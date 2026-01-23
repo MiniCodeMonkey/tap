@@ -1161,3 +1161,18 @@ Started: Fri Jan 23 16:33:21 CET 2026
   - Theme-aware styling uses :global(.theme-name) pattern for scoped global styles
   - Each theme has distinct placeholder appearance (terminal uses $ prefix, brutalist uppercase, etc.)
 ---
+
+## 2026-01-23 - US-071
+- What was implemented: Disconnection indicator component for WebSocket connection status
+- Files changed:
+  - frontend/src/lib/stores/websocket.ts (added reconnecting and reconnectAttempt stores)
+  - frontend/src/lib/components/ConnectionIndicator.svelte (new - connection status indicator)
+- **Learnings for future iterations:**
+  - Store multiple reactive values (reconnecting, reconnectAttempt) to track WebSocket reconnection state
+  - Use $derived for conditional display logic that depends on multiple store values
+  - Pattern: staticDetectionComplete && !isStaticMode && !isConnected for proper indicator visibility
+  - Theme-aware styling with :global(.theme-name) selectors follows existing component patterns
+  - Pulse animation for reconnecting state provides visual feedback without being distracting
+  - Position: fixed; top: 1rem; right: 1rem; z-index: 1000; for corner placement above content
+  - Use aria-live="polite" for accessibility - announces connection status changes to screen readers
+---
