@@ -69,5 +69,31 @@ const features = [
   .home-features {
     padding: 48px 20px;
   }
+
+  .feature-card {
+    padding: 24px;
+  }
+
+  .feature-title {
+    font-size: 1.125rem;
+  }
+
+  .feature-description {
+    font-size: 0.9375rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .home-features {
+    padding: 40px 16px;
+  }
+
+  .features-grid {
+    gap: 16px;
+  }
+
+  .feature-card {
+    padding: 20px;
+  }
 }
 </style>

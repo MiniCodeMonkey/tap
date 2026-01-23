@@ -104,17 +104,47 @@ const installCommand = 'brew install tap-slides'
   border-color: var(--vp-c-text-2);
 }
 
-@media (max-width: 640px) {
+@media (max-width: 768px) {
   .home-hero {
-    padding: 48px 20px;
+    padding: 60px 24px;
   }
 
   .hero-headline {
-    font-size: 2.5rem;
+    font-size: 2.75rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .home-hero {
+    padding: 40px 16px;
+  }
+
+  .hero-headline {
+    font-size: 2rem;
   }
 
   .hero-subheadline {
-    font-size: 1.125rem;
+    font-size: 1rem;
+    margin-bottom: 32px;
+  }
+
+  .install-command {
+    padding: 10px 16px;
+    font-size: 0.875rem;
+  }
+
+  .hero-install {
+    margin-bottom: 32px;
+  }
+
+  .hero-actions {
+    flex-direction: column;
+    width: 100%;
+  }
+
+  .hero-btn {
+    width: 100%;
+    padding: 14px 24px;
   }
 }
 </style>

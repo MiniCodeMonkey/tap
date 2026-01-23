@@ -58,4 +58,24 @@
   font-size: 0.875rem;
   font-style: italic;
 }
+
+@media (max-width: 480px) {
+  .home-footer {
+    padding: 40px 16px 48px;
+  }
+
+  .footer-link,
+  .footer-license {
+    font-size: 0.8rem;
+  }
+
+  .footer-divider {
+    margin: 0 8px;
+  }
+
+  .footer-tagline {
+    font-size: 0.8rem;
+    margin-top: 20px;
+  }
+}
 </style>

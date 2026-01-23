@@ -111,15 +111,41 @@ const themes = [
   .themes-grid {
     grid-template-columns: repeat(2, 1fr);
   }
+
+  .themes-heading {
+    font-size: 1.75rem;
+  }
+
+  .themes-subheading {
+    font-size: 1rem;
+    margin-bottom: 32px;
+  }
 }
 
 @media (max-width: 480px) {
   .themes-grid {
     grid-template-columns: 1fr;
+    gap: 16px;
   }
 
   .home-themes {
-    padding: 48px 20px;
+    padding: 40px 16px;
+  }
+
+  .themes-heading {
+    font-size: 1.5rem;
+  }
+
+  .themes-subheading {
+    font-size: 0.9375rem;
+  }
+
+  .theme-preview {
+    height: 80px;
+  }
+
+  .theme-info {
+    padding: 12px;
   }
 }
 </style>

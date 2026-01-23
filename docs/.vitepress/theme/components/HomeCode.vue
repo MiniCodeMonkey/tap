@@ -112,11 +112,45 @@ Execute any query, see real data.`
 
   .code-heading {
     font-size: 1.5rem;
+    margin-bottom: 24px;
   }
 
   .code-content {
     font-size: 0.8rem;
     padding: 16px;
+  }
+
+  .code-window {
+    border-radius: 8px;
+  }
+}
+
+@media (max-width: 480px) {
+  .home-code {
+    padding: 40px 16px;
+  }
+
+  .code-heading {
+    font-size: 1.25rem;
+  }
+
+  .code-content {
+    font-size: 0.75rem;
+    padding: 12px;
+    line-height: 1.5;
+  }
+
+  .code-header {
+    padding: 10px 12px;
+  }
+
+  .code-dot {
+    width: 10px;
+    height: 10px;
+  }
+
+  .code-filename {
+    font-size: 0.75rem;
   }
 }
 </style>
