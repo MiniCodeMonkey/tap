@@ -1,6 +1,6 @@
 {
   "project": "Tap Documentation Website",
-  "branchName": "ralph/tap-docs-website",
+  "branchName": "ralph/tap-mvp",
   "description": "Build the documentation website for Tap at tap.sh using VitePress with a striking landing page and comprehensive docs, inspired by Linear's clean aesthetic.",
   "userStories": [
     {
