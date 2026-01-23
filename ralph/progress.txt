@@ -1226,3 +1226,25 @@ Started: Fri Jan 23 16:33:21 CET 2026
   - Three-column and sidebar use ||| separators within the slide for column content
   - Speaker notes support multiline content using YAML | or > syntax in directive comments
 ---
+
+## 2026-01-23 - US-075
+- What was implemented: Setup Vitest for frontend component tests
+- Files changed:
+  - frontend/package.json (updated - added vitest, @testing-library/svelte, @testing-library/jest-dom, jsdom, @vitest/coverage-v8 dependencies + test scripts)
+  - frontend/package-lock.json (updated - dependency lockfile)
+  - frontend/vitest.config.ts (new - Vitest configuration with Svelte 5 support, jsdom environment, coverage settings)
+  - frontend/src/test/setup.ts (new - test setup with mocks for matchMedia, ResizeObserver, getBoundingClientRect)
+  - frontend/src/lib/components/SlideRenderer.test.ts (new - 20 tests for rendering, layouts, backgrounds, fragments, transitions)
+  - frontend/src/lib/components/SlideContainer.test.ts (new - 26 tests for scaling, aspect ratios, themes, fullscreen, resize handling)
+  - frontend/src/lib/components/FragmentContainer.test.ts (new - 29 tests for visibility, showAll mode, animation types, timing, reduced motion)
+- **Learnings for future iterations:**
+  - Use `@testing-library/svelte` for Svelte 5 component testing
+  - Svelte 5 requires `compilerOptions: { dev: true }` in Vitest svelte plugin for proper client-side compilation
+  - Add `conditions: ['browser', 'development']` to resolve config to avoid server-side rendering issues
+  - Mock window.matchMedia for components using prefers-reduced-motion media query
+  - Mock ResizeObserver for components that observe container size
+  - Use `@testing-library/jest-dom/vitest` for DOM matchers like toBeInTheDocument, toHaveClass
+  - Svelte internal transition functions are difficult to unit test directly - focus on rendered output
+  - Use `cleanup()` from @testing-library/svelte in afterEach to prevent test pollution
+  - Run npm test scripts: `npm run test` (single run), `npm run test:watch` (watch mode), `npm run test:coverage` (with coverage)
+---
