@@ -67,8 +67,9 @@ func TestTransformSingleSlide(t *testing.T) {
 	if slide.HTML != "<h1>Hello World</h1>" {
 		t.Errorf("unexpected HTML: %q", slide.HTML)
 	}
-	if slide.Layout != "default" {
-		t.Errorf("expected layout 'default', got %q", slide.Layout)
+	// Auto-detection now identifies single H1 as title layout
+	if slide.Layout != "title" {
+		t.Errorf("expected layout 'title', got %q", slide.Layout)
 	}
 }
 
@@ -462,4 +463,375 @@ func findSubstring(s, substr string) int {
 		}
 	}
 	return -1
+}
+
+// --- Layout Auto-Detection Tests (US-021) ---
+
+func TestDetectLayoutTitle(t *testing.T) {
+	testCases := []struct {
+		name     string
+		html     string
+		content  string
+		expected string
+	}{
+		{
+			name:     "H1 only",
+			html:     "<h1>Welcome to My Presentation</h1>",
+			content:  "# Welcome to My Presentation",
+			expected: "title",
+		},
+		{
+			name:     "H1 with subtitle paragraph",
+			html:     "<h1>My Title</h1>\n<p>A subtitle here</p>",
+			content:  "# My Title\n\nA subtitle here",
+			expected: "title",
+		},
+		{
+			name:     "H1 with multiple paragraphs - not title",
+			html:     "<h1>Title</h1>\n<p>Para 1</p>\n<p>Para 2</p>",
+			content:  "# Title\n\nPara 1\n\nPara 2",
+			expected: "default",
+		},
+		{
+			name:     "H1 with list - not title",
+			html:     "<h1>Title</h1>\n<ul><li>Item</li></ul>",
+			content:  "# Title\n\n- Item",
+			expected: "default",
+		},
+		{
+			name:     "H1 with H2 - not title",
+			html:     "<h1>Title</h1>\n<h2>Section</h2>",
+			content:  "# Title\n\n## Section",
+			expected: "default",
+		},
+	}
+
+	cfg := config.DefaultConfig()
+	tr := New(cfg)
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			pres := &parser.Presentation{
+				Slides: []parser.Slide{
+					{Index: 0, HTML: tc.html, Content: tc.content},
+				},
+			}
+			result := tr.Transform(pres)
+			if result.Slides[0].Layout != tc.expected {
+				t.Errorf("expected layout %q, got %q", tc.expected, result.Slides[0].Layout)
+			}
+		})
+	}
+}
+
+func TestDetectLayoutSection(t *testing.T) {
+	testCases := []struct {
+		name     string
+		html     string
+		content  string
+		expected string
+	}{
+		{
+			name:     "H2 only",
+			html:     "<h2>Section Title</h2>",
+			content:  "## Section Title",
+			expected: "section",
+		},
+		{
+			name:     "H2 with paragraph - not section",
+			html:     "<h2>Section</h2>\n<p>Some content</p>",
+			content:  "## Section\n\nSome content",
+			expected: "default",
+		},
+		{
+			name:     "H2 with H1 - not section",
+			html:     "<h1>Title</h1>\n<h2>Section</h2>",
+			content:  "# Title\n\n## Section",
+			expected: "default",
+		},
+		{
+			name:     "H2 with code - not section",
+			html:     "<h2>Code Section</h2>\n<pre><code>code</code></pre>",
+			content:  "## Code Section\n\n```\ncode\n```",
+			expected: "default",
+		},
+	}
+
+	cfg := config.DefaultConfig()
+	tr := New(cfg)
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			pres := &parser.Presentation{
+				Slides: []parser.Slide{
+					{Index: 0, HTML: tc.html, Content: tc.content},
+				},
+			}
+			result := tr.Transform(pres)
+			if result.Slides[0].Layout != tc.expected {
+				t.Errorf("expected layout %q, got %q", tc.expected, result.Slides[0].Layout)
+			}
+		})
+	}
+}
+
+func TestDetectLayoutCodeFocus(t *testing.T) {
+	testCases := []struct {
+		codeBlocks []parser.CodeBlock
+		name       string
+		html       string
+		content    string
+		expected   string
+	}{
+		{
+			name:    "Single large code block",
+			html:    "<pre><code>func main() {\n\tfmt.Println(\"hello\")\n}</code></pre>",
+			content: "```go\nfunc main() {\n\tfmt.Println(\"hello\")\n}\n```",
+			codeBlocks: []parser.CodeBlock{
+				{Language: "go", Code: "func main() {\n\tfmt.Println(\"hello\")\n}"},
+			},
+			expected: "code-focus",
+		},
+		{
+			name:    "Code block less than 50% - not code-focus",
+			html:    "<p>Here is some explanation about the code that follows.</p>\n<pre><code>x := 1</code></pre>\n<p>And more text after.</p>",
+			content: "Here is some explanation about the code that follows.\n\n```go\nx := 1\n```\n\nAnd more text after.",
+			codeBlocks: []parser.CodeBlock{
+				{Language: "go", Code: "x := 1"},
+			},
+			expected: "default",
+		},
+		{
+			name:    "Multiple code blocks - not code-focus",
+			html:    "<pre><code>code1</code></pre>\n<pre><code>code2</code></pre>",
+			content: "```\ncode1\n```\n\n```\ncode2\n```",
+			codeBlocks: []parser.CodeBlock{
+				{Language: "", Code: "code1"},
+				{Language: "", Code: "code2"},
+			},
+			expected: "default",
+		},
+		{
+			name:       "No code blocks - not code-focus",
+			html:       "<p>Just text</p>",
+			content:    "Just text",
+			codeBlocks: nil,
+			expected:   "default",
+		},
+	}
+
+	cfg := config.DefaultConfig()
+	tr := New(cfg)
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			pres := &parser.Presentation{
+				Slides: []parser.Slide{
+					{Index: 0, HTML: tc.html, Content: tc.content, CodeBlocks: tc.codeBlocks},
+				},
+			}
+			result := tr.Transform(pres)
+			if result.Slides[0].Layout != tc.expected {
+				t.Errorf("expected layout %q, got %q", tc.expected, result.Slides[0].Layout)
+			}
+		})
+	}
+}
+
+func TestDetectLayoutQuote(t *testing.T) {
+	testCases := []struct {
+		name     string
+		html     string
+		content  string
+		expected string
+	}{
+		{
+			name:     "Blockquote only",
+			html:     "<blockquote>\n<p>To be or not to be</p>\n</blockquote>",
+			content:  "> To be or not to be",
+			expected: "quote",
+		},
+		{
+			name:     "Blockquote with attribution",
+			html:     "<blockquote>\n<p>Quote text</p>\n</blockquote>\n<p>— Author</p>",
+			content:  "> Quote text\n\n— Author",
+			expected: "quote",
+		},
+		{
+			name:     "Blockquote with header - not quote",
+			html:     "<h2>Famous Quotes</h2>\n<blockquote>\n<p>Quote</p>\n</blockquote>",
+			content:  "## Famous Quotes\n\n> Quote",
+			expected: "default",
+		},
+		{
+			name:     "Blockquote with code - not quote",
+			html:     "<blockquote>\n<p>Quote</p>\n</blockquote>\n<pre><code>code</code></pre>",
+			content:  "> Quote\n\n```\ncode\n```",
+			expected: "default",
+		},
+	}
+
+	cfg := config.DefaultConfig()
+	tr := New(cfg)
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			pres := &parser.Presentation{
+				Slides: []parser.Slide{
+					{Index: 0, HTML: tc.html, Content: tc.content},
+				},
+			}
+			result := tr.Transform(pres)
+			if result.Slides[0].Layout != tc.expected {
+				t.Errorf("expected layout %q, got %q", tc.expected, result.Slides[0].Layout)
+			}
+		})
+	}
+}
+
+func TestDetectLayoutTwoColumn(t *testing.T) {
+	testCases := []struct {
+		name     string
+		html     string
+		content  string
+		expected string
+	}{
+		{
+			name:     "Two column with separator",
+			html:     "<p>Left content</p>\n<p>|||</p>\n<p>Right content</p>",
+			content:  "Left content\n\n|||\n\nRight content",
+			expected: "two-column",
+		},
+		{
+			name:     "Two column inline separator",
+			html:     "<p>Left ||| Right</p>",
+			content:  "Left ||| Right",
+			expected: "two-column",
+		},
+		{
+			name:     "No separator - not two-column",
+			html:     "<p>Just regular content</p>",
+			content:  "Just regular content",
+			expected: "default",
+		},
+	}
+
+	cfg := config.DefaultConfig()
+	tr := New(cfg)
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			pres := &parser.Presentation{
+				Slides: []parser.Slide{
+					{Index: 0, HTML: tc.html, Content: tc.content},
+				},
+			}
+			result := tr.Transform(pres)
+			if result.Slides[0].Layout != tc.expected {
+				t.Errorf("expected layout %q, got %q", tc.expected, result.Slides[0].Layout)
+			}
+		})
+	}
+}
+
+func TestDetectLayoutDefault(t *testing.T) {
+	testCases := []struct {
+		name    string
+		html    string
+		content string
+	}{
+		{
+			name:    "Regular content with paragraphs",
+			html:    "<p>Some text</p>\n<p>More text</p>",
+			content: "Some text\n\nMore text",
+		},
+		{
+			name:    "H3 header with content",
+			html:    "<h3>Subtitle</h3>\n<p>Content</p>",
+			content: "### Subtitle\n\nContent",
+		},
+		{
+			name:    "List content",
+			html:    "<ul>\n<li>Item 1</li>\n<li>Item 2</li>\n</ul>",
+			content: "- Item 1\n- Item 2",
+		},
+		{
+			name:    "Table content",
+			html:    "<table><tr><td>Cell</td></tr></table>",
+			content: "| Cell |",
+		},
+		{
+			name:    "Mixed content",
+			html:    "<h1>Title</h1>\n<p>Text</p>\n<ul><li>List</li></ul>",
+			content: "# Title\n\nText\n\n- List",
+		},
+	}
+
+	cfg := config.DefaultConfig()
+	tr := New(cfg)
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			pres := &parser.Presentation{
+				Slides: []parser.Slide{
+					{Index: 0, HTML: tc.html, Content: tc.content},
+				},
+			}
+			result := tr.Transform(pres)
+			if result.Slides[0].Layout != "default" {
+				t.Errorf("expected layout 'default', got %q", result.Slides[0].Layout)
+			}
+		})
+	}
+}
+
+func TestDetectLayoutDirectiveOverride(t *testing.T) {
+	// Directive should always override auto-detection
+	cfg := config.DefaultConfig()
+	tr := New(cfg)
+
+	pres := &parser.Presentation{
+		Slides: []parser.Slide{
+			{
+				Index:   0,
+				HTML:    "<h1>This looks like a title</h1>",
+				Content: "# This looks like a title",
+				Directives: parser.SlideDirectives{
+					Layout: "big-stat", // Override to different layout
+				},
+			},
+		},
+	}
+
+	result := tr.Transform(pres)
+	if result.Slides[0].Layout != "big-stat" {
+		t.Errorf("directive should override auto-detection: expected 'big-stat', got %q", result.Slides[0].Layout)
+	}
+}
+
+func TestCountHTMLTag(t *testing.T) {
+	testCases := []struct {
+		html     string
+		tag      string
+		expected int
+	}{
+		{"<h1>Title</h1>", "h1", 1},
+		{"<h1>One</h1><h1>Two</h1>", "h1", 2},
+		{"<h1>Title</h1><h2>Sub</h2>", "h1", 1},
+		{"<h1>Title</h1><h2>Sub</h2>", "h2", 1},
+		{"<h1 class='title'>Title</h1>", "h1", 1},
+		{"<h10>Not h1</h10>", "h1", 0},
+		{"<pre><code>code</code></pre>", "pre", 1},
+		{"<p>No headers</p>", "h1", 0},
+		{"", "h1", 0},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.html, func(t *testing.T) {
+			result := countHTMLTag(tc.html, tc.tag)
+			if result != tc.expected {
+				t.Errorf("countHTMLTag(%q, %q) = %d, expected %d", tc.html, tc.tag, result, tc.expected)
+			}
+		})
+	}
 }

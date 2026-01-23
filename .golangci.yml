@@ -59,6 +59,9 @@ issues:
     - path: "_test\\.go"
       linters:
         - errcheck
+    # Exclude fieldalignment in test files (test struct optimization is less critical)
+    - path: "_test\\.go"
+      text: "fieldalignment"
     # Exclude "package comment" warnings
     - linters:
         - staticcheck

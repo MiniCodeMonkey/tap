@@ -122,12 +122,195 @@ func (t *Transformer) transformSlide(slide parser.Slide) TransformedSlide {
 
 // resolveLayout determines the layout for a slide.
 // If a layout directive is specified, it takes precedence.
-// Otherwise, returns "default" (layout detection is handled in US-021).
+// Otherwise, auto-detects layout based on content.
 func (t *Transformer) resolveLayout(slide parser.Slide) string {
 	if slide.Directives.Layout != "" {
 		return slide.Directives.Layout
 	}
+	return detectLayout(slide)
+}
+
+// detectLayout auto-detects the appropriate layout based on slide content.
+// Detection priority:
+//  1. two-column: contains ||| separator
+//  2. title: only H1, optional subtitle (paragraph or small text)
+//  3. section: only H2 (large section header)
+//  4. code-focus: single code block taking >50% of content
+//  5. quote: blockquote as primary content
+//  6. default: everything else
+func detectLayout(slide parser.Slide) string {
+	html := slide.HTML
+	content := slide.Content
+
+	// Check for two-column layout (||| separator in content)
+	if containsTwoColumnSeparator(content) {
+		return "two-column"
+	}
+
+	// Check for title layout (only H1, optional subtitle)
+	if isTitleLayout(html) {
+		return "title"
+	}
+
+	// Check for section layout (only H2)
+	if isSectionLayout(html) {
+		return "section"
+	}
+
+	// Check for code-focus layout (single code block >50% content)
+	if isCodeFocusLayout(slide) {
+		return "code-focus"
+	}
+
+	// Check for quote layout (blockquote as primary content)
+	if isQuoteLayout(html) {
+		return "quote"
+	}
+
 	return "default"
+}
+
+// containsTwoColumnSeparator checks if the content has a ||| column separator.
+func containsTwoColumnSeparator(content string) bool {
+	// Look for ||| on its own line or as a separator
+	for i := 0; i <= len(content)-3; i++ {
+		if content[i:i+3] == "|||" {
+			return true
+		}
+	}
+	return false
+}
+
+// isTitleLayout checks if the HTML contains only an H1, with an optional subtitle.
+// Subtitle can be a paragraph (<p>) following the H1.
+func isTitleLayout(html string) bool {
+	// Must have exactly one H1
+	h1Count := countHTMLTag(html, "h1")
+	if h1Count != 1 {
+		return false
+	}
+
+	// Must not have H2-H6
+	for _, tag := range []string{"h2", "h3", "h4", "h5", "h6"} {
+		if countHTMLTag(html, tag) > 0 {
+			return false
+		}
+	}
+
+	// Count other significant content elements
+	pCount := countHTMLTag(html, "p")
+	ulCount := countHTMLTag(html, "ul")
+	olCount := countHTMLTag(html, "ol")
+	preCount := countHTMLTag(html, "pre")
+	blockquoteCount := countHTMLTag(html, "blockquote")
+	tableCount := countHTMLTag(html, "table")
+
+	// Allow at most one paragraph (subtitle) and no other block content
+	if pCount > 1 || ulCount > 0 || olCount > 0 || preCount > 0 || blockquoteCount > 0 || tableCount > 0 {
+		return false
+	}
+
+	return true
+}
+
+// isSectionLayout checks if the HTML contains only an H2.
+func isSectionLayout(html string) bool {
+	// Must have exactly one H2
+	h2Count := countHTMLTag(html, "h2")
+	if h2Count != 1 {
+		return false
+	}
+
+	// Must not have H1 or other headers
+	for _, tag := range []string{"h1", "h3", "h4", "h5", "h6"} {
+		if countHTMLTag(html, tag) > 0 {
+			return false
+		}
+	}
+
+	// Must not have significant other content
+	pCount := countHTMLTag(html, "p")
+	ulCount := countHTMLTag(html, "ul")
+	olCount := countHTMLTag(html, "ol")
+	preCount := countHTMLTag(html, "pre")
+	blockquoteCount := countHTMLTag(html, "blockquote")
+	tableCount := countHTMLTag(html, "table")
+
+	if pCount > 0 || ulCount > 0 || olCount > 0 || preCount > 0 || blockquoteCount > 0 || tableCount > 0 {
+		return false
+	}
+
+	return true
+}
+
+// isCodeFocusLayout checks if the slide has a single code block taking >50% of content.
+func isCodeFocusLayout(slide parser.Slide) bool {
+	// Must have exactly one code block
+	if len(slide.CodeBlocks) != 1 {
+		return false
+	}
+
+	// Check if code block is >50% of the total content
+	codeLen := len(slide.CodeBlocks[0].Code)
+	totalLen := len(slide.Content)
+
+	// Avoid division by zero
+	if totalLen == 0 {
+		return false
+	}
+
+	// Code must be more than 50% of content
+	return float64(codeLen)/float64(totalLen) > 0.5
+}
+
+// isQuoteLayout checks if the HTML has a blockquote as the primary content.
+func isQuoteLayout(html string) bool {
+	// Must have at least one blockquote
+	blockquoteCount := countHTMLTag(html, "blockquote")
+	if blockquoteCount == 0 {
+		return false
+	}
+
+	// Must not have headers (quotes shouldn't have headers as main content)
+	for _, tag := range []string{"h1", "h2", "h3", "h4", "h5", "h6"} {
+		if countHTMLTag(html, tag) > 0 {
+			return false
+		}
+	}
+
+	// Must not have code blocks or tables
+	preCount := countHTMLTag(html, "pre")
+	tableCount := countHTMLTag(html, "table")
+
+	if preCount > 0 || tableCount > 0 {
+		return false
+	}
+
+	// Allow paragraphs (often for attribution) and lists
+	return true
+}
+
+// countHTMLTag counts occurrences of an HTML tag (opening tags only).
+func countHTMLTag(html, tag string) int {
+	count := 0
+	openTag := "<" + tag
+	openTagLen := len(openTag)
+
+	for i := 0; i <= len(html)-openTagLen; i++ {
+		if html[i:i+openTagLen] == openTag {
+			// Check that it's followed by > or space (not a different tag like <h10>)
+			if i+openTagLen < len(html) {
+				nextChar := html[i+openTagLen]
+				if nextChar == '>' || nextChar == ' ' || nextChar == '\t' || nextChar == '\n' {
+					count++
+				}
+			} else if i+openTagLen == len(html) {
+				// Tag at end of string (malformed but count it)
+				count++
+			}
+		}
+	}
+	return count
 }
 
 // parseBackground parses a background directive value and determines its type.
