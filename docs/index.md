@@ -6,3 +6,4 @@ layout: page
 <HomeFeatures />
 <HomeCode />
 <HomeThemes />
+<HomeFooter />
