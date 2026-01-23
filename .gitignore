@@ -1,0 +1,22 @@
+# Build artifacts
+/bin/
+/dist/
+/tap
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Dependencies
+vendor/
+
+# Test artifacts
+coverage.out
+coverage.html
+
+# OS files
+.DS_Store
+Thumbs.db
