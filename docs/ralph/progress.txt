@@ -331,3 +331,28 @@ Started: Fri Jan 23 20:59:35 CET 2026
   - Added `class` directive for custom CSS classes - useful for advanced styling
   - Multi-line values in YAML use pipe syntax (`|`) - document this explicitly
 ---
+
+## 2026-01-24 - US-025
+- What was implemented: Wrote complete Layouts Reference page with table-format quick reference for all 11 layouts
+- Files changed:
+  - `docs/reference/layouts-reference.md` (modified) - Replaced stub with comprehensive layout reference including summary table, detailed layout entries, and slot marker reference
+- **Learnings for future iterations:**
+  - Reference pages benefit from multiple table formats: summary table at top for quick scanning, detailed sections below
+  - Include a "Slot Marker Reference" table consolidating which layouts use which slot markers (`::left::`, `::main::`, etc.)
+  - Use property tables per layout entry showing slot markers, directive options (if any), and best use cases
+  - VitePress tip containers (`::: tip`) work well for "coming soon" placeholder notes
+  - Cross-link to both the Guide page (for detailed examples) and related Reference pages (for directive syntax)
+---
+
+## 2026-01-24 - US-026
+- What was implemented: Wrote complete Drivers reference page with documentation for all 4 built-in drivers
+- Files changed:
+  - `docs/reference/drivers.md` (modified) - Replaced stub with comprehensive driver reference including SQLite, MySQL, PostgreSQL, and Shell drivers
+- **Learnings for future iterations:**
+  - Driver reference pages benefit from consistent structure per driver: description, config options table, frontmatter example, usage example, special features
+  - Each driver has different required/optional options - clearly mark "required" vs defaults in config tables
+  - Environment variable substitution (`$VAR_NAME` syntax) is a cross-cutting concern documented in "Common Configuration" section
+  - PostgreSQL has standard env vars (PGHOST, etc.) that deserve their own table for users familiar with psql
+  - Shell driver's versatility for running other interpreters via heredocs is a key feature worth documenting
+  - "Custom Drivers" as a stub section with `::: tip Coming Soon` follows existing patterns for planned features
+---
