@@ -1211,3 +1211,18 @@ Started: Fri Jan 23 16:33:21 CET 2026
   - Custom controls overlay sits on top of player for consistent theme styling
   - Svelte $state warning about "initial value" is expected when initializing from props - handle in onMount
 ---
+
+## 2026-01-23 - US-074
+- What was implemented: Comprehensive sample presentation for E2E testing
+- Files changed:
+  - testdata/sample.md (new - complete sample presentation with all features)
+- **Learnings for future iterations:**
+  - Sample includes all frontmatter config options: title, theme, author, date, aspectRatio, transition, codeTheme, fragments, drivers
+  - Driver configs include: shell (timeout), sqlite (connection with :memory:), custom python driver (command + args)
+  - All layout types demonstrated: title, section, default, two-column, code-focus, quote, big-stat, three-column, cover, sidebar, split-media, blank
+  - Per-slide directives: layout, transition, background, notes (multiline with YAML | syntax)
+  - Fragment markers use <!-- pause --> syntax for incremental reveals
+  - Live code blocks use {driver: name, connection: connName} syntax in info string
+  - Three-column and sidebar use ||| separators within the slide for column content
+  - Speaker notes support multiline content using YAML | or > syntax in directive comments
+---
