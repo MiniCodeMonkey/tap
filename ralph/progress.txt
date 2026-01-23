@@ -1311,3 +1311,39 @@ Started: Fri Jan 23 16:33:21 CET 2026
   - Homebrew tap config included but `skip_upload: true` until homebrew-tap repo exists
   - Run with `goreleaser release --snapshot --clean` for local testing without publishing
 ---
+
+## 2026-01-24 - US-079
+- What was implemented: Comprehensive README documentation for the Tap project
+- Files changed:
+  - README.md (new - complete documentation with quick start, installation, usage, and configuration reference)
+- **Learnings for future iterations:**
+  - README sections: Quick Start, Installation (3 methods), Basic Usage, Command Reference table, Writing Presentations
+  - Installation methods: go install (recommended), pre-built binaries (download), Homebrew
+  - Frontmatter config example shows all options: title, theme, author, date, aspectRatio, transition, codeTheme, fragments, drivers
+  - Drivers section shows shell, sqlite, mysql (with env vars), and custom driver (python) examples
+  - Slide directives use HTML comments with YAML content: `<!-- layout: two-column -->`
+  - All 12 layouts documented: title, section, default, two-column, three-column, code-focus, quote, big-stat, cover, sidebar, split-media, blank
+  - Keyboard shortcuts table for navigation (arrows, space, enter), overview (O), presenter (S), fullscreen (F)
+  - All 5 themes listed with brief descriptions: minimal, gradient, terminal, brutalist, keynote
+---
+
+## 2026-01-24 - US-080
+- What was implemented: Created comprehensive example presentations for all themes and use cases
+- Files changed:
+  - examples/basic.md (new - simple getting started presentation covering all basic features)
+  - examples/code-demo.md (new - live code execution with shell and Python drivers)
+  - examples/sql-demo.md (new - interactive SQL with SQLite, building tables and running queries)
+  - examples/theme-minimal.md (new - minimal theme showcase with Apple-style aesthetics)
+  - examples/theme-gradient.md (new - gradient theme showcase with glassmorphism effects)
+  - examples/theme-terminal.md (new - terminal/hacker theme showcase with CRT effects)
+  - examples/theme-brutalist.md (new - brutalist theme showcase with stark contrast)
+  - examples/theme-keynote.md (new - keynote theme showcase with professional polish)
+- **Learnings for future iterations:**
+  - Each theme showcase demonstrates theme-specific features and when to use that theme
+  - basic.md covers core features: slide separators, code blocks, fragments, two-column layout, quotes, sections
+  - code-demo.md shows shell and custom Python driver execution with live output
+  - sql-demo.md progressively builds a database schema with users, products, orders and demonstrates joins/aggregations
+  - Theme examples use the same structure: design philosophy, typography, code blocks, layouts, when to use
+  - Include multiline speaker notes using YAML | syntax in directive comments
+  - Fragments work well for incremental reveals in teaching-style presentations
+---

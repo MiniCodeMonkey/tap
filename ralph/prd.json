@@ -1,1360 +1,546 @@
 {
   "project": "Tap",
   "branchName": "ralph/tap-mvp",
-  "description": "Tap MVP - A markdown-based presentation tool for technical presentations with beautiful defaults, live code execution, and developer-first experience",
+  "description": "TailwindCSS Migration & Theme Redesign - Replace all custom CSS with Tailwind, redesign 5 stunning themes (Paper, Noir, Aurora, Phosphor, Poster), add TUI theme switcher and offline font support",
   "userStories": [
     {
-      "id": "US-001",
-      "title": "Initialize Go module and project structure",
-      "description": "As a developer, I need a well-organized Go project structure so that the codebase is maintainable and follows Go conventions.",
+      "id": "US-101",
+      "title": "Install and configure TailwindCSS in frontend build",
+      "description": "As a developer, I need TailwindCSS integrated into the Vite/Svelte build process so I can use utility classes throughout the application.",
       "acceptanceCriteria": [
-        "Initialize Go module as github.com/tapsh/tap",
-        "Create directory structure: cmd/tap/, internal/cli/, internal/parser/, internal/transformer/, internal/server/, internal/builder/, internal/driver/, internal/pdf/, internal/tui/, internal/config/",
-        "Create frontend/, embedded/, themes/, testdata/ directories",
-        "Create empty main.go in cmd/tap/",
+        "Install tailwindcss, postcss, autoprefixer as dev dependencies",
+        "Create tailwind.config.js with content paths for all Svelte/TS files",
+        "Create postcss.config.js with Tailwind and Autoprefixer plugins",
+        "Add Tailwind directives (@tailwind base/components/utilities) to main CSS entry",
+        "Verify utility classes work in a test component (e.g., class=\"text-red-500\")",
+        "Build completes successfully with no CSS errors",
         "Typecheck passes"
       ],
       "priority": 1,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "US-002",
-      "title": "Create Makefile with build targets",
-      "description": "As a developer, I need a Makefile to standardize build, test, and development commands.",
-      "acceptanceCriteria": [
-        "Create Makefile with targets: build, test, lint, dev, release",
-        "build target compiles to bin/tap",
-        "test target runs go test ./...",
-        "lint target runs golangci-lint",
-        "Cross-compile targets for darwin/amd64, darwin/arm64, linux/amd64, linux/arm64, windows/amd64",
-        "Typecheck passes"
-      ],
-      "priority": 2,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "US-003",
-      "title": "Configure golangci-lint",
-      "description": "As a developer, I need linting configuration for code quality.",
-      "acceptanceCriteria": [
-        "Create .golangci.yml configuration file",
-        "Enable common linters: govet, errcheck, staticcheck, unused, gosimple",
-        "Configure appropriate timeouts and exclusions",
-        "All existing code passes golangci-lint run",
-        "Typecheck passes"
-      ],
-      "priority": 3,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "US-004",
-      "title": "Implement root CLI command with Cobra",
-      "description": "As a user, I want a root CLI command with version flag so I can verify installation.",
-      "acceptanceCriteria": [
-        "Install github.com/spf13/cobra dependency",
-        "Create internal/cli/root.go with root command",
-        "Implement --version flag showing 'tap version 0.1.0'",
-        "Implement --help and --verbose global flags",
-        "Create Execute() function called from main.go",
-        "Proper exit codes (0 success, 1 error)",
-        "Typecheck passes"
-      ],
-      "priority": 4,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "US-005",
-      "title": "Add tap new subcommand stub",
-      "description": "As a user, I want a 'tap new' command to create new presentations.",
-      "acceptanceCriteria": [
-        "Create internal/cli/new.go with new subcommand",
-        "Add --theme and --output flags",
-        "Command registered with root command",
-        "Help text describes creating new presentation",
-        "Typecheck passes"
-      ],
-      "priority": 5,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "US-006",
-      "title": "Add tap dev subcommand stub",
-      "description": "As a user, I want a 'tap dev' command to start the dev server.",
-      "acceptanceCriteria": [
-        "Create internal/cli/dev.go with dev subcommand",
-        "Accept <file> argument for markdown file",
-        "Add --port and --presenter-password flags",
-        "Default port is 3000",
-        "Help text describes starting dev server",
-        "Typecheck passes"
-      ],
-      "priority": 6,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "US-007",
-      "title": "Add tap build subcommand stub",
-      "description": "As a user, I want a 'tap build' command to generate static files.",
-      "acceptanceCriteria": [
-        "Create internal/cli/build.go with build subcommand",
-        "Accept <file> argument for markdown file",
-        "Add --output flag for output directory",
-        "Help text describes generating static HTML",
-        "Typecheck passes"
-      ],
-      "priority": 7,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "US-008",
-      "title": "Add tap serve and tap pdf subcommand stubs",
-      "description": "As a user, I want 'tap serve' and 'tap pdf' commands.",
-      "acceptanceCriteria": [
-        "Create internal/cli/serve.go with serve subcommand",
-        "serve accepts optional [dir] argument, --port flag",
-        "Create internal/cli/pdf.go with pdf subcommand",
-        "pdf accepts <file> argument, --output and --content flags",
-        "Help text for both commands",
-        "Typecheck passes"
-      ],
-      "priority": 8,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "US-009",
-      "title": "Add tap add subcommand stub",
-      "description": "As a user, I want a 'tap add' command to add slides interactively.",
-      "acceptanceCriteria": [
-        "Create internal/cli/add.go with add subcommand",
-        "Accept optional [file] argument",
-        "Help text describes adding slides interactively",
-        "Typecheck passes"
-      ],
-      "priority": 9,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "US-010",
-      "title": "Add colorized CLI output",
-      "description": "As a user, I want colorized CLI output for better readability.",
-      "acceptanceCriteria": [
-        "Install github.com/fatih/color dependency",
-        "Create internal/cli/output.go with color helper functions",
-        "Functions for success (green), error (red), info (blue), warning (yellow)",
-        "Colors work on supported terminals",
-        "Typecheck passes"
-      ],
-      "priority": 10,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "US-011",
-      "title": "Implement Config struct and YAML parsing",
-      "description": "As a user, I want to configure presentations via YAML frontmatter.",
-      "acceptanceCriteria": [
-        "Install gopkg.in/yaml.v3 dependency",
-        "Create internal/config/config.go with Config struct",
-        "Config includes: Title, Theme, Author, Date, AspectRatio, Transition, CodeTheme, Fragments, Drivers",
-        "Define DriverConfig and ConnectionConfig structs",
-        "Implement Load(path string) function to parse frontmatter",
-        "Typecheck passes"
-      ],
-      "priority": 11,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "US-012",
-      "title": "Implement config validation",
-      "description": "As a user, I want meaningful errors for invalid configuration.",
-      "acceptanceCriteria": [
-        "Implement Validate() method on Config",
-        "Validate aspectRatio: must be 16:9, 4:3, or 16:10",
-        "Validate transition: must be none, fade, slide, push, or zoom",
-        "Return descriptive error messages",
-        "Unit tests for validation",
-        "Typecheck passes"
-      ],
-      "priority": 12,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "US-013",
-      "title": "Implement environment variable resolution in config",
-      "description": "As a user, I want to use environment variables in config for secrets.",
-      "acceptanceCriteria": [
-        "Install github.com/joho/godotenv dependency",
-        "Load .env file from presentation directory",
-        "Implement resolveEnvVars() function for $VAR_NAME syntax",
-        "Apply to password and other sensitive fields",
-        "Unit tests for env var resolution",
-        "Typecheck passes"
-      ],
-      "priority": 13,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "US-014",
-      "title": "Setup goldmark markdown parser",
-      "description": "As a developer, I need a markdown parser to process presentation files.",
-      "acceptanceCriteria": [
-        "Install github.com/yuin/goldmark dependency",
-        "Create internal/parser/parser.go with Parser struct",
-        "Configure goldmark with Table, Strikethrough, TaskList, Linkify extensions",
-        "Implement New() constructor",
-        "Typecheck passes"
-      ],
-      "priority": 14,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "US-015",
-      "title": "Implement slide splitting on --- delimiter",
-      "description": "As a user, I want slides separated by --- in my markdown.",
-      "acceptanceCriteria": [
-        "Define Presentation and Slide structs",
-        "Slide includes: Index, Content, HTML, Directives, Fragments, CodeBlocks",
-        "Implement Parse(content []byte) returning Presentation",
-        "Split on --- delimiter (after frontmatter)",
-        "Unit tests with multiple slides",
-        "Typecheck passes"
-      ],
-      "priority": 15,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "US-016",
-      "title": "Parse slide directives from HTML comments",
-      "description": "As a user, I want to set per-slide options via HTML comment directives.",
-      "acceptanceCriteria": [
-        "Define SlideDirectives struct with Layout, Transition, Fragments, Background, Notes",
-        "Implement parseDirectives() to extract YAML from <!-- --> comments",
-        "Parse directives at slide start",
-        "Unit tests for directive parsing",
-        "Typecheck passes"
-      ],
-      "priority": 16,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "US-017",
-      "title": "Parse code block metadata",
-      "description": "As a user, I want to specify driver config on code blocks.",
-      "acceptanceCriteria": [
-        "Define CodeBlock and CodeBlockMeta structs",
-        "Parse code block info string for driver config: ```sql {driver: mysql}",
-        "Extract language, driver name, connection name",
-        "Collect code blocks per slide",
-        "Unit tests for code block parsing",
-        "Typecheck passes"
-      ],
-      "priority": 17,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "US-018",
-      "title": "Parse fragment markers",
-      "description": "As a user, I want <!-- pause --> markers for incremental reveals.",
-      "acceptanceCriteria": [
-        "Define Fragment struct",
-        "Parse <!-- pause --> markers in slide content",
-        "Split content into fragment groups",
-        "Store fragments on Slide struct",
-        "Unit tests for fragment parsing",
-        "Typecheck passes"
-      ],
-      "priority": 18,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "US-019",
-      "title": "Parse image attributes",
-      "description": "As a user, I want to set image width and position.",
-      "acceptanceCriteria": [
-        "Create internal/parser/image.go",
-        "Define ImageAttributes struct with Width and Position",
-        "Parse ![Alt](img.png){width=50%} syntax",
-        "Parse {position=left} and {position=right}",
-        "Unit tests for image attribute parsing",
-        "Typecheck passes"
-      ],
-      "priority": 19,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "US-020",
-      "title": "Implement slide transformer",
-      "description": "As a developer, I need to transform parsed slides for the frontend.",
-      "acceptanceCriteria": [
-        "Create internal/transformer/transformer.go",
-        "Define TransformedSlide and TransformedPresentation structs",
-        "Implement Transform() method taking parser.Presentation",
-        "Output JSON-serializable slide objects",
-        "Unit tests for transformation",
-        "Typecheck passes"
-      ],
-      "priority": 20,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "US-021",
-      "title": "Implement layout auto-detection",
-      "description": "As a user, I want layouts auto-detected from slide content.",
-      "acceptanceCriteria": [
-        "Implement detectLayout() in transformer",
-        "Detect title: only H1, optional subtitle",
-        "Detect section: only H2",
-        "Detect code-focus: single code block >50% content",
-        "Detect quote: blockquote as primary content",
-        "Detect two-column: contains ||| separator",
-        "Default layout for everything else",
-        "Unit tests for each layout detection",
-        "Typecheck passes"
-      ],
-      "priority": 21,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "US-022",
-      "title": "Implement image path resolution in transformer",
-      "description": "As a user, I want relative image paths resolved correctly.",
-      "acceptanceCriteria": [
-        "Implement resolveImagePath() in transformer",
-        "Resolve relative paths from markdown file directory",
-        "Support absolute URLs (https://...)",
-        "Support formats: PNG, JPG, JPEG, GIF, SVG, WebP",
-        "Unit tests for path resolution",
-        "Typecheck passes"
-      ],
-      "priority": 22,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "US-023",
-      "title": "Implement Driver interface and Registry",
-      "description": "As a developer, I need a driver system for code execution.",
-      "acceptanceCriteria": [
-        "Create internal/driver/driver.go with Driver interface",
-        "Driver has Name() and Execute(ctx, code, config) methods",
-        "Define Result struct with Success, Output, Error, Data",
-        "Create internal/driver/registry.go with Registry",
-        "Registry has Register(), Get(), and Execute() methods",
-        "Unit tests for registry operations",
-        "Typecheck passes"
-      ],
-      "priority": 23,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "US-024",
-      "title": "Implement Shell driver",
-      "description": "As a presenter, I want to execute shell commands in slides.",
-      "acceptanceCriteria": [
-        "Create internal/driver/shell.go with ShellDriver",
-        "Execute commands via os/exec with sh -c",
-        "Capture stdout and stderr",
-        "Support configurable timeout",
-        "Set working directory to presentation directory",
-        "Return structured Result with exit code",
-        "Unit tests with mock commands",
-        "Typecheck passes"
-      ],
-      "priority": 24,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "US-025",
-      "title": "Implement SQLite driver",
-      "description": "As a presenter, I want to execute SQLite queries in slides.",
-      "acceptanceCriteria": [
-        "Create internal/driver/sqlite.go with SQLiteDriver",
-        "Execute via sqlite3 CLI with os/exec",
-        "Support in-memory database (:memory:)",
-        "Support file-based database",
-        "Format output as table using sqlite3 -header -column",
-        "Parse output into structured data",
-        "Unit tests with temporary database",
-        "Typecheck passes"
-      ],
-      "priority": 25,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "US-026",
-      "title": "Implement MySQL driver",
-      "description": "As a presenter, I want to execute MySQL queries in slides.",
-      "acceptanceCriteria": [
-        "Create internal/driver/mysql.go with MySQLDriver",
-        "Execute via mysql CLI with os/exec",
-        "Load connection config from frontmatter",
-        "Support environment variable references for credentials",
-        "Format output as table with --table flag",
-        "Mask credentials in error messages",
-        "Unit tests with mock responses",
-        "Typecheck passes"
-      ],
-      "priority": 26,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "US-027",
-      "title": "Implement PostgreSQL driver",
-      "description": "As a presenter, I want to execute PostgreSQL queries in slides.",
-      "acceptanceCriteria": [
-        "Create internal/driver/postgres.go with PostgresDriver",
-        "Execute via psql CLI with os/exec",
-        "Load connection config from frontmatter",
-        "Use PGPASSWORD environment variable for password",
-        "Format output as table",
-        "Handle connection errors gracefully",
-        "Unit tests with mock responses",
-        "Typecheck passes"
-      ],
-      "priority": 27,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "US-028",
-      "title": "Implement custom driver support",
-      "description": "As a presenter, I want to define custom drivers for any language.",
-      "acceptanceCriteria": [
-        "Create internal/driver/custom.go with CustomDriver",
-        "Parse driver definition from frontmatter (command, args)",
-        "Execute via shell with command + args + code",
-        "Inherit timeout from global config or per-driver override",
-        "Register custom drivers alongside built-in drivers",
-        "Unit tests for custom driver execution",
-        "Typecheck passes"
-      ],
-      "priority": 28,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "US-029",
-      "title": "Implement HTTP dev server core",
-      "description": "As a presenter, I want a dev server to preview presentations.",
-      "acceptanceCriteria": [
-        "Create internal/server/server.go with Server struct",
-        "Create HTTP server using net/http",
-        "Bind to 0.0.0.0 for network access",
-        "Support configurable port via --port flag (default 3000)",
-        "Implement SetPresentation() method",
-        "Implement Start() and Shutdown() methods",
-        "Graceful shutdown on SIGINT/SIGTERM",
-        "Unit tests for HTTP handlers",
-        "Typecheck passes"
-      ],
-      "priority": 29,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "US-030",
-      "title": "Implement server routes and API endpoints",
-      "description": "As a frontend, I need API endpoints for presentation data.",
-      "acceptanceCriteria": [
-        "Route GET / serves index.html",
-        "Route GET /presenter serves presenter view",
-        "Route GET /api/presentation returns presentation JSON",
-        "Route GET /qr serves QR code page",
-        "Log requests with colorized output",
-        "Unit tests for routes",
-        "Typecheck passes"
-      ],
-      "priority": 30,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "US-031",
-      "title": "Implement WebSocket hub for hot reload",
-      "description": "As a presenter, I want instant preview updates on file edit.",
-      "acceptanceCriteria": [
-        "Install nhooyr.io/websocket dependency",
-        "Create internal/server/websocket.go with WebSocketHub",
-        "Implement Client struct with conn and send channel",
-        "Implement Run() for hub message loop",
-        "Implement Broadcast() for sending to all clients",
-        "Implement HandleConnection() for /ws route",
-        "Support message types: connected, reload, slide",
-        "Unit tests for hub broadcasting",
-        "Typecheck passes"
-      ],
-      "priority": 31,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "US-032",
-      "title": "Implement file watcher",
-      "description": "As a developer, I need a file watcher for hot reload.",
-      "acceptanceCriteria": [
-        "Install github.com/fsnotify/fsnotify dependency",
-        "Create internal/server/watcher.go with Watcher",
-        "Watch markdown file for changes",
-        "Watch presentation directory for asset changes",
-        "Debounce rapid changes (100ms window)",
-        "Call onChange callback on file change",
-        "Handle file rename/move gracefully",
-        "Unit tests for debounce logic",
-        "Typecheck passes"
-      ],
-      "priority": 32,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "US-033",
-      "title": "Implement code execution API endpoint",
-      "description": "As a frontend, I need an API to execute code blocks.",
-      "acceptanceCriteria": [
-        "Create internal/server/api.go",
-        "Define ExecuteRequest struct (driver, code, connection)",
-        "Define ExecuteResponse struct (success, output, error, data)",
-        "Implement POST /api/execute handler",
-        "Look up driver from registry",
-        "Look up connection config from presentation",
-        "Execute with context timeout",
-        "Return 400 for invalid driver, 500 for execution errors",
-        "Unit tests for all error cases",
-        "Typecheck passes"
-      ],
-      "priority": 33,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "US-034",
-      "title": "Implement QR code generation",
-      "description": "As a presenter, I want a QR code for the presenter URL.",
-      "acceptanceCriteria": [
-        "Install github.com/skip2/go-qrcode dependency",
-        "Create internal/server/qr.go",
-        "Generate QR code for presenter URL on server start",
-        "Display ASCII QR code in terminal",
-        "Create /qr endpoint serving QR code as HTML page",
-        "Include presenter password in URL if configured",
-        "Unit tests for URL generation",
-        "Typecheck passes"
-      ],
-      "priority": 34,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "US-035",
-      "title": "Implement presenter password protection",
-      "description": "As a presenter, I want to password-protect the presenter view.",
-      "acceptanceCriteria": [
-        "Accept --presenter-password flag on tap dev",
-        "/presenter requires ?key=<password> query param when set",
-        "Return 403 Forbidden if key missing or incorrect",
-        "Include password in QR code URL",
-        "Show warning in terminal about password protection status",
-        "Unit tests for authentication flow",
-        "Typecheck passes"
-      ],
-      "priority": 35,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "US-036",
-      "title": "Implement static site builder",
-      "description": "As a presenter, I want to build presentations to static files.",
-      "acceptanceCriteria": [
-        "Create internal/builder/builder.go with Builder struct",
-        "Define BuildResult struct (OutputDir, FileCount, TotalSize, BuildTime)",
-        "Implement Build() method outputting to dist/",
-        "Generate index.html with embedded presentation JSON",
-        "Copy referenced images to dist/assets/ with content hashes",
-        "Rewrite image paths in HTML",
-        "Report build stats",
-        "Unit tests for path rewriting",
-        "Typecheck passes"
-      ],
-      "priority": 36,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "US-037",
-      "title": "Implement PDF exporter",
-      "description": "As a presenter, I want to export presentations to PDF.",
-      "acceptanceCriteria": [
-        "Install github.com/playwright-community/playwright-go dependency",
-        "Create internal/pdf/exporter.go with Exporter struct",
-        "Define ExportOptions struct (Content, Output)",
-        "Launch headless Chromium browser",
-        "Navigate through all slides capturing each as PDF page",
-        "Support --content flag: slides, notes, both",
-        "Generate single PDF file",
-        "Clean up browser on completion",
-        "Typecheck passes"
-      ],
-      "priority": 37,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "US-038",
-      "title": "Setup Bubble Tea TUI framework",
-      "description": "As a developer, I need a TUI framework for interactive CLI.",
-      "acceptanceCriteria": [
-        "Install github.com/charmbracelet/bubbletea dependency",
-        "Install github.com/charmbracelet/lipgloss dependency",
-        "Create internal/tui/styles.go with base styles",
-        "Define color scheme: Primary (#7C3AED), Secondary (#10B981), Error (#EF4444), Muted (#6B7280)",
-        "Create TitleStyle, ErrorStyle, MutedStyle",
-        "Unit tests for style rendering",
-        "Typecheck passes"
-      ],
-      "priority": 38,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "US-039",
-      "title": "Implement tap new TUI",
-      "description": "As a user, I want an interactive command to create presentations.",
-      "acceptanceCriteria": [
-        "Create internal/tui/new.go with NewModel",
-        "Prompt for presentation title (text input)",
-        "Prompt for theme selection (list of 5 themes)",
-        "Prompt for output filename with default",
-        "Generate starter markdown with frontmatter and example slides",
-        "Display success message with next steps",
-        "Handle Ctrl+C gracefully",
-        "Unit tests for markdown generation",
-        "Typecheck passes"
-      ],
-      "priority": 39,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "US-040",
-      "title": "Implement tap dev TUI",
-      "description": "As a presenter, I want a TUI for the dev server.",
-      "acceptanceCriteria": [
-        "Create internal/tui/dev.go with DevModel",
-        "Display server URL and QR code",
-        "Display keyboard shortcuts (a=add, o=open, q=quit)",
-        "Show file watcher status and recent hot reload events",
-        "Show WebSocket connection count",
-        "Handle errors gracefully in TUI",
-        "Unit tests for key handling",
-        "Typecheck passes"
-      ],
-      "priority": 40,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "US-041",
-      "title": "Implement tap add slide builder TUI",
-      "description": "As a presenter, I want to add slides interactively.",
-      "acceptanceCriteria": [
-        "Create internal/tui/add.go with slide builder model",
-        "Display layout picker with ASCII previews",
-        "Available layouts: title, section, default, two-column, code-focus, quote, big-stat",
-        "Prompt for content based on selected layout",
-        "Generate markdown for selected layout",
-        "Append to presentation file",
-        "Unit tests for markdown generation per layout",
-        "Typecheck passes"
-      ],
-      "priority": 41,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "US-042",
-      "title": "Wire up tap build command",
-      "description": "As a user, I want the build command to generate static files.",
-      "acceptanceCriteria": [
-        "Parse presentation file in build command",
-        "Transform to frontend-ready format",
-        "Invoke Builder to generate static files",
-        "Display progress with spinner",
-        "Report build results (files, size, time)",
-        "Exit with error code on failure",
-        "Support --output flag",
-        "Typecheck passes"
-      ],
-      "priority": 42,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "US-043",
-      "title": "Wire up tap serve command",
-      "description": "As a user, I want to preview built presentations locally.",
-      "acceptanceCriteria": [
-        "Serve files from dist/ or specified directory",
-        "Use simple HTTP file server",
-        "Support --port flag (default 3000)",
-        "Display URL in terminal",
-        "Handle missing directory gracefully",
-        "Typecheck passes"
-      ],
-      "priority": 43,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "US-044",
-      "title": "Wire up tap pdf command",
-      "description": "As a user, I want to export presentations to PDF.",
-      "acceptanceCriteria": [
-        "Start temporary dev server (headless, random port)",
-        "Launch PDF exporter",
-        "Support --content flag: slides (default), notes, both",
-        "Support --output flag for custom path",
-        "Display progress during export",
-        "Clean up server and browser on completion",
-        "Report success with output file path",
-        "Typecheck passes"
-      ],
-      "priority": 44,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "US-045",
-      "title": "Configure go:embed for frontend assets",
-      "description": "As a developer, I need embedded frontend assets in the binary.",
-      "acceptanceCriteria": [
-        "Create embedded/embed.go with //go:embed directive",
-        "Embed all files from embedded/ directory",
-        "Server serves embedded assets in dev mode",
-        "Builder includes assets in static output",
-        "Typecheck passes"
-      ],
-      "priority": 45,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "US-046",
-      "title": "Initialize Svelte 5 frontend project",
-      "description": "As a developer, I need a Svelte frontend for the presentation viewer.",
-      "acceptanceCriteria": [
-        "Initialize Svelte 5 project with Vite in frontend/",
-        "Configure TypeScript strict mode",
-        "Create directory structure: src/lib/components, src/lib/layouts, src/lib/themes, src/lib/stores, src/lib/utils",
-        "Configure Vite for library mode embedding",
-        "Add build:embed script outputting to ../embedded/",
-        "ESLint + Prettier configured",
-        "Typecheck passes"
-      ],
-      "priority": 46,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "US-047",
-      "title": "Define TypeScript types for frontend",
-      "description": "As a developer, I need TypeScript types matching the Go backend.",
-      "acceptanceCriteria": [
-        "Create src/lib/types.ts",
-        "Define Presentation interface matching Go struct",
-        "Define PresentationConfig interface",
-        "Define Slide interface with index, layout, html, notes, transition, fragments, background, codeBlocks",
-        "Define Layout, Transition, FragmentGroup, BackgroundConfig, CodeBlock types",
-        "Export all types",
-        "No 'any' types used",
-        "Typecheck passes"
-      ],
-      "priority": 47,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "US-048",
-      "title": "Implement presentation Svelte store",
-      "description": "As a frontend developer, I need a store for presentation state.",
-      "acceptanceCriteria": [
-        "Create src/lib/stores/presentation.ts",
-        "Create writable stores: presentation, currentSlideIndex, currentFragmentIndex",
-        "Create derived stores: currentSlide, totalSlides",
-        "Implement actions: nextSlide, prevSlide, goToSlide, nextFragment, prevFragment",
-        "Persist current slide in URL hash (#5)",
-        "Initialize from URL hash on load",
-        "Unit tests for store actions",
-        "Typecheck passes"
-      ],
-      "priority": 48,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "US-049",
-      "title": "Implement WebSocket client for hot reload",
-      "description": "As a frontend, I need WebSocket for hot reload and sync.",
-      "acceptanceCriteria": [
-        "Create src/lib/stores/websocket.ts",
-        "Create WebSocketClient class connecting to /ws",
-        "Handle 'reload' messages with location.reload()",
-        "Handle 'slide' messages with goToSlide()",
-        "Implement auto-reconnect with exponential backoff (max 30s)",
-        "Export connected writable store",
-        "Unit tests for message handling",
-        "Typecheck passes"
-      ],
-      "priority": 49,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "US-050",
-      "title": "Implement keyboard navigation",
-      "description": "As a presenter, I want keyboard navigation to control slides.",
-      "acceptanceCriteria": [
-        "Create src/lib/utils/keyboard.ts with setupKeyboardNavigation()",
-        "ArrowRight/Down/Space/Enter advances (fragment or slide)",
-        "ArrowLeft/Up/Backspace retreats",
-        "Home goes to first slide, End to last",
-        "S opens presenter view, O toggles overview, F toggles fullscreen",
-        "Escape closes overview/exits fullscreen",
-        "Skip when input is focused",
-        "Prevent default browser behavior",
-        "Typecheck passes"
-      ],
-      "priority": 50,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "US-051",
-      "title": "Implement SlideContainer component",
-      "description": "As a frontend developer, I need a slide container with proper scaling.",
-      "acceptanceCriteria": [
-        "Create src/lib/components/SlideContainer.svelte",
-        "Apply aspect ratio from config (16:9, 4:3, 16:10)",
-        "Scale slide to fit viewport while maintaining ratio",
-        "Center slide in viewport",
-        "Apply theme class to container",
-        "Support fullscreen mode",
-        "Handle window resize",
-        "Typecheck passes"
-      ],
-      "priority": 51,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "US-052",
-      "title": "Implement SlideRenderer component",
-      "description": "As a frontend developer, I need to render slide HTML content.",
-      "acceptanceCriteria": [
-        "Create src/lib/components/SlideRenderer.svelte",
-        "Render slide HTML content with @html directive",
-        "Apply layout-specific classes",
-        "Handle fragment visibility based on visibleFragments prop",
-        "Support background images",
-        "Apply slide-specific transitions",
-        "Typecheck passes"
-      ],
-      "priority": 52,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "US-053",
-      "title": "Implement layout components - Title and Section",
-      "description": "As a frontend developer, I need layout components for title and section slides.",
-      "acceptanceCriteria": [
-        "Create src/lib/layouts/LayoutTitle.svelte - centered title with optional subtitle",
-        "Create src/lib/layouts/LayoutSection.svelte - large section header",
-        "Each layout has appropriate grid/flex structure",
-        "Layouts are theme-aware",
-        "Typecheck passes"
-      ],
-      "priority": 53,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "US-054",
-      "title": "Implement layout components - Default and TwoColumn",
-      "description": "As a frontend developer, I need default and two-column layouts.",
-      "acceptanceCriteria": [
-        "Create src/lib/layouts/LayoutDefault.svelte - standard content layout",
-        "Create src/lib/layouts/LayoutTwoColumn.svelte - side-by-side columns",
-        "Each layout has appropriate grid/flex structure",
-        "Layouts are theme-aware",
-        "Typecheck passes"
-      ],
-      "priority": 54,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "US-055",
-      "title": "Implement layout components - CodeFocus and Quote",
-      "description": "As a frontend developer, I need code-focus and quote layouts.",
-      "acceptanceCriteria": [
-        "Create src/lib/layouts/LayoutCodeFocus.svelte - full-width code block",
-        "Create src/lib/layouts/LayoutQuote.svelte - styled blockquote",
-        "Each layout has appropriate structure",
-        "Layouts are theme-aware",
-        "Typecheck passes"
-      ],
-      "priority": 55,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "US-056",
-      "title": "Implement remaining layout components",
-      "description": "As a frontend developer, I need the remaining layout components.",
-      "acceptanceCriteria": [
-        "Create LayoutBigStat.svelte - large number emphasis",
-        "Create LayoutThreeColumn.svelte - three-column grid",
-        "Create LayoutCover.svelte - full-bleed background image",
-        "Create LayoutSidebar.svelte - main content with sidebar",
-        "Create LayoutSplitMedia.svelte - image + text side-by-side",
-        "Create LayoutBlank.svelte - empty canvas",
-        "All layouts are theme-aware",
-        "Typecheck passes"
-      ],
-      "priority": 56,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "US-057",
-      "title": "Implement minimal theme CSS",
-      "description": "As a user, I want the minimal theme with clean Apple-style aesthetics.",
-      "acceptanceCriteria": [
-        "Create src/lib/themes/minimal.css",
-        "Define CSS custom properties for colors (white bg, dark text)",
-        "Typography: Helvetica Neue font family",
-        "Font sizes: title 8rem, h1 6rem, h2 4rem, body 2rem, code 1.5rem",
-        "Animation timing variables",
-        "Transition default: fade",
-        "Theme applied via .theme-minimal class",
-        "Typecheck passes"
-      ],
-      "priority": 57,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "US-058",
-      "title": "Implement gradient theme CSS",
-      "description": "As a user, I want the gradient theme with colorful modern aesthetics.",
-      "acceptanceCriteria": [
-        "Create src/lib/themes/gradient.css",
-        "Modern colorful gradients for backgrounds",
-        "Glassmorphism effects",
-        "Same typography scale as minimal",
-        "Theme applied via .theme-gradient class",
-        "Typecheck passes"
-      ],
-      "priority": 58,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "US-059",
-      "title": "Implement terminal theme CSS",
-      "description": "As a user, I want the terminal theme with hacker aesthetic.",
-      "acceptanceCriteria": [
-        "Create src/lib/themes/terminal.css",
-        "Dark background with green/amber text",
-        "Monospace font throughout",
-        "CRT-style effects (scanlines, glow)",
-        "Same typography scale",
-        "Theme applied via .theme-terminal class",
-        "Typecheck passes"
-      ],
-      "priority": 59,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "US-060",
-      "title": "Implement brutalist and keynote themes",
-      "description": "As a user, I want brutalist and keynote themes.",
-      "acceptanceCriteria": [
-        "Create src/lib/themes/brutalist.css - bold, geometric, high contrast",
-        "Create src/lib/themes/keynote.css - professional, subtle shadows",
-        "Both follow same typography scale",
-        "Themes applied via respective classes",
-        "Typecheck passes"
-      ],
-      "priority": 60,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "US-061",
-      "title": "Implement slide transitions",
-      "description": "As a presenter, I want smooth transitions between slides.",
-      "acceptanceCriteria": [
-        "Create src/lib/utils/transitions.ts",
-        "Implement 5 transition types: none, fade, slide, push, zoom",
-        "Use Svelte transitions (crossfade, fade, fly, scale)",
-        "Apply transition from config (global default)",
-        "Support per-slide transition override",
-        "Respect reduced motion preferences",
-        "Configurable duration (default 400ms)",
-        "Typecheck passes"
-      ],
-      "priority": 61,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "US-062",
-      "title": "Implement fragment animation system",
-      "description": "As a presenter, I want incremental reveals with fragments.",
-      "acceptanceCriteria": [
-        "Create src/lib/components/FragmentContainer.svelte",
-        "Parse fragment groups from slide data",
-        "Track current fragment index per slide",
-        "Hide fragments beyond current index",
-        "Animate fragment reveal with fade effect",
-        "Fragment navigation integrates with keyboard",
-        "Typecheck passes"
-      ],
-      "priority": 62,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "US-063",
-      "title": "Setup Shiki for syntax highlighting",
-      "description": "As a presenter, I want beautiful syntax highlighting for code.",
-      "acceptanceCriteria": [
-        "Install shiki package",
-        "Create src/lib/utils/highlighting.ts",
-        "Implement initHighlighter() with lazy theme loading",
-        "Implement highlight() function",
-        "Support common languages: js, ts, python, sql, go, rust, bash",
-        "Typecheck passes"
-      ],
-      "priority": 63,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "US-064",
-      "title": "Implement code highlighting features",
-      "description": "As a presenter, I want advanced code highlighting features.",
-      "acceptanceCriteria": [
-        "Support line highlighting ({1,3-5} syntax)",
-        "Support line numbers (optional)",
-        "Support code block titles",
-        "Support code diffs visualization",
-        "Auto-size large code blocks to fit on screen",
-        "Typecheck passes"
-      ],
-      "priority": 64,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "US-065",
-      "title": "Implement LiveCodeBlock component",
-      "description": "As a presenter, I want to execute code from slides.",
-      "acceptanceCriteria": [
-        "Create src/lib/components/LiveCodeBlock.svelte",
-        "Display Run button on driver-enabled code blocks",
-        "Show loading state during execution",
-        "POST to /api/execute with driver, code, connection",
-        "Display execution result below code",
-        "Format tabular data as HTML table",
-        "Show error state with muted styling",
-        "Keyboard shortcut Ctrl/Cmd+Enter to execute",
-        "Typecheck passes"
-      ],
-      "priority": 65,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "US-066",
-      "title": "Implement presenter view",
-      "description": "As a presenter, I want a dedicated presenter view.",
-      "acceptanceCriteria": [
-        "Create src/routes/presenter/+page.svelte",
-        "Display current slide (compact)",
-        "Display next slide preview",
-        "Display speaker notes for current slide",
-        "Display elapsed timer (click to reset)",
-        "Display slide counter (e.g., 5 / 24)",
-        "Touch-friendly controls",
-        "Sync with audience view via WebSocket",
-        "Typecheck passes"
-      ],
-      "priority": 66,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "US-067",
-      "title": "Implement slide overview mode",
-      "description": "As a presenter, I want to quickly navigate to any slide.",
-      "acceptanceCriteria": [
-        "Create src/lib/components/SlideOverview.svelte",
-        "Display all slides as thumbnails in grid",
-        "Highlight current slide",
-        "Click thumbnail to navigate and close",
-        "Keyboard navigation with arrow keys",
-        "Close on Escape or selecting slide",
-        "Toggle with O key",
-        "Typecheck passes"
-      ],
-      "priority": 67,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "US-068",
-      "title": "Implement progress indicator",
-      "description": "As a viewer, I want a progress indicator.",
-      "acceptanceCriteria": [
-        "Create src/lib/components/ProgressBar.svelte",
-        "Display at bottom of slide viewport",
-        "Show percentage complete based on current slide",
-        "Subtle styling that doesn't distract",
-        "Hide in presenter view",
-        "Optional (can be disabled in config)",
-        "Typecheck passes"
-      ],
-      "priority": 68,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "US-069",
-      "title": "Implement animation presets",
-      "description": "As a presenter, I want built-in animation presets.",
-      "acceptanceCriteria": [
-        "Create src/lib/utils/animations.ts",
-        "Implement typewriter - character-by-character reveal",
-        "Implement count-up - number animation from 0 to target",
-        "Implement cascade - staggered list item entrance",
-        "Implement spring - spring physics for motion",
-        "Animations triggered on slide enter",
-        "Respect reduced motion preferences",
-        "Typecheck passes"
-      ],
-      "priority": 69,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "US-070",
-      "title": "Implement static build placeholder",
-      "description": "As a viewer, I want graceful handling of live code in static builds.",
-      "acceptanceCriteria": [
-        "Detect when running in static mode (no WebSocket)",
-        "Show placeholder on driver-enabled code blocks",
-        "Message: 'Live execution available in presentation mode'",
-        "Style placeholder to match theme",
-        "Hide Run button in static mode",
-        "Typecheck passes"
-      ],
-      "priority": 70,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "US-071",
-      "title": "Implement disconnection indicator",
-      "description": "As a presenter, I want to know when connection is lost.",
-      "acceptanceCriteria": [
-        "Create src/lib/components/ConnectionIndicator.svelte",
-        "Show subtle indicator when WebSocket disconnects",
-        "Position in corner of slide",
-        "Indicate reconnection attempts",
-        "Hide when reconnected",
-        "Don't show in static mode",
-        "Typecheck passes"
-      ],
-      "priority": 71,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "US-072",
-      "title": "Create main audience view page",
-      "description": "As a viewer, I need the main presentation page.",
-      "acceptanceCriteria": [
-        "Create src/routes/+page.svelte",
-        "Fetch presentation from /api/presentation on mount",
-        "Render SlideContainer with current slide",
-        "Initialize keyboard navigation",
-        "Connect WebSocket client",
-        "Show progress indicator",
-        "Typecheck passes",
-        "Verify in browser using dev-browser skill"
-      ],
-      "priority": 72,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "US-073",
-      "title": "Implement Asciinema player component",
-      "description": "As a presenter, I want to embed terminal recordings.",
-      "acceptanceCriteria": [
-        "Create src/lib/components/AsciinemaPlayer.svelte",
-        "Load asciinema-player library",
-        "Support .cast file format via code block syntax",
-        "Playback controls: play, pause, speed",
-        "Auto-play option via directive",
-        "Styling matches theme terminal aesthetic",
-        "Graceful fallback if file missing",
-        "Typecheck passes"
-      ],
-      "priority": 73,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "US-074",
-      "title": "Create sample presentation for testing",
-      "description": "As a developer, I need a sample presentation for E2E testing.",
-      "acceptanceCriteria": [
-        "Create testdata/sample.md with complete presentation",
-        "Include frontmatter with all config options",
-        "Include title slide, section slides, code slides",
-        "Include fragments and directives",
-        "Include live code block with shell driver",
-        "Include speaker notes",
-        "Typecheck passes"
-      ],
-      "priority": 74,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "US-075",
-      "title": "Setup Vitest for frontend component tests",
-      "description": "As a developer, I need unit tests for Svelte components.",
-      "acceptanceCriteria": [
-        "Install vitest and @testing-library/svelte",
-        "Configure vitest.config.ts",
-        "Create test for SlideRenderer component",
-        "Create test for SlideContainer scaling",
-        "Create test for FragmentContainer visibility",
-        "Achieve >80% component coverage",
-        "Typecheck passes"
-      ],
-      "priority": 75,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "US-076",
-      "title": "Setup Playwright E2E tests",
-      "description": "As a developer, I need E2E tests for the presentation viewer.",
-      "acceptanceCriteria": [
-        "Install @playwright/test",
-        "Create playwright.config.ts",
-        "Test slide navigation with keyboard",
-        "Test URL hash navigation",
-        "Test fragment reveals",
-        "Test hot reload",
-        "Typecheck passes"
-      ],
-      "priority": 76,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "US-077",
-      "title": "Create Go benchmark tests",
-      "description": "As a developer, I need benchmarks to ensure performance targets.",
-      "acceptanceCriteria": [
-        "Benchmark parsing 100-slide presentation (<100ms)",
-        "Benchmark building 50-slide presentation (<2s)",
-        "Benchmark hot reload latency (<200ms)",
-        "Add benchmarks to Makefile",
-        "Document performance baselines",
-        "Typecheck passes"
-      ],
-      "priority": 77,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "US-078",
-      "title": "Configure GoReleaser for cross-platform builds",
-      "description": "As a developer, I need automated cross-platform binary builds.",
-      "acceptanceCriteria": [
-        "Create .goreleaser.yml configuration",
-        "Build targets: darwin/amd64, darwin/arm64, linux/amd64, linux/arm64, windows/amd64",
-        "Include embedded frontend in all builds",
-        "Generate checksums",
-        "Create GitHub release with artifacts",
-        "Typecheck passes"
-      ],
-      "priority": 78,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "US-079",
-      "title": "Create README documentation",
-      "description": "As a user, I need documentation to learn how to use Tap.",
-      "acceptanceCriteria": [
-        "Create README.md with quick start guide",
-        "Include installation instructions (download, homebrew, go install)",
-        "Include basic usage examples",
-        "Include command reference table",
-        "Include example frontmatter configuration",
-        "Typecheck passes"
-      ],
-      "priority": 79,
       "passes": false,
       "notes": ""
     },
     {
-      "id": "US-080",
-      "title": "Create example presentations",
-      "description": "As a user, I need example presentations to learn from.",
+      "id": "US-102",
+      "title": "Configure Tailwind for presentation-specific design tokens",
+      "description": "As a developer, I need Tailwind configured with presentation-appropriate scales so themes can use consistent, large typography and spacing.",
       "acceptanceCriteria": [
-        "Create examples/ directory",
-        "Create examples/basic.md - simple presentation",
-        "Create examples/code-demo.md - code-focused with live execution",
-        "Create examples/sql-demo.md - live SQL demo",
-        "Each theme has a showcase example",
+        "Extend fontSize with presentation scale: slide-title (8rem), slide-h1 (6rem), slide-h2 (4rem), slide-h3 (2.5rem), slide-body (2rem), slide-code (1.5rem), slide-stat (12rem)",
+        "Extend fontFamily with sans, mono, and display stacks",
+        "Extend spacing for slide-appropriate values (slide padding 80px, content gaps)",
+        "Add aspectRatio utilities for 16/9, 4/3, 16/10",
+        "Configure animation/transition timing tokens",
+        "Add CSS custom property bridge for theme switching (theme-bg, theme-text, theme-accent, etc.)",
         "Typecheck passes"
       ],
-      "priority": 80,
+      "priority": 2,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-103",
+      "title": "Create theme configuration system with CSS custom properties",
+      "description": "As a developer, I need a theming system where themes define CSS custom properties that Tailwind utilities reference, enabling runtime theme switching.",
+      "acceptanceCriteria": [
+        "Create src/lib/themes/theme-tokens.css defining CSS variable structure",
+        "Define required variables: --color-bg, --color-text, --color-muted, --color-accent, --color-code-bg, --font-sans, --font-mono",
+        "Configure Tailwind to use these variables (e.g., bg-theme-bg, text-theme-accent)",
+        "Theme class on root element (.theme-paper) sets the variable values",
+        "Switching theme class instantly updates all colors",
+        "Typecheck passes",
+        "Verify in browser: switching theme class changes colors immediately"
+      ],
+      "priority": 3,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-104",
+      "title": "Archive legacy CSS and remove imports",
+      "description": "As a developer, I need to remove the old CSS architecture so we have a clean slate for the Tailwind migration.",
+      "acceptanceCriteria": [
+        "Create frontend/src/lib/themes/_legacy/ directory",
+        "Move existing theme CSS files (minimal.css, gradient.css, terminal.css, brutalist.css, keynote.css) to _legacy/",
+        "Remove imports of legacy CSS files from components",
+        "Remove any component-level <style> blocks with custom CSS (keep animation-related styles)",
+        "Application still builds (may look broken visually)",
+        "Typecheck passes"
+      ],
+      "priority": 4,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-105",
+      "title": "Migrate SlideContainer component to Tailwind",
+      "description": "As a developer, I need the core slide container using Tailwind so it properly scales and centers slides.",
+      "acceptanceCriteria": [
+        "Replace all custom CSS in SlideContainer.svelte with Tailwind utilities",
+        "Maintain aspect ratio scaling (16:9, 4:3, 16:10) using Tailwind aspect-ratio utilities",
+        "Center slide in viewport with flex utilities (flex items-center justify-center)",
+        "Support fullscreen mode with appropriate Tailwind classes",
+        "Handle window resize correctly",
+        "Typecheck passes",
+        "Verify in browser: slide scales correctly at different window sizes"
+      ],
+      "priority": 5,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-106",
+      "title": "Migrate SlideRenderer component to Tailwind",
+      "description": "As a developer, I need the slide renderer using Tailwind for content display and fragment visibility.",
+      "acceptanceCriteria": [
+        "Replace all custom CSS in SlideRenderer.svelte with Tailwind utilities",
+        "Layout-specific classes applied via Tailwind",
+        "Fragment visibility controlled via Tailwind opacity/transform utilities",
+        "Background image support maintained with Tailwind bg-cover, bg-center",
+        "Typecheck passes",
+        "Verify in browser: slides render with correct layout structure"
+      ],
+      "priority": 6,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-107A",
+      "title": "Migrate Title, Section, and Default layout components to Tailwind",
+      "description": "As a developer, I need the core layout components (Title, Section, Default) using Tailwind.",
+      "acceptanceCriteria": [
+        "LayoutTitle.svelte - centered title with subtitle using Tailwind flex/text utilities",
+        "LayoutSection.svelte - large section header centered using Tailwind",
+        "LayoutDefault.svelte - standard content layout with proper padding/spacing",
+        "All layouts use theme CSS variables via Tailwind utilities (text-theme-text, bg-theme-bg)",
+        "Typecheck passes",
+        "Verify in browser: title, section, and default layouts render correctly"
+      ],
+      "priority": 7,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-107B",
+      "title": "Migrate TwoColumn, ThreeColumn, and Sidebar layout components to Tailwind",
+      "description": "As a developer, I need the column-based layout components using Tailwind grid.",
+      "acceptanceCriteria": [
+        "LayoutTwoColumn.svelte - CSS grid via Tailwind (grid grid-cols-2 gap-8)",
+        "LayoutThreeColumn.svelte - three-column grid using Tailwind",
+        "LayoutSidebar.svelte - main content with sidebar using Tailwind grid",
+        "All layouts use theme CSS variables via Tailwind utilities",
+        "Typecheck passes",
+        "Verify in browser: column layouts render with correct grid structure"
+      ],
+      "priority": 8,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-107C",
+      "title": "Migrate CodeFocus, Quote, and BigStat layout components to Tailwind",
+      "description": "As a developer, I need the specialized content layout components using Tailwind.",
+      "acceptanceCriteria": [
+        "LayoutCodeFocus.svelte - full-width code using Tailwind (w-full, proper padding)",
+        "LayoutQuote.svelte - styled blockquote with accent border using Tailwind",
+        "LayoutBigStat.svelte - large number emphasis with massive text using Tailwind",
+        "All layouts use theme CSS variables via Tailwind utilities",
+        "Typecheck passes",
+        "Verify in browser: code-focus, quote, and big-stat layouts render correctly"
+      ],
+      "priority": 9,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-107D",
+      "title": "Migrate Cover, SplitMedia, and Blank layout components to Tailwind",
+      "description": "As a developer, I need the remaining layout components using Tailwind.",
+      "acceptanceCriteria": [
+        "LayoutCover.svelte - full-bleed background using Tailwind (bg-cover, bg-center, absolute inset-0)",
+        "LayoutSplitMedia.svelte - image + text side-by-side using Tailwind grid",
+        "LayoutBlank.svelte - empty canvas with minimal styling",
+        "All layouts use theme CSS variables via Tailwind utilities",
+        "Typecheck passes",
+        "Verify in browser: cover, split-media, and blank layouts render correctly"
+      ],
+      "priority": 10,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-108",
+      "title": "Migrate typography and prose styling to Tailwind",
+      "description": "As a developer, I need base typography (headings, paragraphs, lists, code, tables) styled via Tailwind.",
+      "acceptanceCriteria": [
+        "Create src/lib/styles/prose.css with Tailwind @apply for markdown content",
+        "Style h1-h6 with appropriate sizes from presentation scale (slide-h1, slide-h2, etc.)",
+        "Style paragraphs and list items with proper spacing",
+        "Style inline code with background and padding",
+        "Style code blocks (pre) with theme-aware backgrounds",
+        "Style blockquotes with accent border",
+        "Style tables with proper borders and padding",
+        "Style links with accent color and hover states",
+        "Typecheck passes",
+        "Verify in browser: markdown content renders beautifully"
+      ],
+      "priority": 11,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-109",
+      "title": "Migrate UI components to Tailwind",
+      "description": "As a developer, I need all UI components (ProgressBar, ConnectionIndicator, LiveCodeBlock, etc.) using Tailwind.",
+      "acceptanceCriteria": [
+        "ProgressBar.svelte - thin accent-colored bar using Tailwind (h-1 bg-theme-accent)",
+        "ConnectionIndicator.svelte - subtle corner indicator using Tailwind",
+        "LiveCodeBlock.svelte - code display with run button using Tailwind",
+        "FragmentContainer.svelte - fragment wrapper using Tailwind opacity/transform",
+        "SlideOverview.svelte - thumbnail grid using Tailwind grid utilities",
+        "AsciinemaPlayer.svelte - player wrapper using Tailwind",
+        "All components use theme CSS variables",
+        "Typecheck passes",
+        "Verify in browser: all UI components render correctly"
+      ],
+      "priority": 12,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-110",
+      "title": "Migrate presenter view to Tailwind",
+      "description": "As a developer, I need the presenter view page using Tailwind for its multi-panel layout.",
+      "acceptanceCriteria": [
+        "Main layout with current slide, next preview, notes panel using Tailwind grid",
+        "Timer display styled with Tailwind (text-4xl font-mono)",
+        "Slide counter styled with Tailwind",
+        "Touch-friendly controls sized appropriately (min-h-12, p-4)",
+        "Responsive for tablet use",
+        "Typecheck passes",
+        "Verify in browser: presenter view is functional and well-styled"
+      ],
+      "priority": 13,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-111",
+      "title": "Design and implement Paper theme",
+      "description": "As a user, I want the Paper theme to feel ultra-clean and airy—like a fresh sheet of premium paper where content takes center stage.",
+      "acceptanceCriteria": [
+        "Create src/lib/themes/paper.css with CSS custom properties only",
+        "Color palette: Pure white background (#ffffff), near-black text (#0a0a0a), sophisticated gray for muted (#71717a), subtle warm accent (#78716c)",
+        "Typography: Inter / system-ui for headings and body with confident letter-spacing (-0.02em), perfect line heights",
+        "Subtle refinements: Delicate shadows on code blocks, refined border radii (8px), generous whitespace",
+        "Code blocks: Dark (#1e1e1e) with excellent contrast",
+        "Transitions: Smooth, confident fades (400ms ease-out)",
+        "Typecheck passes",
+        "Verify in browser: theme looks premium and effortlessly clean"
+      ],
+      "priority": 14,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-112",
+      "title": "Design and implement Aurora theme",
+      "description": "As a user, I want the Aurora theme to feel like the northern lights—vibrant color flows, glassmorphism, dynamic and mesmerizing.",
+      "acceptanceCriteria": [
+        "Create src/lib/themes/aurora.css with CSS custom properties only",
+        "Color palette: Rich gradient backgrounds (deep purples #4c1d95 to electric blues #0ea5e9 to teals #14b8a6), white text",
+        "Background: Animated gradient mesh using CSS @keyframes with subtle movement",
+        "Glassmorphism: Frosted glass cards with backdrop-blur-xl and semi-transparent backgrounds",
+        "Typography: Space Grotesk for headings and body",
+        "Code blocks: Semi-transparent dark glass (rgba(0,0,0,0.6)) with backdrop-blur",
+        "Accent elements: Glowing borders (box-shadow with spread), subtle light leaks",
+        "Typecheck passes",
+        "Verify in browser: theme is vibrant, dynamic, and modern"
+      ],
+      "priority": 15,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-113",
+      "title": "Design and implement Phosphor theme",
+      "description": "As a user, I want the Phosphor theme to feel like authentic CRT monitors—glowing phosphor text, scanlines, retro-futuristic hacker aesthetic.",
+      "acceptanceCriteria": [
+        "Create src/lib/themes/phosphor.css with CSS custom properties only",
+        "Color palette: True black (#000) background, phosphor green (#00ff00) as primary, dim gray (#333) for muted",
+        "CRT effects: Subtle scanlines overlay using repeating-linear-gradient, slight screen curve vignette",
+        "Typography: JetBrains Mono throughout for authentic terminal feel",
+        "Text effects: Multi-layer text-shadow for phosphor glow (0 0 5px, 0 0 10px, 0 0 20px)",
+        "Code blocks: No background change—everything IS terminal",
+        "Typecheck passes",
+        "Verify in browser: theme has authentic retro-tech CRT feel with glowing text"
+      ],
+      "priority": 16,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-114",
+      "title": "Design and implement Poster theme",
+      "description": "As a user, I want the Poster theme to feel like bold graphic design—giant typography, high contrast, impossible to ignore.",
+      "acceptanceCriteria": [
+        "Create src/lib/themes/poster.css with CSS custom properties only",
+        "Color palette: Stark black (#000) and white (#fff), with ONE bold accent (electric red #ef4444)",
+        "Typography: Anton for headings (ALL CAPS via text-transform), massive scale, system sans for body",
+        "Layout elements: Thick black borders (4px+), harsh drop shadows (8px 8px 0 black), geometric blocks",
+        "No rounded corners: Everything sharp and rectangular (border-radius: 0)",
+        "Code blocks: Inverted colors (white on black), monospace with visible structure",
+        "Typecheck passes",
+        "Verify in browser: theme is bold, graphic, and striking"
+      ],
+      "priority": 17,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-115",
+      "title": "Design and implement Noir theme",
+      "description": "As a user, I want the Noir theme to feel cinematic and sophisticated—deep blacks, dramatic lighting, film noir elegance.",
+      "acceptanceCriteria": [
+        "Create src/lib/themes/noir.css with CSS custom properties only",
+        "Color palette: Deep charcoal backgrounds (#0a0a0a), crisp white text (#fafafa), sophisticated gold accent (#d4af37)",
+        "Typography: Playfair Display for titles (serif), Inter for body (sans-serif)",
+        "Cinematic depth: Multi-layer soft shadows, subtle vignette effect on slides",
+        "Subtle gradients: Very subtle dark-to-darker gradients (linear-gradient) for richness",
+        "Code blocks: Elevated card style with refined shadows and slight border",
+        "Typecheck passes",
+        "Verify in browser: theme looks sophisticated, dark, and executive"
+      ],
+      "priority": 18,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-116",
+      "title": "Implement simple color customization for built-in themes",
+      "description": "As a user, I want to easily swap colors in built-in themes via frontmatter so I can match my brand.",
+      "acceptanceCriteria": [
+        "Support themeColors object in frontmatter: { accent: '#ff0000', background: '#000' }",
+        "Parse themeColors in Go config parser (internal/config/config.go)",
+        "Pass themeColors to frontend via presentation JSON",
+        "Apply color overrides as inline CSS variables on root element in frontend",
+        "Supported color keys: background, text, muted, accent, codeBg",
+        "Partial overrides work (only specify what you want to change)",
+        "Invalid colors ignored gracefully with console warning",
+        "Typecheck passes",
+        "Verify in browser: custom colors applied correctly override theme defaults"
+      ],
+      "priority": 19,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-117",
+      "title": "Implement custom theme support via user CSS file",
+      "description": "As a power user, I want to define a completely custom theme by providing my own CSS file.",
+      "acceptanceCriteria": [
+        "Support customTheme: './my-theme.css' in frontmatter (path relative to markdown file)",
+        "Parse customTheme path in Go config parser",
+        "Load and inject custom CSS file at runtime in dev mode via <link> tag",
+        "Embed custom CSS at build time for static builds",
+        "Custom theme CSS can define all CSS variables to completely override defaults",
+        "Error handling: graceful fallback if custom theme file not found (log warning, use default theme)",
+        "Typecheck passes",
+        "Verify in browser: custom theme fully applied"
+      ],
+      "priority": 20,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-118",
+      "title": "Create animation utilities with Tailwind + Svelte transitions",
+      "description": "As a developer, I need a clean approach for animations that combines Tailwind utilities with Svelte transitions.",
+      "acceptanceCriteria": [
+        "Create src/lib/styles/animations.css for complex animations only",
+        "Include CRT scanline animation for Phosphor theme",
+        "Include gradient mesh animation for Aurora theme",
+        "Include phosphor glow keyframes",
+        "Keep file minimal—only what Tailwind truly cannot do",
+        "Document which animations are Tailwind vs custom in code comments",
+        "Svelte transitions used for slide transitions (fade, fly, scale)",
+        "Fragment reveals use Tailwind opacity/transform with transition-all",
+        "Typecheck passes",
+        "Verify in browser: all animations work smoothly"
+      ],
+      "priority": 21,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-119",
+      "title": "Update embedded asset build to include Tailwind output",
+      "description": "As a developer, I need the Go binary to embed the Tailwind-built CSS correctly.",
+      "acceptanceCriteria": [
+        "Vite build outputs optimized CSS with Tailwind utilities to dist/",
+        "CSS is properly purged (only used utilities included) via Tailwind content config",
+        "Output CSS copied to ../embedded/ directory via build:embed script",
+        "Go embed directive in embedded/embed.go picks up the new CSS",
+        "Binary serves correct styles when running tap dev",
+        "Build size is reasonable (target: <50KB CSS gzipped)",
+        "Typecheck passes"
+      ],
+      "priority": 22,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-120",
+      "title": "Update documentation for new theming system",
+      "description": "As a user, I need documentation explaining how to use themes, customize colors, and create custom themes.",
+      "acceptanceCriteria": [
+        "Update SPEC.md with new theming architecture (Tailwind + CSS custom properties)",
+        "Document all 5 themes with visual descriptions: Paper, Noir, Aurora, Phosphor, Poster",
+        "Document themeColors frontmatter option with examples",
+        "Document customTheme CSS file approach with template showing required CSS variables",
+        "Update testdata/sample.md to use theme: paper",
+        "Typecheck passes"
+      ],
+      "priority": 23,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-121",
+      "title": "Rename theme references in Go backend",
+      "description": "As a developer, I need all Go code updated to use the new theme names (paper, noir, aurora, phosphor, poster).",
+      "acceptanceCriteria": [
+        "Update internal/config/config.go theme validation to accept: paper, noir, aurora, phosphor, poster",
+        "Update default theme from 'minimal' to 'paper'",
+        "Update theme list in CLI help text (tap new --help)",
+        "Update TUI theme selector options in internal/tui/new.go with new names and descriptions",
+        "Add backwards compatibility: old names (minimal, gradient, terminal, brutalist, keynote) map to new names with deprecation warning logged",
+        "All Go tests pass with new theme names",
+        "Typecheck passes"
+      ],
+      "priority": 24,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-122",
+      "title": "Rename theme files and references in frontend",
+      "description": "As a developer, I need all frontend code updated to use the new theme names.",
+      "acceptanceCriteria": [
+        "Theme CSS files already created with new names in US-111 through US-115",
+        "Update all CSS class references in components (.theme-minimal to .theme-paper, etc.)",
+        "Update theme imports in main app entry point",
+        "Update TypeScript types/enums for theme names in src/lib/types.ts",
+        "Update any hardcoded theme references in Svelte components",
+        "Typecheck passes",
+        "Verify in browser: all themes load correctly with new names"
+      ],
+      "priority": 25,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-123",
+      "title": "Update sample presentations and test data",
+      "description": "As a developer, I need all sample presentations updated to use the new theme names.",
+      "acceptanceCriteria": [
+        "Update testdata/sample.md frontmatter to use theme: paper",
+        "Update any other test fixtures in testdata/ referencing old theme names",
+        "Create or update examples/ directory with presentations for each theme",
+        "Grep entire codebase for old theme names (minimal, gradient, terminal, brutalist, keynote) and update any remaining references",
+        "Typecheck passes"
+      ],
+      "priority": 26,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-124",
+      "title": "Update SPEC.md with new theme names and descriptions",
+      "description": "As a developer, I need the product specification updated to reflect the new theme names.",
+      "acceptanceCriteria": [
+        "Replace all references to 'minimal' with 'paper' in SPEC.md",
+        "Replace all references to 'keynote' with 'noir' in SPEC.md",
+        "Replace all references to 'gradient' with 'aurora' in SPEC.md",
+        "Replace all references to 'terminal' with 'phosphor' in SPEC.md",
+        "Replace all references to 'brutalist' with 'poster' in SPEC.md",
+        "Update theme descriptions to match new visual directions",
+        "Update any code examples showing theme configuration",
+        "Typecheck passes"
+      ],
+      "priority": 27,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-125",
+      "title": "Add theme switcher to dev server TUI",
+      "description": "As a presenter, I want to quickly switch themes from the dev server TUI to preview my presentation in different themes.",
+      "acceptanceCriteria": [
+        "Add 't' keyboard shortcut to open theme switcher in tap dev TUI (internal/tui/dev.go)",
+        "Create theme picker component showing all 5 themes: Paper, Noir, Aurora, Phosphor, Poster",
+        "Show theme name and brief one-line description for each option",
+        "Arrow keys to navigate, Enter to select, Escape to cancel",
+        "Selecting a theme broadcasts theme change via WebSocket to all connected browsers",
+        "Current theme highlighted in the picker",
+        "Theme change is temporary (doesn't modify markdown file)",
+        "Display current theme name in TUI status bar",
+        "Typecheck passes"
+      ],
+      "priority": 28,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-125B",
+      "title": "Implement WebSocket theme switching in frontend",
+      "description": "As a presenter, I want the browser to instantly switch themes when I select one in the TUI.",
+      "acceptanceCriteria": [
+        "Add 'theme' message type to WebSocket handler in frontend",
+        "When 'theme' message received, update root element class to new theme",
+        "Theme switch happens instantly without page reload",
+        "Update presentation store to track current theme override",
+        "Typecheck passes",
+        "Verify in browser: theme switches instantly when selected in TUI"
+      ],
+      "priority": 29,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-126",
+      "title": "Install and configure embedded fonts",
+      "description": "As a presenter, I need all fonts embedded so presentations work fully offline.",
+      "acceptanceCriteria": [
+        "Install font packages via npm: @fontsource/inter, @fontsource/space-grotesk, @fontsource/jetbrains-mono, @fontsource/playfair-display, @fontsource/anton",
+        "Create src/lib/styles/fonts.css that imports required font weights",
+        "Import Inter weights: 400, 500, 600, 700",
+        "Import Playfair Display weights: 400, 700",
+        "Import Space Grotesk weights: 400, 500, 700",
+        "Import JetBrains Mono weights: 400, 700",
+        "Import Anton weight: 400",
+        "Import fonts.css in main app entry point",
+        "Typecheck passes"
+      ],
+      "priority": 30,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-126B",
+      "title": "Wire up embedded fonts to themes and verify offline support",
+      "description": "As a presenter, I need fonts to load correctly in each theme and work offline.",
+      "acceptanceCriteria": [
+        "Update Paper theme to use font-family: Inter, system-ui, sans-serif",
+        "Update Noir theme to use Playfair Display for headings, Inter for body",
+        "Update Aurora theme to use Space Grotesk",
+        "Update Phosphor theme to use JetBrains Mono throughout",
+        "Update Poster theme to use Anton for headings, system sans for body",
+        "Fonts included in Vite build output (check dist/ after build)",
+        "Verify presentations render correctly with network disabled in browser DevTools",
+        "Typecheck passes",
+        "Verify in browser: fonts load correctly offline for all themes"
+      ],
+      "priority": 31,
       "passes": false,
       "notes": ""
     }
