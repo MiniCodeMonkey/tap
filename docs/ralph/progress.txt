@@ -292,3 +292,16 @@ Started: Fri Jan 23 20:59:35 CET 2026
   - "Pre-Deployment Checklist" sections add practical value for production readiness
   - Quick Reference tables at the end help users find commands quickly
 ---
+
+## 2026-01-24 - US-022
+- What was implemented: Wrote complete CLI Commands reference page with documentation for all 6 commands
+- Files changed:
+  - `docs/reference/cli-commands.md` (modified) - Replaced stub with comprehensive CLI reference
+- **Learnings for future iterations:**
+  - CLI reference pages should have consistent structure: Usage, Arguments, Flags, Examples for each command
+  - Include short flags alongside long flags (e.g., `-p` for `--port`) in tables
+  - Add extra useful sections: Exit Codes, Environment Variables, Global Flags
+  - Quick Reference table at end provides fast lookup for common commands
+  - Tips (`::: tip`) are useful for cross-device networking advice (e.g., `--host 0.0.0.0`)
+  - Warnings (`::: warning`) highlight important caveats like live code execution limitations in static builds
+---
