@@ -103,3 +103,29 @@ Started: Fri Jan 23 20:59:35 CET 2026
   - Use `ref()` for reactive state that controls UI (e.g., copied state for icon toggle)
   - setTimeout is fine for simple temporary state changes like copy feedback
 ---
+
+## 2026-01-23 - US-007
+- What was implemented: Created HomeFeatures component displaying three value proposition cards
+- Files changed:
+  - `docs/.vitepress/theme/components/HomeFeatures.vue` (created) - Features section with three cards showing Markdown-first, Live code execution, and Single binary value props
+  - `docs/.vitepress/theme/index.ts` (modified) - Registered HomeFeatures as a global component
+  - `docs/index.md` (modified) - Added HomeFeatures component below HomeHero
+- **Learnings for future iterations:**
+  - Grid layouts work well with `grid-template-columns: repeat(3, 1fr)` for even card distribution
+  - Use responsive breakpoints at 768px to collapse to single column on mobile
+  - Feature data can be stored as a simple array of objects in `<script setup>` for easy mapping
+  - Use `var(--vp-c-bg-alt)` for subtle card backgrounds that work in both light and dark mode
+---
+
+## 2026-01-23 - US-008
+- What was implemented: Created HomeCode component showing markdown example with terminal-style display
+- Files changed:
+  - `docs/.vitepress/theme/components/HomeCode.vue` (created) - Code example section with terminal window styling, showing frontmatter, SQL query with driver annotation, and descriptive text
+  - `docs/.vitepress/theme/index.ts` (modified) - Registered HomeCode as a global component
+  - `docs/index.md` (modified) - Added HomeCode component after HomeFeatures
+- **Learnings for future iterations:**
+  - Use Catppuccin-style colors (#1e1e2e, #181825, #cdd6f4) for terminal-like dark code blocks
+  - Window controls (red/yellow/green dots) add visual polish and familiarity
+  - Template strings in `<script setup>` work well for multi-line code examples
+  - Use monospace font for both the code content and filename for consistency
+---
