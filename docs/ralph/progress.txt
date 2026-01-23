@@ -1,0 +1,61 @@
+# Ralph Progress Log
+Started: Fri Jan 23 20:59:35 CET 2026
+
+## Codebase Patterns
+- VitePress config is at `docs/.vitepress/config.ts`
+- Use `srcExclude: ['**/ralph/**']` to exclude development files from VitePress build
+- VitePress validates TypeScript during build - no separate typecheck needed
+- Build output goes to `docs/.vitepress/dist/`
+- Dev server runs on port 5173 by default
+
+---
+
+## 2026-01-23 - US-001
+- What was implemented: Initialized VitePress project with basic configuration
+- Files changed:
+  - `docs/.gitignore` (created) - Excludes node_modules, cache, dist
+  - `docs/.vitepress/config.ts` (modified) - Added srcExclude for ralph directory
+  - `docs/index.md` (existing) - Placeholder landing page
+  - `docs/package.json` (existing) - Has VitePress dev dependency and scripts
+  - `docs/package-lock.json` (existing) - Lock file
+- **Learnings for future iterations:**
+  - VitePress was already partially set up; needed to add srcExclude to prevent build errors from ralph directory
+  - The build validates TypeScript, so a separate typecheck command is not required
+  - Must add .gitignore early to avoid committing node_modules
+---
+
+## 2026-01-23 - US-002
+- What was implemented: Configured navigation and sidebar structure in VitePress
+- Files changed:
+  - `docs/.vitepress/config.ts` - Added nav array with 5 links (Getting Started, Guide, Reference, Examples, GitHub) and sidebar configuration for /guide/, /reference/, and /examples/ sections
+- **Learnings for future iterations:**
+  - VitePress sidebar uses path-based matching - sidebar configs keyed by `/guide/` only show on pages under that path
+  - The `items: []` in sidebar groups can be empty (useful for examples section placeholder)
+  - Nav links to sections should point to the first page in that section (e.g., `/guide/writing-slides` not just `/guide/`)
+---
+
+## 2026-01-23 - US-003
+- What was implemented: Created all stub markdown files for documentation structure
+- Files changed:
+  - `docs/getting-started.md` (created) - Getting started page stub
+  - `docs/guide/writing-slides.md` (created) - Guide stub
+  - `docs/guide/layouts.md` (created) - Guide stub
+  - `docs/guide/themes.md` (created) - Guide stub
+  - `docs/guide/animations-transitions.md` (created) - Guide stub
+  - `docs/guide/code-blocks.md` (created) - Guide stub
+  - `docs/guide/live-code-execution.md` (created) - Guide stub
+  - `docs/guide/presenter-mode.md` (created) - Guide stub
+  - `docs/guide/images-media.md` (created) - Guide stub
+  - `docs/guide/building-export.md` (created) - Guide stub
+  - `docs/reference/cli-commands.md` (created) - Reference stub
+  - `docs/reference/frontmatter-options.md` (created) - Reference stub
+  - `docs/reference/slide-directives.md` (created) - Reference stub
+  - `docs/reference/layouts-reference.md` (created) - Reference stub
+  - `docs/reference/drivers.md` (created) - Reference stub
+  - `docs/reference/keyboard-shortcuts.md` (created) - Reference stub
+  - `docs/examples/index.md` (created) - Examples section stub
+- **Learnings for future iterations:**
+  - All stub pages follow the same pattern: YAML frontmatter with title, H1 heading matching title, brief description, and "*Content coming soon.*" placeholder
+  - Directory structure mirrors the sidebar navigation configured in US-002
+  - File names use kebab-case and match the sidebar link paths
+---
