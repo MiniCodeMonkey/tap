@@ -356,3 +356,15 @@ Started: Fri Jan 23 20:59:35 CET 2026
   - Shell driver's versatility for running other interpreters via heredocs is a key feature worth documenting
   - "Custom Drivers" as a stub section with `::: tip Coming Soon` follows existing patterns for planned features
 ---
+
+## 2026-01-24 - US-027
+- What was implemented: Wrote complete Keyboard Shortcuts reference page with table format documentation
+- Files changed:
+  - `docs/reference/keyboard-shortcuts.md` (modified) - Replaced stub with comprehensive keyboard shortcuts reference including navigation, view controls, presenter mode shortcuts, and touch gestures
+- **Learnings for future iterations:**
+  - Keyboard shortcut reference pages benefit from categorized sections (Navigation, View Controls, Presenter Mode)
+  - Include a combined "Quick Reference Table" with a Category column for users who want everything at a glance
+  - VitePress tip containers (`::: tip`) are useful for explaining behavior details (e.g., fragment interaction with navigation)
+  - Touch gestures deserve their own section for mobile/tablet users
+  - Cross-reference related guides (Presenter Mode, Animations) in "See Also" section
+---
