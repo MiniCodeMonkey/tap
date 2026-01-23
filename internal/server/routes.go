@@ -165,32 +165,32 @@ func (s *Server) handleAPIPresentation(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// handleQR serves a page with a QR code for the presenter URL.
+// handleQR serves a page with QR codes for the audience and presenter URLs.
 func (s *Server) handleQR(w http.ResponseWriter, r *http.Request) {
-	// For now, return a placeholder HTML page
-	// Actual QR code generation will be added in US-034
+	cfg := QRConfig{
+		Port:              s.Port(),
+		PresenterPassword: s.presenterPassword,
+	}
+
+	audienceURL, err := GenerateAudienceURL(cfg)
+	if err != nil {
+		http.Error(w, "Failed to generate audience URL", http.StatusInternalServerError)
+		return
+	}
+
+	presenterURL, err := GeneratePresenterURL(cfg)
+	if err != nil {
+		http.Error(w, "Failed to generate presenter URL", http.StatusInternalServerError)
+		return
+	}
+
+	html, err := GenerateQRCodeHTML(audienceURL, presenterURL)
+	if err != nil {
+		http.Error(w, "Failed to generate QR code page", http.StatusInternalServerError)
+		return
+	}
+
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
-	fmt.Fprintf(w, `<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tap QR Code</title>
-    <style>
-        body { font-family: system-ui, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background: white; color: #1a1a1a; }
-        .message { text-align: center; }
-        h1 { font-size: 2rem; margin-bottom: 1rem; }
-        p { color: #666; }
-        .qr-placeholder { width: 200px; height: 200px; border: 2px dashed #ccc; margin: 2rem auto; display: flex; justify-content: center; align-items: center; color: #999; }
-    </style>
-</head>
-<body>
-    <div class="message">
-        <h1>📱 QR Code</h1>
-        <div class="qr-placeholder">QR Code</div>
-        <p>Scan to join the presentation</p>
-    </div>
-</body>
-</html>`)
+	fmt.Fprint(w, html)
 }

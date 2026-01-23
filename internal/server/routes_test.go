@@ -165,7 +165,7 @@ func TestHandleAPIPresentation_WithPresentation(t *testing.T) {
 }
 
 func TestHandleQR(t *testing.T) {
-	s := New(0)
+	s := New(3000)
 
 	req := httptest.NewRequest(http.MethodGet, "/qr", nil)
 	w := httptest.NewRecorder()
@@ -188,8 +188,43 @@ func TestHandleQR(t *testing.T) {
 	bodyStr := string(body)
 
 	// Check for QR page content
-	if !strings.Contains(bodyStr, "QR Code") {
-		t.Error("expected 'QR Code' in body")
+	requiredContent := []string{
+		"Audience View",
+		"Presenter View",
+		"data:image/png;base64,", // QR code images
+		":3000",                  // Port in URLs
+		"/presenter",             // Presenter path in URL
+	}
+
+	for _, required := range requiredContent {
+		if !strings.Contains(bodyStr, required) {
+			t.Errorf("expected body to contain '%s'", required)
+		}
+	}
+}
+
+func TestHandleQR_WithPassword(t *testing.T) {
+	s := New(3000)
+	s.SetPresenterPassword("secretpass")
+
+	req := httptest.NewRequest(http.MethodGet, "/qr", nil)
+	w := httptest.NewRecorder()
+
+	s.handleQR(w, req)
+
+	resp := w.Result()
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("expected status %d, got %d", http.StatusOK, resp.StatusCode)
+	}
+
+	body, _ := io.ReadAll(resp.Body)
+	bodyStr := string(body)
+
+	// Check that password is included in presenter URL
+	if !strings.Contains(bodyStr, "?key=secretpass") {
+		t.Error("expected presenter URL to contain password query param")
 	}
 }
 

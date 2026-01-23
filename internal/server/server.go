@@ -20,14 +20,15 @@ import (
 // Server is the HTTP server for serving presentations in development mode.
 type Server struct {
 	// Fields ordered by size for better memory alignment
-	presentation *transformer.TransformedPresentation
-	registry     *driver.Registry
-	httpServer   *http.Server
-	mux          *http.ServeMux
-	shutdownCh   chan struct{}
-	addr         string
-	mu           sync.RWMutex
-	started      bool
+	presentation      *transformer.TransformedPresentation
+	registry          *driver.Registry
+	httpServer        *http.Server
+	mux               *http.ServeMux
+	shutdownCh        chan struct{}
+	addr              string
+	presenterPassword string
+	mu                sync.RWMutex
+	started           bool
 }
 
 // New creates a new Server bound to the specified port.
@@ -192,4 +193,18 @@ func (s *Server) IsStarted() bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.started
+}
+
+// SetPresenterPassword sets the presenter password for protected presenter view.
+func (s *Server) SetPresenterPassword(password string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.presenterPassword = password
+}
+
+// GetPresenterPassword returns the presenter password.
+func (s *Server) GetPresenterPassword() string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.presenterPassword
 }
