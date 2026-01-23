@@ -852,3 +852,18 @@ Started: Fri Jan 23 16:33:21 CET 2026
   - Use @html directive for rendering HTML content from slide.html
   - CSS custom properties (--slide-padding, --title-font-size, etc.) enable theme customization
 ---
+
+## 2026-01-23 - US-053
+- What was implemented: Layout components for Title and Section slides
+- Files changed:
+  - frontend/src/lib/layouts/LayoutTitle.svelte (new - centered title layout with optional subtitle)
+  - frontend/src/lib/layouts/LayoutSection.svelte (new - large section header layout)
+  - frontend/src/lib/layouts/.gitkeep (deleted - no longer needed)
+- **Learnings for future iterations:**
+  - Layout components use Svelte 5 Snippet type for children prop: `import type { Snippet } from 'svelte'`
+  - Use `{@render children()}` to render slot content in Svelte 5
+  - Theme-aware styling uses global selectors like `:global(.theme-terminal) .content :global(h2)`
+  - CSS custom properties (--title-font-size, --section-font-size, etc.) enable per-theme customization
+  - Layout components are standalone and don't import SlideRenderer - they focus on content structure
+  - SlideRenderer already has CSS for all layouts; these components provide reusable Svelte wrappers
+---
