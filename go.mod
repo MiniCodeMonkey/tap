@@ -1,8 +1,9 @@
 module github.com/tapsh/tap
 
-go 1.22
+go 1.23
 
 require (
+	github.com/coder/websocket v1.8.14
 	github.com/fatih/color v1.18.0
 	github.com/joho/godotenv v1.5.1
 	github.com/spf13/cobra v1.10.2
