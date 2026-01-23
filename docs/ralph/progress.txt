@@ -318,3 +318,16 @@ Started: Fri Jan 23 20:59:35 CET 2026
   - Quick Reference summary table at the end provides fast lookup for all options
   - Cross-link to related guide pages for deeper explanation
 ---
+
+## 2026-01-24 - US-024
+- What was implemented: Wrote complete Slide Directives reference page with documentation for all per-slide configuration options
+- Files changed:
+  - `docs/reference/slide-directives.md` (modified) - Replaced stub with comprehensive slide directive reference
+- **Learnings for future iterations:**
+  - Directive reference pages benefit from a dedicated "Syntax" section explaining format and placement rules
+  - Each directive entry follows pattern: description, property table (Type, Default, Overrides), syntax example, detailed examples
+  - Include "Combining Directives" section showing multiple directives used together
+  - "Directive vs. Frontmatter" comparison table helps users understand scope differences
+  - Added `class` directive for custom CSS classes - useful for advanced styling
+  - Multi-line values in YAML use pipe syntax (`|`) - document this explicitly
+---
