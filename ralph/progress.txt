@@ -1194,3 +1194,20 @@ Started: Fri Jan 23 16:33:21 CET 2026
   - Browser verification requires the Go backend dev command to be wired up (currently a stub)
   - The tap dev command (internal/cli/dev.go) is a stub that needs to be connected to internal/server components
 ---
+
+## 2026-01-23 - US-073
+- What was implemented: Asciinema player component for embedding terminal recordings
+- Files changed:
+  - frontend/src/lib/components/AsciinemaPlayer.svelte (new - complete asciinema player implementation)
+  - frontend/src/lib/types/asciinema.d.ts (new - TypeScript declarations for asciinema-player library)
+- **Learnings for future iterations:**
+  - Use CDN (jsdelivr) to load asciinema-player library dynamically at runtime
+  - Create separate .d.ts file for global Window augmentation to avoid TypeScript errors in Svelte components
+  - asciinema-player API: create(src, container, options) returns player instance with play(), pause(), dispose()
+  - Player doesn't support runtime speed changes - must re-initialize with new speed option
+  - Lazy loading pattern: check if library already loaded, inject script tag, wait for window.AsciinemaPlayer
+  - Use Promise wrapper around script.onload/onerror for async/await pattern
+  - Component props match asciinema-player options: autoPlay, speed, loop, startAt, cols, rows, etc.
+  - Custom controls overlay sits on top of player for consistent theme styling
+  - Svelte $state warning about "initial value" is expected when initializing from props - handle in onMount
+---
