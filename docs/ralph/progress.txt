@@ -368,3 +368,19 @@ Started: Fri Jan 23 20:59:35 CET 2026
   - Touch gestures deserve their own section for mobile/tablet users
   - Cross-reference related guides (Presenter Mode, Animations) in "See Also" section
 ---
+
+## 2026-01-24 - US-028
+- What was implemented: Created Examples index page with links to 4 example presentation stubs
+- Files changed:
+  - `docs/examples/index.md` (modified) - Updated from stub to full index page listing all examples with descriptions
+  - `docs/examples/tech-talk.md` (created) - Tech talk example stub with overview, features used, and tips
+  - `docs/examples/demo-day.md` (created) - Demo day example stub with overview, features used, and tips
+  - `docs/examples/workshop.md` (created) - Workshop example stub with overview, features used, and tips
+  - `docs/examples/lightning-talk.md` (created) - Lightning talk example stub with overview, features used, and tips
+- **Learnings for future iterations:**
+  - Example stubs follow pattern: title, overview, features used (theme, layouts, live code, transitions), preview placeholder, source placeholder, tip
+  - Link examples from index page using heading links: `### [Title](/examples/slug)`
+  - Each example stub should highlight which Tap features are demonstrated (helps users find relevant examples)
+  - Use `::: tip Coming Soon` for features/content not yet available
+  - Example descriptions should highlight use case (conferences, demos, teaching, lightning talks) to help users choose
+---
