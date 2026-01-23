@@ -1090,3 +1090,21 @@ Started: Fri Jan 23 16:33:21 CET 2026
   - Theme-aware styling via :global(.theme-name) selectors
   - Result container has .result-table, .result-output, .result-error classes
 ---
+
+## 2026-01-23 - US-066
+- What was implemented: Presenter view with current slide, next slide preview, speaker notes, timer, and WebSocket sync
+- Files changed:
+  - frontend/src/Presenter.svelte (complete rewrite - presenter view implementation)
+- **Learnings for future iterations:**
+  - Presenter view uses src/Presenter.svelte (not SvelteKit routes), mounted via src/presenter.ts
+  - Store subscriptions use onMount/onDestroy pattern with unsubscribers array for cleanup
+  - Timer uses setInterval with elapsedSeconds state, click timer to reset
+  - formatTime() handles hours/minutes/seconds formatting with padStart for leading zeros
+  - broadcastSlide() sends WebSocket message to sync audience view with presenter navigation
+  - handleGoToSlide is unused but available for future overview integration
+  - Touch-friendly controls use larger padding (1rem+) and min-width for easy tapping
+  - Grid layout: current slide spans 2 rows (left), next slide + notes stack (right)
+  - Responsive breakpoints: 1024px (tablet), 768px (mobile) with different grid configurations
+  - Connection status indicator shows WebSocket state (connected/disconnected)
+  - Keyboard shortcuts: arrows/space/enter for nav, R to reset timer, Home/End for first/last slide
+---
