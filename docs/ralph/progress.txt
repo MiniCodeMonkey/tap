@@ -447,3 +447,16 @@ Started: Fri Jan 23 20:59:35 CET 2026
   - Dark mode colors verified: `#0f172a` (slate-900) for background, `#f8fafc` (slate-50) for text
   - Code blocks in dark mode work well with VitePress default Shiki theme
 ---
+
+## 2026-01-24 - US-034
+- What was implemented: Added Philosophy section to landing page with 6 core principles
+- Files changed:
+  - `docs/.vitepress/theme/components/HomePhilosophy.vue` (created) - Philosophy section component with 6 principles: Beautiful by default, Markdown-first, Simple yet powerful, Developer-first, Zero config, Version control friendly
+  - `docs/.vitepress/theme/index.ts` (modified) - Registered HomePhilosophy as a global component
+  - `docs/index.md` (modified) - Added HomePhilosophy component after HomeHero, before HomeFeatures
+- **Learnings for future iterations:**
+  - Philosophy component was already created in a previous iteration but not committed; always verify git status before starting work
+  - The 6 core principles are derived from SPEC.md Core Philosophy section plus Key Differentiators
+  - Philosophy section uses a 3-column grid layout similar to HomeFeatures, transitioning to 2 columns on tablet and 1 on mobile
+  - Section styling follows established patterns: centered title, muted subheading, grid of items with consistent card styling
+---
