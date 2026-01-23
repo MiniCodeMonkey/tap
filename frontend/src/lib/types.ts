@@ -78,6 +78,8 @@ export interface PresentationConfig {
 	transition?: Transition;
 	codeTheme?: string;
 	fragments?: boolean;
+	/** Whether to show the progress bar (default: true) */
+	showProgressBar?: boolean;
 }
 
 // ============================================================================
