@@ -728,6 +728,375 @@ func TestParseCodeBlocks_Direct(t *testing.T) {
 	}
 }
 
+// Fragment parsing tests
+
+func TestParse_Fragments_SinglePause(t *testing.T) {
+	p := New()
+	content := []byte(`# Title
+
+First content block.
+
+<!-- pause -->
+
+Second content block.`)
+
+	pres, err := p.Parse(content)
+	if err != nil {
+		t.Fatalf("Parse() returned error: %v", err)
+	}
+
+	if len(pres.Slides) != 1 {
+		t.Fatalf("expected 1 slide, got %d", len(pres.Slides))
+	}
+
+	slide := pres.Slides[0]
+	if len(slide.Fragments) != 2 {
+		t.Fatalf("expected 2 fragments, got %d", len(slide.Fragments))
+	}
+
+	// First fragment
+	if slide.Fragments[0].Index != 0 {
+		t.Errorf("expected first fragment index 0, got %d", slide.Fragments[0].Index)
+	}
+	if !contains(slide.Fragments[0].Content, "First content block") {
+		t.Errorf("first fragment should contain 'First content block', got %q", slide.Fragments[0].Content)
+	}
+
+	// Second fragment
+	if slide.Fragments[1].Index != 1 {
+		t.Errorf("expected second fragment index 1, got %d", slide.Fragments[1].Index)
+	}
+	if !contains(slide.Fragments[1].Content, "Second content block") {
+		t.Errorf("second fragment should contain 'Second content block', got %q", slide.Fragments[1].Content)
+	}
+}
+
+func TestParse_Fragments_MultiplePauses(t *testing.T) {
+	p := New()
+	content := []byte(`# Incremental Reveal
+
+- Item 1
+
+<!-- pause -->
+
+- Item 2
+
+<!-- pause -->
+
+- Item 3
+
+<!-- pause -->
+
+- Item 4`)
+
+	pres, err := p.Parse(content)
+	if err != nil {
+		t.Fatalf("Parse() returned error: %v", err)
+	}
+
+	if len(pres.Slides) != 1 {
+		t.Fatalf("expected 1 slide, got %d", len(pres.Slides))
+	}
+
+	slide := pres.Slides[0]
+	if len(slide.Fragments) != 4 {
+		t.Fatalf("expected 4 fragments, got %d", len(slide.Fragments))
+	}
+
+	// Verify each fragment index
+	for i, frag := range slide.Fragments {
+		if frag.Index != i {
+			t.Errorf("fragment %d has incorrect index: expected %d, got %d", i, i, frag.Index)
+		}
+	}
+
+	// Verify content
+	expectations := []string{"Item 1", "Item 2", "Item 3", "Item 4"}
+	for i, expected := range expectations {
+		if !contains(slide.Fragments[i].Content, expected) {
+			t.Errorf("fragment %d should contain %q, got %q", i, expected, slide.Fragments[i].Content)
+		}
+	}
+}
+
+func TestParse_Fragments_NoPause(t *testing.T) {
+	p := New()
+	content := []byte(`# No Fragments
+
+This slide has no pause markers.
+
+All content appears at once.`)
+
+	pres, err := p.Parse(content)
+	if err != nil {
+		t.Fatalf("Parse() returned error: %v", err)
+	}
+
+	if len(pres.Slides) != 1 {
+		t.Fatalf("expected 1 slide, got %d", len(pres.Slides))
+	}
+
+	slide := pres.Slides[0]
+	// With no pause markers, should have 1 fragment with all content
+	if len(slide.Fragments) != 1 {
+		t.Fatalf("expected 1 fragment (no pauses), got %d", len(slide.Fragments))
+	}
+
+	if slide.Fragments[0].Index != 0 {
+		t.Errorf("expected fragment index 0, got %d", slide.Fragments[0].Index)
+	}
+	if !contains(slide.Fragments[0].Content, "No Fragments") {
+		t.Error("fragment should contain all slide content")
+	}
+}
+
+func TestParse_Fragments_PauseVariations(t *testing.T) {
+	p := New()
+	// Test different spacing variations of <!-- pause -->
+	content := []byte(`# Pause Variations
+
+Content 1
+
+<!--pause-->
+
+Content 2
+
+<!-- pause-->
+
+Content 3
+
+<!--pause -->
+
+Content 4
+
+<!-- pause -->
+
+Content 5`)
+
+	pres, err := p.Parse(content)
+	if err != nil {
+		t.Fatalf("Parse() returned error: %v", err)
+	}
+
+	if len(pres.Slides) != 1 {
+		t.Fatalf("expected 1 slide, got %d", len(pres.Slides))
+	}
+
+	slide := pres.Slides[0]
+	if len(slide.Fragments) != 5 {
+		t.Fatalf("expected 5 fragments (all pause variations recognized), got %d", len(slide.Fragments))
+	}
+
+	for i := 1; i <= 5; i++ {
+		expected := "Content " + string(rune('0'+i))
+		if !contains(slide.Fragments[i-1].Content, expected) {
+			t.Errorf("fragment %d should contain %q", i-1, expected)
+		}
+	}
+}
+
+func TestParse_Fragments_ConsecutivePauses(t *testing.T) {
+	p := New()
+	// Consecutive pauses should result in skipped empty fragments
+	content := []byte(`# Test
+
+Content 1
+
+<!-- pause -->
+<!-- pause -->
+
+Content 2`)
+
+	pres, err := p.Parse(content)
+	if err != nil {
+		t.Fatalf("Parse() returned error: %v", err)
+	}
+
+	if len(pres.Slides) != 1 {
+		t.Fatalf("expected 1 slide, got %d", len(pres.Slides))
+	}
+
+	slide := pres.Slides[0]
+	// Empty fragments between consecutive pauses should be skipped
+	if len(slide.Fragments) != 2 {
+		t.Fatalf("expected 2 fragments (empty skipped), got %d", len(slide.Fragments))
+	}
+
+	// Indices should be re-numbered to be consecutive
+	if slide.Fragments[0].Index != 0 {
+		t.Errorf("expected first fragment index 0, got %d", slide.Fragments[0].Index)
+	}
+	if slide.Fragments[1].Index != 1 {
+		t.Errorf("expected second fragment index 1, got %d", slide.Fragments[1].Index)
+	}
+}
+
+func TestParse_Fragments_AcrossSlides(t *testing.T) {
+	p := New()
+	content := []byte(`# Slide 1
+
+Part A
+
+<!-- pause -->
+
+Part B
+
+---
+
+# Slide 2
+
+Part C
+
+<!-- pause -->
+
+Part D
+
+<!-- pause -->
+
+Part E`)
+
+	pres, err := p.Parse(content)
+	if err != nil {
+		t.Fatalf("Parse() returned error: %v", err)
+	}
+
+	if len(pres.Slides) != 2 {
+		t.Fatalf("expected 2 slides, got %d", len(pres.Slides))
+	}
+
+	// Slide 1 should have 2 fragments
+	if len(pres.Slides[0].Fragments) != 2 {
+		t.Fatalf("slide 1: expected 2 fragments, got %d", len(pres.Slides[0].Fragments))
+	}
+
+	// Slide 2 should have 3 fragments
+	if len(pres.Slides[1].Fragments) != 3 {
+		t.Fatalf("slide 2: expected 3 fragments, got %d", len(pres.Slides[1].Fragments))
+	}
+
+	// Each slide's fragments should have independent indices starting at 0
+	for i, frag := range pres.Slides[0].Fragments {
+		if frag.Index != i {
+			t.Errorf("slide 1, fragment %d has incorrect index: %d", i, frag.Index)
+		}
+	}
+	for i, frag := range pres.Slides[1].Fragments {
+		if frag.Index != i {
+			t.Errorf("slide 2, fragment %d has incorrect index: %d", i, frag.Index)
+		}
+	}
+}
+
+func TestParse_Fragments_WithCodeBlocks(t *testing.T) {
+	p := New()
+	content := []byte("# Code Demo\n\nFirst explanation.\n\n<!-- pause -->\n\n```sql {driver: mysql}\nSELECT * FROM users;\n```\n\n<!-- pause -->\n\nFinal thoughts.")
+
+	pres, err := p.Parse(content)
+	if err != nil {
+		t.Fatalf("Parse() returned error: %v", err)
+	}
+
+	if len(pres.Slides) != 1 {
+		t.Fatalf("expected 1 slide, got %d", len(pres.Slides))
+	}
+
+	slide := pres.Slides[0]
+
+	// Should have 3 fragments
+	if len(slide.Fragments) != 3 {
+		t.Fatalf("expected 3 fragments, got %d", len(slide.Fragments))
+	}
+
+	// Code block should still be parsed
+	if len(slide.CodeBlocks) != 1 {
+		t.Fatalf("expected 1 code block, got %d", len(slide.CodeBlocks))
+	}
+
+	// Second fragment should contain the code block
+	if !contains(slide.Fragments[1].Content, "SELECT * FROM users") {
+		t.Error("second fragment should contain the SQL code")
+	}
+}
+
+func TestParse_Fragments_WithDirectives(t *testing.T) {
+	p := New()
+	content := []byte(`<!--
+layout: default
+fragments: true
+-->
+# Title
+
+Content 1
+
+<!-- pause -->
+
+Content 2`)
+
+	pres, err := p.Parse(content)
+	if err != nil {
+		t.Fatalf("Parse() returned error: %v", err)
+	}
+
+	if len(pres.Slides) != 1 {
+		t.Fatalf("expected 1 slide, got %d", len(pres.Slides))
+	}
+
+	slide := pres.Slides[0]
+
+	// Directive should be parsed
+	if slide.Directives.Layout != "default" {
+		t.Errorf("expected layout 'default', got %q", slide.Directives.Layout)
+	}
+	if !slide.Directives.Fragments {
+		t.Error("expected fragments directive to be true")
+	}
+
+	// Should have 2 fragments
+	if len(slide.Fragments) != 2 {
+		t.Fatalf("expected 2 fragments, got %d", len(slide.Fragments))
+	}
+
+	// Fragments should not contain directive content
+	if contains(slide.Fragments[0].Content, "layout:") {
+		t.Error("fragments should not contain directive content")
+	}
+}
+
+func TestParseFragments_Direct(t *testing.T) {
+	content := "Part 1\n\n<!-- pause -->\n\nPart 2\n\n<!-- pause -->\n\nPart 3"
+	fragments := parseFragments(content)
+
+	if len(fragments) != 3 {
+		t.Fatalf("expected 3 fragments, got %d", len(fragments))
+	}
+
+	expectations := []string{"Part 1", "Part 2", "Part 3"}
+	for i, expected := range expectations {
+		if !contains(fragments[i].Content, expected) {
+			t.Errorf("fragment %d should contain %q, got %q", i, expected, fragments[i].Content)
+		}
+		if fragments[i].Index != i {
+			t.Errorf("fragment %d has incorrect index: %d", i, fragments[i].Index)
+		}
+	}
+}
+
+func TestParseFragments_EmptyContent(t *testing.T) {
+	fragments := parseFragments("")
+	if len(fragments) != 0 {
+		t.Errorf("expected 0 fragments for empty content, got %d", len(fragments))
+	}
+}
+
+func TestParseFragments_OnlyPauses(t *testing.T) {
+	content := "<!-- pause -->\n<!-- pause -->\n<!-- pause -->"
+	fragments := parseFragments(content)
+	// All empty, should result in no fragments
+	if len(fragments) != 0 {
+		t.Errorf("expected 0 fragments for only pause markers, got %d", len(fragments))
+	}
+}
+
 // helper function to check if a string contains a substring
 func contains(s, substr string) bool {
 	return len(s) >= len(substr) && (s == substr || len(substr) == 0 ||

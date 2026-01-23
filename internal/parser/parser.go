@@ -140,12 +140,15 @@ func (p *Parser) Parse(content []byte) (*Presentation, error) {
 		// Parse code blocks from the slide content
 		codeBlocks := parseCodeBlocks(contentAfterDirectives)
 
+		// Parse fragments from pause markers
+		fragments := parseFragments(contentAfterDirectives)
+
 		slide := Slide{
 			Content:    contentAfterDirectives,
 			HTML:       html,
 			Index:      len(presentation.Slides),
 			Directives: directives,
-			Fragments:  []Fragment{},
+			Fragments:  fragments,
 			CodeBlocks: codeBlocks,
 		}
 
@@ -250,6 +253,10 @@ func parseDirectives(content string) (SlideDirectives, string) {
 // Example: sql {driver: mysql, connection: mydb}
 var metaPattern = regexp.MustCompile(`\{([^}]*)\}\s*$`)
 
+// pausePattern matches <!-- pause --> markers for fragment splitting.
+// Supports variations: <!-- pause -->, <!--pause-->, <!-- pause-->, etc.
+var pausePattern = regexp.MustCompile(`(?m)^\s*<!--\s*pause\s*-->\s*$`)
+
 // parseCodeBlocks extracts fenced code blocks from slide content.
 // It parses the info string for language and optional driver configuration.
 // Example: ```sql {driver: mysql, connection: mydb}
@@ -335,4 +342,35 @@ func parseCodeBlockMeta(content string) CodeBlockMeta {
 	}
 
 	return meta
+}
+
+// parseFragments splits slide content on <!-- pause --> markers.
+// It returns a slice of Fragment structs, each containing content for incremental reveal.
+// If no pause markers are found, returns a single fragment with all content.
+func parseFragments(content string) []Fragment {
+	// Split content on pause markers
+	parts := pausePattern.Split(content, -1)
+
+	fragments := make([]Fragment, 0, len(parts))
+	for i, part := range parts {
+		// Trim whitespace from fragment content
+		trimmedContent := strings.TrimSpace(part)
+
+		// Skip empty fragments (can occur with consecutive pause markers)
+		if trimmedContent == "" {
+			continue
+		}
+
+		fragments = append(fragments, Fragment{
+			Content: trimmedContent,
+			Index:   i,
+		})
+	}
+
+	// Re-index fragments to be consecutive (after skipping empty ones)
+	for i := range fragments {
+		fragments[i].Index = i
+	}
+
+	return fragments
 }
