@@ -129,3 +129,17 @@ Started: Fri Jan 23 20:59:35 CET 2026
   - Template strings in `<script setup>` work well for multi-line code examples
   - Use monospace font for both the code content and filename for consistency
 ---
+
+## 2026-01-23 - US-009
+- What was implemented: Created HomeThemes component displaying 5 theme preview cards in a grid
+- Files changed:
+  - `docs/.vitepress/theme/components/HomeThemes.vue` (created) - Theme grid section with 5 cards showing theme name, vibe description, and colored gradient preview
+  - `docs/.vitepress/theme/index.ts` (modified) - Registered HomeThemes as a global component
+  - `docs/index.md` (modified) - Added HomeThemes component after HomeCode
+- **Learnings for future iterations:**
+  - Use CSS gradients for abstract theme previews (more lightweight than images)
+  - 5-column grid works well for 5 items; use `repeat(5, 1fr)` for even distribution
+  - Responsive breakpoints: 5 columns at desktop, 2 at tablet (900px), 1 at mobile (480px)
+  - Hover effects with `translateY` and `box-shadow` add subtle interactivity
+  - Theme card structure: preview image area + info section with name and description
+---
