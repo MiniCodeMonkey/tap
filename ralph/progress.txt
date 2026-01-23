@@ -881,3 +881,17 @@ Started: Fri Jan 23 16:33:21 CET 2026
   - Font sizes are slightly smaller in two-column layout to fit more content (h1: 3.5rem vs 4rem, body: 1.75rem vs 2rem)
   - Table styles included for completeness (border-collapse, header background, cell padding)
 ---
+
+## 2026-01-23 - US-055
+- What was implemented: Layout components for CodeFocus and Quote slides
+- Files changed:
+  - frontend/src/lib/layouts/LayoutCodeFocus.svelte (new - full-width code block layout with larger font sizes and code prominence)
+  - frontend/src/lib/layouts/LayoutQuote.svelte (new - styled blockquote layout with decorative quote marks and attribution styling)
+- **Learnings for future iterations:**
+  - LayoutCodeFocus uses smaller padding (3rem vs 4rem) and centers content vertically to maximize code visibility
+  - LayoutCodeFocus has max-height: 70vh on pre blocks with overflow-y: auto for long code
+  - LayoutQuote uses decorative ::before pseudo-element for opening quote mark (")
+  - Terminal theme for quote uses > character instead of decorative quote mark for consistency with terminal aesthetic
+  - Brutalist theme hides decorative quotes and uses border instead for stark appearance
+  - Both layouts follow same pattern: Snippet children, theme-aware :global() selectors, CSS custom properties
+---
