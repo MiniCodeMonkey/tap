@@ -22,6 +22,8 @@ Started: Fri Jan 23 16:33:21 CET 2026
 - Frontend: Use $lib alias for src/lib imports
 - Frontend: Test files (*.test.ts) excluded from typecheck/lint until Vitest is set up (US-075)
 - Frontend: Use `svelte/store` for state (writable, derived, type Readable)
+- Benchmarks: Use `make bench` for all benchmarks, `make bench-targets` for performance target tests
+- Benchmarks: Server SetupRoutes() is a method (not standalone), WebSocketHub uses Run() (not Start())
 
 ---
 
@@ -1269,4 +1271,24 @@ Started: Fri Jan 23 16:33:21 CET 2026
   - Fragment tests need to account for the initial content state before first fragment reveal
   - Hot reload tests use fs.writeFileSync to modify sample.md and trigger file watcher
   - Test scripts: npm run test:e2e (headless), test:e2e:ui (interactive UI), test:e2e:debug (debugger)
+---
+
+## 2026-01-24 - US-077
+- What was implemented: Comprehensive Go benchmark tests for performance verification
+- Files changed:
+  - internal/parser/benchmark_test.go (new - benchmarks for parsing 50/100/200 slides, code blocks, fragments, directives)
+  - internal/builder/benchmark_test.go (new - benchmarks for building 50/100/200 slides, HTML generation, image path handling)
+  - internal/server/benchmark_test.go (new - benchmarks for hot reload latency, route performance, WebSocket broadcasting)
+  - Makefile (updated - added bench, bench-parser, bench-builder, bench-server, bench-targets targets)
+  - docs/PERFORMANCE.md (new - performance baselines and benchmark documentation)
+- **Learnings for future iterations:**
+  - Use generateLargePresentation() helper to create realistic test presentations with varied slide types
+  - Go benchmarks use testing.B with b.ResetTimer() to exclude setup time
+  - Performance target tests use testing.Benchmark() or time.Since() to measure against targets
+  - Server SetupRoutes() is a method on Server, not a standalone function
+  - WebSocketHub uses Run() method, not Start() - run in goroutine: `go hub.Run()`
+  - Parser performance: ~1ms for 100 slides (target: <100ms)
+  - Builder performance: ~0.4ms for 50 slides (target: <2s)
+  - Hot reload latency: ~51ms average (target: <200ms)
+  - Use `make bench-targets` to run all performance target tests
 ---
