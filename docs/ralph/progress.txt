@@ -395,3 +395,18 @@ Started: Fri Jan 23 20:59:35 CET 2026
   - SPA redirect rule (`/* -> /index.html` with status 200) ensures client-side routing works for VitePress
   - Publish directory is relative to project root, so it's `docs/.vitepress/dist`
 ---
+
+## 2026-01-24 - US-030
+- What was implemented: Added favicon and public assets directory with properly configured favicon
+- Files changed:
+  - `docs/public/` (created) - Public assets directory
+  - `docs/public/favicon.ico` (created) - 16x16 ICO file with indigo background and white "T" letter
+  - `docs/public/favicon.svg` (created) - SVG favicon with same design
+  - `docs/.vitepress/config.ts` (modified) - Added head config with favicon links
+- **Learnings for future iterations:**
+  - VitePress public assets go in `docs/public/` directory and are automatically copied to dist/
+  - Use `head` config array in VitePress to add link tags for favicons
+  - Provide both .ico (legacy browser support) and .svg (modern browsers) favicon formats
+  - ICO files can be generated programmatically with Node.js using proper binary format
+  - Favicon link tags: `['link', { rel: 'icon', href: '/favicon.ico' }]` for standard, add `type: 'image/svg+xml'` for SVG
+---
