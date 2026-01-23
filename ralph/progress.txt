@@ -1176,3 +1176,21 @@ Started: Fri Jan 23 16:33:21 CET 2026
   - Position: fixed; top: 1rem; right: 1rem; z-index: 1000; for corner placement above content
   - Use aria-live="polite" for accessibility - announces connection status changes to screen readers
 ---
+
+## 2026-01-23 - US-072
+- What was implemented: Main audience view page (App.svelte) for presentation viewing
+- Files changed:
+  - frontend/src/App.svelte (complete rewrite - main audience view implementation)
+  - testdata/test.md (new - simple test presentation for manual testing)
+- **Learnings for future iterations:**
+  - This is a Vite project (not SvelteKit), so main entry is App.svelte not src/routes/+page.svelte
+  - Use store subscriptions with onMount/onDestroy pattern for cleanup with unsubscribers array
+  - Fetch presentation data from either embedded script tag (static build) or /api/presentation endpoint
+  - Track slide direction ('forward' | 'backward') for transition animations by comparing slideIndex changes
+  - Use {#key slideIndex} to trigger slide transitions when index changes
+  - SlideContainer handles aspect ratio scaling, SlideRenderer handles content and transitions
+  - Keyboard navigation, WebSocket, and hash change listeners all return cleanup functions
+  - Loading, error, and empty states handle all edge cases with appropriate UI feedback
+  - Browser verification requires the Go backend dev command to be wired up (currently a stub)
+  - The tap dev command (internal/cli/dev.go) is a stub that needs to be connected to internal/server components
+---
