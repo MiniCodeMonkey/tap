@@ -1,0 +1,632 @@
+{
+  "project": "Tap Documentation Website",
+  "branchName": "ralph/tap-docs-website",
+  "description": "Build the documentation website for Tap at tap.sh using VitePress with a striking landing page and comprehensive docs, inspired by Linear's clean aesthetic.",
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "Initialize VitePress project",
+      "description": "As a developer, I need VitePress initialized in /docs so we have a foundation for the documentation site.",
+      "acceptanceCriteria": [
+        "VitePress is installed as a dev dependency",
+        "docs/.vitepress/config.ts exists with basic site metadata (title: 'Tap', description: 'Presentations for developers')",
+        "docs/index.md exists as placeholder landing page",
+        "npm run docs:dev script works and serves the site",
+        "npm run docs:build script works and builds to docs/.vitepress/dist",
+        "Typecheck passes"
+      ],
+      "priority": 1,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-002",
+      "title": "Configure navigation and sidebar",
+      "description": "As a user, I need proper navigation so I can browse the documentation structure.",
+      "acceptanceCriteria": [
+        "Top nav includes: Getting Started, Guide, Reference, Examples, GitHub link",
+        "Sidebar for /guide/ section includes: Writing Slides, Layouts, Themes, Animations & Transitions, Code Blocks, Live Code Execution, Presenter Mode, Images & Media, Building & Export",
+        "Sidebar for /reference/ section includes: CLI Commands, Frontmatter Options, Slide Directives, Layouts Reference, Drivers, Keyboard Shortcuts",
+        "Sidebar for /examples/ section exists (can be empty for now)",
+        "Navigation works when clicking between sections",
+        "Typecheck passes"
+      ],
+      "priority": 2,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-003",
+      "title": "Create stub markdown files for all pages",
+      "description": "As a developer, I need all documentation pages created as stubs so the site structure is complete.",
+      "acceptanceCriteria": [
+        "docs/getting-started.md exists with title and placeholder content",
+        "docs/guide/writing-slides.md exists",
+        "docs/guide/layouts.md exists",
+        "docs/guide/themes.md exists",
+        "docs/guide/animations-transitions.md exists",
+        "docs/guide/code-blocks.md exists",
+        "docs/guide/live-code-execution.md exists",
+        "docs/guide/presenter-mode.md exists",
+        "docs/guide/images-media.md exists",
+        "docs/guide/building-export.md exists",
+        "docs/reference/cli-commands.md exists",
+        "docs/reference/frontmatter-options.md exists",
+        "docs/reference/slide-directives.md exists",
+        "docs/reference/layouts-reference.md exists",
+        "docs/reference/drivers.md exists",
+        "docs/reference/keyboard-shortcuts.md exists",
+        "docs/examples/index.md exists",
+        "All pages have frontmatter with title",
+        "Typecheck passes"
+      ],
+      "priority": 3,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-004",
+      "title": "Set up custom theme with Linear-inspired base styling",
+      "description": "As a user, I want the docs to have clean, minimal Linear-inspired styling.",
+      "acceptanceCriteria": [
+        "docs/.vitepress/theme/index.ts exists and extends default theme",
+        "docs/.vitepress/theme/style.css exists with custom CSS variables",
+        "Accent color is indigo (#6366f1)",
+        "Background colors configured for light mode (#ffffff, #f8fafc)",
+        "Text colors configured (#0f172a primary, #64748b muted)",
+        "Dark mode colors configured (#0f172a bg, #f8fafc text)",
+        "System font stack applied for body text",
+        "Monospace font (SF Mono, Menlo, monospace) applied for code",
+        "Site renders with custom colors in browser",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 4,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-005",
+      "title": "Create HomeHero component for landing page",
+      "description": "As a visitor, I want to see a striking hero section that explains what Tap is.",
+      "acceptanceCriteria": [
+        "docs/.vitepress/theme/components/HomeHero.vue exists",
+        "Displays headline: 'Presentations for developers'",
+        "Displays subheadline: 'Markdown slides with live code, beautiful themes, and zero config.'",
+        "Shows install command: brew install tap-slides",
+        "Has 'Get Started' button linking to /getting-started",
+        "Has 'View on GitHub' secondary button (can link to # for now)",
+        "Component is imported and used in docs/index.md",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 5,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-006",
+      "title": "Add CopyButton component for install command",
+      "description": "As a visitor, I want to copy the install command with one click.",
+      "acceptanceCriteria": [
+        "docs/.vitepress/theme/components/CopyButton.vue exists",
+        "Button displays copy icon",
+        "Clicking copies text to clipboard",
+        "Shows feedback after copy (checkmark or 'Copied!' text)",
+        "CopyButton is used in HomeHero for the install command",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 6,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-007",
+      "title": "Create HomeFeatures component with value props",
+      "description": "As a visitor, I want to see the three main value propositions.",
+      "acceptanceCriteria": [
+        "docs/.vitepress/theme/components/HomeFeatures.vue exists",
+        "Displays three cards in a row/grid",
+        "Card 1: 'Markdown-first' - 'Write slides in the format you already know. Version control friendly, editor agnostic.'",
+        "Card 2: 'Live code execution' - 'Run SQL, shell, or any language. Results render directly on your slides.'",
+        "Card 3: 'Single binary' - 'No runtime dependencies. Install once, works everywhere.'",
+        "Cards have clean, minimal design with consistent spacing",
+        "Component is used in docs/index.md below hero",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 7,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-008",
+      "title": "Create HomeCode component showing markdown example",
+      "description": "As a visitor, I want to see a code example demonstrating Tap's syntax.",
+      "acceptanceCriteria": [
+        "docs/.vitepress/theme/components/HomeCode.vue exists",
+        "Shows syntax-highlighted markdown code block",
+        "Code shows frontmatter with theme: terminal",
+        "Code shows # Database Demo heading",
+        "Code shows SQL code block with driver annotation",
+        "Code shows descriptive text about live execution",
+        "Styled to look like a code editor or terminal",
+        "Component is used in docs/index.md",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 8,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-009",
+      "title": "Create HomeThemes component showing theme grid",
+      "description": "As a visitor, I want to preview the available themes.",
+      "acceptanceCriteria": [
+        "docs/.vitepress/theme/components/HomeThemes.vue exists",
+        "Displays grid of 5 theme cards",
+        "Each card shows theme name and vibe description",
+        "Minimal: 'Clean, spacious'",
+        "Gradient: 'Modern, colorful'",
+        "Terminal: 'Hacker aesthetic'",
+        "Brutalist: 'Bold, geometric'",
+        "Keynote: 'Professional, polished'",
+        "Cards have abstract colored visual placeholder (colored div or gradient)",
+        "Component is used in docs/index.md",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 9,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-010",
+      "title": "Add landing page footer section",
+      "description": "As a visitor, I want to see footer links and project info.",
+      "acceptanceCriteria": [
+        "Footer section added to docs/index.md",
+        "Shows GitHub link",
+        "Shows 'MIT License' text",
+        "Shows tagline: 'Made for developers who present'",
+        "Styled with muted text colors",
+        "Centered layout",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 10,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-011",
+      "title": "Make landing page responsive",
+      "description": "As a mobile visitor, I want the landing page to work well on all screen sizes.",
+      "acceptanceCriteria": [
+        "Hero section stacks vertically on mobile",
+        "Feature cards stack to single column on mobile",
+        "Theme grid becomes 2 columns on tablet, 1 on mobile",
+        "Code example is horizontally scrollable on small screens",
+        "Font sizes adjust appropriately for mobile",
+        "Adequate padding/margins on all screen sizes",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 11,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-012",
+      "title": "Write Getting Started page content",
+      "description": "As a new user, I need a quick start guide to use Tap.",
+      "acceptanceCriteria": [
+        "docs/getting-started.md has complete content",
+        "Section 1: Install Tap (brew install, go install, binary download options)",
+        "Section 2: Create first presentation with tap new",
+        "Section 3: Start dev server with tap dev",
+        "Section 4: Basic slide syntax (frontmatter, slide separators)",
+        "Section 5: Build for production with tap build",
+        "Section 6: Next steps with links to Guide pages",
+        "All code examples are in fenced code blocks",
+        "Page renders correctly in VitePress",
+        "Typecheck passes"
+      ],
+      "priority": 12,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-013",
+      "title": "Write Guide: Writing Slides page",
+      "description": "As a user, I need to understand basic slide authoring.",
+      "acceptanceCriteria": [
+        "docs/guide/writing-slides.md has complete content",
+        "Covers frontmatter basics (title, theme)",
+        "Covers slide separators (---)",
+        "Covers markdown syntax supported",
+        "Covers local directives (HTML comment YAML blocks)",
+        "Covers speaker notes",
+        "Includes code examples for each concept",
+        "Typecheck passes"
+      ],
+      "priority": 13,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-014",
+      "title": "Write Guide: Layouts page",
+      "description": "As a user, I need to know about available slide layouts.",
+      "acceptanceCriteria": [
+        "docs/guide/layouts.md has complete content",
+        "Explains default layout behavior",
+        "Shows how to specify layout in directive block",
+        "Lists all layouts: title, section, two-column, three-column, code-focus, big-stat, quote, cover, sidebar, split-media, blank",
+        "Each layout has brief description of when to use",
+        "Includes example directive syntax",
+        "Typecheck passes"
+      ],
+      "priority": 14,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-015",
+      "title": "Write Guide: Themes page",
+      "description": "As a user, I need to understand the theme system.",
+      "acceptanceCriteria": [
+        "docs/guide/themes.md has complete content",
+        "Lists all 5 built-in themes with descriptions",
+        "Shows how to set theme in frontmatter",
+        "Explains what themes control (typography, colors, animations, transitions)",
+        "Includes stub section for customizing themes (marked as TBD)",
+        "Typecheck passes"
+      ],
+      "priority": 15,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-016",
+      "title": "Write Guide: Animations & Transitions page",
+      "description": "As a user, I need to understand slide animations.",
+      "acceptanceCriteria": [
+        "docs/guide/animations-transitions.md has complete content",
+        "Lists slide transitions: none, fade, slide, push, zoom",
+        "Shows setting transitions globally vs per-slide",
+        "Explains fragments/incremental reveals",
+        "Documents <!-- pause --> syntax",
+        "Documents fragments: true for lists",
+        "Includes code examples",
+        "Typecheck passes"
+      ],
+      "priority": 16,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-017",
+      "title": "Write Guide: Code Blocks page",
+      "description": "As a user, I need to understand code block features.",
+      "acceptanceCriteria": [
+        "docs/guide/code-blocks.md has complete content",
+        "Explains Shiki syntax highlighting",
+        "Shows how to specify language",
+        "Documents line highlighting {1,3-5} syntax",
+        "Explains code diffs feature",
+        "Documents multi-step reveals",
+        "Mentions font size configuration",
+        "Includes code examples for each feature",
+        "Typecheck passes"
+      ],
+      "priority": 17,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-018",
+      "title": "Write Guide: Live Code Execution page",
+      "description": "As a user, I need to understand how to run code in slides.",
+      "acceptanceCriteria": [
+        "docs/guide/live-code-execution.md has complete content",
+        "Explains what live code execution is",
+        "Introduces driver concept",
+        "Shows code block syntax with {driver: 'sqlite'}",
+        "Lists built-in drivers: SQLite, MySQL, PostgreSQL, Shell",
+        "Explains connection configuration in frontmatter",
+        "Documents environment variables for credentials",
+        "Mentions timeout protection and error handling",
+        "Notes this only works in tap dev, not static builds",
+        "Typecheck passes"
+      ],
+      "priority": 18,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-019",
+      "title": "Write Guide: Presenter Mode page",
+      "description": "As a user, I need to understand presenter mode features.",
+      "acceptanceCriteria": [
+        "docs/guide/presenter-mode.md has complete content",
+        "Explains dual-window synced mode",
+        "Documents URLs: / vs /presenter",
+        "Lists presenter view features (notes, timer, next slide preview)",
+        "Explains cross-device usage (iPad as controller)",
+        "Mentions QR code for easy access",
+        "Documents password protection option",
+        "Lists keyboard shortcuts for presenter mode",
+        "Typecheck passes"
+      ],
+      "priority": 19,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-020",
+      "title": "Write Guide: Images & Media page",
+      "description": "As a user, I need to understand how to add images.",
+      "acceptanceCriteria": [
+        "docs/guide/images-media.md has complete content",
+        "Documents relative paths (resolved from markdown file)",
+        "Documents absolute URLs",
+        "Lists supported formats",
+        "Shows {width=50%} sizing syntax",
+        "Shows {position=left} positioning syntax",
+        "Explains background images via layout: cover",
+        "Documents build behavior (images copied to dist/)",
+        "Explains missing image handling",
+        "Typecheck passes"
+      ],
+      "priority": 20,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-021",
+      "title": "Write Guide: Building & Export page",
+      "description": "As a user, I need to understand how to build and export.",
+      "acceptanceCriteria": [
+        "docs/guide/building-export.md has complete content",
+        "Documents tap build command",
+        "Explains output structure (dist/)",
+        "Covers deploying to static hosts",
+        "Documents tap serve for preview",
+        "Documents tap pdf export",
+        "Lists PDF options (slides only, notes, both)",
+        "Typecheck passes"
+      ],
+      "priority": 21,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-022",
+      "title": "Write Reference: CLI Commands page",
+      "description": "As a user, I need complete CLI reference documentation.",
+      "acceptanceCriteria": [
+        "docs/reference/cli-commands.md has complete content",
+        "Documents tap new with all flags",
+        "Documents tap dev <file> with all flags",
+        "Documents tap build <file> with all flags",
+        "Documents tap serve [dir] with all flags",
+        "Documents tap pdf <file> with all flags",
+        "Documents tap add [file] with all flags",
+        "Each command has usage example",
+        "Formatted as reference table or definition list",
+        "Typecheck passes"
+      ],
+      "priority": 22,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-023",
+      "title": "Write Reference: Frontmatter Options page",
+      "description": "As a user, I need complete frontmatter reference.",
+      "acceptanceCriteria": [
+        "docs/reference/frontmatter-options.md has complete content",
+        "Documents title, theme, author, date options",
+        "Documents aspectRatio option",
+        "Documents transition option",
+        "Documents codeTheme option",
+        "Documents fragments option",
+        "Documents drivers configuration",
+        "Each option has type, default value, and description",
+        "Typecheck passes"
+      ],
+      "priority": 23,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-024",
+      "title": "Write Reference: Slide Directives page",
+      "description": "As a user, I need complete slide directive reference.",
+      "acceptanceCriteria": [
+        "docs/reference/slide-directives.md has complete content",
+        "Explains directive block syntax (HTML comment YAML)",
+        "Documents layout directive",
+        "Documents transition directive",
+        "Documents fragments directive",
+        "Documents background directive",
+        "Documents notes directive",
+        "Each directive has type and example",
+        "Typecheck passes"
+      ],
+      "priority": 24,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-025",
+      "title": "Write Reference: Layouts Reference page",
+      "description": "As a user, I need a quick reference of all layouts.",
+      "acceptanceCriteria": [
+        "docs/reference/layouts-reference.md has content",
+        "Lists all layouts in table format",
+        "Each layout has: name, description, when to use",
+        "Layouts: title, section, two-column, three-column, code-focus, big-stat, quote, cover, sidebar, split-media, blank",
+        "Marked as stub with 'examples coming soon' note",
+        "Typecheck passes"
+      ],
+      "priority": 25,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-026",
+      "title": "Write Reference: Drivers page",
+      "description": "As a user, I need complete driver reference.",
+      "acceptanceCriteria": [
+        "docs/reference/drivers.md has complete content",
+        "Documents SQLite driver with config options",
+        "Documents MySQL driver with config options",
+        "Documents PostgreSQL driver with config options",
+        "Documents Shell driver with config options",
+        "Shows configuration format in frontmatter",
+        "Includes stub section for custom drivers",
+        "Typecheck passes"
+      ],
+      "priority": 26,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-027",
+      "title": "Write Reference: Keyboard Shortcuts page",
+      "description": "As a user, I need a quick reference of keyboard shortcuts.",
+      "acceptanceCriteria": [
+        "docs/reference/keyboard-shortcuts.md has complete content",
+        "Lists all shortcuts in table format",
+        "Documents: Right/Space = Next slide",
+        "Documents: Left = Previous slide",
+        "Documents: S = Open presenter view",
+        "Documents: O = Toggle overview",
+        "Documents: R = Reset timer (presenter)",
+        "Clean table formatting",
+        "Typecheck passes"
+      ],
+      "priority": 27,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-028",
+      "title": "Create Examples index with placeholder pages",
+      "description": "As a user, I want to see example presentations.",
+      "acceptanceCriteria": [
+        "docs/examples/index.md lists available examples",
+        "docs/examples/tech-talk.md exists as stub",
+        "docs/examples/demo-day.md exists as stub",
+        "docs/examples/workshop.md exists as stub",
+        "docs/examples/lightning-talk.md exists as stub",
+        "Each stub has title and 'Coming soon' placeholder",
+        "Examples are linked from index page",
+        "Typecheck passes"
+      ],
+      "priority": 28,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-029",
+      "title": "Add Netlify configuration",
+      "description": "As a developer, I need Netlify config for deployment.",
+      "acceptanceCriteria": [
+        "netlify.toml exists in project root",
+        "Build command is npm run docs:build",
+        "Publish directory is docs/.vitepress/dist",
+        "SPA redirect rule configured (/* -> /index.html, status 200)",
+        "Typecheck passes"
+      ],
+      "priority": 29,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-030",
+      "title": "Add favicon and public assets",
+      "description": "As a visitor, I want to see a favicon in the browser tab.",
+      "acceptanceCriteria": [
+        "docs/public/ directory exists",
+        "docs/public/favicon.ico exists (can be placeholder)",
+        "Favicon is configured in VitePress config",
+        "Favicon appears in browser tab",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 30,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-031",
+      "title": "Configure search functionality",
+      "description": "As a user, I want to search the documentation.",
+      "acceptanceCriteria": [
+        "VitePress local search is enabled in config",
+        "Search input appears in navigation",
+        "Search finds content across all pages",
+        "Search results show page title and preview",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 31,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-032",
+      "title": "Add SEO meta tags",
+      "description": "As a marketer, I want proper SEO for the documentation.",
+      "acceptanceCriteria": [
+        "Title tag is configured",
+        "Meta description is set",
+        "Open Graph tags configured (og:title, og:description, og:type)",
+        "Twitter card meta tags configured",
+        "Canonical URL configured",
+        "Typecheck passes"
+      ],
+      "priority": 32,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-033",
+      "title": "Polish dark mode styling",
+      "description": "As a user, I want dark mode to look polished.",
+      "acceptanceCriteria": [
+        "Dark mode toggle works in nav",
+        "Dark mode uses configured colors (#0f172a bg, #f8fafc text)",
+        "Code blocks look good in dark mode",
+        "Landing page components render correctly in dark mode",
+        "No harsh contrast or unreadable text",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 33,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-034",
+      "title": "Add Philosophy section to landing page",
+      "description": "As a visitor, I want to understand Tap's philosophy.",
+      "acceptanceCriteria": [
+        "Philosophy section added to docs/index.md",
+        "Section appears after hero, before features",
+        "Lists all 6 core principles with titles and descriptions",
+        "Styled consistently with rest of landing page",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 34,
+      "passes": false,
+      "notes": ""
+    }
+  ]
+}
