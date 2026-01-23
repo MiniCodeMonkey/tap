@@ -1048,7 +1048,7 @@
         "Typecheck passes"
       ],
       "priority": 62,
-      "passes": false,
+      "passes": true,
       "notes": ""
     },
     {
@@ -1064,7 +1064,7 @@
         "Typecheck passes"
       ],
       "priority": 63,
-      "passes": false,
+      "passes": true,
       "notes": ""
     },
     {

@@ -1019,3 +1019,38 @@ Started: Fri Jan 23 16:33:21 CET 2026
   - `createCrossfade()` returns [send, receive] pair for keyed transitions
   - Direction ('forward' | 'backward') affects fly x offset and scale start value
 ---
+
+## 2026-01-23 - US-062
+- What was implemented: Fragment animation system for incremental content reveals
+- Files changed:
+  - frontend/src/lib/components/FragmentContainer.svelte (new - fragment container with animations)
+- **Learnings for future iterations:**
+  - FragmentContainer receives fragments array and currentIndex, computes visibility state
+  - Multiple animation types supported: fade (default), slide-up, slide-left, scale, none
+  - Use custom transition functions with cubicOut easing for smooth animations
+  - Stagger effect: each fragment gets +50ms delay based on its index
+  - Faster exit animation (50% of enter duration) for snappy feel
+  - Fragment navigation already integrated via presentation store (nextSlide/prevSlide handle fragments)
+  - Keyboard utils call store actions which manage fragment state
+  - Use _node, _params prefix for required-but-unused parameters (ESLint @typescript-eslint/no-unused-vars)
+  - showAll prop enables print mode where all fragments are visible instantly
+  - Respect prefers-reduced-motion: return duration 0 for instant transitions
+---
+
+## 2026-01-23 - US-063
+- What was implemented: Setup Shiki for syntax highlighting with lazy loading
+- Files changed:
+  - frontend/package.json, frontend/package-lock.json (added shiki dependency)
+  - frontend/src/lib/utils/highlighting.ts (new - highlighter utility with lazy init)
+- **Learnings for future iterations:**
+  - Use `shiki` package for syntax highlighting (installed via npm)
+  - Highlighter uses lazy initialization with initHighlighter() - only loads when first needed
+  - Dynamic import `await import('shiki')` for code splitting
+  - BundledLanguage type doesn't include 'text' - use 'log' as fallback for plain text
+  - COMMON_LANGUAGES preloaded: js, ts, python, sql, go, rust, bash, json, html, css, markdown, yaml, toml, shell, tsx, jsx, log
+  - DEFAULT_THEMES preloaded: github-dark, github-light, one-dark-pro, dracula, nord
+  - LANGUAGE_ALIASES maps shorthand: js->javascript, ts->typescript, py->python, sh->bash, etc.
+  - ensureLanguageLoaded() and ensureThemeLoaded() load languages/themes on demand
+  - highlight(code, options) is the main API - returns Promise<string> with HTML
+  - disposeHighlighter() releases resources when done
+---
