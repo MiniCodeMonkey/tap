@@ -2,9 +2,10 @@
 package cli
 
 import (
-	"fmt"
+	"os"
 
 	"github.com/spf13/cobra"
+	"github.com/tapsh/tap/internal/tui"
 )
 
 // Flags for the new command
@@ -28,14 +29,14 @@ Examples:
   tap new --output my-talk.md      # Create with custom filename
   tap new -t gradient -o demo.md   # Combine options`,
 	Run: func(cmd *cobra.Command, args []string) {
-		// TODO: Implement presentation creation
-		// This will be implemented in a later user story (US-039)
-		fmt.Println("Creating new presentation...")
-		if newTheme != "" {
-			fmt.Printf("  Theme: %s\n", newTheme)
+		result, err := tui.RunNewWizard(newTheme, newOutput)
+		if err != nil {
+			Error("Failed to create presentation: %v", err)
+			os.Exit(1)
 		}
-		if newOutput != "" {
-			fmt.Printf("  Output: %s\n", newOutput)
+
+		if result.Aborted {
+			os.Exit(0)
 		}
 	},
 }
