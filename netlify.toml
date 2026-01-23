@@ -1,0 +1,15 @@
+# Netlify configuration for Tap documentation site
+
+[build]
+  # Build command to run
+  command = "npm run docs:build"
+  # Directory containing the built site
+  publish = "docs/.vitepress/dist"
+  # Directory to run build command in
+  base = "docs"
+
+# SPA redirect rule - handle client-side routing
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
