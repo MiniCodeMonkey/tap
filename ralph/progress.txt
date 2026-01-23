@@ -1366,3 +1366,17 @@ Started: Fri Jan 23 16:33:21 CET 2026
   - Tailwind v4 generates CSS custom properties like `--color-red-500` and utilities reference them
   - Build output includes Tailwind base layer, theme variables, and utility classes in @layer sections
 ---
+
+## 2026-01-24 - US-102
+- What was implemented: Configured Tailwind CSS with presentation-specific design tokens
+- Files changed:
+  - frontend/tailwind.config.js (extended with presentation-specific fontSize, fontFamily, spacing, aspectRatio, animation/transition tokens, and CSS custom property bridge)
+  - frontend/src/App.svelte (added text-slide-body and font-sans classes to verify utilities work)
+- **Learnings for future iterations:**
+  - Tailwind v4 extended theme uses standard object syntax: `fontSize: { 'slide-title': ['8rem', { lineHeight, letterSpacing }] }`
+  - Font family stacks override Tailwind's defaults when defined in theme.extend.fontFamily
+  - CSS custom property bridge pattern: `colors: { theme: { bg: 'var(--color-bg)' } }` enables theme switching via CSS variables
+  - Custom aspect ratios: use string format like `'16/9': '16 / 9'`
+  - Animation tokens can reference CSS variables for theme-specific timing
+  - Build successfully includes only used utilities (e.g., text-slide-body generates 2rem font-size)
+---
