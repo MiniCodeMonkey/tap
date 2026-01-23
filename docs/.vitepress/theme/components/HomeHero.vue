@@ -1,3 +1,9 @@
+<script setup lang="ts">
+import CopyButton from './CopyButton.vue'
+
+const installCommand = 'brew install tap-slides'
+</script>
+
 <template>
   <section class="home-hero">
     <div class="hero-content">
@@ -6,7 +12,8 @@
         Markdown slides with live code, beautiful themes, and zero config.
       </p>
       <div class="hero-install">
-        <code class="install-command">brew install tap-slides</code>
+        <code class="install-command">{{ installCommand }}</code>
+        <CopyButton :text="installCommand" />
       </div>
       <div class="hero-actions">
         <a href="/getting-started" class="hero-btn hero-btn-primary">

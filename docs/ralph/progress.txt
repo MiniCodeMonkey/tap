@@ -7,6 +7,9 @@ Started: Fri Jan 23 20:59:35 CET 2026
 - VitePress validates TypeScript during build - no separate typecheck needed
 - Build output goes to `docs/.vitepress/dist/`
 - Dev server runs on port 5173 by default
+- Custom theme files go in `docs/.vitepress/theme/` (index.ts + style.css)
+- VitePress CSS variables use `--vp-c-*` prefix for colors, `--vp-font-family-*` for fonts
+- Vue components go in `docs/.vitepress/theme/components/` and are registered in theme index.ts via `app.component()`
 
 ---
 
@@ -58,4 +61,45 @@ Started: Fri Jan 23 20:59:35 CET 2026
   - All stub pages follow the same pattern: YAML frontmatter with title, H1 heading matching title, brief description, and "*Content coming soon.*" placeholder
   - Directory structure mirrors the sidebar navigation configured in US-002
   - File names use kebab-case and match the sidebar link paths
+---
+
+## 2026-01-23 - US-004
+- What was implemented: Set up custom VitePress theme with Linear-inspired styling
+- Files changed:
+  - `docs/.vitepress/theme/index.ts` (created) - Theme entry point extending default theme
+  - `docs/.vitepress/theme/style.css` (created) - Custom CSS variables for colors and fonts
+- **Learnings for future iterations:**
+  - VitePress custom themes go in `docs/.vitepress/theme/` directory
+  - Theme index.ts must import DefaultTheme from 'vitepress/theme' and export it
+  - CSS variables use `--vp-c-*` naming convention (e.g., `--vp-c-brand-1`, `--vp-c-bg`, `--vp-c-text-1`)
+  - Dark mode is activated via `.dark` class selector on the root element
+  - Font stacks use `--vp-font-family-base` for body and `--vp-font-family-mono` for code
+---
+
+## 2026-01-23 - US-005
+- What was implemented: Created HomeHero component for the landing page
+- Files changed:
+  - `docs/.vitepress/theme/components/HomeHero.vue` (created) - Hero section component with headline, subheadline, install command, and CTA buttons
+  - `docs/.vitepress/theme/index.ts` (modified) - Registered HomeHero as a global component
+  - `docs/index.md` (modified) - Changed layout to `page` and added HomeHero component
+- **Learnings for future iterations:**
+  - Vue components must be registered globally in theme index.ts using `app.component()` within `enhanceApp()`
+  - Use `extends: DefaultTheme` instead of just exporting DefaultTheme when adding enhancements
+  - Components directory is `docs/.vitepress/theme/components/`
+  - Use `layout: page` in frontmatter to have a clean page with just nav and content (no sidebar)
+  - CSS scoped styles in Vue components keep styles isolated from the rest of the site
+---
+
+## 2026-01-23 - US-006
+- What was implemented: Added CopyButton component for one-click install command copying
+- Files changed:
+  - `docs/.vitepress/theme/components/CopyButton.vue` (created) - Reusable copy button with clipboard API integration and visual feedback
+  - `docs/.vitepress/theme/components/HomeHero.vue` (modified) - Added CopyButton next to install command
+  - `docs/.vitepress/theme/index.ts` (modified) - Registered CopyButton as a global component
+- **Learnings for future iterations:**
+  - Vue 3 Composition API with `<script setup lang="ts">` is cleaner for simple components
+  - Use `navigator.clipboard.writeText()` for clipboard operations (async API)
+  - SVG icons can be inlined in Vue templates for simple icons (copy icon, checkmark icon)
+  - Use `ref()` for reactive state that controls UI (e.g., copied state for icon toggle)
+  - setTimeout is fine for simple temporary state changes like copy feedback
 ---
