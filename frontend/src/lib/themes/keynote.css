@@ -1,7 +1,7 @@
 /**
  * Keynote Theme
- * Professional, polished design inspired by presentation software.
- * Features subtle shadows, refined typography, and elegant spacing.
+ * Professional, polished design with subtle shadows and refined aesthetics.
+ * Inspired by Apple Keynote's elegant presentation style.
  */
 
 /* ============================================================================
@@ -9,34 +9,36 @@
  * ============================================================================ */
 
 .theme-keynote {
-	/* Colors - Professional, warm palette */
+	/* Colors - professional, clean palette */
 	--slide-bg: #f5f5f7;
 	--text-color: #1d1d1f;
 	--muted-color: #86868b;
 	--accent-color: #0071e3;
 	--link-color: #0071e3;
-	--border-color: rgba(0, 0, 0, 0.08);
+	--border-color: rgba(0, 0, 0, 0.1);
 
-	/* Card/elevated surfaces */
-	--card-bg: #ffffff;
-	--card-shadow: 0 4px 12px rgba(0, 0, 0, 0.08), 0 1px 3px rgba(0, 0, 0, 0.04);
-	--card-shadow-hover: 0 8px 24px rgba(0, 0, 0, 0.12),
-		0 2px 6px rgba(0, 0, 0, 0.06);
-
-	/* Code colors */
+	/* Code colors - soft contrast */
 	--code-bg: rgba(0, 0, 0, 0.04);
 	--pre-bg: #1d1d1f;
 	--pre-color: #f5f5f7;
 
 	/* Table colors */
 	--table-header-bg: rgba(0, 0, 0, 0.03);
-	--table-stripe-bg: rgba(0, 0, 0, 0.015);
 
-	/* Typography - San Francisco / System fonts */
+	/* Shadows - subtle and professional */
+	--shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04);
+	--shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.05),
+		0 2px 4px -1px rgba(0, 0, 0, 0.03);
+	--shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.08),
+		0 4px 6px -2px rgba(0, 0, 0, 0.03);
+	--shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1),
+		0 10px 10px -5px rgba(0, 0, 0, 0.02);
+
+	/* Typography - San Francisco system fonts */
 	--font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display',
-		'SF Pro Text', 'Helvetica Neue', Arial, sans-serif;
-	--mono-font-family: 'SF Mono', Monaco, 'Cascadia Code', Menlo, Consolas,
-		'Liberation Mono', monospace;
+		'SF Pro Text', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+	--mono-font-family: 'SF Mono', Monaco, 'Cascadia Code', Consolas,
+		'Liberation Mono', 'Courier New', monospace;
 
 	/* Font sizes - same scale as other themes */
 	--title-font-size: 8rem;
@@ -58,10 +60,16 @@
 	--content-gap: 24px;
 	--column-gap: 48px;
 
-	/* Animation timing - smooth, professional */
-	--transition-duration: 350ms;
-	--transition-timing: cubic-bezier(0.4, 0, 0.2, 1);
-	--fragment-duration: 300ms;
+	/* Border radius - soft curves */
+	--radius-sm: 8px;
+	--radius-md: 12px;
+	--radius-lg: 16px;
+	--radius-xl: 24px;
+
+	/* Animation timing - smooth and elegant */
+	--transition-duration: 500ms;
+	--transition-timing: cubic-bezier(0.25, 0.1, 0.25, 1);
+	--fragment-duration: 450ms;
 
 	/* Apply base typography */
 	font-family: var(--font-family);
@@ -70,7 +78,7 @@
 }
 
 /* ============================================================================
- * Base Typography - Refined and elegant
+ * Base Typography - Clean and refined
  * ============================================================================ */
 
 .theme-keynote h1,
@@ -81,20 +89,21 @@
 .theme-keynote h6 {
 	font-family: var(--font-family);
 	font-weight: 600;
-	letter-spacing: -0.025em;
+	letter-spacing: -0.015em;
 	line-height: 1.1;
 	margin: 0;
 }
 
 .theme-keynote h1 {
 	font-weight: 700;
+	letter-spacing: -0.025em;
 }
 
 .theme-keynote p,
 .theme-keynote li {
 	font-family: var(--font-family);
 	font-weight: 400;
-	letter-spacing: -0.01em;
+	letter-spacing: -0.005em;
 	line-height: 1.5;
 }
 
@@ -107,14 +116,14 @@
 }
 
 /* ============================================================================
- * Code Styling - Clean, elevated
+ * Code Styling - Elegant with shadows
  * ============================================================================ */
 
 .theme-keynote code {
 	font-family: var(--mono-font-family);
 	background-color: var(--code-bg);
 	padding: 0.15em 0.4em;
-	border-radius: 6px;
+	border-radius: var(--radius-sm);
 	font-size: 0.9em;
 }
 
@@ -123,10 +132,10 @@
 	background-color: var(--pre-bg);
 	color: var(--pre-color);
 	padding: 1.5em 2em;
-	border-radius: 16px;
+	border-radius: var(--radius-lg);
 	overflow-x: auto;
 	line-height: 1.5;
-	box-shadow: var(--card-shadow);
+	box-shadow: var(--shadow-lg);
 }
 
 .theme-keynote pre code {
@@ -147,12 +156,11 @@
 }
 
 .theme-keynote a:hover {
-	opacity: 0.8;
-	text-decoration: underline;
+	opacity: 0.7;
 }
 
 /* ============================================================================
- * Lists - Clean with subtle markers
+ * Lists - Clean styling
  * ============================================================================ */
 
 .theme-keynote ul,
@@ -162,7 +170,7 @@
 }
 
 .theme-keynote li {
-	margin-bottom: 0.6em;
+	margin-bottom: 0.5em;
 }
 
 .theme-keynote li::marker {
@@ -170,17 +178,15 @@
 }
 
 /* ============================================================================
- * Blockquotes - Elevated card style
+ * Blockquotes - Elegant styling
  * ============================================================================ */
 
 .theme-keynote blockquote {
-	background-color: var(--card-bg);
-	box-shadow: var(--card-shadow);
-	border-radius: 16px;
-	border-left: 4px solid var(--accent-color);
-	padding: 1.5em 2em;
+	border-left: 3px solid var(--accent-color);
+	padding-left: 1.5em;
 	margin: 0;
 	font-style: italic;
+	color: var(--muted-color);
 }
 
 .theme-keynote blockquote p:first-child {
@@ -192,22 +198,21 @@
 }
 
 /* ============================================================================
- * Tables - Clean, modern
+ * Tables - Clean and minimal
  * ============================================================================ */
 
 .theme-keynote table {
 	width: 100%;
 	border-collapse: collapse;
 	font-size: var(--table-font-size);
-	background-color: var(--card-bg);
-	border-radius: 12px;
+	border-radius: var(--radius-md);
 	overflow: hidden;
-	box-shadow: var(--card-shadow);
+	box-shadow: var(--shadow-sm);
 }
 
 .theme-keynote th,
 .theme-keynote td {
-	padding: 0.85em 1.25em;
+	padding: 0.75em 1em;
 	text-align: left;
 	border-bottom: 1px solid var(--border-color);
 }
@@ -217,51 +222,31 @@
 	background-color: var(--table-header-bg);
 }
 
-.theme-keynote tbody tr:nth-child(even) {
-	background-color: var(--table-stripe-bg);
-}
-
 .theme-keynote tr:last-child td {
 	border-bottom: none;
 }
 
 /* ============================================================================
- * Images - Subtle shadow, rounded
+ * Images - Rounded with shadows
  * ============================================================================ */
 
 .theme-keynote img {
 	max-width: 100%;
 	height: auto;
-	border-radius: 12px;
-	box-shadow: var(--card-shadow);
-}
-
-/* ============================================================================
- * Cards - Elevated surface utility
- * ============================================================================ */
-
-.theme-keynote .card {
-	background-color: var(--card-bg);
-	box-shadow: var(--card-shadow);
-	border-radius: 16px;
-	padding: 2em;
-	transition: box-shadow var(--transition-duration) var(--transition-timing);
-}
-
-.theme-keynote .card:hover {
-	box-shadow: var(--card-shadow-hover);
+	border-radius: var(--radius-lg);
+	box-shadow: var(--shadow-lg);
 }
 
 /* ============================================================================
  * Layout-specific overrides
  * ============================================================================ */
 
-/* Title layout - Clean and impactful */
+/* Title layout - Elegant and centered */
 .theme-keynote .layout-title h1 {
 	font-size: var(--title-font-size);
 	font-weight: 700;
-	letter-spacing: -0.035em;
-	background: linear-gradient(135deg, var(--text-color) 0%, #4a4a4a 100%);
+	letter-spacing: -0.03em;
+	background: linear-gradient(180deg, var(--text-color) 0%, #424245 100%);
 	-webkit-background-clip: text;
 	-webkit-text-fill-color: transparent;
 	background-clip: text;
@@ -278,26 +263,30 @@
 .theme-keynote .layout-section h2 {
 	font-size: var(--section-font-size);
 	font-weight: 600;
-	letter-spacing: -0.025em;
+	letter-spacing: -0.02em;
 }
 
-/* Quote layout - Elegant presentation */
+/* Quote layout - Refined elegance */
 .theme-keynote .layout-quote blockquote {
 	font-size: var(--quote-font-size);
-	padding: 2.5em 3em;
-	border-left-width: 5px;
+	border: none;
+	padding: 2em;
+	color: var(--text-color);
 	position: relative;
+	background: rgba(0, 0, 0, 0.02);
+	border-radius: var(--radius-xl);
 }
 
 .theme-keynote .layout-quote blockquote::before {
 	content: '\201C';
 	font-size: 6rem;
 	position: absolute;
-	top: 0.1em;
+	top: 0;
 	left: 0.5em;
 	color: var(--accent-color);
 	opacity: 0.15;
 	font-family: Georgia, 'Times New Roman', serif;
+	line-height: 1;
 }
 
 .theme-keynote .layout-quote blockquote p:last-child {
@@ -314,14 +303,14 @@
 	overflow-y: auto;
 }
 
-/* Big stat layout - Clean impact */
+/* Big stat layout - Bold numbers */
 .theme-keynote .layout-big-stat strong,
 .theme-keynote .layout-big-stat .stat-number {
 	font-size: var(--stat-font-size);
 	font-weight: 700;
 	color: var(--accent-color);
 	line-height: 1;
-	letter-spacing: -0.05em;
+	letter-spacing: -0.04em;
 }
 
 .theme-keynote .layout-big-stat p {
@@ -335,49 +324,108 @@
 	position: relative;
 }
 
-/* Three column layout */
-.theme-keynote .layout-three-column {
-	position: relative;
+.theme-keynote .layout-two-column::after {
+	content: '';
+	position: absolute;
+	top: 15%;
+	bottom: 15%;
+	left: 50%;
+	width: 1px;
+	background: linear-gradient(
+		180deg,
+		transparent 0%,
+		var(--border-color) 20%,
+		var(--border-color) 80%,
+		transparent 100%
+	);
 }
 
 /* ============================================================================
- * Dark variant
+ * Card styling for content grouping
  * ============================================================================ */
 
-.theme-keynote.dark {
+.theme-keynote .card {
+	background: #ffffff;
+	border-radius: var(--radius-lg);
+	padding: 1.5em 2em;
+	box-shadow: var(--shadow-md);
+}
+
+.theme-keynote .card-elevated {
+	background: #ffffff;
+	border-radius: var(--radius-lg);
+	padding: 1.5em 2em;
+	box-shadow: var(--shadow-xl);
+}
+
+/* ============================================================================
+ * Dark variant - Dark mode support
+ * ============================================================================ */
+
+.theme-keynote.dark,
+.theme-keynote .dark {
 	--slide-bg: #1d1d1f;
 	--text-color: #f5f5f7;
 	--muted-color: #86868b;
 	--border-color: rgba(255, 255, 255, 0.1);
-	--card-bg: #2c2c2e;
-	--card-shadow: 0 4px 12px rgba(0, 0, 0, 0.3), 0 1px 3px rgba(0, 0, 0, 0.2);
-	--card-shadow-hover: 0 8px 24px rgba(0, 0, 0, 0.4),
-		0 2px 6px rgba(0, 0, 0, 0.25);
-	--code-bg: rgba(255, 255, 255, 0.08);
+	--code-bg: rgba(255, 255, 255, 0.06);
 	--pre-bg: #000000;
 	--pre-color: #f5f5f7;
-	--table-header-bg: rgba(255, 255, 255, 0.05);
-	--table-stripe-bg: rgba(255, 255, 255, 0.02);
+	--table-header-bg: rgba(255, 255, 255, 0.04);
+	--shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.2);
+	--shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.3),
+		0 2px 4px -1px rgba(0, 0, 0, 0.2);
+	--shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.4),
+		0 4px 6px -2px rgba(0, 0, 0, 0.2);
+	--shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.5),
+		0 10px 10px -5px rgba(0, 0, 0, 0.2);
+}
+
+.theme-keynote.dark .card,
+.theme-keynote .dark .card {
+	background: #2d2d2f;
+}
+
+.theme-keynote.dark .card-elevated,
+.theme-keynote .dark .card-elevated {
+	background: #2d2d2f;
+}
+
+.theme-keynote.dark .layout-title h1,
+.theme-keynote .dark .layout-title h1 {
+	background: linear-gradient(180deg, #f5f5f7 0%, #a1a1a6 100%);
+	-webkit-background-clip: text;
+	-webkit-text-fill-color: transparent;
+	background-clip: text;
+}
+
+.theme-keynote.dark .layout-quote blockquote,
+.theme-keynote .dark .layout-quote blockquote {
+	background: rgba(255, 255, 255, 0.03);
 }
 
 /* ============================================================================
- * Blue gradient variant
+ * Gradient accent variant
  * ============================================================================ */
 
-.theme-keynote.blue-gradient {
-	--slide-bg: linear-gradient(180deg, #1d1d1f 0%, #0a2540 100%);
-	--text-color: #f5f5f7;
-	--muted-color: rgba(255, 255, 255, 0.6);
-	--border-color: rgba(255, 255, 255, 0.1);
-	--card-bg: rgba(255, 255, 255, 0.08);
-	--card-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
-	--accent-color: #00d4ff;
-	background: linear-gradient(180deg, #1d1d1f 0%, #0a2540 100%);
+.theme-keynote.gradient-accent,
+.theme-keynote .gradient-accent {
+	--accent-color: linear-gradient(135deg, #0071e3 0%, #af52de 100%);
+}
+
+.theme-keynote.gradient-accent .layout-big-stat strong,
+.theme-keynote.gradient-accent .layout-big-stat .stat-number,
+.theme-keynote .gradient-accent .layout-big-stat strong,
+.theme-keynote .gradient-accent .layout-big-stat .stat-number {
+	background: linear-gradient(135deg, #0071e3 0%, #af52de 100%);
+	-webkit-background-clip: text;
+	-webkit-text-fill-color: transparent;
+	background-clip: text;
 }
 
 /* ============================================================================
  * Transition defaults
- * The keynote theme uses fade as the default - smooth and professional
+ * The keynote theme uses smooth fade as the default
  * ============================================================================ */
 
 .theme-keynote .slide-renderer {
@@ -397,14 +445,10 @@
 	.theme-keynote .slide-renderer {
 		transition: none;
 	}
-
-	.theme-keynote .card {
-		transition: none;
-	}
 }
 
 /* ============================================================================
- * Fragment styling - Smooth entrance
+ * Fragment styling - Smooth and elegant
  * ============================================================================ */
 
 .theme-keynote .fragment {
@@ -414,7 +458,7 @@
 
 .theme-keynote .fragment-hidden {
 	opacity: 0;
-	transform: translateY(16px);
+	transform: translateY(15px);
 }
 
 .theme-keynote .fragment-visible {
@@ -423,19 +467,17 @@
 }
 
 /* ============================================================================
- * Progress bar styling - Subtle, elegant
+ * Progress bar styling - Thin and subtle
  * ============================================================================ */
 
 .theme-keynote .progress-bar {
-	background-color: var(--accent-color);
-	height: 3px;
+	background: var(--accent-color);
+	height: 2px;
 	transition: width var(--transition-duration) var(--transition-timing);
-	border-radius: 2px;
 }
 
 .theme-keynote .progress-bar-container {
 	background-color: var(--border-color);
-	border-radius: 2px;
 }
 
 /* ============================================================================
@@ -448,64 +490,39 @@
 }
 
 /* ============================================================================
- * Utility classes for keynote effects
+ * Utility classes for Keynote-style effects
  * ============================================================================ */
 
-/* Gradient text effect */
-.theme-keynote .gradient-text {
-	background: linear-gradient(
-		90deg,
-		var(--accent-color) 0%,
-		#00c7be 50%,
-		var(--accent-color) 100%
-	);
-	-webkit-background-clip: text;
-	-webkit-text-fill-color: transparent;
-	background-clip: text;
-}
-
-/* Pill/badge style */
+/* Pill badge styling */
 .theme-keynote .pill {
 	display: inline-block;
-	background-color: var(--accent-color);
+	background: var(--accent-color);
 	color: #ffffff;
 	padding: 0.25em 0.75em;
 	border-radius: 100px;
 	font-size: 0.8em;
-	font-weight: 600;
+	font-weight: 500;
 }
 
-/* Icon placeholder circle */
-.theme-keynote .icon-circle {
-	width: 64px;
-	height: 64px;
-	border-radius: 50%;
-	background: linear-gradient(135deg, var(--accent-color) 0%, #00c7be 100%);
-	display: flex;
+/* Soft highlight */
+.theme-keynote .highlight {
+	background: linear-gradient(
+		180deg,
+		transparent 60%,
+		rgba(0, 113, 227, 0.2) 60%
+	);
+}
+
+/* Icon badge for feature highlights */
+.theme-keynote .icon-badge {
+	display: inline-flex;
 	align-items: center;
 	justify-content: center;
+	width: 3em;
+	height: 3em;
+	background: var(--accent-color);
 	color: #ffffff;
-	font-size: 1.5rem;
-	box-shadow: var(--card-shadow);
-}
-
-/* Feature grid for comparison slides */
-.theme-keynote .feature-grid {
-	display: grid;
-	grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-	gap: 1.5em;
-}
-
-.theme-keynote .feature-item {
-	background-color: var(--card-bg);
-	box-shadow: var(--card-shadow);
-	border-radius: 12px;
-	padding: 1.5em;
-	transition: box-shadow var(--transition-duration) var(--transition-timing),
-		transform var(--transition-duration) var(--transition-timing);
-}
-
-.theme-keynote .feature-item:hover {
-	box-shadow: var(--card-shadow-hover);
-	transform: translateY(-2px);
+	border-radius: var(--radius-md);
+	font-size: 1.5em;
+	box-shadow: var(--shadow-md);
 }
