@@ -1,0 +1,146 @@
+# GoReleaser configuration for Tap
+# https://goreleaser.com/
+
+# yaml-language-server: $schema=https://goreleaser.com/static/schema.json
+version: 2
+
+project_name: tap
+
+# Build frontend before Go builds
+before:
+  hooks:
+    # Download Go dependencies
+    - go mod tidy
+    # Build frontend assets to embedded/ directory
+    - bash -c "cd frontend && npm ci && npm run build:embed"
+
+# Build configuration
+builds:
+  - id: tap
+    main: ./cmd/tap
+    binary: tap
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - darwin
+      - linux
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    # Exclude windows/arm64 as it's less common
+    ignore:
+      - goos: windows
+        goarch: arm64
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+      - -X main.commit={{.Commit}}
+      - -X main.date={{.Date}}
+
+# Archive configuration
+archives:
+  - id: default
+    format: tar.gz
+    # Use zip for Windows
+    format_overrides:
+      - goos: windows
+        format: zip
+    # Archive name template
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    # Files to include in archive
+    files:
+      - LICENSE*
+      - README*
+      - CHANGELOG*
+
+# Checksum configuration
+checksum:
+  name_template: "checksums.txt"
+  algorithm: sha256
+
+# Snapshot configuration (for non-tag builds)
+snapshot:
+  version_template: "{{ incpatch .Version }}-snapshot"
+
+# Changelog configuration
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+      - "^ci:"
+      - "Merge pull request"
+      - "Merge branch"
+
+# Release configuration
+release:
+  github:
+    owner: tapsh
+    name: tap
+  # Draft release for review before publishing
+  draft: false
+  # Mark as prerelease if version contains rc, beta, or alpha
+  prerelease: auto
+  # Release name template
+  name_template: "Tap v{{.Version}}"
+  # Release body header
+  header: |
+    ## Tap v{{.Version}}
+
+    A markdown-based presentation tool for technical presentations.
+
+  # Release body footer
+  footer: |
+    ---
+
+    ### Installation
+
+    **macOS (Apple Silicon):**
+    ```bash
+    curl -L https://github.com/tapsh/tap/releases/download/v{{.Version}}/tap_{{.Version}}_darwin_arm64.tar.gz | tar xz
+    sudo mv tap /usr/local/bin/
+    ```
+
+    **macOS (Intel):**
+    ```bash
+    curl -L https://github.com/tapsh/tap/releases/download/v{{.Version}}/tap_{{.Version}}_darwin_amd64.tar.gz | tar xz
+    sudo mv tap /usr/local/bin/
+    ```
+
+    **Linux (amd64):**
+    ```bash
+    curl -L https://github.com/tapsh/tap/releases/download/v{{.Version}}/tap_{{.Version}}_linux_amd64.tar.gz | tar xz
+    sudo mv tap /usr/local/bin/
+    ```
+
+    **Linux (arm64):**
+    ```bash
+    curl -L https://github.com/tapsh/tap/releases/download/v{{.Version}}/tap_{{.Version}}_linux_arm64.tar.gz | tar xz
+    sudo mv tap /usr/local/bin/
+    ```
+
+    **Windows (amd64):**
+    Download `tap_{{.Version}}_windows_amd64.zip`, extract, and add to your PATH.
+
+# Homebrew tap configuration (optional - for future use)
+brews:
+  - name: tap
+    repository:
+      owner: tapsh
+      name: homebrew-tap
+    # Skip Homebrew publishing by default (can be enabled when repo exists)
+    skip_upload: true
+    homepage: "https://github.com/tapsh/tap"
+    description: "A markdown-based presentation tool for technical presentations"
+    license: "MIT"
+    install: |
+      bin.install "tap"
+    test: |
+      system "#{bin}/tap", "--version"
+
+# Announce configuration (optional - disabled by default)
+announce:
+  skip: true
