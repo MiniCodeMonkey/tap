@@ -434,3 +434,16 @@ Started: Fri Jan 23 20:59:35 CET 2026
   - Canonical URL uses a link tag: `['link', { rel: 'canonical', href: siteUrl }]`
   - Twitter card type `summary_large_image` provides a larger preview than default `summary`
 ---
+
+## 2026-01-24 - US-033
+- What was implemented: Polished dark mode styling for the documentation site
+- Files changed:
+  - `docs/.vitepress/theme/style.css` (modified) - Added explicit divider color variables for both light mode (#e2e8f0) and dark mode (#334155)
+  - `docs/.vitepress/theme/components/HomeThemes.vue` (modified) - Enhanced hover shadow for theme cards with darker shadow in dark mode
+- **Learnings for future iterations:**
+  - Dark mode shadows need to be stronger (use higher opacity like 0.4 instead of 0.1) because dark backgrounds absorb more light
+  - Use `.dark` class selector to apply dark mode specific styles in Vue components
+  - VitePress CSS variables for dividers: `--vp-c-divider` should be defined for both modes
+  - Dark mode colors verified: `#0f172a` (slate-900) for background, `#f8fafc` (slate-50) for text
+  - Code blocks in dark mode work well with VitePress default Shiki theme
+---
