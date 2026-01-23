@@ -1108,3 +1108,20 @@ Started: Fri Jan 23 16:33:21 CET 2026
   - Connection status indicator shows WebSocket state (connected/disconnected)
   - Keyboard shortcuts: arrows/space/enter for nav, R to reset timer, Home/End for first/last slide
 ---
+
+## 2026-01-23 - US-068
+- What was implemented: Progress indicator component for presentations
+- Files changed:
+  - frontend/src/lib/components/ProgressBar.svelte (new - progress bar component)
+  - frontend/src/lib/types.ts (added showProgressBar config option)
+- **Learnings for future iterations:**
+  - ProgressBar uses currentSlideIndex and totalSlides from presentation store
+  - Progress percentage: ((currentIndex + 1) / total) * 100 so first slide shows some progress
+  - Position: fixed at bottom of viewport (position: fixed; bottom: 0)
+  - Height: 3px (4px for brutalist theme) for subtle appearance
+  - Theme-aware CSS variables: --progress-bg and --progress-fill
+  - Optional via show prop and showProgressBar config in PresentationConfig
+  - Hidden in presenter view by simply not including the component there
+  - ARIA progressbar role with valuenow, valuemin, valuemax for accessibility
+  - Reduced motion support disables transitions
+---
