@@ -1144,3 +1144,20 @@ Started: Fri Jan 23 16:33:21 CET 2026
   - formatNumber() helper handles thousands separators and decimal formatting
   - Spring physics uses simple stiffness/damping model without complex physics library
 ---
+
+## 2026-01-23 - US-070
+- What was implemented: Static build placeholder for live code blocks
+- Files changed:
+  - frontend/src/lib/stores/websocket.ts (added staticMode store, detectStaticMode function, liveExecutionAvailable derived store)
+  - frontend/src/lib/components/LiveCodeBlock.svelte (added static mode detection, placeholder UI, theme-aware styling)
+- **Learnings for future iterations:**
+  - Static mode is detected by checking if `/api/presentation` endpoint returns OK
+  - Use AbortController with timeout (2s) for static mode detection to avoid hanging
+  - staticMode is a writable store, staticModeDetected tracks if detection has completed
+  - LiveCodeBlock subscribes to staticMode store in onMount with proper cleanup
+  - showStaticPlaceholder = hasDriver && isStaticMode (derived state)
+  - canExecute = hasDriver && !isStaticMode (execution only available in dev mode)
+  - Placeholder positioned at top-right, same location as Run button
+  - Theme-aware styling uses :global(.theme-name) pattern for scoped global styles
+  - Each theme has distinct placeholder appearance (terminal uses $ prefix, brutalist uppercase, etc.)
+---
