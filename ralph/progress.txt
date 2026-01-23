@@ -1,0 +1,838 @@
+# Ralph Progress Log
+Started: Fri Jan 23 16:33:21 CET 2026
+
+## Codebase Patterns
+- Go module is `github.com/tapsh/tap`
+- Use `go build ./...` to verify typecheck passes
+- Use `make build` to build binary to bin/tap
+- Use `make test` to run all tests
+- Use `make lint` or `golangci-lint run ./...` to run linter
+- Add .gitkeep files to preserve empty directories in git
+- CLI commands use Cobra - root command is in internal/cli/root.go
+- New subcommands should register themselves in their init() functions
+- Use `$(go env GOPATH)/bin/golangci-lint` if system golangci-lint is outdated
+- Use cli.Success/Error/Info/Warning functions from internal/cli/output.go for colorized output
+- Config package at internal/config/config.go for presentation config parsing
+- Struct fields should be ordered by size (largest first) to satisfy fieldalignment linter
+- Use `github.com/coder/websocket` for WebSocket support (maintained fork of deprecated nhooyr.io/websocket)
+- TUI uses charmbracelet/bubbletea + charmbracelet/lipgloss - styles in internal/tui/styles.go
+- Frontend: Svelte 5 + Vite + TypeScript in frontend/ directory
+- Frontend: Run `cd frontend && npm run check` for typecheck, `npm run lint` for ESLint
+- Frontend: Run `npm run build:embed` to build and output to embedded/dist/
+- Frontend: Use $lib alias for src/lib imports
+- Frontend: Test files (*.test.ts) excluded from typecheck/lint until Vitest is set up (US-075)
+- Frontend: Use `svelte/store` for state (writable, derived, type Readable)
+
+---
+
+## 2026-01-23 - US-001
+- What was implemented: Initialized Go module and project structure
+- Files changed:
+  - go.mod (updated module name to github.com/tapsh/tap)
+  - cmd/tap/main.go (created empty main function)
+  - internal/*/.gitkeep (created 9 internal package directories)
+  - frontend/.gitkeep, embedded/.gitkeep, themes/.gitkeep, testdata/.gitkeep
+- **Learnings for future iterations:**
+  - The project already had a go.mod but with wrong module name - checked and updated it
+  - Use .gitkeep files to preserve empty directories for git tracking
+---
+
+## 2026-01-23 - US-002
+- What was implemented: Created Makefile with build targets
+- Files changed:
+  - Makefile (new - build, test, lint, dev, release targets with cross-compilation)
+  - .gitignore (new - ignore bin/, dist/, IDE files, etc.)
+- **Learnings for future iterations:**
+  - Use `make build` to build to bin/tap
+  - Use `make test` to run tests
+  - Use `make lint` to run golangci-lint (requires golangci-lint installed)
+  - Use `make release` for cross-platform builds (darwin/amd64, darwin/arm64, linux/amd64, linux/arm64, windows/amd64)
+  - Build artifacts go to bin/ directory (gitignored)
+---
+
+## 2026-01-23 - US-003
+- What was implemented: Configured golangci-lint for code quality
+- Files changed:
+  - .golangci.yml (new - linting configuration)
+- **Learnings for future iterations:**
+  - Enabled linters: govet, errcheck, staticcheck, unused, gosimple, ineffassign, typecheck
+  - Use `golangci-lint run ./...` or `make lint` to run the linter
+  - Configuration uses modern `issues.exclude-dirs` and `issues.exclude-files` options (not deprecated `run.skip-dirs`/`run.skip-files`)
+  - 5 minute timeout configured for analysis
+---
+
+## 2026-01-23 - US-004
+- What was implemented: Implemented root CLI command with Cobra
+- Files changed:
+  - internal/cli/root.go (new - root command with Cobra)
+  - cmd/tap/main.go (updated - calls cli.Execute())
+  - go.mod (updated - added Cobra dependency)
+  - go.sum (new - dependency checksums)
+- **Learnings for future iterations:**
+  - Use `github.com/spf13/cobra` for CLI commands
+  - Root command defined in internal/cli/root.go with rootCmd variable
+  - Version is set via `rootCmd.Version` and shown with `--version` flag
+  - Custom version template: `rootCmd.SetVersionTemplate("tap version {{.Version}}\n")`
+  - Global flags (like --verbose) are defined as PersistentFlags on rootCmd
+  - Execute() returns int for exit code (0 success, 1 error)
+  - Subcommands will be registered on rootCmd in their init() functions
+  - golangci-lint v1.63.4+ is needed for Go 1.25+ (older versions incompatible)
+---
+
+## 2026-01-23 - US-005
+- What was implemented: Added tap new subcommand stub
+- Files changed:
+  - internal/cli/new.go (new - new subcommand with Cobra)
+- **Learnings for future iterations:**
+  - Subcommands register with rootCmd.AddCommand() in their init() functions
+  - Use Flags() for command-specific flags, PersistentFlags() for flags inherited by subcommands
+  - Short flag names use single character (e.g., -t for --theme, -o for --output)
+  - Help text automatically includes usage, flags, and global flags
+---
+
+## 2026-01-23 - US-006
+- What was implemented: Added tap dev subcommand stub
+- Files changed:
+  - internal/cli/dev.go (new - dev subcommand with Cobra)
+- **Learnings for future iterations:**
+  - Use `cobra.ExactArgs(1)` to require exactly one positional argument
+  - Positional arguments documented in Use field as `dev <file>`
+  - Int flags use `IntVarP` instead of `StringVarP`
+  - Long flag names without short version use `StringVar` (not `StringVarP`)
+---
+
+## 2026-01-23 - US-007
+- What was implemented: Added tap build subcommand stub
+- Files changed:
+  - internal/cli/build.go (new - build subcommand with Cobra)
+- **Learnings for future iterations:**
+  - Build command follows same pattern as other subcommands (dev, new)
+  - Default output directory is "dist" as specified in acceptance criteria
+  - Help text includes examples and explains static build limitations (no live code)
+---
+
+## 2026-01-23 - US-008
+- What was implemented: Added tap serve and tap pdf subcommand stubs
+- Files changed:
+  - internal/cli/serve.go (new - serve subcommand with Cobra)
+  - internal/cli/pdf.go (new - pdf subcommand with Cobra)
+- **Learnings for future iterations:**
+  - Use `cobra.MaximumNArgs(1)` for optional positional arguments (serve [dir])
+  - The --content flag for pdf uses a string type with allowed values documented in help
+  - Pattern of handling default values in Run function (e.g., dir := "dist" if no args)
+---
+
+## 2026-01-23 - US-009
+- What was implemented: Added tap add subcommand stub
+- Files changed:
+  - internal/cli/add.go (new - add subcommand with Cobra)
+- **Learnings for future iterations:**
+  - The add command uses `cobra.MaximumNArgs(1)` for optional [file] argument
+  - When no positional arguments, handle default behavior in Run function
+  - No command-specific flags needed for basic stub - just the optional file argument
+---
+
+## 2026-01-23 - US-010
+- What was implemented: Added colorized CLI output helpers
+- Files changed:
+  - go.mod, go.sum (added github.com/fatih/color dependency)
+  - internal/cli/output.go (new - color helper functions)
+- **Learnings for future iterations:**
+  - Use `github.com/fatih/color` for terminal color output
+  - Color functions: Success (green), Error (red), Info (blue), Warning (yellow)
+  - Each color has Printf-style (Success), Println-style (Successln), Sprint variants (SuccessSprint, SuccessSprintf)
+  - Also added Bold and Muted (gray) helpers
+  - Colors automatically disabled on non-TTY terminals
+---
+
+## 2026-01-23 - US-011
+- What was implemented: Config struct and YAML frontmatter parsing
+- Files changed:
+  - go.mod, go.sum (added gopkg.in/yaml.v3 dependency)
+  - internal/config/config.go (new - Config, DriverConfig, ConnectionConfig structs with Load function)
+- **Learnings for future iterations:**
+  - Use `gopkg.in/yaml.v3` for YAML parsing
+  - Config struct fields ordered by size for struct field alignment (maps first, then strings, then ints/bools)
+  - Load() function parses frontmatter between `---` delimiters at file start
+  - DefaultConfig() provides sensible defaults: theme=minimal, aspectRatio=16:9, transition=fade
+  - Use `$(go env GOPATH)/bin/fieldalignment -fix ./...` if struct field alignment issues occur
+---
+
+## 2026-01-23 - US-012
+- What was implemented: Config validation with Validate() method
+- Files changed:
+  - internal/config/config.go (added Validate() method and valid value maps)
+  - internal/config/config_test.go (new - unit tests for validation)
+- **Learnings for future iterations:**
+  - Use map[string]bool for valid value lookup - fast O(1) checks
+  - Validate() method returns first validation error (aspectRatio before transition)
+  - Empty values are allowed (use defaults) - only validate non-empty strings
+  - Unit tests cover valid values, invalid values, empty values, and default config
+  - Test error messages contain both the field name and invalid value
+---
+
+## 2026-01-23 - US-013
+- What was implemented: Environment variable resolution in config
+- Files changed:
+  - go.mod, go.sum (added github.com/joho/godotenv dependency)
+  - internal/config/config.go (added LoadEnv, resolveEnvVars, and ResolveEnvVars methods)
+  - internal/config/config_test.go (added unit tests for env var resolution)
+- **Learnings for future iterations:**
+  - Use `github.com/joho/godotenv` for loading .env files
+  - LoadEnv(dir) loads .env from specified directory, returns nil if file doesn't exist
+  - resolveEnvVars() supports both $VAR_NAME and ${VAR_NAME} syntax using regex
+  - Undefined env vars are left unchanged (no error, keeps original reference)
+  - ResolveEnvVars() applies resolution to Password, User, Host, Database, Path fields in ConnectionConfig
+  - Load() automatically calls LoadEnv and ResolveEnvVars after parsing frontmatter
+  - Tests should use os.Setenv/Unsetenv with defer for cleanup
+---
+
+## 2026-01-23 - US-014
+- What was implemented: Setup goldmark markdown parser with extensions
+- Files changed:
+  - go.mod, go.sum (added github.com/yuin/goldmark dependency)
+  - internal/parser/parser.go (new - Parser struct with New() constructor)
+- **Learnings for future iterations:**
+  - Use `github.com/yuin/goldmark` for markdown parsing
+  - Extensions enabled: Table, Strikethrough, TaskList, Linkify
+  - Parser uses AutoHeadingID and html.WithUnsafe() to allow raw HTML in markdown
+  - Access underlying goldmark instance via Markdown() method for advanced usage
+---
+
+## 2026-01-23 - US-015
+- What was implemented: Slide splitting on --- delimiter
+- Files changed:
+  - internal/parser/parser.go (added Presentation, Slide, SlideDirectives, Fragment, CodeBlock, CodeBlockMeta structs; Parse() method)
+  - internal/parser/parser_test.go (new - comprehensive unit tests for slide parsing)
+- **Learnings for future iterations:**
+  - Parse() method on Parser splits content on `---` delimiters after skipping frontmatter
+  - Slide struct includes: Index, Content, HTML, Directives, Fragments, CodeBlocks
+  - Empty slides (between consecutive delimiters) are automatically skipped
+  - skipFrontmatter() helper removes YAML frontmatter before slide parsing
+  - renderHTML() helper converts markdown content to HTML using the goldmark instance
+  - Regex `(?m)^---\s*$` matches slide delimiter on its own line with optional whitespace
+  - Tests cover: single slide, multiple slides, frontmatter skipping, empty content, empty slides, HTML rendering
+---
+
+## 2026-01-23 - US-016
+- What was implemented: Parse slide directives from HTML comments
+- Files changed:
+  - internal/parser/parser.go (added parseDirectives() function, integrated into Parse() method)
+  - internal/parser/parser_test.go (added 7 new unit tests for directive parsing)
+  - go.mod (moved yaml.v3 to direct dependency for parser package)
+- **Learnings for future iterations:**
+  - Directives are parsed from HTML comments at the start of slides using regex `(?s)^\s*<!--\s*(.*?)\s*-->`
+  - parseDirectives() extracts YAML from comments and returns SlideDirectives struct + remaining content
+  - Uses map[string]interface{} to parse YAML, then type-asserts to extract known fields
+  - Invalid YAML silently falls through (allows non-directive HTML comments to pass)
+  - SlideDirectives struct already existed from US-015 with fields: Layout, Transition, Fragments, Background, Notes
+  - Content after directive extraction is stored in Slide.Content (directive comment is removed)
+  - Tests cover: all directive fields, partial directives, directives not at start, invalid YAML, multiline notes
+---
+
+## 2026-01-23 - US-017
+- What was implemented: Parse code block metadata from info strings
+- Files changed:
+  - internal/parser/parser.go (added parseCodeBlocks() and parseCodeBlockMeta() functions, integrated into Parse() method)
+  - internal/parser/parser_test.go (added 12 new unit tests for code block parsing)
+- **Learnings for future iterations:**
+  - Code blocks are parsed using regex: `(?m)^```([^\n]*)\n([\s\S]*?)\n` ` ` ` (captures info string and code)
+  - Info string format: `language {driver: driverName, connection: connName}`
+  - metaPattern regex `\{([^}]*)\}\s*$` extracts metadata from end of info string
+  - parseCodeBlockMeta() supports YAML-like format (key: value) with comma separators
+  - CodeBlock and CodeBlockMeta structs were already defined in US-015
+  - Code blocks are collected per-slide and stored in Slide.CodeBlocks slice
+  - Tests cover: simple blocks, blocks with driver, driver+connection, multiple blocks, no language, multiline code, across slides
+---
+
+## 2026-01-23 - US-018
+- What was implemented: Parse fragment markers (<!-- pause -->) for incremental reveals
+- Files changed:
+  - internal/parser/parser.go (added pausePattern regex, parseFragments() function, integrated into Parse())
+  - internal/parser/parser_test.go (added 12 unit tests for fragment parsing)
+- **Learnings for future iterations:**
+  - Fragment struct was already defined in US-015 (Index int, Content string)
+  - pausePattern regex supports spacing variations: <!--pause-->, <!-- pause -->, etc.
+  - Use `(?m)^\s*<!--\s*pause\s*-->\s*$` for matching pause markers on their own line
+  - Empty fragments (from consecutive pauses) are automatically skipped
+  - Fragment indices are re-numbered to be consecutive after skipping empty ones
+  - Fragments are parsed per-slide, each slide has independent fragment indices starting at 0
+  - parseFragments() is called after directive parsing, so directive content is already removed
+---
+
+## 2026-01-23 - US-019
+- What was implemented: Parse image attributes (width and position) from markdown images
+- Files changed:
+  - internal/parser/image.go (new - ImageAttributes struct, ParseImageAttributes, ParseImages, ExtractImageAttributes functions)
+  - internal/parser/image_test.go (new - 25 unit tests for image attribute parsing)
+- **Learnings for future iterations:**
+  - ImageAttributes struct has Width and Position fields
+  - Supports syntax: `![Alt](img.png){width=50%}` and `{position=left}` or multiple attributes `{width=50%, position=left}`
+  - ParseImageAttributes() accepts string with or without braces, supports comma-separated key=value pairs
+  - ParseImages() returns []ImageInfo with AltText, URL, Attributes, and Raw fields for each image found
+  - ExtractImageAttributes() extracts attributes from end of line using regex `\{([^}]+)\}\s*$`
+  - Position values are lowercased during parsing (e.g., "LEFT" becomes "left")
+  - Unknown attributes are silently ignored
+  - All supported image formats work: png, jpg, jpeg, gif, svg, webp
+---
+
+## 2026-01-23 - US-020
+- What was implemented: Slide transformer that converts parsed presentations to frontend-ready JSON format
+- Files changed:
+  - internal/transformer/transformer.go (new - Transformer struct with Transform() method, TransformedPresentation, TransformedSlide, and related structs)
+  - internal/transformer/transformer_test.go (new - 14 unit tests for transformation)
+  - internal/transformer/.gitkeep (deleted - no longer needed with actual files)
+- **Learnings for future iterations:**
+  - Transformer takes parser.Presentation and config.Config, outputs TransformedPresentation
+  - TransformedSlide includes: Index, HTML, Layout, Transition, Notes, Fragments, CodeBlocks, Background
+  - Background type is auto-detected: "color" (default), "image" (file extensions or URLs), "gradient" (CSS gradient functions)
+  - Per-slide directive transitions override global config transition
+  - Empty slices (Fragments, CodeBlocks) are omitted from JSON due to `omitempty` tags
+  - Layout defaults to "default" when not specified (auto-detection is in US-021)
+  - Use `fieldalignment -fix` to fix struct field ordering for memory efficiency
+---
+
+## 2026-01-23 - US-021
+- What was implemented: Layout auto-detection for slides based on content analysis
+- Files changed:
+  - internal/transformer/transformer.go (added detectLayout() and helper functions)
+  - internal/transformer/transformer_test.go (added 8 new test functions for layout detection)
+  - .golangci.yml (added exclusion for fieldalignment in test files)
+- **Learnings for future iterations:**
+  - Layout auto-detection uses HTML tag counting (countHTMLTag) to analyze slide structure
+  - Detection priority: two-column (|||) > title (H1 only) > section (H2 only) > code-focus (>50% code) > quote (blockquote) > default
+  - isTitleLayout allows at most one paragraph (subtitle) with H1
+  - isSectionLayout requires only H2 with no other content
+  - isCodeFocusLayout compares code length to total content length (>50%)
+  - isQuoteLayout allows blockquotes with paragraphs (for attribution) but no headers/code
+  - containsTwoColumnSeparator looks for ||| anywhere in content
+  - Directive layout always overrides auto-detection
+  - fieldalignment linting can be excluded for test files in .golangci.yml
+---
+
+## 2026-01-23 - US-022
+- What was implemented: Image path resolution in transformer
+- Files changed:
+  - internal/transformer/transformer.go (added resolveImagePath(), resolveImagePaths(), NewWithBaseDir(), SetBaseDir(), isAbsoluteURL(), isSupportedImageFormat())
+  - internal/transformer/transformer_test.go (added 14 new test functions for path resolution)
+- **Learnings for future iterations:**
+  - Transformer now has a baseDir field for resolving relative image paths
+  - Use NewWithBaseDir(cfg, baseDir) or SetBaseDir() to configure the base directory
+  - resolveImagePaths() processes HTML and updates all img src attributes
+  - Uses regex `(<img\s[^>]*src=["'])([^"']+)(["'][^>]*>)` to match and replace img tags
+  - Absolute URLs (http://, https://) are returned unchanged
+  - Absolute file paths (starting with /) are returned unchanged
+  - Relative paths are resolved using filepath.Join(baseDir, path) and filepath.Clean()
+  - Only supported image formats are resolved: png, jpg, jpeg, gif, svg, webp (case-insensitive)
+  - Unsupported formats (pdf, mp4, etc.) are left unchanged to avoid breaking non-image src attributes
+  - If no baseDir is set, all paths are returned unchanged for backward compatibility
+---
+
+## 2026-01-23 - US-023
+- What was implemented: Driver interface and Registry for code execution
+- Files changed:
+  - internal/driver/driver.go (new - Driver interface and Result struct)
+  - internal/driver/registry.go (new - Registry with Register/Get/Has/List/Execute methods)
+  - internal/driver/registry_test.go (new - 12 unit tests for registry operations)
+  - internal/driver/.gitkeep (deleted - no longer needed)
+- **Learnings for future iterations:**
+  - Driver interface has Name() and Execute(ctx, code, config) methods
+  - Result struct fields: Success (bool), Output (string), Error (string), Data ([]map[string]interface{})
+  - Registry uses sync.RWMutex for thread-safe concurrent access
+  - Use Get() to retrieve a driver by name, Has() to check existence
+  - Execute() on Registry handles driver lookup and returns error Result if driver not found
+  - Data field is for structured tabular results (SQL queries) to render as HTML tables
+---
+
+## 2026-01-23 - US-024
+- What was implemented: Shell driver for executing shell commands in slides
+- Files changed:
+  - internal/driver/shell.go (new - ShellDriver implementation)
+  - internal/driver/shell_test.go (new - 16 unit tests for shell driver)
+- **Learnings for future iterations:**
+  - ShellDriver executes commands via `sh -c` using os/exec
+  - Captures stdout and stderr separately
+  - Default timeout is 30 seconds, configurable via config["timeout"] in seconds
+  - WorkingDir can be set on driver creation or overridden via config["workdir"]
+  - Returns structured Result with Success, Output, Error fields
+  - Handles context cancellation and deadline exceeded properly
+  - On failure, stderr is returned as Error; on success with stderr, it's appended to Output
+  - Exit code is included in error message when command fails
+  - Uses strconv.Atoi for parsing timeout; invalid/zero values use default
+---
+
+## 2026-01-23 - US-025
+- What was implemented: SQLite driver for executing SQL queries in slides
+- Files changed:
+  - internal/driver/sqlite.go (new - SQLiteDriver implementation)
+  - internal/driver/sqlite_test.go (new - 21 unit tests for SQLite driver)
+- **Learnings for future iterations:**
+  - SQLiteDriver executes SQL via `sqlite3 -header -column` CLI command
+  - Default database is `:memory:` for in-memory, configurable via config["database"]
+  - Supports both in-memory and file-based databases
+  - Output is parsed into structured Data field ([]map[string]interface{}) for rendering as HTML tables
+  - parseColumnOutput() parses sqlite3 column-formatted output into structured data
+  - parseColumnHeaders() extracts column names and their positions from the header line
+  - isHeaderSeparator() detects the dashes separator line between header and data
+  - Uses same timeout/workdir patterns as ShellDriver for consistency
+  - Tests skip with `t.Skip()` if sqlite3 is not installed (hasSQLite3 helper)
+---
+
+## 2026-01-23 - US-026
+- What was implemented: MySQL driver for executing SQL queries in slides
+- Files changed:
+  - internal/driver/mysql.go (new - MySQLDriver implementation)
+  - internal/driver/mysql_test.go (new - 28 unit tests for MySQL driver)
+- **Learnings for future iterations:**
+  - MySQLDriver executes SQL via `mysql --table` CLI command
+  - Uses MYSQL_PWD environment variable for secure password handling (avoids command-line exposure)
+  - Connection config: host, port (default 3306), user, password, database
+  - Output parsing differs from SQLite: MySQL uses `+----+` borders and `| val |` row format
+  - parseMySQLTableOutput() handles MySQL's bordered table format
+  - isMySQLBorder() detects lines containing only `+` and `-` characters
+  - maskCredentials() redacts passwords and usernames in error messages for security
+  - Username masking is context-aware (only masks `user@host` or `'user'` patterns, not arbitrary occurrences)
+  - Short usernames (<=2 chars) are not masked to avoid false positives
+  - Tests use hasMySQL() helper and skip if binary not installed
+  - Integration tests skip if MySQL server isn't available/configured
+---
+
+## 2026-01-23 - US-027
+- What was implemented: PostgreSQL driver for executing SQL queries in slides
+- Files changed:
+  - internal/driver/postgres.go (new - PostgresDriver implementation)
+  - internal/driver/postgres_test.go (new - 28 unit tests for PostgreSQL driver)
+- **Learnings for future iterations:**
+  - PostgresDriver executes SQL via `psql` CLI command
+  - Uses PGPASSWORD environment variable for secure password handling (avoids command-line exposure)
+  - Connection config: host, port (default 5432), user, password, database
+  - Uses `--no-psqlrc` to avoid user config affecting output
+  - Uses `--pset=border=2` for table format with borders (similar to MySQL)
+  - Output parsing is similar to MySQL: `+----+` borders and `| val |` row format
+  - parsePostgresTableOutput() handles PostgreSQL's bordered table format
+  - maskPostgresCredentials() redacts passwords and usernames in error messages
+  - PostgreSQL uses double quotes for identifiers, so masking uses `"user"` pattern
+  - Tests use hasPostgres() helper and skip if psql binary not installed
+  - Integration tests skip if PostgreSQL server isn't available/configured
+---
+
+## 2026-01-23 - US-028
+- What was implemented: Custom driver support for defining drivers for any language
+- Files changed:
+  - internal/driver/custom.go (new - CustomDriver implementation and RegisterCustomDrivers helper)
+  - internal/driver/custom_test.go (new - 22 unit tests for custom driver execution)
+- **Learnings for future iterations:**
+  - CustomDriver executes code via a user-defined command with args
+  - Code is passed to the command via stdin (not as a command-line argument)
+  - Inherits timeout pattern from other drivers (default 30s, configurable per-execution)
+  - CustomDriverConfig struct holds Name, Command, Args, Timeout, WorkingDir
+  - RegisterCustomDrivers() creates CustomDriver instances from frontmatter config
+  - Built-in drivers (shell, sqlite, mysql, postgres) are skipped by RegisterCustomDrivers
+  - Drivers with empty Command are skipped during registration
+  - DriverConfigInput is a simplified struct for accepting driver definitions
+  - Use //nolint:govet comment to suppress fieldalignment warnings for readable struct layout
+  - System golangci-lint may be outdated - use $(go env GOPATH)/bin/golangci-lint for newer version
+---
+
+## 2026-01-23 - US-029
+- What was implemented: HTTP dev server core with net/http
+- Files changed:
+  - internal/server/server.go (new - Server struct with HTTP server, Start/Shutdown methods)
+  - internal/server/server_test.go (new - 10 unit tests for server operations)
+  - internal/server/.gitkeep (deleted - no longer needed)
+- **Learnings for future iterations:**
+  - Server struct uses net/http with http.ServeMux for routing
+  - Binds to 0.0.0.0 for network access from other devices
+  - Port 0 can be used in tests for ephemeral port allocation
+  - After Start(), Addr() returns actual bound address (important for port 0)
+  - SetPresentation()/GetPresentation() are thread-safe with sync.RWMutex
+  - RegisterHandler()/RegisterHandlerFunc() add routes before Start()
+  - StartWithGracefulShutdown() blocks and handles SIGINT/SIGTERM
+  - Shutdown() with context for graceful connection draining
+  - ReadHeaderTimeout set to 10 seconds to prevent slowloris attacks
+  - Struct fields ordered by size for memory alignment (fieldalignment linter)
+---
+
+## 2026-01-23 - US-030
+- What was implemented: Server routes and API endpoints with colorized logging
+- Files changed:
+  - internal/server/routes.go (new - route handlers for /, /presenter, /api/presentation, /qr)
+  - internal/server/routes_test.go (new - 10 unit tests for route handlers)
+- **Learnings for future iterations:**
+  - Use SetupRoutes() to configure all routes on Server before Start()
+  - loggingMiddleware wraps http.Handler to log requests with colors (method, path, status, duration)
+  - loggingResponseWriter captures status code by wrapping WriteHeader()
+  - Use `_ = json.NewEncoder(w).Encode(...)` to acknowledge and ignore error return value
+  - Route patterns in Go 1.22+ use "GET /path" format for method-specific routing
+  - httptest.NewRequest + httptest.NewRecorder for unit testing handlers
+  - Always use context.Background() instead of nil for Shutdown() in tests (staticcheck SA1012)
+  - Placeholder HTML pages will be replaced with embedded frontend assets in US-045
+---
+
+## 2026-01-23 - US-031
+- What was implemented: WebSocket hub for hot reload with client management and broadcasting
+- Files changed:
+  - go.mod, go.sum (added github.com/coder/websocket dependency - maintained fork of nhooyr.io/websocket)
+  - internal/server/websocket.go (new - WebSocketHub, Client, Message structs with full implementation)
+  - internal/server/websocket_test.go (new - 15 unit tests for hub operations and real connections)
+- **Learnings for future iterations:**
+  - Use `github.com/coder/websocket` instead of `nhooyr.io/websocket` (deprecated, coder maintains fork)
+  - WebSocketHub uses channel-based architecture: register, unregister, broadcast, done channels
+  - Client struct has hub, conn, send fields - send is a buffered channel for outgoing messages
+  - HandleConnection() creates independent context from http.Request (request context cancels immediately in httptest)
+  - readPump runs in HTTP handler goroutine (blocks), writePump runs in separate goroutine
+  - Use sync.RWMutex for thread-safe client map access (RLock for reads, Lock for writes)
+  - Message types: "connected" (on connect), "reload" (hot reload), "slide" (navigation sync)
+  - BroadcastReload() and BroadcastSlide(index) are convenience methods for common operations
+  - websocket.Accept with InsecureSkipVerify: true allows any origin in dev mode
+  - Ping every 30 seconds to keep connections alive, 10 second write timeout
+  - fieldalignment tool fixed struct ordering: mu first, then channels, then map
+---
+
+## 2026-01-23 - US-032
+- What was implemented: File watcher for hot reload with debouncing
+- Files changed:
+  - go.mod, go.sum (added github.com/fsnotify/fsnotify dependency)
+  - internal/server/watcher.go (new - Watcher struct with full implementation)
+  - internal/server/watcher_test.go (new - 13 unit tests for watcher operations)
+- **Learnings for future iterations:**
+  - Use `github.com/fsnotify/fsnotify` for file system watching
+  - Watcher struct has Start()/Stop() lifecycle with doneCh for clean shutdown
+  - Debounce uses time.AfterFunc with timer.Stop() on new events to coalesce rapid changes
+  - Handle file rename/move by re-adding the file after a short delay (50ms)
+  - SetOnChange() callback receives the path of the changed file
+  - Watch both the markdown file (explicit) and its directory (for asset changes)
+  - Use atomic.Int32 in tests for thread-safe counters
+  - fieldalignment: struct fields ordered by size - pointers/funcs first, then strings, then mutex, then time.Duration, then bool
+---
+
+## 2026-01-23 - US-033
+- What was implemented: Code execution API endpoint (POST /api/execute)
+- Files changed:
+  - internal/server/api.go (new - ExecuteRequest/ExecuteResponse structs, handleAPIExecute handler)
+  - internal/server/api_test.go (new - 15 unit tests for all error cases)
+  - internal/server/server.go (added registry field to Server struct)
+  - internal/server/routes.go (registered POST /api/execute route)
+- **Learnings for future iterations:**
+  - Server struct stores a driver.Registry for executing code
+  - Use SetRegistry() before SetupRoutes() to configure the execute endpoint
+  - Connection config is looked up from presentation.Config.Drivers[driverName].Connections[connectionName]
+  - buildExecutionConfig() maps ConnectionConfig fields to driver config map keys (host, port, user, password, database, path)
+  - Timeout is configurable per-driver via DriverConfig.Timeout (default 30 seconds)
+  - Return 400 for missing driver field, invalid driver; 500 for execution errors and missing registry
+  - Use r.Context() with timeout for execution - allows request cancellation to cancel execution
+---
+
+## 2026-01-23 - US-034
+- What was implemented: QR code generation for presenter/audience URLs
+- Files changed:
+  - go.mod, go.sum (added github.com/skip2/go-qrcode dependency)
+  - internal/server/qr.go (new - QRConfig struct, URL generation, QR code generation functions)
+  - internal/server/qr_test.go (new - 12 unit tests for QR code functionality)
+  - internal/server/server.go (added presenterPassword field with getter/setter)
+  - internal/server/routes.go (updated /qr handler to serve actual QR codes)
+  - internal/server/routes_test.go (updated TestHandleQR, added TestHandleQR_WithPassword)
+- **Learnings for future iterations:**
+  - Use `github.com/skip2/go-qrcode` for QR code generation (PNG and base64)
+  - Auto-detect local IP using UDP dial to 8.8.8.8:80 (doesn't actually connect)
+  - GenerateASCIIQRCode() uses Unicode full block characters for terminal display
+  - QRConfig struct stores Port, PresenterPassword, PreferredHost
+  - /qr endpoint shows both audience and presenter QR codes with embedded base64 PNG images
+  - Presenter password is included as ?key= query parameter if configured
+  - Server.SetPresenterPassword()/GetPresenterPassword() for password management
+---
+
+## 2026-01-23 - US-035
+- What was implemented: Presenter password protection
+- Files changed:
+  - internal/server/routes.go (added password check to handlePresenter)
+  - internal/server/qr.go (added PrintPasswordProtectionStatus function)
+  - internal/server/routes_test.go (added 6 unit tests for authentication flow)
+  - internal/server/qr_test.go (added test for PrintPasswordProtectionStatus)
+- **Learnings for future iterations:**
+  - Password protection uses query param ?key=<password> for presenter view
+  - Server already had presenterPassword field and getter/setter from US-034
+  - QR code URL generation already includes password in URL from US-034
+  - Use http.Error() for returning 403 Forbidden responses
+  - Test both missing password and wrong password scenarios separately
+---
+
+## 2026-01-23 - US-036
+- What was implemented: Static site builder for generating standalone HTML presentations
+- Files changed:
+  - internal/builder/builder.go (new - Builder struct with Build() method)
+  - internal/builder/builder_test.go (new - 22 unit tests for builder functionality)
+  - internal/builder/.gitkeep (deleted - no longer needed)
+- **Learnings for future iterations:**
+  - Builder generates index.html with embedded presentation JSON in a <script type="application/json"> tag
+  - Images are copied to dist/assets/ with SHA256 content hashes in filename (first 8 chars)
+  - Content hashes ensure cache busting when files change, same content = same hash
+  - extractImagePaths() uses regex to find all img src attributes in HTML
+  - rewriteImagePaths() replaces paths using a mapping (old path -> new hashed path)
+  - Absolute URLs (http://, https://) are skipped - not copied or rewritten
+  - BuildResult tracks: OutputDir, FileCount, TotalSize, BuildTime for reporting
+  - Use t.TempDir() in tests for automatic cleanup of temporary directories
+---
+
+## 2026-01-23 - US-037
+- What was implemented: PDF exporter using playwright-go for generating PDFs from presentations
+- Files changed:
+  - go.mod, go.sum (added github.com/playwright-community/playwright-go dependency)
+  - internal/pdf/exporter.go (new - Exporter struct, ExportOptions, ExportResult, full PDF export implementation)
+  - internal/pdf/.gitkeep (deleted - no longer needed)
+- **Learnings for future iterations:**
+  - Use `github.com/playwright-community/playwright-go` for browser automation and PDF generation
+  - Playwright-go API uses `Viewport` (not `ViewportSize`) with `*playwright.Size` type
+  - PDF options use `*playwright.Margin` (not `PagePdfOptionsMargin`) for margin configuration
+  - ExportOptions supports Content field with ContentType enum: "slides", "notes", or "both"
+  - ValidateContentType() helper converts string to ContentType enum
+  - Exporter uses lazy browser launch with launchBrowser() method
+  - Always call Close() to clean up browser resources
+  - playwright.Install() automatically downloads browsers if not present
+  - PDF is generated using page.PDF() with print-to-PDF approach
+  - JavaScript injection via page.Evaluate() can modify page for print styling
+---
+
+## 2026-01-23 - US-038
+- What was implemented: Bubble Tea TUI framework setup with base styles and color scheme
+- Files changed:
+  - go.mod, go.sum (added github.com/charmbracelet/bubbletea and github.com/charmbracelet/lipgloss dependencies)
+  - internal/tui/styles.go (new - color constants, base styles, and render helper functions)
+  - internal/tui/styles_test.go (new - 19 unit tests for style rendering)
+  - internal/tui/.gitkeep (deleted - no longer needed)
+- **Learnings for future iterations:**
+  - Use `github.com/charmbracelet/bubbletea` for TUI framework
+  - Use `github.com/charmbracelet/lipgloss` for terminal styling
+  - Color scheme: Primary (#7C3AED purple), Secondary (#10B981 green), Error (#EF4444 red), Muted (#6B7280 gray)
+  - Styles defined as package-level vars for reuse: TitleStyle, SubtitleStyle, ErrorStyle, SuccessStyle, MutedStyle, etc.
+  - Helper functions like RenderTitle(), RenderError() provide convenient styled output
+  - lipgloss.PlaceHorizontal/PlaceVertical/Place for centering content
+  - BorderStyle and FocusedBorderStyle use RoundedBorder() for nice terminal UI
+---
+
+## 2026-01-23 - US-039
+- What was implemented: Interactive TUI wizard for creating new presentations
+- Files changed:
+  - go.mod, go.sum (added github.com/charmbracelet/bubbles dependency)
+  - internal/tui/new.go (new - NewModel struct, multi-step wizard with title input, theme selection, filename prompt)
+  - internal/tui/new_test.go (new - 26 unit tests for TUI model and markdown generation)
+  - internal/cli/new.go (updated - now calls tui.RunNewWizard instead of printing placeholder)
+- **Learnings for future iterations:**
+  - Use `github.com/charmbracelet/bubbles` for reusable TUI components (textinput, etc.)
+  - Bubble Tea models use Init/Update/View pattern - Update returns (tea.Model, tea.Cmd)
+  - Type assertions on tea.Model returns need `ok` check for errcheck linter
+  - Multi-step wizards track state with an enum (stepTitle, stepTheme, stepFilename, stepDone)
+  - textinput.Model has complex alignment - use //nolint:govet comment if fieldalignment fails
+  - Use textinput.Blink as the cmd from Init() for cursor blinking
+  - RunNewWizard() wraps tea.NewProgram for simple invocation from CLI
+  - GenerateStarterMarkdown() exported for testing - generates full presentation with frontmatter
+  - Handle Ctrl+C and Esc in Update() switch on msg.String() for graceful abort
+---
+
+## 2026-01-23 - US-040
+- What was implemented: Dev server TUI for displaying server status, URLs, and handling hot reload events
+- Files changed:
+  - internal/tui/dev.go (new - DevModel, DevConfig, DevState, DevEvent structs with full TUI implementation)
+  - internal/tui/dev_test.go (new - 26 unit tests for key handling, view rendering, and state updates)
+- **Learnings for future iterations:**
+  - DevModel uses channels (eventsCh, closeCh) for external event communication
+  - Use SendEvent(), SendReloadEvent(), UpdateWebSocketCount(), UpdateWatcherStatus() to send updates from outside
+  - Use tea.WithAltScreen() for full-screen TUI that doesn't pollute terminal history
+  - tea.Tick returns periodic tick messages for animated/updating displays
+  - openBrowserCmd() uses runtime.GOOS to detect OS and run appropriate open command (open, xdg-open, cmd /c start)
+  - Recent events list capped at 5 items for clean display
+  - Keyboard shortcuts: o=open browser, p=presenter view, a=add slide, r=reload, q=quit
+  - Use //nolint:govet comment for structs with embedded types that prevent optimal alignment
+  - Use sync.RWMutex for thread-safe state access from external goroutines
+---
+
+## 2026-01-23 - US-041
+- What was implemented: Interactive TUI slide builder for adding slides to presentations
+- Files changed:
+  - internal/tui/add.go (new - AddModel TUI with layout picker, content fields, and markdown generation)
+  - internal/tui/add_test.go (new - 30 unit tests for AddModel, layout navigation, markdown generation)
+  - internal/cli/add.go (updated - now calls tui.RunAddWizard instead of placeholder)
+- **Learnings for future iterations:**
+  - AddModel uses multi-step wizard: layout selection then content input per layout
+  - Layout struct defines Name, Description, ASCII preview, and Fields for each layout type
+  - AvailableLayouts slice defines all 7 layouts: title, section, default, two-column, code-focus, quote, big-stat
+  - LayoutField struct has Name, Placeholder, and Multiline boolean for different input types
+  - Use textinput.Model for each field, initialize with initTextInputs() when layout is selected
+  - Navigate fields with Tab/Down (next) and Shift+Tab/Up (previous)
+  - Multiline fields use Enter to add newlines, Ctrl+D to finalize from any field
+  - GenerateSlideMarkdown() exported for testing - generates markdown based on layout name and field values
+  - appendToFile() uses os.OpenFile with O_APPEND|O_WRONLY for appending slide to presentation
+  - CLI add command uses findPresentationFile() to auto-detect presentation file in current directory
+  - findPresentationFile() checks common names (presentation.md, slides.md, etc.) and prefers files with slide/present/talk/deck in name
+---
+
+## 2026-01-23 - US-042
+- What was implemented: Wired up tap build command to generate static files from presentations
+- Files changed:
+  - internal/cli/build.go (updated - full implementation of build command with progress spinner and result reporting)
+- **Learnings for future iterations:**
+  - Build command uses config.Load() to parse frontmatter, parser.New().Parse() for markdown, builder.Build() for static output
+  - Custom spinner implementation uses goroutine with ticker for animation frames (Braille dots ⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏)
+  - Struct field ordering matters for fieldalignment linter - channels first, then strings, then bools
+  - formatSize() helper converts bytes to human-readable KB/MB/GB format
+  - formatDuration() helper formats time.Duration with appropriate units (µs, ms, s)
+  - Builder.SetBaseDir() should be called before Build() for proper relative image path resolution
+  - Spinner uses ANSI escape \033[K to clear line when stopping
+---
+
+## 2026-01-23 - US-043
+- What was implemented: Wired up tap serve command to preview built presentations locally
+- Files changed:
+  - internal/cli/serve.go (updated - full implementation of serve command with HTTP file server)
+- **Learnings for future iterations:**
+  - Use http.FileServer(http.Dir(path)) for simple static file serving
+  - Wrap http.Handler in http.HandlerFunc for request logging
+  - Use os.Stat() + IsNotExist() check before serving to provide helpful error messages
+  - Signal handling with signal.Notify for graceful shutdown on SIGINT/SIGTERM
+  - Server.ListenAndServe() blocks, so run in goroutine and use channels for error/signal coordination
+  - ReadHeaderTimeout (10s) prevents slowloris attacks on HTTP servers
+---
+
+## 2026-01-23 - US-044
+- What was implemented: Wired up tap pdf command to export presentations to PDF
+- Files changed:
+  - internal/cli/pdf.go (updated - full implementation with temporary dev server and PDF export)
+- **Learnings for future iterations:**
+  - Use server.New(0) for ephemeral port allocation (port 0 = random available port)
+  - After srv.Start(), srv.Port() returns the actual bound port
+  - Use pdf.ValidateContentType() to convert content type string to ContentType enum
+  - Default output path: replace input file extension with .pdf using filepath.Ext + strings.TrimSuffix
+  - Server cleanup via defer with context.WithTimeout for graceful shutdown
+  - PDF exporter cleanup via defer exporter.Close() to release browser resources
+  - Use 5 minute timeout for PDF export context (browser automation can be slow)
+  - Progress shown via spinner with updates at each major step
+  - Export result includes OutputPath, PageCount, FileSize, Duration for stats display
+---
+
+## 2026-01-23 - US-045
+- What was implemented: Configured go:embed for frontend assets
+- Files changed:
+  - embedded/embed.go (new - //go:embed directive with helper functions)
+  - embedded/embed_test.go (new - unit tests for embedded package)
+  - embedded/index.html (new - full presentation viewer with WebSocket hot reload)
+  - embedded/presenter.html (new - presenter view with speaker notes and timer)
+  - internal/server/routes.go (updated - serves embedded assets instead of placeholders)
+  - internal/builder/builder.go (updated - added CopyEmbeddedAssets() method)
+- **Learnings for future iterations:**
+  - Use `//go:embed` directive to embed files directly in Go binary
+  - embed.FS implements fs.FS interface for use with http.FileServer
+  - Embed specific files with pattern: `//go:embed file1.html file2.html`
+  - embedded.GetFile(name) returns []byte content, embedded.List() returns all filenames
+  - Server uses embedded.GetIndexHTML() and embedded.GetPresenterHTML() for serving HTML
+  - Builder's CopyEmbeddedAssets() copies non-index files to output directory
+  - Frontend assets include WebSocket reconnection with exponential backoff (max 30s)
+  - Presenter view includes timer (click to reset), next slide preview, and speaker notes
+---
+
+## 2026-01-23 - US-046
+- What was implemented: Initialized Svelte 5 frontend project with Vite, TypeScript, ESLint, and Prettier
+- Files changed:
+  - frontend/ (new Svelte 5 project scaffold with Vite)
+  - frontend/package.json (project config with build:embed script)
+  - frontend/tsconfig.app.json (TypeScript strict mode config)
+  - frontend/vite.config.ts (Vite config for library mode, output to ../embedded/dist)
+  - frontend/eslint.config.js (ESLint flat config with TypeScript and Svelte plugins)
+  - frontend/.prettierrc (Prettier config with Svelte plugin)
+  - frontend/src/lib/{components,layouts,themes,stores,utils}/ (directory structure)
+  - frontend/src/App.svelte, frontend/src/Presenter.svelte (placeholder components)
+  - frontend/index.html, frontend/presenter.html (entry points)
+  - .gitignore (added /embedded/dist/ to ignore build output)
+- **Learnings for future iterations:**
+  - Use `npm create vite@latest . -- --template svelte-ts` for Svelte 5 project initialization
+  - Svelte 5 uses `mount()` instead of `new Component()` for mounting components
+  - TypeScript strict mode is enabled by default in @tsconfig/svelte
+  - Additional strict options: noUncheckedIndexedAccess, noImplicitReturns, noFallthroughCasesInSwitch
+  - Vite config: set outDir to '../embedded/dist' for go:embed integration
+  - ESLint 9 uses flat config format (eslint.config.js), not .eslintrc
+  - Use `globals` package for browser/node globals in ESLint flat config
+  - ESLint config files (*.config.js) should be excluded from type-checked linting
+  - Build:embed script outputs to embedded/dist/ directory for go:embed
+  - Use $lib alias in vite.config.ts resolve.alias for cleaner imports
+---
+
+## 2026-01-23 - US-047
+- What was implemented: TypeScript types for frontend matching Go backend structs
+- Files changed:
+  - frontend/src/lib/types.ts (new - complete TypeScript type definitions)
+- **Learnings for future iterations:**
+  - Types match Go structs: Presentation, PresentationConfig, Slide, CodeBlock, FragmentGroup, BackgroundConfig
+  - Layout type is a union of all layout names: default, title, section, two-column, code-focus, quote, big-stat, etc.
+  - Transition type is: none, fade, slide, push, zoom
+  - WebSocketMessage type for hot reload: connected, reload, slide
+  - ExecuteRequest/ExecuteResponse for code execution API
+  - No 'any' types - use Record<string, unknown> for dynamic data like driver execution results
+  - Optional fields use ? suffix in TypeScript (matches Go's omitempty JSON tags)
+---
+
+## 2026-01-23 - US-048
+- What was implemented: Presentation Svelte store for slide navigation and fragment management
+- Files changed:
+  - frontend/src/lib/stores/presentation.ts (new - presentation state store with navigation actions)
+  - frontend/src/lib/stores/presentation.test.ts (new - unit tests for store, ready for Vitest)
+  - frontend/tsconfig.app.json (updated - added $lib path alias and excluded test files)
+  - frontend/eslint.config.js (updated - excluded test files from linting until Vitest is set up)
+- **Learnings for future iterations:**
+  - Use `svelte/store` for state management: writable for mutable state, derived for computed values
+  - Use `type Readable` from svelte/store for derived store type annotations
+  - Navigation actions use store.subscribe()() pattern to get current value and act on it
+  - URL hash persistence: use 1-based slide numbers (#1, #2) for user-friendly URLs
+  - Use history.replaceState instead of location.hash to avoid polluting browser history
+  - Fragment index starts at -1 (no fragments visible) and goes up to fragmentCount - 1
+  - Test files need to be excluded from typecheck/lint until Vitest is set up (US-075)
+  - $lib alias requires paths config in tsconfig.app.json: `"paths": { "$lib/*": ["src/lib/*"] }`
+---
+
+## 2026-01-23 - US-049
+- What was implemented: WebSocket client for hot reload and presentation sync
+- Files changed:
+  - frontend/src/lib/stores/websocket.ts (new - WebSocketClient class with auto-reconnect)
+  - frontend/src/lib/stores/websocket.test.ts (new - comprehensive unit tests)
+- **Learnings for future iterations:**
+  - WebSocketClient class handles connection, message handling, and auto-reconnect
+  - Uses exponential backoff for reconnect: 1s initial, 2x multiplier, max 30s
+  - Export constants in WEBSOCKET_CONSTANTS for testing/configuration
+  - connected writable store tracks connection state
+  - Handle 'reload' with window.location.reload(), 'slide' with goToSlide()
+  - Use singleton pattern with getWebSocketClient() for shared client instance
+  - Default URL uses window.location to construct ws:// or wss:// URL
+  - MockWebSocket class in tests simulates WebSocket behavior for unit testing
+  - Use vi.stubGlobal() to mock browser globals (WebSocket, window)
+---
+
+## 2026-01-23 - US-050
+- What was implemented: Keyboard navigation utility for presentation control
+- Files changed:
+  - frontend/src/lib/utils/keyboard.ts (new - setupKeyboardNavigation function with all keyboard handlers)
+  - frontend/src/lib/utils/keyboard.test.ts (new - comprehensive unit tests for keyboard navigation)
+- **Learnings for future iterations:**
+  - Use window.addEventListener('keydown', handler) for global keyboard handling
+  - Check document.activeElement to skip navigation when input/textarea/contenteditable is focused
+  - Use event.preventDefault() to stop browser defaults (e.g., Space scrolling page)
+  - Fullscreen API: document.documentElement.requestFullscreen() and document.exitFullscreen()
+  - Check document.fullscreenElement to determine if in fullscreen mode
+  - Export helper functions (triggerNext, triggerPrev, triggerFullscreen) for programmatic control
+  - Use options object pattern for customizable callbacks (onToggleOverview, onOpenPresenter, isOverviewOpen)
+  - Store module-level state (currentOptions) for access in event handler
+---
+
+## 2026-01-23 - US-051
+- What was implemented: SlideContainer component for slide display with proper scaling and aspect ratio handling
+- Files changed:
+  - frontend/src/lib/components/SlideContainer.svelte (new - slide container component)
+  - frontend/src/lib/components/.gitkeep (deleted - no longer needed)
+- **Learnings for future iterations:**
+  - Use $props() for Svelte 5 component props with interface definition
+  - Use $state() for reactive local state and $derived() for computed values
+  - ResizeObserver is preferred over window.resize for container size changes
+  - For $effect dependency tracking, assign the tracked value to a variable (const _ = value; void _;) to avoid ESLint no-unused-expressions errors
+  - Use CSS custom properties (--var) for theme-able values
+  - Base slide dimensions of 1920px width provides good quality at all scales
+  - Use transform: scale() for viewport fitting rather than modifying actual dimensions
+  - transform-origin: center center ensures scaling happens from the center
+  - Use import('svelte').Snippet type for children prop in Svelte 5
+---
