@@ -8,7 +8,7 @@ import globals from 'globals'
 export default [
   // Global ignores
   {
-    ignores: ['node_modules/**', 'dist/**', '../embedded/**', '*.config.js', '*.config.ts'],
+    ignores: ['node_modules/**', 'dist/**', '../embedded/**', '*.config.js', '*.config.ts', '**/*.test.ts', '**/*.spec.ts'],
   },
   js.configs.recommended,
   // TypeScript files in src
