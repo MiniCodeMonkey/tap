@@ -143,3 +143,152 @@ Started: Fri Jan 23 20:59:35 CET 2026
   - Hover effects with `translateY` and `box-shadow` add subtle interactivity
   - Theme card structure: preview image area + info section with name and description
 ---
+
+## 2026-01-23 - US-010
+- What was implemented: Added landing page footer section with GitHub link, license, and tagline
+- Files changed:
+  - `docs/.vitepress/theme/components/HomeFooter.vue` (created) - Footer component with GitHub link (with SVG icon), MIT License text, and "Made for developers who present" tagline
+  - `docs/.vitepress/theme/index.ts` (modified) - Registered HomeFooter as a global component
+  - `docs/index.md` (modified) - Added HomeFooter component at the bottom of the page
+- **Learnings for future iterations:**
+  - Use `contentinfo` (footer) semantic HTML element for accessibility
+  - Use `var(--vp-c-text-2)` for secondary text and `var(--vp-c-text-3)` for more muted/tertiary text
+  - A subtle `border-top: 1px solid var(--vp-c-divider)` provides visual separation from content
+  - Inline SVG icons work well for simple icons like GitHub logo
+  - Use `target="_blank" rel="noopener"` for external links
+---
+
+## 2026-01-23 - US-011
+- What was implemented: Made landing page responsive for all screen sizes
+- Files changed:
+  - `docs/.vitepress/theme/components/HomeHero.vue` (modified) - Added 768px and 480px breakpoints for tablet/mobile, buttons stack vertically on mobile
+  - `docs/.vitepress/theme/components/HomeFeatures.vue` (modified) - Added 480px breakpoint for smaller mobile screens, adjusted card padding
+  - `docs/.vitepress/theme/components/HomeThemes.vue` (modified) - Enhanced existing breakpoints with font size adjustments
+  - `docs/.vitepress/theme/components/HomeCode.vue` (modified) - Added 480px breakpoint for very small screens
+  - `docs/.vitepress/theme/components/HomeFooter.vue` (modified) - Added 480px breakpoint for mobile sizing
+- **Learnings for future iterations:**
+  - Use multiple breakpoints for gradual responsive adjustments (768px for tablet, 480px for mobile)
+  - Mobile buttons should be full-width with `flex-direction: column` for better touch targets
+  - Code blocks need `overflow-x: auto` which was already in place for horizontal scrolling
+  - Reduce padding consistently across components on mobile (24px -> 16px)
+  - Font sizes should scale down proportionally: desktop -> tablet -> mobile
+---
+
+## 2026-01-23 - US-012
+- What was implemented: Wrote complete Getting Started page with installation, first presentation, dev server, syntax, build, and next steps
+- Files changed:
+  - `docs/getting-started.md` (modified) - Replaced stub with full content covering all 6 sections
+- **Learnings for future iterations:**
+  - Documentation pages follow a clear structure: overview intro, then numbered/titled sections
+  - All code examples must be in fenced code blocks with language specified (bash, markdown, yaml)
+  - Use markdown syntax inside code blocks to show examples of the tool's input format
+  - Next steps section should link to related guide pages for continued learning
+  - VitePress renders markdown documentation pages without any component registration needed
+---
+
+## 2026-01-23 - US-013
+- What was implemented: Wrote complete Writing Slides guide page with frontmatter, separators, markdown, directives, and speaker notes
+- Files changed:
+  - `docs/guide/writing-slides.md` (modified) - Replaced stub with comprehensive guide content
+- **Learnings for future iterations:**
+  - Guide pages benefit from tables for quick reference (e.g., frontmatter options, directives)
+  - Use VitePress tip containers (`::: tip`) for callouts and important notes
+  - Include "Next Steps" section linking to related guides for reader navigation
+  - Use quadruple backticks (````) when showing markdown code blocks containing triple backticks
+  - Mixed layout examples help users understand how directives work together
+---
+
+## 2026-01-23 - US-014
+- What was implemented: Wrote complete Layouts guide page with all 11 layouts documented
+- Files changed:
+  - `docs/guide/layouts.md` (modified) - Replaced stub with comprehensive guide content covering default behavior, directive syntax, and all layouts
+- **Learnings for future iterations:**
+  - Each layout entry follows pattern: description, code example, "When to use" callout
+  - Include a summary reference table at the end for quick scanning
+  - Use slot markers like `::left::`, `::right::`, `::main::` for multi-region layouts
+  - Directive blocks use HTML comment YAML syntax: `<!-- layout: name -->`
+---
+
+## 2026-01-23 - US-015
+- What was implemented: Wrote complete Themes guide page with all 5 built-in themes documented
+- Files changed:
+  - `docs/guide/themes.md` (modified) - Replaced stub with comprehensive guide content
+- **Learnings for future iterations:**
+  - Theme documentation follows pattern: name, description, code example, "Best for" use cases, characteristics list
+  - Include a "What Themes Control" section explaining the scope of theming (typography, colors, animations, transitions, spacing, code styling)
+  - Use VitePress tip containers (`::: tip Coming Soon`) for planned features not yet implemented
+  - Include a quick reference table summarizing all themes at a glance
+  - Each theme entry benefits from concrete use case suggestions (e.g., "Best for: Technical talks, developer conferences")
+---
+
+## 2026-01-23 - US-016
+- What was implemented: Wrote complete Animations & Transitions guide page
+- Files changed:
+  - `docs/guide/animations-transitions.md` (modified) - Replaced stub with comprehensive guide covering transitions and fragments
+- **Learnings for future iterations:**
+  - Split content into two major sections: Slide Transitions (between slides) and Fragments (within slides)
+  - Include both global (frontmatter) and per-slide (directive block) configuration examples for each feature
+  - Document both manual (`<!-- pause -->`) and automatic (`fragments: true`) reveal mechanisms
+  - Include a "Quick Reference" table at the end summarizing all syntax in one place
+  - Add an "Animation Timing" section linking themes to their animation styles
+---
+
+## 2026-01-23 - US-017
+- What was implemented: Wrote complete Code Blocks guide page with Shiki syntax highlighting documentation
+- Files changed:
+  - `docs/guide/code-blocks.md` (modified) - Replaced stub with comprehensive guide covering all code block features
+- **Learnings for future iterations:**
+  - Use quadruple backticks (````) when showing markdown examples that contain triple backticks
+  - Structure code feature docs as: intro -> basic usage -> advanced features -> configuration -> quick reference -> next steps
+  - Include tables for syntax reference (e.g., line highlighting syntax like `{1-3,5}`)
+  - Link to external documentation (like Shiki) where appropriate for completeness
+  - Practical tips (e.g., "test at presentation distance") add real value to documentation
+---
+
+## 2026-01-23 - US-018
+- What was implemented: Wrote complete Live Code Execution guide page with driver concept and configuration documentation
+- Files changed:
+  - `docs/guide/live-code-execution.md` (modified) - Replaced stub with comprehensive guide covering all live code execution features
+- **Learnings for future iterations:**
+  - Use VitePress warning containers (`::: warning`) for important caveats like "development mode only"
+  - Driver configuration docs benefit from showing both frontmatter YAML and inline code block syntax
+  - Security-related features (env vars for credentials, timeout protection) deserve dedicated sections
+  - "Best Practices" section adds practical value beyond just documenting features
+  - Multiple drivers in one presentation example shows real-world usage patterns
+---
+
+## 2026-01-23 - US-019
+- What was implemented: Wrote complete Presenter Mode guide page with dual-window setup, features, and cross-device control
+- Files changed:
+  - `docs/guide/presenter-mode.md` (modified) - Replaced stub with comprehensive guide covering all presenter mode features
+- **Learnings for future iterations:**
+  - Presenter mode docs benefit from clear separation of concepts: audience view vs presenter view
+  - Cross-device functionality (iPad as controller) is a compelling feature worth highlighting
+  - Include a dedicated keyboard shortcuts table within the page for quick reference
+  - "Best Practices" sections with before/during advice add practical value
+  - Security features (password protection) deserve their own section with warnings about credential handling
+---
+
+## 2026-01-23 - US-020
+- What was implemented: Wrote complete Images & Media guide page with image paths, formats, sizing, positioning, backgrounds, and build behavior
+- Files changed:
+  - `docs/guide/images-media.md` (modified) - Replaced stub with comprehensive guide covering all image and media features
+- **Learnings for future iterations:**
+  - Image attribute syntax uses `{attr=value}` after the markdown image syntax (e.g., `![alt](path){width=50%}`)
+  - The `cover` layout is the recommended way to use background images via directive blocks
+  - Build behavior documentation is useful to explain what happens to assets during `tap build`
+  - Include "Best Practices" sections for performance, accessibility, and organization
+  - Missing/error handling documentation helps users debug issues during development
+---
+
+## 2026-01-23 - US-021
+- What was implemented: Wrote complete Building & Export guide page with build command, output structure, deployment guides, and PDF export documentation
+- Files changed:
+  - `docs/guide/building-export.md` (modified) - Replaced stub with comprehensive guide covering all build and export features
+- **Learnings for future iterations:**
+  - Structure build/deployment docs as: build command -> output structure -> deployment examples -> preview -> export options
+  - Include deployment examples for common platforms (Netlify, Vercel, GitHub Pages) with concrete commands
+  - PDF export has three formats: slides only, notes only, and slides with notes (both)
+  - "Pre-Deployment Checklist" sections add practical value for production readiness
+  - Quick Reference tables at the end help users find commands quickly
+---
