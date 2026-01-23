@@ -1,0 +1,558 @@
+/**
+ * Terminal Theme
+ * Hacker aesthetic with dark backgrounds, green/amber text, and CRT-style effects.
+ * Uses monospace font throughout for authentic terminal feel.
+ */
+
+/* ============================================================================
+ * Theme Variables
+ * ============================================================================ */
+
+.theme-terminal {
+	/* Colors - classic terminal palette */
+	--slide-bg: #0a0a0a;
+	--text-color: #00ff00;
+	--text-color-amber: #ffb000;
+	--muted-color: rgba(0, 255, 0, 0.6);
+	--accent-color: #00ff00;
+	--link-color: #00ffff;
+	--border-color: rgba(0, 255, 0, 0.3);
+
+	/* Code colors */
+	--code-bg: rgba(0, 255, 0, 0.1);
+	--pre-bg: #0d1117;
+	--pre-color: #00ff00;
+
+	/* Table colors */
+	--table-header-bg: rgba(0, 255, 0, 0.1);
+
+	/* Typography - Monospace throughout for terminal feel */
+	--font-family: 'SF Mono', Monaco, 'Cascadia Code', Consolas, 'Liberation Mono',
+		'Courier New', monospace;
+	--mono-font-family: 'SF Mono', Monaco, 'Cascadia Code', Consolas,
+		'Liberation Mono', 'Courier New', monospace;
+
+	/* Font sizes - same scale as other themes */
+	--title-font-size: 8rem;
+	--h1-font-size: 6rem;
+	--h2-font-size: 4rem;
+	--h3-font-size: 2.5rem;
+	--body-font-size: 2rem;
+	--code-font-size: 1.5rem;
+	--subtitle-font-size: 2.5rem;
+	--section-font-size: 5rem;
+	--quote-font-size: 3rem;
+	--quote-attribution-size: 1.5rem;
+	--stat-font-size: 12rem;
+	--stat-label-size: 2rem;
+	--table-font-size: 1.75rem;
+
+	/* Spacing */
+	--slide-padding: 80px;
+	--content-gap: 24px;
+	--column-gap: 48px;
+
+	/* Animation timing */
+	--transition-duration: 400ms;
+	--transition-timing: ease-out;
+	--fragment-duration: 400ms;
+
+	/* CRT effects */
+	--glow-color: rgba(0, 255, 0, 0.5);
+	--scanline-opacity: 0.05;
+
+	/* Apply base typography */
+	font-family: var(--font-family);
+	color: var(--text-color);
+	background-color: var(--slide-bg);
+}
+
+/* ============================================================================
+ * CRT Effects - Scanlines and Glow
+ * ============================================================================ */
+
+.theme-terminal::before {
+	content: '';
+	position: fixed;
+	top: 0;
+	left: 0;
+	width: 100%;
+	height: 100%;
+	pointer-events: none;
+	background: repeating-linear-gradient(
+		0deg,
+		rgba(0, 0, 0, var(--scanline-opacity)),
+		rgba(0, 0, 0, var(--scanline-opacity)) 1px,
+		transparent 1px,
+		transparent 2px
+	);
+	z-index: 9999;
+}
+
+/* Screen flicker effect - subtle */
+@keyframes terminal-flicker {
+	0%,
+	100% {
+		opacity: 1;
+	}
+	50% {
+		opacity: 0.98;
+	}
+}
+
+.theme-terminal {
+	animation: terminal-flicker 0.15s infinite;
+}
+
+/* ============================================================================
+ * Base Typography with Glow Effect
+ * ============================================================================ */
+
+.theme-terminal h1,
+.theme-terminal h2,
+.theme-terminal h3,
+.theme-terminal h4,
+.theme-terminal h5,
+.theme-terminal h6 {
+	font-family: var(--font-family);
+	font-weight: 700;
+	letter-spacing: 0.02em;
+	line-height: 1.2;
+	margin: 0;
+	text-shadow: 0 0 10px var(--glow-color), 0 0 20px var(--glow-color),
+		0 0 30px var(--glow-color);
+}
+
+.theme-terminal p,
+.theme-terminal li {
+	font-family: var(--font-family);
+	font-weight: 400;
+	letter-spacing: 0.01em;
+	text-shadow: 0 0 5px var(--glow-color);
+}
+
+.theme-terminal strong {
+	font-weight: 700;
+	color: var(--text-color-amber);
+	text-shadow: 0 0 10px rgba(255, 176, 0, 0.5);
+}
+
+.theme-terminal em {
+	font-style: italic;
+	color: var(--link-color);
+}
+
+/* ============================================================================
+ * Code Styling - Enhanced Terminal Look
+ * ============================================================================ */
+
+.theme-terminal code {
+	font-family: var(--mono-font-family);
+	background-color: var(--code-bg);
+	padding: 0.15em 0.4em;
+	border-radius: 2px;
+	font-size: 0.9em;
+	border: 1px solid var(--border-color);
+	color: var(--text-color-amber);
+}
+
+.theme-terminal pre {
+	font-family: var(--mono-font-family);
+	background-color: var(--pre-bg);
+	color: var(--pre-color);
+	padding: 1.5em 2em;
+	border-radius: 0;
+	border: 1px solid var(--border-color);
+	overflow-x: auto;
+	line-height: 1.5;
+	box-shadow: 0 0 20px rgba(0, 255, 0, 0.2), inset 0 0 60px rgba(0, 0, 0, 0.5);
+	position: relative;
+}
+
+/* Terminal prompt effect on pre blocks */
+.theme-terminal pre::before {
+	content: '$ ';
+	color: var(--text-color);
+	opacity: 0.5;
+	position: absolute;
+	top: 0.5em;
+	left: 0.5em;
+	font-size: 0.8em;
+}
+
+.theme-terminal pre code {
+	background: none;
+	padding: 0;
+	border-radius: 0;
+	border: none;
+	font-size: inherit;
+	color: inherit;
+}
+
+/* ============================================================================
+ * Links
+ * ============================================================================ */
+
+.theme-terminal a {
+	color: var(--link-color);
+	text-decoration: none;
+	text-shadow: 0 0 5px rgba(0, 255, 255, 0.5);
+	transition: text-shadow var(--transition-duration) var(--transition-timing);
+}
+
+.theme-terminal a:hover {
+	text-shadow: 0 0 10px rgba(0, 255, 255, 0.8), 0 0 20px rgba(0, 255, 255, 0.5);
+}
+
+/* ============================================================================
+ * Lists
+ * ============================================================================ */
+
+.theme-terminal ul,
+.theme-terminal ol {
+	padding-left: 1.25em;
+	margin: 0;
+}
+
+.theme-terminal li {
+	margin-bottom: 0.5em;
+}
+
+.theme-terminal ul li::marker {
+	content: '> ';
+	color: var(--accent-color);
+}
+
+.theme-terminal ol li::marker {
+	color: var(--text-color-amber);
+}
+
+/* ============================================================================
+ * Blockquotes - Terminal Style
+ * ============================================================================ */
+
+.theme-terminal blockquote {
+	border-left: 3px solid var(--accent-color);
+	padding-left: 1.5em;
+	margin: 0;
+	font-style: normal;
+	color: var(--muted-color);
+	background: rgba(0, 255, 0, 0.05);
+	padding: 1em 1.5em;
+}
+
+.theme-terminal blockquote::before {
+	content: '/* ';
+	color: var(--muted-color);
+}
+
+.theme-terminal blockquote::after {
+	content: ' */';
+	color: var(--muted-color);
+}
+
+.theme-terminal blockquote p:first-child {
+	margin-top: 0;
+	display: inline;
+}
+
+.theme-terminal blockquote p:last-child {
+	margin-bottom: 0;
+}
+
+/* ============================================================================
+ * Tables - Matrix Style
+ * ============================================================================ */
+
+.theme-terminal table {
+	width: 100%;
+	border-collapse: collapse;
+	font-size: var(--table-font-size);
+	border: 1px solid var(--border-color);
+}
+
+.theme-terminal th,
+.theme-terminal td {
+	padding: 0.75em 1em;
+	text-align: left;
+	border: 1px solid var(--border-color);
+}
+
+.theme-terminal th {
+	font-weight: 700;
+	background-color: var(--table-header-bg);
+	color: var(--text-color-amber);
+	text-transform: uppercase;
+	letter-spacing: 0.1em;
+}
+
+.theme-terminal tr:nth-child(even) {
+	background-color: rgba(0, 255, 0, 0.03);
+}
+
+/* ============================================================================
+ * Images
+ * ============================================================================ */
+
+.theme-terminal img {
+	max-width: 100%;
+	height: auto;
+	border: 1px solid var(--border-color);
+	box-shadow: 0 0 20px rgba(0, 255, 0, 0.3);
+	filter: grayscale(30%) brightness(0.9);
+}
+
+/* ============================================================================
+ * Layout-specific overrides
+ * ============================================================================ */
+
+/* Title layout - ASCII art style headers */
+.theme-terminal .layout-title h1 {
+	font-size: var(--title-font-size);
+	font-weight: 700;
+	letter-spacing: 0.05em;
+	text-transform: uppercase;
+}
+
+.theme-terminal .layout-title p {
+	font-size: var(--subtitle-font-size);
+	color: var(--muted-color);
+	font-weight: 400;
+	margin-top: 0.75em;
+}
+
+.theme-terminal .layout-title::before {
+	content: '> ';
+	font-size: var(--title-font-size);
+	opacity: 0.5;
+}
+
+/* Section layout */
+.theme-terminal .layout-section h2 {
+	font-size: var(--section-font-size);
+	font-weight: 700;
+	letter-spacing: 0.05em;
+	text-transform: uppercase;
+}
+
+.theme-terminal .layout-section::before {
+	content: '## ';
+	font-size: var(--section-font-size);
+	opacity: 0.5;
+}
+
+/* Quote layout - comment style */
+.theme-terminal .layout-quote blockquote {
+	font-size: var(--quote-font-size);
+	border: none;
+	padding: 0;
+	color: var(--text-color);
+	background: none;
+	position: relative;
+}
+
+.theme-terminal .layout-quote blockquote::before {
+	content: '> ';
+	font-size: var(--quote-font-size);
+	color: var(--accent-color);
+	opacity: 0.7;
+	position: static;
+}
+
+.theme-terminal .layout-quote blockquote::after {
+	content: none;
+}
+
+.theme-terminal .layout-quote blockquote p:last-child {
+	font-size: var(--quote-attribution-size);
+	font-style: normal;
+	color: var(--muted-color);
+	margin-top: 1.5em;
+}
+
+.theme-terminal .layout-quote blockquote p:last-child::before {
+	content: '-- ';
+}
+
+/* Code focus layout */
+.theme-terminal .layout-code-focus pre {
+	font-size: calc(var(--code-font-size) * 1.1);
+	max-height: 75vh;
+	overflow-y: auto;
+}
+
+.theme-terminal .layout-code-focus pre::before {
+	content: none;
+}
+
+/* Big stat layout */
+.theme-terminal .layout-big-stat strong,
+.theme-terminal .layout-big-stat .stat-number {
+	font-size: var(--stat-font-size);
+	font-weight: 700;
+	color: var(--text-color-amber);
+	line-height: 1;
+	letter-spacing: 0.02em;
+	text-shadow: 0 0 20px rgba(255, 176, 0, 0.5), 0 0 40px rgba(255, 176, 0, 0.3);
+}
+
+.theme-terminal .layout-big-stat p {
+	font-size: var(--stat-label-size);
+	color: var(--muted-color);
+	font-weight: 400;
+	text-transform: uppercase;
+	letter-spacing: 0.1em;
+}
+
+/* Two column layout with terminal border */
+.theme-terminal .layout-two-column {
+	position: relative;
+}
+
+.theme-terminal .layout-two-column::after {
+	content: '|';
+	position: absolute;
+	top: 0;
+	bottom: 0;
+	left: 50%;
+	transform: translateX(-50%);
+	color: var(--border-color);
+	font-size: 1.5rem;
+	display: flex;
+	align-items: center;
+	writing-mode: vertical-rl;
+	letter-spacing: -0.5em;
+}
+
+/* ============================================================================
+ * Cursor Blink Animation
+ * ============================================================================ */
+
+@keyframes cursor-blink {
+	0%,
+	50% {
+		opacity: 1;
+	}
+	51%,
+	100% {
+		opacity: 0;
+	}
+}
+
+.theme-terminal .cursor::after {
+	content: '_';
+	animation: cursor-blink 1s step-end infinite;
+	color: var(--accent-color);
+}
+
+/* ============================================================================
+ * Transition defaults
+ * The terminal theme uses fade as the default transition
+ * ============================================================================ */
+
+.theme-terminal .slide-renderer {
+	transition: opacity var(--transition-duration) var(--transition-timing);
+}
+
+/* ============================================================================
+ * Reduced motion support
+ * ============================================================================ */
+
+@media (prefers-reduced-motion: reduce) {
+	.theme-terminal {
+		--transition-duration: 0ms;
+		--fragment-duration: 0ms;
+		animation: none;
+	}
+
+	.theme-terminal .slide-renderer {
+		transition: none;
+	}
+
+	.theme-terminal::before {
+		display: none;
+	}
+
+	.theme-terminal .cursor::after {
+		animation: none;
+		opacity: 1;
+	}
+}
+
+/* ============================================================================
+ * Fragment styling - Typewriter effect
+ * ============================================================================ */
+
+.theme-terminal .fragment {
+	transition: opacity var(--fragment-duration) var(--transition-timing),
+		transform var(--fragment-duration) var(--transition-timing);
+}
+
+.theme-terminal .fragment-hidden {
+	opacity: 0;
+	transform: translateX(-10px);
+}
+
+.theme-terminal .fragment-visible {
+	opacity: 1;
+	transform: translateX(0);
+}
+
+/* ============================================================================
+ * Progress bar styling
+ * ============================================================================ */
+
+.theme-terminal .progress-bar {
+	background-color: var(--accent-color);
+	height: 2px;
+	transition: width var(--transition-duration) var(--transition-timing);
+	box-shadow: 0 0 10px var(--glow-color);
+}
+
+.theme-terminal .progress-bar-container {
+	background-color: rgba(0, 255, 0, 0.1);
+}
+
+/* ============================================================================
+ * Selection styling
+ * ============================================================================ */
+
+.theme-terminal ::selection {
+	background-color: var(--accent-color);
+	color: #000000;
+}
+
+/* ============================================================================
+ * Amber variant - use .terminal-amber class on slide
+ * ============================================================================ */
+
+.theme-terminal.terminal-amber,
+.theme-terminal .terminal-amber {
+	--text-color: #ffb000;
+	--muted-color: rgba(255, 176, 0, 0.6);
+	--accent-color: #ffb000;
+	--glow-color: rgba(255, 176, 0, 0.5);
+	--border-color: rgba(255, 176, 0, 0.3);
+	--pre-color: #ffb000;
+	--code-bg: rgba(255, 176, 0, 0.1);
+	--table-header-bg: rgba(255, 176, 0, 0.1);
+}
+
+/* ============================================================================
+ * Matrix rain background (optional enhancement)
+ * ============================================================================ */
+
+@keyframes matrix-rain {
+	0% {
+		background-position: 0% 0%;
+	}
+	100% {
+		background-position: 0% 100%;
+	}
+}
+
+.theme-terminal.matrix-bg {
+	background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100'%3E%3Ctext x='10' y='20' fill='%23003300' font-family='monospace' font-size='10'%3E01%3C/text%3E%3Ctext x='30' y='40' fill='%23004400' font-family='monospace' font-size='10'%3E10%3C/text%3E%3Ctext x='50' y='60' fill='%23002200' font-family='monospace' font-size='10'%3E11%3C/text%3E%3Ctext x='70' y='80' fill='%23003300' font-family='monospace' font-size='10'%3E00%3C/text%3E%3C/svg%3E");
+	background-size: 100px 100px;
+	animation: matrix-rain 20s linear infinite;
+}
