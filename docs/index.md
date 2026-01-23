@@ -1,7 +1,5 @@
 ---
-layout: home
+layout: page
 ---
 
-# Tap
-
-Presentations for developers.
+<HomeHero />
