@@ -895,3 +895,22 @@ Started: Fri Jan 23 16:33:21 CET 2026
   - Brutalist theme hides decorative quotes and uses border instead for stark appearance
   - Both layouts follow same pattern: Snippet children, theme-aware :global() selectors, CSS custom properties
 ---
+
+## 2026-01-23 - US-056
+- What was implemented: Remaining layout components for presentations
+- Files changed:
+  - frontend/src/lib/layouts/LayoutBigStat.svelte (new - large number emphasis with extra large fonts and accent colors)
+  - frontend/src/lib/layouts/LayoutThreeColumn.svelte (new - three-column grid for comparisons and process steps)
+  - frontend/src/lib/layouts/LayoutCover.svelte (new - full-bleed background image with dark overlay for text readability)
+  - frontend/src/lib/layouts/LayoutSidebar.svelte (new - main content area with supporting sidebar at 2:1 ratio)
+  - frontend/src/lib/layouts/LayoutSplitMedia.svelte (new - image + text side-by-side at 1:1 ratio)
+  - frontend/src/lib/layouts/LayoutBlank.svelte (new - empty canvas with minimal styling for custom content)
+- **Learnings for future iterations:**
+  - LayoutBigStat uses extra large font-size (10rem) for stat numbers with strong color emphasis
+  - LayoutThreeColumn uses CSS grid with `grid-template-columns: 1fr 1fr 1fr` for equal three-column layout
+  - LayoutCover has a dark gradient overlay (.cover-overlay) for text readability on background images
+  - LayoutSidebar uses 2fr 1fr grid columns for main content + sidebar, with sidebar having background and left border
+  - LayoutSplitMedia centers content vertically with `align-items: center` for better image-text alignment
+  - LayoutBlank provides minimal styling reset - only margin resets and basic utility classes (`.full-bleed`, `.centered`)
+  - Theme-aware styling follows consistent pattern across all layouts using :global(.theme-name) selectors
+---
