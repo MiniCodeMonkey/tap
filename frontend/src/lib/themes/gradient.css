@@ -1,0 +1,485 @@
+/**
+ * Gradient Theme
+ * Modern colorful aesthetics with gradient backgrounds and glassmorphism effects.
+ * Features vibrant purple-to-blue gradients with frosted glass UI elements.
+ */
+
+/* ============================================================================
+ * Theme Variables
+ * ============================================================================ */
+
+.theme-gradient {
+	/* Colors - vibrant modern palette */
+	--slide-bg: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%);
+	--slide-bg-fallback: #764ba2;
+	--text-color: #ffffff;
+	--muted-color: rgba(255, 255, 255, 0.7);
+	--accent-color: #fbbf24;
+	--link-color: #fbbf24;
+	--border-color: rgba(255, 255, 255, 0.2);
+
+	/* Glassmorphism */
+	--glass-bg: rgba(255, 255, 255, 0.1);
+	--glass-bg-strong: rgba(255, 255, 255, 0.15);
+	--glass-border: rgba(255, 255, 255, 0.2);
+	--glass-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
+	--glass-blur: blur(8px);
+
+	/* Code colors - glassmorphism style */
+	--code-bg: rgba(255, 255, 255, 0.15);
+	--pre-bg: rgba(0, 0, 0, 0.4);
+	--pre-color: #f0f0f0;
+
+	/* Table colors */
+	--table-header-bg: rgba(255, 255, 255, 0.1);
+
+	/* Typography - same as minimal for consistency */
+	--font-family: 'Helvetica Neue', Helvetica, Arial, -apple-system,
+		BlinkMacSystemFont, 'Segoe UI', sans-serif;
+	--mono-font-family: 'SF Mono', Monaco, 'Cascadia Code', Consolas,
+		'Liberation Mono', 'Courier New', monospace;
+
+	/* Font sizes - same scale as minimal theme */
+	--title-font-size: 8rem;
+	--h1-font-size: 6rem;
+	--h2-font-size: 4rem;
+	--h3-font-size: 2.5rem;
+	--body-font-size: 2rem;
+	--code-font-size: 1.5rem;
+	--subtitle-font-size: 2.5rem;
+	--section-font-size: 5rem;
+	--quote-font-size: 3rem;
+	--quote-attribution-size: 1.5rem;
+	--stat-font-size: 12rem;
+	--stat-label-size: 2rem;
+	--table-font-size: 1.75rem;
+
+	/* Spacing */
+	--slide-padding: 80px;
+	--content-gap: 24px;
+	--column-gap: 48px;
+
+	/* Animation timing */
+	--transition-duration: 400ms;
+	--transition-timing: ease-out;
+	--fragment-duration: 400ms;
+
+	/* Apply base typography */
+	font-family: var(--font-family);
+	color: var(--text-color);
+	background: var(--slide-bg);
+	background-color: var(--slide-bg-fallback);
+}
+
+/* ============================================================================
+ * Base Typography
+ * ============================================================================ */
+
+.theme-gradient h1,
+.theme-gradient h2,
+.theme-gradient h3,
+.theme-gradient h4,
+.theme-gradient h5,
+.theme-gradient h6 {
+	font-family: var(--font-family);
+	font-weight: 700;
+	letter-spacing: -0.02em;
+	line-height: 1.1;
+	margin: 0;
+	text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.theme-gradient p,
+.theme-gradient li {
+	font-family: var(--font-family);
+	font-weight: 400;
+	letter-spacing: -0.01em;
+	text-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
+}
+
+.theme-gradient strong {
+	font-weight: 700;
+}
+
+.theme-gradient em {
+	font-style: italic;
+}
+
+/* ============================================================================
+ * Glassmorphism Elements
+ * ============================================================================ */
+
+.theme-gradient .glass-panel {
+	background: var(--glass-bg);
+	backdrop-filter: var(--glass-blur);
+	-webkit-backdrop-filter: var(--glass-blur);
+	border: 1px solid var(--glass-border);
+	border-radius: 16px;
+	box-shadow: var(--glass-shadow);
+}
+
+/* ============================================================================
+ * Code Styling with Glassmorphism
+ * ============================================================================ */
+
+.theme-gradient code {
+	font-family: var(--mono-font-family);
+	background: var(--code-bg);
+	backdrop-filter: var(--glass-blur);
+	-webkit-backdrop-filter: var(--glass-blur);
+	padding: 0.15em 0.4em;
+	border-radius: 6px;
+	font-size: 0.9em;
+	border: 1px solid var(--glass-border);
+}
+
+.theme-gradient pre {
+	font-family: var(--mono-font-family);
+	background: var(--pre-bg);
+	backdrop-filter: blur(12px);
+	-webkit-backdrop-filter: blur(12px);
+	color: var(--pre-color);
+	padding: 1.5em 2em;
+	border-radius: 16px;
+	overflow-x: auto;
+	line-height: 1.5;
+	border: 1px solid var(--glass-border);
+	box-shadow: var(--glass-shadow);
+}
+
+.theme-gradient pre code {
+	background: none;
+	backdrop-filter: none;
+	-webkit-backdrop-filter: none;
+	padding: 0;
+	border-radius: 0;
+	border: none;
+	font-size: inherit;
+}
+
+/* ============================================================================
+ * Links
+ * ============================================================================ */
+
+.theme-gradient a {
+	color: var(--link-color);
+	text-decoration: none;
+	border-bottom: 1px solid transparent;
+	transition: border-color var(--transition-duration) var(--transition-timing);
+}
+
+.theme-gradient a:hover {
+	border-bottom-color: var(--link-color);
+}
+
+/* ============================================================================
+ * Lists
+ * ============================================================================ */
+
+.theme-gradient ul,
+.theme-gradient ol {
+	padding-left: 1.25em;
+	margin: 0;
+}
+
+.theme-gradient li {
+	margin-bottom: 0.5em;
+}
+
+.theme-gradient li::marker {
+	color: var(--accent-color);
+}
+
+/* ============================================================================
+ * Blockquotes with Glassmorphism
+ * ============================================================================ */
+
+.theme-gradient blockquote {
+	background: var(--glass-bg);
+	backdrop-filter: var(--glass-blur);
+	-webkit-backdrop-filter: var(--glass-blur);
+	border-left: 4px solid var(--accent-color);
+	border-radius: 0 12px 12px 0;
+	padding: 1em 1.5em;
+	margin: 0;
+	font-style: italic;
+	color: var(--text-color);
+}
+
+.theme-gradient blockquote p:first-child {
+	margin-top: 0;
+}
+
+.theme-gradient blockquote p:last-child {
+	margin-bottom: 0;
+}
+
+/* ============================================================================
+ * Tables with Glassmorphism
+ * ============================================================================ */
+
+.theme-gradient table {
+	width: 100%;
+	border-collapse: collapse;
+	font-size: var(--table-font-size);
+	background: var(--glass-bg);
+	backdrop-filter: var(--glass-blur);
+	-webkit-backdrop-filter: var(--glass-blur);
+	border-radius: 12px;
+	overflow: hidden;
+}
+
+.theme-gradient th,
+.theme-gradient td {
+	padding: 0.75em 1em;
+	text-align: left;
+	border-bottom: 1px solid var(--border-color);
+}
+
+.theme-gradient th {
+	font-weight: 600;
+	background: var(--table-header-bg);
+}
+
+.theme-gradient tr:last-child td {
+	border-bottom: none;
+}
+
+/* ============================================================================
+ * Images
+ * ============================================================================ */
+
+.theme-gradient img {
+	max-width: 100%;
+	height: auto;
+	border-radius: 12px;
+	box-shadow: var(--glass-shadow);
+	border: 1px solid var(--glass-border);
+}
+
+/* ============================================================================
+ * Layout-specific overrides
+ * ============================================================================ */
+
+/* Title layout */
+.theme-gradient .layout-title h1 {
+	font-size: var(--title-font-size);
+	font-weight: 700;
+	letter-spacing: -0.03em;
+	background: linear-gradient(
+		135deg,
+		#ffffff 0%,
+		rgba(255, 255, 255, 0.9) 100%
+	);
+	-webkit-background-clip: text;
+	-webkit-text-fill-color: transparent;
+	background-clip: text;
+	text-shadow: none;
+}
+
+.theme-gradient .layout-title p {
+	font-size: var(--subtitle-font-size);
+	color: var(--muted-color);
+	font-weight: 400;
+	margin-top: 0.75em;
+}
+
+/* Section layout */
+.theme-gradient .layout-section h2 {
+	font-size: var(--section-font-size);
+	font-weight: 700;
+	letter-spacing: -0.02em;
+}
+
+/* Quote layout */
+.theme-gradient .layout-quote blockquote {
+	font-size: var(--quote-font-size);
+	border-left-width: 6px;
+	padding: 2em;
+	background: var(--glass-bg-strong);
+	border-radius: 16px;
+	position: relative;
+}
+
+.theme-gradient .layout-quote blockquote::before {
+	content: '\201C';
+	font-size: 8rem;
+	position: absolute;
+	top: -0.2em;
+	left: 0.1em;
+	color: var(--accent-color);
+	opacity: 0.3;
+	font-family: Georgia, serif;
+}
+
+.theme-gradient .layout-quote blockquote p:last-child {
+	font-size: var(--quote-attribution-size);
+	font-style: normal;
+	color: var(--muted-color);
+	margin-top: 1.5em;
+}
+
+/* Code focus layout */
+.theme-gradient .layout-code-focus pre {
+	font-size: calc(var(--code-font-size) * 1.1);
+	max-height: 75vh;
+	overflow-y: auto;
+}
+
+/* Big stat layout */
+.theme-gradient .layout-big-stat strong,
+.theme-gradient .layout-big-stat .stat-number {
+	font-size: var(--stat-font-size);
+	font-weight: 700;
+	color: var(--accent-color);
+	line-height: 1;
+	letter-spacing: -0.04em;
+	text-shadow: 0 4px 12px rgba(251, 191, 36, 0.4);
+}
+
+.theme-gradient .layout-big-stat p {
+	font-size: var(--stat-label-size);
+	color: var(--muted-color);
+	font-weight: 400;
+}
+
+/* Two column layout with subtle divider */
+.theme-gradient .layout-two-column {
+	position: relative;
+}
+
+.theme-gradient .layout-two-column::after {
+	content: '';
+	position: absolute;
+	top: 20%;
+	bottom: 20%;
+	left: 50%;
+	width: 1px;
+	background: linear-gradient(
+		180deg,
+		transparent 0%,
+		var(--glass-border) 20%,
+		var(--glass-border) 80%,
+		transparent 100%
+	);
+}
+
+/* Three column layout with subtle dividers */
+.theme-gradient .layout-three-column {
+	position: relative;
+}
+
+/* ============================================================================
+ * Alternative gradient backgrounds for variety
+ * Use via slide directives: background: "gradient-1", "gradient-2", etc.
+ * ============================================================================ */
+
+.theme-gradient .bg-gradient-1 {
+	background: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%);
+}
+
+.theme-gradient .bg-gradient-2 {
+	background: linear-gradient(135deg, #0f0c29 0%, #302b63 50%, #24243e 100%);
+}
+
+.theme-gradient .bg-gradient-3 {
+	background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+}
+
+.theme-gradient .bg-gradient-4 {
+	background: linear-gradient(135deg, #fc466b 0%, #3f5efb 100%);
+}
+
+.theme-gradient .bg-gradient-5 {
+	background: linear-gradient(135deg, #f12711 0%, #f5af19 100%);
+}
+
+/* ============================================================================
+ * Transition defaults
+ * The gradient theme uses fade as the default transition
+ * ============================================================================ */
+
+.theme-gradient .slide-renderer {
+	transition: opacity var(--transition-duration) var(--transition-timing);
+}
+
+/* ============================================================================
+ * Reduced motion support
+ * ============================================================================ */
+
+@media (prefers-reduced-motion: reduce) {
+	.theme-gradient {
+		--transition-duration: 0ms;
+		--fragment-duration: 0ms;
+	}
+
+	.theme-gradient .slide-renderer {
+		transition: none;
+	}
+}
+
+/* ============================================================================
+ * Fragment styling with glass effect
+ * ============================================================================ */
+
+.theme-gradient .fragment {
+	transition: opacity var(--fragment-duration) var(--transition-timing),
+		transform var(--fragment-duration) var(--transition-timing);
+}
+
+.theme-gradient .fragment-hidden {
+	opacity: 0;
+	transform: translateY(20px) scale(0.95);
+}
+
+.theme-gradient .fragment-visible {
+	opacity: 1;
+	transform: translateY(0) scale(1);
+}
+
+/* ============================================================================
+ * Progress bar styling
+ * ============================================================================ */
+
+.theme-gradient .progress-bar {
+	background: linear-gradient(90deg, var(--accent-color) 0%, #f093fb 100%);
+	height: 4px;
+	transition: width var(--transition-duration) var(--transition-timing);
+	box-shadow: 0 0 10px rgba(251, 191, 36, 0.5);
+}
+
+.theme-gradient .progress-bar-container {
+	background: var(--glass-bg);
+	backdrop-filter: var(--glass-blur);
+	-webkit-backdrop-filter: var(--glass-blur);
+}
+
+/* ============================================================================
+ * Selection styling
+ * ============================================================================ */
+
+.theme-gradient ::selection {
+	background-color: var(--accent-color);
+	color: #1a1a1a;
+}
+
+/* ============================================================================
+ * Animated gradient background (optional enhancement)
+ * ============================================================================ */
+
+@keyframes gradient-shift {
+	0% {
+		background-position: 0% 50%;
+	}
+	50% {
+		background-position: 100% 50%;
+	}
+	100% {
+		background-position: 0% 50%;
+	}
+}
+
+.theme-gradient.animated-bg {
+	background-size: 200% 200%;
+	animation: gradient-shift 15s ease infinite;
+}
