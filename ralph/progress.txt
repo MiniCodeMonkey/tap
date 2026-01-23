@@ -1003,3 +1003,19 @@ Started: Fri Jan 23 16:33:21 CET 2026
   - TRANSITION_TYPES constant lists all valid types for validation
   - SlideRenderer already had inline transition logic - this extracts it for reuse
 ---
+
+## 2026-01-23 - US-061
+- What was implemented: Slide transitions utility module for presentations
+- Files changed:
+  - frontend/src/lib/utils/transitions.ts (new - complete transition system)
+- **Learnings for future iterations:**
+  - Use `TransitionConfig as SvelteTransitionConfig` to rename Svelte's type and avoid conflicts
+  - Create wrapper functions (transitionNone, transitionFade, etc.) that call Svelte's fade, fly, scale
+  - Use `prefersReducedMotion()` checking `window.matchMedia('(prefers-reduced-motion: reduce)')` for accessibility
+  - Export `resolveTransition(slideTransition, globalTransition)` for priority-based transition resolution
+  - Per-slide transition overrides global config transition
+  - Default duration is 400ms, configurable via TRANSITION_DEFAULTS constant
+  - `createSlideTransition(node, options)` is the main entry point for Svelte's in:/out: directives
+  - `createCrossfade()` returns [send, receive] pair for keyed transitions
+  - Direction ('forward' | 'backward') affects fly x offset and scale start value
+---
