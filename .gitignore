@@ -2,6 +2,7 @@
 /bin/
 /dist/
 /tap
+/embedded/dist/
 
 # IDE
 .idea/
