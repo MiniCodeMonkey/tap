@@ -867,3 +867,17 @@ Started: Fri Jan 23 16:33:21 CET 2026
   - Layout components are standalone and don't import SlideRenderer - they focus on content structure
   - SlideRenderer already has CSS for all layouts; these components provide reusable Svelte wrappers
 ---
+
+## 2026-01-23 - US-054
+- What was implemented: Layout components for Default and TwoColumn slides
+- Files changed:
+  - frontend/src/lib/layouts/LayoutDefault.svelte (new - standard content layout with headings, paragraphs, lists, images, code blocks)
+  - frontend/src/lib/layouts/LayoutTwoColumn.svelte (new - side-by-side two-column grid layout)
+- **Learnings for future iterations:**
+  - LayoutDefault uses flex column with gap for vertical content arrangement
+  - LayoutTwoColumn uses CSS grid with `grid-template-columns: 1fr 1fr` for equal columns
+  - Theme-aware styling pattern: `:global(.theme-name) .content :global(element)` for scoped global styles
+  - Brutalist theme adds vertical divider between columns using `::after` pseudo-element
+  - Font sizes are slightly smaller in two-column layout to fit more content (h1: 3.5rem vs 4rem, body: 1.75rem vs 2rem)
+  - Table styles included for completeness (border-collapse, header background, cell padding)
+---
