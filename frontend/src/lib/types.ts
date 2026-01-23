@@ -1,0 +1,182 @@
+/**
+ * TypeScript types for the Tap presentation viewer.
+ * These types match the Go backend structs defined in:
+ * - internal/transformer/transformer.go
+ * - internal/config/config.go
+ */
+
+// ============================================================================
+// Layout Types
+// ============================================================================
+
+/**
+ * Available slide layouts.
+ * Auto-detected from content or specified via slide directives.
+ */
+export type Layout =
+	| 'default'
+	| 'title'
+	| 'section'
+	| 'two-column'
+	| 'code-focus'
+	| 'quote'
+	| 'big-stat'
+	| 'three-column'
+	| 'cover'
+	| 'sidebar'
+	| 'split-media'
+	| 'blank';
+
+// ============================================================================
+// Transition Types
+// ============================================================================
+
+/**
+ * Available slide transitions.
+ */
+export type Transition = 'none' | 'fade' | 'slide' | 'push' | 'zoom';
+
+// ============================================================================
+// Config Types (matches internal/config/config.go)
+// ============================================================================
+
+/**
+ * Connection configuration for a driver.
+ * Matches Go's ConnectionConfig struct.
+ */
+export interface ConnectionConfig {
+	host?: string;
+	user?: string;
+	password?: string;
+	database?: string;
+	path?: string;
+	port?: number;
+}
+
+/**
+ * Driver configuration for code execution.
+ * Matches Go's DriverConfig struct.
+ */
+export interface DriverConfig {
+	connections?: Record<string, ConnectionConfig>;
+	command?: string;
+	args?: string[];
+	timeout?: number;
+}
+
+/**
+ * Presentation configuration from YAML frontmatter.
+ * Matches Go's Config struct.
+ */
+export interface PresentationConfig {
+	drivers?: Record<string, DriverConfig>;
+	title?: string;
+	theme?: string;
+	author?: string;
+	date?: string;
+	aspectRatio?: string;
+	transition?: Transition;
+	codeTheme?: string;
+	fragments?: boolean;
+}
+
+// ============================================================================
+// Slide Types (matches internal/transformer/transformer.go)
+// ============================================================================
+
+/**
+ * Background configuration for a slide.
+ * Matches Go's BackgroundConfig struct.
+ */
+export interface BackgroundConfig {
+	value: string;
+	type: 'color' | 'image' | 'gradient';
+}
+
+/**
+ * Code block ready for frontend rendering.
+ * Matches Go's TransformedCodeBlock struct.
+ */
+export interface CodeBlock {
+	language: string;
+	code: string;
+	driver?: string;
+	connection?: string;
+}
+
+/**
+ * Fragment group for incremental reveals.
+ * Matches Go's TransformedFragment struct.
+ */
+export interface FragmentGroup {
+	content: string;
+	index: number;
+}
+
+/**
+ * Slide ready for frontend rendering.
+ * Matches Go's TransformedSlide struct.
+ */
+export interface Slide {
+	index: number;
+	layout: Layout;
+	html: string;
+	notes?: string;
+	transition?: Transition;
+	fragments?: FragmentGroup[];
+	background?: BackgroundConfig;
+	codeBlocks?: CodeBlock[];
+}
+
+// ============================================================================
+// Presentation Types
+// ============================================================================
+
+/**
+ * Complete presentation data from the backend.
+ * Matches Go's TransformedPresentation struct.
+ */
+export interface Presentation {
+	config: PresentationConfig;
+	slides: Slide[];
+}
+
+// ============================================================================
+// WebSocket Message Types
+// ============================================================================
+
+/**
+ * WebSocket message types for hot reload and sync.
+ */
+export type WebSocketMessageType = 'connected' | 'reload' | 'slide';
+
+/**
+ * WebSocket message from the server.
+ */
+export interface WebSocketMessage {
+	type: WebSocketMessageType;
+	slideIndex?: number;
+}
+
+// ============================================================================
+// API Types
+// ============================================================================
+
+/**
+ * Request body for code execution API.
+ */
+export interface ExecuteRequest {
+	driver: string;
+	code: string;
+	connection?: string;
+}
+
+/**
+ * Response from code execution API.
+ */
+export interface ExecuteResponse {
+	success: boolean;
+	output?: string;
+	error?: string;
+	data?: Record<string, unknown>[];
+}
