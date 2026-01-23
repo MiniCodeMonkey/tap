@@ -914,3 +914,54 @@ Started: Fri Jan 23 16:33:21 CET 2026
   - LayoutBlank provides minimal styling reset - only margin resets and basic utility classes (`.full-bleed`, `.centered`)
   - Theme-aware styling follows consistent pattern across all layouts using :global(.theme-name) selectors
 ---
+
+## 2026-01-23 - US-057
+- What was implemented: Minimal theme CSS with clean Apple-style aesthetics
+- Files changed:
+  - frontend/src/lib/themes/minimal.css (new - complete minimal theme with CSS custom properties)
+  - frontend/src/lib/themes/.gitkeep (deleted - no longer needed)
+- **Learnings for future iterations:**
+  - Themes are CSS files that define CSS custom properties applied via .theme-{name} class
+  - CSS custom properties (--var) enable theme-able values across all components
+  - Minimal theme uses Helvetica Neue font family for clean Apple-style look
+  - Font sizes follow spec: title 8rem, h1 6rem, h2 4rem, body 2rem, code 1.5rem
+  - Animation timing variables: --transition-duration, --transition-timing, --fragment-duration
+  - Theme applies at root level: .theme-minimal { ... }
+  - Layout-specific overrides use selectors like .theme-minimal .layout-title h1
+  - Reduced motion support via @media (prefers-reduced-motion: reduce) sets durations to 0ms
+  - Theme CSS doesn't need TypeScript, so typecheck/lint pass without changes to config
+---
+
+## 2026-01-23 - US-058
+- What was implemented: Gradient theme CSS with modern colorful gradients and glassmorphism effects
+- Files changed:
+  - frontend/src/lib/themes/gradient.css (new - complete gradient theme with glassmorphism)
+- **Learnings for future iterations:**
+  - Gradient theme uses purple-to-blue gradient backgrounds: `linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%)`
+  - Glassmorphism uses `backdrop-filter: blur(8px)` with semi-transparent backgrounds and border colors
+  - -webkit-backdrop-filter needed for Safari compatibility
+  - White text with subtle text-shadow improves readability on colorful backgrounds
+  - Gold/amber accent color (#fbbf24) provides good contrast against purple gradients
+  - Same typography scale as minimal (8rem title, 6rem h1, 4rem h2, etc.)
+  - Alternative gradient backgrounds available via .bg-gradient-1 through .bg-gradient-5 classes
+  - Animated gradient option available via .animated-bg class with CSS keyframes
+  - Fragment animations include scale transform for more dynamic reveals
+---
+
+## 2026-01-23 - US-059
+- What was implemented: Terminal theme CSS with hacker aesthetic
+- Files changed:
+  - frontend/src/lib/themes/terminal.css (new - complete terminal theme with CRT effects)
+- **Learnings for future iterations:**
+  - Terminal theme uses dark background (#0a0a0a) with green (#00ff00) or amber (#ffb000) text
+  - Monospace font throughout: SF Mono, Monaco, Cascadia Code, Consolas, etc.
+  - CRT effects: scanlines via ::before pseudo-element with repeating-linear-gradient
+  - Subtle flicker animation for authentic CRT feel (0.15s infinite)
+  - Text glow via text-shadow with multiple blur layers (0 0 10px, 0 0 20px, 0 0 30px)
+  - Amber variant available via .terminal-amber class that overrides color variables
+  - Matrix rain background option via .matrix-bg class with SVG background
+  - Cursor blink animation available via .cursor class
+  - Same typography scale as other themes (8rem title, 6rem h1, etc.)
+  - Reduced motion support disables flicker animation and scanlines
+  - Terminal-specific styling: > for list markers, $ prompt on pre blocks, /* */ for blockquotes
+---
