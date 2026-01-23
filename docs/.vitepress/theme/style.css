@@ -21,6 +21,9 @@
   --vp-c-text-2: #64748b;
   --vp-c-text-3: #94a3b8;
 
+  /* Light mode divider */
+  --vp-c-divider: #e2e8f0;
+
   /* System font stack for body text */
   --vp-font-family-base: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
     Oxygen, Ubuntu, Cantarell, 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
@@ -41,4 +44,7 @@
   --vp-c-text-1: #f8fafc;
   --vp-c-text-2: #cbd5e1;
   --vp-c-text-3: #94a3b8;
+
+  /* Dark mode divider */
+  --vp-c-divider: #334155;
 }
