@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { CodeBlock, ExecuteRequest, ExecuteResponse } from '$lib/types';
 	import { highlight, type HighlightOptions } from '$lib/utils/highlighting';
+	import { staticMode } from '$lib/stores/websocket';
 	import type { BundledTheme } from 'shiki';
 	import { onMount } from 'svelte';
 
@@ -36,12 +37,21 @@
 	/** Reference to the container element for keyboard handling */
 	let containerRef: HTMLElement | undefined = $state();
 
+	/** Current static mode value */
+	let isStaticMode = $state(false);
+
 	// ============================================================================
 	// Computed Values
 	// ============================================================================
 
 	/** Whether this code block has a driver and can be executed */
-	let canExecute = $derived(!!codeBlock.driver);
+	let hasDriver = $derived(!!codeBlock.driver);
+
+	/** Whether execution is available (has driver and not in static mode) */
+	let canExecute = $derived(hasDriver && !isStaticMode);
+
+	/** Whether to show the static mode placeholder */
+	let showStaticPlaceholder = $derived(hasDriver && isStaticMode);
 
 	// ============================================================================
 	// Lifecycle
@@ -51,8 +61,14 @@
 		highlightCode();
 		setupKeyboardShortcut();
 
+		// Subscribe to static mode store
+		const unsubscribe = staticMode.subscribe((value) => {
+			isStaticMode = value;
+		});
+
 		return () => {
 			cleanupKeyboardShortcut();
+			unsubscribe();
 		};
 	});
 
@@ -237,6 +253,7 @@
 	class:can-execute={canExecute}
 	class:is-executing={isExecuting}
 	class:has-error={hasError}
+	class:static-mode={showStaticPlaceholder}
 	bind:this={containerRef}
 	tabindex={canExecute ? 0 : -1}
 	role="application"
@@ -262,6 +279,13 @@
 						Run
 					{/if}
 				</button>
+			</div>
+		{/if}
+
+		{#if showStaticPlaceholder}
+			<div class="static-placeholder">
+				<span class="static-placeholder-icon" aria-hidden="true">&#9889;</span>
+				<span class="static-placeholder-text">Live execution available in presentation mode</span>
 			</div>
 		{/if}
 	</div>
@@ -506,5 +530,99 @@
 		.loading-spinner {
 			animation: none;
 		}
+	}
+
+	/* ============================================================================
+	 * Static Mode Placeholder
+	 * ============================================================================ */
+
+	.static-placeholder {
+		position: absolute;
+		top: 0.75em;
+		right: 0.75em;
+		z-index: 10;
+		display: inline-flex;
+		align-items: center;
+		gap: 0.5em;
+		padding: 0.5em 1em;
+		font-size: 0.75rem;
+		font-weight: 500;
+		color: var(--muted-color, #9ca3af);
+		background-color: var(--static-placeholder-bg, rgba(0, 0, 0, 0.4));
+		border-radius: 6px;
+		backdrop-filter: blur(4px);
+		-webkit-backdrop-filter: blur(4px);
+	}
+
+	.static-placeholder-icon {
+		font-size: 0.875em;
+		opacity: 0.8;
+	}
+
+	.static-placeholder-text {
+		white-space: nowrap;
+	}
+
+	/* Static mode state on container */
+	.live-code-block.static-mode .code-container :global(pre) {
+		/* Slightly dimmed appearance in static mode */
+		opacity: 0.85;
+	}
+
+	/* Theme-specific static placeholder styles */
+	:global(.theme-minimal) .static-placeholder {
+		background-color: rgba(229, 231, 235, 0.9);
+		color: var(--muted-color, #6b7280);
+		border: 1px solid rgba(209, 213, 219, 0.5);
+	}
+
+	:global(.theme-gradient) .static-placeholder {
+		background: rgba(255, 255, 255, 0.15);
+		color: rgba(255, 255, 255, 0.8);
+		border: 1px solid rgba(255, 255, 255, 0.2);
+		backdrop-filter: blur(8px);
+		-webkit-backdrop-filter: blur(8px);
+	}
+
+	:global(.theme-terminal) .static-placeholder {
+		background-color: rgba(0, 0, 0, 0.6);
+		color: var(--terminal-muted, #666);
+		border: 1px solid var(--terminal-green, #00ff00);
+		font-family: var(--mono-font-family, 'SF Mono', Monaco, Consolas, monospace);
+	}
+
+	:global(.theme-terminal) .static-placeholder-icon {
+		color: var(--terminal-green, #00ff00);
+	}
+
+	:global(.theme-terminal) .static-placeholder-text::before {
+		content: '$ ';
+		opacity: 0.5;
+	}
+
+	:global(.theme-brutalist) .static-placeholder {
+		background-color: #fff;
+		color: #000;
+		border: 3px solid #000;
+		border-radius: 0;
+		text-transform: uppercase;
+		font-weight: 700;
+		letter-spacing: 0.05em;
+	}
+
+	:global(.theme-brutalist) .static-placeholder-icon {
+		display: none;
+	}
+
+	:global(.theme-keynote) .static-placeholder {
+		background: rgba(255, 255, 255, 0.95);
+		color: var(--muted-color, #6b7280);
+		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+		border: none;
+	}
+
+	:global(.theme-keynote.dark) .static-placeholder {
+		background: rgba(30, 30, 30, 0.95);
+		color: var(--muted-color, #9ca3af);
 	}
 </style>

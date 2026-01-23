@@ -3,7 +3,7 @@
  * Handles auto-reconnection with exponential backoff.
  */
 
-import { writable, type Writable } from 'svelte/store';
+import { writable, type Writable, type Readable, derived } from 'svelte/store';
 import type { WebSocketMessage } from '$lib/types';
 import { goToSlide, presentation } from '$lib/stores/presentation';
 
@@ -21,6 +21,59 @@ const MAX_RECONNECT_DELAY = 30000;
 const RECONNECT_BACKOFF_MULTIPLIER = 2;
 
 // ============================================================================
+// Static Mode Detection
+// ============================================================================
+
+/**
+ * Whether the application is running in static mode (no backend server).
+ * In static mode, there's no WebSocket server or API endpoints available.
+ * This is detected by attempting to fetch a test endpoint.
+ */
+export const staticMode: Writable<boolean> = writable(false);
+
+/**
+ * Whether static mode detection has completed.
+ */
+export const staticModeDetected: Writable<boolean> = writable(false);
+
+/**
+ * Detect if we're running in static mode by checking if the API is available.
+ * In static mode, the presentation data is embedded in the HTML and there's no backend.
+ */
+export async function detectStaticMode(): Promise<boolean> {
+	// Skip detection on server-side rendering
+	if (typeof window === 'undefined') {
+		staticModeDetected.set(true);
+		return false;
+	}
+
+	try {
+		// Try to fetch the presentation API endpoint
+		// In dev mode, this will succeed; in static mode, it will fail
+		const controller = new AbortController();
+		const timeoutId = setTimeout(() => controller.abort(), 2000);
+
+		const response = await fetch('/api/presentation', {
+			method: 'HEAD',
+			signal: controller.signal
+		});
+
+		clearTimeout(timeoutId);
+
+		// If we get a response (even an error status), we're not in static mode
+		const isStatic = !response.ok;
+		staticMode.set(isStatic);
+		staticModeDetected.set(true);
+		return isStatic;
+	} catch {
+		// Network error or abort means we're in static mode
+		staticMode.set(true);
+		staticModeDetected.set(true);
+		return true;
+	}
+}
+
+// ============================================================================
 // Connection State Store
 // ============================================================================
 
@@ -28,6 +81,15 @@ const RECONNECT_BACKOFF_MULTIPLIER = 2;
  * Whether the WebSocket is currently connected.
  */
 export const connected: Writable<boolean> = writable(false);
+
+/**
+ * Whether live code execution is available.
+ * This is true when connected to a WebSocket server (not in static mode).
+ */
+export const liveExecutionAvailable: Readable<boolean> = derived(
+	[connected, staticMode],
+	([$connected, $staticMode]) => $connected && !$staticMode
+);
 
 // ============================================================================
 // WebSocket Client Class
