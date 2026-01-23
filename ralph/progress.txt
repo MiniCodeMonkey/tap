@@ -1070,3 +1070,23 @@ Started: Fri Jan 23 16:33:21 CET 2026
   - stripHtmlTags() helper removes HTML for diff marker detection in highlighted content
   - CSS classes documented in code comments for styling reference
 ---
+
+## 2026-01-23 - US-065
+- What was implemented: LiveCodeBlock component for executing code from slides
+- Files changed:
+  - frontend/src/lib/components/LiveCodeBlock.svelte (new - complete live code execution component)
+- **Learnings for future iterations:**
+  - LiveCodeBlock component receives CodeBlock props and optional theme for syntax highlighting
+  - canExecute derived state checks if codeBlock.driver is defined
+  - Execute via POST /api/execute with ExecuteRequest (driver, code, connection)
+  - Loading state uses isExecuting boolean and spinner animation
+  - Result displayed below code with formatTableData() for tabular data (from result.data)
+  - Error state uses hasError boolean with red styling
+  - Keyboard shortcut uses containerRef with keydown listener for Ctrl/Cmd+Enter
+  - Use HighlightOptions type from highlighting.ts for type-safe options
+  - BundledTheme from shiki for theme prop type
+  - Use `<!-- svelte-ignore a11y_no_noninteractive_tabindex -->` for tabindex on div
+  - role="application" makes element interactive for accessibility
+  - Theme-aware styling via :global(.theme-name) selectors
+  - Result container has .result-table, .result-output, .result-error classes
+---
