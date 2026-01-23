@@ -422,3 +422,15 @@ Started: Fri Jan 23 20:59:35 CET 2026
   - Search highlights matching terms in result previews
   - No additional dependencies or setup required - VitePress handles indexing at build time
 ---
+
+## 2026-01-24 - US-032
+- What was implemented: Added comprehensive SEO meta tags to VitePress configuration
+- Files changed:
+  - `docs/.vitepress/config.ts` (modified) - Added Open Graph tags, Twitter card tags, and canonical URL
+- **Learnings for future iterations:**
+  - VitePress SEO tags go in the `head` array in config as tuples: `['meta', { property: 'og:...', content: '...' }]`
+  - Use constants for siteUrl, siteTitle, siteDescription to avoid duplication across meta tags
+  - Open Graph uses `property` attribute (`og:title`), Twitter uses `name` attribute (`twitter:title`)
+  - Canonical URL uses a link tag: `['link', { rel: 'canonical', href: siteUrl }]`
+  - Twitter card type `summary_large_image` provides a larger preview than default `summary`
+---
