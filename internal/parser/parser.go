@@ -10,6 +10,7 @@ import (
 	"github.com/yuin/goldmark/extension"
 	"github.com/yuin/goldmark/parser"
 	"github.com/yuin/goldmark/renderer/html"
+	"gopkg.in/yaml.v3"
 )
 
 // Presentation represents a parsed markdown presentation.
@@ -118,7 +119,7 @@ func (p *Parser) Parse(content []byte) (*Presentation, error) {
 		Slides: make([]Slide, 0, len(parts)),
 	}
 
-	for i, part := range parts {
+	for _, part := range parts {
 		// Trim whitespace from slide content
 		slideContent := strings.TrimSpace(part)
 
@@ -127,23 +128,23 @@ func (p *Parser) Parse(content []byte) (*Presentation, error) {
 			continue
 		}
 
-		// Render markdown to HTML
-		html, err := p.renderHTML([]byte(slideContent))
+		// Parse directives from HTML comments at slide start
+		directives, contentAfterDirectives := parseDirectives(slideContent)
+
+		// Render markdown to HTML (use content after directives removed)
+		html, err := p.renderHTML([]byte(contentAfterDirectives))
 		if err != nil {
 			return nil, err
 		}
 
 		slide := Slide{
-			Content:    slideContent,
+			Content:    contentAfterDirectives,
 			HTML:       html,
 			Index:      len(presentation.Slides),
-			Directives: SlideDirectives{},
+			Directives: directives,
 			Fragments:  []Fragment{},
 			CodeBlocks: []CodeBlock{},
 		}
-
-		// Preserve original index for debugging
-		_ = i
 
 		presentation.Slides = append(presentation.Slides, slide)
 	}
@@ -185,4 +186,54 @@ func (p *Parser) renderHTML(content []byte) (string, error) {
 		return "", err
 	}
 	return buf.String(), nil
+}
+
+// directivePattern matches HTML comments containing YAML directives at the start of slides.
+// Example: <!-- layout: title \n transition: fade -->
+var directivePattern = regexp.MustCompile(`(?s)^\s*<!--\s*(.*?)\s*-->`)
+
+// parseDirectives extracts YAML directives from an HTML comment at the start of slide content.
+// It returns the parsed directives and the content with the directive comment removed.
+func parseDirectives(content string) (SlideDirectives, string) {
+	directives := SlideDirectives{}
+
+	match := directivePattern.FindStringSubmatch(content)
+	if match == nil {
+		return directives, content
+	}
+
+	// Extract the YAML content from the comment
+	yamlContent := match[1]
+
+	// Parse the YAML into the directives struct
+	// We use a map first to handle the yaml parsing, then extract fields
+	var yamlData map[string]interface{}
+	if err := yaml.Unmarshal([]byte(yamlContent), &yamlData); err != nil {
+		// If YAML parsing fails, return unchanged content
+		// This allows non-directive HTML comments to pass through
+		return directives, content
+	}
+
+	// Extract known directive fields
+	if layout, ok := yamlData["layout"].(string); ok {
+		directives.Layout = layout
+	}
+	if transition, ok := yamlData["transition"].(string); ok {
+		directives.Transition = transition
+	}
+	if background, ok := yamlData["background"].(string); ok {
+		directives.Background = background
+	}
+	if notes, ok := yamlData["notes"].(string); ok {
+		directives.Notes = notes
+	}
+	if fragments, ok := yamlData["fragments"].(bool); ok {
+		directives.Fragments = fragments
+	}
+
+	// Remove the directive comment from content
+	remainingContent := strings.TrimPrefix(content, match[0])
+	remainingContent = strings.TrimLeft(remainingContent, "\n")
+
+	return directives, remainingContent
 }

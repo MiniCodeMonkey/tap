@@ -268,6 +268,202 @@ More content here.`)
 	}
 }
 
+func TestParse_SlideDirectives(t *testing.T) {
+	p := New()
+	content := []byte(`<!--
+layout: title
+transition: slide
+background: "#ff0000"
+notes: "Speaker notes here"
+fragments: true
+-->
+# Welcome
+
+This is the title slide.
+
+---
+
+# Second Slide
+
+No directives here.`)
+
+	pres, err := p.Parse(content)
+	if err != nil {
+		t.Fatalf("Parse() returned error: %v", err)
+	}
+
+	if len(pres.Slides) != 2 {
+		t.Fatalf("expected 2 slides, got %d", len(pres.Slides))
+	}
+
+	// First slide should have directives
+	slide1 := pres.Slides[0]
+	if slide1.Directives.Layout != "title" {
+		t.Errorf("expected layout 'title', got %q", slide1.Directives.Layout)
+	}
+	if slide1.Directives.Transition != "slide" {
+		t.Errorf("expected transition 'slide', got %q", slide1.Directives.Transition)
+	}
+	if slide1.Directives.Background != "#ff0000" {
+		t.Errorf("expected background '#ff0000', got %q", slide1.Directives.Background)
+	}
+	if slide1.Directives.Notes != "Speaker notes here" {
+		t.Errorf("expected notes 'Speaker notes here', got %q", slide1.Directives.Notes)
+	}
+	if !slide1.Directives.Fragments {
+		t.Error("expected fragments to be true")
+	}
+	// Content should not contain the directive comment
+	if contains(slide1.Content, "layout:") {
+		t.Error("slide content should not contain directive comment")
+	}
+	if !contains(slide1.Content, "Welcome") {
+		t.Error("slide content should contain 'Welcome'")
+	}
+
+	// Second slide should have empty directives
+	slide2 := pres.Slides[1]
+	if slide2.Directives.Layout != "" {
+		t.Errorf("expected empty layout, got %q", slide2.Directives.Layout)
+	}
+	if slide2.Directives.Transition != "" {
+		t.Errorf("expected empty transition, got %q", slide2.Directives.Transition)
+	}
+}
+
+func TestParse_DirectivesPartial(t *testing.T) {
+	p := New()
+	content := []byte(`<!-- layout: section -->
+# Section Header`)
+
+	pres, err := p.Parse(content)
+	if err != nil {
+		t.Fatalf("Parse() returned error: %v", err)
+	}
+
+	if len(pres.Slides) != 1 {
+		t.Fatalf("expected 1 slide, got %d", len(pres.Slides))
+	}
+
+	slide := pres.Slides[0]
+	if slide.Directives.Layout != "section" {
+		t.Errorf("expected layout 'section', got %q", slide.Directives.Layout)
+	}
+	// Other directives should be empty/false
+	if slide.Directives.Transition != "" {
+		t.Errorf("expected empty transition, got %q", slide.Directives.Transition)
+	}
+	if slide.Directives.Fragments {
+		t.Error("expected fragments to be false")
+	}
+}
+
+func TestParse_DirectivesNotAtStart(t *testing.T) {
+	p := New()
+	// Directive comment not at the start should not be parsed as directives
+	content := []byte(`# Title
+
+<!-- layout: title -->
+
+Some content.`)
+
+	pres, err := p.Parse(content)
+	if err != nil {
+		t.Fatalf("Parse() returned error: %v", err)
+	}
+
+	if len(pres.Slides) != 1 {
+		t.Fatalf("expected 1 slide, got %d", len(pres.Slides))
+	}
+
+	slide := pres.Slides[0]
+	// Directive should not be parsed because it's not at the start
+	if slide.Directives.Layout != "" {
+		t.Errorf("expected empty layout (directive not at start), got %q", slide.Directives.Layout)
+	}
+	// The comment should remain in the content
+	if !contains(slide.Content, "layout:") {
+		t.Error("non-directive comment should remain in content")
+	}
+}
+
+func TestParse_InvalidYAMLDirective(t *testing.T) {
+	p := New()
+	// Invalid YAML should not crash, just pass through
+	content := []byte(`<!-- not: valid: yaml: : : -->
+# Title`)
+
+	pres, err := p.Parse(content)
+	if err != nil {
+		t.Fatalf("Parse() returned error: %v", err)
+	}
+
+	if len(pres.Slides) != 1 {
+		t.Fatalf("expected 1 slide, got %d", len(pres.Slides))
+	}
+
+	// With invalid YAML, directives should be empty and comment remains
+	slide := pres.Slides[0]
+	if slide.Directives.Layout != "" {
+		t.Errorf("expected empty layout for invalid YAML, got %q", slide.Directives.Layout)
+	}
+}
+
+func TestParse_NonDirectiveComment(t *testing.T) {
+	p := New()
+	// A regular HTML comment (not YAML) should pass through
+	content := []byte(`<!-- This is just a regular comment -->
+# Title`)
+
+	pres, err := p.Parse(content)
+	if err != nil {
+		t.Fatalf("Parse() returned error: %v", err)
+	}
+
+	if len(pres.Slides) != 1 {
+		t.Fatalf("expected 1 slide, got %d", len(pres.Slides))
+	}
+
+	// Regular comments are valid YAML (empty map), so they get parsed
+	// but result in empty directives
+	slide := pres.Slides[0]
+	if slide.Directives.Layout != "" {
+		t.Errorf("expected empty layout, got %q", slide.Directives.Layout)
+	}
+}
+
+func TestParse_DirectivesMultiline(t *testing.T) {
+	p := New()
+	content := []byte(`<!--
+layout: two-column
+notes: |
+  These are multiline
+  speaker notes that
+  span multiple lines.
+-->
+# Content`)
+
+	pres, err := p.Parse(content)
+	if err != nil {
+		t.Fatalf("Parse() returned error: %v", err)
+	}
+
+	if len(pres.Slides) != 1 {
+		t.Fatalf("expected 1 slide, got %d", len(pres.Slides))
+	}
+
+	slide := pres.Slides[0]
+	if slide.Directives.Layout != "two-column" {
+		t.Errorf("expected layout 'two-column', got %q", slide.Directives.Layout)
+	}
+	if !contains(slide.Directives.Notes, "multiline") {
+		t.Errorf("expected notes to contain 'multiline', got %q", slide.Directives.Notes)
+	}
+	if !contains(slide.Directives.Notes, "span multiple lines") {
+		t.Errorf("expected notes to contain 'span multiple lines', got %q", slide.Directives.Notes)
+	}
+}
+
 // helper function to check if a string contains a substring
 func contains(s, substr string) bool {
 	return len(s) >= len(substr) && (s == substr || len(substr) == 0 ||
