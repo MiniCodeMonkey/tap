@@ -83,6 +83,16 @@ export async function detectStaticMode(): Promise<boolean> {
 export const connected: Writable<boolean> = writable(false);
 
 /**
+ * Whether the WebSocket is currently attempting to reconnect.
+ */
+export const reconnecting: Writable<boolean> = writable(false);
+
+/**
+ * The current reconnect attempt number (resets on successful connection).
+ */
+export const reconnectAttempt: Writable<number> = writable(0);
+
+/**
  * Whether live code execution is available.
  * This is true when connected to a WebSocket server (not in static mode).
  */
@@ -148,6 +158,8 @@ export class WebSocketClient {
 
 		this.ws.onopen = () => {
 			connected.set(true);
+			reconnecting.set(false);
+			reconnectAttempt.set(0);
 			// Reset reconnect delay on successful connection
 			this.reconnectDelay = INITIAL_RECONNECT_DELAY;
 		};
@@ -234,6 +246,9 @@ export class WebSocketClient {
 		if (!this.shouldReconnect) return;
 		if (this.reconnectTimeout) return; // Already scheduled
 
+		reconnecting.set(true);
+		reconnectAttempt.update((n) => n + 1);
+
 		this.reconnectTimeout = setTimeout(() => {
 			this.reconnectTimeout = null;
 			this.connect();
@@ -263,6 +278,8 @@ export class WebSocketClient {
 		}
 
 		connected.set(false);
+		reconnecting.set(false);
+		reconnectAttempt.set(0);
 	}
 
 	/**
