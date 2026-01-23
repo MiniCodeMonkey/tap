@@ -965,3 +965,21 @@ Started: Fri Jan 23 16:33:21 CET 2026
   - Reduced motion support disables flicker animation and scanlines
   - Terminal-specific styling: > for list markers, $ prompt on pre blocks, /* */ for blockquotes
 ---
+
+## 2026-01-23 - US-060
+- What was implemented: Brutalist and keynote themes CSS
+- Files changed:
+  - frontend/src/lib/themes/brutalist.css (new - bold, geometric, high contrast theme)
+  - frontend/src/lib/themes/keynote.css (new - professional, polished theme with subtle shadows)
+- **Learnings for future iterations:**
+  - Brutalist theme uses stark black/white with red accent, uppercase typography, thick borders (4-8px)
+  - Brutalist theme uses Arial Black font for bold industrial look
+  - Brutalist uses square bullet markers (■) and geometric styling throughout
+  - Keynote theme uses Apple-like system fonts (-apple-system, SF Pro)
+  - Keynote theme features elevated card surfaces with subtle shadows and rounded corners
+  - Both themes support dark variants via .dark modifier class
+  - Keynote also supports .blue-gradient variant for gradient backgrounds
+  - Both themes follow same typography scale: 8rem title, 6rem h1, 4rem h2, 2rem body, 1.5rem code
+  - Theme-specific transition timing: brutalist uses linear (sharp), keynote uses cubic-bezier (smooth)
+  - Utility classes for effects: .rotate-left/.rotate-right, .strike, .highlight-box (brutalist), .gradient-text, .pill, .card (keynote)
+---
