@@ -5,8 +5,11 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"path/filepath"
+	"regexp"
 	"strings"
 
+	"github.com/joho/godotenv"
 	"gopkg.in/yaml.v3"
 )
 
@@ -92,6 +95,15 @@ func Load(path string) (*Config, error) {
 		return nil, fmt.Errorf("failed to parse frontmatter: %w", err)
 	}
 
+	// Load .env file from presentation directory
+	dir := filepath.Dir(path)
+	if err := LoadEnv(dir); err != nil {
+		return nil, fmt.Errorf("failed to load .env file: %w", err)
+	}
+
+	// Resolve environment variables in sensitive fields
+	cfg.ResolveEnvVars()
+
 	return cfg, nil
 }
 
@@ -137,4 +149,47 @@ func (c *Config) Validate() error {
 	}
 
 	return nil
+}
+
+// envVarPattern matches environment variable references like $VAR_NAME or ${VAR_NAME}.
+var envVarPattern = regexp.MustCompile(`\$\{?([A-Za-z_][A-Za-z0-9_]*)\}?`)
+
+// LoadEnv loads environment variables from a .env file in the specified directory.
+// If the .env file doesn't exist, it returns nil (no error).
+func LoadEnv(dir string) error {
+	envPath := filepath.Join(dir, ".env")
+	if _, err := os.Stat(envPath); os.IsNotExist(err) {
+		return nil
+	}
+	return godotenv.Load(envPath)
+}
+
+// resolveEnvVars replaces $VAR_NAME and ${VAR_NAME} syntax with actual
+// environment variable values. If a variable is not set, the reference
+// is left unchanged.
+func resolveEnvVars(s string) string {
+	return envVarPattern.ReplaceAllStringFunc(s, func(match string) string {
+		// Extract variable name from match
+		varName := envVarPattern.FindStringSubmatch(match)[1]
+		if value, exists := os.LookupEnv(varName); exists {
+			return value
+		}
+		return match
+	})
+}
+
+// ResolveEnvVars resolves environment variable references in sensitive config fields.
+// This includes passwords and other credential-related fields in driver connections.
+func (c *Config) ResolveEnvVars() {
+	for driverName, driver := range c.Drivers {
+		for connName, conn := range driver.Connections {
+			conn.Password = resolveEnvVars(conn.Password)
+			conn.User = resolveEnvVars(conn.User)
+			conn.Host = resolveEnvVars(conn.Host)
+			conn.Database = resolveEnvVars(conn.Database)
+			conn.Path = resolveEnvVars(conn.Path)
+			driver.Connections[connName] = conn
+		}
+		c.Drivers[driverName] = driver
+	}
 }
