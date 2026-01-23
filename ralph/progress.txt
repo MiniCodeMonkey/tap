@@ -983,3 +983,23 @@ Started: Fri Jan 23 16:33:21 CET 2026
   - Theme-specific transition timing: brutalist uses linear (sharp), keynote uses cubic-bezier (smooth)
   - Utility classes for effects: .rotate-left/.rotate-right, .strike, .highlight-box (brutalist), .gradient-text, .pill, .card (keynote)
 ---
+
+## 2026-01-23 - US-061
+- What was implemented: Slide transition utilities for smooth slide navigation
+- Files changed:
+  - frontend/src/lib/utils/transitions.ts (new - reusable transition functions)
+- **Learnings for future iterations:**
+  - Created transition utilities in src/lib/utils/transitions.ts (not in SlideRenderer)
+  - Five transition types: none, fade, slide, push, zoom
+  - Use SvelteTransitionConfig (aliased) to avoid conflict with local types
+  - prefersReducedMotion() checks window.matchMedia for accessibility
+  - onReducedMotionChange() allows subscribing to motion preference changes
+  - getEffectiveDuration() returns 0 for reduced motion, otherwise requested duration
+  - Individual transition functions: transitionNone, transitionFade, transitionSlide, transitionPush, transitionZoom
+  - Main entry point: createSlideTransition(node, options) for Svelte transition directive
+  - createCrossfade() creates paired [send, receive] for crossfade transitions
+  - resolveTransition() handles per-slide override vs global config fallback
+  - TRANSITION_DEFAULTS.defaultDuration = 400ms, defaultTransition = 'fade'
+  - TRANSITION_TYPES constant lists all valid types for validation
+  - SlideRenderer already had inline transition logic - this extracts it for reuse
+---
