@@ -1125,3 +1125,22 @@ Started: Fri Jan 23 16:33:21 CET 2026
   - ARIA progressbar role with valuenow, valuemin, valuemax for accessibility
   - Reduced motion support disables transitions
 ---
+
+## 2026-01-23 - US-069
+- What was implemented: Animation presets for presentations (typewriter, count-up, cascade, spring)
+- Files changed:
+  - frontend/src/lib/utils/animations.ts (new - complete animation presets module with Svelte actions)
+- **Learnings for future iterations:**
+  - Animation presets use requestAnimationFrame for smooth 60fps animations
+  - Each animation returns an AnimationController with start(), stop(), destroy(), and running property
+  - typewriter(): Character-by-character reveal using performance.now() timing
+  - countUp(): Number animation with easing, supports formatting (prefix, suffix, separator, decimals)
+  - cascade(): Staggered animation of child elements with direction options (up, down, left, right, fade)
+  - spring(): Physics-based spring animation using simple damped spring model
+  - All animations respect prefersReducedMotion() - show final state immediately when enabled
+  - Svelte actions (typewriterAction, countUpAction, cascadeAction, springAction) auto-start on mount
+  - createAnimation() factory function creates animation based on preset name
+  - ANIMATION_PRESETS constant lists all valid preset names for validation
+  - formatNumber() helper handles thousands separators and decimal formatting
+  - Spring physics uses simple stiffness/damping model without complex physics library
+---
