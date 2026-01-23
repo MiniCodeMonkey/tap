@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/tapsh/tap/embedded"
 	"github.com/tapsh/tap/internal/config"
 	"github.com/tapsh/tap/internal/parser"
 	"github.com/tapsh/tap/internal/transformer"
@@ -213,6 +214,41 @@ func isAbsoluteURL(path string) bool {
 	lowerPath := strings.ToLower(path)
 	return strings.HasPrefix(lowerPath, "http://") || strings.HasPrefix(lowerPath, "https://")
 }
+
+// CopyEmbeddedAssets copies all embedded frontend assets to the output directory.
+// This is useful for builds that need the full frontend application.
+func (b *Builder) CopyEmbeddedAssets() (int, int64, error) {
+	files, err := embedded.List()
+	if err != nil {
+		return 0, 0, fmt.Errorf("failed to list embedded assets: %w", err)
+	}
+
+	var totalSize int64
+	count := 0
+
+	for _, file := range files {
+		// Skip index.html as we generate our own with embedded JSON
+		if file == "index.html" {
+			continue
+		}
+
+		content, err := embedded.GetFile(file)
+		if err != nil {
+			return count, totalSize, fmt.Errorf("failed to read embedded file %s: %w", file, err)
+		}
+
+		destPath := filepath.Join(b.outputDir, file)
+		if err := os.WriteFile(destPath, content, 0644); err != nil {
+			return count, totalSize, fmt.Errorf("failed to write %s: %w", file, err)
+		}
+
+		count++
+		totalSize += int64(len(content))
+	}
+
+	return count, totalSize, nil
+}
+
 
 // generateIndexHTML creates the index.html file with embedded presentation JSON.
 func (b *Builder) generateIndexHTML(path string, pres *transformer.TransformedPresentation) (int64, error) {

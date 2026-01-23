@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tap Presentation</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        html, body {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background: #000;
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
+        .slide-container {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .slide {
+            width: 100%;
+            max-width: 1920px;
+            aspect-ratio: 16 / 9;
+            background: #fff;
+            padding: 4rem;
+            overflow: hidden;
+        }
+        .slide h1 { font-size: 4rem; margin-bottom: 1rem; }
+        .slide h2 { font-size: 3rem; margin-bottom: 0.75rem; }
+        .slide h3 { font-size: 2rem; margin-bottom: 0.5rem; }
+        .slide p { font-size: 1.5rem; line-height: 1.6; margin-bottom: 1rem; }
+        .slide ul, .slide ol { font-size: 1.5rem; margin-left: 2rem; margin-bottom: 1rem; }
+        .slide li { margin-bottom: 0.5rem; }
+        .slide pre { background: #1e1e1e; color: #d4d4d4; padding: 1rem; border-radius: 0.5rem; overflow-x: auto; margin-bottom: 1rem; }
+        .slide code { font-family: 'SF Mono', 'Monaco', 'Inconsolata', monospace; font-size: 1.25rem; }
+        .slide img { max-width: 100%; max-height: 80%; object-fit: contain; }
+        .slide blockquote { border-left: 4px solid #7C3AED; padding-left: 1.5rem; font-style: italic; font-size: 1.75rem; }
+        .navigation {
+            position: fixed;
+            bottom: 1rem;
+            right: 1rem;
+            display: flex;
+            gap: 0.5rem;
+            z-index: 100;
+        }
+        .navigation button {
+            padding: 0.5rem 1rem;
+            font-size: 1rem;
+            cursor: pointer;
+            border: none;
+            background: rgba(0,0,0,0.5);
+            color: #fff;
+            border-radius: 0.25rem;
+        }
+        .navigation button:hover {
+            background: rgba(0,0,0,0.7);
+        }
+        .slide-counter {
+            position: fixed;
+            bottom: 1rem;
+            left: 1rem;
+            color: rgba(255,255,255,0.7);
+            font-size: 0.875rem;
+            z-index: 100;
+        }
+        .loading {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            color: #333;
+        }
+        .loading h1 {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+        }
+        .loading p {
+            color: #666;
+        }
+        .connection-indicator {
+            position: fixed;
+            top: 1rem;
+            right: 1rem;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #10B981;
+            z-index: 100;
+        }
+        .connection-indicator.disconnected {
+            background: #EF4444;
+            animation: pulse 1s infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+    </style>
+</head>
+<body>
+    <div class="slide-container">
+        <div class="slide" id="slide-content">
+            <div class="loading">
+                <h1>Tap</h1>
+                <p>Loading presentation...</p>
+            </div>
+        </div>
+    </div>
+    <div class="navigation">
+        <button onclick="prevSlide()">&#8592; Prev</button>
+        <button onclick="nextSlide()">Next &#8594;</button>
+    </div>
+    <div class="slide-counter" id="slide-counter"></div>
+    <div class="connection-indicator" id="connection-indicator" title="WebSocket connection"></div>
+
+    <script>
+        let presentation = null;
+        let currentSlide = 0;
+        let ws = null;
+        let reconnectAttempts = 0;
+        const maxReconnectDelay = 30000;
+
+        // Fetch presentation data
+        async function fetchPresentation() {
+            try {
+                const response = await fetch('/api/presentation');
+                if (!response.ok) {
+                    throw new Error('Failed to load presentation');
+                }
+                presentation = await response.json();
+                initializeSlide();
+            } catch (error) {
+                document.getElementById('slide-content').innerHTML = `
+                    <div class="loading">
+                        <h1>Error</h1>
+                        <p>${error.message}</p>
+                    </div>
+                `;
+            }
+        }
+
+        // Initialize slide from URL hash
+        function initializeSlide() {
+            const hash = parseInt(location.hash.slice(1));
+            if (!isNaN(hash) && hash >= 0 && hash < presentation.slides.length) {
+                currentSlide = hash;
+            }
+            render();
+        }
+
+        // Render current slide
+        function render() {
+            if (!presentation || !presentation.slides) return;
+            const slide = presentation.slides[currentSlide];
+            if (!slide) return;
+
+            document.getElementById('slide-content').innerHTML = slide.html;
+            document.getElementById('slide-counter').textContent =
+                (currentSlide + 1) + ' / ' + presentation.slides.length;
+            location.hash = currentSlide;
+        }
+
+        // Navigation functions
+        function nextSlide() {
+            if (!presentation) return;
+            if (currentSlide < presentation.slides.length - 1) {
+                currentSlide++;
+                render();
+            }
+        }
+
+        function prevSlide() {
+            if (!presentation) return;
+            if (currentSlide > 0) {
+                currentSlide--;
+                render();
+            }
+        }
+
+        function goToSlide(index) {
+            if (!presentation) return;
+            if (index >= 0 && index < presentation.slides.length) {
+                currentSlide = index;
+                render();
+            }
+        }
+
+        // WebSocket connection for hot reload
+        function connectWebSocket() {
+            const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${protocol}//${location.host}/ws`;
+
+            ws = new WebSocket(wsUrl);
+
+            ws.onopen = function() {
+                reconnectAttempts = 0;
+                document.getElementById('connection-indicator').classList.remove('disconnected');
+                document.getElementById('connection-indicator').title = 'Connected';
+            };
+
+            ws.onclose = function() {
+                document.getElementById('connection-indicator').classList.add('disconnected');
+                document.getElementById('connection-indicator').title = 'Disconnected - reconnecting...';
+                scheduleReconnect();
+            };
+
+            ws.onerror = function(error) {
+                console.error('WebSocket error:', error);
+            };
+
+            ws.onmessage = function(event) {
+                try {
+                    const message = JSON.parse(event.data);
+                    handleWebSocketMessage(message);
+                } catch (error) {
+                    console.error('Failed to parse WebSocket message:', error);
+                }
+            };
+        }
+
+        function handleWebSocketMessage(message) {
+            switch (message.type) {
+                case 'reload':
+                    fetchPresentation();
+                    break;
+                case 'slide':
+                    if (typeof message.data === 'number') {
+                        goToSlide(message.data);
+                    }
+                    break;
+                case 'connected':
+                    // Connection confirmed
+                    break;
+            }
+        }
+
+        function scheduleReconnect() {
+            const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), maxReconnectDelay);
+            reconnectAttempts++;
+            setTimeout(connectWebSocket, delay);
+        }
+
+        // Keyboard navigation
+        document.addEventListener('keydown', function(e) {
+            // Skip if in input field
+            if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+
+            switch (e.key) {
+                case 'ArrowRight':
+                case 'ArrowDown':
+                case ' ':
+                case 'Enter':
+                    e.preventDefault();
+                    nextSlide();
+                    break;
+                case 'ArrowLeft':
+                case 'ArrowUp':
+                case 'Backspace':
+                    e.preventDefault();
+                    prevSlide();
+                    break;
+                case 'Home':
+                    e.preventDefault();
+                    goToSlide(0);
+                    break;
+                case 'End':
+                    e.preventDefault();
+                    if (presentation) {
+                        goToSlide(presentation.slides.length - 1);
+                    }
+                    break;
+                case 'f':
+                case 'F':
+                    // Toggle fullscreen
+                    if (document.fullscreenElement) {
+                        document.exitFullscreen();
+                    } else {
+                        document.documentElement.requestFullscreen();
+                    }
+                    break;
+            }
+        });
+
+        // Handle URL hash changes
+        window.addEventListener('hashchange', function() {
+            const hash = parseInt(location.hash.slice(1));
+            if (!isNaN(hash) && hash !== currentSlide) {
+                goToSlide(hash);
+            }
+        });
+
+        // Initialize
+        fetchPresentation();
+        connectWebSocket();
+    </script>
+</body>
+</html>

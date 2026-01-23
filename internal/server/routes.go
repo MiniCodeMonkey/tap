@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/fatih/color"
+	"github.com/tapsh/tap/embedded"
 )
 
 // Color definitions for request logging
@@ -89,31 +90,16 @@ func (s *Server) SetupRoutes() {
 
 // handleIndex serves the main presentation viewer (index.html).
 func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
-	// For now, return a placeholder HTML page
-	// This will be replaced with embedded frontend assets in US-045
+	// Serve embedded index.html
+	content, err := embedded.GetIndexHTML()
+	if err != nil {
+		http.Error(w, "Failed to load index.html", http.StatusInternalServerError)
+		return
+	}
+
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
-	fmt.Fprintf(w, `<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tap Presentation</title>
-    <style>
-        body { font-family: system-ui, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background: #1a1a1a; color: white; }
-        .message { text-align: center; }
-        h1 { font-size: 3rem; margin-bottom: 1rem; }
-        p { color: #888; }
-    </style>
-</head>
-<body>
-    <div class="message">
-        <h1>🎯 Tap</h1>
-        <p>Presentation viewer will be loaded here</p>
-        <p><a href="/api/presentation" style="color: #7C3AED;">View presentation data</a></p>
-    </div>
-</body>
-</html>`)
+	_, _ = w.Write(content)
 }
 
 // handlePresenter serves the presenter view.
@@ -133,29 +119,16 @@ func (s *Server) handlePresenter(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Serve the presenter view
+	// Serve embedded presenter.html
+	content, err := embedded.GetPresenterHTML()
+	if err != nil {
+		http.Error(w, "Failed to load presenter.html", http.StatusInternalServerError)
+		return
+	}
+
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
-	fmt.Fprintf(w, `<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tap Presenter View</title>
-    <style>
-        body { font-family: system-ui, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background: #0a0a0a; color: white; }
-        .message { text-align: center; }
-        h1 { font-size: 2rem; margin-bottom: 1rem; }
-        p { color: #888; }
-    </style>
-</head>
-<body>
-    <div class="message">
-        <h1>📋 Presenter View</h1>
-        <p>Speaker notes and controls will appear here</p>
-    </div>
-</body>
-</html>`)
+	_, _ = w.Write(content)
 }
 
 // handleAPIPresentation returns the presentation data as JSON.
