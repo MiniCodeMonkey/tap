@@ -1,0 +1,362 @@
+/**
+ * Minimal Theme
+ * Clean Apple-style aesthetics with white backgrounds and dark text.
+ * Typography uses Helvetica Neue for that classic minimal look.
+ */
+
+/* ============================================================================
+ * Theme Variables
+ * ============================================================================ */
+
+.theme-minimal {
+	/* Colors */
+	--slide-bg: #ffffff;
+	--text-color: #1a1a1a;
+	--muted-color: #6b7280;
+	--accent-color: #7c3aed;
+	--link-color: #7c3aed;
+	--border-color: rgba(0, 0, 0, 0.1);
+
+	/* Code colors */
+	--code-bg: rgba(0, 0, 0, 0.04);
+	--pre-bg: #1e1e1e;
+	--pre-color: #d4d4d4;
+
+	/* Table colors */
+	--table-header-bg: rgba(0, 0, 0, 0.02);
+
+	/* Typography - Helvetica Neue for clean, minimal look */
+	--font-family: 'Helvetica Neue', Helvetica, Arial, -apple-system,
+		BlinkMacSystemFont, 'Segoe UI', sans-serif;
+	--mono-font-family: 'SF Mono', Monaco, 'Cascadia Code', Consolas,
+		'Liberation Mono', 'Courier New', monospace;
+
+	/* Font sizes - as per acceptance criteria */
+	--title-font-size: 8rem; /* Title slides */
+	--h1-font-size: 6rem; /* H1 headers */
+	--h2-font-size: 4rem; /* H2 headers */
+	--h3-font-size: 2.5rem;
+	--body-font-size: 2rem; /* Body text */
+	--code-font-size: 1.5rem; /* Code blocks */
+	--subtitle-font-size: 2.5rem;
+	--section-font-size: 5rem;
+	--quote-font-size: 3rem;
+	--quote-attribution-size: 1.5rem;
+	--stat-font-size: 12rem;
+	--stat-label-size: 2rem;
+	--table-font-size: 1.75rem;
+
+	/* Spacing */
+	--slide-padding: 80px;
+	--content-gap: 24px;
+	--column-gap: 48px;
+
+	/* Animation timing */
+	--transition-duration: 400ms;
+	--transition-timing: ease-out;
+	--fragment-duration: 400ms;
+
+	/* Apply base typography */
+	font-family: var(--font-family);
+	color: var(--text-color);
+	background-color: var(--slide-bg);
+}
+
+/* ============================================================================
+ * Base Typography
+ * ============================================================================ */
+
+.theme-minimal h1,
+.theme-minimal h2,
+.theme-minimal h3,
+.theme-minimal h4,
+.theme-minimal h5,
+.theme-minimal h6 {
+	font-family: var(--font-family);
+	font-weight: 600;
+	letter-spacing: -0.02em;
+	line-height: 1.1;
+	margin: 0;
+}
+
+.theme-minimal h1 {
+	font-weight: 700;
+}
+
+.theme-minimal p,
+.theme-minimal li {
+	font-family: var(--font-family);
+	font-weight: 400;
+	letter-spacing: -0.01em;
+}
+
+.theme-minimal strong {
+	font-weight: 600;
+}
+
+.theme-minimal em {
+	font-style: italic;
+}
+
+/* ============================================================================
+ * Code Styling
+ * ============================================================================ */
+
+.theme-minimal code {
+	font-family: var(--mono-font-family);
+	background-color: var(--code-bg);
+	padding: 0.15em 0.4em;
+	border-radius: 4px;
+	font-size: 0.9em;
+}
+
+.theme-minimal pre {
+	font-family: var(--mono-font-family);
+	background-color: var(--pre-bg);
+	color: var(--pre-color);
+	padding: 1.5em 2em;
+	border-radius: 12px;
+	overflow-x: auto;
+	line-height: 1.5;
+	box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1),
+		0 2px 4px -1px rgba(0, 0, 0, 0.06);
+}
+
+.theme-minimal pre code {
+	background: none;
+	padding: 0;
+	border-radius: 0;
+	font-size: inherit;
+}
+
+/* ============================================================================
+ * Links
+ * ============================================================================ */
+
+.theme-minimal a {
+	color: var(--link-color);
+	text-decoration: none;
+	border-bottom: 1px solid transparent;
+	transition: border-color var(--transition-duration) var(--transition-timing);
+}
+
+.theme-minimal a:hover {
+	border-bottom-color: var(--link-color);
+}
+
+/* ============================================================================
+ * Lists
+ * ============================================================================ */
+
+.theme-minimal ul,
+.theme-minimal ol {
+	padding-left: 1.25em;
+	margin: 0;
+}
+
+.theme-minimal li {
+	margin-bottom: 0.5em;
+}
+
+.theme-minimal li::marker {
+	color: var(--accent-color);
+}
+
+/* ============================================================================
+ * Blockquotes
+ * ============================================================================ */
+
+.theme-minimal blockquote {
+	border-left: 4px solid var(--accent-color);
+	padding-left: 1.5em;
+	margin: 0;
+	font-style: italic;
+	color: var(--muted-color);
+}
+
+.theme-minimal blockquote p:first-child {
+	margin-top: 0;
+}
+
+.theme-minimal blockquote p:last-child {
+	margin-bottom: 0;
+}
+
+/* ============================================================================
+ * Tables
+ * ============================================================================ */
+
+.theme-minimal table {
+	width: 100%;
+	border-collapse: collapse;
+	font-size: var(--table-font-size);
+}
+
+.theme-minimal th,
+.theme-minimal td {
+	padding: 0.75em 1em;
+	text-align: left;
+	border-bottom: 1px solid var(--border-color);
+}
+
+.theme-minimal th {
+	font-weight: 600;
+	background-color: var(--table-header-bg);
+}
+
+.theme-minimal tr:last-child td {
+	border-bottom: none;
+}
+
+/* ============================================================================
+ * Images
+ * ============================================================================ */
+
+.theme-minimal img {
+	max-width: 100%;
+	height: auto;
+	border-radius: 8px;
+	box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1),
+		0 2px 4px -1px rgba(0, 0, 0, 0.06);
+}
+
+/* ============================================================================
+ * Layout-specific overrides
+ * ============================================================================ */
+
+/* Title layout - use the larger title font size */
+.theme-minimal .layout-title h1 {
+	font-size: var(--title-font-size);
+	font-weight: 700;
+	letter-spacing: -0.03em;
+}
+
+.theme-minimal .layout-title p {
+	font-size: var(--subtitle-font-size);
+	color: var(--muted-color);
+	font-weight: 400;
+	margin-top: 0.75em;
+}
+
+/* Section layout */
+.theme-minimal .layout-section h2 {
+	font-size: var(--section-font-size);
+	font-weight: 600;
+	letter-spacing: -0.02em;
+}
+
+/* Quote layout */
+.theme-minimal .layout-quote blockquote {
+	font-size: var(--quote-font-size);
+	border: none;
+	padding: 0;
+	color: var(--text-color);
+	position: relative;
+}
+
+.theme-minimal .layout-quote blockquote::before {
+	content: '\201C';
+	font-size: 8rem;
+	position: absolute;
+	top: -0.4em;
+	left: -0.35em;
+	color: var(--accent-color);
+	opacity: 0.2;
+	font-family: Georgia, serif;
+}
+
+.theme-minimal .layout-quote blockquote p:last-child {
+	font-size: var(--quote-attribution-size);
+	font-style: normal;
+	color: var(--muted-color);
+	margin-top: 1.5em;
+}
+
+/* Code focus layout */
+.theme-minimal .layout-code-focus pre {
+	font-size: calc(var(--code-font-size) * 1.1);
+	max-height: 75vh;
+	overflow-y: auto;
+}
+
+/* Big stat layout */
+.theme-minimal .layout-big-stat strong,
+.theme-minimal .layout-big-stat .stat-number {
+	font-size: var(--stat-font-size);
+	font-weight: 700;
+	color: var(--accent-color);
+	line-height: 1;
+	letter-spacing: -0.04em;
+}
+
+.theme-minimal .layout-big-stat p {
+	font-size: var(--stat-label-size);
+	color: var(--muted-color);
+	font-weight: 400;
+}
+
+/* ============================================================================
+ * Transition defaults
+ * The minimal theme uses fade as the default transition
+ * ============================================================================ */
+
+.theme-minimal .slide-renderer {
+	transition: opacity var(--transition-duration) var(--transition-timing);
+}
+
+/* ============================================================================
+ * Reduced motion support
+ * ============================================================================ */
+
+@media (prefers-reduced-motion: reduce) {
+	.theme-minimal {
+		--transition-duration: 0ms;
+		--fragment-duration: 0ms;
+	}
+
+	.theme-minimal .slide-renderer {
+		transition: none;
+	}
+}
+
+/* ============================================================================
+ * Fragment styling
+ * ============================================================================ */
+
+.theme-minimal .fragment {
+	transition: opacity var(--fragment-duration) var(--transition-timing),
+		transform var(--fragment-duration) var(--transition-timing);
+}
+
+.theme-minimal .fragment-hidden {
+	opacity: 0;
+	transform: translateY(10px);
+}
+
+.theme-minimal .fragment-visible {
+	opacity: 1;
+	transform: translateY(0);
+}
+
+/* ============================================================================
+ * Progress bar styling
+ * ============================================================================ */
+
+.theme-minimal .progress-bar {
+	background-color: var(--accent-color);
+	height: 3px;
+	transition: width var(--transition-duration) var(--transition-timing);
+}
+
+.theme-minimal .progress-bar-container {
+	background-color: var(--border-color);
+}
+
+/* ============================================================================
+ * Selection styling
+ * ============================================================================ */
+
+.theme-minimal ::selection {
+	background-color: var(--accent-color);
+	color: #ffffff;
+}
