@@ -177,7 +177,7 @@
 	{#if isLoading}
 		<div class="loading-container">
 			<div class="loading-spinner"></div>
-			<p>Loading presentation...</p>
+			<p class="text-slide-body font-sans">Loading presentation...</p>
 		</div>
 	{:else if loadError}
 		<div class="error-container">
