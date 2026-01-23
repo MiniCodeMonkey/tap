@@ -1292,3 +1292,22 @@ Started: Fri Jan 23 16:33:21 CET 2026
   - Hot reload latency: ~51ms average (target: <200ms)
   - Use `make bench-targets` to run all performance target tests
 ---
+
+## 2026-01-24 - US-078
+- What was implemented: Configured GoReleaser for automated cross-platform binary builds
+- Files changed:
+  - .goreleaser.yml (new - complete GoReleaser configuration)
+- **Learnings for future iterations:**
+  - GoReleaser version 2 uses `version: 2` at top of config file
+  - Use `before.hooks` to run frontend build (`cd frontend && npm ci && npm run build:embed`) before Go builds
+  - Build targets: darwin/amd64, darwin/arm64, linux/amd64, linux/arm64, windows/amd64
+  - Exclude windows/arm64 with `ignore:` section as it's less common
+  - CGO_ENABLED=0 ensures statically linked binaries that work across environments
+  - ldflags `-s -w` strips debug info for smaller binaries
+  - Archives use tar.gz for Unix, zip for Windows via `format_overrides`
+  - Checksums use SHA256 by default, output to checksums.txt
+  - Release section configures GitHub releases with install instructions in footer
+  - Use `prerelease: auto` to detect rc/beta/alpha versions
+  - Homebrew tap config included but `skip_upload: true` until homebrew-tap repo exists
+  - Run with `goreleaser release --snapshot --clean` for local testing without publishing
+---
