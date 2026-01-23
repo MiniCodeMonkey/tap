@@ -835,3 +835,348 @@ func TestCountHTMLTag(t *testing.T) {
 		})
 	}
 }
+
+// --- Image Path Resolution Tests (US-022) ---
+
+func TestNewWithBaseDir(t *testing.T) {
+	cfg := config.DefaultConfig()
+	tr := NewWithBaseDir(cfg, "/path/to/presentation")
+
+	if tr == nil {
+		t.Fatal("NewWithBaseDir() returned nil")
+	}
+	if tr.config != cfg {
+		t.Error("transformer config not set correctly")
+	}
+	if tr.baseDir != "/path/to/presentation" {
+		t.Errorf("baseDir not set correctly: got %q", tr.baseDir)
+	}
+}
+
+func TestSetBaseDir(t *testing.T) {
+	cfg := config.DefaultConfig()
+	tr := New(cfg)
+
+	if tr.baseDir != "" {
+		t.Errorf("baseDir should be empty initially: got %q", tr.baseDir)
+	}
+
+	tr.SetBaseDir("/new/path")
+	if tr.baseDir != "/new/path" {
+		t.Errorf("baseDir not updated: got %q", tr.baseDir)
+	}
+}
+
+func TestResolveImagePathAbsoluteURL(t *testing.T) {
+	cfg := config.DefaultConfig()
+	tr := NewWithBaseDir(cfg, "/base/dir")
+
+	testCases := []struct {
+		input    string
+		expected string
+	}{
+		{"https://example.com/image.png", "https://example.com/image.png"},
+		{"http://example.com/image.jpg", "http://example.com/image.jpg"},
+		{"HTTPS://EXAMPLE.COM/image.png", "HTTPS://EXAMPLE.COM/image.png"},
+		{"HTTP://EXAMPLE.COM/image.jpg", "HTTP://EXAMPLE.COM/image.jpg"},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.input, func(t *testing.T) {
+			result := tr.resolveImagePath(tc.input)
+			if result != tc.expected {
+				t.Errorf("resolveImagePath(%q) = %q, expected %q", tc.input, result, tc.expected)
+			}
+		})
+	}
+}
+
+func TestResolveImagePathAbsoluteFilePath(t *testing.T) {
+	cfg := config.DefaultConfig()
+	tr := NewWithBaseDir(cfg, "/base/dir")
+
+	testCases := []struct {
+		input    string
+		expected string
+	}{
+		{"/absolute/path/image.png", "/absolute/path/image.png"},
+		{"/var/www/assets/photo.jpg", "/var/www/assets/photo.jpg"},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.input, func(t *testing.T) {
+			result := tr.resolveImagePath(tc.input)
+			if result != tc.expected {
+				t.Errorf("resolveImagePath(%q) = %q, expected %q", tc.input, result, tc.expected)
+			}
+		})
+	}
+}
+
+func TestResolveImagePathRelative(t *testing.T) {
+	cfg := config.DefaultConfig()
+	tr := NewWithBaseDir(cfg, "/presentations/demo")
+
+	testCases := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{"simple relative", "image.png", "/presentations/demo/image.png"},
+		{"relative with subdir", "images/photo.jpg", "/presentations/demo/images/photo.jpg"},
+		{"relative with dot", "./diagram.svg", "/presentations/demo/diagram.svg"},
+		{"relative with parent", "../shared/logo.png", "/presentations/shared/logo.png"},
+		{"deep relative", "assets/images/bg.webp", "/presentations/demo/assets/images/bg.webp"},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			result := tr.resolveImagePath(tc.input)
+			if result != tc.expected {
+				t.Errorf("resolveImagePath(%q) = %q, expected %q", tc.input, result, tc.expected)
+			}
+		})
+	}
+}
+
+func TestResolveImagePathSupportedFormats(t *testing.T) {
+	cfg := config.DefaultConfig()
+	tr := NewWithBaseDir(cfg, "/base")
+
+	// All supported formats should be resolved
+	supportedFormats := []string{
+		"image.png",
+		"photo.jpg",
+		"picture.jpeg",
+		"animation.gif",
+		"vector.svg",
+		"modern.webp",
+		"IMAGE.PNG",  // uppercase
+		"Photo.JPG",  // mixed case
+		"file.JPEG",
+	}
+
+	for _, path := range supportedFormats {
+		t.Run(path, func(t *testing.T) {
+			result := tr.resolveImagePath(path)
+			// Should be resolved (not returned unchanged)
+			if result == path {
+				t.Errorf("resolveImagePath(%q) should resolve relative path, got %q", path, result)
+			}
+		})
+	}
+}
+
+func TestResolveImagePathUnsupportedFormats(t *testing.T) {
+	cfg := config.DefaultConfig()
+	tr := NewWithBaseDir(cfg, "/base")
+
+	// Unsupported formats should NOT be resolved
+	unsupportedFormats := []string{
+		"document.pdf",
+		"video.mp4",
+		"audio.mp3",
+		"data.json",
+		"script.js",
+		"style.css",
+	}
+
+	for _, path := range unsupportedFormats {
+		t.Run(path, func(t *testing.T) {
+			result := tr.resolveImagePath(path)
+			// Should be returned unchanged
+			if result != path {
+				t.Errorf("resolveImagePath(%q) should not resolve unsupported format, got %q", path, result)
+			}
+		})
+	}
+}
+
+func TestResolveImagePathNoBaseDir(t *testing.T) {
+	cfg := config.DefaultConfig()
+	tr := New(cfg) // No base dir
+
+	// Without base dir, paths should be returned unchanged
+	testCases := []string{
+		"image.png",
+		"images/photo.jpg",
+		"./diagram.svg",
+	}
+
+	for _, path := range testCases {
+		t.Run(path, func(t *testing.T) {
+			result := tr.resolveImagePath(path)
+			if result != path {
+				t.Errorf("without baseDir, resolveImagePath(%q) should return unchanged, got %q", path, result)
+			}
+		})
+	}
+}
+
+func TestResolveImagePathEmptyPath(t *testing.T) {
+	cfg := config.DefaultConfig()
+	tr := NewWithBaseDir(cfg, "/base")
+
+	result := tr.resolveImagePath("")
+	if result != "" {
+		t.Errorf("resolveImagePath(\"\") should return empty string, got %q", result)
+	}
+}
+
+func TestResolveImagePathsInHTML(t *testing.T) {
+	cfg := config.DefaultConfig()
+	tr := NewWithBaseDir(cfg, "/presentations/demo")
+
+	testCases := []struct {
+		name     string
+		html     string
+		expected string
+	}{
+		{
+			name:     "single image",
+			html:     `<p><img src="photo.png" alt="A photo"></p>`,
+			expected: `<p><img src="/presentations/demo/photo.png" alt="A photo"></p>`,
+		},
+		{
+			name:     "multiple images",
+			html:     `<img src="a.png"><img src="b.jpg">`,
+			expected: `<img src="/presentations/demo/a.png"><img src="/presentations/demo/b.jpg">`,
+		},
+		{
+			name:     "absolute URL unchanged",
+			html:     `<img src="https://example.com/logo.png" alt="Logo">`,
+			expected: `<img src="https://example.com/logo.png" alt="Logo">`,
+		},
+		{
+			name:     "mixed relative and absolute",
+			html:     `<img src="local.png"><img src="https://example.com/remote.jpg">`,
+			expected: `<img src="/presentations/demo/local.png"><img src="https://example.com/remote.jpg">`,
+		},
+		{
+			name:     "image with subdirectory",
+			html:     `<img src="images/hero.png" alt="Hero">`,
+			expected: `<img src="/presentations/demo/images/hero.png" alt="Hero">`,
+		},
+		{
+			name:     "image with attributes",
+			html:     `<img src="photo.jpg" alt="Photo" width="100" class="responsive">`,
+			expected: `<img src="/presentations/demo/photo.jpg" alt="Photo" width="100" class="responsive">`,
+		},
+		{
+			name:     "single quoted src",
+			html:     `<img src='image.png' alt='Test'>`,
+			expected: `<img src='/presentations/demo/image.png' alt='Test'>`,
+		},
+		{
+			name:     "no images",
+			html:     `<p>Just text, no images</p>`,
+			expected: `<p>Just text, no images</p>`,
+		},
+		{
+			name:     "unsupported format unchanged",
+			html:     `<img src="document.pdf" alt="PDF">`,
+			expected: `<img src="document.pdf" alt="PDF">`,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			result := tr.resolveImagePaths(tc.html)
+			if result != tc.expected {
+				t.Errorf("resolveImagePaths failed:\n  got:      %q\n  expected: %q", result, tc.expected)
+			}
+		})
+	}
+}
+
+func TestResolveImagePathsNoBaseDir(t *testing.T) {
+	cfg := config.DefaultConfig()
+	tr := New(cfg) // No base dir
+
+	html := `<img src="photo.png" alt="Photo">`
+
+	result := tr.resolveImagePaths(html)
+	if result != html {
+		t.Errorf("without baseDir, resolveImagePaths should return unchanged HTML")
+	}
+}
+
+func TestTransformWithImagePathResolution(t *testing.T) {
+	cfg := config.DefaultConfig()
+	tr := NewWithBaseDir(cfg, "/presentations/demo")
+
+	pres := &parser.Presentation{
+		Slides: []parser.Slide{
+			{
+				Index:   0,
+				Content: "# Slide with image\n\n![Photo](images/photo.png)",
+				HTML:    `<h1>Slide with image</h1><p><img src="images/photo.png" alt="Photo"></p>`,
+			},
+		},
+	}
+
+	result := tr.Transform(pres)
+
+	expectedHTML := `<h1>Slide with image</h1><p><img src="/presentations/demo/images/photo.png" alt="Photo"></p>`
+	if result.Slides[0].HTML != expectedHTML {
+		t.Errorf("HTML with resolved paths:\n  got:      %q\n  expected: %q", result.Slides[0].HTML, expectedHTML)
+	}
+}
+
+func TestIsAbsoluteURL(t *testing.T) {
+	testCases := []struct {
+		url      string
+		expected bool
+	}{
+		{"https://example.com/image.png", true},
+		{"http://example.com/image.png", true},
+		{"HTTPS://EXAMPLE.COM/IMAGE.PNG", true},
+		{"HTTP://EXAMPLE.COM/IMAGE.PNG", true},
+		{"//example.com/image.png", false},
+		{"/absolute/path.png", false},
+		{"relative/path.png", false},
+		{"./path.png", false},
+		{"", false},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.url, func(t *testing.T) {
+			result := isAbsoluteURL(tc.url)
+			if result != tc.expected {
+				t.Errorf("isAbsoluteURL(%q) = %v, expected %v", tc.url, result, tc.expected)
+			}
+		})
+	}
+}
+
+func TestIsSupportedImageFormat(t *testing.T) {
+	testCases := []struct {
+		path     string
+		expected bool
+	}{
+		{"image.png", true},
+		{"photo.jpg", true},
+		{"picture.jpeg", true},
+		{"animation.gif", true},
+		{"vector.svg", true},
+		{"modern.webp", true},
+		{"IMAGE.PNG", true},
+		{"Photo.JPEG", true},
+		{"document.pdf", false},
+		{"video.mp4", false},
+		{"script.js", false},
+		{"style.css", false},
+		{"data.json", false},
+		{"", false},
+		{"noextension", false},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.path, func(t *testing.T) {
+			result := isSupportedImageFormat(tc.path)
+			if result != tc.expected {
+				t.Errorf("isSupportedImageFormat(%q) = %v, expected %v", tc.path, result, tc.expected)
+			}
+		})
+	}
+}

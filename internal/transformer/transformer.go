@@ -2,6 +2,10 @@
 package transformer
 
 import (
+	"path/filepath"
+	"regexp"
+	"strings"
+
 	"github.com/tapsh/tap/internal/config"
 	"github.com/tapsh/tap/internal/parser"
 )
@@ -46,7 +50,8 @@ type BackgroundConfig struct {
 
 // Transformer converts parser.Presentation to TransformedPresentation.
 type Transformer struct {
-	config *config.Config
+	config  *config.Config
+	baseDir string // Base directory for resolving relative paths
 }
 
 // New creates a new Transformer with the given configuration.
@@ -54,6 +59,20 @@ func New(cfg *config.Config) *Transformer {
 	return &Transformer{
 		config: cfg,
 	}
+}
+
+// NewWithBaseDir creates a new Transformer with the given configuration and base directory.
+// The base directory is used for resolving relative image paths.
+func NewWithBaseDir(cfg *config.Config, baseDir string) *Transformer {
+	return &Transformer{
+		config:  cfg,
+		baseDir: baseDir,
+	}
+}
+
+// SetBaseDir sets the base directory for resolving relative paths.
+func (t *Transformer) SetBaseDir(baseDir string) {
+	t.baseDir = baseDir
 }
 
 // Transform converts a parsed Presentation into a TransformedPresentation
@@ -76,7 +95,7 @@ func (t *Transformer) Transform(pres *parser.Presentation) *TransformedPresentat
 func (t *Transformer) transformSlide(slide parser.Slide) TransformedSlide {
 	transformed := TransformedSlide{
 		Index:  slide.Index,
-		HTML:   slide.HTML,
+		HTML:   t.resolveImagePaths(slide.HTML),
 		Layout: t.resolveLayout(slide),
 		Notes:  slide.Directives.Notes,
 	}
@@ -354,6 +373,91 @@ func isGradient(value string) bool {
 	gradientPrefixes := []string{"linear-gradient(", "radial-gradient(", "conic-gradient("}
 	for _, prefix := range gradientPrefixes {
 		if len(value) >= len(prefix) && value[:len(prefix)] == prefix {
+			return true
+		}
+	}
+	return false
+}
+
+// imgSrcPattern matches img src attributes in HTML.
+// Captures the entire img tag and the src attribute value.
+var imgSrcPattern = regexp.MustCompile(`(<img\s[^>]*src=["'])([^"']+)(["'][^>]*>)`)
+
+// supportedImageExtensions lists all supported image formats.
+var supportedImageExtensions = []string{".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp"}
+
+// resolveImagePaths processes HTML and resolves all image src paths.
+func (t *Transformer) resolveImagePaths(html string) string {
+	// If no base directory is set, return HTML unchanged
+	if t.baseDir == "" {
+		return html
+	}
+
+	return imgSrcPattern.ReplaceAllStringFunc(html, func(match string) string {
+		submatches := imgSrcPattern.FindStringSubmatch(match)
+		if len(submatches) != 4 {
+			return match
+		}
+
+		prefix := submatches[1]  // <img ... src="
+		src := submatches[2]     // the path
+		suffix := submatches[3]  // " ...>
+
+		resolved := t.resolveImagePath(src)
+		return prefix + resolved + suffix
+	})
+}
+
+// resolveImagePath resolves a single image path relative to the base directory.
+// It handles:
+// - Absolute URLs (https://, http://) - returned unchanged
+// - Absolute file paths (starting with /) - returned unchanged
+// - Relative paths - resolved relative to baseDir
+func (t *Transformer) resolveImagePath(path string) string {
+	// Return unchanged if path is empty
+	if path == "" {
+		return path
+	}
+
+	// Check if it's an absolute URL
+	if isAbsoluteURL(path) {
+		return path
+	}
+
+	// Check if it's an absolute file path
+	if filepath.IsAbs(path) {
+		return path
+	}
+
+	// Check if it's a supported image format
+	if !isSupportedImageFormat(path) {
+		return path
+	}
+
+	// If no base directory set, return unchanged
+	if t.baseDir == "" {
+		return path
+	}
+
+	// Resolve relative to base directory
+	// Clean the path to remove . and .. components
+	resolved := filepath.Join(t.baseDir, path)
+	resolved = filepath.Clean(resolved)
+
+	return resolved
+}
+
+// isAbsoluteURL checks if the path is an absolute URL (http:// or https://).
+func isAbsoluteURL(path string) bool {
+	lowerPath := strings.ToLower(path)
+	return strings.HasPrefix(lowerPath, "http://") || strings.HasPrefix(lowerPath, "https://")
+}
+
+// isSupportedImageFormat checks if the path has a supported image extension.
+func isSupportedImageFormat(path string) bool {
+	lowerPath := strings.ToLower(path)
+	for _, ext := range supportedImageExtensions {
+		if strings.HasSuffix(lowerPath, ext) {
 			return true
 		}
 	}
