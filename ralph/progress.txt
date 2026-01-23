@@ -1054,3 +1054,19 @@ Started: Fri Jan 23 16:33:21 CET 2026
   - highlight(code, options) is the main API - returns Promise<string> with HTML
   - disposeHighlighter() releases resources when done
 ---
+
+## 2026-01-23 - US-064
+- What was implemented: Advanced code highlighting features for presentations
+- Files changed:
+  - frontend/src/lib/utils/highlighting.ts (extended with line highlighting, line numbers, titles, diffs, auto-sizing)
+- **Learnings for future iterations:**
+  - Use parseHighlightLines() to parse "1,3-5,7" or number arrays into Set<number>
+  - highlightWithMetadata() returns HighlightResult with html, lineCount, autoSized
+  - Line highlighting uses .line.highlighted CSS class applied via applyLineTransformations()
+  - Line numbers use .line-number span with data-line attribute and --line-num-width CSS variable
+  - Code block titles wrap content in .code-block-wrapper with .code-block-title header
+  - Diff visualization detects +/- at line start and adds .diff-add or .diff-remove classes
+  - Auto-sizing triggers for code blocks over AUTO_SIZE_LINE_THRESHOLD (20) lines when maxHeight is set
+  - stripHtmlTags() helper removes HTML for diff marker detection in highlighted content
+  - CSS classes documented in code comments for styling reference
+---
