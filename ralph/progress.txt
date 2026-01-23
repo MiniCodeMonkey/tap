@@ -1380,3 +1380,19 @@ Started: Fri Jan 23 16:33:21 CET 2026
   - Animation tokens can reference CSS variables for theme-specific timing
   - Build successfully includes only used utilities (e.g., text-slide-body generates 2rem font-size)
 ---
+
+## 2026-01-24 - US-103
+- What was implemented: Theme configuration system with CSS custom properties for runtime theme switching
+- Files changed:
+  - frontend/src/lib/themes/theme-tokens.css (new - CSS variable structure and .theme-paper class)
+  - frontend/src/app.css (updated - imports theme-tokens.css)
+- **Learnings for future iterations:**
+  - Theme system uses CSS custom properties (--color-bg, --color-text, etc.) that Tailwind utilities reference via theme.colors.theme bridge
+  - Tailwind was already configured in US-102 with `colors: { theme: { bg: 'var(--color-bg)' } }` bridge
+  - theme-tokens.css defines :root defaults and .theme-paper class sets Paper theme values
+  - Required CSS variables: --color-bg, --color-text, --color-muted, --color-accent, --color-code-bg, --font-sans, --font-mono
+  - Optional variables with fallbacks: --color-border (defaults to muted), --color-surface, --color-surface-elevated
+  - Paper theme: white bg (#ffffff), near-black text (#0a0a0a), warm gray muted (#71717a), subtle warm accent (#78716c)
+  - @import statements must come before other CSS rules in file - moved theme-tokens.css import to top of app.css
+  - Switching theme class on root element instantly updates all colors due to CSS custom properties
+---
