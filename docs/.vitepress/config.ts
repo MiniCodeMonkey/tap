@@ -1,14 +1,34 @@
 import { defineConfig } from 'vitepress'
 
+const siteUrl = 'https://tap.sh'
+const siteTitle = 'Tap'
+const siteDescription = 'Presentations for developers. Markdown slides with live code, beautiful themes, and zero config.'
+
 export default defineConfig({
-  title: 'Tap',
-  description: 'Presentations for developers',
+  title: siteTitle,
+  description: siteDescription,
 
   srcExclude: ['**/ralph/**'],
 
   head: [
+    // Favicon
     ['link', { rel: 'icon', href: '/favicon.ico' }],
-    ['link', { rel: 'icon', type: 'image/svg+xml', href: '/favicon.svg' }]
+    ['link', { rel: 'icon', type: 'image/svg+xml', href: '/favicon.svg' }],
+
+    // Canonical URL
+    ['link', { rel: 'canonical', href: siteUrl }],
+
+    // Open Graph
+    ['meta', { property: 'og:type', content: 'website' }],
+    ['meta', { property: 'og:title', content: siteTitle }],
+    ['meta', { property: 'og:description', content: siteDescription }],
+    ['meta', { property: 'og:url', content: siteUrl }],
+    ['meta', { property: 'og:site_name', content: siteTitle }],
+
+    // Twitter Card
+    ['meta', { name: 'twitter:card', content: 'summary_large_image' }],
+    ['meta', { name: 'twitter:title', content: siteTitle }],
+    ['meta', { name: 'twitter:description', content: siteDescription }]
   ],
 
   themeConfig: {
