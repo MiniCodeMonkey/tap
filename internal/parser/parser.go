@@ -137,13 +137,16 @@ func (p *Parser) Parse(content []byte) (*Presentation, error) {
 			return nil, err
 		}
 
+		// Parse code blocks from the slide content
+		codeBlocks := parseCodeBlocks(contentAfterDirectives)
+
 		slide := Slide{
 			Content:    contentAfterDirectives,
 			HTML:       html,
 			Index:      len(presentation.Slides),
 			Directives: directives,
 			Fragments:  []Fragment{},
-			CodeBlocks: []CodeBlock{},
+			CodeBlocks: codeBlocks,
 		}
 
 		presentation.Slides = append(presentation.Slides, slide)
@@ -192,6 +195,11 @@ func (p *Parser) renderHTML(content []byte) (string, error) {
 // Example: <!-- layout: title \n transition: fade -->
 var directivePattern = regexp.MustCompile(`(?s)^\s*<!--\s*(.*?)\s*-->`)
 
+// codeBlockPattern matches fenced code blocks with info string.
+// Captures: (1) info string, (2) code content
+// Example: ```sql {driver: mysql, connection: mydb}
+var codeBlockPattern = regexp.MustCompile("(?m)^```([^\\n]*)\\n([\\s\\S]*?)\\n```")
+
 // parseDirectives extracts YAML directives from an HTML comment at the start of slide content.
 // It returns the parsed directives and the content with the directive comment removed.
 func parseDirectives(content string) (SlideDirectives, string) {
@@ -236,4 +244,95 @@ func parseDirectives(content string) (SlideDirectives, string) {
 	remainingContent = strings.TrimLeft(remainingContent, "\n")
 
 	return directives, remainingContent
+}
+
+// metaPattern matches {key: value, ...} at the end of info string.
+// Example: sql {driver: mysql, connection: mydb}
+var metaPattern = regexp.MustCompile(`\{([^}]*)\}\s*$`)
+
+// parseCodeBlocks extracts fenced code blocks from slide content.
+// It parses the info string for language and optional driver configuration.
+// Example: ```sql {driver: mysql, connection: mydb}
+func parseCodeBlocks(content string) []CodeBlock {
+	blocks := []CodeBlock{}
+
+	matches := codeBlockPattern.FindAllStringSubmatch(content, -1)
+	for _, match := range matches {
+		if len(match) < 3 {
+			continue
+		}
+
+		infoString := strings.TrimSpace(match[1])
+		code := match[2]
+
+		block := CodeBlock{
+			Code: code,
+			Meta: CodeBlockMeta{},
+		}
+
+		// Parse info string for language and metadata
+		// Format: language {driver: driverName, connection: connName}
+		if metaMatch := metaPattern.FindStringSubmatch(infoString); metaMatch != nil {
+			// Extract language (everything before the {})
+			langPart := strings.TrimSpace(infoString[:len(infoString)-len(metaMatch[0])])
+			block.Language = langPart
+
+			// Parse metadata inside {}
+			metaContent := metaMatch[1]
+			block.Meta = parseCodeBlockMeta(metaContent)
+		} else {
+			// No metadata, just language
+			block.Language = infoString
+		}
+
+		blocks = append(blocks, block)
+	}
+
+	return blocks
+}
+
+// parseCodeBlockMeta parses the content inside {} in code block info strings.
+// Supports both YAML-like (key: value) and simple (key=value) formats.
+// Example: "driver: mysql, connection: mydb" or "driver=mysql, connection=mydb"
+func parseCodeBlockMeta(content string) CodeBlockMeta {
+	meta := CodeBlockMeta{}
+
+	// Try parsing as YAML first
+	var yamlData map[string]interface{}
+	// Wrap in braces for valid YAML map format
+	if err := yaml.Unmarshal([]byte("{"+content+"}"), &yamlData); err == nil {
+		if driver, ok := yamlData["driver"].(string); ok {
+			meta.Driver = driver
+		}
+		if connection, ok := yamlData["connection"].(string); ok {
+			meta.Connection = connection
+		}
+		return meta
+	}
+
+	// Fall back to simple key=value or key: value parsing
+	parts := strings.Split(content, ",")
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		var key, value string
+
+		if idx := strings.Index(part, ":"); idx != -1 {
+			key = strings.TrimSpace(part[:idx])
+			value = strings.TrimSpace(part[idx+1:])
+		} else if idx := strings.Index(part, "="); idx != -1 {
+			key = strings.TrimSpace(part[:idx])
+			value = strings.TrimSpace(part[idx+1:])
+		} else {
+			continue
+		}
+
+		switch key {
+		case "driver":
+			meta.Driver = value
+		case "connection":
+			meta.Connection = value
+		}
+	}
+
+	return meta
 }

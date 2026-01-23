@@ -464,6 +464,270 @@ notes: |
 	}
 }
 
+func TestParse_CodeBlocks_Simple(t *testing.T) {
+	p := New()
+	content := []byte("# Slide\n\n```sql\nSELECT * FROM users;\n```")
+
+	pres, err := p.Parse(content)
+	if err != nil {
+		t.Fatalf("Parse() returned error: %v", err)
+	}
+
+	if len(pres.Slides) != 1 {
+		t.Fatalf("expected 1 slide, got %d", len(pres.Slides))
+	}
+
+	slide := pres.Slides[0]
+	if len(slide.CodeBlocks) != 1 {
+		t.Fatalf("expected 1 code block, got %d", len(slide.CodeBlocks))
+	}
+
+	block := slide.CodeBlocks[0]
+	if block.Language != "sql" {
+		t.Errorf("expected language 'sql', got %q", block.Language)
+	}
+	if block.Code != "SELECT * FROM users;" {
+		t.Errorf("expected code 'SELECT * FROM users;', got %q", block.Code)
+	}
+	if block.Meta.Driver != "" {
+		t.Errorf("expected empty driver, got %q", block.Meta.Driver)
+	}
+}
+
+func TestParse_CodeBlocks_WithDriver(t *testing.T) {
+	p := New()
+	content := []byte("# SQL Demo\n\n```sql {driver: mysql}\nSELECT * FROM products;\n```")
+
+	pres, err := p.Parse(content)
+	if err != nil {
+		t.Fatalf("Parse() returned error: %v", err)
+	}
+
+	if len(pres.Slides) != 1 {
+		t.Fatalf("expected 1 slide, got %d", len(pres.Slides))
+	}
+
+	slide := pres.Slides[0]
+	if len(slide.CodeBlocks) != 1 {
+		t.Fatalf("expected 1 code block, got %d", len(slide.CodeBlocks))
+	}
+
+	block := slide.CodeBlocks[0]
+	if block.Language != "sql" {
+		t.Errorf("expected language 'sql', got %q", block.Language)
+	}
+	if block.Meta.Driver != "mysql" {
+		t.Errorf("expected driver 'mysql', got %q", block.Meta.Driver)
+	}
+}
+
+func TestParse_CodeBlocks_WithDriverAndConnection(t *testing.T) {
+	p := New()
+	content := []byte("# SQL Demo\n\n```sql {driver: mysql, connection: production}\nSELECT * FROM orders;\n```")
+
+	pres, err := p.Parse(content)
+	if err != nil {
+		t.Fatalf("Parse() returned error: %v", err)
+	}
+
+	if len(pres.Slides) != 1 {
+		t.Fatalf("expected 1 slide, got %d", len(pres.Slides))
+	}
+
+	slide := pres.Slides[0]
+	if len(slide.CodeBlocks) != 1 {
+		t.Fatalf("expected 1 code block, got %d", len(slide.CodeBlocks))
+	}
+
+	block := slide.CodeBlocks[0]
+	if block.Language != "sql" {
+		t.Errorf("expected language 'sql', got %q", block.Language)
+	}
+	if block.Meta.Driver != "mysql" {
+		t.Errorf("expected driver 'mysql', got %q", block.Meta.Driver)
+	}
+	if block.Meta.Connection != "production" {
+		t.Errorf("expected connection 'production', got %q", block.Meta.Connection)
+	}
+}
+
+func TestParse_CodeBlocks_MultipleBlocks(t *testing.T) {
+	p := New()
+	content := []byte(`# Multiple Code Blocks
+
+` + "```javascript\nconsole.log('hello');\n```" + `
+
+Some text in between.
+
+` + "```python {driver: python}\nprint('world')\n```")
+
+	pres, err := p.Parse(content)
+	if err != nil {
+		t.Fatalf("Parse() returned error: %v", err)
+	}
+
+	if len(pres.Slides) != 1 {
+		t.Fatalf("expected 1 slide, got %d", len(pres.Slides))
+	}
+
+	slide := pres.Slides[0]
+	if len(slide.CodeBlocks) != 2 {
+		t.Fatalf("expected 2 code blocks, got %d", len(slide.CodeBlocks))
+	}
+
+	// First block - javascript without driver
+	if slide.CodeBlocks[0].Language != "javascript" {
+		t.Errorf("expected first block language 'javascript', got %q", slide.CodeBlocks[0].Language)
+	}
+	if slide.CodeBlocks[0].Meta.Driver != "" {
+		t.Errorf("expected first block empty driver, got %q", slide.CodeBlocks[0].Meta.Driver)
+	}
+
+	// Second block - python with driver
+	if slide.CodeBlocks[1].Language != "python" {
+		t.Errorf("expected second block language 'python', got %q", slide.CodeBlocks[1].Language)
+	}
+	if slide.CodeBlocks[1].Meta.Driver != "python" {
+		t.Errorf("expected second block driver 'python', got %q", slide.CodeBlocks[1].Meta.Driver)
+	}
+}
+
+func TestParse_CodeBlocks_NoLanguage(t *testing.T) {
+	p := New()
+	content := []byte("# Slide\n\n```\nplain text code\n```")
+
+	pres, err := p.Parse(content)
+	if err != nil {
+		t.Fatalf("Parse() returned error: %v", err)
+	}
+
+	if len(pres.Slides) != 1 {
+		t.Fatalf("expected 1 slide, got %d", len(pres.Slides))
+	}
+
+	slide := pres.Slides[0]
+	if len(slide.CodeBlocks) != 1 {
+		t.Fatalf("expected 1 code block, got %d", len(slide.CodeBlocks))
+	}
+
+	block := slide.CodeBlocks[0]
+	if block.Language != "" {
+		t.Errorf("expected empty language, got %q", block.Language)
+	}
+	if block.Code != "plain text code" {
+		t.Errorf("expected code 'plain text code', got %q", block.Code)
+	}
+}
+
+func TestParse_CodeBlocks_MultilineCode(t *testing.T) {
+	p := New()
+	content := []byte("# Slide\n\n```go\npackage main\n\nfunc main() {\n\tfmt.Println(\"Hello\")\n}\n```")
+
+	pres, err := p.Parse(content)
+	if err != nil {
+		t.Fatalf("Parse() returned error: %v", err)
+	}
+
+	if len(pres.Slides) != 1 {
+		t.Fatalf("expected 1 slide, got %d", len(pres.Slides))
+	}
+
+	slide := pres.Slides[0]
+	if len(slide.CodeBlocks) != 1 {
+		t.Fatalf("expected 1 code block, got %d", len(slide.CodeBlocks))
+	}
+
+	block := slide.CodeBlocks[0]
+	if block.Language != "go" {
+		t.Errorf("expected language 'go', got %q", block.Language)
+	}
+	if !contains(block.Code, "package main") {
+		t.Error("code should contain 'package main'")
+	}
+	if !contains(block.Code, "func main()") {
+		t.Error("code should contain 'func main()'")
+	}
+}
+
+func TestParse_CodeBlocks_AcrossSlides(t *testing.T) {
+	p := New()
+	content := []byte("# Slide 1\n\n```sql {driver: sqlite}\nSELECT 1;\n```\n\n---\n\n# Slide 2\n\n```bash {driver: shell}\necho hello\n```")
+
+	pres, err := p.Parse(content)
+	if err != nil {
+		t.Fatalf("Parse() returned error: %v", err)
+	}
+
+	if len(pres.Slides) != 2 {
+		t.Fatalf("expected 2 slides, got %d", len(pres.Slides))
+	}
+
+	// First slide
+	if len(pres.Slides[0].CodeBlocks) != 1 {
+		t.Fatalf("expected 1 code block in slide 1, got %d", len(pres.Slides[0].CodeBlocks))
+	}
+	if pres.Slides[0].CodeBlocks[0].Meta.Driver != "sqlite" {
+		t.Errorf("expected driver 'sqlite' in slide 1, got %q", pres.Slides[0].CodeBlocks[0].Meta.Driver)
+	}
+
+	// Second slide
+	if len(pres.Slides[1].CodeBlocks) != 1 {
+		t.Fatalf("expected 1 code block in slide 2, got %d", len(pres.Slides[1].CodeBlocks))
+	}
+	if pres.Slides[1].CodeBlocks[0].Meta.Driver != "shell" {
+		t.Errorf("expected driver 'shell' in slide 2, got %q", pres.Slides[1].CodeBlocks[0].Meta.Driver)
+	}
+}
+
+func TestParseCodeBlockMeta_YAMLFormat(t *testing.T) {
+	meta := parseCodeBlockMeta("driver: mysql, connection: prod")
+	if meta.Driver != "mysql" {
+		t.Errorf("expected driver 'mysql', got %q", meta.Driver)
+	}
+	if meta.Connection != "prod" {
+		t.Errorf("expected connection 'prod', got %q", meta.Connection)
+	}
+}
+
+func TestParseCodeBlockMeta_OnlyDriver(t *testing.T) {
+	meta := parseCodeBlockMeta("driver: postgres")
+	if meta.Driver != "postgres" {
+		t.Errorf("expected driver 'postgres', got %q", meta.Driver)
+	}
+	if meta.Connection != "" {
+		t.Errorf("expected empty connection, got %q", meta.Connection)
+	}
+}
+
+func TestParseCodeBlockMeta_Empty(t *testing.T) {
+	meta := parseCodeBlockMeta("")
+	if meta.Driver != "" {
+		t.Errorf("expected empty driver, got %q", meta.Driver)
+	}
+	if meta.Connection != "" {
+		t.Errorf("expected empty connection, got %q", meta.Connection)
+	}
+}
+
+func TestParseCodeBlocks_Direct(t *testing.T) {
+	content := "```sql {driver: mysql}\nSELECT * FROM users;\n```"
+	blocks := parseCodeBlocks(content)
+
+	if len(blocks) != 1 {
+		t.Fatalf("expected 1 block, got %d", len(blocks))
+	}
+
+	if blocks[0].Language != "sql" {
+		t.Errorf("expected language 'sql', got %q", blocks[0].Language)
+	}
+	if blocks[0].Meta.Driver != "mysql" {
+		t.Errorf("expected driver 'mysql', got %q", blocks[0].Meta.Driver)
+	}
+	if blocks[0].Code != "SELECT * FROM users;" {
+		t.Errorf("expected code 'SELECT * FROM users;', got %q", blocks[0].Code)
+	}
+}
+
 // helper function to check if a string contains a substring
 func contains(s, substr string) bool {
 	return len(s) >= len(substr) && (s == substr || len(substr) == 0 ||
