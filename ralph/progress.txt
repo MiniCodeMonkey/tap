@@ -1248,3 +1248,25 @@ Started: Fri Jan 23 16:33:21 CET 2026
   - Use `cleanup()` from @testing-library/svelte in afterEach to prevent test pollution
   - Run npm test scripts: `npm run test` (single run), `npm run test:watch` (watch mode), `npm run test:coverage` (with coverage)
 ---
+
+## 2026-01-23 - US-076
+- What was implemented: Setup Playwright E2E tests for the presentation viewer
+- Files changed:
+  - frontend/package.json (added @playwright/test dependency and test scripts: test:e2e, test:e2e:ui, test:e2e:debug)
+  - frontend/package-lock.json (lockfile update)
+  - frontend/playwright.config.ts (new - Playwright configuration with Chromium, dev server integration, screenshot/trace settings)
+  - frontend/e2e/navigation.spec.ts (new - 12 tests for keyboard navigation: ArrowRight/Left/Up/Down, Space, Enter, Home, End, Backspace)
+  - frontend/e2e/url-hash.spec.ts (new - 10 tests for URL hash navigation: direct hash, browser back/forward, persistence, invalid hashes)
+  - frontend/e2e/fragments.spec.ts (new - 10 tests for fragment reveals: incremental reveals, Space/Enter keys, navigation between fragments)
+  - frontend/e2e/hot-reload.spec.ts (new - 5 tests for hot reload: WebSocket connection, file change detection, debouncing, reconnection)
+- **Learnings for future iterations:**
+  - Playwright E2E tests live in frontend/e2e/ directory, separate from Vitest unit tests in src/
+  - Use playwright.config.ts webServer option to auto-start the Go dev server during tests
+  - E2E tests use go run ./cmd/tap dev testdata/sample.md to run against the full stack
+  - waitForSelector('.slide-container') is a good way to wait for the presentation to load
+  - Use page.waitForTimeout(500) after keyboard navigation to allow for slide transitions
+  - URL hash navigation uses 1-based indexing (#1, #2, #3) for user-friendly URLs
+  - Fragment tests need to account for the initial content state before first fragment reveal
+  - Hot reload tests use fs.writeFileSync to modify sample.md and trigger file watcher
+  - Test scripts: npm run test:e2e (headless), test:e2e:ui (interactive UI), test:e2e:debug (debugger)
+---
