@@ -105,6 +105,25 @@ func GenerateASCIIQRCode(url string) (string, error) {
 	return sb.String(), nil
 }
 
+// PrintPasswordProtectionStatus prints a warning about the presenter view protection status.
+// This should be called when the server starts to inform the presenter.
+func PrintPasswordProtectionStatus(password string) {
+	if password == "" {
+		fmt.Printf("\n%s Presenter view is NOT password protected.\n", warningSymbol)
+		fmt.Printf("  Anyone with the URL can access speaker notes.\n")
+		fmt.Printf("  Use --presenter-password to protect it.\n\n")
+	} else {
+		fmt.Printf("\n%s Presenter view is password protected.\n", secureSymbol)
+		fmt.Printf("  Password is included in the QR code URL.\n\n")
+	}
+}
+
+// Terminal symbols for status messages
+var (
+	warningSymbol = "\u26A0\uFE0F "  // Warning sign
+	secureSymbol  = "\U0001F512"     // Lock emoji
+)
+
 // getLocalIP returns the local IP address by attempting to connect to an external address.
 // This doesn't actually send any traffic - it just determines the outbound interface.
 func getLocalIP() (string, error) {

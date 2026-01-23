@@ -263,3 +263,17 @@ func TestQRCodeDifferentSizes(t *testing.T) {
 		})
 	}
 }
+
+func TestPrintPasswordProtectionStatus(t *testing.T) {
+	// Test with password - should not panic
+	t.Run("with password", func(t *testing.T) {
+		// Just verify it doesn't panic - output goes to stdout
+		PrintPasswordProtectionStatus("mysecret")
+	})
+
+	// Test without password - should not panic
+	t.Run("without password", func(t *testing.T) {
+		// Just verify it doesn't panic - output goes to stdout
+		PrintPasswordProtectionStatus("")
+	})
+}

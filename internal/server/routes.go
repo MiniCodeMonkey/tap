@@ -117,9 +117,23 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 }
 
 // handlePresenter serves the presenter view.
+// If a presenter password is configured, requires ?key=<password> query parameter.
 func (s *Server) handlePresenter(w http.ResponseWriter, r *http.Request) {
-	// For now, return a placeholder HTML page
-	// Password protection will be added in US-035
+	// Check password protection
+	password := s.GetPresenterPassword()
+	if password != "" {
+		key := r.URL.Query().Get("key")
+		if key == "" {
+			http.Error(w, "Forbidden: presenter password required. Use ?key=<password>", http.StatusForbidden)
+			return
+		}
+		if key != password {
+			http.Error(w, "Forbidden: incorrect presenter password", http.StatusForbidden)
+			return
+		}
+	}
+
+	// Serve the presenter view
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
 	fmt.Fprintf(w, `<!DOCTYPE html>

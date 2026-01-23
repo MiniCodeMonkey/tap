@@ -74,6 +74,116 @@ func TestHandlePresenter(t *testing.T) {
 	}
 }
 
+func TestHandlePresenter_PasswordProtection_NoPassword(t *testing.T) {
+	s := New(0)
+	s.SetPresenterPassword("mysecret")
+
+	// Request without password
+	req := httptest.NewRequest(http.MethodGet, "/presenter", nil)
+	w := httptest.NewRecorder()
+
+	s.handlePresenter(w, req)
+
+	resp := w.Result()
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusForbidden {
+		t.Errorf("expected status %d, got %d", http.StatusForbidden, resp.StatusCode)
+	}
+
+	body, _ := io.ReadAll(resp.Body)
+	bodyStr := string(body)
+
+	if !strings.Contains(bodyStr, "presenter password required") {
+		t.Error("expected error message about password required")
+	}
+}
+
+func TestHandlePresenter_PasswordProtection_WrongPassword(t *testing.T) {
+	s := New(0)
+	s.SetPresenterPassword("mysecret")
+
+	// Request with wrong password
+	req := httptest.NewRequest(http.MethodGet, "/presenter?key=wrongpassword", nil)
+	w := httptest.NewRecorder()
+
+	s.handlePresenter(w, req)
+
+	resp := w.Result()
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusForbidden {
+		t.Errorf("expected status %d, got %d", http.StatusForbidden, resp.StatusCode)
+	}
+
+	body, _ := io.ReadAll(resp.Body)
+	bodyStr := string(body)
+
+	if !strings.Contains(bodyStr, "incorrect presenter password") {
+		t.Error("expected error message about incorrect password")
+	}
+}
+
+func TestHandlePresenter_PasswordProtection_CorrectPassword(t *testing.T) {
+	s := New(0)
+	s.SetPresenterPassword("mysecret")
+
+	// Request with correct password
+	req := httptest.NewRequest(http.MethodGet, "/presenter?key=mysecret", nil)
+	w := httptest.NewRecorder()
+
+	s.handlePresenter(w, req)
+
+	resp := w.Result()
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("expected status %d, got %d", http.StatusOK, resp.StatusCode)
+	}
+
+	body, _ := io.ReadAll(resp.Body)
+	bodyStr := string(body)
+
+	if !strings.Contains(bodyStr, "Presenter View") {
+		t.Error("expected 'Presenter View' in body")
+	}
+}
+
+func TestHandlePresenter_PasswordProtection_EmptyKey(t *testing.T) {
+	s := New(0)
+	s.SetPresenterPassword("mysecret")
+
+	// Request with empty key parameter
+	req := httptest.NewRequest(http.MethodGet, "/presenter?key=", nil)
+	w := httptest.NewRecorder()
+
+	s.handlePresenter(w, req)
+
+	resp := w.Result()
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusForbidden {
+		t.Errorf("expected status %d, got %d", http.StatusForbidden, resp.StatusCode)
+	}
+}
+
+func TestHandlePresenter_NoPasswordConfigured(t *testing.T) {
+	s := New(0)
+	// No password set - should allow access without key
+
+	req := httptest.NewRequest(http.MethodGet, "/presenter", nil)
+	w := httptest.NewRecorder()
+
+	s.handlePresenter(w, req)
+
+	resp := w.Result()
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("expected status %d, got %d", http.StatusOK, resp.StatusCode)
+	}
+}
+
 func TestHandleAPIPresentation_NoPresentation(t *testing.T) {
 	s := New(0)
 
