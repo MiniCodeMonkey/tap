@@ -12,6 +12,13 @@ export default defineConfig({
   ],
 
   themeConfig: {
+    search: {
+      provider: 'local',
+      options: {
+        detailedView: true
+      }
+    },
+
     nav: [
       { text: 'Getting Started', link: '/getting-started' },
       { text: 'Guide', link: '/guide/writing-slides' },
