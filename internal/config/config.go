@@ -106,3 +106,35 @@ func DefaultConfig() *Config {
 		Drivers:     make(map[string]DriverConfig),
 	}
 }
+
+// validAspectRatios contains the allowed aspect ratio values.
+var validAspectRatios = map[string]bool{
+	"16:9":  true,
+	"4:3":   true,
+	"16:10": true,
+}
+
+// validTransitions contains the allowed transition values.
+var validTransitions = map[string]bool{
+	"none":  true,
+	"fade":  true,
+	"slide": true,
+	"push":  true,
+	"zoom":  true,
+}
+
+// Validate checks the Config for invalid values and returns an error
+// with a descriptive message if validation fails.
+func (c *Config) Validate() error {
+	// Validate aspect ratio
+	if c.AspectRatio != "" && !validAspectRatios[c.AspectRatio] {
+		return fmt.Errorf("invalid aspectRatio %q: must be one of 16:9, 4:3, or 16:10", c.AspectRatio)
+	}
+
+	// Validate transition
+	if c.Transition != "" && !validTransitions[c.Transition] {
+		return fmt.Errorf("invalid transition %q: must be one of none, fade, slide, push, or zoom", c.Transition)
+	}
+
+	return nil
+}
