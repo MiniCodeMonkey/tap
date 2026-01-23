@@ -80,6 +80,7 @@ func (s *Server) SetupRoutes() {
 	loggedMux.HandleFunc("GET /", s.handleIndex)
 	loggedMux.HandleFunc("GET /presenter", s.handlePresenter)
 	loggedMux.HandleFunc("GET /api/presentation", s.handleAPIPresentation)
+	loggedMux.HandleFunc("POST /api/execute", s.handleAPIExecute)
 	loggedMux.HandleFunc("GET /qr", s.handleQR)
 
 	// Wrap with logging middleware and set as the server handler

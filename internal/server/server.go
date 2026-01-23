@@ -13,6 +13,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/tapsh/tap/internal/driver"
 	"github.com/tapsh/tap/internal/transformer"
 )
 
@@ -20,6 +21,7 @@ import (
 type Server struct {
 	// Fields ordered by size for better memory alignment
 	presentation *transformer.TransformedPresentation
+	registry     *driver.Registry
 	httpServer   *http.Server
 	mux          *http.ServeMux
 	shutdownCh   chan struct{}
