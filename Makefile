@@ -30,6 +30,29 @@ build:
 test:
 	$(GOTEST) ./...
 
+# Run benchmarks
+.PHONY: bench
+bench:
+	$(GOTEST) -bench=. -benchmem ./...
+
+# Run benchmarks with specific packages
+.PHONY: bench-parser
+bench-parser:
+	$(GOTEST) -bench=. -benchmem ./internal/parser/...
+
+.PHONY: bench-builder
+bench-builder:
+	$(GOTEST) -bench=. -benchmem ./internal/builder/...
+
+.PHONY: bench-server
+bench-server:
+	$(GOTEST) -bench=. -benchmem ./internal/server/...
+
+# Run performance target tests
+.PHONY: bench-targets
+bench-targets:
+	$(GOTEST) -v -run "PerformanceTarget" ./...
+
 # Run linter (golangci-lint)
 .PHONY: lint
 lint:
@@ -96,4 +119,9 @@ help:
 	@echo "  clean          - Remove build artifacts"
 	@echo "  deps           - Download and tidy dependencies"
 	@echo "  typecheck      - Verify code compiles"
+	@echo "  bench          - Run all benchmarks"
+	@echo "  bench-parser   - Run parser benchmarks only"
+	@echo "  bench-builder  - Run builder benchmarks only"
+	@echo "  bench-server   - Run server benchmarks only"
+	@echo "  bench-targets  - Run performance target tests"
 	@echo "  help           - Show this help message"
