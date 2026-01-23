@@ -24,6 +24,8 @@ Started: Fri Jan 23 16:33:21 CET 2026
 - Frontend: Use `svelte/store` for state (writable, derived, type Readable)
 - Benchmarks: Use `make bench` for all benchmarks, `make bench-targets` for performance target tests
 - Benchmarks: Server SetupRoutes() is a method (not standalone), WebSocketHub uses Run() (not Start())
+- Tailwind v4: Use `@import "tailwindcss"` (not @tailwind directives), and `@tailwindcss/postcss` plugin (not tailwindcss directly)
+- Tailwind v4: Reference JS config with `@config "../tailwind.config.js"` in CSS file
 
 ---
 
@@ -1346,4 +1348,21 @@ Started: Fri Jan 23 16:33:21 CET 2026
   - Theme examples use the same structure: design philosophy, typography, code blocks, layouts, when to use
   - Include multiline speaker notes using YAML | syntax in directive comments
   - Fragments work well for incremental reveals in teaching-style presentations
+---
+
+## 2026-01-24 - US-101
+- What was implemented: Installed and configured TailwindCSS v4 in frontend build
+- Files changed:
+  - frontend/package.json (added tailwindcss, @tailwindcss/postcss, postcss, autoprefixer as dev dependencies)
+  - frontend/package-lock.json (dependency lockfile)
+  - frontend/tailwind.config.js (new - Tailwind config with content paths for Svelte/TS files)
+  - frontend/postcss.config.js (new - PostCSS config with @tailwindcss/postcss plugin)
+  - frontend/src/app.css (added Tailwind import directives)
+- **Learnings for future iterations:**
+  - Tailwind CSS v4 uses `@import "tailwindcss"` instead of the old `@tailwind base/components/utilities` directives
+  - Tailwind CSS v4 requires `@tailwindcss/postcss` package - the main `tailwindcss` package is no longer a PostCSS plugin directly
+  - Use `@config "../tailwind.config.js"` directive in CSS to reference the JS config file
+  - PostCSS config uses `'@tailwindcss/postcss': {}` instead of `tailwindcss: {}`
+  - Tailwind v4 generates CSS custom properties like `--color-red-500` and utilities reference them
+  - Build output includes Tailwind base layer, theme variables, and utility classes in @layer sections
 ---

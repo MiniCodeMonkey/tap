@@ -17,8 +17,8 @@
         "Typecheck passes"
       ],
       "priority": 1,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Tailwind v4 uses @import 'tailwindcss' and @tailwindcss/postcss plugin"
     },
     {
       "id": "US-102",
