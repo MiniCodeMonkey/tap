@@ -33,13 +33,67 @@
 ### 1. **Presentation Format**
 - **Markdown-first** with frontmatter configuration
 - Slides separated by `---` (standard markdown convention)
-- Support for inline HTML/CSS escape hatches
-- Custom component syntax (e.g., `::left::` `::right::` for two-column layouts)
-- Metadata blocks for code execution configuration
+- Support for inline HTML when needed (though unnecessary for 90%+ of use cases)
+- **Directive system** for configuration (see below)
 
-### 2. **Layout System**
-- **Auto-detection** of layout based on content structure
-- **Explicit override** via `<!-- layout: name -->` comments
+**File Structure:**
+```markdown
+---
+title: My Presentation
+theme: minimal
+---
+
+# First Slide
+
+Content here...
+
+---
+
+# Second Slide
+
+More content...
+```
+
+The first `---` opens frontmatter, the second `---` closes frontmatter AND begins slide 1, and each subsequent `---` starts a new slide.
+
+### 2. **Directive System**
+
+Tap uses a two-tier directive system:
+
+**Global Directives (Frontmatter)**
+- YAML block at the top of the markdown file
+- Apply to the entire presentation
+- Set defaults for theme, transitions, animations, driver connections, etc.
+
+**Local Directives (Per-Slide)**
+- YAML block inside an HTML comment at the start of a slide
+- Override global settings for that specific slide
+- Full YAML syntax supported (multi-line values, etc.)
+
+Example:
+```markdown
+---
+<!--
+layout: two-column
+transition: slide
+notes: |
+  Remember to demo this
+  And mention the performance benefits
+-->
+
+# Slide Title
+```
+
+**Precedence:** Local directives override global directives.
+
+**Environment Variables:**
+- Reference environment variables with `$VAR_NAME` syntax in frontmatter
+- Automatically loads `.env` file from presentation directory if present
+- Useful for credentials: `password: $MYSQL_PASSWORD`
+- Variables are resolved at runtime, never written to output
+
+### 3. **Layout System**
+- **Explicit selection** via local directive block with `layout: name`
 - 10+ built-in layouts per theme:
   - Title slide
   - Section header
@@ -52,30 +106,48 @@
   - Split media (image + text)
   - Blank/Custom
 
-### 3. **Theme System**
+### 4. **Theme System**
 - 5 distinctive built-in themes with completely different aesthetics:
   1. **Minimal** - Clean, Apple-style, Helvetica, whitespace
   2. **Gradient** - Modern, colorful gradients, glassmorphism
   3. **Terminal** - Hacker aesthetic, monospace, CRT effects
   4. **Brutalist** - Bold, geometric, high contrast
   5. **Keynote** - Professional, subtle shadows, smooth
-- Custom theme support via configuration files
-- Themes control: typography, colors, layouts, animations, CSS
+- Custom themes can be defined in the presentation's frontmatter
+- Themes control: typography, colors, layouts, animations, transitions, CSS
 
-### 4. **Animation System**
-- **Remotion-inspired** declarative animations (frame-based, composable, timeline-driven)
+### 5. **Slide Transitions**
+- 5 built-in slide-to-slide transitions:
+  1. **None** - Instant switch (no animation)
+  2. **Fade** - Cross-fade between slides (default)
+  3. **Slide** - Horizontal slide left/right
+  4. **Push** - New slide pushes old slide out
+  5. **Zoom** - Subtle zoom in/out effect
+- Set globally in frontmatter: `transition: fade`
+- Override per-slide with `transition: slide` in local directive block
+- Themes may specify their own default transition
+
+### 6. **Animation System**
+- **Svelte-powered** declarative animations (composable, timeline-driven)
 - Built-in animation presets:
-  - Fade/slide transitions
   - Typewriter effects for code
   - Count-up animations for numbers
   - Cascade/stagger for lists
   - Spring physics for smooth motion
 - Theme-specific animation defaults
 - Per-element animation overrides via CSS classes
-- Timeline-based multi-step reveals
 
-### 5. **Code Presentation**
+**Incremental Reveals (Fragments):**
+- Reveal content step-by-step with click/keypress
+- Use `<!-- pause -->` inline to create reveal points within a slide
+- Lists can auto-fragment with `fragments: true` in local directives (reveals bullets one at a time)
+- Fragments work with all content types (text, code, images)
+- Configure globally in frontmatter or per-slide with local directive block
+
+### 7. **Code Presentation**
 - **Shiki** for syntax highlighting (VS Code themes)
+  - Build-time highlighting by default (faster, smaller bundle)
+  - Runtime highlighting loaded automatically when presentation contains driver-enabled code blocks
 - Line highlighting and ranges
 - Multi-step code reveals (progressive disclosure)
 - Code diffs visualization
@@ -83,19 +155,28 @@
 - Terminal recording playback (Asciinema)
 - Configurable font sizes per-slide
 
-### 6. **Live Code Execution**
+### 8. **Live Code Execution**
 - **Driver-based architecture** for extensibility
 - Built-in drivers:
   - **SQLite** - In-memory or file-based queries
   - **MySQL/PostgreSQL** - Via configured connections
-  - **Shell** - Execute system commands (uptime, scripts, etc.)
+  - **Shell** - Execute system commands, scripts, any CLI tool
   - **Custom** - Community-provided drivers
-- Connection configuration via `tap.yaml`
+- Connection configuration via frontmatter (credentials via environment variables)
 - Results displayed in real-time on slide
 - Error handling and timeout protection
-- Security sandboxing (shell command whitelist, timeouts)
+- **Requires `tap dev`** — static builds display a graceful placeholder indicating live code is not available
 
-### 7. **Image Handling**
+**Code Block Syntax:**
+````markdown
+```sql {driver: "mysql", connection: "demo"}
+SELECT * FROM users LIMIT 5;
+```
+````
+
+The driver and connection are specified in the code block's info string using `{key: "value"}` syntax.
+
+### 9. **Image Handling**
 - **Relative paths:** Images referenced relative to the markdown file location
   - `![Alt](./images/diagram.png)` resolves from the markdown file's directory
 - **Absolute URLs:** External images via `https://` URLs (user's responsibility for availability)
@@ -103,24 +184,33 @@
   - Images are placed in `dist/assets/` with content-hashed filenames
   - HTML references are rewritten automatically
 - **Supported formats:** PNG, JPG, JPEG, GIF, SVG, WebP
-- **Background images:** Via layout directives or CSS
+- **Missing images:** Display graceful inline error message on the slide (not a build failure)
 
-### 8. **Offline Support**
+**Image Positioning & Sizing:**
+- **Inline:** Default behavior, image flows with content
+- **Sized:** `![Alt](img.png){width=50%}` or `{width=300px}` (custom markdown extension)
+- **Left/Right:** Use layout directives or `{position=left}` / `{position=right}`
+- **Cover:** Use `layout: cover` with `background: ./image.png` in local directives for full-bleed image slides
+- **Future:** AI-generated images via Gemini integration (planned)
+
+### 10. **Offline Support**
 - Built presentations are fully self-contained
 - No external CSS/JS dependencies loaded at runtime
 - All fonts embedded or use system font stacks
 - Only external URLs explicitly used by the presenter (e.g., external images) require connectivity
 
-### 9. **Interactive CLI/TUI**
+### 11. **Interactive CLI/TUI**
 - **Scaffolding commands** for creating new presentations (`tap new`)
-- **Interactive slide builder** for adding slides to existing presentations (`tap add`)
+- **Dev server is a full TUI** (`tap dev`):
+  - Live preview with hot reload
+  - File watching for instant updates (markdown, themes, images — all assets)
+  - Built-in slide builder (press `a` to add slide)
+  - Keyboard shortcuts for common operations
+  - ASCII art branding and friendly interface
+- **Standalone slide builder** (`tap add`) for adding slides when dev server isn't running
   - TUI presents available layouts
   - User selects layout and fills in content fields
   - Generated markdown appended to presentation file
-- **Live preview** in dev mode with hot reload
-- **Keyboard shortcuts** for common operations
-- **File watching** for instant updates
-- ASCII art branding and friendly CLI interface
 
 ---
 
@@ -131,52 +221,57 @@
 **Core Components:**
 - **CLI Framework:** Cobra for command interface
 - **TUI:** Bubble Tea + Lip Gloss for interactive forms, selects, and styling
-- **Markdown Parser:** goldmark for robust parsing
+- **Markdown Parser:** goldmark with common extensions enabled (tables, strikethrough, task lists, autolinks)
 - **Config Parser:** gopkg.in/yaml.v3 for YAML configuration
-- **Dev Server:** Built-in net/http with gorilla/websocket for hot reload and presenter sync
+- **Dev Server:** Built-in net/http with nhooyr.io/websocket for hot reload and presenter sync
+  - Auto-reconnect on connection loss with subtle disconnection indicator in slide corner
 - **Code Execution:** Driver registry pattern with os/exec for external processes
 - **QR Code:** skip2/go-qrcode for presenter mode QR codes (terminal + `/qr` endpoint)
 - **Build System:** Static site generator for deployment
-- **PDF Export:** Playwright via rod or playwright-go
+- **PDF Export:** Playwright via playwright-go (requires Chrome/Chromium)
 - **Distribution:** Single binary (cross-compiled for macOS, Linux, Windows)
 
 **Commands:**
 - `tap new` - Create new presentation with interactive prompts
-- `tap dev <file>` - Start dev server with hot reload
+- `tap dev <file>` - Start dev server TUI with hot reload, file watching, and slide builder
   - `--port=3000` - Server port (default: 3000)
   - `--presenter-password=<secret>` - Require password for presenter mode
 - `tap build <file>` - Generate static HTML/CSS/JS bundle
+- `tap serve [dir]` - Serve built presentation for preview (defaults to `dist/`)
 - `tap pdf <file>` - Export to PDF via Playwright
-- `tap add` - Interactive slide builder (TUI for adding slides with layout selection)
+  - `--content=slides` - Slides only (default)
+  - `--content=notes` - Speaker notes only
+  - `--content=both` - Slides with speaker notes
+- `tap add [file]` - Standalone slide builder TUI (when dev server isn't running)
 
 ### Frontend: Svelte + Vite
 
 **Core Components:**
 - **UI Framework:** Svelte 5 (compiles to tiny vanilla JS)
 - **Build Tool:** Vite for fast development and bundling
-- **Animation:** Svelte transitions + GSAP for advanced effects
-- **Code Highlighting:** Shiki (runtime or build-time)
+- **Animation:** Svelte transitions and spring physics (no external animation libraries)
+- **Code Highlighting:** Shiki (build-time by default; runtime loaded automatically for presentations with live code drivers)
 - **WebSocket Client:** For hot reload communication
-- **Router:** Simple hash-based navigation
+- **Router:** Hash-based navigation (`#5` for slide 5)
 
 **Build Requirement:** Node.js 18+ is required to build the frontend assets. The Go binary embeds pre-built frontend assets, so end users don't need Node.js installed.
 
 **Player Features:**
 - Keyboard navigation (arrow keys, space)
-- Speaker notes via HTML comments: `<!-- Your speaker notes here -->`
+- Speaker notes via local directive block (see Directive System)
 - Presenter mode (see below)
 - Slide overview/thumbnail view for navigation
 - Progress indicator
 - Slide counter
-- URL-based slide access (#/5)
+- URL-based slide access (`#5`)
 
 ### Presenter Mode
 
 **Architecture:** Dual-window with WebSocket synchronization (requires `tap dev`, not available in static builds).
 
 **URLs:**
-- Audience view: `http://localhost:3000/` or `http://localhost:3000/#/5`
-- Presenter view: `http://localhost:3000/presenter` or `http://localhost:3000/presenter#/5`
+- Audience view: `http://localhost:3000/` or `http://localhost:3000/#5`
+- Presenter view: `http://localhost:3000/presenter` or `http://localhost:3000/presenter#5`
 
 **Presenter View Features:**
 - Current slide (compact view)
@@ -189,7 +284,8 @@
 **Cross-Device Support:**
 - Dev server binds to `0.0.0.0` for network access
 - Access presenter view from any device on the same network (e.g., iPad)
-- **QR Code:** Displayed in terminal on server start and available at `/qr` endpoint for easy mobile connection
+- **QR Code:** Displayed in terminal on server start and available at `/qr` endpoint
+  - Encodes the presenter view URL (includes password if set)
 - **Password Protection:** Optional `--presenter-password=<secret>` flag
   - When set, `/presenter` requires `?key=<secret>` query parameter
   - QR code includes the password automatically
@@ -213,9 +309,9 @@ The driver system enables live code execution during presentations by shelling o
 **Interface Design:**
 - Drivers execute external processes via `os/exec`
 - Registry pattern for driver discovery
-- Configuration via `tap.yaml`
-- Sandboxed execution with command whitelists
-- Timeout and resource limits
+- Configuration via frontmatter (credentials via `.env` file)
+- Full developer control — no command restrictions (presenters control their own slides)
+- Timeout protection (default 10s, configurable)
 - Structured result format (success, data, error)
 
 **Error Handling UX:**
@@ -259,13 +355,12 @@ The driver system enables live code execution during presentations by shelling o
 ### vs. Marp
 - **More flexible layouts** (not rigid template-based)
 - **Live code execution** (not just static highlighting)
-- **Better animations** (Remotion-style, theme-integrated)
+- **Better animations** (Svelte-powered, theme-integrated)
 - **Interactive dev experience** (CLI, hot reload, slide builder)
 
 ### vs. Slidev
 - **Less configuration required** (beautiful out-of-box)
 - **Simpler syntax** (pure markdown, no Vue components needed)
-- **Auto-layout detection** (no manual layout specification)
 - **Single binary** (no Node.js runtime required for end users)
 
 ### vs. PowerPoint/Keynote
@@ -289,21 +384,26 @@ The driver system enables live code execution during presentations by shelling o
 
 **Option A - Manual:**
 - Edit `slides.md` directly in preferred text editor
-- Hot reload shows changes instantly
+- Hot reload shows changes instantly (when dev server running)
 
-**Option B - Interactive:**
-- Run `tap add` (while dev server running)
-- TUI shows layout picker
-- Form fields based on layout choice
-- Generated markdown inserted into file
+**Option B - Interactive (in dev server):**
+- Press `a` in the `tap dev` TUI
+- Layout picker appears inline
+- Generated markdown appended to file
+
+**Option C - Interactive (standalone):**
+- Run `tap add slides.md` when dev server isn't running
+- Same TUI layout picker experience
+- Generated markdown appended to file
 
 ### Development Workflow
 
-1. Write slides in markdown
-2. Preview in browser updates live
-3. Press 'a' in terminal to add slide
-4. Press 'o' to open/refresh browser
-5. Keyboard shortcuts for navigation during preview
+1. Run `tap dev slides.md` to start the TUI
+2. Write slides in markdown (in your editor)
+3. Preview in browser updates live via hot reload
+4. Press `a` in the TUI to add a new slide interactively
+5. Press `o` to open/refresh browser
+6. Press `q` to quit the dev server
 
 ### Building for Production
 
@@ -346,19 +446,23 @@ The driver system enables live code execution during presentations by shelling o
 
 ---
 
-## Configuration File Structure
+## Configuration
 
-### `slides.md` Frontmatter
+All configuration lives in the presentation file's YAML frontmatter. No separate config files needed.
+
+### Frontmatter (Global Directives)
 ```yaml
+---
 title: Presentation Title
 theme: minimal
 author: Name
 date: 2026-01-23
-aspectRatio: 16:9  # Default. Supported: 16:9, 4:3, 16:10
-```
+aspectRatio: 16:9        # 16:9 (default), 4:3, or 16:10
+transition: fade         # none, fade (default), slide, push, zoom
+codeTheme: github-dark   # Shiki theme for syntax highlighting
+fragments: false         # Auto-fragment lists (default: false)
 
-### `tap.yaml` (optional project config)
-```yaml
+# Driver configuration for live code execution
 drivers:
   mysql:
     demo:
@@ -366,21 +470,46 @@ drivers:
       port: 3306
       database: demo_db
       username: root
-      password: secret
+      password: $MYSQL_PASSWORD  # Environment variable reference
   shell:
-    timeout: 10
-    allowed_commands:
-      - uptime
-      - php
-      - node
-      - python
-
-defaults:
-  theme: minimal
-  animations: true
-  codeTheme: github-dark
-  aspectRatio: 16:9
+    timeout: 10  # Seconds before execution is killed
+---
 ```
+
+### Environment Variables
+- Create a `.env` file in the same directory as your presentation
+- Reference variables in frontmatter with `$VAR_NAME` syntax
+- Variables are resolved at runtime, never written to build output
+- Example `.env`:
+  ```
+  MYSQL_PASSWORD=secret123
+  API_KEY=abc123
+  ```
+
+### Local Directives (Per-Slide)
+Place a YAML block inside an HTML comment at the start of any slide:
+```markdown
+---
+<!--
+layout: two-column
+transition: slide
+fragments: true
+background: ./images/bg.png
+notes: |
+  Remember to explain the diagram
+  Point out the async flow
+-->
+
+# Slide Title
+Content here...
+```
+
+Available local directives:
+- `layout` - Override the auto-detected layout
+- `transition` - Override the slide transition
+- `fragments` - Enable/disable incremental reveals
+- `background` - Set a background image
+- `notes` - Speaker notes (supports multi-line with `|`)
 
 ### Supported Aspect Ratios
 - **16:9** (default) - Standard widescreen, works for most projectors and screens
@@ -430,7 +559,7 @@ All Go tests use the standard `testing` package with table-driven tests.
 
 ### Installation Methods
 1. **Direct download:** Pre-built binaries for macOS (Intel + Apple Silicon), Linux, Windows
-2. **Homebrew:** `brew install tapsh/tap/tap`
+2. **Homebrew:** `brew install tap-slides`
 3. **Go install:** `go install github.com/tapsh/tap@latest`
 
 ### System Requirements
@@ -440,8 +569,9 @@ All Go tests use the standard `testing` package with table-driven tests.
 
 ### Deployment Options
 - **Static hosting:** Build to static files, deploy anywhere
-- **Self-hosted:** Run dev server in production (not recommended)
+- **Local preview:** Use `tap serve` to preview built output before deploying
 - **PDF export:** Standalone PDF file (requires Chrome/Chromium for Playwright)
+  - Use `--notes` flag to include presenter notes
 
 ---
 
@@ -486,11 +616,12 @@ All Go tests use the standard `testing` package with table-driven tests.
 - Strong standard library (HTTP, WebSocket, file I/O)
 
 ### Why Svelte Frontend?
-- Compiles to vanilla JS
-- Built-in animation system
+- Compiles to vanilla JS (tiny bundle size)
+- Built-in animation and transition system (no external animation libraries needed)
 - Reactive updates (perfect for live code)
 - Simple learning curve
 - Clean component architecture
+- Spring physics built into the framework
 
 ### Why Not Full Framework?
 - Avoid complexity (focused tool, not a web app)
@@ -499,9 +630,8 @@ All Go tests use the standard `testing` package with table-driven tests.
 - Single binary distribution
 
 ### Security Considerations
-- Code execution sandboxing via command whitelist
-- Shell commands must be explicitly allowed in `tap.yaml`
-- Database connection validation
+- Presenters have full control over code execution in their own slides (no restrictions)
+- Database credentials loaded from environment variables (never committed to git)
 - Timeout enforcement (default 10s, configurable)
 - No eval() or arbitrary code execution in frontend
 
