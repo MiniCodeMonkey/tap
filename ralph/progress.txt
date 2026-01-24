@@ -1581,3 +1581,17 @@ Started: Fri Jan 23 16:33:21 CET 2026
   - Include reduced motion support via @media (prefers-reduced-motion: reduce)
   - Verify theme is compiled into CSS bundle with `grep ".theme-paper" dist/assets/*.css`
 ---
+
+## 2026-01-24 - US-112
+- What was implemented: Aurora theme - vibrant northern lights aesthetic with animated gradients and glassmorphism
+- Files changed:
+  - frontend/src/lib/themes/aurora.css (new - complete Aurora theme with CSS custom properties)
+  - frontend/src/app.css (added import for aurora.css)
+- **Learnings for future iterations:**
+  - Theme CSS files follow the pattern established in paper.css: CSS custom properties in .theme-{name} class
+  - Animated gradient mesh uses @keyframes with background-position animation (background-size: 400% 400%)
+  - Glassmorphism requires both backdrop-filter and -webkit-backdrop-filter for cross-browser support
+  - Glowing effects use multi-layer box-shadow with rgba colors (0 0 1px, 0 4px 16px, inset 0 0 60px)
+  - Always include @media (prefers-reduced-motion: reduce) to disable animations for accessibility
+  - Theme imports go in app.css after theme-tokens.css
+---
