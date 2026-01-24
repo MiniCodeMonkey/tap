@@ -140,8 +140,8 @@ func (p *Parser) Parse(content []byte) (*Presentation, error) {
 		// Parse code blocks from the slide content
 		codeBlocks := parseCodeBlocks(contentAfterDirectives)
 
-		// Parse fragments from pause markers
-		fragments := parseFragments(contentAfterDirectives)
+		// Parse fragments from pause markers and render to HTML
+		fragments := p.parseFragments(contentAfterDirectives)
 
 		slide := Slide{
 			Content:    contentAfterDirectives,
@@ -345,9 +345,9 @@ func parseCodeBlockMeta(content string) CodeBlockMeta {
 }
 
 // parseFragments splits slide content on <!-- pause --> markers.
-// It returns a slice of Fragment structs, each containing content for incremental reveal.
-// If no pause markers are found, returns a single fragment with all content.
-func parseFragments(content string) []Fragment {
+// It returns a slice of Fragment structs, each containing HTML content for incremental reveal.
+// If no pause markers are found, returns a single fragment with all content as HTML.
+func (p *Parser) parseFragments(content string) []Fragment {
 	// Split content on pause markers
 	parts := pausePattern.Split(content, -1)
 
@@ -361,8 +361,15 @@ func parseFragments(content string) []Fragment {
 			continue
 		}
 
+		// Render fragment content to HTML
+		html, err := p.renderHTML([]byte(trimmedContent))
+		if err != nil {
+			// If rendering fails, use the raw content
+			html = trimmedContent
+		}
+
 		fragments = append(fragments, Fragment{
-			Content: trimmedContent,
+			Content: html,
 			Index:   i,
 		})
 	}

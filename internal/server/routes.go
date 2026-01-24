@@ -9,91 +9,30 @@ import (
 	"os"
 	"path"
 	"strings"
-	"time"
 
-	"github.com/fatih/color"
 	"github.com/tapsh/tap/embedded"
 )
 
-// Color definitions for request logging
-var (
-	methodColor  = color.New(color.FgCyan, color.Bold)
-	pathColor    = color.New(color.FgWhite)
-	statusOKColor = color.New(color.FgGreen)
-	statusErrColor = color.New(color.FgRed)
-	timeColor    = color.New(color.FgHiBlack)
-)
-
-// loggingMiddleware wraps an http.Handler and logs requests with colorized output.
-func loggingMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		start := time.Now()
-
-		// Wrap the response writer to capture status code
-		lrw := &loggingResponseWriter{ResponseWriter: w, statusCode: http.StatusOK}
-
-		// Call the next handler
-		next.ServeHTTP(lrw, r)
-
-		// Log the request with colors
-		duration := time.Since(start)
-		logRequest(r.Method, r.URL.Path, lrw.statusCode, duration)
-	})
-}
-
-// loggingResponseWriter wraps http.ResponseWriter to capture the status code.
-type loggingResponseWriter struct {
-	http.ResponseWriter
-	statusCode int
-}
-
-// WriteHeader captures the status code before writing it.
-func (lrw *loggingResponseWriter) WriteHeader(code int) {
-	lrw.statusCode = code
-	lrw.ResponseWriter.WriteHeader(code)
-}
-
-// logRequest logs a request with colorized output.
-func logRequest(method, path string, status int, duration time.Duration) {
-	// Format status with appropriate color
-	var statusStr string
-	if status >= 200 && status < 400 {
-		statusStr = statusOKColor.Sprintf("%d", status)
-	} else {
-		statusStr = statusErrColor.Sprintf("%d", status)
-	}
-
-	// Format duration
-	durationStr := timeColor.Sprintf("%v", duration.Round(time.Microsecond))
-
-	// Print the log line
-	fmt.Printf("%s %s %s %s\n",
-		methodColor.Sprint(method),
-		pathColor.Sprint(path),
-		statusStr,
-		durationStr,
-	)
-}
-
 // SetupRoutes configures all HTTP routes on the server.
 // This should be called before Start().
+// Any routes registered with RegisterHandlerFunc before or after this call
+// will also be included since we use the server's shared mux.
 func (s *Server) SetupRoutes() {
-	// Create a mux that applies logging to all requests
-	loggedMux := http.NewServeMux()
-
-	// Register all routes
-	loggedMux.HandleFunc("GET /", s.handleIndex)
-	loggedMux.HandleFunc("GET /presenter", s.handlePresenter)
-	loggedMux.HandleFunc("GET /api/presentation", s.handleAPIPresentation)
-	loggedMux.HandleFunc("GET /api/custom-theme.css", s.handleCustomTheme)
-	loggedMux.HandleFunc("POST /api/execute", s.handleAPIExecute)
-	loggedMux.HandleFunc("GET /qr", s.handleQR)
+	// Register all routes on the server's shared mux
+	s.mux.HandleFunc("GET /", s.handleIndex)
+	s.mux.HandleFunc("GET /presenter", s.handlePresenter)
+	s.mux.HandleFunc("GET /api/presentation", s.handleAPIPresentation)
+	s.mux.HandleFunc("GET /api/custom-theme.css", s.handleCustomTheme)
+	s.mux.HandleFunc("POST /api/execute", s.handleAPIExecute)
+	s.mux.HandleFunc("GET /qr", s.handleQR)
 
 	// Serve static assets (JS, CSS) from embedded dist/assets/
-	loggedMux.HandleFunc("GET /assets/", s.handleAssets)
+	s.mux.HandleFunc("GET /assets/", s.handleAssets)
 
-	// Wrap with logging middleware and set as the server handler
-	s.httpServer.Handler = loggingMiddleware(loggedMux)
+	// Note: We don't wrap with logging middleware here because the TUI
+	// manages the terminal in alternate screen mode, and raw fmt.Printf
+	// output would interfere with the display. HTTP activity is visible
+	// through the TUI's connection status instead.
 }
 
 // handleIndex serves the main presentation viewer (index.html).

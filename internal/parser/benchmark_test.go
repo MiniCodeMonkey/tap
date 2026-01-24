@@ -254,11 +254,12 @@ func BenchmarkParseCodeBlocks(b *testing.B) {
 
 // BenchmarkParseFragments benchmarks fragment parsing in isolation.
 func BenchmarkParseFragments(b *testing.B) {
+	p := New()
 	content := "Part 1\n\n<!-- pause -->\n\nPart 2\n\n<!-- pause -->\n\nPart 3\n\n<!-- pause -->\n\nPart 4\n\n<!-- pause -->\n\nPart 5"
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		parseFragments(content)
+		p.parseFragments(content)
 	}
 }
 

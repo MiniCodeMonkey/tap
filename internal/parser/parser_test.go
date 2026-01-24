@@ -1063,8 +1063,9 @@ Content 2`)
 }
 
 func TestParseFragments_Direct(t *testing.T) {
+	p := New()
 	content := "Part 1\n\n<!-- pause -->\n\nPart 2\n\n<!-- pause -->\n\nPart 3"
-	fragments := parseFragments(content)
+	fragments := p.parseFragments(content)
 
 	if len(fragments) != 3 {
 		t.Fatalf("expected 3 fragments, got %d", len(fragments))
@@ -1082,15 +1083,17 @@ func TestParseFragments_Direct(t *testing.T) {
 }
 
 func TestParseFragments_EmptyContent(t *testing.T) {
-	fragments := parseFragments("")
+	p := New()
+	fragments := p.parseFragments("")
 	if len(fragments) != 0 {
 		t.Errorf("expected 0 fragments for empty content, got %d", len(fragments))
 	}
 }
 
 func TestParseFragments_OnlyPauses(t *testing.T) {
+	p := New()
 	content := "<!-- pause -->\n<!-- pause -->\n<!-- pause -->"
-	fragments := parseFragments(content)
+	fragments := p.parseFragments(content)
 	// All empty, should result in no fragments
 	if len(fragments) != 0 {
 		t.Errorf("expected 0 fragments for only pause markers, got %d", len(fragments))

@@ -225,6 +225,7 @@
 		class="slide w-[1920px] origin-center bg-theme-bg text-theme-text transition-transform duration-slide-fast ease-out motion-reduce:transition-none"
 		bind:this={slideRef}
 		style:aspect-ratio={cssAspectRatio}
+		style:height="{1920 / numericRatio}px"
 		style:transform="scale({scale})"
 	>
 		{#if children}

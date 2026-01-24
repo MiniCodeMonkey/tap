@@ -43,10 +43,11 @@
 	let slideTransition = $derived<Transition>(slide.transition ?? 'fade');
 
 	/**
-	 * Check if the slide has fragments.
+	 * Check if the slide has multiple fragments (actual pause markers).
+	 * A single fragment means no pause markers - just show the slide HTML directly.
 	 */
 	let hasFragments = $derived(
-		slide.fragments !== undefined && slide.fragments.length > 0
+		slide.fragments !== undefined && slide.fragments.length > 1
 	);
 
 	/**

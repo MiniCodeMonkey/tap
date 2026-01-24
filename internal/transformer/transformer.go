@@ -93,10 +93,18 @@ func (t *Transformer) Transform(pres *parser.Presentation) *TransformedPresentat
 
 // transformSlide converts a single parser.Slide to TransformedSlide.
 func (t *Transformer) transformSlide(slide parser.Slide) TransformedSlide {
+	layout := t.resolveLayout(slide)
+	html := t.resolveImagePaths(slide.HTML)
+
+	// Process HTML for special layouts
+	if layout == "two-column" {
+		html = processTwoColumnHTML(html)
+	}
+
 	transformed := TransformedSlide{
 		Index:  slide.Index,
-		HTML:   t.resolveImagePaths(slide.HTML),
-		Layout: t.resolveLayout(slide),
+		HTML:   html,
+		Layout: layout,
 		Notes:  slide.Directives.Notes,
 	}
 
@@ -330,6 +338,44 @@ func countHTMLTag(html, tag string) int {
 		}
 	}
 	return count
+}
+
+// columnSeparatorPattern matches ||| in HTML, possibly wrapped in <p> tags.
+var columnSeparatorPattern = regexp.MustCompile(`(?s)<p>\s*\|\|\|\s*</p>|\|\|\|`)
+
+// processTwoColumnHTML transforms HTML content for two-column layout.
+// It finds the ||| separator and wraps content before and after in column divs.
+func processTwoColumnHTML(html string) string {
+	// Find the separator
+	loc := columnSeparatorPattern.FindStringIndex(html)
+	if loc == nil {
+		// No separator found, return as-is
+		return html
+	}
+
+	// Split at the first separator
+	leftContent := strings.TrimSpace(html[:loc[0]])
+	rightContent := strings.TrimSpace(html[loc[1]:])
+
+	// Check for a second separator (for content before the columns)
+	loc2 := columnSeparatorPattern.FindStringIndex(rightContent)
+	if loc2 != nil {
+		// Three parts: header, left column, right column
+		// The first part (leftContent) is the header
+		// The middle part is the actual left column
+		// The last part is the right column
+		headerContent := leftContent
+		leftContent = strings.TrimSpace(rightContent[:loc2[0]])
+		rightContent = strings.TrimSpace(rightContent[loc2[1]:])
+
+		return headerContent + "\n" +
+			`<div class="column column-left">` + leftContent + `</div>` +
+			`<div class="column column-right">` + rightContent + `</div>`
+	}
+
+	// Two parts: left column, right column
+	return `<div class="column column-left">` + leftContent + `</div>` +
+		`<div class="column column-right">` + rightContent + `</div>`
 }
 
 // parseBackground parses a background directive value and determines its type.

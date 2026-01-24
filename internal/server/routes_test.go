@@ -423,56 +423,6 @@ func TestSetupRoutes(t *testing.T) {
 	}
 }
 
-func TestLoggingResponseWriter(t *testing.T) {
-	w := httptest.NewRecorder()
-	lrw := &loggingResponseWriter{ResponseWriter: w, statusCode: http.StatusOK}
-
-	// Test default status code
-	if lrw.statusCode != http.StatusOK {
-		t.Errorf("expected default status code %d, got %d", http.StatusOK, lrw.statusCode)
-	}
-
-	// Test WriteHeader captures status code
-	lrw.WriteHeader(http.StatusNotFound)
-	if lrw.statusCode != http.StatusNotFound {
-		t.Errorf("expected status code %d after WriteHeader, got %d", http.StatusNotFound, lrw.statusCode)
-	}
-
-	// Verify underlying writer received the status code
-	if w.Code != http.StatusNotFound {
-		t.Errorf("expected underlying writer status code %d, got %d", http.StatusNotFound, w.Code)
-	}
-}
-
-func TestLoggingMiddleware(t *testing.T) {
-	// Create a handler that sets a specific status code
-	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusCreated)
-		w.Write([]byte("created"))
-	})
-
-	// Wrap with logging middleware
-	logged := loggingMiddleware(handler)
-
-	req := httptest.NewRequest(http.MethodPost, "/test", nil)
-	w := httptest.NewRecorder()
-
-	// This will also print a log line, which is expected behavior
-	logged.ServeHTTP(w, req)
-
-	resp := w.Result()
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusCreated {
-		t.Errorf("expected status %d, got %d", http.StatusCreated, resp.StatusCode)
-	}
-
-	body, _ := io.ReadAll(resp.Body)
-	if string(body) != "created" {
-		t.Errorf("expected body 'created', got '%s'", string(body))
-	}
-}
-
 func TestAPIPresentation_JSONEncodesAllFields(t *testing.T) {
 	s := New(0)
 

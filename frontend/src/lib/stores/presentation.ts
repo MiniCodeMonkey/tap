@@ -59,9 +59,11 @@ export const totalSlides: Readable<number> = derived(presentation, ($presentatio
 
 /**
  * Total number of fragments in the current slide.
+ * Only counts fragments if there are 2+ (meaning actual pause markers exist).
  */
 export const totalFragments: Readable<number> = derived(currentSlide, ($currentSlide) => {
-	return $currentSlide?.fragments?.length ?? 0;
+	const count = $currentSlide?.fragments?.length ?? 0;
+	return count > 1 ? count : 0;
 });
 
 // ============================================================================
@@ -70,18 +72,22 @@ export const totalFragments: Readable<number> = derived(currentSlide, ($currentS
 
 /**
  * Navigate to the next slide.
- * If there are unrevealed fragments, reveals the next fragment instead.
+ * If there are unrevealed fragments (2+ fragments means actual pause markers),
+ * reveals the next fragment instead.
  * Returns true if navigation occurred.
  */
 export function nextSlide(): boolean {
 	let navigated = false;
 
 	currentSlide.subscribe(($currentSlide) => {
+		// Only treat slides with 2+ fragments as having fragments to reveal
+		// (1 fragment means no pause markers - just show slide directly)
 		const fragmentCount = $currentSlide?.fragments?.length ?? 0;
+		const hasRealFragments = fragmentCount > 1;
 
 		currentFragmentIndex.update(($fragmentIndex) => {
 			// If there are more fragments to reveal, show next fragment
-			if (fragmentCount > 0 && $fragmentIndex < fragmentCount - 1) {
+			if (hasRealFragments && $fragmentIndex < fragmentCount - 1) {
 				navigated = true;
 				return $fragmentIndex + 1;
 			}
@@ -111,20 +117,26 @@ export function nextSlide(): boolean {
 
 /**
  * Navigate to the previous slide.
- * If there are visible fragments, hides the last visible fragment instead.
+ * If there are visible fragments (on slides with 2+ fragments), hides the last visible fragment instead.
  * Returns true if navigation occurred.
  */
 export function prevSlide(): boolean {
 	let navigated = false;
 
-	currentFragmentIndex.update(($fragmentIndex) => {
-		// If there are visible fragments, hide the last one
-		if ($fragmentIndex >= 0) {
-			navigated = true;
-			return $fragmentIndex - 1;
-		}
-		return $fragmentIndex;
-	});
+	currentSlide.subscribe(($currentSlide) => {
+		// Only treat slides with 2+ fragments as having fragments
+		const fragmentCount = $currentSlide?.fragments?.length ?? 0;
+		const hasRealFragments = fragmentCount > 1;
+
+		currentFragmentIndex.update(($fragmentIndex) => {
+			// If there are visible fragments, hide the last one
+			if (hasRealFragments && $fragmentIndex >= 0) {
+				navigated = true;
+				return $fragmentIndex - 1;
+			}
+			return $fragmentIndex;
+		});
+	})();
 
 	// If no fragment was hidden, move to previous slide
 	if (!navigated) {
@@ -135,8 +147,9 @@ export function prevSlide(): boolean {
 					const newSlideIndex = $slideIndex - 1;
 					const newSlide = $presentation?.slides[newSlideIndex];
 					const fragmentCount = newSlide?.fragments?.length ?? 0;
-					// Show all fragments on the previous slide
-					currentFragmentIndex.set(fragmentCount - 1);
+					const hasRealFragments = fragmentCount > 1;
+					// Show all fragments on the previous slide (or -1 if no real fragments)
+					currentFragmentIndex.set(hasRealFragments ? fragmentCount - 1 : -1);
 					updateURLHash(newSlideIndex);
 					return newSlideIndex;
 				}
@@ -177,7 +190,8 @@ export function nextFragment(): boolean {
 
 	currentSlide.subscribe(($currentSlide) => {
 		const fragmentCount = $currentSlide?.fragments?.length ?? 0;
-		if (fragmentCount === 0) return;
+		// Only treat slides with 2+ fragments as having fragments
+		if (fragmentCount <= 1) return;
 
 		currentFragmentIndex.update(($fragmentIndex) => {
 			if ($fragmentIndex < fragmentCount - 1) {
@@ -198,13 +212,19 @@ export function nextFragment(): boolean {
 export function prevFragment(): boolean {
 	let hidden = false;
 
-	currentFragmentIndex.update(($fragmentIndex) => {
-		if ($fragmentIndex >= 0) {
-			hidden = true;
-			return $fragmentIndex - 1;
-		}
-		return $fragmentIndex;
-	});
+	currentSlide.subscribe(($currentSlide) => {
+		const fragmentCount = $currentSlide?.fragments?.length ?? 0;
+		// Only treat slides with 2+ fragments as having fragments
+		if (fragmentCount <= 1) return;
+
+		currentFragmentIndex.update(($fragmentIndex) => {
+			if ($fragmentIndex >= 0) {
+				hidden = true;
+				return $fragmentIndex - 1;
+			}
+			return $fragmentIndex;
+		});
+	})();
 
 	return hidden;
 }
