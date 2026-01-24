@@ -1839,3 +1839,19 @@ Started: Fri Jan 23 16:33:21 CET 2026
   - Use $derived() for computed values that depend on store values
   - Theme override (from WebSocket) takes precedence over config theme using nullish coalescing: `themeOverride ?? config.theme ?? 'paper'`
 ---
+
+## 2026-01-24 - US-126
+- What was implemented: Installed and configured embedded fonts for offline support
+- Files changed:
+  - frontend/package.json (added @fontsource/inter, @fontsource/space-grotesk, @fontsource/jetbrains-mono, @fontsource/playfair-display, @fontsource/anton)
+  - frontend/package-lock.json (updated with font packages)
+  - frontend/src/main.ts (added font CSS imports for main entry point)
+  - frontend/src/presenter.ts (added font CSS imports for presenter entry point)
+  - frontend/src/lib/styles/fonts.css (created documentation file)
+- **Learnings for future iterations:**
+  - Use direct JS imports for @fontsource packages (import '@fontsource/inter/400.css') instead of CSS @import for proper Vite bundling
+  - CSS @import from node_modules doesn't resolve relative font file paths correctly in Vite
+  - Vite's assetsInlineLimit (set to 100KB) inlines font files as base64 data URLs
+  - Font imports must be added to all entry points (main.ts, presenter.ts) that need fonts
+  - Build output shows ~2.3MB CSS when fonts are inlined vs ~92KB without
+---
