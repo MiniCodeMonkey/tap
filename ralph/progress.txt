@@ -1633,3 +1633,18 @@ Started: Fri Jan 23 16:33:21 CET 2026
   - Definition lists use accent color for terms and left border for descriptions
   - Reduced motion support removes text-shadows and button transforms for accessibility
 ---
+
+## 2026-01-24 - US-115
+- What was implemented: Designed and implemented Noir theme with cinematic film noir aesthetic
+- Files changed:
+  - frontend/src/lib/themes/noir.css (new - Noir theme CSS with CSS custom properties)
+  - frontend/src/app.css (updated - added noir.css import)
+- **Learnings for future iterations:**
+  - Noir theme uses Playfair Display serif font for headings, Inter for body text
+  - Multi-layer soft shadows create cinematic depth: 0 4px 6px, 0 10px 20px, 0 20px 40px
+  - Subtle vignette effect via ::after pseudo-element with radial-gradient
+  - Gold accent color #d4af37 with variations (--noir-gold, --noir-gold-muted, --noir-gold-subtle)
+  - Background uses linear-gradient(180deg, #0a0a0a, #0d0d0d, #080808) for subtle richness
+  - hr elements styled with gradient fade effect for elegant dividers
+  - Follow same pattern as other themes: CSS custom properties in .theme-noir class
+---

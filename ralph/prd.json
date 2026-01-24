@@ -311,8 +311,8 @@
         "Verify in browser: theme looks sophisticated, dark, and executive"
       ],
       "priority": 18,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Created src/lib/themes/noir.css with cinematic film noir aesthetic. Features: deep charcoal bg (#0a0a0a), crisp white text (#fafafa), sophisticated gold accent (#d4af37), Playfair Display for serif headings with Inter for body, multi-layer soft shadows for depth, subtle vignette overlay, dark-to-darker gradient background, elevated card-style code blocks with refined shadows, reduced motion support."
     },
     {
       "id": "US-116",
