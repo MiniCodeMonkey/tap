@@ -29,12 +29,10 @@
 	let { children }: Props = $props();
 </script>
 
+<!--
+	LayoutCodeFocus uses CSS from layouts.css for code-centric presentation.
+	The code block takes prominence, filling most of the available space.
+-->
 <div class="layout-code-focus">
-	<div class="code-focus-content">
-		{@render children()}
-	</div>
+	{@render children()}
 </div>
-
-<style>
-	/* Legacy CSS removed - will be replaced with Tailwind in US-107C */
-</style>

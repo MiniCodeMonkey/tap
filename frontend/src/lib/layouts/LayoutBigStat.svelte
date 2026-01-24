@@ -34,12 +34,10 @@
 	let { children }: Props = $props();
 </script>
 
+<!--
+	LayoutBigStat uses CSS from layouts.css for large number emphasis.
+	The main stat is displayed prominently with massive typography.
+-->
 <div class="layout-big-stat">
-	<div class="stat-content">
-		{@render children()}
-	</div>
+	{@render children()}
 </div>
-
-<style>
-	/* Legacy CSS removed - will be replaced with Tailwind in US-107C */
-</style>

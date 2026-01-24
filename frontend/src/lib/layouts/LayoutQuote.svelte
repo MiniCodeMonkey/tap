@@ -34,12 +34,10 @@
 	let { children }: Props = $props();
 </script>
 
+<!--
+	LayoutQuote uses CSS from layouts.css for impactful quote presentation.
+	The blockquote is centered and styled with an accent border.
+-->
 <div class="layout-quote">
-	<div class="quote-content">
-		{@render children()}
-	</div>
+	{@render children()}
 </div>
-
-<style>
-	/* Legacy CSS removed - will be replaced with Tailwind in US-107C */
-</style>

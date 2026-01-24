@@ -561,3 +561,169 @@
 .layout-sidebar a:hover {
   text-decoration: underline;
 }
+
+/* ============================================================================
+ * Layout Code Focus - Full-width code block layout
+ * ============================================================================ */
+
+.layout-code-focus {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  color: var(--color-text);
+}
+
+.layout-code-focus h1,
+.layout-code-focus h2,
+.layout-code-focus h3 {
+  font-size: 2.5rem;
+  line-height: 1.25;
+  font-weight: 600;
+  margin: 0;
+  margin-bottom: 1.5rem;
+}
+
+.layout-code-focus p {
+  font-size: 1.75rem;
+  line-height: 1.5;
+  margin: 0;
+  margin-top: 1.5rem;
+  color: var(--color-muted);
+}
+
+/* Code blocks get the most space */
+.layout-code-focus pre {
+  font-family: var(--font-mono);
+  font-size: 1.5rem; /* slide-code */
+  line-height: 1.6;
+  background-color: var(--color-code-bg);
+  color: var(--color-code-text, #d4d4d4);
+  padding: 2em 2.5em;
+  border-radius: 8px;
+  overflow-x: auto;
+  margin: 0;
+  flex-grow: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.layout-code-focus code {
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+  background-color: rgba(0, 0, 0, 0.05);
+  padding: 0.15em 0.4em;
+  border-radius: 4px;
+}
+
+.layout-code-focus pre code {
+  background: none;
+  padding: 0;
+  border-radius: 0;
+  font-size: inherit;
+}
+
+/* ============================================================================
+ * Layout Quote - Styled blockquote for impactful quotes
+ * ============================================================================ */
+
+.layout-quote {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  color: var(--color-text);
+  text-align: center;
+}
+
+.layout-quote blockquote {
+  font-size: 3rem;
+  line-height: 1.4;
+  font-style: italic;
+  margin: 0;
+  max-width: 80%;
+  position: relative;
+  padding-left: 2rem;
+  border-left: 6px solid var(--color-accent);
+  text-align: left;
+}
+
+.layout-quote blockquote p {
+  margin: 0;
+  margin-bottom: 1rem;
+}
+
+.layout-quote blockquote p:last-child {
+  margin-bottom: 0;
+}
+
+/* Attribution styling (often the last paragraph with "— Author") */
+.layout-quote blockquote p:last-of-type {
+  font-size: 2rem;
+  font-style: normal;
+  color: var(--color-muted);
+  margin-top: 1.5rem;
+}
+
+/* If there's only one paragraph in the blockquote, keep it styled as the quote */
+.layout-quote blockquote p:only-child {
+  font-size: 3rem;
+  font-style: italic;
+  color: var(--color-text);
+  margin-top: 0;
+}
+
+/* ============================================================================
+ * Layout Big Stat - Large number emphasis for statistics
+ * ============================================================================ */
+
+.layout-big-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  color: var(--color-text);
+  text-align: center;
+}
+
+/* The main stat number - use h1 or strong */
+.layout-big-stat h1 {
+  font-size: 12rem; /* slide-stat - massive */
+  line-height: 1;
+  letter-spacing: -0.04em;
+  font-weight: 700;
+  margin: 0;
+  color: var(--color-accent);
+}
+
+.layout-big-stat strong {
+  font-size: 12rem;
+  line-height: 1;
+  letter-spacing: -0.04em;
+  font-weight: 700;
+  display: block;
+  color: var(--color-accent);
+}
+
+/* Description text below the stat */
+.layout-big-stat p {
+  font-size: 2.5rem;
+  line-height: 1.4;
+  margin: 0;
+  margin-top: 2rem;
+  color: var(--color-muted);
+  max-width: 70%;
+}
+
+.layout-big-stat h2 {
+  font-size: 3rem;
+  line-height: 1.3;
+  font-weight: 600;
+  margin: 0;
+  margin-top: 2rem;
+}
