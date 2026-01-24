@@ -142,7 +142,7 @@ func runDevServer(file string, port int, presenterPassword string) error {
 	if err := watcher.Start(); err != nil {
 		return fmt.Errorf("failed to start file watcher: %w", err)
 	}
-	defer watcher.Stop()
+	defer func() { _ = watcher.Stop() }()
 
 	// Generate URLs
 	audienceURL := fmt.Sprintf("http://localhost:%d", port)
@@ -158,11 +158,13 @@ func runDevServer(file string, port int, presenterPassword string) error {
 		AudienceURL:       audienceURL,
 		PresenterURL:      presenterURL,
 		PresenterPassword: presenterPassword,
+		CurrentTheme:      cfg.Theme,
 	}
 
 	// Create TUI model
 	model := tui.NewDevModel(tuiCfg)
 	model.UpdateWatcherStatus(true)
+	model.SetThemeBroadcaster(hub)
 
 	// Set up signal handling for graceful shutdown
 	sigCh := make(chan os.Signal, 1)
@@ -200,7 +202,7 @@ func runDevServer(file string, port int, presenterPassword string) error {
 	})
 
 	// Run the TUI (blocks until user quits)
-	if err := tui.RunDevTUI(tuiCfg); err != nil {
+	if err := tui.RunDevTUIWithModel(model); err != nil {
 		return fmt.Errorf("TUI error: %w", err)
 	}
 

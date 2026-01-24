@@ -21,11 +21,15 @@ const (
 	MessageReload MessageType = "reload"
 	// MessageSlide signals clients to navigate to a specific slide.
 	MessageSlide MessageType = "slide"
+	// MessageTheme signals clients to switch to a specific theme.
+	MessageTheme MessageType = "theme"
 )
 
 // Message represents a WebSocket message sent between server and clients.
+// Fields ordered by size for memory alignment.
 type Message struct {
 	Type  MessageType `json:"type"`
+	Theme string      `json:"theme,omitempty"`
 	Slide int         `json:"slide,omitempty"`
 }
 
@@ -128,6 +132,11 @@ func (h *WebSocketHub) BroadcastReload() error {
 // BroadcastSlide sends a slide navigation message to all clients.
 func (h *WebSocketHub) BroadcastSlide(slideIndex int) error {
 	return h.Broadcast(Message{Type: MessageSlide, Slide: slideIndex})
+}
+
+// BroadcastTheme sends a theme change message to all clients.
+func (h *WebSocketHub) BroadcastTheme(themeName string) error {
+	return h.Broadcast(Message{Type: MessageTheme, Theme: themeName})
 }
 
 // ClientCount returns the number of connected clients.

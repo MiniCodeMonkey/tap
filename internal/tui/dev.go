@@ -13,6 +13,11 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
+// ThemeBroadcaster is an interface for broadcasting theme changes via WebSocket.
+type ThemeBroadcaster interface {
+	BroadcastTheme(themeName string) error
+}
+
 // DevConfig holds configuration for the dev TUI.
 // Fields ordered by size for memory alignment.
 type DevConfig struct {
@@ -21,6 +26,7 @@ type DevConfig struct {
 	QRCodeASCII       string
 	PresenterPassword string
 	MarkdownFile      string
+	CurrentTheme      string
 	Port              int
 }
 
@@ -66,26 +72,52 @@ type tickMsg struct{}
 
 // DevModel is the Bubble Tea model for the dev server TUI.
 type DevModel struct { //nolint:govet // embedded structs prevent optimal alignment
-	config       DevConfig
-	state        DevState
-	eventsCh     chan DevEvent
-	closeCh      chan struct{}
-	mu           sync.RWMutex
-	windowWidth  int
-	windowHeight int
-	quitting     bool
+	config           DevConfig
+	state            DevState
+	eventsCh         chan DevEvent
+	closeCh          chan struct{}
+	themeBroadcaster ThemeBroadcaster
+	mu               sync.RWMutex
+	windowWidth      int
+	windowHeight     int
+	currentTheme     string
+	themePickerIndex int
+	quitting         bool
+	showThemePicker  bool
 }
 
 // NewDevModel creates a new DevModel for the dev server TUI.
 func NewDevModel(cfg DevConfig) *DevModel {
+	// Set default theme if not provided
+	currentTheme := cfg.CurrentTheme
+	if currentTheme == "" {
+		currentTheme = "paper"
+	}
+
+	// Find the index of the current theme
+	themeIndex := 0
+	for i, t := range AvailableThemes {
+		if t.Name == currentTheme {
+			themeIndex = i
+			break
+		}
+	}
+
 	return &DevModel{
 		config: cfg,
 		state: DevState{
 			RecentEvents: make([]DevEvent, 0, 10),
 		},
-		eventsCh: make(chan DevEvent, 100),
-		closeCh:  make(chan struct{}),
+		eventsCh:         make(chan DevEvent, 100),
+		closeCh:          make(chan struct{}),
+		currentTheme:     currentTheme,
+		themePickerIndex: themeIndex,
 	}
+}
+
+// SetThemeBroadcaster sets the theme broadcaster for WebSocket communication.
+func (m *DevModel) SetThemeBroadcaster(tb ThemeBroadcaster) {
+	m.themeBroadcaster = tb
 }
 
 // Init implements tea.Model.
@@ -152,6 +184,11 @@ func (m *DevModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 // handleKeyPress handles keyboard input.
 func (m *DevModel) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	// Handle theme picker if it's open
+	if m.showThemePicker {
+		return m.handleThemePickerKey(msg)
+	}
+
 	switch msg.String() {
 	case "q", "ctrl+c":
 		m.quitting = true
@@ -189,6 +226,59 @@ func (m *DevModel) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.addEvent(DevEvent{
 			Type:      "reload",
 			Message:   "Manual reload triggered",
+			Timestamp: time.Now(),
+		})
+		return m, nil
+
+	case "t":
+		// Open theme picker
+		m.showThemePicker = true
+		// Set picker index to current theme
+		for i, t := range AvailableThemes {
+			if t.Name == m.currentTheme {
+				m.themePickerIndex = i
+				break
+			}
+		}
+		return m, nil
+	}
+
+	return m, nil
+}
+
+// handleThemePickerKey handles keyboard input when the theme picker is open.
+func (m *DevModel) handleThemePickerKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "esc", "q":
+		m.showThemePicker = false
+		return m, nil
+
+	case "up", "k":
+		if m.themePickerIndex > 0 {
+			m.themePickerIndex--
+		}
+		return m, nil
+
+	case "down", "j":
+		if m.themePickerIndex < len(AvailableThemes)-1 {
+			m.themePickerIndex++
+		}
+		return m, nil
+
+	case "enter":
+		// Select theme and broadcast
+		selectedTheme := AvailableThemes[m.themePickerIndex].Name
+		m.currentTheme = selectedTheme
+		m.showThemePicker = false
+
+		// Broadcast theme change via WebSocket
+		if m.themeBroadcaster != nil {
+			_ = m.themeBroadcaster.BroadcastTheme(selectedTheme)
+		}
+
+		m.addEvent(DevEvent{
+			Type:      "action",
+			Message:   fmt.Sprintf("Theme changed to %s", selectedTheme),
 			Timestamp: time.Now(),
 		})
 		return m, nil
@@ -232,6 +322,11 @@ func (m *DevModel) addEvent(event DevEvent) {
 func (m *DevModel) View() string {
 	if m.quitting {
 		return RenderMuted("Shutting down server...\n")
+	}
+
+	// Show theme picker overlay if active
+	if m.showThemePicker {
+		return m.viewThemePicker()
 	}
 
 	var b strings.Builder
@@ -323,6 +418,12 @@ func (m *DevModel) viewStatus() string {
 		Foreground(ColorMuted).
 		Width(18)
 
+	b.WriteString("\n")
+
+	// Current theme
+	b.WriteString(labelStyle.Render("Theme:"))
+	themeStyle := lipgloss.NewStyle().Foreground(ColorPrimary).Bold(true)
+	b.WriteString(themeStyle.Render(m.currentTheme))
 	b.WriteString("\n")
 
 	// WebSocket connections
@@ -453,15 +554,85 @@ func (m *DevModel) viewHelp() string {
 		Bold(true)
 
 	help := fmt.Sprintf(
-		"%s open browser • %s presenter view • %s add slide • %s reload • %s quit",
+		"%s open browser • %s presenter view • %s theme • %s add slide • %s reload • %s quit",
 		keyStyle.Render("o"),
 		keyStyle.Render("p"),
+		keyStyle.Render("t"),
 		keyStyle.Render("a"),
 		keyStyle.Render("r"),
 		keyStyle.Render("q"),
 	)
 
 	return helpStyle.Render(help)
+}
+
+// viewThemePicker renders the theme picker overlay.
+func (m *DevModel) viewThemePicker() string {
+	var b strings.Builder
+
+	// Title
+	titleStyle := lipgloss.NewStyle().
+		Bold(true).
+		Foreground(ColorPrimary).
+		MarginBottom(1)
+
+	b.WriteString(titleStyle.Render("🎨 Select Theme"))
+	b.WriteString("\n\n")
+
+	// Theme list
+	for i, theme := range AvailableThemes {
+		// Check if this is the current theme (from frontmatter)
+		isCurrent := theme.Name == m.currentTheme
+
+		if i == m.themePickerIndex {
+			// Selected item
+			selectedStyle := lipgloss.NewStyle().
+				Bold(true).
+				Foreground(ColorSecondary)
+			b.WriteString(selectedStyle.Render("> " + theme.Name))
+			if isCurrent {
+				currentStyle := lipgloss.NewStyle().Foreground(ColorMuted)
+				b.WriteString(currentStyle.Render(" (current)"))
+			}
+			b.WriteString("\n")
+
+			// Show description for selected theme
+			descStyle := lipgloss.NewStyle().
+				Foreground(ColorMuted).
+				PaddingLeft(4)
+			b.WriteString(descStyle.Render(theme.Description))
+		} else {
+			// Unselected item
+			unselectedStyle := lipgloss.NewStyle().
+				Foreground(ColorWhite)
+			b.WriteString(unselectedStyle.Render("  " + theme.Name))
+			if isCurrent {
+				currentStyle := lipgloss.NewStyle().Foreground(ColorMuted)
+				b.WriteString(currentStyle.Render(" (current)"))
+			}
+		}
+		b.WriteString("\n")
+	}
+
+	// Help text
+	b.WriteString("\n")
+	helpStyle := lipgloss.NewStyle().
+		Foreground(ColorMuted)
+
+	keyStyle := lipgloss.NewStyle().
+		Foreground(ColorPrimary).
+		Bold(true)
+
+	help := fmt.Sprintf(
+		"%s/%s navigate • %s select • %s cancel",
+		keyStyle.Render("↑"),
+		keyStyle.Render("↓"),
+		keyStyle.Render("enter"),
+		keyStyle.Render("esc"),
+	)
+	b.WriteString(helpStyle.Render(help))
+
+	return b.String()
 }
 
 // External update methods - these can be called from outside the TUI
@@ -530,6 +701,15 @@ func (m *DevModel) GetEventChannel() chan DevEvent {
 // RunDevTUI runs the dev server TUI and returns when the user quits.
 func RunDevTUI(cfg DevConfig) error {
 	model := NewDevModel(cfg)
+	p := tea.NewProgram(model, tea.WithAltScreen())
+
+	_, err := p.Run()
+	model.Close()
+	return err
+}
+
+// RunDevTUIWithModel runs the dev server TUI with a pre-configured model.
+func RunDevTUIWithModel(model *DevModel) error {
 	p := tea.NewProgram(model, tea.WithAltScreen())
 
 	_, err := p.Run()
