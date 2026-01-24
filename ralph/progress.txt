@@ -1683,3 +1683,81 @@ Started: Fri Jan 23 16:33:21 CET 2026
   - Custom theme CSS is served with no-cache headers for hot reload
   - Frontend uses $effect() to react to customTheme changes for instant theme switching
 ---
+
+## 2026-01-24 - US-118
+- What was implemented: Animation utilities with Tailwind + Svelte transitions documentation
+- Files changed:
+  - frontend/src/lib/styles/animations.css (new - animation utilities and documentation)
+  - frontend/src/app.css (added animations.css import)
+- **Learnings for future iterations:**
+  - Slide transitions use Svelte transitions (fade, fly, scale from 'svelte/transition') in SlideRenderer.svelte
+  - Fragment reveals use CSS classes (.fragment, .fragment-hidden, .fragment-visible) with transition: opacity 300ms ease-out, transform 300ms ease-out
+  - Theme-specific animations (Aurora gradient mesh, Phosphor CRT effects) stay in their theme CSS files, not centralized
+  - animations.css provides utility keyframes (fade-in, slide-up, scale-in, pulse, bounce) for programmatic JavaScript use
+  - All animation utility classes support reduced motion via @media (prefers-reduced-motion: reduce)
+---
+
+## 2026-01-24 - US-119
+- What was implemented: Updated embedded asset build to include Tailwind CSS output
+- Files changed:
+  - embedded/embed.go (updated - //go:embed dist/* with DistFS() helper, GetFile/List/Exists now use fs.Sub)
+  - embedded/embed_test.go (updated - tests for new DistFS(), ListAll(), and Tailwind CSS verification)
+  - internal/builder/builder.go (updated - CopyEmbeddedAssets() uses ListAll() and creates subdirectories)
+  - internal/server/routes.go (updated - added /assets/ route for serving JS/CSS from embedded dist/)
+  - internal/server/routes_test.go (updated - case-insensitive DOCTYPE check for Vite output)
+- **Learnings for future iterations:**
+  - Use //go:embed dist/* to embed the entire Vite build output directory
+  - Use fs.Sub(Assets, "dist") to strip the dist/ prefix for cleaner file access
+  - DistFS() exported for server to use when serving static assets
+  - ListAll() walks subdirectories using fs.WalkDir for recursive listing (needed for assets/)
+  - Server route pattern: "GET /assets/" handles all files under assets/
+  - Content-Type detection based on file extension (getContentType helper)
+  - CSS build size: ~13KB gzipped (main.css 0.69KB + SlideRenderer.css 12.28KB), well under 50KB target
+  - Vite outputs lowercase <!doctype html> - tests need case-insensitive checks
+---
+
+## 2026-01-24 - US-120
+- What was implemented: Updated documentation for new theming system
+- Files changed:
+  - SPEC.md (updated Theme System section with 5 theme descriptions, added themeColors and customTheme documentation)
+  - testdata/sample.md (changed theme from 'minimal' to 'paper')
+- **Learnings for future iterations:**
+  - Theme CSS files contain good header comments with design philosophy - use these for documentation
+  - The CSS variable structure is documented in theme-tokens.css
+  - Required CSS variables: --color-bg, --color-text, --color-muted, --color-accent, --color-code-bg
+  - Optional CSS variables: --color-border, --color-surface, --color-surface-elevated, --color-link, --color-code-text, --font-sans, --font-mono
+  - Pre-existing lint error in internal/cli/dev.go:145 (unchecked error return) - not related to current work
+---
+
+## 2026-01-24 - US-121
+- What was implemented: Renamed theme references in Go backend to use new theme names
+- Files changed:
+  - internal/config/config.go (updated validThemes map, legacyThemeMapping, default theme, NormalizeTheme function, ValidThemeNames function)
+  - internal/config/config_test.go (added tests for theme validation, backwards compatibility, NormalizeTheme)
+  - internal/cli/new.go (updated help text for --theme flag)
+  - internal/tui/new.go (updated AvailableThemes list with new names and descriptions, added legacyThemeMapping for findThemeIndex)
+  - internal/tui/new_test.go (updated all tests for new theme names)
+- **Learnings for future iterations:**
+  - Theme validation in config.go uses validThemes map: paper, noir, aurora, phosphor, poster
+  - Legacy theme mapping: minimal→paper, keynote→noir, gradient→aurora, terminal→phosphor, brutalist→poster
+  - NormalizeTheme() function handles backwards compatibility and logs deprecation warning
+  - Validate() method now normalizes themes in place (updates c.Theme to new name)
+  - TUI AvailableThemes is separate from config validThemes - both need updating
+  - TUI findThemeIndex uses its own legacyThemeMapping for backwards compat with --theme flag
+  - Default theme changed from 'minimal' to 'paper' in DefaultConfig()
+---
+
+## 2026-01-24 - US-122
+- What was implemented: Renamed theme files and references in frontend to use new theme names (paper, noir, aurora, phosphor, poster)
+- Files changed:
+  - frontend/src/lib/types.ts (added Theme type and DEFAULT_THEME constant)
+  - frontend/src/App.svelte (changed default theme from 'minimal' to 'paper')
+  - frontend/src/Presenter.svelte (changed default theme from 'minimal' to 'paper')
+  - frontend/src/lib/components/SlideContainer.svelte (changed default theme from 'minimal' to 'paper')
+  - frontend/src/lib/components/SlideContainer.test.ts (updated test expectations for new theme names)
+- **Learnings for future iterations:**
+  - Theme CSS files were already created in US-111 to US-115 with correct names (paper.css, noir.css, etc.)
+  - Theme imports in app.css were already correct
+  - Only needed to update default theme references and tests
+  - The Theme type export is optional but helps with type safety
+---

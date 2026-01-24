@@ -368,8 +368,8 @@
         "Verify in browser: all animations work smoothly"
       ],
       "priority": 21,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Created src/lib/styles/animations.css with utility keyframes (fade, slide, scale, pulse, bounce) and comprehensive documentation of animation architecture. Svelte transitions used for slide transitions in SlideRenderer.svelte. Fragment reveals use CSS .fragment classes with 300ms ease-out timing. Theme-specific animations (Aurora gradient mesh, Phosphor CRT effects) remain in theme files with documentation references in animations.css."
     },
     {
       "id": "US-119",
@@ -385,8 +385,8 @@
         "Typecheck passes"
       ],
       "priority": 22,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Updated embed.go to use //go:embed dist/* with DistFS() helper for clean access. Added /assets/ route to server for serving JS/CSS. Updated CopyEmbeddedAssets in builder to handle subdirectories. CSS output ~13KB gzipped (main.css 0.69KB + SlideRenderer.css 12.28KB)."
     },
     {
       "id": "US-120",
@@ -401,8 +401,8 @@
         "Typecheck passes"
       ],
       "priority": 23,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Updated SPEC.md with comprehensive theming documentation: 5 theme descriptions (Paper, Noir, Aurora, Phosphor, Poster), themeColors frontmatter examples, and customTheme CSS template with required variables."
     },
     {
       "id": "US-121",
@@ -418,8 +418,8 @@
         "Typecheck passes"
       ],
       "priority": 24,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Added validThemes map and legacyThemeMapping in config.go. NormalizeTheme() function handles backwards compatibility with log warnings. TUI AvailableThemes updated with new names and descriptions. CLI help text updated. All tests pass."
     },
     {
       "id": "US-122",
@@ -435,8 +435,8 @@
         "Verify in browser: all themes load correctly with new names"
       ],
       "priority": 25,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Added Theme type to types.ts. Updated default theme from 'minimal' to 'paper' in App.svelte, Presenter.svelte, and SlideContainer.svelte. Updated SlideContainer.test.ts to use new theme names (paper, noir, aurora, phosphor, poster)."
     },
     {
       "id": "US-123",
