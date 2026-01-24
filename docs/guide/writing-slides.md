@@ -201,13 +201,11 @@ layout: two-column
 
 # Key Features
 
-::left::
-
 - Fast and efficient
 - Easy to use
 - Well documented
 
-::right::
+|||
 
 - Open source
 - Cross-platform

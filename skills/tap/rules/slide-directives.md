@@ -104,12 +104,12 @@ notes: |
 
 # Architecture Options
 
-::left::
 ### Monolith
 - Single deployment
 - Simpler to start
 
-::right::
+|||
+
 ### Microservices
 - Independent scaling
 - Technology flexibility

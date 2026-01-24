@@ -30,10 +30,10 @@ layout: two-column
 
 # Side by Side
 
-::left::
 Content for the left column.
 
-::right::
+|||
+
 Content for the right column.
 ```
 
@@ -78,7 +78,7 @@ layout: section
 
 ### two-column
 
-Split the slide into two equal columns. Use `::left::` and `::right::` markers to place content.
+Split the slide into two equal columns. Use `|||` to separate the left and right content.
 
 ```markdown
 ---
@@ -89,12 +89,12 @@ layout: two-column
 
 # Comparison
 
-::left::
 ### Option A
 - Fast execution
 - Simple setup
 
-::right::
+|||
+
 ### Option B
 - More features
 - Better scaling
@@ -104,7 +104,7 @@ layout: two-column
 
 ### three-column
 
-Split the slide into three equal columns. Use `::left::`, `::center::`, and `::right::` markers.
+Split the slide into three equal columns. Use `|||` to separate each column.
 
 ```markdown
 ---
@@ -115,15 +115,16 @@ layout: three-column
 
 # Our Process
 
-::left::
 ### Plan
 Define requirements
 
-::center::
+|||
+
 ### Build
 Write the code
 
-::right::
+|||
+
 ### Ship
 Deploy to production
 ```
@@ -209,7 +210,7 @@ background: ./images/hero.jpg
 
 ### sidebar
 
-Content with a sidebar area for notes, navigation, or supplementary information.
+Content with a sidebar area for notes, navigation, or supplementary information. Use `|||` to separate main content from the sidebar.
 
 ```markdown
 ---
@@ -218,11 +219,11 @@ Content with a sidebar area for notes, navigation, or supplementary information.
 layout: sidebar
 -->
 
-::main::
 # Main Content
 The primary focus of this slide.
 
-::sidebar::
+|||
+
 **Related:**
 - Topic A
 - Topic B
@@ -232,7 +233,7 @@ The primary focus of this slide.
 
 ### split-media
 
-Split layout with media on one side and content on the other. Great for images with explanatory text.
+Split layout with media on one side and content on the other. Great for images with explanatory text. Use `|||` to separate media from content.
 
 ```markdown
 ---
@@ -241,10 +242,10 @@ Split layout with media on one side and content on the other. Great for images w
 layout: split-media
 -->
 
-::media::
 ![Product screenshot](./images/product.png)
 
-::content::
+|||
+
 # New Feature
 Introducing our latest improvement that makes everything faster.
 ```

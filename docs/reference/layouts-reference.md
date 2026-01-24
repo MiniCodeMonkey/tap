@@ -12,8 +12,8 @@ Quick reference for all available slide layouts in Tap.
 |--------|-------------|-------------|
 | `title` | Large centered text for opening slides | Opening slides, major section introductions |
 | `section` | Section divider with prominent heading | Separating major parts of your presentation |
-| `two-column` | Two equal columns with `::left::` and `::right::` markers | Comparisons, before/after, pros/cons |
-| `three-column` | Three equal columns with `::left::`, `::center::`, and `::right::` markers | Process flows, multiple options, feature sets |
+| `two-column` | Two equal columns separated by `|||` | Comparisons, before/after, pros/cons |
+| `three-column` | Three equal columns separated by `|||` | Process flows, multiple options, feature sets |
 | `code-focus` | Maximum screen space for code blocks | Code walkthroughs, technical deep-dives |
 | `big-stat` | Prominent display for statistics | Key metrics, impressive numbers, impact statements |
 | `quote` | Stylized quotation with attribution | Customer testimonials, famous quotes, key statements |
@@ -48,7 +48,7 @@ Split the slide into two equal columns.
 
 | Property | Value |
 |----------|-------|
-| **Slot markers** | `::left::`, `::right::` |
+| **Separator** | `|||` |
 | **Best for** | Comparisons, before/after, pros/cons |
 
 ### three-column
@@ -57,7 +57,7 @@ Split the slide into three equal columns.
 
 | Property | Value |
 |----------|-------|
-| **Slot markers** | `::left::`, `::center::`, `::right::` |
+| **Separator** | `|||` (used twice) |
 | **Best for** | Process flows, multiple options, feature sets |
 
 ### code-focus
@@ -103,7 +103,7 @@ Content with a sidebar area for notes, navigation, or supplementary information.
 
 | Property | Value |
 |----------|-------|
-| **Slot markers** | `::main::`, `::sidebar::` |
+| **Separator** | `|||` (main content first, then sidebar) |
 | **Best for** | Content with references, navigation-heavy slides |
 
 ### split-media
@@ -112,7 +112,7 @@ Split layout with media on one side and content on the other.
 
 | Property | Value |
 |----------|-------|
-| **Slot markers** | `::media::`, `::content::` |
+| **Separator** | `|||` (media and content in either order) |
 | **Best for** | Product demos, feature highlights, image explanations |
 
 ### blank
@@ -124,14 +124,16 @@ Completely empty layout with no default styling. Full creative control.
 | **Slot markers** | None |
 | **Best for** | Custom designs, complex layouts, embedded content |
 
-## Slot Marker Reference
+## Column Separator Reference
 
-| Layout | Available Slots |
-|--------|-----------------|
-| `two-column` | `::left::`, `::right::` |
-| `three-column` | `::left::`, `::center::`, `::right::` |
-| `sidebar` | `::main::`, `::sidebar::` |
-| `split-media` | `::media::`, `::content::` |
+Multi-column layouts use `|||` as a separator between content sections:
+
+| Layout | Usage |
+|--------|-------|
+| `two-column` | `content ||| content` |
+| `three-column` | `content ||| content ||| content` |
+| `sidebar` | `main content ||| sidebar content` |
+| `split-media` | `media ||| content` (or reverse) |
 
 See the [Layouts Guide](/guide/layouts) for detailed examples with code snippets.
 

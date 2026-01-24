@@ -93,14 +93,14 @@ layout: two-column
 | `default` | Standard centered content |
 | `title` | Large centered title slide |
 | `section` | Section divider |
-| `two-column` | Two equal columns (`::left::`, `::right::`) |
-| `three-column` | Three columns (`::left::`, `::center::`, `::right::`) |
+| `two-column` | Two equal columns (separated by `|||`) |
+| `three-column` | Three columns (separated by `|||`) |
 | `code-focus` | Maximized code display |
 | `big-stat` | Prominent statistic or number |
 | `quote` | Styled quotation |
 | `cover` | Full-screen background image |
-| `sidebar` | Main content with sidebar (`::main::`, `::sidebar::`) |
-| `split-media` | Media and content side by side (`::media::`, `::content::`) |
+| `sidebar` | Main content with sidebar (separated by `|||`) |
+| `split-media` | Media and content side by side (separated by `|||`) |
 | `blank` | No default styling |
 
 See [Layouts Reference](/reference/layouts-reference) for detailed specifications.
@@ -116,12 +116,12 @@ layout: two-column
 
 # Comparison
 
-::left::
 ### Option A
 - Fast execution
 - Simple setup
 
-::right::
+|||
+
 ### Option B
 - More features
 - Better scaling
@@ -476,13 +476,13 @@ notes: |
 
 # Architecture Options
 
-::left::
 ### Monolith
 - Single deployment
 - Simpler to start
 - Tighter coupling
 
-::right::
+|||
+
 ### Microservices
 - Independent scaling
 - Technology flexibility
