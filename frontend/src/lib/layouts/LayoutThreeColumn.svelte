@@ -29,6 +29,9 @@
 	 * ## Step 3
 	 * Build
 	 * ```
+	 *
+	 * Typography styles are in src/lib/styles/layouts.css.
+	 * This component provides the structure, CSS handles the styling.
 	 */
 
 	import type { Snippet } from 'svelte';
@@ -45,12 +48,12 @@
 	let { children }: Props = $props();
 </script>
 
+<!--
+	LayoutThreeColumn uses CSS from layouts.css for grid-based column layout.
+	Uses grid-template-columns: 1fr 1fr 1fr for three equal-width columns with gap.
+-->
 <div class="layout-three-column">
 	<div class="three-column-content">
 		{@render children()}
 	</div>
 </div>
-
-<style>
-	/* Legacy CSS removed - will be replaced with Tailwind in US-107B */
-</style>

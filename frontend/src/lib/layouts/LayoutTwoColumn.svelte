@@ -25,6 +25,9 @@
 	 * - Point A
 	 * - Point B
 	 * ```
+	 *
+	 * Typography styles are in src/lib/styles/layouts.css.
+	 * This component provides the structure, CSS handles the styling.
 	 */
 
 	import type { Snippet } from 'svelte';
@@ -41,12 +44,12 @@
 	let { children }: Props = $props();
 </script>
 
+<!--
+	LayoutTwoColumn uses CSS from layouts.css for grid-based column layout.
+	Uses grid-template-columns: 1fr 1fr for equal-width columns with gap.
+-->
 <div class="layout-two-column">
 	<div class="two-column-content">
 		{@render children()}
 	</div>
 </div>
-
-<style>
-	/* Legacy CSS removed - will be replaced with Tailwind in US-107B */
-</style>

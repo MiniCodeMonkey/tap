@@ -208,3 +208,356 @@
 .layout-default a:hover {
   text-decoration: underline;
 }
+
+/* ============================================================================
+ * Layout Two Column - Side-by-side columns
+ * ============================================================================ */
+
+.layout-two-column {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  color: var(--color-text);
+}
+
+.layout-two-column .two-column-content {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4rem;
+  width: 100%;
+  height: 100%;
+  align-items: start;
+}
+
+/* Typography for two-column layout */
+.layout-two-column h1 {
+  font-size: 3rem;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  font-weight: 600;
+  margin: 0;
+  margin-bottom: 1.5rem;
+}
+
+.layout-two-column h2 {
+  font-size: 2.5rem;
+  line-height: 1.25;
+  font-weight: 600;
+  margin: 0;
+  margin-bottom: 1.25rem;
+}
+
+.layout-two-column h3 {
+  font-size: 2rem;
+  line-height: 1.3;
+  font-weight: 600;
+  margin: 0;
+  margin-bottom: 1rem;
+}
+
+.layout-two-column p {
+  font-size: 1.75rem;
+  line-height: 1.5;
+  margin: 0;
+  margin-bottom: 1rem;
+}
+
+.layout-two-column p:last-child {
+  margin-bottom: 0;
+}
+
+.layout-two-column ul,
+.layout-two-column ol {
+  font-size: 1.75rem;
+  line-height: 1.5;
+  margin: 0;
+  padding-left: 1.5em;
+}
+
+.layout-two-column li {
+  margin-bottom: 0.5em;
+}
+
+.layout-two-column li:last-child {
+  margin-bottom: 0;
+}
+
+.layout-two-column li::marker {
+  color: var(--color-accent);
+}
+
+.layout-two-column img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 8px;
+}
+
+.layout-two-column pre {
+  font-family: var(--font-mono);
+  font-size: 1.25rem;
+  line-height: 1.6;
+  background-color: var(--color-code-bg);
+  color: var(--color-code-text, #d4d4d4);
+  padding: 1.25em 1.5em;
+  border-radius: 8px;
+  overflow-x: auto;
+  margin: 0;
+}
+
+.layout-two-column code {
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+  background-color: rgba(0, 0, 0, 0.05);
+  padding: 0.15em 0.4em;
+  border-radius: 4px;
+}
+
+.layout-two-column pre code {
+  background: none;
+  padding: 0;
+  border-radius: 0;
+  font-size: inherit;
+}
+
+/* ============================================================================
+ * Layout Three Column - Three-column grid
+ * ============================================================================ */
+
+.layout-three-column {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  color: var(--color-text);
+}
+
+.layout-three-column .three-column-content {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 3rem;
+  width: 100%;
+  height: 100%;
+  align-items: start;
+}
+
+/* Typography for three-column layout - slightly smaller for 3 columns */
+.layout-three-column h1 {
+  font-size: 2.5rem;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  font-weight: 600;
+  margin: 0;
+  margin-bottom: 1.25rem;
+}
+
+.layout-three-column h2 {
+  font-size: 2rem;
+  line-height: 1.25;
+  font-weight: 600;
+  margin: 0;
+  margin-bottom: 1rem;
+}
+
+.layout-three-column h3 {
+  font-size: 1.75rem;
+  line-height: 1.3;
+  font-weight: 600;
+  margin: 0;
+  margin-bottom: 0.75rem;
+}
+
+.layout-three-column p {
+  font-size: 1.5rem;
+  line-height: 1.5;
+  margin: 0;
+  margin-bottom: 0.75rem;
+}
+
+.layout-three-column p:last-child {
+  margin-bottom: 0;
+}
+
+.layout-three-column ul,
+.layout-three-column ol {
+  font-size: 1.5rem;
+  line-height: 1.5;
+  margin: 0;
+  padding-left: 1.5em;
+}
+
+.layout-three-column li {
+  margin-bottom: 0.4em;
+}
+
+.layout-three-column li:last-child {
+  margin-bottom: 0;
+}
+
+.layout-three-column li::marker {
+  color: var(--color-accent);
+}
+
+.layout-three-column img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 8px;
+}
+
+.layout-three-column pre {
+  font-family: var(--font-mono);
+  font-size: 1.125rem;
+  line-height: 1.6;
+  background-color: var(--color-code-bg);
+  color: var(--color-code-text, #d4d4d4);
+  padding: 1em 1.25em;
+  border-radius: 8px;
+  overflow-x: auto;
+  margin: 0;
+}
+
+.layout-three-column code {
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+  background-color: rgba(0, 0, 0, 0.05);
+  padding: 0.15em 0.4em;
+  border-radius: 4px;
+}
+
+.layout-three-column pre code {
+  background: none;
+  padding: 0;
+  border-radius: 0;
+  font-size: inherit;
+}
+
+/* ============================================================================
+ * Layout Sidebar - Main content with sidebar
+ * ============================================================================ */
+
+.layout-sidebar {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  color: var(--color-text);
+}
+
+.layout-sidebar .sidebar-content {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 4rem;
+  width: 100%;
+  height: 100%;
+  align-items: start;
+}
+
+/* Main content area (first child) */
+.layout-sidebar .sidebar-content > :first-child {
+  /* Main content takes 2/3 of space */
+}
+
+/* Sidebar area (second child) */
+.layout-sidebar .sidebar-content > :nth-child(2) {
+  padding-left: 2rem;
+  border-left: 2px solid var(--color-muted);
+}
+
+/* Typography for sidebar layout - main area */
+.layout-sidebar h1 {
+  font-size: 3.5rem;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  font-weight: 600;
+  margin: 0;
+  margin-bottom: 1.5rem;
+}
+
+.layout-sidebar h2 {
+  font-size: 2.5rem;
+  line-height: 1.25;
+  font-weight: 600;
+  margin: 0;
+  margin-bottom: 1.25rem;
+}
+
+.layout-sidebar h3 {
+  font-size: 2rem;
+  line-height: 1.3;
+  font-weight: 600;
+  margin: 0;
+  margin-bottom: 1rem;
+}
+
+.layout-sidebar p {
+  font-size: 1.75rem;
+  line-height: 1.5;
+  margin: 0;
+  margin-bottom: 1rem;
+}
+
+.layout-sidebar p:last-child {
+  margin-bottom: 0;
+}
+
+.layout-sidebar ul,
+.layout-sidebar ol {
+  font-size: 1.75rem;
+  line-height: 1.5;
+  margin: 0;
+  padding-left: 1.5em;
+}
+
+.layout-sidebar li {
+  margin-bottom: 0.5em;
+}
+
+.layout-sidebar li:last-child {
+  margin-bottom: 0;
+}
+
+.layout-sidebar li::marker {
+  color: var(--color-accent);
+}
+
+.layout-sidebar img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 8px;
+}
+
+.layout-sidebar pre {
+  font-family: var(--font-mono);
+  font-size: 1.25rem;
+  line-height: 1.6;
+  background-color: var(--color-code-bg);
+  color: var(--color-code-text, #d4d4d4);
+  padding: 1.25em 1.5em;
+  border-radius: 8px;
+  overflow-x: auto;
+  margin: 0;
+}
+
+.layout-sidebar code {
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+  background-color: rgba(0, 0, 0, 0.05);
+  padding: 0.15em 0.4em;
+  border-radius: 4px;
+}
+
+.layout-sidebar pre code {
+  background: none;
+  padding: 0;
+  border-radius: 0;
+  font-size: inherit;
+}
+
+.layout-sidebar a {
+  color: var(--color-accent);
+  text-decoration: none;
+}
+
+.layout-sidebar a:hover {
+  text-decoration: underline;
+}

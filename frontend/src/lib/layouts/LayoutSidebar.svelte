@@ -26,6 +26,9 @@
 	 * - Link 2
 	 * - Note
 	 * ```
+	 *
+	 * Typography styles are in src/lib/styles/layouts.css.
+	 * This component provides the structure, CSS handles the styling.
 	 */
 
 	import type { Snippet } from 'svelte';
@@ -42,12 +45,13 @@
 	let { children }: Props = $props();
 </script>
 
+<!--
+	LayoutSidebar uses CSS from layouts.css for grid-based layout.
+	Uses grid-template-columns: 2fr 1fr for main content (2/3) and sidebar (1/3).
+	Sidebar has a left border for visual separation.
+-->
 <div class="layout-sidebar">
 	<div class="sidebar-content">
 		{@render children()}
 	</div>
 </div>
-
-<style>
-	/* Legacy CSS removed - will be replaced with Tailwind in US-107B */
-</style>
