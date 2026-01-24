@@ -1761,3 +1761,40 @@ Started: Fri Jan 23 16:33:21 CET 2026
   - Only needed to update default theme references and tests
   - The Theme type export is optional but helps with type safety
 ---
+
+## 2026-01-24 - US-123
+- What was implemented: Updated sample presentations and test data to use new theme names
+- Files changed:
+  - testdata/sample.md (changed code example from 'minimal' to 'paper')
+  - testdata/test.md (changed theme from 'minimal' to 'paper')
+  - examples/theme-minimal.md → examples/theme-paper.md (renamed, updated content)
+  - examples/theme-gradient.md → examples/theme-aurora.md (renamed, updated content)
+  - examples/theme-terminal.md → examples/theme-phosphor.md (renamed, updated content)
+  - examples/theme-brutalist.md → examples/theme-poster.md (renamed, updated content)
+  - examples/theme-keynote.md → examples/theme-noir.md (renamed, updated content)
+  - examples/basic.md (changed theme from 'minimal' to 'paper')
+  - examples/code-demo.md (changed theme from 'terminal' to 'phosphor')
+  - examples/sql-demo.md (changed theme from 'keynote' to 'noir')
+  - SPEC.md (changed theme: minimal to theme: paper in code example)
+  - README.md (changed theme references to new names)
+  - docs/guide/themes.md (complete rewrite with new theme descriptions)
+  - docs/guide/writing-slides.md (updated theme references)
+  - docs/reference/frontmatter-options.md (updated theme options, descriptions, examples)
+  - docs/reference/cli-commands.md (updated default theme, example)
+  - docs/getting-started.md (updated theme references)
+  - docs/.vitepress/theme/components/HomeCode.vue (changed theme: terminal to theme: phosphor)
+  - docs/.vitepress/theme/components/HomeThemes.vue (updated theme names, vibes, gradients, accents)
+  - docs/ralph/prd.json (changed theme: terminal to theme: phosphor)
+  - docs/ralph/prd-scaffold.md (changed theme: terminal to theme: phosphor)
+  - internal/builder/benchmark_test.go (changed theme: minimal to theme: paper)
+  - internal/parser/benchmark_test.go (changed theme: minimal to theme: paper)
+  - internal/parser/parser_test.go (changed theme: minimal to theme: paper)
+  - internal/server/benchmark_test.go (changed theme: minimal to theme: paper)
+- **Learnings for future iterations:**
+  - Use `git mv` to rename files to preserve history
+  - Use `grep` with regex `theme:\s*(minimal|gradient|terminal|brutalist|keynote)` to find all old theme references
+  - Theme showcase files need both filename AND content updates
+  - Documentation has theme references in many places: frontmatter examples, prose descriptions, reference tables
+  - HomeThemes.vue in VitePress has hardcoded theme metadata (names, vibes, gradients, accent colors)
+  - Benchmark test files generate test presentations with hardcoded frontmatter
+---

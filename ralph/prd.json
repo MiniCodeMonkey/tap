@@ -450,8 +450,8 @@
         "Typecheck passes"
       ],
       "priority": 26,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Updated testdata/sample.md and test.md. Renamed and updated all theme showcase files in examples/. Updated basic.md, code-demo.md, sql-demo.md. Updated all documentation (SPEC.md, README.md, docs/guide/themes.md, docs/guide/writing-slides.md, docs/reference/, docs/.vitepress/theme/components/). Updated benchmark test files in internal/builder, internal/parser, internal/server."
     },
     {
       "id": "US-124",
