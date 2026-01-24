@@ -1,6 +1,6 @@
 ---
 title: Tap Sample Presentation
-theme: minimal
+theme: paper
 author: Tap Team
 date: "2026-01-23"
 aspectRatio: "16:9"

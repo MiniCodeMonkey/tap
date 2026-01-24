@@ -107,14 +107,26 @@ notes: |
   - Blank/Custom
 
 ### 4. **Theme System**
-- 5 distinctive built-in themes with completely different aesthetics:
-  1. **Minimal** - Clean, Apple-style, Helvetica, whitespace
-  2. **Gradient** - Modern, colorful gradients, glassmorphism
-  3. **Terminal** - Hacker aesthetic, monospace, CRT effects
-  4. **Brutalist** - Bold, geometric, high contrast
-  5. **Keynote** - Professional, subtle shadows, smooth
-- Custom themes can be defined in the presentation's frontmatter
-- Themes control: typography, colors, layouts, animations, transitions, CSS
+
+Tap uses a modern CSS custom properties architecture with TailwindCSS utilities. Themes define CSS variables that control all visual aspects, enabling runtime theme switching and easy customization.
+
+**Built-in Themes:**
+
+1. **Paper** - Ultra-clean and airy, like premium paper. Pure white backgrounds, confident Inter typography with tight letter-spacing (-0.02em), sophisticated warm accent (#78716c), and delicate shadows on code blocks. Perfect for professional presentations where content takes center stage.
+
+2. **Noir** - Cinematic film noir elegance. Deep charcoal backgrounds (#0a0a0a), crisp white text, sophisticated gold accent (#d4af37). Features Playfair Display serif for headings, Inter for body, multi-layer soft shadows, and subtle vignette effects. Ideal for executive presentations and premium brand talks.
+
+3. **Aurora** - Northern lights inspiration with vibrant color flows. Animated gradient mesh backgrounds (deep purples → electric blues → teals), glassmorphism with backdrop-blur, Space Grotesk typography, and glowing borders. Dynamic and mesmerizing for creative presentations.
+
+4. **Phosphor** - Authentic CRT monitor aesthetic. True black (#000) background, phosphor green (#00ff00) text with multi-layer glow effects (5px/10px/20px text-shadows), subtle scanline overlay, and JetBrains Mono throughout. Everything IS terminal. Perfect for hacker talks and retro-tech themes.
+
+5. **Poster** - Bold graphic design inspired by classic posters. Stark black and white with ONE electric red accent (#ef4444), Anton typeface for massive ALL CAPS headings, thick 4px borders, harsh 8px drop shadows, and zero rounded corners. Impossible to ignore.
+
+**Theme Customization:**
+
+- **Quick color swaps:** Use `themeColors` in frontmatter to override specific colors
+- **Custom themes:** Use `customTheme` to load your own CSS file
+- Themes control: typography, colors, layouts, animations, transitions, CSS variables
 
 ### 5. **Slide Transitions**
 - 5 built-in slide-to-slide transitions:
@@ -454,13 +466,22 @@ All configuration lives in the presentation file's YAML frontmatter. No separate
 ```yaml
 ---
 title: Presentation Title
-theme: minimal
+theme: paper               # paper (default), noir, aurora, phosphor, poster
 author: Name
 date: 2026-01-23
-aspectRatio: 16:9        # 16:9 (default), 4:3, or 16:10
-transition: fade         # none, fade (default), slide, push, zoom
-codeTheme: github-dark   # Shiki theme for syntax highlighting
-fragments: false         # Auto-fragment lists (default: false)
+aspectRatio: 16:9          # 16:9 (default), 4:3, or 16:10
+transition: fade           # none, fade (default), slide, push, zoom
+codeTheme: github-dark     # Shiki theme for syntax highlighting
+fragments: false           # Auto-fragment lists (default: false)
+
+# Theme color customization (optional - override specific colors)
+themeColors:
+  accent: "#3b82f6"        # Override accent color
+  background: "#fafafa"    # Override background
+  # Available keys: background, text, muted, accent, codeBg
+
+# Custom theme file (optional - for complete theme control)
+customTheme: ./my-theme.css  # Path relative to markdown file
 
 # Driver configuration for live code execution
 drivers:
@@ -515,6 +536,77 @@ Available local directives:
 - **16:9** (default) - Standard widescreen, works for most projectors and screens
 - **4:3** - Traditional aspect ratio, useful for older projectors
 - **16:10** - Common laptop screen ratio
+
+### Theme Color Customization
+Quickly override specific colors in any built-in theme using `themeColors` in frontmatter:
+
+```yaml
+---
+theme: paper
+themeColors:
+  accent: "#3b82f6"    # Brand blue instead of warm gray
+  background: "#f8fafc" # Slightly cooler white
+---
+```
+
+**Available color keys:**
+- `background` - Main slide background color
+- `text` - Primary text color
+- `muted` - Secondary/muted text color
+- `accent` - Accent color for highlights, links, list markers
+- `codeBg` - Background color for code blocks
+
+Partial overrides work — only specify what you want to change. Invalid color values are ignored with a console warning.
+
+### Custom Theme CSS
+For complete control, create your own theme CSS file:
+
+```yaml
+---
+customTheme: ./my-theme.css
+---
+```
+
+The path is relative to your markdown file. Your custom CSS must define a `.theme-custom` class with all required CSS variables:
+
+```css
+/* my-theme.css - Custom theme template */
+.theme-custom {
+  /* Required color variables */
+  --color-bg: #1a1a2e;
+  --color-text: #eaeaea;
+  --color-muted: #888888;
+  --color-accent: #e94560;
+  --color-code-bg: #16213e;
+
+  /* Optional extended colors */
+  --color-border: rgba(255, 255, 255, 0.1);
+  --color-surface: #1f1f3a;
+  --color-surface-elevated: #252550;
+  --color-link: var(--color-accent);
+  --color-code-text: #d4d4d4;
+
+  /* Typography */
+  --font-sans: 'Your Font', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+
+  /* Animation timing */
+  --transition-duration: 400ms;
+  --transition-timing: ease-out;
+  --fragment-duration: 300ms;
+
+  /* Apply base styles */
+  font-family: var(--font-sans);
+  color: var(--color-text);
+  background-color: var(--color-bg);
+}
+
+/* Add custom typography, code styling, etc. as needed */
+.theme-custom h1 { font-weight: 700; }
+.theme-custom pre { border-radius: 8px; }
+```
+
+If the custom theme file is not found, Tap falls back to the default theme (paper) with a console warning.
 
 ---
 
