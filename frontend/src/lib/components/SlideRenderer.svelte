@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { Slide, BackgroundConfig, Transition, FragmentGroup } from '$lib/types';
 	import { fade, fly, scale } from 'svelte/transition';
+	import { renderMermaidBlocksInElement } from '$lib/utils/mermaid';
 
 	// ============================================================================
 	// Props
@@ -160,6 +161,32 @@
 		}
 		return slide.html;
 	});
+
+	// ============================================================================
+	// Mermaid Diagram Rendering
+	// ============================================================================
+
+	/**
+	 * Reference to the slide content element for DOM manipulation.
+	 */
+	let slideContentElement: HTMLElement | undefined = $state();
+
+	/**
+	 * Render mermaid diagrams when the slide content is mounted or changes.
+	 * This runs after the HTML is inserted into the DOM via {@html}.
+	 */
+	$effect(() => {
+		if (slideContentElement && active) {
+			// Re-render mermaid diagrams when processedHtml changes
+			// eslint-disable-next-line @typescript-eslint/no-unused-expressions
+			processedHtml;
+
+			// Use a microtask to ensure DOM has been updated
+			queueMicrotask(() => {
+				renderMermaidBlocksInElement(slideContentElement!);
+			});
+		}
+	});
 </script>
 
 <!--
@@ -176,7 +203,7 @@
 		in:getTransition
 		out:getTransition
 	>
-		<div class="slide-content w-full h-full">
+		<div class="slide-content w-full h-full" bind:this={slideContentElement}>
 			{@html processedHtml}
 		</div>
 	</div>
@@ -217,5 +244,50 @@
 		:global(.fragment-hidden) {
 			transform: none;
 		}
+	}
+
+	/*
+	 * Mermaid diagram container styles.
+	 * Centers diagrams and ensures they don't overflow the slide.
+	 */
+	:global(.mermaid-diagram) {
+		display: flex;
+		justify-content: center;
+		align-items: center;
+		width: 100%;
+		margin: 1rem 0;
+	}
+
+	:global(.mermaid-diagram svg) {
+		max-width: 100%;
+		height: auto;
+	}
+
+	/*
+	 * Mermaid error styles.
+	 * Shows a visible error with the original code for debugging.
+	 */
+	:global(.mermaid-error) {
+		padding: 1rem;
+		border-radius: 0.5rem;
+		background-color: rgba(220, 38, 38, 0.1);
+		border: 1px solid rgba(220, 38, 38, 0.3);
+		margin: 1rem 0;
+	}
+
+	:global(.mermaid-error-message) {
+		color: rgb(220, 38, 38);
+		font-weight: 600;
+		margin-bottom: 0.5rem;
+	}
+
+	:global(.mermaid-error-code) {
+		font-size: 0.875rem;
+		opacity: 0.8;
+	}
+
+	:global(.mermaid-error-code code) {
+		white-space: pre-wrap;
+		word-break: break-word;
 	}
 </style>
