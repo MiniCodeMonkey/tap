@@ -17,18 +17,98 @@ This example demonstrates how to structure a lightning talk with:
 
 ## Features Used
 
-- **Theme**: `brutalist` for bold, attention-grabbing visuals
+- **Theme**: `poster` for bold, attention-grabbing visuals
 - **Layouts**: `title`, `big-stat`, `quote`, `section`
-- **Transitions**: `push` for energetic pacing
+- **Transitions**: `fade` for smooth pacing
 - **No Live Code**: Keep it simple for short talks
-
-## Preview
-
-*Coming soon.*
 
 ## Source
 
-*Full source code coming soon.*
+```markdown
+---
+title: Why Markdown?
+theme: poster
+author: Your Name
+date: 2026-01-24
+aspectRatio: "16:9"
+transition: fade
+---
+
+<!--
+layout: title
+-->
+
+# Why Markdown?
+
+The case for plain text
+
+---
+
+<!--
+layout: big-stat
+-->
+
+## 94%
+
+of developers already know Markdown
+
+---
+
+## The Problem
+
+- Word processors are bloated
+- Proprietary formats lock you in
+- Version control is impossible
+- Collaboration is painful
+
+---
+
+<!--
+layout: quote
+-->
+
+> Plain text is the universal interface.
+
+---
+
+## Markdown Wins
+
+<!-- pause -->
+
+**Portable** — Works everywhere
+
+<!-- pause -->
+
+**Readable** — Human-friendly syntax
+
+<!-- pause -->
+
+**Versionable** — Git just works
+
+<!-- pause -->
+
+**Convertible** — HTML, PDF, slides...
+
+---
+
+<!--
+layout: big-stat
+-->
+
+## 1 Syntax
+
+to rule them all
+
+---
+
+<!--
+layout: title
+-->
+
+# Start Today
+
+Your future self will thank you
+```
 
 ---
 

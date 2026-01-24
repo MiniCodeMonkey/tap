@@ -26,6 +26,4 @@ A concise 5-minute talk template. Optimized for quick, impactful presentations w
 
 ---
 
-::: tip Coming Soon
-Full source code and downloadable templates for each example are in development. Check back soon!
-:::
+Each example includes full source code that you can copy and customize for your own presentations.

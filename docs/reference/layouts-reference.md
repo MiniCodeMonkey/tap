@@ -133,9 +133,7 @@ Completely empty layout with no default styling. Full creative control.
 | `sidebar` | `::main::`, `::sidebar::` |
 | `split-media` | `::media::`, `::content::` |
 
-::: tip Examples Coming Soon
-Visual examples for each layout will be added in a future update.
-:::
+See the [Layouts Guide](/guide/layouts) for detailed examples with code snippets.
 
 ## See Also
 

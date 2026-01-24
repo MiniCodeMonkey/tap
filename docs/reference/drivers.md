@@ -12,22 +12,30 @@ Live code execution only works in development mode (`tap dev`). Static builds sh
 
 ## Overview
 
-Drivers are configured in the presentation frontmatter under the `drivers` key. Each driver type has its own configuration options.
+Drivers are configured in the presentation frontmatter under the `drivers` key. Database drivers use named connections, while shell and custom drivers use direct configuration.
 
 ```yaml
 ---
 title: My Presentation
 drivers:
   sqlite:
-    database: ./demo.db
+    connections:
+      demo:
+        path: ":memory:"
   mysql:
-    host: localhost
-    database: myapp
+    connections:
+      default:
+        host: localhost
+        database: myapp
+        user: demo_user
   postgres:
-    host: localhost
-    database: analytics
+    connections:
+      analytics:
+        host: localhost
+        database: analytics
+        user: readonly
   shell:
-    cwd: ./scripts
+    timeout: 30
 ---
 ```
 
@@ -39,36 +47,40 @@ The SQLite driver executes SQL queries against a SQLite database file or in-memo
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
-| `database` | `string` | `:memory:` | Path to SQLite database file, or `:memory:` for in-memory |
-| `timeout` | `number` | `10` | Query timeout in seconds |
-| `readonly` | `boolean` | `false` | Open database in read-only mode |
+| `path` | `string` | `:memory:` | Path to SQLite database file, or `:memory:` for in-memory |
 
 ### Frontmatter Configuration
+
+SQLite uses named connections under the `connections` key:
 
 ```yaml
 ---
 drivers:
   sqlite:
-    database: ./data/demo.db
-    timeout: 30
-    readonly: true
+    connections:
+      demo:
+        path: ":memory:"
+      production:
+        path: "./data/demo.db"
 ---
 ```
 
 ### Usage
 
+Reference the connection name in your code block:
+
 ````markdown
-```sql {driver: 'sqlite'}
+```sql {driver: sqlite, connection: demo}
 SELECT * FROM users WHERE active = 1 LIMIT 10;
 ```
 ````
 
 ### In-Memory Database
 
-When no database is specified (or set to `:memory:`), Tap creates a fresh in-memory SQLite database. This is useful for demos where you create tables and data on the fly:
+Use `:memory:` as the path for a fresh in-memory database. This is useful for demos where you create tables and data on the fly:
 
 ````markdown
-```sql {driver: 'sqlite'}
+```sql {driver: sqlite, connection: demo}
 CREATE TABLE products (id INTEGER PRIMARY KEY, name TEXT, price REAL);
 INSERT INTO products VALUES (1, 'Widget', 9.99), (2, 'Gadget', 19.99);
 SELECT * FROM products;
@@ -94,30 +106,31 @@ The MySQL driver executes SQL queries against a MySQL or MariaDB database server
 | `database` | `string` | *required* | Database name |
 | `user` | `string` | *required* | Username for authentication |
 | `password` | `string` | `""` | Password for authentication |
-| `timeout` | `number` | `10` | Query timeout in seconds |
-| `charset` | `string` | `utf8mb4` | Character set for connection |
-| `ssl` | `boolean` | `false` | Enable SSL/TLS connection |
 
 ### Frontmatter Configuration
+
+MySQL uses named connections under the `connections` key:
 
 ```yaml
 ---
 drivers:
   mysql:
-    host: localhost
-    port: 3306
-    database: myapp
-    user: demo_user
-    password: $MYSQL_PASSWORD
-    timeout: 15
-    charset: utf8mb4
+    connections:
+      default:
+        host: localhost
+        port: 3306
+        database: myapp
+        user: demo_user
+        password: $MYSQL_PASSWORD
 ---
 ```
 
 ### Usage
 
+Reference the connection name in your code block:
+
 ````markdown
-```sql {driver: 'mysql'}
+```sql {driver: mysql, connection: default}
 SELECT
   department,
   COUNT(*) as employee_count,
@@ -136,10 +149,12 @@ Use environment variables for credentials to avoid hardcoding sensitive data:
 ---
 drivers:
   mysql:
-    host: $MYSQL_HOST
-    database: $MYSQL_DATABASE
-    user: $MYSQL_USER
-    password: $MYSQL_PASSWORD
+    connections:
+      production:
+        host: $MYSQL_HOST
+        database: $MYSQL_DATABASE
+        user: $MYSQL_USER
+        password: $MYSQL_PASSWORD
 ---
 ```
 
@@ -168,31 +183,31 @@ The PostgreSQL driver executes SQL queries against a PostgreSQL database server.
 | `database` | `string` | *required* | Database name |
 | `user` | `string` | *required* | Username for authentication |
 | `password` | `string` | `""` | Password for authentication |
-| `timeout` | `number` | `10` | Query timeout in seconds |
-| `sslmode` | `string` | `prefer` | SSL mode: `disable`, `allow`, `prefer`, `require`, `verify-ca`, `verify-full` |
-| `schema` | `string` | `public` | Default schema to use |
 
 ### Frontmatter Configuration
+
+PostgreSQL uses named connections under the `connections` key:
 
 ```yaml
 ---
 drivers:
   postgres:
-    host: localhost
-    port: 5432
-    database: analytics
-    user: demo_user
-    password: $PGPASSWORD
-    sslmode: require
-    schema: public
-    timeout: 20
+    connections:
+      analytics:
+        host: localhost
+        port: 5432
+        database: analytics
+        user: demo_user
+        password: $PGPASSWORD
 ---
 ```
 
 ### Usage
 
+Reference the connection name in your code block:
+
 ````markdown
-```sql {driver: 'postgres'}
+```sql {driver: postgres, connection: analytics}
 SELECT
   date_trunc('month', created_at) as month,
   SUM(amount) as total_revenue
@@ -214,14 +229,15 @@ PostgreSQL driver also respects standard PostgreSQL environment variables:
 | `PGDATABASE` | `database` |
 | `PGUSER` | `user` |
 | `PGPASSWORD` | `password` |
-| `PGSSLMODE` | `sslmode` |
 
 If you have these set, you can use a minimal configuration:
 
 ```yaml
 ---
 drivers:
-  postgres: {}  # Uses PGHOST, PGDATABASE, etc.
+  postgres:
+    connections:
+      default: {}  # Uses PGHOST, PGDATABASE, etc.
 ---
 ```
 
@@ -385,16 +401,31 @@ This keeps sensitive credentials out of your presentation files.
 
 | Driver | Required Options | Key Optional Options |
 |--------|------------------|---------------------|
-| `sqlite` | None | `database`, `timeout`, `readonly` |
-| `mysql` | `database`, `user` | `host`, `port`, `password`, `ssl` |
-| `postgres` | `database`, `user` | `host`, `port`, `password`, `sslmode`, `schema` |
+| `sqlite` | `connections.<name>.path` | - |
+| `mysql` | `connections.<name>.database`, `user` | `host`, `port`, `password` |
+| `postgres` | `connections.<name>.database`, `user` | `host`, `port`, `password` |
 | `shell` | None | `shell`, `cwd`, `env`, `timeout` |
+| Custom | `command` | `args`, `timeout` |
 
 ### Code Block Syntax
 
+For database drivers, specify both driver and connection:
+
 ````markdown
-```language {driver: 'driver_name'}
-code here
+```sql {driver: sqlite, connection: demo}
+SELECT * FROM users;
+```
+````
+
+For shell and custom drivers:
+
+````markdown
+```bash {driver: shell}
+ls -la
+```
+
+```python {driver: python}
+print("Hello, World!")
 ```
 ````
 
@@ -402,14 +433,102 @@ code here
 
 ## Custom Drivers
 
-::: tip Coming Soon
-Support for custom drivers is planned for a future release. Custom drivers will allow you to:
-- Integrate with additional databases (MongoDB, Redis, etc.)
-- Connect to REST APIs and display formatted results
-- Run language-specific REPLs (Python, Ruby, Node.js)
-- Create specialized output formatters
+Custom drivers allow you to execute code using any command-line tool or interpreter. This enables support for any language or tool not covered by the built-in drivers.
 
-Watch the [GitHub repository](https://github.com/tap-slides/tap) for updates.
+### How It Works
+
+Custom drivers pass code to a command via stdin. The command's stdout becomes the result displayed on your slide. This simple model supports virtually any language or tool.
+
+### Configuration Options
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `command` | `string` | *required* | The executable to run (e.g., `python`, `node`, `ruby`) |
+| `args` | `array` | `[]` | Arguments passed to the command before code is sent via stdin |
+| `timeout` | `number` | `30` | Execution timeout in seconds |
+
+### Frontmatter Configuration
+
+Define custom drivers in your frontmatter using any name (except reserved names: `shell`, `sqlite`, `mysql`, `postgres`):
+
+```yaml
+---
+title: Multi-Language Demo
+drivers:
+  python:
+    command: python3
+  node:
+    command: node
+  ruby:
+    command: ruby
+    timeout: 15
+---
+```
+
+### Usage Examples
+
+#### Python
+
+````markdown
+```python {driver: 'python'}
+import json
+data = {"name": "Tap", "version": "1.0"}
+print(json.dumps(data, indent=2))
+```
+````
+
+#### Node.js
+
+````markdown
+```javascript {driver: 'node'}
+const os = require('os');
+console.log(`Platform: ${os.platform()}`);
+console.log(`Architecture: ${os.arch()}`);
+console.log(`CPUs: ${os.cpus().length}`);
+```
+````
+
+#### Ruby
+
+````markdown
+```ruby {driver: 'ruby'}
+require 'json'
+data = { name: 'Tap', languages: ['Go', 'JavaScript'] }
+puts JSON.pretty_generate(data)
+```
+````
+
+### Advanced: Custom Arguments
+
+Use `args` to pass flags to the interpreter:
+
+```yaml
+---
+drivers:
+  python:
+    command: python3
+    args: ["-u"]  # Unbuffered output
+  node:
+    command: node
+    args: ["--experimental-modules"]
+---
+```
+
+### Code Block Timeout Override
+
+Override the driver's default timeout for a specific code block:
+
+````markdown
+```python {driver: 'python', timeout: '60'}
+# Long-running computation...
+import time
+time.sleep(5)
+print("Done!")
+```
+````
+
+::: warning Availability
+Custom driver commands must be installed and available in the system PATH where `tap dev` is running.
 :::
 
 ---
