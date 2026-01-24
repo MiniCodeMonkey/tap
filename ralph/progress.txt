@@ -1612,3 +1612,24 @@ Started: Fri Jan 23 16:33:21 CET 2026
   - All pseudo-elements need pointer-events: none so they don't block user interaction
   - z-index must be high (9999) for scanline overlay to appear above slide content
 ---
+
+## 2026-01-24 - US-114
+- What was implemented: Poster theme - bold graphic design aesthetic with giant typography, high contrast, and harsh visual elements
+- Files changed:
+  - frontend/src/lib/themes/poster.css (new - complete Poster theme with CSS custom properties)
+  - frontend/src/app.css (added import for poster.css)
+- **Learnings for future iterations:**
+  - Poster theme uses stark black (#000) and white (#fff) with ONE accent color (electric red #ef4444)
+  - Anton typeface for headings with text-transform: uppercase for bold, commanding appearance
+  - Text-shadow on headings (4px 4px 0) creates harsh offset shadow effect, not blur
+  - All border-radius: 0 enforces sharp rectangular shapes - no rounded corners anywhere
+  - Thick borders (4px+) and harsh drop shadows (8px 8px 0 black) are signature design elements
+  - Code blocks are inverted (white text on black background) with thick borders and drop shadows
+  - Tables have inverted header row (black bg, white text, Anton font) for visual hierarchy
+  - Square list bullets (list-style-type: square) reinforce geometric aesthetic
+  - Strong/bold text gets accent color (#ef4444) for emphasis
+  - Interactive elements (buttons) have transform + box-shadow transitions for tactile feel
+  - Button press effect: translate(2px, 2px) with smaller shadow simulates physical button press
+  - Definition lists use accent color for terms and left border for descriptions
+  - Reduced motion support removes text-shadows and button transforms for accessibility
+---
