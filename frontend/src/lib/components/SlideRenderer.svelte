@@ -161,28 +161,38 @@
 	});
 </script>
 
+<!--
+	SlideRenderer uses Tailwind utilities for layout and structure.
+	- Full width/height for slide area
+	- Layout classes (layout-title, layout-default, etc.) are passed to content
+	- Background support via inline styles (image, gradient, color)
+	- Fragment visibility controlled via Tailwind-based CSS classes
+-->
 {#if active}
 	<div
-		class="slide-renderer {layoutClass}"
-		class:has-fragments={hasFragments}
+		class="slide-renderer {layoutClass} w-full h-full p-slide relative overflow-hidden {hasFragments ? 'has-fragments' : ''}"
 		style={backgroundStyles}
 		in:getTransition
 		out:getTransition
 	>
-		<div class="slide-content">
+		<div class="slide-content w-full h-full">
 			{@html processedHtml}
 		</div>
 	</div>
 {/if}
 
 <style>
-	/* Legacy CSS removed - will be replaced with Tailwind in US-106 */
-	/* Animation-related styles preserved below */
-
-	/* Fragment transition animations */
+	/*
+	 * Fragment animation styles - kept as custom CSS because they target
+	 * dynamically generated HTML content via {@html} which cannot use
+	 * Tailwind classes directly.
+	 *
+	 * These use Tailwind-like timing values:
+	 * - duration-fragment (300ms from tailwind.config.js)
+	 * - translateY(20px) for slide-up effect
+	 */
 	:global(.fragment) {
-		transition: opacity var(--fragment-duration, 400ms) ease-out,
-			transform var(--fragment-duration, 400ms) ease-out;
+		transition: opacity 300ms ease-out, transform 300ms ease-out;
 	}
 
 	:global(.fragment-hidden) {
@@ -197,7 +207,7 @@
 		pointer-events: auto;
 	}
 
-	/* Reduced motion support for fragments */
+	/* Reduced motion: disable transform animations, instant opacity change */
 	@media (prefers-reduced-motion: reduce) {
 		:global(.fragment) {
 			transition: none;
