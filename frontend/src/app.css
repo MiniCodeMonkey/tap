@@ -10,6 +10,9 @@
 /* UI component styles */
 @import "./lib/styles/ui-components.css";
 
+/* Presenter view styles */
+@import "./lib/styles/presenter-view.css";
+
 @import "tailwindcss";
 @config "../tailwind.config.js";
 
