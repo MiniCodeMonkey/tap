@@ -1488,3 +1488,18 @@ Started: Fri Jan 23 16:33:21 CET 2026
   - Typography sizes are slightly smaller for multi-column layouts to fit content better
   - Sidebar has a left border on second child for visual separation
 ---
+
+## 2026-01-24 - US-107C
+- What was implemented: Migrated CodeFocus, Quote, and BigStat layout components to Tailwind
+- Files changed:
+  - frontend/src/lib/styles/layouts.css (added CSS rules for layout-code-focus, layout-quote, layout-big-stat)
+  - frontend/src/lib/layouts/LayoutCodeFocus.svelte (simplified to use CSS from layouts.css)
+  - frontend/src/lib/layouts/LayoutQuote.svelte (simplified to use CSS from layouts.css)
+  - frontend/src/lib/layouts/LayoutBigStat.svelte (simplified to use CSS from layouts.css)
+- **Learnings for future iterations:**
+  - CodeFocus layout uses flex-grow on pre blocks so code takes maximum available space
+  - Quote layout uses centered flex with 6px accent border on left, blockquote styling with attribution handling
+  - BigStat layout uses massive 12rem font-size (slide-stat scale) for h1/strong elements with accent color
+  - All three layouts follow the same pattern: CSS in layouts.css, Svelte components just provide structure
+  - Theme CSS variables used: --color-text, --color-muted, --color-accent, --color-code-bg, --font-mono
+---

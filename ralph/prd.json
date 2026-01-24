@@ -148,8 +148,8 @@
         "Verify in browser: code-focus, quote, and big-stat layouts render correctly"
       ],
       "priority": 9,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Added CSS rules for layout-code-focus, layout-quote, and layout-big-stat to layouts.css. CodeFocus has flex-grow code blocks, Quote uses 6px accent border with centered layout, BigStat uses 12rem font for massive stat display. All use theme CSS variables (--color-text, --color-muted, --color-accent, --color-code-bg, --font-mono)"
     },
     {
       "id": "US-107D",
