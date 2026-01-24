@@ -205,40 +205,13 @@
 </div>
 
 <style>
-	.fragment-container {
-		/* Stack fragments vertically by default */
-		display: flex;
-		flex-direction: column;
-		width: 100%;
-	}
-
-	.fragment-item {
-		/* Default styling for fragment items */
-		width: 100%;
-	}
+	/* Legacy CSS removed - will be replaced with Tailwind in US-108 */
+	/* Animation-related styles preserved below */
 
 	/* Show-all mode removes transitions and shows everything */
 	.show-all .fragment-item {
 		opacity: 1 !important;
 		transform: none !important;
-	}
-
-	/* ========================================================================
-	 * Fragment content styling (global to affect nested HTML)
-	 * ======================================================================== */
-
-	/* Ensure proper spacing between fragments */
-	.fragment-item :global(> *:first-child) {
-		margin-top: 0;
-	}
-
-	.fragment-item :global(> *:last-child) {
-		margin-bottom: 0;
-	}
-
-	/* Add gap between fragment items */
-	.fragment-container {
-		gap: var(--fragment-gap, 1em);
 	}
 
 	/* Reduced motion support */

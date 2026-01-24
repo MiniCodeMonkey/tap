@@ -160,110 +160,15 @@
 </div>
 
 <style>
+	/* Legacy CSS removed - will be replaced with Tailwind in US-105 */
+	/* Animation-related styles preserved below */
+
 	.slide-container {
-		/* Fill the available space */
-		width: 100%;
-		height: 100%;
-
-		/* Center the slide */
-		display: flex;
-		align-items: center;
-		justify-content: center;
-
-		/* Prevent overflow */
-		overflow: hidden;
-
-		/* Background for letterboxing */
-		background-color: var(--slide-container-bg, #000);
-
-		/* Smooth transitions for fullscreen */
 		transition: background-color 0.3s ease;
 	}
 
-	.slide-container.fullscreen {
-		/* Fullscreen-specific styles */
-		position: fixed;
-		top: 0;
-		left: 0;
-		right: 0;
-		bottom: 0;
-		z-index: 9999;
-	}
-
 	.slide {
-		/* Base dimensions at 1920x1080 (or equivalent based on aspect ratio) */
-		width: 1920px;
-		height: calc(1920px / var(--aspect-ratio));
-		aspect-ratio: var(--aspect-ratio);
-
-		/* Slide background */
-		background-color: var(--slide-bg, #fff);
-
-		/* Enable transforms */
-		transform-origin: center center;
-
-		/* Smooth scaling transitions */
 		transition: transform 0.2s ease-out;
-
-		/* Slide styling */
-		position: relative;
-		overflow: hidden;
-
-		/* Typography defaults */
-		font-family: var(--font-family, system-ui, -apple-system, sans-serif);
-		font-size: var(--base-font-size, 32px);
-		line-height: var(--line-height, 1.5);
-		color: var(--text-color, #1a1a1a);
-	}
-
-	/* Theme CSS custom properties are defined in theme CSS files */
-	/* These are fallback defaults */
-	.slide-container {
-		--slide-container-bg: #000;
-		--slide-bg: #fff;
-		--text-color: #1a1a1a;
-		--font-family: system-ui, -apple-system, 'Helvetica Neue', sans-serif;
-		--base-font-size: 32px;
-		--line-height: 1.5;
-	}
-
-	/* Minimal theme defaults (more defined in theme CSS) */
-	:global(.theme-minimal) {
-		--slide-container-bg: #000;
-		--slide-bg: #fff;
-		--text-color: #1a1a1a;
-	}
-
-	/* Gradient theme defaults */
-	:global(.theme-gradient) {
-		--slide-container-bg: #0f0f23;
-		--slide-bg: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-	}
-
-	/* Terminal theme defaults */
-	:global(.theme-terminal) {
-		--slide-container-bg: #000;
-		--slide-bg: #0d1117;
-		--text-color: #00ff00;
-	}
-
-	/* Brutalist theme defaults */
-	:global(.theme-brutalist) {
-		--slide-container-bg: #000;
-		--slide-bg: #fff;
-		--text-color: #000;
-	}
-
-	/* Keynote theme defaults */
-	:global(.theme-keynote) {
-		--slide-container-bg: #1a1a1a;
-		--slide-bg: #fff;
-		--text-color: #333;
-	}
-
-	/* Ensure slide content fills the slide */
-	.slide :global(*) {
-		box-sizing: border-box;
 	}
 
 	/* Reduced motion support */

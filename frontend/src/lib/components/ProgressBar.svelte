@@ -77,55 +77,15 @@
 {/if}
 
 <style>
+	/* Legacy CSS removed - will be replaced with Tailwind in US-108 */
+	/* Animation-related styles preserved below */
+
 	.progress-bar-container {
-		/* Position at bottom of slide viewport */
-		position: fixed;
-		bottom: 0;
-		left: 0;
-		right: 0;
-		z-index: 100;
-
-		/* Subtle appearance */
-		height: 3px;
-		background-color: var(--progress-bg, rgba(0, 0, 0, 0.1));
-
-		/* Smooth appearance */
 		transition: opacity 0.3s ease;
 	}
 
 	.progress-bar-fill {
-		height: 100%;
-		background-color: var(--progress-fill, rgba(124, 58, 237, 0.6));
-
-		/* Smooth width transitions */
 		transition: width 0.3s ease-out;
-	}
-
-	/* Theme-specific overrides */
-	:global(.theme-minimal) .progress-bar-container {
-		--progress-bg: rgba(0, 0, 0, 0.05);
-		--progress-fill: rgba(124, 58, 237, 0.5);
-	}
-
-	:global(.theme-terminal) .progress-bar-container {
-		--progress-bg: rgba(0, 255, 0, 0.1);
-		--progress-fill: rgba(0, 255, 0, 0.6);
-	}
-
-	:global(.theme-gradient) .progress-bar-container {
-		--progress-bg: rgba(255, 255, 255, 0.1);
-		--progress-fill: rgba(251, 191, 36, 0.7);
-	}
-
-	:global(.theme-brutalist) .progress-bar-container {
-		--progress-bg: rgba(0, 0, 0, 0.1);
-		--progress-fill: #ff0000;
-		height: 4px;
-	}
-
-	:global(.theme-keynote) .progress-bar-container {
-		--progress-bg: rgba(0, 0, 0, 0.05);
-		--progress-fill: rgba(0, 122, 255, 0.6);
 	}
 
 	/* Reduced motion support */
