@@ -142,15 +142,18 @@
 	});
 </script>
 
+<!--
+	SlideContainer uses Tailwind utilities for layout and theme CSS variables for colors.
+	The slide is centered in the viewport using flex and scaled to fit within the container.
+-->
 <div
-	class="slide-container theme-{theme}"
-	class:fullscreen
+	class="slide-container theme-{theme} w-full h-full flex items-center justify-center bg-theme-bg overflow-hidden transition-colors duration-slide ease-out {fullscreen ? 'fixed inset-0 z-50' : 'relative'}"
 	bind:this={containerRef}
 >
 	<div
-		class="slide"
+		class="slide w-[1920px] origin-center bg-theme-bg text-theme-text transition-transform duration-slide-fast ease-out motion-reduce:transition-none"
 		bind:this={slideRef}
-		style:--aspect-ratio={cssAspectRatio}
+		style:aspect-ratio={cssAspectRatio}
 		style:transform="scale({scale})"
 	>
 		{#if children}
@@ -158,26 +161,3 @@
 		{/if}
 	</div>
 </div>
-
-<style>
-	/* Legacy CSS removed - will be replaced with Tailwind in US-105 */
-	/* Animation-related styles preserved below */
-
-	.slide-container {
-		transition: background-color 0.3s ease;
-	}
-
-	.slide {
-		transition: transform 0.2s ease-out;
-	}
-
-	/* Reduced motion support */
-	@media (prefers-reduced-motion: reduce) {
-		.slide-container {
-			transition: none;
-		}
-		.slide {
-			transition: none;
-		}
-	}
-</style>
