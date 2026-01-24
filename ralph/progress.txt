@@ -1396,3 +1396,22 @@ Started: Fri Jan 23 16:33:21 CET 2026
   - @import statements must come before other CSS rules in file - moved theme-tokens.css import to top of app.css
   - Switching theme class on root element instantly updates all colors due to CSS custom properties
 ---
+
+## 2026-01-24 - US-104
+- What was implemented: Archived legacy CSS and removed custom style blocks from components
+- Files changed:
+  - frontend/src/lib/themes/_legacy/ (new directory)
+  - frontend/src/lib/themes/_legacy/*.css (moved: minimal.css, gradient.css, terminal.css, brutalist.css, keynote.css)
+  - frontend/src/lib/components/SlideContainer.svelte (removed custom CSS, kept animation transitions)
+  - frontend/src/lib/components/SlideRenderer.svelte (removed custom CSS, kept fragment transition styles)
+  - frontend/src/lib/components/ProgressBar.svelte (removed custom CSS, kept transition styles)
+  - frontend/src/lib/components/ConnectionIndicator.svelte (removed custom CSS, kept @keyframes animations)
+  - frontend/src/lib/components/FragmentContainer.svelte (removed custom CSS, kept show-all and reduced-motion styles)
+  - frontend/src/lib/layouts/*.svelte (all 10 layout components: removed all custom CSS)
+- **Learnings for future iterations:**
+  - Keep animation-related styles (@keyframes, transitions, reduced-motion media queries) when removing legacy CSS
+  - Animation styles in Svelte components: slideIn, pulse keyframes for ConnectionIndicator, opacity/transform transitions for fragments
+  - Legacy theme CSS files are now in `_legacy/` directory if reference is needed during Tailwind migration
+  - Visual styling will be broken after this change until Tailwind migration is complete (expected)
+  - ESLint and typecheck pass but build output will look unstyled
+---
