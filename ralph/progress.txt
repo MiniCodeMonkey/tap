@@ -1565,3 +1565,19 @@ Started: Fri Jan 23 16:33:21 CET 2026
   - Touch-friendly controls use min-height 3rem and larger padding on tablet breakpoint
   - Notes panel typography styles <strong> with #e94560 (pink) and <em> with #4ecca3 (teal)
 ---
+
+## 2026-01-24 - US-111
+- What was implemented: Paper theme - ultra-clean, premium paper aesthetic
+- Files changed:
+  - frontend/src/lib/themes/paper.css (new - Paper theme with CSS custom properties)
+  - frontend/src/lib/themes/theme-tokens.css (removed Paper theme, kept only defaults)
+  - frontend/src/app.css (added import for paper.css)
+- **Learnings for future iterations:**
+  - Theme files should be separate CSS files (paper.css, aurora.css, etc.) imported in app.css
+  - theme-tokens.css should only contain :root defaults and documentation
+  - All theme classes follow .theme-{name} convention (e.g., .theme-paper)
+  - Theme CSS includes: core colors, extended colors, typography, transitions, element styles
+  - Use var(--color-accent) for link colors to maintain consistency
+  - Include reduced motion support via @media (prefers-reduced-motion: reduce)
+  - Verify theme is compiled into CSS bundle with `grep ".theme-paper" dist/assets/*.css`
+---
