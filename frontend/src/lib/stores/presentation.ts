@@ -4,7 +4,7 @@
  */
 
 import { writable, derived, type Readable } from 'svelte/store';
-import type { Presentation, Slide } from '$lib/types';
+import type { Presentation, Slide, Theme } from '$lib/types';
 
 // ============================================================================
 // Writable Stores
@@ -25,6 +25,13 @@ export const currentSlideIndex = writable<number>(0);
  * -1 means no fragments are visible (before first fragment).
  */
 export const currentFragmentIndex = writable<number>(-1);
+
+/**
+ * Theme override from WebSocket.
+ * When set, this overrides the theme from presentation config.
+ * This is temporary and doesn't modify the markdown file.
+ */
+export const themeOverride = writable<Theme | null>(null);
 
 // ============================================================================
 // Derived Stores
@@ -305,4 +312,19 @@ export function resetPresentation(): void {
 export function loadPresentation(data: Presentation): void {
 	presentation.set(data);
 	initializeFromURL();
+}
+
+/**
+ * Set the theme override from WebSocket message.
+ * This temporarily overrides the theme without modifying the markdown file.
+ */
+export function setThemeOverride(theme: Theme): void {
+	themeOverride.set(theme);
+}
+
+/**
+ * Clear the theme override, reverting to the presentation config theme.
+ */
+export function clearThemeOverride(): void {
+	themeOverride.set(null);
 }

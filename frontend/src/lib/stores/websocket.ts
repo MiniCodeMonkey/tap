@@ -4,8 +4,8 @@
  */
 
 import { writable, type Writable, type Readable, derived } from 'svelte/store';
-import type { WebSocketMessage } from '$lib/types';
-import { goToSlide, presentation } from '$lib/stores/presentation';
+import type { WebSocketMessage, Theme } from '$lib/types';
+import { goToSlide, presentation, setThemeOverride } from '$lib/stores/presentation';
 
 // ============================================================================
 // Constants
@@ -209,6 +209,11 @@ export class WebSocketClient {
 				// Sync to specific slide
 				this.handleSlideNavigation(message.slideIndex);
 				break;
+
+			case 'theme':
+				// Switch to a different theme
+				this.handleThemeChange(message.theme);
+				break;
 		}
 	}
 
@@ -236,6 +241,20 @@ export class WebSocketClient {
 
 		if (hasPresentation) {
 			goToSlide(slideIndex);
+		}
+	}
+
+	/**
+	 * Handle theme change message.
+	 * Updates the theme override store to switch themes instantly.
+	 */
+	private handleThemeChange(theme: string | undefined): void {
+		if (!theme) return;
+
+		// Validate theme is one of the known themes
+		const validThemes = ['paper', 'noir', 'aurora', 'phosphor', 'poster'];
+		if (validThemes.includes(theme)) {
+			setThemeOverride(theme as Theme);
 		}
 	}
 

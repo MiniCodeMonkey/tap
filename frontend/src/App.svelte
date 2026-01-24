@@ -7,7 +7,8 @@
 		currentSlideIndex,
 		currentFragmentIndex,
 		loadPresentation,
-		setupHashChangeListener
+		setupHashChangeListener,
+		themeOverride
 	} from '$lib/stores/presentation';
 	import {
 		connectWebSocket,
@@ -36,12 +37,14 @@
 	let slideIndex = $state(0);
 	let fragmentIndex = $state(-1);
 	let slides = $state<Slide[]>([]);
+	let currentThemeOverride = $state<string | null>(null);
 
 	// ============================================================================
 	// Derived Values
 	// ============================================================================
 
-	let theme = $derived(presentationData?.config?.theme ?? 'paper');
+	// Theme override from WebSocket takes precedence over presentation config
+	let theme = $derived(currentThemeOverride ?? presentationData?.config?.theme ?? 'paper');
 	let aspectRatio = $derived(presentationData?.config?.aspectRatio ?? '16:9');
 	let showProgressBar = $derived(presentationData?.config?.showProgressBar !== false);
 	let themeColors = $derived(presentationData?.config?.themeColors);
@@ -184,6 +187,12 @@
 		unsubscribers.push(
 			currentFragmentIndex.subscribe((value) => {
 				fragmentIndex = value;
+			})
+		);
+
+		unsubscribers.push(
+			themeOverride.subscribe((value) => {
+				currentThemeOverride = value;
 			})
 		);
 

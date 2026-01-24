@@ -13,7 +13,8 @@
 		nextSlide,
 		prevSlide,
 		goToSlide,
-		loadPresentation
+		loadPresentation,
+		themeOverride
 	} from '$lib/stores/presentation';
 	import {
 		connected,
@@ -35,6 +36,7 @@
 	let fragmentCount = $state(0);
 	let slide = $state<Slide | null>(null);
 	let isConnected = $state(false);
+	let currentThemeOverride = $state<string | null>(null);
 
 	// ============================================================================
 	// Derived State
@@ -47,7 +49,8 @@
 		return presentationData.slides[slideIndex + 1] ?? null;
 	});
 
-	let theme = $derived(presentationData?.config?.theme ?? 'paper');
+	// Theme override from WebSocket takes precedence over presentation config
+	let theme = $derived(currentThemeOverride ?? presentationData?.config?.theme ?? 'paper');
 	let aspectRatio = $derived(presentationData?.config?.aspectRatio ?? '16:9');
 	let speakerNotes = $derived(slide?.notes ?? '');
 	let hasNotes = $derived(speakerNotes.length > 0);
@@ -274,6 +277,12 @@
 		unsubscribers.push(
 			connected.subscribe((value) => {
 				isConnected = value;
+			})
+		);
+
+		unsubscribers.push(
+			themeOverride.subscribe((value) => {
+				currentThemeOverride = value;
 			})
 		);
 	}

@@ -185,7 +185,7 @@ export interface Presentation {
 /**
  * WebSocket message types for hot reload and sync.
  */
-export type WebSocketMessageType = 'connected' | 'reload' | 'slide';
+export type WebSocketMessageType = 'connected' | 'reload' | 'slide' | 'theme';
 
 /**
  * WebSocket message from the server.
@@ -193,6 +193,8 @@ export type WebSocketMessageType = 'connected' | 'reload' | 'slide';
 export interface WebSocketMessage {
 	type: WebSocketMessageType;
 	slideIndex?: number;
+	/** Theme name for theme switching messages */
+	theme?: string;
 }
 
 // ============================================================================
