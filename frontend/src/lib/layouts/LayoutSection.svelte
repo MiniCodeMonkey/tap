@@ -9,6 +9,9 @@
 	 *
 	 * Expected HTML structure:
 	 * - h2: Section title (required)
+	 *
+	 * Typography styles are in src/lib/styles/layouts.css.
+	 * This component provides the structure, CSS handles the styling.
 	 */
 
 	import type { Snippet } from 'svelte';
@@ -25,12 +28,12 @@
 	let { children }: Props = $props();
 </script>
 
+<!--
+	LayoutSection uses CSS from layouts.css for centered section header presentation.
+	Content is centered both horizontally and vertically using flexbox.
+-->
 <div class="layout-section">
 	<div class="section-content">
 		{@render children()}
 	</div>
 </div>
-
-<style>
-	/* Legacy CSS removed - will be replaced with Tailwind in US-107A */
-</style>

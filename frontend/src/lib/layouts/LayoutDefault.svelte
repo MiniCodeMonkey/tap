@@ -14,6 +14,9 @@
 	 * - ul, ol: Lists
 	 * - img: Images
 	 * - pre, code: Code blocks
+	 *
+	 * Typography styles are in src/lib/styles/layouts.css.
+	 * This component provides the structure, CSS handles the styling.
 	 */
 
 	import type { Snippet } from 'svelte';
@@ -30,12 +33,12 @@
 	let { children }: Props = $props();
 </script>
 
+<!--
+	LayoutDefault uses CSS from layouts.css for standard content presentation.
+	Content flows vertically with proper spacing between elements.
+-->
 <div class="layout-default">
 	<div class="default-content">
 		{@render children()}
 	</div>
 </div>
-
-<style>
-	/* Legacy CSS removed - will be replaced with Tailwind in US-107A */
-</style>

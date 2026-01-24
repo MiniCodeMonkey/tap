@@ -1,6 +1,9 @@
 /* Theme system - CSS custom properties that Tailwind utilities reference */
 @import "./lib/themes/theme-tokens.css";
 
+/* Layout typography styles */
+@import "./lib/styles/layouts.css";
+
 @import "tailwindcss";
 @config "../tailwind.config.js";
 

@@ -10,6 +10,9 @@
 	 * Expected HTML structure:
 	 * - h1: Main title (required)
 	 * - p: Subtitle (optional)
+	 *
+	 * Typography styles are in src/lib/styles/layouts.css.
+	 * This component provides the structure, CSS handles the styling.
 	 */
 
 	import type { Snippet } from 'svelte';
@@ -26,12 +29,12 @@
 	let { children }: Props = $props();
 </script>
 
+<!--
+	LayoutTitle uses CSS from layouts.css for centered title presentation.
+	Content is centered both horizontally and vertically using flexbox.
+-->
 <div class="layout-title">
 	<div class="title-content">
 		{@render children()}
 	</div>
 </div>
-
-<style>
-	/* Legacy CSS removed - will be replaced with Tailwind in US-107A */
-</style>
