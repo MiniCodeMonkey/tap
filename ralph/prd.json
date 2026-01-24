@@ -468,8 +468,8 @@
         "Typecheck passes"
       ],
       "priority": 27,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "SPEC.md was already fully updated with new theme names in US-120. All theme: paper examples correct, theme list shows paper/noir/aurora/phosphor/poster, descriptions match new visual directions."
     },
     {
       "id": "US-125",

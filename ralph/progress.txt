@@ -1798,3 +1798,15 @@ Started: Fri Jan 23 16:33:21 CET 2026
   - HomeThemes.vue in VitePress has hardcoded theme metadata (names, vibes, gradients, accent colors)
   - Benchmark test files generate test presentations with hardcoded frontmatter
 ---
+
+## 2026-01-24 - US-124
+- What was implemented: Verified SPEC.md already updated with new theme names and descriptions
+- Files changed:
+  - ralph/prd.json (marked US-124 as passes: true)
+- **Learnings for future iterations:**
+  - SPEC.md was already fully updated in US-120 with new theme names (paper, noir, aurora, phosphor, poster)
+  - All theme: examples use 'paper', theme list shows new names, descriptions match new visual directions
+  - When a user story's work was already completed by a previous story, verify with grep and mark as complete
+  - Grep for `theme:\s*(minimal|keynote|gradient|terminal|brutalist)` to find old theme identifiers
+  - Words like "terminal" or "gradient" may appear in valid contexts (terminal recordings, gradient mesh) - check context
+---
