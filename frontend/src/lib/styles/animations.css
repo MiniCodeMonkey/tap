@@ -1,0 +1,322 @@
+/**
+ * Animation Utilities for Tap Presentations
+ *
+ * This file contains complex CSS animations that Tailwind CSS cannot express.
+ * For simple animations, prefer Tailwind utilities (transition-*, animate-*).
+ *
+ * ============================================================================
+ * ANIMATION ARCHITECTURE
+ * ============================================================================
+ *
+ * Slide Transitions:
+ *   - Use Svelte transitions (fade, fly, scale from 'svelte/transition')
+ *   - Configured in SlideRenderer.svelte via getTransition()
+ *   - Supports: fade, slide, push, zoom, none
+ *   - Respects prefers-reduced-motion automatically
+ *
+ * Fragment Reveals:
+ *   - Use Tailwind opacity/transform utilities with transition-all
+ *   - CSS: .fragment, .fragment-hidden, .fragment-visible classes
+ *   - Animations defined in SlideRenderer.svelte <style> block
+ *   - 300ms ease-out timing for smooth appearance
+ *
+ * Theme Animations:
+ *   - Complex theme-specific animations live in theme CSS files
+ *   - Aurora: gradient mesh animation (aurora.css)
+ *   - Phosphor: CRT effects (phosphor.css)
+ *   - These ARE NOT duplicated here to avoid maintenance burden
+ *
+ * This file contains:
+ *   - Shared utility keyframes that multiple components might use
+ *   - Common animation classes for programmatic use
+ *   - Documentation of the animation system
+ *
+ * ============================================================================
+ * UTILITY ANIMATIONS
+ * ============================================================================
+ *
+ * These are general-purpose animations that can be used across themes.
+ */
+
+/* -----------------------------------------------------------------------------
+ * FADE ANIMATIONS
+ * For simple opacity transitions. Tailwind can do these, but having named
+ * keyframes is useful for JavaScript-controlled animations.
+ * -------------------------------------------------------------------------- */
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes fade-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+/* -----------------------------------------------------------------------------
+ * SLIDE ANIMATIONS
+ * For content entering/exiting from directions.
+ * Tailwind can do translateX/Y, but combined opacity+transform is cleaner here.
+ * -------------------------------------------------------------------------- */
+
+@keyframes slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slide-down {
+  from {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slide-left {
+  from {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes slide-right {
+  from {
+    opacity: 0;
+    transform: translateX(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* -----------------------------------------------------------------------------
+ * SCALE ANIMATIONS
+ * For zoom-in/out effects.
+ * -------------------------------------------------------------------------- */
+
+@keyframes scale-in {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes scale-out {
+  from {
+    opacity: 1;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+}
+
+/* -----------------------------------------------------------------------------
+ * ATTENTION ANIMATIONS
+ * For drawing attention to elements. These are complex multi-step animations
+ * that Tailwind cannot express.
+ * -------------------------------------------------------------------------- */
+
+/* Subtle pulse for highlighting important content */
+@keyframes pulse-subtle {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.8;
+  }
+}
+
+/* Gentle bounce for callouts */
+@keyframes bounce-subtle {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-5px);
+  }
+}
+
+/* -----------------------------------------------------------------------------
+ * LOADING/SPINNER ANIMATIONS
+ * Tailwind has animate-spin, but custom spinners may need these.
+ * -------------------------------------------------------------------------- */
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Pulsing dot animation for loading states */
+@keyframes pulse-dot {
+  0%,
+  80%,
+  100% {
+    opacity: 0.3;
+    transform: scale(0.8);
+  }
+  40% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* ============================================================================
+ * ANIMATION UTILITY CLASSES
+ * ============================================================================
+ * Apply these classes to elements for quick animations.
+ * Duration can be customized with inline style: style="--animation-duration: 500ms"
+ */
+
+.animate-fade-in {
+  animation: fade-in var(--animation-duration, 400ms) ease-out forwards;
+}
+
+.animate-fade-out {
+  animation: fade-out var(--animation-duration, 400ms) ease-out forwards;
+}
+
+.animate-slide-up {
+  animation: slide-up var(--animation-duration, 400ms) ease-out forwards;
+}
+
+.animate-slide-down {
+  animation: slide-down var(--animation-duration, 400ms) ease-out forwards;
+}
+
+.animate-slide-left {
+  animation: slide-left var(--animation-duration, 400ms) ease-out forwards;
+}
+
+.animate-slide-right {
+  animation: slide-right var(--animation-duration, 400ms) ease-out forwards;
+}
+
+.animate-scale-in {
+  animation: scale-in var(--animation-duration, 400ms) ease-out forwards;
+}
+
+.animate-scale-out {
+  animation: scale-out var(--animation-duration, 400ms) ease-out forwards;
+}
+
+.animate-pulse-subtle {
+  animation: pulse-subtle 2s ease-in-out infinite;
+}
+
+.animate-bounce-subtle {
+  animation: bounce-subtle 1s ease-in-out infinite;
+}
+
+/* ============================================================================
+ * REDUCED MOTION SUPPORT
+ * ============================================================================
+ * Respect user preference for reduced motion. All animations become instant.
+ */
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-fade-in,
+  .animate-fade-out,
+  .animate-slide-up,
+  .animate-slide-down,
+  .animate-slide-left,
+  .animate-slide-right,
+  .animate-scale-in,
+  .animate-scale-out,
+  .animate-pulse-subtle,
+  .animate-bounce-subtle {
+    animation: none;
+  }
+
+  /* For utility classes, apply final state immediately */
+  .animate-fade-in {
+    opacity: 1;
+  }
+
+  .animate-fade-out {
+    opacity: 0;
+  }
+
+  .animate-slide-up,
+  .animate-slide-down,
+  .animate-slide-left,
+  .animate-slide-right,
+  .animate-scale-in {
+    opacity: 1;
+    transform: none;
+  }
+
+  .animate-scale-out {
+    opacity: 0;
+    transform: none;
+  }
+}
+
+/* ============================================================================
+ * THEME-SPECIFIC ANIMATIONS (DOCUMENTATION)
+ * ============================================================================
+ *
+ * The following animations are defined in their respective theme files and
+ * should NOT be duplicated here. They are theme-specific and tightly coupled
+ * to the theme's visual design.
+ *
+ * AURORA THEME (aurora.css):
+ *   - @keyframes aurora-gradient: Animated gradient mesh background
+ *     - 20s ease infinite, moves background-position 0%->100%->0%
+ *   - @keyframes aurora-glow: Subtle opacity pulse for glow effects
+ *     - Used for light leak effects on accent elements
+ *
+ * PHOSPHOR THEME (phosphor.css):
+ *   - @keyframes phosphor-flicker: CRT screen flicker effect
+ *     - Subtle opacity drops at 92-94% to simulate CRT instability
+ *   - @keyframes phosphor-pulse: Screen brightness pulse
+ *     - 4s ease-in-out infinite, brightness 1.0->1.02->1.0
+ *   - CRT scanlines: Not a keyframe, but a ::before pseudo-element using
+ *     repeating-linear-gradient for scanline overlay effect
+ *   - Screen curve vignette: ::after pseudo-element with radial-gradient
+ *
+ * NOIR THEME (noir.css):
+ *   - No custom keyframes; uses CSS shadows and gradients for cinematic depth
+ *
+ * PAPER THEME (paper.css):
+ *   - No custom keyframes; relies on subtle transitions (400ms ease-out)
+ *
+ * POSTER THEME (poster.css):
+ *   - No custom keyframes; bold static design with no animation
+ *
+ * ============================================================================
+ */

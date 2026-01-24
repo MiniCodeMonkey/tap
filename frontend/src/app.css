@@ -17,6 +17,9 @@
 /* UI component styles */
 @import "./lib/styles/ui-components.css";
 
+/* Animation utilities (complex animations Tailwind cannot express) */
+@import "./lib/styles/animations.css";
+
 /* Presenter view styles */
 @import "./lib/styles/presenter-view.css";
 
