@@ -1,26 +1,26 @@
 ---
-title: Brutalist Theme Showcase
-theme: brutalist
+title: Poster Theme Showcase
+theme: poster
 author: TAP PRESENTATIONS
 date: 2026-01-24
 aspectRatio: "16:9"
 transition: none
 ---
 
-# BRUTALIST
+# POSTER
 
-BOLD. GEOMETRIC. UNCOMPROMISING.
+BOLD. GRAPHIC. IMPOSSIBLE TO IGNORE.
 
 ---
 
 ## DESIGN PHILOSOPHY
 
-The brutalist theme delivers:
+The Poster theme delivers:
 
 - **RAW POWER** - High contrast black and white
-- **BOLD TYPOGRAPHY** - Uppercase, heavy weights
-- **GEOMETRIC FORMS** - Sharp edges, thick borders
-- **NO DECORATION** - Function over form
+- **BOLD TYPOGRAPHY** - Anton font, ALL CAPS
+- **THICK BORDERS** - 4px+ with harsh drop shadows
+- **NO ROUNDED CORNERS** - Everything sharp and rectangular
 
 ---
 
@@ -28,15 +28,15 @@ The brutalist theme delivers:
 
 <!-- pause -->
 
-ARIAL BLACK - THE TYPEFACE OF BRUTALISM
+ANTON - THE TYPEFACE OF BOLD STATEMENTS
 
 <!-- pause -->
 
-UPPERCASE EVERYTHING
+ALL CAPS EVERYTHING VIA TEXT-TRANSFORM
 
 <!-- pause -->
 
-MAXIMUM IMPACT
+MAXIMUM IMPACT WITH EVERY WORD
 
 ---
 
@@ -48,14 +48,14 @@ package main
 import "fmt"
 
 func main() {
-    message := "BRUTALIST CODE"
+    message := "POSTER CODE"
     for i := 0; i < 3; i++ {
         fmt.Println(message)
     }
 }
 ```
 
-THICK BORDERS. SQUARE CORNERS. NO NONSENSE.
+INVERTED COLORS. WHITE ON BLACK. NO NONSENSE.
 
 ---
 
@@ -105,23 +105,23 @@ STRIPPED TO THE ESSENTIALS
 
 ## COLOR PALETTE
 
-The brutalist palette:
+The Poster palette:
 
 - **BLACK** - #000000
 - **WHITE** - #FFFFFF
 - **RED ACCENT** - #EF4444
 
-NO GRADIENTS. NO SHADOWS. PURE CONTRAST.
+NO GRADIENTS. NO BLUR. PURE CONTRAST.
 
 ---
 
-## GEOMETRIC SHAPES
+## GEOMETRIC DESIGN
 
 | ELEMENT | STYLE |
 |---------|-------|
 | BORDERS | 4-8PX THICK |
 | CORNERS | SHARP 90deg |
-| SPACING | GENEROUS |
+| SHADOWS | 8px 8px 0 black |
 | ALIGNMENT | STRICT GRID |
 
 ---
@@ -152,18 +152,18 @@ NUMBERED FOR SEQUENCE:
 
 ---
 
-## WHEN TO USE BRUTALIST
+## WHEN TO USE POSTER
 
 - ARCHITECTURE PRESENTATIONS
 - DESIGN CRITIQUES
-- PROTEST AND ACTIVISM
 - MAKING A STATEMENT
 - STANDING OUT
 - REJECTING TRENDS
+- DEMANDING ATTENTION
 
 ---
 
-## BRUTALIST MANIFESTO
+## POSTER MANIFESTO
 
 <!-- pause -->
 
@@ -187,6 +187,6 @@ MAKE IT BOLD
 layout: title
 -->
 
-# BRUTALIST
+# POSTER
 
 FORM FOLLOWS FUNCTION

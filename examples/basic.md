@@ -1,6 +1,6 @@
 ---
 title: Getting Started with Tap
-theme: minimal
+theme: paper
 author: Your Name
 date: 2026-01-24
 aspectRatio: "16:9"

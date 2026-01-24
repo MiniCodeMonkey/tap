@@ -18,7 +18,7 @@ func generateBenchmarkPresentation(slideCount int) ([]byte, *config.Config) {
 	// Add frontmatter
 	buf.WriteString(`---
 title: Build Performance Test
-theme: minimal
+theme: paper
 author: Test Author
 date: "2026-01-23"
 aspectRatio: "16:9"

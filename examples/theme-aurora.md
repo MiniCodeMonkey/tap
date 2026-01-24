@@ -1,26 +1,26 @@
 ---
-title: Gradient Theme Showcase
-theme: gradient
+title: Aurora Theme Showcase
+theme: aurora
 author: Tap Presentations
 date: 2026-01-24
 aspectRatio: "16:9"
 transition: slide
 ---
 
-# Gradient Theme
+# Aurora Theme
 
-Modern, colorful, and eye-catching
+Vibrant, dynamic, mesmerizing like the northern lights
 
 ---
 
 ## Design Philosophy
 
-The gradient theme features:
+The Aurora theme features:
 
-- **Vibrant colors** - Purple to pink gradients
-- **Glassmorphism** - Frosted glass effects
-- **Depth** - Layered visual elements
-- **Energy** - Dynamic and engaging
+- **Vibrant colors** - Deep purples to electric blues to teals
+- **Glassmorphism** - Frosted glass effects with backdrop blur
+- **Animated gradients** - Subtle, mesmerizing movement
+- **Modern aesthetics** - Fresh and eye-catching
 
 ---
 
@@ -28,15 +28,15 @@ The gradient theme features:
 
 <!-- pause -->
 
-Primary gradient: Purple to Pink
+Primary gradient: Purple (#4c1d95) to Blue (#0ea5e9) to Teal (#14b8a6)
 
 <!-- pause -->
 
-Accent color: Gold (#fbbf24)
+Accent color: Cyan glow effects
 
 <!-- pause -->
 
-Glass overlays with subtle blur effects
+Glass overlays with `backdrop-blur-xl` effects
 
 ---
 
@@ -44,19 +44,19 @@ Glass overlays with subtle blur effects
 
 ```javascript
 const gradient = {
-  start: '#667eea',
-  middle: '#764ba2',
-  end: '#f093fb',
-  direction: '135deg'
+  start: '#4c1d95',
+  middle: '#0ea5e9',
+  end: '#14b8a6',
+  animation: '20s ease infinite'
 };
 
-const style = `linear-gradient(
-  ${gradient.direction},
-  ${gradient.start},
-  ${gradient.middle},
-  ${gradient.end}
-)`;
+const glass = {
+  background: 'rgba(0, 0, 0, 0.6)',
+  backdropBlur: 'xl'
+};
 ```
+
+Semi-transparent dark glass with cyan glow.
 
 ---
 
@@ -73,7 +73,7 @@ Modern UI design trend
 ### Characteristics
 - Semi-transparent backgrounds
 - Backdrop blur effects
-- Subtle borders
+- Glowing borders
 - Floating appearance
 
 |||
@@ -108,7 +108,7 @@ Make your content memorable
 
 ## Dynamic Elements
 
-The gradient theme excels at:
+The Aurora theme excels at:
 
 - **Standing out** in a sea of boring slides
 - **Capturing attention** immediately
@@ -123,28 +123,28 @@ layout: big-stat
 
 ## 3M+
 
-color combinations possible
+color combinations in the gradient mesh
 
 ---
 
 ## Lists with Style
 
-What makes gradient special:
+What makes Aurora special:
 
-- Smooth color transitions
+- Animated gradient backgrounds
 - Glassmorphism overlays
-- White text with shadows
-- Gold accent highlights
+- White text with glowing effects
+- Cyan accent highlights
 
 | Element | Effect |
 |---------|--------|
-| Backgrounds | Gradient fills |
+| Backgrounds | Animated gradient mesh |
 | Cards | Glass blur |
-| Text | Soft shadows |
+| Text | Soft glows |
 
 ---
 
-## When to Use Gradient
+## When to Use Aurora
 
 - Startup pitches
 - Creative presentations
@@ -159,6 +159,6 @@ What makes gradient special:
 layout: title
 -->
 
-# Gradient Theme
+# Aurora Theme
 
 Where color meets content

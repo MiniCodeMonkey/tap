@@ -68,7 +68,7 @@ Side-by-side:
 
 ```markdown
 ---
-theme: terminal
+theme: phosphor
 ---
 
 # Database Demo

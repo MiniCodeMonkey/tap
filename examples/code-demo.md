@@ -1,6 +1,6 @@
 ---
 title: Live Code Execution Demo
-theme: terminal
+theme: phosphor
 author: Developer
 date: 2026-01-24
 aspectRatio: "16:9"

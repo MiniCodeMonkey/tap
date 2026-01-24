@@ -1,6 +1,6 @@
 ---
 title: Test Presentation
-theme: minimal
+theme: paper
 author: Test Author
 aspectRatio: "16:9"
 transition: fade

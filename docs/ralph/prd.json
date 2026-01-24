@@ -147,7 +147,7 @@
       "acceptanceCriteria": [
         "docs/.vitepress/theme/components/HomeCode.vue exists",
         "Shows syntax-highlighted markdown code block",
-        "Code shows frontmatter with theme: terminal",
+        "Code shows frontmatter with theme: phosphor",
         "Code shows # Database Demo heading",
         "Code shows SQL code block with driver annotation",
         "Code shows descriptive text about live execution",

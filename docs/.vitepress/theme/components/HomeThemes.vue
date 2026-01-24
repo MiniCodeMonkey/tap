@@ -3,34 +3,34 @@ import { ref, onMounted, onUnmounted } from 'vue'
 
 const themes = [
   {
-    name: 'Minimal',
-    vibe: 'Clean & spacious',
-    gradient: 'linear-gradient(135deg, #f8fafc 0%, #e2e8f0 50%, #f1f5f9 100%)',
-    accent: '#64748b'
+    name: 'Paper',
+    vibe: 'Ultra-clean & premium',
+    gradient: 'linear-gradient(135deg, #ffffff 0%, #f5f5f4 50%, #ffffff 100%)',
+    accent: '#78716c'
   },
   {
-    name: 'Gradient',
-    vibe: 'Modern & vibrant',
-    gradient: 'linear-gradient(135deg, #6366f1 0%, #ec4899 50%, #f59e0b 100%)',
-    accent: '#6366f1'
+    name: 'Noir',
+    vibe: 'Cinematic & sophisticated',
+    gradient: 'linear-gradient(135deg, #0a0a0a 0%, #1a1a1a 50%, #d4af37 100%)',
+    accent: '#d4af37'
   },
   {
-    name: 'Terminal',
-    vibe: 'Hacker aesthetic',
-    gradient: 'linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #22c55e 100%)',
-    accent: '#22c55e'
+    name: 'Aurora',
+    vibe: 'Vibrant & dynamic',
+    gradient: 'linear-gradient(135deg, #4c1d95 0%, #0ea5e9 50%, #14b8a6 100%)',
+    accent: '#0ea5e9'
   },
   {
-    name: 'Brutalist',
-    vibe: 'Bold & geometric',
-    gradient: 'linear-gradient(135deg, #18181b 0%, #fafafa 50%, #ef4444 100%)',
+    name: 'Phosphor',
+    vibe: 'CRT & hacker aesthetic',
+    gradient: 'linear-gradient(135deg, #000000 0%, #001100 50%, #00ff00 100%)',
+    accent: '#00ff00'
+  },
+  {
+    name: 'Poster',
+    vibe: 'Bold & graphic',
+    gradient: 'linear-gradient(135deg, #000000 0%, #ffffff 50%, #ef4444 100%)',
     accent: '#ef4444'
-  },
-  {
-    name: 'Keynote',
-    vibe: 'Professional polish',
-    gradient: 'linear-gradient(135deg, #1e3a5f 0%, #2563eb 50%, #60a5fa 100%)',
-    accent: '#2563eb'
   }
 ]
 

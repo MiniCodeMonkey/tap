@@ -1,6 +1,6 @@
 ---
-title: Terminal Theme Showcase
-theme: terminal
+title: Phosphor Theme Showcase
+theme: phosphor
 author: root
 date: 2026-01-24
 aspectRatio: "16:9"
@@ -11,20 +11,20 @@ drivers:
     timeout: 10
 ---
 
-# Terminal Theme
+# Phosphor Theme
 
-$ ./present --theme=hacker
+$ ./present --theme=crt
 
 ---
 
 ## Design Philosophy
 
-The terminal theme brings:
+The Phosphor theme brings:
 
-- **Hacker aesthetic** - Dark background, glowing text
-- **Monospace everything** - Code-first design
-- **CRT effects** - Retro scanlines and glow
-- **Command-line feel** - Like presenting in vim
+- **CRT aesthetic** - True black with phosphor green glow
+- **Monospace everything** - JetBrains Mono throughout
+- **Scanline effects** - Authentic retro overlay
+- **Hacker vibes** - Like presenting in a terminal
 
 ---
 
@@ -32,15 +32,15 @@ The terminal theme brings:
 
 <!-- pause -->
 
-$ echo "Default: Green on black"
+$ echo "Primary: Phosphor green (#00ff00)"
 
 <!-- pause -->
 
-$ echo "Alternative: Amber on black"
+$ echo "Background: True black (#000)"
 
 <!-- pause -->
 
-$ export GLOW_EFFECT=enabled
+$ export GLOW_EFFECT="0 0 5px, 0 0 10px, 0 0 20px"
 
 ---
 
@@ -48,7 +48,7 @@ $ export GLOW_EFFECT=enabled
 
 ```bash
 #!/bin/bash
-# Terminal theme makes code shine
+# Phosphor theme makes everything a terminal
 
 function present() {
     local topic="$1"
@@ -60,7 +60,7 @@ function present() {
     done < slides.md
 }
 
-present "Terminal Theme"
+present "Phosphor Theme"
 ```
 
 ---
@@ -132,12 +132,12 @@ $ cat /etc/effects
 
 ## CRT Effects
 
-The terminal theme includes:
+The Phosphor theme includes:
 
-- **Scanlines** - Subtle horizontal lines
-- **Text glow** - Phosphor-style glow
-- **Flicker** - Slight CRT flicker
-- **Matrix rain** - Optional background
+- **Scanlines** - Subtle horizontal lines via gradient
+- **Text glow** - Multi-layer phosphor glow shadows
+- **Vignette** - Screen curve darkening at edges
+- **Subtle pulse** - Optional breathing animation
 
 All effects respect `prefers-reduced-motion`.
 
@@ -166,7 +166,7 @@ lines of pure aesthetics
 
 ---
 
-## Terminal Tips
+## Phosphor Tips
 
 > Use > for blockquotes
 > Like comments in config files
@@ -180,11 +180,11 @@ List items get $ prefix:
 |---------|--------|
 | Glow | ON |
 | Scanlines | ON |
-| Flicker | SUBTLE |
+| Pulse | SUBTLE |
 
 ---
 
-## When to Use Terminal
+## When to Use Phosphor
 
 - Hacker conferences (DEF CON, Black Hat)
 - Developer meetups
@@ -199,6 +199,6 @@ List items get $ prefix:
 layout: title
 -->
 
-# Terminal Theme
+# Phosphor Theme
 
 $ exit 0

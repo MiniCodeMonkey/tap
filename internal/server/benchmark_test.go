@@ -23,7 +23,7 @@ func generateBenchmarkPresentation(slideCount int) ([]byte, *config.Config) {
 	// Add frontmatter
 	buf.WriteString(`---
 title: Hot Reload Performance Test
-theme: minimal
+theme: paper
 author: Test Author
 aspectRatio: "16:9"
 transition: fade

@@ -13,7 +13,7 @@ Frontmatter is YAML configuration at the start of your presentation file, enclos
 ```yaml
 ---
 title: My Presentation
-theme: minimal
+theme: paper
 author: Jane Developer
 transition: fade
 ---
@@ -78,13 +78,13 @@ The visual theme applied to all slides. Themes control typography, colors, anima
 | Property | Value |
 |----------|-------|
 | Type | `string` |
-| Default | `minimal` |
+| Default | `paper` |
 | Required | No |
-| Options | `minimal`, `gradient`, `terminal`, `brutalist`, `keynote` |
+| Options | `paper`, `noir`, `aurora`, `phosphor`, `poster` |
 
 ```yaml
 ---
-theme: terminal
+theme: phosphor
 ---
 ```
 
@@ -92,11 +92,11 @@ theme: terminal
 
 | Theme | Description |
 |-------|-------------|
-| `minimal` | Clean, spacious design with neutral colors |
-| `gradient` | Modern, colorful with gradient backgrounds |
-| `terminal` | Hacker aesthetic with dark, monospace styling |
-| `brutalist` | Bold, geometric with high contrast |
-| `keynote` | Professional, polished with classic feel |
+| `paper` | Ultra-clean, premium design with warm accents |
+| `noir` | Cinematic, sophisticated with gold highlights |
+| `aurora` | Vibrant gradient mesh with glassmorphism |
+| `phosphor` | CRT aesthetic with phosphor green glow |
+| `poster` | Bold graphic design with thick borders |
 
 See [Themes](/guide/themes) for detailed descriptions and examples.
 
@@ -294,7 +294,7 @@ Here's a comprehensive frontmatter example using multiple options:
 title: Database Architecture Deep Dive
 author: Jane Developer
 date: 2024-03-15
-theme: terminal
+theme: phosphor
 aspectRatio: 16/9
 transition: fade
 fragments: true

@@ -1,6 +1,6 @@
 ---
 title: SQL Live Demo
-theme: keynote
+theme: noir
 author: Database Expert
 date: 2026-01-24
 aspectRatio: "16:9"

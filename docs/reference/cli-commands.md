@@ -36,7 +36,7 @@ tap new [name]
 
 | Flag | Short | Description |
 |------|-------|-------------|
-| `--theme <name>` | `-t` | Theme to use (default: `minimal`) |
+| `--theme <name>` | `-t` | Theme to use (default: `paper`) |
 | `--template <type>` | | Template type: `blank`, `demo`, `talk` (default: `blank`) |
 | `--dir <path>` | `-d` | Directory to create the file in (default: current directory) |
 | `--force` | `-f` | Overwrite existing file if it exists |
@@ -70,7 +70,7 @@ Creates a new markdown file with frontmatter and sample content:
 ```markdown
 ---
 title: My Talk
-theme: minimal
+theme: paper
 ---
 
 # Welcome

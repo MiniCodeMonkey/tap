@@ -99,7 +99,7 @@ func TestParse_WithFrontmatter(t *testing.T) {
 	p := New()
 	content := []byte(`---
 title: My Presentation
-theme: minimal
+theme: paper
 ---
 
 # Slide One

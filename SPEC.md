@@ -40,7 +40,7 @@
 ```markdown
 ---
 title: My Presentation
-theme: minimal
+theme: paper
 ---
 
 # First Slide

@@ -13,7 +13,7 @@ Every Tap presentation begins with YAML frontmatter enclosed in triple dashes. T
 ```yaml
 ---
 title: My Presentation
-theme: minimal
+theme: paper
 author: Jane Developer
 date: 2024-01-15
 ---
@@ -24,7 +24,7 @@ date: 2024-01-15
 | Option | Type | Description |
 |--------|------|-------------|
 | `title` | string | The presentation title (shown in browser tab) |
-| `theme` | string | Visual theme: `minimal`, `gradient`, `terminal`, `brutalist`, `keynote` |
+| `theme` | string | Visual theme: `paper`, `noir`, `aurora`, `phosphor`, `poster` |
 | `author` | string | Author name for metadata |
 | `date` | string | Presentation date |
 | `aspectRatio` | string | Slide aspect ratio (default: `16/9`) |
@@ -39,7 +39,7 @@ Separate individual slides using three dashes (`---`) on their own line. Leave b
 ```markdown
 ---
 title: My Talk
-theme: minimal
+theme: paper
 ---
 
 # Welcome
@@ -182,7 +182,7 @@ See [Slide Directives](/reference/slide-directives) for the complete reference.
 ```markdown
 ---
 title: Product Launch
-theme: gradient
+theme: aurora
 ---
 
 <!--

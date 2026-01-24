@@ -14,7 +14,7 @@ func generateLargePresentation(slideCount int) []byte {
 	// Add frontmatter
 	buf.WriteString(`---
 title: Performance Test Presentation
-theme: minimal
+theme: paper
 author: Test Author
 date: "2026-01-23"
 aspectRatio: "16:9"

@@ -225,7 +225,7 @@ function createPresentation(title: string): Presentation {
   return {
     title,
     slides: [],
-    config: { theme: 'minimal' }
+    config: { theme: 'paper' }
   };
 }
 ```

@@ -12,7 +12,7 @@ Set the theme in your presentation's frontmatter:
 
 ```yaml
 ---
-theme: minimal
+theme: paper
 ---
 ```
 
@@ -20,98 +20,102 @@ The theme applies to all slides in your presentation.
 
 ## Built-in Themes
 
-### Minimal
+### Paper
 
-Clean and spacious with ample whitespace. Uses a neutral color palette with subtle accents.
+Ultra-clean and premium, like a fresh sheet of premium paper where content takes center stage.
 
 ```yaml
 ---
-theme: minimal
+theme: paper
 ---
 ```
 
 **Best for:** Professional presentations, corporate settings, content-heavy slides where readability is paramount.
 
 **Characteristics:**
-- Light background with dark text
-- Sans-serif typography
-- Subtle animations
-- High contrast for accessibility
+- Pure white background with near-black text
+- Inter/system-ui typography with confident letter-spacing
+- Warm accent colors (#78716c)
+- Dark code blocks (#1e1e1e) with excellent contrast
+- Smooth 400ms ease-out transitions
 
-### Gradient
+### Noir
 
-Modern and colorful with smooth gradient backgrounds. Eye-catching without being distracting.
-
-```yaml
----
-theme: gradient
----
-```
-
-**Best for:** Product launches, marketing presentations, creative projects, startup pitches.
-
-**Characteristics:**
-- Dynamic gradient backgrounds
-- Bold, modern typography
-- Smooth color transitions
-- Vibrant accent colors
-
-### Terminal
-
-Hacker aesthetic with a dark terminal-inspired design. Monospace fonts and green-on-black styling.
+Cinematic and sophisticated, drawing from film noir elegance with deep blacks and gold accents.
 
 ```yaml
 ---
-theme: terminal
+theme: noir
 ---
 ```
 
-**Best for:** Technical talks, developer conferences, security presentations, demos with code.
+**Best for:** Executive briefings, client pitches, investor meetings, premium product presentations.
 
 **Characteristics:**
-- Dark background (near black)
-- Monospace typography throughout
-- Green/amber accent colors
-- Minimal animations
-- Retro terminal feel
+- Deep charcoal backgrounds (#0a0a0a)
+- Crisp white text (#fafafa)
+- Sophisticated gold accent (#d4af37)
+- Playfair Display for headings, Inter for body
+- Vignette overlay and multi-layer shadows
 
-### Brutalist
+### Aurora
 
-Bold and geometric with strong visual impact. High contrast and unconventional layouts.
+Vibrant and dynamic like the northern lights, with animated gradient mesh and glassmorphism effects.
 
 ```yaml
 ---
-theme: brutalist
+theme: aurora
 ---
 ```
 
-**Best for:** Design talks, creative showcases, presentations that want to stand out, artistic projects.
+**Best for:** Startup pitches, creative presentations, product launches, conference talks.
 
 **Characteristics:**
-- High contrast black and white
-- Bold, heavy typography
-- Sharp edges, no rounded corners
-- Stark, impactful visual style
-- Unconventional spacing
+- Animated gradient backgrounds (purple to blue to teal)
+- Glassmorphism with backdrop-blur-xl
+- Space Grotesk typography
+- Semi-transparent dark glass code blocks with cyan glow
+- Mesmerizing 20s gradient mesh animation
 
-### Keynote
+### Phosphor
 
-Professional and polished with a classic presentation feel. Familiar and comfortable for audiences.
+Authentic CRT monitor aesthetic with glowing phosphor green text, scanlines, and retro-futuristic hacker vibes.
 
 ```yaml
 ---
-theme: keynote
+theme: phosphor
 ---
 ```
 
-**Best for:** Business presentations, executive briefings, educational content, formal settings.
+**Best for:** Developer conferences, security talks, technical deep-dives, hacking demos.
 
 **Characteristics:**
-- Clean, professional aesthetic
-- Balanced typography hierarchy
-- Subtle gradients and shadows
-- Smooth, elegant transitions
-- Traditional slide feel
+- True black (#000) background
+- Phosphor green (#00ff00) primary color
+- Multi-layer text shadows for glow effect
+- Scanline overlay via repeating-linear-gradient
+- JetBrains Mono throughout
+- Screen curve vignette
+
+### Poster
+
+Bold graphic design with giant typography, thick borders, and high contrast that's impossible to ignore.
+
+```yaml
+---
+theme: poster
+---
+```
+
+**Best for:** Design talks, making statements, standing out, architectural presentations.
+
+**Characteristics:**
+- Stark black (#000) and white (#fff)
+- Electric red accent (#ef4444)
+- Anton font for ALL CAPS headings
+- Thick 4px borders with 8px 8px 0 drop shadows
+- No rounded corners - everything sharp
+- Inverted code blocks (white on black)
 
 ## What Themes Control
 
@@ -130,26 +134,49 @@ Each theme defines:
 
 | Theme | Vibe | Background | Typography |
 |-------|------|------------|------------|
-| `minimal` | Clean, spacious | Light (#ffffff) | Sans-serif |
-| `gradient` | Modern, colorful | Gradient | Bold sans-serif |
-| `terminal` | Hacker aesthetic | Dark (#0a0a0a) | Monospace |
-| `brutalist` | Bold, geometric | High contrast | Heavy sans-serif |
-| `keynote` | Professional, polished | Light/subtle | Classic sans-serif |
+| `paper` | Ultra-clean, premium | Light (#ffffff) | Inter/system-ui |
+| `noir` | Cinematic, sophisticated | Dark (#0a0a0a) | Playfair Display + Inter |
+| `aurora` | Vibrant, dynamic | Animated gradient | Space Grotesk |
+| `phosphor` | CRT, hacker aesthetic | Black (#000) | JetBrains Mono |
+| `poster` | Bold, graphic | High contrast | Anton + system sans |
 
 ## Customizing Themes
 
-::: tip Coming Soon
-Custom theme support is planned for a future release. You'll be able to:
+### Color Overrides
 
-- Override theme variables (colors, fonts, spacing)
-- Create entirely custom themes
-- Share themes with the community
+Override theme colors using `themeColors` in frontmatter:
 
-For now, choose the built-in theme that best matches your presentation style.
-:::
+```yaml
+---
+theme: paper
+themeColors:
+  accent: "#ff0000"
+  background: "#f5f5f5"
+---
+```
 
-## Next Steps
+Available color keys: `background`, `text`, `muted`, `accent`, `codeBg`
 
-- Learn about [Animations & Transitions](/guide/animations-transitions) to fine-tune slide effects
-- Explore [Layouts](/guide/layouts) to structure your content
-- See [Code Blocks](/guide/code-blocks) for syntax highlighting options
+### Custom Theme CSS
+
+For complete customization, create your own theme CSS file:
+
+```yaml
+---
+customTheme: "./my-theme.css"
+---
+```
+
+Your CSS file should define these CSS custom properties:
+
+```css
+.theme-custom {
+  --color-bg: #ffffff;
+  --color-text: #0a0a0a;
+  --color-muted: #71717a;
+  --color-accent: #3b82f6;
+  --color-code-bg: #1e1e1e;
+  --font-sans: Inter, system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+}
+```

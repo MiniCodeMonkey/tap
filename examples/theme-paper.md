@@ -1,26 +1,26 @@
 ---
-title: Minimal Theme Showcase
-theme: minimal
+title: Paper Theme Showcase
+theme: paper
 author: Tap Presentations
 date: 2026-01-24
 aspectRatio: "16:9"
 transition: fade
 ---
 
-# Minimal Theme
+# Paper Theme
 
-Clean, Apple-inspired aesthetics
+Ultra-clean, premium, effortlessly elegant
 
 ---
 
 ## Design Philosophy
 
-The minimal theme embodies:
+The Paper theme embodies:
 
-- **Simplicity** - Clean white backgrounds
-- **Clarity** - High contrast text
+- **Purity** - Clean white backgrounds like fresh paper
+- **Clarity** - Near-black text with excellent contrast
+- **Sophistication** - Warm accent tones, not cold
 - **Focus** - Content takes center stage
-- **Elegance** - Subtle transitions and spacing
 
 ---
 
@@ -28,11 +28,11 @@ The minimal theme embodies:
 
 <!-- pause -->
 
-**Helvetica Neue** font family throughout
+**Inter / system-ui** font family throughout
 
 <!-- pause -->
 
-Large, readable text sizes:
+Confident letter-spacing (-0.02em) and perfect line heights:
 - Titles: 8rem
 - H1: 6rem
 - H2: 4rem
@@ -54,7 +54,7 @@ function createSlide(content: string): Slide {
 }
 ```
 
-Clean syntax highlighting that doesn't distract.
+Dark code blocks (#1e1e1e) with excellent contrast.
 
 ---
 
@@ -127,7 +127,7 @@ focus on your content
 
 ---
 
-## When to Use Minimal
+## When to Use Paper
 
 - Corporate presentations
 - Technical documentation
@@ -141,6 +141,6 @@ focus on your content
 layout: title
 -->
 
-# Minimal Theme
+# Paper Theme
 
 Less is more

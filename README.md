@@ -125,7 +125,7 @@ Slides are separated by `---` on its own line:
 ```markdown
 ---
 title: My Presentation
-theme: minimal
+theme: paper
 ---
 
 # Welcome
@@ -146,7 +146,7 @@ Configure your presentation using YAML frontmatter at the top of your file:
 ```yaml
 ---
 title: My Presentation
-theme: minimal          # minimal, gradient, terminal, brutalist, keynote
+theme: paper            # paper, noir, aurora, phosphor, poster
 author: Your Name
 date: "2024-01-15"
 aspectRatio: "16:9"     # 16:9, 4:3, 16:10

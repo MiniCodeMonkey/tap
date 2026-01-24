@@ -1,26 +1,26 @@
 ---
-title: Keynote Theme Showcase
-theme: keynote
+title: Noir Theme Showcase
+theme: noir
 author: Tap Presentations
 date: 2026-01-24
 aspectRatio: "16:9"
 transition: fade
 ---
 
-# Keynote Theme
+# Noir Theme
 
-Professional polish meets modern design
+Cinematic sophistication meets film noir elegance
 
 ---
 
 ## Design Philosophy
 
-The keynote theme offers:
+The Noir theme offers:
 
-- **Professional elegance** - Suitable for any audience
-- **Subtle depth** - Card-based layouts with shadows
-- **Apple aesthetics** - San Francisco font family
-- **Refined animations** - Smooth, purposeful transitions
+- **Deep blacks** - Rich charcoal backgrounds (#0a0a0a)
+- **Crisp whites** - High contrast text (#fafafa)
+- **Gold accents** - Sophisticated touches (#d4af37)
+- **Cinematic depth** - Multi-layer shadows and vignette
 
 ---
 
@@ -28,11 +28,11 @@ The keynote theme offers:
 
 <!-- pause -->
 
-San Francisco Pro - Apple's system font
+Playfair Display for elegant serif headings
 
 <!-- pause -->
 
-Clean, highly readable at any size:
+Inter for clean, readable body text:
 - Titles: 8rem
 - Headers: 6rem / 4rem
 - Body: 2rem
@@ -47,7 +47,7 @@ struct Presentation: Identifiable {
     let id = UUID()
     var title: String
     var slides: [Slide]
-    var theme: Theme = .keynote
+    var theme: Theme = .noir
 
     func present() async {
         for slide in slides {
@@ -57,7 +57,7 @@ struct Presentation: Identifiable {
 }
 ```
 
-Elevated cards with rounded corners.
+Elevated cards with refined shadows.
 
 ---
 
@@ -67,7 +67,7 @@ layout: two-column
 
 ## Two Column Layout
 
-Balanced and professional
+Balanced and sophisticated
 
 |||
 
@@ -81,9 +81,9 @@ Balanced and professional
 
 ### Capabilities
 - Rich typography
-- Subtle shadows
+- Cinematic shadows
 - Smooth transitions
-- Dark mode support
+- Vignette effects
 
 ---
 
@@ -109,12 +109,12 @@ Every pixel considered
 
 ## Visual Elements
 
-The keynote theme includes:
+The Noir theme includes:
 
-- **Elevated surfaces** - Cards that float above the background
-- **Soft shadows** - Depth without harshness
-- **Rounded corners** - Friendly, modern feel
-- **Smooth bezier curves** - Animations that feel natural
+- **Vignette overlay** - Subtle darkening at edges
+- **Multi-layer shadows** - Depth without harshness
+- **Subtle gradients** - Dark-to-darker for richness
+- **Gold accents** - Sophisticated highlight color
 
 ---
 
@@ -127,7 +127,7 @@ The keynote theme includes:
 | Q3 | $1.8M | +29% |
 | Q4 | $2.1M | +17% |
 
-Tables that look professional and readable.
+Tables that look professional and executive.
 
 ---
 
@@ -143,12 +143,12 @@ increase in engagement
 
 ## Lists & Content
 
-Key features of the keynote theme:
+Key features of the Noir theme:
 
-- Clean, professional appearance
-- Works in any business context
-- Supports dark mode variant
-- Blue gradient option available
+- Cinematic, sophisticated appearance
+- Works in executive business contexts
+- Deep blacks with crisp white text
+- Gold accents for emphasis
 
 Numbers work well too:
 
@@ -158,32 +158,32 @@ Numbers work well too:
 
 ---
 
-## When to Use Keynote
+## When to Use Noir
 
 - Board presentations
 - Client pitches
 - Investor meetings
 - Company all-hands
 - Product announcements
-- Sales presentations
+- Executive briefings
 
 ---
 
-## Variants Available
+## Noir Aesthetic
 
-The keynote theme supports variants:
-
-<!-- pause -->
-
-**Light mode** - Classic white background
+The theme draws from:
 
 <!-- pause -->
 
-**Dark mode** - Sophisticated dark surfaces
+**Film noir** - Deep shadows and dramatic lighting
 
 <!-- pause -->
 
-**Blue gradient** - Subtle gradient background
+**Luxury brands** - Gold accents and refined typography
+
+<!-- pause -->
+
+**Executive style** - Sophisticated and professional
 
 ---
 
@@ -191,6 +191,6 @@ The keynote theme supports variants:
 layout: title
 -->
 
-# Keynote Theme
+# Noir Theme
 
-Where professionalism meets design
+Where sophistication meets cinema

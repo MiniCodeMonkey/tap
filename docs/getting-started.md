@@ -55,7 +55,7 @@ This creates a new file `my-talk.md` with a basic template:
 ```markdown
 ---
 title: My Talk
-theme: minimal
+theme: paper
 ---
 
 # Welcome
@@ -93,7 +93,7 @@ Every presentation starts with YAML frontmatter defining global settings:
 ```yaml
 ---
 title: My Presentation
-theme: minimal
+theme: paper
 author: Your Name
 date: 2024-01-15
 ---

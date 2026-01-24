@@ -3,7 +3,7 @@ import { ref, onMounted, onUnmounted, computed } from 'vue'
 
 const codeLines = [
   { text: '---', type: 'frontmatter' },
-  { text: 'theme: terminal', type: 'frontmatter' },
+  { text: 'theme: phosphor', type: 'frontmatter' },
   { text: '---', type: 'frontmatter' },
   { text: '', type: 'empty' },
   { text: '# Database Demo', type: 'heading' },
