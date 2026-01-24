@@ -487,8 +487,8 @@
         "Typecheck passes"
       ],
       "priority": 28,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Added ThemeBroadcaster interface and 't' keyboard shortcut. Theme picker shows all 5 themes with descriptions. Uses arrow keys/j/k to navigate, enter to select, esc to cancel. Current theme shown in status bar. Theme changes broadcast via WebSocket."
     },
     {
       "id": "US-125B",

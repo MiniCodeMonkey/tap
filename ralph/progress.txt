@@ -1810,3 +1810,17 @@ Started: Fri Jan 23 16:33:21 CET 2026
   - Grep for `theme:\s*(minimal|keynote|gradient|terminal|brutalist)` to find old theme identifiers
   - Words like "terminal" or "gradient" may appear in valid contexts (terminal recordings, gradient mesh) - check context
 ---
+
+## 2026-01-24 - US-125
+- What was implemented: Theme switcher for dev server TUI
+- Files changed:
+  - internal/server/websocket.go (added MessageTheme type, BroadcastTheme method)
+  - internal/tui/dev.go (added ThemeBroadcaster interface, theme picker UI, keyboard handling)
+  - internal/cli/dev.go (pass current theme and hub to TUI model)
+- **Learnings for future iterations:**
+  - Use ThemeBroadcaster interface to decouple TUI from WebSocket hub
+  - RunDevTUIWithModel allows passing pre-configured model vs creating a new one
+  - Theme picker uses overlay pattern - just return different view content when showThemePicker is true
+  - Mark current theme in picker UI for better UX
+  - Reuse AvailableThemes from new.go for consistency
+---
