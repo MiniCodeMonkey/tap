@@ -1,0 +1,356 @@
+/**
+ * Phosphor Theme
+ *
+ * Authentic CRT monitor aesthetic - glowing phosphor text, scanlines,
+ * and retro-futuristic hacker vibes. Everything IS terminal.
+ *
+ * Design philosophy:
+ * - True black background like a powered CRT
+ * - Phosphor green (#00ff00) as the primary color
+ * - Multi-layer text shadows for authentic glow effect
+ * - Subtle scanlines overlay for CRT authenticity
+ * - JetBrains Mono throughout for terminal feel
+ */
+
+/* Scanline overlay effect */
+@keyframes phosphor-flicker {
+  0%, 100% {
+    opacity: 1;
+  }
+  92% {
+    opacity: 1;
+  }
+  93% {
+    opacity: 0.8;
+  }
+  94% {
+    opacity: 1;
+  }
+}
+
+/* Subtle screen glow pulse */
+@keyframes phosphor-pulse {
+  0%, 100% {
+    filter: brightness(1);
+  }
+  50% {
+    filter: brightness(1.02);
+  }
+}
+
+.theme-phosphor {
+  /* Core colors - true black and phosphor green */
+  --color-bg: #000000;
+  --color-text: #00ff00;
+  --color-muted: #33ff33;
+  --color-accent: #00ff00;
+  --color-code-bg: transparent;
+
+  /* Extended colors - all terminal, all the time */
+  --color-border: rgba(0, 255, 0, 0.3);
+  --color-surface: transparent;
+  --color-surface-elevated: rgba(0, 255, 0, 0.05);
+  --color-link: #00ff00;
+  --color-code-text: #00ff00;
+
+  /* Phosphor glow colors for layered shadows */
+  --phosphor-glow-1: rgba(0, 255, 0, 0.8);
+  --phosphor-glow-2: rgba(0, 255, 0, 0.5);
+  --phosphor-glow-3: rgba(0, 255, 0, 0.3);
+  --phosphor-dim: #333333;
+
+  /* Typography - JetBrains Mono throughout for authentic terminal feel */
+  --font-sans: 'JetBrains Mono', 'SF Mono', Monaco, 'Cascadia Code', Consolas, 'Liberation Mono', Menlo, monospace;
+  --font-mono: 'JetBrains Mono', 'SF Mono', Monaco, 'Cascadia Code', Consolas, 'Liberation Mono', Menlo, monospace;
+
+  /* Transitions - instant, like a CRT */
+  --transition-duration: 100ms;
+  --transition-timing: linear;
+  --fragment-duration: 150ms;
+
+  /* Apply base styles */
+  font-family: var(--font-mono);
+  color: var(--color-text);
+  background-color: var(--color-bg);
+  letter-spacing: 0.02em;
+  line-height: 1.5;
+
+  /* Subtle screen glow pulse animation */
+  animation: phosphor-pulse 4s ease-in-out infinite;
+}
+
+/* CRT scanline overlay effect - applied to slide content area */
+.theme-phosphor::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0, 0, 0, 0.15) 2px,
+    rgba(0, 0, 0, 0.15) 4px
+  );
+  pointer-events: none;
+  z-index: 9999;
+}
+
+/* Screen curve vignette effect */
+.theme-phosphor::after {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: radial-gradient(
+    ellipse at center,
+    transparent 60%,
+    rgba(0, 0, 0, 0.4) 100%
+  );
+  pointer-events: none;
+  z-index: 9998;
+}
+
+/* Phosphor theme typography - glowing text effect */
+.theme-phosphor h1,
+.theme-phosphor h2,
+.theme-phosphor h3,
+.theme-phosphor h4,
+.theme-phosphor h5,
+.theme-phosphor h6 {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  line-height: 1.2;
+  margin: 0;
+  /* Multi-layer phosphor glow: 5px, 10px, 20px spread */
+  text-shadow:
+    0 0 5px var(--phosphor-glow-1),
+    0 0 10px var(--phosphor-glow-2),
+    0 0 20px var(--phosphor-glow-3);
+  text-transform: uppercase;
+}
+
+.theme-phosphor h1 {
+  font-weight: 700;
+  /* Extra intense glow for main heading */
+  text-shadow:
+    0 0 5px var(--phosphor-glow-1),
+    0 0 10px var(--phosphor-glow-1),
+    0 0 20px var(--phosphor-glow-2),
+    0 0 40px var(--phosphor-glow-3);
+}
+
+.theme-phosphor p,
+.theme-phosphor li {
+  font-family: var(--font-mono);
+  font-weight: 400;
+  letter-spacing: 0.02em;
+  /* Subtle glow for body text */
+  text-shadow:
+    0 0 5px var(--phosphor-glow-3);
+}
+
+/* Phosphor theme code - no background change, everything IS terminal */
+.theme-phosphor code {
+  font-family: var(--font-mono);
+  background-color: transparent;
+  color: var(--color-code-text);
+  padding: 0;
+  border-radius: 0;
+  font-size: 1em;
+  text-shadow:
+    0 0 5px var(--phosphor-glow-1),
+    0 0 10px var(--phosphor-glow-2);
+}
+
+.theme-phosphor pre {
+  font-family: var(--font-mono);
+  background-color: var(--color-code-bg);
+  color: var(--color-code-text);
+  padding: 1.5em 2em;
+  border-radius: 0;
+  overflow-x: auto;
+  line-height: 1.6;
+  /* Subtle border glow */
+  border: 1px solid var(--color-border);
+  box-shadow: 0 0 10px rgba(0, 255, 0, 0.2);
+}
+
+.theme-phosphor pre code {
+  background: none;
+  padding: 0;
+  border-radius: 0;
+  font-size: inherit;
+  text-shadow:
+    0 0 5px var(--phosphor-glow-1),
+    0 0 10px var(--phosphor-glow-2);
+}
+
+/* Phosphor theme links - glowing */
+.theme-phosphor a {
+  color: var(--color-link);
+  text-decoration: none;
+  border-bottom: 1px solid var(--color-border);
+  transition: text-shadow var(--transition-duration) var(--transition-timing);
+  text-shadow:
+    0 0 5px var(--phosphor-glow-3);
+}
+
+.theme-phosphor a:hover {
+  text-shadow:
+    0 0 5px var(--phosphor-glow-1),
+    0 0 10px var(--phosphor-glow-1),
+    0 0 20px var(--phosphor-glow-2);
+}
+
+/* Phosphor theme lists - terminal style */
+.theme-phosphor ul,
+.theme-phosphor ol {
+  padding-left: 1.5em;
+  margin: 0;
+}
+
+.theme-phosphor li {
+  margin-bottom: 0.5em;
+}
+
+.theme-phosphor li::marker {
+  color: var(--color-accent);
+  text-shadow:
+    0 0 5px var(--phosphor-glow-1);
+}
+
+/* Use > as list marker for unordered lists */
+.theme-phosphor ul {
+  list-style-type: '> ';
+}
+
+/* Phosphor theme blockquotes - boxed terminal style */
+.theme-phosphor blockquote {
+  border: 1px solid var(--color-border);
+  border-left: 4px solid var(--color-accent);
+  padding: 1em 1.5em;
+  margin: 0;
+  font-style: normal;
+  color: var(--color-muted);
+  background: transparent;
+  box-shadow: 0 0 10px rgba(0, 255, 0, 0.1);
+}
+
+.theme-phosphor blockquote::before {
+  content: '> ';
+  color: var(--color-accent);
+  text-shadow:
+    0 0 5px var(--phosphor-glow-1);
+}
+
+/* Phosphor theme tables - terminal grid */
+.theme-phosphor table {
+  width: 100%;
+  border-collapse: collapse;
+  border: 1px solid var(--color-border);
+}
+
+.theme-phosphor th,
+.theme-phosphor td {
+  padding: 0.5em 1em;
+  text-align: left;
+  border: 1px solid var(--color-border);
+}
+
+.theme-phosphor th {
+  font-weight: 700;
+  text-transform: uppercase;
+  background-color: rgba(0, 255, 0, 0.1);
+  text-shadow:
+    0 0 5px var(--phosphor-glow-1),
+    0 0 10px var(--phosphor-glow-2);
+}
+
+/* Phosphor theme images - CRT screen effect */
+.theme-phosphor img {
+  max-width: 100%;
+  height: auto;
+  border: 2px solid var(--color-border);
+  box-shadow:
+    0 0 10px rgba(0, 255, 0, 0.3),
+    0 0 20px rgba(0, 255, 0, 0.2);
+  /* Slight green tint for CRT effect */
+  filter: saturate(0.8) brightness(0.95);
+}
+
+/* Phosphor theme fragments - quick terminal-like transitions */
+.theme-phosphor .fragment {
+  transition:
+    opacity var(--fragment-duration) var(--transition-timing),
+    transform var(--fragment-duration) var(--transition-timing);
+}
+
+.theme-phosphor .fragment-hidden {
+  opacity: 0;
+  transform: translateX(-5px);
+}
+
+.theme-phosphor .fragment-visible {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+/* Phosphor theme selection - inverted */
+.theme-phosphor ::selection {
+  background-color: var(--color-accent);
+  color: #000000;
+}
+
+/* Cursor blink effect for focused elements */
+.theme-phosphor input:focus,
+.theme-phosphor textarea:focus {
+  outline: none;
+  border-color: var(--color-accent);
+  box-shadow:
+    0 0 5px var(--phosphor-glow-1),
+    0 0 10px var(--phosphor-glow-2);
+}
+
+/* Strong/bold text gets extra glow */
+.theme-phosphor strong,
+.theme-phosphor b {
+  font-weight: 700;
+  text-shadow:
+    0 0 5px var(--phosphor-glow-1),
+    0 0 10px var(--phosphor-glow-2);
+}
+
+/* Emphasis/italic text */
+.theme-phosphor em,
+.theme-phosphor i {
+  font-style: italic;
+  color: var(--color-muted);
+}
+
+/* Horizontal rule as terminal divider */
+.theme-phosphor hr {
+  border: none;
+  border-top: 1px solid var(--color-border);
+  margin: 2em 0;
+  box-shadow: 0 0 10px rgba(0, 255, 0, 0.2);
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  .theme-phosphor {
+    --transition-duration: 0ms;
+    --fragment-duration: 0ms;
+    animation: none;
+  }
+
+  .theme-phosphor::before,
+  .theme-phosphor::after {
+    animation: none;
+  }
+}
