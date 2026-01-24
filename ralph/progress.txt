@@ -1665,3 +1665,21 @@ Started: Fri Jan 23 16:33:21 CET 2026
   - When adding json tags to existing Go structs, be careful about tests that check for specific field names in serialized JSON
   - ThemeColors keys map to CSS variables: background→--color-bg, text→--color-text, muted→--color-muted, accent→--color-accent, codeBg→--color-code-bg
 ---
+
+## 2026-01-24 - US-117
+- What was implemented: Custom theme support via user CSS file
+- Files changed:
+  - internal/config/config.go (added CustomTheme field, ResolveCustomThemePath() method)
+  - internal/server/server.go (added customThemePath field, SetCustomThemePath/GetCustomThemePath methods)
+  - internal/server/routes.go (added handleCustomTheme handler for /api/custom-theme.css endpoint)
+  - internal/cli/dev.go (resolve and update custom theme path on load and reload)
+  - frontend/src/lib/types.ts (added customTheme to PresentationConfig)
+  - frontend/src/App.svelte (added loadCustomTheme function, $effect for dynamic CSS loading)
+  - frontend/src/Presenter.svelte (added same custom theme loading logic)
+- **Learnings for future iterations:**
+  - Use /api/ prefix for endpoints that serve dynamic content
+  - Dynamic CSS loading via document.head.appendChild(link) with cache-busting timestamp
+  - Config.ResolveCustomThemePath() handles both absolute and relative paths
+  - Custom theme CSS is served with no-cache headers for hot reload
+  - Frontend uses $effect() to react to customTheme changes for instant theme switching
+---

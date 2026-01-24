@@ -348,8 +348,8 @@
         "Verify in browser: custom theme fully applied"
       ],
       "priority": 20,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Added customTheme field to Config struct. ResolveCustomThemePath() resolves relative paths. Server has /api/custom-theme.css endpoint. Frontend loads via dynamic link tag with cache-busting. Graceful fallback on missing file."
     },
     {
       "id": "US-118",
