@@ -31,11 +31,11 @@ type Theme struct {
 
 // AvailableThemes lists the themes available for new presentations.
 var AvailableThemes = []Theme{
-	{Name: "minimal", Description: "Clean Apple-style aesthetics with white background"},
-	{Name: "gradient", Description: "Modern colorful gradients with glassmorphism"},
-	{Name: "terminal", Description: "Hacker aesthetic with dark background and green text"},
-	{Name: "brutalist", Description: "Bold, geometric, high contrast design"},
-	{Name: "keynote", Description: "Professional style with subtle shadows"},
+	{Name: "paper", Description: "Ultra-clean, airy design with premium paper aesthetic"},
+	{Name: "noir", Description: "Cinematic film noir with sophisticated gold accents"},
+	{Name: "aurora", Description: "Vibrant northern lights with glassmorphism effects"},
+	{Name: "phosphor", Description: "Authentic CRT terminal with glowing phosphor green"},
+	{Name: "poster", Description: "Bold graphic design with massive typography"},
 }
 
 // NewModel is the Bubble Tea model for creating new presentations.
@@ -262,8 +262,23 @@ func (m NewModel) generateDefaultFilename() string {
 	return filename + ".md"
 }
 
+// legacyThemeMapping maps old theme names to new theme names for backwards compatibility.
+var legacyThemeMapping = map[string]string{
+	"minimal":   "paper",
+	"keynote":   "noir",
+	"gradient":  "aurora",
+	"terminal":  "phosphor",
+	"brutalist": "poster",
+}
+
 func (m NewModel) findThemeIndex(themeName string) int {
 	themeName = strings.ToLower(themeName)
+
+	// Check for legacy theme name and map to new name
+	if newName, ok := legacyThemeMapping[themeName]; ok {
+		themeName = newName
+	}
+
 	for i, t := range AvailableThemes {
 		if strings.ToLower(t.Name) == themeName {
 			return i

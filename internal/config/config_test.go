@@ -405,3 +405,108 @@ func TestIsValidColor_InvalidColors(t *testing.T) {
 		}
 	}
 }
+
+func TestValidate_ValidThemes(t *testing.T) {
+	validThemes := []string{"paper", "noir", "aurora", "phosphor", "poster"}
+
+	for _, theme := range validThemes {
+		cfg := DefaultConfig()
+		cfg.Theme = theme
+
+		if err := cfg.Validate(); err != nil {
+			t.Errorf("Validate() returned error for valid theme %q: %v", theme, err)
+		}
+	}
+}
+
+func TestValidate_InvalidTheme(t *testing.T) {
+	invalidThemes := []string{"invalid", "dark", "light", "custom", "PAPER"}
+
+	for _, theme := range invalidThemes {
+		cfg := DefaultConfig()
+		cfg.Theme = theme
+
+		err := cfg.Validate()
+		if err == nil {
+			t.Errorf("Validate() should return error for invalid theme %q", theme)
+			continue
+		}
+
+		if !strings.Contains(err.Error(), "theme") {
+			t.Errorf("error message should mention theme, got: %v", err)
+		}
+	}
+}
+
+func TestValidate_LegacyThemeNames(t *testing.T) {
+	// Legacy themes should be normalized to new names (no error, just warning logged)
+	legacyToNew := map[string]string{
+		"minimal":   "paper",
+		"keynote":   "noir",
+		"gradient":  "aurora",
+		"terminal":  "phosphor",
+		"brutalist": "poster",
+	}
+
+	for legacy, expected := range legacyToNew {
+		cfg := DefaultConfig()
+		cfg.Theme = legacy
+
+		if err := cfg.Validate(); err != nil {
+			t.Errorf("Validate() should not return error for legacy theme %q: %v", legacy, err)
+			continue
+		}
+
+		if cfg.Theme != expected {
+			t.Errorf("Theme should be normalized from %q to %q, got %q", legacy, expected, cfg.Theme)
+		}
+	}
+}
+
+func TestNormalizeTheme(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected string
+	}{
+		// New themes
+		{"paper", "paper"},
+		{"noir", "noir"},
+		{"aurora", "aurora"},
+		{"phosphor", "phosphor"},
+		{"poster", "poster"},
+		// Legacy themes
+		{"minimal", "paper"},
+		{"keynote", "noir"},
+		{"gradient", "aurora"},
+		{"terminal", "phosphor"},
+		{"brutalist", "poster"},
+		// Invalid themes
+		{"invalid", ""},
+		{"dark", ""},
+		{"", ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			got := NormalizeTheme(tt.input)
+			if got != tt.expected {
+				t.Errorf("NormalizeTheme(%q) = %q, want %q", tt.input, got, tt.expected)
+			}
+		})
+	}
+}
+
+func TestValidThemeNames(t *testing.T) {
+	expected := []string{"paper", "noir", "aurora", "phosphor", "poster"}
+	got := ValidThemeNames()
+
+	if len(got) != len(expected) {
+		t.Errorf("ValidThemeNames() returned %d themes, want %d", len(got), len(expected))
+	}
+
+	for i, name := range expected {
+		if got[i] != name {
+			t.Errorf("ValidThemeNames()[%d] = %q, want %q", i, got[i], name)
+		}
+	}
+}

@@ -19,12 +19,12 @@ func TestGenerateStarterMarkdown(t *testing.T) {
 		{
 			name:   "basic markdown generation",
 			title:  "My Presentation",
-			theme:  "minimal",
+			theme:  "paper",
 			date:   "2024-01-15",
 			author: "John Doe",
 			want: []string{
 				`title: "My Presentation"`,
-				`theme: minimal`,
+				`theme: paper`,
 				`author: "John Doe"`,
 				`date: "2024-01-15"`,
 				`aspectRatio: "16:9"`,
@@ -44,23 +44,23 @@ func TestGenerateStarterMarkdown(t *testing.T) {
 		{
 			name:   "with special characters in title",
 			title:  "Go & Concurrency: A Deep Dive",
-			theme:  "terminal",
+			theme:  "phosphor",
 			date:   "2024-02-20",
 			author: "Jane Smith",
 			want: []string{
 				`title: "Go & Concurrency: A Deep Dive"`,
-				`theme: terminal`,
+				`theme: phosphor`,
 				`author: "Jane Smith"`,
 			},
 		},
 		{
-			name:   "gradient theme",
+			name:   "aurora theme",
 			title:  "Modern UI Design",
-			theme:  "gradient",
+			theme:  "aurora",
 			date:   "2024-03-10",
 			author: "Design Team",
 			want: []string{
-				`theme: gradient`,
+				`theme: aurora`,
 			},
 		},
 	}
@@ -79,7 +79,7 @@ func TestGenerateStarterMarkdown(t *testing.T) {
 }
 
 func TestGenerateStarterMarkdown_HasFrontmatter(t *testing.T) {
-	md := GenerateStarterMarkdown("Test", "minimal", "2024-01-01", "Author")
+	md := GenerateStarterMarkdown("Test", "paper", "2024-01-01", "Author")
 
 	// Should start with frontmatter delimiter
 	if !strings.HasPrefix(md, "---\n") {
@@ -94,7 +94,7 @@ func TestGenerateStarterMarkdown_HasFrontmatter(t *testing.T) {
 }
 
 func TestGenerateStarterMarkdown_HasMultipleSlides(t *testing.T) {
-	md := GenerateStarterMarkdown("Test", "minimal", "2024-01-01", "Author")
+	md := GenerateStarterMarkdown("Test", "paper", "2024-01-01", "Author")
 
 	// Count slide separators (excluding frontmatter)
 	// Skip the first two dashes from frontmatter
@@ -112,7 +112,7 @@ func TestGenerateStarterMarkdown_HasMultipleSlides(t *testing.T) {
 }
 
 func TestGenerateStarterMarkdown_HasCodeExample(t *testing.T) {
-	md := GenerateStarterMarkdown("Test", "minimal", "2024-01-01", "Author")
+	md := GenerateStarterMarkdown("Test", "paper", "2024-01-01", "Author")
 
 	if !strings.Contains(md, "```go") {
 		t.Error("Markdown should contain a Go code example")
@@ -124,7 +124,7 @@ func TestGenerateStarterMarkdown_HasCodeExample(t *testing.T) {
 }
 
 func TestGenerateStarterMarkdown_HasTwoColumnExample(t *testing.T) {
-	md := GenerateStarterMarkdown("Test", "minimal", "2024-01-01", "Author")
+	md := GenerateStarterMarkdown("Test", "paper", "2024-01-01", "Author")
 
 	if !strings.Contains(md, "|||") {
 		t.Error("Markdown should contain two-column separator")
@@ -132,7 +132,7 @@ func TestGenerateStarterMarkdown_HasTwoColumnExample(t *testing.T) {
 }
 
 func TestGenerateStarterMarkdown_HasFragmentExample(t *testing.T) {
-	md := GenerateStarterMarkdown("Test", "minimal", "2024-01-01", "Author")
+	md := GenerateStarterMarkdown("Test", "paper", "2024-01-01", "Author")
 
 	if !strings.Contains(md, "<!-- pause -->") {
 		t.Error("Markdown should contain fragment marker")
@@ -140,7 +140,7 @@ func TestGenerateStarterMarkdown_HasFragmentExample(t *testing.T) {
 }
 
 func TestGenerateStarterMarkdown_HasQuoteExample(t *testing.T) {
-	md := GenerateStarterMarkdown("Test", "minimal", "2024-01-01", "Author")
+	md := GenerateStarterMarkdown("Test", "paper", "2024-01-01", "Author")
 
 	if !strings.Contains(md, "layout: quote") {
 		t.Error("Markdown should have a quote layout slide")
@@ -214,15 +214,22 @@ func TestNewModel_FindThemeIndex(t *testing.T) {
 		theme    string
 		expected int
 	}{
-		{"minimal", 0},
-		{"gradient", 1},
-		{"terminal", 2},
-		{"brutalist", 3},
-		{"keynote", 4},
-		{"MINIMAL", 0},  // case insensitive
-		{"Gradient", 1}, // case insensitive
-		{"unknown", 0},  // defaults to first
-		{"", 0},         // empty defaults to first
+		// New theme names
+		{"paper", 0},
+		{"noir", 1},
+		{"aurora", 2},
+		{"phosphor", 3},
+		{"poster", 4},
+		{"PAPER", 0},  // case insensitive
+		{"Aurora", 2}, // case insensitive
+		// Legacy theme names (backwards compatibility)
+		{"minimal", 0},   // maps to paper
+		{"gradient", 2},  // maps to aurora
+		{"terminal", 3},  // maps to phosphor
+		{"brutalist", 4}, // maps to poster
+		{"keynote", 1},   // maps to noir
+		{"unknown", 0},   // defaults to first
+		{"", 0},          // empty defaults to first
 	}
 
 	for _, tt := range tests {
@@ -273,7 +280,7 @@ func TestNewModel_GetResult(t *testing.T) {
 	m := NewNewModel("", "")
 	m.titleInput.SetValue("Test Title")
 	m.filenameInput.SetValue("test.md")
-	m.themeIndex = 2 // terminal
+	m.themeIndex = 2 // aurora
 
 	result := m.GetResult()
 
@@ -281,8 +288,8 @@ func TestNewModel_GetResult(t *testing.T) {
 		t.Errorf("GetResult().Title = %q, want %q", result.Title, "Test Title")
 	}
 
-	if result.Theme != "terminal" {
-		t.Errorf("GetResult().Theme = %q, want %q", result.Theme, "terminal")
+	if result.Theme != "aurora" {
+		t.Errorf("GetResult().Theme = %q, want %q", result.Theme, "aurora")
 	}
 
 	if result.Filename != "test.md" {
@@ -306,7 +313,7 @@ func TestNewModel_GetResult_Aborted(t *testing.T) {
 }
 
 func TestAvailableThemes(t *testing.T) {
-	expectedThemes := []string{"minimal", "gradient", "terminal", "brutalist", "keynote"}
+	expectedThemes := []string{"paper", "noir", "aurora", "phosphor", "poster"}
 
 	if len(AvailableThemes) != len(expectedThemes) {
 		t.Errorf("Expected %d themes, got %d", len(expectedThemes), len(AvailableThemes))
@@ -325,9 +332,9 @@ func TestAvailableThemes(t *testing.T) {
 
 func TestNewModel_PrefilledValues(t *testing.T) {
 	t.Run("prefilled theme", func(t *testing.T) {
-		m := NewNewModel("terminal", "")
-		if m.prefilledTheme != "terminal" {
-			t.Errorf("prefilledTheme = %q, want %q", m.prefilledTheme, "terminal")
+		m := NewNewModel("phosphor", "")
+		if m.prefilledTheme != "phosphor" {
+			t.Errorf("prefilledTheme = %q, want %q", m.prefilledTheme, "phosphor")
 		}
 	})
 
@@ -368,7 +375,7 @@ func TestNewModel_FileCreation(t *testing.T) {
 		t.Error("File should contain the title")
 	}
 
-	if !strings.Contains(string(content), "theme: minimal") {
+	if !strings.Contains(string(content), "theme: paper") {
 		t.Error("File should contain the theme")
 	}
 }
@@ -455,7 +462,7 @@ func TestNewModel_ViewSuccess(t *testing.T) {
 	m := NewNewModel("", "")
 	m.titleInput.SetValue("Success Test")
 	m.filenameInput.SetValue("success.md")
-	m.themeIndex = 1 // gradient
+	m.themeIndex = 1 // noir
 
 	model, _ := m.finalize()
 	m = model.(NewModel)

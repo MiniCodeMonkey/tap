@@ -4,6 +4,7 @@ package config
 import (
 	"bufio"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -112,7 +113,7 @@ func Load(path string) (*Config, error) {
 // DefaultConfig returns a Config with sensible default values.
 func DefaultConfig() *Config {
 	return &Config{
-		Theme:       "minimal",
+		Theme:       "paper",
 		AspectRatio: "16:9",
 		Transition:  "fade",
 		CodeTheme:   "github-dark",
@@ -135,6 +136,24 @@ var validTransitions = map[string]bool{
 	"slide": true,
 	"push":  true,
 	"zoom":  true,
+}
+
+// validThemes contains the allowed theme values.
+var validThemes = map[string]bool{
+	"paper":    true,
+	"noir":     true,
+	"aurora":   true,
+	"phosphor": true,
+	"poster":   true,
+}
+
+// legacyThemeMapping maps old theme names to new theme names for backwards compatibility.
+var legacyThemeMapping = map[string]string{
+	"minimal":   "paper",
+	"keynote":   "noir",
+	"gradient":  "aurora",
+	"terminal":  "phosphor",
+	"brutalist": "poster",
 }
 
 // validThemeColorKeys contains the allowed themeColors keys.
@@ -176,7 +195,17 @@ func isValidColor(value string) bool {
 
 // Validate checks the Config for invalid values and returns an error
 // with a descriptive message if validation fails.
+// It also normalizes legacy theme names to their new equivalents.
 func (c *Config) Validate() error {
+	// Validate and normalize theme
+	if c.Theme != "" {
+		normalized := NormalizeTheme(c.Theme)
+		if normalized == "" {
+			return fmt.Errorf("invalid theme %q: must be one of paper, noir, aurora, phosphor, or poster", c.Theme)
+		}
+		c.Theme = normalized
+	}
+
 	// Validate aspect ratio
 	if c.AspectRatio != "" && !validAspectRatios[c.AspectRatio] {
 		return fmt.Errorf("invalid aspectRatio %q: must be one of 16:9, 4:3, or 16:10", c.AspectRatio)
@@ -238,6 +267,30 @@ func (c *Config) ResolveEnvVars() {
 		}
 		c.Drivers[driverName] = driver
 	}
+}
+
+// NormalizeTheme converts legacy theme names to new theme names and returns the normalized theme.
+// If the theme is a legacy name, it logs a deprecation warning and returns the new name.
+// If the theme is invalid, it returns an empty string.
+func NormalizeTheme(theme string) string {
+	// Check if it's already a valid new theme
+	if validThemes[theme] {
+		return theme
+	}
+
+	// Check if it's a legacy theme name
+	if newName, ok := legacyThemeMapping[theme]; ok {
+		log.Printf("Warning: theme %q is deprecated, please use %q instead", theme, newName)
+		return newName
+	}
+
+	// Invalid theme
+	return ""
+}
+
+// ValidThemeNames returns the list of valid theme names.
+func ValidThemeNames() []string {
+	return []string{"paper", "noir", "aurora", "phosphor", "poster"}
 }
 
 // ResolveCustomThemePath resolves the customTheme path relative to the given base directory.

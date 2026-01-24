@@ -25,9 +25,9 @@ and example slides to help you get started quickly.
 
 Examples:
   tap new                          # Interactive mode
-  tap new --theme minimal          # Create with minimal theme
+  tap new --theme paper            # Create with Paper theme
   tap new --output my-talk.md      # Create with custom filename
-  tap new -t gradient -o demo.md   # Combine options`,
+  tap new -t aurora -o demo.md     # Combine options`,
 	Run: func(cmd *cobra.Command, args []string) {
 		result, err := tui.RunNewWizard(newTheme, newOutput)
 		if err != nil {
@@ -46,6 +46,6 @@ func init() {
 	rootCmd.AddCommand(newCmd)
 
 	// Command-specific flags
-	newCmd.Flags().StringVarP(&newTheme, "theme", "t", "", "theme for the new presentation (minimal, gradient, terminal, brutalist, keynote)")
+	newCmd.Flags().StringVarP(&newTheme, "theme", "t", "", "theme for the new presentation (paper, noir, aurora, phosphor, poster)")
 	newCmd.Flags().StringVarP(&newOutput, "output", "o", "", "output filename for the presentation")
 }
