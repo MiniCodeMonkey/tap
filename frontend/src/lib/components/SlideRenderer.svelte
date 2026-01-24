@@ -249,18 +249,29 @@
 	/*
 	 * Mermaid diagram container styles.
 	 * Centers diagrams and ensures they don't overflow the slide.
+	 * Uses max-height to prevent vertical overflow while preserving aspect ratio.
+	 * Small diagrams stay at natural size (no upscaling).
 	 */
 	:global(.mermaid-diagram) {
 		display: flex;
 		justify-content: center;
 		align-items: center;
 		width: 100%;
+		/* Limit height to prevent overflow, leaving room for other content */
+		max-height: 70vh;
 		margin: 1rem 0;
+		overflow: hidden;
 	}
 
 	:global(.mermaid-diagram svg) {
+		/* Constrain to container bounds while preserving aspect ratio */
 		max-width: 100%;
+		max-height: 100%;
+		/* Ensure SVG scales proportionally */
+		width: auto;
 		height: auto;
+		/* Prevent upscaling beyond natural size */
+		object-fit: contain;
 	}
 
 	/*
