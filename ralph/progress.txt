@@ -1515,3 +1515,19 @@ Started: Fri Jan 23 16:33:21 CET 2026
   - SplitMedia uses 1fr 1fr grid with object-fit cover for the media side
   - Blank layout provides minimal styling for maximum user control
 ---
+
+## 2026-01-24 - US-108
+- What was implemented: Migrated typography and prose styling to Tailwind
+- Files changed:
+  - frontend/src/lib/styles/prose.css (created - comprehensive prose styling)
+  - frontend/src/app.css (added prose.css import)
+- **Learnings for future iterations:**
+  - Use .prose class wrapper around markdown-rendered HTML for consistent typography
+  - Presentation-scale font sizes: h1=4rem, h2=2.5rem, h3=2rem, h4=1.75rem, h5=1.5rem, h6=1.25rem, p/li=2rem, code blocks=1.5rem
+  - prose-sm and prose-lg variants available for multi-column layouts and emphasis
+  - All prose styles use theme CSS variables (--color-text, --color-muted, --color-accent, --color-code-bg, --font-sans, --font-mono)
+  - Inline code gets 0.9em size with 0.2em 0.4em padding and 4px border-radius
+  - Blockquotes have 4px accent-colored border-left with italic styling
+  - Tables use 0.75em 1em cell padding with theme-border bottom borders
+  - Links use accent color with 1px border-bottom on hover for subtle underline effect
+---
