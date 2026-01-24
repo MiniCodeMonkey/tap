@@ -1452,3 +1452,25 @@ Started: Fri Jan 23 16:33:21 CET 2026
   - Background styling uses inline styles rather than Tailwind because values are dynamic (images, gradients, colors)
   - The actual layout structure lives in layout components (LayoutDefault, LayoutTitle, etc.) - SlideRenderer just wraps content
 ---
+
+## 2026-01-24 - US-107A
+- What was implemented: Migrated Title, Section, and Default layout components to Tailwind
+- Files changed:
+  - frontend/src/lib/styles/layouts.css (new - layout typography styles)
+  - frontend/src/lib/layouts/LayoutTitle.svelte (simplified to use CSS from layouts.css)
+  - frontend/src/lib/layouts/LayoutSection.svelte (simplified to use CSS from layouts.css)
+  - frontend/src/lib/layouts/LayoutDefault.svelte (simplified to use CSS from layouts.css)
+  - frontend/src/app.css (added import for layouts.css)
+- Key implementation details:
+  - Created centralized layouts.css with typography styles for all three layouts
+  - Layout classes (.layout-title, .layout-section, .layout-default) define flex layout and typography
+  - All typography uses presentation scale: 8rem for title h1, 6rem for section h2, 4rem for default h1
+  - Theme CSS variables used throughout: --color-text, --color-muted, --color-accent, --color-code-bg, --font-mono
+  - Svelte components simplified to just structure, CSS handles all styling
+- **Learnings for future iterations:**
+  - Layout styles need to be in a CSS file that's imported into app.css, not in component :global() blocks
+  - SlideRenderer applies layout class to its wrapper, layout CSS targets that class
+  - Typography in layouts uses presentation scale: slide-title (8rem), slide-h1 (6rem), slide-h2 (4rem), slide-body (2rem), slide-code (1.5rem)
+  - Layout component files are simplified templates; actual styling is in layouts.css
+  - Import order in app.css matters: theme-tokens.css, layouts.css, then tailwindcss
+---
