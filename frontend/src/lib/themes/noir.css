@@ -1,0 +1,375 @@
+/**
+ * Noir Theme
+ *
+ * Cinematic and sophisticated - deep blacks, dramatic lighting, film noir elegance.
+ * Inspired by classic cinema, executive boardrooms, and premium luxury brands.
+ *
+ * Design philosophy:
+ * - Deep charcoal backgrounds for cinematic depth
+ * - Crisp white text for excellent contrast
+ * - Sophisticated gold accent for premium feel
+ * - Multi-layer soft shadows for depth
+ * - Playfair Display for elegant serif headings
+ */
+
+.theme-noir {
+  /* Core colors - deep charcoal with crisp white text */
+  --color-bg: #0a0a0a;
+  --color-text: #fafafa;
+  --color-muted: rgba(250, 250, 250, 0.6);
+  --color-accent: #d4af37;
+  --color-code-bg: #161616;
+
+  /* Extended colors - cinematic depth */
+  --color-border: rgba(250, 250, 250, 0.1);
+  --color-surface: #111111;
+  --color-surface-elevated: #1a1a1a;
+  --color-link: var(--color-accent);
+  --color-code-text: #e5e5e5;
+
+  /* Gold accent variations */
+  --noir-gold: #d4af37;
+  --noir-gold-muted: rgba(212, 175, 55, 0.5);
+  --noir-gold-subtle: rgba(212, 175, 55, 0.2);
+
+  /* Typography - Playfair Display for headings, Inter for body */
+  --font-sans: Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+    'Helvetica Neue', Arial, sans-serif;
+  --font-serif: 'Playfair Display', Georgia, Cambria, 'Times New Roman', serif;
+  --font-mono: 'JetBrains Mono', 'SF Mono', Monaco, 'Cascadia Code', Consolas, 'Liberation Mono',
+    Menlo, monospace;
+
+  /* Transitions - smooth, elegant */
+  --transition-duration: 500ms;
+  --transition-timing: cubic-bezier(0.4, 0, 0.2, 1);
+  --fragment-duration: 500ms;
+
+  /* Apply base styles */
+  font-family: var(--font-sans);
+  color: var(--color-text);
+  letter-spacing: -0.01em;
+  line-height: 1.6;
+
+  /* Subtle dark-to-darker gradient background for richness */
+  background: linear-gradient(
+    180deg,
+    #0a0a0a 0%,
+    #0d0d0d 50%,
+    #080808 100%
+  );
+}
+
+/* Subtle vignette effect on slide content */
+.theme-noir::after {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: radial-gradient(
+    ellipse at center,
+    transparent 50%,
+    rgba(0, 0, 0, 0.4) 100%
+  );
+  pointer-events: none;
+  z-index: 9998;
+}
+
+/* Noir theme typography - elegant serif headings */
+.theme-noir h1,
+.theme-noir h2,
+.theme-noir h3,
+.theme-noir h4,
+.theme-noir h5,
+.theme-noir h6 {
+  font-family: var(--font-serif);
+  font-weight: 400;
+  letter-spacing: 0.01em;
+  line-height: 1.15;
+  margin: 0;
+}
+
+.theme-noir h1 {
+  font-weight: 700;
+  letter-spacing: 0;
+  /* Subtle gold underline effect via text-shadow */
+  text-shadow: 0 2px 20px rgba(0, 0, 0, 0.5);
+}
+
+.theme-noir h2 {
+  font-weight: 600;
+}
+
+.theme-noir h3 {
+  font-weight: 500;
+}
+
+.theme-noir p,
+.theme-noir li {
+  font-family: var(--font-sans);
+  font-weight: 400;
+  letter-spacing: -0.01em;
+}
+
+/* Noir theme code blocks - elevated card style with refined shadows */
+.theme-noir code {
+  font-family: var(--font-mono);
+  background-color: var(--color-surface);
+  padding: 0.2em 0.5em;
+  border-radius: 4px;
+  font-size: 0.9em;
+  border: 1px solid var(--color-border);
+}
+
+.theme-noir pre {
+  font-family: var(--font-mono);
+  background-color: var(--color-code-bg);
+  color: var(--color-code-text);
+  padding: 1.5em 2em;
+  border-radius: 8px;
+  overflow-x: auto;
+  line-height: 1.6;
+  /* Multi-layer soft shadows for cinematic depth */
+  border: 1px solid rgba(250, 250, 250, 0.08);
+  box-shadow:
+    0 4px 6px rgba(0, 0, 0, 0.3),
+    0 10px 20px rgba(0, 0, 0, 0.25),
+    0 20px 40px rgba(0, 0, 0, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.theme-noir pre code {
+  background: none;
+  padding: 0;
+  border-radius: 0;
+  font-size: inherit;
+  border: none;
+}
+
+/* Noir theme links - gold accent with elegant transitions */
+.theme-noir a {
+  color: var(--color-link);
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+  transition:
+    border-color var(--transition-duration) var(--transition-timing),
+    color var(--transition-duration) var(--transition-timing);
+}
+
+.theme-noir a:hover {
+  border-bottom-color: var(--color-link);
+  color: #e5c158; /* Slightly lighter gold on hover */
+}
+
+/* Noir theme lists */
+.theme-noir ul,
+.theme-noir ol {
+  padding-left: 1.25em;
+  margin: 0;
+}
+
+.theme-noir li {
+  margin-bottom: 0.5em;
+}
+
+.theme-noir li::marker {
+  color: var(--color-accent);
+}
+
+/* Noir theme blockquotes - elegant with gold accent */
+.theme-noir blockquote {
+  border-left: 3px solid var(--color-accent);
+  padding: 1em 1.5em;
+  margin: 0;
+  font-family: var(--font-serif);
+  font-style: italic;
+  color: var(--color-muted);
+  background: linear-gradient(
+    90deg,
+    rgba(212, 175, 55, 0.05) 0%,
+    transparent 50%
+  );
+  border-radius: 0 6px 6px 0;
+}
+
+/* Noir theme tables - sophisticated with subtle borders */
+.theme-noir table {
+  width: 100%;
+  border-collapse: collapse;
+  background-color: var(--color-surface);
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow:
+    0 4px 6px rgba(0, 0, 0, 0.2),
+    0 10px 20px rgba(0, 0, 0, 0.15);
+}
+
+.theme-noir th,
+.theme-noir td {
+  padding: 0.875em 1.25em;
+  text-align: left;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.theme-noir th {
+  font-family: var(--font-serif);
+  font-weight: 600;
+  background-color: var(--color-surface-elevated);
+  color: var(--color-accent);
+  letter-spacing: 0.02em;
+}
+
+.theme-noir tr:last-child td {
+  border-bottom: none;
+}
+
+.theme-noir tr:hover td {
+  background-color: rgba(212, 175, 55, 0.03);
+}
+
+/* Noir theme images - refined shadows */
+.theme-noir img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 8px;
+  box-shadow:
+    0 4px 6px rgba(0, 0, 0, 0.3),
+    0 10px 20px rgba(0, 0, 0, 0.25);
+}
+
+/* Noir theme fragments - smooth, elegant fades */
+.theme-noir .fragment {
+  transition:
+    opacity var(--fragment-duration) var(--transition-timing),
+    transform var(--fragment-duration) var(--transition-timing);
+}
+
+.theme-noir .fragment-hidden {
+  opacity: 0;
+  transform: translateY(15px);
+}
+
+.theme-noir .fragment-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Noir theme selection - gold highlight */
+.theme-noir ::selection {
+  background-color: var(--noir-gold);
+  color: #0a0a0a;
+}
+
+/* Strong/bold text - subtle emphasis */
+.theme-noir strong,
+.theme-noir b {
+  font-weight: 600;
+  color: #ffffff;
+}
+
+/* Emphasis/italic text - elegant serif */
+.theme-noir em,
+.theme-noir i {
+  font-family: var(--font-serif);
+  font-style: italic;
+}
+
+/* Horizontal rule - subtle gold line */
+.theme-noir hr {
+  border: none;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    var(--noir-gold-subtle) 20%,
+    var(--noir-gold-muted) 50%,
+    var(--noir-gold-subtle) 80%,
+    transparent 100%
+  );
+  margin: 2em 0;
+}
+
+/* Definition lists - sophisticated styling */
+.theme-noir dt {
+  font-family: var(--font-serif);
+  font-weight: 600;
+  color: var(--color-accent);
+  margin-top: 1em;
+}
+
+.theme-noir dd {
+  margin-left: 0;
+  padding-left: 1.5em;
+  border-left: 1px solid var(--color-border);
+}
+
+/* Figures and captions */
+.theme-noir figure {
+  margin: 0;
+}
+
+.theme-noir figcaption {
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-size: 0.875em;
+  margin-top: 0.75em;
+  color: var(--color-muted);
+}
+
+/* Focus states - gold outline */
+.theme-noir input:focus,
+.theme-noir textarea:focus,
+.theme-noir button:focus {
+  outline: 2px solid var(--noir-gold-muted);
+  outline-offset: 2px;
+}
+
+/* Buttons - elegant styling */
+.theme-noir button {
+  font-family: var(--font-sans);
+  font-weight: 500;
+  background-color: var(--color-surface-elevated);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  padding: 0.75em 1.5em;
+  cursor: pointer;
+  transition:
+    background-color var(--transition-duration) var(--transition-timing),
+    border-color var(--transition-duration) var(--transition-timing);
+}
+
+.theme-noir button:hover {
+  background-color: var(--color-surface);
+  border-color: var(--noir-gold-muted);
+}
+
+/* Inputs - matching elegant style */
+.theme-noir input,
+.theme-noir textarea {
+  font-family: var(--font-sans);
+  background-color: var(--color-surface);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  padding: 0.75em 1em;
+  transition: border-color var(--transition-duration) var(--transition-timing);
+}
+
+.theme-noir input:hover,
+.theme-noir textarea:hover {
+  border-color: rgba(250, 250, 250, 0.2);
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  .theme-noir {
+    --transition-duration: 0ms;
+    --fragment-duration: 0ms;
+  }
+
+  .theme-noir::after {
+    animation: none;
+  }
+}
