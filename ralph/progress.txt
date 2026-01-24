@@ -1415,3 +1415,22 @@ Started: Fri Jan 23 16:33:21 CET 2026
   - Visual styling will be broken after this change until Tailwind migration is complete (expected)
   - ESLint and typecheck pass but build output will look unstyled
 ---
+
+## 2026-01-24 - US-105
+- What was implemented: Migrated SlideContainer component from custom CSS to Tailwind utilities
+- Files changed:
+  - frontend/src/lib/components/SlideContainer.svelte (replaced <style> block with Tailwind classes)
+- Key implementation details:
+  - Container uses `flex items-center justify-center` for centering
+  - Theme colors via Tailwind utilities: `bg-theme-bg`, `text-theme-text`
+  - Fullscreen mode uses conditional class: `{fullscreen ? 'fixed inset-0 z-50' : 'relative'}`
+  - Slide base width fixed at `w-[1920px]` with dynamic scaling via JS
+  - Aspect ratio applied via `style:aspect-ratio` inline style
+  - Transitions via Tailwind: `transition-colors duration-slide`, `transition-transform duration-slide-fast`
+  - Reduced motion support: `motion-reduce:transition-none`
+- **Learnings for future iterations:**
+  - SlideContainer scaling works by setting a fixed 1920px base width and calculating scale based on container size
+  - Use `style:aspect-ratio` for dynamic aspect ratio instead of CSS custom property
+  - Tailwind's `motion-reduce:` variant handles prefers-reduced-motion media query
+  - Browser verification requires full backend running; Vite dev server alone shows error without presentation JSON
+---
