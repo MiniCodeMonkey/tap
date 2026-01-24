@@ -127,6 +127,21 @@ focus on your content
 
 ---
 
+## Mermaid Diagrams
+
+```mermaid
+flowchart LR
+    A[Start] --> B{Decision}
+    B -->|Yes| C[Success]
+    B -->|No| D[Retry]
+    D --> A
+    C --> E[End]
+```
+
+Theme-aware diagrams that match Paper's aesthetic.
+
+---
+
 ## When to Use Paper
 
 - Corporate presentations

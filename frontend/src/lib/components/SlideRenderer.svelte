@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { Slide, BackgroundConfig, Transition, FragmentGroup } from '$lib/types';
+	import type { Slide, BackgroundConfig, Transition, FragmentGroup, Theme } from '$lib/types';
 	import { fade, fly, scale } from 'svelte/transition';
 	import { renderMermaidBlocksInElement } from '$lib/utils/mermaid';
 
@@ -18,6 +18,8 @@
 		direction?: 'forward' | 'backward';
 		/** Custom transition duration in milliseconds */
 		transitionDuration?: number;
+		/** Theme to use for mermaid diagrams */
+		theme?: Theme;
 	}
 
 	let {
@@ -25,7 +27,8 @@
 		visibleFragments = -1,
 		active = true,
 		direction = 'forward',
-		transitionDuration = 400
+		transitionDuration = 400,
+		theme = 'paper'
 	}: Props = $props();
 
 	// ============================================================================
@@ -174,16 +177,19 @@
 	/**
 	 * Render mermaid diagrams when the slide content is mounted or changes.
 	 * This runs after the HTML is inserted into the DOM via {@html}.
+	 * Also re-renders when theme changes to apply theme-specific styling.
 	 */
 	$effect(() => {
 		if (slideContentElement && active) {
-			// Re-render mermaid diagrams when processedHtml changes
+			// Re-render mermaid diagrams when processedHtml or theme changes
 			// eslint-disable-next-line @typescript-eslint/no-unused-expressions
 			processedHtml;
+			// eslint-disable-next-line @typescript-eslint/no-unused-expressions
+			theme;
 
 			// Use a microtask to ensure DOM has been updated
 			queueMicrotask(() => {
-				renderMermaidBlocksInElement(slideContentElement!);
+				renderMermaidBlocksInElement(slideContentElement!, theme);
 			});
 		}
 	});

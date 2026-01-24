@@ -11,6 +11,8 @@ import {
   renderMermaidDiagram,
   renderMermaidBlocksInElement,
   resetDiagramCounter,
+  getMermaidTheme,
+  getCurrentMermaidTheme,
 } from './mermaid'
 
 // Mock mermaid module
@@ -20,6 +22,83 @@ vi.mock('mermaid', () => ({
     render: vi.fn(),
   },
 }))
+
+describe('getMermaidTheme', () => {
+  describe('paper theme', () => {
+    it('returns neutral mermaid theme for paper', () => {
+      const config = getMermaidTheme('paper')
+      expect(config.theme).toBe('neutral')
+    })
+
+    it('uses light colors for paper theme', () => {
+      const config = getMermaidTheme('paper')
+      expect(config.themeVariables.background).toBe('#ffffff')
+      expect(config.themeVariables.primaryTextColor).toBe('#0a0a0a')
+      expect(config.themeVariables.textColor).toBe('#0a0a0a')
+    })
+
+    it('uses stone accent color for paper theme', () => {
+      const config = getMermaidTheme('paper')
+      expect(config.themeVariables.primaryBorderColor).toBe('#78716c')
+      expect(config.themeVariables.lineColor).toBe('#78716c')
+      expect(config.themeVariables.nodeBorder).toBe('#78716c')
+    })
+
+    it('uses Inter font family for paper theme', () => {
+      const config = getMermaidTheme('paper')
+      expect(config.themeVariables.fontFamily).toContain('Inter')
+    })
+  })
+
+  describe('noir theme', () => {
+    it('returns dark mermaid theme for noir', () => {
+      const config = getMermaidTheme('noir')
+      expect(config.theme).toBe('dark')
+    })
+
+    it('uses dark colors for noir theme', () => {
+      const config = getMermaidTheme('noir')
+      expect(config.themeVariables.background).toBe('#0a0a0a')
+      expect(config.themeVariables.primaryTextColor).toBe('#fafafa')
+      expect(config.themeVariables.textColor).toBe('#fafafa')
+    })
+
+    it('uses gold accent color for noir theme', () => {
+      const config = getMermaidTheme('noir')
+      expect(config.themeVariables.primaryBorderColor).toBe('#d4af37')
+      expect(config.themeVariables.lineColor).toBe('#d4af37')
+      expect(config.themeVariables.nodeBorder).toBe('#d4af37')
+      expect(config.themeVariables.titleColor).toBe('#d4af37')
+    })
+
+    it('uses Inter font family for noir theme', () => {
+      const config = getMermaidTheme('noir')
+      expect(config.themeVariables.fontFamily).toContain('Inter')
+    })
+  })
+
+  describe('default theme fallback', () => {
+    it('returns default mermaid theme for aurora (placeholder)', () => {
+      const config = getMermaidTheme('aurora')
+      expect(config.theme).toBe('default')
+    })
+
+    it('returns default mermaid theme for phosphor (placeholder)', () => {
+      const config = getMermaidTheme('phosphor')
+      expect(config.theme).toBe('default')
+    })
+
+    it('returns default mermaid theme for poster (placeholder)', () => {
+      const config = getMermaidTheme('poster')
+      expect(config.theme).toBe('default')
+    })
+
+    it('includes font family even for default themes', () => {
+      const config = getMermaidTheme('aurora')
+      expect(config.themeVariables.fontFamily).toContain('Inter')
+    })
+  })
+})
 
 describe('mermaid initialization', () => {
   beforeEach(() => {
@@ -34,14 +113,15 @@ describe('mermaid initialization', () => {
 
       initializeMermaid()
 
-      expect(mermaid.default.initialize).toHaveBeenCalledWith({
-        startOnLoad: false,
-        theme: 'default',
-        securityLevel: 'strict',
-      })
+      expect(mermaid.default.initialize).toHaveBeenCalledWith(
+        expect.objectContaining({
+          startOnLoad: false,
+          securityLevel: 'strict',
+        })
+      )
     })
 
-    it('only initializes once when called multiple times', async () => {
+    it('only initializes once when called multiple times without theme', async () => {
       const mermaid = await import('mermaid')
 
       initializeMermaid()
@@ -49,6 +129,76 @@ describe('mermaid initialization', () => {
       initializeMermaid()
 
       expect(mermaid.default.initialize).toHaveBeenCalledTimes(1)
+    })
+
+    it('reinitializes when theme changes', async () => {
+      const mermaid = await import('mermaid')
+
+      initializeMermaid('paper')
+      initializeMermaid('noir')
+
+      expect(mermaid.default.initialize).toHaveBeenCalledTimes(2)
+    })
+
+    it('does not reinitialize when called with the same theme', async () => {
+      const mermaid = await import('mermaid')
+
+      initializeMermaid('paper')
+      initializeMermaid('paper')
+
+      expect(mermaid.default.initialize).toHaveBeenCalledTimes(1)
+    })
+
+    it('uses paper theme config when specified', async () => {
+      const mermaid = await import('mermaid')
+
+      initializeMermaid('paper')
+
+      expect(mermaid.default.initialize).toHaveBeenCalledWith(
+        expect.objectContaining({
+          theme: 'neutral',
+          themeVariables: expect.objectContaining({
+            background: '#ffffff',
+          }),
+        })
+      )
+    })
+
+    it('uses noir theme config when specified', async () => {
+      const mermaid = await import('mermaid')
+
+      initializeMermaid('noir')
+
+      expect(mermaid.default.initialize).toHaveBeenCalledWith(
+        expect.objectContaining({
+          theme: 'dark',
+          themeVariables: expect.objectContaining({
+            primaryBorderColor: '#d4af37',
+          }),
+        })
+      )
+    })
+  })
+
+  describe('getCurrentMermaidTheme', () => {
+    it('returns undefined before initialization', () => {
+      expect(getCurrentMermaidTheme()).toBeUndefined()
+    })
+
+    it('returns undefined after initialization without theme', () => {
+      initializeMermaid()
+      expect(getCurrentMermaidTheme()).toBeUndefined()
+    })
+
+    it('returns the theme after initialization with theme', () => {
+      initializeMermaid('paper')
+      expect(getCurrentMermaidTheme()).toBe('paper')
+    })
+
+    it('returns the latest theme after theme change', () => {
+      initializeMermaid('paper')
+      initializeMermaid('noir')
+      expect(getCurrentMermaidTheme()).toBe('noir')
     })
   })
 

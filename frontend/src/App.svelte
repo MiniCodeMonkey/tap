@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
-	import type { Presentation, Slide } from '$lib/types';
+	import type { Presentation, Slide, Theme } from '$lib/types';
 	import {
 		presentation,
 		currentSlide,
@@ -44,7 +44,7 @@
 	// ============================================================================
 
 	// Theme override from WebSocket takes precedence over presentation config
-	let theme = $derived(currentThemeOverride ?? presentationData?.config?.theme ?? 'paper');
+	let theme = $derived((currentThemeOverride ?? presentationData?.config?.theme ?? 'paper') as Theme);
 	let aspectRatio = $derived(presentationData?.config?.aspectRatio ?? '16:9');
 	let showProgressBar = $derived(presentationData?.config?.showProgressBar !== false);
 	let themeColors = $derived(presentationData?.config?.themeColors);
@@ -258,6 +258,7 @@
 					active={true}
 					{direction}
 					transitionDuration={400}
+					{theme}
 				/>
 			{/key}
 		</SlideContainer>

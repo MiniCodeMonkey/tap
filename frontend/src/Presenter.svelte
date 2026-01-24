@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
-	import type { Presentation, Slide } from '$lib/types';
+	import type { Presentation, Slide, Theme } from '$lib/types';
 	import SlideContainer from '$lib/components/SlideContainer.svelte';
 	import SlideRenderer from '$lib/components/SlideRenderer.svelte';
 	import {
@@ -50,7 +50,7 @@
 	});
 
 	// Theme override from WebSocket takes precedence over presentation config
-	let theme = $derived(currentThemeOverride ?? presentationData?.config?.theme ?? 'paper');
+	let theme = $derived((currentThemeOverride ?? presentationData?.config?.theme ?? 'paper') as Theme);
 	let aspectRatio = $derived(presentationData?.config?.aspectRatio ?? '16:9');
 	let speakerNotes = $derived(slide?.notes ?? '');
 	let hasNotes = $derived(speakerNotes.length > 0);
@@ -362,6 +362,7 @@
 							{slide}
 							visibleFragments={fragmentIndex}
 							active={true}
+							{theme}
 						/>
 					</SlideContainer>
 				{:else}
@@ -380,6 +381,7 @@
 							slide={nextSlideData}
 							visibleFragments={-1}
 							active={true}
+							{theme}
 						/>
 					</SlideContainer>
 				{:else if presentationData}
