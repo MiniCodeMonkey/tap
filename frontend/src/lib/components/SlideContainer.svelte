@@ -21,7 +21,7 @@
 
 	let {
 		aspectRatio = '16:9',
-		theme = 'minimal',
+		theme = 'paper',
 		themeColors,
 		fullscreen = false,
 		children

@@ -41,7 +41,7 @@
 	// Derived Values
 	// ============================================================================
 
-	let theme = $derived(presentationData?.config?.theme ?? 'minimal');
+	let theme = $derived(presentationData?.config?.theme ?? 'paper');
 	let aspectRatio = $derived(presentationData?.config?.aspectRatio ?? '16:9');
 	let showProgressBar = $derived(presentationData?.config?.showProgressBar !== false);
 	let themeColors = $derived(presentationData?.config?.themeColors);

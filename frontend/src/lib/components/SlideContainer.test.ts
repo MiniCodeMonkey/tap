@@ -21,20 +21,20 @@ describe('SlideContainer', () => {
 
 		it('applies theme class to container', () => {
 			const { container } = render(SlideContainer, {
-				props: { theme: 'terminal' }
+				props: { theme: 'phosphor' }
 			});
 
-			expect(container.querySelector('.theme-terminal')).toBeInTheDocument();
+			expect(container.querySelector('.theme-phosphor')).toBeInTheDocument();
 		});
 
-		it('applies default minimal theme', () => {
+		it('applies default paper theme', () => {
 			const { container } = render(SlideContainer);
 
-			expect(container.querySelector('.theme-minimal')).toBeInTheDocument();
+			expect(container.querySelector('.theme-paper')).toBeInTheDocument();
 		});
 
 		it('applies different theme classes correctly', () => {
-			const themes = ['minimal', 'gradient', 'terminal', 'brutalist', 'keynote'];
+			const themes = ['paper', 'noir', 'aurora', 'phosphor', 'poster'];
 
 			for (const theme of themes) {
 				cleanup();

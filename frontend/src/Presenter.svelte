@@ -47,7 +47,7 @@
 		return presentationData.slides[slideIndex + 1] ?? null;
 	});
 
-	let theme = $derived(presentationData?.config?.theme ?? 'minimal');
+	let theme = $derived(presentationData?.config?.theme ?? 'paper');
 	let aspectRatio = $derived(presentationData?.config?.aspectRatio ?? '16:9');
 	let speakerNotes = $derived(slide?.notes ?? '');
 	let hasNotes = $derived(speakerNotes.length > 0);

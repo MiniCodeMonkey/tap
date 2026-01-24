@@ -37,6 +37,21 @@ export type Layout =
 export type Transition = 'none' | 'fade' | 'slide' | 'push' | 'zoom';
 
 // ============================================================================
+// Theme Types
+// ============================================================================
+
+/**
+ * Available presentation themes.
+ * Each theme defines CSS custom properties for colors, typography, and visual effects.
+ */
+export type Theme = 'paper' | 'noir' | 'aurora' | 'phosphor' | 'poster';
+
+/**
+ * Default theme used when no theme is specified.
+ */
+export const DEFAULT_THEME: Theme = 'paper';
+
+// ============================================================================
 // Config Types (matches internal/config/config.go)
 // ============================================================================
 
