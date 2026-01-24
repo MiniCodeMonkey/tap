@@ -1531,3 +1531,22 @@ Started: Fri Jan 23 16:33:21 CET 2026
   - Tables use 0.75em 1em cell padding with theme-border bottom borders
   - Links use accent color with 1px border-bottom on hover for subtle underline effect
 ---
+
+## 2026-01-24 - US-109
+- What was implemented: Migrated all UI components from inline <style> blocks to centralized Tailwind/CSS in ui-components.css
+- Files changed:
+  - frontend/src/lib/styles/ui-components.css (created - centralized UI component styles)
+  - frontend/src/app.css (added import for ui-components.css)
+  - frontend/src/lib/components/ProgressBar.svelte (removed inline styles, removed unused theme prop)
+  - frontend/src/lib/components/ConnectionIndicator.svelte (removed inline styles except animations, removed unused theme prop)
+  - frontend/src/lib/components/LiveCodeBlock.svelte (removed inline styles)
+  - frontend/src/lib/components/FragmentContainer.svelte (removed inline styles except show-all)
+  - frontend/src/lib/components/SlideOverview.svelte (removed inline styles, removed unused theme prop)
+  - frontend/src/lib/components/AsciinemaPlayer.svelte (removed inline styles)
+  - frontend/src/App.svelte (removed theme prop from component usages)
+- **Learnings for future iterations:**
+  - Component-specific animations (keyframes) can be kept in component <style> blocks
+  - Removing unused theme props from component interfaces requires updating all usages in parent components
+  - The ui-components.css follows same pattern as layouts.css and prose.css - using CSS classes that reference theme CSS variables (--color-*, --font-*)
+  - Reduced motion support should be included in centralized CSS files
+---
