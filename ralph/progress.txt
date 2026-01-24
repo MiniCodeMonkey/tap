@@ -1855,3 +1855,25 @@ Started: Fri Jan 23 16:33:21 CET 2026
   - Font imports must be added to all entry points (main.ts, presenter.ts) that need fonts
   - Build output shows ~2.3MB CSS when fonts are inlined vs ~92KB without
 ---
+
+## 2026-01-24 - US-126B
+- What was implemented: Verified embedded fonts are wired up to themes and work offline
+- Files changed:
+  - ralph/prd.json (marked US-126B as passes: true)
+- **Verification results:**
+  - Paper theme: Uses `font-family: Inter, system-ui, -apple-system...` (paper.css line 31)
+  - Noir theme: Uses `font-family: 'Playfair Display'` for headings (lines 86-91), `font-family: Inter` for body (lines 108-113)
+  - Aurora theme: Uses `font-family: 'Space Grotesk'` (aurora.css lines 59-63)
+  - Phosphor theme: Uses `font-family: 'JetBrains Mono'` throughout (phosphor.css lines 63-64)
+  - Poster theme: Uses `font-family: Anton` for headings (poster.css line 55), `font-family: system-ui` for body (line 31)
+  - Build output: 60 @font-face declarations with base64 data URIs
+  - Font weights embedded: Inter (400,500,600,700), Playfair Display (400,700), Space Grotesk (400,500,700), JetBrains Mono (400,700), Anton (400)
+  - No external font URLs - all fonts embedded for offline support
+- **Learnings for future iterations:**
+  - Theme font configuration was done in US-111 to US-115 (individual theme stories)
+  - Font installation was done in US-126 (font packages)
+  - This story was verification-focused - no code changes needed, just confirming everything works together
+  - Use `grep -c '@font-face'` to count font declarations in built CSS
+  - Use Python to parse @font-face blocks and extract font-family/font-weight for verification
+  - Build size ~2.3MB CSS is expected with embedded fonts (gzips to ~1.6MB)
+---
