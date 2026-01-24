@@ -3,6 +3,7 @@
 
 /* Theme styles */
 @import "./lib/themes/paper.css";
+@import "./lib/themes/aurora.css";
 
 /* Layout typography styles */
 @import "./lib/styles/layouts.css";

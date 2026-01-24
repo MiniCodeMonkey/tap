@@ -1,0 +1,297 @@
+/**
+ * Aurora Theme
+ *
+ * Inspired by the northern lights - vibrant color flows, glassmorphism,
+ * dynamic and mesmerizing. Features animated gradient backgrounds,
+ * frosted glass effects, and glowing accents.
+ *
+ * Design philosophy:
+ * - Rich gradient backgrounds that subtly animate
+ * - Glassmorphism with backdrop-blur for depth
+ * - Vibrant teals and electric blues for energy
+ * - Glowing borders and light leak effects
+ */
+
+/* Animated gradient mesh background */
+@keyframes aurora-gradient {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+@keyframes aurora-glow {
+  0%,
+  100% {
+    opacity: 0.6;
+  }
+  50% {
+    opacity: 0.8;
+  }
+}
+
+.theme-aurora {
+  /* Core colors - deep purples to electric blues to teals */
+  --color-bg: #0f0a1f;
+  --color-text: #ffffff;
+  --color-muted: rgba(255, 255, 255, 0.6);
+  --color-accent: #14b8a6;
+  --color-code-bg: rgba(0, 0, 0, 0.6);
+
+  /* Extended colors - glassmorphism surfaces */
+  --color-border: rgba(255, 255, 255, 0.1);
+  --color-surface: rgba(255, 255, 255, 0.05);
+  --color-surface-elevated: rgba(255, 255, 255, 0.1);
+  --color-link: #0ea5e9;
+  --color-code-text: #e2e8f0;
+
+  /* Gradient colors for mesh background */
+  --aurora-purple: #4c1d95;
+  --aurora-blue: #0ea5e9;
+  --aurora-teal: #14b8a6;
+  --aurora-cyan: #06b6d4;
+
+  /* Typography - Space Grotesk for modern, geometric feel */
+  --font-sans: 'Space Grotesk', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+    'Helvetica Neue', Arial, sans-serif;
+  --font-mono: 'JetBrains Mono', 'SF Mono', Monaco, 'Cascadia Code', Consolas, 'Liberation Mono',
+    Menlo, monospace;
+
+  /* Transitions - smooth, flowing like aurora */
+  --transition-duration: 500ms;
+  --transition-timing: cubic-bezier(0.4, 0, 0.2, 1);
+  --fragment-duration: 500ms;
+
+  /* Glow effects */
+  --glow-color: rgba(14, 165, 233, 0.5);
+  --glow-spread: 0 0 20px var(--glow-color), 0 0 40px var(--glow-color);
+
+  /* Apply base styles */
+  font-family: var(--font-sans);
+  color: var(--color-text);
+  letter-spacing: -0.01em;
+  line-height: 1.6;
+
+  /* Animated gradient mesh background */
+  background: linear-gradient(
+      135deg,
+      var(--aurora-purple) 0%,
+      #1e1b4b 25%,
+      #0f172a 50%,
+      #0c4a6e 75%,
+      var(--aurora-teal) 100%
+    ),
+    linear-gradient(45deg, var(--aurora-blue) 0%, transparent 50%, var(--aurora-cyan) 100%);
+  background-size: 400% 400%;
+  animation: aurora-gradient 20s ease infinite;
+}
+
+/* Aurora theme typography - clean, geometric headings */
+.theme-aurora h1,
+.theme-aurora h2,
+.theme-aurora h3,
+.theme-aurora h4,
+.theme-aurora h5,
+.theme-aurora h6 {
+  font-family: var(--font-sans);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+  margin: 0;
+  /* Subtle text glow */
+  text-shadow: 0 0 30px rgba(14, 165, 233, 0.3);
+}
+
+.theme-aurora h1 {
+  font-weight: 700;
+}
+
+.theme-aurora p,
+.theme-aurora li {
+  font-family: var(--font-sans);
+  font-weight: 400;
+  letter-spacing: -0.01em;
+}
+
+/* Glassmorphism code blocks - frosted glass with backdrop-blur */
+.theme-aurora code {
+  font-family: var(--font-mono);
+  background-color: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  padding: 0.2em 0.5em;
+  border-radius: 6px;
+  font-size: 0.9em;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.theme-aurora pre {
+  font-family: var(--font-mono);
+  background-color: var(--color-code-bg);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  color: var(--color-code-text);
+  padding: 1.5em 2em;
+  border-radius: 12px;
+  overflow-x: auto;
+  line-height: 1.6;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  /* Subtle glowing border effect */
+  box-shadow:
+    0 0 1px rgba(14, 165, 233, 0.5),
+    0 4px 16px rgba(0, 0, 0, 0.3),
+    inset 0 0 60px rgba(14, 165, 233, 0.05);
+}
+
+.theme-aurora pre code {
+  background: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  padding: 0;
+  border-radius: 0;
+  font-size: inherit;
+  border: none;
+}
+
+/* Aurora theme links - glowing accent */
+.theme-aurora a {
+  color: var(--color-link);
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+  transition:
+    border-color var(--transition-duration) var(--transition-timing),
+    text-shadow var(--transition-duration) var(--transition-timing);
+}
+
+.theme-aurora a:hover {
+  border-bottom-color: var(--color-link);
+  text-shadow: 0 0 10px var(--glow-color);
+}
+
+/* Aurora theme lists */
+.theme-aurora ul,
+.theme-aurora ol {
+  padding-left: 1.25em;
+  margin: 0;
+}
+
+.theme-aurora li {
+  margin-bottom: 0.5em;
+}
+
+.theme-aurora li::marker {
+  color: var(--color-accent);
+}
+
+/* Aurora theme blockquotes - glassmorphism with glowing accent */
+.theme-aurora blockquote {
+  border-left: 4px solid var(--color-accent);
+  padding: 1em 1.5em;
+  margin: 0;
+  font-style: italic;
+  color: var(--color-muted);
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border-radius: 0 8px 8px 0;
+  box-shadow: -4px 0 20px rgba(20, 184, 166, 0.3);
+}
+
+/* Aurora theme tables - glass effect */
+.theme-aurora table {
+  width: 100%;
+  border-collapse: collapse;
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.theme-aurora th,
+.theme-aurora td {
+  padding: 0.75em 1em;
+  text-align: left;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.theme-aurora th {
+  font-weight: 600;
+  background-color: rgba(255, 255, 255, 0.08);
+}
+
+.theme-aurora tr:last-child td {
+  border-bottom: none;
+}
+
+/* Aurora theme images - glowing frame */
+.theme-aurora img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 12px;
+  box-shadow:
+    0 0 1px rgba(14, 165, 233, 0.5),
+    0 4px 20px rgba(0, 0, 0, 0.4);
+}
+
+/* Aurora theme fragments - smooth flowing transitions */
+.theme-aurora .fragment {
+  transition:
+    opacity var(--fragment-duration) var(--transition-timing),
+    transform var(--fragment-duration) var(--transition-timing);
+}
+
+.theme-aurora .fragment-hidden {
+  opacity: 0;
+  transform: translateY(20px) scale(0.98);
+}
+
+.theme-aurora .fragment-visible {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+
+/* Aurora theme selection */
+.theme-aurora ::selection {
+  background-color: var(--aurora-teal);
+  color: #ffffff;
+}
+
+/* Glassmorphism cards/surfaces */
+.theme-aurora .glass-card {
+  background: rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 16px;
+  box-shadow:
+    0 0 1px rgba(14, 165, 233, 0.5),
+    0 8px 32px rgba(0, 0, 0, 0.3);
+}
+
+/* Light leak / glow effects for accent elements */
+.theme-aurora .glow {
+  box-shadow: var(--glow-spread);
+}
+
+.theme-aurora .glow-text {
+  text-shadow:
+    0 0 10px var(--glow-color),
+    0 0 20px var(--glow-color),
+    0 0 40px var(--glow-color);
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  .theme-aurora {
+    --transition-duration: 0ms;
+    --fragment-duration: 0ms;
+    animation: none;
+    background-size: 100% 100%;
+  }
+}
