@@ -96,10 +96,84 @@ export function getMermaidTheme(theme: Theme): MermaidThemeConfig {
         },
       }
 
-    // Placeholder for future themes (US-006)
     case 'aurora':
+      return {
+        theme: 'forest',
+        themeVariables: {
+          // Aurora: Deep purple to teal gradient with glassmorphism feel
+          primaryColor: '#14b8a6', // teal accent
+          primaryTextColor: '#ffffff',
+          primaryBorderColor: '#14b8a6', // teal accent
+          lineColor: '#0ea5e9', // electric blue
+          secondaryColor: '#4c1d95', // deep purple
+          tertiaryColor: '#0f0a1f',
+          background: '#0f0a1f',
+          mainBkg: '#1e1b4b',
+          fontFamily:
+            "'Space Grotesk', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif",
+          fontSize: '16px',
+          nodeBorder: '#14b8a6',
+          clusterBkg: 'rgba(78, 29, 149, 0.3)',
+          clusterBorder: '#0ea5e9',
+          edgeLabelBackground: '#1e1b4b',
+          textColor: '#ffffff',
+          titleColor: '#14b8a6',
+          nodeTextColor: '#ffffff',
+        },
+      }
+
     case 'phosphor':
+      return {
+        theme: 'dark',
+        themeVariables: {
+          // Phosphor: CRT terminal aesthetic with green phosphor glow
+          primaryColor: '#001a00', // very dark green for nodes
+          primaryTextColor: '#00ff00', // phosphor green
+          primaryBorderColor: '#00ff00',
+          lineColor: '#00ff00',
+          secondaryColor: '#001100',
+          tertiaryColor: '#000000',
+          background: '#000000',
+          mainBkg: '#001a00',
+          fontFamily:
+            "'JetBrains Mono', 'SF Mono', Monaco, 'Cascadia Code', Consolas, 'Liberation Mono', Menlo, monospace",
+          fontSize: '16px',
+          nodeBorder: '#00ff00',
+          clusterBkg: '#001100',
+          clusterBorder: '#00ff00',
+          edgeLabelBackground: '#000000',
+          textColor: '#00ff00',
+          titleColor: '#00ff00',
+          nodeTextColor: '#00ff00',
+        },
+      }
+
     case 'poster':
+      return {
+        theme: 'default',
+        themeVariables: {
+          // Poster: High contrast editorial design with warm coral accent
+          primaryColor: '#fafafa', // near-white for nodes
+          primaryTextColor: '#0d0d0f', // dark text on light nodes
+          primaryBorderColor: '#ff6b4a', // coral accent
+          lineColor: '#ff6b4a',
+          secondaryColor: '#f5f5f5',
+          tertiaryColor: '#ffffff',
+          background: '#0d0d0f',
+          mainBkg: '#fafafa',
+          fontFamily:
+            "'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+          fontSize: '16px',
+          nodeBorder: '#ff6b4a',
+          clusterBkg: '#f5f5f5',
+          clusterBorder: '#ff6b4a',
+          edgeLabelBackground: '#0d0d0f',
+          textColor: '#fafafa',
+          titleColor: '#ff6b4a',
+          nodeTextColor: '#0d0d0f',
+        },
+      }
+
     default:
       return {
         theme: 'default',

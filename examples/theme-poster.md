@@ -115,6 +115,21 @@ NO GRADIENTS. NO BLUR. PURE CONTRAST.
 
 ---
 
+## MERMAID DIAGRAMS
+
+HIGH CONTRAST FLOWCHARTS:
+
+```mermaid
+flowchart LR
+    A[START] --> B{CHOICE}
+    B -->|YES| C[ACTION]
+    B -->|NO| D[STOP]
+    C --> E[END]
+    D --> E
+```
+
+---
+
 ## GEOMETRIC DESIGN
 
 | ELEMENT | STYLE |

@@ -130,6 +130,19 @@ $ cat /etc/effects
 
 ---
 
+## Mermaid Diagrams
+
+```mermaid
+flowchart TD
+    A[INPUT] --> B{PROCESS}
+    B -->|VALID| C[EXECUTE]
+    B -->|ERROR| D[LOG]
+    C --> E[OUTPUT]
+    D --> E
+```
+
+---
+
 ## CRT Effects
 
 The Phosphor theme includes:

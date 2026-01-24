@@ -106,6 +106,21 @@ Make your content memorable
 
 ---
 
+## Mermaid Diagrams
+
+Diagrams with teal and purple aurora accents:
+
+```mermaid
+flowchart LR
+    A[Start] --> B{Decision}
+    B -->|Yes| C[Action 1]
+    B -->|No| D[Action 2]
+    C --> E[End]
+    D --> E
+```
+
+---
+
 ## Dynamic Elements
 
 The Aurora theme excels at:

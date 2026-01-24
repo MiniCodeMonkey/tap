@@ -77,24 +77,106 @@ describe('getMermaidTheme', () => {
     })
   })
 
-  describe('default theme fallback', () => {
-    it('returns default mermaid theme for aurora (placeholder)', () => {
+  describe('aurora theme', () => {
+    it('returns forest mermaid theme for aurora', () => {
       const config = getMermaidTheme('aurora')
-      expect(config.theme).toBe('default')
+      expect(config.theme).toBe('forest')
     })
 
-    it('returns default mermaid theme for phosphor (placeholder)', () => {
+    it('uses dark colors for aurora theme background', () => {
+      const config = getMermaidTheme('aurora')
+      expect(config.themeVariables.background).toBe('#0f0a1f')
+      expect(config.themeVariables.primaryTextColor).toBe('#ffffff')
+      expect(config.themeVariables.textColor).toBe('#ffffff')
+    })
+
+    it('uses teal accent color for aurora theme', () => {
+      const config = getMermaidTheme('aurora')
+      expect(config.themeVariables.primaryColor).toBe('#14b8a6')
+      expect(config.themeVariables.primaryBorderColor).toBe('#14b8a6')
+      expect(config.themeVariables.nodeBorder).toBe('#14b8a6')
+      expect(config.themeVariables.titleColor).toBe('#14b8a6')
+    })
+
+    it('uses electric blue for lines in aurora theme', () => {
+      const config = getMermaidTheme('aurora')
+      expect(config.themeVariables.lineColor).toBe('#0ea5e9')
+    })
+
+    it('uses purple as secondary color for aurora theme', () => {
+      const config = getMermaidTheme('aurora')
+      expect(config.themeVariables.secondaryColor).toBe('#4c1d95')
+    })
+
+    it('uses Space Grotesk font family for aurora theme', () => {
+      const config = getMermaidTheme('aurora')
+      expect(config.themeVariables.fontFamily).toContain('Space Grotesk')
+    })
+  })
+
+  describe('phosphor theme', () => {
+    it('returns dark mermaid theme for phosphor', () => {
       const config = getMermaidTheme('phosphor')
-      expect(config.theme).toBe('default')
+      expect(config.theme).toBe('dark')
     })
 
-    it('returns default mermaid theme for poster (placeholder)', () => {
+    it('uses true black background for phosphor theme', () => {
+      const config = getMermaidTheme('phosphor')
+      expect(config.themeVariables.background).toBe('#000000')
+    })
+
+    it('uses phosphor green (#00ff00) for phosphor theme', () => {
+      const config = getMermaidTheme('phosphor')
+      expect(config.themeVariables.primaryTextColor).toBe('#00ff00')
+      expect(config.themeVariables.primaryBorderColor).toBe('#00ff00')
+      expect(config.themeVariables.lineColor).toBe('#00ff00')
+      expect(config.themeVariables.nodeBorder).toBe('#00ff00')
+      expect(config.themeVariables.textColor).toBe('#00ff00')
+      expect(config.themeVariables.titleColor).toBe('#00ff00')
+      expect(config.themeVariables.nodeTextColor).toBe('#00ff00')
+    })
+
+    it('uses JetBrains Mono font family for phosphor theme', () => {
+      const config = getMermaidTheme('phosphor')
+      expect(config.themeVariables.fontFamily).toContain('JetBrains Mono')
+    })
+  })
+
+  describe('poster theme', () => {
+    it('returns default mermaid theme for poster', () => {
       const config = getMermaidTheme('poster')
       expect(config.theme).toBe('default')
     })
 
-    it('includes font family even for default themes', () => {
-      const config = getMermaidTheme('aurora')
+    it('uses high contrast colors for poster theme', () => {
+      const config = getMermaidTheme('poster')
+      // Light nodes on dark background
+      expect(config.themeVariables.primaryColor).toBe('#fafafa')
+      expect(config.themeVariables.background).toBe('#0d0d0f')
+      expect(config.themeVariables.mainBkg).toBe('#fafafa')
+    })
+
+    it('uses coral accent color for poster theme', () => {
+      const config = getMermaidTheme('poster')
+      expect(config.themeVariables.primaryBorderColor).toBe('#ff6b4a')
+      expect(config.themeVariables.lineColor).toBe('#ff6b4a')
+      expect(config.themeVariables.nodeBorder).toBe('#ff6b4a')
+      expect(config.themeVariables.titleColor).toBe('#ff6b4a')
+    })
+
+    it('uses dark text color on light nodes for poster theme', () => {
+      const config = getMermaidTheme('poster')
+      expect(config.themeVariables.primaryTextColor).toBe('#0d0d0f')
+      expect(config.themeVariables.nodeTextColor).toBe('#0d0d0f')
+    })
+
+    it('uses light text color for edge labels on dark background for poster theme', () => {
+      const config = getMermaidTheme('poster')
+      expect(config.themeVariables.textColor).toBe('#fafafa')
+    })
+
+    it('uses Inter font family for poster theme', () => {
+      const config = getMermaidTheme('poster')
       expect(config.themeVariables.fontFamily).toContain('Inter')
     })
   })
