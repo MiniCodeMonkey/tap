@@ -22,6 +22,8 @@
  * - --font-serif: Serif font stack
  * - --color-link: Link color (defaults to accent)
  * - --color-code-text: Code text color
+ * - --color-error: Error/warning color for error states
+ * - --color-error-bg: Background color for error containers
  * - --transition-duration: Default transition duration
  * - --transition-timing: Default transition timing function
  * - --fragment-duration: Fragment animation duration
@@ -43,6 +45,10 @@
   --transition-duration: 400ms;
   --transition-timing: ease-out;
   --fragment-duration: 300ms;
+
+  /* Default error colors */
+  --color-error: #dc2626;
+  --color-error-bg: rgba(220, 38, 38, 0.1);
 
   /* Default spacing */
   --slide-padding: 80px;

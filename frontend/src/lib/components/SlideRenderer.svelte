@@ -266,28 +266,36 @@
 	/*
 	 * Mermaid error styles.
 	 * Shows a visible error with the original code for debugging.
+	 * Uses theme-aware error colors via CSS custom properties.
 	 */
 	:global(.mermaid-error) {
-		padding: 1rem;
+		padding: 1.25rem 1.5rem;
 		border-radius: 0.5rem;
-		background-color: rgba(220, 38, 38, 0.1);
-		border: 1px solid rgba(220, 38, 38, 0.3);
+		background-color: var(--color-error-bg, rgba(220, 38, 38, 0.1));
+		border: 1px solid color-mix(in srgb, var(--color-error, #dc2626) 40%, transparent);
 		margin: 1rem 0;
 	}
 
 	:global(.mermaid-error-message) {
-		color: rgb(220, 38, 38);
+		color: var(--color-error, #dc2626);
 		font-weight: 600;
-		margin-bottom: 0.5rem;
+		margin-bottom: 0.75rem;
+		font-family: var(--font-sans, inherit);
 	}
 
 	:global(.mermaid-error-code) {
 		font-size: 0.875rem;
-		opacity: 0.8;
+		opacity: 0.85;
+		background-color: var(--color-surface, rgba(0, 0, 0, 0.05));
+		border-radius: 0.375rem;
+		padding: 1rem;
+		border: 1px solid var(--color-border, rgba(0, 0, 0, 0.1));
 	}
 
 	:global(.mermaid-error-code code) {
 		white-space: pre-wrap;
 		word-break: break-word;
+		font-family: var(--font-mono, monospace);
+		color: var(--color-text, inherit);
 	}
 </style>

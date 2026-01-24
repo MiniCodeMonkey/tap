@@ -59,6 +59,10 @@
   --phosphor-glow-3: rgba(0, 255, 0, 0.3);
   --phosphor-dim: #333333;
 
+  /* Error colors - red phosphor for terminal error aesthetic */
+  --color-error: #ff3333;
+  --color-error-bg: rgba(255, 51, 51, 0.15);
+
   /* Typography - JetBrains Mono throughout for authentic terminal feel */
   --font-sans: 'JetBrains Mono', 'SF Mono', Monaco, 'Cascadia Code', Consolas, 'Liberation Mono', Menlo, monospace;
   --font-mono: 'JetBrains Mono', 'SF Mono', Monaco, 'Cascadia Code', Consolas, 'Liberation Mono', Menlo, monospace;

@@ -56,6 +56,10 @@
   --aurora-teal: #14b8a6;
   --aurora-cyan: #06b6d4;
 
+  /* Error colors - pink/magenta that fits the aurora palette */
+  --color-error: #f472b6;
+  --color-error-bg: rgba(244, 114, 182, 0.15);
+
   /* Typography - Space Grotesk for modern, geometric feel */
   --font-sans: 'Space Grotesk', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
     'Helvetica Neue', Arial, sans-serif;
