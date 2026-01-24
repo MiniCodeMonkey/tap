@@ -1434,3 +1434,21 @@ Started: Fri Jan 23 16:33:21 CET 2026
   - Tailwind's `motion-reduce:` variant handles prefers-reduced-motion media query
   - Browser verification requires full backend running; Vite dev server alone shows error without presentation JSON
 ---
+
+## 2026-01-24 - US-106
+- What was implemented: Migrated SlideRenderer component from custom CSS to Tailwind utilities
+- Files changed:
+  - frontend/src/lib/components/SlideRenderer.svelte (replaced CSS with Tailwind utilities)
+- Key implementation details:
+  - Container uses `w-full h-full p-slide relative overflow-hidden` for full slide area with padding
+  - Layout class (e.g., layout-title, layout-default) passed through for layout-specific styling
+  - Background images/gradients/colors maintained via inline styles from `getBackgroundStyles()`
+  - Fragment visibility remains in custom CSS because content is dynamically generated via `{@html}`
+  - Fragment transitions use 300ms ease-out (matching Tailwind's duration-fragment token)
+  - Reduced motion support preserved for accessibility
+- **Learnings for future iterations:**
+  - Fragment styles must remain as :global() CSS rules because they target dynamically inserted HTML
+  - SlideRenderer receives layout class like `layout-default` and passes it to outer container
+  - Background styling uses inline styles rather than Tailwind because values are dynamic (images, gradients, colors)
+  - The actual layout structure lives in layout components (LayoutDefault, LayoutTitle, etc.) - SlideRenderer just wraps content
+---
