@@ -1595,3 +1595,20 @@ Started: Fri Jan 23 16:33:21 CET 2026
   - Always include @media (prefers-reduced-motion: reduce) to disable animations for accessibility
   - Theme imports go in app.css after theme-tokens.css
 ---
+
+## 2026-01-24 - US-113
+- What was implemented: Phosphor theme - authentic CRT monitor aesthetic with glowing phosphor text, scanlines, and retro-futuristic hacker vibes
+- Files changed:
+  - frontend/src/lib/themes/phosphor.css (new - complete Phosphor theme with CSS custom properties)
+  - frontend/src/app.css (added import for phosphor.css)
+- **Learnings for future iterations:**
+  - CRT scanline effect uses repeating-linear-gradient on ::before pseudo-element with fixed positioning
+  - Screen vignette effect uses radial-gradient on ::after pseudo-element for curved CRT look
+  - Multi-layer text-shadow creates phosphor glow effect: 0 0 5px, 0 0 10px, 0 0 20px with varying opacity
+  - JetBrains Mono used for both --font-sans and --font-mono since everything IS terminal in this theme
+  - Code blocks have transparent background since all content appears as terminal output
+  - Use > as custom list marker (list-style-type: '> ') for terminal aesthetic
+  - Subtle pulse animation on root element (4s ease-in-out infinite) simulates CRT screen flicker
+  - All pseudo-elements need pointer-events: none so they don't block user interaction
+  - z-index must be high (9999) for scanline overlay to appear above slide content
+---
