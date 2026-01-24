@@ -15,15 +15,16 @@ import (
 
 // Config represents the presentation configuration from YAML frontmatter.
 type Config struct {
-	Drivers     map[string]DriverConfig `yaml:"drivers"`
-	Title       string                  `yaml:"title"`
-	Theme       string                  `yaml:"theme"`
-	Author      string                  `yaml:"author"`
-	Date        string                  `yaml:"date"`
-	AspectRatio string                  `yaml:"aspectRatio"`
-	Transition  string                  `yaml:"transition"`
-	CodeTheme   string                  `yaml:"codeTheme"`
-	Fragments   bool                    `yaml:"fragments"`
+	Drivers     map[string]DriverConfig `yaml:"drivers" json:"drivers,omitempty"`
+	ThemeColors map[string]string       `yaml:"themeColors" json:"themeColors,omitempty"`
+	Title       string                  `yaml:"title" json:"title,omitempty"`
+	Theme       string                  `yaml:"theme" json:"theme,omitempty"`
+	Author      string                  `yaml:"author" json:"author,omitempty"`
+	Date        string                  `yaml:"date" json:"date,omitempty"`
+	AspectRatio string                  `yaml:"aspectRatio" json:"aspectRatio,omitempty"`
+	Transition  string                  `yaml:"transition" json:"transition,omitempty"`
+	CodeTheme   string                  `yaml:"codeTheme" json:"codeTheme,omitempty"`
+	Fragments   bool                    `yaml:"fragments" json:"fragments,omitempty"`
 }
 
 // DriverConfig represents the configuration for a code execution driver.
@@ -135,6 +136,43 @@ var validTransitions = map[string]bool{
 	"zoom":  true,
 }
 
+// validThemeColorKeys contains the allowed themeColors keys.
+var validThemeColorKeys = map[string]bool{
+	"background": true, // maps to --color-bg
+	"text":       true, // maps to --color-text
+	"muted":      true, // maps to --color-muted
+	"accent":     true, // maps to --color-accent
+	"codeBg":     true, // maps to --color-code-bg
+}
+
+// hexColorPattern matches valid CSS hex colors (#RGB, #RRGGBB, #RGBA, #RRGGBBAA).
+var hexColorPattern = regexp.MustCompile(`^#([0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$`)
+
+// isValidColor checks if a string is a valid CSS color value.
+// Supports hex colors (#RGB, #RRGGBB, #RGBA, #RRGGBBAA) and CSS color functions.
+func isValidColor(value string) bool {
+	// Check hex color
+	if hexColorPattern.MatchString(value) {
+		return true
+	}
+
+	// Check CSS color functions (rgb, rgba, hsl, hsla, oklch, etc.)
+	colorFunctions := []string{"rgb(", "rgba(", "hsl(", "hsla(", "oklch(", "oklab(", "lch(", "lab("}
+	for _, prefix := range colorFunctions {
+		if len(value) > len(prefix) && value[:len(prefix)] == prefix {
+			return true
+		}
+	}
+
+	// Check named colors (basic set - not exhaustive, but covers common cases)
+	namedColors := map[string]bool{
+		"black": true, "white": true, "red": true, "green": true, "blue": true,
+		"yellow": true, "orange": true, "purple": true, "pink": true, "gray": true,
+		"grey": true, "transparent": true, "currentColor": true, "inherit": true,
+	}
+	return namedColors[value]
+}
+
 // Validate checks the Config for invalid values and returns an error
 // with a descriptive message if validation fails.
 func (c *Config) Validate() error {
@@ -146,6 +184,13 @@ func (c *Config) Validate() error {
 	// Validate transition
 	if c.Transition != "" && !validTransitions[c.Transition] {
 		return fmt.Errorf("invalid transition %q: must be one of none, fade, slide, push, or zoom", c.Transition)
+	}
+
+	// Validate themeColors keys (invalid colors are logged as warnings but not errors)
+	for key := range c.ThemeColors {
+		if !validThemeColorKeys[key] {
+			return fmt.Errorf("invalid themeColors key %q: must be one of background, text, muted, accent, or codeBg", key)
+		}
 	}
 
 	return nil

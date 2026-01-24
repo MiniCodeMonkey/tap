@@ -65,11 +65,29 @@ export interface DriverConfig {
 }
 
 /**
+ * Theme color override keys.
+ * Maps to CSS custom properties:
+ * - background -> --color-bg
+ * - text -> --color-text
+ * - muted -> --color-muted
+ * - accent -> --color-accent
+ * - codeBg -> --color-code-bg
+ */
+export interface ThemeColors {
+	background?: string;
+	text?: string;
+	muted?: string;
+	accent?: string;
+	codeBg?: string;
+}
+
+/**
  * Presentation configuration from YAML frontmatter.
  * Matches Go's Config struct.
  */
 export interface PresentationConfig {
 	drivers?: Record<string, DriverConfig>;
+	themeColors?: ThemeColors;
 	title?: string;
 	theme?: string;
 	author?: string;

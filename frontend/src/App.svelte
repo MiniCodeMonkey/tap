@@ -44,6 +44,7 @@
 	let theme = $derived(presentationData?.config?.theme ?? 'minimal');
 	let aspectRatio = $derived(presentationData?.config?.aspectRatio ?? '16:9');
 	let showProgressBar = $derived(presentationData?.config?.showProgressBar !== false);
+	let themeColors = $derived(presentationData?.config?.themeColors);
 
 	// ============================================================================
 	// Store Subscriptions
@@ -187,7 +188,7 @@
 		</div>
 	{:else if presentationData && currentSlideData}
 		<!-- Main slide view -->
-		<SlideContainer {aspectRatio} {theme}>
+		<SlideContainer {aspectRatio} {theme} {themeColors}>
 			{#key slideIndex}
 				<SlideRenderer
 					slide={currentSlideData}

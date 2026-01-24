@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
+	import type { ThemeColors } from '$lib/types';
 
 	// ============================================================================
 	// Props
@@ -10,6 +11,8 @@
 		aspectRatio?: string;
 		/** Theme name for CSS class */
 		theme?: string;
+		/** Theme color overrides from frontmatter */
+		themeColors?: ThemeColors;
 		/** Whether fullscreen mode is active */
 		fullscreen?: boolean;
 		/** Content to render inside the slide */
@@ -19,6 +22,7 @@
 	let {
 		aspectRatio = '16:9',
 		theme = 'minimal',
+		themeColors,
 		fullscreen = false,
 		children
 	}: Props = $props();
@@ -60,6 +64,71 @@
 
 	let numericRatio = $derived(parseAspectRatio(aspectRatio));
 	let cssAspectRatio = $derived(getCSSAspectRatio(aspectRatio));
+
+	// ============================================================================
+	// Theme Color Overrides
+	// ============================================================================
+
+	/**
+	 * Regex to validate CSS color values.
+	 * Supports: hex (#RGB, #RRGGBB, #RGBA, #RRGGBBAA), rgb(), rgba(), hsl(), hsla(), oklch(), etc.
+	 */
+	const hexColorRegex = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/;
+	const colorFunctionRegex = /^(rgb|rgba|hsl|hsla|oklch|oklab|lch|lab)\(/i;
+	const namedColors = new Set([
+		'black', 'white', 'red', 'green', 'blue', 'yellow', 'orange', 'purple',
+		'pink', 'gray', 'grey', 'transparent', 'currentColor', 'inherit'
+	]);
+
+	/**
+	 * Validate a CSS color value.
+	 */
+	function isValidColor(value: string): boolean {
+		if (hexColorRegex.test(value)) return true;
+		if (colorFunctionRegex.test(value)) return true;
+		if (namedColors.has(value)) return true;
+		return false;
+	}
+
+	/**
+	 * Map themeColors keys to CSS custom property names.
+	 */
+	const colorKeyToProperty: Record<string, string> = {
+		background: '--color-bg',
+		text: '--color-text',
+		muted: '--color-muted',
+		accent: '--color-accent',
+		codeBg: '--color-code-bg'
+	};
+
+	/**
+	 * Generate inline style string for theme color overrides.
+	 * Invalid colors are logged as warnings and skipped.
+	 */
+	let colorOverrideStyle = $derived.by(() => {
+		if (!themeColors) return '';
+
+		const styles: string[] = [];
+
+		for (const [key, value] of Object.entries(themeColors)) {
+			if (!value) continue;
+
+			const cssProperty = colorKeyToProperty[key];
+			if (!cssProperty) {
+				console.warn(`[tap] Invalid themeColors key "${key}". Valid keys: ${Object.keys(colorKeyToProperty).join(', ')}`);
+				continue;
+			}
+
+			if (!isValidColor(value)) {
+				console.warn(`[tap] Invalid color value "${value}" for themeColors.${key}. Skipping.`);
+				continue;
+			}
+
+			styles.push(`${cssProperty}: ${value}`);
+		}
+
+		return styles.join('; ');
+	});
 
 	// ============================================================================
 	// Scaling Logic
@@ -145,9 +214,11 @@
 <!--
 	SlideContainer uses Tailwind utilities for layout and theme CSS variables for colors.
 	The slide is centered in the viewport using flex and scaled to fit within the container.
+	Theme color overrides from frontmatter are applied as inline CSS custom properties.
 -->
 <div
 	class="slide-container theme-{theme} w-full h-full flex items-center justify-center bg-theme-bg overflow-hidden transition-colors duration-slide ease-out {fullscreen ? 'fixed inset-0 z-50' : 'relative'}"
+	style={colorOverrideStyle}
 	bind:this={containerRef}
 >
 	<div

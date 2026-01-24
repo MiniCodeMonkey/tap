@@ -256,3 +256,152 @@ func TestLoadEnv_NonexistentFile(t *testing.T) {
 		t.Errorf("LoadEnv() should return nil for non-existent .env file, got: %v", err)
 	}
 }
+
+func TestValidate_ValidThemeColorsKeys(t *testing.T) {
+	validKeys := []string{"background", "text", "muted", "accent", "codeBg"}
+
+	for _, key := range validKeys {
+		cfg := DefaultConfig()
+		cfg.ThemeColors = map[string]string{key: "#ff0000"}
+
+		if err := cfg.Validate(); err != nil {
+			t.Errorf("Validate() returned error for valid themeColors key %q: %v", key, err)
+		}
+	}
+}
+
+func TestValidate_InvalidThemeColorsKey(t *testing.T) {
+	invalidKeys := []string{"color", "bg", "primary", "secondary", "invalid"}
+
+	for _, key := range invalidKeys {
+		cfg := DefaultConfig()
+		cfg.ThemeColors = map[string]string{key: "#ff0000"}
+
+		err := cfg.Validate()
+		if err == nil {
+			t.Errorf("Validate() should return error for invalid themeColors key %q", key)
+			continue
+		}
+
+		if !strings.Contains(err.Error(), "themeColors") {
+			t.Errorf("error message should mention themeColors, got: %v", err)
+		}
+		if !strings.Contains(err.Error(), key) {
+			t.Errorf("error message should include the invalid key %q, got: %v", key, err)
+		}
+	}
+}
+
+func TestValidate_PartialThemeColors(t *testing.T) {
+	// Partial overrides should work (only specify some colors)
+	cfg := DefaultConfig()
+	cfg.ThemeColors = map[string]string{
+		"accent": "#ef4444",
+	}
+
+	if err := cfg.Validate(); err != nil {
+		t.Errorf("Validate() should allow partial themeColors, got error: %v", err)
+	}
+}
+
+func TestValidate_AllThemeColors(t *testing.T) {
+	// All color keys together should work
+	cfg := DefaultConfig()
+	cfg.ThemeColors = map[string]string{
+		"background": "#ffffff",
+		"text":       "#0a0a0a",
+		"muted":      "#71717a",
+		"accent":     "#78716c",
+		"codeBg":     "#1e1e1e",
+	}
+
+	if err := cfg.Validate(); err != nil {
+		t.Errorf("Validate() should allow all themeColors keys, got error: %v", err)
+	}
+}
+
+func TestValidate_EmptyThemeColors(t *testing.T) {
+	// Empty themeColors map should be valid
+	cfg := DefaultConfig()
+	cfg.ThemeColors = map[string]string{}
+
+	if err := cfg.Validate(); err != nil {
+		t.Errorf("Validate() should allow empty themeColors, got error: %v", err)
+	}
+}
+
+func TestValidate_NilThemeColors(t *testing.T) {
+	// Nil themeColors should be valid (default)
+	cfg := DefaultConfig()
+
+	if err := cfg.Validate(); err != nil {
+		t.Errorf("Validate() should allow nil themeColors, got error: %v", err)
+	}
+}
+
+func TestIsValidColor_HexColors(t *testing.T) {
+	validHexColors := []string{
+		"#fff",     // 3-digit
+		"#FFF",     // 3-digit uppercase
+		"#ffffff",  // 6-digit
+		"#FFFFFF",  // 6-digit uppercase
+		"#fffa",    // 4-digit (with alpha)
+		"#ffffffaa", // 8-digit (with alpha)
+	}
+
+	for _, color := range validHexColors {
+		if !isValidColor(color) {
+			t.Errorf("isValidColor(%q) = false, want true", color)
+		}
+	}
+}
+
+func TestIsValidColor_CSSFunctions(t *testing.T) {
+	validFunctions := []string{
+		"rgb(255, 0, 0)",
+		"rgba(255, 0, 0, 0.5)",
+		"hsl(0, 100%, 50%)",
+		"hsla(0, 100%, 50%, 0.5)",
+		"oklch(0.7 0.15 60)",
+		"oklab(0.7 -0.1 0.1)",
+	}
+
+	for _, color := range validFunctions {
+		if !isValidColor(color) {
+			t.Errorf("isValidColor(%q) = false, want true", color)
+		}
+	}
+}
+
+func TestIsValidColor_NamedColors(t *testing.T) {
+	namedColors := []string{
+		"black", "white", "red", "green", "blue",
+		"transparent", "currentColor", "inherit",
+	}
+
+	for _, color := range namedColors {
+		if !isValidColor(color) {
+			t.Errorf("isValidColor(%q) = false, want true", color)
+		}
+	}
+}
+
+func TestIsValidColor_InvalidColors(t *testing.T) {
+	invalidColors := []string{
+		"notacolor",
+		"#gg0000",   // invalid hex chars
+		"rgb",       // function without parens
+		"",          // empty string
+		"#f",        // 1 char - too short
+		"#ff",       // 2 chars - too short
+		"#fffff",    // 5 chars - invalid (only 3, 4, 6, 8 allowed)
+		"#fffffff",  // 7 chars - invalid
+		"#fffffffff", // 9 chars - too long
+	}
+
+	for _, color := range invalidColors {
+		if isValidColor(color) {
+			t.Errorf("isValidColor(%q) = true, want false", color)
+		}
+	}
+}

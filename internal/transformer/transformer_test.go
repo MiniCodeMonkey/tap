@@ -407,16 +407,21 @@ func TestTransformNoFragmentsOmittedInJSON(t *testing.T) {
 
 	result := tr.Transform(pres)
 
-	// Marshal to JSON
-	data, err := json.Marshal(result)
-	if err != nil {
-		t.Fatalf("failed to marshal: %v", err)
+	// Check that the slide's Fragments field is nil (will be omitted due to omitempty)
+	if result.Slides[0].Fragments != nil {
+		t.Error("expected slide Fragments to be nil when no pause markers present")
 	}
 
-	// Check that fragments key is omitted (due to omitempty)
-	jsonStr := string(data)
-	if containsField(jsonStr, "fragments") {
-		t.Error("expected 'fragments' field to be omitted when empty")
+	// Marshal just the slide to verify omitempty behavior
+	slideData, err := json.Marshal(result.Slides[0])
+	if err != nil {
+		t.Fatalf("failed to marshal slide: %v", err)
+	}
+
+	// Check that fragments key is omitted from the slide JSON (due to omitempty)
+	slideJSON := string(slideData)
+	if containsField(slideJSON, "fragments") {
+		t.Error("expected 'fragments' field to be omitted from slide when empty")
 	}
 }
 
