@@ -21,6 +21,10 @@ import '@fontsource/anton/400.css'
 
 import './app.css'
 import App from './App.svelte'
+import { initializeMermaid } from '$lib/utils/mermaid'
+
+// Initialize mermaid for diagram rendering (startOnLoad: false for manual control)
+initializeMermaid()
 
 const app = mount(App, {
   target: document.getElementById('app')!,

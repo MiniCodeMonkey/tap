@@ -52,6 +52,7 @@
     "@fontsource/jetbrains-mono": "^5.2.8",
     "@fontsource/playfair-display": "^5.2.8",
     "@fontsource/space-grotesk": "^5.2.10",
+    "mermaid": "^11.12.2",
     "shiki": "^3.21.0"
   }
 }
