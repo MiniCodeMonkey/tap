@@ -164,8 +164,8 @@
         "Verify in browser: cover, split-media, and blank layouts render correctly"
       ],
       "priority": 10,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Added CSS rules for layout-cover, layout-split-media, and layout-blank to layouts.css. Cover has centered content with text shadows, SplitMedia uses 1fr 1fr grid with object-fit cover for images, Blank has minimal styling for user-controlled content. All use theme CSS variables (--color-text, --color-muted, --color-accent, --color-code-bg, --font-mono)"
     },
     {
       "id": "US-108",

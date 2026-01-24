@@ -1503,3 +1503,15 @@ Started: Fri Jan 23 16:33:21 CET 2026
   - All three layouts follow the same pattern: CSS in layouts.css, Svelte components just provide structure
   - Theme CSS variables used: --color-text, --color-muted, --color-accent, --color-code-bg, --font-mono
 ---
+
+## 2026-01-24 - US-107D
+- What was implemented: Migrated Cover, SplitMedia, and Blank layout components to Tailwind
+- Files changed:
+  - frontend/src/lib/styles/layouts.css (added layout-cover, layout-split-media, layout-blank CSS rules)
+- **Learnings for future iterations:**
+  - Layouts are applied via CSS classes (layout-*) on slide content, not as separate Svelte components
+  - The SlideRenderer component applies layoutClass dynamically based on slide.layout property
+  - Cover layout uses text-shadow for readability over background images
+  - SplitMedia uses 1fr 1fr grid with object-fit cover for the media side
+  - Blank layout provides minimal styling for maximum user control
+---
