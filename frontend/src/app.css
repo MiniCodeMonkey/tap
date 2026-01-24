@@ -4,6 +4,9 @@
 /* Layout typography styles */
 @import "./lib/styles/layouts.css";
 
+/* Prose typography styles for markdown content */
+@import "./lib/styles/prose.css";
+
 @import "tailwindcss";
 @config "../tailwind.config.js";
 
