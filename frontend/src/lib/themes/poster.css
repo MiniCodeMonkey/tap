@@ -1,0 +1,326 @@
+/**
+ * Poster Theme
+ *
+ * Bold graphic design - giant typography, high contrast, impossible to ignore.
+ * Inspired by classic poster design, brutalist aesthetics, and bold visual statements.
+ *
+ * Design philosophy:
+ * - Stark black and white for maximum contrast
+ * - ONE bold accent color (electric red) for emphasis
+ * - Anton typeface for massive, commanding headings
+ * - Sharp rectangular shapes, no rounded corners
+ * - Thick borders and harsh drop shadows
+ */
+
+.theme-poster {
+  /* Core colors - stark black and white with electric red accent */
+  --color-bg: #ffffff;
+  --color-text: #000000;
+  --color-muted: #4a4a4a;
+  --color-accent: #ef4444;
+  --color-code-bg: #000000;
+
+  /* Extended colors */
+  --color-border: #000000;
+  --color-surface: #ffffff;
+  --color-surface-elevated: #f5f5f5;
+  --color-link: var(--color-accent);
+  --color-code-text: #ffffff;
+
+  /* Typography - Anton for headings, system sans for body */
+  --font-sans: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-mono: 'JetBrains Mono', 'SF Mono', Monaco, 'Cascadia Code', Consolas, 'Liberation Mono', Menlo, monospace;
+  --font-display: Anton, Impact, 'Arial Black', system-ui, sans-serif;
+
+  /* Transitions - quick and decisive */
+  --transition-duration: 200ms;
+  --transition-timing: ease-in-out;
+  --fragment-duration: 250ms;
+
+  /* Apply base styles */
+  font-family: var(--font-sans);
+  color: var(--color-text);
+  background-color: var(--color-bg);
+  letter-spacing: 0;
+  line-height: 1.4;
+}
+
+/* Poster theme typography - massive, commanding headings */
+.theme-poster h1,
+.theme-poster h2,
+.theme-poster h3,
+.theme-poster h4,
+.theme-poster h5,
+.theme-poster h6 {
+  font-family: var(--font-display);
+  font-weight: 400; /* Anton only has one weight */
+  letter-spacing: 0.02em;
+  line-height: 0.95;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.theme-poster h1 {
+  /* Extremely bold heading - add harsh shadow for depth */
+  text-shadow: 4px 4px 0 var(--color-accent);
+}
+
+.theme-poster h2 {
+  text-shadow: 3px 3px 0 var(--color-accent);
+}
+
+.theme-poster h3 {
+  text-shadow: 2px 2px 0 var(--color-accent);
+}
+
+.theme-poster p,
+.theme-poster li {
+  font-family: var(--font-sans);
+  font-weight: 500;
+  letter-spacing: 0;
+  line-height: 1.5;
+}
+
+/* Poster theme code blocks - inverted colors (white on black) */
+.theme-poster code {
+  font-family: var(--font-mono);
+  background-color: var(--color-code-bg);
+  color: var(--color-code-text);
+  padding: 0.2em 0.5em;
+  border-radius: 0; /* No rounded corners */
+  font-size: 0.9em;
+  border: 2px solid var(--color-border);
+}
+
+.theme-poster pre {
+  font-family: var(--font-mono);
+  background-color: var(--color-code-bg);
+  color: var(--color-code-text);
+  padding: 1.5em 2em;
+  border-radius: 0; /* No rounded corners */
+  overflow-x: auto;
+  line-height: 1.6;
+  /* Thick border and harsh drop shadow */
+  border: 4px solid var(--color-border);
+  box-shadow: 8px 8px 0 var(--color-border);
+}
+
+.theme-poster pre code {
+  background: none;
+  padding: 0;
+  border-radius: 0;
+  font-size: inherit;
+  border: none;
+}
+
+/* Poster theme links - bold accent with underline */
+.theme-poster a {
+  color: var(--color-link);
+  text-decoration: none;
+  font-weight: 600;
+  border-bottom: 3px solid var(--color-accent);
+  transition: background-color var(--transition-duration) var(--transition-timing);
+}
+
+.theme-poster a:hover {
+  background-color: var(--color-accent);
+  color: #ffffff;
+}
+
+/* Poster theme lists - bold markers */
+.theme-poster ul,
+.theme-poster ol {
+  padding-left: 1.5em;
+  margin: 0;
+}
+
+.theme-poster li {
+  margin-bottom: 0.75em;
+}
+
+.theme-poster li::marker {
+  color: var(--color-accent);
+  font-weight: 700;
+}
+
+/* Square bullets for unordered lists */
+.theme-poster ul {
+  list-style-type: square;
+}
+
+/* Poster theme blockquotes - bold block style */
+.theme-poster blockquote {
+  border-left: 8px solid var(--color-accent);
+  padding: 1.5em 2em;
+  margin: 0;
+  font-style: normal;
+  font-weight: 500;
+  color: var(--color-text);
+  background-color: var(--color-surface-elevated);
+  border-radius: 0; /* No rounded corners */
+  box-shadow: 4px 4px 0 var(--color-border);
+}
+
+/* Poster theme tables - bold grid structure */
+.theme-poster table {
+  width: 100%;
+  border-collapse: collapse;
+  border: 4px solid var(--color-border);
+  box-shadow: 8px 8px 0 var(--color-border);
+}
+
+.theme-poster th,
+.theme-poster td {
+  padding: 0.75em 1.25em;
+  text-align: left;
+  border: 2px solid var(--color-border);
+}
+
+.theme-poster th {
+  font-family: var(--font-display);
+  font-weight: 400;
+  text-transform: uppercase;
+  background-color: var(--color-code-bg);
+  color: var(--color-code-text);
+  letter-spacing: 0.05em;
+}
+
+/* Poster theme images - bold framing */
+.theme-poster img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 0; /* No rounded corners */
+  border: 4px solid var(--color-border);
+  box-shadow: 8px 8px 0 var(--color-border);
+}
+
+/* Poster theme fragments - quick, decisive transitions */
+.theme-poster .fragment {
+  transition:
+    opacity var(--fragment-duration) var(--transition-timing),
+    transform var(--fragment-duration) var(--transition-timing);
+}
+
+.theme-poster .fragment-hidden {
+  opacity: 0;
+  transform: translateY(-20px);
+}
+
+.theme-poster .fragment-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Poster theme selection - accent highlight */
+.theme-poster ::selection {
+  background-color: var(--color-accent);
+  color: #ffffff;
+}
+
+/* Strong/bold text gets accent color */
+.theme-poster strong,
+.theme-poster b {
+  font-weight: 700;
+  color: var(--color-accent);
+}
+
+/* Emphasis/italic text */
+.theme-poster em,
+.theme-poster i {
+  font-style: italic;
+  font-weight: 500;
+}
+
+/* Horizontal rule - thick accent line */
+.theme-poster hr {
+  border: none;
+  border-top: 8px solid var(--color-accent);
+  margin: 2em 0;
+}
+
+/* Inputs and interactive elements - bold styling */
+.theme-poster input,
+.theme-poster textarea,
+.theme-poster button {
+  border-radius: 0; /* No rounded corners */
+  border: 3px solid var(--color-border);
+  font-family: var(--font-sans);
+}
+
+.theme-poster button {
+  font-family: var(--font-display);
+  text-transform: uppercase;
+  background-color: var(--color-accent);
+  color: #ffffff;
+  padding: 0.75em 1.5em;
+  cursor: pointer;
+  box-shadow: 4px 4px 0 var(--color-border);
+  transition: transform var(--transition-duration) var(--transition-timing),
+    box-shadow var(--transition-duration) var(--transition-timing);
+}
+
+.theme-poster button:hover {
+  transform: translate(-2px, -2px);
+  box-shadow: 6px 6px 0 var(--color-border);
+}
+
+.theme-poster button:active {
+  transform: translate(2px, 2px);
+  box-shadow: 2px 2px 0 var(--color-border);
+}
+
+/* Focus states - bold outline */
+.theme-poster input:focus,
+.theme-poster textarea:focus,
+.theme-poster button:focus {
+  outline: 4px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+/* Definition lists - poster style */
+.theme-poster dt {
+  font-family: var(--font-display);
+  font-weight: 400;
+  text-transform: uppercase;
+  color: var(--color-accent);
+  margin-top: 1em;
+}
+
+.theme-poster dd {
+  margin-left: 0;
+  padding-left: 1.5em;
+  border-left: 4px solid var(--color-border);
+}
+
+/* Figures and captions */
+.theme-poster figure {
+  margin: 0;
+}
+
+.theme-poster figcaption {
+  font-family: var(--font-display);
+  text-transform: uppercase;
+  font-size: 0.875em;
+  letter-spacing: 0.05em;
+  margin-top: 0.75em;
+  color: var(--color-muted);
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  .theme-poster {
+    --transition-duration: 0ms;
+    --fragment-duration: 0ms;
+  }
+
+  .theme-poster h1,
+  .theme-poster h2,
+  .theme-poster h3 {
+    text-shadow: none;
+  }
+
+  .theme-poster button:hover,
+  .theme-poster button:active {
+    transform: none;
+  }
+}

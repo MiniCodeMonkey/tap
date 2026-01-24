@@ -5,6 +5,7 @@
 @import "./lib/themes/paper.css";
 @import "./lib/themes/aurora.css";
 @import "./lib/themes/phosphor.css";
+@import "./lib/themes/poster.css";
 
 /* Layout typography styles */
 @import "./lib/styles/layouts.css";
