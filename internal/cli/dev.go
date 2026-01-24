@@ -86,6 +86,13 @@ func runDevServer(file string, port int, presenterPassword string) error {
 		return fmt.Errorf("failed to load presentation: %w", err)
 	}
 
+	// Resolve custom theme path if configured
+	customThemePath, err := cfg.ResolveCustomThemePath(baseDir)
+	if err != nil {
+		// Log warning but don't fail - fall back to default theme
+		Warning("Custom theme not loaded: %v\n", err)
+	}
+
 	// Create WebSocket hub for hot reload
 	hub := server.NewWebSocketHub()
 	go hub.Run()
@@ -95,6 +102,9 @@ func runDevServer(file string, port int, presenterPassword string) error {
 	srv := server.New(port)
 	srv.SetPresentation(pres)
 	srv.SetPresenterPassword(presenterPassword)
+	if customThemePath != "" {
+		srv.SetCustomThemePath(customThemePath)
+	}
 	srv.SetupRoutes()
 
 	// Register WebSocket handler
@@ -171,6 +181,16 @@ func runDevServer(file string, port int, presenterPassword string) error {
 		if err != nil {
 			model.SetError(err)
 			return
+		}
+
+		// Update custom theme path if changed
+		newCustomThemePath, err := newCfg.ResolveCustomThemePath(baseDir)
+		if err != nil {
+			// Log warning but continue - use empty path to disable custom theme
+			Warning("Custom theme not loaded on reload: %v\n", err)
+			srv.SetCustomThemePath("")
+		} else {
+			srv.SetCustomThemePath(newCustomThemePath)
 		}
 
 		model.ClearError()

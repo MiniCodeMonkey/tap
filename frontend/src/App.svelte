@@ -45,12 +45,59 @@
 	let aspectRatio = $derived(presentationData?.config?.aspectRatio ?? '16:9');
 	let showProgressBar = $derived(presentationData?.config?.showProgressBar !== false);
 	let themeColors = $derived(presentationData?.config?.themeColors);
+	let customTheme = $derived(presentationData?.config?.customTheme);
+
+	// Track custom theme link element
+	let customThemeLinkEl: HTMLLinkElement | null = null;
 
 	// ============================================================================
 	// Store Subscriptions
 	// ============================================================================
 
 	let unsubscribers: (() => void)[] = [];
+
+	// ============================================================================
+	// Custom Theme Loading
+	// ============================================================================
+
+	/**
+	 * Load custom theme CSS file via a dynamic link element.
+	 * Removes any previously loaded custom theme first.
+	 */
+	function loadCustomTheme(hasCustomTheme: boolean): void {
+		// Remove existing custom theme link if present
+		if (customThemeLinkEl) {
+			customThemeLinkEl.remove();
+			customThemeLinkEl = null;
+		}
+
+		// If no custom theme, we're done
+		if (!hasCustomTheme) {
+			return;
+		}
+
+		// Create link element for custom theme CSS
+		const link = document.createElement('link');
+		link.rel = 'stylesheet';
+		link.type = 'text/css';
+		// Add cache-busting timestamp for dev mode reload
+		link.href = `/api/custom-theme.css?t=${Date.now()}`;
+		link.id = 'custom-theme-css';
+
+		// Handle load errors gracefully
+		link.onerror = () => {
+			console.warn('[tap] Custom theme CSS failed to load. Using default theme.');
+		};
+
+		// Insert after other stylesheets to ensure custom theme overrides defaults
+		document.head.appendChild(link);
+		customThemeLinkEl = link;
+	}
+
+	// React to custom theme changes
+	$effect(() => {
+		loadCustomTheme(!!customTheme);
+	});
 
 	// ============================================================================
 	// Fetch Presentation
@@ -164,6 +211,12 @@
 	onDestroy(() => {
 		// Clean up all subscriptions
 		unsubscribers.forEach((unsub) => unsub());
+
+		// Clean up custom theme link
+		if (customThemeLinkEl) {
+			customThemeLinkEl.remove();
+			customThemeLinkEl = null;
+		}
 
 		// Disconnect WebSocket
 		disconnectWebSocket();

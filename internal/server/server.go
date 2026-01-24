@@ -27,6 +27,7 @@ type Server struct {
 	shutdownCh        chan struct{}
 	addr              string
 	presenterPassword string
+	customThemePath   string
 	mu                sync.RWMutex
 	started           bool
 }
@@ -207,4 +208,18 @@ func (s *Server) GetPresenterPassword() string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.presenterPassword
+}
+
+// SetCustomThemePath sets the path to a custom CSS theme file.
+func (s *Server) SetCustomThemePath(path string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.customThemePath = path
+}
+
+// GetCustomThemePath returns the path to the custom CSS theme file.
+func (s *Server) GetCustomThemePath() string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.customThemePath
 }

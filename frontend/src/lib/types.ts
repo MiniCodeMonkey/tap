@@ -90,6 +90,8 @@ export interface PresentationConfig {
 	themeColors?: ThemeColors;
 	title?: string;
 	theme?: string;
+	/** Path to a custom CSS theme file (relative to markdown file) */
+	customTheme?: string;
 	author?: string;
 	date?: string;
 	aspectRatio?: string;

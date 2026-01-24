@@ -19,6 +19,7 @@ type Config struct {
 	ThemeColors map[string]string       `yaml:"themeColors" json:"themeColors,omitempty"`
 	Title       string                  `yaml:"title" json:"title,omitempty"`
 	Theme       string                  `yaml:"theme" json:"theme,omitempty"`
+	CustomTheme string                  `yaml:"customTheme" json:"customTheme,omitempty"`
 	Author      string                  `yaml:"author" json:"author,omitempty"`
 	Date        string                  `yaml:"date" json:"date,omitempty"`
 	AspectRatio string                  `yaml:"aspectRatio" json:"aspectRatio,omitempty"`
@@ -237,4 +238,32 @@ func (c *Config) ResolveEnvVars() {
 		}
 		c.Drivers[driverName] = driver
 	}
+}
+
+// ResolveCustomThemePath resolves the customTheme path relative to the given base directory.
+// If the customTheme is already an absolute path or empty, it returns it unchanged.
+// Returns the resolved path and any error encountered while checking the file.
+func (c *Config) ResolveCustomThemePath(baseDir string) (string, error) {
+	if c.CustomTheme == "" {
+		return "", nil
+	}
+
+	// If it's already an absolute path, use it directly
+	if filepath.IsAbs(c.CustomTheme) {
+		if _, err := os.Stat(c.CustomTheme); os.IsNotExist(err) {
+			return "", fmt.Errorf("custom theme file not found: %s", c.CustomTheme)
+		}
+		return c.CustomTheme, nil
+	}
+
+	// Resolve relative to base directory
+	resolved := filepath.Join(baseDir, c.CustomTheme)
+	resolved = filepath.Clean(resolved)
+
+	// Check if file exists
+	if _, err := os.Stat(resolved); os.IsNotExist(err) {
+		return "", fmt.Errorf("custom theme file not found: %s (resolved from %s)", resolved, c.CustomTheme)
+	}
+
+	return resolved, nil
 }

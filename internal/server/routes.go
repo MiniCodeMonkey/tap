@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/fatih/color"
@@ -81,6 +82,7 @@ func (s *Server) SetupRoutes() {
 	loggedMux.HandleFunc("GET /", s.handleIndex)
 	loggedMux.HandleFunc("GET /presenter", s.handlePresenter)
 	loggedMux.HandleFunc("GET /api/presentation", s.handleAPIPresentation)
+	loggedMux.HandleFunc("GET /api/custom-theme.css", s.handleCustomTheme)
 	loggedMux.HandleFunc("POST /api/execute", s.handleAPIExecute)
 	loggedMux.HandleFunc("GET /qr", s.handleQR)
 
@@ -150,6 +152,31 @@ func (s *Server) handleAPIPresentation(w http.ResponseWriter, r *http.Request) {
 		// so we can't change the status code. Just log internally.
 		fmt.Printf("Error encoding presentation JSON: %v\n", err)
 	}
+}
+
+// handleCustomTheme serves the custom CSS theme file if configured.
+func (s *Server) handleCustomTheme(w http.ResponseWriter, r *http.Request) {
+	themePath := s.GetCustomThemePath()
+	if themePath == "" {
+		http.NotFound(w, r)
+		return
+	}
+
+	// Read the custom theme file
+	content, err := os.ReadFile(themePath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			http.NotFound(w, r)
+			return
+		}
+		http.Error(w, "Failed to read custom theme file", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/css; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(content)
 }
 
 // handleQR serves a page with QR codes for the audience and presenter URLs.
