@@ -200,17 +200,16 @@
 		</SlideContainer>
 
 		<!-- Progress bar -->
-		<ProgressBar {theme} show={showProgressBar} />
+		<ProgressBar show={showProgressBar} />
 
 		<!-- Connection indicator -->
-		<ConnectionIndicator {theme} />
+		<ConnectionIndicator />
 
 		<!-- Slide overview modal -->
 		<SlideOverview
 			{slides}
 			isOpen={isOverviewOpen}
 			onClose={closeOverview}
-			{theme}
 		/>
 	{:else}
 		<div class="empty-container">

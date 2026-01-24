@@ -205,19 +205,9 @@
 </div>
 
 <style>
-	/* Legacy CSS removed - will be replaced with Tailwind in US-108 */
-	/* Animation-related styles preserved below */
-
 	/* Show-all mode removes transitions and shows everything */
 	.show-all .fragment-item {
 		opacity: 1 !important;
 		transform: none !important;
-	}
-
-	/* Reduced motion support */
-	@media (prefers-reduced-motion: reduce) {
-		.fragment-item {
-			transition: none !important;
-		}
 	}
 </style>

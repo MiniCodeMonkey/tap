@@ -7,13 +7,11 @@
 	// ============================================================================
 
 	interface Props {
-		/** Theme name for styling */
-		theme?: string;
 		/** Whether to show the progress bar (can be disabled via config) */
 		show?: boolean;
 	}
 
-	let { theme = 'minimal', show = true }: Props = $props();
+	let { show = true }: Props = $props();
 
 	// ============================================================================
 	// State
@@ -65,7 +63,7 @@
 
 {#if show && total > 0}
 	<div
-		class="progress-bar-container theme-{theme}"
+		class="progress-bar-container"
 		role="progressbar"
 		aria-valuenow={currentIndex + 1}
 		aria-valuemin={1}
@@ -75,24 +73,3 @@
 		<div class="progress-bar-fill" style:width="{progressPercent()}%"></div>
 	</div>
 {/if}
-
-<style>
-	/* Legacy CSS removed - will be replaced with Tailwind in US-108 */
-	/* Animation-related styles preserved below */
-
-	.progress-bar-container {
-		transition: opacity 0.3s ease;
-	}
-
-	.progress-bar-fill {
-		transition: width 0.3s ease-out;
-	}
-
-	/* Reduced motion support */
-	@media (prefers-reduced-motion: reduce) {
-		.progress-bar-container,
-		.progress-bar-fill {
-			transition: none;
-		}
-	}
-</style>

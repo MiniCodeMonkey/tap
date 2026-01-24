@@ -9,17 +9,6 @@
 	} from '$lib/stores/websocket';
 
 	// ============================================================================
-	// Props
-	// ============================================================================
-
-	interface Props {
-		/** Theme name for styling */
-		theme?: string;
-	}
-
-	let { theme = 'minimal' }: Props = $props();
-
-	// ============================================================================
 	// State
 	// ============================================================================
 
@@ -97,7 +86,7 @@
 
 {#if shouldShow}
 	<div
-		class="connection-indicator theme-{theme}"
+		class="connection-indicator"
 		class:reconnecting={isReconnecting}
 		role="status"
 		aria-live="polite"
@@ -109,9 +98,7 @@
 {/if}
 
 <style>
-	/* Legacy CSS removed - will be replaced with Tailwind in US-108 */
-	/* Animation-related styles preserved below */
-
+	/* Animation keyframes kept in component - these are component-specific */
 	.connection-indicator {
 		animation: slideIn 0.3s ease-out;
 	}

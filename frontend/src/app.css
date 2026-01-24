@@ -7,6 +7,9 @@
 /* Prose typography styles for markdown content */
 @import "./lib/styles/prose.css";
 
+/* UI component styles */
+@import "./lib/styles/ui-components.css";
+
 @import "tailwindcss";
 @config "../tailwind.config.js";
 
