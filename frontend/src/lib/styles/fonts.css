@@ -1,0 +1,31 @@
+/**
+ * fonts.css - Embedded font documentation
+ *
+ * NOTE: Font imports are done via JavaScript in main.ts and presenter.ts
+ * for proper Vite bundling and asset resolution. This file serves as
+ * documentation for the font configuration.
+ *
+ * Fonts are bundled into the final build for fully offline presentations.
+ *
+ * Font Usage by Theme:
+ * - Paper: Inter (sans-serif)
+ * - Noir: Playfair Display (headings) + Inter (body)
+ * - Aurora: Space Grotesk (sans-serif)
+ * - Phosphor: JetBrains Mono (monospace throughout)
+ * - Poster: Anton (headings) + system sans (body)
+ *
+ * Imported Weights:
+ * - Inter: 400, 500, 600, 700
+ * - Playfair Display: 400, 700
+ * - Space Grotesk: 400, 500, 700
+ * - JetBrains Mono: 400, 700
+ * - Anton: 400
+ *
+ * The font CSS is imported via JS imports in entry points:
+ *   import '@fontsource/inter/400.css'
+ *   import '@fontsource/playfair-display/400.css'
+ *   etc.
+ *
+ * This approach ensures Vite properly resolves and bundles the font files
+ * with correct asset paths for offline support.
+ */
