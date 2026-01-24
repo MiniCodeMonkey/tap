@@ -503,8 +503,8 @@
         "Verify in browser: theme switches instantly when selected in TUI"
       ],
       "priority": 29,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Added 'theme' message type to types.ts. Created themeOverride store with setThemeOverride/clearThemeOverride functions. WebSocketClient handles 'theme' messages and updates store. App.svelte and Presenter.svelte use themeOverride to switch themes instantly."
     },
     {
       "id": "US-126",

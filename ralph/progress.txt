@@ -1824,3 +1824,18 @@ Started: Fri Jan 23 16:33:21 CET 2026
   - Mark current theme in picker UI for better UX
   - Reuse AvailableThemes from new.go for consistency
 ---
+
+## 2026-01-24 - US-125B
+- What was implemented: WebSocket theme switching in frontend
+- Files changed:
+  - frontend/src/lib/types.ts (added 'theme' message type and theme field)
+  - frontend/src/lib/stores/presentation.ts (added themeOverride store and setThemeOverride/clearThemeOverride functions)
+  - frontend/src/lib/stores/websocket.ts (added handleThemeChange handler for 'theme' messages)
+  - frontend/src/App.svelte (integrated themeOverride to switch themes instantly)
+  - frontend/src/Presenter.svelte (integrated themeOverride for presenter view)
+- **Learnings for future iterations:**
+  - WebSocket message types are in types.ts, handlers in websocket.ts (WebSocketClient class)
+  - Theme is applied via theme-{themeName} class on SlideContainer
+  - Use $derived() for computed values that depend on store values
+  - Theme override (from WebSocket) takes precedence over config theme using nullish coalescing: `themeOverride ?? config.theme ?? 'paper'`
+---
