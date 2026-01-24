@@ -330,8 +330,8 @@
         "Verify in browser: custom colors applied correctly override theme defaults"
       ],
       "priority": 19,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Added ThemeColors map to Config struct with keys: background, text, muted, accent, codeBg. Go validates keys, frontend validates colors with console warnings. Applied as inline CSS variables on SlideContainer element."
     },
     {
       "id": "US-117",

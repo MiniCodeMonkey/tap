@@ -1648,3 +1648,20 @@ Started: Fri Jan 23 16:33:21 CET 2026
   - hr elements styled with gradient fade effect for elegant dividers
   - Follow same pattern as other themes: CSS custom properties in .theme-noir class
 ---
+
+## 2026-01-24 - US-116
+- What was implemented: Simple color customization for built-in themes via frontmatter
+- Files changed:
+  - internal/config/config.go (added ThemeColors map, validation for keys, isValidColor helper)
+  - internal/config/config_test.go (added tests for themeColors validation and color validation)
+  - internal/transformer/transformer_test.go (fixed test that was checking for "fragments" field globally)
+  - frontend/src/lib/types.ts (added ThemeColors interface)
+  - frontend/src/App.svelte (added themeColors derived value, passed to SlideContainer)
+  - frontend/src/lib/components/SlideContainer.svelte (added themeColors prop, color validation, inline style generation)
+- **Learnings for future iterations:**
+  - CSS color validation supports hex (#RGB, #RRGGBB, #RGBA, #RRGGBBAA), CSS functions (rgb, rgba, hsl, hsla, oklch, etc.), and named colors
+  - Go validates only the key names (background, text, muted, accent, codeBg); frontend validates actual color values
+  - Invalid colors log console warnings but don't break the presentation
+  - When adding json tags to existing Go structs, be careful about tests that check for specific field names in serialized JSON
+  - ThemeColors keys map to CSS variables: background→--color-bg, text→--color-text, muted→--color-muted, accent→--color-accent, codeBg→--color-code-bg
+---
