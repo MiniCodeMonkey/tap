@@ -24,7 +24,7 @@ This example demonstrates how to structure an interactive workshop with:
 
 ## Source
 
-```markdown
+````markdown
 ---
 title: SQL Fundamentals Workshop
 theme: paper
@@ -326,7 +326,7 @@ layout: title
 # Practice Makes Perfect
 
 Try these queries on your own data!
-```
+````
 
 ---
 

@@ -24,7 +24,7 @@ This example demonstrates how to structure a technical presentation with:
 
 ## Source
 
-```markdown
+````markdown
 ---
 title: Building Scalable APIs
 theme: paper
@@ -204,7 +204,7 @@ layout: title
 # Questions?
 
 @yourhandle | your@email.com
-```
+````
 
 ---
 

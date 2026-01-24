@@ -1,4 +1,5 @@
 import { defineConfig } from 'vitepress'
+import { rawMarkdownPlugin } from './plugins/rawMarkdown'
 
 const siteUrl = 'https://tap.sh'
 const siteTitle = 'Tap'
@@ -86,5 +87,9 @@ export default defineConfig({
         }
       ]
     }
+  },
+
+  vite: {
+    plugins: [rawMarkdownPlugin()]
   }
 })

@@ -134,7 +134,7 @@ Deploy to production
 
 Optimized for showing code with maximum screen real estate. Reduces padding and uses the full slide area.
 
-```markdown
+````markdown
 ---
 
 <!--
@@ -150,7 +150,7 @@ def calculate_metrics(data):
     }
 ```
 
-```
+````
 
 **When to use:** Code walkthroughs, technical deep-dives.
 

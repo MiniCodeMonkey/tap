@@ -24,7 +24,7 @@ This example demonstrates how to structure a product demo with:
 
 ## Source
 
-```markdown
+````markdown
 ---
 title: Introducing Tap
 theme: aurora
@@ -208,7 +208,7 @@ layout: title
 # Ready to Try?
 
 tap-slides.dev
-```
+````
 
 ---
 

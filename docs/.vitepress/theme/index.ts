@@ -1,5 +1,6 @@
 import DefaultTheme from 'vitepress/theme'
 import type { Theme } from 'vitepress'
+import Layout from './Layout.vue'
 import HomeHero from './components/HomeHero.vue'
 import HomePhilosophy from './components/HomePhilosophy.vue'
 import HomeFeatures from './components/HomeFeatures.vue'
@@ -11,6 +12,7 @@ import './style.css'
 
 export default {
   extends: DefaultTheme,
+  Layout,
   enhanceApp({ app }) {
     app.component('HomeHero', HomeHero)
     app.component('HomePhilosophy', HomePhilosophy)

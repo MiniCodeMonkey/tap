@@ -179,7 +179,7 @@ See [Slide Directives](/reference/slide-directives) for the complete reference.
 
 ### Example: Mixed Layouts
 
-```markdown
+````markdown
 ---
 title: Product Launch
 theme: aurora
@@ -234,7 +234,7 @@ layout: big-stat
 # 10x
 
 Faster than the competition
-```
+````
 
 ## Speaker Notes
 
