@@ -4,8 +4,11 @@ package server
 import (
 	"encoding/json"
 	"fmt"
+	"io/fs"
 	"net/http"
 	"os"
+	"path"
+	"strings"
 	"time"
 
 	"github.com/fatih/color"
@@ -85,6 +88,9 @@ func (s *Server) SetupRoutes() {
 	loggedMux.HandleFunc("GET /api/custom-theme.css", s.handleCustomTheme)
 	loggedMux.HandleFunc("POST /api/execute", s.handleAPIExecute)
 	loggedMux.HandleFunc("GET /qr", s.handleQR)
+
+	// Serve static assets (JS, CSS) from embedded dist/assets/
+	loggedMux.HandleFunc("GET /assets/", s.handleAssets)
 
 	// Wrap with logging middleware and set as the server handler
 	s.httpServer.Handler = loggingMiddleware(loggedMux)
@@ -207,4 +213,69 @@ func (s *Server) handleQR(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
 	fmt.Fprint(w, html)
+}
+
+// handleAssets serves static assets (JS, CSS) from the embedded dist/assets/ directory.
+func (s *Server) handleAssets(w http.ResponseWriter, r *http.Request) {
+	// Get the embedded filesystem rooted at dist/
+	distFS, err := embedded.DistFS()
+	if err != nil {
+		http.Error(w, "Failed to access embedded assets", http.StatusInternalServerError)
+		return
+	}
+
+	// The request path is "/assets/filename", we need to serve "assets/filename" from distFS
+	// Strip leading slash to get the relative path
+	filePath := strings.TrimPrefix(r.URL.Path, "/")
+
+	// Read the file from the embedded filesystem
+	content, err := fs.ReadFile(distFS, filePath)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+
+	// Set content type based on file extension
+	contentType := getContentType(filePath)
+	w.Header().Set("Content-Type", contentType)
+
+	// Set caching headers - assets have content hashes so we can cache aggressively
+	// For development, use short cache; in production builds, these files are immutable
+	w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(content)
+}
+
+// getContentType returns the appropriate Content-Type header for a file path.
+func getContentType(filePath string) string {
+	ext := strings.ToLower(path.Ext(filePath))
+	switch ext {
+	case ".js":
+		return "application/javascript; charset=utf-8"
+	case ".css":
+		return "text/css; charset=utf-8"
+	case ".html":
+		return "text/html; charset=utf-8"
+	case ".json":
+		return "application/json; charset=utf-8"
+	case ".svg":
+		return "image/svg+xml"
+	case ".png":
+		return "image/png"
+	case ".jpg", ".jpeg":
+		return "image/jpeg"
+	case ".gif":
+		return "image/gif"
+	case ".woff":
+		return "font/woff"
+	case ".woff2":
+		return "font/woff2"
+	case ".ttf":
+		return "font/ttf"
+	case ".eot":
+		return "application/vnd.ms-fontobject"
+	default:
+		return "application/octet-stream"
+	}
 }

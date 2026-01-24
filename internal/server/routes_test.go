@@ -36,8 +36,9 @@ func TestHandleIndex(t *testing.T) {
 	body, _ := io.ReadAll(resp.Body)
 	bodyStr := string(body)
 
-	// Check for expected content
-	if !strings.Contains(bodyStr, "<!DOCTYPE html>") {
+	// Check for expected content (Vite outputs lowercase doctype)
+	bodyLower := strings.ToLower(bodyStr)
+	if !strings.Contains(bodyLower, "<!doctype html>") {
 		t.Error("expected HTML doctype")
 	}
 	if !strings.Contains(bodyStr, "Tap") {

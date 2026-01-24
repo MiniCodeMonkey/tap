@@ -216,9 +216,10 @@ func isAbsoluteURL(path string) bool {
 }
 
 // CopyEmbeddedAssets copies all embedded frontend assets to the output directory.
+// This includes JS, CSS, and other assets from the Vite build in the assets/ subdirectory.
 // This is useful for builds that need the full frontend application.
 func (b *Builder) CopyEmbeddedAssets() (int, int64, error) {
-	files, err := embedded.List()
+	files, err := embedded.ListAll()
 	if err != nil {
 		return 0, 0, fmt.Errorf("failed to list embedded assets: %w", err)
 	}
@@ -238,6 +239,13 @@ func (b *Builder) CopyEmbeddedAssets() (int, int64, error) {
 		}
 
 		destPath := filepath.Join(b.outputDir, file)
+
+		// Create parent directories if needed (for assets/ subdirectory)
+		destDir := filepath.Dir(destPath)
+		if err := os.MkdirAll(destDir, 0755); err != nil {
+			return count, totalSize, fmt.Errorf("failed to create directory for %s: %w", file, err)
+		}
+
 		if err := os.WriteFile(destPath, content, 0644); err != nil {
 			return count, totalSize, fmt.Errorf("failed to write %s: %w", file, err)
 		}

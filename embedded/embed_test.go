@@ -17,7 +17,7 @@ func TestGetIndexHTML(t *testing.T) {
 
 	// Check that it's valid HTML
 	html := string(content)
-	if !strings.Contains(html, "<!DOCTYPE html>") {
+	if !strings.Contains(html, "<!doctype html>") && !strings.Contains(html, "<!DOCTYPE html>") {
 		t.Error("GetIndexHTML() does not contain DOCTYPE")
 	}
 	if !strings.Contains(html, "<title>") {
@@ -37,10 +37,10 @@ func TestGetPresenterHTML(t *testing.T) {
 
 	// Check that it's valid HTML
 	html := string(content)
-	if !strings.Contains(html, "<!DOCTYPE html>") {
+	if !strings.Contains(html, "<!doctype html>") && !strings.Contains(html, "<!DOCTYPE html>") {
 		t.Error("GetPresenterHTML() does not contain DOCTYPE")
 	}
-	if !strings.Contains(html, "Presenter") {
+	if !strings.Contains(html, "Presenter") && !strings.Contains(html, "presenter") {
 		t.Error("GetPresenterHTML() does not contain 'Presenter' text")
 	}
 }
@@ -145,13 +145,16 @@ func TestList(t *testing.T) {
 }
 
 func TestFileSystem(t *testing.T) {
-	fs := FileSystem()
-	if fs == nil {
+	fsys, err := FileSystem()
+	if err != nil {
+		t.Fatalf("FileSystem() error = %v", err)
+	}
+	if fsys == nil {
 		t.Error("FileSystem() returned nil")
 	}
 
 	// Try to open a file
-	file, err := fs.Open("index.html")
+	file, err := fsys.Open("index.html")
 	if err != nil {
 		t.Errorf("FileSystem().Open() error = %v", err)
 		return
@@ -167,5 +170,72 @@ func TestFileSystem(t *testing.T) {
 
 	if info.Size() == 0 {
 		t.Error("index.html has size 0")
+	}
+}
+
+func TestDistFS(t *testing.T) {
+	fsys, err := DistFS()
+	if err != nil {
+		t.Fatalf("DistFS() error = %v", err)
+	}
+	if fsys == nil {
+		t.Error("DistFS() returned nil")
+	}
+}
+
+func TestListAll(t *testing.T) {
+	files, err := ListAll()
+	if err != nil {
+		t.Fatalf("ListAll() error = %v", err)
+	}
+
+	// Should include files in subdirectories (assets/)
+	if len(files) < 2 {
+		t.Errorf("ListAll() returned %d files, expected at least 2", len(files))
+	}
+
+	// Check for expected files
+	foundIndex := false
+	foundAssets := false
+	for _, f := range files {
+		if f == "index.html" {
+			foundIndex = true
+		}
+		if strings.HasPrefix(f, "assets/") {
+			foundAssets = true
+		}
+	}
+
+	if !foundIndex {
+		t.Error("ListAll() did not include index.html")
+	}
+	if !foundAssets {
+		t.Error("ListAll() did not include any assets/ files")
+	}
+}
+
+func TestAssetsContainTailwindCSS(t *testing.T) {
+	// Verify that built CSS files exist in assets/
+	files, err := ListAll()
+	if err != nil {
+		t.Fatalf("ListAll() error = %v", err)
+	}
+
+	foundCSS := false
+	foundJS := false
+	for _, f := range files {
+		if strings.HasSuffix(f, ".css") && strings.HasPrefix(f, "assets/") {
+			foundCSS = true
+		}
+		if strings.HasSuffix(f, ".js") && strings.HasPrefix(f, "assets/") {
+			foundJS = true
+		}
+	}
+
+	if !foundCSS {
+		t.Error("No CSS files found in assets/ - Tailwind CSS build may have failed")
+	}
+	if !foundJS {
+		t.Error("No JS files found in assets/ - Vite build may have failed")
 	}
 }
