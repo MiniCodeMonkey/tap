@@ -132,8 +132,8 @@
         "Verify in browser: column layouts render with correct grid structure"
       ],
       "priority": 8,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Added CSS grid layouts to layouts.css. TwoColumn uses 1fr 1fr, ThreeColumn uses 1fr 1fr 1fr, Sidebar uses 2fr 1fr with border separator. All use theme CSS variables (--color-text, --color-muted, --color-accent, --color-code-bg, --font-mono)"
     },
     {
       "id": "US-107C",

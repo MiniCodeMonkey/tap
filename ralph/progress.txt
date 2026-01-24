@@ -1474,3 +1474,17 @@ Started: Fri Jan 23 16:33:21 CET 2026
   - Layout component files are simplified templates; actual styling is in layouts.css
   - Import order in app.css matters: theme-tokens.css, layouts.css, then tailwindcss
 ---
+
+## 2026-01-24 - US-107B
+- What was implemented: Migrated TwoColumn, ThreeColumn, and Sidebar layout components to Tailwind
+- Files changed:
+  - frontend/src/lib/styles/layouts.css (added CSS grid styles for all three column layouts)
+  - frontend/src/lib/layouts/LayoutTwoColumn.svelte (updated comments, removed empty style block)
+  - frontend/src/lib/layouts/LayoutThreeColumn.svelte (updated comments, removed empty style block)
+  - frontend/src/lib/layouts/LayoutSidebar.svelte (updated comments, removed empty style block)
+- **Learnings for future iterations:**
+  - Column layouts follow same pattern as US-107A: CSS in layouts.css, Svelte provides structure
+  - Grid template columns: TwoColumn uses `1fr 1fr`, ThreeColumn uses `1fr 1fr 1fr`, Sidebar uses `2fr 1fr`
+  - Typography sizes are slightly smaller for multi-column layouts to fit content better
+  - Sidebar has a left border on second child for visual separation
+---
