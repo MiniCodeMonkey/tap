@@ -4,6 +4,7 @@ package tui
 import (
 	"fmt"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"sync"
@@ -11,6 +12,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/tapsh/tap/internal/config"
 	"github.com/tapsh/tap/internal/gemini"
 )
 
@@ -79,6 +81,7 @@ type DevModel struct { //nolint:govet // embedded structs prevent optimal alignm
 	closeCh            chan struct{}
 	themeBroadcaster   ThemeBroadcaster
 	imageGenModel      *ImageGenModel
+	addModel           *AddModel
 	mu                 sync.RWMutex
 	windowWidth        int
 	windowHeight       int
@@ -87,6 +90,7 @@ type DevModel struct { //nolint:govet // embedded structs prevent optimal alignm
 	quitting           bool
 	showThemePicker    bool
 	showImageGenerator bool
+	showSlideBuilder   bool
 }
 
 // NewDevModel creates a new DevModel for the dev server TUI.
@@ -224,6 +228,21 @@ func (m *DevModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 
+	// Forward non-key messages to slide builder when active (for textinput blink, etc.)
+	if m.showSlideBuilder && m.addModel != nil {
+		switch msg.(type) {
+		case tea.KeyMsg:
+			// Key messages are handled by handleKeyPress below
+		default:
+			// Forward blink and other messages to add model
+			newModel, cmd := m.addModel.Update(msg)
+			if addModel, ok := newModel.(AddModel); ok {
+				m.addModel = &addModel
+			}
+			return m, cmd
+		}
+	}
+
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		return m.handleKeyPress(msg)
@@ -269,13 +288,34 @@ func (m *DevModel) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleImageGeneratorKey(msg)
 	}
 
+	// Handle slide builder if it's open
+	if m.showSlideBuilder && m.addModel != nil {
+		return m.handleSlideBuilderKey(msg)
+	}
+
 	switch msg.String() {
 	case "q", "ctrl+c":
 		m.quitting = true
 		return m, tea.Quit
 
 	case "a":
-		// Add slide - will trigger external action
+		// Add slide - open the slide builder overlay
+		if m.showSlideBuilder {
+			return m, nil
+		}
+
+		// Get absolute path to markdown file
+		absPath, err := filepath.Abs(m.config.MarkdownFile)
+		if err != nil {
+			m.SetError(fmt.Errorf("failed to resolve file path: %w", err))
+			return m, nil
+		}
+
+		// Create the add model
+		addModel := NewAddModel(absPath)
+		m.addModel = &addModel
+		m.showSlideBuilder = true
+
 		m.addEvent(DevEvent{
 			Type:      "action",
 			Message:   "Opening slide builder...",
@@ -400,6 +440,20 @@ func (m *DevModel) handleThemePickerKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			_ = m.themeBroadcaster.BroadcastTheme(selectedTheme)
 		}
 
+		// Persist theme change to markdown file
+		if m.config.MarkdownFile != "" {
+			absPath, err := filepath.Abs(m.config.MarkdownFile)
+			if err == nil {
+				if err := config.UpdateThemeInFile(absPath, selectedTheme); err != nil {
+					m.addEvent(DevEvent{
+						Type:      "error",
+						Message:   fmt.Sprintf("Failed to save theme: %v", err),
+						Timestamp: time.Now(),
+					})
+				}
+			}
+		}
+
 		m.addEvent(DevEvent{
 			Type:      "action",
 			Message:   fmt.Sprintf("Theme changed to %s", selectedTheme),
@@ -444,6 +498,48 @@ func (m *DevModel) handleImageGeneratorKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) 
 
 	// Update the image generator model
 	m.imageGenModel = newModel.(*ImageGenModel)
+	return m, cmd
+}
+
+// handleSlideBuilderKey handles keyboard input when the slide builder is open.
+func (m *DevModel) handleSlideBuilderKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	// Check if we're in the Done step before delegating
+	wasInDoneStep := m.addModel.step == addStepDone
+
+	// Delegate to the add model
+	newModel, cmd := m.addModel.Update(msg)
+
+	// Check if it's the updated AddModel
+	if addModel, ok := newModel.(AddModel); ok {
+		m.addModel = &addModel
+
+		// Check if the user completed or cancelled
+		if addModel.quitting {
+			m.showSlideBuilder = false
+			m.addModel = nil
+			m.addEvent(DevEvent{
+				Type:      "action",
+				Message:   "Slide builder cancelled",
+				Timestamp: time.Now(),
+			})
+			return m, nil
+		}
+
+		// Check if done (success)
+		if addModel.done || wasInDoneStep {
+			m.showSlideBuilder = false
+			m.addModel = nil
+			m.addEvent(DevEvent{
+				Type:      "reload",
+				Message:   "Slide added successfully",
+				Timestamp: time.Now(),
+			})
+			return m, nil
+		}
+
+		return m, cmd
+	}
+
 	return m, cmd
 }
 
@@ -492,6 +588,11 @@ func (m *DevModel) View() string {
 	// Show image generator overlay if active
 	if m.showImageGenerator && m.imageGenModel != nil {
 		return m.imageGenModel.View()
+	}
+
+	// Show slide builder overlay if active
+	if m.showSlideBuilder && m.addModel != nil {
+		return m.addModel.View()
 	}
 
 	var b strings.Builder

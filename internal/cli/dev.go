@@ -218,6 +218,11 @@ func runDevServer(file string, port int, presenterPassword string, headless bool
 		model.UpdateWatcherStatus(true)
 		model.SetThemeBroadcaster(hub)
 
+		// Track WebSocket client count
+		hub.SetOnClientCountChange(func(count int) {
+			model.UpdateWebSocketCount(count)
+		})
+
 		// Update watcher to also update TUI
 		watcher.SetOnChange(func(path string) {
 			// Reload config and presentation

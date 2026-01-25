@@ -40,14 +40,18 @@ type Client struct {
 	send chan []byte
 }
 
+// ClientCountCallback is called when the number of connected clients changes.
+type ClientCountCallback func(count int)
+
 // WebSocketHub manages WebSocket connections and message broadcasting.
 type WebSocketHub struct {
-	clients    map[*Client]bool
-	broadcast  chan []byte
-	register   chan *Client
-	unregister chan *Client
-	done       chan struct{}
-	mu         sync.RWMutex
+	clients             map[*Client]bool
+	broadcast           chan []byte
+	register            chan *Client
+	unregister          chan *Client
+	done                chan struct{}
+	onClientCountChange ClientCountCallback
+	mu                  sync.RWMutex
 }
 
 // NewWebSocketHub creates a new WebSocket hub.
@@ -79,6 +83,7 @@ func (h *WebSocketHub) Run() {
 		case client := <-h.register:
 			h.mu.Lock()
 			h.clients[client] = true
+			h.notifyClientCountChange()
 			h.mu.Unlock()
 
 		case client := <-h.unregister:
@@ -86,6 +91,7 @@ func (h *WebSocketHub) Run() {
 			if _, ok := h.clients[client]; ok {
 				delete(h.clients, client)
 				close(client.send)
+				h.notifyClientCountChange()
 			}
 			h.mu.Unlock()
 
@@ -106,6 +112,24 @@ func (h *WebSocketHub) Run() {
 // Stop stops the hub's event loop.
 func (h *WebSocketHub) Stop() {
 	close(h.done)
+}
+
+// SetOnClientCountChange sets a callback to be called when the client count changes.
+func (h *WebSocketHub) SetOnClientCountChange(callback ClientCountCallback) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.onClientCountChange = callback
+}
+
+// notifyClientCountChange calls the callback with the current client count.
+// Must be called with the lock held.
+func (h *WebSocketHub) notifyClientCountChange() {
+	if h.onClientCountChange != nil {
+		count := len(h.clients)
+		// Call callback without lock to avoid deadlocks
+		callback := h.onClientCountChange
+		go callback(count)
+	}
 }
 
 // Broadcast sends a message to all connected clients.

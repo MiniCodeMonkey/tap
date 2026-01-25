@@ -293,6 +293,66 @@ func ValidThemeNames() []string {
 	return []string{"paper", "noir", "aurora", "phosphor", "poster"}
 }
 
+// UpdateThemeInFile updates the theme field in a markdown file's frontmatter.
+// If the file has no frontmatter, it adds one with just the theme.
+// If the frontmatter has no theme field, it adds one.
+func UpdateThemeInFile(path string, newTheme string) error {
+	content, err := os.ReadFile(path)
+	if err != nil {
+		return fmt.Errorf("failed to read file: %w", err)
+	}
+
+	lines := strings.Split(string(content), "\n")
+	if len(lines) == 0 {
+		return fmt.Errorf("empty file")
+	}
+
+	// Check if file has frontmatter
+	if strings.TrimSpace(lines[0]) != "---" {
+		// No frontmatter - add one with just the theme
+		newContent := fmt.Sprintf("---\ntheme: %s\n---\n%s", newTheme, string(content))
+		return os.WriteFile(path, []byte(newContent), 0644)
+	}
+
+	// Find the end of frontmatter
+	endIndex := -1
+	for i := 1; i < len(lines); i++ {
+		if strings.TrimSpace(lines[i]) == "---" {
+			endIndex = i
+			break
+		}
+	}
+
+	if endIndex == -1 {
+		return fmt.Errorf("frontmatter not closed")
+	}
+
+	// Look for existing theme line in frontmatter
+	themeLineIndex := -1
+	for i := 1; i < endIndex; i++ {
+		line := strings.TrimSpace(lines[i])
+		if strings.HasPrefix(line, "theme:") {
+			themeLineIndex = i
+			break
+		}
+	}
+
+	if themeLineIndex != -1 {
+		// Replace existing theme line
+		lines[themeLineIndex] = fmt.Sprintf("theme: %s", newTheme)
+	} else {
+		// Add theme line after opening ---
+		newLines := make([]string, 0, len(lines)+1)
+		newLines = append(newLines, lines[0])
+		newLines = append(newLines, fmt.Sprintf("theme: %s", newTheme))
+		newLines = append(newLines, lines[1:]...)
+		lines = newLines
+	}
+
+	newContent := strings.Join(lines, "\n")
+	return os.WriteFile(path, []byte(newContent), 0644)
+}
+
 // ResolveCustomThemePath resolves the customTheme path relative to the given base directory.
 // If the customTheme is already an absolute path or empty, it returns it unchanged.
 // Returns the resolved path and any error encountered while checking the file.

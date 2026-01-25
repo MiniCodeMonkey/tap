@@ -48,6 +48,8 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	// Disable caching in dev mode so browsers always fetch fresh assets
+	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(content)
 }
@@ -77,6 +79,8 @@ func (s *Server) handlePresenter(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	// Disable caching in dev mode so browsers always fetch fresh assets
+	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(content)
 }
@@ -94,6 +98,8 @@ func (s *Server) handleAPIPresentation(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
+	// Disable caching so changes are always picked up
+	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
 	w.WriteHeader(http.StatusOK)
 	if err := json.NewEncoder(w).Encode(pres); err != nil {
 		// If encoding fails, we've already started writing the response
@@ -181,9 +187,9 @@ func (s *Server) handleAssets(w http.ResponseWriter, r *http.Request) {
 	contentType := getContentType(filePath)
 	w.Header().Set("Content-Type", contentType)
 
-	// Set caching headers - assets have content hashes so we can cache aggressively
-	// For development, use short cache; in production builds, these files are immutable
-	w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+	// Disable caching in dev mode - users need to see changes immediately
+	// For production exports, assets are served from static files with proper caching
+	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
 
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(content)

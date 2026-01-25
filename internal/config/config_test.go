@@ -510,3 +510,117 @@ func TestValidThemeNames(t *testing.T) {
 		}
 	}
 }
+
+func TestUpdateThemeInFile_ExistingTheme(t *testing.T) {
+	// Create a temp file with existing frontmatter
+	content := `---
+title: Test
+theme: paper
+---
+
+# Slide 1
+
+Content here
+`
+	tmpFile, err := os.CreateTemp("", "test-*.md")
+	if err != nil {
+		t.Fatalf("Failed to create temp file: %v", err)
+	}
+	defer os.Remove(tmpFile.Name())
+
+	if _, err := tmpFile.WriteString(content); err != nil {
+		t.Fatalf("Failed to write temp file: %v", err)
+	}
+	tmpFile.Close()
+
+	// Update the theme
+	if err := UpdateThemeInFile(tmpFile.Name(), "noir"); err != nil {
+		t.Errorf("UpdateThemeInFile() returned error: %v", err)
+	}
+
+	// Read back and verify
+	result, err := os.ReadFile(tmpFile.Name())
+	if err != nil {
+		t.Fatalf("Failed to read temp file: %v", err)
+	}
+
+	if !strings.Contains(string(result), "theme: noir") {
+		t.Errorf("File should contain 'theme: noir', got:\n%s", result)
+	}
+	if strings.Contains(string(result), "theme: paper") {
+		t.Errorf("File should not contain 'theme: paper', got:\n%s", result)
+	}
+}
+
+func TestUpdateThemeInFile_NoThemeField(t *testing.T) {
+	// Create a temp file with frontmatter but no theme
+	content := `---
+title: Test
+author: Me
+---
+
+# Slide 1
+`
+	tmpFile, err := os.CreateTemp("", "test-*.md")
+	if err != nil {
+		t.Fatalf("Failed to create temp file: %v", err)
+	}
+	defer os.Remove(tmpFile.Name())
+
+	if _, err := tmpFile.WriteString(content); err != nil {
+		t.Fatalf("Failed to write temp file: %v", err)
+	}
+	tmpFile.Close()
+
+	// Update the theme
+	if err := UpdateThemeInFile(tmpFile.Name(), "aurora"); err != nil {
+		t.Errorf("UpdateThemeInFile() returned error: %v", err)
+	}
+
+	// Read back and verify
+	result, err := os.ReadFile(tmpFile.Name())
+	if err != nil {
+		t.Fatalf("Failed to read temp file: %v", err)
+	}
+
+	if !strings.Contains(string(result), "theme: aurora") {
+		t.Errorf("File should contain 'theme: aurora', got:\n%s", result)
+	}
+}
+
+func TestUpdateThemeInFile_NoFrontmatter(t *testing.T) {
+	// Create a temp file with no frontmatter
+	content := `# Slide 1
+
+Some content here
+`
+	tmpFile, err := os.CreateTemp("", "test-*.md")
+	if err != nil {
+		t.Fatalf("Failed to create temp file: %v", err)
+	}
+	defer os.Remove(tmpFile.Name())
+
+	if _, err := tmpFile.WriteString(content); err != nil {
+		t.Fatalf("Failed to write temp file: %v", err)
+	}
+	tmpFile.Close()
+
+	// Update the theme
+	if err := UpdateThemeInFile(tmpFile.Name(), "phosphor"); err != nil {
+		t.Errorf("UpdateThemeInFile() returned error: %v", err)
+	}
+
+	// Read back and verify
+	result, err := os.ReadFile(tmpFile.Name())
+	if err != nil {
+		t.Fatalf("Failed to read temp file: %v", err)
+	}
+
+	if !strings.Contains(string(result), "theme: phosphor") {
+		t.Errorf("File should contain 'theme: phosphor', got:\n%s", result)
+	}
+	// Should still have original content
+	if !strings.Contains(string(result), "# Slide 1") {
+		t.Errorf("File should still contain original content, got:\n%s", result)
+	}
+}
