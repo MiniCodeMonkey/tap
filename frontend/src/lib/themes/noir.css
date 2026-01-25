@@ -15,26 +15,28 @@
 .theme-noir {
   /* Core colors - deep charcoal with crisp white text */
   --color-bg: #0a0a0a;
-  --color-text: #fafafa;
-  --color-muted: rgba(250, 250, 250, 0.6);
-  --color-accent: #d4af37;
-  --color-code-bg: #161616;
+  --color-text: #f5f5f5;
+  --color-muted: rgba(245, 245, 245, 0.55);
+  --color-accent: #c9a227;
+  --color-code-bg: #141414;
 
   /* Extended colors - cinematic depth */
-  --color-border: rgba(250, 250, 250, 0.1);
-  --color-surface: #111111;
-  --color-surface-elevated: #1a1a1a;
+  --color-border: rgba(255, 255, 255, 0.08);
+  --color-surface: #0f0f0f;
+  --color-surface-elevated: #181818;
   --color-link: var(--color-accent);
-  --color-code-text: #e5e5e5;
+  --color-code-text: #e8e8e8;
 
-  /* Gold accent variations */
-  --noir-gold: #d4af37;
-  --noir-gold-muted: rgba(212, 175, 55, 0.5);
-  --noir-gold-subtle: rgba(212, 175, 55, 0.2);
+  /* Gold accent variations - refined for elegance */
+  --noir-gold: #c9a227;
+  --noir-gold-light: #dbb842;
+  --noir-gold-muted: rgba(201, 162, 39, 0.4);
+  --noir-gold-subtle: rgba(201, 162, 39, 0.15);
+  --noir-gold-glow: rgba(201, 162, 39, 0.25);
 
   /* Error colors - warm amber that complements the gold theme */
   --color-error: #f59e0b;
-  --color-error-bg: rgba(245, 158, 11, 0.15);
+  --color-error-bg: rgba(245, 158, 11, 0.12);
 
   /* Typography - Playfair Display for headings, Inter for body */
   --font-sans: Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
@@ -44,26 +46,25 @@
     Menlo, monospace;
 
   /* Transitions - smooth, elegant */
-  --transition-duration: 500ms;
-  --transition-timing: cubic-bezier(0.4, 0, 0.2, 1);
-  --fragment-duration: 500ms;
+  --transition-duration: 450ms;
+  --transition-timing: cubic-bezier(0.25, 0.1, 0.25, 1);
+  --fragment-duration: 450ms;
 
   /* Apply base styles */
   font-family: var(--font-sans);
   color: var(--color-text);
   letter-spacing: -0.01em;
-  line-height: 1.6;
+  line-height: 1.65;
 
-  /* Subtle dark-to-darker gradient background for richness */
-  background: linear-gradient(
-    180deg,
-    #0a0a0a 0%,
-    #0d0d0d 50%,
-    #080808 100%
-  );
+  /* Rich gradient background with subtle texture for cinematic depth */
+  background:
+    radial-gradient(ellipse 120% 80% at 50% 0%, #151515 0%, transparent 60%),
+    radial-gradient(ellipse 100% 60% at 80% 100%, rgba(201, 162, 39, 0.03) 0%, transparent 50%),
+    linear-gradient(180deg, #0c0c0c 0%, #0a0a0a 40%, #080808 100%);
+  background-color: #0a0a0a;
 }
 
-/* Subtle vignette effect on slide content */
+/* Cinematic vignette effect for depth */
 .theme-noir::after {
   content: '';
   position: fixed;
@@ -72,9 +73,10 @@
   width: 100%;
   height: 100%;
   background: radial-gradient(
-    ellipse at center,
-    transparent 50%,
-    rgba(0, 0, 0, 0.4) 100%
+    ellipse 150% 100% at center,
+    transparent 40%,
+    rgba(0, 0, 0, 0.25) 70%,
+    rgba(0, 0, 0, 0.5) 100%
   );
   pointer-events: none;
   z-index: 9998;
@@ -89,58 +91,70 @@
 .theme-noir h6 {
   font-family: var(--font-serif);
   font-weight: 400;
-  letter-spacing: 0.01em;
+  letter-spacing: 0.02em;
   line-height: 1.15;
   margin: 0;
+  color: #ffffff;
 }
 
 .theme-noir h1 {
   font-weight: 700;
-  letter-spacing: 0;
-  /* Subtle gold underline effect via text-shadow */
-  text-shadow: 0 2px 20px rgba(0, 0, 0, 0.5);
+  letter-spacing: 0.01em;
+  /* Subtle glow for cinematic depth */
+  text-shadow:
+    0 0 40px rgba(201, 162, 39, 0.15),
+    0 2px 20px rgba(0, 0, 0, 0.6);
 }
 
 .theme-noir h2 {
   font-weight: 600;
+  text-shadow: 0 2px 15px rgba(0, 0, 0, 0.4);
 }
 
 .theme-noir h3 {
   font-weight: 500;
+  text-shadow: 0 1px 10px rgba(0, 0, 0, 0.3);
 }
 
 .theme-noir p,
 .theme-noir li {
   font-family: var(--font-sans);
   font-weight: 400;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.005em;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
 }
 
 /* Noir theme code blocks - elevated card style with refined shadows */
 .theme-noir code {
   font-family: var(--font-mono);
-  background-color: var(--color-surface);
+  background-color: rgba(0, 0, 0, 0.4);
   padding: 0.2em 0.5em;
   border-radius: 4px;
-  font-size: 0.9em;
-  border: 1px solid var(--color-border);
+  font-size: 0.88em;
+  border: 1px solid rgba(201, 162, 39, 0.12);
+  color: var(--noir-gold-light);
 }
 
 .theme-noir pre {
   font-family: var(--font-mono);
-  background-color: var(--color-code-bg);
+  background: linear-gradient(
+    145deg,
+    #131313 0%,
+    #0e0e0e 100%
+  );
   color: var(--color-code-text);
-  padding: 1.5em 2em;
-  border-radius: 8px;
+  padding: 1.75em 2.25em;
+  border-radius: 10px;
   overflow-x: auto;
-  line-height: 1.6;
+  line-height: 1.65;
   /* Multi-layer soft shadows for cinematic depth */
-  border: 1px solid rgba(250, 250, 250, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.06);
   box-shadow:
-    0 4px 6px rgba(0, 0, 0, 0.3),
-    0 10px 20px rgba(0, 0, 0, 0.25),
-    0 20px 40px rgba(0, 0, 0, 0.2),
-    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    0 2px 4px rgba(0, 0, 0, 0.4),
+    0 8px 16px rgba(0, 0, 0, 0.35),
+    0 16px 32px rgba(0, 0, 0, 0.25),
+    0 0 60px rgba(201, 162, 39, 0.03),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
 
 .theme-noir pre code {
@@ -149,79 +163,98 @@
   border-radius: 0;
   font-size: inherit;
   border: none;
+  color: inherit;
+  text-shadow: none;
 }
 
 /* Noir theme links - gold accent with elegant transitions */
 .theme-noir a {
   color: var(--color-link);
   text-decoration: none;
-  border-bottom: 1px solid transparent;
+  border-bottom: 1px solid var(--noir-gold-subtle);
   transition:
     border-color var(--transition-duration) var(--transition-timing),
-    color var(--transition-duration) var(--transition-timing);
+    color var(--transition-duration) var(--transition-timing),
+    text-shadow var(--transition-duration) var(--transition-timing);
 }
 
 .theme-noir a:hover {
-  border-bottom-color: var(--color-link);
-  color: #e5c158; /* Slightly lighter gold on hover */
+  border-bottom-color: var(--noir-gold-muted);
+  color: var(--noir-gold-light);
+  text-shadow: 0 0 12px var(--noir-gold-glow);
 }
 
 /* Noir theme lists */
 .theme-noir ul,
 .theme-noir ol {
-  padding-left: 1.25em;
+  padding-left: 1.5em;
   margin: 0;
 }
 
 .theme-noir li {
-  margin-bottom: 0.5em;
+  margin-bottom: 0.6em;
+  padding-left: 0.25em;
 }
 
 .theme-noir li::marker {
-  color: var(--color-accent);
+  color: var(--noir-gold-muted);
+}
+
+.theme-noir ul li::marker {
+  content: '◆ ';
+  font-size: 0.6em;
 }
 
 /* Noir theme blockquotes - elegant with gold accent */
 .theme-noir blockquote {
-  border-left: 3px solid var(--color-accent);
-  padding: 1em 1.5em;
+  border-left: 2px solid var(--noir-gold-muted);
+  padding: 1.25em 1.75em;
   margin: 0;
   font-family: var(--font-serif);
   font-style: italic;
-  color: var(--color-muted);
+  color: rgba(255, 255, 255, 0.85);
   background: linear-gradient(
-    90deg,
-    rgba(212, 175, 55, 0.05) 0%,
-    transparent 50%
+    100deg,
+    rgba(201, 162, 39, 0.06) 0%,
+    rgba(201, 162, 39, 0.02) 30%,
+    transparent 60%
   );
-  border-radius: 0 6px 6px 0;
+  border-radius: 0 8px 8px 0;
+  box-shadow:
+    inset 0 0 30px rgba(0, 0, 0, 0.2),
+    0 4px 20px rgba(0, 0, 0, 0.15);
 }
 
 /* Noir theme tables - sophisticated with subtle borders */
 .theme-noir table {
   width: 100%;
   border-collapse: collapse;
-  background-color: var(--color-surface);
-  border-radius: 8px;
+  background: linear-gradient(180deg, #121212 0%, #0e0e0e 100%);
+  border-radius: 10px;
   overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.05);
   box-shadow:
-    0 4px 6px rgba(0, 0, 0, 0.2),
-    0 10px 20px rgba(0, 0, 0, 0.15);
+    0 4px 8px rgba(0, 0, 0, 0.3),
+    0 12px 24px rgba(0, 0, 0, 0.2),
+    0 0 40px rgba(201, 162, 39, 0.02);
 }
 
 .theme-noir th,
 .theme-noir td {
-  padding: 0.875em 1.25em;
+  padding: 1em 1.5em;
   text-align: left;
-  border-bottom: 1px solid var(--color-border);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
 }
 
 .theme-noir th {
   font-family: var(--font-serif);
   font-weight: 600;
-  background-color: var(--color-surface-elevated);
-  color: var(--color-accent);
-  letter-spacing: 0.02em;
+  background: linear-gradient(180deg, #1a1a1a 0%, #161616 100%);
+  color: var(--noir-gold);
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  font-size: 0.85em;
+  border-bottom: 1px solid var(--noir-gold-subtle);
 }
 
 .theme-noir tr:last-child td {
@@ -229,17 +262,19 @@
 }
 
 .theme-noir tr:hover td {
-  background-color: rgba(212, 175, 55, 0.03);
+  background-color: rgba(201, 162, 39, 0.04);
 }
 
-/* Noir theme images - refined shadows */
+/* Noir theme images - refined shadows with subtle gold glow */
 .theme-noir img {
   max-width: 100%;
   height: auto;
-  border-radius: 8px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
   box-shadow:
-    0 4px 6px rgba(0, 0, 0, 0.3),
-    0 10px 20px rgba(0, 0, 0, 0.25);
+    0 4px 8px rgba(0, 0, 0, 0.4),
+    0 12px 24px rgba(0, 0, 0, 0.3),
+    0 0 50px rgba(201, 162, 39, 0.04);
 }
 
 /* Noir theme fragments - smooth, elegant fades */
@@ -265,11 +300,12 @@
   color: #0a0a0a;
 }
 
-/* Strong/bold text - subtle emphasis */
+/* Strong/bold text - subtle emphasis with glow */
 .theme-noir strong,
 .theme-noir b {
   font-weight: 600;
   color: #ffffff;
+  text-shadow: 0 0 20px rgba(255, 255, 255, 0.1);
 }
 
 /* Emphasis/italic text - elegant serif */
@@ -277,21 +313,23 @@
 .theme-noir i {
   font-family: var(--font-serif);
   font-style: italic;
+  color: rgba(255, 255, 255, 0.9);
 }
 
-/* Horizontal rule - subtle gold line */
+/* Horizontal rule - subtle gold gradient line */
 .theme-noir hr {
   border: none;
   height: 1px;
   background: linear-gradient(
     90deg,
     transparent 0%,
-    var(--noir-gold-subtle) 20%,
+    var(--noir-gold-subtle) 15%,
     var(--noir-gold-muted) 50%,
-    var(--noir-gold-subtle) 80%,
+    var(--noir-gold-subtle) 85%,
     transparent 100%
   );
-  margin: 2em 0;
+  margin: 2.5em 0;
+  box-shadow: 0 0 15px var(--noir-gold-glow);
 }
 
 /* Definition lists - sophisticated styling */
@@ -364,6 +402,143 @@
 .theme-noir input:hover,
 .theme-noir textarea:hover {
   border-color: rgba(250, 250, 250, 0.2);
+}
+
+/* ============================================
+   Layout-specific refinements for Noir theme
+   ============================================ */
+
+/* Title layout - cinematic impact */
+.theme-noir .layout-title {
+  text-align: center;
+}
+
+.theme-noir .layout-title h1 {
+  font-size: clamp(4rem, 10vw, 9rem);
+  letter-spacing: 0.02em;
+  text-shadow:
+    0 0 60px rgba(201, 162, 39, 0.2),
+    0 4px 30px rgba(0, 0, 0, 0.6);
+  margin-bottom: 0.3em;
+}
+
+.theme-noir .layout-title p {
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-size: 2.25rem;
+  color: var(--color-muted);
+  letter-spacing: 0.05em;
+}
+
+/* Section layout - dramatic reveal */
+.theme-noir .layout-section {
+  text-align: center;
+}
+
+.theme-noir .layout-section h2 {
+  font-size: clamp(3.5rem, 8vw, 7rem);
+  text-shadow:
+    0 0 40px rgba(201, 162, 39, 0.15),
+    0 2px 20px rgba(0, 0, 0, 0.5);
+}
+
+.theme-noir .layout-section p {
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-size: 1.75rem;
+  color: var(--color-muted);
+  margin-top: 1em;
+}
+
+/* Big-stat layout - dramatic centered presence */
+.theme-noir .layout-big-stat {
+  text-align: center;
+}
+
+.theme-noir .layout-big-stat h2 {
+  font-size: clamp(6rem, 15vw, 12rem);
+  font-family: var(--font-serif);
+  color: var(--noir-gold);
+  letter-spacing: -0.02em;
+  text-shadow:
+    0 0 80px var(--noir-gold-glow),
+    0 0 40px rgba(201, 162, 39, 0.3),
+    0 4px 30px rgba(0, 0, 0, 0.5);
+  line-height: 1;
+  margin-bottom: 0.2em;
+}
+
+.theme-noir .layout-big-stat p {
+  font-size: 2rem;
+  color: var(--color-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  font-weight: 500;
+}
+
+/* Quote layout - elegant cinematic */
+.theme-noir .layout-quote {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  padding: 4rem;
+}
+
+.theme-noir .layout-quote blockquote {
+  border-left: none;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  max-width: 80%;
+  padding: 0;
+  position: relative;
+}
+
+.theme-noir .layout-quote blockquote::before {
+  content: '"';
+  position: absolute;
+  top: -0.3em;
+  left: -0.4em;
+  font-family: var(--font-serif);
+  font-size: 6rem;
+  color: var(--noir-gold-subtle);
+  line-height: 1;
+}
+
+.theme-noir .layout-quote blockquote p {
+  font-size: clamp(2rem, 4vw, 3.5rem);
+  font-family: var(--font-serif);
+  font-style: italic;
+  line-height: 1.4;
+  color: rgba(255, 255, 255, 0.95);
+  text-shadow: 0 2px 20px rgba(0, 0, 0, 0.4);
+}
+
+.theme-noir .layout-quote p:not(blockquote p) {
+  font-family: var(--font-sans);
+  font-style: normal;
+  font-size: 1.5rem;
+  color: var(--noir-gold);
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  margin-top: 2rem;
+  font-weight: 500;
+}
+
+/* Two-column layout refinements */
+.theme-noir .layout-two-column h3 {
+  color: var(--noir-gold);
+  margin-bottom: 1em;
+  font-size: 2rem;
+}
+
+/* Three-column layout refinements */
+.theme-noir .layout-three-column h3 {
+  color: var(--noir-gold);
+  margin-bottom: 0.75em;
+  font-size: 1.75rem;
 }
 
 /* Reduced motion support */
