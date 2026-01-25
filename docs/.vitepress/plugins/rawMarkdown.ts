@@ -19,9 +19,9 @@ export function rawMarkdownPlugin(): Plugin {
         return null
       }
 
-      // Skip the homepage
+      // Skip the homepage and changelog (changelog uses @include directive)
       const relativePath = relative(docsDir, id)
-      if (relativePath === 'index.md') {
+      if (relativePath === 'index.md' || relativePath === 'changelog.md') {
         return null
       }
 

@@ -45,6 +45,7 @@ export default defineConfig({
       { text: 'Guide', link: '/guide/writing-slides' },
       { text: 'Reference', link: '/reference/cli-commands' },
       { text: 'Examples', link: '/examples/' },
+      { text: 'Changelog', link: '/changelog' },
       { text: 'GitHub', link: 'https://github.com/tap-slides/tap' }
     ],
 
@@ -61,6 +62,8 @@ export default defineConfig({
             { text: 'Live Code Execution', link: '/guide/live-code-execution' },
             { text: 'Presenter Mode', link: '/guide/presenter-mode' },
             { text: 'Images & Media', link: '/guide/images-media' },
+            { text: 'Mermaid Diagrams', link: '/guide/mermaid-diagrams' },
+            { text: 'AI Image Generation', link: '/guide/ai-images' },
             { text: 'Building & Export', link: '/guide/building-export' }
           ]
         }
