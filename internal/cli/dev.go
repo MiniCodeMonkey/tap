@@ -21,6 +21,7 @@ import (
 var (
 	devPort              int
 	devPresenterPassword string
+	devHeadless          bool
 )
 
 // devCmd represents the dev command
@@ -42,7 +43,7 @@ Examples:
   tap dev slides.md --presenter-password secret  # Protect presenter view`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return runDevServer(args[0], devPort, devPresenterPassword)
+		return runDevServer(args[0], devPort, devPresenterPassword, devHeadless)
 	},
 }
 
@@ -53,10 +54,11 @@ func init() {
 	// Command-specific flags
 	devCmd.Flags().IntVarP(&devPort, "port", "p", 3000, "port for the dev server")
 	devCmd.Flags().StringVar(&devPresenterPassword, "presenter-password", "", "password to protect the presenter view")
+	devCmd.Flags().BoolVar(&devHeadless, "headless", false, "run without TUI (for testing/automation)")
 }
 
 // runDevServer starts the dev server with hot reload and TUI.
-func runDevServer(file string, port int, presenterPassword string) error {
+func runDevServer(file string, port int, presenterPassword string, headless bool) error {
 	// Resolve absolute path
 	absFile, err := filepath.Abs(file)
 	if err != nil {
@@ -151,59 +153,105 @@ func runDevServer(file string, port int, presenterPassword string) error {
 		presenterURL += "?key=" + presenterPassword
 	}
 
-	// Run the TUI
-	tuiCfg := tui.DevConfig{
-		MarkdownFile:      file,
-		Port:              port,
-		AudienceURL:       audienceURL,
-		PresenterURL:      presenterURL,
-		PresenterPassword: presenterPassword,
-		CurrentTheme:      cfg.Theme,
-	}
-
-	// Create TUI model
-	model := tui.NewDevModel(tuiCfg)
-	model.UpdateWatcherStatus(true)
-	model.SetThemeBroadcaster(hub)
-
 	// Set up signal handling for graceful shutdown
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 
-	// Update watcher to also update TUI
-	watcher.SetOnChange(func(path string) {
-		// Reload config and presentation
-		newCfg, err := config.Load(absFile)
-		if err != nil {
-			model.SetError(err)
-			return
+	if headless {
+		// Headless mode - no TUI, just log and wait for signal
+		fmt.Println()
+		Success("  Dev server running (headless mode)\n")
+		fmt.Println()
+		fmt.Printf("  Audience:  %s\n", audienceURL)
+		fmt.Printf("  Presenter: %s\n", presenterURL)
+		fmt.Println()
+		Muted("  Press Ctrl+C to stop\n")
+		fmt.Println()
+
+		// Update watcher for headless mode
+		watcher.SetOnChange(func(path string) {
+			// Reload config and presentation
+			newCfg, err := config.Load(absFile)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error reloading config: %v\n", err)
+				return
+			}
+
+			newPres, err := loadPresentation(absFile, newCfg, baseDir)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error reloading presentation: %v\n", err)
+				return
+			}
+
+			// Update custom theme path if changed
+			newCustomThemePath, err := newCfg.ResolveCustomThemePath(baseDir)
+			if err != nil {
+				Warning("Custom theme not loaded on reload: %v\n", err)
+				srv.SetCustomThemePath("")
+			} else {
+				srv.SetCustomThemePath(newCustomThemePath)
+			}
+
+			srv.SetPresentation(newPres)
+			_ = hub.BroadcastReload()
+			Info("Reloaded: %s\n", path)
+		})
+
+		// Wait for signal
+		<-sigCh
+		fmt.Println()
+		Info("Shutting down...\n")
+	} else {
+		// Run the TUI
+		tuiCfg := tui.DevConfig{
+			MarkdownFile:      file,
+			Port:              port,
+			AudienceURL:       audienceURL,
+			PresenterURL:      presenterURL,
+			PresenterPassword: presenterPassword,
+			CurrentTheme:      cfg.Theme,
 		}
 
-		newPres, err := loadPresentation(absFile, newCfg, baseDir)
-		if err != nil {
-			model.SetError(err)
-			return
+		// Create TUI model
+		model := tui.NewDevModel(tuiCfg)
+		model.UpdateWatcherStatus(true)
+		model.SetThemeBroadcaster(hub)
+
+		// Update watcher to also update TUI
+		watcher.SetOnChange(func(path string) {
+			// Reload config and presentation
+			newCfg, err := config.Load(absFile)
+			if err != nil {
+				model.SetError(err)
+				return
+			}
+
+			newPres, err := loadPresentation(absFile, newCfg, baseDir)
+			if err != nil {
+				model.SetError(err)
+				return
+			}
+
+			// Update custom theme path if changed
+			newCustomThemePath, err := newCfg.ResolveCustomThemePath(baseDir)
+			if err != nil {
+				// Log warning but continue - use empty path to disable custom theme
+				Warning("Custom theme not loaded on reload: %v\n", err)
+				srv.SetCustomThemePath("")
+			} else {
+				srv.SetCustomThemePath(newCustomThemePath)
+			}
+
+			model.ClearError()
+			srv.SetPresentation(newPres)
+			_ = hub.BroadcastReload()
+			model.SendReloadEvent(path)
+		})
+
+		// Run the TUI (blocks until user quits)
+		if err := tui.RunDevTUIWithModel(model); err != nil {
+			return fmt.Errorf("TUI error: %w", err)
 		}
-
-		// Update custom theme path if changed
-		newCustomThemePath, err := newCfg.ResolveCustomThemePath(baseDir)
-		if err != nil {
-			// Log warning but continue - use empty path to disable custom theme
-			Warning("Custom theme not loaded on reload: %v\n", err)
-			srv.SetCustomThemePath("")
-		} else {
-			srv.SetCustomThemePath(newCustomThemePath)
-		}
-
-		model.ClearError()
-		srv.SetPresentation(newPres)
-		_ = hub.BroadcastReload()
-		model.SendReloadEvent(path)
-	})
-
-	// Run the TUI (blocks until user quits)
-	if err := tui.RunDevTUIWithModel(model); err != nil {
-		return fmt.Errorf("TUI error: %w", err)
 	}
 
 	// Graceful shutdown

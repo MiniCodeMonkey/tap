@@ -2,7 +2,7 @@
 import { ref, onMounted } from 'vue'
 import CopyButton from './CopyButton.vue'
 
-const installCommand = 'brew install tap-slides'
+const installCommand = 'brew install MiniCodeMonkey/tap-homebrew/tap'
 const isVisible = ref(false)
 
 onMounted(() => {

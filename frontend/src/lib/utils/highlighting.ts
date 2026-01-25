@@ -614,6 +614,74 @@ ${html}
 }
 
 // ============================================================================
+// DOM-based Highlighting
+// ============================================================================
+
+/**
+ * Find and highlight all code blocks within a DOM element.
+ * Replaces plain <pre><code class="language-*"> blocks with syntax-highlighted versions.
+ * Skips mermaid blocks which are handled separately.
+ *
+ * @param element The DOM element to search within
+ * @returns Promise resolving when all code blocks are highlighted
+ */
+export async function highlightCodeBlocksInElement(element: HTMLElement): Promise<void> {
+	// Find all code blocks that need highlighting (skip mermaid)
+	const codeBlocks = element.querySelectorAll<HTMLElement>(
+		'pre > code[class*="language-"]:not(.language-mermaid)'
+	);
+
+	if (codeBlocks.length === 0) {
+		return;
+	}
+
+	// Process each code block
+	const promises = Array.from(codeBlocks).map(async (codeBlock) => {
+		const pre = codeBlock.parentElement;
+		if (!pre || pre.dataset.highlighted === 'true') {
+			return; // Already highlighted or no parent
+		}
+
+		// Extract language from class
+		const classMatch = codeBlock.className.match(/language-(\w+)/);
+		const language = classMatch?.[1] ?? 'text';
+
+		// Get the code content
+		const code = codeBlock.textContent ?? '';
+
+		// Mark as processing to prevent duplicate attempts
+		pre.dataset.highlighted = 'processing';
+
+		try {
+			// Highlight the code
+			const highlightedHtml = await highlight(code, { language });
+
+			// Create a temporary container to parse the HTML
+			const temp = document.createElement('div');
+			temp.innerHTML = highlightedHtml;
+
+			// Get the new pre element from Shiki's output
+			const newPre = temp.querySelector('pre');
+			if (newPre) {
+				// Mark as highlighted to prevent re-processing
+				newPre.dataset.highlighted = 'true';
+				// Preserve any existing classes on the original pre
+				newPre.className = `${newPre.className} ${pre.className}`.trim();
+				pre.replaceWith(newPre);
+			} else {
+				pre.dataset.highlighted = 'true';
+			}
+		} catch (err) {
+			// On error, just mark as highlighted to prevent repeated attempts
+			pre.dataset.highlighted = 'error';
+			console.error('Failed to highlight code block:', err);
+		}
+	});
+
+	await Promise.all(promises);
+}
+
+// ============================================================================
 // CSS Classes Reference
 // ============================================================================
 /**

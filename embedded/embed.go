@@ -14,7 +14,7 @@ import (
 // - assets/*.js (bundled JavaScript with Svelte components)
 // - assets/*.css (Tailwind CSS output, properly purged)
 //
-//go:embed dist/*
+//go:embed all:dist
 var Assets embed.FS
 
 // DistFS returns an fs.FS rooted at the dist/ directory.

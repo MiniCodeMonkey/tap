@@ -111,7 +111,7 @@ export function getMermaidTheme(theme: Theme): MermaidThemeConfig {
           mainBkg: '#1e1b4b',
           fontFamily:
             "'Space Grotesk', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif",
-          fontSize: '16px',
+          fontSize: '18px',
           nodeBorder: '#14b8a6',
           clusterBkg: 'rgba(78, 29, 149, 0.3)',
           clusterBorder: '#0ea5e9',
@@ -205,6 +205,15 @@ export function initializeMermaid(theme?: Theme): void {
     startOnLoad: false,
     securityLevel: 'strict',
     ...themeConfig,
+    flowchart: {
+      htmlLabels: true,
+      nodeSpacing: 50,
+      rankSpacing: 50,
+      padding: 15,
+      useMaxWidth: false,
+      curve: 'basis',
+      wrappingWidth: 300,
+    },
   })
 
   isInitialized = true

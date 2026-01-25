@@ -2,6 +2,7 @@
 	import type { Slide, BackgroundConfig, Transition, FragmentGroup, Theme } from '$lib/types';
 	import { fade, fly, scale } from 'svelte/transition';
 	import { renderMermaidBlocksInElement } from '$lib/utils/mermaid';
+	import { highlightCodeBlocksInElement } from '$lib/utils/highlighting';
 
 	// ============================================================================
 	// Props
@@ -175,21 +176,52 @@
 	let slideContentElement: HTMLElement | undefined = $state();
 
 	/**
-	 * Render mermaid diagrams when the slide content is mounted or changes.
+	 * Fix mermaid foreignObject text clipping by expanding their widths.
+	 * Mermaid sometimes calculates text width incorrectly when custom fonts are used,
+	 * causing text to be clipped. This function expands foreignObject elements to
+	 * ensure all text is visible.
+	 */
+	function fixMermaidTextClipping(element: HTMLElement): void {
+		const diagrams = element.querySelectorAll('.mermaid-diagram');
+		diagrams.forEach((diagram) => {
+			const foreignObjects = diagram.querySelectorAll('foreignObject');
+			foreignObjects.forEach((fo) => {
+				const currentWidth = parseFloat(fo.getAttribute('width') || '0');
+				// Add 50% extra width to ensure text fits with custom fonts
+				const newWidth = currentWidth * 1.5;
+				fo.setAttribute('width', String(newWidth));
+			});
+		});
+	}
+
+	/**
+	 * Render mermaid diagrams and highlight code blocks when the slide content is mounted or changes.
 	 * This runs after the HTML is inserted into the DOM via {@html}.
 	 * Also re-renders when theme changes to apply theme-specific styling.
 	 */
 	$effect(() => {
 		if (slideContentElement && active) {
-			// Re-render mermaid diagrams when processedHtml or theme changes
+			// Re-render when processedHtml or theme changes
 			// eslint-disable-next-line @typescript-eslint/no-unused-expressions
 			processedHtml;
 			// eslint-disable-next-line @typescript-eslint/no-unused-expressions
 			theme;
 
-			// Use a microtask to ensure DOM has been updated
-			queueMicrotask(() => {
-				renderMermaidBlocksInElement(slideContentElement!, theme);
+			console.log('SlideRenderer effect running, element:', !!slideContentElement);
+
+			// Use a microtask to ensure DOM has been updated, then process async
+			queueMicrotask(async () => {
+				console.log('Processing slide content');
+				try {
+					await renderMermaidBlocksInElement(slideContentElement!, theme);
+					// Fix mermaid foreignObject text clipping by expanding widths
+					fixMermaidTextClipping(slideContentElement!);
+					console.log('Mermaid done, starting highlight');
+					await highlightCodeBlocksInElement(slideContentElement!);
+					console.log('Highlight done');
+				} catch (err) {
+					console.error('Error processing slide content:', err);
+				}
 			});
 		}
 	});
@@ -254,30 +286,27 @@
 
 	/*
 	 * Mermaid diagram container styles.
-	 * Centers diagrams and ensures they don't overflow the slide.
-	 * Uses max-height to prevent vertical overflow while preserving aspect ratio.
-	 * Small diagrams stay at natural size (no upscaling).
+	 * Centers diagrams and scales them for slide presentation.
 	 */
 	:global(.mermaid-diagram) {
 		display: flex;
 		justify-content: center;
 		align-items: center;
 		width: 100%;
-		/* Limit height to prevent overflow, leaving room for other content */
-		max-height: 70vh;
-		margin: 1rem 0;
-		overflow: hidden;
+		min-height: 150px;
+		margin: 1.5rem 0;
+		overflow: visible;
 	}
 
 	:global(.mermaid-diagram svg) {
-		/* Constrain to container bounds while preserving aspect ratio */
 		max-width: 100%;
-		max-height: 100%;
-		/* Ensure SVG scales proportionally */
-		width: auto;
 		height: auto;
-		/* Prevent upscaling beyond natural size */
-		object-fit: contain;
+		overflow: visible;
+	}
+
+	/* Ensure mermaid foreignObject content is visible */
+	:global(.mermaid-diagram foreignObject) {
+		overflow: visible;
 	}
 
 	/*

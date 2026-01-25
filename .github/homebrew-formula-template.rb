@@ -3,7 +3,7 @@
 # Manual edits will be overwritten on the next release.
 
 class Tap < Formula
-  desc "Markdown presentations with live code execution"
+  desc "Presentations for developers"
   homepage "https://tap.sh"
   version "VERSION_PLACEHOLDER"
   license "MIT"

@@ -4,7 +4,7 @@
 
 ### Homebrew (macOS/Linux)
 ```bash
-brew install tap-slides
+brew install MiniCodeMonkey/tap-homebrew/tap
 ```
 
 ### Go Install

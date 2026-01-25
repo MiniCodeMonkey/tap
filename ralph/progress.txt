@@ -1,1879 +1,311 @@
 # Ralph Progress Log
-Started: Fri Jan 23 16:33:21 CET 2026
+Started: Sat Jan 24 22:43:44 CET 2026
+---
 
 ## Codebase Patterns
-- Go module is `github.com/tapsh/tap`
-- Use `go build ./...` to verify typecheck passes
-- Use `make build` to build binary to bin/tap
-- Use `make test` to run all tests
-- Use `make lint` or `golangci-lint run ./...` to run linter
-- Add .gitkeep files to preserve empty directories in git
-- CLI commands use Cobra - root command is in internal/cli/root.go
-- New subcommands should register themselves in their init() functions
-- Use `$(go env GOPATH)/bin/golangci-lint` if system golangci-lint is outdated
-- Use cli.Success/Error/Info/Warning functions from internal/cli/output.go for colorized output
-- Config package at internal/config/config.go for presentation config parsing
-- Struct fields should be ordered by size (largest first) to satisfy fieldalignment linter
-- Use `github.com/coder/websocket` for WebSocket support (maintained fork of deprecated nhooyr.io/websocket)
-- TUI uses charmbracelet/bubbletea + charmbracelet/lipgloss - styles in internal/tui/styles.go
-- Frontend: Svelte 5 + Vite + TypeScript in frontend/ directory
-- Frontend: Run `cd frontend && npm run check` for typecheck, `npm run lint` for ESLint
-- Frontend: Run `npm run build:embed` to build and output to embedded/dist/
-- Frontend: Use $lib alias for src/lib imports
-- Frontend: Test files (*.test.ts) excluded from typecheck/lint until Vitest is set up (US-075)
-- Frontend: Use `svelte/store` for state (writable, derived, type Readable)
-- Benchmarks: Use `make bench` for all benchmarks, `make bench-targets` for performance target tests
-- Benchmarks: Server SetupRoutes() is a method (not standalone), WebSocketHub uses Run() (not Start())
-- Tailwind v4: Use `@import "tailwindcss"` (not @tailwind directives), and `@tailwindcss/postcss` plugin (not tailwindcss directly)
-- Tailwind v4: Reference JS config with `@config "../tailwind.config.js"` in CSS file
-
----
-
-## 2026-01-23 - US-001
-- What was implemented: Initialized Go module and project structure
-- Files changed:
-  - go.mod (updated module name to github.com/tapsh/tap)
-  - cmd/tap/main.go (created empty main function)
-  - internal/*/.gitkeep (created 9 internal package directories)
-  - frontend/.gitkeep, embedded/.gitkeep, themes/.gitkeep, testdata/.gitkeep
-- **Learnings for future iterations:**
-  - The project already had a go.mod but with wrong module name - checked and updated it
-  - Use .gitkeep files to preserve empty directories for git tracking
----
-
-## 2026-01-23 - US-002
-- What was implemented: Created Makefile with build targets
-- Files changed:
-  - Makefile (new - build, test, lint, dev, release targets with cross-compilation)
-  - .gitignore (new - ignore bin/, dist/, IDE files, etc.)
-- **Learnings for future iterations:**
-  - Use `make build` to build to bin/tap
-  - Use `make test` to run tests
-  - Use `make lint` to run golangci-lint (requires golangci-lint installed)
-  - Use `make release` for cross-platform builds (darwin/amd64, darwin/arm64, linux/amd64, linux/arm64, windows/amd64)
-  - Build artifacts go to bin/ directory (gitignored)
----
-
-## 2026-01-23 - US-003
-- What was implemented: Configured golangci-lint for code quality
-- Files changed:
-  - .golangci.yml (new - linting configuration)
-- **Learnings for future iterations:**
-  - Enabled linters: govet, errcheck, staticcheck, unused, gosimple, ineffassign, typecheck
-  - Use `golangci-lint run ./...` or `make lint` to run the linter
-  - Configuration uses modern `issues.exclude-dirs` and `issues.exclude-files` options (not deprecated `run.skip-dirs`/`run.skip-files`)
-  - 5 minute timeout configured for analysis
----
-
-## 2026-01-23 - US-004
-- What was implemented: Implemented root CLI command with Cobra
-- Files changed:
-  - internal/cli/root.go (new - root command with Cobra)
-  - cmd/tap/main.go (updated - calls cli.Execute())
-  - go.mod (updated - added Cobra dependency)
-  - go.sum (new - dependency checksums)
-- **Learnings for future iterations:**
-  - Use `github.com/spf13/cobra` for CLI commands
-  - Root command defined in internal/cli/root.go with rootCmd variable
-  - Version is set via `rootCmd.Version` and shown with `--version` flag
-  - Custom version template: `rootCmd.SetVersionTemplate("tap version {{.Version}}\n")`
-  - Global flags (like --verbose) are defined as PersistentFlags on rootCmd
-  - Execute() returns int for exit code (0 success, 1 error)
-  - Subcommands will be registered on rootCmd in their init() functions
-  - golangci-lint v1.63.4+ is needed for Go 1.25+ (older versions incompatible)
----
-
-## 2026-01-23 - US-005
-- What was implemented: Added tap new subcommand stub
-- Files changed:
-  - internal/cli/new.go (new - new subcommand with Cobra)
-- **Learnings for future iterations:**
-  - Subcommands register with rootCmd.AddCommand() in their init() functions
-  - Use Flags() for command-specific flags, PersistentFlags() for flags inherited by subcommands
-  - Short flag names use single character (e.g., -t for --theme, -o for --output)
-  - Help text automatically includes usage, flags, and global flags
----
-
-## 2026-01-23 - US-006
-- What was implemented: Added tap dev subcommand stub
-- Files changed:
-  - internal/cli/dev.go (new - dev subcommand with Cobra)
-- **Learnings for future iterations:**
-  - Use `cobra.ExactArgs(1)` to require exactly one positional argument
-  - Positional arguments documented in Use field as `dev <file>`
-  - Int flags use `IntVarP` instead of `StringVarP`
-  - Long flag names without short version use `StringVar` (not `StringVarP`)
----
-
-## 2026-01-23 - US-007
-- What was implemented: Added tap build subcommand stub
-- Files changed:
-  - internal/cli/build.go (new - build subcommand with Cobra)
-- **Learnings for future iterations:**
-  - Build command follows same pattern as other subcommands (dev, new)
-  - Default output directory is "dist" as specified in acceptance criteria
-  - Help text includes examples and explains static build limitations (no live code)
----
-
-## 2026-01-23 - US-008
-- What was implemented: Added tap serve and tap pdf subcommand stubs
-- Files changed:
-  - internal/cli/serve.go (new - serve subcommand with Cobra)
-  - internal/cli/pdf.go (new - pdf subcommand with Cobra)
-- **Learnings for future iterations:**
-  - Use `cobra.MaximumNArgs(1)` for optional positional arguments (serve [dir])
-  - The --content flag for pdf uses a string type with allowed values documented in help
-  - Pattern of handling default values in Run function (e.g., dir := "dist" if no args)
----
-
-## 2026-01-23 - US-009
-- What was implemented: Added tap add subcommand stub
-- Files changed:
-  - internal/cli/add.go (new - add subcommand with Cobra)
-- **Learnings for future iterations:**
-  - The add command uses `cobra.MaximumNArgs(1)` for optional [file] argument
-  - When no positional arguments, handle default behavior in Run function
-  - No command-specific flags needed for basic stub - just the optional file argument
----
-
-## 2026-01-23 - US-010
-- What was implemented: Added colorized CLI output helpers
-- Files changed:
-  - go.mod, go.sum (added github.com/fatih/color dependency)
-  - internal/cli/output.go (new - color helper functions)
-- **Learnings for future iterations:**
-  - Use `github.com/fatih/color` for terminal color output
-  - Color functions: Success (green), Error (red), Info (blue), Warning (yellow)
-  - Each color has Printf-style (Success), Println-style (Successln), Sprint variants (SuccessSprint, SuccessSprintf)
-  - Also added Bold and Muted (gray) helpers
-  - Colors automatically disabled on non-TTY terminals
----
-
-## 2026-01-23 - US-011
-- What was implemented: Config struct and YAML frontmatter parsing
-- Files changed:
-  - go.mod, go.sum (added gopkg.in/yaml.v3 dependency)
-  - internal/config/config.go (new - Config, DriverConfig, ConnectionConfig structs with Load function)
-- **Learnings for future iterations:**
-  - Use `gopkg.in/yaml.v3` for YAML parsing
-  - Config struct fields ordered by size for struct field alignment (maps first, then strings, then ints/bools)
-  - Load() function parses frontmatter between `---` delimiters at file start
-  - DefaultConfig() provides sensible defaults: theme=minimal, aspectRatio=16:9, transition=fade
-  - Use `$(go env GOPATH)/bin/fieldalignment -fix ./...` if struct field alignment issues occur
----
-
-## 2026-01-23 - US-012
-- What was implemented: Config validation with Validate() method
-- Files changed:
-  - internal/config/config.go (added Validate() method and valid value maps)
-  - internal/config/config_test.go (new - unit tests for validation)
-- **Learnings for future iterations:**
-  - Use map[string]bool for valid value lookup - fast O(1) checks
-  - Validate() method returns first validation error (aspectRatio before transition)
-  - Empty values are allowed (use defaults) - only validate non-empty strings
-  - Unit tests cover valid values, invalid values, empty values, and default config
-  - Test error messages contain both the field name and invalid value
----
-
-## 2026-01-23 - US-013
-- What was implemented: Environment variable resolution in config
-- Files changed:
-  - go.mod, go.sum (added github.com/joho/godotenv dependency)
-  - internal/config/config.go (added LoadEnv, resolveEnvVars, and ResolveEnvVars methods)
-  - internal/config/config_test.go (added unit tests for env var resolution)
-- **Learnings for future iterations:**
-  - Use `github.com/joho/godotenv` for loading .env files
-  - LoadEnv(dir) loads .env from specified directory, returns nil if file doesn't exist
-  - resolveEnvVars() supports both $VAR_NAME and ${VAR_NAME} syntax using regex
-  - Undefined env vars are left unchanged (no error, keeps original reference)
-  - ResolveEnvVars() applies resolution to Password, User, Host, Database, Path fields in ConnectionConfig
-  - Load() automatically calls LoadEnv and ResolveEnvVars after parsing frontmatter
-  - Tests should use os.Setenv/Unsetenv with defer for cleanup
----
-
-## 2026-01-23 - US-014
-- What was implemented: Setup goldmark markdown parser with extensions
-- Files changed:
-  - go.mod, go.sum (added github.com/yuin/goldmark dependency)
-  - internal/parser/parser.go (new - Parser struct with New() constructor)
-- **Learnings for future iterations:**
-  - Use `github.com/yuin/goldmark` for markdown parsing
-  - Extensions enabled: Table, Strikethrough, TaskList, Linkify
-  - Parser uses AutoHeadingID and html.WithUnsafe() to allow raw HTML in markdown
-  - Access underlying goldmark instance via Markdown() method for advanced usage
----
-
-## 2026-01-23 - US-015
-- What was implemented: Slide splitting on --- delimiter
-- Files changed:
-  - internal/parser/parser.go (added Presentation, Slide, SlideDirectives, Fragment, CodeBlock, CodeBlockMeta structs; Parse() method)
-  - internal/parser/parser_test.go (new - comprehensive unit tests for slide parsing)
-- **Learnings for future iterations:**
-  - Parse() method on Parser splits content on `---` delimiters after skipping frontmatter
-  - Slide struct includes: Index, Content, HTML, Directives, Fragments, CodeBlocks
-  - Empty slides (between consecutive delimiters) are automatically skipped
-  - skipFrontmatter() helper removes YAML frontmatter before slide parsing
-  - renderHTML() helper converts markdown content to HTML using the goldmark instance
-  - Regex `(?m)^---\s*$` matches slide delimiter on its own line with optional whitespace
-  - Tests cover: single slide, multiple slides, frontmatter skipping, empty content, empty slides, HTML rendering
----
-
-## 2026-01-23 - US-016
-- What was implemented: Parse slide directives from HTML comments
-- Files changed:
-  - internal/parser/parser.go (added parseDirectives() function, integrated into Parse() method)
-  - internal/parser/parser_test.go (added 7 new unit tests for directive parsing)
-  - go.mod (moved yaml.v3 to direct dependency for parser package)
-- **Learnings for future iterations:**
-  - Directives are parsed from HTML comments at the start of slides using regex `(?s)^\s*<!--\s*(.*?)\s*-->`
-  - parseDirectives() extracts YAML from comments and returns SlideDirectives struct + remaining content
-  - Uses map[string]interface{} to parse YAML, then type-asserts to extract known fields
-  - Invalid YAML silently falls through (allows non-directive HTML comments to pass)
-  - SlideDirectives struct already existed from US-015 with fields: Layout, Transition, Fragments, Background, Notes
-  - Content after directive extraction is stored in Slide.Content (directive comment is removed)
-  - Tests cover: all directive fields, partial directives, directives not at start, invalid YAML, multiline notes
----
-
-## 2026-01-23 - US-017
-- What was implemented: Parse code block metadata from info strings
-- Files changed:
-  - internal/parser/parser.go (added parseCodeBlocks() and parseCodeBlockMeta() functions, integrated into Parse() method)
-  - internal/parser/parser_test.go (added 12 new unit tests for code block parsing)
-- **Learnings for future iterations:**
-  - Code blocks are parsed using regex: `(?m)^```([^\n]*)\n([\s\S]*?)\n` ` ` ` (captures info string and code)
-  - Info string format: `language {driver: driverName, connection: connName}`
-  - metaPattern regex `\{([^}]*)\}\s*$` extracts metadata from end of info string
-  - parseCodeBlockMeta() supports YAML-like format (key: value) with comma separators
-  - CodeBlock and CodeBlockMeta structs were already defined in US-015
-  - Code blocks are collected per-slide and stored in Slide.CodeBlocks slice
-  - Tests cover: simple blocks, blocks with driver, driver+connection, multiple blocks, no language, multiline code, across slides
----
-
-## 2026-01-23 - US-018
-- What was implemented: Parse fragment markers (<!-- pause -->) for incremental reveals
-- Files changed:
-  - internal/parser/parser.go (added pausePattern regex, parseFragments() function, integrated into Parse())
-  - internal/parser/parser_test.go (added 12 unit tests for fragment parsing)
-- **Learnings for future iterations:**
-  - Fragment struct was already defined in US-015 (Index int, Content string)
-  - pausePattern regex supports spacing variations: <!--pause-->, <!-- pause -->, etc.
-  - Use `(?m)^\s*<!--\s*pause\s*-->\s*$` for matching pause markers on their own line
-  - Empty fragments (from consecutive pauses) are automatically skipped
-  - Fragment indices are re-numbered to be consecutive after skipping empty ones
-  - Fragments are parsed per-slide, each slide has independent fragment indices starting at 0
-  - parseFragments() is called after directive parsing, so directive content is already removed
----
-
-## 2026-01-23 - US-019
-- What was implemented: Parse image attributes (width and position) from markdown images
-- Files changed:
-  - internal/parser/image.go (new - ImageAttributes struct, ParseImageAttributes, ParseImages, ExtractImageAttributes functions)
-  - internal/parser/image_test.go (new - 25 unit tests for image attribute parsing)
-- **Learnings for future iterations:**
-  - ImageAttributes struct has Width and Position fields
-  - Supports syntax: `![Alt](img.png){width=50%}` and `{position=left}` or multiple attributes `{width=50%, position=left}`
-  - ParseImageAttributes() accepts string with or without braces, supports comma-separated key=value pairs
-  - ParseImages() returns []ImageInfo with AltText, URL, Attributes, and Raw fields for each image found
-  - ExtractImageAttributes() extracts attributes from end of line using regex `\{([^}]+)\}\s*$`
-  - Position values are lowercased during parsing (e.g., "LEFT" becomes "left")
-  - Unknown attributes are silently ignored
-  - All supported image formats work: png, jpg, jpeg, gif, svg, webp
----
-
-## 2026-01-23 - US-020
-- What was implemented: Slide transformer that converts parsed presentations to frontend-ready JSON format
-- Files changed:
-  - internal/transformer/transformer.go (new - Transformer struct with Transform() method, TransformedPresentation, TransformedSlide, and related structs)
-  - internal/transformer/transformer_test.go (new - 14 unit tests for transformation)
-  - internal/transformer/.gitkeep (deleted - no longer needed with actual files)
-- **Learnings for future iterations:**
-  - Transformer takes parser.Presentation and config.Config, outputs TransformedPresentation
-  - TransformedSlide includes: Index, HTML, Layout, Transition, Notes, Fragments, CodeBlocks, Background
-  - Background type is auto-detected: "color" (default), "image" (file extensions or URLs), "gradient" (CSS gradient functions)
-  - Per-slide directive transitions override global config transition
-  - Empty slices (Fragments, CodeBlocks) are omitted from JSON due to `omitempty` tags
-  - Layout defaults to "default" when not specified (auto-detection is in US-021)
-  - Use `fieldalignment -fix` to fix struct field ordering for memory efficiency
----
-
-## 2026-01-23 - US-021
-- What was implemented: Layout auto-detection for slides based on content analysis
-- Files changed:
-  - internal/transformer/transformer.go (added detectLayout() and helper functions)
-  - internal/transformer/transformer_test.go (added 8 new test functions for layout detection)
-  - .golangci.yml (added exclusion for fieldalignment in test files)
-- **Learnings for future iterations:**
-  - Layout auto-detection uses HTML tag counting (countHTMLTag) to analyze slide structure
-  - Detection priority: two-column (|||) > title (H1 only) > section (H2 only) > code-focus (>50% code) > quote (blockquote) > default
-  - isTitleLayout allows at most one paragraph (subtitle) with H1
-  - isSectionLayout requires only H2 with no other content
-  - isCodeFocusLayout compares code length to total content length (>50%)
-  - isQuoteLayout allows blockquotes with paragraphs (for attribution) but no headers/code
-  - containsTwoColumnSeparator looks for ||| anywhere in content
-  - Directive layout always overrides auto-detection
-  - fieldalignment linting can be excluded for test files in .golangci.yml
----
-
-## 2026-01-23 - US-022
-- What was implemented: Image path resolution in transformer
-- Files changed:
-  - internal/transformer/transformer.go (added resolveImagePath(), resolveImagePaths(), NewWithBaseDir(), SetBaseDir(), isAbsoluteURL(), isSupportedImageFormat())
-  - internal/transformer/transformer_test.go (added 14 new test functions for path resolution)
-- **Learnings for future iterations:**
-  - Transformer now has a baseDir field for resolving relative image paths
-  - Use NewWithBaseDir(cfg, baseDir) or SetBaseDir() to configure the base directory
-  - resolveImagePaths() processes HTML and updates all img src attributes
-  - Uses regex `(<img\s[^>]*src=["'])([^"']+)(["'][^>]*>)` to match and replace img tags
-  - Absolute URLs (http://, https://) are returned unchanged
-  - Absolute file paths (starting with /) are returned unchanged
-  - Relative paths are resolved using filepath.Join(baseDir, path) and filepath.Clean()
-  - Only supported image formats are resolved: png, jpg, jpeg, gif, svg, webp (case-insensitive)
-  - Unsupported formats (pdf, mp4, etc.) are left unchanged to avoid breaking non-image src attributes
-  - If no baseDir is set, all paths are returned unchanged for backward compatibility
----
-
-## 2026-01-23 - US-023
-- What was implemented: Driver interface and Registry for code execution
-- Files changed:
-  - internal/driver/driver.go (new - Driver interface and Result struct)
-  - internal/driver/registry.go (new - Registry with Register/Get/Has/List/Execute methods)
-  - internal/driver/registry_test.go (new - 12 unit tests for registry operations)
-  - internal/driver/.gitkeep (deleted - no longer needed)
-- **Learnings for future iterations:**
-  - Driver interface has Name() and Execute(ctx, code, config) methods
-  - Result struct fields: Success (bool), Output (string), Error (string), Data ([]map[string]interface{})
-  - Registry uses sync.RWMutex for thread-safe concurrent access
-  - Use Get() to retrieve a driver by name, Has() to check existence
-  - Execute() on Registry handles driver lookup and returns error Result if driver not found
-  - Data field is for structured tabular results (SQL queries) to render as HTML tables
----
-
-## 2026-01-23 - US-024
-- What was implemented: Shell driver for executing shell commands in slides
-- Files changed:
-  - internal/driver/shell.go (new - ShellDriver implementation)
-  - internal/driver/shell_test.go (new - 16 unit tests for shell driver)
-- **Learnings for future iterations:**
-  - ShellDriver executes commands via `sh -c` using os/exec
-  - Captures stdout and stderr separately
-  - Default timeout is 30 seconds, configurable via config["timeout"] in seconds
-  - WorkingDir can be set on driver creation or overridden via config["workdir"]
-  - Returns structured Result with Success, Output, Error fields
-  - Handles context cancellation and deadline exceeded properly
-  - On failure, stderr is returned as Error; on success with stderr, it's appended to Output
-  - Exit code is included in error message when command fails
-  - Uses strconv.Atoi for parsing timeout; invalid/zero values use default
----
-
-## 2026-01-23 - US-025
-- What was implemented: SQLite driver for executing SQL queries in slides
-- Files changed:
-  - internal/driver/sqlite.go (new - SQLiteDriver implementation)
-  - internal/driver/sqlite_test.go (new - 21 unit tests for SQLite driver)
-- **Learnings for future iterations:**
-  - SQLiteDriver executes SQL via `sqlite3 -header -column` CLI command
-  - Default database is `:memory:` for in-memory, configurable via config["database"]
-  - Supports both in-memory and file-based databases
-  - Output is parsed into structured Data field ([]map[string]interface{}) for rendering as HTML tables
-  - parseColumnOutput() parses sqlite3 column-formatted output into structured data
-  - parseColumnHeaders() extracts column names and their positions from the header line
-  - isHeaderSeparator() detects the dashes separator line between header and data
-  - Uses same timeout/workdir patterns as ShellDriver for consistency
-  - Tests skip with `t.Skip()` if sqlite3 is not installed (hasSQLite3 helper)
----
-
-## 2026-01-23 - US-026
-- What was implemented: MySQL driver for executing SQL queries in slides
-- Files changed:
-  - internal/driver/mysql.go (new - MySQLDriver implementation)
-  - internal/driver/mysql_test.go (new - 28 unit tests for MySQL driver)
-- **Learnings for future iterations:**
-  - MySQLDriver executes SQL via `mysql --table` CLI command
-  - Uses MYSQL_PWD environment variable for secure password handling (avoids command-line exposure)
-  - Connection config: host, port (default 3306), user, password, database
-  - Output parsing differs from SQLite: MySQL uses `+----+` borders and `| val |` row format
-  - parseMySQLTableOutput() handles MySQL's bordered table format
-  - isMySQLBorder() detects lines containing only `+` and `-` characters
-  - maskCredentials() redacts passwords and usernames in error messages for security
-  - Username masking is context-aware (only masks `user@host` or `'user'` patterns, not arbitrary occurrences)
-  - Short usernames (<=2 chars) are not masked to avoid false positives
-  - Tests use hasMySQL() helper and skip if binary not installed
-  - Integration tests skip if MySQL server isn't available/configured
----
-
-## 2026-01-23 - US-027
-- What was implemented: PostgreSQL driver for executing SQL queries in slides
-- Files changed:
-  - internal/driver/postgres.go (new - PostgresDriver implementation)
-  - internal/driver/postgres_test.go (new - 28 unit tests for PostgreSQL driver)
-- **Learnings for future iterations:**
-  - PostgresDriver executes SQL via `psql` CLI command
-  - Uses PGPASSWORD environment variable for secure password handling (avoids command-line exposure)
-  - Connection config: host, port (default 5432), user, password, database
-  - Uses `--no-psqlrc` to avoid user config affecting output
-  - Uses `--pset=border=2` for table format with borders (similar to MySQL)
-  - Output parsing is similar to MySQL: `+----+` borders and `| val |` row format
-  - parsePostgresTableOutput() handles PostgreSQL's bordered table format
-  - maskPostgresCredentials() redacts passwords and usernames in error messages
-  - PostgreSQL uses double quotes for identifiers, so masking uses `"user"` pattern
-  - Tests use hasPostgres() helper and skip if psql binary not installed
-  - Integration tests skip if PostgreSQL server isn't available/configured
----
-
-## 2026-01-23 - US-028
-- What was implemented: Custom driver support for defining drivers for any language
-- Files changed:
-  - internal/driver/custom.go (new - CustomDriver implementation and RegisterCustomDrivers helper)
-  - internal/driver/custom_test.go (new - 22 unit tests for custom driver execution)
-- **Learnings for future iterations:**
-  - CustomDriver executes code via a user-defined command with args
-  - Code is passed to the command via stdin (not as a command-line argument)
-  - Inherits timeout pattern from other drivers (default 30s, configurable per-execution)
-  - CustomDriverConfig struct holds Name, Command, Args, Timeout, WorkingDir
-  - RegisterCustomDrivers() creates CustomDriver instances from frontmatter config
-  - Built-in drivers (shell, sqlite, mysql, postgres) are skipped by RegisterCustomDrivers
-  - Drivers with empty Command are skipped during registration
-  - DriverConfigInput is a simplified struct for accepting driver definitions
-  - Use //nolint:govet comment to suppress fieldalignment warnings for readable struct layout
-  - System golangci-lint may be outdated - use $(go env GOPATH)/bin/golangci-lint for newer version
----
-
-## 2026-01-23 - US-029
-- What was implemented: HTTP dev server core with net/http
-- Files changed:
-  - internal/server/server.go (new - Server struct with HTTP server, Start/Shutdown methods)
-  - internal/server/server_test.go (new - 10 unit tests for server operations)
-  - internal/server/.gitkeep (deleted - no longer needed)
-- **Learnings for future iterations:**
-  - Server struct uses net/http with http.ServeMux for routing
-  - Binds to 0.0.0.0 for network access from other devices
-  - Port 0 can be used in tests for ephemeral port allocation
-  - After Start(), Addr() returns actual bound address (important for port 0)
-  - SetPresentation()/GetPresentation() are thread-safe with sync.RWMutex
-  - RegisterHandler()/RegisterHandlerFunc() add routes before Start()
-  - StartWithGracefulShutdown() blocks and handles SIGINT/SIGTERM
-  - Shutdown() with context for graceful connection draining
-  - ReadHeaderTimeout set to 10 seconds to prevent slowloris attacks
-  - Struct fields ordered by size for memory alignment (fieldalignment linter)
----
-
-## 2026-01-23 - US-030
-- What was implemented: Server routes and API endpoints with colorized logging
-- Files changed:
-  - internal/server/routes.go (new - route handlers for /, /presenter, /api/presentation, /qr)
-  - internal/server/routes_test.go (new - 10 unit tests for route handlers)
-- **Learnings for future iterations:**
-  - Use SetupRoutes() to configure all routes on Server before Start()
-  - loggingMiddleware wraps http.Handler to log requests with colors (method, path, status, duration)
-  - loggingResponseWriter captures status code by wrapping WriteHeader()
-  - Use `_ = json.NewEncoder(w).Encode(...)` to acknowledge and ignore error return value
-  - Route patterns in Go 1.22+ use "GET /path" format for method-specific routing
-  - httptest.NewRequest + httptest.NewRecorder for unit testing handlers
-  - Always use context.Background() instead of nil for Shutdown() in tests (staticcheck SA1012)
-  - Placeholder HTML pages will be replaced with embedded frontend assets in US-045
----
-
-## 2026-01-23 - US-031
-- What was implemented: WebSocket hub for hot reload with client management and broadcasting
-- Files changed:
-  - go.mod, go.sum (added github.com/coder/websocket dependency - maintained fork of nhooyr.io/websocket)
-  - internal/server/websocket.go (new - WebSocketHub, Client, Message structs with full implementation)
-  - internal/server/websocket_test.go (new - 15 unit tests for hub operations and real connections)
-- **Learnings for future iterations:**
-  - Use `github.com/coder/websocket` instead of `nhooyr.io/websocket` (deprecated, coder maintains fork)
-  - WebSocketHub uses channel-based architecture: register, unregister, broadcast, done channels
-  - Client struct has hub, conn, send fields - send is a buffered channel for outgoing messages
-  - HandleConnection() creates independent context from http.Request (request context cancels immediately in httptest)
-  - readPump runs in HTTP handler goroutine (blocks), writePump runs in separate goroutine
-  - Use sync.RWMutex for thread-safe client map access (RLock for reads, Lock for writes)
-  - Message types: "connected" (on connect), "reload" (hot reload), "slide" (navigation sync)
-  - BroadcastReload() and BroadcastSlide(index) are convenience methods for common operations
-  - websocket.Accept with InsecureSkipVerify: true allows any origin in dev mode
-  - Ping every 30 seconds to keep connections alive, 10 second write timeout
-  - fieldalignment tool fixed struct ordering: mu first, then channels, then map
----
-
-## 2026-01-23 - US-032
-- What was implemented: File watcher for hot reload with debouncing
-- Files changed:
-  - go.mod, go.sum (added github.com/fsnotify/fsnotify dependency)
-  - internal/server/watcher.go (new - Watcher struct with full implementation)
-  - internal/server/watcher_test.go (new - 13 unit tests for watcher operations)
-- **Learnings for future iterations:**
-  - Use `github.com/fsnotify/fsnotify` for file system watching
-  - Watcher struct has Start()/Stop() lifecycle with doneCh for clean shutdown
-  - Debounce uses time.AfterFunc with timer.Stop() on new events to coalesce rapid changes
-  - Handle file rename/move by re-adding the file after a short delay (50ms)
-  - SetOnChange() callback receives the path of the changed file
-  - Watch both the markdown file (explicit) and its directory (for asset changes)
-  - Use atomic.Int32 in tests for thread-safe counters
-  - fieldalignment: struct fields ordered by size - pointers/funcs first, then strings, then mutex, then time.Duration, then bool
----
-
-## 2026-01-23 - US-033
-- What was implemented: Code execution API endpoint (POST /api/execute)
-- Files changed:
-  - internal/server/api.go (new - ExecuteRequest/ExecuteResponse structs, handleAPIExecute handler)
-  - internal/server/api_test.go (new - 15 unit tests for all error cases)
-  - internal/server/server.go (added registry field to Server struct)
-  - internal/server/routes.go (registered POST /api/execute route)
-- **Learnings for future iterations:**
-  - Server struct stores a driver.Registry for executing code
-  - Use SetRegistry() before SetupRoutes() to configure the execute endpoint
-  - Connection config is looked up from presentation.Config.Drivers[driverName].Connections[connectionName]
-  - buildExecutionConfig() maps ConnectionConfig fields to driver config map keys (host, port, user, password, database, path)
-  - Timeout is configurable per-driver via DriverConfig.Timeout (default 30 seconds)
-  - Return 400 for missing driver field, invalid driver; 500 for execution errors and missing registry
-  - Use r.Context() with timeout for execution - allows request cancellation to cancel execution
----
-
-## 2026-01-23 - US-034
-- What was implemented: QR code generation for presenter/audience URLs
-- Files changed:
-  - go.mod, go.sum (added github.com/skip2/go-qrcode dependency)
-  - internal/server/qr.go (new - QRConfig struct, URL generation, QR code generation functions)
-  - internal/server/qr_test.go (new - 12 unit tests for QR code functionality)
-  - internal/server/server.go (added presenterPassword field with getter/setter)
-  - internal/server/routes.go (updated /qr handler to serve actual QR codes)
-  - internal/server/routes_test.go (updated TestHandleQR, added TestHandleQR_WithPassword)
-- **Learnings for future iterations:**
-  - Use `github.com/skip2/go-qrcode` for QR code generation (PNG and base64)
-  - Auto-detect local IP using UDP dial to 8.8.8.8:80 (doesn't actually connect)
-  - GenerateASCIIQRCode() uses Unicode full block characters for terminal display
-  - QRConfig struct stores Port, PresenterPassword, PreferredHost
-  - /qr endpoint shows both audience and presenter QR codes with embedded base64 PNG images
-  - Presenter password is included as ?key= query parameter if configured
-  - Server.SetPresenterPassword()/GetPresenterPassword() for password management
----
-
-## 2026-01-23 - US-035
-- What was implemented: Presenter password protection
-- Files changed:
-  - internal/server/routes.go (added password check to handlePresenter)
-  - internal/server/qr.go (added PrintPasswordProtectionStatus function)
-  - internal/server/routes_test.go (added 6 unit tests for authentication flow)
-  - internal/server/qr_test.go (added test for PrintPasswordProtectionStatus)
-- **Learnings for future iterations:**
-  - Password protection uses query param ?key=<password> for presenter view
-  - Server already had presenterPassword field and getter/setter from US-034
-  - QR code URL generation already includes password in URL from US-034
-  - Use http.Error() for returning 403 Forbidden responses
-  - Test both missing password and wrong password scenarios separately
----
-
-## 2026-01-23 - US-036
-- What was implemented: Static site builder for generating standalone HTML presentations
-- Files changed:
-  - internal/builder/builder.go (new - Builder struct with Build() method)
-  - internal/builder/builder_test.go (new - 22 unit tests for builder functionality)
-  - internal/builder/.gitkeep (deleted - no longer needed)
-- **Learnings for future iterations:**
-  - Builder generates index.html with embedded presentation JSON in a <script type="application/json"> tag
-  - Images are copied to dist/assets/ with SHA256 content hashes in filename (first 8 chars)
-  - Content hashes ensure cache busting when files change, same content = same hash
-  - extractImagePaths() uses regex to find all img src attributes in HTML
-  - rewriteImagePaths() replaces paths using a mapping (old path -> new hashed path)
-  - Absolute URLs (http://, https://) are skipped - not copied or rewritten
-  - BuildResult tracks: OutputDir, FileCount, TotalSize, BuildTime for reporting
-  - Use t.TempDir() in tests for automatic cleanup of temporary directories
----
-
-## 2026-01-23 - US-037
-- What was implemented: PDF exporter using playwright-go for generating PDFs from presentations
-- Files changed:
-  - go.mod, go.sum (added github.com/playwright-community/playwright-go dependency)
-  - internal/pdf/exporter.go (new - Exporter struct, ExportOptions, ExportResult, full PDF export implementation)
-  - internal/pdf/.gitkeep (deleted - no longer needed)
-- **Learnings for future iterations:**
-  - Use `github.com/playwright-community/playwright-go` for browser automation and PDF generation
-  - Playwright-go API uses `Viewport` (not `ViewportSize`) with `*playwright.Size` type
-  - PDF options use `*playwright.Margin` (not `PagePdfOptionsMargin`) for margin configuration
-  - ExportOptions supports Content field with ContentType enum: "slides", "notes", or "both"
-  - ValidateContentType() helper converts string to ContentType enum
-  - Exporter uses lazy browser launch with launchBrowser() method
-  - Always call Close() to clean up browser resources
-  - playwright.Install() automatically downloads browsers if not present
-  - PDF is generated using page.PDF() with print-to-PDF approach
-  - JavaScript injection via page.Evaluate() can modify page for print styling
----
-
-## 2026-01-23 - US-038
-- What was implemented: Bubble Tea TUI framework setup with base styles and color scheme
-- Files changed:
-  - go.mod, go.sum (added github.com/charmbracelet/bubbletea and github.com/charmbracelet/lipgloss dependencies)
-  - internal/tui/styles.go (new - color constants, base styles, and render helper functions)
-  - internal/tui/styles_test.go (new - 19 unit tests for style rendering)
-  - internal/tui/.gitkeep (deleted - no longer needed)
-- **Learnings for future iterations:**
-  - Use `github.com/charmbracelet/bubbletea` for TUI framework
-  - Use `github.com/charmbracelet/lipgloss` for terminal styling
-  - Color scheme: Primary (#7C3AED purple), Secondary (#10B981 green), Error (#EF4444 red), Muted (#6B7280 gray)
-  - Styles defined as package-level vars for reuse: TitleStyle, SubtitleStyle, ErrorStyle, SuccessStyle, MutedStyle, etc.
-  - Helper functions like RenderTitle(), RenderError() provide convenient styled output
-  - lipgloss.PlaceHorizontal/PlaceVertical/Place for centering content
-  - BorderStyle and FocusedBorderStyle use RoundedBorder() for nice terminal UI
----
-
-## 2026-01-23 - US-039
-- What was implemented: Interactive TUI wizard for creating new presentations
-- Files changed:
-  - go.mod, go.sum (added github.com/charmbracelet/bubbles dependency)
-  - internal/tui/new.go (new - NewModel struct, multi-step wizard with title input, theme selection, filename prompt)
-  - internal/tui/new_test.go (new - 26 unit tests for TUI model and markdown generation)
-  - internal/cli/new.go (updated - now calls tui.RunNewWizard instead of printing placeholder)
-- **Learnings for future iterations:**
-  - Use `github.com/charmbracelet/bubbles` for reusable TUI components (textinput, etc.)
-  - Bubble Tea models use Init/Update/View pattern - Update returns (tea.Model, tea.Cmd)
-  - Type assertions on tea.Model returns need `ok` check for errcheck linter
-  - Multi-step wizards track state with an enum (stepTitle, stepTheme, stepFilename, stepDone)
-  - textinput.Model has complex alignment - use //nolint:govet comment if fieldalignment fails
-  - Use textinput.Blink as the cmd from Init() for cursor blinking
-  - RunNewWizard() wraps tea.NewProgram for simple invocation from CLI
-  - GenerateStarterMarkdown() exported for testing - generates full presentation with frontmatter
-  - Handle Ctrl+C and Esc in Update() switch on msg.String() for graceful abort
----
-
-## 2026-01-23 - US-040
-- What was implemented: Dev server TUI for displaying server status, URLs, and handling hot reload events
-- Files changed:
-  - internal/tui/dev.go (new - DevModel, DevConfig, DevState, DevEvent structs with full TUI implementation)
-  - internal/tui/dev_test.go (new - 26 unit tests for key handling, view rendering, and state updates)
-- **Learnings for future iterations:**
-  - DevModel uses channels (eventsCh, closeCh) for external event communication
-  - Use SendEvent(), SendReloadEvent(), UpdateWebSocketCount(), UpdateWatcherStatus() to send updates from outside
-  - Use tea.WithAltScreen() for full-screen TUI that doesn't pollute terminal history
-  - tea.Tick returns periodic tick messages for animated/updating displays
-  - openBrowserCmd() uses runtime.GOOS to detect OS and run appropriate open command (open, xdg-open, cmd /c start)
-  - Recent events list capped at 5 items for clean display
-  - Keyboard shortcuts: o=open browser, p=presenter view, a=add slide, r=reload, q=quit
-  - Use //nolint:govet comment for structs with embedded types that prevent optimal alignment
-  - Use sync.RWMutex for thread-safe state access from external goroutines
----
-
-## 2026-01-23 - US-041
-- What was implemented: Interactive TUI slide builder for adding slides to presentations
-- Files changed:
-  - internal/tui/add.go (new - AddModel TUI with layout picker, content fields, and markdown generation)
-  - internal/tui/add_test.go (new - 30 unit tests for AddModel, layout navigation, markdown generation)
-  - internal/cli/add.go (updated - now calls tui.RunAddWizard instead of placeholder)
-- **Learnings for future iterations:**
-  - AddModel uses multi-step wizard: layout selection then content input per layout
-  - Layout struct defines Name, Description, ASCII preview, and Fields for each layout type
-  - AvailableLayouts slice defines all 7 layouts: title, section, default, two-column, code-focus, quote, big-stat
-  - LayoutField struct has Name, Placeholder, and Multiline boolean for different input types
-  - Use textinput.Model for each field, initialize with initTextInputs() when layout is selected
-  - Navigate fields with Tab/Down (next) and Shift+Tab/Up (previous)
-  - Multiline fields use Enter to add newlines, Ctrl+D to finalize from any field
-  - GenerateSlideMarkdown() exported for testing - generates markdown based on layout name and field values
-  - appendToFile() uses os.OpenFile with O_APPEND|O_WRONLY for appending slide to presentation
-  - CLI add command uses findPresentationFile() to auto-detect presentation file in current directory
-  - findPresentationFile() checks common names (presentation.md, slides.md, etc.) and prefers files with slide/present/talk/deck in name
----
-
-## 2026-01-23 - US-042
-- What was implemented: Wired up tap build command to generate static files from presentations
-- Files changed:
-  - internal/cli/build.go (updated - full implementation of build command with progress spinner and result reporting)
-- **Learnings for future iterations:**
-  - Build command uses config.Load() to parse frontmatter, parser.New().Parse() for markdown, builder.Build() for static output
-  - Custom spinner implementation uses goroutine with ticker for animation frames (Braille dots ⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏)
-  - Struct field ordering matters for fieldalignment linter - channels first, then strings, then bools
-  - formatSize() helper converts bytes to human-readable KB/MB/GB format
-  - formatDuration() helper formats time.Duration with appropriate units (µs, ms, s)
-  - Builder.SetBaseDir() should be called before Build() for proper relative image path resolution
-  - Spinner uses ANSI escape \033[K to clear line when stopping
----
-
-## 2026-01-23 - US-043
-- What was implemented: Wired up tap serve command to preview built presentations locally
-- Files changed:
-  - internal/cli/serve.go (updated - full implementation of serve command with HTTP file server)
-- **Learnings for future iterations:**
-  - Use http.FileServer(http.Dir(path)) for simple static file serving
-  - Wrap http.Handler in http.HandlerFunc for request logging
-  - Use os.Stat() + IsNotExist() check before serving to provide helpful error messages
-  - Signal handling with signal.Notify for graceful shutdown on SIGINT/SIGTERM
-  - Server.ListenAndServe() blocks, so run in goroutine and use channels for error/signal coordination
-  - ReadHeaderTimeout (10s) prevents slowloris attacks on HTTP servers
----
-
-## 2026-01-23 - US-044
-- What was implemented: Wired up tap pdf command to export presentations to PDF
-- Files changed:
-  - internal/cli/pdf.go (updated - full implementation with temporary dev server and PDF export)
-- **Learnings for future iterations:**
-  - Use server.New(0) for ephemeral port allocation (port 0 = random available port)
-  - After srv.Start(), srv.Port() returns the actual bound port
-  - Use pdf.ValidateContentType() to convert content type string to ContentType enum
-  - Default output path: replace input file extension with .pdf using filepath.Ext + strings.TrimSuffix
-  - Server cleanup via defer with context.WithTimeout for graceful shutdown
-  - PDF exporter cleanup via defer exporter.Close() to release browser resources
-  - Use 5 minute timeout for PDF export context (browser automation can be slow)
-  - Progress shown via spinner with updates at each major step
-  - Export result includes OutputPath, PageCount, FileSize, Duration for stats display
----
-
-## 2026-01-23 - US-045
-- What was implemented: Configured go:embed for frontend assets
-- Files changed:
-  - embedded/embed.go (new - //go:embed directive with helper functions)
-  - embedded/embed_test.go (new - unit tests for embedded package)
-  - embedded/index.html (new - full presentation viewer with WebSocket hot reload)
-  - embedded/presenter.html (new - presenter view with speaker notes and timer)
-  - internal/server/routes.go (updated - serves embedded assets instead of placeholders)
-  - internal/builder/builder.go (updated - added CopyEmbeddedAssets() method)
-- **Learnings for future iterations:**
-  - Use `//go:embed` directive to embed files directly in Go binary
-  - embed.FS implements fs.FS interface for use with http.FileServer
-  - Embed specific files with pattern: `//go:embed file1.html file2.html`
-  - embedded.GetFile(name) returns []byte content, embedded.List() returns all filenames
-  - Server uses embedded.GetIndexHTML() and embedded.GetPresenterHTML() for serving HTML
-  - Builder's CopyEmbeddedAssets() copies non-index files to output directory
-  - Frontend assets include WebSocket reconnection with exponential backoff (max 30s)
-  - Presenter view includes timer (click to reset), next slide preview, and speaker notes
----
-
-## 2026-01-23 - US-046
-- What was implemented: Initialized Svelte 5 frontend project with Vite, TypeScript, ESLint, and Prettier
-- Files changed:
-  - frontend/ (new Svelte 5 project scaffold with Vite)
-  - frontend/package.json (project config with build:embed script)
-  - frontend/tsconfig.app.json (TypeScript strict mode config)
-  - frontend/vite.config.ts (Vite config for library mode, output to ../embedded/dist)
-  - frontend/eslint.config.js (ESLint flat config with TypeScript and Svelte plugins)
-  - frontend/.prettierrc (Prettier config with Svelte plugin)
-  - frontend/src/lib/{components,layouts,themes,stores,utils}/ (directory structure)
-  - frontend/src/App.svelte, frontend/src/Presenter.svelte (placeholder components)
-  - frontend/index.html, frontend/presenter.html (entry points)
-  - .gitignore (added /embedded/dist/ to ignore build output)
-- **Learnings for future iterations:**
-  - Use `npm create vite@latest . -- --template svelte-ts` for Svelte 5 project initialization
-  - Svelte 5 uses `mount()` instead of `new Component()` for mounting components
-  - TypeScript strict mode is enabled by default in @tsconfig/svelte
-  - Additional strict options: noUncheckedIndexedAccess, noImplicitReturns, noFallthroughCasesInSwitch
-  - Vite config: set outDir to '../embedded/dist' for go:embed integration
-  - ESLint 9 uses flat config format (eslint.config.js), not .eslintrc
-  - Use `globals` package for browser/node globals in ESLint flat config
-  - ESLint config files (*.config.js) should be excluded from type-checked linting
-  - Build:embed script outputs to embedded/dist/ directory for go:embed
-  - Use $lib alias in vite.config.ts resolve.alias for cleaner imports
----
-
-## 2026-01-23 - US-047
-- What was implemented: TypeScript types for frontend matching Go backend structs
-- Files changed:
-  - frontend/src/lib/types.ts (new - complete TypeScript type definitions)
-- **Learnings for future iterations:**
-  - Types match Go structs: Presentation, PresentationConfig, Slide, CodeBlock, FragmentGroup, BackgroundConfig
-  - Layout type is a union of all layout names: default, title, section, two-column, code-focus, quote, big-stat, etc.
-  - Transition type is: none, fade, slide, push, zoom
-  - WebSocketMessage type for hot reload: connected, reload, slide
-  - ExecuteRequest/ExecuteResponse for code execution API
-  - No 'any' types - use Record<string, unknown> for dynamic data like driver execution results
-  - Optional fields use ? suffix in TypeScript (matches Go's omitempty JSON tags)
----
-
-## 2026-01-23 - US-048
-- What was implemented: Presentation Svelte store for slide navigation and fragment management
-- Files changed:
-  - frontend/src/lib/stores/presentation.ts (new - presentation state store with navigation actions)
-  - frontend/src/lib/stores/presentation.test.ts (new - unit tests for store, ready for Vitest)
-  - frontend/tsconfig.app.json (updated - added $lib path alias and excluded test files)
-  - frontend/eslint.config.js (updated - excluded test files from linting until Vitest is set up)
-- **Learnings for future iterations:**
-  - Use `svelte/store` for state management: writable for mutable state, derived for computed values
-  - Use `type Readable` from svelte/store for derived store type annotations
-  - Navigation actions use store.subscribe()() pattern to get current value and act on it
-  - URL hash persistence: use 1-based slide numbers (#1, #2) for user-friendly URLs
-  - Use history.replaceState instead of location.hash to avoid polluting browser history
-  - Fragment index starts at -1 (no fragments visible) and goes up to fragmentCount - 1
-  - Test files need to be excluded from typecheck/lint until Vitest is set up (US-075)
-  - $lib alias requires paths config in tsconfig.app.json: `"paths": { "$lib/*": ["src/lib/*"] }`
----
-
-## 2026-01-23 - US-049
-- What was implemented: WebSocket client for hot reload and presentation sync
-- Files changed:
-  - frontend/src/lib/stores/websocket.ts (new - WebSocketClient class with auto-reconnect)
-  - frontend/src/lib/stores/websocket.test.ts (new - comprehensive unit tests)
-- **Learnings for future iterations:**
-  - WebSocketClient class handles connection, message handling, and auto-reconnect
-  - Uses exponential backoff for reconnect: 1s initial, 2x multiplier, max 30s
-  - Export constants in WEBSOCKET_CONSTANTS for testing/configuration
-  - connected writable store tracks connection state
-  - Handle 'reload' with window.location.reload(), 'slide' with goToSlide()
-  - Use singleton pattern with getWebSocketClient() for shared client instance
-  - Default URL uses window.location to construct ws:// or wss:// URL
-  - MockWebSocket class in tests simulates WebSocket behavior for unit testing
-  - Use vi.stubGlobal() to mock browser globals (WebSocket, window)
----
-
-## 2026-01-23 - US-050
-- What was implemented: Keyboard navigation utility for presentation control
-- Files changed:
-  - frontend/src/lib/utils/keyboard.ts (new - setupKeyboardNavigation function with all keyboard handlers)
-  - frontend/src/lib/utils/keyboard.test.ts (new - comprehensive unit tests for keyboard navigation)
-- **Learnings for future iterations:**
-  - Use window.addEventListener('keydown', handler) for global keyboard handling
-  - Check document.activeElement to skip navigation when input/textarea/contenteditable is focused
-  - Use event.preventDefault() to stop browser defaults (e.g., Space scrolling page)
-  - Fullscreen API: document.documentElement.requestFullscreen() and document.exitFullscreen()
-  - Check document.fullscreenElement to determine if in fullscreen mode
-  - Export helper functions (triggerNext, triggerPrev, triggerFullscreen) for programmatic control
-  - Use options object pattern for customizable callbacks (onToggleOverview, onOpenPresenter, isOverviewOpen)
-  - Store module-level state (currentOptions) for access in event handler
----
-
-## 2026-01-23 - US-051
-- What was implemented: SlideContainer component for slide display with proper scaling and aspect ratio handling
-- Files changed:
-  - frontend/src/lib/components/SlideContainer.svelte (new - slide container component)
-  - frontend/src/lib/components/.gitkeep (deleted - no longer needed)
-- **Learnings for future iterations:**
-  - Use $props() for Svelte 5 component props with interface definition
-  - Use $state() for reactive local state and $derived() for computed values
-  - ResizeObserver is preferred over window.resize for container size changes
-  - For $effect dependency tracking, assign the tracked value to a variable (const _ = value; void _;) to avoid ESLint no-unused-expressions errors
-  - Use CSS custom properties (--var) for theme-able values
-  - Base slide dimensions of 1920px width provides good quality at all scales
-  - Use transform: scale() for viewport fitting rather than modifying actual dimensions
-  - transform-origin: center center ensures scaling happens from the center
-  - Use import('svelte').Snippet type for children prop in Svelte 5
----
-
-## 2026-01-23 - US-052
-- What was implemented: SlideRenderer component for rendering slide HTML content with transitions and fragments
-- Files changed:
-  - frontend/src/lib/components/SlideRenderer.svelte (new - slide renderer component)
-- **Learnings for future iterations:**
-  - Use $derived.by() for derived values that require complex computation (not $derived with a function type)
-  - Use Svelte transitions (fade, fly, scale) from 'svelte/transition' for slide transitions
-  - Transition selection based on type: none (instant), fade (opacity), slide/push (fly with x offset), zoom (scale)
-  - Check prefersReducedMotion() via window.matchMedia('(prefers-reduced-motion: reduce)') for accessibility
-  - Fragment visibility is managed via CSS classes (fragment-visible, fragment-hidden) with transition animations
-  - Layout-specific CSS classes (.layout-title, .layout-section, etc.) provide appropriate grid/flex structures
-  - Background support: color (background-color), image (background-image with cover), gradient (background with CSS gradient)
-  - Use @html directive for rendering HTML content from slide.html
-  - CSS custom properties (--slide-padding, --title-font-size, etc.) enable theme customization
----
-
-## 2026-01-23 - US-053
-- What was implemented: Layout components for Title and Section slides
-- Files changed:
-  - frontend/src/lib/layouts/LayoutTitle.svelte (new - centered title layout with optional subtitle)
-  - frontend/src/lib/layouts/LayoutSection.svelte (new - large section header layout)
-  - frontend/src/lib/layouts/.gitkeep (deleted - no longer needed)
-- **Learnings for future iterations:**
-  - Layout components use Svelte 5 Snippet type for children prop: `import type { Snippet } from 'svelte'`
-  - Use `{@render children()}` to render slot content in Svelte 5
-  - Theme-aware styling uses global selectors like `:global(.theme-terminal) .content :global(h2)`
-  - CSS custom properties (--title-font-size, --section-font-size, etc.) enable per-theme customization
-  - Layout components are standalone and don't import SlideRenderer - they focus on content structure
-  - SlideRenderer already has CSS for all layouts; these components provide reusable Svelte wrappers
----
-
-## 2026-01-23 - US-054
-- What was implemented: Layout components for Default and TwoColumn slides
-- Files changed:
-  - frontend/src/lib/layouts/LayoutDefault.svelte (new - standard content layout with headings, paragraphs, lists, images, code blocks)
-  - frontend/src/lib/layouts/LayoutTwoColumn.svelte (new - side-by-side two-column grid layout)
-- **Learnings for future iterations:**
-  - LayoutDefault uses flex column with gap for vertical content arrangement
-  - LayoutTwoColumn uses CSS grid with `grid-template-columns: 1fr 1fr` for equal columns
-  - Theme-aware styling pattern: `:global(.theme-name) .content :global(element)` for scoped global styles
-  - Brutalist theme adds vertical divider between columns using `::after` pseudo-element
-  - Font sizes are slightly smaller in two-column layout to fit more content (h1: 3.5rem vs 4rem, body: 1.75rem vs 2rem)
-  - Table styles included for completeness (border-collapse, header background, cell padding)
----
-
-## 2026-01-23 - US-055
-- What was implemented: Layout components for CodeFocus and Quote slides
-- Files changed:
-  - frontend/src/lib/layouts/LayoutCodeFocus.svelte (new - full-width code block layout with larger font sizes and code prominence)
-  - frontend/src/lib/layouts/LayoutQuote.svelte (new - styled blockquote layout with decorative quote marks and attribution styling)
-- **Learnings for future iterations:**
-  - LayoutCodeFocus uses smaller padding (3rem vs 4rem) and centers content vertically to maximize code visibility
-  - LayoutCodeFocus has max-height: 70vh on pre blocks with overflow-y: auto for long code
-  - LayoutQuote uses decorative ::before pseudo-element for opening quote mark (")
-  - Terminal theme for quote uses > character instead of decorative quote mark for consistency with terminal aesthetic
-  - Brutalist theme hides decorative quotes and uses border instead for stark appearance
-  - Both layouts follow same pattern: Snippet children, theme-aware :global() selectors, CSS custom properties
----
-
-## 2026-01-23 - US-056
-- What was implemented: Remaining layout components for presentations
-- Files changed:
-  - frontend/src/lib/layouts/LayoutBigStat.svelte (new - large number emphasis with extra large fonts and accent colors)
-  - frontend/src/lib/layouts/LayoutThreeColumn.svelte (new - three-column grid for comparisons and process steps)
-  - frontend/src/lib/layouts/LayoutCover.svelte (new - full-bleed background image with dark overlay for text readability)
-  - frontend/src/lib/layouts/LayoutSidebar.svelte (new - main content area with supporting sidebar at 2:1 ratio)
-  - frontend/src/lib/layouts/LayoutSplitMedia.svelte (new - image + text side-by-side at 1:1 ratio)
-  - frontend/src/lib/layouts/LayoutBlank.svelte (new - empty canvas with minimal styling for custom content)
-- **Learnings for future iterations:**
-  - LayoutBigStat uses extra large font-size (10rem) for stat numbers with strong color emphasis
-  - LayoutThreeColumn uses CSS grid with `grid-template-columns: 1fr 1fr 1fr` for equal three-column layout
-  - LayoutCover has a dark gradient overlay (.cover-overlay) for text readability on background images
-  - LayoutSidebar uses 2fr 1fr grid columns for main content + sidebar, with sidebar having background and left border
-  - LayoutSplitMedia centers content vertically with `align-items: center` for better image-text alignment
-  - LayoutBlank provides minimal styling reset - only margin resets and basic utility classes (`.full-bleed`, `.centered`)
-  - Theme-aware styling follows consistent pattern across all layouts using :global(.theme-name) selectors
----
-
-## 2026-01-23 - US-057
-- What was implemented: Minimal theme CSS with clean Apple-style aesthetics
-- Files changed:
-  - frontend/src/lib/themes/minimal.css (new - complete minimal theme with CSS custom properties)
-  - frontend/src/lib/themes/.gitkeep (deleted - no longer needed)
-- **Learnings for future iterations:**
-  - Themes are CSS files that define CSS custom properties applied via .theme-{name} class
-  - CSS custom properties (--var) enable theme-able values across all components
-  - Minimal theme uses Helvetica Neue font family for clean Apple-style look
-  - Font sizes follow spec: title 8rem, h1 6rem, h2 4rem, body 2rem, code 1.5rem
-  - Animation timing variables: --transition-duration, --transition-timing, --fragment-duration
-  - Theme applies at root level: .theme-minimal { ... }
-  - Layout-specific overrides use selectors like .theme-minimal .layout-title h1
-  - Reduced motion support via @media (prefers-reduced-motion: reduce) sets durations to 0ms
-  - Theme CSS doesn't need TypeScript, so typecheck/lint pass without changes to config
----
-
-## 2026-01-23 - US-058
-- What was implemented: Gradient theme CSS with modern colorful gradients and glassmorphism effects
-- Files changed:
-  - frontend/src/lib/themes/gradient.css (new - complete gradient theme with glassmorphism)
-- **Learnings for future iterations:**
-  - Gradient theme uses purple-to-blue gradient backgrounds: `linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%)`
-  - Glassmorphism uses `backdrop-filter: blur(8px)` with semi-transparent backgrounds and border colors
-  - -webkit-backdrop-filter needed for Safari compatibility
-  - White text with subtle text-shadow improves readability on colorful backgrounds
-  - Gold/amber accent color (#fbbf24) provides good contrast against purple gradients
-  - Same typography scale as minimal (8rem title, 6rem h1, 4rem h2, etc.)
-  - Alternative gradient backgrounds available via .bg-gradient-1 through .bg-gradient-5 classes
-  - Animated gradient option available via .animated-bg class with CSS keyframes
-  - Fragment animations include scale transform for more dynamic reveals
----
-
-## 2026-01-23 - US-059
-- What was implemented: Terminal theme CSS with hacker aesthetic
-- Files changed:
-  - frontend/src/lib/themes/terminal.css (new - complete terminal theme with CRT effects)
-- **Learnings for future iterations:**
-  - Terminal theme uses dark background (#0a0a0a) with green (#00ff00) or amber (#ffb000) text
-  - Monospace font throughout: SF Mono, Monaco, Cascadia Code, Consolas, etc.
-  - CRT effects: scanlines via ::before pseudo-element with repeating-linear-gradient
-  - Subtle flicker animation for authentic CRT feel (0.15s infinite)
-  - Text glow via text-shadow with multiple blur layers (0 0 10px, 0 0 20px, 0 0 30px)
-  - Amber variant available via .terminal-amber class that overrides color variables
-  - Matrix rain background option via .matrix-bg class with SVG background
-  - Cursor blink animation available via .cursor class
-  - Same typography scale as other themes (8rem title, 6rem h1, etc.)
-  - Reduced motion support disables flicker animation and scanlines
-  - Terminal-specific styling: > for list markers, $ prompt on pre blocks, /* */ for blockquotes
----
-
-## 2026-01-23 - US-060
-- What was implemented: Brutalist and keynote themes CSS
-- Files changed:
-  - frontend/src/lib/themes/brutalist.css (new - bold, geometric, high contrast theme)
-  - frontend/src/lib/themes/keynote.css (new - professional, polished theme with subtle shadows)
-- **Learnings for future iterations:**
-  - Brutalist theme uses stark black/white with red accent, uppercase typography, thick borders (4-8px)
-  - Brutalist theme uses Arial Black font for bold industrial look
-  - Brutalist uses square bullet markers (■) and geometric styling throughout
-  - Keynote theme uses Apple-like system fonts (-apple-system, SF Pro)
-  - Keynote theme features elevated card surfaces with subtle shadows and rounded corners
-  - Both themes support dark variants via .dark modifier class
-  - Keynote also supports .blue-gradient variant for gradient backgrounds
-  - Both themes follow same typography scale: 8rem title, 6rem h1, 4rem h2, 2rem body, 1.5rem code
-  - Theme-specific transition timing: brutalist uses linear (sharp), keynote uses cubic-bezier (smooth)
-  - Utility classes for effects: .rotate-left/.rotate-right, .strike, .highlight-box (brutalist), .gradient-text, .pill, .card (keynote)
----
-
-## 2026-01-23 - US-061
-- What was implemented: Slide transition utilities for smooth slide navigation
-- Files changed:
-  - frontend/src/lib/utils/transitions.ts (new - reusable transition functions)
-- **Learnings for future iterations:**
-  - Created transition utilities in src/lib/utils/transitions.ts (not in SlideRenderer)
-  - Five transition types: none, fade, slide, push, zoom
-  - Use SvelteTransitionConfig (aliased) to avoid conflict with local types
-  - prefersReducedMotion() checks window.matchMedia for accessibility
-  - onReducedMotionChange() allows subscribing to motion preference changes
-  - getEffectiveDuration() returns 0 for reduced motion, otherwise requested duration
-  - Individual transition functions: transitionNone, transitionFade, transitionSlide, transitionPush, transitionZoom
-  - Main entry point: createSlideTransition(node, options) for Svelte transition directive
-  - createCrossfade() creates paired [send, receive] for crossfade transitions
-  - resolveTransition() handles per-slide override vs global config fallback
-  - TRANSITION_DEFAULTS.defaultDuration = 400ms, defaultTransition = 'fade'
-  - TRANSITION_TYPES constant lists all valid types for validation
-  - SlideRenderer already had inline transition logic - this extracts it for reuse
----
-
-## 2026-01-23 - US-061
-- What was implemented: Slide transitions utility module for presentations
-- Files changed:
-  - frontend/src/lib/utils/transitions.ts (new - complete transition system)
-- **Learnings for future iterations:**
-  - Use `TransitionConfig as SvelteTransitionConfig` to rename Svelte's type and avoid conflicts
-  - Create wrapper functions (transitionNone, transitionFade, etc.) that call Svelte's fade, fly, scale
-  - Use `prefersReducedMotion()` checking `window.matchMedia('(prefers-reduced-motion: reduce)')` for accessibility
-  - Export `resolveTransition(slideTransition, globalTransition)` for priority-based transition resolution
-  - Per-slide transition overrides global config transition
-  - Default duration is 400ms, configurable via TRANSITION_DEFAULTS constant
-  - `createSlideTransition(node, options)` is the main entry point for Svelte's in:/out: directives
-  - `createCrossfade()` returns [send, receive] pair for keyed transitions
-  - Direction ('forward' | 'backward') affects fly x offset and scale start value
----
-
-## 2026-01-23 - US-062
-- What was implemented: Fragment animation system for incremental content reveals
-- Files changed:
-  - frontend/src/lib/components/FragmentContainer.svelte (new - fragment container with animations)
-- **Learnings for future iterations:**
-  - FragmentContainer receives fragments array and currentIndex, computes visibility state
-  - Multiple animation types supported: fade (default), slide-up, slide-left, scale, none
-  - Use custom transition functions with cubicOut easing for smooth animations
-  - Stagger effect: each fragment gets +50ms delay based on its index
-  - Faster exit animation (50% of enter duration) for snappy feel
-  - Fragment navigation already integrated via presentation store (nextSlide/prevSlide handle fragments)
-  - Keyboard utils call store actions which manage fragment state
-  - Use _node, _params prefix for required-but-unused parameters (ESLint @typescript-eslint/no-unused-vars)
-  - showAll prop enables print mode where all fragments are visible instantly
-  - Respect prefers-reduced-motion: return duration 0 for instant transitions
----
-
-## 2026-01-23 - US-063
-- What was implemented: Setup Shiki for syntax highlighting with lazy loading
-- Files changed:
-  - frontend/package.json, frontend/package-lock.json (added shiki dependency)
-  - frontend/src/lib/utils/highlighting.ts (new - highlighter utility with lazy init)
-- **Learnings for future iterations:**
-  - Use `shiki` package for syntax highlighting (installed via npm)
-  - Highlighter uses lazy initialization with initHighlighter() - only loads when first needed
-  - Dynamic import `await import('shiki')` for code splitting
-  - BundledLanguage type doesn't include 'text' - use 'log' as fallback for plain text
-  - COMMON_LANGUAGES preloaded: js, ts, python, sql, go, rust, bash, json, html, css, markdown, yaml, toml, shell, tsx, jsx, log
-  - DEFAULT_THEMES preloaded: github-dark, github-light, one-dark-pro, dracula, nord
-  - LANGUAGE_ALIASES maps shorthand: js->javascript, ts->typescript, py->python, sh->bash, etc.
-  - ensureLanguageLoaded() and ensureThemeLoaded() load languages/themes on demand
-  - highlight(code, options) is the main API - returns Promise<string> with HTML
-  - disposeHighlighter() releases resources when done
----
-
-## 2026-01-23 - US-064
-- What was implemented: Advanced code highlighting features for presentations
-- Files changed:
-  - frontend/src/lib/utils/highlighting.ts (extended with line highlighting, line numbers, titles, diffs, auto-sizing)
-- **Learnings for future iterations:**
-  - Use parseHighlightLines() to parse "1,3-5,7" or number arrays into Set<number>
-  - highlightWithMetadata() returns HighlightResult with html, lineCount, autoSized
-  - Line highlighting uses .line.highlighted CSS class applied via applyLineTransformations()
-  - Line numbers use .line-number span with data-line attribute and --line-num-width CSS variable
-  - Code block titles wrap content in .code-block-wrapper with .code-block-title header
-  - Diff visualization detects +/- at line start and adds .diff-add or .diff-remove classes
-  - Auto-sizing triggers for code blocks over AUTO_SIZE_LINE_THRESHOLD (20) lines when maxHeight is set
-  - stripHtmlTags() helper removes HTML for diff marker detection in highlighted content
-  - CSS classes documented in code comments for styling reference
----
-
-## 2026-01-23 - US-065
-- What was implemented: LiveCodeBlock component for executing code from slides
-- Files changed:
-  - frontend/src/lib/components/LiveCodeBlock.svelte (new - complete live code execution component)
-- **Learnings for future iterations:**
-  - LiveCodeBlock component receives CodeBlock props and optional theme for syntax highlighting
-  - canExecute derived state checks if codeBlock.driver is defined
-  - Execute via POST /api/execute with ExecuteRequest (driver, code, connection)
-  - Loading state uses isExecuting boolean and spinner animation
-  - Result displayed below code with formatTableData() for tabular data (from result.data)
-  - Error state uses hasError boolean with red styling
-  - Keyboard shortcut uses containerRef with keydown listener for Ctrl/Cmd+Enter
-  - Use HighlightOptions type from highlighting.ts for type-safe options
-  - BundledTheme from shiki for theme prop type
-  - Use `<!-- svelte-ignore a11y_no_noninteractive_tabindex -->` for tabindex on div
-  - role="application" makes element interactive for accessibility
-  - Theme-aware styling via :global(.theme-name) selectors
-  - Result container has .result-table, .result-output, .result-error classes
----
-
-## 2026-01-23 - US-066
-- What was implemented: Presenter view with current slide, next slide preview, speaker notes, timer, and WebSocket sync
-- Files changed:
-  - frontend/src/Presenter.svelte (complete rewrite - presenter view implementation)
-- **Learnings for future iterations:**
-  - Presenter view uses src/Presenter.svelte (not SvelteKit routes), mounted via src/presenter.ts
-  - Store subscriptions use onMount/onDestroy pattern with unsubscribers array for cleanup
-  - Timer uses setInterval with elapsedSeconds state, click timer to reset
-  - formatTime() handles hours/minutes/seconds formatting with padStart for leading zeros
-  - broadcastSlide() sends WebSocket message to sync audience view with presenter navigation
-  - handleGoToSlide is unused but available for future overview integration
-  - Touch-friendly controls use larger padding (1rem+) and min-width for easy tapping
-  - Grid layout: current slide spans 2 rows (left), next slide + notes stack (right)
-  - Responsive breakpoints: 1024px (tablet), 768px (mobile) with different grid configurations
-  - Connection status indicator shows WebSocket state (connected/disconnected)
-  - Keyboard shortcuts: arrows/space/enter for nav, R to reset timer, Home/End for first/last slide
----
-
-## 2026-01-23 - US-068
-- What was implemented: Progress indicator component for presentations
-- Files changed:
-  - frontend/src/lib/components/ProgressBar.svelte (new - progress bar component)
-  - frontend/src/lib/types.ts (added showProgressBar config option)
-- **Learnings for future iterations:**
-  - ProgressBar uses currentSlideIndex and totalSlides from presentation store
-  - Progress percentage: ((currentIndex + 1) / total) * 100 so first slide shows some progress
-  - Position: fixed at bottom of viewport (position: fixed; bottom: 0)
-  - Height: 3px (4px for brutalist theme) for subtle appearance
-  - Theme-aware CSS variables: --progress-bg and --progress-fill
-  - Optional via show prop and showProgressBar config in PresentationConfig
-  - Hidden in presenter view by simply not including the component there
-  - ARIA progressbar role with valuenow, valuemin, valuemax for accessibility
-  - Reduced motion support disables transitions
----
-
-## 2026-01-23 - US-069
-- What was implemented: Animation presets for presentations (typewriter, count-up, cascade, spring)
-- Files changed:
-  - frontend/src/lib/utils/animations.ts (new - complete animation presets module with Svelte actions)
-- **Learnings for future iterations:**
-  - Animation presets use requestAnimationFrame for smooth 60fps animations
-  - Each animation returns an AnimationController with start(), stop(), destroy(), and running property
-  - typewriter(): Character-by-character reveal using performance.now() timing
-  - countUp(): Number animation with easing, supports formatting (prefix, suffix, separator, decimals)
-  - cascade(): Staggered animation of child elements with direction options (up, down, left, right, fade)
-  - spring(): Physics-based spring animation using simple damped spring model
-  - All animations respect prefersReducedMotion() - show final state immediately when enabled
-  - Svelte actions (typewriterAction, countUpAction, cascadeAction, springAction) auto-start on mount
-  - createAnimation() factory function creates animation based on preset name
-  - ANIMATION_PRESETS constant lists all valid preset names for validation
-  - formatNumber() helper handles thousands separators and decimal formatting
-  - Spring physics uses simple stiffness/damping model without complex physics library
----
-
-## 2026-01-23 - US-070
-- What was implemented: Static build placeholder for live code blocks
-- Files changed:
-  - frontend/src/lib/stores/websocket.ts (added staticMode store, detectStaticMode function, liveExecutionAvailable derived store)
-  - frontend/src/lib/components/LiveCodeBlock.svelte (added static mode detection, placeholder UI, theme-aware styling)
-- **Learnings for future iterations:**
-  - Static mode is detected by checking if `/api/presentation` endpoint returns OK
-  - Use AbortController with timeout (2s) for static mode detection to avoid hanging
-  - staticMode is a writable store, staticModeDetected tracks if detection has completed
-  - LiveCodeBlock subscribes to staticMode store in onMount with proper cleanup
-  - showStaticPlaceholder = hasDriver && isStaticMode (derived state)
-  - canExecute = hasDriver && !isStaticMode (execution only available in dev mode)
-  - Placeholder positioned at top-right, same location as Run button
-  - Theme-aware styling uses :global(.theme-name) pattern for scoped global styles
-  - Each theme has distinct placeholder appearance (terminal uses $ prefix, brutalist uppercase, etc.)
----
-
-## 2026-01-23 - US-071
-- What was implemented: Disconnection indicator component for WebSocket connection status
-- Files changed:
-  - frontend/src/lib/stores/websocket.ts (added reconnecting and reconnectAttempt stores)
-  - frontend/src/lib/components/ConnectionIndicator.svelte (new - connection status indicator)
-- **Learnings for future iterations:**
-  - Store multiple reactive values (reconnecting, reconnectAttempt) to track WebSocket reconnection state
-  - Use $derived for conditional display logic that depends on multiple store values
-  - Pattern: staticDetectionComplete && !isStaticMode && !isConnected for proper indicator visibility
-  - Theme-aware styling with :global(.theme-name) selectors follows existing component patterns
-  - Pulse animation for reconnecting state provides visual feedback without being distracting
-  - Position: fixed; top: 1rem; right: 1rem; z-index: 1000; for corner placement above content
-  - Use aria-live="polite" for accessibility - announces connection status changes to screen readers
----
-
-## 2026-01-23 - US-072
-- What was implemented: Main audience view page (App.svelte) for presentation viewing
-- Files changed:
-  - frontend/src/App.svelte (complete rewrite - main audience view implementation)
-  - testdata/test.md (new - simple test presentation for manual testing)
-- **Learnings for future iterations:**
-  - This is a Vite project (not SvelteKit), so main entry is App.svelte not src/routes/+page.svelte
-  - Use store subscriptions with onMount/onDestroy pattern for cleanup with unsubscribers array
-  - Fetch presentation data from either embedded script tag (static build) or /api/presentation endpoint
-  - Track slide direction ('forward' | 'backward') for transition animations by comparing slideIndex changes
-  - Use {#key slideIndex} to trigger slide transitions when index changes
-  - SlideContainer handles aspect ratio scaling, SlideRenderer handles content and transitions
-  - Keyboard navigation, WebSocket, and hash change listeners all return cleanup functions
-  - Loading, error, and empty states handle all edge cases with appropriate UI feedback
-  - Browser verification requires the Go backend dev command to be wired up (currently a stub)
-  - The tap dev command (internal/cli/dev.go) is a stub that needs to be connected to internal/server components
----
-
-## 2026-01-23 - US-073
-- What was implemented: Asciinema player component for embedding terminal recordings
+- Frontend is Svelte 5 + TypeScript + Vite, located in `/frontend`
+- Utility modules go in `frontend/src/lib/utils/`
+- Tests use Vitest with `vi.mock()` for mocking, file pattern: `*.test.ts`
+- Path alias `$lib` maps to `src/lib`
+- Build output goes to `/embedded/dist` for Go embedding
+- Typecheck command: `npm run check` (runs svelte-check + tsc)
+- Go backend packages go in `internal/` directory
+- Go tests use `*_test.go` pattern, run with `go test ./...`
+- Use `httptest.NewServer` for mocking HTTP APIs in Go tests
+- Environment variables for secrets (e.g., `GEMINI_API_KEY`) loaded via godotenv
+- Use functional options pattern for configurable clients (e.g., `NewClient(apiKey, WithTimeout())`)
+- TUI is Bubble Tea based, located in `internal/tui/`
+
+---
+
+## 2026-01-24 22:47 - US-001
+- What was implemented: Added mermaid.js to frontend bundle with manual initialization
+- Files changed:
+  - `frontend/package.json` - Added mermaid dependency
+  - `frontend/package-lock.json` - Lock file updated
+  - `frontend/src/main.ts` - Import and initialize mermaid
+  - `frontend/src/lib/utils/mermaid.ts` - New mermaid utility module
+  - `frontend/src/lib/utils/mermaid.test.ts` - Unit tests (7 tests)
+- **Learnings for future iterations:**
+  - Mermaid is configured with `startOnLoad: false` for manual control over rendering
+  - The mermaid utility exports `initializeMermaid()`, `isMermaidInitialized()`, `resetMermaidInitialization()`, and `getMermaid()`
+  - Some pre-existing test failures in SlideRenderer.test.ts and SlideContainer.test.ts (24 failures) - unrelated to mermaid changes
+  - Build includes mermaid diagram chunks (stateDiagram, flowDiagram, ganttDiagram, etc.)
+---
+
+## 2026-01-24 22:56 - US-002
+- What was implemented: Mermaid code block detection and rendering in SlideRenderer
 - Files changed:
-  - frontend/src/lib/components/AsciinemaPlayer.svelte (new - complete asciinema player implementation)
-  - frontend/src/lib/types/asciinema.d.ts (new - TypeScript declarations for asciinema-player library)
-- **Learnings for future iterations:**
-  - Use CDN (jsdelivr) to load asciinema-player library dynamically at runtime
-  - Create separate .d.ts file for global Window augmentation to avoid TypeScript errors in Svelte components
-  - asciinema-player API: create(src, container, options) returns player instance with play(), pause(), dispose()
-  - Player doesn't support runtime speed changes - must re-initialize with new speed option
-  - Lazy loading pattern: check if library already loaded, inject script tag, wait for window.AsciinemaPlayer
-  - Use Promise wrapper around script.onload/onerror for async/await pattern
-  - Component props match asciinema-player options: autoPlay, speed, loop, startAt, cols, rows, etc.
-  - Custom controls overlay sits on top of player for consistent theme styling
-  - Svelte $state warning about "initial value" is expected when initializing from props - handle in onMount
----
-
-## 2026-01-23 - US-074
-- What was implemented: Comprehensive sample presentation for E2E testing
-- Files changed:
-  - testdata/sample.md (new - complete sample presentation with all features)
-- **Learnings for future iterations:**
-  - Sample includes all frontmatter config options: title, theme, author, date, aspectRatio, transition, codeTheme, fragments, drivers
-  - Driver configs include: shell (timeout), sqlite (connection with :memory:), custom python driver (command + args)
-  - All layout types demonstrated: title, section, default, two-column, code-focus, quote, big-stat, three-column, cover, sidebar, split-media, blank
-  - Per-slide directives: layout, transition, background, notes (multiline with YAML | syntax)
-  - Fragment markers use <!-- pause --> syntax for incremental reveals
-  - Live code blocks use {driver: name, connection: connName} syntax in info string
-  - Three-column and sidebar use ||| separators within the slide for column content
-  - Speaker notes support multiline content using YAML | or > syntax in directive comments
----
-
-## 2026-01-23 - US-075
-- What was implemented: Setup Vitest for frontend component tests
-- Files changed:
-  - frontend/package.json (updated - added vitest, @testing-library/svelte, @testing-library/jest-dom, jsdom, @vitest/coverage-v8 dependencies + test scripts)
-  - frontend/package-lock.json (updated - dependency lockfile)
-  - frontend/vitest.config.ts (new - Vitest configuration with Svelte 5 support, jsdom environment, coverage settings)
-  - frontend/src/test/setup.ts (new - test setup with mocks for matchMedia, ResizeObserver, getBoundingClientRect)
-  - frontend/src/lib/components/SlideRenderer.test.ts (new - 20 tests for rendering, layouts, backgrounds, fragments, transitions)
-  - frontend/src/lib/components/SlideContainer.test.ts (new - 26 tests for scaling, aspect ratios, themes, fullscreen, resize handling)
-  - frontend/src/lib/components/FragmentContainer.test.ts (new - 29 tests for visibility, showAll mode, animation types, timing, reduced motion)
-- **Learnings for future iterations:**
-  - Use `@testing-library/svelte` for Svelte 5 component testing
-  - Svelte 5 requires `compilerOptions: { dev: true }` in Vitest svelte plugin for proper client-side compilation
-  - Add `conditions: ['browser', 'development']` to resolve config to avoid server-side rendering issues
-  - Mock window.matchMedia for components using prefers-reduced-motion media query
-  - Mock ResizeObserver for components that observe container size
-  - Use `@testing-library/jest-dom/vitest` for DOM matchers like toBeInTheDocument, toHaveClass
-  - Svelte internal transition functions are difficult to unit test directly - focus on rendered output
-  - Use `cleanup()` from @testing-library/svelte in afterEach to prevent test pollution
-  - Run npm test scripts: `npm run test` (single run), `npm run test:watch` (watch mode), `npm run test:coverage` (with coverage)
----
-
-## 2026-01-23 - US-076
-- What was implemented: Setup Playwright E2E tests for the presentation viewer
-- Files changed:
-  - frontend/package.json (added @playwright/test dependency and test scripts: test:e2e, test:e2e:ui, test:e2e:debug)
-  - frontend/package-lock.json (lockfile update)
-  - frontend/playwright.config.ts (new - Playwright configuration with Chromium, dev server integration, screenshot/trace settings)
-  - frontend/e2e/navigation.spec.ts (new - 12 tests for keyboard navigation: ArrowRight/Left/Up/Down, Space, Enter, Home, End, Backspace)
-  - frontend/e2e/url-hash.spec.ts (new - 10 tests for URL hash navigation: direct hash, browser back/forward, persistence, invalid hashes)
-  - frontend/e2e/fragments.spec.ts (new - 10 tests for fragment reveals: incremental reveals, Space/Enter keys, navigation between fragments)
-  - frontend/e2e/hot-reload.spec.ts (new - 5 tests for hot reload: WebSocket connection, file change detection, debouncing, reconnection)
-- **Learnings for future iterations:**
-  - Playwright E2E tests live in frontend/e2e/ directory, separate from Vitest unit tests in src/
-  - Use playwright.config.ts webServer option to auto-start the Go dev server during tests
-  - E2E tests use go run ./cmd/tap dev testdata/sample.md to run against the full stack
-  - waitForSelector('.slide-container') is a good way to wait for the presentation to load
-  - Use page.waitForTimeout(500) after keyboard navigation to allow for slide transitions
-  - URL hash navigation uses 1-based indexing (#1, #2, #3) for user-friendly URLs
-  - Fragment tests need to account for the initial content state before first fragment reveal
-  - Hot reload tests use fs.writeFileSync to modify sample.md and trigger file watcher
-  - Test scripts: npm run test:e2e (headless), test:e2e:ui (interactive UI), test:e2e:debug (debugger)
----
-
-## 2026-01-24 - US-077
-- What was implemented: Comprehensive Go benchmark tests for performance verification
-- Files changed:
-  - internal/parser/benchmark_test.go (new - benchmarks for parsing 50/100/200 slides, code blocks, fragments, directives)
-  - internal/builder/benchmark_test.go (new - benchmarks for building 50/100/200 slides, HTML generation, image path handling)
-  - internal/server/benchmark_test.go (new - benchmarks for hot reload latency, route performance, WebSocket broadcasting)
-  - Makefile (updated - added bench, bench-parser, bench-builder, bench-server, bench-targets targets)
-  - docs/PERFORMANCE.md (new - performance baselines and benchmark documentation)
-- **Learnings for future iterations:**
-  - Use generateLargePresentation() helper to create realistic test presentations with varied slide types
-  - Go benchmarks use testing.B with b.ResetTimer() to exclude setup time
-  - Performance target tests use testing.Benchmark() or time.Since() to measure against targets
-  - Server SetupRoutes() is a method on Server, not a standalone function
-  - WebSocketHub uses Run() method, not Start() - run in goroutine: `go hub.Run()`
-  - Parser performance: ~1ms for 100 slides (target: <100ms)
-  - Builder performance: ~0.4ms for 50 slides (target: <2s)
-  - Hot reload latency: ~51ms average (target: <200ms)
-  - Use `make bench-targets` to run all performance target tests
----
-
-## 2026-01-24 - US-078
-- What was implemented: Configured GoReleaser for automated cross-platform binary builds
-- Files changed:
-  - .goreleaser.yml (new - complete GoReleaser configuration)
-- **Learnings for future iterations:**
-  - GoReleaser version 2 uses `version: 2` at top of config file
-  - Use `before.hooks` to run frontend build (`cd frontend && npm ci && npm run build:embed`) before Go builds
-  - Build targets: darwin/amd64, darwin/arm64, linux/amd64, linux/arm64, windows/amd64
-  - Exclude windows/arm64 with `ignore:` section as it's less common
-  - CGO_ENABLED=0 ensures statically linked binaries that work across environments
-  - ldflags `-s -w` strips debug info for smaller binaries
-  - Archives use tar.gz for Unix, zip for Windows via `format_overrides`
-  - Checksums use SHA256 by default, output to checksums.txt
-  - Release section configures GitHub releases with install instructions in footer
-  - Use `prerelease: auto` to detect rc/beta/alpha versions
-  - Homebrew tap config included but `skip_upload: true` until homebrew-tap repo exists
-  - Run with `goreleaser release --snapshot --clean` for local testing without publishing
----
-
-## 2026-01-24 - US-079
-- What was implemented: Comprehensive README documentation for the Tap project
-- Files changed:
-  - README.md (new - complete documentation with quick start, installation, usage, and configuration reference)
-- **Learnings for future iterations:**
-  - README sections: Quick Start, Installation (3 methods), Basic Usage, Command Reference table, Writing Presentations
-  - Installation methods: go install (recommended), pre-built binaries (download), Homebrew
-  - Frontmatter config example shows all options: title, theme, author, date, aspectRatio, transition, codeTheme, fragments, drivers
-  - Drivers section shows shell, sqlite, mysql (with env vars), and custom driver (python) examples
-  - Slide directives use HTML comments with YAML content: `<!-- layout: two-column -->`
-  - All 12 layouts documented: title, section, default, two-column, three-column, code-focus, quote, big-stat, cover, sidebar, split-media, blank
-  - Keyboard shortcuts table for navigation (arrows, space, enter), overview (O), presenter (S), fullscreen (F)
-  - All 5 themes listed with brief descriptions: minimal, gradient, terminal, brutalist, keynote
----
-
-## 2026-01-24 - US-080
-- What was implemented: Created comprehensive example presentations for all themes and use cases
-- Files changed:
-  - examples/basic.md (new - simple getting started presentation covering all basic features)
-  - examples/code-demo.md (new - live code execution with shell and Python drivers)
-  - examples/sql-demo.md (new - interactive SQL with SQLite, building tables and running queries)
-  - examples/theme-minimal.md (new - minimal theme showcase with Apple-style aesthetics)
-  - examples/theme-gradient.md (new - gradient theme showcase with glassmorphism effects)
-  - examples/theme-terminal.md (new - terminal/hacker theme showcase with CRT effects)
-  - examples/theme-brutalist.md (new - brutalist theme showcase with stark contrast)
-  - examples/theme-keynote.md (new - keynote theme showcase with professional polish)
-- **Learnings for future iterations:**
-  - Each theme showcase demonstrates theme-specific features and when to use that theme
-  - basic.md covers core features: slide separators, code blocks, fragments, two-column layout, quotes, sections
-  - code-demo.md shows shell and custom Python driver execution with live output
-  - sql-demo.md progressively builds a database schema with users, products, orders and demonstrates joins/aggregations
-  - Theme examples use the same structure: design philosophy, typography, code blocks, layouts, when to use
-  - Include multiline speaker notes using YAML | syntax in directive comments
-  - Fragments work well for incremental reveals in teaching-style presentations
----
-
-## 2026-01-24 - US-101
-- What was implemented: Installed and configured TailwindCSS v4 in frontend build
-- Files changed:
-  - frontend/package.json (added tailwindcss, @tailwindcss/postcss, postcss, autoprefixer as dev dependencies)
-  - frontend/package-lock.json (dependency lockfile)
-  - frontend/tailwind.config.js (new - Tailwind config with content paths for Svelte/TS files)
-  - frontend/postcss.config.js (new - PostCSS config with @tailwindcss/postcss plugin)
-  - frontend/src/app.css (added Tailwind import directives)
-- **Learnings for future iterations:**
-  - Tailwind CSS v4 uses `@import "tailwindcss"` instead of the old `@tailwind base/components/utilities` directives
-  - Tailwind CSS v4 requires `@tailwindcss/postcss` package - the main `tailwindcss` package is no longer a PostCSS plugin directly
-  - Use `@config "../tailwind.config.js"` directive in CSS to reference the JS config file
-  - PostCSS config uses `'@tailwindcss/postcss': {}` instead of `tailwindcss: {}`
-  - Tailwind v4 generates CSS custom properties like `--color-red-500` and utilities reference them
-  - Build output includes Tailwind base layer, theme variables, and utility classes in @layer sections
----
-
-## 2026-01-24 - US-102
-- What was implemented: Configured Tailwind CSS with presentation-specific design tokens
-- Files changed:
-  - frontend/tailwind.config.js (extended with presentation-specific fontSize, fontFamily, spacing, aspectRatio, animation/transition tokens, and CSS custom property bridge)
-  - frontend/src/App.svelte (added text-slide-body and font-sans classes to verify utilities work)
-- **Learnings for future iterations:**
-  - Tailwind v4 extended theme uses standard object syntax: `fontSize: { 'slide-title': ['8rem', { lineHeight, letterSpacing }] }`
-  - Font family stacks override Tailwind's defaults when defined in theme.extend.fontFamily
-  - CSS custom property bridge pattern: `colors: { theme: { bg: 'var(--color-bg)' } }` enables theme switching via CSS variables
-  - Custom aspect ratios: use string format like `'16/9': '16 / 9'`
-  - Animation tokens can reference CSS variables for theme-specific timing
-  - Build successfully includes only used utilities (e.g., text-slide-body generates 2rem font-size)
----
-
-## 2026-01-24 - US-103
-- What was implemented: Theme configuration system with CSS custom properties for runtime theme switching
-- Files changed:
-  - frontend/src/lib/themes/theme-tokens.css (new - CSS variable structure and .theme-paper class)
-  - frontend/src/app.css (updated - imports theme-tokens.css)
-- **Learnings for future iterations:**
-  - Theme system uses CSS custom properties (--color-bg, --color-text, etc.) that Tailwind utilities reference via theme.colors.theme bridge
-  - Tailwind was already configured in US-102 with `colors: { theme: { bg: 'var(--color-bg)' } }` bridge
-  - theme-tokens.css defines :root defaults and .theme-paper class sets Paper theme values
-  - Required CSS variables: --color-bg, --color-text, --color-muted, --color-accent, --color-code-bg, --font-sans, --font-mono
-  - Optional variables with fallbacks: --color-border (defaults to muted), --color-surface, --color-surface-elevated
-  - Paper theme: white bg (#ffffff), near-black text (#0a0a0a), warm gray muted (#71717a), subtle warm accent (#78716c)
-  - @import statements must come before other CSS rules in file - moved theme-tokens.css import to top of app.css
-  - Switching theme class on root element instantly updates all colors due to CSS custom properties
----
-
-## 2026-01-24 - US-104
-- What was implemented: Archived legacy CSS and removed custom style blocks from components
-- Files changed:
-  - frontend/src/lib/themes/_legacy/ (new directory)
-  - frontend/src/lib/themes/_legacy/*.css (moved: minimal.css, gradient.css, terminal.css, brutalist.css, keynote.css)
-  - frontend/src/lib/components/SlideContainer.svelte (removed custom CSS, kept animation transitions)
-  - frontend/src/lib/components/SlideRenderer.svelte (removed custom CSS, kept fragment transition styles)
-  - frontend/src/lib/components/ProgressBar.svelte (removed custom CSS, kept transition styles)
-  - frontend/src/lib/components/ConnectionIndicator.svelte (removed custom CSS, kept @keyframes animations)
-  - frontend/src/lib/components/FragmentContainer.svelte (removed custom CSS, kept show-all and reduced-motion styles)
-  - frontend/src/lib/layouts/*.svelte (all 10 layout components: removed all custom CSS)
-- **Learnings for future iterations:**
-  - Keep animation-related styles (@keyframes, transitions, reduced-motion media queries) when removing legacy CSS
-  - Animation styles in Svelte components: slideIn, pulse keyframes for ConnectionIndicator, opacity/transform transitions for fragments
-  - Legacy theme CSS files are now in `_legacy/` directory if reference is needed during Tailwind migration
-  - Visual styling will be broken after this change until Tailwind migration is complete (expected)
-  - ESLint and typecheck pass but build output will look unstyled
----
-
-## 2026-01-24 - US-105
-- What was implemented: Migrated SlideContainer component from custom CSS to Tailwind utilities
-- Files changed:
-  - frontend/src/lib/components/SlideContainer.svelte (replaced <style> block with Tailwind classes)
-- Key implementation details:
-  - Container uses `flex items-center justify-center` for centering
-  - Theme colors via Tailwind utilities: `bg-theme-bg`, `text-theme-text`
-  - Fullscreen mode uses conditional class: `{fullscreen ? 'fixed inset-0 z-50' : 'relative'}`
-  - Slide base width fixed at `w-[1920px]` with dynamic scaling via JS
-  - Aspect ratio applied via `style:aspect-ratio` inline style
-  - Transitions via Tailwind: `transition-colors duration-slide`, `transition-transform duration-slide-fast`
-  - Reduced motion support: `motion-reduce:transition-none`
-- **Learnings for future iterations:**
-  - SlideContainer scaling works by setting a fixed 1920px base width and calculating scale based on container size
-  - Use `style:aspect-ratio` for dynamic aspect ratio instead of CSS custom property
-  - Tailwind's `motion-reduce:` variant handles prefers-reduced-motion media query
-  - Browser verification requires full backend running; Vite dev server alone shows error without presentation JSON
+  - `frontend/src/lib/components/SlideRenderer.svelte` - Added mermaid rendering with $effect hook and CSS styles
+  - `frontend/src/lib/utils/mermaid.ts` - Added `renderMermaidDiagram()` and `renderMermaidBlocksInElement()` functions
+  - `frontend/src/lib/utils/mermaid.test.ts` - Added 12 new unit tests (now 19 total)
+- **Learnings for future iterations:**
+  - Mermaid rendering must happen client-side after DOM is mounted (use `$effect` + `queueMicrotask`)
+  - Query selector for mermaid blocks: `pre > code.language-mermaid`
+  - SVG output from `mermaid.render()` returns `{ svg: string }`
+  - Error handling shows both error message and original code in styled container
+  - Static build (`tap build`) uses minimal HTML/JS without Svelte, so mermaid won't render there
+  - To test Svelte frontend locally, can embed presentation data in `index.html` with `#presentation-data` script tag
+---
+
+## 2026-01-24 23:15 - US-003
+- What was implemented: Theme-aware error styling for mermaid syntax errors
+- Files changed:
+  - `frontend/src/lib/themes/theme-tokens.css` - Added `--color-error` and `--color-error-bg` default variables
+  - `frontend/src/lib/themes/paper.css` - Added error colors (warm red #dc2626)
+  - `frontend/src/lib/themes/noir.css` - Added error colors (amber #f59e0b to complement gold)
+  - `frontend/src/lib/themes/aurora.css` - Added error colors (pink #f472b6 to match aurora palette)
+  - `frontend/src/lib/themes/phosphor.css` - Added error colors (red phosphor #ff3333)
+  - `frontend/src/lib/themes/poster.css` - Added error colors (red #ef4444 matching accent)
+  - `frontend/src/lib/components/SlideRenderer.svelte` - Updated mermaid error CSS to use theme tokens
+- **Learnings for future iterations:**
+  - Themes use CSS custom properties defined in `.theme-{name}` classes
+  - Error handling was already implemented in US-002, this story added theme-aware styling
+  - Use `var(--property, fallback)` syntax for graceful degradation
+  - The `color-mix()` CSS function can be used for semi-transparent theme colors
+  - Tests for error handling exist in `mermaid.test.ts` (19 tests total)
+---
+
+## 2026-01-24 23:10 - US-004
+- What was implemented: Auto-scaling for mermaid diagrams to fit within slide bounds
+- Files changed:
+  - `frontend/src/lib/components/SlideRenderer.svelte` - Added CSS constraints for mermaid diagram scaling
+- **Learnings for future iterations:**
+  - The `.mermaid-diagram` container already exists (created in US-002), just needed CSS constraints
+  - `max-height: 70vh` limits vertical overflow while leaving room for slide title and text
+  - `overflow: hidden` on container prevents any bleed
+  - SVG needs both `max-width: 100%` and `max-height: 100%` to scale proportionally
+  - `object-fit: contain` ensures aspect ratio is preserved
+  - Setting `width: auto` and `height: auto` on SVG prevents forced upscaling
+  - Tested by embedding presentation data in `index.html` with `#presentation-data` script tag (see US-002 notes)
+---
+
+## 2026-01-24 23:20 - US-005
+- What was implemented: Mermaid theme mapping for Paper and Noir themes
+- Files changed:
+  - `frontend/src/lib/utils/mermaid.ts` - Added `getMermaidTheme()` function and `MermaidThemeConfig` interface, updated `initializeMermaid()` to accept theme parameter
+  - `frontend/src/lib/utils/mermaid.test.ts` - Added 20 new unit tests for theme mapping (now 39 total)
+  - `frontend/src/lib/components/SlideRenderer.svelte` - Added `theme` prop and pass it to mermaid rendering
+  - `frontend/src/App.svelte` - Pass theme prop to SlideRenderer
+  - `frontend/src/Presenter.svelte` - Pass theme prop to SlideRenderer
+  - `examples/theme-paper.md` - Added mermaid diagram example slide
+  - `examples/theme-noir.md` - Added mermaid diagram example slide
+- **Learnings for future iterations:**
+  - Mermaid has built-in themes: 'default', 'dark', 'forest', 'neutral', 'base'
+  - Use `themeVariables` to customize colors, fonts, and other diagram properties
+  - Paper theme maps to 'neutral' mermaid theme with stone accent (#78716c)
+  - Noir theme maps to 'dark' mermaid theme with gold accent (#d4af37)
+  - `initializeMermaid()` reinitializes mermaid when theme changes (tracks `currentTheme`)
+  - Theme prop flows: App/Presenter -> SlideRenderer -> renderMermaidBlocksInElement
+  - Cast theme variables to `Theme` type when derived from `string | null` sources
 ---
 
-## 2026-01-24 - US-106
-- What was implemented: Migrated SlideRenderer component from custom CSS to Tailwind utilities
-- Files changed:
-  - frontend/src/lib/components/SlideRenderer.svelte (replaced CSS with Tailwind utilities)
-- Key implementation details:
-  - Container uses `w-full h-full p-slide relative overflow-hidden` for full slide area with padding
-  - Layout class (e.g., layout-title, layout-default) passed through for layout-specific styling
-  - Background images/gradients/colors maintained via inline styles from `getBackgroundStyles()`
-  - Fragment visibility remains in custom CSS because content is dynamically generated via `{@html}`
-  - Fragment transitions use 300ms ease-out (matching Tailwind's duration-fragment token)
-  - Reduced motion support preserved for accessibility
-- **Learnings for future iterations:**
-  - Fragment styles must remain as :global() CSS rules because they target dynamically inserted HTML
-  - SlideRenderer receives layout class like `layout-default` and passes it to outer container
-  - Background styling uses inline styles rather than Tailwind because values are dynamic (images, gradients, colors)
-  - The actual layout structure lives in layout components (LayoutDefault, LayoutTitle, etc.) - SlideRenderer just wraps content
----
-
-## 2026-01-24 - US-107A
-- What was implemented: Migrated Title, Section, and Default layout components to Tailwind
-- Files changed:
-  - frontend/src/lib/styles/layouts.css (new - layout typography styles)
-  - frontend/src/lib/layouts/LayoutTitle.svelte (simplified to use CSS from layouts.css)
-  - frontend/src/lib/layouts/LayoutSection.svelte (simplified to use CSS from layouts.css)
-  - frontend/src/lib/layouts/LayoutDefault.svelte (simplified to use CSS from layouts.css)
-  - frontend/src/app.css (added import for layouts.css)
-- Key implementation details:
-  - Created centralized layouts.css with typography styles for all three layouts
-  - Layout classes (.layout-title, .layout-section, .layout-default) define flex layout and typography
-  - All typography uses presentation scale: 8rem for title h1, 6rem for section h2, 4rem for default h1
-  - Theme CSS variables used throughout: --color-text, --color-muted, --color-accent, --color-code-bg, --font-mono
-  - Svelte components simplified to just structure, CSS handles all styling
-- **Learnings for future iterations:**
-  - Layout styles need to be in a CSS file that's imported into app.css, not in component :global() blocks
-  - SlideRenderer applies layout class to its wrapper, layout CSS targets that class
-  - Typography in layouts uses presentation scale: slide-title (8rem), slide-h1 (6rem), slide-h2 (4rem), slide-body (2rem), slide-code (1.5rem)
-  - Layout component files are simplified templates; actual styling is in layouts.css
-  - Import order in app.css matters: theme-tokens.css, layouts.css, then tailwindcss
----
-
-## 2026-01-24 - US-107B
-- What was implemented: Migrated TwoColumn, ThreeColumn, and Sidebar layout components to Tailwind
-- Files changed:
-  - frontend/src/lib/styles/layouts.css (added CSS grid styles for all three column layouts)
-  - frontend/src/lib/layouts/LayoutTwoColumn.svelte (updated comments, removed empty style block)
-  - frontend/src/lib/layouts/LayoutThreeColumn.svelte (updated comments, removed empty style block)
-  - frontend/src/lib/layouts/LayoutSidebar.svelte (updated comments, removed empty style block)
-- **Learnings for future iterations:**
-  - Column layouts follow same pattern as US-107A: CSS in layouts.css, Svelte provides structure
-  - Grid template columns: TwoColumn uses `1fr 1fr`, ThreeColumn uses `1fr 1fr 1fr`, Sidebar uses `2fr 1fr`
-  - Typography sizes are slightly smaller for multi-column layouts to fit content better
-  - Sidebar has a left border on second child for visual separation
----
-
-## 2026-01-24 - US-107C
-- What was implemented: Migrated CodeFocus, Quote, and BigStat layout components to Tailwind
-- Files changed:
-  - frontend/src/lib/styles/layouts.css (added CSS rules for layout-code-focus, layout-quote, layout-big-stat)
-  - frontend/src/lib/layouts/LayoutCodeFocus.svelte (simplified to use CSS from layouts.css)
-  - frontend/src/lib/layouts/LayoutQuote.svelte (simplified to use CSS from layouts.css)
-  - frontend/src/lib/layouts/LayoutBigStat.svelte (simplified to use CSS from layouts.css)
-- **Learnings for future iterations:**
-  - CodeFocus layout uses flex-grow on pre blocks so code takes maximum available space
-  - Quote layout uses centered flex with 6px accent border on left, blockquote styling with attribution handling
-  - BigStat layout uses massive 12rem font-size (slide-stat scale) for h1/strong elements with accent color
-  - All three layouts follow the same pattern: CSS in layouts.css, Svelte components just provide structure
-  - Theme CSS variables used: --color-text, --color-muted, --color-accent, --color-code-bg, --font-mono
----
-
-## 2026-01-24 - US-107D
-- What was implemented: Migrated Cover, SplitMedia, and Blank layout components to Tailwind
-- Files changed:
-  - frontend/src/lib/styles/layouts.css (added layout-cover, layout-split-media, layout-blank CSS rules)
-- **Learnings for future iterations:**
-  - Layouts are applied via CSS classes (layout-*) on slide content, not as separate Svelte components
-  - The SlideRenderer component applies layoutClass dynamically based on slide.layout property
-  - Cover layout uses text-shadow for readability over background images
-  - SplitMedia uses 1fr 1fr grid with object-fit cover for the media side
-  - Blank layout provides minimal styling for maximum user control
----
-
-## 2026-01-24 - US-108
-- What was implemented: Migrated typography and prose styling to Tailwind
-- Files changed:
-  - frontend/src/lib/styles/prose.css (created - comprehensive prose styling)
-  - frontend/src/app.css (added prose.css import)
-- **Learnings for future iterations:**
-  - Use .prose class wrapper around markdown-rendered HTML for consistent typography
-  - Presentation-scale font sizes: h1=4rem, h2=2.5rem, h3=2rem, h4=1.75rem, h5=1.5rem, h6=1.25rem, p/li=2rem, code blocks=1.5rem
-  - prose-sm and prose-lg variants available for multi-column layouts and emphasis
-  - All prose styles use theme CSS variables (--color-text, --color-muted, --color-accent, --color-code-bg, --font-sans, --font-mono)
-  - Inline code gets 0.9em size with 0.2em 0.4em padding and 4px border-radius
-  - Blockquotes have 4px accent-colored border-left with italic styling
-  - Tables use 0.75em 1em cell padding with theme-border bottom borders
-  - Links use accent color with 1px border-bottom on hover for subtle underline effect
----
-
-## 2026-01-24 - US-109
-- What was implemented: Migrated all UI components from inline <style> blocks to centralized Tailwind/CSS in ui-components.css
-- Files changed:
-  - frontend/src/lib/styles/ui-components.css (created - centralized UI component styles)
-  - frontend/src/app.css (added import for ui-components.css)
-  - frontend/src/lib/components/ProgressBar.svelte (removed inline styles, removed unused theme prop)
-  - frontend/src/lib/components/ConnectionIndicator.svelte (removed inline styles except animations, removed unused theme prop)
-  - frontend/src/lib/components/LiveCodeBlock.svelte (removed inline styles)
-  - frontend/src/lib/components/FragmentContainer.svelte (removed inline styles except show-all)
-  - frontend/src/lib/components/SlideOverview.svelte (removed inline styles, removed unused theme prop)
-  - frontend/src/lib/components/AsciinemaPlayer.svelte (removed inline styles)
-  - frontend/src/App.svelte (removed theme prop from component usages)
-- **Learnings for future iterations:**
-  - Component-specific animations (keyframes) can be kept in component <style> blocks
-  - Removing unused theme props from component interfaces requires updating all usages in parent components
-  - The ui-components.css follows same pattern as layouts.css and prose.css - using CSS classes that reference theme CSS variables (--color-*, --font-*)
-  - Reduced motion support should be included in centralized CSS files
----
-
-## 2026-01-24 - US-110
-- What was implemented: Migrated presenter view page to Tailwind CSS
-- Files changed:
-  - frontend/src/lib/styles/presenter-view.css (new - centralized styles for presenter view)
-  - frontend/src/Presenter.svelte (updated - removed inline <style> block, using presenter-prefixed CSS classes)
-  - frontend/src/app.css (updated - added import for presenter-view.css)
-- **Learnings for future iterations:**
-  - Presenter view uses prefixed CSS classes (presenter-*) to avoid conflicts with other components
-  - Layout follows established pattern: create dedicated CSS file in src/lib/styles/, import in app.css, use classes in component
-  - Grid layout: 2fr 1fr columns with 1fr 1fr rows for desktop, responsive at 1024px (tablet) and 768px (mobile)
-  - Timer button uses monospace font family for consistent number width during countdown
-  - Touch-friendly controls use min-height 3rem and larger padding on tablet breakpoint
-  - Notes panel typography styles <strong> with #e94560 (pink) and <em> with #4ecca3 (teal)
----
-
-## 2026-01-24 - US-111
-- What was implemented: Paper theme - ultra-clean, premium paper aesthetic
-- Files changed:
-  - frontend/src/lib/themes/paper.css (new - Paper theme with CSS custom properties)
-  - frontend/src/lib/themes/theme-tokens.css (removed Paper theme, kept only defaults)
-  - frontend/src/app.css (added import for paper.css)
-- **Learnings for future iterations:**
-  - Theme files should be separate CSS files (paper.css, aurora.css, etc.) imported in app.css
-  - theme-tokens.css should only contain :root defaults and documentation
-  - All theme classes follow .theme-{name} convention (e.g., .theme-paper)
-  - Theme CSS includes: core colors, extended colors, typography, transitions, element styles
-  - Use var(--color-accent) for link colors to maintain consistency
-  - Include reduced motion support via @media (prefers-reduced-motion: reduce)
-  - Verify theme is compiled into CSS bundle with `grep ".theme-paper" dist/assets/*.css`
----
-
-## 2026-01-24 - US-112
-- What was implemented: Aurora theme - vibrant northern lights aesthetic with animated gradients and glassmorphism
-- Files changed:
-  - frontend/src/lib/themes/aurora.css (new - complete Aurora theme with CSS custom properties)
-  - frontend/src/app.css (added import for aurora.css)
-- **Learnings for future iterations:**
-  - Theme CSS files follow the pattern established in paper.css: CSS custom properties in .theme-{name} class
-  - Animated gradient mesh uses @keyframes with background-position animation (background-size: 400% 400%)
-  - Glassmorphism requires both backdrop-filter and -webkit-backdrop-filter for cross-browser support
-  - Glowing effects use multi-layer box-shadow with rgba colors (0 0 1px, 0 4px 16px, inset 0 0 60px)
-  - Always include @media (prefers-reduced-motion: reduce) to disable animations for accessibility
-  - Theme imports go in app.css after theme-tokens.css
----
-
-## 2026-01-24 - US-113
-- What was implemented: Phosphor theme - authentic CRT monitor aesthetic with glowing phosphor text, scanlines, and retro-futuristic hacker vibes
-- Files changed:
-  - frontend/src/lib/themes/phosphor.css (new - complete Phosphor theme with CSS custom properties)
-  - frontend/src/app.css (added import for phosphor.css)
-- **Learnings for future iterations:**
-  - CRT scanline effect uses repeating-linear-gradient on ::before pseudo-element with fixed positioning
-  - Screen vignette effect uses radial-gradient on ::after pseudo-element for curved CRT look
-  - Multi-layer text-shadow creates phosphor glow effect: 0 0 5px, 0 0 10px, 0 0 20px with varying opacity
-  - JetBrains Mono used for both --font-sans and --font-mono since everything IS terminal in this theme
-  - Code blocks have transparent background since all content appears as terminal output
-  - Use > as custom list marker (list-style-type: '> ') for terminal aesthetic
-  - Subtle pulse animation on root element (4s ease-in-out infinite) simulates CRT screen flicker
-  - All pseudo-elements need pointer-events: none so they don't block user interaction
-  - z-index must be high (9999) for scanline overlay to appear above slide content
----
-
-## 2026-01-24 - US-114
-- What was implemented: Poster theme - bold graphic design aesthetic with giant typography, high contrast, and harsh visual elements
-- Files changed:
-  - frontend/src/lib/themes/poster.css (new - complete Poster theme with CSS custom properties)
-  - frontend/src/app.css (added import for poster.css)
-- **Learnings for future iterations:**
-  - Poster theme uses stark black (#000) and white (#fff) with ONE accent color (electric red #ef4444)
-  - Anton typeface for headings with text-transform: uppercase for bold, commanding appearance
-  - Text-shadow on headings (4px 4px 0) creates harsh offset shadow effect, not blur
-  - All border-radius: 0 enforces sharp rectangular shapes - no rounded corners anywhere
-  - Thick borders (4px+) and harsh drop shadows (8px 8px 0 black) are signature design elements
-  - Code blocks are inverted (white text on black background) with thick borders and drop shadows
-  - Tables have inverted header row (black bg, white text, Anton font) for visual hierarchy
-  - Square list bullets (list-style-type: square) reinforce geometric aesthetic
-  - Strong/bold text gets accent color (#ef4444) for emphasis
-  - Interactive elements (buttons) have transform + box-shadow transitions for tactile feel
-  - Button press effect: translate(2px, 2px) with smaller shadow simulates physical button press
-  - Definition lists use accent color for terms and left border for descriptions
-  - Reduced motion support removes text-shadows and button transforms for accessibility
----
-
-## 2026-01-24 - US-115
-- What was implemented: Designed and implemented Noir theme with cinematic film noir aesthetic
-- Files changed:
-  - frontend/src/lib/themes/noir.css (new - Noir theme CSS with CSS custom properties)
-  - frontend/src/app.css (updated - added noir.css import)
+## 2026-01-24 23:25 - US-006
+- What was implemented: Mermaid theme mapping for Aurora, Phosphor, and Poster themes
+- Files changed:
+  - `frontend/src/lib/utils/mermaid.ts` - Added theme configs for aurora, phosphor, poster
+  - `frontend/src/lib/utils/mermaid.test.ts` - Added 12 new unit tests for new themes (now 51 total)
+  - `examples/theme-aurora.md` - Added mermaid diagram example slide
+  - `examples/theme-phosphor.md` - Added mermaid diagram example slide
+  - `examples/theme-poster.md` - Added mermaid diagram example slide
 - **Learnings for future iterations:**
-  - Noir theme uses Playfair Display serif font for headings, Inter for body text
-  - Multi-layer soft shadows create cinematic depth: 0 4px 6px, 0 10px 20px, 0 20px 40px
-  - Subtle vignette effect via ::after pseudo-element with radial-gradient
-  - Gold accent color #d4af37 with variations (--noir-gold, --noir-gold-muted, --noir-gold-subtle)
-  - Background uses linear-gradient(180deg, #0a0a0a, #0d0d0d, #080808) for subtle richness
-  - hr elements styled with gradient fade effect for elegant dividers
-  - Follow same pattern as other themes: CSS custom properties in .theme-noir class
+  - Aurora: Uses 'forest' mermaid theme with teal (#14b8a6) accent, electric blue (#0ea5e9) lines, purple (#4c1d95) secondary, Space Grotesk font
+  - Phosphor: Uses 'dark' mermaid theme with phosphor green (#00ff00) throughout, JetBrains Mono font
+  - Poster: Uses 'default' mermaid theme with high contrast (white nodes #fafafa on dark bg #0d0d0f), coral accent (#ff6b4a), Inter font
+  - Reference theme CSS files in `/frontend/src/lib/themes/` to extract accurate color values
+  - Browser verification requires TTY (dev server uses BubbleTea TUI), manual verification needed in non-TTY environments
 ---
 
-## 2026-01-24 - US-116
-- What was implemented: Simple color customization for built-in themes via frontmatter
+## 2026-01-25 01:35 - US-007
+- What was implemented: Mermaid diagrams re-render automatically when theme changes
 - Files changed:
-  - internal/config/config.go (added ThemeColors map, validation for keys, isValidColor helper)
-  - internal/config/config_test.go (added tests for themeColors validation and color validation)
-  - internal/transformer/transformer_test.go (fixed test that was checking for "fragments" field globally)
-  - frontend/src/lib/types.ts (added ThemeColors interface)
-  - frontend/src/App.svelte (added themeColors derived value, passed to SlideContainer)
-  - frontend/src/lib/components/SlideContainer.svelte (added themeColors prop, color validation, inline style generation)
+  - `frontend/src/lib/utils/mermaid.ts` - Store code/theme in data attributes, re-render on theme change
+  - `frontend/src/lib/utils/mermaid.test.ts` - Added 7 new unit tests for theme re-rendering (now 58 total)
 - **Learnings for future iterations:**
-  - CSS color validation supports hex (#RGB, #RRGGBB, #RGBA, #RRGGBBAA), CSS functions (rgb, rgba, hsl, hsla, oklch, etc.), and named colors
-  - Go validates only the key names (background, text, muted, accent, codeBg); frontend validates actual color values
-  - Invalid colors log console warnings but don't break the presentation
-  - When adding json tags to existing Go structs, be careful about tests that check for specific field names in serialized JSON
-  - ThemeColors keys map to CSS variables: background→--color-bg, text→--color-text, muted→--color-muted, accent→--color-accent, codeBg→--color-code-bg
+  - Mermaid diagrams replace `<pre><code>` with `<div class="mermaid-diagram">` after render
+  - To re-render on theme change, store original code in `data-mermaid-code` attribute
+  - Track current theme in `data-mermaid-theme` to detect when re-rendering is needed
+  - Error containers can also retry rendering when theme changes (might succeed with new theme)
+  - The `$effect` in SlideRenderer.svelte already tracks `theme` prop - just need to handle re-rendering in mermaid utility
 ---
 
-## 2026-01-24 - US-117
-- What was implemented: Custom theme support via user CSS file
+## 2026-01-25 02:00 - US-008
+- What was implemented: Gemini API client for image generation in Go backend
 - Files changed:
-  - internal/config/config.go (added CustomTheme field, ResolveCustomThemePath() method)
-  - internal/server/server.go (added customThemePath field, SetCustomThemePath/GetCustomThemePath methods)
-  - internal/server/routes.go (added handleCustomTheme handler for /api/custom-theme.css endpoint)
-  - internal/cli/dev.go (resolve and update custom theme path on load and reload)
-  - frontend/src/lib/types.ts (added customTheme to PresentationConfig)
-  - frontend/src/App.svelte (added loadCustomTheme function, $effect for dynamic CSS loading)
-  - frontend/src/Presenter.svelte (added same custom theme loading logic)
+  - `internal/gemini/client.go` - New Gemini API client with GenerateImage function
+  - `internal/gemini/client_test.go` - 27 unit tests with mocked HTTP responses
 - **Learnings for future iterations:**
-  - Use /api/ prefix for endpoints that serve dynamic content
-  - Dynamic CSS loading via document.head.appendChild(link) with cache-busting timestamp
-  - Config.ResolveCustomThemePath() handles both absolute and relative paths
-  - Custom theme CSS is served with no-cache headers for hot reload
-  - Frontend uses $effect() to react to customTheme changes for instant theme switching
+  - Go backend packages go in `internal/` directory
+  - Use `httptest.NewServer` for mocking HTTP APIs in tests
+  - Use functional options pattern (`WithBaseURL()`, `WithModel()`, etc.) for client configuration
+  - API key is read from `GEMINI_API_KEY` environment variable
+  - Nano Banana Pro model ID is `gemini-3-pro-image-preview`
+  - API endpoint: `https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent`
+  - Authentication via `x-goog-api-key` header
+  - Request needs `"responseModalities": ["TEXT", "IMAGE"]` in generationConfig
+  - Response returns base64-encoded image in `candidates[].content.parts[].inlineData`
+  - Structured error types: auth, rate_limit, content_policy, invalid_request, server, network, no_image
+  - Always mask API key in error messages with `strings.ReplaceAll()`
+  - `HasAPIKey()` helper exported for TUI to check if API key is configured
 ---
 
-## 2026-01-24 - US-118
-- What was implemented: Animation utilities with Tailwind + Svelte transitions documentation
+## 2026-01-25 - US-009
+- What was implemented: Image generation shortcut 'i' in dev TUI with API key validation
 - Files changed:
-  - frontend/src/lib/styles/animations.css (new - animation utilities and documentation)
-  - frontend/src/app.css (added animations.css import)
+  - `internal/tui/dev.go` - Added 'i' key handler, showImageGenerator flag, ShowImageGenerator() and ResetImageGenerator() methods, updated help text
+  - `internal/tui/dev_test.go` - Added 6 unit tests for key handling and API key validation
 - **Learnings for future iterations:**
-  - Slide transitions use Svelte transitions (fade, fly, scale from 'svelte/transition') in SlideRenderer.svelte
-  - Fragment reveals use CSS classes (.fragment, .fragment-hidden, .fragment-visible) with transition: opacity 300ms ease-out, transform 300ms ease-out
-  - Theme-specific animations (Aurora gradient mesh, Phosphor CRT effects) stay in their theme CSS files, not centralized
-  - animations.css provides utility keyframes (fade-in, slide-up, scale-in, pulse, bounce) for programmatic JavaScript use
-  - All animation utility classes support reduced motion via @media (prefers-reduced-motion: reduce)
+  - DevModel uses `showThemePicker` and `showImageGenerator` boolean flags for overlay state
+  - Use `gemini.HasAPIKey()` to check if API key is configured before starting image generation
+  - Errors should be both set via `SetError()` and logged as events via `addEvent()` for visibility
+  - Help text in `viewHelp()` uses `fmt.Sprintf` with `keyStyle.Render()` for key highlighting
+  - Key handlers return early with `if m.showImageGenerator { return m, nil }` to prevent re-entry
 ---
 
-## 2026-01-24 - US-119
-- What was implemented: Updated embedded asset build to include Tailwind CSS output
+## 2026-01-25 - US-010
+- What was implemented: Slide selector for image generation with slide navigation
 - Files changed:
-  - embedded/embed.go (updated - //go:embed dist/* with DistFS() helper, GetFile/List/Exists now use fs.Sub)
-  - embedded/embed_test.go (updated - tests for new DistFS(), ListAll(), and Tailwind CSS verification)
-  - internal/builder/builder.go (updated - CopyEmbeddedAssets() uses ListAll() and creates subdirectories)
-  - internal/server/routes.go (updated - added /assets/ route for serving JS/CSS from embedded dist/)
-  - internal/server/routes_test.go (updated - case-insensitive DOCTYPE check for Vite output)
+  - `internal/tui/imagegen.go` - New ImageGenModel with slide selection step
+  - `internal/tui/imagegen_test.go` - 15 unit tests for slide parsing, navigation, and view rendering
+  - `internal/tui/dev.go` - Integrated ImageGenModel, added handleImageGeneratorKey() method
+  - `internal/tui/dev_test.go` - Updated test for image generation with API key to use temp markdown file
 - **Learnings for future iterations:**
-  - Use //go:embed dist/* to embed the entire Vite build output directory
-  - Use fs.Sub(Assets, "dist") to strip the dist/ prefix for cleaner file access
-  - DistFS() exported for server to use when serving static assets
-  - ListAll() walks subdirectories using fs.WalkDir for recursive listing (needed for assets/)
-  - Server route pattern: "GET /assets/" handles all files under assets/
-  - Content-Type detection based on file extension (getContentType helper)
-  - CSS build size: ~13KB gzipped (main.css 0.69KB + SlideRenderer.css 12.28KB), well under 50KB target
-  - Vite outputs lowercase <!doctype html> - tests need case-insensitive checks
+  - ImageGenModel handles its own tea.Model interface, returns nil on cancel to signal parent
+  - Slide parsing extracts titles from markdown headings or falls back to first non-empty line
+  - Use `frontmatterRe` to remove YAML frontmatter before parsing slides
+  - DevModel delegates to ImageGenModel for key handling when image generator is active
+  - Returning nil from Update signals cancellation (non-standard pattern but effective)
+  - Test files need temp markdown files when ImageGenModel is created during 'i' key handling
 ---
 
-## 2026-01-24 - US-120
-- What was implemented: Updated documentation for new theming system
+## 2026-01-25 - US-011
+- What was implemented: Detection of existing AI-generated images on slides
 - Files changed:
-  - SPEC.md (updated Theme System section with 5 theme descriptions, added themeColors and customTheme documentation)
-  - testdata/sample.md (changed theme from 'minimal' to 'paper')
+  - `internal/tui/imagegen.go` - Added AIImageInfo struct, parseAIImages(), aiImageRe regex, updated SlideInfo with AIImages slice, updated viewSlideSelect() to show indicators
+  - `internal/tui/imagegen_test.go` - Added 4 new test functions for AI image parsing and view rendering with indicators
 - **Learnings for future iterations:**
-  - Theme CSS files contain good header comments with design philosophy - use these for documentation
-  - The CSS variable structure is documented in theme-tokens.css
-  - Required CSS variables: --color-bg, --color-text, --color-muted, --color-accent, --color-code-bg
-  - Optional CSS variables: --color-border, --color-surface, --color-surface-elevated, --color-link, --color-code-text, --font-sans, --font-mono
-  - Pre-existing lint error in internal/cli/dev.go:145 (unchecked error return) - not related to current work
+  - AI-generated images are tracked via HTML comments: `<!-- ai-prompt: ... -->` followed by `![](path)` on next line
+  - The regex `aiImageRe` requires the image to be directly on the next line (no blank lines) to be associated
+  - Use `[ \t]*` to allow leading spaces but not newlines
+  - SlideInfo already had HasAIImages and AIImageCount fields (added in US-010), just needed AIImages slice and parsing
+  - View shows `[has 1 AI image]` or `[has N AI images]` as muted, italic text next to slide title
 ---
 
-## 2026-01-24 - US-121
-- What was implemented: Renamed theme references in Go backend to use new theme names
+## 2026-01-25 - US-012
+- What was implemented: Add/regenerate options for slides with existing AI images
 - Files changed:
-  - internal/config/config.go (updated validThemes map, legacyThemeMapping, default theme, NormalizeTheme function, ValidThemeNames function)
-  - internal/config/config_test.go (added tests for theme validation, backwards compatibility, NormalizeTheme)
-  - internal/cli/new.go (updated help text for --theme flag)
-  - internal/tui/new.go (updated AvailableThemes list with new names and descriptions, added legacyThemeMapping for findThemeIndex)
-  - internal/tui/new_test.go (updated all tests for new theme names)
+  - `internal/tui/imagegen.go` - Added ImageGenStepImageSelect step, ImageSelectOption struct, new fields (ImageOptions, ImageOptionIndex, SelectedImage, Prompt), buildImageOptions(), viewImageSelect(), handleImageSelectKey()
+  - `internal/tui/imagegen_test.go` - Added 11 new test functions for image selection workflow (now 30+ tests)
 - **Learnings for future iterations:**
-  - Theme validation in config.go uses validThemes map: paper, noir, aurora, phosphor, poster
-  - Legacy theme mapping: minimal→paper, keynote→noir, gradient→aurora, terminal→phosphor, brutalist→poster
-  - NormalizeTheme() function handles backwards compatibility and logs deprecation warning
-  - Validate() method now normalizes themes in place (updates c.Theme to new name)
-  - TUI AvailableThemes is separate from config validThemes - both need updating
-  - TUI findThemeIndex uses its own legacyThemeMapping for backwards compat with --theme flag
-  - Default theme changed from 'minimal' to 'paper' in DefaultConfig()
+  - ImageGenModel workflow: SlideSelect -> ImageSelect (if has AI images) -> Prompt -> Generating -> Done
+  - Slides without AI images skip ImageSelect step and go directly to Prompt
+  - ImageSelectOption.IsAddNew=true for "Add new image", false for regenerate options
+  - Long prompts are truncated to 40 chars for display, but full prompt is preserved in AIImage
+  - SelectedImage is set when regenerating, nil when adding new
+  - Prompt is pre-filled with existing prompt when regenerating
+  - Pressing esc in ImageSelect goes back to SlideSelect (clears ImageOptions and ImageOptionIndex)
 ---
 
-## 2026-01-24 - US-122
-- What was implemented: Renamed theme files and references in frontend to use new theme names (paper, noir, aurora, phosphor, poster)
+## 2026-01-25 - US-013
+- What was implemented: Prompt input step for image generation using textarea component
 - Files changed:
-  - frontend/src/lib/types.ts (added Theme type and DEFAULT_THEME constant)
-  - frontend/src/App.svelte (changed default theme from 'minimal' to 'paper')
-  - frontend/src/Presenter.svelte (changed default theme from 'minimal' to 'paper')
-  - frontend/src/lib/components/SlideContainer.svelte (changed default theme from 'minimal' to 'paper')
-  - frontend/src/lib/components/SlideContainer.test.ts (updated test expectations for new theme names)
+  - `internal/tui/imagegen.go` - Added promptInput textarea.Model field, handlePromptKey(), viewPrompt(), submitPrompt(); Updated handleSlideSelectKey() and handleImageSelectKey() to initialize and focus textarea
+  - `internal/tui/imagegen_test.go` - Added 11 new test functions for prompt input handling (now 41+ tests)
 - **Learnings for future iterations:**
-  - Theme CSS files were already created in US-111 to US-115 with correct names (paper.css, noir.css, etc.)
-  - Theme imports in app.css were already correct
-  - Only needed to update default theme references and tests
-  - The Theme type export is optional but helps with type safety
+  - Use `bubbles/textarea` (not textinput) for multi-line input support
+  - Textarea needs Focus() called to receive input, and Blink cmd returned for cursor animation
+  - Non-key messages (like blink messages) must be passed to textarea in Update()
+  - Enter key submits the prompt (single-line behavior); use ctrl+d as alternative
+  - Empty/whitespace-only prompts show error and stay in prompt step
+  - Esc goes back to ImageSelect if slide has AI images, otherwise to SlideSelect
+  - Textarea value is set before transitioning to prompt step (SetValue for pre-fill or empty)
 ---
 
-## 2026-01-24 - US-123
-- What was implemented: Updated sample presentations and test data to use new theme names
+## 2026-01-25 - US-014
+- What was implemented: Image generation with progress spinner and error handling
 - Files changed:
-  - testdata/sample.md (changed code example from 'minimal' to 'paper')
-  - testdata/test.md (changed theme from 'minimal' to 'paper')
-  - examples/theme-minimal.md → examples/theme-paper.md (renamed, updated content)
-  - examples/theme-gradient.md → examples/theme-aurora.md (renamed, updated content)
-  - examples/theme-terminal.md → examples/theme-phosphor.md (renamed, updated content)
-  - examples/theme-brutalist.md → examples/theme-poster.md (renamed, updated content)
-  - examples/theme-keynote.md → examples/theme-noir.md (renamed, updated content)
-  - examples/basic.md (changed theme from 'minimal' to 'paper')
-  - examples/code-demo.md (changed theme from 'terminal' to 'phosphor')
-  - examples/sql-demo.md (changed theme from 'keynote' to 'noir')
-  - SPEC.md (changed theme: minimal to theme: paper in code example)
-  - README.md (changed theme references to new names)
-  - docs/guide/themes.md (complete rewrite with new theme descriptions)
-  - docs/guide/writing-slides.md (updated theme references)
-  - docs/reference/frontmatter-options.md (updated theme options, descriptions, examples)
-  - docs/reference/cli-commands.md (updated default theme, example)
-  - docs/getting-started.md (updated theme references)
-  - docs/.vitepress/theme/components/HomeCode.vue (changed theme: terminal to theme: phosphor)
-  - docs/.vitepress/theme/components/HomeThemes.vue (updated theme names, vibes, gradients, accents)
-  - docs/ralph/prd.json (changed theme: terminal to theme: phosphor)
-  - docs/ralph/prd-scaffold.md (changed theme: terminal to theme: phosphor)
-  - internal/builder/benchmark_test.go (changed theme: minimal to theme: paper)
-  - internal/parser/benchmark_test.go (changed theme: minimal to theme: paper)
-  - internal/parser/parser_test.go (changed theme: minimal to theme: paper)
-  - internal/server/benchmark_test.go (changed theme: minimal to theme: paper)
+  - `internal/tui/imagegen.go` - Added spinner, ImageGenerateResult struct, imageGenerateMsg, generateImageCmd(), handleGeneratingKey(), handleImageGenerateResult(), viewGenerating(), formatAPIError(); Updated Update() for spinner tick and result messages; Added IsGenerating and GeneratedImage fields
+  - `internal/tui/imagegen_test.go` - Added 16 new test functions for generating step, spinner, success/error handling, retry, and API error formatting
+  - `internal/tui/dev.go` - Forward non-key messages to ImageGenModel when active for spinner animation; Block 'i' shortcut while IsGenerating is true
 - **Learnings for future iterations:**
-  - Use `git mv` to rename files to preserve history
-  - Use `grep` with regex `theme:\s*(minimal|gradient|terminal|brutalist|keynote)` to find all old theme references
-  - Theme showcase files need both filename AND content updates
-  - Documentation has theme references in many places: frontmatter examples, prose descriptions, reference tables
-  - HomeThemes.vue in VitePress has hardcoded theme metadata (names, vibes, gradients, accent colors)
-  - Benchmark test files generate test presentations with hardcoded frontmatter
+  - Use `bubbles/spinner` for animated progress indicators
+  - Spinner needs Tick cmd started when entering generating step: `tea.Batch(m.spinner.Tick, generateCmd)`
+  - Non-key messages (spinner.TickMsg, imageGenerateMsg) must be forwarded from parent DevModel to child ImageGenModel
+  - Generation command captures prompt value before returning closure (to avoid stale references)
+  - Error handling: stay in generating step but show error with retry/cancel options
+  - Only allow retry ('r') and cancel ('esc') when there's an error, ignore keys while actively generating
+  - API errors are converted to user-friendly messages via formatAPIError() checking gemini.ErrorType
+  - On success, GeneratedImage is set and step advances to ImageGenStepDone
 ---
 
-## 2026-01-24 - US-124
-- What was implemented: Verified SPEC.md already updated with new theme names and descriptions
+## 2026-01-25 - US-015
+- What was implemented: Images directory creation logic for AI-generated images
 - Files changed:
-  - ralph/prd.json (marked US-124 as passes: true)
+  - `internal/tui/imagegen.go` - Added GetImagesDir() and EnsureImagesDir() functions, added path/filepath import
+  - `internal/tui/imagegen_test.go` - Added 8 unit tests for directory creation logic
 - **Learnings for future iterations:**
-  - SPEC.md was already fully updated in US-120 with new theme names (paper, noir, aurora, phosphor, poster)
-  - All theme: examples use 'paper', theme list shows new names, descriptions match new visual directions
-  - When a user story's work was already completed by a previous story, verify with grep and mark as complete
-  - Grep for `theme:\s*(minimal|keynote|gradient|terminal|brutalist)` to find old theme identifiers
-  - Words like "terminal" or "gradient" may appear in valid contexts (terminal recordings, gradient mesh) - check context
+  - GetImagesDir() returns "images/" relative to the markdown file's directory using filepath.Dir() and filepath.Join()
+  - EnsureImagesDir() is idempotent - safe to call multiple times
+  - os.MkdirAll creates all parent directories if needed (recursive)
+  - os.Stat checks if path exists; os.IsNotExist(err) detects missing paths
+  - Return error if "images" path exists but is a file (not directory)
+  - Default permissions 0755 for directories
 ---
 
-## 2026-01-24 - US-125
-- What was implemented: Theme switcher for dev server TUI
+## 2026-01-25 - US-016
+- What was implemented: Save generated image to disk with content-hashed filename
 - Files changed:
-  - internal/server/websocket.go (added MessageTheme type, BroadcastTheme method)
-  - internal/tui/dev.go (added ThemeBroadcaster interface, theme picker UI, keyboard handling)
-  - internal/cli/dev.go (pass current theme and hub to TUI model)
+  - `internal/tui/imagegen.go` - Added GenerateImageFilename(), GetExtensionFromContentType(), and SaveGeneratedImage() functions; added crypto/sha256 and encoding/hex imports
+  - `internal/tui/imagegen_test.go` - Added 16 unit tests for filename generation and file saving
 - **Learnings for future iterations:**
-  - Use ThemeBroadcaster interface to decouple TUI from WebSocket hub
-  - RunDevTUIWithModel allows passing pre-configured model vs creating a new one
-  - Theme picker uses overlay pattern - just return different view content when showThemePicker is true
-  - Mark current theme in picker UI for better UX
-  - Reuse AvailableThemes from new.go for consistency
+  - Use crypto/sha256 and encoding/hex for content hashing
+  - SHA256 hash returns [32]byte, use hex.EncodeToString(hash[:]) to convert to hex string
+  - Take first 8 chars of hex hash for filename (16 hex chars = 8 bytes of randomness)
+  - SaveGeneratedImage() returns relative path "images/generated-{hash}.{ext}" suitable for markdown
+  - GetExtensionFromContentType() maps MIME types to file extensions, defaults to "png"
+  - Use 0644 permissions for image files (readable by all, writable by owner)
 ---
 
-## 2026-01-24 - US-125B
-- What was implemented: WebSocket theme switching in frontend
+## 2026-01-25 - US-017
+- What was implemented: Insert AI-generated image into markdown file
 - Files changed:
-  - frontend/src/lib/types.ts (added 'theme' message type and theme field)
-  - frontend/src/lib/stores/presentation.ts (added themeOverride store and setThemeOverride/clearThemeOverride functions)
-  - frontend/src/lib/stores/websocket.ts (added handleThemeChange handler for 'theme' messages)
-  - frontend/src/App.svelte (integrated themeOverride to switch themes instantly)
-  - frontend/src/Presenter.svelte (integrated themeOverride for presenter view)
+  - `internal/tui/imagegen.go` - Added InsertImageIntoMarkdown() and insertImageIntoSlide() functions
+  - `internal/tui/imagegen_test.go` - Added 11 unit tests for markdown insertion logic and integration tests for file modification
 - **Learnings for future iterations:**
-  - WebSocket message types are in types.ts, handlers in websocket.ts (WebSocketClient class)
-  - Theme is applied via theme-{themeName} class on SlideContainer
-  - Use $derived() for computed values that depend on store values
-  - Theme override (from WebSocket) takes precedence over config theme using nullish coalescing: `themeOverride ?? config.theme ?? 'paper'`
+  - InsertImageIntoMarkdown() uses the model's SelectedIndex and Prompt fields to insert the image
+  - insertImageIntoSlide() handles frontmatter separately from content, rebuilds with "---\n" separators
+  - Empty slides are skipped when counting slide indices (matching parseSlides behavior)
+  - Image markdown format: `<!-- ai-prompt: {prompt} -->\n![](imagePath)`
+  - Existing images/content on slides are preserved
+  - Hot reload is triggered automatically when the markdown file is written (file watcher picks up changes)
 ---
 
-## 2026-01-24 - US-126
-- What was implemented: Installed and configured embedded fonts for offline support
+## 2026-01-25 - US-018
+- What was implemented: Image regeneration handling - delete old images and update markdown in-place
 - Files changed:
-  - frontend/package.json (added @fontsource/inter, @fontsource/space-grotesk, @fontsource/jetbrains-mono, @fontsource/playfair-display, @fontsource/anton)
-  - frontend/package-lock.json (updated with font packages)
-  - frontend/src/main.ts (added font CSS imports for main entry point)
-  - frontend/src/presenter.ts (added font CSS imports for presenter entry point)
-  - frontend/src/lib/styles/fonts.css (created documentation file)
+  - `internal/tui/imagegen.go` - Added DeleteOldImage() and ReplaceImageInMarkdown() functions, plus replaceImageInContent() helper
+  - `internal/tui/imagegen_test.go` - Added 10 new tests for image regeneration workflow
 - **Learnings for future iterations:**
-  - Use direct JS imports for @fontsource packages (import '@fontsource/inter/400.css') instead of CSS @import for proper Vite bundling
-  - CSS @import from node_modules doesn't resolve relative font file paths correctly in Vite
-  - Vite's assetsInlineLimit (set to 100KB) inlines font files as base64 data URLs
-  - Font imports must be added to all entry points (main.ts, presenter.ts) that need fonts
-  - Build output shows ~2.3MB CSS when fonts are inlined vs ~92KB without
+  - DeleteOldImage() resolves the image path relative to markdown file directory using filepath.Dir() and filepath.Join()
+  - ReplaceImageInMarkdown() preserves image position in the slide (doesn't move to end)
+  - replaceImageInContent() uses regexp.QuoteMeta() to escape special characters in prompt/path for safe regex matching
+  - Pattern matches `<!-- ai-prompt: {prompt} -->\n[ \t]*![]({path})` to handle optional leading whitespace
+  - When SelectedImage is nil (adding new image), DeleteOldImage() returns nil silently
+  - When SelectedImage is nil, ReplaceImageInMarkdown() returns error (use InsertImageIntoMarkdown() instead)
+  - Full regeneration workflow: SaveGeneratedImage() -> ReplaceImageInMarkdown() -> DeleteOldImage()
 ---
 
-## 2026-01-24 - US-126B
-- What was implemented: Verified embedded fonts are wired up to themes and work offline
+## 2026-01-25 - US-019
+- What was implemented: Return to main dev view after successful image generation
 - Files changed:
-  - ralph/prd.json (marked US-126B as passes: true)
-- **Verification results:**
-  - Paper theme: Uses `font-family: Inter, system-ui, -apple-system...` (paper.css line 31)
-  - Noir theme: Uses `font-family: 'Playfair Display'` for headings (lines 86-91), `font-family: Inter` for body (lines 108-113)
-  - Aurora theme: Uses `font-family: 'Space Grotesk'` (aurora.css lines 59-63)
-  - Phosphor theme: Uses `font-family: 'JetBrains Mono'` throughout (phosphor.css lines 63-64)
-  - Poster theme: Uses `font-family: Anton` for headings (poster.css line 55), `font-family: system-ui` for body (line 31)
-  - Build output: 60 @font-face declarations with base64 data URIs
-  - Font weights embedded: Inter (400,500,600,700), Playfair Display (400,700), Space Grotesk (400,500,700), JetBrains Mono (400,700), Anton (400)
-  - No external font URLs - all fonts embedded for offline support
+  - `internal/tui/imagegen.go` - Added viewDone() method, handleDoneKey() method, SavedImagePath field
+  - `internal/tui/dev.go` - Integrated Done step handling: save image, insert/replace in markdown, delete old image, send reload event
+  - `internal/tui/imagegen_test.go` - Added 9 unit tests for Done step behavior
 - **Learnings for future iterations:**
-  - Theme font configuration was done in US-111 to US-115 (individual theme stories)
-  - Font installation was done in US-126 (font packages)
-  - This story was verification-focused - no code changes needed, just confirming everything works together
-  - Use `grep -c '@font-face'` to count font declarations in built CSS
-  - Use Python to parse @font-face blocks and extract font-family/font-weight for verification
-  - Build size ~2.3MB CSS is expected with embedded fonts (gzips to ~1.6MB)
+  - Done step returns nil from Update() to signal completion to parent (same pattern as cancel)
+  - Parent checks wasInDoneStep and savedPath before clearing imageGenModel to determine if it was completion vs cancellation
+  - Image saving and markdown insertion happen in dev.go's Update() when Step becomes Done (not in handleDoneKey)
+  - Reload event is sent with the saved filename for activity log visibility
+  - Accept enter, esc, or space to dismiss the Done view (user-friendly)
+  - The full completion workflow: Generate -> Save to disk -> Insert/Replace markdown -> Delete old image (if regenerating) -> Show success -> User dismisses -> Return to main view
 ---

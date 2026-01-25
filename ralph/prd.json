@@ -1,548 +1,319 @@
 {
   "project": "Tap",
-  "branchName": "ralph/tap-mvp",
-  "description": "TailwindCSS Migration & Theme Redesign - Replace all custom CSS with Tailwind, redesign 5 stunning themes (Paper, Noir, Aurora, Phosphor, Poster), add TUI theme switcher and offline font support",
+  "branchName": "ralph/mermaid-ai-images",
+  "description": "Mermaid Charts & AI Image Generation - Native mermaid diagram support with theme matching, plus TUI-based AI image generation via Gemini API",
   "userStories": [
     {
-      "id": "US-101",
-      "title": "Install and configure TailwindCSS in frontend build",
-      "description": "As a developer, I need TailwindCSS integrated into the Vite/Svelte build process so I can use utility classes throughout the application.",
+      "id": "US-001",
+      "title": "Add mermaid.js to frontend bundle",
+      "description": "As a developer, I need mermaid.js installed and configured in the frontend build so diagrams can be rendered client-side.",
       "acceptanceCriteria": [
-        "Install tailwindcss, postcss, autoprefixer as dev dependencies",
-        "Create tailwind.config.js with content paths for all Svelte/TS files",
-        "Create postcss.config.js with Tailwind and Autoprefixer plugins",
-        "Add Tailwind directives (@tailwind base/components/utilities) to main CSS entry",
-        "Verify utility classes work in a test component (e.g., class=\"text-red-500\")",
-        "Build completes successfully with no CSS errors",
+        "Install mermaid package via npm",
+        "Import mermaid in frontend entry point",
+        "Configure mermaid with startOnLoad: false for manual initialization",
+        "Verify mermaid is included in build output",
+        "Unit test for mermaid initialization",
         "Typecheck passes"
       ],
       "priority": 1,
       "passes": true,
-      "notes": "Tailwind v4 uses @import 'tailwindcss' and @tailwindcss/postcss plugin"
+      "notes": ""
     },
     {
-      "id": "US-102",
-      "title": "Configure Tailwind for presentation-specific design tokens",
-      "description": "As a developer, I need Tailwind configured with presentation-appropriate scales so themes can use consistent, large typography and spacing.",
+      "id": "US-002",
+      "title": "Detect and render mermaid code blocks",
+      "description": "As a presenter, I want code blocks with language 'mermaid' to render as diagrams instead of code.",
       "acceptanceCriteria": [
-        "Extend fontSize with presentation scale: slide-title (8rem), slide-h1 (6rem), slide-h2 (4rem), slide-h3 (2.5rem), slide-body (2rem), slide-code (1.5rem), slide-stat (12rem)",
-        "Extend fontFamily with sans, mono, and display stacks",
-        "Extend spacing for slide-appropriate values (slide padding 80px, content gaps)",
-        "Add aspectRatio utilities for 16/9, 4/3, 16/10",
-        "Configure animation/transition timing tokens",
-        "Add CSS custom property bridge for theme switching (theme-bg, theme-text, theme-accent, etc.)",
-        "Typecheck passes"
+        "Detect code blocks with language identifier 'mermaid' in SlideRenderer",
+        "Call mermaid.render() for each mermaid block",
+        "Replace code block content with rendered SVG",
+        "Diagrams render in both dev server and built output",
+        "Unit tests for mermaid block detection",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
       ],
       "priority": 2,
       "passes": true,
       "notes": ""
     },
     {
-      "id": "US-103",
-      "title": "Create theme configuration system with CSS custom properties",
-      "description": "As a developer, I need a theming system where themes define CSS custom properties that Tailwind utilities reference, enabling runtime theme switching.",
+      "id": "US-003",
+      "title": "Handle mermaid syntax errors gracefully",
+      "description": "As a presenter, I want to see helpful error messages when my mermaid syntax is invalid.",
       "acceptanceCriteria": [
-        "Create src/lib/themes/theme-tokens.css defining CSS variable structure",
-        "Define required variables: --color-bg, --color-text, --color-muted, --color-accent, --color-code-bg, --font-sans, --font-mono",
-        "Configure Tailwind to use these variables (e.g., bg-theme-bg, text-theme-accent)",
-        "Theme class on root element (.theme-paper) sets the variable values",
-        "Switching theme class instantly updates all colors",
+        "Catch mermaid.render() errors",
+        "Display user-friendly error message in place of diagram",
+        "Show the original mermaid code alongside error",
+        "Error styling matches theme (red/warning colors)",
+        "Unit tests for error handling",
         "Typecheck passes",
-        "Verify in browser: switching theme class changes colors immediately"
+        "Verify in browser using dev-browser skill"
       ],
       "priority": 3,
       "passes": true,
-      "notes": "theme-tokens.css defines CSS variable structure and .theme-paper class; Tailwind already configured with theme.colors.theme bridge in US-102"
+      "notes": ""
     },
     {
-      "id": "US-104",
-      "title": "Archive legacy CSS and remove imports",
-      "description": "As a developer, I need to remove the old CSS architecture so we have a clean slate for the Tailwind migration.",
+      "id": "US-004",
+      "title": "Auto-scale mermaid diagrams to fit slide bounds",
+      "description": "As a presenter, I want large diagrams to automatically scale down to fit within the slide.",
       "acceptanceCriteria": [
-        "Create frontend/src/lib/themes/_legacy/ directory",
-        "Move existing theme CSS files (minimal.css, gradient.css, terminal.css, brutalist.css, keynote.css) to _legacy/",
-        "Remove imports of legacy CSS files from components",
-        "Remove any component-level <style> blocks with custom CSS (keep animation-related styles)",
-        "Application still builds (may look broken visually)",
-        "Typecheck passes"
+        "Wrap mermaid SVG output in a container with max-width/max-height constraints",
+        "Use CSS to scale diagram proportionally (object-fit: contain or similar)",
+        "Diagram never overflows slide bounds",
+        "Small diagrams remain at natural size (no upscaling)",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
       ],
       "priority": 4,
       "passes": true,
-      "notes": "Legacy CSS moved to _legacy/, custom styles removed from components while preserving animation-related styles"
+      "notes": ""
     },
     {
-      "id": "US-105",
-      "title": "Migrate SlideContainer component to Tailwind",
-      "description": "As a developer, I need the core slide container using Tailwind so it properly scales and centers slides.",
+      "id": "US-005",
+      "title": "Create mermaid theme mapping for Paper and Noir themes",
+      "description": "As a presenter, I want mermaid diagrams to match the Paper and Noir presentation themes.",
       "acceptanceCriteria": [
-        "Replace all custom CSS in SlideContainer.svelte with Tailwind utilities",
-        "Maintain aspect ratio scaling (16:9, 4:3, 16:10) using Tailwind aspect-ratio utilities",
-        "Center slide in viewport with flex utilities (flex items-center justify-center)",
-        "Support fullscreen mode with appropriate Tailwind classes",
-        "Handle window resize correctly",
+        "Create getMermaidTheme() function that maps tap theme to mermaid config",
+        "Paper theme uses mermaid 'neutral' theme with light colors",
+        "Noir theme uses mermaid 'dark' theme with gold accent",
+        "Diagrams use theme's font family",
+        "Unit tests for theme mapping logic",
         "Typecheck passes",
-        "Verify in browser: slide scales correctly at different window sizes"
+        "Verify in browser using dev-browser skill"
       ],
       "priority": 5,
       "passes": true,
-      "notes": "SlideContainer migrated to Tailwind with flex centering, theme CSS variables, fullscreen support, and reduced motion preference"
+      "notes": ""
     },
     {
-      "id": "US-106",
-      "title": "Migrate SlideRenderer component to Tailwind",
-      "description": "As a developer, I need the slide renderer using Tailwind for content display and fragment visibility.",
+      "id": "US-006",
+      "title": "Create mermaid theme mapping for Aurora, Phosphor, and Poster themes",
+      "description": "As a presenter, I want mermaid diagrams to match the Aurora, Phosphor, and Poster themes.",
       "acceptanceCriteria": [
-        "Replace all custom CSS in SlideRenderer.svelte with Tailwind utilities",
-        "Layout-specific classes applied via Tailwind",
-        "Fragment visibility controlled via Tailwind opacity/transform utilities",
-        "Background image support maintained with Tailwind bg-cover, bg-center",
+        "Aurora theme uses mermaid 'forest' theme with teal/purple accents",
+        "Phosphor theme uses mermaid 'dark' theme with green (#00ff00) accent",
+        "Poster theme uses mermaid 'default' theme with high contrast black/white/red",
+        "Unit tests for theme mapping logic",
         "Typecheck passes",
-        "Verify in browser: slides render with correct layout structure"
+        "Verify in browser using dev-browser skill"
       ],
       "priority": 6,
       "passes": true,
-      "notes": "SlideRenderer migrated to Tailwind with w-full h-full p-slide, layout classes passed through, background via inline styles, fragment transitions use 300ms timing"
+      "notes": ""
     },
     {
-      "id": "US-107A",
-      "title": "Migrate Title, Section, and Default layout components to Tailwind",
-      "description": "As a developer, I need the core layout components (Title, Section, Default) using Tailwind.",
+      "id": "US-007",
+      "title": "Re-render mermaid diagrams on theme change",
+      "description": "As a presenter, I want diagrams to update when I switch themes via the TUI.",
       "acceptanceCriteria": [
-        "LayoutTitle.svelte - centered title with subtitle using Tailwind flex/text utilities",
-        "LayoutSection.svelte - large section header centered using Tailwind",
-        "LayoutDefault.svelte - standard content layout with proper padding/spacing",
-        "All layouts use theme CSS variables via Tailwind utilities (text-theme-text, bg-theme-bg)",
+        "Listen for theme changes in presentation store",
+        "Re-initialize mermaid with new theme config when theme changes",
+        "Re-render all mermaid diagrams on current slide",
+        "Theme switch reflects in diagrams within one hot reload cycle",
         "Typecheck passes",
-        "Verify in browser: title, section, and default layouts render correctly"
+        "Verify in browser using dev-browser skill"
       ],
       "priority": 7,
       "passes": true,
-      "notes": "Created src/lib/styles/layouts.css with layout typography styles. All three components use theme CSS variables (--color-text, --color-muted, --color-accent, --color-code-bg, --font-mono)"
+      "notes": ""
     },
     {
-      "id": "US-107B",
-      "title": "Migrate TwoColumn, ThreeColumn, and Sidebar layout components to Tailwind",
-      "description": "As a developer, I need the column-based layout components using Tailwind grid.",
+      "id": "US-008",
+      "title": "Create Gemini API client in Go backend",
+      "description": "As a developer, I need a Go client for the Gemini API to generate images.",
       "acceptanceCriteria": [
-        "LayoutTwoColumn.svelte - CSS grid via Tailwind (grid grid-cols-2 gap-8)",
-        "LayoutThreeColumn.svelte - three-column grid using Tailwind",
-        "LayoutSidebar.svelte - main content with sidebar using Tailwind grid",
-        "All layouts use theme CSS variables via Tailwind utilities",
-        "Typecheck passes",
-        "Verify in browser: column layouts render with correct grid structure"
+        "Create internal/gemini/client.go with GenerateImage function",
+        "Read GEMINI_API_KEY from environment",
+        "Use Nano Banana Pro model for image generation",
+        "Return image bytes and content type on success",
+        "Return structured error on API failure (rate limit, content policy, etc.)",
+        "Integration tests with mocked HTTP responses",
+        "Typecheck passes"
       ],
       "priority": 8,
       "passes": true,
-      "notes": "Added CSS grid layouts to layouts.css. TwoColumn uses 1fr 1fr, ThreeColumn uses 1fr 1fr 1fr, Sidebar uses 2fr 1fr with border separator. All use theme CSS variables (--color-text, --color-muted, --color-accent, --color-code-bg, --font-mono)"
+      "notes": ""
     },
     {
-      "id": "US-107C",
-      "title": "Migrate CodeFocus, Quote, and BigStat layout components to Tailwind",
-      "description": "As a developer, I need the specialized content layout components using Tailwind.",
+      "id": "US-009",
+      "title": "Add image generation shortcut to dev TUI",
+      "description": "As a presenter, I want to press 'i' during tap dev to start the image generation workflow.",
       "acceptanceCriteria": [
-        "LayoutCodeFocus.svelte - full-width code using Tailwind (w-full, proper padding)",
-        "LayoutQuote.svelte - styled blockquote with accent border using Tailwind",
-        "LayoutBigStat.svelte - large number emphasis with massive text using Tailwind",
-        "All layouts use theme CSS variables via Tailwind utilities",
-        "Typecheck passes",
-        "Verify in browser: code-focus, quote, and big-stat layouts render correctly"
+        "Add 'i' key handler in DevModel.handleKeyPress",
+        "Check for GEMINI_API_KEY in environment",
+        "If key missing, show error message explaining how to configure it in .env",
+        "If key present, set showImageGenerator flag to true",
+        "Update help text to show 'i' shortcut",
+        "Unit tests for key handling and API key validation",
+        "Typecheck passes"
       ],
       "priority": 9,
       "passes": true,
-      "notes": "Added CSS rules for layout-code-focus, layout-quote, and layout-big-stat to layouts.css. CodeFocus has flex-grow code blocks, Quote uses 6px accent border with centered layout, BigStat uses 12rem font for massive stat display. All use theme CSS variables (--color-text, --color-muted, --color-accent, --color-code-bg, --font-mono)"
+      "notes": ""
     },
     {
-      "id": "US-107D",
-      "title": "Migrate Cover, SplitMedia, and Blank layout components to Tailwind",
-      "description": "As a developer, I need the remaining layout components using Tailwind.",
+      "id": "US-010",
+      "title": "Create slide selector for image generation",
+      "description": "As a presenter, I want to select which slide to add an image to.",
       "acceptanceCriteria": [
-        "LayoutCover.svelte - full-bleed background using Tailwind (bg-cover, bg-center, absolute inset-0)",
-        "LayoutSplitMedia.svelte - image + text side-by-side using Tailwind grid",
-        "LayoutBlank.svelte - empty canvas with minimal styling",
-        "All layouts use theme CSS variables via Tailwind utilities",
-        "Typecheck passes",
-        "Verify in browser: cover, split-media, and blank layouts render correctly"
+        "Create ImageGenModel with slide selection step",
+        "Show numbered list of all slides with titles/first headings",
+        "Navigate with up/down arrows or j/k",
+        "Current selection highlighted",
+        "Press enter to select slide",
+        "Press esc to cancel and return to main dev view",
+        "Unit tests for slide list rendering and navigation",
+        "Typecheck passes"
       ],
       "priority": 10,
       "passes": true,
-      "notes": "Added CSS rules for layout-cover, layout-split-media, and layout-blank to layouts.css. Cover has centered content with text shadows, SplitMedia uses 1fr 1fr grid with object-fit cover for images, Blank has minimal styling for user-controlled content. All use theme CSS variables (--color-text, --color-muted, --color-accent, --color-code-bg, --font-mono)"
+      "notes": ""
     },
     {
-      "id": "US-108",
-      "title": "Migrate typography and prose styling to Tailwind",
-      "description": "As a developer, I need base typography (headings, paragraphs, lists, code, tables) styled via Tailwind.",
+      "id": "US-011",
+      "title": "Detect existing AI-generated images on slides",
+      "description": "As a presenter, I want to see which slides already have AI-generated images.",
       "acceptanceCriteria": [
-        "Create src/lib/styles/prose.css with Tailwind @apply for markdown content",
-        "Style h1-h6 with appropriate sizes from presentation scale (slide-h1, slide-h2, etc.)",
-        "Style paragraphs and list items with proper spacing",
-        "Style inline code with background and padding",
-        "Style code blocks (pre) with theme-aware backgrounds",
-        "Style blockquotes with accent border",
-        "Style tables with proper borders and padding",
-        "Style links with accent color and hover states",
-        "Typecheck passes",
-        "Verify in browser: markdown content renders beautifully"
+        "Parse markdown to find <!-- ai-prompt: ... --> comments",
+        "Extract prompt text and associated image path",
+        "Show indicator next to slides with AI images in selector (e.g., '[has 1 AI image]')",
+        "Unit tests for ai-prompt comment parsing",
+        "Typecheck passes"
       ],
       "priority": 11,
       "passes": true,
-      "notes": "Created src/lib/styles/prose.css with presentation-scale typography. Styles h1-h6, paragraphs, lists (including task lists), inline code, code blocks, blockquotes, tables, links, definition lists, figures, and horizontal rules. Includes size variants (prose-sm, prose-lg) and reduced motion support. All styles use theme CSS variables (--color-*, --font-*)."
+      "notes": ""
     },
     {
-      "id": "US-109",
-      "title": "Migrate UI components to Tailwind",
-      "description": "As a developer, I need all UI components (ProgressBar, ConnectionIndicator, LiveCodeBlock, etc.) using Tailwind.",
+      "id": "US-012",
+      "title": "Show add/regenerate options for slides with existing images",
+      "description": "As a presenter, I want to choose between adding a new image or regenerating an existing one.",
       "acceptanceCriteria": [
-        "ProgressBar.svelte - thin accent-colored bar using Tailwind (h-1 bg-theme-accent)",
-        "ConnectionIndicator.svelte - subtle corner indicator using Tailwind",
-        "LiveCodeBlock.svelte - code display with run button using Tailwind",
-        "FragmentContainer.svelte - fragment wrapper using Tailwind opacity/transform",
-        "SlideOverview.svelte - thumbnail grid using Tailwind grid utilities",
-        "AsciinemaPlayer.svelte - player wrapper using Tailwind",
-        "All components use theme CSS variables",
-        "Typecheck passes",
-        "Verify in browser: all UI components render correctly"
+        "When slide has existing AI images, show options: 'Add new image' and 'Regenerate: [prompt preview]'",
+        "If multiple AI images exist, show each as a separate regenerate option",
+        "Navigate options with up/down, select with enter",
+        "Selecting 'Add new image' proceeds to prompt input",
+        "Selecting regenerate option pre-fills prompt with existing prompt",
+        "Unit tests for image selection with multiple images",
+        "Typecheck passes"
       ],
       "priority": 12,
       "passes": true,
-      "notes": "Created src/lib/styles/ui-components.css with centralized styles for ProgressBar, ConnectionIndicator, LiveCodeBlock, FragmentContainer, SlideOverview, and AsciinemaPlayer. Components reference CSS classes from the shared stylesheet. Removed unused theme props from components. All use theme CSS variables (--color-*, --font-*) with reduced motion support."
+      "notes": ""
     },
     {
-      "id": "US-110",
-      "title": "Migrate presenter view to Tailwind",
-      "description": "As a developer, I need the presenter view page using Tailwind for its multi-panel layout.",
+      "id": "US-013",
+      "title": "Create prompt input for image generation",
+      "description": "As a presenter, I want to type a prompt for the AI image generator.",
       "acceptanceCriteria": [
-        "Main layout with current slide, next preview, notes panel using Tailwind grid",
-        "Timer display styled with Tailwind (text-4xl font-mono)",
-        "Slide counter styled with Tailwind",
-        "Touch-friendly controls sized appropriately (min-h-12, p-4)",
-        "Responsive for tablet use",
-        "Typecheck passes",
-        "Verify in browser: presenter view is functional and well-styled"
+        "Add prompt input step to ImageGenModel using textinput.Model",
+        "Support multi-line input",
+        "Press enter or ctrl+d to submit prompt",
+        "Press esc to go back to slide selector",
+        "Pre-fill with existing prompt when regenerating",
+        "Unit tests for prompt input handling",
+        "Typecheck passes"
       ],
       "priority": 13,
       "passes": true,
-      "notes": "Created src/lib/styles/presenter-view.css with centralized styles for the presenter view. Main layout uses CSS grid (2fr 1fr columns, 1fr 1fr rows). Timer styled with text-2.5rem font-mono in #4ecca3. Slide counter styled with 1.5rem base and 2rem for current slide number. Touch-friendly controls have min-height 3rem and larger hit targets on tablet (1.25rem padding). Responsive breakpoints at 1024px (tablet) and 768px (mobile) with grid layout adjustments. Includes reduced motion support."
+      "notes": ""
     },
     {
-      "id": "US-111",
-      "title": "Design and implement Paper theme",
-      "description": "As a user, I want the Paper theme to feel ultra-clean and airy—like a fresh sheet of premium paper where content takes center stage.",
+      "id": "US-014",
+      "title": "Generate image and show progress",
+      "description": "As a presenter, I want to see progress while the image is being generated.",
       "acceptanceCriteria": [
-        "Create src/lib/themes/paper.css with CSS custom properties only",
-        "Color palette: Pure white background (#ffffff), near-black text (#0a0a0a), sophisticated gray for muted (#71717a), subtle warm accent (#78716c)",
-        "Typography: Inter / system-ui for headings and body with confident letter-spacing (-0.02em), perfect line heights",
-        "Subtle refinements: Delicate shadows on code blocks, refined border radii (8px), generous whitespace",
-        "Code blocks: Dark (#1e1e1e) with excellent contrast",
-        "Transitions: Smooth, confident fades (400ms ease-out)",
-        "Typecheck passes",
-        "Verify in browser: theme looks premium and effortlessly clean"
+        "Show spinner with 'Generating image...' message while API call is in progress",
+        "Disable 'i' shortcut while generation is in progress",
+        "Call Gemini API client with prompt",
+        "On success, proceed to save step",
+        "On error, display user-friendly error message and allow retry or cancel",
+        "Unit tests for progress states and error handling",
+        "Typecheck passes"
       ],
       "priority": 14,
       "passes": true,
-      "notes": "Created src/lib/themes/paper.css with ultra-clean aesthetic. Extracted Paper theme from theme-tokens.css to separate file. Features: pure white bg, near-black text, warm accent, dark code blocks with shadows, Inter typography with -0.02em letter-spacing, 400ms ease-out transitions, 8px border radii, reduced motion support."
+      "notes": ""
     },
     {
-      "id": "US-112",
-      "title": "Design and implement Aurora theme",
-      "description": "As a user, I want the Aurora theme to feel like the northern lights—vibrant color flows, glassmorphism, dynamic and mesmerizing.",
+      "id": "US-015",
+      "title": "Create images directory if needed",
+      "description": "As a presenter, I want the images directory created automatically.",
       "acceptanceCriteria": [
-        "Create src/lib/themes/aurora.css with CSS custom properties only",
-        "Color palette: Rich gradient backgrounds (deep purples #4c1d95 to electric blues #0ea5e9 to teals #14b8a6), white text",
-        "Background: Animated gradient mesh using CSS @keyframes with subtle movement",
-        "Glassmorphism: Frosted glass cards with backdrop-blur-xl and semi-transparent backgrounds",
-        "Typography: Space Grotesk for headings and body",
-        "Code blocks: Semi-transparent dark glass (rgba(0,0,0,0.6)) with backdrop-blur",
-        "Accent elements: Glowing borders (box-shadow with spread), subtle light leaks",
-        "Typecheck passes",
-        "Verify in browser: theme is vibrant, dynamic, and modern"
+        "Check if images/ directory exists relative to markdown file",
+        "If not, create it with os.MkdirAll",
+        "Works with both relative and absolute paths",
+        "Unit tests for directory creation logic",
+        "Typecheck passes"
       ],
       "priority": 15,
       "passes": true,
-      "notes": "Created src/lib/themes/aurora.css with vibrant northern lights aesthetic. Features: animated gradient mesh background (20s ease infinite), glassmorphism with backdrop-blur-xl, Space Grotesk typography, semi-transparent dark glass code blocks with cyan glow, glowing borders and light leak effects, reduced motion support."
+      "notes": ""
     },
     {
-      "id": "US-113",
-      "title": "Design and implement Phosphor theme",
-      "description": "As a user, I want the Phosphor theme to feel like authentic CRT monitors—glowing phosphor text, scanlines, retro-futuristic hacker aesthetic.",
+      "id": "US-016",
+      "title": "Save generated image to disk",
+      "description": "As a presenter, I want generated images saved with content-hashed filenames.",
       "acceptanceCriteria": [
-        "Create src/lib/themes/phosphor.css with CSS custom properties only",
-        "Color palette: True black (#000) background, phosphor green (#00ff00) as primary, dim gray (#333) for muted",
-        "CRT effects: Subtle scanlines overlay using repeating-linear-gradient, slight screen curve vignette",
-        "Typography: JetBrains Mono throughout for authentic terminal feel",
-        "Text effects: Multi-layer text-shadow for phosphor glow (0 0 5px, 0 0 10px, 0 0 20px)",
-        "Code blocks: No background change—everything IS terminal",
-        "Typecheck passes",
-        "Verify in browser: theme has authentic retro-tech CRT feel with glowing text"
+        "Generate filename using first 8 chars of SHA256 hash of image content",
+        "Save image to images/ directory (e.g., images/generated-a1b2c3d4.png)",
+        "Determine file extension from content type returned by API",
+        "Unit tests for filename generation",
+        "Integration tests for file writing",
+        "Typecheck passes"
       ],
       "priority": 16,
       "passes": true,
-      "notes": "Created src/lib/themes/phosphor.css with authentic CRT aesthetic. Features: true black bg (#000), phosphor green (#00ff00), multi-layer text shadows (5px/10px/20px), scanline overlay via repeating-linear-gradient, screen curve vignette, JetBrains Mono throughout, subtle pulse animation, reduced motion support."
+      "notes": ""
     },
     {
-      "id": "US-114",
-      "title": "Design and implement Poster theme",
-      "description": "As a user, I want the Poster theme to feel like bold graphic design—giant typography, high contrast, impossible to ignore.",
+      "id": "US-017",
+      "title": "Insert image into markdown file",
+      "description": "As a presenter, I want the generated image automatically inserted into my markdown.",
       "acceptanceCriteria": [
-        "Create src/lib/themes/poster.css with CSS custom properties only",
-        "Color palette: Stark black (#000) and white (#fff), with ONE bold accent (electric red #ef4444)",
-        "Typography: Anton for headings (ALL CAPS via text-transform), massive scale, system sans for body",
-        "Layout elements: Thick black borders (4px+), harsh drop shadows (8px 8px 0 black), geometric blocks",
-        "No rounded corners: Everything sharp and rectangular (border-radius: 0)",
-        "Code blocks: Inverted colors (white on black), monospace with visible structure",
-        "Typecheck passes",
-        "Verify in browser: theme is bold, graphic, and striking"
+        "Insert at end of selected slide's content (before next --- separator)",
+        "Use format: <!-- ai-prompt: {prompt} -->\\n![](images/filename.png)",
+        "No alt text in image syntax",
+        "Preserve existing markdown formatting",
+        "Hot reload triggers automatically after file update",
+        "Unit tests for markdown insertion logic",
+        "Integration tests for file modification",
+        "Typecheck passes"
       ],
       "priority": 17,
       "passes": true,
-      "notes": "Created src/lib/themes/poster.css with bold graphic design aesthetic. Features: stark black/white palette with electric red (#ef4444) accent, Anton typography for ALL CAPS headings with text shadows, thick 4px borders with 8px 8px 0 drop shadows, no rounded corners (border-radius: 0), inverted code blocks (white on black), reduced motion support."
+      "notes": ""
     },
     {
-      "id": "US-115",
-      "title": "Design and implement Noir theme",
-      "description": "As a user, I want the Noir theme to feel cinematic and sophisticated—deep blacks, dramatic lighting, film noir elegance.",
+      "id": "US-018",
+      "title": "Handle image regeneration",
+      "description": "As a presenter, I want regenerated images to replace the old ones cleanly.",
       "acceptanceCriteria": [
-        "Create src/lib/themes/noir.css with CSS custom properties only",
-        "Color palette: Deep charcoal backgrounds (#0a0a0a), crisp white text (#fafafa), sophisticated gold accent (#d4af37)",
-        "Typography: Playfair Display for titles (serif), Inter for body (sans-serif)",
-        "Cinematic depth: Multi-layer soft shadows, subtle vignette effect on slides",
-        "Subtle gradients: Very subtle dark-to-darker gradients (linear-gradient) for richness",
-        "Code blocks: Elevated card style with refined shadows and slight border",
-        "Typecheck passes",
-        "Verify in browser: theme looks sophisticated, dark, and executive"
+        "Delete old image file after successful replacement",
+        "Update markdown with new image path and prompt comment",
+        "Preserve image position in markdown (don't move to end of slide)",
+        "Integration tests for file replacement",
+        "Typecheck passes"
       ],
       "priority": 18,
       "passes": true,
-      "notes": "Created src/lib/themes/noir.css with cinematic film noir aesthetic. Features: deep charcoal bg (#0a0a0a), crisp white text (#fafafa), sophisticated gold accent (#d4af37), Playfair Display for serif headings with Inter for body, multi-layer soft shadows for depth, subtle vignette overlay, dark-to-darker gradient background, elevated card-style code blocks with refined shadows, reduced motion support."
+      "notes": ""
     },
     {
-      "id": "US-116",
-      "title": "Implement simple color customization for built-in themes",
-      "description": "As a user, I want to easily swap colors in built-in themes via frontmatter so I can match my brand.",
+      "id": "US-019",
+      "title": "Return to main dev view after successful generation",
+      "description": "As a presenter, I want to return to the main TUI view after generating an image.",
       "acceptanceCriteria": [
-        "Support themeColors object in frontmatter: { accent: '#ff0000', background: '#000' }",
-        "Parse themeColors in Go config parser (internal/config/config.go)",
-        "Pass themeColors to frontend via presentation JSON",
-        "Apply color overrides as inline CSS variables on root element in frontend",
-        "Supported color keys: background, text, muted, accent, codeBg",
-        "Partial overrides work (only specify what you want to change)",
-        "Invalid colors ignored gracefully with console warning",
-        "Typecheck passes",
-        "Verify in browser: custom colors applied correctly override theme defaults"
+        "Show success message with generated filename",
+        "After brief delay or keypress, return to main dev view",
+        "Reset ImageGenModel state for next use",
+        "Send reload event to update TUI activity log",
+        "Typecheck passes"
       ],
       "priority": 19,
       "passes": true,
-      "notes": "Added ThemeColors map to Config struct with keys: background, text, muted, accent, codeBg. Go validates keys, frontend validates colors with console warnings. Applied as inline CSS variables on SlideContainer element."
-    },
-    {
-      "id": "US-117",
-      "title": "Implement custom theme support via user CSS file",
-      "description": "As a power user, I want to define a completely custom theme by providing my own CSS file.",
-      "acceptanceCriteria": [
-        "Support customTheme: './my-theme.css' in frontmatter (path relative to markdown file)",
-        "Parse customTheme path in Go config parser",
-        "Load and inject custom CSS file at runtime in dev mode via <link> tag",
-        "Embed custom CSS at build time for static builds",
-        "Custom theme CSS can define all CSS variables to completely override defaults",
-        "Error handling: graceful fallback if custom theme file not found (log warning, use default theme)",
-        "Typecheck passes",
-        "Verify in browser: custom theme fully applied"
-      ],
-      "priority": 20,
-      "passes": true,
-      "notes": "Added customTheme field to Config struct. ResolveCustomThemePath() resolves relative paths. Server has /api/custom-theme.css endpoint. Frontend loads via dynamic link tag with cache-busting. Graceful fallback on missing file."
-    },
-    {
-      "id": "US-118",
-      "title": "Create animation utilities with Tailwind + Svelte transitions",
-      "description": "As a developer, I need a clean approach for animations that combines Tailwind utilities with Svelte transitions.",
-      "acceptanceCriteria": [
-        "Create src/lib/styles/animations.css for complex animations only",
-        "Include CRT scanline animation for Phosphor theme",
-        "Include gradient mesh animation for Aurora theme",
-        "Include phosphor glow keyframes",
-        "Keep file minimal—only what Tailwind truly cannot do",
-        "Document which animations are Tailwind vs custom in code comments",
-        "Svelte transitions used for slide transitions (fade, fly, scale)",
-        "Fragment reveals use Tailwind opacity/transform with transition-all",
-        "Typecheck passes",
-        "Verify in browser: all animations work smoothly"
-      ],
-      "priority": 21,
-      "passes": true,
-      "notes": "Created src/lib/styles/animations.css with utility keyframes (fade, slide, scale, pulse, bounce) and comprehensive documentation of animation architecture. Svelte transitions used for slide transitions in SlideRenderer.svelte. Fragment reveals use CSS .fragment classes with 300ms ease-out timing. Theme-specific animations (Aurora gradient mesh, Phosphor CRT effects) remain in theme files with documentation references in animations.css."
-    },
-    {
-      "id": "US-119",
-      "title": "Update embedded asset build to include Tailwind output",
-      "description": "As a developer, I need the Go binary to embed the Tailwind-built CSS correctly.",
-      "acceptanceCriteria": [
-        "Vite build outputs optimized CSS with Tailwind utilities to dist/",
-        "CSS is properly purged (only used utilities included) via Tailwind content config",
-        "Output CSS copied to ../embedded/ directory via build:embed script",
-        "Go embed directive in embedded/embed.go picks up the new CSS",
-        "Binary serves correct styles when running tap dev",
-        "Build size is reasonable (target: <50KB CSS gzipped)",
-        "Typecheck passes"
-      ],
-      "priority": 22,
-      "passes": true,
-      "notes": "Updated embed.go to use //go:embed dist/* with DistFS() helper for clean access. Added /assets/ route to server for serving JS/CSS. Updated CopyEmbeddedAssets in builder to handle subdirectories. CSS output ~13KB gzipped (main.css 0.69KB + SlideRenderer.css 12.28KB)."
-    },
-    {
-      "id": "US-120",
-      "title": "Update documentation for new theming system",
-      "description": "As a user, I need documentation explaining how to use themes, customize colors, and create custom themes.",
-      "acceptanceCriteria": [
-        "Update SPEC.md with new theming architecture (Tailwind + CSS custom properties)",
-        "Document all 5 themes with visual descriptions: Paper, Noir, Aurora, Phosphor, Poster",
-        "Document themeColors frontmatter option with examples",
-        "Document customTheme CSS file approach with template showing required CSS variables",
-        "Update testdata/sample.md to use theme: paper",
-        "Typecheck passes"
-      ],
-      "priority": 23,
-      "passes": true,
-      "notes": "Updated SPEC.md with comprehensive theming documentation: 5 theme descriptions (Paper, Noir, Aurora, Phosphor, Poster), themeColors frontmatter examples, and customTheme CSS template with required variables."
-    },
-    {
-      "id": "US-121",
-      "title": "Rename theme references in Go backend",
-      "description": "As a developer, I need all Go code updated to use the new theme names (paper, noir, aurora, phosphor, poster).",
-      "acceptanceCriteria": [
-        "Update internal/config/config.go theme validation to accept: paper, noir, aurora, phosphor, poster",
-        "Update default theme from 'minimal' to 'paper'",
-        "Update theme list in CLI help text (tap new --help)",
-        "Update TUI theme selector options in internal/tui/new.go with new names and descriptions",
-        "Add backwards compatibility: old names (minimal, gradient, terminal, brutalist, keynote) map to new names with deprecation warning logged",
-        "All Go tests pass with new theme names",
-        "Typecheck passes"
-      ],
-      "priority": 24,
-      "passes": true,
-      "notes": "Added validThemes map and legacyThemeMapping in config.go. NormalizeTheme() function handles backwards compatibility with log warnings. TUI AvailableThemes updated with new names and descriptions. CLI help text updated. All tests pass."
-    },
-    {
-      "id": "US-122",
-      "title": "Rename theme files and references in frontend",
-      "description": "As a developer, I need all frontend code updated to use the new theme names.",
-      "acceptanceCriteria": [
-        "Theme CSS files already created with new names in US-111 through US-115",
-        "Update all CSS class references in components (.theme-minimal to .theme-paper, etc.)",
-        "Update theme imports in main app entry point",
-        "Update TypeScript types/enums for theme names in src/lib/types.ts",
-        "Update any hardcoded theme references in Svelte components",
-        "Typecheck passes",
-        "Verify in browser: all themes load correctly with new names"
-      ],
-      "priority": 25,
-      "passes": true,
-      "notes": "Added Theme type to types.ts. Updated default theme from 'minimal' to 'paper' in App.svelte, Presenter.svelte, and SlideContainer.svelte. Updated SlideContainer.test.ts to use new theme names (paper, noir, aurora, phosphor, poster)."
-    },
-    {
-      "id": "US-123",
-      "title": "Update sample presentations and test data",
-      "description": "As a developer, I need all sample presentations updated to use the new theme names.",
-      "acceptanceCriteria": [
-        "Update testdata/sample.md frontmatter to use theme: paper",
-        "Update any other test fixtures in testdata/ referencing old theme names",
-        "Create or update examples/ directory with presentations for each theme",
-        "Grep entire codebase for old theme names (minimal, gradient, terminal, brutalist, keynote) and update any remaining references",
-        "Typecheck passes"
-      ],
-      "priority": 26,
-      "passes": true,
-      "notes": "Updated testdata/sample.md and test.md. Renamed and updated all theme showcase files in examples/. Updated basic.md, code-demo.md, sql-demo.md. Updated all documentation (SPEC.md, README.md, docs/guide/themes.md, docs/guide/writing-slides.md, docs/reference/, docs/.vitepress/theme/components/). Updated benchmark test files in internal/builder, internal/parser, internal/server."
-    },
-    {
-      "id": "US-124",
-      "title": "Update SPEC.md with new theme names and descriptions",
-      "description": "As a developer, I need the product specification updated to reflect the new theme names.",
-      "acceptanceCriteria": [
-        "Replace all references to 'minimal' with 'paper' in SPEC.md",
-        "Replace all references to 'keynote' with 'noir' in SPEC.md",
-        "Replace all references to 'gradient' with 'aurora' in SPEC.md",
-        "Replace all references to 'terminal' with 'phosphor' in SPEC.md",
-        "Replace all references to 'brutalist' with 'poster' in SPEC.md",
-        "Update theme descriptions to match new visual directions",
-        "Update any code examples showing theme configuration",
-        "Typecheck passes"
-      ],
-      "priority": 27,
-      "passes": true,
-      "notes": "SPEC.md was already fully updated with new theme names in US-120. All theme: paper examples correct, theme list shows paper/noir/aurora/phosphor/poster, descriptions match new visual directions."
-    },
-    {
-      "id": "US-125",
-      "title": "Add theme switcher to dev server TUI",
-      "description": "As a presenter, I want to quickly switch themes from the dev server TUI to preview my presentation in different themes.",
-      "acceptanceCriteria": [
-        "Add 't' keyboard shortcut to open theme switcher in tap dev TUI (internal/tui/dev.go)",
-        "Create theme picker component showing all 5 themes: Paper, Noir, Aurora, Phosphor, Poster",
-        "Show theme name and brief one-line description for each option",
-        "Arrow keys to navigate, Enter to select, Escape to cancel",
-        "Selecting a theme broadcasts theme change via WebSocket to all connected browsers",
-        "Current theme highlighted in the picker",
-        "Theme change is temporary (doesn't modify markdown file)",
-        "Display current theme name in TUI status bar",
-        "Typecheck passes"
-      ],
-      "priority": 28,
-      "passes": true,
-      "notes": "Added ThemeBroadcaster interface and 't' keyboard shortcut. Theme picker shows all 5 themes with descriptions. Uses arrow keys/j/k to navigate, enter to select, esc to cancel. Current theme shown in status bar. Theme changes broadcast via WebSocket."
-    },
-    {
-      "id": "US-125B",
-      "title": "Implement WebSocket theme switching in frontend",
-      "description": "As a presenter, I want the browser to instantly switch themes when I select one in the TUI.",
-      "acceptanceCriteria": [
-        "Add 'theme' message type to WebSocket handler in frontend",
-        "When 'theme' message received, update root element class to new theme",
-        "Theme switch happens instantly without page reload",
-        "Update presentation store to track current theme override",
-        "Typecheck passes",
-        "Verify in browser: theme switches instantly when selected in TUI"
-      ],
-      "priority": 29,
-      "passes": true,
-      "notes": "Added 'theme' message type to types.ts. Created themeOverride store with setThemeOverride/clearThemeOverride functions. WebSocketClient handles 'theme' messages and updates store. App.svelte and Presenter.svelte use themeOverride to switch themes instantly."
-    },
-    {
-      "id": "US-126",
-      "title": "Install and configure embedded fonts",
-      "description": "As a presenter, I need all fonts embedded so presentations work fully offline.",
-      "acceptanceCriteria": [
-        "Install font packages via npm: @fontsource/inter, @fontsource/space-grotesk, @fontsource/jetbrains-mono, @fontsource/playfair-display, @fontsource/anton",
-        "Create src/lib/styles/fonts.css that imports required font weights",
-        "Import Inter weights: 400, 500, 600, 700",
-        "Import Playfair Display weights: 400, 700",
-        "Import Space Grotesk weights: 400, 500, 700",
-        "Import JetBrains Mono weights: 400, 700",
-        "Import Anton weight: 400",
-        "Import fonts.css in main app entry point",
-        "Typecheck passes"
-      ],
-      "priority": 30,
-      "passes": true,
-      "notes": "Installed @fontsource packages: inter, space-grotesk, jetbrains-mono, playfair-display, anton. Fonts imported via JS in main.ts/presenter.ts for proper Vite bundling. Created fonts.css as documentation. Build inlines fonts as base64 data URLs for offline support."
-    },
-    {
-      "id": "US-126B",
-      "title": "Wire up embedded fonts to themes and verify offline support",
-      "description": "As a presenter, I need fonts to load correctly in each theme and work offline.",
-      "acceptanceCriteria": [
-        "Update Paper theme to use font-family: Inter, system-ui, sans-serif",
-        "Update Noir theme to use Playfair Display for headings, Inter for body",
-        "Update Aurora theme to use Space Grotesk",
-        "Update Phosphor theme to use JetBrains Mono throughout",
-        "Update Poster theme to use Anton for headings, system sans for body",
-        "Fonts included in Vite build output (check dist/ after build)",
-        "Verify presentations render correctly with network disabled in browser DevTools",
-        "Typecheck passes",
-        "Verify in browser: fonts load correctly offline for all themes"
-      ],
-      "priority": 31,
-      "passes": true,
-      "notes": "Verified all themes use correct font-family: Paper (Inter), Noir (Playfair Display headings, Inter body), Aurora (Space Grotesk), Phosphor (JetBrains Mono throughout), Poster (Anton headings, system sans body). Build output contains 60 @font-face declarations with all fonts embedded as base64 data URIs for offline support. Font weights: Inter 400-700, Playfair Display 400/700, Space Grotesk 400-700, JetBrains Mono 400/700, Anton 400."
+      "notes": ""
     }
   ]
 }

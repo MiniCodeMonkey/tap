@@ -25,6 +25,14 @@
   color: var(--color-text);
 }
 
+/* Make slide-content also center its children for title layout */
+.layout-title .slide-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
 .layout-title h1 {
   font-size: 8rem; /* slide-title */
   line-height: 1.1;
@@ -62,6 +70,14 @@
   height: 100%;
   text-align: center;
   color: var(--color-text);
+}
+
+/* Make slide-content also center its children for section layout */
+.layout-section .slide-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
 }
 
 .layout-section h2 {
@@ -661,6 +677,14 @@
   text-align: center;
 }
 
+/* Make slide-content also center its children for quote layout */
+.layout-quote .slide-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
 .layout-quote blockquote {
   font-size: 3rem;
   line-height: 1.4;
@@ -698,6 +722,24 @@
   margin-top: 0;
 }
 
+/* Attribution paragraph that follows the blockquote (e.g., "— Author Name") */
+.layout-quote .slide-content > p,
+.layout-quote > p {
+  font-size: 2.25rem;
+  font-weight: 500;
+  font-style: normal;
+  color: var(--color-muted);
+  margin-top: 2.5rem;
+  text-align: center;
+  letter-spacing: 0.02em;
+}
+
+/* Attribution with em-dash prefix styling */
+.layout-quote .slide-content > p::before,
+.layout-quote > p::before {
+  content: "— ";
+}
+
 /* ============================================================================
  * Layout Big Stat - Large number emphasis for statistics
  * ============================================================================ */
@@ -711,6 +753,14 @@
   height: 100%;
   color: var(--color-text);
   text-align: center;
+}
+
+/* Make slide-content also center its children for big-stat layout */
+.layout-big-stat .slide-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
 }
 
 /* The main stat number - use h1 or strong */
@@ -742,12 +792,14 @@
   max-width: 70%;
 }
 
+/* h2 in big-stat is also a stat - make it HUGE */
 .layout-big-stat h2 {
-  font-size: 3rem;
-  line-height: 1.3;
-  font-weight: 600;
+  font-size: 12rem; /* slide-stat - massive, same as h1 */
+  line-height: 1;
+  letter-spacing: -0.04em;
+  font-weight: 700;
   margin: 0;
-  margin-top: 2rem;
+  color: var(--color-accent);
 }
 
 /* ============================================================================
@@ -764,6 +816,14 @@
   height: 100%;
   color: var(--color-text);
   text-align: center;
+}
+
+/* Make slide-content also center its children for cover layout */
+.layout-cover .slide-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
 }
 
 /* Cover slides often have dark backgrounds, so default to white text */
@@ -924,6 +984,14 @@
   width: 100%;
   height: 100%;
   color: var(--color-text);
+}
+
+/* Make slide-content also center its children for blank layout */
+.layout-blank .slide-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
 }
 
 /* Minimal typography - user controls content placement */
