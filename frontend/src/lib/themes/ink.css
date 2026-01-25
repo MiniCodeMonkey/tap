@@ -1,0 +1,543 @@
+/**
+ * Ink Theme
+ *
+ * Zen minimalism meets Japanese calligraphy - brush stroke aesthetics,
+ * washi paper textures, and meditative balance. Inspired by sumi-e ink
+ * painting, traditional shodo calligraphy, and wabi-sabi philosophy.
+ *
+ * Design philosophy:
+ * - Warm cream background like aged washi paper
+ * - Deep sumi black for primary text with vermillion accents
+ * - Brush stroke decorative elements
+ * - Asymmetric balance and negative space
+ * - Elegant Noto Serif JP typography
+ */
+
+.theme-ink {
+  /* Core colors - washi paper cream with sumi black */
+  --color-bg: #f5f1e8;
+  --color-text: #1a1a1a;
+  --color-muted: rgba(26, 26, 26, 0.6);
+  --color-accent: #c41e3a;
+  --color-code-bg: rgba(26, 26, 26, 0.06);
+
+  /* Extended colors - ink and paper harmony */
+  --color-border: rgba(26, 26, 26, 0.12);
+  --color-surface: rgba(26, 26, 26, 0.03);
+  --color-surface-elevated: rgba(26, 26, 26, 0.05);
+  --color-link: #c41e3a;
+  --color-code-text: #1a1a1a;
+
+  /* Ink theme accent variations */
+  --ink-vermillion: #c41e3a;
+  --ink-vermillion-muted: rgba(196, 30, 58, 0.4);
+  --ink-vermillion-subtle: rgba(196, 30, 58, 0.15);
+  --ink-sumi: #1a1a1a;
+  --ink-sumi-light: #3d3d3d;
+  --ink-washi: #f5f1e8;
+  --ink-washi-dark: #e8e2d5;
+
+  /* Error colors - warm red that complements vermillion */
+  --color-error: #b91c1c;
+  --color-error-bg: rgba(185, 28, 28, 0.1);
+
+  /* Typography - Noto Serif JP for elegant Japanese-inspired serif */
+  --font-sans: 'Noto Serif JP', Georgia, Cambria, 'Times New Roman', serif;
+  --font-serif: 'Noto Serif JP', Georgia, Cambria, 'Times New Roman', serif;
+  --font-mono: 'JetBrains Mono', 'SF Mono', Monaco, 'Cascadia Code', Consolas, 'Liberation Mono',
+    Menlo, monospace;
+
+  /* Transitions - calm, deliberate, meditative */
+  --transition-duration: 500ms;
+  --transition-timing: cubic-bezier(0.4, 0, 0.2, 1);
+  --fragment-duration: 500ms;
+
+  /* Apply base styles */
+  font-family: var(--font-sans);
+  color: var(--color-text);
+  letter-spacing: 0.01em;
+  line-height: 1.8;
+
+  /* Washi paper texture background - subtle fiber pattern */
+  background:
+    /* Subtle paper grain via noise-like radial gradients */
+    radial-gradient(
+      ellipse 1px 1px at 20% 30%,
+      rgba(26, 26, 26, 0.015) 0%,
+      transparent 100%
+    ),
+    radial-gradient(
+      ellipse 1px 1px at 60% 70%,
+      rgba(26, 26, 26, 0.01) 0%,
+      transparent 100%
+    ),
+    radial-gradient(
+      ellipse 2px 1px at 80% 20%,
+      rgba(26, 26, 26, 0.012) 0%,
+      transparent 100%
+    ),
+    /* Warm paper gradient for depth */
+    linear-gradient(
+      180deg,
+      #f7f3ea 0%,
+      #f5f1e8 30%,
+      #f3efe4 70%,
+      #f0ebe0 100%
+    );
+  background-color: var(--ink-washi);
+}
+
+/* Ink theme typography - elegant serif with calligraphic feel */
+.theme-ink h1,
+.theme-ink h2,
+.theme-ink h3,
+.theme-ink h4,
+.theme-ink h5,
+.theme-ink h6 {
+  font-family: var(--font-serif);
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  line-height: 1.3;
+  margin: 0;
+  color: var(--ink-sumi);
+}
+
+.theme-ink h1 {
+  font-weight: 700;
+  letter-spacing: 0.05em;
+}
+
+.theme-ink h2 {
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.theme-ink h3 {
+  font-weight: 400;
+  letter-spacing: 0.03em;
+}
+
+.theme-ink p,
+.theme-ink li {
+  font-family: var(--font-sans);
+  font-weight: 400;
+  letter-spacing: 0.01em;
+}
+
+/* Ink theme code blocks - subtle ink wash effect */
+.theme-ink code {
+  font-family: var(--font-mono);
+  background-color: var(--color-code-bg);
+  padding: 0.2em 0.5em;
+  border-radius: 3px;
+  font-size: 0.88em;
+  border: 1px solid var(--color-border);
+  color: var(--ink-sumi);
+}
+
+.theme-ink pre {
+  font-family: var(--font-mono);
+  background: linear-gradient(
+    145deg,
+    rgba(26, 26, 26, 0.04) 0%,
+    rgba(26, 26, 26, 0.06) 100%
+  );
+  color: var(--color-code-text);
+  padding: 1.75em 2.25em;
+  border-radius: 0;
+  overflow-x: auto;
+  line-height: 1.65;
+  /* Brush stroke-inspired border - thick on left */
+  border: none;
+  border-left: 4px solid var(--ink-sumi);
+  box-shadow:
+    inset 0 0 30px rgba(26, 26, 26, 0.02);
+}
+
+.theme-ink pre code {
+  background: none;
+  padding: 0;
+  border-radius: 0;
+  font-size: inherit;
+  border: none;
+}
+
+/* Ink theme links - vermillion accent */
+.theme-ink a {
+  color: var(--color-link);
+  text-decoration: none;
+  border-bottom: 1px solid var(--ink-vermillion-subtle);
+  transition:
+    border-color var(--transition-duration) var(--transition-timing),
+    color var(--transition-duration) var(--transition-timing);
+}
+
+.theme-ink a:hover {
+  border-bottom-color: var(--ink-vermillion-muted);
+}
+
+/* Ink theme lists - minimal markers */
+.theme-ink ul,
+.theme-ink ol {
+  padding-left: 1.5em;
+  margin: 0;
+}
+
+.theme-ink li {
+  margin-bottom: 0.6em;
+  padding-left: 0.25em;
+}
+
+.theme-ink li::marker {
+  color: var(--ink-vermillion-muted);
+}
+
+.theme-ink ul li::marker {
+  content: '● ';
+  font-size: 0.5em;
+}
+
+/* Ink theme blockquotes - brush stroke left border */
+.theme-ink blockquote {
+  border-left: none;
+  padding: 1.5em 2em;
+  margin: 0;
+  font-style: italic;
+  color: var(--ink-sumi-light);
+  background: linear-gradient(
+    90deg,
+    rgba(196, 30, 58, 0.06) 0%,
+    transparent 100%
+  );
+  position: relative;
+}
+
+/* Brush stroke effect using pseudo-element */
+.theme-ink blockquote::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  background: linear-gradient(
+    180deg,
+    transparent 0%,
+    var(--ink-sumi) 5%,
+    var(--ink-sumi) 20%,
+    var(--ink-sumi-light) 40%,
+    var(--ink-sumi) 60%,
+    var(--ink-sumi) 90%,
+    transparent 100%
+  );
+  border-radius: 3px;
+}
+
+/* Ink theme tables - clean lines */
+.theme-ink table {
+  width: 100%;
+  border-collapse: collapse;
+  background: transparent;
+}
+
+.theme-ink th,
+.theme-ink td {
+  padding: 1em 1.5em;
+  text-align: left;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.theme-ink th {
+  font-weight: 700;
+  color: var(--ink-sumi);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  font-size: 0.85em;
+  border-bottom: 2px solid var(--ink-sumi);
+}
+
+.theme-ink tr:last-child td {
+  border-bottom: none;
+}
+
+.theme-ink tr:hover td {
+  background-color: rgba(26, 26, 26, 0.02);
+}
+
+/* Ink theme images - subtle shadow */
+.theme-ink img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 0;
+  box-shadow: 0 4px 20px rgba(26, 26, 26, 0.1);
+}
+
+/* Ink theme fragments - gentle fade in */
+.theme-ink .fragment {
+  transition:
+    opacity var(--fragment-duration) var(--transition-timing),
+    transform var(--fragment-duration) var(--transition-timing);
+}
+
+.theme-ink .fragment-hidden {
+  opacity: 0;
+  transform: translateY(10px);
+}
+
+.theme-ink .fragment-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Ink theme selection - vermillion highlight */
+.theme-ink ::selection {
+  background-color: var(--ink-vermillion);
+  color: #ffffff;
+}
+
+/* Strong/bold text - darker emphasis */
+.theme-ink strong,
+.theme-ink b {
+  font-weight: 700;
+  color: var(--ink-sumi);
+}
+
+/* Emphasis/italic text */
+.theme-ink em,
+.theme-ink i {
+  font-style: italic;
+  color: var(--ink-sumi-light);
+}
+
+/* Horizontal rule - brush stroke divider */
+.theme-ink hr {
+  border: none;
+  height: 3px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    var(--ink-sumi) 10%,
+    var(--ink-sumi) 30%,
+    var(--ink-sumi-light) 50%,
+    var(--ink-sumi) 70%,
+    var(--ink-sumi) 90%,
+    transparent 100%
+  );
+  margin: 2.5em auto;
+  max-width: 60%;
+  border-radius: 2px;
+}
+
+/* ============================================
+   Layout-specific styles for Ink theme
+   ============================================ */
+
+/* Title layout - centered zen aesthetic */
+.theme-ink .layout-title {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.theme-ink .layout-title h1 {
+  font-size: clamp(3.5rem, 8vw, 7rem);
+  letter-spacing: 0.08em;
+  position: relative;
+}
+
+/* Hanko (seal) accent after title */
+.theme-ink .layout-title h1::after {
+  content: '';
+  display: block;
+  width: 40px;
+  height: 40px;
+  margin: 1.5rem auto 0;
+  background-color: var(--ink-vermillion);
+  border-radius: 4px;
+  opacity: 0.9;
+}
+
+.theme-ink .layout-title p {
+  font-size: 1.5rem;
+  color: var(--color-muted);
+  letter-spacing: 0.1em;
+  margin-top: 1rem;
+}
+
+/* Section layout - minimal divider */
+.theme-ink .layout-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.theme-ink .layout-section h2 {
+  font-size: clamp(3rem, 7vw, 5.5rem);
+  letter-spacing: 0.06em;
+  position: relative;
+}
+
+/* Brush stroke underline */
+.theme-ink .layout-section h2::after {
+  content: '';
+  display: block;
+  width: 80px;
+  height: 3px;
+  margin: 1.5rem auto 0;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    var(--ink-sumi) 20%,
+    var(--ink-sumi) 80%,
+    transparent 100%
+  );
+  border-radius: 2px;
+}
+
+.theme-ink .layout-section p {
+  font-size: 1.35rem;
+  color: var(--color-muted);
+  margin-top: 1.5rem;
+}
+
+/* Big-stat layout - dramatic number with seal */
+.theme-ink .layout-big-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.theme-ink .layout-big-stat h2 {
+  font-size: clamp(6rem, 15vw, 12rem);
+  letter-spacing: -0.02em;
+  line-height: 1;
+  color: var(--ink-sumi);
+  position: relative;
+}
+
+/* Vermillion accent circle behind stat */
+.theme-ink .layout-big-stat h2::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 80%;
+  height: 120%;
+  background: radial-gradient(
+    ellipse at center,
+    rgba(196, 30, 58, 0.08) 0%,
+    transparent 70%
+  );
+  z-index: -1;
+}
+
+.theme-ink .layout-big-stat p {
+  font-size: 1.5rem;
+  color: var(--color-muted);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin-top: 1rem;
+}
+
+/* Quote layout - elegant centered with brush accents */
+.theme-ink .layout-quote {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  padding: 4rem;
+}
+
+.theme-ink .layout-quote blockquote {
+  border-left: none;
+  background: none;
+  max-width: 85%;
+  padding: 2rem 0;
+  position: relative;
+}
+
+.theme-ink .layout-quote blockquote::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 60px;
+  height: 4px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    var(--ink-sumi) 20%,
+    var(--ink-sumi) 80%,
+    transparent 100%
+  );
+  border-radius: 2px;
+}
+
+.theme-ink .layout-quote blockquote::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 60px;
+  height: 4px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    var(--ink-sumi) 20%,
+    var(--ink-sumi) 80%,
+    transparent 100%
+  );
+  border-radius: 2px;
+}
+
+.theme-ink .layout-quote blockquote p {
+  font-size: clamp(1.75rem, 3.5vw, 2.75rem);
+  font-style: italic;
+  line-height: 1.5;
+  color: var(--ink-sumi);
+  padding: 2rem 0;
+}
+
+.theme-ink .layout-quote p:not(blockquote p),
+.theme-ink .layout-quote cite {
+  font-style: normal;
+  font-size: 1.25rem;
+  color: var(--ink-vermillion);
+  letter-spacing: 0.1em;
+  margin-top: 1rem;
+}
+
+/* Two-column layout - asymmetric balance */
+.theme-ink .layout-two-column {
+  gap: 4rem;
+}
+
+.theme-ink .layout-two-column > *:first-child {
+  border-right: 2px solid var(--color-border);
+  padding-right: 3rem;
+}
+
+.theme-ink .layout-two-column h3 {
+  color: var(--ink-sumi);
+  margin-bottom: 1em;
+  font-size: 1.75rem;
+  letter-spacing: 0.03em;
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  .theme-ink {
+    --transition-duration: 0ms;
+    --fragment-duration: 0ms;
+  }
+}
