@@ -3,6 +3,8 @@ package tui
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -925,4 +927,65 @@ func (m *ImageGenModel) EnsureImagesDir() (string, error) {
 // IsCancelled returns true if the user cancelled the workflow.
 func (m *ImageGenModel) IsCancelled() bool {
 	return m == nil
+}
+
+// GenerateImageFilename creates a content-hashed filename for an image.
+// The filename format is "generated-{hash}.{ext}" where hash is the first 8
+// characters of the SHA256 hash of the image data.
+func GenerateImageFilename(imageData []byte, contentType string) string {
+	// Generate SHA256 hash of image data
+	hash := sha256.Sum256(imageData)
+	hashStr := hex.EncodeToString(hash[:])
+	shortHash := hashStr[:8] // First 8 characters
+
+	// Determine file extension from content type
+	ext := GetExtensionFromContentType(contentType)
+
+	return fmt.Sprintf("generated-%s.%s", shortHash, ext)
+}
+
+// GetExtensionFromContentType returns the file extension for a MIME content type.
+// Defaults to "png" if the content type is unknown.
+func GetExtensionFromContentType(contentType string) string {
+	switch contentType {
+	case "image/png":
+		return "png"
+	case "image/jpeg", "image/jpg":
+		return "jpg"
+	case "image/gif":
+		return "gif"
+	case "image/webp":
+		return "webp"
+	default:
+		return "png"
+	}
+}
+
+// SaveGeneratedImage saves the generated image to the images directory.
+// It returns the relative path to the saved image (e.g., "images/generated-a1b2c3d4.png").
+func (m *ImageGenModel) SaveGeneratedImage() (string, error) {
+	if m.GeneratedImage == nil {
+		return "", fmt.Errorf("no generated image to save")
+	}
+
+	// Ensure images directory exists
+	imagesDir, err := m.EnsureImagesDir()
+	if err != nil {
+		return "", fmt.Errorf("failed to ensure images directory: %w", err)
+	}
+
+	// Generate filename
+	filename := GenerateImageFilename(m.GeneratedImage.ImageData, m.GeneratedImage.ContentType)
+
+	// Full path for saving
+	fullPath := filepath.Join(imagesDir, filename)
+
+	// Write file
+	if err := os.WriteFile(fullPath, m.GeneratedImage.ImageData, 0644); err != nil {
+		return "", fmt.Errorf("failed to write image file: %w", err)
+	}
+
+	// Return relative path (images/filename)
+	relativePath := filepath.Join("images", filename)
+	return relativePath, nil
 }

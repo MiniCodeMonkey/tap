@@ -2407,3 +2407,375 @@ func TestImageGenModel_EnsureImagesDir_AbsolutePath(t *testing.T) {
 		t.Errorf("expected absolute path, got %q", resultDir)
 	}
 }
+
+// Tests for image saving (US-016)
+
+func TestGenerateImageFilename(t *testing.T) {
+	tests := []struct {
+		name           string
+		imageData      []byte
+		contentType    string
+		expectedExt    string
+		expectedPrefix string
+	}{
+		{
+			name:           "PNG image",
+			imageData:      []byte("fake png data"),
+			contentType:    "image/png",
+			expectedExt:    ".png",
+			expectedPrefix: "generated-",
+		},
+		{
+			name:           "JPEG image",
+			imageData:      []byte("fake jpeg data"),
+			contentType:    "image/jpeg",
+			expectedExt:    ".jpg",
+			expectedPrefix: "generated-",
+		},
+		{
+			name:           "JPG content type",
+			imageData:      []byte("fake jpg data"),
+			contentType:    "image/jpg",
+			expectedExt:    ".jpg",
+			expectedPrefix: "generated-",
+		},
+		{
+			name:           "GIF image",
+			imageData:      []byte("fake gif data"),
+			contentType:    "image/gif",
+			expectedExt:    ".gif",
+			expectedPrefix: "generated-",
+		},
+		{
+			name:           "WebP image",
+			imageData:      []byte("fake webp data"),
+			contentType:    "image/webp",
+			expectedExt:    ".webp",
+			expectedPrefix: "generated-",
+		},
+		{
+			name:           "Unknown content type defaults to PNG",
+			imageData:      []byte("unknown data"),
+			contentType:    "application/octet-stream",
+			expectedExt:    ".png",
+			expectedPrefix: "generated-",
+		},
+		{
+			name:           "Empty content type defaults to PNG",
+			imageData:      []byte("empty type data"),
+			contentType:    "",
+			expectedExt:    ".png",
+			expectedPrefix: "generated-",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			filename := GenerateImageFilename(tt.imageData, tt.contentType)
+
+			// Check prefix
+			if !strings.HasPrefix(filename, tt.expectedPrefix) {
+				t.Errorf("expected filename to start with %q, got %q", tt.expectedPrefix, filename)
+			}
+
+			// Check extension
+			if !strings.HasSuffix(filename, tt.expectedExt) {
+				t.Errorf("expected filename to end with %q, got %q", tt.expectedExt, filename)
+			}
+
+			// Check hash length (8 characters)
+			// Format is "generated-{8 chars}.{ext}"
+			hashStart := len("generated-")
+			hashEnd := strings.LastIndex(filename, ".")
+			if hashEnd-hashStart != 8 {
+				t.Errorf("expected 8-character hash, got %d characters", hashEnd-hashStart)
+			}
+
+			// Check hash is valid hex
+			hash := filename[hashStart:hashEnd]
+			for _, c := range hash {
+				if (c < '0' || c > '9') && (c < 'a' || c > 'f') {
+					t.Errorf("hash contains invalid hex character: %c", c)
+				}
+			}
+		})
+	}
+}
+
+func TestGenerateImageFilename_DifferentDataDifferentHash(t *testing.T) {
+	data1 := []byte("first image data")
+	data2 := []byte("second image data")
+
+	filename1 := GenerateImageFilename(data1, "image/png")
+	filename2 := GenerateImageFilename(data2, "image/png")
+
+	if filename1 == filename2 {
+		t.Error("different data should produce different filenames")
+	}
+}
+
+func TestGenerateImageFilename_SameDataSameHash(t *testing.T) {
+	data := []byte("identical image data")
+
+	filename1 := GenerateImageFilename(data, "image/png")
+	filename2 := GenerateImageFilename(data, "image/png")
+
+	if filename1 != filename2 {
+		t.Errorf("same data should produce same filename: %q != %q", filename1, filename2)
+	}
+}
+
+func TestGetExtensionFromContentType(t *testing.T) {
+	tests := []struct {
+		contentType string
+		expected    string
+	}{
+		{"image/png", "png"},
+		{"image/jpeg", "jpg"},
+		{"image/jpg", "jpg"},
+		{"image/gif", "gif"},
+		{"image/webp", "webp"},
+		{"application/octet-stream", "png"},
+		{"", "png"},
+		{"text/html", "png"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.contentType, func(t *testing.T) {
+			result := GetExtensionFromContentType(tt.contentType)
+			if result != tt.expected {
+				t.Errorf("expected %q, got %q", tt.expected, result)
+			}
+		})
+	}
+}
+
+func TestImageGenModel_SaveGeneratedImage(t *testing.T) {
+	tmpDir := t.TempDir()
+	mdFile := filepath.Join(tmpDir, "slides.md")
+
+	content := `# Test Slide`
+	if err := os.WriteFile(mdFile, []byte(content), 0644); err != nil {
+		t.Fatalf("failed to write test file: %v", err)
+	}
+
+	model, err := NewImageGenModel(mdFile)
+	if err != nil {
+		t.Fatalf("failed to create model: %v", err)
+	}
+
+	// Set up generated image
+	imageData := []byte("fake PNG image data for testing")
+	model.GeneratedImage = &ImageGenerateResult{
+		ImageData:   imageData,
+		ContentType: "image/png",
+	}
+
+	// Save the image
+	relativePath, err := model.SaveGeneratedImage()
+	if err != nil {
+		t.Fatalf("SaveGeneratedImage failed: %v", err)
+	}
+
+	// Check relative path format
+	if !strings.HasPrefix(relativePath, "images/") {
+		t.Errorf("expected relative path to start with 'images/', got %q", relativePath)
+	}
+	if !strings.HasSuffix(relativePath, ".png") {
+		t.Errorf("expected relative path to end with '.png', got %q", relativePath)
+	}
+
+	// Check file was created
+	fullPath := filepath.Join(tmpDir, relativePath)
+	savedData, err := os.ReadFile(fullPath)
+	if err != nil {
+		t.Fatalf("failed to read saved file: %v", err)
+	}
+
+	// Check file content matches
+	if string(savedData) != string(imageData) {
+		t.Error("saved file content does not match original image data")
+	}
+}
+
+func TestImageGenModel_SaveGeneratedImage_JPEG(t *testing.T) {
+	tmpDir := t.TempDir()
+	mdFile := filepath.Join(tmpDir, "slides.md")
+
+	content := `# Test Slide`
+	if err := os.WriteFile(mdFile, []byte(content), 0644); err != nil {
+		t.Fatalf("failed to write test file: %v", err)
+	}
+
+	model, err := NewImageGenModel(mdFile)
+	if err != nil {
+		t.Fatalf("failed to create model: %v", err)
+	}
+
+	// Set up generated JPEG image
+	model.GeneratedImage = &ImageGenerateResult{
+		ImageData:   []byte("fake JPEG image data"),
+		ContentType: "image/jpeg",
+	}
+
+	// Save the image
+	relativePath, err := model.SaveGeneratedImage()
+	if err != nil {
+		t.Fatalf("SaveGeneratedImage failed: %v", err)
+	}
+
+	// Check extension is jpg
+	if !strings.HasSuffix(relativePath, ".jpg") {
+		t.Errorf("expected relative path to end with '.jpg', got %q", relativePath)
+	}
+}
+
+func TestImageGenModel_SaveGeneratedImage_NoGeneratedImage(t *testing.T) {
+	tmpDir := t.TempDir()
+	mdFile := filepath.Join(tmpDir, "slides.md")
+
+	content := `# Test Slide`
+	if err := os.WriteFile(mdFile, []byte(content), 0644); err != nil {
+		t.Fatalf("failed to write test file: %v", err)
+	}
+
+	model, err := NewImageGenModel(mdFile)
+	if err != nil {
+		t.Fatalf("failed to create model: %v", err)
+	}
+
+	// Don't set GeneratedImage (should be nil)
+
+	// Try to save - should fail
+	_, err = model.SaveGeneratedImage()
+	if err == nil {
+		t.Error("SaveGeneratedImage should fail when GeneratedImage is nil")
+	}
+	if !strings.Contains(err.Error(), "no generated image") {
+		t.Errorf("error should mention 'no generated image', got: %v", err)
+	}
+}
+
+func TestImageGenModel_SaveGeneratedImage_CreatesImagesDirectory(t *testing.T) {
+	tmpDir := t.TempDir()
+	mdFile := filepath.Join(tmpDir, "slides.md")
+
+	content := `# Test Slide`
+	if err := os.WriteFile(mdFile, []byte(content), 0644); err != nil {
+		t.Fatalf("failed to write test file: %v", err)
+	}
+
+	model, err := NewImageGenModel(mdFile)
+	if err != nil {
+		t.Fatalf("failed to create model: %v", err)
+	}
+
+	// Verify images dir doesn't exist
+	imagesDir := filepath.Join(tmpDir, "images")
+	if _, err := os.Stat(imagesDir); err == nil {
+		t.Fatal("images directory should not exist yet")
+	}
+
+	// Set up generated image
+	model.GeneratedImage = &ImageGenerateResult{
+		ImageData:   []byte("test image data"),
+		ContentType: "image/png",
+	}
+
+	// Save the image
+	_, err = model.SaveGeneratedImage()
+	if err != nil {
+		t.Fatalf("SaveGeneratedImage failed: %v", err)
+	}
+
+	// Verify images directory was created
+	info, err := os.Stat(imagesDir)
+	if err != nil {
+		t.Fatalf("images directory should exist: %v", err)
+	}
+	if !info.IsDir() {
+		t.Error("images should be a directory")
+	}
+}
+
+func TestImageGenModel_SaveGeneratedImage_FilePermissions(t *testing.T) {
+	tmpDir := t.TempDir()
+	mdFile := filepath.Join(tmpDir, "slides.md")
+
+	content := `# Test Slide`
+	if err := os.WriteFile(mdFile, []byte(content), 0644); err != nil {
+		t.Fatalf("failed to write test file: %v", err)
+	}
+
+	model, err := NewImageGenModel(mdFile)
+	if err != nil {
+		t.Fatalf("failed to create model: %v", err)
+	}
+
+	model.GeneratedImage = &ImageGenerateResult{
+		ImageData:   []byte("test image data"),
+		ContentType: "image/png",
+	}
+
+	relativePath, err := model.SaveGeneratedImage()
+	if err != nil {
+		t.Fatalf("SaveGeneratedImage failed: %v", err)
+	}
+
+	// Check file permissions (0644)
+	fullPath := filepath.Join(tmpDir, relativePath)
+	info, err := os.Stat(fullPath)
+	if err != nil {
+		t.Fatalf("failed to stat file: %v", err)
+	}
+
+	// Check file is readable
+	perm := info.Mode().Perm()
+	if perm&0400 == 0 {
+		t.Error("file should be readable by owner")
+	}
+	if perm&0200 == 0 {
+		t.Error("file should be writable by owner")
+	}
+}
+
+func TestImageGenModel_SaveGeneratedImage_ReturnsRelativePath(t *testing.T) {
+	tmpDir := t.TempDir()
+	mdFile := filepath.Join(tmpDir, "slides.md")
+
+	content := `# Test Slide`
+	if err := os.WriteFile(mdFile, []byte(content), 0644); err != nil {
+		t.Fatalf("failed to write test file: %v", err)
+	}
+
+	model, err := NewImageGenModel(mdFile)
+	if err != nil {
+		t.Fatalf("failed to create model: %v", err)
+	}
+
+	model.GeneratedImage = &ImageGenerateResult{
+		ImageData:   []byte("test image data"),
+		ContentType: "image/png",
+	}
+
+	relativePath, err := model.SaveGeneratedImage()
+	if err != nil {
+		t.Fatalf("SaveGeneratedImage failed: %v", err)
+	}
+
+	// Path should be relative (not absolute)
+	if filepath.IsAbs(relativePath) {
+		t.Errorf("expected relative path, got absolute path: %q", relativePath)
+	}
+
+	// Path should start with "images/"
+	if !strings.HasPrefix(relativePath, "images/") {
+		t.Errorf("expected path to start with 'images/', got: %q", relativePath)
+	}
+
+	// Filename should start with "generated-"
+	filename := filepath.Base(relativePath)
+	if !strings.HasPrefix(filename, "generated-") {
+		t.Errorf("expected filename to start with 'generated-', got: %q", filename)
+	}
+}
