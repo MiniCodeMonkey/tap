@@ -22,6 +22,8 @@ The theme applies to all slides in your presentation.
 
 ### Paper
 
+![Paper theme preview](/images/themes/theme-paper.png)
+
 Ultra-clean and premium, like a fresh sheet of premium paper where content takes center stage.
 
 ```yaml
@@ -40,6 +42,8 @@ theme: paper
 - Smooth 400ms ease-out transitions
 
 ### Noir
+
+![Noir theme preview](/images/themes/theme-noir.png)
 
 Cinematic and sophisticated, drawing from film noir elegance with deep blacks and gold accents.
 
@@ -60,6 +64,8 @@ theme: noir
 
 ### Aurora
 
+![Aurora theme preview](/images/themes/theme-aurora.png)
+
 Vibrant and dynamic like the northern lights, with animated gradient mesh and glassmorphism effects.
 
 ```yaml
@@ -78,6 +84,8 @@ theme: aurora
 - Mesmerizing 20s gradient mesh animation
 
 ### Phosphor
+
+![Phosphor theme preview](/images/themes/theme-phosphor.png)
 
 Authentic CRT monitor aesthetic with glowing phosphor green text, scanlines, and retro-futuristic hacker vibes.
 
@@ -99,6 +107,8 @@ theme: phosphor
 
 ### Poster
 
+![Poster theme preview](/images/themes/theme-poster.png)
+
 Bold graphic design with giant typography, thick borders, and high contrast that's impossible to ignore.
 
 ```yaml
@@ -118,6 +128,8 @@ theme: poster
 - Inverted code blocks (white on black)
 
 ### Ink
+
+![Ink theme preview](/images/themes/theme-ink.png)
 
 Japanese calligraphy-inspired zen minimalism with brush stroke aesthetics and washi paper texture.
 
@@ -139,6 +151,8 @@ theme: ink
 
 ### Manuscript
 
+![Manuscript theme preview](/images/themes/theme-manuscript.png)
+
 Medieval illuminated manuscript aesthetic with aged parchment, ornate flourishes, and gold accents.
 
 ```yaml
@@ -158,6 +172,8 @@ theme: manuscript
 - Aged paper texture effect
 
 ### Deco
+
+![Deco theme preview](/images/themes/theme-deco.png)
 
 Art Deco glamour from the 1920s with geometric luxury, gold accents, and sunburst patterns.
 
@@ -179,6 +195,8 @@ theme: deco
 
 ### Stained Glass
 
+![Stained Glass theme preview](/images/themes/theme-stained-glass.png)
+
 Gothic cathedral aesthetic with jewel tones, gold leading lines, and luminous glow effects.
 
 ```yaml
@@ -198,6 +216,8 @@ theme: stained-glass
 - Rose window decorative effects
 
 ### Bauhaus
+
+![Bauhaus theme preview](/images/themes/theme-bauhaus.png)
 
 Geometric modernism with bold primary colors and constructivist design principles.
 
@@ -219,6 +239,8 @@ theme: bauhaus
 
 ### Watercolor
 
+![Watercolor theme preview](/images/themes/theme-watercolor.png)
+
 Soft, organic, hand-painted aesthetic with gentle color washes and artistic flowing edges.
 
 ```yaml
@@ -238,6 +260,8 @@ theme: watercolor
 - Organic color transitions
 
 ### Comic
+
+![Comic theme preview](/images/themes/theme-comic.png)
 
 Pop art comic book aesthetic with halftone dots, bold outlines, and speech bubble styling.
 
@@ -259,6 +283,8 @@ theme: comic
 
 ### Blueprint
 
+![Blueprint theme preview](/images/themes/theme-blueprint.png)
+
 Technical architectural drawing aesthetic with grid lines, dimension markers, and engineering precision.
 
 ```yaml
@@ -278,6 +304,8 @@ theme: blueprint
 - Technical annotation callouts
 
 ### Editorial
+
+![Editorial theme preview](/images/themes/theme-editorial.png)
 
 Classic magazine publishing design with elegant typography and sophisticated layout.
 
@@ -299,6 +327,8 @@ theme: editorial
 
 ### Synthwave
 
+![Synthwave theme preview](/images/themes/theme-synthwave.png)
+
 Neon 80s retro-futurism with glowing colors, chrome effects, and perspective grid horizons.
 
 ```yaml
@@ -318,6 +348,8 @@ theme: synthwave
 - Chrome metallic text effects
 
 ### Safari
+
+![Safari theme preview](/images/themes/theme-safari.png)
 
 Victorian exploration aesthetic with aged parchment, compass motifs, and expedition journal styling.
 
@@ -339,6 +371,8 @@ theme: safari
 
 ### Botanical
 
+![Botanical theme preview](/images/themes/theme-botanical.png)
+
 Victorian scientific illustration aesthetic with specimen labels and naturalist elegance.
 
 ```yaml
@@ -358,6 +392,8 @@ theme: botanical
 - Botanical flourish decorations
 
 ### Cyber
+
+![Cyber theme preview](/images/themes/theme-cyber.png)
 
 Cyberpunk dystopian tech aesthetic with glitch effects, scan lines, and angular UI elements.
 
@@ -379,6 +415,8 @@ theme: cyber
 
 ### Origami
 
+![Origami theme preview](/images/themes/theme-origami.png)
+
 Clean paper craft aesthetic with folded paper effects, subtle shadows, and geometric precision.
 
 ```yaml
@@ -398,6 +436,8 @@ theme: origami
 - Clean angles and geometric precision
 
 ### Chalkboard
+
+![Chalkboard theme preview](/images/themes/theme-chalkboard.png)
 
 Friendly classroom aesthetic with chalk typography, dusty texture, and hand-drawn borders.
 
