@@ -128,3 +128,48 @@ jobs:
             dist/checksums.txt
           draft: false
           prerelease: ${{ contains(github.event.inputs.version, '-') }}
+
+      # Update Homebrew tap (skip for pre-releases)
+      - name: Update Homebrew formula
+        if: ${{ !contains(github.event.inputs.version, '-') && secrets.HOMEBREW_TAP_TOKEN != '' }}
+        env:
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          HOMEBREW_TAP_REPO: ${{ vars.HOMEBREW_TAP_REPO || 'tap-slides/homebrew-tap' }}
+        run: |
+          # Calculate SHA256 for each binary
+          SHA256_DARWIN_AMD64=$(sha256sum dist/tap-darwin-amd64 | cut -d ' ' -f 1)
+          SHA256_DARWIN_ARM64=$(sha256sum dist/tap-darwin-arm64 | cut -d ' ' -f 1)
+          SHA256_LINUX_AMD64=$(sha256sum dist/tap-linux-amd64 | cut -d ' ' -f 1)
+          SHA256_LINUX_ARM64=$(sha256sum dist/tap-linux-arm64 | cut -d ' ' -f 1)
+
+          echo "SHA256 checksums:"
+          echo "  darwin-amd64: $SHA256_DARWIN_AMD64"
+          echo "  darwin-arm64: $SHA256_DARWIN_ARM64"
+          echo "  linux-amd64:  $SHA256_LINUX_AMD64"
+          echo "  linux-arm64:  $SHA256_LINUX_ARM64"
+
+          # Clone the homebrew tap repo
+          git clone "https://x-access-token:${HOMEBREW_TAP_TOKEN}@github.com/${HOMEBREW_TAP_REPO}.git" homebrew-tap
+          cd homebrew-tap
+
+          # Update the formula
+          sed -i "s/version \".*\"/version \"${{ env.VERSION }}\"/" Formula/tap.rb
+          sed -i "s/vVERSION_PLACEHOLDER/v${{ env.VERSION }}/g" Formula/tap.rb
+          sed -i "s/VERSION_PLACEHOLDER/${{ env.VERSION }}/g" Formula/tap.rb
+          sed -i "s/SHA256_DARWIN_AMD64_PLACEHOLDER/$SHA256_DARWIN_AMD64/" Formula/tap.rb
+          sed -i "s/SHA256_DARWIN_ARM64_PLACEHOLDER/$SHA256_DARWIN_ARM64/" Formula/tap.rb
+          sed -i "s/SHA256_LINUX_AMD64_PLACEHOLDER/$SHA256_LINUX_AMD64/" Formula/tap.rb
+          sed -i "s/SHA256_LINUX_ARM64_PLACEHOLDER/$SHA256_LINUX_ARM64/" Formula/tap.rb
+
+          # Also handle already-versioned formulas (update existing version)
+          sed -i "s|/releases/download/v[0-9.]*-*[a-zA-Z0-9.]*/|/releases/download/v${{ env.VERSION }}/|g" Formula/tap.rb
+
+          echo "Updated formula:"
+          cat Formula/tap.rb
+
+          # Commit and push
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Formula/tap.rb
+          git commit -m "Update tap to ${{ env.VERSION }}"
+          git push
