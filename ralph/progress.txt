@@ -1,20 +1,345 @@
 # Ralph Progress Log
-Started: Sat Jan 25 2026
----
+Started: Sun Jan 25 14:30:25 CET 2026
 
 ## Codebase Patterns
-- Frontend is Svelte 5 + TypeScript + Vite, located in `/frontend`
-- Utility modules go in `frontend/src/lib/utils/`
-- Tests use Vitest with `vi.mock()` for mocking, file pattern: `*.test.ts`
-- Path alias `$lib` maps to `src/lib`
-- Build output goes to `/embedded/dist` for Go embedding
-- Typecheck command: `npm run check` (runs svelte-check + tsc)
-- Go backend packages go in `internal/` directory
-- Go tests use `*_test.go` pattern, run with `go test ./...`
-- Themes are CSS files in `frontend/src/lib/themes/`
-- Layouts are in `frontend/src/lib/styles/layouts.css`
-- Example presentations are in `examples/` folder
-- tap dev --headless runs server without TUI
+- Playwright is already installed in frontend/package.json (@playwright/test ^1.58.0)
+- Existing e2e tests in frontend/e2e/ use frontend/playwright.config.ts
+- Visual tests use separate config: frontend/playwright.visual.config.ts
+- Run visual tests with: `npm run test:visual` in frontend/
+- Test command uses: `playwright test --config=playwright.visual.config.ts`
+- Visual test timeout is 10 minutes (600000ms) to handle all 8 templates
+- Screenshots organized by template: `tests/visual/screenshots/{templateName}/`
+- Gallery report generated at: `tests/visual/gallery/index.html`
+- Network errors (net::ERR_*) are logged as warnings, not failures
+- Core layout styles in `frontend/src/lib/styles/layouts.css` - themes override via `.theme-{name} .layout-{type}`
+- Use CSS custom property fallbacks for theme-customizable values: `var(--theme-var, default-value)`
 
 ---
 
+## 2026-01-25 ~14:32 - US-001
+- Installed Playwright and created test directory structure
+- Files changed:
+  - frontend/package.json (added test:visual script)
+  - frontend/playwright.visual.config.ts (new - 1920x1080 viewport, chromium only)
+  - frontend/tests/visual/.gitkeep (new directory)
+  - frontend/tests/visual/screenshots/.gitkeep (new directory)
+- **Learnings for future iterations:**
+  - Playwright was already installed as a dev dependency
+  - Created separate config file (playwright.visual.config.ts) to avoid conflicts with existing e2e tests
+  - The project has existing e2e tests in frontend/e2e/ with their own playwright.config.ts
+  - Visual tests will be in frontend/tests/visual/
+- Tap binary supports `--headless` flag for headless mode (useful for CI/testing)
+- Rebuild tap binary from cmd/tap: `go build -o tap ./cmd/tap`
+- Playwright browsers may need installation: `npx playwright install chromium`
+---
+
+## 2026-01-25 ~14:37 - US-002
+- Created basic Playwright test that starts tap dev and captures screenshot
+- Files changed:
+  - frontend/tests/visual/basic.spec.ts (new - basic test for screenshots)
+- **Learnings for future iterations:**
+  - Test uses ESM modules, so use `fileURLToPath(import.meta.url)` for `__dirname` equivalent
+  - Dynamic port allocation (4000-5000 range) avoids conflicts
+  - `waitForServer()` polls until HTTP 200 before running test
+  - Project root is 3 levels up from tests/visual/ directory
+  - Screenshot path: `tests/visual/screenshots/` (same dir as test)
+  - Always clean up test artifacts (screenshots) before committing, they should be regenerated
+---
+
+## 2026-01-25 ~14:41 - US-003
+- Implemented slide navigation and multi-slide screenshot capture
+- Files changed:
+  - frontend/tests/visual/basic.spec.ts (updated - added slide navigation and multi-screenshot capture)
+- **Learnings for future iterations:**
+  - `/api/presentation` returns JSON with `slides` array containing all slide data
+  - Each slide has `fragments` array for incremental reveal support (useful for US-004)
+  - Use `page.keyboard.press('ArrowRight')` to navigate to next slide
+  - Screenshot naming convention: `{template}-slide-{number}.png`
+  - The test runs via `npm run check` (not `npm run typecheck`) for type checking
+  - Basic template currently has 11 slides - test correctly handles varying counts
+---
+
+## 2026-01-25 ~14:44 - US-004
+- Added fragment state screenshot capture
+- Files changed:
+  - frontend/tests/visual/basic.spec.ts (updated - added fragment detection and screenshot capture)
+- **Learnings for future iterations:**
+  - `TransformedFragment` type has `content: string` and `index: number` fields
+  - Fragment count from API tells how many ArrowRight presses before moving to next slide
+  - Fragment screenshot naming: `{template}-slide-{number}-frag-{index}.png`
+  - Final fragment state captured as main slide screenshot `{template}-slide-{number}.png`
+  - Slide 5 in basic.md has 4 fragments (from 3 `<!-- pause -->` markers), demonstrating multi-fragment handling
+  - Each slide with fragments: capture frag-0, press ArrowRight, capture frag-1, ..., press ArrowRight after last frag goes to next slide
+---
+
+## 2026-01-25 ~15:00 - US-005
+- Added console error detection and reporting
+- Files changed:
+  - frontend/tests/visual/basic.spec.ts (updated - added error detection via page.on listeners)
+- **Learnings for future iterations:**
+  - Use `page.on('console', msg => { if (msg.type() === 'error') ... })` to capture console.error calls
+  - Use `page.on('pageerror', error => ...)` to capture uncaught exceptions/page errors
+  - Track current slide number as a module-level variable to associate errors with slides
+  - CapturedError interface: `{ templateName, slideNumber, errorType, message, timestamp }`
+  - Print error summary at end of test run for visibility
+  - Use `expect(capturedErrors.length).toBe(0)` with custom message to fail test if errors found
+---
+
+## 2026-01-25 ~15:05 - US-006
+- Created test runner that iterates all example templates
+- Files changed:
+  - frontend/tests/visual/basic.spec.ts (refactored - now iterates all templates)
+  - frontend/playwright.visual.config.ts (increased timeout to 10 minutes)
+- **Learnings for future iterations:**
+  - Use `readdirSync(examplesDir).filter(f => f.endsWith('.md'))` to discover templates
+  - Use incremental port allocation (4000, 4001, 4002...) for unique ports per template
+  - Screenshots organized in subdirectories: `screenshots/{templateName}/{templateName}-slide-{n}.png`
+  - TemplateResult interface tracks: success, slideCount, fragmentCount, screenshotCount, errorCount
+  - printSummary() function outputs formatted summary at end of test run
+  - Filter network errors (`net::ERR_*`, `Failed to load resource`) as non-critical warnings
+  - Test timeout needs to be ~10 minutes for 8 templates (each takes ~60-90 seconds)
+  - Clean up event listeners after each template to prevent memory leaks
+---
+
+## 2026-01-25 ~15:30 - US-007
+- Generated HTML gallery report after visual tests complete
+- Files changed:
+  - frontend/tests/visual/basic.spec.ts (added generateGalleryReport function and supporting utilities)
+  - frontend/tests/visual/gallery/.gitkeep (new directory)
+  - .gitignore (added patterns for visual test outputs)
+- **Learnings for future iterations:**
+  - Gallery output location: `tests/visual/gallery/index.html`
+  - Gallery uses relative paths to screenshots: `../screenshots/{templateName}/{filename}`
+  - ScreenshotInfo interface tracks: filename, relativePath, slideNumber, fragmentIndex
+  - `discoverScreenshots()` parses filenames to extract slide/fragment metadata
+  - Gallery features: dark theme, responsive grid, nav links, error highlighting, summary stats
+  - Screenshots and generated HTML are gitignored (regenerated on each run)
+  - `escapeHtml()` utility sanitizes error messages for safe HTML display
+---
+
+## 2026-01-25 ~15:45 - US-008
+- Improved Paper theme typography and spacing for polished look
+- Files changed:
+  - frontend/src/lib/themes/paper.css (comprehensive refinements)
+- **Changes made:**
+  - Typography: tighter letter-spacing (-0.025em to -0.03em for headings), comfortable 1.6 line-height
+  - Colors: warmer muted color (#64748b), softer code background (#1e1e2e)
+  - Code blocks: subtle blue-tinted background for inline code, 12px border-radius for pre blocks
+  - Lists: improved bullet styling with accent color markers, nested list support
+  - Tables: subtle accent-tinted headers, hover states, better padding
+  - Layout-specific overrides for title, section, big-stat, and quote layouts
+- **Learnings for future iterations:**
+  - Theme CSS files are in `frontend/src/lib/themes/`
+  - Themes can override layout styles with `.theme-{name} .layout-{type}` selectors
+  - Use CSS variables for consistency (--color-accent, --font-sans, etc.)
+  - Inline code styling should complement the theme's accent color
+  - Run `npm run test:visual` to verify theme changes across all templates
+  - Visual tests generate screenshots to `tests/visual/screenshots/{templateName}/`
+---
+
+## 2026-01-25 ~16:00 - US-009
+- Improved Noir theme depth and elegance with cinematic styling
+- Files changed:
+  - frontend/src/lib/themes/noir.css (comprehensive refinements)
+- **Changes made:**
+  - Background: multi-layer radial gradients with subtle gold tint at bottom-right corner
+  - Gold accent refined from #d4af37 to #c9a227 (slightly deeper, more elegant)
+  - Added gold variations: --noir-gold-light, --noir-gold-glow for hover states and glows
+  - Typography: text shadows on headings and body text for cinematic depth
+  - Code blocks: gradient background, gold-tinted inline code, layered shadows with subtle gold glow
+  - Vignette: refined ellipse shape with better depth progression (40% transparent → 70% → 100%)
+  - Lists: diamond markers (◆) with muted gold color
+  - Blockquotes: softer gold gradient with inner shadow for depth
+  - Tables: gradient header background, gold uppercase headers, subtle hover states
+  - Layout-specific styles for title, section, big-stat, and quote layouts
+- **Learnings for future iterations:**
+  - Use multi-layer radial gradients for rich background depth without being overwhelming
+  - Gold accents work best at lower opacity (0.15-0.4) for elegance, not overwhelming
+  - Text shadows add cinematic depth but should be subtle (rgba with 0.3-0.4 opacity)
+  - Custom list markers via `::marker { content: '◆ '; }` add theme personality
+  - Layout-specific overrides allow dramatic styling for special slide types
+---
+
+## 2026-01-25 ~16:20 - US-010
+- Improved Aurora theme with beautiful gradients and modern glassmorphism
+- Files changed:
+  - frontend/src/lib/themes/aurora.css (comprehensive refinements)
+- **Changes made:**
+  - Background: Multi-layer animated gradient mesh with radial glow overlays, slower 30s animation
+  - Added `::before` pseudo-element for subtle aurora shimmer light bands
+  - New CSS variables: --aurora-violet, --aurora-pink, glass effect variables (--glass-bg, --glass-border, --glass-highlight)
+  - Typography: Multi-layer text shadows for readability (cyan glow + purple glow + dark shadow)
+  - Code blocks: Gradient background with cyan/purple tint, enhanced glassmorphism with 24px blur
+  - Inline code: Gradient background with cyan-to-purple, soft cyan text color
+  - Blockquotes: Gradient border (cyan → violet), enhanced glass effect with multi-layer shadows
+  - Tables: Uppercase cyan headers with glow, gradient header background, hover states
+  - Lists: Enhanced markers with cyan glow effect
+  - Images: Larger border-radius (16px), cyan/purple glow shadows
+  - Fragments: Added blur(4px) to hidden state for smoother reveal effect
+  - Layout-specific styles: Title with gradient text (white → cyan → violet), section with gradient text, quote with rounded glass card, big-stat with dramatic cyan-to-teal gradient
+- **Learnings for future iterations:**
+  - Multi-layer backgrounds (radial + radial + linear) create depth without overwhelming
+  - Pseudo-elements (::before) work well for animated overlay effects
+  - `filter: drop-shadow()` works better than text-shadow for gradient text
+  - `background-clip: text` with `-webkit-text-fill-color: transparent` creates gradient text
+  - Use longer animation durations (30s) for subtle, non-distracting movement
+  - Fragment blur effect (blur(4px) → blur(0)) adds polish to reveal transitions
+---
+
+## 2026-01-25 ~16:45 - US-011
+- Improved Phosphor theme with authentic but comfortable CRT aesthetics
+- Files changed:
+  - frontend/src/lib/themes/phosphor.css (comprehensive refinements)
+- **Changes made:**
+  - Color: Changed phosphor green from #00ff00 to #39ff14 (P3 phosphor) - easier on eyes
+  - Added new CSS variables: --phosphor-bright, --phosphor-medium, --phosphor-dim, --phosphor-dark, --phosphor-glow-soft
+  - Background: Changed from pure black (#000000) to #050505 for softer contrast
+  - Error color: Changed from harsh red (#ff3333) to amber (#ffaa00) for terminal authenticity
+  - Scanlines: Finer 1px/2px pattern instead of 2px/4px, with subtle drift animation
+  - Vignette: Multi-layer radial gradients for CRT curvature feel
+  - Typography: Improved letter-spacing (0.03em body, 0.08-0.12em headings), increased line-height (1.6-1.7)
+  - Text glow: Added --phosphor-glow-soft for subtle outer spread, refined glow layers
+  - Code blocks: Added terminal window aesthetic with subtle dark tint, border-top highlight, inner shadow
+  - Inline code: Added subtle bracket borders for distinction
+  - Blockquotes: Styled as /* */ comment blocks with ::before/::after
+  - Lists: Shell prompt style (>) markers, dimmed ordered list numbers
+  - Tables: Hover states, gradient-like header styling
+  - Links: Dashed underline that solidifies on hover
+  - HR: Dashed line style instead of solid
+  - Layout overrides: Title (dramatic glow), section (chapter style), big-stat (8rem with intense glow), quote (comment block style)
+- **Learnings for future iterations:**
+  - P3 phosphor green (#39ff14) is more comfortable than pure #00ff00 while staying authentic
+  - Multiple glow layers (glow-1, glow-2, glow-3, glow-soft) create depth hierarchy
+  - Amber (#ffaa00) errors feel more terminal-authentic than red
+  - Background #050505 instead of #000000 provides subtle warmth without losing darkness
+  - Scanline drift animation (8s) adds subtle life without being distracting
+  - Terminal comment syntax (/* */) makes blockquotes feel native
+  - Layout-specific overrides are essential for CRT themes to handle different slide types appropriately
+---
+
+## 2026-01-25 ~16:00 - US-012
+- Improved Poster theme with bold, impactful design for maximum visual presence
+- Files changed:
+  - frontend/src/lib/themes/poster.css (comprehensive redesign)
+- **Changes made:**
+  - Typography: Bold 900 weight, uppercase text-transform, dramatic text shadows (6px offset)
+  - Colors: High contrast palette - #ff4d4d red accent, #ffcc00 yellow, pure white (#ffffff) and black (#0a0a0a)
+  - New CSS variables: --poster-border-thick (4px), --poster-shadow-offset (6px), --poster-red, --poster-yellow, --poster-cyan
+  - Borders: 4px thick with box-shadow offset (no rounded corners - sharp rectangular aesthetic)
+  - Code blocks: Pure black background, 8px red accent bar on left, white border with offset shadow
+  - Tables: Red (#ff4d4d) header background with black text, thick grid borders, zebra striping, hover states
+  - Lists: Custom square markers (■) with red color, bold list item styling
+  - Blockquotes: Bordered box with offset shadow, decorative quote marks, red left accent
+  - Images: Thick white border with offset shadow
+  - HR: 6px thick white bar with red accent block on left
+  - Links: 3px underline thickness, yellow on hover
+  - Fragments: Horizontal slide-in animation (translateX) instead of vertical
+  - Layout-specific overrides:
+    - Title: 9rem, gradient text shadow (red), letter-spacing 0.1em
+    - Section: 5rem red heading with offset shadow
+    - Big-stat: 14rem number with dramatic offset shadows
+    - Quote: Clean design with 8px red border, 4rem bold text
+    - Default/Two-column: Enhanced heading sizes and accent colors
+  - Mermaid diagrams: High contrast styling with thick strokes and red edges
+- **Learnings for future iterations:**
+  - Offset box-shadows (6px 6px 0) create bold poster-style depth without softness
+  - Uppercase text with wide letter-spacing (0.05-0.1em) reinforces bold aesthetic
+  - Pure black (#0a0a0a) and white (#ffffff) maximize contrast for poster impact
+  - Sharp corners (border-radius: 0) are essential for authentic poster style
+  - Red/yellow/cyan color palette provides vibrancy while remaining harmonious
+  - Custom list markers (■, ▸) via ::before pseudo-element add theme personality
+  - Text shadows with solid offset (not blur) create graphic design poster feel
+---
+
+## 2026-01-25 ~17:15 - US-013
+- Improved core layouts.css typography hierarchy for better defaults across all themes
+- Files changed:
+  - frontend/src/lib/styles/layouts.css (typography and blockquote refinements)
+- **Changes made:**
+  - Title layout: tighter letter-spacing (-0.025em vs -0.03em), added text-wrap: balance for better line breaks
+  - Title h2: lighter font-weight (500 vs 600) for subtitle contrast, increased line-height to 1.25
+  - Section headers: line-height 1.1, text-wrap: balance, max-width 75% for p tags
+  - Default layout: h1 font-weight increased to 700, letter-spacing -0.02em, text-wrap: balance
+  - Body text: line-height increased to 1.6 across default and section layouts for comfortable reading
+  - List items: increased margin-bottom to 0.6em for better vertical rhythm
+  - Code blocks: unified line-height (1.65), consistent border-radius (10-12px for pre, 5px for inline)
+  - Inline code: added --color-code-inline-bg CSS variable support with fallback
+  - Blockquotes: improved default layout with attribution styling for last paragraph
+  - Quote layout: attribution aligned with blockquote content, em-dash prefix with accent color
+- **Learnings for future iterations:**
+  - `text-wrap: balance` is excellent for headings - prevents awkward single-word orphans
+  - Core layouts.css provides base styles that themes can override via `.theme-{name} .layout-{type}` selectors
+  - Line-height 1.6 is optimal for body text readability at presentation scale
+  - Using CSS custom property fallbacks (e.g., `var(--color-code-inline-bg, rgba(...))`) allows themes to override while maintaining defaults
+  - Blockquote attribution can be styled via `:last-of-type:not(:only-child)` to target only when multiple paragraphs exist
+---
+
+## 2026-01-25 ~17:45 - US-014
+- Improved core layouts.css spacing and visual rhythm for better presentation aesthetics
+- Files changed:
+  - frontend/src/lib/styles/layouts.css (comprehensive spacing improvements)
+- **Changes made:**
+  - Slide padding: Added `var(--slide-padding, 5rem)` to title, section, quote, big-stat, blank layouts
+  - Vertical rhythm: Added `> * + *` sibling spacing for default layout using `var(--content-gap, 2rem)`
+  - List spacing: Increased padding-left to 2em, margin-bottom to 0.75em, added nested list styling
+  - Two-column layout: Using `var(--column-gap, 4rem)`, added internal column padding for balance
+  - Three-column layout: Proportional gap (0.85x column-gap), added internal column flex/gap
+  - Big-stat layout: Increased h1 to 12rem, strong to 14rem, added 3rem gap in slide-content, 65% max-width for description
+  - Quote layout: Extra 6rem padding, 3.25rem font size, 3rem padding-left, 3rem attribution margin-top
+  - Sidebar layout: Added internal flex/gap for main and sidebar areas, softened divider color
+  - Code-focus layout: Added 1.5rem gap
+  - Cover layout: Added gap and max-width constraints for slide-content
+- **Learnings for future iterations:**
+  - Use CSS custom properties (`var(--slide-padding, 5rem)`) for consistent spacing that themes can override
+  - `> * + *` selector provides vertical rhythm without manual margin on each element
+  - Nested list styling (li ul, li ol) needs explicit margin-top for proper visual separation
+  - Big-stat needs dramatic sizing (12-14rem) and generous whitespace for impact
+  - Quote layout benefits from extra padding (6rem) for elegant whitespace framing
+  - Column layouts need internal padding (0.5rem) on each side for visual balance
+---
+
+## 2026-01-25 ~18:00 - US-015
+- Refined Mermaid diagram theme integration for all 5 themes
+- Files changed:
+  - frontend/src/lib/utils/mermaid.ts (refined getMermaidTheme() color mappings)
+  - frontend/src/lib/components/SlideRenderer.svelte (enhanced diagram/error styling)
+- **Changes made:**
+  - Paper: Changed from stone accent to blue (#2563eb) to match theme, subtle blue-tinted node background
+  - Noir: Updated to use refined gold (#c9a227), muted gold cluster borders for elegance
+  - Aurora: Changed to dark theme base with cyan (#22d3ee) accents, violet cluster borders
+  - Phosphor: Updated to P3 phosphor green (#39ff14) matching theme, dimmer green for lines/clusters
+  - Poster: Changed to dark theme with white borders, red (#ff4d4d) accent lines for bold aesthetic
+  - Increased font sizes from 16px to 18-20px for better presentation scale readability
+  - Added diagram container scaling (transform: scale(1.1)) for better visibility
+  - Enhanced error styling: larger padding/margins, 2px solid borders, larger font size (1.25rem)
+  - Added .nodeLabel and .edgeLabel font size styling for consistent text readability
+- **Learnings for future iterations:**
+  - Mermaid theme mappings should match the slide theme's primary accent color, not generic colors
+  - Font sizes 18-20px work better at presentation scale (projected displays)
+  - Using 'dark' base theme for dark themes gives better starting point than 'forest' or 'default'
+  - Error states should use `--color-error` and `--color-error-bg` CSS variables for theme consistency
+  - Diagram scaling (1.1x) helps readability without distorting proportions
+---
+
+## 2026-01-25 ~18:30 - US-016
+- Refined code block syntax highlighting with theme-specific Shiki mappings
+- Files changed:
+  - frontend/src/lib/utils/highlighting.ts (added TAP_THEME_TO_SHIKI mapping, getShikiTheme function)
+  - frontend/src/lib/components/SlideRenderer.svelte (pass theme to highlighting function)
+  - frontend/src/lib/styles/prose.css (comprehensive line number and line highlighting CSS)
+- **Changes made:**
+  - Created TAP_THEME_TO_SHIKI mapping: Paper→github-light, Noir→one-dark-pro, Aurora→dracula, Phosphor→vitesse-dark, Poster→one-dark-pro
+  - Added getShikiTheme() function to resolve Tap themes to appropriate Shiki themes
+  - Updated highlightCodeBlocksInElement() to accept tapTheme parameter
+  - Added vitesse-dark to DEFAULT_THEMES for Phosphor theme support
+  - Added theme change detection for re-highlighting when theme switches
+  - Added comprehensive CSS for line numbers (.line-number), line content (.line-content), and highlighted lines (.line.highlighted)
+  - Added diff styling (.diff-add, .diff-remove) with colored left borders
+  - Added code block title bar and auto-size container styling
+- **Learnings for future iterations:**
+  - Shiki theme selection should match the visual tone of the slide theme (light themes→light Shiki, dark→dark Shiki)
+  - vitesse-dark works well for terminal/CRT themes as it has muted tones that don't clash with green phosphor
+  - Line numbers should be subtle (opacity 0.5) with tabular-nums for alignment
+  - Highlighted lines need negative margin + padding to extend to edges of code block
+  - Theme change detection via data-highlighted-theme attribute enables re-highlighting when theme switches
+---
