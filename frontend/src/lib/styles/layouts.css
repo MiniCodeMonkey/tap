@@ -1,13 +1,23 @@
 /**
- * Layout Typography Styles
+ * Layout Typography & Spacing Styles
  *
- * These styles apply presentation-scale typography to content within each layout.
+ * These styles apply presentation-scale typography and spacing to content within each layout.
  * They use CSS custom properties from the theme system (--color-*, --font-*).
+ *
+ * Spacing philosophy:
+ * - Slide padding: 5rem (80px) for comfortable margins from edges
+ * - Vertical rhythm: Consistent 1.5-2rem spacing between sibling elements
+ * - Column gaps: 4rem for two-column, 3rem for three-column
+ * - Content breathing room: max-width constraints on text blocks
  *
  * Layout types:
  * - layout-title: Centered title slide with large headings
  * - layout-section: Section divider with prominent heading
  * - layout-default: Standard content with proper typography hierarchy
+ * - layout-two-column: Side-by-side columns with balanced gaps
+ * - layout-three-column: Three-column grid with proportional spacing
+ * - layout-big-stat: Dramatic centered statistics
+ * - layout-quote: Elegant quote with whitespace framing
  */
 
 /* ============================================================================
@@ -23,6 +33,7 @@
   height: 100%;
   text-align: center;
   color: var(--color-text);
+  padding: var(--slide-padding, 5rem);
 }
 
 /* Make slide-content also center its children for title layout */
@@ -85,6 +96,7 @@
   height: 100%;
   text-align: center;
   color: var(--color-text);
+  padding: var(--slide-padding, 5rem);
 }
 
 /* Make slide-content also center its children for section layout */
@@ -135,7 +147,17 @@
   width: 100%;
   height: 100%;
   color: var(--color-text);
-  gap: 2rem;
+  gap: var(--content-gap, 2rem);
+}
+
+/* Vertical rhythm: consistent spacing between sibling elements */
+.layout-default > * + * {
+  margin-top: var(--content-gap, 2rem);
+}
+
+/* Reset gap when using flexbox gap */
+.layout-default > *:first-child {
+  margin-top: 0;
 }
 
 .layout-default h1 {
@@ -173,11 +195,12 @@
   font-size: 2rem; /* slide-body */
   line-height: 1.6;
   margin: 0;
-  padding-left: 1.5em;
+  padding-left: 2em; /* increased indentation for better hierarchy */
 }
 
 .layout-default li {
-  margin-bottom: 0.6em;
+  margin-bottom: 0.75em; /* increased for better vertical rhythm */
+  padding-left: 0.5em; /* subtle padding for marker spacing */
 }
 
 .layout-default li:last-child {
@@ -186,6 +209,17 @@
 
 .layout-default li::marker {
   color: var(--color-accent);
+}
+
+/* Nested lists get tighter spacing */
+.layout-default li ul,
+.layout-default li ol {
+  margin-top: 0.5em;
+  padding-left: 1.75em;
+}
+
+.layout-default li li {
+  margin-bottom: 0.5em;
 }
 
 .layout-default img {
@@ -292,22 +326,33 @@
 .layout-two-column .slide-content {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 4rem;
+  gap: var(--column-gap, 4rem);
   width: 100%;
   height: 100%;
   align-items: start;
   align-content: center;
+  padding: 0; /* content area, padding handled by parent */
 }
 
 /* Header content spans both columns */
 .layout-two-column .slide-content > :not(.column) {
   grid-column: 1 / -1;
+  margin-bottom: 1.5rem;
 }
 
 .layout-two-column .column {
   display: flex;
   flex-direction: column;
-  gap: 1.5rem;
+  gap: 1.75rem; /* increased internal gap for breathing room */
+}
+
+/* Balanced visual weight for columns */
+.layout-two-column .column:first-of-type {
+  padding-right: 0.5rem;
+}
+
+.layout-two-column .column:last-of-type {
+  padding-left: 0.5rem;
 }
 
 /* Typography for two-column layout */
@@ -356,7 +401,8 @@
 }
 
 .layout-two-column li {
-  margin-bottom: 0.5em;
+  margin-bottom: 0.6em; /* slightly increased */
+  padding-left: 0.25em;
 }
 
 .layout-two-column li:last-child {
@@ -365,6 +411,16 @@
 
 .layout-two-column li::marker {
   color: var(--color-accent);
+}
+
+/* Nested lists in columns */
+.layout-two-column li ul,
+.layout-two-column li ol {
+  margin-top: 0.4em;
+}
+
+.layout-two-column li li {
+  margin-bottom: 0.4em;
 }
 
 .layout-two-column img {
@@ -415,10 +471,18 @@
 .layout-three-column .three-column-content {
   display: grid;
   grid-template-columns: 1fr 1fr 1fr;
-  gap: 3rem;
+  gap: calc(var(--column-gap, 3rem) * 0.85); /* proportionally smaller than two-column */
   width: 100%;
   height: 100%;
   align-items: start;
+  align-content: center;
+}
+
+/* Each column gets consistent internal spacing */
+.layout-three-column .three-column-content > * {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
 }
 
 /* Typography for three-column layout - slightly smaller for 3 columns */
@@ -467,7 +531,8 @@
 }
 
 .layout-three-column li {
-  margin-bottom: 0.4em;
+  margin-bottom: 0.5em; /* slightly increased */
+  padding-left: 0.2em;
 }
 
 .layout-three-column li:last-child {
@@ -476,6 +541,17 @@
 
 .layout-three-column li::marker {
   color: var(--color-accent);
+}
+
+/* Nested lists in three-column */
+.layout-three-column li ul,
+.layout-three-column li ol {
+  margin-top: 0.35em;
+  padding-left: 1.25em;
+}
+
+.layout-three-column li li {
+  margin-bottom: 0.35em;
 }
 
 .layout-three-column img {
@@ -526,21 +602,28 @@
 .layout-sidebar .sidebar-content {
   display: grid;
   grid-template-columns: 2fr 1fr;
-  gap: 4rem;
+  gap: var(--column-gap, 4rem);
   width: 100%;
   height: 100%;
   align-items: start;
+  align-content: center;
 }
 
 /* Main content area (first child) */
 .layout-sidebar .sidebar-content > :first-child {
-  /* Main content takes 2/3 of space */
+  display: flex;
+  flex-direction: column;
+  gap: 1.75rem;
+  padding-right: 1rem; /* breathing room from divider */
 }
 
 /* Sidebar area (second child) */
 .layout-sidebar .sidebar-content > :nth-child(2) {
-  padding-left: 2rem;
-  border-left: 2px solid var(--color-muted);
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  padding-left: 2.5rem; /* increased for elegant separation */
+  border-left: 2px solid color-mix(in srgb, var(--color-muted) 60%, transparent);
 }
 
 /* Typography for sidebar layout - main area */
@@ -589,7 +672,8 @@
 }
 
 .layout-sidebar li {
-  margin-bottom: 0.5em;
+  margin-bottom: 0.6em;
+  padding-left: 0.25em;
 }
 
 .layout-sidebar li:last-child {
@@ -598,6 +682,16 @@
 
 .layout-sidebar li::marker {
   color: var(--color-accent);
+}
+
+/* Nested lists in sidebar */
+.layout-sidebar li ul,
+.layout-sidebar li ol {
+  margin-top: 0.4em;
+}
+
+.layout-sidebar li li {
+  margin-bottom: 0.4em;
 }
 
 .layout-sidebar img {
@@ -652,6 +746,7 @@
   width: 100%;
   height: 100%;
   color: var(--color-text);
+  gap: 1.5rem; /* consistent internal spacing */
 }
 
 .layout-code-focus h1,
@@ -717,6 +812,7 @@
   height: 100%;
   color: var(--color-text);
   text-align: center;
+  padding: var(--slide-padding, 6rem); /* extra padding for elegant whitespace */
 }
 
 /* Make slide-content also center its children for quote layout */
@@ -725,23 +821,26 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
+  max-width: 85%; /* constrain for elegant framing */
 }
 
 .layout-quote blockquote {
-  font-size: 3rem;
-  line-height: 1.45;
+  font-size: 3.25rem; /* slightly larger for impact */
+  line-height: 1.5;
   font-style: italic;
   margin: 0;
-  max-width: 80%;
+  max-width: 90%;
   position: relative;
-  padding-left: 2.5rem;
+  padding-left: 3rem; /* increased padding for breathing room */
+  padding-top: 1rem;
+  padding-bottom: 1rem;
   border-left: 5px solid var(--color-accent);
   text-align: left;
 }
 
 .layout-quote blockquote p {
   margin: 0;
-  margin-bottom: 1rem;
+  margin-bottom: 1.25rem;
 }
 
 .layout-quote blockquote p:last-child {
@@ -753,12 +852,12 @@
   font-size: 2rem;
   font-style: normal;
   color: var(--color-muted);
-  margin-top: 1.5rem;
+  margin-top: 2rem; /* increased spacing before attribution */
 }
 
 /* If there's only one paragraph in the blockquote, keep it styled as the quote */
 .layout-quote blockquote p:only-child {
-  font-size: 3rem;
+  font-size: 3.25rem;
   font-style: italic;
   color: var(--color-text);
   margin-top: 0;
@@ -767,15 +866,15 @@
 /* Attribution paragraph that follows the blockquote (e.g., "— Author Name") */
 .layout-quote .slide-content > p,
 .layout-quote > p {
-  font-size: 2rem;
+  font-size: 2.25rem; /* slightly larger */
   font-weight: 500;
   font-style: normal;
   color: var(--color-muted);
-  margin-top: 2.5rem;
+  margin-top: 3rem; /* increased for elegant separation */
   text-align: left;
-  letter-spacing: 0.03em;
-  padding-left: 2.5rem; /* align with blockquote content */
-  max-width: 80%;
+  letter-spacing: 0.04em;
+  padding-left: 3rem; /* align with blockquote content */
+  max-width: 90%;
 }
 
 /* Attribution with em-dash prefix styling */
@@ -783,6 +882,7 @@
 .layout-quote > p::before {
   content: "— ";
   color: var(--color-accent);
+  font-weight: 600;
 }
 
 /* ============================================================================
@@ -798,6 +898,7 @@
   height: 100%;
   color: var(--color-text);
   text-align: center;
+  padding: var(--slide-padding, 5rem);
 }
 
 /* Make slide-content also center its children for big-stat layout */
@@ -806,48 +907,53 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 3rem; /* breathing room between elements */
+  max-width: 90%; /* constrain width for dramatic presence */
 }
 
 /* The main stat number - use h1 or strong */
 .layout-big-stat h1 {
-  font-size: 10rem; /* slide-stat - massive */
-  line-height: 1;
-  letter-spacing: -0.04em;
+  font-size: 12rem; /* increased for more dramatic impact */
+  line-height: 0.95;
+  letter-spacing: -0.05em;
   font-weight: 800;
   margin: 0;
   color: var(--color-accent);
-  text-shadow: 0 4px 30px color-mix(in srgb, var(--color-accent) 25%, transparent);
+  text-shadow: 0 6px 40px color-mix(in srgb, var(--color-accent) 30%, transparent);
 }
 
 .layout-big-stat strong {
-  font-size: 12rem;
-  line-height: 1;
-  letter-spacing: -0.04em;
+  font-size: 14rem; /* increased for dramatic emphasis */
+  line-height: 0.9;
+  letter-spacing: -0.05em;
   font-weight: 700;
   display: block;
   color: var(--color-accent);
+  text-shadow: 0 6px 40px color-mix(in srgb, var(--color-accent) 30%, transparent);
 }
 
 /* Description text below the stat */
 .layout-big-stat p {
-  font-size: 2.5rem;
+  font-size: 2.75rem; /* slightly increased */
   line-height: 1.4;
   margin: 0;
-  margin-top: 2rem;
+  margin-top: 2.5rem; /* more breathing room */
   color: var(--color-muted);
-  max-width: 70%;
+  max-width: 65%; /* tighter for elegant framing */
+  text-wrap: balance;
 }
 
 /* h2 in big-stat is the description below the stat */
 .layout-big-stat h2 {
-  font-size: 3rem;
+  font-size: 3.25rem; /* slightly increased */
   line-height: 1.3;
   letter-spacing: -0.01em;
   font-weight: 500;
   margin: 0;
-  margin-top: 2rem;
+  margin-top: 2.5rem; /* more breathing room */
   color: var(--color-muted);
-  max-width: 80%;
+  max-width: 75%;
+  text-wrap: balance;
 }
 
 /* ============================================================================
@@ -864,6 +970,7 @@
   height: 100%;
   color: var(--color-text);
   text-align: center;
+  /* Cover layout is full-bleed, no padding by default */
 }
 
 /* Make slide-content also center its children for cover layout */
@@ -872,6 +979,9 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 2rem; /* consistent internal spacing */
+  padding: var(--slide-padding, 5rem); /* content padding for text */
+  max-width: 85%; /* constrain text for readability */
 }
 
 /* Cover slides often have dark backgrounds, so default to white text */
@@ -1061,6 +1171,7 @@
   width: 100%;
   height: 100%;
   color: var(--color-text);
+  padding: var(--slide-padding, 5rem);
 }
 
 /* Make slide-content also center its children for blank layout */
@@ -1069,6 +1180,7 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 2rem; /* consistent internal spacing */
 }
 
 /* Minimal typography - user controls content placement */
