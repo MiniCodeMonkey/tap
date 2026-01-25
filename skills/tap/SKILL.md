@@ -81,6 +81,8 @@ This skill includes detailed rules for:
 9. **themes** - 5 built-in themes and customization
 10. **cli** - tap new/dev/build/serve/pdf commands
 11. **best-practices** - Presentation design tips
+12. **mermaid** - Mermaid diagram support (flowcharts, sequence, ER, etc.)
+13. **ai-images** - Gemini AI image generation from prompts
 
 ## Important Patterns
 
