@@ -1,0 +1,148 @@
+/**
+ * Font imports for Tap themes
+ *
+ * Uses @fontsource packages for local font embedding.
+ * Each theme uses specific fonts for its unique character.
+ *
+ * Font-display: swap ensures text remains visible during font loading.
+ */
+
+/* =============================================================================
+ * Ink Theme - Japanese Calligraphy
+ * Noto Serif JP: Elegant serif with Japanese character support
+ * ============================================================================= */
+@import "@fontsource/noto-serif-jp/400.css";
+@import "@fontsource/noto-serif-jp/700.css";
+
+/* =============================================================================
+ * Manuscript Theme - Medieval Illuminated
+ * Cinzel Decorative: Ornate display font for headings
+ * Cinzel: Classic inscriptional capitals for body
+ * ============================================================================= */
+@import "@fontsource/cinzel-decorative/400.css";
+@import "@fontsource/cinzel-decorative/700.css";
+@import "@fontsource/cinzel/400.css";
+@import "@fontsource/cinzel/600.css";
+@import "@fontsource/cinzel/700.css";
+
+/* =============================================================================
+ * Deco Theme - Art Deco Glamour
+ * Poiret One: Geometric art deco display font
+ * Bodoni Moda: Elegant high-contrast serif
+ * ============================================================================= */
+@import "@fontsource/poiret-one/400.css";
+@import "@fontsource/bodoni-moda/400.css";
+@import "@fontsource/bodoni-moda/600.css";
+@import "@fontsource/bodoni-moda/700.css";
+
+/* =============================================================================
+ * Stained Glass Theme - Gothic Cathedral
+ * Uncial Antiqua: Medieval uncial letterforms
+ * Crimson Pro: Elegant serif with old-style figures
+ * ============================================================================= */
+@import "@fontsource/uncial-antiqua/400.css";
+@import "@fontsource/crimson-pro/400.css";
+@import "@fontsource/crimson-pro/600.css";
+@import "@fontsource/crimson-pro/700.css";
+
+/* =============================================================================
+ * Bauhaus Theme - Geometric Modernism
+ * Bebas Neue: Bold geometric sans-serif
+ * ============================================================================= */
+@import "@fontsource/bebas-neue/400.css";
+
+/* =============================================================================
+ * Watercolor Theme - Artistic/Painterly
+ * Cormorant Garamond: Elegant, flowing serif
+ * ============================================================================= */
+@import "@fontsource/cormorant-garamond/400.css";
+@import "@fontsource/cormorant-garamond/600.css";
+@import "@fontsource/cormorant-garamond/700.css";
+
+/* =============================================================================
+ * Comic Theme - Pop Art/Halftone
+ * Bangers: Bold comic book display font
+ * Comic Neue: Playful comic-style body text
+ * ============================================================================= */
+@import "@fontsource/bangers/400.css";
+@import "@fontsource/comic-neue/400.css";
+@import "@fontsource/comic-neue/700.css";
+
+/* =============================================================================
+ * Blueprint Theme - Engineering/Architecture
+ * Share Tech Mono: Technical monospace font
+ * Oswald: Condensed sans-serif for headings
+ * ============================================================================= */
+@import "@fontsource/share-tech-mono/400.css";
+@import "@fontsource/oswald/400.css";
+@import "@fontsource/oswald/600.css";
+@import "@fontsource/oswald/700.css";
+
+/* =============================================================================
+ * Editorial Theme - Classic Magazine
+ * Playfair Display: Elegant transitional serif for headlines
+ * Source Serif Pro: Readable serif for body text
+ * ============================================================================= */
+@import "@fontsource/playfair-display/400.css";
+@import "@fontsource/playfair-display/600.css";
+@import "@fontsource/playfair-display/700.css";
+@import "@fontsource/source-serif-pro/400.css";
+@import "@fontsource/source-serif-pro/600.css";
+@import "@fontsource/source-serif-pro/700.css";
+
+/* =============================================================================
+ * Synthwave Theme - 80s Retro-Futurism
+ * Orbitron: Geometric futuristic display font
+ * Audiowide: Wide sci-fi display font
+ * ============================================================================= */
+@import "@fontsource/orbitron/400.css";
+@import "@fontsource/orbitron/600.css";
+@import "@fontsource/orbitron/700.css";
+@import "@fontsource/audiowide/400.css";
+
+/* =============================================================================
+ * Safari Theme - Vintage Explorer
+ * Spectral: Elegant serif with old-world charm
+ * Special Elite: Typewriter font for vintage effect
+ * ============================================================================= */
+@import "@fontsource/spectral/400.css";
+@import "@fontsource/spectral/600.css";
+@import "@fontsource/spectral/700.css";
+@import "@fontsource/special-elite/400.css";
+
+/* =============================================================================
+ * Botanical Theme - Victorian Scientific
+ * Libre Baskerville: Classic transitional serif
+ * EB Garamond: Elegant old-style serif
+ * ============================================================================= */
+@import "@fontsource/libre-baskerville/400.css";
+@import "@fontsource/libre-baskerville/700.css";
+@import "@fontsource/eb-garamond/400.css";
+@import "@fontsource/eb-garamond/600.css";
+@import "@fontsource/eb-garamond/700.css";
+
+/* =============================================================================
+ * Cyber Theme - Cyberpunk/Dystopian
+ * Rajdhani: Angular tech-style font
+ * Share Tech Mono: (already imported for Blueprint)
+ * ============================================================================= */
+@import "@fontsource/rajdhani/400.css";
+@import "@fontsource/rajdhani/600.css";
+@import "@fontsource/rajdhani/700.css";
+
+/* =============================================================================
+ * Origami Theme - Paper Craft
+ * Quicksand: Clean geometric rounded sans-serif
+ * ============================================================================= */
+@import "@fontsource/quicksand/400.css";
+@import "@fontsource/quicksand/600.css";
+@import "@fontsource/quicksand/700.css";
+
+/* =============================================================================
+ * Chalkboard Theme - Classroom
+ * Caveat: Handwritten brush script
+ * Patrick Hand: Casual handwriting font
+ * ============================================================================= */
+@import "@fontsource/caveat/400.css";
+@import "@fontsource/caveat/700.css";
+@import "@fontsource/patrick-hand/400.css";

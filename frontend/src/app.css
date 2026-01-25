@@ -3,6 +3,9 @@
 /* Theme system - CSS custom properties that Tailwind utilities reference */
 @import "./lib/themes/theme-tokens.css";
 
+/* Local font imports for themes */
+@import "./lib/fonts/fonts.css";
+
 /* Theme styles */
 @import "./lib/themes/paper.css";
 @import "./lib/themes/noir.css";
