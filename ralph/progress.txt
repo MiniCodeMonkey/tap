@@ -343,3 +343,16 @@ Started: Sun Jan 25 14:30:25 CET 2026
   - Highlighted lines need negative margin + padding to extend to edges of code block
   - Theme change detection via data-highlighted-theme attribute enables re-highlighting when theme switches
 ---
+
+## 2026-01-25 ~18:45 - US-017
+- Reviewed and polished example template content for accuracy
+- Files changed:
+  - examples/theme-noir.md (fixed gold accent color reference #d4af37 → #c9a227)
+  - examples/theme-paper.md (removed specific hex code reference for cleaner description)
+  - examples/theme-phosphor.md (fixed phosphor green #00ff00 → #39ff14, background #000 → #050505)
+  - examples/theme-poster.md (fixed color palette: black #000000 → #0a0a0a, red accent #EF4444 → #ff4d4d)
+- **Learnings for future iterations:**
+  - Theme example templates should reference the actual CSS values from the theme files
+  - When theme colors are updated (as in US-009 through US-012), example templates need to be verified for accuracy
+  - Prefer descriptive terms over specific hex codes when possible to reduce maintenance burden
+---
