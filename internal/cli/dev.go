@@ -104,6 +104,7 @@ func runDevServer(file string, port int, presenterPassword string, headless bool
 	srv := server.New(port)
 	srv.SetPresentation(pres)
 	srv.SetPresenterPassword(presenterPassword)
+	srv.SetBaseDir(baseDir) // Enable serving local files (images, etc.)
 	if customThemePath != "" {
 		srv.SetCustomThemePath(customThemePath)
 	}

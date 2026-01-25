@@ -42,6 +42,13 @@
 	let layoutClass = $derived(`layout-${slide.layout}`);
 
 	/**
+	 * Check if the layout should be full-bleed (no padding).
+	 */
+	let isFullBleed = $derived(
+		slide.layout === 'split-media' || slide.layout === 'cover'
+	);
+
+	/**
 	 * Get the transition to use for this slide.
 	 * Falls back to 'fade' if not specified.
 	 */
@@ -175,24 +182,6 @@
 	 */
 	let slideContentElement: HTMLElement | undefined = $state();
 
-	/**
-	 * Fix mermaid foreignObject text clipping by expanding their widths.
-	 * Mermaid sometimes calculates text width incorrectly when custom fonts are used,
-	 * causing text to be clipped. This function expands foreignObject elements to
-	 * ensure all text is visible.
-	 */
-	function fixMermaidTextClipping(element: HTMLElement): void {
-		const diagrams = element.querySelectorAll('.mermaid-diagram');
-		diagrams.forEach((diagram) => {
-			const foreignObjects = diagram.querySelectorAll('foreignObject');
-			foreignObjects.forEach((fo) => {
-				const currentWidth = parseFloat(fo.getAttribute('width') || '0');
-				// Add 50% extra width to ensure text fits with custom fonts
-				const newWidth = currentWidth * 1.5;
-				fo.setAttribute('width', String(newWidth));
-			});
-		});
-	}
 
 	/**
 	 * Render mermaid diagrams and highlight code blocks when the slide content is mounted or changes.
@@ -214,8 +203,6 @@
 				console.log('Processing slide content');
 				try {
 					await renderMermaidBlocksInElement(slideContentElement!, theme);
-					// Fix mermaid foreignObject text clipping by expanding widths
-					fixMermaidTextClipping(slideContentElement!);
 					console.log('Mermaid done, starting highlight');
 					await highlightCodeBlocksInElement(slideContentElement!);
 					console.log('Highlight done');
@@ -236,7 +223,7 @@
 -->
 {#if active}
 	<div
-		class="slide-renderer {layoutClass} w-full h-full p-slide relative overflow-hidden {hasFragments ? 'has-fragments' : ''}"
+		class="slide-renderer {layoutClass} w-full h-full relative overflow-hidden {hasFragments ? 'has-fragments' : ''} {isFullBleed ? '' : 'p-slide'}"
 		style={backgroundStyles}
 		in:getTransition
 		out:getTransition
@@ -343,5 +330,14 @@
 		word-break: break-word;
 		font-family: var(--font-mono, monospace);
 		color: var(--color-text, inherit);
+	}
+
+	/*
+	 * Full-bleed layouts need zero padding to allow content to edge.
+	 * This overrides the p-slide Tailwind class.
+	 */
+	:global(.slide-renderer.layout-split-media),
+	:global(.slide-renderer.layout-cover) {
+		padding: 0 !important;
 	}
 </style>

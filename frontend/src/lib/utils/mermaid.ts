@@ -358,6 +358,8 @@ export async function renderMermaidBlocksInElement(
       container.dataset.mermaidCode = code
       container.dataset.mermaidTheme = theme ?? ''
       container.innerHTML = result.svg
+      // Fix foreignObject text clipping by expanding widths
+      fixForeignObjectWidths(container)
       pre.replaceWith(container)
     } else {
       // Show error message, storing the code for potential re-render
@@ -388,6 +390,8 @@ export async function renderMermaidBlocksInElement(
     if (result.success) {
       diagram.innerHTML = result.svg
       diagram.dataset.mermaidTheme = theme ?? ''
+      // Fix foreignObject text clipping
+      fixForeignObjectWidths(diagram)
     } else {
       // Convert to error container
       const errorContainer = document.createElement('div')
@@ -442,4 +446,24 @@ function escapeHtml(text: string): string {
   const div = document.createElement('div')
   div.textContent = text
   return div.innerHTML
+}
+
+/**
+ * Fix mermaid foreignObject text clipping by expanding their widths.
+ * Mermaid calculates text width using a generic font, but custom fonts may render wider.
+ * This function expands foreignObject elements to ensure all text is visible.
+ */
+function fixForeignObjectWidths(container: HTMLElement): void {
+  const foreignObjects = container.querySelectorAll('foreignObject')
+  foreignObjects.forEach((fo) => {
+    const text = fo.textContent?.trim() || ''
+    if (text.length === 0) return
+
+    const currentWidth = parseFloat(fo.getAttribute('width') || '0')
+    // Calculate minimum width based on character count (roughly 14px per char at 18px font)
+    const minWidth = text.length * 14
+    const newWidth = Math.max(currentWidth * 1.6, minWidth)
+
+    fo.setAttribute('width', String(newWidth))
+  })
 }
