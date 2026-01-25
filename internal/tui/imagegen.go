@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/charmbracelet/bubbles/textarea"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
@@ -71,14 +72,25 @@ type ImageGenModel struct {
 	SelectedImage *AIImageInfo
 	// Prompt is the prompt text for image generation.
 	Prompt string
+	// promptInput is the textarea model for prompt input.
+	promptInput textarea.Model
 }
 
 // NewImageGenModel creates a new ImageGenModel for image generation.
 func NewImageGenModel(markdownFile string) (*ImageGenModel, error) {
+	// Initialize textarea for prompt input
+	ta := textarea.New()
+	ta.Placeholder = "Describe the image you want to generate..."
+	ta.CharLimit = 2000
+	ta.SetWidth(60)
+	ta.SetHeight(5)
+	ta.ShowLineNumbers = false
+
 	m := &ImageGenModel{
 		MarkdownFile:  markdownFile,
 		SelectedIndex: 0,
 		Step:          ImageGenStepSlideSelect,
+		promptInput:   ta,
 	}
 
 	// Load slides from the markdown file
@@ -221,6 +233,13 @@ func (m *ImageGenModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		return m.handleKeyPress(msg)
+	default:
+		// Pass other messages to the textarea when in prompt step
+		if m.Step == ImageGenStepPrompt {
+			var cmd tea.Cmd
+			m.promptInput, cmd = m.promptInput.Update(msg)
+			return m, cmd
+		}
 	}
 	return m, nil
 }
@@ -232,6 +251,8 @@ func (m *ImageGenModel) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleSlideSelectKey(msg)
 	case ImageGenStepImageSelect:
 		return m.handleImageSelectKey(msg)
+	case ImageGenStepPrompt:
+		return m.handlePromptKey(msg)
 	}
 	return m, nil
 }
@@ -264,7 +285,12 @@ func (m *ImageGenModel) handleSlideSelectKey(msg tea.KeyMsg) (tea.Model, tea.Cmd
 			m.Step = ImageGenStepImageSelect
 		} else {
 			// No AI images, go directly to prompt input
+			m.SelectedImage = nil
+			m.Prompt = ""
+			m.promptInput.SetValue("")
+			m.promptInput.Focus()
 			m.Step = ImageGenStepPrompt
+			return m, textarea.Blink
 		}
 		return m, nil
 	}
@@ -302,17 +328,69 @@ func (m *ImageGenModel) handleImageSelectKey(msg tea.KeyMsg) (tea.Model, tea.Cmd
 				// Adding new image, proceed to prompt input
 				m.SelectedImage = nil
 				m.Prompt = ""
+				m.promptInput.SetValue("")
 			} else {
 				// Regenerating existing image, pre-fill prompt
 				m.SelectedImage = option.AIImage
 				if option.AIImage != nil {
 					m.Prompt = option.AIImage.Prompt
+					m.promptInput.SetValue(option.AIImage.Prompt)
 				}
 			}
+			m.promptInput.Focus()
 			m.Step = ImageGenStepPrompt
 		}
+		return m, textarea.Blink
+	}
+
+	return m, nil
+}
+
+// handlePromptKey handles keyboard input during prompt input.
+func (m *ImageGenModel) handlePromptKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "esc":
+		// Go back to previous step
+		m.promptInput.Blur()
+		slide := m.GetSelectedSlide()
+		if slide != nil && slide.HasAIImages {
+			// Go back to image select
+			m.Step = ImageGenStepImageSelect
+		} else {
+			// Go back to slide select
+			m.Step = ImageGenStepSlideSelect
+		}
+		return m, nil
+
+	case "ctrl+d":
+		// Submit the prompt
+		return m.submitPrompt()
+	}
+
+	// Check for enter key - submit if not empty
+	if msg.Type == tea.KeyEnter {
+		// Submit the prompt
+		return m.submitPrompt()
+	}
+
+	// Pass other keys to the textarea
+	var cmd tea.Cmd
+	m.promptInput, cmd = m.promptInput.Update(msg)
+	return m, cmd
+}
+
+// submitPrompt validates and submits the prompt, moving to the generating step.
+func (m *ImageGenModel) submitPrompt() (tea.Model, tea.Cmd) {
+	prompt := strings.TrimSpace(m.promptInput.Value())
+	if prompt == "" {
+		m.Error = "Prompt cannot be empty"
 		return m, nil
 	}
+
+	m.Prompt = prompt
+	m.Error = ""
+	m.promptInput.Blur()
+	m.Step = ImageGenStepGenerating
 
 	return m, nil
 }
@@ -324,6 +402,8 @@ func (m *ImageGenModel) View() string {
 		return m.viewSlideSelect()
 	case ImageGenStepImageSelect:
 		return m.viewImageSelect()
+	case ImageGenStepPrompt:
+		return m.viewPrompt()
 	default:
 		return m.viewSlideSelect()
 	}
@@ -513,6 +593,67 @@ func (m *ImageGenModel) viewImageSelect() string {
 		keyStyle.Render("↑"),
 		keyStyle.Render("↓"),
 		keyStyle.Render("enter"),
+		keyStyle.Render("esc"),
+	)
+	b.WriteString(helpStyle.Render(help))
+
+	return b.String()
+}
+
+// viewPrompt renders the prompt input view.
+func (m *ImageGenModel) viewPrompt() string {
+	var b strings.Builder
+
+	// Title
+	titleStyle := lipgloss.NewStyle().
+		Bold(true).
+		Foreground(ColorPrimary).
+		MarginBottom(1)
+
+	b.WriteString(titleStyle.Render("🖼  Enter Image Prompt"))
+	b.WriteString("\n\n")
+
+	// Show selected slide info
+	slide := m.GetSelectedSlide()
+	if slide != nil {
+		slideInfoStyle := lipgloss.NewStyle().
+			Foreground(ColorMuted).
+			Italic(true)
+		b.WriteString(slideInfoStyle.Render(fmt.Sprintf("Slide %d: %s", slide.Index+1, slide.Title)))
+		b.WriteString("\n")
+
+		// Show if regenerating
+		if m.SelectedImage != nil {
+			b.WriteString(slideInfoStyle.Render("(Regenerating existing image)"))
+			b.WriteString("\n")
+		}
+		b.WriteString("\n")
+	}
+
+	// Show error if any
+	if m.Error != "" {
+		errorStyle := lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#ff5555"))
+		b.WriteString(errorStyle.Render("Error: " + m.Error))
+		b.WriteString("\n\n")
+	}
+
+	// Textarea
+	b.WriteString(m.promptInput.View())
+	b.WriteString("\n\n")
+
+	// Help text
+	helpStyle := lipgloss.NewStyle().
+		Foreground(ColorMuted)
+
+	keyStyle := lipgloss.NewStyle().
+		Foreground(ColorPrimary).
+		Bold(true)
+
+	help := fmt.Sprintf(
+		"%s submit • %s submit • %s back",
+		keyStyle.Render("enter"),
+		keyStyle.Render("ctrl+d"),
 		keyStyle.Render("esc"),
 	)
 	b.WriteString(helpStyle.Render(help))

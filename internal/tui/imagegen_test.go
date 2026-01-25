@@ -1175,3 +1175,408 @@ func TestImageGenModel_LongPromptTruncated(t *testing.T) {
 		t.Error("original prompt should be preserved in AIImage")
 	}
 }
+
+// Tests for prompt input step (US-013)
+
+func TestImageGenModel_PromptInputStep(t *testing.T) {
+	tmpDir := t.TempDir()
+	mdFile := filepath.Join(tmpDir, "test.md")
+
+	content := `# Test Slide
+
+Some content here
+`
+	if err := os.WriteFile(mdFile, []byte(content), 0644); err != nil {
+		t.Fatalf("failed to write test file: %v", err)
+	}
+
+	model, err := NewImageGenModel(mdFile)
+	if err != nil {
+		t.Fatalf("failed to create model: %v", err)
+	}
+
+	// Select slide (goes directly to prompt since no AI images)
+	newModel, _ := model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m := newModel.(*ImageGenModel)
+
+	if m.Step != ImageGenStepPrompt {
+		t.Errorf("expected ImageGenStepPrompt, got %d", m.Step)
+	}
+
+	// Prompt should be empty for new image
+	if m.Prompt != "" {
+		t.Errorf("expected empty prompt for new image, got %q", m.Prompt)
+	}
+
+	// SelectedImage should be nil for new image
+	if m.SelectedImage != nil {
+		t.Error("SelectedImage should be nil for new image")
+	}
+}
+
+func TestImageGenModel_PromptInputView(t *testing.T) {
+	tmpDir := t.TempDir()
+	mdFile := filepath.Join(tmpDir, "test.md")
+
+	content := `# My Test Slide
+
+Some content
+`
+	if err := os.WriteFile(mdFile, []byte(content), 0644); err != nil {
+		t.Fatalf("failed to write test file: %v", err)
+	}
+
+	model, err := NewImageGenModel(mdFile)
+	if err != nil {
+		t.Fatalf("failed to create model: %v", err)
+	}
+
+	// Go to prompt step
+	newModel, _ := model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m := newModel.(*ImageGenModel)
+
+	view := m.View()
+
+	// Check title
+	if !strings.Contains(view, "Enter Image Prompt") {
+		t.Error("view should contain 'Enter Image Prompt'")
+	}
+
+	// Check slide info is shown
+	if !strings.Contains(view, "My Test Slide") {
+		t.Error("view should contain slide title")
+	}
+
+	// Check help text
+	if !strings.Contains(view, "enter") {
+		t.Error("view should contain 'enter' in help text")
+	}
+	if !strings.Contains(view, "ctrl+d") {
+		t.Error("view should contain 'ctrl+d' in help text")
+	}
+	if !strings.Contains(view, "esc") {
+		t.Error("view should contain 'esc' in help text")
+	}
+}
+
+func TestImageGenModel_PromptInputEscGoesBackToSlideSelect(t *testing.T) {
+	tmpDir := t.TempDir()
+	mdFile := filepath.Join(tmpDir, "test.md")
+
+	content := `# Test Slide
+
+No AI images
+`
+	if err := os.WriteFile(mdFile, []byte(content), 0644); err != nil {
+		t.Fatalf("failed to write test file: %v", err)
+	}
+
+	model, err := NewImageGenModel(mdFile)
+	if err != nil {
+		t.Fatalf("failed to create model: %v", err)
+	}
+
+	// Go to prompt step (no AI images, so directly from slide select)
+	newModel, _ := model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m := newModel.(*ImageGenModel)
+
+	if m.Step != ImageGenStepPrompt {
+		t.Fatalf("expected ImageGenStepPrompt, got %d", m.Step)
+	}
+
+	// Press esc to go back
+	newModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m = newModel.(*ImageGenModel)
+
+	// Should go back to slide select (no AI images to go back to image select)
+	if m.Step != ImageGenStepSlideSelect {
+		t.Errorf("expected ImageGenStepSlideSelect after esc, got %d", m.Step)
+	}
+}
+
+func TestImageGenModel_PromptInputEscGoesBackToImageSelect(t *testing.T) {
+	tmpDir := t.TempDir()
+	mdFile := filepath.Join(tmpDir, "test.md")
+
+	content := `# Test Slide
+
+<!-- ai-prompt: existing -->
+![](images/existing.png)
+`
+	if err := os.WriteFile(mdFile, []byte(content), 0644); err != nil {
+		t.Fatalf("failed to write test file: %v", err)
+	}
+
+	model, err := NewImageGenModel(mdFile)
+	if err != nil {
+		t.Fatalf("failed to create model: %v", err)
+	}
+
+	// Select slide (goes to image select)
+	newModel, _ := model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m := newModel.(*ImageGenModel)
+
+	if m.Step != ImageGenStepImageSelect {
+		t.Fatalf("expected ImageGenStepImageSelect, got %d", m.Step)
+	}
+
+	// Select "Add new image" to go to prompt
+	newModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = newModel.(*ImageGenModel)
+
+	if m.Step != ImageGenStepPrompt {
+		t.Fatalf("expected ImageGenStepPrompt, got %d", m.Step)
+	}
+
+	// Press esc to go back
+	newModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m = newModel.(*ImageGenModel)
+
+	// Should go back to image select (slide has AI images)
+	if m.Step != ImageGenStepImageSelect {
+		t.Errorf("expected ImageGenStepImageSelect after esc, got %d", m.Step)
+	}
+}
+
+func TestImageGenModel_PromptInputSubmitWithEnter(t *testing.T) {
+	tmpDir := t.TempDir()
+	mdFile := filepath.Join(tmpDir, "test.md")
+
+	content := `# Test Slide
+
+Content
+`
+	if err := os.WriteFile(mdFile, []byte(content), 0644); err != nil {
+		t.Fatalf("failed to write test file: %v", err)
+	}
+
+	model, err := NewImageGenModel(mdFile)
+	if err != nil {
+		t.Fatalf("failed to create model: %v", err)
+	}
+
+	// Go to prompt step
+	newModel, _ := model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m := newModel.(*ImageGenModel)
+
+	// Type a prompt (simulate by setting the value directly since we can't easily send key events)
+	m.promptInput.SetValue("A beautiful mountain landscape")
+
+	// Submit with enter
+	newModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = newModel.(*ImageGenModel)
+
+	// Should be in generating step
+	if m.Step != ImageGenStepGenerating {
+		t.Errorf("expected ImageGenStepGenerating, got %d", m.Step)
+	}
+
+	// Prompt should be captured
+	if m.Prompt != "A beautiful mountain landscape" {
+		t.Errorf("expected prompt 'A beautiful mountain landscape', got %q", m.Prompt)
+	}
+}
+
+func TestImageGenModel_PromptInputSubmitWithCtrlD(t *testing.T) {
+	tmpDir := t.TempDir()
+	mdFile := filepath.Join(tmpDir, "test.md")
+
+	content := `# Test Slide
+
+Content
+`
+	if err := os.WriteFile(mdFile, []byte(content), 0644); err != nil {
+		t.Fatalf("failed to write test file: %v", err)
+	}
+
+	model, err := NewImageGenModel(mdFile)
+	if err != nil {
+		t.Fatalf("failed to create model: %v", err)
+	}
+
+	// Go to prompt step
+	newModel, _ := model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m := newModel.(*ImageGenModel)
+
+	// Type a prompt
+	m.promptInput.SetValue("A sunset over the ocean")
+
+	// Submit with ctrl+d
+	newModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{}, Alt: false})
+	// Simulate ctrl+d key message
+	newModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyCtrlD})
+	m = newModel.(*ImageGenModel)
+
+	// Should be in generating step
+	if m.Step != ImageGenStepGenerating {
+		t.Errorf("expected ImageGenStepGenerating, got %d", m.Step)
+	}
+
+	// Prompt should be captured
+	if m.Prompt != "A sunset over the ocean" {
+		t.Errorf("expected prompt 'A sunset over the ocean', got %q", m.Prompt)
+	}
+}
+
+func TestImageGenModel_PromptInputEmptyPromptShowsError(t *testing.T) {
+	tmpDir := t.TempDir()
+	mdFile := filepath.Join(tmpDir, "test.md")
+
+	content := `# Test Slide
+
+Content
+`
+	if err := os.WriteFile(mdFile, []byte(content), 0644); err != nil {
+		t.Fatalf("failed to write test file: %v", err)
+	}
+
+	model, err := NewImageGenModel(mdFile)
+	if err != nil {
+		t.Fatalf("failed to create model: %v", err)
+	}
+
+	// Go to prompt step
+	newModel, _ := model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m := newModel.(*ImageGenModel)
+
+	// Try to submit empty prompt
+	newModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = newModel.(*ImageGenModel)
+
+	// Should stay in prompt step
+	if m.Step != ImageGenStepPrompt {
+		t.Errorf("expected to stay in ImageGenStepPrompt with empty prompt, got %d", m.Step)
+	}
+
+	// Should have error
+	if m.Error == "" {
+		t.Error("expected error for empty prompt")
+	}
+	if !strings.Contains(m.Error, "empty") {
+		t.Errorf("expected error about empty prompt, got %q", m.Error)
+	}
+}
+
+func TestImageGenModel_PromptInputWhitespaceOnlyShowsError(t *testing.T) {
+	tmpDir := t.TempDir()
+	mdFile := filepath.Join(tmpDir, "test.md")
+
+	content := `# Test Slide
+
+Content
+`
+	if err := os.WriteFile(mdFile, []byte(content), 0644); err != nil {
+		t.Fatalf("failed to write test file: %v", err)
+	}
+
+	model, err := NewImageGenModel(mdFile)
+	if err != nil {
+		t.Fatalf("failed to create model: %v", err)
+	}
+
+	// Go to prompt step
+	newModel, _ := model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m := newModel.(*ImageGenModel)
+
+	// Set whitespace-only prompt
+	m.promptInput.SetValue("   \n  \t  ")
+
+	// Try to submit
+	newModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = newModel.(*ImageGenModel)
+
+	// Should stay in prompt step
+	if m.Step != ImageGenStepPrompt {
+		t.Errorf("expected to stay in ImageGenStepPrompt with whitespace-only prompt, got %d", m.Step)
+	}
+
+	// Should have error
+	if m.Error == "" {
+		t.Error("expected error for whitespace-only prompt")
+	}
+}
+
+func TestImageGenModel_PromptPrefilledWhenRegenerating(t *testing.T) {
+	tmpDir := t.TempDir()
+	mdFile := filepath.Join(tmpDir, "test.md")
+
+	content := `# Test Slide
+
+<!-- ai-prompt: A cat sitting on a windowsill -->
+![](images/cat.png)
+`
+	if err := os.WriteFile(mdFile, []byte(content), 0644); err != nil {
+		t.Fatalf("failed to write test file: %v", err)
+	}
+
+	model, err := NewImageGenModel(mdFile)
+	if err != nil {
+		t.Fatalf("failed to create model: %v", err)
+	}
+
+	// Select slide (goes to image select)
+	newModel, _ := model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m := newModel.(*ImageGenModel)
+
+	// Navigate to regenerate option (index 1)
+	newModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	m = newModel.(*ImageGenModel)
+
+	// Select regenerate option
+	newModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = newModel.(*ImageGenModel)
+
+	// Should be in prompt step
+	if m.Step != ImageGenStepPrompt {
+		t.Errorf("expected ImageGenStepPrompt, got %d", m.Step)
+	}
+
+	// Prompt should be pre-filled
+	promptValue := m.promptInput.Value()
+	if promptValue != "A cat sitting on a windowsill" {
+		t.Errorf("expected prompt to be pre-filled with 'A cat sitting on a windowsill', got %q", promptValue)
+	}
+
+	// SelectedImage should be set
+	if m.SelectedImage == nil {
+		t.Error("SelectedImage should not be nil when regenerating")
+	}
+
+	// View should indicate regenerating
+	view := m.View()
+	if !strings.Contains(view, "Regenerating") {
+		t.Error("view should indicate regenerating existing image")
+	}
+}
+
+func TestImageGenModel_PromptInputViewShowsError(t *testing.T) {
+	tmpDir := t.TempDir()
+	mdFile := filepath.Join(tmpDir, "test.md")
+
+	content := `# Test Slide
+
+Content
+`
+	if err := os.WriteFile(mdFile, []byte(content), 0644); err != nil {
+		t.Fatalf("failed to write test file: %v", err)
+	}
+
+	model, err := NewImageGenModel(mdFile)
+	if err != nil {
+		t.Fatalf("failed to create model: %v", err)
+	}
+
+	// Go to prompt step
+	newModel, _ := model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m := newModel.(*ImageGenModel)
+
+	// Try to submit empty prompt to trigger error
+	newModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = newModel.(*ImageGenModel)
+
+	// View should show error
+	view := m.View()
+	if !strings.Contains(view, "Error") {
+		t.Error("view should show error message")
+	}
+}
