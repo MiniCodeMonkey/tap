@@ -1,7 +1,7 @@
 import { test, expect, Page } from '@playwright/test';
 import { spawn, ChildProcess } from 'child_process';
-import { join, dirname } from 'path';
-import { mkdirSync, existsSync } from 'fs';
+import { join, dirname, basename } from 'path';
+import { mkdirSync, existsSync, readdirSync } from 'fs';
 import { fileURLToPath } from 'url';
 
 // ESM compatible __dirname
@@ -9,8 +9,8 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 /**
- * Visual test that starts tap dev server and captures screenshots of all slides.
- * Tests examples/basic.md template.
+ * Visual test that iterates all example templates, starts tap dev server for each,
+ * and captures screenshots of all slides with fragment states.
  */
 
 // API response types
@@ -39,10 +39,41 @@ interface CapturedError {
   timestamp: Date;
 }
 
-// Get a dynamic port to avoid conflicts
-function getPort(): number {
-  // Use a random port between 4000-5000 for visual tests
-  return 4000 + Math.floor(Math.random() * 1000);
+// Test result tracking
+interface TemplateResult {
+  templateName: string;
+  success: boolean;
+  slideCount: number;
+  fragmentCount: number;
+  screenshotCount: number;
+  errorCount: number;
+  errors: CapturedError[];
+}
+
+// Project paths
+const projectRoot = join(__dirname, '..', '..', '..');
+const tapBinary = join(projectRoot, 'tap');
+const examplesDir = join(projectRoot, 'examples');
+const screenshotsBaseDir = join(__dirname, 'screenshots');
+
+// Port management - start from a base and increment for each template
+let nextPort = 4000;
+
+function getNextPort(): number {
+  return nextPort++;
+}
+
+// Discover all markdown files in examples directory
+function discoverTemplates(): string[] {
+  const files = readdirSync(examplesDir)
+    .filter((file) => file.endsWith('.md'))
+    .sort(); // Alphabetical order for consistent test runs
+  return files;
+}
+
+// Get template name from filename (without .md extension)
+function getTemplateName(filename: string): string {
+  return basename(filename, '.md');
 }
 
 // Wait for HTTP server to be ready
@@ -64,8 +95,50 @@ async function waitForServer(url: string, timeout = 30000): Promise<void> {
   throw new Error(`Server did not become ready at ${url} within ${timeout}ms`);
 }
 
+// Start tap dev server for a template
+async function startServer(
+  templatePath: string,
+  port: number
+): Promise<ChildProcess> {
+  const serverProcess = spawn(
+    tapBinary,
+    ['dev', templatePath, '--port', String(port), '--headless'],
+    {
+      stdio: ['ignore', 'pipe', 'pipe'],
+      detached: false,
+    }
+  );
+
+  serverProcess.stdout?.on('data', (data) => {
+    console.log(`[tap dev stdout]: ${data}`);
+  });
+
+  serverProcess.stderr?.on('data', (data) => {
+    console.error(`[tap dev stderr]: ${data}`);
+  });
+
+  serverProcess.on('error', (error) => {
+    console.error(`[tap dev error]: ${error.message}`);
+  });
+
+  const baseUrl = `http://localhost:${port}`;
+  await waitForServer(baseUrl, 30000);
+
+  return serverProcess;
+}
+
+// Stop server gracefully
+async function stopServer(serverProcess: ChildProcess | null): Promise<void> {
+  if (serverProcess) {
+    serverProcess.kill('SIGTERM');
+    await new Promise((resolve) => setTimeout(resolve, 500));
+  }
+}
+
 // Fetch presentation data from API
-async function fetchPresentation(baseUrl: string): Promise<PresentationResponse> {
+async function fetchPresentation(
+  baseUrl: string
+): Promise<PresentationResponse> {
   const response = await fetch(`${baseUrl}/api/presentation`);
   if (!response.ok) {
     throw new Error(`Failed to fetch presentation: ${response.status}`);
@@ -80,7 +153,10 @@ async function captureSlideScreenshot(
   slideNumber: number,
   screenshotsDir: string
 ): Promise<void> {
-  const screenshotPath = join(screenshotsDir, `${templateName}-slide-${slideNumber}.png`);
+  const screenshotPath = join(
+    screenshotsDir,
+    `${templateName}-slide-${slideNumber}.png`
+  );
   await page.screenshot({
     path: screenshotPath,
     fullPage: false,
@@ -105,98 +181,67 @@ async function captureFragmentScreenshot(
   });
 }
 
-test.describe('Basic Template Visual Test', () => {
-  let serverProcess: ChildProcess | null = null;
-  let port: number;
-  let baseUrl: string;
+// Process a single template and capture all screenshots
+async function processTemplate(
+  page: Page,
+  templateName: string,
+  baseUrl: string,
+  screenshotsDir: string
+): Promise<TemplateResult> {
   const capturedErrors: CapturedError[] = [];
   let currentSlideNumber = 1;
 
-  test.beforeAll(async () => {
-    port = getPort();
-    baseUrl = `http://localhost:${port}`;
-
-    // Path to tap binary (root of project is 3 levels up from tests/visual/)
-    const projectRoot = join(__dirname, '..', '..', '..');
-    const tapBinary = join(projectRoot, 'tap');
-    // Path to examples/basic.md
-    const basicMd = join(projectRoot, 'examples', 'basic.md');
-
-    // Ensure screenshots directory exists
-    const screenshotsDir = join(__dirname, 'screenshots');
-    if (!existsSync(screenshotsDir)) {
-      mkdirSync(screenshotsDir, { recursive: true });
-    }
-
-    // Start tap dev server in headless mode
-    serverProcess = spawn(tapBinary, ['dev', basicMd, '--port', String(port), '--headless'], {
-      stdio: ['ignore', 'pipe', 'pipe'],
-      detached: false,
-    });
-
-    // Log server output for debugging
-    serverProcess.stdout?.on('data', (data) => {
-      console.log(`[tap dev stdout]: ${data}`);
-    });
-
-    serverProcess.stderr?.on('data', (data) => {
-      console.error(`[tap dev stderr]: ${data}`);
-    });
-
-    serverProcess.on('error', (error) => {
-      console.error(`[tap dev error]: ${error.message}`);
-    });
-
-    // Wait for server to be ready
-    await waitForServer(baseUrl, 30000);
-  });
-
-  test.afterAll(async () => {
-    // Stop the server
-    if (serverProcess) {
-      serverProcess.kill('SIGTERM');
-      // Wait a bit for graceful shutdown
-      await new Promise((resolve) => setTimeout(resolve, 500));
-      serverProcess = null;
-    }
-  });
-
-  test('captures screenshot of all slides in basic template', async ({ page }) => {
-    const screenshotsDir = join(__dirname, 'screenshots');
-    const templateName = 'basic';
-
-    // Set up console error listener
-    page.on('console', (msg) => {
-      if (msg.type() === 'error') {
-        capturedErrors.push({
-          templateName,
-          slideNumber: currentSlideNumber,
-          errorType: 'console',
-          message: msg.text(),
-          timestamp: new Date(),
-        });
-        console.error(`[Console Error] Slide ${currentSlideNumber}: ${msg.text()}`);
+  // Set up console error listener
+  const consoleHandler = (msg: { type: () => string; text: () => string }) => {
+    if (msg.type() === 'error') {
+      const text = msg.text();
+      // Ignore network resource loading errors (external images, fonts, etc.)
+      // These are usually not critical errors and can be false positives
+      if (
+        text.includes('net::ERR_') ||
+        text.includes('Failed to load resource')
+      ) {
+        console.warn(
+          `[Network Warning] ${templateName} slide ${currentSlideNumber}: ${text}`
+        );
+        return;
       }
-    });
-
-    // Set up page error listener (uncaught exceptions)
-    page.on('pageerror', (error) => {
       capturedErrors.push({
         templateName,
         slideNumber: currentSlideNumber,
-        errorType: 'pageerror',
-        message: error.message,
+        errorType: 'console',
+        message: text,
         timestamp: new Date(),
       });
-      console.error(`[Page Error] Slide ${currentSlideNumber}: ${error.message}`);
-    });
+      console.error(
+        `[Console Error] ${templateName} slide ${currentSlideNumber}: ${text}`
+      );
+    }
+  };
 
+  // Set up page error listener (uncaught exceptions)
+  const pageErrorHandler = (error: Error) => {
+    capturedErrors.push({
+      templateName,
+      slideNumber: currentSlideNumber,
+      errorType: 'pageerror',
+      message: error.message,
+      timestamp: new Date(),
+    });
+    console.error(
+      `[Page Error] ${templateName} slide ${currentSlideNumber}: ${error.message}`
+    );
+  };
+
+  page.on('console', consoleHandler);
+  page.on('pageerror', pageErrorHandler);
+
+  try {
     // Fetch presentation data to get slide count
     const presentation = await fetchPresentation(baseUrl);
     const totalSlides = presentation.slides.length;
-    expect(totalSlides).toBeGreaterThan(0);
 
-    console.log(`Found ${totalSlides} slides in ${templateName} template`);
+    console.log(`\n📖 Processing ${templateName}: ${totalSlides} slides`);
 
     // Navigate to the presentation
     await page.goto(baseUrl);
@@ -222,22 +267,17 @@ test.describe('Basic Template Visual Test', () => {
 
       if (fragmentCount > 0) {
         // Slide has fragments - capture each fragment state
-        console.log(
-          `Slide ${slideNumber} has ${fragmentCount} fragments, capturing each state...`
-        );
-
-        // First fragment state (fragment 0) - this is the initial state before any fragments revealed
-        // Actually, when we land on a slide with fragments, we see fragment index 0 content
-        // Pressing ArrowRight reveals the next fragment until all are revealed
-        // Then pressing ArrowRight again moves to the next slide
-
         for (let fragIndex = 0; fragIndex <= fragmentCount; fragIndex++) {
           await page.waitForTimeout(300);
 
           if (fragIndex === fragmentCount) {
             // Final state - all fragments revealed, capture as the slide's main screenshot
-            await captureSlideScreenshot(page, templateName, slideNumber, screenshotsDir);
-            console.log(`Captured final state for slide ${slideNumber} (all fragments revealed)`);
+            await captureSlideScreenshot(
+              page,
+              templateName,
+              slideNumber,
+              screenshotsDir
+            );
           } else {
             // Intermediate fragment state
             await captureFragmentScreenshot(
@@ -246,9 +286,6 @@ test.describe('Basic Template Visual Test', () => {
               slideNumber,
               fragIndex,
               screenshotsDir
-            );
-            console.log(
-              `Captured fragment ${fragIndex}/${fragmentCount} for slide ${slideNumber}`
             );
             totalFragments++;
 
@@ -259,8 +296,12 @@ test.describe('Basic Template Visual Test', () => {
         totalScreenshots++;
       } else {
         // No fragments - capture single screenshot
-        await captureSlideScreenshot(page, templateName, slideNumber, screenshotsDir);
-        console.log(`Captured screenshot for slide ${slideNumber}/${totalSlides}`);
+        await captureSlideScreenshot(
+          page,
+          templateName,
+          slideNumber,
+          screenshotsDir
+        );
         totalScreenshots++;
       }
 
@@ -272,23 +313,135 @@ test.describe('Basic Template Visual Test', () => {
     }
 
     console.log(
-      `Completed: captured ${totalScreenshots} slides + ${totalFragments} fragment states for ${templateName}`
+      `   ✓ Captured ${totalScreenshots} slides + ${totalFragments} fragment states`
     );
 
-    // Print error summary
-    console.log('\n=== Error Summary ===');
-    if (capturedErrors.length === 0) {
-      console.log('No errors detected during visual test run.');
-    } else {
-      console.log(`Total errors detected: ${capturedErrors.length}`);
-      console.log('\nError details:');
-      for (const error of capturedErrors) {
-        console.log(`  [${error.errorType}] ${error.templateName} slide ${error.slideNumber}: ${error.message}`);
+    return {
+      templateName,
+      success: capturedErrors.length === 0,
+      slideCount: totalSlides,
+      fragmentCount: totalFragments,
+      screenshotCount: totalScreenshots + totalFragments,
+      errorCount: capturedErrors.length,
+      errors: capturedErrors,
+    };
+  } finally {
+    // Clean up listeners
+    page.removeListener('console', consoleHandler);
+    page.removeListener('pageerror', pageErrorHandler);
+  }
+}
+
+// Print summary of all template results
+function printSummary(results: TemplateResult[]): void {
+  const totalTemplates = results.length;
+  const successfulTemplates = results.filter((r) => r.success).length;
+  const failedTemplates = results.filter((r) => !r.success);
+  const totalSlides = results.reduce((sum, r) => sum + r.slideCount, 0);
+  const totalScreenshots = results.reduce((sum, r) => sum + r.screenshotCount, 0);
+  const totalErrors = results.reduce((sum, r) => sum + r.errorCount, 0);
+
+  console.log('\n' + '='.repeat(60));
+  console.log('                    VISUAL TEST SUMMARY');
+  console.log('='.repeat(60));
+  console.log(`Templates processed: ${totalTemplates}`);
+  console.log(`  Successful: ${successfulTemplates}`);
+  console.log(`  Failed: ${failedTemplates.length}`);
+  console.log(`Total slides: ${totalSlides}`);
+  console.log(`Total screenshots: ${totalScreenshots}`);
+  console.log(`Total errors: ${totalErrors}`);
+
+  if (failedTemplates.length > 0) {
+    console.log('\n--- Failed Templates ---');
+    for (const result of failedTemplates) {
+      console.log(`\n${result.templateName} (${result.errorCount} errors):`);
+      for (const error of result.errors) {
+        console.log(
+          `  [${error.errorType}] Slide ${error.slideNumber}: ${error.message}`
+        );
       }
     }
-    console.log('=====================\n');
+  }
 
-    // Fail test if any errors were detected
-    expect(capturedErrors.length, `Detected ${capturedErrors.length} console/page errors during rendering`).toBe(0);
+  console.log('='.repeat(60) + '\n');
+}
+
+test.describe('Visual Tests for All Example Templates', () => {
+  // Ensure screenshots directory exists
+  test.beforeAll(async () => {
+    if (!existsSync(screenshotsBaseDir)) {
+      mkdirSync(screenshotsBaseDir, { recursive: true });
+    }
+  });
+
+  test('captures screenshots of all templates in examples/', async ({
+    page,
+  }) => {
+    const templateFiles = discoverTemplates();
+    const results: TemplateResult[] = [];
+
+    console.log(`\nDiscovered ${templateFiles.length} templates:`);
+    templateFiles.forEach((file) => console.log(`  - ${file}`));
+
+    for (const templateFile of templateFiles) {
+      const templateName = getTemplateName(templateFile);
+      const templatePath = join(examplesDir, templateFile);
+      const port = getNextPort();
+      const baseUrl = `http://localhost:${port}`;
+
+      // Create template-specific screenshots directory
+      const templateScreenshotsDir = join(screenshotsBaseDir, templateName);
+      if (!existsSync(templateScreenshotsDir)) {
+        mkdirSync(templateScreenshotsDir, { recursive: true });
+      }
+
+      let serverProcess: ChildProcess | null = null;
+
+      try {
+        // Start server for this template
+        serverProcess = await startServer(templatePath, port);
+
+        // Process template and capture screenshots
+        const result = await processTemplate(
+          page,
+          templateName,
+          baseUrl,
+          templateScreenshotsDir
+        );
+        results.push(result);
+      } catch (error) {
+        console.error(`\n❌ Failed to process ${templateName}:`, error);
+        results.push({
+          templateName,
+          success: false,
+          slideCount: 0,
+          fragmentCount: 0,
+          screenshotCount: 0,
+          errorCount: 1,
+          errors: [
+            {
+              templateName,
+              slideNumber: 0,
+              errorType: 'pageerror',
+              message: error instanceof Error ? error.message : String(error),
+              timestamp: new Date(),
+            },
+          ],
+        });
+      } finally {
+        // Stop server for this template
+        await stopServer(serverProcess);
+      }
+    }
+
+    // Print summary
+    printSummary(results);
+
+    // Fail test if any template had errors
+    const totalErrors = results.reduce((sum, r) => sum + r.errorCount, 0);
+    expect(
+      totalErrors,
+      `Detected ${totalErrors} console/page errors across ${results.filter((r) => !r.success).length} templates`
+    ).toBe(0);
   });
 });

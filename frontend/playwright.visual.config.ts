@@ -47,8 +47,8 @@ export default defineConfig({
   // Output directory for screenshots
   outputDir: './tests/visual/screenshots',
 
-  // Timeout settings
-  timeout: 60000, // 60 seconds per test
+  // Timeout settings - extended for processing all templates sequentially
+  timeout: 600000, // 10 minutes per test (8 templates * ~60s each)
   expect: {
     timeout: 10000,
   },
