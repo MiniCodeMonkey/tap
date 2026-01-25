@@ -589,7 +589,15 @@ func TestDevModel_HandleKeyPress_Image_WithAPIKey(t *testing.T) {
 		}
 	}()
 
-	model := NewDevModel(DevConfig{})
+	// Create a temporary markdown file for testing
+	tmpDir := t.TempDir()
+	mdFile := tmpDir + "/test.md"
+	content := "# Test Slide\n\n---\n\n# Another Slide"
+	if err := os.WriteFile(mdFile, []byte(content), 0644); err != nil {
+		t.Fatalf("failed to write test file: %v", err)
+	}
+
+	model := NewDevModel(DevConfig{MarkdownFile: mdFile})
 
 	msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("i")}
 	newModel, _ := model.Update(msg)
@@ -623,6 +631,16 @@ func TestDevModel_HandleKeyPress_Image_WithAPIKey(t *testing.T) {
 	}
 	if !found {
 		t.Error("expected action event about opening image generator")
+	}
+
+	// Should have created the imageGenModel
+	if m.imageGenModel == nil {
+		t.Error("expected imageGenModel to be created")
+	}
+
+	// Verify slides were loaded
+	if m.imageGenModel != nil && len(m.imageGenModel.Slides) != 2 {
+		t.Errorf("expected 2 slides, got %d", len(m.imageGenModel.Slides))
 	}
 }
 

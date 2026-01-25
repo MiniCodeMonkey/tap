@@ -78,6 +78,7 @@ type DevModel struct { //nolint:govet // embedded structs prevent optimal alignm
 	eventsCh           chan DevEvent
 	closeCh            chan struct{}
 	themeBroadcaster   ThemeBroadcaster
+	imageGenModel      *ImageGenModel
 	mu                 sync.RWMutex
 	windowWidth        int
 	windowHeight       int
@@ -191,6 +192,11 @@ func (m *DevModel) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleThemePickerKey(msg)
 	}
 
+	// Handle image generator if it's open
+	if m.showImageGenerator && m.imageGenModel != nil {
+		return m.handleImageGeneratorKey(msg)
+	}
+
 	switch msg.String() {
 	case "q", "ctrl+c":
 		m.quitting = true
@@ -262,7 +268,20 @@ func (m *DevModel) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
+		// Create the image generator model
+		imageGen, err := NewImageGenModel(m.config.MarkdownFile)
+		if err != nil {
+			m.SetError(fmt.Errorf("failed to load slides: %w", err))
+			m.addEvent(DevEvent{
+				Type:      "error",
+				Message:   "Failed to load slides for image generator",
+				Timestamp: time.Now(),
+			})
+			return m, nil
+		}
+
 		// API key is present, show image generator
+		m.imageGenModel = imageGen
 		m.showImageGenerator = true
 		m.addEvent(DevEvent{
 			Type:      "action",
@@ -316,6 +335,28 @@ func (m *DevModel) handleThemePickerKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// handleImageGeneratorKey handles keyboard input when the image generator is open.
+func (m *DevModel) handleImageGeneratorKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	// Delegate to the image generator model
+	newModel, cmd := m.imageGenModel.Update(msg)
+
+	// Check if the user cancelled (returns nil)
+	if newModel == nil {
+		m.showImageGenerator = false
+		m.imageGenModel = nil
+		m.addEvent(DevEvent{
+			Type:      "action",
+			Message:   "Image generator cancelled",
+			Timestamp: time.Now(),
+		})
+		return m, nil
+	}
+
+	// Update the image generator model
+	m.imageGenModel = newModel.(*ImageGenModel)
+	return m, cmd
+}
+
 // openBrowserCmd returns a command that opens a URL in the default browser.
 func openBrowserCmd(url string) tea.Cmd {
 	return func() tea.Msg {
@@ -356,6 +397,11 @@ func (m *DevModel) View() string {
 	// Show theme picker overlay if active
 	if m.showThemePicker {
 		return m.viewThemePicker()
+	}
+
+	// Show image generator overlay if active
+	if m.showImageGenerator && m.imageGenModel != nil {
+		return m.imageGenModel.View()
 	}
 
 	var b strings.Builder
