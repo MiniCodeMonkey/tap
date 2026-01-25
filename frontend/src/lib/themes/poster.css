@@ -1,8 +1,9 @@
 /**
- * Poster Theme - Editorial Edition
+ * Poster Theme - Bold Statement Edition
  *
- * Sophisticated editorial design meets bold poster aesthetics.
- * Rich, warm tones with elegant typography and refined visual effects.
+ * Unapologetically bold poster aesthetics with maximum visual impact.
+ * High contrast, thick borders, sharp corners, and commanding typography.
+ * Designed to demand attention and make every slide a statement.
  */
 
 /* Animations */
@@ -12,62 +13,101 @@
   100% { background-position: 0% 50%; }
 }
 
+@keyframes poster-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.85; }
+}
+
 .theme-poster {
-  /* Core colors - sophisticated warm palette */
-  --color-bg: #0d0d0f;
-  --color-text: #fafafa;
-  --color-muted: #a1a1aa;
-  --color-accent: #ff6b4a;
-  --color-code-bg: #161619;
+  /* Core colors - high contrast for maximum impact */
+  --color-bg: #0a0a0a;
+  --color-text: #ffffff;
+  --color-muted: #888888;
+  --color-accent: #ff4d4d;
+  --color-code-bg: #111111;
 
   /* Extended colors */
-  --color-border: rgba(255, 255, 255, 0.12);
-  --color-surface: rgba(255, 255, 255, 0.04);
-  --color-surface-elevated: rgba(255, 255, 255, 0.08);
+  --color-border: rgba(255, 255, 255, 0.25);
+  --color-surface: rgba(255, 255, 255, 0.05);
+  --color-surface-elevated: rgba(255, 255, 255, 0.1);
   --color-link: var(--color-accent);
-  --color-code-text: #f1f5f9;
+  --color-code-text: #f5f5f5;
+
+  /* Poster bold color palette - vibrant and harmonious */
+  --poster-red: #ff4d4d;
+  --poster-red-bright: #ff6666;
+  --poster-yellow: #ffcc00;
+  --poster-cyan: #00ffff;
+  --poster-white: #ffffff;
 
   /* Gradient accent colors */
-  --poster-gradient-start: #ff6b4a;
-  --poster-gradient-mid: #f472b6;
-  --poster-gradient-end: #818cf8;
+  --poster-gradient-start: #ff4d4d;
+  --poster-gradient-mid: #ff8800;
+  --poster-gradient-end: #ffcc00;
 
-  /* Error colors - warm coral that fits the gradient palette */
-  --color-error: #ff6b4a;
-  --color-error-bg: rgba(255, 107, 74, 0.15);
+  /* Error colors - bold red */
+  --color-error: #ff3333;
+  --color-error-bg: rgba(255, 51, 51, 0.2);
 
-  /* Typography */
-  --font-sans: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  /* Typography - bold, impactful */
+  --font-sans: 'Inter', 'Helvetica Neue', Arial, system-ui, sans-serif;
   --font-mono: 'JetBrains Mono', 'SF Mono', Monaco, Consolas, monospace;
-  --font-display: 'Inter', system-ui, sans-serif;
+  --font-display: 'Inter', 'Helvetica Neue', Arial, system-ui, sans-serif;
+
+  /* Poster-specific spacing */
+  --poster-border-thick: 4px;
+  --poster-shadow-offset: 6px;
 
   /* Transitions */
-  --transition-duration: 300ms;
-  --transition-timing: cubic-bezier(0.4, 0, 0.2, 1);
-  --fragment-duration: 400ms;
+  --transition-duration: 200ms;
+  --transition-timing: cubic-bezier(0.25, 0, 0.25, 1);
+  --fragment-duration: 300ms;
 
   /* Base styles */
   font-family: var(--font-sans);
   color: var(--color-text);
-  letter-spacing: -0.01em;
-  line-height: 1.6;
+  letter-spacing: 0.02em;
+  line-height: 1.5;
+  text-transform: uppercase;
 }
 
-/* Force dark background - override Tailwind's bg-theme-bg */
+/* Force dark background - pure black for maximum contrast */
 .theme-poster,
 .theme-poster.slide-container,
 .theme-poster .slide {
-  background-color: #0d0d0f !important;
+  background-color: #0a0a0a !important;
 }
 
-/* Add subtle gradient overlay to slide */
+/* Subtle corner accent - bold but not distracting */
 .theme-poster .slide::before {
   content: '';
   position: absolute;
-  inset: 0;
-  background:
-    radial-gradient(ellipse at 20% 0%, rgba(255, 107, 74, 0.08) 0%, transparent 50%),
-    radial-gradient(ellipse at 80% 100%, rgba(129, 140, 248, 0.06) 0%, transparent 50%);
+  top: 0;
+  right: 0;
+  width: 200px;
+  height: 200px;
+  background: linear-gradient(
+    135deg,
+    rgba(255, 77, 77, 0.15) 0%,
+    transparent 70%
+  );
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Bottom-left accent */
+.theme-poster .slide::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 150px;
+  height: 150px;
+  background: linear-gradient(
+    315deg,
+    rgba(255, 204, 0, 0.1) 0%,
+    transparent 70%
+  );
   pointer-events: none;
   z-index: 0;
 }
@@ -78,7 +118,7 @@
 }
 
 /* ============================================================================
- * Typography
+ * Typography - Bold, Commanding, Impactful
  * ============================================================================ */
 
 .theme-poster h1,
@@ -88,82 +128,96 @@
 .theme-poster h5,
 .theme-poster h6 {
   font-family: var(--font-display);
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  line-height: 1.1;
+  font-weight: 900;
+  letter-spacing: 0.05em;
+  line-height: 1.0;
   margin: 0;
   color: var(--color-text);
+  text-transform: uppercase;
 }
 
 .theme-poster h1 {
-  font-weight: 800;
-  letter-spacing: -0.03em;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-shadow:
+    var(--poster-shadow-offset) var(--poster-shadow-offset) 0 rgba(0, 0, 0, 0.8),
+    -1px -1px 0 rgba(255, 255, 255, 0.1);
+}
+
+.theme-poster h2 {
+  letter-spacing: 0.06em;
+  text-shadow: 4px 4px 0 rgba(0, 0, 0, 0.6);
+}
+
+.theme-poster h3 {
+  letter-spacing: 0.04em;
 }
 
 .theme-poster p,
 .theme-poster li {
   font-family: var(--font-sans);
-  font-weight: 400;
-  line-height: 1.7;
+  font-weight: 600;
+  line-height: 1.6;
+  letter-spacing: 0.03em;
 }
 
-/* Strong text with accent color */
+/* Strong text with accent color - extra bold */
 .theme-poster strong,
 .theme-poster b {
-  font-weight: 700;
+  font-weight: 900;
   color: var(--color-accent);
+  text-shadow: 2px 2px 0 rgba(0, 0, 0, 0.5);
 }
 
 .theme-poster em,
 .theme-poster i {
-  font-style: italic;
-  color: var(--color-muted);
+  font-style: normal;
+  color: var(--poster-yellow);
+  font-weight: 700;
 }
 
 /* ============================================================================
- * Code blocks
+ * Code blocks - Bold, High Contrast
  * ============================================================================ */
 
 .theme-poster code {
   font-family: var(--font-mono);
-  background: rgba(255, 107, 74, 0.1);
-  color: var(--color-text);
-  padding: 0.2em 0.5em;
-  border-radius: 6px;
-  font-size: 0.88em;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--color-accent);
+  color: #000000;
+  padding: 0.15em 0.5em;
+  border-radius: 0;
+  font-size: 0.85em;
+  font-weight: 700;
+  text-transform: none;
+  letter-spacing: 0;
+  border: 2px solid var(--color-text);
 }
 
 .theme-poster pre {
   font-family: var(--font-mono);
-  background: var(--color-code-bg);
+  background: #000000;
   color: var(--color-code-text);
-  padding: 1.75em 2em;
-  border-radius: 12px;
+  padding: 2em 2.5em;
+  border-radius: 0;
   overflow-x: auto;
-  line-height: 1.6;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  line-height: 1.5;
+  border: var(--poster-border-thick) solid var(--color-text);
   box-shadow:
-    0 4px 24px -8px rgba(0, 0, 0, 0.5),
-    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    var(--poster-shadow-offset) var(--poster-shadow-offset) 0 var(--color-text);
   position: relative;
+  text-transform: none;
+  letter-spacing: 0;
 }
 
-/* Gradient accent line on code blocks */
+/* Bold accent bar on code blocks */
 .theme-poster pre::before {
   content: '';
   position: absolute;
   top: 0;
   left: 0;
-  right: 0;
-  height: 2px;
-  background: linear-gradient(
-    90deg,
-    var(--poster-gradient-start),
-    var(--poster-gradient-mid),
-    var(--poster-gradient-end)
-  );
-  border-radius: 12px 12px 0 0;
+  width: 8px;
+  height: 100%;
+  background: var(--color-accent);
 }
 
 .theme-poster pre code {
@@ -172,127 +226,185 @@
   border-radius: 0;
   font-size: inherit;
   border: none;
+  font-weight: 500;
+  color: var(--color-code-text);
 }
 
 /* ============================================================================
- * Links
+ * Links - Bold, Underlined
  * ============================================================================ */
 
 .theme-poster a {
   color: var(--color-accent);
-  text-decoration: none;
-  font-weight: 500;
-  transition: color var(--transition-duration) var(--transition-timing);
+  text-decoration: underline;
+  text-decoration-thickness: 3px;
+  text-underline-offset: 4px;
+  font-weight: 700;
+  transition: all var(--transition-duration) var(--transition-timing);
 }
 
 .theme-poster a:hover {
-  color: #ff8a70;
-  text-decoration: underline;
-  text-underline-offset: 3px;
+  color: var(--poster-yellow);
+  text-decoration-color: var(--poster-yellow);
+  text-shadow: 2px 2px 0 rgba(0, 0, 0, 0.5);
 }
 
 /* ============================================================================
- * Lists
+ * Lists - Bold Markers, High Impact
  * ============================================================================ */
 
 .theme-poster ul,
 .theme-poster ol {
-  padding-left: 1.5em;
+  padding-left: 2em;
   margin: 0;
 }
 
-.theme-poster li {
-  margin-bottom: 0.75em;
+.theme-poster ul {
+  list-style: none;
+}
+
+.theme-poster ul li {
+  position: relative;
+  margin-bottom: 1em;
+  padding-left: 0.5em;
+}
+
+/* Square bullet markers for poster aesthetic */
+.theme-poster ul li::before {
+  content: '■';
+  position: absolute;
+  left: -1.5em;
+  color: var(--color-accent);
+  font-size: 0.8em;
+  line-height: 1.8;
+  font-weight: 900;
+}
+
+.theme-poster ol li {
+  margin-bottom: 1em;
 }
 
 .theme-poster li::marker {
   color: var(--color-accent);
+  font-weight: 900;
+}
+
+/* Nested lists */
+.theme-poster ul ul li::before,
+.theme-poster ol ul li::before {
+  content: '▸';
+  color: var(--poster-yellow);
 }
 
 /* ============================================================================
- * Blockquotes
+ * Blockquotes - Bold Statement Boxes
  * ============================================================================ */
 
 .theme-poster blockquote {
-  border-left: 4px solid var(--color-accent);
-  padding: 1.5em 2em;
+  border: var(--poster-border-thick) solid var(--color-text);
+  border-left: 8px solid var(--color-accent);
+  padding: 2em 2.5em;
   margin: 0;
   background: rgba(255, 255, 255, 0.03);
-  border-radius: 0 12px 12px 0;
+  border-radius: 0;
   color: var(--color-text);
+  box-shadow: var(--poster-shadow-offset) var(--poster-shadow-offset) 0 var(--color-text);
+  position: relative;
+}
+
+/* Quote mark accent */
+.theme-poster blockquote::before {
+  content: '"';
+  position: absolute;
+  top: -0.2em;
+  left: 0.2em;
+  font-size: 4em;
+  font-weight: 900;
+  color: var(--color-accent);
+  opacity: 0.3;
+  line-height: 1;
 }
 
 .theme-poster blockquote p {
-  font-size: 1.1em;
-  line-height: 1.5;
+  font-size: 1.15em;
+  line-height: 1.4;
   margin: 0;
+  font-weight: 700;
 }
 
 /* ============================================================================
- * Tables
+ * Tables - Grid Structure, High Contrast
  * ============================================================================ */
 
 .theme-poster table {
   width: 100%;
-  border-collapse: separate;
-  border-spacing: 0;
-  background: var(--color-surface);
-  border-radius: 12px;
-  overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-collapse: collapse;
+  background: transparent;
+  border: var(--poster-border-thick) solid var(--color-text);
+  box-shadow: var(--poster-shadow-offset) var(--poster-shadow-offset) 0 var(--color-text);
 }
 
 .theme-poster th,
 .theme-poster td {
   padding: 1em 1.5em;
   text-align: left;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  border: 2px solid var(--color-text);
 }
 
 .theme-poster th {
-  font-weight: 600;
-  background: rgba(255, 255, 255, 0.06);
-  color: var(--color-text);
+  font-weight: 900;
+  background: var(--color-accent);
+  color: #000000;
   text-transform: uppercase;
-  font-size: 0.85em;
-  letter-spacing: 0.05em;
+  font-size: 0.9em;
+  letter-spacing: 0.08em;
 }
 
-.theme-poster tr:last-child td {
-  border-bottom: none;
+.theme-poster tr:nth-child(even) td {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.theme-poster tr:hover td {
+  background: rgba(255, 77, 77, 0.1);
 }
 
 /* ============================================================================
- * Images
+ * Images - Bold Frames
  * ============================================================================ */
 
 .theme-poster img {
   max-width: 100%;
   height: auto;
-  border-radius: 12px;
-  box-shadow: 0 8px 32px -8px rgba(0, 0, 0, 0.5);
+  border-radius: 0;
+  border: var(--poster-border-thick) solid var(--color-text);
+  box-shadow: var(--poster-shadow-offset) var(--poster-shadow-offset) 0 var(--color-text);
 }
 
 /* ============================================================================
- * Horizontal rule
+ * Horizontal rule - Bold Separator
  * ============================================================================ */
 
 .theme-poster hr {
   border: none;
-  height: 2px;
-  background: linear-gradient(
-    90deg,
-    transparent,
-    var(--poster-gradient-start) 20%,
-    var(--poster-gradient-mid) 50%,
-    var(--poster-gradient-end) 80%,
-    transparent
-  );
+  height: 6px;
+  background: var(--color-text);
   margin: 2.5em 0;
+  position: relative;
+}
+
+/* Accent block on hr */
+.theme-poster hr::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 60px;
+  height: 100%;
+  background: var(--color-accent);
 }
 
 /* ============================================================================
- * Fragments
+ * Fragments - Bold Reveal
  * ============================================================================ */
 
 .theme-poster .fragment {
@@ -303,12 +415,12 @@
 
 .theme-poster .fragment-hidden {
   opacity: 0;
-  transform: translateY(20px);
+  transform: translateX(-30px);
 }
 
 .theme-poster .fragment-visible {
   opacity: 1;
-  transform: translateY(0);
+  transform: translateX(0);
 }
 
 /* ============================================================================
@@ -316,69 +428,162 @@
  * ============================================================================ */
 
 .theme-poster ::selection {
-  background-color: var(--color-accent);
-  color: #ffffff;
+  background-color: var(--poster-yellow);
+  color: #000000;
 }
 
 /* ============================================================================
  * Layout-specific styling
  * ============================================================================ */
 
-/* Title slide - gradient animated heading */
+/* Title slide - massive, impactful heading */
 .theme-poster .layout-title h1 {
-  background: linear-gradient(
-    135deg,
-    var(--color-text) 0%,
-    var(--color-text) 30%,
-    var(--poster-gradient-start) 50%,
-    var(--poster-gradient-mid) 70%,
-    var(--poster-gradient-end) 100%
-  );
-  background-size: 200% 200%;
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
-  animation: poster-gradient-shift 8s ease infinite;
+  font-size: 9rem;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  color: var(--color-text);
+  text-shadow:
+    8px 8px 0 var(--color-accent),
+    -2px -2px 0 rgba(255, 255, 255, 0.2);
+  -webkit-text-stroke: 2px var(--color-text);
 }
 
-/* Section slide - accent gradient heading */
+.theme-poster .layout-title p {
+  font-size: 2.5rem;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  color: var(--color-muted);
+  margin-top: 2rem;
+}
+
+/* Section slide - bold accent heading */
 .theme-poster .layout-section h2 {
-  background: linear-gradient(
-    135deg,
-    var(--poster-gradient-start),
-    var(--poster-gradient-mid),
-    var(--poster-gradient-end)
-  );
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
+  font-size: 5rem;
+  color: var(--color-accent);
+  text-shadow: 6px 6px 0 rgba(0, 0, 0, 0.8);
+  letter-spacing: 0.1em;
 }
 
-/* Quote layout - clean, large quote text */
+.theme-poster .layout-section p {
+  font-size: 2rem;
+  letter-spacing: 0.08em;
+  color: var(--color-muted);
+}
+
+/* Quote layout - dramatic statement */
 .theme-poster .layout-quote blockquote {
   background: transparent;
-  border-left: none;
-  padding: 0;
-  border-radius: 0;
+  border: none;
+  border-left: 8px solid var(--color-accent);
+  padding: 0 0 0 2rem;
+  box-shadow: none;
+  max-width: 85%;
+}
+
+.theme-poster .layout-quote blockquote::before {
+  display: none;
 }
 
 .theme-poster .layout-quote blockquote p {
-  font-weight: 600;
-  font-size: inherit;
-  line-height: 1.3;
+  font-weight: 900;
+  font-size: 4rem;
+  line-height: 1.2;
   color: var(--color-text);
+  text-shadow: 4px 4px 0 rgba(0, 0, 0, 0.5);
 }
 
-/* Big stat - gradient number */
+/* Attribution */
+.theme-poster .layout-quote .slide-content > p {
+  font-size: 2rem;
+  color: var(--color-muted);
+  letter-spacing: 0.1em;
+  font-weight: 700;
+}
+
+/* Big stat - maximum impact number */
 .theme-poster .layout-big-stat h2 {
-  background: linear-gradient(
-    135deg,
-    var(--poster-gradient-start),
-    var(--poster-gradient-mid)
-  );
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
+  font-size: 14rem;
+  font-weight: 900;
+  color: var(--color-accent);
+  text-shadow:
+    10px 10px 0 rgba(0, 0, 0, 0.8),
+    -3px -3px 0 rgba(255, 255, 255, 0.2);
+  letter-spacing: 0.05em;
+  line-height: 0.9;
+}
+
+.theme-poster .layout-big-stat p {
+  font-size: 2.5rem;
+  letter-spacing: 0.12em;
+  font-weight: 700;
+  margin-top: 2rem;
+}
+
+/* Default layout adjustments */
+.theme-poster .layout-default h1 {
+  font-size: 5rem;
+  margin-bottom: 1.5rem;
+}
+
+.theme-poster .layout-default h2 {
+  font-size: 3.5rem;
+  margin-bottom: 1.25rem;
+}
+
+.theme-poster .layout-default h3 {
+  font-size: 2.5rem;
+  color: var(--color-accent);
+}
+
+/* Two-column layout */
+.theme-poster .layout-two-column h2 {
+  font-size: 3.5rem;
+  margin-bottom: 2rem;
+}
+
+.theme-poster .layout-two-column h3 {
+  font-size: 2.25rem;
+  color: var(--color-accent);
+  border-bottom: 3px solid var(--color-accent);
+  padding-bottom: 0.5rem;
+  margin-bottom: 1.5rem;
+}
+
+/* ============================================================================
+ * Mermaid Diagram Styling
+ * ============================================================================ */
+
+.theme-poster .mermaid {
+  background: transparent;
+}
+
+/* High contrast diagram nodes */
+.theme-poster .mermaid .node rect,
+.theme-poster .mermaid .node circle,
+.theme-poster .mermaid .node ellipse,
+.theme-poster .mermaid .node polygon {
+  fill: #000000 !important;
+  stroke: var(--color-text) !important;
+  stroke-width: 3px !important;
+}
+
+.theme-poster .mermaid .node .label {
+  fill: var(--color-text) !important;
+  font-weight: 700 !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.05em !important;
+}
+
+/* Edge styling */
+.theme-poster .mermaid .edgePath path {
+  stroke: var(--color-accent) !important;
+  stroke-width: 3px !important;
+}
+
+.theme-poster .mermaid .edgeLabel {
+  background: #000000 !important;
+  color: var(--color-text) !important;
+  font-weight: 700 !important;
 }
 
 /* ============================================================================
