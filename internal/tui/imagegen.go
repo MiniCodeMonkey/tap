@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 
@@ -885,6 +886,40 @@ func (m *ImageGenModel) GetSelectedSlide() *SlideInfo {
 		return &m.Slides[m.SelectedIndex]
 	}
 	return nil
+}
+
+// GetImagesDir returns the path to the images directory for the markdown file.
+// The images directory is always "images/" relative to the markdown file's directory.
+func (m *ImageGenModel) GetImagesDir() string {
+	mdDir := filepath.Dir(m.MarkdownFile)
+	return filepath.Join(mdDir, "images")
+}
+
+// EnsureImagesDir creates the images directory if it doesn't exist.
+// Returns the path to the images directory on success.
+func (m *ImageGenModel) EnsureImagesDir() (string, error) {
+	imagesDir := m.GetImagesDir()
+
+	// Check if directory already exists
+	info, err := os.Stat(imagesDir)
+	if err == nil {
+		if !info.IsDir() {
+			return "", fmt.Errorf("images path exists but is not a directory: %s", imagesDir)
+		}
+		return imagesDir, nil
+	}
+
+	// If error is not "not exists", return it
+	if !os.IsNotExist(err) {
+		return "", fmt.Errorf("failed to check images directory: %w", err)
+	}
+
+	// Create directory with parents
+	if err := os.MkdirAll(imagesDir, 0755); err != nil {
+		return "", fmt.Errorf("failed to create images directory: %w", err)
+	}
+
+	return imagesDir, nil
 }
 
 // IsCancelled returns true if the user cancelled the workflow.

@@ -2152,3 +2152,258 @@ func TestImageGenModel_GeneratedImageFieldInitiallyNil(t *testing.T) {
 		t.Error("IsGenerating should be false initially")
 	}
 }
+
+// Tests for images directory creation (US-015)
+
+func TestImageGenModel_GetImagesDir(t *testing.T) {
+	tests := []struct {
+		name           string
+		markdownPath   string
+		expectedSuffix string
+	}{
+		{
+			name:           "markdown in root directory",
+			markdownPath:   "/presentations/slides.md",
+			expectedSuffix: "/presentations/images",
+		},
+		{
+			name:           "markdown in nested directory",
+			markdownPath:   "/home/user/projects/docs/talk.md",
+			expectedSuffix: "/home/user/projects/docs/images",
+		},
+		{
+			name:           "markdown with relative path",
+			markdownPath:   "docs/presentation.md",
+			expectedSuffix: "docs/images",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			model := &ImageGenModel{MarkdownFile: tt.markdownPath}
+			result := model.GetImagesDir()
+
+			if result != tt.expectedSuffix {
+				t.Errorf("expected %q, got %q", tt.expectedSuffix, result)
+			}
+		})
+	}
+}
+
+func TestImageGenModel_EnsureImagesDir_CreatesDirectory(t *testing.T) {
+	tmpDir := t.TempDir()
+	mdFile := filepath.Join(tmpDir, "slides.md")
+
+	content := `# Test Slide`
+	if err := os.WriteFile(mdFile, []byte(content), 0644); err != nil {
+		t.Fatalf("failed to write test file: %v", err)
+	}
+
+	model, err := NewImageGenModel(mdFile)
+	if err != nil {
+		t.Fatalf("failed to create model: %v", err)
+	}
+
+	// Images directory should not exist yet
+	imagesDir := filepath.Join(tmpDir, "images")
+	if _, err := os.Stat(imagesDir); err == nil {
+		t.Fatal("images directory should not exist yet")
+	}
+
+	// Call EnsureImagesDir
+	resultDir, err := model.EnsureImagesDir()
+	if err != nil {
+		t.Fatalf("EnsureImagesDir failed: %v", err)
+	}
+
+	// Check returned path is correct
+	if resultDir != imagesDir {
+		t.Errorf("expected %q, got %q", imagesDir, resultDir)
+	}
+
+	// Check directory was created
+	info, err := os.Stat(imagesDir)
+	if err != nil {
+		t.Fatalf("images directory should exist: %v", err)
+	}
+	if !info.IsDir() {
+		t.Error("images path should be a directory")
+	}
+}
+
+func TestImageGenModel_EnsureImagesDir_DirectoryAlreadyExists(t *testing.T) {
+	tmpDir := t.TempDir()
+	mdFile := filepath.Join(tmpDir, "slides.md")
+
+	content := `# Test Slide`
+	if err := os.WriteFile(mdFile, []byte(content), 0644); err != nil {
+		t.Fatalf("failed to write test file: %v", err)
+	}
+
+	// Pre-create the images directory
+	imagesDir := filepath.Join(tmpDir, "images")
+	if err := os.Mkdir(imagesDir, 0755); err != nil {
+		t.Fatalf("failed to create images directory: %v", err)
+	}
+
+	// Create a file in it to verify it's not replaced
+	testFile := filepath.Join(imagesDir, "existing.png")
+	if err := os.WriteFile(testFile, []byte("test"), 0644); err != nil {
+		t.Fatalf("failed to write test file: %v", err)
+	}
+
+	model, err := NewImageGenModel(mdFile)
+	if err != nil {
+		t.Fatalf("failed to create model: %v", err)
+	}
+
+	// Call EnsureImagesDir
+	resultDir, err := model.EnsureImagesDir()
+	if err != nil {
+		t.Fatalf("EnsureImagesDir failed: %v", err)
+	}
+
+	// Check returned path is correct
+	if resultDir != imagesDir {
+		t.Errorf("expected %q, got %q", imagesDir, resultDir)
+	}
+
+	// Check existing file is still there
+	if _, err := os.Stat(testFile); err != nil {
+		t.Error("existing file in images directory should not be affected")
+	}
+}
+
+func TestImageGenModel_EnsureImagesDir_PathIsFile(t *testing.T) {
+	tmpDir := t.TempDir()
+	mdFile := filepath.Join(tmpDir, "slides.md")
+
+	content := `# Test Slide`
+	if err := os.WriteFile(mdFile, []byte(content), 0644); err != nil {
+		t.Fatalf("failed to write test file: %v", err)
+	}
+
+	// Create "images" as a file instead of directory
+	imagesPath := filepath.Join(tmpDir, "images")
+	if err := os.WriteFile(imagesPath, []byte("not a directory"), 0644); err != nil {
+		t.Fatalf("failed to write images file: %v", err)
+	}
+
+	model, err := NewImageGenModel(mdFile)
+	if err != nil {
+		t.Fatalf("failed to create model: %v", err)
+	}
+
+	// Call EnsureImagesDir - should fail
+	_, err = model.EnsureImagesDir()
+	if err == nil {
+		t.Error("EnsureImagesDir should fail when images path is a file")
+	}
+	if !strings.Contains(err.Error(), "not a directory") {
+		t.Errorf("error should mention 'not a directory', got: %v", err)
+	}
+}
+
+func TestImageGenModel_EnsureImagesDir_NestedDirectory(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create a nested directory structure for the markdown file
+	nestedDir := filepath.Join(tmpDir, "projects", "presentations", "2024")
+	if err := os.MkdirAll(nestedDir, 0755); err != nil {
+		t.Fatalf("failed to create nested directory: %v", err)
+	}
+
+	mdFile := filepath.Join(nestedDir, "talk.md")
+	content := `# Test Slide`
+	if err := os.WriteFile(mdFile, []byte(content), 0644); err != nil {
+		t.Fatalf("failed to write test file: %v", err)
+	}
+
+	model, err := NewImageGenModel(mdFile)
+	if err != nil {
+		t.Fatalf("failed to create model: %v", err)
+	}
+
+	// Call EnsureImagesDir
+	resultDir, err := model.EnsureImagesDir()
+	if err != nil {
+		t.Fatalf("EnsureImagesDir failed: %v", err)
+	}
+
+	// Check returned path is correct
+	expectedDir := filepath.Join(nestedDir, "images")
+	if resultDir != expectedDir {
+		t.Errorf("expected %q, got %q", expectedDir, resultDir)
+	}
+
+	// Check directory was created
+	info, err := os.Stat(expectedDir)
+	if err != nil {
+		t.Fatalf("images directory should exist: %v", err)
+	}
+	if !info.IsDir() {
+		t.Error("images path should be a directory")
+	}
+}
+
+func TestImageGenModel_EnsureImagesDir_Idempotent(t *testing.T) {
+	tmpDir := t.TempDir()
+	mdFile := filepath.Join(tmpDir, "slides.md")
+
+	content := `# Test Slide`
+	if err := os.WriteFile(mdFile, []byte(content), 0644); err != nil {
+		t.Fatalf("failed to write test file: %v", err)
+	}
+
+	model, err := NewImageGenModel(mdFile)
+	if err != nil {
+		t.Fatalf("failed to create model: %v", err)
+	}
+
+	// Call EnsureImagesDir multiple times
+	dir1, err1 := model.EnsureImagesDir()
+	dir2, err2 := model.EnsureImagesDir()
+	dir3, err3 := model.EnsureImagesDir()
+
+	// All calls should succeed
+	if err1 != nil {
+		t.Errorf("first call failed: %v", err1)
+	}
+	if err2 != nil {
+		t.Errorf("second call failed: %v", err2)
+	}
+	if err3 != nil {
+		t.Errorf("third call failed: %v", err3)
+	}
+
+	// All calls should return the same path
+	if dir1 != dir2 || dir2 != dir3 {
+		t.Errorf("paths should be identical: %q, %q, %q", dir1, dir2, dir3)
+	}
+}
+
+func TestImageGenModel_EnsureImagesDir_AbsolutePath(t *testing.T) {
+	tmpDir := t.TempDir()
+	mdFile := filepath.Join(tmpDir, "slides.md")
+
+	content := `# Test Slide`
+	if err := os.WriteFile(mdFile, []byte(content), 0644); err != nil {
+		t.Fatalf("failed to write test file: %v", err)
+	}
+
+	model, err := NewImageGenModel(mdFile)
+	if err != nil {
+		t.Fatalf("failed to create model: %v", err)
+	}
+
+	// Call EnsureImagesDir
+	resultDir, err := model.EnsureImagesDir()
+	if err != nil {
+		t.Fatalf("EnsureImagesDir failed: %v", err)
+	}
+
+	// Result should be an absolute path since mdFile was absolute
+	if !filepath.IsAbs(resultDir) {
+		t.Errorf("expected absolute path, got %q", resultDir)
+	}
+}
