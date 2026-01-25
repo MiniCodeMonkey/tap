@@ -1,7 +1,7 @@
 import { test, expect, Page } from '@playwright/test';
 import { spawn, ChildProcess } from 'child_process';
 import { join, dirname, basename } from 'path';
-import { mkdirSync, existsSync, readdirSync } from 'fs';
+import { mkdirSync, existsSync, readdirSync, writeFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 
 // ESM compatible __dirname
@@ -55,6 +55,7 @@ const projectRoot = join(__dirname, '..', '..', '..');
 const tapBinary = join(projectRoot, 'tap');
 const examplesDir = join(projectRoot, 'examples');
 const screenshotsBaseDir = join(__dirname, 'screenshots');
+const galleryDir = join(__dirname, 'gallery');
 
 // Port management - start from a base and increment for each template
 let nextPort = 4000;
@@ -366,6 +367,379 @@ function printSummary(results: TemplateResult[]): void {
   console.log('='.repeat(60) + '\n');
 }
 
+// Screenshot info for gallery
+interface ScreenshotInfo {
+  filename: string;
+  relativePath: string;
+  slideNumber: number;
+  fragmentIndex: number | null;
+}
+
+// Discover screenshots for a template
+function discoverScreenshots(templateName: string): ScreenshotInfo[] {
+  const templateDir = join(screenshotsBaseDir, templateName);
+  if (!existsSync(templateDir)) {
+    return [];
+  }
+
+  const files = readdirSync(templateDir)
+    .filter((f) => f.endsWith('.png'))
+    .sort();
+
+  return files.map((filename) => {
+    // Parse filename: {template}-slide-{number}.png or {template}-slide-{number}-frag-{index}.png
+    const fragMatch = filename.match(/-slide-(\d+)-frag-(\d+)\.png$/);
+    const slideMatch = filename.match(/-slide-(\d+)\.png$/);
+
+    let slideNumber = 1;
+    let fragmentIndex: number | null = null;
+
+    if (fragMatch) {
+      slideNumber = parseInt(fragMatch[1], 10);
+      fragmentIndex = parseInt(fragMatch[2], 10);
+    } else if (slideMatch) {
+      slideNumber = parseInt(slideMatch[1], 10);
+    }
+
+    return {
+      filename,
+      relativePath: `../screenshots/${templateName}/${filename}`,
+      slideNumber,
+      fragmentIndex,
+    };
+  });
+}
+
+// Generate HTML gallery report
+function generateGalleryReport(results: TemplateResult[]): void {
+  // Ensure gallery directory exists
+  if (!existsSync(galleryDir)) {
+    mkdirSync(galleryDir, { recursive: true });
+  }
+
+  const totalTemplates = results.length;
+  const successfulTemplates = results.filter((r) => r.success).length;
+  const totalSlides = results.reduce((sum, r) => sum + r.slideCount, 0);
+  const totalScreenshots = results.reduce(
+    (sum, r) => sum + r.screenshotCount,
+    0
+  );
+  const totalErrors = results.reduce((sum, r) => sum + r.errorCount, 0);
+  const timestamp = new Date().toLocaleString();
+
+  // Generate template sections
+  const templateSections = results
+    .map((result) => {
+      const screenshots = discoverScreenshots(result.templateName);
+      const statusClass = result.success ? 'success' : 'error';
+      const statusIcon = result.success ? '✓' : '✗';
+
+      const screenshotCards = screenshots
+        .map((ss) => {
+          const label =
+            ss.fragmentIndex !== null
+              ? `Slide ${ss.slideNumber} - Fragment ${ss.fragmentIndex}`
+              : `Slide ${ss.slideNumber}`;
+
+          return `
+          <div class="screenshot-card">
+            <a href="${ss.relativePath}" target="_blank">
+              <img src="${ss.relativePath}" alt="${result.templateName} ${label}" loading="lazy" />
+            </a>
+            <div class="screenshot-label">${label}</div>
+          </div>`;
+        })
+        .join('\n');
+
+      const errorList =
+        result.errors.length > 0
+          ? `
+        <div class="error-list">
+          <h4>Errors:</h4>
+          <ul>
+            ${result.errors.map((e) => `<li><strong>[${e.errorType}] Slide ${e.slideNumber}:</strong> ${escapeHtml(e.message)}</li>`).join('\n')}
+          </ul>
+        </div>`
+          : '';
+
+      return `
+      <section class="template-section" id="${result.templateName}">
+        <h2 class="template-header ${statusClass}">
+          <span class="status-icon">${statusIcon}</span>
+          ${result.templateName}
+          <span class="template-stats">${result.slideCount} slides, ${result.screenshotCount} screenshots</span>
+        </h2>
+        ${errorList}
+        <div class="screenshot-grid">
+          ${screenshotCards}
+        </div>
+      </section>`;
+    })
+    .join('\n');
+
+  // Generate navigation links
+  const navLinks = results
+    .map((r) => {
+      const statusClass = r.success ? 'success' : 'error';
+      return `<a href="#${r.templateName}" class="nav-link ${statusClass}">${r.templateName}</a>`;
+    })
+    .join('\n');
+
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tap Visual QA Gallery</title>
+  <style>
+    :root {
+      --bg-color: #1a1a2e;
+      --card-bg: #16213e;
+      --text-color: #eee;
+      --text-muted: #888;
+      --success-color: #4ade80;
+      --error-color: #f87171;
+      --accent-color: #818cf8;
+      --border-color: #334155;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--bg-color);
+      color: var(--text-color);
+      margin: 0;
+      padding: 0;
+      line-height: 1.6;
+    }
+
+    header {
+      background: var(--card-bg);
+      padding: 2rem;
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    h1 {
+      margin: 0 0 1rem 0;
+      font-size: 2rem;
+      font-weight: 600;
+    }
+
+    .summary-stats {
+      display: flex;
+      gap: 2rem;
+      flex-wrap: wrap;
+    }
+
+    .stat {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .stat-value {
+      font-size: 1.5rem;
+      font-weight: 600;
+      color: var(--accent-color);
+    }
+
+    .stat-value.success { color: var(--success-color); }
+    .stat-value.error { color: var(--error-color); }
+
+    .stat-label {
+      font-size: 0.875rem;
+      color: var(--text-muted);
+    }
+
+    .timestamp {
+      margin-top: 1rem;
+      font-size: 0.875rem;
+      color: var(--text-muted);
+    }
+
+    nav {
+      background: var(--card-bg);
+      padding: 1rem 2rem;
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+    }
+
+    .nav-link {
+      padding: 0.5rem 1rem;
+      background: var(--bg-color);
+      color: var(--text-color);
+      text-decoration: none;
+      border-radius: 6px;
+      font-size: 0.875rem;
+      transition: background 0.2s;
+    }
+
+    .nav-link:hover {
+      background: var(--border-color);
+    }
+
+    .nav-link.success::before {
+      content: '✓ ';
+      color: var(--success-color);
+    }
+
+    .nav-link.error::before {
+      content: '✗ ';
+      color: var(--error-color);
+    }
+
+    main {
+      padding: 2rem;
+    }
+
+    .template-section {
+      margin-bottom: 3rem;
+    }
+
+    .template-header {
+      font-size: 1.5rem;
+      font-weight: 600;
+      margin: 0 0 1rem 0;
+      padding-bottom: 0.5rem;
+      border-bottom: 2px solid var(--border-color);
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .template-header.success .status-icon { color: var(--success-color); }
+    .template-header.error .status-icon { color: var(--error-color); }
+
+    .template-stats {
+      font-size: 0.875rem;
+      font-weight: 400;
+      color: var(--text-muted);
+      margin-left: auto;
+    }
+
+    .error-list {
+      background: rgba(248, 113, 113, 0.1);
+      border: 1px solid var(--error-color);
+      border-radius: 8px;
+      padding: 1rem;
+      margin-bottom: 1rem;
+    }
+
+    .error-list h4 {
+      margin: 0 0 0.5rem 0;
+      color: var(--error-color);
+    }
+
+    .error-list ul {
+      margin: 0;
+      padding-left: 1.5rem;
+    }
+
+    .error-list li {
+      font-size: 0.875rem;
+      margin-bottom: 0.25rem;
+    }
+
+    .screenshot-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
+      gap: 1.5rem;
+    }
+
+    .screenshot-card {
+      background: var(--card-bg);
+      border-radius: 8px;
+      overflow: hidden;
+      border: 1px solid var(--border-color);
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+
+    .screenshot-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
+    }
+
+    .screenshot-card img {
+      width: 100%;
+      height: auto;
+      display: block;
+    }
+
+    .screenshot-label {
+      padding: 0.75rem 1rem;
+      font-size: 0.875rem;
+      color: var(--text-muted);
+      border-top: 1px solid var(--border-color);
+    }
+
+    @media (max-width: 600px) {
+      .screenshot-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .summary-stats {
+        gap: 1rem;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Tap Visual QA Gallery</h1>
+    <div class="summary-stats">
+      <div class="stat">
+        <span class="stat-value">${totalTemplates}</span>
+        <span class="stat-label">Templates</span>
+      </div>
+      <div class="stat">
+        <span class="stat-value success">${successfulTemplates}</span>
+        <span class="stat-label">Successful</span>
+      </div>
+      <div class="stat">
+        <span class="stat-value ${totalErrors > 0 ? 'error' : ''}">${totalErrors}</span>
+        <span class="stat-label">Errors</span>
+      </div>
+      <div class="stat">
+        <span class="stat-value">${totalSlides}</span>
+        <span class="stat-label">Slides</span>
+      </div>
+      <div class="stat">
+        <span class="stat-value">${totalScreenshots}</span>
+        <span class="stat-label">Screenshots</span>
+      </div>
+    </div>
+    <div class="timestamp">Generated: ${timestamp}</div>
+  </header>
+
+  <nav>
+    ${navLinks}
+  </nav>
+
+  <main>
+    ${templateSections}
+  </main>
+</body>
+</html>`;
+
+  const galleryPath = join(galleryDir, 'index.html');
+  writeFileSync(galleryPath, html, 'utf-8');
+  console.log(`\n📸 Gallery report generated: ${galleryPath}`);
+}
+
+// Escape HTML special characters
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
 test.describe('Visual Tests for All Example Templates', () => {
   // Ensure screenshots directory exists
   test.beforeAll(async () => {
@@ -436,6 +810,9 @@ test.describe('Visual Tests for All Example Templates', () => {
 
     // Print summary
     printSummary(results);
+
+    // Generate HTML gallery report
+    generateGalleryReport(results);
 
     // Fail test if any template had errors
     const totalErrors = results.reduce((sum, r) => sum + r.errorCount, 0);

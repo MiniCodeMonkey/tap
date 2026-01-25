@@ -18,6 +18,12 @@ vendor/
 coverage.out
 coverage.html
 
+# Visual test outputs (regenerated)
+frontend/tests/visual/screenshots/*
+!frontend/tests/visual/screenshots/.gitkeep
+frontend/tests/visual/gallery/index.html
+frontend/tests/visual/report/
+
 # OS files
 .DS_Store
 Thumbs.db
