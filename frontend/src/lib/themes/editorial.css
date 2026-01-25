@@ -1,0 +1,566 @@
+/**
+ * Editorial Theme
+ *
+ * Classic magazine and publishing design - sophisticated typography,
+ * fine hairline rules, drop caps, and pull quotes. Inspired by The New Yorker,
+ * Esquire, and traditional editorial layout.
+ *
+ * Design philosophy:
+ * - Crisp white background with true black text for maximum readability
+ * - Single spot color (deep burgundy) used sparingly for emphasis
+ * - Playfair Display for elegant display headings
+ * - Source Serif Pro for refined body typography
+ * - Fine hairline rules and classic print conventions
+ */
+
+.theme-editorial {
+  /* Core colors - crisp white with true black */
+  --color-bg: #ffffff;
+  --color-text: #000000;
+  --color-muted: rgba(0, 0, 0, 0.55);
+  --color-accent: #7f1d1d;
+  --color-code-bg: #fafafa;
+
+  /* Extended colors - editorial palette */
+  --color-border: rgba(0, 0, 0, 0.12);
+  --color-surface: #fafafa;
+  --color-surface-elevated: #f5f5f5;
+  --color-link: #7f1d1d;
+  --color-code-text: #1a1a1a;
+
+  /* Editorial theme accent variations */
+  --editorial-burgundy: #7f1d1d;
+  --editorial-burgundy-muted: rgba(127, 29, 29, 0.6);
+  --editorial-burgundy-subtle: rgba(127, 29, 29, 0.12);
+  --editorial-black: #000000;
+  --editorial-gray: #333333;
+  --editorial-light-gray: #666666;
+  --editorial-rule: rgba(0, 0, 0, 0.15);
+  --editorial-rule-dark: rgba(0, 0, 0, 0.4);
+
+  /* Error colors - deep red that complements burgundy */
+  --color-error: #991b1b;
+  --color-error-bg: rgba(153, 27, 27, 0.08);
+
+  /* Typography - Playfair Display for headlines, Source Serif Pro for body */
+  --font-sans: 'Source Serif Pro', Georgia, Cambria, 'Times New Roman', serif;
+  --font-serif: 'Source Serif Pro', Georgia, Cambria, 'Times New Roman', serif;
+  --font-display: 'Playfair Display', Georgia, 'Times New Roman', serif;
+  --font-mono: 'JetBrains Mono', 'SF Mono', Monaco, 'Cascadia Code', Consolas, monospace;
+
+  /* Transitions - subtle and refined */
+  --transition-duration: 300ms;
+  --transition-timing: cubic-bezier(0.4, 0, 0.2, 1);
+  --fragment-duration: 400ms;
+
+  /* Apply base styles */
+  font-family: var(--font-sans);
+  color: var(--color-text);
+  letter-spacing: -0.01em;
+  line-height: 1.7;
+
+  /* Clean white background */
+  background-color: var(--color-bg);
+}
+
+/* Editorial theme typography - classic serif elegance */
+.theme-editorial h1,
+.theme-editorial h2,
+.theme-editorial h3,
+.theme-editorial h4,
+.theme-editorial h5,
+.theme-editorial h6 {
+  font-family: var(--font-display);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+  margin: 0;
+  color: var(--editorial-black);
+}
+
+.theme-editorial h1 {
+  font-weight: 900;
+  letter-spacing: -0.03em;
+}
+
+.theme-editorial h2 {
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.theme-editorial h3 {
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.theme-editorial p,
+.theme-editorial li {
+  font-family: var(--font-sans);
+  font-weight: 400;
+  letter-spacing: -0.01em;
+}
+
+/* Drop cap styling for first paragraph */
+.theme-editorial .drop-cap::first-letter,
+.theme-editorial .layout-default > p:first-of-type::first-letter {
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-size: 4em;
+  float: left;
+  line-height: 0.8;
+  padding-right: 0.1em;
+  padding-top: 0.05em;
+  color: var(--editorial-burgundy);
+}
+
+/* Editorial theme code blocks - minimal, refined */
+.theme-editorial code {
+  font-family: var(--font-mono);
+  background-color: var(--color-code-bg);
+  padding: 0.15em 0.4em;
+  border-radius: 2px;
+  font-size: 0.88em;
+  border: 1px solid var(--color-border);
+  color: var(--editorial-gray);
+}
+
+.theme-editorial pre {
+  font-family: var(--font-mono);
+  background-color: var(--color-code-bg);
+  color: var(--color-code-text);
+  padding: 1.75em 2em;
+  border-radius: 0;
+  overflow-x: auto;
+  line-height: 1.6;
+  border: 1px solid var(--color-border);
+  border-top: 1px solid var(--editorial-rule-dark);
+  border-bottom: 1px solid var(--editorial-rule-dark);
+  position: relative;
+}
+
+.theme-editorial pre code {
+  background: none;
+  padding: 0;
+  border-radius: 0;
+  font-size: inherit;
+  border: none;
+}
+
+/* Editorial theme links - burgundy accent */
+.theme-editorial a {
+  color: var(--color-link);
+  text-decoration: none;
+  border-bottom: 1px solid var(--editorial-burgundy-subtle);
+  transition:
+    border-color var(--transition-duration) var(--transition-timing),
+    color var(--transition-duration) var(--transition-timing);
+}
+
+.theme-editorial a:hover {
+  border-bottom-color: var(--editorial-burgundy-muted);
+}
+
+/* Editorial theme lists - refined markers */
+.theme-editorial ul,
+.theme-editorial ol {
+  padding-left: 1.5em;
+  margin: 0;
+}
+
+.theme-editorial li {
+  margin-bottom: 0.5em;
+  padding-left: 0.25em;
+}
+
+.theme-editorial li::marker {
+  color: var(--editorial-burgundy);
+}
+
+.theme-editorial ul li::marker {
+  content: '—  ';
+  font-weight: 400;
+}
+
+.theme-editorial ol li::marker {
+  font-family: var(--font-display);
+  font-weight: 600;
+}
+
+/* Editorial theme blockquotes - pull quote styling */
+.theme-editorial blockquote {
+  border-left: none;
+  padding: 1.5em 0;
+  margin: 1.5em 0;
+  font-style: italic;
+  color: var(--editorial-gray);
+  position: relative;
+  text-align: center;
+  border-top: 1px solid var(--editorial-rule);
+  border-bottom: 1px solid var(--editorial-rule);
+}
+
+/* Large quotation marks */
+.theme-editorial blockquote::before {
+  content: '"';
+  position: absolute;
+  top: -0.3em;
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: var(--font-display);
+  font-size: 5em;
+  font-weight: 900;
+  color: var(--editorial-burgundy-subtle);
+  line-height: 1;
+  z-index: 0;
+}
+
+.theme-editorial blockquote p {
+  position: relative;
+  z-index: 1;
+  font-size: 1.25em;
+  line-height: 1.6;
+}
+
+/* Editorial theme tables - clean lines */
+.theme-editorial table {
+  width: 100%;
+  border-collapse: collapse;
+  background: transparent;
+}
+
+.theme-editorial th,
+.theme-editorial td {
+  padding: 0.875em 1.25em;
+  text-align: left;
+  border-bottom: 1px solid var(--editorial-rule);
+}
+
+.theme-editorial th {
+  font-family: var(--font-display);
+  font-weight: 700;
+  color: var(--editorial-black);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  font-size: 0.8em;
+  border-bottom: 2px solid var(--editorial-black);
+}
+
+.theme-editorial tr:last-child td {
+  border-bottom: none;
+}
+
+.theme-editorial tr:hover td {
+  background-color: rgba(0, 0, 0, 0.02);
+}
+
+/* Editorial theme images - subtle shadow */
+.theme-editorial img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 0;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+}
+
+/* Editorial theme fragments - elegant fade */
+.theme-editorial .fragment {
+  transition:
+    opacity var(--fragment-duration) var(--transition-timing),
+    transform var(--fragment-duration) var(--transition-timing);
+}
+
+.theme-editorial .fragment-hidden {
+  opacity: 0;
+  transform: translateY(8px);
+}
+
+.theme-editorial .fragment-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Editorial theme selection - burgundy highlight */
+.theme-editorial ::selection {
+  background-color: var(--editorial-burgundy);
+  color: #ffffff;
+}
+
+/* Strong/bold text - darker emphasis */
+.theme-editorial strong,
+.theme-editorial b {
+  font-weight: 700;
+  color: var(--editorial-black);
+}
+
+/* Emphasis/italic text */
+.theme-editorial em,
+.theme-editorial i {
+  font-style: italic;
+  color: var(--editorial-gray);
+}
+
+/* Horizontal rule - fine hairline */
+.theme-editorial hr {
+  border: none;
+  height: 1px;
+  background-color: var(--editorial-rule-dark);
+  margin: 2.5em auto;
+  max-width: 100%;
+}
+
+/* ============================================
+   Layout-specific styles for Editorial theme
+   ============================================ */
+
+/* Title layout - classic magazine cover */
+.theme-editorial .layout-title {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  position: relative;
+}
+
+/* Top and bottom hairline rules */
+.theme-editorial .layout-title::before,
+.theme-editorial .layout-title::after {
+  content: '';
+  position: absolute;
+  left: 10%;
+  right: 10%;
+  height: 1px;
+  background-color: var(--editorial-rule-dark);
+}
+
+.theme-editorial .layout-title::before {
+  top: 8%;
+}
+
+.theme-editorial .layout-title::after {
+  bottom: 8%;
+}
+
+.theme-editorial .layout-title h1 {
+  font-size: clamp(3.5rem, 9vw, 8rem);
+  letter-spacing: -0.04em;
+  line-height: 1;
+  position: relative;
+}
+
+/* Decorative rule under title */
+.theme-editorial .layout-title h1::after {
+  content: '';
+  display: block;
+  width: 60px;
+  height: 3px;
+  margin: 1.25rem auto 0;
+  background-color: var(--editorial-burgundy);
+}
+
+.theme-editorial .layout-title p {
+  font-family: var(--font-sans);
+  font-size: 1.35rem;
+  font-style: italic;
+  color: var(--color-muted);
+  letter-spacing: 0.02em;
+  margin-top: 1.5rem;
+}
+
+/* Section layout - chapter header style */
+.theme-editorial .layout-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.theme-editorial .layout-section h2 {
+  font-size: clamp(2.5rem, 7vw, 5rem);
+  letter-spacing: -0.03em;
+  position: relative;
+  padding-bottom: 1.5rem;
+}
+
+/* Fine hairline rules above and below */
+.theme-editorial .layout-section h2::before {
+  content: '';
+  display: block;
+  width: 40px;
+  height: 1px;
+  margin: 0 auto 1.5rem;
+  background-color: var(--editorial-rule-dark);
+}
+
+.theme-editorial .layout-section h2::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 80px;
+  height: 1px;
+  background-color: var(--editorial-rule-dark);
+}
+
+.theme-editorial .layout-section p {
+  font-family: var(--font-sans);
+  font-size: 1.25rem;
+  font-style: italic;
+  color: var(--color-muted);
+  margin-top: 1.5rem;
+  max-width: 65%;
+}
+
+/* Big-stat layout - dramatic editorial numbers */
+.theme-editorial .layout-big-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  position: relative;
+}
+
+.theme-editorial .layout-big-stat h2 {
+  font-size: clamp(7rem, 18vw, 14rem);
+  letter-spacing: -0.04em;
+  line-height: 0.9;
+  color: var(--editorial-black);
+  position: relative;
+}
+
+/* Subtle burgundy accent line */
+.theme-editorial .layout-big-stat h2::after {
+  content: '';
+  display: block;
+  width: 80px;
+  height: 4px;
+  margin: 0.75rem auto 0;
+  background-color: var(--editorial-burgundy);
+}
+
+.theme-editorial .layout-big-stat p {
+  font-family: var(--font-display);
+  font-size: 1.35rem;
+  font-weight: 600;
+  color: var(--color-muted);
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  margin-top: 1rem;
+}
+
+/* Quote layout - elegant pull quote */
+.theme-editorial .layout-quote {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  padding: 4rem;
+}
+
+.theme-editorial .layout-quote blockquote {
+  border: none;
+  background: none;
+  max-width: 80%;
+  padding: 3rem 2rem;
+  position: relative;
+  border-top: 1px solid var(--editorial-rule-dark);
+  border-bottom: 1px solid var(--editorial-rule-dark);
+}
+
+/* Large decorative quotation marks */
+.theme-editorial .layout-quote blockquote::before {
+  content: '"';
+  position: absolute;
+  top: 0.5rem;
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: var(--font-display);
+  font-size: 8rem;
+  font-weight: 900;
+  color: var(--editorial-burgundy-subtle);
+  line-height: 1;
+  z-index: 0;
+}
+
+.theme-editorial .layout-quote blockquote::after {
+  content: '"';
+  position: absolute;
+  bottom: -1.5rem;
+  right: 15%;
+  font-family: var(--font-display);
+  font-size: 8rem;
+  font-weight: 900;
+  color: var(--editorial-burgundy-subtle);
+  line-height: 1;
+  z-index: 0;
+}
+
+.theme-editorial .layout-quote blockquote p {
+  font-family: var(--font-display);
+  font-size: clamp(1.75rem, 4vw, 3rem);
+  font-style: italic;
+  font-weight: 400;
+  line-height: 1.4;
+  color: var(--editorial-black);
+  position: relative;
+  z-index: 1;
+}
+
+.theme-editorial .layout-quote p:not(blockquote p),
+.theme-editorial .layout-quote cite {
+  font-family: var(--font-display);
+  font-style: normal;
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--editorial-burgundy);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin-top: 1.5rem;
+}
+
+/* Two-column layout - magazine spread */
+.theme-editorial .layout-two-column {
+  gap: 3rem;
+  position: relative;
+}
+
+/* Center divider line */
+.theme-editorial .layout-two-column::before {
+  content: '';
+  position: absolute;
+  top: 10%;
+  bottom: 10%;
+  left: 50%;
+  width: 1px;
+  background-color: var(--editorial-rule);
+  transform: translateX(-50%);
+}
+
+.theme-editorial .layout-two-column > *:first-child {
+  padding-right: 2rem;
+}
+
+.theme-editorial .layout-two-column > *:last-child {
+  padding-left: 2rem;
+}
+
+.theme-editorial .layout-two-column h3 {
+  font-family: var(--font-display);
+  color: var(--editorial-black);
+  margin-bottom: 0.75em;
+  font-size: 1.5rem;
+  letter-spacing: -0.01em;
+  padding-bottom: 0.5em;
+  border-bottom: 1px solid var(--editorial-rule);
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  .theme-editorial {
+    --transition-duration: 0ms;
+    --fragment-duration: 0ms;
+  }
+}
