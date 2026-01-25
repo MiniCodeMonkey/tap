@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, Page } from '@playwright/test';
 import { spawn, ChildProcess } from 'child_process';
 import { join, dirname } from 'path';
 import { mkdirSync, existsSync } from 'fs';
@@ -9,9 +9,21 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 /**
- * Visual test that starts tap dev server and captures a screenshot.
+ * Visual test that starts tap dev server and captures screenshots of all slides.
  * Tests examples/basic.md template.
  */
+
+// API response types
+interface PresentationSlide {
+  index: number;
+  content: string;
+  html: string;
+  fragments: unknown[];
+}
+
+interface PresentationResponse {
+  slides: PresentationSlide[];
+}
 
 // Get a dynamic port to avoid conflicts
 function getPort(): number {
@@ -36,6 +48,29 @@ async function waitForServer(url: string, timeout = 30000): Promise<void> {
   }
 
   throw new Error(`Server did not become ready at ${url} within ${timeout}ms`);
+}
+
+// Fetch presentation data from API
+async function fetchPresentation(baseUrl: string): Promise<PresentationResponse> {
+  const response = await fetch(`${baseUrl}/api/presentation`);
+  if (!response.ok) {
+    throw new Error(`Failed to fetch presentation: ${response.status}`);
+  }
+  return response.json() as Promise<PresentationResponse>;
+}
+
+// Capture screenshot for a specific slide
+async function captureSlideScreenshot(
+  page: Page,
+  templateName: string,
+  slideNumber: number,
+  screenshotsDir: string
+): Promise<void> {
+  const screenshotPath = join(screenshotsDir, `${templateName}-slide-${slideNumber}.png`);
+  await page.screenshot({
+    path: screenshotPath,
+    fullPage: false,
+  });
 }
 
 test.describe('Basic Template Visual Test', () => {
@@ -92,24 +127,41 @@ test.describe('Basic Template Visual Test', () => {
     }
   });
 
-  test('captures screenshot of basic template', async ({ page }) => {
+  test('captures screenshot of all slides in basic template', async ({ page }) => {
+    const screenshotsDir = join(__dirname, 'screenshots');
+    const templateName = 'basic';
+
+    // Fetch presentation data to get slide count
+    const presentation = await fetchPresentation(baseUrl);
+    const totalSlides = presentation.slides.length;
+    expect(totalSlides).toBeGreaterThan(0);
+
+    console.log(`Found ${totalSlides} slides in ${templateName} template`);
+
     // Navigate to the presentation
     await page.goto(baseUrl);
 
     // Wait for the slide content to be visible
     await page.waitForSelector('.slide', { timeout: 10000 });
 
-    // Wait a bit for any animations to settle
+    // Wait for any animations to settle
     await page.waitForTimeout(500);
 
-    // Take screenshot
-    const screenshotPath = join(__dirname, 'screenshots', 'basic-slide-1.png');
-    await page.screenshot({
-      path: screenshotPath,
-      fullPage: false,
-    });
+    // Capture screenshot for each slide
+    for (let slideNumber = 1; slideNumber <= totalSlides; slideNumber++) {
+      // Wait for slide transition to complete
+      await page.waitForTimeout(300);
 
-    // Verify screenshot was created by checking we got here without error
-    expect(true).toBe(true);
+      // Capture screenshot
+      await captureSlideScreenshot(page, templateName, slideNumber, screenshotsDir);
+      console.log(`Captured screenshot for slide ${slideNumber}/${totalSlides}`);
+
+      // Navigate to next slide (except for the last one)
+      if (slideNumber < totalSlides) {
+        await page.keyboard.press('ArrowRight');
+      }
+    }
+
+    console.log(`Completed: captured ${totalSlides} screenshots for ${templateName}`);
   });
 });
