@@ -12,49 +12,74 @@
  * - Glowing borders and light leak effects
  */
 
-/* Animated gradient mesh background */
+/* Animated gradient mesh background - smoother, slower for elegance */
 @keyframes aurora-gradient {
   0% {
     background-position: 0% 50%;
   }
+  25% {
+    background-position: 50% 100%;
+  }
   50% {
     background-position: 100% 50%;
   }
+  75% {
+    background-position: 50% 0%;
+  }
   100% {
     background-position: 0% 50%;
+  }
+}
+
+/* Subtle shimmer effect for aurora light bands */
+@keyframes aurora-shimmer {
+  0%, 100% {
+    opacity: 0.4;
+    transform: translateY(0);
+  }
+  50% {
+    opacity: 0.6;
+    transform: translateY(-2%);
   }
 }
 
 @keyframes aurora-glow {
   0%,
   100% {
-    opacity: 0.6;
+    opacity: 0.5;
   }
   50% {
-    opacity: 0.8;
+    opacity: 0.7;
   }
 }
 
 .theme-aurora {
   /* Core colors - deep purples to electric blues to teals */
-  --color-bg: #0f0a1f;
+  --color-bg: #0a0614;
   --color-text: #ffffff;
-  --color-muted: rgba(255, 255, 255, 0.6);
-  --color-accent: #14b8a6;
-  --color-code-bg: rgba(0, 0, 0, 0.6);
+  --color-muted: rgba(255, 255, 255, 0.7);
+  --color-accent: #22d3ee;
+  --color-code-bg: rgba(15, 10, 30, 0.85);
 
   /* Extended colors - glassmorphism surfaces */
-  --color-border: rgba(255, 255, 255, 0.1);
-  --color-surface: rgba(255, 255, 255, 0.05);
+  --color-border: rgba(255, 255, 255, 0.12);
+  --color-surface: rgba(255, 255, 255, 0.06);
   --color-surface-elevated: rgba(255, 255, 255, 0.1);
-  --color-link: #0ea5e9;
+  --color-link: #38bdf8;
   --color-code-text: #e2e8f0;
 
-  /* Gradient colors for mesh background */
-  --aurora-purple: #4c1d95;
+  /* Gradient colors for mesh background - richer, more vibrant */
+  --aurora-purple: #5b21b6;
+  --aurora-violet: #7c3aed;
   --aurora-blue: #0ea5e9;
   --aurora-teal: #14b8a6;
   --aurora-cyan: #06b6d4;
+  --aurora-pink: #a855f7;
+
+  /* Glass effect colors */
+  --glass-bg: rgba(255, 255, 255, 0.08);
+  --glass-border: rgba(255, 255, 255, 0.15);
+  --glass-highlight: rgba(255, 255, 255, 0.25);
 
   /* Error colors - pink/magenta that fits the aurora palette */
   --color-error: #f472b6;
@@ -71,85 +96,157 @@
   --transition-timing: cubic-bezier(0.4, 0, 0.2, 1);
   --fragment-duration: 500ms;
 
-  /* Glow effects */
-  --glow-color: rgba(14, 165, 233, 0.5);
+  /* Glow effects - enhanced for vibrant look */
+  --glow-color: rgba(34, 211, 238, 0.4);
+  --glow-color-strong: rgba(34, 211, 238, 0.6);
   --glow-spread: 0 0 20px var(--glow-color), 0 0 40px var(--glow-color);
 
   /* Apply base styles */
   font-family: var(--font-sans);
   color: var(--color-text);
   letter-spacing: -0.01em;
-  line-height: 1.6;
+  line-height: 1.7;
 
-  /* Animated gradient mesh background */
-  background: linear-gradient(
+  /* Multi-layer animated gradient mesh background for smooth transitions */
+  background:
+    /* Top layer: subtle radial glow */
+    radial-gradient(
+      ellipse 80% 60% at 70% 20%,
+      rgba(124, 58, 237, 0.25) 0%,
+      transparent 50%
+    ),
+    /* Middle layer: aurora band */
+    radial-gradient(
+      ellipse 100% 50% at 30% 80%,
+      rgba(14, 165, 233, 0.2) 0%,
+      transparent 40%
+    ),
+    /* Base gradient mesh */
+    linear-gradient(
       135deg,
       var(--aurora-purple) 0%,
-      #1e1b4b 25%,
-      #0f172a 50%,
-      #0c4a6e 75%,
+      #1e1b4b 20%,
+      #0f172a 40%,
+      #0c4a6e 60%,
+      #134e4a 80%,
       var(--aurora-teal) 100%
-    ),
-    linear-gradient(45deg, var(--aurora-blue) 0%, transparent 50%, var(--aurora-cyan) 100%);
-  background-size: 400% 400%;
-  animation: aurora-gradient 20s ease infinite;
+    );
+  background-size: 100% 100%, 100% 100%, 300% 300%;
+  background-attachment: fixed;
+  animation: aurora-gradient 30s ease-in-out infinite;
 }
 
-/* Aurora theme typography - clean, geometric headings */
+/* Pseudo-element for animated aurora light bands */
+.theme-aurora::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(
+      ellipse 60% 40% at 80% 30%,
+      rgba(168, 85, 247, 0.15) 0%,
+      transparent 50%
+    ),
+    radial-gradient(
+      ellipse 50% 30% at 20% 70%,
+      rgba(6, 182, 212, 0.12) 0%,
+      transparent 50%
+    );
+  animation: aurora-shimmer 15s ease-in-out infinite;
+  z-index: 0;
+}
+
+/* Aurora theme typography - clean, geometric headings with enhanced readability */
 .theme-aurora h1,
 .theme-aurora h2,
 .theme-aurora h3,
 .theme-aurora h4,
 .theme-aurora h5,
 .theme-aurora h6 {
+  position: relative;
+  z-index: 1;
   font-family: var(--font-sans);
   font-weight: 700;
-  letter-spacing: -0.02em;
-  line-height: 1.1;
+  letter-spacing: -0.025em;
+  line-height: 1.15;
   margin: 0;
-  /* Subtle text glow */
-  text-shadow: 0 0 30px rgba(14, 165, 233, 0.3);
+  /* Multi-layer text shadow for readability and glow */
+  text-shadow:
+    0 0 40px rgba(34, 211, 238, 0.4),
+    0 0 80px rgba(124, 58, 237, 0.2),
+    0 2px 4px rgba(0, 0, 0, 0.3);
 }
 
 .theme-aurora h1 {
   font-weight: 700;
+  letter-spacing: -0.03em;
+}
+
+.theme-aurora h2 {
+  font-weight: 600;
+  letter-spacing: -0.02em;
 }
 
 .theme-aurora p,
 .theme-aurora li {
+  position: relative;
+  z-index: 1;
   font-family: var(--font-sans);
   font-weight: 400;
   letter-spacing: -0.01em;
+  /* Subtle shadow for readability against gradients */
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
 }
 
 /* Glassmorphism code blocks - frosted glass with backdrop-blur */
 .theme-aurora code {
+  position: relative;
+  z-index: 1;
   font-family: var(--font-mono);
-  background-color: rgba(255, 255, 255, 0.1);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  padding: 0.2em 0.5em;
+  background: linear-gradient(
+    135deg,
+    rgba(34, 211, 238, 0.15) 0%,
+    rgba(124, 58, 237, 0.1) 100%
+  );
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  padding: 0.2em 0.6em;
   border-radius: 6px;
-  font-size: 0.9em;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  font-size: 0.88em;
+  border: 1px solid var(--glass-border);
+  color: #e0f2fe;
+  text-shadow: none;
 }
 
 .theme-aurora pre {
+  position: relative;
+  z-index: 1;
   font-family: var(--font-mono);
-  background-color: var(--color-code-bg);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
+  background: linear-gradient(
+    145deg,
+    rgba(15, 10, 35, 0.9) 0%,
+    rgba(20, 15, 45, 0.85) 50%,
+    rgba(10, 30, 50, 0.9) 100%
+  );
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
   color: var(--color-code-text);
-  padding: 1.5em 2em;
-  border-radius: 12px;
+  padding: 1.75em 2.25em;
+  border-radius: 16px;
   overflow-x: auto;
-  line-height: 1.6;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  /* Subtle glowing border effect */
+  line-height: 1.65;
+  border: 1px solid var(--glass-border);
+  /* Multi-layer glow for depth and aurora feel */
   box-shadow:
-    0 0 1px rgba(14, 165, 233, 0.5),
-    0 4px 16px rgba(0, 0, 0, 0.3),
-    inset 0 0 60px rgba(14, 165, 233, 0.05);
+    0 0 0 1px rgba(34, 211, 238, 0.1),
+    0 0 30px rgba(124, 58, 237, 0.15),
+    0 8px 32px rgba(0, 0, 0, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    inset 0 0 80px rgba(34, 211, 238, 0.03);
 }
 
 .theme-aurora pre code {
@@ -160,6 +257,7 @@
   border-radius: 0;
   font-size: inherit;
   border: none;
+  text-shadow: none;
 }
 
 /* Aurora theme links - glowing accent */
@@ -177,87 +275,141 @@
   text-shadow: 0 0 10px var(--glow-color);
 }
 
-/* Aurora theme lists */
+/* Aurora theme lists - enhanced markers */
 .theme-aurora ul,
 .theme-aurora ol {
-  padding-left: 1.25em;
+  position: relative;
+  z-index: 1;
+  padding-left: 1.5em;
   margin: 0;
 }
 
 .theme-aurora li {
-  margin-bottom: 0.5em;
+  margin-bottom: 0.6em;
+  padding-left: 0.25em;
 }
 
 .theme-aurora li::marker {
   color: var(--color-accent);
+  text-shadow: 0 0 10px var(--glow-color);
 }
 
 /* Aurora theme blockquotes - glassmorphism with glowing accent */
 .theme-aurora blockquote {
-  border-left: 4px solid var(--color-accent);
-  padding: 1em 1.5em;
+  position: relative;
+  z-index: 1;
+  border-left: 4px solid transparent;
+  border-image: linear-gradient(
+    180deg,
+    var(--aurora-cyan) 0%,
+    var(--aurora-violet) 100%
+  ) 1;
+  padding: 1.25em 1.75em;
   margin: 0;
   font-style: italic;
-  color: var(--color-muted);
-  background: rgba(255, 255, 255, 0.05);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  border-radius: 0 8px 8px 0;
-  box-shadow: -4px 0 20px rgba(20, 184, 166, 0.3);
+  font-size: 1.05em;
+  color: rgba(255, 255, 255, 0.9);
+  background: linear-gradient(
+    135deg,
+    rgba(34, 211, 238, 0.08) 0%,
+    rgba(124, 58, 237, 0.06) 100%
+  );
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-radius: 0 12px 12px 0;
+  box-shadow:
+    -4px 0 30px rgba(34, 211, 238, 0.2),
+    0 4px 20px rgba(0, 0, 0, 0.2),
+    inset 0 0 40px rgba(124, 58, 237, 0.03);
 }
 
-/* Aurora theme tables - glass effect */
+.theme-aurora blockquote p {
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+/* Aurora theme tables - enhanced glass effect */
 .theme-aurora table {
+  position: relative;
+  z-index: 1;
   width: 100%;
-  border-collapse: collapse;
-  background: rgba(255, 255, 255, 0.05);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  border-radius: 8px;
+  border-collapse: separate;
+  border-spacing: 0;
+  background: linear-gradient(
+    145deg,
+    rgba(255, 255, 255, 0.06) 0%,
+    rgba(255, 255, 255, 0.03) 100%
+  );
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-radius: 12px;
   overflow: hidden;
+  border: 1px solid var(--glass-border);
+  box-shadow:
+    0 0 0 1px rgba(34, 211, 238, 0.05),
+    0 8px 24px rgba(0, 0, 0, 0.25);
 }
 
 .theme-aurora th,
 .theme-aurora td {
-  padding: 0.75em 1em;
+  padding: 0.9em 1.25em;
   text-align: left;
-  border-bottom: 1px solid var(--color-border);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .theme-aurora th {
   font-weight: 600;
-  background-color: rgba(255, 255, 255, 0.08);
+  font-size: 0.9em;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-accent);
+  background: linear-gradient(
+    180deg,
+    rgba(34, 211, 238, 0.1) 0%,
+    rgba(124, 58, 237, 0.08) 100%
+  );
+  text-shadow: 0 0 20px var(--glow-color);
 }
 
 .theme-aurora tr:last-child td {
   border-bottom: none;
 }
 
-/* Aurora theme images - glowing frame */
-.theme-aurora img {
-  max-width: 100%;
-  height: auto;
-  border-radius: 12px;
-  box-shadow:
-    0 0 1px rgba(14, 165, 233, 0.5),
-    0 4px 20px rgba(0, 0, 0, 0.4);
+.theme-aurora tr:hover td {
+  background: rgba(34, 211, 238, 0.05);
 }
 
-/* Aurora theme fragments - smooth flowing transitions */
+/* Aurora theme images - glowing frame */
+.theme-aurora img {
+  position: relative;
+  z-index: 1;
+  max-width: 100%;
+  height: auto;
+  border-radius: 16px;
+  border: 1px solid var(--glass-border);
+  box-shadow:
+    0 0 0 1px rgba(34, 211, 238, 0.15),
+    0 0 40px rgba(124, 58, 237, 0.2),
+    0 8px 32px rgba(0, 0, 0, 0.4);
+}
+
+/* Aurora theme fragments - smooth flowing transitions with glow */
 .theme-aurora .fragment {
   transition:
     opacity var(--fragment-duration) var(--transition-timing),
-    transform var(--fragment-duration) var(--transition-timing);
+    transform var(--fragment-duration) var(--transition-timing),
+    filter var(--fragment-duration) var(--transition-timing);
 }
 
 .theme-aurora .fragment-hidden {
   opacity: 0;
-  transform: translateY(20px) scale(0.98);
+  transform: translateY(24px) scale(0.97);
+  filter: blur(4px);
 }
 
 .theme-aurora .fragment-visible {
   opacity: 1;
   transform: translateY(0) scale(1);
+  filter: blur(0);
 }
 
 /* Aurora theme selection */
@@ -290,6 +442,166 @@
     0 0 40px var(--glow-color);
 }
 
+/* ============================================
+   LAYOUT-SPECIFIC STYLES
+   ============================================ */
+
+/* Title layout - dramatic, centered with enhanced glow */
+.theme-aurora .layout-title {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.theme-aurora .layout-title h1 {
+  font-size: 4.5rem;
+  font-weight: 700;
+  letter-spacing: -0.04em;
+  background: linear-gradient(
+    135deg,
+    #ffffff 0%,
+    var(--aurora-cyan) 50%,
+    var(--aurora-violet) 100%
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  text-shadow: none;
+  filter: drop-shadow(0 0 40px rgba(34, 211, 238, 0.4))
+          drop-shadow(0 0 80px rgba(124, 58, 237, 0.3));
+}
+
+.theme-aurora .layout-title p {
+  font-size: 1.5rem;
+  color: var(--color-muted);
+  margin-top: 1.5rem;
+}
+
+/* Section layout - bold divider with aurora gradient */
+.theme-aurora .layout-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.theme-aurora .layout-section h2 {
+  font-size: 3.5rem;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  background: linear-gradient(
+    90deg,
+    var(--aurora-cyan) 0%,
+    #ffffff 50%,
+    var(--aurora-violet) 100%
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  text-shadow: none;
+  filter: drop-shadow(0 0 30px rgba(34, 211, 238, 0.35));
+}
+
+.theme-aurora .layout-section p {
+  font-size: 1.35rem;
+  color: var(--color-muted);
+  margin-top: 1rem;
+}
+
+/* Quote layout - elegant glass card */
+.theme-aurora .layout-quote {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 4rem;
+}
+
+.theme-aurora .layout-quote blockquote {
+  max-width: 900px;
+  font-size: 1.75rem;
+  line-height: 1.6;
+  border-left: none;
+  border-image: none;
+  border-radius: 20px;
+  padding: 2.5rem 3rem;
+  background: linear-gradient(
+    145deg,
+    rgba(34, 211, 238, 0.1) 0%,
+    rgba(124, 58, 237, 0.08) 50%,
+    rgba(168, 85, 247, 0.06) 100%
+  );
+  border: 1px solid var(--glass-border);
+  box-shadow:
+    0 0 0 1px rgba(34, 211, 238, 0.1),
+    0 0 60px rgba(124, 58, 237, 0.15),
+    0 16px 48px rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 var(--glass-highlight);
+}
+
+.theme-aurora .layout-quote blockquote p {
+  font-style: italic;
+  color: #ffffff;
+  text-align: center;
+}
+
+.theme-aurora .layout-quote blockquote + p,
+.theme-aurora .layout-quote cite {
+  margin-top: 1.5rem;
+  font-size: 1.1rem;
+  font-style: normal;
+  color: var(--color-accent);
+  text-shadow: 0 0 20px var(--glow-color);
+}
+
+/* Big-stat layout - dramatic number with aurora glow */
+.theme-aurora .layout-big-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.theme-aurora .layout-big-stat h2 {
+  font-size: 8rem;
+  font-weight: 700;
+  letter-spacing: -0.04em;
+  line-height: 1;
+  background: linear-gradient(
+    180deg,
+    #ffffff 0%,
+    var(--aurora-cyan) 60%,
+    var(--aurora-teal) 100%
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  text-shadow: none;
+  filter: drop-shadow(0 0 60px rgba(34, 211, 238, 0.5))
+          drop-shadow(0 0 100px rgba(20, 184, 166, 0.3));
+}
+
+.theme-aurora .layout-big-stat p {
+  font-size: 1.5rem;
+  color: var(--color-muted);
+  margin-top: 1.5rem;
+  letter-spacing: 0.02em;
+}
+
+/* Two-column layout - glass divider effect */
+.theme-aurora .layout-two-column {
+  gap: 3rem;
+}
+
+.theme-aurora .layout-two-column > *:first-child {
+  border-right: 1px solid rgba(34, 211, 238, 0.15);
+  padding-right: 2rem;
+}
+
 /* Reduced motion support */
 @media (prefers-reduced-motion: reduce) {
   .theme-aurora {
@@ -297,5 +609,9 @@
     --fragment-duration: 0ms;
     animation: none;
     background-size: 100% 100%;
+  }
+
+  .theme-aurora::before {
+    animation: none;
   }
 }
