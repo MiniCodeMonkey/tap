@@ -55,85 +55,47 @@ Example:
 
 ## Release Process
 
-Releases are managed through the `make tag` command, which automates the entire process.
-
-### Prerequisites
-
-- [GitHub CLI](https://cli.github.com/) installed and authenticated (`gh auth login`)
-- No uncommitted changes in your working directory
-- Changes documented in `CHANGELOG.md` under `[Unreleased]`
+Releases are fully automated via GitHub Actions.
 
 ### Creating a Release
 
-```bash
-# Create a release (e.g., version 1.0.0)
-make tag VERSION=1.0.0
-```
+1. Ensure your changes are documented in `CHANGELOG.md` under `[Unreleased]`
+2. Go to **Actions** → **Release** → **Run workflow**
+3. Enter the version number (e.g., `1.0.0`)
+4. Click **Run workflow**
 
-This command will:
+That's it! The workflow automatically:
 
-1. **Validate** the version format (must be semver: `X.Y.Z` or `X.Y.Z-label`)
-2. **Check** for uncommitted changes (fails if any exist)
-3. **Extract** release notes from the `[Unreleased]` section in `CHANGELOG.md`
-4. **Show** the release notes and ask for confirmation
-5. **Update** `CHANGELOG.md`:
-   - Converts `[Unreleased]` to `[X.Y.Z] - YYYY-MM-DD`
-   - Adds a fresh `[Unreleased]` section
-6. **Commit** the changelog update
-7. **Create** a git tag `vX.Y.Z`
-8. **Push** the commit and tag to origin
-9. **Create** a GitHub release with the extracted notes
-
-### Building and Uploading Binaries
-
-After creating the release:
-
-```bash
-# Build binaries for all platforms
-make release VERSION=1.0.0
-
-# Upload binaries to the GitHub release
-gh release upload v1.0.0 bin/tap-*
-```
+- Validates the version format
+- Extracts release notes from `[Unreleased]`
+- Updates `CHANGELOG.md` with the versioned section
+- Commits and pushes the changelog update
+- Creates the git tag
+- Builds binaries for all platforms (macOS, Linux, Windows)
+- Creates the GitHub release with binaries attached
 
 ### Version Format
 
 Use [Semantic Versioning](https://semver.org/):
 
-- `1.0.0` - Major.Minor.Patch
-- `1.0.0-beta.1` - Pre-release versions
-- `1.0.0-rc.1` - Release candidates
+- `1.0.0` - Stable release
+- `1.0.0-beta.1` - Pre-release (marked as prerelease on GitHub)
+- `1.0.0-rc.1` - Release candidate
 
-### Example Workflow
+### Local Release (Alternative)
+
+For local releases without GitHub Actions:
 
 ```bash
-# 1. Make sure all changes are committed
-git status
+# Create release (updates changelog, tags, creates GH release)
+make tag VERSION=1.0.0
 
-# 2. Verify changelog has unreleased changes
-cat CHANGELOG.md
-
-# 3. Create the release
-make tag VERSION=1.2.0
-
-# 4. Build binaries
-make release VERSION=1.2.0
-
-# 5. Upload binaries to GitHub
-gh release upload v1.2.0 bin/tap-*
-
-# 6. Verify the release
-gh release view v1.2.0
+# Build and upload binaries
+make release VERSION=1.0.0
+gh release upload v1.0.0 bin/tap-*
 ```
 
-### Troubleshooting
-
-| Error | Solution |
-|-------|----------|
-| "You have uncommitted changes" | Commit or stash changes first |
-| "Tag vX.Y.Z already exists" | Choose a different version number |
-| "No [Unreleased] section found" | Add changes to CHANGELOG.md first |
-| "Not authenticated with GitHub CLI" | Run `gh auth login` |
+Requires [GitHub CLI](https://cli.github.com/) installed and authenticated.
 
 ## Project Structure
 
