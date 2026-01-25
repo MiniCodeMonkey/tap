@@ -196,16 +196,12 @@
 			// eslint-disable-next-line @typescript-eslint/no-unused-expressions
 			theme;
 
-			console.log('SlideRenderer effect running, element:', !!slideContentElement);
-
 			// Use a microtask to ensure DOM has been updated, then process async
 			queueMicrotask(async () => {
-				console.log('Processing slide content');
 				try {
 					await renderMermaidBlocksInElement(slideContentElement!, theme);
-					console.log('Mermaid done, starting highlight');
-					await highlightCodeBlocksInElement(slideContentElement!);
-					console.log('Highlight done');
+					// Pass the theme to highlighting for theme-appropriate Shiki colors
+					await highlightCodeBlocksInElement(slideContentElement!, theme);
 				} catch (err) {
 					console.error('Error processing slide content:', err);
 				}

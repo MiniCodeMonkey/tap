@@ -242,6 +242,101 @@
 }
 
 /* ============================================================================
+ * Shiki Syntax Highlighting Enhancements
+ * ============================================================================ */
+
+/* Line structure - Shiki outputs .line spans */
+.prose pre .line {
+  display: block;
+  min-height: 1.6em;
+  line-height: 1.6;
+}
+
+/* Line numbers - subtle but readable */
+.prose pre .line-number {
+  display: inline-block;
+  width: var(--line-num-width, 2ch);
+  text-align: right;
+  padding-right: 1.5em;
+  margin-right: 1em;
+  color: var(--color-muted, rgba(150, 150, 150, 0.5));
+  user-select: none;
+  opacity: 0.5;
+  font-size: 0.9em;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Line content wrapper */
+.prose pre .line-content {
+  display: inline;
+}
+
+/* Highlighted lines - stands out appropriately */
+.prose pre .line.highlighted {
+  display: block;
+  background-color: var(--color-line-highlight, rgba(255, 255, 0, 0.08));
+  margin-left: -2em;
+  margin-right: -2em;
+  padding-left: 2em;
+  padding-right: 2em;
+  border-left: 3px solid var(--color-accent, #ffc107);
+}
+
+.prose pre .line.highlighted .line-number {
+  opacity: 0.8;
+}
+
+/* Diff styling */
+.prose pre .line.diff-add {
+  display: block;
+  background-color: rgba(0, 180, 0, 0.12);
+  margin-left: -2em;
+  margin-right: -2em;
+  padding-left: calc(2em - 3px);
+  padding-right: 2em;
+  border-left: 3px solid #22c55e;
+}
+
+.prose pre .line.diff-remove {
+  display: block;
+  background-color: rgba(220, 38, 38, 0.12);
+  margin-left: -2em;
+  margin-right: -2em;
+  padding-left: calc(2em - 3px);
+  padding-right: 2em;
+  border-left: 3px solid #ef4444;
+}
+
+/* Code block title bar */
+.prose .code-block-wrapper {
+  margin-bottom: 1.5rem;
+}
+
+.prose .code-block-title {
+  background: var(--color-code-bg, #1e1e1e);
+  color: var(--color-muted, #999);
+  padding: 0.6em 1.5em;
+  font-size: 0.85em;
+  font-family: var(--font-mono);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px 8px 0 0;
+}
+
+.prose .code-block-wrapper pre {
+  border-radius: 0 0 8px 8px;
+  margin-top: 0;
+}
+
+/* Auto-size container for long code blocks */
+.prose .code-block-auto-size {
+  margin-bottom: 1.5rem;
+}
+
+.prose .code-block-auto-size pre {
+  margin-bottom: 0;
+}
+
+/* ============================================================================
  * Blockquotes
  * ============================================================================ */
 

@@ -71,8 +71,39 @@ export const DEFAULT_THEMES: BundledTheme[] = [
 	'github-light',
 	'one-dark-pro',
 	'dracula',
-	'nord'
+	'nord',
+	'vitesse-dark'
 ];
+
+/**
+ * Mapping from Tap presentation themes to Shiki syntax highlighting themes.
+ * Each Tap theme has a carefully selected Shiki theme that complements its visual style.
+ */
+export const TAP_THEME_TO_SHIKI: Record<string, BundledTheme> = {
+	// Paper: Clean, light theme - github-light complements the airy aesthetic
+	paper: 'github-light',
+	// Noir: Cinematic, dark with gold - one-dark-pro has elegant dark colors
+	noir: 'one-dark-pro',
+	// Aurora: Vibrant gradients - dracula has rich purples and teals that match
+	aurora: 'dracula',
+	// Phosphor: Terminal green CRT - vitesse-dark has muted tones that won't clash
+	phosphor: 'vitesse-dark',
+	// Poster: Bold high contrast - one-dark-pro provides clean, readable highlighting
+	poster: 'one-dark-pro'
+};
+
+/**
+ * Get the appropriate Shiki theme for a given Tap presentation theme.
+ *
+ * @param tapTheme The Tap presentation theme name
+ * @returns The corresponding Shiki theme for syntax highlighting
+ */
+export function getShikiTheme(tapTheme?: string): BundledTheme {
+	if (!tapTheme) {
+		return DEFAULT_THEME;
+	}
+	return TAP_THEME_TO_SHIKI[tapTheme.toLowerCase()] ?? DEFAULT_THEME;
+}
 
 /**
  * Common languages to support for presentations.
@@ -623,9 +654,13 @@ ${html}
  * Skips mermaid blocks which are handled separately.
  *
  * @param element The DOM element to search within
+ * @param tapTheme Optional Tap presentation theme to determine Shiki theme
  * @returns Promise resolving when all code blocks are highlighted
  */
-export async function highlightCodeBlocksInElement(element: HTMLElement): Promise<void> {
+export async function highlightCodeBlocksInElement(
+	element: HTMLElement,
+	tapTheme?: string
+): Promise<void> {
 	// Find all code blocks that need highlighting (skip mermaid)
 	const codeBlocks = element.querySelectorAll<HTMLElement>(
 		'pre > code[class*="language-"]:not(.language-mermaid)'
@@ -635,11 +670,23 @@ export async function highlightCodeBlocksInElement(element: HTMLElement): Promis
 		return;
 	}
 
+	// Determine the Shiki theme based on the Tap presentation theme
+	const shikiTheme = getShikiTheme(tapTheme);
+
 	// Process each code block
 	const promises = Array.from(codeBlocks).map(async (codeBlock) => {
 		const pre = codeBlock.parentElement;
 		if (!pre || pre.dataset.highlighted === 'true') {
 			return; // Already highlighted or no parent
+		}
+
+		// Check if theme changed - re-highlight if needed
+		const previousTheme = pre.dataset.highlightedTheme;
+		if (previousTheme && previousTheme !== shikiTheme) {
+			// Theme changed, need to re-highlight
+			pre.dataset.highlighted = '';
+		} else if (pre.dataset.highlighted === 'processing') {
+			return; // Already processing
 		}
 
 		// Extract language from class
@@ -653,8 +700,8 @@ export async function highlightCodeBlocksInElement(element: HTMLElement): Promis
 		pre.dataset.highlighted = 'processing';
 
 		try {
-			// Highlight the code
-			const highlightedHtml = await highlight(code, { language });
+			// Highlight the code with the theme-specific Shiki theme
+			const highlightedHtml = await highlight(code, { language, theme: shikiTheme });
 
 			// Create a temporary container to parse the HTML
 			const temp = document.createElement('div');
@@ -665,11 +712,13 @@ export async function highlightCodeBlocksInElement(element: HTMLElement): Promis
 			if (newPre) {
 				// Mark as highlighted to prevent re-processing
 				newPre.dataset.highlighted = 'true';
+				newPre.dataset.highlightedTheme = shikiTheme;
 				// Preserve any existing classes on the original pre
 				newPre.className = `${newPre.className} ${pre.className}`.trim();
 				pre.replaceWith(newPre);
 			} else {
 				pre.dataset.highlighted = 'true';
+				pre.dataset.highlightedTheme = shikiTheme;
 			}
 		} catch (err) {
 			// On error, just mark as highlighted to prevent repeated attempts
