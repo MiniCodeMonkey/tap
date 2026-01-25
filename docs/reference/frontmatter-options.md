@@ -107,13 +107,13 @@ Slide aspect ratio. Defines the width-to-height ratio of your slides.
 | Property | Value |
 |----------|-------|
 | Type | `string` |
-| Default | `16/9` |
+| Default | `16:9` |
 | Required | No |
-| Options | `16/9`, `4/3`, `21/9`, custom (e.g., `3/2`) |
+| Options | `16:9`, `4:3`, `16:10` |
 
 ```yaml
 ---
-aspectRatio: 4/3
+aspectRatio: 4:3
 ---
 ```
 
@@ -121,9 +121,9 @@ aspectRatio: 4/3
 
 | Ratio | Use Case |
 |-------|----------|
-| `16/9` | Modern widescreen (default) |
-| `4/3` | Traditional/legacy projectors |
-| `21/9` | Ultra-wide displays |
+| `16:9` | Modern widescreen (default) |
+| `4:3` | Traditional/legacy projectors |
+| `16:10` | Widescreen laptops/displays |
 
 ::: tip
 Most modern projectors and displays use 16:9. Use 4:3 only if you know your venue has older equipment.
@@ -295,7 +295,7 @@ title: Database Architecture Deep Dive
 author: Jane Developer
 date: 2024-03-15
 theme: phosphor
-aspectRatio: 16/9
+aspectRatio: 16:9
 transition: fade
 fragments: true
 codeTheme: github-dark
@@ -320,7 +320,7 @@ drivers:
 | `author` | string | None | Author name |
 | `date` | string | None | Presentation date |
 | `theme` | string | `minimal` | Visual theme |
-| `aspectRatio` | string | `16/9` | Slide aspect ratio |
+| `aspectRatio` | string | `16:9` | Slide aspect ratio |
 | `transition` | string | `fade` | Default slide transition |
 | `fragments` | boolean | `false` | Auto-reveal list items |
 | `codeTheme` | string | Theme default | Syntax highlighting theme |

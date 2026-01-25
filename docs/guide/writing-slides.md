@@ -27,7 +27,7 @@ date: 2024-01-15
 | `theme` | string | Visual theme: `paper`, `noir`, `aurora`, `phosphor`, `poster` |
 | `author` | string | Author name for metadata |
 | `date` | string | Presentation date |
-| `aspectRatio` | string | Slide aspect ratio (default: `16/9`) |
+| `aspectRatio` | string | Slide aspect ratio (default: `16:9`) |
 | `transition` | string | Default slide transition: `none`, `fade`, `slide`, `push`, `zoom` |
 
 See [Frontmatter Options](/reference/frontmatter-options) for the complete reference.
