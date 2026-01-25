@@ -1,0 +1,607 @@
+/**
+ * Bauhaus Theme
+ *
+ * Bold constructivist design - primary colors and geometric shapes. Inspired by
+ * the Bauhaus school, Kandinsky, Mondrian, and early 20th century modernism.
+ *
+ * Design philosophy:
+ * - Stark white background with pure black text
+ * - Only primary colors: red, yellow, blue (no secondary colors)
+ * - Bebas Neue for bold geometric headings
+ * - Thick black borders and lines, zero border-radius
+ * - Geometric shapes as decorative elements
+ * - Form follows function, no ornamentation
+ */
+
+.theme-bauhaus {
+  /* Core colors - pure and stark */
+  --color-bg: #ffffff;
+  --color-text: #000000;
+  --color-muted: rgba(0, 0, 0, 0.6);
+  --color-accent: #1e88e5;
+  --color-code-bg: #f5f5f5;
+
+  /* Extended colors - minimal palette */
+  --color-border: #000000;
+  --color-surface: #f5f5f5;
+  --color-surface-elevated: #eeeeee;
+  --color-link: #1e88e5;
+  --color-code-text: #000000;
+
+  /* Primary color palette - pure Bauhaus */
+  --bauhaus-red: #e53935;
+  --bauhaus-yellow: #fdd835;
+  --bauhaus-blue: #1e88e5;
+  --bauhaus-black: #000000;
+  --bauhaus-white: #ffffff;
+  --bauhaus-gray: #757575;
+  --bauhaus-gray-light: #e0e0e0;
+
+  /* Error colors - using red */
+  --color-error: #e53935;
+  --color-error-bg: rgba(229, 57, 53, 0.1);
+
+  /* Typography - Bebas Neue for bold geometric display */
+  --font-sans: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+    'Helvetica Neue', Arial, sans-serif;
+  --font-display: 'Bebas Neue', 'Inter', Impact, 'Arial Black', sans-serif;
+  --font-mono: 'JetBrains Mono', 'SF Mono', Monaco, 'Cascadia Code', Consolas, 'Liberation Mono',
+    Menlo, monospace;
+
+  /* Transitions - snappy, mechanical */
+  --transition-duration: 200ms;
+  --transition-timing: cubic-bezier(0.4, 0, 0.2, 1);
+  --fragment-duration: 250ms;
+
+  /* Apply base styles */
+  font-family: var(--font-sans);
+  color: var(--color-text);
+  letter-spacing: 0;
+  line-height: 1.6;
+
+  /* Stark white background with subtle grid */
+  background:
+    repeating-linear-gradient(
+      0deg,
+      transparent 0px,
+      transparent 49px,
+      rgba(0, 0, 0, 0.03) 49px,
+      rgba(0, 0, 0, 0.03) 50px
+    ),
+    repeating-linear-gradient(
+      90deg,
+      transparent 0px,
+      transparent 49px,
+      rgba(0, 0, 0, 0.03) 49px,
+      rgba(0, 0, 0, 0.03) 50px
+    );
+  background-color: var(--bauhaus-white);
+}
+
+/* Bauhaus typography - bold, geometric, uppercase */
+.theme-bauhaus h1,
+.theme-bauhaus h2,
+.theme-bauhaus h3,
+.theme-bauhaus h4,
+.theme-bauhaus h5,
+.theme-bauhaus h6 {
+  font-family: var(--font-display);
+  font-weight: 400;
+  letter-spacing: 0.08em;
+  line-height: 1;
+  margin: 0;
+  color: var(--bauhaus-black);
+  text-transform: uppercase;
+}
+
+.theme-bauhaus h1 {
+  letter-spacing: 0.1em;
+}
+
+.theme-bauhaus h2 {
+  letter-spacing: 0.08em;
+}
+
+.theme-bauhaus h3 {
+  font-family: var(--font-sans);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.theme-bauhaus p,
+.theme-bauhaus li {
+  font-family: var(--font-sans);
+  font-weight: 400;
+  letter-spacing: 0;
+}
+
+/* Bauhaus code blocks - thick black borders, no radius */
+.theme-bauhaus code {
+  font-family: var(--font-mono);
+  background-color: var(--color-code-bg);
+  padding: 0.2em 0.5em;
+  border-radius: 0;
+  font-size: 0.85em;
+  border: 2px solid var(--bauhaus-black);
+  color: var(--bauhaus-black);
+}
+
+.theme-bauhaus pre {
+  font-family: var(--font-mono);
+  background-color: var(--color-code-bg);
+  color: var(--color-code-text);
+  padding: 1.75em 2.25em;
+  border-radius: 0;
+  overflow-x: auto;
+  line-height: 1.65;
+  /* Thick black border, no radius */
+  border: 4px solid var(--bauhaus-black);
+  position: relative;
+}
+
+/* Geometric accent on code block */
+.theme-bauhaus pre::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 20px;
+  height: 20px;
+  background: var(--bauhaus-red);
+}
+
+.theme-bauhaus pre::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 20px;
+  height: 20px;
+  background: var(--bauhaus-blue);
+}
+
+.theme-bauhaus pre code {
+  background: none;
+  padding: 0;
+  border-radius: 0;
+  font-size: inherit;
+  border: none;
+}
+
+/* Bauhaus links - blue with thick underline */
+.theme-bauhaus a {
+  color: var(--color-link);
+  text-decoration: none;
+  border-bottom: 3px solid var(--bauhaus-blue);
+  transition:
+    border-color var(--transition-duration) var(--transition-timing),
+    color var(--transition-duration) var(--transition-timing);
+}
+
+.theme-bauhaus a:hover {
+  border-bottom-color: var(--bauhaus-red);
+  color: var(--bauhaus-red);
+}
+
+/* Bauhaus lists - geometric markers */
+.theme-bauhaus ul,
+.theme-bauhaus ol {
+  padding-left: 2em;
+  margin: 0;
+}
+
+.theme-bauhaus li {
+  margin-bottom: 0.65em;
+  padding-left: 0.5em;
+}
+
+.theme-bauhaus li::marker {
+  color: var(--bauhaus-black);
+  font-weight: 700;
+}
+
+/* Rotating primary color markers */
+.theme-bauhaus ul li:nth-child(3n+1)::marker {
+  content: '■ ';
+  color: var(--bauhaus-red);
+}
+
+.theme-bauhaus ul li:nth-child(3n+2)::marker {
+  content: '■ ';
+  color: var(--bauhaus-yellow);
+}
+
+.theme-bauhaus ul li:nth-child(3n+3)::marker {
+  content: '■ ';
+  color: var(--bauhaus-blue);
+}
+
+.theme-bauhaus ol li::marker {
+  font-family: var(--font-display);
+  font-size: 1.2em;
+  color: var(--bauhaus-black);
+}
+
+/* Bauhaus blockquotes - bold black border, primary accent */
+.theme-bauhaus blockquote {
+  border-left: 8px solid var(--bauhaus-black);
+  padding: 1.5em 2em;
+  margin: 0;
+  font-style: normal;
+  background-color: var(--color-surface);
+  position: relative;
+}
+
+/* Color accent strip on right */
+.theme-bauhaus blockquote::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 8px;
+  background: linear-gradient(
+    to bottom,
+    var(--bauhaus-red) 0%,
+    var(--bauhaus-red) 33%,
+    var(--bauhaus-yellow) 33%,
+    var(--bauhaus-yellow) 66%,
+    var(--bauhaus-blue) 66%,
+    var(--bauhaus-blue) 100%
+  );
+}
+
+/* Bauhaus tables - bold borders */
+.theme-bauhaus table {
+  width: 100%;
+  border-collapse: collapse;
+  background: transparent;
+  border: 4px solid var(--bauhaus-black);
+}
+
+.theme-bauhaus th,
+.theme-bauhaus td {
+  padding: 1em 1.5em;
+  text-align: left;
+  border: 2px solid var(--bauhaus-black);
+}
+
+.theme-bauhaus th {
+  font-family: var(--font-display);
+  font-weight: 400;
+  color: var(--bauhaus-white);
+  background: var(--bauhaus-black);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-size: 1em;
+}
+
+.theme-bauhaus tr:nth-child(even) td {
+  background-color: rgba(0, 0, 0, 0.03);
+}
+
+/* Bauhaus images - thick black frame */
+.theme-bauhaus img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 0;
+  border: 4px solid var(--bauhaus-black);
+}
+
+/* Bauhaus fragments - snappy slide in */
+.theme-bauhaus .fragment {
+  transition:
+    opacity var(--fragment-duration) var(--transition-timing),
+    transform var(--fragment-duration) var(--transition-timing);
+}
+
+.theme-bauhaus .fragment-hidden {
+  opacity: 0;
+  transform: translateX(-20px);
+}
+
+.theme-bauhaus .fragment-visible {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+/* Bauhaus selection - primary color highlight */
+.theme-bauhaus ::selection {
+  background-color: var(--bauhaus-yellow);
+  color: var(--bauhaus-black);
+}
+
+/* Strong/bold text */
+.theme-bauhaus strong,
+.theme-bauhaus b {
+  font-weight: 700;
+  color: var(--bauhaus-black);
+}
+
+/* Emphasis/italic text */
+.theme-bauhaus em,
+.theme-bauhaus i {
+  font-style: italic;
+  color: var(--color-muted);
+}
+
+/* Horizontal rule - primary color stripe */
+.theme-bauhaus hr {
+  border: none;
+  height: 16px;
+  margin: 2em auto;
+  max-width: 300px;
+  background: linear-gradient(
+    90deg,
+    var(--bauhaus-red) 0%,
+    var(--bauhaus-red) 33%,
+    var(--bauhaus-yellow) 33%,
+    var(--bauhaus-yellow) 66%,
+    var(--bauhaus-blue) 66%,
+    var(--bauhaus-blue) 100%
+  );
+}
+
+/* ============================================
+   Layout-specific styles for Bauhaus theme
+   ============================================ */
+
+/* Title layout - bold geometric composition */
+.theme-bauhaus .layout-title {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  position: relative;
+}
+
+/* Geometric shapes behind title */
+.theme-bauhaus .layout-title::before {
+  content: '';
+  position: absolute;
+  top: 20%;
+  left: 10%;
+  width: 120px;
+  height: 120px;
+  background: var(--bauhaus-red);
+  border-radius: 50%;
+  opacity: 0.9;
+  z-index: 0;
+}
+
+.theme-bauhaus .layout-title::after {
+  content: '';
+  position: absolute;
+  bottom: 15%;
+  right: 12%;
+  width: 100px;
+  height: 100px;
+  background: var(--bauhaus-yellow);
+  z-index: 0;
+}
+
+.theme-bauhaus .layout-title h1 {
+  font-size: clamp(3.5rem, 8vw, 7rem);
+  letter-spacing: 0.12em;
+  position: relative;
+  z-index: 1;
+}
+
+/* Thick black line under title */
+.theme-bauhaus .layout-title h1::after {
+  content: '';
+  display: block;
+  width: 200px;
+  height: 8px;
+  margin: 1.5rem auto 0;
+  background: var(--bauhaus-black);
+}
+
+.theme-bauhaus .layout-title p {
+  font-size: 1.5rem;
+  color: var(--color-muted);
+  margin-top: 1rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  position: relative;
+  z-index: 1;
+}
+
+/* Section layout - bold divider */
+.theme-bauhaus .layout-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  position: relative;
+}
+
+/* Geometric accent */
+.theme-bauhaus .layout-section::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 5%;
+  transform: translateY(-50%);
+  width: 60px;
+  height: 200px;
+  background: var(--bauhaus-blue);
+}
+
+.theme-bauhaus .layout-section h2 {
+  font-size: clamp(3rem, 7vw, 5.5rem);
+  letter-spacing: 0.1em;
+  position: relative;
+  padding-bottom: 1.5rem;
+}
+
+/* Primary color underline */
+.theme-bauhaus .layout-section h2::after {
+  content: '';
+  display: block;
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 150px;
+  height: 8px;
+  background: linear-gradient(
+    90deg,
+    var(--bauhaus-red) 0%,
+    var(--bauhaus-red) 33%,
+    var(--bauhaus-yellow) 33%,
+    var(--bauhaus-yellow) 66%,
+    var(--bauhaus-blue) 66%,
+    var(--bauhaus-blue) 100%
+  );
+}
+
+.theme-bauhaus .layout-section p {
+  font-size: 1.4rem;
+  color: var(--color-muted);
+  margin-top: 1.5rem;
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+}
+
+/* Big-stat layout - massive bold number */
+.theme-bauhaus .layout-big-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  position: relative;
+}
+
+/* Colored backdrop shapes */
+.theme-bauhaus .layout-big-stat::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 350px;
+  height: 350px;
+  border: 12px solid var(--bauhaus-black);
+  z-index: 0;
+}
+
+.theme-bauhaus .layout-big-stat h2 {
+  font-family: var(--font-display);
+  font-size: clamp(6rem, 16vw, 13rem);
+  letter-spacing: 0.02em;
+  line-height: 1;
+  color: var(--bauhaus-black);
+  position: relative;
+  z-index: 1;
+}
+
+.theme-bauhaus .layout-big-stat p {
+  font-size: 1.5rem;
+  color: var(--color-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  margin-top: 1rem;
+  font-weight: 500;
+  position: relative;
+  z-index: 1;
+}
+
+/* Quote layout - bold framing */
+.theme-bauhaus .layout-quote {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  padding: 4rem;
+}
+
+.theme-bauhaus .layout-quote blockquote {
+  max-width: 85%;
+  padding: 2.5rem 3rem;
+  position: relative;
+  border-left: 12px solid var(--bauhaus-black);
+  border-right: none;
+  background: none;
+}
+
+/* Remove color strip on quote layout */
+.theme-bauhaus .layout-quote blockquote::after {
+  display: none;
+}
+
+/* Large quotation marks in primary colors */
+.theme-bauhaus .layout-quote blockquote::before {
+  content: '"';
+  position: absolute;
+  top: -20px;
+  left: 20px;
+  font-family: var(--font-display);
+  font-size: 8rem;
+  line-height: 1;
+  color: var(--bauhaus-red);
+  opacity: 0.8;
+}
+
+.theme-bauhaus .layout-quote blockquote p {
+  font-size: clamp(1.6rem, 3.5vw, 2.5rem);
+  font-style: normal;
+  line-height: 1.5;
+  color: var(--bauhaus-black);
+  font-weight: 500;
+}
+
+.theme-bauhaus .layout-quote p:not(blockquote p),
+.theme-bauhaus .layout-quote cite {
+  font-style: normal;
+  font-size: 1.2rem;
+  color: var(--bauhaus-blue);
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  margin-top: 1.5rem;
+  font-weight: 600;
+}
+
+/* Two-column layout - bold divider */
+.theme-bauhaus .layout-two-column {
+  gap: 4rem;
+}
+
+.theme-bauhaus .layout-two-column > *:first-child {
+  border-right: 6px solid var(--bauhaus-black);
+  padding-right: 3rem;
+}
+
+.theme-bauhaus .layout-two-column h3 {
+  font-family: var(--font-display);
+  color: var(--bauhaus-black);
+  margin-bottom: 1em;
+  font-size: 1.8rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding-bottom: 0.5em;
+  border-bottom: 4px solid var(--bauhaus-black);
+}
+
+/* Rotating accent colors on column headers */
+.theme-bauhaus .layout-two-column > *:first-child h3 {
+  border-bottom-color: var(--bauhaus-red);
+}
+
+.theme-bauhaus .layout-two-column > *:last-child h3 {
+  border-bottom-color: var(--bauhaus-blue);
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  .theme-bauhaus {
+    --transition-duration: 0ms;
+    --fragment-duration: 0ms;
+  }
+}
