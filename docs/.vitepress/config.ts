@@ -57,6 +57,7 @@ export default defineConfig({
             { text: 'Writing Slides', link: '/guide/writing-slides' },
             { text: 'Layouts', link: '/guide/layouts' },
             { text: 'Themes', link: '/guide/themes' },
+            { text: 'Theme Gallery', link: '/guide/theme-gallery' },
             { text: 'Animations & Transitions', link: '/guide/animations-transitions' },
             { text: 'Code Blocks', link: '/guide/code-blocks' },
             { text: 'Live Code Execution', link: '/guide/live-code-execution' },
