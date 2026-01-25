@@ -1,8 +1,8 @@
 ---
 title: Phosphor Theme Showcase
 theme: phosphor
-author: root
-date: 2026-01-24
+author: Tap Presentations
+date: 2026-01-25
 aspectRatio: "16:9"
 transition: none
 codeTheme: github-dark

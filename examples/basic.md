@@ -1,8 +1,8 @@
 ---
 title: Getting Started with Tap
 theme: paper
-author: Your Name
-date: 2026-01-24
+author: Tap Presentations
+date: 2026-01-25
 aspectRatio: "16:9"
 transition: fade
 ---
@@ -105,9 +105,11 @@ Alan Kay
 
 You can include images with standard markdown:
 
-![Placeholder](https://via.placeholder.com/400x200)
+```markdown
+![My Image](./path/to/image.png)
+```
 
-Images can be sized with `{width=50%}` attributes.
+Images work with local paths and URLs. Use attributes like `{width=50%}` for sizing.
 
 ---
 

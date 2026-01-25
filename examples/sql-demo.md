@@ -1,8 +1,8 @@
 ---
 title: SQL Live Demo
 theme: noir
-author: Database Expert
-date: 2026-01-24
+author: Tap Presentations
+date: 2026-01-25
 aspectRatio: "16:9"
 transition: fade
 codeTheme: github-light

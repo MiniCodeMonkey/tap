@@ -1,18 +1,17 @@
 {
   "project": "Tap",
-  "branchName": "ralph/mermaid-ai-images",
-  "description": "Mermaid Charts & AI Image Generation - Native mermaid diagram support with theme matching, plus TUI-based AI image generation via Gemini API",
+  "branchName": "ralph/template-visual-qa",
+  "description": "Template Visual QA & Design Enhancement - Playwright-based visual testing for all templates with comprehensive design improvements",
   "userStories": [
     {
       "id": "US-001",
-      "title": "Add mermaid.js to frontend bundle",
-      "description": "As a developer, I need mermaid.js installed and configured in the frontend build so diagrams can be rendered client-side.",
+      "title": "Install Playwright and create test directory structure",
+      "description": "As a developer, I need Playwright installed and configured so we can automate visual testing.",
       "acceptanceCriteria": [
-        "Install mermaid package via npm",
-        "Import mermaid in frontend entry point",
-        "Configure mermaid with startOnLoad: false for manual initialization",
-        "Verify mermaid is included in build output",
-        "Unit test for mermaid initialization",
+        "Install @playwright/test as dev dependency in frontend/package.json",
+        "Create playwright.config.ts with 1920x1080 viewport and chromium only",
+        "Create tests/visual/ directory structure",
+        "Add 'test:visual' script to frontend/package.json",
         "Typecheck passes"
       ],
       "priority": 1,
@@ -21,16 +20,16 @@
     },
     {
       "id": "US-002",
-      "title": "Detect and render mermaid code blocks",
-      "description": "As a presenter, I want code blocks with language 'mermaid' to render as diagrams instead of code.",
+      "title": "Create basic Playwright test that starts tap dev and takes a screenshot",
+      "description": "As a developer, I need a working test that starts tap dev in headless mode and captures a screenshot.",
       "acceptanceCriteria": [
-        "Detect code blocks with language identifier 'mermaid' in SlideRenderer",
-        "Call mermaid.render() for each mermaid block",
-        "Replace code block content with rendered SVG",
-        "Diagrams render in both dev server and built output",
-        "Unit tests for mermaid block detection",
-        "Typecheck passes",
-        "Verify in browser using dev-browser skill"
+        "Test starts tap dev --headless for examples/basic.md on a dynamic port",
+        "Test waits for server to be ready (HTTP 200 on localhost)",
+        "Test opens browser and navigates to presentation",
+        "Test captures one screenshot at 1920x1080",
+        "Test stops tap dev server after completion",
+        "Screenshot saved to tests/visual/screenshots/",
+        "Typecheck passes"
       ],
       "priority": 2,
       "passes": true,
@@ -38,16 +37,14 @@
     },
     {
       "id": "US-003",
-      "title": "Handle mermaid syntax errors gracefully",
-      "description": "As a presenter, I want to see helpful error messages when my mermaid syntax is invalid.",
+      "title": "Implement slide navigation and multi-slide screenshot capture",
+      "description": "As a developer, I need the test to navigate through all slides and capture each one.",
       "acceptanceCriteria": [
-        "Catch mermaid.render() errors",
-        "Display user-friendly error message in place of diagram",
-        "Show the original mermaid code alongside error",
-        "Error styling matches theme (red/warning colors)",
-        "Unit tests for error handling",
-        "Typecheck passes",
-        "Verify in browser using dev-browser skill"
+        "Test fetches /api/presentation to get total slide count",
+        "Test navigates slides using ArrowRight key press",
+        "Screenshot captured for each slide with naming: {template}-slide-{number}.png",
+        "Test handles presentations with varying slide counts",
+        "Typecheck passes"
       ],
       "priority": 3,
       "passes": true,
@@ -55,15 +52,14 @@
     },
     {
       "id": "US-004",
-      "title": "Auto-scale mermaid diagrams to fit slide bounds",
-      "description": "As a presenter, I want large diagrams to automatically scale down to fit within the slide.",
+      "title": "Add fragment state screenshot capture",
+      "description": "As a developer, I need the test to capture screenshots at each fragment/pause point.",
       "acceptanceCriteria": [
-        "Wrap mermaid SVG output in a container with max-width/max-height constraints",
-        "Use CSS to scale diagram proportionally (object-fit: contain or similar)",
-        "Diagram never overflows slide bounds",
-        "Small diagrams remain at natural size (no upscaling)",
-        "Typecheck passes",
-        "Verify in browser using dev-browser skill"
+        "Test detects slides with multiple fragments from API response",
+        "Test presses ArrowRight to advance through fragments",
+        "Screenshot captured at each fragment state: {template}-slide-{number}-frag-{index}.png",
+        "Final fragment state matches total slide screenshot",
+        "Typecheck passes"
       ],
       "priority": 4,
       "passes": true,
@@ -71,16 +67,15 @@
     },
     {
       "id": "US-005",
-      "title": "Create mermaid theme mapping for Paper and Noir themes",
-      "description": "As a presenter, I want mermaid diagrams to match the Paper and Noir presentation themes.",
+      "title": "Add console error detection and reporting",
+      "description": "As a developer, I need the test to detect and report any console errors during rendering.",
       "acceptanceCriteria": [
-        "Create getMermaidTheme() function that maps tap theme to mermaid config",
-        "Paper theme uses mermaid 'neutral' theme with light colors",
-        "Noir theme uses mermaid 'dark' theme with gold accent",
-        "Diagrams use theme's font family",
-        "Unit tests for theme mapping logic",
-        "Typecheck passes",
-        "Verify in browser using dev-browser skill"
+        "Test listens for console errors via page.on('console')",
+        "Test listens for page errors via page.on('pageerror')",
+        "Errors collected with template name, slide number, and error message",
+        "Test fails if any errors are detected",
+        "Error summary printed at end of test run",
+        "Typecheck passes"
       ],
       "priority": 5,
       "passes": true,
@@ -88,15 +83,15 @@
     },
     {
       "id": "US-006",
-      "title": "Create mermaid theme mapping for Aurora, Phosphor, and Poster themes",
-      "description": "As a presenter, I want mermaid diagrams to match the Aurora, Phosphor, and Poster themes.",
+      "title": "Create test runner that iterates all example templates",
+      "description": "As a developer, I need the test to run against all markdown files in examples/ folder.",
       "acceptanceCriteria": [
-        "Aurora theme uses mermaid 'forest' theme with teal/purple accents",
-        "Phosphor theme uses mermaid 'dark' theme with green (#00ff00) accent",
-        "Poster theme uses mermaid 'default' theme with high contrast black/white/red",
-        "Unit tests for theme mapping logic",
-        "Typecheck passes",
-        "Verify in browser using dev-browser skill"
+        "Test discovers all .md files in examples/ directory",
+        "Test runs screenshot capture for each template sequentially",
+        "Each template uses unique port to avoid conflicts",
+        "Screenshots organized by template name in output directory",
+        "Summary shows total templates processed and any failures",
+        "Typecheck passes"
       ],
       "priority": 6,
       "passes": true,
@@ -104,15 +99,16 @@
     },
     {
       "id": "US-007",
-      "title": "Re-render mermaid diagrams on theme change",
-      "description": "As a presenter, I want diagrams to update when I switch themes via the TUI.",
+      "title": "Generate HTML gallery report",
+      "description": "As a developer, I need an HTML gallery that displays all captured screenshots.",
       "acceptanceCriteria": [
-        "Listen for theme changes in presentation store",
-        "Re-initialize mermaid with new theme config when theme changes",
-        "Re-render all mermaid diagrams on current slide",
-        "Theme switch reflects in diagrams within one hot reload cycle",
-        "Typecheck passes",
-        "Verify in browser using dev-browser skill"
+        "HTML report generated after test run completes",
+        "Report shows screenshots organized by template",
+        "Each screenshot shows template name, slide number, fragment info",
+        "Report includes summary stats (total templates, slides, errors)",
+        "Report uses relative paths to screenshots",
+        "Report saved to tests/visual/gallery/index.html",
+        "Typecheck passes"
       ],
       "priority": 7,
       "passes": true,
@@ -120,16 +116,16 @@
     },
     {
       "id": "US-008",
-      "title": "Create Gemini API client in Go backend",
-      "description": "As a developer, I need a Go client for the Gemini API to generate images.",
+      "title": "Improve Paper theme typography and spacing",
+      "description": "As a designer, I want the Paper theme to have refined typography and spacing for a polished look.",
       "acceptanceCriteria": [
-        "Create internal/gemini/client.go with GenerateImage function",
-        "Read GEMINI_API_KEY from environment",
-        "Use Nano Banana Pro model for image generation",
-        "Return image bytes and content type on success",
-        "Return structured error on API failure (rate limit, content policy, etc.)",
-        "Integration tests with mocked HTTP responses",
-        "Typecheck passes"
+        "Title slide: increase title size, add letter-spacing for impact",
+        "Body text: ensure comfortable line-height (1.5-1.6)",
+        "Code blocks: refine padding, border-radius, and background contrast",
+        "Lists: improve bullet styling and item spacing",
+        "Headings: add subtle letter-spacing and weight adjustments",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill - theme-paper.md looks polished"
       ],
       "priority": 8,
       "passes": true,
@@ -137,16 +133,16 @@
     },
     {
       "id": "US-009",
-      "title": "Add image generation shortcut to dev TUI",
-      "description": "As a presenter, I want to press 'i' during tap dev to start the image generation workflow.",
+      "title": "Improve Noir theme depth and elegance",
+      "description": "As a designer, I want the Noir theme to have cinematic depth and elegant gold accents.",
       "acceptanceCriteria": [
-        "Add 'i' key handler in DevModel.handleKeyPress",
-        "Check for GEMINI_API_KEY in environment",
-        "If key missing, show error message explaining how to configure it in .env",
-        "If key present, set showImageGenerator flag to true",
-        "Update help text to show 'i' shortcut",
-        "Unit tests for key handling and API key validation",
-        "Typecheck passes"
+        "Background: use subtle gradient or texture instead of flat black",
+        "Gold accents: refine to be elegant, not overwhelming",
+        "Typography: ensure excellent contrast against dark background",
+        "Code blocks: dark aesthetic that integrates seamlessly",
+        "Add subtle shadows or glows for depth where appropriate",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill - theme-noir.md looks polished"
       ],
       "priority": 9,
       "passes": true,
@@ -154,17 +150,16 @@
     },
     {
       "id": "US-010",
-      "title": "Create slide selector for image generation",
-      "description": "As a presenter, I want to select which slide to add an image to.",
+      "title": "Improve Aurora theme gradients and glassmorphism",
+      "description": "As a designer, I want the Aurora theme to have beautiful gradients and modern glassmorphism.",
       "acceptanceCriteria": [
-        "Create ImageGenModel with slide selection step",
-        "Show numbered list of all slides with titles/first headings",
-        "Navigate with up/down arrows or j/k",
-        "Current selection highlighted",
-        "Press enter to select slide",
-        "Press esc to cancel and return to main dev view",
-        "Unit tests for slide list rendering and navigation",
-        "Typecheck passes"
+        "Gradient backgrounds: smooth, visually appealing transitions",
+        "Glassmorphism: subtle backdrop-blur effects that enhance readability",
+        "Text: highly readable against gradient backgrounds (add text-shadow if needed)",
+        "Code blocks: work well with colorful aesthetic",
+        "Transitions: cohesive and smooth",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill - theme-aurora.md looks polished"
       ],
       "priority": 10,
       "passes": true,
@@ -172,14 +167,16 @@
     },
     {
       "id": "US-011",
-      "title": "Detect existing AI-generated images on slides",
-      "description": "As a presenter, I want to see which slides already have AI-generated images.",
+      "title": "Improve Phosphor theme CRT authenticity",
+      "description": "As a designer, I want the Phosphor theme to have authentic but comfortable CRT aesthetics.",
       "acceptanceCriteria": [
-        "Parse markdown to find <!-- ai-prompt: ... --> comments",
-        "Extract prompt text and associated image path",
-        "Show indicator next to slides with AI images in selector (e.g., '[has 1 AI image]')",
-        "Unit tests for ai-prompt comment parsing",
-        "Typecheck passes"
+        "Green phosphor color: authentic but not harsh on eyes (consider slight desaturation)",
+        "CRT effects: subtle scanlines or glow that enhance without distracting",
+        "Monospace typography: well-balanced sizing and spacing",
+        "Code blocks: feel native to terminal aesthetic",
+        "Add subtle text-shadow glow for authenticity",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill - theme-phosphor.md looks polished"
       ],
       "priority": 11,
       "passes": true,
@@ -187,16 +184,16 @@
     },
     {
       "id": "US-012",
-      "title": "Show add/regenerate options for slides with existing images",
-      "description": "As a presenter, I want to choose between adding a new image or regenerating an existing one.",
+      "title": "Improve Poster theme boldness and impact",
+      "description": "As a designer, I want the Poster theme to make bold visual statements with artistic flair.",
       "acceptanceCriteria": [
-        "When slide has existing AI images, show options: 'Add new image' and 'Regenerate: [prompt preview]'",
-        "If multiple AI images exist, show each as a separate regenerate option",
-        "Navigate options with up/down, select with enter",
-        "Selecting 'Add new image' proceeds to prompt input",
-        "Selecting regenerate option pre-fills prompt with existing prompt",
-        "Unit tests for image selection with multiple images",
-        "Typecheck passes"
+        "Typography: bold, impactful sizing and weights",
+        "Color palette: vibrant but harmonious",
+        "Layout spacing: supports the bold aesthetic with generous margins",
+        "Visual hierarchy: clear despite bold styling",
+        "Code blocks: readable within artistic style",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill - theme-poster.md looks polished"
       ],
       "priority": 12,
       "passes": true,
@@ -204,16 +201,16 @@
     },
     {
       "id": "US-013",
-      "title": "Create prompt input for image generation",
-      "description": "As a presenter, I want to type a prompt for the AI image generator.",
+      "title": "Improve core layouts.css typography hierarchy",
+      "description": "As a developer, I want the core layout styles to have better typography defaults.",
       "acceptanceCriteria": [
-        "Add prompt input step to ImageGenModel using textinput.Model",
-        "Support multi-line input",
-        "Press enter or ctrl+d to submit prompt",
-        "Press esc to go back to slide selector",
-        "Pre-fill with existing prompt when regenerating",
-        "Unit tests for prompt input handling",
-        "Typecheck passes"
+        "Title layout: impactful title sizing with appropriate letter-spacing",
+        "Section headers: prominent with good visual weight",
+        "Body text: comfortable reading at presentation scale (2rem+)",
+        "Code blocks: consistent sizing across layouts",
+        "Blockquotes: refined, elegant styling with proper attribution",
+        "Typecheck passes",
+        "Verify improvements visible across multiple themes"
       ],
       "priority": 13,
       "passes": true,
@@ -221,16 +218,17 @@
     },
     {
       "id": "US-014",
-      "title": "Generate image and show progress",
-      "description": "As a presenter, I want to see progress while the image is being generated.",
+      "title": "Improve core layouts.css spacing and rhythm",
+      "description": "As a developer, I want the core layout styles to have better spacing and visual rhythm.",
       "acceptanceCriteria": [
-        "Show spinner with 'Generating image...' message while API call is in progress",
-        "Disable 'i' shortcut while generation is in progress",
-        "Call Gemini API client with prompt",
-        "On success, proceed to save step",
-        "On error, display user-friendly error message and allow retry or cancel",
-        "Unit tests for progress states and error handling",
-        "Typecheck passes"
+        "Slide padding: comfortable margins from edges (4-6rem)",
+        "Vertical rhythm: consistent spacing between elements",
+        "Column layouts: balanced gaps in two-column and three-column",
+        "Lists: proper indentation and item spacing",
+        "Big-stat layout: dramatic centered presence with breathing room",
+        "Quote layout: elegant whitespace framing",
+        "Typecheck passes",
+        "Verify improvements visible across multiple themes"
       ],
       "priority": 14,
       "passes": true,
@@ -238,14 +236,15 @@
     },
     {
       "id": "US-015",
-      "title": "Create images directory if needed",
-      "description": "As a presenter, I want the images directory created automatically.",
+      "title": "Refine Mermaid diagram theme integration",
+      "description": "As a developer, I want Mermaid diagrams to look native within each theme.",
       "acceptanceCriteria": [
-        "Check if images/ directory exists relative to markdown file",
-        "If not, create it with os.MkdirAll",
-        "Works with both relative and absolute paths",
-        "Unit tests for directory creation logic",
-        "Typecheck passes"
+        "Review and refine getMermaidTheme() mappings for all 5 themes",
+        "Diagram colors complement slide theme appropriately",
+        "Diagram text readable at presentation scale",
+        "Error states styled consistently with theme error colors",
+        "Typecheck passes",
+        "Verify diagrams in theme example files look polished"
       ],
       "priority": 15,
       "passes": true,
@@ -253,15 +252,16 @@
     },
     {
       "id": "US-016",
-      "title": "Save generated image to disk",
-      "description": "As a presenter, I want generated images saved with content-hashed filenames.",
+      "title": "Refine code block syntax highlighting per theme",
+      "description": "As a developer, I want code blocks to have refined highlighting that matches each theme.",
       "acceptanceCriteria": [
-        "Generate filename using first 8 chars of SHA256 hash of image content",
-        "Save image to images/ directory (e.g., images/generated-a1b2c3d4.png)",
-        "Determine file extension from content type returned by API",
-        "Unit tests for filename generation",
-        "Integration tests for file writing",
-        "Typecheck passes"
+        "Review Shiki theme mappings in highlighting.ts",
+        "Ensure highlighting theme complements each tap theme",
+        "Line numbers subtle but readable",
+        "Code font size readable at presentation distance",
+        "Line highlighting stands out appropriately",
+        "Typecheck passes",
+        "Verify code blocks in code-demo.md look polished"
       ],
       "priority": 16,
       "passes": true,
@@ -269,50 +269,36 @@
     },
     {
       "id": "US-017",
-      "title": "Insert image into markdown file",
-      "description": "As a presenter, I want the generated image automatically inserted into my markdown.",
+      "title": "Review and polish example template content",
+      "description": "As a content creator, I want example templates to showcase tap's capabilities effectively.",
       "acceptanceCriteria": [
-        "Insert at end of selected slide's content (before next --- separator)",
-        "Use format: <!-- ai-prompt: {prompt} -->\\n![](images/filename.png)",
-        "No alt text in image syntax",
-        "Preserve existing markdown formatting",
-        "Hot reload triggers automatically after file update",
-        "Unit tests for markdown insertion logic",
-        "Integration tests for file modification",
+        "basic.md: demonstrates fundamentals clearly with good slide design",
+        "code-demo.md: showcases code features with well-chosen examples",
+        "sql-demo.md: demonstrates SQL capabilities effectively",
+        "Theme templates: each showcases its theme's strengths",
+        "Content is free of typos and formatting issues",
         "Typecheck passes"
       ],
       "priority": 17,
-      "passes": true,
+      "passes": false,
       "notes": ""
     },
     {
       "id": "US-018",
-      "title": "Handle image regeneration",
-      "description": "As a presenter, I want regenerated images to replace the old ones cleanly.",
+      "title": "Run final visual QA pass and generate gallery",
+      "description": "As a QA engineer, I want to run the complete test suite and verify all templates pass.",
       "acceptanceCriteria": [
-        "Delete old image file after successful replacement",
-        "Update markdown with new image path and prompt comment",
-        "Preserve image position in markdown (don't move to end of slide)",
-        "Integration tests for file replacement",
+        "Run test:visual command successfully",
+        "All templates render without console errors",
+        "Visual gallery report generated with all screenshots",
+        "All 5 themes look polished in gallery review",
+        "All layouts render correctly across themes",
+        "Mermaid diagrams render correctly in all themes",
+        "Code blocks highlight correctly in all themes",
         "Typecheck passes"
       ],
       "priority": 18,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "US-019",
-      "title": "Return to main dev view after successful generation",
-      "description": "As a presenter, I want to return to the main TUI view after generating an image.",
-      "acceptanceCriteria": [
-        "Show success message with generated filename",
-        "After brief delay or keypress, return to main dev view",
-        "Reset ImageGenModel state for next use",
-        "Send reload event to update TUI activity log",
-        "Typecheck passes"
-      ],
-      "priority": 19,
-      "passes": true,
+      "passes": false,
       "notes": ""
     }
   ]

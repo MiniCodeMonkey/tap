@@ -2,7 +2,7 @@
 title: Poster Theme Showcase
 theme: poster
 author: TAP PRESENTATIONS
-date: 2026-01-24
+date: 2026-01-25
 aspectRatio: "16:9"
 transition: none
 ---
