@@ -1,0 +1,854 @@
+/**
+ * Chalkboard Theme
+ *
+ * Friendly, educational aesthetics - classroom nostalgia with chalk and slate. Inspired by
+ * traditional blackboards, teacher's notes, and the tactile warmth of handwritten lessons.
+ *
+ * Design philosophy:
+ * - Dark green chalkboard background with realistic texture
+ * - White and pastel chalk colors for text
+ * - Caveat for handwritten feel, Patrick Hand for casual notes
+ * - Chalk dust texture and imperfect lines
+ * - Sketchy underlines and hand-drawn borders
+ * - Warm, approachable educational presence
+ */
+
+.theme-chalkboard {
+  /* Core colors - chalk on slate */
+  --color-bg: #2d4a3e;
+  --color-text: #ffffff;
+  --color-muted: rgba(255, 255, 255, 0.7);
+  --color-accent: #fff59d;
+  --color-code-bg: rgba(0, 0, 0, 0.2);
+
+  /* Extended colors - chalk palette */
+  --color-border: rgba(255, 255, 255, 0.3);
+  --color-surface: rgba(0, 0, 0, 0.15);
+  --color-surface-elevated: rgba(0, 0, 0, 0.25);
+  --color-link: #90caf9;
+  --color-code-text: #e0f7fa;
+
+  /* Chalkboard palette - pastel chalk colors */
+  --chalk-white: #ffffff;
+  --chalk-yellow: #fff59d;
+  --chalk-pink: #f8bbd9;
+  --chalk-blue: #90caf9;
+  --chalk-green: #a5d6a7;
+  --chalk-orange: #ffcc80;
+  --chalk-purple: #ce93d8;
+
+  /* Board colors */
+  --board-dark: #1e3a2f;
+  --board-light: #3d5a4e;
+  --board-edge: #5d4037;
+
+  /* Chalk dust effects */
+  --chalk-dust: rgba(255, 255, 255, 0.05);
+  --chalk-smudge: rgba(255, 255, 255, 0.08);
+
+  /* Error colors */
+  --color-error: #ef9a9a;
+  --color-error-bg: rgba(239, 154, 154, 0.15);
+
+  /* Typography - handwritten feel */
+  --font-sans: 'Patrick Hand', 'Caveat', 'Comic Sans MS', cursive, sans-serif;
+  --font-serif: 'Caveat', 'Patrick Hand', 'Comic Sans MS', cursive, serif;
+  --font-mono: 'JetBrains Mono', 'SF Mono', Monaco, 'Cascadia Code', Consolas, 'Liberation Mono',
+    Menlo, monospace;
+  --font-display: 'Caveat', 'Patrick Hand', cursive;
+
+  /* Transitions - organic and gentle */
+  --transition-duration: 350ms;
+  --transition-timing: cubic-bezier(0.4, 0, 0.2, 1);
+  --fragment-duration: 400ms;
+
+  /* Apply base styles */
+  font-family: var(--font-sans);
+  color: var(--color-text);
+  letter-spacing: 0.02em;
+  line-height: 1.8;
+
+  /* Chalkboard background with texture */
+  background:
+    /* Chalk dust specks */
+    radial-gradient(
+      ellipse 2px 2px at 15% 20%,
+      var(--chalk-dust) 0%,
+      transparent 100%
+    ),
+    radial-gradient(
+      ellipse 1px 1px at 45% 35%,
+      var(--chalk-dust) 0%,
+      transparent 100%
+    ),
+    radial-gradient(
+      ellipse 2px 1px at 75% 60%,
+      var(--chalk-dust) 0%,
+      transparent 100%
+    ),
+    radial-gradient(
+      ellipse 1px 2px at 30% 80%,
+      var(--chalk-dust) 0%,
+      transparent 100%
+    ),
+    radial-gradient(
+      ellipse 1px 1px at 85% 25%,
+      var(--chalk-dust) 0%,
+      transparent 100%
+    ),
+    radial-gradient(
+      ellipse 2px 2px at 60% 90%,
+      var(--chalk-dust) 0%,
+      transparent 100%
+    ),
+    /* Subtle scratches and wear */
+    linear-gradient(
+      95deg,
+      transparent 40%,
+      var(--chalk-smudge) 41%,
+      var(--chalk-smudge) 41.5%,
+      transparent 42%
+    ),
+    linear-gradient(
+      87deg,
+      transparent 60%,
+      var(--chalk-smudge) 61%,
+      var(--chalk-smudge) 61.3%,
+      transparent 62%
+    ),
+    /* Board grain texture */
+    linear-gradient(
+      180deg,
+      var(--board-dark) 0%,
+      var(--color-bg) 3%,
+      var(--color-bg) 97%,
+      var(--board-dark) 100%
+    );
+  background-color: var(--color-bg);
+}
+
+/* Chalkboard typography - handwritten feel */
+.theme-chalkboard h1,
+.theme-chalkboard h2,
+.theme-chalkboard h3,
+.theme-chalkboard h4,
+.theme-chalkboard h5,
+.theme-chalkboard h6 {
+  font-family: var(--font-display);
+  font-weight: 400;
+  letter-spacing: 0.02em;
+  line-height: 1.3;
+  margin: 0;
+  color: var(--chalk-white);
+  /* Chalk text effect - slight roughness */
+  text-shadow:
+    1px 1px 0 rgba(255, 255, 255, 0.1),
+    -1px -1px 0 rgba(0, 0, 0, 0.2);
+}
+
+.theme-chalkboard h1 {
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.theme-chalkboard h2 {
+  font-weight: 600;
+  letter-spacing: 0.015em;
+}
+
+.theme-chalkboard h3 {
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+
+.theme-chalkboard p,
+.theme-chalkboard li {
+  font-family: var(--font-sans);
+  font-weight: 400;
+  letter-spacing: 0.02em;
+  /* Chalk dust effect on text */
+  text-shadow: 0 0 1px rgba(255, 255, 255, 0.3);
+}
+
+/* Chalkboard code blocks - boxed area like a sidebar note */
+.theme-chalkboard code {
+  font-family: var(--font-mono);
+  background: var(--color-code-bg);
+  padding: 0.2em 0.5em;
+  border-radius: 2px;
+  font-size: 0.85em;
+  border: 1px dashed var(--color-border);
+  color: var(--color-code-text);
+}
+
+.theme-chalkboard pre {
+  font-family: var(--font-mono);
+  background: var(--color-surface-elevated);
+  color: var(--color-code-text);
+  padding: 2em 2.5em;
+  border-radius: 0;
+  overflow-x: auto;
+  line-height: 1.6;
+  /* Hand-drawn border effect */
+  border: 2px solid var(--chalk-white);
+  border-radius: 3px 5px 4px 6px;
+  position: relative;
+  /* Chalk smudge on edges */
+  box-shadow:
+    inset 0 0 30px rgba(0, 0, 0, 0.2),
+    2px 2px 0 rgba(255, 255, 255, 0.05);
+}
+
+/* Label above code block like teacher's note */
+.theme-chalkboard pre::before {
+  content: '// code';
+  position: absolute;
+  top: -1.5em;
+  left: 1em;
+  font-family: var(--font-display);
+  font-size: 1rem;
+  color: var(--chalk-yellow);
+  background: var(--color-bg);
+  padding: 0 0.5em;
+  letter-spacing: 0.05em;
+}
+
+/* Chalk dust smudge under code */
+.theme-chalkboard pre::after {
+  content: '';
+  position: absolute;
+  bottom: -8px;
+  left: 10%;
+  right: 10%;
+  height: 6px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    var(--chalk-dust) 20%,
+    var(--chalk-smudge) 50%,
+    var(--chalk-dust) 80%,
+    transparent 100%
+  );
+  filter: blur(2px);
+}
+
+.theme-chalkboard pre code {
+  background: none;
+  padding: 0;
+  border-radius: 0;
+  font-size: inherit;
+  border: none;
+}
+
+/* Chalkboard links - underlined with chalk */
+.theme-chalkboard a {
+  color: var(--chalk-blue);
+  text-decoration: none;
+  position: relative;
+  transition: color var(--transition-duration) var(--transition-timing);
+}
+
+/* Sketchy chalk underline */
+.theme-chalkboard a::after {
+  content: '';
+  position: absolute;
+  bottom: -2px;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(
+    90deg,
+    var(--chalk-blue) 0%,
+    var(--chalk-blue) 20%,
+    transparent 21%,
+    transparent 25%,
+    var(--chalk-blue) 26%,
+    var(--chalk-blue) 45%,
+    transparent 46%,
+    transparent 48%,
+    var(--chalk-blue) 49%,
+    var(--chalk-blue) 100%
+  );
+  opacity: 0.6;
+}
+
+.theme-chalkboard a:hover {
+  color: var(--chalk-yellow);
+}
+
+.theme-chalkboard a:hover::after {
+  background: var(--chalk-yellow);
+  opacity: 0.8;
+}
+
+/* Chalkboard lists - chalk bullet points */
+.theme-chalkboard ul,
+.theme-chalkboard ol {
+  padding-left: 1.5em;
+  margin: 0;
+}
+
+.theme-chalkboard li {
+  margin-bottom: 0.7em;
+  padding-left: 0.5em;
+}
+
+.theme-chalkboard li::marker {
+  color: var(--chalk-yellow);
+}
+
+/* Rotating chalk color markers */
+.theme-chalkboard ul li:nth-child(5n+1)::marker {
+  content: '\2022 ';
+  color: var(--chalk-yellow);
+}
+
+.theme-chalkboard ul li:nth-child(5n+2)::marker {
+  content: '\25CB ';
+  color: var(--chalk-pink);
+}
+
+.theme-chalkboard ul li:nth-child(5n+3)::marker {
+  content: '\2022 ';
+  color: var(--chalk-blue);
+}
+
+.theme-chalkboard ul li:nth-child(5n+4)::marker {
+  content: '\25CB ';
+  color: var(--chalk-green);
+}
+
+.theme-chalkboard ul li:nth-child(5n+5)::marker {
+  content: '\2022 ';
+  color: var(--chalk-orange);
+}
+
+/* Chalkboard blockquotes - boxed with chalk */
+.theme-chalkboard blockquote {
+  border-left: none;
+  padding: 2em 2.5em;
+  margin: 0;
+  font-style: normal;
+  color: var(--color-text);
+  position: relative;
+  background: var(--color-surface);
+  /* Hand-drawn dashed border */
+  border: 3px dashed var(--chalk-pink);
+  border-radius: 5px 3px 6px 4px;
+}
+
+/* Quote marks in chalk */
+.theme-chalkboard blockquote::before {
+  content: '"';
+  position: absolute;
+  top: 0.2em;
+  left: 0.3em;
+  font-family: var(--font-display);
+  font-size: 4rem;
+  line-height: 1;
+  color: var(--chalk-pink);
+  opacity: 0.5;
+}
+
+/* Star doodle decoration */
+.theme-chalkboard blockquote::after {
+  content: '\2605';
+  position: absolute;
+  bottom: 0.3em;
+  right: 0.5em;
+  font-size: 1.5rem;
+  color: var(--chalk-yellow);
+  opacity: 0.6;
+}
+
+/* Chalkboard tables - ruled lines */
+.theme-chalkboard table {
+  width: 100%;
+  border-collapse: collapse;
+  background: transparent;
+}
+
+.theme-chalkboard th,
+.theme-chalkboard td {
+  padding: 1em 1.5em;
+  text-align: left;
+  border: none;
+  border-bottom: 2px solid var(--color-border);
+}
+
+.theme-chalkboard th {
+  font-family: var(--font-display);
+  font-weight: 600;
+  color: var(--chalk-yellow);
+  letter-spacing: 0.03em;
+  font-size: 1.1em;
+  border-bottom: 3px solid var(--chalk-white);
+}
+
+.theme-chalkboard tr:last-child td {
+  border-bottom: none;
+}
+
+.theme-chalkboard tr:hover td {
+  background: var(--color-surface);
+}
+
+/* Chalkboard images - polaroid-like frame */
+.theme-chalkboard img {
+  max-width: 100%;
+  height: auto;
+  border: 4px solid var(--chalk-white);
+  border-radius: 2px;
+  box-shadow:
+    3px 3px 0 rgba(0, 0, 0, 0.3),
+    -1px -1px 0 rgba(255, 255, 255, 0.1);
+}
+
+/* Chalkboard fragments - fade in like writing */
+.theme-chalkboard .fragment {
+  transition:
+    opacity var(--fragment-duration) var(--transition-timing),
+    transform var(--fragment-duration) var(--transition-timing),
+    filter var(--fragment-duration) var(--transition-timing);
+}
+
+.theme-chalkboard .fragment-hidden {
+  opacity: 0;
+  transform: translateX(-10px);
+  filter: blur(2px);
+}
+
+.theme-chalkboard .fragment-visible {
+  opacity: 1;
+  transform: translateX(0);
+  filter: blur(0);
+}
+
+/* Chalkboard selection */
+.theme-chalkboard ::selection {
+  background-color: rgba(255, 245, 157, 0.4);
+  color: var(--color-text);
+}
+
+/* Strong/bold text - emphasized chalk */
+.theme-chalkboard strong,
+.theme-chalkboard b {
+  font-weight: 700;
+  color: var(--chalk-yellow);
+}
+
+/* Emphasis/italic text */
+.theme-chalkboard em,
+.theme-chalkboard i {
+  font-style: italic;
+  color: var(--chalk-pink);
+}
+
+/* Horizontal rule - chalk line */
+.theme-chalkboard hr {
+  border: none;
+  height: 3px;
+  margin: 2.5em auto;
+  max-width: 200px;
+  /* Sketchy chalk line effect */
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    var(--chalk-white) 5%,
+    var(--chalk-white) 15%,
+    transparent 16%,
+    transparent 18%,
+    var(--chalk-white) 19%,
+    var(--chalk-white) 40%,
+    transparent 41%,
+    transparent 43%,
+    var(--chalk-white) 44%,
+    var(--chalk-white) 65%,
+    transparent 66%,
+    transparent 68%,
+    var(--chalk-white) 69%,
+    var(--chalk-white) 95%,
+    transparent 100%
+  );
+  opacity: 0.7;
+  position: relative;
+}
+
+/* Doodle marks around divider */
+.theme-chalkboard hr::before {
+  content: '\2733';
+  position: absolute;
+  top: 50%;
+  left: -1.5em;
+  transform: translateY(-50%);
+  color: var(--chalk-yellow);
+  font-size: 1rem;
+  opacity: 0.6;
+}
+
+.theme-chalkboard hr::after {
+  content: '\2733';
+  position: absolute;
+  top: 50%;
+  right: -1.5em;
+  transform: translateY(-50%);
+  color: var(--chalk-pink);
+  font-size: 1rem;
+  opacity: 0.6;
+}
+
+/* ============================================
+   Layout-specific styles for Chalkboard theme
+   ============================================ */
+
+/* Title layout - main lesson title */
+.theme-chalkboard .layout-title {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  position: relative;
+}
+
+/* Decorative corner doodles */
+.theme-chalkboard .layout-title::before {
+  content: '\2606 \2606 \2606';
+  position: absolute;
+  top: 10%;
+  left: 8%;
+  font-size: 1.5rem;
+  color: var(--chalk-yellow);
+  opacity: 0.5;
+  letter-spacing: 0.5em;
+}
+
+.theme-chalkboard .layout-title::after {
+  content: '\2729 \2729 \2729';
+  position: absolute;
+  bottom: 10%;
+  right: 8%;
+  font-size: 1.2rem;
+  color: var(--chalk-pink);
+  opacity: 0.5;
+  letter-spacing: 0.4em;
+}
+
+.theme-chalkboard .layout-title h1 {
+  font-size: clamp(3.5rem, 8vw, 6rem);
+  letter-spacing: 0.02em;
+  position: relative;
+  z-index: 1;
+}
+
+/* Chalk underline under title */
+.theme-chalkboard .layout-title h1::after {
+  content: '';
+  display: block;
+  width: 120px;
+  height: 4px;
+  margin: 1rem auto 0;
+  /* Sketchy underline */
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    var(--chalk-yellow) 10%,
+    var(--chalk-yellow) 30%,
+    transparent 32%,
+    var(--chalk-yellow) 35%,
+    var(--chalk-yellow) 90%,
+    transparent 100%
+  );
+  border-radius: 2px;
+}
+
+.theme-chalkboard .layout-title p {
+  font-size: 1.5rem;
+  color: var(--color-muted);
+  letter-spacing: 0.05em;
+  margin-top: 1.5rem;
+  font-weight: 400;
+  position: relative;
+  z-index: 1;
+}
+
+/* Section layout - chapter heading */
+.theme-chalkboard .layout-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  position: relative;
+}
+
+/* Decorative bracket */
+.theme-chalkboard .layout-section::before {
+  content: '\300A';
+  position: absolute;
+  top: 50%;
+  left: 10%;
+  transform: translateY(-50%);
+  font-size: 8rem;
+  color: var(--chalk-blue);
+  opacity: 0.2;
+}
+
+.theme-chalkboard .layout-section::after {
+  content: '\300B';
+  position: absolute;
+  top: 50%;
+  right: 10%;
+  transform: translateY(-50%);
+  font-size: 8rem;
+  color: var(--chalk-blue);
+  opacity: 0.2;
+}
+
+.theme-chalkboard .layout-section h2 {
+  font-size: clamp(3rem, 7vw, 5rem);
+  letter-spacing: 0.02em;
+  position: relative;
+  z-index: 1;
+}
+
+/* Dashed underline */
+.theme-chalkboard .layout-section h2::after {
+  content: '';
+  display: block;
+  width: 80px;
+  height: 3px;
+  margin: 1rem auto 0;
+  border-top: 3px dashed var(--chalk-yellow);
+}
+
+.theme-chalkboard .layout-section p {
+  font-size: 1.4rem;
+  color: var(--color-muted);
+  margin-top: 1.5rem;
+  font-weight: 400;
+  position: relative;
+  z-index: 1;
+}
+
+/* Big-stat layout - circled number like a test score */
+.theme-chalkboard .layout-big-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  position: relative;
+}
+
+/* Hand-drawn circle around stat */
+.theme-chalkboard .layout-big-stat::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(350px, 60%);
+  height: min(280px, 50%);
+  border: 5px solid var(--chalk-yellow);
+  border-radius: 50% 48% 52% 49% / 48% 50% 51% 49%;
+  opacity: 0.6;
+  z-index: 0;
+}
+
+/* Exclamation doodle */
+.theme-chalkboard .layout-big-stat::after {
+  content: '!';
+  position: absolute;
+  top: calc(50% - min(120px, 22%));
+  right: calc(50% - min(200px, 35%));
+  font-family: var(--font-display);
+  font-size: 4rem;
+  color: var(--chalk-pink);
+  opacity: 0.7;
+  z-index: 1;
+}
+
+.theme-chalkboard .layout-big-stat h2 {
+  font-size: clamp(6rem, 15vw, 11rem);
+  letter-spacing: -0.02em;
+  line-height: 1;
+  color: var(--chalk-white);
+  position: relative;
+  z-index: 2;
+  /* Chalk texture */
+  text-shadow:
+    2px 2px 0 rgba(0, 0, 0, 0.2),
+    0 0 2px rgba(255, 255, 255, 0.5);
+}
+
+.theme-chalkboard .layout-big-stat p {
+  font-size: 1.5rem;
+  color: var(--chalk-yellow);
+  letter-spacing: 0.06em;
+  margin-top: 0.5rem;
+  font-weight: 400;
+  position: relative;
+  z-index: 2;
+}
+
+/* Quote layout - speech bubble style */
+.theme-chalkboard .layout-quote {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  padding: 4rem;
+  position: relative;
+}
+
+/* Large chalk quote box */
+.theme-chalkboard .layout-quote::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(700px, 80%);
+  height: min(350px, 55%);
+  border: 4px solid var(--chalk-white);
+  border-radius: 8px 4px 6px 5px;
+  z-index: 0;
+  opacity: 0.8;
+}
+
+/* Speech bubble tail */
+.theme-chalkboard .layout-quote::after {
+  content: '';
+  position: absolute;
+  bottom: calc(50% - min(175px, 27.5%) - 25px);
+  left: calc(50% - min(350px, 40%) + 50px);
+  width: 0;
+  height: 0;
+  border-style: solid;
+  border-width: 25px 0 0 30px;
+  border-color: transparent transparent transparent var(--chalk-white);
+  opacity: 0.8;
+  z-index: 0;
+}
+
+.theme-chalkboard .layout-quote blockquote {
+  background: none;
+  max-width: 75%;
+  padding: 2rem;
+  position: relative;
+  z-index: 2;
+  border: none;
+  border-radius: 0;
+}
+
+.theme-chalkboard .layout-quote blockquote::before {
+  content: '\201C';
+  position: absolute;
+  top: -0.5em;
+  left: -0.3em;
+  font-family: Georgia, serif;
+  font-size: 5rem;
+  line-height: 1;
+  color: var(--chalk-pink);
+  opacity: 0.5;
+}
+
+.theme-chalkboard .layout-quote blockquote::after {
+  content: '\201D';
+  position: absolute;
+  bottom: -0.8em;
+  right: -0.1em;
+  font-family: Georgia, serif;
+  font-size: 5rem;
+  line-height: 1;
+  color: var(--chalk-pink);
+  opacity: 0.5;
+}
+
+.theme-chalkboard .layout-quote blockquote p {
+  font-family: var(--font-display);
+  font-size: clamp(1.75rem, 3.5vw, 2.5rem);
+  font-style: normal;
+  font-weight: 400;
+  line-height: 1.5;
+  color: var(--color-text);
+}
+
+.theme-chalkboard .layout-quote p:not(blockquote p),
+.theme-chalkboard .layout-quote cite {
+  font-family: var(--font-sans);
+  font-style: normal;
+  font-size: 1.2rem;
+  color: var(--chalk-yellow);
+  letter-spacing: 0.04em;
+  margin-top: 1.5rem;
+  position: relative;
+  z-index: 2;
+}
+
+/* Two-column layout - notebook style */
+.theme-chalkboard .layout-two-column {
+  gap: 4rem;
+}
+
+.theme-chalkboard .layout-two-column > *:first-child {
+  border-right: none;
+  padding-right: 3rem;
+  position: relative;
+}
+
+/* Vertical dashed chalk line divider */
+.theme-chalkboard .layout-two-column > *:first-child::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  top: 5%;
+  height: 90%;
+  width: 3px;
+  background: repeating-linear-gradient(
+    180deg,
+    var(--chalk-white) 0px,
+    var(--chalk-white) 10px,
+    transparent 10px,
+    transparent 20px
+  );
+  opacity: 0.5;
+}
+
+/* Plus sign doodle at intersection */
+.theme-chalkboard .layout-two-column > *:first-child::before {
+  content: '+';
+  position: absolute;
+  right: -0.4em;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 1.5rem;
+  font-weight: bold;
+  color: var(--chalk-yellow);
+  background: var(--color-bg);
+  padding: 0.1em 0.2em;
+  z-index: 1;
+  opacity: 0.8;
+}
+
+.theme-chalkboard .layout-two-column h3 {
+  color: var(--chalk-yellow);
+  margin-bottom: 1em;
+  font-size: 1.6rem;
+  letter-spacing: 0.02em;
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  .theme-chalkboard {
+    --transition-duration: 0ms;
+    --fragment-duration: 0ms;
+  }
+
+  .theme-chalkboard .fragment-hidden {
+    transform: none;
+    filter: none;
+  }
+}
