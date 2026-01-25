@@ -107,9 +107,9 @@ STRIPPED TO THE ESSENTIALS
 
 The Poster palette:
 
-- **BLACK** - #000000
+- **BLACK** - #0a0a0a
 - **WHITE** - #FFFFFF
-- **RED ACCENT** - #EF4444
+- **RED ACCENT** - #ff4d4d
 
 NO GRADIENTS. NO BLUR. PURE CONTRAST.
 

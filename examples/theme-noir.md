@@ -19,7 +19,7 @@ The Noir theme offers:
 
 - **Deep blacks** - Rich charcoal backgrounds (#0a0a0a)
 - **Crisp whites** - High contrast text (#fafafa)
-- **Gold accents** - Sophisticated touches (#d4af37)
+- **Gold accents** - Sophisticated touches (#c9a227)
 - **Cinematic depth** - Multi-layer shadows and vignette
 
 ---

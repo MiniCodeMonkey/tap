@@ -21,7 +21,7 @@ $ ./present --theme=crt
 
 The Phosphor theme brings:
 
-- **CRT aesthetic** - True black with phosphor green glow
+- **CRT aesthetic** - Near-black with P3 phosphor green glow
 - **Monospace everything** - JetBrains Mono throughout
 - **Scanline effects** - Authentic retro overlay
 - **Hacker vibes** - Like presenting in a terminal
@@ -32,15 +32,15 @@ The Phosphor theme brings:
 
 <!-- pause -->
 
-$ echo "Primary: Phosphor green (#00ff00)"
+$ echo "Primary: P3 phosphor green (#39ff14)"
 
 <!-- pause -->
 
-$ echo "Background: True black (#000)"
+$ echo "Background: Near-black (#050505)"
 
 <!-- pause -->
 
-$ export GLOW_EFFECT="0 0 5px, 0 0 10px, 0 0 20px"
+$ export GLOW_EFFECT="multiple soft layers for depth"
 
 ---
 

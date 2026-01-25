@@ -54,7 +54,7 @@ function createSlide(content: string): Slide {
 }
 ```
 
-Dark code blocks (#1e1e1e) with excellent contrast.
+Dark code blocks with excellent contrast and subtle blue tint.
 
 ---
 
