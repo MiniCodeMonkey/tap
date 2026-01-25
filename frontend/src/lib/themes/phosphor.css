@@ -6,62 +6,62 @@
  *
  * Design philosophy:
  * - True black background like a powered CRT
- * - Phosphor green (#00ff00) as the primary color
+ * - P3 phosphor green (#39ff14) - classic but comfortable
  * - Multi-layer text shadows for authentic glow effect
  * - Subtle scanlines overlay for CRT authenticity
  * - JetBrains Mono throughout for terminal feel
  */
 
-/* Scanline overlay effect */
-@keyframes phosphor-flicker {
-  0%, 100% {
-    opacity: 1;
-  }
-  92% {
-    opacity: 1;
-  }
-  93% {
-    opacity: 0.8;
-  }
-  94% {
-    opacity: 1;
-  }
-}
-
-/* Subtle screen glow pulse */
+/* Subtle screen glow pulse - very gentle brightness breathing */
 @keyframes phosphor-pulse {
   0%, 100% {
     filter: brightness(1);
   }
   50% {
-    filter: brightness(1.02);
+    filter: brightness(1.015);
+  }
+}
+
+/* Subtle scanline movement for authenticity */
+@keyframes scanline-drift {
+  0% {
+    background-position: 0 0;
+  }
+  100% {
+    background-position: 0 4px;
   }
 }
 
 .theme-phosphor {
-  /* Core colors - true black and phosphor green */
-  --color-bg: #000000;
-  --color-text: #00ff00;
-  --color-muted: #33ff33;
-  --color-accent: #00ff00;
+  /* Core colors - true black and P3 phosphor green (slightly warmer, easier on eyes) */
+  --color-bg: #050505;
+  --color-text: #39ff14;
+  --color-muted: #5cff5c;
+  --color-accent: #39ff14;
   --color-code-bg: transparent;
 
+  /* Phosphor green variations for depth */
+  --phosphor-bright: #39ff14;
+  --phosphor-medium: #30d912;
+  --phosphor-dim: #228b22;
+  --phosphor-dark: #0d3d0d;
+
   /* Extended colors - all terminal, all the time */
-  --color-border: rgba(0, 255, 0, 0.3);
+  --color-border: rgba(57, 255, 20, 0.35);
   --color-surface: transparent;
-  --color-surface-elevated: rgba(0, 255, 0, 0.05);
-  --color-link: #00ff00;
-  --color-code-text: #00ff00;
+  --color-surface-elevated: rgba(57, 255, 20, 0.06);
+  --color-link: #39ff14;
+  --color-code-text: #39ff14;
 
-  /* Phosphor glow colors for layered shadows */
-  --phosphor-glow-1: rgba(0, 255, 0, 0.8);
-  --phosphor-glow-2: rgba(0, 255, 0, 0.5);
-  --phosphor-glow-3: rgba(0, 255, 0, 0.3);
-  --phosphor-dim: #333333;
+  /* Phosphor glow colors for layered shadows - slightly warmer tint */
+  --phosphor-glow-1: rgba(57, 255, 20, 0.85);
+  --phosphor-glow-2: rgba(57, 255, 20, 0.5);
+  --phosphor-glow-3: rgba(57, 255, 20, 0.25);
+  --phosphor-glow-soft: rgba(57, 255, 20, 0.12);
 
-  /* Error colors - red phosphor for terminal error aesthetic */
-  --color-error: #ff3333;
-  --color-error-bg: rgba(255, 51, 51, 0.15);
+  /* Error colors - amber phosphor for terminal error aesthetic (softer than red) */
+  --color-error: #ffaa00;
+  --color-error-bg: rgba(255, 170, 0, 0.12);
 
   /* Typography - JetBrains Mono throughout for authentic terminal feel */
   --font-sans: 'JetBrains Mono', 'SF Mono', Monaco, 'Cascadia Code', Consolas, 'Liberation Mono', Menlo, monospace;
@@ -76,14 +76,15 @@
   font-family: var(--font-mono);
   color: var(--color-text);
   background-color: var(--color-bg);
-  letter-spacing: 0.02em;
-  line-height: 1.5;
+  letter-spacing: 0.03em;
+  line-height: 1.6;
+  font-size: 1rem;
 
   /* Subtle screen glow pulse animation */
-  animation: phosphor-pulse 4s ease-in-out infinite;
+  animation: phosphor-pulse 6s ease-in-out infinite;
 }
 
-/* CRT scanline overlay effect - applied to slide content area */
+/* CRT scanline overlay effect - subtle and authentic */
 .theme-phosphor::before {
   content: '';
   position: fixed;
@@ -91,18 +92,27 @@
   left: 0;
   width: 100%;
   height: 100%;
-  background: repeating-linear-gradient(
-    0deg,
-    transparent,
-    transparent 2px,
-    rgba(0, 0, 0, 0.15) 2px,
-    rgba(0, 0, 0, 0.15) 4px
-  );
+  /* Finer scanlines with slight gap variation for authenticity */
+  background:
+    repeating-linear-gradient(
+      0deg,
+      transparent 0px,
+      transparent 1px,
+      rgba(0, 0, 0, 0.08) 1px,
+      rgba(0, 0, 0, 0.08) 2px
+    ),
+    /* Very subtle RGB fringe effect on edges */
+    radial-gradient(
+      ellipse 120% 100% at 50% 50%,
+      transparent 65%,
+      rgba(57, 255, 20, 0.02) 100%
+    );
   pointer-events: none;
   z-index: 9999;
+  animation: scanline-drift 8s linear infinite;
 }
 
-/* Screen curve vignette effect */
+/* Screen curve vignette effect - CRT monitor edge darkening */
 .theme-phosphor::after {
   content: '';
   position: fixed;
@@ -110,16 +120,41 @@
   left: 0;
   width: 100%;
   height: 100%;
-  background: radial-gradient(
-    ellipse at center,
-    transparent 60%,
-    rgba(0, 0, 0, 0.4) 100%
-  );
+  /* Multi-layer vignette for authentic CRT curvature feel */
+  background:
+    radial-gradient(
+      ellipse 90% 80% at center,
+      transparent 50%,
+      rgba(0, 0, 0, 0.15) 75%,
+      rgba(0, 0, 0, 0.35) 90%,
+      rgba(0, 0, 0, 0.5) 100%
+    ),
+    /* Subtle corner shadows */
+    radial-gradient(
+      ellipse 150% 150% at 0% 0%,
+      transparent 60%,
+      rgba(0, 0, 0, 0.15) 100%
+    ),
+    radial-gradient(
+      ellipse 150% 150% at 100% 0%,
+      transparent 60%,
+      rgba(0, 0, 0, 0.15) 100%
+    ),
+    radial-gradient(
+      ellipse 150% 150% at 0% 100%,
+      transparent 60%,
+      rgba(0, 0, 0, 0.15) 100%
+    ),
+    radial-gradient(
+      ellipse 150% 150% at 100% 100%,
+      transparent 60%,
+      rgba(0, 0, 0, 0.15) 100%
+    );
   pointer-events: none;
   z-index: 9998;
 }
 
-/* Phosphor theme typography - glowing text effect */
+/* Phosphor theme typography - authentic glowing terminal text */
 .theme-phosphor h1,
 .theme-phosphor h2,
 .theme-phosphor h3,
@@ -127,222 +162,407 @@
 .theme-phosphor h5,
 .theme-phosphor h6 {
   font-family: var(--font-mono);
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  line-height: 1.2;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  line-height: 1.25;
   margin: 0;
-  /* Multi-layer phosphor glow: 5px, 10px, 20px spread */
+  /* Multi-layer phosphor glow with soft outer spread */
   text-shadow:
-    0 0 5px var(--phosphor-glow-1),
-    0 0 10px var(--phosphor-glow-2),
-    0 0 20px var(--phosphor-glow-3);
+    0 0 2px var(--phosphor-glow-1),
+    0 0 8px var(--phosphor-glow-2),
+    0 0 16px var(--phosphor-glow-3),
+    0 0 24px var(--phosphor-glow-soft);
   text-transform: uppercase;
 }
 
 .theme-phosphor h1 {
   font-weight: 700;
-  /* Extra intense glow for main heading */
+  letter-spacing: 0.12em;
+  /* Extra intense glow for main heading - simulates CRT bloom */
   text-shadow:
-    0 0 5px var(--phosphor-glow-1),
-    0 0 10px var(--phosphor-glow-1),
-    0 0 20px var(--phosphor-glow-2),
-    0 0 40px var(--phosphor-glow-3);
+    0 0 3px var(--phosphor-glow-1),
+    0 0 6px var(--phosphor-glow-1),
+    0 0 12px var(--phosphor-glow-2),
+    0 0 24px var(--phosphor-glow-2),
+    0 0 48px var(--phosphor-glow-3);
+}
+
+.theme-phosphor h2 {
+  letter-spacing: 0.1em;
+}
+
+.theme-phosphor h3 {
+  letter-spacing: 0.08em;
+  text-shadow:
+    0 0 2px var(--phosphor-glow-1),
+    0 0 6px var(--phosphor-glow-2),
+    0 0 12px var(--phosphor-glow-3);
 }
 
 .theme-phosphor p,
 .theme-phosphor li {
   font-family: var(--font-mono);
   font-weight: 400;
-  letter-spacing: 0.02em;
-  /* Subtle glow for body text */
+  letter-spacing: 0.03em;
+  line-height: 1.7;
+  /* Subtle glow for body text - readable without eye strain */
   text-shadow:
-    0 0 5px var(--phosphor-glow-3);
+    0 0 1px var(--phosphor-glow-2),
+    0 0 4px var(--phosphor-glow-soft);
 }
 
-/* Phosphor theme code - no background change, everything IS terminal */
+/* Phosphor theme code - everything IS terminal, but subtle distinction */
 .theme-phosphor code {
   font-family: var(--font-mono);
   background-color: transparent;
-  color: var(--color-code-text);
-  padding: 0;
+  color: var(--phosphor-bright);
+  padding: 0.1em 0.3em;
   border-radius: 0;
-  font-size: 1em;
+  font-size: 0.95em;
+  /* Inline code gets a brighter glow to stand out */
   text-shadow:
-    0 0 5px var(--phosphor-glow-1),
-    0 0 10px var(--phosphor-glow-2);
+    0 0 2px var(--phosphor-glow-1),
+    0 0 6px var(--phosphor-glow-2);
+  /* Subtle bracket visual */
+  border-left: 1px solid var(--phosphor-dim);
+  border-right: 1px solid var(--phosphor-dim);
 }
 
 .theme-phosphor pre {
   font-family: var(--font-mono);
-  background-color: var(--color-code-bg);
+  /* Very subtle dark tint for code blocks - like a terminal window */
+  background-color: rgba(0, 20, 5, 0.4);
   color: var(--color-code-text);
-  padding: 1.5em 2em;
+  padding: 1.75em 2em;
   border-radius: 0;
   overflow-x: auto;
-  line-height: 1.6;
-  /* Subtle border glow */
+  line-height: 1.7;
+  letter-spacing: 0.02em;
+  /* Terminal window border effect */
   border: 1px solid var(--color-border);
-  box-shadow: 0 0 10px rgba(0, 255, 0, 0.2);
+  border-top: 2px solid var(--phosphor-dim);
+  /* Subtle inner and outer glow */
+  box-shadow:
+    inset 0 0 30px rgba(0, 0, 0, 0.3),
+    0 0 12px var(--phosphor-glow-soft),
+    0 0 24px rgba(57, 255, 20, 0.08);
 }
 
 .theme-phosphor pre code {
   background: none;
   padding: 0;
+  border: none;
   border-radius: 0;
-  font-size: inherit;
+  font-size: 1em;
+  /* Code in pre blocks - slightly reduced glow for readability */
   text-shadow:
-    0 0 5px var(--phosphor-glow-1),
-    0 0 10px var(--phosphor-glow-2);
+    0 0 1px var(--phosphor-glow-1),
+    0 0 4px var(--phosphor-glow-3);
 }
 
-/* Phosphor theme links - glowing */
+/* Line numbers in code blocks - dimmed for hierarchy */
+.theme-phosphor pre .line-number {
+  color: var(--phosphor-dim);
+  text-shadow: none;
+  opacity: 0.7;
+}
+
+/* Highlighted lines in code blocks */
+.theme-phosphor pre .highlight-line {
+  background: rgba(57, 255, 20, 0.1);
+  border-left: 2px solid var(--phosphor-bright);
+  margin-left: -2em;
+  padding-left: calc(2em - 2px);
+}
+
+/* Phosphor theme links - terminal hyperlink style */
 .theme-phosphor a {
-  color: var(--color-link);
+  color: var(--phosphor-bright);
   text-decoration: none;
-  border-bottom: 1px solid var(--color-border);
-  transition: text-shadow var(--transition-duration) var(--transition-timing);
+  border-bottom: 1px dashed var(--phosphor-dim);
+  padding-bottom: 1px;
+  transition: all var(--transition-duration) var(--transition-timing);
   text-shadow:
-    0 0 5px var(--phosphor-glow-3);
+    0 0 2px var(--phosphor-glow-3);
 }
 
 .theme-phosphor a:hover {
+  border-bottom-style: solid;
+  border-bottom-color: var(--phosphor-bright);
   text-shadow:
-    0 0 5px var(--phosphor-glow-1),
-    0 0 10px var(--phosphor-glow-1),
-    0 0 20px var(--phosphor-glow-2);
+    0 0 3px var(--phosphor-glow-1),
+    0 0 8px var(--phosphor-glow-1),
+    0 0 16px var(--phosphor-glow-2);
 }
 
-/* Phosphor theme lists - terminal style */
+.theme-phosphor a:active {
+  color: var(--color-muted);
+}
+
+/* Phosphor theme lists - terminal command style */
 .theme-phosphor ul,
 .theme-phosphor ol {
-  padding-left: 1.5em;
-  margin: 0;
+  padding-left: 2em;
+  margin: 0.5em 0;
 }
 
 .theme-phosphor li {
-  margin-bottom: 0.5em;
+  margin-bottom: 0.6em;
+  padding-left: 0.25em;
 }
 
 .theme-phosphor li::marker {
-  color: var(--color-accent);
+  color: var(--phosphor-medium);
   text-shadow:
-    0 0 5px var(--phosphor-glow-1);
+    0 0 3px var(--phosphor-glow-2);
 }
 
-/* Use > as list marker for unordered lists */
+/* Use > as list marker for unordered lists - shell prompt style */
 .theme-phosphor ul {
   list-style-type: '> ';
 }
 
-/* Phosphor theme blockquotes - boxed terminal style */
+/* Ordered lists with dim numbers */
+.theme-phosphor ol {
+  list-style-type: decimal;
+}
+
+.theme-phosphor ol li::marker {
+  color: var(--phosphor-dim);
+  text-shadow: none;
+}
+
+/* Nested lists - slightly dimmer */
+.theme-phosphor ul ul,
+.theme-phosphor ol ol,
+.theme-phosphor ul ol,
+.theme-phosphor ol ul {
+  margin-top: 0.4em;
+  opacity: 0.9;
+}
+
+/* Phosphor theme blockquotes - terminal comment/output style */
 .theme-phosphor blockquote {
-  border: 1px solid var(--color-border);
-  border-left: 4px solid var(--color-accent);
+  border: none;
+  border-left: 3px solid var(--phosphor-dim);
   padding: 1em 1.5em;
-  margin: 0;
+  margin: 1em 0;
   font-style: normal;
   color: var(--color-muted);
-  background: transparent;
-  box-shadow: 0 0 10px rgba(0, 255, 0, 0.1);
+  background: rgba(57, 255, 20, 0.03);
+  /* Subtle inner shadow for depth */
+  box-shadow:
+    inset 2px 0 8px rgba(0, 0, 0, 0.2),
+    0 0 8px var(--phosphor-glow-soft);
+}
+
+.theme-phosphor blockquote p {
+  margin: 0;
 }
 
 .theme-phosphor blockquote::before {
-  content: '> ';
-  color: var(--color-accent);
-  text-shadow:
-    0 0 5px var(--phosphor-glow-1);
+  content: '/* ';
+  color: var(--phosphor-dim);
+  text-shadow: none;
+  font-weight: 400;
 }
 
-/* Phosphor theme tables - terminal grid */
+.theme-phosphor blockquote::after {
+  content: ' */';
+  color: var(--phosphor-dim);
+  text-shadow: none;
+  font-weight: 400;
+}
+
+/* Phosphor theme tables - ASCII art grid style */
 .theme-phosphor table {
   width: 100%;
-  border-collapse: collapse;
+  border-collapse: separate;
+  border-spacing: 0;
   border: 1px solid var(--color-border);
+  box-shadow: 0 0 12px var(--phosphor-glow-soft);
 }
 
 .theme-phosphor th,
 .theme-phosphor td {
-  padding: 0.5em 1em;
+  padding: 0.65em 1.25em;
   text-align: left;
-  border: 1px solid var(--color-border);
+  border: 1px solid rgba(57, 255, 20, 0.2);
 }
 
 .theme-phosphor th {
-  font-weight: 700;
+  font-weight: 600;
   text-transform: uppercase;
-  background-color: rgba(0, 255, 0, 0.1);
+  letter-spacing: 0.08em;
+  background-color: rgba(57, 255, 20, 0.08);
+  border-bottom: 2px solid var(--color-border);
   text-shadow:
-    0 0 5px var(--phosphor-glow-1),
-    0 0 10px var(--phosphor-glow-2);
+    0 0 2px var(--phosphor-glow-1),
+    0 0 6px var(--phosphor-glow-2);
 }
 
-/* Phosphor theme images - CRT screen effect */
+.theme-phosphor tr:hover td {
+  background-color: rgba(57, 255, 20, 0.04);
+}
+
+/* Phosphor theme images - CRT screen effect with scanlines */
 .theme-phosphor img {
   max-width: 100%;
   height: auto;
-  border: 2px solid var(--color-border);
+  border: 2px solid var(--phosphor-dim);
   box-shadow:
-    0 0 10px rgba(0, 255, 0, 0.3),
-    0 0 20px rgba(0, 255, 0, 0.2);
-  /* Slight green tint for CRT effect */
-  filter: saturate(0.8) brightness(0.95);
+    0 0 8px var(--phosphor-glow-soft),
+    0 0 16px rgba(57, 255, 20, 0.1),
+    inset 0 0 20px rgba(0, 0, 0, 0.3);
+  /* Desaturated with green tint - authentic CRT monitor feel */
+  filter: saturate(0.7) brightness(0.9) contrast(1.05) sepia(0.1) hue-rotate(80deg);
+  border-radius: 2px;
 }
 
 /* Phosphor theme fragments - quick terminal-like transitions */
 .theme-phosphor .fragment {
   transition:
     opacity var(--fragment-duration) var(--transition-timing),
-    transform var(--fragment-duration) var(--transition-timing);
+    transform var(--fragment-duration) var(--transition-timing),
+    filter var(--fragment-duration) var(--transition-timing);
 }
 
 .theme-phosphor .fragment-hidden {
   opacity: 0;
-  transform: translateX(-5px);
+  transform: translateX(-8px);
+  filter: blur(2px);
 }
 
 .theme-phosphor .fragment-visible {
   opacity: 1;
   transform: translateX(0);
+  filter: blur(0);
 }
 
-/* Phosphor theme selection - inverted */
+/* Phosphor theme selection - inverted terminal selection */
 .theme-phosphor ::selection {
-  background-color: var(--color-accent);
+  background-color: var(--phosphor-bright);
   color: #000000;
+  text-shadow: none;
 }
 
 /* Cursor blink effect for focused elements */
 .theme-phosphor input:focus,
 .theme-phosphor textarea:focus {
   outline: none;
-  border-color: var(--color-accent);
+  border-color: var(--phosphor-bright);
   box-shadow:
-    0 0 5px var(--phosphor-glow-1),
-    0 0 10px var(--phosphor-glow-2);
+    0 0 4px var(--phosphor-glow-1),
+    0 0 8px var(--phosphor-glow-2);
 }
 
-/* Strong/bold text gets extra glow */
+/* Strong/bold text gets extra glow - like highlighted text */
 .theme-phosphor strong,
 .theme-phosphor b {
-  font-weight: 700;
+  font-weight: 600;
+  color: var(--phosphor-bright);
   text-shadow:
-    0 0 5px var(--phosphor-glow-1),
-    0 0 10px var(--phosphor-glow-2);
+    0 0 2px var(--phosphor-glow-1),
+    0 0 6px var(--phosphor-glow-2),
+    0 0 12px var(--phosphor-glow-3);
 }
 
-/* Emphasis/italic text */
+/* Emphasis/italic text - dimmed for contrast */
 .theme-phosphor em,
 .theme-phosphor i {
   font-style: italic;
   color: var(--color-muted);
+  text-shadow:
+    0 0 2px var(--phosphor-glow-soft);
 }
 
-/* Horizontal rule as terminal divider */
+/* Horizontal rule as terminal divider - dashed line */
 .theme-phosphor hr {
   border: none;
-  border-top: 1px solid var(--color-border);
+  height: 1px;
+  background: repeating-linear-gradient(
+    90deg,
+    var(--phosphor-dim) 0px,
+    var(--phosphor-dim) 8px,
+    transparent 8px,
+    transparent 16px
+  );
   margin: 2em 0;
-  box-shadow: 0 0 10px rgba(0, 255, 0, 0.2);
+  box-shadow: 0 0 6px var(--phosphor-glow-soft);
+}
+
+/* Layout-specific overrides for Phosphor theme */
+
+/* Title layout - dramatic CRT boot screen feel */
+.theme-phosphor .layout-title h1 {
+  font-size: 4rem;
+  letter-spacing: 0.15em;
+  text-shadow:
+    0 0 4px var(--phosphor-glow-1),
+    0 0 8px var(--phosphor-glow-1),
+    0 0 16px var(--phosphor-glow-2),
+    0 0 32px var(--phosphor-glow-2),
+    0 0 64px var(--phosphor-glow-3);
+}
+
+.theme-phosphor .layout-title p {
+  color: var(--phosphor-medium);
+  letter-spacing: 0.05em;
+}
+
+/* Section layout - chapter header style */
+.theme-phosphor .layout-section h2 {
+  font-size: 3rem;
+  letter-spacing: 0.12em;
+  text-shadow:
+    0 0 3px var(--phosphor-glow-1),
+    0 0 10px var(--phosphor-glow-2),
+    0 0 20px var(--phosphor-glow-3),
+    0 0 40px var(--phosphor-glow-soft);
+}
+
+/* Big-stat layout - dramatic number display */
+.theme-phosphor .layout-big-stat h2 {
+  font-size: 8rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-shadow:
+    0 0 5px var(--phosphor-glow-1),
+    0 0 15px var(--phosphor-glow-1),
+    0 0 30px var(--phosphor-glow-2),
+    0 0 60px var(--phosphor-glow-3);
+}
+
+.theme-phosphor .layout-big-stat p {
+  color: var(--phosphor-medium);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+/* Quote layout - styled as terminal comment block */
+.theme-phosphor .layout-quote blockquote {
+  font-size: 1.5rem;
+  line-height: 1.6;
+  border-left-width: 4px;
+  border-left-color: var(--phosphor-medium);
+  padding: 1.5em 2em;
+}
+
+.theme-phosphor .layout-quote blockquote::before {
+  content: '/**';
+  display: block;
+  margin-bottom: 0.5em;
+}
+
+.theme-phosphor .layout-quote blockquote::after {
+  content: ' */';
+  display: block;
+  margin-top: 0.5em;
+}
+
+/* Two-column layout adjustments */
+.theme-phosphor .layout-two-column {
+  gap: 3rem;
 }
 
 /* Reduced motion support */
@@ -356,5 +576,9 @@
   .theme-phosphor::before,
   .theme-phosphor::after {
     animation: none;
+  }
+
+  .theme-phosphor .fragment-hidden {
+    filter: none;
   }
 }
