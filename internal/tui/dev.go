@@ -11,6 +11,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/tapsh/tap/internal/gemini"
 )
 
 // ThemeBroadcaster is an interface for broadcasting theme changes via WebSocket.
@@ -72,18 +73,19 @@ type tickMsg struct{}
 
 // DevModel is the Bubble Tea model for the dev server TUI.
 type DevModel struct { //nolint:govet // embedded structs prevent optimal alignment
-	config           DevConfig
-	state            DevState
-	eventsCh         chan DevEvent
-	closeCh          chan struct{}
-	themeBroadcaster ThemeBroadcaster
-	mu               sync.RWMutex
-	windowWidth      int
-	windowHeight     int
-	currentTheme     string
-	themePickerIndex int
-	quitting         bool
-	showThemePicker  bool
+	config             DevConfig
+	state              DevState
+	eventsCh           chan DevEvent
+	closeCh            chan struct{}
+	themeBroadcaster   ThemeBroadcaster
+	mu                 sync.RWMutex
+	windowWidth        int
+	windowHeight       int
+	currentTheme       string
+	themePickerIndex   int
+	quitting           bool
+	showThemePicker    bool
+	showImageGenerator bool
 }
 
 // NewDevModel creates a new DevModel for the dev server TUI.
@@ -240,6 +242,33 @@ func (m *DevModel) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				break
 			}
 		}
+		return m, nil
+
+	case "i":
+		// Open image generator
+		// Check if already generating
+		if m.showImageGenerator {
+			return m, nil
+		}
+
+		// Check for GEMINI_API_KEY
+		if !gemini.HasAPIKey() {
+			m.SetError(fmt.Errorf("GEMINI_API_KEY not set. Add it to your .env file to use AI image generation"))
+			m.addEvent(DevEvent{
+				Type:      "error",
+				Message:   "Missing GEMINI_API_KEY environment variable",
+				Timestamp: time.Now(),
+			})
+			return m, nil
+		}
+
+		// API key is present, show image generator
+		m.showImageGenerator = true
+		m.addEvent(DevEvent{
+			Type:      "action",
+			Message:   "Opening image generator...",
+			Timestamp: time.Now(),
+		})
 		return m, nil
 	}
 
@@ -554,11 +583,12 @@ func (m *DevModel) viewHelp() string {
 		Bold(true)
 
 	help := fmt.Sprintf(
-		"%s open browser • %s presenter view • %s theme • %s add slide • %s reload • %s quit",
+		"%s open browser • %s presenter view • %s theme • %s add slide • %s image • %s reload • %s quit",
 		keyStyle.Render("o"),
 		keyStyle.Render("p"),
 		keyStyle.Render("t"),
 		keyStyle.Render("a"),
+		keyStyle.Render("i"),
 		keyStyle.Render("r"),
 		keyStyle.Render("q"),
 	)
@@ -691,6 +721,20 @@ func (m *DevModel) Close() {
 // WasQuit returns true if the user quit the TUI.
 func (m *DevModel) WasQuit() bool {
 	return m.quitting
+}
+
+// ShowImageGenerator returns true if the image generator should be shown.
+func (m *DevModel) ShowImageGenerator() bool {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.showImageGenerator
+}
+
+// ResetImageGenerator resets the image generator state.
+func (m *DevModel) ResetImageGenerator() {
+	m.mu.Lock()
+	m.showImageGenerator = false
+	m.mu.Unlock()
 }
 
 // GetEventChannel returns the events channel for testing.

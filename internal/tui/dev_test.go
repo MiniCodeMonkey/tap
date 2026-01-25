@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -523,5 +524,182 @@ func TestDevModel_WasQuit(t *testing.T) {
 
 	if !model.WasQuit() {
 		t.Error("model should be quit after setting quitting=true")
+	}
+}
+
+func TestDevModel_HandleKeyPress_Image_NoAPIKey(t *testing.T) {
+	// Ensure GEMINI_API_KEY is not set
+	originalKey := os.Getenv("GEMINI_API_KEY")
+	os.Unsetenv("GEMINI_API_KEY")
+	defer func() {
+		if originalKey != "" {
+			os.Setenv("GEMINI_API_KEY", originalKey)
+		}
+	}()
+
+	model := NewDevModel(DevConfig{})
+
+	msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("i")}
+	newModel, _ := model.Update(msg)
+	m := newModel.(*DevModel)
+
+	// Should not show image generator
+	if m.showImageGenerator {
+		t.Error("showImageGenerator should be false when API key is missing")
+	}
+
+	// Should set an error
+	m.mu.RLock()
+	err := m.state.Error
+	m.mu.RUnlock()
+
+	if err == nil {
+		t.Error("expected error to be set when API key is missing")
+	}
+	if !strings.Contains(err.Error(), "GEMINI_API_KEY") {
+		t.Errorf("error message should mention GEMINI_API_KEY, got: %s", err.Error())
+	}
+
+	// Should add an error event
+	m.mu.RLock()
+	events := m.state.RecentEvents
+	m.mu.RUnlock()
+
+	found := false
+	for _, e := range events {
+		if e.Type == "error" && strings.Contains(e.Message, "GEMINI_API_KEY") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("expected error event about missing GEMINI_API_KEY")
+	}
+}
+
+func TestDevModel_HandleKeyPress_Image_WithAPIKey(t *testing.T) {
+	// Set GEMINI_API_KEY
+	originalKey := os.Getenv("GEMINI_API_KEY")
+	os.Setenv("GEMINI_API_KEY", "test-api-key")
+	defer func() {
+		if originalKey != "" {
+			os.Setenv("GEMINI_API_KEY", originalKey)
+		} else {
+			os.Unsetenv("GEMINI_API_KEY")
+		}
+	}()
+
+	model := NewDevModel(DevConfig{})
+
+	msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("i")}
+	newModel, _ := model.Update(msg)
+	m := newModel.(*DevModel)
+
+	// Should show image generator
+	if !m.showImageGenerator {
+		t.Error("showImageGenerator should be true when API key is present")
+	}
+
+	// Should not set an error
+	m.mu.RLock()
+	err := m.state.Error
+	m.mu.RUnlock()
+
+	if err != nil {
+		t.Errorf("expected no error when API key is present, got: %s", err.Error())
+	}
+
+	// Should add an action event
+	m.mu.RLock()
+	events := m.state.RecentEvents
+	m.mu.RUnlock()
+
+	found := false
+	for _, e := range events {
+		if e.Type == "action" && strings.Contains(e.Message, "image generator") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("expected action event about opening image generator")
+	}
+}
+
+func TestDevModel_HandleKeyPress_Image_AlreadyGenerating(t *testing.T) {
+	// Set GEMINI_API_KEY
+	originalKey := os.Getenv("GEMINI_API_KEY")
+	os.Setenv("GEMINI_API_KEY", "test-api-key")
+	defer func() {
+		if originalKey != "" {
+			os.Setenv("GEMINI_API_KEY", originalKey)
+		} else {
+			os.Unsetenv("GEMINI_API_KEY")
+		}
+	}()
+
+	model := NewDevModel(DevConfig{})
+	model.showImageGenerator = true // Already showing
+
+	// Clear any events
+	model.mu.Lock()
+	model.state.RecentEvents = nil
+	model.mu.Unlock()
+
+	msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("i")}
+	newModel, _ := model.Update(msg)
+	m := newModel.(*DevModel)
+
+	// Should still show image generator (no change)
+	if !m.showImageGenerator {
+		t.Error("showImageGenerator should remain true")
+	}
+
+	// Should not add any events (early return)
+	m.mu.RLock()
+	eventCount := len(m.state.RecentEvents)
+	m.mu.RUnlock()
+
+	if eventCount != 0 {
+		t.Errorf("expected no new events when already generating, got %d", eventCount)
+	}
+}
+
+func TestDevModel_ShowImageGenerator(t *testing.T) {
+	model := NewDevModel(DevConfig{})
+
+	if model.ShowImageGenerator() {
+		t.Error("ShowImageGenerator should be false initially")
+	}
+
+	model.showImageGenerator = true
+
+	if !model.ShowImageGenerator() {
+		t.Error("ShowImageGenerator should be true after setting flag")
+	}
+}
+
+func TestDevModel_ResetImageGenerator(t *testing.T) {
+	model := NewDevModel(DevConfig{})
+	model.showImageGenerator = true
+
+	model.ResetImageGenerator()
+
+	if model.ShowImageGenerator() {
+		t.Error("ShowImageGenerator should be false after reset")
+	}
+}
+
+func TestDevModel_View_HelpIncludesImage(t *testing.T) {
+	model := NewDevModel(DevConfig{
+		MarkdownFile: "slides.md",
+	})
+	model.windowWidth = 100
+	model.windowHeight = 24
+
+	view := model.View()
+
+	if !strings.Contains(view, "i") || !strings.Contains(view, "image") {
+		t.Error("help text should include 'i' shortcut for image generation")
 	}
 }
