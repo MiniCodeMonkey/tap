@@ -101,6 +101,8 @@ type ImageGenModel struct {
 	GeneratedImage *ImageGenerateResult
 	// IsGenerating indicates whether generation is in progress.
 	IsGenerating bool
+	// SavedImagePath is the relative path to the saved image file (after saving).
+	SavedImagePath string
 }
 
 // NewImageGenModel creates a new ImageGenModel for image generation.
@@ -300,6 +302,8 @@ func (m *ImageGenModel) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handlePromptKey(msg)
 	case ImageGenStepGenerating:
 		return m.handleGeneratingKey(msg)
+	case ImageGenStepDone:
+		return m.handleDoneKey(msg)
 	}
 	return m, nil
 }
@@ -489,6 +493,18 @@ func (m *ImageGenModel) handleGeneratingKey(msg tea.KeyMsg) (tea.Model, tea.Cmd)
 	return m, nil
 }
 
+// handleDoneKey handles keyboard input in the done step.
+// Any key press returns nil to signal completion to the parent.
+func (m *ImageGenModel) handleDoneKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "enter", "esc", " ":
+		// Return nil to signal completion to the parent
+		return nil, nil
+	}
+	// Ignore other keys
+	return m, nil
+}
+
 // handleImageGenerateResult handles the result of image generation.
 func (m *ImageGenModel) handleImageGenerateResult(result ImageGenerateResult) (tea.Model, tea.Cmd) {
 	m.IsGenerating = false
@@ -546,6 +562,8 @@ func (m *ImageGenModel) View() string {
 		return m.viewPrompt()
 	case ImageGenStepGenerating:
 		return m.viewGenerating()
+	case ImageGenStepDone:
+		return m.viewDone()
 	default:
 		return m.viewSlideSelect()
 	}
@@ -878,6 +896,69 @@ func (m *ImageGenModel) viewGenerating() string {
 			Foreground(ColorMuted)
 		b.WriteString(helpStyle.Render("Please wait, this may take a moment..."))
 	}
+
+	return b.String()
+}
+
+// viewDone renders the completion view with success message.
+func (m *ImageGenModel) viewDone() string {
+	var b strings.Builder
+
+	// Title
+	titleStyle := lipgloss.NewStyle().
+		Bold(true).
+		Foreground(ColorPrimary).
+		MarginBottom(1)
+
+	b.WriteString(titleStyle.Render("✓ Image Generated Successfully"))
+	b.WriteString("\n\n")
+
+	// Show selected slide info
+	slide := m.GetSelectedSlide()
+	if slide != nil {
+		slideInfoStyle := lipgloss.NewStyle().
+			Foreground(ColorMuted).
+			Italic(true)
+		b.WriteString(slideInfoStyle.Render(fmt.Sprintf("Slide %d: %s", slide.Index+1, slide.Title)))
+		b.WriteString("\n\n")
+	}
+
+	// Show saved filename
+	if m.SavedImagePath != "" {
+		labelStyle := lipgloss.NewStyle().
+			Foreground(ColorWhite)
+		pathStyle := lipgloss.NewStyle().
+			Foreground(ColorSecondary).
+			Bold(true)
+		b.WriteString(labelStyle.Render("Saved to: "))
+		b.WriteString(pathStyle.Render(m.SavedImagePath))
+		b.WriteString("\n\n")
+	}
+
+	// Show action taken (add new vs regenerate)
+	actionStyle := lipgloss.NewStyle().
+		Foreground(ColorMuted)
+	if m.SelectedImage != nil {
+		b.WriteString(actionStyle.Render("(Regenerated existing image)"))
+	} else {
+		b.WriteString(actionStyle.Render("(Added new image to slide)"))
+	}
+	b.WriteString("\n\n")
+
+	// Help text
+	helpStyle := lipgloss.NewStyle().
+		Foreground(ColorMuted)
+
+	keyStyle := lipgloss.NewStyle().
+		Foreground(ColorPrimary).
+		Bold(true)
+
+	help := fmt.Sprintf(
+		"Press %s or %s to continue",
+		keyStyle.Render("enter"),
+		keyStyle.Render("esc"),
+	)
+	b.WriteString(helpStyle.Render(help))
 
 	return b.String()
 }

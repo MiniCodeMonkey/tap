@@ -163,9 +163,61 @@ func (m *DevModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			newModel, cmd := m.imageGenModel.Update(msg)
 			if newModel != nil {
 				m.imageGenModel = newModel.(*ImageGenModel)
-				// Check if generation completed successfully
-				if m.imageGenModel.Step == ImageGenStepDone && m.imageGenModel.GeneratedImage != nil {
-					// Generation successful, will be handled by subsequent stories
+				// Check if generation completed successfully - save image and update markdown
+				if m.imageGenModel.Step == ImageGenStepDone && m.imageGenModel.GeneratedImage != nil && m.imageGenModel.SavedImagePath == "" {
+					// Save the generated image
+					savedPath, err := m.imageGenModel.SaveGeneratedImage()
+					if err != nil {
+						m.SetError(err)
+						m.addEvent(DevEvent{
+							Type:      "error",
+							Message:   "Failed to save generated image",
+							Timestamp: time.Now(),
+						})
+						return m, cmd
+					}
+					m.imageGenModel.SavedImagePath = savedPath
+
+					// Insert or replace image in markdown
+					if m.imageGenModel.SelectedImage != nil {
+						// Regenerating - replace existing image
+						if err := m.imageGenModel.ReplaceImageInMarkdown(savedPath); err != nil {
+							m.SetError(err)
+							m.addEvent(DevEvent{
+								Type:      "error",
+								Message:   "Failed to update markdown",
+								Timestamp: time.Now(),
+							})
+							return m, cmd
+						}
+						// Delete old image file
+						if err := m.imageGenModel.DeleteOldImage(); err != nil {
+							// Log but don't fail - the new image is already saved
+							m.addEvent(DevEvent{
+								Type:      "error",
+								Message:   "Failed to delete old image (non-fatal)",
+								Timestamp: time.Now(),
+							})
+						}
+					} else {
+						// Adding new image
+						if err := m.imageGenModel.InsertImageIntoMarkdown(savedPath); err != nil {
+							m.SetError(err)
+							m.addEvent(DevEvent{
+								Type:      "error",
+								Message:   "Failed to update markdown",
+								Timestamp: time.Now(),
+							})
+							return m, cmd
+						}
+					}
+
+					// Send reload event
+					m.addEvent(DevEvent{
+						Type:      "reload",
+						Message:   fmt.Sprintf("Generated image: %s", savedPath),
+						Timestamp: time.Now(),
+					})
 				}
 			}
 			return m, cmd
@@ -361,18 +413,32 @@ func (m *DevModel) handleThemePickerKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 // handleImageGeneratorKey handles keyboard input when the image generator is open.
 func (m *DevModel) handleImageGeneratorKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	// Check if we're in the Done step - save the saved path before delegating
+	wasInDoneStep := m.imageGenModel.Step == ImageGenStepDone
+	savedPath := m.imageGenModel.SavedImagePath
+
 	// Delegate to the image generator model
 	newModel, cmd := m.imageGenModel.Update(msg)
 
-	// Check if the user cancelled (returns nil)
+	// Check if the user completed or cancelled (returns nil)
 	if newModel == nil {
 		m.showImageGenerator = false
 		m.imageGenModel = nil
-		m.addEvent(DevEvent{
-			Type:      "action",
-			Message:   "Image generator cancelled",
-			Timestamp: time.Now(),
-		})
+
+		// Check if this was a successful completion (was in Done step with saved image)
+		if wasInDoneStep && savedPath != "" {
+			m.addEvent(DevEvent{
+				Type:      "action",
+				Message:   fmt.Sprintf("Image generation complete: %s", savedPath),
+				Timestamp: time.Now(),
+			})
+		} else {
+			m.addEvent(DevEvent{
+				Type:      "action",
+				Message:   "Image generator cancelled",
+				Timestamp: time.Now(),
+			})
+		}
 		return m, nil
 	}
 

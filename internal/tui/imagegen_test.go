@@ -3765,3 +3765,295 @@ More content below
 		t.Error("should preserve frontmatter")
 	}
 }
+
+func TestImageGenModel_DoneStep(t *testing.T) {
+	tmpDir := t.TempDir()
+	mdFile := filepath.Join(tmpDir, "test.md")
+
+	content := `# Test Slide
+
+Content
+`
+	if err := os.WriteFile(mdFile, []byte(content), 0644); err != nil {
+		t.Fatalf("failed to write test file: %v", err)
+	}
+
+	model, err := NewImageGenModel(mdFile)
+	if err != nil {
+		t.Fatalf("failed to create model: %v", err)
+	}
+
+	// Set to done step with saved image
+	model.Step = ImageGenStepDone
+	model.SavedImagePath = "images/generated-abc12345.png"
+	model.Prompt = "Test prompt"
+
+	// Should be in done step
+	if model.Step != ImageGenStepDone {
+		t.Errorf("expected ImageGenStepDone, got %d", model.Step)
+	}
+}
+
+func TestImageGenModel_DoneViewShowsSuccessMessage(t *testing.T) {
+	tmpDir := t.TempDir()
+	mdFile := filepath.Join(tmpDir, "test.md")
+
+	content := `# Test Slide
+
+Content
+`
+	if err := os.WriteFile(mdFile, []byte(content), 0644); err != nil {
+		t.Fatalf("failed to write test file: %v", err)
+	}
+
+	model, err := NewImageGenModel(mdFile)
+	if err != nil {
+		t.Fatalf("failed to create model: %v", err)
+	}
+
+	// Set to done step with saved image
+	model.Step = ImageGenStepDone
+	model.SavedImagePath = "images/generated-abc12345.png"
+	model.Prompt = "Test prompt"
+
+	view := model.View()
+
+	// Should show success message
+	if !strings.Contains(view, "Successfully") {
+		t.Error("view should show success message")
+	}
+
+	// Should show saved image path
+	if !strings.Contains(view, "images/generated-abc12345.png") {
+		t.Error("view should show saved image path")
+	}
+
+	// Should show "Added new image" for new images
+	if !strings.Contains(view, "Added new image") {
+		t.Error("view should indicate new image was added")
+	}
+}
+
+func TestImageGenModel_DoneViewShowsRegenerateMessage(t *testing.T) {
+	tmpDir := t.TempDir()
+	mdFile := filepath.Join(tmpDir, "test.md")
+
+	content := `# Test Slide
+
+Content
+`
+	if err := os.WriteFile(mdFile, []byte(content), 0644); err != nil {
+		t.Fatalf("failed to write test file: %v", err)
+	}
+
+	model, err := NewImageGenModel(mdFile)
+	if err != nil {
+		t.Fatalf("failed to create model: %v", err)
+	}
+
+	// Set to done step with selected image (regenerating)
+	model.Step = ImageGenStepDone
+	model.SavedImagePath = "images/generated-newpath.png"
+	model.SelectedImage = &AIImageInfo{
+		Prompt:    "old prompt",
+		ImagePath: "images/generated-oldpath.png",
+	}
+
+	view := model.View()
+
+	// Should show regenerate message
+	if !strings.Contains(view, "Regenerated existing image") {
+		t.Error("view should indicate existing image was regenerated")
+	}
+}
+
+func TestImageGenModel_DoneEnterKeyReturnsNil(t *testing.T) {
+	tmpDir := t.TempDir()
+	mdFile := filepath.Join(tmpDir, "test.md")
+
+	content := `# Test Slide
+
+Content
+`
+	if err := os.WriteFile(mdFile, []byte(content), 0644); err != nil {
+		t.Fatalf("failed to write test file: %v", err)
+	}
+
+	model, err := NewImageGenModel(mdFile)
+	if err != nil {
+		t.Fatalf("failed to create model: %v", err)
+	}
+
+	// Set to done step
+	model.Step = ImageGenStepDone
+	model.SavedImagePath = "images/generated-abc12345.png"
+
+	// Press enter - should return nil to signal completion
+	newModel, _ := model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+
+	if newModel != nil {
+		t.Error("pressing enter in done step should return nil to signal completion")
+	}
+}
+
+func TestImageGenModel_DoneEscKeyReturnsNil(t *testing.T) {
+	tmpDir := t.TempDir()
+	mdFile := filepath.Join(tmpDir, "test.md")
+
+	content := `# Test Slide
+
+Content
+`
+	if err := os.WriteFile(mdFile, []byte(content), 0644); err != nil {
+		t.Fatalf("failed to write test file: %v", err)
+	}
+
+	model, err := NewImageGenModel(mdFile)
+	if err != nil {
+		t.Fatalf("failed to create model: %v", err)
+	}
+
+	// Set to done step
+	model.Step = ImageGenStepDone
+	model.SavedImagePath = "images/generated-abc12345.png"
+
+	// Press esc - should return nil to signal completion
+	newModel, _ := model.Update(tea.KeyMsg{Type: tea.KeyEsc})
+
+	if newModel != nil {
+		t.Error("pressing esc in done step should return nil to signal completion")
+	}
+}
+
+func TestImageGenModel_DoneSpaceKeyReturnsNil(t *testing.T) {
+	tmpDir := t.TempDir()
+	mdFile := filepath.Join(tmpDir, "test.md")
+
+	content := `# Test Slide
+
+Content
+`
+	if err := os.WriteFile(mdFile, []byte(content), 0644); err != nil {
+		t.Fatalf("failed to write test file: %v", err)
+	}
+
+	model, err := NewImageGenModel(mdFile)
+	if err != nil {
+		t.Fatalf("failed to create model: %v", err)
+	}
+
+	// Set to done step
+	model.Step = ImageGenStepDone
+	model.SavedImagePath = "images/generated-abc12345.png"
+
+	// Press space - should return nil to signal completion
+	newModel, _ := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(" ")})
+
+	if newModel != nil {
+		t.Error("pressing space in done step should return nil to signal completion")
+	}
+}
+
+func TestImageGenModel_DoneOtherKeyIgnored(t *testing.T) {
+	tmpDir := t.TempDir()
+	mdFile := filepath.Join(tmpDir, "test.md")
+
+	content := `# Test Slide
+
+Content
+`
+	if err := os.WriteFile(mdFile, []byte(content), 0644); err != nil {
+		t.Fatalf("failed to write test file: %v", err)
+	}
+
+	model, err := NewImageGenModel(mdFile)
+	if err != nil {
+		t.Fatalf("failed to create model: %v", err)
+	}
+
+	// Set to done step
+	model.Step = ImageGenStepDone
+	model.SavedImagePath = "images/generated-abc12345.png"
+
+	// Press random key - should be ignored (stay in done step)
+	newModel, _ := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("x")})
+
+	if newModel == nil {
+		t.Error("pressing random key in done step should not close (should return model, not nil)")
+	}
+
+	m := newModel.(*ImageGenModel)
+	if m.Step != ImageGenStepDone {
+		t.Errorf("expected to stay in ImageGenStepDone, got %d", m.Step)
+	}
+}
+
+func TestImageGenModel_DoneViewShowsSlideInfo(t *testing.T) {
+	tmpDir := t.TempDir()
+	mdFile := filepath.Join(tmpDir, "test.md")
+
+	content := `# First Slide
+
+Content
+
+---
+
+# Target Slide
+
+More content
+`
+	if err := os.WriteFile(mdFile, []byte(content), 0644); err != nil {
+		t.Fatalf("failed to write test file: %v", err)
+	}
+
+	model, err := NewImageGenModel(mdFile)
+	if err != nil {
+		t.Fatalf("failed to create model: %v", err)
+	}
+
+	// Select second slide
+	model.SelectedIndex = 1
+	model.Step = ImageGenStepDone
+	model.SavedImagePath = "images/generated-abc12345.png"
+
+	view := model.View()
+
+	// Should show slide info
+	if !strings.Contains(view, "Slide 2") {
+		t.Error("view should show slide number")
+	}
+	if !strings.Contains(view, "Target Slide") {
+		t.Error("view should show slide title")
+	}
+}
+
+func TestImageGenModel_DoneViewShowsHelpText(t *testing.T) {
+	tmpDir := t.TempDir()
+	mdFile := filepath.Join(tmpDir, "test.md")
+
+	content := `# Test Slide
+
+Content
+`
+	if err := os.WriteFile(mdFile, []byte(content), 0644); err != nil {
+		t.Fatalf("failed to write test file: %v", err)
+	}
+
+	model, err := NewImageGenModel(mdFile)
+	if err != nil {
+		t.Fatalf("failed to create model: %v", err)
+	}
+
+	model.Step = ImageGenStepDone
+	model.SavedImagePath = "images/generated-abc12345.png"
+
+	view := model.View()
+
+	// Should show help text for dismissing
+	if !strings.Contains(view, "enter") && !strings.Contains(view, "esc") {
+		t.Error("view should show help text for dismissing")
+	}
+	if !strings.Contains(view, "continue") {
+		t.Error("view should mention 'continue' in help text")
+	}
+}
