@@ -2779,3 +2779,418 @@ func TestImageGenModel_SaveGeneratedImage_ReturnsRelativePath(t *testing.T) {
 		t.Errorf("expected filename to start with 'generated-', got: %q", filename)
 	}
 }
+
+// Tests for markdown insertion (US-017)
+
+func TestInsertImageIntoSlide_SingleSlide(t *testing.T) {
+	content := `# My Slide
+
+Some content here`
+
+	result, err := insertImageIntoSlide(content, 0, "A test prompt", "images/generated-abc123.png")
+	if err != nil {
+		t.Fatalf("insertImageIntoSlide failed: %v", err)
+	}
+
+	// Should contain the AI prompt comment
+	if !strings.Contains(result, "<!-- ai-prompt: A test prompt -->") {
+		t.Error("result should contain AI prompt comment")
+	}
+
+	// Should contain the image reference
+	if !strings.Contains(result, "![](images/generated-abc123.png)") {
+		t.Error("result should contain image reference")
+	}
+
+	// AI prompt should come before image
+	commentIdx := strings.Index(result, "<!-- ai-prompt:")
+	imageIdx := strings.Index(result, "![](images/")
+	if commentIdx >= imageIdx {
+		t.Error("AI prompt comment should come before image reference")
+	}
+
+	// Original content should be preserved
+	if !strings.Contains(result, "# My Slide") {
+		t.Error("original heading should be preserved")
+	}
+	if !strings.Contains(result, "Some content here") {
+		t.Error("original content should be preserved")
+	}
+}
+
+func TestInsertImageIntoSlide_MultipleSlides(t *testing.T) {
+	content := `# First Slide
+
+Content one
+
+---
+
+# Second Slide
+
+Content two
+
+---
+
+# Third Slide
+
+Content three`
+
+	// Insert into second slide
+	result, err := insertImageIntoSlide(content, 1, "Second slide image", "images/second.png")
+	if err != nil {
+		t.Fatalf("insertImageIntoSlide failed: %v", err)
+	}
+
+	// Should contain the AI prompt comment
+	if !strings.Contains(result, "<!-- ai-prompt: Second slide image -->") {
+		t.Error("result should contain AI prompt comment")
+	}
+
+	// All slides should still be present
+	if !strings.Contains(result, "# First Slide") {
+		t.Error("first slide should be preserved")
+	}
+	if !strings.Contains(result, "# Second Slide") {
+		t.Error("second slide should be preserved")
+	}
+	if !strings.Contains(result, "# Third Slide") {
+		t.Error("third slide should be preserved")
+	}
+
+	// Separators should still be present
+	if strings.Count(result, "---") != 2 {
+		t.Errorf("expected 2 slide separators, got %d", strings.Count(result, "---"))
+	}
+
+	// Image should be in the second slide section (between first and second ---)
+	parts := strings.Split(result, "---")
+	if len(parts) != 3 {
+		t.Fatalf("expected 3 parts, got %d", len(parts))
+	}
+	if !strings.Contains(parts[1], "![](images/second.png)") {
+		t.Error("image should be in second slide section")
+	}
+	if strings.Contains(parts[0], "![](images/second.png)") {
+		t.Error("image should not be in first slide section")
+	}
+	if strings.Contains(parts[2], "![](images/second.png)") {
+		t.Error("image should not be in third slide section")
+	}
+}
+
+func TestInsertImageIntoSlide_WithFrontmatter(t *testing.T) {
+	content := `---
+title: My Presentation
+theme: paper
+---
+
+# First Slide
+
+Content here
+
+---
+
+# Second Slide
+
+More content`
+
+	result, err := insertImageIntoSlide(content, 0, "First slide prompt", "images/first.png")
+	if err != nil {
+		t.Fatalf("insertImageIntoSlide failed: %v", err)
+	}
+
+	// Frontmatter should be preserved
+	if !strings.Contains(result, "title: My Presentation") {
+		t.Error("frontmatter title should be preserved")
+	}
+	if !strings.Contains(result, "theme: paper") {
+		t.Error("frontmatter theme should be preserved")
+	}
+
+	// Image should be added to first slide
+	if !strings.Contains(result, "<!-- ai-prompt: First slide prompt -->") {
+		t.Error("AI prompt comment should be present")
+	}
+	if !strings.Contains(result, "![](images/first.png)") {
+		t.Error("image reference should be present")
+	}
+}
+
+func TestInsertImageIntoSlide_InvalidSlideIndex(t *testing.T) {
+	content := `# Only Slide
+
+Content`
+
+	// Try to insert into non-existent slide
+	_, err := insertImageIntoSlide(content, 5, "prompt", "images/test.png")
+	if err == nil {
+		t.Error("expected error for invalid slide index")
+	}
+	if !strings.Contains(err.Error(), "invalid slide index") {
+		t.Errorf("error should mention 'invalid slide index', got: %v", err)
+	}
+
+	// Try negative index
+	_, err = insertImageIntoSlide(content, -1, "prompt", "images/test.png")
+	if err == nil {
+		t.Error("expected error for negative slide index")
+	}
+}
+
+func TestInsertImageIntoSlide_EmptySlidesSkipped(t *testing.T) {
+	content := `# First Slide
+
+Content
+
+---
+
+
+
+---
+
+# Third Slide
+
+More content`
+
+	// Empty slide (index 1 would be empty, but it's skipped)
+	// So slide index 1 should be "Third Slide"
+	result, err := insertImageIntoSlide(content, 1, "Third slide image", "images/third.png")
+	if err != nil {
+		t.Fatalf("insertImageIntoSlide failed: %v", err)
+	}
+
+	// Image should be associated with "Third Slide"
+	parts := strings.Split(result, "---")
+	// Third part should contain the image
+	found := false
+	for _, part := range parts {
+		if strings.Contains(part, "# Third Slide") && strings.Contains(part, "![](images/third.png)") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("image should be in the Third Slide section")
+	}
+}
+
+func TestInsertImageIntoSlide_PreservesExistingImages(t *testing.T) {
+	content := `# Slide With Images
+
+Some text
+
+<!-- ai-prompt: existing prompt -->
+![](images/existing.png)
+
+More text`
+
+	result, err := insertImageIntoSlide(content, 0, "new prompt", "images/new.png")
+	if err != nil {
+		t.Fatalf("insertImageIntoSlide failed: %v", err)
+	}
+
+	// Existing image should be preserved
+	if !strings.Contains(result, "![](images/existing.png)") {
+		t.Error("existing image should be preserved")
+	}
+	if !strings.Contains(result, "<!-- ai-prompt: existing prompt -->") {
+		t.Error("existing AI prompt should be preserved")
+	}
+
+	// New image should be added
+	if !strings.Contains(result, "![](images/new.png)") {
+		t.Error("new image should be added")
+	}
+	if !strings.Contains(result, "<!-- ai-prompt: new prompt -->") {
+		t.Error("new AI prompt should be added")
+	}
+}
+
+func TestInsertImageIntoSlide_LastSlide(t *testing.T) {
+	content := `# First
+
+Content
+
+---
+
+# Second
+
+Content
+
+---
+
+# Last Slide
+
+Final content`
+
+	result, err := insertImageIntoSlide(content, 2, "last prompt", "images/last.png")
+	if err != nil {
+		t.Fatalf("insertImageIntoSlide failed: %v", err)
+	}
+
+	// Image should be in last slide
+	if !strings.Contains(result, "<!-- ai-prompt: last prompt -->") {
+		t.Error("AI prompt should be present")
+	}
+	if !strings.Contains(result, "![](images/last.png)") {
+		t.Error("image reference should be present")
+	}
+
+	// Should not create extra separators
+	if strings.Count(result, "---") != 2 {
+		t.Errorf("expected 2 slide separators, got %d", strings.Count(result, "---"))
+	}
+}
+
+func TestInsertImageIntoSlide_SpecialCharactersInPrompt(t *testing.T) {
+	content := `# Slide
+
+Content`
+
+	// Prompt with special characters
+	prompt := "A beautiful sunset with \"quotes\" and special chars: <>&"
+	result, err := insertImageIntoSlide(content, 0, prompt, "images/special.png")
+	if err != nil {
+		t.Fatalf("insertImageIntoSlide failed: %v", err)
+	}
+
+	// Prompt should be preserved exactly
+	expectedComment := "<!-- ai-prompt: A beautiful sunset with \"quotes\" and special chars: <>&"
+	if !strings.Contains(result, expectedComment) {
+		t.Errorf("expected prompt with special characters to be preserved, got:\n%s", result)
+	}
+}
+
+func TestImageGenModel_InsertImageIntoMarkdown(t *testing.T) {
+	tmpDir := t.TempDir()
+	mdFile := filepath.Join(tmpDir, "slides.md")
+
+	content := `# Test Slide
+
+Some content here
+
+---
+
+# Second Slide
+
+More content`
+
+	if err := os.WriteFile(mdFile, []byte(content), 0644); err != nil {
+		t.Fatalf("failed to write test file: %v", err)
+	}
+
+	model, err := NewImageGenModel(mdFile)
+	if err != nil {
+		t.Fatalf("failed to create model: %v", err)
+	}
+
+	// Set up model state
+	model.SelectedIndex = 0
+	model.Prompt = "A test image"
+
+	// Insert image
+	err = model.InsertImageIntoMarkdown("images/test-image.png")
+	if err != nil {
+		t.Fatalf("InsertImageIntoMarkdown failed: %v", err)
+	}
+
+	// Read back the file
+	updatedContent, err := os.ReadFile(mdFile)
+	if err != nil {
+		t.Fatalf("failed to read updated file: %v", err)
+	}
+
+	// Verify content was updated
+	if !strings.Contains(string(updatedContent), "<!-- ai-prompt: A test image -->") {
+		t.Error("updated content should contain AI prompt comment")
+	}
+	if !strings.Contains(string(updatedContent), "![](images/test-image.png)") {
+		t.Error("updated content should contain image reference")
+	}
+
+	// Verify original content preserved
+	if !strings.Contains(string(updatedContent), "# Test Slide") {
+		t.Error("original content should be preserved")
+	}
+	if !strings.Contains(string(updatedContent), "# Second Slide") {
+		t.Error("second slide should be preserved")
+	}
+}
+
+func TestImageGenModel_InsertImageIntoMarkdown_FileNotFound(t *testing.T) {
+	model := &ImageGenModel{
+		MarkdownFile:  "/nonexistent/path/slides.md",
+		SelectedIndex: 0,
+		Prompt:        "test",
+	}
+
+	err := model.InsertImageIntoMarkdown("images/test.png")
+	if err == nil {
+		t.Error("expected error for nonexistent file")
+	}
+}
+
+func TestImageGenModel_InsertImageIntoMarkdown_SecondSlide(t *testing.T) {
+	tmpDir := t.TempDir()
+	mdFile := filepath.Join(tmpDir, "slides.md")
+
+	content := `# First Slide
+
+Content one
+
+---
+
+# Second Slide
+
+Content two
+
+---
+
+# Third Slide
+
+Content three`
+
+	if err := os.WriteFile(mdFile, []byte(content), 0644); err != nil {
+		t.Fatalf("failed to write test file: %v", err)
+	}
+
+	model, err := NewImageGenModel(mdFile)
+	if err != nil {
+		t.Fatalf("failed to create model: %v", err)
+	}
+
+	// Select second slide
+	model.SelectedIndex = 1
+	model.Prompt = "Second slide image"
+
+	// Insert image
+	err = model.InsertImageIntoMarkdown("images/second-slide.png")
+	if err != nil {
+		t.Fatalf("InsertImageIntoMarkdown failed: %v", err)
+	}
+
+	// Read back the file
+	updatedContent, err := os.ReadFile(mdFile)
+	if err != nil {
+		t.Fatalf("failed to read updated file: %v", err)
+	}
+
+	// Image should be in second slide section
+	parts := strings.Split(string(updatedContent), "---")
+	if len(parts) != 3 {
+		t.Fatalf("expected 3 parts, got %d", len(parts))
+	}
+
+	// Second part should contain the image
+	if !strings.Contains(parts[1], "![](images/second-slide.png)") {
+		t.Error("image should be in second slide section")
+	}
+
+	// Other parts should not contain the image
+	if strings.Contains(parts[0], "second-slide.png") {
+		t.Error("image should not be in first slide section")
+	}
+	if strings.Contains(parts[2], "second-slide.png") {
+		t.Error("image should not be in third slide section")
+	}
+}

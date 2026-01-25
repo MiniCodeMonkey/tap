@@ -989,3 +989,89 @@ func (m *ImageGenModel) SaveGeneratedImage() (string, error) {
 	relativePath := filepath.Join("images", filename)
 	return relativePath, nil
 }
+
+// InsertImageIntoMarkdown inserts an AI-generated image into the markdown file
+// at the end of the selected slide's content (before the next --- separator).
+// The image is inserted with the format: <!-- ai-prompt: {prompt} -->\n![](imagePath)
+func (m *ImageGenModel) InsertImageIntoMarkdown(imagePath string) error {
+	// Read the current markdown content
+	content, err := os.ReadFile(m.MarkdownFile)
+	if err != nil {
+		return fmt.Errorf("failed to read markdown file: %w", err)
+	}
+
+	// Insert the image into the content
+	newContent, err := insertImageIntoSlide(string(content), m.SelectedIndex, m.Prompt, imagePath)
+	if err != nil {
+		return fmt.Errorf("failed to insert image: %w", err)
+	}
+
+	// Write the updated content back to the file
+	if err := os.WriteFile(m.MarkdownFile, []byte(newContent), 0644); err != nil {
+		return fmt.Errorf("failed to write markdown file: %w", err)
+	}
+
+	return nil
+}
+
+// insertImageIntoSlide inserts an image reference into a specific slide in markdown content.
+// It returns the modified content with the image inserted at the end of the specified slide.
+func insertImageIntoSlide(content string, slideIndex int, prompt string, imagePath string) (string, error) {
+	// Build the image markdown to insert
+	imageMarkdown := fmt.Sprintf("<!-- ai-prompt: %s -->\n![](%s)", prompt, imagePath)
+
+	// Check if content has frontmatter
+	hasFrontmatter := false
+	frontmatter := ""
+	contentAfterFrontmatter := content
+
+	if frontmatterRe.MatchString(content) {
+		hasFrontmatter = true
+		match := frontmatterRe.FindString(content)
+		frontmatter = match
+		contentAfterFrontmatter = content[len(match):]
+	}
+
+	// Split the content (after frontmatter) by slide delimiter
+	parts := slideDelimiterRe.Split(contentAfterFrontmatter, -1)
+
+	// Find non-empty slide indices (matching parseSlides behavior)
+	slidePartIndices := []int{}
+	for i, part := range parts {
+		if strings.TrimSpace(part) != "" {
+			slidePartIndices = append(slidePartIndices, i)
+		}
+	}
+
+	// Check if slideIndex is valid
+	if slideIndex < 0 || slideIndex >= len(slidePartIndices) {
+		return "", fmt.Errorf("invalid slide index: %d (have %d slides)", slideIndex, len(slidePartIndices))
+	}
+
+	// Get the actual part index for this slide
+	partIndex := slidePartIndices[slideIndex]
+
+	// Insert the image at the end of the slide's content
+	slideContent := parts[partIndex]
+
+	// Trim trailing whitespace but preserve structure
+	trimmedSlide := strings.TrimRight(slideContent, " \t\n")
+
+	// Add the image with proper newlines
+	parts[partIndex] = trimmedSlide + "\n\n" + imageMarkdown + "\n"
+
+	// Rebuild the content with separators
+	var result strings.Builder
+	if hasFrontmatter {
+		result.WriteString(frontmatter)
+	}
+
+	for i, part := range parts {
+		result.WriteString(part)
+		if i < len(parts)-1 {
+			result.WriteString("---\n")
+		}
+	}
+
+	return result.String(), nil
+}
