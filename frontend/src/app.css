@@ -6,12 +6,29 @@
 /* Local font imports for themes */
 @import "./lib/fonts/fonts.css";
 
-/* Theme styles */
+/* Theme styles - Original themes */
 @import "./lib/themes/paper.css";
 @import "./lib/themes/noir.css";
 @import "./lib/themes/aurora.css";
 @import "./lib/themes/phosphor.css";
 @import "./lib/themes/poster.css";
+
+/* Theme styles - New themes */
+@import "./lib/themes/ink.css";
+@import "./lib/themes/manuscript.css";
+@import "./lib/themes/deco.css";
+@import "./lib/themes/stained-glass.css";
+@import "./lib/themes/bauhaus.css";
+@import "./lib/themes/watercolor.css";
+@import "./lib/themes/comic.css";
+@import "./lib/themes/blueprint.css";
+@import "./lib/themes/editorial.css";
+@import "./lib/themes/synthwave.css";
+@import "./lib/themes/safari.css";
+@import "./lib/themes/botanical.css";
+@import "./lib/themes/cyber.css";
+@import "./lib/themes/origami.css";
+@import "./lib/themes/chalkboard.css";
 
 /* Layout typography styles */
 @import "./lib/styles/layouts.css";

@@ -407,7 +407,14 @@ func TestIsValidColor_InvalidColors(t *testing.T) {
 }
 
 func TestValidate_ValidThemes(t *testing.T) {
-	validThemes := []string{"paper", "noir", "aurora", "phosphor", "poster"}
+	validThemes := []string{
+		// Original themes
+		"paper", "noir", "aurora", "phosphor", "poster",
+		// New themes
+		"ink", "manuscript", "deco", "stained-glass", "bauhaus",
+		"watercolor", "comic", "blueprint", "editorial", "synthwave",
+		"safari", "botanical", "cyber", "origami", "chalkboard",
+	}
 
 	for _, theme := range validThemes {
 		cfg := DefaultConfig()
@@ -497,16 +504,44 @@ func TestNormalizeTheme(t *testing.T) {
 }
 
 func TestValidThemeNames(t *testing.T) {
-	expected := []string{"paper", "noir", "aurora", "phosphor", "poster"}
 	got := ValidThemeNames()
 
-	if len(got) != len(expected) {
-		t.Errorf("ValidThemeNames() returned %d themes, want %d", len(got), len(expected))
+	// We expect 20 themes total (5 original + 15 new)
+	if len(got) != 20 {
+		t.Errorf("ValidThemeNames() returned %d themes, want 20", len(got))
 	}
 
-	for i, name := range expected {
-		if got[i] != name {
-			t.Errorf("ValidThemeNames()[%d] = %q, want %q", i, got[i], name)
+	// Check that all original themes are present
+	originalThemes := []string{"paper", "noir", "aurora", "phosphor", "poster"}
+	for _, theme := range originalThemes {
+		found := false
+		for _, name := range got {
+			if name == theme {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("ValidThemeNames() should contain %q", theme)
+		}
+	}
+
+	// Check that all new themes are present
+	newThemes := []string{
+		"ink", "manuscript", "deco", "stained-glass", "bauhaus",
+		"watercolor", "comic", "blueprint", "editorial", "synthwave",
+		"safari", "botanical", "cyber", "origami", "chalkboard",
+	}
+	for _, theme := range newThemes {
+		found := false
+		for _, name := range got {
+			if name == theme {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("ValidThemeNames() should contain %q", theme)
 		}
 	}
 }

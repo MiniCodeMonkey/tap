@@ -140,11 +140,28 @@ var validTransitions = map[string]bool{
 
 // validThemes contains the allowed theme values.
 var validThemes = map[string]bool{
+	// Original themes
 	"paper":    true,
 	"noir":     true,
 	"aurora":   true,
 	"phosphor": true,
 	"poster":   true,
+	// New themes
+	"ink":           true,
+	"manuscript":    true,
+	"deco":          true,
+	"stained-glass": true,
+	"bauhaus":       true,
+	"watercolor":    true,
+	"comic":         true,
+	"blueprint":     true,
+	"editorial":     true,
+	"synthwave":     true,
+	"safari":        true,
+	"botanical":     true,
+	"cyber":         true,
+	"origami":       true,
+	"chalkboard":    true,
 }
 
 // legacyThemeMapping maps old theme names to new theme names for backwards compatibility.
@@ -201,7 +218,7 @@ func (c *Config) Validate() error {
 	if c.Theme != "" {
 		normalized := NormalizeTheme(c.Theme)
 		if normalized == "" {
-			return fmt.Errorf("invalid theme %q: must be one of paper, noir, aurora, phosphor, or poster", c.Theme)
+			return fmt.Errorf("invalid theme %q: see documentation for valid theme names", c.Theme)
 		}
 		c.Theme = normalized
 	}
@@ -290,7 +307,11 @@ func NormalizeTheme(theme string) string {
 
 // ValidThemeNames returns the list of valid theme names.
 func ValidThemeNames() []string {
-	return []string{"paper", "noir", "aurora", "phosphor", "poster"}
+	names := make([]string, 0, len(validThemes))
+	for name := range validThemes {
+		names = append(names, name)
+	}
+	return names
 }
 
 // UpdateThemeInFile updates the theme field in a markdown file's frontmatter.

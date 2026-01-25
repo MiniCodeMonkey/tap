@@ -80,6 +80,7 @@ export const DEFAULT_THEMES: BundledTheme[] = [
  * Each Tap theme has a carefully selected Shiki theme that complements its visual style.
  */
 export const TAP_THEME_TO_SHIKI: Record<string, BundledTheme> = {
+	// Original themes
 	// Paper: Clean, light theme - github-light complements the airy aesthetic
 	paper: 'github-light',
 	// Noir: Cinematic, dark with gold - one-dark-pro has elegant dark colors
@@ -89,7 +90,39 @@ export const TAP_THEME_TO_SHIKI: Record<string, BundledTheme> = {
 	// Phosphor: Terminal green CRT - vitesse-dark has muted tones that won't clash
 	phosphor: 'vitesse-dark',
 	// Poster: Bold high contrast - one-dark-pro provides clean, readable highlighting
-	poster: 'one-dark-pro'
+	poster: 'one-dark-pro',
+
+	// New themes
+	// Ink: Japanese zen aesthetic with cream background - github-light for clean look
+	ink: 'github-light',
+	// Manuscript: Illuminated manuscript with aged paper - github-light for readability
+	manuscript: 'github-light',
+	// Deco: Art Deco black & gold - one-dark-pro complements the dark elegance
+	deco: 'one-dark-pro',
+	// Stained Glass: Dark with jewel tones - dracula has rich purples that match
+	'stained-glass': 'dracula',
+	// Bauhaus: Bold primary colors on white - github-light for clean contrast
+	bauhaus: 'github-light',
+	// Watercolor: Soft pastels on white - github-light maintains the airy feel
+	watercolor: 'github-light',
+	// Comic: Pop art with bold colors - one-dark-pro for contrast
+	comic: 'one-dark-pro',
+	// Blueprint: Technical blue background - vitesse-dark for technical aesthetic
+	blueprint: 'vitesse-dark',
+	// Editorial: Classic magazine on white - github-light for publishing look
+	editorial: 'github-light',
+	// Synthwave: Neon 80s dark theme - dracula has vibrant colors that fit
+	synthwave: 'dracula',
+	// Safari: Vintage explorer with sepia - github-light for aged paper feel
+	safari: 'github-light',
+	// Botanical: Scientific illustration on cream - github-light for specimen look
+	botanical: 'github-light',
+	// Cyber: Cyberpunk dark with neon - vitesse-dark for terminal aesthetic
+	cyber: 'vitesse-dark',
+	// Origami: Clean minimal white - github-light for paper aesthetic
+	origami: 'github-light',
+	// Chalkboard: Dark green classroom - vitesse-dark complements the dark background
+	chalkboard: 'vitesse-dark'
 };
 
 /**

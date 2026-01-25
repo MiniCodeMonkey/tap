@@ -44,7 +44,27 @@ export type Transition = 'none' | 'fade' | 'slide' | 'push' | 'zoom';
  * Available presentation themes.
  * Each theme defines CSS custom properties for colors, typography, and visual effects.
  */
-export type Theme = 'paper' | 'noir' | 'aurora' | 'phosphor' | 'poster';
+export type Theme =
+	| 'paper'
+	| 'noir'
+	| 'aurora'
+	| 'phosphor'
+	| 'poster'
+	| 'ink'
+	| 'manuscript'
+	| 'deco'
+	| 'stained-glass'
+	| 'bauhaus'
+	| 'watercolor'
+	| 'comic'
+	| 'blueprint'
+	| 'editorial'
+	| 'synthwave'
+	| 'safari'
+	| 'botanical'
+	| 'cyber'
+	| 'origami'
+	| 'chalkboard';
 
 /**
  * Default theme used when no theme is specified.
