@@ -134,7 +134,7 @@ jobs:
         if: ${{ !contains(github.event.inputs.version, '-') && secrets.HOMEBREW_TAP_TOKEN != '' }}
         env:
           HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
-          HOMEBREW_TAP_REPO: ${{ vars.HOMEBREW_TAP_REPO || 'tap-slides/homebrew-tap' }}
+          HOMEBREW_TAP_REPO: ${{ vars.HOMEBREW_TAP_REPO || 'MiniCodeMonkey/tap-homebrew' }}
         run: |
           # Calculate SHA256 for each binary
           SHA256_DARWIN_AMD64=$(sha256sum dist/tap-darwin-amd64 | cut -d ' ' -f 1)
