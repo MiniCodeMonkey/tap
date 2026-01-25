@@ -29,7 +29,7 @@ theme: paper  # Options: paper, noir, aurora, phosphor, poster
 
 ### aspectRatio
 ```yaml
-aspectRatio: 16/9  # Options: 16/9 (default), 4/3, 21/9
+aspectRatio: 16:9  # Options: 16:9 (default), 4:3, 16:10
 ```
 
 ## Animations
@@ -93,7 +93,7 @@ title: Database Architecture Deep Dive
 author: Jane Developer
 date: 2024-03-15
 theme: phosphor
-aspectRatio: 16/9
+aspectRatio: 16:9
 transition: fade
 fragments: true
 codeTheme: github-dark
@@ -120,7 +120,7 @@ drivers:
 | `title` | string | File name |
 | `author` | string | None |
 | `theme` | string | `paper` |
-| `aspectRatio` | string | `16/9` |
+| `aspectRatio` | string | `16:9` |
 | `transition` | string | `fade` |
 | `fragments` | boolean | `false` |
 | `codeTheme` | string | Theme default |

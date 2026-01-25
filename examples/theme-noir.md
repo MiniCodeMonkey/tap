@@ -158,6 +158,21 @@ Numbers work well too:
 
 ---
 
+## Mermaid Diagrams
+
+```mermaid
+flowchart LR
+    A[Start] --> B{Decision}
+    B -->|Yes| C[Success]
+    B -->|No| D[Retry]
+    D --> A
+    C --> E[End]
+```
+
+Theme-aware diagrams with gold accents.
+
+---
+
 ## When to Use Noir
 
 - Board presentations

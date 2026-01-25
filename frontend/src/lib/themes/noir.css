@@ -32,6 +32,10 @@
   --noir-gold-muted: rgba(212, 175, 55, 0.5);
   --noir-gold-subtle: rgba(212, 175, 55, 0.2);
 
+  /* Error colors - warm amber that complements the gold theme */
+  --color-error: #f59e0b;
+  --color-error-bg: rgba(245, 158, 11, 0.15);
+
   /* Typography - Playfair Display for headings, Inter for body */
   --font-sans: Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
     'Helvetica Neue', Arial, sans-serif;

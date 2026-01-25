@@ -111,12 +111,12 @@ SELECT * FROM users;
 ```
 ````
 
-### Slot Markers
-For multi-column layouts, use slot markers:
+### Column Separator
+For multi-column layouts, use `|||` to separate content:
 ```markdown
-::left::
 Left content
 
-::right::
+|||
+
 Right content
 ```

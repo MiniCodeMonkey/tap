@@ -27,6 +27,10 @@
   --color-link: var(--color-accent);
   --color-code-text: #d4d4d4;
 
+  /* Error colors - warm red for light theme */
+  --color-error: #dc2626;
+  --color-error-bg: rgba(220, 38, 38, 0.08);
+
   /* Typography - Inter for confident, clean look */
   --font-sans: Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   --font-mono: 'JetBrains Mono', 'SF Mono', Monaco, 'Cascadia Code', Consolas, 'Liberation Mono', Menlo, monospace;

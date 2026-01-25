@@ -1,0 +1,681 @@
+/**
+ * Unit tests for mermaid initialization and configuration.
+ */
+
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import {
+  initializeMermaid,
+  isMermaidInitialized,
+  resetMermaidInitialization,
+  getMermaid,
+  renderMermaidDiagram,
+  renderMermaidBlocksInElement,
+  resetDiagramCounter,
+  getMermaidTheme,
+  getCurrentMermaidTheme,
+} from './mermaid'
+
+// Mock mermaid module
+vi.mock('mermaid', () => ({
+  default: {
+    initialize: vi.fn(),
+    render: vi.fn(),
+  },
+}))
+
+describe('getMermaidTheme', () => {
+  describe('paper theme', () => {
+    it('returns neutral mermaid theme for paper', () => {
+      const config = getMermaidTheme('paper')
+      expect(config.theme).toBe('neutral')
+    })
+
+    it('uses light colors for paper theme', () => {
+      const config = getMermaidTheme('paper')
+      expect(config.themeVariables.background).toBe('#ffffff')
+      expect(config.themeVariables.primaryTextColor).toBe('#0a0a0a')
+      expect(config.themeVariables.textColor).toBe('#0a0a0a')
+    })
+
+    it('uses stone accent color for paper theme', () => {
+      const config = getMermaidTheme('paper')
+      expect(config.themeVariables.primaryBorderColor).toBe('#78716c')
+      expect(config.themeVariables.lineColor).toBe('#78716c')
+      expect(config.themeVariables.nodeBorder).toBe('#78716c')
+    })
+
+    it('uses Inter font family for paper theme', () => {
+      const config = getMermaidTheme('paper')
+      expect(config.themeVariables.fontFamily).toContain('Inter')
+    })
+  })
+
+  describe('noir theme', () => {
+    it('returns dark mermaid theme for noir', () => {
+      const config = getMermaidTheme('noir')
+      expect(config.theme).toBe('dark')
+    })
+
+    it('uses dark colors for noir theme', () => {
+      const config = getMermaidTheme('noir')
+      expect(config.themeVariables.background).toBe('#0a0a0a')
+      expect(config.themeVariables.primaryTextColor).toBe('#fafafa')
+      expect(config.themeVariables.textColor).toBe('#fafafa')
+    })
+
+    it('uses gold accent color for noir theme', () => {
+      const config = getMermaidTheme('noir')
+      expect(config.themeVariables.primaryBorderColor).toBe('#d4af37')
+      expect(config.themeVariables.lineColor).toBe('#d4af37')
+      expect(config.themeVariables.nodeBorder).toBe('#d4af37')
+      expect(config.themeVariables.titleColor).toBe('#d4af37')
+    })
+
+    it('uses Inter font family for noir theme', () => {
+      const config = getMermaidTheme('noir')
+      expect(config.themeVariables.fontFamily).toContain('Inter')
+    })
+  })
+
+  describe('aurora theme', () => {
+    it('returns forest mermaid theme for aurora', () => {
+      const config = getMermaidTheme('aurora')
+      expect(config.theme).toBe('forest')
+    })
+
+    it('uses dark colors for aurora theme background', () => {
+      const config = getMermaidTheme('aurora')
+      expect(config.themeVariables.background).toBe('#0f0a1f')
+      expect(config.themeVariables.primaryTextColor).toBe('#ffffff')
+      expect(config.themeVariables.textColor).toBe('#ffffff')
+    })
+
+    it('uses teal accent color for aurora theme', () => {
+      const config = getMermaidTheme('aurora')
+      expect(config.themeVariables.primaryColor).toBe('#14b8a6')
+      expect(config.themeVariables.primaryBorderColor).toBe('#14b8a6')
+      expect(config.themeVariables.nodeBorder).toBe('#14b8a6')
+      expect(config.themeVariables.titleColor).toBe('#14b8a6')
+    })
+
+    it('uses electric blue for lines in aurora theme', () => {
+      const config = getMermaidTheme('aurora')
+      expect(config.themeVariables.lineColor).toBe('#0ea5e9')
+    })
+
+    it('uses purple as secondary color for aurora theme', () => {
+      const config = getMermaidTheme('aurora')
+      expect(config.themeVariables.secondaryColor).toBe('#4c1d95')
+    })
+
+    it('uses Space Grotesk font family for aurora theme', () => {
+      const config = getMermaidTheme('aurora')
+      expect(config.themeVariables.fontFamily).toContain('Space Grotesk')
+    })
+  })
+
+  describe('phosphor theme', () => {
+    it('returns dark mermaid theme for phosphor', () => {
+      const config = getMermaidTheme('phosphor')
+      expect(config.theme).toBe('dark')
+    })
+
+    it('uses true black background for phosphor theme', () => {
+      const config = getMermaidTheme('phosphor')
+      expect(config.themeVariables.background).toBe('#000000')
+    })
+
+    it('uses phosphor green (#00ff00) for phosphor theme', () => {
+      const config = getMermaidTheme('phosphor')
+      expect(config.themeVariables.primaryTextColor).toBe('#00ff00')
+      expect(config.themeVariables.primaryBorderColor).toBe('#00ff00')
+      expect(config.themeVariables.lineColor).toBe('#00ff00')
+      expect(config.themeVariables.nodeBorder).toBe('#00ff00')
+      expect(config.themeVariables.textColor).toBe('#00ff00')
+      expect(config.themeVariables.titleColor).toBe('#00ff00')
+      expect(config.themeVariables.nodeTextColor).toBe('#00ff00')
+    })
+
+    it('uses JetBrains Mono font family for phosphor theme', () => {
+      const config = getMermaidTheme('phosphor')
+      expect(config.themeVariables.fontFamily).toContain('JetBrains Mono')
+    })
+  })
+
+  describe('poster theme', () => {
+    it('returns default mermaid theme for poster', () => {
+      const config = getMermaidTheme('poster')
+      expect(config.theme).toBe('default')
+    })
+
+    it('uses high contrast colors for poster theme', () => {
+      const config = getMermaidTheme('poster')
+      // Light nodes on dark background
+      expect(config.themeVariables.primaryColor).toBe('#fafafa')
+      expect(config.themeVariables.background).toBe('#0d0d0f')
+      expect(config.themeVariables.mainBkg).toBe('#fafafa')
+    })
+
+    it('uses coral accent color for poster theme', () => {
+      const config = getMermaidTheme('poster')
+      expect(config.themeVariables.primaryBorderColor).toBe('#ff6b4a')
+      expect(config.themeVariables.lineColor).toBe('#ff6b4a')
+      expect(config.themeVariables.nodeBorder).toBe('#ff6b4a')
+      expect(config.themeVariables.titleColor).toBe('#ff6b4a')
+    })
+
+    it('uses dark text color on light nodes for poster theme', () => {
+      const config = getMermaidTheme('poster')
+      expect(config.themeVariables.primaryTextColor).toBe('#0d0d0f')
+      expect(config.themeVariables.nodeTextColor).toBe('#0d0d0f')
+    })
+
+    it('uses light text color for edge labels on dark background for poster theme', () => {
+      const config = getMermaidTheme('poster')
+      expect(config.themeVariables.textColor).toBe('#fafafa')
+    })
+
+    it('uses Inter font family for poster theme', () => {
+      const config = getMermaidTheme('poster')
+      expect(config.themeVariables.fontFamily).toContain('Inter')
+    })
+  })
+})
+
+describe('mermaid initialization', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    resetMermaidInitialization()
+    resetDiagramCounter()
+  })
+
+  describe('initializeMermaid', () => {
+    it('initializes mermaid with startOnLoad: false', async () => {
+      const mermaid = await import('mermaid')
+
+      initializeMermaid()
+
+      expect(mermaid.default.initialize).toHaveBeenCalledWith(
+        expect.objectContaining({
+          startOnLoad: false,
+          securityLevel: 'strict',
+        })
+      )
+    })
+
+    it('only initializes once when called multiple times without theme', async () => {
+      const mermaid = await import('mermaid')
+
+      initializeMermaid()
+      initializeMermaid()
+      initializeMermaid()
+
+      expect(mermaid.default.initialize).toHaveBeenCalledTimes(1)
+    })
+
+    it('reinitializes when theme changes', async () => {
+      const mermaid = await import('mermaid')
+
+      initializeMermaid('paper')
+      initializeMermaid('noir')
+
+      expect(mermaid.default.initialize).toHaveBeenCalledTimes(2)
+    })
+
+    it('does not reinitialize when called with the same theme', async () => {
+      const mermaid = await import('mermaid')
+
+      initializeMermaid('paper')
+      initializeMermaid('paper')
+
+      expect(mermaid.default.initialize).toHaveBeenCalledTimes(1)
+    })
+
+    it('uses paper theme config when specified', async () => {
+      const mermaid = await import('mermaid')
+
+      initializeMermaid('paper')
+
+      expect(mermaid.default.initialize).toHaveBeenCalledWith(
+        expect.objectContaining({
+          theme: 'neutral',
+          themeVariables: expect.objectContaining({
+            background: '#ffffff',
+          }),
+        })
+      )
+    })
+
+    it('uses noir theme config when specified', async () => {
+      const mermaid = await import('mermaid')
+
+      initializeMermaid('noir')
+
+      expect(mermaid.default.initialize).toHaveBeenCalledWith(
+        expect.objectContaining({
+          theme: 'dark',
+          themeVariables: expect.objectContaining({
+            primaryBorderColor: '#d4af37',
+          }),
+        })
+      )
+    })
+  })
+
+  describe('getCurrentMermaidTheme', () => {
+    it('returns undefined before initialization', () => {
+      expect(getCurrentMermaidTheme()).toBeUndefined()
+    })
+
+    it('returns undefined after initialization without theme', () => {
+      initializeMermaid()
+      expect(getCurrentMermaidTheme()).toBeUndefined()
+    })
+
+    it('returns the theme after initialization with theme', () => {
+      initializeMermaid('paper')
+      expect(getCurrentMermaidTheme()).toBe('paper')
+    })
+
+    it('returns the latest theme after theme change', () => {
+      initializeMermaid('paper')
+      initializeMermaid('noir')
+      expect(getCurrentMermaidTheme()).toBe('noir')
+    })
+  })
+
+  describe('isMermaidInitialized', () => {
+    it('returns false before initialization', () => {
+      expect(isMermaidInitialized()).toBe(false)
+    })
+
+    it('returns true after initialization', () => {
+      initializeMermaid()
+      expect(isMermaidInitialized()).toBe(true)
+    })
+  })
+
+  describe('resetMermaidInitialization', () => {
+    it('resets initialization state', () => {
+      initializeMermaid()
+      expect(isMermaidInitialized()).toBe(true)
+
+      resetMermaidInitialization()
+      expect(isMermaidInitialized()).toBe(false)
+    })
+
+    it('allows re-initialization after reset', async () => {
+      const mermaid = await import('mermaid')
+
+      initializeMermaid()
+      resetMermaidInitialization()
+      initializeMermaid()
+
+      expect(mermaid.default.initialize).toHaveBeenCalledTimes(2)
+    })
+  })
+
+  describe('getMermaid', () => {
+    it('returns the mermaid instance', async () => {
+      const mermaid = await import('mermaid')
+      const instance = getMermaid()
+      expect(instance).toBe(mermaid.default)
+    })
+  })
+})
+
+describe('mermaid rendering', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    resetMermaidInitialization()
+    resetDiagramCounter()
+  })
+
+  describe('renderMermaidDiagram', () => {
+    it('renders a valid mermaid diagram', async () => {
+      const mermaid = await import('mermaid')
+      const mockRender = vi.mocked(mermaid.default.render)
+      mockRender.mockResolvedValue({ svg: '<svg>test diagram</svg>' })
+
+      const result = await renderMermaidDiagram('graph TD\nA-->B')
+
+      expect(result.success).toBe(true)
+      if (result.success) {
+        expect(result.svg).toBe('<svg>test diagram</svg>')
+      }
+    })
+
+    it('generates unique IDs for each diagram', async () => {
+      const mermaid = await import('mermaid')
+      const mockRender = vi.mocked(mermaid.default.render)
+      mockRender.mockResolvedValue({ svg: '<svg></svg>' })
+
+      await renderMermaidDiagram('graph TD\nA-->B')
+      await renderMermaidDiagram('graph TD\nC-->D')
+
+      expect(mockRender).toHaveBeenNthCalledWith(1, 'mermaid-diagram-1', expect.any(String))
+      expect(mockRender).toHaveBeenNthCalledWith(2, 'mermaid-diagram-2', expect.any(String))
+    })
+
+    it('returns error result when rendering fails', async () => {
+      const mermaid = await import('mermaid')
+      const mockRender = vi.mocked(mermaid.default.render)
+      mockRender.mockRejectedValue(new Error('Parse error'))
+
+      const result = await renderMermaidDiagram('invalid diagram')
+
+      expect(result.success).toBe(false)
+      if (!result.success) {
+        expect(result.error).toBe('Parse error')
+        expect(result.code).toBe('invalid diagram')
+      }
+    })
+
+    it('handles non-Error exceptions', async () => {
+      const mermaid = await import('mermaid')
+      const mockRender = vi.mocked(mermaid.default.render)
+      mockRender.mockRejectedValue('string error')
+
+      const result = await renderMermaidDiagram('invalid diagram')
+
+      expect(result.success).toBe(false)
+      if (!result.success) {
+        expect(result.error).toBe('string error')
+      }
+    })
+
+    it('initializes mermaid before rendering', async () => {
+      const mermaid = await import('mermaid')
+      const mockRender = vi.mocked(mermaid.default.render)
+      mockRender.mockResolvedValue({ svg: '<svg></svg>' })
+
+      expect(isMermaidInitialized()).toBe(false)
+      await renderMermaidDiagram('graph TD\nA-->B')
+      expect(isMermaidInitialized()).toBe(true)
+    })
+  })
+
+  describe('renderMermaidBlocksInElement', () => {
+    it('renders mermaid code blocks in an element', async () => {
+      const mermaid = await import('mermaid')
+      const mockRender = vi.mocked(mermaid.default.render)
+      mockRender.mockResolvedValue({ svg: '<svg class="rendered">flowchart</svg>' })
+
+      // Create DOM element with mermaid code block
+      const container = document.createElement('div')
+      container.innerHTML = `
+        <pre><code class="language-mermaid">graph TD
+A-->B</code></pre>
+      `
+
+      await renderMermaidBlocksInElement(container)
+
+      // Check that the pre was replaced with a diagram container
+      expect(container.querySelector('pre')).toBeNull()
+      const diagram = container.querySelector('.mermaid-diagram') as HTMLElement
+      expect(diagram).not.toBeNull()
+      expect(diagram?.innerHTML).toBe('<svg class="rendered">flowchart</svg>')
+    })
+
+    it('stores original mermaid code as data attribute for re-rendering', async () => {
+      const mermaid = await import('mermaid')
+      const mockRender = vi.mocked(mermaid.default.render)
+      mockRender.mockResolvedValue({ svg: '<svg>diagram</svg>' })
+
+      const container = document.createElement('div')
+      const mermaidCode = 'graph TD\nA-->B'
+      container.innerHTML = `
+        <pre><code class="language-mermaid">${mermaidCode}</code></pre>
+      `
+
+      await renderMermaidBlocksInElement(container, 'paper')
+
+      const diagram = container.querySelector('.mermaid-diagram') as HTMLElement
+      expect(diagram).not.toBeNull()
+      expect(diagram?.dataset.mermaidCode).toBe(mermaidCode)
+      expect(diagram?.dataset.mermaidTheme).toBe('paper')
+    })
+
+    it('handles multiple mermaid blocks', async () => {
+      const mermaid = await import('mermaid')
+      const mockRender = vi.mocked(mermaid.default.render)
+      mockRender.mockResolvedValue({ svg: '<svg>diagram</svg>' })
+
+      const container = document.createElement('div')
+      container.innerHTML = `
+        <pre><code class="language-mermaid">graph TD\nA-->B</code></pre>
+        <p>Some text</p>
+        <pre><code class="language-mermaid">graph TD\nC-->D</code></pre>
+      `
+
+      await renderMermaidBlocksInElement(container)
+
+      const diagrams = container.querySelectorAll('.mermaid-diagram')
+      expect(diagrams.length).toBe(2)
+      expect(mockRender).toHaveBeenCalledTimes(2)
+    })
+
+    it('does nothing when no mermaid blocks exist', async () => {
+      const mermaid = await import('mermaid')
+      const mockRender = vi.mocked(mermaid.default.render)
+
+      const container = document.createElement('div')
+      container.innerHTML = `
+        <pre><code class="language-javascript">const x = 1;</code></pre>
+      `
+
+      await renderMermaidBlocksInElement(container)
+
+      expect(mockRender).not.toHaveBeenCalled()
+      expect(container.querySelector('pre')).not.toBeNull()
+    })
+
+    it('shows error message when rendering fails', async () => {
+      const mermaid = await import('mermaid')
+      const mockRender = vi.mocked(mermaid.default.render)
+      mockRender.mockRejectedValue(new Error('Syntax error'))
+
+      const container = document.createElement('div')
+      container.innerHTML = `
+        <pre><code class="language-mermaid">invalid syntax</code></pre>
+      `
+
+      await renderMermaidBlocksInElement(container)
+
+      // Check that error container was created
+      expect(container.querySelector('pre > code.language-mermaid')).toBeNull()
+      const errorContainer = container.querySelector('.mermaid-error')
+      expect(errorContainer).not.toBeNull()
+      expect(errorContainer?.querySelector('.mermaid-error-message')?.textContent).toContain('Syntax error')
+      expect(errorContainer?.querySelector('.mermaid-error-code code')?.textContent).toBe('invalid syntax')
+    })
+
+    it('escapes HTML in error messages', async () => {
+      const mermaid = await import('mermaid')
+      const mockRender = vi.mocked(mermaid.default.render)
+      mockRender.mockRejectedValue(new Error('<script>alert("xss")</script>'))
+
+      const container = document.createElement('div')
+      container.innerHTML = `
+        <pre><code class="language-mermaid"><script>bad</script></code></pre>
+      `
+
+      await renderMermaidBlocksInElement(container)
+
+      const errorMessage = container.querySelector('.mermaid-error-message')
+      expect(errorMessage?.innerHTML).not.toContain('<script>')
+      expect(errorMessage?.textContent).toContain('<script>')
+    })
+
+    it('preserves non-mermaid code blocks', async () => {
+      const mermaid = await import('mermaid')
+      const mockRender = vi.mocked(mermaid.default.render)
+      mockRender.mockResolvedValue({ svg: '<svg>diagram</svg>' })
+
+      const container = document.createElement('div')
+      container.innerHTML = `
+        <pre><code class="language-javascript">const x = 1;</code></pre>
+        <pre><code class="language-mermaid">graph TD\nA-->B</code></pre>
+        <pre><code class="language-python">print("hello")</code></pre>
+      `
+
+      await renderMermaidBlocksInElement(container)
+
+      // Mermaid block should be replaced
+      expect(container.querySelector('.mermaid-diagram')).not.toBeNull()
+      // Other code blocks should remain
+      expect(container.querySelector('code.language-javascript')).not.toBeNull()
+      expect(container.querySelector('code.language-python')).not.toBeNull()
+    })
+
+    it('re-renders existing diagrams when theme changes', async () => {
+      const mermaid = await import('mermaid')
+      const mockRender = vi.mocked(mermaid.default.render)
+      mockRender
+        .mockResolvedValueOnce({ svg: '<svg>paper-styled</svg>' })
+        .mockResolvedValueOnce({ svg: '<svg>noir-styled</svg>' })
+
+      const container = document.createElement('div')
+      container.innerHTML = `
+        <pre><code class="language-mermaid">graph TD\nA-->B</code></pre>
+      `
+
+      // First render with paper theme
+      await renderMermaidBlocksInElement(container, 'paper')
+      let diagram = container.querySelector('.mermaid-diagram') as HTMLElement
+      expect(diagram?.innerHTML).toBe('<svg>paper-styled</svg>')
+      expect(diagram?.dataset.mermaidTheme).toBe('paper')
+
+      // Re-render with noir theme
+      await renderMermaidBlocksInElement(container, 'noir')
+      diagram = container.querySelector('.mermaid-diagram') as HTMLElement
+      expect(diagram?.innerHTML).toBe('<svg>noir-styled</svg>')
+      expect(diagram?.dataset.mermaidTheme).toBe('noir')
+    })
+
+    it('does not re-render when theme is the same', async () => {
+      const mermaid = await import('mermaid')
+      const mockRender = vi.mocked(mermaid.default.render)
+      mockRender.mockResolvedValue({ svg: '<svg>diagram</svg>' })
+
+      const container = document.createElement('div')
+      container.innerHTML = `
+        <pre><code class="language-mermaid">graph TD\nA-->B</code></pre>
+      `
+
+      // First render
+      await renderMermaidBlocksInElement(container, 'paper')
+      expect(mockRender).toHaveBeenCalledTimes(1)
+
+      // Same theme - should skip re-render
+      await renderMermaidBlocksInElement(container, 'paper')
+      expect(mockRender).toHaveBeenCalledTimes(1)
+    })
+
+    it('re-renders multiple diagrams on theme change', async () => {
+      const mermaid = await import('mermaid')
+      const mockRender = vi.mocked(mermaid.default.render)
+      mockRender.mockResolvedValue({ svg: '<svg>diagram</svg>' })
+
+      const container = document.createElement('div')
+      container.innerHTML = `
+        <pre><code class="language-mermaid">graph TD\nA-->B</code></pre>
+        <pre><code class="language-mermaid">graph TD\nC-->D</code></pre>
+      `
+
+      // First render
+      await renderMermaidBlocksInElement(container, 'paper')
+      expect(mockRender).toHaveBeenCalledTimes(2)
+
+      // Theme change should re-render both
+      await renderMermaidBlocksInElement(container, 'noir')
+      expect(mockRender).toHaveBeenCalledTimes(4)
+
+      const diagrams = container.querySelectorAll('.mermaid-diagram')
+      expect(diagrams.length).toBe(2)
+    })
+
+    it('stores mermaid code on error containers for theme change retry', async () => {
+      const mermaid = await import('mermaid')
+      const mockRender = vi.mocked(mermaid.default.render)
+      mockRender.mockRejectedValue(new Error('Parse error'))
+
+      const container = document.createElement('div')
+      const code = 'invalid syntax'
+      container.innerHTML = `
+        <pre><code class="language-mermaid">${code}</code></pre>
+      `
+
+      await renderMermaidBlocksInElement(container, 'paper')
+
+      const errorContainer = container.querySelector('.mermaid-error') as HTMLElement
+      expect(errorContainer).not.toBeNull()
+      expect(errorContainer?.dataset.mermaidCode).toBe(code)
+      expect(errorContainer?.dataset.mermaidTheme).toBe('paper')
+    })
+
+    it('retries rendering error containers on theme change and converts to diagram if successful', async () => {
+      const mermaid = await import('mermaid')
+      const mockRender = vi.mocked(mermaid.default.render)
+      mockRender
+        .mockRejectedValueOnce(new Error('Parse error'))
+        .mockResolvedValueOnce({ svg: '<svg>success</svg>' })
+
+      const container = document.createElement('div')
+      container.innerHTML = `
+        <pre><code class="language-mermaid">graph TD\nA-->B</code></pre>
+      `
+
+      // First render fails
+      await renderMermaidBlocksInElement(container, 'paper')
+      expect(container.querySelector('.mermaid-error')).not.toBeNull()
+
+      // Theme change succeeds
+      await renderMermaidBlocksInElement(container, 'noir')
+      expect(container.querySelector('.mermaid-error')).toBeNull()
+      const diagram = container.querySelector('.mermaid-diagram') as HTMLElement
+      expect(diagram?.innerHTML).toBe('<svg>success</svg>')
+      expect(diagram?.dataset.mermaidTheme).toBe('noir')
+    })
+
+    it('converts diagram to error container if re-render fails', async () => {
+      const mermaid = await import('mermaid')
+      const mockRender = vi.mocked(mermaid.default.render)
+      mockRender
+        .mockResolvedValueOnce({ svg: '<svg>diagram</svg>' })
+        .mockRejectedValueOnce(new Error('Theme incompatible'))
+
+      const container = document.createElement('div')
+      container.innerHTML = `
+        <pre><code class="language-mermaid">graph TD\nA-->B</code></pre>
+      `
+
+      // First render succeeds
+      await renderMermaidBlocksInElement(container, 'paper')
+      expect(container.querySelector('.mermaid-diagram')).not.toBeNull()
+
+      // Theme change fails
+      await renderMermaidBlocksInElement(container, 'noir')
+      expect(container.querySelector('.mermaid-diagram')).toBeNull()
+      const errorContainer = container.querySelector('.mermaid-error') as HTMLElement
+      expect(errorContainer).not.toBeNull()
+      expect(errorContainer?.dataset.mermaidTheme).toBe('noir')
+    })
+  })
+
+  describe('resetDiagramCounter', () => {
+    it('resets the diagram counter', async () => {
+      const mermaid = await import('mermaid')
+      const mockRender = vi.mocked(mermaid.default.render)
+      mockRender.mockResolvedValue({ svg: '<svg></svg>' })
+
+      await renderMermaidDiagram('graph TD\nA-->B')
+      resetDiagramCounter()
+      await renderMermaidDiagram('graph TD\nC-->D')
+
+      // After reset, IDs should start from 1 again
+      expect(mockRender).toHaveBeenNthCalledWith(1, 'mermaid-diagram-1', expect.any(String))
+      expect(mockRender).toHaveBeenNthCalledWith(2, 'mermaid-diagram-1', expect.any(String))
+    })
+  })
+})

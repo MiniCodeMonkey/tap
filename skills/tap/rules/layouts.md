@@ -14,10 +14,10 @@ layout: two-column
 
 # Side by Side
 
-::left::
 Left column content.
 
-::right::
+|||
+
 Right column content.
 ```
 
@@ -47,7 +47,7 @@ layout: section
 **Use for:** Separating major parts of your presentation.
 
 ### two-column
-Two equal columns using `::left::` and `::right::`.
+Two equal columns separated by `|||`.
 ```markdown
 <!--
 layout: two-column
@@ -55,12 +55,12 @@ layout: two-column
 
 # Comparison
 
-::left::
 ### Option A
 - Fast execution
 - Simple setup
 
-::right::
+|||
+
 ### Option B
 - More features
 - Better scaling
@@ -68,7 +68,7 @@ layout: two-column
 **Use for:** Comparisons, before/after, pros/cons.
 
 ### three-column
-Three equal columns using `::left::`, `::center::`, `::right::`.
+Three equal columns separated by `|||`.
 ```markdown
 <!--
 layout: three-column
@@ -76,15 +76,16 @@ layout: three-column
 
 # Our Process
 
-::left::
 ### Plan
 Define requirements
 
-::center::
+|||
+
 ### Build
 Write the code
 
-::right::
+|||
+
 ### Ship
 Deploy to production
 ```
@@ -147,17 +148,17 @@ background: ./images/hero.jpg
 **Use for:** Hero images, dramatic statements.
 
 ### sidebar
-Content with a sidebar area using `::main::` and `::sidebar::`.
+Content with a sidebar area separated by `|||`.
 ```markdown
 <!--
 layout: sidebar
 -->
 
-::main::
 # Main Content
 The primary focus of this slide.
 
-::sidebar::
+|||
+
 **Related:**
 - Topic A
 - Topic B
@@ -165,16 +166,16 @@ The primary focus of this slide.
 **Use for:** Content with references, navigation-heavy slides.
 
 ### split-media
-Media and content side by side using `::media::` and `::content::`.
+Media and content side by side separated by `|||`.
 ```markdown
 <!--
 layout: split-media
 -->
 
-::media::
 ![Product screenshot](./images/product.png)
 
-::content::
+|||
+
 # New Feature
 Introducing our latest improvement.
 ```
@@ -195,16 +196,16 @@ layout: blank
 
 ## Layout Reference
 
-| Layout | Slot Markers | Best For |
-|--------|--------------|----------|
+| Layout | Separator | Best For |
+|--------|-----------|----------|
 | `title` | None | Opening slides |
 | `section` | None | Part breaks |
-| `two-column` | `::left::`, `::right::` | Comparisons |
-| `three-column` | `::left::`, `::center::`, `::right::` | Process flows |
+| `two-column` | `|||` | Comparisons |
+| `three-column` | `|||` (twice) | Process flows |
 | `code-focus` | None | Code walkthroughs |
 | `big-stat` | None | Key metrics |
 | `quote` | None | Testimonials |
 | `cover` | None (uses `background` directive) | Hero images |
-| `sidebar` | `::main::`, `::sidebar::` | Reference slides |
-| `split-media` | `::media::`, `::content::` | Feature highlights |
+| `sidebar` | `|||` | Reference slides |
+| `split-media` | `|||` | Feature highlights |
 | `blank` | None | Custom designs |

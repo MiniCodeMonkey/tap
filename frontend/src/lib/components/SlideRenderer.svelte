@@ -1,6 +1,7 @@
 <script lang="ts">
-	import type { Slide, BackgroundConfig, Transition, FragmentGroup } from '$lib/types';
+	import type { Slide, BackgroundConfig, Transition, FragmentGroup, Theme } from '$lib/types';
 	import { fade, fly, scale } from 'svelte/transition';
+	import { renderMermaidBlocksInElement } from '$lib/utils/mermaid';
 
 	// ============================================================================
 	// Props
@@ -17,6 +18,8 @@
 		direction?: 'forward' | 'backward';
 		/** Custom transition duration in milliseconds */
 		transitionDuration?: number;
+		/** Theme to use for mermaid diagrams */
+		theme?: Theme;
 	}
 
 	let {
@@ -24,7 +27,8 @@
 		visibleFragments = -1,
 		active = true,
 		direction = 'forward',
-		transitionDuration = 400
+		transitionDuration = 400,
+		theme = 'paper'
 	}: Props = $props();
 
 	// ============================================================================
@@ -160,6 +164,35 @@
 		}
 		return slide.html;
 	});
+
+	// ============================================================================
+	// Mermaid Diagram Rendering
+	// ============================================================================
+
+	/**
+	 * Reference to the slide content element for DOM manipulation.
+	 */
+	let slideContentElement: HTMLElement | undefined = $state();
+
+	/**
+	 * Render mermaid diagrams when the slide content is mounted or changes.
+	 * This runs after the HTML is inserted into the DOM via {@html}.
+	 * Also re-renders when theme changes to apply theme-specific styling.
+	 */
+	$effect(() => {
+		if (slideContentElement && active) {
+			// Re-render mermaid diagrams when processedHtml or theme changes
+			// eslint-disable-next-line @typescript-eslint/no-unused-expressions
+			processedHtml;
+			// eslint-disable-next-line @typescript-eslint/no-unused-expressions
+			theme;
+
+			// Use a microtask to ensure DOM has been updated
+			queueMicrotask(() => {
+				renderMermaidBlocksInElement(slideContentElement!, theme);
+			});
+		}
+	});
 </script>
 
 <!--
@@ -176,7 +209,7 @@
 		in:getTransition
 		out:getTransition
 	>
-		<div class="slide-content w-full h-full">
+		<div class="slide-content w-full h-full" bind:this={slideContentElement}>
 			{@html processedHtml}
 		</div>
 	</div>
@@ -217,5 +250,69 @@
 		:global(.fragment-hidden) {
 			transform: none;
 		}
+	}
+
+	/*
+	 * Mermaid diagram container styles.
+	 * Centers diagrams and ensures they don't overflow the slide.
+	 * Uses max-height to prevent vertical overflow while preserving aspect ratio.
+	 * Small diagrams stay at natural size (no upscaling).
+	 */
+	:global(.mermaid-diagram) {
+		display: flex;
+		justify-content: center;
+		align-items: center;
+		width: 100%;
+		/* Limit height to prevent overflow, leaving room for other content */
+		max-height: 70vh;
+		margin: 1rem 0;
+		overflow: hidden;
+	}
+
+	:global(.mermaid-diagram svg) {
+		/* Constrain to container bounds while preserving aspect ratio */
+		max-width: 100%;
+		max-height: 100%;
+		/* Ensure SVG scales proportionally */
+		width: auto;
+		height: auto;
+		/* Prevent upscaling beyond natural size */
+		object-fit: contain;
+	}
+
+	/*
+	 * Mermaid error styles.
+	 * Shows a visible error with the original code for debugging.
+	 * Uses theme-aware error colors via CSS custom properties.
+	 */
+	:global(.mermaid-error) {
+		padding: 1.25rem 1.5rem;
+		border-radius: 0.5rem;
+		background-color: var(--color-error-bg, rgba(220, 38, 38, 0.1));
+		border: 1px solid color-mix(in srgb, var(--color-error, #dc2626) 40%, transparent);
+		margin: 1rem 0;
+	}
+
+	:global(.mermaid-error-message) {
+		color: var(--color-error, #dc2626);
+		font-weight: 600;
+		margin-bottom: 0.75rem;
+		font-family: var(--font-sans, inherit);
+	}
+
+	:global(.mermaid-error-code) {
+		font-size: 0.875rem;
+		opacity: 0.85;
+		background-color: var(--color-surface, rgba(0, 0, 0, 0.05));
+		border-radius: 0.375rem;
+		padding: 1rem;
+		border: 1px solid var(--color-border, rgba(0, 0, 0, 0.1));
+	}
+
+	:global(.mermaid-error-code code) {
+		white-space: pre-wrap;
+		word-break: break-word;
+		font-family: var(--font-mono, monospace);
+		color: var(--color-text, inherit);
 	}
 </style>

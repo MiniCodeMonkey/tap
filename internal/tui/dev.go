@@ -11,6 +11,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/tapsh/tap/internal/gemini"
 )
 
 // ThemeBroadcaster is an interface for broadcasting theme changes via WebSocket.
@@ -72,18 +73,20 @@ type tickMsg struct{}
 
 // DevModel is the Bubble Tea model for the dev server TUI.
 type DevModel struct { //nolint:govet // embedded structs prevent optimal alignment
-	config           DevConfig
-	state            DevState
-	eventsCh         chan DevEvent
-	closeCh          chan struct{}
-	themeBroadcaster ThemeBroadcaster
-	mu               sync.RWMutex
-	windowWidth      int
-	windowHeight     int
-	currentTheme     string
-	themePickerIndex int
-	quitting         bool
-	showThemePicker  bool
+	config             DevConfig
+	state              DevState
+	eventsCh           chan DevEvent
+	closeCh            chan struct{}
+	themeBroadcaster   ThemeBroadcaster
+	imageGenModel      *ImageGenModel
+	mu                 sync.RWMutex
+	windowWidth        int
+	windowHeight       int
+	currentTheme       string
+	themePickerIndex   int
+	quitting           bool
+	showThemePicker    bool
+	showImageGenerator bool
 }
 
 // NewDevModel creates a new DevModel for the dev server TUI.
@@ -149,6 +152,78 @@ func tickCmd() tea.Cmd {
 
 // Update implements tea.Model.
 func (m *DevModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	// Forward non-key messages to image generator when active (for spinner animation, API results, etc.)
+	if m.showImageGenerator && m.imageGenModel != nil {
+		// Only forward certain message types to the image generator
+		switch msg.(type) {
+		case tea.KeyMsg:
+			// Key messages are handled by handleKeyPress below
+		default:
+			// Forward spinner ticks and other messages to image generator
+			newModel, cmd := m.imageGenModel.Update(msg)
+			if newModel != nil {
+				m.imageGenModel = newModel.(*ImageGenModel)
+				// Check if generation completed successfully - save image and update markdown
+				if m.imageGenModel.Step == ImageGenStepDone && m.imageGenModel.GeneratedImage != nil && m.imageGenModel.SavedImagePath == "" {
+					// Save the generated image
+					savedPath, err := m.imageGenModel.SaveGeneratedImage()
+					if err != nil {
+						m.SetError(err)
+						m.addEvent(DevEvent{
+							Type:      "error",
+							Message:   "Failed to save generated image",
+							Timestamp: time.Now(),
+						})
+						return m, cmd
+					}
+					m.imageGenModel.SavedImagePath = savedPath
+
+					// Insert or replace image in markdown
+					if m.imageGenModel.SelectedImage != nil {
+						// Regenerating - replace existing image
+						if err := m.imageGenModel.ReplaceImageInMarkdown(savedPath); err != nil {
+							m.SetError(err)
+							m.addEvent(DevEvent{
+								Type:      "error",
+								Message:   "Failed to update markdown",
+								Timestamp: time.Now(),
+							})
+							return m, cmd
+						}
+						// Delete old image file
+						if err := m.imageGenModel.DeleteOldImage(); err != nil {
+							// Log but don't fail - the new image is already saved
+							m.addEvent(DevEvent{
+								Type:      "error",
+								Message:   "Failed to delete old image (non-fatal)",
+								Timestamp: time.Now(),
+							})
+						}
+					} else {
+						// Adding new image
+						if err := m.imageGenModel.InsertImageIntoMarkdown(savedPath); err != nil {
+							m.SetError(err)
+							m.addEvent(DevEvent{
+								Type:      "error",
+								Message:   "Failed to update markdown",
+								Timestamp: time.Now(),
+							})
+							return m, cmd
+						}
+					}
+
+					// Send reload event
+					m.addEvent(DevEvent{
+						Type:      "reload",
+						Message:   fmt.Sprintf("Generated image: %s", savedPath),
+						Timestamp: time.Now(),
+					})
+				}
+			}
+			return m, cmd
+		}
+	}
+
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		return m.handleKeyPress(msg)
@@ -187,6 +262,11 @@ func (m *DevModel) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// Handle theme picker if it's open
 	if m.showThemePicker {
 		return m.handleThemePickerKey(msg)
+	}
+
+	// Handle image generator if it's open
+	if m.showImageGenerator && m.imageGenModel != nil {
+		return m.handleImageGeneratorKey(msg)
 	}
 
 	switch msg.String() {
@@ -241,6 +321,50 @@ func (m *DevModel) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 		}
 		return m, nil
+
+	case "i":
+		// Open image generator
+		// Check if already showing image generator or generation is in progress
+		if m.showImageGenerator {
+			return m, nil
+		}
+		// Also check if there's an active image generation in progress
+		if m.imageGenModel != nil && m.imageGenModel.IsGenerating {
+			return m, nil
+		}
+
+		// Check for GEMINI_API_KEY
+		if !gemini.HasAPIKey() {
+			m.SetError(fmt.Errorf("GEMINI_API_KEY not set. Add it to your .env file to use AI image generation"))
+			m.addEvent(DevEvent{
+				Type:      "error",
+				Message:   "Missing GEMINI_API_KEY environment variable",
+				Timestamp: time.Now(),
+			})
+			return m, nil
+		}
+
+		// Create the image generator model
+		imageGen, err := NewImageGenModel(m.config.MarkdownFile)
+		if err != nil {
+			m.SetError(fmt.Errorf("failed to load slides: %w", err))
+			m.addEvent(DevEvent{
+				Type:      "error",
+				Message:   "Failed to load slides for image generator",
+				Timestamp: time.Now(),
+			})
+			return m, nil
+		}
+
+		// API key is present, show image generator
+		m.imageGenModel = imageGen
+		m.showImageGenerator = true
+		m.addEvent(DevEvent{
+			Type:      "action",
+			Message:   "Opening image generator...",
+			Timestamp: time.Now(),
+		})
+		return m, nil
 	}
 
 	return m, nil
@@ -287,6 +411,42 @@ func (m *DevModel) handleThemePickerKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// handleImageGeneratorKey handles keyboard input when the image generator is open.
+func (m *DevModel) handleImageGeneratorKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	// Check if we're in the Done step - save the saved path before delegating
+	wasInDoneStep := m.imageGenModel.Step == ImageGenStepDone
+	savedPath := m.imageGenModel.SavedImagePath
+
+	// Delegate to the image generator model
+	newModel, cmd := m.imageGenModel.Update(msg)
+
+	// Check if the user completed or cancelled (returns nil)
+	if newModel == nil {
+		m.showImageGenerator = false
+		m.imageGenModel = nil
+
+		// Check if this was a successful completion (was in Done step with saved image)
+		if wasInDoneStep && savedPath != "" {
+			m.addEvent(DevEvent{
+				Type:      "action",
+				Message:   fmt.Sprintf("Image generation complete: %s", savedPath),
+				Timestamp: time.Now(),
+			})
+		} else {
+			m.addEvent(DevEvent{
+				Type:      "action",
+				Message:   "Image generator cancelled",
+				Timestamp: time.Now(),
+			})
+		}
+		return m, nil
+	}
+
+	// Update the image generator model
+	m.imageGenModel = newModel.(*ImageGenModel)
+	return m, cmd
+}
+
 // openBrowserCmd returns a command that opens a URL in the default browser.
 func openBrowserCmd(url string) tea.Cmd {
 	return func() tea.Msg {
@@ -327,6 +487,11 @@ func (m *DevModel) View() string {
 	// Show theme picker overlay if active
 	if m.showThemePicker {
 		return m.viewThemePicker()
+	}
+
+	// Show image generator overlay if active
+	if m.showImageGenerator && m.imageGenModel != nil {
+		return m.imageGenModel.View()
 	}
 
 	var b strings.Builder
@@ -554,11 +719,12 @@ func (m *DevModel) viewHelp() string {
 		Bold(true)
 
 	help := fmt.Sprintf(
-		"%s open browser • %s presenter view • %s theme • %s add slide • %s reload • %s quit",
+		"%s open browser • %s presenter view • %s theme • %s add slide • %s image • %s reload • %s quit",
 		keyStyle.Render("o"),
 		keyStyle.Render("p"),
 		keyStyle.Render("t"),
 		keyStyle.Render("a"),
+		keyStyle.Render("i"),
 		keyStyle.Render("r"),
 		keyStyle.Render("q"),
 	)
@@ -691,6 +857,20 @@ func (m *DevModel) Close() {
 // WasQuit returns true if the user quit the TUI.
 func (m *DevModel) WasQuit() bool {
 	return m.quitting
+}
+
+// ShowImageGenerator returns true if the image generator should be shown.
+func (m *DevModel) ShowImageGenerator() bool {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.showImageGenerator
+}
+
+// ResetImageGenerator resets the image generator state.
+func (m *DevModel) ResetImageGenerator() {
+	m.mu.Lock()
+	m.showImageGenerator = false
+	m.mu.Unlock()
 }
 
 // GetEventChannel returns the events channel for testing.

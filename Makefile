@@ -19,9 +19,14 @@ LDFLAGS=-ldflags "-X main.version=$(VERSION)"
 .PHONY: all
 all: build
 
-# Build the binary
+# Build frontend assets
+.PHONY: frontend
+frontend:
+	cd frontend && npm run build
+
+# Build the binary (includes frontend)
 .PHONY: build
-build:
+build: frontend
 	@mkdir -p $(BUILD_DIR)
 	$(GOBUILD) $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME) ./cmd/tap
 
@@ -96,6 +101,7 @@ release-windows-amd64:
 .PHONY: clean
 clean:
 	rm -rf $(BUILD_DIR)
+	rm -rf embedded/dist
 
 # Download dependencies
 .PHONY: deps
@@ -111,7 +117,8 @@ typecheck:
 .PHONY: help
 help:
 	@echo "Tap Makefile targets:"
-	@echo "  build          - Build the tap binary to bin/tap"
+	@echo "  build          - Build frontend and tap binary to bin/tap"
+	@echo "  frontend       - Build frontend assets only"
 	@echo "  test           - Run all tests"
 	@echo "  lint           - Run golangci-lint"
 	@echo "  dev            - Build and run development server"
