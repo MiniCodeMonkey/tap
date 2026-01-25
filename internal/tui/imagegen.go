@@ -17,6 +17,8 @@ type ImageGenStep int
 const (
 	// ImageGenStepSlideSelect is the slide selection step.
 	ImageGenStepSlideSelect ImageGenStep = iota
+	// ImageGenStepImageSelect is the image selection step (add new or regenerate).
+	ImageGenStepImageSelect
 	// ImageGenStepPrompt is the prompt input step.
 	ImageGenStepPrompt
 	// ImageGenStepGenerating is the image generation step.
@@ -39,6 +41,16 @@ type SlideInfo struct {
 	AIImages []AIImageInfo
 }
 
+// ImageSelectOption represents an option in the image selection step.
+type ImageSelectOption struct {
+	// IsAddNew indicates if this is the "Add new image" option.
+	IsAddNew bool
+	// AIImage is the AI image info for regenerate options (nil for add new).
+	AIImage *AIImageInfo
+	// Label is the display label for this option.
+	Label string
+}
+
 // ImageGenModel is the Bubble Tea model for the image generation workflow.
 type ImageGenModel struct {
 	// Slides contains information about all slides.
@@ -51,6 +63,14 @@ type ImageGenModel struct {
 	Error string
 	// MarkdownFile is the path to the markdown file being edited.
 	MarkdownFile string
+	// ImageOptions contains the options for image selection (add new or regenerate).
+	ImageOptions []ImageSelectOption
+	// ImageOptionIndex is the currently selected image option index.
+	ImageOptionIndex int
+	// SelectedImage is the AI image being regenerated (nil if adding new).
+	SelectedImage *AIImageInfo
+	// Prompt is the prompt text for image generation.
+	Prompt string
 }
 
 // NewImageGenModel creates a new ImageGenModel for image generation.
@@ -210,6 +230,8 @@ func (m *ImageGenModel) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch m.Step {
 	case ImageGenStepSlideSelect:
 		return m.handleSlideSelectKey(msg)
+	case ImageGenStepImageSelect:
+		return m.handleImageSelectKey(msg)
 	}
 	return m, nil
 }
@@ -235,8 +257,60 @@ func (m *ImageGenModel) handleSlideSelectKey(msg tea.KeyMsg) (tea.Model, tea.Cmd
 
 	case "enter":
 		// Select the slide and proceed to next step
-		// For now, just mark the slide as selected (next stories will add more steps)
-		m.Step = ImageGenStepPrompt
+		slide := m.GetSelectedSlide()
+		if slide != nil && slide.HasAIImages {
+			// Slide has AI images, show add/regenerate options
+			m.buildImageOptions()
+			m.Step = ImageGenStepImageSelect
+		} else {
+			// No AI images, go directly to prompt input
+			m.Step = ImageGenStepPrompt
+		}
+		return m, nil
+	}
+
+	return m, nil
+}
+
+// handleImageSelectKey handles keyboard input during image selection (add new or regenerate).
+func (m *ImageGenModel) handleImageSelectKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "esc":
+		// Go back to slide selection
+		m.Step = ImageGenStepSlideSelect
+		m.ImageOptions = nil
+		m.ImageOptionIndex = 0
+		return m, nil
+
+	case "up", "k":
+		if m.ImageOptionIndex > 0 {
+			m.ImageOptionIndex--
+		}
+		return m, nil
+
+	case "down", "j":
+		if m.ImageOptionIndex < len(m.ImageOptions)-1 {
+			m.ImageOptionIndex++
+		}
+		return m, nil
+
+	case "enter":
+		// Select the option and proceed
+		if m.ImageOptionIndex >= 0 && m.ImageOptionIndex < len(m.ImageOptions) {
+			option := m.ImageOptions[m.ImageOptionIndex]
+			if option.IsAddNew {
+				// Adding new image, proceed to prompt input
+				m.SelectedImage = nil
+				m.Prompt = ""
+			} else {
+				// Regenerating existing image, pre-fill prompt
+				m.SelectedImage = option.AIImage
+				if option.AIImage != nil {
+					m.Prompt = option.AIImage.Prompt
+				}
+			}
+			m.Step = ImageGenStepPrompt
+		}
 		return m, nil
 	}
 
@@ -248,6 +322,8 @@ func (m *ImageGenModel) View() string {
 	switch m.Step {
 	case ImageGenStepSlideSelect:
 		return m.viewSlideSelect()
+	case ImageGenStepImageSelect:
+		return m.viewImageSelect()
 	default:
 		return m.viewSlideSelect()
 	}
@@ -331,6 +407,109 @@ func (m *ImageGenModel) viewSlideSelect() string {
 
 	help := fmt.Sprintf(
 		"%s/%s navigate • %s select • %s cancel",
+		keyStyle.Render("↑"),
+		keyStyle.Render("↓"),
+		keyStyle.Render("enter"),
+		keyStyle.Render("esc"),
+	)
+	b.WriteString(helpStyle.Render(help))
+
+	return b.String()
+}
+
+// buildImageOptions creates the image selection options for the selected slide.
+func (m *ImageGenModel) buildImageOptions() {
+	slide := m.GetSelectedSlide()
+	if slide == nil {
+		m.ImageOptions = nil
+		return
+	}
+
+	options := make([]ImageSelectOption, 0, len(slide.AIImages)+1)
+
+	// Always add "Add new image" as the first option
+	options = append(options, ImageSelectOption{
+		IsAddNew: true,
+		Label:    "Add new image",
+	})
+
+	// Add regenerate options for each existing AI image
+	for i := range slide.AIImages {
+		prompt := slide.AIImages[i].Prompt
+		// Truncate long prompts for display
+		displayPrompt := prompt
+		if len(displayPrompt) > 40 {
+			displayPrompt = displayPrompt[:37] + "..."
+		}
+		options = append(options, ImageSelectOption{
+			IsAddNew: false,
+			AIImage:  &slide.AIImages[i],
+			Label:    fmt.Sprintf("Regenerate: %s", displayPrompt),
+		})
+	}
+
+	m.ImageOptions = options
+	m.ImageOptionIndex = 0
+}
+
+// viewImageSelect renders the image selection view (add new or regenerate).
+func (m *ImageGenModel) viewImageSelect() string {
+	var b strings.Builder
+
+	// Title
+	titleStyle := lipgloss.NewStyle().
+		Bold(true).
+		Foreground(ColorPrimary).
+		MarginBottom(1)
+
+	b.WriteString(titleStyle.Render("🖼  Select Action"))
+	b.WriteString("\n\n")
+
+	// Show selected slide info
+	slide := m.GetSelectedSlide()
+	if slide != nil {
+		slideInfoStyle := lipgloss.NewStyle().
+			Foreground(ColorMuted).
+			Italic(true)
+		b.WriteString(slideInfoStyle.Render(fmt.Sprintf("Slide %d: %s", slide.Index+1, slide.Title)))
+		b.WriteString("\n\n")
+	}
+
+	// Option list
+	for i, option := range m.ImageOptions {
+		if i == m.ImageOptionIndex {
+			// Selected item
+			selectedStyle := lipgloss.NewStyle().
+				Bold(true).
+				Foreground(ColorSecondary)
+			indicatorStyle := lipgloss.NewStyle().
+				Bold(true).
+				Foreground(ColorPrimary)
+
+			b.WriteString(indicatorStyle.Render("> "))
+			b.WriteString(selectedStyle.Render(option.Label))
+		} else {
+			// Unselected item
+			unselectedStyle := lipgloss.NewStyle().
+				Foreground(ColorWhite)
+
+			b.WriteString("  ")
+			b.WriteString(unselectedStyle.Render(option.Label))
+		}
+		b.WriteString("\n")
+	}
+
+	// Help text
+	b.WriteString("\n")
+	helpStyle := lipgloss.NewStyle().
+		Foreground(ColorMuted)
+
+	keyStyle := lipgloss.NewStyle().
+		Foreground(ColorPrimary).
+		Bold(true)
+
+	help := fmt.Sprintf(
+		"%s/%s navigate • %s select • %s back",
 		keyStyle.Render("↑"),
 		keyStyle.Render("↓"),
 		keyStyle.Render("enter"),

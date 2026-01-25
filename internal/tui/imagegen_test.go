@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -698,5 +699,479 @@ No images here
 	// Third slide should show "[has 2 AI images]"
 	if !strings.Contains(view, "[has 2 AI images]") {
 		t.Error("view should contain '[has 2 AI images]' for slide with 2 AI images")
+	}
+}
+
+func TestImageGenModel_SelectSlideWithAIImages_ShowsOptions(t *testing.T) {
+	tmpDir := t.TempDir()
+	mdFile := filepath.Join(tmpDir, "test.md")
+
+	content := `# First Slide
+
+No images
+
+---
+
+# Second Slide
+
+<!-- ai-prompt: a beautiful sunset -->
+![](images/sunset.png)
+`
+	if err := os.WriteFile(mdFile, []byte(content), 0644); err != nil {
+		t.Fatalf("failed to write test file: %v", err)
+	}
+
+	model, err := NewImageGenModel(mdFile)
+	if err != nil {
+		t.Fatalf("failed to create model: %v", err)
+	}
+
+	// Navigate to second slide
+	newModel, _ := model.Update(tea.KeyMsg{Type: tea.KeyDown})
+	m := newModel.(*ImageGenModel)
+
+	// Select the slide (press enter)
+	newModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = newModel.(*ImageGenModel)
+
+	// Should be in image select step
+	if m.Step != ImageGenStepImageSelect {
+		t.Errorf("expected ImageGenStepImageSelect, got %d", m.Step)
+	}
+
+	// Should have 2 options: add new + 1 regenerate
+	if len(m.ImageOptions) != 2 {
+		t.Errorf("expected 2 image options, got %d", len(m.ImageOptions))
+	}
+
+	// First option should be "Add new image"
+	if !m.ImageOptions[0].IsAddNew {
+		t.Error("first option should be IsAddNew=true")
+	}
+	if m.ImageOptions[0].Label != "Add new image" {
+		t.Errorf("expected label 'Add new image', got %q", m.ImageOptions[0].Label)
+	}
+
+	// Second option should be regenerate
+	if m.ImageOptions[1].IsAddNew {
+		t.Error("second option should be IsAddNew=false")
+	}
+	if !strings.Contains(m.ImageOptions[1].Label, "Regenerate:") {
+		t.Errorf("expected label to contain 'Regenerate:', got %q", m.ImageOptions[1].Label)
+	}
+	if !strings.Contains(m.ImageOptions[1].Label, "a beautiful sunset") {
+		t.Errorf("expected label to contain prompt preview, got %q", m.ImageOptions[1].Label)
+	}
+}
+
+func TestImageGenModel_SelectSlideWithoutAIImages_SkipsImageSelect(t *testing.T) {
+	tmpDir := t.TempDir()
+	mdFile := filepath.Join(tmpDir, "test.md")
+
+	content := `# First Slide
+
+No images here
+`
+	if err := os.WriteFile(mdFile, []byte(content), 0644); err != nil {
+		t.Fatalf("failed to write test file: %v", err)
+	}
+
+	model, err := NewImageGenModel(mdFile)
+	if err != nil {
+		t.Fatalf("failed to create model: %v", err)
+	}
+
+	// Select the slide (press enter)
+	newModel, _ := model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m := newModel.(*ImageGenModel)
+
+	// Should skip directly to prompt step (no AI images to choose from)
+	if m.Step != ImageGenStepPrompt {
+		t.Errorf("expected ImageGenStepPrompt, got %d", m.Step)
+	}
+}
+
+func TestImageGenModel_ImageSelectNavigation(t *testing.T) {
+	tmpDir := t.TempDir()
+	mdFile := filepath.Join(tmpDir, "test.md")
+
+	content := `# Slide
+
+<!-- ai-prompt: first image -->
+![](images/first.png)
+
+<!-- ai-prompt: second image -->
+![](images/second.png)
+
+<!-- ai-prompt: third image -->
+![](images/third.png)
+`
+	if err := os.WriteFile(mdFile, []byte(content), 0644); err != nil {
+		t.Fatalf("failed to write test file: %v", err)
+	}
+
+	model, err := NewImageGenModel(mdFile)
+	if err != nil {
+		t.Fatalf("failed to create model: %v", err)
+	}
+
+	// Select slide
+	newModel, _ := model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m := newModel.(*ImageGenModel)
+
+	// Should have 4 options: add new + 3 regenerate
+	if len(m.ImageOptions) != 4 {
+		t.Fatalf("expected 4 image options, got %d", len(m.ImageOptions))
+	}
+
+	// Initial selection should be 0
+	if m.ImageOptionIndex != 0 {
+		t.Errorf("expected ImageOptionIndex 0, got %d", m.ImageOptionIndex)
+	}
+
+	// Navigate down with 'j'
+	newModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")})
+	m = newModel.(*ImageGenModel)
+	if m.ImageOptionIndex != 1 {
+		t.Errorf("expected ImageOptionIndex 1 after 'j', got %d", m.ImageOptionIndex)
+	}
+
+	// Navigate down with 'down'
+	newModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	m = newModel.(*ImageGenModel)
+	if m.ImageOptionIndex != 2 {
+		t.Errorf("expected ImageOptionIndex 2 after 'down', got %d", m.ImageOptionIndex)
+	}
+
+	// Navigate up with 'k'
+	newModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("k")})
+	m = newModel.(*ImageGenModel)
+	if m.ImageOptionIndex != 1 {
+		t.Errorf("expected ImageOptionIndex 1 after 'k', got %d", m.ImageOptionIndex)
+	}
+
+	// Navigate up with 'up'
+	newModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyUp})
+	m = newModel.(*ImageGenModel)
+	if m.ImageOptionIndex != 0 {
+		t.Errorf("expected ImageOptionIndex 0 after 'up', got %d", m.ImageOptionIndex)
+	}
+
+	// Can't go below 0
+	newModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyUp})
+	m = newModel.(*ImageGenModel)
+	if m.ImageOptionIndex != 0 {
+		t.Errorf("expected ImageOptionIndex 0 at boundary, got %d", m.ImageOptionIndex)
+	}
+
+	// Navigate to last option
+	for i := 0; i < 3; i++ {
+		newModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
+		m = newModel.(*ImageGenModel)
+	}
+	if m.ImageOptionIndex != 3 {
+		t.Errorf("expected ImageOptionIndex 3, got %d", m.ImageOptionIndex)
+	}
+
+	// Can't go past last
+	newModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	m = newModel.(*ImageGenModel)
+	if m.ImageOptionIndex != 3 {
+		t.Errorf("expected ImageOptionIndex 3 at boundary, got %d", m.ImageOptionIndex)
+	}
+}
+
+func TestImageGenModel_ImageSelectAddNew(t *testing.T) {
+	tmpDir := t.TempDir()
+	mdFile := filepath.Join(tmpDir, "test.md")
+
+	content := `# Slide
+
+<!-- ai-prompt: existing prompt -->
+![](images/existing.png)
+`
+	if err := os.WriteFile(mdFile, []byte(content), 0644); err != nil {
+		t.Fatalf("failed to write test file: %v", err)
+	}
+
+	model, err := NewImageGenModel(mdFile)
+	if err != nil {
+		t.Fatalf("failed to create model: %v", err)
+	}
+
+	// Select slide
+	newModel, _ := model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m := newModel.(*ImageGenModel)
+
+	// Select "Add new image" (first option, index 0)
+	newModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = newModel.(*ImageGenModel)
+
+	// Should be in prompt step
+	if m.Step != ImageGenStepPrompt {
+		t.Errorf("expected ImageGenStepPrompt, got %d", m.Step)
+	}
+
+	// SelectedImage should be nil (adding new)
+	if m.SelectedImage != nil {
+		t.Error("SelectedImage should be nil when adding new")
+	}
+
+	// Prompt should be empty
+	if m.Prompt != "" {
+		t.Errorf("expected empty prompt, got %q", m.Prompt)
+	}
+}
+
+func TestImageGenModel_ImageSelectRegenerate(t *testing.T) {
+	tmpDir := t.TempDir()
+	mdFile := filepath.Join(tmpDir, "test.md")
+
+	content := `# Slide
+
+<!-- ai-prompt: existing prompt for testing -->
+![](images/existing.png)
+`
+	if err := os.WriteFile(mdFile, []byte(content), 0644); err != nil {
+		t.Fatalf("failed to write test file: %v", err)
+	}
+
+	model, err := NewImageGenModel(mdFile)
+	if err != nil {
+		t.Fatalf("failed to create model: %v", err)
+	}
+
+	// Select slide
+	newModel, _ := model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m := newModel.(*ImageGenModel)
+
+	// Navigate to regenerate option (index 1)
+	newModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	m = newModel.(*ImageGenModel)
+
+	// Select regenerate option
+	newModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = newModel.(*ImageGenModel)
+
+	// Should be in prompt step
+	if m.Step != ImageGenStepPrompt {
+		t.Errorf("expected ImageGenStepPrompt, got %d", m.Step)
+	}
+
+	// SelectedImage should be set
+	if m.SelectedImage == nil {
+		t.Fatal("SelectedImage should not be nil when regenerating")
+	}
+
+	// Prompt should be pre-filled
+	if m.Prompt != "existing prompt for testing" {
+		t.Errorf("expected prompt 'existing prompt for testing', got %q", m.Prompt)
+	}
+
+	// ImagePath should be set
+	if m.SelectedImage.ImagePath != "images/existing.png" {
+		t.Errorf("expected ImagePath 'images/existing.png', got %q", m.SelectedImage.ImagePath)
+	}
+}
+
+func TestImageGenModel_ImageSelectEscapeGoesBack(t *testing.T) {
+	tmpDir := t.TempDir()
+	mdFile := filepath.Join(tmpDir, "test.md")
+
+	content := `# Slide
+
+<!-- ai-prompt: test -->
+![](images/test.png)
+`
+	if err := os.WriteFile(mdFile, []byte(content), 0644); err != nil {
+		t.Fatalf("failed to write test file: %v", err)
+	}
+
+	model, err := NewImageGenModel(mdFile)
+	if err != nil {
+		t.Fatalf("failed to create model: %v", err)
+	}
+
+	// Select slide to go to image select
+	newModel, _ := model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m := newModel.(*ImageGenModel)
+
+	if m.Step != ImageGenStepImageSelect {
+		t.Fatalf("expected ImageGenStepImageSelect, got %d", m.Step)
+	}
+
+	// Press escape to go back
+	newModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m = newModel.(*ImageGenModel)
+
+	// Should be back in slide select
+	if m.Step != ImageGenStepSlideSelect {
+		t.Errorf("expected ImageGenStepSlideSelect after esc, got %d", m.Step)
+	}
+
+	// ImageOptions should be cleared
+	if m.ImageOptions != nil {
+		t.Error("ImageOptions should be nil after going back")
+	}
+}
+
+func TestImageGenModel_ImageSelectView(t *testing.T) {
+	tmpDir := t.TempDir()
+	mdFile := filepath.Join(tmpDir, "test.md")
+
+	content := `# My Test Slide
+
+<!-- ai-prompt: first prompt -->
+![](images/first.png)
+
+<!-- ai-prompt: second prompt -->
+![](images/second.png)
+`
+	if err := os.WriteFile(mdFile, []byte(content), 0644); err != nil {
+		t.Fatalf("failed to write test file: %v", err)
+	}
+
+	model, err := NewImageGenModel(mdFile)
+	if err != nil {
+		t.Fatalf("failed to create model: %v", err)
+	}
+
+	// Select slide to go to image select
+	newModel, _ := model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m := newModel.(*ImageGenModel)
+
+	view := m.View()
+
+	// Should contain title
+	if !strings.Contains(view, "Select Action") {
+		t.Error("view should contain 'Select Action'")
+	}
+
+	// Should show slide info
+	if !strings.Contains(view, "My Test Slide") {
+		t.Error("view should contain slide title")
+	}
+
+	// Should show "Add new image" option
+	if !strings.Contains(view, "Add new image") {
+		t.Error("view should contain 'Add new image'")
+	}
+
+	// Should show regenerate options with prompt previews
+	if !strings.Contains(view, "Regenerate:") {
+		t.Error("view should contain 'Regenerate:'")
+	}
+	if !strings.Contains(view, "first prompt") {
+		t.Error("view should contain 'first prompt'")
+	}
+	if !strings.Contains(view, "second prompt") {
+		t.Error("view should contain 'second prompt'")
+	}
+
+	// Should have selection indicator
+	if !strings.Contains(view, ">") {
+		t.Error("view should contain '>' selection indicator")
+	}
+
+	// Should have help text
+	if !strings.Contains(view, "navigate") {
+		t.Error("view should contain 'navigate' in help text")
+	}
+	if !strings.Contains(view, "back") {
+		t.Error("view should contain 'back' in help text")
+	}
+}
+
+func TestImageGenModel_MultipleAIImagesShowAllOptions(t *testing.T) {
+	tmpDir := t.TempDir()
+	mdFile := filepath.Join(tmpDir, "test.md")
+
+	content := `# Slide
+
+<!-- ai-prompt: image one -->
+![](images/one.png)
+
+<!-- ai-prompt: image two -->
+![](images/two.png)
+
+<!-- ai-prompt: image three -->
+![](images/three.png)
+`
+	if err := os.WriteFile(mdFile, []byte(content), 0644); err != nil {
+		t.Fatalf("failed to write test file: %v", err)
+	}
+
+	model, err := NewImageGenModel(mdFile)
+	if err != nil {
+		t.Fatalf("failed to create model: %v", err)
+	}
+
+	// Select slide
+	newModel, _ := model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m := newModel.(*ImageGenModel)
+
+	// Should have 4 options: 1 add new + 3 regenerate
+	if len(m.ImageOptions) != 4 {
+		t.Fatalf("expected 4 image options, got %d", len(m.ImageOptions))
+	}
+
+	// Verify first option is add new
+	if !m.ImageOptions[0].IsAddNew {
+		t.Error("first option should be IsAddNew")
+	}
+
+	// Verify regenerate options
+	expectedPrompts := []string{"image one", "image two", "image three"}
+	for i, expected := range expectedPrompts {
+		optionIdx := i + 1 // offset by 1 for "add new"
+		if m.ImageOptions[optionIdx].IsAddNew {
+			t.Errorf("option %d should not be IsAddNew", optionIdx)
+		}
+		if m.ImageOptions[optionIdx].AIImage == nil {
+			t.Errorf("option %d AIImage should not be nil", optionIdx)
+			continue
+		}
+		if m.ImageOptions[optionIdx].AIImage.Prompt != expected {
+			t.Errorf("option %d: expected prompt %q, got %q", optionIdx, expected, m.ImageOptions[optionIdx].AIImage.Prompt)
+		}
+	}
+}
+
+func TestImageGenModel_LongPromptTruncated(t *testing.T) {
+	tmpDir := t.TempDir()
+	mdFile := filepath.Join(tmpDir, "test.md")
+
+	longPrompt := "This is a very long prompt that should be truncated because it exceeds forty characters"
+	content := fmt.Sprintf(`# Slide
+
+<!-- ai-prompt: %s -->
+![](images/long.png)
+`, longPrompt)
+	if err := os.WriteFile(mdFile, []byte(content), 0644); err != nil {
+		t.Fatalf("failed to write test file: %v", err)
+	}
+
+	model, err := NewImageGenModel(mdFile)
+	if err != nil {
+		t.Fatalf("failed to create model: %v", err)
+	}
+
+	// Select slide
+	newModel, _ := model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m := newModel.(*ImageGenModel)
+
+	// Check the regenerate option label is truncated
+	if len(m.ImageOptions) < 2 {
+		t.Fatal("expected at least 2 options")
+	}
+
+	label := m.ImageOptions[1].Label
+	if !strings.Contains(label, "...") {
+		t.Error("long prompt should be truncated with '...'")
+	}
+
+	// Original prompt should still be preserved in AIImage
+	if m.ImageOptions[1].AIImage.Prompt != longPrompt {
+		t.Error("original prompt should be preserved in AIImage")
 	}
 }
