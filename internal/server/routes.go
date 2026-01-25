@@ -29,6 +29,9 @@ func (s *Server) SetupRoutes() {
 	// Serve static assets (JS, CSS) from embedded dist/assets/
 	s.mux.HandleFunc("GET /assets/", s.handleAssets)
 
+	// Serve local files (images, etc.) from the presentation's base directory
+	s.mux.HandleFunc("GET /local/", s.handleLocalFiles)
+
 	// Note: We don't wrap with logging middleware here because the TUI
 	// manages the terminal in alternate screen mode, and raw fmt.Printf
 	// output would interfere with the display. HTTP activity is visible
@@ -182,6 +185,49 @@ func (s *Server) handleAssets(w http.ResponseWriter, r *http.Request) {
 	// For development, use short cache; in production builds, these files are immutable
 	w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(content)
+}
+
+// handleLocalFiles serves local files (images, etc.) from the presentation's base directory.
+func (s *Server) handleLocalFiles(w http.ResponseWriter, r *http.Request) {
+	baseDir := s.GetBaseDir()
+	if baseDir == "" {
+		http.Error(w, "Base directory not configured", http.StatusInternalServerError)
+		return
+	}
+
+	// Get the requested file path, stripping "/local/" prefix
+	requestedPath := strings.TrimPrefix(r.URL.Path, "/local/")
+	if requestedPath == "" {
+		http.NotFound(w, r)
+		return
+	}
+
+	// Security: prevent directory traversal
+	if strings.Contains(requestedPath, "..") {
+		http.Error(w, "Invalid path", http.StatusBadRequest)
+		return
+	}
+
+	// Construct the full file path
+	fullPath := path.Join(baseDir, requestedPath)
+
+	// Read the file
+	content, err := os.ReadFile(fullPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			http.NotFound(w, r)
+			return
+		}
+		http.Error(w, "Failed to read file", http.StatusInternalServerError)
+		return
+	}
+
+	// Set content type based on extension
+	contentType := getContentType(fullPath)
+	w.Header().Set("Content-Type", contentType)
+	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(content)
 }

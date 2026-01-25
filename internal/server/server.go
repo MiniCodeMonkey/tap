@@ -28,6 +28,7 @@ type Server struct {
 	addr              string
 	presenterPassword string
 	customThemePath   string
+	baseDir           string // Base directory for serving local files (images, etc.)
 	mu                sync.RWMutex
 	started           bool
 }
@@ -222,4 +223,18 @@ func (s *Server) GetCustomThemePath() string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.customThemePath
+}
+
+// SetBaseDir sets the base directory for serving local files.
+func (s *Server) SetBaseDir(dir string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.baseDir = dir
+}
+
+// GetBaseDir returns the base directory for serving local files.
+func (s *Server) GetBaseDir() string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.baseDir
 }

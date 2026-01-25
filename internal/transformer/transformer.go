@@ -96,9 +96,11 @@ func (t *Transformer) transformSlide(slide parser.Slide) TransformedSlide {
 	layout := t.resolveLayout(slide)
 	html := t.resolveImagePaths(slide.HTML)
 
-	// Process HTML for special layouts
-	if layout == "two-column" {
+	// Process HTML for layouts that use ||| column separator
+	if layout == "two-column" || layout == "split-media" || layout == "sidebar" {
 		html = processTwoColumnHTML(html)
+	} else if layout == "three-column" {
+		html = processThreeColumnHTML(html)
 	}
 
 	transformed := TransformedSlide{
@@ -378,20 +380,54 @@ func processTwoColumnHTML(html string) string {
 		`<div class="column column-right">` + rightContent + `</div>`
 }
 
+// processThreeColumnHTML transforms HTML content for three-column layout.
+// It finds the ||| separators and wraps content in column divs.
+func processThreeColumnHTML(html string) string {
+	// Find the first separator
+	loc1 := columnSeparatorPattern.FindStringIndex(html)
+	if loc1 == nil {
+		// No separator found, return as-is
+		return html
+	}
+
+	// Split at the first separator
+	leftContent := strings.TrimSpace(html[:loc1[0]])
+	remaining := strings.TrimSpace(html[loc1[1]:])
+
+	// Find the second separator
+	loc2 := columnSeparatorPattern.FindStringIndex(remaining)
+	if loc2 == nil {
+		// Only two parts, treat as two-column
+		return `<div class="column">` + leftContent + `</div>` +
+			`<div class="column">` + remaining + `</div>`
+	}
+
+	// Three parts
+	middleContent := strings.TrimSpace(remaining[:loc2[0]])
+	rightContent := strings.TrimSpace(remaining[loc2[1]:])
+
+	return `<div class="column">` + leftContent + `</div>` +
+		`<div class="column">` + middleContent + `</div>` +
+		`<div class="column">` + rightContent + `</div>`
+}
+
 // parseBackground parses a background directive value and determines its type.
 func (t *Transformer) parseBackground(value string) *BackgroundConfig {
 	// Detect background type based on value format
 	bgType := "color"
+	resolvedValue := value
 
 	// Check for image (URL or file path)
 	if isImageURL(value) {
 		bgType = "image"
+		// Resolve relative image paths to /local/ URLs
+		resolvedValue = t.resolveImagePath(value)
 	} else if isGradient(value) {
 		bgType = "gradient"
 	}
 
 	return &BackgroundConfig{
-		Value: value,
+		Value: resolvedValue,
 		Type:  bgType,
 	}
 }
@@ -454,11 +490,11 @@ func (t *Transformer) resolveImagePaths(html string) string {
 	})
 }
 
-// resolveImagePath resolves a single image path relative to the base directory.
+// resolveImagePath resolves a single image path to a URL for the dev server.
 // It handles:
 // - Absolute URLs (https://, http://) - returned unchanged
 // - Absolute file paths (starting with /) - returned unchanged
-// - Relative paths - resolved relative to baseDir
+// - Relative paths - converted to /local/... URL for dev server
 func (t *Transformer) resolveImagePath(path string) string {
 	// Return unchanged if path is empty
 	if path == "" {
@@ -485,12 +521,15 @@ func (t *Transformer) resolveImagePath(path string) string {
 		return path
 	}
 
-	// Resolve relative to base directory
+	// Convert to /local/ URL for the dev server
 	// Clean the path to remove . and .. components
-	resolved := filepath.Join(t.baseDir, path)
-	resolved = filepath.Clean(resolved)
+	cleanPath := filepath.Clean(path)
+	// Convert Windows backslashes to forward slashes for URL
+	cleanPath = strings.ReplaceAll(cleanPath, "\\", "/")
+	// Remove leading ./ if present
+	cleanPath = strings.TrimPrefix(cleanPath, "./")
 
-	return resolved
+	return "/local/" + cleanPath
 }
 
 // isAbsoluteURL checks if the path is an absolute URL (http:// or https://).
