@@ -35,6 +35,8 @@ type SlideInfo struct {
 	HasAIImages bool
 	// AIImageCount is the number of AI-generated images on the slide.
 	AIImageCount int
+	// AIImages contains info about each AI-generated image on the slide.
+	AIImages []AIImageInfo
 }
 
 // ImageGenModel is the Bubble Tea model for the image generation workflow.
@@ -88,6 +90,23 @@ var headingRe = regexp.MustCompile(`(?m)^#+\s+(.+)$`)
 // frontmatterRe matches YAML frontmatter at the start of a file.
 var frontmatterRe = regexp.MustCompile(`(?s)^---\n.*?\n---\n?`)
 
+// aiPromptRe matches AI prompt comments: <!-- ai-prompt: ... -->
+// It captures the prompt text in group 1.
+var aiPromptRe = regexp.MustCompile(`<!--\s*ai-prompt:\s*(.+?)\s*-->`)
+
+// aiImageRe matches AI prompt comments followed by an image on the next line.
+// Group 1: prompt text, Group 2: image path
+// Only matches if the image is directly on the next line (possibly with leading spaces, but no blank lines).
+var aiImageRe = regexp.MustCompile(`<!--\s*ai-prompt:\s*(.+?)\s*-->\n[ \t]*!\[\]\(([^)]+)\)`)
+
+// AIImageInfo contains information about an AI-generated image.
+type AIImageInfo struct {
+	// Prompt is the AI prompt used to generate the image.
+	Prompt string
+	// ImagePath is the path to the generated image file.
+	ImagePath string
+}
+
 // parseSlides extracts slide information from markdown content.
 func parseSlides(content string) []SlideInfo {
 	// Remove frontmatter if present
@@ -103,15 +122,40 @@ func parseSlides(content string) []SlideInfo {
 			continue
 		}
 
+		aiImages := parseAIImages(part)
 		slide := SlideInfo{
-			Index: len(slides),
-			Title: extractSlideTitle(part),
+			Index:        len(slides),
+			Title:        extractSlideTitle(part),
+			AIImages:     aiImages,
+			HasAIImages:  len(aiImages) > 0,
+			AIImageCount: len(aiImages),
 		}
 
 		slides = append(slides, slide)
 	}
 
 	return slides
+}
+
+// parseAIImages extracts AI-generated image info from slide content.
+// It looks for <!-- ai-prompt: ... --> comments followed by image references.
+func parseAIImages(content string) []AIImageInfo {
+	matches := aiImageRe.FindAllStringSubmatch(content, -1)
+	if matches == nil {
+		return nil
+	}
+
+	images := make([]AIImageInfo, 0, len(matches))
+	for _, match := range matches {
+		if len(match) >= 3 {
+			images = append(images, AIImageInfo{
+				Prompt:    match[1],
+				ImagePath: match[2],
+			})
+		}
+	}
+
+	return images
 }
 
 // extractSlideTitle extracts the title from slide content.
@@ -226,6 +270,16 @@ func (m *ImageGenModel) viewSlideSelect() string {
 	for i, slide := range m.Slides {
 		slideNum := fmt.Sprintf("%2d.", slide.Index+1)
 
+		// Build AI image indicator if slide has AI images
+		aiIndicator := ""
+		if slide.HasAIImages {
+			if slide.AIImageCount == 1 {
+				aiIndicator = " [has 1 AI image]"
+			} else {
+				aiIndicator = fmt.Sprintf(" [has %d AI images]", slide.AIImageCount)
+			}
+		}
+
 		if i == m.SelectedIndex {
 			// Selected item
 			selectedStyle := lipgloss.NewStyle().
@@ -234,22 +288,34 @@ func (m *ImageGenModel) viewSlideSelect() string {
 			numStyle := lipgloss.NewStyle().
 				Bold(true).
 				Foreground(ColorPrimary)
+			indicatorStyle := lipgloss.NewStyle().
+				Foreground(ColorMuted).
+				Italic(true)
 
 			b.WriteString(numStyle.Render("> "))
 			b.WriteString(numStyle.Render(slideNum))
 			b.WriteString(" ")
 			b.WriteString(selectedStyle.Render(slide.Title))
+			if aiIndicator != "" {
+				b.WriteString(indicatorStyle.Render(aiIndicator))
+			}
 		} else {
 			// Unselected item
 			unselectedStyle := lipgloss.NewStyle().
 				Foreground(ColorWhite)
 			numStyle := lipgloss.NewStyle().
 				Foreground(ColorMuted)
+			indicatorStyle := lipgloss.NewStyle().
+				Foreground(ColorMuted).
+				Italic(true)
 
 			b.WriteString("  ")
 			b.WriteString(numStyle.Render(slideNum))
 			b.WriteString(" ")
 			b.WriteString(unselectedStyle.Render(slide.Title))
+			if aiIndicator != "" {
+				b.WriteString(indicatorStyle.Render(aiIndicator))
+			}
 		}
 		b.WriteString("\n")
 	}

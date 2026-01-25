@@ -482,3 +482,221 @@ func TestSlideInfo_SlideIndex(t *testing.T) {
 		}
 	}
 }
+
+func TestParseAIImages(t *testing.T) {
+	tests := []struct {
+		name          string
+		content       string
+		expectedCount int
+		expectedItems []AIImageInfo
+	}{
+		{
+			name:          "no AI images",
+			content:       "# Slide Title\n\nSome content here",
+			expectedCount: 0,
+			expectedItems: nil,
+		},
+		{
+			name:          "single AI image",
+			content:       "# Slide Title\n\n<!-- ai-prompt: a beautiful sunset -->\n![](images/generated-abc123.png)",
+			expectedCount: 1,
+			expectedItems: []AIImageInfo{
+				{Prompt: "a beautiful sunset", ImagePath: "images/generated-abc123.png"},
+			},
+		},
+		{
+			name:          "multiple AI images",
+			content:       "# Slide Title\n\n<!-- ai-prompt: first image -->\n![](images/first.png)\n\nSome text\n\n<!-- ai-prompt: second image -->\n![](images/second.png)",
+			expectedCount: 2,
+			expectedItems: []AIImageInfo{
+				{Prompt: "first image", ImagePath: "images/first.png"},
+				{Prompt: "second image", ImagePath: "images/second.png"},
+			},
+		},
+		{
+			name:          "AI prompt without image",
+			content:       "# Slide Title\n\n<!-- ai-prompt: orphan prompt -->\n\nSome text but no image",
+			expectedCount: 0,
+			expectedItems: nil,
+		},
+		{
+			name:          "regular image without AI prompt",
+			content:       "# Slide Title\n\n![Alt text](images/regular.png)",
+			expectedCount: 0,
+			expectedItems: nil,
+		},
+		{
+			name:          "AI prompt with spaces",
+			content:       "<!--   ai-prompt:   a detailed prompt with spaces   -->\n![](images/test.png)",
+			expectedCount: 1,
+			expectedItems: []AIImageInfo{
+				{Prompt: "a detailed prompt with spaces", ImagePath: "images/test.png"},
+			},
+		},
+		{
+			name:          "AI image with relative path",
+			content:       "<!-- ai-prompt: test -->\n![](./images/local.png)",
+			expectedCount: 1,
+			expectedItems: []AIImageInfo{
+				{Prompt: "test", ImagePath: "./images/local.png"},
+			},
+		},
+		{
+			name:          "AI image with whitespace between comment and image",
+			content:       "<!-- ai-prompt: test -->\n   \n![](images/test.png)",
+			expectedCount: 0,
+			expectedItems: nil, // Should not match if there's extra whitespace (blank line)
+		},
+		{
+			name:          "AI image with newline and leading spaces",
+			content:       "<!-- ai-prompt: test -->\n  ![](images/test.png)",
+			expectedCount: 1,
+			expectedItems: []AIImageInfo{
+				{Prompt: "test", ImagePath: "images/test.png"},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			images := parseAIImages(tt.content)
+
+			if len(images) != tt.expectedCount {
+				t.Errorf("expected %d AI images, got %d", tt.expectedCount, len(images))
+			}
+
+			for i, expected := range tt.expectedItems {
+				if i >= len(images) {
+					break
+				}
+				if images[i].Prompt != expected.Prompt {
+					t.Errorf("image %d: expected prompt %q, got %q", i, expected.Prompt, images[i].Prompt)
+				}
+				if images[i].ImagePath != expected.ImagePath {
+					t.Errorf("image %d: expected path %q, got %q", i, expected.ImagePath, images[i].ImagePath)
+				}
+			}
+		})
+	}
+}
+
+func TestParseSlides_WithAIImages(t *testing.T) {
+	content := `# First Slide
+
+Some content
+
+---
+
+# Second Slide
+
+<!-- ai-prompt: a mountain landscape -->
+![](images/mountain.png)
+
+---
+
+# Third Slide
+
+<!-- ai-prompt: image one -->
+![](images/one.png)
+
+Some text
+
+<!-- ai-prompt: image two -->
+![](images/two.png)
+`
+
+	slides := parseSlides(content)
+
+	if len(slides) != 3 {
+		t.Fatalf("expected 3 slides, got %d", len(slides))
+	}
+
+	// First slide - no AI images
+	if slides[0].HasAIImages {
+		t.Error("slide 0: should not have AI images")
+	}
+	if slides[0].AIImageCount != 0 {
+		t.Errorf("slide 0: expected AIImageCount 0, got %d", slides[0].AIImageCount)
+	}
+
+	// Second slide - one AI image
+	if !slides[1].HasAIImages {
+		t.Error("slide 1: should have AI images")
+	}
+	if slides[1].AIImageCount != 1 {
+		t.Errorf("slide 1: expected AIImageCount 1, got %d", slides[1].AIImageCount)
+	}
+	if len(slides[1].AIImages) != 1 {
+		t.Fatalf("slide 1: expected 1 AIImage, got %d", len(slides[1].AIImages))
+	}
+	if slides[1].AIImages[0].Prompt != "a mountain landscape" {
+		t.Errorf("slide 1: expected prompt 'a mountain landscape', got %q", slides[1].AIImages[0].Prompt)
+	}
+
+	// Third slide - two AI images
+	if !slides[2].HasAIImages {
+		t.Error("slide 2: should have AI images")
+	}
+	if slides[2].AIImageCount != 2 {
+		t.Errorf("slide 2: expected AIImageCount 2, got %d", slides[2].AIImageCount)
+	}
+	if len(slides[2].AIImages) != 2 {
+		t.Fatalf("slide 2: expected 2 AIImages, got %d", len(slides[2].AIImages))
+	}
+	if slides[2].AIImages[0].Prompt != "image one" {
+		t.Errorf("slide 2 image 0: expected prompt 'image one', got %q", slides[2].AIImages[0].Prompt)
+	}
+	if slides[2].AIImages[1].Prompt != "image two" {
+		t.Errorf("slide 2 image 1: expected prompt 'image two', got %q", slides[2].AIImages[1].Prompt)
+	}
+}
+
+func TestImageGenModel_View_WithAIImageIndicator(t *testing.T) {
+	tmpDir := t.TempDir()
+	mdFile := filepath.Join(tmpDir, "test.md")
+
+	content := `# First Slide
+
+No images here
+
+---
+
+# Second Slide
+
+<!-- ai-prompt: test prompt -->
+![](images/test.png)
+
+---
+
+# Third Slide
+
+<!-- ai-prompt: prompt one -->
+![](images/one.png)
+
+<!-- ai-prompt: prompt two -->
+![](images/two.png)
+`
+	if err := os.WriteFile(mdFile, []byte(content), 0644); err != nil {
+		t.Fatalf("failed to write test file: %v", err)
+	}
+
+	model, err := NewImageGenModel(mdFile)
+	if err != nil {
+		t.Fatalf("failed to create model: %v", err)
+	}
+
+	view := model.View()
+
+	// First slide should not have indicator
+	// (we check by ensuring the indicator appears in the right places)
+
+	// Second slide should show "[has 1 AI image]"
+	if !strings.Contains(view, "[has 1 AI image]") {
+		t.Error("view should contain '[has 1 AI image]' for slide with 1 AI image")
+	}
+
+	// Third slide should show "[has 2 AI images]"
+	if !strings.Contains(view, "[has 2 AI images]") {
+		t.Error("view should contain '[has 2 AI images]' for slide with 2 AI images")
+	}
+}
