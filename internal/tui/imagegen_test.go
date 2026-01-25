@@ -1,13 +1,16 @@
 package tui
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/tapsh/tap/internal/gemini"
 )
 
 func TestParseSlides(t *testing.T) {
@@ -1578,5 +1581,574 @@ Content
 	view := m.View()
 	if !strings.Contains(view, "Error") {
 		t.Error("view should show error message")
+	}
+}
+
+// Tests for generating step (US-014)
+
+func TestImageGenModel_GeneratingStep(t *testing.T) {
+	tmpDir := t.TempDir()
+	mdFile := filepath.Join(tmpDir, "test.md")
+
+	content := `# Test Slide
+
+Content here
+`
+	if err := os.WriteFile(mdFile, []byte(content), 0644); err != nil {
+		t.Fatalf("failed to write test file: %v", err)
+	}
+
+	model, err := NewImageGenModel(mdFile)
+	if err != nil {
+		t.Fatalf("failed to create model: %v", err)
+	}
+
+	// Go to prompt step
+	newModel, _ := model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m := newModel.(*ImageGenModel)
+
+	// Set a prompt and submit
+	m.promptInput.SetValue("A test image prompt")
+	newModel, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = newModel.(*ImageGenModel)
+
+	// Should be in generating step
+	if m.Step != ImageGenStepGenerating {
+		t.Errorf("expected ImageGenStepGenerating, got %d", m.Step)
+	}
+
+	// IsGenerating should be true
+	if !m.IsGenerating {
+		t.Error("IsGenerating should be true")
+	}
+
+	// Prompt should be captured
+	if m.Prompt != "A test image prompt" {
+		t.Errorf("expected prompt 'A test image prompt', got %q", m.Prompt)
+	}
+
+	// Should return a command (for spinner and generation)
+	if cmd == nil {
+		t.Error("expected non-nil cmd for generation")
+	}
+}
+
+func TestImageGenModel_GeneratingViewShowsSpinner(t *testing.T) {
+	tmpDir := t.TempDir()
+	mdFile := filepath.Join(tmpDir, "test.md")
+
+	content := `# My Test Slide
+
+Content
+`
+	if err := os.WriteFile(mdFile, []byte(content), 0644); err != nil {
+		t.Fatalf("failed to write test file: %v", err)
+	}
+
+	model, err := NewImageGenModel(mdFile)
+	if err != nil {
+		t.Fatalf("failed to create model: %v", err)
+	}
+
+	// Manually set to generating step
+	model.Step = ImageGenStepGenerating
+	model.IsGenerating = true
+	model.Prompt = "A beautiful landscape"
+
+	view := model.View()
+
+	// Should contain title
+	if !strings.Contains(view, "Generating Image") {
+		t.Error("view should contain 'Generating Image'")
+	}
+
+	// Should show slide info
+	if !strings.Contains(view, "My Test Slide") {
+		t.Error("view should contain slide title")
+	}
+
+	// Should show prompt
+	if !strings.Contains(view, "Prompt:") {
+		t.Error("view should show prompt label")
+	}
+	if !strings.Contains(view, "A beautiful landscape") {
+		t.Error("view should show the prompt text")
+	}
+
+	// Should show generating message
+	if !strings.Contains(view, "Generating image") {
+		t.Error("view should contain 'Generating image'")
+	}
+}
+
+func TestImageGenModel_GeneratingViewTruncatesLongPrompt(t *testing.T) {
+	tmpDir := t.TempDir()
+	mdFile := filepath.Join(tmpDir, "test.md")
+
+	content := `# Test Slide
+
+Content
+`
+	if err := os.WriteFile(mdFile, []byte(content), 0644); err != nil {
+		t.Fatalf("failed to write test file: %v", err)
+	}
+
+	model, err := NewImageGenModel(mdFile)
+	if err != nil {
+		t.Fatalf("failed to create model: %v", err)
+	}
+
+	// Set a very long prompt
+	longPrompt := "This is a very very very long prompt that should be truncated because it exceeds sixty characters in length"
+	model.Step = ImageGenStepGenerating
+	model.IsGenerating = true
+	model.Prompt = longPrompt
+
+	view := model.View()
+
+	// Should contain truncated prompt with "..."
+	if !strings.Contains(view, "...") {
+		t.Error("long prompt should be truncated with '...'")
+	}
+
+	// Should not contain the full prompt
+	if strings.Contains(view, longPrompt) {
+		t.Error("view should not contain the full long prompt")
+	}
+}
+
+func TestImageGenModel_HandleImageGenerateSuccess(t *testing.T) {
+	tmpDir := t.TempDir()
+	mdFile := filepath.Join(tmpDir, "test.md")
+
+	content := `# Test Slide
+
+Content
+`
+	if err := os.WriteFile(mdFile, []byte(content), 0644); err != nil {
+		t.Fatalf("failed to write test file: %v", err)
+	}
+
+	model, err := NewImageGenModel(mdFile)
+	if err != nil {
+		t.Fatalf("failed to create model: %v", err)
+	}
+
+	// Set to generating step
+	model.Step = ImageGenStepGenerating
+	model.IsGenerating = true
+	model.Prompt = "Test prompt"
+
+	// Simulate successful generation
+	result := ImageGenerateResult{
+		ImageData:   []byte("fake image data"),
+		ContentType: "image/png",
+	}
+	newModel, _ := model.Update(imageGenerateMsg{result: result})
+	m := newModel.(*ImageGenModel)
+
+	// Should be in done step
+	if m.Step != ImageGenStepDone {
+		t.Errorf("expected ImageGenStepDone, got %d", m.Step)
+	}
+
+	// IsGenerating should be false
+	if m.IsGenerating {
+		t.Error("IsGenerating should be false after success")
+	}
+
+	// GeneratedImage should be set
+	if m.GeneratedImage == nil {
+		t.Fatal("GeneratedImage should not be nil after success")
+	}
+
+	if string(m.GeneratedImage.ImageData) != "fake image data" {
+		t.Error("image data should match")
+	}
+
+	if m.GeneratedImage.ContentType != "image/png" {
+		t.Errorf("expected content type 'image/png', got %q", m.GeneratedImage.ContentType)
+	}
+
+	// No error
+	if m.Error != "" {
+		t.Errorf("expected no error, got %q", m.Error)
+	}
+}
+
+func TestImageGenModel_HandleImageGenerateError(t *testing.T) {
+	tmpDir := t.TempDir()
+	mdFile := filepath.Join(tmpDir, "test.md")
+
+	content := `# Test Slide
+
+Content
+`
+	if err := os.WriteFile(mdFile, []byte(content), 0644); err != nil {
+		t.Fatalf("failed to write test file: %v", err)
+	}
+
+	model, err := NewImageGenModel(mdFile)
+	if err != nil {
+		t.Fatalf("failed to create model: %v", err)
+	}
+
+	// Set to generating step
+	model.Step = ImageGenStepGenerating
+	model.IsGenerating = true
+	model.Prompt = "Test prompt"
+
+	// Simulate error
+	result := ImageGenerateResult{
+		Error: errors.New("generation failed"),
+	}
+	newModel, _ := model.Update(imageGenerateMsg{result: result})
+	m := newModel.(*ImageGenModel)
+
+	// Should stay in generating step (to show error)
+	if m.Step != ImageGenStepGenerating {
+		t.Errorf("expected ImageGenStepGenerating after error, got %d", m.Step)
+	}
+
+	// IsGenerating should be false
+	if m.IsGenerating {
+		t.Error("IsGenerating should be false after error")
+	}
+
+	// Error should be set
+	if m.Error == "" {
+		t.Error("Error should be set after generation failure")
+	}
+
+	// GeneratedImage should be nil
+	if m.GeneratedImage != nil {
+		t.Error("GeneratedImage should be nil after error")
+	}
+}
+
+func TestImageGenModel_GeneratingViewShowsError(t *testing.T) {
+	tmpDir := t.TempDir()
+	mdFile := filepath.Join(tmpDir, "test.md")
+
+	content := `# Test Slide
+
+Content
+`
+	if err := os.WriteFile(mdFile, []byte(content), 0644); err != nil {
+		t.Fatalf("failed to write test file: %v", err)
+	}
+
+	model, err := NewImageGenModel(mdFile)
+	if err != nil {
+		t.Fatalf("failed to create model: %v", err)
+	}
+
+	// Set to generating step with error
+	model.Step = ImageGenStepGenerating
+	model.IsGenerating = false
+	model.Prompt = "Test prompt"
+	model.Error = "Network error occurred"
+
+	view := model.View()
+
+	// Should show error message
+	if !strings.Contains(view, "Error:") {
+		t.Error("view should show 'Error:'")
+	}
+	if !strings.Contains(view, "Network error") {
+		t.Error("view should show the error message")
+	}
+
+	// Should show retry option
+	if !strings.Contains(view, "retry") {
+		t.Error("view should show retry option")
+	}
+
+	// Should show back option
+	if !strings.Contains(view, "back") || !strings.Contains(view, "esc") {
+		t.Error("view should show back/esc option")
+	}
+}
+
+func TestImageGenModel_GeneratingRetry(t *testing.T) {
+	tmpDir := t.TempDir()
+	mdFile := filepath.Join(tmpDir, "test.md")
+
+	content := `# Test Slide
+
+Content
+`
+	if err := os.WriteFile(mdFile, []byte(content), 0644); err != nil {
+		t.Fatalf("failed to write test file: %v", err)
+	}
+
+	model, err := NewImageGenModel(mdFile)
+	if err != nil {
+		t.Fatalf("failed to create model: %v", err)
+	}
+
+	// Set to generating step with error (so retry is allowed)
+	model.Step = ImageGenStepGenerating
+	model.IsGenerating = false
+	model.Prompt = "Test prompt"
+	model.Error = "Previous error"
+
+	// Press 'r' to retry
+	newModel, cmd := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("r")})
+	m := newModel.(*ImageGenModel)
+
+	// Should still be in generating step
+	if m.Step != ImageGenStepGenerating {
+		t.Errorf("expected ImageGenStepGenerating after retry, got %d", m.Step)
+	}
+
+	// IsGenerating should be true again
+	if !m.IsGenerating {
+		t.Error("IsGenerating should be true after retry")
+	}
+
+	// Error should be cleared
+	if m.Error != "" {
+		t.Errorf("Error should be cleared after retry, got %q", m.Error)
+	}
+
+	// Should return a command for the new generation
+	if cmd == nil {
+		t.Error("expected non-nil cmd after retry")
+	}
+}
+
+func TestImageGenModel_GeneratingEscapeGoesBackToPrompt(t *testing.T) {
+	tmpDir := t.TempDir()
+	mdFile := filepath.Join(tmpDir, "test.md")
+
+	content := `# Test Slide
+
+Content
+`
+	if err := os.WriteFile(mdFile, []byte(content), 0644); err != nil {
+		t.Fatalf("failed to write test file: %v", err)
+	}
+
+	model, err := NewImageGenModel(mdFile)
+	if err != nil {
+		t.Fatalf("failed to create model: %v", err)
+	}
+
+	// Set to generating step with error (so esc is allowed)
+	model.Step = ImageGenStepGenerating
+	model.IsGenerating = false
+	model.Prompt = "Test prompt"
+	model.Error = "Previous error"
+
+	// Press esc to go back
+	newModel, _ := model.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m := newModel.(*ImageGenModel)
+
+	// Should go back to prompt step
+	if m.Step != ImageGenStepPrompt {
+		t.Errorf("expected ImageGenStepPrompt after esc, got %d", m.Step)
+	}
+
+	// Error should be cleared
+	if m.Error != "" {
+		t.Errorf("Error should be cleared after going back, got %q", m.Error)
+	}
+
+	// IsGenerating should be false
+	if m.IsGenerating {
+		t.Error("IsGenerating should be false after going back")
+	}
+}
+
+func TestImageGenModel_GeneratingIgnoresKeysWhileActive(t *testing.T) {
+	tmpDir := t.TempDir()
+	mdFile := filepath.Join(tmpDir, "test.md")
+
+	content := `# Test Slide
+
+Content
+`
+	if err := os.WriteFile(mdFile, []byte(content), 0644); err != nil {
+		t.Fatalf("failed to write test file: %v", err)
+	}
+
+	model, err := NewImageGenModel(mdFile)
+	if err != nil {
+		t.Fatalf("failed to create model: %v", err)
+	}
+
+	// Set to generating step (actively generating, no error)
+	model.Step = ImageGenStepGenerating
+	model.IsGenerating = true
+	model.Prompt = "Test prompt"
+	model.Error = "" // No error, so keys should be ignored
+
+	// Try to press esc - should be ignored while generating
+	newModel, _ := model.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m := newModel.(*ImageGenModel)
+
+	// Should still be in generating step
+	if m.Step != ImageGenStepGenerating {
+		t.Errorf("expected to stay in ImageGenStepGenerating while generating, got %d", m.Step)
+	}
+
+	// Try to press 'r' - should be ignored while generating
+	newModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("r")})
+	m = newModel.(*ImageGenModel)
+
+	// Should still be in generating step
+	if m.Step != ImageGenStepGenerating {
+		t.Errorf("expected to stay in ImageGenStepGenerating while generating, got %d", m.Step)
+	}
+}
+
+func TestImageGenModel_SpinnerTickUpdate(t *testing.T) {
+	tmpDir := t.TempDir()
+	mdFile := filepath.Join(tmpDir, "test.md")
+
+	content := `# Test Slide
+
+Content
+`
+	if err := os.WriteFile(mdFile, []byte(content), 0644); err != nil {
+		t.Fatalf("failed to write test file: %v", err)
+	}
+
+	model, err := NewImageGenModel(mdFile)
+	if err != nil {
+		t.Fatalf("failed to create model: %v", err)
+	}
+
+	// Set to generating step
+	model.Step = ImageGenStepGenerating
+	model.IsGenerating = true
+	model.Prompt = "Test prompt"
+
+	// Send spinner tick message
+	newModel, cmd := model.Update(spinner.TickMsg{})
+	m := newModel.(*ImageGenModel)
+
+	// Should still be in generating step
+	if m.Step != ImageGenStepGenerating {
+		t.Errorf("expected ImageGenStepGenerating after spinner tick, got %d", m.Step)
+	}
+
+	// Should return a command (for next spinner tick)
+	if cmd == nil {
+		t.Error("expected non-nil cmd for next spinner tick")
+	}
+}
+
+func TestFormatAPIError(t *testing.T) {
+	tests := []struct {
+		name     string
+		err      error
+		contains string
+	}{
+		{
+			name:     "nil error",
+			err:      nil,
+			contains: "",
+		},
+		{
+			name:     "auth error",
+			err:      &gemini.APIError{Type: gemini.ErrorTypeAuth, Message: "invalid key"},
+			contains: "Authentication",
+		},
+		{
+			name:     "rate limit error",
+			err:      &gemini.APIError{Type: gemini.ErrorTypeRateLimit, Message: "too many requests"},
+			contains: "Rate limit",
+		},
+		{
+			name:     "content policy error",
+			err:      &gemini.APIError{Type: gemini.ErrorTypeContentPolicy, Message: "blocked"},
+			contains: "content policy",
+		},
+		{
+			name:     "invalid request error",
+			err:      &gemini.APIError{Type: gemini.ErrorTypeInvalidRequest, Message: "bad request"},
+			contains: "Invalid request",
+		},
+		{
+			name:     "no image error",
+			err:      &gemini.APIError{Type: gemini.ErrorTypeNoImage, Message: "no image"},
+			contains: "No image was generated",
+		},
+		{
+			name:     "network error",
+			err:      &gemini.APIError{Type: gemini.ErrorTypeNetwork, Message: "connection failed"},
+			contains: "Network error",
+		},
+		{
+			name:     "server error",
+			err:      &gemini.APIError{Type: gemini.ErrorTypeServer, Message: "internal error"},
+			contains: "Server error",
+		},
+		{
+			name:     "generic error",
+			err:      errors.New("something went wrong"),
+			contains: "Failed to generate image",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := formatAPIError(tt.err)
+			if tt.contains == "" {
+				if result != "" {
+					t.Errorf("expected empty string, got %q", result)
+				}
+			} else {
+				if !strings.Contains(result, tt.contains) {
+					t.Errorf("expected result to contain %q, got %q", tt.contains, result)
+				}
+			}
+		})
+	}
+}
+
+func TestImageGenModel_NewModelHasSpinner(t *testing.T) {
+	tmpDir := t.TempDir()
+	mdFile := filepath.Join(tmpDir, "test.md")
+
+	content := `# Test Slide`
+	if err := os.WriteFile(mdFile, []byte(content), 0644); err != nil {
+		t.Fatalf("failed to write test file: %v", err)
+	}
+
+	model, err := NewImageGenModel(mdFile)
+	if err != nil {
+		t.Fatalf("failed to create model: %v", err)
+	}
+
+	// Spinner should be initialized
+	view := model.spinner.View()
+	if view == "" {
+		t.Error("spinner should be initialized and have a view")
+	}
+}
+
+func TestImageGenModel_GeneratedImageFieldInitiallyNil(t *testing.T) {
+	tmpDir := t.TempDir()
+	mdFile := filepath.Join(tmpDir, "test.md")
+
+	content := `# Test Slide`
+	if err := os.WriteFile(mdFile, []byte(content), 0644); err != nil {
+		t.Fatalf("failed to write test file: %v", err)
+	}
+
+	model, err := NewImageGenModel(mdFile)
+	if err != nil {
+		t.Fatalf("failed to create model: %v", err)
+	}
+
+	if model.GeneratedImage != nil {
+		t.Error("GeneratedImage should be nil initially")
+	}
+
+	if model.IsGenerating {
+		t.Error("IsGenerating should be false initially")
 	}
 }

@@ -2,14 +2,17 @@
 package tui
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"regexp"
 	"strings"
 
+	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textarea"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/tapsh/tap/internal/gemini"
 )
 
 // ImageGenStep represents the current step in the image generation workflow.
@@ -52,6 +55,21 @@ type ImageSelectOption struct {
 	Label string
 }
 
+// ImageGenerateResult is the result of an image generation operation.
+type ImageGenerateResult struct {
+	// ImageData contains the raw image bytes on success.
+	ImageData []byte
+	// ContentType is the MIME type of the generated image (e.g., "image/png").
+	ContentType string
+	// Error holds any error that occurred during generation.
+	Error error
+}
+
+// imageGenerateMsg is sent when image generation completes.
+type imageGenerateMsg struct {
+	result ImageGenerateResult
+}
+
 // ImageGenModel is the Bubble Tea model for the image generation workflow.
 type ImageGenModel struct {
 	// Slides contains information about all slides.
@@ -74,6 +92,12 @@ type ImageGenModel struct {
 	Prompt string
 	// promptInput is the textarea model for prompt input.
 	promptInput textarea.Model
+	// spinner is the spinner model for the generating step.
+	spinner spinner.Model
+	// GeneratedImage holds the result of a successful image generation.
+	GeneratedImage *ImageGenerateResult
+	// IsGenerating indicates whether generation is in progress.
+	IsGenerating bool
 }
 
 // NewImageGenModel creates a new ImageGenModel for image generation.
@@ -86,11 +110,17 @@ func NewImageGenModel(markdownFile string) (*ImageGenModel, error) {
 	ta.SetHeight(5)
 	ta.ShowLineNumbers = false
 
+	// Initialize spinner for generating step
+	s := spinner.New()
+	s.Spinner = spinner.Dot
+	s.Style = lipgloss.NewStyle().Foreground(ColorPrimary)
+
 	m := &ImageGenModel{
 		MarkdownFile:  markdownFile,
 		SelectedIndex: 0,
 		Step:          ImageGenStepSlideSelect,
 		promptInput:   ta,
+		spinner:       s,
 	}
 
 	// Load slides from the markdown file
@@ -233,6 +263,18 @@ func (m *ImageGenModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		return m.handleKeyPress(msg)
+
+	case imageGenerateMsg:
+		return m.handleImageGenerateResult(msg.result)
+
+	case spinner.TickMsg:
+		// Update spinner when in generating step
+		if m.Step == ImageGenStepGenerating {
+			var cmd tea.Cmd
+			m.spinner, cmd = m.spinner.Update(msg)
+			return m, cmd
+		}
+
 	default:
 		// Pass other messages to the textarea when in prompt step
 		if m.Step == ImageGenStepPrompt {
@@ -253,6 +295,8 @@ func (m *ImageGenModel) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleImageSelectKey(msg)
 	case ImageGenStepPrompt:
 		return m.handlePromptKey(msg)
+	case ImageGenStepGenerating:
+		return m.handleGeneratingKey(msg)
 	}
 	return m, nil
 }
@@ -391,8 +435,101 @@ func (m *ImageGenModel) submitPrompt() (tea.Model, tea.Cmd) {
 	m.Error = ""
 	m.promptInput.Blur()
 	m.Step = ImageGenStepGenerating
+	m.IsGenerating = true
 
+	// Start spinner and image generation
+	return m, tea.Batch(m.spinner.Tick, m.generateImageCmd())
+}
+
+// generateImageCmd returns a command that generates an image using the Gemini API.
+func (m *ImageGenModel) generateImageCmd() tea.Cmd {
+	prompt := m.Prompt
+	return func() tea.Msg {
+		client, err := gemini.NewClientFromEnv()
+		if err != nil {
+			return imageGenerateMsg{result: ImageGenerateResult{Error: err}}
+		}
+
+		result, err := client.GenerateImage(context.Background(), prompt)
+		if err != nil {
+			return imageGenerateMsg{result: ImageGenerateResult{Error: err}}
+		}
+
+		return imageGenerateMsg{result: ImageGenerateResult{
+			ImageData:   result.Data,
+			ContentType: result.ContentType,
+		}}
+	}
+}
+
+// handleGeneratingKey handles keyboard input during image generation.
+func (m *ImageGenModel) handleGeneratingKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	// Only allow cancel when there's an error (not while generating)
+	if m.Error != "" {
+		switch msg.String() {
+		case "r":
+			// Retry generation
+			m.Error = ""
+			m.IsGenerating = true
+			return m, tea.Batch(m.spinner.Tick, m.generateImageCmd())
+
+		case "esc":
+			// Go back to prompt step
+			m.Error = ""
+			m.IsGenerating = false
+			m.promptInput.Focus()
+			m.Step = ImageGenStepPrompt
+			return m, textarea.Blink
+		}
+	}
+	// While generating, ignore all key presses
 	return m, nil
+}
+
+// handleImageGenerateResult handles the result of image generation.
+func (m *ImageGenModel) handleImageGenerateResult(result ImageGenerateResult) (tea.Model, tea.Cmd) {
+	m.IsGenerating = false
+
+	if result.Error != nil {
+		// Show user-friendly error message
+		m.Error = formatAPIError(result.Error)
+		return m, nil
+	}
+
+	// Success - store the result and proceed to done step
+	m.GeneratedImage = &result
+	m.Step = ImageGenStepDone
+	return m, nil
+}
+
+// formatAPIError converts an API error to a user-friendly message.
+func formatAPIError(err error) string {
+	if err == nil {
+		return ""
+	}
+
+	// Check if it's a Gemini API error
+	if apiErr, ok := err.(*gemini.APIError); ok {
+		switch apiErr.Type {
+		case gemini.ErrorTypeAuth:
+			return "Authentication failed. Please check your GEMINI_API_KEY."
+		case gemini.ErrorTypeRateLimit:
+			return "Rate limit exceeded. Please wait a moment and try again."
+		case gemini.ErrorTypeContentPolicy:
+			return "The prompt was blocked by content policy. Please try a different prompt."
+		case gemini.ErrorTypeInvalidRequest:
+			return "Invalid request. Please try a different prompt."
+		case gemini.ErrorTypeNoImage:
+			return "No image was generated. Please try a different prompt."
+		case gemini.ErrorTypeNetwork:
+			return "Network error. Please check your connection and try again."
+		case gemini.ErrorTypeServer:
+			return "Server error. Please try again later."
+		}
+	}
+
+	// Generic error
+	return fmt.Sprintf("Failed to generate image: %v", err)
 }
 
 // View implements tea.Model.
@@ -404,6 +541,8 @@ func (m *ImageGenModel) View() string {
 		return m.viewImageSelect()
 	case ImageGenStepPrompt:
 		return m.viewPrompt()
+	case ImageGenStepGenerating:
+		return m.viewGenerating()
 	default:
 		return m.viewSlideSelect()
 	}
@@ -657,6 +796,85 @@ func (m *ImageGenModel) viewPrompt() string {
 		keyStyle.Render("esc"),
 	)
 	b.WriteString(helpStyle.Render(help))
+
+	return b.String()
+}
+
+// viewGenerating renders the generating progress view.
+func (m *ImageGenModel) viewGenerating() string {
+	var b strings.Builder
+
+	// Title
+	titleStyle := lipgloss.NewStyle().
+		Bold(true).
+		Foreground(ColorPrimary).
+		MarginBottom(1)
+
+	b.WriteString(titleStyle.Render("🖼  Generating Image"))
+	b.WriteString("\n\n")
+
+	// Show selected slide info
+	slide := m.GetSelectedSlide()
+	if slide != nil {
+		slideInfoStyle := lipgloss.NewStyle().
+			Foreground(ColorMuted).
+			Italic(true)
+		b.WriteString(slideInfoStyle.Render(fmt.Sprintf("Slide %d: %s", slide.Index+1, slide.Title)))
+		b.WriteString("\n\n")
+	}
+
+	// Show prompt being used
+	promptStyle := lipgloss.NewStyle().
+		Foreground(ColorWhite)
+	b.WriteString(promptStyle.Render("Prompt: "))
+
+	// Truncate long prompts for display
+	displayPrompt := m.Prompt
+	if len(displayPrompt) > 60 {
+		displayPrompt = displayPrompt[:57] + "..."
+	}
+	promptValueStyle := lipgloss.NewStyle().
+		Foreground(ColorSecondary).
+		Italic(true)
+	b.WriteString(promptValueStyle.Render(displayPrompt))
+	b.WriteString("\n\n")
+
+	// Show error or progress
+	if m.Error != "" {
+		// Show error with retry/cancel options
+		errorStyle := lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#ff5555"))
+		b.WriteString(errorStyle.Render("Error: " + m.Error))
+		b.WriteString("\n\n")
+
+		// Help text for error state
+		helpStyle := lipgloss.NewStyle().
+			Foreground(ColorMuted)
+
+		keyStyle := lipgloss.NewStyle().
+			Foreground(ColorPrimary).
+			Bold(true)
+
+		help := fmt.Sprintf(
+			"%s retry • %s back to prompt",
+			keyStyle.Render("r"),
+			keyStyle.Render("esc"),
+		)
+		b.WriteString(helpStyle.Render(help))
+	} else {
+		// Show spinner while generating
+		progressStyle := lipgloss.NewStyle().
+			Foreground(ColorSecondary)
+		b.WriteString(m.spinner.View())
+		b.WriteString(" ")
+		b.WriteString(progressStyle.Render("Generating image..."))
+		b.WriteString("\n\n")
+
+		// Help text while generating
+		helpStyle := lipgloss.NewStyle().
+			Foreground(ColorMuted)
+		b.WriteString(helpStyle.Render("Please wait, this may take a moment..."))
+	}
 
 	return b.String()
 }

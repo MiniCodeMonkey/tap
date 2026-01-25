@@ -152,6 +152,26 @@ func tickCmd() tea.Cmd {
 
 // Update implements tea.Model.
 func (m *DevModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	// Forward non-key messages to image generator when active (for spinner animation, API results, etc.)
+	if m.showImageGenerator && m.imageGenModel != nil {
+		// Only forward certain message types to the image generator
+		switch msg.(type) {
+		case tea.KeyMsg:
+			// Key messages are handled by handleKeyPress below
+		default:
+			// Forward spinner ticks and other messages to image generator
+			newModel, cmd := m.imageGenModel.Update(msg)
+			if newModel != nil {
+				m.imageGenModel = newModel.(*ImageGenModel)
+				// Check if generation completed successfully
+				if m.imageGenModel.Step == ImageGenStepDone && m.imageGenModel.GeneratedImage != nil {
+					// Generation successful, will be handled by subsequent stories
+				}
+			}
+			return m, cmd
+		}
+	}
+
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		return m.handleKeyPress(msg)
@@ -252,8 +272,12 @@ func (m *DevModel) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case "i":
 		// Open image generator
-		// Check if already generating
+		// Check if already showing image generator or generation is in progress
 		if m.showImageGenerator {
+			return m, nil
+		}
+		// Also check if there's an active image generation in progress
+		if m.imageGenModel != nil && m.imageGenModel.IsGenerating {
 			return m, nil
 		}
 
