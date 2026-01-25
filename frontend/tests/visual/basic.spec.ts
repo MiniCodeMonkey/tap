@@ -30,6 +30,15 @@ interface PresentationResponse {
   slides: PresentationSlide[];
 }
 
+// Error tracking for console and page errors
+interface CapturedError {
+  templateName: string;
+  slideNumber: number;
+  errorType: 'console' | 'pageerror';
+  message: string;
+  timestamp: Date;
+}
+
 // Get a dynamic port to avoid conflicts
 function getPort(): number {
   // Use a random port between 4000-5000 for visual tests
@@ -100,6 +109,8 @@ test.describe('Basic Template Visual Test', () => {
   let serverProcess: ChildProcess | null = null;
   let port: number;
   let baseUrl: string;
+  const capturedErrors: CapturedError[] = [];
+  let currentSlideNumber = 1;
 
   test.beforeAll(async () => {
     port = getPort();
@@ -154,6 +165,32 @@ test.describe('Basic Template Visual Test', () => {
     const screenshotsDir = join(__dirname, 'screenshots');
     const templateName = 'basic';
 
+    // Set up console error listener
+    page.on('console', (msg) => {
+      if (msg.type() === 'error') {
+        capturedErrors.push({
+          templateName,
+          slideNumber: currentSlideNumber,
+          errorType: 'console',
+          message: msg.text(),
+          timestamp: new Date(),
+        });
+        console.error(`[Console Error] Slide ${currentSlideNumber}: ${msg.text()}`);
+      }
+    });
+
+    // Set up page error listener (uncaught exceptions)
+    page.on('pageerror', (error) => {
+      capturedErrors.push({
+        templateName,
+        slideNumber: currentSlideNumber,
+        errorType: 'pageerror',
+        message: error.message,
+        timestamp: new Date(),
+      });
+      console.error(`[Page Error] Slide ${currentSlideNumber}: ${error.message}`);
+    });
+
     // Fetch presentation data to get slide count
     const presentation = await fetchPresentation(baseUrl);
     const totalSlides = presentation.slides.length;
@@ -172,6 +209,7 @@ test.describe('Basic Template Visual Test', () => {
 
     let totalScreenshots = 0;
     let totalFragments = 0;
+    currentSlideNumber = 1;
 
     // Capture screenshot for each slide
     for (let slideNumber = 1; slideNumber <= totalSlides; slideNumber++) {
@@ -229,11 +267,28 @@ test.describe('Basic Template Visual Test', () => {
       // Navigate to next slide (except for the last one)
       if (slideNumber < totalSlides) {
         await page.keyboard.press('ArrowRight');
+        currentSlideNumber = slideNumber + 1;
       }
     }
 
     console.log(
       `Completed: captured ${totalScreenshots} slides + ${totalFragments} fragment states for ${templateName}`
     );
+
+    // Print error summary
+    console.log('\n=== Error Summary ===');
+    if (capturedErrors.length === 0) {
+      console.log('No errors detected during visual test run.');
+    } else {
+      console.log(`Total errors detected: ${capturedErrors.length}`);
+      console.log('\nError details:');
+      for (const error of capturedErrors) {
+        console.log(`  [${error.errorType}] ${error.templateName} slide ${error.slideNumber}: ${error.message}`);
+      }
+    }
+    console.log('=====================\n');
+
+    // Fail test if any errors were detected
+    expect(capturedErrors.length, `Detected ${capturedErrors.length} console/page errors during rendering`).toBe(0);
   });
 });
