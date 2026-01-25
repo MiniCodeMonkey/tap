@@ -280,8 +280,8 @@
 		justify-content: center;
 		align-items: center;
 		width: 100%;
-		min-height: 150px;
-		margin: 1.5rem 0;
+		min-height: 200px;
+		margin: 2rem 0;
 		overflow: visible;
 	}
 
@@ -289,11 +289,23 @@
 		max-width: 100%;
 		height: auto;
 		overflow: visible;
+		/* Scale diagrams slightly for better presentation visibility */
+		transform: scale(1.1);
+		transform-origin: center center;
 	}
 
 	/* Ensure mermaid foreignObject content is visible */
 	:global(.mermaid-diagram foreignObject) {
 		overflow: visible;
+	}
+
+	/* Mermaid text styling for better readability */
+	:global(.mermaid-diagram .nodeLabel) {
+		font-size: 1.1em;
+	}
+
+	:global(.mermaid-diagram .edgeLabel) {
+		font-size: 1em;
 	}
 
 	/*
@@ -302,26 +314,27 @@
 	 * Uses theme-aware error colors via CSS custom properties.
 	 */
 	:global(.mermaid-error) {
-		padding: 1.25rem 1.5rem;
-		border-radius: 0.5rem;
+		padding: 1.5rem 2rem;
+		border-radius: 0.75rem;
 		background-color: var(--color-error-bg, rgba(220, 38, 38, 0.1));
-		border: 1px solid color-mix(in srgb, var(--color-error, #dc2626) 40%, transparent);
-		margin: 1rem 0;
+		border: 2px solid var(--color-error, #dc2626);
+		margin: 2rem 0;
 	}
 
 	:global(.mermaid-error-message) {
 		color: var(--color-error, #dc2626);
 		font-weight: 600;
-		margin-bottom: 0.75rem;
+		font-size: 1.25rem;
+		margin-bottom: 1rem;
 		font-family: var(--font-sans, inherit);
 	}
 
 	:global(.mermaid-error-code) {
-		font-size: 0.875rem;
-		opacity: 0.85;
+		font-size: 1rem;
+		opacity: 0.9;
 		background-color: var(--color-surface, rgba(0, 0, 0, 0.05));
-		border-radius: 0.375rem;
-		padding: 1rem;
+		border-radius: 0.5rem;
+		padding: 1.25rem;
 		border: 1px solid var(--color-border, rgba(0, 0, 0, 0.1));
 	}
 
@@ -330,6 +343,7 @@
 		word-break: break-word;
 		font-family: var(--font-mono, monospace);
 		color: var(--color-text, inherit);
+		line-height: 1.6;
 	}
 
 	/*

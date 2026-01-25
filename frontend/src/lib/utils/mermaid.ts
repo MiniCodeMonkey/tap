@@ -38,6 +38,7 @@ export interface MermaidThemeConfig {
 /**
  * Get mermaid theme configuration for a tap presentation theme.
  * Maps tap themes to mermaid theme settings with appropriate colors and fonts.
+ * Font sizes are optimized for presentation scale (18-20px base).
  *
  * @param theme The tap presentation theme
  * @returns Mermaid theme configuration
@@ -48,25 +49,25 @@ export function getMermaidTheme(theme: Theme): MermaidThemeConfig {
       return {
         theme: 'neutral',
         themeVariables: {
-          // Paper: Clean light theme with warm stone accent
-          primaryColor: '#f5f5f4', // stone-100
-          primaryTextColor: '#0a0a0a',
-          primaryBorderColor: '#78716c', // stone-500 (accent)
-          lineColor: '#78716c',
-          secondaryColor: '#fafafa',
+          // Paper: Clean light theme with blue accent (#2563eb) matching theme
+          primaryColor: '#f0f4ff', // Subtle blue-tinted light background
+          primaryTextColor: '#18181b', // Near-black text
+          primaryBorderColor: '#2563eb', // Blue accent from theme
+          lineColor: '#64748b', // Muted gray for clean lines
+          secondaryColor: '#f8fafc', // Very light surface
           tertiaryColor: '#ffffff',
-          background: '#ffffff',
-          mainBkg: '#f5f5f4',
+          background: '#fafafa', // Match theme background
+          mainBkg: '#f0f4ff', // Subtle blue tint
           fontFamily:
             'Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
-          fontSize: '16px',
-          nodeBorder: '#78716c',
-          clusterBkg: '#fafaf9',
-          clusterBorder: '#d6d3d1',
+          fontSize: '18px', // Larger for presentation scale
+          nodeBorder: '#2563eb', // Blue accent
+          clusterBkg: '#f8fafc',
+          clusterBorder: '#cbd5e1', // Subtle gray border
           edgeLabelBackground: '#ffffff',
-          textColor: '#0a0a0a',
-          titleColor: '#0a0a0a',
-          nodeTextColor: '#0a0a0a',
+          textColor: '#18181b',
+          titleColor: '#2563eb', // Blue accent for titles
+          nodeTextColor: '#18181b',
         },
       }
 
@@ -74,50 +75,50 @@ export function getMermaidTheme(theme: Theme): MermaidThemeConfig {
       return {
         theme: 'dark',
         themeVariables: {
-          // Noir: Cinematic dark theme with gold accent
-          primaryColor: '#1a1a1a',
-          primaryTextColor: '#fafafa',
-          primaryBorderColor: '#d4af37', // gold accent
-          lineColor: '#d4af37',
-          secondaryColor: '#111111',
-          tertiaryColor: '#0a0a0a',
-          background: '#0a0a0a',
-          mainBkg: '#161616',
+          // Noir: Cinematic dark theme with refined gold accent (#c9a227)
+          primaryColor: '#1a1a1a', // Deep charcoal nodes
+          primaryTextColor: '#f5f5f5', // Light text
+          primaryBorderColor: '#c9a227', // Refined gold accent
+          lineColor: '#c9a227', // Gold lines for elegance
+          secondaryColor: '#141414', // Slightly lighter dark
+          tertiaryColor: '#0f0f0f',
+          background: '#0a0a0a', // True dark background
+          mainBkg: '#181818', // Elevated surface
           fontFamily:
             'Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
-          fontSize: '16px',
-          nodeBorder: '#d4af37',
-          clusterBkg: '#111111',
-          clusterBorder: '#d4af37',
-          edgeLabelBackground: '#161616',
-          textColor: '#fafafa',
-          titleColor: '#d4af37',
-          nodeTextColor: '#fafafa',
+          fontSize: '18px', // Larger for presentation scale
+          nodeBorder: '#c9a227', // Gold accent
+          clusterBkg: '#121212',
+          clusterBorder: 'rgba(201, 162, 39, 0.5)', // Muted gold border
+          edgeLabelBackground: '#181818',
+          textColor: '#f5f5f5',
+          titleColor: '#c9a227', // Gold titles
+          nodeTextColor: '#f5f5f5',
         },
       }
 
     case 'aurora':
       return {
-        theme: 'forest',
+        theme: 'dark',
         themeVariables: {
-          // Aurora: Deep purple to teal gradient with glassmorphism feel
-          primaryColor: '#14b8a6', // teal accent
+          // Aurora: Vibrant gradients with cyan/teal accents
+          primaryColor: '#1e1b4b', // Deep indigo for nodes
           primaryTextColor: '#ffffff',
-          primaryBorderColor: '#14b8a6', // teal accent
-          lineColor: '#0ea5e9', // electric blue
-          secondaryColor: '#4c1d95', // deep purple
+          primaryBorderColor: '#22d3ee', // Cyan accent from theme
+          lineColor: '#0ea5e9', // Electric blue lines
+          secondaryColor: '#312e81', // Deep purple
           tertiaryColor: '#0f0a1f',
-          background: '#0f0a1f',
-          mainBkg: '#1e1b4b',
+          background: '#0a0614', // Deep aurora background
+          mainBkg: '#1e1b4b', // Indigo node background
           fontFamily:
             "'Space Grotesk', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif",
-          fontSize: '18px',
-          nodeBorder: '#14b8a6',
-          clusterBkg: 'rgba(78, 29, 149, 0.3)',
-          clusterBorder: '#0ea5e9',
+          fontSize: '18px', // Larger for presentation scale
+          nodeBorder: '#22d3ee', // Cyan border
+          clusterBkg: 'rgba(91, 33, 182, 0.3)', // Purple cluster
+          clusterBorder: '#7c3aed', // Violet border
           edgeLabelBackground: '#1e1b4b',
           textColor: '#ffffff',
-          titleColor: '#14b8a6',
+          titleColor: '#22d3ee', // Cyan titles
           nodeTextColor: '#ffffff',
         },
       }
@@ -126,51 +127,51 @@ export function getMermaidTheme(theme: Theme): MermaidThemeConfig {
       return {
         theme: 'dark',
         themeVariables: {
-          // Phosphor: CRT terminal aesthetic with green phosphor glow
-          primaryColor: '#001a00', // very dark green for nodes
-          primaryTextColor: '#00ff00', // phosphor green
-          primaryBorderColor: '#00ff00',
-          lineColor: '#00ff00',
-          secondaryColor: '#001100',
-          tertiaryColor: '#000000',
-          background: '#000000',
-          mainBkg: '#001a00',
+          // Phosphor: CRT terminal with P3 phosphor green (#39ff14)
+          primaryColor: '#0a1a0a', // Very dark green for nodes
+          primaryTextColor: '#39ff14', // P3 phosphor green
+          primaryBorderColor: '#39ff14',
+          lineColor: '#30d912', // Slightly dimmer green for lines
+          secondaryColor: '#081408',
+          tertiaryColor: '#050505',
+          background: '#050505', // Softened CRT black
+          mainBkg: '#0a1a0a', // Dark green node background
           fontFamily:
             "'JetBrains Mono', 'SF Mono', Monaco, 'Cascadia Code', Consolas, 'Liberation Mono', Menlo, monospace",
-          fontSize: '16px',
-          nodeBorder: '#00ff00',
-          clusterBkg: '#001100',
-          clusterBorder: '#00ff00',
-          edgeLabelBackground: '#000000',
-          textColor: '#00ff00',
-          titleColor: '#00ff00',
-          nodeTextColor: '#00ff00',
+          fontSize: '18px', // Larger for presentation scale
+          nodeBorder: '#39ff14', // Phosphor green border
+          clusterBkg: '#081408',
+          clusterBorder: '#228b22', // Dimmer green for clusters
+          edgeLabelBackground: '#050505',
+          textColor: '#39ff14',
+          titleColor: '#39ff14',
+          nodeTextColor: '#39ff14',
         },
       }
 
     case 'poster':
       return {
-        theme: 'default',
+        theme: 'dark',
         themeVariables: {
-          // Poster: High contrast editorial design with warm coral accent
-          primaryColor: '#fafafa', // near-white for nodes
-          primaryTextColor: '#0d0d0f', // dark text on light nodes
-          primaryBorderColor: '#ff6b4a', // coral accent
-          lineColor: '#ff6b4a',
-          secondaryColor: '#f5f5f5',
-          tertiaryColor: '#ffffff',
-          background: '#0d0d0f',
-          mainBkg: '#fafafa',
+          // Poster: High contrast with red accent (#ff4d4d), bold aesthetic
+          primaryColor: '#0a0a0a', // Pure black nodes
+          primaryTextColor: '#ffffff', // Pure white text
+          primaryBorderColor: '#ffffff', // White borders for contrast
+          lineColor: '#ff4d4d', // Red accent for lines
+          secondaryColor: '#111111',
+          tertiaryColor: '#000000',
+          background: '#0a0a0a', // Dark background
+          mainBkg: '#0a0a0a', // Black node background
           fontFamily:
             "'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
-          fontSize: '16px',
-          nodeBorder: '#ff6b4a',
-          clusterBkg: '#f5f5f5',
-          clusterBorder: '#ff6b4a',
-          edgeLabelBackground: '#0d0d0f',
-          textColor: '#fafafa',
-          titleColor: '#ff6b4a',
-          nodeTextColor: '#0d0d0f',
+          fontSize: '20px', // Extra large for bold poster aesthetic
+          nodeBorder: '#ffffff', // White borders
+          clusterBkg: '#111111',
+          clusterBorder: '#ff4d4d', // Red cluster borders
+          edgeLabelBackground: '#0a0a0a',
+          textColor: '#ffffff',
+          titleColor: '#ff4d4d', // Red titles
+          nodeTextColor: '#ffffff',
         },
       }
 
@@ -180,7 +181,7 @@ export function getMermaidTheme(theme: Theme): MermaidThemeConfig {
         themeVariables: {
           fontFamily:
             'Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
-          fontSize: '16px',
+          fontSize: '18px',
         },
       }
   }
