@@ -3194,3 +3194,574 @@ Content three`
 		t.Error("image should not be in third slide section")
 	}
 }
+
+// Tests for US-018: Handle image regeneration
+
+func TestDeleteOldImage(t *testing.T) {
+	tmpDir := t.TempDir()
+	mdFile := filepath.Join(tmpDir, "test.md")
+	imagesDir := filepath.Join(tmpDir, "images")
+
+	// Create images directory and an old image
+	if err := os.MkdirAll(imagesDir, 0755); err != nil {
+		t.Fatalf("failed to create images directory: %v", err)
+	}
+
+	oldImagePath := filepath.Join(imagesDir, "old-image.png")
+	if err := os.WriteFile(oldImagePath, []byte("fake image data"), 0644); err != nil {
+		t.Fatalf("failed to create old image file: %v", err)
+	}
+
+	content := `# Test Slide
+
+<!-- ai-prompt: old prompt -->
+![](images/old-image.png)
+`
+	if err := os.WriteFile(mdFile, []byte(content), 0644); err != nil {
+		t.Fatalf("failed to write test file: %v", err)
+	}
+
+	model, err := NewImageGenModel(mdFile)
+	if err != nil {
+		t.Fatalf("failed to create model: %v", err)
+	}
+
+	// Set up the selected image (simulating regeneration workflow)
+	model.SelectedImage = &AIImageInfo{
+		Prompt:    "old prompt",
+		ImagePath: "images/old-image.png",
+	}
+
+	// Verify the file exists before deletion
+	if _, err := os.Stat(oldImagePath); os.IsNotExist(err) {
+		t.Fatal("old image file should exist before deletion")
+	}
+
+	// Delete the old image
+	err = model.DeleteOldImage()
+	if err != nil {
+		t.Fatalf("DeleteOldImage failed: %v", err)
+	}
+
+	// Verify the file was deleted
+	if _, err := os.Stat(oldImagePath); !os.IsNotExist(err) {
+		t.Error("old image file should be deleted")
+	}
+}
+
+func TestDeleteOldImage_FileDoesNotExist(t *testing.T) {
+	tmpDir := t.TempDir()
+	mdFile := filepath.Join(tmpDir, "test.md")
+
+	content := `# Test Slide
+
+<!-- ai-prompt: old prompt -->
+![](images/nonexistent.png)
+`
+	if err := os.WriteFile(mdFile, []byte(content), 0644); err != nil {
+		t.Fatalf("failed to write test file: %v", err)
+	}
+
+	model, err := NewImageGenModel(mdFile)
+	if err != nil {
+		t.Fatalf("failed to create model: %v", err)
+	}
+
+	// Set up the selected image pointing to a non-existent file
+	model.SelectedImage = &AIImageInfo{
+		Prompt:    "old prompt",
+		ImagePath: "images/nonexistent.png",
+	}
+
+	// Should not error when file doesn't exist
+	err = model.DeleteOldImage()
+	if err != nil {
+		t.Errorf("DeleteOldImage should not error when file doesn't exist: %v", err)
+	}
+}
+
+func TestDeleteOldImage_NoSelectedImage(t *testing.T) {
+	tmpDir := t.TempDir()
+	mdFile := filepath.Join(tmpDir, "test.md")
+
+	content := `# Test Slide
+
+Content
+`
+	if err := os.WriteFile(mdFile, []byte(content), 0644); err != nil {
+		t.Fatalf("failed to write test file: %v", err)
+	}
+
+	model, err := NewImageGenModel(mdFile)
+	if err != nil {
+		t.Fatalf("failed to create model: %v", err)
+	}
+
+	// SelectedImage is nil (adding new image, not regenerating)
+	model.SelectedImage = nil
+
+	// Should not error when no selected image
+	err = model.DeleteOldImage()
+	if err != nil {
+		t.Errorf("DeleteOldImage should not error when SelectedImage is nil: %v", err)
+	}
+}
+
+func TestReplaceImageInContent(t *testing.T) {
+	tests := []struct {
+		name         string
+		content      string
+		oldPrompt    string
+		oldImagePath string
+		newPrompt    string
+		newImagePath string
+		expected     string
+		wantErr      bool
+	}{
+		{
+			name: "simple replacement",
+			content: `# Test Slide
+
+<!-- ai-prompt: old prompt -->
+![](images/old.png)
+
+More content`,
+			oldPrompt:    "old prompt",
+			oldImagePath: "images/old.png",
+			newPrompt:    "new prompt",
+			newImagePath: "images/new.png",
+			expected: `# Test Slide
+
+<!-- ai-prompt: new prompt -->
+![](images/new.png)
+
+More content`,
+			wantErr: false,
+		},
+		{
+			name: "replacement with leading spaces on image line",
+			content: `# Test Slide
+
+<!-- ai-prompt: test prompt -->
+  ![](images/test.png)
+
+Content`,
+			oldPrompt:    "test prompt",
+			oldImagePath: "images/test.png",
+			newPrompt:    "updated prompt",
+			newImagePath: "images/updated.png",
+			expected: `# Test Slide
+
+<!-- ai-prompt: updated prompt -->
+![](images/updated.png)
+
+Content`,
+			wantErr: false,
+		},
+		{
+			name: "replacement in multi-slide markdown",
+			content: `---
+theme: paper
+---
+
+# Slide 1
+
+Content one
+
+---
+
+# Slide 2
+
+<!-- ai-prompt: middle slide image -->
+![](images/middle.png)
+
+---
+
+# Slide 3
+
+Content three`,
+			oldPrompt:    "middle slide image",
+			oldImagePath: "images/middle.png",
+			newPrompt:    "regenerated image",
+			newImagePath: "images/regen.png",
+			expected: `---
+theme: paper
+---
+
+# Slide 1
+
+Content one
+
+---
+
+# Slide 2
+
+<!-- ai-prompt: regenerated image -->
+![](images/regen.png)
+
+---
+
+# Slide 3
+
+Content three`,
+			wantErr: false,
+		},
+		{
+			name: "prompt not found",
+			content: `# Test Slide
+
+<!-- ai-prompt: different prompt -->
+![](images/test.png)`,
+			oldPrompt:    "nonexistent prompt",
+			oldImagePath: "images/test.png",
+			newPrompt:    "new prompt",
+			newImagePath: "images/new.png",
+			expected:     "",
+			wantErr:      true,
+		},
+		{
+			name: "image path not found",
+			content: `# Test Slide
+
+<!-- ai-prompt: test prompt -->
+![](images/test.png)`,
+			oldPrompt:    "test prompt",
+			oldImagePath: "images/different.png",
+			newPrompt:    "new prompt",
+			newImagePath: "images/new.png",
+			expected:     "",
+			wantErr:      true,
+		},
+		{
+			name: "replacement with special characters in prompt",
+			content: `# Test Slide
+
+<!-- ai-prompt: a (special) prompt with [brackets] and $symbols -->
+![](images/special.png)`,
+			oldPrompt:    "a (special) prompt with [brackets] and $symbols",
+			oldImagePath: "images/special.png",
+			newPrompt:    "a new (special) prompt",
+			newImagePath: "images/new-special.png",
+			expected: `# Test Slide
+
+<!-- ai-prompt: a new (special) prompt -->
+![](images/new-special.png)`,
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := replaceImageInContent(tt.content, tt.oldPrompt, tt.oldImagePath, tt.newPrompt, tt.newImagePath)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("replaceImageInContent() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !tt.wantErr && result != tt.expected {
+				t.Errorf("replaceImageInContent() got:\n%s\n\nwant:\n%s", result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestReplaceImageInMarkdown_Integration(t *testing.T) {
+	tmpDir := t.TempDir()
+	mdFile := filepath.Join(tmpDir, "test.md")
+	imagesDir := filepath.Join(tmpDir, "images")
+
+	// Create images directory
+	if err := os.MkdirAll(imagesDir, 0755); err != nil {
+		t.Fatalf("failed to create images directory: %v", err)
+	}
+
+	// Create old and new image files
+	oldImagePath := filepath.Join(imagesDir, "old.png")
+	if err := os.WriteFile(oldImagePath, []byte("old image data"), 0644); err != nil {
+		t.Fatalf("failed to create old image file: %v", err)
+	}
+
+	content := `# Test Slide
+
+Some content before
+
+<!-- ai-prompt: generate a sunset -->
+![](images/old.png)
+
+Some content after
+`
+	if err := os.WriteFile(mdFile, []byte(content), 0644); err != nil {
+		t.Fatalf("failed to write test file: %v", err)
+	}
+
+	model, err := NewImageGenModel(mdFile)
+	if err != nil {
+		t.Fatalf("failed to create model: %v", err)
+	}
+
+	// Set up for regeneration
+	model.SelectedImage = &AIImageInfo{
+		Prompt:    "generate a sunset",
+		ImagePath: "images/old.png",
+	}
+	model.Prompt = "generate a beautiful sunset"
+
+	// Replace the image
+	err = model.ReplaceImageInMarkdown("images/new.png")
+	if err != nil {
+		t.Fatalf("ReplaceImageInMarkdown failed: %v", err)
+	}
+
+	// Read back and verify
+	updatedContent, err := os.ReadFile(mdFile)
+	if err != nil {
+		t.Fatalf("failed to read updated file: %v", err)
+	}
+
+	// Should contain new prompt
+	if !strings.Contains(string(updatedContent), "<!-- ai-prompt: generate a beautiful sunset -->") {
+		t.Error("should contain new prompt comment")
+	}
+
+	// Should contain new image path
+	if !strings.Contains(string(updatedContent), "![](images/new.png)") {
+		t.Error("should contain new image path")
+	}
+
+	// Should not contain old prompt
+	if strings.Contains(string(updatedContent), "<!-- ai-prompt: generate a sunset -->") {
+		t.Error("should not contain old prompt comment")
+	}
+
+	// Should not contain old image path
+	if strings.Contains(string(updatedContent), "![](images/old.png)") {
+		t.Error("should not contain old image path")
+	}
+
+	// Should preserve content before and after
+	if !strings.Contains(string(updatedContent), "Some content before") {
+		t.Error("should preserve content before image")
+	}
+	if !strings.Contains(string(updatedContent), "Some content after") {
+		t.Error("should preserve content after image")
+	}
+}
+
+func TestReplaceImageInMarkdown_PreservesPosition(t *testing.T) {
+	tmpDir := t.TempDir()
+	mdFile := filepath.Join(tmpDir, "test.md")
+	imagesDir := filepath.Join(tmpDir, "images")
+
+	// Create images directory
+	if err := os.MkdirAll(imagesDir, 0755); err != nil {
+		t.Fatalf("failed to create images directory: %v", err)
+	}
+
+	// Content with image in the middle of the slide
+	content := `# Test Slide
+
+Paragraph one.
+
+<!-- ai-prompt: middle image -->
+![](images/middle.png)
+
+Paragraph two.
+
+End of slide.
+`
+	if err := os.WriteFile(mdFile, []byte(content), 0644); err != nil {
+		t.Fatalf("failed to write test file: %v", err)
+	}
+
+	model, err := NewImageGenModel(mdFile)
+	if err != nil {
+		t.Fatalf("failed to create model: %v", err)
+	}
+
+	// Set up for regeneration
+	model.SelectedImage = &AIImageInfo{
+		Prompt:    "middle image",
+		ImagePath: "images/middle.png",
+	}
+	model.Prompt = "regenerated middle image"
+
+	// Replace the image
+	err = model.ReplaceImageInMarkdown("images/new-middle.png")
+	if err != nil {
+		t.Fatalf("ReplaceImageInMarkdown failed: %v", err)
+	}
+
+	// Read back and verify position is preserved
+	updatedContent, err := os.ReadFile(mdFile)
+	if err != nil {
+		t.Fatalf("failed to read updated file: %v", err)
+	}
+
+	contentStr := string(updatedContent)
+
+	// Find positions
+	paragraphOnePos := strings.Index(contentStr, "Paragraph one.")
+	imagePos := strings.Index(contentStr, "![](images/new-middle.png)")
+	paragraphTwoPos := strings.Index(contentStr, "Paragraph two.")
+	endPos := strings.Index(contentStr, "End of slide.")
+
+	// Verify ordering is preserved
+	if paragraphOnePos >= imagePos {
+		t.Error("Paragraph one should come before the image")
+	}
+	if imagePos >= paragraphTwoPos {
+		t.Error("Image should come before Paragraph two")
+	}
+	if paragraphTwoPos >= endPos {
+		t.Error("Paragraph two should come before End of slide")
+	}
+}
+
+func TestReplaceImageInMarkdown_NoSelectedImage(t *testing.T) {
+	tmpDir := t.TempDir()
+	mdFile := filepath.Join(tmpDir, "test.md")
+
+	content := `# Test Slide
+
+Content
+`
+	if err := os.WriteFile(mdFile, []byte(content), 0644); err != nil {
+		t.Fatalf("failed to write test file: %v", err)
+	}
+
+	model, err := NewImageGenModel(mdFile)
+	if err != nil {
+		t.Fatalf("failed to create model: %v", err)
+	}
+
+	// SelectedImage is nil
+	model.SelectedImage = nil
+	model.Prompt = "some prompt"
+
+	// Should error when no selected image
+	err = model.ReplaceImageInMarkdown("images/new.png")
+	if err == nil {
+		t.Error("ReplaceImageInMarkdown should error when SelectedImage is nil")
+	}
+	if !strings.Contains(err.Error(), "no selected image") {
+		t.Errorf("error should mention 'no selected image', got: %v", err)
+	}
+}
+
+func TestImageRegeneration_FullWorkflow_Integration(t *testing.T) {
+	tmpDir := t.TempDir()
+	mdFile := filepath.Join(tmpDir, "test.md")
+	imagesDir := filepath.Join(tmpDir, "images")
+
+	// Create images directory and old image
+	if err := os.MkdirAll(imagesDir, 0755); err != nil {
+		t.Fatalf("failed to create images directory: %v", err)
+	}
+
+	oldImagePath := filepath.Join(imagesDir, "generated-abc12345.png")
+	oldImageData := []byte("old image content")
+	if err := os.WriteFile(oldImagePath, oldImageData, 0644); err != nil {
+		t.Fatalf("failed to create old image file: %v", err)
+	}
+
+	content := `---
+theme: paper
+---
+
+# Test Slide
+
+Some content here
+
+<!-- ai-prompt: original prompt -->
+![](images/generated-abc12345.png)
+
+More content below
+`
+	if err := os.WriteFile(mdFile, []byte(content), 0644); err != nil {
+		t.Fatalf("failed to write test file: %v", err)
+	}
+
+	model, err := NewImageGenModel(mdFile)
+	if err != nil {
+		t.Fatalf("failed to create model: %v", err)
+	}
+
+	// Simulate the full regeneration workflow
+
+	// 1. Set up selected image (from image selection step)
+	model.SelectedImage = &AIImageInfo{
+		Prompt:    "original prompt",
+		ImagePath: "images/generated-abc12345.png",
+	}
+	model.Prompt = "updated prompt for regeneration"
+
+	// 2. Simulate successful image generation
+	newImageData := []byte("new image content for testing")
+	model.GeneratedImage = &ImageGenerateResult{
+		ImageData:   newImageData,
+		ContentType: "image/png",
+	}
+
+	// 3. Save the new image
+	newImageRelPath, err := model.SaveGeneratedImage()
+	if err != nil {
+		t.Fatalf("SaveGeneratedImage failed: %v", err)
+	}
+
+	// Verify new image was saved
+	newImageFullPath := filepath.Join(tmpDir, newImageRelPath)
+	if _, err := os.Stat(newImageFullPath); os.IsNotExist(err) {
+		t.Error("new image file should exist")
+	}
+
+	// 4. Replace the image in markdown
+	err = model.ReplaceImageInMarkdown(newImageRelPath)
+	if err != nil {
+		t.Fatalf("ReplaceImageInMarkdown failed: %v", err)
+	}
+
+	// 5. Delete the old image
+	err = model.DeleteOldImage()
+	if err != nil {
+		t.Fatalf("DeleteOldImage failed: %v", err)
+	}
+
+	// Verify old image was deleted
+	if _, err := os.Stat(oldImagePath); !os.IsNotExist(err) {
+		t.Error("old image file should be deleted")
+	}
+
+	// Verify markdown was updated correctly
+	updatedContent, err := os.ReadFile(mdFile)
+	if err != nil {
+		t.Fatalf("failed to read updated file: %v", err)
+	}
+
+	contentStr := string(updatedContent)
+
+	// Should have new prompt and path
+	if !strings.Contains(contentStr, "<!-- ai-prompt: updated prompt for regeneration -->") {
+		t.Error("markdown should contain new prompt")
+	}
+	if !strings.Contains(contentStr, fmt.Sprintf("![](%s)", newImageRelPath)) {
+		t.Errorf("markdown should contain new image path: %s", newImageRelPath)
+	}
+
+	// Should not have old prompt and path
+	if strings.Contains(contentStr, "<!-- ai-prompt: original prompt -->") {
+		t.Error("markdown should not contain old prompt")
+	}
+	if strings.Contains(contentStr, "![](images/generated-abc12345.png)") {
+		t.Error("markdown should not contain old image path")
+	}
+
+	// Should preserve other content
+	if !strings.Contains(contentStr, "Some content here") {
+		t.Error("should preserve content before image")
+	}
+	if !strings.Contains(contentStr, "More content below") {
+		t.Error("should preserve content after image")
+	}
+	if !strings.Contains(contentStr, "theme: paper") {
+		t.Error("should preserve frontmatter")
+	}
+}

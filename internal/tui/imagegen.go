@@ -1014,6 +1014,90 @@ func (m *ImageGenModel) InsertImageIntoMarkdown(imagePath string) error {
 	return nil
 }
 
+// DeleteOldImage deletes the old image file when regenerating.
+// It resolves the image path relative to the markdown file's directory.
+func (m *ImageGenModel) DeleteOldImage() error {
+	if m.SelectedImage == nil {
+		return nil // Nothing to delete, not regenerating
+	}
+
+	oldImagePath := m.SelectedImage.ImagePath
+
+	// Resolve the path relative to the markdown file's directory
+	mdDir := filepath.Dir(m.MarkdownFile)
+	fullPath := filepath.Join(mdDir, oldImagePath)
+
+	// Check if the file exists
+	if _, err := os.Stat(fullPath); os.IsNotExist(err) {
+		// File doesn't exist, nothing to delete
+		return nil
+	}
+
+	// Delete the file
+	if err := os.Remove(fullPath); err != nil {
+		return fmt.Errorf("failed to delete old image: %w", err)
+	}
+
+	return nil
+}
+
+// ReplaceImageInMarkdown replaces an existing AI-generated image in the markdown file.
+// This preserves the image's position in the markdown (doesn't move it to the end of the slide).
+// The old image reference (comment + image) is replaced with the new one.
+func (m *ImageGenModel) ReplaceImageInMarkdown(newImagePath string) error {
+	if m.SelectedImage == nil {
+		return fmt.Errorf("no selected image to replace")
+	}
+
+	// Read the current markdown content
+	content, err := os.ReadFile(m.MarkdownFile)
+	if err != nil {
+		return fmt.Errorf("failed to read markdown file: %w", err)
+	}
+
+	// Replace the image in the content
+	newContent, err := replaceImageInContent(string(content), m.SelectedImage.Prompt, m.SelectedImage.ImagePath, m.Prompt, newImagePath)
+	if err != nil {
+		return fmt.Errorf("failed to replace image: %w", err)
+	}
+
+	// Write the updated content back to the file
+	if err := os.WriteFile(m.MarkdownFile, []byte(newContent), 0644); err != nil {
+		return fmt.Errorf("failed to write markdown file: %w", err)
+	}
+
+	return nil
+}
+
+// replaceImageInContent replaces an existing AI image reference in markdown content.
+// It finds the old prompt comment + image and replaces it with the new one.
+func replaceImageInContent(content string, oldPrompt string, oldImagePath string, newPrompt string, newImagePath string) (string, error) {
+	// Build the old pattern to find: <!-- ai-prompt: {oldPrompt} -->\n![](oldImagePath)
+	// We need to escape special regex characters in the prompt and path
+	escapedOldPrompt := regexp.QuoteMeta(oldPrompt)
+	escapedOldPath := regexp.QuoteMeta(oldImagePath)
+
+	// Match the comment followed by the image (with possible leading whitespace on the image line)
+	patternStr := fmt.Sprintf(`<!--\s*ai-prompt:\s*%s\s*-->\n[ \t]*!\[\]\(%s\)`, escapedOldPrompt, escapedOldPath)
+	pattern, err := regexp.Compile(patternStr)
+	if err != nil {
+		return "", fmt.Errorf("failed to compile replacement pattern: %w", err)
+	}
+
+	// Check if the pattern exists in the content
+	if !pattern.MatchString(content) {
+		return "", fmt.Errorf("could not find the existing image reference to replace")
+	}
+
+	// Build the new markdown
+	newMarkdown := fmt.Sprintf("<!-- ai-prompt: %s -->\n![](%s)", newPrompt, newImagePath)
+
+	// Replace the old with the new
+	newContent := pattern.ReplaceAllString(content, newMarkdown)
+
+	return newContent, nil
+}
+
 // insertImageIntoSlide inserts an image reference into a specific slide in markdown content.
 // It returns the modified content with the image inserted at the end of the specified slide.
 func insertImageIntoSlide(content string, slideIndex int, prompt string, imagePath string) (string, error) {
