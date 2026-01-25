@@ -157,7 +157,7 @@ flowchart LR
 
 Use the `two-column` layout to show a diagram alongside explanatory text:
 
-```markdown
+````markdown
 <!--
 layout: two-column
 -->
@@ -173,7 +173,7 @@ flowchart TD
     API --> Cache
     Cache --> DB
 ```
-```
+````
 
 ## Quick Reference
 
