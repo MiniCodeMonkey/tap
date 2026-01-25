@@ -356,3 +356,28 @@ Started: Sun Jan 25 14:30:25 CET 2026
   - When theme colors are updated (as in US-009 through US-012), example templates need to be verified for accuracy
   - Prefer descriptive terms over specific hex codes when possible to reduce maintenance burden
 ---
+
+## 2026-01-25 ~19:30 - US-018
+- Ran final visual QA pass and verified all templates render correctly
+- **Test Results:**
+  - 8 templates processed: basic, code-demo, sql-demo, theme-aurora, theme-noir, theme-paper, theme-phosphor, theme-poster
+  - 115 total slides captured
+  - 263 total screenshots (including fragment states)
+  - 0 console errors detected
+  - All tests passed in ~2.3 minutes
+- **Visual Verification:**
+  - Paper theme: Clean white backgrounds, good typography hierarchy, readable code blocks
+  - Noir theme: Elegant dark aesthetic with cinematic vignette, gold accents refined
+  - Aurora theme: Beautiful gradient backgrounds, glassmorphism effects, cyan/purple color scheme
+  - Phosphor theme: Authentic CRT green glow (#39ff14), scanline effects, terminal aesthetic
+  - Poster theme: Bold typography, high contrast red/yellow/white palette, offset shadows
+  - SQL demo: Two-column layouts with code and tables render correctly
+  - Code blocks: Syntax highlighting matches theme aesthetics across all templates
+- **Gallery Report:** Generated at tests/visual/gallery/index.html with all screenshots organized by template
+- **No files changed** - this was a verification/QA story, not an implementation story
+- **Learnings for future iterations:**
+  - Visual tests take ~2.3 minutes to run all 8 templates
+  - Each template uses dynamic port allocation (4000-4007) to avoid conflicts
+  - Gallery report provides easy visual comparison across all themes
+  - Zero errors across all templates indicates stable rendering
+---
