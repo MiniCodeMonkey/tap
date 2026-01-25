@@ -13,19 +13,19 @@
  */
 
 .theme-paper {
-  /* Core colors */
-  --color-bg: #ffffff;
-  --color-text: #0a0a0a;
+  /* Core colors - refined palette with more punch */
+  --color-bg: #fafafa;
+  --color-text: #18181b;
   --color-muted: #71717a;
-  --color-accent: #78716c;
-  --color-code-bg: #1e1e1e;
+  --color-accent: #2563eb; /* Vibrant blue for impact */
+  --color-code-bg: #18181b;
 
   /* Extended colors */
-  --color-border: rgba(10, 10, 10, 0.1);
-  --color-surface: #ffffff;
-  --color-surface-elevated: #fafafa;
+  --color-border: rgba(24, 24, 27, 0.08);
+  --color-surface: rgba(0, 0, 0, 0.02);
+  --color-surface-elevated: #ffffff;
   --color-link: var(--color-accent);
-  --color-code-text: #d4d4d4;
+  --color-code-text: #e4e4e7;
 
   /* Error colors - warm red for light theme */
   --color-error: #dc2626;
