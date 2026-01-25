@@ -1,0 +1,720 @@
+/**
+ * Comic Theme
+ *
+ * Bold pop art aesthetics - comic book panels, halftone dots, and speech bubbles.
+ * Inspired by classic comic books, Roy Lichtenstein, and pop art movement.
+ *
+ * Design philosophy:
+ * - White background with pure black text
+ * - Bold primaries: red, yellow, blue
+ * - Bangers for explosive display headings
+ * - Comic Neue for friendly body text
+ * - Halftone dot patterns via CSS radial-gradient
+ * - Thick black outlines (3-4px), speech bubble blockquotes
+ * - BAM! POW! energy throughout
+ */
+
+.theme-comic {
+  /* Core colors - bold and punchy */
+  --color-bg: #ffffff;
+  --color-text: #000000;
+  --color-muted: rgba(0, 0, 0, 0.65);
+  --color-accent: #3b82f6;
+  --color-code-bg: #fffbeb;
+
+  /* Extended colors */
+  --color-border: #000000;
+  --color-surface: #fef9c3;
+  --color-surface-elevated: #fef3c7;
+  --color-link: #3b82f6;
+  --color-code-text: #000000;
+
+  /* Comic color palette - bright primaries */
+  --comic-red: #ef4444;
+  --comic-yellow: #facc15;
+  --comic-blue: #3b82f6;
+  --comic-black: #000000;
+  --comic-white: #ffffff;
+  --comic-pink: #ec4899;
+  --comic-cyan: #06b6d4;
+  --comic-orange: #f97316;
+
+  /* Error colors */
+  --color-error: #ef4444;
+  --color-error-bg: rgba(239, 68, 68, 0.15);
+
+  /* Typography - Bangers for POW!, Comic Neue for readability */
+  --font-sans: 'Comic Neue', 'Comic Sans MS', cursive, sans-serif;
+  --font-display: 'Bangers', 'Impact', 'Comic Neue', cursive, sans-serif;
+  --font-mono: 'JetBrains Mono', 'SF Mono', Monaco, 'Cascadia Code', Consolas, 'Liberation Mono',
+    Menlo, monospace;
+
+  /* Transitions - snappy, punchy */
+  --transition-duration: 150ms;
+  --transition-timing: cubic-bezier(0.68, -0.55, 0.265, 1.55);
+  --fragment-duration: 200ms;
+
+  /* Apply base styles */
+  font-family: var(--font-sans);
+  color: var(--color-text);
+  letter-spacing: 0.01em;
+  line-height: 1.6;
+  font-weight: 400;
+
+  /* White background with subtle halftone pattern */
+  background:
+    radial-gradient(circle, rgba(0, 0, 0, 0.03) 1px, transparent 1px);
+  background-size: 8px 8px;
+  background-color: var(--comic-white);
+}
+
+/* Comic typography - bold, expressive, FUN! */
+.theme-comic h1,
+.theme-comic h2,
+.theme-comic h3,
+.theme-comic h4,
+.theme-comic h5,
+.theme-comic h6 {
+  font-family: var(--font-display);
+  font-weight: 400;
+  letter-spacing: 0.05em;
+  line-height: 1.1;
+  margin: 0;
+  color: var(--comic-black);
+  text-transform: uppercase;
+  /* Thick black outline effect via text-shadow */
+  text-shadow:
+    3px 3px 0 var(--comic-black),
+    -1px -1px 0 var(--comic-black),
+    1px -1px 0 var(--comic-black),
+    -1px 1px 0 var(--comic-black),
+    1px 1px 0 var(--comic-black);
+  color: var(--comic-yellow);
+}
+
+.theme-comic h1 {
+  letter-spacing: 0.08em;
+}
+
+.theme-comic h2 {
+  letter-spacing: 0.06em;
+  color: var(--comic-red);
+}
+
+.theme-comic h3 {
+  letter-spacing: 0.04em;
+  font-size: 1.5em;
+  color: var(--comic-blue);
+}
+
+.theme-comic p,
+.theme-comic li {
+  font-family: var(--font-sans);
+  font-weight: 400;
+  letter-spacing: 0.01em;
+  text-shadow: none;
+  color: var(--comic-black);
+}
+
+/* Comic code blocks - panel style with thick borders */
+.theme-comic code {
+  font-family: var(--font-mono);
+  background-color: var(--color-code-bg);
+  padding: 0.2em 0.5em;
+  border-radius: 0;
+  font-size: 0.85em;
+  border: 3px solid var(--comic-black);
+  color: var(--comic-black);
+  box-shadow: 4px 4px 0 var(--comic-black);
+}
+
+.theme-comic pre {
+  font-family: var(--font-mono);
+  background-color: var(--color-code-bg);
+  color: var(--color-code-text);
+  padding: 1.75em 2.25em;
+  border-radius: 0;
+  overflow-x: auto;
+  line-height: 1.65;
+  /* Thick black border with offset shadow */
+  border: 4px solid var(--comic-black);
+  box-shadow: 8px 8px 0 var(--comic-black);
+  position: relative;
+}
+
+/* Corner dots on code blocks */
+.theme-comic pre::before,
+.theme-comic pre::after {
+  content: '';
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  background: var(--comic-red);
+  border: 3px solid var(--comic-black);
+  border-radius: 50%;
+}
+
+.theme-comic pre::before {
+  top: -8px;
+  left: -8px;
+}
+
+.theme-comic pre::after {
+  bottom: -8px;
+  right: -8px;
+  background: var(--comic-blue);
+}
+
+.theme-comic pre code {
+  background: none;
+  padding: 0;
+  border-radius: 0;
+  font-size: inherit;
+  border: none;
+  box-shadow: none;
+}
+
+/* Comic links - bold with action underline */
+.theme-comic a {
+  color: var(--comic-blue);
+  text-decoration: none;
+  border-bottom: 3px solid var(--comic-blue);
+  font-weight: 700;
+  transition:
+    border-color var(--transition-duration) var(--transition-timing),
+    color var(--transition-duration) var(--transition-timing),
+    transform var(--transition-duration) var(--transition-timing);
+}
+
+.theme-comic a:hover {
+  border-bottom-color: var(--comic-red);
+  color: var(--comic-red);
+  transform: scale(1.05);
+}
+
+/* Comic lists - action markers */
+.theme-comic ul,
+.theme-comic ol {
+  padding-left: 2.5em;
+  margin: 0;
+}
+
+.theme-comic li {
+  margin-bottom: 0.75em;
+  padding-left: 0.5em;
+}
+
+.theme-comic li::marker {
+  color: var(--comic-black);
+  font-weight: 700;
+}
+
+/* Rotating action markers with stars and bursts */
+.theme-comic ul li:nth-child(4n+1)::marker {
+  content: '★ ';
+  color: var(--comic-red);
+}
+
+.theme-comic ul li:nth-child(4n+2)::marker {
+  content: '✦ ';
+  color: var(--comic-yellow);
+}
+
+.theme-comic ul li:nth-child(4n+3)::marker {
+  content: '● ';
+  color: var(--comic-blue);
+}
+
+.theme-comic ul li:nth-child(4n+4)::marker {
+  content: '✸ ';
+  color: var(--comic-pink);
+}
+
+.theme-comic ol li::marker {
+  font-family: var(--font-display);
+  font-size: 1.3em;
+  color: var(--comic-red);
+}
+
+/* Comic blockquotes - SPEECH BUBBLE style! */
+.theme-comic blockquote {
+  background: var(--comic-white);
+  border: 4px solid var(--comic-black);
+  border-radius: 30px;
+  padding: 1.5em 2em;
+  margin: 0;
+  font-style: normal;
+  position: relative;
+  box-shadow: 6px 6px 0 var(--comic-black);
+}
+
+/* Speech bubble tail */
+.theme-comic blockquote::after {
+  content: '';
+  position: absolute;
+  bottom: -25px;
+  left: 40px;
+  width: 0;
+  height: 0;
+  border-left: 20px solid transparent;
+  border-right: 20px solid transparent;
+  border-top: 25px solid var(--comic-black);
+}
+
+.theme-comic blockquote::before {
+  content: '';
+  position: absolute;
+  bottom: -17px;
+  left: 44px;
+  width: 0;
+  height: 0;
+  border-left: 16px solid transparent;
+  border-right: 16px solid transparent;
+  border-top: 20px solid var(--comic-white);
+  z-index: 1;
+}
+
+.theme-comic blockquote p {
+  font-size: 1.1em;
+  font-weight: 700;
+  text-shadow: none;
+}
+
+/* Comic tables - panel grid */
+.theme-comic table {
+  width: 100%;
+  border-collapse: collapse;
+  background: transparent;
+  border: 4px solid var(--comic-black);
+  box-shadow: 6px 6px 0 var(--comic-black);
+}
+
+.theme-comic th,
+.theme-comic td {
+  padding: 1em 1.5em;
+  text-align: left;
+  border: 3px solid var(--comic-black);
+}
+
+.theme-comic th {
+  font-family: var(--font-display);
+  font-weight: 400;
+  color: var(--comic-white);
+  background: var(--comic-red);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  font-size: 1.1em;
+  text-shadow:
+    2px 2px 0 var(--comic-black),
+    -1px -1px 0 var(--comic-black),
+    1px -1px 0 var(--comic-black),
+    -1px 1px 0 var(--comic-black);
+}
+
+.theme-comic tr:nth-child(even) td {
+  background-color: rgba(250, 204, 21, 0.15);
+}
+
+/* Comic images - panel frame */
+.theme-comic img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 0;
+  border: 4px solid var(--comic-black);
+  box-shadow: 6px 6px 0 var(--comic-black);
+}
+
+/* Comic fragments - POW! bounce in */
+.theme-comic .fragment {
+  transition:
+    opacity var(--fragment-duration) var(--transition-timing),
+    transform var(--fragment-duration) var(--transition-timing);
+}
+
+.theme-comic .fragment-hidden {
+  opacity: 0;
+  transform: scale(0.8) rotate(-5deg);
+}
+
+.theme-comic .fragment-visible {
+  opacity: 1;
+  transform: scale(1) rotate(0deg);
+}
+
+/* Comic selection - POW! highlight */
+.theme-comic ::selection {
+  background-color: var(--comic-yellow);
+  color: var(--comic-black);
+}
+
+/* Strong/bold text - extra punchy */
+.theme-comic strong,
+.theme-comic b {
+  font-weight: 700;
+  color: var(--comic-red);
+  text-shadow: none;
+}
+
+/* Emphasis/italic text */
+.theme-comic em,
+.theme-comic i {
+  font-style: italic;
+  color: var(--comic-blue);
+  text-shadow: none;
+}
+
+/* Horizontal rule - action burst */
+.theme-comic hr {
+  border: none;
+  height: 20px;
+  margin: 2.5em auto;
+  max-width: 300px;
+  position: relative;
+  background: transparent;
+}
+
+.theme-comic hr::before {
+  content: '★ ★ ★';
+  display: block;
+  text-align: center;
+  font-family: var(--font-display);
+  font-size: 2rem;
+  letter-spacing: 1em;
+  color: var(--comic-yellow);
+  text-shadow:
+    2px 2px 0 var(--comic-black),
+    -1px -1px 0 var(--comic-black),
+    1px -1px 0 var(--comic-black),
+    -1px 1px 0 var(--comic-black);
+}
+
+/* ============================================
+   Layout-specific styles for Comic theme
+   ============================================ */
+
+/* Title layout - explosive action splash */
+.theme-comic .layout-title {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  position: relative;
+}
+
+/* Halftone burst background */
+.theme-comic .layout-title::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 130%;
+  height: 130%;
+  background:
+    radial-gradient(circle at center, var(--comic-yellow) 0%, transparent 50%),
+    radial-gradient(circle, rgba(0, 0, 0, 0.08) 2px, transparent 2px);
+  background-size: 100% 100%, 12px 12px;
+  z-index: 0;
+  opacity: 0.8;
+}
+
+/* Action lines radiating from center */
+.theme-comic .layout-title::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 90%;
+  height: 90%;
+  background:
+    repeating-conic-gradient(
+      from 0deg,
+      transparent 0deg 8deg,
+      rgba(0, 0, 0, 0.03) 8deg 10deg
+    );
+  z-index: 0;
+}
+
+.theme-comic .layout-title h1 {
+  font-size: clamp(3.5rem, 9vw, 8rem);
+  letter-spacing: 0.1em;
+  position: relative;
+  z-index: 1;
+  color: var(--comic-yellow);
+  text-shadow:
+    5px 5px 0 var(--comic-black),
+    -2px -2px 0 var(--comic-black),
+    2px -2px 0 var(--comic-black),
+    -2px 2px 0 var(--comic-black),
+    2px 2px 0 var(--comic-black),
+    8px 8px 0 var(--comic-red);
+  transform: rotate(-2deg);
+}
+
+.theme-comic .layout-title p {
+  font-size: 1.6rem;
+  color: var(--comic-black);
+  margin-top: 1.5rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  position: relative;
+  z-index: 1;
+  background: var(--comic-white);
+  padding: 0.5em 1.5em;
+  border: 3px solid var(--comic-black);
+  box-shadow: 4px 4px 0 var(--comic-black);
+  text-shadow: none;
+}
+
+/* Section layout - chapter splash page */
+.theme-comic .layout-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  position: relative;
+}
+
+/* Action star burst */
+.theme-comic .layout-section::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 500px;
+  height: 500px;
+  background:
+    conic-gradient(
+      from 0deg,
+      var(--comic-yellow) 0deg,
+      transparent 20deg,
+      var(--comic-yellow) 40deg,
+      transparent 60deg,
+      var(--comic-yellow) 80deg,
+      transparent 100deg,
+      var(--comic-yellow) 120deg,
+      transparent 140deg,
+      var(--comic-yellow) 160deg,
+      transparent 180deg,
+      var(--comic-yellow) 200deg,
+      transparent 220deg,
+      var(--comic-yellow) 240deg,
+      transparent 260deg,
+      var(--comic-yellow) 280deg,
+      transparent 300deg,
+      var(--comic-yellow) 320deg,
+      transparent 340deg,
+      var(--comic-yellow) 360deg
+    );
+  opacity: 0.4;
+  z-index: 0;
+}
+
+.theme-comic .layout-section h2 {
+  font-size: clamp(3rem, 8vw, 6rem);
+  letter-spacing: 0.08em;
+  position: relative;
+  z-index: 1;
+  color: var(--comic-red);
+  text-shadow:
+    4px 4px 0 var(--comic-black),
+    -2px -2px 0 var(--comic-black),
+    2px -2px 0 var(--comic-black),
+    -2px 2px 0 var(--comic-black),
+    6px 6px 0 var(--comic-yellow);
+  transform: rotate(1deg);
+}
+
+.theme-comic .layout-section p {
+  font-size: 1.4rem;
+  color: var(--comic-black);
+  margin-top: 1.5rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-weight: 700;
+  position: relative;
+  z-index: 1;
+  text-shadow: none;
+}
+
+/* Big-stat layout - POW! number explosion */
+.theme-comic .layout-big-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  position: relative;
+}
+
+/* Explosion burst behind stat */
+.theme-comic .layout-big-stat::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 400px;
+  height: 400px;
+  background:
+    radial-gradient(circle, var(--comic-yellow) 0%, transparent 70%);
+  clip-path: polygon(
+    50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%,
+    50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%
+  );
+  z-index: 0;
+}
+
+.theme-comic .layout-big-stat h2 {
+  font-family: var(--font-display);
+  font-size: clamp(7rem, 18vw, 14rem);
+  letter-spacing: 0.02em;
+  line-height: 1;
+  color: var(--comic-red);
+  position: relative;
+  z-index: 1;
+  text-shadow:
+    6px 6px 0 var(--comic-black),
+    -2px -2px 0 var(--comic-black),
+    2px -2px 0 var(--comic-black),
+    -2px 2px 0 var(--comic-black),
+    10px 10px 0 var(--comic-yellow);
+  transform: rotate(-3deg);
+}
+
+.theme-comic .layout-big-stat p {
+  font-size: 1.6rem;
+  color: var(--comic-black);
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  margin-top: 1.5rem;
+  font-weight: 700;
+  position: relative;
+  z-index: 1;
+  background: var(--comic-white);
+  padding: 0.4em 1.2em;
+  border: 3px solid var(--comic-black);
+  box-shadow: 4px 4px 0 var(--comic-black);
+  text-shadow: none;
+}
+
+/* Quote layout - giant speech bubble */
+.theme-comic .layout-quote {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  padding: 4rem;
+}
+
+.theme-comic .layout-quote blockquote {
+  max-width: 80%;
+  padding: 2.5rem 3rem;
+  position: relative;
+  border-radius: 50px;
+  border: 5px solid var(--comic-black);
+  box-shadow: 8px 8px 0 var(--comic-black);
+  background: var(--comic-white);
+}
+
+/* Bigger speech bubble tail */
+.theme-comic .layout-quote blockquote::after {
+  bottom: -35px;
+  left: 50px;
+  border-left: 30px solid transparent;
+  border-right: 30px solid transparent;
+  border-top: 35px solid var(--comic-black);
+}
+
+.theme-comic .layout-quote blockquote::before {
+  bottom: -25px;
+  left: 56px;
+  border-left: 24px solid transparent;
+  border-right: 24px solid transparent;
+  border-top: 28px solid var(--comic-white);
+}
+
+.theme-comic .layout-quote blockquote p {
+  font-size: clamp(1.5rem, 3.5vw, 2.5rem);
+  font-style: normal;
+  line-height: 1.4;
+  color: var(--comic-black);
+  font-weight: 700;
+  text-shadow: none;
+}
+
+.theme-comic .layout-quote p:not(blockquote p),
+.theme-comic .layout-quote cite {
+  font-style: normal;
+  font-size: 1.3rem;
+  color: var(--comic-blue);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin-top: 2.5rem;
+  font-weight: 700;
+  text-shadow: none;
+}
+
+/* Two-column layout - comic panels */
+.theme-comic .layout-two-column {
+  gap: 3rem;
+}
+
+.theme-comic .layout-two-column > *:first-child,
+.theme-comic .layout-two-column > *:last-child {
+  background: var(--comic-white);
+  border: 4px solid var(--comic-black);
+  padding: 2rem;
+  box-shadow: 6px 6px 0 var(--comic-black);
+}
+
+.theme-comic .layout-two-column > *:first-child {
+  border-right: 4px solid var(--comic-black);
+}
+
+.theme-comic .layout-two-column h3 {
+  font-family: var(--font-display);
+  color: var(--comic-yellow);
+  margin-bottom: 1em;
+  font-size: 1.8rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  text-shadow:
+    2px 2px 0 var(--comic-black),
+    -1px -1px 0 var(--comic-black),
+    1px -1px 0 var(--comic-black),
+    -1px 1px 0 var(--comic-black);
+}
+
+/* Rotating panel colors */
+.theme-comic .layout-two-column > *:first-child {
+  background:
+    radial-gradient(circle, rgba(250, 204, 21, 0.1) 2px, transparent 2px);
+  background-size: 10px 10px;
+  background-color: var(--comic-white);
+}
+
+.theme-comic .layout-two-column > *:last-child {
+  background:
+    radial-gradient(circle, rgba(59, 130, 246, 0.1) 2px, transparent 2px);
+  background-size: 10px 10px;
+  background-color: var(--comic-white);
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  .theme-comic {
+    --transition-duration: 0ms;
+    --fragment-duration: 0ms;
+  }
+
+  .theme-comic .fragment-hidden {
+    transform: none;
+  }
+}
