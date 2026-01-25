@@ -97,6 +97,15 @@ release-windows-amd64:
 	@mkdir -p $(BUILD_DIR)
 	GOOS=windows GOARCH=amd64 $(GOBUILD) $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME)-windows-amd64.exe ./cmd/tap
 
+# Create a new release (updates changelog, tags, creates GitHub release)
+# Usage: make tag VERSION=1.0.0
+.PHONY: tag
+tag:
+ifndef VERSION
+	$(error VERSION is required. Usage: make tag VERSION=1.0.0)
+endif
+	./scripts/release.sh $(VERSION)
+
 # Clean build artifacts
 .PHONY: clean
 clean:
@@ -123,6 +132,7 @@ help:
 	@echo "  lint           - Run golangci-lint"
 	@echo "  dev            - Build and run development server"
 	@echo "  release        - Build release binaries for all platforms"
+	@echo "  tag VERSION=X  - Create a release (update changelog, tag, GitHub release)"
 	@echo "  clean          - Remove build artifacts"
 	@echo "  deps           - Download and tidy dependencies"
 	@echo "  typecheck      - Verify code compiles"
