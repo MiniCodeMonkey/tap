@@ -17,7 +17,8 @@
     "test:coverage": "vitest run --coverage",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
-    "test:e2e:debug": "playwright test --debug"
+    "test:e2e:debug": "playwright test --debug",
+    "test:visual": "playwright test --config=playwright.visual.config.ts"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.2",
