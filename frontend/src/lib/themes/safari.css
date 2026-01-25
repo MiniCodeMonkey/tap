@@ -1,0 +1,727 @@
+/**
+ * Safari Theme
+ *
+ * Adventurous Victorian exploration aesthetic - aged maps, brass instruments,
+ * field journals, and the golden age of discovery.
+ *
+ * Design philosophy:
+ * - Aged cream/sepia background evoking old expedition maps and journals
+ * - Forest green, brass/copper, and burgundy for authentic explorer colors
+ * - Spectral for elegant headings with old-world charm
+ * - Special Elite (typewriter) for field notes and accents
+ * - Vintage map texture effects and compass rose decorations
+ * - Dotted travel line borders suggesting expedition routes
+ */
+
+.theme-safari {
+  /* Core colors - aged parchment with rich earth tones */
+  --color-bg: #f5f0e1;
+  --color-text: #3d2914;
+  --color-muted: rgba(61, 41, 20, 0.6);
+  --color-accent: #2d5016;
+  --color-code-bg: rgba(45, 80, 22, 0.08);
+
+  /* Extended colors - explorer palette */
+  --color-border: rgba(61, 41, 20, 0.25);
+  --color-surface: rgba(245, 240, 225, 0.9);
+  --color-surface-elevated: #fffdf7;
+  --color-link: #2d5016;
+  --color-code-text: #3d2914;
+
+  /* Safari exploration colors */
+  --safari-cream: #f5f0e1;
+  --safari-parchment: #e8dcc8;
+  --safari-sepia: #8b7355;
+  --safari-brown: #3d2914;
+  --safari-dark-brown: #2c1810;
+  --safari-green: #2d5016;
+  --safari-forest: #1e3a0f;
+  --safari-brass: #b8860b;
+  --safari-copper: #a06030;
+  --safari-burgundy: #6b1c23;
+  --safari-gold: #c9a227;
+  --safari-khaki: #c3b091;
+
+  /* Accent color with alpha */
+  --safari-green-muted: rgba(45, 80, 22, 0.15);
+  --safari-brass-muted: rgba(184, 134, 11, 0.2);
+  --safari-burgundy-muted: rgba(107, 28, 35, 0.15);
+
+  /* Error colors - warning red */
+  --color-error: #9f1d1d;
+  --color-error-bg: rgba(159, 29, 29, 0.1);
+
+  /* Typography - Spectral for headings, Special Elite for accents */
+  --font-sans: 'Spectral', Georgia, 'Times New Roman', serif;
+  --font-serif: 'Spectral', Georgia, 'Times New Roman', serif;
+  --font-display: 'Spectral', Georgia, serif;
+  --font-accent: 'Special Elite', 'Courier New', monospace;
+  --font-mono: 'Special Elite', 'Courier New', Consolas, monospace;
+
+  /* Transitions - measured and deliberate */
+  --transition-duration: 300ms;
+  --transition-timing: cubic-bezier(0.4, 0, 0.2, 1);
+  --fragment-duration: 400ms;
+
+  /* Apply base styles */
+  font-family: var(--font-sans);
+  color: var(--color-text);
+  letter-spacing: 0.01em;
+  line-height: 1.7;
+
+  /* Aged parchment background with subtle map texture */
+  background:
+    /* Subtle foxing/age spots */
+    radial-gradient(
+      ellipse at 20% 30%,
+      rgba(139, 115, 85, 0.08) 0%,
+      transparent 50%
+    ),
+    radial-gradient(
+      ellipse at 80% 70%,
+      rgba(139, 115, 85, 0.06) 0%,
+      transparent 40%
+    ),
+    radial-gradient(
+      ellipse at 60% 20%,
+      rgba(139, 115, 85, 0.04) 0%,
+      transparent 35%
+    ),
+    /* Parchment grain texture */
+    repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(139, 115, 85, 0.02) 2px,
+      rgba(139, 115, 85, 0.02) 4px
+    ),
+    repeating-linear-gradient(
+      90deg,
+      transparent,
+      transparent 2px,
+      rgba(139, 115, 85, 0.015) 2px,
+      rgba(139, 115, 85, 0.015) 4px
+    );
+  background-color: var(--safari-cream);
+}
+
+/* Safari theme typography - elegant old-world */
+.theme-safari h1,
+.theme-safari h2,
+.theme-safari h3,
+.theme-safari h4,
+.theme-safari h5,
+.theme-safari h6 {
+  font-family: var(--font-display);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  line-height: 1.2;
+  margin: 0;
+  color: var(--safari-dark-brown);
+}
+
+.theme-safari h1 {
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border-bottom: 2px solid var(--safari-brass);
+  padding-bottom: 0.3em;
+}
+
+.theme-safari h2 {
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  color: var(--safari-green);
+}
+
+.theme-safari h3 {
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--safari-brown);
+}
+
+.theme-safari p,
+.theme-safari li {
+  font-family: var(--font-sans);
+  font-weight: 400;
+  letter-spacing: 0.01em;
+}
+
+/* Safari theme code blocks - typewriter field notes */
+.theme-safari code {
+  font-family: var(--font-mono);
+  background-color: var(--color-code-bg);
+  padding: 0.2em 0.5em;
+  border-radius: 2px;
+  font-size: 0.9em;
+  border: 1px dashed var(--safari-sepia);
+  color: var(--safari-brown);
+}
+
+.theme-safari pre {
+  font-family: var(--font-mono);
+  background-color: var(--safari-parchment);
+  color: var(--color-code-text);
+  padding: 1.5em 2em;
+  border-radius: 0;
+  overflow-x: auto;
+  line-height: 1.6;
+  border: 2px solid var(--safari-sepia);
+  position: relative;
+  box-shadow:
+    inset 0 0 30px rgba(139, 115, 85, 0.1),
+    4px 4px 0 rgba(139, 115, 85, 0.15);
+}
+
+/* Aged paper corner curl effect */
+.theme-safari pre::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 0;
+  height: 0;
+  border-style: solid;
+  border-width: 0 25px 25px 0;
+  border-color: transparent var(--safari-cream) transparent transparent;
+  filter: drop-shadow(-2px 2px 2px rgba(139, 115, 85, 0.2));
+}
+
+/* Field journal label */
+.theme-safari pre::after {
+  content: 'FIELD NOTES';
+  position: absolute;
+  top: -1px;
+  left: 15px;
+  font-family: var(--font-accent);
+  font-size: 0.65em;
+  color: var(--safari-sepia);
+  letter-spacing: 0.15em;
+  background: var(--safari-cream);
+  padding: 0 0.5em;
+  transform: translateY(-50%);
+}
+
+.theme-safari pre code {
+  background: none;
+  padding: 0;
+  border-radius: 0;
+  font-size: inherit;
+  border: none;
+}
+
+/* Safari theme links - forest green */
+.theme-safari a {
+  color: var(--color-link);
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  text-underline-offset: 3px;
+  transition: color var(--transition-duration) var(--transition-timing);
+}
+
+.theme-safari a:hover {
+  color: var(--safari-brass);
+  text-decoration-style: solid;
+}
+
+/* Safari theme lists - expedition markers */
+.theme-safari ul,
+.theme-safari ol {
+  padding-left: 1.5em;
+  margin: 0;
+}
+
+.theme-safari li {
+  margin-bottom: 0.5em;
+  padding-left: 0.5em;
+}
+
+.theme-safari li::marker {
+  color: var(--safari-brass);
+}
+
+/* Rotating exploration markers */
+.theme-safari ul li:nth-child(4n+1)::marker {
+  content: '◆ ';
+  color: var(--safari-green);
+}
+
+.theme-safari ul li:nth-child(4n+2)::marker {
+  content: '▸ ';
+  color: var(--safari-brass);
+}
+
+.theme-safari ul li:nth-child(4n+3)::marker {
+  content: '● ';
+  color: var(--safari-burgundy);
+}
+
+.theme-safari ul li:nth-child(4n+4)::marker {
+  content: '✦ ';
+  color: var(--safari-sepia);
+}
+
+.theme-safari ol li::marker {
+  font-family: var(--font-display);
+  font-weight: 700;
+  color: var(--safari-brass);
+}
+
+/* Safari theme blockquotes - field journal excerpts */
+.theme-safari blockquote {
+  border-left: 4px double var(--safari-brass);
+  padding: 1.25em 1.5em;
+  margin: 1.5em 0;
+  background: linear-gradient(
+    90deg,
+    rgba(184, 134, 11, 0.08) 0%,
+    rgba(232, 220, 200, 0.5) 50%,
+    rgba(245, 240, 225, 0.8) 100%
+  );
+  position: relative;
+  font-style: italic;
+}
+
+/* Vintage quote marks */
+.theme-safari blockquote::before {
+  content: '"';
+  position: absolute;
+  top: -0.2em;
+  left: 0.3em;
+  font-family: var(--font-display);
+  font-size: 3em;
+  color: var(--safari-brass-muted);
+  line-height: 1;
+}
+
+.theme-safari blockquote p {
+  color: var(--safari-brown);
+  font-style: italic;
+  margin-left: 1em;
+}
+
+/* Safari theme tables - expedition logs */
+.theme-safari table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--safari-parchment);
+  border: 2px solid var(--safari-sepia);
+}
+
+.theme-safari th,
+.theme-safari td {
+  padding: 0.875em 1.25em;
+  text-align: left;
+  border-bottom: 1px dashed var(--safari-sepia);
+}
+
+.theme-safari th {
+  font-family: var(--font-accent);
+  font-weight: 400;
+  color: var(--safari-dark-brown);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  font-size: 0.85em;
+  background: rgba(184, 134, 11, 0.1);
+  border-bottom: 2px solid var(--safari-brass);
+}
+
+.theme-safari tr:last-child td {
+  border-bottom: none;
+}
+
+.theme-safari tr:hover td {
+  background-color: rgba(184, 134, 11, 0.05);
+}
+
+/* Safari theme images - vintage photo frame */
+.theme-safari img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 0;
+  border: 3px solid var(--safari-sepia);
+  box-shadow:
+    4px 4px 0 rgba(139, 115, 85, 0.2),
+    8px 8px 15px rgba(139, 115, 85, 0.1);
+  filter: sepia(10%);
+}
+
+/* Safari theme fragments - fade in from exploration */
+.theme-safari .fragment {
+  transition:
+    opacity var(--fragment-duration) var(--transition-timing),
+    transform var(--fragment-duration) var(--transition-timing);
+}
+
+.theme-safari .fragment-hidden {
+  opacity: 0;
+  transform: translateY(15px);
+}
+
+.theme-safari .fragment-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Safari theme selection - brass highlight */
+.theme-safari ::selection {
+  background-color: var(--safari-brass);
+  color: #ffffff;
+}
+
+/* Strong/bold text - forest green emphasis */
+.theme-safari strong,
+.theme-safari b {
+  font-weight: 700;
+  color: var(--safari-green);
+}
+
+/* Emphasis/italic text - sepia tint */
+.theme-safari em,
+.theme-safari i {
+  font-style: italic;
+  color: var(--safari-sepia);
+}
+
+/* Horizontal rule - dotted travel line */
+.theme-safari hr {
+  border: none;
+  height: 2px;
+  border-top: 2px dotted var(--safari-brass);
+  margin: 2.5em auto;
+  max-width: 70%;
+  position: relative;
+}
+
+/* Compass marker on hr */
+.theme-safari hr::before {
+  content: '✦';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: var(--safari-cream);
+  color: var(--safari-brass);
+  font-size: 1.2em;
+  padding: 0 0.5em;
+}
+
+/* ============================================
+   Layout-specific styles for Safari theme
+   ============================================ */
+
+/* Title layout - expedition banner with compass */
+.theme-safari .layout-title {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Vintage map border pattern */
+.theme-safari .layout-title::before {
+  content: '';
+  position: absolute;
+  top: 5%;
+  left: 5%;
+  right: 5%;
+  bottom: 5%;
+  border: 3px double var(--safari-brass);
+  pointer-events: none;
+}
+
+/* Compass rose decoration */
+.theme-safari .layout-title::after {
+  content: '✦';
+  position: absolute;
+  top: 12%;
+  right: 12%;
+  font-size: 3rem;
+  color: var(--safari-brass);
+  opacity: 0.6;
+}
+
+.theme-safari .layout-title h1 {
+  font-size: clamp(3rem, 9vw, 7rem);
+  letter-spacing: 0.08em;
+  line-height: 1.1;
+  position: relative;
+  z-index: 1;
+  text-transform: uppercase;
+  color: var(--safari-dark-brown);
+  border-bottom: 3px double var(--safari-brass);
+  padding-bottom: 0.2em;
+  margin-bottom: 0.3em;
+}
+
+/* Decorative flourish below title */
+.theme-safari .layout-title h1::after {
+  content: '— ✦ —';
+  display: block;
+  font-size: 0.25em;
+  letter-spacing: 0.5em;
+  color: var(--safari-brass);
+  margin-top: 0.5em;
+  border: none;
+}
+
+.theme-safari .layout-title p {
+  font-family: var(--font-accent);
+  font-size: 1.25rem;
+  color: var(--safari-sepia);
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  margin-top: 1rem;
+  position: relative;
+  z-index: 1;
+}
+
+/* Section layout - chapter divider */
+.theme-safari .layout-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  position: relative;
+}
+
+/* Decorative border lines */
+.theme-safari .layout-section::before,
+.theme-safari .layout-section::after {
+  content: '';
+  position: absolute;
+  left: 15%;
+  right: 15%;
+  height: 3px;
+  border-top: 1px solid var(--safari-brass);
+  border-bottom: 1px solid var(--safari-brass);
+}
+
+.theme-safari .layout-section::before {
+  top: 20%;
+}
+
+.theme-safari .layout-section::after {
+  bottom: 20%;
+}
+
+.theme-safari .layout-section h2 {
+  font-size: clamp(2.5rem, 8vw, 5rem);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--safari-green);
+  position: relative;
+}
+
+/* Chapter number style flourish */
+.theme-safari .layout-section h2::before {
+  content: '◆';
+  display: block;
+  font-size: 0.4em;
+  color: var(--safari-brass);
+  margin-bottom: 0.5em;
+  letter-spacing: 0.3em;
+}
+
+.theme-safari .layout-section p {
+  font-family: var(--font-accent);
+  font-size: 1.1rem;
+  color: var(--safari-sepia);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  margin-top: 1.5rem;
+}
+
+/* Big-stat layout - expedition data */
+.theme-safari .layout-big-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  position: relative;
+}
+
+/* Vintage measurement frame */
+.theme-safari .layout-big-stat::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(60vw, 400px);
+  height: min(60vw, 400px);
+  border: 4px double var(--safari-brass);
+  border-radius: 50%;
+  opacity: 0.4;
+}
+
+/* Inner compass ring */
+.theme-safari .layout-big-stat::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(50vw, 320px);
+  height: min(50vw, 320px);
+  border: 2px solid var(--safari-sepia);
+  border-radius: 50%;
+  opacity: 0.3;
+}
+
+.theme-safari .layout-big-stat h2 {
+  font-size: clamp(6rem, 18vw, 12rem);
+  letter-spacing: 0.02em;
+  line-height: 0.9;
+  position: relative;
+  z-index: 1;
+  color: var(--safari-dark-brown);
+  font-weight: 700;
+}
+
+.theme-safari .layout-big-stat p {
+  font-family: var(--font-accent);
+  font-size: 1.3rem;
+  font-weight: 400;
+  color: var(--safari-brass);
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  margin-top: 1rem;
+  position: relative;
+  z-index: 1;
+}
+
+/* Quote layout - explorer's journal */
+.theme-safari .layout-quote {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  padding: 4rem;
+}
+
+.theme-safari .layout-quote blockquote {
+  border-left: none;
+  background: var(--safari-parchment);
+  max-width: 80%;
+  padding: 3rem;
+  position: relative;
+  border: 2px solid var(--safari-sepia);
+  box-shadow:
+    6px 6px 0 rgba(139, 115, 85, 0.15),
+    inset 0 0 40px rgba(139, 115, 85, 0.08);
+}
+
+/* Journal page torn edge simulation */
+.theme-safari .layout-quote blockquote::before {
+  content: '"';
+  position: absolute;
+  top: 0.5rem;
+  left: 1.5rem;
+  font-family: var(--font-display);
+  font-size: 5rem;
+  color: var(--safari-brass);
+  opacity: 0.4;
+  line-height: 1;
+}
+
+.theme-safari .layout-quote blockquote::after {
+  content: 'FROM THE EXPEDITION JOURNAL';
+  position: absolute;
+  bottom: -1px;
+  right: 20px;
+  font-family: var(--font-accent);
+  font-size: 0.6em;
+  color: var(--safari-sepia);
+  letter-spacing: 0.1em;
+  background: var(--safari-cream);
+  padding: 0 0.5em;
+  transform: translateY(50%);
+}
+
+.theme-safari .layout-quote blockquote p {
+  font-family: var(--font-serif);
+  font-size: clamp(1.4rem, 3vw, 2.2rem);
+  font-style: italic;
+  font-weight: 400;
+  line-height: 1.6;
+  color: var(--safari-brown);
+  margin-left: 0;
+  text-indent: 2em;
+}
+
+.theme-safari .layout-quote p:not(blockquote p),
+.theme-safari .layout-quote cite {
+  font-family: var(--font-accent);
+  font-style: normal;
+  font-size: 1rem;
+  font-weight: 400;
+  color: var(--safari-green);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin-top: 1.5rem;
+}
+
+/* Two-column layout - side-by-side field notes */
+.theme-safari .layout-two-column {
+  gap: 3rem;
+  position: relative;
+}
+
+/* Dotted divider line */
+.theme-safari .layout-two-column::before {
+  content: '';
+  position: absolute;
+  top: 10%;
+  bottom: 10%;
+  left: 50%;
+  width: 0;
+  border-left: 2px dotted var(--safari-brass);
+  transform: translateX(-50%);
+}
+
+/* Compass marker on divider */
+.theme-safari .layout-two-column::after {
+  content: '✦';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: var(--safari-cream);
+  color: var(--safari-brass);
+  font-size: 1.5rem;
+  padding: 0.5em;
+}
+
+.theme-safari .layout-two-column > *:first-child {
+  padding-right: 2rem;
+}
+
+.theme-safari .layout-two-column > *:last-child {
+  padding-left: 2rem;
+}
+
+.theme-safari .layout-two-column h3 {
+  font-family: var(--font-display);
+  color: var(--safari-green);
+  margin-bottom: 0.75em;
+  font-size: 1.5rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border-bottom: 2px double var(--safari-brass);
+  padding-bottom: 0.4em;
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  .theme-safari {
+    --transition-duration: 0ms;
+    --fragment-duration: 0ms;
+  }
+}
