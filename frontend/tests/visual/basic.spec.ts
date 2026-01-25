@@ -14,11 +14,16 @@ const __dirname = dirname(__filename);
  */
 
 // API response types
+interface TransformedFragment {
+  content: string;
+  index: number;
+}
+
 interface PresentationSlide {
   index: number;
   content: string;
   html: string;
-  fragments: unknown[];
+  fragments: TransformedFragment[];
 }
 
 interface PresentationResponse {
@@ -67,6 +72,24 @@ async function captureSlideScreenshot(
   screenshotsDir: string
 ): Promise<void> {
   const screenshotPath = join(screenshotsDir, `${templateName}-slide-${slideNumber}.png`);
+  await page.screenshot({
+    path: screenshotPath,
+    fullPage: false,
+  });
+}
+
+// Capture screenshot for a specific fragment state
+async function captureFragmentScreenshot(
+  page: Page,
+  templateName: string,
+  slideNumber: number,
+  fragmentIndex: number,
+  screenshotsDir: string
+): Promise<void> {
+  const screenshotPath = join(
+    screenshotsDir,
+    `${templateName}-slide-${slideNumber}-frag-${fragmentIndex}.png`
+  );
   await page.screenshot({
     path: screenshotPath,
     fullPage: false,
@@ -147,14 +170,61 @@ test.describe('Basic Template Visual Test', () => {
     // Wait for any animations to settle
     await page.waitForTimeout(500);
 
+    let totalScreenshots = 0;
+    let totalFragments = 0;
+
     // Capture screenshot for each slide
     for (let slideNumber = 1; slideNumber <= totalSlides; slideNumber++) {
       // Wait for slide transition to complete
       await page.waitForTimeout(300);
 
-      // Capture screenshot
-      await captureSlideScreenshot(page, templateName, slideNumber, screenshotsDir);
-      console.log(`Captured screenshot for slide ${slideNumber}/${totalSlides}`);
+      // Get fragment count for this slide (0-indexed in API, 1-indexed for display)
+      const slide = presentation.slides[slideNumber - 1];
+      const fragmentCount = slide.fragments?.length || 0;
+
+      if (fragmentCount > 0) {
+        // Slide has fragments - capture each fragment state
+        console.log(
+          `Slide ${slideNumber} has ${fragmentCount} fragments, capturing each state...`
+        );
+
+        // First fragment state (fragment 0) - this is the initial state before any fragments revealed
+        // Actually, when we land on a slide with fragments, we see fragment index 0 content
+        // Pressing ArrowRight reveals the next fragment until all are revealed
+        // Then pressing ArrowRight again moves to the next slide
+
+        for (let fragIndex = 0; fragIndex <= fragmentCount; fragIndex++) {
+          await page.waitForTimeout(300);
+
+          if (fragIndex === fragmentCount) {
+            // Final state - all fragments revealed, capture as the slide's main screenshot
+            await captureSlideScreenshot(page, templateName, slideNumber, screenshotsDir);
+            console.log(`Captured final state for slide ${slideNumber} (all fragments revealed)`);
+          } else {
+            // Intermediate fragment state
+            await captureFragmentScreenshot(
+              page,
+              templateName,
+              slideNumber,
+              fragIndex,
+              screenshotsDir
+            );
+            console.log(
+              `Captured fragment ${fragIndex}/${fragmentCount} for slide ${slideNumber}`
+            );
+            totalFragments++;
+
+            // Advance to next fragment
+            await page.keyboard.press('ArrowRight');
+          }
+        }
+        totalScreenshots++;
+      } else {
+        // No fragments - capture single screenshot
+        await captureSlideScreenshot(page, templateName, slideNumber, screenshotsDir);
+        console.log(`Captured screenshot for slide ${slideNumber}/${totalSlides}`);
+        totalScreenshots++;
+      }
 
       // Navigate to next slide (except for the last one)
       if (slideNumber < totalSlides) {
@@ -162,6 +232,8 @@ test.describe('Basic Template Visual Test', () => {
       }
     }
 
-    console.log(`Completed: captured ${totalSlides} screenshots for ${templateName}`);
+    console.log(
+      `Completed: captured ${totalScreenshots} slides + ${totalFragments} fragment states for ${templateName}`
+    );
   });
 });
