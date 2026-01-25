@@ -412,9 +412,28 @@ A-->B</code></pre>
 
       // Check that the pre was replaced with a diagram container
       expect(container.querySelector('pre')).toBeNull()
-      const diagram = container.querySelector('.mermaid-diagram')
+      const diagram = container.querySelector('.mermaid-diagram') as HTMLElement
       expect(diagram).not.toBeNull()
       expect(diagram?.innerHTML).toBe('<svg class="rendered">flowchart</svg>')
+    })
+
+    it('stores original mermaid code as data attribute for re-rendering', async () => {
+      const mermaid = await import('mermaid')
+      const mockRender = vi.mocked(mermaid.default.render)
+      mockRender.mockResolvedValue({ svg: '<svg>diagram</svg>' })
+
+      const container = document.createElement('div')
+      const mermaidCode = 'graph TD\nA-->B'
+      container.innerHTML = `
+        <pre><code class="language-mermaid">${mermaidCode}</code></pre>
+      `
+
+      await renderMermaidBlocksInElement(container, 'paper')
+
+      const diagram = container.querySelector('.mermaid-diagram') as HTMLElement
+      expect(diagram).not.toBeNull()
+      expect(diagram?.dataset.mermaidCode).toBe(mermaidCode)
+      expect(diagram?.dataset.mermaidTheme).toBe('paper')
     })
 
     it('handles multiple mermaid blocks', async () => {
@@ -507,6 +526,140 @@ A-->B</code></pre>
       // Other code blocks should remain
       expect(container.querySelector('code.language-javascript')).not.toBeNull()
       expect(container.querySelector('code.language-python')).not.toBeNull()
+    })
+
+    it('re-renders existing diagrams when theme changes', async () => {
+      const mermaid = await import('mermaid')
+      const mockRender = vi.mocked(mermaid.default.render)
+      mockRender
+        .mockResolvedValueOnce({ svg: '<svg>paper-styled</svg>' })
+        .mockResolvedValueOnce({ svg: '<svg>noir-styled</svg>' })
+
+      const container = document.createElement('div')
+      container.innerHTML = `
+        <pre><code class="language-mermaid">graph TD\nA-->B</code></pre>
+      `
+
+      // First render with paper theme
+      await renderMermaidBlocksInElement(container, 'paper')
+      let diagram = container.querySelector('.mermaid-diagram') as HTMLElement
+      expect(diagram?.innerHTML).toBe('<svg>paper-styled</svg>')
+      expect(diagram?.dataset.mermaidTheme).toBe('paper')
+
+      // Re-render with noir theme
+      await renderMermaidBlocksInElement(container, 'noir')
+      diagram = container.querySelector('.mermaid-diagram') as HTMLElement
+      expect(diagram?.innerHTML).toBe('<svg>noir-styled</svg>')
+      expect(diagram?.dataset.mermaidTheme).toBe('noir')
+    })
+
+    it('does not re-render when theme is the same', async () => {
+      const mermaid = await import('mermaid')
+      const mockRender = vi.mocked(mermaid.default.render)
+      mockRender.mockResolvedValue({ svg: '<svg>diagram</svg>' })
+
+      const container = document.createElement('div')
+      container.innerHTML = `
+        <pre><code class="language-mermaid">graph TD\nA-->B</code></pre>
+      `
+
+      // First render
+      await renderMermaidBlocksInElement(container, 'paper')
+      expect(mockRender).toHaveBeenCalledTimes(1)
+
+      // Same theme - should skip re-render
+      await renderMermaidBlocksInElement(container, 'paper')
+      expect(mockRender).toHaveBeenCalledTimes(1)
+    })
+
+    it('re-renders multiple diagrams on theme change', async () => {
+      const mermaid = await import('mermaid')
+      const mockRender = vi.mocked(mermaid.default.render)
+      mockRender.mockResolvedValue({ svg: '<svg>diagram</svg>' })
+
+      const container = document.createElement('div')
+      container.innerHTML = `
+        <pre><code class="language-mermaid">graph TD\nA-->B</code></pre>
+        <pre><code class="language-mermaid">graph TD\nC-->D</code></pre>
+      `
+
+      // First render
+      await renderMermaidBlocksInElement(container, 'paper')
+      expect(mockRender).toHaveBeenCalledTimes(2)
+
+      // Theme change should re-render both
+      await renderMermaidBlocksInElement(container, 'noir')
+      expect(mockRender).toHaveBeenCalledTimes(4)
+
+      const diagrams = container.querySelectorAll('.mermaid-diagram')
+      expect(diagrams.length).toBe(2)
+    })
+
+    it('stores mermaid code on error containers for theme change retry', async () => {
+      const mermaid = await import('mermaid')
+      const mockRender = vi.mocked(mermaid.default.render)
+      mockRender.mockRejectedValue(new Error('Parse error'))
+
+      const container = document.createElement('div')
+      const code = 'invalid syntax'
+      container.innerHTML = `
+        <pre><code class="language-mermaid">${code}</code></pre>
+      `
+
+      await renderMermaidBlocksInElement(container, 'paper')
+
+      const errorContainer = container.querySelector('.mermaid-error') as HTMLElement
+      expect(errorContainer).not.toBeNull()
+      expect(errorContainer?.dataset.mermaidCode).toBe(code)
+      expect(errorContainer?.dataset.mermaidTheme).toBe('paper')
+    })
+
+    it('retries rendering error containers on theme change and converts to diagram if successful', async () => {
+      const mermaid = await import('mermaid')
+      const mockRender = vi.mocked(mermaid.default.render)
+      mockRender
+        .mockRejectedValueOnce(new Error('Parse error'))
+        .mockResolvedValueOnce({ svg: '<svg>success</svg>' })
+
+      const container = document.createElement('div')
+      container.innerHTML = `
+        <pre><code class="language-mermaid">graph TD\nA-->B</code></pre>
+      `
+
+      // First render fails
+      await renderMermaidBlocksInElement(container, 'paper')
+      expect(container.querySelector('.mermaid-error')).not.toBeNull()
+
+      // Theme change succeeds
+      await renderMermaidBlocksInElement(container, 'noir')
+      expect(container.querySelector('.mermaid-error')).toBeNull()
+      const diagram = container.querySelector('.mermaid-diagram') as HTMLElement
+      expect(diagram?.innerHTML).toBe('<svg>success</svg>')
+      expect(diagram?.dataset.mermaidTheme).toBe('noir')
+    })
+
+    it('converts diagram to error container if re-render fails', async () => {
+      const mermaid = await import('mermaid')
+      const mockRender = vi.mocked(mermaid.default.render)
+      mockRender
+        .mockResolvedValueOnce({ svg: '<svg>diagram</svg>' })
+        .mockRejectedValueOnce(new Error('Theme incompatible'))
+
+      const container = document.createElement('div')
+      container.innerHTML = `
+        <pre><code class="language-mermaid">graph TD\nA-->B</code></pre>
+      `
+
+      // First render succeeds
+      await renderMermaidBlocksInElement(container, 'paper')
+      expect(container.querySelector('.mermaid-diagram')).not.toBeNull()
+
+      // Theme change fails
+      await renderMermaidBlocksInElement(container, 'noir')
+      expect(container.querySelector('.mermaid-diagram')).toBeNull()
+      const errorContainer = container.querySelector('.mermaid-error') as HTMLElement
+      expect(errorContainer).not.toBeNull()
+      expect(errorContainer?.dataset.mermaidTheme).toBe('noir')
     })
   })
 

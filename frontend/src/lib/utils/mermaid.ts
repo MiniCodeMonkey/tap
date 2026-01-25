@@ -305,6 +305,7 @@ export async function renderMermaidDiagram(
 /**
  * Find and render all mermaid code blocks within an element.
  * Replaces <pre><code class="language-mermaid"> blocks with rendered SVGs.
+ * Also re-renders existing mermaid diagrams when theme changes.
  *
  * @param element The DOM element to search within
  * @param theme Optional tap theme to use for styling diagrams
@@ -314,16 +315,27 @@ export async function renderMermaidBlocksInElement(
   element: HTMLElement,
   theme?: Theme
 ): Promise<void> {
-  // Find all mermaid code blocks
+  // Find all unrendered mermaid code blocks
   const codeBlocks = element.querySelectorAll<HTMLElement>(
     'pre > code.language-mermaid'
   )
 
-  if (codeBlocks.length === 0) {
+  // Find all already-rendered diagrams that may need theme update
+  const existingDiagrams = element.querySelectorAll<HTMLElement>(
+    '.mermaid-diagram[data-mermaid-code]'
+  )
+
+  // Also find error containers that have stored code for retry
+  const errorContainers = element.querySelectorAll<HTMLElement>(
+    '.mermaid-error[data-mermaid-code]'
+  )
+
+  if (codeBlocks.length === 0 && existingDiagrams.length === 0 && errorContainers.length === 0) {
     return
   }
 
-  const renderPromises = Array.from(codeBlocks).map(async (codeBlock) => {
+  // Render new mermaid code blocks
+  const newBlockPromises = Array.from(codeBlocks).map(async (codeBlock) => {
     const pre = codeBlock.parentElement
     if (!pre) return
 
@@ -331,15 +343,19 @@ export async function renderMermaidBlocksInElement(
     const result = await renderMermaidDiagram(code, theme)
 
     if (result.success) {
-      // Create container for the rendered diagram
+      // Create container for the rendered diagram, storing the code for re-rendering
       const container = document.createElement('div')
       container.className = 'mermaid-diagram'
+      container.dataset.mermaidCode = code
+      container.dataset.mermaidTheme = theme ?? ''
       container.innerHTML = result.svg
       pre.replaceWith(container)
     } else {
-      // Show error message
+      // Show error message, storing the code for potential re-render
       const errorContainer = document.createElement('div')
       errorContainer.className = 'mermaid-error'
+      errorContainer.dataset.mermaidCode = code
+      errorContainer.dataset.mermaidTheme = theme ?? ''
       errorContainer.innerHTML = `
         <div class="mermaid-error-message">Mermaid diagram error: ${escapeHtml(result.error)}</div>
         <pre class="mermaid-error-code"><code>${escapeHtml(result.code)}</code></pre>
@@ -348,7 +364,66 @@ export async function renderMermaidBlocksInElement(
     }
   })
 
-  await Promise.all(renderPromises)
+  // Re-render existing diagrams if theme has changed
+  const existingDiagramPromises = Array.from(existingDiagrams).map(async (diagram) => {
+    const code = diagram.dataset.mermaidCode
+    const previousTheme = diagram.dataset.mermaidTheme
+
+    // Skip if no code stored or theme hasn't changed
+    if (!code || previousTheme === (theme ?? '')) {
+      return
+    }
+
+    const result = await renderMermaidDiagram(code, theme)
+
+    if (result.success) {
+      diagram.innerHTML = result.svg
+      diagram.dataset.mermaidTheme = theme ?? ''
+    } else {
+      // Convert to error container
+      const errorContainer = document.createElement('div')
+      errorContainer.className = 'mermaid-error'
+      errorContainer.dataset.mermaidCode = code
+      errorContainer.dataset.mermaidTheme = theme ?? ''
+      errorContainer.innerHTML = `
+        <div class="mermaid-error-message">Mermaid diagram error: ${escapeHtml(result.error)}</div>
+        <pre class="mermaid-error-code"><code>${escapeHtml(result.code)}</code></pre>
+      `
+      diagram.replaceWith(errorContainer)
+    }
+  })
+
+  // Re-render error containers (in case new theme fixes the issue)
+  const errorContainerPromises = Array.from(errorContainers).map(async (errorContainer) => {
+    const code = errorContainer.dataset.mermaidCode
+    const previousTheme = errorContainer.dataset.mermaidTheme
+
+    // Skip if no code stored or theme hasn't changed
+    if (!code || previousTheme === (theme ?? '')) {
+      return
+    }
+
+    const result = await renderMermaidDiagram(code, theme)
+
+    if (result.success) {
+      // Convert to successful diagram
+      const container = document.createElement('div')
+      container.className = 'mermaid-diagram'
+      container.dataset.mermaidCode = code
+      container.dataset.mermaidTheme = theme ?? ''
+      container.innerHTML = result.svg
+      errorContainer.replaceWith(container)
+    } else {
+      // Update error with new theme
+      errorContainer.dataset.mermaidTheme = theme ?? ''
+      const messageEl = errorContainer.querySelector('.mermaid-error-message')
+      if (messageEl) {
+        messageEl.textContent = `Mermaid diagram error: ${result.error}`
+      }
+    }
+  })
+
+  await Promise.all([...newBlockPromises, ...existingDiagramPromises, ...errorContainerPromises])
 }
 
 /**
