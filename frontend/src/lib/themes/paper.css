@@ -16,16 +16,16 @@
   /* Core colors - refined palette with more punch */
   --color-bg: #fafafa;
   --color-text: #18181b;
-  --color-muted: #71717a;
+  --color-muted: #64748b; /* Slightly warmer gray for better harmony */
   --color-accent: #2563eb; /* Vibrant blue for impact */
-  --color-code-bg: #18181b;
+  --color-code-bg: #1e1e2e; /* Slightly softer dark for better contrast */
 
   /* Extended colors */
-  --color-border: rgba(24, 24, 27, 0.08);
+  --color-border: rgba(24, 24, 27, 0.1);
   --color-surface: rgba(0, 0, 0, 0.02);
   --color-surface-elevated: #ffffff;
   --color-link: var(--color-accent);
-  --color-code-text: #e4e4e7;
+  --color-code-text: #e2e8f0; /* Slightly warmer code text */
 
   /* Error colors - warm red for light theme */
   --color-error: #dc2626;
@@ -44,8 +44,8 @@
   font-family: var(--font-sans);
   color: var(--color-text);
   background-color: var(--color-bg);
-  letter-spacing: -0.02em;
-  line-height: 1.5;
+  letter-spacing: -0.015em; /* Slightly tighter for polished look */
+  line-height: 1.6; /* More comfortable reading */
 }
 
 /* Paper theme typography - confident letter-spacing, perfect line heights */
@@ -57,13 +57,24 @@
 .theme-paper h6 {
   font-family: var(--font-sans);
   font-weight: 600;
-  letter-spacing: -0.02em;
-  line-height: 1.1;
+  letter-spacing: -0.025em; /* Tighter for impact */
+  line-height: 1.15;
   margin: 0;
 }
 
 .theme-paper h1 {
   font-weight: 700;
+  letter-spacing: -0.03em; /* Extra tight for titles */
+}
+
+.theme-paper h2 {
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.theme-paper h3 {
+  font-weight: 600;
+  letter-spacing: -0.015em;
 }
 
 .theme-paper p,
@@ -71,26 +82,32 @@
   font-family: var(--font-sans);
   font-weight: 400;
   letter-spacing: -0.01em;
+  line-height: 1.6; /* Comfortable reading */
 }
 
-/* Paper theme code blocks - delicate shadows, refined border radii (8px) */
+/* Paper theme code blocks - delicate shadows, refined border radii */
 .theme-paper code {
   font-family: var(--font-mono);
-  background-color: rgba(10, 10, 10, 0.04);
-  padding: 0.15em 0.4em;
-  border-radius: 4px;
-  font-size: 0.9em;
+  background-color: rgba(37, 99, 235, 0.06); /* Subtle blue tint matching accent */
+  color: #1e40af; /* Dark blue for inline code */
+  padding: 0.2em 0.45em;
+  border-radius: 6px;
+  font-size: 0.88em;
+  font-weight: 500;
 }
 
 .theme-paper pre {
   font-family: var(--font-mono);
   background-color: var(--color-code-bg);
   color: var(--color-code-text);
-  padding: 1.5em 2em;
-  border-radius: 8px;
+  padding: 1.75em 2.25em;
+  border-radius: 12px; /* Slightly rounder for modern feel */
   overflow-x: auto;
-  line-height: 1.6;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  line-height: 1.65;
+  box-shadow:
+    0 4px 6px -1px rgba(0, 0, 0, 0.08),
+    0 2px 4px -1px rgba(0, 0, 0, 0.04),
+    0 0 0 1px rgba(0, 0, 0, 0.03); /* Subtle border effect */
 }
 
 .theme-paper pre code {
@@ -98,6 +115,8 @@
   padding: 0;
   border-radius: 0;
   font-size: inherit;
+  color: inherit;
+  font-weight: 400;
 }
 
 /* Paper theme links */
@@ -112,50 +131,91 @@
   border-bottom-color: var(--color-link);
 }
 
-/* Paper theme lists */
+/* Paper theme lists - refined bullets and comfortable spacing */
 .theme-paper ul,
 .theme-paper ol {
-  padding-left: 1.25em;
+  padding-left: 1.5em;
   margin: 0;
 }
 
+.theme-paper ul {
+  list-style-type: disc;
+}
+
 .theme-paper li {
-  margin-bottom: 0.5em;
+  margin-bottom: 0.65em;
+  padding-left: 0.25em;
+}
+
+.theme-paper li:last-child {
+  margin-bottom: 0;
 }
 
 .theme-paper li::marker {
   color: var(--color-accent);
+  font-weight: 600;
 }
 
-/* Paper theme blockquotes */
+/* Nested lists */
+.theme-paper ul ul,
+.theme-paper ol ol,
+.theme-paper ul ol,
+.theme-paper ol ul {
+  margin-top: 0.5em;
+  margin-bottom: 0;
+}
+
+.theme-paper ul ul {
+  list-style-type: circle;
+}
+
+.theme-paper ul ul ul {
+  list-style-type: square;
+}
+
+/* Paper theme blockquotes - elegant with refined styling */
 .theme-paper blockquote {
   border-left: 4px solid var(--color-accent);
-  padding-left: 1.5em;
+  padding-left: 1.75em;
   margin: 0;
   font-style: italic;
-  color: var(--color-muted);
+  color: var(--color-text);
+  opacity: 0.85;
+  position: relative;
 }
 
-/* Paper theme tables */
+.theme-paper blockquote p {
+  line-height: 1.7;
+}
+
+/* Paper theme tables - clean and refined */
 .theme-paper table {
   width: 100%;
   border-collapse: collapse;
+  border-radius: 8px;
+  overflow: hidden;
 }
 
 .theme-paper th,
 .theme-paper td {
-  padding: 0.75em 1em;
+  padding: 0.85em 1.25em;
   text-align: left;
   border-bottom: 1px solid var(--color-border);
 }
 
 .theme-paper th {
   font-weight: 600;
-  background-color: rgba(10, 10, 10, 0.02);
+  background-color: rgba(37, 99, 235, 0.04); /* Subtle accent tint */
+  letter-spacing: -0.01em;
+  color: var(--color-text);
 }
 
 .theme-paper tr:last-child td {
   border-bottom: none;
+}
+
+.theme-paper tr:hover td {
+  background-color: rgba(0, 0, 0, 0.015);
 }
 
 /* Paper theme images - refined shadows */
@@ -186,6 +246,52 @@
 .theme-paper ::selection {
   background-color: var(--color-accent);
   color: #ffffff;
+}
+
+/* ============================================================================
+ * Paper Theme Layout Overrides
+ * Refined typography for specific layouts
+ * ============================================================================ */
+
+/* Title layout - increased impact with tighter letter-spacing */
+.theme-paper .layout-title h1 {
+  letter-spacing: -0.035em;
+  font-weight: 800;
+}
+
+.theme-paper .layout-title p {
+  letter-spacing: -0.005em;
+  line-height: 1.5;
+}
+
+/* Section layout - prominent with visual weight */
+.theme-paper .layout-section h1 {
+  letter-spacing: -0.03em;
+}
+
+.theme-paper .layout-section h2 {
+  letter-spacing: -0.01em;
+  font-weight: 500;
+}
+
+/* Big stat layout - dramatic emphasis */
+.theme-paper .layout-big-stat h1 {
+  letter-spacing: -0.045em;
+}
+
+.theme-paper .layout-big-stat h2 {
+  letter-spacing: -0.01em;
+  line-height: 1.4;
+}
+
+/* Quote layout - elegant and refined */
+.theme-paper .layout-quote blockquote {
+  border-left-width: 5px;
+  padding-left: 2em;
+}
+
+.theme-paper .layout-quote blockquote p {
+  line-height: 1.5;
 }
 
 /* Reduced motion support */
