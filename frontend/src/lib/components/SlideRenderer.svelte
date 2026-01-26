@@ -378,13 +378,20 @@
 
 		// Apply transform with or without transition
 		// Only animate if this is a user-triggered action and measurements are ready
-		if (reducedMotion || !isUserTriggered || !scrollMeasured) {
-			slideContentElement.style.transition = 'none';
-		} else {
-			slideContentElement.style.transition = `transform ${scrollSpeed}ms ease-in-out`;
-		}
+		const shouldAnimate = !reducedMotion && isUserTriggered && scrollMeasured;
 
-		slideContentElement.style.transform = `translateY(-${targetY}px)`;
+		if (shouldAnimate) {
+			// Set transition first, force reflow, then apply transform
+			// This ensures the browser sees the transition before the transform change
+			slideContentElement.style.transition = `transform ${scrollSpeed}ms ease-in-out`;
+			// Force reflow by reading offsetHeight
+			void slideContentElement.offsetHeight;
+			slideContentElement.style.transform = `translateY(-${targetY}px)`;
+		} else {
+			// Apply instantly without animation
+			slideContentElement.style.transition = 'none';
+			slideContentElement.style.transform = `translateY(-${targetY}px)`;
+		}
 	});
 </script>
 
