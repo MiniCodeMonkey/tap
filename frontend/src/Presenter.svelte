@@ -156,6 +156,9 @@
 		broadcastSlide();
 	}
 
+	// Track the last broadcasted slide index to avoid broadcasting on fragment changes
+	let lastBroadcastedSlideIndex = -1;
+
 	function broadcastSlide(): void {
 		const client = getWebSocketClient();
 		// Read the current slide index from the store
@@ -165,10 +168,14 @@
 		});
 		unsubscribe();
 
-		client.send({
-			type: 'slide',
-			slideIndex: currentIndex
-		});
+		// Only broadcast if the slide index actually changed (not just a fragment reveal)
+		if (currentIndex !== lastBroadcastedSlideIndex) {
+			lastBroadcastedSlideIndex = currentIndex;
+			client.send({
+				type: 'slide',
+				slideIndex: currentIndex
+			});
+		}
 	}
 
 	// ============================================================================

@@ -108,12 +108,12 @@ func TestMessageJSON(t *testing.T) {
 		},
 		{
 			name: "slide message",
-			msg:  Message{Type: MessageSlide, Slide: 5},
-			want: `{"type":"slide","slide":5}`,
+			msg:  Message{Type: MessageSlide, SlideIndex: 5},
+			want: `{"type":"slide","slideIndex":5}`,
 		},
 		{
 			name: "slide message with zero",
-			msg:  Message{Type: MessageSlide, Slide: 0},
+			msg:  Message{Type: MessageSlide, SlideIndex: 0},
 			want: `{"type":"slide"}`,
 		},
 	}
@@ -368,8 +368,8 @@ func TestWebSocketHubBroadcastToRealConnection(t *testing.T) {
 		t.Errorf("message type = %v, want %v", msg.Type, MessageSlide)
 	}
 
-	if msg.Slide != 10 {
-		t.Errorf("slide = %d, want 10", msg.Slide)
+	if msg.SlideIndex != 10 {
+		t.Errorf("slide = %d, want 10", msg.SlideIndex)
 	}
 }
 

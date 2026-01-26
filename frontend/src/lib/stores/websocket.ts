@@ -5,7 +5,7 @@
 
 import { writable, type Writable, type Readable, derived } from 'svelte/store';
 import type { WebSocketMessage, Theme } from '$lib/types';
-import { goToSlide, presentation, setThemeOverride } from '$lib/stores/presentation';
+import { goToSlide, presentation, currentSlideIndex, setThemeOverride } from '$lib/stores/presentation';
 
 // ============================================================================
 // Constants
@@ -232,14 +232,22 @@ export class WebSocketClient {
 	private handleSlideNavigation(slideIndex: number | undefined): void {
 		if (slideIndex === undefined) return;
 
-		// Check if presentation is loaded before navigating
+		// Check if presentation is loaded and get current slide index
 		let hasPresentation = false;
-		const unsubscribe = presentation.subscribe(($presentation) => {
+		let currentIndex = -1;
+		const unsubPresentation = presentation.subscribe(($presentation) => {
 			hasPresentation = $presentation !== null;
 		});
-		unsubscribe();
+		unsubPresentation();
 
-		if (hasPresentation) {
+		const unsubIndex = currentSlideIndex.subscribe((value) => {
+			currentIndex = value;
+		});
+		unsubIndex();
+
+		// Only navigate if we're not already on this slide
+		// This prevents resetting fragment state when receiving our own broadcast
+		if (hasPresentation && slideIndex !== currentIndex) {
 			goToSlide(slideIndex);
 		}
 	}

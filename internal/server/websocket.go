@@ -28,9 +28,9 @@ const (
 // Message represents a WebSocket message sent between server and clients.
 // Fields ordered by size for memory alignment.
 type Message struct {
-	Type  MessageType `json:"type"`
-	Theme string      `json:"theme,omitempty"`
-	Slide int         `json:"slide,omitempty"`
+	Type       MessageType `json:"type"`
+	Theme      string      `json:"theme,omitempty"`
+	SlideIndex int         `json:"slideIndex,omitempty"`
 }
 
 // Client represents a connected WebSocket client.
@@ -155,7 +155,7 @@ func (h *WebSocketHub) BroadcastReload() error {
 
 // BroadcastSlide sends a slide navigation message to all clients.
 func (h *WebSocketHub) BroadcastSlide(slideIndex int) error {
-	return h.Broadcast(Message{Type: MessageSlide, Slide: slideIndex})
+	return h.Broadcast(Message{Type: MessageSlide, SlideIndex: slideIndex})
 }
 
 // BroadcastTheme sends a theme change message to all clients.
@@ -215,12 +215,23 @@ func (c *Client) readPump(ctx context.Context) {
 	}()
 
 	for {
-		_, _, err := c.conn.Read(ctx)
+		_, data, err := c.conn.Read(ctx)
 		if err != nil {
 			// Connection closed or error
 			return
 		}
-		// For now, we don't process client messages, just keep the connection alive
+
+		// Parse and broadcast client messages to other clients
+		var msg Message
+		if err := json.Unmarshal(data, &msg); err != nil {
+			continue // Ignore invalid JSON
+		}
+
+		// Broadcast slide and theme messages to all clients
+		switch msg.Type {
+		case MessageSlide, MessageTheme:
+			_ = c.hub.Broadcast(msg)
+		}
 	}
 }
 
