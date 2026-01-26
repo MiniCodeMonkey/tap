@@ -347,3 +347,67 @@ func TestParseImages_SupportedFormats(t *testing.T) {
 		}
 	}
 }
+
+func TestTransformImageAttributes_Width(t *testing.T) {
+	content := "![](./images/test.png){width=50%}"
+	result := transformImageAttributes(content)
+
+	expected := `<img src="./images/test.png" alt="" style="width: 50%">`
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}
+
+func TestTransformImageAttributes_Position(t *testing.T) {
+	content := "![Photo](photo.jpg){position=center}"
+	result := transformImageAttributes(content)
+
+	expected := `<img src="photo.jpg" alt="Photo" style="display: block; margin-left: auto; margin-right: auto">`
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}
+
+func TestTransformImageAttributes_WidthAndPosition(t *testing.T) {
+	content := "![](img.png){width=50%, position=left}"
+	result := transformImageAttributes(content)
+
+	expected := `<img src="img.png" alt="" style="width: 50%; float: left; margin-right: 1em">`
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}
+
+func TestTransformImageAttributes_NoAttributes(t *testing.T) {
+	content := "![Alt](image.png)"
+	result := transformImageAttributes(content)
+
+	// Should remain unchanged when no attributes
+	if result != content {
+		t.Errorf("expected unchanged %q, got %q", content, result)
+	}
+}
+
+func TestTransformImageAttributes_InParagraph(t *testing.T) {
+	content := "Some text before\n\n![](./images/test.png){width=50%}\n\nSome text after"
+	result := transformImageAttributes(content)
+
+	if !stringContains(result, `<img src="./images/test.png" alt="" style="width: 50%">`) {
+		t.Errorf("expected transformed image in result, got %q", result)
+	}
+	if !stringContains(result, "Some text before") {
+		t.Errorf("expected text before preserved, got %q", result)
+	}
+	if !stringContains(result, "Some text after") {
+		t.Errorf("expected text after preserved, got %q", result)
+	}
+}
+
+func stringContains(s, substr string) bool {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
+}

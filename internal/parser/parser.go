@@ -36,11 +36,13 @@ type Slide struct {
 
 // SlideDirectives contains per-slide configuration options.
 type SlideDirectives struct {
-	Layout     string
-	Transition string
-	Background string
-	Notes      string
-	Fragments  bool
+	Layout      string
+	Transition  string
+	Background  string
+	Notes       string
+	Fragments   bool
+	Scroll      bool // Enable scroll reveal for long content
+	ScrollSpeed int  // Animation duration in milliseconds (default: 2000)
 }
 
 // Fragment represents a content fragment for incremental reveals.
@@ -198,6 +200,9 @@ func (p *Parser) Parse(content []byte) (*Presentation, error) {
 		// Parse directives from HTML comments at slide start
 		directives, contentAfterDirectives := parseDirectives(slideContent)
 
+		// Pre-process images with attributes (e.g., {width=50%}) to HTML
+		contentAfterDirectives = transformImageAttributes(contentAfterDirectives)
+
 		// Render markdown to HTML (use content after directives removed)
 		html, err := p.renderHTML([]byte(contentAfterDirectives))
 		if err != nil {
@@ -324,6 +329,12 @@ func parseDirectives(content string) (SlideDirectives, string) {
 	}
 	if fragments, ok := yamlData["fragments"].(bool); ok {
 		directives.Fragments = fragments
+	}
+	if scroll, ok := yamlData["scroll"].(bool); ok {
+		directives.Scroll = scroll
+	}
+	if scrollSpeed, ok := yamlData["scroll-speed"].(int); ok {
+		directives.ScrollSpeed = scrollSpeed
 	}
 
 	// Remove the directive comment from content
@@ -520,4 +531,47 @@ func intToString(n int) string {
 // hasPauseMarkers checks if the content contains any <!-- pause --> markers.
 func hasPauseMarkers(content string) bool {
 	return pausePattern.MatchString(content)
+}
+
+// transformImageAttributes converts markdown images with attributes to HTML.
+// It transforms ![alt](src){width=50%} to <img src="src" alt="alt" style="width: 50%">.
+// This pre-processing is needed because goldmark doesn't handle the {attr} syntax.
+func transformImageAttributes(content string) string {
+	images := ParseImages(content)
+
+	for _, img := range images {
+		// Only transform if there are attributes to apply
+		if img.Attributes.Width == "" && img.Attributes.Position == "" {
+			continue
+		}
+
+		// Build style attribute
+		var styles []string
+		if img.Attributes.Width != "" {
+			styles = append(styles, "width: "+img.Attributes.Width)
+		}
+		if img.Attributes.Position != "" {
+			switch img.Attributes.Position {
+			case "left":
+				styles = append(styles, "float: left", "margin-right: 1em")
+			case "right":
+				styles = append(styles, "float: right", "margin-left: 1em")
+			case "center":
+				styles = append(styles, "display: block", "margin-left: auto", "margin-right: auto")
+			}
+		}
+
+		styleAttr := ""
+		if len(styles) > 0 {
+			styleAttr = ` style="` + strings.Join(styles, "; ") + `"`
+		}
+
+		// Build the HTML img tag
+		htmlImg := `<img src="` + img.URL + `" alt="` + img.AltText + `"` + styleAttr + `>`
+
+		// Replace the markdown image with HTML
+		content = strings.Replace(content, img.Raw, htmlImg, 1)
+	}
+
+	return content
 }
