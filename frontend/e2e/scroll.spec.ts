@@ -105,6 +105,25 @@ test.describe('Scroll Reveal', () => {
     expect(transform).not.toBe('none');
   });
 
+  test('navigating from previous slide should start at top', async ({ page }) => {
+    // Navigate to slide before the scroll slide
+    await page.goto('/#28');
+    await page.waitForSelector('.slide-container');
+
+    // Navigate forward to scroll slide
+    await page.keyboard.press('ArrowRight');
+    await page.waitForTimeout(500);
+
+    // Should be on scroll slide at top position
+    expect(page.url()).toContain(SCROLL_SLIDE);
+    const scrollContent = page.locator('.scroll-content');
+    const transform = await scrollContent.evaluate(el =>
+      window.getComputedStyle(el).transform
+    );
+    // Should be at top (no transform or identity matrix)
+    expect(transform === 'none' || transform === 'matrix(1, 0, 0, 1, 0, 0)').toBeTruthy();
+  });
+
   test('scroll should animate with CSS transition', async ({ page }) => {
     // Capture the transition property immediately after pressing ArrowRight
     const transitionCapture = page.evaluate(() => {

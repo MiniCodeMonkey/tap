@@ -102,56 +102,62 @@ export const hasScrollReveal: Readable<boolean> = derived(currentSlide, ($curren
 export function nextSlide(): boolean {
 	let navigated = false;
 
+	// Get current slide data once (not reactively) to avoid re-running logic
+	// when slide index changes
+	let slideData: Slide | null = null;
 	currentSlide.subscribe(($currentSlide) => {
-		// Check if scroll needs to be triggered first
-		const hasScroll = $currentSlide?.scroll === true;
-
-		if (hasScroll) {
-			let isScrollRevealed = false;
-			scrollRevealed.subscribe((v) => (isScrollRevealed = v))();
-
-			if (!isScrollRevealed) {
-				// Trigger scroll animation
-				scrollRevealed.set(true);
-				// Increment trigger count to signal this is a user action
-				scrollTriggerCount.update((n) => n + 1);
-				navigated = true;
-				return;
-			}
-		}
-
-		// Only treat slides with 2+ fragments as having fragments to reveal
-		// (1 fragment means no pause markers - just show slide directly)
-		const fragmentCount = $currentSlide?.fragments?.length ?? 0;
-		const hasRealFragments = fragmentCount > 1;
-
-		currentFragmentIndex.update(($fragmentIndex) => {
-			// If there are more fragments to reveal, show next fragment
-			if (hasRealFragments && $fragmentIndex < fragmentCount - 1) {
-				navigated = true;
-				return $fragmentIndex + 1;
-			}
-			return $fragmentIndex;
-		});
-
-		// If no fragment was revealed, move to next slide
-		if (!navigated) {
-			presentation.subscribe(($presentation) => {
-				currentSlideIndex.update(($slideIndex) => {
-					const total = $presentation?.slides.length ?? 0;
-					if ($slideIndex < total - 1) {
-						navigated = true;
-						// Reset fragment index and scroll state for new slide
-						currentFragmentIndex.set(-1);
-						scrollRevealed.set(false);
-						updateURLHash($slideIndex + 1);
-						return $slideIndex + 1;
-					}
-					return $slideIndex;
-				});
-			})();
-		}
+		slideData = $currentSlide;
 	})();
+
+	if (!slideData) return false;
+
+	// Check if scroll needs to be triggered first
+	const hasScroll = slideData.scroll === true;
+
+	if (hasScroll) {
+		let isScrollRevealed = false;
+		scrollRevealed.subscribe((v) => (isScrollRevealed = v))();
+
+		if (!isScrollRevealed) {
+			// Trigger scroll animation
+			scrollRevealed.set(true);
+			// Increment trigger count to signal this is a user action
+			scrollTriggerCount.update((n) => n + 1);
+			return true;
+		}
+	}
+
+	// Only treat slides with 2+ fragments as having fragments to reveal
+	// (1 fragment means no pause markers - just show slide directly)
+	const fragmentCount = slideData.fragments?.length ?? 0;
+	const hasRealFragments = fragmentCount > 1;
+
+	currentFragmentIndex.update(($fragmentIndex) => {
+		// If there are more fragments to reveal, show next fragment
+		if (hasRealFragments && $fragmentIndex < fragmentCount - 1) {
+			navigated = true;
+			return $fragmentIndex + 1;
+		}
+		return $fragmentIndex;
+	});
+
+	// If no fragment was revealed, move to next slide
+	if (!navigated) {
+		presentation.subscribe(($presentation) => {
+			currentSlideIndex.update(($slideIndex) => {
+				const total = $presentation?.slides.length ?? 0;
+				if ($slideIndex < total - 1) {
+					navigated = true;
+					// Reset fragment index and scroll state for new slide
+					currentFragmentIndex.set(-1);
+					scrollRevealed.set(false);
+					updateURLHash($slideIndex + 1);
+					return $slideIndex + 1;
+				}
+				return $slideIndex;
+			});
+		})();
+	}
 
 	return navigated;
 }
@@ -167,36 +173,41 @@ export function nextSlide(): boolean {
 export function prevSlide(): boolean {
 	let navigated = false;
 
+	// Get current slide data once (not reactively)
+	let slideData: Slide | null = null;
 	currentSlide.subscribe(($currentSlide) => {
-		// Only treat slides with 2+ fragments as having fragments
-		const fragmentCount = $currentSlide?.fragments?.length ?? 0;
-		const hasRealFragments = fragmentCount > 1;
+		slideData = $currentSlide;
+	})();
 
-		currentFragmentIndex.update(($fragmentIndex) => {
-			// If there are visible fragments, hide the last one
-			if (hasRealFragments && $fragmentIndex >= 0) {
-				navigated = true;
-				return $fragmentIndex - 1;
-			}
-			return $fragmentIndex;
-		});
+	if (!slideData) return false;
 
-		// If no fragment was hidden, check if we need to scroll back to top
-		if (!navigated) {
-			const hasScroll = $currentSlide?.scroll === true;
-			if (hasScroll) {
-				let isScrollRevealed = false;
-				scrollRevealed.subscribe((v) => (isScrollRevealed = v))();
+	// Only treat slides with 2+ fragments as having fragments
+	const fragmentCount = slideData.fragments?.length ?? 0;
+	const hasRealFragments = fragmentCount > 1;
 
-				if (isScrollRevealed) {
-					// Scroll back to top
-					scrollRevealed.set(false);
-					navigated = true;
-					return;
-				}
+	currentFragmentIndex.update(($fragmentIndex) => {
+		// If there are visible fragments, hide the last one
+		if (hasRealFragments && $fragmentIndex >= 0) {
+			navigated = true;
+			return $fragmentIndex - 1;
+		}
+		return $fragmentIndex;
+	});
+
+	// If no fragment was hidden, check if we need to scroll back to top
+	if (!navigated) {
+		const hasScroll = slideData.scroll === true;
+		if (hasScroll) {
+			let isScrollRevealed = false;
+			scrollRevealed.subscribe((v) => (isScrollRevealed = v))();
+
+			if (isScrollRevealed) {
+				// Scroll back to top
+				scrollRevealed.set(false);
+				return true;
 			}
 		}
-	})();
+	}
 
 	// If no fragment was hidden and no scroll to reset, move to previous slide
 	if (!navigated) {
@@ -206,13 +217,13 @@ export function prevSlide(): boolean {
 					navigated = true;
 					const newSlideIndex = $slideIndex - 1;
 					const newSlide = $presentation?.slides[newSlideIndex];
-					const fragmentCount = newSlide?.fragments?.length ?? 0;
-					const hasRealFragments = fragmentCount > 1;
-					const hasScroll = newSlide?.scroll === true;
+					const newFragmentCount = newSlide?.fragments?.length ?? 0;
+					const newHasRealFragments = newFragmentCount > 1;
+					const newHasScroll = newSlide?.scroll === true;
 					// Show all fragments on the previous slide (or -1 if no real fragments)
-					currentFragmentIndex.set(hasRealFragments ? fragmentCount - 1 : -1);
+					currentFragmentIndex.set(newHasRealFragments ? newFragmentCount - 1 : -1);
 					// Set scroll to revealed state (scrolled to bottom) on previous slide
-					scrollRevealed.set(hasScroll);
+					scrollRevealed.set(newHasScroll);
 					updateURLHash(newSlideIndex);
 					return newSlideIndex;
 				}
