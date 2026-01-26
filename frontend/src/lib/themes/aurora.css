@@ -284,6 +284,14 @@
   margin: 0;
 }
 
+.theme-aurora ul {
+  list-style-type: disc;
+}
+
+.theme-aurora ol {
+  list-style-type: decimal;
+}
+
 .theme-aurora li {
   margin-bottom: 0.6em;
   padding-left: 0.25em;
