@@ -49,7 +49,7 @@ export default defineConfig({
   // Run the dev server before starting tests
   webServer: {
     // Run the Go dev server with the sample presentation
-    command: 'cd .. && go run ./cmd/tap dev testdata/sample.md --port 3000',
+    command: 'cd .. && go run ./cmd/tap dev testdata/sample.md --port 3000 --headless',
     url: 'http://localhost:3000',
     reuseExistingServer: !process.env.CI,
     timeout: 30000, // 30 seconds to start server

@@ -459,6 +459,78 @@ This slide zooms in from the center.
 
 ---
 
+<!--
+scroll: true
+scroll-speed: 500
+-->
+
+## Scroll Test Slide
+
+```typescript
+// This is a long code block to test scroll functionality
+interface DataProcessor {
+  id: number;
+  name: string;
+  config: ProcessorConfig;
+}
+
+interface ProcessorConfig {
+  timeout: number;
+  retries: number;
+  batchSize: number;
+}
+
+class DataProcessingService {
+  private processors: Map<string, DataProcessor> = new Map();
+
+  async process(data: unknown[]): Promise<void> {
+    for (const item of data) {
+      await this.processItem(item);
+    }
+  }
+
+  private async processItem(item: unknown): Promise<void> {
+    console.log('Processing item:', item);
+  }
+
+  registerProcessor(name: string, processor: DataProcessor): void {
+    this.processors.set(name, processor);
+  }
+
+  getProcessor(name: string): DataProcessor | undefined {
+    return this.processors.get(name);
+  }
+}
+
+// Additional lines to ensure content exceeds viewport
+function createProcessor(id: number, name: string): DataProcessor {
+  return {
+    id,
+    name,
+    config: {
+      timeout: 5000,
+      retries: 3,
+      batchSize: 100
+    }
+  };
+}
+
+const service = new DataProcessingService();
+service.registerProcessor('default', createProcessor(1, 'Default'));
+service.registerProcessor('fast', createProcessor(2, 'Fast'));
+service.registerProcessor('reliable', createProcessor(3, 'Reliable'));
+
+export { DataProcessingService, createProcessor };
+```
+
+---
+
+## After Scroll Slide
+
+This slide follows the scroll test slide.
+
+---
+
 <!-- layout: title -->
 
 # Thank You!
