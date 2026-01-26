@@ -104,4 +104,41 @@ test.describe('Scroll Reveal', () => {
     );
     expect(transform).not.toBe('none');
   });
+
+  test('scroll should animate with CSS transition', async ({ page }) => {
+    // Capture the transition property immediately after pressing ArrowRight
+    const transitionCapture = page.evaluate(() => {
+      return new Promise<string>((resolve) => {
+        const content = document.querySelector('.scroll-content') as HTMLElement;
+        if (!content) {
+          resolve('no-content');
+          return;
+        }
+
+        // Set up a MutationObserver to catch the style change
+        const observer = new MutationObserver(() => {
+          const transition = content.style.transition;
+          if (transition && transition.includes('transform')) {
+            observer.disconnect();
+            resolve(transition);
+          }
+        });
+
+        observer.observe(content, { attributes: true, attributeFilter: ['style'] });
+
+        // Timeout fallback
+        setTimeout(() => {
+          observer.disconnect();
+          resolve(content.style.transition || 'no-transition');
+        }, 100);
+      });
+    });
+
+    await page.keyboard.press('ArrowRight');
+    const transition = await transitionCapture;
+
+    // Should have a transform transition with the scroll speed (500ms)
+    expect(transition).toContain('transform');
+    expect(transition).toContain('500ms');
+  });
 });

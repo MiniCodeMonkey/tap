@@ -4,7 +4,7 @@
 	import { untrack } from 'svelte';
 	import { renderMermaidBlocksInElement } from '$lib/utils/mermaid';
 	import { highlightCodeBlocksInElement } from '$lib/utils/highlighting';
-	import { scrollRevealed as scrollRevealedStore, scrollTriggerCount as scrollTriggerCountStore } from '$lib/stores/presentation';
+	import { scrollRevealed as scrollRevealedStore } from '$lib/stores/presentation';
 
 	// ============================================================================
 	// Props
@@ -328,36 +328,22 @@
 	});
 
 	/**
-	 * Subscribe to scrollTriggerCount store to detect user-initiated scroll actions.
+	 * Track the last applied scroll position (non-reactive to avoid effect loops).
 	 */
-	let scrollTriggerCountFromStore = $state(0);
-	let prevScrollTriggerCount = $state(0);
-
-	$effect(() => {
-		const unsubscribe = scrollTriggerCountStore.subscribe((value) => {
-			scrollTriggerCountFromStore = value;
-		});
-		return unsubscribe;
-	});
+	let lastAppliedScrollY: number | null = null;
 
 	/**
 	 * Apply scroll transform based on scrollRevealed from store.
-	 * Only scrolls when triggered by user action (scrollTriggerCount increments).
+	 * Animates smoothly when scroll position changes.
 	 */
 	$effect(() => {
 		if (!slideContentElement || !hasScrollReveal) {
 			return;
 		}
 
-		// Track scrollTriggerCount changes to detect user actions
-		const currentTriggerCount = scrollTriggerCountFromStore;
-		const isUserTriggered = currentTriggerCount > prevScrollTriggerCount;
-
-		// Update previous count for next comparison (using untrack to avoid infinite loop)
-		if (isUserTriggered) {
-			untrack(() => {
-				prevScrollTriggerCount = currentTriggerCount;
-			});
+		// Wait for measurements to be ready before applying any transform
+		if (!scrollMeasured) {
+			return;
 		}
 
 		// Use store value to determine target state
@@ -373,12 +359,15 @@
 			targetY = scrollDistance;
 		}
 
+		// Check if this is the first application or a position change
+		const isFirstApplication = lastAppliedScrollY === null;
+		const isPositionChange = !isFirstApplication && targetY !== lastAppliedScrollY;
+
 		// Check for reduced motion preference
 		const reducedMotion = prefersReducedMotion();
 
-		// Apply transform with or without transition
-		// Only animate if this is a user-triggered action and measurements are ready
-		const shouldAnimate = !reducedMotion && isUserTriggered && scrollMeasured;
+		// Animate only when position actually changes (not on initial load)
+		const shouldAnimate = isPositionChange && !reducedMotion;
 
 		if (shouldAnimate) {
 			// Set transition first, force reflow, then apply transform
@@ -386,12 +375,14 @@
 			slideContentElement.style.transition = `transform ${scrollSpeed}ms ease-in-out`;
 			// Force reflow by reading offsetHeight
 			void slideContentElement.offsetHeight;
-			slideContentElement.style.transform = `translateY(-${targetY}px)`;
 		} else {
-			// Apply instantly without animation
 			slideContentElement.style.transition = 'none';
-			slideContentElement.style.transform = `translateY(-${targetY}px)`;
 		}
+
+		slideContentElement.style.transform = `translateY(-${targetY}px)`;
+
+		// Update last applied position (direct assignment, not reactive)
+		lastAppliedScrollY = targetY;
 	});
 </script>
 
