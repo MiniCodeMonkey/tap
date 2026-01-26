@@ -160,6 +160,49 @@
   margin-top: 0;
 }
 
+/* Vertical rhythm inside slide-content - applies to all layouts */
+.slide-content > * + h2 {
+  margin-top: 2.5rem;
+}
+
+.slide-content > * + h3 {
+  margin-top: 2rem;
+}
+
+.slide-content > * + h4,
+.slide-content > * + h5,
+.slide-content > * + h6 {
+  margin-top: 1.5rem;
+}
+
+.slide-content > h1 + *,
+.slide-content > h2 + *,
+.slide-content > h3 + * {
+  margin-top: 1rem;
+}
+
+.slide-content > * + ul,
+.slide-content > * + ol {
+  margin-top: 1rem;
+}
+
+.slide-content > ul + *,
+.slide-content > ol + * {
+  margin-top: 1.5rem;
+}
+
+.slide-content > * + blockquote {
+  margin-top: 1.5rem;
+}
+
+.slide-content > blockquote + * {
+  margin-top: 1.5rem;
+}
+
+.slide-content > * + p {
+  margin-top: 1rem;
+}
+
 .layout-default h1 {
   font-size: 4rem; /* slide-h2 for content slides */
   line-height: 1.15;

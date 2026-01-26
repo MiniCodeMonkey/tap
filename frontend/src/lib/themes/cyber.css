@@ -126,6 +126,7 @@
 }
 
 .theme-cyber h3 {
+  font-size: 2rem;
   font-weight: 600;
   letter-spacing: 0.05em;
   text-shadow: 0 0 6px var(--cyber-blue-glow);

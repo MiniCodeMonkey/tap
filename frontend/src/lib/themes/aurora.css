@@ -194,6 +194,7 @@
 }
 
 .theme-aurora h3 {
+  font-size: 2rem;
   margin-bottom: 1rem;
 }
 
@@ -345,6 +346,41 @@
 
 .theme-aurora blockquote p {
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+/* Aurora theme vertical rhythm - spacing between sibling elements */
+.theme-aurora * + h3 {
+  margin-top: 2rem;
+}
+
+.theme-aurora * + h4,
+.theme-aurora * + h5,
+.theme-aurora * + h6 {
+  margin-top: 1.5rem;
+}
+
+.theme-aurora h1 + *,
+.theme-aurora h2 + *,
+.theme-aurora h3 + * {
+  margin-top: 1rem;
+}
+
+.theme-aurora * + ul,
+.theme-aurora * + ol {
+  margin-top: 1rem;
+}
+
+.theme-aurora ul + *,
+.theme-aurora ol + * {
+  margin-top: 1.5rem;
+}
+
+.theme-aurora * + blockquote {
+  margin-top: 1.5rem;
+}
+
+.theme-aurora blockquote + * {
+  margin-top: 1.5rem;
 }
 
 /* Aurora theme tables - enhanced glass effect */
