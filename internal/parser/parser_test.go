@@ -1100,6 +1100,128 @@ func TestParseFragments_OnlyPauses(t *testing.T) {
 	}
 }
 
+func TestAutoFragmentListItems(t *testing.T) {
+	html := `<h1>Title</h1>
+<ul>
+<li>Item 1</li>
+<li>Item 2</li>
+<li>Item 3</li>
+</ul>`
+
+	result, count := autoFragmentListItems(html)
+
+	if count != 3 {
+		t.Errorf("expected 3 list items, got %d", count)
+	}
+
+	// Check that fragment classes were added
+	if !contains(result, `class="fragment fragment-hidden"`) {
+		t.Error("expected fragment classes to be added to list items")
+	}
+
+	// Check that data-fragment-index attributes were added
+	if !contains(result, `data-fragment-index="0"`) {
+		t.Error("expected data-fragment-index=0")
+	}
+	if !contains(result, `data-fragment-index="1"`) {
+		t.Error("expected data-fragment-index=1")
+	}
+	if !contains(result, `data-fragment-index="2"`) {
+		t.Error("expected data-fragment-index=2")
+	}
+
+	// Check that heading is unchanged
+	if !contains(result, "<h1>Title</h1>") {
+		t.Error("heading should be unchanged")
+	}
+}
+
+func TestAutoFragmentListItems_WithExistingClass(t *testing.T) {
+	html := `<ul>
+<li class="existing">Item 1</li>
+</ul>`
+
+	result, count := autoFragmentListItems(html)
+
+	if count != 1 {
+		t.Errorf("expected 1 list item, got %d", count)
+	}
+
+	// Check that fragment class was merged with existing class
+	if !contains(result, `class="fragment fragment-hidden existing"`) {
+		t.Errorf("expected fragment class to be merged, got %s", result)
+	}
+}
+
+func TestAutoFragmentListItems_NoListItems(t *testing.T) {
+	html := `<h1>Title</h1>
+<p>Just a paragraph</p>`
+
+	result, count := autoFragmentListItems(html)
+
+	if count != 0 {
+		t.Errorf("expected 0 list items, got %d", count)
+	}
+
+	// HTML should be unchanged
+	if result != html {
+		t.Error("HTML should be unchanged when no list items")
+	}
+}
+
+func TestParse_FragmentsDirectiveAutoFragments(t *testing.T) {
+	p := New()
+	content := `---
+title: Test
+---
+
+<!--
+fragments: true
+-->
+
+# Title
+
+- Item 1
+- Item 2
+- Item 3`
+
+	pres, err := p.Parse([]byte(content))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(pres.Slides) != 1 {
+		t.Fatalf("expected 1 slide, got %d", len(pres.Slides))
+	}
+
+	slide := pres.Slides[0]
+
+	// Directive should be parsed
+	if !slide.Directives.Fragments {
+		t.Error("expected fragments directive to be true")
+	}
+
+	// Should have 3 fragments (one for each list item)
+	if len(slide.Fragments) != 3 {
+		t.Fatalf("expected 3 fragments for auto-fragmented list, got %d", len(slide.Fragments))
+	}
+
+	// Fragment content should be empty (content is inline in HTML)
+	for i, frag := range slide.Fragments {
+		if frag.Content != "" {
+			t.Errorf("fragment %d should have empty content for inline fragments, got %q", i, frag.Content)
+		}
+	}
+
+	// HTML should contain fragment classes on list items
+	if !contains(slide.HTML, `class="fragment fragment-hidden"`) {
+		t.Error("HTML should contain fragment classes on list items")
+	}
+	if !contains(slide.HTML, `data-fragment-index="0"`) {
+		t.Error("HTML should contain data-fragment-index attributes")
+	}
+}
+
 // helper function to check if a string contains a substring
 func contains(s, substr string) bool {
 	return len(s) >= len(substr) && (s == substr || len(substr) == 0 ||

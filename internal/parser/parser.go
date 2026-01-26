@@ -143,6 +143,23 @@ func (p *Parser) Parse(content []byte) (*Presentation, error) {
 		// Parse fragments from pause markers and render to HTML
 		fragments := p.parseFragments(contentAfterDirectives)
 
+		// Auto-fragment list items when fragments: true and no explicit pause markers
+		if directives.Fragments && !hasPauseMarkers(contentAfterDirectives) {
+			transformedHTML, listItemCount := autoFragmentListItems(html)
+			if listItemCount > 0 {
+				html = transformedHTML
+				// Create fragment entries for each list item
+				// This tells the frontend how many fragment steps exist
+				fragments = make([]Fragment, listItemCount)
+				for i := 0; i < listItemCount; i++ {
+					fragments[i] = Fragment{
+						Content: "", // Content is inline in the HTML, not in fragment structs
+						Index:   i,
+					}
+				}
+			}
+		}
+
 		slide := Slide{
 			Content:    contentAfterDirectives,
 			HTML:       html,
@@ -380,4 +397,60 @@ func (p *Parser) parseFragments(content string) []Fragment {
 	}
 
 	return fragments
+}
+
+// liPattern matches <li> opening tags (with or without attributes).
+var liPattern = regexp.MustCompile(`<li(\s[^>]*)?>`)
+
+// autoFragmentListItems transforms HTML to add fragment classes to list items.
+// It adds class="fragment fragment-hidden" and data-fragment-index attributes to each <li> element.
+// The fragment-hidden class ensures items are hidden initially until revealed by navigation.
+// Returns the transformed HTML and the number of list items found.
+func autoFragmentListItems(html string) (string, int) {
+	fragmentIndex := 0
+
+	result := liPattern.ReplaceAllStringFunc(html, func(match string) string {
+		index := fragmentIndex
+		fragmentIndex++
+
+		// Check if the <li> already has attributes
+		if match == "<li>" {
+			return `<li class="fragment fragment-hidden" data-fragment-index="` + intToString(index) + `">`
+		}
+
+		// Has existing attributes - need to merge class if present or add it
+		// Check if there's already a class attribute
+		if strings.Contains(match, `class="`) {
+			// Insert "fragment fragment-hidden " at the start of the existing class value
+			return strings.Replace(match, `class="`, `class="fragment fragment-hidden `, 1) +
+				` data-fragment-index="` + intToString(index) + `"`
+		}
+
+		// No class attribute, add both class and data-fragment-index
+		// Insert before the closing >
+		return match[:len(match)-1] + ` class="fragment fragment-hidden" data-fragment-index="` + intToString(index) + `">`
+	})
+
+	return result, fragmentIndex
+}
+
+// intToString converts an integer to a string without importing strconv.
+func intToString(n int) string {
+	if n == 0 {
+		return "0"
+	}
+	if n < 0 {
+		return "-" + intToString(-n)
+	}
+	digits := ""
+	for n > 0 {
+		digits = string(rune('0'+n%10)) + digits
+		n /= 10
+	}
+	return digits
+}
+
+// hasPauseMarkers checks if the content contains any <!-- pause --> markers.
+func hasPauseMarkers(content string) bool {
+	return pausePattern.MatchString(content)
 }

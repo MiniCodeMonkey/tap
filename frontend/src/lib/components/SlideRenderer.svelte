@@ -55,15 +55,27 @@
 	let slideTransition = $derived<Transition>(slide.transition ?? 'fade');
 
 	/**
-	 * Check if the slide has multiple fragments (actual pause markers).
-	 * A single fragment means no pause markers - just show the slide HTML directly.
+	 * Check if the slide has block fragments (content in fragment array from pause markers).
+	 * Block fragments have non-empty content that gets wrapped in divs.
 	 */
-	let hasFragments = $derived(
-		slide.fragments !== undefined && slide.fragments.length > 1
+	let hasBlockFragments = $derived(
+		slide.fragments !== undefined &&
+			slide.fragments.length > 1 &&
+			slide.fragments.some((f) => f.content && f.content.trim() !== '')
 	);
 
 	/**
-	 * Get fragments with visibility state.
+	 * Check if the slide has inline fragments (fragment classes in HTML from fragments: true).
+	 * Inline fragments have empty content but fragments array is populated for counting.
+	 */
+	let hasInlineFragments = $derived(
+		slide.fragments !== undefined &&
+			slide.fragments.length > 0 &&
+			slide.fragments.every((f) => !f.content || f.content.trim() === '')
+	);
+
+	/**
+	 * Get fragments with visibility state (for block fragments).
 	 */
 	let fragmentsWithVisibility = $derived.by(() => {
 		if (!slide.fragments) return [];
@@ -165,9 +177,11 @@
 
 	/**
 	 * Get the final HTML content, either with or without fragment processing.
+	 * For block fragments, wraps content in divs.
+	 * For inline fragments, returns HTML as-is (visibility controlled via DOM).
 	 */
 	let processedHtml = $derived.by(() => {
-		if (hasFragments) {
+		if (hasBlockFragments) {
 			return processHtmlWithFragments(slide.html, fragmentsWithVisibility);
 		}
 		return slide.html;
@@ -208,6 +222,33 @@
 			});
 		}
 	});
+
+	/**
+	 * Update inline fragment visibility when visibleFragments changes.
+	 * This handles fragments where classes are directly on elements (e.g., <li class="fragment">)
+	 * rather than wrapped in div containers.
+	 */
+	$effect(() => {
+		if (slideContentElement && hasInlineFragments) {
+			// Track visibleFragments to trigger updates
+			const currentVisible = visibleFragments;
+
+			// Use microtask to ensure DOM is ready
+			queueMicrotask(() => {
+				const fragments = slideContentElement!.querySelectorAll('[data-fragment-index]');
+				fragments.forEach((el) => {
+					const index = parseInt(el.getAttribute('data-fragment-index') || '0', 10);
+					if (index <= currentVisible) {
+						el.classList.remove('fragment-hidden');
+						el.classList.add('fragment-visible');
+					} else {
+						el.classList.remove('fragment-visible');
+						el.classList.add('fragment-hidden');
+					}
+				});
+			});
+		}
+	});
 </script>
 
 <!--
@@ -219,7 +260,7 @@
 -->
 {#if active}
 	<div
-		class="slide-renderer {layoutClass} w-full h-full relative overflow-hidden {hasFragments ? 'has-fragments' : ''} {isFullBleed ? '' : 'p-slide'}"
+		class="slide-renderer {layoutClass} w-full h-full relative overflow-hidden {hasBlockFragments || hasInlineFragments ? 'has-fragments' : ''} {isFullBleed ? '' : 'p-slide'}"
 		style={backgroundStyles}
 		in:getTransition
 		out:getTransition

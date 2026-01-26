@@ -212,13 +212,15 @@ describe('SlideRenderer', () => {
 		it('renders fragment content correctly', () => {
 			const slide = createSlide({
 				fragments: [
-					{ index: 0, content: '<p>First fragment content</p>' }
+					{ index: 0, content: '<p>First fragment content</p>' },
+					{ index: 1, content: '<p>Second fragment content</p>' }
 				]
 			});
 
-			render(SlideRenderer, { props: { slide, visibleFragments: 0 } });
+			render(SlideRenderer, { props: { slide, visibleFragments: 1 } });
 
 			expect(screen.getByText('First fragment content')).toBeInTheDocument();
+			expect(screen.getByText('Second fragment content')).toBeInTheDocument();
 		});
 	});
 
