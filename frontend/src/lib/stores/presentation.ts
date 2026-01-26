@@ -27,6 +27,20 @@ export const currentSlideIndex = writable<number>(0);
 export const currentFragmentIndex = writable<number>(-1);
 
 /**
+ * Whether the scroll animation has been triggered for the current slide.
+ * Used for slides with scroll: true directive.
+ * false = at top of slide, true = scrolled to bottom.
+ */
+export const scrollRevealed = writable<boolean>(false);
+
+/**
+ * Counter that increments each time scroll is triggered by user action.
+ * This allows the component to distinguish between store updates from
+ * user navigation vs initialization/resets.
+ */
+export const scrollTriggerCount = writable<number>(0);
+
+/**
  * Theme override from WebSocket.
  * When set, this overrides the theme from presentation config.
  * This is temporary and doesn't modify the markdown file.
@@ -66,20 +80,46 @@ export const totalFragments: Readable<number> = derived(currentSlide, ($currentS
 	return count > 1 ? count : 0;
 });
 
+/**
+ * Whether the current slide has scroll reveal enabled.
+ */
+export const hasScrollReveal: Readable<boolean> = derived(currentSlide, ($currentSlide) => {
+	return $currentSlide?.scroll === true;
+});
+
 // ============================================================================
 // Navigation Actions
 // ============================================================================
 
 /**
  * Navigate to the next slide.
- * If there are unrevealed fragments (2+ fragments means actual pause markers),
- * reveals the next fragment instead.
+ * Order of operations:
+ * 1. Scroll first - if scroll enabled and not yet revealed, trigger scroll animation
+ * 2. Then fragments - reveal fragments one by one
+ * 3. Then next slide - advance to next slide
  * Returns true if navigation occurred.
  */
 export function nextSlide(): boolean {
 	let navigated = false;
 
 	currentSlide.subscribe(($currentSlide) => {
+		// Check if scroll needs to be triggered first
+		const hasScroll = $currentSlide?.scroll === true;
+
+		if (hasScroll) {
+			let isScrollRevealed = false;
+			scrollRevealed.subscribe((v) => (isScrollRevealed = v))();
+
+			if (!isScrollRevealed) {
+				// Trigger scroll animation
+				scrollRevealed.set(true);
+				// Increment trigger count to signal this is a user action
+				scrollTriggerCount.update((n) => n + 1);
+				navigated = true;
+				return;
+			}
+		}
+
 		// Only treat slides with 2+ fragments as having fragments to reveal
 		// (1 fragment means no pause markers - just show slide directly)
 		const fragmentCount = $currentSlide?.fragments?.length ?? 0;
@@ -101,8 +141,9 @@ export function nextSlide(): boolean {
 					const total = $presentation?.slides.length ?? 0;
 					if ($slideIndex < total - 1) {
 						navigated = true;
-						// Reset fragment index for new slide
+						// Reset fragment index and scroll state for new slide
 						currentFragmentIndex.set(-1);
+						scrollRevealed.set(false);
 						updateURLHash($slideIndex + 1);
 						return $slideIndex + 1;
 					}
@@ -117,7 +158,10 @@ export function nextSlide(): boolean {
 
 /**
  * Navigate to the previous slide.
- * If there are visible fragments (on slides with 2+ fragments), hides the last visible fragment instead.
+ * Order of operations (reverse of nextSlide):
+ * 1. Fragments first - hide fragments in reverse order
+ * 2. Then scroll - animate back to top of slide
+ * 3. Then prev slide - go to previous slide (scrolled to bottom, all fragments visible)
  * Returns true if navigation occurred.
  */
 export function prevSlide(): boolean {
@@ -136,9 +180,25 @@ export function prevSlide(): boolean {
 			}
 			return $fragmentIndex;
 		});
+
+		// If no fragment was hidden, check if we need to scroll back to top
+		if (!navigated) {
+			const hasScroll = $currentSlide?.scroll === true;
+			if (hasScroll) {
+				let isScrollRevealed = false;
+				scrollRevealed.subscribe((v) => (isScrollRevealed = v))();
+
+				if (isScrollRevealed) {
+					// Scroll back to top
+					scrollRevealed.set(false);
+					navigated = true;
+					return;
+				}
+			}
+		}
 	})();
 
-	// If no fragment was hidden, move to previous slide
+	// If no fragment was hidden and no scroll to reset, move to previous slide
 	if (!navigated) {
 		presentation.subscribe(($presentation) => {
 			currentSlideIndex.update(($slideIndex) => {
@@ -148,8 +208,11 @@ export function prevSlide(): boolean {
 					const newSlide = $presentation?.slides[newSlideIndex];
 					const fragmentCount = newSlide?.fragments?.length ?? 0;
 					const hasRealFragments = fragmentCount > 1;
+					const hasScroll = newSlide?.scroll === true;
 					// Show all fragments on the previous slide (or -1 if no real fragments)
 					currentFragmentIndex.set(hasRealFragments ? fragmentCount - 1 : -1);
+					// Set scroll to revealed state (scrolled to bottom) on previous slide
+					scrollRevealed.set(hasScroll);
 					updateURLHash(newSlideIndex);
 					return newSlideIndex;
 				}
@@ -163,7 +226,7 @@ export function prevSlide(): boolean {
 
 /**
  * Navigate directly to a specific slide.
- * Resets fragment index to -1 (all fragments hidden).
+ * Resets fragment index to -1 (all fragments hidden) and scroll to top.
  */
 export function goToSlide(index: number): boolean {
 	let navigated = false;
@@ -173,6 +236,7 @@ export function goToSlide(index: number): boolean {
 		if (index >= 0 && index < total) {
 			currentSlideIndex.set(index);
 			currentFragmentIndex.set(-1);
+			scrollRevealed.set(false);
 			updateURLHash(index);
 			navigated = true;
 		}
@@ -282,6 +346,7 @@ export function initializeFromURL(): void {
 			const validIndex = Math.min(slideIndex, total - 1);
 			currentSlideIndex.set(validIndex);
 			currentFragmentIndex.set(-1);
+			scrollRevealed.set(false);
 		}
 	})();
 }
@@ -302,6 +367,7 @@ export function setupHashChangeListener(): () => void {
 			if (slideIndex >= 0 && slideIndex < total) {
 				currentSlideIndex.set(slideIndex);
 				currentFragmentIndex.set(-1);
+				scrollRevealed.set(false);
 			}
 		})();
 	};
@@ -324,6 +390,7 @@ export function resetPresentation(): void {
 	presentation.set(null);
 	currentSlideIndex.set(0);
 	currentFragmentIndex.set(-1);
+	scrollRevealed.set(false);
 }
 
 /**

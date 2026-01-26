@@ -354,7 +354,7 @@
 	<main class="presenter-main">
 		<!-- Current slide (compact) -->
 		<div class="presenter-current-slide-panel">
-			<h2 class="presenter-panel-title">Current Slide</h2>
+			<h2 class="presenter-panel-title">Current Slide{slide?.scroll ? ' (Scroll)' : ''}</h2>
 			<div class="presenter-slide-preview current">
 				{#if presentationData && slide}
 					<SlideContainer {aspectRatio} {theme}>

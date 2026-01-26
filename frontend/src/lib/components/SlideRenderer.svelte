@@ -1,8 +1,10 @@
 <script lang="ts">
 	import type { Slide, BackgroundConfig, Transition, FragmentGroup, Theme } from '$lib/types';
 	import { fade, fly, scale } from 'svelte/transition';
+	import { untrack } from 'svelte';
 	import { renderMermaidBlocksInElement } from '$lib/utils/mermaid';
 	import { highlightCodeBlocksInElement } from '$lib/utils/highlighting';
+	import { scrollRevealed as scrollRevealedStore, scrollTriggerCount as scrollTriggerCountStore } from '$lib/stores/presentation';
 
 	// ============================================================================
 	// Props
@@ -73,6 +75,33 @@
 			slide.fragments.length > 0 &&
 			slide.fragments.every((f) => !f.content || f.content.trim() === '')
 	);
+
+	/**
+	 * Check if the slide has scroll reveal enabled.
+	 */
+	let hasScrollReveal = $derived(slide.scroll === true);
+
+	/**
+	 * Get the scroll animation duration in milliseconds.
+	 * Default is 2000ms for a readable scroll speed.
+	 */
+	let scrollSpeed = $derived(slide.scrollSpeed || 2000);
+
+	/**
+	 * Track the scroll distance (how far content extends beyond viewport).
+	 */
+	let scrollDistance = $state(0);
+
+	/**
+	 * Whether content actually needs scrolling (extends beyond viewport).
+	 */
+	let needsScroll = $derived(scrollDistance > 0);
+
+	/**
+	 * Track if scroll measurement is ready.
+	 * Prevents animation before we know the scroll distance.
+	 */
+	let scrollMeasured = $state(false);
 
 	/**
 	 * Get fragments with visibility state (for block fragments).
@@ -249,6 +278,114 @@
 			});
 		}
 	});
+
+	// ============================================================================
+	// Scroll Reveal Implementation
+	// ============================================================================
+
+	/**
+	 * Measure content height and calculate scroll distance.
+	 * Uses ResizeObserver to handle window resize.
+	 */
+	$effect(() => {
+		if (!slideContentElement || !hasScrollReveal || !active) {
+			scrollDistance = 0;
+			scrollMeasured = false;
+			return;
+		}
+
+		// Function to measure and update scroll distance
+		const measureScrollDistance = () => {
+			if (!slideContentElement) return;
+			const scrollHeight = slideContentElement.scrollHeight;
+			const clientHeight = slideContentElement.clientHeight;
+			scrollDistance = Math.max(0, scrollHeight - clientHeight);
+			scrollMeasured = true;
+		};
+
+		// Initial measurement after DOM updates
+		queueMicrotask(measureScrollDistance);
+
+		// Set up ResizeObserver for dynamic recalculation
+		const resizeObserver = new ResizeObserver(measureScrollDistance);
+		resizeObserver.observe(slideContentElement);
+
+		return () => {
+			resizeObserver.disconnect();
+		};
+	});
+
+	/**
+	 * Subscribe to scrollRevealed store directly for more reliable updates.
+	 */
+	let scrollRevealedFromStore = $state(false);
+
+	$effect(() => {
+		const unsubscribe = scrollRevealedStore.subscribe((value) => {
+			scrollRevealedFromStore = value;
+		});
+		return unsubscribe;
+	});
+
+	/**
+	 * Subscribe to scrollTriggerCount store to detect user-initiated scroll actions.
+	 */
+	let scrollTriggerCountFromStore = $state(0);
+	let prevScrollTriggerCount = $state(0);
+
+	$effect(() => {
+		const unsubscribe = scrollTriggerCountStore.subscribe((value) => {
+			scrollTriggerCountFromStore = value;
+		});
+		return unsubscribe;
+	});
+
+	/**
+	 * Apply scroll transform based on scrollRevealed from store.
+	 * Only scrolls when triggered by user action (scrollTriggerCount increments).
+	 */
+	$effect(() => {
+		if (!slideContentElement || !hasScrollReveal) {
+			return;
+		}
+
+		// Track scrollTriggerCount changes to detect user actions
+		const currentTriggerCount = scrollTriggerCountFromStore;
+		const isUserTriggered = currentTriggerCount > prevScrollTriggerCount;
+
+		// Update previous count for next comparison (using untrack to avoid infinite loop)
+		if (isUserTriggered) {
+			untrack(() => {
+				prevScrollTriggerCount = currentTriggerCount;
+			});
+		}
+
+		// Use store value to determine target state
+		const isRevealed = scrollRevealedFromStore;
+
+		// Calculate target position
+		let targetY = 0;
+
+		// Only scroll down if:
+		// 1. scrollRevealed is true
+		// 2. Content actually needs scrolling
+		if (isRevealed && needsScroll) {
+			targetY = scrollDistance;
+		}
+
+		// Check for reduced motion preference
+		const reducedMotion = prefersReducedMotion();
+
+		// Apply transform with or without transition
+		// Only animate if this is a user-triggered action and measurements are ready
+		if (reducedMotion || !isUserTriggered || !scrollMeasured) {
+			slideContentElement.style.transition = 'none';
+		} else {
+			slideContentElement.style.transition = `transform ${scrollSpeed}ms ease-in-out`;
+		}
+
+		slideContentElement.style.transform = `translateY(-${targetY}px)`;
+	});
 </script>
 
 <!--
@@ -260,12 +397,16 @@
 -->
 {#if active}
 	<div
-		class="slide-renderer {layoutClass} w-full h-full relative overflow-hidden {hasBlockFragments || hasInlineFragments ? 'has-fragments' : ''} {isFullBleed ? '' : 'p-slide'}"
+		class="slide-renderer {layoutClass} w-full h-full relative overflow-hidden {hasBlockFragments || hasInlineFragments ? 'has-fragments' : ''} {isFullBleed ? '' : 'p-slide'} {hasScrollReveal ? 'scroll-enabled' : ''}"
 		style={backgroundStyles}
 		in:getTransition
 		out:getTransition
 	>
-		<div class="slide-content w-full h-full" bind:this={slideContentElement}>
+		<div
+			class="slide-content w-full {hasScrollReveal ? 'scroll-content' : 'h-full'}"
+			bind:this={slideContentElement}
+			style={hasScrollReveal ? `--scroll-speed: ${scrollSpeed}ms` : ''}
+		>
 			{@html processedHtml}
 		</div>
 	</div>
@@ -390,5 +531,33 @@
 	:global(.slide-renderer.layout-split-media),
 	:global(.slide-renderer.layout-cover) {
 		padding: 0 !important;
+	}
+
+	/*
+	 * Scroll reveal styles for long content slides.
+	 * Uses CSS transform for smooth, performant scrolling animation.
+	 */
+	:global(.slide-renderer.scroll-enabled) {
+		/* Clip content at container bounds */
+		overflow: hidden;
+	}
+
+	:global(.slide-renderer.scroll-enabled .scroll-content) {
+		/* Allow content to extend beyond viewport */
+		min-height: 100%;
+		/* Transform is applied via JavaScript for smooth animation */
+		will-change: transform;
+	}
+
+	/* Print mode: show all content without scroll truncation */
+	@media print {
+		:global(.slide-renderer.scroll-enabled) {
+			overflow: visible;
+		}
+
+		:global(.slide-renderer.scroll-enabled .scroll-content) {
+			transform: none !important;
+			transition: none !important;
+		}
 	}
 </style>

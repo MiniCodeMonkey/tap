@@ -18,14 +18,16 @@ type TransformedPresentation struct {
 
 // TransformedSlide represents a slide ready for frontend rendering.
 type TransformedSlide struct {
-	Background *BackgroundConfig      `json:"background,omitempty"`
-	Layout     string                 `json:"layout"`
-	HTML       string                 `json:"html"`
-	Transition string                 `json:"transition,omitempty"`
-	Notes      string                 `json:"notes,omitempty"`
-	CodeBlocks []TransformedCodeBlock `json:"codeBlocks,omitempty"`
-	Fragments  []TransformedFragment  `json:"fragments,omitempty"`
-	Index      int                    `json:"index"`
+	Background  *BackgroundConfig      `json:"background,omitempty"`
+	Layout      string                 `json:"layout"`
+	HTML        string                 `json:"html"`
+	Transition  string                 `json:"transition,omitempty"`
+	Notes       string                 `json:"notes,omitempty"`
+	CodeBlocks  []TransformedCodeBlock `json:"codeBlocks,omitempty"`
+	Fragments   []TransformedFragment  `json:"fragments,omitempty"`
+	Index       int                    `json:"index"`
+	Scroll      bool                   `json:"scroll,omitempty"`
+	ScrollSpeed int                    `json:"scrollSpeed,omitempty"`
 }
 
 // TransformedCodeBlock represents a code block ready for frontend rendering.
@@ -144,6 +146,14 @@ func (t *Transformer) transformSlide(slide parser.Slide) TransformedSlide {
 	// Transform background
 	if slide.Directives.Background != "" {
 		transformed.Background = t.parseBackground(slide.Directives.Background)
+	}
+
+	// Transform scroll settings
+	if slide.Directives.Scroll {
+		transformed.Scroll = true
+		if slide.Directives.ScrollSpeed > 0 {
+			transformed.ScrollSpeed = slide.Directives.ScrollSpeed
+		}
 	}
 
 	return transformed

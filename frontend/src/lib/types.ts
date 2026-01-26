@@ -183,6 +183,10 @@ export interface Slide {
 	fragments?: FragmentGroup[];
 	background?: BackgroundConfig;
 	codeBlocks?: CodeBlock[];
+	/** Enable scroll reveal for long content */
+	scroll?: boolean;
+	/** Animation duration in milliseconds (default: 2000) */
+	scrollSpeed?: number;
 }
 
 // ============================================================================
