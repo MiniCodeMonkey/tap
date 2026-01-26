@@ -1236,3 +1236,244 @@ func findSubstring(s, substr string) bool {
 	}
 	return false
 }
+
+// Tests for code block-aware slide splitting
+
+func TestParse_CodeBlockWithHorizontalRule(t *testing.T) {
+	p := New()
+	content := []byte(`# Slide One
+
+` + "```yaml" + `
+---
+title: Example
+---
+` + "```" + `
+
+---
+
+# Slide Two
+
+This is the second slide.`)
+
+	pres, err := p.Parse(content)
+	if err != nil {
+		t.Fatalf("Parse() returned error: %v", err)
+	}
+
+	if len(pres.Slides) != 2 {
+		t.Fatalf("expected 2 slides, got %d", len(pres.Slides))
+	}
+
+	// First slide should contain the YAML code block content
+	if !contains(pres.Slides[0].Content, "title: Example") {
+		t.Error("first slide should contain the YAML code block content")
+	}
+
+	// Second slide should be "Slide Two"
+	if !contains(pres.Slides[1].Content, "Slide Two") {
+		t.Error("second slide should contain 'Slide Two'")
+	}
+}
+
+func TestParse_QuadrupleBackticksWithHorizontalRule(t *testing.T) {
+	p := New()
+	content := []byte(`# Markdown Example
+
+` + "````markdown" + `
+---
+This is inside quadruple backticks
+---
+` + "````" + `
+
+---
+
+# Next Slide`)
+
+	pres, err := p.Parse(content)
+	if err != nil {
+		t.Fatalf("Parse() returned error: %v", err)
+	}
+
+	if len(pres.Slides) != 2 {
+		t.Fatalf("expected 2 slides, got %d", len(pres.Slides))
+	}
+
+	// First slide should contain the content inside quadruple backticks
+	if !contains(pres.Slides[0].Content, "inside quadruple backticks") {
+		t.Error("first slide should contain the code block content")
+	}
+}
+
+func TestParse_NestedCodeBlocks(t *testing.T) {
+	p := New()
+	// Quadruple backticks containing triple backticks with ---
+	content := []byte(`# Nested Code Blocks
+
+` + "````markdown" + `
+` + "```yaml" + `
+---
+title: Nested
+---
+` + "```" + `
+` + "````" + `
+
+---
+
+# After Nested`)
+
+	pres, err := p.Parse(content)
+	if err != nil {
+		t.Fatalf("Parse() returned error: %v", err)
+	}
+
+	if len(pres.Slides) != 2 {
+		t.Fatalf("expected 2 slides (nested code blocks should be preserved), got %d", len(pres.Slides))
+	}
+}
+
+func TestParse_MultipleCodeBlocksWithHorizontalRules(t *testing.T) {
+	p := New()
+	content := []byte(`# Multiple Code Blocks
+
+` + "```yaml" + `
+---
+first: block
+---
+` + "```" + `
+
+` + "```yaml" + `
+---
+second: block
+---
+` + "```" + `
+
+---
+
+# Next Slide`)
+
+	pres, err := p.Parse(content)
+	if err != nil {
+		t.Fatalf("Parse() returned error: %v", err)
+	}
+
+	if len(pres.Slides) != 2 {
+		t.Fatalf("expected 2 slides (multiple code blocks on one slide), got %d", len(pres.Slides))
+	}
+
+	// First slide should contain both code blocks
+	if !contains(pres.Slides[0].Content, "first: block") {
+		t.Error("first slide should contain first code block")
+	}
+	if !contains(pres.Slides[0].Content, "second: block") {
+		t.Error("first slide should contain second code block")
+	}
+}
+
+func TestParse_CodeBlockFollowedBySlideDelimiter(t *testing.T) {
+	p := New()
+	content := []byte(`# First
+
+` + "```" + `
+some code
+` + "```" + `
+
+---
+
+# Second`)
+
+	pres, err := p.Parse(content)
+	if err != nil {
+		t.Fatalf("Parse() returned error: %v", err)
+	}
+
+	if len(pres.Slides) != 2 {
+		t.Fatalf("expected 2 slides (code block followed by real delimiter), got %d", len(pres.Slides))
+	}
+}
+
+func TestParse_UnclosedCodeBlock(t *testing.T) {
+	p := New()
+	content := []byte(`# First
+
+` + "```" + `
+unclosed code block
+---
+this should not be a new slide
+`)
+
+	pres, err := p.Parse(content)
+	if err != nil {
+		t.Fatalf("Parse() returned error: %v", err)
+	}
+
+	// Unclosed code block should prevent splitting
+	if len(pres.Slides) != 1 {
+		t.Fatalf("expected 1 slide (unclosed code block should prevent splitting), got %d", len(pres.Slides))
+	}
+}
+
+func TestSplitSlidesPreservingCodeBlocks_Direct(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected int
+	}{
+		{
+			name:     "no code blocks",
+			input:    "slide 1\n---\nslide 2",
+			expected: 2,
+		},
+		{
+			name:     "--- in code block",
+			input:    "slide 1\n```\n---\n```\n---\nslide 2",
+			expected: 2,
+		},
+		{
+			name:     "--- in quadruple backtick code block",
+			input:    "slide 1\n````\n---\n````\n---\nslide 2",
+			expected: 2,
+		},
+		{
+			name:     "nested code blocks",
+			input:    "slide 1\n````\n```\n---\n```\n````\n---\nslide 2",
+			expected: 2,
+		},
+		{
+			name:     "multiple --- in code block",
+			input:    "slide 1\n```\n---\n---\n---\n```\n---\nslide 2",
+			expected: 2,
+		},
+		{
+			name:     "unclosed code block",
+			input:    "slide 1\n```\n---\nno close",
+			expected: 1,
+		},
+		{
+			name:     "code block with info string",
+			input:    "slide 1\n```yaml\n---\n```\n---\nslide 2",
+			expected: 2,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := SplitSlidesPreservingCodeBlocks(tt.input)
+			// Filter empty slides (like the real parser does)
+			nonEmpty := 0
+			for _, s := range result {
+				if len(s) > 0 && s != "" {
+					trimmed := s
+					for len(trimmed) > 0 && (trimmed[0] == ' ' || trimmed[0] == '\n' || trimmed[0] == '\t' || trimmed[0] == '\r') {
+						trimmed = trimmed[1:]
+					}
+					if len(trimmed) > 0 {
+						nonEmpty++
+					}
+				}
+			}
+			if nonEmpty != tt.expected {
+				t.Errorf("expected %d non-empty slides, got %d (raw: %d)", tt.expected, nonEmpty, len(result))
+			}
+		})
+	}
+}

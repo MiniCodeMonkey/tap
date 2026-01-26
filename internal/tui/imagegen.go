@@ -16,6 +16,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/tapsh/tap/internal/gemini"
+	"github.com/tapsh/tap/internal/parser"
 )
 
 // ImageGenStep represents the current step in the image generation workflow.
@@ -179,8 +180,8 @@ func parseSlides(content string) []SlideInfo {
 	// Remove frontmatter if present
 	content = frontmatterRe.ReplaceAllString(content, "")
 
-	// Split on slide delimiter
-	parts := slideDelimiterRe.Split(content, -1)
+	// Split on slide delimiter, preserving code blocks
+	parts := parser.SplitSlidesPreservingCodeBlocks(content)
 
 	slides := make([]SlideInfo, 0, len(parts))
 	for _, part := range parts {
@@ -1197,8 +1198,8 @@ func insertImageIntoSlide(content string, slideIndex int, prompt string, imagePa
 		contentAfterFrontmatter = content[len(match):]
 	}
 
-	// Split the content (after frontmatter) by slide delimiter
-	parts := slideDelimiterRe.Split(contentAfterFrontmatter, -1)
+	// Split the content (after frontmatter) by slide delimiter, preserving code blocks
+	parts := parser.SplitSlidesPreservingCodeBlocks(contentAfterFrontmatter)
 
 	// Find non-empty slide indices (matching parseSlides behavior)
 	slidePartIndices := []int{}

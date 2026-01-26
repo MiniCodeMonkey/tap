@@ -103,6 +103,73 @@ func (p *Parser) Markdown() goldmark.Markdown {
 // It matches "---" on its own line (with optional surrounding whitespace).
 var slideDelimiter = regexp.MustCompile(`(?m)^---\s*$`)
 
+// countLeadingBackticks returns the number of consecutive backticks at the start of a line.
+func countLeadingBackticks(line string) int {
+	count := 0
+	for _, ch := range line {
+		if ch == '`' {
+			count++
+		} else {
+			break
+		}
+	}
+	return count
+}
+
+// SplitSlidesPreservingCodeBlocks splits text on "---" delimiters while preserving
+// code blocks. Any "---" inside a fenced code block (``` or ````) is NOT treated
+// as a slide delimiter.
+func SplitSlidesPreservingCodeBlocks(text string) []string {
+	lines := strings.Split(text, "\n")
+	var slides []string
+	var currentSlide strings.Builder
+	insideCodeBlock := false
+	codeBlockFenceLength := 0
+
+	for i, line := range lines {
+		// Check for code block fence (must be at least 3 backticks)
+		backtickCount := countLeadingBackticks(line)
+		if backtickCount >= 3 {
+			if !insideCodeBlock {
+				// Opening a code block
+				insideCodeBlock = true
+				codeBlockFenceLength = backtickCount
+			} else if backtickCount >= codeBlockFenceLength {
+				// Check if this is a closing fence (just backticks, possibly with trailing whitespace)
+				trimmedAfterBackticks := strings.TrimSpace(line[backtickCount:])
+				if trimmedAfterBackticks == "" {
+					// Closing the code block
+					insideCodeBlock = false
+					codeBlockFenceLength = 0
+				}
+			}
+		}
+
+		// Check for slide delimiter only when not in a code block
+		if !insideCodeBlock && slideDelimiter.MatchString(line) {
+			// End current slide, start new one
+			slides = append(slides, currentSlide.String())
+			currentSlide.Reset()
+		} else {
+			// Add line to current slide
+			if currentSlide.Len() > 0 || i > 0 {
+				// Add newline before line (except for very first line when builder is empty)
+				if currentSlide.Len() > 0 {
+					currentSlide.WriteString("\n")
+				}
+			}
+			currentSlide.WriteString(line)
+		}
+	}
+
+	// Don't forget the last slide
+	if currentSlide.Len() > 0 {
+		slides = append(slides, currentSlide.String())
+	}
+
+	return slides
+}
+
 // Parse parses markdown content and returns a Presentation with slides.
 // Slides are split on "---" delimiters. Frontmatter (if present) is skipped.
 func (p *Parser) Parse(content []byte) (*Presentation, error) {
@@ -112,8 +179,8 @@ func (p *Parser) Parse(content []byte) (*Presentation, error) {
 	// Skip frontmatter if present
 	text = skipFrontmatter(text)
 
-	// Split content on --- delimiter
-	parts := slideDelimiter.Split(text, -1)
+	// Split content on --- delimiter, preserving code blocks
+	parts := SplitSlidesPreservingCodeBlocks(text)
 
 	presentation := &Presentation{
 		Slides: make([]Slide, 0, len(parts)),
