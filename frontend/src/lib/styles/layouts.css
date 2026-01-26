@@ -160,46 +160,47 @@
   margin-top: 0;
 }
 
-/* Vertical rhythm inside slide-content - applies to all layouts */
-.slide-content > * + h2 {
+/* Vertical rhythm inside slide-content - applies to all layouts
+   Uses .slide-renderer prefix for higher specificity to override layout-specific margin:0 rules */
+.slide-renderer .slide-content > * + h2 {
   margin-top: 2.5rem;
 }
 
-.slide-content > * + h3 {
+.slide-renderer .slide-content > * + h3 {
   margin-top: 2rem;
 }
 
-.slide-content > * + h4,
-.slide-content > * + h5,
-.slide-content > * + h6 {
+.slide-renderer .slide-content > * + h4,
+.slide-renderer .slide-content > * + h5,
+.slide-renderer .slide-content > * + h6 {
   margin-top: 1.5rem;
 }
 
-.slide-content > h1 + *,
-.slide-content > h2 + *,
-.slide-content > h3 + * {
+.slide-renderer .slide-content > h1 + *,
+.slide-renderer .slide-content > h2 + *,
+.slide-renderer .slide-content > h3 + * {
   margin-top: 1rem;
 }
 
-.slide-content > * + ul,
-.slide-content > * + ol {
+.slide-renderer .slide-content > * + ul,
+.slide-renderer .slide-content > * + ol {
   margin-top: 1rem;
 }
 
-.slide-content > ul + *,
-.slide-content > ol + * {
+.slide-renderer .slide-content > ul + *,
+.slide-renderer .slide-content > ol + * {
   margin-top: 1.5rem;
 }
 
-.slide-content > * + blockquote {
+.slide-renderer .slide-content > * + blockquote {
   margin-top: 1.5rem;
 }
 
-.slide-content > blockquote + * {
+.slide-renderer .slide-content > blockquote + * {
   margin-top: 1.5rem;
 }
 
-.slide-content > * + p {
+.slide-renderer .slide-content > * + p {
   margin-top: 1rem;
 }
 
@@ -208,7 +209,7 @@
   line-height: 1.15;
   letter-spacing: -0.02em;
   font-weight: 700;
-  margin: 0;
+  margin-bottom: 0;
   text-wrap: balance;
 }
 
@@ -217,27 +218,27 @@
   line-height: 1.3;
   letter-spacing: -0.01em;
   font-weight: 600;
-  margin: 0;
+  margin-bottom: 0;
 }
 
 .layout-default h3 {
   font-size: 2rem; /* slide-body */
   line-height: 1.5;
   font-weight: 600;
-  margin: 0;
+  margin-bottom: 0;
 }
 
 .layout-default p {
   font-size: 2rem; /* slide-body */
   line-height: 1.6; /* comfortable reading line-height */
-  margin: 0;
+  margin-bottom: 0;
 }
 
 .layout-default ul,
 .layout-default ol {
   font-size: 2rem; /* slide-body */
   line-height: 1.6;
-  margin: 0;
+  margin-bottom: 0;
   padding-left: 2em; /* increased indentation for better hierarchy */
 }
 
