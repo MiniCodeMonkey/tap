@@ -38,6 +38,12 @@ export interface KeyboardOptions {
 	 * Callback to check if overview is currently open.
 	 */
 	isOverviewOpen?: () => boolean;
+
+	/**
+	 * Callback after slide navigation occurs.
+	 * Use this to broadcast slide changes to other views.
+	 */
+	onNavigate?: () => void;
 }
 
 // ============================================================================
@@ -185,6 +191,7 @@ function handleKeyDown(event: KeyboardEvent): void {
 	if (ADVANCE_KEYS.includes(key)) {
 		event.preventDefault();
 		nextSlide();
+		currentOptions.onNavigate?.();
 		return;
 	}
 
@@ -192,6 +199,7 @@ function handleKeyDown(event: KeyboardEvent): void {
 	if (RETREAT_KEYS.includes(key)) {
 		event.preventDefault();
 		prevSlide();
+		currentOptions.onNavigate?.();
 		return;
 	}
 
@@ -199,6 +207,7 @@ function handleKeyDown(event: KeyboardEvent): void {
 	if (key === 'Home') {
 		event.preventDefault();
 		goToSlide(0);
+		currentOptions.onNavigate?.();
 		return;
 	}
 
@@ -209,6 +218,7 @@ function handleKeyDown(event: KeyboardEvent): void {
 		if (total > 0) {
 			goToSlide(total - 1);
 		}
+		currentOptions.onNavigate?.();
 		return;
 	}
 

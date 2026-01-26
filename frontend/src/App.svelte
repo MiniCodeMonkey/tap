@@ -13,7 +13,8 @@
 	import {
 		connectWebSocket,
 		disconnectWebSocket,
-		detectStaticMode
+		detectStaticMode,
+		getWebSocketClient
 	} from '$lib/stores/websocket';
 	import { setupKeyboardNavigation } from '$lib/utils/keyboard';
 	import SlideContainer from '$lib/components/SlideContainer.svelte';
@@ -154,6 +155,25 @@
 	}
 
 	// ============================================================================
+	// WebSocket Broadcasting
+	// ============================================================================
+
+	function broadcastSlide(): void {
+		const client = getWebSocketClient();
+		// Read the current slide index from the store
+		let currentIndex = 0;
+		const unsubscribe = currentSlideIndex.subscribe((value) => {
+			currentIndex = value;
+		});
+		unsubscribe();
+
+		client.send({
+			type: 'slide',
+			slideIndex: currentIndex
+		});
+	}
+
+	// ============================================================================
 	// Lifecycle
 	// ============================================================================
 
@@ -203,7 +223,8 @@
 		// Set up keyboard navigation
 		const keyboardCleanup = setupKeyboardNavigation({
 			onToggleOverview: toggleOverview,
-			isOverviewOpen: isOverviewOpenFn
+			isOverviewOpen: isOverviewOpenFn,
+			onNavigate: broadcastSlide
 		});
 		unsubscribers.push(keyboardCleanup);
 
