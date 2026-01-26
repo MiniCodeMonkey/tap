@@ -52,8 +52,6 @@
 	// Theme override from WebSocket takes precedence over presentation config
 	let theme = $derived((currentThemeOverride ?? presentationData?.config?.theme ?? 'paper') as Theme);
 	let aspectRatio = $derived(presentationData?.config?.aspectRatio ?? '16:9');
-	let speakerNotes = $derived(slide?.notes ?? '');
-	let hasNotes = $derived(speakerNotes.length > 0);
 	let customTheme = $derived(presentationData?.config?.customTheme);
 
 	// Track custom theme link element
@@ -400,11 +398,11 @@
 		</div>
 
 		<!-- Speaker notes -->
-		<div class="presenter-notes-panel" class:has-notes={hasNotes}>
+		<div class="presenter-notes-panel" class:has-notes={!!slide?.notes}>
 			<h2 class="presenter-panel-title">Speaker Notes</h2>
 			<div class="presenter-notes-content">
-				{#if hasNotes}
-					{@html speakerNotes}
+				{#if slide?.notes}
+					{@html slide.notes}
 				{:else}
 					<p class="presenter-no-notes">No speaker notes for this slide.</p>
 				{/if}
