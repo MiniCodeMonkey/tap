@@ -135,6 +135,7 @@ func runPDF(cmd *cobra.Command, args []string) {
 	spinner.update("Starting temporary server")
 	srv := server.New(0)
 	srv.SetPresentation(transformed)
+	srv.SetBaseDir(baseDir) // Required for serving local images
 	srv.SetupRoutes()
 
 	if err := srv.Start(); err != nil {

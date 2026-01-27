@@ -4,10 +4,16 @@ package pdf
 import (
 	"context"
 	"fmt"
+	"image"
+	"image/png"
 	"os"
 	"path/filepath"
+	"sort"
 	"time"
 
+	"github.com/pdfcpu/pdfcpu/pkg/api"
+	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/model"
+	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/types"
 	"github.com/playwright-community/playwright-go"
 )
 
@@ -216,7 +222,32 @@ func (e *Exporter) Export(ctx context.Context, serverURL string, opts ExportOpti
 }
 
 // getSlideCount determines the number of slides in the presentation.
+// It retries for up to 10 seconds to allow the frontend to load the presentation data.
 func (e *Exporter) getSlideCount(page playwright.Page) (int, error) {
+	// Retry for up to 10 seconds (20 attempts * 500ms)
+	const maxAttempts = 20
+	const retryDelay = 500 * time.Millisecond
+
+	for attempt := 0; attempt < maxAttempts; attempt++ {
+		count, err := e.tryGetSlideCount(page)
+		if err != nil {
+			return 0, err
+		}
+		if count > 0 {
+			return count, nil
+		}
+
+		// Wait before retrying
+		if attempt < maxAttempts-1 {
+			time.Sleep(retryDelay)
+		}
+	}
+
+	return 0, nil
+}
+
+// tryGetSlideCount attempts to get the slide count once.
+func (e *Exporter) tryGetSlideCount(page playwright.Page) (int, error) {
 	// Try to get slide count from the presentation data
 	count, err := page.Evaluate(`() => {
 		// Try to get from embedded data
@@ -270,110 +301,63 @@ func (e *Exporter) getSlideCount(page playwright.Page) (int, error) {
 }
 
 // exportSlides exports only the presentation slides to PDF.
+// It captures each slide as a screenshot and combines them into a single PDF.
 func (e *Exporter) exportSlides(ctx context.Context, page playwright.Page, serverURL string, slideCount int, output string) (*ExportResult, error) {
-	// Navigate through all slides and capture as PDF
-	// First, go to slide 0
-	if _, err := page.Goto(serverURL+"#0", playwright.PageGotoOptions{
-		WaitUntil: playwright.WaitUntilStateDomcontentloaded,
-	}); err != nil {
-		return nil, fmt.Errorf("failed to navigate to first slide: %w", err)
-	}
-
-	// Wait for slide to render
-	if err := page.WaitForLoadState(playwright.PageWaitForLoadStateOptions{
-		State: playwright.LoadStateNetworkidle,
-	}); err != nil {
-		return nil, fmt.Errorf("failed to wait for slide load: %w", err)
-	}
-
-	// Generate PDF using print-to-PDF
-	// Playwright's PDF generation captures the current view
-	// We'll use a special print stylesheet approach
-	pdfBytes, err := page.PDF(playwright.PagePdfOptions{
-		Path:            playwright.String(output),
-		Format:          playwright.String("A4"),
-		Landscape:       playwright.Bool(true),
-		PrintBackground: playwright.Bool(true),
-		Margin: &playwright.Margin{
-			Top:    playwright.String("0"),
-			Right:  playwright.String("0"),
-			Bottom: playwright.String("0"),
-			Left:   playwright.String("0"),
-		},
-	})
-
-	// For multi-slide PDF, we need to navigate through each slide
-	// Since PDF() captures only the current viewport, we'll generate
-	// individual PDFs and combine them, or use a different approach
-
-	// Alternative approach: Use the built-in slide navigation and capture
-	// For now, we'll do a simplified single-page capture that shows
-	// the presentation, and document that a more sophisticated approach
-	// would be needed for multi-page PDF
-
-	// Actually, let's implement proper multi-slide PDF export
+	// Create a temporary directory for screenshots
+	tempDir, err := os.MkdirTemp("", "tap-pdf-export-*")
 	if err != nil {
-		// If simple PDF failed, try alternate approach
-		return e.exportSlidesMultiPage(ctx, page, serverURL, slideCount, output)
+		return nil, fmt.Errorf("failed to create temp directory: %w", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	// Capture each slide as a screenshot
+	var screenshotPaths []string
+	for i := 0; i < slideCount; i++ {
+		// Check for context cancellation
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		default:
+		}
+
+		// Navigate to the slide (1-based hash for URL)
+		slideURL := fmt.Sprintf("%s#%d", serverURL, i+1)
+		if _, err := page.Goto(slideURL, playwright.PageGotoOptions{
+			WaitUntil: playwright.WaitUntilStateDomcontentloaded,
+		}); err != nil {
+			return nil, fmt.Errorf("failed to navigate to slide %d: %w", i+1, err)
+		}
+
+		// Wait for slide to render
+		if err := page.WaitForLoadState(playwright.PageWaitForLoadStateOptions{
+			State: playwright.LoadStateNetworkidle,
+		}); err != nil {
+			return nil, fmt.Errorf("failed to wait for slide %d to load: %w", i+1, err)
+		}
+
+		// Wait for all images to be fully loaded
+		if err := e.waitForImages(page); err != nil {
+			return nil, fmt.Errorf("failed to wait for images on slide %d: %w", i+1, err)
+		}
+
+		// Small delay to ensure animations complete
+		time.Sleep(200 * time.Millisecond)
+
+		// Take a screenshot
+		screenshotPath := filepath.Join(tempDir, fmt.Sprintf("slide-%03d.png", i))
+		if _, err := page.Screenshot(playwright.PageScreenshotOptions{
+			Path:     playwright.String(screenshotPath),
+			FullPage: playwright.Bool(false),
+			Type:     playwright.ScreenshotTypePng,
+		}); err != nil {
+			return nil, fmt.Errorf("failed to capture slide %d: %w", i+1, err)
+		}
+		screenshotPaths = append(screenshotPaths, screenshotPath)
 	}
 
-	_ = pdfBytes // Suppress unused variable warning
-
-	return &ExportResult{
-		OutputPath: output,
-		PageCount:  1, // Single page for now
-	}, nil
-}
-
-// exportSlidesMultiPage exports each slide as a separate page in the PDF.
-func (e *Exporter) exportSlidesMultiPage(ctx context.Context, page playwright.Page, serverURL string, slideCount int, output string) (*ExportResult, error) {
-	// For multi-page PDF, we'll generate a single PDF from the presentation
-	// by using JavaScript to create a print-friendly view
-
-	// Navigate to first slide
-	if _, err := page.Goto(serverURL+"#0", playwright.PageGotoOptions{
-		WaitUntil: playwright.WaitUntilStateDomcontentloaded,
-	}); err != nil {
-		return nil, fmt.Errorf("failed to navigate to first slide: %w", err)
-	}
-
-	// Inject print stylesheet that shows all slides
-	_, err := page.Evaluate(`() => {
-		// Create a print-friendly view showing all slides
-		const style = document.createElement('style');
-		style.id = 'pdf-export-style';
-		style.textContent = ` + "`" + `
-			@media print {
-				.slide-container {
-					page-break-after: always;
-					height: 100vh;
-					width: 100vw;
-				}
-				.navigation, .slide-counter { display: none !important; }
-				body { background: white !important; }
-			}
-		` + "`" + `;
-		document.head.appendChild(style);
-	}`)
-	if err != nil {
-		return nil, fmt.Errorf("failed to inject print styles: %w", err)
-	}
-
-	// Generate PDF with all slides
-	_, err = page.PDF(playwright.PagePdfOptions{
-		Path:            playwright.String(output),
-		Format:          playwright.String("A4"),
-		Landscape:       playwright.Bool(true),
-		PrintBackground: playwright.Bool(true),
-		Margin: &playwright.Margin{
-			Top:    playwright.String("0"),
-			Right:  playwright.String("0"),
-			Bottom: playwright.String("0"),
-			Left:   playwright.String("0"),
-		},
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to generate PDF: %w", err)
+	// Combine screenshots into a PDF
+	if err := e.imagesToPDF(screenshotPaths, output); err != nil {
+		return nil, fmt.Errorf("failed to create PDF from screenshots: %w", err)
 	}
 
 	return &ExportResult{
@@ -382,46 +366,181 @@ func (e *Exporter) exportSlidesMultiPage(ctx context.Context, page playwright.Pa
 	}, nil
 }
 
+// imagesToPDF combines multiple PNG images into a single PDF file.
+func (e *Exporter) imagesToPDF(imagePaths []string, outputPath string) error {
+	if len(imagePaths) == 0 {
+		return fmt.Errorf("no images to convert")
+	}
+
+	// Sort paths to ensure correct order
+	sort.Strings(imagePaths)
+
+	// Get dimensions from the first image to use as page size
+	firstImg, err := loadPNG(imagePaths[0])
+	if err != nil {
+		return fmt.Errorf("failed to load first image: %w", err)
+	}
+	bounds := firstImg.Bounds()
+	pageWidth := float64(bounds.Dx())
+	pageHeight := float64(bounds.Dy())
+
+	// Configure pdfcpu to use custom page dimensions matching the screenshots
+	// Convert pixels to points (assuming 72 DPI for simplicity, but we'll use actual dimensions)
+	conf := model.NewDefaultConfiguration()
+
+	// Import images to PDF with custom page size
+	// pdfcpu's ImportImages creates pages sized to fit each image
+	imp, err := api.Import("form:A4L, pos:c, sc:1.0", types.POINTS) // Landscape A4, centered, scale to fit
+	if err != nil {
+		return fmt.Errorf("failed to create import config: %w", err)
+	}
+
+	// Override with custom dimensions based on screenshot size
+	// Use the screenshot dimensions directly (in points, 1:1 ratio for screen capture)
+	imp.PageDim = &types.Dim{Width: pageWidth, Height: pageHeight}
+	imp.Pos = types.Center
+	imp.ScaleAbs = true
+	imp.Scale = 1.0
+
+	// Import all images into a new PDF
+	if err := api.ImportImagesFile(imagePaths, outputPath, imp, conf); err != nil {
+		return fmt.Errorf("failed to import images to PDF: %w", err)
+	}
+
+	return nil
+}
+
+// loadPNG loads a PNG image and returns it.
+func loadPNG(path string) (image.Image, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+
+	return png.Decode(f)
+}
+
+// waitForImages waits for all images on the page to be fully loaded.
+func (e *Exporter) waitForImages(page playwright.Page) error {
+	// Wait for all images to complete loading with a timeout
+	_, err := page.Evaluate(`() => {
+		return new Promise((resolve, reject) => {
+			const timeout = setTimeout(() => {
+				resolve(); // Don't fail on timeout, just continue
+			}, 5000);
+
+			const images = Array.from(document.querySelectorAll('img'));
+			if (images.length === 0) {
+				clearTimeout(timeout);
+				resolve();
+				return;
+			}
+
+			let loaded = 0;
+			const total = images.length;
+
+			const checkComplete = () => {
+				loaded++;
+				if (loaded >= total) {
+					clearTimeout(timeout);
+					resolve();
+				}
+			};
+
+			images.forEach(img => {
+				if (img.complete && img.naturalHeight !== 0) {
+					checkComplete();
+				} else {
+					img.addEventListener('load', checkComplete);
+					img.addEventListener('error', checkComplete); // Count errors as "done"
+				}
+			});
+		});
+	}`)
+	return err
+}
+
 // exportNotes exports only the speaker notes to PDF.
+// It creates an HTML page with all notes and converts it to PDF.
 func (e *Exporter) exportNotes(ctx context.Context, page playwright.Page, serverURL string, slideCount int, output string) (*ExportResult, error) {
-	// Navigate to presenter view which shows notes
-	if _, err := page.Goto(serverURL+"/presenter", playwright.PageGotoOptions{
+	// First, get all the notes by navigating to each slide
+	var allNotes []string
+	for i := 0; i < slideCount; i++ {
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		default:
+		}
+
+		// Navigate to presenter view for this slide
+		slideURL := fmt.Sprintf("%s/presenter#%d", serverURL, i+1)
+		if _, err := page.Goto(slideURL, playwright.PageGotoOptions{
+			WaitUntil: playwright.WaitUntilStateDomcontentloaded,
+		}); err != nil {
+			return nil, fmt.Errorf("failed to navigate to slide %d: %w", i+1, err)
+		}
+
+		if err := page.WaitForLoadState(playwright.PageWaitForLoadStateOptions{
+			State: playwright.LoadStateNetworkidle,
+		}); err != nil {
+			return nil, fmt.Errorf("failed to wait for slide %d: %w", i+1, err)
+		}
+
+		// Small delay for content to render
+		time.Sleep(100 * time.Millisecond)
+
+		// Extract notes text
+		notes, err := page.Evaluate(`() => {
+			const notesEl = document.querySelector('.speaker-notes, .notes, [class*="notes"]');
+			return notesEl ? notesEl.innerText : '';
+		}`)
+		if err != nil {
+			return nil, fmt.Errorf("failed to extract notes for slide %d: %w", i+1, err)
+		}
+		noteText := ""
+		if notes != nil {
+			noteText = notes.(string)
+		}
+		allNotes = append(allNotes, noteText)
+	}
+
+	// Create an HTML page with all the notes
+	html := `<!DOCTYPE html>
+<html>
+<head>
+<style>
+body { font-family: Georgia, serif; font-size: 12pt; line-height: 1.6; max-width: 800px; margin: 0 auto; padding: 2cm; }
+.slide-notes { margin-bottom: 2em; padding-bottom: 1em; border-bottom: 1px solid #ccc; page-break-inside: avoid; }
+.slide-number { font-weight: bold; color: #666; margin-bottom: 0.5em; }
+.no-notes { color: #999; font-style: italic; }
+</style>
+</head>
+<body>
+<h1>Speaker Notes</h1>
+`
+	for i, note := range allNotes {
+		html += fmt.Sprintf(`<div class="slide-notes">
+<div class="slide-number">Slide %d</div>
+`, i+1)
+		if note == "" {
+			html += `<p class="no-notes">No notes for this slide</p>`
+		} else {
+			html += fmt.Sprintf(`<p>%s</p>`, note)
+		}
+		html += "</div>\n"
+	}
+	html += "</body></html>"
+
+	// Set the page content to our notes HTML
+	if err := page.SetContent(html, playwright.PageSetContentOptions{
 		WaitUntil: playwright.WaitUntilStateDomcontentloaded,
 	}); err != nil {
-		return nil, fmt.Errorf("failed to navigate to presenter view: %w", err)
-	}
-
-	// Wait for page to load
-	if err := page.WaitForLoadState(playwright.PageWaitForLoadStateOptions{
-		State: playwright.LoadStateNetworkidle,
-	}); err != nil {
-		return nil, fmt.Errorf("failed to wait for presenter view load: %w", err)
-	}
-
-	// Inject styles to show only notes
-	_, err := page.Evaluate(`() => {
-		const style = document.createElement('style');
-		style.id = 'pdf-export-style';
-		style.textContent = ` + "`" + `
-			@media print {
-				/* Hide everything except notes */
-				.slide-preview, .timer, .slide-counter, .controls { display: none !important; }
-				.speaker-notes {
-					display: block !important;
-					font-size: 14pt;
-					line-height: 1.6;
-				}
-				body { background: white !important; color: black !important; }
-			}
-		` + "`" + `;
-		document.head.appendChild(style);
-	}`)
-	if err != nil {
-		return nil, fmt.Errorf("failed to inject notes styles: %w", err)
+		return nil, fmt.Errorf("failed to set notes content: %w", err)
 	}
 
 	// Generate PDF
-	_, err = page.PDF(playwright.PagePdfOptions{
+	_, err := page.PDF(playwright.PagePdfOptions{
 		Path:            playwright.String(output),
 		Format:          playwright.String("A4"),
 		Landscape:       playwright.Bool(false),
@@ -439,68 +558,66 @@ func (e *Exporter) exportNotes(ctx context.Context, page playwright.Page, server
 
 	return &ExportResult{
 		OutputPath: output,
-		PageCount:  slideCount,
+		PageCount:  slideCount, // Approximate, actual pages depend on content
 	}, nil
 }
 
 // exportBoth exports both slides and notes to PDF.
+// It captures screenshots of the presenter view (showing slide + notes) for each slide.
 func (e *Exporter) exportBoth(ctx context.Context, page playwright.Page, serverURL string, slideCount int, output string) (*ExportResult, error) {
-	// Navigate to presenter view which shows both slide and notes
-	if _, err := page.Goto(serverURL+"/presenter", playwright.PageGotoOptions{
-		WaitUntil: playwright.WaitUntilStateDomcontentloaded,
-	}); err != nil {
-		return nil, fmt.Errorf("failed to navigate to presenter view: %w", err)
-	}
-
-	// Wait for page to load
-	if err := page.WaitForLoadState(playwright.PageWaitForLoadStateOptions{
-		State: playwright.LoadStateNetworkidle,
-	}); err != nil {
-		return nil, fmt.Errorf("failed to wait for presenter view load: %w", err)
-	}
-
-	// Inject styles to show both slide and notes in print layout
-	_, err := page.Evaluate(`() => {
-		const style = document.createElement('style');
-		style.id = 'pdf-export-style';
-		style.textContent = ` + "`" + `
-			@media print {
-				.timer, .controls { display: none !important; }
-				.slide-preview {
-					page-break-after: always;
-					margin-bottom: 2cm;
-				}
-				.speaker-notes {
-					display: block !important;
-					font-size: 12pt;
-					line-height: 1.5;
-					border-top: 1px solid #ccc;
-					padding-top: 1cm;
-				}
-				body { background: white !important; color: black !important; }
-			}
-		` + "`" + `;
-		document.head.appendChild(style);
-	}`)
+	// Create a temporary directory for screenshots
+	tempDir, err := os.MkdirTemp("", "tap-pdf-both-*")
 	if err != nil {
-		return nil, fmt.Errorf("failed to inject both styles: %w", err)
+		return nil, fmt.Errorf("failed to create temp directory: %w", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	// Capture each slide's presenter view as a screenshot
+	var screenshotPaths []string
+	for i := 0; i < slideCount; i++ {
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		default:
+		}
+
+		// Navigate to presenter view for this slide
+		slideURL := fmt.Sprintf("%s/presenter#%d", serverURL, i+1)
+		if _, err := page.Goto(slideURL, playwright.PageGotoOptions{
+			WaitUntil: playwright.WaitUntilStateDomcontentloaded,
+		}); err != nil {
+			return nil, fmt.Errorf("failed to navigate to slide %d: %w", i+1, err)
+		}
+
+		if err := page.WaitForLoadState(playwright.PageWaitForLoadStateOptions{
+			State: playwright.LoadStateNetworkidle,
+		}); err != nil {
+			return nil, fmt.Errorf("failed to wait for slide %d: %w", i+1, err)
+		}
+
+		// Wait for all images to be fully loaded
+		if err := e.waitForImages(page); err != nil {
+			return nil, fmt.Errorf("failed to wait for images on slide %d: %w", i+1, err)
+		}
+
+		// Small delay for content to render
+		time.Sleep(200 * time.Millisecond)
+
+		// Take a screenshot of the presenter view
+		screenshotPath := filepath.Join(tempDir, fmt.Sprintf("slide-%03d.png", i))
+		if _, err := page.Screenshot(playwright.PageScreenshotOptions{
+			Path:     playwright.String(screenshotPath),
+			FullPage: playwright.Bool(false),
+			Type:     playwright.ScreenshotTypePng,
+		}); err != nil {
+			return nil, fmt.Errorf("failed to capture slide %d: %w", i+1, err)
+		}
+		screenshotPaths = append(screenshotPaths, screenshotPath)
 	}
 
-	// Generate PDF
-	_, err = page.PDF(playwright.PagePdfOptions{
-		Path:            playwright.String(output),
-		Format:          playwright.String("A4"),
-		Landscape:       playwright.Bool(true),
-		PrintBackground: playwright.Bool(true),
-		Margin: &playwright.Margin{
-			Top:    playwright.String("0.5cm"),
-			Right:  playwright.String("0.5cm"),
-			Bottom: playwright.String("0.5cm"),
-			Left:   playwright.String("0.5cm"),
-		},
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to generate combined PDF: %w", err)
+	// Combine screenshots into a PDF
+	if err := e.imagesToPDF(screenshotPaths, output); err != nil {
+		return nil, fmt.Errorf("failed to create PDF from screenshots: %w", err)
 	}
 
 	return &ExportResult{

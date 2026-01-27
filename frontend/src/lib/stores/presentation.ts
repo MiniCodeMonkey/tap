@@ -406,10 +406,16 @@ export function resetPresentation(): void {
 
 /**
  * Load a presentation and initialize from URL hash.
+ * Also exposes the presentation on window.presentation for PDF export.
  */
 export function loadPresentation(data: Presentation): void {
 	presentation.set(data);
 	initializeFromURL();
+
+	// Expose on window for PDF exporter to access slide count
+	if (typeof window !== 'undefined') {
+		(window as unknown as { presentation: Presentation }).presentation = data;
+	}
 }
 
 /**
