@@ -38,6 +38,9 @@
 	let isConnected = $state(false);
 	let currentThemeOverride = $state<string | null>(null);
 
+	// Print mode detection (for PDF export - shows all fragments)
+	const isPrintMode = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('print') === 'true';
+
 	// ============================================================================
 	// Derived State
 	// ============================================================================
@@ -365,7 +368,7 @@
 					<SlideContainer {aspectRatio} {theme}>
 						<SlideRenderer
 							{slide}
-							visibleFragments={fragmentIndex}
+							visibleFragments={isPrintMode ? 999 : fragmentIndex}
 							active={true}
 							{theme}
 						/>

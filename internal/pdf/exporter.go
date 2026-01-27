@@ -37,6 +37,10 @@ type ExportOptions struct {
 	// Output is the path for the generated PDF file.
 	// If empty, defaults to "presentation.pdf" in the current directory.
 	Output string
+	// Title is the PDF document title metadata.
+	Title string
+	// Author is the PDF document author metadata.
+	Author string
 }
 
 // DefaultExportOptions returns the default export options.
@@ -194,11 +198,17 @@ func (e *Exporter) Export(ctx context.Context, serverURL string, opts ExportOpti
 		return nil, fmt.Errorf("no slides found in presentation")
 	}
 
+	// Remove existing output file to ensure clean overwrite
+	// (pdfcpu may not properly overwrite existing files)
+	if err := os.Remove(opts.Output); err != nil && !os.IsNotExist(err) {
+		return nil, fmt.Errorf("failed to remove existing output file: %w", err)
+	}
+
 	// Export based on content type
 	var result *ExportResult
 	switch opts.Content {
 	case ContentSlides:
-		result, err = e.exportSlides(ctx, page, serverURL, slideCount, opts.Output)
+		result, err = e.exportSlides(ctx, page, serverURL, slideCount, opts.Output, opts)
 	case ContentNotes:
 		result, err = e.exportNotes(ctx, page, serverURL, slideCount, opts.Output)
 	case ContentBoth:
@@ -302,7 +312,7 @@ func (e *Exporter) tryGetSlideCount(page playwright.Page) (int, error) {
 
 // exportSlides exports only the presentation slides to PDF.
 // It captures each slide as a screenshot and combines them into a single PDF.
-func (e *Exporter) exportSlides(ctx context.Context, page playwright.Page, serverURL string, slideCount int, output string) (*ExportResult, error) {
+func (e *Exporter) exportSlides(ctx context.Context, page playwright.Page, serverURL string, slideCount int, output string, opts ExportOptions) (*ExportResult, error) {
 	// Create a temporary directory for screenshots
 	tempDir, err := os.MkdirTemp("", "tap-pdf-export-*")
 	if err != nil {
@@ -321,7 +331,8 @@ func (e *Exporter) exportSlides(ctx context.Context, page playwright.Page, serve
 		}
 
 		// Navigate to the slide (1-based hash for URL)
-		slideURL := fmt.Sprintf("%s#%d", serverURL, i+1)
+		// Use ?print=true to show all fragments
+		slideURL := fmt.Sprintf("%s?print=true#%d", serverURL, i+1)
 		if _, err := page.Goto(slideURL, playwright.PageGotoOptions{
 			WaitUntil: playwright.WaitUntilStateDomcontentloaded,
 		}); err != nil {
@@ -358,6 +369,11 @@ func (e *Exporter) exportSlides(ctx context.Context, page playwright.Page, serve
 	// Combine screenshots into a PDF
 	if err := e.imagesToPDF(screenshotPaths, output); err != nil {
 		return nil, fmt.Errorf("failed to create PDF from screenshots: %w", err)
+	}
+
+	// Add PDF metadata if provided
+	if err := e.addMetadata(output, opts); err != nil {
+		return nil, fmt.Errorf("failed to add PDF metadata: %w", err)
 	}
 
 	return &ExportResult{
@@ -582,7 +598,8 @@ func (e *Exporter) exportBoth(ctx context.Context, page playwright.Page, serverU
 		}
 
 		// Navigate to presenter view for this slide
-		slideURL := fmt.Sprintf("%s/presenter#%d", serverURL, i+1)
+		// Use ?print=true to show all fragments
+		slideURL := fmt.Sprintf("%s/presenter?print=true#%d", serverURL, i+1)
 		if _, err := page.Goto(slideURL, playwright.PageGotoOptions{
 			WaitUntil: playwright.WaitUntilStateDomcontentloaded,
 		}); err != nil {
@@ -624,6 +641,27 @@ func (e *Exporter) exportBoth(ctx context.Context, page playwright.Page, serverU
 		OutputPath: output,
 		PageCount:  slideCount,
 	}, nil
+}
+
+// addMetadata adds PDF metadata (title, author, etc.) to an existing PDF file.
+func (e *Exporter) addMetadata(pdfPath string, opts ExportOptions) error {
+	properties := make(map[string]string)
+
+	if opts.Title != "" {
+		properties["Title"] = opts.Title
+	}
+	if opts.Author != "" {
+		properties["Author"] = opts.Author
+	}
+	properties["Creator"] = "Tap - Markdown Presentations"
+	properties["Producer"] = "Tap (https://tap.sh)"
+
+	if len(properties) == 0 {
+		return nil
+	}
+
+	conf := model.NewDefaultConfiguration()
+	return api.AddPropertiesFile(pdfPath, pdfPath, properties, conf)
 }
 
 // ValidateContentType checks if a content type string is valid.

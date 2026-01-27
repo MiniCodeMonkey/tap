@@ -40,6 +40,9 @@
 	let slides = $state<Slide[]>([]);
 	let currentThemeOverride = $state<string | null>(null);
 
+	// Print mode detection (for PDF export - shows all fragments)
+	const isPrintMode = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('print') === 'true';
+
 	// ============================================================================
 	// Derived Values
 	// ============================================================================
@@ -282,7 +285,7 @@
 			{#key slideIndex}
 				<SlideRenderer
 					slide={currentSlideData}
-					visibleFragments={fragmentIndex}
+					visibleFragments={isPrintMode ? 999 : fragmentIndex}
 					active={true}
 					{direction}
 					transitionDuration={400}
@@ -294,8 +297,10 @@
 		<!-- Progress bar -->
 		<ProgressBar show={showProgressBar} />
 
-		<!-- Connection indicator -->
-		<ConnectionIndicator />
+		<!-- Connection indicator (hidden in print mode for PDF export) -->
+		{#if !isPrintMode}
+			<ConnectionIndicator />
+		{/if}
 
 		<!-- Slide overview modal -->
 		<SlideOverview

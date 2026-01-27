@@ -176,6 +176,8 @@ func runPDF(cmd *cobra.Command, args []string) {
 	result, err := exporter.Export(ctx, serverURL, pdf.ExportOptions{
 		Content: contentType,
 		Output:  outputPath,
+		Title:   cfg.Title,
+		Author:  cfg.Author,
 	})
 	if err != nil {
 		spinner.stop()
