@@ -26,7 +26,7 @@ var (
 
 // devCmd represents the dev command
 var devCmd = &cobra.Command{
-	Use:   "dev <file>",
+	Use:   "dev [file]",
 	Short: "Start the development server",
 	Long: `Start the development server to preview and present your slides.
 
@@ -41,9 +41,33 @@ Examples:
   tap dev slides.md --port 8080          # Use custom port
   tap dev slides.md -p 8080              # Short form
   tap dev slides.md --presenter-password secret  # Protect presenter view`,
-	Args: cobra.ExactArgs(1),
+	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return runDevServer(args[0], devPort, devPresenterPassword, devHeadless)
+		var file string
+
+		if len(args) == 0 {
+			// No file provided - show file picker or error
+			result, err := tui.RunFilePicker()
+			if err != nil {
+				return err
+			}
+
+			if result.Aborted {
+				if result.File == "" {
+					// No files found - show helpful error
+					fmt.Print(tui.RenderNoFilesError())
+					return nil
+				}
+				// User cancelled
+				return nil
+			}
+
+			file = result.File
+		} else {
+			file = args[0]
+		}
+
+		return runDevServer(file, devPort, devPresenterPassword, devHeadless)
 	},
 }
 
