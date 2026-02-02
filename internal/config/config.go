@@ -140,28 +140,14 @@ var validTransitions = map[string]bool{
 
 // validThemes contains the allowed theme values.
 var validThemes = map[string]bool{
-	// Original themes
-	"paper":    true,
-	"noir":     true,
-	"aurora":   true,
-	"phosphor": true,
-	"poster":   true,
-	// New themes
-	"ink":           true,
-	"manuscript":    true,
-	"deco":          true,
-	"stained-glass": true,
-	"bauhaus":       true,
-	"watercolor":    true,
-	"comic":         true,
-	"blueprint":     true,
-	"editorial":     true,
-	"synthwave":     true,
-	"safari":        true,
-	"botanical":     true,
-	"cyber":         true,
-	"origami":       true,
-	"chalkboard":    true,
+	"paper":     true,
+	"noir":      true,
+	"aurora":    true,
+	"phosphor":  true,
+	"poster":    true,
+	"ink":       true,
+	"bauhaus":   true,
+	"editorial": true,
 }
 
 // legacyThemeMapping maps old theme names to new theme names for backwards compatibility.

@@ -51,20 +51,8 @@ export type Theme =
 	| 'phosphor'
 	| 'poster'
 	| 'ink'
-	| 'manuscript'
-	| 'deco'
-	| 'stained-glass'
 	| 'bauhaus'
-	| 'watercolor'
-	| 'comic'
-	| 'blueprint'
-	| 'editorial'
-	| 'synthwave'
-	| 'safari'
-	| 'botanical'
-	| 'cyber'
-	| 'origami'
-	| 'chalkboard';
+	| 'editorial';
 
 /**
  * Default theme used when no theme is specified.
