@@ -65,7 +65,7 @@ export default defineConfig({
             { text: 'Images & Media', link: '/guide/images-media' },
             { text: 'Mermaid Diagrams', link: '/guide/mermaid-diagrams' },
             { text: 'AI Image Generation', link: '/guide/ai-images' },
-            { text: 'Claude Code Skill', link: '/guide/claude-code' },
+            { text: 'AI Skills', link: '/guide/ai-skills' },
             { text: 'Building & Export', link: '/guide/building-export' }
           ]
         }

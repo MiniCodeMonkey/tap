@@ -1,10 +1,20 @@
 ---
-title: Claude Code Skill
+title: AI Coding Assistant Skills
 ---
 
-# Claude Code Skill
+# AI Coding Assistant Skills
 
-Tap provides an [Agent Skill](https://docs.anthropic.com/en/docs/claude-code/skills) for Claude Code that teaches the AI assistant best practices for creating Tap presentations. When installed, Claude Code understands Tap's markdown syntax, layouts, live code execution, and all other features.
+Tap provides an [Agent Skill](https://docs.anthropic.com/en/docs/claude-code/skills) that teaches AI coding assistants best practices for creating Tap presentations. When installed, your AI assistant understands Tap's markdown syntax, layouts, live code execution, and all other features.
+
+## Compatibility
+
+The Tap skill works with AI coding assistants that support the skills format:
+
+- [Claude Code](https://docs.anthropic.com/en/docs/claude-code)
+- [Cursor](https://cursor.sh)
+- [Amp](https://amp.dev)
+- [Codex](https://openai.com/codex)
+- And other compatible assistants
 
 ## Installation
 
@@ -14,11 +24,11 @@ Install the Tap skill using the skills CLI:
 npx @anthropic-ai/skills add minicodemonkey/tap
 ```
 
-The skill is installed to `~/.claude/skills/` and automatically loaded in future Claude Code sessions.
+The skill is installed to your skills directory and automatically loaded in future sessions.
 
 ## What's Included
 
-The skill teaches Claude Code about:
+The skill teaches AI assistants about:
 
 - **Slide syntax** - Markdown structure, slide separators, frontmatter
 - **Layouts** - All 11 layouts and their slot markers
@@ -33,7 +43,7 @@ The skill teaches Claude Code about:
 
 ## Usage
 
-Once installed, Claude Code automatically applies the skill when working on Tap presentations. You can ask Claude to:
+Once installed, your AI assistant automatically applies the skill when working on Tap presentations. You can ask it to:
 
 - Create new presentations from scratch
 - Add slides with specific layouts
