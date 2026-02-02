@@ -17,6 +17,9 @@ vendor/
 # Test artifacts
 coverage.out
 coverage.html
+test-results/
+frontend/test-results/
+frontend/playwright-report/
 
 # Visual test outputs (regenerated)
 frontend/tests/visual/screenshots/*
