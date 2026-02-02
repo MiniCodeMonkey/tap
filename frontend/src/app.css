@@ -1,5 +1,8 @@
 /* All @imports must come first */
 
+/* MapLibre GL CSS for map slides */
+@import "maplibre-gl/dist/maplibre-gl.css";
+
 /* Theme system - CSS custom properties that Tailwind utilities reference */
 @import "./lib/themes/theme-tokens.css";
 

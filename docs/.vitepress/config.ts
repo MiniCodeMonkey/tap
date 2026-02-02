@@ -64,6 +64,7 @@ export default defineConfig({
             { text: 'Presenter Mode', link: '/guide/presenter-mode' },
             { text: 'Images & Media', link: '/guide/images-media' },
             { text: 'Mermaid Diagrams', link: '/guide/mermaid-diagrams' },
+            { text: 'Map Animations', link: '/guide/map-animations' },
             { text: 'AI Image Generation', link: '/guide/ai-images' },
             { text: 'AI Skills', link: '/guide/ai-skills' },
             { text: 'Building & Export', link: '/guide/building-export' }

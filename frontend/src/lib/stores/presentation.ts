@@ -47,6 +47,18 @@ export const scrollTriggerCount = writable<number>(0);
  */
 export const themeOverride = writable<Theme | null>(null);
 
+/**
+ * Whether the current slide has a map animation.
+ * Set by SlideRenderer when it detects a map code block.
+ */
+export const currentSlideHasMap = writable<boolean>(false);
+
+/**
+ * Whether the map animation has been triggered for the current slide.
+ * false = map at start position, true = animation triggered/completed.
+ */
+export const mapAnimationTriggered = writable<boolean>(false);
+
 // ============================================================================
 // Derived Stores
 // ============================================================================
@@ -94,9 +106,10 @@ export const hasScrollReveal: Readable<boolean> = derived(currentSlide, ($curren
 /**
  * Navigate to the next slide.
  * Order of operations:
- * 1. Scroll first - if scroll enabled and not yet revealed, trigger scroll animation
- * 2. Then fragments - reveal fragments one by one
- * 3. Then next slide - advance to next slide
+ * 1. Map animation first - if slide has map and not yet triggered, trigger animation
+ * 2. Scroll - if scroll enabled and not yet revealed, trigger scroll animation
+ * 3. Then fragments - reveal fragments one by one
+ * 4. Then next slide - advance to next slide
  * Returns true if navigation occurred.
  */
 export function nextSlide(): boolean {
@@ -110,6 +123,21 @@ export function nextSlide(): boolean {
 	})();
 
 	if (!slideData) return false;
+
+	// Check if map animation needs to be triggered first
+	let hasMap = false;
+	currentSlideHasMap.subscribe((v) => (hasMap = v))();
+
+	if (hasMap) {
+		let isMapAnimated = false;
+		mapAnimationTriggered.subscribe((v) => (isMapAnimated = v))();
+
+		if (!isMapAnimated) {
+			// Trigger map animation
+			mapAnimationTriggered.set(true);
+			return true;
+		}
+	}
 
 	// Check if scroll needs to be triggered first
 	const hasScroll = slideData.scroll === true;
@@ -148,9 +176,11 @@ export function nextSlide(): boolean {
 				const total = $presentation?.slides.length ?? 0;
 				if ($slideIndex < total - 1) {
 					navigated = true;
-					// Reset fragment index and scroll state for new slide
+					// Reset fragment index, scroll state, and map state for new slide
 					currentFragmentIndex.set(-1);
 					scrollRevealed.set(false);
+					currentSlideHasMap.set(false);
+					mapAnimationTriggered.set(false);
 					updateURLHash($slideIndex + 1);
 					return $slideIndex + 1;
 				}
@@ -167,7 +197,8 @@ export function nextSlide(): boolean {
  * Order of operations (reverse of nextSlide):
  * 1. Fragments first - hide fragments in reverse order
  * 2. Then scroll - animate back to top of slide
- * 3. Then prev slide - go to previous slide (scrolled to bottom, all fragments visible)
+ * 3. Then map - reset map to start position
+ * 4. Then prev slide - go to previous slide (scrolled to bottom, all fragments visible, map at end)
  * Returns true if navigation occurred.
  */
 export function prevSlide(): boolean {
@@ -209,7 +240,24 @@ export function prevSlide(): boolean {
 		}
 	}
 
-	// If no fragment was hidden and no scroll to reset, move to previous slide
+	// If no fragment was hidden and no scroll to reset, check if map needs to be reset
+	if (!navigated) {
+		let hasMap = false;
+		currentSlideHasMap.subscribe((v) => (hasMap = v))();
+
+		if (hasMap) {
+			let isMapAnimated = false;
+			mapAnimationTriggered.subscribe((v) => (isMapAnimated = v))();
+
+			if (isMapAnimated) {
+				// Reset map to start position
+				mapAnimationTriggered.set(false);
+				return true;
+			}
+		}
+	}
+
+	// If nothing else to undo, move to previous slide
 	if (!navigated) {
 		presentation.subscribe(($presentation) => {
 			currentSlideIndex.update(($slideIndex) => {
@@ -224,6 +272,11 @@ export function prevSlide(): boolean {
 					currentFragmentIndex.set(newHasRealFragments ? newFragmentCount - 1 : -1);
 					// Set scroll to revealed state (scrolled to bottom) on previous slide
 					scrollRevealed.set(newHasScroll);
+					// Map state will be set by SlideRenderer when it detects map
+					// For now, reset to allow SlideRenderer to set it
+					currentSlideHasMap.set(false);
+					// When going back to a slide with a map, show it at end position (animated)
+					mapAnimationTriggered.set(true);
 					updateURLHash(newSlideIndex);
 					return newSlideIndex;
 				}
@@ -248,6 +301,8 @@ export function goToSlide(index: number): boolean {
 			currentSlideIndex.set(index);
 			currentFragmentIndex.set(-1);
 			scrollRevealed.set(false);
+			currentSlideHasMap.set(false);
+			mapAnimationTriggered.set(false);
 			updateURLHash(index);
 			navigated = true;
 		}
@@ -358,6 +413,8 @@ export function initializeFromURL(): void {
 			currentSlideIndex.set(validIndex);
 			currentFragmentIndex.set(-1);
 			scrollRevealed.set(false);
+			currentSlideHasMap.set(false);
+			mapAnimationTriggered.set(false);
 		}
 	})();
 }
@@ -379,6 +436,8 @@ export function setupHashChangeListener(): () => void {
 				currentSlideIndex.set(slideIndex);
 				currentFragmentIndex.set(-1);
 				scrollRevealed.set(false);
+				currentSlideHasMap.set(false);
+				mapAnimationTriggered.set(false);
 			}
 		})();
 	};
@@ -402,6 +461,8 @@ export function resetPresentation(): void {
 	currentSlideIndex.set(0);
 	currentFragmentIndex.set(-1);
 	scrollRevealed.set(false);
+	currentSlideHasMap.set(false);
+	mapAnimationTriggered.set(false);
 }
 
 /**

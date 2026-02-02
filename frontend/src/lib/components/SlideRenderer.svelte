@@ -1,10 +1,16 @@
 <script lang="ts">
-	import type { Slide, BackgroundConfig, Transition, FragmentGroup, Theme } from '$lib/types';
+	import type { Slide, BackgroundConfig, Transition, FragmentGroup, Theme, MapConfig } from '$lib/types';
 	import { fade, fly, scale } from 'svelte/transition';
 	import { untrack } from 'svelte';
 	import { renderMermaidBlocksInElement } from '$lib/utils/mermaid';
 	import { highlightCodeBlocksInElement } from '$lib/utils/highlighting';
-	import { scrollRevealed as scrollRevealedStore } from '$lib/stores/presentation';
+	import { parseMapConfig } from '$lib/utils/map';
+	import {
+		scrollRevealed as scrollRevealedStore,
+		currentSlideHasMap,
+		mapAnimationTriggered
+	} from '$lib/stores/presentation';
+	import MapSlide from './MapSlide.svelte';
 
 	// ============================================================================
 	// Props
@@ -23,6 +29,8 @@
 		transitionDuration?: number;
 		/** Theme to use for mermaid diagrams */
 		theme?: Theme;
+		/** Whether in print/PDF mode */
+		isPrintMode?: boolean;
 	}
 
 	let {
@@ -31,7 +39,8 @@
 		active = true,
 		direction = 'forward',
 		transitionDuration = 400,
-		theme = 'paper'
+		theme = 'paper',
+		isPrintMode = false
 	}: Props = $props();
 
 	// ============================================================================
@@ -113,6 +122,77 @@
 			visible: fragment.index <= visibleFragments
 		}));
 	});
+
+	// ============================================================================
+	// Map Slide State
+	// ============================================================================
+
+	/**
+	 * Parsed map configuration from the slide content.
+	 * Null if no map code block is present.
+	 */
+	let mapConfig = $state<MapConfig | null>(null);
+
+	/**
+	 * Reference to the MapSlide component for programmatic control.
+	 */
+	let mapSlideRef: MapSlide | undefined = $state();
+
+	/**
+	 * Check if the slide has a map (for fragment-like behavior).
+	 */
+	let hasMap = $derived(mapConfig !== null);
+
+	/**
+	 * Subscribe to map animation state from store.
+	 */
+	let mapAnimationTriggeredFromStore = $state(false);
+
+	$effect(() => {
+		const unsubscribe = mapAnimationTriggered.subscribe((value) => {
+			mapAnimationTriggeredFromStore = value;
+		});
+		return unsubscribe;
+	});
+
+	/**
+	 * Detect map code blocks in the HTML and extract config.
+	 * Returns the HTML with map code blocks removed.
+	 */
+	function extractMapConfig(html: string): { html: string; config: MapConfig | null } {
+		// Check for map code block pattern
+		const mapBlockRegex = /<pre><code class="language-map">([\s\S]*?)<\/code><\/pre>/;
+		const match = html.match(mapBlockRegex);
+
+		if (!match) {
+			return { html, config: null };
+		}
+
+		// Decode HTML entities in the code content
+		const matchContent = match[1];
+		if (!matchContent) {
+			return { html, config: null };
+		}
+
+		const codeContent = matchContent
+			.replace(/&lt;/g, '<')
+			.replace(/&gt;/g, '>')
+			.replace(/&amp;/g, '&')
+			.replace(/&quot;/g, '"')
+			.replace(/&#39;/g, "'");
+
+		const config = parseMapConfig(codeContent);
+
+		if (!config) {
+			// Leave the code block for error display
+			return { html, config: null };
+		}
+
+		// Remove the map code block from HTML (map will render separately)
+		const cleanedHtml = html.replace(mapBlockRegex, '');
+
+		return { html: cleanedHtml, config };
+	}
 
 	// ============================================================================
 	// Background Handling
@@ -208,12 +288,27 @@
 	 * Get the final HTML content, either with or without fragment processing.
 	 * For block fragments, wraps content in divs.
 	 * For inline fragments, returns HTML as-is (visibility controlled via DOM).
+	 * Also extracts map configuration from map code blocks.
 	 */
 	let processedHtml = $derived.by(() => {
+		let html = slide.html;
+
+		// Extract map config from HTML
+		const mapResult = extractMapConfig(html);
+		// Update mapConfig state (use queueMicrotask to avoid state change during derivation)
+		queueMicrotask(() => {
+			if (mapResult.config !== mapConfig) {
+				mapConfig = mapResult.config;
+				// Update the store to tell navigation about the map
+				currentSlideHasMap.set(mapResult.config !== null);
+			}
+		});
+		html = mapResult.html;
+
 		if (hasBlockFragments) {
-			return processHtmlWithFragments(slide.html, fragmentsWithVisibility);
+			return processHtmlWithFragments(html, fragmentsWithVisibility);
 		}
-		return slide.html;
+		return html;
 	});
 
 	// ============================================================================
@@ -276,6 +371,44 @@
 					}
 				});
 			});
+		}
+	});
+
+	// ============================================================================
+	// Map Animation Control
+	// ============================================================================
+
+	/**
+	 * Track previous map animation state to detect changes.
+	 */
+	let prevMapAnimationTriggered = $state(false);
+
+	/**
+	 * React to map animation state changes from the store.
+	 * When store says animation is triggered, tell the MapSlide component.
+	 * When store says to reset, tell MapSlide to go back to start.
+	 */
+	$effect(() => {
+		if (hasMap && active && mapSlideRef) {
+			const currentTriggered = mapAnimationTriggeredFromStore;
+
+			if (currentTriggered && !prevMapAnimationTriggered) {
+				// Animation was just triggered - the MapSlide will handle this via its prop
+			} else if (!currentTriggered && prevMapAnimationTriggered) {
+				// Animation was reset - tell map to go back to start
+				mapSlideRef.resetToStart();
+			}
+
+			prevMapAnimationTriggered = currentTriggered;
+		}
+	});
+
+	/**
+	 * Reset map state when slide becomes inactive.
+	 */
+	$effect(() => {
+		if (!active && hasMap) {
+			currentSlideHasMap.set(false);
 		}
 	});
 
@@ -395,13 +528,25 @@
 -->
 {#if active}
 	<div
-		class="slide-renderer {layoutClass} w-full h-full relative overflow-hidden {hasBlockFragments || hasInlineFragments ? 'has-fragments' : ''} {isFullBleed ? '' : 'p-slide'} {hasScrollReveal ? 'scroll-enabled' : ''}"
+		class="slide-renderer {layoutClass} w-full h-full relative overflow-hidden {hasBlockFragments || hasInlineFragments ? 'has-fragments' : ''} {isFullBleed ? '' : 'p-slide'} {hasScrollReveal ? 'scroll-enabled' : ''} {hasMap ? 'has-map' : ''}"
 		style={backgroundStyles}
 		in:getTransition
 		out:getTransition
 	>
+		<!-- Map slide (rendered as overlay when map config exists) -->
+		{#if mapConfig}
+			<MapSlide
+				bind:this={mapSlideRef}
+				config={mapConfig}
+				{active}
+				animationTriggered={mapAnimationTriggeredFromStore}
+				{isPrintMode}
+			/>
+		{/if}
+
+		<!-- Regular slide content -->
 		<div
-			class="slide-content w-full {hasScrollReveal ? 'scroll-content' : 'h-full'}"
+			class="slide-content w-full {hasScrollReveal ? 'scroll-content' : 'h-full'} {hasMap ? 'map-content-overlay' : ''}"
 			bind:this={slideContentElement}
 			style={hasScrollReveal ? `--scroll-speed: ${scrollSpeed}ms` : ''}
 		>
@@ -557,5 +702,31 @@
 			transform: none !important;
 			transition: none !important;
 		}
+	}
+
+	/*
+	 * Map slide styles.
+	 * Maps render as full-slide backgrounds with optional content overlay.
+	 */
+	:global(.slide-renderer.has-map) {
+		/* Ensure map fills the slide */
+		padding: 0 !important;
+	}
+
+	:global(.slide-renderer.has-map .map-content-overlay) {
+		/* Content overlays on top of map */
+		position: relative;
+		z-index: 10;
+		pointer-events: none;
+	}
+
+	:global(.slide-renderer.has-map .map-content-overlay:empty) {
+		/* Hide empty content overlay */
+		display: none;
+	}
+
+	:global(.slide-renderer.has-map .map-content-overlay > *) {
+		/* Re-enable pointer events on actual content */
+		pointer-events: auto;
 	}
 </style>

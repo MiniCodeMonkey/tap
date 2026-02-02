@@ -126,6 +126,44 @@ export interface PresentationConfig {
 }
 
 // ============================================================================
+// Map Types
+// ============================================================================
+
+/**
+ * Easing functions for map animations.
+ */
+export type MapEasing = 'linear' | 'ease-in' | 'ease-out' | 'ease-in-out';
+
+/**
+ * Configuration for map animations.
+ * Parsed from ```map code blocks.
+ */
+export interface MapConfig {
+	/** Starting coordinates [lat, lng] */
+	start: [number, number];
+	/** Ending coordinates [lat, lng] */
+	end: [number, number];
+	/** Initial zoom level (1-20) */
+	zoom: number;
+	/** Ending zoom level (defaults to zoom) */
+	endZoom: number;
+	/** Animation duration in milliseconds */
+	duration: number;
+	/** Animation easing function */
+	easing: MapEasing;
+	/** Camera pitch angle (0-85 degrees) */
+	pitch: number;
+	/** Camera bearing/rotation (0-360) */
+	bearing: number;
+	/** Map style URL or 'geocodio' for default */
+	style: string;
+	/** Show start/end markers */
+	markers: boolean;
+	/** Draw a line connecting start and end */
+	showPath: boolean;
+}
+
+// ============================================================================
 // Slide Types (matches internal/transformer/transformer.go)
 // ============================================================================
 
