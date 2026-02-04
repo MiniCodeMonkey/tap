@@ -222,7 +222,7 @@
 	bind:this={containerRef}
 >
 	<div
-		class="slide w-[1920px] origin-center bg-theme-bg text-theme-text transition-transform duration-slide-fast ease-out motion-reduce:transition-none"
+		class="slide w-[1920px] origin-center bg-theme-bg text-theme-text transition-transform duration-slide-fast ease-out motion-reduce:transition-none relative overflow-hidden"
 		bind:this={slideRef}
 		style:aspect-ratio={cssAspectRatio}
 		style:height="{1920 / numericRatio}px"

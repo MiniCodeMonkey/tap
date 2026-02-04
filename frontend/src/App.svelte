@@ -17,6 +17,8 @@
 		getWebSocketClient
 	} from '$lib/stores/websocket';
 	import { setupKeyboardNavigation } from '$lib/utils/keyboard';
+	import { createSlideTransition } from '$lib/utils/transitions';
+	import type { Transition } from '$lib/types';
 	import SlideContainer from '$lib/components/SlideContainer.svelte';
 	import SlideRenderer from '$lib/components/SlideRenderer.svelte';
 	import ProgressBar from '$lib/components/ProgressBar.svelte';
@@ -53,6 +55,8 @@
 	let showProgressBar = $derived(presentationData?.config?.showProgressBar !== false);
 	let themeColors = $derived(presentationData?.config?.themeColors);
 	let customTheme = $derived(presentationData?.config?.customTheme);
+	let transition = $derived((presentationData?.config?.transition ?? 'fade') as Transition);
+	let transitionDuration = $derived(presentationData?.config?.transitionDuration ?? 400);
 
 	// Track custom theme link element
 	let customThemeLinkEl: HTMLLinkElement | null = null;
@@ -283,14 +287,20 @@
 		<!-- Main slide view -->
 		<SlideContainer {aspectRatio} {theme} {themeColors}>
 			{#key slideIndex}
-				<SlideRenderer
-					slide={currentSlideData}
-					visibleFragments={isPrintMode ? 999 : fragmentIndex}
-					active={true}
-					{direction}
-					transitionDuration={400}
-					{theme}
-				/>
+				<div
+					style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;"
+					in:createSlideTransition={{ type: transition, duration: transitionDuration, direction }}
+					out:createSlideTransition={{ type: transition, duration: transitionDuration, direction }}
+				>
+					<SlideRenderer
+						slide={currentSlideData}
+						visibleFragments={isPrintMode ? 999 : fragmentIndex}
+						active={true}
+						{direction}
+						{transitionDuration}
+						{theme}
+					/>
+				</div>
 			{/key}
 		</SlideContainer>
 
