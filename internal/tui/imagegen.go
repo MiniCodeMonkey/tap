@@ -15,8 +15,8 @@ import (
 	"github.com/charmbracelet/bubbles/textarea"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/tapsh/tap/internal/gemini"
-	"github.com/tapsh/tap/internal/parser"
+	"github.com/MiniCodeMonkey/tap/internal/gemini"
+	"github.com/MiniCodeMonkey/tap/internal/parser"
 )
 
 // ImageGenStep represents the current step in the image generation workflow.

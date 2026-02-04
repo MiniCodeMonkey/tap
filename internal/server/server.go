@@ -13,8 +13,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/tapsh/tap/internal/driver"
-	"github.com/tapsh/tap/internal/transformer"
+	"github.com/MiniCodeMonkey/tap/internal/driver"
+	"github.com/MiniCodeMonkey/tap/internal/transformer"
 )
 
 // Server is the HTTP server for serving presentations in development mode.

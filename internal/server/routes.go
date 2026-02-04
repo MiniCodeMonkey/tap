@@ -10,7 +10,7 @@ import (
 	"path"
 	"strings"
 
-	"github.com/tapsh/tap/embedded"
+	"github.com/MiniCodeMonkey/tap/embedded"
 )
 
 // SetupRoutes configures all HTTP routes on the server.

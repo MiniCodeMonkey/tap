@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
-	"github.com/tapsh/tap/internal/tui"
+	"github.com/MiniCodeMonkey/tap/internal/tui"
 )
 
 // addCmd represents the add command

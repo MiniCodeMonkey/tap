@@ -74,7 +74,7 @@ notes: Getting started is easy - just follow these steps.
 Install Tap with a single command:
 
 ```bash
-go install github.com/tapsh/tap@latest
+go install github.com/MiniCodeMonkey/tap@latest
 ```
 
 |||

@@ -11,9 +11,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/tapsh/tap/internal/config"
-	"github.com/tapsh/tap/internal/server"
-	"github.com/tapsh/tap/internal/transformer"
+	"github.com/MiniCodeMonkey/tap/internal/config"
+	"github.com/MiniCodeMonkey/tap/internal/server"
+	"github.com/MiniCodeMonkey/tap/internal/transformer"
 )
 
 func TestValidateContentType(t *testing.T) {

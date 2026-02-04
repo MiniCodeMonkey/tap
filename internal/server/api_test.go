@@ -9,9 +9,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/tapsh/tap/internal/config"
-	"github.com/tapsh/tap/internal/driver"
-	"github.com/tapsh/tap/internal/transformer"
+	"github.com/MiniCodeMonkey/tap/internal/config"
+	"github.com/MiniCodeMonkey/tap/internal/driver"
+	"github.com/MiniCodeMonkey/tap/internal/transformer"
 )
 
 // mockDriver is a test driver that returns predefined results.

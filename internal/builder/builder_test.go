@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/tapsh/tap/internal/config"
-	"github.com/tapsh/tap/internal/parser"
+	"github.com/MiniCodeMonkey/tap/internal/config"
+	"github.com/MiniCodeMonkey/tap/internal/parser"
 )
 
 func TestNew(t *testing.T) {

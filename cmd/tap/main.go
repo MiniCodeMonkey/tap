@@ -3,7 +3,7 @@ package main
 import (
 	"os"
 
-	"github.com/tapsh/tap/internal/cli"
+	"github.com/MiniCodeMonkey/tap/internal/cli"
 )
 
 func main() {

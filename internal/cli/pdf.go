@@ -10,11 +10,11 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
-	"github.com/tapsh/tap/internal/config"
-	"github.com/tapsh/tap/internal/parser"
-	"github.com/tapsh/tap/internal/pdf"
-	"github.com/tapsh/tap/internal/server"
-	"github.com/tapsh/tap/internal/transformer"
+	"github.com/MiniCodeMonkey/tap/internal/config"
+	"github.com/MiniCodeMonkey/tap/internal/parser"
+	"github.com/MiniCodeMonkey/tap/internal/pdf"
+	"github.com/MiniCodeMonkey/tap/internal/server"
+	"github.com/MiniCodeMonkey/tap/internal/transformer"
 )
 
 // Flags for the pdf command

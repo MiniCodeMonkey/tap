@@ -6,7 +6,7 @@ A markdown-based presentation tool for technical presentations with beautiful de
 
 ```bash
 # Install Tap
-go install github.com/tapsh/tap@latest
+go install github.com/MiniCodeMonkey/tap@latest
 
 # Create a new presentation
 tap new my-presentation
@@ -22,14 +22,14 @@ Open http://localhost:3000 to view your presentation. The presenter view is avai
 ### Using Go Install (Recommended)
 
 ```bash
-go install github.com/tapsh/tap@latest
+go install github.com/MiniCodeMonkey/tap@latest
 ```
 
 Requires Go 1.21 or later.
 
 ### Download Pre-built Binaries
 
-Download the latest release for your platform from the [Releases page](https://github.com/tapsh/tap/releases):
+Download the latest release for your platform from the [Releases page](https://github.com/MiniCodeMonkey/tap/releases):
 
 - **macOS (Apple Silicon)**: `tap_darwin_arm64.tar.gz`
 - **macOS (Intel)**: `tap_darwin_amd64.tar.gz`

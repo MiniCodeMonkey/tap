@@ -652,7 +652,7 @@ All Go tests use the standard `testing` package with table-driven tests.
 ### Installation Methods
 1. **Direct download:** Pre-built binaries for macOS (Intel + Apple Silicon), Linux, Windows
 2. **Homebrew:** `brew install tap-slides`
-3. **Go install:** `go install github.com/tapsh/tap@latest`
+3. **Go install:** `go install github.com/MiniCodeMonkey/tap@latest`
 
 ### System Requirements
 - **End users:** No dependencies—single binary with embedded frontend assets

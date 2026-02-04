@@ -9,8 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/tapsh/tap/internal/config"
-	"github.com/tapsh/tap/internal/transformer"
+	"github.com/MiniCodeMonkey/tap/internal/config"
+	"github.com/MiniCodeMonkey/tap/internal/transformer"
 )
 
 func TestHandleIndex(t *testing.T) {

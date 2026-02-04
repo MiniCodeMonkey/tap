@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/tapsh/tap/internal/config"
-	"github.com/tapsh/tap/internal/parser"
+	"github.com/MiniCodeMonkey/tap/internal/config"
+	"github.com/MiniCodeMonkey/tap/internal/parser"
 )
 
 func TestNewTransformer(t *testing.T) {

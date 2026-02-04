@@ -12,8 +12,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/tapsh/tap/internal/config"
-	"github.com/tapsh/tap/internal/gemini"
+	"github.com/MiniCodeMonkey/tap/internal/config"
+	"github.com/MiniCodeMonkey/tap/internal/gemini"
 )
 
 // ThemeBroadcaster is an interface for broadcasting theme changes via WebSocket.

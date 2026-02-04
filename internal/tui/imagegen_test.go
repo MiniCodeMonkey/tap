@@ -10,7 +10,7 @@ import (
 
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/tapsh/tap/internal/gemini"
+	"github.com/MiniCodeMonkey/tap/internal/gemini"
 )
 
 func TestParseSlides(t *testing.T) {

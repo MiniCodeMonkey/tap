@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/tapsh/tap/internal/config"
-	"github.com/tapsh/tap/internal/transformer"
+	"github.com/MiniCodeMonkey/tap/internal/config"
+	"github.com/MiniCodeMonkey/tap/internal/transformer"
 )
 
 func TestNew(t *testing.T) {

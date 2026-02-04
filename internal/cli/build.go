@@ -8,9 +8,9 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
-	"github.com/tapsh/tap/internal/builder"
-	"github.com/tapsh/tap/internal/config"
-	"github.com/tapsh/tap/internal/parser"
+	"github.com/MiniCodeMonkey/tap/internal/builder"
+	"github.com/MiniCodeMonkey/tap/internal/config"
+	"github.com/MiniCodeMonkey/tap/internal/parser"
 )
 
 // Flags for the build command

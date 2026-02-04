@@ -67,7 +67,7 @@ Tap is a markdown-based presentation tool designed specifically for technical pr
 **Description:** As a developer, I need a well-organized Go project structure so that the codebase is maintainable and follows Go conventions.
 
 **Acceptance Criteria:**
-- [ ] Initialize Go module as `github.com/tapsh/tap`
+- [ ] Initialize Go module as `github.com/MiniCodeMonkey/tap`
 - [ ] Create directory structure:
   ```
   tap/
@@ -130,7 +130,7 @@ package main
 
 import (
     "os"
-    "github.com/tapsh/tap/internal/cli"
+    "github.com/MiniCodeMonkey/tap/internal/cli"
 )
 
 func main() {
@@ -2286,7 +2286,7 @@ export function countUp(node: HTMLElement, { duration = 1000 }) {
 
 1. **Direct download:** Pre-built binaries from GitHub releases
 2. **Homebrew:** `brew install tap-slides`
-3. **Go install:** `go install github.com/tapsh/tap@latest`
+3. **Go install:** `go install github.com/MiniCodeMonkey/tap@latest`
 
 ## Licensing & Branding
 

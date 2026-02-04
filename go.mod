@@ -1,4 +1,4 @@
-module github.com/tapsh/tap
+module github.com/MiniCodeMonkey/tap
 
 go 1.24.0
 

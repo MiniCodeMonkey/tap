@@ -5,7 +5,7 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
-	"github.com/tapsh/tap/internal/tui"
+	"github.com/MiniCodeMonkey/tap/internal/tui"
 )
 
 // Flags for the new command

@@ -6,8 +6,8 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/tapsh/tap/internal/config"
-	"github.com/tapsh/tap/internal/parser"
+	"github.com/MiniCodeMonkey/tap/internal/config"
+	"github.com/MiniCodeMonkey/tap/internal/parser"
 )
 
 // TransformedPresentation is the JSON-serializable output for the frontend.

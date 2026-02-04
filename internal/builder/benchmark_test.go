@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/tapsh/tap/internal/config"
-	"github.com/tapsh/tap/internal/parser"
+	"github.com/MiniCodeMonkey/tap/internal/config"
+	"github.com/MiniCodeMonkey/tap/internal/parser"
 )
 
 // generateBenchmarkPresentation creates a presentation with the specified number of slides.

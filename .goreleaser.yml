@@ -100,25 +100,25 @@ release:
 
     **macOS (Apple Silicon):**
     ```bash
-    curl -L https://github.com/tapsh/tap/releases/download/v{{.Version}}/tap_{{.Version}}_darwin_arm64.tar.gz | tar xz
+    curl -L https://github.com/MiniCodeMonkey/tap/releases/download/v{{.Version}}/tap_{{.Version}}_darwin_arm64.tar.gz | tar xz
     sudo mv tap /usr/local/bin/
     ```
 
     **macOS (Intel):**
     ```bash
-    curl -L https://github.com/tapsh/tap/releases/download/v{{.Version}}/tap_{{.Version}}_darwin_amd64.tar.gz | tar xz
+    curl -L https://github.com/MiniCodeMonkey/tap/releases/download/v{{.Version}}/tap_{{.Version}}_darwin_amd64.tar.gz | tar xz
     sudo mv tap /usr/local/bin/
     ```
 
     **Linux (amd64):**
     ```bash
-    curl -L https://github.com/tapsh/tap/releases/download/v{{.Version}}/tap_{{.Version}}_linux_amd64.tar.gz | tar xz
+    curl -L https://github.com/MiniCodeMonkey/tap/releases/download/v{{.Version}}/tap_{{.Version}}_linux_amd64.tar.gz | tar xz
     sudo mv tap /usr/local/bin/
     ```
 
     **Linux (arm64):**
     ```bash
-    curl -L https://github.com/tapsh/tap/releases/download/v{{.Version}}/tap_{{.Version}}_linux_arm64.tar.gz | tar xz
+    curl -L https://github.com/MiniCodeMonkey/tap/releases/download/v{{.Version}}/tap_{{.Version}}_linux_arm64.tar.gz | tar xz
     sudo mv tap /usr/local/bin/
     ```
 
@@ -133,7 +133,7 @@ brews:
       name: homebrew-tap
     # Skip Homebrew publishing by default (can be enabled when repo exists)
     skip_upload: true
-    homepage: "https://github.com/tapsh/tap"
+    homepage: "https://github.com/MiniCodeMonkey/tap"
     description: "A markdown-based presentation tool for technical presentations"
     license: "MIT"
     install: |
