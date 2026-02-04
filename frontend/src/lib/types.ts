@@ -119,8 +119,6 @@ export interface PresentationConfig {
 	date?: string;
 	aspectRatio?: string;
 	transition?: Transition;
-	/** Transition duration in milliseconds (default: 400) */
-	transitionDuration?: number;
 	codeTheme?: string;
 	fragments?: boolean;
 	/** Whether to show the progress bar (default: true) */
