@@ -72,7 +72,7 @@ Convert these bullet points into incremental fragments
 
 ## Skill Source
 
-The skill definitions are maintained in the Tap repository at [`skills/tap/`](https://github.com/tap-slides/tap/tree/main/skills/tap). You can review the rules or contribute improvements directly.
+The skill definitions are maintained in the Tap repository at [`skills/tap/`](https://github.com/MiniCodeMonkey/tap/tree/main/skills/tap). You can review the rules or contribute improvements directly.
 
 ## Next Steps
 

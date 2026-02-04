@@ -2285,7 +2285,7 @@ export function countUp(node: HTMLElement, { duration = 1000 }) {
 ## Installation Methods
 
 1. **Direct download:** Pre-built binaries from GitHub releases
-2. **Homebrew:** `brew install tap-slides`
+2. **Homebrew:** `brew install MiniCodeMonkey/tap/tap`
 3. **Go install:** `go install github.com/MiniCodeMonkey/tap@latest`
 
 ## Licensing & Branding

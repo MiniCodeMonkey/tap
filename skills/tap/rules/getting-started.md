@@ -9,11 +9,11 @@ brew install MiniCodeMonkey/tap/tap
 
 ### Go Install
 ```bash
-go install github.com/tap-slides/tap@latest
+go install github.com/MiniCodeMonkey/tap@latest
 ```
 
 ### Binary Download
-Download from [GitHub releases](https://github.com/tap-slides/tap/releases):
+Download from [GitHub releases](https://github.com/MiniCodeMonkey/tap/releases):
 - `tap-darwin-amd64` - macOS Intel
 - `tap-darwin-arm64` - macOS Apple Silicon
 - `tap-linux-amd64` - Linux x64

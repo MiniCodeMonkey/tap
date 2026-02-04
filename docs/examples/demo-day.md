@@ -185,7 +185,7 @@ layout: section
 
 <!-- pause -->
 
-1. **Install**: `go install github.com/tap-slides/tap@latest`
+1. **Install**: `go install github.com/MiniCodeMonkey/tap@latest`
 
 <!-- pause -->
 
@@ -207,7 +207,7 @@ layout: title
 
 # Ready to Try?
 
-tap-slides.dev
+tap.sh
 ````
 
 ---

@@ -21,12 +21,12 @@ brew install MiniCodeMonkey/tap/tap
 If you have Go installed:
 
 ```bash
-go install github.com/tap-slides/tap@latest
+go install github.com/MiniCodeMonkey/tap@latest
 ```
 
 ### Binary Download
 
-Download the latest release for your platform from the [GitHub releases page](https://github.com/tap-slides/tap/releases).
+Download the latest release for your platform from the [GitHub releases page](https://github.com/MiniCodeMonkey/tap/releases).
 
 Available binaries:
 - `tap-darwin-amd64` - macOS Intel

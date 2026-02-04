@@ -46,7 +46,7 @@ export default defineConfig({
       { text: 'Reference', link: '/reference/cli-commands' },
       { text: 'Examples', link: '/examples/' },
       { text: 'Changelog', link: '/changelog' },
-      { text: 'GitHub', link: 'https://github.com/tap-slides/tap' }
+      { text: 'GitHub', link: 'https://github.com/MiniCodeMonkey/tap' }
     ],
 
     sidebar: {

@@ -4,7 +4,7 @@
 
 ```bash
 # Clone the repository
-git clone https://github.com/tap-slides/tap.git
+git clone https://github.com/MiniCodeMonkey/tap.git
 cd tap
 
 # Install dependencies
