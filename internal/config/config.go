@@ -16,17 +16,18 @@ import (
 
 // Config represents the presentation configuration from YAML frontmatter.
 type Config struct {
-	Drivers     map[string]DriverConfig `yaml:"drivers" json:"drivers,omitempty"`
-	ThemeColors map[string]string       `yaml:"themeColors" json:"themeColors,omitempty"`
-	Title       string                  `yaml:"title" json:"title,omitempty"`
-	Theme       string                  `yaml:"theme" json:"theme,omitempty"`
-	CustomTheme string                  `yaml:"customTheme" json:"customTheme,omitempty"`
-	Author      string                  `yaml:"author" json:"author,omitempty"`
-	Date        string                  `yaml:"date" json:"date,omitempty"`
-	AspectRatio string                  `yaml:"aspectRatio" json:"aspectRatio,omitempty"`
-	Transition  string                  `yaml:"transition" json:"transition,omitempty"`
-	CodeTheme   string                  `yaml:"codeTheme" json:"codeTheme,omitempty"`
-	Fragments   bool                    `yaml:"fragments" json:"fragments,omitempty"`
+	Drivers            map[string]DriverConfig `yaml:"drivers" json:"drivers,omitempty"`
+	ThemeColors        map[string]string       `yaml:"themeColors" json:"themeColors,omitempty"`
+	Title              string                  `yaml:"title" json:"title,omitempty"`
+	Theme              string                  `yaml:"theme" json:"theme,omitempty"`
+	CustomTheme        string                  `yaml:"customTheme" json:"customTheme,omitempty"`
+	Author             string                  `yaml:"author" json:"author,omitempty"`
+	Date               string                  `yaml:"date" json:"date,omitempty"`
+	AspectRatio        string                  `yaml:"aspectRatio" json:"aspectRatio,omitempty"`
+	Transition         string                  `yaml:"transition" json:"transition,omitempty"`
+	TransitionDuration int                     `yaml:"transitionDuration" json:"transitionDuration,omitempty"`
+	CodeTheme          string                  `yaml:"codeTheme" json:"codeTheme,omitempty"`
+	Fragments          bool                    `yaml:"fragments" json:"fragments,omitempty"`
 }
 
 // DriverConfig represents the configuration for a code execution driver.

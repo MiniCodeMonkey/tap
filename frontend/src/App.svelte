@@ -53,6 +53,7 @@
 	let showProgressBar = $derived(presentationData?.config?.showProgressBar !== false);
 	let themeColors = $derived(presentationData?.config?.themeColors);
 	let customTheme = $derived(presentationData?.config?.customTheme);
+	let transitionDuration = $derived(presentationData?.config?.transitionDuration ?? 400);
 
 	// Track custom theme link element
 	let customThemeLinkEl: HTMLLinkElement | null = null;
@@ -288,7 +289,7 @@
 					visibleFragments={isPrintMode ? 999 : fragmentIndex}
 					active={true}
 					{direction}
-					transitionDuration={400}
+					{transitionDuration}
 					{theme}
 				/>
 			{/key}

@@ -528,7 +528,7 @@
 -->
 {#if active}
 	<div
-		class="slide-renderer {layoutClass} w-full h-full relative overflow-hidden {hasBlockFragments || hasInlineFragments ? 'has-fragments' : ''} {isFullBleed ? '' : 'p-slide'} {hasScrollReveal ? 'scroll-enabled' : ''} {hasMap ? 'has-map' : ''}"
+		class="slide-renderer {layoutClass} absolute inset-0 overflow-hidden {hasBlockFragments || hasInlineFragments ? 'has-fragments' : ''} {isFullBleed ? '' : 'p-slide'} {hasScrollReveal ? 'scroll-enabled' : ''} {hasMap ? 'has-map' : ''}"
 		style={backgroundStyles}
 		in:getTransition
 		out:getTransition
