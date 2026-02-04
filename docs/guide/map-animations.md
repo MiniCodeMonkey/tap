@@ -10,12 +10,12 @@ Tap supports animated map slides that fly between two locations, perfect for vis
 
 Add a map code block to your slide:
 
-```markdown
+````markdown
 ```map
 start: 40.7128, -74.0060
 end: 34.0522, -118.2437
 ```
-```
+````
 
 The map appears at the start location. Press the next key to trigger the fly animation.
 
@@ -46,7 +46,7 @@ The map appears at the start location. Press the next key to trigger the fly ani
 
 ### Cross-Country Flight
 
-```markdown
+````markdown
 ```map
 start: 40.7128, -74.0060
 end: 34.0522, -118.2437
@@ -56,13 +56,13 @@ pitch: 45
 markers: true
 showPath: true
 ```
-```
+````
 
 ### City Zoom
 
 Zoom into a single location by using the same coordinates for start and end:
 
-```markdown
+````markdown
 ```map
 start: 51.5074, -0.1278
 end: 51.5074, -0.1278
@@ -70,11 +70,11 @@ zoom: 10
 endZoom: 16
 duration: 4000
 ```
-```
+````
 
 ### European Tour
 
-```markdown
+````markdown
 ```map
 start: 48.8566, 2.3522
 end: 41.9028, 12.4964
@@ -82,13 +82,13 @@ zoom: 5
 duration: 6000
 bearing: 45
 ```
-```
+````
 
 ### Cinematic Flyover
 
 Add pitch and bearing for a 3D cinematic effect:
 
-```markdown
+````markdown
 ```map
 start: 37.7749, -122.4194
 end: 37.7749, -122.4194
@@ -98,7 +98,7 @@ duration: 5000
 pitch: 60
 bearing: -30
 ```
-```
+````
 
 ## Animation Behavior
 
@@ -127,7 +127,7 @@ When navigating backward:
 
 Use the `blank` layout for full-screen maps:
 
-```markdown
+````markdown
 ---
 
 <!-- layout: blank -->
@@ -140,7 +140,7 @@ duration: 10000
 ```
 
 ---
-```
+````
 
 ### Network Requirements
 
