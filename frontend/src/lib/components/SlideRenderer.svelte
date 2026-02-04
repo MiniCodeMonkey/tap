@@ -231,9 +231,10 @@
 
 	/**
 	 * Get the appropriate Svelte transition for the slide.
+	 * Returns instant transitions in print mode to prevent ghosting in PDF export.
 	 */
 	function getTransition(node: Element) {
-		if (prefersReducedMotion()) {
+		if (prefersReducedMotion() || isPrintMode) {
 			return fade(node, { duration: 0 });
 		}
 

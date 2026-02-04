@@ -111,11 +111,22 @@ export function onReducedMotionChange(
 // ============================================================================
 
 /**
- * Get the effective duration, respecting reduced motion preferences.
- * Returns 0 if user prefers reduced motion.
+ * Check if the page is in print/PDF mode.
+ * Print mode is indicated by ?print=true in the URL.
+ */
+export function isPrintMode(): boolean {
+	if (typeof window === 'undefined') {
+		return false;
+	}
+	return new URLSearchParams(window.location.search).get('print') === 'true';
+}
+
+/**
+ * Get the effective duration, respecting reduced motion preferences and print mode.
+ * Returns 0 if user prefers reduced motion or if in print mode (for PDF export).
  */
 export function getEffectiveDuration(duration: number): number {
-	if (prefersReducedMotion()) {
+	if (prefersReducedMotion() || isPrintMode()) {
 		return 0;
 	}
 	return duration;

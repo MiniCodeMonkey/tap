@@ -371,6 +371,7 @@
 							visibleFragments={isPrintMode ? 999 : fragmentIndex}
 							active={true}
 							{theme}
+							{isPrintMode}
 						/>
 					</SlideContainer>
 				{:else}

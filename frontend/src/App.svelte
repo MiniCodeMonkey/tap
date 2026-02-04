@@ -318,6 +318,7 @@
 						{direction}
 						{transitionDuration}
 						{theme}
+						{isPrintMode}
 					/>
 				</div>
 			{/key}
