@@ -18,6 +18,7 @@
 	} from '$lib/stores/websocket';
 	import { setupKeyboardNavigation } from '$lib/utils/keyboard';
 	import { createSlideTransition } from '$lib/utils/transitions';
+	import { preloadPresentationImages } from '$lib/utils/preload';
 	import type { Transition } from '$lib/types';
 	import SlideContainer from '$lib/components/SlideContainer.svelte';
 	import SlideRenderer from '$lib/components/SlideRenderer.svelte';
@@ -30,6 +31,8 @@
 	// ============================================================================
 
 	let isLoading = $state(true);
+	let isPreloading = $state(false);
+	let preloadProgress = $state(0);
 	let loadError = $state<string | null>(null);
 	let isOverviewOpen = $state(false);
 	let direction = $state<'forward' | 'backward'>('forward');
@@ -116,32 +119,44 @@
 
 	async function fetchPresentation(): Promise<void> {
 		try {
+			let data: Presentation | null = null;
+
 			// First check for embedded data (static build)
 			const embeddedScript = document.getElementById('presentation-data');
 			if (embeddedScript) {
 				try {
-					const data = JSON.parse(embeddedScript.textContent || '{}') as Presentation;
-					if (data.slides && data.slides.length > 0) {
-						loadPresentation(data);
-						isLoading = false;
-						return;
+					const parsed = JSON.parse(embeddedScript.textContent || '{}') as Presentation;
+					if (parsed.slides && parsed.slides.length > 0) {
+						data = parsed;
 					}
 				} catch {
 					// Fall through to API fetch
 				}
 			}
 
-			// Fetch from API
-			const response = await fetch('/api/presentation');
-			if (!response.ok) {
-				throw new Error(`Failed to load presentation: ${response.statusText}`);
+			// Fetch from API if no embedded data
+			if (!data) {
+				const response = await fetch('/api/presentation');
+				if (!response.ok) {
+					throw new Error(`Failed to load presentation: ${response.statusText}`);
+				}
+				data = (await response.json()) as Presentation;
 			}
-			const data = (await response.json()) as Presentation;
+
+			// Preload all images before showing the presentation
+			isPreloading = true;
+			await preloadPresentationImages(data, (progress) => {
+				preloadProgress = progress;
+			});
+			isPreloading = false;
+
+			// Now load and display the presentation
 			loadPresentation(data);
 			isLoading = false;
 		} catch (error) {
 			loadError = error instanceof Error ? error.message : 'Failed to load presentation';
 			isLoading = false;
+			isPreloading = false;
 		}
 	}
 
@@ -275,7 +290,11 @@
 	{#if isLoading}
 		<div class="loading-container">
 			<div class="loading-spinner"></div>
-			<p class="text-slide-body font-sans">Loading presentation...</p>
+			{#if isPreloading}
+				<p class="text-slide-body font-sans">Loading assets... {Math.round(preloadProgress * 100)}%</p>
+			{:else}
+				<p class="text-slide-body font-sans">Loading presentation...</p>
+			{/if}
 		</div>
 	{:else if loadError}
 		<div class="error-container">
