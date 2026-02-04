@@ -26,7 +26,7 @@ onMounted(() => {
     <div class="hero-content" :class="{ 'is-visible': isVisible }">
       <div class="hero-badge">
         <span class="badge-dot"></span>
-        <span class="badge-text">Open source & free forever</span>
+        <span class="badge-text">Beta</span>
       </div>
 
       <h1 class="hero-headline">
