@@ -4,7 +4,7 @@
 
 ### Homebrew (macOS/Linux)
 ```bash
-brew install MiniCodeMonkey/tap-homebrew/tap
+brew install MiniCodeMonkey/tap/tap
 ```
 
 ### Go Install

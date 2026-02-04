@@ -52,7 +52,7 @@ Expand-Archive tap_windows_amd64.zip -DestinationPath C:\tap
 ### Using Homebrew (macOS/Linux)
 
 ```bash
-brew install MiniCodeMonkey/tap-homebrew/tap
+brew install MiniCodeMonkey/tap/tap
 ```
 
 ## Basic Usage

@@ -88,16 +88,16 @@ The release workflow automatically updates the Homebrew tap for stable releases 
 
 **One-time setup:**
 
-1. Create the tap repo (e.g., `MiniCodeMonkey/tap-homebrew`)
+1. Create the tap repo (e.g., `MiniCodeMonkey/homebrew-tap`)
 2. Copy `.github/homebrew-formula-template.rb` to `Formula/tap.rb` in the tap repo
 3. Add a repository secret `HOMEBREW_TAP_TOKEN`:
    - Create a [Personal Access Token](https://github.com/settings/tokens) with `repo` scope
    - Add it as a secret in the main tap repo: Settings → Secrets → Actions
-4. (Optional) Set repository variable `HOMEBREW_TAP_REPO` if not using `MiniCodeMonkey/tap-homebrew`
+4. (Optional) Set repository variable `HOMEBREW_TAP_REPO` if not using `MiniCodeMonkey/homebrew-tap`
 
 Users can then install with:
 ```bash
-brew install MiniCodeMonkey/tap-homebrew/tap
+brew install MiniCodeMonkey/tap/tap
 ```
 
 ### Local Release (Alternative)
