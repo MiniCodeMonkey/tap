@@ -122,7 +122,14 @@ export const TAP_THEME_TO_SHIKI: Record<string, BundledTheme> = {
 	// Origami: Clean minimal white - github-light for paper aesthetic
 	origami: 'github-light',
 	// Chalkboard: Dark green classroom - vitesse-dark complements the dark background
-	chalkboard: 'vitesse-dark'
+	chalkboard: 'vitesse-dark',
+
+	// New themes - dark code blocks use github-dark for proper contrast
+	signal: 'github-dark',
+	carbon: 'github-dark',
+	spectrum: 'github-dark',
+	mono: 'github-dark',
+	flux: 'github-dark'
 };
 
 /**

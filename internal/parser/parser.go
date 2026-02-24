@@ -40,6 +40,8 @@ type SlideDirectives struct {
 	Transition  string
 	Background  string
 	Notes       string
+	Tag         string // Decorative metadata label (e.g., "// workshop")
+	Badge       string // Decorative metadata badge (e.g., "v2.0")
 	Fragments   bool
 	Scroll      bool // Enable scroll reveal for long content
 	ScrollSpeed int  // Animation duration in milliseconds (default: 2000)
@@ -335,6 +337,12 @@ func parseDirectives(content string) (SlideDirectives, string) {
 	}
 	if scrollSpeed, ok := yamlData["scroll-speed"].(int); ok {
 		directives.ScrollSpeed = scrollSpeed
+	}
+	if tag, ok := yamlData["tag"].(string); ok {
+		directives.Tag = tag
+	}
+	if badge, ok := yamlData["badge"].(string); ok {
+		directives.Badge = badge
 	}
 
 	// Remove the directive comment from content

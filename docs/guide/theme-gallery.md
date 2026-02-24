@@ -4,7 +4,7 @@ title: Theme Gallery
 
 # Theme Gallery
 
-A visual overview of all 8 built-in themes. Click any thumbnail to see the full theme details.
+A visual overview of all 13 built-in themes. Click any thumbnail to see the full theme details.
 
 ## Themes
 
@@ -18,6 +18,11 @@ A visual overview of all 8 built-in themes. Click any thumbnail to see the full 
 | [Ink](/guide/themes#ink) | ![Ink](/images/themes/theme-ink.png) | Japanese calligraphy with zen minimalism |
 | [Bauhaus](/guide/themes#bauhaus) | ![Bauhaus](/images/themes/theme-bauhaus.png) | Geometric modernism with primary colors |
 | [Editorial](/guide/themes#editorial) | ![Editorial](/images/themes/theme-editorial.png) | Classic magazine publishing design |
+| [Signal](/guide/themes#signal) | ![Signal](/images/themes/theme-signal.png) | Developer-first aesthetic with neon green accents |
+| [Carbon](/guide/themes#carbon) | ![Carbon](/images/themes/theme-carbon.png) | IBM Carbon design system with red accents |
+| [Spectrum](/guide/themes#spectrum) | ![Spectrum](/images/themes/theme-spectrum.png) | Gradient-forward modern SaaS design |
+| [Mono](/guide/themes#mono) | ![Mono](/images/themes/theme-mono.png) | Ultra-minimal weight-contrast typography |
+| [Flux](/guide/themes#flux) | ![Flux](/images/themes/theme-flux.png) | Polished SaaS product feel with indigo accents |
 
 ---
 

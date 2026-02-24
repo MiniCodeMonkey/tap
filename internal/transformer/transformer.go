@@ -23,6 +23,8 @@ type TransformedSlide struct {
 	HTML        string                 `json:"html"`
 	Transition  string                 `json:"transition,omitempty"`
 	Notes       string                 `json:"notes,omitempty"`
+	Tag         string                 `json:"tag,omitempty"`
+	Badge       string                 `json:"badge,omitempty"`
 	CodeBlocks  []TransformedCodeBlock `json:"codeBlocks,omitempty"`
 	Fragments   []TransformedFragment  `json:"fragments,omitempty"`
 	Index       int                    `json:"index"`
@@ -110,6 +112,8 @@ func (t *Transformer) transformSlide(slide parser.Slide) TransformedSlide {
 		HTML:   html,
 		Layout: layout,
 		Notes:  slide.Directives.Notes,
+		Tag:    slide.Directives.Tag,
+		Badge:  slide.Directives.Badge,
 	}
 
 	// Set transition (per-slide directive overrides global config)

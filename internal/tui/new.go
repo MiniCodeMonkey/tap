@@ -36,6 +36,11 @@ var AvailableThemes = []Theme{
 	{Name: "aurora", Description: "Vibrant northern lights with glassmorphism effects"},
 	{Name: "phosphor", Description: "Authentic CRT terminal with glowing phosphor green"},
 	{Name: "poster", Description: "Bold graphic design with massive typography"},
+	{Name: "signal", Description: "Vercel/Nuxt-inspired developer aesthetic with neon green accents"},
+	{Name: "carbon", Description: "IBM Carbon design system with sharp corners and red accents"},
+	{Name: "spectrum", Description: "Gradient-forward modern SaaS with indigo-to-pink spectrum"},
+	{Name: "mono", Description: "Ultra-minimal weight-contrast typography with blue accent"},
+	{Name: "flux", Description: "Polished SaaS product feel with warm indigo accents"},
 }
 
 // NewModel is the Bubble Tea model for creating new presentations.

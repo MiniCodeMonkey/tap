@@ -1,0 +1,659 @@
+/**
+ * Flux Theme
+ *
+ * Polished SaaS product feel - the kind of slide deck you'd see at a well-funded
+ * startup's all-hands or a product launch keynote. Warm off-white backgrounds,
+ * confident indigo accents, and crisp Plus Jakarta Sans typography that reads
+ * equally well at 14px and 140px.
+ *
+ * Design philosophy:
+ * - Warm off-white (#fafaf9) background to avoid the sterile feel of pure white
+ * - Deep zinc text (#18181b) for strong contrast without pure black harshness
+ * - Indigo (#4f46e5) accent used with precision, never decoratively
+ * - Chip badge tags, filled-circle bullets, and dot-separated labels as
+ *   recurring micro-patterns that unify the theme
+ * - Fragment reveal is subtle: 10px translateY, 300ms ease-out
+ */
+
+/* ============================================================================
+ * Section 1 — Root: CSS Variables
+ * ============================================================================ */
+
+.theme-flux {
+  /* Core colors */
+  --color-bg: #fafaf9;
+  --color-text: #18181b;
+  --color-muted: #71717a;
+  --color-accent: #4f46e5;
+  --color-code-bg: #1c1917;
+
+  /* Extended colors */
+  --color-border: rgba(24, 24, 27, 0.1);
+  --color-surface: rgba(24, 24, 27, 0.03);
+  --color-surface-elevated: #ffffff;
+  --color-link: var(--color-accent);
+  --color-code-text: #d6d3d1;
+
+  /* Accent tints — used for chips, badges, subtle fills */
+  --flux-accent-subtle: rgba(79, 70, 229, 0.08);
+  --flux-accent-muted: rgba(79, 70, 229, 0.18);
+  --flux-accent-border: rgba(79, 70, 229, 0.25);
+
+  /* Error colors */
+  --color-error: #dc2626;
+  --color-error-bg: rgba(220, 38, 38, 0.08);
+
+  /* Typography — Plus Jakarta Sans for display and body */
+  --font-sans: 'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont,
+    'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-display: 'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont,
+    'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-mono: 'JetBrains Mono', 'SF Mono', Monaco, 'Cascadia Code', Consolas,
+    'Liberation Mono', Menlo, monospace;
+
+  /* Transitions */
+  --transition-duration: 300ms;
+  --transition-timing: ease-out;
+  --fragment-duration: 300ms;
+
+  /* Apply base styles */
+  font-family: var(--font-sans);
+  color: var(--color-text);
+  background-color: var(--color-bg);
+  letter-spacing: -0.015em;
+  line-height: 1.6;
+}
+
+/* ============================================================================
+ * Section 2 — Typography
+ * h1–h6 with Plus Jakarta Sans at various weights; p/li at 400–500
+ * ============================================================================ */
+
+.theme-flux h1,
+.theme-flux h2,
+.theme-flux h3,
+.theme-flux h4,
+.theme-flux h5,
+.theme-flux h6 {
+  font-family: var(--font-display);
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  line-height: 1.15;
+  margin: 0;
+  color: var(--color-text);
+}
+
+.theme-flux h1 {
+  font-weight: 800;
+  letter-spacing: -0.035em;
+  line-height: 1.1;
+}
+
+.theme-flux h2 {
+  font-weight: 700;
+  letter-spacing: -0.025em;
+}
+
+.theme-flux h3 {
+  font-size: 2rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.theme-flux h4 {
+  font-weight: 600;
+  letter-spacing: -0.015em;
+}
+
+.theme-flux h5 {
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.theme-flux h6 {
+  font-weight: 500;
+  letter-spacing: -0.005em;
+  color: var(--color-muted);
+}
+
+.theme-flux p,
+.theme-flux li {
+  font-family: var(--font-sans);
+  font-weight: 400;
+  letter-spacing: -0.01em;
+  line-height: 1.65;
+}
+
+.theme-flux p {
+  margin: 0;
+}
+
+/* ============================================================================
+ * Section 3 — Element Styles
+ * code (12px radius), pre, links, lists (● markers), blockquote (left bar 3px),
+ * table, img, strong, em (accent italic), hr
+ * ============================================================================ */
+
+/* Code — inline (stays light, accent colored) */
+.theme-flux code {
+  font-family: var(--font-mono);
+  background-color: var(--flux-accent-subtle);
+  color: var(--color-accent);
+  padding: 0.2em 0.5em;
+  border-radius: 12px;
+  font-size: 0.875em;
+  font-weight: 500;
+  letter-spacing: 0;
+  border: 1px solid var(--flux-accent-border);
+}
+
+/* Code — pre blocks with dot-separated filename label convention */
+.theme-flux pre {
+  font-family: var(--font-mono);
+  background-color: var(--color-code-bg);
+  color: var(--color-code-text);
+  padding: 1.75em 2em;
+  border-radius: 12px;
+  overflow-x: auto;
+  line-height: 1.65;
+  border: 1px solid var(--color-border);
+  position: relative;
+}
+
+/* Pre filename label: expects a data-filename attribute on a wrapper or the pre itself.
+   Rendered as: filename · ext (dot-separated). Uses mono font, muted color. */
+.theme-flux pre[data-filename]::before {
+  content: attr(data-filename);
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--color-muted);
+  letter-spacing: 0.04em;
+  padding-bottom: 1em;
+  border-bottom: 1px solid var(--color-border);
+  margin-bottom: 1.25em;
+}
+
+.theme-flux pre code {
+  background: none;
+  padding: 0;
+  border-radius: 0;
+  font-size: inherit;
+  color: inherit;
+  font-weight: 400;
+  border: none;
+  letter-spacing: inherit;
+}
+
+/* Links */
+.theme-flux a {
+  color: var(--color-link);
+  text-decoration: none;
+  font-weight: 500;
+  border-bottom: 1px solid transparent;
+  transition: border-color var(--transition-duration) var(--transition-timing);
+}
+
+.theme-flux a:hover {
+  border-bottom-color: var(--color-link);
+}
+
+/* Lists — unordered with filled-circle (●) bullets in accent color */
+.theme-flux ul,
+.theme-flux ol {
+  padding-left: 1.5em;
+  margin: 0;
+}
+
+.theme-flux ul {
+  list-style-type: none;
+  padding-left: 1.25em;
+}
+
+.theme-flux ol {
+  list-style-type: decimal;
+}
+
+.theme-flux li {
+  margin-bottom: 0.6em;
+  padding-left: 0.25em;
+  position: relative;
+}
+
+.theme-flux li:last-child {
+  margin-bottom: 0;
+}
+
+/* Filled-circle ● bullet for unordered lists */
+.theme-flux ul > li::before {
+  content: '●';
+  position: absolute;
+  left: -1.25em;
+  color: var(--color-accent);
+  font-size: 0.55em;
+  line-height: 2.4;
+}
+
+.theme-flux ol > li::marker {
+  color: var(--color-accent);
+  font-weight: 600;
+}
+
+/* Nested lists */
+.theme-flux ul ul,
+.theme-flux ol ol,
+.theme-flux ul ol,
+.theme-flux ol ul {
+  margin-top: 0.4em;
+  margin-bottom: 0;
+}
+
+.theme-flux ul ul > li::before {
+  content: '○';
+  font-size: 0.55em;
+  line-height: 2.4;
+  color: var(--color-muted);
+}
+
+/* Blockquote — left accent bar 3px, bold display font */
+.theme-flux blockquote {
+  border-left: 3px solid var(--color-accent);
+  padding: 0.75em 1.5em;
+  margin: 0;
+  background-color: var(--flux-accent-subtle);
+  border-radius: 0 8px 8px 0;
+  position: relative;
+}
+
+.theme-flux blockquote p {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-style: normal;
+  letter-spacing: -0.015em;
+  line-height: 1.5;
+  color: var(--color-text);
+}
+
+/* Table — clean, minimal */
+.theme-flux table {
+  width: 100%;
+  border-collapse: collapse;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+}
+
+.theme-flux th,
+.theme-flux td {
+  padding: 0.8em 1.2em;
+  text-align: left;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.theme-flux th {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 0.85em;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  background-color: var(--color-code-bg);
+  color: var(--color-muted);
+}
+
+.theme-flux tr:last-child td {
+  border-bottom: none;
+}
+
+.theme-flux tr:hover td {
+  background-color: var(--color-surface);
+}
+
+/* Images — rounded corners */
+.theme-flux img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 10px;
+}
+
+/* Strong / bold */
+.theme-flux strong,
+.theme-flux b {
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+/* Em — italic with accent color for keyword emphasis */
+.theme-flux em,
+.theme-flux i {
+  font-style: italic;
+  color: var(--color-accent);
+}
+
+/* Horizontal rule */
+.theme-flux hr {
+  border: none;
+  height: 1px;
+  background-color: var(--color-border);
+  margin: 2rem 0;
+}
+
+/* ============================================================================
+ * Section 4 — Fragment Animation
+ * translateY(10px), 300ms ease-out
+ * ============================================================================ */
+
+.theme-flux .fragment {
+  transition:
+    opacity var(--fragment-duration) var(--transition-timing),
+    transform var(--fragment-duration) var(--transition-timing);
+}
+
+.theme-flux .fragment-hidden {
+  opacity: 0;
+  transform: translateY(10px);
+}
+
+.theme-flux .fragment-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* ============================================================================
+ * Section 5 — Selection Styles (indigo)
+ * ============================================================================ */
+
+.theme-flux ::selection {
+  background-color: var(--color-accent);
+  color: #ffffff;
+}
+
+/* ============================================================================
+ * Section 6 — Layout-specific Styles
+ * ============================================================================ */
+
+/* --------------------------------------------------------------------------
+ * layout-title
+ * Centered, warm feel. h1 large. Subtitle em styled in accent italic.
+ * Tag chip via ::before when [data-tag] present. Nav dots via h1::after.
+ * -------------------------------------------------------------------------- */
+
+.theme-flux .layout-title {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: flex-end;
+  text-align: left;
+  position: relative;
+}
+
+/* Override base layout centering on slide-content */
+.theme-flux .layout-title .slide-content {
+  align-items: flex-start;
+  justify-content: flex-end;
+}
+
+/* Tag chip badge: ● label in top-left corner */
+.theme-flux .layout-title[data-tag]::before {
+  content: '● ' attr(data-tag);
+  position: absolute;
+  top: 48px;
+  left: 56px;
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  color: var(--color-accent);
+  background: var(--flux-accent-subtle);
+  padding: 0.3em 1em;
+  border-radius: 100px;
+  letter-spacing: 0.02em;
+}
+
+/* Badge: not styled — intentionally omitted */
+
+.theme-flux .layout-title h1 {
+  font-size: clamp(3rem, 8vw, 6.5rem);
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  line-height: 1.05;
+}
+
+/* Nav dots — 3 small dots beneath h1 as a rhythm indicator */
+.theme-flux .layout-title h1::after {
+  content: '· · ·';
+  display: block;
+  font-size: 1.5rem;
+  font-weight: 400;
+  letter-spacing: 0.35em;
+  color: var(--flux-accent-muted);
+  margin-top: 1.25rem;
+}
+
+.theme-flux .layout-title p {
+  font-size: clamp(1rem, 2.5vw, 1.35rem);
+  font-weight: 400;
+  color: var(--color-muted);
+  letter-spacing: -0.005em;
+  margin-top: 1.5rem;
+  line-height: 1.5;
+  max-width: 72%;
+}
+
+/* Subtitle em: accent italic for keyword emphasis */
+.theme-flux .layout-title p em {
+  font-style: italic;
+  color: var(--color-accent);
+  font-weight: 500;
+}
+
+/* --------------------------------------------------------------------------
+ * layout-section
+ * Clean section break with accent underline beneath heading
+ * -------------------------------------------------------------------------- */
+
+.theme-flux .layout-section {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  position: relative;
+}
+
+/* Override base layout centering on slide-content */
+.theme-flux .layout-section .slide-content {
+  align-items: flex-start;
+  justify-content: center;
+}
+
+.theme-flux .layout-section h1,
+.theme-flux .layout-section h2 {
+  position: relative;
+  display: inline-block;
+  padding-bottom: 0.75rem;
+}
+
+/* Accent underline on section heading */
+.theme-flux .layout-section h1::after,
+.theme-flux .layout-section h2::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 2.5em;
+  height: 3px;
+  border-radius: 100px;
+  background-color: var(--color-accent);
+}
+
+/* Section tag label — rendered as a small-caps label above the heading */
+.theme-flux .layout-section[data-tag]::before {
+  content: attr(data-tag);
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-accent);
+  margin-bottom: 1.25rem;
+}
+
+.theme-flux .layout-section p {
+  font-size: 1.2rem;
+  color: var(--color-muted);
+  margin-top: 1.25rem;
+  max-width: 60%;
+  line-height: 1.6;
+}
+
+/* --------------------------------------------------------------------------
+ * layout-big-stat
+ * Bold indigo numbers, label beneath
+ * -------------------------------------------------------------------------- */
+
+.theme-flux .layout-big-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.theme-flux .layout-big-stat h1,
+.theme-flux .layout-big-stat h2 {
+  font-size: clamp(6rem, 18vw, 14rem);
+  font-weight: 800;
+  letter-spacing: -0.05em;
+  line-height: 1;
+  color: var(--color-accent);
+}
+
+.theme-flux .layout-big-stat p {
+  font-size: clamp(1.1rem, 2.5vw, 1.5rem);
+  font-weight: 500;
+  color: var(--color-muted);
+  letter-spacing: -0.01em;
+  margin-top: 1rem;
+}
+
+/* --------------------------------------------------------------------------
+ * layout-quote
+ * Left accent bar 3px, bold display font, avatar-style attribution
+ * -------------------------------------------------------------------------- */
+
+.theme-flux .layout-quote {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: flex-start;
+  text-align: left;
+  padding: 4rem 5rem;
+}
+
+/* Override base layout centering on slide-content */
+.theme-flux .layout-quote .slide-content {
+  align-items: flex-start;
+  justify-content: center;
+  max-width: 100%;
+}
+
+.theme-flux .layout-quote blockquote {
+  border-left: 3px solid var(--color-accent);
+  background: none;
+  border-radius: 0;
+  padding: 0.5em 0 0.5em 2rem;
+  max-width: 85%;
+}
+
+.theme-flux .layout-quote blockquote p {
+  font-family: var(--font-display);
+  font-size: clamp(1.6rem, 3.5vw, 2.75rem);
+  font-weight: 700;
+  font-style: normal;
+  letter-spacing: -0.03em;
+  line-height: 1.3;
+  color: var(--color-text);
+}
+
+/* Attribution — avatar-style: name on its own line with a dash prefix */
+.theme-flux .layout-quote blockquote + p,
+.theme-flux .layout-quote cite {
+  font-family: var(--font-sans);
+  font-size: 1rem;
+  font-weight: 500;
+  font-style: normal;
+  color: var(--color-muted);
+  margin-top: 1.75rem;
+  padding-left: calc(2rem + 3px); /* align with quote text, accounting for border */
+  display: flex;
+  align-items: center;
+  gap: 0.6em;
+}
+
+/* Dash before attribution name */
+.theme-flux .layout-quote blockquote + p::before,
+.theme-flux .layout-quote cite::before {
+  content: '—';
+  color: var(--color-accent);
+  font-weight: 600;
+}
+
+/* --------------------------------------------------------------------------
+ * layout-two-column
+ * Subtle vertical divider between columns
+ * -------------------------------------------------------------------------- */
+
+.theme-flux .layout-two-column {
+  gap: 3.5rem;
+  position: relative;
+}
+
+/* Vertical divider */
+.theme-flux .layout-two-column::before {
+  content: '';
+  position: absolute;
+  top: 8%;
+  bottom: 8%;
+  left: 50%;
+  width: 1px;
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    var(--color-border) 20%,
+    var(--color-border) 80%,
+    transparent 100%
+  );
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.theme-flux .layout-two-column > *:first-child {
+  padding-right: 1.75rem;
+}
+
+.theme-flux .layout-two-column > *:last-child {
+  padding-left: 1.75rem;
+}
+
+.theme-flux .layout-two-column h3 {
+  font-size: 1.4rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--color-text);
+  margin-bottom: 0.75em;
+  padding-bottom: 0.5em;
+  border-bottom: 1px solid var(--color-border);
+}
+
+/* ============================================================================
+ * Section 7 — Reduced Motion
+ * ============================================================================ */
+
+@media (prefers-reduced-motion: reduce) {
+  .theme-flux {
+    --transition-duration: 0ms;
+    --fragment-duration: 0ms;
+  }
+
+  .theme-flux .fragment {
+    transition: none;
+  }
+}

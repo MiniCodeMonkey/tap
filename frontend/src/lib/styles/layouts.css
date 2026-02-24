@@ -50,10 +50,7 @@
   letter-spacing: -0.025em; /* slightly tighter for impact */
   font-weight: 800;
   margin: 0;
-  background: linear-gradient(135deg, var(--color-text) 0%, var(--color-muted) 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  color: var(--color-text);
   text-wrap: balance; /* better line breaking for titles */
 }
 

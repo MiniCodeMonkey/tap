@@ -1,0 +1,699 @@
+/**
+ * Signal Theme
+ *
+ * Vercel/Nuxt developer aesthetic - clean, metadata-rich, and precise.
+ * Inspired by modern developer tooling documentation, system dashboards,
+ * and the visual language of production-grade developer platforms.
+ *
+ * Design philosophy:
+ * - Near-white #fafafa background with pure black #0a0a0a text for crisp contrast
+ * - Neon green #00dc82 accent (Nuxt/Vue ecosystem signature color)
+ * - Instrument Sans for clean, modern display and body typography
+ * - JetBrains Mono for code and metadata labels throughout
+ * - Hairline borders on list items instead of bullets — data-table feel
+ * - Contextual metadata surfaced via [data-tag] and [data-badge] attributes
+ * - Code blocks with true black backgrounds and semantic syntax coloring
+ * - Fragment entries slide up 12px with ease-out — confident, not flashy
+ */
+
+.theme-signal {
+  /* Core colors - near-white canvas with true black text */
+  --color-bg: #fafafa;
+  --color-text: #0a0a0a;
+  --color-muted: rgba(10, 10, 10, 0.5);
+  --color-accent: #00dc82;
+  --color-code-bg: #0a0a0a;
+
+  /* Extended colors - developer tool palette */
+  --color-border: rgba(10, 10, 10, 0.1);
+  --color-surface: #f4f4f5;
+  --color-surface-elevated: #ececee;
+  --color-link: #0070f3;
+  --color-code-text: #e4e4e7;
+
+  /* Signal theme accent variations */
+  --signal-green: #00dc82;
+  --signal-green-muted: rgba(0, 220, 130, 0.5);
+  --signal-green-subtle: rgba(0, 220, 130, 0.12);
+  --signal-green-bg: rgba(0, 220, 130, 0.08);
+  --signal-black: #0a0a0a;
+  --signal-near-black: #18181b;
+  --signal-gray-dark: #3f3f46;
+  --signal-gray: #71717a;
+  --signal-gray-light: #a1a1aa;
+  --signal-gray-faint: #e4e4e7;
+  --signal-border: rgba(10, 10, 10, 0.1);
+  --signal-border-strong: rgba(10, 10, 10, 0.2);
+
+  /* Code syntax colors - terminal green palette on true black */
+  --signal-code-keyword: #00dc82;
+  --signal-code-string: #a8ff78;
+  --signal-code-comment: #52525b;
+  --signal-code-number: #fbbf24;
+  --signal-code-type: #67e8f9;
+
+  /* Error colors */
+  --color-error: #ef4444;
+  --color-error-bg: rgba(239, 68, 68, 0.08);
+
+  /* Typography - Instrument Sans for clean developer aesthetic */
+  --font-sans: 'Instrument Sans', Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI',
+    Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-display: 'Instrument Sans', Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI',
+    Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-mono: 'JetBrains Mono', 'SF Mono', Monaco, 'Cascadia Code', Consolas, 'Liberation Mono',
+    Menlo, monospace;
+
+  /* Transitions - snappy, modern developer tool feel */
+  --transition-duration: 200ms;
+  --transition-timing: cubic-bezier(0.4, 0, 0.2, 1);
+  --fragment-duration: 300ms;
+
+  /* Apply base styles */
+  font-family: var(--font-sans);
+  color: var(--color-text);
+  letter-spacing: -0.011em;
+  line-height: 1.6;
+
+  /* Near-white background */
+  background-color: var(--color-bg);
+}
+
+/* Signal theme typography - Instrument Sans, tight tracking, developer-precise */
+.theme-signal h1,
+.theme-signal h2,
+.theme-signal h3,
+.theme-signal h4,
+.theme-signal h5,
+.theme-signal h6 {
+  font-family: var(--font-display);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+  margin: 0;
+  color: var(--signal-black);
+}
+
+.theme-signal h1 {
+  font-weight: 800;
+  letter-spacing: -0.04em;
+}
+
+.theme-signal h2 {
+  font-weight: 700;
+  letter-spacing: -0.03em;
+}
+
+.theme-signal h3 {
+  font-size: 2rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.theme-signal h4 {
+  font-weight: 600;
+  letter-spacing: -0.015em;
+}
+
+.theme-signal h5,
+.theme-signal h6 {
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+
+.theme-signal p,
+.theme-signal li {
+  font-family: var(--font-sans);
+  font-weight: 400;
+  letter-spacing: -0.011em;
+  line-height: 1.65;
+}
+
+/* Signal theme code blocks - true black background, terminal precision */
+
+/* Inline code - dark pill with mono font */
+.theme-signal code {
+  font-family: var(--font-mono);
+  background-color: var(--signal-near-black);
+  color: var(--signal-green);
+  padding: 0.2em 0.45em;
+  border-radius: 4px;
+  font-size: 0.875em;
+  letter-spacing: 0;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+/* Code block container - true black, styled like a devtool panel */
+.theme-signal pre {
+  font-family: var(--font-mono);
+  background-color: var(--color-code-bg);
+  color: var(--color-code-text);
+  padding: 1.5em 1.75em;
+  border-radius: 8px;
+  overflow-x: auto;
+  line-height: 1.65;
+  letter-spacing: 0;
+  position: relative;
+  /* Hairline border on a dark bg for subtle panel definition */
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  box-shadow:
+    0 1px 3px rgba(0, 0, 0, 0.12),
+    0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+/* Optional filename badge on code blocks via [data-filename] attribute */
+.theme-signal pre[data-filename]::before {
+  content: attr(data-filename);
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 0.75em;
+  color: var(--signal-gray-light);
+  background-color: rgba(255, 255, 255, 0.04);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+  margin: -1.5em -1.75em 1.5em;
+  padding: 0.6em 1.75em;
+  letter-spacing: 0.02em;
+  border-radius: 8px 8px 0 0;
+}
+
+/* Reset inline code styles inside pre blocks */
+.theme-signal pre code {
+  background: none;
+  padding: 0;
+  border-radius: 0;
+  font-size: inherit;
+  border: none;
+  color: inherit;
+  letter-spacing: inherit;
+}
+
+/* Signal theme links - Vercel blue with clean underline affordance */
+.theme-signal a {
+  color: var(--color-link);
+  text-decoration: none;
+  border-bottom: 1px solid rgba(0, 112, 243, 0.25);
+  transition:
+    border-color var(--transition-duration) var(--transition-timing),
+    color var(--transition-duration) var(--transition-timing);
+}
+
+.theme-signal a:hover {
+  border-bottom-color: rgba(0, 112, 243, 0.7);
+}
+
+/* Signal theme lists - hairline borders instead of bullets, data-table feel */
+.theme-signal ul,
+.theme-signal ol {
+  padding-left: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.theme-signal li {
+  padding: 0.55em 0;
+  border-bottom: 1px solid var(--signal-border);
+}
+
+.theme-signal li:first-child {
+  border-top: 1px solid var(--signal-border);
+}
+
+/* Suppress native markers — use green dot bullets via ::before */
+.theme-signal li::marker {
+  content: none;
+}
+
+/* Green dot bullets for unordered lists */
+.theme-signal ul > li {
+  padding-left: 1.5em;
+  position: relative;
+}
+
+.theme-signal ul > li::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 1em;
+  width: 6px;
+  height: 6px;
+  background-color: var(--signal-green);
+  border-radius: 50%;
+}
+
+/* Ordered list counters - mono numbers in accent green, inlined */
+.theme-signal ol {
+  counter-reset: signal-counter;
+}
+
+.theme-signal ol > li {
+  counter-increment: signal-counter;
+  padding-left: 2.25em;
+  position: relative;
+}
+
+.theme-signal ol > li::before {
+  content: counter(signal-counter, decimal-leading-zero);
+  position: absolute;
+  left: 0;
+  font-family: var(--font-mono);
+  font-size: 0.75em;
+  font-weight: 500;
+  color: var(--signal-green);
+  letter-spacing: 0.02em;
+  line-height: 2.2;
+}
+
+/* Signal theme blockquotes - left-aligned, mono attribution, green accent line */
+.theme-signal blockquote {
+  border-left: 2px solid var(--signal-green);
+  padding: 0.75em 0 0.75em 1.5em;
+  margin: 0;
+  font-style: normal;
+  color: var(--signal-gray-dark);
+  background: var(--signal-green-bg);
+  border-radius: 0 4px 4px 0;
+}
+
+.theme-signal blockquote p {
+  margin: 0;
+  font-size: 1.05em;
+  line-height: 1.6;
+}
+
+/* Attribution line inside blockquote — mono dash style */
+.theme-signal blockquote cite,
+.theme-signal blockquote footer {
+  display: block;
+  font-family: var(--font-mono);
+  font-style: normal;
+  font-size: 0.8em;
+  color: var(--signal-gray);
+  margin-top: 0.75em;
+  letter-spacing: 0.02em;
+}
+
+.theme-signal blockquote cite::before,
+.theme-signal blockquote footer::before {
+  content: '— ';
+}
+
+/* Signal theme tables - clean data-table aesthetic */
+.theme-signal table {
+  width: 100%;
+  border-collapse: collapse;
+  background: transparent;
+  font-size: 0.95em;
+}
+
+.theme-signal th,
+.theme-signal td {
+  padding: 0.75em 1em;
+  text-align: left;
+  border-bottom: 1px solid var(--signal-border);
+}
+
+.theme-signal th {
+  font-family: var(--font-mono);
+  font-weight: 500;
+  font-size: 0.8em;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--signal-gray);
+  border-bottom: 1px solid var(--signal-border-strong);
+  padding-bottom: 0.6em;
+}
+
+.theme-signal tr:last-child td {
+  border-bottom: none;
+}
+
+.theme-signal tr:hover td {
+  background-color: rgba(10, 10, 10, 0.03);
+}
+
+/* Signal theme images - clean, no border-radius on slides */
+.theme-signal img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 6px;
+  border: 1px solid var(--signal-border);
+}
+
+/* Signal theme strong/em */
+.theme-signal strong,
+.theme-signal b {
+  font-weight: 700;
+  color: var(--signal-black);
+}
+
+.theme-signal em,
+.theme-signal i {
+  font-style: italic;
+  color: var(--signal-gray-dark);
+}
+
+/* Horizontal rule - hairline in signal style */
+.theme-signal hr {
+  border: none;
+  height: 1px;
+  background-color: var(--signal-border-strong);
+  margin: 2rem 0;
+}
+
+/* ============================================
+   Fragment animation - Signal theme
+   Slides up 12px with ease-out, 300ms
+   ============================================ */
+
+.theme-signal .fragment {
+  transition:
+    opacity var(--fragment-duration) ease-out,
+    transform var(--fragment-duration) ease-out;
+}
+
+.theme-signal .fragment-hidden {
+  opacity: 0;
+  transform: translateY(12px);
+}
+
+.theme-signal .fragment-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Signal theme selection - neon green highlight */
+.theme-signal ::selection {
+  background-color: var(--signal-green);
+  color: var(--signal-black);
+}
+
+/* ============================================
+   Layout-specific styles for Signal theme
+   ============================================ */
+
+/* Title layout - bottom-left aligned, with tag/badge metadata pseudo-elements */
+.theme-signal .layout-title {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: flex-end;
+  text-align: left;
+  /* Required for absolute positioning of ::before / ::after metadata */
+  position: relative;
+}
+
+/* Override base layout centering on slide-content */
+.theme-signal .layout-title .slide-content {
+  align-items: flex-start;
+  justify-content: flex-end;
+}
+
+/*
+ * [data-tag] pseudo-element — mono bordered label in top-left corner.
+ * Usage: <div class="layout-title" data-tag="v3.2.0">
+ * Renders a bordered mono chip, signaling version / category metadata.
+ */
+.theme-signal .layout-title[data-tag]::before {
+  content: attr(data-tag);
+  position: absolute;
+  top: 56px;
+  left: 60px;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  color: var(--signal-gray);
+  background-color: transparent;
+  border: 1px solid var(--signal-border-strong);
+  border-radius: 4px;
+  padding: 0.3em 0.65em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+/*
+ * [data-badge] pseudo-element — neon green pill in top-right corner.
+ * Usage: <div class="layout-title" data-badge="NEW">
+ * Renders a filled accent-colored badge for status / call-to-action metadata.
+ */
+.theme-signal .layout-title[data-badge]::after {
+  content: attr(data-badge);
+  position: absolute;
+  top: 56px;
+  right: 60px;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: var(--signal-black);
+  background-color: var(--signal-green);
+  border-radius: 100px;
+  padding: 0.3em 0.8em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.theme-signal .layout-title h1 {
+  font-size: clamp(3.5rem, 8vw, 7rem);
+  letter-spacing: -0.04em;
+  line-height: 1;
+  max-width: 14ch;
+}
+
+/* Green underline accent on title h1 — left-aligned */
+.theme-signal .layout-title h1::after {
+  content: '';
+  display: block;
+  width: 40px;
+  height: 2px;
+  margin: 1.25rem 0 0;
+  background-color: var(--signal-green);
+  border-radius: 1px;
+}
+
+.theme-signal .layout-title p {
+  font-family: var(--font-sans);
+  font-size: 1.25rem;
+  font-weight: 400;
+  color: var(--color-muted);
+  letter-spacing: -0.01em;
+  margin-top: 1.25rem;
+  max-width: 50ch;
+}
+
+/* Section layout - centered interstitial marker */
+.theme-signal .layout-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  position: relative;
+}
+
+.theme-signal .layout-section h2 {
+  font-size: clamp(2.5rem, 6vw, 5rem);
+  letter-spacing: -0.035em;
+  position: relative;
+}
+
+/* Mono category label above section heading */
+.theme-signal .layout-section h2::before {
+  content: attr(data-label, '');
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 0.7em;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--signal-green);
+  margin-bottom: 0.75rem;
+}
+
+/* Hairline rule below section heading */
+.theme-signal .layout-section h2::after {
+  content: '';
+  display: block;
+  width: 32px;
+  height: 1px;
+  margin: 1.25rem auto 0;
+  background-color: var(--signal-border-strong);
+}
+
+.theme-signal .layout-section p {
+  font-family: var(--font-sans);
+  font-size: 1.25rem;
+  color: var(--color-muted);
+  margin-top: 1.25rem;
+  max-width: 55ch;
+  letter-spacing: -0.01em;
+}
+
+/* Big-stat layout - oversized metric, developer dashboard style */
+.theme-signal .layout-big-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  position: relative;
+}
+
+.theme-signal .layout-big-stat h2 {
+  font-size: clamp(7rem, 20vw, 16rem);
+  letter-spacing: -0.05em;
+  line-height: 0.9;
+  color: var(--signal-black);
+  font-weight: 800;
+  position: relative;
+  /* Subtle green glow behind the number */
+  text-shadow: 0 0 80px var(--signal-green-subtle);
+}
+
+/* Neon green underbar accent */
+.theme-signal .layout-big-stat h2::after {
+  content: '';
+  display: block;
+  width: 48px;
+  height: 3px;
+  margin: 0.75rem auto 0;
+  background-color: var(--signal-green);
+  border-radius: 1.5px;
+}
+
+.theme-signal .layout-big-stat p {
+  font-family: var(--font-mono);
+  font-size: 1rem;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--signal-gray);
+  margin-top: 0.75rem;
+}
+
+/* Quote layout - left-aligned, mono attribution, green left rule */
+.theme-signal .layout-quote {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: flex-start;
+  text-align: left;
+  padding: 4rem 5rem;
+}
+
+/* Override base layout centering on slide-content */
+.theme-signal .layout-quote .slide-content {
+  align-items: flex-start;
+  justify-content: center;
+  max-width: 100%;
+}
+
+.theme-signal .layout-quote blockquote {
+  border-left: 3px solid var(--signal-green);
+  background: none;
+  border-radius: 0;
+  max-width: 80%;
+  padding: 0 0 0 2rem;
+  position: relative;
+}
+
+.theme-signal .layout-quote blockquote p {
+  font-family: var(--font-display);
+  font-size: clamp(1.75rem, 3.5vw, 2.75rem);
+  font-style: normal;
+  font-weight: 500;
+  line-height: 1.35;
+  color: var(--signal-black);
+  letter-spacing: -0.02em;
+}
+
+/* Mono dash attribution — left-aligned below quote */
+.theme-signal .layout-quote p:not(blockquote p),
+.theme-signal .layout-quote cite {
+  font-family: var(--font-mono);
+  font-style: normal;
+  font-size: 0.9rem;
+  font-weight: 400;
+  color: var(--signal-gray);
+  letter-spacing: 0.02em;
+  margin-top: 1.5rem;
+  padding-left: 2rem;
+}
+
+.theme-signal .layout-quote p:not(blockquote p)::before,
+.theme-signal .layout-quote cite::before {
+  content: '— ';
+}
+
+/* Two-column layout - equal columns, hairline divider */
+.theme-signal .layout-two-column {
+  gap: 3rem;
+  position: relative;
+}
+
+/* Hairline column divider */
+.theme-signal .layout-two-column::before {
+  content: '';
+  position: absolute;
+  top: 5%;
+  bottom: 5%;
+  left: 50%;
+  width: 1px;
+  background-color: var(--signal-border);
+  transform: translateX(-50%);
+}
+
+.theme-signal .layout-two-column > *:first-child {
+  padding-right: 1.5rem;
+}
+
+.theme-signal .layout-two-column > *:last-child {
+  padding-left: 1.5rem;
+}
+
+/* Column headings - mono label style */
+.theme-signal .layout-two-column h3 {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1.5rem;
+  letter-spacing: -0.02em;
+  color: var(--signal-black);
+  margin-bottom: 1em;
+  padding-bottom: 0.6em;
+  border-bottom: 1px solid var(--signal-border);
+}
+
+/* Three-column layout - condensed mono label style */
+.theme-signal .layout-three-column {
+  gap: 2rem;
+}
+
+.theme-signal .layout-three-column h3 {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1.25rem;
+  letter-spacing: -0.02em;
+  color: var(--signal-black);
+  margin-bottom: 0.75em;
+  padding-bottom: 0.5em;
+  border-bottom: 1px solid var(--signal-border);
+}
+
+/* ============================================
+   Reduced motion support
+   ============================================ */
+@media (prefers-reduced-motion: reduce) {
+  .theme-signal {
+    --transition-duration: 0ms;
+    --fragment-duration: 0ms;
+  }
+
+  /* Ensure no transform is applied when reduced motion is active */
+  .theme-signal .fragment-hidden {
+    transform: none;
+  }
+
+  .theme-signal .fragment-visible {
+    transform: none;
+  }
+}

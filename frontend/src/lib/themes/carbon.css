@@ -1,0 +1,664 @@
+/**
+ * Carbon Theme
+ *
+ * IBM Carbon Design System — enterprise precision meets expressive clarity.
+ * Inspired by IBM's open-source design language: structured grids, functional
+ * typography, and purposeful use of a single accent color.
+ *
+ * Design philosophy:
+ * - Pure white background with IBM Plex Sans for maximum legibility
+ * - IBM Carbon red (#da1e28) used sparingly as a signal color
+ * - Zero border-radius — sharp, unambiguous corners throughout
+ * - Monospaced numbered list items (01–05) separated by hairline borders
+ * - Title slide inverted: deep carbon (#161616) with a red top border
+ * - Code blocks distinguished by a 3px left red accent border
+ */
+
+/* =============================================================================
+   Section 1: Root .theme-carbon with CSS variables
+   ============================================================================= */
+
+.theme-carbon {
+  /* Core colors — IBM Carbon palette */
+  --color-bg: #ffffff;
+  --color-text: #161616;
+  --color-muted: #6f6f6f;
+  --color-accent: #da1e28;
+  --color-code-bg: #161616;
+
+  /* Extended colors */
+  --color-border: #e0e0e0;
+  --color-surface: #f4f4f4;
+  --color-surface-elevated: #e8e8e8;
+  --color-link: #0f62fe;
+  --color-code-text: #c6c6c6;
+
+  /* Carbon-specific palette tokens */
+  --carbon-red: #da1e28;
+  --carbon-red-muted: rgba(218, 30, 40, 0.5);
+  --carbon-red-subtle: rgba(218, 30, 40, 0.12);
+  --carbon-gray-100: #161616;
+  --carbon-gray-90: #262626;
+  --carbon-gray-80: #393939;
+  --carbon-gray-70: #525252;
+  --carbon-gray-50: #8d8d8d;
+  --carbon-gray-30: #c6c6c6;
+  --carbon-gray-20: #e0e0e0;
+  --carbon-gray-10: #f4f4f4;
+  --carbon-white: #ffffff;
+
+  /* Inverted surface — used by layout-title */
+  --carbon-inverse-bg: #161616;
+  --carbon-inverse-text: #f4f4f4;
+  --carbon-inverse-muted: #8d8d8d;
+
+  /* Error colors */
+  --color-error: #da1e28;
+  --color-error-bg: rgba(218, 30, 40, 0.1);
+
+  /* Typography — IBM Plex Sans + IBM Plex Mono */
+  --font-sans: 'IBM Plex Sans', 'Helvetica Neue', Arial, system-ui, sans-serif;
+  --font-mono: 'IBM Plex Mono', 'SF Mono', Monaco, Consolas, 'Liberation Mono', Menlo, monospace;
+  --font-display: 'IBM Plex Sans', 'Helvetica Neue', Arial, system-ui, sans-serif;
+
+  /* Transitions — crisp, functional */
+  --transition-duration: 200ms;
+  --transition-timing: cubic-bezier(0.2, 0, 0.38, 0.9);
+  --fragment-duration: 250ms;
+
+  /* Apply base styles */
+  font-family: var(--font-sans);
+  color: var(--color-text);
+  letter-spacing: 0;
+  line-height: 1.6;
+
+  background-color: var(--color-bg);
+}
+
+/* =============================================================================
+   Section 2: Typography — h1–h6, p, li (IBM Plex Sans)
+   ============================================================================= */
+
+.theme-carbon h1,
+.theme-carbon h2,
+.theme-carbon h3,
+.theme-carbon h4,
+.theme-carbon h5,
+.theme-carbon h6 {
+  font-family: var(--font-sans);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+  margin: 0;
+  color: var(--carbon-gray-100);
+}
+
+.theme-carbon h1 {
+  font-weight: 300;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+}
+
+.theme-carbon h2 {
+  font-weight: 300;
+  letter-spacing: -0.015em;
+}
+
+.theme-carbon h3 {
+  font-size: 2rem;
+  font-weight: 400;
+  letter-spacing: -0.01em;
+}
+
+.theme-carbon h4 {
+  font-size: 1.5rem;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+.theme-carbon h5 {
+  font-size: 1.25rem;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+.theme-carbon h6 {
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  text-transform: uppercase;
+  color: var(--color-muted);
+}
+
+.theme-carbon p {
+  font-family: var(--font-sans);
+  font-weight: 400;
+  letter-spacing: 0;
+  line-height: 1.6;
+}
+
+.theme-carbon li {
+  font-family: var(--font-sans);
+  font-weight: 400;
+  letter-spacing: 0;
+  line-height: 1.6;
+}
+
+/* =============================================================================
+   Section 3: Element styles
+   ============================================================================= */
+
+/* Code — inline code stays light, code blocks go dark */
+.theme-carbon code {
+  font-family: var(--font-mono);
+  background-color: var(--carbon-gray-10);
+  color: var(--carbon-gray-100);
+  padding: 0.15em 0.45em;
+  border-radius: 0;
+  font-size: 0.875em;
+  border: 1px solid var(--carbon-gray-20);
+}
+
+.theme-carbon pre {
+  font-family: var(--font-mono);
+  background-color: var(--color-code-bg);
+  color: var(--color-code-text);
+  padding: 1.5em 2em;
+  border-radius: 0;
+  overflow-x: auto;
+  line-height: 1.6;
+  /* Red left accent border — Carbon code block signature */
+  border: none;
+  border-left: 3px solid var(--carbon-red);
+}
+
+.theme-carbon pre code {
+  background: none;
+  padding: 0;
+  border-radius: 0;
+  font-size: inherit;
+  border: none;
+  color: inherit;
+}
+
+/* Links — IBM blue, no decoration, subtle underline on hover */
+.theme-carbon a {
+  color: var(--color-link);
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+  transition:
+    border-color var(--transition-duration) var(--transition-timing),
+    color var(--transition-duration) var(--transition-timing);
+}
+
+.theme-carbon a:hover {
+  border-bottom-color: currentColor;
+}
+
+/* Lists — numbered items 01–05 in mono, separated by hairline borders */
+.theme-carbon ul,
+.theme-carbon ol {
+  padding-left: 0;
+  margin: 0;
+  list-style: none;
+  counter-reset: carbon-list;
+}
+
+.theme-carbon li {
+  margin-bottom: 0;
+  padding: 0.75em 0 0.75em 3.5em;
+  border-bottom: 1px solid var(--carbon-gray-20);
+  position: relative;
+  counter-increment: carbon-list;
+}
+
+.theme-carbon li:first-child {
+  border-top: 1px solid var(--carbon-gray-20);
+}
+
+/* Mono two-digit counter: 01, 02, … */
+.theme-carbon ol li::before {
+  content: counter(carbon-list, decimal-leading-zero);
+  position: absolute;
+  left: 0;
+  top: 0.75em;
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  font-weight: 400;
+  color: var(--carbon-red);
+  letter-spacing: 0.02em;
+  line-height: 1.6;
+  width: 2.5em;
+}
+
+/* Unordered list — small red square marker aligned with numbered style */
+.theme-carbon ul li::before {
+  content: '—';
+  position: absolute;
+  left: 0;
+  top: 0.75em;
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  font-weight: 400;
+  color: var(--carbon-red);
+  letter-spacing: 0.02em;
+  line-height: 1.6;
+  width: 2.5em;
+}
+
+/* Blockquote — red square block with quote mark, uppercase mono attribution */
+.theme-carbon blockquote {
+  border-left: none;
+  padding: 1.5em 2em 1.5em 4.5em;
+  margin: 0;
+  font-style: normal;
+  color: var(--carbon-gray-80);
+  background-color: var(--color-code-bg);
+  position: relative;
+}
+
+/* Red square block with oversized quote mark */
+.theme-carbon blockquote::before {
+  content: '"';
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 3em;
+  height: 100%;
+  background-color: var(--carbon-red);
+  font-family: var(--font-sans);
+  font-size: 2.5rem;
+  font-weight: 300;
+  color: var(--carbon-white);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 0.4em;
+  box-sizing: border-box;
+  line-height: 1;
+}
+
+.theme-carbon blockquote p {
+  font-size: 1.1em;
+  line-height: 1.55;
+  color: var(--carbon-gray-80);
+}
+
+/* Attribution / cite inside blockquote */
+.theme-carbon blockquote cite,
+.theme-carbon blockquote footer {
+  display: block;
+  margin-top: 0.75em;
+  font-family: var(--font-mono);
+  font-size: 0.8em;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-muted);
+  font-style: normal;
+}
+
+/* Tables — clean hairline borders, no radius */
+.theme-carbon table {
+  width: 100%;
+  border-collapse: collapse;
+  background: transparent;
+  border-radius: 0;
+}
+
+.theme-carbon th,
+.theme-carbon td {
+  padding: 0.875em 1.25em;
+  text-align: left;
+  border-bottom: 1px solid var(--carbon-gray-20);
+}
+
+.theme-carbon th {
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: 0.875em;
+  color: var(--carbon-gray-100);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  border-bottom: 2px solid var(--carbon-gray-100);
+  background: transparent;
+}
+
+.theme-carbon tr:last-child td {
+  border-bottom: none;
+}
+
+.theme-carbon tr:hover td {
+  background-color: var(--carbon-gray-10);
+}
+
+/* Images — no border-radius, subtle border */
+.theme-carbon img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 0;
+  border: 1px solid var(--carbon-gray-20);
+}
+
+/* Strong / bold */
+.theme-carbon strong,
+.theme-carbon b {
+  font-weight: 600;
+  color: var(--carbon-gray-100);
+}
+
+/* Emphasis / italic */
+.theme-carbon em,
+.theme-carbon i {
+  font-style: italic;
+  color: var(--carbon-gray-80);
+}
+
+/* Horizontal rule — single pixel carbon border */
+.theme-carbon hr {
+  border: none;
+  height: 1px;
+  background-color: var(--carbon-gray-20);
+  margin: 2.5em 0;
+}
+
+/* =============================================================================
+   Section 4: Fragment animation — translateY(10px), 250ms
+   ============================================================================= */
+
+.theme-carbon .fragment {
+  transition:
+    opacity var(--fragment-duration) var(--transition-timing),
+    transform var(--fragment-duration) var(--transition-timing);
+}
+
+.theme-carbon .fragment-hidden {
+  opacity: 0;
+  transform: translateY(10px);
+}
+
+.theme-carbon .fragment-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* =============================================================================
+   Section 5: Selection styles
+   ============================================================================= */
+
+.theme-carbon ::selection {
+  background-color: var(--carbon-red);
+  color: var(--carbon-white);
+}
+
+/* =============================================================================
+   Section 6: Layout-specific styles
+   ============================================================================= */
+
+/* ---------------------------------------------------------------------------
+   layout-title — INVERTED: dark bg #161616, white text, red top bar
+   Tag/badge rendered as absolute pseudo-elements at the bottom
+   --------------------------------------------------------------------------- */
+
+.theme-carbon .layout-title {
+  background-color: #161616;
+  color: #f4f4f4;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: flex-end;
+  padding-left: 60px;
+  padding-right: 60px;
+  position: relative;
+  /* Red accent bar along the top edge */
+  border-top: 4px solid var(--carbon-red);
+}
+
+/* Override base layout centering on slide-content */
+.theme-carbon .layout-title .slide-content {
+  align-items: flex-start;
+  justify-content: flex-end;
+}
+
+.theme-carbon .layout-title h1,
+.theme-carbon .layout-title h2,
+.theme-carbon .layout-title h3,
+.theme-carbon .layout-title h4,
+.theme-carbon .layout-title h5,
+.theme-carbon .layout-title h6 {
+  color: #f4f4f4;
+}
+
+.theme-carbon .layout-title h1 {
+  font-size: clamp(3rem, 7vw, 6rem);
+  font-weight: 300;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+}
+
+.theme-carbon .layout-title p {
+  font-size: 1.35rem;
+  font-weight: 300;
+  color: #8d8d8d;
+  margin-top: 1rem;
+  letter-spacing: 0.01em;
+}
+
+/* Tag — mono label at bottom-left */
+.theme-carbon .layout-title[data-tag]::before {
+  content: attr(data-tag);
+  position: absolute;
+  bottom: 48px;
+  left: 60px;
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  color: var(--carbon-inverse-muted);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+/* Badge — mono label at bottom-right */
+.theme-carbon .layout-title[data-badge]::after {
+  content: attr(data-badge);
+  position: absolute;
+  bottom: 48px;
+  right: 60px;
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  color: var(--carbon-red);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+/* Invert list item colors when inside layout-title */
+.theme-carbon .layout-title li {
+  border-bottom-color: rgba(255, 255, 255, 0.1);
+  color: #f4f4f4;
+}
+
+.theme-carbon .layout-title li:first-child {
+  border-top-color: rgba(255, 255, 255, 0.1);
+}
+
+/* ---------------------------------------------------------------------------
+   layout-section — centered, bold heading with red underline accent
+   --------------------------------------------------------------------------- */
+
+.theme-carbon .layout-section {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  padding-left: 60px;
+  padding-right: 60px;
+  position: relative;
+}
+
+/* Override base layout centering on slide-content */
+.theme-carbon .layout-section .slide-content {
+  align-items: flex-start;
+  justify-content: center;
+}
+
+.theme-carbon .layout-section h2 {
+  font-size: clamp(2.5rem, 6vw, 5rem);
+  font-weight: 300;
+  letter-spacing: -0.015em;
+  position: relative;
+  padding-bottom: 1.25rem;
+}
+
+/* Short red underline accent */
+.theme-carbon .layout-section h2::after {
+  content: '';
+  display: block;
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 48px;
+  height: 3px;
+  background-color: var(--carbon-red);
+}
+
+.theme-carbon .layout-section p {
+  font-size: 1.35rem;
+  color: var(--color-muted);
+  margin-top: 1.5rem;
+  font-weight: 300;
+  max-width: 65ch;
+}
+
+/* ---------------------------------------------------------------------------
+   layout-big-stat — large red numbers, mono label, centered
+   --------------------------------------------------------------------------- */
+
+.theme-carbon .layout-big-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.theme-carbon .layout-big-stat h2 {
+  font-size: clamp(6rem, 16vw, 13rem);
+  font-weight: 300;
+  letter-spacing: -0.04em;
+  line-height: 1;
+  color: var(--carbon-red);
+  margin-bottom: 0.1em;
+}
+
+.theme-carbon .layout-big-stat p {
+  font-family: var(--font-mono);
+  font-size: 1.1rem;
+  font-weight: 400;
+  color: var(--color-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  margin-top: 0.5rem;
+}
+
+/* ---------------------------------------------------------------------------
+   layout-quote — red accent square, uppercase mono attribution
+   --------------------------------------------------------------------------- */
+
+.theme-carbon .layout-quote {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  text-align: left;
+  padding: 4rem;
+}
+
+.theme-carbon .layout-quote blockquote {
+  max-width: 82%;
+  background-color: transparent;
+  padding: 0 0 0 4.5em;
+  position: relative;
+}
+
+/* Keep the red square block visible in layout-quote */
+.theme-carbon .layout-quote blockquote::before {
+  content: '"';
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 3em;
+  height: 100%;
+  background-color: var(--carbon-red);
+  font-family: var(--font-sans);
+  font-size: 2.5rem;
+  font-weight: 300;
+  color: var(--carbon-white);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 0.4em;
+  box-sizing: border-box;
+  line-height: 1;
+}
+
+.theme-carbon .layout-quote blockquote p {
+  font-size: clamp(1.6rem, 3.5vw, 2.5rem);
+  font-weight: 300;
+  line-height: 1.45;
+  color: var(--carbon-gray-100);
+  letter-spacing: -0.01em;
+}
+
+/* Attribution below the blockquote */
+.theme-carbon .layout-quote p:not(blockquote p),
+.theme-carbon .layout-quote cite {
+  font-family: var(--font-mono);
+  font-style: normal;
+  font-size: 0.85rem;
+  color: var(--color-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin-top: 1.5rem;
+  max-width: 82%;
+}
+
+/* ---------------------------------------------------------------------------
+   layout-two-column — sharp 1px vertical divider
+   --------------------------------------------------------------------------- */
+
+.theme-carbon .layout-two-column {
+  gap: 0;
+}
+
+.theme-carbon .layout-two-column > *:first-child {
+  border-right: 1px solid var(--carbon-gray-20);
+  padding-right: 3rem;
+}
+
+.theme-carbon .layout-two-column > *:last-child {
+  padding-left: 3rem;
+}
+
+.theme-carbon .layout-two-column h3 {
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: 1.25rem;
+  color: var(--carbon-gray-100);
+  margin-bottom: 1em;
+  padding-bottom: 0.5em;
+  border-bottom: 1px solid var(--carbon-gray-20);
+  letter-spacing: 0;
+}
+
+/* =============================================================================
+   Section 7: Reduced motion
+   ============================================================================= */
+
+@media (prefers-reduced-motion: reduce) {
+  .theme-carbon {
+    --transition-duration: 0ms;
+    --fragment-duration: 0ms;
+  }
+
+  .theme-carbon .fragment-hidden {
+    transform: none;
+  }
+}

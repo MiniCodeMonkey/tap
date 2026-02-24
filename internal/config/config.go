@@ -149,6 +149,11 @@ var validThemes = map[string]bool{
 	"ink":       true,
 	"bauhaus":   true,
 	"editorial": true,
+	"signal":    true,
+	"carbon":    true,
+	"spectrum":  true,
+	"mono":      true,
+	"flux":      true,
 }
 
 // legacyThemeMapping maps old theme names to new theme names for backwards compatibility.

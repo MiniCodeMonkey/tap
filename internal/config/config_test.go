@@ -502,15 +502,16 @@ func TestNormalizeTheme(t *testing.T) {
 func TestValidThemeNames(t *testing.T) {
 	got := ValidThemeNames()
 
-	// We expect 8 themes total
-	if len(got) != 8 {
-		t.Errorf("ValidThemeNames() returned %d themes, want 8", len(got))
+	// We expect 13 themes total
+	if len(got) != 13 {
+		t.Errorf("ValidThemeNames() returned %d themes, want 13", len(got))
 	}
 
 	// Check that all themes are present
 	expectedThemes := []string{
 		"paper", "noir", "aurora", "phosphor", "poster",
 		"ink", "bauhaus", "editorial",
+		"signal", "carbon", "spectrum", "mono", "flux",
 	}
 	for _, theme := range expectedThemes {
 		found := false

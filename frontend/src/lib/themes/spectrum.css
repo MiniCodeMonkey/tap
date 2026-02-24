@@ -1,0 +1,702 @@
+/**
+ * Spectrum Theme
+ *
+ * Gradient-forward, modern SaaS aesthetic - indigo to purple to pink gradients,
+ * card-style content surfaces, and Sora typography. Clean off-white background
+ * with confident use of color as a communication tool.
+ *
+ * Design philosophy:
+ * - Off-white (#fcfcfd) background for warmth without harshness
+ * - Indigo→purple→pink gradient as the primary visual language
+ * - Sora for display and body: geometric, friendly, modern
+ * - Fira Code for monospace: legible with character
+ * - Card-style list items with gradient-filled number badges
+ * - Gradient clip text on h1 for maximum impact
+ */
+
+/* =============================================================================
+   SECTION 1: ROOT — CSS Variables
+   ============================================================================= */
+
+.theme-spectrum {
+  /* Core colors — Prism palette */
+  --color-bg: #fcfcfd;
+  --color-text: #09090b;
+  --color-muted: #71717a;
+  --color-accent: #6366f1;
+  --color-code-bg: #18181b;
+
+  /* Extended colors */
+  --color-border: #e4e4e7;
+  --color-surface: #f4f4f5;
+  --color-surface-elevated: #ffffff;
+  --color-link: #6366f1;
+  --color-code-text: #d4d4d8;
+
+  /* Error colors - warm red that pairs with indigo */
+  --color-error: #e11d48;
+  --color-error-bg: rgba(225, 29, 72, 0.08);
+
+  /* Gradient custom properties — the core of this theme */
+  --gradient-primary: linear-gradient(135deg, #6366f1, #a855f7, #ec4899);
+  --gradient-primary-subtle: linear-gradient(135deg, rgba(99, 102, 241, 0.12), rgba(168, 85, 247, 0.08), rgba(236, 72, 153, 0.06));
+  --gradient-primary-text: linear-gradient(135deg, #6366f1, #a855f7, #ec4899);
+  --gradient-cool: linear-gradient(135deg, #6366f1, #8b5cf6);
+  --gradient-warm: linear-gradient(135deg, #a855f7, #ec4899);
+  --gradient-horizontal: linear-gradient(90deg, #6366f1, #a855f7, #ec4899);
+
+  /* Spectrum palette colors for direct use */
+  --spectrum-indigo: #6366f1;
+  --spectrum-purple: #a855f7;
+  --spectrum-pink: #ec4899;
+  --spectrum-indigo-light: rgba(99, 102, 241, 0.1);
+  --spectrum-indigo-mid: rgba(99, 102, 241, 0.2);
+  --spectrum-surface-shadow: 0 1px 3px rgba(0, 0, 0, 0.04), 0 8px 32px rgba(0, 0, 0, 0.04);
+  --spectrum-surface-shadow-raised: 0 4px 6px -1px rgba(9, 9, 11, 0.08), 0 12px 32px rgba(99, 102, 241, 0.1);
+
+  /* Typography - Sora for display/body, Fira Code for mono */
+  --font-sans: 'Sora', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+    'Helvetica Neue', Arial, sans-serif;
+  --font-mono: 'Fira Code', 'JetBrains Mono', 'SF Mono', Monaco, 'Cascadia Code', Consolas,
+    'Liberation Mono', Menlo, monospace;
+
+  /* Transitions - smooth, modern */
+  --transition-duration: 300ms;
+  --transition-timing: cubic-bezier(0.4, 0, 0.2, 1);
+  --fragment-duration: 350ms;
+
+  /* Apply base styles */
+  font-family: var(--font-sans);
+  color: var(--color-text);
+  background-color: var(--color-bg);
+  letter-spacing: -0.01em;
+  line-height: 1.65;
+}
+
+/* =============================================================================
+   SECTION 2: Typography — h1–h6, p, li
+   ============================================================================= */
+
+.theme-spectrum h1,
+.theme-spectrum h2,
+.theme-spectrum h3,
+.theme-spectrum h4,
+.theme-spectrum h5,
+.theme-spectrum h6 {
+  font-family: var(--font-sans);
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  line-height: 1.15;
+  margin: 0;
+  color: var(--color-text);
+}
+
+.theme-spectrum h1 {
+  font-weight: 800;
+  letter-spacing: -0.035em;
+}
+
+.theme-spectrum h2 {
+  font-weight: 700;
+  letter-spacing: -0.025em;
+}
+
+.theme-spectrum h3 {
+  font-size: 2rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.theme-spectrum h4 {
+  font-weight: 600;
+  letter-spacing: -0.015em;
+}
+
+.theme-spectrum h5,
+.theme-spectrum h6 {
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.theme-spectrum p,
+.theme-spectrum li {
+  font-family: var(--font-sans);
+  font-weight: 400;
+  letter-spacing: -0.01em;
+  line-height: 1.7;
+}
+
+/* =============================================================================
+   SECTION 3: Element Styles
+   ============================================================================= */
+
+/* --- Inline code (stays light, code blocks go dark) --- */
+.theme-spectrum code {
+  font-family: var(--font-mono);
+  background-color: var(--spectrum-indigo-light);
+  color: var(--spectrum-indigo);
+  padding: 0.2em 0.5em;
+  border-radius: 6px;
+  font-size: 0.875em;
+  font-weight: 500;
+  border: 1px solid rgba(99, 102, 241, 0.15);
+  font-variant-ligatures: contextual;
+}
+
+/* --- Code blocks (pre) --- */
+.theme-spectrum pre {
+  font-family: var(--font-mono);
+  background-color: var(--color-code-bg);
+  color: var(--color-code-text);
+  padding: 1.75em 2.25em;
+  border-radius: 14px;
+  overflow-x: auto;
+  line-height: 1.7;
+  border: 1px solid var(--color-border);
+  box-shadow: var(--spectrum-surface-shadow);
+  position: relative;
+  font-variant-ligatures: contextual;
+}
+
+/* Gradient filename badge on pre blocks */
+.theme-spectrum pre[data-filename]::before {
+  content: attr(data-filename);
+  display: inline-block;
+  position: absolute;
+  top: -1px;
+  left: 1.5em;
+  font-family: var(--font-mono);
+  font-size: 0.75em;
+  font-weight: 500;
+  padding: 0.3em 0.85em;
+  background: var(--gradient-primary);
+  color: #ffffff;
+  border-radius: 0 0 8px 8px;
+  letter-spacing: 0.02em;
+}
+
+.theme-spectrum pre code {
+  background: none;
+  padding: 0;
+  border-radius: 0;
+  font-size: inherit;
+  color: inherit;
+  font-weight: 400;
+  border: none;
+}
+
+/* --- Links --- */
+.theme-spectrum a {
+  color: var(--color-link);
+  text-decoration: none;
+  background-image: linear-gradient(135deg, #6366f1, #a855f7, #ec4899);
+  background-size: 0% 1.5px;
+  background-position: 0 100%;
+  background-repeat: no-repeat;
+  transition:
+    background-size var(--transition-duration) var(--transition-timing);
+}
+
+.theme-spectrum a:hover {
+  background-size: 100% 1.5px;
+}
+
+/* --- Lists with gradient number badges --- */
+.theme-spectrum ul,
+.theme-spectrum ol {
+  padding-left: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.theme-spectrum li {
+  position: relative;
+  margin-bottom: 0.75em;
+  padding-left: 0;
+}
+
+/* Unordered list items — card-style with gradient dot */
+.theme-spectrum ul > li {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75em;
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  padding: 0.65em 1em;
+  box-shadow: var(--spectrum-surface-shadow);
+}
+
+.theme-spectrum ul > li::before {
+  content: '';
+  flex-shrink: 0;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--gradient-primary);
+  margin-top: 0.42em;
+}
+
+/* Ordered list items — card-style with gradient number badges */
+.theme-spectrum ol {
+  counter-reset: spectrum-counter;
+}
+
+.theme-spectrum ol > li {
+  counter-increment: spectrum-counter;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.85em;
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  padding: 0.65em 1em;
+  box-shadow: var(--spectrum-surface-shadow);
+}
+
+.theme-spectrum ol > li::before {
+  content: counter(spectrum-counter);
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.6em;
+  height: 1.6em;
+  border-radius: 50%;
+  background: var(--gradient-primary);
+  color: #ffffff;
+  font-family: var(--font-sans);
+  font-size: 0.75em;
+  font-weight: 700;
+  line-height: 1;
+  margin-top: 0.1em;
+}
+
+/* Nested lists — no card style, simpler */
+.theme-spectrum ul ul,
+.theme-spectrum ol ol,
+.theme-spectrum ul ol,
+.theme-spectrum ol ul {
+  margin-top: 0.5em;
+  margin-left: 1.5em;
+}
+
+.theme-spectrum ul ul > li,
+.theme-spectrum ol ol > li,
+.theme-spectrum ul ol > li,
+.theme-spectrum ol ul > li {
+  background: none;
+  border: none;
+  border-radius: 0;
+  padding: 0.2em 0;
+  box-shadow: none;
+}
+
+/* --- Blockquote --- */
+.theme-spectrum blockquote {
+  position: relative;
+  border-left: none;
+  padding: 1.5em 2em;
+  margin: 0;
+  font-style: italic;
+  color: var(--color-text);
+  background: var(--gradient-primary-subtle);
+  border-radius: 12px;
+  border: 1px solid var(--color-border);
+  text-align: center;
+}
+
+/* Centered gradient quote mark */
+.theme-spectrum blockquote::before {
+  content: '\201C';
+  position: absolute;
+  top: -0.2em;
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: var(--font-sans);
+  font-size: 5rem;
+  font-weight: 800;
+  font-style: normal;
+  line-height: 1;
+  background: var(--gradient-primary);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  z-index: 0;
+  opacity: 0.4;
+}
+
+.theme-spectrum blockquote p {
+  position: relative;
+  z-index: 1;
+  font-size: 1.1em;
+  line-height: 1.6;
+}
+
+/* --- Tables --- */
+.theme-spectrum table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  background: var(--color-surface);
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  box-shadow: var(--spectrum-surface-shadow);
+}
+
+.theme-spectrum th,
+.theme-spectrum td {
+  padding: 0.875em 1.25em;
+  text-align: left;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.theme-spectrum th {
+  font-weight: 600;
+  font-size: 0.85em;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--spectrum-indigo);
+  background: linear-gradient(
+    135deg,
+    rgba(99, 102, 241, 0.07) 0%,
+    rgba(168, 85, 247, 0.05) 100%
+  );
+}
+
+.theme-spectrum tr:last-child td {
+  border-bottom: none;
+}
+
+.theme-spectrum tr:hover td {
+  background-color: rgba(99, 102, 241, 0.03);
+}
+
+/* --- Images --- */
+.theme-spectrum img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 12px;
+  box-shadow: var(--spectrum-surface-shadow);
+  border: 1px solid var(--color-border);
+}
+
+/* --- Strong / Em --- */
+.theme-spectrum strong,
+.theme-spectrum b {
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.theme-spectrum em,
+.theme-spectrum i {
+  font-style: italic;
+  color: var(--color-muted);
+}
+
+/* --- Horizontal rule --- */
+.theme-spectrum hr {
+  border: none;
+  height: 1.5px;
+  margin: 2.5em auto;
+  max-width: 100%;
+  background: var(--gradient-horizontal);
+  opacity: 0.3;
+  border-radius: 100px;
+}
+
+/* =============================================================================
+   SECTION 4: Fragment Animation
+   ============================================================================= */
+
+.theme-spectrum .fragment {
+  transition:
+    opacity var(--fragment-duration) var(--transition-timing),
+    transform var(--fragment-duration) var(--transition-timing);
+}
+
+.theme-spectrum .fragment-hidden {
+  opacity: 0;
+  transform: translateY(16px) scale(0.98);
+}
+
+.theme-spectrum .fragment-visible {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+
+/* =============================================================================
+   SECTION 5: Selection Styles
+   ============================================================================= */
+
+.theme-spectrum ::selection {
+  background-color: rgba(99, 102, 241, 0.2);
+  color: var(--color-text);
+}
+
+/* =============================================================================
+   SECTION 6: Layout-Specific Styles
+   ============================================================================= */
+
+/* --- layout-title --- */
+.theme-spectrum .layout-title {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  position: relative;
+}
+
+/* Tag pill above title (data-tag attribute) */
+.theme-spectrum .layout-title[data-tag]::before {
+  content: attr(data-tag);
+  position: absolute;
+  top: 60px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: var(--font-mono);
+  font-size: 0.9rem;
+  background: var(--gradient-primary);
+  color: white;
+  padding: 0.35em 1.25em;
+  border-radius: 100px;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+}
+
+/* Badge / dot indicators below pill (data-badge attribute) */
+.theme-spectrum .layout-title[data-badge]::after {
+  content: attr(data-badge);
+  position: absolute;
+  top: 110px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: var(--color-muted);
+  letter-spacing: 0.1em;
+  white-space: nowrap;
+}
+
+/* h1: gradient clip text */
+.theme-spectrum .layout-title h1 {
+  font-size: clamp(3rem, 8vw, 6.5rem);
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  line-height: 1.05;
+  background-image: linear-gradient(135deg, #6366f1, #a855f7, #ec4899);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  position: relative;
+}
+
+/* 3 gradient dots below h1 (rendered via h1::after) */
+.theme-spectrum .layout-title h1::after {
+  content: '';
+  display: block;
+  width: 72px;
+  height: 8px;
+  margin: 1.25rem auto 0;
+  border-radius: 100px;
+  background: var(--gradient-primary);
+  opacity: 0.7;
+  -webkit-text-fill-color: initial;
+}
+
+/* Subtitle / paragraph below h1 */
+.theme-spectrum .layout-title p {
+  font-size: clamp(1rem, 2.5vw, 1.4rem);
+  font-weight: 400;
+  color: var(--color-muted);
+  margin-top: 1.5rem;
+  letter-spacing: -0.005em;
+  line-height: 1.55;
+  max-width: 70%;
+}
+
+/* --- layout-section --- */
+.theme-spectrum .layout-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  position: relative;
+}
+
+/* Gradient left accent bar — disabled: overlaps image content */
+
+.theme-spectrum .layout-section h2 {
+  font-size: clamp(2.5rem, 7vw, 5rem);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  position: relative;
+  padding-bottom: 1.25rem;
+}
+
+/* Gradient underline rule below section heading */
+.theme-spectrum .layout-section h2::after {
+  content: '';
+  display: block;
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 80px;
+  height: 3px;
+  border-radius: 100px;
+  background: var(--gradient-primary);
+}
+
+.theme-spectrum .layout-section p {
+  font-size: clamp(1rem, 2.5vw, 1.3rem);
+  color: var(--color-muted);
+  margin-top: 1.25rem;
+  max-width: 65%;
+  line-height: 1.55;
+}
+
+/* --- layout-big-stat --- */
+.theme-spectrum .layout-big-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.theme-spectrum .layout-big-stat h2 {
+  font-size: clamp(6rem, 18vw, 14rem);
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  line-height: 0.95;
+  background-image: var(--gradient-primary);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  position: relative;
+}
+
+.theme-spectrum .layout-big-stat p {
+  font-size: 1rem;
+  font-weight: 500;
+  color: var(--color-muted);
+  margin-top: 1.25rem;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+/* --- layout-quote --- */
+.theme-spectrum .layout-quote {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 4rem;
+}
+
+.theme-spectrum .layout-quote blockquote {
+  max-width: 820px;
+  font-size: clamp(1.3rem, 3vw, 2rem);
+  line-height: 1.55;
+  font-style: italic;
+  text-align: center;
+  background: var(--gradient-primary-subtle);
+  border: 1px solid var(--color-border);
+  border-radius: 20px;
+  padding: 2.75rem 3.5rem;
+  box-shadow: var(--spectrum-surface-shadow-raised);
+  position: relative;
+}
+
+/* Oversized gradient quote mark centered above text */
+.theme-spectrum .layout-quote blockquote::before {
+  content: '\201C';
+  position: absolute;
+  top: -0.15em;
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: var(--font-sans);
+  font-size: 8rem;
+  font-weight: 800;
+  font-style: normal;
+  line-height: 1;
+  background: var(--gradient-primary);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  z-index: 0;
+  opacity: 0.3;
+  pointer-events: none;
+}
+
+.theme-spectrum .layout-quote blockquote p {
+  position: relative;
+  z-index: 1;
+  color: var(--color-text);
+}
+
+/* Attribution / cite line */
+.theme-spectrum .layout-quote blockquote + p,
+.theme-spectrum .layout-quote cite {
+  margin-top: 1.5rem;
+  font-style: normal;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--spectrum-indigo);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+/* --- layout-two-column --- */
+.theme-spectrum .layout-two-column {
+  gap: 3rem;
+  position: relative;
+}
+
+/* Soft gradient divider between columns */
+.theme-spectrum .layout-two-column::before {
+  content: '';
+  position: absolute;
+  top: 5%;
+  bottom: 5%;
+  left: 50%;
+  width: 1px;
+  transform: translateX(-50%);
+  background: var(--gradient-primary);
+  opacity: 0.2;
+}
+
+.theme-spectrum .layout-two-column > *:first-child {
+  padding-right: 2rem;
+}
+
+.theme-spectrum .layout-two-column > *:last-child {
+  padding-left: 2rem;
+}
+
+/* =============================================================================
+   SECTION 7: Reduced Motion
+   ============================================================================= */
+
+@media (prefers-reduced-motion: reduce) {
+  .theme-spectrum {
+    --transition-duration: 0ms;
+    --fragment-duration: 0ms;
+  }
+
+  .theme-spectrum .fragment {
+    transition: none;
+  }
+
+  .theme-spectrum a {
+    transition: none;
+    background-image: none;
+    text-decoration: underline;
+    text-decoration-color: rgba(99, 102, 241, 0.5);
+  }
+}

@@ -52,7 +52,12 @@ export type Theme =
 	| 'poster'
 	| 'ink'
 	| 'bauhaus'
-	| 'editorial';
+	| 'editorial'
+	| 'signal'
+	| 'carbon'
+	| 'spectrum'
+	| 'mono'
+	| 'flux';
 
 /**
  * Default theme used when no theme is specified.
@@ -211,6 +216,10 @@ export interface Slide {
 	fragments?: FragmentGroup[];
 	background?: BackgroundConfig;
 	codeBlocks?: CodeBlock[];
+	/** Decorative metadata label (e.g., "// workshop") */
+	tag?: string;
+	/** Decorative metadata badge (e.g., "v2.0") */
+	badge?: string;
 	/** Enable scroll reveal for long content */
 	scroll?: boolean;
 	/** Animation duration in milliseconds (default: 2000) */

@@ -1,33 +1,28 @@
 /**
  * Font imports for Tap themes
  *
- * Uses @fontsource packages for local font embedding.
- * Each theme uses specific fonts for its unique character.
+ * NOTE: Font @font-face declarations are loaded via JavaScript imports in
+ * main.ts and presenter.ts, not via CSS @import. This is because Tailwind
+ * CSS v4's @import processing strips @font-face rules from CSS imports,
+ * while Vite properly handles font files (inlining as base64) when
+ * imported from JavaScript.
  *
- * Font-display: swap ensures text remains visible during font loading.
+ * This file is kept for documentation purposes. To add a new font:
+ * 1. Install the @fontsource package: npm install @fontsource/font-name
+ * 2. Add imports to both main.ts and presenter.ts
+ * 3. Reference the font in your theme CSS via font-family
+ *
+ * Current fonts by theme:
+ * - Paper/Noir: Inter, Playfair Display
+ * - Aurora: Space Grotesk
+ * - Phosphor: JetBrains Mono
+ * - Poster: Anton
+ * - Ink: Noto Serif JP
+ * - Bauhaus: Bebas Neue
+ * - Editorial: Playfair Display, Source Serif Pro
+ * - Signal: Instrument Sans
+ * - Carbon: IBM Plex Sans, IBM Plex Mono
+ * - Spectrum: Sora, Fira Code
+ * - Mono: Outfit
+ * - Flux: Plus Jakarta Sans
  */
-
-/* =============================================================================
- * Ink Theme - Japanese Calligraphy
- * Noto Serif JP: Elegant serif with Japanese character support
- * ============================================================================= */
-@import "@fontsource/noto-serif-jp/400.css";
-@import "@fontsource/noto-serif-jp/700.css";
-
-/* =============================================================================
- * Bauhaus Theme - Geometric Modernism
- * Bebas Neue: Bold geometric sans-serif
- * ============================================================================= */
-@import "@fontsource/bebas-neue/400.css";
-
-/* =============================================================================
- * Editorial Theme - Classic Magazine
- * Playfair Display: Elegant transitional serif for headlines
- * Source Serif Pro: Readable serif for body text
- * ============================================================================= */
-@import "@fontsource/playfair-display/400.css";
-@import "@fontsource/playfair-display/600.css";
-@import "@fontsource/playfair-display/700.css";
-@import "@fontsource/source-serif-pro/400.css";
-@import "@fontsource/source-serif-pro/600.css";
-@import "@fontsource/source-serif-pro/700.css";

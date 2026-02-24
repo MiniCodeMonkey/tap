@@ -20,6 +20,11 @@
 @import "./lib/themes/ink.css";
 @import "./lib/themes/bauhaus.css";
 @import "./lib/themes/editorial.css";
+@import "./lib/themes/signal.css";
+@import "./lib/themes/carbon.css";
+@import "./lib/themes/spectrum.css";
+@import "./lib/themes/mono.css";
+@import "./lib/themes/flux.css";
 
 /* Layout typography styles */
 @import "./lib/styles/layouts.css";

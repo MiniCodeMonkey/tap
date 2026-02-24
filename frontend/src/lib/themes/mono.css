@@ -1,0 +1,642 @@
+/**
+ * Mono Theme
+ *
+ * Ultra-minimal, weight-contrast design. Pure white canvas with pure black
+ * text, a single blue accent used sparingly, and extreme typographic weight
+ * variation that creates visual hierarchy through contrast alone.
+ *
+ * Design philosophy:
+ * - Pure white background, pure black text — no noise, no gradients
+ * - Single accent color (#2563eb blue) applied only where it counts
+ * - Outfit for display/body with extreme weight range (300 thin → 900 black)
+ * - JetBrains Mono for all code, also used for eyebrow/attribution labels
+ * - Sharp geometry: 2px radius on code, chevron markers, arrow decorators
+ */
+
+/* ============================================================================
+ * Section 1: Root .theme-mono with CSS variables
+ * ============================================================================ */
+
+.theme-mono {
+  /* Core colors - pure white with pure black */
+  --color-bg: #ffffff;
+  --color-text: #000000;
+  --color-muted: rgba(0, 0, 0, 0.45);
+  --color-accent: #2563eb;
+  --color-code-bg: #09090b;
+
+  /* Extended colors */
+  --color-border: rgba(0, 0, 0, 0.1);
+  --color-surface: #fafafa;
+  --color-surface-elevated: #f4f4f4;
+  --color-link: #2563eb;
+  --color-code-text: #d4d4d8;
+
+  /* Mono theme accent variations */
+  --mono-blue: #2563eb;
+  --mono-blue-muted: rgba(37, 99, 235, 0.5);
+  --mono-blue-subtle: rgba(37, 99, 235, 0.12);
+  --mono-black: #000000;
+  --mono-near-black: #111111;
+  --mono-dark-gray: #333333;
+  --mono-mid-gray: #666666;
+  --mono-light-gray: #e5e5e5;
+  --mono-off-white: #f8f8f8;
+
+  /* Error colors */
+  --color-error: #dc2626;
+  --color-error-bg: rgba(220, 38, 38, 0.08);
+
+  /* Typography - Outfit for display + body with wide weight range */
+  --font-sans: 'Outfit', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+    'Helvetica Neue', Arial, sans-serif;
+  --font-display: 'Outfit', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+    'Helvetica Neue', Arial, sans-serif;
+  --font-mono: 'JetBrains Mono', 'SF Mono', Monaco, 'Cascadia Code', Consolas,
+    'Liberation Mono', Menlo, monospace;
+
+  /* Transitions - crisp and fast */
+  --transition-duration: 200ms;
+  --transition-timing: cubic-bezier(0.4, 0, 0.2, 1);
+  --fragment-duration: 200ms;
+
+  /* Apply base styles */
+  font-family: var(--font-sans);
+  color: var(--color-text);
+  letter-spacing: -0.01em;
+  line-height: 1.6;
+
+  /* Pure white — no texture, no noise, no gradient */
+  background-color: var(--color-bg);
+}
+
+/* ============================================================================
+ * Section 2: Typography (h1–h6, p, li)
+ * ============================================================================ */
+
+.theme-mono h1,
+.theme-mono h2,
+.theme-mono h3,
+.theme-mono h4,
+.theme-mono h5,
+.theme-mono h6 {
+  font-family: var(--font-display);
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+  margin: 0;
+  color: var(--mono-black);
+}
+
+/* h1: maximum weight — structural anchor */
+.theme-mono h1 {
+  font-weight: 900;
+  letter-spacing: -0.03em;
+}
+
+/* h2: strong but not maximum */
+.theme-mono h2 {
+  font-weight: 700;
+  letter-spacing: -0.025em;
+}
+
+/* h3: deliberate mid-weight break */
+.theme-mono h3 {
+  font-size: 2rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+/* h4: thin — extreme weight contrast within the hierarchy */
+.theme-mono h4 {
+  font-size: 1.5rem;
+  font-weight: 300;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--mono-dark-gray);
+}
+
+/* h5: thin + mono feel */
+.theme-mono h5 {
+  font-size: 1.15rem;
+  font-weight: 300;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--mono-mid-gray);
+}
+
+/* h6: mono smallest label */
+.theme-mono h6 {
+  font-size: 0.9rem;
+  font-weight: 400;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--mono-mid-gray);
+}
+
+/* Body text and list items: clean 400 weight */
+.theme-mono p,
+.theme-mono li {
+  font-family: var(--font-sans);
+  font-weight: 400;
+  letter-spacing: -0.01em;
+  line-height: 1.65;
+}
+
+/* ============================================================================
+ * Section 3: Element styles
+ * ============================================================================ */
+
+/* --- Code: inline code stays light, code blocks go dark --- */
+.theme-mono code {
+  font-family: var(--font-mono);
+  background-color: var(--mono-off-white);
+  color: var(--mono-near-black);
+  padding: 0.15em 0.45em;
+  border-radius: 2px;
+  font-size: 0.875em;
+  font-weight: 400;
+  border: 1px solid var(--color-border);
+}
+
+.theme-mono pre {
+  font-family: var(--font-mono);
+  background-color: var(--color-code-bg);
+  color: var(--color-code-text);
+  padding: 1.75em 2em;
+  border-radius: 2px;
+  overflow-x: auto;
+  line-height: 1.6;
+  border: 1px solid var(--color-border);
+}
+
+.theme-mono pre code {
+  background: none;
+  padding: 0;
+  border-radius: 0;
+  font-size: inherit;
+  border: none;
+  color: inherit;
+}
+
+/* --- Links: clean underline on hover --- */
+.theme-mono a {
+  color: var(--color-link);
+  text-decoration: none;
+  border-bottom: 1px solid var(--mono-blue-subtle);
+  transition:
+    border-color var(--transition-duration) var(--transition-timing),
+    color var(--transition-duration) var(--transition-timing);
+}
+
+.theme-mono a:hover {
+  border-bottom-color: var(--mono-blue-muted);
+}
+
+/* --- Lists: chevron › markers --- */
+.theme-mono ul,
+.theme-mono ol {
+  padding-left: 1.75em;
+  margin: 0;
+}
+
+.theme-mono li {
+  margin-bottom: 0.55em;
+  padding-left: 0.2em;
+}
+
+.theme-mono li:last-child {
+  margin-bottom: 0;
+}
+
+.theme-mono ul li::marker {
+  content: '› ';
+  color: var(--mono-blue);
+  font-size: 1.1em;
+  font-weight: 700;
+}
+
+.theme-mono ol li::marker {
+  color: var(--mono-blue);
+  font-family: var(--font-mono);
+  font-weight: 400;
+  font-size: 0.9em;
+}
+
+/* Nested lists */
+.theme-mono ul ul,
+.theme-mono ol ol,
+.theme-mono ul ol,
+.theme-mono ol ul {
+  margin-top: 0.4em;
+  margin-bottom: 0;
+}
+
+/* --- Blockquote: oversized " in light gray #e5e5e5 --- */
+.theme-mono blockquote {
+  border-left: none;
+  padding: 1.25em 1.5em 1.25em 2em;
+  margin: 0;
+  font-style: italic;
+  color: var(--mono-dark-gray);
+  position: relative;
+}
+
+.theme-mono blockquote::before {
+  content: '"';
+  position: absolute;
+  top: -0.15em;
+  left: -0.05em;
+  font-family: var(--font-display);
+  font-size: 5em;
+  font-weight: 900;
+  color: var(--mono-light-gray);
+  line-height: 1;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.theme-mono blockquote p {
+  position: relative;
+  z-index: 1;
+  font-size: 1.1em;
+  line-height: 1.55;
+}
+
+/* --- Table: minimal, hairline borders --- */
+.theme-mono table {
+  width: 100%;
+  border-collapse: collapse;
+  background: transparent;
+}
+
+.theme-mono th,
+.theme-mono td {
+  padding: 0.875em 1.25em;
+  text-align: left;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.theme-mono th {
+  font-family: var(--font-mono);
+  font-weight: 400;
+  font-size: 0.8em;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--mono-mid-gray);
+  border-bottom: 2px solid var(--mono-black);
+}
+
+.theme-mono tr:last-child td {
+  border-bottom: none;
+}
+
+.theme-mono tr:hover td {
+  background-color: rgba(0, 0, 0, 0.02);
+}
+
+/* --- Images --- */
+.theme-mono img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 2px;
+}
+
+/* --- Strong/bold at weight 700 --- */
+.theme-mono strong,
+.theme-mono b {
+  font-weight: 700;
+  color: var(--mono-black);
+}
+
+/* --- Em/italic --- */
+.theme-mono em,
+.theme-mono i {
+  font-style: italic;
+  color: var(--mono-dark-gray);
+}
+
+/* --- HR: thin 1px line --- */
+.theme-mono hr {
+  border: none;
+  height: 1px;
+  background-color: var(--color-border);
+  margin: 2.5em 0;
+}
+
+/* ============================================================================
+ * Section 4: Fragment animation — translateX(-15px), 200ms
+ * ============================================================================ */
+
+.theme-mono .fragment {
+  transition:
+    opacity var(--fragment-duration) var(--transition-timing),
+    transform var(--fragment-duration) var(--transition-timing);
+}
+
+.theme-mono .fragment-hidden {
+  opacity: 0;
+  transform: translateX(-15px);
+}
+
+.theme-mono .fragment-visible {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+/* ============================================================================
+ * Section 5: Selection styles — blue
+ * ============================================================================ */
+
+.theme-mono ::selection {
+  background-color: var(--mono-blue);
+  color: #ffffff;
+}
+
+/* ============================================================================
+ * Section 6: Layout-specific styles
+ * ============================================================================ */
+
+/* --- .layout-title: left-aligned, weight contrast, bottom separator + arrow --- */
+
+.theme-mono .layout-title {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  text-align: left;
+  position: relative;
+}
+
+/* Override base layout centering */
+.theme-mono .layout-title .slide-content {
+  align-items: flex-start;
+}
+
+/* Tag: eyebrow label above title — // prefix feel, blue accent */
+.theme-mono .layout-title[data-tag]::before {
+  content: attr(data-tag);
+  position: static;
+  transform: none;
+  font-family: var(--font-mono);
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--color-accent);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  margin-bottom: 1rem;
+}
+
+/* Badge: intentionally omitted */
+
+/* h1: thin base weight — bold/strong creates the extreme weight contrast */
+.theme-mono .layout-title h1 {
+  font-size: clamp(3.5rem, 9vw, 8rem);
+  font-weight: 300;
+  letter-spacing: -0.06em;
+  text-transform: uppercase;
+  line-height: 0.92;
+  position: relative;
+  padding-bottom: 1.5rem;
+  margin-bottom: 0;
+  border-bottom: 2px solid var(--mono-black);
+  width: 100%;
+}
+
+/* Bold text within title gets maximum weight — the core mono contrast */
+.theme-mono .layout-title h1 strong,
+.theme-mono .layout-title h1 b {
+  font-weight: 900;
+  color: inherit;
+  display: block;
+}
+
+/* No inline arrow on h1 */
+.theme-mono .layout-title h1::after {
+  display: none;
+}
+
+/* First paragraph: subtitle row with arrow on the right */
+.theme-mono .layout-title p:first-of-type {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  max-width: none;
+  font-size: clamp(1rem, 2.5vw, 1.4rem);
+  font-weight: 400;
+  color: var(--color-muted);
+  letter-spacing: 0;
+  margin-top: 1rem;
+  line-height: 1.4;
+}
+
+/* Arrow on first subtitle paragraph — only appears in title layout */
+.theme-mono .layout-title p:first-of-type::after {
+  content: '→';
+  color: var(--mono-blue);
+  font-size: 1.6rem;
+  font-weight: 300;
+  flex-shrink: 0;
+  margin-left: 2rem;
+}
+
+/* Subsequent paragraphs: quieter, smaller muted text */
+.theme-mono .layout-title p:not(:first-of-type) {
+  font-size: clamp(0.9rem, 2vw, 1.2rem);
+  font-weight: 400;
+  color: var(--color-muted);
+  margin-top: 0.5rem;
+  letter-spacing: 0;
+  line-height: 1.4;
+  max-width: none;
+}
+
+/* --- .layout-section: minimal with blue accent dot --- */
+
+.theme-mono .layout-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.theme-mono .layout-section h2 {
+  font-size: clamp(2.75rem, 7vw, 5.5rem);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  position: relative;
+  padding-bottom: 1.75rem;
+}
+
+/* Horizontal rule that extends from the heading text */
+.theme-mono .layout-section h2::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 100%;
+  height: 1px;
+  background-color: var(--color-border);
+}
+
+/* Blue accent dot */
+.theme-mono .layout-section h2::before {
+  content: '';
+  display: block;
+  width: 8px;
+  height: 8px;
+  background-color: var(--mono-blue);
+  border-radius: 50%;
+  margin: 0 auto 1.25rem;
+}
+
+.theme-mono .layout-section p {
+  font-size: 1.25rem;
+  font-weight: 300;
+  color: var(--color-muted);
+  letter-spacing: 0.02em;
+  margin-top: 1.5rem;
+  max-width: 70%;
+}
+
+/* --- .layout-big-stat: ultra-bold numbers, weight 900 --- */
+
+.theme-mono .layout-big-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.theme-mono .layout-big-stat h2 {
+  font-size: clamp(7rem, 18vw, 15rem);
+  font-weight: 900;
+  letter-spacing: -0.04em;
+  line-height: 0.9;
+  color: var(--mono-black);
+}
+
+.theme-mono .layout-big-stat p {
+  font-family: var(--font-mono);
+  font-size: clamp(0.85rem, 1.5vw, 1.1rem);
+  font-weight: 400;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--color-muted);
+  margin-top: 1.25rem;
+}
+
+/* --- .layout-quote: oversized " in light gray, centered --- */
+
+.theme-mono .layout-quote {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  padding: 4rem;
+}
+
+.theme-mono .layout-quote blockquote {
+  border-left: none;
+  background: none;
+  max-width: 82%;
+  padding: 2rem 0;
+  position: relative;
+}
+
+/* Oversized opening quote mark in light gray */
+.theme-mono .layout-quote blockquote::before {
+  content: '"';
+  position: absolute;
+  top: -0.4em;
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: var(--font-display);
+  font-size: 10rem;
+  font-weight: 900;
+  color: var(--mono-light-gray);
+  line-height: 1;
+  z-index: 0;
+  pointer-events: none;
+  user-select: none;
+}
+
+.theme-mono .layout-quote blockquote p {
+  font-size: clamp(1.6rem, 3.5vw, 2.75rem);
+  font-weight: 300;
+  font-style: normal;
+  letter-spacing: -0.01em;
+  line-height: 1.45;
+  color: var(--mono-black);
+  position: relative;
+  z-index: 1;
+}
+
+/* Attribution: mono uppercase */
+.theme-mono .layout-quote p:not(blockquote p),
+.theme-mono .layout-quote cite {
+  font-family: var(--font-mono);
+  font-style: normal;
+  font-size: 0.9rem;
+  font-weight: 400;
+  color: var(--color-muted);
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  margin-top: 1.5rem;
+}
+
+/* --- .layout-two-column: thin line divider --- */
+
+.theme-mono .layout-two-column {
+  gap: 4rem;
+  position: relative;
+}
+
+/* Thin center divider line */
+.theme-mono .layout-two-column::before {
+  content: '';
+  position: absolute;
+  top: 5%;
+  bottom: 5%;
+  left: 50%;
+  width: 1px;
+  background-color: var(--color-border);
+  transform: translateX(-50%);
+}
+
+.theme-mono .layout-two-column > *:first-child {
+  padding-right: 2rem;
+}
+
+.theme-mono .layout-two-column > *:last-child {
+  padding-left: 2rem;
+}
+
+.theme-mono .layout-two-column h3 {
+  font-weight: 700;
+  font-size: 1.5rem;
+  letter-spacing: -0.01em;
+  color: var(--mono-black);
+  margin-bottom: 0.85em;
+  padding-bottom: 0.6em;
+  border-bottom: 2px solid var(--mono-black);
+}
+
+/* ============================================================================
+ * Section 7: Reduced motion
+ * ============================================================================ */
+
+@media (prefers-reduced-motion: reduce) {
+  .theme-mono {
+    --transition-duration: 0ms;
+    --fragment-duration: 0ms;
+  }
+
+  .theme-mono .fragment {
+    transition: none;
+  }
+}

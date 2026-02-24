@@ -531,6 +531,8 @@
 	<div
 		class="slide-renderer {layoutClass} w-full h-full relative overflow-hidden {hasBlockFragments || hasInlineFragments ? 'has-fragments' : ''} {isFullBleed ? '' : 'p-slide'} {hasScrollReveal ? 'scroll-enabled' : ''} {hasMap ? 'has-map' : ''}"
 		style={backgroundStyles}
+		data-tag={slide.tag ?? undefined}
+		data-badge={slide.badge ?? undefined}
 		in:getTransition
 		out:getTransition
 	>

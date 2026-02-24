@@ -4,7 +4,7 @@ title: Themes
 
 # Themes
 
-Themes control the visual appearance of your presentation, including typography, colors, animations, and transitions. Tap comes with eight built-in themes designed for different presentation styles, ranging from clean professional looks to bold artistic expressions.
+Themes control the visual appearance of your presentation, including typography, colors, animations, and transitions. Tap comes with thirteen built-in themes designed for different presentation styles, ranging from clean professional looks to bold artistic expressions.
 
 ## Setting a Theme
 
@@ -193,6 +193,119 @@ theme: editorial
 - Fine hairline rules (1px borders)
 - Large quotation marks for pull quotes
 
+### Signal
+
+![Signal theme preview](/images/themes/theme-signal.png)
+
+Developer-first aesthetic inspired by Vercel and Nuxt, with neon green accents and metadata-rich layouts.
+
+```yaml
+---
+theme: signal
+---
+```
+
+**Best for:** Developer conferences, technical talks, API showcases, open-source project presentations.
+
+**Characteristics:**
+- Near-white background (#fafafa) with pure black text
+- Neon green accent (#00dc82) for emphasis
+- Instrument Sans typography throughout
+- True black code blocks (#0a0a0a) with green highlights
+- Hairline border list separators instead of bullets
+- Tag/badge directive support for metadata display
+
+### Carbon
+
+![Carbon theme preview](/images/themes/theme-carbon.png)
+
+IBM Carbon design system aesthetic with sharp corners, systematic spacing, and red accent marks.
+
+```yaml
+---
+theme: carbon
+---
+```
+
+**Best for:** Enterprise presentations, design system talks, IBM-aligned events, data-heavy slides.
+
+**Characteristics:**
+- Pure white background with IBM design language
+- Sharp 0-radius corners throughout
+- Carbon red accent (#da1e28)
+- IBM Plex Sans and IBM Plex Mono typography
+- Inverted title slides (dark background, red top bar)
+- Numbered list items in monospace (01, 02, 03...)
+
+### Spectrum
+
+![Spectrum theme preview](/images/themes/theme-spectrum.png)
+
+Gradient-forward modern SaaS design with indigo-to-pink spectrum accents and card-style layouts.
+
+```yaml
+---
+theme: spectrum
+---
+```
+
+**Best for:** SaaS product launches, startup pitches, marketing presentations, modern brand talks.
+
+**Characteristics:**
+- Off-white background (#fcfcfd) with dark text
+- Indigo-purple-pink gradient accent
+- Sora geometric sans-serif typography
+- Fira Code for code blocks with ligature support
+- 14px rounded corners throughout
+- Gradient text on title headings
+- Card-style list items with gradient number badges
+
+### Mono
+
+![Mono theme preview](/images/themes/theme-mono.png)
+
+Ultra-minimal design driven entirely by typography weight contrast, from thin 300 to black 900.
+
+```yaml
+---
+theme: mono
+---
+```
+
+**Best for:** Design talks, typography discussions, minimal presentations, academic lectures.
+
+**Characteristics:**
+- Pure white background with pure black text
+- Single blue accent (#2563eb) used sparingly
+- Outfit font with extreme weight range (300–900)
+- Weight contrast as the primary design tool
+- Chevron (›) list markers
+- Sharp 2px radius code blocks
+- Arrow (→) element on title slides
+
+### Flux
+
+![Flux theme preview](/images/themes/theme-flux.png)
+
+Polished SaaS product feel with warm tones, indigo accents, and interface-inspired design patterns.
+
+```yaml
+---
+theme: flux
+---
+```
+
+**Best for:** Product demos, SaaS presentations, team updates, feature announcements.
+
+**Characteristics:**
+- Warm off-white background (#fafaf9)
+- Indigo accent (#4f46e5) for interactive elements
+- Plus Jakarta Sans with friendly character
+- Filled-circle (●) bullet markers
+- 12px rounded code blocks with dot-separated labels
+- Chip tag badges on title slides
+- Italic emphasis in accent color
+
 ## What Themes Control
 
 Each theme defines:
@@ -218,6 +331,11 @@ Each theme defines:
 | `ink` | Zen, calligraphy | Cream (#f5f1e8) | Noto Serif JP |
 | `bauhaus` | Geometric modernism | White (#ffffff) | Bebas Neue |
 | `editorial` | Magazine publishing | White (#ffffff) | Playfair Display + Source Serif Pro |
+| `signal` | Developer, metadata-rich | Near-white (#fafafa) | Instrument Sans |
+| `carbon` | IBM design system | White (#ffffff) | IBM Plex Sans + IBM Plex Mono |
+| `spectrum` | Gradient SaaS | Off-white (#fcfcfd) | Sora + Fira Code |
+| `mono` | Ultra-minimal typography | White (#ffffff) | Outfit |
+| `flux` | Polished SaaS product | Warm off-white (#fafaf9) | Plus Jakarta Sans |
 
 ## Customizing Themes
 
