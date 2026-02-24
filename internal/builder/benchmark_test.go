@@ -4,11 +4,13 @@ import (
 	"bytes"
 	"fmt"
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/MiniCodeMonkey/tap/internal/config"
 	"github.com/MiniCodeMonkey/tap/internal/parser"
+	"github.com/MiniCodeMonkey/tap/internal/transformer"
 )
 
 // generateBenchmarkPresentation creates a presentation with the specified number of slides.
@@ -219,12 +221,19 @@ func BenchmarkTransformOnly(b *testing.B) {
 
 // BenchmarkGenerateIndexHTML benchmarks HTML generation.
 func BenchmarkGenerateIndexHTML(b *testing.B) {
-	content, _ := generateBenchmarkPresentation(50)
-	presJSON := string(content) // Use content as mock JSON for simplicity
+	tmpDir := b.TempDir()
+	builder := NewWithOutput(tmpDir)
+	pres := &transformer.TransformedPresentation{
+		Config: config.Config{Title: "Test Title"},
+		Slides: []transformer.TransformedSlide{
+			{HTML: "<h1>Slide</h1>"},
+		},
+	}
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_ = generateStaticHTML("Test Title", presJSON)
+		path := filepath.Join(tmpDir, fmt.Sprintf("index-%d.html", i))
+		_, _ = builder.generateIndexHTML(path, pres)
 	}
 }
 

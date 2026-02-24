@@ -63,9 +63,8 @@ func (b *Builder) OutputDir() string {
 }
 
 // Build generates static files for the given presentation.
-// It creates index.html with embedded presentation JSON,
-// copies referenced images to assets/ with content hashes,
-// and rewrites image paths in the HTML.
+// It copies the embedded Vite-built frontend (JS, CSS, fonts) and creates
+// an index.html with the presentation JSON embedded, so themes render correctly.
 func (b *Builder) Build(cfg *config.Config, pres *parser.Presentation) (*BuildResult, error) {
 	startTime := time.Now()
 	result := &BuildResult{
@@ -81,6 +80,14 @@ func (b *Builder) Build(cfg *config.Config, pres *parser.Presentation) (*BuildRe
 	if err := os.MkdirAll(assetsDir, 0755); err != nil {
 		return nil, fmt.Errorf("failed to create assets directory: %w", err)
 	}
+
+	// Copy embedded frontend assets (JS, CSS, fonts) for proper theme rendering
+	assetCount, assetSize, err := b.CopyEmbeddedAssets()
+	if err != nil {
+		return nil, fmt.Errorf("failed to copy frontend assets: %w", err)
+	}
+	result.FileCount += assetCount
+	result.TotalSize += assetSize
 
 	// Transform presentation to frontend-ready format
 	trans := transformer.NewWithBaseDir(cfg, b.baseDir)
@@ -101,10 +108,17 @@ func (b *Builder) Build(cfg *config.Config, pres *parser.Presentation) (*BuildRe
 				continue
 			}
 
-			// Resolve the image path
-			sourcePath := imgPath
-			if !filepath.IsAbs(imgPath) && b.baseDir != "" {
-				sourcePath = filepath.Join(b.baseDir, imgPath)
+			// Resolve the image path.
+			// The transformer converts relative paths to /local/... URLs for the dev server.
+			// Strip this prefix to resolve the actual file path on disk.
+			resolvedPath := imgPath
+			if strings.HasPrefix(resolvedPath, "/local/") {
+				resolvedPath = strings.TrimPrefix(resolvedPath, "/local/")
+			}
+
+			sourcePath := resolvedPath
+			if !filepath.IsAbs(resolvedPath) && b.baseDir != "" {
+				sourcePath = filepath.Join(b.baseDir, resolvedPath)
 			}
 
 			// Copy the image with content hash
@@ -258,7 +272,8 @@ func (b *Builder) CopyEmbeddedAssets() (int, int64, error) {
 }
 
 
-// generateIndexHTML creates the index.html file with embedded presentation JSON.
+// generateIndexHTML creates the index.html file by injecting presentation JSON
+// into the real Vite-built frontend template, so all themes, fonts, and styles work.
 func (b *Builder) generateIndexHTML(path string, pres *transformer.TransformedPresentation) (int64, error) {
 	// Serialize presentation to JSON
 	presJSON, err := json.Marshal(pres)
@@ -266,8 +281,23 @@ func (b *Builder) generateIndexHTML(path string, pres *transformer.TransformedPr
 		return 0, fmt.Errorf("failed to marshal presentation: %w", err)
 	}
 
-	// Generate HTML with embedded JSON
-	html := generateStaticHTML(pres.Config.Title, string(presJSON))
+	// Read the embedded index.html template from the Vite build
+	templateHTML, err := embedded.GetIndexHTML()
+	if err != nil {
+		return 0, fmt.Errorf("failed to read embedded index.html: %w", err)
+	}
+
+	// Set the title
+	title := pres.Config.Title
+	if title == "" {
+		title = "Tap Presentation"
+	}
+	html := strings.Replace(string(templateHTML), "<title>Tap Presentation</title>", "<title>"+title+"</title>", 1)
+
+	// Inject embedded presentation JSON before the closing </body> tag.
+	// The Svelte App.svelte checks for this element and uses it instead of fetching /api/presentation.
+	dataScript := fmt.Sprintf(`<script id="presentation-data" type="application/json">%s</script>`, string(presJSON))
+	html = strings.Replace(html, "</body>", dataScript+"\n</body>", 1)
 
 	// Write to file
 	if err := os.WriteFile(path, []byte(html), 0644); err != nil {
@@ -275,159 +305,4 @@ func (b *Builder) generateIndexHTML(path string, pres *transformer.TransformedPr
 	}
 
 	return int64(len(html)), nil
-}
-
-// generateStaticHTML creates the HTML shell with embedded presentation JSON.
-func generateStaticHTML(title string, presJSON string) string {
-	if title == "" {
-		title = "Tap Presentation"
-	}
-
-	return fmt.Sprintf(`<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>%s</title>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-        html, body {
-            width: 100%%;
-            height: 100%%;
-            overflow: hidden;
-            background: #000;
-        }
-        .slide-container {
-            width: 100%%;
-            height: 100%%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-        .slide {
-            width: 100%%;
-            max-width: 1920px;
-            aspect-ratio: 16 / 9;
-            background: #fff;
-            padding: 4rem;
-            overflow: hidden;
-        }
-        .slide h1 { font-size: 4rem; margin-bottom: 1rem; }
-        .slide h2 { font-size: 3rem; margin-bottom: 0.75rem; }
-        .slide h3 { font-size: 2rem; margin-bottom: 0.5rem; }
-        .slide p { font-size: 1.5rem; line-height: 1.6; margin-bottom: 1rem; }
-        .slide ul, .slide ol { font-size: 1.5rem; margin-left: 2rem; margin-bottom: 1rem; }
-        .slide li { margin-bottom: 0.5rem; }
-        .slide pre { background: #1e1e1e; color: #d4d4d4; padding: 1rem; border-radius: 0.5rem; overflow-x: auto; margin-bottom: 1rem; }
-        .slide code { font-family: 'SF Mono', 'Monaco', 'Inconsolata', monospace; font-size: 1.25rem; }
-        .slide img { max-width: 100%%; max-height: 80%%; object-fit: contain; }
-        .slide blockquote { border-left: 4px solid #7C3AED; padding-left: 1.5rem; font-style: italic; font-size: 1.75rem; }
-        .navigation {
-            position: fixed;
-            bottom: 1rem;
-            right: 1rem;
-            display: flex;
-            gap: 0.5rem;
-            z-index: 100;
-        }
-        .navigation button {
-            padding: 0.5rem 1rem;
-            font-size: 1rem;
-            cursor: pointer;
-            border: none;
-            background: rgba(0,0,0,0.5);
-            color: #fff;
-            border-radius: 0.25rem;
-        }
-        .navigation button:hover {
-            background: rgba(0,0,0,0.7);
-        }
-        .slide-counter {
-            position: fixed;
-            bottom: 1rem;
-            left: 1rem;
-            color: rgba(255,255,255,0.7);
-            font-size: 0.875rem;
-            z-index: 100;
-        }
-        .static-mode-notice {
-            display: none;
-            position: fixed;
-            bottom: 4rem;
-            left: 50%%;
-            transform: translateX(-50%%);
-            background: rgba(0,0,0,0.8);
-            color: #fff;
-            padding: 0.5rem 1rem;
-            border-radius: 0.25rem;
-            font-size: 0.875rem;
-            z-index: 100;
-        }
-        .code-block-static .static-mode-notice {
-            display: block;
-        }
-    </style>
-</head>
-<body>
-    <div class="slide-container">
-        <div class="slide" id="slide-content"></div>
-    </div>
-    <div class="navigation">
-        <button onclick="prevSlide()">← Prev</button>
-        <button onclick="nextSlide()">Next →</button>
-    </div>
-    <div class="slide-counter" id="slide-counter"></div>
-
-    <script id="presentation-data" type="application/json">%s</script>
-    <script>
-        const data = JSON.parse(document.getElementById('presentation-data').textContent);
-        let currentSlide = parseInt(location.hash.slice(1)) || 0;
-
-        function render() {
-            const slide = data.slides[currentSlide];
-            if (!slide) return;
-            document.getElementById('slide-content').innerHTML = slide.html;
-            document.getElementById('slide-counter').textContent =
-                (currentSlide + 1) + ' / ' + data.slides.length;
-            location.hash = currentSlide;
-        }
-
-        function nextSlide() {
-            if (currentSlide < data.slides.length - 1) {
-                currentSlide++;
-                render();
-            }
-        }
-
-        function prevSlide() {
-            if (currentSlide > 0) {
-                currentSlide--;
-                render();
-            }
-        }
-
-        document.addEventListener('keydown', (e) => {
-            if (e.key === 'ArrowRight' || e.key === ' ') nextSlide();
-            if (e.key === 'ArrowLeft') prevSlide();
-            if (e.key === 'Home') { currentSlide = 0; render(); }
-            if (e.key === 'End') { currentSlide = data.slides.length - 1; render(); }
-        });
-
-        window.addEventListener('hashchange', () => {
-            const hash = parseInt(location.hash.slice(1));
-            if (!isNaN(hash) && hash >= 0 && hash < data.slides.length) {
-                currentSlide = hash;
-                render();
-            }
-        });
-
-        render();
-    </script>
-</body>
-</html>
-`, title, presJSON)
 }
