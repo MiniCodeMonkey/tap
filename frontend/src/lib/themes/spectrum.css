@@ -211,68 +211,52 @@
 
 .theme-spectrum li {
   position: relative;
-  margin-bottom: 0.75em;
-  padding-left: 0;
+  margin-bottom: 0.5em;
+  padding-left: 1.25em;
 }
 
-/* Unordered list items — card-style with gradient dot */
-.theme-spectrum ul > li {
-  display: flex;
-  align-items: flex-start;
-  gap: 0.75em;
-  background-color: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: 10px;
-  padding: 0.65em 1em;
-  box-shadow: var(--spectrum-surface-shadow);
-}
-
+/* Unordered list items — gradient dot bullet */
 .theme-spectrum ul > li::before {
   content: '';
-  flex-shrink: 0;
+  position: absolute;
+  left: 0;
+  top: 0.55em;
   width: 8px;
   height: 8px;
   border-radius: 50%;
   background: var(--gradient-primary);
-  margin-top: 0.42em;
 }
 
-/* Ordered list items — card-style with gradient number badges */
+/* Ordered list items — gradient number with left border */
 .theme-spectrum ol {
   counter-reset: spectrum-counter;
 }
 
 .theme-spectrum ol > li {
   counter-increment: spectrum-counter;
-  display: flex;
-  align-items: flex-start;
-  gap: 0.85em;
-  background-color: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: 10px;
-  padding: 0.65em 1em;
-  box-shadow: var(--spectrum-surface-shadow);
+  padding-left: 1.75em;
 }
 
 .theme-spectrum ol > li::before {
   content: counter(spectrum-counter);
-  flex-shrink: 0;
+  position: absolute;
+  left: 0;
+  top: 0.15em;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 1.6em;
-  height: 1.6em;
+  width: 1.5em;
+  height: 1.5em;
   border-radius: 50%;
   background: var(--gradient-primary);
   color: #ffffff;
   font-family: var(--font-sans);
-  font-size: 0.75em;
+  font-size: 0.7em;
   font-weight: 700;
   line-height: 1;
-  margin-top: 0.1em;
 }
 
-/* Nested lists — no card style, simpler */
+/* Nested lists */
 .theme-spectrum ul ul,
 .theme-spectrum ol ol,
 .theme-spectrum ul ol,
@@ -285,11 +269,13 @@
 .theme-spectrum ol ol > li,
 .theme-spectrum ul ol > li,
 .theme-spectrum ol ul > li {
-  background: none;
-  border: none;
-  border-radius: 0;
   padding: 0.2em 0;
-  box-shadow: none;
+}
+
+.theme-spectrum ul ul > li::before {
+  width: 5px;
+  height: 5px;
+  background: var(--color-muted);
 }
 
 /* --- Blockquote --- */
