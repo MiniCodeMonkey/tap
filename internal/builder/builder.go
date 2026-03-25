@@ -134,10 +134,44 @@ func (b *Builder) Build(cfg *config.Config, pres *parser.Presentation) (*BuildRe
 		}
 	}
 
-	// Rewrite image paths in transformed slides
+	// Find and copy all referenced .cast files for asciinema blocks
+	for i := range transformed.Slides {
+		slide := &transformed.Slides[i]
+		castPaths := extractAsciinemaPaths(slide.HTML)
+		for _, castPath := range castPaths {
+			if _, exists := pathMapping[castPath]; exists {
+				continue
+			}
+			if isAbsoluteURL(castPath) {
+				continue
+			}
+
+			resolvedPath := castPath
+			if strings.HasPrefix(resolvedPath, "/local/") {
+				resolvedPath = strings.TrimPrefix(resolvedPath, "/local/")
+			}
+
+			sourcePath := resolvedPath
+			if !filepath.IsAbs(resolvedPath) && b.baseDir != "" {
+				sourcePath = filepath.Join(b.baseDir, resolvedPath)
+			}
+
+			hashedPath, size, err := b.copyWithHash(sourcePath, assetsDir)
+			if err != nil {
+				continue
+			}
+
+			pathMapping[castPath] = hashedPath
+			result.TotalSize += size
+			result.FileCount++
+		}
+	}
+
+	// Rewrite image and asciinema paths in transformed slides
 	for i := range transformed.Slides {
 		slide := &transformed.Slides[i]
 		slide.HTML = rewriteImagePaths(slide.HTML, pathMapping)
+		slide.HTML = rewriteAsciinemaPaths(slide.HTML, pathMapping)
 	}
 
 	// Generate index.html with embedded presentation JSON
@@ -155,6 +189,12 @@ func (b *Builder) Build(cfg *config.Config, pres *parser.Presentation) (*BuildRe
 
 // imgSrcPattern matches img src attributes in HTML.
 var imgSrcPattern = regexp.MustCompile(`(<img\s[^>]*src=["'])([^"']+)(["'][^>]*>)`)
+
+// asciinemaBlockPattern matches asciinema code blocks and captures the content.
+var asciinemaBlockPattern = regexp.MustCompile(`<code class="language-asciinema">([\s\S]*?)</code>`)
+
+// ascinemaSrcPattern matches "src: path" lines in asciinema block content.
+var ascinemaSrcPattern = regexp.MustCompile(`(?m)^src:\s*(?:&quot;|"|')?([^"'&\n]+)(?:&quot;|"|')?$`)
 
 // extractImagePaths finds all image src attributes in HTML.
 func extractImagePaths(html string) []string {
@@ -221,6 +261,47 @@ func (b *Builder) copyWithHash(sourcePath, destDir string) (string, int64, error
 	// Return relative path from output directory
 	relPath := filepath.Join("assets", hashedName)
 	return relPath, int64(len(content)), nil
+}
+
+// extractAsciinemaPaths finds all .cast file src paths in asciinema code blocks.
+func extractAsciinemaPaths(html string) []string {
+	var paths []string
+	blocks := asciinemaBlockPattern.FindAllStringSubmatch(html, -1)
+	for _, block := range blocks {
+		if len(block) < 2 {
+			continue
+		}
+		content := block[1]
+		srcMatches := ascinemaSrcPattern.FindStringSubmatch(content)
+		if len(srcMatches) >= 2 {
+			paths = append(paths, strings.TrimSpace(srcMatches[1]))
+		}
+	}
+	return paths
+}
+
+// rewriteAsciinemaPaths replaces .cast file paths in asciinema code block content.
+func rewriteAsciinemaPaths(html string, pathMapping map[string]string) string {
+	return asciinemaBlockPattern.ReplaceAllStringFunc(html, func(match string) string {
+		submatches := asciinemaBlockPattern.FindStringSubmatch(match)
+		if len(submatches) < 2 {
+			return match
+		}
+		content := submatches[1]
+		// Replace src paths in the content
+		newContent := ascinemaSrcPattern.ReplaceAllStringFunc(content, func(srcLine string) string {
+			srcMatches := ascinemaSrcPattern.FindStringSubmatch(srcLine)
+			if len(srcMatches) < 2 {
+				return srcLine
+			}
+			oldPath := strings.TrimSpace(srcMatches[1])
+			if newPath, exists := pathMapping[oldPath]; exists {
+				return "src: " + newPath
+			}
+			return srcLine
+		})
+		return `<code class="language-asciinema">` + newContent + `</code>`
+	})
 }
 
 // isAbsoluteURL checks if the path is an absolute URL (http:// or https://).

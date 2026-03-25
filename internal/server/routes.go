@@ -266,6 +266,8 @@ func getContentType(filePath string) string {
 		return "font/ttf"
 	case ".eot":
 		return "application/vnd.ms-fontobject"
+	case ".cast":
+		return "application/json; charset=utf-8"
 	default:
 		return "application/octet-stream"
 	}

@@ -205,6 +205,9 @@ func (p *Parser) Parse(content []byte) (*Presentation, error) {
 		// Pre-process images with attributes (e.g., {width=50%}) to HTML
 		contentAfterDirectives = transformImageAttributes(contentAfterDirectives)
 
+		// Pre-process asciinema code blocks to move info string meta into body
+		contentAfterDirectives = transformAsciinemaBlocks(contentAfterDirectives)
+
 		// Render markdown to HTML (use content after directives removed)
 		html, err := p.renderHTML([]byte(contentAfterDirectives))
 		if err != nil {
@@ -582,4 +585,40 @@ func transformImageAttributes(content string) string {
 	}
 
 	return content
+}
+
+// asciinemaInfoPattern matches the info string of an asciinema fenced code block.
+// Captures: (1) metadata content inside braces
+// Example: ```asciinema {src: "./demo.cast", autoPlay: true}
+var asciinemaInfoPattern = regexp.MustCompile("(?m)^```asciinema\\s*\\{([^}]*)\\}")
+
+// transformAsciinemaBlocks moves asciinema info string metadata into the code block body.
+// This is needed because goldmark discards everything after the language name in the info string.
+// Transforms: ```asciinema {src: "./demo.cast", autoPlay: true}
+//             ```
+// Into:       ```asciinema
+//             src: ./demo.cast
+//             autoPlay: true
+//             ```
+func transformAsciinemaBlocks(content string) string {
+	return asciinemaInfoPattern.ReplaceAllStringFunc(content, func(match string) string {
+		submatches := asciinemaInfoPattern.FindStringSubmatch(match)
+		if len(submatches) < 2 {
+			return match
+		}
+
+		metaContent := strings.TrimSpace(submatches[1])
+
+		// Parse the YAML-like key: value pairs from the meta
+		var lines []string
+		pairs := strings.Split(metaContent, ",")
+		for _, pair := range pairs {
+			pair = strings.TrimSpace(pair)
+			if pair != "" {
+				lines = append(lines, pair)
+			}
+		}
+
+		return "```asciinema\n" + strings.Join(lines, "\n")
+	})
 }

@@ -65,6 +65,7 @@ export default defineConfig({
             { text: 'Images & Media', link: '/guide/images-media' },
             { text: 'Mermaid Diagrams', link: '/guide/mermaid-diagrams' },
             { text: 'Map Animations', link: '/guide/map-animations' },
+            { text: 'Asciinema Recordings', link: '/guide/asciinema' },
             { text: 'AI Image Generation', link: '/guide/ai-images' },
             { text: 'AI Skills', link: '/guide/ai-skills' },
             { text: 'Building & Export', link: '/guide/building-export' }

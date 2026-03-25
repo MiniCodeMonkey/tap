@@ -3,6 +3,7 @@
 	import { fade, fly, scale } from 'svelte/transition';
 	import { untrack } from 'svelte';
 	import { renderMermaidBlocksInElement } from '$lib/utils/mermaid';
+	import { renderAsciinemaBlocksInElement } from '$lib/utils/asciinema';
 	import { highlightCodeBlocksInElement } from '$lib/utils/highlighting';
 	import { parseMapConfig } from '$lib/utils/map';
 	import {
@@ -339,6 +340,7 @@
 			queueMicrotask(async () => {
 				try {
 					await renderMermaidBlocksInElement(slideContentElement!, theme);
+					await renderAsciinemaBlocksInElement(slideContentElement!);
 					// Pass the theme to highlighting for theme-appropriate Shiki colors
 					await highlightCodeBlocksInElement(slideContentElement!, theme);
 				} catch (err) {

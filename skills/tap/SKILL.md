@@ -83,6 +83,7 @@ This skill includes detailed rules for:
 11. **best-practices** - Presentation design tips
 12. **mermaid** - Mermaid diagram support (flowcharts, sequence, ER, etc.)
 13. **ai-images** - Gemini AI image generation from prompts
+14. **asciinema** - Asciinema terminal recording playback
 
 ## Important Patterns
 

@@ -703,7 +703,7 @@ export async function highlightCodeBlocksInElement(
 ): Promise<void> {
 	// Find all code blocks that need highlighting (skip mermaid)
 	const codeBlocks = element.querySelectorAll<HTMLElement>(
-		'pre > code[class*="language-"]:not(.language-mermaid)'
+		'pre > code[class*="language-"]:not(.language-mermaid):not(.language-asciinema)'
 	);
 
 	if (codeBlocks.length === 0) {

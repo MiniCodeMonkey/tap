@@ -99,6 +99,7 @@ func (t *Transformer) Transform(pres *parser.Presentation) *TransformedPresentat
 func (t *Transformer) transformSlide(slide parser.Slide) TransformedSlide {
 	layout := t.resolveLayout(slide)
 	html := t.resolveImagePaths(slide.HTML)
+	html = t.resolveAsciinemaPaths(html)
 
 	// Process HTML for layouts that use ||| column separator
 	if layout == "two-column" || layout == "split-media" || layout == "sidebar" {
@@ -544,6 +545,46 @@ func (t *Transformer) resolveImagePath(path string) string {
 	cleanPath = strings.TrimPrefix(cleanPath, "./")
 
 	return "/local/" + cleanPath
+}
+
+// asciinemaBlockPattern matches asciinema code blocks and captures the content.
+var asciinemaBlockPattern = regexp.MustCompile(`<code class="language-asciinema">([\s\S]*?)</code>`)
+
+// asciinemaSrcPattern matches "src: path" lines in asciinema block content.
+var asciinemaSrcPattern = regexp.MustCompile(`(?m)^src:\s*(?:&quot;|"|')?([^"'&\n]+)(?:&quot;|"|')?$`)
+
+// resolveAsciinemaPaths processes HTML and resolves .cast file paths in asciinema blocks.
+func (t *Transformer) resolveAsciinemaPaths(html string) string {
+	if t.baseDir == "" {
+		return html
+	}
+
+	return asciinemaBlockPattern.ReplaceAllStringFunc(html, func(match string) string {
+		submatches := asciinemaBlockPattern.FindStringSubmatch(match)
+		if len(submatches) < 2 {
+			return match
+		}
+		content := submatches[1]
+
+		newContent := asciinemaSrcPattern.ReplaceAllStringFunc(content, func(srcLine string) string {
+			srcMatches := asciinemaSrcPattern.FindStringSubmatch(srcLine)
+			if len(srcMatches) < 2 {
+				return srcLine
+			}
+			path := strings.TrimSpace(srcMatches[1])
+
+			if isAbsoluteURL(path) || filepath.IsAbs(path) {
+				return srcLine
+			}
+
+			cleanPath := filepath.Clean(path)
+			cleanPath = strings.ReplaceAll(cleanPath, "\\", "/")
+			cleanPath = strings.TrimPrefix(cleanPath, "./")
+			return "src: /local/" + cleanPath
+		})
+
+		return `<code class="language-asciinema">` + newContent + `</code>`
+	})
 }
 
 // isAbsoluteURL checks if the path is an absolute URL (http:// or https://).
