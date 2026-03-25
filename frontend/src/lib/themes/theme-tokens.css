@@ -55,3 +55,8 @@
   --content-gap: 2rem;
   --column-gap: 3rem;
 }
+
+/* Code blocks must always be left-aligned, even inside centered layouts */
+pre {
+  text-align: left;
+}
