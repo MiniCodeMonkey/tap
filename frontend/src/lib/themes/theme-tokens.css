@@ -56,7 +56,10 @@
   --column-gap: 3rem;
 }
 
-/* Code blocks must always be left-aligned, even inside centered layouts */
-pre {
+/* Content elements must always be left-aligned, even inside centered layouts */
+pre,
+ul,
+ol,
+blockquote {
   text-align: left;
 }
