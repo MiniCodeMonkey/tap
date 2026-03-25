@@ -28,6 +28,7 @@ interface AsciinemaConfig {
 	idleTimeLimit?: number;
 	fit?: string;
 	poster?: string;
+	controls?: boolean;
 }
 
 /**
@@ -116,6 +117,7 @@ function parseConfig(content: string): AsciinemaConfig | null {
 	if (config.idleTimeLimit !== undefined) result.idleTimeLimit = parseFloat(config.idleTimeLimit);
 	if (config.fit !== undefined) result.fit = config.fit;
 	if (config.poster !== undefined) result.poster = config.poster;
+	if (config.controls !== undefined) result.controls = config.controls === 'true';
 
 	return result;
 }
@@ -240,13 +242,14 @@ export async function renderAsciinemaBlocksInElement(element: HTMLElement): Prom
 
 		try {
 			// Build player options
+			const showControls = config.controls ?? false;
 			const options: Record<string, any> = {
 				autoPlay: config.autoPlay ?? false,
 				speed: config.speed ?? 1.0,
 				loop: config.loop ?? false,
 				preload: true,
 				fit: config.fit === 'none' ? false : (config.fit ?? 'width'),
-				controls: true,
+				controls: showControls,
 				theme: 'monokai'
 			};
 
