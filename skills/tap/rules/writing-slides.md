@@ -71,6 +71,9 @@ The first `---` block is frontmatter. Slides start after the closing frontmatter
 ```markdown
 [Link text](https://example.com)
 ![Alt text](./images/diagram.png)
+![Half-width](./images/diagram.png){width=50%}
+![No border](./images/screenshot.png){border=none}
+![Combined](./images/photo.png){width=80%, position=center, border=none}
 ```
 
 ### Code Blocks

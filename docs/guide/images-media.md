@@ -106,14 +106,26 @@ Control where images appear on your slide using the position attribute:
 | `{position=center}` | Center the image (default) |
 | `{position=right}` | Align image to the right |
 
-### Combining Attributes
+## Border Control
 
-Combine sizing and positioning:
+Some themes add borders or box shadows to images. You can disable this per-image using the `border` attribute:
 
 ```markdown
-![Logo](./logo.png){width=150px position=right}
+![Clean screenshot](./screenshot.png){border=none}
+```
 
-![Diagram](./diagram.svg){width=80% position=center}
+This removes both the border and box shadow that a theme would normally apply, giving you a clean image with no frame.
+
+### Combining Attributes
+
+Combine sizing, positioning, and border control:
+
+```markdown
+![Logo](./logo.png){width=150px, position=right}
+
+![Diagram](./diagram.svg){width=80%, position=center}
+
+![Screenshot](./screenshot.png){width=50%, border=none}
 ```
 
 ## Background Images
@@ -233,7 +245,8 @@ Run `tap build` before important presentations to catch any missing image errors
 | Width (pixels) | `{width=Npx}` | `{width=200px}` |
 | Width (percent) | `{width=N%}` | `{width=50%}` |
 | Position | `{position=X}` | `{position=right}` |
-| Combined | `{attr1 attr2}` | `{width=50% position=left}` |
+| No border | `{border=none}` | `{border=none}` |
+| Combined | `{attr1, attr2}` | `{width=50%, border=none}` |
 | Background | `layout: cover` | In directive block |
 
 ## Next Steps
