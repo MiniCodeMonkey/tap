@@ -552,7 +552,7 @@ func transformImageAttributes(content string) string {
 
 	for _, img := range images {
 		// Only transform if there are attributes to apply
-		if img.Attributes.Width == "" && img.Attributes.Position == "" {
+		if img.Attributes.Width == "" && img.Attributes.Position == "" && img.Attributes.Border == "" {
 			continue
 		}
 
@@ -570,6 +570,10 @@ func transformImageAttributes(content string) string {
 			case "center":
 				styles = append(styles, "display: block", "margin-left: auto", "margin-right: auto")
 			}
+		}
+
+		if img.Attributes.Border == "none" {
+			styles = append(styles, "border: none", "box-shadow: none")
 		}
 
 		styleAttr := ""

@@ -13,6 +13,8 @@ type ImageAttributes struct {
 	Width string
 	// Position specifies the image alignment: "left", "right", or "center".
 	Position string
+	// Border specifies border styling. Set to "none" to disable theme borders.
+	Border string
 }
 
 // imageAttrPattern matches image attribute blocks like {width=50%} or {position=left}
@@ -56,6 +58,8 @@ func ParseImageAttributes(attrString string) ImageAttributes {
 				attrs.Width = value
 			case "position":
 				attrs.Position = strings.ToLower(value)
+			case "border":
+				attrs.Border = strings.ToLower(value)
 			}
 		}
 	}

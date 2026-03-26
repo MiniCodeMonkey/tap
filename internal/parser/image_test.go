@@ -103,6 +103,33 @@ func TestParseImageAttributes_CaseInsensitive(t *testing.T) {
 	}
 }
 
+func TestParseImageAttributes_BorderNone(t *testing.T) {
+	attrs := ParseImageAttributes("border=none")
+
+	if attrs.Border != "none" {
+		t.Errorf("expected border 'none', got %q", attrs.Border)
+	}
+}
+
+func TestParseImageAttributes_BorderNoneCaseInsensitive(t *testing.T) {
+	attrs := ParseImageAttributes("Border=None")
+
+	if attrs.Border != "none" {
+		t.Errorf("expected border 'none', got %q", attrs.Border)
+	}
+}
+
+func TestParseImageAttributes_WidthAndBorder(t *testing.T) {
+	attrs := ParseImageAttributes("width=50%, border=none")
+
+	if attrs.Width != "50%" {
+		t.Errorf("expected width '50%%', got %q", attrs.Width)
+	}
+	if attrs.Border != "none" {
+		t.Errorf("expected border 'none', got %q", attrs.Border)
+	}
+}
+
 func TestParseImageAttributes_UnknownAttribute(t *testing.T) {
 	attrs := ParseImageAttributes("width=50%, unknown=value, position=right")
 
@@ -373,6 +400,26 @@ func TestTransformImageAttributes_WidthAndPosition(t *testing.T) {
 	result := transformImageAttributes(content)
 
 	expected := `<img src="img.png" alt="" style="width: 50%; float: left; margin-right: 1em">`
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}
+
+func TestTransformImageAttributes_BorderNone(t *testing.T) {
+	content := "![](photo.png){border=none}"
+	result := transformImageAttributes(content)
+
+	expected := `<img src="photo.png" alt="" style="border: none; box-shadow: none">`
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}
+
+func TestTransformImageAttributes_WidthAndBorderNone(t *testing.T) {
+	content := "![](photo.png){width=50%, border=none}"
+	result := transformImageAttributes(content)
+
+	expected := `<img src="photo.png" alt="" style="width: 50%; border: none; box-shadow: none">`
 	if result != expected {
 		t.Errorf("expected %q, got %q", expected, result)
 	}
