@@ -335,6 +335,7 @@
 		<!-- Slide overview modal -->
 		<SlideOverview
 			{slides}
+			{theme}
 			isOpen={isOverviewOpen}
 			onClose={closeOverview}
 		/>

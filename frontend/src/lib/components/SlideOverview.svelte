@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
-	import type { Slide } from '$lib/types';
+	import type { Slide, Theme } from '$lib/types';
 	import { currentSlideIndex, goToSlide } from '$lib/stores/presentation';
 
 	// ============================================================================
@@ -10,6 +10,8 @@
 	interface Props {
 		/** Array of slides to display as thumbnails */
 		slides: Slide[];
+		/** Current theme name */
+		theme?: Theme;
 		/** Whether the overview is currently visible */
 		isOpen?: boolean;
 		/** Callback when a slide is selected */
@@ -20,10 +22,30 @@
 
 	let {
 		slides,
+		theme = 'paper' as Theme,
 		isOpen = false,
 		onSelect,
 		onClose
 	}: Props = $props();
+
+	// ============================================================================
+	// Background Helpers
+	// ============================================================================
+
+	function getBackgroundStyle(slide: Slide): string {
+		if (!slide.background) return '';
+		const bg = slide.background;
+		switch (bg.type) {
+			case 'color':
+				return `background-color: ${bg.value};`;
+			case 'image':
+				return `background-image: url('${bg.value}'); background-size: cover; background-position: center;`;
+			case 'gradient':
+				return `background: ${bg.value};`;
+			default:
+				return '';
+		}
+	}
 
 	// ============================================================================
 	// State
@@ -66,7 +88,36 @@
 	// ============================================================================
 
 	/** Number of columns in the grid */
-	const GRID_COLUMNS = 4;
+	const GRID_COLUMNS = 5;
+
+	/** Base slide dimensions for scaling */
+	const SLIDE_WIDTH = 1920;
+
+	/** Track thumbnail scale factor */
+	let thumbnailScale = $state(0.15);
+	let gridRef: HTMLDivElement | undefined = $state();
+
+	function updateThumbnailScale(): void {
+		if (!gridRef) return;
+		const firstThumb = gridRef.querySelector('.thumbnail') as HTMLElement | null;
+		if (firstThumb) {
+			thumbnailScale = firstThumb.clientWidth / SLIDE_WIDTH;
+		}
+	}
+
+	let resizeObserver: ResizeObserver | undefined;
+
+	$effect(() => {
+		if (isOpen && gridRef) {
+			// Wait for layout to settle before measuring
+			requestAnimationFrame(() => updateThumbnailScale());
+			resizeObserver = new ResizeObserver(() => updateThumbnailScale());
+			resizeObserver.observe(gridRef);
+		}
+		return () => {
+			resizeObserver?.disconnect();
+		};
+	});
 
 	// ============================================================================
 	// Computed Values
@@ -213,18 +264,12 @@
 		<div class="overview-backdrop" role="presentation" onclick={() => onClose?.()}></div>
 
 		<div class="overview-content">
-			<div class="overview-header">
-				<h2>Slide Overview</h2>
-				<button class="close-button" onclick={() => onClose?.()} aria-label="Close overview">
-					<span aria-hidden="true">&times;</span>
-				</button>
-			</div>
-
 			<div
 				class="thumbnail-grid"
 				style:--grid-columns={GRID_COLUMNS}
 				role="listbox"
 				aria-label="Select a slide"
+				bind:this={gridRef}
 			>
 				{#each slides as slide, index}
 					<button
@@ -236,20 +281,19 @@
 						aria-selected={index === currentIndex}
 						aria-label="Slide {index + 1}"
 					>
-						<div class="thumbnail-content layout-{slide.layout}">
-							{@html slide.html}
+						<div class="thumbnail-aspect theme-{theme}">
+							<div
+								class="thumbnail-content slide-renderer layout-{slide.layout}"
+								style="transform: scale({thumbnailScale}); {getBackgroundStyle(slide)}"
+							>
+								{@html slide.html}
+							</div>
 						</div>
 						<div class="thumbnail-number">
 							{index + 1}
 						</div>
 					</button>
 				{/each}
-			</div>
-
-			<div class="overview-footer">
-				<span class="keyboard-hint">
-					Use arrow keys to navigate, Enter to select, Escape to close
-				</span>
 			</div>
 		</div>
 	</div>

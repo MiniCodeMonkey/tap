@@ -332,81 +332,34 @@
 .slide-overview .overview-content {
   position: relative;
   z-index: 1;
-  width: 90%;
-  max-width: 1400px;
-  max-height: 90vh;
-  display: flex;
-  flex-direction: column;
+  width: 100%;
+  height: 100%;
   background-color: var(--color-code-bg, #1a1a1a);
-  border-radius: 12px;
-  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
-  overflow: hidden;
+  overflow-y: auto;
 }
 
-.slide-overview .overview-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 1rem 1.5rem;
-  border-bottom: 1px solid var(--color-border, rgba(255, 255, 255, 0.1));
-}
-
-.slide-overview .overview-header h2 {
-  margin: 0;
-  font-size: 1.25rem;
-  font-weight: 600;
-  color: #fff;
-}
-
-.slide-overview .close-button {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 2rem;
-  height: 2rem;
-  padding: 0;
-  background: transparent;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  color: #fff;
-  font-size: 1.5rem;
-  line-height: 1;
-  transition: background-color 0.2s ease;
-}
-
-.slide-overview .close-button:hover {
-  background-color: rgba(255, 255, 255, 0.1);
-}
-
-.slide-overview .close-button:focus {
-  outline: 2px solid var(--color-accent);
-  outline-offset: 2px;
-}
 
 .slide-overview .thumbnail-grid {
   display: grid;
-  grid-template-columns: repeat(var(--grid-columns, 4), 1fr);
-  gap: 1rem;
-  padding: 1.5rem;
-  overflow-y: auto;
-  flex: 1;
+  grid-template-columns: repeat(var(--grid-columns, 5), 1fr);
+  gap: 0.75rem;
+  padding: 1rem 1.25rem;
 }
 
 .slide-overview .thumbnail {
   position: relative;
-  aspect-ratio: 16 / 9;
-  border: 2px solid transparent;
-  border-radius: 8px;
+  display: block;
+  width: 100%;
+  border: 2px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
   overflow: hidden;
   cursor: pointer;
   background-color: var(--color-bg, #fff);
-  transition: border-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
   padding: 0;
 }
 
 .slide-overview .thumbnail:hover {
-  transform: scale(1.02);
   border-color: rgba(124, 58, 237, 0.5);
 }
 
@@ -428,18 +381,82 @@
   box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.3);
 }
 
-.slide-overview .thumbnail-content {
+.slide-overview .thumbnail-aspect {
+  position: relative;
   width: 100%;
-  height: 100%;
-  transform: scale(0.15);
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+}
+
+.slide-overview .thumbnail-content {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 1920px;
+  height: 1080px;
   transform-origin: top left;
-  width: calc(100% / 0.15);
-  height: calc(100% / 0.15);
   pointer-events: none;
   overflow: hidden;
   padding: 80px;
   box-sizing: border-box;
   font-size: 32px;
+  background-color: var(--color-bg, #fff);
+  color: var(--color-text, #1a1a1a);
+}
+
+/* Full-bleed layouts need zero padding */
+.slide-overview .thumbnail-content.layout-split-media,
+.slide-overview .thumbnail-content.layout-cover {
+  padding: 0;
+}
+
+/*
+ * Overview thumbnails render raw HTML without a .slide-content wrapper.
+ * Many layout CSS rules target .layout-X .slide-content for grid/flex.
+ * Add a .slide-content class to thumbnail-content so those rules match,
+ * OR duplicate the critical layout rules here for the thumbnail context.
+ *
+ * We duplicate the key multi-column layouts to avoid class conflicts.
+ */
+
+/* Two-column grid */
+.slide-overview .thumbnail-content.layout-two-column {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4rem;
+  align-items: start;
+  align-content: center;
+}
+
+.slide-overview .thumbnail-content.layout-two-column > :not(.column) {
+  grid-column: 1 / -1;
+}
+
+/* Split-media grid */
+.slide-overview .thumbnail-content.layout-split-media {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0;
+}
+
+/* Code-focus centering */
+.slide-overview .thumbnail-content.layout-code-focus {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+/* Centered layouts */
+.slide-overview .thumbnail-content.layout-title,
+.slide-overview .thumbnail-content.layout-section,
+.slide-overview .thumbnail-content.layout-quote,
+.slide-overview .thumbnail-content.layout-cover,
+.slide-overview .thumbnail-content.layout-big-stat,
+.slide-overview .thumbnail-content.layout-blank {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
 }
 
 .slide-overview .thumbnail-number {
@@ -460,18 +477,14 @@
   background-color: #10b981;
 }
 
-.slide-overview .overview-footer {
-  padding: 0.75rem 1.5rem;
-  border-top: 1px solid var(--color-border, rgba(255, 255, 255, 0.1));
-  text-align: center;
-}
-
-.slide-overview .keyboard-hint {
-  font-size: 0.875rem;
-  color: rgba(255, 255, 255, 0.5);
-}
 
 /* Responsive adjustments */
+@media (max-width: 1400px) {
+  .slide-overview .thumbnail-grid {
+    --grid-columns: 4;
+  }
+}
+
 @media (max-width: 1024px) {
   .slide-overview .thumbnail-grid {
     --grid-columns: 3;
@@ -482,20 +495,11 @@
   .slide-overview .thumbnail-grid {
     --grid-columns: 2;
   }
-
-  .slide-overview .keyboard-hint {
-    display: none;
-  }
 }
 
 @media (max-width: 480px) {
   .slide-overview .thumbnail-grid {
     --grid-columns: 1;
-  }
-
-  .slide-overview .overview-content {
-    width: 95%;
-    max-height: 95vh;
   }
 }
 
