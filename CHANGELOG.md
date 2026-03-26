@@ -6,6 +6,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-03-26
+
+### Added
+
+- **Asciinema terminal recording support** - Embed terminal recordings directly in slides with full playback support.
+- **5 new themes** - Carbon, Flux, Mono, Signal, and Spectrum themes with distinct visual styles.
+
+### Changed
+
+- **Presenter view layout** - Slides now display on top with notes below for a more natural workflow.
+
+### Fixed
+
+- **Asciinema player** - Hide player control bar by default for cleaner slide appearance.
+- **Theme list alignment** - Fix list padding and bullet design in Spectrum theme.
+- **Centered layout alignment** - Force left-align on lists and blockquotes inside centered layouts.
+- **Code block alignment** - Prevent text-align center on code blocks across all themes.
+- **Static builds** - Use real Vite frontend in static builds for proper theme rendering.
+- **Post theme** - Fix code block colors in Post theme.
+- **PDF export** - Disable slide transitions in print mode to prevent ghosting.
+
 ## [0.1.0] - 2026-02-04
 
 ### Added

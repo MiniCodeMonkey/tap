@@ -927,11 +927,11 @@ func TestResolveImagePathRelative(t *testing.T) {
 		input    string
 		expected string
 	}{
-		{"simple relative", "image.png", "/presentations/demo/image.png"},
-		{"relative with subdir", "images/photo.jpg", "/presentations/demo/images/photo.jpg"},
-		{"relative with dot", "./diagram.svg", "/presentations/demo/diagram.svg"},
-		{"relative with parent", "../shared/logo.png", "/presentations/shared/logo.png"},
-		{"deep relative", "assets/images/bg.webp", "/presentations/demo/assets/images/bg.webp"},
+		{"simple relative", "image.png", "/local/image.png"},
+		{"relative with subdir", "images/photo.jpg", "/local/images/photo.jpg"},
+		{"relative with dot", "./diagram.svg", "/local/diagram.svg"},
+		{"relative with parent", "../shared/logo.png", "/local/../shared/logo.png"},
+		{"deep relative", "assets/images/bg.webp", "/local/assets/images/bg.webp"},
 	}
 
 	for _, tc := range testCases {
@@ -1040,12 +1040,12 @@ func TestResolveImagePathsInHTML(t *testing.T) {
 		{
 			name:     "single image",
 			html:     `<p><img src="photo.png" alt="A photo"></p>`,
-			expected: `<p><img src="/presentations/demo/photo.png" alt="A photo"></p>`,
+			expected: `<p><img src="/local/photo.png" alt="A photo"></p>`,
 		},
 		{
 			name:     "multiple images",
 			html:     `<img src="a.png"><img src="b.jpg">`,
-			expected: `<img src="/presentations/demo/a.png"><img src="/presentations/demo/b.jpg">`,
+			expected: `<img src="/local/a.png"><img src="/local/b.jpg">`,
 		},
 		{
 			name:     "absolute URL unchanged",
@@ -1055,22 +1055,22 @@ func TestResolveImagePathsInHTML(t *testing.T) {
 		{
 			name:     "mixed relative and absolute",
 			html:     `<img src="local.png"><img src="https://example.com/remote.jpg">`,
-			expected: `<img src="/presentations/demo/local.png"><img src="https://example.com/remote.jpg">`,
+			expected: `<img src="/local/local.png"><img src="https://example.com/remote.jpg">`,
 		},
 		{
 			name:     "image with subdirectory",
 			html:     `<img src="images/hero.png" alt="Hero">`,
-			expected: `<img src="/presentations/demo/images/hero.png" alt="Hero">`,
+			expected: `<img src="/local/images/hero.png" alt="Hero">`,
 		},
 		{
 			name:     "image with attributes",
 			html:     `<img src="photo.jpg" alt="Photo" width="100" class="responsive">`,
-			expected: `<img src="/presentations/demo/photo.jpg" alt="Photo" width="100" class="responsive">`,
+			expected: `<img src="/local/photo.jpg" alt="Photo" width="100" class="responsive">`,
 		},
 		{
 			name:     "single quoted src",
 			html:     `<img src='image.png' alt='Test'>`,
-			expected: `<img src='/presentations/demo/image.png' alt='Test'>`,
+			expected: `<img src='/local/image.png' alt='Test'>`,
 		},
 		{
 			name:     "no images",
@@ -1122,7 +1122,7 @@ func TestTransformWithImagePathResolution(t *testing.T) {
 
 	result := tr.Transform(pres)
 
-	expectedHTML := `<h1>Slide with image</h1><p><img src="/presentations/demo/images/photo.png" alt="Photo"></p>`
+	expectedHTML := `<h1>Slide with image</h1><p><img src="/local/images/photo.png" alt="Photo"></p>`
 	if result.Slides[0].HTML != expectedHTML {
 		t.Errorf("HTML with resolved paths:\n  got:      %q\n  expected: %q", result.Slides[0].HTML, expectedHTML)
 	}

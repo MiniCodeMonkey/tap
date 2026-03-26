@@ -313,7 +313,7 @@ func TestNewModel_GetResult_Aborted(t *testing.T) {
 }
 
 func TestAvailableThemes(t *testing.T) {
-	expectedThemes := []string{"paper", "noir", "aurora", "phosphor", "poster"}
+	expectedThemes := []string{"paper", "noir", "aurora", "phosphor", "poster", "signal", "carbon", "spectrum", "mono", "flux"}
 
 	if len(AvailableThemes) != len(expectedThemes) {
 		t.Errorf("Expected %d themes, got %d", len(expectedThemes), len(AvailableThemes))
