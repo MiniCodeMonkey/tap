@@ -3,6 +3,7 @@ package tui
 
 import (
 	"fmt"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
@@ -55,6 +56,12 @@ type devEventMsg struct {
 	event DevEvent
 }
 
+// pdfExportMsg is sent when a PDF export completes.
+type pdfExportMsg struct {
+	outputPath string
+	err        error
+}
+
 // wsCountMsg is sent when WebSocket client count changes.
 type wsCountMsg struct {
 	count int
@@ -91,6 +98,7 @@ type DevModel struct { //nolint:govet // embedded structs prevent optimal alignm
 	showThemePicker    bool
 	showImageGenerator bool
 	showSlideBuilder   bool
+	exportingPDF       bool
 }
 
 // NewDevModel creates a new DevModel for the dev server TUI.
@@ -268,6 +276,24 @@ func (m *DevModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.state.Error = msg.err
 		return m, nil
 
+	case pdfExportMsg:
+		m.exportingPDF = false
+		if msg.err != nil {
+			m.SetError(msg.err)
+			m.addEvent(DevEvent{
+				Type:      "error",
+				Message:   "PDF export failed",
+				Timestamp: time.Now(),
+			})
+		} else {
+			m.addEvent(DevEvent{
+				Type:      "action",
+				Message:   fmt.Sprintf("PDF exported → %s", msg.outputPath),
+				Timestamp: time.Now(),
+			})
+		}
+		return m, nil
+
 	case tickMsg:
 		// Periodic tick - just redraw
 		return m, tickCmd()
@@ -361,6 +387,19 @@ func (m *DevModel) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 		}
 		return m, nil
+
+	case "e":
+		// Export to PDF
+		if m.exportingPDF {
+			return m, nil
+		}
+		m.exportingPDF = true
+		m.addEvent(DevEvent{
+			Type:      "action",
+			Message:   "Exporting PDF...",
+			Timestamp: time.Now(),
+		})
+		return m, m.exportPDFCmd()
 
 	case "i":
 		// Open image generator
@@ -544,6 +583,28 @@ func (m *DevModel) handleSlideBuilderKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 // openBrowserCmd returns a command that opens a URL in the default browser.
+// exportPDFCmd runs `tap pdf <file>` as a background command.
+func (m *DevModel) exportPDFCmd() tea.Cmd {
+	file := m.config.MarkdownFile
+	ext := filepath.Ext(file)
+	outputPath := strings.TrimSuffix(file, ext) + ".pdf"
+
+	return func() tea.Msg {
+		// Use the current binary to run the pdf subcommand
+		binary, err := os.Executable()
+		if err != nil {
+			return pdfExportMsg{err: fmt.Errorf("failed to find executable: %w", err)}
+		}
+
+		cmd := exec.Command(binary, "pdf", file)
+		if output, err := cmd.CombinedOutput(); err != nil {
+			return pdfExportMsg{err: fmt.Errorf("PDF export failed: %s", strings.TrimSpace(string(output)))}
+		}
+
+		return pdfExportMsg{outputPath: outputPath}
+	}
+}
+
 func openBrowserCmd(url string) tea.Cmd {
 	return func() tea.Msg {
 		var cmd *exec.Cmd
@@ -820,12 +881,13 @@ func (m *DevModel) viewHelp() string {
 		Bold(true)
 
 	help := fmt.Sprintf(
-		"%s open browser • %s presenter view • %s theme • %s add slide • %s image • %s reload • %s quit",
+		"%s open browser • %s presenter view • %s theme • %s add slide • %s image • %s export pdf • %s reload • %s quit",
 		keyStyle.Render("o"),
 		keyStyle.Render("p"),
 		keyStyle.Render("t"),
 		keyStyle.Render("a"),
 		keyStyle.Render("i"),
+		keyStyle.Render("e"),
 		keyStyle.Render("r"),
 		keyStyle.Render("q"),
 	)
