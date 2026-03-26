@@ -790,6 +790,12 @@
   gap: 1.5rem; /* consistent internal spacing */
 }
 
+.layout-code-focus .slide-content {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
 .layout-code-focus h1,
 .layout-code-focus h2,
 .layout-code-focus h3 {
@@ -819,10 +825,6 @@
   border-radius: 12px;
   overflow-x: auto;
   margin: 0;
-  flex-grow: 1;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
 }
 
 .layout-code-focus code {
