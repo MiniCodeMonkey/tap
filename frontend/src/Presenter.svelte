@@ -244,6 +244,23 @@
 	// ============================================================================
 
 	let unsubscribers: (() => void)[] = [];
+	let wakeLock: WakeLockSentinel | null = null;
+
+	async function requestWakeLock(): Promise<void> {
+		try {
+			if ('wakeLock' in navigator) {
+				wakeLock = await navigator.wakeLock.request('screen');
+			}
+		} catch {
+			// Wake lock request can fail (e.g. low battery) — not critical
+		}
+	}
+
+	function handleVisibilityChange(): void {
+		if (document.visibilityState === 'visible') {
+			requestWakeLock();
+		}
+	}
 
 	function setupSubscriptions(): void {
 		unsubscribers.push(
@@ -309,8 +326,10 @@
 		fetchPresentation();
 		connectWebSocket();
 		startTimer();
+		requestWakeLock();
 
 		window.addEventListener('keydown', handleKeydown);
+		document.addEventListener('visibilitychange', handleVisibilityChange);
 	});
 
 	onDestroy(() => {
@@ -324,8 +343,14 @@
 			customThemeLinkEl = null;
 		}
 
+		if (wakeLock) {
+			wakeLock.release();
+			wakeLock = null;
+		}
+
 		if (typeof window !== 'undefined') {
 			window.removeEventListener('keydown', handleKeydown);
+			document.removeEventListener('visibilitychange', handleVisibilityChange);
 		}
 	});
 </script>
