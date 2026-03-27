@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-03-27
+
+### Added
+
+- **Screen Wake Lock in presenter view** - Prevent sleep/screensaver while presenting using the Screen Wake Lock API.
+- **Image border control** - Add `{border=none}` attribute to disable theme borders on individual images.
+- **PDF export shortcut** - Press `e` in the dev server to export to PDF.
+- **Slide overview redesign** - Full-screen grid layout with proper slide rendering in overview mode.
+
+### Fixed
+
+- **Code focus vertical centering** - Vertically center content when focused code block is small.
+
 ## [0.2.0] - 2026-03-26
 
 ### Added
