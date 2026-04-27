@@ -21,7 +21,7 @@ The Tap skill works with AI coding assistants that support the skills format:
 Install the Tap skill using the skills CLI:
 
 ```bash
-npx @anthropic-ai/skills add minicodemonkey/tap
+npx skills add minicodemonkey/tap
 ```
 
 The skill is installed to your skills directory and automatically loaded in future sessions.
