@@ -31,7 +31,10 @@ type DevConfig struct {
 	PresenterPassword string
 	MarkdownFile      string
 	CurrentTheme      string
-	Port              int
+	// Version is the tap version shown next to the title, for example
+	// "v2.0.0-beta.2", or "dev" for a local build.
+	Version string
+	Port    int
 }
 
 // DevState holds the current state of the dev server.
@@ -705,16 +708,18 @@ func (m *DevModel) View() string {
 func (m *DevModel) viewHeader() string {
 	titleStyle := lipgloss.NewStyle().
 		Bold(true).
-		Foreground(ColorPrimary).
-		MarginBottom(1)
+		Foreground(ColorPrimary)
 
-	fileStyle := lipgloss.NewStyle().
+	mutedStyle := lipgloss.NewStyle().
 		Foreground(ColorMuted)
 
 	title := titleStyle.Render("⚡ Tap Dev Server")
-	file := fileStyle.Render(fmt.Sprintf("Serving: %s", m.config.MarkdownFile))
+	if m.config.Version != "" {
+		title += " " + mutedStyle.Render(m.config.Version)
+	}
+	file := mutedStyle.Render(fmt.Sprintf("Serving: %s", m.config.MarkdownFile))
 
-	return title + "\n" + file
+	return title + "\n\n" + file
 }
 
 // viewURLs renders the server URLs section.

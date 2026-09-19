@@ -262,6 +262,7 @@ func runDevServer(file string, port int, presenterPassword string, headless bool
 		fmt.Println()
 		Success("  Dev server running (headless mode)\n")
 		fmt.Println()
+		fmt.Printf("  Version:   %s\n", displayVersion())
 		fmt.Printf("  Audience:  %s\n", audienceURL)
 		fmt.Printf("  Presenter: %s\n", presenterURL)
 		fmt.Println()
@@ -317,6 +318,7 @@ func runDevServer(file string, port int, presenterPassword string, headless bool
 			PresenterURL:      presenterURL,
 			PresenterPassword: presenterPassword,
 			CurrentTheme:      cfg.Theme,
+			Version:           displayVersion(),
 		}
 
 		// Create TUI model
