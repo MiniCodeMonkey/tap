@@ -34,6 +34,10 @@
 	--muted: #52525b;
 	--accent: #2563eb;
 	--accent-text: #2563eb;
+	--status-ok: #16a34a;
+	--status-warn: #b45309;
+	--status-error: #dc2626;
+	--accent-2: var(--accent-text);
 	--surface: rgba(0, 0, 0, 0.02);
 	--font-display: Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
 		sans-serif;

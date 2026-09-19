@@ -492,6 +492,9 @@ export async function readContrast(page: Page): Promise<ContrastResult[]> {
 			fg: resolve('--fg'),
 			accentText: resolve('--accent-text'),
 			muted: resolve('--muted'),
+			statusOk: resolve('--status-ok'),
+			statusWarn: resolve('--status-warn'),
+			statusError: resolve('--status-error'),
 			raw: {
 				bg: style.getPropertyValue('--bg').trim(),
 				fg: style.getPropertyValue('--fg').trim(),
@@ -506,7 +509,13 @@ export async function readContrast(page: Page): Promise<ContrastResult[]> {
 	const pairs: { name: string; foreground: string; minimum: number }[] = [
 		{ name: 'fg-on-bg', foreground: colors.fg, minimum: 7 },
 		{ name: 'accent-text-on-bg', foreground: colors.accentText, minimum: 7 },
-		{ name: 'muted-on-bg', foreground: colors.muted, minimum: 4.5 }
+		{ name: 'muted-on-bg', foreground: colors.muted, minimum: 4.5 },
+		// Status tokens are read as a fill (a badge, a dot, an icon), not as
+		// body text, so they only need to clear the 3:1 non-text contrast
+		// minimum against --bg, not the 7:1/4.5:1 bars above.
+		{ name: 'status-ok-on-bg', foreground: colors.statusOk, minimum: 3 },
+		{ name: 'status-warn-on-bg', foreground: colors.statusWarn, minimum: 3 },
+		{ name: 'status-error-on-bg', foreground: colors.statusError, minimum: 3 }
 	];
 
 	return pairs.map(({ name, foreground, minimum }) => {

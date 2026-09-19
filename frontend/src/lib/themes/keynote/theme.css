@@ -27,6 +27,10 @@
 	--accent: #7cc7ff;
 	--accent-text: #7cc7ff;
 	--accent-bright: #d7efff;
+	--status-ok: #5ee6a8;
+	--status-warn: #ffcc66;
+	--status-error: #ff6b6b;
+	--accent-2: var(--accent-bright);
 	--surface: #1a212d;
 	--edge: #4d5a6e;
 	--dim: #7f8a9a;

@@ -33,6 +33,10 @@
 	--accent: #1b3a8c;
 	--accent-text: #1b3a8c;
 	--surface: #eef0f6;
+	--status-ok: #1f6f43;
+	--status-warn: #a06a00;
+	--status-error: var(--pen);
+	--accent-2: var(--pen);
 	--font-display: 'STIX Two Text', 'Latin Modern Roman', 'Times New Roman', serif;
 	--font-body: 'STIX Two Text', 'Latin Modern Roman', 'Times New Roman', serif;
 	--font-mono: 'IBM Plex Mono', 'Latin Modern Mono', monospace;

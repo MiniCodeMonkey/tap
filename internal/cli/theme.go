@@ -192,7 +192,11 @@ func printThemeHuman(theme themes.Theme, tokens map[string]string, illustration 
 	printColorRole("muted", "muted text", tokens)
 	printColorRole("accent", "accent", tokens)
 	printColorRole("accent-text", "accent (as text)", tokens)
+	printColorRole("accent-2", "second accent", tokens)
 	printColorRole("surface", "surface", tokens)
+	printColorRole("status-ok", "status ok", tokens)
+	printColorRole("status-warn", "status warn", tokens)
+	printColorRole("status-error", "status error", tokens)
 
 	fmt.Println("\n  Fonts:")
 	fmt.Printf("    display: %s\n", tokens["--font-display"])
@@ -227,13 +231,17 @@ func printColorRole(cssSuffix, role string, tokens map[string]string) {
 // ============================================================================
 
 type themeColorsJSON struct {
-	BG         string            `json:"bg"`
-	FG         string            `json:"fg"`
-	Muted      string            `json:"muted"`
-	Accent     string            `json:"accent"`
-	AccentText string            `json:"accentText"`
-	Surface    string            `json:"surface"`
-	Extra      map[string]string `json:"extra,omitempty"`
+	BG          string            `json:"bg"`
+	FG          string            `json:"fg"`
+	Muted       string            `json:"muted"`
+	Accent      string            `json:"accent"`
+	AccentText  string            `json:"accentText"`
+	Accent2     string            `json:"accent2"`
+	Surface     string            `json:"surface"`
+	StatusOk    string            `json:"statusOk"`
+	StatusWarn  string            `json:"statusWarn"`
+	StatusError string            `json:"statusError"`
+	Extra       map[string]string `json:"extra,omitempty"`
 }
 
 type themeFontsJSON struct {
@@ -307,13 +315,17 @@ func buildThemeTokensJSON(tokens map[string]string) themeTokensJSON {
 
 	return themeTokensJSON{
 		Colors: themeColorsJSON{
-			BG:         tokens["--bg"],
-			FG:         tokens["--fg"],
-			Muted:      tokens["--muted"],
-			Accent:     tokens["--accent"],
-			AccentText: tokens["--accent-text"],
-			Surface:    tokens["--surface"],
-			Extra:      extra,
+			BG:          tokens["--bg"],
+			FG:          tokens["--fg"],
+			Muted:       tokens["--muted"],
+			Accent:      tokens["--accent"],
+			AccentText:  tokens["--accent-text"],
+			Accent2:     tokens["--accent-2"],
+			Surface:     tokens["--surface"],
+			StatusOk:    tokens["--status-ok"],
+			StatusWarn:  tokens["--status-warn"],
+			StatusError: tokens["--status-error"],
+			Extra:       extra,
 		},
 		Fonts: themeFontsJSON{
 			Display: tokens["--font-display"],
@@ -389,6 +401,11 @@ func buildThemePrompt(theme themes.Theme, tokens map[string]string, illustration
 		fmt.Fprintf(&b, "Extra colors: %s. ", strings.Join(parts, ", "))
 	}
 
+	statusOk := toHexOrAsWritten(tokens["--status-ok"], bg)
+	statusWarn := toHexOrAsWritten(tokens["--status-warn"], bg)
+	statusError := toHexOrAsWritten(tokens["--status-error"], bg)
+	fmt.Fprintf(&b, "Status colors, only where meaning requires them: ok %s, warn %s, error %s. ", statusOk, statusWarn, statusError)
+
 	fmt.Fprintf(&b, "Palette use: %s. ", illustration.PaletteUse)
 	fmt.Fprintf(&b, "Line: %s. ", illustration.Line)
 	fmt.Fprintf(&b, "Shapes: %s. ", illustration.Shapes)
@@ -439,7 +456,10 @@ type paletteColor struct {
 // paletteRoleTokens are the five token names already named as roles in the
 // prompt's palette sentence (and printed elsewhere as the theme's known
 // colors), excluded here so they are never repeated.
-var paletteRoleTokens = []string{"--bg", "--fg", "--muted", "--accent", "--accent-text", "--surface"}
+var paletteRoleTokens = []string{
+	"--bg", "--fg", "--muted", "--accent", "--accent-text", "--accent-2", "--surface",
+	"--status-ok", "--status-warn", "--status-error",
+}
 
 var colorValuePattern = regexp.MustCompile(`(?i)^(#[0-9a-f]{3,8}|rgba?\([^)]*\)|hsla?\([^)]*\))$`)
 

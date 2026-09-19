@@ -32,6 +32,10 @@
 	--accent: #ffb454;
 	--accent-text: #ffb454;
 	--accent-cool: #6fb6ff;
+	--status-ok: #5be3a6;
+	--status-warn: var(--accent);
+	--status-error: #ff6b6b;
+	--accent-2: var(--accent-cool);
 	--surface: #182c57;
 	--bg-high: #13264d;
 	--bg-deep: #060b1a;

@@ -29,6 +29,9 @@
 	--accent: #e0161d;
 	--accent-text: #800410;
 	--accent-2: #ffffff;
+	--status-ok: #0b6b2c;
+	--status-warn: #7a3d00;
+	--status-error: var(--accent-text);
 	--surface: #f2c200;
 	--font-display: 'Anton', 'Impact', 'Arial Narrow', sans-serif;
 	--font-body: 'Archivo Narrow', 'Arial Narrow', sans-serif;

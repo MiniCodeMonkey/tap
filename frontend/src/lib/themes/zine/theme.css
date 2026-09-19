@@ -23,6 +23,10 @@
 	--accent: #ffe600;
 	--accent-text: #0d0d0d;
 	--surface: #faf8f1;
+	--status-ok: #1c7a3e;
+	--status-warn: #a35a00;
+	--status-error: #a3181f;
+	--accent-2: var(--accent-text);
 	--font-display: 'Permanent Marker', 'Marker Felt', cursive;
 	--font-body: 'Special Elite', 'Courier New', monospace;
 	--font-mono: 'Courier Prime', 'Courier New', monospace;

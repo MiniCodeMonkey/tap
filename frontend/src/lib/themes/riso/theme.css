@@ -25,6 +25,10 @@
 	--accent: #ff48b0;
 	--accent-text: #2a1153;
 	--surface: #f9f5ea;
+	--status-ok: #1c7a3e;
+	--status-warn: #b06a00;
+	--status-error: #c0202a;
+	--accent-2: #263a78;
 	--font-display: 'Bagel Fat One', 'Arial Black', sans-serif;
 	--font-body: 'Bricolage Grotesque', 'Helvetica Neue', Arial, sans-serif;
 	--font-mono: 'Space Mono', 'Courier New', monospace;

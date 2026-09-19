@@ -262,12 +262,13 @@ func TestThemeShowCommand_JSONHoldsExpectedKeys(t *testing.T) {
 	if !ok {
 		t.Fatalf("tokens.colors is not an object: %v", tokens["colors"])
 	}
-	extra, ok := colors["extra"].(map[string]any)
-	if !ok {
-		t.Fatalf("tokens.colors.extra is not an object: %v", colors["extra"])
+	if colors["accent2"] != "#6fe3a0" {
+		t.Errorf(`tokens.colors.accent2 = %v, want "#6fe3a0"`, colors["accent2"])
 	}
-	if extra["accent 2"] != "#6fe3a0" {
-		t.Errorf(`tokens.colors.extra["accent 2"] = %v, want "#6fe3a0"`, extra["accent 2"])
+	for _, key := range []string{"statusOk", "statusWarn", "statusError"} {
+		if value, ok := colors[key].(string); !ok || value == "" {
+			t.Errorf("tokens.colors.%s = %v, want a non-empty string", key, colors[key])
+		}
 	}
 
 	illustration, ok := output["illustration"].(map[string]any)

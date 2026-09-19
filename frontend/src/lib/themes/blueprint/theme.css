@@ -27,6 +27,10 @@
 	--accent: #ffd447;
 	--accent-text: #ffd447;
 	--surface: #174688;
+	--status-ok: #5be3a6;
+	--status-warn: #f5a623;
+	--status-error: #ff6b6b;
+	--accent-2: var(--accent-text);
 	--font-display: 'Saira Condensed', 'Arial Narrow', sans-serif;
 	--font-body: 'Saira Semi Condensed', 'Arial Narrow', sans-serif;
 	--font-mono: 'IBM Plex Mono', ui-monospace, Menlo, monospace;

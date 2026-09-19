@@ -26,6 +26,10 @@
 	 * clear 7:1 contrast there, which the mockup's brighter #1b2fd0 does not. */
 	--accent-text: #10186e;
 	--surface: #ffffff;
+	--status-ok: #0a6b2c;
+	--status-warn: #7a5200;
+	--status-error: #8a1414;
+	--accent-2: var(--accent-text);
 	--font-display: 'Pixelify Sans', 'Chicago', 'Geneva', sans-serif;
 	--font-body: 'IBM Plex Mono', 'Monaco', 'Courier New', monospace;
 	--font-mono: 'IBM Plex Mono', 'Monaco', 'Courier New', monospace;

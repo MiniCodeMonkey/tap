@@ -37,6 +37,10 @@
 	--accent: #8a2b1e;
 	--accent-text: #8a2b1e;
 	--accent-soft: #d9b77c;
+	--status-ok: #3f6e3f;
+	--status-warn: #a9762c;
+	--status-error: var(--accent);
+	--accent-2: var(--accent-soft);
 	--surface: #eadfc8;
 	--dim: #85796a;
 	--hairline: rgba(29, 24, 19, 0.4);

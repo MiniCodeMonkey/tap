@@ -30,6 +30,10 @@
 	--accent: #d40b1e;
 	--accent-text: #a30d1c;
 	--surface: #deddd6;
+	--status-ok: #1c7a3e;
+	--status-warn: #8a6a00;
+	--status-error: var(--accent);
+	--accent-2: var(--accent-text);
 	/* the quietest text value: dimmed code lines and comments, 5:1 on --bg */
 	--dim: #6a6962;
 	--font-display: 'Archivo', 'Helvetica Neue', Helvetica, Arial, sans-serif;

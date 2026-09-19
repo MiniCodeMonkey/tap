@@ -41,6 +41,10 @@
 	--red: #d62718;
 	--blue: #1d3f9e;
 	--yellow: #f2b90f;
+	--status-ok: #1d7a4c;
+	--status-warn: #8a6d00;
+	--status-error: var(--red);
+	--accent-2: var(--yellow);
 	--font-display: 'Outfit', 'Futura', 'Century Gothic', sans-serif;
 	--font-body: 'Outfit', 'Futura', 'Century Gothic', sans-serif;
 	--font-mono: 'Space Mono', ui-monospace, monospace;

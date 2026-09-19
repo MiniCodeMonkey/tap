@@ -30,6 +30,9 @@
 	--accent: #ff7ebd;
 	--accent-text: #ff7ebd;
 	--accent-2: #3cf2ff;
+	--status-ok: #39ff88;
+	--status-warn: #ffd23c;
+	--status-error: #ff5c7a;
 	--surface: #24197a;
 	/* Extra token, not in the base spec set: the perspective floor's line color. */
 	--grid: #6a58e6;
