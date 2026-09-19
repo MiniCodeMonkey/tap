@@ -2,6 +2,7 @@
 package server
 
 import (
+	"crypto/subtle"
 	"encoding/json"
 	"fmt"
 	"io/fs"
@@ -59,32 +60,54 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 }
 
 // handlePresenter serves the presenter view.
-// If a presenter password is configured, requires ?key=<password> query
-// parameter, and, once that check passes, sets PresenterAuthCookieName so
-// the same browser's WebSocket connection can prove it too (see
-// WebSocketHub.SetPresenterPassword) - without it, a client that never saw
-// this password-gated page could still open /ws directly and send
-// navigation messages that drive every other client.
+// If a presenter password is configured, requires either a presenter auth
+// cookie from an earlier visit or a ?key=<password> query parameter. A
+// correct ?key= sets PresenterAuthCookieName to the server's random
+// per-process session token, never the password itself (see
+// GeneratePresenterSessionToken), so the same browser's WebSocket
+// connection can prove it too (see WebSocketHub.checkPresenterAuth) -
+// without it, a client that never saw this password-gated page could still
+// open /ws directly and send navigation messages that drive every other
+// client. After a correct ?key=, the request is redirected to the same
+// path without the key query parameter, so the password does not stay in
+// the address bar or browser history.
 func (s *Server) handlePresenter(w http.ResponseWriter, r *http.Request) {
-	// Check password protection
 	password := s.GetPresenterPassword()
 	if password != "" {
-		key := r.URL.Query().Get("key")
-		if key == "" {
-			http.Error(w, "Forbidden: presenter password required. Use ?key=<password>", http.StatusForbidden)
+		sessionToken := s.GetPresenterSessionToken()
+		authorized := false
+		if sessionToken != "" {
+			if cookie, err := r.Cookie(PresenterAuthCookieName); err == nil {
+				authorized = subtle.ConstantTimeCompare([]byte(cookie.Value), []byte(sessionToken)) == 1
+			}
+		}
+
+		if !authorized {
+			key := r.URL.Query().Get("key")
+			if key == "" {
+				http.Error(w, "Forbidden: presenter password required. Use ?key=<password>", http.StatusForbidden)
+				return
+			}
+			if subtle.ConstantTimeCompare([]byte(key), []byte(password)) != 1 {
+				http.Error(w, "Forbidden: incorrect presenter password", http.StatusForbidden)
+				return
+			}
+
+			http.SetCookie(w, &http.Cookie{
+				Name:     PresenterAuthCookieName,
+				Value:    sessionToken,
+				Path:     "/",
+				HttpOnly: true,
+				SameSite: http.SameSiteLaxMode,
+			})
+
+			redirectURL := *r.URL
+			query := redirectURL.Query()
+			query.Del("key")
+			redirectURL.RawQuery = query.Encode()
+			http.Redirect(w, r, redirectURL.RequestURI(), http.StatusFound)
 			return
 		}
-		if key != password {
-			http.Error(w, "Forbidden: incorrect presenter password", http.StatusForbidden)
-			return
-		}
-		http.SetCookie(w, &http.Cookie{
-			Name:     PresenterAuthCookieName,
-			Value:    password,
-			Path:     "/",
-			HttpOnly: true,
-			SameSite: http.SameSiteLaxMode,
-		})
 	}
 
 	// Serve embedded presenter.html

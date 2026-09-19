@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 
@@ -125,11 +126,16 @@ func TestHandlePresenter_PasswordProtection_WrongPassword(t *testing.T) {
 	}
 }
 
+// TestHandlePresenter_PasswordProtection_CorrectPassword verifies that a
+// correct ?key= redirects to the presenter page without the key parameter,
+// so the password does not stay in the address bar or browser history; the
+// redirect target is what actually serves the presenter page once the
+// browser follows it with the cookie this response just set.
 func TestHandlePresenter_PasswordProtection_CorrectPassword(t *testing.T) {
 	s := New(0)
 	s.SetPresenterPassword("mysecret")
+	s.SetPresenterSessionToken("session-token")
 
-	// Request with correct password
 	req := httptest.NewRequest(http.MethodGet, "/presenter?key=mysecret", nil)
 	w := httptest.NewRecorder()
 
@@ -138,25 +144,42 @@ func TestHandlePresenter_PasswordProtection_CorrectPassword(t *testing.T) {
 	resp := w.Result()
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		t.Errorf("expected status %d, got %d", http.StatusOK, resp.StatusCode)
+	if resp.StatusCode != http.StatusFound {
+		t.Errorf("expected status %d, got %d", http.StatusFound, resp.StatusCode)
+	}
+	if location := resp.Header.Get("Location"); location != "/presenter" {
+		t.Errorf("Location = %q, want %q (key parameter stripped)", location, "/presenter")
 	}
 
-	body, _ := io.ReadAll(resp.Body)
-	bodyStr := string(body)
+	// Following the redirect, with the cookie the first response set,
+	// serves the presenter page.
+	followReq := httptest.NewRequest(http.MethodGet, "/presenter", nil)
+	for _, c := range resp.Cookies() {
+		followReq.AddCookie(c)
+	}
+	followW := httptest.NewRecorder()
+	s.handlePresenter(followW, followReq)
+	followResp := followW.Result()
+	defer followResp.Body.Close()
 
-	if !strings.Contains(bodyStr, "Presenter View") {
+	if followResp.StatusCode != http.StatusOK {
+		t.Errorf("expected status %d after following the redirect, got %d", http.StatusOK, followResp.StatusCode)
+	}
+	body, _ := io.ReadAll(followResp.Body)
+	if !strings.Contains(string(body), "Presenter View") {
 		t.Error("expected 'Presenter View' in body")
 	}
 }
 
 // TestHandlePresenter_SetsAuthCookieOnCorrectPassword verifies that a
-// correct ?key= sets PresenterAuthCookieName to the password, Path=/, so
-// the same browser's later WebSocket upgrade to /ws can prove it too (see
+// correct ?key= sets PresenterAuthCookieName to the server's session
+// token, never the raw password, Path=/, so the same browser's later
+// WebSocket upgrade to /ws can prove it too (see
 // WebSocketHub.checkPresenterAuth).
 func TestHandlePresenter_SetsAuthCookieOnCorrectPassword(t *testing.T) {
 	s := New(0)
 	s.SetPresenterPassword("mysecret")
+	s.SetPresenterSessionToken("session-token")
 
 	req := httptest.NewRequest(http.MethodGet, "/presenter?key=mysecret", nil)
 	w := httptest.NewRecorder()
@@ -176,8 +199,8 @@ func TestHandlePresenter_SetsAuthCookieOnCorrectPassword(t *testing.T) {
 	if cookie == nil {
 		t.Fatal("no auth cookie set on a correct password")
 	}
-	if cookie.Value != "mysecret" {
-		t.Errorf("cookie value = %q, want %q", cookie.Value, "mysecret")
+	if cookie.Value != "session-token" {
+		t.Errorf("cookie value = %q, want the session token, not the raw password", cookie.Value)
 	}
 	if cookie.Path != "/" {
 		t.Errorf("cookie path = %q, want \"/\" so it also rides along on /ws", cookie.Path)
@@ -189,6 +212,7 @@ func TestHandlePresenter_SetsAuthCookieOnCorrectPassword(t *testing.T) {
 func TestHandlePresenter_NoAuthCookieOnWrongPassword(t *testing.T) {
 	s := New(0)
 	s.SetPresenterPassword("mysecret")
+	s.SetPresenterSessionToken("session-token")
 
 	req := httptest.NewRequest(http.MethodGet, "/presenter?key=wrong", nil)
 	w := httptest.NewRecorder()
@@ -202,6 +226,98 @@ func TestHandlePresenter_NoAuthCookieOnWrongPassword(t *testing.T) {
 		if c.Name == PresenterAuthCookieName {
 			t.Fatal("auth cookie set on a wrong password")
 		}
+	}
+}
+
+// TestHandlePresenter_PasswordWithSpecialCharactersAuthenticates checks a
+// password containing a semicolon and a space - characters Go's cookie jar
+// sanitizes out of a raw cookie value - authenticates correctly, since the
+// cookie carries the random session token rather than the password.
+func TestHandlePresenter_PasswordWithSpecialCharactersAuthenticates(t *testing.T) {
+	s := New(0)
+	password := `weird; pass"word`
+	s.SetPresenterPassword(password)
+	s.SetPresenterSessionToken("session-token")
+
+	req := httptest.NewRequest(http.MethodGet, "/presenter?key="+url.QueryEscape(password), nil)
+	w := httptest.NewRecorder()
+	s.handlePresenter(w, req)
+
+	resp := w.Result()
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusFound {
+		t.Fatalf("expected status %d, got %d", http.StatusFound, resp.StatusCode)
+	}
+
+	var cookie *http.Cookie
+	for _, c := range resp.Cookies() {
+		if c.Name == PresenterAuthCookieName {
+			cookie = c
+		}
+	}
+	if cookie == nil {
+		t.Fatal("no auth cookie set on a correct password")
+	}
+
+	followReq := httptest.NewRequest(http.MethodGet, "/presenter", nil)
+	followReq.AddCookie(cookie)
+	followW := httptest.NewRecorder()
+	s.handlePresenter(followW, followReq)
+	if followW.Result().StatusCode != http.StatusOK {
+		t.Errorf("expected status %d for cookie-only access, got %d", http.StatusOK, followW.Result().StatusCode)
+	}
+}
+
+// TestHandlePresenter_CookieOnlyAccessWorks checks that a request carrying
+// only the presenter auth cookie (no ?key=) is authorized, so the
+// presenter page keeps working after the first authentication without the
+// password reappearing in the URL.
+func TestHandlePresenter_CookieOnlyAccessWorks(t *testing.T) {
+	s := New(0)
+	s.SetPresenterPassword("mysecret")
+	s.SetPresenterSessionToken("session-token")
+
+	req := httptest.NewRequest(http.MethodGet, "/presenter", nil)
+	req.AddCookie(&http.Cookie{Name: PresenterAuthCookieName, Value: "session-token"})
+	w := httptest.NewRecorder()
+	s.handlePresenter(w, req)
+
+	resp := w.Result()
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("expected status %d for cookie-only access, got %d", http.StatusOK, resp.StatusCode)
+	}
+}
+
+// TestHandlePresenter_WrongCookieMatchesNoKeyResponse checks that a wrong
+// cookie value, with no ?key=, gets the exact same response as no
+// credentials at all, rather than leaking that a cookie was present but
+// invalid.
+func TestHandlePresenter_WrongCookieMatchesNoKeyResponse(t *testing.T) {
+	s := New(0)
+	s.SetPresenterPassword("mysecret")
+	s.SetPresenterSessionToken("session-token")
+
+	noCredsReq := httptest.NewRequest(http.MethodGet, "/presenter", nil)
+	noCredsW := httptest.NewRecorder()
+	s.handlePresenter(noCredsW, noCredsReq)
+	noCredsResp := noCredsW.Result()
+	defer noCredsResp.Body.Close()
+	noCredsBody, _ := io.ReadAll(noCredsResp.Body)
+
+	wrongCookieReq := httptest.NewRequest(http.MethodGet, "/presenter", nil)
+	wrongCookieReq.AddCookie(&http.Cookie{Name: PresenterAuthCookieName, Value: "not-the-token"})
+	wrongCookieW := httptest.NewRecorder()
+	s.handlePresenter(wrongCookieW, wrongCookieReq)
+	wrongCookieResp := wrongCookieW.Result()
+	defer wrongCookieResp.Body.Close()
+	wrongCookieBody, _ := io.ReadAll(wrongCookieResp.Body)
+
+	if wrongCookieResp.StatusCode != noCredsResp.StatusCode {
+		t.Errorf("status with wrong cookie = %d, want %d (same as no key)", wrongCookieResp.StatusCode, noCredsResp.StatusCode)
+	}
+	if string(wrongCookieBody) != string(noCredsBody) {
+		t.Errorf("body with wrong cookie = %q, want %q (same as no key)", wrongCookieBody, noCredsBody)
 	}
 }
 

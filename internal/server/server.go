@@ -3,6 +3,8 @@ package server
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"net"
 	"net/http"
@@ -20,18 +22,19 @@ import (
 // Server is the HTTP server for serving presentations in development mode.
 type Server struct {
 	// Fields ordered by size for better memory alignment
-	presentation      *transformer.TransformedPresentation
-	registry          *driver.Registry
-	httpServer        *http.Server
-	mux               *http.ServeMux
-	shutdownCh        chan struct{}
-	addr              string
-	presenterPassword string
-	customThemePath   string
-	baseDir           string // Base directory for serving local files (images, etc.)
-	componentBundles  *ComponentBundleStore
-	mu                sync.RWMutex
-	started           bool
+	presentation          *transformer.TransformedPresentation
+	registry              *driver.Registry
+	httpServer            *http.Server
+	mux                   *http.ServeMux
+	shutdownCh            chan struct{}
+	addr                  string
+	presenterPassword     string
+	presenterSessionToken string
+	customThemePath       string
+	baseDir               string // Base directory for serving local files (images, etc.)
+	componentBundles      *ComponentBundleStore
+	mu                    sync.RWMutex
+	started               bool
 }
 
 // New creates a new Server bound to the specified port on 0.0.0.0, so a
@@ -218,6 +221,40 @@ func (s *Server) GetPresenterPassword() string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.presenterPassword
+}
+
+// SetPresenterSessionToken sets the random per-process token handlePresenter
+// stores in the presenter auth cookie once a request proves it knows the
+// presenter password (see GeneratePresenterSessionToken). The caller
+// generates this once per process and sets it on every candidate Server and
+// on the WebSocketHub, so a cookie one of them issues validates against the
+// others too.
+func (s *Server) SetPresenterSessionToken(token string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.presenterSessionToken = token
+}
+
+// GetPresenterSessionToken returns the current presenter session token.
+func (s *Server) GetPresenterSessionToken() string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.presenterSessionToken
+}
+
+// GeneratePresenterSessionToken returns a fresh random 32-byte token,
+// hex-encoded, for use as the presenter auth cookie's value. It never
+// carries the actual presenter password (see handlePresenter in routes.go):
+// Go's cookie jar sanitizes cookie values, silently changing a raw password
+// that contains a semicolon, quote, backslash, space, or non-ASCII
+// character, which would otherwise break the cookie compare a real
+// presenter password could easily trigger.
+func GeneratePresenterSessionToken() (string, error) {
+	buf := make([]byte, 32)
+	if _, err := rand.Read(buf); err != nil {
+		return "", fmt.Errorf("generate presenter session token: %w", err)
+	}
+	return hex.EncodeToString(buf), nil
 }
 
 // SetCustomThemePath sets the path to a custom CSS theme file.

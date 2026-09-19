@@ -3,6 +3,7 @@ package server
 
 import (
 	"context"
+	"crypto/subtle"
 	"encoding/json"
 	"log"
 	"net/http"
@@ -148,11 +149,16 @@ type WebSocketHub struct {
 	// presenterPassword mirrors the dev server's --presenter-password (see
 	// SetPresenterPassword): empty means nothing is protected, so every
 	// connection can send. Non-empty means a connection may only send once
-	// it presents PresenterAuthCookieName equal to this value (see
-	// checkPresenterAuth), matching the same password the presenter page
-	// itself already requires as ?key=.
+	// it presents PresenterAuthCookieName equal to presenterSessionToken
+	// (see checkPresenterAuth), matching the cookie handlePresenter issues
+	// after the presenter page's own ?key= check passes.
 	presenterPassword string
-	mu                sync.RWMutex
+	// presenterSessionToken is the random per-process token the presenter
+	// auth cookie carries (see Server.GeneratePresenterSessionToken); the
+	// dev command sets the same value here and on every candidate Server so
+	// a cookie either of them issues validates.
+	presenterSessionToken string
+	mu                    sync.RWMutex
 }
 
 // DefaultStateRetention is how long the hub keeps the last-known slide
@@ -273,27 +279,46 @@ func (h *WebSocketHub) SetPresenterPassword(password string) {
 	h.presenterPassword = password
 }
 
+// SetPresenterSessionToken sets the per-process token checkPresenterAuth
+// compares a connection's cookie against (see
+// Server.GeneratePresenterSessionToken). The dev command calls this with
+// the same token it sets on every candidate Server.
+func (h *WebSocketHub) SetPresenterSessionToken(token string) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.presenterSessionToken = token
+}
+
 // checkPresenterAuth reports whether r may send navigation messages once
 // connected: always true when no presenter password is configured, and
-// otherwise true only when r carries PresenterAuthCookieName equal to that
-// password - proof this browser already passed the same check the
-// presenter page's ?key= requires (see handlePresenter in routes.go).
-// A connection that fails this still registers and receives every
-// broadcast; it just cannot send one (see Client.canSend).
+// otherwise true only when r carries PresenterAuthCookieName equal to the
+// current presenter session token - proof this browser already passed the
+// same check the presenter page's ?key= requires (see handlePresenter in
+// routes.go). The compare runs in constant time, and against the random
+// session token rather than the password itself, since Go's cookie jar
+// sanitizes cookie values and would silently change a password containing
+// a semicolon, quote, backslash, space, or non-ASCII character before it
+// ever reached this compare. A connection that fails this still registers
+// and receives every broadcast; it just cannot send one (see
+// Client.canSend).
 func (h *WebSocketHub) checkPresenterAuth(r *http.Request) bool {
 	h.mu.RLock()
 	password := h.presenterPassword
+	sessionToken := h.presenterSessionToken
 	h.mu.RUnlock()
 
 	if password == "" {
 		return true
+	}
+	if sessionToken == "" {
+		return false
 	}
 
 	cookie, err := r.Cookie(PresenterAuthCookieName)
 	if err != nil {
 		return false
 	}
-	return cookie.Value == password
+	return subtle.ConstantTimeCompare([]byte(cookie.Value), []byte(sessionToken)) == 1
 }
 
 // scheduleForgetLocked arranges for the hub to forget lastSlideState

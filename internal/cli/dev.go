@@ -151,6 +151,20 @@ func runDevServer(file string, port int, presenterPassword string, headless bool
 	}
 	hub.SetAllowedOrigins(allowOrigins)
 	hub.SetPresenterPassword(presenterPassword)
+	// A presenter session token, generated once per process, is what the
+	// presenter auth cookie actually carries (see
+	// server.GeneratePresenterSessionToken): the raw password never rides
+	// in a cookie, since Go's cookie jar sanitizes a value containing a
+	// semicolon, quote, backslash, space, or non-ASCII character, which
+	// would otherwise silently break the compare for a real password.
+	var presenterSessionToken string
+	if presenterPassword != "" {
+		presenterSessionToken, err = server.GeneratePresenterSessionToken()
+		if err != nil {
+			return fmt.Errorf("failed to generate presenter session token: %w", err)
+		}
+	}
+	hub.SetPresenterSessionToken(presenterSessionToken)
 	go hub.Run()
 	defer hub.Stop()
 
@@ -167,6 +181,7 @@ func runDevServer(file string, port int, presenterPassword string, headless bool
 		candidate := server.New(candidatePort)
 		candidate.SetPresentation(pres)
 		candidate.SetPresenterPassword(presenterPassword)
+		candidate.SetPresenterSessionToken(presenterSessionToken)
 		candidate.SetBaseDir(baseDir) // Enable serving local files (images, etc.)
 		candidate.SetComponentBundles(componentBundleFiles(resolvedComponents))
 		if customThemePath != "" {

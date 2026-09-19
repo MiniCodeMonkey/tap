@@ -1229,6 +1229,7 @@ func TestWebSocketHubPresenterAuthGatesSending(t *testing.T) {
 	t.Run("password configured: a connection without the auth cookie cannot send", func(t *testing.T) {
 		hub := NewWebSocketHub()
 		hub.SetPresenterPassword("secret")
+		hub.SetPresenterSessionToken("session-token")
 		go hub.Run()
 		defer hub.Stop()
 		server := httptest.NewServer(http.HandlerFunc(hub.HandleConnection))
@@ -1248,7 +1249,7 @@ func TestWebSocketHubPresenterAuthGatesSending(t *testing.T) {
 		// The dropped message never arrives; a subsequent authenticated
 		// sender's message is what proves the receiver's pipe is still
 		// live and nothing from the unauthenticated sender snuck through.
-		authenticated := dial(t, wsURL, PresenterAuthCookieName+"=secret")
+		authenticated := dial(t, wsURL, PresenterAuthCookieName+"=session-token")
 		defer authenticated.Close(websocket.StatusNormalClosure, "")
 		if err := authenticated.Write(ctx, websocket.MessageText, []byte(`{"type":"slide","slideIndex":2}`)); err != nil {
 			t.Fatalf("authenticated.Write() error = %v", err)
@@ -1269,13 +1270,14 @@ func TestWebSocketHubPresenterAuthGatesSending(t *testing.T) {
 	t.Run("password configured: a connection with the correct auth cookie can send", func(t *testing.T) {
 		hub := NewWebSocketHub()
 		hub.SetPresenterPassword("secret")
+		hub.SetPresenterSessionToken("session-token")
 		go hub.Run()
 		defer hub.Stop()
 		server := httptest.NewServer(http.HandlerFunc(hub.HandleConnection))
 		defer server.Close()
 		wsURL := "ws" + strings.TrimPrefix(server.URL, "http") + "/"
 
-		sender := dial(t, wsURL, PresenterAuthCookieName+"=secret")
+		sender := dial(t, wsURL, PresenterAuthCookieName+"=session-token")
 		defer sender.Close(websocket.StatusNormalClosure, "")
 		receiver := dial(t, wsURL, "")
 		defer receiver.Close(websocket.StatusNormalClosure, "")
