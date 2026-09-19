@@ -116,12 +116,18 @@ server, each on their own pair of ports so multiple runs can work on
 different themes in parallel without fighting over a snapshot folder.
 Start both, then run the suite with `BASE_URL` pointing at the Vite server:
 
-The dev server's websocket hub accepts an origin whose host matches the
-request's own `Host` header, which is exactly what the proxy setup below
-produces, so this workflow needs no extra flag. If you run a dev server on
-a different host or port that talks to the hub directly rather than through
-the proxy, add it with `tap dev --allow-origin http://localhost:<port>`
-(repeatable).
+The dev server checks both the request's `Host` header against a
+local-and-private allow-list and the websocket's `Origin` against that
+host. The proxy setup below satisfies both, because the browser talks to
+the Vite server on `localhost` and Vite forwards with a matching `Host`, so
+this workflow needs no extra flag.
+
+You need `tap dev --allow-origin <value>` (repeatable) when something else
+is true: a dev server that talks to the hub directly rather than through
+the proxy (pass its origin, `http://localhost:<port>`), or reaching `tap
+dev` through a custom DNS name or a tunnel such as ngrok or Tailscale (pass
+the host). LAN IP addresses, `localhost`, and `.local` names are already
+allowed.
 
 ```bash
 # terminal 1, from the repo root: the Go dev server
@@ -166,7 +172,8 @@ keeps `0.0.0.0` so a presenter can open it from another device.
 
 `scripts/prepare-changelog.sh` holds the changelog logic the release
 workflow runs, so you can test a release's changelog handling without
-triggering a release. It covers three cases:
+triggering a release. It covers four cases, each with a Go test in
+`scripts/prepare_changelog_test.go`:
 
 - **First run for a version:** the `## [Unreleased]` section's contents
   move into a new `## [<version>] - <date>` section, and `Unreleased` is
@@ -176,6 +183,8 @@ triggering a release. It covers three cases:
   safe.
 - **An empty `Unreleased` section with no section for the version:** the
   script fails, rather than cutting a release with no notes.
+- **Reusing a section that is the last thing in the file:** the notes come
+  out whole, with no dropped final line.
 
 It takes the version, the changelog to rewrite in place, and the file to
 write the extracted notes to. Set `CHANGELOG_DATE` to pin the new header's

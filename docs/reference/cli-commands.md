@@ -94,16 +94,44 @@ tap dev [file]
 | Flag | Short | Description |
 |------|-------|-------------|
 | `--port <number>` | `-p` | Port to serve on (default: `3000`) |
-| `--presenter-password <pass>` | | Password to protect the presenter view, and gate who may drive other windows |
-| `--allow-origin <origin>` | | Additional origin (`scheme://host:port`) allowed to connect to the websocket hub, for a contributor's Vite dev server. Repeatable |
+| `--presenter-password <pass>` | | Password gating the presenter view and `/qr`, and gating who may drive other windows. Any characters are allowed |
+| `--allow-origin <value>` | | An additional origin (`scheme://host:port`) allowed to connect to the websocket hub, **or** a host (`host:port`) allowed in a request's `Host` header. Repeatable |
 | `--headless` | | Run without the terminal UI, for testing/automation |
 
-The websocket hub accepts a connection with no `Origin` header, or one
-whose origin host matches the request's own `Host` header, which covers
-`localhost`, `127.0.0.1`, a LAN address, and a fallback port. Anything else
-is refused with HTTP 403 and `Forbidden: origin not allowed`, and the
-server logs the origin it turned away. `--allow-origin` adds exceptions;
-you only need it for a separate dev server on another port.
+`tap dev` checks two things, to keep a page on another site from driving
+your deck and to block DNS rebinding.
+
+**The `Host` header.** Requests to `/ws`, `/api/`, `/presenter`, `/qr`,
+`/local/`, and `/components/` must arrive with a `Host` that is
+`localhost`, a loopback, private, or link-local IP address (IPv4 or IPv6),
+a name ending in `.local`, this machine's own hostname, or a value passed
+with `--allow-origin`. Anything else gets 403 `Forbidden: host not allowed;
+use --allow-origin to allow it`.
+
+**The websocket origin.** A connection is accepted when it carries no
+`Origin` header, or when the origin's host equals the request's `Host`
+**and** that host passes the check above, or when the origin itself is in
+the allow list. A rejected one is logged, for example
+`rejected websocket connection with Host "evil.example.com": not a local,
+private, or allowed host`.
+
+::: warning Reaching tap through a custom name or a tunnel
+LAN IP addresses, `localhost`, and `.local` names work with no flag. A
+custom DNS name, or a tunnel such as an ngrok or Tailscale hostname, does
+not: pass it with `--allow-origin`, repeating the flag for each one.
+
+```bash
+tap dev slides.md --allow-origin talk.example.com
+tap dev slides.md --allow-origin https://tap.example.ngrok.app
+```
+:::
+
+`tap serve`, which has no websocket and no API, is not affected by either
+check.
+
+The live app is served only at `/`, `/index.html`, `/presenter`, and
+`/presenter.html`. `/presenter/` redirects 301 to `/presenter`, and any
+other unknown path returns 404 rather than the app.
 
 If the default port is already taken, `tap dev` tries the next ports in turn (up to 20 above it) and prints the URL of whichever one it actually bound, so two decks (or two agents) can run side by side without flags. Passing `--port` explicitly instead fails outright when that exact port is busy:
 
@@ -262,7 +290,10 @@ tap pdf slides.md --content notes
 ### Behavior
 
 `tap pdf` exits with status **130** on Ctrl-C or SIGTERM, after finishing
-its cleanup, printing `interrupted` on standard error. The progress spinner
+its cleanup, printing `interrupted` on standard error. This holds whether
+the signal reaches the process directly or the terminal signals the whole
+process group. A second Ctrl-C during that cleanup exits at once, so a
+browser that will not close cannot hold the terminal. The progress spinner
 is written to standard error and draws nothing when standard error is not a
 terminal, so standard output holds only the result lines; warnings print
 after the spinner has stopped.
@@ -280,8 +311,11 @@ error: slides/RollingDeploy.jsx:12:8: Expected ")" but found "}"
 A slide that shows an error card at export time, such as a component that throws while rendering, is still written to the PDF. `tap pdf` prints one line per affected slide to standard error and exits 0:
 
 ```
-warning: slide 4 shows an error card
+warning: slide 4 shows an error card: component blew up on purpose
 ```
+
+The message is the one on the card, so a broken export names what broke
+rather than only where.
 
 ::: tip
 PDF export captures your presentation at export time. If you have live code execution, the results shown are whatever was displayed when you ran the export.
@@ -326,7 +360,13 @@ On success the command prints the path of each file written, one per line, and n
 
 It exits with status 1, and a message on standard error, on any of: a missing deck, an out-of-range slide, step, fragment, or `--wait`, an unknown theme, a deck component that fails to build, a browser that cannot start, or a rendered slide that shows a slide or component error card. A component build error fails before any image is written.
 
-On Ctrl-C or SIGTERM it finishes its cleanup, prints `interrupted` on standard error, and exits with status **130**.
+On Ctrl-C or SIGTERM it finishes its cleanup, prints `interrupted` on standard error, and exits with status **130**, whether the signal reaches the process directly or the terminal signals the whole process group. A second Ctrl-C during the cleanup exits at once.
+
+A slide that renders an error card fails with the card's own message:
+
+```
+Error: slide 2 shows an error card: component blew up on purpose
+```
 
 ### Examples
 
