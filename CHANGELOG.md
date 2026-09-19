@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+## [2.0.0-beta.2] - 2026-09-19
+
 ### Added
 
 - **`?` lists the keyboard shortcuts** - In the audience view and the presenter view, `?` opens a list of that view's shortcuts. `?`, `Esc`, or a click outside closes it. The `tap dev` help line mentions it.
