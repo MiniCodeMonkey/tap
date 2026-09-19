@@ -426,6 +426,64 @@ func TestWebSocketHubHandleConnection(t *testing.T) {
 	}
 }
 
+// TestWebSocketHubOriginCheck covers checkOrigin's rules: no Origin header,
+// an Origin whose host matches the request's own Host header, and an Origin
+// explicitly allowed via SetAllowedOrigins are all accepted; anything else
+// is rejected with 403.
+func TestWebSocketHubOriginCheck(t *testing.T) {
+	hub := NewWebSocketHub()
+	go hub.Run()
+	defer hub.Stop()
+
+	hub.SetAllowedOrigins([]string{"http://localhost:5173"})
+
+	server := httptest.NewServer(http.HandlerFunc(hub.HandleConnection))
+	defer server.Close()
+
+	wsURL := "ws" + strings.TrimPrefix(server.URL, "http") + "/"
+	httpURL := server.URL
+
+	dial := func(origin string) error {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		var header http.Header
+		if origin != "" {
+			header = http.Header{"Origin": []string{origin}}
+		}
+		conn, _, err := websocket.Dial(ctx, wsURL, &websocket.DialOptions{HTTPHeader: header})
+		if err == nil {
+			conn.Close(websocket.StatusNormalClosure, "")
+		}
+		return err
+	}
+
+	t.Run("no origin header is accepted", func(t *testing.T) {
+		if err := dial(""); err != nil {
+			t.Errorf("dial with no Origin header failed: %v", err)
+		}
+	})
+
+	t.Run("origin matching the request host is accepted", func(t *testing.T) {
+		sameHostOrigin := "http://" + strings.TrimPrefix(httpURL, "http://")
+		if err := dial(sameHostOrigin); err != nil {
+			t.Errorf("dial with same-host Origin %q failed: %v", sameHostOrigin, err)
+		}
+	})
+
+	t.Run("origin allowed via SetAllowedOrigins is accepted", func(t *testing.T) {
+		if err := dial("http://localhost:5173"); err != nil {
+			t.Errorf("dial with allowed Origin failed: %v", err)
+		}
+	})
+
+	t.Run("foreign origin is rejected", func(t *testing.T) {
+		err := dial("http://evil.example.com")
+		if err == nil {
+			t.Fatal("dial with foreign Origin succeeded, want rejection")
+		}
+	})
+}
+
 func TestWebSocketHubBroadcastToRealConnection(t *testing.T) {
 	hub := NewWebSocketHub()
 	go hub.Run()

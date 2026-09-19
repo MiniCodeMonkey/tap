@@ -4,7 +4,9 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"log"
 	"net/http"
+	"net/url"
 	"sync"
 	"time"
 
@@ -106,7 +108,13 @@ type WebSocketHub struct {
 	// in-range-but-stale index itself (see applyRemoteState in
 	// frontend/src/lib/stores/websocket.ts).
 	slideCount int
-	mu         sync.RWMutex
+	// allowedOrigins holds the extra origins a WebSocket upgrade is
+	// accepted from, beyond same-host connections - the tap dev
+	// --allow-origin flag, for a contributor's Vite dev server running on
+	// another port (see checkOrigin). Keyed by the full origin string
+	// (e.g. "http://localhost:5173") as sent in the Origin header.
+	allowedOrigins map[string]struct{}
+	mu             sync.RWMutex
 }
 
 // DefaultStateRetention is how long the hub keeps the last-known slide
@@ -164,6 +172,52 @@ func (h *WebSocketHub) validSlideIndex(slideIndex int) bool {
 		return false
 	}
 	return true
+}
+
+// SetAllowedOrigins sets the extra origins the hub accepts a WebSocket
+// upgrade from, beyond an origin that already matches the request's own
+// Host header (see checkOrigin). Each entry is a full origin such as
+// "http://localhost:5173", matched exactly against the incoming Origin
+// header. This is what tap dev's repeatable --allow-origin flag feeds, for
+// a contributor's Vite dev server proxying to this hub from another port.
+func (h *WebSocketHub) SetAllowedOrigins(origins []string) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.allowedOrigins = make(map[string]struct{}, len(origins))
+	for _, origin := range origins {
+		h.allowedOrigins[origin] = struct{}{}
+	}
+}
+
+// checkOrigin reports whether r is an acceptable WebSocket upgrade request
+// given its Origin header:
+//   - No Origin header at all: accepted. Only a browser sends one, so this
+//     covers non-browser clients and tests.
+//   - An Origin whose host (host and port) equals the request's own Host
+//     header: accepted. This covers localhost, 127.0.0.1, the LAN address
+//     a presenter opens tap dev from on a phone or second laptop, and
+//     whatever fallback port tap dev bound when its default was busy -
+//     all of them addressed with the same host the browser used to reach
+//     this server in the first place.
+//   - An Origin explicitly listed via SetAllowedOrigins: accepted. This is
+//     the --allow-origin flag's list, for a dev server proxying in from
+//     elsewhere (the Vite dev server contributors run on another port).
+//
+// Anything else is rejected.
+func (h *WebSocketHub) checkOrigin(r *http.Request) bool {
+	origin := r.Header.Get("Origin")
+	if origin == "" {
+		return true
+	}
+
+	if originURL, err := url.Parse(origin); err == nil && originURL.Host == r.Host {
+		return true
+	}
+
+	h.mu.RLock()
+	_, allowed := h.allowedOrigins[origin]
+	h.mu.RUnlock()
+	return allowed
 }
 
 // scheduleForgetLocked arranges for the hub to forget lastSlideState
@@ -366,8 +420,15 @@ func (h *WebSocketHub) ClientCount() int {
 // HandleConnection handles a new WebSocket connection.
 // It should be used as an HTTP handler.
 func (h *WebSocketHub) HandleConnection(w http.ResponseWriter, r *http.Request) {
+	if !h.checkOrigin(r) {
+		log.Printf("rejected websocket connection from origin %q: not this server's host and not allowed by --allow-origin", r.Header.Get("Origin"))
+		http.Error(w, "Forbidden: origin not allowed", http.StatusForbidden)
+		return
+	}
+
 	conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{
-		// Allow connections from any origin in dev mode
+		// checkOrigin above already enforced the origin rules tap dev
+		// wants; skip the library's own, less flexible host-pattern check.
 		InsecureSkipVerify: true,
 	})
 	if err != nil {

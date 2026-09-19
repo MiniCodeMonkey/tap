@@ -27,6 +27,7 @@ var (
 	devPort              int
 	devPresenterPassword string
 	devHeadless          bool
+	devAllowOrigins      []string
 )
 
 // devCmd represents the dev command
@@ -72,7 +73,7 @@ Examples:
 			file = args[0]
 		}
 
-		return runDevServer(file, devPort, devPresenterPassword, devHeadless, cmd.Flags().Changed("port"))
+		return runDevServer(file, devPort, devPresenterPassword, devHeadless, cmd.Flags().Changed("port"), devAllowOrigins)
 	},
 }
 
@@ -84,13 +85,14 @@ func init() {
 	devCmd.Flags().IntVarP(&devPort, "port", "p", 3000, "port for the dev server")
 	devCmd.Flags().StringVar(&devPresenterPassword, "presenter-password", "", "password to protect the presenter view")
 	devCmd.Flags().BoolVar(&devHeadless, "headless", false, "run without TUI (for testing/automation)")
+	devCmd.Flags().StringArrayVar(&devAllowOrigins, "allow-origin", nil, "additional origin (scheme://host:port) allowed to connect to the websocket hub, for a contributor's Vite dev server (repeatable)")
 }
 
 // runDevServer starts the dev server with hot reload and TUI. portExplicit
 // is whether the user passed --port themselves (cmd.Flags().Changed
 // ("port")): it decides whether a busy port fails outright or falls back
 // to the next one (see startOnAvailablePort).
-func runDevServer(file string, port int, presenterPassword string, headless bool, portExplicit bool) error {
+func runDevServer(file string, port int, presenterPassword string, headless bool, portExplicit bool, allowOrigins []string) error {
 	// Resolve absolute path
 	absFile, err := filepath.Abs(file)
 	if err != nil {
@@ -147,6 +149,7 @@ func runDevServer(file string, port int, presenterPassword string, headless bool
 			hub.SetStateRetention(retention)
 		}
 	}
+	hub.SetAllowedOrigins(allowOrigins)
 	go hub.Run()
 	defer hub.Stop()
 
