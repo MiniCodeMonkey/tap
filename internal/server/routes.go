@@ -24,8 +24,22 @@ func (s *Server) SetupRoutes() {
 	// presenter-specific and nothing a DNS-rebinding attacker gains from
 	// (see requireAllowedHost) - the audience view and its static assets
 	// are meant to be reachable the same way the presentation itself is.
-	s.mux.HandleFunc("GET /", s.handleIndex)
+	// The app is only ever served at its exact paths, not the whole "/"
+	// subtree Go's ServeMux would otherwise catch every unmatched request
+	// with: the frontend now builds with a relative base ("base: './'"),
+	// so its script and stylesheet URLs resolve relative to whatever path
+	// served the page, and serving index.html for, say, /foo/bar would
+	// point those URLs at /foo/assets/... - which returns this same HTML,
+	// not a script - leaving the page blank. "/{$}" matches only the
+	// literal root; "/index.html" and "/presenter.html" are the frontend's
+	// own file names, aliased to the same handlers. A trailing-slash
+	// variant of /presenter redirects to the canonical path; everything
+	// else unmatched falls through to ServeMux's own 404.
+	s.mux.HandleFunc("GET /{$}", s.handleIndex)
+	s.mux.HandleFunc("GET /index.html", s.handleIndex)
 	s.mux.HandleFunc("GET /presenter", s.requireAllowedHost(s.handlePresenter))
+	s.mux.HandleFunc("GET /presenter.html", s.requireAllowedHost(s.handlePresenter))
+	s.mux.HandleFunc("GET /presenter/", s.requireAllowedHost(redirectToCanonicalPath("/presenter")))
 	s.mux.HandleFunc("GET /api/presentation", s.requireAllowedHost(s.handleAPIPresentation))
 	s.mux.HandleFunc("GET /api/custom-theme.css", s.requireAllowedHost(s.handleCustomTheme))
 	s.mux.HandleFunc("POST /api/execute", s.requireAllowedHost(s.handleAPIExecute))
@@ -45,6 +59,21 @@ func (s *Server) SetupRoutes() {
 	// manages the terminal in alternate screen mode, and raw fmt.Printf
 	// output would interfere with the display. HTTP activity is visible
 	// through the TUI's connection status instead.
+}
+
+// redirectToCanonicalPath returns a handler that redirects a request for a
+// trailing-slash variant of canonical (for example "/presenter/") to
+// canonical itself, preserving the query string, so a link or a reverse
+// proxy that appends a trailing slash still lands on the one path the
+// frontend's relative asset URLs and any auth cookie are built for.
+func redirectToCanonicalPath(canonical string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		target := canonical
+		if r.URL.RawQuery != "" {
+			target += "?" + r.URL.RawQuery
+		}
+		http.Redirect(w, r, target, http.StatusMovedPermanently)
+	}
 }
 
 // handleIndex serves the main presentation viewer (index.html).

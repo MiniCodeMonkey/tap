@@ -654,6 +654,96 @@ func TestSetupRoutes(t *testing.T) {
 	}
 }
 
+// TestSetupRoutes_ExactPathsOnly reproduces the nested-path bug the
+// frontend's relative base ("base: './'") introduces: serving index.html
+// (or presenter.html) for an unmatched nested path used to work because
+// "/" was a catch-all subtree pattern, but the page's relative asset URLs
+// then resolve against the wrong directory and the page comes up blank.
+// The app must be served only at its exact paths; a trailing-slash variant
+// of /presenter redirects to the canonical path, and any other unmatched
+// path gets a real 404.
+func TestSetupRoutes_ExactPathsOnly(t *testing.T) {
+	s := New(0)
+	s.SetupRoutes()
+
+	cfg := config.DefaultConfig()
+	pres := &transformer.TransformedPresentation{
+		Config: *cfg,
+		Slides: []transformer.TransformedSlide{
+			{Index: 0, Layout: "title", HTML: "<h1>Test</h1>"},
+		},
+	}
+	s.SetPresentation(pres)
+
+	if err := s.Start(); err != nil {
+		t.Fatalf("failed to start server: %v", err)
+	}
+	defer s.Shutdown(context.Background())
+
+	_, addrPort, err := net.SplitHostPort(s.Addr())
+	if err != nil {
+		t.Fatalf("failed to parse server address: %v", err)
+	}
+	baseURL := "http://127.0.0.1:" + addrPort
+
+	get := func(t *testing.T, path string) *http.Response {
+		t.Helper()
+		client := &http.Client{
+			CheckRedirect: func(req *http.Request, via []*http.Request) error {
+				return http.ErrUseLastResponse
+			},
+		}
+		resp, err := client.Get(baseURL + path)
+		if err != nil {
+			t.Fatalf("GET %s failed: %v", path, err)
+		}
+		return resp
+	}
+
+	t.Run("index.html serves the index page", func(t *testing.T) {
+		resp := get(t, "/index.html")
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Errorf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+		}
+	})
+
+	t.Run("presenter.html serves the presenter page", func(t *testing.T) {
+		resp := get(t, "/presenter.html")
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Errorf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+		}
+		body, _ := io.ReadAll(resp.Body)
+		if !strings.Contains(string(body), "Presenter View") {
+			t.Error("expected 'Presenter View' in body")
+		}
+	})
+
+	t.Run("a trailing slash on /presenter redirects to the canonical path", func(t *testing.T) {
+		resp := get(t, "/presenter/")
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusMovedPermanently {
+			t.Errorf("status = %d, want %d", resp.StatusCode, http.StatusMovedPermanently)
+		}
+		if location := resp.Header.Get("Location"); location != "/presenter" {
+			t.Errorf("Location = %q, want %q", location, "/presenter")
+		}
+	})
+
+	t.Run("an unknown nested path gets a real 404, not index.html", func(t *testing.T) {
+		resp := get(t, "/foo/bar")
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusNotFound {
+			t.Errorf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
+		}
+		body, _ := io.ReadAll(resp.Body)
+		if strings.Contains(string(body), "Tap") {
+			t.Errorf("expected a plain 404, not the index page: %q", body)
+		}
+	})
+}
+
 func TestAPIPresentation_JSONEncodesAllFields(t *testing.T) {
 	s := New(0)
 
