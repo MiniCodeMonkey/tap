@@ -46,12 +46,21 @@ const NAMED_COLORS = new Set([
 	'inherit'
 ]);
 
-const COLOR_KEY_TO_PROPERTY: Record<string, string> = {
-	background: '--color-bg',
-	text: '--color-text',
-	muted: '--color-muted',
-	accent: '--color-accent',
-	codeBg: '--color-code-bg'
+// Each themeColors key maps to the base bridge property every theme already
+// aliases from its own tokens (see docs/reference/theme-porting.md section
+// 4), plus the standard design-spec token name(s) useTheme() reads. Both
+// are set on the same element so CSS (which reads --color-*) and deck
+// components (which read the design-spec names through useTheme()) see the
+// same override. "accent" sets both --accent and --accent-text, since
+// themeColors has no separate key for the two accent roles. "codeBg" has
+// no design-spec token of its own (--surface is a different, broader
+// role), so it only sets its bridge property.
+const COLOR_KEY_TO_PROPERTIES: Record<string, string[]> = {
+	background: ['--color-bg', '--bg'],
+	text: ['--color-text', '--fg'],
+	muted: ['--color-muted', '--muted'],
+	accent: ['--color-accent', '--accent', '--accent-text'],
+	codeBg: ['--color-code-bg']
 };
 
 function isValidColor(value: string): boolean {
@@ -84,9 +93,9 @@ function buildColorOverrideStyle(themeColors: ThemeColors | undefined): CSSPrope
 	for (const [key, value] of Object.entries(themeColors)) {
 		if (!value) continue;
 
-		const cssProperty = COLOR_KEY_TO_PROPERTY[key];
-		if (!cssProperty) {
-			console.warn(`[tap] Invalid themeColors key "${key}". Valid keys: ${Object.keys(COLOR_KEY_TO_PROPERTY).join(', ')}`);
+		const cssProperties = COLOR_KEY_TO_PROPERTIES[key];
+		if (!cssProperties) {
+			console.warn(`[tap] Invalid themeColors key "${key}". Valid keys: ${Object.keys(COLOR_KEY_TO_PROPERTIES).join(', ')}`);
 			continue;
 		}
 
@@ -95,7 +104,9 @@ function buildColorOverrideStyle(themeColors: ThemeColors | undefined): CSSPrope
 			continue;
 		}
 
-		style[cssProperty] = value;
+		for (const cssProperty of cssProperties) {
+			style[cssProperty] = value;
+		}
 	}
 
 	return style as CSSProperties;

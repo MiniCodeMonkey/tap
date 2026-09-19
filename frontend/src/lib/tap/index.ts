@@ -130,7 +130,11 @@ export interface ThemeTokens {
 	muted: string;
 	accent: string;
 	accentText: string;
+	accent2: string;
 	surface: string;
+	statusOk: string;
+	statusWarn: string;
+	statusError: string;
 	fontDisplay: string;
 	fontBody: string;
 	fontMono: string;
@@ -148,7 +152,11 @@ const TOKEN_PROPERTIES: Record<keyof ThemeTokens, string> = {
 	muted: '--muted',
 	accent: '--accent',
 	accentText: '--accent-text',
+	accent2: '--accent-2',
 	surface: '--surface',
+	statusOk: '--status-ok',
+	statusWarn: '--status-warn',
+	statusError: '--status-error',
 	fontDisplay: '--font-display',
 	fontBody: '--font-body',
 	fontMono: '--font-mono',
@@ -165,7 +173,11 @@ const EMPTY_TOKENS: ThemeTokens = {
 	muted: '',
 	accent: '',
 	accentText: '',
+	accent2: '',
 	surface: '',
+	statusOk: '',
+	statusWarn: '',
+	statusError: '',
 	fontDisplay: '',
 	fontBody: '',
 	fontMono: '',
@@ -190,7 +202,10 @@ function readTokens(element: Element): ThemeTokens {
  * The active theme's tokens, read from the CSS custom properties on the
  * nearest `[data-theme]` ancestor of the component's own root. Re-reads
  * whenever that ancestor's `data-theme` attribute changes (a theme switch
- * from the dev server's live reload, or the `t` key in the viewer).
+ * from the dev server's live reload, or the `t` key in the viewer), or
+ * whenever its inline `style` attribute changes (a deck's `themeColors`
+ * frontmatter applies its overrides as inline custom properties on this
+ * same element - see SlideCanvas.tsx).
  * Returns every value as an empty string until the component's root has
  * mounted, and for any token the current theme doesn't define. Reads the
  * tokens in a layout effect, not a plain effect, so they are populated
@@ -214,7 +229,7 @@ export function useTheme(): ThemeTokens {
 		const observer = new MutationObserver(() => {
 			setTokens(readTokens(themeElement));
 		});
-		observer.observe(themeElement, { attributes: true, attributeFilter: ['data-theme'] });
+		observer.observe(themeElement, { attributes: true, attributeFilter: ['data-theme', 'style'] });
 
 		return () => observer.disconnect();
 	}, [rootRef]);
