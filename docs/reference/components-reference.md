@@ -26,11 +26,12 @@ The entry file must live inside the deck's own folder. A path that resolves
 outside it, symlinks followed, is rejected with:
 
 ```
-error: ../outside/Thing.jsx: component files must live inside the deck's folder
+error: component files must live inside the deck folder: ../shared/Thing.jsx (imports from outside are allowed, entry files are not) (used on slide 1)
 ```
 
-A build error with no source position omits it rather than printing a
-misleading `:0:0`.
+This is checked before esbuild runs, so a deck with an out-of-folder entry
+fails immediately rather than partway through a build. A build error with
+no source position omits it rather than printing a misleading `:0:0`.
 
 Files that the entry file *imports* may live outside the deck folder when they
 are code or a stylesheet (`.js`, `.jsx`, `.mjs`, `.cjs`, `.ts`, `.tsx`,
@@ -186,7 +187,7 @@ name that the slide does not define renders nothing.
 
 ### `useTheme`
 
-Returns an object with **exactly these 14 keys**, each read from the
+Returns an object with **exactly these 18 keys**, each read from the
 matching CSS custom property on the nearest `[data-theme]` ancestor:
 
 | Key | CSS custom property |
@@ -196,7 +197,11 @@ matching CSS custom property on the nearest `[data-theme]` ancestor:
 | `muted` | `--muted` |
 | `accent` | `--accent` |
 | `accentText` | `--accent-text` |
+| `accent2` | `--accent-2` |
 | `surface` | `--surface` |
+| `statusOk` | `--status-ok` |
+| `statusWarn` | `--status-warn` |
+| `statusError` | `--status-error` |
 | `fontDisplay` | `--font-display` |
 | `fontBody` | `--font-body` |
 | `fontMono` | `--font-mono` |
@@ -217,21 +222,21 @@ component follows the `t` key and `?theme=<slug>` live.
 Run `tap theme show <slug>` to see the same token values on the command
 line.
 
+`useTheme()` also sees a deck's frontmatter `themeColors` overrides, and
+re-reads when they change.
+
 #### Reading other theme variables
 
-There is no second accent in `ThemeTokens`. Some themes define extra
-variables, such as `terminal`'s `--accent-2`, but `useTheme()` returns the
-portable subset that every theme defines, not the whole set.
-
-A component may read any theme variable directly, and should always give a
-fallback so it still works in the themes that do not define it:
+The 18 keys are the portable set that every theme defines. A theme may
+define more; a component can read any of them directly, and should give a
+fallback so it still works in the themes that do not:
 
 ```jsx
-<div style={{ color: 'var(--accent-2, var(--accent-text))' }}>ok</div>
+<div style={{ color: 'var(--brand-ink, var(--fg))' }}>ok</div>
 ```
 
-`tap theme show <slug> --json` lists a theme's extra colors under
-`tokens.colors.extra`, and every raw variable under `tokens.other`.
+`tap theme show <slug> --json` lists every raw variable under
+`tokens.other`.
 
 ## The color rule
 
@@ -243,17 +248,34 @@ page.
 | What you are painting | Use |
 |-----------------------|-----|
 | A filled shape, bar, or box on the slide | `theme.accent` |
+| A second filled shape that must read apart from the first | `theme.accent2` |
 | Text or a thin line sitting on `theme.bg` | `theme.accentText`, or `currentColor` |
 | Text painted on top of an accent fill | `textOn(theme.accent, theme)` |
-| A failed, down, or inactive state | `theme.muted`, a dashed outline, and lower opacity |
+| Healthy, warning, or failed **state** | `theme.statusOk`, `theme.statusWarn`, `theme.statusError` |
+| Merely inactive or out of focus, with no verdict | `theme.muted`, a dashed outline, lower opacity |
 
 `theme.accentText` is the accent in a form the theme guarantees is
 readable as text on its background. For `zine` that is `#0d0d0d`, not the
 yellow.
 
-Tap has **no semantic token for a failed or down state**. Build one the way
-the shipped example's restarting server box does: `theme.muted` for text
-and border, `dashed` rather than `solid`, and a lower opacity.
+### Status colors
+
+Every theme defines `--status-ok`, `--status-warn`, and `--status-error`.
+Each is readable **as a fill**, at a contrast of at least 3:1 against
+`--bg`, so a filled dot, bar, or badge in one of them is visible in every
+theme. Use `textOn(theme.statusError, theme)` for a label painted on top of
+one.
+
+Use them only where the color carries meaning: a health state, a passed or
+failed check, a threshold crossed. A component that paints its whole
+palette in status colors leaves the audience nothing to read them against.
+Something that is merely inactive or out of focus is not a verdict, so it
+stays `theme.muted` with a dashed outline and lower opacity, the way the
+shipped example's restarting server box does.
+
+`theme.accent2` is a real second accent in themes that have one, and equal
+to `theme.accentText` in the rest, so a component can always reach for a
+second fill without checking.
 
 ### `textOn`
 
@@ -364,6 +386,32 @@ const shown = printMode ? SERVERS.length : step;
 const shown = step;
 const duration = printMode ? 0 : 0.3;
 ```
+
+### What tap enforces in print mode
+
+Tap does some of the work for you, but not all of it, so a component must
+still honor `usePrintMode()`.
+
+Tap **does**:
+
+- wrap deck components in Motion's `reducedMotion="always"`, which makes
+  transform and layout animations instant: `x`, `y`, `scale`, `rotate`,
+  `skew`, `width`, `height`, `top`, `left`, `right`, `bottom`, and
+  `layoutId` projection
+- apply `animation: none; transition: none` to everything inside
+  `.deck-component-root` under `[data-print]`, which stops raw CSS keyframe
+  animations and CSS transitions
+
+Tap does **not** stop:
+
+- Motion animations of `opacity`, `color`, or `backgroundColor`
+- anything your own code drives: `setTimeout`, `setInterval`,
+  `requestAnimationFrame`, a state machine, a canvas loop
+
+So a fade that Motion drives will still fade in a PDF unless you set
+`transition={{ duration: printMode ? 0 : 0.4 }}` yourself, and a timer will
+still tick unless you gate it. Treat the enforcement as a safety net for
+the transform cases, not as a reason to skip the check.
 
 The `Step` helper follows the same rule: it compares `at`/`from` against
 the live `step` in every mode. True print and previews already force `step`
@@ -505,8 +553,21 @@ bundle, and tap adds one `<link rel="stylesheet" data-deck-component>` for
 it, once per URL.
 
 Imported `.png`, `.jpg`, `.jpeg`, `.gif`, `.svg`, `.webp`, and `.woff2`
-files are inlined as data URLs, at any size. Large images belong in the
-markdown as a normal image, not in a component's imports.
+files are handled by size:
+
+| Size | What happens |
+|------|--------------|
+| Under 100 KB | Inlined into the bundle as a data URL |
+| 100 KB or more | Emitted as its own file and referenced by URL |
+
+An emitted file is served by `tap dev` from `/components/`, and written by
+`tap build` into `dist/components/` alongside the bundle. Either way the
+component just uses the imported value as a `src`; the difference only
+shows in the output size.
+
+A large photograph still belongs in the markdown as a normal image rather
+than in a component's imports, since the markdown path gives you sizing
+attributes and the theme's image styling.
 
 ### URLs and output
 
@@ -539,7 +600,14 @@ or anything it imports changes. Two rules matter:
 Every build error prints one line to standard error, in this format:
 
 ```
-error: <file>:<line>:<column>: <message>
+error: <file>:<line>:<column>: <message> (used on slides <n>, <m>)
+```
+
+The suffix names every slide that uses the file, so you know where to look:
+`(used on slide 2)` for one, `(used on slides 2, 5)` for several.
+
+```
+error: slides/Broken.jsx:7:1: Top-level return cannot be used inside an ECMAScript module (used on slides 1, 3)
 ```
 
 `<file>` is relative to the deck's folder when the file lives inside it,
@@ -553,25 +621,50 @@ is caught by its own error boundary, so one broken inline component never
 takes the rest of the slide with it. A slide that fails to render for any
 other reason is caught by the slide error boundary.
 
-Both show the same kind of card, and the rule for where is simple: a
-server-backed render shows the card; only a static `tap build` output falls
-back.
+There are three forms, and which one you get depends on who is looking.
 
-| Context | Whole-slide component | Inline component |
-|---------|----------------------|------------------|
-| `tap dev` | Error card | Error card |
-| `tap pdf` | Error card on that page, plus a warning on standard error | Error card on that page, plus a warning on standard error |
-| `tap screenshot` | Error card, and exit status 1 | Error card, and exit status 1 |
-| A static `tap build` output | The slide's slots rendered with the `default` layout | The slot's raw content, without the component |
+| Form | What is shown |
+|------|---------------|
+| **Full card** | The source path and the message, in place of the component |
+| **Audience-safe** | The fallback content (the slide's slots in the `default` layout) plus a small muted `component error` chip in the top right corner |
+| **Silent fallback** | The fallback content, with no card and no chip |
 
-The fallback is deliberate: a deck already shipped to an audience stays
-usable on stage rather than showing a stack trace. Everywhere you are still
-authoring, the card tells you what broke.
+| Context | Form |
+|---------|------|
+| A normal viewer window, not fullscreen | Full card |
+| The presenter view (`/presenter`) | Full card |
+| `?debug=true` | Full card |
+| `?print=true`, `?capture=true`, `tap pdf`, `tap screenshot` | Full card |
+| A **fullscreen** viewer | Audience-safe |
+| `?present=true` | Audience-safe |
+| A static `tap build` output | Silent fallback |
 
-The two are told apart at run time by whether the page has a
-`#presentation-data` element, which only a static build's `index.html`
-embeds. `import.meta.env.DEV` is not the signal, because the embedded
-frontend is always a production Vite build.
+The audience-safe form exists because a live talk otherwise shows a
+throwing component's raw error to the whole room. Go fullscreen, or open
+the audience window with `?present=true`, and a failure degrades to the
+slide's own content with a chip only you will notice. `?debug=true` forces
+the full card back on any window, which is what you want while authoring.
+
+Even in the audience-safe form the `.deck-error-card` element stays in the
+DOM, hidden, with the message in its `data-message` attribute, so
+`tap screenshot` still finds it and still exits 1.
+
+A static build's silent fallback is deliberate: a shipped deck stays usable
+rather than showing a stack trace. A static build is told apart at run time
+by the `#presentation-data` element its `index.html` embeds;
+`import.meta.env.DEV` is not the signal, because the embedded frontend is
+always a production Vite build.
+
+### The load timeout
+
+A component that has not loaded within **8 seconds** becomes a load error:
+
+```
+component did not load within 8 seconds: ./slides/RollingDeploy.jsx
+```
+
+Re-entering the slide retries. There is no timeout in print mode, in a
+capture, or in a preview, since those have no user waiting on a slide.
 
 ### The card itself
 

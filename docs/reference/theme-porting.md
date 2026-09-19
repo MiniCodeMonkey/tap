@@ -285,11 +285,27 @@ didn't show you:
 ## 4. Bridge your tokens to the base theme's token names
 
 The design spec's token set (`--bg --fg --muted --accent --accent-text
---surface --font-display --font-body --font-mono --ease --dur --space-unit
---radius --stroke-width`) is what your theme thinks in. The last three are
-required too: a deck component reads them with `useTheme()` to size its own
-spacing, corners, and line weight in your theme's terms, so pick values
-that match the rest of your design rather than copying another theme's. It is **not** what most of the app's shared CSS reads.
+--accent-2 --surface --status-ok --status-warn --status-error
+--font-display --font-body --font-mono --ease --dur --space-unit --radius
+--stroke-width`) is what your theme thinks in. All of them are required: a
+deck component reads them with `useTheme()` to color and size itself in
+your theme's terms, so pick values that match the rest of your design
+rather than copying another theme's.
+
+Four of them are newer and easy to miss:
+
+| Token | Rule |
+|-------|------|
+| `--status-ok` | A healthy or passing state, used as a **fill**. At least **3:1** against `--bg` |
+| `--status-warn` | A warning state, used as a fill. At least **3:1** against `--bg` |
+| `--status-error` | A failed state, used as a fill. At least **3:1** against `--bg` |
+| `--accent-2` | A real second accent if your theme has one; otherwise set it equal to `--accent-text` |
+
+The 3:1 floor is what makes a filled status dot or bar visible in every
+theme, and the theme check suite enforces it. These are fills, not text
+colors: a component paints a label on one with `textOn()`. Keep them
+recognisable as ok, warning, and error rather than three shades of your
+accent. It is **not** what most of the app's shared CSS reads.
 `layouts.css`, `prose.css`, `rich-blocks.css`, and `ui-components.css`, the
 files that style the live code block, the map slide, `.slide-badge`,
 `.slide-tag`, and generic prose, all read the *base* theme's token names:
@@ -471,7 +487,33 @@ the steps modest: a `short` title is still one of several headings the
 theme has to keep in a consistent type scale, not a special case that
 breaks it.
 
+### Blockquote length classes
+
+Blockquotes carry the same `data-length` attribute headings do, on their
+own rune-count thresholds:
+
+| Class | Rune count |
+|-------|-----------|
+| `short` | up to 80 |
+| `medium` | 81 to 180 |
+| `long` | above 180 |
+
+Thirteen of the built-in themes step the quote size down for a `long`
+quote. Size for `long` first, then scale `short` and `medium` up, the same
+way you do for headings:
+
+```css
+[data-theme='<slug>'] .slot blockquote[data-length='short'] {
+	font-size: 3.4rem;
+}
+```
+
 ## 8. Fonts
+
+The frontend build emits **`.woff2` only**. The `@fontsource` packages ship
+`.woff` as well, and the build strips those `src` entries and deletes the
+files, since every browser tap supports has read `.woff2` for years. Do not
+add a `.woff` fallback by hand; it will be removed.
 
 Every family the 20 themes use is already installed as an `@fontsource`
 package (or `@fontsource-variable`, for the one family with no static
@@ -581,7 +623,17 @@ The suite runs, per slide of the kitchen-sink deck: overflow (no text
 element extends past the slide, except vertically inside a scroll slide's
 `.scroll-content`), contrast (`--fg` and `--accent-text` at least 7:1
 against `--bg`, `--muted` at least 4.5:1), occluded or clipped text, and
-minimum text size (section 6). It also runs, once per theme: an isolation
+minimum text size (section 6), and the contrast of `--status-ok`,
+`--status-warn`, and `--status-error` against `--bg` (at least 3:1 each,
+since a component uses them as fills).
+
+One check runs **live**, not in print mode: an entrance-animation check per
+theme, asserting that an element which animates in never settles hidden. A
+theme whose entrance keyframes end at `opacity: 0`, or that leaves a
+transform parked off-slide, passes every print-mode check and still shows
+the audience a blank slide; this is the check that catches it.
+
+It also runs, once per theme: an isolation
 check (switches from the
 adjacent theme in `themes.json` order into yours with the `t` key, in one
 page, and asserts the resulting computed styles equal a fresh page load of

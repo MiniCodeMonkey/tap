@@ -90,7 +90,11 @@ hand-written theme should build on, instead of hard-coded colors:
 | `--muted` | Secondary text and inactive states |
 | `--accent` | The one highlight color, used as a **fill** |
 | `--accent-text` | The accent in a form that is readable as **text** on `--bg` |
+| `--accent-2` | A second fill; equals `--accent-text` in themes with no second accent |
 | `--surface` | Panels, cards, and code backgrounds |
+| `--status-ok` | A healthy or passing state, as a fill |
+| `--status-warn` | A warning state, as a fill |
+| `--status-error` | A failed state, as a fill |
 | `--font-display` | Heading family |
 | `--font-body` | Body family |
 | `--font-mono` | Code family |
@@ -99,6 +103,12 @@ hand-written theme should build on, instead of hard-coded colors:
 | `--space-unit` | The theme's base spacing step |
 | `--radius` | Corner radius |
 | `--stroke-width` | Border and line weight |
+
+The three status colors are each readable as a fill at a contrast of at
+least 3:1 against `--bg`, so a filled dot, bar, or badge in one of them is
+visible in every theme. They carry meaning, so use them only where the
+color says something: a health state, a passed or failed check, a threshold
+crossed. Something merely inactive stays `--muted`.
 
 Themes also set the Shiki CSS variables, so code colors follow the theme.
 
@@ -120,6 +130,10 @@ Blueprint (blueprint)
   ...
 ```
 
+`tap theme show <slug> --json` lists the same values under
+`tokens.colors`, including `accent2`, `statusOk`, `statusWarn`, and
+`statusError`, plus every raw variable under `tokens.other`.
+
 A deck component reads the same values at run time with `useTheme()`. See
 [Custom Components](/guide/custom-components#theme-tokens).
 
@@ -139,16 +153,18 @@ seven short fields: `medium`, `line`, `shapes`, `texture`, `palette_use`,
 **Illustration**.
 
 `tap theme show <slug> --prompt` turns the same fields into a plain-text
-style brief written for an image model:
+style brief written for an image model. It names the palette, and the
+status colors as colors to reach for only where meaning requires them:
 
 ```
-$ tap theme show blueprint --prompt
-Illustration style for the "Blueprint" slide theme: flat vector technical
-drawing, white-ink-on-blue blueprint diagram. Use only this palette:
-background #0f3a75, foreground #f5f9ff, accent #ffd447, muted #c0d6f3,
-surface #174688. Palette use: deep blue background dominant, white/near-white
-line work, one yellow accent used only for a callout or highlight. Line: 3 to
-4px even strokes, drafting-table precision, dimension lines with tick marks.
+$ tap theme show terminal --prompt
+Illustration style for the "Terminal" slide theme: flat vector on near-black,
+like a TUI with amber and mint green accents. Use only this palette:
+background #0f1a16, foreground #dcebe0, accent #ffb84d, muted #9db8a8,
+surface #1d2b25. Status colors, only where meaning requires them: ok #6fe3a0,
+warn #ffb84d, error #ff5c57. Palette use: dark background dominant, amber
+accent and mint green accent used one or two per image. Line: 1 to 2px
+strokes, monospace-grid aligned, square caps.
 ...
 ```
 
