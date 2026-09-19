@@ -199,17 +199,28 @@ jobs:
       - name: Install Playwright Chromium
         run: cd frontend && npx playwright install --with-deps chromium
 
+      # Build the binary in its own step rather than starting it through
+      # `go run`. This job never runs `make build` (unlike test-e2e), so on
+      # a cold Go build cache `go run` compiles silently for a while before
+      # the server ever starts, and the poll below timed out against an
+      # empty log during that compile.
+      - name: Build tap binary
+        run: go build -o /tmp/tap ./cmd/tap
+
       # The theme suite needs its own Go dev server and Vite dev server,
       # each on their own port, the same pair CONTRIBUTING.md documents
       # for a local run (see "Testing the Theme Suite").
       - name: Start tap dev server
         run: |
-          nohup go run ./cmd/tap dev testdata/themes.md --port 3300 --headless > /tmp/tap-dev.log 2>&1 &
-          for i in $(seq 1 30); do
+          nohup /tmp/tap dev testdata/themes.md --port 3300 --headless > /tmp/tap-dev.log 2>&1 &
+          for i in $(seq 1 60); do
             curl -sf http://localhost:3300 > /dev/null && exit 0
             sleep 1
           done
-          echo "tap dev server did not come up"; cat /tmp/tap-dev.log; exit 1
+          echo "tap dev server did not come up"
+          cat /tmp/tap-dev.log
+          ss -ltnp || lsof -i :3300
+          exit 1
 
       - name: Start Vite dev server
         working-directory: frontend
