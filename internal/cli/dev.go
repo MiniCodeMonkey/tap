@@ -153,7 +153,7 @@ func runDevServer(file string, port int, presenterPassword string, headless bool
 	go hub.Run()
 	defer hub.Stop()
 
-	hub.SetSlideCount(len(pres.Slides))
+	hub.SetPresentationMeta(len(pres.Slides), server.ComputeRevision(pres, componentBundleFiles(resolvedComponents)))
 
 	// Create, configure, and start the server. A candidate port that is
 	// already bound (another tap dev, or anything else, listening on it)
@@ -216,7 +216,7 @@ func runDevServer(file string, port int, presenterPassword string, headless bool
 		watcher.AddExtraDirs(externalInputDirs(newResolvedComponents, baseDir))
 		srv.SetComponentBundles(componentBundleFiles(newResolvedComponents))
 		srv.SetPresentation(newPres)
-		hub.SetSlideCount(len(newPres.Slides))
+		hub.SetPresentationMeta(len(newPres.Slides), server.ComputeRevision(newPres, componentBundleFiles(newResolvedComponents)))
 		_ = hub.BroadcastReload()
 	})
 
@@ -278,7 +278,7 @@ func runDevServer(file string, port int, presenterPassword string, headless bool
 			watcher.AddExtraDirs(externalInputDirs(newResolvedComponents, baseDir))
 			srv.SetComponentBundles(componentBundleFiles(newResolvedComponents))
 			srv.SetPresentation(newPres)
-			hub.SetSlideCount(len(newPres.Slides))
+			hub.SetPresentationMeta(len(newPres.Slides), server.ComputeRevision(newPres, componentBundleFiles(newResolvedComponents)))
 			_ = hub.BroadcastReload()
 			Info("Reloaded: %s\n", path)
 		})
@@ -348,10 +348,15 @@ func runDevServer(file string, port int, presenterPassword string, headless bool
 			} else {
 				model.ClearError()
 			}
+			// Bundler warnings (an esbuild warning on a component bundle,
+			// for example) are not fatal enough to be an error, but still
+			// worth showing; the model clears them on the next reload that
+			// has none, so a warning never outlives the build it came from.
+			model.SetWarnings(componentWarningLines(componentWarnings(newResolvedComponents)))
 			watcher.AddExtraDirs(externalInputDirs(newResolvedComponents, baseDir))
 			srv.SetComponentBundles(componentBundleFiles(newResolvedComponents))
 			srv.SetPresentation(newPres)
-			hub.SetSlideCount(len(newPres.Slides))
+			hub.SetPresentationMeta(len(newPres.Slides), server.ComputeRevision(newPres, componentBundleFiles(newResolvedComponents)))
 			_ = hub.BroadcastReload()
 			model.SendReloadEvent(path)
 		})

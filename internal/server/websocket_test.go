@@ -426,6 +426,57 @@ func TestWebSocketHubHandleConnection(t *testing.T) {
 	}
 }
 
+// TestWebSocketHubConnectedMessageCarriesRevision verifies that
+// SetPresentationMeta's revision rides on the "connected" message sent at
+// register time, and that a later connection sees a revision changed by a
+// later SetPresentationMeta call (simulating a deck reload between the two
+// connections).
+func TestWebSocketHubConnectedMessageCarriesRevision(t *testing.T) {
+	hub := NewWebSocketHub()
+	go hub.Run()
+	defer hub.Stop()
+
+	server := httptest.NewServer(http.HandlerFunc(hub.HandleConnection))
+	defer server.Close()
+	wsURL := "ws" + strings.TrimPrefix(server.URL, "http") + "/"
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	readConnected := func() Message {
+		conn, _, err := websocket.Dial(ctx, wsURL, nil)
+		if err != nil {
+			t.Fatalf("websocket.Dial() error = %v", err)
+		}
+		defer conn.Close(websocket.StatusNormalClosure, "")
+		_, data, err := conn.Read(ctx)
+		if err != nil {
+			t.Fatalf("conn.Read() error = %v", err)
+		}
+		var msg Message
+		if err := json.Unmarshal(data, &msg); err != nil {
+			t.Fatalf("json.Unmarshal() error = %v", err)
+		}
+		return msg
+	}
+
+	first := readConnected()
+	if first.Revision != "" {
+		t.Errorf("Revision = %q, want empty before SetPresentationMeta is ever called", first.Revision)
+	}
+
+	hub.SetPresentationMeta(3, "abc123")
+	second := readConnected()
+	if second.Revision != "abc123" {
+		t.Errorf("Revision = %q, want %q", second.Revision, "abc123")
+	}
+
+	hub.SetPresentationMeta(3, "def456")
+	third := readConnected()
+	if third.Revision != "def456" {
+		t.Errorf("Revision = %q, want %q", third.Revision, "def456")
+	}
+}
+
 // TestWebSocketHubOriginCheck covers checkOrigin's rules: no Origin header,
 // an Origin whose host matches the request's own Host header, and an Origin
 // explicitly allowed via SetAllowedOrigins are all accepted; anything else
@@ -1129,7 +1180,7 @@ func TestWebSocketHubValidSlideIndex(t *testing.T) {
 		t.Error("validSlideIndex(99) = false, want true: slide count is unknown, so only negatives are rejected")
 	}
 
-	hub.SetSlideCount(5)
+	hub.SetPresentationMeta(5, "")
 	if hub.validSlideIndex(5) {
 		t.Error("validSlideIndex(5) = true, want false: only indexes 0-4 are in range for a 5-slide deck")
 	}

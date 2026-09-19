@@ -46,10 +46,17 @@ const (
 // concurrent with registration (see the register case in Run). Broadcast
 // strips it from every message it sends out, so a client-sent "initial"
 // (accidental or otherwise) never survives a relay to other clients.
+//
+// Revision is set only on the "connected" message Run's register case sends
+// at register time, to the hub's current deck revision (see
+// WebSocketHub.SetPresentationMeta). A client compares it across
+// reconnects, on the same page load, to notice the deck changed while its
+// socket was down and reload (see frontend/src/lib/stores/websocket.ts).
 // Fields ordered by size for memory alignment.
 type Message struct {
 	Type           MessageType `json:"type"`
 	Theme          string      `json:"theme,omitempty"`
+	Revision       string      `json:"revision,omitempty"`
 	SlideIndex     *int        `json:"slideIndex,omitempty"`
 	Fragment       *int        `json:"fragment,omitempty"`
 	Step           *int        `json:"step,omitempty"`
@@ -108,6 +115,13 @@ type WebSocketHub struct {
 	// in-range-but-stale index itself (see applyRemoteState in
 	// frontend/src/lib/stores/websocket.ts).
 	slideCount int
+	// revision is the current deck's content hash (see ComputeRevision),
+	// sent as the Revision field of the "connected" message at register
+	// time. Empty until SetPresentationMeta is called at least once, in
+	// which case "connected" carries no revision at all and a client never
+	// reloads off its first connection (see the frontend's handling of an
+	// absent revision in frontend/src/lib/stores/websocket.ts).
+	revision string
 	// allowedOrigins holds the extra origins a WebSocket upgrade is
 	// accepted from, beyond same-host connections - the tap dev
 	// --allow-origin flag, for a contributor's Vite dev server running on
@@ -147,15 +161,18 @@ func (h *WebSocketHub) SetStateRetention(d time.Duration) {
 	h.stateRetention = d
 }
 
-// SetSlideCount tells the hub how many slides the current presentation
-// has, so a relayed "slide" message with an out-of-range slideIndex can be
-// rejected instead of broadcast. Safe to call at any time, including
-// before Run starts or while clients are connected (e.g. after a reload
-// changes the slide count).
-func (h *WebSocketHub) SetSlideCount(n int) {
+// SetPresentationMeta tells the hub about the deck it is currently serving:
+// slideCount, so a relayed "slide" message with an out-of-range slideIndex
+// can be rejected instead of broadcast, and revision (see ComputeRevision),
+// sent as the Revision field of every "connected" message from then on so a
+// reconnecting client can tell the deck changed while its socket was down.
+// Safe to call at any time, including before Run starts or while clients
+// are connected (tap dev calls it again on every reload).
+func (h *WebSocketHub) SetPresentationMeta(slideCount int, revision string) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	h.slideCount = n
+	h.slideCount = slideCount
+	h.revision = revision
 }
 
 // validSlideIndex reports whether slideIndex is acceptable in a relayed
@@ -281,6 +298,7 @@ func (h *WebSocketHub) Run() {
 				initialMsg.Initial = true
 				initialData, _ = json.Marshal(initialMsg)
 			}
+			revision := h.revision
 			h.notifyClientCountChange()
 			h.mu.Unlock()
 
@@ -294,7 +312,13 @@ func (h *WebSocketHub) Run() {
 			// finishes. That's what guarantees a client always receives its
 			// own late-joiner state before any live navigation broadcast by
 			// another client racing its connection.
-			connectedMsg, _ := json.Marshal(Message{Type: MessageConnected})
+			//
+			// Revision rides on this same "connected" message rather than a
+			// separate one: a client only needs to compare it across
+			// distinct connections (see hasSeenFirstRevision in the
+			// frontend), and "connected" already fires exactly once per
+			// connection.
+			connectedMsg, _ := json.Marshal(Message{Type: MessageConnected, Revision: revision})
 			select {
 			case client.send <- connectedMsg:
 			default:
