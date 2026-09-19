@@ -149,6 +149,9 @@ export function Slide({
 	// `slideNumbers: false` in the frontmatter, data-slide-numbers="off"
 	// tells each theme to leave it out.
 	const slideNumbersOff = usePresentationStore((state) => state.presentation?.config?.slideNumbers === false);
+	// The deck title, for themes that print it on every slide (the terminal
+	// theme's tmux window tab). Absent when the deck has no title.
+	const deckTitle = usePresentationStore((state) => state.presentation?.config?.title?.trim() || undefined);
 
 	const mapBlock = slide.codeBlocks?.find((block) => block.language === 'map');
 	const mapConfig = useMemo(() => (mapBlock ? parseMapConfig(mapBlock.code) : null), [mapBlock]);
@@ -161,6 +164,7 @@ export function Slide({
 				data-index={slide.index + 1}
 				data-total={total}
 				data-slide-numbers={slideNumbersOff ? 'off' : undefined}
+				data-deck-title={deckTitle}
 				style={getBackgroundStyle(slide.background)}
 			>
 				{slide.tag ? <div className="slide-tag">{slide.tag}</div> : null}

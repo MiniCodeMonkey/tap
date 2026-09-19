@@ -172,15 +172,21 @@
 	color: var(--accent-text);
 }
 
-/* tmux status bar: window name left, position right, section marker beside it */
+/* tmux status bar: window tab left, position right, section marker beside
+   it. The window is named after the deck's title, or "zsh" when the deck
+   has none. A long title ends in an ellipsis before the position counter. */
 [data-theme='terminal'] .slide[data-layout]::before {
-	content: ' ' attr(data-index) ':tap*';
+	content: ' ' attr(data-index) ':zsh*';
 	position: absolute;
 	left: 0;
 	right: 0;
 	bottom: 0;
 	height: 60px;
+	box-sizing: border-box;
 	padding-left: 96px;
+	padding-right: 280px;
+	overflow: hidden;
+	text-overflow: ellipsis;
 	font-size: 30px;
 	line-height: 60px;
 	font-weight: 700;
@@ -190,6 +196,9 @@
 	background: var(--surface);
 	box-shadow: inset 72px 0 0 var(--accent-2);
 	animation: terminal-pop 100ms steps(2, jump-none) 0ms both;
+}
+[data-theme='terminal'] .slide[data-layout][data-deck-title]::before {
+	content: ' ' attr(data-index) ':' attr(data-deck-title) '*';
 }
 [data-theme='terminal'] .slide[data-layout]::after {
 	content: attr(data-index) '/' attr(data-total);

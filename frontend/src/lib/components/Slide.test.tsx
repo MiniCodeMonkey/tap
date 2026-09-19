@@ -115,6 +115,31 @@ describe('Slide', () => {
 		}
 	});
 
+	it('sets data-deck-title from the deck title, and leaves it out when there is none', () => {
+		const slide = makeSlide();
+		function deckTitleAttribute(): string | null {
+			const { container, unmount } = render(
+				<Slide slide={slide} active printMode={false} fragmentIndex={-1} step={0} total={1} />
+			);
+			const value = container.querySelector('.slide')!.getAttribute('data-deck-title');
+			unmount();
+			return value;
+		}
+
+		try {
+			resetPresentation();
+			expect(deckTitleAttribute()).toBeNull();
+
+			loadPresentation({ config: { title: '  ' }, slides: [slide] });
+			expect(deckTitleAttribute()).toBeNull();
+
+			loadPresentation({ config: { title: 'Quarterly Review' }, slides: [slide] });
+			expect(deckTitleAttribute()).toBe('Quarterly Review');
+		} finally {
+			resetPresentation();
+		}
+	});
+
 	it('keeps slide-content as a plain wrapper with no data attributes', () => {
 		const slide = makeSlide({ index: 2, layout: 'quote' });
 

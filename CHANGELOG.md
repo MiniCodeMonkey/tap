@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+### Changed
+
+- **The terminal theme's window tab shows the deck title** - The tmux tab in the status bar reads `3:Quarterly Review*`, taken from the deck's `title`, or `3:zsh*` when the deck has none. A long title ends in an ellipsis before the slide counter. It used to read `3:tap*`.
+
 ## [2.0.0-beta.3] - 2026-09-19
 
 ### Added
