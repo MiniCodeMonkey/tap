@@ -1034,6 +1034,14 @@
 	letter-spacing: -0.01em;
 	text-wrap: balance;
 }
+/* A medium quote (81-180 runes) already overruns the window chrome at
+   120px, and a long one (over 180) worse; step down at both lengths. */
+[data-theme='retro-computing'] .layout-quote blockquote[data-length='medium'] p {
+	font-size: 92px;
+}
+[data-theme='retro-computing'] .layout-quote blockquote[data-length='long'] p {
+	font-size: 64px;
+}
 [data-theme='retro-computing'] .layout-quote .slot-attribution {
 	max-width: 100%;
 	padding: 0 64px 56px 250px;

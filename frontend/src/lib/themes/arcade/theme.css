@@ -901,6 +901,11 @@
 	text-wrap: balance;
 	text-align: left;
 }
+/* A long quote (over 180 runes) crowds the HUD frame at 84px; step down
+   to keep it clear of the top/bottom border. */
+[data-theme='arcade'] .layout-quote blockquote[data-length='long'] p {
+	font-size: 52px;
+}
 [data-theme='arcade'] .layout-quote .slot-default::after {
 	content: '';
 	position: absolute;

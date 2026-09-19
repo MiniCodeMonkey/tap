@@ -1032,6 +1032,10 @@
 	letter-spacing: -0.012em;
 	text-wrap: balance;
 }
+/* A long quote (over 180 runes) overflows the slide at 124px; step down. */
+[data-theme='isometric'] .layout-quote blockquote[data-length='long'] p {
+	font: 500 70px/1.1 var(--font-display);
+}
 [data-theme='isometric'] .layout-quote .slot-attribution p {
 	display: flex;
 	align-items: center;

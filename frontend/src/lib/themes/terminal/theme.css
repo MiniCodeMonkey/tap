@@ -1047,6 +1047,14 @@
 	text-wrap: balance;
 	animation: terminal-type 800ms steps(24, end) 400ms both;
 }
+/* The layout centers the quote block vertically; a long quote (over 180
+   runes) at 78px grows tall enough that centering pushes its first line
+   up under the "$ fortune" prompt line. Step down so the block stays
+   clear of it. */
+[data-theme='terminal'] .layout-quote blockquote[data-length='long'] p {
+	font-size: 52px;
+	line-height: 70px;
+}
 [data-theme='terminal'] .layout-quote .slot-attribution {
 	margin-top: 56px;
 	padding-left: 130px;

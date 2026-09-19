@@ -1068,6 +1068,11 @@
 [data-theme='poster'] .layout-quote blockquote p em {
 	font-weight: 400;
 }
+/* A long quote (over 180 runes) crowds the slide edge to edge at 124px,
+   crossing the attribution below it; step down. */
+[data-theme='poster'] .layout-quote blockquote[data-length='long'] p {
+	font-size: 68px;
+}
 [data-theme='poster'] .layout-quote .slot-attribution {
 	margin-top: 52px;
 }

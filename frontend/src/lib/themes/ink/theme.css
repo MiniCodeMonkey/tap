@@ -888,6 +888,14 @@
 	color: var(--fg);
 	font-style: normal;
 }
+/* A medium quote (81-180 runes) already crowds the frame at 112px, and a
+   long one (over 180) overflows it outright; step down at both lengths. */
+[data-theme='ink'] .layout-quote blockquote[data-length='medium'] p {
+	font: 500 86px/1.24 var(--font-display) !important;
+}
+[data-theme='ink'] .layout-quote blockquote[data-length='long'] p {
+	font: 500 62px/1.24 var(--font-display) !important;
+}
 [data-theme='ink'] .layout-quote blockquote p::after {
 	content: '\300D';
 	display: inline-block;

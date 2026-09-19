@@ -1179,6 +1179,11 @@
 [data-theme='zine'] .layout-quote .slot-default blockquote p {
 	font-size: 104px;
 }
+/* A long quote (over 180 runes) runs off the bottom of the chalkboard
+   panel at 104px; step down. */
+[data-theme='zine'] .layout-quote .slot-default blockquote[data-length='long'] p {
+	font-size: 60px;
+}
 [data-theme='zine'] .slot blockquote p:first-child::before {
 	content: '\201C';
 	display: block;

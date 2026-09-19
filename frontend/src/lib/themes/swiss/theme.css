@@ -809,6 +809,11 @@
 	letter-spacing: -0.04em;
 	text-wrap: balance;
 }
+/* A long quote (over 180 runes) runs off the bottom of the slide at
+   108px; step down. */
+[data-theme='swiss'] .layout-quote .slot-default blockquote[data-length='long'] p {
+	font-size: 64px;
+}
 [data-theme='swiss'] .layout-quote .slot-attribution p {
 	margin: 0;
 	font-size: 44px;

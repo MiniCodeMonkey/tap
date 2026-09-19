@@ -1214,6 +1214,10 @@
 	letter-spacing: -0.03em;
 	animation: bauhaus-slide var(--dur) var(--ease) 200ms both;
 }
+/* A long quote (over 180 runes) overflows the slide at 120px; step down. */
+[data-theme='bauhaus'] .layout-quote blockquote[data-length='long'] p {
+	font-size: 68px;
+}
 [data-theme='bauhaus'] .layout-quote .slot-attribution {
 	margin-top: 50px;
 }

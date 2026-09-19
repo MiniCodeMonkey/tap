@@ -889,6 +889,10 @@
 	letter-spacing: -0.02em;
 	text-wrap: balance;
 }
+/* A long quote (over 180 runes) clips at the top of the frame at 108px. */
+[data-theme='observatory'] .layout-quote blockquote[data-length='long'] p {
+	font-size: 64px;
+}
 [data-theme='observatory'] .layout-quote .slot-attribution {
 	margin-top: 48px;
 	padding-left: 72px;

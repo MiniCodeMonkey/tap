@@ -844,6 +844,11 @@
 	max-width: 1560px;
 	text-wrap: balance;
 }
+/* A long quote (over 180 runes) at 108px leaves no room below it for the
+   attribution line; step down. */
+[data-theme='keynote'] .layout-quote blockquote[data-length='long'] p {
+	font-size: 66px;
+}
 [data-theme='keynote'] .layout-quote .slot-attribution {
 	margin-top: 56px;
 	padding-top: 40px;

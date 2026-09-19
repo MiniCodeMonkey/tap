@@ -124,6 +124,7 @@ func New() *Parser {
 			// registered transformers, of which there are none yet.
 			parser.WithASTTransformers(
 				util.Prioritized(NewHeadingLengthTransformer(), 100),
+				util.Prioritized(NewBlockquoteLengthTransformer(), 100),
 			),
 		),
 		goldmark.WithRendererOptions(
