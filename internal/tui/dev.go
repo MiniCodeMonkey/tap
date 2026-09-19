@@ -39,6 +39,7 @@ type DevConfig struct {
 type DevState struct {
 	Error            error
 	RecentEvents     []DevEvent
+	Warnings         []string
 	WebSocketClients int
 	WatcherRunning   bool
 }
@@ -688,6 +689,12 @@ func (m *DevModel) View() string {
 		b.WriteString("\n")
 	}
 
+	// Warning display
+	if len(m.state.Warnings) > 0 {
+		b.WriteString(m.viewWarnings())
+		b.WriteString("\n")
+	}
+
 	// Help/keyboard shortcuts
 	b.WriteString(m.viewHelp())
 
@@ -872,6 +879,23 @@ func (m *DevModel) viewError() string {
 	return errorBox.Render(RenderError("Error: " + m.state.Error.Error()))
 }
 
+// viewWarnings renders the warnings section - bundler warnings from the
+// last reload (see ClearWarnings), shown next to any error but never
+// fatal on their own.
+func (m *DevModel) viewWarnings() string {
+	if len(m.state.Warnings) == 0 {
+		return ""
+	}
+
+	warningBox := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(ColorWarning).
+		Padding(0, 1).
+		MarginTop(1)
+
+	return warningBox.Render(RenderWarning(strings.Join(m.state.Warnings, "\n")))
+}
+
 // viewHelp renders the keyboard shortcuts section.
 func (m *DevModel) viewHelp() string {
 	helpStyle := lipgloss.NewStyle().
@@ -1011,6 +1035,25 @@ func (m *DevModel) SetError(err error) {
 func (m *DevModel) ClearError() {
 	m.mu.Lock()
 	m.state.Error = nil
+	m.mu.Unlock()
+}
+
+// SetWarnings sets the warnings to display next to any error - a bundler
+// warning from the last reload (an esbuild warning on a component bundle,
+// for example), not fatal enough to be an error but still worth showing.
+// An empty slice clears the display, the same as ClearWarnings.
+func (m *DevModel) SetWarnings(warnings []string) {
+	m.mu.Lock()
+	m.state.Warnings = warnings
+	m.mu.Unlock()
+}
+
+// ClearWarnings clears any displayed warnings. Call this on every clean
+// reload (one with nothing to warn about), so a warning from an earlier
+// reload does not linger once it no longer applies.
+func (m *DevModel) ClearWarnings() {
+	m.mu.Lock()
+	m.state.Warnings = nil
 	m.mu.Unlock()
 }
 

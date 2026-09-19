@@ -485,6 +485,44 @@ func TestDevModel_SetError_ClearError(t *testing.T) {
 	}
 }
 
+// TestDevModel_SetWarnings_ClearWarnings checks that warnings (a bundler
+// warning surfaced from the reload path, for example) show up in the
+// rendered view and are gone once cleared, matching how errors already
+// behave (see TestDevModel_SetError_ClearError and
+// TestDevModel_View_WithError).
+func TestDevModel_SetWarnings_ClearWarnings(t *testing.T) {
+	model := NewDevModel(DevConfig{
+		MarkdownFile: "slides.md",
+	})
+	model.windowWidth = 80
+	model.windowHeight = 24
+
+	model.SetWarnings([]string{"warning: slides/Chart.jsx:3:1: unused import"})
+
+	model.mu.RLock()
+	warnings := model.state.Warnings
+	model.mu.RUnlock()
+	if len(warnings) != 1 || warnings[0] != "warning: slides/Chart.jsx:3:1: unused import" {
+		t.Fatalf("expected the warning to be set, got %v", warnings)
+	}
+
+	if view := model.View(); !strings.Contains(view, "unused import") {
+		t.Error("view should display the warning message")
+	}
+
+	model.ClearWarnings()
+
+	model.mu.RLock()
+	warnings = model.state.Warnings
+	model.mu.RUnlock()
+	if len(warnings) != 0 {
+		t.Errorf("expected warnings to be cleared, got %v", warnings)
+	}
+	if view := model.View(); strings.Contains(view, "unused import") {
+		t.Error("view should not display a cleared warning")
+	}
+}
+
 func TestDevModel_FormatEvent_Types(t *testing.T) {
 	model := NewDevModel(DevConfig{})
 

@@ -145,6 +145,19 @@ func printComponentWarningsToStderr(warnings []components.BuildError) {
 	}
 }
 
+// componentWarningLines formats component build warnings as plain
+// "warning: <file>:<line>:<column>: <message>" strings, one per warning,
+// for a caller that owns its own rendering instead of writing straight to
+// the terminal (the TUI model's warnings display, which draws its own
+// border and color around them - see internal/tui/dev.go's viewWarnings).
+func componentWarningLines(warnings []components.BuildError) []string {
+	lines := make([]string, len(warnings))
+	for i, warning := range warnings {
+		lines[i] = "warning: " + warning.Error()
+	}
+	return lines
+}
+
 // componentErrorsError joins component build errors into a single error for
 // display through the TUI model's SetError, or nil when there are none.
 func componentErrorsError(buildErrors []components.BuildError) error {

@@ -161,3 +161,24 @@ func TestComponentWarnings_FlattensSortedByPathAndFormatsEachLine(t *testing.T) 
 		t.Errorf("got %q, want %q", warnings[0].Error(), want)
 	}
 }
+
+// TestComponentWarningLines_FormatsWithWarningPrefix checks the plain
+// "warning: ..." lines fed to the TUI model's warnings display (see
+// internal/tui/dev.go's viewWarnings): the same format
+// printComponentWarningsToStderr prints, but as strings a caller renders
+// itself instead of writing straight to the terminal.
+func TestComponentWarningLines_FormatsWithWarningPrefix(t *testing.T) {
+	warnings := []components.BuildError{
+		{File: "RollingDeploy.jsx", Line: 4, Column: 9, Message: "unused variable \"x\""},
+	}
+
+	lines := componentWarningLines(warnings)
+
+	if len(lines) != 1 {
+		t.Fatalf("expected 1 line, got %d: %+v", len(lines), lines)
+	}
+	want := "warning: RollingDeploy.jsx:4:9: unused variable \"x\""
+	if lines[0] != want {
+		t.Errorf("got %q, want %q", lines[0], want)
+	}
+}
