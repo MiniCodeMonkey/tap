@@ -242,6 +242,8 @@ func Build(sourcePath string, options Options) (*Bundle, []BuildError) {
 		}
 	}
 
+	bundle.CSS = relativizeCSSAssetURLs(bundle.CSS, bundle.Assets, options.AssetPublicPath)
+
 	bundle.Hash = contentHash(bundle.JavaScript, bundle.CSS)
 	bundle.Inputs = metafileInputs(result.Metafile)
 
@@ -338,6 +340,30 @@ func safeName(absSource string) string {
 	base := filepath.Base(absSource)
 	base = strings.TrimSuffix(base, filepath.Ext(base))
 	return unsafeNameCharacters.ReplaceAllString(base, "-")
+}
+
+// relativizeCSSAssetURLs rewrites a CSS url() token referencing an emitted
+// asset from "<AssetPublicPath><asset name>" to "./<asset name>". esbuild's
+// PublicPath applies the same way to a CSS url() token as it does to a
+// JavaScript import: as a URL string baked in verbatim. A JavaScript import
+// is later evaluated relative to the page, so the public path resolves
+// correctly there, but a browser resolves a CSS url() token relative to
+// the CSS file itself. The CSS file and its emitted assets are always
+// written as siblings (see writeComponentBundles and
+// ComponentBundleStore), so the relative reference resolves correctly
+// under any deployment sub path, and in dev where AssetPublicPath is
+// already absolute this substitution is a no-op unless it happens to
+// appear verbatim, which a relative rewrite still serves correctly since
+// the sibling files never move.
+func relativizeCSSAssetURLs(css []byte, assets []Asset, publicPath string) []byte {
+	if len(css) == 0 || publicPath == "" {
+		return css
+	}
+	text := string(css)
+	for _, asset := range assets {
+		text = strings.ReplaceAll(text, publicPath+asset.Name, "./"+asset.Name)
+	}
+	return []byte(text)
 }
 
 // contentHash returns the first 12 hex characters of the SHA-256 of the

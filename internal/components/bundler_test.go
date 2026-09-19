@@ -2,8 +2,12 @@ package components
 
 import (
 	"bytes"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -524,6 +528,99 @@ func TestBuildEmitsAssetsAtOrAboveTheSizeThreshold(t *testing.T) {
 	wantURL := "/components/" + asset.Name
 	if !strings.Contains(string(bundle.JavaScript), wantURL) {
 		t.Errorf("expected the bundle's JavaScript to reference %q", wantURL)
+	}
+}
+
+// writeCSSAssetFixture writes a JSX entry file that imports a stylesheet
+// with a url() token pointing at a large image, plus the image itself
+// sized to bytes, into deckDirectory.
+func writeCSSAssetFixture(t *testing.T, deckDirectory string, imageBytes int) {
+	t.Helper()
+	image := make([]byte, imageBytes)
+	for i := range image {
+		image[i] = byte(i)
+	}
+	if err := os.WriteFile(filepath.Join(deckDirectory, "big.png"), image, 0o644); err != nil {
+		t.Fatalf("write image fixture: %v", err)
+	}
+	css := `.banner { background-image: url("./big.png"); }` + "\n"
+	if err := os.WriteFile(filepath.Join(deckDirectory, "Banner.css"), []byte(css), 0o644); err != nil {
+		t.Fatalf("write css fixture: %v", err)
+	}
+	source := `import "./Banner.css";
+export default function Banner() {
+  return <div className="banner" />;
+}
+`
+	if err := os.WriteFile(filepath.Join(deckDirectory, "Banner.jsx"), []byte(source), 0o644); err != nil {
+		t.Fatalf("write entry fixture: %v", err)
+	}
+}
+
+// cssURLFuncPattern finds a url(...) token in emitted CSS.
+var cssURLFuncPattern = regexp.MustCompile(`url\(([^)]+)\)`)
+
+// TestBuildCSSAssetURLResolvesUnderAStaticSubPath reproduces the static
+// build bug where a CSS url() token referencing a large (non-inlined)
+// asset used the bundle's public path exactly like a JavaScript import,
+// producing a URL that a browser resolves relative to the CSS file
+// itself - which already lives inside the public path directory - doubling
+// the prefix. It builds a component whose CSS references an image at the
+// inline threshold, serves the emitted files (as they would sit in
+// dist/components/ under a sub path), and resolves the CSS url() token
+// against the CSS file's own URL exactly as a browser would.
+func TestBuildCSSAssetURLResolvesUnderAStaticSubPath(t *testing.T) {
+	deckDirectory := t.TempDir()
+	writeCSSAssetFixture(t, deckDirectory, assetInlineThreshold)
+
+	bundle, errs := Build("Banner.jsx", Options{DeckDirectory: deckDirectory, AssetPublicPath: "components/"})
+	if len(errs) > 0 {
+		t.Fatalf("unexpected errors: %v", errs)
+	}
+	if len(bundle.Assets) != 1 {
+		t.Fatalf("expected 1 emitted asset, got %d: %+v", len(bundle.Assets), bundle.Assets)
+	}
+	if len(bundle.CSS) == 0 {
+		t.Fatal("expected the bundle to have CSS")
+	}
+
+	match := cssURLFuncPattern.FindStringSubmatch(string(bundle.CSS))
+	if match == nil {
+		t.Fatalf("expected a url() token in the emitted CSS, got %q", bundle.CSS)
+	}
+	token := strings.Trim(match[1], `"'`)
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/sub2/components/"+bundle.Name+"-"+bundle.Hash+".css", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/css")
+		w.Write(bundle.CSS)
+	})
+	for _, asset := range bundle.Assets {
+		content := asset.Content
+		mux.HandleFunc("/sub2/components/"+asset.Name, func(w http.ResponseWriter, r *http.Request) {
+			w.Write(content)
+		})
+	}
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	cssURL, err := url.Parse(server.URL + "/sub2/components/" + bundle.Name + "-" + bundle.Hash + ".css")
+	if err != nil {
+		t.Fatalf("parse CSS URL: %v", err)
+	}
+	assetRef, err := url.Parse(token)
+	if err != nil {
+		t.Fatalf("parse url() token %q: %v", token, err)
+	}
+	resolved := cssURL.ResolveReference(assetRef)
+
+	response, err := http.Get(resolved.String())
+	if err != nil {
+		t.Fatalf("GET %s: %v", resolved, err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		t.Errorf("GET %s status = %d, want 200 (url() token was %q)", resolved, response.StatusCode, token)
 	}
 }
 
