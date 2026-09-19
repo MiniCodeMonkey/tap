@@ -451,7 +451,19 @@ func (h *WebSocketHub) HandleConnection(w http.ResponseWriter, r *http.Request) 
 	// no guarantee which arrived first. A brand new hub with no slide
 	// message broadcast yet sends only "connected", leaving this client to
 	// initialize from its own URL hash.
-	h.register <- client
+	//
+	// Selecting on h.done alongside the send matters once the hub has
+	// stopped: Run's loop has returned by then, so nothing ever receives
+	// from h.register again, and an unconditional send would block this
+	// goroutine forever. A connection arriving during shutdown gets no
+	// "connected" message and its readPump/writePump never start; the
+	// deferred conn.Close below still runs to tell the client goodbye.
+	select {
+	case h.register <- client:
+	case <-h.done:
+		conn.Close(websocket.StatusGoingAway, "server shutting down")
+		return
+	}
 
 	// Use a context that's independent of the HTTP request
 	// The context will be canceled when the hub is stopped

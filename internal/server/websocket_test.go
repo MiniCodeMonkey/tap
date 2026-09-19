@@ -1276,3 +1276,41 @@ func TestWebSocketHubInitialStateOrdersBeforeConcurrentBroadcast(t *testing.T) {
 		}
 	}
 }
+
+// TestWebSocketHubHandleConnectionDuringShutdown verifies that a connection
+// arriving after Stop() has closed h.done does not hang HandleConnection
+// forever waiting on h.register, which nothing reads from once Run has
+// returned.
+func TestWebSocketHubHandleConnectionDuringShutdown(t *testing.T) {
+	hub := NewWebSocketHub()
+	go hub.Run()
+
+	// Stop the hub and wait for Run to actually return before connecting,
+	// so this test exercises the case under test (nothing reading from
+	// h.register) rather than racing Run's own shutdown.
+	hub.Stop()
+	time.Sleep(20 * time.Millisecond)
+
+	server := httptest.NewServer(http.HandlerFunc(hub.HandleConnection))
+	defer server.Close()
+
+	wsURL := "ws" + strings.TrimPrefix(server.URL, "http") + "/"
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	done := make(chan struct{})
+	go func() {
+		conn, _, err := websocket.Dial(ctx, wsURL, nil)
+		if err == nil {
+			conn.Close(websocket.StatusNormalClosure, "")
+		}
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		// HandleConnection returned instead of blocking forever on h.register.
+	case <-time.After(2 * time.Second):
+		t.Fatal("HandleConnection did not return during hub shutdown within timeout")
+	}
+}
