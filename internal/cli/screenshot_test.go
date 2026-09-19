@@ -318,9 +318,7 @@ func TestScreenshotIntegration(t *testing.T) {
 	}
 	defer func() { _ = exporter.Close() }()
 
-	if err := exporter.EnsureBrowser(); err != nil {
-		t.Skipf("skipping: no browser available: %v", err)
-	}
+	requireBrowser(t, exporter)
 
 	tempDir, err := os.MkdirTemp("", "tap-screenshot-test-*")
 	if err != nil {
@@ -420,11 +418,8 @@ func TestScreenshotCommand_StdoutStderrSeparation(t *testing.T) {
 		if err != nil {
 			t.Fatalf("pdf.New() error = %v", err)
 		}
-		browserErr := exporter.EnsureBrowser()
+		requireBrowser(t, exporter)
 		_ = exporter.Close()
-		if browserErr != nil {
-			t.Skipf("skipping: no browser available: %v", browserErr)
-		}
 
 		sampleDeck, err := filepath.Abs(filepath.Join("..", "..", "testdata", "sample.md"))
 		if err != nil {
@@ -550,9 +545,7 @@ func TestScreenshotIntegration_RollingDeployStepsDiffer(t *testing.T) {
 	}
 	defer func() { _ = exporter.Close() }()
 
-	if err := exporter.EnsureBrowser(); err != nil {
-		t.Skipf("skipping: no browser available: %v", err)
-	}
+	requireBrowser(t, exporter)
 
 	tempDir := t.TempDir()
 

@@ -117,9 +117,7 @@ func TestPDFExportIntegration(t *testing.T) {
 	}
 	defer func() { _ = exporter.Close() }()
 
-	if err := exporter.EnsureBrowser(); err != nil {
-		t.Skipf("skipping: no browser available: %v", err)
-	}
+	requireBrowser(t, exporter)
 
 	outputPath := filepath.Join(t.TempDir(), "deck.pdf")
 
