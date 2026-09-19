@@ -1,6 +1,8 @@
 package parser
 
 import (
+	"bytes"
+	"os"
 	"testing"
 )
 
@@ -377,7 +379,7 @@ func TestParseImages_SupportedFormats(t *testing.T) {
 
 func TestTransformImageAttributes_Width(t *testing.T) {
 	content := "![](./images/test.png){width=50%}"
-	result := transformImageAttributes(content)
+	result := transformImageAttributes(content, 1)
 
 	expected := `<img src="./images/test.png" alt="" style="width: 50%">`
 	if result != expected {
@@ -387,7 +389,7 @@ func TestTransformImageAttributes_Width(t *testing.T) {
 
 func TestTransformImageAttributes_Position(t *testing.T) {
 	content := "![Photo](photo.jpg){position=center}"
-	result := transformImageAttributes(content)
+	result := transformImageAttributes(content, 1)
 
 	expected := `<img src="photo.jpg" alt="Photo" style="display: block; margin-left: auto; margin-right: auto">`
 	if result != expected {
@@ -397,7 +399,7 @@ func TestTransformImageAttributes_Position(t *testing.T) {
 
 func TestTransformImageAttributes_WidthAndPosition(t *testing.T) {
 	content := "![](img.png){width=50%, position=left}"
-	result := transformImageAttributes(content)
+	result := transformImageAttributes(content, 1)
 
 	expected := `<img src="img.png" alt="" style="width: 50%; float: left; margin-right: 1em">`
 	if result != expected {
@@ -407,7 +409,7 @@ func TestTransformImageAttributes_WidthAndPosition(t *testing.T) {
 
 func TestTransformImageAttributes_BorderNone(t *testing.T) {
 	content := "![](photo.png){border=none}"
-	result := transformImageAttributes(content)
+	result := transformImageAttributes(content, 1)
 
 	expected := `<img src="photo.png" alt="" style="border: none; box-shadow: none">`
 	if result != expected {
@@ -417,7 +419,7 @@ func TestTransformImageAttributes_BorderNone(t *testing.T) {
 
 func TestTransformImageAttributes_WidthAndBorderNone(t *testing.T) {
 	content := "![](photo.png){width=50%, border=none}"
-	result := transformImageAttributes(content)
+	result := transformImageAttributes(content, 1)
 
 	expected := `<img src="photo.png" alt="" style="width: 50%; border: none; box-shadow: none">`
 	if result != expected {
@@ -427,7 +429,7 @@ func TestTransformImageAttributes_WidthAndBorderNone(t *testing.T) {
 
 func TestTransformImageAttributes_NoAttributes(t *testing.T) {
 	content := "![Alt](image.png)"
-	result := transformImageAttributes(content)
+	result := transformImageAttributes(content, 1)
 
 	// Should remain unchanged when no attributes
 	if result != content {
@@ -437,7 +439,7 @@ func TestTransformImageAttributes_NoAttributes(t *testing.T) {
 
 func TestTransformImageAttributes_InParagraph(t *testing.T) {
 	content := "Some text before\n\n![](./images/test.png){width=50%}\n\nSome text after"
-	result := transformImageAttributes(content)
+	result := transformImageAttributes(content, 1)
 
 	if !stringContains(result, `<img src="./images/test.png" alt="" style="width: 50%">`) {
 		t.Errorf("expected transformed image in result, got %q", result)
@@ -447,6 +449,56 @@ func TestTransformImageAttributes_InParagraph(t *testing.T) {
 	}
 	if !stringContains(result, "Some text after") {
 		t.Errorf("expected text after preserved, got %q", result)
+	}
+}
+
+func TestTransformImageAttributes_QuotedAltTextWithAttributeBlock(t *testing.T) {
+	content := `![The "quoted" screenshot](./images/shot.jpg){width=300px}`
+	result := transformImageAttributes(content, 1)
+
+	expected := `<img src="./images/shot.jpg" alt="The &#34;quoted&#34; screenshot" style="width: 300px">`
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}
+
+func TestTransformImageAttributes_EscapesAmpLtGtInAltAndURL(t *testing.T) {
+	content := `![A & B < C > D](image.png?a=1&b=2){width=50%}`
+	result := transformImageAttributes(content, 1)
+
+	expected := `<img src="image.png?a=1&amp;b=2" alt="A &amp; B &lt; C &gt; D" style="width: 50%">`
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}
+
+func TestTransformImageAttributes_DropsHostileWidthValue(t *testing.T) {
+	content := `![Alt](image.png){width=300px" onerror="alert(1)}`
+
+	oldStderr := os.Stderr
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("failed to create pipe: %v", err)
+	}
+	os.Stderr = w
+
+	result := transformImageAttributes(content, 3)
+
+	w.Close()
+	os.Stderr = oldStderr
+	var buf bytes.Buffer
+	_, _ = buf.ReadFrom(r)
+	stderrOutput := buf.String()
+
+	// The hostile width value must not appear in the emitted tag at all,
+	// and no style attribute is written since width was the only style.
+	expected := `<img src="image.png" alt="Alt">`
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+
+	if !stringContains(stderrOutput, "slide 3") || !stringContains(stderrOutput, "dropped invalid width value") {
+		t.Errorf("expected a warning naming slide 3 and the dropped width value, got %q", stderrOutput)
 	}
 }
 

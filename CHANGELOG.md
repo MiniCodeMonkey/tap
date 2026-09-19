@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+### Fixed
+
+- **Quoted or special-character alt text on an image attribute block** - `![The "quoted" screenshot](img.jpg){width=300px}` rendered as literal `<img ...>` text on the slide instead of the image, because the hand-built `<img>` tag's `alt` and `src` values were not HTML-escaped. A hostile `width` value is now rejected with a warning instead of being written into the `style` attribute unescaped.
+
 ## [2.0.0-beta.1] - 2026-09-19
 
 ### Breaking changes
