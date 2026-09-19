@@ -759,3 +759,16 @@ func TestDevModel_View_HelpIncludesImage(t *testing.T) {
 		t.Error("help text should include 'i' shortcut for image generation")
 	}
 }
+
+func TestDevModel_ViewHeaderShowsVersion(t *testing.T) {
+	model := NewDevModel(DevConfig{MarkdownFile: "talk.md", Version: "v2.0.0-beta.2"})
+
+	header := model.viewHeader()
+
+	if !strings.Contains(header, "Tap Dev Server") || !strings.Contains(header, "v2.0.0-beta.2") {
+		t.Errorf("viewHeader() = %q, want the title and the version", header)
+	}
+	if !strings.Contains(header, "Serving: talk.md") {
+		t.Errorf("viewHeader() = %q, want the served file", header)
+	}
+}

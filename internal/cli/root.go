@@ -13,6 +13,15 @@ import (
 // which only works on a variable, so this is not a constant.
 var Version = "dev"
 
+// displayVersion is Version as shown to a person: "v2.0.0-beta.2" for a
+// release build, "dev" for a local one.
+func displayVersion() string {
+	if Version == "dev" {
+		return Version
+	}
+	return "v" + Version
+}
+
 // Global flags
 var verbose bool
 

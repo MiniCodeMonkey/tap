@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+### Added
+
+- **`tap dev` shows its version** - Next to the title in the terminal interface, and on a `Version:` line in `--headless` mode, so a server left running from an older build is easy to spot.
+
 ## [2.0.0-beta.2] - 2026-09-19
 
 ### Added
