@@ -420,6 +420,43 @@ describe('DeckComponent', () => {
 		}
 	});
 
+	it('renders the build fallback next to the marker when a mounted component throws at render, with ?present=true, in dev', async () => {
+		(import.meta.env as { DEV: boolean }).DEV = true;
+		window.history.pushState({}, '', '/?present=true');
+		const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+		function Throws(): never {
+			throw new Error('boom');
+		}
+		const importer = vi.fn().mockResolvedValue({ default: Throws });
+		const slide = makeSlide();
+
+		try {
+			const { container, findByTestId } = render(
+				<DeckComponent
+					source="slides/Throws.jsx"
+					url="/components/Throws-present.js"
+					props={{}}
+					slots={{}}
+					slide={slide}
+					step={0}
+					steps={0}
+					active
+					printMode={false}
+					importer={importer}
+					buildFallback={<p data-testid="fallback">the slide's normal content</p>}
+				/>
+			);
+
+			expect(await findByTestId('fallback')).toBeTruthy();
+			const card = container.querySelector('.deck-error-card');
+			expect(card?.hasAttribute('hidden')).toBe(true);
+			expect(container.querySelector('.deck-error-marker')?.textContent).toBe('component error');
+		} finally {
+			window.history.pushState({}, '', '/');
+			consoleSpy.mockRestore();
+		}
+	});
+
 	it('shows the full error card when fullscreen, since ?present=true is absent, in dev', () => {
 		(import.meta.env as { DEV: boolean }).DEV = true;
 		Object.defineProperty(document, 'fullscreenElement', {

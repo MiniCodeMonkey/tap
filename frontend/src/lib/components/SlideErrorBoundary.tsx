@@ -5,7 +5,9 @@
  * isDevRuntime) it shows an error card naming the slide, so a broken slide
  * is visible as broken instead of silently falling back; in a static `tap
  * build` output it falls back to the slide's raw slot content instead of
- * going blank.
+ * going blank. The audience-safe form (see shouldUseSafeErrorForm) renders
+ * that same fallback next to its marker, so the audience sees the slide's
+ * normal content instead of an empty one.
  */
 
 import { Component, type ReactNode } from 'react';
@@ -39,6 +41,7 @@ export class SlideErrorBoundary extends Component<SlideErrorBoundaryProps, Slide
 				if (shouldUseSafeErrorForm()) {
 					return (
 						<>
+							{this.props.fallback}
 							<div className="slide-error deck-error-card deck-error-card-safe" data-message={message} hidden />
 							<div className="deck-error-marker" title={message}>
 								component error

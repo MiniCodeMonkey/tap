@@ -146,14 +146,16 @@ export function isPreviewDisabled(module: { preview?: unknown }): boolean {
  * In the audience-safe form (see shouldUseSafeErrorForm), the full card is
  * kept in the DOM - visually hidden, its message moved to a data-message
  * attribute - rather than removed, so tap screenshot and tests still find
- * it by class; only a small "component error" marker is visible, so a
- * throwing component never puts a raw stack-trace-flavored message in
- * front of the room.
+ * it by class; only a small "component error" marker is visible next to
+ * `fallback` (the slide's normal slot content for a whole-slide component,
+ * nothing for an inline one), so the room sees the slide instead of an
+ * empty one, and never a raw stack-trace-flavored message.
  */
-function ErrorCard({ source, message }: { source: string; message: string }) {
+function ErrorCard({ source, message, fallback = null }: { source: string; message: string; fallback?: ReactNode }) {
 	if (shouldUseSafeErrorForm()) {
 		return (
 			<>
+				{fallback}
 				<div className="deck-error-card deck-error-card-safe" data-source={source} data-message={message} hidden />
 				<div className="deck-error-marker" title={`${source}: ${message}`}>
 					component error
@@ -209,7 +211,13 @@ class DeckComponentBoundary extends Component<DeckComponentBoundaryProps, DeckCo
 	render(): ReactNode {
 		if (this.state.error) {
 			if (isDevRuntime()) {
-				return <ErrorCard source={this.props.source} message={this.state.error.message} />;
+				return (
+					<ErrorCard
+						source={this.props.source}
+						message={this.state.error.message}
+						fallback={this.props.buildFallback}
+					/>
+				);
 			}
 			return this.props.buildFallback;
 		}
@@ -281,7 +289,7 @@ export function DeckComponent({
 		return (
 			<div ref={rootRef} className="deck-component-root">
 				{isDevRuntime() ? (
-					<ErrorCard source={source} message={buildError} />
+					<ErrorCard source={source} message={buildError} fallback={buildFallback} />
 				) : (
 					buildFallback
 				)}
