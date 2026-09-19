@@ -138,6 +138,28 @@ tap dev presentation.md
 
 Scan the QR code with your phone or tablet to instantly open the presentation. Navigate to `/presenter` for the presenter view.
 
+## On Stage
+
+Three things make a live talk safer. None of them need a flag on the deck.
+
+**Put the audience window in fullscreen, or open it with
+`?present=true`.** Both switch error display to its audience-safe form: if
+a component throws, the slide falls back to its own content with a small
+muted `component error` chip in the corner, rather than showing the whole
+room a stack trace. Your presenter view keeps the full message, so you can
+read what broke while the audience sees a merely plainer slide. Add
+`?debug=true` to any window to force the full card back while you are
+still authoring.
+
+**A window catches up by itself after a restart.** The hub tells each
+window the deck's revision when it connects. A window that reconnects and
+finds a different revision than it first saw reloads itself, so restarting
+`tap dev`, or editing the deck while a window was asleep, no longer leaves
+a stale slide on the projector.
+
+**With a presenter password set, only authenticated windows drive the
+others.** See below.
+
 ## Password Protection
 
 For sensitive presentations, you can protect the presenter view with a password:
@@ -154,6 +176,15 @@ When password protection is enabled:
 - The audience view (`/`) remains publicly accessible
 - The presenter view (`/presenter`) requires the password
 - Notes and upcoming slides stay private
+- **Only an authenticated window can drive the others.** Opening
+  `/presenter?key=<secret>` sets an HttpOnly cookie for that browser. A
+  window without it still receives every sync and reload message, so it
+  follows along, but its own navigation messages are dropped by the hub. An
+  audience member clicking around moves only their own screen.
+
+With no password set, nothing changes: any connected window can navigate
+every other one, which is what you want for a rehearsal across two
+laptops.
 
 ::: warning
 The password is passed on the command line, so it lands in your shell
