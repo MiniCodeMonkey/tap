@@ -53,7 +53,7 @@ func init() {
 
 	addComponentCmd.Flags().BoolVar(&addComponentInline, "inline", false, "scaffold an inline block component instead of a whole-slide one")
 	addComponentCmd.Flags().BoolVar(&addComponentTS, "ts", false, "write a .tsx file and a tap-env.d.ts next to the deck")
-	addComponentCmd.Flags().StringVar(&addComponentDeck, "deck", "", "deck file the component belongs to (default: the current directory)")
+	addComponentCmd.Flags().StringVar(&addComponentDeck, "deck", "", "deck file or deck folder the component belongs to (default: the current directory)")
 }
 
 func runAddComponent(cmd *cobra.Command, args []string) {
