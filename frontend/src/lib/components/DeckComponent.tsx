@@ -17,10 +17,11 @@ import {
 	type ComponentType,
 	type ReactNode
 } from 'react';
-import { PresenceContext } from 'motion/react';
+import { MotionConfig, PresenceContext } from 'motion/react';
 import type { DeckComponentProps, Slide as SlideData } from '$lib/types';
-import { isDevRuntime } from '$lib/utils/runtime';
+import { isDevRuntime, shouldUseSafeErrorForm } from '$lib/utils/runtime';
 import { DeckComponentContext } from '../tap';
+import './DeckComponent.css';
 
 /** A dynamic import() function, swappable in tests: jsdom cannot import() a URL. */
 export type ComponentImporter = (url: string) => Promise<unknown>;
@@ -52,18 +53,52 @@ function loadStylesheet(cssURL: string): void {
 	document.head.appendChild(link);
 }
 
+/** How long a dynamic import may sit unresolved before it is treated as a load failure. */
+export const COMPONENT_LOAD_TIMEOUT_MS = 8000;
+
 /**
  * Imports a bundle's module namespace, caching the promise by its absolute
  * URL. A rejection (a 404 during a `tap dev` restart, a build failure)
  * evicts the entry instead of caching the rejection forever, so leaving
  * and re-entering the slide retries the import instead of repeating
  * "Failed to fetch dynamically imported module".
+ *
+ * `timeout`, when given, races the import against COMPONENT_LOAD_TIMEOUT_MS:
+ * an import() that never settles (a bundler stuck mid-build, a network
+ * request that never completes) would otherwise leave the slide blank
+ * forever, since Suspense's fallback has nothing else to show. A timeout
+ * is treated exactly like a rejected import - same cache eviction, same
+ * error boundary - with a message naming the source that never loaded.
+ * Omitted for a print/capture pass, which waits on its own terms instead.
  */
-function importModule(url: string, importer: ComponentImporter = defaultImporter): Promise<unknown> {
+function importModule(
+	url: string,
+	importer: ComponentImporter = defaultImporter,
+	timeout?: { source: string }
+): Promise<unknown> {
 	const absolute = resolveComponentURL(url);
 	let cached = importCache.get(absolute);
 	if (!cached) {
-		cached = importer(absolute).catch((error: unknown) => {
+		const importPromise = importer(absolute);
+		let racedPromise: Promise<unknown> = importPromise;
+		if (timeout) {
+			let timeoutId: ReturnType<typeof setTimeout>;
+			const timeoutPromise = new Promise<never>((_, reject) => {
+				timeoutId = setTimeout(() => {
+					reject(new Error(`component did not load within 8 seconds: ${timeout.source}`));
+				}, COMPONENT_LOAD_TIMEOUT_MS);
+			});
+			racedPromise = Promise.race([importPromise, timeoutPromise]);
+			// The import can still resolve after the timeout fires (a slow but
+			// eventually successful build); clearing on both settle paths avoids
+			// leaving a stray timer around, and an unhandled rejection warning
+			// for the timeout promise once nothing is racing it any more.
+			importPromise.then(
+				() => clearTimeout(timeoutId),
+				() => clearTimeout(timeoutId)
+			);
+		}
+		cached = racedPromise.catch((error: unknown) => {
 			importCache.delete(absolute);
 			throw error;
 		});
@@ -103,8 +138,29 @@ export function isPreviewDisabled(module: { preview?: unknown }): boolean {
 	return module.preview === false;
 }
 
-/** The error card shown in dev when a component fails to build or render. Detected by `tap screenshot` via the deck-error-card class. */
+/**
+ * The error card shown in dev when a component fails to build or render.
+ * Detected by `tap screenshot` via the deck-error-card class (present in
+ * both forms below).
+ *
+ * In the audience-safe form (see shouldUseSafeErrorForm), the full card is
+ * kept in the DOM - visually hidden, its message moved to a data-message
+ * attribute - rather than removed, so tap screenshot and tests still find
+ * it by class; only a small "component error" marker is visible, so a
+ * throwing component never puts a raw stack-trace-flavored message in
+ * front of the room.
+ */
 function ErrorCard({ source, message }: { source: string; message: string }) {
+	if (shouldUseSafeErrorForm()) {
+		return (
+			<>
+				<div className="deck-error-card deck-error-card-safe" data-source={source} data-message={message} hidden />
+				<div className="deck-error-marker" title={`${source}: ${message}`}>
+					component error
+				</div>
+			</>
+		);
+	}
 	return (
 		<div className="deck-error-card" data-source={source}>
 			<p className="deck-error-card-source">{source}</p>
@@ -217,8 +273,8 @@ export function DeckComponent({
 	// every render calls the same hooks in the same order (a lookup in
 	// lazyCache is cheap even when buildError means it never renders).
 	const LazyComponent = useMemo(
-		() => makeLazyComponent(url, importer, preview, source),
-		[url, importer, preview, source]
+		() => makeLazyComponent(url, importer, preview, source, printMode),
+		[url, importer, preview, source, printMode]
 	);
 
 	if (buildError) {
@@ -252,7 +308,17 @@ export function DeckComponent({
 						    wants its own AnimatePresence still nests one normally
 						    under this null value. */}
 						<PresenceContext.Provider value={null}>
-							<LazyComponent slots={slots} props={props} slide={slide} step={step} steps={steps} active={active} printMode={printMode} />
+							{/* Print mode (and a settled capture, which passes printMode
+							    the same way) forces every Motion transform and layout
+							    animation in the component's tree to its end state
+							    instantly, so tap pdf's waitForAnimations never waits on
+							    one and a screenshot never lands mid-animation. It leaves
+							    opacity and color animations running - see
+							    DeckComponent.css for the CSS-driven animations this does
+							    not reach. */}
+							<MotionConfig reducedMotion={printMode ? 'always' : 'never'}>
+								<LazyComponent slots={slots} props={props} slide={slide} step={step} steps={steps} active={active} printMode={printMode} />
+							</MotionConfig>
 						</PresenceContext.Provider>
 					</Suspense>
 				</DeckComponentBoundary>
@@ -272,19 +338,24 @@ const lazyCache = new Map<string, ComponentType<DeckComponentProps>>();
  * `export const preview = false`. A rejected load evicts this entry too
  * (React.lazy caches its own rejected promise forever otherwise), so a
  * remount of the same URL builds a fresh lazy component that retries.
+ *
+ * `printMode` skips the load timeout below: a print/capture pass already
+ * waits on its own terms (see internal/pdf/capture.go), and a fixed
+ * frontend timeout on top of that would only race it.
  */
 function makeLazyComponent(
 	url: string,
 	importer: ComponentImporter | undefined,
 	isPreviewRender: boolean,
-	source: string
+	source: string,
+	printMode: boolean
 ): ComponentType<DeckComponentProps> {
 	const cacheKey = `${url}\u0000${importer ? 'custom' : 'default'}\u0000${isPreviewRender}`;
 	let cached = lazyCache.get(cacheKey);
 	if (!cached) {
 		cached = lazy(async (): Promise<{ default: ComponentType<DeckComponentProps> }> => {
 			try {
-				const module = await importModule(url, importer);
+				const module = await importModule(url, importer, printMode ? undefined : { source });
 				const exported = (module as { default?: unknown }).default;
 				if (typeof exported !== 'function') {
 					throw new Error(`${url} has no default export`);

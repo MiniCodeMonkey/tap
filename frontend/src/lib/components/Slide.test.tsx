@@ -190,6 +190,32 @@ describe('Slide', () => {
 		consoleSpy.mockRestore();
 	});
 
+	it('shows the audience-safe marker instead of the full card when the page is opened with ?present=true', () => {
+		const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+		vi.mocked(resolveLayout).mockReturnValue({
+			component: () => {
+				throw new Error('boom');
+			},
+			slots: ['default']
+		});
+		window.history.pushState({}, '', '/?present=true');
+
+		const slide = makeSlide({ index: 2 });
+		try {
+			const { container } = render(
+				<Slide slide={slide} active printMode={false} fragmentIndex={-1} step={0} total={1} />
+			);
+
+			const card = container.querySelector('.deck-error-card');
+			expect(card?.hasAttribute('hidden')).toBe(true);
+			expect(card?.getAttribute('data-message')).toBe('Slide 3 failed to render');
+			expect(container.querySelector('.deck-error-marker')?.textContent).toBe('component error');
+		} finally {
+			window.history.pushState({}, '', '/');
+			consoleSpy.mockRestore();
+		}
+	});
+
 	it('shows the raw slot content when not in dev mode', () => {
 		// "Not in dev mode" is a static tap build output, not merely
 		// import.meta.env.DEV === false: SlideErrorBoundary uses isDevRuntime

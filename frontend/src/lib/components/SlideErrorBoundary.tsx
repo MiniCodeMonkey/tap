@@ -9,7 +9,7 @@
  */
 
 import { Component, type ReactNode } from 'react';
-import { isDevRuntime } from '$lib/utils/runtime';
+import { isDevRuntime, shouldUseSafeErrorForm } from '$lib/utils/runtime';
 
 interface SlideErrorBoundaryProps {
 	slideNumber: number;
@@ -35,11 +35,18 @@ export class SlideErrorBoundary extends Component<SlideErrorBoundaryProps, Slide
 	render(): ReactNode {
 		if (this.state.hasError) {
 			if (isDevRuntime()) {
-				return (
-					<div className="slide-error deck-error-card">
-						Slide {this.props.slideNumber} failed to render
-					</div>
-				);
+				const message = `Slide ${this.props.slideNumber} failed to render`;
+				if (shouldUseSafeErrorForm()) {
+					return (
+						<>
+							<div className="slide-error deck-error-card deck-error-card-safe" data-message={message} hidden />
+							<div className="deck-error-marker" title={message}>
+								component error
+							</div>
+						</>
+					);
+				}
+				return <div className="slide-error deck-error-card">{message}</div>;
 			}
 			return this.props.fallback;
 		}

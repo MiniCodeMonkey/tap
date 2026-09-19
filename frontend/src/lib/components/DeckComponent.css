@@ -1,0 +1,36 @@
+/*
+ * Print mode must never animate forever: a deck component that ignores
+ * usePrintMode() and starts a CSS keyframe animation with an infinite
+ * repeat count keeps `tap pdf`'s waitForAnimations waiting and captures a
+ * random frame (see internal/pdf/capture.go). Motion's <MotionConfig
+ * reducedMotion="always"> in DeckComponent.tsx only reaches Motion's own
+ * transform and layout animations, never a component's raw CSS, so this
+ * rule stops CSS animations and transitions unconditionally for anything
+ * a deck component renders while print mode is on.
+ */
+[data-print] .deck-component-root,
+[data-print] .deck-component-root * {
+	animation: none !important;
+	transition: none !important;
+}
+
+/*
+ * The audience-safe form of a component error (see shouldUseSafeErrorForm
+ * in $lib/utils/runtime): a small, muted marker instead of the full
+ * card, so a throwing component never shows a raw error to the room. Kept
+ * unobtrusive and out of the way of the slide content it sits over.
+ */
+.deck-error-marker {
+	position: absolute;
+	top: 0.5em;
+	right: 0.5em;
+	padding: 0.15em 0.5em;
+	border-radius: 999px;
+	background: rgba(0, 0, 0, 0.55);
+	color: rgba(255, 255, 255, 0.75);
+	font-size: 0.65em;
+	font-family: monospace;
+	letter-spacing: 0.02em;
+	pointer-events: none;
+	z-index: 1;
+}

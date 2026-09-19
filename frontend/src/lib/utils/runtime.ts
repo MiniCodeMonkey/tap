@@ -16,3 +16,31 @@
 export function isDevRuntime(): boolean {
 	return import.meta.env.DEV || (typeof document !== 'undefined' && !document.getElementById('presentation-data'));
 }
+
+/**
+ * Whether a component or slide error should show only its safe, audience-facing
+ * form (a muted marker, no message) instead of the full error card. A live
+ * talk shows a throwing component's raw error to the whole room otherwise, so
+ * the audience-facing viewer - fullscreen, or opened with `?present=true` -
+ * switches to the safe form. The presenter view (served at /presenter) always
+ * keeps the full card in its current-slide panel, so the speaker can read
+ * what broke; a print/capture pass (`?print=true`, `?capture=true`) and any
+ * page opened with `?debug=true` keep the full card too, since those exist
+ * for the deck's author to see the failure while authoring.
+ */
+export function shouldUseSafeErrorForm(): boolean {
+	if (typeof window === 'undefined') {
+		return false;
+	}
+	if (window.location.pathname === '/presenter') {
+		return false;
+	}
+	const params = new URLSearchParams(window.location.search);
+	if (params.get('debug') === 'true' || params.get('print') === 'true' || params.get('capture') === 'true') {
+		return false;
+	}
+	if (params.get('present') === 'true') {
+		return true;
+	}
+	return typeof document !== 'undefined' && Boolean(document.fullscreenElement);
+}
