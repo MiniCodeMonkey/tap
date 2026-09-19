@@ -55,7 +55,7 @@ func TestBuild_ComponentsExampleServesFromStaticSubpath(t *testing.T) {
 		t.Fatalf("failed to parse deck: %v", err)
 	}
 
-	resolvedComponents, componentErrs := buildComponents(pres, baseDir, true, false)
+	resolvedComponents, componentErrs := buildComponents(pres, baseDir, true, false, "components/")
 	if len(componentErrs) > 0 {
 		t.Fatalf("unexpected component build errors: %v", componentErrs)
 	}
