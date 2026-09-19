@@ -113,11 +113,11 @@ jobs:
           mkdir -p dist
 
           # Build for each platform
-          GOOS=darwin GOARCH=amd64 go build -ldflags "-X main.version=${{ env.VERSION }}" -o dist/tap-darwin-amd64 ./cmd/tap
-          GOOS=darwin GOARCH=arm64 go build -ldflags "-X main.version=${{ env.VERSION }}" -o dist/tap-darwin-arm64 ./cmd/tap
-          GOOS=linux GOARCH=amd64 go build -ldflags "-X main.version=${{ env.VERSION }}" -o dist/tap-linux-amd64 ./cmd/tap
-          GOOS=linux GOARCH=arm64 go build -ldflags "-X main.version=${{ env.VERSION }}" -o dist/tap-linux-arm64 ./cmd/tap
-          GOOS=windows GOARCH=amd64 go build -ldflags "-X main.version=${{ env.VERSION }}" -o dist/tap-windows-amd64.exe ./cmd/tap
+          GOOS=darwin GOARCH=amd64 go build -ldflags "-X github.com/MiniCodeMonkey/tap/internal/cli.Version=${{ env.VERSION }}" -o dist/tap-darwin-amd64 ./cmd/tap
+          GOOS=darwin GOARCH=arm64 go build -ldflags "-X github.com/MiniCodeMonkey/tap/internal/cli.Version=${{ env.VERSION }}" -o dist/tap-darwin-arm64 ./cmd/tap
+          GOOS=linux GOARCH=amd64 go build -ldflags "-X github.com/MiniCodeMonkey/tap/internal/cli.Version=${{ env.VERSION }}" -o dist/tap-linux-amd64 ./cmd/tap
+          GOOS=linux GOARCH=arm64 go build -ldflags "-X github.com/MiniCodeMonkey/tap/internal/cli.Version=${{ env.VERSION }}" -o dist/tap-linux-arm64 ./cmd/tap
+          GOOS=windows GOARCH=amd64 go build -ldflags "-X github.com/MiniCodeMonkey/tap/internal/cli.Version=${{ env.VERSION }}" -o dist/tap-windows-amd64.exe ./cmd/tap
 
           # Create checksums
           cd dist
