@@ -16,6 +16,73 @@ function themeSlugFromModuleId(id: string | null | undefined): string | null {
 }
 
 /**
+ * Drops the `.woff` entry from every @fontsource `@font-face` `src` list in
+ * the built CSS, keeping only `.woff2`, and deletes the `.woff` asset files
+ * that only existed for that now-removed reference. Every browser tap
+ * supports reads `.woff2` (it has done so for years), so the `.woff`
+ * fallback each @fontsource package ships alongside it is dead weight.
+ *
+ * A theme's fonts reach the bundle through a CSS `@import` inside
+ * theme.css (e.g. `@import '@fontsource/jetbrains-mono/latin-500.css'`),
+ * which Vite inlines and resolves to hashed asset URLs entirely inside its
+ * own internal CSS plugin - a `transform` hook on the imported file never
+ * fires for it, so a pre-build rewrite can't reach this content. Instead,
+ * this runs as a `generateBundle` hook, after every CSS chunk and font
+ * asset already exists in the bundle: it strips each `, url(...)
+ * format('woff')` clause from the emitted CSS, then deletes any `.woff`
+ * asset whose emitted file name no longer appears in any remaining CSS or
+ * JS chunk, so a font that also happens to be referenced elsewhere (it
+ * shouldn't be, but this is checked rather than assumed) is never removed
+ * out from under a real reference.
+ */
+function fontsourceWoff2OnlyPlugin(): Plugin {
+  // Matches ", url(<hashed-file>.woff) format('woff')" or the double-quoted
+  // spelling, immediately after a .woff2 entry in the same src list.
+  const woffFallbackPattern = /,\s*url\(([^)]+\.woff)\)\s*format\((['"])woff\2\)/g;
+
+  return {
+    name: 'fontsource-woff2-only',
+    enforce: 'post',
+    generateBundle(_, bundle) {
+      const removedWoffFiles = new Set<string>();
+
+      for (const chunk of Object.values(bundle)) {
+        if (chunk.type !== 'asset' || !chunk.fileName.endsWith('.css') || typeof chunk.source !== 'string') continue;
+
+        chunk.source = chunk.source.replace(woffFallbackPattern, (_match, urlPath: string) => {
+          // urlPath is relative to the CSS file (e.g. "./name.woff" or
+          // "name.woff"); every font asset in this build lives flat in
+          // assets/, matching every CSS chunk's own location, so the
+          // fileName Rollup uses for the asset is just its basename.
+          const fileName = urlPath.replace(/^\.\//, '');
+          removedWoffFiles.add(fileName.startsWith('assets/') ? fileName : `assets/${fileName}`);
+          return '';
+        });
+      }
+
+      if (removedWoffFiles.size === 0) return;
+
+      // A .woff file is only safe to delete if no surviving chunk (CSS or
+      // JS) still references its file name anywhere.
+      const stillReferenced = new Set<string>();
+      for (const chunk of Object.values(bundle)) {
+        const source = chunk.type === 'asset' ? chunk.source : chunk.type === 'chunk' ? chunk.code : undefined;
+        if (typeof source !== 'string') continue;
+        for (const fileName of removedWoffFiles) {
+          const baseName = fileName.replace(/^assets\//, '');
+          if (source.includes(baseName)) stillReferenced.add(fileName);
+        }
+      }
+
+      for (const fileName of removedWoffFiles) {
+        if (stillReferenced.has(fileName)) continue;
+        if (bundle[fileName]) delete bundle[fileName];
+      }
+    }
+  };
+}
+
+/**
  * Lists every installed @fontsource and @fontsource-variable package's
  * node_modules path (e.g. "@fontsource/jetbrains-mono"), across every
  * theme's font imports. Scanning node_modules directly means a new theme's
@@ -123,7 +190,11 @@ export default defineConfig({
   // the same relative reference works for the live Go server and the
   // static build alike.
   base: './',
-  plugins: [react(), fontsourceFallbackPlugin()],
+  // fontsourceFallbackPlugin resolves any stray ./files/ references left
+  // in the CSS before fontsourceWoff2OnlyPlugin strips .woff references
+  // and deletes their now-unreferenced assets, so a font the fallback
+  // plugin still had to resolve is caught by the woff2-only pass too.
+  plugins: [react(), fontsourceFallbackPlugin(), fontsourceWoff2OnlyPlugin()],
   server: {
     fs: {
       // Allow importing ../internal/layouts/layouts.json from the frontend
