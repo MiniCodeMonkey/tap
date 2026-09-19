@@ -87,7 +87,10 @@ func runServe(cmd *cobra.Command, args []string) {
 		Errorln("Error:", err)
 		os.Exit(1)
 	}
-	boundPort := listener.Addr().(*net.TCPAddr).Port
+	boundPort := servePort
+	if tcpAddr, ok := listener.Addr().(*net.TCPAddr); ok {
+		boundPort = tcpAddr.Port
+	}
 
 	httpServer := &http.Server{
 		Handler:           handler,

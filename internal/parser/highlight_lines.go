@@ -57,7 +57,10 @@ func (r *fencedCodeBlockRenderer) RegisterFuncs(reg renderer.NodeRendererFuncReg
 func (r *fencedCodeBlockRenderer) renderFencedCodeBlock(
 	w util.BufWriter, source []byte, node ast.Node, entering bool,
 ) (ast.WalkStatus, error) {
-	n := node.(*ast.FencedCodeBlock)
+	n, ok := node.(*ast.FencedCodeBlock)
+	if !ok {
+		return ast.WalkContinue, nil
+	}
 	if index, ok := n.AttributeString(componentIndexAttr); ok {
 		if entering {
 			_, _ = w.WriteString(`<div class="deck-component" data-component-index="`)

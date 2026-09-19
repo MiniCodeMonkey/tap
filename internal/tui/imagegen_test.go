@@ -1405,7 +1405,7 @@ Content
 	m.promptInput.SetValue("A sunset over the ocean")
 
 	// Submit with ctrl+d
-	newModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{}, Alt: false})
+	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{}, Alt: false})
 	// Simulate ctrl+d key message
 	newModel, _ = m.Update(tea.KeyMsg{Type: tea.KeyCtrlD})
 	m = newModel.(*ImageGenModel)

@@ -134,10 +134,7 @@ func (b *Builder) Build(cfg *config.Config, pres *parser.Presentation) (*BuildRe
 			// Resolve the image path.
 			// The transformer converts relative paths to /local/... URLs for the dev server.
 			// Strip this prefix to resolve the actual file path on disk.
-			resolvedPath := imgPath
-			if strings.HasPrefix(resolvedPath, "/local/") {
-				resolvedPath = strings.TrimPrefix(resolvedPath, "/local/")
-			}
+			resolvedPath := strings.TrimPrefix(imgPath, "/local/")
 
 			sourcePath := resolvedPath
 			if !filepath.IsAbs(resolvedPath) && b.baseDir != "" {
@@ -169,10 +166,7 @@ func (b *Builder) Build(cfg *config.Config, pres *parser.Presentation) (*BuildRe
 				continue
 			}
 
-			resolvedPath := castPath
-			if strings.HasPrefix(resolvedPath, "/local/") {
-				resolvedPath = strings.TrimPrefix(resolvedPath, "/local/")
-			}
+			resolvedPath := strings.TrimPrefix(castPath, "/local/")
 
 			sourcePath := resolvedPath
 			if !filepath.IsAbs(resolvedPath) && b.baseDir != "" {

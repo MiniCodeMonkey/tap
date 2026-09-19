@@ -609,8 +609,8 @@ func (e *Exporter) exportNotes(ctx context.Context, page playwright.Page, server
 			return nil, fmt.Errorf("failed to extract notes for slide %d: %w", i+1, err)
 		}
 		noteText := ""
-		if notes != nil {
-			noteText = notes.(string)
+		if s, ok := notes.(string); ok {
+			noteText = s
 		}
 		allNotes = append(allNotes, noteText)
 	}

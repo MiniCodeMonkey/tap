@@ -426,32 +426,6 @@ func skipFrontmatterWithLineOffset(text string) (string, int) {
 	return remaining, strings.Count(text[:removedLength], "\n")
 }
 
-// skipFrontmatter removes YAML frontmatter from the beginning of the content.
-// Frontmatter is delimited by "---" at the start and end.
-func skipFrontmatter(text string) string {
-	// Check if content starts with frontmatter delimiter
-	if !strings.HasPrefix(strings.TrimSpace(text), "---") {
-		return text
-	}
-
-	// Find the first ---
-	text = strings.TrimSpace(text)
-	if !strings.HasPrefix(text, "---") {
-		return text
-	}
-
-	// Find the closing ---
-	rest := text[3:] // Skip the first "---"
-	idx := strings.Index(rest, "\n---")
-	if idx == -1 {
-		// No closing delimiter, return original
-		return text
-	}
-
-	// Skip past the closing delimiter and any trailing newline
-	afterFrontmatter := rest[idx+4:] // +4 for "\n---"
-	return strings.TrimPrefix(afterFrontmatter, "\n")
-}
 
 // directivePattern matches HTML comments containing YAML directives at the start of slides.
 // Example: <!-- layout: title \n transition: fade -->
