@@ -51,6 +51,10 @@ a Go test and `npm run tokens:check` both guard it.
 > `go.mod` targets. If that happens, fall back to `go vet ./...` and
 > `go test ./...` for the Go side.
 
+The config is `.golangci.yml` in the **v2** schema, so you need
+golangci-lint v2. staticcheck's `QF1012` is excluded deliberately; leave it
+that way rather than rewriting the lines it flags.
+
 ## Continuous integration
 
 `.github/workflows/ci.yml` runs on every push and pull request against
@@ -112,6 +116,13 @@ server, each on their own pair of ports so multiple runs can work on
 different themes in parallel without fighting over a snapshot folder.
 Start both, then run the suite with `BASE_URL` pointing at the Vite server:
 
+The dev server's websocket hub accepts an origin whose host matches the
+request's own `Host` header, which is exactly what the proxy setup below
+produces, so this workflow needs no extra flag. If you run a dev server on
+a different host or port that talks to the hub directly rather than through
+the proxy, add it with `tap dev --allow-origin http://localhost:<port>`
+(repeatable).
+
 ```bash
 # terminal 1, from the repo root: the Go dev server
 go run ./cmd/tap dev testdata/themes.md --port 3300 --headless
@@ -150,6 +161,40 @@ though naming a port keeps it obvious which is which.
 The temporary servers behind `tap pdf` and `tap screenshot` bind
 `127.0.0.1`, since only tap's own headless browser talks to them. `tap dev`
 keeps `0.0.0.0` so a presenter can open it from another device.
+
+## Changelog preparation
+
+`scripts/prepare-changelog.sh` holds the changelog logic the release
+workflow runs, so you can test a release's changelog handling without
+triggering a release. It covers three cases:
+
+- **First run for a version:** the `## [Unreleased]` section's contents
+  move into a new `## [<version>] - <date>` section, and `Unreleased` is
+  left empty.
+- **Second run for the same version:** the existing section for that
+  version is reused rather than duplicated, so re-running the workflow is
+  safe.
+- **An empty `Unreleased` section with no section for the version:** the
+  script fails, rather than cutting a release with no notes.
+
+It takes the version, the changelog to rewrite in place, and the file to
+write the extracted notes to. Set `CHANGELOG_DATE` to pin the new header's
+date, which is how the tests keep fixtures independent of today.
+
+Run it against a copy, never the real file:
+
+```bash
+cp CHANGELOG.md /tmp/CHANGELOG-test.md
+CHANGELOG_DATE=2026-01-01 scripts/prepare-changelog.sh 9.9.9 \
+  /tmp/CHANGELOG-test.md /tmp/notes.md
+
+# second run for the same version reuses the section it already wrote
+CHANGELOG_DATE=2026-01-01 scripts/prepare-changelog.sh 9.9.9 \
+  /tmp/CHANGELOG-test.md /tmp/notes.md
+
+# a new version with an empty Unreleased section fails, exit status 1
+scripts/prepare-changelog.sh 8.8.8 /tmp/CHANGELOG-test.md /tmp/notes.md
+```
 
 ## The end-to-end suite's server
 

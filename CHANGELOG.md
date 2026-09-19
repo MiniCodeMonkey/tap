@@ -6,9 +6,43 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+### Added
+
+- **Status and second-accent theme tokens** - Every theme now defines `--status-ok`, `--status-warn`, and `--status-error`, each readable as a fill at 3:1 or better against `--bg`, plus `--accent-2` (a real second accent where the theme has one, otherwise equal to `--accent-text`). `useTheme()` returns them as `statusOk`, `statusWarn`, `statusError`, and `accent2`, so it has 18 keys rather than 14. `tap theme show --json` lists them under `tokens.colors` and `--prompt` names them as colors to use only where meaning requires them. Use them for a health state or a passed or failed check; something merely inactive still belongs in `--muted`.
+- **`tap dev --allow-origin <origin>`** - Repeatable. Adds an origin allowed to connect to the websocket hub, for a contributor running a separate Vite dev server. The hub already accepts a connection with no `Origin` header or one whose host matches the request's own `Host`, so localhost, 127.0.0.1, a LAN address, a fallback port, and the documented proxy workflow need no flag.
+- **Audience-safe errors** - A fullscreen viewer, or one opened with `?present=true`, shows a failing component as the slide's own fallback content plus a small muted `component error` chip, instead of a card with the raw message. The presenter view, a normal window, `?debug=true`, and every print or capture pass still show the full card. The hidden `.deck-error-card` element stays in the DOM either way, so `tap screenshot` still exits 1.
+- **`?debug=true` and `?present=true` URL parameters** - Force the full error card on any window, and force the audience-safe form without going fullscreen.
+- **Windows catch up after a restart** - The hub's `connected` message carries a revision of the presentation and its component bundles. A window that reconnects and sees a different revision than it first saw reloads itself, so restarting `tap dev`, or editing the deck while a window was asleep, no longer leaves a stale slide on the projector.
+- **Blockquote length classes** - Blockquotes carry `data-length="short|medium|long"` (up to 80 runes, 81 to 180, above 180) alongside the heading classes. Thirteen themes step long quotes down.
+- **`scripts/prepare-changelog.sh`** - The release workflow's changelog logic, runnable on its own so a contributor can test it against a copy.
+
+### Changed
+
+- **Imported assets over 100 KB are emitted as files** - An image or font imported by a component is inlined as a data URL only under 100 KB. At 100 KB or more it is emitted as its own file, served by `tap dev` from `/components/` and written into `dist/components/` by `tap build`, and referenced by URL. The previous behavior inlined every asset at any size.
+- **`--presenter-password` gates control, not just the view** - A correct `?key=` on `/presenter` sets an HttpOnly cookie. A window without it still receives all sync and reload traffic, but the hub drops its navigation messages, so an audience member clicking around moves only their own screen and the presenter drives the room. With no password set, nothing changes.
+- **Print mode stops more on its own** - Deck components are wrapped in Motion's `reducedMotion="always"`, which makes transform and layout animations instant, and everything inside `.deck-component-root` gets `animation: none; transition: none` under `[data-print]`. Motion animations of opacity, color, and background color are not affected, and neither are your own timers, so a component must still honor `usePrintMode()`.
+- **A component that does not load in 8 seconds is an error** - `component did not load within 8 seconds: <source>`; re-entering the slide retries. No timeout in print, capture, or preview.
+- **`?step=` and `?fragment=` leave the URL** - Both are load-time parameters, so they are removed from the address bar on the first navigation rather than pinning a shared link to the step you started on. Every other query parameter stays.
+- **Component build errors name their slides** - `error: slides/Broken.jsx:7:1: Unexpected "return" (used on slides 2, 5)`, or `(used on slide 2)` for one.
+- **An entry path outside the deck folder fails early** - `component files must live inside the deck folder: <path> (imports from outside are allowed, entry files are not)`, checked before esbuild runs. Imports from outside the folder are still allowed for code and stylesheets.
+- **`tap add component --deck <path>` accepts a directory** - A directory argument is used as the deck folder itself, rather than being read as a file whose folder is taken.
+- **`tap screenshot` and `tap pdf` stop cleanly on Ctrl-C** - Both finish their cleanup, print `interrupted` on standard error, and exit with status 130 on SIGINT or SIGTERM.
+- **Spinners write to standard error** - `tap build` and `tap pdf` draw their progress spinner on standard error, and nothing at all when standard error is not a terminal, so standard output holds only result lines. `tap pdf` stops the spinner before printing warnings.
+- **Bundler warnings get their own box in the dev TUI** - Shown during a live reload and cleared on the next clean rebuild.
+- **`useTheme()` follows `themeColors`** - Frontmatter overrides now also set the standard token names on the canvas frame, and `useTheme()` re-reads when they change. Setting `accent` sets both `--accent` and `--accent-text`.
+- **The frontend build emits `.woff2` only** - The `.woff` fallbacks every `@fontsource` package ships are stripped from the CSS and deleted, since every browser tap supports has read `.woff2` for years.
+- **golangci-lint v2** - `.golangci.yml` uses the v2 schema. staticcheck's `QF1012` is excluded deliberately.
+
 ### Fixed
 
 - **Quoted or special-character alt text on an image attribute block** - `![The "quoted" screenshot](img.jpg){width=300px}` rendered as literal `<img ...>` text on the slide instead of the image, because the hand-built `<img>` tag's `alt` and `src` values were not HTML-escaped. A hostile `width` value is now rejected with a warning instead of being written into the `style` attribute unescaped.
+- **Static builds under a URL sub path** - A build's asset references are relative, so the same `dist/` folder now works from a domain root, a sub path, and a GitHub Pages project site with no flag and no rewriting.
+- **Entrance animations that end hidden** - The theme check suite gained a live check, per theme, that an element which animates in never settles hidden. A theme whose keyframes ended at `opacity: 0` passed every print-mode check and still showed the audience a blank slide.
+
+### Security
+
+- **WebSocket origin check** - The hub refuses a connection whose `Origin` is neither absent, nor the request's own host, nor in the `--allow-origin` list, with HTTP 403 and `Forbidden: origin not allowed`, and logs the origin it turned away.
+- **Image attribute escaping and validation** - Alt text and URL of an image with an attribute block are HTML-escaped, and a size value must be a CSS length or percentage or it is dropped with a warning naming the slide (issue #7).
 
 ## [2.0.0-beta.1] - 2026-09-19
 
