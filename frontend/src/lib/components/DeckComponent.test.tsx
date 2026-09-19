@@ -457,6 +457,42 @@ describe('DeckComponent', () => {
 		}
 	});
 
+	it('switches to the audience-safe form when fullscreen is entered, without remounting', () => {
+		(import.meta.env as { DEV: boolean }).DEV = true;
+		const slide = makeSlide();
+
+		const { container } = render(
+			<DeckComponent
+				source="slides/Broken.jsx"
+				url="/components/Broken-livefullscreen.js"
+				buildError="slides/Broken.jsx:3:7: bad"
+				props={{}}
+				slots={{}}
+				slide={slide}
+				step={0}
+				steps={0}
+				active
+				printMode={false}
+			/>
+		);
+
+		// Not fullscreen yet: the full card, not the safe form.
+		expect(container.querySelector('.deck-error-card')?.hasAttribute('hidden')).toBe(false);
+
+		Object.defineProperty(document, 'fullscreenElement', {
+			value: document.createElement('div'),
+			configurable: true
+		});
+		act(() => {
+			document.dispatchEvent(new Event('fullscreenchange'));
+		});
+
+		expect(container.querySelector('.deck-error-card')?.hasAttribute('hidden')).toBe(true);
+		expect(container.querySelector('.deck-error-marker')).not.toBeNull();
+
+		Object.defineProperty(document, 'fullscreenElement', { value: null, configurable: true });
+	});
+
 	it('shows the full error card when fullscreen, since ?present=true is absent, in dev', () => {
 		(import.meta.env as { DEV: boolean }).DEV = true;
 		Object.defineProperty(document, 'fullscreenElement', {

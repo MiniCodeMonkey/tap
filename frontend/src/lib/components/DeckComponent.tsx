@@ -19,7 +19,8 @@ import {
 } from 'react';
 import { MotionConfig, PresenceContext } from 'motion/react';
 import type { DeckComponentProps, Slide as SlideData } from '$lib/types';
-import { isDevRuntime, shouldUseSafeErrorForm } from '$lib/utils/runtime';
+import { isDevRuntime } from '$lib/utils/runtime';
+import { useSafeErrorForm } from '$lib/hooks/useSafeErrorForm';
 import { DeckComponentContext } from '../tap';
 import './DeckComponent.css';
 
@@ -152,7 +153,8 @@ export function isPreviewDisabled(module: { preview?: unknown }): boolean {
  * empty one, and never a raw stack-trace-flavored message.
  */
 function ErrorCard({ source, message, fallback = null }: { source: string; message: string; fallback?: ReactNode }) {
-	if (shouldUseSafeErrorForm()) {
+	const safe = useSafeErrorForm();
+	if (safe) {
 		return (
 			<>
 				{fallback}
