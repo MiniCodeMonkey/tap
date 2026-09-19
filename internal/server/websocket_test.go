@@ -535,6 +535,46 @@ func TestWebSocketHubOriginCheck(t *testing.T) {
 	})
 }
 
+// TestWebSocketHubCheckOrigin_RejectsDNSRebinding reproduces the
+// DNS-rebinding gap directly against checkOrigin: a hostile domain an
+// attacker controls can resolve to 127.0.0.1, so a request can carry
+// Host: evil.example:3800 and Origin: http://evil.example:3800 - equal to
+// each other, but neither one a host this hub should trust. The same-host
+// compare alone must not be enough to accept it.
+func TestWebSocketHubCheckOrigin_RejectsDNSRebinding(t *testing.T) {
+	hub := NewWebSocketHub()
+
+	req := httptest.NewRequest(http.MethodGet, "/ws", nil)
+	req.Host = "evil.example:3800"
+	req.Header.Set("Origin", "http://evil.example:3800")
+
+	if hub.checkOrigin(req) {
+		t.Error("checkOrigin accepted a same-host DNS-rebinding request, want rejection")
+	}
+}
+
+// TestWebSocketHubHandleConnection_RejectsDisallowedHost checks
+// HandleConnection's own Host allow-list, which runs even for a request
+// with no Origin header at all (a non-browser client), where checkOrigin
+// alone would otherwise accept it.
+func TestWebSocketHubHandleConnection_RejectsDisallowedHost(t *testing.T) {
+	hub := NewWebSocketHub()
+	go hub.Run()
+	defer hub.Stop()
+
+	req := httptest.NewRequest(http.MethodGet, "/ws", nil)
+	req.Host = "evil.example:3800"
+	w := httptest.NewRecorder()
+
+	hub.HandleConnection(w, req)
+
+	resp := w.Result()
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusForbidden {
+		t.Errorf("status = %d, want %d", resp.StatusCode, http.StatusForbidden)
+	}
+}
+
 func TestWebSocketHubBroadcastToRealConnection(t *testing.T) {
 	hub := NewWebSocketHub()
 	go hub.Run()

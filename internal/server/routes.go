@@ -19,23 +19,27 @@ import (
 // Any routes registered with RegisterHandlerFunc before or after this call
 // will also be included since we use the server's shared mux.
 func (s *Server) SetupRoutes() {
-	// Register all routes on the server's shared mux
+	// Register all routes on the server's shared mux.
+	// / and /assets/ are left off the host allow-list: they carry nothing
+	// presenter-specific and nothing a DNS-rebinding attacker gains from
+	// (see requireAllowedHost) - the audience view and its static assets
+	// are meant to be reachable the same way the presentation itself is.
 	s.mux.HandleFunc("GET /", s.handleIndex)
-	s.mux.HandleFunc("GET /presenter", s.handlePresenter)
-	s.mux.HandleFunc("GET /api/presentation", s.handleAPIPresentation)
-	s.mux.HandleFunc("GET /api/custom-theme.css", s.handleCustomTheme)
-	s.mux.HandleFunc("POST /api/execute", s.handleAPIExecute)
-	s.mux.HandleFunc("GET /qr", s.handleQR)
+	s.mux.HandleFunc("GET /presenter", s.requireAllowedHost(s.handlePresenter))
+	s.mux.HandleFunc("GET /api/presentation", s.requireAllowedHost(s.handleAPIPresentation))
+	s.mux.HandleFunc("GET /api/custom-theme.css", s.requireAllowedHost(s.handleCustomTheme))
+	s.mux.HandleFunc("POST /api/execute", s.requireAllowedHost(s.handleAPIExecute))
+	s.mux.HandleFunc("GET /qr", s.requireAllowedHost(s.handleQR))
 
 	// Serve static assets (JS, CSS) from embedded dist/assets/
 	s.mux.HandleFunc("GET /assets/", s.handleAssets)
 
 	// Serve local files (images, etc.) from the presentation's base directory
-	s.mux.HandleFunc("GET /local/", s.handleLocalFiles)
+	s.mux.HandleFunc("GET /local/", s.requireAllowedHost(s.handleLocalFiles))
 
 	// Serve component bundles from the in-memory store the dev command
 	// swaps atomically after each rebuild.
-	s.mux.HandleFunc("GET /components/", s.handleComponentBundle)
+	s.mux.HandleFunc("GET /components/", s.requireAllowedHost(s.handleComponentBundle))
 
 	// Note: We don't wrap with logging middleware here because the TUI
 	// manages the terminal in alternate screen mode, and raw fmt.Printf

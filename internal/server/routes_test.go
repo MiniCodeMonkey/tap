@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -582,7 +583,14 @@ func TestSetupRoutes(t *testing.T) {
 	}
 	defer s.Shutdown(context.Background())
 
-	baseURL := "http://" + s.Addr()
+	// 127.0.0.1, not s.Addr()'s bound "0.0.0.0", which is the unspecified
+	// address, not itself on the DNS-rebinding host allow-list (see
+	// isAllowedHost) - a real client always dials a concrete address.
+	_, addrPort, err := net.SplitHostPort(s.Addr())
+	if err != nil {
+		t.Fatalf("failed to parse server address: %v", err)
+	}
+	baseURL := "http://127.0.0.1:" + addrPort
 
 	tests := []struct {
 		name           string

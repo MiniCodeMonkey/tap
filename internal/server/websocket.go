@@ -146,6 +146,12 @@ type WebSocketHub struct {
 	// another port (see checkOrigin). Keyed by the full origin string
 	// (e.g. "http://localhost:5173") as sent in the Origin header.
 	allowedOrigins map[string]struct{}
+	// allowedHosts holds the same --allow-origin values, reduced to bare
+	// hosts (see allowedHostsFromOrigins), checked by isAllowedHost against
+	// a request's own Host header and an Origin header's host - the extra
+	// defense against DNS rebinding a same-host compare alone cannot
+	// provide (see checkOrigin and requireAllowedHost).
+	allowedHosts map[string]struct{}
 	// presenterPassword mirrors the dev server's --presenter-password (see
 	// SetPresenterPassword): empty means nothing is protected, so every
 	// connection can send. Non-empty means a connection may only send once
@@ -234,18 +240,24 @@ func (h *WebSocketHub) SetAllowedOrigins(origins []string) {
 	for _, origin := range origins {
 		h.allowedOrigins[origin] = struct{}{}
 	}
+	h.allowedHosts = allowedHostsFromOrigins(origins)
 }
 
 // checkOrigin reports whether r is an acceptable WebSocket upgrade request
 // given its Origin header:
 //   - No Origin header at all: accepted. Only a browser sends one, so this
-//     covers non-browser clients and tests.
+//     covers non-browser clients and tests. (HandleConnection separately
+//     enforces the Host allow-list on every request, browser or not.)
 //   - An Origin whose host (host and port) equals the request's own Host
-//     header: accepted. This covers localhost, 127.0.0.1, the LAN address
-//     a presenter opens tap dev from on a phone or second laptop, and
-//     whatever fallback port tap dev bound when its default was busy -
+//     header, and that host is itself on the allow-list (see
+//     isAllowedHost): accepted. This covers localhost, 127.0.0.1, the LAN
+//     address a presenter opens tap dev from on a phone or second laptop,
+//     and whatever fallback port tap dev bound when its default was busy -
 //     all of them addressed with the same host the browser used to reach
-//     this server in the first place.
+//     this server in the first place. The extra isAllowedHost check is
+//     what stops DNS rebinding: without it, a hostile domain that
+//     resolves to 127.0.0.1 would make Origin and Host equal for any name
+//     an attacker picks.
 //   - An Origin explicitly listed via SetAllowedOrigins: accepted. This is
 //     the --allow-origin flag's list, for a dev server proxying in from
 //     elsewhere (the Vite dev server contributors run on another port).
@@ -257,14 +269,16 @@ func (h *WebSocketHub) checkOrigin(r *http.Request) bool {
 		return true
 	}
 
-	if originURL, err := url.Parse(origin); err == nil && originURL.Host == r.Host {
+	h.mu.RLock()
+	allowedHosts := h.allowedHosts
+	_, exactlyAllowed := h.allowedOrigins[origin]
+	h.mu.RUnlock()
+
+	if originURL, err := url.Parse(origin); err == nil && originURL.Host == r.Host && isAllowedHost(r.Host, allowedHosts) {
 		return true
 	}
 
-	h.mu.RLock()
-	_, allowed := h.allowedOrigins[origin]
-	h.mu.RUnlock()
-	return allowed
+	return exactlyAllowed
 }
 
 // SetPresenterPassword tells the hub the dev server's current
@@ -528,6 +542,15 @@ func (h *WebSocketHub) ClientCount() int {
 // HandleConnection handles a new WebSocket connection.
 // It should be used as an HTTP handler.
 func (h *WebSocketHub) HandleConnection(w http.ResponseWriter, r *http.Request) {
+	h.mu.RLock()
+	allowedHosts := h.allowedHosts
+	h.mu.RUnlock()
+	if !isAllowedHost(r.Host, allowedHosts) {
+		log.Printf("rejected websocket connection with Host %q: not a local, private, or allowed host", r.Host)
+		http.Error(w, "Forbidden: host not allowed; use --allow-origin to allow it", http.StatusForbidden)
+		return
+	}
+
 	if !h.checkOrigin(r) {
 		log.Printf("rejected websocket connection from origin %q: not this server's host and not allowed by --allow-origin", r.Header.Get("Origin"))
 		http.Error(w, "Forbidden: origin not allowed", http.StatusForbidden)

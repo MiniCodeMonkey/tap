@@ -33,8 +33,14 @@ type Server struct {
 	customThemePath       string
 	baseDir               string // Base directory for serving local files (images, etc.)
 	componentBundles      *ComponentBundleStore
-	mu                    sync.RWMutex
-	started               bool
+	// allowedHosts is the --allow-origin flag reduced to bare hosts (see
+	// allowedHostsFromOrigins), checked by requireAllowedHost against a
+	// request's Host header on the routes that matter against DNS
+	// rebinding. Mirrors WebSocketHub.allowedHosts; tap dev sets both from
+	// the same flag value.
+	allowedHosts map[string]struct{}
+	mu           sync.RWMutex
+	started      bool
 }
 
 // New creates a new Server bound to the specified port on 0.0.0.0, so a
@@ -262,6 +268,36 @@ func (s *Server) SetCustomThemePath(path string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.customThemePath = path
+}
+
+// SetAllowedOrigins sets the --allow-origin values requireAllowedHost
+// checks a request's Host header against, on top of localhost, a loopback,
+// private, or link-local IP, a ".local" name, and this machine's own
+// hostname (see isAllowedHost). tap dev calls this with the same value it
+// passes to WebSocketHub.SetAllowedOrigins.
+func (s *Server) SetAllowedOrigins(origins []string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.allowedHosts = allowedHostsFromOrigins(origins)
+}
+
+// requireAllowedHost wraps next so it only runs for a request whose Host
+// header is on the allow-list (see isAllowedHost); anything else gets 403.
+// This is the DNS rebinding defense for tap dev's HTTP routes: a same-host
+// compare alone (as the WebSocket origin check used to rely on) is not
+// enough, since a hostile domain an attacker controls can resolve to
+// 127.0.0.1 and still send that exact Host header.
+func (s *Server) requireAllowedHost(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		s.mu.RLock()
+		allowedHosts := s.allowedHosts
+		s.mu.RUnlock()
+		if !isAllowedHost(r.Host, allowedHosts) {
+			http.Error(w, "Forbidden: host not allowed; use --allow-origin to allow it", http.StatusForbidden)
+			return
+		}
+		next(w, r)
+	}
 }
 
 // GetCustomThemePath returns the path to the custom CSS theme file.

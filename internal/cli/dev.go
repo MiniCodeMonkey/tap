@@ -86,7 +86,7 @@ func init() {
 	devCmd.Flags().IntVarP(&devPort, "port", "p", 3000, "port for the dev server")
 	devCmd.Flags().StringVar(&devPresenterPassword, "presenter-password", "", "password to protect the presenter view")
 	devCmd.Flags().BoolVar(&devHeadless, "headless", false, "run without TUI (for testing/automation)")
-	devCmd.Flags().StringArrayVar(&devAllowOrigins, "allow-origin", nil, "additional origin (scheme://host:port) allowed to connect to the websocket hub, for a contributor's Vite dev server (repeatable)")
+	devCmd.Flags().StringArrayVar(&devAllowOrigins, "allow-origin", nil, "additional origin (scheme://host:port) allowed to connect to the websocket hub, or host (host:port) allowed in a request's Host header, for a contributor's Vite dev server or a non-local presenter host (repeatable)")
 }
 
 // runDevServer starts the dev server with hot reload and TUI. portExplicit
@@ -183,6 +183,7 @@ func runDevServer(file string, port int, presenterPassword string, headless bool
 		candidate.SetPresentation(pres)
 		candidate.SetPresenterPassword(presenterPassword)
 		candidate.SetPresenterSessionToken(presenterSessionToken)
+		candidate.SetAllowedOrigins(allowOrigins)
 		candidate.SetBaseDir(baseDir) // Enable serving local files (images, etc.)
 		candidate.SetComponentBundles(componentBundleFiles(resolvedComponents))
 		if customThemePath != "" {
