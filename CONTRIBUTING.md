@@ -51,6 +51,58 @@ a Go test and `npm run tokens:check` both guard it.
 > `go.mod` targets. If that happens, fall back to `go vet ./...` and
 > `go test ./...` for the Go side.
 
+## Continuous integration
+
+`.github/workflows/ci.yml` runs on every push and pull request against
+`main`, as four jobs:
+
+- **Go Tests** - builds the frontend, runs `go vet ./...` and `go test
+  ./...` (with a real Chromium, installed by playwright-go), then
+  `golangci-lint`. Reproduce locally with:
+
+  ```bash
+  cd frontend && npm ci && npm run build && cd ..
+  go vet ./...
+  go test ./...
+  go run github.com/golangci/golangci-lint/cmd/golangci-lint@v1.64.8 run ./...
+  ```
+
+- **Frontend Tests** - unit tests, the TypeScript check, ESLint, and the
+  theme tokens check. Reproduce from `frontend/`:
+
+  ```bash
+  npm ci
+  npm run test
+  npm run check
+  npm run lint
+  npm run tokens:check
+  ```
+
+- **E2E Tests** - builds the frontend and the `tap` binary (`make
+  build`), then runs the Playwright suite in `frontend/`, which starts
+  its own dev server on port 3100. Reproduce with:
+
+  ```bash
+  make build
+  cd frontend && npx playwright install --with-deps chromium
+  npx playwright test
+  ```
+
+- **Theme Checks** - runs `frontend/e2e-themes/` against every theme,
+  with `TAP_THEME_SNAPSHOTS=off` so it skips only the visual snapshot
+  comparisons (the checked-in baselines were rendered on macOS and don't
+  match Linux font rendering); overflow, clipping, minimum text size,
+  contrast, and theme isolation all still run. Reproduce locally with the
+  two servers from "Testing the Theme Suite" above, then:
+
+  ```bash
+  cd frontend
+  TAP_THEME_SNAPSHOTS=off BASE_URL=http://localhost:5300 npx playwright test -c playwright.themes.config.ts
+  ```
+
+  Drop `TAP_THEME_SNAPSHOTS=off` to also check snapshots, but only on
+  macOS, against the committed baselines.
+
 ## Testing the Theme Suite
 
 Beyond the main Go and frontend test suites, `frontend/e2e-themes/` runs a
