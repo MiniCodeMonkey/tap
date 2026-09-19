@@ -1595,3 +1595,14 @@
 [data-theme='observatory'] .slot th {
 	font-size: 48px;
 }
+
+/* ============================================================================
+ * Slide numbers off
+ *
+ * Slide.tsx sets data-slide-numbers="off" on the slide root when the deck's
+ * frontmatter says `slideNumbers: false`.
+ * ============================================================================ */
+
+[data-theme='observatory'] .slide[data-layout][data-slide-numbers='off']::after {
+	content: none;
+}

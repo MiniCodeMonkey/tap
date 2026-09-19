@@ -1899,3 +1899,15 @@
 		transition: none !important;
 	}
 }
+
+/* ============================================================================
+ * Slide numbers off
+ *
+ * Slide.tsx sets data-slide-numbers="off" on the slide root when the deck's
+ * frontmatter says `slideNumbers: false`. The title slide's "N PAGES!"
+ * burst is the slide count too, so it goes as well.
+ * ============================================================================ */
+
+[data-theme='zine'] .slide[data-layout][data-slide-numbers='off']::after {
+	content: none;
+}

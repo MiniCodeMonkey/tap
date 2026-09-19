@@ -65,7 +65,7 @@ Content here.
 More content.
 ```
 
-Slides are separated by `---` on its own line. Frontmatter (the first `---`-delimited YAML block) sets presentation-wide defaults: `title`, `theme`, `author`, `date`, `aspectRatio`, `transition`, `fragments`. Per-slide directives (an HTML comment with YAML, placed right after the slide separator) override those for one slide. See `docs/reference/frontmatter-options.md` and `docs/reference/slide-directives.md` for the complete option lists.
+Slides are separated by `---` on its own line. Frontmatter (the first `---`-delimited YAML block) sets presentation-wide defaults: `title`, `theme`, `author`, `date`, `aspectRatio`, `transition`, `fragments`, `slideNumbers`. Per-slide directives (an HTML comment with YAML, placed right after the slide separator) override those for one slide. See `docs/reference/frontmatter-options.md` and `docs/reference/slide-directives.md` for the complete option lists.
 
 Every slide renders on a fixed 1920px-wide canvas that scales as one unit to fit any screen, so a deck looks the same on every projector, laptop, or presenter panel; themes are tuned for the default 16:9 aspect ratio.
 

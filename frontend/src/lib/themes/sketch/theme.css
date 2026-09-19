@@ -1358,3 +1358,14 @@
 	padding: 6px 20px;
 	border-radius: var(--hand-box);
 }
+
+/* ============================================================================
+ * Slide numbers off
+ *
+ * Slide.tsx sets data-slide-numbers="off" on the slide root when the deck's
+ * frontmatter says `slideNumbers: false`.
+ * ============================================================================ */
+
+[data-theme='sketch'] .slide[data-layout][data-slide-numbers='off']::after {
+	content: none;
+}

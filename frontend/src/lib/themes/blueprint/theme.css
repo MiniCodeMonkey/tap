@@ -1714,3 +1714,18 @@
 		transition: none !important;
 	}
 }
+
+/* ============================================================================
+ * Slide numbers off
+ *
+ * Slide.tsx sets data-slide-numbers="off" on the slide root when the deck's
+ * frontmatter says `slideNumbers: false`. The title block keeps its
+ * drawing row and drops the sheet row.
+ * ============================================================================ */
+
+[data-theme='blueprint'] .slide[data-layout][data-slide-numbers='off']::after {
+	content: 'DWG  ' attr(data-layout);
+	height: 60px;
+	background: none;
+	background-color: inherit;
+}

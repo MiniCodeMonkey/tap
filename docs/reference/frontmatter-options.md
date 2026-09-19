@@ -149,6 +149,32 @@ px) and that whole canvas scales as one unit to fit the screen it's shown
 on, so a deck looks the same on every projector, laptop, or presenter
 panel. Themes are tuned against the 16:9 canvas.
 
+### slideNumbers
+
+Whether the theme draws a slide number on each slide. Most themes show one,
+for example `3/12` in the terminal theme's status bar or `Page 3 of 12` in
+newsprint. Set it to `false` to leave the numbers out.
+
+| Property | Value |
+|----------|-------|
+| Type | `boolean` |
+| Default | `true` |
+| Required | No |
+
+```yaml
+---
+slideNumbers: false
+---
+```
+
+The setting applies to the audience view, the presenter view previews,
+screenshots, and PDF export. The presenter view's own slide counter stays.
+Where a theme builds a decoration around the number, the decoration stays
+and only the number goes: transit keeps an empty station marker, blueprint
+keeps the drawing row of its title block, and terminal keeps the window tab
+on the left of its status bar. In zine, the "N PAGES!" burst on the title
+slide also goes, because it shows the slide count.
+
 ## Animations and Transitions
 
 ### transition
@@ -339,6 +365,7 @@ drivers:
 | `date` | string | None | Presentation date |
 | `theme` | string | `base` | Visual theme |
 | `aspectRatio` | string | `16:9` | Slide aspect ratio |
+| `slideNumbers` | boolean | `true` | Show the theme's slide numbers |
 | `transition` | string | `fade` | Default slide transition |
 | `fragments` | boolean | `false` | Auto-reveal list items |
 | `themeColors` | object | None | Override individual theme colors |

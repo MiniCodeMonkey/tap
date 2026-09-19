@@ -119,6 +119,8 @@ export interface PresentationConfig {
 	fragments?: boolean;
 	/** Whether to show the progress bar (default: true) */
 	showProgressBar?: boolean;
+	/** Whether the theme draws slide numbers (default: true) */
+	slideNumbers?: boolean;
 }
 
 // ============================================================================

@@ -8,6 +8,7 @@ import { useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from '
 import { createPortal } from 'react-dom';
 import type { BackgroundConfig, Slide as SlideData } from '$lib/types';
 import { resolveLayout } from '../layouts/registry';
+import { usePresentationStore } from '../stores/presentation';
 import { useRichBlocks, type DeckComponentPortal, type LiveCodeBlockPortal } from '../hooks/useRichBlocks';
 import type { MermaidThemeOverrides } from '../utils/mermaid';
 import { parseMapConfig } from '../utils/map';
@@ -144,6 +145,11 @@ export function Slide({
 		});
 	}, [preview, slide]);
 
+	// Themes draw the slide number from data-index and data-total. With
+	// `slideNumbers: false` in the frontmatter, data-slide-numbers="off"
+	// tells each theme to leave it out.
+	const slideNumbersOff = usePresentationStore((state) => state.presentation?.config?.slideNumbers === false);
+
 	const mapBlock = slide.codeBlocks?.find((block) => block.language === 'map');
 	const mapConfig = useMemo(() => (mapBlock ? parseMapConfig(mapBlock.code) : null), [mapBlock]);
 
@@ -154,6 +160,7 @@ export function Slide({
 				data-layout={slide.layout}
 				data-index={slide.index + 1}
 				data-total={total}
+				data-slide-numbers={slideNumbersOff ? 'off' : undefined}
 				style={getBackgroundStyle(slide.background)}
 			>
 				{slide.tag ? <div className="slide-tag">{slide.tag}</div> : null}

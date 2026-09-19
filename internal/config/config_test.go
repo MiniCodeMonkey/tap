@@ -1,7 +1,9 @@
 package config
 
 import (
+	"encoding/json"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -611,5 +613,44 @@ transitionDuration: 400
 
 	if cfg.Title != "Test" {
 		t.Errorf("Title = %q, want %q", cfg.Title, "Test")
+	}
+}
+
+func TestLoad_SlideNumbers(t *testing.T) {
+	tests := []struct {
+		name        string
+		frontmatter string
+		wantJSON    string
+	}{
+		{name: "key left out keeps numbers", frontmatter: "title: Test", wantJSON: ""},
+		{name: "false turns numbers off", frontmatter: "slideNumbers: false", wantJSON: `"slideNumbers":false`},
+		{name: "true keeps numbers", frontmatter: "slideNumbers: true", wantJSON: `"slideNumbers":true`},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "deck.md")
+			content := "---\n" + tt.frontmatter + "\n---\n\n# Slide 1\n"
+			if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+				t.Fatalf("Failed to write deck: %v", err)
+			}
+
+			cfg, err := Load(path)
+			if err != nil {
+				t.Fatalf("Load() returned error: %v", err)
+			}
+
+			encoded, err := json.Marshal(cfg)
+			if err != nil {
+				t.Fatalf("json.Marshal() returned error: %v", err)
+			}
+			if tt.wantJSON == "" {
+				if strings.Contains(string(encoded), "slideNumbers") {
+					t.Errorf("JSON = %s, want no slideNumbers key", encoded)
+				}
+			} else if !strings.Contains(string(encoded), tt.wantJSON) {
+				t.Errorf("JSON = %s, want it to contain %s", encoded, tt.wantJSON)
+			}
+		})
 	}
 }

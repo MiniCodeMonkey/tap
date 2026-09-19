@@ -174,7 +174,7 @@
 
 /* tmux status bar: window name left, position right, section marker beside it */
 [data-theme='terminal'] .slide[data-layout]::before {
-	content: ' ' attr(data-index) ':' attr(data-layout) '*';
+	content: ' ' attr(data-index) ':tap*';
 	position: absolute;
 	left: 0;
 	right: 0;
@@ -1522,4 +1522,16 @@
 [data-theme='terminal'] .slot td,
 [data-theme='terminal'] .slot th {
 	font-size: 46px;
+}
+
+/* ============================================================================
+ * Slide numbers off
+ *
+ * Slide.tsx sets data-slide-numbers="off" on the slide root when the deck's
+ * frontmatter says `slideNumbers: false`. The window tab on the
+ * left of the status bar stays; only the counter on the right goes.
+ * ============================================================================ */
+
+[data-theme='terminal'] .slide[data-layout][data-slide-numbers='off']::after {
+	content: none;
 }

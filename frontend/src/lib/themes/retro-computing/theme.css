@@ -1644,3 +1644,14 @@
 [data-theme='retro-computing'] .slot th {
 	font-size: 44px;
 }
+
+/* ============================================================================
+ * Slide numbers off
+ *
+ * Slide.tsx sets data-slide-numbers="off" on the slide root when the deck's
+ * frontmatter says `slideNumbers: false`.
+ * ============================================================================ */
+
+[data-theme='retro-computing'] .slide[data-layout][data-slide-numbers='off']::after {
+	content: none;
+}
