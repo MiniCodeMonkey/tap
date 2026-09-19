@@ -6,8 +6,10 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/MiniCodeMonkey/tap/internal/config"
@@ -65,6 +67,10 @@ func init() {
 // path after they start.
 func runPDF(cmd *cobra.Command, args []string) {
 	if err := runPDFE(args); err != nil {
+		if errors.Is(err, errInterrupted) {
+			fmt.Fprintln(os.Stderr, "interrupted")
+			os.Exit(130)
+		}
 		if !errors.Is(err, errSilent) {
 			Errorln("Error:", err)
 		}
@@ -75,6 +81,12 @@ func runPDF(cmd *cobra.Command, args []string) {
 // runPDFE implements the pdf command. See runPDF for why this is a
 // separate, error-returning function.
 func runPDFE(args []string) error {
+	// Cancelled on Ctrl-C (SIGINT) or SIGTERM, so the export loop below can
+	// stop between slides instead of leaving a headless browser running
+	// past the deferred cleanup below.
+	signalCtx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+
 	file := args[0]
 
 	// Validate that the file exists
@@ -165,7 +177,7 @@ func runPDFE(args []string) error {
 
 	// Step 6: Export to PDF
 	spinner.update("Generating PDF (this may take a moment)")
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	ctx, cancel := context.WithTimeout(signalCtx, 5*time.Minute)
 	defer cancel()
 
 	result, err := exporter.Export(ctx, serverURL, pdf.ExportOptions{
@@ -176,6 +188,9 @@ func runPDFE(args []string) error {
 	})
 	if err != nil {
 		spinner.stop()
+		if errors.Is(err, context.Canceled) {
+			return errInterrupted
+		}
 		return fmt.Errorf("PDF export failed: %w", err)
 	}
 

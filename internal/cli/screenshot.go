@@ -7,9 +7,11 @@ import (
 	"fmt"
 	"math"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/MiniCodeMonkey/tap/internal/config"
@@ -25,6 +27,12 @@ import (
 // printing anything more. Shared by both commands, so its text names
 // neither.
 var errSilent = errors.New("command failed")
+
+// errInterrupted marks a failure caused by Ctrl-C (SIGINT) or SIGTERM
+// during a capture or export: runScreenshot and runPDF print "interrupted"
+// to standard error instead of the usual "Error: ..." line and exit with
+// status 130, the conventional exit code for a process killed by SIGINT.
+var errInterrupted = errors.New("interrupted")
 
 // Flags for the screenshot command
 var (
@@ -100,6 +108,10 @@ func init() {
 // failure path.
 func runScreenshot(cmd *cobra.Command, args []string) {
 	if err := runScreenshotE(cmd, args); err != nil {
+		if errors.Is(err, errInterrupted) {
+			fmt.Fprintln(os.Stderr, "interrupted")
+			os.Exit(130)
+		}
 		if !errors.Is(err, errSilent) {
 			Errorln("Error:", err)
 		}
@@ -110,6 +122,12 @@ func runScreenshot(cmd *cobra.Command, args []string) {
 // runScreenshotE implements the screenshot command. See runScreenshot for
 // why this is a separate, error-returning function.
 func runScreenshotE(cmd *cobra.Command, args []string) error {
+	// Cancelled on Ctrl-C (SIGINT) or SIGTERM, so the capture loop below
+	// can stop between slides instead of leaving a headless browser
+	// running past the deferred cleanup below.
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+
 	file := args[0]
 	hasSlideFlag := cmd.Flags().Changed("slide")
 	hasStepFlag := cmd.Flags().Changed("step")
@@ -202,8 +220,11 @@ func runScreenshotE(cmd *cobra.Command, args []string) error {
 	}
 
 	if screenshotAll {
-		written, broken, err := captureAllSlides(exporter.CaptureSlide, serverURL, total, width, height, screenshotTheme, resolveAllOutputDir(screenshotOut, file))
+		written, broken, err := captureAllSlides(ctx, exporter.CaptureSlide, serverURL, total, width, height, screenshotTheme, resolveAllOutputDir(screenshotOut, file))
 		if err != nil {
+			if errors.Is(err, context.Canceled) {
+				return errInterrupted
+			}
 			return err
 		}
 		for _, path := range written {
@@ -247,7 +268,10 @@ func runScreenshotE(cmd *cobra.Command, args []string) error {
 		options.Print = true
 	}
 
-	if err := exporter.CaptureSlide(serverURL, options, outputPath); err != nil {
+	if err := exporter.CaptureSlide(ctx, serverURL, options, outputPath); err != nil {
+		if errors.Is(err, context.Canceled) {
+			return errInterrupted
+		}
 		return err
 	}
 
@@ -266,21 +290,23 @@ type brokenSlide struct {
 // captureFunc matches (*pdf.Exporter).CaptureSlide's signature, so
 // captureAllSlides's loop can be tested against a fake instead of a real
 // browser.
-type captureFunc func(serverURL string, options pdf.CaptureOptions, outputPath string) error
+type captureFunc func(ctx context.Context, serverURL string, options pdf.CaptureOptions, outputPath string) error
 
 // captureAllSlides writes one PNG per slide, at its final state, into
 // outputDir, named slide-001.png and so on. It tries every slide even
 // after one fails: a broken slide (a capture error, or a rendered error
 // card) is collected and does not stop the rest from being written. The
-// only fatal error is one that stops the loop before it can try any slide
-// at all (failing to create outputDir).
+// only fatal errors are one that stops the loop before it can try any
+// slide at all (failing to create outputDir), and ctx being cancelled
+// (Ctrl-C or SIGTERM), which is checked between slides so the loop stops
+// there instead of starting one more capture.
 //
 // Returns the paths successfully written, in slide order, and the slides
 // that failed, also in slide order. Printing - the written paths to
 // standard output, one "slide N: reason" line per broken slide to standard
 // error - is the caller's job, which is what keeps this loop cheap to
 // test against a fake captureFunc.
-func captureAllSlides(capture captureFunc, serverURL string, slideCount int, width, height int, theme, outputDir string) ([]string, []brokenSlide, error) {
+func captureAllSlides(ctx context.Context, capture captureFunc, serverURL string, slideCount int, width, height int, theme, outputDir string) ([]string, []brokenSlide, error) {
 	if err := os.MkdirAll(outputDir, 0755); err != nil {
 		return nil, nil, fmt.Errorf("failed to create output directory: %w", err)
 	}
@@ -288,6 +314,10 @@ func captureAllSlides(capture captureFunc, serverURL string, slideCount int, wid
 	var written []string
 	var broken []brokenSlide
 	for i := 0; i < slideCount; i++ {
+		if err := ctx.Err(); err != nil {
+			return written, broken, err
+		}
+
 		slideNumber := i + 1
 		outputPath := filepath.Join(outputDir, fmt.Sprintf("slide-%03d.png", slideNumber))
 		options := pdf.CaptureOptions{
@@ -297,7 +327,10 @@ func captureAllSlides(capture captureFunc, serverURL string, slideCount int, wid
 			Theme:       theme,
 			Print:       true,
 		}
-		if err := capture(serverURL, options, outputPath); err != nil {
+		if err := capture(ctx, serverURL, options, outputPath); err != nil {
+			if errors.Is(err, context.Canceled) {
+				return written, broken, err
+			}
 			broken = append(broken, brokenSlide{SlideNumber: slideNumber, Reason: err.Error()})
 			continue
 		}

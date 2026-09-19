@@ -1,6 +1,7 @@
 package pdf
 
 import (
+	"context"
 	"fmt"
 	"net/url"
 	"os"
@@ -98,8 +99,15 @@ func buildSlideURL(serverURL string, options CaptureOptions) string {
 // shows a slide or component error card (see ErrorCardSelector). With
 // options.WaitMS > 0, it sleeps that many extra milliseconds after all of
 // the above, for a capture that deliberately wants a moment mid-animation
-// rather than the settled state.
-func (e *Exporter) CaptureSlide(serverURL string, options CaptureOptions, outputPath string) error {
+// rather than the settled state. ctx is checked before the capture starts
+// and again before the screenshot is taken, so a caller looping over
+// several slides (tap screenshot --all) can stop between slides on
+// cancellation instead of starting one it will only throw away.
+func (e *Exporter) CaptureSlide(ctx context.Context, serverURL string, options CaptureOptions, outputPath string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+
 	if err := e.launchBrowser(); err != nil {
 		return err
 	}
@@ -154,6 +162,10 @@ func (e *Exporter) CaptureSlide(serverURL string, options CaptureOptions, output
 
 	if message, hasError := detectErrorCard(page); hasError {
 		return fmt.Errorf("slide %d shows an error card: %s", options.SlideNumber, message)
+	}
+
+	if err := ctx.Err(); err != nil {
+		return err
 	}
 
 	if dir := filepath.Dir(outputPath); dir != "" && dir != "." {
