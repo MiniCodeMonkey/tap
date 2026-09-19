@@ -113,6 +113,16 @@ const apiProxyTarget = `http://localhost:${process.env.TAP_API_PORT ?? 3000}`;
 
 // https://vite.dev/config/
 export default defineConfig({
+  // Relative base so a build deployed under a URL sub path (GitHub Pages
+  // project sites, a reverse-proxy path prefix) resolves its own assets
+  // instead of looking for them at the domain root. index.html and
+  // presenter.html are always served as the last path segment (a file, not
+  // a directory, per URL resolution rules), so a relative "assets/..."
+  // reference resolves against the directory containing that HTML file
+  // whether it's served at "/", "/presenter", or nested under a sub path -
+  // the same relative reference works for the live Go server and the
+  // static build alike.
+  base: './',
   plugins: [react(), fontsourceFallbackPlugin()],
   server: {
     fs: {
