@@ -12,16 +12,15 @@ import (
 // rather than bloating the bundle's JavaScript.
 const assetInlineThreshold = 100 * 1024 // 100 KB
 
-// assetExtensionFilter matches every extension the built-in Loader map used
-// to send straight to api.LoaderDataURL. esbuild applies one loader per
-// extension, not per size, so choosing inline vs. file per asset needs a
-// plugin instead.
+// assetExtensionFilter matches every image and font extension this package
+// inlines or emits based on size (see assetSizePlugin). esbuild applies one
+// loader per extension, not per size, so choosing inline vs. file per
+// asset needs a plugin instead of a fixed per-extension loader mapping.
 const assetExtensionFilter = `\.(png|jpe?g|gif|svg|webp|woff2)$`
 
 // assetSizePlugin inlines an imported asset under assetInlineThreshold as a
-// data URL, exactly like the plain per-extension LoaderDataURL mapping did,
-// and emits one at or above it as its own output file (esbuild's "file"
-// loader), named by AssetNames and referenced by a URL under publicPath.
+// data URL, and emits one at or above it as its own output file (esbuild's
+// "file" loader), named by AssetNames and referenced by a URL under publicPath.
 // The emitted file shows up in the build result's OutputFiles alongside the
 // bundle's JavaScript and CSS (see Build), for the caller to serve or write
 // out next to them.

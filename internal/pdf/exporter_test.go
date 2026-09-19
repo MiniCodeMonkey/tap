@@ -148,9 +148,8 @@ func TestExportSlides(t *testing.T) {
 // slide's audience-safe error card - kept in the DOM but hidden, with its
 // message moved to a data-message attribute rather than the card's empty
 // text content (see SlideErrorBoundary.tsx and DeckComponent.tsx) - still
-// reports its real message in BrokenSlides, rather than the generic
-// "error card detected" placeholder a hidden card with no text used to
-// fall back to.
+// reports its real message in BrokenSlides, rather than a generic
+// placeholder for a hidden card with no text content.
 func TestExportSlides_BrokenSlideReportsDataMessage(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test in short mode")

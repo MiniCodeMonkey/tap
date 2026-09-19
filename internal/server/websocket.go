@@ -285,8 +285,7 @@ func (h *WebSocketHub) checkOrigin(r *http.Request) bool {
 // --presenter-password, so HandleConnection can decide whether a new
 // connection may send (see checkPresenterAuth). An empty password (the
 // default, and tap dev's default) leaves every connection able to send,
-// matching the behavior before this check existed. Safe to call at any
-// time.
+// with nothing gated. Safe to call at any time.
 func (h *WebSocketHub) SetPresenterPassword(password string) {
 	h.mu.Lock()
 	defer h.mu.Unlock()

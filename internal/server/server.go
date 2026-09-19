@@ -284,9 +284,8 @@ func (s *Server) SetAllowedOrigins(origins []string) {
 // requireAllowedHost wraps next so it only runs for a request whose Host
 // header is on the allow-list (see isAllowedHost); anything else gets 403.
 // This is the DNS rebinding defense for tap dev's HTTP routes: a same-host
-// compare alone (as the WebSocket origin check used to rely on) is not
-// enough, since a hostile domain an attacker controls can resolve to
-// 127.0.0.1 and still send that exact Host header.
+// compare alone is not enough, since a hostile domain an attacker controls
+// can resolve to 127.0.0.1 and still send that exact Host header.
 func (s *Server) requireAllowedHost(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		s.mu.RLock()

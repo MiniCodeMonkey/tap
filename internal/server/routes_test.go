@@ -655,13 +655,12 @@ func TestSetupRoutes(t *testing.T) {
 }
 
 // TestSetupRoutes_ExactPathsOnly reproduces the nested-path bug the
-// frontend's relative base ("base: './'") introduces: serving index.html
-// (or presenter.html) for an unmatched nested path used to work because
-// "/" was a catch-all subtree pattern, but the page's relative asset URLs
-// then resolve against the wrong directory and the page comes up blank.
-// The app must be served only at its exact paths; a trailing-slash variant
-// of /presenter redirects to the canonical path, and any other unmatched
-// path gets a real 404.
+// frontend's relative base ("base: './'") introduces: index.html (or
+// presenter.html) for an unmatched nested path leaves the page's relative
+// asset URLs resolving against the wrong directory, and the page comes up
+// blank. The app must be served only at its exact paths; a trailing-slash
+// variant of /presenter redirects to the canonical path, and any other
+// unmatched path gets a real 404.
 func TestSetupRoutes_ExactPathsOnly(t *testing.T) {
 	s := New(0)
 	s.SetupRoutes()
