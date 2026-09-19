@@ -70,10 +70,21 @@ func runAddComponentE(name string) error {
 
 	targetDir := "."
 	if addComponentDeck != "" {
-		if _, err := os.Stat(addComponentDeck); os.IsNotExist(err) {
+		info, err := os.Stat(addComponentDeck)
+		if os.IsNotExist(err) {
 			return fmt.Errorf("deck not found: %s", addComponentDeck)
 		}
-		targetDir = filepath.Dir(addComponentDeck)
+		if err != nil {
+			return fmt.Errorf("failed to stat %s: %w", addComponentDeck, err)
+		}
+		if info.IsDir() {
+			// --deck given a directory is the deck folder itself, not a
+			// markdown file inside it - use it directly rather than
+			// filepath.Dir'ing up to its parent.
+			targetDir = addComponentDeck
+		} else {
+			targetDir = filepath.Dir(addComponentDeck)
+		}
 	}
 
 	extension := "jsx"
