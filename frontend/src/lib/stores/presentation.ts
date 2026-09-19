@@ -83,6 +83,61 @@ export const selectCurrentThemeSlug = (state: PresentationState): Theme => {
 };
 
 // ============================================================================
+// Load-time query parameter cleanup
+// ============================================================================
+
+/**
+ * Whether stripLoadTimeQueryParams has already run for this page load. Set
+ * once, since the URL never carries `?step=`/`?fragment=` again after the
+ * first strip - checking first avoids rewriting the URL (and touching
+ * history) on every navigation action for nothing.
+ */
+let hasStrippedLoadTimeQueryParams = false;
+
+/**
+ * Remove `?step=` and `?fragment=` from the URL, keeping every other query
+ * parameter (`theme`, `capture`, `live`, `print`, ...). These two are
+ * load-time only: they place the initial load on a specific presenter step
+ * and fragment (see resolveInitialStepAndFragment), but replaceState's
+ * hash-only updates otherwise carry them forward untouched, so a reload
+ * after any navigation would land back on whatever step/fragment they
+ * named instead of where the clicker actually is. Called once, from every
+ * navigation entry point below, so the first navigation away from the
+ * initial state - a step or fragment press included, not only a slide
+ * change - is what clears them.
+ */
+function stripLoadTimeQueryParams(): void {
+	if (typeof window === 'undefined' || hasStrippedLoadTimeQueryParams) {
+		return;
+	}
+	hasStrippedLoadTimeQueryParams = true;
+
+	const search = window.location.search;
+	if (!search) {
+		return;
+	}
+	const params = new URLSearchParams(search);
+	if (!params.has('step') && !params.has('fragment')) {
+		return;
+	}
+	params.delete('step');
+	params.delete('fragment');
+	const newSearch = params.toString();
+	window.history.replaceState(
+		null,
+		'',
+		`${window.location.pathname}${newSearch ? `?${newSearch}` : ''}${window.location.hash}`
+	);
+}
+
+/**
+ * Reset the once-per-load query param strip (for testing).
+ */
+export function resetStrippedLoadTimeQueryParams(): void {
+	hasStrippedLoadTimeQueryParams = false;
+}
+
+// ============================================================================
 // Navigation Actions
 // ============================================================================
 
@@ -95,6 +150,7 @@ export const selectCurrentThemeSlug = (state: PresentationState): Theme => {
  * Returns true if navigation occurred.
  */
 export function nextSlide(): boolean {
+	stripLoadTimeQueryParams();
 	const state = usePresentationStore.getState();
 	const slide = selectCurrentSlide(state);
 	if (!slide) return false;
@@ -144,6 +200,7 @@ export function nextSlide(): boolean {
  * Returns true if navigation occurred.
  */
 export function prevSlide(): boolean {
+	stripLoadTimeQueryParams();
 	const state = usePresentationStore.getState();
 	const slide = selectCurrentSlide(state);
 	if (!slide) return false;
@@ -187,6 +244,7 @@ export function prevSlide(): boolean {
  * Resets step, fragment and scroll state.
  */
 export function goToSlide(index: number): boolean {
+	stripLoadTimeQueryParams();
 	const state = usePresentationStore.getState();
 	const total = state.presentation?.slides.length ?? 0;
 	if (index < 0 || index >= total) {
@@ -231,6 +289,7 @@ export function applyRemoteState(state: {
 	step: number;
 	scrollRevealed: boolean;
 }): boolean {
+	stripLoadTimeQueryParams();
 	const current = usePresentationStore.getState();
 	const slides = current.presentation?.slides ?? [];
 	const total = slides.length;
@@ -274,6 +333,7 @@ export function applyRemoteState(state: {
  * Returns true if a fragment was revealed.
  */
 export function nextFragment(): boolean {
+	stripLoadTimeQueryParams();
 	const state = usePresentationStore.getState();
 	const slide = selectCurrentSlide(state);
 	if (!slide) return false;
@@ -292,6 +352,7 @@ export function nextFragment(): boolean {
  * Returns true if a fragment was hidden.
  */
 export function prevFragment(): boolean {
+	stripLoadTimeQueryParams();
 	const state = usePresentationStore.getState();
 	const slide = selectCurrentSlide(state);
 	if (!slide) return false;
@@ -500,6 +561,7 @@ export function setupHashChangeListener(): () => void {
 export function resetPresentation(): void {
 	usePresentationStore.setState({ ...initialState });
 	resetHashSlideIndexAtLoad();
+	resetStrippedLoadTimeQueryParams();
 }
 
 /**

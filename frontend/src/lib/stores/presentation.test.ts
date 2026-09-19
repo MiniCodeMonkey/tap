@@ -27,7 +27,7 @@ import type { Presentation, Slide } from '$lib/types';
 
 // Mock window object for URL hash tests
 const mockWindow = {
-	location: { hash: '', search: '' },
+	location: { hash: '', search: '', pathname: '/' },
 	history: {
 		replaceState: vi.fn()
 	},
@@ -592,6 +592,34 @@ describe('presentation store', () => {
 				'hashchange',
 				expect.any(Function)
 			);
+		});
+	});
+
+	describe('load-time query parameter cleanup', () => {
+		it('strips ?step= and ?fragment= from the URL on the first navigation, keeping other params', () => {
+			mockWindow.location.hash = '#1';
+			mockWindow.location.search = '?step=2&theme=terminal&fragment=1';
+			const testPresentation = createTestPresentation(3, [{ steps: 5 }]);
+			usePresentationStore.setState({ presentation: testPresentation });
+
+			nextSlide();
+
+			expect(mockWindow.history.replaceState).toHaveBeenCalledWith(null, '', '/?theme=terminal#1');
+		});
+
+		it('does nothing on navigation when there is no ?step= or ?fragment= to strip', () => {
+			mockWindow.location.hash = '#1';
+			mockWindow.location.search = '?theme=terminal';
+			const testPresentation = createTestPresentation(3, [{ steps: 0 }]);
+			usePresentationStore.setState({ presentation: testPresentation });
+
+			nextSlide();
+
+			// Only updateURLHash's own hash-only replaceState call fires (the
+			// slide changed); stripLoadTimeQueryParams finds nothing to strip
+			// and never touches history itself.
+			expect(mockWindow.history.replaceState).toHaveBeenCalledTimes(1);
+			expect(mockWindow.history.replaceState).toHaveBeenCalledWith(null, '', '#2');
 		});
 	});
 
