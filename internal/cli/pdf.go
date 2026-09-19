@@ -219,8 +219,8 @@ func runPDFE(args []string) error {
 	// throws at render, or a slide that fails to render) still ends up in
 	// the PDF - the broken page just shows the card - so this only warns,
 	// one line per affected slide, and still exits 0.
-	for _, slideNumber := range result.BrokenSlides {
-		fmt.Fprintf(os.Stderr, "warning: slide %d shows an error card\n", slideNumber)
+	for _, broken := range result.BrokenSlides {
+		fmt.Fprintf(os.Stderr, "warning: slide %d shows an error card: %s\n", broken.SlideNumber, broken.Message)
 	}
 
 	// Print success message and export stats

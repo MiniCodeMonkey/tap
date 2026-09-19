@@ -225,12 +225,26 @@ func waitForAnimations(page playwright.Page) error {
 }
 
 // detectErrorCard reports whether the rendered slide shows a slide or
-// component error card (see ErrorCardSelector), and that card's text when
-// it does.
+// component error card (see ErrorCardSelector), and that card's message
+// when it does. The audience-safe form of the card (print mode, or any
+// time the audience view would otherwise show a broken component) is kept
+// in the DOM but visually hidden, with its message moved to a
+// data-message attribute instead of the card's text (see
+// SlideErrorBoundary.tsx and DeckComponent.tsx); the visible form carries
+// the same message as its text content. data-message is read first so
+// both forms report the real message, falling back to the card's text and
+// then a generic placeholder if neither is present.
 func detectErrorCard(page playwright.Page) (message string, hasError bool) {
 	result, err := page.Evaluate(fmt.Sprintf(`() => {
 		const el = document.querySelector(%q);
-		return el ? (el.textContent || '').trim() : null;
+		if (!el) {
+			return null;
+		}
+		const dataMessage = (el.getAttribute('data-message') || '').trim();
+		if (dataMessage) {
+			return dataMessage;
+		}
+		return (el.textContent || '').trim();
 	}`, ErrorCardSelector))
 	if err != nil || result == nil {
 		return "", false

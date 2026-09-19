@@ -61,13 +61,20 @@ type ExportResult struct {
 	Duration time.Duration
 	// FileSize is the size of the generated PDF in bytes.
 	FileSize int64
-	// BrokenSlides lists the one-based slide numbers that showed a slide or
-	// component error card (see ErrorCardSelector) at export time. A
-	// broken slide still gets a page in the PDF - the card is what's on
-	// it - this is only for the caller to warn about. Only exportSlides
-	// checks for error cards; ContentNotes and ContentBoth exports never
-	// populate this.
-	BrokenSlides []int
+	// BrokenSlides lists the slides that showed a slide or component error
+	// card (see ErrorCardSelector) at export time, one-based slide number
+	// and the card's message. A broken slide still gets a page in the
+	// PDF - the card is what's on it - this is only for the caller to
+	// warn about. Only exportSlides checks for error cards; ContentNotes
+	// and ContentBoth exports never populate this.
+	BrokenSlides []BrokenSlide
+}
+
+// BrokenSlide names one slide that showed an error card at export time,
+// and that card's message (see detectErrorCard).
+type BrokenSlide struct {
+	SlideNumber int
+	Message     string
 }
 
 // Exporter handles PDF generation from tap presentations.
@@ -329,7 +336,7 @@ func (e *Exporter) exportSlides(ctx context.Context, page playwright.Page, serve
 
 	// Capture each slide as a screenshot
 	var screenshotPaths []string
-	var brokenSlides []int
+	var brokenSlides []BrokenSlide
 	for i := 0; i < slideCount; i++ {
 		// Check for context cancellation
 		select {
@@ -380,8 +387,8 @@ func (e *Exporter) exportSlides(ctx context.Context, page playwright.Page, serve
 		// that fails to render) still gets a page - the card is what
 		// renders - so this only records it for a warning, once the whole
 		// export succeeds; it never stops the loop.
-		if _, hasError := detectErrorCard(page); hasError {
-			brokenSlides = append(brokenSlides, i+1)
+		if message, hasError := detectErrorCard(page); hasError {
+			brokenSlides = append(brokenSlides, BrokenSlide{SlideNumber: i + 1, Message: message})
 		}
 
 		// Take a screenshot

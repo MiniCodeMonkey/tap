@@ -144,6 +144,86 @@ func TestExportSlides(t *testing.T) {
 	}
 }
 
+// TestExportSlides_BrokenSlideReportsDataMessage checks that a broken
+// slide's audience-safe error card - kept in the DOM but hidden, with its
+// message moved to a data-message attribute rather than the card's empty
+// text content (see SlideErrorBoundary.tsx and DeckComponent.tsx) - still
+// reports its real message in BrokenSlides, rather than the generic
+// "error card detected" placeholder a hidden card with no text used to
+// fall back to.
+func TestExportSlides_BrokenSlideReportsDataMessage(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
+
+	tempDir, err := os.MkdirTemp("", "pdf-test-*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	pres := &transformer.TransformedPresentation{
+		Config: *config.DefaultConfig(),
+		Slides: []transformer.TransformedSlide{
+			// SlotOrder must not be nil for either slide: the frontend
+			// calls .filter on it unconditionally for every non-component
+			// layout (see Slide.tsx), and a real deck's transformer output
+			// never leaves it nil - only a hand-built fixture like this one
+			// could, and a nil slice there crashes the whole render tree
+			// well before this test's real interest (the error card).
+			{Index: 0, Layout: "title", Slots: map[string]string{}, SlotOrder: []string{}},
+			{
+				Index:  1,
+				Layout: "default",
+				// A layout renders a slide's "default" slot, not its raw
+				// HTML field directly (see Slide.tsx), so the hand-built
+				// error card belongs there to actually reach the DOM.
+				Slots:     map[string]string{"default": `<div class="slide-error deck-error-card deck-error-card-safe" data-message="widget failed to render" hidden></div>`},
+				SlotOrder: []string{"default"},
+			},
+		},
+	}
+
+	srv := server.New(0)
+	srv.SetPresentation(pres)
+	srv.SetupRoutes()
+	if err := srv.Start(); err != nil {
+		t.Fatalf("failed to start server: %v", err)
+	}
+	defer srv.Shutdown(context.Background())
+
+	serverURL := "http://localhost:" + itoa(srv.Port())
+	outputPath := filepath.Join(tempDir, "test.pdf")
+
+	exp, err := New()
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	defer exp.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	result, err := exp.Export(ctx, serverURL, ExportOptions{
+		Content: ContentSlides,
+		Output:  outputPath,
+	})
+	if err != nil {
+		t.Fatalf("Export() error = %v", err)
+	}
+
+	if len(result.BrokenSlides) != 1 {
+		t.Fatalf("BrokenSlides = %+v, want 1 entry", result.BrokenSlides)
+	}
+	broken := result.BrokenSlides[0]
+	if broken.SlideNumber != 2 {
+		t.Errorf("BrokenSlides[0].SlideNumber = %d, want 2", broken.SlideNumber)
+	}
+	if broken.Message != "widget failed to render" {
+		t.Errorf("BrokenSlides[0].Message = %q, want %q", broken.Message, "widget failed to render")
+	}
+}
+
 // TestExportNoSlides verifies proper error handling when presentation has no slides.
 func TestExportNoSlides(t *testing.T) {
 	if testing.Short() {
