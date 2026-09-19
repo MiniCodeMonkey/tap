@@ -132,8 +132,11 @@ export interface ThemeTokens {
 	accentText: string;
 	accent2: string;
 	surface: string;
+	/** A healthy or passing state; a deck component pairs it with a label, an icon, or a shape, never color alone. */
 	statusOk: string;
+	/** A warning state; a deck component pairs it with a label, an icon, or a shape, never color alone. */
 	statusWarn: string;
+	/** A failed state; a deck component pairs it with a label, an icon, or a shape, never color alone. */
 	statusError: string;
 	fontDisplay: string;
 	fontBody: string;
