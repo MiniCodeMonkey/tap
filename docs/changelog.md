@@ -10,6 +10,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+## [2.0.0-beta.1] - 2026-09-19
+
 ### Breaking changes
 
 - **`|||` column separator removed** - Multi-column and multi-slot layouts now use `::slotname` marker lines instead (e.g. `::right`, `::sidebar`, `::caption`). Content before the first marker is the `default` slot. See `docs/reference/slide-directives.md` and `docs/reference/layouts-reference.md`.
