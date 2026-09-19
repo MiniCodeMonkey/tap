@@ -94,14 +94,20 @@ test.describe('Fragment Reveals', () => {
   });
 
   test('should handle rapid fragment navigation', async ({ page }) => {
-    // Rapidly press right multiple times (need 3 to go through 2 fragments and advance)
+    // Rapidly press right multiple times (need 3 to go through 2 fragments and advance).
+    // handleKeyDown in $lib/utils/keyboard applies each press synchronously
+    // to the store (no debounce, no dropped input), but the URL hash update
+    // and the slide 4 content still land a render tick later than the
+    // presses themselves. A plain `expect(page.url())` snapshot right after
+    // a fixed wait can read the URL before that tick lands; toHaveURL is a
+    // web-first assertion that retries until the hash actually changes.
     await page.keyboard.press('ArrowRight');
     await page.keyboard.press('ArrowRight');
     await page.keyboard.press('ArrowRight');
-    await page.waitForTimeout(600);
 
     // Should be on slide 4 after going through all fragments
-    expect(page.url()).toContain('#4');
+    await expect(page).toHaveURL(/#4$/);
+    await expect(page.locator('.slide-content')).toContainText('Two Column Layout');
   });
 
   test('should work with Space key for fragment reveals', async ({ page }) => {
