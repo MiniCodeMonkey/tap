@@ -27,9 +27,9 @@
 	--accent: #ffd447;
 	--accent-text: #ffd447;
 	--surface: #174688;
-	--status-ok: #5be3a6;
-	--status-warn: #f5a623;
-	--status-error: #ff6b6b;
+	--status-ok: #4de19e;
+	--status-warn: #e9960b;
+	--status-error: #ff4646;
 	--accent-2: var(--accent-text);
 	--font-display: 'Saira Condensed', 'Arial Narrow', sans-serif;
 	--font-body: 'Saira Semi Condensed', 'Arial Narrow', sans-serif;

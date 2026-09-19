@@ -24,9 +24,9 @@
 	--accent: #ffb84d;
 	--accent-text: #ffb84d;
 	--accent-2: #6fe3a0;
-	--status-ok: var(--accent-2);
-	--status-warn: var(--accent);
-	--status-error: #ff5c57;
+	--status-ok: #23b561;
+	--status-warn: #bd7100;
+	--status-error: #d60600;
 	--surface: #1d2b25;
 	--font-display: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
 	--font-body: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;

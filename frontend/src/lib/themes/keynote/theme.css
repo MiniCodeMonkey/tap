@@ -27,9 +27,9 @@
 	--accent: #7cc7ff;
 	--accent-text: #7cc7ff;
 	--accent-bright: #d7efff;
-	--status-ok: #5ee6a8;
-	--status-warn: #ffcc66;
-	--status-error: #ff6b6b;
+	--status-ok: #168b56;
+	--status-warn: #ca8600;
+	--status-error: #c70000;
 	--accent-2: var(--accent-bright);
 	--surface: #1a212d;
 	--edge: #4d5a6e;

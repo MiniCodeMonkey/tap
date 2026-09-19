@@ -28,9 +28,9 @@
 	--accent: #dc241f;
 	--accent-text: #0b3fa8;
 	--surface: #e8e6de;
-	--status-ok: #1c7a3e;
+	--status-ok: #176433;
 	--status-warn: #8a6a00;
-	--status-error: var(--accent);
+	--status-error: #e75753;
 	--accent-2: var(--accent-text);
 	--font-display: 'Overpass', 'Helvetica Neue', Helvetica, Arial, sans-serif;
 	--font-body: 'Overpass', 'Helvetica Neue', Helvetica, Arial, sans-serif;

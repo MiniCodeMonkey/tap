@@ -41,9 +41,9 @@
 	--red: #d62718;
 	--blue: #1d3f9e;
 	--yellow: #f2b90f;
-	--status-ok: #1d7a4c;
-	--status-warn: #8a6d00;
-	--status-error: var(--red);
+	--status-ok: #165c39;
+	--status-warn: #9d7c00;
+	--status-error: #c92516;
 	--accent-2: var(--yellow);
 	--font-display: 'Outfit', 'Futura', 'Century Gothic', sans-serif;
 	--font-body: 'Outfit', 'Futura', 'Century Gothic', sans-serif;

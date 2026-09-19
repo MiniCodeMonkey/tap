@@ -25,9 +25,9 @@
 	--accent: #0a5f45;
 	--accent-text: #0a5f45;
 	--accent-2: #17a673;
-	--status-ok: var(--accent);
-	--status-warn: #a15c00;
-	--status-error: #c0392b;
+	--status-ok: #0b664a;
+	--status-warn: #cc7400;
+	--status-error: #cd3d2e;
 	--surface: #ffffff;
 	--line: #dcddd4;
 	--dot: #c9cbc0;

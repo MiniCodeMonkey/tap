@@ -37,9 +37,9 @@
 	--accent: #8a2b1e;
 	--accent-text: #8a2b1e;
 	--accent-soft: #d9b77c;
-	--status-ok: #3f6e3f;
-	--status-warn: #a9762c;
-	--status-error: var(--accent);
+	--status-ok: #427442;
+	--status-warn: #ab772c;
+	--status-error: #952e20;
 	--accent-2: var(--accent-soft);
 	--surface: #eadfc8;
 	--dim: #85796a;

@@ -30,9 +30,9 @@
 	--accent: #e8994a;
 	--accent-text: #1f4e5a;
 	--surface: #e9dcbe;
-	--status-ok: var(--accent-text);
-	--status-warn: #8a5a1e;
-	--status-error: #8a2f22;
+	--status-ok: #235764;
+	--status-warn: #af7226;
+	--status-error: #b63e2d;
 	--accent-2: var(--accent-text);
 	--font-display: 'Jost', 'Futura', 'Gill Sans', sans-serif;
 	--font-body: 'Libre Baskerville', 'Baskerville', Georgia, serif;

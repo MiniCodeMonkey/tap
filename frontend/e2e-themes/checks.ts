@@ -506,24 +506,33 @@ export async function readContrast(page: Page): Promise<ContrastResult[]> {
 
 	if (!colors) return [];
 
-	const pairs: { name: string; foreground: string; minimum: number }[] = [
-		{ name: 'fg-on-bg', foreground: colors.fg, minimum: 7 },
-		{ name: 'accent-text-on-bg', foreground: colors.accentText, minimum: 7 },
-		{ name: 'muted-on-bg', foreground: colors.muted, minimum: 4.5 },
+	const pairs: { name: string; foreground: string; background: string; minimum: number }[] = [
+		{ name: 'fg-on-bg', foreground: colors.fg, background: colors.bg, minimum: 7 },
+		{ name: 'accent-text-on-bg', foreground: colors.accentText, background: colors.bg, minimum: 7 },
+		{ name: 'muted-on-bg', foreground: colors.muted, background: colors.bg, minimum: 4.5 },
 		// Status tokens are read as a fill (a badge, a dot, an icon), not as
 		// body text, so they only need to clear the 3:1 non-text contrast
 		// minimum against --bg, not the 7:1/4.5:1 bars above.
-		{ name: 'status-ok-on-bg', foreground: colors.statusOk, minimum: 3 },
-		{ name: 'status-warn-on-bg', foreground: colors.statusWarn, minimum: 3 },
-		{ name: 'status-error-on-bg', foreground: colors.statusError, minimum: 3 }
+		{ name: 'status-ok-on-bg', foreground: colors.statusOk, background: colors.bg, minimum: 3 },
+		{ name: 'status-warn-on-bg', foreground: colors.statusWarn, background: colors.bg, minimum: 3 },
+		{ name: 'status-error-on-bg', foreground: colors.statusError, background: colors.bg, minimum: 3 },
+		// The three status colors must also differ from each other in
+		// luminance, not only hue: a pair that is only distinguished by
+		// hue (green vs. amber, for a deuteranope) reads as the same color.
+		// 1.35:1 is well under the 3:1 non-text bar above, so it never
+		// second-guesses that check - it only catches two status colors
+		// sitting at nearly the same lightness.
+		{ name: 'status-ok-warn', foreground: colors.statusOk, background: colors.statusWarn, minimum: 1.35 },
+		{ name: 'status-warn-error', foreground: colors.statusWarn, background: colors.statusError, minimum: 1.35 },
+		{ name: 'status-ok-error', foreground: colors.statusOk, background: colors.statusError, minimum: 1.35 }
 	];
 
-	return pairs.map(({ name, foreground, minimum }) => {
-		const ratio = contrastRatio(foreground, colors.bg) ?? 0;
+	return pairs.map(({ name, foreground, background, minimum }) => {
+		const ratio = contrastRatio(foreground, background) ?? 0;
 		return {
 			name,
 			foreground,
-			background: colors.bg,
+			background,
 			ratio: Math.round(ratio * 100) / 100,
 			minimum,
 			passes: ratio >= minimum
