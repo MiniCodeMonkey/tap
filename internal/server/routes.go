@@ -59,7 +59,12 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 }
 
 // handlePresenter serves the presenter view.
-// If a presenter password is configured, requires ?key=<password> query parameter.
+// If a presenter password is configured, requires ?key=<password> query
+// parameter, and, once that check passes, sets PresenterAuthCookieName so
+// the same browser's WebSocket connection can prove it too (see
+// WebSocketHub.SetPresenterPassword) - without it, a client that never saw
+// this password-gated page could still open /ws directly and send
+// navigation messages that drive every other client.
 func (s *Server) handlePresenter(w http.ResponseWriter, r *http.Request) {
 	// Check password protection
 	password := s.GetPresenterPassword()
@@ -73,6 +78,13 @@ func (s *Server) handlePresenter(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "Forbidden: incorrect presenter password", http.StatusForbidden)
 			return
 		}
+		http.SetCookie(w, &http.Cookie{
+			Name:     PresenterAuthCookieName,
+			Value:    password,
+			Path:     "/",
+			HttpOnly: true,
+			SameSite: http.SameSiteLaxMode,
+		})
 	}
 
 	// Serve embedded presenter.html

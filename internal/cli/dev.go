@@ -150,6 +150,7 @@ func runDevServer(file string, port int, presenterPassword string, headless bool
 		}
 	}
 	hub.SetAllowedOrigins(allowOrigins)
+	hub.SetPresenterPassword(presenterPassword)
 	go hub.Run()
 	defer hub.Stop()
 

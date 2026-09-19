@@ -13,6 +13,14 @@ import (
 	"github.com/coder/websocket"
 )
 
+// PresenterAuthCookieName is the cookie handlePresenter sets once a client
+// proves it knows the configured --presenter-password (see routes.go), and
+// that HandleConnection reads back to decide whether a WebSocket connection
+// may drive other clients (see WebSocketHub.SetPresenterPassword). Path=/
+// on that cookie is what makes it ride along on the browser's /ws upgrade
+// request too, alongside /presenter itself.
+const PresenterAuthCookieName = "tap_presenter_key"
+
 // MessageType represents the type of WebSocket message.
 type MessageType string
 
@@ -69,6 +77,15 @@ type Client struct {
 	hub  *WebSocketHub
 	conn *websocket.Conn
 	send chan []byte
+	// canSend is whether this client's relayed "slide" and "theme"
+	// messages are broadcast to other clients (see readPump), rather than
+	// silently dropped. True when no presenter password is configured (see
+	// checkPresenterAuth), or when the connection carried a valid
+	// PresenterAuthCookieName. A client with canSend false still registers
+	// normally and receives every broadcast - it just cannot drive other
+	// clients, so an audience window without the password still navigates
+	// its own view locally without moving anyone else's.
+	canSend bool
 }
 
 // ClientCountCallback is called when the number of connected clients changes.
@@ -128,7 +145,14 @@ type WebSocketHub struct {
 	// another port (see checkOrigin). Keyed by the full origin string
 	// (e.g. "http://localhost:5173") as sent in the Origin header.
 	allowedOrigins map[string]struct{}
-	mu             sync.RWMutex
+	// presenterPassword mirrors the dev server's --presenter-password (see
+	// SetPresenterPassword): empty means nothing is protected, so every
+	// connection can send. Non-empty means a connection may only send once
+	// it presents PresenterAuthCookieName equal to this value (see
+	// checkPresenterAuth), matching the same password the presenter page
+	// itself already requires as ?key=.
+	presenterPassword string
+	mu                sync.RWMutex
 }
 
 // DefaultStateRetention is how long the hub keeps the last-known slide
@@ -235,6 +259,41 @@ func (h *WebSocketHub) checkOrigin(r *http.Request) bool {
 	_, allowed := h.allowedOrigins[origin]
 	h.mu.RUnlock()
 	return allowed
+}
+
+// SetPresenterPassword tells the hub the dev server's current
+// --presenter-password, so HandleConnection can decide whether a new
+// connection may send (see checkPresenterAuth). An empty password (the
+// default, and tap dev's default) leaves every connection able to send,
+// matching the behavior before this check existed. Safe to call at any
+// time.
+func (h *WebSocketHub) SetPresenterPassword(password string) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.presenterPassword = password
+}
+
+// checkPresenterAuth reports whether r may send navigation messages once
+// connected: always true when no presenter password is configured, and
+// otherwise true only when r carries PresenterAuthCookieName equal to that
+// password - proof this browser already passed the same check the
+// presenter page's ?key= requires (see handlePresenter in routes.go).
+// A connection that fails this still registers and receives every
+// broadcast; it just cannot send one (see Client.canSend).
+func (h *WebSocketHub) checkPresenterAuth(r *http.Request) bool {
+	h.mu.RLock()
+	password := h.presenterPassword
+	h.mu.RUnlock()
+
+	if password == "" {
+		return true
+	}
+
+	cookie, err := r.Cookie(PresenterAuthCookieName)
+	if err != nil {
+		return false
+	}
+	return cookie.Value == password
 }
 
 // scheduleForgetLocked arranges for the hub to forget lastSlideState
@@ -460,9 +519,10 @@ func (h *WebSocketHub) HandleConnection(w http.ResponseWriter, r *http.Request) 
 	}
 
 	client := &Client{
-		hub:  h,
-		conn: conn,
-		send: make(chan []byte, 256),
+		hub:     h,
+		conn:    conn,
+		send:    make(chan []byte, 256),
+		canSend: h.checkPresenterAuth(r),
 	}
 
 	// Registering also queues the "connected" message and, if the hub has
@@ -518,6 +578,15 @@ func (c *Client) readPump(ctx context.Context) {
 		var msg Message
 		if err := json.Unmarshal(data, &msg); err != nil {
 			continue // Ignore invalid JSON
+		}
+
+		// A client without canSend (a presenter password is configured and
+		// this connection never proved it) still receives every broadcast,
+		// but its own slide and theme messages are dropped here instead of
+		// relayed - it can navigate its own view locally, but never drives
+		// anyone else's.
+		if !c.canSend {
+			continue
 		}
 
 		// Broadcast slide and theme messages to all clients. A "slide"

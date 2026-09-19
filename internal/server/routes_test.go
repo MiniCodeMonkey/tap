@@ -150,6 +150,61 @@ func TestHandlePresenter_PasswordProtection_CorrectPassword(t *testing.T) {
 	}
 }
 
+// TestHandlePresenter_SetsAuthCookieOnCorrectPassword verifies that a
+// correct ?key= sets PresenterAuthCookieName to the password, Path=/, so
+// the same browser's later WebSocket upgrade to /ws can prove it too (see
+// WebSocketHub.checkPresenterAuth).
+func TestHandlePresenter_SetsAuthCookieOnCorrectPassword(t *testing.T) {
+	s := New(0)
+	s.SetPresenterPassword("mysecret")
+
+	req := httptest.NewRequest(http.MethodGet, "/presenter?key=mysecret", nil)
+	w := httptest.NewRecorder()
+
+	s.handlePresenter(w, req)
+
+	resp := w.Result()
+	defer resp.Body.Close()
+
+	var cookie *http.Cookie
+	for _, c := range resp.Cookies() {
+		if c.Name == PresenterAuthCookieName {
+			cookie = c
+			break
+		}
+	}
+	if cookie == nil {
+		t.Fatal("no auth cookie set on a correct password")
+	}
+	if cookie.Value != "mysecret" {
+		t.Errorf("cookie value = %q, want %q", cookie.Value, "mysecret")
+	}
+	if cookie.Path != "/" {
+		t.Errorf("cookie path = %q, want \"/\" so it also rides along on /ws", cookie.Path)
+	}
+}
+
+// TestHandlePresenter_NoAuthCookieOnWrongPassword verifies a wrong ?key=
+// sets no auth cookie.
+func TestHandlePresenter_NoAuthCookieOnWrongPassword(t *testing.T) {
+	s := New(0)
+	s.SetPresenterPassword("mysecret")
+
+	req := httptest.NewRequest(http.MethodGet, "/presenter?key=wrong", nil)
+	w := httptest.NewRecorder()
+
+	s.handlePresenter(w, req)
+
+	resp := w.Result()
+	defer resp.Body.Close()
+
+	for _, c := range resp.Cookies() {
+		if c.Name == PresenterAuthCookieName {
+			t.Fatal("auth cookie set on a wrong password")
+		}
+	}
+}
+
 func TestHandlePresenter_PasswordProtection_EmptyKey(t *testing.T) {
 	s := New(0)
 	s.SetPresenterPassword("mysecret")

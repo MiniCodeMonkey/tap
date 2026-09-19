@@ -1168,6 +1168,137 @@ func TestWebSocketHubRelayRejectsNegativeSlideIndex(t *testing.T) {
 	}
 }
 
+// TestWebSocketHubPresenterAuthGatesSending covers checkPresenterAuth end to
+// end: with no password configured, a connection with no cookie can still
+// send; with a password configured, a connection without the matching
+// PresenterAuthCookieName is registered and receives broadcasts but its own
+// messages are dropped, while a connection that carries the cookie sends
+// normally.
+func TestWebSocketHubPresenterAuthGatesSending(t *testing.T) {
+	dial := func(t *testing.T, wsURL string, cookie string) *websocket.Conn {
+		t.Helper()
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		var header http.Header
+		if cookie != "" {
+			header = http.Header{"Cookie": []string{cookie}}
+		}
+		conn, _, err := websocket.Dial(ctx, wsURL, &websocket.DialOptions{HTTPHeader: header})
+		if err != nil {
+			t.Fatalf("websocket.Dial() error = %v", err)
+		}
+		ctx2, cancel2 := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel2()
+		if _, _, err := conn.Read(ctx2); err != nil {
+			t.Fatalf("conn.Read() connected message error = %v", err)
+		}
+		return conn
+	}
+
+	t.Run("no password configured: an uncookied connection can still send", func(t *testing.T) {
+		hub := NewWebSocketHub()
+		go hub.Run()
+		defer hub.Stop()
+		server := httptest.NewServer(http.HandlerFunc(hub.HandleConnection))
+		defer server.Close()
+		wsURL := "ws" + strings.TrimPrefix(server.URL, "http") + "/"
+
+		sender := dial(t, wsURL, "")
+		defer sender.Close(websocket.StatusNormalClosure, "")
+		receiver := dial(t, wsURL, "")
+		defer receiver.Close(websocket.StatusNormalClosure, "")
+
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := sender.Write(ctx, websocket.MessageText, []byte(`{"type":"slide","slideIndex":1}`)); err != nil {
+			t.Fatalf("sender.Write() error = %v", err)
+		}
+		_, data, err := receiver.Read(ctx)
+		if err != nil {
+			t.Fatalf("receiver.Read() error = %v", err)
+		}
+		var msg Message
+		if err := json.Unmarshal(data, &msg); err != nil {
+			t.Fatalf("json.Unmarshal() error = %v", err)
+		}
+		if msg.SlideIndex == nil || *msg.SlideIndex != 1 {
+			t.Errorf("relayed message = %+v, want slideIndex 1", msg)
+		}
+	})
+
+	t.Run("password configured: a connection without the auth cookie cannot send", func(t *testing.T) {
+		hub := NewWebSocketHub()
+		hub.SetPresenterPassword("secret")
+		go hub.Run()
+		defer hub.Stop()
+		server := httptest.NewServer(http.HandlerFunc(hub.HandleConnection))
+		defer server.Close()
+		wsURL := "ws" + strings.TrimPrefix(server.URL, "http") + "/"
+
+		unauthenticated := dial(t, wsURL, "")
+		defer unauthenticated.Close(websocket.StatusNormalClosure, "")
+		receiver := dial(t, wsURL, "")
+		defer receiver.Close(websocket.StatusNormalClosure, "")
+
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := unauthenticated.Write(ctx, websocket.MessageText, []byte(`{"type":"slide","slideIndex":1}`)); err != nil {
+			t.Fatalf("unauthenticated.Write() error = %v", err)
+		}
+		// The dropped message never arrives; a subsequent authenticated
+		// sender's message is what proves the receiver's pipe is still
+		// live and nothing from the unauthenticated sender snuck through.
+		authenticated := dial(t, wsURL, PresenterAuthCookieName+"=secret")
+		defer authenticated.Close(websocket.StatusNormalClosure, "")
+		if err := authenticated.Write(ctx, websocket.MessageText, []byte(`{"type":"slide","slideIndex":2}`)); err != nil {
+			t.Fatalf("authenticated.Write() error = %v", err)
+		}
+		_, data, err := receiver.Read(ctx)
+		if err != nil {
+			t.Fatalf("receiver.Read() error = %v", err)
+		}
+		var msg Message
+		if err := json.Unmarshal(data, &msg); err != nil {
+			t.Fatalf("json.Unmarshal() error = %v", err)
+		}
+		if msg.SlideIndex == nil || *msg.SlideIndex != 2 {
+			t.Errorf("relayed message = %+v, want the unauthenticated slide 1 dropped and only slide 2 relayed", msg)
+		}
+	})
+
+	t.Run("password configured: a connection with the correct auth cookie can send", func(t *testing.T) {
+		hub := NewWebSocketHub()
+		hub.SetPresenterPassword("secret")
+		go hub.Run()
+		defer hub.Stop()
+		server := httptest.NewServer(http.HandlerFunc(hub.HandleConnection))
+		defer server.Close()
+		wsURL := "ws" + strings.TrimPrefix(server.URL, "http") + "/"
+
+		sender := dial(t, wsURL, PresenterAuthCookieName+"=secret")
+		defer sender.Close(websocket.StatusNormalClosure, "")
+		receiver := dial(t, wsURL, "")
+		defer receiver.Close(websocket.StatusNormalClosure, "")
+
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := sender.Write(ctx, websocket.MessageText, []byte(`{"type":"slide","slideIndex":3}`)); err != nil {
+			t.Fatalf("sender.Write() error = %v", err)
+		}
+		_, data, err := receiver.Read(ctx)
+		if err != nil {
+			t.Fatalf("receiver.Read() error = %v", err)
+		}
+		var msg Message
+		if err := json.Unmarshal(data, &msg); err != nil {
+			t.Fatalf("json.Unmarshal() error = %v", err)
+		}
+		if msg.SlideIndex == nil || *msg.SlideIndex != 3 {
+			t.Errorf("relayed message = %+v, want slideIndex 3", msg)
+		}
+	})
+}
+
 // TestWebSocketHubValidSlideIndex verifies validSlideIndex's rules: never
 // negative; out of range only rejected once the hub knows the slide count.
 func TestWebSocketHubValidSlideIndex(t *testing.T) {
