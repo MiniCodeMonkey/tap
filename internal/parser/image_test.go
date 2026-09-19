@@ -502,6 +502,74 @@ func TestTransformImageAttributes_DropsHostileWidthValue(t *testing.T) {
 	}
 }
 
+// TestTransformImageAttributes_EscapesPlainAmpersandOnce checks that a
+// raw "&" in alt text (as in "AT&T", written directly, no entity) is
+// escaped exactly once, into "&amp;".
+func TestTransformImageAttributes_EscapesPlainAmpersandOnce(t *testing.T) {
+	content := `![AT&T](logo.png){width=50%}`
+	result := transformImageAttributes(content, 1)
+
+	expected := `<img src="logo.png" alt="AT&amp;T" style="width: 50%">`
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}
+
+// TestTransformImageAttributes_DoesNotDoubleEscapeAnExistingEntity
+// reproduces the double-escape bug: alt text that already contains a
+// valid HTML entity reference ("&amp;") must come out unchanged, not as
+// "&amp;amp;".
+func TestTransformImageAttributes_DoesNotDoubleEscapeAnExistingEntity(t *testing.T) {
+	content := `![Fish &amp; Chips](logo.png){width=50%}`
+	result := transformImageAttributes(content, 1)
+
+	expected := `<img src="logo.png" alt="Fish &amp; Chips" style="width: 50%">`
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}
+
+// TestTransformImageAttributes_EscapesQuoteInAltText checks a literal
+// double quote in alt text is escaped rather than closing the attribute
+// early.
+func TestTransformImageAttributes_EscapesQuoteInAltText(t *testing.T) {
+	content := `![Say "hi"](logo.png){width=50%}`
+	result := transformImageAttributes(content, 1)
+
+	expected := `<img src="logo.png" alt="Say &#34;hi&#34;" style="width: 50%">`
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}
+
+// TestTransformImageAttributes_WidthUnitIsCaseInsensitive checks that a
+// unit's case doesn't matter, matching CSS itself: "300PX" is as valid as
+// "300px".
+func TestTransformImageAttributes_WidthUnitIsCaseInsensitive(t *testing.T) {
+	content := `![](image.png){width=300PX}`
+	result := transformImageAttributes(content, 1)
+
+	expected := `<img src="image.png" alt="" style="width: 300PX">`
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}
+
+// TestTransformImageAttributes_RejectsCalc checks that calc(...) is still
+// rejected as a width value, exactly like any other non-bare-number value.
+func TestTransformImageAttributes_RejectsCalc(t *testing.T) {
+	content := `![](image.png){width=calc(100% - 20px)}`
+	result := transformImageAttributes(content, 1)
+
+	if stringContains(result, "calc") {
+		t.Errorf("expected calc() to be rejected, got %q", result)
+	}
+	expected := `<img src="image.png" alt="">`
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}
+
 func stringContains(s, substr string) bool {
 	for i := 0; i <= len(s)-len(substr); i++ {
 		if s[i:i+len(substr)] == substr {
