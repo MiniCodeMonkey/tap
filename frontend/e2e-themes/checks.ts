@@ -886,3 +886,113 @@ export async function findSmallHeadlines(
 		return warnings;
 	}, recommendedPx);
 }
+
+// ============================================================================
+// Entrance animation end state
+// ============================================================================
+
+export interface AnimationEndStateViolation {
+	selector: string;
+	text: string;
+	reason: 'opacity-below-1' | 'visibility-hidden' | 'zero-size-clip';
+	detail: string;
+}
+
+const ANIMATION_TEXT_SELECTOR = 'h1, h2, h3, h4, h5, h6, p, li, td, th, blockquote, figcaption, dt, dd';
+
+/**
+ * Waits for every running Web Animation on the page to finish (a fixed
+ * timeout, not a fixed wait, so a theme's own animation durations don't
+ * need to be known here), then checks every text-bearing element for a
+ * hidden-looking end state: `opacity` under 1, `visibility: hidden`, or a
+ * zero-size `clip`/`clip-path`. The suite's other checks all run in print
+ * mode (`?print=true`), which turns entrance animations off outright (see
+ * docs/reference/theme-porting.md section 3.6) and so never exercises
+ * whether one of them actually finishes in a visible state; this check is
+ * the one place that loads a slide live and lets its animations run to
+ * completion before looking.
+ *
+ * `opacity` is read with a small tolerance (0.98) rather than a strict
+ * `< 1`, since a theme can leave an animation's `fill: forwards` keyframe
+ * a hair under 1 by design (a barely-there flicker meant to read as
+ * "settled", not "still fading"); this check is for an entrance animation
+ * that never finishes revealing its own text, not for that.
+ */
+export async function findAnimationEndStateViolations(page: Page): Promise<AnimationEndStateViolation[]> {
+	await page.evaluate(async () => {
+		const animations = document.getAnimations();
+		await Promise.race([
+			Promise.all(animations.map((animation) => animation.finished.catch(() => undefined))),
+			new Promise((resolve) => setTimeout(resolve, 5000))
+		]);
+	});
+
+	return page.evaluate((selector) => {
+		const OPACITY_TOLERANCE = 0.98;
+		const violations: AnimationEndStateViolation[] = [];
+
+		const candidates = document.querySelectorAll<HTMLElement>(selector);
+		for (const element of candidates) {
+			const text = (element.textContent ?? '').trim();
+			if (text.length === 0) continue;
+
+			const rect = element.getBoundingClientRect();
+			if (rect.width === 0 || rect.height === 0) continue;
+
+			const style = getComputedStyle(element);
+			const selectorLabel = element.tagName.toLowerCase();
+			const textSample = text.slice(0, 80);
+
+			const opacity = parseFloat(style.opacity);
+			if (!Number.isNaN(opacity) && opacity < OPACITY_TOLERANCE) {
+				violations.push({
+					selector: selectorLabel,
+					text: textSample,
+					reason: 'opacity-below-1',
+					detail: `opacity: ${style.opacity}`
+				});
+				continue;
+			}
+
+			if (style.visibility === 'hidden') {
+				violations.push({
+					selector: selectorLabel,
+					text: textSample,
+					reason: 'visibility-hidden',
+					detail: 'visibility: hidden'
+				});
+				continue;
+			}
+
+			const clip = style.clip;
+			const clipPath = style.clipPath;
+			const clipsToZero = (value: string) => {
+				const rectMatch = /^rect\(\s*([\d.]+px|auto)\s*,\s*([\d.]+px|auto)\s*,\s*([\d.]+px|auto)\s*,\s*([\d.]+px|auto)\s*\)$/.exec(
+					value
+				);
+				if (rectMatch) {
+					const [, top, right, bottom, left] = rectMatch;
+					const toNumber = (part: string) => (part === 'auto' ? null : parseFloat(part));
+					const t = toNumber(top);
+					const r = toNumber(right);
+					const b = toNumber(bottom);
+					const l = toNumber(left);
+					if (t !== null && b !== null && b - t <= 0) return true;
+					if (l !== null && r !== null && r - l <= 0) return true;
+				}
+				return value === 'circle(0px)' || value === 'circle(0px at 50% 50%)' || /^inset\(\s*100%/.test(value);
+			};
+
+			if ((clip && clip !== 'auto' && clipsToZero(clip)) || (clipPath && clipPath !== 'none' && clipsToZero(clipPath))) {
+				violations.push({
+					selector: selectorLabel,
+					text: textSample,
+					reason: 'zero-size-clip',
+					detail: `clip: ${clip}; clip-path: ${clipPath}`
+				});
+			}
+		}
+
+		return violations;
+	}, ANIMATION_TEXT_SELECTOR);
+}

@@ -13,7 +13,15 @@ import { existsSync, readFileSync } from 'fs';
 import { dirname, resolve } from 'path';
 import { fileURLToPath } from 'url';
 import { expect, test, type Page } from '@playwright/test';
-import { findOccludedOrClippedText, findOverflow, findSmallHeadlines, findSmallText, readCodeContrast, readContrast } from './checks';
+import {
+	findAnimationEndStateViolations,
+	findOccludedOrClippedText,
+	findOverflow,
+	findSmallHeadlines,
+	findSmallText,
+	readCodeContrast,
+	readContrast
+} from './checks';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -115,6 +123,26 @@ async function snapshotSlideNumbers(page: Page): Promise<{ title: string; slideN
 		}
 		return { title, slideNumber: index + 1 };
 	});
+}
+
+/**
+ * Loads a slide live (no `print=true`), so a theme's entrance animations
+ * actually run instead of being turned off, for
+ * findAnimationEndStateViolations. Waits for the same readiness signals
+ * gotoSlide does (theme applied, fonts ready), but deliberately not for
+ * animations to settle - that wait belongs to the caller, after this
+ * resolves, since some themes start an entrance animation only once the
+ * slide has already painted once.
+ */
+async function gotoSlideLive(page: Page, slug: string, slideNumber: number): Promise<void> {
+	await page.goto(`/?theme=${slug}#${slideNumber}`);
+	await page.waitForSelector('.slide[data-layout]');
+	await page.waitForFunction(
+		(expected) => document.querySelector('.slide-container [data-theme]')?.getAttribute('data-theme') === expected,
+		slug
+	);
+	await page.waitForLoadState('networkidle');
+	await page.evaluate(() => document.fonts.ready);
 }
 
 async function gotoSlide(page: Page, slug: string, slideNumber: number): Promise<void> {
@@ -256,6 +284,30 @@ for (const theme of themesToRun()) {
 			expect(occludedOrClippedFailures, occludedOrClippedFailures.join('\n')).toEqual([]);
 			expect(smallTextFailures, smallTextFailures.join('\n')).toEqual([]);
 			expect(codeContrastFailures, codeContrastFailures.join('\n')).toEqual([]);
+		});
+
+		test('entrance animation: title slide settles on visible text', async ({ page }) => {
+			// Every other check in this suite runs in print mode, which turns
+			// entrance animations off outright (see docs/reference/theme-
+			// porting.md section 3.6), so a theme whose title-slide reveal
+			// (typing, fade, wipe) finishes on a hidden-looking frame - the
+			// class of bug print mode can never catch - would otherwise go
+			// unnoticed. One slide is enough: this is about the animation
+			// engine finishing cleanly, not about re-running the size/
+			// contrast/overflow checks already covered elsewhere live.
+			await gotoSlideLive(page, theme.slug, 1);
+			await page.evaluate(
+				() =>
+					new Promise<void>((resolve) => {
+						requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+					})
+			);
+
+			const violations = await findAnimationEndStateViolations(page);
+			expect(
+				violations.map((v) => `${v.selector} "${v.text}": ${v.reason} (${v.detail})`),
+				'an entrance animation left text in a hidden-looking end state'
+			).toEqual([]);
 		});
 
 		test('isolation: switching in from another theme matches a fresh load', async ({ page }) => {
