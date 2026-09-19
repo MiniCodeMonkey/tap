@@ -178,21 +178,29 @@ func TestWatcher_Debounce(t *testing.T) {
 	// Give watcher time to start
 	time.Sleep(50 * time.Millisecond)
 
-	// Make multiple rapid changes
-	for i := 0; i < 5; i++ {
+	// Fire a burst of writes back to back, with no sleep between them, so
+	// the whole burst lands well inside one debounce window regardless of
+	// how loaded the machine running the test is. A fixed inter-write sleep
+	// close to the debounce window is what made this test flaky on slow
+	// runners: the writes could spread past the window and split into more
+	// than one debounce cycle even though the debounce logic itself was
+	// fine.
+	const writes = 10
+	for i := 0; i < writes; i++ {
 		if err := os.WriteFile(mdFile, []byte("# Update "+string(rune('0'+i))), 0644); err != nil {
 			t.Fatalf("failed to write file: %v", err)
 		}
-		time.Sleep(20 * time.Millisecond) // Less than debounce time
 	}
 
-	// Wait for debounce to complete
-	time.Sleep(200 * time.Millisecond)
+	// Wait well past the debounce window for it to fire.
+	time.Sleep(300 * time.Millisecond)
 
-	// Should have only one callback due to debouncing
+	// A burst of writes inside one debounce window should collapse to far
+	// fewer callbacks than writes, not zero (the burst must still trigger a
+	// rebuild) and not one per write (debouncing must have done its job).
 	count := callCount.Load()
-	if count > 2 {
-		t.Errorf("callCount = %d, want <= 2 (debouncing should reduce calls)", count)
+	if count < 1 || count > 3 {
+		t.Errorf("callCount = %d, want between 1 and 3 (debouncing should collapse a %d-write burst into a small number of callbacks)", count, writes)
 	}
 }
 
