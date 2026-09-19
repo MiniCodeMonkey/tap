@@ -30,8 +30,13 @@ dist/
 
 Everything the deck needs is in that folder. The fonts, the syntax
 highlighter, and the asciinema player are all bundled, so a built deck
-needs no network at all. Every path is relative, so the folder works from
-any sub-path without a base-path flag.
+needs no network at all.
+
+**A build works from any URL path.** Every asset reference is relative, so
+the same `dist/` folder serves correctly from a domain root, from a
+sub-path like `https://example.com/talks/q3/`, and from a GitHub Pages
+project site like `https://user.github.io/your-repo/`. There is no
+base-path flag to set and no rewriting to do after the fact.
 
 ### Build Options
 

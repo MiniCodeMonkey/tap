@@ -94,8 +94,16 @@ tap dev [file]
 | Flag | Short | Description |
 |------|-------|-------------|
 | `--port <number>` | `-p` | Port to serve on (default: `3000`) |
-| `--presenter-password <pass>` | | Password to protect the presenter view |
+| `--presenter-password <pass>` | | Password to protect the presenter view, and gate who may drive other windows |
+| `--allow-origin <origin>` | | Additional origin (`scheme://host:port`) allowed to connect to the websocket hub, for a contributor's Vite dev server. Repeatable |
 | `--headless` | | Run without the terminal UI, for testing/automation |
+
+The websocket hub accepts a connection with no `Origin` header, or one
+whose origin host matches the request's own `Host` header, which covers
+`localhost`, `127.0.0.1`, a LAN address, and a fallback port. Anything else
+is refused with HTTP 403 and `Forbidden: origin not allowed`, and the
+server logs the origin it turned away. `--allow-origin` adds exceptions;
+you only need it for a separate dev server on another port.
 
 If the default port is already taken, `tap dev` tries the next ports in turn (up to 20 above it) and prints the URL of whichever one it actually bound, so two decks (or two agents) can run side by side without flags. Passing `--port` explicitly instead fails outright when that exact port is busy:
 
@@ -149,6 +157,12 @@ tap build <file>
 | Flag | Short | Description |
 |------|-------|-------------|
 | `--output <dir>` | `-o` | Output directory (default: `dist`) |
+
+### Behavior
+
+The progress spinner goes to standard error, and draws nothing when standard error is not a terminal, so a script capturing standard output gets only the result lines.
+
+`tap build` exits with status 1 when a slide names an unknown layout, uses a slot its layout does not declare, or has a deck component that fails to build.
 
 ### Examples
 
@@ -247,6 +261,12 @@ tap pdf slides.md --content notes
 
 ### Behavior
 
+`tap pdf` exits with status **130** on Ctrl-C or SIGTERM, after finishing
+its cleanup, printing `interrupted` on standard error. The progress spinner
+is written to standard error and draws nothing when standard error is not a
+terminal, so standard output holds only the result lines; warnings print
+after the spinner has stopped.
+
 Each slide is exported in its final state: every fragment revealed, every step at its last value, and no animation. Deck components are built and registered the same way `tap screenshot` does it, so a component appears in the PDF with `printMode = true` and `step = steps`.
 
 Page size follows the deck's own `aspectRatio`.
@@ -306,6 +326,8 @@ On success the command prints the path of each file written, one per line, and n
 
 It exits with status 1, and a message on standard error, on any of: a missing deck, an out-of-range slide, step, fragment, or `--wait`, an unknown theme, a deck component that fails to build, a browser that cannot start, or a rendered slide that shows a slide or component error card. A component build error fails before any image is written.
 
+On Ctrl-C or SIGTERM it finishes its cleanup, prints `interrupted` on standard error, and exits with status **130**.
+
 ### Examples
 
 ```bash
@@ -363,7 +385,7 @@ tap add component <Name> [flags]
 |------|-------------|
 | `--inline` | Scaffold an inline block component instead of a whole-slide one |
 | `--ts` | Write a `.tsx` file, plus `tap-env.d.ts` and `tap-shims.d.ts` next to the deck |
-| `--deck <file>` | Deck file the component belongs to. Default: the current directory |
+| `--deck <path>` | The deck the component belongs to. A file uses its folder; a **directory** is used as the deck folder itself. Default: the current directory |
 
 Without `--inline`, the file goes to `slides/<Name>.jsx`. With `--inline`, it goes to `components/<Name>.jsx`. With `--ts`, the extension is `.tsx`, and the two declaration files are written only when they do not already exist. `tap-shims.d.ts` is skipped when `node_modules/@types/react` exists next to the deck or above it.
 
