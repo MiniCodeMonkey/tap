@@ -144,13 +144,17 @@ func runPDFE(args []string) error {
 		spinner.stop()
 		return fmt.Errorf("failed to load presentation: %w", err)
 	}
+	// The spinner and these warnings both write to standard error; stop it
+	// first so a warning line never lands mid-frame, then start it again
+	// (with the next step's message) once they are printed.
+	spinner.stop()
 	printLayoutWarningsToStderr(absPath, warnings)
 	if len(componentBuildErrs) > 0 {
-		spinner.stop()
 		printComponentErrorsToStderr(componentBuildErrs)
 		return errSilent
 	}
 	printComponentWarningsToStderr(componentBuildWarnings)
+	spinner.start()
 
 	// Ensure server is cleaned up on exit
 	defer func() {
