@@ -6,10 +6,15 @@ on:
   pull_request:
     branches: [main]
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test-go:
     name: Go Tests
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -17,7 +22,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.24'
+          go-version-file: go.mod
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -32,17 +37,51 @@ jobs:
       - name: Build frontend
         run: cd frontend && npm run build
 
+      - name: Determine playwright-go version
+        id: playwright-go
+        run: |
+          version=$(grep -m1 'github.com/mxschmitt/playwright-go ' go.mod | awk '{print $2}')
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      # internal/pdf and internal/cli drive a real Chromium through
+      # playwright-go: cache its driver and browser download, keyed on the
+      # playwright-go version pinned in go.mod, so a normal run reuses
+      # yesterday's download instead of re-fetching ~250MB of Chromium.
+      - name: Cache Playwright driver and browser
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/ms-playwright-go
+            ~/.cache/ms-playwright
+          key: playwright-go-${{ runner.os }}-${{ steps.playwright-go.outputs.version }}
+
+      # Chromium needs a handful of system libraries ubuntu-latest doesn't
+      # ship by default (libnss3, libatk, libgtk, etc). The frontend's own
+      # @playwright/test dependency already carries the `install-deps`
+      # subcommand, so reuse it rather than hand-maintaining an apt list
+      # that drifts from whatever Ubuntu image GitHub ships next.
+      - name: Install Chromium system dependencies
+        run: cd frontend && npx playwright install-deps chromium
+
+      - name: Run go vet
+        run: go vet ./...
+
+      # CI is set by GitHub Actions, which flips the browser-availability
+      # skip in internal/cli's pdf and screenshot tests into a hard
+      # failure instead of a silent skip (see browser_test_helper_test.go),
+      # so a broken browser install shows up as a red build here.
       - name: Run Go tests
         run: go test ./...
 
       - name: Run Go linter
         uses: golangci/golangci-lint-action@v6
         with:
-          version: latest
+          version: v1.64.8
 
   test-frontend:
     name: Frontend Tests
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -62,3 +101,137 @@ jobs:
 
       - name: Run type check
         run: cd frontend && npm run check
+
+      - name: Run linter
+        run: cd frontend && npm run lint
+
+      - name: Check theme tokens are up to date
+        run: cd frontend && npm run tokens:check
+
+  test-e2e:
+    name: E2E Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        run: cd frontend && npm ci
+
+      # Builds the frontend into embedded/dist, then the tap binary, the
+      # same two steps `make build` always runs - playwright.config.ts's
+      # webServer runs the dev server with `go run`, not the built
+      # binary, but both need the frontend already built into
+      # embedded/dist.
+      - name: Build frontend and tap binary
+        run: make build
+
+      - name: Cache Playwright browser (frontend)
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-frontend-${{ runner.os }}-${{ hashFiles('frontend/package-lock.json') }}
+
+      - name: Install Playwright Chromium
+        run: cd frontend && npx playwright install --with-deps chromium
+
+      - name: Run Playwright E2E tests
+        run: cd frontend && npx playwright test
+
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: frontend/playwright-report/
+          retention-days: 14
+
+  test-themes:
+    name: Theme Checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        run: cd frontend && npm ci
+
+      - name: Build frontend
+        run: cd frontend && npm run build
+
+      - name: Cache Playwright browser (frontend)
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-frontend-${{ runner.os }}-${{ hashFiles('frontend/package-lock.json') }}
+
+      - name: Install Playwright Chromium
+        run: cd frontend && npx playwright install --with-deps chromium
+
+      # The theme suite needs its own Go dev server and Vite dev server,
+      # each on their own port, the same pair CONTRIBUTING.md documents
+      # for a local run (see "Testing the Theme Suite").
+      - name: Start tap dev server
+        run: |
+          nohup go run ./cmd/tap dev testdata/themes.md --port 3300 --headless > /tmp/tap-dev.log 2>&1 &
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:3300 > /dev/null && exit 0
+            sleep 1
+          done
+          echo "tap dev server did not come up"; cat /tmp/tap-dev.log; exit 1
+
+      - name: Start Vite dev server
+        working-directory: frontend
+        run: |
+          TAP_API_PORT=3300 nohup npx vite --port 5300 > /tmp/vite-dev.log 2>&1 &
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:5300 > /dev/null && exit 0
+            sleep 1
+          done
+          echo "vite dev server did not come up"; cat /tmp/vite-dev.log; exit 1
+
+      # The visual snapshots under frontend/e2e-themes/__snapshots__/ were
+      # rendered on macOS and never match Linux font rendering pixel for
+      # pixel, so TAP_THEME_SNAPSHOTS=off skips only that comparison (see
+      # themes.spec.ts). Overflow, clipping, minimum text size, contrast,
+      # and the theme-isolation check all still run, for every theme.
+      - name: Run theme checks
+        working-directory: frontend
+        env:
+          BASE_URL: http://localhost:5300
+          TAP_THEME_SNAPSHOTS: 'off'
+        run: npx playwright test -c playwright.themes.config.ts
+
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: theme-checks-report
+          path: frontend/playwright-report/
+          retention-days: 14

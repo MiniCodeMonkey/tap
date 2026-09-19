@@ -295,6 +295,14 @@ for (const theme of themesToRun()) {
 			// list); the slide number behind each title is resolved inside
 			// the test itself, from whatever deck is actually loaded.
 			test(`snapshot: ${title}`, async ({ page }) => {
+				// The visual baselines under __snapshots__/ were rendered on
+				// macOS; Linux's font rendering never matches them pixel for
+				// pixel. TAP_THEME_SNAPSHOTS=off (set by the CI job that runs
+				// this suite on ubuntu-latest) skips only the screenshot
+				// comparison below - every other check in this file (overflow,
+				// clipping, sizes, contrast, isolation) still runs there.
+				test.skip(process.env.TAP_THEME_SNAPSHOTS === 'off', 'visual snapshots disabled (TAP_THEME_SNAPSHOTS=off)');
+
 				const resolved = await snapshotSlideNumbers(page);
 				const match = resolved.find((entry) => entry.title === title);
 				if (!match) {
