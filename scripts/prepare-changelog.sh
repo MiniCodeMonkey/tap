@@ -47,7 +47,21 @@ version_header_pattern="## \\[${escaped_version}\\]"
 # the end of the file if there is none.
 extract_section() {
     local start_pattern="$1"
-    sed -n "/${start_pattern}/,/## \\[/p" "$CHANGELOG" | sed '1d;$d' | sed '/^$/d'
+    local raw last_line
+    raw="$(sed -n "/${start_pattern}/,/## \\[/p" "$CHANGELOG")"
+    last_line="$(printf '%s\n' "$raw" | tail -n 1)"
+    if [[ "$last_line" == "## ["* ]]; then
+        # The range matched a following header line: drop it along with
+        # the section's own header.
+        printf '%s\n' "$raw" | sed '1d;$d' | sed '/^$/d'
+    else
+        # No following header: the range ran to the end of the file, so
+        # its last line is real content, not a header to strip. Dropping
+        # it too (the previous "sed '1d;$d'" did unconditionally) silently
+        # lost a section's last line whenever it was also the changelog's
+        # last section.
+        printf '%s\n' "$raw" | sed '1d' | sed '/^$/d'
+    fi
 }
 
 if grep -qE "^${version_header_pattern}" "$CHANGELOG"; then

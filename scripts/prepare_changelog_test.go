@@ -14,9 +14,9 @@ import (
 // runPrepareChangelog runs scripts/prepare-changelog.sh against changelog
 // (written to a temp file) for version, with CHANGELOG_DATE pinned so the
 // fixture does not depend on today's date. It returns the script's
-// standard error, the resulting changelog contents, and its exit error (nil
-// on success).
-func runPrepareChangelog(t *testing.T, changelog, version string) (stderr, changelogAfter string, runErr error) {
+// standard error, the resulting changelog contents, the release notes it
+// wrote (empty on failure), and its exit error (nil on success).
+func runPrepareChangelog(t *testing.T, changelog, version string) (stderr, changelogAfter, notes string, runErr error) {
 	t.Helper()
 
 	dir := t.TempDir()
@@ -48,9 +48,10 @@ func runPrepareChangelog(t *testing.T, changelog, version string) (stderr, chang
 			t.Fatalf("failed to read release notes: %v", err)
 		}
 		t.Logf("release notes:\n%s", notesBytes)
+		notes = string(notesBytes)
 	}
 
-	return errBuf.String(), string(changelogBytes), runErr
+	return errBuf.String(), string(changelogBytes), notes, runErr
 }
 
 // TestPrepareChangelog_NormalFirstRun checks the ordinary case: notes sit
@@ -72,7 +73,7 @@ func TestPrepareChangelog_NormalFirstRun(t *testing.T) {
 - Older thing
 `
 
-	_, after, err := runPrepareChangelog(t, changelog, "1.2.0")
+	_, after, _, err := runPrepareChangelog(t, changelog, "1.2.0")
 	if err != nil {
 		t.Fatalf("prepare-changelog.sh failed: %v", err)
 	}
@@ -112,7 +113,7 @@ func TestPrepareChangelog_SecondRunForSameVersion(t *testing.T) {
 - Older thing
 `
 
-	stderr, after, err := runPrepareChangelog(t, changelog, "1.2.0")
+	stderr, after, _, err := runPrepareChangelog(t, changelog, "1.2.0")
 	if err != nil {
 		t.Fatalf("prepare-changelog.sh failed: %v (stderr: %s)", err, stderr)
 	}
@@ -141,7 +142,7 @@ func TestPrepareChangelog_EmptyUnreleasedFailsClearly(t *testing.T) {
 - Older thing
 `
 
-	stderr, after, err := runPrepareChangelog(t, changelog, "1.2.0")
+	stderr, after, _, err := runPrepareChangelog(t, changelog, "1.2.0")
 	if err == nil {
 		t.Fatal("expected prepare-changelog.sh to fail on an empty [Unreleased] section")
 	}
@@ -150,5 +151,37 @@ func TestPrepareChangelog_EmptyUnreleasedFailsClearly(t *testing.T) {
 	}
 	if after != changelog {
 		t.Errorf("expected the changelog to be left untouched on failure, got:\n%s", after)
+	}
+}
+
+// TestPrepareChangelog_SecondRunForLastSectionInFile reproduces the bug: a
+// reused section that is also the last one in the file has no following
+// "## [" header for extract_section's sed range to stop at, so its range
+// runs to end of file and its last line is real content, not a header.
+// Unconditionally stripping "the last line of the range" as if it were
+// always that header silently dropped the section's actual last entry -
+// here, with only one entry, that emptied the notes entirely while still
+// exiting 0.
+func TestPrepareChangelog_SecondRunForLastSectionInFile(t *testing.T) {
+	changelog := `# Changelog
+
+## [Unreleased]
+
+## [1.2.0] - 2026-01-01
+
+### Added
+
+- New thing
+`
+
+	stderr, after, notes, err := runPrepareChangelog(t, changelog, "1.2.0")
+	if err != nil {
+		t.Fatalf("prepare-changelog.sh failed: %v (stderr: %s)", err, stderr)
+	}
+	if after != changelog {
+		t.Errorf("expected the changelog to be left untouched on a second run, got:\n%s", after)
+	}
+	if !strings.Contains(notes, "- New thing") {
+		t.Errorf("expected the section's last line to survive in the release notes, got:\n%s", notes)
 	}
 }
