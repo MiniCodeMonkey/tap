@@ -397,8 +397,11 @@ func loadPresentation(file string, cfg *config.Config, baseDir string) (*transfo
 	}
 
 	// Resolve and bundle every component the presentation's slides use.
-	// Dev builds keep source maps and skip minification.
-	resolvedComponents, componentBuildErrs := buildComponents(parsed, baseDir, false, true)
+	// Dev builds keep source maps and skip minification. loadPresentation
+	// is only ever used against a live server (tap dev, tap pdf, tap
+	// screenshot all share it), so an emitted asset's URL always starts
+	// from the server root.
+	resolvedComponents, componentBuildErrs := buildComponents(parsed, baseDir, false, true, "/components/")
 
 	// Transform to frontend format
 	t := transformer.NewWithBaseDir(cfg, baseDir)

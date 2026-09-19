@@ -402,6 +402,53 @@ func TestBuild_WritesComponentBundlesAndRelativeURLs(t *testing.T) {
 	}
 }
 
+// TestBuild_WritesComponentAssets checks that a bundle's emitted (not
+// inlined) assets - an imported image or font at or above the 100 KB
+// inline threshold - land in dist/components/ next to the JS and CSS, by
+// the same name the JavaScript already references.
+func TestBuild_WritesComponentAssets(t *testing.T) {
+	tmpDir := t.TempDir()
+	outputDir := filepath.Join(tmpDir, "dist")
+
+	b := NewWithOutput(outputDir)
+	b.SetComponents(map[string]components.Result{
+		"./slides/RollingDeploy.jsx": {
+			Bundle: &components.Bundle{
+				Name:       "RollingDeploy",
+				Hash:       "abc123",
+				JavaScript: []byte(`export default "components/photo-xyz.png";`),
+				Assets: []components.Asset{
+					{Name: "photo-xyz.png", Content: []byte("fake-png-bytes"), ContentType: "image/png"},
+				},
+			},
+		},
+	})
+
+	cfg := config.DefaultConfig()
+	pres := &parser.Presentation{
+		Slides: []parser.Slide{
+			{Index: 0, Directives: parser.SlideDirectives{Layout: "./slides/RollingDeploy.jsx"}},
+		},
+	}
+
+	result, err := b.Build(cfg, pres)
+	if err != nil {
+		t.Fatalf("Build failed: %v", err)
+	}
+
+	assetPath := filepath.Join(outputDir, "components", "photo-xyz.png")
+	assetContent, err := os.ReadFile(assetPath)
+	if err != nil {
+		t.Fatalf("expected the emitted asset to be written: %v", err)
+	}
+	if string(assetContent) != "fake-png-bytes" {
+		t.Errorf("unexpected asset content: %q", assetContent)
+	}
+	if result.FileCount < 3 {
+		t.Errorf("expected FileCount to include the asset file, got %d", result.FileCount)
+	}
+}
+
 func TestBuild_EmbedsPresentationJSON(t *testing.T) {
 	tmpDir := t.TempDir()
 	outputDir := filepath.Join(tmpDir, "dist")
