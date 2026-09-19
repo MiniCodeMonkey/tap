@@ -485,11 +485,42 @@ func TestHandleQR(t *testing.T) {
 	}
 }
 
-func TestHandleQR_WithPassword(t *testing.T) {
+// TestHandleQR_WithPasswordRequiresAuth checks that /qr - which prints the
+// presenter password straight into the presenter URL and QR code - refuses
+// an unauthenticated request once a presenter password is configured,
+// exactly like /presenter itself. Without this, anyone on the network
+// could read the password off this page without ever passing the
+// presenter gate.
+func TestHandleQR_WithPasswordRequiresAuth(t *testing.T) {
 	s := New(3000)
 	s.SetPresenterPassword("secretpass")
 
 	req := httptest.NewRequest(http.MethodGet, "/qr", nil)
+	w := httptest.NewRecorder()
+
+	s.handleQR(w, req)
+
+	resp := w.Result()
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusForbidden {
+		t.Errorf("expected status %d for an unauthenticated request, got %d", http.StatusForbidden, resp.StatusCode)
+	}
+
+	body, _ := io.ReadAll(resp.Body)
+	if strings.Contains(string(body), "secretpass") {
+		t.Error("response must not leak the presenter password")
+	}
+}
+
+// TestHandleQR_WithCorrectKeyServesThePage checks that /qr serves the page,
+// with the password embedded in the presenter URL, once the request
+// carries the correct ?key=.
+func TestHandleQR_WithCorrectKeyServesThePage(t *testing.T) {
+	s := New(3000)
+	s.SetPresenterPassword("secretpass")
+
+	req := httptest.NewRequest(http.MethodGet, "/qr?key=secretpass", nil)
 	w := httptest.NewRecorder()
 
 	s.handleQR(w, req)
@@ -504,9 +535,30 @@ func TestHandleQR_WithPassword(t *testing.T) {
 	body, _ := io.ReadAll(resp.Body)
 	bodyStr := string(body)
 
-	// Check that password is included in presenter URL
 	if !strings.Contains(bodyStr, "?key=secretpass") {
 		t.Error("expected presenter URL to contain password query param")
+	}
+}
+
+// TestHandleQR_WithPresenterCookieServesThePage checks that /qr also
+// accepts the presenter auth cookie in place of ?key=, matching
+// handlePresenter.
+func TestHandleQR_WithPresenterCookieServesThePage(t *testing.T) {
+	s := New(3000)
+	s.SetPresenterPassword("secretpass")
+	s.SetPresenterSessionToken("session-token")
+
+	req := httptest.NewRequest(http.MethodGet, "/qr", nil)
+	req.AddCookie(&http.Cookie{Name: PresenterAuthCookieName, Value: "session-token"})
+	w := httptest.NewRecorder()
+
+	s.handleQR(w, req)
+
+	resp := w.Result()
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("expected status %d, got %d", http.StatusOK, resp.StatusCode)
 	}
 }
 

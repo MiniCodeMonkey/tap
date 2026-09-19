@@ -75,12 +75,7 @@ func (s *Server) handlePresenter(w http.ResponseWriter, r *http.Request) {
 	password := s.GetPresenterPassword()
 	if password != "" {
 		sessionToken := s.GetPresenterSessionToken()
-		authorized := false
-		if sessionToken != "" {
-			if cookie, err := r.Cookie(PresenterAuthCookieName); err == nil {
-				authorized = subtle.ConstantTimeCompare([]byte(cookie.Value), []byte(sessionToken)) == 1
-			}
-		}
+		authorized := s.presenterCookieAuthorized(r)
 
 		if !authorized {
 			key := r.URL.Query().Get("key")
@@ -122,6 +117,42 @@ func (s *Server) handlePresenter(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(content)
+}
+
+// presenterCookieAuthorized reports whether r carries a presenter auth
+// cookie matching the server's current session token, compared in
+// constant time. False whenever no session token has been issued yet (no
+// one has ever passed ?key=).
+func (s *Server) presenterCookieAuthorized(r *http.Request) bool {
+	sessionToken := s.GetPresenterSessionToken()
+	if sessionToken == "" {
+		return false
+	}
+	cookie, err := r.Cookie(PresenterAuthCookieName)
+	if err != nil {
+		return false
+	}
+	return subtle.ConstantTimeCompare([]byte(cookie.Value), []byte(sessionToken)) == 1
+}
+
+// presenterAuthorized reports whether r may see presenter-only information
+// (the presenter page itself, and anything that reveals the presenter
+// password, such as /qr): always true when no presenter password is
+// configured, and otherwise true when r carries a valid presenter auth
+// cookie or the correct ?key=<password>, compared in constant time.
+func (s *Server) presenterAuthorized(r *http.Request) bool {
+	password := s.GetPresenterPassword()
+	if password == "" {
+		return true
+	}
+	if s.presenterCookieAuthorized(r) {
+		return true
+	}
+	key := r.URL.Query().Get("key")
+	if key == "" {
+		return false
+	}
+	return subtle.ConstantTimeCompare([]byte(key), []byte(password)) == 1
 }
 
 // handleAPIPresentation returns the presentation data as JSON.
@@ -173,10 +204,20 @@ func (s *Server) handleCustomTheme(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleQR serves a page with QR codes for the audience and presenter URLs.
+// The presenter QR code and URL carry the presenter password, so this route
+// requires the same proof handlePresenter does (a valid auth cookie or
+// ?key=<password>) whenever a password is configured; otherwise an
+// unauthenticated request on the network could read the password straight
+// off this page without ever passing the presenter gate.
 func (s *Server) handleQR(w http.ResponseWriter, r *http.Request) {
+	if !s.presenterAuthorized(r) {
+		http.Error(w, "Forbidden: presenter password required. Use ?key=<password>", http.StatusForbidden)
+		return
+	}
+
 	cfg := QRConfig{
 		Port:              s.Port(),
-		PresenterPassword: s.presenterPassword,
+		PresenterPassword: s.GetPresenterPassword(),
 	}
 
 	audienceURL, err := GenerateAudienceURL(cfg)

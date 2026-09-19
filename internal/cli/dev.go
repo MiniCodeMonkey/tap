@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -245,7 +246,10 @@ func runDevServer(file string, port int, presenterPassword string, headless bool
 	audienceURL := fmt.Sprintf("http://localhost:%d", port)
 	presenterURL := fmt.Sprintf("http://localhost:%d/presenter", port)
 	if presenterPassword != "" {
-		presenterURL += "?key=" + presenterPassword
+		// URL-encoded, so a password with a space, "&", or other character
+		// with meaning in a URL query still round-trips as the same ?key=
+		// value a client sends back.
+		presenterURL += "?key=" + url.QueryEscape(presenterPassword)
 	}
 
 	// Set up signal handling for graceful shutdown
