@@ -6,8 +6,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
-## [2.0.0-beta.1] - 2026-09-19
-
 ### Breaking changes
 
 - **`|||` column separator removed** - Multi-column and multi-slot layouts now use `::slotname` marker lines instead (e.g. `::right`, `::sidebar`, `::caption`). Content before the first marker is the `default` slot. See `docs/reference/slide-directives.md` and `docs/reference/layouts-reference.md`.
@@ -52,6 +50,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- **`tap --version` reports the release version** - Release builds set a version flag on a variable that did not exist, so every release printed `0.1.0`. A build without the flag now prints `dev`.
 - **Unquoted hex colors in directives** - A value like `background: #1a1a2e` no longer needs quotes in the directive block.
 - **Fragment count** - The reported fragment count no longer includes a dead first press that revealed nothing.
 - **Presenter view mirrors fragment and step state** - The presenter's current-slide panel now shows the same revealed fragments and step as the audience view, not just the slide index.

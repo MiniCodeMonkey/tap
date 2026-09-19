@@ -3,7 +3,7 @@
 
 BINARY_NAME=tap
 BUILD_DIR=bin
-VERSION ?= 0.1.0
+VERSION ?= dev
 
 # Go parameters
 GOCMD=go
@@ -13,7 +13,7 @@ GOMOD=$(GOCMD) mod
 GOVET=$(GOCMD) vet
 
 # Build flags
-LDFLAGS=-ldflags "-X main.version=$(VERSION)"
+LDFLAGS=-ldflags "-X github.com/MiniCodeMonkey/tap/internal/cli.Version=$(VERSION)"
 
 # Default target
 .PHONY: all

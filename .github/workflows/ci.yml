@@ -73,6 +73,11 @@ jobs:
       - name: Run Go tests
         run: go test ./...
 
+      - name: Check that the release version flag reaches the binary
+        run: |
+          go build -ldflags "-X github.com/MiniCodeMonkey/tap/internal/cli.Version=9.9.9-ci" -o /tmp/tap-version-check ./cmd/tap
+          test "$(/tmp/tap-version-check --version)" = "tap version 9.9.9-ci"
+
       - name: Run Go linter
         uses: golangci/golangci-lint-action@v6
         with:

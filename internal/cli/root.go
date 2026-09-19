@@ -8,10 +8,10 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// Version information
-const (
-	Version = "0.1.0"
-)
+// Version is the release version. The release build sets it with
+// -ldflags "-X github.com/MiniCodeMonkey/tap/internal/cli.Version=<version>",
+// which only works on a variable, so this is not a constant.
+var Version = "dev"
 
 // Global flags
 var verbose bool
