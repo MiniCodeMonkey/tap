@@ -3,6 +3,7 @@ import { cleanup, render, waitFor } from '@testing-library/react';
 import { Slide } from './Slide';
 import { resolveLayout } from '../layouts/registry';
 import type { Slide as SlideData } from '$lib/types';
+import { loadPresentation, resetPresentation } from '$lib/stores/presentation';
 
 vi.mock('../layouts/registry', async (importOriginal) => {
 	const actual = await importOriginal<typeof import('../layouts/registry')>();
@@ -87,6 +88,31 @@ describe('Slide', () => {
 		expect(root).toHaveAttribute('data-layout', 'quote');
 		expect(root).toHaveAttribute('data-index', '3');
 		expect(root).toHaveAttribute('data-total', '5');
+	});
+
+	it('sets data-slide-numbers="off" only when the deck sets slideNumbers: false', () => {
+		const slide = makeSlide();
+		function slideNumbersAttribute(): string | null {
+			const { container, unmount } = render(
+				<Slide slide={slide} active printMode={false} fragmentIndex={-1} step={0} total={1} />
+			);
+			const value = container.querySelector('.slide')!.getAttribute('data-slide-numbers');
+			unmount();
+			return value;
+		}
+
+		try {
+			resetPresentation();
+			expect(slideNumbersAttribute()).toBeNull();
+
+			loadPresentation({ config: { slideNumbers: true }, slides: [slide] });
+			expect(slideNumbersAttribute()).toBeNull();
+
+			loadPresentation({ config: { slideNumbers: false }, slides: [slide] });
+			expect(slideNumbersAttribute()).toBe('off');
+		} finally {
+			resetPresentation();
+		}
 	});
 
 	it('keeps slide-content as a plain wrapper with no data attributes', () => {

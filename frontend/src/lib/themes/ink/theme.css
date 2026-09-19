@@ -1322,3 +1322,15 @@
 [data-theme='ink'] .map-content-overlay {
 	color: var(--fg);
 }
+
+/* ============================================================================
+ * Slide numbers off
+ *
+ * Slide.tsx sets data-slide-numbers="off" on the slide root when the deck's
+ * frontmatter says `slideNumbers: false`. The title slide keeps
+ * its ::after, which is a decoration there, not the number.
+ * ============================================================================ */
+
+[data-theme='ink'] .slide[data-layout]:not([data-layout='title'])[data-slide-numbers='off']::after {
+	content: none;
+}

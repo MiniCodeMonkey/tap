@@ -26,6 +26,11 @@ See `skills/tap/rules/themes.md` for the full list of 21 themes with pitch and p
 aspectRatio: 16:9  # Options: 16:9 (default), 4:3, 16:10
 ```
 
+### slideNumbers
+```yaml
+slideNumbers: false  # Hide the slide number the theme draws (default: true)
+```
+
 ## Animations
 
 ### transition
@@ -121,6 +126,7 @@ drivers:
 | `date` | string | None |
 | `theme` | string | `base` |
 | `aspectRatio` | string | `16:9` |
+| `slideNumbers` | boolean | `true` |
 | `transition` | string | `fade` |
 | `fragments` | boolean | `false` |
 | `themeColors` | object | None |

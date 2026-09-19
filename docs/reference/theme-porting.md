@@ -123,6 +123,15 @@ on the scaling wrapper (the inner `.slide`), matching the interface the
 loader and `SlideCanvas` already implement: you never need to set it
 yourself.
 
+**Slide numbers must honor `data-slide-numbers="off"`.** A deck with
+`slideNumbers: false` in its frontmatter gets that attribute on the same
+inner `.slide`. A theme that prints `attr(data-index)` or `attr(data-total)`
+ends its `theme.css` with a rule that removes the number, usually
+`[data-theme='x'] .slide[data-layout][data-slide-numbers='off']::after { content: none; }`.
+Put it last, so it outranks layout-specific rules for the same
+pseudo-element, and exclude any layout that reuses that pseudo-element for
+a decoration instead of the number.
+
 ### 3.2 `.slide-content` is unpadded by default; overriding its box needs `width`/`height: auto` too
 
 Base's `layouts.css` sets `.slide-content { position: relative; width: 100%;

@@ -29,6 +29,7 @@ date: 2024-01-15
 | `date` | string | Presentation date |
 | `aspectRatio` | string | Slide aspect ratio (default: `16:9`) |
 | `transition` | string | Default slide transition: `none`, `fade`, `slide`, `push`, `zoom` |
+| `slideNumbers` | boolean | Set to `false` to hide the theme's slide numbers (default: `true`) |
 
 See [Frontmatter Options](/reference/frontmatter-options) for the complete reference.
 

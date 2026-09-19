@@ -1565,3 +1565,16 @@
 	border: 3px solid var(--fg);
 	width: fit-content;
 }
+
+/* ============================================================================
+ * Slide numbers off
+ *
+ * Slide.tsx sets data-slide-numbers="off" on the slide root when the deck's
+ * frontmatter says `slideNumbers: false`. The station marker stays
+ * as an empty circle on the line. The title slide's ::before is a
+ * decoration, not the number, so it is left alone.
+ * ============================================================================ */
+
+[data-theme='transit'] .slide[data-layout]:not([data-layout='title'])[data-slide-numbers='off']::before {
+	content: '';
+}
