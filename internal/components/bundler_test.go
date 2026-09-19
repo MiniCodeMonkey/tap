@@ -531,6 +531,51 @@ func TestBuildEmitsAssetsAtOrAboveTheSizeThreshold(t *testing.T) {
 	}
 }
 
+// TestBuildEmittedAssetNameIsSafeForAHostileFileName reproduces the bundle
+// syntax break a hostile asset file name causes: esbuild bakes an emitted
+// file's name into the bundle's JavaScript as a plain string literal, so a
+// name built from the original file's base name ("we ird'na"me<x>.png")
+// can break the string it lands in. The emitted name must only ever
+// contain safe characters.
+func TestBuildEmittedAssetNameIsSafeForAHostileFileName(t *testing.T) {
+	deckDirectory := t.TempDir()
+	image := make([]byte, assetInlineThreshold)
+	for i := range image {
+		image[i] = byte(i)
+	}
+	hostileName := `we ird'na"me<x>.png`
+	if err := os.WriteFile(filepath.Join(deckDirectory, hostileName), image, 0o644); err != nil {
+		t.Skipf("filesystem does not support this file name: %v", err)
+	}
+	// Escaped as a JS string literal: the import specifier still has to
+	// parse, whatever character the file name itself carries.
+	escapedName := strings.NewReplacer(`\`, `\\`, `"`, `\"`).Replace(hostileName)
+	source := "import photo from \"./" + escapedName + "\";\n" +
+		"export default function WithImage() {\n  return photo;\n}\n"
+	if err := os.WriteFile(filepath.Join(deckDirectory, "WithImage.jsx"), []byte(source), 0o644); err != nil {
+		t.Fatalf("write entry fixture: %v", err)
+	}
+
+	bundle, errs := Build("WithImage.jsx", Options{DeckDirectory: deckDirectory, AssetPublicPath: "/components/"})
+	if len(errs) > 0 {
+		t.Fatalf("unexpected errors: %v", errs)
+	}
+	if len(bundle.Assets) != 1 {
+		t.Fatalf("expected 1 emitted asset, got %d: %+v", len(bundle.Assets), bundle.Assets)
+	}
+
+	asset := bundle.Assets[0]
+	if unsafeNameCharacters.MatchString(strings.TrimSuffix(asset.Name, filepath.Ext(asset.Name))) {
+		t.Errorf("emitted asset name %q contains unsafe characters", asset.Name)
+	}
+	if strings.ContainsAny(asset.Name, `'"<> `) {
+		t.Errorf("emitted asset name %q must not carry the original file name's unsafe characters", asset.Name)
+	}
+	if !strings.Contains(string(bundle.JavaScript), "/components/"+asset.Name) {
+		t.Errorf("expected the bundle's JavaScript to reference %q", asset.Name)
+	}
+}
+
 // writeCSSAssetFixture writes a JSX entry file that imports a stylesheet
 // with a url() token pointing at a large image, plus the image itself
 // sized to bytes, into deckDirectory.

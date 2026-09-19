@@ -193,8 +193,13 @@ func Build(sourcePath string, options Options) (*Bundle, []BuildError) {
 		// AssetNames and PublicPath only take effect for an asset the
 		// assetSizePlugin sends through the "file" loader (an asset at or
 		// above assetInlineThreshold); a data-URL asset never reaches an
-		// output file, so these are unused below that size.
-		AssetNames: "[name]-[hash]",
+		// output file, so these are unused below that size. Dropping
+		// [name] (the original file's base name) avoids baking an unsafe
+		// character straight into the bundle's JavaScript: esbuild embeds
+		// the emitted file's name as a plain string literal, so a file
+		// named "we ird'na"me<x>.png" would otherwise break the bundle's
+		// syntax.
+		AssetNames: "asset-[hash]",
 		PublicPath: options.AssetPublicPath,
 		Loader: map[string]api.Loader{
 			// LLM-authored decks often put JSX in a plain .js file; treat
