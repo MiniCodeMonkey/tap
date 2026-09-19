@@ -52,9 +52,12 @@ wizard that asks for a title, a theme, and a filename; `--output` and
 tap new --output my-talk.md --theme terminal
 ```
 
-The wizard needs a terminal. If you are scripting, write the markdown file
-yourself: a deck is a plain file, and the frontmatter below is all it
-needs.
+With no terminal attached, or with `--yes`, the wizard is skipped and the
+file is written straight from the flags:
+
+```bash
+tap new --yes --title "My Talk" --theme terminal --output my-talk.md
+```
 
 It writes `my-talk.md` with eight starter slides. The first two look like
 this:

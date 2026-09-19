@@ -315,6 +315,85 @@ describe('keyboard navigation', () => {
 		});
 	});
 
+	describe('shortcut overlay', () => {
+		function press(key: string): void {
+			keydownHandler?.(new KeyboardEvent('keydown', { key }));
+		}
+
+		it('should open the overlay on ?', () => {
+			const onToggleHelp = vi.fn();
+			cleanup = setupKeyboardNavigation({ onToggleHelp, isHelpOpen: () => false });
+
+			const event = new KeyboardEvent('keydown', { key: '?' });
+			const preventDefaultSpy = vi.spyOn(event, 'preventDefault');
+			keydownHandler?.(event);
+
+			expect(onToggleHelp).toHaveBeenCalledTimes(1);
+			expect(preventDefaultSpy).toHaveBeenCalled();
+		});
+
+		it('should close the overlay on ? or Escape while it is open', () => {
+			const onToggleHelp = vi.fn();
+			cleanup = setupKeyboardNavigation({ onToggleHelp, isHelpOpen: () => true });
+
+			press('?');
+			press('Escape');
+
+			expect(onToggleHelp).toHaveBeenCalledTimes(2);
+		});
+
+		it('should ignore every other shortcut while the overlay is open', () => {
+			const onToggleHelp = vi.fn();
+			const onToggleOverview = vi.fn();
+			cleanup = setupKeyboardNavigation({ onToggleHelp, onToggleOverview, isHelpOpen: () => true });
+
+			for (const key of ['ArrowRight', 'ArrowLeft', 'Home', 'End', 'o', 't', 'f', 's']) {
+				press(key);
+			}
+
+			expect(presentationStore.nextSlide).not.toHaveBeenCalled();
+			expect(presentationStore.prevSlide).not.toHaveBeenCalled();
+			expect(presentationStore.goToSlide).not.toHaveBeenCalled();
+			expect(presentationStore.cycleTheme).not.toHaveBeenCalled();
+			expect(onToggleOverview).not.toHaveBeenCalled();
+			expect(onToggleHelp).not.toHaveBeenCalled();
+		});
+
+		it('should close only the overlay on Escape, not exit fullscreen', () => {
+			Object.defineProperty(document, 'fullscreenElement', {
+				value: document.documentElement,
+				configurable: true
+			});
+			const onToggleHelp = vi.fn();
+			cleanup = setupKeyboardNavigation({ onToggleHelp, isHelpOpen: () => true });
+
+			press('Escape');
+
+			expect(onToggleHelp).toHaveBeenCalledTimes(1);
+			expect(document.exitFullscreen).not.toHaveBeenCalled();
+		});
+
+		it('should not open the overlay while the overview is open', () => {
+			const onToggleHelp = vi.fn();
+			cleanup = setupKeyboardNavigation({ onToggleHelp, isHelpOpen: () => false, isOverviewOpen: () => true });
+
+			press('?');
+
+			expect(onToggleHelp).not.toHaveBeenCalled();
+		});
+
+		it('should not open the overlay while an input is focused', () => {
+			const input = document.createElement('input');
+			Object.defineProperty(document, 'activeElement', { value: input, configurable: true });
+			const onToggleHelp = vi.fn();
+			cleanup = setupKeyboardNavigation({ onToggleHelp, isHelpOpen: () => false });
+
+			press('?');
+
+			expect(onToggleHelp).not.toHaveBeenCalled();
+		});
+	});
+
 	describe('input focus handling', () => {
 		it('should skip navigation when input is focused', () => {
 			const inputElement = document.createElement('input');

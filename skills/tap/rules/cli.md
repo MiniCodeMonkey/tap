@@ -4,26 +4,34 @@ Complete reference for Tap CLI commands. See `docs/reference/cli-commands.md` fo
 
 ## tap new
 
-Create a new presentation with an interactive wizard.
+Create a new presentation, interactively or non-interactively.
 
 ```bash
 tap new
+tap new --yes --title <title> --theme <slug> --output <file>
 ```
 
 | Flag | Short | Description |
 |------|-------|-------------|
-| `--theme <slug>` | `-t` | Pre-fill the wizard's theme step |
-| `--output <file>` | `-o` | Pre-fill the output filename |
+| `--title <title>` | | Presentation title (default: `"My Presentation"`) |
+| `--theme <slug>` | `-t` | Theme (default: the first built-in theme) |
+| `--output <file>` | `-o` | Output filename (default: derived from the title) |
+| `--yes` | `-y` | Skip the wizard and write from flags and defaults |
+| `--force` | | Overwrite `--output` if it already exists |
 
-The wizard always runs and needs a terminal, so an agent working
-unattended should write the markdown file directly rather than call
-`tap new`.
+With a terminal attached, `tap new` opens an interactive wizard and the
+flags only pre-fill its steps. With `--yes`, or with no terminal attached
+to standard input, the wizard is skipped: the file is written straight
+from the flags, and only the written path is printed to standard output.
+An agent working unattended should call `tap new --yes ...` rather than
+write the markdown file directly.
 
 Examples:
 ```bash
 tap new                            # interactive wizard
 tap new --theme terminal           # wizard, terminal theme pre-filled
 tap new --theme keynote --output launch.md
+tap new --yes --title "My Talk" --theme terminal --output talk.md   # no wizard
 ```
 
 ## tap dev

@@ -27,12 +27,19 @@ mv tap-darwin-arm64 /usr/local/bin/tap
 
 ## Create Your First Presentation
 
-`tap new` opens an interactive wizard (title, theme, filename) and needs a
-terminal, so writing the file yourself is usually faster when working
-unattended:
+`tap new` opens an interactive wizard (title, theme, filename) with a
+terminal attached:
 
 ```bash
 tap new --output my-talk.md --theme terminal
+```
+
+With no terminal attached, or with `--yes`, it skips the wizard and writes
+the file straight from the flags -- the mode to use when working
+unattended:
+
+```bash
+tap new --yes --title "My Talk" --output my-talk.md --theme terminal
 ```
 
 A deck is a plain markdown file. This is all it needs:
@@ -83,7 +90,7 @@ tap serve dist
 
 ## Essential Workflow
 
-1. Write the markdown file (or `tap new` for the wizard)
+1. `tap new --yes ...` (or `tap new` for the wizard) to write the markdown file
 2. `tap dev <file>` - Develop with live preview
 3. `tap screenshot <file> --slide <n>` - Check one slide; exit status 1 means it is broken
 4. `tap build <file>` - Build for deployment

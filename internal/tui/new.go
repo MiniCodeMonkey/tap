@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -77,6 +78,21 @@ type NewModelResult struct {
 	Aborted  bool
 }
 
+// DefaultTitle is the title tap new falls back to when none is given,
+// whether the wizard's title step is left blank or --title is omitted in
+// non-interactive mode.
+const DefaultTitle = "My Presentation"
+
+// DefaultTheme is the theme slug tap new falls back to when none is given.
+// It is the first entry in AvailableThemes, the same theme the wizard
+// starts on.
+func DefaultTheme() string {
+	if len(AvailableThemes) == 0 {
+		return "base"
+	}
+	return AvailableThemes[0].Name
+}
+
 // NewNewModel creates a new NewModel for the presentation wizard.
 func NewNewModel(prefilledTheme, prefilledFilename string) NewModel {
 	ti := textinput.New()
@@ -142,7 +158,7 @@ func (m NewModel) updateTitle(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "enter":
 			title := strings.TrimSpace(m.titleInput.Value())
 			if title == "" {
-				title = "My Presentation"
+				title = DefaultTitle
 			}
 			m.titleInput.SetValue(title)
 
@@ -244,7 +260,14 @@ func (m *NewModel) setDefaultFilename() {
 }
 
 func (m NewModel) generateDefaultFilename() string {
-	title := m.titleInput.Value()
+	return FilenameFromTitle(m.titleInput.Value())
+}
+
+// FilenameFromTitle derives a default output filename from a presentation
+// title, for example "My Talk" becomes "my-talk.md". Exported so tap new's
+// non-interactive mode can derive the same default the wizard does when
+// --output is omitted.
+func FilenameFromTitle(title string) string {
 	if title == "" {
 		title = "presentation"
 	}
@@ -420,12 +443,13 @@ func (m NewModel) generateMarkdown() string {
 }
 
 // GenerateStarterMarkdown generates markdown content for a new presentation.
-// Exported for testing.
+// The title and author are written as quoted, escaped YAML strings, so a
+// title that contains a double quote or a backslash still parses.
 func GenerateStarterMarkdown(title, theme, date, author string) string {
 	return fmt.Sprintf(`---
-title: "%s"
+title: %s
 theme: %s
-author: "%s"
+author: %s
 date: "%s"
 aspectRatio: "16:9"
 transition: fade
@@ -505,7 +529,7 @@ layout: quote
 
 Questions?
 
-`, title, theme, author, date, title, author)
+`, strconv.Quote(title), theme, strconv.Quote(author), date, title, author)
 }
 
 // RunNewWizard runs the new presentation wizard and returns the result.

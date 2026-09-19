@@ -11,6 +11,7 @@ import {
 	selectTotalSlides,
 	cycleTheme
 } from '$lib/stores/presentation';
+import { HELP_KEY } from './shortcuts';
 
 // ============================================================================
 // Types
@@ -34,6 +35,16 @@ export interface KeyboardOptions {
 	 * Callback to check if overview is currently open.
 	 */
 	isOverviewOpen?: () => boolean;
+
+	/**
+	 * Callback when the shortcut overlay should be toggled.
+	 */
+	onToggleHelp?: () => void;
+
+	/**
+	 * Callback to check if the shortcut overlay is currently open.
+	 */
+	isHelpOpen?: () => boolean;
 
 	/**
 	 * Callback after slide navigation occurs.
@@ -174,6 +185,18 @@ function handleKeyDown(event: KeyboardEvent): void {
 
 	const key = event.key;
 
+	// While the shortcut overlay is open, only ? and Escape reach it (to
+	// close it). Every other key is ignored, the same way the overview
+	// swallows keys.
+	const isHelp = currentOptions.isHelpOpen?.() ?? false;
+	if (isHelp) {
+		if (key === HELP_KEY || key === 'Escape') {
+			event.preventDefault();
+			currentOptions.onToggleHelp?.();
+		}
+		return;
+	}
+
 	// Handle overview mode specially
 	const isOverview = currentOptions.isOverviewOpen?.() ?? false;
 
@@ -195,6 +218,13 @@ function handleKeyDown(event: KeyboardEvent): void {
 	if (isOverview) {
 		// Overview handles its own arrow key navigation for grid selection
 		// Only pass through Enter to select and close
+		return;
+	}
+
+	// ? - toggle the shortcut overlay
+	if (key === HELP_KEY && currentOptions.onToggleHelp) {
+		event.preventDefault();
+		currentOptions.onToggleHelp();
 		return;
 	}
 

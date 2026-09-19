@@ -18,20 +18,24 @@ Run `tap --help` to see all available commands, or `tap <command> --help` for co
 
 ## tap new
 
-Create a new presentation. `tap new` always opens an interactive wizard that walks you through a title, a theme, and a filename; the flags pre-fill steps rather than skip the wizard. The command needs a terminal, so it cannot run unattended.
+Create a new presentation. With a terminal attached, `tap new` opens an interactive wizard that walks you through a title, a theme, and a filename; the flags pre-fill those steps. With `--yes` (or `-y`), or with no terminal attached to standard input, the wizard is skipped: the file is written straight from the flags, with defaults for anything not given, and only the written path goes to standard output. This is the mode for scripts, CI, and LLM agents.
 
 ### Usage
 
 ```bash
 tap new
+tap new --yes [--title <title>] [--theme <slug>] [--output <file>] [--force]
 ```
 
 ### Flags
 
 | Flag | Short | Description |
 |------|-------|-------------|
-| `--theme <slug>` | `-t` | Pre-fill the wizard's theme step with this theme |
-| `--output <file>` | `-o` | Pre-fill the wizard's output filename |
+| `--title <title>` | | Presentation title (default: `"My Presentation"`) |
+| `--theme <slug>` | `-t` | Theme for the presentation (default: the first built-in theme) |
+| `--output <file>` | `-o` | Output filename (default: derived from the title, for example `my-talk.md`) |
+| `--yes` | `-y` | Skip the wizard and write the file from flags and defaults |
+| `--force` | | Overwrite `--output` if it already exists (non-interactive mode only) |
 
 ### Examples
 
@@ -44,7 +48,15 @@ tap new --theme terminal
 
 # Combine flags
 tap new --theme keynote --output launch.md
+
+# Non-interactive: no wizard, no terminal needed
+tap new --yes --title "My Talk" --theme terminal --output talk.md
+
+# Overwrite an existing file non-interactively
+tap new --yes --output talk.md --force
 ```
+
+Non-interactive mode refuses to overwrite an existing `--output` file unless `--force` is given. With no terminal attached to standard input, `tap new` behaves as if `--yes` was passed, so it never hangs waiting on the wizard.
 
 ### Output
 
@@ -506,7 +518,7 @@ unknown theme, or a rendered slide that shows an error card.
 
 | Command | Description | Example |
 |---------|-------------|---------|
-| `tap new` | Create a new presentation (interactive wizard) | `tap new --theme terminal` |
+| `tap new` | Create a new presentation (wizard, or non-interactive with `--yes`) | `tap new --yes --theme terminal --output talk.md` |
 | `tap dev [file]` | Start dev server | `tap dev slides.md` |
 | `tap build <file>` | Build for production | `tap build slides.md` |
 | `tap serve [dir]` | Serve built files | `tap serve dist` |

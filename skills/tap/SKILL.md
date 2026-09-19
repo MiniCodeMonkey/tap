@@ -27,6 +27,7 @@ Use Tap when building:
 ```bash
 tap new                            # interactive wizard: title, theme, filename (needs a terminal)
 tap new --theme terminal -o my-talk.md   # same wizard, with those steps pre-filled
+tap new --yes --title "My Talk" --theme terminal --output my-talk.md   # no wizard, scriptable
 tap dev my-talk.md                 # start the dev server (live code execution works here)
 tap build my-talk.md               # build a static site (no live code execution)
 tap pdf my-talk.md                 # export to PDF
@@ -35,8 +36,11 @@ tap theme list                     # every built-in theme
 tap theme show terminal --prompt   # style brief for an image model
 ```
 
-`tap new` always opens a terminal wizard, so an unattended agent should
-write the markdown file directly instead.
+With a terminal attached, `tap new` opens an interactive wizard. An
+unattended agent should pass `--yes` instead (or rely on it automatically:
+`tap new` behaves as `--yes` when standard input is not a terminal),
+which writes the file straight from `--title`, `--theme`, and `--output`
+with no wizard.
 
 Check your own work by rendering it: `tap screenshot` exits with status 1
 when a slide shows an error card, and `tap build` exits 1 on any component
