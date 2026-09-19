@@ -4,6 +4,8 @@ package parser
 import (
 	"encoding/json"
 	"fmt"
+	stdhtml "html"
+	"os"
 	"regexp"
 	"strings"
 
@@ -122,6 +124,7 @@ func New() *Parser {
 			// registered transformers, of which there are none yet.
 			parser.WithASTTransformers(
 				util.Prioritized(NewHeadingLengthTransformer(), 100),
+				util.Prioritized(NewBlockquoteLengthTransformer(), 100),
 			),
 		),
 		goldmark.WithRendererOptions(
@@ -338,7 +341,7 @@ func (p *Parser) Parse(content []byte) (*Presentation, error) {
 		// Pre-process images with attributes (e.g., {width=50%}) to HTML.
 		// Every replacement stays on the single line the image markdown
 		// was on, so this never shifts line numbers.
-		contentAfterDirectives = transformImageAttributes(contentAfterDirectives)
+		contentAfterDirectives = transformImageAttributes(contentAfterDirectives, len(presentation.Slides)+1)
 
 		// Pre-process asciinema code blocks to move info string meta into
 		// body. A block with metadata pairs turns one line into several,
@@ -691,10 +694,63 @@ func hasPauseMarkers(content string) bool {
 	return pausePattern.MatchString(content)
 }
 
+// cssLengthPattern matches a bare CSS length or percentage value: an
+// optional sign, digits with an optional decimal part, and a known unit
+// (or no unit at all, for "0"). The unit is matched case-insensitively -
+// CSS itself treats "300PX" the same as "300px" - everything else about
+// the pattern stays case-sensitive. Anything that doesn't match this is
+// rejected outright rather than interpolated into a style attribute, since
+// an unvalidated value could otherwise close the attribute early or add a
+// second CSS declaration; calc(...) is always rejected this way, since it
+// is never a bare number and unit.
+var cssLengthPattern = regexp.MustCompile(`(?i)^-?\d+(\.\d+)?(px|%|em|rem|vw|vh|vmin|vmax|pt|pc|cm|mm|in|ch|ex)?$`)
+
+// htmlEntityReferencePattern matches the part of an HTML entity reference
+// that follows its leading "&": a named reference ("amp;", "lt;", ...), a
+// decimal numeric reference ("#39;"), or a hexadecimal one ("#x27;").
+var htmlEntityReferencePattern = regexp.MustCompile(`^(#[0-9]+;|#[xX][0-9a-fA-F]+;|[a-zA-Z][a-zA-Z0-9]*;)`)
+
+// escapeAltTextOnce escapes text for use inside an HTML attribute the same
+// way html.EscapeString does, except an "&" that already begins a valid
+// HTML entity reference is left alone instead of being escaped into
+// "&amp;...". Alt text reaches this function as raw markdown source, not
+// goldmark output, so an entity reference already present ("AT&amp;T")
+// came from the author typing it that way, not from a previous escaping
+// pass - escaping its "&" again would turn it into "&amp;amp;T", visibly
+// wrong once rendered. A "&" that doesn't start a valid reference (plain
+// "AT&T") is raw text and is escaped normally.
+func escapeAltTextOnce(s string) string {
+	var b strings.Builder
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		switch c {
+		case '&':
+			if htmlEntityReferencePattern.MatchString(s[i+1:]) {
+				b.WriteByte(c)
+				continue
+			}
+			b.WriteString("&amp;")
+		case '<':
+			b.WriteString("&lt;")
+		case '>':
+			b.WriteString("&gt;")
+		case '"':
+			b.WriteString("&#34;")
+		case '\'':
+			b.WriteString("&#39;")
+		default:
+			b.WriteByte(c)
+		}
+	}
+	return b.String()
+}
+
 // transformImageAttributes converts markdown images with attributes to HTML.
 // It transforms ![alt](src){width=50%} to <img src="src" alt="alt" style="width: 50%">.
 // This pre-processing is needed because goldmark doesn't handle the {attr} syntax.
-func transformImageAttributes(content string) string {
+// slideNumber is used only to name the slide in a warning printed to stderr
+// when an attribute value is rejected as unsafe.
+func transformImageAttributes(content string, slideNumber int) string {
 	images := ParseImages(content)
 
 	for _, img := range images {
@@ -706,7 +762,11 @@ func transformImageAttributes(content string) string {
 		// Build style attribute
 		var styles []string
 		if img.Attributes.Width != "" {
-			styles = append(styles, "width: "+img.Attributes.Width)
+			if cssLengthPattern.MatchString(img.Attributes.Width) {
+				styles = append(styles, "width: "+img.Attributes.Width)
+			} else {
+				fmt.Fprintf(os.Stderr, "warning: slide %d: dropped invalid width value %q on image %q\n", slideNumber, img.Attributes.Width, img.AltText)
+			}
 		}
 		if img.Attributes.Position != "" {
 			switch img.Attributes.Position {
@@ -728,8 +788,13 @@ func transformImageAttributes(content string) string {
 			styleAttr = ` style="` + strings.Join(styles, "; ") + `"`
 		}
 
-		// Build the HTML img tag
-		htmlImg := `<img src="` + img.URL + `" alt="` + img.AltText + `"` + styleAttr + `>`
+		// Build the HTML img tag. Alt text and the URL are raw markdown
+		// source at this point (transformImageAttributes runs before
+		// goldmark sees the content), so they are escaped here, the only
+		// place this hand-built tag's attributes are assembled, to guard
+		// against a quote, "&", "<", or ">" in either one closing the
+		// attribute early or breaking the tag out of raw-HTML mode.
+		htmlImg := `<img src="` + stdhtml.EscapeString(img.URL) + `" alt="` + escapeAltTextOnce(img.AltText) + `"` + styleAttr + `>`
 
 		// Replace the markdown image with HTML
 		content = strings.Replace(content, img.Raw, htmlImg, 1)

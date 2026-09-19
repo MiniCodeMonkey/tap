@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -27,6 +28,7 @@ var (
 	devPort              int
 	devPresenterPassword string
 	devHeadless          bool
+	devAllowOrigins      []string
 )
 
 // devCmd represents the dev command
@@ -72,7 +74,7 @@ Examples:
 			file = args[0]
 		}
 
-		return runDevServer(file, devPort, devPresenterPassword, devHeadless, cmd.Flags().Changed("port"))
+		return runDevServer(file, devPort, devPresenterPassword, devHeadless, cmd.Flags().Changed("port"), devAllowOrigins)
 	},
 }
 
@@ -84,13 +86,14 @@ func init() {
 	devCmd.Flags().IntVarP(&devPort, "port", "p", 3000, "port for the dev server")
 	devCmd.Flags().StringVar(&devPresenterPassword, "presenter-password", "", "password to protect the presenter view")
 	devCmd.Flags().BoolVar(&devHeadless, "headless", false, "run without TUI (for testing/automation)")
+	devCmd.Flags().StringArrayVar(&devAllowOrigins, "allow-origin", nil, "additional origin (scheme://host:port) allowed to connect to the websocket hub, or host (host:port) allowed in a request's Host header, for a contributor's Vite dev server or a non-local presenter host (repeatable)")
 }
 
 // runDevServer starts the dev server with hot reload and TUI. portExplicit
 // is whether the user passed --port themselves (cmd.Flags().Changed
 // ("port")): it decides whether a busy port fails outright or falls back
 // to the next one (see startOnAvailablePort).
-func runDevServer(file string, port int, presenterPassword string, headless bool, portExplicit bool) error {
+func runDevServer(file string, port int, presenterPassword string, headless bool, portExplicit bool, allowOrigins []string) error {
 	// Resolve absolute path
 	absFile, err := filepath.Abs(file)
 	if err != nil {
@@ -147,10 +150,26 @@ func runDevServer(file string, port int, presenterPassword string, headless bool
 			hub.SetStateRetention(retention)
 		}
 	}
+	hub.SetAllowedOrigins(allowOrigins)
+	hub.SetPresenterPassword(presenterPassword)
+	// A presenter session token, generated once per process, is what the
+	// presenter auth cookie actually carries (see
+	// server.GeneratePresenterSessionToken): the raw password never rides
+	// in a cookie, since Go's cookie jar sanitizes a value containing a
+	// semicolon, quote, backslash, space, or non-ASCII character, which
+	// would otherwise silently break the compare for a real password.
+	var presenterSessionToken string
+	if presenterPassword != "" {
+		presenterSessionToken, err = server.GeneratePresenterSessionToken()
+		if err != nil {
+			return fmt.Errorf("failed to generate presenter session token: %w", err)
+		}
+	}
+	hub.SetPresenterSessionToken(presenterSessionToken)
 	go hub.Run()
 	defer hub.Stop()
 
-	hub.SetSlideCount(len(pres.Slides))
+	hub.SetPresentationMeta(len(pres.Slides), server.ComputeRevision(pres, componentBundleFiles(resolvedComponents)))
 
 	// Create, configure, and start the server. A candidate port that is
 	// already bound (another tap dev, or anything else, listening on it)
@@ -163,6 +182,8 @@ func runDevServer(file string, port int, presenterPassword string, headless bool
 		candidate := server.New(candidatePort)
 		candidate.SetPresentation(pres)
 		candidate.SetPresenterPassword(presenterPassword)
+		candidate.SetPresenterSessionToken(presenterSessionToken)
+		candidate.SetAllowedOrigins(allowOrigins)
 		candidate.SetBaseDir(baseDir) // Enable serving local files (images, etc.)
 		candidate.SetComponentBundles(componentBundleFiles(resolvedComponents))
 		if customThemePath != "" {
@@ -213,7 +234,7 @@ func runDevServer(file string, port int, presenterPassword string, headless bool
 		watcher.AddExtraDirs(externalInputDirs(newResolvedComponents, baseDir))
 		srv.SetComponentBundles(componentBundleFiles(newResolvedComponents))
 		srv.SetPresentation(newPres)
-		hub.SetSlideCount(len(newPres.Slides))
+		hub.SetPresentationMeta(len(newPres.Slides), server.ComputeRevision(newPres, componentBundleFiles(newResolvedComponents)))
 		_ = hub.BroadcastReload()
 	})
 
@@ -226,7 +247,10 @@ func runDevServer(file string, port int, presenterPassword string, headless bool
 	audienceURL := fmt.Sprintf("http://localhost:%d", port)
 	presenterURL := fmt.Sprintf("http://localhost:%d/presenter", port)
 	if presenterPassword != "" {
-		presenterURL += "?key=" + presenterPassword
+		// URL-encoded, so a password with a space, "&", or other character
+		// with meaning in a URL query still round-trips as the same ?key=
+		// value a client sends back.
+		presenterURL += "?key=" + url.QueryEscape(presenterPassword)
 	}
 
 	// Set up signal handling for graceful shutdown
@@ -275,7 +299,7 @@ func runDevServer(file string, port int, presenterPassword string, headless bool
 			watcher.AddExtraDirs(externalInputDirs(newResolvedComponents, baseDir))
 			srv.SetComponentBundles(componentBundleFiles(newResolvedComponents))
 			srv.SetPresentation(newPres)
-			hub.SetSlideCount(len(newPres.Slides))
+			hub.SetPresentationMeta(len(newPres.Slides), server.ComputeRevision(newPres, componentBundleFiles(newResolvedComponents)))
 			_ = hub.BroadcastReload()
 			Info("Reloaded: %s\n", path)
 		})
@@ -345,10 +369,15 @@ func runDevServer(file string, port int, presenterPassword string, headless bool
 			} else {
 				model.ClearError()
 			}
+			// Bundler warnings (an esbuild warning on a component bundle,
+			// for example) are not fatal enough to be an error, but still
+			// worth showing; the model clears them on the next reload that
+			// has none, so a warning never outlives the build it came from.
+			model.SetWarnings(componentWarningLines(componentWarnings(newResolvedComponents)))
 			watcher.AddExtraDirs(externalInputDirs(newResolvedComponents, baseDir))
 			srv.SetComponentBundles(componentBundleFiles(newResolvedComponents))
 			srv.SetPresentation(newPres)
-			hub.SetSlideCount(len(newPres.Slides))
+			hub.SetPresentationMeta(len(newPres.Slides), server.ComputeRevision(newPres, componentBundleFiles(newResolvedComponents)))
 			_ = hub.BroadcastReload()
 			model.SendReloadEvent(path)
 		})
@@ -388,8 +417,11 @@ func loadPresentation(file string, cfg *config.Config, baseDir string) (*transfo
 	}
 
 	// Resolve and bundle every component the presentation's slides use.
-	// Dev builds keep source maps and skip minification.
-	resolvedComponents, componentBuildErrs := buildComponents(parsed, baseDir, false, true)
+	// Dev builds keep source maps and skip minification. loadPresentation
+	// is only ever used against a live server (tap dev, tap pdf, tap
+	// screenshot all share it), so an emitted asset's URL always starts
+	// from the server root.
+	resolvedComponents, componentBuildErrs := buildComponents(parsed, baseDir, false, true, "/components/")
 
 	// Transform to frontend format
 	t := transformer.NewWithBaseDir(cfg, baseDir)

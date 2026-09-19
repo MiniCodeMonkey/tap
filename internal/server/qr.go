@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"net"
+	"net/url"
 	"strings"
 
 	"github.com/skip2/go-qrcode"
@@ -33,11 +34,11 @@ func GeneratePresenterURL(cfg QRConfig) (string, error) {
 		}
 	}
 
-	url := fmt.Sprintf("http://%s:%d/presenter", host, cfg.Port)
+	presenterURL := fmt.Sprintf("http://%s:%d/presenter", host, cfg.Port)
 	if cfg.PresenterPassword != "" {
-		url += "?key=" + cfg.PresenterPassword
+		presenterURL += "?key=" + url.QueryEscape(cfg.PresenterPassword)
 	}
-	return url, nil
+	return presenterURL, nil
 }
 
 // GenerateAudienceURL generates the audience URL for the given configuration.

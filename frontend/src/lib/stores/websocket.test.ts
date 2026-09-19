@@ -222,6 +222,61 @@ describe('WebSocketClient', () => {
 			expect(client.isConnected()).toBe(true);
 		});
 
+		describe('deck revision on "connected" messages', () => {
+			it('does not reload on the first "connected" message, even when it carries a revision', () => {
+				const reloadSpy = vi.fn();
+				vi.stubGlobal('window', {
+					location: { protocol: 'http:', host: 'localhost:3000', reload: reloadSpy }
+				});
+
+				client.connect();
+				mockWs?.simulateOpen();
+				mockWs?.simulateMessage({ type: 'connected', revision: 'abc123' });
+
+				expect(reloadSpy).not.toHaveBeenCalled();
+			});
+
+			it('does not reload on a reconnect whose "connected" message carries the same revision', () => {
+				const reloadSpy = vi.fn();
+				vi.stubGlobal('window', {
+					location: { protocol: 'http:', host: 'localhost:3000', reload: reloadSpy }
+				});
+
+				client.connect();
+				mockWs?.simulateOpen();
+				mockWs?.simulateMessage({ type: 'connected', revision: 'abc123' });
+
+				// Simulate the transport dropping and a fresh socket opening in
+				// its place, without going through the real onclose/reconnect
+				// scheduling path (which uses a live setTimeout this test has no
+				// need to wait out).
+				if (mockWs) mockWs.readyState = MockWebSocket.CLOSED;
+				client.connect();
+				mockWs?.simulateOpen();
+				mockWs?.simulateMessage({ type: 'connected', revision: 'abc123' });
+
+				expect(reloadSpy).not.toHaveBeenCalled();
+			});
+
+			it('reloads on a reconnect whose "connected" message carries a different revision', () => {
+				const reloadSpy = vi.fn();
+				vi.stubGlobal('window', {
+					location: { protocol: 'http:', host: 'localhost:3000', reload: reloadSpy }
+				});
+
+				client.connect();
+				mockWs?.simulateOpen();
+				mockWs?.simulateMessage({ type: 'connected', revision: 'abc123' });
+
+				if (mockWs) mockWs.readyState = MockWebSocket.CLOSED;
+				client.connect();
+				mockWs?.simulateOpen();
+				mockWs?.simulateMessage({ type: 'connected', revision: 'def456' });
+
+				expect(reloadSpy).toHaveBeenCalledTimes(1);
+			});
+		});
+
 		it('should handle "reload" message by reloading the page', () => {
 			const reloadSpy = vi.fn();
 			vi.stubGlobal('window', {

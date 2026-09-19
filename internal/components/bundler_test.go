@@ -2,11 +2,41 @@ package components
 
 import (
 	"bytes"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 )
+
+// TestBuildErrorError_NamesSlidesWithoutChangingThePrefix checks that the
+// leading "<file>:<line>:<column>: <message>" part - what tools parse -
+// stays exactly as before, with the slide list as a trailing suffix, for
+// both one slide and several.
+func TestBuildErrorError_NamesSlidesWithoutChangingThePrefix(t *testing.T) {
+	noSlides := BuildError{File: "slides/Broken.jsx", Line: 7, Column: 1, Message: `Unexpected "return"`}
+	want := `slides/Broken.jsx:7:1: Unexpected "return"`
+	if got := noSlides.Error(); got != want {
+		t.Errorf("Error() with no slides = %q, want %q", got, want)
+	}
+
+	oneSlide := noSlides
+	oneSlide.SlideNumbers = []int{2}
+	want = `slides/Broken.jsx:7:1: Unexpected "return" (used on slide 2)`
+	if got := oneSlide.Error(); got != want {
+		t.Errorf("Error() with one slide = %q, want %q", got, want)
+	}
+
+	severalSlides := noSlides
+	severalSlides.SlideNumbers = []int{2, 5}
+	want = `slides/Broken.jsx:7:1: Unexpected "return" (used on slides 2, 5)`
+	if got := severalSlides.Error(); got != want {
+		t.Errorf("Error() with several slides = %q, want %q", got, want)
+	}
+}
 
 func TestHostModuleNames(t *testing.T) {
 	want := []string{"react", "react/jsx-runtime", "react-dom", "react-dom/client", "motion", "motion/react", "tap"}
@@ -216,11 +246,12 @@ func TestBuildRejectsPathOutsideDeckDirectory(t *testing.T) {
 	if len(errs) == 0 {
 		t.Fatal("expected an error for a path outside the deck directory")
 	}
-	if !strings.Contains(errs[0].Message, "deck's folder") {
-		t.Errorf("message = %q, want it to explain components must live inside the deck's folder", errs[0].Message)
+	want := "component files must live inside the deck folder: ../outside/Outside.jsx (imports from outside are allowed, entry files are not)"
+	if errs[0].Message != want {
+		t.Errorf("message = %q, want %q", errs[0].Message, want)
 	}
-	if strings.Contains(errs[0].Error(), ":0:0:") {
-		t.Errorf("Error() = %q, want no \":0:0:\" position for an error with no source location", errs[0].Error())
+	if errs[0].Error() != want {
+		t.Errorf("Error() = %q, want %q (no File prefix for a path-containment error)", errs[0].Error(), want)
 	}
 }
 
@@ -422,8 +453,219 @@ func TestBuildRejectsSymlinkEscapingDeckDirectory(t *testing.T) {
 	if len(errs) == 0 {
 		t.Fatal("expected an error for a symlink that escapes the deck directory")
 	}
-	if !strings.Contains(errs[0].Message, "deck's folder") {
-		t.Errorf("message = %q, want it to explain components must live inside the deck's folder", errs[0].Message)
+	if !strings.Contains(errs[0].Message, "deck folder") {
+		t.Errorf("message = %q, want it to explain components must live inside the deck folder", errs[0].Message)
+	}
+}
+
+// writeAssetFixture writes a JSX entry file importing one image, plus the
+// image itself sized to bytes, into deckDirectory. Real PNG bytes are not
+// needed: the asset-size plugin (and esbuild's own dataurl/file loaders it
+// delegates to) work on the raw bytes without decoding them.
+func writeAssetFixture(t *testing.T, deckDirectory string, imageBytes int) {
+	t.Helper()
+	image := make([]byte, imageBytes)
+	for i := range image {
+		image[i] = byte(i)
+	}
+	if err := os.WriteFile(filepath.Join(deckDirectory, "photo.png"), image, 0o644); err != nil {
+		t.Fatalf("write image fixture: %v", err)
+	}
+	source := `import photo from "./photo.png";
+export default function WithImage() {
+  return photo;
+}
+`
+	if err := os.WriteFile(filepath.Join(deckDirectory, "WithImage.jsx"), []byte(source), 0o644); err != nil {
+		t.Fatalf("write entry fixture: %v", err)
+	}
+}
+
+// TestBuildInlinesAssetsUnderTheSizeThreshold checks that an imported image
+// under assetInlineThreshold is inlined as a data URL, in the bundle's
+// JavaScript, exactly as it always was - and lists no separate Asset.
+func TestBuildInlinesAssetsUnderTheSizeThreshold(t *testing.T) {
+	deckDirectory := t.TempDir()
+	writeAssetFixture(t, deckDirectory, assetInlineThreshold-1)
+
+	bundle, errs := Build("WithImage.jsx", Options{DeckDirectory: deckDirectory, AssetPublicPath: "/components/"})
+	if len(errs) > 0 {
+		t.Fatalf("unexpected errors: %v", errs)
+	}
+	if len(bundle.Assets) != 0 {
+		t.Errorf("expected no emitted assets for a small image, got %+v", bundle.Assets)
+	}
+	if !strings.Contains(string(bundle.JavaScript), "data:image/png;base64,") {
+		t.Error("expected the small image to be inlined as a data URL in the bundle's JavaScript")
+	}
+}
+
+// TestBuildEmitsAssetsAtOrAboveTheSizeThreshold checks that an imported
+// image at or above assetInlineThreshold is emitted as its own file
+// (Bundle.Assets) instead, referenced from the bundle's JavaScript by a URL
+// under Options.AssetPublicPath rather than inlined.
+func TestBuildEmitsAssetsAtOrAboveTheSizeThreshold(t *testing.T) {
+	deckDirectory := t.TempDir()
+	writeAssetFixture(t, deckDirectory, assetInlineThreshold)
+
+	bundle, errs := Build("WithImage.jsx", Options{DeckDirectory: deckDirectory, AssetPublicPath: "/components/"})
+	if len(errs) > 0 {
+		t.Fatalf("unexpected errors: %v", errs)
+	}
+	if len(bundle.Assets) != 1 {
+		t.Fatalf("expected 1 emitted asset for a large image, got %d: %+v", len(bundle.Assets), bundle.Assets)
+	}
+	asset := bundle.Assets[0]
+	if asset.ContentType != "image/png" {
+		t.Errorf("ContentType = %q, want %q", asset.ContentType, "image/png")
+	}
+	if len(asset.Content) != assetInlineThreshold {
+		t.Errorf("Content length = %d, want %d", len(asset.Content), assetInlineThreshold)
+	}
+	if strings.Contains(string(bundle.JavaScript), "data:image/png;base64,") {
+		t.Error("did not expect the large image to be inlined as a data URL")
+	}
+	wantURL := "/components/" + asset.Name
+	if !strings.Contains(string(bundle.JavaScript), wantURL) {
+		t.Errorf("expected the bundle's JavaScript to reference %q", wantURL)
+	}
+}
+
+// TestBuildEmittedAssetNameIsSafeForAHostileFileName reproduces the bundle
+// syntax break a hostile asset file name causes: esbuild bakes an emitted
+// file's name into the bundle's JavaScript as a plain string literal, so a
+// name built from the original file's base name ("we ird'na"me<x>.png")
+// can break the string it lands in. The emitted name must only ever
+// contain safe characters.
+func TestBuildEmittedAssetNameIsSafeForAHostileFileName(t *testing.T) {
+	deckDirectory := t.TempDir()
+	image := make([]byte, assetInlineThreshold)
+	for i := range image {
+		image[i] = byte(i)
+	}
+	hostileName := `we ird'na"me<x>.png`
+	if err := os.WriteFile(filepath.Join(deckDirectory, hostileName), image, 0o644); err != nil {
+		t.Skipf("filesystem does not support this file name: %v", err)
+	}
+	// Escaped as a JS string literal: the import specifier still has to
+	// parse, whatever character the file name itself carries.
+	escapedName := strings.NewReplacer(`\`, `\\`, `"`, `\"`).Replace(hostileName)
+	source := "import photo from \"./" + escapedName + "\";\n" +
+		"export default function WithImage() {\n  return photo;\n}\n"
+	if err := os.WriteFile(filepath.Join(deckDirectory, "WithImage.jsx"), []byte(source), 0o644); err != nil {
+		t.Fatalf("write entry fixture: %v", err)
+	}
+
+	bundle, errs := Build("WithImage.jsx", Options{DeckDirectory: deckDirectory, AssetPublicPath: "/components/"})
+	if len(errs) > 0 {
+		t.Fatalf("unexpected errors: %v", errs)
+	}
+	if len(bundle.Assets) != 1 {
+		t.Fatalf("expected 1 emitted asset, got %d: %+v", len(bundle.Assets), bundle.Assets)
+	}
+
+	asset := bundle.Assets[0]
+	if unsafeNameCharacters.MatchString(strings.TrimSuffix(asset.Name, filepath.Ext(asset.Name))) {
+		t.Errorf("emitted asset name %q contains unsafe characters", asset.Name)
+	}
+	if strings.ContainsAny(asset.Name, `'"<> `) {
+		t.Errorf("emitted asset name %q must not carry the original file name's unsafe characters", asset.Name)
+	}
+	if !strings.Contains(string(bundle.JavaScript), "/components/"+asset.Name) {
+		t.Errorf("expected the bundle's JavaScript to reference %q", asset.Name)
+	}
+}
+
+// writeCSSAssetFixture writes a JSX entry file that imports a stylesheet
+// with a url() token pointing at a large image, plus the image itself
+// sized to bytes, into deckDirectory.
+func writeCSSAssetFixture(t *testing.T, deckDirectory string, imageBytes int) {
+	t.Helper()
+	image := make([]byte, imageBytes)
+	for i := range image {
+		image[i] = byte(i)
+	}
+	if err := os.WriteFile(filepath.Join(deckDirectory, "big.png"), image, 0o644); err != nil {
+		t.Fatalf("write image fixture: %v", err)
+	}
+	css := `.banner { background-image: url("./big.png"); }` + "\n"
+	if err := os.WriteFile(filepath.Join(deckDirectory, "Banner.css"), []byte(css), 0o644); err != nil {
+		t.Fatalf("write css fixture: %v", err)
+	}
+	source := `import "./Banner.css";
+export default function Banner() {
+  return <div className="banner" />;
+}
+`
+	if err := os.WriteFile(filepath.Join(deckDirectory, "Banner.jsx"), []byte(source), 0o644); err != nil {
+		t.Fatalf("write entry fixture: %v", err)
+	}
+}
+
+// cssURLFuncPattern finds a url(...) token in emitted CSS.
+var cssURLFuncPattern = regexp.MustCompile(`url\(([^)]+)\)`)
+
+// TestBuildCSSAssetURLResolvesUnderAStaticSubPath reproduces the static
+// build bug where a CSS url() token referencing a large (non-inlined)
+// asset used the bundle's public path exactly like a JavaScript import,
+// producing a URL that a browser resolves relative to the CSS file
+// itself - which already lives inside the public path directory - doubling
+// the prefix. It builds a component whose CSS references an image at the
+// inline threshold, serves the emitted files (as they would sit in
+// dist/components/ under a sub path), and resolves the CSS url() token
+// against the CSS file's own URL exactly as a browser would.
+func TestBuildCSSAssetURLResolvesUnderAStaticSubPath(t *testing.T) {
+	deckDirectory := t.TempDir()
+	writeCSSAssetFixture(t, deckDirectory, assetInlineThreshold)
+
+	bundle, errs := Build("Banner.jsx", Options{DeckDirectory: deckDirectory, AssetPublicPath: "components/"})
+	if len(errs) > 0 {
+		t.Fatalf("unexpected errors: %v", errs)
+	}
+	if len(bundle.Assets) != 1 {
+		t.Fatalf("expected 1 emitted asset, got %d: %+v", len(bundle.Assets), bundle.Assets)
+	}
+	if len(bundle.CSS) == 0 {
+		t.Fatal("expected the bundle to have CSS")
+	}
+
+	match := cssURLFuncPattern.FindStringSubmatch(string(bundle.CSS))
+	if match == nil {
+		t.Fatalf("expected a url() token in the emitted CSS, got %q", bundle.CSS)
+	}
+	token := strings.Trim(match[1], `"'`)
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/sub2/components/"+bundle.Name+"-"+bundle.Hash+".css", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/css")
+		w.Write(bundle.CSS)
+	})
+	for _, asset := range bundle.Assets {
+		content := asset.Content
+		mux.HandleFunc("/sub2/components/"+asset.Name, func(w http.ResponseWriter, r *http.Request) {
+			w.Write(content)
+		})
+	}
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	cssURL, err := url.Parse(server.URL + "/sub2/components/" + bundle.Name + "-" + bundle.Hash + ".css")
+	if err != nil {
+		t.Fatalf("parse CSS URL: %v", err)
+	}
+	assetRef, err := url.Parse(token)
+	if err != nil {
+		t.Fatalf("parse url() token %q: %v", token, err)
+	}
+	resolved := cssURL.ResolveReference(assetRef)
+
+	response, err := http.Get(resolved.String())
+	if err != nil {
+		t.Fatalf("GET %s: %v", resolved, err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		t.Errorf("GET %s status = %d, want 200 (url() token was %q)", resolved, response.StatusCode, token)
 	}
 }
 

@@ -94,8 +94,44 @@ tap dev [file]
 | Flag | Short | Description |
 |------|-------|-------------|
 | `--port <number>` | `-p` | Port to serve on (default: `3000`) |
-| `--presenter-password <pass>` | | Password to protect the presenter view |
+| `--presenter-password <pass>` | | Password gating the presenter view and `/qr`, and gating who may drive other windows. Any characters are allowed |
+| `--allow-origin <value>` | | An additional origin (`scheme://host:port`) allowed to connect to the websocket hub, **or** a host (`host:port`) allowed in a request's `Host` header. Repeatable |
 | `--headless` | | Run without the terminal UI, for testing/automation |
+
+`tap dev` checks two things, to keep a page on another site from driving
+your deck and to block DNS rebinding.
+
+**The `Host` header.** Requests to `/ws`, `/api/`, `/presenter`, `/qr`,
+`/local/`, and `/components/` must arrive with a `Host` that is
+`localhost`, a loopback, private, or link-local IP address (IPv4 or IPv6),
+a name ending in `.local`, this machine's own hostname, or a value passed
+with `--allow-origin`. Anything else gets 403 `Forbidden: host not allowed;
+use --allow-origin to allow it`.
+
+**The websocket origin.** A connection is accepted when it carries no
+`Origin` header, or when the origin's host equals the request's `Host`
+**and** that host passes the check above, or when the origin itself is in
+the allow list. A rejected one is logged, for example
+`rejected websocket connection with Host "evil.example.com": not a local,
+private, or allowed host`.
+
+::: warning Reaching tap through a custom name or a tunnel
+LAN IP addresses, `localhost`, and `.local` names work with no flag. A
+custom DNS name, or a tunnel such as an ngrok or Tailscale hostname, does
+not: pass it with `--allow-origin`, repeating the flag for each one.
+
+```bash
+tap dev slides.md --allow-origin talk.example.com
+tap dev slides.md --allow-origin https://tap.example.ngrok.app
+```
+:::
+
+`tap serve`, which has no websocket and no API, is not affected by either
+check.
+
+The live app is served only at `/`, `/index.html`, `/presenter`, and
+`/presenter.html`. `/presenter/` redirects 301 to `/presenter`, and any
+other unknown path returns 404 rather than the app.
 
 If the default port is already taken, `tap dev` tries the next ports in turn (up to 20 above it) and prints the URL of whichever one it actually bound, so two decks (or two agents) can run side by side without flags. Passing `--port` explicitly instead fails outright when that exact port is busy:
 
@@ -149,6 +185,12 @@ tap build <file>
 | Flag | Short | Description |
 |------|-------|-------------|
 | `--output <dir>` | `-o` | Output directory (default: `dist`) |
+
+### Behavior
+
+The progress spinner goes to standard error, and draws nothing when standard error is not a terminal, so a script capturing standard output gets only the result lines.
+
+`tap build` exits with status 1 when a slide names an unknown layout, uses a slot its layout does not declare, or has a deck component that fails to build.
 
 ### Examples
 
@@ -247,6 +289,15 @@ tap pdf slides.md --content notes
 
 ### Behavior
 
+`tap pdf` exits with status **130** on Ctrl-C or SIGTERM, after finishing
+its cleanup, printing `interrupted` on standard error. This holds whether
+the signal reaches the process directly or the terminal signals the whole
+process group. A second Ctrl-C during that cleanup exits at once, so a
+browser that will not close cannot hold the terminal. The progress spinner
+is written to standard error and draws nothing when standard error is not a
+terminal, so standard output holds only the result lines; warnings print
+after the spinner has stopped.
+
 Each slide is exported in its final state: every fragment revealed, every step at its last value, and no animation. Deck components are built and registered the same way `tap screenshot` does it, so a component appears in the PDF with `printMode = true` and `step = steps`.
 
 Page size follows the deck's own `aspectRatio`.
@@ -260,8 +311,11 @@ error: slides/RollingDeploy.jsx:12:8: Expected ")" but found "}"
 A slide that shows an error card at export time, such as a component that throws while rendering, is still written to the PDF. `tap pdf` prints one line per affected slide to standard error and exits 0:
 
 ```
-warning: slide 4 shows an error card
+warning: slide 4 shows an error card: component blew up on purpose
 ```
+
+The message is the one on the card, so a broken export names what broke
+rather than only where.
 
 ::: tip
 PDF export captures your presentation at export time. If you have live code execution, the results shown are whatever was displayed when you ran the export.
@@ -305,6 +359,14 @@ On success the command prints the path of each file written, one per line, and n
 `--all` writes `slide-001.png`, `slide-002.png`, and so on into the output folder. It does not stop at the first broken slide: it tries every slide, prints the paths it did write to standard output, then prints one `slide N: <reason>` line per broken slide to standard error and exits 1. `--all` cannot be combined with `--slide`, `--step`, or `--fragment`.
 
 It exits with status 1, and a message on standard error, on any of: a missing deck, an out-of-range slide, step, fragment, or `--wait`, an unknown theme, a deck component that fails to build, a browser that cannot start, or a rendered slide that shows a slide or component error card. A component build error fails before any image is written.
+
+On Ctrl-C or SIGTERM it finishes its cleanup, prints `interrupted` on standard error, and exits with status **130**, whether the signal reaches the process directly or the terminal signals the whole process group. A second Ctrl-C during the cleanup exits at once.
+
+A slide that renders an error card fails with the card's own message:
+
+```
+Error: slide 2 shows an error card: component blew up on purpose
+```
 
 ### Examples
 
@@ -363,7 +425,7 @@ tap add component <Name> [flags]
 |------|-------------|
 | `--inline` | Scaffold an inline block component instead of a whole-slide one |
 | `--ts` | Write a `.tsx` file, plus `tap-env.d.ts` and `tap-shims.d.ts` next to the deck |
-| `--deck <file>` | Deck file the component belongs to. Default: the current directory |
+| `--deck <path>` | The deck the component belongs to. A file uses its folder; a **directory** is used as the deck folder itself. Default: the current directory |
 
 Without `--inline`, the file goes to `slides/<Name>.jsx`. With `--inline`, it goes to `components/<Name>.jsx`. With `--ts`, the extension is `.tsx`, and the two declaration files are written only when they do not already exist. `tap-shims.d.ts` is skipped when `node_modules/@types/react` exists next to the deck or above it.
 

@@ -492,6 +492,9 @@ export async function readContrast(page: Page): Promise<ContrastResult[]> {
 			fg: resolve('--fg'),
 			accentText: resolve('--accent-text'),
 			muted: resolve('--muted'),
+			statusOk: resolve('--status-ok'),
+			statusWarn: resolve('--status-warn'),
+			statusError: resolve('--status-error'),
 			raw: {
 				bg: style.getPropertyValue('--bg').trim(),
 				fg: style.getPropertyValue('--fg').trim(),
@@ -503,18 +506,33 @@ export async function readContrast(page: Page): Promise<ContrastResult[]> {
 
 	if (!colors) return [];
 
-	const pairs: { name: string; foreground: string; minimum: number }[] = [
-		{ name: 'fg-on-bg', foreground: colors.fg, minimum: 7 },
-		{ name: 'accent-text-on-bg', foreground: colors.accentText, minimum: 7 },
-		{ name: 'muted-on-bg', foreground: colors.muted, minimum: 4.5 }
+	const pairs: { name: string; foreground: string; background: string; minimum: number }[] = [
+		{ name: 'fg-on-bg', foreground: colors.fg, background: colors.bg, minimum: 7 },
+		{ name: 'accent-text-on-bg', foreground: colors.accentText, background: colors.bg, minimum: 7 },
+		{ name: 'muted-on-bg', foreground: colors.muted, background: colors.bg, minimum: 4.5 },
+		// Status tokens are read as a fill (a badge, a dot, an icon), not as
+		// body text, so they only need to clear the 3:1 non-text contrast
+		// minimum against --bg, not the 7:1/4.5:1 bars above.
+		{ name: 'status-ok-on-bg', foreground: colors.statusOk, background: colors.bg, minimum: 3 },
+		{ name: 'status-warn-on-bg', foreground: colors.statusWarn, background: colors.bg, minimum: 3 },
+		{ name: 'status-error-on-bg', foreground: colors.statusError, background: colors.bg, minimum: 3 },
+		// The three status colors must also differ from each other in
+		// luminance, not only hue: a pair that is only distinguished by
+		// hue (green vs. amber, for a deuteranope) reads as the same color.
+		// 1.35:1 is well under the 3:1 non-text bar above, so it never
+		// second-guesses that check - it only catches two status colors
+		// sitting at nearly the same lightness.
+		{ name: 'status-ok-warn', foreground: colors.statusOk, background: colors.statusWarn, minimum: 1.35 },
+		{ name: 'status-warn-error', foreground: colors.statusWarn, background: colors.statusError, minimum: 1.35 },
+		{ name: 'status-ok-error', foreground: colors.statusOk, background: colors.statusError, minimum: 1.35 }
 	];
 
-	return pairs.map(({ name, foreground, minimum }) => {
-		const ratio = contrastRatio(foreground, colors.bg) ?? 0;
+	return pairs.map(({ name, foreground, background, minimum }) => {
+		const ratio = contrastRatio(foreground, background) ?? 0;
 		return {
 			name,
 			foreground,
-			background: colors.bg,
+			background,
 			ratio: Math.round(ratio * 100) / 100,
 			minimum,
 			passes: ratio >= minimum
@@ -876,4 +894,114 @@ export async function findSmallHeadlines(
 
 		return warnings;
 	}, recommendedPx);
+}
+
+// ============================================================================
+// Entrance animation end state
+// ============================================================================
+
+export interface AnimationEndStateViolation {
+	selector: string;
+	text: string;
+	reason: 'opacity-below-1' | 'visibility-hidden' | 'zero-size-clip';
+	detail: string;
+}
+
+const ANIMATION_TEXT_SELECTOR = 'h1, h2, h3, h4, h5, h6, p, li, td, th, blockquote, figcaption, dt, dd';
+
+/**
+ * Waits for every running Web Animation on the page to finish (a fixed
+ * timeout, not a fixed wait, so a theme's own animation durations don't
+ * need to be known here), then checks every text-bearing element for a
+ * hidden-looking end state: `opacity` under 1, `visibility: hidden`, or a
+ * zero-size `clip`/`clip-path`. The suite's other checks all run in print
+ * mode (`?print=true`), which turns entrance animations off outright (see
+ * docs/reference/theme-porting.md section 3.6) and so never exercises
+ * whether one of them actually finishes in a visible state; this check is
+ * the one place that loads a slide live and lets its animations run to
+ * completion before looking.
+ *
+ * `opacity` is read with a small tolerance (0.98) rather than a strict
+ * `< 1`, since a theme can leave an animation's `fill: forwards` keyframe
+ * a hair under 1 by design (a barely-there flicker meant to read as
+ * "settled", not "still fading"); this check is for an entrance animation
+ * that never finishes revealing its own text, not for that.
+ */
+export async function findAnimationEndStateViolations(page: Page): Promise<AnimationEndStateViolation[]> {
+	await page.evaluate(async () => {
+		const animations = document.getAnimations();
+		await Promise.race([
+			Promise.all(animations.map((animation) => animation.finished.catch(() => undefined))),
+			new Promise((resolve) => setTimeout(resolve, 5000))
+		]);
+	});
+
+	return page.evaluate((selector) => {
+		const OPACITY_TOLERANCE = 0.98;
+		const violations: AnimationEndStateViolation[] = [];
+
+		const candidates = document.querySelectorAll<HTMLElement>(selector);
+		for (const element of candidates) {
+			const text = (element.textContent ?? '').trim();
+			if (text.length === 0) continue;
+
+			const rect = element.getBoundingClientRect();
+			if (rect.width === 0 || rect.height === 0) continue;
+
+			const style = getComputedStyle(element);
+			const selectorLabel = element.tagName.toLowerCase();
+			const textSample = text.slice(0, 80);
+
+			const opacity = parseFloat(style.opacity);
+			if (!Number.isNaN(opacity) && opacity < OPACITY_TOLERANCE) {
+				violations.push({
+					selector: selectorLabel,
+					text: textSample,
+					reason: 'opacity-below-1',
+					detail: `opacity: ${style.opacity}`
+				});
+				continue;
+			}
+
+			if (style.visibility === 'hidden') {
+				violations.push({
+					selector: selectorLabel,
+					text: textSample,
+					reason: 'visibility-hidden',
+					detail: 'visibility: hidden'
+				});
+				continue;
+			}
+
+			const clip = style.clip;
+			const clipPath = style.clipPath;
+			const clipsToZero = (value: string) => {
+				const rectMatch = /^rect\(\s*([\d.]+px|auto)\s*,\s*([\d.]+px|auto)\s*,\s*([\d.]+px|auto)\s*,\s*([\d.]+px|auto)\s*\)$/.exec(
+					value
+				);
+				if (rectMatch) {
+					const [, top, right, bottom, left] = rectMatch;
+					const toNumber = (part: string) => (part === 'auto' ? null : parseFloat(part));
+					const t = toNumber(top);
+					const r = toNumber(right);
+					const b = toNumber(bottom);
+					const l = toNumber(left);
+					if (t !== null && b !== null && b - t <= 0) return true;
+					if (l !== null && r !== null && r - l <= 0) return true;
+				}
+				return value === 'circle(0px)' || value === 'circle(0px at 50% 50%)' || /^inset\(\s*100%/.test(value);
+			};
+
+			if ((clip && clip !== 'auto' && clipsToZero(clip)) || (clipPath && clipPath !== 'none' && clipsToZero(clipPath))) {
+				violations.push({
+					selector: selectorLabel,
+					text: textSample,
+					reason: 'zero-size-clip',
+					detail: `clip: ${clip}; clip-path: ${clipPath}`
+				});
+			}
+		}
+
+		return violations;
+	}, ANIMATION_TEXT_SELECTOR);
 }

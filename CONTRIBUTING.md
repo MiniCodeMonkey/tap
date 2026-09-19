@@ -51,6 +51,10 @@ a Go test and `npm run tokens:check` both guard it.
 > `go.mod` targets. If that happens, fall back to `go vet ./...` and
 > `go test ./...` for the Go side.
 
+The config is `.golangci.yml` in the **v2** schema, so you need
+golangci-lint v2. staticcheck's `QF1012` is excluded deliberately; leave it
+that way rather than rewriting the lines it flags.
+
 ## Continuous integration
 
 `.github/workflows/ci.yml` runs on every push and pull request against
@@ -112,6 +116,19 @@ server, each on their own pair of ports so multiple runs can work on
 different themes in parallel without fighting over a snapshot folder.
 Start both, then run the suite with `BASE_URL` pointing at the Vite server:
 
+The dev server checks both the request's `Host` header against a
+local-and-private allow-list and the websocket's `Origin` against that
+host. The proxy setup below satisfies both, because the browser talks to
+the Vite server on `localhost` and Vite forwards with a matching `Host`, so
+this workflow needs no extra flag.
+
+You need `tap dev --allow-origin <value>` (repeatable) when something else
+is true: a dev server that talks to the hub directly rather than through
+the proxy (pass its origin, `http://localhost:<port>`), or reaching `tap
+dev` through a custom DNS name or a tunnel such as ngrok or Tailscale (pass
+the host). LAN IP addresses, `localhost`, and `.local` names are already
+allowed.
+
 ```bash
 # terminal 1, from the repo root: the Go dev server
 go run ./cmd/tap dev testdata/themes.md --port 3300 --headless
@@ -150,6 +167,43 @@ though naming a port keeps it obvious which is which.
 The temporary servers behind `tap pdf` and `tap screenshot` bind
 `127.0.0.1`, since only tap's own headless browser talks to them. `tap dev`
 keeps `0.0.0.0` so a presenter can open it from another device.
+
+## Changelog preparation
+
+`scripts/prepare-changelog.sh` holds the changelog logic the release
+workflow runs, so you can test a release's changelog handling without
+triggering a release. It covers four cases, each with a Go test in
+`scripts/prepare_changelog_test.go`:
+
+- **First run for a version:** the `## [Unreleased]` section's contents
+  move into a new `## [<version>] - <date>` section, and `Unreleased` is
+  left empty.
+- **Second run for the same version:** the existing section for that
+  version is reused rather than duplicated, so re-running the workflow is
+  safe.
+- **An empty `Unreleased` section with no section for the version:** the
+  script fails, rather than cutting a release with no notes.
+- **Reusing a section that is the last thing in the file:** the notes come
+  out whole, with no dropped final line.
+
+It takes the version, the changelog to rewrite in place, and the file to
+write the extracted notes to. Set `CHANGELOG_DATE` to pin the new header's
+date, which is how the tests keep fixtures independent of today.
+
+Run it against a copy, never the real file:
+
+```bash
+cp CHANGELOG.md /tmp/CHANGELOG-test.md
+CHANGELOG_DATE=2026-01-01 scripts/prepare-changelog.sh 9.9.9 \
+  /tmp/CHANGELOG-test.md /tmp/notes.md
+
+# second run for the same version reuses the section it already wrote
+CHANGELOG_DATE=2026-01-01 scripts/prepare-changelog.sh 9.9.9 \
+  /tmp/CHANGELOG-test.md /tmp/notes.md
+
+# a new version with an empty Unreleased section fails, exit status 1
+scripts/prepare-changelog.sh 8.8.8 /tmp/CHANGELOG-test.md /tmp/notes.md
+```
 
 ## The end-to-end suite's server
 

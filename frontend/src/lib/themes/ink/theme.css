@@ -27,6 +27,10 @@
 	--accent: #c73e1d; /* vermilion: the seal, the brush mark */
 	--accent-text: #822f1a; /* the same vermilion, ground darker so it holds as type at 7:1 */
 	--surface: #ebe4d6;
+	--status-ok: #43764e;
+	--status-warn: #ae7a2d;
+	--status-error: #93351d;
+	--accent-2: var(--accent-text);
 	--font-display: 'Shippori Mincho', 'Hiragino Mincho ProN', Georgia, serif;
 	--font-body: 'Zen Kaku Gothic New', 'Hiragino Sans', system-ui, sans-serif;
 	--font-mono: 'DM Mono', ui-monospace, monospace;
@@ -883,6 +887,14 @@
 	text-wrap: balance;
 	color: var(--fg);
 	font-style: normal;
+}
+/* A medium quote (81-180 runes) already crowds the frame at 112px, and a
+   long one (over 180) overflows it outright; step down at both lengths. */
+[data-theme='ink'] .layout-quote blockquote[data-length='medium'] p {
+	font: 500 86px/1.24 var(--font-display) !important;
+}
+[data-theme='ink'] .layout-quote blockquote[data-length='long'] p {
+	font: 500 62px/1.24 var(--font-display) !important;
 }
 [data-theme='ink'] .layout-quote blockquote p::after {
 	content: '\300D';

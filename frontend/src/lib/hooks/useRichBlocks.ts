@@ -126,13 +126,28 @@ function findDeckComponentPlaceholders(element: HTMLElement): DeckComponentPorta
 }
 
 /**
+ * A short, non-cryptographic hash of `value` (djb2 XOR variant), base-36
+ * encoded. Used to keep `data-rich-processed` a short marker instead of a
+ * copy of the slide's whole slot HTML - the attribute only needs to detect
+ * whether the content changed, never to be read back as content itself.
+ */
+function hashString(value: string): string {
+	let hash = 5381;
+	for (let i = 0; i < value.length; i++) {
+		hash = (hash * 33) ^ value.charCodeAt(i);
+	}
+	return (hash >>> 0).toString(36);
+}
+
+/**
  * Build a signature for a slide's slot content, used to detect whether the
  * mounted DOM already reflects the current slide. A repeat effect run over
  * the same signature (React StrictMode runs effects twice in development)
  * is skipped instead of reprocessing the same nodes a second time.
  */
 function slotContentSignature(slide: Slide): string {
-	return `${slide.index}:${slide.slotOrder.map((name) => slide.slots[name] ?? '').join('\u0000')}`;
+	const content = `${slide.index}:${slide.slotOrder.map((name) => slide.slots[name] ?? '').join('\u0000')}`;
+	return hashString(content);
 }
 
 /**

@@ -25,6 +25,10 @@
 	--accent: #ffe24a; /* highlighter: only ever a fill behind dark text */
 	--accent-text: #a3210f; /* red pen */
 	--surface: #f1eee1;
+	--status-ok: #318040;
+	--status-warn: #c37a0a;
+	--status-error: #ad2310;
+	--accent-2: var(--accent-text);
 	--font-display: 'Permanent Marker', 'Marker Felt', 'Comic Sans MS', cursive;
 	--font-body: 'Patrick Hand', 'Marker Felt', 'Comic Sans MS', cursive;
 	--font-mono: 'Fira Mono', ui-monospace, Menlo, monospace;

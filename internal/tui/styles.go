@@ -9,8 +9,10 @@ const (
 	ColorPrimary = lipgloss.Color("#7C3AED")
 	// Secondary color - emerald green for success/positive elements.
 	ColorSecondary = lipgloss.Color("#10B981")
-	// Error color - red for error states and warnings.
+	// Error color - red for error states.
 	ColorError = lipgloss.Color("#EF4444")
+	// Warning color - amber for non-fatal warnings.
+	ColorWarning = lipgloss.Color("#F59E0B")
 	// Muted color - gray for secondary text and borders.
 	ColorMuted = lipgloss.Color("#6B7280")
 	// White color - for text on dark backgrounds.
@@ -32,10 +34,14 @@ var (
 			Foreground(ColorMuted).
 			MarginBottom(1)
 
-	// ErrorStyle is used for error messages and warnings.
+	// ErrorStyle is used for error messages.
 	ErrorStyle = lipgloss.NewStyle().
 			Bold(true).
 			Foreground(ColorError)
+
+	// WarningStyle is used for non-fatal warning messages.
+	WarningStyle = lipgloss.NewStyle().
+			Foreground(ColorWarning)
 
 	// SuccessStyle is used for success messages and confirmations.
 	SuccessStyle = lipgloss.NewStyle().
@@ -100,6 +106,11 @@ func RenderSubtitle(text string) string {
 // RenderError renders an error message with the ErrorStyle.
 func RenderError(text string) string {
 	return ErrorStyle.Render(text)
+}
+
+// RenderWarning renders a warning message with the WarningStyle.
+func RenderWarning(text string) string {
+	return WarningStyle.Render(text)
 }
 
 // RenderSuccess renders a success message with the SuccessStyle.

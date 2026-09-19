@@ -30,6 +30,9 @@
 	--accent: #ff7ebd;
 	--accent-text: #ff7ebd;
 	--accent-2: #3cf2ff;
+	--status-ok: #00bb4b;
+	--status-warn: #a88100;
+	--status-error: #dc0028;
 	--surface: #24197a;
 	/* Extra token, not in the base spec set: the perspective floor's line color. */
 	--grid: #6a58e6;
@@ -897,6 +900,11 @@
 	color: var(--fg);
 	text-wrap: balance;
 	text-align: left;
+}
+/* A long quote (over 180 runes) crowds the HUD frame at 84px; step down
+   to keep it clear of the top/bottom border. */
+[data-theme='arcade'] .layout-quote blockquote[data-length='long'] p {
+	font-size: 52px;
 }
 [data-theme='arcade'] .layout-quote .slot-default::after {
 	content: '';

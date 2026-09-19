@@ -112,9 +112,11 @@ cannot be read as text on their own background: `zine`'s accent is
 | Painting | Use |
 |----------|-----|
 | A filled shape, bar, or box on the slide | `theme.accent` |
+| A second fill that must read apart from the first | `theme.accent2` |
 | Text or a thin line on `theme.bg` | `theme.accentText`, or `currentColor` |
-| Text on top of an accent fill | `textOn(theme.accent, theme)` |
-| A failed, down, or inactive state | `theme.muted` + dashed outline + lower opacity |
+| Text on top of any fill | `textOn(fill, theme)` |
+| Healthy / warning / failed **state** | `theme.statusOk` / `theme.statusWarn` / `theme.statusError` |
+| Merely inactive, no verdict | `theme.muted` + dashed outline + lower opacity |
 
 `textOn(fill, theme)` returns whichever of `theme.bg` and `theme.fg` has
 the higher contrast ratio against `fill`. It accepts `#rgb`, `#rrggbb`,
@@ -132,12 +134,21 @@ const theme = useTheme();
 
 Three more rules that follow:
 
-- `useTheme()` has **exactly 14 keys** and **no second accent**.
-- To use a theme's extra variable, read the CSS variable directly, always
-  with a fallback: `var(--accent-2, var(--accent-text))`. Any theme
-  variable can be read this way.
-- There is **no token for a failed or down state**. Build one from
-  `muted`, `dashed`, and opacity.
+- `useTheme()` has **exactly 18 keys**: `bg`, `fg`, `muted`, `accent`,
+  `accentText`, `accent2`, `surface`, `statusOk`, `statusWarn`,
+  `statusError`, `fontDisplay`, `fontBody`, `fontMono`, `ease`, `dur`,
+  `spaceUnit`, `radius`, `strokeWidth`.
+- `accent2` is a real second accent where the theme has one and equals
+  `accentText` elsewhere, so it is always safe to use.
+- The status colors are fills, readable at 3:1 or better against `bg` and
+  stepped apart from each other in lightness, in every theme. **Spend them
+  only where the color means something.** Inactive is not a verdict: that
+  is `muted` plus dashed plus opacity.
+- **Never signal status by color alone.** Pair it with a label, an icon, or
+  a shape, so it reads for a colorblind viewer and on a bad projector.
+- A theme may define more variables; read one directly with a fallback,
+  `var(--brand-ink, var(--fg))`. Frontmatter `themeColors` overrides are
+  picked up automatically.
 
 ## The slide canvas
 
@@ -341,6 +352,23 @@ const shown = step;                       // right
 const duration = printMode ? 0 : 0.3;     // printMode decides animation only
 ```
 
+In print mode tap wraps components in Motion's `reducedMotion="always"`
+(transform and layout animations become instant), and one global rule sets
+`animation: none; transition: none` on everything under
+`[data-print='true']`. It does **not** stop Motion
+`opacity`/`color`/`backgroundColor` animations or your own timers, so still
+honor `usePrintMode()`.
+
+Because CSS animations never run in print mode, an element that reaches its
+final look only through `animation-fill-mode: forwards` snaps back to its
+base style. Make the base style the settled state and animate **from** the
+start state:
+
+```css
+.badge { opacity: 1; animation: fade-in 400ms; }
+@keyframes fade-in { from { opacity: 0; } }
+```
+
 `Step` compares against the current `step` in every mode. `<Step at={n}>`
 is unaffected in print, since `step` is the total there. `<Step from={a}
 to={b}>` whose `to` is below the total is **hidden** in a PDF and in
@@ -379,9 +407,15 @@ updated live when the theme changes: `bg`, `fg`, `muted`, `accent`,
 `accentText`, `surface`, `fontDisplay`, `fontBody`, `fontMono`, `ease`,
 `dur`, `spaceUnit`, `radius`, `strokeWidth`.
 
+`useTheme()` returns 18 keys: `bg`, `fg`, `muted`, `accent`, `accentText`,
+`accent2`, `surface`, `statusOk`, `statusWarn`, `statusError`,
+`fontDisplay`, `fontBody`, `fontMono`, `ease`, `dur`, `spaceUnit`,
+`radius`, `strokeWidth`.
+
 The tokens are read in a layout effect, so the first painted frame already
-has real values. A token the theme does not define reads as an empty
-string; `textOn` tolerates that and falls back to `theme.fg`.
+has real values, and frontmatter `themeColors` overrides are included. A
+token the theme does not define reads as an empty string; `textOn`
+tolerates that and falls back to `theme.fg`.
 
 Read the same values, and the theme's illustration style, on the command
 line:
@@ -487,7 +521,14 @@ is a second, cheaper check.
 Build errors print one line each to standard error:
 
 ```
-error: slides/RollingDeploy.jsx:12:8: Expected ")" but found "}"
+error: slides/RollingDeploy.jsx:12:8: Expected ")" but found "}" (used on slides 2, 5)
+```
+
+The suffix names every slide that uses the file (`(used on slide 2)` for
+one). An entry path outside the deck folder fails before esbuild runs:
+
+```
+error: component files must live inside the deck folder: ../shared/X.jsx (imports from outside are allowed, entry files are not) (used on slide 1)
 ```
 
 A build error with no source position omits it rather than printing
@@ -501,8 +542,27 @@ A missing npm package names itself and the command to run:
 error: charts/LatencyDrop.jsx:2:18: package "d3-shape" not found; run `npm install d3-shape` next to the deck
 ```
 
-The affected slide shows an error card in `tap dev`, `tap pdf`, and
-`tap screenshot` alike, and the rest of the deck keeps working. `tap build`
+Error display has three forms. A normal (not fullscreen) window, the
+presenter view, `?debug=true`, and every print or capture pass show the
+**full card** with the message. A **fullscreen** window or one opened with
+`?present=true` shows the **audience-safe** form: the slide's own fallback
+content (its slots in the default layout for a whole-slide component; the
+rest of the slide untouched for an inline one) plus a small muted
+`component error` chip. Fullscreen is followed live, so entering or leaving
+it switches forms at once. A static `tap build` output falls back silently.
+The hidden `.deck-error-card` element stays in the DOM either way, with
+`data-message` and `data-source`, so `tap screenshot` still exits 1 and
+reports the message:
+
+```
+Error: slide 2 shows an error card: component blew up on purpose
+```
+
+A component that has not loaded in **8 seconds** becomes a load error
+(`component did not load within 8 seconds: <source>`); re-entering the
+slide retries. No timeout in print, capture, or preview.
+
+The rest of the deck keeps working. `tap build`
 fails outright on a build error. Only a static `tap build` output falls
 back instead of showing a card: a whole-slide component renders the slide's
 slots with the `default` layout, an inline one leaves the slot's raw
@@ -511,8 +571,9 @@ content, so a shipped deck stays usable on stage.
 `tap pdf` builds components too, and exports each in its final state
 (`printMode = true`, `step = steps`). A build error stops it with the same
 `error:` line and exit status 1. A slide that shows an error card is still
-written to the PDF; `tap pdf` prints `warning: slide <n> shows an error
-card` to standard error and exits 0.
+written to the PDF; `tap pdf` prints
+`warning: slide <n> shows an error card: <message>` to standard error and
+exits 0.
 
 ## Rules of thumb
 

@@ -93,6 +93,8 @@ Not keyboard shortcuts, but the same job from a link or a script.
 | Parameter | Effect |
 |-----------|--------|
 | `?theme=<slug>` | Render with that theme instead of the deck's own |
+| `?present=true` | Audience mode: a failing component or slide degrades to its fallback content plus a small `component error` chip, instead of a full error card |
+| `?debug=true` | Force the full error card on any window, including a fullscreen or `?present=true` one |
 | `?print=true` | Print mode: every fragment and step at its final state, no animation, no websocket |
 | `?capture=true` | Capture mode: no websocket, no connection badge, and the requested step or fragment rendered settled |
 | `?live=true` | With `capture=true`, keeps animations and timers running instead of settling |
@@ -101,7 +103,10 @@ Not keyboard shortcuts, but the same job from a link or a script.
 | `#<n>` | The URL hash selects the slide, by one-based slide number (`#5`) |
 
 `?step=` and `?fragment=` are read once at load and never again, so normal
-clicker navigation is unaffected. `tap screenshot --step` and `--fragment`
+clicker navigation is unaffected. They are also removed from the address
+bar on the first navigation, so a link you share after clicking around does
+not pin the reader to the step you started on. Every other query parameter
+stays. `tap screenshot --step` and `--fragment`
 use them, together with `?capture=true`.
 
 `?capture=true` exists for a stepped or fragment screenshot. Such a capture
@@ -126,6 +131,10 @@ already skips the websocket and shows the final state.
 
 The keyboard reference for these states is in
 [Print mode](/reference/components-reference#print-mode).
+
+A **fullscreen** window behaves like `?present=true` for error display,
+without needing the parameter. See
+[Where the error card shows](/reference/components-reference#where-the-error-card-shows).
 
 ## See Also
 

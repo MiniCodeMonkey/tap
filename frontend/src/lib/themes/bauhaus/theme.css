@@ -41,6 +41,10 @@
 	--red: #d62718;
 	--blue: #1d3f9e;
 	--yellow: #f2b90f;
+	--status-ok: #165c39;
+	--status-warn: #9d7c00;
+	--status-error: #c92516;
+	--accent-2: var(--yellow);
 	--font-display: 'Outfit', 'Futura', 'Century Gothic', sans-serif;
 	--font-body: 'Outfit', 'Futura', 'Century Gothic', sans-serif;
 	--font-mono: 'Space Mono', ui-monospace, monospace;
@@ -1209,6 +1213,10 @@
 	line-height: 1.05;
 	letter-spacing: -0.03em;
 	animation: bauhaus-slide var(--dur) var(--ease) 200ms both;
+}
+/* A long quote (over 180 runes) overflows the slide at 120px; step down. */
+[data-theme='bauhaus'] .layout-quote blockquote[data-length='long'] p {
+	font-size: 68px;
 }
 [data-theme='bauhaus'] .layout-quote .slot-attribution {
 	margin-top: 50px;

@@ -27,6 +27,10 @@
 	--accent: #ffd447;
 	--accent-text: #ffd447;
 	--surface: #174688;
+	--status-ok: #4de19e;
+	--status-warn: #e9960b;
+	--status-error: #ff4646;
+	--accent-2: var(--accent-text);
 	--font-display: 'Saira Condensed', 'Arial Narrow', sans-serif;
 	--font-body: 'Saira Semi Condensed', 'Arial Narrow', sans-serif;
 	--font-mono: 'IBM Plex Mono', ui-monospace, Menlo, monospace;
@@ -1019,6 +1023,11 @@
 	text-transform: uppercase;
 	text-wrap: balance;
 	animation: blueprint-plot 1000ms var(--ease) 250ms both;
+}
+/* A long quote (over 180 runes) overflows the sheet at 124px; step down. */
+[data-theme='blueprint'] .layout-quote .slot blockquote[data-length='long'] p {
+	font-size: 68px;
+	line-height: 76px;
 }
 [data-theme='blueprint'] .layout-quote .slot blockquote p + p {
 	margin-top: 40px;

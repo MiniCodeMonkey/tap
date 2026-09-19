@@ -27,6 +27,10 @@
 	--accent: #7cc7ff;
 	--accent-text: #7cc7ff;
 	--accent-bright: #d7efff;
+	--status-ok: #168b56;
+	--status-warn: #ca8600;
+	--status-error: #c70000;
+	--accent-2: var(--accent-bright);
 	--surface: #1a212d;
 	--edge: #4d5a6e;
 	--dim: #7f8a9a;
@@ -839,6 +843,11 @@
 	letter-spacing: -0.04em;
 	max-width: 1560px;
 	text-wrap: balance;
+}
+/* A long quote (over 180 runes) at 108px leaves no room below it for the
+   attribution line; step down. */
+[data-theme='keynote'] .layout-quote blockquote[data-length='long'] p {
+	font-size: 66px;
 }
 [data-theme='keynote'] .layout-quote .slot-attribution {
 	margin-top: 56px;

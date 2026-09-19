@@ -33,6 +33,10 @@
 	--accent: #1b3a8c;
 	--accent-text: #1b3a8c;
 	--surface: #eef0f6;
+	--status-ok: #24804d;
+	--status-warn: #bd7d00;
+	--status-error: #b41015;
+	--accent-2: var(--pen);
 	--font-display: 'STIX Two Text', 'Latin Modern Roman', 'Times New Roman', serif;
 	--font-body: 'STIX Two Text', 'Latin Modern Roman', 'Times New Roman', serif;
 	--font-mono: 'IBM Plex Mono', 'Latin Modern Mono', monospace;
@@ -1026,6 +1030,11 @@
 	line-height: 1.22;
 	letter-spacing: -0.01em;
 	text-wrap: balance;
+}
+/* A long quote (over 180 runes) at 100px leaves no room below it for the
+   attribution line; step down. */
+[data-theme='lab-notebook'] .layout-quote blockquote[data-length='long'] p {
+	font-size: 60px;
 }
 [data-theme='lab-notebook'] .layout-quote blockquote p::before {
 	content: '\201C';

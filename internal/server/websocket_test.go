@@ -426,6 +426,155 @@ func TestWebSocketHubHandleConnection(t *testing.T) {
 	}
 }
 
+// TestWebSocketHubConnectedMessageCarriesRevision verifies that
+// SetPresentationMeta's revision rides on the "connected" message sent at
+// register time, and that a later connection sees a revision changed by a
+// later SetPresentationMeta call (simulating a deck reload between the two
+// connections).
+func TestWebSocketHubConnectedMessageCarriesRevision(t *testing.T) {
+	hub := NewWebSocketHub()
+	go hub.Run()
+	defer hub.Stop()
+
+	server := httptest.NewServer(http.HandlerFunc(hub.HandleConnection))
+	defer server.Close()
+	wsURL := "ws" + strings.TrimPrefix(server.URL, "http") + "/"
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	readConnected := func() Message {
+		conn, _, err := websocket.Dial(ctx, wsURL, nil)
+		if err != nil {
+			t.Fatalf("websocket.Dial() error = %v", err)
+		}
+		defer conn.Close(websocket.StatusNormalClosure, "")
+		_, data, err := conn.Read(ctx)
+		if err != nil {
+			t.Fatalf("conn.Read() error = %v", err)
+		}
+		var msg Message
+		if err := json.Unmarshal(data, &msg); err != nil {
+			t.Fatalf("json.Unmarshal() error = %v", err)
+		}
+		return msg
+	}
+
+	first := readConnected()
+	if first.Revision != "" {
+		t.Errorf("Revision = %q, want empty before SetPresentationMeta is ever called", first.Revision)
+	}
+
+	hub.SetPresentationMeta(3, "abc123")
+	second := readConnected()
+	if second.Revision != "abc123" {
+		t.Errorf("Revision = %q, want %q", second.Revision, "abc123")
+	}
+
+	hub.SetPresentationMeta(3, "def456")
+	third := readConnected()
+	if third.Revision != "def456" {
+		t.Errorf("Revision = %q, want %q", third.Revision, "def456")
+	}
+}
+
+// TestWebSocketHubOriginCheck covers checkOrigin's rules: no Origin header,
+// an Origin whose host matches the request's own Host header, and an Origin
+// explicitly allowed via SetAllowedOrigins are all accepted; anything else
+// is rejected with 403.
+func TestWebSocketHubOriginCheck(t *testing.T) {
+	hub := NewWebSocketHub()
+	go hub.Run()
+	defer hub.Stop()
+
+	hub.SetAllowedOrigins([]string{"http://localhost:5173"})
+
+	server := httptest.NewServer(http.HandlerFunc(hub.HandleConnection))
+	defer server.Close()
+
+	wsURL := "ws" + strings.TrimPrefix(server.URL, "http") + "/"
+	httpURL := server.URL
+
+	dial := func(origin string) error {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		var header http.Header
+		if origin != "" {
+			header = http.Header{"Origin": []string{origin}}
+		}
+		conn, _, err := websocket.Dial(ctx, wsURL, &websocket.DialOptions{HTTPHeader: header})
+		if err == nil {
+			conn.Close(websocket.StatusNormalClosure, "")
+		}
+		return err
+	}
+
+	t.Run("no origin header is accepted", func(t *testing.T) {
+		if err := dial(""); err != nil {
+			t.Errorf("dial with no Origin header failed: %v", err)
+		}
+	})
+
+	t.Run("origin matching the request host is accepted", func(t *testing.T) {
+		sameHostOrigin := "http://" + strings.TrimPrefix(httpURL, "http://")
+		if err := dial(sameHostOrigin); err != nil {
+			t.Errorf("dial with same-host Origin %q failed: %v", sameHostOrigin, err)
+		}
+	})
+
+	t.Run("origin allowed via SetAllowedOrigins is accepted", func(t *testing.T) {
+		if err := dial("http://localhost:5173"); err != nil {
+			t.Errorf("dial with allowed Origin failed: %v", err)
+		}
+	})
+
+	t.Run("foreign origin is rejected", func(t *testing.T) {
+		err := dial("http://evil.example.com")
+		if err == nil {
+			t.Fatal("dial with foreign Origin succeeded, want rejection")
+		}
+	})
+}
+
+// TestWebSocketHubCheckOrigin_RejectsDNSRebinding reproduces the
+// DNS-rebinding gap directly against checkOrigin: a hostile domain an
+// attacker controls can resolve to 127.0.0.1, so a request can carry
+// Host: evil.example:3800 and Origin: http://evil.example:3800 - equal to
+// each other, but neither one a host this hub should trust. The same-host
+// compare alone must not be enough to accept it.
+func TestWebSocketHubCheckOrigin_RejectsDNSRebinding(t *testing.T) {
+	hub := NewWebSocketHub()
+
+	req := httptest.NewRequest(http.MethodGet, "/ws", nil)
+	req.Host = "evil.example:3800"
+	req.Header.Set("Origin", "http://evil.example:3800")
+
+	if hub.checkOrigin(req) {
+		t.Error("checkOrigin accepted a same-host DNS-rebinding request, want rejection")
+	}
+}
+
+// TestWebSocketHubHandleConnection_RejectsDisallowedHost checks
+// HandleConnection's own Host allow-list, which runs even for a request
+// with no Origin header at all (a non-browser client), where checkOrigin
+// alone would otherwise accept it.
+func TestWebSocketHubHandleConnection_RejectsDisallowedHost(t *testing.T) {
+	hub := NewWebSocketHub()
+	go hub.Run()
+	defer hub.Stop()
+
+	req := httptest.NewRequest(http.MethodGet, "/ws", nil)
+	req.Host = "evil.example:3800"
+	w := httptest.NewRecorder()
+
+	hub.HandleConnection(w, req)
+
+	resp := w.Result()
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusForbidden {
+		t.Errorf("status = %d, want %d", resp.StatusCode, http.StatusForbidden)
+	}
+}
+
 func TestWebSocketHubBroadcastToRealConnection(t *testing.T) {
 	hub := NewWebSocketHub()
 	go hub.Run()
@@ -1059,6 +1208,139 @@ func TestWebSocketHubRelayRejectsNegativeSlideIndex(t *testing.T) {
 	}
 }
 
+// TestWebSocketHubPresenterAuthGatesSending covers checkPresenterAuth end to
+// end: with no password configured, a connection with no cookie can still
+// send; with a password configured, a connection without the matching
+// PresenterAuthCookieName is registered and receives broadcasts but its own
+// messages are dropped, while a connection that carries the cookie sends
+// normally.
+func TestWebSocketHubPresenterAuthGatesSending(t *testing.T) {
+	dial := func(t *testing.T, wsURL string, cookie string) *websocket.Conn {
+		t.Helper()
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		var header http.Header
+		if cookie != "" {
+			header = http.Header{"Cookie": []string{cookie}}
+		}
+		conn, _, err := websocket.Dial(ctx, wsURL, &websocket.DialOptions{HTTPHeader: header})
+		if err != nil {
+			t.Fatalf("websocket.Dial() error = %v", err)
+		}
+		ctx2, cancel2 := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel2()
+		if _, _, err := conn.Read(ctx2); err != nil {
+			t.Fatalf("conn.Read() connected message error = %v", err)
+		}
+		return conn
+	}
+
+	t.Run("no password configured: an uncookied connection can still send", func(t *testing.T) {
+		hub := NewWebSocketHub()
+		go hub.Run()
+		defer hub.Stop()
+		server := httptest.NewServer(http.HandlerFunc(hub.HandleConnection))
+		defer server.Close()
+		wsURL := "ws" + strings.TrimPrefix(server.URL, "http") + "/"
+
+		sender := dial(t, wsURL, "")
+		defer sender.Close(websocket.StatusNormalClosure, "")
+		receiver := dial(t, wsURL, "")
+		defer receiver.Close(websocket.StatusNormalClosure, "")
+
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := sender.Write(ctx, websocket.MessageText, []byte(`{"type":"slide","slideIndex":1}`)); err != nil {
+			t.Fatalf("sender.Write() error = %v", err)
+		}
+		_, data, err := receiver.Read(ctx)
+		if err != nil {
+			t.Fatalf("receiver.Read() error = %v", err)
+		}
+		var msg Message
+		if err := json.Unmarshal(data, &msg); err != nil {
+			t.Fatalf("json.Unmarshal() error = %v", err)
+		}
+		if msg.SlideIndex == nil || *msg.SlideIndex != 1 {
+			t.Errorf("relayed message = %+v, want slideIndex 1", msg)
+		}
+	})
+
+	t.Run("password configured: a connection without the auth cookie cannot send", func(t *testing.T) {
+		hub := NewWebSocketHub()
+		hub.SetPresenterPassword("secret")
+		hub.SetPresenterSessionToken("session-token")
+		go hub.Run()
+		defer hub.Stop()
+		server := httptest.NewServer(http.HandlerFunc(hub.HandleConnection))
+		defer server.Close()
+		wsURL := "ws" + strings.TrimPrefix(server.URL, "http") + "/"
+
+		unauthenticated := dial(t, wsURL, "")
+		defer unauthenticated.Close(websocket.StatusNormalClosure, "")
+		receiver := dial(t, wsURL, "")
+		defer receiver.Close(websocket.StatusNormalClosure, "")
+
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := unauthenticated.Write(ctx, websocket.MessageText, []byte(`{"type":"slide","slideIndex":1}`)); err != nil {
+			t.Fatalf("unauthenticated.Write() error = %v", err)
+		}
+		// The dropped message never arrives; a subsequent authenticated
+		// sender's message is what proves the receiver's pipe is still
+		// live and nothing from the unauthenticated sender snuck through.
+		authenticated := dial(t, wsURL, PresenterAuthCookieName+"=session-token")
+		defer authenticated.Close(websocket.StatusNormalClosure, "")
+		if err := authenticated.Write(ctx, websocket.MessageText, []byte(`{"type":"slide","slideIndex":2}`)); err != nil {
+			t.Fatalf("authenticated.Write() error = %v", err)
+		}
+		_, data, err := receiver.Read(ctx)
+		if err != nil {
+			t.Fatalf("receiver.Read() error = %v", err)
+		}
+		var msg Message
+		if err := json.Unmarshal(data, &msg); err != nil {
+			t.Fatalf("json.Unmarshal() error = %v", err)
+		}
+		if msg.SlideIndex == nil || *msg.SlideIndex != 2 {
+			t.Errorf("relayed message = %+v, want the unauthenticated slide 1 dropped and only slide 2 relayed", msg)
+		}
+	})
+
+	t.Run("password configured: a connection with the correct auth cookie can send", func(t *testing.T) {
+		hub := NewWebSocketHub()
+		hub.SetPresenterPassword("secret")
+		hub.SetPresenterSessionToken("session-token")
+		go hub.Run()
+		defer hub.Stop()
+		server := httptest.NewServer(http.HandlerFunc(hub.HandleConnection))
+		defer server.Close()
+		wsURL := "ws" + strings.TrimPrefix(server.URL, "http") + "/"
+
+		sender := dial(t, wsURL, PresenterAuthCookieName+"=session-token")
+		defer sender.Close(websocket.StatusNormalClosure, "")
+		receiver := dial(t, wsURL, "")
+		defer receiver.Close(websocket.StatusNormalClosure, "")
+
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := sender.Write(ctx, websocket.MessageText, []byte(`{"type":"slide","slideIndex":3}`)); err != nil {
+			t.Fatalf("sender.Write() error = %v", err)
+		}
+		_, data, err := receiver.Read(ctx)
+		if err != nil {
+			t.Fatalf("receiver.Read() error = %v", err)
+		}
+		var msg Message
+		if err := json.Unmarshal(data, &msg); err != nil {
+			t.Fatalf("json.Unmarshal() error = %v", err)
+		}
+		if msg.SlideIndex == nil || *msg.SlideIndex != 3 {
+			t.Errorf("relayed message = %+v, want slideIndex 3", msg)
+		}
+	})
+}
+
 // TestWebSocketHubValidSlideIndex verifies validSlideIndex's rules: never
 // negative; out of range only rejected once the hub knows the slide count.
 func TestWebSocketHubValidSlideIndex(t *testing.T) {
@@ -1071,7 +1353,7 @@ func TestWebSocketHubValidSlideIndex(t *testing.T) {
 		t.Error("validSlideIndex(99) = false, want true: slide count is unknown, so only negatives are rejected")
 	}
 
-	hub.SetSlideCount(5)
+	hub.SetPresentationMeta(5, "")
 	if hub.validSlideIndex(5) {
 		t.Error("validSlideIndex(5) = true, want false: only indexes 0-4 are in range for a 5-slide deck")
 	}
@@ -1216,5 +1498,43 @@ func TestWebSocketHubInitialStateOrdersBeforeConcurrentBroadcast(t *testing.T) {
 				}
 			}
 		}
+	}
+}
+
+// TestWebSocketHubHandleConnectionDuringShutdown verifies that a connection
+// arriving after Stop() has closed h.done does not hang HandleConnection
+// forever waiting on h.register, which nothing reads from once Run has
+// returned.
+func TestWebSocketHubHandleConnectionDuringShutdown(t *testing.T) {
+	hub := NewWebSocketHub()
+	go hub.Run()
+
+	// Stop the hub and wait for Run to actually return before connecting,
+	// so this test exercises the case under test (nothing reading from
+	// h.register) rather than racing Run's own shutdown.
+	hub.Stop()
+	time.Sleep(20 * time.Millisecond)
+
+	server := httptest.NewServer(http.HandlerFunc(hub.HandleConnection))
+	defer server.Close()
+
+	wsURL := "ws" + strings.TrimPrefix(server.URL, "http") + "/"
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	done := make(chan struct{})
+	go func() {
+		conn, _, err := websocket.Dial(ctx, wsURL, nil)
+		if err == nil {
+			conn.Close(websocket.StatusNormalClosure, "")
+		}
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		// HandleConnection returned instead of blocking forever on h.register.
+	case <-time.After(2 * time.Second):
+		t.Fatal("HandleConnection did not return during hub shutdown within timeout")
 	}
 }

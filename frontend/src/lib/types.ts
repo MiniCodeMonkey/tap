@@ -304,6 +304,12 @@ export interface WebSocketMessage {
 	 * a reliable way to detect it; this field is.
 	 */
 	initial?: boolean;
+	/**
+	 * Short content hash of the deck currently served, sent only on a
+	 * "connected" message (see internal/server/websocket.go's register
+	 * case). Absent when the hub has never had a presentation set.
+	 */
+	revision?: string;
 }
 
 // ============================================================================

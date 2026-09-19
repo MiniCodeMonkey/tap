@@ -30,6 +30,10 @@
 	--accent: #d40b1e;
 	--accent-text: #a30d1c;
 	--surface: #deddd6;
+	--status-ok: #1d7d40;
+	--status-warn: #a78100;
+	--status-error: #ae0919;
+	--accent-2: var(--accent-text);
 	/* the quietest text value: dimmed code lines and comments, 5:1 on --bg */
 	--dim: #6a6962;
 	--font-display: 'Archivo', 'Helvetica Neue', Helvetica, Arial, sans-serif;
@@ -804,6 +808,11 @@
 	line-height: 1.05;
 	letter-spacing: -0.04em;
 	text-wrap: balance;
+}
+/* A long quote (over 180 runes) runs off the bottom of the slide at
+   108px; step down. */
+[data-theme='swiss'] .layout-quote .slot-default blockquote[data-length='long'] p {
+	font-size: 64px;
 }
 [data-theme='swiss'] .layout-quote .slot-attribution p {
 	margin: 0;

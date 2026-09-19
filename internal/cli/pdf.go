@@ -6,8 +6,10 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/MiniCodeMonkey/tap/internal/config"
@@ -65,6 +67,10 @@ func init() {
 // path after they start.
 func runPDF(cmd *cobra.Command, args []string) {
 	if err := runPDFE(args); err != nil {
+		if errors.Is(err, errInterrupted) {
+			fmt.Fprintln(os.Stderr, "interrupted")
+			os.Exit(130)
+		}
 		if !errors.Is(err, errSilent) {
 			Errorln("Error:", err)
 		}
@@ -75,6 +81,20 @@ func runPDF(cmd *cobra.Command, args []string) {
 // runPDFE implements the pdf command. See runPDF for why this is a
 // separate, error-returning function.
 func runPDFE(args []string) error {
+	// Cancelled on Ctrl-C (SIGINT) or SIGTERM, so the export loop below can
+	// stop between slides instead of leaving a headless browser running
+	// past the deferred cleanup below.
+	signalCtx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+	// stop() also runs the moment signalCtx is done, rather than waiting
+	// for this function to return: signal.NotifyContext keeps intercepting
+	// the signal until stop() runs, so without this a second Ctrl-C during
+	// the cleanup below (server shutdown, exporter close) would just
+	// cancel the already-cancelled context again instead of falling
+	// through to the OS default handler, which is what actually kills the
+	// process immediately.
+	context.AfterFunc(signalCtx, stop)
+
 	file := args[0]
 
 	// Validate that the file exists
@@ -132,13 +152,17 @@ func runPDFE(args []string) error {
 		spinner.stop()
 		return fmt.Errorf("failed to load presentation: %w", err)
 	}
+	// The spinner and these warnings both write to standard error; stop it
+	// first so a warning line never lands mid-frame, then start it again
+	// (with the next step's message) once they are printed.
+	spinner.stop()
 	printLayoutWarningsToStderr(absPath, warnings)
 	if len(componentBuildErrs) > 0 {
-		spinner.stop()
 		printComponentErrorsToStderr(componentBuildErrs)
 		return errSilent
 	}
 	printComponentWarningsToStderr(componentBuildWarnings)
+	spinner.start()
 
 	// Ensure server is cleaned up on exit
 	defer func() {
@@ -165,7 +189,7 @@ func runPDFE(args []string) error {
 
 	// Step 6: Export to PDF
 	spinner.update("Generating PDF (this may take a moment)")
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	ctx, cancel := context.WithTimeout(signalCtx, 5*time.Minute)
 	defer cancel()
 
 	result, err := exporter.Export(ctx, serverURL, pdf.ExportOptions{
@@ -176,6 +200,15 @@ func runPDFE(args []string) error {
 	})
 	if err != nil {
 		spinner.stop()
+		// A real Ctrl-C signals the whole process group, so the headless
+		// browser often dies first and Export fails with its own error
+		// (a closed target, a lost connection) rather than one that wraps
+		// context.Canceled. signalCtx itself is the source of truth for
+		// whether this run was interrupted, regardless of how that
+		// surfaced in err.
+		if signalCtx.Err() != nil {
+			return errInterrupted
+		}
 		return fmt.Errorf("PDF export failed: %w", err)
 	}
 
@@ -186,8 +219,8 @@ func runPDFE(args []string) error {
 	// throws at render, or a slide that fails to render) still ends up in
 	// the PDF - the broken page just shows the card - so this only warns,
 	// one line per affected slide, and still exits 0.
-	for _, slideNumber := range result.BrokenSlides {
-		fmt.Fprintf(os.Stderr, "warning: slide %d shows an error card\n", slideNumber)
+	for _, broken := range result.BrokenSlides {
+		fmt.Fprintf(os.Stderr, "warning: slide %d shows an error card: %s\n", broken.SlideNumber, broken.Message)
 	}
 
 	// Print success message and export stats

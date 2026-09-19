@@ -29,6 +29,9 @@
 	--accent: #e0161d;
 	--accent-text: #800410;
 	--accent-2: #ffffff;
+	--status-ok: #0e8637;
+	--status-warn: #924900;
+	--status-error: #910512;
 	--surface: #f2c200;
 	--font-display: 'Anton', 'Impact', 'Arial Narrow', sans-serif;
 	--font-body: 'Archivo Narrow', 'Arial Narrow', sans-serif;
@@ -1064,6 +1067,11 @@
 [data-theme='poster'] .layout-quote blockquote p strong,
 [data-theme='poster'] .layout-quote blockquote p em {
 	font-weight: 400;
+}
+/* A long quote (over 180 runes) crowds the slide edge to edge at 124px,
+   crossing the attribution below it; step down. */
+[data-theme='poster'] .layout-quote blockquote[data-length='long'] p {
+	font-size: 68px;
 }
 [data-theme='poster'] .layout-quote .slot-attribution {
 	margin-top: 52px;

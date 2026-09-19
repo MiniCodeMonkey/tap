@@ -3,6 +3,8 @@ package server
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"net"
 	"net/http"
@@ -20,18 +22,25 @@ import (
 // Server is the HTTP server for serving presentations in development mode.
 type Server struct {
 	// Fields ordered by size for better memory alignment
-	presentation      *transformer.TransformedPresentation
-	registry          *driver.Registry
-	httpServer        *http.Server
-	mux               *http.ServeMux
-	shutdownCh        chan struct{}
-	addr              string
-	presenterPassword string
-	customThemePath   string
-	baseDir           string // Base directory for serving local files (images, etc.)
-	componentBundles  *ComponentBundleStore
-	mu                sync.RWMutex
-	started           bool
+	presentation          *transformer.TransformedPresentation
+	registry              *driver.Registry
+	httpServer            *http.Server
+	mux                   *http.ServeMux
+	shutdownCh            chan struct{}
+	addr                  string
+	presenterPassword     string
+	presenterSessionToken string
+	customThemePath       string
+	baseDir               string // Base directory for serving local files (images, etc.)
+	componentBundles      *ComponentBundleStore
+	// allowedHosts is the --allow-origin flag reduced to bare hosts (see
+	// allowedHostsFromOrigins), checked by requireAllowedHost against a
+	// request's Host header on the routes that matter against DNS
+	// rebinding. Mirrors WebSocketHub.allowedHosts; tap dev sets both from
+	// the same flag value.
+	allowedHosts map[string]struct{}
+	mu           sync.RWMutex
+	started      bool
 }
 
 // New creates a new Server bound to the specified port on 0.0.0.0, so a
@@ -220,11 +229,74 @@ func (s *Server) GetPresenterPassword() string {
 	return s.presenterPassword
 }
 
+// SetPresenterSessionToken sets the random per-process token handlePresenter
+// stores in the presenter auth cookie once a request proves it knows the
+// presenter password (see GeneratePresenterSessionToken). The caller
+// generates this once per process and sets it on every candidate Server and
+// on the WebSocketHub, so a cookie one of them issues validates against the
+// others too.
+func (s *Server) SetPresenterSessionToken(token string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.presenterSessionToken = token
+}
+
+// GetPresenterSessionToken returns the current presenter session token.
+func (s *Server) GetPresenterSessionToken() string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.presenterSessionToken
+}
+
+// GeneratePresenterSessionToken returns a fresh random 32-byte token,
+// hex-encoded, for use as the presenter auth cookie's value. It never
+// carries the actual presenter password (see handlePresenter in routes.go):
+// Go's cookie jar sanitizes cookie values, silently changing a raw password
+// that contains a semicolon, quote, backslash, space, or non-ASCII
+// character, which would otherwise break the cookie compare a real
+// presenter password could easily trigger.
+func GeneratePresenterSessionToken() (string, error) {
+	buf := make([]byte, 32)
+	if _, err := rand.Read(buf); err != nil {
+		return "", fmt.Errorf("generate presenter session token: %w", err)
+	}
+	return hex.EncodeToString(buf), nil
+}
+
 // SetCustomThemePath sets the path to a custom CSS theme file.
 func (s *Server) SetCustomThemePath(path string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.customThemePath = path
+}
+
+// SetAllowedOrigins sets the --allow-origin values requireAllowedHost
+// checks a request's Host header against, on top of localhost, a loopback,
+// private, or link-local IP, a ".local" name, and this machine's own
+// hostname (see isAllowedHost). tap dev calls this with the same value it
+// passes to WebSocketHub.SetAllowedOrigins.
+func (s *Server) SetAllowedOrigins(origins []string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.allowedHosts = allowedHostsFromOrigins(origins)
+}
+
+// requireAllowedHost wraps next so it only runs for a request whose Host
+// header is on the allow-list (see isAllowedHost); anything else gets 403.
+// This is the DNS rebinding defense for tap dev's HTTP routes: a same-host
+// compare alone is not enough, since a hostile domain an attacker controls
+// can resolve to 127.0.0.1 and still send that exact Host header.
+func (s *Server) requireAllowedHost(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		s.mu.RLock()
+		allowedHosts := s.allowedHosts
+		s.mu.RUnlock()
+		if !isAllowedHost(r.Host, allowedHosts) {
+			http.Error(w, "Forbidden: host not allowed; use --allow-origin to allow it", http.StatusForbidden)
+			return
+		}
+		next(w, r)
+	}
 }
 
 // GetCustomThemePath returns the path to the custom CSS theme file.

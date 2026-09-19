@@ -37,6 +37,33 @@ func withWorkingDirectory(t *testing.T, dir string, fn func()) {
 	fn()
 }
 
+// TestAddComponentDeckFlagAsDirectory checks that --deck given a directory
+// (the deck folder itself, not a markdown file inside it) writes into that
+// directory, not its parent.
+func TestAddComponentDeckFlagAsDirectory(t *testing.T) {
+	parent := t.TempDir()
+	deckDir := filepath.Join(parent, "my-talk")
+	if err := os.Mkdir(deckDir, 0o755); err != nil {
+		t.Fatalf("failed to create deck directory: %v", err)
+	}
+	resetAddComponentFlags()
+	addComponentDeck = deckDir
+
+	if err := runAddComponentE("RollingDeploy"); err != nil {
+		t.Fatalf("runAddComponentE: %v", err)
+	}
+
+	componentPath := filepath.Join(deckDir, "slides", "RollingDeploy.jsx")
+	if _, err := os.Stat(componentPath); err != nil {
+		t.Fatalf("expected component to be written inside the deck directory at %s: %v", componentPath, err)
+	}
+
+	parentComponentPath := filepath.Join(parent, "slides", "RollingDeploy.jsx")
+	if _, err := os.Stat(parentComponentPath); err == nil {
+		t.Errorf("did not expect a component written into the parent directory at %s", parentComponentPath)
+	}
+}
+
 func TestAddComponentWholeSlideJSX(t *testing.T) {
 	dir := t.TempDir()
 	resetAddComponentFlags()

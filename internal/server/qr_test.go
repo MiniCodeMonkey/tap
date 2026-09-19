@@ -223,6 +223,28 @@ func TestGeneratePresenterURL_PasswordURLEncoding(t *testing.T) {
 	}
 }
 
+// TestGeneratePresenterURL_EncodesSpecialCharacters checks a password
+// containing characters with meaning in a URL query (a space and an
+// ampersand) comes back percent-encoded rather than breaking the URL or
+// silently changing what a client sends back as ?key=.
+func TestGeneratePresenterURL_EncodesSpecialCharacters(t *testing.T) {
+	cfg := QRConfig{
+		Port:              3000,
+		PreferredHost:     "localhost",
+		PresenterPassword: "we ird&pass",
+	}
+
+	presenterURL, err := GeneratePresenterURL(cfg)
+	if err != nil {
+		t.Fatalf("GeneratePresenterURL() error = %v", err)
+	}
+
+	want := "http://localhost:3000/presenter?key=we+ird%26pass"
+	if presenterURL != want {
+		t.Errorf("GeneratePresenterURL() = %q, want %q", presenterURL, want)
+	}
+}
+
 func TestGeneratePresenterURL_EmptyPassword(t *testing.T) {
 	cfg := QRConfig{
 		Port:              3000,

@@ -37,7 +37,8 @@ type themeData struct {
 // these are the ones the rest of tap (useTheme(), tap theme show) depends
 // on existing for every theme.
 var RequiredTokens = []string{
-	"--bg", "--fg", "--muted", "--accent", "--accent-text", "--surface",
+	"--bg", "--fg", "--muted", "--accent", "--accent-text", "--accent-2", "--surface",
+	"--status-ok", "--status-warn", "--status-error",
 	"--font-display", "--font-body", "--font-mono", "--ease", "--dur",
 	"--space-unit", "--radius", "--stroke-width",
 }

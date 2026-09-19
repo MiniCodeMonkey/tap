@@ -174,9 +174,20 @@ Read `boxStyle` as the rule in miniature. The upgraded box uses
 its text color is whatever `textOn` picked. The restarting box uses no
 accent at all.
 
-Tap has no semantic token for a failed or down state. Express one the way
-the restarting box does: `theme.muted`, a dashed outline, and lower
-opacity.
+For a **state**, reach for the status tokens instead:
+`theme.statusOk`, `theme.statusWarn`, `theme.statusError`. Each is a fill,
+readable at 3:1 or better against the background in every theme, and the
+three are stepped apart in lightness as well as hue. Spend them only where
+the color means something, and use `textOn(theme.statusError, theme)` for a
+label on top of one.
+
+**Never signal status by color alone.** Pair the color with a label, an
+icon, or a shape, so the meaning survives a colorblind viewer and a
+washed-out projector.
+
+A server that is merely restarting is not a verdict, which is why the
+example keeps `theme.muted` with a dashed outline and lower opacity for
+that case. Save `statusError` for something that actually failed.
 
 ### The component body
 
@@ -588,7 +599,7 @@ tap screenshot deck.md --slide 3 --theme zine --out zine.png
 slide's `[data-theme]` root, and re-reads them when the theme changes. That
 means a component follows the `t` key and `?theme=<slug>` without any work.
 
-It returns **exactly these 14 keys**, and no more:
+It returns **exactly these 18 keys**, and no more:
 
 | Token | CSS property | Typical use |
 |-------|--------------|-------------|
@@ -597,7 +608,11 @@ It returns **exactly these 14 keys**, and no more:
 | `muted` | `--muted` | Secondary text, inactive and down states |
 | `accent` | `--accent` | The one highlight color, **as a fill** |
 | `accentText` | `--accent-text` | The accent as text or a thin line on `bg` |
+| `accent2` | `--accent-2` | A second fill; equals `accentText` in themes with no second accent |
 | `surface` | `--surface` | Panels and cards |
+| `statusOk` | `--status-ok` | A healthy or passing state, as a fill |
+| `statusWarn` | `--status-warn` | A warning state, as a fill |
+| `statusError` | `--status-error` | A failed state, as a fill |
 | `fontDisplay` | `--font-display` | Headings |
 | `fontBody` | `--font-body` | Body text |
 | `fontMono` | `--font-mono` | Code and labels |
@@ -609,23 +624,22 @@ It returns **exactly these 14 keys**, and no more:
 
 Three things that follow from that list:
 
-- **There is no second accent.** Some themes define extra colors, such as
-  `terminal`'s `--accent-2`, but `useTheme()` does not surface them. A
-  component that wants one reads the CSS variable directly, always with a
-  fallback, so it still works in the themes that have no such variable:
-
-  ```jsx
-  <div style={{ color: 'var(--accent-2, var(--accent-text))' }}>ok</div>
-  ```
-
-  Any theme variable can be read this way. `useTheme()` is the portable
-  subset, not the whole set.
-- **There is no token for a failed or down state.** Build one from
-  `muted`, a dashed outline, and lower opacity, the way the rolling
-  deploy's restarting box does.
-- **Every value is a string, and may be empty.** On the first render,
-  before the root has mounted, all 14 are `''`. Write styles that survive
-  that, or branch as `textOnAccent` does.
+- **`accent2` is always safe to use.** It is a real second accent in the
+  themes that have one, and equal to `accentText` in the rest, so a
+  component that needs two fills never has to check.
+- **The status colors carry meaning, so spend them sparingly.** Each is
+  readable as a fill at 3:1 or better against the background, and any two
+  differ in lightness by at least a 1.35 contrast ratio, in every theme.
+  Use them for a health state, a passed or failed check, a threshold
+  crossed. Something merely inactive is not a verdict: that stays `muted`
+  with a dashed outline and lower opacity, the way the rolling deploy's
+  restarting box does. **Never signal status by color alone:** pair it with
+  a label, an icon, or a shape, so it still reads for a colorblind viewer
+  and on a washed-out projector.
+- **`useTheme()` is the portable set, not the whole set.** A theme may
+  define more variables; read one directly with a fallback,
+  `var(--brand-ink, var(--fg))`, so it still works elsewhere. Frontmatter
+  `themeColors` overrides are picked up automatically.
 
 To see the same values on the command line:
 
@@ -659,6 +673,30 @@ const duration = printMode ? 0 : 0.3;
 The `Step` helper follows the same rule, comparing against the live `step`
 in every mode, so `<Step at={totalSteps}>` correctly stays hidden in a
 step 2 capture.
+
+### Tap helps, but not enough to skip the check
+
+In print mode tap wraps components in Motion's `reducedMotion="always"`,
+which makes transform and layout animations instant (`x`, `y`, `scale`,
+`rotate`, `skew`, `width`, `height`, `top`, `left`, `right`, `bottom`,
+`layoutId`), and applies `animation: none; transition: none` inside the
+component root, which stops CSS keyframes and CSS transitions.
+
+It does **not** stop Motion animations of `opacity`, `color`, or
+`backgroundColor`, and it cannot stop your own timers. A Motion fade still
+fades in a PDF unless you write
+`transition={{ duration: printMode ? 0 : 0.4 }}` yourself.
+
+Because CSS animations are switched off rather than fast-forwarded, an
+element that only reaches its final look through
+`animation-fill-mode: forwards` snaps back to its base style in print mode.
+Make the base style the settled state and animate **from** the start state
+instead:
+
+```css
+.badge { opacity: 1; animation: fade-in 400ms; }
+@keyframes fade-in { from { opacity: 0; } }
+```
 
 ## Thumbnails
 
@@ -750,8 +788,16 @@ import './deploy.css';
 Tap emits the CSS next to the bundle and adds one stylesheet link for it.
 Scope your selectors, since the stylesheet applies to the whole document.
 
-Imported images and `.woff2` files are inlined as data URLs at any size, so
-keep large images in the markdown as normal images instead.
+An imported image or font under 100 KB is inlined as a data URL. One of
+100 KB or more is emitted as its own file named `asset-<hash>.<ext>` next
+to the bundle and referenced by URL, served by `tap dev` from
+`/components/` and written into `dist/components/` by `tap build`. Either
+way your component just uses the imported value as a `src`, and an asset
+referenced from your CSS with `url()` resolves relative to the emitted CSS
+file, so it survives a static build under any sub path.
+
+A large photograph still belongs in the markdown as a normal image, where
+you get sizing attributes and the theme's image styling.
 
 ## When something breaks
 

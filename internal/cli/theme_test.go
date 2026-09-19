@@ -139,7 +139,12 @@ func TestFontFeelSentence(t *testing.T) {
 	}
 }
 
-func TestExtraPaletteColors_TerminalHasAccent2AndNoShikiOrCodeTokens(t *testing.T) {
+// TestExtraPaletteColors_TerminalExcludesNamedRolesAndCodeTokens checks that
+// extraPaletteColors never repeats a token that already has its own named
+// field elsewhere in tokens.colors (accent2, statusOk, statusWarn,
+// statusError, alongside the original five roles), and still drops shiki
+// and code block tokens, which mean nothing to an image model.
+func TestExtraPaletteColors_TerminalExcludesNamedRolesAndCodeTokens(t *testing.T) {
 	tokens, ok := themes.Tokens("terminal")
 	if !ok {
 		t.Fatal("terminal has no tokens")
@@ -148,7 +153,6 @@ func TestExtraPaletteColors_TerminalHasAccent2AndNoShikiOrCodeTokens(t *testing.
 	bg := toHexOrAsWritten(tokens["--bg"], "")
 	extra := extraPaletteColors(tokens, bg)
 
-	found := false
 	for _, color := range extra {
 		if strings.HasPrefix(color.Name, "shiki") {
 			t.Errorf("extraPaletteColors(terminal) includes a shiki token %q, want it dropped", color.Name)
@@ -157,14 +161,11 @@ func TestExtraPaletteColors_TerminalHasAccent2AndNoShikiOrCodeTokens(t *testing.
 			t.Errorf("extraPaletteColors(terminal) includes a code block token %q, want it dropped", color.Name)
 		}
 		if color.Name == "accent 2" {
-			found = true
-			if color.Hex != tokens["--accent-2"] {
-				t.Errorf("accent 2 = %q, want %q", color.Hex, tokens["--accent-2"])
-			}
+			t.Error("extraPaletteColors(terminal) includes accent 2, which now has its own named field (tokens.colors.accent2)")
 		}
-	}
-	if !found {
-		t.Error("extraPaletteColors(terminal) does not include accent 2")
+		if color.Name == "status ok" || color.Name == "status warn" || color.Name == "status error" {
+			t.Errorf("extraPaletteColors(terminal) includes %q, which now has its own named field", color.Name)
+		}
 	}
 	if len(extra) > 8 {
 		t.Errorf("extraPaletteColors(terminal) returned %d colors, want at most 8", len(extra))
@@ -262,12 +263,13 @@ func TestThemeShowCommand_JSONHoldsExpectedKeys(t *testing.T) {
 	if !ok {
 		t.Fatalf("tokens.colors is not an object: %v", tokens["colors"])
 	}
-	extra, ok := colors["extra"].(map[string]any)
-	if !ok {
-		t.Fatalf("tokens.colors.extra is not an object: %v", colors["extra"])
+	if colors["accent2"] != "#6fe3a0" {
+		t.Errorf(`tokens.colors.accent2 = %v, want "#6fe3a0"`, colors["accent2"])
 	}
-	if extra["accent 2"] != "#6fe3a0" {
-		t.Errorf(`tokens.colors.extra["accent 2"] = %v, want "#6fe3a0"`, extra["accent 2"])
+	for _, key := range []string{"statusOk", "statusWarn", "statusError"} {
+		if value, ok := colors[key].(string); !ok || value == "" {
+			t.Errorf("tokens.colors.%s = %v, want a non-empty string", key, colors[key])
+		}
 	}
 
 	illustration, ok := output["illustration"].(map[string]any)

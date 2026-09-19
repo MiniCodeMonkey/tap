@@ -24,6 +24,9 @@
 	--accent: #ffb84d;
 	--accent-text: #ffb84d;
 	--accent-2: #6fe3a0;
+	--status-ok: #23b561;
+	--status-warn: #bd7100;
+	--status-error: #d60600;
 	--surface: #1d2b25;
 	--font-display: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
 	--font-body: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
@@ -1043,6 +1046,14 @@
 	letter-spacing: -0.03em;
 	text-wrap: balance;
 	animation: terminal-type 800ms steps(24, end) 400ms both;
+}
+/* The layout centers the quote block vertically; a long quote (over 180
+   runes) at 78px grows tall enough that centering pushes its first line
+   up under the "$ fortune" prompt line. Step down so the block stays
+   clear of it. */
+[data-theme='terminal'] .layout-quote blockquote[data-length='long'] p {
+	font-size: 52px;
+	line-height: 70px;
 }
 [data-theme='terminal'] .layout-quote .slot-attribution {
 	margin-top: 56px;

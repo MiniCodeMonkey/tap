@@ -205,11 +205,12 @@ func (b *Builder) Build(cfg *config.Config, pres *parser.Presentation) (*BuildRe
 }
 
 // writeComponentBundles writes every successfully built component bundle's
-// JavaScript, and CSS when it has any, to dist/components/, using the same
-// "<name>-<hash>.<ext>" file names the dev server serves. A component that
-// failed to build has no Bundle and is skipped here; its slide JSON carries
-// the error instead (see the transformer), and the caller has already
-// failed the build for that case before reaching Build.
+// JavaScript, CSS when it has any, and any emitted (not inlined) asset, to
+// dist/components/, using the same "<name>-<hash>.<ext>" file names the dev
+// server serves. A component that failed to build has no Bundle and is
+// skipped here; its slide JSON carries the error instead (see the
+// transformer), and the caller has already failed the build for that case
+// before reaching Build.
 func (b *Builder) writeComponentBundles() (int, int64, error) {
 	if len(b.components) == 0 {
 		return 0, 0, nil
@@ -243,6 +244,15 @@ func (b *Builder) writeComponentBundles() (int, int64, error) {
 			}
 			count++
 			totalSize += int64(len(bundle.CSS))
+		}
+
+		for _, asset := range bundle.Assets {
+			assetPath := filepath.Join(componentsDir, asset.Name)
+			if err := os.WriteFile(assetPath, asset.Content, 0644); err != nil {
+				return count, totalSize, fmt.Errorf("failed to write %s: %w", assetPath, err)
+			}
+			count++
+			totalSize += int64(len(asset.Content))
 		}
 	}
 	return count, totalSize, nil

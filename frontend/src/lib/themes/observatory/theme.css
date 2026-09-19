@@ -32,6 +32,10 @@
 	--accent: #ffb454;
 	--accent-text: #ffb454;
 	--accent-cool: #6fb6ff;
+	--status-ok: #1fb370;
+	--status-warn: #c26d00;
+	--status-error: #d50000;
+	--accent-2: var(--accent-cool);
 	--surface: #182c57;
 	--bg-high: #13264d;
 	--bg-deep: #060b1a;
@@ -884,6 +888,10 @@
 	line-height: 1.16;
 	letter-spacing: -0.02em;
 	text-wrap: balance;
+}
+/* A long quote (over 180 runes) clips at the top of the frame at 108px. */
+[data-theme='observatory'] .layout-quote blockquote[data-length='long'] p {
+	font-size: 64px;
 }
 [data-theme='observatory'] .layout-quote .slot-attribution {
 	margin-top: 48px;

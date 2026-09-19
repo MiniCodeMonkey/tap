@@ -169,6 +169,10 @@ describe('SlideCanvas', () => {
 			const frame = container.querySelector('.slide');
 
 			expect(frame).toHaveStyle({ '--color-accent': '#ff0000' });
+			// The standard design-spec tokens (read by useTheme()) follow the
+			// same override, on the same element, not just the --color-*
+			// bridge CSS reads.
+			expect(frame).toHaveStyle({ '--accent': '#ff0000', '--accent-text': '#ff0000' });
 		});
 
 		it('skips an invalid color value with a warning', () => {

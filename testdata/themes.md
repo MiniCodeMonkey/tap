@@ -408,3 +408,16 @@ markers: true
 # Thank You
 
 Questions, complaints, and pull requests welcome
+
+---
+
+<!--
+layout: quote
+notes: A long quote (over 180 runes), for data-length="long" coverage on the quote layout.
+-->
+
+> The rewrite did not fix scaling by being clever. It fixed it by being boring: cache the output, measure the real bottleneck before touching a line of code, and ship the smallest change that moves the number you are actually watching.
+
+::attribution
+
+Someone who learned this the hard way, twice

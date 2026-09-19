@@ -12,6 +12,7 @@ import (
 	"github.com/MiniCodeMonkey/tap/internal/layouts"
 	"github.com/MiniCodeMonkey/tap/internal/parser"
 	"github.com/MiniCodeMonkey/tap/internal/transformer"
+	"github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"
 )
 
@@ -111,8 +112,11 @@ func runBuild(cmd *cobra.Command, args []string) {
 	// Resolve and bundle every component the presentation's slides use.
 	// Static builds minify and skip source maps. Any bundle error fails
 	// the build outright, printed in the same terminal format dev uses.
+	// The asset URL prefix is relative ("components/", no leading slash),
+	// matching trans.SetComponentURLPrefix below, so the built deck still
+	// works when deployed under a sub-path.
 	spinner.update("Bundling components")
-	resolvedComponents, componentBuildErrs := buildComponents(pres, baseDir, true, false)
+	resolvedComponents, componentBuildErrs := buildComponents(pres, baseDir, true, false, "components/")
 	if len(componentBuildErrs) > 0 {
 		spinner.stop()
 		printComponentErrorsToStderr(componentBuildErrs)
@@ -171,18 +175,38 @@ type spinner struct {
 	done    chan bool
 	message string
 	running bool
+	// isTerminal reports whether standard error is a terminal worth
+	// drawing a spinner on. A field, not a direct isatty call, so a test
+	// can force the no-terminal path without depending on how the test
+	// binary itself happens to be run.
+	isTerminal func() bool
 }
 
 // newSpinner creates a new spinner with the given message
 func newSpinner(message string) *spinner {
 	return &spinner{
-		message: message,
-		done:    make(chan bool),
+		message:    message,
+		done:       make(chan bool),
+		isTerminal: stderrIsTerminal,
 	}
 }
 
-// start begins the spinner animation
+// stderrIsTerminal reports whether standard error is a terminal.
+func stderrIsTerminal() bool {
+	return isatty.IsTerminal(os.Stderr.Fd())
+}
+
+// start begins the spinner animation, writing to standard error - progress
+// output, not a command's result, which only ever belongs on standard
+// output (see tap build and tap pdf's own success lines). It draws
+// nothing at all when standard error is not a terminal (redirected to a
+// file, piped, or running in CI): a spinner frame with no terminal to
+// erase it just leaves a stream of "\r..." noise behind.
 func (s *spinner) start() {
+	if !s.isTerminal() {
+		return
+	}
+
 	s.running = true
 	frames := []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
 	frameIndex := 0
@@ -197,7 +221,7 @@ func (s *spinner) start() {
 				return
 			case <-ticker.C:
 				// Clear line and print spinner
-				fmt.Printf("\r%s %s", InfoSprint(frames[frameIndex]), s.message)
+				fmt.Fprintf(os.Stderr, "\r%s %s", InfoSprint(frames[frameIndex]), s.message)
 				frameIndex = (frameIndex + 1) % len(frames)
 			}
 		}
@@ -209,13 +233,15 @@ func (s *spinner) update(message string) {
 	s.message = message
 }
 
-// stop stops the spinner animation
+// stop stops the spinner animation and clears its line from standard
+// error. A no-op when the spinner was never started (standard error is
+// not a terminal - see start).
 func (s *spinner) stop() {
 	if s.running {
 		s.running = false
 		s.done <- true
 		// Clear the spinner line
-		fmt.Print("\r\033[K")
+		fmt.Fprint(os.Stderr, "\r\033[K")
 	}
 }
 

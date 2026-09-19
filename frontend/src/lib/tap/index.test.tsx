@@ -183,6 +183,45 @@ describe('useTheme', () => {
 
 		document.body.removeChild(themeHost);
 	});
+
+	it('re-reads tokens when the ancestor style attribute changes without a data-theme change', async () => {
+		// Mirrors how SlideCanvas applies themeColors: an inline custom
+		// property set on the same element that carries data-theme, with no
+		// change to data-theme itself.
+		const themeHost = document.createElement('div');
+		themeHost.setAttribute('data-theme', 'terminal');
+		themeHost.style.setProperty('--accent', '#ffb84d');
+		themeHost.style.setProperty('--accent-text', '#ffb84d');
+		document.body.appendChild(themeHost);
+
+		const mountPoint = themeHost.appendChild(document.createElement('div'));
+		const rootRef = { current: mountPoint as HTMLElement | null };
+
+		const { getByTestId } = render(
+			<DeckComponentContext.Provider
+				value={{ step: 0, steps: 0, active: true, printMode: false, preview: false, rootRef }}
+			>
+				<ThemeReadout />
+			</DeckComponentContext.Provider>,
+			{ container: mountPoint }
+		);
+
+		expect(JSON.parse(getByTestId('theme-readout').textContent ?? '{}').accent).toBe('#ffb84d');
+
+		// themeColors: { accent: "#ff0000" } applied as an inline override,
+		// the same way SlideCanvas's buildColorOverrideStyle does.
+		await act(async () => {
+			themeHost.style.setProperty('--accent', '#ff0000');
+			themeHost.style.setProperty('--accent-text', '#ff0000');
+			await new Promise((resolve) => setTimeout(resolve, 0));
+		});
+
+		const tokens = JSON.parse(getByTestId('theme-readout').textContent ?? '{}');
+		expect(tokens.accent).toBe('#ff0000');
+		expect(tokens.accentText).toBe('#ff0000');
+
+		document.body.removeChild(themeHost);
+	});
 });
 
 describe('textOn', () => {
@@ -192,7 +231,11 @@ describe('textOn', () => {
 		muted: '',
 		accent: '',
 		accentText: '',
+		accent2: '',
 		surface: '',
+		statusOk: '',
+		statusWarn: '',
+		statusError: '',
 		fontDisplay: '',
 		fontBody: '',
 		fontMono: '',

@@ -17,12 +17,16 @@ import (
 // buildComponents resolves and bundles every component a presentation's
 // slides use (see internal/components.Resolve), and returns the resolved
 // map for the transformer plus a flattened, deterministically ordered list
-// of build errors for terminal output.
-func buildComponents(parsed *parser.Presentation, deckDirectory string, minify bool, sourceMaps bool) (map[string]components.Result, []components.BuildError) {
+// of build errors for terminal output. assetPublicPath is the URL prefix
+// baked into an emitted (not inlined) asset's URL: "/components/" for a
+// live server (dev, pdf, screenshot), "components/" for tap build's static
+// output - see components.Options.AssetPublicPath.
+func buildComponents(parsed *parser.Presentation, deckDirectory string, minify bool, sourceMaps bool, assetPublicPath string) (map[string]components.Result, []components.BuildError) {
 	resolved := components.Resolve(parsed, deckDirectory, components.Options{
-		DeckDirectory: deckDirectory,
-		Minify:        minify,
-		SourceMaps:    sourceMaps,
+		DeckDirectory:   deckDirectory,
+		Minify:          minify,
+		SourceMaps:      sourceMaps,
+		AssetPublicPath: assetPublicPath,
 	})
 
 	paths := make([]string, 0, len(resolved))
@@ -63,6 +67,12 @@ func componentBundleFiles(resolved map[string]components.Result) map[string]serv
 			files[base+".js.map"] = server.ComponentBundleFile{
 				ContentType: "application/json; charset=utf-8",
 				Content:     bundle.SourceMap,
+			}
+		}
+		for _, asset := range bundle.Assets {
+			files[asset.Name] = server.ComponentBundleFile{
+				ContentType: asset.ContentType,
+				Content:     asset.Content,
 			}
 		}
 	}
@@ -143,6 +153,19 @@ func printComponentWarningsToStderr(warnings []components.BuildError) {
 	for _, warning := range warnings {
 		Warning("warning: %s\n", warning.Error())
 	}
+}
+
+// componentWarningLines formats component build warnings as plain
+// "warning: <file>:<line>:<column>: <message>" strings, one per warning,
+// for a caller that owns its own rendering instead of writing straight to
+// the terminal (the TUI model's warnings display, which draws its own
+// border and color around them - see internal/tui/dev.go's viewWarnings).
+func componentWarningLines(warnings []components.BuildError) []string {
+	lines := make([]string, len(warnings))
+	for i, warning := range warnings {
+		lines[i] = "warning: " + warning.Error()
+	}
+	return lines
 }
 
 // componentErrorsError joins component build errors into a single error for

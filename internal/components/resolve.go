@@ -39,29 +39,48 @@ type Result struct {
 // as a whole-slide layout or an inline ```component fence, exactly once. It
 // returns a map from that path, as written in the deck, to its build
 // result, so the transformer can look up each slide's component(s) by the
-// same path it already has.
+// same path it already has. A build error's SlideNumbers is set to every
+// one-based slide number that uses the path, so one broken bundle used by
+// several slides can be reported once, naming all of them.
 func Resolve(presentation *parser.Presentation, deckDirectory string, options Options) map[string]Result {
 	options.DeckDirectory = deckDirectory
 
-	paths := collectComponentPaths(presentation)
-	results := make(map[string]Result, len(paths))
-	for path := range paths {
+	pathSlideNumbers := collectComponentPathSlideNumbers(presentation)
+	results := make(map[string]Result, len(pathSlideNumbers))
+	for path, slideNumbers := range pathSlideNumbers {
 		bundle, buildErrors := Build(path, options)
+		for i := range buildErrors {
+			buildErrors[i].SlideNumbers = slideNumbers
+		}
 		results[path] = Result{Bundle: bundle, Errors: buildErrors}
 	}
 	return results
 }
 
-// collectComponentPaths gathers every distinct component path referenced by
-// a presentation's slides, as a set.
-func collectComponentPaths(presentation *parser.Presentation) map[string]bool {
-	paths := make(map[string]bool)
+// collectComponentPathSlideNumbers gathers every distinct component path
+// referenced by a presentation's slides, mapped to the one-based slide
+// numbers that reference it, in ascending order.
+func collectComponentPathSlideNumbers(presentation *parser.Presentation) map[string][]int {
+	paths := make(map[string][]int)
+	addUse := func(path string, slideNumber int) {
+		numbers := paths[path]
+		if len(numbers) > 0 && numbers[len(numbers)-1] == slideNumber {
+			// The same slide can reach the same path twice (a whole-slide
+			// layout that also happens to match an inline fence's source,
+			// or duplicate fences), and slides are visited in order, so a
+			// repeat always lands right after the last entry.
+			return
+		}
+		paths[path] = append(numbers, slideNumber)
+	}
+
 	for _, slide := range presentation.Slides {
+		slideNumber := slide.Index + 1
 		if IsComponentPath(slide.Directives.Layout) {
-			paths[slide.Directives.Layout] = true
+			addUse(slide.Directives.Layout, slideNumber)
 		}
 		for _, component := range slide.Components {
-			paths[component.Source] = true
+			addUse(component.Source, slideNumber)
 		}
 	}
 	return paths

@@ -3,13 +3,24 @@ package server
 
 import (
 	"context"
+	"crypto/subtle"
 	"encoding/json"
+	"log"
 	"net/http"
+	"net/url"
 	"sync"
 	"time"
 
 	"github.com/coder/websocket"
 )
+
+// PresenterAuthCookieName is the cookie handlePresenter sets once a client
+// proves it knows the configured --presenter-password (see routes.go), and
+// that HandleConnection reads back to decide whether a WebSocket connection
+// may drive other clients (see WebSocketHub.SetPresenterPassword). Path=/
+// on that cookie is what makes it ride along on the browser's /ws upgrade
+// request too, alongside /presenter itself.
+const PresenterAuthCookieName = "tap_presenter_key"
 
 // MessageType represents the type of WebSocket message.
 type MessageType string
@@ -44,10 +55,17 @@ const (
 // concurrent with registration (see the register case in Run). Broadcast
 // strips it from every message it sends out, so a client-sent "initial"
 // (accidental or otherwise) never survives a relay to other clients.
+//
+// Revision is set only on the "connected" message Run's register case sends
+// at register time, to the hub's current deck revision (see
+// WebSocketHub.SetPresentationMeta). A client compares it across
+// reconnects, on the same page load, to notice the deck changed while its
+// socket was down and reload (see frontend/src/lib/stores/websocket.ts).
 // Fields ordered by size for memory alignment.
 type Message struct {
 	Type           MessageType `json:"type"`
 	Theme          string      `json:"theme,omitempty"`
+	Revision       string      `json:"revision,omitempty"`
 	SlideIndex     *int        `json:"slideIndex,omitempty"`
 	Fragment       *int        `json:"fragment,omitempty"`
 	Step           *int        `json:"step,omitempty"`
@@ -60,6 +78,15 @@ type Client struct {
 	hub  *WebSocketHub
 	conn *websocket.Conn
 	send chan []byte
+	// canSend is whether this client's relayed "slide" and "theme"
+	// messages are broadcast to other clients (see readPump), rather than
+	// silently dropped. True when no presenter password is configured (see
+	// checkPresenterAuth), or when the connection carried a valid
+	// PresenterAuthCookieName. A client with canSend false still registers
+	// normally and receives every broadcast - it just cannot drive other
+	// clients, so an audience window without the password still navigates
+	// its own view locally without moving anyone else's.
+	canSend bool
 }
 
 // ClientCountCallback is called when the number of connected clients changes.
@@ -106,7 +133,38 @@ type WebSocketHub struct {
 	// in-range-but-stale index itself (see applyRemoteState in
 	// frontend/src/lib/stores/websocket.ts).
 	slideCount int
-	mu         sync.RWMutex
+	// revision is the current deck's content hash (see ComputeRevision),
+	// sent as the Revision field of the "connected" message at register
+	// time. Empty until SetPresentationMeta is called at least once, in
+	// which case "connected" carries no revision at all and a client never
+	// reloads off its first connection (see the frontend's handling of an
+	// absent revision in frontend/src/lib/stores/websocket.ts).
+	revision string
+	// allowedOrigins holds the extra origins a WebSocket upgrade is
+	// accepted from, beyond same-host connections - the tap dev
+	// --allow-origin flag, for a contributor's Vite dev server running on
+	// another port (see checkOrigin). Keyed by the full origin string
+	// (e.g. "http://localhost:5173") as sent in the Origin header.
+	allowedOrigins map[string]struct{}
+	// allowedHosts holds the same --allow-origin values, reduced to bare
+	// hosts (see allowedHostsFromOrigins), checked by isAllowedHost against
+	// a request's own Host header and an Origin header's host - the extra
+	// defense against DNS rebinding a same-host compare alone cannot
+	// provide (see checkOrigin and requireAllowedHost).
+	allowedHosts map[string]struct{}
+	// presenterPassword mirrors the dev server's --presenter-password (see
+	// SetPresenterPassword): empty means nothing is protected, so every
+	// connection can send. Non-empty means a connection may only send once
+	// it presents PresenterAuthCookieName equal to presenterSessionToken
+	// (see checkPresenterAuth), matching the cookie handlePresenter issues
+	// after the presenter page's own ?key= check passes.
+	presenterPassword string
+	// presenterSessionToken is the random per-process token the presenter
+	// auth cookie carries (see Server.GeneratePresenterSessionToken); the
+	// dev command sets the same value here and on every candidate Server so
+	// a cookie either of them issues validates.
+	presenterSessionToken string
+	mu                    sync.RWMutex
 }
 
 // DefaultStateRetention is how long the hub keeps the last-known slide
@@ -139,15 +197,18 @@ func (h *WebSocketHub) SetStateRetention(d time.Duration) {
 	h.stateRetention = d
 }
 
-// SetSlideCount tells the hub how many slides the current presentation
-// has, so a relayed "slide" message with an out-of-range slideIndex can be
-// rejected instead of broadcast. Safe to call at any time, including
-// before Run starts or while clients are connected (e.g. after a reload
-// changes the slide count).
-func (h *WebSocketHub) SetSlideCount(n int) {
+// SetPresentationMeta tells the hub about the deck it is currently serving:
+// slideCount, so a relayed "slide" message with an out-of-range slideIndex
+// can be rejected instead of broadcast, and revision (see ComputeRevision),
+// sent as the Revision field of every "connected" message from then on so a
+// reconnecting client can tell the deck changed while its socket was down.
+// Safe to call at any time, including before Run starts or while clients
+// are connected (tap dev calls it again on every reload).
+func (h *WebSocketHub) SetPresentationMeta(slideCount int, revision string) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	h.slideCount = n
+	h.slideCount = slideCount
+	h.revision = revision
 }
 
 // validSlideIndex reports whether slideIndex is acceptable in a relayed
@@ -164,6 +225,113 @@ func (h *WebSocketHub) validSlideIndex(slideIndex int) bool {
 		return false
 	}
 	return true
+}
+
+// SetAllowedOrigins sets the extra origins the hub accepts a WebSocket
+// upgrade from, beyond an origin that already matches the request's own
+// Host header (see checkOrigin). Each entry is a full origin such as
+// "http://localhost:5173", matched exactly against the incoming Origin
+// header. This is what tap dev's repeatable --allow-origin flag feeds, for
+// a contributor's Vite dev server proxying to this hub from another port.
+func (h *WebSocketHub) SetAllowedOrigins(origins []string) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.allowedOrigins = make(map[string]struct{}, len(origins))
+	for _, origin := range origins {
+		h.allowedOrigins[origin] = struct{}{}
+	}
+	h.allowedHosts = allowedHostsFromOrigins(origins)
+}
+
+// checkOrigin reports whether r is an acceptable WebSocket upgrade request
+// given its Origin header:
+//   - No Origin header at all: accepted. Only a browser sends one, so this
+//     covers non-browser clients and tests. (HandleConnection separately
+//     enforces the Host allow-list on every request, browser or not.)
+//   - An Origin whose host (host and port) equals the request's own Host
+//     header, and that host is itself on the allow-list (see
+//     isAllowedHost): accepted. This covers localhost, 127.0.0.1, the LAN
+//     address a presenter opens tap dev from on a phone or second laptop,
+//     and whatever fallback port tap dev bound when its default was busy -
+//     all of them addressed with the same host the browser used to reach
+//     this server in the first place. The extra isAllowedHost check is
+//     what stops DNS rebinding: without it, a hostile domain that
+//     resolves to 127.0.0.1 would make Origin and Host equal for any name
+//     an attacker picks.
+//   - An Origin explicitly listed via SetAllowedOrigins: accepted. This is
+//     the --allow-origin flag's list, for a dev server proxying in from
+//     elsewhere (the Vite dev server contributors run on another port).
+//
+// Anything else is rejected.
+func (h *WebSocketHub) checkOrigin(r *http.Request) bool {
+	origin := r.Header.Get("Origin")
+	if origin == "" {
+		return true
+	}
+
+	h.mu.RLock()
+	allowedHosts := h.allowedHosts
+	_, exactlyAllowed := h.allowedOrigins[origin]
+	h.mu.RUnlock()
+
+	if originURL, err := url.Parse(origin); err == nil && originURL.Host == r.Host && isAllowedHost(r.Host, allowedHosts) {
+		return true
+	}
+
+	return exactlyAllowed
+}
+
+// SetPresenterPassword tells the hub the dev server's current
+// --presenter-password, so HandleConnection can decide whether a new
+// connection may send (see checkPresenterAuth). An empty password (the
+// default, and tap dev's default) leaves every connection able to send,
+// with nothing gated. Safe to call at any time.
+func (h *WebSocketHub) SetPresenterPassword(password string) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.presenterPassword = password
+}
+
+// SetPresenterSessionToken sets the per-process token checkPresenterAuth
+// compares a connection's cookie against (see
+// Server.GeneratePresenterSessionToken). The dev command calls this with
+// the same token it sets on every candidate Server.
+func (h *WebSocketHub) SetPresenterSessionToken(token string) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.presenterSessionToken = token
+}
+
+// checkPresenterAuth reports whether r may send navigation messages once
+// connected: always true when no presenter password is configured, and
+// otherwise true only when r carries PresenterAuthCookieName equal to the
+// current presenter session token - proof this browser already passed the
+// same check the presenter page's ?key= requires (see handlePresenter in
+// routes.go). The compare runs in constant time, and against the random
+// session token rather than the password itself, since Go's cookie jar
+// sanitizes cookie values and would silently change a password containing
+// a semicolon, quote, backslash, space, or non-ASCII character before it
+// ever reached this compare. A connection that fails this still registers
+// and receives every broadcast; it just cannot send one (see
+// Client.canSend).
+func (h *WebSocketHub) checkPresenterAuth(r *http.Request) bool {
+	h.mu.RLock()
+	password := h.presenterPassword
+	sessionToken := h.presenterSessionToken
+	h.mu.RUnlock()
+
+	if password == "" {
+		return true
+	}
+	if sessionToken == "" {
+		return false
+	}
+
+	cookie, err := r.Cookie(PresenterAuthCookieName)
+	if err != nil {
+		return false
+	}
+	return subtle.ConstantTimeCompare([]byte(cookie.Value), []byte(sessionToken)) == 1
 }
 
 // scheduleForgetLocked arranges for the hub to forget lastSlideState
@@ -227,6 +395,7 @@ func (h *WebSocketHub) Run() {
 				initialMsg.Initial = true
 				initialData, _ = json.Marshal(initialMsg)
 			}
+			revision := h.revision
 			h.notifyClientCountChange()
 			h.mu.Unlock()
 
@@ -240,7 +409,13 @@ func (h *WebSocketHub) Run() {
 			// finishes. That's what guarantees a client always receives its
 			// own late-joiner state before any live navigation broadcast by
 			// another client racing its connection.
-			connectedMsg, _ := json.Marshal(Message{Type: MessageConnected})
+			//
+			// Revision rides on this same "connected" message rather than a
+			// separate one: a client only needs to compare it across
+			// distinct connections (see hasSeenFirstRevision in the
+			// frontend), and "connected" already fires exactly once per
+			// connection.
+			connectedMsg, _ := json.Marshal(Message{Type: MessageConnected, Revision: revision})
 			select {
 			case client.send <- connectedMsg:
 			default:
@@ -366,8 +541,24 @@ func (h *WebSocketHub) ClientCount() int {
 // HandleConnection handles a new WebSocket connection.
 // It should be used as an HTTP handler.
 func (h *WebSocketHub) HandleConnection(w http.ResponseWriter, r *http.Request) {
+	h.mu.RLock()
+	allowedHosts := h.allowedHosts
+	h.mu.RUnlock()
+	if !isAllowedHost(r.Host, allowedHosts) {
+		log.Printf("rejected websocket connection with Host %q: not a local, private, or allowed host", r.Host)
+		http.Error(w, "Forbidden: host not allowed; use --allow-origin to allow it", http.StatusForbidden)
+		return
+	}
+
+	if !h.checkOrigin(r) {
+		log.Printf("rejected websocket connection from origin %q: not this server's host and not allowed by --allow-origin", r.Header.Get("Origin"))
+		http.Error(w, "Forbidden: origin not allowed", http.StatusForbidden)
+		return
+	}
+
 	conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{
-		// Allow connections from any origin in dev mode
+		// checkOrigin above already enforced the origin rules tap dev
+		// wants; skip the library's own, less flexible host-pattern check.
 		InsecureSkipVerify: true,
 	})
 	if err != nil {
@@ -375,9 +566,10 @@ func (h *WebSocketHub) HandleConnection(w http.ResponseWriter, r *http.Request) 
 	}
 
 	client := &Client{
-		hub:  h,
-		conn: conn,
-		send: make(chan []byte, 256),
+		hub:     h,
+		conn:    conn,
+		send:    make(chan []byte, 256),
+		canSend: h.checkPresenterAuth(r),
 	}
 
 	// Registering also queues the "connected" message and, if the hub has
@@ -390,7 +582,19 @@ func (h *WebSocketHub) HandleConnection(w http.ResponseWriter, r *http.Request) 
 	// no guarantee which arrived first. A brand new hub with no slide
 	// message broadcast yet sends only "connected", leaving this client to
 	// initialize from its own URL hash.
-	h.register <- client
+	//
+	// Selecting on h.done alongside the send matters once the hub has
+	// stopped: Run's loop has returned by then, so nothing ever receives
+	// from h.register again, and an unconditional send would block this
+	// goroutine forever. A connection arriving during shutdown gets no
+	// "connected" message and its readPump/writePump never start; the
+	// deferred conn.Close below still runs to tell the client goodbye.
+	select {
+	case h.register <- client:
+	case <-h.done:
+		conn.Close(websocket.StatusGoingAway, "server shutting down")
+		return
+	}
 
 	// Use a context that's independent of the HTTP request
 	// The context will be canceled when the hub is stopped
@@ -421,6 +625,15 @@ func (c *Client) readPump(ctx context.Context) {
 		var msg Message
 		if err := json.Unmarshal(data, &msg); err != nil {
 			continue // Ignore invalid JSON
+		}
+
+		// A client without canSend (a presenter password is configured and
+		// this connection never proved it) still receives every broadcast,
+		// but its own slide and theme messages are dropped here instead of
+		// relayed - it can navigate its own view locally, but never drives
+		// anyone else's.
+		if !c.canSend {
+			continue
 		}
 
 		// Broadcast slide and theme messages to all clients. A "slide"

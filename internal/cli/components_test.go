@@ -28,7 +28,7 @@ func TestBuildComponents_ResolvesAndReturnsSortedErrors(t *testing.T) {
 		},
 	}
 
-	resolved, errs := buildComponents(pres, deckDir, false, true)
+	resolved, errs := buildComponents(pres, deckDir, false, true, "/components/")
 
 	if len(resolved) != 2 {
 		t.Fatalf("expected 2 resolved paths, got %d", len(resolved))
@@ -70,6 +70,39 @@ func TestComponentBundleFiles_BuildsFileMap(t *testing.T) {
 	}
 	if len(files) != 3 {
 		t.Errorf("expected exactly 3 files (nothing for the broken component), got %d: %+v", len(files), files)
+	}
+}
+
+// TestComponentBundleFiles_IncludesEmittedAssets checks that a bundle's
+// emitted (not inlined) assets are added to the same file map the JS, CSS,
+// and source map already go into, so the existing /components/ server
+// route (see internal/server/routes.go's generic ComponentBundleStore
+// lookup) serves them with no server-side change needed.
+func TestComponentBundleFiles_IncludesEmittedAssets(t *testing.T) {
+	resolved := map[string]components.Result{
+		"./slides/RollingDeploy.jsx": {
+			Bundle: &components.Bundle{
+				Name:       "RollingDeploy",
+				Hash:       "abc123",
+				JavaScript: []byte("export default 1;"),
+				Assets: []components.Asset{
+					{Name: "photo-xyz.png", Content: []byte("fake-png-bytes"), ContentType: "image/png"},
+				},
+			},
+		},
+	}
+
+	files := componentBundleFiles(resolved)
+
+	asset, ok := files["photo-xyz.png"]
+	if !ok {
+		t.Fatal("expected the emitted asset to be present in the file map")
+	}
+	if asset.ContentType != "image/png" {
+		t.Errorf("ContentType = %q, want %q", asset.ContentType, "image/png")
+	}
+	if string(asset.Content) != "fake-png-bytes" {
+		t.Errorf("Content = %q, want %q", asset.Content, "fake-png-bytes")
 	}
 }
 
@@ -159,5 +192,26 @@ func TestComponentWarnings_FlattensSortedByPathAndFormatsEachLine(t *testing.T) 
 	want := "RollingDeploy.jsx:4:9: unused variable \"x\""
 	if warnings[0].Error() != want {
 		t.Errorf("got %q, want %q", warnings[0].Error(), want)
+	}
+}
+
+// TestComponentWarningLines_FormatsWithWarningPrefix checks the plain
+// "warning: ..." lines fed to the TUI model's warnings display (see
+// internal/tui/dev.go's viewWarnings): the same format
+// printComponentWarningsToStderr prints, but as strings a caller renders
+// itself instead of writing straight to the terminal.
+func TestComponentWarningLines_FormatsWithWarningPrefix(t *testing.T) {
+	warnings := []components.BuildError{
+		{File: "RollingDeploy.jsx", Line: 4, Column: 9, Message: "unused variable \"x\""},
+	}
+
+	lines := componentWarningLines(warnings)
+
+	if len(lines) != 1 {
+		t.Fatalf("expected 1 line, got %d: %+v", len(lines), lines)
+	}
+	want := "warning: RollingDeploy.jsx:4:9: unused variable \"x\""
+	if lines[0] != want {
+		t.Errorf("got %q, want %q", lines[0], want)
 	}
 }

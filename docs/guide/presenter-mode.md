@@ -138,22 +138,73 @@ tap dev presentation.md
 
 Scan the QR code with your phone or tablet to instantly open the presentation. Navigate to `/presenter` for the presenter view.
 
+## On Stage
+
+Three things make a live talk safer. None of them need a flag on the deck.
+
+**Put the audience window in fullscreen, or open it with
+`?present=true`.** Both switch error display to its audience-safe form: a
+whole-slide component that throws is replaced by the slide's own content,
+its slots in the default layout, with a small muted `component error` chip
+in the corner; an inline one leaves the rest of the slide untouched and the
+chip marks the gap. Either way the room sees a slide, not a stack trace.
+Fullscreen is followed live, so entering or leaving it while an error is on
+screen switches forms straight away. Your presenter view keeps the full message, so you can
+read what broke while the audience sees a merely plainer slide. Add
+`?debug=true` to any window to force the full card back while you are
+still authoring.
+
+**A window catches up by itself after a restart.** The hub tells each
+window the deck's revision when it connects. A window that reconnects and
+finds a different revision than it first saw reloads itself, so restarting
+`tap dev`, or editing the deck while a window was asleep, no longer leaves
+a stale slide on the projector.
+
+**With a presenter password set, only authenticated windows drive the
+others.** See below.
+
 ## Password Protection
 
 For sensitive presentations, you can protect the presenter view with a password:
 
 ```bash
-tap dev presentation.md --presenter-password secret123
+tap dev presentation.md --presenter-password 'secret 123'
 ```
 
 The password is a `tap dev` flag, not a frontmatter key, so it never ends
-up in the deck file.
+up in the deck file. It may contain any characters; tap URL-encodes it
+wherever it prints a presenter URL or builds the QR code.
+
+Authenticate once by opening `/presenter?key=<password>`. Tap answers with
+a redirect to `/presenter` with `key` removed, so the password does not sit
+in the address bar or in your history, and sets an HttpOnly cookie holding
+a **random session token**, never the password itself. After that the
+presenter view opens without `?key=`, which is what makes the **S** key
+work: the window it opens inherits the cookie.
+
+| Request | Response |
+|---------|----------|
+| No key, no cookie | 403 `Forbidden: presenter password required. Use ?key=<password>` |
+| Wrong key | 403 `Forbidden: incorrect presenter password` |
+| Correct key | 302 to `/presenter`, cookie set |
+| Valid cookie, no key | 200 |
+
+`/qr` is gated the same way, so the QR code cannot be used to hand out
+presenter access to anyone who can reach the server.
 
 When password protection is enabled:
 
 - The audience view (`/`) remains publicly accessible
 - The presenter view (`/presenter`) requires the password
 - Notes and upcoming slides stay private
+- **Only an authenticated window can drive the others.** A window without
+  the cookie still receives every sync and reload message, so it follows
+  along, but its own navigation messages are dropped by the hub. An
+  audience member clicking around moves only their own screen.
+
+With no password set, nothing changes: any connected window can navigate
+every other one, which is what you want for a rehearsal across two
+laptops.
 
 ::: warning
 The password is passed on the command line, so it lands in your shell

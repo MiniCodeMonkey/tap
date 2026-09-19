@@ -29,6 +29,10 @@
 	--accent: #980b13;
 	--accent-text: #980b13;
 	--surface: #e6e0d2;
+	--status-ok: #347740;
+	--status-warn: #b37500;
+	--status-error: #a70c15;
+	--accent-2: var(--accent-text);
 	--font-display: 'Besley', Georgia, serif;
 	--font-body: 'Newsreader', Georgia, serif;
 	--font-mono: 'IBM Plex Mono', 'Courier New', monospace;

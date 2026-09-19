@@ -254,6 +254,23 @@ export class WebSocketClient {
 	 */
 	private hasOpenedBefore: boolean = false;
 
+	/**
+	 * Whether this page load (or, in a test, this client instance) has
+	 * received its first "connected" message yet. Set together with
+	 * firstRevision the first time one arrives; every "connected" message
+	 * after that is a reconnect, compared against firstRevision instead of
+	 * remembered.
+	 */
+	private hasSeenFirstConnected: boolean = false;
+
+	/**
+	 * The deck revision from this page load's first "connected" message
+	 * (see internal/server/websocket.go's Revision field). undefined until
+	 * that first message arrives, or if it carried no revision at all (a
+	 * hub that has never had a presentation set).
+	 */
+	private firstRevision: string | undefined = undefined;
+
 	constructor(url?: string) {
 		// Default to current host with /ws path
 		this.url = url ?? this.getDefaultURL();
@@ -343,7 +360,7 @@ export class WebSocketClient {
 	private dispatchMessage(message: WebSocketMessage): void {
 		switch (message.type) {
 			case 'connected':
-				// Server acknowledged connection
+				this.handleConnected(message.revision);
 				break;
 
 			case 'reload':
@@ -360,6 +377,33 @@ export class WebSocketClient {
 				// Switch to a different theme
 				this.handleThemeChange(message.theme);
 				break;
+		}
+	}
+
+	/**
+	 * Handle a "connected" message: remembers the revision carried by the
+	 * first one this page load receives, and reloads the page on any later
+	 * one (a reconnect - the socket dropped and came back, or the hub
+	 * itself restarted) whose revision differs from that first one. This is
+	 * how a window left open through a `tap dev` restart, or a deck reload
+	 * while its socket was down, notices the deck changed instead of going
+	 * on showing the old one until someone reloads manually.
+	 *
+	 * Never reloads on the very first "connected" message, even when the
+	 * hub already has a revision by then (a page that loads after the hub
+	 * has been running a while) - there is nothing to compare it against
+	 * yet. Never loops: a reload starts a new page load, and the new
+	 * WebSocketClient's first "connected" message is recorded, not
+	 * compared, exactly as this one's was.
+	 */
+	private handleConnected(revision: string | undefined): void {
+		if (!this.hasSeenFirstConnected) {
+			this.hasSeenFirstConnected = true;
+			this.firstRevision = revision;
+			return;
+		}
+		if (revision !== undefined && revision !== this.firstRevision) {
+			this.handleReload();
 		}
 	}
 
@@ -492,6 +536,8 @@ export class WebSocketClient {
 	disconnect(): void {
 		this.shouldReconnect = false;
 		this.hasOpenedBefore = false;
+		this.hasSeenFirstConnected = false;
+		this.firstRevision = undefined;
 
 		if (this.reconnectTimeout) {
 			clearTimeout(this.reconnectTimeout);

@@ -30,6 +30,9 @@
 	--accent: #0fa3a3;
 	--accent-text: #165668;
 	--accent-2: #f2694b;
+	--status-ok: #15939c;
+	--status-warn: #856900;
+	--status-error: #9b2f25;
 	--surface: #fffdf8;
 
 	/* the three faces every slab is built from, plus a floor shadow */
@@ -1028,6 +1031,10 @@
 	font: 500 124px/1.08 var(--font-display);
 	letter-spacing: -0.012em;
 	text-wrap: balance;
+}
+/* A long quote (over 180 runes) overflows the slide at 124px; step down. */
+[data-theme='isometric'] .layout-quote blockquote[data-length='long'] p {
+	font: 500 70px/1.1 var(--font-display);
 }
 [data-theme='isometric'] .layout-quote .slot-attribution p {
 	display: flex;

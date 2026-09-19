@@ -1,6 +1,7 @@
 package pdf
 
 import (
+	"context"
 	"fmt"
 	"net/url"
 	"os"
@@ -98,8 +99,15 @@ func buildSlideURL(serverURL string, options CaptureOptions) string {
 // shows a slide or component error card (see ErrorCardSelector). With
 // options.WaitMS > 0, it sleeps that many extra milliseconds after all of
 // the above, for a capture that deliberately wants a moment mid-animation
-// rather than the settled state.
-func (e *Exporter) CaptureSlide(serverURL string, options CaptureOptions, outputPath string) error {
+// rather than the settled state. ctx is checked before the capture starts
+// and again before the screenshot is taken, so a caller looping over
+// several slides (tap screenshot --all) can stop between slides on
+// cancellation instead of starting one it will only throw away.
+func (e *Exporter) CaptureSlide(ctx context.Context, serverURL string, options CaptureOptions, outputPath string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+
 	if err := e.launchBrowser(); err != nil {
 		return err
 	}
@@ -154,6 +162,10 @@ func (e *Exporter) CaptureSlide(serverURL string, options CaptureOptions, output
 
 	if message, hasError := detectErrorCard(page); hasError {
 		return fmt.Errorf("slide %d shows an error card: %s", options.SlideNumber, message)
+	}
+
+	if err := ctx.Err(); err != nil {
+		return err
 	}
 
 	if dir := filepath.Dir(outputPath); dir != "" && dir != "." {
@@ -213,12 +225,26 @@ func waitForAnimations(page playwright.Page) error {
 }
 
 // detectErrorCard reports whether the rendered slide shows a slide or
-// component error card (see ErrorCardSelector), and that card's text when
-// it does.
+// component error card (see ErrorCardSelector), and that card's message
+// when it does. The audience-safe form of the card (print mode, or any
+// time the audience view would otherwise show a broken component) is kept
+// in the DOM but visually hidden, with its message moved to a
+// data-message attribute instead of the card's text (see
+// SlideErrorBoundary.tsx and DeckComponent.tsx); the visible form carries
+// the same message as its text content. data-message is read first so
+// both forms report the real message, falling back to the card's text and
+// then a generic placeholder if neither is present.
 func detectErrorCard(page playwright.Page) (message string, hasError bool) {
 	result, err := page.Evaluate(fmt.Sprintf(`() => {
 		const el = document.querySelector(%q);
-		return el ? (el.textContent || '').trim() : null;
+		if (!el) {
+			return null;
+		}
+		const dataMessage = (el.getAttribute('data-message') || '').trim();
+		if (dataMessage) {
+			return dataMessage;
+		}
+		return (el.textContent || '').trim();
 	}`, ErrorCardSelector))
 	if err != nil || result == nil {
 		return "", false

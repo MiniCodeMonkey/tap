@@ -9,7 +9,11 @@ declare module 'tap' {
 		muted: string;
 		accent: string;
 		accentText: string;
+		accent2: string;
 		surface: string;
+		statusOk: string;
+		statusWarn: string;
+		statusError: string;
 		fontDisplay: string;
 		fontBody: string;
 		fontMono: string;

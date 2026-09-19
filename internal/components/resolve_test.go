@@ -2,6 +2,7 @@ package components
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/MiniCodeMonkey/tap/internal/parser"
@@ -72,4 +73,53 @@ func TestResolve_BuildErrorsSurfacePerPath(t *testing.T) {
 	if len(result.Errors) == 0 {
 		t.Fatal("expected build errors for a broken component")
 	}
+}
+
+// TestResolve_BuildErrorsNameEverySlideThatUsesThePath checks that a build
+// error for a path used by several slides names all of them (see
+// BuildError.Error), sorted by slide number, not just the first slide
+// Resolve happened to see it on.
+func TestResolve_BuildErrorsNameEverySlideThatUsesThePath(t *testing.T) {
+	presentation := &parser.Presentation{
+		Slides: []parser.Slide{
+			{Index: 0},
+			{Index: 1, Directives: parser.SlideDirectives{Layout: "./syntax-error/Broken.jsx"}},
+			{Index: 2},
+			{Index: 3, Components: []parser.Component{
+				{Index: 0, Source: "./syntax-error/Broken.jsx", Props: json.RawMessage("{}")},
+			}},
+		},
+	}
+
+	results := Resolve(presentation, "testdata", Options{})
+
+	result, ok := results["./syntax-error/Broken.jsx"]
+	if !ok {
+		t.Fatal("expected ./syntax-error/Broken.jsx to be present in the results")
+	}
+	if len(result.Errors) == 0 {
+		t.Fatal("expected build errors for a broken component")
+	}
+
+	wantSlides := []int{2, 4}
+	if got := result.Errors[0].SlideNumbers; !equalIntSlices(got, wantSlides) {
+		t.Fatalf("SlideNumbers = %v, want %v", got, wantSlides)
+	}
+
+	errText := result.Errors[0].Error()
+	if !strings.Contains(errText, "(used on slides 2, 4)") {
+		t.Errorf("Error() = %q, want it to end with \"(used on slides 2, 4)\"", errText)
+	}
+}
+
+func equalIntSlices(a, b []int) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }

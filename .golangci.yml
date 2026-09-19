@@ -1,80 +1,84 @@
 # golangci-lint configuration for Tap
 # https://golangci-lint.run/usage/configuration/
 
+version: "2"
+
 run:
-  # Timeout for analysis
-  timeout: 5m
   # Include test files
   tests: true
 
 linters:
   # Disable all linters by default and enable only the ones we want
-  disable-all: true
+  default: none
   enable:
     # Required linters from acceptance criteria
-    - govet       # Reports suspicious constructs
     - errcheck    # Checks for unchecked errors
-    - staticcheck # Static analysis checks
+    - govet       # Reports suspicious constructs
+    - staticcheck # Static analysis checks (gosimple's checks live here too, in v2)
     - unused      # Checks for unused code
-    - gosimple    # Simplifies code
     # Additional useful linters
     - ineffassign # Detects ineffectual assignments
-    - typecheck   # Parses and type-checks Go code
-
-linters-settings:
-  govet:
-    # Enable all analyzers
-    enable-all: true
-    disable:
-      # Disable shadow checking (can be noisy)
-      - shadow
-      # fieldalignment flags struct memory layout on nearly every struct in
-      # the codebase (JSON payloads, Bubble Tea models, config structs), and
-      # reordering them for a few saved bytes buys nothing here - none of
-      # these structs are allocated in numbers where padding matters, and
-      # the churn would touch struct literals across the whole tree.
-      - fieldalignment
-  errcheck:
-    # Check for errors from type assertions
-    check-type-assertions: true
-    # Check for errors from blank identifier assignments
-    check-blank: false
-  staticcheck:
-    # Enable all staticcheck analyzers
-    checks: ["all"]
-  gosimple:
-    # Enable all gosimple analyzers
-    checks: ["all"]
+  settings:
+    errcheck:
+      # Check for errors from type assertions
+      check-type-assertions: true
+      # Check for errors from blank identifier assignments
+      check-blank: false
+    govet:
+      # Enable all analyzers
+      enable-all: true
+      disable:
+        # Disable shadow checking (can be noisy)
+        - shadow
+        # fieldalignment flags struct memory layout on nearly every struct in
+        # the codebase (JSON payloads, Bubble Tea models, config structs), and
+        # reordering them for a few saved bytes buys nothing here - none of
+        # these structs are allocated in numbers where padding matters, and
+        # the churn would touch struct literals across the whole tree.
+        - fieldalignment
+    staticcheck:
+      # Enable all staticcheck analyzers (this also covers what gosimple
+      # checked under golangci-lint v1, folded into staticcheck in v2).
+      # QF1012 (prefer fmt.Fprintf over WriteString(fmt.Sprintf(...))) is a
+      # newer check that the codebase does not follow yet in many places;
+      # left off rather than rewriting call sites across the tree as a side
+      # effect of a lint version bump.
+      checks:
+        - all
+        - "-QF1012"
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    rules:
+      # Exclude some staticcheck messages in test files
+      - linters:
+          - errcheck
+        path: _test\.go
+      # Exclude fieldalignment in test files (test struct optimization is less critical)
+      - path: _test\.go
+        text: fieldalignment
+      # Exclude "package comment" warnings
+      - linters:
+          - staticcheck
+        text: 'ST1000:'
+    paths:
+      # Skip generated files
+      - .*_generated\.go$
+      # Skip vendor, third_party, node_modules directories
+      - vendor
+      - third_party
+      - node_modules
 
 issues:
   # Maximum issues count per one linter (0 = unlimited)
   max-issues-per-linter: 0
   # Maximum count of issues with the same text (0 = unlimited)
   max-same-issues: 0
-  # Skip vendor, third_party, node_modules directories
-  exclude-dirs:
-    - vendor
-    - third_party
-    - node_modules
-  # Skip generated files
-  exclude-files:
-    - ".*_generated\\.go$"
-  # Exclude some linter messages
-  exclude-rules:
-    # Exclude some staticcheck messages in test files
-    - path: "_test\\.go"
-      linters:
-        - errcheck
-    # Exclude fieldalignment in test files (test struct optimization is less critical)
-    - path: "_test\\.go"
-      text: "fieldalignment"
-    # Exclude "package comment" warnings
-    - linters:
-        - staticcheck
-      text: "ST1000:"
 
-output:
-  # Sort results by file, line, and column
-  sort-results: true
-  # Print linter name in the end of issue text
-  print-linter-name: true
+formatters:
+  exclusions:
+    generated: lax

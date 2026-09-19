@@ -23,15 +23,20 @@ After building, your presentation is output to the `dist/` directory:
 ```
 dist/
 ├── index.html         # Audience view, with the deck's JSON embedded
-├── presenter.html     # Presenter view
+├── presenter.html     # Presenter view (needs `tap dev`; see below)
 ├── assets/            # Hashed JS and CSS chunks, bundled fonts, and copied images
 └── components/        # Bundled deck components, when the deck uses any
 ```
 
 Everything the deck needs is in that folder. The fonts, the syntax
 highlighter, and the asciinema player are all bundled, so a built deck
-needs no network at all. Every path is relative, so the folder works from
-any sub-path without a base-path flag.
+needs no network at all.
+
+**A build works from any URL path.** Every asset reference is relative, so
+the same `dist/` folder serves correctly from a domain root, from a
+sub-path like `https://example.com/talks/q3/`, and from a GitHub Pages
+project site like `https://user.github.io/your-repo/`. There is no
+base-path flag to set and no rewriting to do after the fact.
 
 ### Build Options
 
@@ -50,8 +55,13 @@ tap build slides.md --output ./public
 - **Live code execution.** A code block with a `driver` shows its code as
   written; nothing runs. Use `tap dev` for a live demo.
 - **Hot reload and cross-device sync.** There is no server, so the viewer
-  and the presenter view never open a websocket and never try to
-  reconnect.
+  never opens a websocket and never tries to reconnect.
+- **The presenter view.** `presenter.html` is written into the build, but
+  it fetches the presentation from `/api/presentation`, which only
+  `tap dev` serves, so it cannot load from a static build. The presenter
+  view, with its notes, timer, and next-slide panel, is a `tap dev`
+  feature. Export notes with `tap pdf --content notes` or
+  `--content both` if you need them alongside a static deck.
 - **The AI image generator and the slide builder.** Both live in the
   `tap dev` terminal.
 
@@ -234,7 +244,7 @@ PDF export captures your presentation at a specific moment. If you have live cod
 2. **Check all links** - Ensure navigation and external links function
 3. **Verify images** - Confirm all images load correctly
 4. **Test responsiveness** - Check different screen sizes
-5. **Review presenter mode** - Make sure `/presenter` route works
+5. **Review presenter mode** - Run `tap dev` and check `/presenter`; it does not work from a static build
 
 ### Optimization Tips
 

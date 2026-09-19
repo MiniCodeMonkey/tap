@@ -131,6 +131,7 @@ describe('DeckComponent', () => {
 		const card = container.querySelector('.deck-error-card');
 		expect(card).not.toBeNull();
 		expect(card?.getAttribute('data-source')).toBe('slides/Broken.jsx');
+		expect(card?.getAttribute('data-message')).toBe('slides/Broken.jsx:3:7: Unexpected "}"');
 		expect(card?.textContent).toContain('Unexpected');
 	});
 
@@ -387,6 +388,258 @@ describe('DeckComponent', () => {
 		await waitFor(() => expect(container.querySelector('[data-testid="fixed"]')).not.toBeNull());
 		expect(container.querySelector('.deck-error-card')).toBeNull();
 		consoleSpy.mockRestore();
+	});
+
+	it('shows the audience-safe form (a hidden card plus a marker) when the page is opened with ?present=true, in dev', () => {
+		(import.meta.env as { DEV: boolean }).DEV = true;
+		window.history.pushState({}, '', '/?present=true');
+		const slide = makeSlide();
+
+		try {
+			const { container } = render(
+				<DeckComponent
+					source="slides/Broken.jsx"
+					url="/components/Broken-safe.js"
+					buildError="slides/Broken.jsx:3:7: bad"
+					props={{}}
+					slots={{}}
+					slide={slide}
+					step={0}
+					steps={0}
+					active
+					printMode={false}
+				/>
+			);
+
+			const card = container.querySelector('.deck-error-card');
+			expect(card).not.toBeNull();
+			expect(card?.hasAttribute('hidden')).toBe(true);
+			expect(card?.getAttribute('data-message')).toBe('slides/Broken.jsx:3:7: bad');
+			expect(container.querySelector('.deck-error-marker')?.textContent).toBe('component error');
+		} finally {
+			window.history.pushState({}, '', '/');
+		}
+	});
+
+	it('renders the build fallback next to the marker when a mounted component throws at render, with ?present=true, in dev', async () => {
+		(import.meta.env as { DEV: boolean }).DEV = true;
+		window.history.pushState({}, '', '/?present=true');
+		const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+		function Throws(): never {
+			throw new Error('boom');
+		}
+		const importer = vi.fn().mockResolvedValue({ default: Throws });
+		const slide = makeSlide();
+
+		try {
+			const { container, findByTestId } = render(
+				<DeckComponent
+					source="slides/Throws.jsx"
+					url="/components/Throws-present.js"
+					props={{}}
+					slots={{}}
+					slide={slide}
+					step={0}
+					steps={0}
+					active
+					printMode={false}
+					importer={importer}
+					buildFallback={<p data-testid="fallback">the slide's normal content</p>}
+				/>
+			);
+
+			expect(await findByTestId('fallback')).toBeTruthy();
+			const card = container.querySelector('.deck-error-card');
+			expect(card?.hasAttribute('hidden')).toBe(true);
+			expect(container.querySelector('.deck-error-marker')?.textContent).toBe('component error');
+		} finally {
+			window.history.pushState({}, '', '/');
+			consoleSpy.mockRestore();
+		}
+	});
+
+	it('switches to the audience-safe form when fullscreen is entered, without remounting', () => {
+		(import.meta.env as { DEV: boolean }).DEV = true;
+		const slide = makeSlide();
+
+		const { container } = render(
+			<DeckComponent
+				source="slides/Broken.jsx"
+				url="/components/Broken-livefullscreen.js"
+				buildError="slides/Broken.jsx:3:7: bad"
+				props={{}}
+				slots={{}}
+				slide={slide}
+				step={0}
+				steps={0}
+				active
+				printMode={false}
+			/>
+		);
+
+		// Not fullscreen yet: the full card, not the safe form.
+		expect(container.querySelector('.deck-error-card')?.hasAttribute('hidden')).toBe(false);
+
+		Object.defineProperty(document, 'fullscreenElement', {
+			value: document.createElement('div'),
+			configurable: true
+		});
+		act(() => {
+			document.dispatchEvent(new Event('fullscreenchange'));
+		});
+
+		expect(container.querySelector('.deck-error-card')?.hasAttribute('hidden')).toBe(true);
+		expect(container.querySelector('.deck-error-marker')).not.toBeNull();
+
+		Object.defineProperty(document, 'fullscreenElement', { value: null, configurable: true });
+	});
+
+	it('shows the full error card when fullscreen, since ?present=true is absent, in dev', () => {
+		(import.meta.env as { DEV: boolean }).DEV = true;
+		Object.defineProperty(document, 'fullscreenElement', {
+			value: document.createElement('div'),
+			configurable: true
+		});
+		const slide = makeSlide();
+
+		try {
+			const { container } = render(
+				<DeckComponent
+					source="slides/Broken.jsx"
+					url="/components/Broken-fullscreen.js"
+					buildError="slides/Broken.jsx:3:7: bad"
+					props={{}}
+					slots={{}}
+					slide={slide}
+					step={0}
+					steps={0}
+					active
+					printMode={false}
+				/>
+			);
+
+			const card = container.querySelector('.deck-error-card');
+			expect(card?.hasAttribute('hidden')).toBe(true);
+			expect(container.querySelector('.deck-error-marker')).not.toBeNull();
+		} finally {
+			Object.defineProperty(document, 'fullscreenElement', { value: null, configurable: true });
+		}
+	});
+
+	it('keeps the full error card when ?present=true is set but ?debug=true is also set, in dev', () => {
+		(import.meta.env as { DEV: boolean }).DEV = true;
+		window.history.pushState({}, '', '/?present=true&debug=true');
+		const slide = makeSlide();
+
+		try {
+			const { container } = render(
+				<DeckComponent
+					source="slides/Broken.jsx"
+					url="/components/Broken-debug.js"
+					buildError="slides/Broken.jsx:3:7: bad"
+					props={{}}
+					slots={{}}
+					slide={slide}
+					step={0}
+					steps={0}
+					active
+					printMode={false}
+				/>
+			);
+
+			const card = container.querySelector('.deck-error-card');
+			expect(card?.hasAttribute('hidden')).toBe(false);
+			expect(card?.textContent).toContain('bad');
+			expect(container.querySelector('.deck-error-marker')).toBeNull();
+		} finally {
+			window.history.pushState({}, '', '/');
+		}
+	});
+
+	it('times out a component that never resolves after 8 seconds, evicting the cache so a remount retries', async () => {
+		vi.useFakeTimers();
+		(import.meta.env as { DEV: boolean }).DEV = true;
+		const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+		const neverResolves = () => new Promise(() => {});
+		function Widget() {
+			return <p data-testid="widget">recovered</p>;
+		}
+		const importer = vi.fn().mockImplementation((url: string) => {
+			// First mount hangs forever; a second mount for the same URL (the
+			// retry after eviction) resolves normally.
+			return importer.mock.calls.length === 1 ? neverResolves() : Promise.resolve({ default: Widget });
+		});
+		const slide = makeSlide();
+
+		const first = render(
+			<DeckComponent
+				source="slides/Hangs.jsx"
+				url="/components/Hangs-1.js"
+				props={{}}
+				slots={{}}
+				slide={slide}
+				step={0}
+				steps={0}
+				active
+				printMode={false}
+				importer={importer}
+			/>
+		);
+
+		await act(async () => {
+			await vi.advanceTimersByTimeAsync(8000);
+		});
+
+		const card = first.container.querySelector('.deck-error-card');
+		expect(card).not.toBeNull();
+		expect(card?.textContent).toContain('component did not load within 8 seconds: slides/Hangs.jsx');
+		first.unmount();
+
+		const second = render(
+			<DeckComponent
+				source="slides/Hangs.jsx"
+				url="/components/Hangs-1.js"
+				props={{}}
+				slots={{}}
+				slide={slide}
+				step={0}
+				steps={0}
+				active
+				printMode={false}
+				importer={importer}
+			/>
+		);
+		await vi.waitFor(() => expect(second.container.querySelector('[data-testid="widget"]')).not.toBeNull());
+
+		consoleSpy.mockRestore();
+		vi.useRealTimers();
+	});
+
+	it('never times out a component in print mode', async () => {
+		vi.useFakeTimers();
+		(import.meta.env as { DEV: boolean }).DEV = true;
+		const neverResolves = vi.fn().mockImplementation(() => new Promise(() => {}));
+		const slide = makeSlide();
+
+		const { container } = render(
+			<DeckComponent
+				source="slides/HangsInPrint.jsx"
+				url="/components/HangsInPrint-1.js"
+				props={{}}
+				slots={{}}
+				slide={slide}
+				step={0}
+				steps={0}
+				active
+				printMode
+				importer={neverResolves}
+			/>
+		);
+
+		await vi.advanceTimersByTimeAsync(60000);
+
+		expect(container.querySelector('.deck-error-card')).toBeNull();
+		vi.useRealTimers();
 	});
 
 	it('loads the component css as a stylesheet link, once per URL', async () => {
