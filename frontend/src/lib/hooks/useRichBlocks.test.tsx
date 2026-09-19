@@ -126,7 +126,7 @@ describe('useRichBlocks', () => {
 		expect(container.querySelector('pre > code.language-js')).not.toBeNull();
 	});
 
-	it('marks the processed element with a signature covering the slide index and slot content', async () => {
+	it('marks the processed element with a short hash instead of the raw slot content', async () => {
 		const slide = createSlide({
 			slots: { body: '<pre><code class="language-js">const x = 1;</code></pre>' },
 			slotOrder: ['body']
@@ -140,7 +140,41 @@ describe('useRichBlocks', () => {
 
 		const element = container.querySelector('[data-rich-processed]') as HTMLElement;
 		expect(element).not.toBeNull();
-		expect(element.dataset.richProcessed).toBe(`0:${slide.slots.body}`);
+		expect(element.dataset.richProcessed).not.toBe(slide.slots.body);
+		expect(element.dataset.richProcessed?.length).toBeLessThan((slide.slots.body ?? '').length);
+	});
+
+	it('reprocesses when the slot HTML changes, and skips when it stays the same', async () => {
+		const firstSlide = createSlide({
+			slots: { body: '<pre><code class="language-js">const x = 1;</code></pre>' },
+			slotOrder: ['body']
+		});
+
+		const { container, rerender } = render(<Harness slide={firstSlide} active />);
+		await waitFor(() => expect(container.querySelector('pre.shiki')).not.toBeNull());
+		const firstHash = (container.querySelector('[data-rich-processed]') as HTMLElement).dataset
+			.richProcessed;
+
+		// Re-rendering with the exact same slot content must not touch the
+		// marker: the hook detects it as already processed and skips reprocessing.
+		rerender(<Harness slide={{ ...firstSlide }} active />);
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		expect(
+			(container.querySelector('[data-rich-processed]') as HTMLElement).dataset.richProcessed
+		).toBe(firstHash);
+
+		// Different slot content must produce a different hash, so the
+		// changed HTML is detected as new and reprocessed.
+		const secondSlide = createSlide({
+			slots: { body: '<pre><code class="language-js">const y = 2;</code></pre>' },
+			slotOrder: ['body']
+		});
+		rerender(<Harness slide={secondSlide} active />);
+		await waitFor(() => {
+			const hash = (container.querySelector('[data-rich-processed]') as HTMLElement).dataset
+				.richProcessed;
+			expect(hash).not.toBe(firstHash);
+		});
 	});
 
 	it('replaces a driver code block\'s pre with a portal container and reports it', async () => {
