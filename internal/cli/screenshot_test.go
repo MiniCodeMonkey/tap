@@ -246,6 +246,42 @@ func TestCaptureAllSlides_MkdirFailureIsFatal(t *testing.T) {
 	}
 }
 
+// TestCaptureAllSlides_CancelledContextStopsEvenWithoutWrappingCanceled
+// reproduces the Ctrl-C bug: a real process-group signal often kills the
+// headless browser before capture returns, so capture fails with its own
+// error (here a stand-in for "target closed") rather than one that wraps
+// context.Canceled. The loop must still stop instead of folding this into
+// the broken-slide list, because ctx itself - not the error's shape - is
+// what decides whether this was an interruption.
+func TestCaptureAllSlides_CancelledContextStopsEvenWithoutWrappingCanceled(t *testing.T) {
+	tempDir := t.TempDir()
+	ctx, cancel := context.WithCancel(context.Background())
+
+	var calls []int
+	fakeCapture := func(ctx context.Context, serverURL string, opts pdf.CaptureOptions, outputPath string) error {
+		calls = append(calls, opts.SlideNumber)
+		if opts.SlideNumber == 2 {
+			cancel()
+			return fmt.Errorf("target closed")
+		}
+		return os.WriteFile(outputPath, []byte("fake png"), 0644)
+	}
+
+	written, broken, err := captureAllSlides(ctx, fakeCapture, "http://localhost:0", 4, 1920, 1080, "", tempDir)
+	if err == nil {
+		t.Fatal("expected an error when the context is cancelled mid-loop")
+	}
+	if len(calls) != 2 {
+		t.Errorf("expected the loop to stop after the cancelled slide, got %d calls: %v", len(calls), calls)
+	}
+	if len(broken) != 0 {
+		t.Errorf("expected no broken slides recorded, got %+v (a cancellation is not a broken slide)", broken)
+	}
+	if len(written) != 1 {
+		t.Errorf("expected only slide 1 written, got %v", written)
+	}
+}
+
 func contains(haystack, needle string) bool {
 	return len(haystack) >= len(needle) && (func() bool {
 		for i := 0; i+len(needle) <= len(haystack); i++ {

@@ -127,6 +127,14 @@ func runScreenshotE(cmd *cobra.Command, args []string) error {
 	// running past the deferred cleanup below.
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
+	// stop() also runs the moment ctx is done, rather than waiting for
+	// this function to return: signal.NotifyContext keeps intercepting the
+	// signal until stop() runs, so without this a second Ctrl-C during the
+	// cleanup below (browser close) would just cancel the already
+	// cancelled context again instead of falling through to the OS
+	// default handler, which is what actually kills the process
+	// immediately.
+	context.AfterFunc(ctx, stop)
 
 	file := args[0]
 	hasSlideFlag := cmd.Flags().Changed("slide")
@@ -222,7 +230,12 @@ func runScreenshotE(cmd *cobra.Command, args []string) error {
 	if screenshotAll {
 		written, broken, err := captureAllSlides(ctx, exporter.CaptureSlide, serverURL, total, width, height, screenshotTheme, resolveAllOutputDir(screenshotOut, file))
 		if err != nil {
-			if errors.Is(err, context.Canceled) {
+			// A real Ctrl-C signals the whole process group, so the
+			// headless browser often dies first and capture fails with its
+			// own error rather than one that wraps context.Canceled. ctx
+			// itself is the source of truth for whether this run was
+			// interrupted, regardless of how that surfaced in err.
+			if ctx.Err() != nil {
 				return errInterrupted
 			}
 			return err
@@ -269,7 +282,7 @@ func runScreenshotE(cmd *cobra.Command, args []string) error {
 	}
 
 	if err := exporter.CaptureSlide(ctx, serverURL, options, outputPath); err != nil {
-		if errors.Is(err, context.Canceled) {
+		if ctx.Err() != nil {
 			return errInterrupted
 		}
 		return err
@@ -328,7 +341,12 @@ func captureAllSlides(ctx context.Context, capture captureFunc, serverURL string
 			Print:       true,
 		}
 		if err := capture(ctx, serverURL, options, outputPath); err != nil {
-			if errors.Is(err, context.Canceled) {
+			// ctx itself, not the shape of err, decides whether this was
+			// an interruption: a real Ctrl-C signals the whole process
+			// group, so the headless browser can die first and capture
+			// can fail with its own error rather than one that wraps
+			// context.Canceled.
+			if ctx.Err() != nil {
 				return written, broken, err
 			}
 			broken = append(broken, brokenSlide{SlideNumber: slideNumber, Reason: err.Error()})

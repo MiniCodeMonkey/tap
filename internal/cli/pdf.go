@@ -86,6 +86,14 @@ func runPDFE(args []string) error {
 	// past the deferred cleanup below.
 	signalCtx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
+	// stop() also runs the moment signalCtx is done, rather than waiting
+	// for this function to return: signal.NotifyContext keeps intercepting
+	// the signal until stop() runs, so without this a second Ctrl-C during
+	// the cleanup below (server shutdown, exporter close) would just
+	// cancel the already-cancelled context again instead of falling
+	// through to the OS default handler, which is what actually kills the
+	// process immediately.
+	context.AfterFunc(signalCtx, stop)
 
 	file := args[0]
 
@@ -192,7 +200,13 @@ func runPDFE(args []string) error {
 	})
 	if err != nil {
 		spinner.stop()
-		if errors.Is(err, context.Canceled) {
+		// A real Ctrl-C signals the whole process group, so the headless
+		// browser often dies first and Export fails with its own error
+		// (a closed target, a lost connection) rather than one that wraps
+		// context.Canceled. signalCtx itself is the source of truth for
+		// whether this run was interrupted, regardless of how that
+		// surfaced in err.
+		if signalCtx.Err() != nil {
 			return errInterrupted
 		}
 		return fmt.Errorf("PDF export failed: %w", err)
