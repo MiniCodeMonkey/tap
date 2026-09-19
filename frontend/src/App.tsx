@@ -28,6 +28,8 @@ import { SlideTransition } from '$lib/components/SlideTransition';
 import { ProgressBar } from '$lib/components/ProgressBar';
 import { ConnectionIndicator } from '$lib/components/ConnectionIndicator';
 import { SlideOverview } from '$lib/components/SlideOverview';
+import { ShortcutHelp } from '$lib/components/ShortcutHelp';
+import { AUDIENCE_SHORTCUTS } from '$lib/utils/shortcuts';
 import { resolveTransition, type TransitionDirection } from '$lib/utils/transitions';
 
 const PRINT_MODE =
@@ -85,6 +87,9 @@ export default function App() {
 	const [overviewOpen, setOverviewOpen] = useState(false);
 	const overviewOpenRef = useRef(overviewOpen);
 	overviewOpenRef.current = overviewOpen;
+	const [helpOpen, setHelpOpen] = useState(false);
+	const helpOpenRef = useRef(helpOpen);
+	helpOpenRef.current = helpOpen;
 
 	const presentation = usePresentationStore((state) => state.presentation);
 	const currentSlide = usePresentationStore(selectCurrentSlide);
@@ -126,7 +131,9 @@ export default function App() {
 		const keyboardCleanup = setupKeyboardNavigation({
 			onNavigate: broadcastPresentationState,
 			onToggleOverview: () => setOverviewOpen((open) => !open),
-			isOverviewOpen: () => overviewOpenRef.current
+			isOverviewOpen: () => overviewOpenRef.current,
+			onToggleHelp: () => setHelpOpen((open) => !open),
+			isHelpOpen: () => helpOpenRef.current
 		});
 
 		// A print pass (PDF export, ?print=true) is a static snapshot of one
@@ -241,6 +248,8 @@ export default function App() {
 					isOpen={overviewOpen}
 					onClose={() => setOverviewOpen(false)}
 				/>
+
+				<ShortcutHelp groups={AUDIENCE_SHORTCUTS} theme={theme} isOpen={helpOpen} onClose={() => setHelpOpen(false)} />
 			</>
 		);
 	}

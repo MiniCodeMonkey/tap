@@ -16,6 +16,11 @@
  * fragments revealed yet) as a static, non-interactive preview, the same
  * cheap path the overview thumbnails use: no map, no live code, no rich
  * content processing, since it is only a look-ahead.
+ *
+ * Layout: the current slide takes the wider left column; the next slide
+ * and the speaker notes share the right column, with the notes filling
+ * whatever height the next slide leaves. The notes font size is adjustable
+ * (the - and = keys, or the A- / A+ buttons) and persists in localStorage.
  */
 
 import { useEffect, useRef, useState, type ReactNode } from 'react';
@@ -40,6 +45,8 @@ import {
 import { fetchPresentation } from '$lib/utils/fetchPresentation';
 import { SlideCanvas } from '$lib/components/SlideCanvas';
 import { Slide } from '$lib/components/Slide';
+import { ShortcutHelp } from '$lib/components/ShortcutHelp';
+import { HELP_KEY, PRESENTER_SHORTCUTS } from '$lib/utils/shortcuts';
 
 /** True when exported to PDF via the "both" content option (`/presenter?print=true`). */
 const PRINT_MODE =
@@ -50,7 +57,47 @@ function isInputFocused(): boolean {
 	const target = document.activeElement;
 	if (!target) return false;
 	const tagName = target.tagName;
-	return tagName === 'INPUT' || tagName === 'TEXTAREA' || target.getAttribute('contenteditable') === 'true';
+	return (
+		tagName === 'INPUT' ||
+		tagName === 'TEXTAREA' ||
+		tagName === 'SELECT' ||
+		target.getAttribute('contenteditable') === 'true'
+	);
+}
+
+const NOTES_FONT_SIZE_STORAGE_KEY = 'tap-presenter-notes-font-size';
+/** Speaker notes font size bounds and step, in rem. */
+const NOTES_FONT_SIZE_DEFAULT = 1.5;
+const NOTES_FONT_SIZE_MIN = 1;
+const NOTES_FONT_SIZE_MAX = 3;
+const NOTES_FONT_SIZE_STEP = 0.125;
+
+function clampNotesFontSize(size: number): number {
+	return Math.min(NOTES_FONT_SIZE_MAX, Math.max(NOTES_FONT_SIZE_MIN, size));
+}
+
+function readNotesFontSize(): number {
+	try {
+		const stored = Number.parseFloat(window.localStorage.getItem(NOTES_FONT_SIZE_STORAGE_KEY) ?? '');
+		return Number.isFinite(stored) ? clampNotesFontSize(stored) : NOTES_FONT_SIZE_DEFAULT;
+	} catch {
+		return NOTES_FONT_SIZE_DEFAULT;
+	}
+}
+
+function writeNotesFontSize(size: number): void {
+	try {
+		window.localStorage.setItem(NOTES_FONT_SIZE_STORAGE_KEY, String(size));
+	} catch {
+		// Storage can be unavailable (private window, blocked site data); the
+		// size then lasts only until reload.
+	}
+}
+
+/** "16:9" to the CSS aspect-ratio value "16 / 9". */
+function cssAspectRatio(aspectRatio: string): string {
+	const [width, height] = aspectRatio.split(':');
+	return width && height ? `${width} / ${height}` : '16 / 9';
 }
 
 function formatTime(seconds: number): string {
@@ -67,6 +114,10 @@ export default function PresenterApp() {
 	const [isLoading, setIsLoading] = useState(true);
 	const [loadError, setLoadError] = useState<string | null>(null);
 	const [elapsedSeconds, setElapsedSeconds] = useState(0);
+	const [helpOpen, setHelpOpen] = useState(false);
+	const helpOpenRef = useRef(helpOpen);
+	helpOpenRef.current = helpOpen;
+	const [notesFontSize, setNotesFontSize] = useState(readNotesFontSize);
 
 	const presentation = usePresentationStore((state) => state.presentation);
 	const currentSlide = usePresentationStore(selectCurrentSlide);
@@ -103,6 +154,14 @@ export default function PresenterApp() {
 	function handlePrevSlide(): void {
 		prevSlide();
 		broadcastPresentationState();
+	}
+
+	function changeNotesFontSize(delta: number): void {
+		setNotesFontSize((size) => {
+			const next = clampNotesFontSize(size + delta);
+			writeNotesFontSize(next);
+			return next;
+		});
 	}
 
 	useEffect(() => {
@@ -161,17 +220,33 @@ export default function PresenterApp() {
 		function handleKeyDown(event: KeyboardEvent): void {
 			if (isInputFocused()) return;
 
+			// While the shortcut overlay is open, only ? and Escape reach it
+			// (to close it); every other key is ignored.
+			if (helpOpenRef.current) {
+				if (event.key === HELP_KEY || event.key === 'Escape') {
+					event.preventDefault();
+					setHelpOpen(false);
+				}
+				return;
+			}
+
 			switch (event.key) {
+				case HELP_KEY:
+					event.preventDefault();
+					setHelpOpen(true);
+					break;
 				case 'ArrowRight':
 				case 'ArrowDown':
 				case ' ':
 				case 'Enter':
+				case 'PageDown':
 					event.preventDefault();
 					handleNextSlide();
 					break;
 				case 'ArrowLeft':
 				case 'ArrowUp':
 				case 'Backspace':
+				case 'PageUp':
 					event.preventDefault();
 					handlePrevSlide();
 					break;
@@ -193,6 +268,16 @@ export default function PresenterApp() {
 				case 'R':
 					event.preventDefault();
 					resetTimer();
+					break;
+				case '-':
+				case '_':
+					event.preventDefault();
+					changeNotesFontSize(-NOTES_FONT_SIZE_STEP);
+					break;
+				case '=':
+				case '+':
+					event.preventDefault();
+					changeNotesFontSize(NOTES_FONT_SIZE_STEP);
 					break;
 			}
 		}
@@ -293,7 +378,10 @@ export default function PresenterApp() {
 					</div>
 				</header>
 
-				<main className="presenter-main">
+				<main
+					className="presenter-main"
+					style={{ ['--presenter-aspect-ratio' as string]: cssAspectRatio(aspectRatio) }}
+				>
 					<div className="presenter-current-slide-panel">
 						<h2 className="presenter-panel-title">Current Slide{currentSlide.scroll ? ' (Scroll)' : ''}</h2>
 						<div className="presenter-slide-preview current">
@@ -314,36 +402,62 @@ export default function PresenterApp() {
 						</div>
 					</div>
 
-					<div className="presenter-next-slide-panel">
-						<h2 className="presenter-panel-title">Next Slide</h2>
-						<div className="presenter-slide-preview next">
-							{nextSlideData ? (
-								<SlideCanvas aspectRatio={aspectRatio} theme={theme} printMode={PRINT_MODE}>
-									<Slide
-										key={nextSlideData.index}
-										slide={nextSlideData}
-										active={false}
-										printMode={false}
-										preview
-										fragmentIndex={-1}
-										step={0}
-										total={totalSlides}
-									/>
-								</SlideCanvas>
-							) : (
-								<div className="presenter-end-placeholder">End of Presentation</div>
-							)}
+					<div className="presenter-side">
+						<div className="presenter-next-slide-panel">
+							<h2 className="presenter-panel-title">Next Slide</h2>
+							<div className="presenter-slide-preview next">
+								{nextSlideData ? (
+									<SlideCanvas aspectRatio={aspectRatio} theme={theme} printMode={PRINT_MODE}>
+										<Slide
+											key={nextSlideData.index}
+											slide={nextSlideData}
+											active={false}
+											printMode={false}
+											preview
+											fragmentIndex={-1}
+											step={0}
+											total={totalSlides}
+										/>
+									</SlideCanvas>
+								) : (
+									<div className="presenter-end-placeholder">End of Presentation</div>
+								)}
+							</div>
 						</div>
-					</div>
 
-					<div className={`presenter-notes-panel${currentSlide.notes ? ' has-notes' : ''}`}>
-						<h2 className="presenter-panel-title">Speaker Notes</h2>
-						<div className="presenter-notes-content">
-							{currentSlide.notes ? (
-								<div dangerouslySetInnerHTML={{ __html: currentSlide.notes }} />
-							) : (
-								<p className="presenter-no-notes">No speaker notes for this slide.</p>
-							)}
+						<div className={`presenter-notes-panel${currentSlide.notes ? ' has-notes' : ''}`}>
+							<div className="presenter-notes-header">
+								<h2 className="presenter-panel-title">Speaker Notes</h2>
+								<div className="presenter-notes-font-controls">
+									<button
+										type="button"
+										className="presenter-notes-font-button"
+										onClick={() => changeNotesFontSize(-NOTES_FONT_SIZE_STEP)}
+										disabled={notesFontSize <= NOTES_FONT_SIZE_MIN}
+										aria-label="Smaller speaker notes"
+										title="Smaller notes (-)"
+									>
+										A-
+									</button>
+									<button
+										type="button"
+										className="presenter-notes-font-button"
+										onClick={() => changeNotesFontSize(NOTES_FONT_SIZE_STEP)}
+										disabled={notesFontSize >= NOTES_FONT_SIZE_MAX}
+										aria-label="Larger speaker notes"
+										title="Larger notes (=)"
+									>
+										A+
+									</button>
+								</div>
+							</div>
+							<div className="presenter-notes-content" style={{ fontSize: `${notesFontSize}rem` }}>
+								{currentSlide.notes ? (
+									<div dangerouslySetInnerHTML={{ __html: currentSlide.notes }} />
+								) : (
+									<p className="presenter-no-notes">No speaker notes for this slide.</p>
+								)}
+							</div>
 						</div>
 					</div>
 				</main>
@@ -363,7 +477,7 @@ export default function PresenterApp() {
 
 					<div className="presenter-control-info">
 						<span className="presenter-keyboard-hint">Use arrow keys or space to navigate</span>
-						<span className="presenter-keyboard-hint">Press R to reset timer</span>
+						<span className="presenter-keyboard-hint">Press R to reset timer, ? for all shortcuts</span>
 					</div>
 
 					<button
@@ -378,6 +492,8 @@ export default function PresenterApp() {
 						</svg>
 					</button>
 				</footer>
+
+				<ShortcutHelp groups={PRESENTER_SHORTCUTS} theme={theme} isOpen={helpOpen} onClose={() => setHelpOpen(false)} />
 			</div>
 		);
 	}

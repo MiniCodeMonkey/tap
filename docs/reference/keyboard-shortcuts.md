@@ -10,6 +10,9 @@ the `tap dev` terminal.
 Keys are ignored while an input, textarea, select, or `contenteditable`
 element has focus.
 
+Press **?** in the audience view or the presenter view to show the
+shortcuts for that view without leaving the deck.
+
 ## Audience View
 
 The main presentation window, at `http://localhost:3000`.
@@ -37,7 +40,8 @@ through those first and only then moves to the next slide. A slide with two
 | **O** | Toggle the slide overview |
 | **T** | Cycle to the next theme |
 | **F** | Toggle fullscreen |
-| **Esc** | Blur a focused input, or close the overview, or exit fullscreen |
+| **?** | Show or hide the list of shortcuts |
+| **Esc** | Blur a focused input, or close the overview or the list of shortcuts, or exit fullscreen |
 
 Navigation keys are ignored while an input, textarea, select, or
 `contenteditable` element inside a slide has focus, so a form on a slide
@@ -46,6 +50,9 @@ it does not also close the overview or leave fullscreen on that same press.
 
 In the overview, arrow keys move the selection and **Enter** jumps to the
 selected slide. Other shortcuts are ignored while the overview is open.
+
+While the list of shortcuts is open, only **?** and **Esc** work, and both
+close it. A click outside the list also closes it.
 
 **T** cycles through every built-in theme without touching the deck's
 frontmatter. To force one theme for a link or a recording, add
@@ -57,11 +64,17 @@ The window at `http://localhost:3000/presenter`, or opened with **S**.
 
 | Shortcut | Action |
 |----------|--------|
-| **Right**, **Down**, **Space**, **Enter** | Next fragment or step, then next slide |
-| **Left**, **Up**, **Backspace** | Previous fragment or step, then previous slide |
+| **Right**, **Down**, **Space**, **Enter**, **PageDown** | Next fragment or step, then next slide |
+| **Left**, **Up**, **Backspace**, **PageUp** | Previous fragment or step, then previous slide |
 | **Home** | First slide |
 | **End** | Last slide |
 | **R** | Reset the timer |
+| **-** | Make the speaker notes smaller |
+| **=** | Make the speaker notes larger |
+| **?** | Show or hide the list of shortcuts |
+| **Esc** | Close the list of shortcuts |
+
+The speaker notes size is remembered in this browser.
 
 Navigation in the presenter view is broadcast to every connected audience
 view, and the other way round.
@@ -80,6 +93,11 @@ The `tap dev` terminal interface, not the browser.
 | **E** | Export the deck to PDF |
 | **I** | Open the AI image generator (needs `GEMINI_API_KEY`) |
 | **Q**, **Ctrl+C** | Stop the dev server |
+
+**O** means different things in the two places: in this terminal it opens
+the browser, in the browser it opens the slide overview. The help line at
+the bottom of the terminal reminds you that **?** in the browser lists the
+browser's own shortcuts.
 
 In the theme picker, **Up**/**K** and **Down**/**J** move the selection,
 **Enter** applies the theme to every connected browser and writes it into

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act } from 'react';
-import { cleanup, render, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, waitFor } from '@testing-library/react';
 import PresenterApp from './PresenterApp';
 import { resetPresentation, usePresentationStore } from '$lib/stores/presentation';
 import type { Presentation } from '$lib/types';
@@ -257,6 +257,98 @@ describe('PresenterApp', () => {
 			const nextCanvas = container.querySelector('.presenter-next-slide-panel .slide-container .slide');
 			expect(currentCanvas).toHaveAttribute('data-theme', 'terminal');
 			expect(nextCanvas).toHaveAttribute('data-theme', 'terminal');
+		});
+	});
+	it('opens the shortcut overlay on ? and closes it on ? or Escape', async () => {
+		const { container } = render(<PresenterApp />);
+		await waitFor(() => expect(container.querySelector('.presenter-view')).toBeInTheDocument());
+
+		fireEvent.keyDown(window, { key: '?' });
+		const overlay = container.querySelector('.shortcut-help');
+		expect(overlay).toBeInTheDocument();
+		expect(overlay).toHaveTextContent('Reset the timer');
+		expect(overlay).not.toHaveTextContent('Toggle the slide overview');
+
+		fireEvent.keyDown(window, { key: '?' });
+		expect(container.querySelector('.shortcut-help')).not.toBeInTheDocument();
+
+		fireEvent.keyDown(window, { key: '?' });
+		fireEvent.keyDown(window, { key: 'Escape' });
+		expect(container.querySelector('.shortcut-help')).not.toBeInTheDocument();
+	});
+
+	it('closes the shortcut overlay on a backdrop click and ignores navigation while open', async () => {
+		const { container } = render(<PresenterApp />);
+		await waitFor(() => expect(container.querySelector('.presenter-view')).toBeInTheDocument());
+
+		fireEvent.keyDown(window, { key: '?' });
+		fireEvent.keyDown(window, { key: 'ArrowRight' });
+		expect(usePresentationStore.getState().currentSlideIndex).toBe(0);
+
+		fireEvent.click(container.querySelector('.shortcut-help-backdrop')!);
+		expect(container.querySelector('.shortcut-help')).not.toBeInTheDocument();
+	});
+
+	describe('speaker notes font size', () => {
+		const storageKey = 'tap-presenter-notes-font-size';
+
+		beforeEach(() => {
+			window.localStorage.clear();
+		});
+
+		function notesFontSize(container: HTMLElement): string {
+			return (container.querySelector('.presenter-notes-content') as HTMLElement).style.fontSize;
+		}
+
+		it('changes with the - and = keys and the A- / A+ buttons, and persists the size', async () => {
+			const { container, getByLabelText } = render(<PresenterApp />);
+			await waitFor(() => expect(container.querySelector('.presenter-notes-content')).toBeInTheDocument());
+			expect(notesFontSize(container)).toBe('1.5rem');
+
+			fireEvent.keyDown(window, { key: '=' });
+			expect(notesFontSize(container)).toBe('1.625rem');
+			expect(window.localStorage.getItem(storageKey)).toBe('1.625');
+
+			fireEvent.keyDown(window, { key: '-' });
+			fireEvent.keyDown(window, { key: '-' });
+			expect(notesFontSize(container)).toBe('1.375rem');
+
+			fireEvent.click(getByLabelText('Larger speaker notes'));
+			expect(notesFontSize(container)).toBe('1.5rem');
+			fireEvent.click(getByLabelText('Smaller speaker notes'));
+			expect(notesFontSize(container)).toBe('1.375rem');
+			expect(window.localStorage.getItem(storageKey)).toBe('1.375');
+		});
+
+		it('restores the stored size on load and clamps it to the allowed range', async () => {
+			window.localStorage.setItem(storageKey, '2.25');
+			const first = render(<PresenterApp />);
+			await waitFor(() => expect(first.container.querySelector('.presenter-notes-content')).toBeInTheDocument());
+			expect(notesFontSize(first.container)).toBe('2.25rem');
+			first.unmount();
+
+			window.localStorage.setItem(storageKey, '99');
+			const second = render(<PresenterApp />);
+			await waitFor(() => expect(second.container.querySelector('.presenter-notes-content')).toBeInTheDocument());
+			expect(notesFontSize(second.container)).toBe('3rem');
+			expect(second.getByLabelText('Larger speaker notes')).toBeDisabled();
+		});
+
+		it('falls back to the default size when storage throws', async () => {
+			vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+				throw new Error('blocked');
+			});
+			vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+				throw new Error('blocked');
+			});
+
+			const { container } = render(<PresenterApp />);
+			await waitFor(() => expect(container.querySelector('.presenter-notes-content')).toBeInTheDocument());
+			expect(notesFontSize(container)).toBe('1.5rem');
+
+			fireEvent.keyDown(window, { key: '=' });
+			expect(notesFontSize(container)).toBe('1.625rem');
+			vi.restoreAllMocks();
 		});
 	});
 });

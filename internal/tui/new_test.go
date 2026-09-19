@@ -57,6 +57,18 @@ func TestGenerateStarterMarkdown(t *testing.T) {
 			},
 		},
 		{
+			name:   "with a double quote and a backslash in title",
+			title:  `Say "Hi" \ Wave`,
+			theme:  "terminal",
+			date:   "2024-02-21",
+			author: `Jo "JJ" Smith`,
+			want: []string{
+				`title: "Say \"Hi\" \\ Wave"`,
+				`author: "Jo \"JJ\" Smith"`,
+				`# Say "Hi" \ Wave`,
+			},
+		},
+		{
 			name:   "aurora theme",
 			title:  "Modern UI Design",
 			theme:  "aurora",

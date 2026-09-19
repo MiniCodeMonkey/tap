@@ -907,7 +907,7 @@ func (m *DevModel) viewHelp() string {
 		Bold(true)
 
 	help := fmt.Sprintf(
-		"%s open browser • %s presenter view • %s theme • %s add slide • %s image • %s export pdf • %s reload • %s quit",
+		"%s open browser • %s presenter view • %s theme • %s add slide • %s image • %s export pdf • %s reload • %s quit\n%s in the browser lists its shortcuts",
 		keyStyle.Render("o"),
 		keyStyle.Render("p"),
 		keyStyle.Render("t"),
@@ -916,6 +916,7 @@ func (m *DevModel) viewHelp() string {
 		keyStyle.Render("e"),
 		keyStyle.Render("r"),
 		keyStyle.Render("q"),
+		keyStyle.Render("?"),
 	)
 
 	return helpStyle.Render(help)

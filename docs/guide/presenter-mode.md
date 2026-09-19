@@ -62,7 +62,9 @@ The presenter view includes everything you need to deliver a polished presentati
 
 ### Speaker Notes
 
-Your notes appear prominently in the presenter view. Add notes to any slide using the `notes` directive:
+Your notes appear in the right column of the presenter view, under the next
+slide preview, and use all the height the preview leaves. The current slide
+takes the wider left column. Add notes to any slide using the `notes` directive:
 
 ```markdown
 # Quarterly Results
@@ -82,6 +84,11 @@ preserved, so write them as short lines or a small list. Markdown is not
 rendered there: `**bold**` shows as `**bold**`. A notes comment anywhere in
 the slide works too, and is the better form for long free text. See
 [Slide Directives](/reference/slide-directives#notes).
+
+To change the notes font size, press **-** or **=**, or use the **A-** and
+**A+** buttons in the notes panel title. The presenter view remembers the
+size in this browser. On a narrow screen such as a phone, the panels stack
+with the notes above the next slide preview.
 
 ### Timer
 
@@ -218,10 +225,13 @@ In the presenter view:
 
 | Shortcut | Action |
 |----------|--------|
-| **Right**, **Down**, **Space**, **Enter** | Next fragment or step, then next slide |
-| **Left**, **Up**, **Backspace** | Previous fragment or step, then previous slide |
+| **Right**, **Down**, **Space**, **Enter**, **PageDown** | Next fragment or step, then next slide |
+| **Left**, **Up**, **Backspace**, **PageUp** | Previous fragment or step, then previous slide |
 | **Home** / **End** | First / last slide |
 | **R** | Reset timer |
+| **-** / **=** | Smaller / larger speaker notes |
+| **?** | Show or hide the list of shortcuts |
+| **Esc** | Close the list of shortcuts |
 
 In the audience view:
 
@@ -231,7 +241,8 @@ In the audience view:
 | **O** | Toggle the slide overview |
 | **T** | Cycle themes |
 | **F** | Toggle fullscreen |
-| **Esc** | Close the overview, or exit fullscreen |
+| **?** | Show or hide the list of shortcuts |
+| **Esc** | Close the overview or the list of shortcuts, or exit fullscreen |
 
 The presenter view also has on-screen previous and next buttons, which is
 what makes it usable from a phone or tablet.
