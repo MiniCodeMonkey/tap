@@ -36,18 +36,58 @@ type Bundle struct {
 	// same format as BuildError. A caller decides whether and how to
 	// print them; this package does not print anything itself.
 	Warnings []BuildError
+	// Assets lists every imported image or font at or above
+	// assetInlineThreshold, emitted as its own file instead of inlined as
+	// a data URL (see assetSizePlugin). A caller serves or writes these
+	// out next to the bundle's JavaScript and CSS, at the URL already
+	// baked into the JavaScript (built from Options.AssetPublicPath).
+	Assets []Asset
+}
+
+// Asset is one imported image or font emitted as its own file rather than
+// inlined into the bundle's JavaScript (see assetInlineThreshold).
+type Asset struct {
+	// Name is the emitted file's name, "<original name>-<hash>.<ext>",
+	// matching the URL already baked into the bundle's JavaScript.
+	Name string
+	// Content is the asset's raw bytes.
+	Content []byte
+	// ContentType is the value to serve or record this asset with.
+	ContentType string
 }
 
 // BuildError describes one problem esbuild reported, in the exact format
 // the spec requires for terminal and error-card output.
 type BuildError struct {
-	File    string
-	Line    int
-	Column  int
-	Message string
+	File string
+	// SlideNumbers is every one-based slide number that uses this build's
+	// component path (see Resolve), in ascending order. Empty when the
+	// error did not come from Resolve walking a presentation (a direct
+	// Build call in a test, for example).
+	SlideNumbers []int
+	Line         int
+	Column       int
+	Message      string
 }
 
 func (e BuildError) Error() string {
+	base := e.baseError()
+	if len(e.SlideNumbers) == 0 {
+		return base
+	}
+	return base + " (used on " + e.slideNumbersSuffix() + ")"
+}
+
+// baseError formats the error without its trailing "(used on slide(s)
+// ...)" suffix: the "error: <file>:<line>:<column>: <message>" (or
+// equivalent) form tools that parse tap's output rely on staying fixed.
+func (e BuildError) baseError() string {
+	// A validation error caught before esbuild ever runs (an entry file
+	// outside the deck folder, for example) has no file to prefix and
+	// carries the whole sentence, path included, in Message already.
+	if e.File == "" {
+		return e.Message
+	}
 	// A build error with no esbuild source location (Line and Column both
 	// zero, such as the deck-folder containment check below) omits the
 	// position instead of printing the misleading "0:0".
@@ -57,6 +97,18 @@ func (e BuildError) Error() string {
 	return fmt.Sprintf("%s:%d:%d: %s", e.File, e.Line, e.Column, e.Message)
 }
 
+// slideNumbersSuffix renders SlideNumbers as "slide 2" or "slides 2, 5".
+func (e BuildError) slideNumbersSuffix() string {
+	if len(e.SlideNumbers) == 1 {
+		return fmt.Sprintf("slide %d", e.SlideNumbers[0])
+	}
+	numbers := make([]string, len(e.SlideNumbers))
+	for i, n := range e.SlideNumbers {
+		numbers[i] = strconv.Itoa(n)
+	}
+	return "slides " + strings.Join(numbers, ", ")
+}
+
 // Options configures a build.
 type Options struct {
 	// DeckDirectory is the deck's folder. A source path that resolves
@@ -64,6 +116,13 @@ type Options struct {
 	DeckDirectory string
 	Minify        bool
 	SourceMaps    bool
+	// AssetPublicPath is the URL prefix baked into an emitted asset's URL
+	// (see Bundle.Assets): "/components/" for a live server (tap dev, tap
+	// pdf, tap screenshot, all serving from the same root), "components/"
+	// (no leading slash) for tap build's static output, so the deck still
+	// works when deployed under a sub-path. An asset small enough to
+	// inline as a data URL never uses this.
+	AssetPublicPath string
 }
 
 // stepsExportPattern and previewExportPattern match against esbuild's own
@@ -96,8 +155,9 @@ const fixedTsconfigRaw = `{"compilerOptions":{"jsx":"react-jsx","jsxImportSource
 func Build(sourcePath string, options Options) (*Bundle, []BuildError) {
 	absSource, resolveErr := resolveSourcePath(sourcePath, options.DeckDirectory)
 	if resolveErr != nil {
+		// resolveErr's message already names sourcePath (it explains what
+		// is wrong with that exact path), so no separate File prefix here.
 		return nil, []BuildError{{
-			File:    sourcePath,
 			Message: resolveErr.Error(),
 		}}
 	}
@@ -130,23 +190,19 @@ func Build(sourcePath string, options Options) (*Bundle, []BuildError) {
 		MinifySyntax:      options.Minify,
 		Sourcemap:         sourcemap,
 		Metafile:          true,
+		// AssetNames and PublicPath only take effect for an asset the
+		// assetSizePlugin sends through the "file" loader (an asset at or
+		// above assetInlineThreshold); a data-URL asset never reaches an
+		// output file, so these are unused below that size.
+		AssetNames: "[name]-[hash]",
+		PublicPath: options.AssetPublicPath,
 		Loader: map[string]api.Loader{
 			// LLM-authored decks often put JSX in a plain .js file; treat
 			// it as JSX rather than the default JS-only loader. .ts is
 			// left alone since JSX syntax is not valid TypeScript there.
 			".js": api.LoaderJSX,
-			// Assets are inlined as data URLs regardless of size. The
-			// spec's rule to copy assets over 100 KB instead is out of
-			// scope for this package.
-			".png":   api.LoaderDataURL,
-			".jpg":   api.LoaderDataURL,
-			".jpeg":  api.LoaderDataURL,
-			".gif":   api.LoaderDataURL,
-			".svg":   api.LoaderDataURL,
-			".webp":  api.LoaderDataURL,
-			".woff2": api.LoaderDataURL,
 		},
-		Plugins: []api.Plugin{hostShimPlugin()},
+		Plugins: []api.Plugin{hostShimPlugin(), assetSizePlugin(options.AssetPublicPath)},
 	})
 
 	if len(result.Errors) > 0 {
@@ -174,6 +230,15 @@ func Build(sourcePath string, options Options) (*Bundle, []BuildError) {
 			bundle.SourceMap = output.Contents
 		case strings.HasSuffix(output.Path, ".js"):
 			bundle.JavaScript = output.Contents
+		default:
+			// Everything else is an asset the assetSizePlugin sent through
+			// the "file" loader (assetInlineThreshold or larger).
+			name := filepath.Base(output.Path)
+			bundle.Assets = append(bundle.Assets, Asset{
+				Name:        name,
+				Content:     output.Contents,
+				ContentType: assetContentType(filepath.Ext(name)),
+			})
 		}
 	}
 
@@ -261,7 +326,7 @@ func resolveSourcePath(sourcePath, deckDirectory string) (string, error) {
 
 	relativePath, err := filepath.Rel(absDeckDirectory, absPath)
 	if err != nil || relativePath == ".." || strings.HasPrefix(relativePath, ".."+string(filepath.Separator)) {
-		return "", fmt.Errorf("component files must live inside the deck's folder")
+		return "", fmt.Errorf("component files must live inside the deck folder: %s (imports from outside are allowed, entry files are not)", sourcePath)
 	}
 
 	return absPath, nil

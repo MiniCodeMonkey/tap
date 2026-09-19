@@ -8,6 +8,32 @@ import (
 	"testing"
 )
 
+// TestBuildErrorError_NamesSlidesWithoutChangingThePrefix checks that the
+// leading "<file>:<line>:<column>: <message>" part - what tools parse -
+// stays exactly as before, with the slide list as a trailing suffix, for
+// both one slide and several.
+func TestBuildErrorError_NamesSlidesWithoutChangingThePrefix(t *testing.T) {
+	noSlides := BuildError{File: "slides/Broken.jsx", Line: 7, Column: 1, Message: `Unexpected "return"`}
+	want := `slides/Broken.jsx:7:1: Unexpected "return"`
+	if got := noSlides.Error(); got != want {
+		t.Errorf("Error() with no slides = %q, want %q", got, want)
+	}
+
+	oneSlide := noSlides
+	oneSlide.SlideNumbers = []int{2}
+	want = `slides/Broken.jsx:7:1: Unexpected "return" (used on slide 2)`
+	if got := oneSlide.Error(); got != want {
+		t.Errorf("Error() with one slide = %q, want %q", got, want)
+	}
+
+	severalSlides := noSlides
+	severalSlides.SlideNumbers = []int{2, 5}
+	want = `slides/Broken.jsx:7:1: Unexpected "return" (used on slides 2, 5)`
+	if got := severalSlides.Error(); got != want {
+		t.Errorf("Error() with several slides = %q, want %q", got, want)
+	}
+}
+
 func TestHostModuleNames(t *testing.T) {
 	want := []string{"react", "react/jsx-runtime", "react-dom", "react-dom/client", "motion", "motion/react", "tap"}
 	got := HostModuleNames()
@@ -216,11 +242,12 @@ func TestBuildRejectsPathOutsideDeckDirectory(t *testing.T) {
 	if len(errs) == 0 {
 		t.Fatal("expected an error for a path outside the deck directory")
 	}
-	if !strings.Contains(errs[0].Message, "deck's folder") {
-		t.Errorf("message = %q, want it to explain components must live inside the deck's folder", errs[0].Message)
+	want := "component files must live inside the deck folder: ../outside/Outside.jsx (imports from outside are allowed, entry files are not)"
+	if errs[0].Message != want {
+		t.Errorf("message = %q, want %q", errs[0].Message, want)
 	}
-	if strings.Contains(errs[0].Error(), ":0:0:") {
-		t.Errorf("Error() = %q, want no \":0:0:\" position for an error with no source location", errs[0].Error())
+	if errs[0].Error() != want {
+		t.Errorf("Error() = %q, want %q (no File prefix for a path-containment error)", errs[0].Error(), want)
 	}
 }
 
@@ -422,8 +449,81 @@ func TestBuildRejectsSymlinkEscapingDeckDirectory(t *testing.T) {
 	if len(errs) == 0 {
 		t.Fatal("expected an error for a symlink that escapes the deck directory")
 	}
-	if !strings.Contains(errs[0].Message, "deck's folder") {
-		t.Errorf("message = %q, want it to explain components must live inside the deck's folder", errs[0].Message)
+	if !strings.Contains(errs[0].Message, "deck folder") {
+		t.Errorf("message = %q, want it to explain components must live inside the deck folder", errs[0].Message)
+	}
+}
+
+// writeAssetFixture writes a JSX entry file importing one image, plus the
+// image itself sized to bytes, into deckDirectory. Real PNG bytes are not
+// needed: the asset-size plugin (and esbuild's own dataurl/file loaders it
+// delegates to) work on the raw bytes without decoding them.
+func writeAssetFixture(t *testing.T, deckDirectory string, imageBytes int) {
+	t.Helper()
+	image := make([]byte, imageBytes)
+	for i := range image {
+		image[i] = byte(i)
+	}
+	if err := os.WriteFile(filepath.Join(deckDirectory, "photo.png"), image, 0o644); err != nil {
+		t.Fatalf("write image fixture: %v", err)
+	}
+	source := `import photo from "./photo.png";
+export default function WithImage() {
+  return photo;
+}
+`
+	if err := os.WriteFile(filepath.Join(deckDirectory, "WithImage.jsx"), []byte(source), 0o644); err != nil {
+		t.Fatalf("write entry fixture: %v", err)
+	}
+}
+
+// TestBuildInlinesAssetsUnderTheSizeThreshold checks that an imported image
+// under assetInlineThreshold is inlined as a data URL, in the bundle's
+// JavaScript, exactly as it always was - and lists no separate Asset.
+func TestBuildInlinesAssetsUnderTheSizeThreshold(t *testing.T) {
+	deckDirectory := t.TempDir()
+	writeAssetFixture(t, deckDirectory, assetInlineThreshold-1)
+
+	bundle, errs := Build("WithImage.jsx", Options{DeckDirectory: deckDirectory, AssetPublicPath: "/components/"})
+	if len(errs) > 0 {
+		t.Fatalf("unexpected errors: %v", errs)
+	}
+	if len(bundle.Assets) != 0 {
+		t.Errorf("expected no emitted assets for a small image, got %+v", bundle.Assets)
+	}
+	if !strings.Contains(string(bundle.JavaScript), "data:image/png;base64,") {
+		t.Error("expected the small image to be inlined as a data URL in the bundle's JavaScript")
+	}
+}
+
+// TestBuildEmitsAssetsAtOrAboveTheSizeThreshold checks that an imported
+// image at or above assetInlineThreshold is emitted as its own file
+// (Bundle.Assets) instead, referenced from the bundle's JavaScript by a URL
+// under Options.AssetPublicPath rather than inlined.
+func TestBuildEmitsAssetsAtOrAboveTheSizeThreshold(t *testing.T) {
+	deckDirectory := t.TempDir()
+	writeAssetFixture(t, deckDirectory, assetInlineThreshold)
+
+	bundle, errs := Build("WithImage.jsx", Options{DeckDirectory: deckDirectory, AssetPublicPath: "/components/"})
+	if len(errs) > 0 {
+		t.Fatalf("unexpected errors: %v", errs)
+	}
+	if len(bundle.Assets) != 1 {
+		t.Fatalf("expected 1 emitted asset for a large image, got %d: %+v", len(bundle.Assets), bundle.Assets)
+	}
+	asset := bundle.Assets[0]
+	if asset.ContentType != "image/png" {
+		t.Errorf("ContentType = %q, want %q", asset.ContentType, "image/png")
+	}
+	if len(asset.Content) != assetInlineThreshold {
+		t.Errorf("Content length = %d, want %d", len(asset.Content), assetInlineThreshold)
+	}
+	if strings.Contains(string(bundle.JavaScript), "data:image/png;base64,") {
+		t.Error("did not expect the large image to be inlined as a data URL")
+	}
+	wantURL := "/components/" + asset.Name
+	if !strings.Contains(string(bundle.JavaScript), wantURL) {
+		t.Errorf("expected the bundle's JavaScript to reference %q", wantURL)
 	}
 }
 
