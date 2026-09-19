@@ -140,9 +140,12 @@ Three more rules that follow:
   `spaceUnit`, `radius`, `strokeWidth`.
 - `accent2` is a real second accent where the theme has one and equals
   `accentText` elsewhere, so it is always safe to use.
-- The status colors are fills, readable at 3:1 or better against `bg` in
-  every theme. **Spend them only where the color means something.**
-  Inactive is not a verdict: that is `muted` plus dashed plus opacity.
+- The status colors are fills, readable at 3:1 or better against `bg` and
+  stepped apart from each other in lightness, in every theme. **Spend them
+  only where the color means something.** Inactive is not a verdict: that
+  is `muted` plus dashed plus opacity.
+- **Never signal status by color alone.** Pair it with a label, an icon, or
+  a shape, so it reads for a colorblind viewer and on a bad projector.
 - A theme may define more variables; read one directly with a fallback,
   `var(--brand-ink, var(--fg))`. Frontmatter `themeColors` overrides are
   picked up automatically.
@@ -350,10 +353,21 @@ const duration = printMode ? 0 : 0.3;     // printMode decides animation only
 ```
 
 In print mode tap wraps components in Motion's `reducedMotion="always"`
-(transform and layout animations become instant) and kills CSS animations
-and transitions inside the component root. It does **not** stop Motion
+(transform and layout animations become instant), and one global rule sets
+`animation: none; transition: none` on everything under
+`[data-print='true']`. It does **not** stop Motion
 `opacity`/`color`/`backgroundColor` animations or your own timers, so still
 honor `usePrintMode()`.
+
+Because CSS animations never run in print mode, an element that reaches its
+final look only through `animation-fill-mode: forwards` snaps back to its
+base style. Make the base style the settled state and animate **from** the
+start state:
+
+```css
+.badge { opacity: 1; animation: fade-in 400ms; }
+@keyframes fade-in { from { opacity: 0; } }
+```
 
 `Step` compares against the current `step` in every mode. `<Step at={n}>`
 is unaffected in print, since `step` is the total there. `<Step from={a}
@@ -532,9 +546,17 @@ Error display has three forms. A normal (not fullscreen) window, the
 presenter view, `?debug=true`, and every print or capture pass show the
 **full card** with the message. A **fullscreen** window or one opened with
 `?present=true` shows the **audience-safe** form: the slide's own fallback
-content plus a small muted `component error` chip. A static `tap build`
-output falls back silently. The hidden `.deck-error-card` element stays in
-the DOM either way, so `tap screenshot` still exits 1.
+content (its slots in the default layout for a whole-slide component; the
+rest of the slide untouched for an inline one) plus a small muted
+`component error` chip. Fullscreen is followed live, so entering or leaving
+it switches forms at once. A static `tap build` output falls back silently.
+The hidden `.deck-error-card` element stays in the DOM either way, with
+`data-message` and `data-source`, so `tap screenshot` still exits 1 and
+reports the message:
+
+```
+Error: slide 2 shows an error card: component blew up on purpose
+```
 
 A component that has not loaded in **8 seconds** becomes a load error
 (`component did not load within 8 seconds: <source>`); re-entering the
@@ -549,8 +571,9 @@ content, so a shipped deck stays usable on stage.
 `tap pdf` builds components too, and exports each in its final state
 (`printMode = true`, `step = steps`). A build error stops it with the same
 `error:` line and exit status 1. A slide that shows an error card is still
-written to the PDF; `tap pdf` prints `warning: slide <n> shows an error
-card` to standard error and exits 0.
+written to the PDF; `tap pdf` prints
+`warning: slide <n> shows an error card: <message>` to standard error and
+exits 0.
 
 ## Rules of thumb
 

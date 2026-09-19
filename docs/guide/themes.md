@@ -105,10 +105,16 @@ hand-written theme should build on, instead of hard-coded colors:
 | `--stroke-width` | Border and line weight |
 
 The three status colors are each readable as a fill at a contrast of at
-least 3:1 against `--bg`, so a filled dot, bar, or badge in one of them is
-visible in every theme. They carry meaning, so use them only where the
-color says something: a health state, a passed or failed check, a threshold
-crossed. Something merely inactive stays `--muted`.
+least 3:1 against `--bg`, and any two of them differ by a contrast ratio of
+at least 1.35, so they are stepped apart by lightness and not only by hue.
+A filled dot, bar, or badge in one of them is visible in every theme.
+
+They carry meaning, so use them only where the color says something: a
+health state, a passed or failed check, a threshold crossed. Something
+merely inactive stays `--muted`. And **never signal status by color
+alone**: pair it with a label, an icon, or a shape, so it still reads for a
+colorblind viewer and on a washed-out projector. The luminance separation
+exists to keep that pairing legible when the hue is lost.
 
 Themes also set the Shiki CSS variables, so code colors follow the theme.
 
@@ -161,8 +167,8 @@ $ tap theme show terminal --prompt
 Illustration style for the "Terminal" slide theme: flat vector on near-black,
 like a TUI with amber and mint green accents. Use only this palette:
 background #0f1a16, foreground #dcebe0, accent #ffb84d, muted #9db8a8,
-surface #1d2b25. Status colors, only where meaning requires them: ok #6fe3a0,
-warn #ffb84d, error #ff5c57. Palette use: dark background dominant, amber
+surface #1d2b25. Status colors, only where meaning requires them: ok #23b561,
+warn #bd7100, error #d60600. Palette use: dark background dominant, amber
 accent and mint green accent used one or two per image. Line: 1 to 2px
 strokes, monospace-grid aligned, square caps.
 ...

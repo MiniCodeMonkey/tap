@@ -262,9 +262,17 @@ yellow.
 
 Every theme defines `--status-ok`, `--status-warn`, and `--status-error`.
 Each is readable **as a fill**, at a contrast of at least 3:1 against
-`--bg`, so a filled dot, bar, or badge in one of them is visible in every
-theme. Use `textOn(theme.statusError, theme)` for a label painted on top of
-one.
+`--bg`, and any two of the three differ from each other by a contrast ratio
+of at least 1.35, so they stay apart by lightness and not only by hue. Use
+`textOn(theme.statusError, theme)` for a label painted on top of one.
+
+::: warning Never signal status by color alone
+Roughly one viewer in twelve will not read your red against your green, and
+a washed-out projector flattens the difference for everybody. Pair a status
+color with a label, an icon, or a shape: a cross and a check, `failed` and
+`ok`, a filled square and a hollow one. The luminance separation is there
+so the pairing still reads when the color does not.
+:::
 
 Use them only where the color carries meaning: a health state, a passed or
 failed check, a threshold crossed. A component that paints its whole
@@ -398,9 +406,10 @@ Tap **does**:
   transform and layout animations instant: `x`, `y`, `scale`, `rotate`,
   `skew`, `width`, `height`, `top`, `left`, `right`, `bottom`, and
   `layoutId` projection
-- apply `animation: none; transition: none` to everything inside
-  `.deck-component-root` under `[data-print]`, which stops raw CSS keyframe
-  animations and CSS transitions
+- apply `animation: none !important; transition: none !important` to
+  everything under `[data-print='true']`, one global rule in the app
+  stylesheet covering the whole slide, components included, which stops raw
+  CSS keyframe animations and CSS transitions
 
 Tap does **not** stop:
 
@@ -412,6 +421,25 @@ So a fade that Motion drives will still fade in a PDF unless you set
 `transition={{ duration: printMode ? 0 : 0.4 }}` yourself, and a timer will
 still tick unless you gate it. Treat the enforcement as a safety net for
 the transform cases, not as a reason to skip the check.
+
+::: warning `animation-fill-mode: forwards` does not survive print mode
+Because the rule is `animation: none`, a CSS animation never runs at all in
+print mode, so an element that only reaches its final appearance through
+`forwards` snaps back to its base style: invisible, off-position, or
+whatever the keyframes started from.
+
+Write it the other way round. Make the **base** style the settled state,
+and animate **from** the start state:
+
+```css
+/* Fragile: nothing runs in print, so the element stays at opacity 0. */
+.badge { opacity: 0; animation: fade-in 400ms forwards; }
+
+/* Sound: the base style is already the end state. */
+.badge { opacity: 1; animation: fade-in 400ms; }
+@keyframes fade-in { from { opacity: 0; } }
+```
+:::
 
 The `Step` helper follows the same rule: it compares `at`/`from` against
 the live `step` in every mode. True print and previews already force `step`
@@ -560,8 +588,12 @@ files are handled by size:
 | Under 100 KB | Inlined into the bundle as a data URL |
 | 100 KB or more | Emitted as its own file and referenced by URL |
 
-An emitted file is served by `tap dev` from `/components/`, and written by
-`tap build` into `dist/components/` alongside the bundle. Either way the
+An emitted file is named `asset-<hash>.<ext>`; the original file name is
+not used, so nothing about your folder layout leaks into a published deck.
+It is served by `tap dev` from `/components/`, and written by `tap build`
+into `dist/components/` alongside the bundle. An asset referenced from a
+component's CSS with `url()` resolves relative to the emitted CSS file, so
+it works in `tap dev` and in a static build served from any sub path. Either way the
 component just uses the imported value as a `src`; the difference only
 shows in the output size.
 
@@ -626,7 +658,7 @@ There are three forms, and which one you get depends on who is looking.
 | Form | What is shown |
 |------|---------------|
 | **Full card** | The source path and the message, in place of the component |
-| **Audience-safe** | The fallback content (the slide's slots in the `default` layout) plus a small muted `component error` chip in the top right corner |
+| **Audience-safe** | The fallback content plus a small muted `component error` chip in the top right corner. For a whole-slide component the fallback is the slide's slots in the `default` layout; for an inline one the rest of the slide renders as normal and the chip marks the gap |
 | **Silent fallback** | The fallback content, with no card and no chip |
 
 | Context | Form |
@@ -645,9 +677,24 @@ the audience window with `?present=true`, and a failure degrades to the
 slide's own content with a chip only you will notice. `?debug=true` forces
 the full card back on any window, which is what you want while authoring.
 
+Fullscreen is followed **live**: entering or leaving fullscreen while an
+error is on screen switches between the two forms straight away, with no
+reload.
+
 Even in the audience-safe form the `.deck-error-card` element stays in the
-DOM, hidden, with the message in its `data-message` attribute, so
-`tap screenshot` still finds it and still exits 1.
+DOM, hidden, carrying the message in `data-message` and the file in
+`data-source`. `tap screenshot` still finds it, still exits 1, and now
+reports the message:
+
+```
+Error: slide 2 shows an error card: component blew up on purpose
+```
+
+`tap pdf` prints the same message as a warning and still writes the PDF:
+
+```
+warning: slide 2 shows an error card: component blew up on purpose
+```
 
 A static build's silent fallback is deliberate: a shipped deck stays usable
 rather than showing a stack trace. A static build is told apart at run time

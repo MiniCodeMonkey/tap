@@ -301,11 +301,24 @@ Four of them are newer and easy to miss:
 | `--status-error` | A failed state, used as a fill. At least **3:1** against `--bg` |
 | `--accent-2` | A real second accent if your theme has one; otherwise set it equal to `--accent-text` |
 
-The 3:1 floor is what makes a filled status dot or bar visible in every
-theme, and the theme check suite enforces it. These are fills, not text
-colors: a component paints a label on one with `textOn()`. Keep them
-recognisable as ok, warning, and error rather than three shades of your
-accent. It is **not** what most of the app's shared CSS reads.
+Two rules apply to the status three, and the check suite enforces both:
+
+1. **Each is at least 3:1 against `--bg`**, which is what makes a filled
+   status dot or bar visible at all.
+2. **Any two of the three differ by a contrast ratio of at least 1.35.**
+   Hue alone is not enough: a colorblind viewer, or a washed-out projector,
+   flattens red against green. Step them apart in lightness so the three
+   stay distinguishable as light, mid, and dark as well as as colors.
+
+Picking a saturated red, amber, and green straight off the wheel usually
+fails the second rule, since they can land at nearly the same luminance.
+Darken one and lighten another until the pairwise ratios clear 1.35. For
+reference, `terminal` settled on ok `#23b561`, warn `#bd7100`, error
+`#d60600`.
+
+These are fills, not text colors: a component paints a label on one with
+`textOn()`. Keep them recognisable as ok, warning, and error rather than
+three shades of your accent. It is **not** what most of the app's shared CSS reads.
 `layouts.css`, `prose.css`, `rich-blocks.css`, and `ui-components.css`, the
 files that style the live code block, the map slide, `.slide-badge`,
 `.slide-tag`, and generic prose, all read the *base* theme's token names:

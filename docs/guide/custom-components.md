@@ -176,9 +176,14 @@ accent at all.
 
 For a **state**, reach for the status tokens instead:
 `theme.statusOk`, `theme.statusWarn`, `theme.statusError`. Each is a fill,
-readable at 3:1 or better against the background in every theme. Spend them
-only where the color means something, and use
-`textOn(theme.statusError, theme)` for a label on top of one.
+readable at 3:1 or better against the background in every theme, and the
+three are stepped apart in lightness as well as hue. Spend them only where
+the color means something, and use `textOn(theme.statusError, theme)` for a
+label on top of one.
+
+**Never signal status by color alone.** Pair the color with a label, an
+icon, or a shape, so the meaning survives a colorblind viewer and a
+washed-out projector.
 
 A server that is merely restarting is not a verdict, which is why the
 example keeps `theme.muted` with a dashed outline and lower opacity for
@@ -623,11 +628,14 @@ Three things that follow from that list:
   themes that have one, and equal to `accentText` in the rest, so a
   component that needs two fills never has to check.
 - **The status colors carry meaning, so spend them sparingly.** Each is
-  readable as a fill at 3:1 or better against the background in every
-  theme. Use them for a health state, a passed or failed check, a
-  threshold crossed. Something merely inactive is not a verdict: that stays
-  `muted` with a dashed outline and lower opacity, the way the rolling
-  deploy's restarting box does.
+  readable as a fill at 3:1 or better against the background, and any two
+  differ in lightness by at least a 1.35 contrast ratio, in every theme.
+  Use them for a health state, a passed or failed check, a threshold
+  crossed. Something merely inactive is not a verdict: that stays `muted`
+  with a dashed outline and lower opacity, the way the rolling deploy's
+  restarting box does. **Never signal status by color alone:** pair it with
+  a label, an icon, or a shape, so it still reads for a colorblind viewer
+  and on a washed-out projector.
 - **`useTheme()` is the portable set, not the whole set.** A theme may
   define more variables; read one directly with a fallback,
   `var(--brand-ink, var(--fg))`, so it still works elsewhere. Frontmatter
@@ -678,6 +686,17 @@ It does **not** stop Motion animations of `opacity`, `color`, or
 `backgroundColor`, and it cannot stop your own timers. A Motion fade still
 fades in a PDF unless you write
 `transition={{ duration: printMode ? 0 : 0.4 }}` yourself.
+
+Because CSS animations are switched off rather than fast-forwarded, an
+element that only reaches its final look through
+`animation-fill-mode: forwards` snaps back to its base style in print mode.
+Make the base style the settled state and animate **from** the start state
+instead:
+
+```css
+.badge { opacity: 1; animation: fade-in 400ms; }
+@keyframes fade-in { from { opacity: 0; } }
+```
 
 ## Thumbnails
 
@@ -770,10 +789,12 @@ Tap emits the CSS next to the bundle and adds one stylesheet link for it.
 Scope your selectors, since the stylesheet applies to the whole document.
 
 An imported image or font under 100 KB is inlined as a data URL. One of
-100 KB or more is emitted as its own file next to the bundle and referenced
-by URL, served by `tap dev` from `/components/` and written into
-`dist/components/` by `tap build`. Either way your component just uses the
-imported value as a `src`.
+100 KB or more is emitted as its own file named `asset-<hash>.<ext>` next
+to the bundle and referenced by URL, served by `tap dev` from
+`/components/` and written into `dist/components/` by `tap build`. Either
+way your component just uses the imported value as a `src`, and an asset
+referenced from your CSS with `url()` resolves relative to the emitted CSS
+file, so it survives a static build under any sub path.
 
 A large photograph still belongs in the markdown as a normal image, where
 you get sizing attributes and the theme's image styling.
