@@ -11,8 +11,8 @@ import (
 // The //go:embed directive embeds all files from the dist/ directory,
 // which contains the optimized production build including:
 // - index.html and presenter.html (HTML entry points)
-// - assets/*.js (bundled JavaScript with Svelte components)
-// - assets/*.css (Tailwind CSS output, properly purged)
+// - assets/*.js (bundled JavaScript with React components)
+// - assets/*.css (per-theme CSS, loaded on demand) plus the base app CSS
 //
 //go:embed all:dist
 var Assets embed.FS

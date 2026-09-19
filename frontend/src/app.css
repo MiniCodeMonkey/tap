@@ -1,66 +1,195 @@
-/* All @imports must come first */
+/*
+ * Global styles for the React app: the theme tokens, layout and slot
+ * typography, general prose typography, and the app shell states
+ * (loading, error, empty).
+ */
 
-/* MapLibre GL CSS for map slides */
-@import "maplibre-gl/dist/maplibre-gl.css";
+@import './lib/themes/base.css';
+@import './lib/styles/layouts.css';
+@import './lib/styles/prose.css';
+@import './lib/styles/animations.css';
+@import './lib/styles/rich-blocks.css';
+@import './lib/styles/ui-components.css';
 
-/* Theme system - CSS custom properties that Tailwind utilities reference */
-@import "./lib/themes/theme-tokens.css";
+/*
+ * PDF export (?print=true) sets data-print="true" on the same .slide frame
+ * element that carries data-theme. Every descendant's
+ * animations and transitions, including pseudo-elements, are turned off:
+ * entrance animations have no page to play across in a static export.
+ * A theme's own animated elements must still look correct with this rule
+ * applied, so the theme's final, settled state has to be the element's
+ * natural, un-animated state (its plain CSS, with no animation running),
+ * not a state only reachable partway through a keyframe.
+ */
+[data-print='true'] *,
+[data-print='true'] *::before,
+[data-print='true'] *::after {
+	animation: none !important;
+	transition: none !important;
+}
 
-/* Local font imports for themes */
-@import "./lib/fonts/fonts.css";
+html,
+body {
+	margin: 0;
+	padding: 0;
+}
 
-/* Theme styles - Original themes */
-@import "./lib/themes/paper.css";
-@import "./lib/themes/noir.css";
-@import "./lib/themes/aurora.css";
-@import "./lib/themes/phosphor.css";
-@import "./lib/themes/poster.css";
+/*
+ * Every box inside the slide canvas sizes with padding and border included
+ * in its width/height, not added on top. Without this, a rule as simple as
+ * `.layout-x { width: 100%; padding: 5rem; }` renders 2 * padding wider
+ * than its container and overflows the slide: the default theme and every
+ * one of the 20 designed themes lean on `width`/`height: 100%` plus padding
+ * throughout, so this is a base assumption, not an opt-in per theme.
+ */
+.slide-container,
+.slide-container *,
+.slide-container *::before,
+.slide-container *::after {
+	box-sizing: border-box;
+}
 
-/* Theme styles - Additional themes */
-@import "./lib/themes/ink.css";
-@import "./lib/themes/bauhaus.css";
-@import "./lib/themes/editorial.css";
-@import "./lib/themes/signal.css";
-@import "./lib/themes/carbon.css";
-@import "./lib/themes/spectrum.css";
-@import "./lib/themes/mono.css";
-@import "./lib/themes/flux.css";
+.slide-renderer {
+	width: 100vw;
+	height: 100vh;
+	overflow: hidden;
+	background-color: #000;
+}
 
-/* Layout typography styles */
-@import "./lib/styles/layouts.css";
+/*
+ * .slide-container is the letterbox area around the fixed 1920x1080 canvas
+ * (the .slide frame below, which carries data-theme): whatever isn't
+ * covered by the scaled canvas on a non-16:9 screen. That area is always
+ * black, not the theme's background - a theme's colors are scoped to the
+ * canvas itself, not to the space around it. The presenter panels and the
+ * overview thumbnails override this back to transparent so their own panel
+ * background shows through instead (see presenter-view.css, ui-components.css).
+ */
+.slide-container {
+	width: 100%;
+	height: 100%;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	overflow: hidden;
+	background-color: #000;
+	position: relative;
+}
 
-/* Prose typography styles for markdown content */
-@import "./lib/styles/prose.css";
+.slide-container.fullscreen {
+	position: fixed;
+	inset: 0;
+	z-index: 50;
+}
 
-/* UI component styles */
-@import "./lib/styles/ui-components.css";
+/*
+ * .slide is used both by SlideCanvas's fixed 1920x1080 scaling frame (which
+ * sets its own pixel width and height inline) and by each rendered slide's
+ * root element (Slide.tsx), which fills that frame at 100% width/height.
+ */
+.slide {
+	width: 100%;
+	height: 100%;
+	transform-origin: center;
+	background-color: var(--color-bg);
+	color: var(--color-text);
+	position: relative;
+	overflow: hidden;
+}
 
-/* Animation utilities (complex animations Tailwind cannot express) */
-@import "./lib/styles/animations.css";
+/* Loading state */
+.loading-container {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	height: 100vh;
+	gap: 1rem;
+	color: #fff;
+	font-family: system-ui, -apple-system, sans-serif;
+}
 
-/* Presenter view styles */
-@import "./lib/styles/presenter-view.css";
+.loading-spinner {
+	width: 40px;
+	height: 40px;
+	border: 3px solid rgba(255, 255, 255, 0.2);
+	border-top-color: #7c3aed;
+	border-radius: 50%;
+	animation: spin 1s linear infinite;
+}
 
-/* Tailwind - must come after regular imports but before @layer */
-@import "tailwindcss";
-@config "../tailwind.config.js";
+@keyframes spin {
+	to {
+		transform: rotate(360deg);
+	}
+}
 
-/* Base layer - minimal resets for presentation mode */
-@layer base {
-  html,
-  body {
-    @apply m-0 p-0 w-full h-full overflow-hidden;
-  }
+/* Error state */
+.error-container {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	height: 100vh;
+	gap: 1rem;
+	color: #fff;
+	font-family: system-ui, -apple-system, sans-serif;
+	text-align: center;
+	padding: 2rem;
+}
 
-  /* Prevent text selection during presentation for cleaner experience */
-  body {
-    @apply select-none;
-    -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
-  }
+.error-container h1 {
+	margin: 0;
+	font-size: 2rem;
+	color: #ef4444;
+}
 
-  /* App container - full viewport */
-  #app {
-    @apply w-full h-full m-0 p-0;
-  }
+.error-container p {
+	margin: 0;
+	color: rgba(255, 255, 255, 0.7);
+	max-width: 400px;
+}
+
+.error-container button {
+	margin-top: 1rem;
+	padding: 0.75rem 1.5rem;
+	background-color: #7c3aed;
+	color: #fff;
+	border: none;
+	border-radius: 6px;
+	font-size: 1rem;
+	cursor: pointer;
+	transition: background-color 0.2s ease;
+}
+
+.error-container button:hover {
+	background-color: #6d28d9;
+}
+
+.error-container button:focus {
+	outline: 2px solid #7c3aed;
+	outline-offset: 2px;
+}
+
+/* Empty state */
+.empty-container {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	height: 100vh;
+	gap: 1rem;
+	color: #fff;
+	font-family: system-ui, -apple-system, sans-serif;
+	text-align: center;
+}
+
+.empty-container h1 {
+	margin: 0;
+	font-size: 2rem;
+}
+
+.empty-container p {
+	margin: 0;
+	color: rgba(255, 255, 255, 0.7);
 }

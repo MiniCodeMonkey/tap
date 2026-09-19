@@ -1,0 +1,5 @@
+{"version": 2, "width": 80, "height": 24, "timestamp": 1700000000, "env": {"SHELL": "/bin/bash", "TERM": "xterm-256color"}}
+[0.1, "o", "$ "]
+[0.5, "o", "deploy --stage prod\r\n"]
+[1.2, "o", "Deploying...\r\n"]
+[2.0, "o", "Done in 1.4s\r\n"]

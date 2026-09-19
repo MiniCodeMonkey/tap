@@ -6,7 +6,7 @@ Every presentation starts with YAML frontmatter:
 ```yaml
 ---
 title: My Presentation
-theme: paper
+theme: terminal
 author: Jane Developer
 date: 2024-01-15
 ---
@@ -18,7 +18,7 @@ Separate slides with `---` on its own line:
 ```markdown
 ---
 title: My Talk
-theme: paper
+theme: terminal
 ---
 
 # Welcome
@@ -88,7 +88,7 @@ function greet(name) {
 ### Blockquotes
 ```markdown
 > "The best way to predict the future is to invent it."
-> — Alan Kay
+> -- Alan Kay
 ```
 
 ### Tables

@@ -11,10 +11,10 @@ import (
 	"sync"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 	"github.com/MiniCodeMonkey/tap/internal/config"
 	"github.com/MiniCodeMonkey/tap/internal/gemini"
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 )
 
 // ThemeBroadcaster is an interface for broadcasting theme changes via WebSocket.
@@ -106,7 +106,7 @@ func NewDevModel(cfg DevConfig) *DevModel {
 	// Set default theme if not provided
 	currentTheme := cfg.CurrentTheme
 	if currentTheme == "" {
-		currentTheme = "paper"
+		currentTheme = "base"
 	}
 
 	// Find the index of the current theme

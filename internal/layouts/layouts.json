@@ -1,0 +1,14 @@
+{
+  "title": ["default"],
+  "section": ["default"],
+  "default": ["default"],
+  "two-column": ["default", "left", "right"],
+  "three-column": ["default", "left", "center", "right"],
+  "code-focus": ["default"],
+  "big-stat": ["default", "caption", "figure"],
+  "quote": ["default", "attribution"],
+  "cover": ["default"],
+  "sidebar": ["default", "sidebar"],
+  "split-media": ["default", "media"],
+  "blank": ["default"]
+}

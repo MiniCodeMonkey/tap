@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/MiniCodeMonkey/tap/embedded"
+	"github.com/MiniCodeMonkey/tap/internal/components"
 	"github.com/MiniCodeMonkey/tap/internal/config"
 	"github.com/MiniCodeMonkey/tap/internal/parser"
 	"github.com/MiniCodeMonkey/tap/internal/transformer"
@@ -29,8 +30,9 @@ type BuildResult struct {
 
 // Builder generates static files from a tap presentation.
 type Builder struct {
-	outputDir string
-	baseDir   string // Base directory for resolving relative paths
+	outputDir  string
+	baseDir    string // Base directory for resolving relative paths
+	components map[string]components.Result
 }
 
 // New creates a new Builder with the default output directory "dist".
@@ -50,6 +52,14 @@ func NewWithOutput(outputDir string) *Builder {
 // SetBaseDir sets the base directory for resolving relative paths.
 func (b *Builder) SetBaseDir(baseDir string) {
 	b.baseDir = baseDir
+}
+
+// SetComponents provides the build result for every distinct component
+// path the presentation's slides use (see internal/components.Resolve), so
+// Build can write each bundle to dist/components/ and point the embedded
+// presentation JSON at it.
+func (b *Builder) SetComponents(resolved map[string]components.Result) {
+	b.components = resolved
 }
 
 // SetOutputDir sets the output directory for the build.
@@ -89,9 +99,22 @@ func (b *Builder) Build(cfg *config.Config, pres *parser.Presentation) (*BuildRe
 	result.FileCount += assetCount
 	result.TotalSize += assetSize
 
-	// Transform presentation to frontend-ready format
+	// Transform presentation to frontend-ready format. Component bundle
+	// URLs are relative ("components/<name>-<hash>.js"), the same way
+	// image and asciinema paths below are made relative, so the built
+	// folder works when served from any base path.
 	trans := transformer.NewWithBaseDir(cfg, b.baseDir)
+	trans.SetComponents(b.components)
+	trans.SetComponentURLPrefix("components/")
 	transformed := trans.Transform(pres)
+
+	// Write every successfully built component bundle to dist/components/.
+	componentCount, componentSize, err := b.writeComponentBundles()
+	if err != nil {
+		return nil, fmt.Errorf("failed to write component bundles: %w", err)
+	}
+	result.FileCount += componentCount
+	result.TotalSize += componentSize
 
 	// Find and copy all referenced images, building a path mapping
 	pathMapping := make(map[string]string)
@@ -185,6 +208,50 @@ func (b *Builder) Build(cfg *config.Config, pres *parser.Presentation) (*BuildRe
 
 	result.BuildTime = time.Since(startTime)
 	return result, nil
+}
+
+// writeComponentBundles writes every successfully built component bundle's
+// JavaScript, and CSS when it has any, to dist/components/, using the same
+// "<name>-<hash>.<ext>" file names the dev server serves. A component that
+// failed to build has no Bundle and is skipped here; its slide JSON carries
+// the error instead (see the transformer), and the caller has already
+// failed the build for that case before reaching Build.
+func (b *Builder) writeComponentBundles() (int, int64, error) {
+	if len(b.components) == 0 {
+		return 0, 0, nil
+	}
+
+	componentsDir := filepath.Join(b.outputDir, "components")
+	if err := os.MkdirAll(componentsDir, 0755); err != nil {
+		return 0, 0, fmt.Errorf("failed to create components directory: %w", err)
+	}
+
+	count := 0
+	var totalSize int64
+	for _, result := range b.components {
+		bundle := result.Bundle
+		if bundle == nil {
+			continue
+		}
+		base := bundle.Name + "-" + bundle.Hash
+
+		jsPath := filepath.Join(componentsDir, base+".js")
+		if err := os.WriteFile(jsPath, bundle.JavaScript, 0644); err != nil {
+			return count, totalSize, fmt.Errorf("failed to write %s: %w", jsPath, err)
+		}
+		count++
+		totalSize += int64(len(bundle.JavaScript))
+
+		if len(bundle.CSS) > 0 {
+			cssPath := filepath.Join(componentsDir, base+".css")
+			if err := os.WriteFile(cssPath, bundle.CSS, 0644); err != nil {
+				return count, totalSize, fmt.Errorf("failed to write %s: %w", cssPath, err)
+			}
+			count++
+			totalSize += int64(len(bundle.CSS))
+		}
+	}
+	return count, totalSize, nil
 }
 
 // imgSrcPattern matches img src attributes in HTML.
@@ -352,7 +419,6 @@ func (b *Builder) CopyEmbeddedAssets() (int, int64, error) {
 	return count, totalSize, nil
 }
 
-
 // generateIndexHTML creates the index.html file by injecting presentation JSON
 // into the real Vite-built frontend template, so all themes, fonts, and styles work.
 func (b *Builder) generateIndexHTML(path string, pres *transformer.TransformedPresentation) (int64, error) {
@@ -376,7 +442,7 @@ func (b *Builder) generateIndexHTML(path string, pres *transformer.TransformedPr
 	html := strings.Replace(string(templateHTML), "<title>Tap Presentation</title>", "<title>"+title+"</title>", 1)
 
 	// Inject embedded presentation JSON before the closing </body> tag.
-	// The Svelte App.svelte checks for this element and uses it instead of fetching /api/presentation.
+	// The React App checks for this element and uses it instead of fetching /api/presentation.
 	dataScript := fmt.Sprintf(`<script id="presentation-data" type="application/json">%s</script>`, string(presJSON))
 	html = strings.Replace(html, "</body>", dataScript+"\n</body>", 1)
 

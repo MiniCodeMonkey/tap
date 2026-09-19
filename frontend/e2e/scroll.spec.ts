@@ -10,9 +10,10 @@ test.describe('Scroll Reveal', () => {
     await page.waitForSelector('.slide-container');
   });
 
-  test('slide with scroll directive should have scroll-enabled class', async ({ page }) => {
-    const slideRenderer = page.locator('.slide-renderer');
-    await expect(slideRenderer).toHaveClass(/scroll-enabled/);
+  test('slide with scroll directive should render a scroll-content element', async ({ page }) => {
+    // `.slide-renderer` is a static app-wide wrapper, not per-slide, so this
+    // checks for the `.scroll-content` element ScrollReveal renders instead.
+    await expect(page.locator('.scroll-content')).toBeAttached();
   });
 
   test('should start at top position', async ({ page }) => {

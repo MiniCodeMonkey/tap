@@ -1,0 +1,30 @@
+{
+	"name": "Lab Notebook",
+	"polarity": "light",
+	"pitch": "An evidence-first engineering talk where every claim arrives as a numbered figure and the speaker's red pen does the arguing.",
+	"illustration": {
+		"medium": "flat vector styled as a hand-annotated lab notebook diagram on off-white",
+		"line": "2px strokes, ruled-notebook precision with small hand annotation marks",
+		"shapes": "simple labeled diagrams, pill tags, rectangles with corner notes, grid-paper alignment",
+		"texture": "faint ruled or graph-paper lines in the background",
+		"palette_use": "off-white background dominant, near-black ink, one navy blue used for labels and callouts",
+		"mood": "methodical, observational, quietly rigorous",
+		"avoid": "gradients, glossy 3D, playful color, hand-drawn wobble beyond small annotation marks"
+	},
+	"mermaid": {
+		"themeVariables": {
+			"fontFamily": "STIX Two Text",
+			"primaryColor": "#FBFAF5",
+			"primaryTextColor": "#1B3A8C",
+			"primaryBorderColor": "#1B3A8C",
+			"lineColor": "#1B3A8C",
+			"secondaryColor": "#FBFAF5",
+			"tertiaryColor": "#FBFAF5",
+			"nodeTextColor": "#1B3A8C",
+			"titleColor": "#16181D",
+			"fontSize": "34px"
+		},
+		"quietStyle": "fill:#FBFAF5,stroke:#474B55,color:#474B55",
+		"curve": "linear"
+	}
+}

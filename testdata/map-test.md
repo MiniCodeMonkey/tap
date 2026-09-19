@@ -1,6 +1,6 @@
 ---
 title: Map Test Presentation
-theme: paper
+theme: base
 ---
 
 # Map Test

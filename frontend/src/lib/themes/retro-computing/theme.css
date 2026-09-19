@@ -1,0 +1,1634 @@
+/**
+ * Retro Computing theme.
+ * A nostalgic, slightly mischievous systems talk told from a 1990 desktop:
+ * every slide is a window opened on a dithered gray desktop, under a menu
+ * bar that never changes and a clock that counts slides instead of time.
+ *
+ * Ported from .superpowers/brainstorm/themes-v3/retro-computing.theme.html
+ * (the CSS-only mockup built against a fixed 11-slide deck). See
+ * docs/reference/theme-porting.md and its addendum for what changed moving
+ * from that mockup to the real app's markup.
+ */
+
+@import '@fontsource/pixelify-sans/latin-500.css';
+@import '@fontsource/pixelify-sans/latin-600.css';
+@import '@fontsource/pixelify-sans/latin-700.css';
+@import '@fontsource/ibm-plex-mono/latin-500.css';
+@import '@fontsource/ibm-plex-mono/latin-600.css';
+
+[data-theme='retro-computing'] {
+	/* ---------- design-spec tokens ---------- */
+	--bg: #d2d2d2;
+	--fg: #0a0a0a;
+	--muted: #3c3c3c;
+	--accent: #1b2fd0;
+	/* Darker than --accent: --accent-text sits directly on --bg and needs to
+	 * clear 7:1 contrast there, which the mockup's brighter #1b2fd0 does not. */
+	--accent-text: #10186e;
+	--surface: #ffffff;
+	--font-display: 'Pixelify Sans', 'Chicago', 'Geneva', sans-serif;
+	--font-body: 'IBM Plex Mono', 'Monaco', 'Courier New', monospace;
+	--font-mono: 'IBM Plex Mono', 'Monaco', 'Courier New', monospace;
+	--ease: steps(4, end);
+	--dur: 260ms;
+	--space-unit: 24px;
+	--radius: 4px;
+	--stroke-width: 3px;
+
+	/* theme-specific extras, not part of the shared token set */
+	--dither: #b2b2b2;
+	--stripes: repeating-linear-gradient(to bottom, #ffffff 0, #ffffff 4px, #0a0a0a 4px, #0a0a0a 8px);
+
+	/*
+	 * Bridge to the base theme's own token names. layouts.css, prose.css,
+	 * rich-blocks.css and ui-components.css style the live code block, the
+	 * map slide, badges, tags, and generic prose entirely through these
+	 * `--color-*` and `--font-sans` custom properties.
+	 */
+	--color-bg: var(--bg);
+	--color-text: var(--fg);
+	--color-muted: var(--muted);
+	--color-accent: var(--accent);
+	--color-code-bg: var(--surface);
+	--color-code-text: var(--fg);
+	--color-code-inline-bg: var(--bg);
+	--color-border: var(--fg);
+	--color-surface: var(--surface);
+	--color-surface-elevated: var(--surface);
+	--color-link: var(--accent-text);
+	--font-sans: var(--font-body);
+
+	/* Shiki reads token colors from these custom properties directly. */
+	--shiki-foreground: var(--fg);
+	--shiki-background: var(--surface);
+	--shiki-token-comment: var(--muted);
+	--shiki-token-string: var(--accent-text);
+	--shiki-token-string-expression: var(--accent-text);
+	--shiki-token-keyword: var(--accent-text);
+	--shiki-token-function: var(--fg);
+	--shiki-token-constant: var(--accent-text);
+	--shiki-token-parameter: var(--fg);
+	--shiki-token-punctuation: var(--muted);
+	--shiki-token-link: var(--accent-text);
+}
+
+@keyframes retro-computing-zoom {
+	0% {
+		opacity: 0;
+		transform: scale(0.25);
+		animation-timing-function: steps(1, end);
+	}
+	4% {
+		opacity: 1;
+		transform: scale(0.25);
+	}
+	100% {
+		opacity: 1;
+		transform: scale(1);
+	}
+}
+@keyframes retro-computing-pop {
+	from {
+		opacity: 0;
+	}
+}
+@keyframes retro-computing-ln {
+	from {
+		opacity: 0;
+	}
+	to {
+		opacity: 0.55;
+	}
+}
+@keyframes retro-computing-fill {
+	from {
+		background-size: 0% 100%;
+	}
+	to {
+		background-size: 100% 100%;
+	}
+}
+@keyframes retro-computing-ants {
+	from {
+		background-position:
+			0 0,
+			0 100%,
+			0 0,
+			100% 0;
+	}
+	to {
+		background-position:
+			32px 0,
+			-32px 100%,
+			0 -32px,
+			100% 32px;
+	}
+}
+@keyframes retro-computing-band {
+	from {
+		clip-path: inset(0 100% 0 0);
+	}
+	to {
+		clip-path: inset(0 0 0 0);
+	}
+}
+
+/* ============================================================================
+ * Screen: the desktop, the menu bar, and the window
+ * ============================================================================
+ * Every selector below that reads attr(data-index)/attr(data-layout) or
+ * decorates the slide root is scoped to `.slide[data-layout]`, the real
+ * rendered slide, not the bare `.slide` class SlideCanvas also puts on its
+ * outer 1920x1080 scaling frame.
+ * ============================================================================ */
+
+[data-theme='retro-computing'] .slide[data-layout] {
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	padding: 128px 104px 96px 96px;
+	background-color: var(--bg);
+	background-image: conic-gradient(var(--dither) 25%, transparent 0 50%, var(--dither) 0 75%, transparent 0);
+	background-size: 8px 8px;
+	color: var(--fg);
+	font-family: var(--font-body);
+	font-weight: 500;
+	font-size: 52px;
+	line-height: 1.2;
+	letter-spacing: -0.02em;
+}
+/* Margin and padding reset, at no extra specificity so specific rules below
+ * (list items, code blocks, headings) still win the cascade. */
+[data-theme='retro-computing'] :where(.slide) :where(h1, h2, h3, h4, h5, h6, p, ul, ol, li, blockquote, pre, table) {
+	margin: 0;
+	padding: 0;
+}
+/* Heading length scale: a short heading claims more of its layout's
+ * headline size instead of being sized for the worst-case long title every
+ * layout also has to fit. Each h1 rule below multiplies its own long-case
+ * base by this; the h2 rule folds it into --h2-size the same way. */
+[data-theme='retro-computing'] .slide [data-length='medium'] {
+	--length-scale: 1.1;
+}
+[data-theme='retro-computing'] .slide [data-length='short'] {
+	--length-scale: 1.22;
+}
+
+[data-theme='retro-computing'] .slide[data-layout] h1,
+[data-theme='retro-computing'] .slide[data-layout] h2,
+[data-theme='retro-computing'] .slide[data-layout] h3,
+[data-theme='retro-computing'] .slide[data-layout] h4,
+[data-theme='retro-computing'] .slide[data-layout] h5,
+[data-theme='retro-computing'] .slide[data-layout] h6 {
+	font-family: var(--font-display);
+	font-weight: 700;
+	letter-spacing: -0.01em;
+	text-wrap: balance;
+}
+[data-theme='retro-computing'] .slide[data-layout] strong,
+[data-theme='retro-computing'] .slide[data-layout] em {
+	font-style: normal;
+	font-weight: 600;
+	background: var(--accent);
+	color: var(--surface);
+	padding: 0 14px 2px;
+	-webkit-box-decoration-break: clone;
+	box-decoration-break: clone;
+}
+[data-theme='retro-computing'] .slide[data-layout] a {
+	color: var(--accent-text);
+	font-weight: 600;
+	text-decoration: underline;
+	text-decoration-style: dotted;
+	text-decoration-thickness: 3px;
+	text-underline-offset: 0.18em;
+}
+[data-theme='retro-computing'] .slide[data-layout] a:hover {
+	background: var(--accent);
+	color: var(--surface);
+}
+
+/* menu bar: File Edit View Special, an apple in the corner, a clock that
+ * counts slides instead of time */
+[data-theme='retro-computing'] .slide[data-layout]::before {
+	content: 'File   Edit   View   Special';
+	white-space: pre;
+	position: absolute;
+	left: 0;
+	top: 0;
+	width: 100%;
+	height: 64px;
+	padding-left: 168px;
+	background:
+		conic-gradient(var(--fg) 25%, var(--surface) 0 50%, var(--fg) 0 75%, var(--surface) 0) 100px 18px / 16px 16px
+			no-repeat,
+		linear-gradient(var(--fg), var(--fg)) 96px 14px / 32px 32px no-repeat,
+		var(--surface);
+	border-bottom: 4px solid var(--fg);
+	font-family: var(--font-display);
+	font-weight: 600;
+	font-size: 36px;
+	line-height: 64px;
+	letter-spacing: 0;
+	animation: retro-computing-pop 10ms steps(1, end) both;
+}
+[data-theme='retro-computing'] .slide[data-layout]::after {
+	content: attr(data-index) '/' attr(data-total);
+	position: absolute;
+	right: 96px;
+	top: 0;
+	height: 64px;
+	font-family: var(--font-display);
+	font-weight: 600;
+	font-size: 36px;
+	line-height: 64px;
+	letter-spacing: 0;
+	animation: retro-computing-pop 10ms steps(1, end) both;
+}
+
+/* the tag is the window title, centered over the window's title bar; a
+ * badge is a small note pinned to the desktop beside the clock */
+[data-theme='retro-computing'] .slide-tag {
+	position: absolute;
+	z-index: 2;
+	left: 50%;
+	top: 146px;
+	right: auto;
+	transform: translateX(-50%);
+	background: var(--surface);
+	padding: 0 22px;
+	max-width: 60%;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-family: var(--font-display);
+	font-weight: 600;
+	font-size: 36px;
+	line-height: 40px;
+	letter-spacing: 0;
+	color: var(--fg);
+	animation: retro-computing-pop 10ms steps(1, end) 280ms both;
+}
+[data-theme='retro-computing'] .slide-badge {
+	position: absolute;
+	z-index: 2;
+	top: 16px;
+	right: 340px;
+	left: auto;
+	background: var(--accent);
+	color: var(--surface);
+	padding: 4px 18px;
+	font-family: var(--font-mono);
+	font-weight: 600;
+	font-size: 28px;
+	line-height: 40px;
+	letter-spacing: 0;
+	animation: retro-computing-pop 10ms steps(1, end) 280ms both;
+}
+/* Where there is no single titled window (a smaller inset window, or two
+ * windows side by side), the tag reads as the open menu instead. */
+[data-theme='retro-computing'] .slide[data-layout='section'] .slide-tag,
+[data-theme='retro-computing'] .slide[data-layout='two-column'] .slide-tag,
+[data-theme='retro-computing'] .slide[data-layout='three-column'] .slide-tag,
+[data-theme='retro-computing'] .slide[data-layout='split-media'] .slide-tag,
+[data-theme='retro-computing'] .slide[data-layout='sidebar'] .slide-tag,
+[data-theme='retro-computing'] .slide:has(.layout-default h1:only-child) .slide-tag,
+[data-theme='retro-computing'] .slide:has(.layout-default h2:only-child) .slide-tag {
+	left: 700px;
+	top: 0;
+	max-width: none;
+	transform: none;
+	height: 64px;
+	line-height: 64px;
+	background: var(--fg);
+	color: var(--surface);
+}
+
+/* !important keeps h2 metrics safe from a per-layout font-size below it in
+ * the cascade that forgets to reset --h2-size. */
+[data-theme='retro-computing'] .slide h2 {
+	font-size: calc(var(--h2-size, 108px) * var(--length-scale, 1)) !important;
+	margin: var(--h2-margin, 0) !important;
+	line-height: 1.12;
+}
+[data-theme='retro-computing'] .slide h3 {
+	font-size: calc(60px * var(--length-scale, 1));
+	line-height: 1.2;
+	margin-top: 32px;
+	margin-bottom: 12px;
+}
+[data-theme='retro-computing'] .slide h4 {
+	font-size: 48px;
+	line-height: 1.25;
+	margin-top: 24px;
+	margin-bottom: 10px;
+	color: var(--accent-text);
+}
+[data-theme='retro-computing'] .slide h5,
+[data-theme='retro-computing'] .slide h6 {
+	font-size: 36px;
+	line-height: 1.3;
+	margin-top: 20px;
+	margin-bottom: 8px;
+	color: var(--muted);
+	text-transform: uppercase;
+	letter-spacing: 0.05em;
+}
+[data-theme='retro-computing'] .slide p code,
+[data-theme='retro-computing'] .slide li code {
+	font-family: var(--font-mono);
+	font-weight: 600;
+	border: 3px solid var(--fg);
+	background: var(--surface);
+	padding: 0 10px;
+	font-size: 0.88em;
+}
+
+/* The window: a document, a dialog, a palette, whatever it needs to be. */
+[data-theme='retro-computing'] .slide-content {
+	position: relative;
+	flex: 1;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+	padding-top: 64px;
+	background: var(--surface);
+	border: 4px solid var(--fg);
+	box-shadow: 8px 8px 0 var(--fg);
+	animation: retro-computing-zoom var(--dur) var(--ease) both;
+}
+[data-theme='retro-computing'] .slide-content::before {
+	content: '';
+	position: absolute;
+	left: 0;
+	right: 0;
+	top: 0;
+	height: 64px;
+	padding: 10px 12px;
+	border-bottom: 4px solid var(--fg);
+	background: var(--stripes);
+	background-clip: content-box;
+}
+[data-theme='retro-computing'] .slide-content::after {
+	content: '';
+	position: absolute;
+	left: 28px;
+	top: 12px;
+	width: 32px;
+	height: 32px;
+	background: var(--surface);
+	border: 4px solid var(--fg);
+	box-shadow: 0 0 0 6px var(--surface);
+}
+[data-theme='retro-computing'] [class^='layout-'] {
+	flex: 1;
+	min-height: 0;
+	width: auto;
+	height: auto;
+	display: flex;
+	flex-direction: column;
+	justify-content: flex-start;
+	padding: 32px 64px 44px;
+	text-align: left;
+	gap: 0;
+}
+/*
+ * A component's own root commonly fills `.deck-component-root` with an
+ * inline `position: absolute; inset: 0`, resolving against the padding
+ * edge, so real `padding` would sit inside it and get filled over; a
+ * transparent `border` reserves the same margin instead.
+ */
+[data-theme='retro-computing'] .slide[data-layout='component'] > .slide-content > .deck-component-root,
+[data-theme='retro-computing'] .slide[data-layout='component'] > .slide-content > .scroll-content > .deck-component-root {
+	flex: 1;
+	min-height: 0;
+	width: auto;
+	height: auto;
+	display: flex;
+	flex-direction: column;
+	justify-content: flex-start;
+	border-width: 32px 64px 44px;
+	border-style: solid;
+	border-color: transparent;
+	text-align: left;
+	gap: 0;
+}
+[data-theme='retro-computing'] .slot {
+	display: flex;
+	flex-direction: column;
+	max-width: none;
+}
+[data-theme='retro-computing'] .slot > * {
+	animation: retro-computing-pop 10ms steps(1, end) both;
+}
+[data-theme='retro-computing'] .slot > *:nth-child(1) {
+	animation-delay: 320ms;
+}
+[data-theme='retro-computing'] .slot > *:nth-child(2) {
+	animation-delay: 420ms;
+}
+[data-theme='retro-computing'] .slot > *:nth-child(3) {
+	animation-delay: 520ms;
+}
+[data-theme='retro-computing'] .slot > *:nth-child(n + 4) {
+	animation-delay: 620ms;
+}
+[data-theme='retro-computing'] .slot > ul,
+[data-theme='retro-computing'] .slot > ol {
+	animation: none;
+}
+
+/* Slot heading: the top of a window's document, "## Heading" style. Covers
+ * fragment-wrapped headings too, since `<!-- pause -->` can wrap the first
+ * block of a slot. Layouts that give the heading its own special treatment
+ * (section, title, quote, big-stat, cover) are excluded so it is never
+ * ruled twice. */
+[data-theme='retro-computing']
+	:is(.layout-default, .layout-two-column, .layout-three-column, .layout-code-focus, .layout-sidebar, .layout-split-media)
+	:where(.slot, .slot > .fragment-visible, .slot > .fragment-hidden)
+	> h2 {
+	margin-bottom: 20px;
+	padding-bottom: 14px;
+	border-bottom: 4px solid var(--fg);
+}
+/* A slot carrying a heading plus several other blocks (an intro line, a
+ * list, a closing line) needs the heading smaller to leave the list its
+ * required row height without spilling past the window. */
+[data-theme='retro-computing'] .slot:has(> :nth-child(4)) {
+	--h2-size: 72px;
+}
+[data-theme='retro-computing'] .slot:has(> :nth-child(4)) > h2 {
+	margin-bottom: 12px;
+	padding-bottom: 8px;
+}
+[data-theme='retro-computing'] .slot:has(> :nth-child(4)) > p {
+	margin-top: 4px;
+}
+
+/* ---------- bullets: checkboxes on a ruled list ---------- */
+[data-theme='retro-computing'] :where(.slot, .slot > .fragment-visible, .slot > .fragment-hidden) > ul {
+	list-style: none;
+	margin-top: 14px;
+	border-top: 4px solid var(--fg);
+}
+[data-theme='retro-computing'] .slot:has(> :nth-child(4)) > ul {
+	margin-top: 6px;
+}
+[data-theme='retro-computing'] :where(.slot, .slot > .fragment-visible, .slot > .fragment-hidden) > ul > li {
+	position: relative;
+	padding: 18px 0 18px 84px;
+	font-weight: 500;
+	line-height: 1.22;
+	letter-spacing: -0.02em;
+	border-bottom: 4px dotted var(--muted);
+	transition: opacity 120ms steps(2, end);
+	animation: retro-computing-pop 10ms steps(1, end) both;
+}
+[data-theme='retro-computing'] .slot:has(> :nth-child(4)) > ul > li {
+	padding: 10px 0 10px 84px;
+}
+[data-theme='retro-computing'] .slot > ul + p {
+	margin-top: 14px;
+}
+/* A top-level list that carries a nested list inside one of its items runs
+ * long (two row heights per nested item on top of the parent's own rows),
+ * so the heading and every row tighten to keep the whole thing inside the
+ * window. */
+[data-theme='retro-computing'] .slot:has(> ul ul) {
+	--h2-size: 64px;
+}
+[data-theme='retro-computing'] .slot:has(> ul ul) > h2 {
+	margin-bottom: 6px;
+	padding-bottom: 4px;
+}
+[data-theme='retro-computing'] .slot:has(> ul ul) > ul {
+	margin-top: 6px;
+}
+[data-theme='retro-computing'] .slot:has(> ul ul) > ul > li {
+	padding: 4px 0 4px 84px;
+	line-height: 1.12;
+}
+[data-theme='retro-computing'] .slot:has(> ul ul) > ul > li::before {
+	top: 14px;
+}
+[data-theme='retro-computing'] .slot:has(> ul ul) ul ul {
+	margin-top: 2px;
+}
+[data-theme='retro-computing'] .slot:has(> ul ul) ul ul > li {
+	padding: 2px 0 2px 44px;
+	line-height: 1.12;
+}
+/* A slot with a table needs the heading kept modest regardless of its
+ * length class: the table's own rows already claim most of the window's
+ * height, so a two-line heading at the length-scaled size would push the
+ * last row past the bottom edge. */
+[data-theme='retro-computing'] .slot:has(> table) {
+	--h2-size: 84px;
+}
+[data-theme='retro-computing'] .slot:has(> table) > h2 {
+	--length-scale: 1;
+}
+[data-theme='retro-computing'] :where(.slot, .slot > .fragment-visible, .slot > .fragment-hidden) > ul > li:last-child {
+	border-bottom: 0;
+}
+[data-theme='retro-computing'] :where(.slot, .slot > .fragment-visible, .slot > .fragment-hidden) > ul > li:nth-child(1) {
+	animation-delay: 480ms;
+}
+[data-theme='retro-computing'] :where(.slot, .slot > .fragment-visible, .slot > .fragment-hidden) > ul > li:nth-child(2) {
+	animation-delay: 560ms;
+}
+[data-theme='retro-computing'] :where(.slot, .slot > .fragment-visible, .slot > .fragment-hidden) > ul > li:nth-child(3) {
+	animation-delay: 640ms;
+}
+[data-theme='retro-computing'] :where(.slot, .slot > .fragment-visible, .slot > .fragment-hidden) > ul > li:nth-child(n + 4) {
+	animation-delay: 720ms;
+}
+[data-theme='retro-computing'] .slide .fragment-hidden {
+	opacity: 0;
+}
+[data-theme='retro-computing'] .slide .fragment-visible {
+	opacity: 1;
+	transition: opacity 150ms steps(2, end);
+}
+[data-theme='retro-computing'] :where(.slot, .slot > .fragment-visible, .slot > .fragment-hidden) > ul > li::before {
+	content: '';
+	position: absolute;
+	left: 4px;
+	top: 24px;
+	width: 48px;
+	height: 48px;
+	border: 4px solid var(--fg);
+	background:
+		linear-gradient(45deg, transparent 44%, var(--fg) 44%, var(--fg) 56%, transparent 56%),
+		linear-gradient(-45deg, transparent 44%, var(--fg) 44%, var(--fg) 56%, transparent 56%),
+		var(--surface);
+	box-shadow: 4px 4px 0 var(--fg);
+}
+/* Nested lists lose the checkbox for a quieter dash, indented under the
+ * parent item's own padding. */
+[data-theme='retro-computing'] .slot ul ul {
+	list-style: none;
+	margin: 8px 0 0;
+	border-top: 0;
+}
+[data-theme='retro-computing'] .slot ul ul > li {
+	position: relative;
+	padding: 6px 0 6px 44px;
+	border-bottom: 0;
+	font-weight: 500;
+	color: var(--muted);
+}
+[data-theme='retro-computing'] .slot ul ul > li::before {
+	content: '\2013';
+	position: absolute;
+	left: 0;
+	top: 8px;
+	width: auto;
+	height: auto;
+	border: 0;
+	background: none;
+	box-shadow: none;
+	color: var(--fg);
+	font-weight: 700;
+}
+[data-theme='retro-computing'] .slot ol {
+	margin-top: 20px;
+	padding-left: 3.2ch;
+}
+[data-theme='retro-computing'] .slot ol > li {
+	padding: 14px 0;
+	font-weight: 500;
+}
+/* Seven or more bullets is the recap slide: smaller rows, smaller heading. */
+[data-theme='retro-computing'] .slot:has(> ul > li:nth-child(7)) > h2 {
+	font-size: 72px;
+	margin-bottom: 16px;
+	padding-bottom: 14px;
+}
+[data-theme='retro-computing'] .slot > ul:has(> li:nth-child(7)) > li {
+	padding: 10px 0 10px 72px;
+	font-size: 44px;
+	line-height: 1.2;
+}
+[data-theme='retro-computing'] .slot > ul:has(> li:nth-child(7)) > li::before {
+	top: 12px;
+	width: 34px;
+	height: 34px;
+}
+
+/* ---------- blockquote outside the quote layout: a sticky note ---------- */
+[data-theme='retro-computing'] :not(.layout-quote) > :where(.slot, .slot > .fragment-visible, .slot > .fragment-hidden) > blockquote {
+	position: relative;
+	margin-top: 28px;
+	padding: 30px 40px;
+	border: 3px dashed var(--fg);
+	font-style: normal;
+	color: var(--fg);
+	animation: retro-computing-pop 10ms steps(1, end) 600ms both;
+}
+[data-theme='retro-computing'] :not(.layout-quote) > :where(.slot, .slot > .fragment-visible, .slot > .fragment-hidden) > blockquote p {
+	font-size: 48px;
+	line-height: 1.3;
+	font-weight: 500;
+}
+
+/* ============================================================================
+ * title: the window, its info bar, and an icon on the desktop
+ * ============================================================================ */
+[data-theme='retro-computing'] .slide[data-layout='title'] .slide-content {
+	flex: none;
+	margin-top: 108px;
+	margin-bottom: 108px;
+}
+[data-theme='retro-computing'] .layout-title {
+	--h2-size: 72px;
+	padding: 64px 0 0;
+}
+[data-theme='retro-computing'] .layout-title h1 {
+	/* Budgeted for a full sentence: a 90+ character title still wraps to no
+	 * more than five lines inside the window without overflowing. */
+	font-size: 88px;
+	line-height: 1.14;
+	padding: 0 56px;
+	max-width: 100%;
+}
+[data-theme='retro-computing'] .layout-title h1[data-length='medium'] {
+	font-size: 108px;
+}
+[data-theme='retro-computing'] .layout-title h1[data-length='short'] {
+	font-size: 132px;
+}
+[data-theme='retro-computing'] .layout-title h2 {
+	--h2-margin: 8px 0 0 32px;
+	align-self: flex-start;
+	line-height: 1.15;
+	color: var(--accent-text);
+	padding: 4px 24px 10px;
+	max-width: calc(100% - 32px);
+	background-image:
+		linear-gradient(90deg, var(--fg) 50%, var(--surface) 0),
+		linear-gradient(90deg, var(--fg) 50%, var(--surface) 0),
+		linear-gradient(0deg, var(--fg) 50%, var(--surface) 0),
+		linear-gradient(0deg, var(--fg) 50%, var(--surface) 0);
+	background-size:
+		32px 4px,
+		32px 4px,
+		4px 32px,
+		4px 32px;
+	background-repeat: repeat-x, repeat-x, repeat-y, repeat-y;
+	background-position:
+		0 0,
+		0 100%,
+		0 0,
+		100% 0;
+	animation:
+		retro-computing-pop 10ms steps(1, end) 440ms both,
+		retro-computing-ants 4s steps(8, end) infinite;
+}
+[data-theme='retro-computing'] .layout-title p {
+	margin-top: 44px;
+	border-top: 4px solid var(--fg);
+	padding: 24px 56px 26px;
+	font-weight: 600;
+	line-height: 1.2;
+	max-width: 100%;
+}
+[data-theme='retro-computing'] .slide[data-layout='title']::before {
+	content: 'File   Edit   View   Special';
+}
+
+/* ============================================================================
+ * section: a smaller window, opened in the middle of the desktop
+ * ============================================================================ */
+[data-theme='retro-computing'] .slide[data-layout='section'] .slide-content {
+	flex: none;
+	width: 1400px;
+	margin: auto;
+}
+[data-theme='retro-computing'] .layout-section {
+	padding: 30px 64px 0;
+}
+[data-theme='retro-computing'] .layout-section h1 {
+	/* Base is the long case (a full sentence still has to fit this 1400px
+	 * window); medium and short claim more of the window's height. */
+	font-size: 96px;
+	line-height: 1.1;
+}
+[data-theme='retro-computing'] .layout-section h1[data-length='medium'] {
+	font-size: 140px;
+}
+[data-theme='retro-computing'] .layout-section h1[data-length='short'] {
+	font-size: 190px;
+	line-height: 1.08;
+}
+[data-theme='retro-computing'] .layout-section h2 {
+	--h2-size: 130px;
+	line-height: 1.1;
+}
+[data-theme='retro-computing'] .layout-section p {
+	margin: 16px -64px 0;
+	padding: 26px 64px 30px;
+	border-top: 4px solid var(--fg);
+	font-weight: 600;
+}
+[data-theme='retro-computing'] .slide[data-layout='section'] .slide-tag {
+	background: var(--fg);
+	color: var(--surface);
+}
+
+/* ============================================================================
+ * statement: a lone h1 or h2 on the default layout becomes an alert box
+ * ============================================================================ */
+[data-theme='retro-computing'] .slide:has(.layout-default h1:only-child) .slide-content,
+[data-theme='retro-computing'] .slide:has(.layout-default h2:only-child) .slide-content {
+	flex: none;
+	width: 1580px;
+	margin: auto;
+	padding-top: 0;
+	outline: 4px solid var(--fg);
+	outline-offset: -22px;
+}
+[data-theme='retro-computing'] .slide:has(.layout-default h1:only-child) .slide-content::before,
+[data-theme='retro-computing'] .slide:has(.layout-default h2:only-child) .slide-content::before {
+	content: '!';
+	left: 84px;
+	top: 88px;
+	right: auto;
+	width: 170px;
+	height: 170px;
+	padding: 0;
+	border: 8px solid var(--fg);
+	background: var(--surface);
+	font-family: var(--font-display);
+	font-weight: 700;
+	font-size: 140px;
+	line-height: 154px;
+	text-align: center;
+	letter-spacing: 0;
+}
+[data-theme='retro-computing'] .slide:has(.layout-default h1:only-child) .slide-content::after,
+[data-theme='retro-computing'] .slide:has(.layout-default h2:only-child) .slide-content::after {
+	content: 'OK';
+	left: auto;
+	top: auto;
+	right: 84px;
+	bottom: 72px;
+	width: 270px;
+	height: 90px;
+	background: var(--surface);
+	border: 4px solid var(--fg);
+	border-radius: 20px;
+	box-shadow:
+		0 0 0 6px var(--surface),
+		0 0 0 14px var(--fg);
+	font-family: var(--font-display);
+	font-weight: 700;
+	font-size: 46px;
+	line-height: 78px;
+	text-align: center;
+	letter-spacing: 0;
+}
+[data-theme='retro-computing'] .layout-default:has(h1:only-child),
+[data-theme='retro-computing'] .layout-default:has(h2:only-child) {
+	padding: 76px 84px 220px 320px;
+	justify-content: center;
+}
+[data-theme='retro-computing'] .layout-default h1:only-child {
+	/* Base is the long case; the shipped example ("Every system has a
+	 * bottleneck.") is medium-length and keeps its validated 150px size. */
+	font-size: 72px;
+	line-height: 1.2;
+}
+[data-theme='retro-computing'] .layout-default h1:only-child[data-length='medium'] {
+	font-size: 150px;
+}
+[data-theme='retro-computing'] .layout-default h1:only-child[data-length='short'] {
+	font-size: 190px;
+}
+[data-theme='retro-computing'] .layout-default h2:only-child {
+	--h2-size: 108px;
+	line-height: 1.18;
+}
+
+/* ============================================================================
+ * default: window content, general case
+ * ============================================================================ */
+[data-theme='retro-computing'] .layout-default .slot:has(> img, > p > img:only-child) {
+	flex: 1;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+}
+[data-theme='retro-computing'] .layout-default .slot > :is(h1, h2):has(~ img, ~ p > img:only-child) {
+	flex: none;
+}
+[data-theme='retro-computing'] .layout-default .slot > p:has(> img:only-child) {
+	flex: 1;
+	min-height: 0;
+	width: auto;
+	display: flex;
+	justify-content: center;
+	align-items: flex-start;
+	margin-top: 24px;
+}
+/* Any image on a plain slot: a 1-bit halftone scan with a caption frame. */
+[data-theme='retro-computing'] .layout-default .slot > p > img:only-child,
+[data-theme='retro-computing'] .layout-default .slot > img {
+	width: auto;
+	height: auto;
+	max-width: 100%;
+	max-height: 100%;
+	object-fit: contain;
+	border: 4px solid var(--fg);
+	box-shadow: 8px 8px 0 var(--fg);
+	filter: grayscale(1) contrast(1.5) brightness(0.85);
+}
+[data-theme='retro-computing'] .layout-default .slot > img {
+	flex: 0 1 auto;
+	min-height: 0;
+	align-self: center;
+	margin-top: 24px;
+}
+
+/* ============================================================================
+ * code-focus and code in general: a text document, the highlight is a
+ * selection
+ * ============================================================================ */
+[data-theme='retro-computing'] .slide pre.shiki {
+	position: relative;
+	margin-top: 32px;
+	padding: 32px 0;
+	border-top: 4px solid var(--fg);
+	border-bottom: 4px solid var(--fg);
+	font-family: var(--font-mono);
+	font-weight: 500;
+	font-size: 40px;
+	line-height: 1.45;
+	letter-spacing: -0.01em;
+	animation: retro-computing-pop 10ms steps(1, end) 500ms both;
+}
+[data-theme='retro-computing'] .slide pre.shiki code {
+	display: flex;
+	flex-direction: column;
+	font: inherit;
+}
+[data-theme='retro-computing'] .slide pre.shiki .line {
+	display: block;
+	white-space: pre;
+	padding-left: 56px;
+	animation: retro-computing-pop 10ms steps(1, end) both;
+}
+[data-theme='retro-computing'] .slide pre.shiki .line:nth-child(1) {
+	animation-delay: 560ms;
+}
+[data-theme='retro-computing'] .slide pre.shiki .line:nth-child(2) {
+	animation-delay: 640ms;
+}
+[data-theme='retro-computing'] .slide pre.shiki .line:nth-child(3) {
+	animation-delay: 720ms;
+}
+[data-theme='retro-computing'] .slide pre.shiki .line:nth-child(n + 4) {
+	animation-delay: 800ms;
+}
+/* Dim every line that is not highlighted; `> *` covers the line's children
+ * whether or not the highlighter wraps them in `.line-content`. */
+[data-theme='retro-computing'] .slide pre.has-highlighted .line:not(.highlighted) > * {
+	opacity: 0.6;
+	animation-name: retro-computing-ln;
+}
+/* `color` alone never reaches a token span: shiki gives each one its own
+ * inline `style="color:var(--shiki-token-x)"`, which beats a stylesheet
+ * rule on the span, so a plain identifier kept the panel's dark
+ * --shiki-foreground instead of switching to --surface. Redefining the
+ * shiki custom properties is what actually recolors the tokens, since
+ * inline styles still resolve custom properties through the cascade. */
+[data-theme='retro-computing'] .slide pre.has-highlighted .line.highlighted {
+	font-weight: 600;
+	background: var(--accent);
+	color: var(--surface);
+	--shiki-foreground: var(--surface);
+	--shiki-token-comment: var(--surface);
+	--shiki-token-string: var(--surface);
+	--shiki-token-string-expression: var(--surface);
+	--shiki-token-keyword: var(--surface);
+	--shiki-token-function: var(--surface);
+	--shiki-token-constant: var(--surface);
+	--shiki-token-parameter: var(--surface);
+	--shiki-token-punctuation: var(--surface);
+	--shiki-token-link: var(--surface);
+	animation-delay: 1100ms;
+}
+[data-theme='retro-computing'] .slide pre + p {
+	margin-top: 28px;
+}
+[data-theme='retro-computing'] .layout-code-focus pre + p {
+	margin-top: 36px;
+	font-weight: 600;
+	line-height: 1.2;
+}
+
+/* ============================================================================
+ * big-stat: a finished progress dialog
+ * ============================================================================ */
+[data-theme='retro-computing'] .slide[data-layout='big-stat'] .slide-content {
+	flex: none;
+	width: 1620px;
+	margin: auto;
+}
+[data-theme='retro-computing'] .layout-big-stat {
+	padding: 10px 72px 56px;
+}
+[data-theme='retro-computing'] .layout-big-stat h1,
+[data-theme='retro-computing'] .layout-big-stat strong {
+	display: block;
+	/* Base is the long case (a stat phrase, not just a number); the shipped
+	 * example ("40x") is short and stays a single nowrap line at its
+	 * validated 300px size via the data-length override below (`strong` has
+	 * no data-length, so a stat written that way always gets this wrapping
+	 * long-case treatment, safe for any length of text). */
+	font-size: 120px;
+	line-height: 1.15;
+	color: var(--accent-text);
+	background: none;
+	padding: 0;
+}
+[data-theme='retro-computing'] .layout-big-stat h1[data-length='medium'] {
+	font-size: 160px;
+	line-height: 1.1;
+}
+[data-theme='retro-computing'] .layout-big-stat h1[data-length='short'] {
+	font-size: 300px;
+	line-height: 1.05;
+	white-space: nowrap;
+}
+[data-theme='retro-computing'] .layout-big-stat .slot-default {
+	max-width: 100%;
+}
+[data-theme='retro-computing'] .layout-big-stat .slot-default::after {
+	content: '';
+	display: block;
+	height: 76px;
+	margin-top: 20px;
+	border: 4px solid var(--fg);
+	background: linear-gradient(var(--accent), var(--accent)) 0 0 / 100% 100% no-repeat, var(--surface);
+	animation:
+		retro-computing-pop 10ms steps(1, end) 480ms both,
+		retro-computing-fill 960ms steps(12, end) 500ms both;
+}
+[data-theme='retro-computing'] .layout-big-stat .slot-caption {
+	max-width: 100%;
+}
+[data-theme='retro-computing'] .layout-big-stat .slot-caption p {
+	margin-top: 36px;
+	font-weight: 600;
+	font-size: 52px;
+	line-height: 1.3;
+	color: var(--fg);
+	animation-delay: 1300ms;
+}
+[data-theme='retro-computing'] .layout-big-stat .slot-figure img {
+	max-height: 200px;
+	border: 4px solid var(--fg);
+	filter: grayscale(1) contrast(1.3);
+}
+
+/* ============================================================================
+ * quote
+ * ============================================================================ */
+[data-theme='retro-computing'] .slide[data-layout='quote'] .slide-content {
+	flex: none;
+	margin: auto 0;
+}
+[data-theme='retro-computing'] .layout-quote {
+	padding: 0;
+	justify-content: center;
+}
+[data-theme='retro-computing'] .layout-quote .slot-default {
+	max-width: 100%;
+}
+[data-theme='retro-computing'] .layout-quote blockquote {
+	position: relative;
+	padding: 40px 64px 0 250px;
+}
+[data-theme='retro-computing'] .layout-quote blockquote::before {
+	content: '\201C';
+	position: absolute;
+	left: 60px;
+	top: 20px;
+	font-family: var(--font-display);
+	font-weight: 700;
+	font-size: 340px;
+	line-height: 1;
+	letter-spacing: 0;
+	color: var(--accent);
+}
+[data-theme='retro-computing'] .layout-quote blockquote p {
+	font-family: var(--font-display);
+	font-weight: 700;
+	font-size: 120px;
+	line-height: 1.16;
+	letter-spacing: -0.01em;
+	text-wrap: balance;
+}
+[data-theme='retro-computing'] .layout-quote .slot-attribution {
+	max-width: 100%;
+	padding: 0 64px 56px 250px;
+}
+[data-theme='retro-computing'] .layout-quote .slot-attribution p {
+	border-top: 4px solid var(--fg);
+	padding: 24px 0 0;
+	font-weight: 600;
+	font-size: 60px;
+	animation-delay: 600ms;
+}
+
+/* ============================================================================
+ * two-column and three-column: panes, the front pane striped
+ * ============================================================================ */
+[data-theme='retro-computing'] .slide[data-layout='two-column'] .slide-content,
+[data-theme='retro-computing'] .slide[data-layout='three-column'] .slide-content,
+[data-theme='retro-computing'] .slide[data-layout='split-media'] .slide-content {
+	background: none;
+	border: 0;
+	box-shadow: none;
+	padding-top: 0;
+	animation: none;
+}
+[data-theme='retro-computing'] .slide[data-layout='two-column'] .slide-content::before,
+[data-theme='retro-computing'] .slide[data-layout='two-column'] .slide-content::after,
+[data-theme='retro-computing'] .slide[data-layout='three-column'] .slide-content::before,
+[data-theme='retro-computing'] .slide[data-layout='three-column'] .slide-content::after,
+[data-theme='retro-computing'] .slide[data-layout='split-media'] .slide-content::before,
+[data-theme='retro-computing'] .slide[data-layout='split-media'] .slide-content::after {
+	display: none;
+}
+[data-theme='retro-computing'] .layout-two-column {
+	padding: 0;
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	grid-template-rows: auto 1fr;
+	align-content: stretch;
+	align-items: stretch;
+	gap: 40px 56px;
+}
+[data-theme='retro-computing'] .layout-three-column {
+	padding: 0;
+	display: grid;
+	grid-template-columns: 1fr 1fr 1fr;
+	grid-template-rows: auto 1fr;
+	align-content: stretch;
+	align-items: stretch;
+	gap: 40px 48px;
+}
+[data-theme='retro-computing'] .layout-two-column,
+[data-theme='retro-computing'] .layout-three-column {
+	/* The heading sits above the panes, not inside a ruled window; keep it
+	 * modest so the row of panes below keeps most of the available height. */
+	--h2-size: 76px;
+}
+[data-theme='retro-computing'] .layout-two-column .slot-default,
+[data-theme='retro-computing'] .layout-three-column .slot-default {
+	grid-column: 1 / -1;
+	align-items: flex-start;
+}
+[data-theme='retro-computing'] .layout-two-column .slot-default > h2,
+[data-theme='retro-computing'] .layout-three-column .slot-default > h2 {
+	background: var(--surface);
+	border-bottom: 0;
+	padding: 0 24px 8px;
+	margin-left: -8px;
+}
+[data-theme='retro-computing'] .layout-two-column .slot-left,
+[data-theme='retro-computing'] .layout-two-column .slot-right,
+[data-theme='retro-computing'] .layout-three-column .slot-left,
+[data-theme='retro-computing'] .layout-three-column .slot-center,
+[data-theme='retro-computing'] .layout-three-column .slot-right {
+	position: relative;
+	padding: 72px 36px 24px;
+	background: var(--surface);
+	border: 4px solid var(--fg);
+	box-shadow: 8px 8px 0 var(--fg);
+	overflow: hidden;
+	animation: retro-computing-zoom var(--dur) var(--ease) 240ms both;
+}
+/* A pane in a two-way or three-way split has little width to give a row of
+ * body text, so this column gets its own smaller, narrow-column scale
+ * (rather than inheriting the plain-slide safety net size) with padding
+ * and line-height tuned to give each row real air at that size. */
+[data-theme='retro-computing'] .layout-two-column .slot-left > ul,
+[data-theme='retro-computing'] .layout-two-column .slot-right > ul,
+[data-theme='retro-computing'] .layout-three-column .slot-left > ul,
+[data-theme='retro-computing'] .layout-three-column .slot-center > ul,
+[data-theme='retro-computing'] .layout-three-column .slot-right > ul {
+	margin-top: 12px;
+}
+[data-theme='retro-computing'] .layout-two-column .slot-left > ul > li,
+[data-theme='retro-computing'] .layout-two-column .slot-right > ul > li,
+[data-theme='retro-computing'] .layout-three-column .slot-left > ul > li,
+[data-theme='retro-computing'] .layout-three-column .slot-center > ul > li,
+[data-theme='retro-computing'] .layout-three-column .slot-right > ul > li {
+	padding: 16px 0 16px 60px;
+	font-size: 42px;
+	line-height: 1.25;
+}
+[data-theme='retro-computing'] .layout-two-column .slot-left > ul > li::before,
+[data-theme='retro-computing'] .layout-two-column .slot-right > ul > li::before,
+[data-theme='retro-computing'] .layout-three-column .slot-left > ul > li::before,
+[data-theme='retro-computing'] .layout-three-column .slot-center > ul > li::before,
+[data-theme='retro-computing'] .layout-three-column .slot-right > ul > li::before {
+	width: 34px;
+	height: 34px;
+	left: 2px;
+	top: 8px;
+	box-shadow: 3px 3px 0 var(--fg);
+}
+[data-theme='retro-computing'] .layout-two-column .slot-right {
+	animation-delay: 480ms;
+}
+[data-theme='retro-computing'] .layout-three-column .slot-center {
+	animation-delay: 400ms;
+}
+[data-theme='retro-computing'] .layout-three-column .slot-right {
+	animation-delay: 560ms;
+}
+[data-theme='retro-computing'] .layout-two-column .slot-left::before,
+[data-theme='retro-computing'] .layout-two-column .slot-right::before,
+[data-theme='retro-computing'] .layout-three-column .slot-left::before,
+[data-theme='retro-computing'] .layout-three-column .slot-center::before,
+[data-theme='retro-computing'] .layout-three-column .slot-right::before {
+	content: '';
+	position: absolute;
+	left: 0;
+	right: 0;
+	top: 0;
+	height: 60px;
+	padding: 8px 10px;
+	border-bottom: 4px solid var(--fg);
+}
+[data-theme='retro-computing'] .layout-two-column .slot-right::before,
+[data-theme='retro-computing'] .layout-three-column .slot-center::before,
+[data-theme='retro-computing'] .layout-three-column .slot-right::before {
+	background: var(--stripes);
+	background-clip: content-box;
+}
+[data-theme='retro-computing'] .layout-two-column .slot-right::after,
+[data-theme='retro-computing'] .layout-three-column .slot-center::after,
+[data-theme='retro-computing'] .layout-three-column .slot-right::after {
+	content: '';
+	position: absolute;
+	left: 24px;
+	top: 10px;
+	width: 28px;
+	height: 28px;
+	background: var(--surface);
+	border: 4px solid var(--fg);
+	box-shadow: 0 0 0 5px var(--surface);
+}
+[data-theme='retro-computing'] .layout-two-column h3,
+[data-theme='retro-computing'] .layout-three-column h3 {
+	position: absolute;
+	left: 50%;
+	top: 10px;
+	transform: translateX(-50%);
+	z-index: 1;
+	background: var(--surface);
+	padding: 0 20px;
+	font-size: 32px;
+	line-height: 40px;
+	letter-spacing: 0;
+	white-space: nowrap;
+	max-width: calc(100% - 48px);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	margin: 0;
+}
+[data-theme='retro-computing'] .layout-two-column p,
+[data-theme='retro-computing'] .layout-three-column p {
+	width: auto;
+}
+[data-theme='retro-computing'] .layout-two-column p:has(> strong:first-child) {
+	font-weight: 600;
+	margin-bottom: 20px;
+	padding-bottom: 20px;
+	border-bottom: 4px dotted var(--fg);
+}
+[data-theme='retro-computing'] .layout-two-column p > strong:first-child {
+	display: block;
+	font-family: var(--font-display);
+	font-weight: 700;
+	font-size: 160px;
+	line-height: 1.05;
+	letter-spacing: -0.01em;
+	background: none;
+	color: var(--accent-text);
+	padding: 0;
+}
+[data-theme='retro-computing'] .layout-three-column p {
+	font-size: 44px;
+	line-height: 1.3;
+}
+
+/* ============================================================================
+ * split-media: an image, dithered like a 1-bit scan, in its own window
+ * ============================================================================ */
+[data-theme='retro-computing'] .layout-split-media {
+	padding: 0;
+	display: grid;
+	/* The text pane needs noticeably more than half the window at this
+	 * theme's monospace body copy, or a normal sentence wraps past the
+	 * pane's height; the media pane gives up width to make room. */
+	grid-template-columns: 1fr 760px;
+	gap: 48px;
+	align-items: center;
+}
+[data-theme='retro-computing'] .layout-split-media .slot-default,
+[data-theme='retro-computing'] .layout-split-media .slot-media {
+	position: relative;
+	padding-top: 60px;
+	background: var(--surface);
+	border: 4px solid var(--fg);
+	box-shadow: 8px 8px 0 var(--fg);
+	animation: retro-computing-zoom var(--dur) var(--ease) 100ms both;
+}
+[data-theme='retro-computing'] .layout-split-media .slot-media {
+	animation-delay: 320ms;
+}
+[data-theme='retro-computing'] .layout-split-media .slot-default::before,
+[data-theme='retro-computing'] .layout-split-media .slot-media::before {
+	content: '';
+	position: absolute;
+	left: 0;
+	right: 0;
+	top: 0;
+	height: 60px;
+	padding: 8px 10px;
+	border-bottom: 4px solid var(--fg);
+}
+[data-theme='retro-computing'] .layout-split-media .slot-media::before {
+	background: var(--stripes);
+	background-clip: content-box;
+}
+[data-theme='retro-computing'] .layout-split-media .slot-media::after {
+	content: '';
+	position: absolute;
+	left: 24px;
+	top: 10px;
+	width: 28px;
+	height: 28px;
+	background: var(--surface);
+	border: 4px solid var(--fg);
+	box-shadow: 0 0 0 5px var(--surface);
+}
+[data-theme='retro-computing'] .layout-split-media .slot-default {
+	--h2-size: 96px;
+	display: flex;
+	flex-direction: column;
+	justify-content: center;
+}
+[data-theme='retro-computing'] .layout-split-media .slot-default h2 {
+	padding: 24px 40px 0;
+	border-bottom: 0;
+}
+[data-theme='retro-computing'] .layout-split-media .slot-default p {
+	padding: 24px 40px 36px;
+	font-size: 44px;
+	line-height: 1.3;
+}
+[data-theme='retro-computing'] .layout-split-media .slot-media {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	overflow: hidden;
+}
+[data-theme='retro-computing'] .layout-split-media img {
+	width: 100%;
+	height: auto;
+	filter: grayscale(1) contrast(1.5) brightness(0.8);
+}
+
+/* ============================================================================
+ * table: a spreadsheet
+ * ============================================================================ */
+[data-theme='retro-computing'] .slide table {
+	margin-top: 28px;
+	width: 100%;
+	border-collapse: collapse;
+	text-align: left;
+	font-size: 52px;
+	line-height: 1.2;
+}
+[data-theme='retro-computing'] .slide th,
+[data-theme='retro-computing'] .slide td {
+	border: 4px solid var(--fg);
+	padding: 32px 32px;
+}
+[data-theme='retro-computing'] .slide th {
+	font-family: var(--font-display);
+	font-weight: 600;
+	font-size: 48px;
+	letter-spacing: 0;
+	background: var(--fg);
+	color: var(--surface);
+	border-right-color: var(--surface);
+	padding: 20px 32px;
+}
+[data-theme='retro-computing'] .slide th:last-child {
+	border-right-color: var(--fg);
+}
+[data-theme='retro-computing'] .slide td:first-child {
+	font-weight: 600;
+	background-color: var(--bg);
+}
+[data-theme='retro-computing'] .slide tbody tr {
+	animation: retro-computing-pop 10ms steps(1, end) both;
+}
+[data-theme='retro-computing'] .slide tbody tr:nth-child(1) {
+	animation-delay: 560ms;
+}
+[data-theme='retro-computing'] .slide tbody tr:nth-child(2) {
+	animation-delay: 640ms;
+}
+[data-theme='retro-computing'] .slide tbody tr:nth-child(3) {
+	animation-delay: 720ms;
+}
+[data-theme='retro-computing'] .slide tbody tr:nth-child(n + 4) {
+	animation-delay: 800ms;
+}
+
+/* ============================================================================
+ * cover: the window taking over the whole screen
+ * ============================================================================ */
+[data-theme='retro-computing'] .slide[data-layout='cover'] {
+	padding: 96px;
+}
+[data-theme='retro-computing'] .slide[data-layout='cover'] .slide-content {
+	padding-top: 0;
+}
+[data-theme='retro-computing'] .slide[data-layout='cover'] .slide-content::before,
+[data-theme='retro-computing'] .slide[data-layout='cover'] .slide-content::after {
+	display: none;
+}
+[data-theme='retro-computing'] .layout-cover {
+	justify-content: center;
+	align-items: flex-start;
+	padding: 96px 120px;
+}
+[data-theme='retro-computing'] .layout-cover .slot {
+	max-width: 1500px;
+}
+[data-theme='retro-computing'] .layout-cover h1 {
+	/* Base is the long case; the shipped example ("One idea per slide") is
+	 * short and keeps its validated 176px size. */
+	font-size: 110px;
+	line-height: 1.1;
+	max-width: 100%;
+}
+[data-theme='retro-computing'] .layout-cover h1[data-length='medium'] {
+	font-size: 142px;
+}
+[data-theme='retro-computing'] .layout-cover h1[data-length='short'] {
+	font-size: 176px;
+	line-height: 1.08;
+}
+[data-theme='retro-computing'] .layout-cover p {
+	margin-top: 40px;
+	font-size: 52px;
+	line-height: 1.35;
+	max-width: 100%;
+}
+[data-theme='retro-computing'] .slide[data-layout='cover'] .slide-tag {
+	left: 50%;
+	top: 60px;
+	background: var(--fg);
+	color: var(--surface);
+	height: 64px;
+	line-height: 64px;
+}
+
+/* ============================================================================
+ * sidebar: the main window plus a narrow palette beside it
+ * ============================================================================ */
+[data-theme='retro-computing'] .layout-sidebar {
+	padding: 28px 0 32px 56px;
+	display: grid;
+	grid-template-columns: 1fr 0.5fr;
+	grid-template-rows: 1fr;
+	align-items: stretch;
+	column-gap: 0;
+}
+[data-theme='retro-computing'] .layout-sidebar .slot-default {
+	--h2-size: 56px;
+	padding-right: 32px;
+	min-height: 0;
+}
+[data-theme='retro-computing'] .layout-sidebar .slot-default > h2 {
+	margin-bottom: 8px;
+	padding-bottom: 6px;
+}
+[data-theme='retro-computing'] .layout-sidebar .slot-default > p {
+	line-height: 1.28;
+}
+[data-theme='retro-computing'] .layout-sidebar .slot-default > ul {
+	margin-top: 10px;
+}
+[data-theme='retro-computing'] .layout-sidebar .slot-default > ul > li {
+	padding: 10px 0 10px 68px;
+	line-height: 1.22;
+}
+[data-theme='retro-computing'] .layout-sidebar .slot-default > ul > li::before {
+	top: 14px;
+	width: 40px;
+	height: 40px;
+}
+/* The sidebar is a panel inside the same window, not a second window of its
+ * own: a shaded column with a ruled divider, not a title bar to overlap.
+ * Its column is narrow (about a third of the window), so it gets the
+ * theme's narrow-column scale rather than the plain-slide safety net. */
+[data-theme='retro-computing'] .layout-sidebar .slot-sidebar {
+	position: relative;
+	min-height: 0;
+	padding: 0 0 0 40px;
+	background: var(--bg);
+	border-left: 4px solid var(--fg);
+}
+[data-theme='retro-computing'] .layout-sidebar .slot-sidebar h3 {
+	margin-top: 0;
+	font-size: 40px;
+	padding-bottom: 10px;
+	border-bottom: 3px solid var(--fg);
+}
+[data-theme='retro-computing'] .layout-sidebar .slot-sidebar p,
+[data-theme='retro-computing'] .layout-sidebar .slot-sidebar li {
+	font-size: 42px;
+	line-height: 1.2;
+}
+[data-theme='retro-computing'] .layout-sidebar .slot-sidebar ul {
+	margin-top: 10px;
+	border-top: 3px solid var(--fg);
+}
+[data-theme='retro-computing'] .layout-sidebar .slot-sidebar ul > li {
+	padding: 10px 0 10px 60px;
+	border-bottom: 3px dotted var(--muted);
+}
+[data-theme='retro-computing'] .layout-sidebar .slot-sidebar ul > li::before {
+	width: 34px;
+	height: 34px;
+	top: 6px;
+	box-shadow: 3px 3px 0 var(--fg);
+}
+
+/* ============================================================================
+ * blank: no chrome expectations, used for custom HTML and bare code fences
+ * ============================================================================ */
+[data-theme='retro-computing'] .layout-blank {
+	padding: 0;
+	justify-content: center;
+	align-items: center;
+	color: var(--fg);
+	font-family: var(--font-body);
+}
+/* The map fills the whole frame; suppress the window and menu bar so the
+ * map is not boxed inside a smaller pane than it renders at. */
+[data-theme='retro-computing'] .slide[data-layout].has-map {
+	padding: 0;
+	background: var(--surface);
+}
+[data-theme='retro-computing'] .slide[data-layout].has-map::before,
+[data-theme='retro-computing'] .slide[data-layout].has-map::after {
+	display: none;
+}
+[data-theme='retro-computing'] .slide[data-layout].has-map .slide-content {
+	border: 0;
+	box-shadow: none;
+	padding-top: 0;
+	animation: none;
+}
+[data-theme='retro-computing'] .slide[data-layout].has-map .slide-content::before,
+[data-theme='retro-computing'] .slide[data-layout].has-map .slide-content::after {
+	display: none;
+}
+
+/* ============================================================================
+ * diagram: hard-edged nodes with a drop shadow, like everything else here
+ * ============================================================================ */
+[data-theme='retro-computing'] .layout-default .slot:has(.mermaid-diagram) {
+	flex: 1;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+}
+[data-theme='retro-computing'] .mermaid-diagram {
+	flex: 1;
+	min-height: 0;
+	margin-top: 20px;
+	display: flex;
+	justify-content: center;
+}
+[data-theme='retro-computing'] .mermaid-diagram svg {
+	width: 100% !important;
+	height: 100% !important;
+	max-width: none !important;
+	shape-rendering: crispEdges;
+}
+[data-theme='retro-computing'] .mermaid-diagram .node rect,
+[data-theme='retro-computing'] .mermaid-diagram .node path,
+[data-theme='retro-computing'] .mermaid-diagram .node polygon {
+	stroke-width: 4px !important;
+}
+[data-theme='retro-computing'] .mermaid-diagram .node:not(.quiet) {
+	filter: drop-shadow(6px 6px 0 #0a0a0a);
+}
+[data-theme='retro-computing'] .mermaid-diagram .flowchart-link,
+[data-theme='retro-computing'] .mermaid-diagram .edgePath path {
+	stroke-width: 5px !important;
+}
+/* Mermaid labels are <p> elements inside .mermaid-diagram; this theme's own
+ * .slot p sizing must not leak into them. Mermaid sizes each node's box for
+ * the 40px in theme.json's themeVariables.fontSize; an inherited 60px (or a
+ * bolder weight, which is wider per glyph) draws text that no longer fits
+ * the box mermaid already committed to, so this matches that number and
+ * weight exactly rather than the theme's own body styling. */
+[data-theme='retro-computing'] .slide-content .mermaid-diagram p {
+	font-family: var(--font-mono);
+	font-weight: 500;
+	font-size: 40px;
+	letter-spacing: 0;
+	line-height: 1.3;
+	white-space: nowrap;
+	margin: 0;
+	padding: 0;
+}
+[data-theme='retro-computing'] .mermaid-diagram + p {
+	margin-top: 20px;
+	font-weight: 600;
+}
+
+/* ============================================================================
+ * scroll slide: the window clips, the presenter scrolls the contents
+ * ============================================================================ */
+[data-theme='retro-computing'] .scroll-content {
+	position: relative;
+}
+/* The window's border and drop shadow sit at the slide-content edge; without
+ * this, the scrolled content's revealed end (code plus trailing paragraph)
+ * spills past that edge and the border is drawn across the last line. */
+[data-theme='retro-computing'] .slide-content:has(.scroll-content) {
+	overflow: hidden;
+}
+/* At the theme's code size, the widest lines in the scroll sample can still
+ * run past the window's right edge under `white-space: pre`. Wrap instead
+ * of shrinking below the minimum; the extra height this adds is exactly
+ * what scroll reveal is for. */
+[data-theme='retro-computing'] .scroll-content pre.shiki .line {
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+}
+
+/* ============================================================================
+ * live code block and asciinema chrome
+ * Structure and behavior come from rich-blocks.css, which reads the
+ * --color-* bridge above; this theme squares off the corners and gives the
+ * run button the same hard border every other window edge has.
+ * ============================================================================ */
+[data-theme='retro-computing'] .live-code-block .run-button {
+	background-color: var(--accent);
+	color: var(--surface);
+	font-family: var(--font-mono);
+	font-weight: 600;
+	border: 3px solid var(--fg);
+	border-radius: 0;
+	box-shadow: 4px 4px 0 var(--fg);
+}
+[data-theme='retro-computing'] .live-code-block .code-container pre,
+[data-theme='retro-computing'] .live-code-block .result-container {
+	border-radius: 0;
+	border: 4px solid var(--fg);
+}
+[data-theme='retro-computing'] .live-code-block .result-status.success {
+	color: var(--accent-text);
+}
+[data-theme='retro-computing'] .asciinema-player-wrapper {
+	border: 4px solid var(--fg);
+	box-shadow: 8px 8px 0 var(--fg);
+}
+
+/* ============================================================================
+ * minimum-size safety net
+ * Every layout rule above sets an explicit size for the slot text it knows
+ * about. This catches whatever it doesn't (two-column and three-column body
+ * copy, the sidebar, fragment paragraphs, code without highlights), which
+ * would otherwise fall back to the base theme's much smaller typography.
+ * Rules above with a more specific selector still win the cascade.
+ * ============================================================================ */
+[data-theme='retro-computing'] .slot p,
+[data-theme='retro-computing'] .slot li {
+	font-size: 48px;
+	line-height: 1.38;
+}
+[data-theme='retro-computing'] pre code {
+	font-size: 40px;
+}
+[data-theme='retro-computing'] .slot td,
+[data-theme='retro-computing'] .slot th {
+	font-size: 44px;
+}

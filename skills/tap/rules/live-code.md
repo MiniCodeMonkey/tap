@@ -204,5 +204,5 @@ uname -a && df -h
 1. **Test queries** before presentation
 2. **Use read-only credentials** for production databases
 3. **Have a backup plan** if connectivity fails
-4. **Keep queries fast**—audiences lose attention
-5. **Use SQLite for portability**—no external server needed
+4. **Keep queries fast.** Audiences lose attention
+5. **Use SQLite for portability.** No external server needed

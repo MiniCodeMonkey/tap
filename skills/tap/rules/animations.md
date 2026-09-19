@@ -38,7 +38,7 @@ This slide zooms in for dramatic effect!
 ```
 
 ### Best Practices
-- Use `fade` for most presentations—smooth and professional
+- Use `fade` for most presentations: smooth and professional
 - Use `none` for rapid-fire slides
 - Use `zoom` sparingly for emphasis
 - Keep transitions consistent within sections

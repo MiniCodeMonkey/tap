@@ -1,0 +1,1579 @@
+/**
+ * Isometric theme.
+ * For a friendly architecture walkthrough where the infrastructure itself is
+ * the cast: code blocks, table rows, and image frames read as chunky little
+ * solids standing on a warm floor, all pushed back along one shared 30
+ * degree axis. List markers and section badges are true isometric cubes cut
+ * from one conic gradient. Text itself is never skewed, only the panels and
+ * shelves behind it.
+ *
+ * Ported from .superpowers/brainstorm/themes-v3/isometric.theme.html (the
+ * CSS-only mockup built against a fixed 11-slide deck). See
+ * docs/reference/theme-porting.md for the general porting technique
+ * (token bridging, `.slide[data-layout]` scoping, fragment classes) and its
+ * addendum for facts found while porting the other themes.
+ */
+
+@import '@fontsource/fredoka/latin-500.css';
+@import '@fontsource/fredoka/latin-600.css';
+@import '@fontsource/nunito/latin-600.css';
+@import '@fontsource/nunito/latin-700.css';
+@import '@fontsource/nunito/latin-800.css';
+@import '@fontsource/jetbrains-mono/latin-500.css';
+@import '@fontsource/jetbrains-mono/latin-700.css';
+
+[data-theme='isometric'] {
+	/* ---------- design-spec tokens ---------- */
+	--bg: #f6f2ea;
+	--fg: #1b2340;
+	--muted: #454e69;
+	--accent: #0fa3a3;
+	--accent-text: #165668;
+	--accent-2: #f2694b;
+	--surface: #fffdf8;
+
+	/* the three faces every slab is built from, plus a floor shadow */
+	--top: #7ec9c5;
+	--top-light: #c4e6e3;
+	--side: #127f87;
+	--calm-top: #dad8d5;
+	--calm-side: #93949d;
+	--shadow: #dad7d4;
+
+	--font-display: 'Fredoka', 'Nunito', sans-serif;
+	--font-body: 'Nunito', system-ui, sans-serif;
+	--font-mono: 'JetBrains Mono', ui-monospace, monospace;
+	--ease: cubic-bezier(0.22, 1, 0.36, 1);
+	--dur: 560ms;
+	--space-unit: 24px;
+	--radius: 8px;
+	--stroke-width: 2px;
+	--step: 110ms;
+
+	/* every slab is pushed back along the same 30 degree axis */
+	--depth-x: 24px;
+	--depth-y: 14px;
+	--slab-top: var(--calm-top);
+	--slab-side: var(--calm-side);
+
+	/*
+	 * Bridge to the base theme's own token names. layouts.css, prose.css,
+	 * rich-blocks.css and ui-components.css style the live code block, the
+	 * map slide, badges, tags, and generic prose entirely through these
+	 * `--color-*` and `--font-sans` custom properties.
+	 */
+	--color-bg: var(--bg);
+	--color-text: var(--fg);
+	--color-muted: var(--muted);
+	--color-accent: var(--accent);
+	--color-code-bg: var(--fg);
+	--color-code-text: var(--bg);
+	--color-code-inline-bg: var(--fg);
+	--color-border: var(--muted);
+	--color-surface: var(--surface);
+	--color-surface-elevated: var(--surface);
+	--color-link: var(--accent-text);
+	--font-sans: var(--font-body);
+
+	/* Shiki reads token colors from these custom properties directly. */
+	--shiki-foreground: var(--bg);
+	--shiki-background: var(--fg);
+	--shiki-token-comment: #b9c0d6;
+	--shiki-token-string: var(--top);
+	--shiki-token-string-expression: var(--top);
+	--shiki-token-keyword: var(--top-light);
+	--shiki-token-function: var(--bg);
+	--shiki-token-constant: var(--top-light);
+	--shiki-token-parameter: var(--bg);
+	--shiki-token-punctuation: var(--bg);
+	--shiki-token-link: var(--top);
+}
+
+/*
+ * Safety net, placed right after the token bridge per the porting guide:
+ * anything below that doesn't set its own size still lands on a passing
+ * size instead of base's much smaller default typography.
+ */
+[data-theme='isometric'] .slot p,
+[data-theme='isometric'] .slot li {
+	font-size: 48px;
+	line-height: 1.4;
+}
+[data-theme='isometric'] .slot > pre.shiki code,
+[data-theme='isometric'] pre.shiki code {
+	font-size: 40px;
+}
+[data-theme='isometric'] .slot td,
+[data-theme='isometric'] .slot th {
+	font-size: 44px;
+}
+
+/* ============================================================================
+ * Motion
+ * ============================================================================ */
+
+@keyframes isometric-drop {
+	0% {
+		opacity: 0;
+		translate: 0 -64px;
+	}
+	45% {
+		opacity: 1;
+	}
+	68% {
+		translate: 0 5px;
+	}
+	100% {
+		opacity: 1;
+		translate: 0 0;
+	}
+}
+@keyframes isometric-rise {
+	from {
+		opacity: 0;
+		translate: 0 26px;
+	}
+	to {
+		opacity: 1;
+		translate: 0 0;
+	}
+}
+@keyframes isometric-fade {
+	from {
+		opacity: 0;
+	}
+	to {
+		opacity: 1;
+	}
+}
+@keyframes isometric-bob {
+	from {
+		translate: 0 0;
+	}
+	to {
+		translate: 0 -9px;
+	}
+}
+
+/* ============================================================================
+ * Screen: base slide chrome
+ * ============================================================================
+ * Every selector below that reads attr(data-index) or decorates the slide
+ * root is scoped to `.slide[data-layout]`, the real rendered slide, not the
+ * bare `.slide` class SlideCanvas also puts on its outer 1920x1080 scaling
+ * frame (see theme-porting.md's markup differences section).
+ * ============================================================================ */
+
+[data-theme='isometric'] .slide[data-layout] {
+	background: var(--bg);
+	color: var(--fg);
+	font: 700 48px/1.3 var(--font-body);
+	padding: 96px;
+	display: flex;
+	flex-direction: column;
+}
+/*
+ * `.slide` sits outside :where() only for the parts that must keep matching
+ * `.slide[data-layout]`; the reset itself is wrapped entirely in :where() so
+ * it adds no specificity and can't outrank the theme's own `li`/`pre`/etc.
+ * rules further down the file (see the porting guide addendum's
+ * specificity-trap note).
+ */
+[data-theme='isometric'] :where(
+		.slide h1,
+		.slide h2,
+		.slide h3,
+		.slide h4,
+		.slide h5,
+		.slide h6,
+		.slide p,
+		.slide ul,
+		.slide ol,
+		.slide li,
+		.slide blockquote,
+		.slide pre,
+		.slide table
+	) {
+	margin: 0;
+	padding: 0;
+}
+
+[data-theme='isometric'] .slide-content {
+	flex: 1;
+	min-height: 0;
+	width: auto;
+	height: auto;
+	display: flex;
+	flex-direction: column;
+	position: relative;
+	z-index: 1;
+}
+[data-theme='isometric'] .slide-content > div {
+	flex: 1;
+	min-height: 0;
+	width: auto;
+	height: auto;
+	padding: 0;
+	text-align: left;
+	display: flex;
+	flex-direction: column;
+}
+/*
+ * The rule above already zeroes every layout wrapper's own padding (this
+ * theme's real inset comes from the outer `.slide[data-layout]` padding),
+ * but its `.slide-content > div` selector is less specific than
+ * layouts.css's shared `.slide[data-layout='component'] > .slide-content >
+ * .deck-component-root { border: ... }` rule (two attribute/class
+ * selectors there vs. one attribute, one class and one bare type here), so
+ * it cannot cancel that rule's border on its own. Match the shared rule's
+ * selector shape directly, scoped by theme, to win on specificity.
+ */
+[data-theme='isometric'] .slide[data-layout='component'] > .slide-content > .deck-component-root,
+[data-theme='isometric'] .slide[data-layout='component'] > .slide-content > .scroll-content > .deck-component-root {
+	border: 0;
+}
+[data-theme='isometric'] .slide[data-layout]:has(> .slide-tag):not([data-layout='section']) .slide-content {
+	margin-top: 84px;
+}
+
+/* entrance stagger: later slots and later children rise a little later */
+[data-theme='isometric'] .slot {
+	--o: 0;
+}
+[data-theme='isometric'] .slot-caption,
+[data-theme='isometric'] .slot-attribution,
+[data-theme='isometric'] .slot-left,
+[data-theme='isometric'] .slot-sidebar {
+	--o: 2;
+}
+[data-theme='isometric'] .slot-right,
+[data-theme='isometric'] .slot-center,
+[data-theme='isometric'] .slot-media {
+	--o: 4;
+}
+[data-theme='isometric'] .slot > * {
+	--i: 0;
+	animation: isometric-rise var(--dur) var(--ease) both;
+	animation-delay: calc((var(--i) + var(--o)) * var(--step));
+}
+[data-theme='isometric'] .slot > :nth-child(2) {
+	--i: 2;
+}
+[data-theme='isometric'] .slot > :nth-child(3) {
+	--i: 3;
+}
+[data-theme='isometric'] .slot > :nth-child(4) {
+	--i: 4;
+}
+[data-theme='isometric'] .slot > :nth-child(n + 5) {
+	--i: 5;
+}
+/* a `<!-- pause -->` wraps its block in a fragment div; give it the same rise */
+[data-theme='isometric'] .slot > .fragment {
+	--i: 0;
+	animation: isometric-rise var(--dur) var(--ease) both;
+	animation-delay: calc((var(--i) + var(--o)) * var(--step));
+}
+[data-theme='isometric'] .fragment-hidden {
+	opacity: 0;
+}
+[data-theme='isometric'] .fragment-visible {
+	opacity: 1;
+}
+
+/* ---------- a slab: flat face to the audience, top and side pushed back ---------- */
+[data-theme='isometric'] .slot > pre.shiki,
+[data-theme='isometric'] .slot > .fragment > pre.shiki,
+[data-theme='isometric'] tr,
+[data-theme='isometric'] .layout-two-column .slot-left,
+[data-theme='isometric'] .layout-two-column .slot-right,
+[data-theme='isometric'] .layout-three-column .slot-left,
+[data-theme='isometric'] .layout-three-column .slot-center,
+[data-theme='isometric'] .layout-three-column .slot-right,
+[data-theme='isometric'] .layout-sidebar .slot-sidebar {
+	position: relative;
+}
+[data-theme='isometric'] .slot > pre.shiki::before,
+[data-theme='isometric'] .slot > .fragment > pre.shiki::before,
+[data-theme='isometric'] tr::before,
+[data-theme='isometric'] .layout-two-column .slot-left::before,
+[data-theme='isometric'] .layout-two-column .slot-right::before,
+[data-theme='isometric'] .layout-three-column .slot-left::before,
+[data-theme='isometric'] .layout-three-column .slot-center::before,
+[data-theme='isometric'] .layout-three-column .slot-right::before,
+[data-theme='isometric'] .layout-sidebar .slot-sidebar::before,
+[data-theme='isometric'] pre.shiki .line.highlighted::before {
+	content: '';
+	position: absolute;
+	left: 0;
+	bottom: 100%;
+	width: 100%;
+	height: var(--depth-y);
+	background: var(--slab-top);
+	transform-origin: 0 100%;
+	transform: skewX(-59.74deg);
+}
+[data-theme='isometric'] .slot > pre.shiki::after,
+[data-theme='isometric'] .slot > .fragment > pre.shiki::after,
+[data-theme='isometric'] tr::after,
+[data-theme='isometric'] .layout-two-column .slot-left::after,
+[data-theme='isometric'] .layout-two-column .slot-right::after,
+[data-theme='isometric'] .layout-three-column .slot-left::after,
+[data-theme='isometric'] .layout-three-column .slot-center::after,
+[data-theme='isometric'] .layout-three-column .slot-right::after,
+[data-theme='isometric'] .layout-sidebar .slot-sidebar::after,
+[data-theme='isometric'] pre.shiki .line.highlighted::after {
+	content: '';
+	position: absolute;
+	left: 100%;
+	top: 0;
+	width: var(--depth-x);
+	height: 100%;
+	background: var(--slab-side);
+	transform-origin: 0 0;
+	transform: skewY(-30.26deg);
+}
+
+/* ---------- a cube: one hexagon, three tones from a single conic gradient ---------- */
+[data-theme='isometric'] .slide-tag::before,
+[data-theme='isometric'] li::before,
+[data-theme='isometric'] .slot-attribution p::before,
+[data-theme='isometric'] h3::before {
+	content: '';
+	flex: none;
+	display: inline-block;
+	width: 45px;
+	height: 52px;
+	background: conic-gradient(from -60deg, var(--top) 0 120deg, var(--accent) 0 240deg, var(--side) 0);
+	clip-path: polygon(50% 0, 100% 25%, 100% 75%, 50% 100%, 0 75%, 0 25%);
+}
+
+/* section marker: same word-sized cube-and-label chip on every layout */
+[data-theme='isometric'] .slide-tag {
+	top: 92px;
+	left: 96px;
+	right: auto;
+	bottom: auto;
+	width: auto;
+	height: auto;
+	z-index: 2;
+	display: flex;
+	align-items: center;
+	gap: 18px;
+	font: 800 32px/1 var(--font-body);
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	color: var(--fg);
+	animation: isometric-rise var(--dur) var(--ease) both;
+}
+
+/* badge: a small angled placard at the opposite corner */
+[data-theme='isometric'] .slide-badge {
+	top: 92px;
+	right: 96px;
+	left: auto;
+	bottom: auto;
+	width: auto;
+	height: auto;
+	padding: 14px 30px;
+	font: 800 32px/1 var(--font-body);
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+	color: var(--bg);
+	background: var(--accent-text);
+	clip-path: polygon(16px 0, 100% 0, calc(100% - 16px) 100%, 0 100%);
+	animation: isometric-rise var(--dur) var(--ease) 120ms both;
+}
+
+/* folio: a numbered floor tile in the bottom right corner */
+[data-theme='isometric'] .slide[data-layout]::after {
+	content: attr(data-index);
+	position: absolute;
+	right: 128px;
+	bottom: 66px;
+	width: 84px;
+	height: 84px;
+	display: grid;
+	place-items: center;
+	font: 800 40px/1 var(--font-body);
+	color: var(--fg);
+	background: var(--top);
+	transform: matrix(0.866, -0.5, 0.866, 0.5, 0, 0);
+	box-shadow:
+		-1px 1px 0 var(--side),
+		-2px 2px 0 var(--side),
+		-3px 3px 0 var(--side),
+		-4px 4px 0 var(--side),
+		-5px 5px 0 var(--side),
+		-6px 6px 0 var(--side),
+		-7px 7px 0 var(--side),
+		-8px 8px 0 var(--side),
+		-9px 9px 0 var(--side),
+		-10px 10px 0 var(--side);
+	animation: isometric-drop var(--dur) var(--ease) 700ms both;
+}
+
+/* ---------- type ---------- */
+[data-theme='isometric'] .slide[data-layout] h1,
+[data-theme='isometric'] .slide[data-layout] h2 {
+	font-family: var(--font-display);
+	font-weight: 600;
+	letter-spacing: -0.012em;
+	text-wrap: balance;
+}
+/* !important keeps h2 metrics safe from base's own .layout-x h2 specificity */
+[data-theme='isometric'] .slide[data-layout] h2 {
+	font-size: var(--h2-size, 112px) !important;
+	margin: var(--h2-margin, 0 0 56px) !important;
+	line-height: 1.04;
+}
+/*
+ * data-length scaling for a slot heading that has no layout-specific
+ * --h2-size of its own (plain `default`, `code-focus`, the scroll and
+ * blank layouts, and so on): 112px above already reads well for the
+ * short/medium headings the kitchen-sink deck exercises, so that stays the
+ * medium size. `:where()` keeps this at effectively zero specificity so it
+ * never outranks a layout's own --h2-size override (two-column,
+ * three-column, sidebar, split-media, the diagram slot, the 7+ item list).
+ */
+[data-theme='isometric'] :where(.slide[data-layout]) h2[data-length='long'] {
+	--h2-size: 76px;
+}
+[data-theme='isometric'] :where(.slide[data-layout]) h2[data-length='short'] {
+	--h2-size: 128px;
+}
+[data-theme='isometric'] .slide[data-layout] h3 {
+	display: flex;
+	align-items: center;
+	gap: 18px;
+	font: 800 40px/1 var(--font-body);
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	margin: 40px 0 20px;
+}
+[data-theme='isometric'] .slide[data-layout] h3:first-child {
+	margin-top: 0;
+}
+[data-theme='isometric'] .slide[data-layout] h4 {
+	font-family: var(--font-display);
+	font-weight: 600;
+	font-size: 52px;
+	line-height: 1.2;
+	color: var(--accent-text);
+	margin: 32px 0 16px;
+}
+[data-theme='isometric'] .slide[data-layout] h5,
+[data-theme='isometric'] .slide[data-layout] h6 {
+	font-family: var(--font-body);
+	font-weight: 800;
+	font-size: 36px;
+	line-height: 1.2;
+	letter-spacing: 0.05em;
+	text-transform: uppercase;
+	color: var(--muted);
+	margin: 28px 0 12px;
+}
+[data-theme='isometric'] .slide[data-layout] strong {
+	font-weight: 800;
+	color: var(--accent-text);
+}
+[data-theme='isometric'] .slide[data-layout] em {
+	font-style: normal;
+	color: var(--accent-text);
+	text-decoration: underline;
+	text-decoration-color: var(--accent);
+	text-decoration-thickness: 0.08em;
+	text-underline-offset: 0.12em;
+}
+[data-theme='isometric'] .slide[data-layout] a {
+	color: var(--accent-text);
+	text-decoration: underline;
+	text-decoration-color: var(--accent);
+	text-decoration-thickness: 0.08em;
+	text-underline-offset: 0.14em;
+}
+[data-theme='isometric'] .slide[data-layout] a:hover {
+	color: var(--accent-2);
+}
+[data-theme='isometric'] .slot :not(pre) > code {
+	font: 700 0.86em/1 var(--font-mono);
+	background: var(--fg);
+	color: var(--bg);
+	padding: 0.08em 0.22em 0.1em;
+	border-radius: 2px;
+}
+/* Consecutive paragraphs (plain, or each wrapped in its own `<!-- pause -->`
+ * fragment) need a gap or they read as one run-on block. */
+[data-theme='isometric'] .slot > p + p,
+[data-theme='isometric'] .slot > .fragment + .fragment {
+	margin-top: 28px;
+}
+
+/* ---------- title: the cast on its floor ---------- */
+[data-theme='isometric'] .slide[data-layout='title']::before,
+[data-theme='isometric'] .slide[data-layout='title']::after {
+	content: '';
+	position: absolute;
+	left: 1050px;
+	top: 310px;
+	width: 750px;
+	height: 514px;
+	right: auto;
+	bottom: auto;
+	background:
+		url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='-520 -380 1050 720'%3E%3Cpolygon fill='%23C6C4C5' points='-507,52.5 -78,300 -78,322 -507,74.5'/%3E%3Cpolygon fill='%23D7D5D2' points='-78,300 520,-45 520,-23 -78,322'/%3E%3Cpolygon fill='%23EBE8E2' points='-507,52.5 91,-292.5 520,-45 -78,300'/%3E%3C/svg%3E")
+		center / contain no-repeat;
+	transform: none;
+	box-shadow: none;
+	animation: isometric-drop var(--dur) var(--ease) 100ms both;
+}
+[data-theme='isometric'] .slide[data-layout='title']::after {
+	background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='-520 -380 1050 720'%3E%3Cpath fill='none' stroke='%230FA3A3' stroke-width='8' stroke-linecap='round' stroke-dasharray='1 19' d='M-182,105 L182,-105 M-286,45 L-182,105 M-104,-60 L0,0 M78,-165 L182,-105 M260,-30 L156,-90 M13,127.5 L-104,60'/%3E%3Cg transform='translate%2878,-165%29'%3E%3Cpolygon fill='%23DAD7D4' points='-34,95 96,20 -34,-55 -164,20'/%3E%3Cpolygon fill='%2393949D' stroke='%2393949D' stroke-width='7' stroke-linejoin='round' points='0,75 -130,0 -130,-120 0,-45'/%3E%3Cpolygon fill='%23C1C0C1' stroke='%23C1C0C1' stroke-width='7' stroke-linejoin='round' points='0,75 130,0 130,-120 0,-45'/%3E%3Cpolygon fill='%23DAD8D5' stroke='%23DAD8D5' stroke-width='7' stroke-linejoin='round' points='0,-45 130,-120 0,-195 -130,-120'/%3E%3Cpath fill='none' stroke='%23F6F2EA' stroke-opacity='.55' stroke-width='9' stroke-linecap='round' d='M-18,-42 L-112,-96 M-18,-14 L-112,-68 M-18,14 L-112,-40 M18,-42 L84,-80 M18,-14 L84,-52'/%3E%3Ccircle fill='%23F6F2EA' cx='108' cy='-2' r='8'/%3E%3C/g%3E%3Cg transform='translate%28-104,-60%29'%3E%3Cpolygon fill='%23DAD7D4' points='-34,95 96,20 -34,-55 -164,20'/%3E%3Cpolygon fill='%2393949D' stroke='%2393949D' stroke-width='7' stroke-linejoin='round' points='0,75 -130,0 -130,-120 0,-45'/%3E%3Cpolygon fill='%23C1C0C1' stroke='%23C1C0C1' stroke-width='7' stroke-linejoin='round' points='0,75 130,0 130,-120 0,-45'/%3E%3Cpolygon fill='%23DAD8D5' stroke='%23DAD8D5' stroke-width='7' stroke-linejoin='round' points='0,-45 130,-120 0,-195 -130,-120'/%3E%3Cpath fill='none' stroke='%23F6F2EA' stroke-opacity='.55' stroke-width='9' stroke-linecap='round' d='M-18,-42 L-112,-96 M-18,-14 L-112,-68 M-18,14 L-112,-40 M18,-42 L84,-80 M18,-14 L84,-52'/%3E%3Ccircle fill='%23F6F2EA' cx='108' cy='-2' r='8'/%3E%3C/g%3E%3Cg transform='translate%28260,-30%29'%3E%3Cpolygon fill='%23DAD7D4' points='-34,95 96,20 -34,-55 -164,20'/%3E%3Cpolygon fill='%23B65548' stroke='%23B65548' stroke-width='7' stroke-linejoin='round' points='0,75 -130,0 -130,-48 0,27'/%3E%3Cpolygon fill='%23F2694B' stroke='%23F2694B' stroke-width='7' stroke-linejoin='round' points='0,75 130,0 130,-48 0,27'/%3E%3Cpolygon fill='%23F4AB97' stroke='%23F4AB97' stroke-width='7' stroke-linejoin='round' points='0,27 130,-48 0,-123 -130,-48'/%3E%3Cpath fill='none' stroke='%23F6F2EA' stroke-width='10' stroke-linecap='round' stroke-linejoin='round' d='M-62,-84 L0,-48 L62,-12 M0,-48 L50,-77 M0,-48 L-50,-19'/%3E%3C/g%3E%3Cg transform='translate%28-286,45%29'%3E%3Cpolygon fill='%23DAD7D4' points='-34,95 96,20 -34,-55 -164,20'/%3E%3Cpolygon fill='%2393949D' stroke='%2393949D' stroke-width='7' stroke-linejoin='round' points='0,75 -130,0 -130,-120 0,-45'/%3E%3Cpolygon fill='%23C1C0C1' stroke='%23C1C0C1' stroke-width='7' stroke-linejoin='round' points='0,75 130,0 130,-120 0,-45'/%3E%3Cpolygon fill='%23DAD8D5' stroke='%23DAD8D5' stroke-width='7' stroke-linejoin='round' points='0,-45 130,-120 0,-195 -130,-120'/%3E%3Cpath fill='none' stroke='%23F6F2EA' stroke-opacity='.55' stroke-width='9' stroke-linecap='round' d='M-18,-42 L-112,-96 M-18,-14 L-112,-68 M-18,14 L-112,-40 M18,-42 L84,-80 M18,-14 L84,-52'/%3E%3Ccircle fill='%23F6F2EA' cx='108' cy='-2' r='8'/%3E%3C/g%3E%3Cg transform='translate%2813,127.5%29'%3E%3Cellipse fill='%23DAD7D4' cx='-34' cy='20' rx='90' ry='52'/%3E%3Cpath fill='%23127F87' stroke='%23127F87' stroke-width='7' stroke-linejoin='round' d='M-90,-130 L-90,0 A90,52 0 0 0 0,52 L0,-130 Z'/%3E%3Cpath fill='%230FA3A3' stroke='%230FA3A3' stroke-width='7' stroke-linejoin='round' d='M0,-130 L0,52 A90,52 0 0 0 90,0 L90,-130 Z'/%3E%3Cpath fill='none' stroke='%23F6F2EA' stroke-opacity='.5' stroke-width='7' d='M-90,-84 A90,52 0 0 0 90,-84 M-90,-40 A90,52 0 0 0 90,-40'/%3E%3Cellipse fill='%237EC9C5' stroke='%237EC9C5' stroke-width='7' stroke-linejoin='round' cx='0' cy='-130' rx='90' ry='52'/%3E%3C/g%3E%3C/svg%3E");
+	animation:
+		isometric-drop var(--dur) var(--ease) 420ms both,
+		isometric-bob 5s ease-in-out 1.2s infinite alternate;
+}
+[data-theme='isometric'] .layout-title {
+	justify-content: center;
+	align-items: flex-start;
+}
+[data-theme='isometric'] .layout-title .slot {
+	flex: none;
+	max-width: 920px;
+}
+[data-theme='isometric'] .layout-title h1,
+[data-theme='isometric'] .layout-title h2 {
+	max-width: 100%;
+}
+[data-theme='isometric'] .layout-title h1 {
+	/* Budgeted for a full 95-character sentence at this column width: the
+	 * worst case, sized for `long`. `data-length` scales a shorter title up
+	 * from here instead of leaving it this small by default. */
+	font-size: 84px;
+	line-height: 1.14;
+	text-shadow:
+		1.7px -1px 0 var(--accent),
+		3.5px -2px 0 var(--accent),
+		5.2px -3px 0 var(--accent),
+		6.9px -4px 0 var(--accent),
+		8.7px -5px 0 var(--accent),
+		10.4px -6px 0 var(--accent);
+}
+[data-theme='isometric'] .layout-title h1[data-length='medium'] {
+	font-size: 108px;
+}
+[data-theme='isometric'] .layout-title h1[data-length='short'] {
+	font-size: 136px;
+}
+[data-theme='isometric'] .layout-title h2 {
+	--h2-size: 88px;
+	--h2-margin: 28px 0 0;
+	font-weight: 500;
+	color: var(--accent-text);
+}
+[data-theme='isometric'] .layout-title p {
+	margin-top: 56px;
+	font-size: 52px;
+	max-width: 100%;
+	--i: 5;
+}
+
+/* ---------- section: a floor tile and a quiet marker ---------- */
+[data-theme='isometric'] .layout-section {
+	justify-content: center;
+}
+[data-theme='isometric'] .layout-section .slot {
+	flex: none;
+	max-width: 1200px;
+	z-index: 1;
+}
+[data-theme='isometric'] .layout-section h1,
+[data-theme='isometric'] .layout-section h2 {
+	font-size: 176px;
+	line-height: 1.02;
+	text-shadow:
+		1.7px -1px 0 var(--accent),
+		3.5px -2px 0 var(--accent),
+		5.2px -3px 0 var(--accent),
+		6.9px -4px 0 var(--accent),
+		8.7px -5px 0 var(--accent),
+		10.4px -6px 0 var(--accent),
+		12.1px -7px 0 var(--accent),
+		13.8px -8px 0 var(--accent);
+}
+[data-theme='isometric'] .layout-section h1[data-length='medium'],
+[data-theme='isometric'] .layout-section h2[data-length='medium'] {
+	font-size: 152px;
+}
+[data-theme='isometric'] .layout-section h1[data-length='long'],
+[data-theme='isometric'] .layout-section h2[data-length='long'] {
+	font-size: 120px;
+}
+[data-theme='isometric'] .layout-section h1::before,
+[data-theme='isometric'] .layout-section h2::before {
+	content: '';
+	display: block;
+	width: 170px;
+	height: 196px;
+	margin-bottom: 48px;
+	background: conic-gradient(from -60deg, var(--top) 0 120deg, var(--accent) 0 240deg, var(--side) 0);
+	clip-path: polygon(50% 0, 100% 25%, 100% 75%, 50% 100%, 0 75%, 0 25%);
+	animation: isometric-drop var(--dur) var(--ease) 250ms both;
+}
+[data-theme='isometric'] .layout-section p {
+	margin-top: 44px;
+	font-size: 52px;
+	color: var(--muted);
+	text-wrap: balance;
+}
+/*
+ * A second, larger cube stands on the floor at the frame's edge, sized off
+ * the slide itself rather than the tag or heading, so it stays imposing
+ * whether the section title is one word or a full sentence. It sits behind
+ * `.slide-content` (z-index: 1 there, unset here) so it can never cover the
+ * heading even on a long, wrapped title.
+ */
+[data-theme='isometric'] .slide[data-layout='section']::before {
+	content: '';
+	position: absolute;
+	right: 70px;
+	bottom: 60px;
+	width: 460px;
+	height: 530px;
+	background: conic-gradient(from -60deg, var(--top) 0 120deg, var(--accent) 0 240deg, var(--side) 0);
+	clip-path: polygon(50% 0, 100% 25%, 100% 75%, 50% 100%, 0 75%, 0 25%);
+	opacity: 0.9;
+	animation: isometric-drop var(--dur) var(--ease) 380ms both;
+}
+/*
+ * The heading column is centered and can grow to its 1200px max-width when
+ * wrapped across several lines (a medium or long section title). Tucking
+ * the big cube smaller and further into the corner keeps it clear of that
+ * column instead of colliding with wrapped text.
+ */
+[data-theme='isometric'] .slide[data-layout='section']:has(h1[data-length='medium'], h2[data-length='medium'], h1[data-length='long'], h2[data-length='long'])::before {
+	right: 80px;
+	bottom: 64px;
+	width: 220px;
+	height: 254px;
+}
+
+/* ---------- statement: a lone heading on a plain default slide ---------- */
+[data-theme='isometric'] .layout-default .slot:has(> h1:only-child),
+[data-theme='isometric'] .layout-default .slot:has(> h2:only-child) {
+	flex: 1;
+	display: flex;
+	flex-direction: column;
+	justify-content: center;
+	max-width: 1400px;
+	padding-bottom: 60px;
+}
+[data-theme='isometric'] .layout-default .slot > h1:only-child {
+	font-size: 176px;
+	line-height: 1.02;
+}
+[data-theme='isometric'] .layout-default .slot > h1:only-child[data-length='short'] {
+	font-size: 208px;
+}
+[data-theme='isometric'] .layout-default .slot > h1:only-child[data-length='long'] {
+	font-size: 136px;
+}
+[data-theme='isometric'] .layout-default .slot > h2:only-child {
+	font-size: 124px;
+	line-height: 1.1;
+	margin: 0 !important;
+}
+[data-theme='isometric'] .layout-default .slot > h2:only-child[data-length='short'] {
+	font-size: 152px;
+}
+[data-theme='isometric'] .layout-default .slot > h2:only-child[data-length='long'] {
+	font-size: 92px;
+}
+[data-theme='isometric'] .slide[data-layout]:has(.layout-default h1:only-child)::before,
+[data-theme='isometric'] .slide[data-layout]:has(.layout-default h2:only-child)::before {
+	content: '';
+	position: absolute;
+	right: 150px;
+	bottom: 170px;
+	width: 277px;
+	height: 320px;
+	background: conic-gradient(from -60deg, var(--top) 0 120deg, var(--accent) 0 240deg, var(--side) 0);
+	clip-path: polygon(50% 0, 100% 25%, 100% 75%, 50% 100%, 0 75%, 0 25%);
+	animation: isometric-drop var(--dur) var(--ease) 500ms both;
+}
+
+/* ---------- bullets: a flight of steps ---------- */
+[data-theme='isometric'] .slot > ul,
+[data-theme='isometric'] .slot > .fragment > ul {
+	list-style: none;
+	display: flex;
+	flex-direction: column;
+	gap: 40px;
+}
+/*
+ * The marker is positioned, not a flex sibling: a flex row of [marker, text]
+ * gives the anonymous text box a content-sized min-width, so long body copy
+ * wraps the whole item down instead of wrapping its own lines under the
+ * marker. Absolute positioning sidesteps that, and also means a nested <ul>
+ * (a real child element of the <li>) just continues the block flow below
+ * the text instead of becoming a third row item.
+ */
+[data-theme='isometric'] li {
+	position: relative;
+	padding-left: 86px;
+	font-size: 64px;
+	line-height: 1.16;
+	transition:
+		opacity var(--dur) var(--ease),
+		translate var(--dur) var(--ease);
+}
+[data-theme='isometric'] li::before {
+	position: absolute;
+	left: 0;
+	top: 8px;
+	width: 52px;
+	height: 60px;
+}
+[data-theme='isometric'] .slot > ul > li:nth-child(2),
+[data-theme='isometric'] .slot > .fragment > ul > li:nth-child(2) {
+	margin-left: 70px;
+}
+[data-theme='isometric'] .slot > ul > li:nth-child(3),
+[data-theme='isometric'] .slot > .fragment > ul > li:nth-child(3) {
+	margin-left: 140px;
+}
+[data-theme='isometric'] .slot > ul > li:nth-child(n + 4),
+[data-theme='isometric'] .slot > .fragment > ul > li:nth-child(n + 4) {
+	margin-left: 210px;
+}
+[data-theme='isometric'] li.fragment-hidden {
+	opacity: 0;
+	translate: 0 -40px;
+}
+[data-theme='isometric'] li.fragment-visible {
+	animation: isometric-drop var(--dur) var(--ease) backwards;
+	animation-delay: 100ms;
+}
+[data-theme='isometric'] li.fragment-visible:nth-child(2) {
+	animation-delay: 230ms;
+}
+[data-theme='isometric'] li.fragment-visible:nth-child(3) {
+	animation-delay: 360ms;
+}
+[data-theme='isometric'] li.fragment-visible:nth-child(n + 4) {
+	animation-delay: 490ms;
+}
+
+/* Nested lists sit in the parent li's flow with a quieter marker; they keep
+ * the 60px body minimum, just a lighter weight and no staircase indent. */
+[data-theme='isometric'] li ul {
+	list-style: none;
+	display: flex;
+	flex-direction: column;
+	margin: 20px 0 0 86px;
+	gap: 20px;
+	width: auto;
+}
+[data-theme='isometric'] li ul > li {
+	font-weight: 500;
+	font-size: 44px;
+	color: var(--muted);
+	margin-left: 0;
+	padding-left: 64px;
+}
+[data-theme='isometric'] li ul > li::before {
+	width: 30px;
+	height: 34px;
+	top: 14px;
+	background: conic-gradient(from -60deg, var(--calm-top) 0 120deg, #c1c0c1 0 240deg, var(--calm-side) 0);
+}
+
+[data-theme='isometric'] .slot > ol,
+[data-theme='isometric'] .slot > .fragment > ol {
+	list-style: none;
+	counter-reset: iso-step;
+	display: flex;
+	flex-direction: column;
+	gap: 36px;
+}
+[data-theme='isometric'] ol > li {
+	counter-increment: iso-step;
+}
+[data-theme='isometric'] ol > li::before {
+	content: counter(iso-step);
+	width: 52px;
+	height: 60px;
+	display: grid;
+	place-items: center;
+	font: 800 32px/1 var(--font-body);
+	color: var(--fg);
+	background: conic-gradient(from -60deg, var(--top) 0 120deg, var(--accent) 0 240deg, var(--side) 0);
+	clip-path: polygon(50% 0, 100% 25%, 100% 75%, 50% 100%, 0 75%, 0 25%);
+}
+
+/* Seven or more items cannot fit at the normal size: a quieter listing. */
+[data-theme='isometric'] .slot > :is(h1, h2):has(~ ul > li:nth-child(7)) {
+	--h2-size: 84px;
+	--h2-margin: 0 0 36px;
+}
+[data-theme='isometric'] .slot > ul:has(> li:nth-child(7)) {
+	gap: 20px;
+}
+[data-theme='isometric'] .slot > ul:has(> li:nth-child(7)) > li {
+	font-size: 44px;
+}
+[data-theme='isometric'] .slot > ul:has(> li:nth-child(7)) > li::before {
+	width: 36px;
+	height: 42px;
+	margin-top: 4px;
+}
+
+/* ---------- blockquote outside the quote layout: a callout aside ---------- */
+[data-theme='isometric'] .slide[data-layout]:not([data-layout='quote']) .slot > blockquote {
+	position: relative;
+	margin: 20px 0 0;
+	padding: 36px 44px 36px 60px;
+	background: var(--surface);
+	color: var(--fg);
+	font-style: normal;
+}
+[data-theme='isometric'] .slide[data-layout]:not([data-layout='quote']) .slot > blockquote::before {
+	content: '';
+	position: absolute;
+	left: 0;
+	top: 0;
+	bottom: 0;
+	width: 12px;
+	background: var(--accent);
+}
+[data-theme='isometric'] .slide[data-layout]:not([data-layout='quote']) .slot > blockquote p {
+	font-size: 48px;
+	line-height: 1.3;
+}
+
+/* ---------- code: a dark slab; the focus line is a lit key that stands proud ---------- */
+[data-theme='isometric'] pre.shiki {
+	--slab-top: var(--muted);
+	--slab-side: #0c1226;
+	margin: 14px var(--depth-x) 0 0;
+	padding: 44px;
+	background: var(--fg);
+	color: var(--bg);
+	font-family: var(--font-mono);
+	font-size: 40px;
+	font-weight: 500;
+	line-height: 1.55;
+	font-variant-ligatures: none;
+}
+[data-theme='isometric'] pre.shiki code {
+	display: flex;
+	flex-direction: column;
+	font: inherit;
+}
+[data-theme='isometric'] pre.shiki .line {
+	display: block;
+	white-space: pre-wrap;
+	word-break: break-word;
+}
+[data-theme='isometric'] pre.shiki .line:empty::before {
+	content: '\00a0';
+}
+[data-theme='isometric'] pre.shiki .tok-comment {
+	color: #b9c0d6;
+}
+[data-theme='isometric'] pre.shiki .tok-string {
+	color: var(--top);
+}
+[data-theme='isometric'] pre.has-highlighted .line:not(.highlighted) {
+	opacity: 0.7;
+}
+/* Shiki gives each token an inline `style="color:var(--shiki-token-x)"`,
+ * which beats any stylesheet rule on the span itself (inline style always
+ * wins), so `color: inherit` below never actually reaches a token span; it
+ * only affects the small number of unclassified text nodes and the
+ * line-number gutter. Redefining the shiki custom properties here is what
+ * actually recolors the tokens, since inline styles resolve custom
+ * properties through the normal cascade. Without this, plain identifiers
+ * on the highlighted line kept the panel's light --shiki-foreground and
+ * read at 1.7:1 against this line's light --top background. */
+[data-theme='isometric'] pre.shiki .line.highlighted {
+	--slab-top: var(--top-light);
+	--slab-side: var(--side);
+	--depth-x: 12px;
+	--depth-y: 7px;
+	--shiki-foreground: var(--fg);
+	--shiki-token-comment: var(--fg);
+	--shiki-token-string: var(--fg);
+	--shiki-token-string-expression: var(--fg);
+	--shiki-token-keyword: var(--fg);
+	--shiki-token-function: var(--fg);
+	--shiki-token-constant: var(--fg);
+	--shiki-token-parameter: var(--fg);
+	--shiki-token-punctuation: var(--fg);
+	--shiki-token-link: var(--fg);
+	position: relative;
+	z-index: 1;
+	margin: 0 -44px;
+	padding: 0 44px;
+	background: var(--top);
+	color: var(--fg);
+	font-weight: 700;
+	translate: -12px 7px;
+	animation: isometric-drop var(--dur) var(--ease) 500ms both;
+}
+[data-theme='isometric'] pre.shiki .line.highlighted span {
+	color: inherit;
+}
+[data-theme='isometric'] .slot pre.shiki ~ p,
+[data-theme='isometric'] .slot pre.shiki + p {
+	margin-top: 48px;
+}
+
+/* ---------- big number, extruded ---------- */
+[data-theme='isometric'] .slide[data-layout='big-stat']::before {
+	content: '';
+	position: absolute;
+	left: 1120px;
+	top: 500px;
+	width: 700px;
+	height: 516px;
+	background:
+		url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='-400 -330 800 590'%3E%3Cpolygon fill='%23C6C4C5' points='-390,90 -156,225 -156,247 -390,112'/%3E%3Cpolygon fill='%23D7D5D2' points='-156,225 390,-90 390,-68 -156,247'/%3E%3Cpolygon fill='%23EBE8E2' points='-390,90 156,-225 390,-90 -156,225'/%3E%3Cg transform='translate%28169,-97.5%29'%3E%3Cpolygon fill='%23DAD7D4' points='-34,95 96,20 -34,-55 -164,20'/%3E%3Cpolygon fill='%23127F87' stroke='%23127F87' stroke-width='7' stroke-linejoin='round' points='0,75 -130,0 -130,-120 0,-45'/%3E%3Cpolygon fill='%230FA3A3' stroke='%230FA3A3' stroke-width='7' stroke-linejoin='round' points='0,75 130,0 130,-120 0,-45'/%3E%3Cpolygon fill='%237EC9C5' stroke='%237EC9C5' stroke-width='7' stroke-linejoin='round' points='0,-45 130,-120 0,-195 -130,-120'/%3E%3Cpath fill='none' stroke='%23F6F2EA' stroke-opacity='.55' stroke-width='9' stroke-linecap='round' d='M-18,-42 L-112,-96 M-18,-14 L-112,-68 M-18,14 L-112,-40 M18,-42 L84,-80 M18,-14 L84,-52'/%3E%3Ccircle fill='%23F6F2EA' cx='108' cy='-2' r='8'/%3E%3C/g%3E%3Cg transform='translate%280,0%29'%3E%3Cpolygon fill='%23DAD7D4' points='-34,95 96,20 -34,-55 -164,20'/%3E%3Cpolygon fill='%23127F87' stroke='%23127F87' stroke-width='7' stroke-linejoin='round' points='0,75 -130,0 -130,-120 0,-45'/%3E%3Cpolygon fill='%230FA3A3' stroke='%230FA3A3' stroke-width='7' stroke-linejoin='round' points='0,75 130,0 130,-120 0,-45'/%3E%3Cpolygon fill='%237EC9C5' stroke='%237EC9C5' stroke-width='7' stroke-linejoin='round' points='0,-45 130,-120 0,-195 -130,-120'/%3E%3Cpath fill='none' stroke='%23F6F2EA' stroke-opacity='.55' stroke-width='9' stroke-linecap='round' d='M-18,-42 L-112,-96 M-18,-14 L-112,-68 M-18,14 L-112,-40 M18,-42 L84,-80 M18,-14 L84,-52'/%3E%3Ccircle fill='%23F6F2EA' cx='108' cy='-2' r='8'/%3E%3C/g%3E%3Cg transform='translate%28-169,97.5%29'%3E%3Cpolygon fill='%23DAD7D4' points='-34,95 96,20 -34,-55 -164,20'/%3E%3Cpolygon fill='%23127F87' stroke='%23127F87' stroke-width='7' stroke-linejoin='round' points='0,75 -130,0 -130,-120 0,-45'/%3E%3Cpolygon fill='%230FA3A3' stroke='%230FA3A3' stroke-width='7' stroke-linejoin='round' points='0,75 130,0 130,-120 0,-45'/%3E%3Cpolygon fill='%237EC9C5' stroke='%237EC9C5' stroke-width='7' stroke-linejoin='round' points='0,-45 130,-120 0,-195 -130,-120'/%3E%3Cpath fill='none' stroke='%23F6F2EA' stroke-opacity='.55' stroke-width='9' stroke-linecap='round' d='M-18,-42 L-112,-96 M-18,-14 L-112,-68 M-18,14 L-112,-40 M18,-42 L84,-80 M18,-14 L84,-52'/%3E%3Ccircle fill='%23F6F2EA' cx='108' cy='-2' r='8'/%3E%3C/g%3E%3C/svg%3E")
+		center / contain no-repeat;
+	animation: isometric-drop var(--dur) var(--ease) 500ms both;
+}
+[data-theme='isometric'] .layout-big-stat {
+	justify-content: center;
+	padding-bottom: 60px;
+}
+[data-theme='isometric'] .layout-big-stat .slot {
+	flex: none;
+}
+[data-theme='isometric'] .layout-big-stat h1 {
+	font-size: 300px;
+	line-height: 1.05;
+	letter-spacing: -0.02em;
+	color: var(--accent-text);
+	text-shadow:
+		1.7px -1px 0 var(--accent),
+		3.5px -2px 0 var(--accent),
+		5.2px -3px 0 var(--accent),
+		6.9px -4px 0 var(--accent),
+		8.7px -5px 0 var(--accent),
+		10.4px -6px 0 var(--accent),
+		12.1px -7px 0 var(--accent),
+		13.8px -8px 0 var(--accent),
+		15.6px -9px 0 var(--accent),
+		17.3px -10px 0 var(--accent),
+		19px -11px 0 var(--accent),
+		20.8px -12px 0 var(--accent),
+		22.5px -13px 0 var(--accent),
+		24.2px -14px 0 var(--accent),
+		25.9px -15px 0 var(--accent),
+		27.7px -16px 0 var(--accent),
+		29.4px -17px 0 var(--accent),
+		31.1px -18px 0 var(--accent);
+}
+[data-theme='isometric'] .layout-big-stat h1[data-length='medium'] {
+	font-size: 200px;
+}
+[data-theme='isometric'] .layout-big-stat h1[data-length='long'] {
+	font-size: 140px;
+}
+[data-theme='isometric'] .layout-big-stat .slot-caption {
+	max-width: 1000px;
+	margin-top: 30px;
+}
+[data-theme='isometric'] .layout-big-stat .slot-caption p {
+	font-size: 52px;
+	line-height: 1.25;
+	text-wrap: balance;
+}
+[data-theme='isometric'] .layout-big-stat .slot-figure {
+	margin-top: 30px;
+}
+[data-theme='isometric'] .layout-big-stat .slot-figure img {
+	max-height: 220px;
+	border: 12px solid var(--surface);
+	background: var(--surface);
+	box-shadow: -10px 10px 0 var(--shadow);
+}
+
+/* ---------- quote ---------- */
+[data-theme='isometric'] .layout-quote {
+	justify-content: center;
+}
+[data-theme='isometric'] .layout-quote .slot {
+	flex: none;
+}
+[data-theme='isometric'] .layout-quote blockquote::before {
+	content: '\201c';
+	display: block;
+	height: 170px;
+	font: 600 380px/1 var(--font-display);
+	color: var(--accent-text);
+	text-shadow:
+		1.7px -1px 0 var(--accent),
+		3.5px -2px 0 var(--accent),
+		5.2px -3px 0 var(--accent),
+		6.9px -4px 0 var(--accent),
+		8.7px -5px 0 var(--accent),
+		10.4px -6px 0 var(--accent),
+		12.1px -7px 0 var(--accent),
+		13.8px -8px 0 var(--accent),
+		15.6px -9px 0 var(--accent),
+		17.3px -10px 0 var(--accent);
+}
+[data-theme='isometric'] .layout-quote blockquote p {
+	font: 500 124px/1.08 var(--font-display);
+	letter-spacing: -0.012em;
+	text-wrap: balance;
+}
+[data-theme='isometric'] .layout-quote .slot-attribution p {
+	display: flex;
+	align-items: center;
+	gap: 24px;
+	margin-top: 60px;
+	font: 800 48px/1.25 var(--font-body);
+}
+/* A long quote (more than about 90 characters) cannot hold the display size
+ * without overflowing; step down for it. */
+[data-theme='isometric'] .layout-quote blockquote:has(p) {
+	max-width: 1650px;
+}
+
+/* ---------- two columns: two platforms, the second one lit ---------- */
+[data-theme='isometric'] .slide-content > .layout-two-column {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	grid-template-rows: auto auto;
+	column-gap: 72px;
+	align-content: start;
+}
+[data-theme='isometric'] .layout-two-column .slot-default {
+	grid-column: 1 / -1;
+}
+[data-theme='isometric'] .layout-two-column h2 {
+	--h2-size: 88px;
+	--h2-margin: 0 0 32px;
+}
+[data-theme='isometric'] .layout-two-column .slot-left,
+[data-theme='isometric'] .layout-two-column .slot-right {
+	margin: 14px var(--depth-x) 0 0;
+	padding: 36px 44px 40px;
+	background: var(--surface);
+	animation: isometric-drop var(--dur) var(--ease) 250ms both;
+}
+[data-theme='isometric'] .layout-two-column h3 {
+	margin: 0 0 16px;
+}
+[data-theme='isometric'] .layout-two-column li {
+	font-size: 44px;
+	line-height: 1.12;
+}
+[data-theme='isometric'] .layout-two-column .slot > ul {
+	gap: 20px;
+}
+[data-theme='isometric'] .layout-two-column .slot-right {
+	--slab-top: var(--top);
+	--slab-side: var(--side);
+	animation-delay: 450ms;
+}
+[data-theme='isometric'] .layout-two-column .slot-left h3::before {
+	background: conic-gradient(from -60deg, var(--calm-top) 0 120deg, #c1c0c1 0 240deg, var(--calm-side) 0);
+}
+[data-theme='isometric'] .layout-two-column .slot > p {
+	margin-top: 22px;
+	text-wrap: balance;
+}
+[data-theme='isometric'] .layout-two-column .slot > p:has(> strong:first-child) {
+	font-weight: 800;
+	margin-top: 18px;
+}
+[data-theme='isometric'] .layout-two-column .slot > p > strong:only-child {
+	display: block;
+	font: 600 170px/1.1 var(--font-display);
+	letter-spacing: -0.02em;
+}
+
+/* ---------- three columns: three tiers, escalating tone ---------- */
+[data-theme='isometric'] .slide-content > .layout-three-column {
+	display: grid;
+	grid-template-columns: 1fr 1fr 1fr;
+	grid-template-rows: auto auto;
+	column-gap: 48px;
+	align-content: start;
+}
+[data-theme='isometric'] .layout-three-column .slot-default {
+	grid-column: 1 / -1;
+}
+[data-theme='isometric'] .layout-three-column h2 {
+	--h2-size: 88px;
+	--h2-margin: 0 0 32px;
+}
+[data-theme='isometric'] .layout-three-column .slot-left,
+[data-theme='isometric'] .layout-three-column .slot-center,
+[data-theme='isometric'] .layout-three-column .slot-right {
+	margin: 14px var(--depth-x) 0 0;
+	padding: 32px 32px 36px;
+	background: var(--surface);
+	animation: isometric-drop var(--dur) var(--ease) 250ms both;
+}
+[data-theme='isometric'] .layout-three-column h3 {
+	margin: 0 0 14px;
+	font-size: 36px;
+}
+[data-theme='isometric'] .layout-three-column li {
+	line-height: 1.12;
+}
+[data-theme='isometric'] .layout-three-column .slot > ul {
+	gap: 18px;
+}
+[data-theme='isometric'] .layout-three-column .slot-left h3::before {
+	background: conic-gradient(from -60deg, var(--calm-top) 0 120deg, #c1c0c1 0 240deg, var(--calm-side) 0);
+}
+[data-theme='isometric'] .layout-three-column .slot-center {
+	--slab-top: var(--top-light);
+	--slab-side: var(--top);
+	animation-delay: 400ms;
+}
+[data-theme='isometric'] .layout-three-column .slot-center h3::before {
+	background: conic-gradient(from -60deg, var(--top-light) 0 120deg, var(--top) 0 240deg, var(--side) 0);
+}
+[data-theme='isometric'] .layout-three-column .slot-right {
+	--slab-top: var(--top);
+	--slab-side: var(--side);
+	animation-delay: 550ms;
+}
+[data-theme='isometric'] .layout-three-column li {
+	font-size: 44px;
+	padding-left: 56px;
+}
+[data-theme='isometric'] .layout-three-column li::before {
+	width: 32px;
+	height: 38px;
+	top: 6px;
+}
+
+/* ---------- image: a billboard standing on the floor ---------- */
+[data-theme='isometric'] .slide-content > .layout-split-media {
+	display: grid;
+	grid-template-columns: 1fr 800px;
+	column-gap: 40px;
+}
+[data-theme='isometric'] .layout-split-media .slot-default {
+	align-self: center;
+	padding-bottom: 80px;
+}
+[data-theme='isometric'] .layout-split-media h2 {
+	--h2-size: 108px;
+	--h2-margin: 0 0 40px;
+}
+[data-theme='isometric'] .layout-split-media .slot-default p {
+	color: var(--muted);
+	text-wrap: pretty;
+}
+[data-theme='isometric'] .slot-media {
+	position: relative;
+}
+[data-theme='isometric'] .slot-media::before {
+	content: '';
+	position: absolute;
+	left: 90px;
+	top: calc(100% - 80px);
+	width: 650px;
+	height: 130px;
+	background: var(--shadow);
+	transform-origin: 0 0;
+	transform: matrix(0.866, -0.5, 0.866, 0.5, 0, 0);
+	animation: isometric-fade 400ms ease-out 500ms both;
+}
+[data-theme='isometric'] .slot-media p {
+	position: absolute;
+	left: 90px;
+	bottom: 80px;
+	width: 650px;
+	border: 12px solid var(--surface);
+	background: var(--surface);
+	transform-origin: 0 100%;
+	transform: matrix(0.866, -0.5, 0, 1, 0, 0);
+	animation: isometric-drop var(--dur) var(--ease) 300ms both;
+}
+[data-theme='isometric'] .slot-media p img {
+	width: 100%;
+	display: block;
+}
+[data-theme='isometric'] .slot-media p::before {
+	content: '';
+	position: absolute;
+	left: -12px;
+	right: -12px;
+	bottom: calc(100% + 12px);
+	height: 22px;
+	background: var(--top-light);
+	transform-origin: 0 100%;
+	transform: skewX(45deg);
+}
+[data-theme='isometric'] .slot-media p::after {
+	content: '';
+	position: absolute;
+	right: calc(100% + 12px);
+	top: -12px;
+	bottom: -12px;
+	width: 22px;
+	background: var(--accent);
+	transform-origin: 100% 0;
+	transform: skewY(45deg);
+}
+
+/* A plain image on a `default` slot gets the same matte-card treatment,
+ * centered under whatever heading it follows, without the absolute floor
+ * placement the split-media billboard uses. Both parser shapes are covered:
+ * a bare <img> when the image carries an attribute block, and <p><img></p>
+ * otherwise. */
+[data-theme='isometric'] .layout-default .slot:has(> img, > p > img:only-child) {
+	flex: 1;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+}
+[data-theme='isometric'] .layout-default .slot > :is(h1, h2):has(~ img, ~ p > img:only-child) {
+	flex: none;
+}
+[data-theme='isometric'] .layout-default .slot > p:has(> img:only-child) {
+	flex: 1;
+	min-height: 0;
+	margin-top: 40px;
+	display: flex;
+	justify-content: center;
+	align-items: center;
+	animation: isometric-rise var(--dur) var(--ease) 200ms both;
+}
+[data-theme='isometric'] .layout-default .slot > img,
+[data-theme='isometric'] .layout-default .slot > p > img:only-child {
+	width: auto;
+	height: auto;
+	max-width: 100%;
+	max-height: 100%;
+	object-fit: contain;
+	border: 12px solid var(--surface);
+	background: var(--surface);
+	box-shadow: -12px 12px 0 var(--shadow);
+}
+[data-theme='isometric'] .layout-default .slot > img {
+	flex: 0 1 auto;
+	min-height: 0;
+	align-self: center;
+	margin-top: 40px;
+	animation: isometric-rise var(--dur) var(--ease) 200ms both;
+}
+
+/* ---------- table: a stack of plates, the header plate on top ---------- */
+[data-theme='isometric'] .slot > table {
+	display: block;
+	width: 100%;
+	margin-right: var(--depth-x);
+}
+[data-theme='isometric'] thead,
+[data-theme='isometric'] tbody {
+	display: block;
+}
+[data-theme='isometric'] tr {
+	display: grid;
+	grid-auto-flow: column;
+	grid-auto-columns: 1fr;
+	margin-top: 36px;
+	background: var(--surface);
+	animation: isometric-drop var(--dur) var(--ease) both;
+	animation-delay: 300ms;
+}
+[data-theme='isometric'] thead tr {
+	--slab-top: var(--top);
+	--slab-side: var(--side);
+	margin-top: 14px;
+	background: var(--fg);
+	color: var(--bg);
+	animation-delay: 180ms;
+}
+[data-theme='isometric'] tbody tr:nth-child(2) {
+	animation-delay: 420ms;
+}
+[data-theme='isometric'] tbody tr:nth-child(3) {
+	animation-delay: 540ms;
+}
+[data-theme='isometric'] tbody tr:nth-child(n + 4) {
+	animation-delay: 660ms;
+}
+[data-theme='isometric'] th,
+[data-theme='isometric'] td {
+	display: block;
+	text-align: left;
+	padding: 26px 36px;
+	font-size: 48px;
+	line-height: 1.18;
+}
+[data-theme='isometric'] th {
+	font: 800 40px/1.18 var(--font-body);
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+	padding: 22px 36px;
+}
+[data-theme='isometric'] td:first-child {
+	font: 600 50px/1.1 var(--font-display);
+}
+/* Five or more rows tighten to keep the stack on the slide. */
+[data-theme='isometric'] .slot > table:has(tbody tr:nth-child(5)) tr {
+	margin-top: 20px;
+}
+[data-theme='isometric'] .slot > table:has(tbody tr:nth-child(5)) th,
+[data-theme='isometric'] .slot > table:has(tbody tr:nth-child(5)) td {
+	padding: 14px 30px;
+	font-size: 42px;
+}
+[data-theme='isometric'] .slot > table:has(tbody tr:nth-child(5)) td:first-child {
+	font-size: 44px;
+}
+
+/* ---------- cover: the whole frame, text on its own sheet ---------- */
+[data-theme='isometric'] .layout-cover {
+	justify-content: center;
+	align-items: flex-start;
+}
+[data-theme='isometric'] .layout-cover .slot {
+	max-width: 1400px;
+	padding: 72px 88px;
+	background: var(--surface);
+	box-shadow: -16px 16px 0 var(--shadow);
+}
+[data-theme='isometric'] .layout-cover h1 {
+	font-size: 152px;
+	line-height: 1.03;
+	max-width: 100%;
+	text-wrap: balance;
+}
+[data-theme='isometric'] .layout-cover h1[data-length='medium'] {
+	font-size: 118px;
+}
+[data-theme='isometric'] .layout-cover h1[data-length='long'] {
+	font-size: 88px;
+}
+[data-theme='isometric'] .layout-cover p {
+	margin-top: 40px;
+	font-size: 52px;
+	line-height: 1.3;
+	color: var(--muted);
+}
+
+/* ---------- sidebar: the argument, then the receipts ---------- */
+[data-theme='isometric'] .slide-content > .layout-sidebar {
+	display: grid;
+	grid-template-columns: 1fr 0.5fr;
+	column-gap: 64px;
+	align-content: start;
+}
+[data-theme='isometric'] .layout-sidebar h2 {
+	--h2-size: 88px;
+	--h2-margin: 0 0 28px;
+}
+[data-theme='isometric'] .layout-sidebar .slot-default > p {
+	margin-top: 0;
+	line-height: 1.2;
+}
+[data-theme='isometric'] .layout-sidebar .slot-default > ul {
+	margin-top: 20px;
+	gap: 16px;
+}
+[data-theme='isometric'] .layout-sidebar .slot-default > ul > li {
+	line-height: 1.08;
+}
+[data-theme='isometric'] .layout-sidebar .slot-default > ul > li:nth-child(2) {
+	margin-left: 32px;
+}
+[data-theme='isometric'] .layout-sidebar .slot-default > ul > li:nth-child(n + 3) {
+	margin-left: 64px;
+}
+[data-theme='isometric'] .layout-sidebar .slot-sidebar {
+	margin: 14px var(--depth-x) 0 0;
+	padding: 44px 44px 48px;
+	background: var(--surface);
+}
+[data-theme='isometric'] .layout-sidebar .slot-sidebar h3 {
+	margin-top: 0;
+}
+[data-theme='isometric'] .layout-sidebar .slot-sidebar h3::before {
+	background: conic-gradient(from -60deg, var(--calm-top) 0 120deg, #c1c0c1 0 240deg, var(--calm-side) 0);
+}
+[data-theme='isometric'] .layout-sidebar .slot-sidebar li {
+	font-size: 42px;
+	line-height: 1.2;
+	padding-left: 56px;
+}
+[data-theme='isometric'] .layout-sidebar .slot-sidebar li::before {
+	width: 32px;
+	height: 38px;
+	top: 6px;
+}
+[data-theme='isometric'] .layout-sidebar .slot-sidebar .slot > ul,
+[data-theme='isometric'] .layout-sidebar .slot-sidebar ul {
+	gap: 20px;
+}
+
+/* ---------- blank: no chrome, just centered content ---------- */
+[data-theme='isometric'] .layout-blank {
+	justify-content: center;
+	align-items: center;
+}
+[data-theme='isometric'] .layout-blank .slot {
+	max-width: 1600px;
+}
+
+/* ---------- diagram ---------- */
+/*
+ * The row that holds the diagram sizes to its own content (`auto`, with
+ * `align-content: start` so an auto row never stretches to fill the grid's
+ * leftover height) rather than to the slide's full remaining space. A wide,
+ * flat diagram (mermaid's default `xMidYMid meet` scaling) would otherwise
+ * sit centered inside an artificially tall box, reading as a large empty
+ * gap above and below it; sized to its own content, it instead sits right
+ * under the heading at its natural, unstretched height.
+ */
+[data-theme='isometric'] .slot:has(> .mermaid-diagram) {
+	flex: 1;
+	min-height: 0;
+	display: grid;
+	grid-template-columns: 500px 1fr;
+	grid-template-rows: auto auto;
+	align-content: start;
+	column-gap: 40px;
+}
+[data-theme='isometric'] .slot:has(> .mermaid-diagram) h2 {
+	--h2-size: 108px;
+	--h2-margin: 0 0 20px;
+	grid-column: 1 / -1;
+}
+[data-theme='isometric'] .mermaid-diagram {
+	grid-column: 2;
+	grid-row: 2;
+	min-height: 0;
+	display: flex;
+	justify-content: flex-start;
+	align-items: center;
+	animation: isometric-drop var(--dur) var(--ease) 300ms both;
+}
+[data-theme='isometric'] .mermaid-diagram ~ p {
+	grid-column: 1;
+	grid-row: 2;
+	align-self: center;
+	text-wrap: pretty;
+}
+[data-theme='isometric'] .mermaid-diagram {
+	width: 100%;
+	height: auto;
+	/* Caps a tall diagram now that the row no longer stretches to fill the
+	 * slide (see the grid rule above); a wide, flat one never gets near
+	 * this and just renders at its own natural, unstretched height. */
+	max-height: 620px;
+}
+[data-theme='isometric'] .mermaid-diagram svg {
+	/* height: auto (not 100%) lets the SVG's own viewBox aspect ratio set
+	 * its rendered height from the full available width, instead of
+	 * stretching to fill a container taller than the diagram itself. */
+	width: 100% !important;
+	height: auto !important;
+	max-width: 100% !important;
+	max-height: 620px !important;
+	overflow: visible;
+}
+[data-theme='isometric'] .mermaid-diagram foreignObject {
+	overflow: visible;
+}
+/* Mermaid draws labels as <p> inside foreignObject; reset the inherited
+ * 60px slide body size to the diagram's own literal font size. */
+[data-theme='isometric'] .mermaid-diagram p {
+	font-family: 'Nunito', sans-serif;
+	font-size: 40px;
+	font-weight: 400;
+	line-height: 1.25;
+	letter-spacing: normal;
+	white-space: normal;
+	text-wrap: initial;
+	margin: 0;
+	color: var(--fg);
+	animation: none;
+}
+[data-theme='isometric'] .mermaid-diagram .node .label-container {
+	stroke-width: 5px !important;
+	stroke-linejoin: round;
+	filter:
+		drop-shadow(1.7px -1px 0 #127f87) drop-shadow(1.7px -1px 0 #127f87) drop-shadow(3.5px -2px 0 #127f87)
+			drop-shadow(7px -4px 0 #127f87);
+}
+[data-theme='isometric'] .mermaid-diagram .node.quiet .label-container {
+	filter:
+		drop-shadow(1.7px -1px 0 #93949d) drop-shadow(1.7px -1px 0 #93949d) drop-shadow(3.5px -2px 0 #93949d)
+			drop-shadow(7px -4px 0 #93949d);
+}
+[data-theme='isometric'] .mermaid-diagram .edgePaths path,
+[data-theme='isometric'] .mermaid-diagram .flowchart-link {
+	stroke-width: 5px !important;
+	stroke-linecap: round;
+}
+
+/* ---------- scroll slide ---------- */
+[data-theme='isometric'] .scroll-content {
+	position: relative;
+}
+[data-theme='isometric'] .scroll-content pre.shiki {
+	margin-right: 0;
+}
+[data-theme='isometric'] .scroll-content pre.shiki::after {
+	display: none;
+}
+
+/* ---------- live code block chrome ----------
+ * Structure and behavior come from rich-blocks.css, which reads the
+ * --color-* bridge above. Only the run button and containers get a small
+ * toy-block shadow so they read as part of the same solid-on-a-floor system
+ * without repeating the full skewed slab (which would fight the button's
+ * own rounded corners). */
+[data-theme='isometric'] .live-code-block .run-button {
+	background-color: var(--accent);
+	color: var(--fg);
+	font-family: var(--font-body);
+	font-weight: 800;
+	box-shadow: -6px 6px 0 var(--side);
+}
+[data-theme='isometric'] .live-code-block .code-container pre {
+	border: 0;
+	box-shadow: -10px 10px 0 var(--shadow);
+}
+[data-theme='isometric'] .live-code-block .result-container {
+	border: 3px solid var(--calm-side);
+}
+/*
+ * The shared fix in rich-blocks.css already resets font-size and makes the
+ * holding slot a shrinkable flex column; this theme only adds its own
+ * border treatment on top.
+ */
+[data-theme='isometric'] .asciinema-player-wrapper {
+	margin-top: 32px;
+	border: 12px solid var(--surface);
+	background: var(--surface);
+	box-shadow: -10px 10px 0 var(--shadow);
+}
+/*
+ * Before the CDN player library loads (or if it fails to), the raw fence
+ * sits in the DOM as plain code. Give it the same 40px code size so a slow
+ * or offline load never reads as a minimum-size failure.
+ */
+[data-theme='isometric'] .slot pre > code.language-asciinema {
+	font-size: 40px;
+}
+
+/* ---------- map slide ---------- */
+[data-theme='isometric'] .map-slide {
+	background: var(--surface);
+}
+[data-theme='isometric'] .map-content-overlay {
+	pointer-events: none;
+}

@@ -1,24 +1,31 @@
 import js from '@eslint/js'
 import ts from '@typescript-eslint/eslint-plugin'
 import tsParser from '@typescript-eslint/parser'
-import svelte from 'eslint-plugin-svelte'
-import svelteParser from 'svelte-eslint-parser'
+import reactHooks from 'eslint-plugin-react-hooks'
 import globals from 'globals'
 
 export default [
   // Global ignores
   {
-    ignores: ['node_modules/**', 'dist/**', '../embedded/**', '*.config.js', '*.config.ts', '**/*.test.ts', '**/*.spec.ts'],
+    ignores: ['node_modules/**', 'dist/**', '../embedded/**', '*.config.js', '*.config.ts', '**/*.test.ts', '**/*.test.tsx', '**/*.spec.ts', 'e2e-themes/**'],
   },
   js.configs.recommended,
-  // TypeScript files in src
+  // Plain Node scripts (e.g. the theme token extractor)
   {
-    files: ['src/**/*.ts'],
+    files: ['scripts/**/*.mjs'],
+    languageOptions: {
+      globals: {
+        ...globals.node,
+      },
+    },
+  },
+  // TypeScript and TSX files in src
+  {
+    files: ['src/**/*.ts', 'src/**/*.tsx'],
     languageOptions: {
       parser: tsParser,
       parserOptions: {
         project: ['./tsconfig.app.json'],
-        extraFileExtensions: ['.svelte'],
       },
       globals: {
         ...globals.browser,
@@ -26,36 +33,14 @@ export default [
     },
     plugins: {
       '@typescript-eslint': ts,
+      'react-hooks': reactHooks,
     },
     rules: {
       ...ts.configs.recommended.rules,
+      ...reactHooks.configs.recommended.rules,
       '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
       '@typescript-eslint/explicit-function-return-type': 'off',
       '@typescript-eslint/explicit-module-boundary-types': 'off',
-    },
-  },
-  // Svelte files
-  {
-    files: ['**/*.svelte'],
-    languageOptions: {
-      parser: svelteParser,
-      parserOptions: {
-        parser: tsParser,
-        project: ['./tsconfig.app.json'],
-        extraFileExtensions: ['.svelte'],
-      },
-      globals: {
-        ...globals.browser,
-      },
-    },
-    plugins: {
-      '@typescript-eslint': ts,
-      svelte,
-    },
-    rules: {
-      ...svelte.configs.recommended.rules,
-      ...ts.configs.recommended.rules,
-      '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
     },
   },
 ]

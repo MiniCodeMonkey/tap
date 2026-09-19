@@ -2,451 +2,437 @@
  * Mermaid diagram initialization and configuration utilities.
  * Handles mermaid.js setup with manual initialization (startOnLoad: false).
  */
-import mermaid from 'mermaid'
-import type { Theme } from '$lib/types'
+import mermaid from 'mermaid';
 
-let isInitialized = false
-let currentTheme: Theme | undefined
+let isInitialized = false;
+let currentConfigKey: string | undefined;
+
+/**
+ * Mermaid theme variables. Colors are literal values, not CSS custom
+ * properties: mermaid's theming engine parses each one to derive shades
+ * (borders, gradients) and throws on a `var(...)` string it can't parse as
+ * a color.
+ */
+export interface MermaidThemeVariables {
+	primaryColor?: string;
+	primaryTextColor?: string;
+	primaryBorderColor?: string;
+	lineColor?: string;
+	secondaryColor?: string;
+	tertiaryColor?: string;
+	background?: string;
+	mainBkg?: string;
+	fontFamily?: string;
+	fontSize?: string;
+	nodeBorder?: string;
+	clusterBkg?: string;
+	clusterBorder?: string;
+	edgeLabelBackground?: string;
+	textColor?: string;
+	titleColor?: string;
+	nodeTextColor?: string;
+}
 
 /**
  * Mermaid theme configuration type.
  * Represents the configuration object passed to mermaid.initialize().
  */
 export interface MermaidThemeConfig {
-  theme: 'default' | 'dark' | 'forest' | 'neutral' | 'base'
-  themeVariables: {
-    primaryColor?: string
-    primaryTextColor?: string
-    primaryBorderColor?: string
-    lineColor?: string
-    secondaryColor?: string
-    tertiaryColor?: string
-    background?: string
-    mainBkg?: string
-    fontFamily?: string
-    fontSize?: string
-    nodeBorder?: string
-    clusterBkg?: string
-    clusterBorder?: string
-    edgeLabelBackground?: string
-    textColor?: string
-    titleColor?: string
-    nodeTextColor?: string
-  }
+	theme: 'base';
+	themeVariables: MermaidThemeVariables;
+	curve: 'basis' | 'linear' | 'natural' | 'step' | 'stepAfter' | 'stepBefore';
 }
 
 /**
+ * Overrides a later task can pass to customize the theme per Tap theme,
+ * without changing how rendering itself works.
+ */
+export interface MermaidThemeOverrides {
+	/** Theme variable overrides, merged over the base defaults. */
+	themeVariables?: MermaidThemeVariables;
+	/**
+	 * CSS declarations (mermaid `classDef` syntax, comma-separated, e.g.
+	 * `"fill:#0f1a16,stroke:#9db8a8,color:#dcebe0"`) for nodes a diagram
+	 * marks with the `quiet` class, for app-server or background nodes that
+	 * should recede. Also drops the edge label background box when set, for
+	 * a plainer look.
+	 */
+	quietStyle?: string;
+	/** Line curve style for flowchart edges. */
+	curve?: MermaidThemeConfig['curve'];
+}
+
+/**
+ * Default theme variables for the `base` Tap theme, matching the literal
+ * colors in `lib/themes/base.css`. `fontFamily` is a single bare family
+ * name because mermaid silently ignores a value with commas or quotes and
+ * measures labels in the wrong font as a result.
+ */
+const BASE_THEME_VARIABLES: MermaidThemeVariables = {
+	primaryColor: '#ffffff',
+	primaryTextColor: '#18181b',
+	primaryBorderColor: '#2563eb',
+	lineColor: '#52525b',
+	secondaryColor: 'rgba(0, 0, 0, 0.02)',
+	tertiaryColor: '#ffffff',
+	background: '#ffffff',
+	mainBkg: '#ffffff',
+	fontFamily: 'Inter',
+	fontSize: '18px',
+	nodeBorder: '#2563eb',
+	clusterBkg: 'rgba(0, 0, 0, 0.02)',
+	clusterBorder: 'rgba(24, 24, 27, 0.12)',
+	edgeLabelBackground: '#ffffff',
+	textColor: '#18181b',
+	titleColor: '#2563eb',
+	nodeTextColor: '#18181b'
+};
+
+/**
  * Get mermaid theme configuration for a tap presentation theme.
- * Maps tap themes to mermaid theme settings with appropriate colors and fonts.
- * Font sizes are optimized for presentation scale (18-20px base).
+ * `base` is the only Tap theme, so this always builds from
+ * `BASE_THEME_VARIABLES`, merging in any overrides a caller passes.
  *
- * @param theme The tap presentation theme
+ * @param overrides Theme variable, quiet-style, and curve overrides
  * @returns Mermaid theme configuration
  */
-export function getMermaidTheme(theme: Theme): MermaidThemeConfig {
-  switch (theme) {
-    case 'paper':
-      return {
-        theme: 'neutral',
-        themeVariables: {
-          // Paper: Clean light theme with blue accent (#2563eb) matching theme
-          primaryColor: '#f0f4ff', // Subtle blue-tinted light background
-          primaryTextColor: '#18181b', // Near-black text
-          primaryBorderColor: '#2563eb', // Blue accent from theme
-          lineColor: '#64748b', // Muted gray for clean lines
-          secondaryColor: '#f8fafc', // Very light surface
-          tertiaryColor: '#ffffff',
-          background: '#fafafa', // Match theme background
-          mainBkg: '#f0f4ff', // Subtle blue tint
-          fontFamily:
-            'Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
-          fontSize: '18px', // Larger for presentation scale
-          nodeBorder: '#2563eb', // Blue accent
-          clusterBkg: '#f8fafc',
-          clusterBorder: '#cbd5e1', // Subtle gray border
-          edgeLabelBackground: '#ffffff',
-          textColor: '#18181b',
-          titleColor: '#2563eb', // Blue accent for titles
-          nodeTextColor: '#18181b',
-        },
-      }
+export function getMermaidTheme(overrides?: MermaidThemeOverrides): MermaidThemeConfig {
+	const themeVariables: MermaidThemeVariables = {
+		...BASE_THEME_VARIABLES,
+		...(overrides?.quietStyle ? { edgeLabelBackground: 'transparent' } : {}),
+		...overrides?.themeVariables
+	};
 
-    case 'noir':
-      return {
-        theme: 'dark',
-        themeVariables: {
-          // Noir: Cinematic dark theme with refined gold accent (#c9a227)
-          primaryColor: '#1a1a1a', // Deep charcoal nodes
-          primaryTextColor: '#f5f5f5', // Light text
-          primaryBorderColor: '#c9a227', // Refined gold accent
-          lineColor: '#c9a227', // Gold lines for elegance
-          secondaryColor: '#141414', // Slightly lighter dark
-          tertiaryColor: '#0f0f0f',
-          background: '#0a0a0a', // True dark background
-          mainBkg: '#181818', // Elevated surface
-          fontFamily:
-            'Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
-          fontSize: '18px', // Larger for presentation scale
-          nodeBorder: '#c9a227', // Gold accent
-          clusterBkg: '#121212',
-          clusterBorder: 'rgba(201, 162, 39, 0.5)', // Muted gold border
-          edgeLabelBackground: '#181818',
-          textColor: '#f5f5f5',
-          titleColor: '#c9a227', // Gold titles
-          nodeTextColor: '#f5f5f5',
-        },
-      }
-
-    case 'aurora':
-      return {
-        theme: 'dark',
-        themeVariables: {
-          // Aurora: Vibrant gradients with cyan/teal accents
-          primaryColor: '#1e1b4b', // Deep indigo for nodes
-          primaryTextColor: '#ffffff',
-          primaryBorderColor: '#22d3ee', // Cyan accent from theme
-          lineColor: '#0ea5e9', // Electric blue lines
-          secondaryColor: '#312e81', // Deep purple
-          tertiaryColor: '#0f0a1f',
-          background: '#0a0614', // Deep aurora background
-          mainBkg: '#1e1b4b', // Indigo node background
-          fontFamily:
-            "'Space Grotesk', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif",
-          fontSize: '18px', // Larger for presentation scale
-          nodeBorder: '#22d3ee', // Cyan border
-          clusterBkg: 'rgba(91, 33, 182, 0.3)', // Purple cluster
-          clusterBorder: '#7c3aed', // Violet border
-          edgeLabelBackground: '#1e1b4b',
-          textColor: '#ffffff',
-          titleColor: '#22d3ee', // Cyan titles
-          nodeTextColor: '#ffffff',
-        },
-      }
-
-    case 'phosphor':
-      return {
-        theme: 'dark',
-        themeVariables: {
-          // Phosphor: CRT terminal with P3 phosphor green (#39ff14)
-          primaryColor: '#0a1a0a', // Very dark green for nodes
-          primaryTextColor: '#39ff14', // P3 phosphor green
-          primaryBorderColor: '#39ff14',
-          lineColor: '#30d912', // Slightly dimmer green for lines
-          secondaryColor: '#081408',
-          tertiaryColor: '#050505',
-          background: '#050505', // Softened CRT black
-          mainBkg: '#0a1a0a', // Dark green node background
-          fontFamily:
-            "'JetBrains Mono', 'SF Mono', Monaco, 'Cascadia Code', Consolas, 'Liberation Mono', Menlo, monospace",
-          fontSize: '18px', // Larger for presentation scale
-          nodeBorder: '#39ff14', // Phosphor green border
-          clusterBkg: '#081408',
-          clusterBorder: '#228b22', // Dimmer green for clusters
-          edgeLabelBackground: '#050505',
-          textColor: '#39ff14',
-          titleColor: '#39ff14',
-          nodeTextColor: '#39ff14',
-        },
-      }
-
-    case 'poster':
-      return {
-        theme: 'dark',
-        themeVariables: {
-          // Poster: High contrast with red accent (#ff4d4d), bold aesthetic
-          primaryColor: '#0a0a0a', // Pure black nodes
-          primaryTextColor: '#ffffff', // Pure white text
-          primaryBorderColor: '#ffffff', // White borders for contrast
-          lineColor: '#ff4d4d', // Red accent for lines
-          secondaryColor: '#111111',
-          tertiaryColor: '#000000',
-          background: '#0a0a0a', // Dark background
-          mainBkg: '#0a0a0a', // Black node background
-          fontFamily:
-            "'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
-          fontSize: '20px', // Extra large for bold poster aesthetic
-          nodeBorder: '#ffffff', // White borders
-          clusterBkg: '#111111',
-          clusterBorder: '#ff4d4d', // Red cluster borders
-          edgeLabelBackground: '#0a0a0a',
-          textColor: '#ffffff',
-          titleColor: '#ff4d4d', // Red titles
-          nodeTextColor: '#ffffff',
-        },
-      }
-
-    default:
-      return {
-        theme: 'default',
-        themeVariables: {
-          fontFamily:
-            'Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
-          fontSize: '18px',
-        },
-      }
-  }
+	return {
+		theme: 'base',
+		themeVariables,
+		curve: overrides?.curve ?? 'basis'
+	};
 }
 
 /**
  * Initialize mermaid with default configuration.
  * Uses startOnLoad: false for manual control over diagram rendering.
- * Safe to call multiple times - will only reinitialize if theme changes.
+ * Safe to call multiple times - will only reinitialize if the configuration changed.
  *
- * @param theme Optional tap theme to use for styling diagrams
+ * @param overrides Optional theme overrides to use for styling diagrams
  */
-export function initializeMermaid(theme?: Theme): void {
-  // Skip if already initialized with the same theme
-  if (isInitialized && currentTheme === theme) {
-    return
-  }
+export function initializeMermaid(overrides?: MermaidThemeOverrides): void {
+	const configKey = JSON.stringify(overrides ?? {});
 
-  const themeConfig = theme ? getMermaidTheme(theme) : { theme: 'default' as const, themeVariables: {} }
+	// Skip if already initialized with the same configuration
+	if (isInitialized && currentConfigKey === configKey) {
+		return;
+	}
 
-  mermaid.initialize({
-    startOnLoad: false,
-    securityLevel: 'strict',
-    ...themeConfig,
-    flowchart: {
-      htmlLabels: true,
-      nodeSpacing: 50,
-      rankSpacing: 50,
-      padding: 15,
-      useMaxWidth: false,
-      curve: 'basis',
-      wrappingWidth: 300,
-    },
-  })
+	const themeConfig = getMermaidTheme(overrides);
 
-  isInitialized = true
-  currentTheme = theme
+	mermaid.initialize({
+		startOnLoad: false,
+		securityLevel: 'strict',
+		theme: themeConfig.theme,
+		themeVariables: themeConfig.themeVariables,
+		flowchart: {
+			htmlLabels: true,
+			nodeSpacing: 50,
+			rankSpacing: 50,
+			padding: 15,
+			useMaxWidth: false,
+			curve: themeConfig.curve,
+			wrappingWidth: 300
+		}
+	});
+
+	isInitialized = true;
+	currentConfigKey = configKey;
 }
 
 /**
  * Check if mermaid has been initialized.
  */
 export function isMermaidInitialized(): boolean {
-  return isInitialized
+	return isInitialized;
 }
 
 /**
  * Reset initialization state (primarily for testing).
  */
 export function resetMermaidInitialization(): void {
-  isInitialized = false
-  currentTheme = undefined
-}
-
-/**
- * Get the current theme used for mermaid initialization.
- */
-export function getCurrentMermaidTheme(): Theme | undefined {
-  return currentTheme
+	isInitialized = false;
+	currentConfigKey = undefined;
 }
 
 /**
  * Get the mermaid instance for direct access if needed.
  */
 export function getMermaid() {
-  return mermaid
+	return mermaid;
 }
 
 /**
  * Counter for generating unique IDs for mermaid diagrams.
  */
-let diagramCounter = 0
+let diagramCounter = 0;
 
 /**
  * Reset the diagram counter (primarily for testing).
  */
 export function resetDiagramCounter(): void {
-  diagramCounter = 0
+	diagramCounter = 0;
 }
 
 /**
  * Result of rendering a mermaid diagram.
  */
 export interface MermaidRenderResult {
-  /** The rendered SVG string */
-  svg: string
-  /** Whether the render was successful */
-  success: true
+	/** The rendered SVG string */
+	svg: string;
+	/** Whether the render was successful */
+	success: true;
 }
 
 /**
  * Error result when mermaid rendering fails.
  */
 export interface MermaidRenderError {
-  /** Whether the render was successful */
-  success: false
-  /** The error message */
-  error: string
-  /** The original mermaid code */
-  code: string
+	/** Whether the render was successful */
+	success: false;
+	/** The error message */
+	error: string;
+	/** The original mermaid code */
+	code: string;
+}
+
+/**
+ * Wait for web fonts to finish loading before mermaid measures label text.
+ * Mermaid lays out diagrams synchronously against whatever font is active
+ * at render time, so rendering before fonts are ready produces wrong label
+ * widths. `document.fonts` is unavailable in some test environments, so
+ * this is a no-op there.
+ */
+async function waitForFonts(): Promise<void> {
+	if (typeof document !== 'undefined' && document.fonts?.ready) {
+		await document.fonts.ready;
+	}
+}
+
+/**
+ * Append a `classDef quiet <declarations>` line to mermaid source, so a
+ * diagram that marks nodes with `class nodeName quiet` picks up the theme's
+ * quiet styling. A no-op when the theme sets no quiet style, or the diagram
+ * already defines its own `quiet` class.
+ */
+function withQuietClassDef(code: string, quietStyle: string | undefined): string {
+	if (!quietStyle || /classDef\s+quiet\b/.test(code)) {
+		return code;
+	}
+	return `${code}\nclassDef quiet ${quietStyle}`;
 }
 
 /**
  * Render a mermaid diagram from code.
  *
  * @param code The mermaid diagram code
- * @param theme Optional tap theme to use for styling
+ * @param overrides Optional theme overrides to use for styling
  * @returns Promise resolving to the rendered SVG or error
  */
 export async function renderMermaidDiagram(
-  code: string,
-  theme?: Theme
+	code: string,
+	overrides?: MermaidThemeOverrides
 ): Promise<MermaidRenderResult | MermaidRenderError> {
-  initializeMermaid(theme)
+	initializeMermaid(overrides);
+	await waitForFonts();
 
-  const id = `mermaid-diagram-${++diagramCounter}`
+	const id = `mermaid-diagram-${++diagramCounter}`;
+	const renderedCode = withQuietClassDef(code, overrides?.quietStyle);
 
-  try {
-    const { svg } = await mermaid.render(id, code)
-    return { svg, success: true }
-  } catch (err) {
-    const errorMessage = err instanceof Error ? err.message : String(err)
-    return {
-      success: false,
-      error: errorMessage,
-      code,
-    }
-  }
+	try {
+		const { svg } = await mermaid.render(id, renderedCode);
+		return { svg, success: true };
+	} catch (err) {
+		const errorMessage = err instanceof Error ? err.message : String(err);
+		return {
+			success: false,
+			error: errorMessage,
+			code
+		};
+	}
 }
 
 /**
  * Find and render all mermaid code blocks within an element.
  * Replaces <pre><code class="language-mermaid"> blocks with rendered SVGs.
- * Also re-renders existing mermaid diagrams when theme changes.
+ * Also re-renders existing mermaid diagrams when the configuration changes.
  *
  * @param element The DOM element to search within
- * @param theme Optional tap theme to use for styling diagrams
+ * @param overrides Optional theme overrides to use for styling diagrams
  * @returns Promise resolving when all diagrams are rendered
  */
 export async function renderMermaidBlocksInElement(
-  element: HTMLElement,
-  theme?: Theme
+	element: HTMLElement,
+	overrides?: MermaidThemeOverrides
 ): Promise<void> {
-  // Find all unrendered mermaid code blocks
-  const codeBlocks = element.querySelectorAll<HTMLElement>(
-    'pre > code.language-mermaid'
-  )
+	const configKey = JSON.stringify(overrides ?? {});
 
-  // Find all already-rendered diagrams that may need theme update
-  const existingDiagrams = element.querySelectorAll<HTMLElement>(
-    '.mermaid-diagram[data-mermaid-code]'
-  )
+	// Scoped to .slot descendants throughout: a layout can render DOM a deck
+	// component owns outside of a slot, and rich-block processing must never
+	// mutate that DOM.
+	// Find all unrendered mermaid code blocks
+	const codeBlocks = element.querySelectorAll<HTMLElement>('.slot pre > code.language-mermaid');
 
-  // Also find error containers that have stored code for retry
-  const errorContainers = element.querySelectorAll<HTMLElement>(
-    '.mermaid-error[data-mermaid-code]'
-  )
+	// Find all already-rendered diagrams that may need a re-render
+	const existingDiagrams = element.querySelectorAll<HTMLElement>(
+		'.slot .mermaid-diagram[data-mermaid-code]'
+	);
 
-  if (codeBlocks.length === 0 && existingDiagrams.length === 0 && errorContainers.length === 0) {
-    return
-  }
+	// Also find error containers that have stored code for retry
+	const errorContainers = element.querySelectorAll<HTMLElement>('.slot .mermaid-error[data-mermaid-code]');
 
-  // Render new mermaid code blocks
-  const newBlockPromises = Array.from(codeBlocks).map(async (codeBlock) => {
-    const pre = codeBlock.parentElement
-    if (!pre) return
+	if (codeBlocks.length === 0 && existingDiagrams.length === 0 && errorContainers.length === 0) {
+		return;
+	}
 
-    const code = codeBlock.textContent ?? ''
-    const result = await renderMermaidDiagram(code, theme)
+	// Render new mermaid code blocks
+	const newBlockPromises = Array.from(codeBlocks).map(async (codeBlock) => {
+		const pre = codeBlock.parentElement;
+		if (!pre) return;
 
-    if (result.success) {
-      // Create container for the rendered diagram, storing the code for re-rendering
-      const container = document.createElement('div')
-      container.className = 'mermaid-diagram'
-      container.dataset.mermaidCode = code
-      container.dataset.mermaidTheme = theme ?? ''
-      container.innerHTML = result.svg
-      // Fix foreignObject text clipping by expanding widths
-      fixForeignObjectWidths(container)
-      pre.replaceWith(container)
-    } else {
-      // Show error message, storing the code for potential re-render
-      const errorContainer = document.createElement('div')
-      errorContainer.className = 'mermaid-error'
-      errorContainer.dataset.mermaidCode = code
-      errorContainer.dataset.mermaidTheme = theme ?? ''
-      errorContainer.innerHTML = `
+		// The host slide may have been unmounted by rapid navigation since
+		// this pass started; skip this block's render work instead of doing
+		// it for an element nothing will ever show.
+		if (!pre.isConnected) return;
+
+		const code = codeBlock.textContent ?? '';
+		// Claim this element for this configuration before awaiting, so that
+		// if another call (e.g. the theme's config resolving shortly after an
+		// initial render with the base config) is racing to render this same
+		// block, only the render whose configuration was requested last gets
+		// applied below: an earlier request finishing after a later one has
+		// nothing to overwrite it with, since it's no longer the latest claim.
+		pre.dataset.mermaidPendingConfig = configKey;
+		const result = await renderMermaidDiagram(code, overrides);
+
+		if (pre.dataset.mermaidPendingConfig !== configKey) {
+			// A newer render request for this block landed while this one was
+			// pending; drop this stale result.
+			return;
+		}
+
+		if (result.success) {
+			// Create container for the rendered diagram, storing the code for re-rendering
+			const container = document.createElement('div');
+			container.className = 'mermaid-diagram';
+			container.dataset.mermaidCode = code;
+			container.dataset.mermaidConfig = configKey;
+			container.innerHTML = result.svg;
+			// Fix foreignObject text clipping by expanding widths
+			fixForeignObjectWidths(container);
+			pre.replaceWith(container);
+		} else {
+			// Show error message, storing the code for potential re-render
+			const errorContainer = document.createElement('div');
+			errorContainer.className = 'mermaid-error';
+			errorContainer.dataset.mermaidCode = code;
+			errorContainer.dataset.mermaidConfig = configKey;
+			errorContainer.innerHTML = `
         <div class="mermaid-error-message">Mermaid diagram error: ${escapeHtml(result.error)}</div>
         <pre class="mermaid-error-code"><code>${escapeHtml(result.code)}</code></pre>
-      `
-      pre.replaceWith(errorContainer)
-    }
-  })
+      `;
+			pre.replaceWith(errorContainer);
+		}
+	});
 
-  // Re-render existing diagrams if theme has changed
-  const existingDiagramPromises = Array.from(existingDiagrams).map(async (diagram) => {
-    const code = diagram.dataset.mermaidCode
-    const previousTheme = diagram.dataset.mermaidTheme
+	// Re-render existing diagrams if the configuration has changed
+	const existingDiagramPromises = Array.from(existingDiagrams).map(async (diagram) => {
+		const code = diagram.dataset.mermaidCode;
+		const previousConfig = diagram.dataset.mermaidConfig;
 
-    // Skip if no code stored or theme hasn't changed
-    if (!code || previousTheme === (theme ?? '')) {
-      return
-    }
+		// Skip if no code stored or configuration hasn't changed
+		if (!code || previousConfig === configKey) {
+			return;
+		}
 
-    const result = await renderMermaidDiagram(code, theme)
+		// See newBlockPromises above: skip a detached element's render work.
+		if (!diagram.isConnected) return;
 
-    if (result.success) {
-      diagram.innerHTML = result.svg
-      diagram.dataset.mermaidTheme = theme ?? ''
-      // Fix foreignObject text clipping
-      fixForeignObjectWidths(diagram)
-    } else {
-      // Convert to error container
-      const errorContainer = document.createElement('div')
-      errorContainer.className = 'mermaid-error'
-      errorContainer.dataset.mermaidCode = code
-      errorContainer.dataset.mermaidTheme = theme ?? ''
-      errorContainer.innerHTML = `
+		// See the newBlockPromises claim above: guards against a stale render
+		// from an earlier configuration overwriting a newer one.
+		diagram.dataset.mermaidPendingConfig = configKey;
+		const result = await renderMermaidDiagram(code, overrides);
+
+		if (diagram.dataset.mermaidPendingConfig !== configKey) {
+			return;
+		}
+
+		if (result.success) {
+			diagram.innerHTML = result.svg;
+			diagram.dataset.mermaidConfig = configKey;
+			// Fix foreignObject text clipping
+			fixForeignObjectWidths(diagram);
+		} else {
+			// Convert to error container
+			const errorContainer = document.createElement('div');
+			errorContainer.className = 'mermaid-error';
+			errorContainer.dataset.mermaidCode = code;
+			errorContainer.dataset.mermaidConfig = configKey;
+			errorContainer.innerHTML = `
         <div class="mermaid-error-message">Mermaid diagram error: ${escapeHtml(result.error)}</div>
         <pre class="mermaid-error-code"><code>${escapeHtml(result.code)}</code></pre>
-      `
-      diagram.replaceWith(errorContainer)
-    }
-  })
+      `;
+			diagram.replaceWith(errorContainer);
+		}
+	});
 
-  // Re-render error containers (in case new theme fixes the issue)
-  const errorContainerPromises = Array.from(errorContainers).map(async (errorContainer) => {
-    const code = errorContainer.dataset.mermaidCode
-    const previousTheme = errorContainer.dataset.mermaidTheme
+	// Re-render error containers (in case the new configuration fixes the issue)
+	const errorContainerPromises = Array.from(errorContainers).map(async (errorContainer) => {
+		const code = errorContainer.dataset.mermaidCode;
+		const previousConfig = errorContainer.dataset.mermaidConfig;
 
-    // Skip if no code stored or theme hasn't changed
-    if (!code || previousTheme === (theme ?? '')) {
-      return
-    }
+		// Skip if no code stored or configuration hasn't changed
+		if (!code || previousConfig === configKey) {
+			return;
+		}
 
-    const result = await renderMermaidDiagram(code, theme)
+		// See newBlockPromises above: skip a detached element's render work.
+		if (!errorContainer.isConnected) return;
 
-    if (result.success) {
-      // Convert to successful diagram
-      const container = document.createElement('div')
-      container.className = 'mermaid-diagram'
-      container.dataset.mermaidCode = code
-      container.dataset.mermaidTheme = theme ?? ''
-      container.innerHTML = result.svg
-      errorContainer.replaceWith(container)
-    } else {
-      // Update error with new theme
-      errorContainer.dataset.mermaidTheme = theme ?? ''
-      const messageEl = errorContainer.querySelector('.mermaid-error-message')
-      if (messageEl) {
-        messageEl.textContent = `Mermaid diagram error: ${result.error}`
-      }
-    }
-  })
+		// See the newBlockPromises claim above: guards against a stale render
+		// from an earlier configuration overwriting a newer one.
+		errorContainer.dataset.mermaidPendingConfig = configKey;
+		const result = await renderMermaidDiagram(code, overrides);
 
-  await Promise.all([...newBlockPromises, ...existingDiagramPromises, ...errorContainerPromises])
+		if (errorContainer.dataset.mermaidPendingConfig !== configKey) {
+			return;
+		}
+
+		if (result.success) {
+			// Convert to successful diagram
+			const container = document.createElement('div');
+			container.className = 'mermaid-diagram';
+			container.dataset.mermaidCode = code;
+			container.dataset.mermaidConfig = configKey;
+			container.innerHTML = result.svg;
+			errorContainer.replaceWith(container);
+		} else {
+			// Update error with new configuration
+			errorContainer.dataset.mermaidConfig = configKey;
+			const messageEl = errorContainer.querySelector('.mermaid-error-message');
+			if (messageEl) {
+				messageEl.textContent = `Mermaid diagram error: ${result.error}`;
+			}
+		}
+	});
+
+	await Promise.all([...newBlockPromises, ...existingDiagramPromises, ...errorContainerPromises]);
 }
 
 /**
  * Escape HTML special characters to prevent XSS.
  */
 function escapeHtml(text: string): string {
-  const div = document.createElement('div')
-  div.textContent = text
-  return div.innerHTML
+	const div = document.createElement('div');
+	div.textContent = text;
+	return div.innerHTML;
 }
 
 /**
@@ -455,16 +441,16 @@ function escapeHtml(text: string): string {
  * This function expands foreignObject elements to ensure all text is visible.
  */
 function fixForeignObjectWidths(container: HTMLElement): void {
-  const foreignObjects = container.querySelectorAll('foreignObject')
-  foreignObjects.forEach((fo) => {
-    const text = fo.textContent?.trim() || ''
-    if (text.length === 0) return
+	const foreignObjects = container.querySelectorAll('foreignObject');
+	foreignObjects.forEach((fo) => {
+		const text = fo.textContent?.trim() || '';
+		if (text.length === 0) return;
 
-    const currentWidth = parseFloat(fo.getAttribute('width') || '0')
-    // Calculate minimum width based on character count (roughly 14px per char at 18px font)
-    const minWidth = text.length * 14
-    const newWidth = Math.max(currentWidth * 1.6, minWidth)
+		const currentWidth = parseFloat(fo.getAttribute('width') || '0');
+		// Calculate minimum width based on character count (roughly 14px per char at 18px font)
+		const minWidth = text.length * 14;
+		const newWidth = Math.max(currentWidth * 1.6, minWidth);
 
-    fo.setAttribute('width', String(newWidth))
-  })
+		fo.setAttribute('width', String(newWidth));
+	});
 }

@@ -36,31 +36,25 @@ test.describe('URL Hash Navigation', () => {
     expect(page.url()).toContain('#2');
   });
 
-  test('should handle browser back/forward navigation', async ({ page }) => {
+  test('should navigate when the URL hash changes', async ({ page }) => {
+    // Keyboard navigation updates the hash with history.replaceState, on
+    // purpose, so it creates no browser history entries to go back/forward
+    // through. This tests what the app does support: reacting to a hash
+    // change made directly on the page.
     await page.goto('/');
     await page.waitForSelector('.slide-container');
 
-    // Navigate to slide 2
-    await page.keyboard.press('ArrowRight');
+    await page.evaluate(() => {
+      window.location.hash = '#3';
+    });
     await page.waitForTimeout(500);
-    expect(page.url()).toContain('#2');
-
-    // Navigate to slide 3
-    await page.keyboard.press('ArrowRight');
-    await page.waitForTimeout(500);
-    expect(page.url()).toContain('#3');
-
-    // Use browser back button
-    await page.goBack();
-    await page.waitForTimeout(500);
-    expect(page.url()).toContain('#2');
-    await expect(page.locator('.slide-content')).toContainText('Getting Started');
-
-    // Use browser forward button
-    await page.goForward();
-    await page.waitForTimeout(500);
-    expect(page.url()).toContain('#3');
     await expect(page.locator('.slide-content')).toContainText('Core Features');
+
+    await page.evaluate(() => {
+      window.location.hash = '#2';
+    });
+    await page.waitForTimeout(500);
+    await expect(page.locator('.slide-content')).toContainText('Getting Started');
   });
 
   test('should handle invalid hash gracefully (hash too high)', async ({ page }) => {
@@ -132,6 +126,6 @@ test.describe('URL Hash Navigation', () => {
     const slideNumber = parseInt(match![1], 10);
     expect(slideNumber).toBeGreaterThan(20); // Sample has many slides
 
-    await expect(page.locator('.slide-content')).toContainText('Thank You!');
+    await expect(page.locator('.slide-content')).toContainText('Reordered Live Code');
   });
 });

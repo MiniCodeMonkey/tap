@@ -7,10 +7,12 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/spf13/cobra"
 	"github.com/MiniCodeMonkey/tap/internal/builder"
 	"github.com/MiniCodeMonkey/tap/internal/config"
+	"github.com/MiniCodeMonkey/tap/internal/layouts"
 	"github.com/MiniCodeMonkey/tap/internal/parser"
+	"github.com/MiniCodeMonkey/tap/internal/transformer"
+	"github.com/spf13/cobra"
 )
 
 // Flags for the build command
@@ -102,7 +104,34 @@ func runBuild(cmd *cobra.Command, args []string) {
 	pres, err := p.Parse(content)
 	if err != nil {
 		spinner.stop()
-		Errorln("Error: failed to parse presentation:", err)
+		Errorln("Error: failed to parse presentation:", file, err)
+		os.Exit(1)
+	}
+
+	// Resolve and bundle every component the presentation's slides use.
+	// Static builds minify and skip source maps. Any bundle error fails
+	// the build outright, printed in the same terminal format dev uses.
+	spinner.update("Bundling components")
+	resolvedComponents, componentBuildErrs := buildComponents(pres, baseDir, true, false)
+	if len(componentBuildErrs) > 0 {
+		spinner.stop()
+		printComponentErrorsToStderr(componentBuildErrs)
+		os.Exit(1)
+	}
+
+	// Validate layouts and slots before building. This transforms pres to
+	// check for warnings, and Builder.Build below transforms it again
+	// internally; Builder's API takes the untransformed presentation, and
+	// every other caller (dev server, pdf, tests) relies on that, so the
+	// second pass isn't threaded through here.
+	trans := transformer.NewWithBaseDir(cfg, baseDir)
+	trans.SetComponents(resolvedComponents)
+	transformed := trans.Transform(pres)
+	if warnings := layouts.Validate(transformed); len(warnings) > 0 {
+		spinner.stop()
+		for _, warning := range warnings {
+			fmt.Fprintf(os.Stderr, "error: %s: slide %d: %s\n", file, warning.SlideNumber, warning.Message)
+		}
 		os.Exit(1)
 	}
 
@@ -110,6 +139,7 @@ func runBuild(cmd *cobra.Command, args []string) {
 	spinner.update("Generating static files")
 	b := builder.NewWithOutput(buildOutput)
 	b.SetBaseDir(baseDir)
+	b.SetComponents(resolvedComponents)
 
 	result, err := b.Build(cfg, pres)
 	if err != nil {
@@ -120,6 +150,8 @@ func runBuild(cmd *cobra.Command, args []string) {
 
 	// Stop spinner and show results
 	spinner.stop()
+
+	printComponentWarningsToStderr(componentWarnings(resolvedComponents))
 
 	// Print success message and build stats
 	Successln("\nBuild complete!")

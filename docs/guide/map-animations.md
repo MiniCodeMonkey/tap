@@ -108,6 +108,11 @@ Map animations work like fragments:
 2. Press next (Space/→) → animation flies to end position
 3. Press next again → advance to next slide
 
+A map fence gives the slide one step. Set `steps:` in the slide's
+directive block to change that, for example when the slide also holds a
+deck component with steps of its own. See
+[Slide Directives](/reference/slide-directives#steps).
+
 ### Going Backward
 
 When navigating backward:

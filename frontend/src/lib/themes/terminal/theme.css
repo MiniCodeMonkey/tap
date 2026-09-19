@@ -1,0 +1,1514 @@
+/**
+ * Terminal theme.
+ * For infrastructure and live-coding talks where the audience lives in a
+ * shell and the deck should feel like one long tmux session: a status bar
+ * along the bottom, a prompt above every slide, and a `cat slide.md`
+ * command that changes with the layout in front of it.
+ *
+ * Ported from .superpowers/brainstorm/themes-v3/terminal.theme.html (the
+ * CSS-only mockup built against a fixed 11-slide deck). See
+ * docs/reference/theme-porting.md for what changed moving from that mockup
+ * to the real app's markup, and for the general porting technique this file
+ * follows (token bridging, `.slide[data-layout]` scoping, and so on).
+ */
+
+@import '@fontsource/jetbrains-mono/latin-500.css';
+@import '@fontsource/jetbrains-mono/latin-700.css';
+@import '@fontsource/jetbrains-mono/latin-800.css';
+
+[data-theme='terminal'] {
+	/* ---------- design-spec tokens ---------- */
+	--bg: #0f1a16;
+	--fg: #dcebe0;
+	--muted: #9db8a8;
+	--accent: #ffb84d;
+	--accent-text: #ffb84d;
+	--accent-2: #6fe3a0;
+	--surface: #1d2b25;
+	--font-display: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+	--font-body: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+	--font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+	--ease: cubic-bezier(0, 0, 1, 1);
+	--dur: 500ms;
+	--space-unit: 24px;
+	--radius: 0px;
+	--stroke-width: 2px;
+
+	/*
+	 * Bridge to the base theme's own token names. layouts.css, prose.css,
+	 * rich-blocks.css and ui-components.css style the live code block, the
+	 * map slide, badges, tags, and generic prose entirely through these
+	 * `--color-*` and `--font-sans` custom properties. Setting them here
+	 * means that shared chrome follows this theme automatically, without
+	 * this file having to restyle every one of those selectors itself.
+	 */
+	--color-bg: var(--bg);
+	--color-text: var(--fg);
+	--color-muted: var(--muted);
+	--color-accent: var(--accent);
+	--color-code-bg: var(--surface);
+	--color-code-text: var(--fg);
+	--color-code-inline-bg: rgba(220, 235, 224, 0.12);
+	--color-border: var(--muted);
+	--color-surface: var(--surface);
+	--color-surface-elevated: var(--surface);
+	--color-link: var(--accent-2);
+	--font-sans: var(--font-body);
+
+	/* Shiki reads token colors from these custom properties directly. */
+	--shiki-foreground: var(--fg);
+	--shiki-background: var(--surface);
+	--shiki-token-comment: var(--muted);
+	--shiki-token-string: var(--accent-2);
+	--shiki-token-string-expression: var(--accent-2);
+	--shiki-token-keyword: var(--accent-text);
+	--shiki-token-function: var(--fg);
+	--shiki-token-constant: var(--accent-text);
+	--shiki-token-parameter: var(--fg);
+	--shiki-token-punctuation: var(--fg);
+	--shiki-token-link: var(--accent-2);
+}
+
+@keyframes terminal-type {
+	from {
+		clip-path: inset(-20% 100% -20% -2%);
+	}
+	to {
+		clip-path: inset(-20% -4% -20% -2%);
+	}
+}
+@keyframes terminal-pop {
+	from {
+		opacity: 0;
+	}
+}
+@keyframes terminal-band {
+	from {
+		clip-path: inset(0 100% 0 0);
+	}
+	to {
+		clip-path: inset(0 0 0 0);
+	}
+}
+@keyframes terminal-blink {
+	0%,
+	44% {
+		opacity: 1;
+	}
+	45%,
+	54% {
+		opacity: 0;
+	}
+	55%,
+	89% {
+		opacity: 1;
+	}
+	90%,
+	100% {
+		opacity: 0;
+	}
+}
+
+/* ============================================================================
+ * Screen: base slide chrome, status bar, and prompt
+ * ============================================================================
+ * Every selector below that reads attr(data-index)/attr(data-layout) or
+ * decorates the slide root is scoped to `.slide[data-layout]`, the real
+ * rendered slide, not the bare `.slide` class SlideCanvas also puts on its
+ * outer 1920x1080 scaling frame. See theme-porting.md's markup differences
+ * section for why that distinction matters.
+ * ============================================================================ */
+
+[data-theme='terminal'] .slide[data-layout] {
+	color: var(--fg);
+	font-family: var(--font-body);
+	font-weight: 500;
+	font-variant-ligatures: none;
+	font-size: 48px;
+	line-height: 66px;
+	letter-spacing: -0.03em;
+	background:
+		repeating-linear-gradient(0deg, transparent 0 4px, rgba(220, 235, 224, 0.028) 4px 6px),
+		var(--bg);
+}
+/*
+ * Margin and padding reset. `:where()` keeps this at the specificity of
+ * `[data-theme] .slide`, which beats the base prose margins but loses to
+ * every rule below that sets its own margin or padding (list items, code
+ * blocks, the quote rule, heading gaps).
+ */
+[data-theme='terminal'] .slide :where(h1, h2, h3, h4, h5, h6, p, ul, ol, li, blockquote, pre, table) {
+	margin: 0;
+	padding: 0;
+}
+[data-theme='terminal'] .slide[data-layout] h1,
+[data-theme='terminal'] .slide[data-layout] h2,
+[data-theme='terminal'] .slide[data-layout] h3,
+[data-theme='terminal'] .slide[data-layout] h4,
+[data-theme='terminal'] .slide[data-layout] h5,
+[data-theme='terminal'] .slide[data-layout] h6 {
+	font-family: var(--font-display);
+	font-weight: 800;
+	text-wrap: balance;
+}
+[data-theme='terminal'] .slide[data-layout] strong {
+	color: var(--accent-text);
+	font-weight: 800;
+}
+[data-theme='terminal'] .slide[data-layout] em {
+	color: var(--accent-text);
+	font-style: normal;
+}
+[data-theme='terminal'] .slide[data-layout] a {
+	color: var(--accent-2);
+	text-decoration: underline;
+	text-decoration-color: color-mix(in srgb, var(--accent-2) 50%, transparent);
+	text-underline-offset: 0.15em;
+}
+[data-theme='terminal'] .slide[data-layout] a:hover {
+	color: var(--accent-text);
+}
+
+/* tmux status bar: window name left, position right, section marker beside it */
+[data-theme='terminal'] .slide[data-layout]::before {
+	content: ' ' attr(data-index) ':' attr(data-layout) '*';
+	position: absolute;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	height: 60px;
+	padding-left: 96px;
+	font-size: 30px;
+	line-height: 60px;
+	font-weight: 700;
+	letter-spacing: 0;
+	white-space: pre;
+	color: var(--accent-text);
+	background: var(--surface);
+	box-shadow: inset 72px 0 0 var(--accent-2);
+	animation: terminal-pop 100ms steps(2, jump-none) 0ms both;
+}
+[data-theme='terminal'] .slide[data-layout]::after {
+	content: attr(data-index) '/' attr(data-total);
+	position: absolute;
+	right: 0;
+	bottom: 0;
+	box-sizing: border-box;
+	height: 60px;
+	width: 250px;
+	padding: 0 96px 0 0;
+	font-size: 30px;
+	line-height: 60px;
+	font-weight: 800;
+	letter-spacing: 0;
+	text-align: right;
+	color: var(--bg);
+	background: var(--accent-2);
+	animation: terminal-pop 100ms steps(2, jump-none) 0ms both;
+}
+[data-theme='terminal'] .slide-tag {
+	position: absolute;
+	top: auto;
+	left: auto;
+	right: 286px;
+	bottom: 0;
+	height: 60px;
+	z-index: 1;
+	font-size: 30px;
+	line-height: 60px;
+	font-weight: 700;
+	letter-spacing: 0;
+	color: var(--fg);
+	font-family: var(--font-mono);
+	animation: terminal-pop 100ms steps(2, jump-none) 100ms both;
+}
+/*
+ * The badge sits at the right end of the prompt line. Down in the status bar
+ * it shared the counter box, where anything longer than a version number ran
+ * into the slide count.
+ */
+[data-theme='terminal'] .slide-badge {
+	top: 84px;
+	right: 96px;
+	bottom: auto;
+	left: auto;
+	height: 44px;
+	font-size: 36px;
+	line-height: 44px;
+	letter-spacing: 0;
+	color: var(--accent-text);
+	font-family: var(--font-mono);
+	font-weight: 800;
+	z-index: 2;
+	animation: terminal-pop 100ms steps(2, jump-none) 300ms both;
+}
+[data-theme='terminal'] .slide-badge::before {
+	content: '[';
+	color: var(--muted);
+}
+[data-theme='terminal'] .slide-badge::after {
+	content: ']';
+	color: var(--muted);
+}
+
+/* prompt line: every slide is the output of one command */
+[data-theme='terminal'] .slide-content {
+	/*
+	 * width/height: auto override the base theme's `.slide-content { width:
+	 * 100%; height: 100% }` (a different, lower-specificity rule, but the
+	 * cascade resolves `width` and `left`/`right` as separate properties,
+	 * not as a whole matching rule). Left unset, that 100% width wins over
+	 * this rule's `left`/`right`, since an absolutely positioned box with
+	 * an explicit width can't also honor both insets: the browser drops
+	 * `right` and the box overflows past the right margin.
+	 */
+	position: absolute;
+	width: auto;
+	height: auto;
+	left: 96px;
+	right: 96px;
+	top: 84px;
+	bottom: 120px;
+	display: flex;
+	flex-direction: column;
+}
+[data-theme='terminal'] .slide-content::before {
+	content: '$';
+	position: absolute;
+	left: 0;
+	top: 0;
+	font-size: 36px;
+	line-height: 44px;
+	font-weight: 800;
+	letter-spacing: 0;
+	color: var(--accent-2);
+	animation: terminal-pop 100ms steps(2, jump-none) 0ms both;
+}
+/*
+ * The base layouts pad, center and size every `.layout-*` box themselves.
+ * This theme insets `.slide-content` instead and sets everything flush left
+ * under the prompt, so those base declarations are cleared here.
+ */
+[data-theme='terminal'] [class^='layout-'] {
+	flex: 1;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+	align-items: stretch;
+	justify-content: flex-start;
+	align-content: start;
+	gap: 0;
+	width: auto;
+	height: auto;
+	padding: 0;
+	text-align: left;
+}
+[data-theme='terminal'] [class^='layout-'] .slot {
+	max-width: none;
+}
+[data-theme='terminal'] [class^='layout-']::before {
+	content: 'cat slide.md';
+	display: block;
+	flex: none;
+	width: fit-content;
+	padding-left: 2ch;
+	margin-bottom: 28px;
+	font-size: 36px;
+	line-height: 44px;
+	font-weight: 500;
+	letter-spacing: 0;
+	color: var(--muted);
+	white-space: pre;
+	animation: terminal-type 300ms steps(14, end) 0ms both;
+}
+/*
+ * The component's own root div commonly fills its container with
+ * `position: absolute; inset: 0`, an inline style no stylesheet rule can
+ * override. A flow sibling (the `cat slide.md` line above) never reserves
+ * space for an abspos box, so it would sit under the prompt instead of
+ * below it. `inset: 0` on that box resolves against the padding edge of
+ * the nearest positioned ancestor, so padding alone can't push it down
+ * (the containing block includes the padding area). A transparent border
+ * does, since the containing block starts after the border; draw "cat
+ * slide.md" as an absolutely positioned overlay inside that reserved
+ * strip (`top` negative by the same amount) instead of a flow element, so
+ * it works whether the component's child flows or not.
+ *
+ * All four `border-*-width`s are set explicitly (not just `border-top`):
+ * this selector has higher specificity than layouts.css's shared
+ * `.deck-component-root { border: var(--slide-padding) solid transparent }`
+ * for the properties it sets, but the cascade still resolves left/right/
+ * bottom width from that lower-specificity rule for any side this rule
+ * leaves unset - which left this slide double-inset by the shared
+ * default's 80px on top of `.slide-content`'s own 96px before this fix.
+ * Scoped to the whole-slide form only - `.deck-component-root` is also an
+ * inline component's class, nested inside a `.slot` there, never a direct
+ * child of `.slide-content`.
+ */
+[data-theme='terminal'] .slide[data-layout='component'] > .slide-content > .deck-component-root,
+[data-theme='terminal'] .slide[data-layout='component'] > .slide-content > .scroll-content > .deck-component-root {
+	position: relative;
+	flex: 1;
+	min-height: 0;
+	width: auto;
+	height: auto;
+	padding: 0;
+	border-width: 72px 0 0 0;
+	border-style: solid;
+	border-color: transparent;
+	text-align: left;
+}
+[data-theme='terminal'] .slide[data-layout='component'] > .slide-content > .deck-component-root .slot,
+[data-theme='terminal'] .slide[data-layout='component'] > .slide-content > .scroll-content > .deck-component-root .slot {
+	max-width: none;
+}
+[data-theme='terminal'] .slide[data-layout='component'] > .slide-content > .deck-component-root::before,
+[data-theme='terminal'] .slide[data-layout='component'] > .slide-content > .scroll-content > .deck-component-root::before {
+	content: 'cat slide.md';
+	position: absolute;
+	top: -72px;
+	left: 0;
+	width: fit-content;
+	padding-left: 2ch;
+	font-size: 36px;
+	line-height: 44px;
+	font-weight: 500;
+	letter-spacing: 0;
+	color: var(--muted);
+	white-space: pre;
+	animation: terminal-type 300ms steps(14, end) 0ms both;
+}
+[data-theme='terminal'] .layout-title::before {
+	content: './present --fullscreen';
+}
+[data-theme='terminal'] .layout-section::before {
+	content: 'cd next/ && ls';
+}
+[data-theme='terminal'] .layout-code-focus::before {
+	content: 'vim +/focus';
+}
+[data-theme='terminal'] .layout-big-stat::before {
+	content: 'wc -l';
+}
+[data-theme='terminal'] .layout-quote::before {
+	content: 'fortune';
+}
+[data-theme='terminal'] .layout-two-column::before {
+	content: 'tmux split-window -h';
+}
+[data-theme='terminal'] .layout-three-column::before {
+	content: 'tmux split-window -h -h';
+}
+[data-theme='terminal'] .layout-split-media::before {
+	content: 'open attachment';
+}
+[data-theme='terminal'] .layout-cover::before {
+	content: 'fullscreen.sh';
+}
+[data-theme='terminal'] .layout-sidebar::before {
+	content: 'tmux split-window -v -p 25';
+}
+[data-theme='terminal'] .layout-blank::before {
+	content: none;
+}
+[data-theme='terminal'] .layout-default:has(h1:only-child)::before,
+[data-theme='terminal'] .layout-default:has(h2:only-child)::before {
+	content: 'echo $THESIS';
+}
+[data-theme='terminal'] .layout-default:has(ul)::before {
+	content: 'ls -1';
+}
+[data-theme='terminal'] .layout-default:has(table)::before {
+	content: 'column -t';
+}
+[data-theme='terminal'] .layout-default:has(.mermaid-diagram)::before,
+[data-theme='terminal'] .layout-default:has(.mermaid-source)::before {
+	content: 'tree --infra';
+}
+[data-theme='terminal'] .layout-default:has(img)::before {
+	content: 'feh screenshot.jpg';
+}
+
+/* ---------- headings and body copy ---------- */
+/*
+ * The slide heading is an h2, or an h1 that has body content after it (the
+ * common "# Heading, then bullets" markdown habit). A lone h1 is a statement
+ * and the title, section, big-stat and cover layouts size their own h1.
+ */
+[data-theme='terminal'] .slot > h2,
+[data-theme='terminal'] :is(.layout-default, .layout-code-focus, .layout-two-column, .layout-three-column, .layout-sidebar, .layout-split-media) .slot-default > h1:not(:only-child) {
+	/* Sized for the worst case (a "long" heading up to 60 characters); the
+	 * data-length overrides below scale up a genuinely short or medium one so
+	 * it gets the impact the mockup intended instead of looking small next
+	 * to a title built to survive a much longer sentence. */
+	font-size: 76px;
+	line-height: 92px;
+	letter-spacing: -0.03em;
+	margin-bottom: 32px;
+	width: fit-content;
+	animation: terminal-type var(--dur) steps(20, end) 250ms both;
+}
+[data-theme='terminal'] .slot > h2[data-length='medium'],
+[data-theme='terminal'] :is(.layout-default, .layout-code-focus, .layout-two-column, .layout-three-column, .layout-sidebar, .layout-split-media) .slot-default > h1[data-length='medium']:not(:only-child) {
+	font-size: 92px;
+	line-height: 108px;
+}
+[data-theme='terminal'] .slot > h2[data-length='short'],
+[data-theme='terminal'] :is(.layout-default, .layout-code-focus, .layout-two-column, .layout-three-column, .layout-sidebar, .layout-split-media) .slot-default > h1[data-length='short']:not(:only-child) {
+	font-size: 108px;
+	line-height: 124px;
+}
+[data-theme='terminal'] .slot > h2::before,
+[data-theme='terminal'] :is(.layout-default, .layout-code-focus, .layout-two-column, .layout-three-column, .layout-sidebar, .layout-split-media) .slot-default > h1:not(:only-child)::before {
+	content: '# ';
+	color: var(--muted);
+}
+[data-theme='terminal'] .slot h3 {
+	font-size: 64px;
+	line-height: 78px;
+	margin-top: 16px;
+	margin-bottom: 8px;
+}
+[data-theme='terminal'] .slot h4 {
+	font-size: 52px;
+	line-height: 64px;
+	margin-top: 12px;
+	margin-bottom: 6px;
+	color: var(--accent-2);
+}
+[data-theme='terminal'] .slot h5,
+[data-theme='terminal'] .slot h6 {
+	font-size: 40px;
+	line-height: 52px;
+	margin-top: 8px;
+	margin-bottom: 4px;
+	color: var(--muted);
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+}
+[data-theme='terminal'] :is(.slot, .slot > [data-fragment-index]) > p {
+	font-weight: 700;
+	animation: terminal-type var(--dur) steps(24, end) 1000ms both;
+	width: fit-content;
+}
+[data-theme='terminal'] .slot :not(pre) > code {
+	font-family: var(--font-mono);
+	font-weight: 800;
+	color: var(--bg);
+	background: var(--accent-2);
+	padding: 0 0.22em;
+	border-radius: 2px;
+}
+
+/* ---------- title ---------- */
+[data-theme='terminal'] .layout-title .slot {
+	flex: 1;
+	display: flex;
+	flex-direction: column;
+	justify-content: center;
+	padding-bottom: 150px;
+	position: relative;
+}
+[data-theme='terminal'] .layout-title .slot::after {
+	content: '';
+	position: absolute;
+	left: 0;
+	right: 0;
+	bottom: 24px;
+	height: 64px;
+	background: repeating-linear-gradient(90deg, var(--accent-2) 0 28px, transparent 28px 36px);
+	animation: terminal-band 1200ms steps(24, end) 300ms both;
+}
+[data-theme='terminal'] .layout-title h1 {
+	/* Sized for a "long" title (the kitchen sink's 100-character worst case);
+	 * data-length overrides below scale up a shorter one. */
+	font-size: 68px;
+	line-height: 84px;
+	letter-spacing: -0.01em;
+	width: fit-content;
+	max-width: 100%;
+	text-wrap: balance;
+	animation: terminal-type var(--dur) steps(17, end) 350ms both;
+}
+[data-theme='terminal'] .layout-title h1[data-length='medium'] {
+	font-size: 84px;
+	line-height: 100px;
+}
+[data-theme='terminal'] .layout-title h1[data-length='short'] {
+	font-size: 104px;
+	line-height: 120px;
+}
+[data-theme='terminal'] .layout-title h2 {
+	font-size: 68px;
+	line-height: 84px;
+	letter-spacing: -0.01em;
+	color: var(--accent-text);
+	margin: 0;
+	width: fit-content;
+	max-width: 100%;
+	text-wrap: balance;
+	animation: terminal-type var(--dur) steps(21, end) 800ms both;
+}
+[data-theme='terminal'] .layout-title h2[data-length='medium'] {
+	font-size: 84px;
+	line-height: 100px;
+}
+[data-theme='terminal'] .layout-title h2[data-length='short'] {
+	font-size: 104px;
+	line-height: 120px;
+}
+[data-theme='terminal'] .layout-title h2::before {
+	content: none;
+}
+[data-theme='terminal'] .layout-title h2::after,
+[data-theme='terminal'] .layout-section h1::after,
+[data-theme='terminal'] .layout-default h1:only-child::after,
+[data-theme='terminal'] .layout-default h2:only-child::after {
+	content: '';
+	display: inline-block;
+	width: 0.58em;
+	height: 0.92em;
+	margin-left: 0.12em;
+	vertical-align: -0.1em;
+	background: var(--accent);
+}
+[data-theme='terminal'] .layout-title h2::after {
+	animation: terminal-blink 4s steps(1, end) 1600ms infinite;
+}
+[data-theme='terminal'] .layout-title p {
+	max-width: none;
+	margin-left: 0;
+	margin-right: 0;
+	color: var(--fg);
+	margin-top: 64px;
+	padding-top: 36px;
+	width: 100%;
+	border-top: 3px solid var(--muted);
+	font-size: 44px;
+	line-height: 60px;
+	font-weight: 700;
+	animation: terminal-pop 100ms steps(2, jump-none) 1300ms both;
+}
+[data-theme='terminal'] .layout-title p::before {
+	content: '# ';
+	color: var(--muted);
+}
+
+/* ---------- section ---------- */
+[data-theme='terminal'] .slide[data-layout='section'] .slide-tag {
+	right: auto;
+	left: 96px;
+	top: 300px;
+	bottom: auto;
+	height: auto;
+	font-size: 72px;
+	line-height: 84px;
+	font-weight: 800;
+	color: var(--accent-2);
+	animation: terminal-pop 100ms steps(2, jump-none) 300ms both;
+}
+[data-theme='terminal'] .slide[data-layout='section'] .slide-tag::before {
+	content: 'drwxr-xr-x  ';
+	color: var(--muted);
+	font-weight: 500;
+	white-space: pre;
+}
+[data-theme='terminal'] .layout-section .slot {
+	position: absolute;
+	left: 0;
+	right: 0;
+	top: 320px;
+}
+[data-theme='terminal'] .layout-section h1 {
+	/* Sized for a "long" section title; data-length overrides below scale up
+	 * a short one (a word or two) to the full 184px poster size the mockup
+	 * intended, and a medium one partway there. */
+	font-size: 116px;
+	line-height: 136px;
+	letter-spacing: -0.03em;
+	width: fit-content;
+	max-width: 100%;
+	text-wrap: balance;
+	animation: terminal-type var(--dur) steps(10, end) 450ms both;
+}
+[data-theme='terminal'] .layout-section h1[data-length='medium'] {
+	font-size: 148px;
+	line-height: 168px;
+}
+[data-theme='terminal'] .layout-section h1[data-length='short'] {
+	/* 184px keeps a 14 letter word such as "Infrastructure", plus the cursor,
+	 * on one line, and lets a two line title clear the status bar. */
+	font-size: 184px;
+	line-height: 208px;
+}
+[data-theme='terminal'] .layout-section h1::after {
+	background: var(--accent);
+}
+[data-theme='terminal'] .layout-section p {
+	margin-top: 24px;
+	animation-delay: 1000ms;
+}
+[data-theme='terminal'] .layout-section p::before {
+	content: '# ';
+	color: var(--muted);
+}
+
+/* ---------- statement (a lone h1 on layout-default) ---------- */
+[data-theme='terminal'] .layout-default .slot:has(> h1:only-child),
+[data-theme='terminal'] .layout-default .slot:has(> h2:only-child) {
+	flex: 1;
+	display: flex;
+	align-items: center;
+	padding-bottom: 60px;
+}
+/*
+ * A heading immediately followed by one closing callout (a `[VISUAL]`
+ * placeholder blockquote, a talk's own note-to-self about a build or an
+ * animation) and nothing else is otherwise top-heavy: two short lines
+ * against an empty lower two-thirds of the slide. Center that pair the
+ * same way a lone heading centers, instead of leaving the callout stranded
+ * near the top. One line of body copy between the two centers with them.
+ */
+[data-theme='terminal'] .layout-default .slot:has(> :is(h1, h2):first-child + blockquote:last-child),
+[data-theme='terminal'] .layout-default .slot:has(> :is(h1, h2):first-child + p + blockquote:last-child) {
+	flex: 1;
+	display: flex;
+	flex-direction: column;
+	justify-content: center;
+	padding-bottom: 60px;
+}
+[data-theme='terminal'] .layout-default h1:only-child {
+	font-size: 128px;
+	line-height: 148px;
+	letter-spacing: -0.03em;
+	max-width: 100%;
+	text-wrap: balance;
+	animation: terminal-type 700ms steps(16, end) 350ms both;
+}
+[data-theme='terminal'] .layout-default h1[data-length='medium']:only-child {
+	font-size: 160px;
+	line-height: 180px;
+}
+[data-theme='terminal'] .layout-default h1[data-length='short']:only-child {
+	font-size: 184px;
+	line-height: 208px;
+}
+
+/*
+ * A lone h2 is the long statement: a full sentence that would not fit in
+ * three lines at the h1 statement size. About 24 characters per line.
+ */
+[data-theme='terminal'] .layout-default h2:only-child {
+	font-size: 116px;
+	line-height: 144px;
+	letter-spacing: -0.03em;
+	margin: 0;
+	width: auto;
+	max-width: 100%;
+	text-wrap: balance;
+	animation: terminal-type 700ms steps(24, end) 350ms both;
+}
+[data-theme='terminal'] .layout-default h2:only-child::before {
+	content: none;
+}
+
+/* ---------- bullets: a directory tree ---------- */
+[data-theme='terminal'] :is(.slot, .slot > [data-fragment-index]) > ul {
+	list-style: none;
+	margin-top: 12px;
+}
+[data-theme='terminal'] :is(.slot, .slot > [data-fragment-index]) > ul > li {
+	position: relative;
+	padding: 16px 0 16px 110px;
+	font-weight: 700;
+	transition: opacity 100ms steps(2, jump-none);
+	animation: terminal-pop 100ms steps(2, jump-none) both;
+}
+[data-theme='terminal'] :is(.slot, .slot > [data-fragment-index]) > ul > li::before {
+	content: '';
+	position: absolute;
+	left: 16px;
+	top: 0;
+	bottom: 0;
+	width: 5px;
+	background: var(--accent-2);
+}
+[data-theme='terminal'] :is(.slot, .slot > [data-fragment-index]) > ul > li:last-child::before {
+	bottom: auto;
+	height: 54px;
+}
+[data-theme='terminal'] :is(.slot, .slot > [data-fragment-index]) > ul > li::after {
+	content: '';
+	position: absolute;
+	left: 16px;
+	top: 50px;
+	width: 68px;
+	height: 5px;
+	background: var(--accent-2);
+}
+[data-theme='terminal'] :is(.slot, .slot > [data-fragment-index]) > ul > li:nth-child(1) {
+	animation-delay: 800ms;
+}
+[data-theme='terminal'] :is(.slot, .slot > [data-fragment-index]) > ul > li:nth-child(2) {
+	animation-delay: 950ms;
+}
+[data-theme='terminal'] :is(.slot, .slot > [data-fragment-index]) > ul > li:nth-child(3) {
+	animation-delay: 1100ms;
+}
+[data-theme='terminal'] :is(.slot, .slot > [data-fragment-index]) > ul > li:nth-child(4) {
+	animation-delay: 1250ms;
+}
+[data-theme='terminal'] :is(.slot, .slot > [data-fragment-index]) > ul > li:nth-child(n + 5) {
+	animation-delay: 1400ms;
+}
+/* Nested lists sit inside the parent li's padding, with a quieter marker. */
+[data-theme='terminal'] .slot ul ul {
+	list-style: none;
+	margin-top: 10px;
+}
+[data-theme='terminal'] .slot ul ul > li {
+	padding: 8px 0 8px 48px;
+	font-weight: 500;
+	color: var(--fg);
+}
+[data-theme='terminal'] .slot ul ul > li::before {
+	content: '\2192';
+	position: absolute;
+	left: 0;
+	top: 8px;
+	width: auto;
+	height: auto;
+	background: none;
+	color: var(--muted);
+}
+[data-theme='terminal'] .slot ul ul > li::after {
+	content: none;
+}
+[data-theme='terminal'] .slot ol {
+	margin-top: 12px;
+	/* room for a bold "1. " marker at the 60px item size, inside the margin */
+	padding-left: 130px;
+}
+[data-theme='terminal'] .slot ol > li {
+	font-weight: 700;
+	padding: 12px 0;
+}
+[data-theme='terminal'] .slide .fragment-hidden {
+	opacity: 0;
+}
+[data-theme='terminal'] .slide .fragment-visible {
+	opacity: 1;
+	transition: opacity 200ms steps(2, jump-none);
+}
+
+/*
+ * Seven or more bullets cannot fit at the normal size, so a long list turns
+ * into a dense listing: smaller rows and a smaller heading above it. It is
+ * meant for the one recap slide a deck allows itself, not for regular use.
+ */
+[data-theme='terminal'] .slot.slot-default:has(> ul > li:nth-child(7)) > :is(h1, h2):not(:only-child) {
+	font-size: 72px;
+	line-height: 88px;
+	margin-bottom: 20px;
+}
+[data-theme='terminal'] .slot > ul:has(> li:nth-child(7)) {
+	margin-top: 0;
+}
+[data-theme='terminal'] .slot > ul:has(> li:nth-child(7)) > li {
+	padding: 5px 0 5px 64px;
+	font-size: 44px;
+	line-height: 58px;
+}
+[data-theme='terminal'] .slot > ul:has(> li:nth-child(7)) > li::after {
+	top: 32px;
+	width: 40px;
+}
+[data-theme='terminal'] .slot > ul:has(> li:nth-child(7)) > li:last-child::before {
+	height: 36px;
+}
+
+/* ---------- blockquote outside the quote layout ----------
+ * A plain blockquote is an aside with the quote rule beside it. One that
+ * opens with a bold label ("**Note** ...") is a callout: a dashed pane with
+ * the label in the accent color.
+ */
+[data-theme='terminal'] :not(.layout-quote) > :is(.slot, .slot > [data-fragment-index]) > blockquote {
+	position: relative;
+	margin-top: 28px;
+	padding: 6px 0 6px 64px;
+	border: 0;
+	font-style: normal;
+	color: var(--fg);
+	animation: terminal-pop 100ms steps(2, jump-none) 900ms both;
+}
+[data-theme='terminal'] :not(.layout-quote) > :is(.slot, .slot > [data-fragment-index]) > blockquote::before {
+	content: '';
+	position: absolute;
+	left: 0;
+	top: 0;
+	bottom: 0;
+	width: 5px;
+	background: var(--accent-2);
+	box-shadow: 16px 0 0 var(--accent-2);
+}
+[data-theme='terminal'] :not(.layout-quote) > :is(.slot, .slot > [data-fragment-index]) > blockquote p {
+	font-size: 48px;
+	line-height: 64px;
+	font-weight: 500;
+}
+[data-theme='terminal'] :not(.layout-quote) > :is(.slot, .slot > [data-fragment-index]) > blockquote:has(> p:first-child > strong:first-child) {
+	padding: 22px 40px 26px;
+	border: 3px dashed var(--muted);
+}
+[data-theme='terminal'] :not(.layout-quote) > :is(.slot, .slot > [data-fragment-index]) > blockquote:has(> p:first-child > strong:first-child)::before {
+	content: none;
+}
+
+/* ---------- code: a vim buffer ---------- */
+[data-theme='terminal'] pre.shiki {
+	position: relative;
+	z-index: 0;
+	/* The mode label hangs over the bottom border, so the block must not clip. */
+	overflow: visible;
+	padding: 36px 48px 32px;
+	border: 3px solid var(--muted);
+	font-family: var(--font-mono);
+	font-size: 40px;
+	line-height: 56px;
+	font-weight: 500;
+	letter-spacing: 0;
+	animation: terminal-pop 100ms steps(2, jump-none) 600ms both;
+}
+[data-theme='terminal'] pre.shiki::after {
+	content: '-- NORMAL --';
+	position: absolute;
+	left: 36px;
+	bottom: -24px;
+	padding: 0 16px;
+	font-size: 32px;
+	line-height: 44px;
+	font-weight: 800;
+	color: var(--accent-text);
+	background: var(--bg);
+}
+[data-theme='terminal'] pre.shiki code {
+	display: flex;
+	flex-direction: column;
+	font: inherit;
+}
+[data-theme='terminal'] pre.shiki .line {
+	display: block;
+	position: relative;
+	white-space: pre;
+	animation: terminal-pop 100ms steps(2, jump-none) both;
+}
+/* An empty line inside the code keeps its row; the highlighter's trailing
+ * empty line after the last newline stays collapsed. */
+[data-theme='terminal'] pre.shiki .line:empty:not(:last-child) {
+	min-height: 1lh;
+}
+[data-theme='terminal'] pre.shiki .line:nth-child(1) {
+	animation-delay: 660ms;
+}
+[data-theme='terminal'] pre.shiki .line:nth-child(2) {
+	animation-delay: 720ms;
+}
+[data-theme='terminal'] pre.shiki .line:nth-child(3) {
+	animation-delay: 780ms;
+}
+[data-theme='terminal'] pre.shiki .line:nth-child(4) {
+	animation-delay: 840ms;
+}
+[data-theme='terminal'] pre.shiki .line:nth-child(n + 5) {
+	animation-delay: 900ms;
+}
+/* Dim every line that is not highlighted. `> *` covers the line's children
+ * whether or not the highlighter wraps them in `.line-content`. */
+[data-theme='terminal'] pre.has-highlighted .line:not(.highlighted) > * {
+	/* 0.6 keeps the context lines legible on a projector with lifted blacks. */
+	opacity: 0.6;
+}
+[data-theme='terminal'] pre.shiki .line.highlighted {
+	font-weight: 700;
+}
+[data-theme='terminal'] pre.shiki .line.highlighted::before {
+	content: '';
+	position: absolute;
+	left: -40px;
+	right: -40px;
+	top: 0;
+	bottom: 0;
+	z-index: -1;
+	background: color-mix(in srgb, var(--accent) 22%, var(--bg));
+	box-shadow: inset 12px 0 0 var(--accent);
+	animation: terminal-band var(--dur) steps(12, end) 1000ms both;
+}
+[data-theme='terminal'] .slot pre + p {
+	margin-top: 40px;
+}
+[data-theme='terminal'] .layout-code-focus pre + p {
+	margin-top: 44px;
+	animation-delay: 1100ms;
+}
+[data-theme='terminal'] .layout-code-focus pre + p::before {
+	content: '> ';
+	color: var(--accent-text);
+}
+
+/* ---------- big stat ---------- */
+[data-theme='terminal'] .layout-big-stat {
+	justify-content: flex-start;
+}
+[data-theme='terminal'] .layout-big-stat .slot-default {
+	margin-top: 70px;
+}
+[data-theme='terminal'] .layout-big-stat h1 {
+	/* Sized for a "long" stat label; the common case is a short number
+	 * like "40x", which gets the full poster size via data-length. */
+	font-size: 220px;
+	line-height: 240px;
+	letter-spacing: -0.04em;
+	color: var(--accent-text);
+	width: fit-content;
+	animation: terminal-type var(--dur) steps(9, end) 400ms both;
+}
+[data-theme='terminal'] .layout-big-stat h1[data-length='medium'] {
+	font-size: 260px;
+	line-height: 280px;
+}
+[data-theme='terminal'] .layout-big-stat h1[data-length='short'] {
+	font-size: 300px;
+	line-height: 330px;
+}
+[data-theme='terminal'] .layout-big-stat .slot-caption {
+	position: relative;
+	margin-top: 30px;
+	padding-top: 48px;
+}
+[data-theme='terminal'] .layout-big-stat .slot-caption::before {
+	content: '';
+	position: absolute;
+	left: 0;
+	right: 0;
+	top: 0;
+	height: 3px;
+	background: var(--muted);
+	animation: terminal-band var(--dur) steps(24, end) 750ms both;
+}
+[data-theme='terminal'] .layout-big-stat .slot-caption p {
+	max-width: 1300px;
+	animation-delay: 1000ms;
+	text-wrap: balance;
+}
+[data-theme='terminal'] .layout-big-stat .slot-figure {
+	margin-top: 20px;
+}
+[data-theme='terminal'] .layout-big-stat .slot-figure img {
+	max-height: 200px;
+	border: 3px solid var(--muted);
+	filter: grayscale(1) contrast(1.2);
+}
+
+/* ---------- quote ---------- */
+[data-theme='terminal'] .layout-quote {
+	justify-content: center;
+	padding-bottom: 60px;
+}
+[data-theme='terminal'] .layout-quote::before {
+	position: absolute;
+	left: 0;
+	top: 0;
+}
+[data-theme='terminal'] .layout-quote blockquote {
+	position: relative;
+	padding-left: 130px;
+	border: 0;
+	font-style: normal;
+}
+[data-theme='terminal'] .layout-quote blockquote::before {
+	content: '';
+	position: absolute;
+	left: 0;
+	top: 12px;
+	bottom: 12px;
+	width: 5px;
+	background: var(--accent-2);
+	box-shadow: 24px 0 0 var(--accent-2);
+	animation: terminal-pop 100ms steps(2, jump-none) 300ms both;
+}
+[data-theme='terminal'] .layout-quote blockquote p {
+	font-size: 78px;
+	line-height: 104px;
+	font-weight: 800;
+	letter-spacing: -0.03em;
+	text-wrap: balance;
+	animation: terminal-type 800ms steps(24, end) 400ms both;
+}
+[data-theme='terminal'] .layout-quote .slot-attribution {
+	margin-top: 56px;
+	padding-left: 130px;
+}
+[data-theme='terminal'] .layout-quote .slot-attribution p {
+	animation-delay: 1250ms;
+	font-size: 44px;
+	line-height: 60px;
+}
+[data-theme='terminal'] .layout-quote .slot-attribution p::before {
+	content: '-- ';
+	color: var(--accent-text);
+}
+
+/* ---------- two columns and three columns: panes ---------- */
+[data-theme='terminal'] .layout-two-column {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	grid-template-rows: auto auto 1fr;
+	column-gap: 0;
+}
+[data-theme='terminal'] .layout-two-column::before,
+[data-theme='terminal'] .layout-two-column .slot-default {
+	grid-column: 1 / -1;
+}
+[data-theme='terminal'] .layout-two-column .slot-left,
+[data-theme='terminal'] .layout-two-column .slot-right {
+	position: relative;
+	margin-top: 36px;
+	padding: 64px 48px 40px;
+	border: 3px solid var(--muted);
+	animation: terminal-pop 100ms steps(2, jump-none) 700ms both;
+}
+[data-theme='terminal'] .layout-two-column .slot-right {
+	border-left: 0;
+	animation-delay: 1000ms;
+}
+[data-theme='terminal'] .layout-two-column h3,
+[data-theme='terminal'] .layout-three-column h3 {
+	position: absolute;
+	left: 36px;
+	top: -36px;
+	padding: 0 18px;
+	background: var(--bg);
+	font-size: 48px;
+	line-height: 68px;
+	font-weight: 700;
+	color: var(--accent-2);
+	margin: 0;
+}
+[data-theme='terminal'] .layout-two-column h3::before,
+[data-theme='terminal'] .layout-three-column h3::before {
+	content: '[';
+	color: var(--muted);
+}
+[data-theme='terminal'] .layout-two-column h3::after,
+[data-theme='terminal'] .layout-three-column h3::after {
+	content: ']';
+	color: var(--muted);
+}
+[data-theme='terminal'] .layout-two-column .slot-left p,
+[data-theme='terminal'] .layout-two-column .slot-right p {
+	width: auto;
+	animation: terminal-pop 100ms steps(2, jump-none) 850ms both;
+}
+[data-theme='terminal'] .layout-two-column .slot-right p {
+	animation-delay: 1150ms;
+}
+[data-theme='terminal'] .layout-two-column p + p {
+	margin-top: 20px;
+	animation-delay: 950ms;
+}
+[data-theme='terminal'] .layout-two-column .slot-right p + p {
+	animation-delay: 1250ms;
+}
+[data-theme='terminal'] .layout-two-column p strong {
+	display: block;
+	font-size: 120px;
+	line-height: 140px;
+	letter-spacing: -0.05em;
+}
+[data-theme='terminal'] .layout-two-column .slot-left p strong {
+	color: var(--fg);
+}
+
+[data-theme='terminal'] .layout-three-column {
+	display: grid;
+	grid-template-columns: 1fr 1fr 1fr;
+	grid-template-rows: auto auto 1fr;
+	column-gap: 48px;
+}
+[data-theme='terminal'] .layout-three-column::before,
+[data-theme='terminal'] .layout-three-column .slot-default {
+	grid-column: 1 / -1;
+}
+[data-theme='terminal'] .layout-three-column .slot-left,
+[data-theme='terminal'] .layout-three-column .slot-center,
+[data-theme='terminal'] .layout-three-column .slot-right {
+	position: relative;
+	margin-top: 36px;
+	padding: 52px 32px 24px;
+	border: 3px solid var(--muted);
+	animation: terminal-pop 100ms steps(2, jump-none) 700ms both;
+}
+[data-theme='terminal'] .layout-three-column .slot-center {
+	animation-delay: 900ms;
+}
+[data-theme='terminal'] .layout-three-column .slot-right {
+	animation-delay: 1100ms;
+}
+/* Panes are narrow, so full-width body copy (60px, now 48px) wraps onto more
+ * lines than a pane has room for and runs under the status bar: give every
+ * pane in these three layouts its own smaller scale (the 40-44px narrow
+ * column range) with a tighter line-height, and re-tune the tree markers'
+ * fixed offsets to match the shorter row height that produces. */
+[data-theme='terminal'] :is(.layout-two-column, .layout-three-column, .layout-sidebar) .slot > p,
+[data-theme='terminal'] :is(.layout-two-column, .layout-three-column, .layout-sidebar) .slot > ul > li {
+	font-size: 42px;
+	line-height: 1.3;
+}
+[data-theme='terminal'] :is(.layout-two-column, .layout-three-column, .layout-sidebar) .slot > ul > li {
+	padding-top: 6px;
+	padding-bottom: 6px;
+}
+[data-theme='terminal'] :is(.layout-two-column, .layout-three-column, .layout-sidebar) .slot > ul > li::after {
+	top: 27px;
+}
+[data-theme='terminal'] :is(.layout-two-column, .layout-three-column, .layout-sidebar) .slot > ul > li:last-child::before {
+	height: 33px;
+}
+[data-theme='terminal'] :is(.layout-two-column, .layout-three-column, .layout-sidebar) .slot-default > h2 {
+	margin-bottom: 8px;
+}
+
+/* ---------- image: phosphor screen (split-media, and a plain slot image) ---------- */
+[data-theme='terminal'] .layout-split-media {
+	display: grid;
+	grid-template-columns: 1.1fr 1fr;
+	grid-template-rows: auto 1fr;
+	column-gap: 64px;
+}
+[data-theme='terminal'] .layout-split-media::before {
+	grid-column: 1 / -1;
+}
+[data-theme='terminal'] .layout-split-media .slot-default {
+	align-self: center;
+	padding-bottom: 0;
+}
+[data-theme='terminal'] .layout-split-media .slot-default p {
+	margin-top: 12px;
+	width: auto;
+	animation: terminal-pop 100ms steps(2, jump-none) 900ms both;
+}
+[data-theme='terminal'] .layout-split-media .slot-media {
+	align-self: center;
+	padding-bottom: 60px;
+}
+[data-theme='terminal'] .layout-split-media .slot-media p {
+	position: relative;
+	width: auto;
+	padding: 0;
+	border: 3px solid var(--muted);
+	background: color-mix(in srgb, var(--accent-2) 72%, var(--bg));
+	overflow: hidden;
+	animation: terminal-band 600ms steps(10, end) 600ms both;
+}
+[data-theme='terminal'] .layout-split-media img {
+	width: 100%;
+	filter: grayscale(1) contrast(1.25) brightness(0.82);
+	mix-blend-mode: multiply;
+	border: 3px solid var(--muted);
+}
+/*
+ * A plain slot image is evidence (a chart, a screenshot), so it keeps its
+ * own colors: a pane border, a little less glare, and a box that gives it
+ * all the height left under the heading without ever growing past it.
+ */
+[data-theme='terminal'] .slot:not(.slot-media) img {
+	border: 3px solid var(--muted);
+	filter: brightness(0.92);
+}
+/* The parser emits a bare <img> when the image carries an attribute block
+ * and a <p><img></p> otherwise, so both shapes are handled. */
+[data-theme='terminal'] .layout-default .slot:has(> img, > p > img:only-child) {
+	flex: 1;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+}
+/* The heading above an image steps down a size (about 36 characters per
+ * line), so a sentence headline takes two lines and the image keeps the room. */
+[data-theme='terminal'] .layout-default .slot > :is(h1, h2):has(~ img, ~ p > img:only-child) {
+	flex: none;
+	font-size: 84px;
+	line-height: 100px;
+	margin-bottom: 24px;
+}
+[data-theme='terminal'] .layout-default .slot > p:has(> img:only-child) {
+	flex: 1;
+	min-height: 0;
+	width: auto;
+	display: flex;
+	justify-content: center;
+	align-items: flex-start;
+	animation: terminal-pop 100ms steps(2, jump-none) 600ms both;
+}
+/* The image fills the pane width and never grows past the room that is
+ * left. A tall image is letterboxed inside the pane, like a viewer window. */
+[data-theme='terminal'] .layout-default .slot > p > img:only-child {
+	width: 100%;
+	height: auto;
+	max-height: 100%;
+	object-fit: contain;
+	background: var(--surface);
+}
+[data-theme='terminal'] .layout-default .slot > img {
+	flex: 0 1 auto;
+	min-height: 0;
+	width: auto;
+	height: auto;
+	max-width: 100%;
+	align-self: center;
+	object-fit: contain;
+	animation: terminal-pop 100ms steps(2, jump-none) 600ms both;
+}
+
+/* ---------- table: column -t output ---------- */
+[data-theme='terminal'] :is(.slot, .slot > [data-fragment-index]) > table {
+	width: 100%;
+	border-collapse: collapse;
+	margin-top: 24px;
+	font-size: 46px;
+	line-height: 60px;
+	letter-spacing: -0.02em;
+	border: 3px solid var(--muted);
+}
+[data-theme='terminal'] table th {
+	text-align: left;
+	padding: 20px 40px;
+	font-weight: 800;
+	text-transform: uppercase;
+	letter-spacing: 0.02em;
+	color: var(--bg);
+	background: var(--accent-2);
+}
+[data-theme='terminal'] table td {
+	padding: 28px 40px;
+	font-weight: 700;
+	border-top: 3px dashed color-mix(in srgb, var(--muted) 60%, var(--bg));
+}
+[data-theme='terminal'] table td:last-child {
+	color: var(--accent-text);
+	font-weight: 800;
+}
+[data-theme='terminal'] table td:first-child::before {
+	content: '> ';
+	color: var(--muted);
+}
+[data-theme='terminal'] table thead tr,
+[data-theme='terminal'] table tbody tr {
+	animation: terminal-pop 100ms steps(2, jump-none) both;
+}
+[data-theme='terminal'] table thead tr {
+	animation-delay: 700ms;
+}
+[data-theme='terminal'] table tbody tr:nth-child(1) {
+	animation-delay: 850ms;
+}
+[data-theme='terminal'] table tbody tr:nth-child(2) {
+	animation-delay: 1000ms;
+}
+[data-theme='terminal'] table tbody tr:nth-child(3) {
+	animation-delay: 1150ms;
+}
+[data-theme='terminal'] table tbody tr:nth-child(n + 4) {
+	animation-delay: 1300ms;
+}
+
+/* ---------- cover, sidebar, blank ---------- */
+[data-theme='terminal'] .layout-cover {
+	justify-content: center;
+	padding: 96px;
+}
+[data-theme='terminal'] .layout-cover .slot {
+	max-width: 1400px;
+}
+[data-theme='terminal'] .layout-cover h1 {
+	font-size: 120px;
+	line-height: 140px;
+	letter-spacing: -0.03em;
+	max-width: 100%;
+	text-wrap: balance;
+	animation: terminal-type 700ms steps(16, end) 350ms both;
+}
+[data-theme='terminal'] .layout-cover h1[data-length='medium'] {
+	font-size: 150px;
+	line-height: 170px;
+}
+[data-theme='terminal'] .layout-cover h1[data-length='short'] {
+	font-size: 176px;
+	line-height: 196px;
+}
+[data-theme='terminal'] .layout-cover p {
+	margin-top: 44px;
+	font-size: 48px;
+	line-height: 64px;
+}
+
+[data-theme='terminal'] .layout-sidebar {
+	display: grid;
+	grid-template-columns: 1fr 0.45fr;
+	grid-template-rows: auto 1fr;
+	column-gap: 64px;
+}
+[data-theme='terminal'] .layout-sidebar::before {
+	grid-column: 1 / -1;
+}
+[data-theme='terminal'] .layout-sidebar .slot-sidebar {
+	position: relative;
+	padding: 48px 40px;
+	border: 3px solid var(--muted);
+	background: var(--surface);
+}
+[data-theme='terminal'] .layout-sidebar .slot-sidebar h3 {
+	margin-top: 0;
+	color: var(--accent-2);
+}
+[data-theme='terminal'] .layout-sidebar .slot-sidebar p {
+	font-size: 44px;
+	line-height: 60px;
+}
+
+[data-theme='terminal'] .layout-blank {
+	justify-content: center;
+	align-items: center;
+}
+/*
+ * A blank slide with no content is a deliberate beat of nothing (a black
+ * slide while the speaker tells a story), so the status bar, the tag, the
+ * badge and the prompt all step aside. A blank slide with content keeps them.
+ */
+[data-theme='terminal'] .slide[data-layout='blank']:has(.layout-blank:empty)::before,
+[data-theme='terminal'] .slide[data-layout='blank']:has(.layout-blank:empty)::after,
+[data-theme='terminal'] .slide[data-layout='blank']:has(.layout-blank:empty) .slide-content::before {
+	content: none;
+}
+[data-theme='terminal'] .slide[data-layout='blank']:has(.layout-blank:empty) :is(.slide-tag, .slide-badge) {
+	display: none;
+}
+/* The slide's own `background` directive is a flat color: no scanlines over it. */
+[data-theme='terminal'] .slide[data-layout='blank'][style*='background']:has(.layout-blank:empty) {
+	background-image: none;
+}
+
+/* ---------- diagram ---------- */
+[data-theme='terminal'] .layout-default .slot:has(.mermaid-diagram) {
+	flex: 1;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+}
+[data-theme='terminal'] .mermaid-diagram {
+	flex: 1;
+	min-height: 0;
+	display: flex;
+	justify-content: center;
+	animation: terminal-band 700ms steps(8, end) 650ms both;
+}
+[data-theme='terminal'] .mermaid-diagram svg {
+	width: 100% !important;
+	height: 100% !important;
+	max-width: none !important;
+}
+[data-theme='terminal'] .mermaid-diagram .node rect,
+[data-theme='terminal'] .mermaid-diagram .node path,
+[data-theme='terminal'] .mermaid-diagram .node polygon {
+	stroke-width: 3px !important;
+}
+[data-theme='terminal'] .mermaid-diagram {
+	letter-spacing: 0;
+	line-height: 1.5;
+	font-weight: 500;
+}
+/* Mermaid draws its labels as <p> inside foreignObject. They size from the
+ * diagram's own font settings, not from the slot body copy rules. */
+[data-theme='terminal'] .slot .mermaid-diagram p,
+[data-theme='terminal'] .slot .mermaid-diagram li {
+	font-size: inherit;
+	line-height: inherit;
+	font-weight: inherit;
+	width: auto;
+	margin: 0;
+	animation: none;
+}
+/* Label color fallback for a diagram that was rendered without this theme's
+ * mermaid variables. A `quiet` node keeps its own inline color. */
+[data-theme='terminal'] .mermaid-diagram .nodeLabel,
+[data-theme='terminal'] .mermaid-diagram .edgeLabel {
+	color: var(--accent-text) !important;
+}
+[data-theme='terminal'] .mermaid-diagram .edgePath path,
+[data-theme='terminal'] .mermaid-diagram .flowchart-link {
+	stroke-width: 3px !important;
+}
+[data-theme='terminal'] .mermaid-diagram + p {
+	margin-top: 20px;
+	animation-delay: 1100ms;
+}
+[data-theme='terminal'] .mermaid-diagram + p::before {
+	content: '> ';
+	color: var(--accent-text);
+}
+
+/* ---------- scroll slide ---------- */
+[data-theme='terminal'] .scroll-content {
+	position: relative;
+}
+/* The scroll sample's lines run much longer than the code-focus sample's,
+ * and at the theme's fixed code size (51px, the suite's minimum) the
+ * widest ones ran past the box's right edge under `white-space: pre`.
+ * Wrapping instead of shrinking keeps the minimum text size; the extra
+ * vertical height it adds is exactly what scroll reveal is for. */
+[data-theme='terminal'] .scroll-content pre.shiki .line {
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+}
+
+/* ---------- live code block and asciinema chrome ----------
+ * Structure and behavior come from rich-blocks.css, which reads the
+ * --color-* bridge above; only the run button icon color needs a tweak
+ * since it hardcodes white text over --color-accent, and --accent-2 here
+ * is closer to this theme's "go" color than --accent (amber, an alert
+ * color in this palette). */
+[data-theme='terminal'] .live-code-block .run-button {
+	background-color: var(--accent-2);
+	color: var(--bg);
+	font-family: var(--font-mono);
+	font-weight: 800;
+	border-radius: 0;
+}
+[data-theme='terminal'] .live-code-block .code-container pre,
+[data-theme='terminal'] .live-code-block .result-container {
+	border-radius: 0;
+	border: 3px solid var(--muted);
+}
+[data-theme='terminal'] .asciinema-player-wrapper {
+	border: 3px solid var(--muted);
+}
+
+/* ---------- minimum-size safety net ----------
+ * Every layout rule above sets an explicit size for the slot text it knows
+ * about. This catches whatever it doesn't: two-column and three-column
+ * body copy, the sidebar, big-stat's caption, split-media's default slot,
+ * fragment paragraphs, and code without highlights, all of which otherwise
+ * fall back to the base theme's much smaller default typography. Rules
+ * above with a more specific selector still win the cascade. */
+[data-theme='terminal'] .slot p,
+[data-theme='terminal'] .slot li {
+	font-size: 48px;
+	line-height: 1.4;
+}
+[data-theme='terminal'] pre code {
+	font-size: 40px;
+}
+[data-theme='terminal'] .slot td,
+[data-theme='terminal'] .slot th {
+	font-size: 46px;
+}

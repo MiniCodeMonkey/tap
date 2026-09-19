@@ -92,7 +92,7 @@ layout: two-column
 
 Follow along with the installation process step by step.
 
-|||
+::right
 
 ```asciinema {src: "./install.cast", autoPlay: true, loop: true}
 ```
@@ -138,7 +138,7 @@ No additional configuration is needed.
 | Issue | Solution |
 |-------|----------|
 | Blank player | Check that the `.cast` file path is correct relative to your markdown |
-| Player not loading | The asciinema-player library loads from CDN; check your network connection |
+| Player not loading | The asciinema-player library is bundled with tap; check the browser console for a build/load error |
 | Recording looks wrong | Try setting explicit `cols` and `rows` to match your recording |
 | Playback too fast/slow | Adjust the `speed` option or use `idleTimeLimit` to trim pauses |
 
@@ -148,7 +148,7 @@ No additional configuration is needed.
 - Use `speed: 2` for demos that are mostly typing
 - Use `idleTimeLimit` to trim long pauses automatically
 - Use `autoPlay: true, loop: true` for ambient background demos
-- Test playback before presenting (the player library loads from CDN)
+- The player is bundled with tap and needs no network access to load
 
 ## Next Steps
 

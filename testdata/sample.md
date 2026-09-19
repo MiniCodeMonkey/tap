@@ -1,11 +1,10 @@
 ---
 title: Tap Sample Presentation
-theme: paper
+theme: base
 author: Tap Team
 date: "2026-01-23"
 aspectRatio: "16:9"
 transition: fade
-codeTheme: github-dark
 fragments: true
 drivers:
   shell:
@@ -67,7 +66,7 @@ notes: Getting started is easy - just follow these steps.
 
 ## Two Column Layout
 
-|||
+::left
 
 ### Left Side
 
@@ -77,7 +76,7 @@ Install Tap with a single command:
 go install github.com/MiniCodeMonkey/tap@latest
 ```
 
-|||
+::right
 
 ### Right Side
 
@@ -116,7 +115,7 @@ notes: A memorable quote to inspire the audience.
 
 > "The best way to predict the future is to invent it."
 >
-> — Alan Kay
+> -- Alan Kay
 
 ---
 
@@ -252,7 +251,7 @@ notes: Comparing different options side by side.
 
 ## Feature Comparison
 
-|||
+::left
 
 ### Free Tier
 
@@ -260,7 +259,7 @@ notes: Comparing different options side by side.
 - Basic themes
 - Community support
 
-|||
+::center
 
 ### Pro Tier
 
@@ -269,7 +268,7 @@ notes: Comparing different options side by side.
 - Priority support
 - Custom branding
 
-|||
+::right
 
 ### Enterprise
 
@@ -346,8 +345,6 @@ layout: sidebar
 
 ## Sidebar Layout
 
-||| main
-
 The main content area takes up most of the space.
 
 Perfect for content that needs some supporting information on the side.
@@ -356,7 +353,7 @@ Perfect for content that needs some supporting information on the side.
 - Point two
 - Point three
 
-||| sidebar
+::sidebar
 
 ### Resources
 
@@ -373,8 +370,6 @@ layout: split-media
 
 ## Split Media
 
-||| content
-
 ### Image + Text
 
 This layout places an image alongside your content.
@@ -384,9 +379,9 @@ Great for:
 - Diagrams
 - Photos
 
-||| media
+::media
 
-![Placeholder Image](https://via.placeholder.com/800x600)
+![Placeholder Image](placeholder.png)
 
 ---
 
@@ -538,3 +533,78 @@ This slide follows the scroll test slide.
 Questions?
 
 **Press S for presenter view**
+
+---
+
+<!--
+layout: big-stat
+-->
+
+# 99%
+
+::caption
+
+Uptime across every region
+
+::figure
+
+![Reliability chart](placeholder.png)
+
+---
+
+<!--
+layout: two-column
+notes: Covers the step mechanism for a fragment inside a slot.
+-->
+
+## Column Fragments
+
+::left
+
+### Static Column
+
+This column has no fragments.
+
+::right
+
+### Reveal Column
+
+<!-- pause -->
+
+This line only appears after advancing.
+
+---
+
+<!-- layout: blank -->
+
+```map
+start: 40.7128, -74.0060
+end: 51.5074, -0.1278
+zoom: 4
+duration: 2000
+markers: true
+```
+
+---
+
+## After Map
+
+This slide follows the map slide.
+
+---
+
+<!-- layout: two-column -->
+
+## Reordered Live Code
+
+::right
+
+```sql {driver: sqlite, connection: default}
+SELECT * FROM users;
+```
+
+::left
+
+```js
+console.log('static, no driver');
+```

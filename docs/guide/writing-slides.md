@@ -13,7 +13,7 @@ Every Tap presentation begins with YAML frontmatter enclosed in triple dashes. T
 ```yaml
 ---
 title: My Presentation
-theme: paper
+theme: terminal
 author: Jane Developer
 date: 2024-01-15
 ---
@@ -24,7 +24,7 @@ date: 2024-01-15
 | Option | Type | Description |
 |--------|------|-------------|
 | `title` | string | The presentation title (shown in browser tab) |
-| `theme` | string | Visual theme: `paper`, `noir`, `aurora`, `phosphor`, `poster` |
+| `theme` | string | Visual theme, e.g. `terminal`, `swiss`, `keynote` (21 total, see [Themes](/guide/themes)) |
 | `author` | string | Author name for metadata |
 | `date` | string | Presentation date |
 | `aspectRatio` | string | Slide aspect ratio (default: `16:9`) |
@@ -39,7 +39,7 @@ Separate individual slides using three dashes (`---`) on their own line. Leave b
 ```markdown
 ---
 title: My Talk
-theme: paper
+theme: terminal
 ---
 
 # Welcome
@@ -135,7 +135,7 @@ See [Code Blocks](/guide/code-blocks) for line highlighting, diffs, and multi-st
 
 ```markdown
 > "The best way to predict the future is to invent it."
-> — Alan Kay
+> -- Alan Kay
 ```
 
 ### Tables
@@ -174,6 +174,11 @@ Content here will use the two-column layout with a fade transition.
 | `background` | Background color or image |
 | `fragments` | Enable incremental reveals (`true`/`false`) |
 | `notes` | Speaker notes (alternative to `<!-- notes: -->` syntax) |
+| `tag` | Small decorative metadata label |
+| `badge` | Small decorative badge |
+| `scroll` | Scroll reveal for long content (`true`/`false`) |
+| `scroll-speed` | Scroll reveal duration in milliseconds (default `2000`) |
+| `steps` | Clicker presses this slide consumes |
 
 See [Slide Directives](/reference/slide-directives) for the complete reference.
 
@@ -182,7 +187,7 @@ See [Slide Directives](/reference/slide-directives) for the complete reference.
 ````markdown
 ---
 title: Product Launch
-theme: aurora
+theme: product
 ---
 
 <!--
@@ -205,7 +210,7 @@ layout: two-column
 - Easy to use
 - Well documented
 
-|||
+::right
 
 - Open source
 - Cross-platform

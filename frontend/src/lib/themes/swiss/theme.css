@@ -1,0 +1,1469 @@
+/**
+ * Swiss theme.
+ * An argument-driven engineering talk set like a Zurich concert poster:
+ * a twelve-column grid, one grotesk in four weights, black rules, and a
+ * single red that only ever points at the thing being talked about.
+ *
+ * The sheet: 96px margins, twelve 122px columns with 24px gutters. A 10px
+ * rule runs along the top margin, the folio and section marker hang under
+ * it, headings sit at the top of the sheet and content is anchored to the
+ * bottom margin. Numerals and labels live in the three margin columns;
+ * running text starts at the fourth column (`--indent`).
+ *
+ * Red comes in two values. `--accent` is for shapes, rules, and display
+ * numerals. `--accent-text` is the darker cut for body-size text; it
+ * measures 7.24:1 on `--bg`.
+ */
+
+@import '@fontsource/archivo/latin-500.css';
+@import '@fontsource/archivo/latin-600.css';
+@import '@fontsource/archivo/latin-700.css';
+@import '@fontsource/archivo/latin-800.css';
+@import '@fontsource/dm-mono/latin-400.css';
+@import '@fontsource/dm-mono/latin-500.css';
+
+[data-theme='swiss'] {
+	/* ---------- design-spec tokens ---------- */
+	--bg: #f4f4f0;
+	--fg: #111111;
+	--muted: #4a4a47;
+	--accent: #d40b1e;
+	--accent-text: #a30d1c;
+	--surface: #deddd6;
+	/* the quietest text value: dimmed code lines and comments, 5:1 on --bg */
+	--dim: #6a6962;
+	--font-display: 'Archivo', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+	--font-body: 'Archivo', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+	--font-mono: 'DM Mono', ui-monospace, Menlo, monospace;
+	--ease: cubic-bezier(0.2, 0, 0, 1);
+	--dur: 520ms;
+	--space-unit: 24px;
+	--radius: 0px;
+	--stroke-width: 2px;
+	/* three margin columns plus their gutters; running text starts here */
+	--indent: 438px;
+
+	/* bridge to the token names the shared stylesheets read */
+	--color-bg: var(--bg);
+	--color-text: var(--fg);
+	--color-muted: var(--muted);
+	--color-accent: var(--accent);
+	--color-code-bg: var(--surface);
+	--color-code-text: var(--fg);
+	--color-code-inline-bg: var(--surface);
+	--color-border: var(--fg);
+	--color-surface: var(--surface);
+	--color-surface-elevated: var(--bg);
+	--color-link: var(--accent-text);
+	--font-sans: var(--font-body);
+
+	/* code: text color, one red for literals, grey for the scaffolding */
+	--shiki-foreground: var(--fg);
+	--shiki-background: transparent;
+	--shiki-token-comment: var(--dim);
+	--shiki-token-string: var(--accent-text);
+	--shiki-token-string-expression: var(--accent-text);
+	--shiki-token-keyword: var(--fg);
+	--shiki-token-function: var(--fg);
+	--shiki-token-constant: var(--accent-text);
+	--shiki-token-parameter: var(--fg);
+	--shiki-token-punctuation: var(--muted);
+	--shiki-token-link: var(--accent-text);
+}
+
+@keyframes swiss-in-x {
+	0% {
+		opacity: 0;
+		transform: translateX(-72px);
+	}
+	35% {
+		opacity: 1;
+	}
+}
+@keyframes swiss-in-y {
+	0% {
+		opacity: 0;
+		transform: translateY(40px);
+	}
+	35% {
+		opacity: 1;
+	}
+}
+@keyframes swiss-fade {
+	from {
+		opacity: 0;
+	}
+}
+@keyframes swiss-grow-x {
+	from {
+		transform: scaleX(0);
+	}
+}
+@keyframes swiss-grow-y {
+	from {
+		transform: scaleY(0);
+	}
+}
+@keyframes swiss-breathe {
+	from {
+		transform: scaleY(1);
+	}
+	to {
+		transform: scaleY(1.045);
+	}
+}
+
+/* ============================================================================
+ * The sheet: margins, top rule, folio, section marker, badge
+ * ============================================================================
+ * `.slide[data-layout]` is the rendered slide. SlideCanvas's outer scaling
+ * frame also carries the class `slide` but has no data attributes, so it
+ * never receives the chrome below.
+ * ============================================================================ */
+
+[data-theme='swiss'] .slide[data-layout] {
+	isolation: isolate;
+	padding: 186px 96px 96px;
+	background-color: var(--bg);
+	color: var(--fg);
+	font-family: var(--font-body);
+	font-size: 48px;
+	font-weight: 600;
+	line-height: 1.4;
+	letter-spacing: -0.015em;
+}
+[data-theme='swiss'] .slide[data-layout]::before {
+	content: '';
+	position: absolute;
+	left: 96px;
+	right: 96px;
+	top: 96px;
+	height: 10px;
+	background: var(--fg);
+	transform-origin: left center;
+	animation: swiss-grow-x var(--dur) var(--ease) both;
+}
+[data-theme='swiss'] .slide[data-layout]::after {
+	content: attr(data-index) ' / ' attr(data-total);
+	position: absolute;
+	right: 96px;
+	top: 124px;
+	font-size: 28px;
+	font-weight: 700;
+	line-height: 1.2;
+	letter-spacing: 0.01em;
+	font-variant-numeric: tabular-nums;
+	animation: swiss-in-y var(--dur) var(--ease) 120ms both;
+}
+[data-theme='swiss'] .slide-tag {
+	left: calc(96px + var(--indent));
+	top: 124px;
+	max-width: 1000px;
+	overflow: hidden;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+	font-family: var(--font-body);
+	font-size: 28px;
+	font-weight: 700;
+	line-height: 1.2;
+	letter-spacing: 0.01em;
+	color: var(--fg);
+	animation: swiss-in-y var(--dur) var(--ease) 120ms both;
+}
+/* the badge is a solid block at the head of the margin columns */
+[data-theme='swiss'] .slide-badge {
+	left: 96px;
+	right: auto;
+	top: 122px;
+	padding: 3px 14px 4px;
+	font-family: var(--font-body);
+	font-size: 28px;
+	font-weight: 700;
+	line-height: 1.2;
+	letter-spacing: 0.01em;
+	color: var(--bg);
+	background: var(--fg);
+	animation: swiss-in-y var(--dur) var(--ease) 120ms both;
+}
+
+/* every layout fills the sheet inside the margins, flush left */
+[data-theme='swiss'] [class^='layout-'],
+[data-theme='swiss'] .slide[data-layout='component'] > .slide-content > .deck-component-root,
+[data-theme='swiss'] .slide[data-layout='component'] > .slide-content > .scroll-content > .deck-component-root {
+	width: 100%;
+	height: 100%;
+	padding: 0;
+	/* Cancel layouts.css's shared `.deck-component-root` border: this
+	   theme's real inset already comes from `.slide[data-layout]` padding. */
+	border: 0;
+	gap: 0;
+	text-align: left;
+	align-items: stretch;
+	justify-content: flex-start;
+}
+[data-theme='swiss'] .slot {
+	max-width: none;
+	color: var(--fg);
+}
+[data-theme='swiss'] .slot :where(h1, h2, h3, h4, h5, h6, p, ul, ol, li, blockquote, pre, table, figure) {
+	margin: 0;
+	padding: 0;
+}
+
+/*
+ * Mermaid measures its labels in the medium cut. Setting one invisible
+ * glyph in that cut on every sheet has the face loaded before
+ * document.fonts.ready resolves, so labels are measured in the font they
+ * are drawn in.
+ */
+[data-theme='swiss'] .slide[data-layout] .slide-content::after {
+	content: 'n' / '';
+	position: absolute;
+	left: 0;
+	top: 0;
+	font-family: var(--font-body);
+	font-size: 28px;
+	font-weight: 500;
+	line-height: 1;
+	opacity: 0;
+	pointer-events: none;
+}
+
+/* ============================================================================
+ * Type
+ * ============================================================================ */
+
+[data-theme='swiss'] .slot :is(h1, h2, h3, h4, h5, h6) {
+	font-family: var(--font-display);
+	font-weight: 800;
+	line-height: 1;
+	letter-spacing: -0.035em;
+	text-wrap: balance;
+	color: var(--fg);
+}
+/* size for a long (60+ character) heading first, then scale up for medium and short */
+[data-theme='swiss'] .slot h1 {
+	font-size: 108px;
+	letter-spacing: -0.04em;
+}
+[data-theme='swiss'] .slot h1[data-length='medium'] {
+	font-size: 132px;
+}
+[data-theme='swiss'] .slot h1[data-length='short'] {
+	font-size: 160px;
+}
+[data-theme='swiss'] .slot h2 {
+	font-size: 88px;
+}
+[data-theme='swiss'] .slot h2[data-length='medium'] {
+	font-size: 104px;
+}
+[data-theme='swiss'] .slot h2[data-length='short'] {
+	font-size: 124px;
+}
+[data-theme='swiss'] .slot h3 {
+	font-size: 72px;
+	line-height: 1.04;
+}
+[data-theme='swiss'] .slot h4 {
+	font-size: 56px;
+	font-weight: 700;
+	line-height: 1.08;
+	letter-spacing: -0.025em;
+}
+[data-theme='swiss'] .slot h5 {
+	font-size: 44px;
+	font-weight: 700;
+	line-height: 1.1;
+	letter-spacing: -0.015em;
+}
+[data-theme='swiss'] .slot h6 {
+	font-size: 34px;
+	font-weight: 700;
+	line-height: 1.15;
+	letter-spacing: 0.01em;
+	color: var(--muted);
+}
+[data-theme='swiss'] .slot p,
+[data-theme='swiss'] .slot li {
+	line-height: 1.4;
+	text-wrap: pretty;
+}
+[data-theme='swiss'] .slot strong {
+	font-weight: 800;
+	color: var(--accent-text);
+}
+/* emphasis is a red underline, never a slant */
+[data-theme='swiss'] .slot em {
+	font-style: normal;
+	box-shadow: inset 0 -0.11em 0 var(--accent);
+	-webkit-box-decoration-break: clone;
+	box-decoration-break: clone;
+}
+[data-theme='swiss'] .slot a {
+	color: var(--accent-text);
+	text-decoration: underline;
+	text-decoration-thickness: 0.07em;
+	text-underline-offset: 0.14em;
+	transition:
+		color 160ms var(--ease),
+		background-color 160ms var(--ease);
+}
+[data-theme='swiss'] .slot a:hover {
+	color: var(--bg);
+	background-color: var(--fg);
+	text-decoration-color: transparent;
+}
+[data-theme='swiss'] .slot :not(pre) > code {
+	font-family: var(--font-mono);
+	font-size: 0.88em;
+	font-weight: 500;
+	letter-spacing: 0;
+	padding: 0 0.14em;
+	border-radius: 0;
+	color: var(--fg);
+	background: var(--surface);
+}
+
+/* entrance: everything slides in from the left along the grid */
+[data-theme='swiss'] .slot > * {
+	animation: swiss-in-x var(--dur) var(--ease) 140ms both;
+}
+[data-theme='swiss'] .slot > :nth-child(2) {
+	animation-delay: 240ms;
+}
+[data-theme='swiss'] .slot > :nth-child(3) {
+	animation-delay: 320ms;
+}
+[data-theme='swiss'] .slot > :nth-child(n + 4) {
+	animation-delay: 400ms;
+}
+/* lists, tables, and code bring their own rows in one by one */
+[data-theme='swiss'] .slot > :is(ul, ol, pre, table) {
+	animation: none;
+}
+
+/* a fragment wrapper moves only when it is revealed */
+[data-theme='swiss'] .slot > .fragment {
+	animation: none;
+}
+/* fragments arrive along the same axis */
+[data-theme='swiss'] .slide .fragment-hidden {
+	opacity: 0;
+	transform: translateX(-72px);
+	transition:
+		opacity var(--dur) var(--ease),
+		transform var(--dur) var(--ease),
+		visibility 0ms var(--dur);
+}
+[data-theme='swiss'] .slide .fragment-visible {
+	opacity: 1;
+	transform: none;
+	transition:
+		opacity var(--dur) var(--ease),
+		transform var(--dur) var(--ease),
+		visibility 0ms;
+}
+
+/* ============================================================================
+ * A text block that hangs from a rule in the text column
+ * ============================================================================ */
+
+[data-theme='swiss'] .layout-section .slot,
+[data-theme='swiss'] .layout-default .slot:has(> h1:only-child),
+[data-theme='swiss'] .slot-caption,
+[data-theme='swiss'] .slot-attribution {
+	margin-left: var(--indent);
+}
+[data-theme='swiss'] .layout-section .slot::before,
+[data-theme='swiss'] .layout-default .slot:has(> h1:only-child)::before,
+[data-theme='swiss'] .slot-caption::before,
+[data-theme='swiss'] .slot-attribution::before {
+	content: '';
+	display: block;
+	height: 4px;
+	margin-bottom: 32px;
+	background: var(--fg);
+	transform-origin: left center;
+	animation: swiss-grow-x var(--dur) var(--ease) 200ms both;
+}
+
+/* ============================================================================
+ * Title: the headline at the top of the sheet, a bar chart growing out of
+ * the bottom margin. The bars take whatever height the headline leaves.
+ * ============================================================================ */
+
+[data-theme='swiss'] .layout-title {
+	display: block;
+}
+[data-theme='swiss'] .layout-title .slot {
+	height: 100%;
+	display: grid;
+	grid-template-columns: 560px 1fr;
+	grid-template-rows: auto auto minmax(0, 1fr);
+	column-gap: 24px;
+}
+[data-theme='swiss'] .layout-title .slot :is(h1, h2) {
+	grid-column: 1 / -1;
+	letter-spacing: -0.04em;
+}
+/* size for a long title first, then scale up for medium and short */
+[data-theme='swiss'] .layout-title .slot h1 {
+	font-weight: 800;
+	font-size: 108px;
+}
+[data-theme='swiss'] .layout-title .slot h1[data-length='medium'] {
+	font-size: 140px;
+}
+[data-theme='swiss'] .layout-title .slot h1[data-length='short'] {
+	font-size: 176px;
+}
+/* with a subtitle the title steps back a weight and the subtitle carries the black */
+[data-theme='swiss'] .layout-title .slot h1:has(~ h2) {
+	font-weight: 500;
+}
+[data-theme='swiss'] .layout-title .slot h2 {
+	color: var(--fg);
+	font-size: 90px;
+}
+[data-theme='swiss'] .layout-title .slot h2[data-length='medium'] {
+	font-size: 112px;
+}
+[data-theme='swiss'] .layout-title .slot h2[data-length='short'] {
+	font-size: 132px;
+}
+[data-theme='swiss'] .layout-title .slot p {
+	grid-row: 3;
+	grid-column: 1;
+	align-self: end;
+	max-width: none;
+	margin: 48px 0 0;
+	font-size: 46px;
+	font-weight: 700;
+	line-height: 1.3;
+	letter-spacing: -0.02em;
+	color: var(--fg);
+	text-wrap: balance;
+}
+[data-theme='swiss'] .layout-title .slot::after {
+	content: '';
+	grid-row: 3;
+	grid-column: 2;
+	align-self: end;
+	width: 1144px;
+	height: calc(100% - 48px);
+	max-height: 300px;
+	background:
+		linear-gradient(var(--accent), var(--accent)) 0 100% / 122px 13% no-repeat,
+		linear-gradient(var(--fg), var(--fg)) 146px 100% / 122px 43% no-repeat,
+		linear-gradient(var(--fg), var(--fg)) 292px 100% / 122px 61% no-repeat,
+		linear-gradient(var(--fg), var(--fg)) 438px 100% / 122px 50% no-repeat,
+		linear-gradient(var(--fg), var(--fg)) 584px 100% / 122px 79% no-repeat,
+		linear-gradient(var(--fg), var(--fg)) 730px 100% / 122px 68% no-repeat,
+		linear-gradient(var(--fg), var(--fg)) 876px 100% / 122px 100% no-repeat,
+		linear-gradient(var(--fg), var(--fg)) 1022px 100% / 122px 88% no-repeat;
+	transform-origin: center bottom;
+	animation:
+		swiss-grow-y calc(var(--dur) * 1.6) var(--ease) 300ms both,
+		swiss-breathe 9s ease-in-out 1600ms infinite alternate;
+}
+
+/* ============================================================================
+ * Section: the marker becomes the red headline numeral of the sheet
+ * ============================================================================ */
+
+[data-theme='swiss'] .slide[data-layout='section'] .slide-tag {
+	left: 90px;
+	top: 176px;
+	max-width: 1736px;
+	font-family: var(--font-display);
+	font-size: 150px;
+	font-weight: 800;
+	line-height: 1.1;
+	letter-spacing: -0.05em;
+	color: var(--accent);
+	animation: swiss-in-x var(--dur) var(--ease) both;
+}
+[data-theme='swiss'] .layout-section {
+	display: flex;
+	flex-direction: column;
+	justify-content: flex-end;
+}
+/* size for a long section title first, then scale up for medium and short */
+[data-theme='swiss'] .layout-section .slot :is(h1, h2) {
+	font-size: 124px;
+	letter-spacing: -0.04em;
+	color: var(--fg);
+}
+[data-theme='swiss'] .layout-section .slot :is(h1, h2)[data-length='medium'] {
+	font-size: 156px;
+}
+[data-theme='swiss'] .layout-section .slot :is(h1, h2)[data-length='short'] {
+	font-size: 190px;
+}
+[data-theme='swiss'] .layout-section .slot p {
+	margin-top: 28px;
+}
+
+/* ============================================================================
+ * Default and code-focus: heading at the top of the sheet, everything
+ * after it anchored to the bottom margin
+ * ============================================================================ */
+
+[data-theme='swiss'] .layout-default,
+[data-theme='swiss'] .layout-code-focus {
+	display: block;
+}
+[data-theme='swiss'] .layout-default .slot,
+[data-theme='swiss'] .layout-code-focus .slot {
+	height: 100%;
+	display: flex;
+	flex-direction: column;
+}
+[data-theme='swiss'] .layout-default .slot > :is(h1, h2):first-child,
+[data-theme='swiss'] .layout-code-focus .slot > :is(h1, h2):first-child {
+	padding-bottom: 40px;
+}
+[data-theme='swiss'] .layout-default .slot > :is(h1, h2):first-child + *,
+[data-theme='swiss'] .layout-code-focus .slot > :is(h1, h2):first-child + * {
+	margin-top: auto;
+}
+/* running text and minor headings keep to the text column, under a rule */
+[data-theme='swiss'] .layout-default .slot > p,
+[data-theme='swiss'] .layout-default .slot > .fragment > p,
+[data-theme='swiss'] .layout-code-focus .slot > p,
+[data-theme='swiss'] .layout-code-focus .slot > .fragment > p {
+	padding: 22px 0 30px var(--indent);
+	border-top: 4px solid var(--fg);
+}
+[data-theme='swiss'] .layout-default .slot > p:last-child,
+[data-theme='swiss'] .layout-default .slot > .fragment:last-child > p:last-child,
+[data-theme='swiss'] .layout-code-focus .slot > p:last-child,
+[data-theme='swiss'] .layout-code-focus .slot > .fragment:last-child > p:last-child {
+	padding-bottom: 0;
+}
+[data-theme='swiss'] .layout-default .slot > :is(h3, h4, h5, h6),
+[data-theme='swiss'] .layout-code-focus .slot > :is(h3, h4, h5, h6) {
+	margin-left: var(--indent);
+	margin-top: 20px;
+}
+[data-theme='swiss'] .layout-default .slot > p + :is(h3, h4, h5, h6) {
+	margin-top: 0;
+}
+
+/* statement: a lone h1 hangs from its rule at the bottom of the sheet */
+[data-theme='swiss'] .layout-default:has(h1:only-child) {
+	display: flex;
+	flex-direction: column;
+	justify-content: flex-end;
+}
+[data-theme='swiss'] .layout-default .slot:has(> h1:only-child) {
+	height: auto;
+	display: block;
+}
+/* size for a long statement first, then scale up for medium and short */
+[data-theme='swiss'] .layout-default .slot > h1:only-child {
+	font-size: 124px;
+	line-height: 0.98;
+	letter-spacing: -0.04em;
+	padding-bottom: 12px;
+}
+[data-theme='swiss'] .layout-default .slot > h1:only-child[data-length='medium'] {
+	font-size: 156px;
+}
+[data-theme='swiss'] .layout-default .slot > h1:only-child[data-length='short'] {
+	font-size: 190px;
+}
+
+/* ============================================================================
+ * Lists: a numbered index. Numerals in the margin columns, text in the
+ * text column, a rule over every entry.
+ * ============================================================================ */
+
+[data-theme='swiss'] .slot :is(ul, ol) {
+	list-style: none;
+	counter-reset: swiss-item;
+	font-size: 48px;
+	line-height: 1.4;
+}
+[data-theme='swiss'] .slot li {
+	position: relative;
+	counter-increment: swiss-item;
+	margin: 0;
+	padding: 20px 0 26px var(--indent);
+	border-top: 4px solid var(--fg);
+	font-size: 50px;
+	line-height: 1.35;
+	letter-spacing: -0.02em;
+	animation: swiss-in-x var(--dur) var(--ease) 260ms both;
+}
+[data-theme='swiss'] .slot li:last-child {
+	padding-bottom: 0;
+}
+[data-theme='swiss'] .slot li::before {
+	content: counter(swiss-item, decimal-leading-zero);
+	position: absolute;
+	left: 0;
+	top: 22px;
+	font-weight: 800;
+	font-variant-numeric: tabular-nums;
+	color: var(--accent-text);
+}
+[data-theme='swiss'] .slot li:nth-child(2) {
+	animation-delay: 340ms;
+}
+[data-theme='swiss'] .slot li:nth-child(3) {
+	animation-delay: 420ms;
+}
+[data-theme='swiss'] .slot li:nth-child(4) {
+	animation-delay: 500ms;
+}
+[data-theme='swiss'] .slot li:nth-child(n + 5) {
+	animation-delay: 580ms;
+}
+/* nested entries: no rule, no numeral, a short dash and a lighter cut */
+[data-theme='swiss'] .slot li :is(ul, ol) {
+	margin-top: 14px;
+}
+[data-theme='swiss'] .slot li li {
+	padding: 6px 0 6px 64px;
+	border-top: 0;
+	font-size: 44px;
+	font-weight: 500;
+	line-height: 1.35;
+	color: var(--muted);
+	animation: none;
+}
+[data-theme='swiss'] .slot li li::before {
+	content: '';
+	left: 0;
+	top: calc(6px + 0.5em);
+	width: 40px;
+	height: 5px;
+	background: var(--fg);
+}
+
+/* ============================================================================
+ * Code: set straight on the paper under a rule. The line in focus gets a
+ * red bar in the margin; the others step back to grey.
+ * ============================================================================ */
+
+[data-theme='swiss'] .slot pre {
+	padding: 22px 0 0;
+	border-top: 4px solid var(--fg);
+	border-radius: 0;
+	overflow: hidden;
+	background: transparent !important;
+	font-family: var(--font-mono);
+	font-size: 40px;
+	font-weight: 500;
+	line-height: 58px;
+	letter-spacing: 0;
+	font-variant-ligatures: none;
+	color: var(--fg);
+}
+/* longer listings tighten their leading; the count includes the empty last line */
+[data-theme='swiss'] .slot pre:has(.line:nth-child(10)) {
+	line-height: 52px;
+}
+[data-theme='swiss'] .slot pre:has(.line:nth-child(11)) {
+	line-height: 48px;
+}
+[data-theme='swiss'] .slot pre code {
+	display: flex;
+	flex-direction: column;
+	font: inherit;
+	font-size: 40px;
+}
+/* long lines wrap with a hanging indent instead of running off the sheet */
+[data-theme='swiss'] .slot pre .line {
+	display: block;
+	padding-left: calc(44px + 2ch);
+	text-indent: -2ch;
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+	opacity: 1;
+	animation: swiss-in-x var(--dur) var(--ease) 260ms both;
+}
+/* blank lines keep their height; the empty line after the final newline does not */
+[data-theme='swiss'] .slot pre .line {
+	min-height: 1lh;
+}
+[data-theme='swiss'] .slot pre .line:last-child:empty,
+[data-theme='swiss'] .slot pre .line:last-child:has(> .line-content:only-child:empty) {
+	display: none;
+}
+[data-theme='swiss'] .slot pre .line:nth-child(2) {
+	animation-delay: 310ms;
+}
+[data-theme='swiss'] .slot pre .line:nth-child(3) {
+	animation-delay: 360ms;
+}
+[data-theme='swiss'] .slot pre .line:nth-child(4) {
+	animation-delay: 410ms;
+}
+[data-theme='swiss'] .slot pre .line:nth-child(n + 5) {
+	animation-delay: 460ms;
+}
+[data-theme='swiss'] .slot pre .line.highlighted {
+	animation-delay: 620ms;
+}
+[data-theme='swiss'] .slot pre.has-highlighted .line:not(.highlighted) {
+	font-weight: 400;
+	color: var(--dim);
+	--shiki-token-string: var(--dim);
+	--shiki-token-string-expression: var(--dim);
+	--shiki-token-keyword: var(--dim);
+	--shiki-token-function: var(--dim);
+	--shiki-token-constant: var(--dim);
+	--shiki-token-parameter: var(--dim);
+	--shiki-token-punctuation: var(--dim);
+	--shiki-token-link: var(--dim);
+}
+[data-theme='swiss'] .slot pre.has-highlighted .line.highlighted {
+	padding-left: calc(30px + 2ch);
+	border-left: 14px solid var(--accent);
+	font-weight: 500;
+}
+[data-theme='swiss'] .slot pre .line-number {
+	display: inline-block;
+	min-width: 3ch;
+	text-indent: 0;
+	color: var(--dim);
+}
+
+/* ============================================================================
+ * Big number
+ * ============================================================================ */
+
+[data-theme='swiss'] .layout-big-stat,
+[data-theme='swiss'] .layout-quote {
+	display: flex;
+	flex-direction: column;
+	justify-content: space-between;
+}
+/* size for a long stat label first, then scale up for medium and short (the common case) */
+[data-theme='swiss'] .layout-big-stat .slot-default h1,
+[data-theme='swiss'] .layout-big-stat .slot-default strong {
+	margin: 24px 0 0 -14px;
+	font-size: 220px;
+	font-weight: 800;
+	line-height: 0.8;
+	letter-spacing: -0.055em;
+	white-space: nowrap;
+	color: var(--accent);
+}
+[data-theme='swiss'] .layout-big-stat .slot-default h1[data-length='medium'] {
+	font-size: 264px;
+}
+[data-theme='swiss'] .layout-big-stat .slot-default h1[data-length='short'] {
+	font-size: 310px;
+}
+[data-theme='swiss'] .layout-big-stat .slot-caption p {
+	max-width: 1100px;
+	margin: 0;
+	font-size: 46px;
+	color: var(--fg);
+}
+[data-theme='swiss'] .layout-big-stat .slot-figure {
+	position: absolute;
+	right: 0;
+	top: 0;
+}
+[data-theme='swiss'] .layout-big-stat .slot-figure img {
+	max-height: 300px;
+}
+
+/* ============================================================================
+ * Quote
+ * ============================================================================ */
+
+[data-theme='swiss'] .layout-quote .slot-default blockquote {
+	position: relative;
+	padding-left: var(--indent);
+	border: 0;
+	font-style: normal;
+	color: var(--fg);
+}
+[data-theme='swiss'] .layout-quote .slot-default blockquote::before {
+	content: '\201C';
+	position: absolute;
+	left: -12px;
+	top: -30px;
+	font-family: var(--font-display);
+	font-size: 560px;
+	font-weight: 800;
+	line-height: 1;
+	letter-spacing: -0.05em;
+	color: var(--accent);
+}
+[data-theme='swiss'] .layout-quote .slot-default blockquote p {
+	font-family: var(--font-display);
+	font-size: 108px;
+	font-weight: 800;
+	line-height: 1.05;
+	letter-spacing: -0.04em;
+	text-wrap: balance;
+}
+[data-theme='swiss'] .layout-quote .slot-attribution p {
+	margin: 0;
+	font-size: 44px;
+	font-weight: 700;
+	color: var(--fg);
+}
+[data-theme='swiss'] .layout-quote .slot-attribution p::before {
+	content: none;
+}
+/* a quotation on any other sheet: the same voice at body scale */
+[data-theme='swiss'] .slot blockquote {
+	padding-left: var(--indent);
+	border: 0;
+	font-style: normal;
+	color: var(--fg);
+}
+
+/* ============================================================================
+ * Columns: halves and thirds of the grid, each hanging from a bar
+ * ============================================================================ */
+
+[data-theme='swiss'] .layout-two-column,
+[data-theme='swiss'] .layout-three-column {
+	display: grid;
+	grid-template-rows: auto auto;
+	align-content: space-between;
+	column-gap: 24px;
+	row-gap: 40px;
+}
+[data-theme='swiss'] .layout-two-column {
+	grid-template-columns: 1fr 1fr;
+}
+[data-theme='swiss'] .layout-three-column {
+	grid-template-columns: 1fr 1fr 1fr;
+	/* the numeral prefix below is the column index, not the list index */
+	counter-reset: swiss-col;
+}
+[data-theme='swiss'] .layout-two-column .slot-default,
+[data-theme='swiss'] .layout-three-column .slot-default {
+	grid-column: 1 / -1;
+}
+[data-theme='swiss'] .layout-two-column .slot:not(.slot-default),
+[data-theme='swiss'] .layout-three-column .slot:not(.slot-default) {
+	padding-top: 22px;
+	border-top: 10px solid var(--fg);
+}
+[data-theme='swiss'] .layout-two-column .slot:not(.slot-default) :is(li, p) {
+	padding-right: 36px;
+}
+/* in a column the numerals take one grid column, not three */
+[data-theme='swiss'] .layout-two-column .slot:not(.slot-default) {
+	--indent: 146px;
+}
+[data-theme='swiss'] .layout-three-column .slot:not(.slot-default) {
+	--indent: 0px;
+	counter-increment: swiss-col;
+}
+/* column, sidebar, and media headings are labels, not headlines */
+[data-theme='swiss'] .layout-two-column .slot:not(.slot-default) h3,
+[data-theme='swiss'] .layout-three-column .slot:not(.slot-default) h3,
+[data-theme='swiss'] .layout-sidebar .slot-sidebar h3,
+[data-theme='swiss'] .layout-split-media .slot-default h3 {
+	font-size: 40px;
+	font-weight: 700;
+	line-height: 1.1;
+	letter-spacing: -0.005em;
+}
+[data-theme='swiss'] .layout-two-column .slot:not(.slot-default) h3,
+[data-theme='swiss'] .layout-three-column .slot:not(.slot-default) h3,
+[data-theme='swiss'] .layout-sidebar .slot-sidebar h3 {
+	margin-bottom: 26px;
+}
+/* the one place three-column carries red: a numbered index across its heads, same voice as the main list's numerals */
+[data-theme='swiss'] .layout-three-column .slot:not(.slot-default) h3::before {
+	content: counter(swiss-col, decimal-leading-zero) '  ';
+	color: var(--accent-text);
+}
+[data-theme='swiss'] .layout-two-column .slot:not(.slot-default) li,
+[data-theme='swiss'] .layout-sidebar .slot-sidebar li {
+	padding-top: 16px;
+	padding-bottom: 22px;
+	font-size: 44px;
+	line-height: 1.35;
+	/* room for a two-line wrap, so a neighboring column that wraps doesn't throw a shared rule out of line */
+	min-height: 152px;
+}
+[data-theme='swiss'] .layout-three-column .slot:not(.slot-default) li {
+	padding-top: 16px;
+	padding-bottom: 22px;
+	font-size: 42px;
+	line-height: 1.35;
+	min-height: 146px;
+}
+[data-theme='swiss'] .layout-sidebar .slot-default li {
+	padding-top: 18px;
+	padding-bottom: 24px;
+	font-size: 48px;
+	line-height: 1.35;
+}
+[data-theme='swiss'] .layout-two-column .slot:not(.slot-default) li::before,
+[data-theme='swiss'] .layout-sidebar .slot li::before {
+	top: 16px;
+}
+[data-theme='swiss'] .layout-two-column .slot:not(.slot-default) li:last-child,
+[data-theme='swiss'] .layout-three-column .slot:not(.slot-default) li:last-child,
+[data-theme='swiss'] .layout-sidebar .slot li:last-child {
+	padding-bottom: 0;
+}
+/* thirds are too narrow for margin numerals: the rules alone carry the index */
+[data-theme='swiss'] .layout-three-column .slot:not(.slot-default) li::before,
+[data-theme='swiss'] .layout-sidebar .slot-sidebar li::before {
+	content: none;
+}
+[data-theme='swiss'] .layout-two-column .slot:not(.slot-default) p,
+[data-theme='swiss'] .layout-three-column .slot:not(.slot-default) p {
+	text-wrap: balance;
+}
+/* a lone figure in a column is a display numeral */
+[data-theme='swiss'] .layout-two-column .slot:not(.slot-default) p > strong:only-child {
+	font-family: var(--font-display);
+	font-size: 190px;
+	line-height: 1.02;
+	letter-spacing: -0.055em;
+	margin-left: -8px;
+	white-space: nowrap;
+	color: var(--accent);
+}
+[data-theme='swiss'] .layout-two-column .slot-right > *,
+[data-theme='swiss'] .layout-three-column .slot-center > * {
+	animation-delay: 300ms;
+}
+[data-theme='swiss'] .layout-three-column .slot-right > * {
+	animation-delay: 460ms;
+}
+
+/* ============================================================================
+ * Sidebar: eight columns of argument, four columns of receipts on a tint
+ * ============================================================================ */
+
+[data-theme='swiss'] .layout-sidebar {
+	display: grid;
+	grid-template-columns: 1144px 1fr;
+	grid-template-rows: 100%;
+	column-gap: 24px;
+	align-content: stretch;
+}
+[data-theme='swiss'] .layout-sidebar .slot-default {
+	--indent: 122px;
+	display: flex;
+	flex-direction: column;
+	min-height: 0;
+}
+[data-theme='swiss'] .layout-sidebar .slot-default > :is(h1, h2):first-child + * {
+	margin-top: auto;
+}
+[data-theme='swiss'] .layout-sidebar .slot-default > p,
+[data-theme='swiss'] .layout-sidebar .slot-default > .fragment > p {
+	padding: 18px 0 26px;
+	border-top: 4px solid var(--fg);
+}
+[data-theme='swiss'] .layout-sidebar .slot-sidebar {
+	--indent: 0px;
+	align-self: end;
+	padding: 22px 24px 28px;
+	border: 0;
+	border-top: 10px solid var(--accent);
+	background: var(--surface);
+}
+
+/* ============================================================================
+ * Images: high-contrast black and white, printed on the paper, hanging
+ * from a red bar. In split-media the print bleeds off the right edge.
+ * ============================================================================ */
+
+[data-theme='swiss'] .slot img {
+	display: block;
+	border-radius: 0;
+	filter: grayscale(1) contrast(1.35) brightness(1.04);
+	mix-blend-mode: multiply;
+}
+/* the picture's parent carries the paper, so multiply always has a sheet to print on */
+[data-theme='swiss'] .slot :has(> img) {
+	background: var(--bg);
+}
+/* a plain photo gets the room a photo deserves: it grows to fill whatever the heading and any text leave */
+[data-theme='swiss'] .layout-default .slot > p:has(> img:only-child) {
+	flex: 1 1 0;
+	min-height: 0;
+	margin-top: 32px;
+	margin-left: var(--indent);
+	display: flex;
+	padding: 22px 0 0;
+	border-top: 10px solid var(--accent);
+	background: var(--bg);
+}
+[data-theme='swiss'] .layout-default .slot > p:has(> img:only-child) img {
+	min-height: 0;
+	height: 100%;
+	max-height: 100%;
+	width: auto;
+	max-width: 100%;
+	object-fit: contain;
+	object-position: left top;
+}
+
+[data-theme='swiss'] .layout-split-media {
+	display: block;
+}
+[data-theme='swiss'] .layout-split-media .slot-default {
+	--indent: 0px;
+	height: 100%;
+	width: 828px;
+	padding: 0;
+	display: flex;
+	flex-direction: column;
+	justify-content: flex-start;
+}
+[data-theme='swiss'] .layout-split-media .slot-default h3 {
+	margin-top: 22px;
+}
+[data-theme='swiss'] .layout-split-media .slot-default > p,
+[data-theme='swiss'] .layout-split-media .slot-default > .fragment > p {
+	padding-top: 28px;
+	border-top: 4px solid var(--fg);
+}
+[data-theme='swiss'] .layout-split-media .slot-default > p:first-of-type {
+	margin-top: auto;
+}
+[data-theme='swiss'] .layout-split-media .slot-default > p + p {
+	margin-top: 28px;
+}
+[data-theme='swiss'] .layout-split-media .slot-media {
+	position: absolute;
+	left: 876px;
+	right: -96px;
+	top: 0;
+	display: block;
+	overflow: visible;
+	padding-top: 22px;
+	border-top: 10px solid var(--accent);
+	background: var(--bg);
+}
+[data-theme='swiss'] .layout-split-media .slot-media > * {
+	animation-name: swiss-in-y;
+	animation-delay: 300ms;
+}
+[data-theme='swiss'] .layout-split-media .slot-media img {
+	width: 100%;
+	height: auto;
+	max-height: 776px;
+	object-fit: cover;
+	object-position: left top;
+}
+
+/* ============================================================================
+ * Cover: a paper label on a full-bleed field. With no background of its
+ * own the field is the red.
+ * ============================================================================ */
+
+[data-theme='swiss'] .slide[data-layout='cover']:not([style*='background']) {
+	background-color: var(--accent);
+}
+[data-theme='swiss'] .slide[data-layout='cover']::before {
+	background: var(--bg);
+}
+[data-theme='swiss'] .slide[data-layout='cover']::after {
+	padding: 3px 14px 4px;
+	top: 122px;
+	color: var(--fg);
+	background: var(--bg);
+}
+[data-theme='swiss'] .slide[data-layout='cover'] :is(.slide-tag, .slide-badge) {
+	padding: 3px 14px 4px;
+	top: 122px;
+	color: var(--fg);
+	background: var(--bg);
+}
+[data-theme='swiss'] .layout-cover {
+	display: flex;
+	flex-direction: column;
+	justify-content: flex-end;
+	align-items: flex-start;
+}
+[data-theme='swiss'] .layout-cover .slot-default {
+	max-width: 1436px;
+	padding: 28px 72px 56px 48px;
+	border-top: 10px solid var(--accent);
+	background: var(--bg);
+}
+[data-theme='swiss'] .slide[data-layout='cover']:not([style*='background']) .layout-cover .slot-default {
+	border-top-color: var(--fg);
+}
+/* size for a long cover headline first, then scale up for medium and short */
+[data-theme='swiss'] .layout-cover .slot h1 {
+	font-size: 124px;
+	line-height: 0.98;
+	letter-spacing: -0.045em;
+}
+[data-theme='swiss'] .layout-cover .slot h1[data-length='medium'] {
+	font-size: 156px;
+}
+[data-theme='swiss'] .layout-cover .slot h1[data-length='short'] {
+	font-size: 190px;
+}
+[data-theme='swiss'] .layout-cover .slot h2 {
+	font-size: 108px;
+}
+[data-theme='swiss'] .layout-cover .slot h2[data-length='medium'] {
+	font-size: 128px;
+}
+[data-theme='swiss'] .layout-cover .slot h2[data-length='short'] {
+	font-size: 148px;
+}
+[data-theme='swiss'] .layout-cover .slot p {
+	max-width: 1100px;
+	margin-top: 32px;
+	font-size: 46px;
+	font-weight: 700;
+	line-height: 1.3;
+}
+
+/* ============================================================================
+ * Blank: the bare sheet. Only the top rule and folio remain.
+ * ============================================================================ */
+
+[data-theme='swiss'] .layout-blank {
+	display: block;
+}
+[data-theme='swiss'] .layout-blank .slot {
+	height: 100%;
+}
+
+/* ============================================================================
+ * Table: first column in the margin columns, the rest in the text column
+ * ============================================================================ */
+
+[data-theme='swiss'] .slot table {
+	width: 100%;
+	border-collapse: collapse;
+	text-align: left;
+	border-top: 10px solid var(--fg);
+	font-size: 44px;
+}
+[data-theme='swiss'] .slot th {
+	padding: 14px 24px 16px 0;
+	font-size: 40px;
+	font-weight: 500;
+	line-height: 1.1;
+	letter-spacing: -0.01em;
+	text-align: left;
+	color: var(--fg);
+	border-bottom: 4px solid var(--fg);
+}
+[data-theme='swiss'] .slot td {
+	padding: 20px 24px 26px 0;
+	font-size: 44px;
+	font-weight: 600;
+	line-height: 1.1;
+	letter-spacing: -0.02em;
+	font-variant-numeric: tabular-nums;
+	border-bottom: 2px solid var(--fg);
+}
+[data-theme='swiss'] .slot :is(th, td):first-child {
+	width: var(--indent);
+}
+[data-theme='swiss'] .slot td:first-child {
+	font-weight: 800;
+}
+[data-theme='swiss'] .slot :is(th, td):last-child {
+	padding-right: 0;
+}
+[data-theme='swiss'] .slot tbody tr:last-child td {
+	border-bottom: 0;
+	padding-bottom: 0;
+}
+[data-theme='swiss'] .slot tbody tr {
+	animation: swiss-in-x var(--dur) var(--ease) 300ms both;
+}
+[data-theme='swiss'] .slot tbody tr:nth-child(2) {
+	animation-delay: 380ms;
+}
+[data-theme='swiss'] .slot tbody tr:nth-child(3) {
+	animation-delay: 460ms;
+}
+[data-theme='swiss'] .slot tbody tr:nth-child(n + 4) {
+	animation-delay: 540ms;
+}
+
+/* ============================================================================
+ * Diagram: fills the sheet between the heading and its caption. Labels
+ * keep the metrics mermaid measured them with, so they never outgrow
+ * their nodes.
+ * ============================================================================ */
+
+[data-theme='swiss'] .slot .mermaid-diagram {
+	flex: 1 1 0;
+	min-height: 0;
+	display: flex;
+	align-items: center;
+	justify-content: flex-start;
+	margin: 32px 0;
+	/* smaller than the old 60px: mermaid sizes each node to its label plus a fixed pixel
+	 * padding, so a smaller label leaves visibly more padding inside the node instead of
+	 * crowding its border */
+	font-size: 34px;
+	font-weight: 500;
+	letter-spacing: -0.01em;
+	line-height: normal;
+	animation-name: swiss-fade;
+}
+[data-theme='swiss'] .layout-default .slot > :is(h1, h2):first-child + .mermaid-diagram,
+[data-theme='swiss'] .layout-default .slot > .mermaid-diagram + *,
+[data-theme='swiss'] .layout-default .slot > .mermaid-error + * {
+	margin-top: 32px;
+}
+[data-theme='swiss'] .slot .mermaid-diagram + p {
+	margin-top: 0;
+}
+/* mermaid sets its labels in p and span; they keep mermaid's own metrics */
+[data-theme='swiss'] .slot .mermaid-diagram :is(p, span, div) {
+	font-size: inherit;
+	line-height: inherit;
+	letter-spacing: inherit;
+	text-wrap: initial;
+}
+[data-theme='swiss'] .slot .mermaid-diagram foreignObject {
+	overflow: visible;
+}
+[data-theme='swiss'] .slot .mermaid-diagram svg {
+	display: block;
+	width: 100% !important;
+	height: 100% !important;
+	max-width: none !important;
+	overflow: visible;
+}
+[data-theme='swiss'] .slot .mermaid-diagram .node :is(rect, circle, ellipse, polygon, path) {
+	stroke-width: 9px !important;
+}
+[data-theme='swiss'] .slot .mermaid-diagram .node.quiet :is(rect, circle, ellipse, polygon, path) {
+	stroke-width: 0 !important;
+}
+/* arrowheads are drawn for an 18px diagram; they scale up with the type */
+[data-theme='swiss'] .slot .mermaid-diagram marker {
+	overflow: visible;
+}
+[data-theme='swiss'] .slot .mermaid-diagram marker path {
+	transform: scale(2.6);
+	transform-origin: 5px 5px;
+	stroke-width: 0 !important;
+}
+[data-theme='swiss'] .slot .mermaid-diagram .flowchart-link,
+[data-theme='swiss'] .slot .mermaid-diagram .edgePath path {
+	stroke-width: 6px !important;
+}
+
+/* ============================================================================
+ * Scroll slide: the sheet scrolls under the top rule, inside the margins
+ * ============================================================================ */
+
+[data-theme='swiss'] .slide-content:has(> .scroll-content) {
+	overflow: hidden;
+}
+[data-theme='swiss'] .scroll-content .slot > * + * {
+	margin-top: 40px;
+}
+[data-theme='swiss'] .scroll-content .slot pre {
+	line-height: 58px;
+}
+
+/* ============================================================================
+ * Live code, asciinema, map
+ * ============================================================================ */
+
+[data-theme='swiss'] .slot .live-code-block-portal {
+	animation-delay: 240ms;
+}
+[data-theme='swiss'] .live-code-block {
+	margin: 0;
+	border-radius: 0;
+	overflow: visible;
+}
+[data-theme='swiss'] .live-code-block:focus {
+	outline: 0;
+}
+[data-theme='swiss'] .live-code-block .code-container pre {
+	border-radius: 0;
+	padding-bottom: 26px;
+	opacity: 1;
+}
+/* the run control is a black key sitting on the code's rule */
+[data-theme='swiss'] .live-code-block .code-actions,
+[data-theme='swiss'] .live-code-block .static-placeholder {
+	top: 0;
+	right: 0;
+}
+[data-theme='swiss'] .live-code-block .run-button,
+[data-theme='swiss'] .live-code-block .static-placeholder {
+	padding: 10px 22px 12px;
+	border-radius: 0;
+	font-family: var(--font-body);
+	font-size: 30px;
+	font-weight: 700;
+	letter-spacing: 0.01em;
+	color: var(--bg);
+	background: var(--fg);
+	-webkit-backdrop-filter: none;
+	backdrop-filter: none;
+}
+/* the note that replaces the key outside presentation mode is a quiet label above the rule */
+[data-theme='swiss'] .live-code-block .static-placeholder {
+	top: auto;
+	bottom: calc(100% + 10px);
+	padding: 0;
+	font-size: 28px;
+	color: var(--muted);
+	background: transparent;
+}
+[data-theme='swiss'] .live-code-block .run-button:hover:not(:disabled) {
+	filter: none;
+	transform: none;
+	background: var(--accent-text);
+}
+[data-theme='swiss'] .live-code-block .result-container {
+	border-radius: 0;
+	border-top: 10px solid var(--accent);
+	background: var(--surface);
+}
+[data-theme='swiss'] .live-code-block .result-container.error {
+	border-top-color: var(--accent);
+}
+[data-theme='swiss'] .live-code-block .result-header {
+	padding: 16px 44px 0;
+	border-bottom: 0;
+}
+[data-theme='swiss'] .live-code-block .result-status,
+[data-theme='swiss'] .live-code-block .result-status.success,
+[data-theme='swiss'] .live-code-block .result-status.error {
+	font-family: var(--font-body);
+	font-size: 28px;
+	font-weight: 700;
+	letter-spacing: 0.01em;
+	text-transform: none;
+	color: var(--fg);
+}
+[data-theme='swiss'] .live-code-block .result-status.error {
+	color: var(--accent-text);
+}
+[data-theme='swiss'] .live-code-block .result-content {
+	padding: 8px 44px 24px;
+}
+[data-theme='swiss'] .live-code-block .result-content :is(.result-output, .result-error, .result-empty) {
+	padding: 0;
+	border: 0;
+	font-family: var(--font-mono);
+	font-size: 44px;
+	font-weight: 500;
+	font-style: normal;
+	line-height: 1.35;
+	letter-spacing: 0;
+	color: var(--fg);
+}
+[data-theme='swiss'] .live-code-block .result-content .result-error {
+	color: var(--accent-text);
+}
+[data-theme='swiss'] .live-code-block .result-content .result-table {
+	font-family: var(--font-body);
+	font-size: 40px;
+	color: var(--fg);
+	border-top: 0;
+}
+[data-theme='swiss'] .live-code-block .result-content .result-table :is(th, td) {
+	padding: 10px 24px 12px 0;
+	font-size: 40px;
+	color: var(--fg);
+	background: transparent;
+	border-bottom: 2px solid var(--fg);
+}
+
+/* the recording sits in the text column, narrow enough that an 80x24 session keeps its controls on the sheet */
+[data-theme='swiss'] .slot .asciinema-player-wrapper {
+	width: 860px;
+	max-width: calc(100% - var(--indent));
+	margin-left: var(--indent);
+	border-top: 10px solid var(--fg);
+	border-radius: 0;
+}
+/* play and speed keys hang in the margin columns beside the recording */
+[data-theme='swiss'] .slot .asciinema-player-wrapper {
+	position: relative;
+}
+[data-theme='swiss'] .slot .asciinema-player-wrapper .controls-overlay {
+	position: absolute;
+	right: calc(100% + 24px);
+	bottom: 0;
+	display: flex;
+	gap: 12px;
+}
+[data-theme='swiss'] .slot .asciinema-player-wrapper .control-button {
+	padding: 8px 18px 10px;
+	border: 0;
+	border-radius: 0;
+	font-family: var(--font-body);
+	font-size: 30px;
+	font-weight: 700;
+	line-height: 1.2;
+	color: var(--bg);
+	background: var(--fg);
+	cursor: pointer;
+}
+[data-theme='swiss'] .slot .asciinema-player-wrapper.error {
+	padding: 22px 0 0;
+	font-family: var(--font-body);
+	font-size: 40px;
+	font-weight: 700;
+	line-height: 1.15;
+	color: var(--accent-text);
+	background: transparent;
+}
+
+/* the map prints in black and white like every other picture */
+[data-theme='swiss'] .map-slide canvas {
+	filter: grayscale(1) contrast(1.15);
+}
+
+/* ============================================================================
+ * Minimum-size safety net. Every rule above that sets a size uses at least
+ * these values; this catches any slot text the layout rules do not name.
+ * ============================================================================ */
+
+[data-theme='swiss'] .slot p {
+	font-size: 48px;
+}
+[data-theme='swiss'] .slot pre code {
+	font-size: 40px;
+}
+
+/* ============================================================================
+ * Print and reduced motion: everything is in its final state, nothing moves
+ * ============================================================================ */
+
+@media print, (prefers-reduced-motion: reduce) {
+	[data-theme='swiss'] .slide[data-layout],
+	[data-theme='swiss'] .slide[data-layout]::before,
+	[data-theme='swiss'] .slide[data-layout]::after,
+	[data-theme='swiss'] .slide[data-layout] *,
+	[data-theme='swiss'] .slide[data-layout] *::before,
+	[data-theme='swiss'] .slide[data-layout] *::after {
+		animation: none !important;
+		transition: none !important;
+	}
+}
+
+/* print mode marks the theme root or an ancestor of it; the same final state applies there */
+[data-theme='swiss']:is([data-print='true'], [data-print='true'] *) .slide[data-layout],
+[data-theme='swiss']:is([data-print='true'], [data-print='true'] *) .slide[data-layout]::before,
+[data-theme='swiss']:is([data-print='true'], [data-print='true'] *) .slide[data-layout]::after,
+[data-theme='swiss']:is([data-print='true'], [data-print='true'] *) .slide[data-layout] *,
+[data-theme='swiss']:is([data-print='true'], [data-print='true'] *) .slide[data-layout] *::before,
+[data-theme='swiss']:is([data-print='true'], [data-print='true'] *) .slide[data-layout] *::after {
+	animation: none !important;
+	transition: none !important;
+}

@@ -2,9 +2,14 @@
  * Syntax highlighting utilities using Shiki.
  * Provides lazy initialization and caching of the highlighter instance.
  * Supports advanced features: line highlighting, line numbers, titles, and diffs.
+ *
+ * Uses Shiki's CSS variables theme instead of a bundled theme: token colors
+ * come from `--shiki-*` custom properties defined per Tap theme in CSS, so
+ * highlighted code follows whichever theme is active without re-highlighting.
  */
 
-import type { BundledLanguage, BundledTheme, Highlighter } from 'shiki';
+import type { BundledLanguage, Highlighter } from 'shiki';
+import { createCssVariablesTheme } from '@shikijs/core';
 
 // ============================================================================
 // Types
@@ -16,8 +21,6 @@ import type { BundledLanguage, BundledTheme, Highlighter } from 'shiki';
 export interface HighlightOptions {
 	/** The language to highlight (e.g., 'javascript', 'python') */
 	language?: string;
-	/** The theme to use for highlighting */
-	theme?: BundledTheme;
 	/** Lines to highlight (e.g., [1, 3, 4, 5] or "1,3-5") */
 	highlightLines?: number[] | string;
 	/** Whether to show line numbers */
@@ -53,8 +56,6 @@ export interface HighlightResult {
  * Configuration for initializing the highlighter.
  */
 export interface HighlighterConfig {
-	/** Themes to preload */
-	themes?: BundledTheme[];
 	/** Languages to preload */
 	languages?: BundledLanguage[];
 }
@@ -64,86 +65,16 @@ export interface HighlighterConfig {
 // ============================================================================
 
 /**
- * Default themes to load.
+ * The Shiki theme used for all highlighting.
+ * Token colors are CSS custom properties (`--shiki-foreground`,
+ * `--shiki-token-keyword`, etc.) so a theme's stylesheet controls the
+ * palette instead of picking a bundled Shiki theme per Tap theme.
  */
-export const DEFAULT_THEMES: BundledTheme[] = [
-	'github-dark',
-	'github-light',
-	'one-dark-pro',
-	'dracula',
-	'nord',
-	'vitesse-dark'
-];
-
-/**
- * Mapping from Tap presentation themes to Shiki syntax highlighting themes.
- * Each Tap theme has a carefully selected Shiki theme that complements its visual style.
- */
-export const TAP_THEME_TO_SHIKI: Record<string, BundledTheme> = {
-	// Original themes
-	// Paper: Clean, light theme - github-light complements the airy aesthetic
-	paper: 'github-light',
-	// Noir: Cinematic, dark with gold - one-dark-pro has elegant dark colors
-	noir: 'one-dark-pro',
-	// Aurora: Vibrant gradients - dracula has rich purples and teals that match
-	aurora: 'dracula',
-	// Phosphor: Terminal green CRT - vitesse-dark has muted tones that won't clash
-	phosphor: 'vitesse-dark',
-	// Poster: Bold high contrast - one-dark-pro provides clean, readable highlighting
-	poster: 'one-dark-pro',
-
-	// New themes
-	// Ink: Japanese zen aesthetic with cream background - github-light for clean look
-	ink: 'github-light',
-	// Manuscript: Illuminated manuscript with aged paper - github-light for readability
-	manuscript: 'github-light',
-	// Deco: Art Deco black & gold - one-dark-pro complements the dark elegance
-	deco: 'one-dark-pro',
-	// Stained Glass: Dark with jewel tones - dracula has rich purples that match
-	'stained-glass': 'dracula',
-	// Bauhaus: Bold primary colors on white - github-light for clean contrast
-	bauhaus: 'github-light',
-	// Watercolor: Soft pastels on white - github-light maintains the airy feel
-	watercolor: 'github-light',
-	// Comic: Pop art with bold colors - one-dark-pro for contrast
-	comic: 'one-dark-pro',
-	// Blueprint: Technical blue background - vitesse-dark for technical aesthetic
-	blueprint: 'vitesse-dark',
-	// Editorial: Classic magazine on white - github-light for publishing look
-	editorial: 'github-light',
-	// Synthwave: Neon 80s dark theme - dracula has vibrant colors that fit
-	synthwave: 'dracula',
-	// Safari: Vintage explorer with sepia - github-light for aged paper feel
-	safari: 'github-light',
-	// Botanical: Scientific illustration on cream - github-light for specimen look
-	botanical: 'github-light',
-	// Cyber: Cyberpunk dark with neon - vitesse-dark for terminal aesthetic
-	cyber: 'vitesse-dark',
-	// Origami: Clean minimal white - github-light for paper aesthetic
-	origami: 'github-light',
-	// Chalkboard: Dark green classroom - vitesse-dark complements the dark background
-	chalkboard: 'vitesse-dark',
-
-	// New themes - dark code blocks use github-dark for proper contrast
-	signal: 'github-dark',
-	carbon: 'github-dark',
-	spectrum: 'github-dark',
-	mono: 'github-dark',
-	flux: 'github-dark'
-};
-
-/**
- * Get the appropriate Shiki theme for a given Tap presentation theme.
- *
- * @param tapTheme The Tap presentation theme name
- * @returns The corresponding Shiki theme for syntax highlighting
- */
-export function getShikiTheme(tapTheme?: string): BundledTheme {
-	if (!tapTheme) {
-		return DEFAULT_THEME;
-	}
-	return TAP_THEME_TO_SHIKI[tapTheme.toLowerCase()] ?? DEFAULT_THEME;
-}
+export const CSS_VARIABLES_THEME = createCssVariablesTheme({
+	name: 'tap-css-variables',
+	variablePrefix: '--shiki-',
+	fontStyle: true
+});
 
 /**
  * Common languages to support for presentations.
@@ -168,11 +99,6 @@ export const COMMON_LANGUAGES: BundledLanguage[] = [
 	'jsx',
 	'log'
 ];
-
-/**
- * Default theme for highlighting.
- */
-export const DEFAULT_THEME: BundledTheme = 'github-dark';
 
 /**
  * Language aliases for common language names.
@@ -206,18 +132,15 @@ let highlighterPromise: Promise<Highlighter> | null = null;
 /** Set of loaded languages */
 const loadedLanguages = new Set<string>();
 
-/** Set of loaded themes */
-const loadedThemes = new Set<string>();
-
 // ============================================================================
 // Public Functions
 // ============================================================================
 
 /**
- * Initialize the Shiki highlighter with lazy theme loading.
+ * Initialize the Shiki highlighter with lazy language loading.
  * This function is idempotent - calling it multiple times returns the same instance.
  *
- * @param config Optional configuration for themes and languages to preload
+ * @param config Optional configuration for languages to preload
  * @returns Promise resolving to the highlighter instance
  */
 export async function initHighlighter(config?: HighlighterConfig): Promise<Highlighter> {
@@ -246,7 +169,7 @@ export async function initHighlighter(config?: HighlighterConfig): Promise<Highl
  * Highlight code with syntax highlighting.
  *
  * @param code The code to highlight
- * @param options Highlighting options (language, theme)
+ * @param options Highlighting options (language, etc.)
  * @returns Promise resolving to highlighted HTML string
  */
 export async function highlight(code: string, options?: HighlightOptions): Promise<string> {
@@ -268,28 +191,24 @@ export async function highlightWithMetadata(
 	const highlighter = await initHighlighter();
 
 	const language = resolveLanguage(options?.language);
-	const theme = options?.theme ?? DEFAULT_THEME;
 
 	// Ensure the language is loaded
 	await ensureLanguageLoaded(highlighter, language);
 
-	// Ensure the theme is loaded
-	await ensureThemeLoaded(highlighter, theme);
-
-	// Parse highlight lines if provided
-	const highlightedLines = parseHighlightLines(options?.highlightLines);
-
-	// Count lines for auto-sizing
+	// Count lines for auto-sizing, and to clamp a highlight-lines range below.
 	const lines = code.split('\n');
 	const lineCount = lines.length;
+
+	// Parse highlight lines if provided, clamped to this block's line count.
+	const highlightedLines = parseHighlightLines(options?.highlightLines, lineCount);
 
 	// Determine if auto-sizing should be applied
 	const autoSized = shouldAutoSize(lineCount, options?.maxHeight);
 
-	// Generate base highlighted HTML
+	// Generate base highlighted HTML using the CSS variables theme
 	let html = highlighter.codeToHtml(code, {
 		lang: language,
-		theme: theme
+		theme: CSS_VARIABLES_THEME
 	});
 
 	// Apply line-based transformations
@@ -342,7 +261,6 @@ export function disposeHighlighter(): void {
 	}
 	highlighterPromise = null;
 	loadedLanguages.clear();
-	loadedThemes.clear();
 }
 
 /**
@@ -396,18 +314,14 @@ async function createHighlighter(config?: HighlighterConfig): Promise<Highlighte
 	// Dynamic import for code splitting
 	const { createHighlighter: shikiCreateHighlighter } = await import('shiki');
 
-	const themes = config?.themes ?? DEFAULT_THEMES;
 	const languages = config?.languages ?? COMMON_LANGUAGES;
 
 	const highlighter = await shikiCreateHighlighter({
-		themes,
+		themes: [CSS_VARIABLES_THEME],
 		langs: languages
 	});
 
-	// Track loaded themes and languages
-	for (const theme of themes) {
-		loadedThemes.add(theme);
-	}
+	// Track loaded languages
 	for (const lang of languages) {
 		loadedLanguages.add(lang);
 	}
@@ -437,46 +351,41 @@ async function ensureLanguageLoaded(
 	}
 }
 
-/**
- * Ensure a theme is loaded into the highlighter.
- * Loads the theme lazily if not already loaded.
- */
-async function ensureThemeLoaded(highlighter: Highlighter, theme: BundledTheme): Promise<void> {
-	if (loadedThemes.has(theme)) {
-		return;
-	}
-
-	try {
-		await highlighter.loadTheme(theme);
-		loadedThemes.add(theme);
-	} catch {
-		// If theme fails to load, use default theme
-		loadedThemes.add(theme); // Mark as "loaded" to avoid repeated attempts
-	}
-}
-
 // ============================================================================
 // Line Highlighting Functions
 // ============================================================================
+
+/**
+ * A hard cap on the highest line number parseHighlightLines will expand a
+ * range up to, used when the caller doesn't know the code block's actual
+ * line count. Without any cap, a spec like "{1-999999999}" iterates a
+ * billion times and hangs the tab.
+ */
+const HIGHLIGHT_LINE_HARD_CAP = 10000;
 
 /**
  * Parse highlight lines specification.
  * Supports formats: "1,3-5,7" or [1, 3, 4, 5, 7]
  *
  * @param spec The highlight specification
+ * @param lineCount The code block's actual line count, used to clamp a
+ *   range's upper bound. Falls back to a hard cap when omitted, since a
+ *   range is otherwise expanded by iterating every number in it.
  * @returns Set of line numbers to highlight (1-indexed)
  */
-export function parseHighlightLines(spec?: number[] | string): Set<number> {
+export function parseHighlightLines(spec?: number[] | string, lineCount?: number): Set<number> {
 	const lines = new Set<number>();
 
 	if (!spec) {
 		return lines;
 	}
 
+	const maxLine = lineCount && lineCount > 0 ? lineCount : HIGHLIGHT_LINE_HARD_CAP;
+
 	// Handle array input
 	if (Array.isArray(spec)) {
 		for (const line of spec) {
-			if (typeof line === 'number' && line > 0) {
+			if (typeof line === 'number' && line > 0 && line <= maxLine) {
 				lines.add(line);
 			}
 		}
@@ -491,9 +400,9 @@ export function parseHighlightLines(spec?: number[] | string): Set<number> {
 			// Range: "3-5"
 			const [startStr, endStr] = part.split('-').map((s) => s.trim());
 			const start = parseInt(startStr || '', 10);
-			const end = parseInt(endStr || '', 10);
+			const end = Math.min(parseInt(endStr || '', 10), maxLine);
 
-			if (!isNaN(start) && !isNaN(end) && start > 0 && end >= start) {
+			if (!isNaN(start) && !isNaN(end) && start > 0 && start <= maxLine && end >= start) {
 				for (let i = start; i <= end; i++) {
 					lines.add(i);
 				}
@@ -501,7 +410,7 @@ export function parseHighlightLines(spec?: number[] | string): Set<number> {
 		} else {
 			// Single line: "3"
 			const line = parseInt(part, 10);
-			if (!isNaN(line) && line > 0) {
+			if (!isNaN(line) && line > 0 && line <= maxLine) {
 				lines.add(line);
 			}
 		}
@@ -523,6 +432,14 @@ interface LineTransformOptions {
 /**
  * Apply line-based transformations to highlighted HTML.
  * Adds line highlighting, line numbers, and diff markers.
+ *
+ * Works on a parsed DOM fragment rather than the HTML string: Shiki nests
+ * one span per token inside each line's `<span class="line">`, so a regex
+ * that looks for the line span's closing tag stops at the first token's
+ * closing tag instead, truncating every multi-token line down to its first
+ * token. Parsing into a `<template>` and moving each line's existing child
+ * nodes (its token spans, however many there are) into a `.line-content`
+ * wrapper keeps every token intact.
  */
 function applyLineTransformations(html: string, options: LineTransformOptions): string {
 	const { highlightedLines, showLineNumbers, isDiff, lineCount } = options;
@@ -532,99 +449,93 @@ function applyLineTransformations(html: string, options: LineTransformOptions): 
 		return html;
 	}
 
-	// Parse the HTML structure
 	// Shiki generates: <pre class="..."><code>...lines...</code></pre>
-	// We need to wrap each line in a span for styling
-
-	// Extract content between <code> tags
-	const codeMatch = html.match(/<code[^>]*>([\s\S]*?)<\/code>/);
-	if (!codeMatch || codeMatch[1] === undefined) {
+	// A <template>'s innerHTML parses into (and serializes back from) its
+	// `.content` DocumentFragment without inserting anything into the live
+	// document, so this is safe to run on untrusted-looking markup.
+	const template = document.createElement('template');
+	template.innerHTML = html;
+	const pre = template.content.querySelector('pre');
+	const code = template.content.querySelector('code');
+	if (!pre || !code) {
 		return html;
 	}
 
-	const preMatch = html.match(/(<pre[^>]*>)/);
-	const preOpen = preMatch?.[1] ?? '<pre>';
+	// Shiki wraps each line in a top-level <span class="line"> directly
+	// under <code>; anything with an additional class (say, from a future
+	// Shiki version) still matches, since this checks for the class, not an
+	// exact attribute string.
+	const lineSpans = Array.from(code.querySelectorAll<HTMLElement>(':scope > span.line'));
 
-	const codeOpenMatch = html.match(/<code[^>]*>/);
-	const codeOpen = codeOpenMatch?.[0] ?? '<code>';
-
-	const codeContent = codeMatch[1];
-
-	// Split by line (handling various line structures)
-	// Shiki typically wraps each line in a span with class="line"
-	const lineRegex = /<span class="line">([\s\S]*?)<\/span>/g;
-	const lineMatches = [...codeContent.matchAll(lineRegex)];
-
-	let processedLines: string[];
-
-	if (lineMatches.length > 0) {
-		// Modern Shiki output with line spans
-		processedLines = lineMatches.map((match, index) => {
-			const lineNum = index + 1;
-			const lineContent = match[1] ?? '';
-			return processLine(lineNum, lineContent, options);
-		});
+	if (lineSpans.length > 0) {
+		lineSpans.forEach((lineSpan, index) => transformLineElement(lineSpan, index + 1, options));
 	} else {
-		// Fallback: split by newlines
-		const rawLines = codeContent.split('\n');
-		processedLines = rawLines.map((lineContent, index) => {
-			const lineNum = index + 1;
-			return processLine(lineNum, lineContent, options);
+		// Fallback for output with no per-line spans (e.g. a language Shiki
+		// highlights as one block): split the plain text by newline and
+		// build a line span per line from scratch.
+		const rawLines = (code.textContent ?? '').split('\n');
+		code.textContent = '';
+		rawLines.forEach((lineText, index) => {
+			const lineSpan = document.createElement('span');
+			lineSpan.textContent = lineText;
+			code.appendChild(lineSpan);
+			if (index < rawLines.length - 1) {
+				code.appendChild(document.createTextNode('\n'));
+			}
+			transformLineElement(lineSpan, index + 1, options);
 		});
 	}
 
-	// Calculate line number width for padding
-	const lineNumWidth = String(lineCount).length;
+	// Add line number width as a CSS variable, and mark the block as having
+	// highlighted lines so CSS can dim the rest.
+	pre.style.setProperty('--line-num-width', `${String(lineCount).length}ch`);
+	if (highlightedLines.size > 0) {
+		pre.classList.add('has-highlighted');
+	}
 
-	// Add line number width as CSS variable
-	const preWithVar = preOpen.replace(
-		/<pre/,
-		`<pre style="--line-num-width: ${lineNumWidth}ch"`
-	);
-
-	// Reconstruct the HTML
-	return `${preWithVar}${codeOpen}${processedLines.join('\n')}</code></pre>`;
+	return template.innerHTML;
 }
 
 /**
- * Process a single line, adding classes and content as needed.
+ * Transform one line's `<span>` in place: set its classes (line, highlighted,
+ * diff-add/diff-remove) and wrap its existing children, whatever tokens
+ * Shiki nested inside it, in a `.line-content` span, prefixed by a
+ * `.line-number` span when requested.
  */
-function processLine(lineNum: number, content: string, options: LineTransformOptions): string {
-	const classes: string[] = ['line'];
+function transformLineElement(lineSpan: HTMLElement, lineNum: number, options: LineTransformOptions): void {
 	const { highlightedLines, showLineNumbers, isDiff } = options;
 
-	// Check if this line should be highlighted
+	const classes: string[] = ['line'];
 	if (highlightedLines.has(lineNum)) {
 		classes.push('highlighted');
 	}
-
-	// Check for diff markers
 	if (isDiff) {
-		const trimmedContent = stripHtmlTags(content).trimStart();
+		const trimmedContent = (lineSpan.textContent ?? '').trimStart();
 		if (trimmedContent.startsWith('+')) {
 			classes.push('diff-add');
 		} else if (trimmedContent.startsWith('-')) {
 			classes.push('diff-remove');
 		}
 	}
+	lineSpan.className = classes.join(' ');
 
-	// Build the line HTML
-	let lineHtml = '';
-
-	if (showLineNumbers) {
-		lineHtml += `<span class="line-number" data-line="${lineNum}">${lineNum}</span>`;
+	// Move every existing child (Shiki's per-token spans, or a single text
+	// node) into a .line-content wrapper, preserving all of them intact.
+	const contentSpan = document.createElement('span');
+	contentSpan.className = 'line-content';
+	while (lineSpan.firstChild) {
+		contentSpan.appendChild(lineSpan.firstChild);
 	}
 
-	lineHtml += `<span class="line-content">${content}</span>`;
+	if (showLineNumbers) {
+		const numberSpan = document.createElement('span');
+		numberSpan.className = 'line-number';
+		numberSpan.dataset.line = String(lineNum);
+		numberSpan.textContent = String(lineNum);
+		lineSpan.appendChild(numberSpan);
+	}
 
-	return `<span class="${classes.join(' ')}">${lineHtml}</span>`;
-}
-
-/**
- * Strip HTML tags from content (for diff detection).
- */
-function stripHtmlTags(html: string): string {
-	return html.replace(/<[^>]*>/g, '');
+	lineSpan.appendChild(contentSpan);
 }
 
 /**
@@ -691,42 +602,38 @@ ${html}
 /**
  * Find and highlight all code blocks within a DOM element.
  * Replaces plain <pre><code class="language-*"> blocks with syntax-highlighted versions.
- * Skips mermaid blocks which are handled separately.
+ * Skips mermaid and asciinema blocks which are handled separately.
  *
  * @param element The DOM element to search within
- * @param tapTheme Optional Tap presentation theme to determine Shiki theme
  * @returns Promise resolving when all code blocks are highlighted
  */
-export async function highlightCodeBlocksInElement(
-	element: HTMLElement,
-	tapTheme?: string
-): Promise<void> {
-	// Find all code blocks that need highlighting (skip mermaid)
+export async function highlightCodeBlocksInElement(element: HTMLElement): Promise<void> {
+	// Find all code blocks that need highlighting (skip mermaid and
+	// asciinema). Scoped to .slot descendants so DOM a deck-supplied
+	// component owns outside of a slot is never mutated here. The `:is()`
+	// wrapper around the descendant+child combinator is needed for jsdom's
+	// selector engine to evaluate correctly when chained with :not(); real
+	// browsers accept the unwrapped form too, but this form works in both.
 	const codeBlocks = element.querySelectorAll<HTMLElement>(
-		'pre > code[class*="language-"]:not(.language-mermaid):not(.language-asciinema)'
+		':is(.slot pre) > code[class*="language-"]:not(.language-mermaid):not(.language-asciinema)'
 	);
 
 	if (codeBlocks.length === 0) {
 		return;
 	}
 
-	// Determine the Shiki theme based on the Tap presentation theme
-	const shikiTheme = getShikiTheme(tapTheme);
-
 	// Process each code block
 	const promises = Array.from(codeBlocks).map(async (codeBlock) => {
 		const pre = codeBlock.parentElement;
-		if (!pre || pre.dataset.highlighted === 'true') {
-			return; // Already highlighted or no parent
+		if (!pre || pre.dataset.highlighted === 'true' || pre.dataset.highlighted === 'processing') {
+			return; // Already highlighted or processing
 		}
 
-		// Check if theme changed - re-highlight if needed
-		const previousTheme = pre.dataset.highlightedTheme;
-		if (previousTheme && previousTheme !== shikiTheme) {
-			// Theme changed, need to re-highlight
-			pre.dataset.highlighted = '';
-		} else if (pre.dataset.highlighted === 'processing') {
-			return; // Already processing
+		// The host slide may have been unmounted by rapid navigation since
+		// this pass started; skip this block's highlight work instead of
+		// doing it for an element nothing will ever show.
+		if (!pre.isConnected) {
+			return;
 		}
 
 		// Extract language from class
@@ -736,12 +643,18 @@ export async function highlightCodeBlocksInElement(
 		// Get the code content
 		const code = codeBlock.textContent ?? '';
 
+		// A line-highlight spec from the fence's info string (e.g. "```php
+		// {3-4}") arrives as a data attribute on this element: the Go parser
+		// carries it there because goldmark's own renderer keeps only the
+		// language from the info string and drops everything else.
+		const highlightLines = codeBlock.dataset.highlightLines;
+
 		// Mark as processing to prevent duplicate attempts
 		pre.dataset.highlighted = 'processing';
 
 		try {
-			// Highlight the code with the theme-specific Shiki theme
-			const highlightedHtml = await highlight(code, { language, theme: shikiTheme });
+			// Highlight the code with the CSS variables theme
+			const highlightedHtml = await highlight(code, { language, highlightLines });
 
 			// Create a temporary container to parse the HTML
 			const temp = document.createElement('div');
@@ -752,17 +665,21 @@ export async function highlightCodeBlocksInElement(
 			if (newPre) {
 				// Mark as highlighted to prevent re-processing
 				newPre.dataset.highlighted = 'true';
-				newPre.dataset.highlightedTheme = shikiTheme;
 				// Preserve any existing classes on the original pre
 				newPre.className = `${newPre.className} ${pre.className}`.trim();
 				pre.replaceWith(newPre);
 			} else {
 				pre.dataset.highlighted = 'true';
-				pre.dataset.highlightedTheme = shikiTheme;
 			}
 		} catch (err) {
-			// On error, just mark as highlighted to prevent repeated attempts
+			// On error, leave the original code block in place and show the error
+			// message under it instead of losing the source.
 			pre.dataset.highlighted = 'error';
+			const errorMessage = err instanceof Error ? err.message : String(err);
+			const errorEl = document.createElement('div');
+			errorEl.className = 'code-block-error-message';
+			errorEl.textContent = `Failed to highlight code block: ${errorMessage}`;
+			pre.after(errorEl);
 			console.error('Failed to highlight code block:', err);
 		}
 	});
@@ -785,8 +702,14 @@ export async function highlightCodeBlocksInElement(
  * .code-block-wrapper - Container for code block with title
  * .code-block-title - Title bar above code block
  * .code-block-auto-size - Container for auto-sized code blocks
+ * pre.has-highlighted - A code block that has at least one highlighted line,
+ *   so its other lines can be dimmed in CSS.
  *
  * Recommended CSS:
+ *
+ * .has-highlighted .line:not(.highlighted) {
+ *   opacity: 0.5;
+ * }
  *
  * .line.highlighted {
  *   background-color: rgba(255, 255, 0, 0.1);

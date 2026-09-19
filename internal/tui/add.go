@@ -124,7 +124,7 @@ var AvailableLayouts = []Layout{
 │                     │
 │  "Quote text..."    │
 │                     │
-│        — Author     │
+│        -- Author    │
 │                     │
 └─────────────────────┘`,
 		Fields: []LayoutField{
@@ -382,9 +382,9 @@ func GenerateSlideMarkdown(layoutName string, values []string) string {
 		if header != "" {
 			b.WriteString(fmt.Sprintf("## %s\n\n", header))
 		}
-		b.WriteString("|||\n\n")
+		b.WriteString("::left\n\n")
 		b.WriteString(formatContent(left))
-		b.WriteString("\n\n|||\n\n")
+		b.WriteString("\n\n::right\n\n")
 		b.WriteString(formatContent(right))
 		b.WriteString("\n")
 
@@ -400,7 +400,7 @@ func GenerateSlideMarkdown(layoutName string, values []string) string {
 		author := getValueOrDefault(values, 1, "")
 		b.WriteString(fmt.Sprintf("> %q\n", quote))
 		if author != "" {
-			b.WriteString(fmt.Sprintf(">\n> — %s\n", author))
+			b.WriteString(fmt.Sprintf(">\n> -- %s\n", author))
 		}
 
 	case "big-stat":

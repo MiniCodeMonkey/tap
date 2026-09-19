@@ -1,22 +1,22 @@
 import '@testing-library/jest-dom/vitest';
 import { vi } from 'vitest';
 
-// Mock window.matchMedia for components that check for reduced motion
+// Mock window.matchMedia for components that check for reduced motion.
 Object.defineProperty(window, 'matchMedia', {
 	writable: true,
 	value: vi.fn().mockImplementation((query: string) => ({
 		matches: false,
 		media: query,
 		onchange: null,
-		addListener: vi.fn(), // deprecated
-		removeListener: vi.fn(), // deprecated
+		addListener: vi.fn(),
+		removeListener: vi.fn(),
 		addEventListener: vi.fn(),
 		removeEventListener: vi.fn(),
 		dispatchEvent: vi.fn()
 	}))
 });
 
-// Mock ResizeObserver for SlideContainer
+// Mock ResizeObserver for SlideCanvas.
 class MockResizeObserver {
 	observe = vi.fn();
 	unobserve = vi.fn();
@@ -28,7 +28,7 @@ Object.defineProperty(window, 'ResizeObserver', {
 	value: MockResizeObserver
 });
 
-// Mock getBoundingClientRect for scaling tests
+// Mock getBoundingClientRect for scaling tests.
 Element.prototype.getBoundingClientRect = vi.fn(() => ({
 	width: 1920,
 	height: 1080,

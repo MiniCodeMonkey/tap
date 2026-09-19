@@ -128,23 +128,12 @@ async function fetchUser(id) {
 ```
 ````
 
-## Font Size Configuration
+## Code Text Size
 
-Set in frontmatter:
-```yaml
----
-codeFontSize: 14px
----
-```
-
-| Size | Use Case |
-|------|----------|
-| `18px` | Large venue, few lines |
-| `16px` | Default |
-| `14px` | More code on screen |
-| `12px` | Dense code |
-
-**Tip:** Test at actual presentation distance.
+Set by the theme, not by frontmatter. Every built-in theme keeps code at
+36px or larger on the 1920px canvas. Keep lines to about 80 characters and
+blocks to about 12 lines; use `code-focus` or split the example instead of
+shrinking the text.
 
 ## Quick Reference
 
@@ -156,4 +145,3 @@ codeFontSize: 14px
 | Line range | `{n-m}` |
 | Combined | `{n-m,o}` |
 | Diff | ` ```diff ` |
-| Font size | `codeFontSize` in frontmatter |

@@ -187,29 +187,16 @@ async function fetchUser(id) {
 ```
 ````
 
-## Font Size Configuration
+## Code Text Size
 
-Adjust code font size to fit more content or improve readability. Set the code font size in your presentation's frontmatter:
+Code size comes from the active theme, not from frontmatter. Every built-in
+theme sizes code for a projected slide: at least 36px on the 1920px canvas,
+and the theme check suite fails a theme that goes under that.
 
-```yaml
----
-title: Technical Deep Dive
-codeFontSize: 14px
----
-```
-
-### Recommended Sizes
-
-| Context | Size | Use Case |
-|---------|------|----------|
-| `18px` | Large | Few lines, audience far away |
-| `16px` | Default | Standard presentations |
-| `14px` | Medium | More code on screen |
-| `12px` | Small | Dense code, close viewing |
-
-::: tip Readability
-Test your slides at the actual presentation distance. Code that looks fine on your laptop may be unreadable on a projector.
-:::
+Keep code lines to about 80 characters and a block to about 12 lines. Past
+that, use the `code-focus` layout or split the example across slides. To
+change code size yourself, override the theme's custom properties with a
+`customTheme` stylesheet.
 
 ## Code Block Styling
 
@@ -220,7 +207,7 @@ Themes control the overall appearance of code blocks, including:
 - **Border radius**: Rounded or sharp corners
 - **Padding**: Space around the code
 
-The `terminal` theme uses a dark, high-contrast code style, while `minimal` uses a lighter, more subtle appearance.
+The `terminal` theme uses a dark, high-contrast code style, while a light theme like `base` uses a lighter, more subtle appearance.
 
 ## Quick Reference
 
@@ -232,7 +219,6 @@ The `terminal` theme uses a dark, high-contrast code style, while `minimal` uses
 | Line range | `{n-m}` | ` ```js {2-5} ` |
 | Combined | `{n-m,o}` | ` ```js {1-3,7} ` |
 | Diff | ` ```diff ` | Shows +/- coloring |
-| Font size | `codeFontSize` | In frontmatter |
 
 ## Next Steps
 

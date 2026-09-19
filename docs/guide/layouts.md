@@ -6,16 +6,28 @@ title: Layouts
 
 Layouts control how content is arranged on your slides. Tap provides a variety of built-in layouts to suit different presentation needs.
 
-## Default Layout Behavior
+## Automatic Layout Behavior
 
-If you don't specify a layout, Tap uses a default content layout that centers your content vertically and horizontally. This works well for most slides with headings and body text.
+A slide with no `layout:` directive gets one picked from its content:
+
+1. `three-column` when the slide has `left`, `center`, and `right` slots
+2. `two-column` when it has `left` and `right` slots
+3. `title` when it holds only an `h1`, with an optional short subtitle
+4. `section` when it holds only an `h2`
+5. `code-focus` when a single code block is more than half the content
+6. `quote` when a blockquote is the main content
+7. `default` for everything else
+
+So this slide is a `title` slide without saying so:
 
 ```markdown
 # My Slide Title
 
-This content uses the default layout.
-It will be centered on the slide.
+A one-line subtitle.
 ```
+
+Set the directive when you want a layout the content would not produce on
+its own, such as `big-stat`, `cover`, `sidebar`, or `split-media`.
 
 ## Specifying a Layout
 
@@ -32,16 +44,39 @@ layout: two-column
 
 Content for the left column.
 
-|||
+::right
 
 Content for the right column.
 ```
 
-The `layout` directive tells Tap which layout to apply to that slide.
+The `layout` directive tells Tap which layout to apply to that slide. A
+layout with named slots reads content before the first `::slot` marker as
+the `default` slot; a marker line like `::right` starts a new slot that
+runs to the next marker or the end of the slide. See
+[Slide Directives](/reference/slide-directives) for the full marker syntax.
 
 ## Available Layouts
 
-Tap includes 11 built-in layouts:
+Tap includes 12 built-in layouts:
+
+### default
+
+Centers headings and body text vertically and horizontally. This is what
+you get when you don't specify a `layout` directive at all, but you can
+also name it explicitly.
+
+```markdown
+---
+
+<!--
+layout: default
+-->
+
+# My Slide Title
+Body content, centered.
+```
+
+**When to use:** General-purpose slides that don't fit a more specific layout.
 
 ### title
 
@@ -78,7 +113,7 @@ layout: section
 
 ### two-column
 
-Split the slide into two equal columns. Use `|||` to separate the left and right content.
+Split the slide into two equal columns. The default slot is a header spanning both columns; `::right` starts the right column.
 
 ```markdown
 ---
@@ -93,7 +128,7 @@ layout: two-column
 - Fast execution
 - Simple setup
 
-|||
+::right
 
 ### Option B
 - More features
@@ -104,7 +139,7 @@ layout: two-column
 
 ### three-column
 
-Split the slide into three equal columns. Use `|||` to separate each column.
+Split the slide into three equal columns. Use `::center` and `::right` to start the second and third columns.
 
 ```markdown
 ---
@@ -118,12 +153,12 @@ layout: three-column
 ### Plan
 Define requirements
 
-|||
+::center
 
 ### Build
 Write the code
 
-|||
+::right
 
 ### Ship
 Deploy to production
@@ -157,7 +192,7 @@ def calculate_metrics(data):
 
 ### big-stat
 
-Display a large statistic or number prominently. Perfect for impactful data points.
+Display a large statistic or number prominently. Add `::caption` for a supporting line and `::figure` for a small chart or image.
 
 ```markdown
 ---
@@ -167,14 +202,17 @@ layout: big-stat
 -->
 
 # 3.2x
-## Faster build times
+
+::caption
+
+Faster build times
 ```
 
 **When to use:** Key metrics, impressive numbers, impact statements.
 
 ### quote
 
-Stylized layout for quotations with attribution support.
+Stylized layout for quotations, with an `::attribution` slot for the source.
 
 ```markdown
 ---
@@ -185,7 +223,9 @@ layout: quote
 
 > The best code is no code at all.
 
-— Jeff Atwood
+::attribution
+
+Jeff Atwood
 ```
 
 **When to use:** Customer testimonials, famous quotes, key statements.
@@ -210,7 +250,7 @@ background: ./images/hero.jpg
 
 ### sidebar
 
-Content with a sidebar area for notes, navigation, or supplementary information. Use `|||` to separate main content from the sidebar.
+Content with a sidebar area for notes, navigation, or supplementary information. Use `::sidebar` to start the sidebar content.
 
 ```markdown
 ---
@@ -222,7 +262,7 @@ layout: sidebar
 # Main Content
 The primary focus of this slide.
 
-|||
+::sidebar
 
 **Related:**
 - Topic A
@@ -233,7 +273,7 @@ The primary focus of this slide.
 
 ### split-media
 
-Split layout with media on one side and content on the other. Great for images with explanatory text. Use `|||` to separate media from content.
+Split layout with media on one side and content on the other. Great for images with explanatory text. Use `::media` to start the media slot.
 
 ```markdown
 ---
@@ -242,12 +282,12 @@ Split layout with media on one side and content on the other. Great for images w
 layout: split-media
 -->
 
-![Product screenshot](./images/product.png)
-
-|||
-
 # New Feature
 Introducing our latest improvement that makes everything faster.
+
+::media
+
+![Product screenshot](./images/product.png)
 ```
 
 **When to use:** Product demos, feature highlights, image explanations.
@@ -274,6 +314,7 @@ layout: blank
 
 | Layout | Description | Best For |
 |--------|-------------|----------|
+| `default` | Centered heading and body | General-purpose slides |
 | `title` | Large centered text | Opening slides |
 | `section` | Section divider | Part breaks |
 | `two-column` | Two equal columns | Comparisons |
@@ -286,8 +327,25 @@ layout: blank
 | `split-media` | Media + content | Feature highlights |
 | `blank` | No styling | Custom designs |
 
+## Component Layouts
+
+A `layout:` value that starts with `./` or `../` and ends in `.jsx`,
+`.tsx`, `.js`, or `.ts` is a React component file next to the deck, which
+renders the whole slide and can use any slot name it likes:
+
+```markdown
+<!--
+layout: ./slides/RollingDeploy.jsx
+-->
+
+# Zero-downtime deploys
+```
+
+See [Custom Components](/guide/custom-components).
+
 ## Next Steps
 
 - Learn about [Themes](/guide/themes) to style your layouts
 - Add [Animations & Transitions](/guide/animations-transitions) for polish
 - See the [Layouts Reference](/reference/layouts-reference) for detailed specifications
+- Build your own slide with [Custom Components](/guide/custom-components)

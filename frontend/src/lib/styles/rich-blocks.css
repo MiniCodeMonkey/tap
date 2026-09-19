@@ -1,0 +1,310 @@
+/*
+ * Styles for the two step-driven rich blocks: the live, executable code
+ * block and the animated map slide. Both use CSS custom properties from the
+ * theme system (--color-*, --font-*).
+ */
+
+/* ============================================================================
+ * Live Code Block - code display with run button and execution result
+ * ============================================================================ */
+
+.live-code-block {
+	position: relative;
+	margin: 0 0 0.75em;
+	border-radius: 8px;
+	overflow: hidden;
+}
+
+.live-code-block:focus {
+	outline: 2px solid var(--color-accent);
+	outline-offset: 2px;
+}
+
+.live-code-block .code-container {
+	position: relative;
+}
+
+.live-code-block .code-container pre {
+	margin: 0;
+	border-radius: 8px 8px 0 0;
+}
+
+.live-code-block .code-actions {
+	position: absolute;
+	top: 0.75em;
+	right: 0.75em;
+	z-index: 10;
+}
+
+.live-code-block .run-button {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.5em;
+	padding: 0.5em 1em;
+	font-size: 0.875rem;
+	font-weight: 500;
+	color: #fff;
+	background-color: var(--color-accent);
+	border: none;
+	border-radius: 6px;
+	cursor: pointer;
+	transition:
+		background-color 0.2s ease,
+		transform 0.1s ease;
+}
+
+.live-code-block .run-button:hover:not(:disabled) {
+	filter: brightness(1.1);
+	transform: translateY(-1px);
+}
+
+.live-code-block .run-button:active:not(:disabled) {
+	transform: translateY(0);
+}
+
+.live-code-block .run-button:disabled {
+	opacity: 0.7;
+	cursor: not-allowed;
+}
+
+.live-code-block .play-icon {
+	font-size: 0.75em;
+}
+
+.live-code-block .loading-spinner {
+	display: inline-block;
+	width: 14px;
+	height: 14px;
+	border: 2px solid rgba(255, 255, 255, 0.3);
+	border-top-color: #fff;
+	border-radius: 50%;
+	animation: spin 0.8s linear infinite;
+}
+
+.live-code-block .result-container {
+	background-color: var(--color-code-bg, #1a1a1a);
+	border-top: 1px solid var(--color-border, #333);
+	border-radius: 0 0 8px 8px;
+}
+
+.live-code-block .result-header {
+	padding: 0.5em 1em;
+	border-bottom: 1px solid var(--color-border, #333);
+}
+
+.live-code-block .result-status {
+	font-size: 0.75rem;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.05em;
+}
+
+.live-code-block .result-status.success {
+	color: #10b981;
+}
+
+.live-code-block .result-status.error {
+	color: #ef4444;
+}
+
+.live-code-block .result-content {
+	padding: 1em;
+	overflow-x: auto;
+}
+
+.live-code-block .result-content .result-table {
+	width: 100%;
+	border-collapse: collapse;
+	font-size: 0.875rem;
+	color: var(--color-code-text, #e5e5e5);
+}
+
+.live-code-block .result-content .result-table th,
+.live-code-block .result-content .result-table td {
+	padding: 0.5em 0.75em;
+	text-align: left;
+	border-bottom: 1px solid var(--color-border, #333);
+}
+
+.live-code-block .result-content .result-table th {
+	font-weight: 600;
+	background-color: rgba(255, 255, 255, 0.05);
+	color: #fff;
+}
+
+.live-code-block .result-content .result-table tr:last-child td {
+	border-bottom: none;
+}
+
+.live-code-block .result-content .result-table tr:hover td {
+	background-color: rgba(255, 255, 255, 0.02);
+}
+
+.live-code-block .result-content .result-output {
+	margin: 0;
+	padding: 0;
+	background: none;
+	color: var(--color-code-text, #e5e5e5);
+	font-family: var(--font-mono);
+	font-size: 0.875rem;
+	white-space: pre-wrap;
+	word-break: break-word;
+}
+
+.live-code-block .result-content .result-error {
+	margin: 0;
+	padding: 0;
+	background: none;
+	color: #ef4444;
+	font-family: var(--font-mono);
+	font-size: 0.875rem;
+	white-space: pre-wrap;
+	word-break: break-word;
+}
+
+.live-code-block .result-content .result-empty {
+	color: var(--color-muted);
+	font-style: italic;
+}
+
+.live-code-block .result-container.error {
+	border-top-color: #ef4444;
+}
+
+.live-code-block .static-placeholder {
+	position: absolute;
+	top: 0.75em;
+	right: 0.75em;
+	z-index: 10;
+	display: inline-flex;
+	align-items: center;
+	gap: 0.5em;
+	padding: 0.5em 1em;
+	font-size: 0.75rem;
+	font-weight: 500;
+	color: var(--color-muted);
+	background-color: rgba(0, 0, 0, 0.4);
+	border-radius: 6px;
+	backdrop-filter: blur(4px);
+	-webkit-backdrop-filter: blur(4px);
+}
+
+.live-code-block .static-placeholder-icon {
+	font-size: 0.875em;
+	opacity: 0.8;
+}
+
+.live-code-block .static-placeholder-text {
+	white-space: nowrap;
+}
+
+.live-code-block.static-mode .code-container pre {
+	opacity: 0.85;
+}
+
+/* ============================================================================
+ * Asciinema player - shared sizing
+ *
+ * The asciinema-player library sizes its terminal from a character grid
+ * (cols x rows) times an em-based font size, so it inherits whatever
+ * font-size is in scope where it mounts. A theme's slot can carry a 60px
+ * body font, which makes the player's own em-based frame render far larger
+ * than the space under the heading and overflow the slide by hundreds of
+ * pixels. Reset the font-size here to a fixed pixel value so every theme
+ * gets a predictable terminal size, then constrain the wrapper to the room
+ * a flex column gives it (min-height: 0 so it can shrink below its content
+ * size) and let the player's own `fit` option (default "width", see
+ * asciinema.ts) scale the terminal to the wrapper while keeping its aspect
+ * ratio.
+ * ============================================================================ */
+
+/* A slot holding the player needs to be a shrinkable flex column itself, or
+ * `max-height: 100%` on the wrapper below has nothing definite to resolve
+ * against (a plain block slot sizes to its content, which is exactly the
+ * oversized player). This mirrors the per-theme `.layout-default
+ * .slot:has(...)` rules the ports wrote individually, generalized to every
+ * layout. */
+.slot:has(> .asciinema-player-wrapper) {
+	display: flex;
+	flex-direction: column;
+	flex: 1;
+	min-height: 0;
+}
+
+.asciinema-player-wrapper {
+	font-size: 16px;
+	display: flex;
+	flex-direction: column;
+	min-height: 0;
+	max-height: 100%;
+	overflow: hidden;
+}
+
+.asciinema-player-wrapper .player-container {
+	min-height: 0;
+	flex: 1;
+	overflow: hidden;
+}
+
+.asciinema-player-wrapper .ap-player,
+.asciinema-player-wrapper .ap-terminal {
+	max-width: 100%;
+	max-height: 100%;
+}
+
+/* ============================================================================
+ * Map Slide - full-slide animated MapLibre map
+ * ============================================================================ */
+
+.map-slide {
+	width: 100%;
+	height: 100%;
+	position: absolute;
+	top: 0;
+	left: 0;
+}
+
+.maplibregl-map {
+	font-family: inherit;
+}
+
+.map-marker {
+	cursor: default;
+}
+
+.map-marker svg {
+	display: block;
+}
+
+.maplibregl-ctrl-attrib {
+	font-size: 10px;
+	background: rgba(255, 255, 255, 0.7);
+	padding: 2px 5px;
+	border-radius: 3px;
+}
+
+@media print {
+	.maplibregl-ctrl-attrib {
+		display: none;
+	}
+}
+
+/* A slide with a map fills the slide with the map and overlays any regular
+ * slot content on top of it. */
+.slide.has-map {
+	padding: 0;
+}
+
+.slide.has-map .map-content-overlay {
+	position: relative;
+	z-index: 10;
+	pointer-events: none;
+}
+
+.slide.has-map .map-content-overlay:empty {
+	display: none;
+}
+
+.slide.has-map .map-content-overlay > * {
+	pointer-events: auto;
+}

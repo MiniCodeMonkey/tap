@@ -1,11 +1,10 @@
 ---
 title: SQL Live Demo
-theme: noir
+theme: base
 author: Tap Presentations
 date: 2026-01-25
 aspectRatio: "16:9"
 transition: fade
-codeTheme: github-light
 fragments: true
 drivers:
   sqlite:
@@ -117,6 +116,8 @@ layout: two-column
 
 ## Create Products Table
 
+::left
+
 ```sql {driver: sqlite, connection: demo}
 CREATE TABLE products (
     id INTEGER PRIMARY KEY,
@@ -126,7 +127,7 @@ CREATE TABLE products (
 );
 ```
 
-|||
+::right
 
 ### Table Schema
 

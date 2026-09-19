@@ -26,11 +26,33 @@ const (
 )
 
 // Message represents a WebSocket message sent between server and clients.
+// A slide message's SlideIndex, Fragment, Step and ScrollRevealed fields are
+// optional: when absent, the message means "this slide, initial state"
+// exactly as it did before these fields existed, which keeps an old client
+// that ignores them working and lets a new client tell "no fragment
+// revealed" (a present Fragment of -1) apart from "field not sent" (a nil
+// Fragment). Pointers are required here because plain ints and bools can't
+// distinguish a real zero value, such as slide index 0, fragment 0 or step
+// 0, from an omitted field.
+//
+// Initial marks a slide message as the register-time state Run's register
+// case sends a newly connected client (see lastSlideState below): only the
+// hub itself ever sets it, and only on that one message. A client uses it,
+// not message order, to tell the hub's late-joiner state apart from a live
+// navigation broadcast by another client - the only message order actually
+// guarantees is that this one, if sent at all, arrives before any broadcast
+// concurrent with registration (see the register case in Run). Broadcast
+// strips it from every message it sends out, so a client-sent "initial"
+// (accidental or otherwise) never survives a relay to other clients.
 // Fields ordered by size for memory alignment.
 type Message struct {
-	Type       MessageType `json:"type"`
-	Theme      string      `json:"theme,omitempty"`
-	SlideIndex int         `json:"slideIndex,omitempty"`
+	Type           MessageType `json:"type"`
+	Theme          string      `json:"theme,omitempty"`
+	SlideIndex     *int        `json:"slideIndex,omitempty"`
+	Fragment       *int        `json:"fragment,omitempty"`
+	Step           *int        `json:"step,omitempty"`
+	ScrollRevealed *bool       `json:"scrollRevealed,omitempty"`
+	Initial        bool        `json:"initial,omitempty"`
 }
 
 // Client represents a connected WebSocket client.
@@ -51,18 +73,123 @@ type WebSocketHub struct {
 	unregister          chan *Client
 	done                chan struct{}
 	onClientCountChange ClientCountCallback
-	mu                  sync.RWMutex
+	// lastSlideState is the most recently broadcast "slide" message. A
+	// client that registers after the talk is underway (a presenter window
+	// opened mid-talk, or a viewer that reconnects) is sent a copy of this,
+	// marked Initial, right after it registers (see the register case in
+	// Run), so it lands on the deck's current slide and fragment state
+	// instead of slide 1. Stored as a Message, not pre-marshaled bytes,
+	// because the copy sent to a new client needs Initial set while the
+	// stored value itself (and anything broadcast) never has it set. nil
+	// until the first slide message is broadcast, and reset to nil again
+	// once stateRetention has passed since every client disconnected (see
+	// scheduleForgetLocked and the unregister case in Run): with nobody
+	// left watching, there is no live "current state" to hand off forever,
+	// but a reload of the only open window (which briefly drops the hub to
+	// zero clients before the same window reconnects) should not lose it
+	// either, hence the grace period rather than forgetting immediately.
+	lastSlideState *Message
+	// stateRetention is how long lastSlideState survives after the last
+	// client disconnects, before scheduleForgetLocked's timer clears it. A
+	// zero or negative value forgets it immediately, with no retention.
+	stateRetention time.Duration
+	// retentionTimer is the pending "forget the state" timer started when
+	// the last client disconnects, or nil when no such timer is pending
+	// (nobody has disconnected down to zero clients since the timer last
+	// fired or was canceled). A client reconnecting before it fires stops
+	// it, canceling the forget.
+	retentionTimer *time.Timer
+	// slideCount is the presentation's current slide count, used to reject
+	// a relayed "slide" message whose slideIndex is out of range. Zero
+	// means "unknown" (no presentation set yet), in which case only a
+	// negative slideIndex is rejected; the frontend already clamps an
+	// in-range-but-stale index itself (see applyRemoteState in
+	// frontend/src/lib/stores/websocket.ts).
+	slideCount int
+	mu         sync.RWMutex
 }
 
-// NewWebSocketHub creates a new WebSocket hub.
+// DefaultStateRetention is how long the hub keeps the last-known slide
+// state after the last client disconnects, before forgetting it, unless
+// SetStateRetention overrides it.
+const DefaultStateRetention = 10 * time.Minute
+
+// NewWebSocketHub creates a new WebSocket hub with the default state
+// retention period (DefaultStateRetention).
 func NewWebSocketHub() *WebSocketHub {
 	return &WebSocketHub{
-		clients:    make(map[*Client]bool),
-		broadcast:  make(chan []byte, 256),
-		register:   make(chan *Client),
-		unregister: make(chan *Client),
-		done:       make(chan struct{}),
+		clients:        make(map[*Client]bool),
+		broadcast:      make(chan []byte, 256),
+		register:       make(chan *Client),
+		unregister:     make(chan *Client),
+		done:           make(chan struct{}),
+		stateRetention: DefaultStateRetention,
 	}
+}
+
+// SetStateRetention sets how long the hub keeps its last-known slide state
+// after the last client disconnects. Safe to call at any time, including
+// while a forget is already pending (it does not itself reschedule a
+// pending timer, only affects the next time the hub reaches zero clients).
+// A zero or negative duration makes the hub forget the state immediately
+// on disconnect.
+func (h *WebSocketHub) SetStateRetention(d time.Duration) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.stateRetention = d
+}
+
+// SetSlideCount tells the hub how many slides the current presentation
+// has, so a relayed "slide" message with an out-of-range slideIndex can be
+// rejected instead of broadcast. Safe to call at any time, including
+// before Run starts or while clients are connected (e.g. after a reload
+// changes the slide count).
+func (h *WebSocketHub) SetSlideCount(n int) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.slideCount = n
+}
+
+// validSlideIndex reports whether slideIndex is acceptable in a relayed
+// "slide" message: never negative, and, when the hub knows the slide
+// count, not past the last slide either.
+func (h *WebSocketHub) validSlideIndex(slideIndex int) bool {
+	if slideIndex < 0 {
+		return false
+	}
+	h.mu.RLock()
+	count := h.slideCount
+	h.mu.RUnlock()
+	if count > 0 && slideIndex >= count {
+		return false
+	}
+	return true
+}
+
+// scheduleForgetLocked arranges for the hub to forget lastSlideState
+// after stateRetention, unless a client reconnects first (the register
+// case in Run stops this timer). Must be called with h.mu held, and only
+// once the hub has reached zero clients.
+func (h *WebSocketHub) scheduleForgetLocked() {
+	if h.retentionTimer != nil {
+		h.retentionTimer.Stop()
+		h.retentionTimer = nil
+	}
+	if h.stateRetention <= 0 {
+		h.lastSlideState = nil
+		return
+	}
+	h.retentionTimer = time.AfterFunc(h.stateRetention, func() {
+		h.mu.Lock()
+		defer h.mu.Unlock()
+		// A client may have reconnected just as this fired, racing the
+		// register case's Stop() call; only forget if the hub is still at
+		// zero clients under this same lock.
+		if len(h.clients) == 0 {
+			h.lastSlideState = nil
+		}
+		h.retentionTimer = nil
+	})
 }
 
 // Run starts the hub's main event loop.
@@ -73,6 +200,10 @@ func (h *WebSocketHub) Run() {
 		case <-h.done:
 			// Close all client connections
 			h.mu.Lock()
+			if h.retentionTimer != nil {
+				h.retentionTimer.Stop()
+				h.retentionTimer = nil
+			}
 			for client := range h.clients {
 				close(client.send)
 				delete(h.clients, client)
@@ -83,8 +214,43 @@ func (h *WebSocketHub) Run() {
 		case client := <-h.register:
 			h.mu.Lock()
 			h.clients[client] = true
+			// A reconnect within the retention window cancels the pending
+			// forget: the state it's about to be sent below is exactly what
+			// would otherwise be erased.
+			if h.retentionTimer != nil {
+				h.retentionTimer.Stop()
+				h.retentionTimer = nil
+			}
+			var initialData []byte
+			if h.lastSlideState != nil {
+				initialMsg := *h.lastSlideState
+				initialMsg.Initial = true
+				initialData, _ = json.Marshal(initialMsg)
+			}
 			h.notifyClientCountChange()
 			h.mu.Unlock()
+
+			// Queue "connected" and, if any, the late-joiner state (marked
+			// Initial) from this same goroutine, before this case returns to
+			// select: Run is the only writer of client.send once a client is
+			// registered (HandleConnection never writes to it directly), so
+			// nothing sent here can ever be interleaved with, or arrive
+			// after, a broadcast concurrent with this registration - the
+			// broadcast case below can't run until this case's body
+			// finishes. That's what guarantees a client always receives its
+			// own late-joiner state before any live navigation broadcast by
+			// another client racing its connection.
+			connectedMsg, _ := json.Marshal(Message{Type: MessageConnected})
+			select {
+			case client.send <- connectedMsg:
+			default:
+			}
+			if initialData != nil {
+				select {
+				case client.send <- initialData:
+				default:
+				}
+			}
 
 		case client := <-h.unregister:
 			h.mu.Lock()
@@ -92,6 +258,15 @@ func (h *WebSocketHub) Run() {
 				delete(h.clients, client)
 				close(client.send)
 				h.notifyClientCountChange()
+				// Once nobody is watching, the state isn't handed off
+				// immediately, but it isn't kept forever either: after
+				// stateRetention with nobody reconnecting, there is no
+				// "current state" left to hand off, so scheduleForgetLocked
+				// clears it and the next connection starts from its own URL
+				// hash instead of wherever the deck was left days ago.
+				if len(h.clients) == 0 {
+					h.scheduleForgetLocked()
+				}
 			}
 			h.mu.Unlock()
 
@@ -132,11 +307,29 @@ func (h *WebSocketHub) notifyClientCountChange() {
 	}
 }
 
-// Broadcast sends a message to all connected clients.
+// Broadcast sends a message to all connected clients. Initial is always
+// cleared first, whether this call originated internally (BroadcastSlide,
+// BroadcastTheme) or from relaying a client's own message (readPump): only
+// the register case in Run, sending a client its own late-joiner state, is
+// allowed to set it, so a client can trust Initial as "the hub's state on
+// register", never "a peer happened to send this flag".
 func (h *WebSocketHub) Broadcast(msg Message) error {
+	msg.Initial = false
+
 	data, err := json.Marshal(msg)
 	if err != nil {
 		return err
+	}
+
+	if msg.Type == MessageSlide {
+		stateCopy := msg
+		// A slide message carries no theme of its own; strip any Theme a
+		// relayed client message happened to set so the retained state
+		// never claims one.
+		stateCopy.Theme = ""
+		h.mu.Lock()
+		h.lastSlideState = &stateCopy
+		h.mu.Unlock()
 	}
 
 	select {
@@ -155,7 +348,7 @@ func (h *WebSocketHub) BroadcastReload() error {
 
 // BroadcastSlide sends a slide navigation message to all clients.
 func (h *WebSocketHub) BroadcastSlide(slideIndex int) error {
-	return h.Broadcast(Message{Type: MessageSlide, SlideIndex: slideIndex})
+	return h.Broadcast(Message{Type: MessageSlide, SlideIndex: &slideIndex})
 }
 
 // BroadcastTheme sends a theme change message to all clients.
@@ -187,14 +380,17 @@ func (h *WebSocketHub) HandleConnection(w http.ResponseWriter, r *http.Request) 
 		send: make(chan []byte, 256),
 	}
 
+	// Registering also queues the "connected" message and, if the hub has
+	// one, the late-joiner state (marked Initial) - see the register case
+	// in Run. Both happen from Run's own goroutine, before this call
+	// returns control here, which is what guarantees they reach the client
+	// ahead of any live broadcast racing this registration: writing them
+	// here instead, from this goroutine, would race the broadcast case in
+	// Run writing to the same client.send from a different goroutine, with
+	// no guarantee which arrived first. A brand new hub with no slide
+	// message broadcast yet sends only "connected", leaving this client to
+	// initialize from its own URL hash.
 	h.register <- client
-
-	// Send connected message
-	connectedMsg, _ := json.Marshal(Message{Type: MessageConnected})
-	select {
-	case client.send <- connectedMsg:
-	default:
-	}
 
 	// Use a context that's independent of the HTTP request
 	// The context will be canceled when the hub is stopped
@@ -227,9 +423,17 @@ func (c *Client) readPump(ctx context.Context) {
 			continue // Ignore invalid JSON
 		}
 
-		// Broadcast slide and theme messages to all clients
+		// Broadcast slide and theme messages to all clients. A "slide"
+		// message with a negative index, or (when the hub knows the slide
+		// count) an index past the last slide, is dropped instead of
+		// relayed and retained as lastSlideState.
 		switch msg.Type {
-		case MessageSlide, MessageTheme:
+		case MessageSlide:
+			if msg.SlideIndex == nil || !c.hub.validSlideIndex(*msg.SlideIndex) {
+				continue
+			}
+			_ = c.hub.Broadcast(msg)
+		case MessageTheme:
 			_ = c.hub.Broadcast(msg)
 		}
 	}

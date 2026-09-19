@@ -1,6 +1,6 @@
 ---
 title: Getting Started with Tap
-theme: paper
+theme: base
 author: Tap Presentations
 date: 2026-01-25
 aspectRatio: "16:9"
@@ -77,13 +77,13 @@ layout: two-column
 
 Use the two-column layout for side-by-side content.
 
-|||
+::left
 
 - Left column content
 - Lists work great here
 - Easy to compare
 
-|||
+::right
 
 - Right column content
 - Perfect for comparisons

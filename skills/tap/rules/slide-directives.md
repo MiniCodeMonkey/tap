@@ -28,7 +28,16 @@ Sets the slide layout.
 layout: two-column
 -->
 ```
-Options: `default`, `title`, `section`, `two-column`, `three-column`, `code-focus`, `big-stat`, `quote`, `cover`, `sidebar`, `split-media`, `blank`
+Options: `default`, `title`, `section`, `two-column`, `three-column`, `code-focus`, `big-stat`, `quote`, `cover`, `sidebar`, `split-media`, `blank`.
+
+A value starting with `./` or `../` and ending in `.jsx`, `.tsx`, `.js`, or
+`.ts` is a deck component file instead, which renders the whole slide. See
+`skills/tap/rules/components.md`.
+
+With no `layout:` directive, tap picks one from the content: `three-column`
+or `two-column` from the slot names, `title` for a lone `h1`, `section` for
+a lone `h2`, `code-focus` for a dominant code block, `quote` for a
+blockquote, otherwise `default`.
 
 ### transition
 Animation when transitioning to this slide.
@@ -55,6 +64,10 @@ background: #1a1a2e
 -->
 ```
 
+Hex colors do not need quotes: the parser quotes a bare `#rgb`, `#rgba`,
+`#rrggbb`, or `#rrggbbaa` value before handing the block to YAML. Other
+`#` values still need quotes, for example `tag: "#scaling"`.
+
 Accepted values:
 - Hex color: `#1a1a2e`
 - RGB: `rgb(26, 26, 46)`
@@ -80,13 +93,43 @@ notes: |
 -->
 ```
 
-### class
-Custom CSS classes for the slide.
+### tag
+A short decorative metadata label on the slide. Keep it word-shaped.
 ```markdown
 <!--
-class: my-custom-slide highlight
+tag: "01 / Kickoff"
 -->
 ```
+
+### badge
+A short decorative badge on the slide.
+```markdown
+<!--
+badge: "v2.0"
+-->
+```
+
+### scroll / scroll-speed
+Turn a long slide into a scroll reveal. `scroll-speed` is the duration in
+milliseconds (default `2000`).
+```markdown
+<!--
+scroll: true
+scroll-speed: 4000
+-->
+```
+
+### steps
+How many clicker presses this slide consumes, for a deck component or a
+`map` fence. The directive always wins, including `steps: 0`.
+```markdown
+<!--
+steps: 4
+-->
+```
+**Do not set this on a slide whose component exports `steps`.** The
+directive overrides the export silently, so the two drift apart. Prefer the
+export.
 
 ## Combining Directives
 
@@ -108,16 +151,21 @@ notes: |
 - Single deployment
 - Simpler to start
 
-|||
+::right
 
 ### Microservices
 - Independent scaling
 - Technology flexibility
 ```
 
-## Inline Notes Alternative
+## Notes Comment Anywhere (Recommended)
 
-Add notes at the end of a slide:
+A comment whose content starts with `notes:` is a notes comment, wherever
+it sits in the slide. It never reaches the rendered HTML, and its text
+becomes the slide's notes with line breaks preserved. This form never
+collides with directive parsing, so prefer it for long free text. Notes
+render as plain text, not markdown. A comment ends at the first `-->`, so
+notes cannot contain that sequence.
 ```markdown
 # Key Results
 

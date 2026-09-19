@@ -1,0 +1,34 @@
+{
+	"name": "Product",
+	"polarity": "light",
+	"pitch": "A launch-day talk for a developer tool, where every slide should feel like the landing page of something you want to install.",
+	"illustration": {
+		"medium": "flat vector, clean SaaS-landing-page illustration on off-white",
+		"line": "2px rounded strokes, consistent corner radius, friendly not sharp",
+		"shapes": "rounded rectangles, soft blobs, pill buttons, simple isometric-free devices and icons",
+		"texture": "none, flat color fields with occasional soft drop shadow for depth",
+		"palette_use": "white and near-white dominant, single deep green accent used for the one call-to-action element",
+		"mood": "confident, launch-day, install-me polish",
+		"avoid": "hand-drawn wobble, grunge texture, heavy black outlines, clutter"
+	},
+	"mermaid": {
+		"themeVariables": {
+			"fontFamily": "Geist Mono",
+			"fontSize": "44px",
+			"primaryColor": "#E3F3EB",
+			"primaryTextColor": "#0A5F45",
+			"primaryBorderColor": "#0A5F45",
+			"lineColor": "#17A673",
+			"background": "#FFFFFF",
+			"mainBkg": "#E3F3EB",
+			"textColor": "#11140F",
+			"nodeTextColor": "#0A5F45",
+			"nodeBorder": "#0A5F45",
+			"clusterBkg": "#FAFAF6",
+			"clusterBorder": "#DCDDD4",
+			"edgeLabelBackground": "#FFFFFF"
+		},
+		"quietStyle": "fill:#FFFFFF,stroke:#C9CBC0,color:#11140F",
+		"curve": "basis"
+	}
+}

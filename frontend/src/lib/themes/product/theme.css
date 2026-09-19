@@ -1,0 +1,1852 @@
+/**
+ * Product theme.
+ * A launch-day talk for a developer tool: every slide reads like a section
+ * of a landing page. A dotted grid with a clearing behind the content, a
+ * status chip and a mono folio as the nav row, feature lists with check
+ * marks, comparison cards, a dark editor for code, screenshots in a browser
+ * frame, and one deep green that points at the thing being talked about.
+ *
+ * Selectors that style slot content carry `.slot` (or `.slide[data-layout]`)
+ * so they outrank the base theme's `.layout-x .slot-content el` rules
+ * whatever order the stylesheets load in.
+ */
+
+@import '@fontsource/geist/latin-500.css';
+@import '@fontsource/geist/latin-600.css';
+@import '@fontsource/geist/latin-700.css';
+@import '@fontsource/geist-mono/latin-500.css';
+@import '@fontsource/geist-mono/latin-600.css';
+
+[data-theme='product'] {
+	/* ---------- design-spec tokens ---------- */
+	--bg: #fafaf6;
+	--fg: #11140f;
+	--muted: #4c5048;
+	--accent: #0a5f45;
+	--accent-text: #0a5f45;
+	--accent-2: #17a673;
+	--surface: #ffffff;
+	--line: #dcddd4;
+	--dot: #c9cbc0;
+	--tint: #e3f3eb;
+	--code-bg: #0e1411;
+	--code-fg: #eef2ee;
+	--code-line: #26302b;
+	--syn-1: #5be3a6;
+	--syn-2: #9db0a7;
+	--band-dot: #4e9c82;
+	--font-display: 'Geist', 'Helvetica Neue', Arial, sans-serif;
+	--font-body: 'Geist', 'Helvetica Neue', Arial, sans-serif;
+	--font-mono: 'Geist Mono', 'SFMono-Regular', Menlo, monospace;
+	--ease: cubic-bezier(0.3, 1.45, 0.55, 1);
+	--ease-rule: cubic-bezier(0.2, 0.8, 0.2, 1);
+	--dur: 520ms;
+	--space-unit: 32px;
+	--radius: 20px;
+	--stroke-width: 2px;
+
+	/* Bridge to the token names the shared stylesheets read. */
+	--color-bg: var(--bg);
+	--color-text: var(--fg);
+	--color-muted: var(--muted);
+	--color-accent: var(--accent);
+	--color-code-bg: var(--code-bg);
+	--color-code-text: var(--code-fg);
+	--color-code-inline-bg: var(--tint);
+	--color-border: var(--line);
+	--color-surface: var(--surface);
+	--color-surface-elevated: var(--surface);
+	--color-link: var(--accent-text);
+	--font-sans: var(--font-body);
+
+	/* Shiki: mint for keywords and strings, grey-green for comments and
+	   punctuation, the editor foreground for everything else. */
+	--shiki-foreground: var(--code-fg);
+	--shiki-background: var(--code-bg);
+	--shiki-token-comment: var(--syn-2);
+	--shiki-token-string: var(--syn-1);
+	--shiki-token-string-expression: var(--syn-1);
+	--shiki-token-keyword: var(--syn-1);
+	--shiki-token-function: var(--code-fg);
+	--shiki-token-constant: var(--syn-1);
+	--shiki-token-parameter: var(--code-fg);
+	--shiki-token-punctuation: var(--syn-2);
+	--shiki-token-link: var(--syn-1);
+}
+
+@keyframes product-rise {
+	from {
+		opacity: 0;
+		transform: translateY(34px) scale(0.985);
+	}
+	to {
+		opacity: 1;
+		transform: translateY(0) scale(1);
+	}
+}
+/* Uses filter and translate so it never fights the opacity and transform
+   that fragment reveals transition on the same element. */
+@keyframes product-item {
+	from {
+		filter: opacity(0);
+		translate: 0 30px;
+	}
+	to {
+		filter: opacity(1);
+		translate: 0 0;
+	}
+}
+@keyframes product-fade {
+	from {
+		opacity: 0;
+	}
+	to {
+		opacity: 1;
+	}
+}
+@keyframes product-rule {
+	from {
+		transform: scaleX(0);
+	}
+	to {
+		transform: scaleX(1);
+	}
+}
+@keyframes product-codein {
+	from {
+		opacity: 0;
+		transform: translateY(18px);
+	}
+	to {
+		opacity: 0.5;
+		transform: translateY(0);
+	}
+}
+@keyframes product-focusin {
+	from {
+		opacity: 0;
+		transform: translateY(18px);
+	}
+	to {
+		opacity: 1;
+		transform: translateY(0);
+	}
+}
+@keyframes product-pulse {
+	0%,
+	100% {
+		transform: scale(1);
+		opacity: 0.55;
+	}
+	50% {
+		transform: scale(1.45);
+		opacity: 0;
+	}
+}
+
+/* ============================================================================
+ * Page: dotted grid with a clearing behind the content
+ * ============================================================================ */
+
+[data-theme='product'] .slide[data-layout] {
+	background-color: var(--bg);
+	background-image:
+		radial-gradient(ellipse 1100px 620px at 34% 44%, var(--bg) 0%, var(--bg) 45%, transparent 100%),
+		radial-gradient(circle at 2px 2px, var(--dot) 2px, transparent 2.6px);
+	background-size:
+		100% 100%,
+		32px 32px;
+	color: var(--fg);
+	font-family: var(--font-body);
+	font-weight: 500;
+	font-size: 48px;
+	line-height: 1.2;
+	letter-spacing: -0.03em;
+}
+/* :where() keeps this reset just above the base theme's element rules and
+   below every later rule in this file. */
+[data-theme='product'] .slot :where(h1, h2, h3, h4, h5, h6, p, ul, ol, li, blockquote, pre, table) {
+	margin: 0;
+	padding: 0;
+}
+[data-theme='product'] .slot :where(h1, h2, h3, h4) {
+	font-family: var(--font-display);
+	font-weight: 700;
+	text-wrap: balance;
+}
+
+/* Every layout shares one frame: 96px safe margin, content anchored top
+   left, and a nav row reserved above it when the slide carries a tag. */
+[data-theme='product'] .slide[data-layout] [class^='layout-'] {
+	padding: 96px;
+	text-align: left;
+	align-items: stretch;
+	justify-content: flex-start;
+	align-content: start;
+}
+[data-theme='product'] .slide[data-layout]:has(> .slide-tag) [class^='layout-'] {
+	padding-top: 196px;
+}
+/*
+ * A component's own root commonly fills `.deck-component-root` with an
+ * inline `position: absolute; inset: 0`, resolving against the padding
+ * edge, so real `padding` would sit inside it and get filled over; a
+ * transparent `border` reserves the same margin instead.
+ */
+[data-theme='product'] .slide[data-layout='component'] > .slide-content > .deck-component-root,
+[data-theme='product'] .slide[data-layout='component'] > .slide-content > .scroll-content > .deck-component-root {
+	border-width: 96px;
+	border-style: solid;
+	border-color: transparent;
+	text-align: left;
+	align-items: stretch;
+	justify-content: flex-start;
+	align-content: start;
+}
+[data-theme='product'] .slide[data-layout='component']:has(> .slide-tag) > .slide-content > .deck-component-root,
+[data-theme='product'] .slide[data-layout='component']:has(> .slide-tag) > .slide-content > .scroll-content > .deck-component-root {
+	border-top-width: 196px;
+}
+[data-theme='product'] .slot {
+	display: flex;
+	flex-direction: column;
+	min-width: 0;
+	max-width: none;
+}
+[data-theme='product'] .slot > * {
+	flex-shrink: 0;
+	animation: product-rise var(--dur) var(--ease) both;
+}
+[data-theme='product'] .slot > *:nth-child(1) {
+	animation-delay: 95ms;
+}
+[data-theme='product'] .slot > *:nth-child(2) {
+	animation-delay: 190ms;
+}
+[data-theme='product'] .slot > *:nth-child(3) {
+	animation-delay: 300ms;
+}
+[data-theme='product'] .slot > *:nth-child(4) {
+	animation-delay: 400ms;
+}
+[data-theme='product'] .slot > *:nth-child(n + 5) {
+	animation-delay: 500ms;
+}
+/* Lists and tables stay still; their rows arrive one by one instead.
+   Fragment wrappers stay still so their reveal transition is the motion. */
+[data-theme='product'] .slot > :is(ul, ol, table, .fragment) {
+	animation: none;
+}
+
+/* ---------- nav row: status chip, badge, folio ---------- */
+[data-theme='product'] .slide-tag {
+	position: absolute;
+	left: 96px;
+	top: 96px;
+	display: inline-flex;
+	align-items: center;
+	gap: 16px;
+	height: 60px;
+	padding: 0 28px 0 22px;
+	border-radius: 30px;
+	border: 2px solid var(--line);
+	background: var(--surface);
+	font-family: var(--font-mono);
+	font-weight: 500;
+	font-size: 30px;
+	letter-spacing: -0.01em;
+	line-height: 1;
+	color: var(--fg);
+	white-space: nowrap;
+	animation: product-rise var(--dur) var(--ease) both;
+}
+[data-theme='product'] .slide-tag::before {
+	content: '';
+	width: 14px;
+	height: 14px;
+	border-radius: 50%;
+	background: var(--accent-2);
+}
+/* The badge is the release pill of a changelog: solid, beside the folio. */
+[data-theme='product'] .slide-badge {
+	position: absolute;
+	top: 96px;
+	right: 300px;
+	display: inline-flex;
+	align-items: center;
+	height: 60px;
+	padding: 0 26px;
+	border-radius: 30px;
+	background: var(--accent);
+	font-family: var(--font-mono);
+	font-weight: 600;
+	font-size: 30px;
+	letter-spacing: -0.01em;
+	line-height: 1;
+	color: var(--bg);
+	white-space: nowrap;
+	animation: product-rise var(--dur) var(--ease) 120ms both;
+}
+[data-theme='product'] .slide[data-layout]::after {
+	content: attr(data-index) ' / ' attr(data-total);
+	position: absolute;
+	right: 96px;
+	top: 110px;
+	z-index: 1;
+	font-family: var(--font-mono);
+	font-weight: 500;
+	font-size: 30px;
+	line-height: 1;
+	letter-spacing: -0.01em;
+	color: var(--muted);
+	animation: product-fade 400ms linear both;
+}
+/* Without a tag the heading shares the top row with the folio (and the
+   badge, when there is one), so it keeps clear of them. */
+[data-theme='product'] .slide[data-layout]:not(:has(> .slide-tag)) .slot-default > :is(h1, h2):first-child {
+	padding-right: 230px;
+}
+[data-theme='product'] .slide[data-layout]:has(> .slide-badge):not(:has(> .slide-tag)) .slot-default > :is(h1, h2):first-child {
+	padding-right: 480px;
+}
+
+/* ============================================================================
+ * Type
+ * ============================================================================ */
+
+/* Sized for a long (60+ char) heading first; data-length scales a
+   genuinely short one up so it keeps a landing page's headline impact. */
+[data-theme='product'] .slot h1 {
+	font-size: 108px;
+	line-height: 1.02;
+	letter-spacing: -0.05em;
+	margin-left: -4px;
+}
+[data-theme='product'] .slot h1[data-length='medium'] {
+	font-size: 128px;
+}
+[data-theme='product'] .slot h1[data-length='short'] {
+	font-size: 144px;
+	line-height: 0.98;
+	letter-spacing: -0.055em;
+}
+[data-theme='product'] .slot h2 {
+	font-size: 84px;
+	line-height: 1.04;
+	letter-spacing: -0.045em;
+	margin: 0 0 0 -3px;
+}
+[data-theme='product'] .slot h2[data-length='medium'] {
+	font-size: 98px;
+}
+[data-theme='product'] .slot h2[data-length='short'] {
+	font-size: 112px;
+	line-height: 1;
+	letter-spacing: -0.05em;
+	margin: 0 0 0 -4px;
+}
+[data-theme='product'] .slot h3 {
+	font-size: 64px;
+	line-height: 1.08;
+	letter-spacing: -0.04em;
+	margin-top: 44px;
+}
+[data-theme='product'] .slot h3[data-length='short'] {
+	font-size: 76px;
+	line-height: 1.04;
+	letter-spacing: -0.045em;
+	margin-top: 48px;
+}
+[data-theme='product'] .slot h4 {
+	font-size: 52px;
+	line-height: 1.12;
+	letter-spacing: -0.035em;
+	font-weight: 600;
+	margin-top: 32px;
+}
+/* h5 and h6 are the mono eyebrow labels of a landing page. */
+[data-theme='product'] .slot :is(h5, h6) {
+	display: flex;
+	align-items: center;
+	gap: 18px;
+	font-family: var(--font-mono);
+	font-weight: 500;
+	font-size: 40px;
+	line-height: 1.1;
+	letter-spacing: -0.01em;
+	color: var(--muted);
+	margin-top: 32px;
+}
+[data-theme='product'] .slot :is(h5, h6)::before {
+	content: '';
+	flex: none;
+	width: 16px;
+	height: 16px;
+	border-radius: 50%;
+	background: var(--accent-2);
+}
+[data-theme='product'] .slot h6 {
+	font-size: 32px;
+	margin-top: 24px;
+}
+[data-theme='product'] .slot h6::before {
+	width: 14px;
+	height: 14px;
+	background: transparent;
+	border: 3px solid var(--muted);
+}
+[data-theme='product'] .slot :is(h1, h2, h3, h4, h5, h6):first-child {
+	margin-top: 0;
+}
+
+[data-theme='product'] .slot p {
+	font-size: 48px;
+	line-height: 1.32;
+	max-width: 1520px;
+	text-wrap: pretty;
+}
+/* :where() keeps the class names in these lists from raising the weight
+   of the rule above the layout rules further down. */
+[data-theme='product'] .slot :where(p, ul, ol, pre, table, blockquote, .fragment, .mermaid-diagram, .mermaid-error, .live-code-block-portal, .asciinema-player-wrapper) {
+	margin-top: 44px;
+}
+[data-theme='product'] .slot :where(p, ul, ol, pre, table, blockquote, .fragment):first-child {
+	margin-top: 0;
+}
+[data-theme='product'] .slot .fragment + .fragment {
+	margin-top: 28px;
+}
+
+[data-theme='product'] .slide[data-layout] strong {
+	font-weight: 700;
+	color: var(--accent-text);
+}
+[data-theme='product'] .slide[data-layout] em {
+	font-style: normal;
+	color: var(--accent-text);
+}
+[data-theme='product'] .slide[data-layout] a {
+	color: var(--accent-text);
+	text-decoration: underline;
+	text-decoration-color: var(--accent-2);
+	text-decoration-thickness: 0.07em;
+	text-underline-offset: 0.14em;
+	border-radius: 10px;
+	transition: background-color 200ms ease;
+}
+[data-theme='product'] .slide[data-layout] a:hover {
+	background-color: var(--tint);
+	text-decoration-color: var(--accent);
+}
+[data-theme='product'] .slot :is(p, li, td, th, h1, h2, h3, h4, blockquote) code {
+	font-family: var(--font-mono);
+	font-weight: 600;
+	font-size: 0.86em;
+	letter-spacing: -0.02em;
+	padding: 2px 10px 4px;
+	border-radius: 12px;
+	background: var(--tint);
+	color: var(--accent-text);
+}
+
+/* Fragments rise into place with the same overshoot as everything else. */
+[data-theme='product'] .slide[data-layout] .fragment-hidden {
+	opacity: 0;
+	visibility: hidden;
+	transform: translateY(30px) scale(0.985);
+	transition:
+		opacity var(--dur) var(--ease),
+		transform var(--dur) var(--ease),
+		visibility 0ms var(--dur);
+}
+[data-theme='product'] .slide[data-layout] .fragment-visible {
+	opacity: 1;
+	visibility: visible;
+	transform: none;
+	transition:
+		opacity var(--dur) var(--ease),
+		transform var(--dur) var(--ease),
+		visibility 0ms;
+}
+
+/* ============================================================================
+ * Title: headline, second line in green, speaker pill above the fold line
+ * ============================================================================ */
+
+[data-theme='product'] .slide[data-layout='title'] .layout-title {
+	display: flex;
+	flex-direction: column;
+	padding-top: 196px;
+}
+[data-theme='product'] .layout-title .slot {
+	flex: 1;
+	min-height: 0;
+}
+[data-theme='product'] .layout-title .slot :is(h1, h2) {
+	font-size: 116px;
+	line-height: 1.02;
+	letter-spacing: -0.05em;
+	margin: 0 0 0 -5px;
+	padding-right: 0;
+	max-width: 1700px;
+}
+[data-theme='product'] .layout-title .slot :is(h1, h2)[data-length='medium'] {
+	font-size: 132px;
+	line-height: 0.98;
+	letter-spacing: -0.055em;
+}
+[data-theme='product'] .layout-title .slot :is(h1, h2)[data-length='short'] {
+	font-size: 156px;
+	line-height: 0.96;
+	letter-spacing: -0.06em;
+}
+[data-theme='product'] .layout-title .slot h1 + h2 {
+	margin-top: 14px;
+}
+[data-theme='product'] .layout-title .slot h2 {
+	color: var(--accent-text);
+}
+/* The fold line is a flex item, so a long headline pushes it down instead
+   of running through it. */
+[data-theme='product'] .layout-title .slot::after {
+	content: '';
+	order: 1;
+	flex: none;
+	height: 2px;
+	margin-top: auto;
+	background: var(--line);
+	transform-origin: left center;
+	animation: product-rule 700ms var(--ease-rule) 380ms both;
+}
+[data-theme='product'] .layout-title .slot p {
+	order: 2;
+	align-self: flex-start;
+	position: relative;
+	display: flex;
+	align-items: center;
+	min-height: 108px;
+	max-width: 100%;
+	margin: 44px 0 0;
+	padding: 22px 48px 22px 92px;
+	border-radius: 54px;
+	background: var(--surface);
+	border: 2px solid var(--line);
+	font-size: 48px;
+	font-weight: 600;
+	line-height: 1.15;
+	text-wrap: balance;
+	color: var(--fg);
+	animation-delay: 480ms;
+}
+[data-theme='product'] .layout-title .slot p::before {
+	content: '';
+	position: absolute;
+	left: 44px;
+	top: 50%;
+	width: 24px;
+	height: 24px;
+	margin-top: -12px;
+	border-radius: 50%;
+	background: var(--accent-2);
+}
+[data-theme='product'] .layout-title .slot p::after {
+	content: '';
+	position: absolute;
+	left: 34px;
+	top: 50%;
+	width: 44px;
+	height: 44px;
+	margin-top: -22px;
+	border-radius: 50%;
+	border: 4px solid var(--accent-2);
+	animation: product-pulse 4.5s ease-in-out 1.6s infinite both;
+}
+
+/* ============================================================================
+ * Section and cover: the dark bands of the landing page
+ * ============================================================================ */
+
+[data-theme='product'] .slide[data-layout='section'] {
+	background-color: var(--accent);
+	background-image:
+		radial-gradient(ellipse 1100px 620px at 34% 50%, var(--accent) 0%, var(--accent) 45%, transparent 100%),
+		radial-gradient(circle at 2px 2px, var(--band-dot) 2px, transparent 2.6px);
+	color: var(--bg);
+}
+[data-theme='product'] .slide:is([data-layout='section'], [data-layout='cover'])::after {
+	color: var(--bg);
+}
+[data-theme='product'] .slide:is([data-layout='section'], [data-layout='cover']) .slide-tag {
+	background: transparent;
+	border-color: var(--band-dot);
+	color: var(--bg);
+}
+[data-theme='product'] .slide:is([data-layout='section'], [data-layout='cover']) .slide-tag::before {
+	background: var(--syn-1);
+}
+[data-theme='product'] .slide:is([data-layout='section'], [data-layout='cover']) .slide-badge {
+	background: var(--syn-1);
+	color: var(--code-bg);
+}
+/* The green that marks emphasis elsewhere has no contrast on a dark band,
+   so emphasis, links and inline code switch to mint here. */
+[data-theme='product'] .slide:is([data-layout='section'], [data-layout='cover']) :is(strong, em, a) {
+	color: var(--syn-1);
+}
+[data-theme='product'] .slide:is([data-layout='section'], [data-layout='cover']) a:hover {
+	background-color: rgba(255, 255, 255, 0.12);
+}
+[data-theme='product'] .slide:is([data-layout='section'], [data-layout='cover']) .slot :is(p, li, h1, h2, h3) code {
+	background: rgba(255, 255, 255, 0.14);
+	color: var(--bg);
+}
+
+[data-theme='product'] .slide[data-layout] .layout-section {
+	display: flex;
+	flex-direction: column;
+	justify-content: center;
+	padding-bottom: 156px;
+}
+[data-theme='product'] .layout-section .slot :is(h1, h2) {
+	font-size: 130px;
+	line-height: 1.02;
+	letter-spacing: -0.05em;
+	margin: 0 0 0 -6px;
+	padding-right: 0;
+	color: var(--bg);
+	overflow-wrap: break-word;
+}
+[data-theme='product'] .layout-section .slot :is(h1, h2)[data-length='medium'] {
+	font-size: 180px;
+	line-height: 0.98;
+	letter-spacing: -0.055em;
+	margin-left: -9px;
+}
+[data-theme='product'] .layout-section .slot :is(h1, h2)[data-length='short'] {
+	font-size: 240px;
+	line-height: 0.96;
+	letter-spacing: -0.06em;
+	margin-left: -12px;
+}
+[data-theme='product'] .layout-section .slot h1 + h2 {
+	font-size: 92px;
+	margin-top: 28px;
+	color: var(--syn-1);
+}
+[data-theme='product'] .layout-section .slot h1 + h2[data-length='medium'] {
+	font-size: 100px;
+}
+[data-theme='product'] .layout-section .slot h1 + h2[data-length='short'] {
+	font-size: 112px;
+}
+[data-theme='product'] .layout-section .slot p {
+	margin-top: 40px;
+	font-size: 56px;
+	max-width: 1400px;
+	color: var(--bg);
+}
+
+/* Cover: the hero at night. Near-black, light dots, a low green glow.
+   The layers are transparent, so a deck-supplied background color shows
+   through them, and a deck-supplied image replaces them. */
+[data-theme='product'] .slide[data-layout='cover'] {
+	background-color: var(--code-bg);
+	background-image:
+		radial-gradient(ellipse 1300px 560px at 50% 112%, rgba(23, 166, 115, 0.5) 0%, transparent 72%),
+		radial-gradient(circle at 2px 2px, rgba(255, 255, 255, 0.16) 2px, transparent 2.6px);
+	background-size:
+		100% 100%,
+		32px 32px;
+	color: var(--code-fg);
+}
+[data-theme='product'] .slide[data-layout] .layout-cover {
+	display: flex;
+	flex-direction: column;
+	justify-content: center;
+	align-items: center;
+	text-align: center;
+	padding-bottom: 120px;
+}
+[data-theme='product'] .layout-cover .slot {
+	align-items: center;
+	padding: 0;
+	max-width: 1560px;
+}
+[data-theme='product'] .layout-cover .slot h1 {
+	font-size: 118px;
+	line-height: 1.02;
+	letter-spacing: -0.05em;
+	margin: 0;
+	padding-right: 0;
+	color: var(--code-fg);
+}
+[data-theme='product'] .layout-cover .slot h1[data-length='medium'] {
+	font-size: 156px;
+	line-height: 0.98;
+	letter-spacing: -0.055em;
+}
+[data-theme='product'] .layout-cover .slot h1[data-length='short'] {
+	font-size: 196px;
+	line-height: 0.96;
+	letter-spacing: -0.06em;
+}
+[data-theme='product'] .layout-cover .slot h2 {
+	padding-right: 0;
+	color: var(--syn-1);
+	margin: 28px 0 0;
+}
+[data-theme='product'] .layout-cover .slot p {
+	margin-top: 48px;
+	max-width: 1240px;
+	font-size: 52px;
+	line-height: 1.28;
+	text-wrap: balance;
+	color: var(--syn-2);
+}
+/* The install-button rule under the hero copy. */
+[data-theme='product'] .layout-cover .slot::after {
+	content: '';
+	width: 120px;
+	height: 8px;
+	margin-top: 64px;
+	border-radius: 4px;
+	background: var(--syn-1);
+	transform-origin: center;
+	animation: product-rule 700ms var(--ease-rule) 520ms both;
+}
+
+/* ============================================================================
+ * Default and code-focus: heading on top, content fills what is left
+ * ============================================================================ */
+
+[data-theme='product'] .slide[data-layout] :is(.layout-default, .layout-code-focus) {
+	display: flex;
+	flex-direction: column;
+	gap: 0;
+}
+[data-theme='product'] :is(.layout-default, .layout-code-focus) > .slot {
+	flex: 1;
+	min-height: 0;
+}
+
+/* statement: a lone h1 */
+[data-theme='product'] .layout-default .slot:has(> h1:only-child) {
+	justify-content: center;
+	padding-bottom: 80px;
+}
+[data-theme='product'] .layout-default .slot > h1:only-child {
+	font-size: 130px;
+	line-height: 1.02;
+	letter-spacing: -0.05em;
+	margin-left: -5px;
+	padding-right: 0;
+}
+[data-theme='product'] .layout-default .slot > h1:only-child[data-length='medium'] {
+	font-size: 196px;
+	line-height: 0.96;
+	letter-spacing: -0.06em;
+	margin-left: -8px;
+}
+[data-theme='product'] .layout-default .slot > h1:only-child[data-length='short'] {
+	font-size: 240px;
+	line-height: 0.94;
+	letter-spacing: -0.06em;
+	margin-left: -10px;
+}
+[data-theme='product'] .layout-default:has(h1:only-child)::after {
+	content: '';
+	position: absolute;
+	left: 96px;
+	right: 96px;
+	bottom: 96px;
+	height: 2px;
+	background: var(--line);
+	transform-origin: left center;
+	animation: product-rule 700ms var(--ease-rule) 380ms both;
+}
+
+/* ============================================================================
+ * Lists: a feature list with check marks
+ * ============================================================================
+ * --row-pad, --row-size and --mark set the density. Short lists get the
+ * roomy landing-page rows; longer ones tighten so seven bullets still fit.
+ * ============================================================================ */
+
+[data-theme='product'] .slot :is(ul, ol):not(li *) {
+	--row-pad: 44px;
+	--row-size: 52px;
+	--mark: 44px;
+	list-style: none;
+	margin-top: 64px;
+	border-top: 2px solid var(--line);
+}
+[data-theme='product'] .slot :is(ul, ol):not(li *):has(> li:nth-child(4)) {
+	--row-pad: 30px;
+	--row-size: 46px;
+	--mark: 40px;
+}
+[data-theme='product'] .slot :is(ul, ol):not(li *):has(> li:nth-child(6)) {
+	--row-pad: 20px;
+	--row-size: 42px;
+	--mark: 36px;
+}
+[data-theme='product'] .slot :is(ul, ol):not(li *) > li {
+	position: relative;
+	padding: var(--row-pad) 0 var(--row-pad) calc(var(--mark) + 40px);
+	border-bottom: 2px solid var(--line);
+	font-size: var(--row-size);
+	line-height: 1.18;
+	font-weight: 500;
+	text-wrap: pretty;
+	animation: product-item var(--dur) var(--ease) both;
+}
+[data-theme='product'] .slot :is(ul, ol):not(li *) > li:nth-child(1) {
+	animation-delay: 300ms;
+}
+[data-theme='product'] .slot :is(ul, ol):not(li *) > li:nth-child(2) {
+	animation-delay: 395ms;
+}
+[data-theme='product'] .slot :is(ul, ol):not(li *) > li:nth-child(3) {
+	animation-delay: 490ms;
+}
+[data-theme='product'] .slot :is(ul, ol):not(li *) > li:nth-child(4) {
+	animation-delay: 585ms;
+}
+[data-theme='product'] .slot :is(ul, ol):not(li *) > li:nth-child(n + 5) {
+	animation-delay: 680ms;
+}
+/* the check: a solid green disc with a tick drawn from two borders */
+[data-theme='product'] .slot :is(ul, ol):not(li *) > li::before {
+	content: '';
+	position: absolute;
+	left: 0;
+	top: calc(var(--row-pad) + (var(--row-size) * 1.1 - var(--mark)) / 2);
+	width: var(--mark);
+	height: var(--mark);
+	border-radius: 50%;
+	background: var(--accent);
+}
+[data-theme='product'] .slot ul:not(li *) > li::after {
+	content: '';
+	position: absolute;
+	left: calc(var(--mark) * 0.31);
+	top: calc(var(--row-pad) + (var(--row-size) * 1.1 - var(--mark)) / 2 + var(--mark) * 0.29);
+	width: calc(var(--mark) * 0.39);
+	height: calc(var(--mark) * 0.22);
+	border-left: calc(var(--mark) * 0.1) solid var(--bg);
+	border-bottom: calc(var(--mark) * 0.1) solid var(--bg);
+	transform: rotate(-45deg);
+}
+/* ordered lists: the step number takes the place of the tick */
+[data-theme='product'] .slot ol:not(li *) {
+	counter-reset: product-step;
+}
+[data-theme='product'] .slot ol:not(li *) > li {
+	counter-increment: product-step;
+}
+[data-theme='product'] .slot ol:not(li *) > li::before {
+	content: counter(product-step);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	font-family: var(--font-mono);
+	font-weight: 600;
+	font-size: calc(var(--mark) * 0.5);
+	letter-spacing: 0;
+	line-height: 1;
+	color: var(--bg);
+}
+/* nested lists: the quiet detail under a feature */
+[data-theme='product'] .slot li :is(ul, ol) {
+	list-style: none;
+	margin-top: 18px;
+	border: 0;
+}
+[data-theme='product'] .slot li li {
+	position: relative;
+	padding: 10px 0 10px 48px;
+	border: 0;
+	font-size: 44px;
+	line-height: 1.2;
+	color: var(--muted);
+	animation: none;
+}
+[data-theme='product'] .slot li li::before {
+	content: '';
+	position: absolute;
+	left: 4px;
+	top: calc(10px + 44px * 0.56 - 8px);
+	width: 16px;
+	height: 16px;
+	border-radius: 50%;
+	border: 4px solid var(--dot);
+	background: transparent;
+}
+[data-theme='product'] .slot li li::after {
+	content: none;
+}
+
+/* ============================================================================
+ * Code: the editor
+ * ============================================================================ */
+
+[data-theme='product'] .slot.slot-content pre {
+	--code-fs: 42px;
+	--code-lh: 58px;
+	position: relative;
+	margin-top: 32px;
+	padding: 76px 0 28px;
+	border-radius: 24px;
+	overflow: hidden;
+	background: var(--code-bg);
+	color: var(--code-fg);
+	font-family: var(--font-mono);
+	font-weight: 500;
+	font-size: var(--code-fs);
+	line-height: var(--code-lh);
+	letter-spacing: -0.01em;
+	tab-size: 4;
+}
+/* Eight lines or more tighten so a dozen-odd lines still fit under a
+   heading. Code that has no line spans yet cannot be counted, so it takes
+   the tight rhythm as well. */
+[data-theme='product'] .slot.slot-content pre:has(.line:nth-child(8)),
+[data-theme='product'] .slot.slot-content pre:not(:has(.line)) {
+	--code-fs: 38px;
+	--code-lh: 48px;
+}
+/* window bar with three lights */
+[data-theme='product'] .slot pre::before {
+	content: '';
+	position: absolute;
+	left: 0;
+	right: 0;
+	top: 0;
+	height: 76px;
+	border-bottom: 2px solid var(--code-line);
+	background:
+		radial-gradient(circle at 39px 38px, var(--code-line) 9px, transparent 10px),
+		radial-gradient(circle at 71px 38px, var(--code-line) 9px, transparent 10px),
+		radial-gradient(circle at 103px 38px, var(--code-line) 9px, transparent 10px);
+}
+[data-theme='product'] .slot pre code {
+	display: flex;
+	flex-direction: column;
+	padding: 24px 0 0;
+	font: inherit;
+	font-size: var(--code-fs, 42px);
+	letter-spacing: inherit;
+	background: none;
+	color: inherit;
+	border-radius: 0;
+	white-space: pre-wrap;
+}
+[data-theme='product'] .slot pre code:not(:has(.line)) {
+	padding-left: 58px;
+	padding-right: 40px;
+}
+/* A long line wraps with a hanging indent instead of being cut off. */
+[data-theme='product'] .slot pre .line {
+	display: block;
+	min-height: var(--code-lh);
+	padding: 0 40px 0 calc(50px + 2ch);
+	text-indent: -2ch;
+	border-left: 8px solid transparent;
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+	animation: product-focusin var(--dur) var(--ease) both;
+}
+/* Shiki ends a block with an empty line span for the trailing newline. */
+[data-theme='product'] .slot pre .line:last-child:empty {
+	display: none;
+}
+[data-theme='product'] .slot pre.has-highlighted .line:not(.highlighted) {
+	opacity: 0.5;
+	animation-name: product-codein;
+}
+[data-theme='product'] .slot pre.has-highlighted .line.highlighted {
+	opacity: 1;
+	background: var(--code-line);
+	border-left-color: var(--syn-1);
+	animation-delay: 780ms;
+}
+[data-theme='product'] .slot pre .line:nth-child(1) {
+	animation-delay: 380ms;
+}
+[data-theme='product'] .slot pre .line:nth-child(2) {
+	animation-delay: 440ms;
+}
+[data-theme='product'] .slot pre .line:nth-child(3) {
+	animation-delay: 500ms;
+}
+[data-theme='product'] .slot pre .line:nth-child(4) {
+	animation-delay: 560ms;
+}
+[data-theme='product'] .slot pre .line:nth-child(n + 5) {
+	animation-delay: 620ms;
+}
+[data-theme='product'] .slot pre + p {
+	margin-top: 32px;
+}
+
+/* ---------- live code: the editor gains a run pill and an output panel ---------- */
+[data-theme='product'] .slot .live-code-block {
+	margin: 0;
+	border-radius: 24px;
+	background: var(--code-bg);
+}
+[data-theme='product'] .slot .live-code-block:focus {
+	outline: 4px solid var(--accent-2);
+	outline-offset: 6px;
+}
+[data-theme='product'] .slot .live-code-block pre {
+	margin: 0;
+	border-radius: 0;
+}
+[data-theme='product'] .slot .live-code-block .code-actions,
+[data-theme='product'] .slot .live-code-block .static-placeholder {
+	top: 12px;
+	right: 16px;
+	display: flex;
+	line-height: 1;
+}
+[data-theme='product'] .slot .live-code-block .run-button {
+	height: 52px;
+	padding: 0 26px 0 22px;
+	gap: 12px;
+	border-radius: 26px;
+	background-color: var(--syn-1);
+	color: var(--code-bg);
+	font-family: var(--font-mono);
+	font-weight: 600;
+	font-size: 28px;
+	letter-spacing: -0.01em;
+	line-height: 1;
+	transition:
+		transform 200ms var(--ease),
+		filter 200ms ease;
+}
+[data-theme='product'] .slot .live-code-block .loading-spinner {
+	width: 24px;
+	height: 24px;
+	border-width: 3px;
+	border-color: rgba(14, 20, 17, 0.25);
+	border-top-color: var(--code-bg);
+}
+[data-theme='product'] .slot .live-code-block .static-placeholder {
+	height: 52px;
+	padding: 0 22px;
+	border-radius: 26px;
+	background: var(--code-line);
+	color: var(--syn-2);
+	font-family: var(--font-mono);
+	font-size: 28px;
+	letter-spacing: -0.01em;
+	backdrop-filter: none;
+}
+[data-theme='product'] .slot .live-code-block .result-container {
+	background: #0a0f0c;
+	border-top: 2px solid var(--code-line);
+	border-radius: 0;
+}
+[data-theme='product'] .slot .live-code-block .result-container.error {
+	border-top-color: #ff8a7a;
+}
+[data-theme='product'] .slot .live-code-block .result-header {
+	display: flex;
+	align-items: center;
+	gap: 14px;
+	padding: 22px 58px 6px;
+	border-bottom: 0;
+}
+[data-theme='product'] .slot .live-code-block .result-header::before {
+	content: '';
+	width: 14px;
+	height: 14px;
+	border-radius: 50%;
+	background: var(--syn-1);
+}
+[data-theme='product'] .slot .live-code-block .result-container.error .result-header::before {
+	background: #ff8a7a;
+}
+[data-theme='product'] .slot .live-code-block .result-status {
+	font-family: var(--font-mono);
+	font-weight: 500;
+	font-size: 28px;
+	letter-spacing: 0.02em;
+	line-height: 1;
+}
+[data-theme='product'] .slot .live-code-block .result-status.success {
+	color: var(--syn-2);
+}
+[data-theme='product'] .slot .live-code-block .result-status.error {
+	color: #ff8a7a;
+}
+[data-theme='product'] .slot .live-code-block .result-content {
+	padding: 10px 58px 30px;
+}
+[data-theme='product'] .slot .live-code-block .result-content pre {
+	margin: 0;
+	padding: 0;
+	border-radius: 0;
+	background: none;
+	font-size: 38px;
+	line-height: 1.4;
+	color: var(--code-fg);
+	animation: none;
+}
+[data-theme='product'] .slot .live-code-block .result-content pre::before {
+	content: none;
+}
+[data-theme='product'] .slot .live-code-block .result-content pre.result-error {
+	color: #ff8a7a;
+}
+[data-theme='product'] .slot .live-code-block .result-content .result-table {
+	margin: 0;
+	border: 0;
+	border-radius: 0;
+	background: none;
+	font-family: var(--font-mono);
+	color: var(--code-fg);
+}
+[data-theme='product'] .slot .live-code-block .result-content .result-table :is(th, td) {
+	padding: 14px 24px 14px 0;
+	background: none;
+	border-bottom: 2px solid var(--code-line);
+	font-family: var(--font-mono);
+	font-size: 40px;
+	font-weight: 500;
+	color: var(--code-fg);
+}
+[data-theme='product'] .slot .live-code-block .result-content .result-table th {
+	color: var(--syn-2);
+}
+[data-theme='product'] .slot .live-code-block .result-content .result-empty {
+	font-family: var(--font-mono);
+	font-size: 40px;
+	font-style: normal;
+	color: var(--syn-2);
+}
+
+/* ---------- asciinema: the same dark window, without assuming its insides ---------- */
+[data-theme='product'] .slot .asciinema-player-wrapper {
+	border-radius: 24px;
+	overflow: hidden;
+	background: var(--code-bg);
+	border: 2px solid var(--code-line);
+	color: var(--code-fg);
+	font-family: var(--font-mono);
+	font-size: 32px;
+	letter-spacing: -0.01em;
+	min-height: 0;
+	flex: 0 1 auto;
+}
+/* The player draws its own terminal in a <pre>; the editor chrome stays off it. */
+[data-theme='product'] .slot.slot-content .asciinema-player-wrapper pre {
+	margin: 0;
+	padding: 0;
+	border-radius: 0;
+	background: none;
+	font: inherit;
+	letter-spacing: normal;
+	overflow: visible;
+	animation: none;
+}
+[data-theme='product'] .slot.slot-content .asciinema-player-wrapper pre::before {
+	content: none;
+}
+[data-theme='product'] .slot .asciinema-player-wrapper.error {
+	padding: 48px 58px;
+	color: var(--syn-2);
+}
+[data-theme='product'] .slot .asciinema-player-wrapper .error-state {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+}
+[data-theme='product'] .slot .asciinema-player-wrapper .error-icon {
+	color: var(--syn-1);
+}
+
+/* ============================================================================
+ * Big number
+ * ============================================================================ */
+
+[data-theme='product'] .slide[data-layout] .layout-big-stat {
+	display: flex;
+	flex-direction: column;
+	justify-content: center;
+	gap: 0;
+	padding-bottom: 136px;
+}
+[data-theme='product'] .layout-big-stat .slot {
+	max-width: none;
+}
+[data-theme='product'] .layout-big-stat .slot-default :is(h1, strong) {
+	display: block;
+	font-family: var(--font-display);
+	font-weight: 700;
+	font-size: 220px;
+	line-height: 1;
+	letter-spacing: -0.06em;
+	margin: 0 0 0 -8px;
+	padding-right: 0;
+	color: var(--accent-text);
+	text-wrap: balance;
+}
+[data-theme='product'] .layout-big-stat .slot-default h1[data-length='medium'],
+[data-theme='product'] .layout-big-stat .slot-default strong[data-length='medium'] {
+	font-size: 300px;
+	letter-spacing: -0.065em;
+}
+[data-theme='product'] .layout-big-stat .slot-default h1[data-length='short'],
+[data-theme='product'] .layout-big-stat .slot-default strong[data-length='short'] {
+	font-size: 380px;
+	line-height: 0.98;
+	letter-spacing: -0.07em;
+	margin-left: -14px;
+}
+[data-theme='product'] .layout-big-stat .slot-default p {
+	font-size: 52px;
+	color: var(--muted);
+}
+[data-theme='product'] .layout-big-stat .slot-caption p {
+	margin-top: 32px;
+	max-width: 1300px;
+	font-size: 52px;
+	line-height: 1.28;
+	color: var(--muted);
+	text-wrap: balance;
+	animation-delay: 420ms;
+}
+[data-theme='product'] .layout-big-stat .slot-figure {
+	margin-top: 40px;
+	align-items: flex-start;
+}
+[data-theme='product'] .layout-big-stat .slot-figure img {
+	max-height: 220px;
+}
+
+/* ============================================================================
+ * Quote: the testimonial
+ * ============================================================================ */
+
+[data-theme='product'] .slide[data-layout] .layout-quote {
+	display: flex;
+	flex-direction: column;
+	justify-content: center;
+}
+[data-theme='product'] .layout-quote .slot {
+	max-width: none;
+}
+[data-theme='product'] .slot blockquote {
+	position: relative;
+	border: 0;
+	padding: 0 0 0 44px;
+	font-style: normal;
+	color: var(--fg);
+	box-shadow: inset 8px 0 0 var(--accent);
+}
+[data-theme='product'] .layout-quote .slot-default blockquote {
+	padding: 140px 0 0;
+	border: 0;
+	box-shadow: none;
+	font-size: inherit;
+	font-style: normal;
+	line-height: inherit;
+	color: var(--fg);
+}
+[data-theme='product'] .layout-quote .slot-default blockquote::before {
+	content: '\201C';
+	position: absolute;
+	left: -10px;
+	top: -30px;
+	font-family: var(--font-display);
+	font-weight: 700;
+	font-size: 340px;
+	line-height: 1;
+	letter-spacing: 0;
+	color: var(--accent);
+}
+[data-theme='product'] .layout-quote .slot-default blockquote p {
+	font-family: var(--font-display);
+	font-weight: 700;
+	font-size: 100px;
+	line-height: 1.08;
+	letter-spacing: -0.05em;
+	max-width: none;
+	margin-left: -5px;
+	text-wrap: balance;
+}
+[data-theme='product'] .layout-quote .slot-attribution p {
+	display: flex;
+	align-items: center;
+	gap: 24px;
+	max-width: none;
+	margin-top: 56px;
+	padding-top: 36px;
+	border-top: 2px solid var(--line);
+	font-family: var(--font-mono);
+	font-size: 46px;
+	font-weight: 500;
+	font-style: normal;
+	line-height: 1.15;
+	letter-spacing: -0.03em;
+	text-align: left;
+	color: var(--fg);
+	animation-delay: 420ms;
+}
+[data-theme='product'] .layout-quote .slot-attribution p::before {
+	content: '';
+	flex: none;
+	width: 22px;
+	height: 22px;
+	border-radius: 50%;
+	background: var(--accent-2);
+}
+
+/* ============================================================================
+ * Cards: two columns, three columns, and the sidebar
+ * ============================================================================ */
+
+[data-theme='product'] .slide[data-layout] .layout-two-column {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	grid-template-rows: auto 1fr;
+	align-content: stretch;
+	gap: 44px 48px;
+}
+[data-theme='product'] .slide[data-layout] .layout-three-column {
+	display: grid;
+	grid-template-columns: 1fr 1fr 1fr;
+	grid-template-rows: auto 1fr;
+	align-content: stretch;
+	gap: 44px 36px;
+}
+[data-theme='product'] .slide[data-layout] .layout-sidebar {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) 540px;
+	grid-template-rows: 1fr;
+	align-content: stretch;
+	gap: 0 64px;
+}
+[data-theme='product'] :is(.layout-two-column, .layout-three-column) .slot-default {
+	grid-column: 1 / -1;
+}
+[data-theme='product'] :is(.layout-two-column, .layout-three-column) :is(.slot-left, .slot-center, .slot-right),
+[data-theme='product'] .layout-sidebar .slot-sidebar {
+	background: var(--surface);
+	border: 2px solid var(--line);
+	border-radius: 24px;
+	padding: 44px 52px 48px;
+	animation: product-rise var(--dur) var(--ease) 300ms both;
+}
+[data-theme='product'] .layout-three-column :is(.slot-left, .slot-center, .slot-right),
+[data-theme='product'] .layout-sidebar .slot-sidebar {
+	padding: 40px 40px 36px;
+}
+[data-theme='product'] :is(.layout-two-column, .layout-three-column) .slot-center {
+	animation-delay: 400ms;
+}
+[data-theme='product'] :is(.layout-two-column, .layout-three-column) .slot-right,
+[data-theme='product'] .layout-sidebar .slot-sidebar {
+	animation-delay: 500ms;
+}
+[data-theme='product'] :is(.layout-two-column, .layout-three-column) :is(.slot-left, .slot-center, .slot-right) > *,
+[data-theme='product'] .layout-sidebar .slot-sidebar > * {
+	animation: none;
+}
+[data-theme='product'] :is(.layout-two-column, .layout-three-column) :is(.slot-left, .slot-center, .slot-right) > .fragment,
+[data-theme='product'] .layout-sidebar .slot-sidebar > .fragment {
+	margin-top: 0;
+}
+/* card label: mono, with a status light. The first card is the "before"
+   (hollow ring); the ones after it are live (solid). */
+[data-theme='product'] :is(.layout-two-column, .layout-three-column) :is(.slot-left, .slot-center, .slot-right) > h3:first-child,
+[data-theme='product'] .layout-sidebar .slot-sidebar > h3:first-child {
+	display: flex;
+	align-items: center;
+	gap: 18px;
+	font-family: var(--font-mono);
+	font-weight: 500;
+	font-size: 36px;
+	letter-spacing: -0.01em;
+	line-height: 1;
+	color: var(--muted);
+	margin: 0;
+	padding-bottom: 28px;
+	border-bottom: 2px solid var(--line);
+}
+[data-theme='product'] :is(.layout-two-column, .layout-three-column) :is(.slot-left, .slot-center, .slot-right) > h3:first-child::before,
+[data-theme='product'] .layout-sidebar .slot-sidebar > h3:first-child::before {
+	content: '';
+	flex: none;
+	width: 18px;
+	height: 18px;
+	border-radius: 50%;
+	background: var(--accent-2);
+}
+[data-theme='product'] .layout-two-column .slot-left > h3:first-child::before {
+	background: transparent;
+	border: 4px solid var(--muted);
+}
+[data-theme='product'] :is(.layout-two-column, .layout-three-column) :is(.slot-left, .slot-center, .slot-right) p {
+	font-size: 44px;
+	line-height: 1.24;
+	margin-top: 24px;
+}
+/* A card that opens with a bold figure shows it as the card's number. */
+[data-theme='product'] .layout-two-column .slot h3 + p:has(> strong:first-child) {
+	font-family: var(--font-mono);
+	font-size: 44px;
+	letter-spacing: -0.03em;
+	color: var(--muted);
+}
+[data-theme='product'] .layout-two-column .slot h3 + p > strong:first-child {
+	font-family: var(--font-display);
+	font-size: 140px;
+	line-height: 1;
+	letter-spacing: -0.06em;
+	margin-right: 12px;
+}
+[data-theme='product'] .layout-two-column .slot-left h3 + p > strong:first-child {
+	color: var(--fg);
+}
+/* Lists inside a card are the rows of a spec sheet: hairlines, no discs. */
+[data-theme='product'] :is(.layout-two-column, .layout-three-column) :is(.slot-left, .slot-center, .slot-right) :is(ul, ol):not(li *),
+[data-theme='product'] .layout-sidebar .slot-sidebar :is(ul, ol):not(li *) {
+	--row-pad: 26px;
+	--row-size: 44px;
+	margin-top: 0;
+	border-top: 0;
+}
+[data-theme='product'] :is(.layout-two-column, .layout-three-column) :is(.slot-left, .slot-center, .slot-right) :is(ul, ol):not(li *) > li,
+[data-theme='product'] .layout-sidebar .slot-sidebar :is(ul, ol):not(li *) > li {
+	padding-left: 0;
+	line-height: 1.08;
+	text-wrap: balance;
+}
+[data-theme='product'] :is(.layout-two-column, .layout-three-column) :is(.slot-left, .slot-center, .slot-right) :is(ul, ol):not(li *) > li:last-child,
+[data-theme='product'] .layout-sidebar .slot-sidebar :is(ul, ol):not(li *) > li:last-child {
+	border-bottom: 0;
+	padding-bottom: 0;
+}
+[data-theme='product'] .layout-three-column :is(.slot-left, .slot-center, .slot-right) ul:not(li *) > li::before,
+[data-theme='product'] .layout-three-column :is(.slot-left, .slot-center, .slot-right) ul:not(li *) > li::after,
+[data-theme='product'] .layout-sidebar .slot-sidebar ul:not(li *) > li::before,
+[data-theme='product'] .layout-sidebar .slot-sidebar ul:not(li *) > li::after {
+	content: none;
+}
+/* In two columns there is room for a small tick beside each row. */
+[data-theme='product'] .layout-two-column :is(.slot-left, .slot-right) ul:not(li *) {
+	--mark: 44px;
+}
+[data-theme='product'] .layout-two-column :is(.slot-left, .slot-right) ul:not(li *) > li {
+	padding-left: 72px;
+}
+
+/* sidebar: the argument on the left, the receipts in a card on the right */
+[data-theme='product'] .layout-sidebar .slot-sidebar {
+	align-self: stretch;
+	border-left: 2px solid var(--line);
+}
+/* Without a tag the nav row is not reserved, so the card starts below the
+   folio instead of under it. */
+[data-theme='product'] .slide[data-layout]:not(:has(> .slide-tag)) .layout-sidebar .slot-sidebar {
+	margin-top: 100px;
+}
+[data-theme='product'] .layout-sidebar .slot-default :is(ul, ol):not(li *) {
+	--row-pad: 32px;
+	--row-size: 48px;
+	--mark: 40px;
+	margin-top: 52px;
+}
+[data-theme='product'] .layout-sidebar .slot-default p {
+	color: var(--muted);
+}
+[data-theme='product'] .layout-sidebar .slot-sidebar p {
+	margin-top: 28px;
+	font-size: 44px;
+	line-height: 1.24;
+}
+
+/* ============================================================================
+ * Images: a screenshot in a browser frame
+ * ============================================================================ */
+
+[data-theme='product'] .slot p:has(> img:only-child) {
+	position: relative;
+	display: block;
+	align-self: flex-start;
+	width: fit-content;
+	max-width: 100%;
+	padding: 68px 0 0;
+	border-radius: 24px;
+	overflow: hidden;
+	background: var(--surface);
+	border: 2px solid var(--line);
+	box-shadow:
+		0 2px 0 var(--line),
+		0 40px 80px -40px rgba(10, 95, 69, 0.35);
+	font-size: 48px;
+	line-height: 0;
+}
+/* The window bar is painted on the frame itself: three lights and a
+   hairline under them. */
+[data-theme='product'] .slot p:has(> img:only-child) {
+	background-image:
+		radial-gradient(circle at 39px 34px, var(--line) 9px, transparent 10px),
+		radial-gradient(circle at 71px 34px, var(--line) 9px, transparent 10px),
+		radial-gradient(circle at 103px 34px, var(--line) 9px, transparent 10px),
+		linear-gradient(var(--line), var(--line));
+	background-size:
+		100% 68px,
+		100% 68px,
+		100% 68px,
+		100% 2px;
+	background-position:
+		0 0,
+		0 0,
+		0 0,
+		0 66px;
+	background-repeat: no-repeat;
+}
+/* The frame wraps the image at its own proportions. The height budget is
+   what a heading leaves free, less a paragraph and less the nav row. */
+[data-theme='product'] .slot p:has(> img:only-child) > img {
+	display: block;
+	width: auto;
+	height: auto;
+	max-width: 100%;
+	max-height: calc(var(--image-room, 620px) - var(--nav-room, 0px));
+	border-radius: 0;
+}
+[data-theme='product'] .slot:has(> p ~ p) {
+	--image-room: 560px;
+}
+[data-theme='product'] .slot:has(> :is(ul, ol, pre, table)) {
+	--image-room: 380px;
+}
+[data-theme='product'] .slide[data-layout]:has(> .slide-tag) .slot {
+	--nav-room: 100px;
+}
+[data-theme='product'] .slot img {
+	border-radius: 16px;
+}
+
+[data-theme='product'] .slide[data-layout] .layout-split-media {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) 860px;
+	gap: 64px;
+	align-items: center;
+	align-content: center;
+}
+[data-theme='product'] .layout-split-media .slot-default {
+	padding: 0;
+	justify-content: center;
+}
+[data-theme='product'] .layout-split-media .slot-default h2 {
+	font-size: 92px;
+}
+[data-theme='product'] .layout-split-media .slot-default h3 {
+	margin-top: 36px;
+	font-size: 52px;
+	color: var(--accent-text);
+}
+[data-theme='product'] .layout-split-media .slot-default p {
+	margin-top: 32px;
+	color: var(--muted);
+}
+[data-theme='product'] .layout-split-media .slot-media {
+	display: flex;
+	overflow: visible;
+	background: none;
+	align-items: stretch;
+	justify-content: center;
+}
+[data-theme='product'] .layout-split-media .slot-media p:has(> img:only-child) {
+	align-self: stretch;
+	animation-delay: 300ms;
+}
+[data-theme='product'] .layout-split-media .slot-media p:has(> img:only-child) > img {
+	width: 100%;
+	max-height: 760px;
+	object-fit: cover;
+	object-position: top left;
+}
+
+/* ============================================================================
+ * Table: the comparison grid
+ * ============================================================================ */
+
+[data-theme='product'] .slot table {
+	--cell-pad: 40px;
+	margin-top: 52px;
+	width: 100%;
+	border-collapse: separate;
+	border-spacing: 0;
+	background: var(--surface);
+	border: 2px solid var(--line);
+	border-radius: 24px;
+	overflow: hidden;
+	font-size: 48px;
+	line-height: 1.16;
+	text-align: left;
+}
+[data-theme='product'] .slot table:has(tbody tr:nth-child(4)) {
+	--cell-pad: 30px;
+}
+[data-theme='product'] .slot table:has(tbody tr:nth-child(6)) {
+	--cell-pad: 20px;
+}
+[data-theme='product'] .slot th {
+	font-family: var(--font-mono);
+	font-weight: 500;
+	font-size: 40px;
+	letter-spacing: -0.02em;
+	color: var(--muted);
+	padding: 26px 40px;
+	border-bottom: 2px solid var(--line);
+	background: var(--bg);
+}
+[data-theme='product'] .slot td {
+	padding: var(--cell-pad) 40px;
+	border-bottom: 2px solid var(--line);
+	font-size: 48px;
+	font-weight: 500;
+}
+[data-theme='product'] .slot table:has(tbody tr:nth-child(4)) td {
+	font-size: 44px;
+}
+[data-theme='product'] .slot table:has(tbody tr:nth-child(6)) td {
+	font-size: 40px;
+}
+[data-theme='product'] .slot tbody tr:last-child td {
+	border-bottom: 0;
+}
+[data-theme='product'] .slot td:first-child {
+	font-weight: 700;
+}
+[data-theme='product'] .slot td:not(:first-child) {
+	font-family: var(--font-mono);
+	font-size: 42px;
+	letter-spacing: -0.02em;
+}
+[data-theme='product'] .slot table:has(tbody tr:nth-child(4)) td:not(:first-child) {
+	font-size: 40px;
+}
+[data-theme='product'] .slot table:has(tbody tr:nth-child(6)) td:not(:first-child) {
+	font-size: 40px;
+}
+[data-theme='product'] .slot tbody tr {
+	animation: product-item var(--dur) var(--ease) both;
+}
+[data-theme='product'] .slot tbody tr:nth-child(1) {
+	animation-delay: 380ms;
+}
+[data-theme='product'] .slot tbody tr:nth-child(2) {
+	animation-delay: 470ms;
+}
+[data-theme='product'] .slot tbody tr:nth-child(3) {
+	animation-delay: 560ms;
+}
+[data-theme='product'] .slot tbody tr:nth-child(n + 4) {
+	animation-delay: 650ms;
+}
+
+/* ============================================================================
+ * Diagram: a canvas panel that takes all the room left on the slide
+ * ============================================================================ */
+
+[data-theme='product'] .slot .mermaid-diagram {
+	flex: 1 1 0;
+	min-height: 0;
+	display: flex;
+	align-items: stretch;
+	justify-content: center;
+	margin-top: 36px;
+	padding: 36px 44px;
+	border-radius: 24px;
+	border: 2px solid var(--line);
+	background-color: var(--surface);
+	background-image: radial-gradient(circle at 2px 2px, var(--line) 2px, transparent 2.6px);
+	background-size: 32px 32px;
+	letter-spacing: 0;
+}
+/* The svg is taken out of flow so its own size never pushes the panel
+   taller than the room the slide has left. */
+[data-theme='product'] .slot .mermaid-diagram {
+	position: relative;
+	min-height: 240px;
+}
+[data-theme='product'] .slot .mermaid-diagram svg {
+	position: absolute;
+	left: 44px;
+	top: 36px;
+	width: calc(100% - 88px) !important;
+	height: calc(100% - 72px) !important;
+	max-width: none !important;
+}
+[data-theme='product'] .slot .mermaid-diagram .node rect {
+	rx: 60px;
+	ry: 60px;
+}
+/* Node, label and edge colors repeat theme.json's mermaid variables, so a
+   diagram that mermaid drew before the theme's variables reached it still
+   wears the theme. */
+[data-theme='product'] .slot .mermaid-diagram .node :is(rect, circle, polygon, path) {
+	fill: var(--tint) !important;
+	stroke: var(--accent) !important;
+	stroke-width: 4px !important;
+}
+[data-theme='product'] .slot .mermaid-diagram .node .nodeLabel {
+	color: var(--accent-text) !important;
+	font-weight: 600;
+	letter-spacing: 0;
+}
+[data-theme='product'] .slot .mermaid-diagram .node.quiet :is(rect, circle, polygon, path) {
+	fill: var(--surface) !important;
+	stroke: var(--dot) !important;
+}
+[data-theme='product'] .slot .mermaid-diagram .node.quiet .nodeLabel {
+	color: var(--fg) !important;
+	font-weight: 500;
+}
+/* The node the diagram declares first is its entry point: the solid
+   call-to-action pill. Every other node stays tinted or quiet. */
+[data-theme='product'] .slot .mermaid-diagram .nodes > .node:first-child:not(.quiet) :is(rect, circle, polygon) {
+	fill: var(--accent) !important;
+}
+[data-theme='product'] .slot .mermaid-diagram .nodes > .node:first-child:not(.quiet) .nodeLabel {
+	color: var(--bg) !important;
+}
+[data-theme='product'] .slot .mermaid-diagram :is(.edgePaths path, .flowchart-link) {
+	stroke: var(--accent-2) !important;
+	stroke-width: 7px !important;
+	stroke-linecap: round;
+}
+[data-theme='product'] .slot .mermaid-diagram .marker path,
+[data-theme='product'] .slot .mermaid-diagram marker path {
+	fill: var(--accent-2) !important;
+	stroke: var(--accent-2) !important;
+}
+[data-theme='product'] .slot .mermaid-diagram .edgeLabel {
+	color: var(--muted) !important;
+	background-color: var(--surface) !important;
+}
+/* Mermaid wraps each label in a <p>. It keeps the metrics mermaid measured
+   it with, not the slide's paragraph rhythm; when the theme's 44px label
+   size is in force, it is stated explicitly to match. */
+[data-theme='product'] .slot .mermaid-diagram p {
+	margin: 0;
+	max-width: none;
+	font-size: inherit;
+	line-height: inherit;
+	letter-spacing: 0;
+	text-wrap: initial;
+	animation: none;
+}
+[data-theme='product'] .slot .mermaid-diagram[data-mermaid-config*='"fontSize":"44px"'] p {
+	font-size: 44px;
+}
+[data-theme='product'] .slot .mermaid-diagram + p {
+	margin-top: 28px;
+	line-height: 1.1;
+	color: var(--muted);
+}
+/* Until mermaid (or the asciinema player) replaces its source block, the
+   block holds the panel's place: same room, no raw source on screen. */
+[data-theme='product'] .slot.slot-content pre:has(> code:is(.language-mermaid, .language-asciinema)) {
+	flex: 1 1 0;
+	min-height: 0;
+	margin-top: 36px;
+	padding: 0;
+	border: 2px solid var(--line);
+	background-color: var(--surface);
+	background-image: radial-gradient(circle at 2px 2px, var(--line) 2px, transparent 2.6px);
+	background-size: 32px 32px;
+	color: transparent;
+	animation: none;
+}
+[data-theme='product'] .slot.slot-content pre:has(> code:is(.language-mermaid, .language-asciinema))::before {
+	content: none;
+}
+[data-theme='product'] .slot .mermaid-error {
+	padding: 40px 48px;
+	border-radius: 24px;
+	border: 2px solid var(--line);
+	background: var(--surface);
+	font-family: var(--font-mono);
+	font-size: 36px;
+	letter-spacing: -0.01em;
+	color: var(--muted);
+}
+
+/* ============================================================================
+ * Scroll slide: content keeps its natural height and the slide moves past it
+ * ============================================================================ */
+
+[data-theme='product'] .slide[data-layout] .scroll-content > [class^='layout-'] {
+	height: auto;
+	min-height: 100%;
+}
+[data-theme='product'] .scroll-content .slot {
+	flex: none;
+}
+
+/* ============================================================================
+ * Blank: the author's canvas. No nav row, no inset.
+ * ============================================================================ */
+
+[data-theme='product'] .slide[data-layout='blank']::after {
+	content: none;
+}
+[data-theme='product'] .slide[data-layout='blank'] .layout-blank {
+	padding: 0;
+}
+[data-theme='product'] .layout-blank .slot {
+	width: 100%;
+	height: 100%;
+	padding: 96px;
+}
+[data-theme='product'] .layout-blank .slot > * {
+	animation-name: product-fade;
+}
+[data-theme='product'] .layout-blank .slot h1 {
+	text-align: center;
+	max-width: 1560px;
+	padding-right: 0;
+}
+/* MapLibre sets its own labels; the slide's tight tracking stays off them. */
+[data-theme='product'] .map-slide {
+	letter-spacing: normal;
+}
+[data-theme='product'] .slide.has-map .layout-blank .slot {
+	padding: 0;
+}
+
+/* ============================================================================
+ * Print and reduced motion: final states, nothing moves
+ * ============================================================================ */
+
+@media print, (prefers-reduced-motion: reduce) {
+	[data-theme='product'] .slide[data-layout],
+	[data-theme='product'] .slide[data-layout] *,
+	[data-theme='product'] .slide[data-layout]::before,
+	[data-theme='product'] .slide[data-layout]::after,
+	[data-theme='product'] .slide[data-layout] *::before,
+	[data-theme='product'] .slide[data-layout] *::after {
+		animation: none !important;
+		transition: none !important;
+	}
+}
+
+[data-theme='product']:is([data-print='true'], [data-print='true'] *) .slide[data-layout],
+[data-theme='product']:is([data-print='true'], [data-print='true'] *) .slide[data-layout] *,
+[data-theme='product']:is([data-print='true'], [data-print='true'] *) .slide[data-layout]::before,
+[data-theme='product']:is([data-print='true'], [data-print='true'] *) .slide[data-layout]::after,
+[data-theme='product']:is([data-print='true'], [data-print='true'] *) .slide[data-layout] *::before,
+[data-theme='product']:is([data-print='true'], [data-print='true'] *) .slide[data-layout] *::after {
+	animation: none !important;
+	transition: none !important;
+}

@@ -457,13 +457,10 @@ func TestAPIPresentation_JSONEncodesAllFields(t *testing.T) {
 				},
 			},
 			{
-				Index:  2,
-				Layout: "default",
-				HTML:   "<p>First</p><p>Second</p>",
-				Fragments: []transformer.TransformedFragment{
-					{Index: 0, Content: "<p>First</p>"},
-					{Index: 1, Content: "<p>Second</p>"},
-				},
+				Index:         2,
+				Layout:        "default",
+				HTML:          "<p>First</p><p>Second</p>",
+				FragmentCount: 2,
 			},
 		},
 	}
@@ -508,8 +505,65 @@ func TestAPIPresentation_JSONEncodesAllFields(t *testing.T) {
 		t.Errorf("expected driver 'shell', got '%s'", result.Slides[1].CodeBlocks[0].Driver)
 	}
 
-	// Check third slide has fragments
-	if len(result.Slides[2].Fragments) != 2 {
-		t.Errorf("expected 2 fragments, got %d", len(result.Slides[2].Fragments))
+	// Check third slide has the fragment count
+	if result.Slides[2].FragmentCount != 2 {
+		t.Errorf("expected fragmentCount 2, got %d", result.Slides[2].FragmentCount)
+	}
+}
+
+func TestHandleComponentBundle_ServesKnownFile(t *testing.T) {
+	s := New(0)
+	s.SetComponentBundles(map[string]ComponentBundleFile{
+		"RollingDeploy-abc123.js": {ContentType: "application/javascript; charset=utf-8", Content: []byte("export default 1;")},
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/components/RollingDeploy-abc123.js", nil)
+	w := httptest.NewRecorder()
+	s.handleComponentBundle(w, req)
+
+	resp := w.Result()
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, resp.StatusCode)
+	}
+	if ct := resp.Header.Get("Content-Type"); ct != "application/javascript; charset=utf-8" {
+		t.Errorf("expected Content-Type %q, got %q", "application/javascript; charset=utf-8", ct)
+	}
+	if cc := resp.Header.Get("Cache-Control"); cc != "no-store" {
+		t.Errorf("expected Cache-Control %q, got %q", "no-store", cc)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	if string(body) != "export default 1;" {
+		t.Errorf("expected body %q, got %q", "export default 1;", string(body))
+	}
+}
+
+func TestHandleComponentBundle_UnknownNameGives404(t *testing.T) {
+	s := New(0)
+
+	req := httptest.NewRequest(http.MethodGet, "/components/Nope-000000.js", nil)
+	w := httptest.NewRecorder()
+	s.handleComponentBundle(w, req)
+
+	resp := w.Result()
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusNotFound {
+		t.Errorf("expected status %d, got %d", http.StatusNotFound, resp.StatusCode)
+	}
+}
+
+func TestHandleComponentBundle_RejectsPathTraversal(t *testing.T) {
+	s := New(0)
+
+	req := httptest.NewRequest(http.MethodGet, "/components/../../etc/passwd", nil)
+	req.URL.Path = "/components/../../etc/passwd"
+	w := httptest.NewRecorder()
+	s.handleComponentBundle(w, req)
+
+	resp := w.Result()
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusNotFound {
+		t.Errorf("expected status %d, got %d", http.StatusNotFound, resp.StatusCode)
 	}
 }

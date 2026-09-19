@@ -75,19 +75,19 @@ layout: quote
 
 <!-- pause -->
 
-**Portable** — Works everywhere
+**Portable.** Works everywhere
 
 <!-- pause -->
 
-**Readable** — Human-friendly syntax
+**Readable.** Human-friendly syntax
 
 <!-- pause -->
 
-**Versionable** — Git just works
+**Versionable.** Git just works
 
 <!-- pause -->
 
-**Convertible** — HTML, PDF, slides...
+**Convertible.** HTML, PDF, slides...
 
 ---
 

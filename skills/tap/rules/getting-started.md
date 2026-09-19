@@ -27,26 +27,32 @@ mv tap-darwin-arm64 /usr/local/bin/tap
 
 ## Create Your First Presentation
 
+`tap new` opens an interactive wizard (title, theme, filename) and needs a
+terminal, so writing the file yourself is usually faster when working
+unattended:
+
 ```bash
-tap new my-talk
+tap new --output my-talk.md --theme terminal
 ```
 
-Creates `my-talk.md`:
+A deck is a plain markdown file. This is all it needs:
 ```markdown
 ---
 title: My Talk
-theme: paper
+theme: terminal
 ---
 
-# Welcome
+# My Talk
 
-Your first slide content here.
+A one-line subtitle.
 
 ---
 
-# Second Slide
+## What we will cover
 
-More content...
+- The problem
+- What we tried
+- What worked
 ```
 
 ## Start the Dev Server
@@ -60,7 +66,8 @@ Starts at `http://localhost:3000` with:
 - Presenter mode at `/presenter`
 - Live code execution support
 
-Navigate with arrow keys or space.
+Navigate with arrow keys or space. `t` cycles themes, `o` opens the
+overview, `s` opens the presenter view, `f` toggles fullscreen.
 
 ## Build for Production
 
@@ -68,14 +75,16 @@ Navigate with arrow keys or space.
 tap build my-talk.md
 ```
 
-Generates optimized HTML/CSS/JS in `dist/`. Preview with:
+Generates a self-contained `dist/` folder with relative paths and bundled
+fonts. Live code execution is the one thing it cannot do. Preview with:
 ```bash
 tap serve dist
 ```
 
 ## Essential Workflow
 
-1. `tap new <name>` - Create presentation
+1. Write the markdown file (or `tap new` for the wizard)
 2. `tap dev <file>` - Develop with live preview
-3. `tap build <file>` - Build for deployment
-4. `tap pdf <file>` - Export to PDF
+3. `tap screenshot <file> --slide <n>` - Check one slide; exit status 1 means it is broken
+4. `tap build <file>` - Build for deployment
+5. `tap pdf <file>` - Export to PDF

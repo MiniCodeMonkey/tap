@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/MiniCodeMonkey/tap/internal/components"
 	"github.com/MiniCodeMonkey/tap/internal/config"
 	"github.com/MiniCodeMonkey/tap/internal/parser"
 	"github.com/MiniCodeMonkey/tap/internal/transformer"
@@ -336,6 +337,68 @@ func TestBuild_GeneratesValidHTML(t *testing.T) {
 	}
 	if !strings.Contains(html, `"slides":[`) {
 		t.Error("missing slides in embedded JSON")
+	}
+}
+
+func TestBuild_WritesComponentBundlesAndRelativeURLs(t *testing.T) {
+	tmpDir := t.TempDir()
+	outputDir := filepath.Join(tmpDir, "dist")
+
+	b := NewWithOutput(outputDir)
+	b.SetComponents(map[string]components.Result{
+		"./slides/RollingDeploy.jsx": {
+			Bundle: &components.Bundle{
+				Name:       "RollingDeploy",
+				Hash:       "abc123",
+				JavaScript: []byte("export default 1;"),
+				CSS:        []byte("body{color:red}"),
+			},
+		},
+	})
+
+	cfg := config.DefaultConfig()
+	pres := &parser.Presentation{
+		Slides: []parser.Slide{
+			{Index: 0, Directives: parser.SlideDirectives{Layout: "./slides/RollingDeploy.jsx"}},
+		},
+	}
+
+	result, err := b.Build(cfg, pres)
+	if err != nil {
+		t.Fatalf("Build failed: %v", err)
+	}
+
+	jsPath := filepath.Join(outputDir, "components", "RollingDeploy-abc123.js")
+	jsContent, err := os.ReadFile(jsPath)
+	if err != nil {
+		t.Fatalf("expected component JS file to be written: %v", err)
+	}
+	if string(jsContent) != "export default 1;" {
+		t.Errorf("unexpected JS content: %q", jsContent)
+	}
+
+	cssPath := filepath.Join(outputDir, "components", "RollingDeploy-abc123.css")
+	cssContent, err := os.ReadFile(cssPath)
+	if err != nil {
+		t.Fatalf("expected component CSS file to be written: %v", err)
+	}
+	if string(cssContent) != "body{color:red}" {
+		t.Errorf("unexpected CSS content: %q", cssContent)
+	}
+
+	indexContent, err := os.ReadFile(filepath.Join(outputDir, "index.html"))
+	if err != nil {
+		t.Fatalf("failed to read index.html: %v", err)
+	}
+	if !strings.Contains(string(indexContent), `"url":"components/RollingDeploy-abc123.js"`) {
+		t.Errorf("expected a relative component url in the embedded JSON, got: %s", indexContent)
+	}
+	if strings.Contains(string(indexContent), `"url":"/components/`) {
+		t.Errorf("expected the component url to be relative (no leading slash), got: %s", indexContent)
+	}
+
+	if result.FileCount < 2 {
+		t.Errorf("expected FileCount to include the component files, got %d", result.FileCount)
 	}
 }
 

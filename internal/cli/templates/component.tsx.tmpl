@@ -1,0 +1,43 @@
+/*
+ * Whole-slide component contract:
+ * - Props: { slots, props, slide, step, steps, active, printMode }.
+ * - `steps` below sets how many clicker presses this slide consumes; tap
+ *   reads it with a regular expression, so it must stay exactly this form.
+ * - In print mode (printMode === true) render the final state, no
+ *   animation.
+ * - Import only host modules (react, react/jsx-runtime, react-dom,
+ *   react-dom/client, motion, motion/react, tap) and npm packages
+ *   installed next to the deck.
+ */
+import { Step, Slot, useStep, usePrintMode, useTheme, type DeckComponentProps } from 'tap';
+import { motion } from 'motion/react';
+
+export const steps = 3;
+
+export default function __COMPONENT_NAME__({ slots }: DeckComponentProps) {
+	const { step } = useStep();
+	const printMode = usePrintMode();
+	const theme = useTheme();
+
+	return (
+		<div style={{ display: 'flex', flexDirection: 'column', gap: theme.spaceUnit, color: 'currentColor' }}>
+			{slots.title && <Slot html={slots.title} />}
+			<Step at={1}>
+				<motion.div
+					initial={printMode ? false : { opacity: 0, y: 12 }}
+					animate={{ opacity: 1, y: 0 }}
+					transition={{ duration: 0.4 }}
+					style={{ padding: theme.spaceUnit, borderRadius: theme.radius, border: `${theme.strokeWidth} solid currentColor` }}
+				>
+					First state
+				</motion.div>
+			</Step>
+			<Step at={2}>
+				<div>Second state</div>
+			</Step>
+			<Step at={3}>
+				<div>Third state, step {step}</div>
+			</Step>
+		</div>
+	);
+}

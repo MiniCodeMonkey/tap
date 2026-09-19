@@ -1,0 +1,1445 @@
+/**
+ * Arcade theme.
+ * For a high-energy war-story talk framed as a game you can win: a HUD bar
+ * (level tag left, stage counter right), a perspective floor grid, dashed
+ * scanline dividers, and menu-item bullets. Numerals render in a second
+ * pixel font (Jersey 10) because the display font's digits are ambiguous at
+ * a distance; everything else stays in the blocky display font or the
+ * humanist body font.
+ *
+ * Ported from .superpowers/brainstorm/themes-v3/arcade.theme.html (the
+ * CSS-only mockup built against a fixed 11-slide deck). See
+ * docs/reference/theme-porting.md and its addendum for what changed moving
+ * from that mockup to the real app's markup.
+ */
+
+@import '@fontsource/tiny5/latin-400.css';
+@import '@fontsource/jersey-10/latin-400.css';
+@import '@fontsource/lexend/latin-500.css';
+@import '@fontsource/lexend/latin-600.css';
+@import '@fontsource/lexend/latin-700.css';
+@import '@fontsource/red-hat-mono/latin-500.css';
+@import '@fontsource/red-hat-mono/latin-600.css';
+@import '@fontsource/red-hat-mono/latin-700.css';
+
+[data-theme='arcade'] {
+	/* ---------- design-spec tokens ---------- */
+	--bg: #181052;
+	--fg: #faf8ff;
+	--muted: #cbc5f2;
+	--accent: #ff7ebd;
+	--accent-text: #ff7ebd;
+	--accent-2: #3cf2ff;
+	--surface: #24197a;
+	/* Extra token, not in the base spec set: the perspective floor's line color. */
+	--grid: #6a58e6;
+	--font-display: 'Tiny5', 'Courier New', monospace;
+	/* Numerals only: Tiny5's digits are ambiguous at a distance, Jersey 10's aren't. */
+	--font-score: 'Jersey 10', 'Tiny5', 'Courier New', monospace;
+	--font-body: 'Lexend', 'Helvetica Neue', Arial, sans-serif;
+	--font-mono: 'Red Hat Mono', 'SFMono-Regular', Menlo, monospace;
+	--ease: steps(6, end);
+	--dur: 480ms;
+	--space-unit: 32px;
+	--radius: 20px;
+	--stroke-width: 3px;
+
+	/*
+	 * Bridge to the base theme's own token names. layouts.css, prose.css,
+	 * rich-blocks.css and ui-components.css style the live code block, the
+	 * map slide, badges, tags, and generic prose entirely through these
+	 * `--color-*` and `--font-sans` custom properties.
+	 */
+	--color-bg: var(--bg);
+	--color-text: var(--fg);
+	--color-muted: var(--muted);
+	--color-accent: var(--accent);
+	--color-code-bg: var(--surface);
+	--color-code-text: var(--fg);
+	--color-code-inline-bg: rgba(106, 88, 230, 0.35);
+	--color-border: var(--grid);
+	--color-surface: var(--surface);
+	--color-surface-elevated: var(--surface);
+	--color-link: var(--accent-2);
+	--font-sans: var(--font-body);
+
+	/* Shiki reads token colors from these custom properties directly. */
+	--shiki-foreground: var(--fg);
+	--shiki-background: var(--surface);
+	--shiki-token-comment: var(--muted);
+	--shiki-token-string: var(--accent-2);
+	--shiki-token-string-expression: var(--accent-2);
+	--shiki-token-keyword: var(--accent-text);
+	--shiki-token-function: var(--fg);
+	--shiki-token-constant: var(--accent-text);
+	--shiki-token-parameter: var(--fg);
+	--shiki-token-punctuation: var(--fg);
+	--shiki-token-link: var(--accent-2);
+}
+
+@keyframes arcade-wipe {
+	from {
+		clip-path: inset(-30px 100% -30px -30px);
+	}
+	to {
+		clip-path: inset(-30px -30px -30px -30px);
+	}
+}
+@keyframes arcade-drop {
+	0% {
+		opacity: 0;
+		transform: translateY(-40px);
+		animation-timing-function: steps(1, end);
+	}
+	2% {
+		opacity: 1;
+		transform: translateY(-40px);
+	}
+	100% {
+		opacity: 1;
+		transform: translateY(0);
+	}
+}
+@keyframes arcade-item {
+	0% {
+		filter: opacity(0);
+		translate: 0 -40px;
+		animation-timing-function: steps(1, end);
+	}
+	2% {
+		filter: opacity(1);
+		translate: 0 -40px;
+	}
+	100% {
+		filter: opacity(1);
+		translate: 0 0;
+	}
+}
+@keyframes arcade-pop {
+	from {
+		opacity: 0;
+	}
+}
+@keyframes arcade-scroll {
+	from {
+		background-position: 0 0;
+	}
+	to {
+		background-position: 0 120px;
+	}
+}
+@keyframes arcade-rise {
+	from {
+		transform: translateY(100%);
+		clip-path: inset(0 0 100% 0);
+	}
+	to {
+		transform: translateY(0);
+		clip-path: inset(0 0 0 0);
+	}
+}
+
+/* ============================================================================
+ * Screen: base slide chrome, HUD, and the floor
+ * ============================================================================
+ * Every selector below that reads attr(data-index)/attr(data-layout) or
+ * decorates the slide root is scoped to `.slide[data-layout]`, the real
+ * rendered slide, not the bare `.slide` class SlideCanvas also puts on its
+ * outer 1920x1080 scaling frame.
+ * ============================================================================ */
+
+[data-theme='arcade'] .slide[data-layout] {
+	position: relative;
+	overflow: hidden;
+	padding: 176px 96px 150px;
+	background: var(--bg);
+	color: var(--fg);
+	font-family: var(--font-body);
+	font-weight: 500;
+	font-size: 48px;
+	line-height: 1.3;
+	letter-spacing: -0.01em;
+}
+[data-theme='arcade'] .slide :where(h1, h2, h3, h4, h5, h6, p, ul, ol, li, blockquote, pre, table) {
+	margin: 0;
+	padding: 0;
+}
+[data-theme='arcade'] .slide[data-layout] h1,
+[data-theme='arcade'] .slide[data-layout] h2,
+[data-theme='arcade'] .slide[data-layout] h3,
+[data-theme='arcade'] .slide[data-layout] h4,
+[data-theme='arcade'] .slide[data-layout] h5,
+[data-theme='arcade'] .slide[data-layout] h6 {
+	font-family: var(--font-display);
+	font-weight: 400;
+	text-transform: uppercase;
+	letter-spacing: 0.01em;
+	text-wrap: balance;
+}
+[data-theme='arcade'] .slide[data-layout] strong {
+	font-weight: 700;
+	color: var(--accent-text);
+}
+[data-theme='arcade'] .slide[data-layout] em {
+	font-style: normal;
+	color: var(--accent-2);
+}
+[data-theme='arcade'] .slide[data-layout] a {
+	color: var(--accent-2);
+	text-decoration: underline;
+	text-decoration-style: dashed;
+	text-underline-offset: 0.18em;
+}
+[data-theme='arcade'] .slide[data-layout] a:hover {
+	color: var(--accent-text);
+}
+[data-theme='arcade'] .slot :not(pre) > code {
+	font-family: var(--font-mono);
+	font-weight: 600;
+	font-size: 0.82em;
+	color: var(--accent-2);
+	background: var(--surface);
+	box-shadow: 0 0 0 4px var(--grid);
+	padding: 0 0.3em;
+	margin: 0 0.15em;
+	white-space: nowrap;
+}
+
+/* the floor: a perspective grid grounding every slide */
+[data-theme='arcade'] .slide[data-layout]::after {
+	content: '';
+	position: absolute;
+	left: -100%;
+	right: -100%;
+	top: 860px;
+	height: 1400px;
+	z-index: 0;
+	transform-origin: 50% 0;
+	transform: perspective(420px) rotateX(78deg);
+	border-top: 5px solid var(--grid);
+	background-image:
+		linear-gradient(to bottom, var(--grid) 0, var(--grid) 5px, transparent 5px),
+		linear-gradient(to right, var(--grid) 0, var(--grid) 5px, transparent 5px);
+	background-size: 120px 120px, 120px 120px;
+	opacity: 0.55;
+}
+[data-theme='arcade'] .slide[data-layout='title']::after {
+	top: 700px;
+	border-top-color: var(--accent);
+	opacity: 0.8;
+	animation: arcade-scroll 5s linear infinite;
+}
+@media print, (prefers-reduced-motion: reduce) {
+	[data-theme='arcade'] .slide[data-layout='title']::after {
+		background-position: 0 0;
+	}
+}
+
+/* HUD: section tag on the left, stage counter and badge stacked on the right */
+[data-theme='arcade'] .slide-tag {
+	top: 84px;
+	left: 96px;
+	right: auto;
+	bottom: auto;
+	z-index: 2;
+	font-family: var(--font-display);
+	font-size: 40px;
+	line-height: 1;
+	letter-spacing: 0.05em;
+	text-transform: uppercase;
+	color: var(--accent-2);
+	animation: arcade-pop 10ms steps(1, end) both;
+}
+[data-theme='arcade'] .slide[data-layout]::before {
+	content: 'STAGE ' attr(data-index) '/' attr(data-total);
+	position: absolute;
+	top: 168px;
+	right: 96px;
+	left: auto;
+	bottom: auto;
+	z-index: 2;
+	font-family: var(--font-display);
+	font-size: 36px;
+	line-height: 1;
+	letter-spacing: 0.05em;
+	text-transform: uppercase;
+	color: var(--accent);
+	animation: arcade-pop 10ms steps(1, end) both;
+}
+[data-theme='arcade'] .slide-badge {
+	top: 84px;
+	right: 96px;
+	left: auto;
+	bottom: auto;
+	z-index: 2;
+	font-family: var(--font-mono);
+	font-weight: 700;
+	font-size: 34px;
+	line-height: 1;
+	letter-spacing: 0.02em;
+	color: var(--bg);
+	background: var(--accent-2);
+	padding: 10px 16px;
+	animation: arcade-pop 10ms steps(1, end) both;
+}
+
+/* ---------- title ---------- */
+[data-theme='arcade'] .layout-title {
+	display: flex;
+	flex-direction: column;
+	justify-content: center;
+	align-items: flex-start;
+	text-align: left;
+	padding: 176px 140px 190px;
+}
+[data-theme='arcade'] .layout-title .slot-default {
+	margin: 0;
+	max-width: 100%;
+	text-align: left;
+}
+/*
+ * Sized for a "long" title (the kitchen sink's ~100-character worst case);
+ * the data-length overrides below scale up a genuinely shorter one so it
+ * gets the impact the mockup intended. "medium" keeps the value the deck's
+ * own title ("Scaling a Markdown Renderer") already showed well at.
+ */
+[data-theme='arcade'] .layout-title .slot-content h1 {
+	font-size: 88px;
+	line-height: 1.05;
+	margin-left: -4px;
+	max-width: 100%;
+	animation: arcade-wipe var(--dur) var(--ease) both;
+}
+[data-theme='arcade'] .layout-title .slot-content h1[data-length='medium'] {
+	font-size: 112px;
+	line-height: 1.08;
+}
+[data-theme='arcade'] .layout-title .slot-content h1[data-length='short'] {
+	font-size: 136px;
+	line-height: 1.05;
+}
+[data-theme='arcade'] .layout-title h2 {
+	font-size: 60px;
+	line-height: 1.2;
+	margin-top: 20px;
+	color: var(--accent-text);
+	animation: arcade-wipe var(--dur) var(--ease) 150ms both;
+}
+[data-theme='arcade'] .layout-title p {
+	margin-top: 48px;
+	font-weight: 600;
+	font-size: 48px;
+	line-height: 1.35;
+	max-width: 1500px;
+	color: var(--fg);
+	animation: arcade-pop 200ms steps(4, end) 400ms both;
+}
+[data-theme='arcade'] .layout-title::before {
+	content: '';
+	position: absolute;
+	right: 60px;
+	top: 300px;
+	width: 480px;
+	height: 240px;
+	border-radius: 240px 240px 0 0;
+	z-index: 0;
+	background: linear-gradient(
+		to bottom,
+		var(--accent) 0,
+		var(--accent) 44%,
+		var(--bg) 44%,
+		var(--bg) 48%,
+		var(--accent) 48%,
+		var(--accent) 62%,
+		var(--bg) 62%,
+		var(--bg) 68%,
+		var(--accent) 68%,
+		var(--accent) 78%,
+		var(--bg) 78%,
+		var(--bg) 86%,
+		var(--accent) 86%,
+		var(--accent) 92%,
+		var(--bg) 92%,
+		var(--bg) 100%
+	);
+	opacity: 0.5;
+	animation: arcade-rise 900ms steps(9, end) 300ms both;
+}
+[data-theme='arcade'] .layout-title .slot-content {
+	position: relative;
+	z-index: 1;
+}
+
+/* ---------- section: stage card ---------- */
+[data-theme='arcade'] .slide[data-layout='section'] .slide-tag {
+	top: 250px;
+	left: 140px;
+	font-size: 96px;
+	letter-spacing: 0.03em;
+	color: var(--accent-2);
+	animation: arcade-wipe var(--dur) var(--ease) both;
+}
+[data-theme='arcade'] .layout-section {
+	display: flex;
+	flex-direction: column;
+	justify-content: flex-start;
+	align-items: flex-start;
+	text-align: left;
+	padding: 176px 140px 190px;
+}
+[data-theme='arcade'] .layout-section .slot-default {
+	margin: 0;
+	max-width: 100%;
+	text-align: left;
+	padding-top: 220px;
+}
+/*
+ * Sized for "long" first; the deck's own section title ("Foundations") is
+ * short and already showed well at 220px, kept as the [data-length='short']
+ * ceiling rather than the flat default.
+ */
+[data-theme='arcade'] .layout-section .slot-content h2 {
+	font-size: 140px;
+	line-height: 1.02;
+	margin-left: -6px;
+	color: var(--accent-text);
+	max-width: 100%;
+	animation: arcade-wipe var(--dur) var(--ease) 200ms both;
+}
+[data-theme='arcade'] .layout-section .slot-content h2[data-length='medium'] {
+	font-size: 180px;
+}
+[data-theme='arcade'] .layout-section .slot-content h2[data-length='short'] {
+	font-size: 220px;
+	line-height: 1;
+}
+
+/* ---------- statement (a lone heading on layout-default) ---------- */
+[data-theme='arcade'] .layout-default .slot:has(> h1:only-child),
+[data-theme='arcade'] .layout-default .slot:has(> h2:only-child) {
+	flex: 1;
+	display: flex;
+	align-items: center;
+}
+/*
+ * Sized for "long" first; the deck's own statement ("Every system has a
+ * bottleneck.") is medium-length and already showed well at 168px, kept as
+ * the [data-length='medium'] value rather than the flat default.
+ */
+[data-theme='arcade'] .layout-default .slot-content h1:only-child {
+	font-size: 136px;
+	line-height: 1.04;
+	margin-left: -6px;
+	max-width: 100%;
+	animation: arcade-wipe 700ms var(--ease) both;
+}
+[data-theme='arcade'] .layout-default .slot-content h1[data-length='medium']:only-child {
+	font-size: 168px;
+	line-height: 1.02;
+}
+[data-theme='arcade'] .layout-default .slot-content h1[data-length='short']:only-child {
+	font-size: 200px;
+	line-height: 1;
+}
+[data-theme='arcade'] .layout-default .slot-content h2:only-child {
+	font-size: 88px;
+	line-height: 1.15;
+	max-width: 100%;
+	color: var(--accent-text);
+	animation: arcade-wipe 700ms var(--ease) both;
+}
+[data-theme='arcade'] .layout-default .slot-content h2[data-length='medium']:only-child {
+	font-size: 108px;
+	line-height: 1.1;
+}
+[data-theme='arcade'] .layout-default .slot-content h2[data-length='short']:only-child {
+	font-size: 132px;
+	line-height: 1.05;
+}
+
+/* ---------- slot heading: the level briefing ----------
+ * Scoped to the layouts that use a plain slot-default h2 as their heading.
+ * title, section, big-stat, quote, cover and blank size their own heading
+ * separately above, at higher specificity through their own layout class,
+ * so this list leaves those out to avoid a same-specificity source-order
+ * fight over slides that share an h2. Written through .slot-content so
+ * these carry at least the specificity of the generic h1/h2 rules above;
+ * sized for "long" first, with the deck's own headings (almost all
+ * "short") kept at the 112px value that already showed well. */
+[data-theme='arcade']
+	:is(.layout-default, .layout-code-focus, .layout-two-column, .layout-three-column, .layout-sidebar, .layout-split-media)
+	.slot-content
+	> h2,
+[data-theme='arcade']
+	:is(.layout-default, .layout-code-focus, .layout-two-column, .layout-three-column, .layout-sidebar, .layout-split-media)
+	.slot-content.slot-default
+	> h1:not(:only-child) {
+	font-size: 76px;
+	line-height: 1.1;
+	margin-bottom: 32px;
+	color: var(--fg);
+	animation: arcade-wipe var(--dur) var(--ease) both;
+}
+[data-theme='arcade']
+	:is(.layout-default, .layout-code-focus, .layout-two-column, .layout-three-column, .layout-sidebar, .layout-split-media)
+	.slot-content
+	> h2[data-length='medium'],
+[data-theme='arcade']
+	:is(.layout-default, .layout-code-focus, .layout-two-column, .layout-three-column, .layout-sidebar, .layout-split-media)
+	.slot-content.slot-default
+	> h1[data-length='medium']:not(:only-child) {
+	font-size: 92px;
+	line-height: 1.08;
+	margin-bottom: 36px;
+}
+[data-theme='arcade']
+	:is(.layout-default, .layout-code-focus, .layout-two-column, .layout-three-column, .layout-sidebar, .layout-split-media)
+	.slot-content
+	> h2[data-length='short'],
+[data-theme='arcade']
+	:is(.layout-default, .layout-code-focus, .layout-two-column, .layout-three-column, .layout-sidebar, .layout-split-media)
+	.slot-content.slot-default
+	> h1[data-length='short']:not(:only-child) {
+	font-size: 112px;
+	line-height: 1.05;
+	margin-bottom: 40px;
+}
+[data-theme='arcade'] .slot h3 {
+	font-size: 56px;
+	line-height: 1.2;
+	margin-top: 32px;
+	margin-bottom: 14px;
+	color: var(--accent-2);
+}
+[data-theme='arcade'] .slot h4 {
+	font-size: 44px;
+	line-height: 1.25;
+	margin-top: 24px;
+	margin-bottom: 10px;
+	color: var(--muted);
+}
+[data-theme='arcade'] .slot h5,
+[data-theme='arcade'] .slot h6 {
+	font-size: 40px;
+	line-height: 1.25;
+	margin-top: 22px;
+	margin-bottom: 10px;
+	color: var(--muted);
+	letter-spacing: 0.04em;
+}
+
+/* ---------- bullets: the pause menu ---------- */
+[data-theme='arcade'] .slot > ul,
+[data-theme='arcade'] .slot > .fragment > ul {
+	list-style: none;
+	margin-top: 44px;
+}
+[data-theme='arcade'] .slot > ul > li,
+[data-theme='arcade'] .slot > .fragment > ul > li {
+	position: relative;
+	padding: 26px 0 26px 88px;
+	font-size: 48px;
+	font-weight: 600;
+	line-height: 1.3;
+	border-bottom: 5px dashed var(--grid);
+	animation: arcade-item 300ms steps(4, end) both;
+	transition: opacity 200ms steps(2, end);
+}
+[data-theme='arcade'] .slot > ul > li:first-child,
+[data-theme='arcade'] .slot > .fragment > ul > li:first-child {
+	border-top: 5px dashed var(--grid);
+}
+[data-theme='arcade'] .slot > ul > li:nth-child(1) {
+	animation-delay: 300ms;
+}
+[data-theme='arcade'] .slot > ul > li:nth-child(2) {
+	animation-delay: 420ms;
+}
+[data-theme='arcade'] .slot > ul > li:nth-child(3) {
+	animation-delay: 540ms;
+}
+[data-theme='arcade'] .slot > ul > li:nth-child(n + 4) {
+	animation-delay: 660ms;
+}
+[data-theme='arcade'] .slot > ul > li.fragment-hidden {
+	opacity: 0;
+}
+[data-theme='arcade'] .slot > ul > li.fragment-visible {
+	opacity: 1;
+	transition: opacity 200ms steps(2, end);
+}
+[data-theme='arcade'] .slot > ul > li::before,
+[data-theme='arcade'] .slot > .fragment > ul > li::before {
+	content: '';
+	position: absolute;
+	left: 6px;
+	top: 30px;
+	width: 38px;
+	height: 38px;
+	background: var(--accent);
+	clip-path: polygon(0 0, 14px 0, 14px 7px, 27px 7px, 27px 17px, 38px 17px, 38px 27px, 27px 27px, 27px 38px, 14px 38px, 14px 27px, 0 27px);
+}
+/* Nested lists sit inside the parent li's padding with a quieter marker;
+ * they stay at the same size as the top-level bullet (the 40px body
+ * minimum still applies), just lighter in weight and color. */
+[data-theme='arcade'] .slot ul ul {
+	list-style: none;
+	margin-top: 12px;
+}
+[data-theme='arcade'] .slot ul ul > li {
+	padding: 8px 0 8px 52px;
+	font-weight: 500;
+	font-size: 48px;
+	color: var(--muted);
+	border-bottom: 0;
+	animation: none;
+}
+[data-theme='arcade'] .slot ul ul > li::before {
+	content: '\25B8';
+	width: auto;
+	height: auto;
+	top: 8px;
+	background: none;
+	clip-path: none;
+	color: var(--accent-2);
+	font-size: 0.7em;
+}
+[data-theme='arcade'] .slot ol {
+	margin-top: 16px;
+	padding-left: 0;
+	list-style: none;
+	counter-reset: arcade-ol;
+}
+[data-theme='arcade'] .slot ol > li {
+	position: relative;
+	counter-increment: arcade-ol;
+	padding: 14px 0 14px 92px;
+	font-weight: 600;
+	font-size: 48px;
+	border-bottom: 5px dashed var(--grid);
+}
+[data-theme='arcade'] .slot ol > li::before {
+	content: counter(arcade-ol);
+	position: absolute;
+	left: 0;
+	top: 10px;
+	width: 70px;
+	font-family: var(--font-score);
+	font-size: 1.4em;
+	line-height: 0.7;
+	color: var(--accent-2);
+}
+[data-theme='arcade'] .slide .fragment-hidden {
+	opacity: 0;
+}
+[data-theme='arcade'] .slide .fragment-visible {
+	opacity: 1;
+	transition: opacity 200ms steps(2, end);
+}
+/* Consecutive fragment paragraphs need breathing room between reveals. */
+[data-theme='arcade'] .slot > p + p,
+[data-theme='arcade'] .slot > .fragment + .fragment > p {
+	margin-top: 32px;
+}
+
+/* Seven or more bullets: a dense listing, at the narrow-column body scale
+ * rather than the full-width one, still clear of the 40px floor. */
+[data-theme='arcade'] .slot:has(> ul > li:nth-child(7)) > h2 {
+	font-size: 68px;
+	margin-bottom: 20px;
+}
+[data-theme='arcade'] .slot > ul:has(> li:nth-child(7)) {
+	margin-top: 8px;
+}
+[data-theme='arcade'] .slot > ul:has(> li:nth-child(7)) > li {
+	padding: 12px 0 12px 76px;
+	font-size: 44px;
+}
+[data-theme='arcade'] .slot > ul:has(> li:nth-child(7)) > li::before {
+	top: 15px;
+	width: 30px;
+	height: 30px;
+	clip-path: polygon(0 0, 10px 0, 10px 5px, 20px 5px, 20px 13px, 30px 13px, 30px 21px, 20px 21px, 20px 30px, 10px 30px, 10px 21px, 0 21px);
+}
+
+/* ---------- blockquote outside the quote layout ----------
+ * A plain blockquote is an aside. One that opens with a bold label
+ * ("**Note** ...") is a callout: a dashed pane in the accent color.
+ */
+[data-theme='arcade'] :not(.layout-quote) > :is(.slot, .slot > .fragment) > blockquote {
+	position: relative;
+	margin-top: 32px;
+	padding: 4px 0 4px 56px;
+	font-style: normal;
+	color: var(--fg);
+	animation: arcade-pop 10ms steps(1, end) both;
+}
+[data-theme='arcade'] :not(.layout-quote) > :is(.slot, .slot > .fragment) > blockquote::before {
+	content: '';
+	position: absolute;
+	left: 0;
+	top: 0;
+	bottom: 0;
+	width: 5px;
+	background: var(--accent-2);
+}
+[data-theme='arcade'] :not(.layout-quote) > :is(.slot, .slot > .fragment) > blockquote p {
+	font-size: 48px;
+	line-height: 1.4;
+	font-weight: 500;
+}
+[data-theme='arcade'] :not(.layout-quote) > :is(.slot, .slot > .fragment) > blockquote:has(> p:first-child > strong:first-child) {
+	padding: 32px 44px;
+	border: 3px dashed var(--muted);
+}
+[data-theme='arcade'] :not(.layout-quote) > :is(.slot, .slot > .fragment) > blockquote:has(> p:first-child > strong:first-child)::before {
+	content: none;
+}
+
+/* ---------- code: the boss fight ---------- */
+[data-theme='arcade'] pre.shiki {
+	position: relative;
+	margin: 40px 0 0;
+	padding: 40px 48px;
+	background: var(--surface);
+	border: 5px solid var(--grid);
+	font-family: var(--font-mono);
+	font-weight: 600;
+	font-size: 40px;
+	line-height: 1.55;
+	letter-spacing: -0.01em;
+	color: var(--fg);
+}
+[data-theme='arcade'] pre.shiki code {
+	display: flex;
+	flex-direction: column;
+	font: inherit;
+}
+[data-theme='arcade'] pre.shiki .line {
+	display: block;
+	position: relative;
+	white-space: pre-wrap;
+	word-break: break-word;
+	padding-left: 56px;
+	text-indent: -56px;
+	animation: arcade-pop 10ms steps(1, end) both;
+}
+[data-theme='arcade'] pre.has-highlighted .line:not(.highlighted) > * {
+	opacity: 0.58;
+}
+[data-theme='arcade'] pre.shiki .line.highlighted {
+	padding-top: 6px;
+	padding-bottom: 6px;
+	background: var(--bg);
+	box-shadow:
+		inset 0 5px 0 var(--accent),
+		inset 0 -5px 0 var(--accent);
+}
+[data-theme='arcade'] pre.shiki .line.highlighted::before {
+	content: '';
+	position: absolute;
+	left: 12px;
+	top: 50%;
+	margin-top: -18px;
+	width: 30px;
+	height: 36px;
+	text-indent: 0;
+	background: var(--accent);
+	clip-path: polygon(0 0, 10px 0, 10px 9px, 20px 9px, 20px 14px, 30px 14px, 30px 23px, 20px 23px, 20px 28px, 10px 28px, 10px 36px, 0 36px);
+}
+[data-theme='arcade'] .slot pre + p {
+	margin-top: 36px;
+}
+[data-theme='arcade'] .layout-code-focus pre + p {
+	font-weight: 600;
+	color: var(--accent-2);
+}
+[data-theme='arcade'] .layout-code-focus pre + p::before {
+	content: '\25B8 ';
+	color: var(--accent);
+}
+[data-theme='arcade'] .scroll-content pre.shiki {
+	font-size: 40px;
+	line-height: 1.55;
+}
+
+/* ---------- big stat: the high score ---------- */
+[data-theme='arcade'] .layout-big-stat {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	justify-content: center;
+	text-align: left;
+	padding: 176px 140px 190px;
+}
+[data-theme='arcade'] .layout-big-stat .slot-default {
+	max-width: 100%;
+}
+[data-theme='arcade'] .layout-big-stat .slot-default::before {
+	content: 'HI-SCORE';
+	display: block;
+	font-family: var(--font-display);
+	font-size: 44px;
+	line-height: 1;
+	letter-spacing: 0.08em;
+	color: var(--accent-2);
+	margin-bottom: 20px;
+	animation: arcade-pop 10ms steps(1, end) both;
+}
+/*
+ * Scoped to `.slide[data-layout='big-stat']`, not the shorter `.layout-big-stat`,
+ * so this matches the base chrome's own `.slide[data-layout] h1` at (0,3,1)
+ * specificity and wins on source order: the big number needs the numeral
+ * font (Jersey 10), not the display font (Tiny5) the generic heading rule
+ * sets, and a lower-specificity override here would silently lose that
+ * fight and render digits in the wrong, ambiguous font. Sized for "long"
+ * first; the deck's own stat ("40x") is a short numeral and already showed
+ * well at 380px, kept as the [data-length='short'] value.
+ */
+[data-theme='arcade'] .slide[data-layout='big-stat'] h1,
+[data-theme='arcade'] .slide[data-layout='big-stat'] strong {
+	display: block;
+	font-family: var(--font-score);
+	font-weight: 400;
+	font-size: 200px;
+	line-height: 0.9;
+	letter-spacing: 0;
+	margin-left: -6px;
+	color: var(--accent-text);
+	animation: arcade-wipe 1000ms steps(9, end) 150ms both;
+}
+[data-theme='arcade'] .slide[data-layout='big-stat'] h1[data-length='medium'] {
+	font-size: 280px;
+	line-height: 0.87;
+}
+[data-theme='arcade'] .slide[data-layout='big-stat'] h1[data-length='short'] {
+	font-size: 380px;
+	line-height: 0.85;
+}
+[data-theme='arcade'] .layout-big-stat .slot-caption {
+	margin-top: 32px;
+	max-width: 1500px;
+}
+[data-theme='arcade'] .layout-big-stat .slot-caption p {
+	font-size: 48px;
+	line-height: 1.3;
+	font-weight: 600;
+	color: var(--fg);
+	max-width: 1500px;
+	text-wrap: balance;
+}
+[data-theme='arcade'] .layout-big-stat .slot-figure {
+	margin-top: 24px;
+}
+[data-theme='arcade'] .layout-big-stat .slot-figure img {
+	max-height: 26vh;
+	border: 4px solid var(--grid);
+	filter: contrast(1.1) saturate(0.9);
+}
+
+/* ---------- quote: a dialogue box ---------- */
+[data-theme='arcade'] .layout-quote {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	justify-content: center;
+	text-align: left;
+	padding: 176px 140px 190px;
+}
+[data-theme='arcade'] .layout-quote .slot-default,
+[data-theme='arcade'] .layout-quote .slot-attribution {
+	max-width: 100%;
+}
+[data-theme='arcade'] .layout-quote .slot-attribution {
+	order: -1;
+	position: relative;
+	z-index: 1;
+}
+[data-theme='arcade'] .layout-quote .slot-attribution p {
+	margin: 0 0 -40px 56px;
+	padding: 14px 32px 16px;
+	background: var(--accent);
+	color: var(--bg);
+	font-family: var(--font-display);
+	font-weight: 400;
+	font-size: 48px;
+	line-height: 1;
+	letter-spacing: 0.03em;
+	text-transform: uppercase;
+	text-align: left;
+	max-width: none;
+	width: fit-content;
+	animation: arcade-pop 10ms steps(1, end) 100ms both;
+}
+[data-theme='arcade'] .layout-quote .slot-attribution p::before {
+	content: none;
+}
+[data-theme='arcade'] .layout-quote .slot-default {
+	position: relative;
+	padding: 88px 76px 100px;
+	background: var(--surface);
+	border: 6px solid var(--fg);
+	box-shadow:
+		0 0 0 6px var(--bg),
+		0 0 0 12px var(--grid);
+	animation: arcade-wipe var(--dur) var(--ease) 200ms both;
+}
+[data-theme='arcade'] .layout-quote blockquote {
+	border: 0;
+	padding: 0;
+	font-style: normal;
+}
+[data-theme='arcade'] .layout-quote blockquote p {
+	font-size: 84px;
+	font-weight: 600;
+	line-height: 1.2;
+	letter-spacing: -0.01em;
+	color: var(--fg);
+	text-wrap: balance;
+	text-align: left;
+}
+[data-theme='arcade'] .layout-quote .slot-default::after {
+	content: '';
+	position: absolute;
+	right: 52px;
+	bottom: 40px;
+	width: 46px;
+	height: 28px;
+	background: var(--accent-2);
+	clip-path: polygon(0 0, 100% 0, 100% 9px, 37px 9px, 37px 18px, 28px 18px, 28px 28px, 19px 28px, 19px 18px, 9px 18px, 9px 9px, 0 9px);
+}
+
+/* ---------- two columns: player one, player two ---------- */
+[data-theme='arcade'] .layout-two-column {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	grid-template-rows: auto 1fr;
+	gap: 40px 48px;
+	padding: 176px 96px 150px;
+}
+[data-theme='arcade'] .layout-two-column .slot-default {
+	grid-column: 1 / -1;
+}
+[data-theme='arcade'] .layout-two-column .slot-left,
+[data-theme='arcade'] .layout-two-column .slot-right {
+	--player: var(--accent-2);
+	padding: 40px 48px 44px;
+	background: var(--surface);
+	border: 6px solid var(--player);
+	animation: arcade-drop 300ms steps(4, end) 300ms both;
+}
+[data-theme='arcade'] .layout-two-column .slot-right {
+	--player: var(--accent);
+	animation-delay: 550ms;
+}
+[data-theme='arcade'] .layout-two-column h3 {
+	font-size: 48px;
+	line-height: 1.05;
+	letter-spacing: 0.05em;
+	color: var(--player);
+	margin-top: 0;
+	margin-bottom: 20px;
+}
+/* A ~880px-wide column at the full 48px body scale still wraps a longer
+ * item into more lines than a narrow panel has room for; give it the
+ * narrow-column scale (44px) instead. */
+[data-theme='arcade'] .layout-two-column .slot-left p,
+[data-theme='arcade'] .layout-two-column .slot-right p {
+	font-size: 44px;
+	line-height: 1.25;
+}
+[data-theme='arcade'] .layout-two-column .slot-left ul,
+[data-theme='arcade'] .layout-two-column .slot-right ul {
+	margin-top: 8px;
+}
+[data-theme='arcade'] .layout-two-column .slot-left > ul > li,
+[data-theme='arcade'] .layout-two-column .slot-right > ul > li {
+	padding: 16px 0 16px 64px;
+	font-size: 44px;
+	line-height: 1.3;
+	animation: none;
+}
+[data-theme='arcade'] .layout-two-column .slot-left > ul > li::before,
+[data-theme='arcade'] .layout-two-column .slot-right > ul > li::before {
+	width: 30px;
+	height: 30px;
+	top: 20px;
+	background: var(--player);
+	clip-path: polygon(0 0, 10px 0, 10px 5px, 20px 5px, 20px 13px, 30px 13px, 30px 21px, 20px 21px, 20px 30px, 10px 30px, 10px 21px, 0 21px);
+}
+
+/* ---------- three columns: the tier select screen ---------- */
+[data-theme='arcade'] .layout-three-column {
+	display: grid;
+	grid-template-columns: 1fr 1fr 1fr;
+	grid-template-rows: auto 1fr;
+	gap: 40px 40px;
+	padding: 176px 96px 150px;
+}
+[data-theme='arcade'] .layout-three-column .slot-default {
+	grid-column: 1 / -1;
+}
+[data-theme='arcade'] .layout-three-column .slot-left,
+[data-theme='arcade'] .layout-three-column .slot-center,
+[data-theme='arcade'] .layout-three-column .slot-right {
+	padding: 36px 36px 40px;
+	background: var(--surface);
+	border: 5px solid var(--grid);
+	animation: arcade-drop 300ms steps(4, end) 300ms both;
+}
+[data-theme='arcade'] .layout-three-column .slot-center {
+	border-color: var(--accent-2);
+	animation-delay: 480ms;
+}
+[data-theme='arcade'] .layout-three-column .slot-right {
+	border-color: var(--accent);
+	animation-delay: 660ms;
+}
+[data-theme='arcade'] .layout-three-column h3 {
+	font-size: 44px;
+	margin-top: 0;
+	margin-bottom: 16px;
+	color: var(--accent-2);
+}
+[data-theme='arcade'] .layout-three-column .slot-center h3 {
+	color: var(--accent-2);
+}
+[data-theme='arcade'] .layout-three-column .slot-right h3 {
+	color: var(--accent);
+}
+/* The narrowest column in the theme (~530px): the 40px floor, not the
+ * general 44-52px body scale. */
+[data-theme='arcade'] .layout-three-column p {
+	font-size: 40px;
+	line-height: 1.3;
+}
+[data-theme='arcade'] .layout-three-column ul {
+	margin-top: 4px;
+}
+[data-theme='arcade'] .layout-three-column > .slot-left > ul > li,
+[data-theme='arcade'] .layout-three-column > .slot-center > ul > li,
+[data-theme='arcade'] .layout-three-column > .slot-right > ul > li {
+	padding: 10px 0 10px 48px;
+	font-size: 40px;
+	line-height: 1.3;
+	border-bottom: 0;
+	animation: none;
+}
+[data-theme='arcade'] .layout-three-column > .slot-left > ul > li::before,
+[data-theme='arcade'] .layout-three-column > .slot-center > ul > li::before,
+[data-theme='arcade'] .layout-three-column > .slot-right > ul > li::before {
+	width: 22px;
+	height: 22px;
+	top: 17px;
+	clip-path: polygon(0 0, 7px 0, 7px 4px, 14px 4px, 14px 9px, 22px 9px, 22px 14px, 14px 14px, 14px 22px, 7px 22px, 7px 14px, 0 14px);
+}
+
+/* ---------- image: on a CRT (split-media, and a plain slot image) ---------- */
+[data-theme='arcade'] .layout-split-media {
+	display: grid;
+	grid-template-columns: 1.05fr 1fr;
+	gap: 64px;
+	align-items: center;
+	padding: 176px 96px 150px;
+}
+[data-theme='arcade'] .layout-split-media .slot-default {
+	padding: 0;
+}
+/* Sized for "long" first; the deck's own split-media heading ("Split
+ * media") is short and already showed well at 100px, kept as the
+ * [data-length='short'] value. */
+[data-theme='arcade'] .layout-split-media .slot-default h2 {
+	font-size: 72px;
+}
+[data-theme='arcade'] .layout-split-media .slot-default h2[data-length='medium'] {
+	font-size: 86px;
+}
+[data-theme='arcade'] .layout-split-media .slot-default h2[data-length='short'] {
+	font-size: 100px;
+}
+[data-theme='arcade'] .layout-split-media .slot-default h3 {
+	margin-top: 0;
+	font-size: 44px;
+}
+[data-theme='arcade'] .layout-split-media .slot-default p {
+	margin-top: 28px;
+	font-size: 44px;
+	line-height: 1.3;
+}
+[data-theme='arcade'] .layout-split-media .slot-media {
+	position: relative;
+	isolation: isolate;
+	background: var(--bg);
+	border: 6px solid var(--accent-2);
+	box-shadow:
+		0 0 0 6px var(--bg),
+		0 0 0 12px var(--grid);
+	aspect-ratio: 4 / 3;
+	overflow: hidden;
+	animation: arcade-wipe var(--dur) var(--ease) 300ms both;
+}
+[data-theme='arcade'] .layout-split-media img,
+[data-theme='arcade'] .slot:not(.slot-media) img {
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+	filter: grayscale(1) contrast(1.2);
+	mix-blend-mode: screen;
+}
+[data-theme='arcade'] .layout-split-media .slot-media::before,
+[data-theme='arcade'] .slot:not(.slot-media) img {
+	position: relative;
+}
+[data-theme='arcade'] .layout-split-media .slot-media::before {
+	content: '';
+	position: absolute;
+	inset: 0;
+	z-index: 1;
+	background: #b4f9ff;
+	mix-blend-mode: multiply;
+}
+[data-theme='arcade'] .layout-split-media .slot-media::after {
+	content: '';
+	position: absolute;
+	inset: 0;
+	z-index: 2;
+	background: repeating-linear-gradient(to bottom, transparent 0, transparent 6px, rgba(24, 16, 82, 0.32) 6px, rgba(24, 16, 82, 0.32) 8px);
+}
+/*
+ * A plain slot image (not the split-media slot) is evidence: a chart, a
+ * screenshot. It keeps its own frame and quiet CRT treatment without a
+ * blend mode dimming it into the background.
+ */
+[data-theme='arcade'] .layout-default .slot:has(> img, > p > img:only-child) {
+	flex: 1;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+}
+[data-theme='arcade'] .layout-default .slot > :is(h1, h2):has(~ img, ~ p > img:only-child) {
+	flex: none;
+	font-size: 68px;
+	margin-bottom: 24px;
+}
+[data-theme='arcade'] .layout-default .slot > p:has(> img:only-child) {
+	flex: 1;
+	min-height: 0;
+	display: flex;
+	justify-content: center;
+	align-items: center;
+}
+[data-theme='arcade'] .layout-default .slot > p > img:only-child,
+[data-theme='arcade'] .layout-default .slot > img {
+	width: auto;
+	height: auto;
+	max-width: 100%;
+	max-height: 100%;
+	object-fit: contain;
+	filter: grayscale(0.4) contrast(1.1);
+	border: 5px solid var(--grid);
+	mix-blend-mode: normal;
+}
+
+/* ---------- table: the high-score board ---------- */
+[data-theme='arcade'] .slot > table {
+	margin-top: 36px;
+	width: 100%;
+	border-collapse: collapse;
+	text-align: left;
+	font-size: 44px;
+	line-height: 1.2;
+	counter-reset: arcade-rank;
+}
+[data-theme='arcade'] .slot th {
+	font-family: var(--font-display);
+	font-weight: 400;
+	font-size: 44px;
+	letter-spacing: 0.05em;
+	text-transform: uppercase;
+	color: var(--accent-2);
+	padding: 0 24px 18px 0;
+	border-bottom: 5px solid var(--accent-2);
+}
+[data-theme='arcade'] .slot th:first-child {
+	padding-left: 92px;
+}
+[data-theme='arcade'] .slot td {
+	padding: 26px 24px 26px 0;
+	font-weight: 600;
+	font-size: 44px;
+	border-bottom: 5px dashed var(--grid);
+}
+[data-theme='arcade'] .slot td:not(:first-child):not(:last-child) {
+	font-family: var(--font-mono);
+	font-size: 40px;
+}
+[data-theme='arcade'] .slot td:last-child {
+	color: var(--accent-text);
+}
+[data-theme='arcade'] .slot tbody tr {
+	counter-increment: arcade-rank;
+	animation: arcade-item 300ms steps(4, end) both;
+}
+[data-theme='arcade'] .slot td:first-child::before {
+	content: counter(arcade-rank);
+	display: inline-block;
+	width: 92px;
+	font-family: var(--font-score);
+	font-size: 68px;
+	line-height: 0.6;
+	color: var(--accent-2);
+}
+[data-theme='arcade'] .slot tbody tr:nth-child(1) {
+	animation-delay: 300ms;
+}
+[data-theme='arcade'] .slot tbody tr:nth-child(2) {
+	animation-delay: 420ms;
+}
+[data-theme='arcade'] .slot tbody tr:nth-child(3) {
+	animation-delay: 540ms;
+}
+[data-theme='arcade'] .slot tbody tr:nth-child(n + 4) {
+	animation-delay: 660ms;
+}
+
+/* ---------- cover: full-frame ready screen ---------- */
+[data-theme='arcade'] .layout-cover {
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	justify-content: center;
+	align-items: flex-start;
+	text-align: left;
+	padding: 176px 140px 190px;
+}
+[data-theme='arcade'] .layout-cover .slot-default {
+	position: relative;
+	z-index: 1;
+	max-width: 1500px;
+	padding: 64px 72px;
+	background: color-mix(in srgb, var(--bg) 72%, transparent);
+	border: 6px solid var(--fg);
+	box-shadow:
+		0 0 0 6px var(--bg),
+		0 0 0 12px var(--grid);
+}
+/*
+ * Sized for "long" first; the deck's own cover heading ("One idea per
+ * slide") is short and already showed well at 148px, kept as the
+ * [data-length='short'] value.
+ */
+[data-theme='arcade'] .layout-cover .slot-content h1 {
+	font-size: 96px;
+	line-height: 1.05;
+	max-width: 100%;
+	animation: arcade-wipe var(--dur) var(--ease) both;
+}
+[data-theme='arcade'] .layout-cover .slot-content h1[data-length='medium'] {
+	font-size: 122px;
+	line-height: 1.04;
+}
+[data-theme='arcade'] .layout-cover .slot-content h1[data-length='short'] {
+	font-size: 148px;
+	line-height: 1.02;
+}
+[data-theme='arcade'] .layout-cover p {
+	margin-top: 32px;
+	font-size: 48px;
+	line-height: 1.35;
+	max-width: 100%;
+}
+
+/* ---------- sidebar: the receipts panel ---------- */
+[data-theme='arcade'] .layout-sidebar {
+	display: grid;
+	grid-template-columns: 1fr 0.52fr;
+	gap: 48px;
+	padding: 176px 96px 150px;
+}
+/*
+ * The main column (~1105px wide) is a narrow column by this theme's own
+ * definition: its heading, paragraph and menu list get the narrow-column
+ * body scale (44px) rather than the general 48px, with room for real line
+ * height and margins instead of the compressed spacing a full 48-60px
+ * scale would have forced here.
+ */
+[data-theme='arcade'] .layout-sidebar .slot-default > h2 {
+	margin-bottom: 20px;
+}
+[data-theme='arcade'] .layout-sidebar .slot-default > p {
+	font-size: 44px;
+	line-height: 1.3;
+}
+[data-theme='arcade'] .layout-sidebar .slot-default > ul {
+	margin-top: 16px;
+}
+[data-theme='arcade'] .layout-sidebar .slot-default > ul > li {
+	padding: 14px 0 14px 80px;
+	font-size: 44px;
+	line-height: 1.3;
+}
+[data-theme='arcade'] .layout-sidebar .slot-default > ul > li::before {
+	top: 20px;
+	width: 34px;
+	height: 34px;
+	clip-path: polygon(0 0, 12px 0, 12px 6px, 24px 6px, 24px 15px, 34px 15px, 34px 24px, 24px 24px, 24px 34px, 12px 34px, 12px 24px, 0 24px);
+}
+[data-theme='arcade'] .layout-sidebar .slot-sidebar {
+	/* slot-default and slot-sidebar share a grid row, so without this the
+	 * panel would start level with the page padding alone and crowd the
+	 * STAGE counter in the top-right HUD. Pushing only the panel down (not
+	 * the whole layout, which would starve the main column's own list of
+	 * vertical room) clears it. */
+	margin-top: 56px;
+	padding: 44px 40px;
+	background: var(--surface);
+	border: 5px solid var(--grid);
+	border-left-width: 5px;
+}
+[data-theme='arcade'] .layout-sidebar .slot-sidebar h3 {
+	margin-top: 0;
+	font-size: 44px;
+}
+/* The sidebar panel itself (~575px wide) is the narrowest column in the
+ * theme; at the 40px floor rather than the wider narrow-column scale. */
+[data-theme='arcade'] .layout-sidebar .slot-sidebar p {
+	font-size: 40px;
+	line-height: 1.3;
+}
+[data-theme='arcade'] .layout-sidebar .slot-sidebar ul {
+	margin-top: 12px;
+}
+[data-theme='arcade'] .layout-sidebar .slot-sidebar > ul > li {
+	padding: 12px 0 12px 48px;
+	font-size: 40px;
+	line-height: 1.3;
+	border-bottom: 0;
+	animation: none;
+}
+[data-theme='arcade'] .layout-sidebar .slot-sidebar > ul > li::before {
+	width: 24px;
+	height: 24px;
+	top: 18px;
+	clip-path: polygon(0 0, 8px 0, 8px 4px, 16px 4px, 16px 10px, 24px 10px, 24px 16px, 16px 16px, 16px 24px, 8px 24px, 8px 16px, 0 16px);
+}
+
+/* ---------- blank: no chrome expectations ---------- */
+[data-theme='arcade'] .layout-blank {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 176px 96px 150px;
+}
+[data-theme='arcade'] .layout-blank h1 {
+	font-size: 148px;
+	line-height: 1.05;
+	text-align: center;
+}
+
+/* ---------- diagram: the mini-map ---------- */
+[data-theme='arcade'] .layout-default .slot:has(.mermaid-diagram) {
+	flex: 1;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+}
+/*
+ * A diagram slide steps its heading and caption down a size so the panel
+ * gets the full slide area under them (addendum: give diagrams the full
+ * slide area under the heading). At 112px, a heading long enough to wrap
+ * to two lines otherwise eats half the available height before the
+ * diagram gets any of it.
+ */
+[data-theme='arcade'] .slot:has(.mermaid-diagram) > h2 {
+	font-size: 68px;
+	line-height: 1.15;
+	margin-bottom: 20px;
+}
+[data-theme='arcade'] .mermaid-diagram {
+	flex: 1;
+	min-height: 0;
+	position: relative;
+	margin-top: 24px;
+	display: flex;
+	justify-content: center;
+	align-items: center;
+	background: var(--surface);
+	border: 5px solid var(--grid);
+}
+[data-theme='arcade'] .mermaid-diagram svg {
+	width: 100% !important;
+	height: 100% !important;
+	max-width: none !important;
+	shape-rendering: crispEdges;
+}
+[data-theme='arcade'] .mermaid-diagram .node rect,
+[data-theme='arcade'] .mermaid-diagram .node path,
+[data-theme='arcade'] .mermaid-diagram .node polygon {
+	stroke-width: 5px !important;
+}
+[data-theme='arcade'] .mermaid-diagram .flowchart-link {
+	stroke-width: 6px !important;
+}
+/* Mermaid draws its labels as <p> inside foreignObject; they size from the
+ * diagram's own font settings, not from the slot body copy rules. Text is
+ * excluded from the minimum-size check, so this can go well under 60px. */
+[data-theme='arcade'] .slot .mermaid-diagram p {
+	font-family: var(--font-mono);
+	font-size: 42px;
+	line-height: 1.3;
+	font-weight: 600;
+	letter-spacing: -0.01em;
+	text-wrap: initial;
+	width: auto;
+	margin: 0;
+	animation: none;
+}
+[data-theme='arcade'] .mermaid-diagram + p {
+	margin-top: 24px;
+	font-weight: 600;
+}
+[data-theme='arcade'] .mermaid-diagram + p::before {
+	content: '\25B8 ';
+	color: var(--accent-2);
+}
+
+/* ---------- live code block and asciinema chrome ----------
+ * Structure and behavior come from rich-blocks.css, which reads the
+ * --color-* bridge above; only the run button and code container border
+ * need a tweak for the pixel-chrome look. */
+[data-theme='arcade'] .live-code-block .run-button {
+	background-color: var(--accent-2);
+	color: var(--bg);
+	font-family: var(--font-mono);
+	font-weight: 700;
+	border-radius: 0;
+}
+[data-theme='arcade'] .live-code-block .code-container pre,
+[data-theme='arcade'] .live-code-block .result-container {
+	border-radius: 0;
+	border: 5px solid var(--grid);
+}
+[data-theme='arcade'] .asciinema-player-wrapper {
+	border: 5px solid var(--grid);
+}
+
+/* ---------- minimum-size safety net ----------
+ * Every layout rule above sets an explicit size for the slot text it knows
+ * about. This catches whatever it doesn't (fragment paragraphs, code
+ * without highlights, anything the kitchen-sink deck exercises that the
+ * rules above didn't anticipate), which would otherwise fall back to the
+ * base theme's much smaller default typography. Rules above with a more
+ * specific selector still win the cascade; this is the only place in the
+ * file that uses these exact bare selectors. */
+[data-theme='arcade'] .slot p,
+[data-theme='arcade'] .slot li {
+	font-size: 48px;
+	line-height: 1.4;
+}
+[data-theme='arcade'] pre code {
+	font-size: 40px;
+}
+[data-theme='arcade'] .slot td,
+[data-theme='arcade'] .slot th {
+	font-size: 44px;
+}

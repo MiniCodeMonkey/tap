@@ -1,17 +1,16 @@
 /**
- * Slide transitions for Tap presentations.
- * Provides reusable transition functions using Svelte's built-in transitions.
+ * Slide transition helpers for Tap presentations.
+ * Provides the reduced-motion and print-mode aware defaults, and the Motion
+ * variants each transition type animates through.
  *
  * Supports 5 transition types:
- * - none: Instant transition (no animation)
- * - fade: Opacity crossfade (default)
- * - slide: Horizontal slide in/out
- * - push: Horizontal slide with slight overlap
- * - zoom: Scale in/out
+ * - none: instant transition (no animation)
+ * - fade: opacity crossfade (default)
+ * - slide: horizontal slide in/out
+ * - push: horizontal slide with a soft opacity overlap
+ * - zoom: scale in/out
  */
 
-import { fade, fly, scale, crossfade } from 'svelte/transition';
-import type { TransitionConfig as SvelteTransitionConfig } from 'svelte/transition';
 import type { Transition } from '$lib/types';
 
 // ============================================================================
@@ -24,20 +23,6 @@ import type { Transition } from '$lib/types';
 export type TransitionDirection = 'forward' | 'backward';
 
 /**
- * Options for creating a slide transition.
- */
-export interface TransitionOptions {
-	/** Transition type to use */
-	type?: Transition;
-	/** Duration in milliseconds (default: 400) */
-	duration?: number;
-	/** Direction for directional transitions */
-	direction?: TransitionDirection;
-	/** Delay before transition starts in milliseconds */
-	delay?: number;
-}
-
-/**
  * Configuration for transition defaults.
  */
 export interface TransitionDefaults {
@@ -46,6 +31,35 @@ export interface TransitionDefaults {
 	/** Default duration in milliseconds */
 	defaultDuration: number;
 }
+
+/**
+ * A Motion animation target, keyed by the CSS/transform properties it sets.
+ */
+export type TransitionTarget = Record<string, number | string>;
+
+/**
+ * A Motion easing value: Motion's named `'linear'`, or a cubic-bezier control
+ * point array like Motion's own `Easing` type accepts.
+ */
+export type TransitionEasing = 'linear' | readonly [number, number, number, number];
+
+/**
+ * The three Motion variants a slide transition animates between, plus the
+ * easing curve that transition type animates with.
+ */
+export interface TransitionVariants {
+	initial: TransitionTarget;
+	animate: TransitionTarget;
+	exit: TransitionTarget;
+	ease: TransitionEasing;
+}
+
+/**
+ * Cubic-bezier control points for a fast-out, slow-in ease: motion starts
+ * quickly and settles gently into its resting state. Used as the `ease`
+ * curve for the slide, push, and zoom transition types.
+ */
+const CUBIC_OUT: TransitionEasing = [0.33, 1, 0.68, 1];
 
 // ============================================================================
 // Constants
@@ -106,10 +120,6 @@ export function onReducedMotionChange(
 	};
 }
 
-// ============================================================================
-// Transition Functions
-// ============================================================================
-
 /**
  * Check if the page is in print/PDF mode.
  * Print mode is indicated by ?print=true in the URL.
@@ -132,191 +142,8 @@ export function getEffectiveDuration(duration: number): number {
 	return duration;
 }
 
-/**
- * Create a "none" transition (instant, no animation).
- */
-export function transitionNone(
-	_node: Element,
-	_options?: TransitionOptions
-): SvelteTransitionConfig {
-	return {
-		duration: 0,
-		css: () => ''
-	};
-}
-
-/**
- * Create a "fade" transition (opacity crossfade).
- */
-export function transitionFade(
-	node: Element,
-	options: TransitionOptions = {}
-): SvelteTransitionConfig {
-	const duration = getEffectiveDuration(
-		options.duration ?? TRANSITION_DEFAULTS.defaultDuration
-	);
-	const delay = options.delay ?? 0;
-
-	return fade(node, { duration, delay });
-}
-
-/**
- * Create a "slide" transition (horizontal slide in/out).
- */
-export function transitionSlide(
-	node: Element,
-	options: TransitionOptions = {}
-): SvelteTransitionConfig {
-	const duration = getEffectiveDuration(
-		options.duration ?? TRANSITION_DEFAULTS.defaultDuration
-	);
-	const delay = options.delay ?? 0;
-	const direction = options.direction ?? 'forward';
-
-	// Slide from right when going forward, from left when going backward
-	const x = direction === 'forward' ? 100 : -100;
-
-	return fly(node, { x, duration, delay });
-}
-
-/**
- * Create a "push" transition (horizontal slide with opacity).
- * Similar to slide but with a softer overlap effect.
- */
-export function transitionPush(
-	node: Element,
-	options: TransitionOptions = {}
-): SvelteTransitionConfig {
-	const duration = getEffectiveDuration(
-		options.duration ?? TRANSITION_DEFAULTS.defaultDuration
-	);
-	const delay = options.delay ?? 0;
-	const direction = options.direction ?? 'forward';
-
-	// Smaller distance than slide for push effect
-	const x = direction === 'forward' ? 50 : -50;
-
-	return fly(node, { x, duration, delay, opacity: 0.5 });
-}
-
-/**
- * Create a "zoom" transition (scale in/out).
- */
-export function transitionZoom(
-	node: Element,
-	options: TransitionOptions = {}
-): SvelteTransitionConfig {
-	const duration = getEffectiveDuration(
-		options.duration ?? TRANSITION_DEFAULTS.defaultDuration
-	);
-	const delay = options.delay ?? 0;
-	const direction = options.direction ?? 'forward';
-
-	// Scale down when entering forward, scale up when entering backward
-	const start = direction === 'forward' ? 0.8 : 1.2;
-
-	return scale(node, { start, duration, delay });
-}
-
 // ============================================================================
-// Main Transition Factory
-// ============================================================================
-
-/**
- * Get the transition function for a given transition type.
- */
-export function getTransitionFunction(
-	type: Transition
-): (node: Element, options?: TransitionOptions) => SvelteTransitionConfig {
-	switch (type) {
-		case 'none':
-			return transitionNone;
-		case 'slide':
-			return transitionSlide;
-		case 'push':
-			return transitionPush;
-		case 'zoom':
-			return transitionZoom;
-		case 'fade':
-		default:
-			return transitionFade;
-	}
-}
-
-/**
- * Create a transition for a slide element.
- * This is the main function to use for slide transitions.
- *
- * @param node - The DOM element to transition
- * @param options - Transition options
- * @returns Svelte transition config
- *
- * @example
- * ```svelte
- * <script>
- *   import { createSlideTransition } from '$lib/utils/transitions';
- *
- *   let transitionType = 'fade';
- *   let direction = 'forward';
- * </script>
- *
- * <div
- *   in:createSlideTransition={{ type: transitionType, direction }}
- *   out:createSlideTransition={{ type: transitionType, direction }}
- * >
- *   Slide content
- * </div>
- * ```
- */
-export function createSlideTransition(
-	node: Element,
-	options: TransitionOptions = {}
-): SvelteTransitionConfig {
-	const type = options.type ?? TRANSITION_DEFAULTS.defaultTransition;
-	const transitionFn = getTransitionFunction(type);
-	return transitionFn(node, options);
-}
-
-// ============================================================================
-// Crossfade Transition
-// ============================================================================
-
-/**
- * Create a crossfade transition pair for smooth slide switching.
- * Returns [send, receive] functions for use with Svelte's crossfade.
- *
- * @example
- * ```svelte
- * <script>
- *   import { createCrossfade } from '$lib/utils/transitions';
- *
- *   const [send, receive] = createCrossfade({ duration: 400 });
- * </script>
- *
- * {#each slides as slide (slide.index)}
- *   <div in:receive={{ key: slide.index }} out:send={{ key: slide.index }}>
- *     {slide.content}
- *   </div>
- * {/each}
- * ```
- */
-export function createCrossfade(
-	options: { duration?: number; delay?: number } = {}
-) {
-	const duration = getEffectiveDuration(
-		options.duration ?? TRANSITION_DEFAULTS.defaultDuration
-	);
-	const delay = options.delay ?? 0;
-
-	return crossfade({
-		duration,
-		delay,
-		fallback: (node) => fade(node, { duration })
-	});
-}
-
-// ============================================================================
-// Utility Functions
+// Transition Resolution
 // ============================================================================
 
 /**
@@ -364,5 +191,68 @@ export function getTransitionDescription(type: Transition): string {
 			return 'Zoom in/out';
 		default:
 			return 'Unknown transition';
+	}
+}
+
+// ============================================================================
+// Motion Variants
+// ============================================================================
+
+/**
+ * Get the Motion variants for a slide transition type and direction.
+ * `initial` is where the entering slide starts, `animate` is its resting
+ * state, and `exit` is where the leaving slide animates to. Directional
+ * transitions (slide, push, zoom) mirror their offsets for `backward`.
+ *
+ * `fade` eases linearly, a plain constant-speed cross-fade; `slide`,
+ * `push`, and `zoom` ease with CUBIC_OUT, the fast-out, slow-in curve that
+ * suits a directional motion settling into place.
+ */
+export function getTransitionVariants(
+	type: Transition,
+	direction: TransitionDirection
+): TransitionVariants {
+	switch (type) {
+		case 'none':
+			return { initial: {}, animate: {}, exit: {}, ease: 'linear' };
+
+		case 'slide': {
+			const x = direction === 'forward' ? 100 : -100;
+			return {
+				initial: { x },
+				animate: { x: 0 },
+				exit: { x },
+				ease: CUBIC_OUT
+			};
+		}
+
+		case 'push': {
+			const x = direction === 'forward' ? 50 : -50;
+			return {
+				initial: { x, opacity: 0.5 },
+				animate: { x: 0, opacity: 1 },
+				exit: { x, opacity: 0.5 },
+				ease: CUBIC_OUT
+			};
+		}
+
+		case 'zoom': {
+			const scale = direction === 'forward' ? 0.8 : 1.2;
+			return {
+				initial: { scale },
+				animate: { scale: 1 },
+				exit: { scale },
+				ease: CUBIC_OUT
+			};
+		}
+
+		case 'fade':
+		default:
+			return {
+				initial: { opacity: 0 },
+				animate: { opacity: 1 },
+				exit: { opacity: 0 },
+				ease: 'linear'
+			};
 	}
 }

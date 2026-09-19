@@ -13,7 +13,34 @@ Presenter mode creates two synchronized views of your presentation:
 1. **Audience View** (`/`) - The full-screen presentation your audience sees
 2. **Presenter View** (`/presenter`) - Your private control panel with notes, timer, and navigation
 
-Both views stay perfectly in sync. Advance the slide in either window and the other follows automatically.
+Both views stay perfectly in sync. Advance the slide in either window and the other follows automatically, including the revealed fragments and the current step, so the presenter's current-slide panel always shows exactly what the audience sees.
+
+### Opening a window mid-talk
+
+When a new browser window connects while a talk is already underway, it either picks up the live slide or keeps its own, depending on the URL:
+
+- **No slide number in the URL** (e.g. opening `/presenter` fresh) - it lands on whatever slide, fragment, and step the talk is currently on.
+- **A deep link to the same slide** (e.g. reloading on `/#12` while the talk is on slide 12) - it takes the live fragment, step, and scroll position, so a reload keeps the fragments you've already revealed.
+- **A deep link to a different slide** (e.g. sharing `/#12` while the talk has moved on to slide 20) - the link wins. That window stays on slide 12 in its initial state and won't jump to slide 20 until you actually navigate it.
+
+The hash is weighed against the hub's state **only on the first state
+message after a page load**. A dropped connection that comes back sends
+another one, and every later message wins outright, so a presenter whose
+laptop reconnects mid-talk snaps to where the audience actually is instead
+of being pulled back to the hash it happened to load on.
+
+The hub does not remember a theme as part of that state, so a window that
+reconnects keeps whatever theme it was set to. It also refuses a slide
+index that is negative or past the last slide, so a stale or malformed
+message cannot send a viewer off the end of the deck.
+
+The dev server remembers the live slide, fragment, and step for 10 minutes
+after the last window closes, so reloading the only open window mid-talk
+lands back where you were rather than on slide 1. (Set
+`TAP_HUB_STATE_RETENTION` to a Go duration such as `0s` or `30s` on the
+`tap dev` process to change it; it exists for tests, not for presenting.)
+
+A PDF export (`?print=true`) never takes part in this at all: it's a static snapshot of one slide and never connects to the live talk, so exporting while a viewer is open can't pull a live slide into the screenshots.
 
 ### Starting Presenter Mode
 
@@ -50,7 +77,11 @@ notes: |
 -->
 ```
 
-Notes support full markdown formatting, so you can use bullet points, bold text, and even code snippets.
+Notes are shown as plain text with their line breaks and blank lines
+preserved, so write them as short lines or a small list. Markdown is not
+rendered there: `**bold**` shows as `**bold**`. A notes comment anywhere in
+the slide works too, and is the better form for long free text. See
+[Slide Directives](/reference/slide-directives#notes).
 
 ### Timer
 
@@ -90,7 +121,7 @@ This setup lets you:
 
 - Walk around freely while presenting
 - See your notes without looking at your laptop
-- Control slides with touch gestures
+- Advance slides with the presenter view's on-screen buttons
 
 ### QR Code for Easy Access
 
@@ -111,12 +142,12 @@ Scan the QR code with your phone or tablet to instantly open the presentation. N
 
 For sensitive presentations, you can protect the presenter view with a password:
 
-```yaml
----
-title: Confidential Results
-presenterPassword: secret123
----
+```bash
+tap dev presentation.md --presenter-password secret123
 ```
+
+The password is a `tap dev` flag, not a frontmatter key, so it never ends
+up in the deck file.
 
 When password protection is enabled:
 
@@ -125,21 +156,34 @@ When password protection is enabled:
 - Notes and upcoming slides stay private
 
 ::: warning
-The password is stored in plain text in your markdown file. Don't commit sensitive passwords to version control.
+The password is passed on the command line, so it lands in your shell
+history. It protects the presenter view on a shared network; it is not a
+substitute for not serving confidential material.
 :::
 
 ## Presenter Mode Keyboard Shortcuts
 
+In the presenter view:
+
 | Shortcut | Action |
 |----------|--------|
-| **S** | Open presenter view (from audience view) |
-| **Right** / **Space** | Next slide |
-| **Left** | Previous slide |
+| **Right**, **Down**, **Space**, **Enter** | Next fragment or step, then next slide |
+| **Left**, **Up**, **Backspace** | Previous fragment or step, then previous slide |
+| **Home** / **End** | First / last slide |
 | **R** | Reset timer |
-| **O** | Toggle slide overview |
-| **Esc** | Exit overview / fullscreen |
+
+In the audience view:
+
+| Shortcut | Action |
+|----------|--------|
+| **S** | Open the presenter view in a new window |
+| **O** | Toggle the slide overview |
+| **T** | Cycle themes |
 | **F** | Toggle fullscreen |
-| **B** | Black screen (pause) |
+| **Esc** | Close the overview, or exit fullscreen |
+
+The presenter view also has on-screen previous and next buttons, which is
+what makes it usable from a phone or tablet.
 
 ## Best Practices
 

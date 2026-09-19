@@ -1,0 +1,34 @@
+{
+	"name": "Newsprint",
+	"polarity": "light",
+	"pitch": "A war story or postmortem told as front-page news, where every slide is a headline and every number is a front-page figure.",
+	"illustration": {
+		"medium": "flat vector styled as a front-page newspaper illustration or engraving, on cream newsprint",
+		"line": "2px strokes with a slightly inked, halftone-adjacent feel, hard edges",
+		"shapes": "rectangles and columns like a broadsheet layout, no rounded corners",
+		"texture": "subtle halftone dot or newsprint grain, never smooth gradients",
+		"palette_use": "cream background dominant, near-black ink, one masthead red used only for the headline element",
+		"mood": "urgent, front-page, matter-of-fact",
+		"avoid": "gradients, glossy 3D, rounded corners, soft pastel color, modern UI chrome"
+	},
+	"mermaid": {
+		"themeVariables": {
+			"fontFamily": "Newsreader",
+			"primaryColor": "#980b13",
+			"primaryTextColor": "#f2ede1",
+			"primaryBorderColor": "#980b13",
+			"lineColor": "#16130f",
+			"background": "#f2ede1",
+			"mainBkg": "#980b13",
+			"textColor": "#16130f",
+			"nodeTextColor": "#f2ede1",
+			"nodeBorder": "#980b13",
+			"clusterBkg": "#e6e0d2",
+			"clusterBorder": "#16130f",
+			"edgeLabelBackground": "#f2ede1",
+			"fontSize": "30px"
+		},
+		"quietStyle": "fill:#f2ede1,stroke:#16130f,color:#16130f",
+		"curve": "stepAfter"
+	}
+}

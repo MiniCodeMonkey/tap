@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	tea "github.com/charmbracelet/bubbletea"
 )
 
 func TestGenerateStarterMarkdown(t *testing.T) {
@@ -34,7 +36,8 @@ func TestGenerateStarterMarkdown(t *testing.T) {
 				"<!-- pause -->",
 				"## Key Points",
 				"```go",
-				"|||",
+				"::left",
+				"::right",
 				"## Two Column Layout",
 				`layout: quote`,
 				"> \"The best way to predict the future",
@@ -126,8 +129,8 @@ func TestGenerateStarterMarkdown_HasCodeExample(t *testing.T) {
 func TestGenerateStarterMarkdown_HasTwoColumnExample(t *testing.T) {
 	md := GenerateStarterMarkdown("Test", "paper", "2024-01-01", "Author")
 
-	if !strings.Contains(md, "|||") {
-		t.Error("Markdown should contain two-column separator")
+	if !strings.Contains(md, "::left") || !strings.Contains(md, "::right") {
+		t.Error("Markdown should contain the left and right slot markers")
 	}
 }
 
@@ -207,41 +210,6 @@ func TestNewModel_GenerateDefaultFilename(t *testing.T) {
 	}
 }
 
-func TestNewModel_FindThemeIndex(t *testing.T) {
-	m := NewNewModel("", "")
-
-	tests := []struct {
-		theme    string
-		expected int
-	}{
-		// New theme names
-		{"paper", 0},
-		{"noir", 1},
-		{"aurora", 2},
-		{"phosphor", 3},
-		{"poster", 4},
-		{"PAPER", 0},  // case insensitive
-		{"Aurora", 2}, // case insensitive
-		// Legacy theme names (backwards compatibility)
-		{"minimal", 0},   // maps to paper
-		{"gradient", 2},  // maps to aurora
-		{"terminal", 3},  // maps to phosphor
-		{"brutalist", 4}, // maps to poster
-		{"keynote", 1},   // maps to noir
-		{"unknown", 0},   // defaults to first
-		{"", 0},          // empty defaults to first
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.theme, func(t *testing.T) {
-			got := m.findThemeIndex(tt.theme)
-			if got != tt.expected {
-				t.Errorf("findThemeIndex(%q) = %d, want %d", tt.theme, got, tt.expected)
-			}
-		})
-	}
-}
-
 func TestNewModel_Init(t *testing.T) {
 	m := NewNewModel("", "")
 	cmd := m.Init()
@@ -280,7 +248,6 @@ func TestNewModel_GetResult(t *testing.T) {
 	m := NewNewModel("", "")
 	m.titleInput.SetValue("Test Title")
 	m.filenameInput.SetValue("test.md")
-	m.themeIndex = 2 // aurora
 
 	result := m.GetResult()
 
@@ -288,8 +255,8 @@ func TestNewModel_GetResult(t *testing.T) {
 		t.Errorf("GetResult().Title = %q, want %q", result.Title, "Test Title")
 	}
 
-	if result.Theme != "aurora" {
-		t.Errorf("GetResult().Theme = %q, want %q", result.Theme, "aurora")
+	if result.Theme != "base" {
+		t.Errorf("GetResult().Theme = %q, want %q", result.Theme, "base")
 	}
 
 	if result.Filename != "test.md" {
@@ -313,28 +280,42 @@ func TestNewModel_GetResult_Aborted(t *testing.T) {
 }
 
 func TestAvailableThemes(t *testing.T) {
-	expectedThemes := []string{"paper", "noir", "aurora", "phosphor", "poster", "signal", "carbon", "spectrum", "mono", "flux"}
-
-	if len(AvailableThemes) != len(expectedThemes) {
-		t.Errorf("Expected %d themes, got %d", len(expectedThemes), len(AvailableThemes))
+	if len(AvailableThemes) != 21 {
+		t.Errorf("Expected 21 themes (base + 20), got %d", len(AvailableThemes))
 	}
 
-	for i, expected := range expectedThemes {
-		if AvailableThemes[i].Name != expected {
-			t.Errorf("Theme[%d].Name = %q, want %q", i, AvailableThemes[i].Name, expected)
-		}
+	if AvailableThemes[0].Name != "base" {
+		t.Errorf("Theme[0].Name = %q, want %q", AvailableThemes[0].Name, "base")
+	}
 
-		if AvailableThemes[i].Description == "" {
-			t.Errorf("Theme[%d].Description should not be empty", i)
-		}
+	if AvailableThemes[0].Description == "" {
+		t.Error("Theme[0].Description should not be empty")
 	}
 }
 
 func TestNewModel_PrefilledValues(t *testing.T) {
-	t.Run("prefilled theme", func(t *testing.T) {
-		m := NewNewModel("phosphor", "")
-		if m.prefilledTheme != "phosphor" {
-			t.Errorf("prefilledTheme = %q, want %q", m.prefilledTheme, "phosphor")
+	t.Run("prefilled theme is stored", func(t *testing.T) {
+		m := NewNewModel("terminal", "")
+		if m.prefilledTheme != "terminal" {
+			t.Errorf("prefilledTheme = %q, want %q", m.prefilledTheme, "terminal")
+		}
+	})
+
+	t.Run("prefilled theme selects it once submitted", func(t *testing.T) {
+		m := NewNewModel("terminal", "")
+		updated, _ := m.updateTitle(tea.KeyMsg{Type: tea.KeyEnter})
+		result := updated.(NewModel).GetResult()
+		if result.Theme != "terminal" {
+			t.Errorf("GetResult().Theme = %q, want %q", result.Theme, "terminal")
+		}
+	})
+
+	t.Run("unknown prefilled theme falls back to base", func(t *testing.T) {
+		m := NewNewModel("not-a-real-theme", "")
+		updated, _ := m.updateTitle(tea.KeyMsg{Type: tea.KeyEnter})
+		result := updated.(NewModel).GetResult()
+		if result.Theme != "base" {
+			t.Errorf("GetResult().Theme = %q, want %q", result.Theme, "base")
 		}
 	})
 
@@ -358,7 +339,6 @@ func TestNewModel_FileCreation(t *testing.T) {
 	m := NewNewModel("", "")
 	m.titleInput.SetValue("Test Presentation")
 	m.filenameInput.SetValue("test-output.md")
-	m.themeIndex = 0
 
 	// Simulate finalize
 	model, _ := m.finalize()
@@ -375,7 +355,7 @@ func TestNewModel_FileCreation(t *testing.T) {
 		t.Error("File should contain the title")
 	}
 
-	if !strings.Contains(string(content), "theme: paper") {
+	if !strings.Contains(string(content), "theme: base") {
 		t.Error("File should contain the theme")
 	}
 }
@@ -391,7 +371,6 @@ func TestNewModel_FileCreation_AddsExtension(t *testing.T) {
 	m := NewNewModel("", "")
 	m.titleInput.SetValue("Test")
 	m.filenameInput.SetValue("no-extension") // No .md extension
-	m.themeIndex = 0
 
 	model, _ := m.finalize()
 	m = model.(NewModel)
@@ -417,7 +396,6 @@ func TestNewModel_OutputPath(t *testing.T) {
 	m := NewNewModel("", "")
 	m.titleInput.SetValue("Test")
 	m.filenameInput.SetValue("output.md")
-	m.themeIndex = 0
 
 	model, _ := m.finalize()
 	m = model.(NewModel)
@@ -462,7 +440,6 @@ func TestNewModel_ViewSuccess(t *testing.T) {
 	m := NewNewModel("", "")
 	m.titleInput.SetValue("Success Test")
 	m.filenameInput.SetValue("success.md")
-	m.themeIndex = 1 // noir
 
 	model, _ := m.finalize()
 	m = model.(NewModel)

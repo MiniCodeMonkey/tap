@@ -1,0 +1,37 @@
+{
+	"name": "Ink",
+	"polarity": "light",
+	"pitch": "A calm, reflective talk about hard-won lessons, where each slide holds one thought and a lot of silence around it.",
+	"illustration": {
+		"medium": "flat vector, ink-and-brush illustration on warm rice-paper cream",
+		"line": "variable-width brush strokes, 1 to 4px, tapered ends like real ink",
+		"shapes": "a single confident brush stroke or seal-mark motif, lots of empty space around it",
+		"texture": "faint paper grain, occasional ink-bleed edge",
+		"palette_use": "warm cream background dominant, near-black ink, one vermilion red used sparingly like a seal stamp",
+		"mood": "calm, deliberate, brushed by hand",
+		"avoid": "gradients, digital UI chrome, neon color, symmetry, clutter"
+	},
+	"mermaid": {
+		"themeVariables": {
+			"fontFamily": "Zen Kaku Gothic New",
+			"primaryColor": "#F5F0E6",
+			"primaryTextColor": "#1A1815",
+			"primaryBorderColor": "#1A1815",
+			"nodeTextColor": "#1A1815",
+			"lineColor": "#1A1815",
+			"background": "#F5F0E6",
+			"mainBkg": "#F5F0E6",
+			"textColor": "#1A1815",
+			"nodeBorder": "#1A1815",
+			"clusterBkg": "#EBE4D6",
+			"clusterBorder": "#544E45",
+			"edgeLabelBackground": "#F5F0E6",
+			"titleColor": "#1A1815",
+			"secondaryColor": "#EBE4D6",
+			"tertiaryColor": "#EBE4D6",
+			"fontSize": "36px"
+		},
+		"quietStyle": "fill:#F5F0E6,stroke:#544E45,color:#544E45",
+		"curve": "basis"
+	}
+}

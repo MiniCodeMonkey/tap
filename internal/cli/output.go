@@ -28,14 +28,18 @@ func Successln(a ...any) {
 	successColor.Println(a...)
 }
 
-// Error prints an error message in red
+// Error prints an error message in red to standard error. Errors are
+// diagnostics, not command output, so they must never land on standard
+// output where a script or an LLM reading a command's result (for example
+// tap screenshot's written paths) would see them mixed in.
 func Error(format string, a ...any) {
-	errorColor.Printf(format, a...)
+	errorColor.Fprintf(color.Error, format, a...)
 }
 
-// Errorln prints an error message in red with a newline
+// Errorln prints an error message in red to standard error with a newline.
+// See Error for why standard error, not standard output.
 func Errorln(a ...any) {
-	errorColor.Println(a...)
+	errorColor.Fprintln(color.Error, a...)
 }
 
 // Info prints an informational message in blue
@@ -48,14 +52,17 @@ func Infoln(a ...any) {
 	infoColor.Println(a...)
 }
 
-// Warning prints a warning message in yellow
+// Warning prints a warning message in yellow to standard error. Warnings
+// are diagnostics, not command output; see Error for why that means
+// standard error, not standard output.
 func Warning(format string, a ...any) {
-	warningColor.Printf(format, a...)
+	warningColor.Fprintf(color.Error, format, a...)
 }
 
-// Warningln prints a warning message in yellow with a newline
+// Warningln prints a warning message in yellow to standard error with a
+// newline. See Warning for why standard error, not standard output.
 func Warningln(a ...any) {
-	warningColor.Println(a...)
+	warningColor.Fprintln(color.Error, a...)
 }
 
 // SuccessSprint returns a success message formatted in green

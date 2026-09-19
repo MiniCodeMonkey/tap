@@ -1,0 +1,30 @@
+{
+	"name": "Bauhaus",
+	"polarity": "light",
+	"pitch": "A bold, opinionated talk about first principles, where every idea is reduced to a circle, a triangle, or a square.",
+	"illustration": {
+		"medium": "flat vector, Bauhaus school poster illustration on warm cream",
+		"line": "4px flat strokes where used, mostly line-free solid shapes",
+		"shapes": "primary geometric forms only: circles, triangles, and squares, composed in bold overlapping arrangements",
+		"texture": "none, pure flat color fields",
+		"palette_use": "cream background dominant, one primary red, one primary blue, and one mustard yellow used as the full accent set, each as a solid shape",
+		"mood": "bold, reductive, first-principles confidence",
+		"avoid": "gradients, photorealism, hand-drawn wobble, decorative ornament, any shape beyond circle/triangle/square"
+	},
+	"mermaid": {
+		"themeVariables": {
+			"fontFamily": "Outfit",
+			"primaryColor": "#1D3F9E",
+			"primaryTextColor": "#F2EAD8",
+			"primaryBorderColor": "#141414",
+			"lineColor": "#141414",
+			"nodeTextColor": "#F2EAD8",
+			"titleColor": "#141414",
+			"secondaryColor": "#F2B90F",
+			"tertiaryColor": "#F2EAD8",
+			"fontSize": "28px"
+		},
+		"quietStyle": "fill:#F2EAD8,stroke:#141414,color:#141414",
+		"curve": "linear"
+	}
+}

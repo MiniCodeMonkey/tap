@@ -1,0 +1,1892 @@
+/**
+ * Zine theme.
+ * An opinionated, scrappy talk with a point to argue: cut, pasted, and
+ * photocopied the night before. Every block is a scrap of paper slapped
+ * onto a grey photocopy bed, held with tape, labelled with a label maker,
+ * and the one thing being argued gets a swipe of yellow highlighter.
+ *
+ * The accent is never a text color. It is always a swipe behind black type.
+ */
+
+@import '@fontsource/permanent-marker/latin-400.css';
+@import '@fontsource/special-elite/latin-400.css';
+@import '@fontsource/courier-prime/latin-400.css';
+@import '@fontsource/courier-prime/latin-700.css';
+@import '@fontsource/alfa-slab-one/latin-400.css';
+@import '@fontsource/archivo-black/latin-400.css';
+
+[data-theme='zine'] {
+	/* ---------- design-spec tokens ---------- */
+	--bg: #e8e5dd;
+	--fg: #0d0d0d;
+	--muted: #3a3a3a;
+	--accent: #ffe600;
+	--accent-text: #0d0d0d;
+	--surface: #faf8f1;
+	--font-display: 'Permanent Marker', 'Marker Felt', cursive;
+	--font-body: 'Special Elite', 'Courier New', monospace;
+	--font-mono: 'Courier Prime', 'Courier New', monospace;
+	--font-cut-a: 'Alfa Slab One', serif;
+	--font-cut-b: 'Archivo Black', sans-serif;
+	--ease: cubic-bezier(0.3, 1.35, 0.5, 1);
+	--dur: 420ms;
+	--space-unit: 24px;
+	--radius: 3px;
+	--stroke-width: 6px;
+	--step: 120ms;
+
+	/* ---------- collage parts ---------- */
+	--shadow: color-mix(in srgb, var(--fg) 34%, transparent);
+	--hard-shadow: 6px 8px 0 var(--shadow);
+	--tape: color-mix(in srgb, color-mix(in srgb, var(--muted) 30%, var(--bg)) 90%, transparent);
+	--swipe: linear-gradient(177deg, transparent 10%, var(--accent) 12%, var(--accent) 90%, transparent 92%);
+	--tape-settle: 220ms cubic-bezier(0.2, 0.8, 0.3, 1);
+	--tear: polygon(
+		0 0,
+		100% 0,
+		100% calc(100% - 8px),
+		97.7% calc(100% - 5px),
+		95.5% calc(100% - 13px),
+		93.2% calc(100% - 7px),
+		90.9% calc(100% - 2px),
+		88.6% calc(100% - 2px),
+		86.4% calc(100% - 11px),
+		84.1% calc(100% - 16px),
+		81.8% calc(100% - 2px),
+		79.5% calc(100% - 9px),
+		77.3% calc(100% - 16px),
+		75% calc(100% - 2px),
+		72.7% calc(100% - 16px),
+		70.5% calc(100% - 5px),
+		68.2% calc(100% - 2px),
+		65.9% calc(100% - 2px),
+		63.6% calc(100% - 13px),
+		61.4% calc(100% - 13px),
+		59.1% calc(100% - 2px),
+		56.8% calc(100% - 5px),
+		54.5% calc(100% - 2px),
+		52.3% calc(100% - 16px),
+		50% calc(100% - 13px),
+		47.7% calc(100% - 2px),
+		45.5% calc(100% - 11px),
+		43.2% calc(100% - 16px),
+		40.9% calc(100% - 2px),
+		38.6% calc(100% - 5px),
+		36.4% calc(100% - 7px),
+		34.1% calc(100% - 7px),
+		31.8% calc(100% - 16px),
+		29.5% calc(100% - 2px),
+		27.3% calc(100% - 16px),
+		25% calc(100% - 16px),
+		22.7% calc(100% - 13px),
+		20.5% calc(100% - 2px),
+		18.2% calc(100% - 5px),
+		15.9% calc(100% - 2px),
+		13.6% calc(100% - 16px),
+		11.4% calc(100% - 11px),
+		9.1% calc(100% - 5px),
+		6.8% calc(100% - 9px),
+		4.5% calc(100% - 13px),
+		2.3% calc(100% - 5px),
+		0 calc(100% - 8px)
+	);
+	--tape-cut: polygon(
+		0 0,
+		4% 18%,
+		0 34%,
+		4% 52%,
+		0 70%,
+		4% 86%,
+		0 100%,
+		100% 100%,
+		96% 84%,
+		100% 66%,
+		96% 48%,
+		100% 30%,
+		96% 14%,
+		100% 0
+	);
+	--burst: polygon(
+		50% 0%,
+		58.1% 9.3%,
+		69.1% 3.8%,
+		73.1% 15.5%,
+		85.4% 14.6%,
+		84.5% 26.9%,
+		96.2% 30.9%,
+		90.7% 41.9%,
+		100% 50%,
+		90.7% 58.1%,
+		96.2% 69.1%,
+		84.5% 73.1%,
+		85.4% 85.4%,
+		73.1% 84.5%,
+		69.1% 96.2%,
+		58.1% 90.7%,
+		50% 100%,
+		41.9% 90.7%,
+		30.9% 96.2%,
+		26.9% 84.5%,
+		14.6% 85.4%,
+		15.5% 73.1%,
+		3.8% 69.1%,
+		9.3% 58.1%,
+		0% 50%,
+		9.3% 41.9%,
+		3.8% 30.9%,
+		15.5% 26.9%,
+		14.6% 14.6%,
+		26.9% 15.5%,
+		30.9% 3.8%,
+		41.9% 9.3%
+	);
+
+	/*
+	 * Bridge to the base theme's token names, which the shared live code
+	 * block, map, badge, tag, and prose styles read.
+	 */
+	--color-bg: var(--bg);
+	--color-text: var(--fg);
+	--color-muted: var(--muted);
+	--color-accent: var(--accent);
+	--color-code-bg: var(--surface);
+	--color-code-text: var(--fg);
+	--color-code-inline-bg: var(--fg);
+	--color-border: var(--fg);
+	--color-surface: var(--surface);
+	--color-surface-elevated: var(--surface);
+	--color-link: var(--accent-text);
+	--font-sans: var(--font-body);
+
+	/* Shiki: black type on paper, comments and strings in grey, nothing
+	 * else. The highlighter does the pointing, not the syntax colors. */
+	--shiki-foreground: var(--fg);
+	--shiki-background: transparent;
+	--shiki-token-comment: var(--muted);
+	--shiki-token-string: var(--muted);
+	--shiki-token-string-expression: var(--muted);
+	--shiki-token-keyword: var(--fg);
+	--shiki-token-function: var(--fg);
+	--shiki-token-constant: var(--fg);
+	--shiki-token-parameter: var(--fg);
+	--shiki-token-punctuation: var(--fg);
+	--shiki-token-link: var(--fg);
+}
+
+/* Motion: blocks are slapped down and settle, tape goes on last. */
+@keyframes zine-paste {
+	0% {
+		opacity: 0;
+		transform: translateY(-46px) rotate(3deg) scale(1.03);
+	}
+	30% {
+		opacity: 1;
+	}
+	100% {
+		opacity: 1;
+		transform: translateY(0) rotate(0deg) scale(1);
+	}
+}
+@keyframes zine-fade {
+	from {
+		opacity: 0;
+	}
+	to {
+		opacity: 1;
+	}
+}
+@keyframes zine-tape {
+	from {
+		opacity: 0;
+		scale: 1.3;
+	}
+	to {
+		opacity: 1;
+		scale: 1;
+	}
+}
+@keyframes zine-sway {
+	from {
+		rotate: -11deg;
+	}
+	to {
+		rotate: -6deg;
+	}
+}
+
+/* ============================================================================
+ * The page: photocopy bed, toner grain, folio
+ * ============================================================================ */
+
+[data-theme='zine'] .slide[data-layout] {
+	background-color: var(--bg);
+	color: var(--fg);
+	font-family: var(--font-body);
+	font-weight: 400;
+	font-size: 48px;
+	line-height: 1.4;
+}
+
+/* Burnt copier edges and toner grain lie over everything on the page. */
+[data-theme='zine'] .slide[data-layout]::before {
+	content: '';
+	position: absolute;
+	inset: 0;
+	pointer-events: none;
+	z-index: 9;
+	background:
+		url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='320' height='320'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.62' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .05 0 0 0 0 .05 0 0 0 0 .05 .7 0 0 0 -.3'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url%28%23n%29'/%3E%3C/svg%3E"),
+		linear-gradient(
+			90deg,
+			color-mix(in srgb, var(--fg) 14%, transparent),
+			transparent 4%,
+			transparent 96%,
+			color-mix(in srgb, var(--fg) 16%, transparent)
+		),
+		linear-gradient(
+			180deg,
+			color-mix(in srgb, var(--fg) 9%, transparent),
+			transparent 3%,
+			transparent 97%,
+			color-mix(in srgb, var(--fg) 12%, transparent)
+		);
+}
+
+/* Folio: a typed scrap in the bottom margin. */
+[data-theme='zine'] .slide[data-layout]::after {
+	content: 'p. ' attr(data-index);
+	position: absolute;
+	right: 96px;
+	bottom: 30px;
+	z-index: 3;
+	background: var(--surface);
+	color: var(--fg);
+	box-shadow: 4px 5px 0 var(--shadow);
+	font: 700 32px/1 var(--font-mono);
+	padding: 12px 18px 8px;
+	rotate: 3deg;
+	animation: zine-tape var(--tape-settle) 900ms both;
+}
+[data-theme='zine'] .slide[data-layout='blank']::after,
+[data-theme='zine'] .slide[data-layout].has-map::after {
+	content: none;
+}
+
+/* Label-maker strip: the tag, every h3, and the generated layout labels. */
+[data-theme='zine'] .slide-tag,
+[data-theme='zine'] .slot h3,
+[data-theme='zine'] .layout-title .slot::before,
+[data-theme='zine'] .layout-big-stat::before {
+	width: fit-content;
+	max-width: 100%;
+	background: var(--fg);
+	color: var(--surface);
+	font: 700 34px/1 var(--font-mono);
+	letter-spacing: 0.2em;
+	text-transform: uppercase;
+	padding: 15px 26px 11px;
+	border-radius: 3px;
+	rotate: -2deg;
+}
+[data-theme='zine'] .slide-tag {
+	top: 44px;
+	left: 96px;
+	z-index: 3;
+	transform-origin: left center;
+	animation: zine-paste var(--dur) var(--ease) both;
+}
+
+/* Badge: a price sticker, highlighter yellow with a hand-cut black edge. */
+[data-theme='zine'] .slide-badge {
+	top: 38px;
+	right: 96px;
+	z-index: 3;
+	background: var(--accent);
+	color: var(--fg);
+	border: 5px solid var(--fg);
+	box-shadow: 4px 5px 0 var(--shadow);
+	font: 400 34px/1 var(--font-cut-b);
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+	padding: 10px 20px 8px;
+	rotate: 4deg;
+	animation: zine-tape var(--tape-settle) 1000ms both;
+}
+
+/* ============================================================================
+ * Layout frame
+ * ============================================================================ */
+
+[data-theme='zine'] [class^='layout-'] {
+	padding: 96px;
+	text-align: left;
+}
+/* A tagged slide starts its content below the label strip. */
+[data-theme='zine'] .slide[data-layout]:has(> .slide-tag) [class^='layout-'] {
+	padding-top: 140px;
+}
+/*
+ * A component's own root commonly fills `.deck-component-root` with an
+ * inline `position: absolute; inset: 0`, resolving against the padding
+ * edge, so real `padding` would sit inside it and get filled over; a
+ * transparent `border` reserves the same margin instead.
+ */
+[data-theme='zine'] .slide[data-layout='component'] > .slide-content > .deck-component-root,
+[data-theme='zine'] .slide[data-layout='component'] > .slide-content > .scroll-content > .deck-component-root {
+	border-width: 96px;
+	border-style: solid;
+	border-color: transparent;
+	text-align: left;
+}
+[data-theme='zine'] .slide[data-layout='component']:has(> .slide-tag) > .slide-content > .deck-component-root,
+[data-theme='zine'] .slide[data-layout='component']:has(> .slide-tag) > .slide-content > .scroll-content > .deck-component-root {
+	border-top-width: 140px;
+}
+/* A slide's content is centered in the frame by default, the way base does
+ * it, so a short list or a two-line code sample doesn't strand itself at
+ * the top with a dead lower third; a slide dense enough to fill the frame
+ * looks the same either way. */
+[data-theme='zine'] .layout-default,
+[data-theme='zine'] .layout-code-focus {
+	justify-content: center;
+	gap: 0;
+}
+
+/* A slot never grows past its column, however long a code line inside is. */
+[data-theme='zine'] .slot {
+	min-width: 0;
+	max-width: 100%;
+}
+
+/* Every block in a slot is pasted in turn. */
+[data-theme='zine'] .slot {
+	--o: 0;
+}
+[data-theme='zine'] .slot-caption,
+[data-theme='zine'] .slot-attribution,
+[data-theme='zine'] .slot-left {
+	--o: 2;
+}
+[data-theme='zine'] .slot-center {
+	--o: 3;
+}
+[data-theme='zine'] .slot-right,
+[data-theme='zine'] .slot-media,
+[data-theme='zine'] .slot-sidebar {
+	--o: 4;
+}
+[data-theme='zine'] .slot > * {
+	--i: 1;
+	animation: zine-paste var(--dur) var(--ease) both;
+	animation-delay: calc((var(--i) + var(--o)) * var(--step));
+}
+[data-theme='zine'] .slot > :nth-child(2) {
+	--i: 3;
+}
+[data-theme='zine'] .slot > :nth-child(3) {
+	--i: 4;
+}
+[data-theme='zine'] .slot > :nth-child(4) {
+	--i: 5;
+}
+[data-theme='zine'] .slot > :nth-child(n + 5) {
+	--i: 6;
+}
+
+/* A fragment stays off the page until its turn, then gets slapped down. */
+[data-theme='zine'] .slot [data-fragment-index].fragment-hidden {
+	animation: none;
+	opacity: 0;
+}
+[data-theme='zine'] .slot [data-fragment-index].fragment-visible {
+	animation: zine-paste var(--dur) var(--ease) both;
+}
+
+/* ============================================================================
+ * Pasted paper
+ * The sheet is a clipped pseudo-element, so the hard drop shadow on the
+ * element follows the torn edge.
+ * ============================================================================ */
+
+[data-theme='zine'] .layout-title .slot h1,
+[data-theme='zine'] .layout-title .slot h2,
+[data-theme='zine'] .layout-default .slot > h1:only-child,
+[data-theme='zine'] .layout-cover .slot h1,
+[data-theme='zine'] .slot pre:where(:not(.ap-terminal, .result-output, .result-error)),
+[data-theme='zine'] .slot-caption p,
+[data-theme='zine'] .layout-two-column .slot-left,
+[data-theme='zine'] .layout-two-column .slot-right,
+[data-theme='zine'] .layout-three-column .slot-left,
+[data-theme='zine'] .layout-three-column .slot-center,
+[data-theme='zine'] .layout-three-column .slot-right,
+[data-theme='zine'] .layout-sidebar .slot-sidebar,
+[data-theme='zine'] .live-code-block .result-container,
+[data-theme='zine'] .slot blockquote {
+	position: relative;
+	isolation: isolate;
+	filter: drop-shadow(6px 8px 0 var(--shadow));
+}
+[data-theme='zine'] .layout-title .slot h1::before,
+[data-theme='zine'] .layout-title .slot h2::before,
+[data-theme='zine'] .layout-default .slot > h1:only-child::before,
+[data-theme='zine'] .layout-cover .slot h1::before,
+[data-theme='zine'] .slot pre:where(:not(.ap-terminal, .result-output, .result-error))::before,
+[data-theme='zine'] .slot-caption p::before,
+[data-theme='zine'] .layout-two-column .slot-left::before,
+[data-theme='zine'] .layout-two-column .slot-right::before,
+[data-theme='zine'] .layout-three-column .slot-left::before,
+[data-theme='zine'] .layout-three-column .slot-center::before,
+[data-theme='zine'] .layout-three-column .slot-right::before,
+[data-theme='zine'] .layout-sidebar .slot-sidebar::before,
+[data-theme='zine'] .live-code-block .result-container::before,
+[data-theme='zine'] .slot blockquote::before {
+	content: '';
+	position: absolute;
+	inset: 0 0 -14px 0;
+	z-index: -1;
+	background: var(--surface);
+	clip-path: var(--tear);
+}
+[data-theme='zine'] .slot blockquote::before,
+[data-theme='zine'] .layout-title .slot h2::before {
+	background: var(--fg);
+}
+
+/* Tape: one strip across the top edge of a sheet. */
+[data-theme='zine'] .layout-title .slot h1::after,
+[data-theme='zine'] .layout-default .slot > h1:only-child::after,
+[data-theme='zine'] .layout-cover .slot h1::after,
+[data-theme='zine'] .slot pre:where(:not(.ap-terminal, .result-output, .result-error))::after,
+[data-theme='zine'] .slot-caption p::after,
+[data-theme='zine'] .layout-two-column .slot-left::after,
+[data-theme='zine'] .layout-two-column .slot-right::after,
+[data-theme='zine'] .layout-three-column .slot-left::after,
+[data-theme='zine'] .layout-three-column .slot-center::after,
+[data-theme='zine'] .layout-three-column .slot-right::after,
+[data-theme='zine'] .layout-sidebar .slot-sidebar::after {
+	content: '';
+	position: absolute;
+	left: calc(50% - 105px);
+	top: -28px;
+	width: 210px;
+	height: 50px;
+	background: var(--tape);
+	clip-path: var(--tape-cut);
+	rotate: -5deg;
+	animation: zine-tape var(--tape-settle) 1100ms both;
+}
+
+/* ============================================================================
+ * Type
+ * ============================================================================ */
+
+[data-theme='zine'] .slot :where(h1, h2, h3, h4, h5, h6, p, ul, ol, li, blockquote, pre, table, figure) {
+	margin: 0;
+	padding: 0;
+}
+[data-theme='zine'] .slot h1,
+[data-theme='zine'] .slot h2,
+[data-theme='zine'] .slot h4 {
+	font-family: var(--font-display);
+	font-weight: 400;
+	letter-spacing: 0;
+	text-wrap: balance;
+}
+[data-theme='zine'] .slot h1 {
+	font-size: 150px;
+	line-height: 1.08;
+}
+[data-theme='zine'] .slot h2 {
+	font-size: var(--h2-size, 116px);
+	line-height: 1.05;
+	margin: var(--h2-margin, 0 0 40px);
+	max-width: 100%;
+	rotate: -1deg;
+	transform-origin: left center;
+}
+/* --h2-size is already sized for a long (60+ character) heading in every
+ * layout that sets it. A short or medium one gets scaled up from whatever
+ * base that layout chose, proportionally, so a two-word slot heading keeps
+ * the same impact the mockup intended. */
+[data-theme='zine'] .slot h2[data-length='medium'] {
+	font-size: calc(var(--h2-size, 116px) * 1.08);
+}
+[data-theme='zine'] .slot h2[data-length='short'] {
+	font-size: calc(var(--h2-size, 116px) * 1.18);
+}
+/* A badge sits top right, so a heading beside it stops short of it. */
+[data-theme='zine'] .slide[data-layout]:has(> .slide-badge) .slot-default > h2:first-child {
+	max-width: calc(100% - 260px);
+}
+[data-theme='zine'] .slot h3 {
+	display: block;
+	margin: 0 0 20px;
+	transform-origin: left center;
+}
+[data-theme='zine'] .slot h4 {
+	font-size: 54px;
+	line-height: 1.15;
+	margin: 26px 0 0;
+	rotate: -0.6deg;
+	transform-origin: left center;
+}
+/* h5: typed, and underlined by hand with the ruler. */
+[data-theme='zine'] .slot h5 {
+	width: fit-content;
+	font: 700 46px/1.1 var(--font-mono);
+	text-transform: uppercase;
+	letter-spacing: 0.06em;
+	margin: 22px 0 0;
+	padding-bottom: 4px;
+	border-bottom: 5px solid var(--fg);
+}
+/* h6: a typed margin note. */
+[data-theme='zine'] .slot h6 {
+	font: 700 36px/1.1 var(--font-mono);
+	text-transform: uppercase;
+	letter-spacing: 0.2em;
+	color: var(--muted);
+	margin: 20px 0 0;
+}
+[data-theme='zine'] .slot h6::before {
+	content: '>> ';
+}
+[data-theme='zine'] .slot p {
+	max-width: 1700px;
+	line-height: 1.4;
+	text-wrap: pretty;
+}
+[data-theme='zine'] .slot > p + p,
+[data-theme='zine'] .slot > [data-fragment-index] + [data-fragment-index],
+[data-theme='zine'] .slot > h2 + [data-fragment-index] {
+	margin-top: 36px;
+}
+[data-theme='zine'] .slot > h3 + p,
+[data-theme='zine'] .slot > p + h3,
+[data-theme='zine'] .slot > p + ul,
+[data-theme='zine'] .slot > p + ol,
+[data-theme='zine'] .slot > p + table,
+[data-theme='zine'] .slot > p + .live-code-block-portal {
+	margin-top: 44px;
+}
+
+/* A paragraph revealed on its own is a typed strip, slapped down in turn. */
+[data-theme='zine'] .slot > [data-fragment-index] > p:only-child {
+	width: fit-content;
+	max-width: calc(100% - 90px);
+	background: var(--surface);
+	box-shadow: var(--hard-shadow);
+	padding: 30px 48px 16px;
+	rotate: -0.7deg;
+}
+[data-theme='zine'] .slot > [data-fragment-index]:nth-child(even) > p:only-child {
+	rotate: 0.6deg;
+	margin-left: 90px;
+}
+[data-theme='zine'] .slot > [data-fragment-index]:nth-child(3n + 1) > p:only-child {
+	margin-left: 30px;
+}
+[data-theme='zine'] .slot > [data-fragment-index] + [data-fragment-index]:has(> p:only-child) {
+	margin-top: 44px;
+}
+
+/* The highlighter points at the thing being argued. */
+[data-theme='zine'] .slot strong,
+[data-theme='zine'] .slot em,
+[data-theme='zine'] .slot mark {
+	font-weight: inherit;
+	font-style: normal;
+	color: var(--fg);
+	background: var(--swipe);
+	padding: 0 0.14em;
+	margin: 0 -0.06em;
+	-webkit-box-decoration-break: clone;
+	box-decoration-break: clone;
+}
+/* em is the quieter of the two: underlined with the highlighter, not swiped. */
+[data-theme='zine'] .slot em {
+	background: linear-gradient(178deg, transparent 80%, var(--accent) 82%, var(--accent) 97%, transparent 98%);
+}
+/* On a black block the full swipe sits behind black type. */
+[data-theme='zine'] .slot blockquote strong,
+[data-theme='zine'] .slot blockquote em,
+[data-theme='zine'] .layout-title .slot h2 strong,
+[data-theme='zine'] .layout-title .slot h2 em {
+	background: var(--swipe);
+	color: var(--fg);
+}
+
+/* Links: underlined twice with the pen; the hover is a highlighter swipe. */
+[data-theme='zine'] .slot a {
+	color: var(--fg);
+	text-decoration: underline;
+	text-decoration-style: double;
+	text-decoration-thickness: 4px;
+	text-underline-offset: 0.14em;
+	padding: 0 0.08em;
+	transition: background-color 120ms linear;
+}
+[data-theme='zine'] .slot a:hover,
+[data-theme='zine'] .slot a:focus-visible {
+	background-color: var(--accent);
+	text-decoration-style: solid;
+}
+[data-theme='zine'] .slot blockquote a {
+	color: var(--surface);
+}
+[data-theme='zine'] .slot blockquote a:hover {
+	color: var(--fg);
+}
+
+/* Inline code: an embossed label cut to length. */
+[data-theme='zine'] .slot :not(pre) > code {
+	font: 700 0.9em/1 var(--font-mono);
+	background: var(--fg);
+	color: var(--surface);
+	padding: 0.12em 0.22em 0.02em;
+	border-radius: 3px;
+	white-space: nowrap;
+}
+[data-theme='zine'] .slot blockquote :not(pre) > code {
+	background: var(--surface);
+	color: var(--fg);
+}
+
+/* ============================================================================
+ * Title: a pasted-up cover
+ * ============================================================================ */
+
+[data-theme='zine'] .layout-title {
+	align-items: flex-start;
+	justify-content: center;
+}
+[data-theme='zine'] .layout-title .slot {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	max-width: 100%;
+}
+[data-theme='zine'] .layout-title .slot::before {
+	content: 'please copy + pass it on';
+	margin-bottom: 40px;
+	animation: zine-paste var(--dur) var(--ease) both;
+}
+[data-theme='zine'] .slide[data-layout]:has(> .slide-tag) .layout-title .slot::before {
+	content: none;
+}
+/* Sized for a 95-character worst-case title first (the unqualified rule);
+ * data-length scales a shorter one up so it still fills the frame. */
+[data-theme='zine'] .layout-title .slot h1 {
+	width: fit-content;
+	max-width: 100%;
+	padding: 28px 52px 30px;
+	font-size: 118px;
+	line-height: 1.06;
+	rotate: -1.4deg;
+}
+[data-theme='zine'] .layout-title .slot h1[data-length='medium'] {
+	font-size: 150px;
+}
+[data-theme='zine'] .layout-title .slot h1[data-length='short'] {
+	font-size: 192px;
+}
+/* The first letter is cut from a different magazine. */
+[data-theme='zine'] .layout-title .slot h1::first-letter,
+[data-theme='zine'] .layout-big-stat .slot-default h1::first-letter {
+	font-family: var(--font-cut-a);
+	background: var(--fg);
+	color: var(--surface);
+	padding: 0 0.14em;
+	margin-right: 0.08em;
+}
+[data-theme='zine'] .layout-title .slot h1::after {
+	left: auto;
+	right: -70px;
+	top: -14px;
+	rotate: 32deg;
+	width: 170px;
+}
+[data-theme='zine'] .layout-title .slot h2 {
+	--h2-size: 84px;
+	--h2-margin: 6px 0 0 50px;
+	max-width: 1400px;
+	padding: 20px 52px 16px;
+	color: var(--surface);
+	rotate: 1.1deg;
+	z-index: 1;
+}
+[data-theme='zine'] .layout-title .slot p {
+	max-width: 1300px;
+	margin: 46px 0 0;
+	background: var(--surface);
+	color: var(--fg);
+	box-shadow: var(--hard-shadow);
+	padding: 22px 34px 12px;
+	font-size: 52px;
+	line-height: 1.3;
+	rotate: -1deg;
+	text-wrap: balance;
+	--i: 6;
+}
+/* The page count, on a starburst sticker. */
+[data-theme='zine'] .slide[data-layout='title']::after {
+	content: attr(data-total) '\A PAGES!';
+	white-space: pre;
+	text-align: center;
+	right: 110px;
+	top: auto;
+	bottom: 84px;
+	width: 290px;
+	height: 290px;
+	padding: 0;
+	display: grid;
+	place-items: center;
+	font: 400 52px/1.05 var(--font-cut-b);
+	background: radial-gradient(closest-side, var(--accent) 0 80%, var(--fg) 81%);
+	box-shadow: none;
+	clip-path: var(--burst);
+	rotate: -9deg;
+	animation:
+		zine-tape 260ms cubic-bezier(0.2, 0.8, 0.3, 1) 1000ms both,
+		zine-sway 7s ease-in-out 1.6s infinite alternate;
+}
+
+/* ============================================================================
+ * Section: a cut-out section sign, then the name under the highlighter
+ * ============================================================================ */
+
+[data-theme='zine'] .layout-section {
+	align-items: flex-start;
+	justify-content: center;
+}
+[data-theme='zine'] .layout-section .slot {
+	max-width: 100%;
+}
+[data-theme='zine'] .layout-section .slot::before {
+	content: '\00A7';
+	display: block;
+	width: fit-content;
+	font: 400 250px/1 var(--font-cut-a);
+	background: var(--fg);
+	color: var(--surface);
+	padding: 0 46px 8px;
+	box-shadow: var(--hard-shadow);
+	rotate: -4deg;
+	margin-bottom: 36px;
+	animation: zine-paste var(--dur) var(--ease) both;
+}
+[data-theme='zine'] .layout-section .slot h1,
+[data-theme='zine'] .layout-section .slot h2 {
+	width: fit-content;
+	max-width: 100%;
+	font-size: 132px;
+	line-height: 1.12;
+	margin: 0 0 0 -0.06em;
+	color: var(--fg);
+	background: var(--swipe);
+	padding: 0 0.12em;
+	rotate: -1deg;
+	-webkit-box-decoration-break: clone;
+	box-decoration-break: clone;
+}
+[data-theme='zine'] .layout-section .slot h1[data-length='medium'],
+[data-theme='zine'] .layout-section .slot h2[data-length='medium'] {
+	font-size: 176px;
+}
+[data-theme='zine'] .layout-section .slot h1[data-length='short'],
+[data-theme='zine'] .layout-section .slot h2[data-length='short'] {
+	font-size: 230px;
+}
+[data-theme='zine'] .layout-section .slot p {
+	width: fit-content;
+	margin-top: 34px;
+	background: var(--surface);
+	box-shadow: var(--hard-shadow);
+	padding: 20px 32px 8px;
+	rotate: 0.8deg;
+}
+
+/* ============================================================================
+ * Statement: a lone h1 on a default slide
+ * ============================================================================ */
+
+[data-theme='zine'] .layout-default .slot > h1:only-child {
+	width: fit-content;
+	max-width: 1640px;
+	padding: 52px 64px 46px;
+	font-size: 128px;
+	line-height: 1.1;
+	rotate: -1.2deg;
+}
+[data-theme='zine'] .layout-default .slot > h1:only-child[data-length='medium'] {
+	font-size: 176px;
+}
+[data-theme='zine'] .layout-default .slot > h1:only-child[data-length='short'] {
+	font-size: 224px;
+}
+/* A default slide that opens with an h1 and carries on keeps it as a headline. */
+[data-theme='zine'] .layout-default .slot > h1:not(:only-child) {
+	font-size: 132px;
+	margin-bottom: 40px;
+	rotate: -1deg;
+	transform-origin: left center;
+}
+
+/* ============================================================================
+ * Bullets: typed strips, ticked off
+ * ============================================================================ */
+
+[data-theme='zine'] .slot ul,
+[data-theme='zine'] .slot ol {
+	list-style: none;
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	gap: 40px;
+}
+[data-theme='zine'] .slot ol {
+	counter-reset: zine-item;
+}
+[data-theme='zine'] .slot li {
+	position: relative;
+	max-width: calc(100% - 70px);
+	background: var(--surface);
+	box-shadow: var(--hard-shadow);
+	padding: 26px 44px 14px 116px;
+	font-size: 48px;
+	line-height: 1.35;
+	rotate: -0.7deg;
+}
+[data-theme='zine'] .slot li:nth-child(even) {
+	rotate: 0.6deg;
+	margin-left: 70px;
+}
+[data-theme='zine'] .slot li:nth-child(3n) {
+	margin-left: 24px;
+}
+[data-theme='zine'] .slot ul > li::before {
+	content: 'x';
+	position: absolute;
+	left: 36px;
+	top: 28px;
+	width: 52px;
+	height: 52px;
+	border: 5px solid var(--fg);
+	font: 400 74px/34px var(--font-display);
+	text-align: center;
+	rotate: -5deg;
+}
+[data-theme='zine'] .slot ol > li {
+	counter-increment: zine-item;
+}
+[data-theme='zine'] .slot ol > li::before {
+	content: counter(zine-item);
+	position: absolute;
+	left: 30px;
+	top: 20px;
+	min-width: 62px;
+	height: 66px;
+	background: var(--fg);
+	color: var(--surface);
+	font: 400 50px/70px var(--font-cut-a);
+	text-align: center;
+	rotate: -4deg;
+}
+
+/* Nested lists: typed straight onto the parent strip, no paper of their own. */
+[data-theme='zine'] .slot li > ul,
+[data-theme='zine'] .slot li > ol {
+	gap: 4px;
+	margin: 8px 0 6px;
+}
+[data-theme='zine'] .slot li li,
+[data-theme='zine'] .slot li li:nth-child(n) {
+	max-width: 100%;
+	background: none;
+	box-shadow: none;
+	padding: 0 0 0 70px;
+	margin-left: 0;
+	rotate: none;
+	color: var(--muted);
+}
+[data-theme='zine'] .slot li ul > li::before,
+[data-theme='zine'] .slot li ol > li::before {
+	content: '+';
+	left: 8px;
+	top: 0;
+	width: auto;
+	min-width: 0;
+	height: auto;
+	border: 0;
+	background: none;
+	color: var(--muted);
+	font: 700 60px/1.25 var(--font-mono);
+	rotate: none;
+}
+
+/* Lists inside a scrap (columns, sidebar) are typed on that scrap directly. */
+[data-theme='zine'] .slot-left ul,
+[data-theme='zine'] .slot-center ul,
+[data-theme='zine'] .slot-right ul,
+[data-theme='zine'] .slot-sidebar ul,
+[data-theme='zine'] .slot-left ol,
+[data-theme='zine'] .slot-center ol,
+[data-theme='zine'] .slot-right ol,
+[data-theme='zine'] .slot-sidebar ol {
+	gap: 24px;
+}
+/* Narrow columns get their own smaller scale (section 6 of the porting
+ * guide): still clear of the 40px body floor, but sized for a ~590px
+ * column rather than the full slide. */
+[data-theme='zine'] .slot-left li:nth-child(n),
+[data-theme='zine'] .slot-center li:nth-child(n),
+[data-theme='zine'] .slot-right li:nth-child(n),
+[data-theme='zine'] .slot-sidebar li:nth-child(n) {
+	max-width: 100%;
+	background: none;
+	box-shadow: none;
+	padding: 0 0 0 64px;
+	margin-left: 0;
+	rotate: none;
+	font-size: 42px;
+	line-height: 1.3;
+	text-wrap: balance;
+}
+[data-theme='zine'] .slot-left ul > li::before,
+[data-theme='zine'] .slot-center ul > li::before,
+[data-theme='zine'] .slot-right ul > li::before,
+[data-theme='zine'] .slot-sidebar ul > li::before {
+	left: 0;
+	top: 6px;
+	width: 42px;
+	height: 42px;
+	border-width: 4px;
+	font-size: 44px;
+	line-height: 26px;
+}
+[data-theme='zine'] .slot-left ol > li::before,
+[data-theme='zine'] .slot-center ol > li::before,
+[data-theme='zine'] .slot-right ol > li::before,
+[data-theme='zine'] .slot-sidebar ol > li::before {
+	left: 0;
+	top: 4px;
+	min-width: 48px;
+	height: 54px;
+	font-size: 40px;
+	line-height: 58px;
+}
+
+/* ============================================================================
+ * Code: typed on a torn sheet, the line in focus gets the highlighter
+ * ============================================================================ */
+
+[data-theme='zine'] .slot pre:where(:not(.ap-terminal, .result-output, .result-error)) {
+	max-width: 100%;
+	margin: 0;
+	padding: 0;
+	border-radius: 0;
+	overflow: visible;
+	background: none !important;
+	color: var(--fg);
+	font: 700 42px/1.55 var(--font-mono);
+	rotate: -0.5deg;
+}
+/* A line too long for the sheet wraps with a hanging indent instead of
+ * running off the paper or scrolling: code on a slide has no scrollbar a
+ * viewer could discover mid-talk, so a clipped line was simply lost. */
+[data-theme='zine'] .slot pre:where(:not(.ap-terminal, .result-output, .result-error)) > code {
+	display: block;
+	max-width: 100%;
+	padding: 44px 52px 34px;
+	font: inherit;
+	font-size: 42px;
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+	background: none;
+	color: inherit;
+	border-radius: 0;
+}
+/* Shiki separates its line spans with newlines; as flex items the lines
+ * stack on their own and the newlines between them collapse. */
+[data-theme='zine'] .slot pre.shiki > code {
+	display: flex;
+	flex-direction: column;
+	white-space: normal;
+}
+[data-theme='zine'] .slot pre.shiki .line {
+	display: block;
+	min-height: 1.5em;
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+	padding-left: 2ch;
+	text-indent: -2ch;
+}
+[data-theme='zine'] .slot pre.shiki.has-highlighted .line:not(.highlighted) {
+	opacity: 0.62;
+}
+[data-theme='zine'] .slot pre.shiki .line.highlighted {
+	background: linear-gradient(178.6deg, transparent 8%, var(--accent) 11%, var(--accent) 90%, transparent 93%);
+	margin: 0 -24px;
+	padding: 0 24px;
+	min-width: calc(100% + 48px);
+	animation: zine-fade 300ms linear 900ms both;
+}
+/* The source of a diagram, recording, or map is never shown while the
+ * rendered block is still on its way. */
+[data-theme='zine'] .slot pre:has(> code.language-mermaid),
+[data-theme='zine'] .slot pre:has(> code.language-asciinema),
+[data-theme='zine'] .slot pre:has(> code.language-map) {
+	display: none;
+}
+/* Line numbers are typed in the margin; a diff is marked up by hand. */
+[data-theme='zine'] .slot pre.shiki .line-number {
+	display: inline-block;
+	width: calc(var(--line-num-width, 2ch) + 1ch);
+	color: var(--muted);
+	font-weight: 400;
+	user-select: none;
+}
+[data-theme='zine'] .slot pre.shiki .line.diff-add {
+	background: var(--swipe);
+}
+[data-theme='zine'] .slot pre.shiki .line.diff-remove {
+	color: var(--muted);
+	text-decoration: line-through;
+	text-decoration-thickness: 4px;
+}
+[data-theme='zine'] .slot .code-block-title {
+	width: fit-content;
+	background: var(--fg);
+	color: var(--surface);
+	font: 700 30px/1 var(--font-mono);
+	letter-spacing: 0.16em;
+	padding: 12px 20px 8px;
+	margin: 0 0 -6px 30px;
+	position: relative;
+	z-index: 1;
+	rotate: -1deg;
+}
+[data-theme='zine'] .slot > h2 + pre:where(:not(.ap-terminal, .result-output, .result-error)),
+[data-theme='zine'] .slot > h2 + .live-code-block-portal,
+[data-theme='zine'] .slot > h2 + .asciinema-player-wrapper {
+	margin-top: 8px;
+}
+[data-theme='zine'] .slot > p + pre:where(:not(.ap-terminal, .result-output, .result-error)) {
+	margin-top: 48px;
+}
+[data-theme='zine'] .slot > pre + p,
+[data-theme='zine'] .slot > .live-code-block-portal + p {
+	margin-top: 56px;
+}
+
+/* ============================================================================
+ * Big number
+ * ============================================================================ */
+
+[data-theme='zine'] .layout-big-stat {
+	align-items: flex-start;
+	justify-content: center;
+	gap: 0;
+}
+[data-theme='zine'] .layout-big-stat::before {
+	content: 'actual number';
+	margin-bottom: 30px;
+	animation: zine-paste var(--dur) var(--ease) both;
+}
+[data-theme='zine'] .layout-big-stat .slot-default,
+[data-theme='zine'] .layout-big-stat .slot-caption {
+	max-width: 100%;
+}
+[data-theme='zine'] .layout-big-stat .slot-default h1,
+[data-theme='zine'] .layout-big-stat .slot-default strong {
+	display: block;
+	width: fit-content;
+	max-width: 100%;
+	font: 400 180px/1.16 var(--font-display);
+	letter-spacing: 0;
+	color: var(--fg);
+	background: var(--swipe);
+	padding: 0 0.1em 0 0;
+	margin: 0;
+	rotate: -1.5deg;
+}
+/* Only h1 ever carries data-length (the parser only tags h1-h3); a bare
+ * **stat** written as strong has no length class and keeps the base size. */
+[data-theme='zine'] .layout-big-stat .slot-default h1[data-length='medium'] {
+	font-size: 230px;
+}
+[data-theme='zine'] .layout-big-stat .slot-default h1[data-length='short'] {
+	font-size: 280px;
+}
+[data-theme='zine'] .layout-big-stat .slot-caption p {
+	width: fit-content;
+	max-width: 1300px;
+	margin-top: 44px;
+	padding: 38px 48px 28px;
+	font-size: 62px;
+	line-height: 1.3;
+	color: var(--fg);
+	rotate: 0.8deg;
+	text-wrap: balance;
+}
+[data-theme='zine'] .layout-big-stat .slot-caption p::after {
+	left: auto;
+	right: -60px;
+	top: -20px;
+	rotate: 38deg;
+	width: 170px;
+}
+[data-theme='zine'] .layout-big-stat .slot-figure {
+	margin-top: 36px;
+}
+[data-theme='zine'] .layout-big-stat .slot-figure img {
+	max-height: 220px;
+}
+
+/* ============================================================================
+ * Quote: white marker on a black block
+ * ============================================================================ */
+
+[data-theme='zine'] .layout-quote {
+	align-items: flex-start;
+	justify-content: center;
+}
+[data-theme='zine'] .layout-quote .slot-default,
+[data-theme='zine'] .layout-quote .slot-attribution {
+	max-width: 100%;
+}
+[data-theme='zine'] .slot blockquote,
+[data-theme='zine'] .layout-quote .slot-default blockquote {
+	width: fit-content;
+	max-width: 1640px;
+	border: 0;
+	padding: 52px 78px 58px;
+	font-style: normal;
+	color: var(--surface);
+	rotate: -0.8deg;
+}
+[data-theme='zine'] .slot blockquote p {
+	font: 400 80px/1.18 var(--font-display);
+	text-wrap: balance;
+}
+[data-theme='zine'] .slot blockquote p + p {
+	margin-top: 24px;
+}
+[data-theme='zine'] .layout-quote .slot-default blockquote p {
+	font-size: 104px;
+}
+[data-theme='zine'] .slot blockquote p:first-child::before {
+	content: '\201C';
+	display: block;
+	height: 130px;
+	font: 400 260px/1 var(--font-cut-a);
+	color: var(--accent);
+}
+[data-theme='zine'] .layout-quote .slot-attribution p {
+	width: fit-content;
+	margin: -6px 0 0 90px;
+	position: relative;
+	z-index: 1;
+	background: var(--surface);
+	color: var(--fg);
+	box-shadow: var(--hard-shadow);
+	padding: 22px 34px 10px;
+	font-size: 54px;
+	line-height: 1.25;
+	rotate: 1deg;
+}
+[data-theme='zine'] .layout-quote .slot-attribution p::before {
+	content: 'said ';
+	color: var(--muted);
+}
+
+/* ============================================================================
+ * Columns: scraps taped side by side
+ * ============================================================================ */
+
+[data-theme='zine'] .layout-two-column,
+[data-theme='zine'] .layout-three-column {
+	grid-template-rows: auto auto;
+	column-gap: 72px;
+	row-gap: 0;
+	align-content: center;
+}
+[data-theme='zine'] .layout-three-column {
+	column-gap: 48px;
+}
+/* Each scrap hugs its own text (section 7 lesson: a paper sheet that's
+ * only as wide as its max-width, not its content, stops looking cut and
+ * pasted and starts looking like a plain column). */
+[data-theme='zine'] .layout-two-column .slot-left,
+[data-theme='zine'] .layout-two-column .slot-right,
+[data-theme='zine'] .layout-three-column .slot-left,
+[data-theme='zine'] .layout-three-column .slot-center,
+[data-theme='zine'] .layout-three-column .slot-right {
+	width: fit-content;
+	max-width: 100%;
+	align-self: start;
+	margin-top: 20px;
+	padding: 60px 56px 44px;
+	rotate: -1deg;
+	animation: zine-paste var(--dur) var(--ease) 300ms both;
+}
+[data-theme='zine'] .layout-two-column .slot-right,
+[data-theme='zine'] .layout-three-column .slot-center {
+	rotate: 0.9deg;
+	margin-top: 44px;
+	animation-delay: 520ms;
+}
+[data-theme='zine'] .layout-three-column .slot-right {
+	rotate: -0.5deg;
+	margin-top: 28px;
+	animation-delay: 740ms;
+}
+[data-theme='zine'] .layout-three-column .slot-left,
+[data-theme='zine'] .layout-three-column .slot-center,
+[data-theme='zine'] .layout-three-column .slot-right {
+	padding: 56px 40px 34px;
+}
+[data-theme='zine'] .layout-two-column .slot-right::after,
+[data-theme='zine'] .layout-three-column .slot-center::after {
+	rotate: 4deg;
+}
+[data-theme='zine'] .layout-three-column .slot-right::after {
+	rotate: -9deg;
+	left: calc(50% - 60px);
+}
+/* The scrap is what gets pasted; its contents arrive with it. */
+[data-theme='zine'] .layout-two-column .slot:not(.slot-default) > :not([data-fragment-index]),
+[data-theme='zine'] .layout-three-column .slot:not(.slot-default) > :not([data-fragment-index]) {
+	animation: none;
+}
+[data-theme='zine'] .layout-two-column .slot p,
+[data-theme='zine'] .layout-three-column .slot p {
+	margin-top: 22px;
+	font-size: 44px;
+	line-height: 1.35;
+	text-wrap: balance;
+}
+/* A figure that leads a column paragraph is written in marker. */
+[data-theme='zine'] .layout-two-column .slot p > strong:first-child {
+	font: 400 150px/1.2 var(--font-display);
+	margin-right: 0.1em;
+}
+[data-theme='zine'] .layout-three-column .slot li:nth-child(n) {
+	padding-left: 56px;
+}
+
+/* ============================================================================
+ * Sidebar: the argument on the page, the receipts on a taped slip
+ * ============================================================================ */
+
+[data-theme='zine'] .layout-sidebar {
+	grid-template-columns: minmax(0, 2.1fr) minmax(0, 1fr);
+	column-gap: 64px;
+	align-content: start;
+	align-items: start;
+}
+[data-theme='zine'] .layout-sidebar .slot-default ul,
+[data-theme='zine'] .layout-sidebar .slot-default ol {
+	gap: 16px;
+}
+[data-theme='zine'] .layout-sidebar .slot h2 {
+	--h2-size: 108px;
+	--h2-margin: 0 0 28px;
+}
+[data-theme='zine'] .layout-sidebar .slot-default p {
+	line-height: 1.3;
+}
+[data-theme='zine'] .layout-sidebar .slot-default li {
+	padding: 16px 28px 6px 96px;
+	line-height: 1.22;
+}
+[data-theme='zine'] .layout-sidebar .slot-default li:nth-child(even) {
+	margin-left: 40px;
+}
+[data-theme='zine'] .layout-sidebar .slot-default ul > li::before {
+	top: 14px;
+	left: 24px;
+}
+[data-theme='zine'] .layout-sidebar .slot-default > p + ul,
+[data-theme='zine'] .layout-sidebar .slot-default > p + ol {
+	margin-top: 24px;
+}
+[data-theme='zine'] .layout-sidebar .slot-sidebar {
+	margin-top: 30px;
+	padding: 56px 32px 36px;
+	border: 0;
+	rotate: 1.4deg;
+	animation: zine-paste var(--dur) var(--ease) 600ms both;
+}
+[data-theme='zine'] .layout-sidebar .slot-sidebar > :not([data-fragment-index]) {
+	animation: none;
+}
+[data-theme='zine'] .layout-sidebar .slot-sidebar::after {
+	rotate: 5deg;
+}
+[data-theme='zine'] .layout-sidebar .slot-sidebar ul,
+[data-theme='zine'] .layout-sidebar .slot-sidebar ol {
+	gap: 0;
+	align-items: stretch;
+}
+/* Receipt lines: each entry is ruled off with a dashed cut line. */
+[data-theme='zine'] .layout-sidebar .slot-sidebar li:nth-child(n) {
+	padding: 18px 0 10px;
+	border-top: 4px dashed var(--fg);
+	text-wrap: wrap;
+}
+[data-theme='zine'] .layout-sidebar .slot-sidebar ul > li::before {
+	content: none;
+}
+[data-theme='zine'] .layout-sidebar .slot-sidebar p {
+	margin-top: 16px;
+}
+
+/* ============================================================================
+ * Images: run through the copier, taped to the page
+ * ============================================================================ */
+
+[data-theme='zine'] .layout-split-media {
+	grid-template-columns: minmax(0, 1fr) 800px;
+	column-gap: 72px;
+	align-items: center;
+}
+[data-theme='zine'] .layout-split-media .slot-default {
+	padding: 0;
+}
+[data-theme='zine'] .layout-split-media .slot h2 {
+	--h2-size: 112px;
+}
+[data-theme='zine'] .layout-split-media .slot-default p {
+	width: fit-content;
+	background: var(--surface);
+	box-shadow: var(--hard-shadow);
+	padding: 22px 32px 10px;
+	rotate: 0.7deg;
+}
+[data-theme='zine'] .layout-split-media .slot-media {
+	overflow: visible;
+	background: none;
+}
+[data-theme='zine'] .slot p:has(> img:only-child) {
+	position: relative;
+	width: fit-content;
+	max-width: 100%;
+	background: var(--surface);
+	padding: 22px 22px 26px;
+	box-shadow: 8px 10px 0 var(--shadow);
+	rotate: 2deg;
+	line-height: 0;
+}
+[data-theme='zine'] .slot img {
+	display: block;
+	max-width: 100%;
+	height: auto;
+	border-radius: 0;
+	filter: grayscale(1) contrast(1.4);
+	mix-blend-mode: multiply;
+}
+[data-theme='zine'] .layout-split-media .slot-media img {
+	width: 100%;
+	height: auto;
+	max-height: 760px;
+	object-fit: cover;
+}
+/* A photo on a plain slide leaves room for its headline and a caption. */
+[data-theme='zine'] .layout-default .slot p:has(> img:only-child) {
+	margin: 48px 0 0 14%;
+	rotate: -1.6deg;
+}
+[data-theme='zine'] .layout-default .slot p > img:only-child {
+	width: auto;
+	max-height: 600px;
+}
+[data-theme='zine'] .slot p:has(> img:only-child)::before,
+[data-theme='zine'] .slot p:has(> img:only-child)::after {
+	content: '';
+	position: absolute;
+	z-index: 1;
+	left: -64px;
+	top: -6px;
+	width: 190px;
+	height: 50px;
+	background: var(--tape);
+	clip-path: var(--tape-cut);
+	rotate: -35deg;
+	animation: zine-tape var(--tape-settle) 1100ms both;
+}
+[data-theme='zine'] .slot p:has(> img:only-child)::after {
+	left: auto;
+	right: -64px;
+	rotate: 33deg;
+	animation-delay: 1200ms;
+}
+
+/* ============================================================================
+ * Cover: the whole frame goes black, one sheet slapped in the middle of it
+ * ============================================================================ */
+
+[data-theme='zine'] .slide[data-layout='cover'] {
+	background-color: var(--fg);
+	background-image: radial-gradient(
+		circle at center,
+		color-mix(in srgb, var(--surface) 22%, transparent) 0 3px,
+		transparent 4px
+	);
+	background-size: 22px 22px;
+}
+[data-theme='zine'] .layout-cover {
+	align-items: flex-start;
+	justify-content: center;
+}
+[data-theme='zine'] .layout-cover .slot-default {
+	padding: 0;
+	max-width: 100%;
+}
+[data-theme='zine'] .layout-cover .slot h1 {
+	width: fit-content;
+	max-width: 1500px;
+	padding: 52px 72px 46px;
+	font-size: 122px;
+	line-height: 1.1;
+	color: var(--fg);
+	rotate: -1.6deg;
+}
+[data-theme='zine'] .layout-cover .slot h1[data-length='medium'] {
+	font-size: 160px;
+}
+[data-theme='zine'] .layout-cover .slot h1[data-length='short'] {
+	font-size: 200px;
+}
+[data-theme='zine'] .layout-cover .slot h1::after {
+	left: -60px;
+	top: -8px;
+	rotate: -34deg;
+	width: 190px;
+}
+[data-theme='zine'] .layout-cover .slot p {
+	width: fit-content;
+	max-width: 1200px;
+	margin: 40px 0 0 80px;
+	background: var(--accent);
+	color: var(--fg);
+	box-shadow: var(--hard-shadow);
+	padding: 20px 34px 8px;
+	rotate: 0.9deg;
+	text-wrap: balance;
+}
+
+/* ============================================================================
+ * Blank: only the copier bed. Custom markup gets the type, nothing else.
+ * ============================================================================ */
+
+[data-theme='zine'] .layout-blank .slot h1 {
+	font-size: 150px;
+	background: var(--swipe);
+	padding: 0 0.12em;
+	rotate: -1deg;
+}
+
+/* ============================================================================
+ * Table: cut-here lines on a pasted sheet
+ * ============================================================================ */
+
+[data-theme='zine'] .slot table {
+	width: 100%;
+	border-collapse: collapse;
+	background: var(--surface);
+	box-shadow: var(--hard-shadow);
+	rotate: 0.4deg;
+	font-size: 46px;
+}
+[data-theme='zine'] .slot th {
+	text-align: left;
+	background: var(--fg);
+	color: var(--surface);
+	font: 700 42px/1 var(--font-mono);
+	letter-spacing: 0.12em;
+	text-transform: uppercase;
+	padding: 34px 48px 26px;
+	border: 0;
+}
+[data-theme='zine'] .slot td {
+	font-size: 46px;
+	line-height: 1.2;
+	padding: 44px 48px 26px;
+	border: 0;
+	border-bottom: 5px dashed var(--fg);
+}
+[data-theme='zine'] .slot tbody tr:last-child td {
+	border-bottom: 0;
+	padding-bottom: 38px;
+}
+[data-theme='zine'] .slot td:first-child {
+	font: 400 50px/1.15 var(--font-display);
+}
+[data-theme='zine'] .slot tbody tr {
+	animation: zine-fade 300ms linear 500ms both;
+}
+[data-theme='zine'] .slot tbody tr:nth-child(2) {
+	animation-delay: 640ms;
+}
+[data-theme='zine'] .slot tbody tr:nth-child(3) {
+	animation-delay: 780ms;
+}
+[data-theme='zine'] .slot tbody tr:nth-child(n + 4) {
+	animation-delay: 920ms;
+}
+
+/* ============================================================================
+ * Diagram: scraps and marker lines
+ * ============================================================================ */
+
+[data-theme='zine'] .layout-default:has(.mermaid-diagram) .slot-default {
+	flex: 1;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+}
+[data-theme='zine'] .slot:has(> .mermaid-diagram) h2 {
+	--h2-size: 108px;
+	--h2-margin: 0 0 20px;
+}
+[data-theme='zine'] .slot .mermaid-diagram {
+	display: flex;
+	justify-content: center;
+	align-items: center;
+	animation-name: zine-fade;
+}
+/* On a default slide the drawing takes exactly the room the headline and
+ * caption leave, so it can never push the caption off the page. */
+[data-theme='zine'] .layout-default .slot-default > .mermaid-diagram {
+	position: relative;
+	flex: 1;
+	min-height: 0;
+}
+/* The drawing scales through its viewBox to whatever room the slide has. */
+[data-theme='zine'] .slot .mermaid-diagram svg {
+	width: 100%;
+	height: auto;
+	max-width: 100%;
+	max-height: 640px;
+	overflow: visible;
+}
+[data-theme='zine'] .layout-default .slot-default > .mermaid-diagram svg {
+	position: absolute;
+	inset: 0;
+	height: 100%;
+	max-height: 100%;
+}
+/* Mermaid measures its labels before they reach the page, so label text
+ * keeps mermaid's own metrics rather than the slide's body size. */
+[data-theme='zine'] .slot .mermaid-diagram p,
+[data-theme='zine'] .slot .mermaid-diagram li {
+	max-width: none;
+	margin: 0;
+	padding: 0;
+	font-size: inherit;
+	line-height: inherit;
+	background: none;
+	box-shadow: none;
+	rotate: none;
+}
+[data-theme='zine'] .mermaid-diagram foreignObject {
+	overflow: visible;
+}
+[data-theme='zine'] .mermaid-diagram .node .label-container {
+	stroke-width: 4px !important;
+	filter: drop-shadow(5px 6px 0 rgba(13, 13, 13, 0.34));
+}
+/* The same literal colors as theme.json, held from the stylesheet too, so a
+ * diagram drawn before the theme's mermaid settings arrive still matches. A
+ * node with a class of its own (quiet, or one the deck defines) is left alone. */
+[data-theme='zine'] .mermaid-diagram .node[class='node default'] .label-container {
+	fill: var(--accent) !important;
+	stroke: var(--fg) !important;
+}
+[data-theme='zine'] .mermaid-diagram .node.quiet .label-container {
+	fill: var(--surface) !important;
+	stroke: var(--fg) !important;
+}
+[data-theme='zine'] .mermaid-diagram .nodeLabel,
+[data-theme='zine'] .mermaid-diagram .edgeLabel {
+	color: var(--fg) !important;
+}
+[data-theme='zine'] .mermaid-diagram .edgePaths path {
+	stroke: var(--fg) !important;
+}
+[data-theme='zine'] .mermaid-diagram .marker {
+	fill: var(--fg) !important;
+	stroke: var(--fg) !important;
+}
+[data-theme='zine'] .mermaid-diagram .node rect.label-container {
+	transform-box: fill-box;
+	transform-origin: center;
+	rotate: -1.6deg;
+}
+[data-theme='zine'] .mermaid-diagram .node:nth-child(even) rect.label-container {
+	rotate: 1.4deg;
+}
+[data-theme='zine'] .mermaid-diagram .edgePaths path {
+	stroke-width: 4px !important;
+	stroke-linecap: round;
+}
+[data-theme='zine'] .slot > .mermaid-diagram ~ p {
+	flex: none;
+	width: fit-content;
+	margin-top: 20px;
+	background: var(--surface);
+	box-shadow: var(--hard-shadow);
+	padding: 18px 32px 6px;
+	rotate: -0.6deg;
+}
+[data-theme='zine'] .slot .mermaid-error {
+	font: 700 36px/1.3 var(--font-mono);
+	background: var(--surface);
+	border: 5px dashed var(--fg);
+	padding: 24px 32px;
+}
+
+/* ============================================================================
+ * Live code: the typed sheet, a RUN sticker, and the output on a second slip
+ * ============================================================================ */
+
+[data-theme='zine'] .live-code-block {
+	margin: 0;
+	overflow: visible;
+	border-radius: 0;
+}
+[data-theme='zine'] .live-code-block:focus {
+	outline: none;
+}
+[data-theme='zine'] .live-code-block .code-container pre {
+	border-radius: 0;
+}
+[data-theme='zine'] .live-code-block .code-actions {
+	top: -26px;
+	right: 40px;
+}
+[data-theme='zine'] .live-code-block .run-button {
+	gap: 12px;
+	padding: 12px 24px 10px;
+	background: var(--accent);
+	color: var(--fg);
+	border: 5px solid var(--fg);
+	border-radius: 0;
+	box-shadow: 4px 5px 0 var(--shadow);
+	font: 400 36px/1 var(--font-cut-b);
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+	rotate: 3deg;
+	transition:
+		rotate 120ms var(--ease),
+		translate 120ms var(--ease);
+}
+[data-theme='zine'] .live-code-block .run-button:hover:not(:disabled) {
+	filter: none;
+	transform: none;
+	rotate: -2deg;
+	translate: 0 -3px;
+}
+[data-theme='zine'] .live-code-block .run-button:disabled {
+	opacity: 1;
+	background: var(--surface);
+}
+[data-theme='zine'] .live-code-block .loading-spinner {
+	width: 28px;
+	height: 28px;
+	border: 5px solid color-mix(in srgb, var(--fg) 25%, transparent);
+	border-top-color: var(--fg);
+}
+[data-theme='zine'] .live-code-block .result-container {
+	width: fit-content;
+	min-width: 50%;
+	max-width: calc(100% - 80px);
+	margin: 34px 0 0 80px;
+	background: none;
+	border: 0;
+	border-radius: 0;
+	rotate: 0.8deg;
+	animation: zine-paste var(--dur) var(--ease) both;
+}
+[data-theme='zine'] .live-code-block .result-header {
+	padding: 0;
+	border: 0;
+}
+[data-theme='zine'] .live-code-block .result-status {
+	display: inline-block;
+	background: var(--fg);
+	color: var(--surface);
+	font: 700 30px/1 var(--font-mono);
+	letter-spacing: 0.2em;
+	padding: 12px 22px 8px;
+}
+[data-theme='zine'] .live-code-block .result-status.success {
+	color: var(--surface);
+}
+[data-theme='zine'] .live-code-block .result-status.error {
+	background: var(--accent);
+	color: var(--fg);
+}
+[data-theme='zine'] .live-code-block .result-content {
+	padding: 22px 36px 20px;
+}
+[data-theme='zine'] .live-code-block .result-content .result-output,
+[data-theme='zine'] .live-code-block .result-content .result-error,
+[data-theme='zine'] .live-code-block .result-content .result-empty {
+	color: var(--fg);
+	font: 400 44px/1.4 var(--font-mono);
+}
+[data-theme='zine'] .live-code-block .result-content .result-error {
+	font-weight: 700;
+}
+[data-theme='zine'] .live-code-block .result-content .result-table {
+	font: 400 40px/1.2 var(--font-mono);
+	color: var(--fg);
+	box-shadow: none;
+	rotate: none;
+}
+[data-theme='zine'] .live-code-block .result-content .result-table th,
+[data-theme='zine'] .live-code-block .result-content .result-table td {
+	font-size: 40px;
+	padding: 12px 20px 6px;
+	border-bottom: 3px dashed var(--fg);
+}
+[data-theme='zine'] .live-code-block .result-content .result-table th {
+	background: var(--fg);
+	color: var(--surface);
+}
+[data-theme='zine'] .live-code-block .static-placeholder {
+	top: -22px;
+	right: 40px;
+	background: var(--surface);
+	color: var(--fg);
+	border: 4px solid var(--fg);
+	border-radius: 0;
+	backdrop-filter: none;
+	-webkit-backdrop-filter: none;
+	font: 700 28px/1 var(--font-mono);
+	padding: 10px 16px 6px;
+}
+
+/* ============================================================================
+ * Asciinema and map: somebody else's picture, mounted on the page
+ * ============================================================================ */
+
+/* The player sizes itself from the width it is given, so the mount is kept
+ * narrow enough that a tall recording still ends above the bottom margin. */
+[data-theme='zine'] .asciinema-player-wrapper {
+	position: relative;
+	width: 1040px;
+	max-width: 100%;
+	max-height: 720px;
+	margin-left: auto;
+	margin-right: auto;
+	background: var(--surface);
+	padding: 18px 18px 22px;
+	box-shadow: 8px 10px 0 var(--shadow);
+	rotate: -0.5deg;
+}
+[data-theme='zine'] .asciinema-player-wrapper .player-container {
+	max-height: 680px;
+	overflow: hidden;
+}
+[data-theme='zine'] .asciinema-player-wrapper::before,
+[data-theme='zine'] .asciinema-player-wrapper::after {
+	content: '';
+	position: absolute;
+	z-index: 2;
+	left: -64px;
+	top: -6px;
+	width: 190px;
+	height: 50px;
+	background: var(--tape);
+	clip-path: var(--tape-cut);
+	rotate: -35deg;
+	animation: zine-tape var(--tape-settle) 1100ms both;
+}
+[data-theme='zine'] .asciinema-player-wrapper::after {
+	left: auto;
+	right: -64px;
+	rotate: 33deg;
+	animation-delay: 1200ms;
+}
+[data-theme='zine'] .asciinema-player-wrapper .controls-overlay {
+	position: absolute;
+	right: 28px;
+	bottom: -22px;
+	z-index: 2;
+	display: flex;
+	gap: 10px;
+	rotate: 1.5deg;
+}
+[data-theme='zine'] .asciinema-player-wrapper .control-button {
+	background: var(--fg);
+	color: var(--surface);
+	border: 0;
+	border-radius: 3px;
+	font: 700 28px/1 var(--font-mono);
+	padding: 10px 16px 6px;
+	cursor: pointer;
+}
+[data-theme='zine'] .asciinema-player-wrapper .control-button:hover {
+	background: var(--accent);
+	color: var(--fg);
+}
+[data-theme='zine'] .map-slide {
+	filter: grayscale(1) contrast(1.25);
+}
+
+/* ============================================================================
+ * Scroll slide: one long sheet fed through the copier
+ * ============================================================================ */
+
+[data-theme='zine'] .scroll-content .slot pre:where(:not(.ap-terminal, .result-output, .result-error)) {
+	rotate: none;
+}
+[data-theme='zine'] .scroll-content [class^='layout-'] {
+	height: auto;
+	min-height: 100%;
+}
+/* A sheet several screens long fades in; swinging it would throw its far
+ * end off the page. */
+[data-theme='zine'] .scroll-content .slot > * {
+	animation-name: zine-fade;
+}
+
+/* ============================================================================
+ * Minimum-size safety net
+ * ============================================================================ */
+
+[data-theme='zine'] .slot p,
+[data-theme='zine'] .slot li {
+	font-size: 48px;
+}
+[data-theme='zine'] .slot pre code {
+	font-size: 42px;
+}
+
+/* ============================================================================
+ * Print and reduced motion: everything is already pasted down
+ * ============================================================================ */
+
+[data-theme='zine']:is([data-print='true'], [data-print='true'] *) .slide[data-layout],
+[data-theme='zine']:is([data-print='true'], [data-print='true'] *) .slide[data-layout] *,
+[data-theme='zine']:is([data-print='true'], [data-print='true'] *) .slide[data-layout]::before,
+[data-theme='zine']:is([data-print='true'], [data-print='true'] *) .slide[data-layout]::after,
+[data-theme='zine']:is([data-print='true'], [data-print='true'] *) .slide[data-layout] *::before,
+[data-theme='zine']:is([data-print='true'], [data-print='true'] *) .slide[data-layout] *::after {
+	animation: none !important;
+	transition: none !important;
+}
+@media print, (prefers-reduced-motion: reduce) {
+	[data-theme='zine'] .slide[data-layout],
+	[data-theme='zine'] .slide[data-layout] *,
+	[data-theme='zine'] .slide[data-layout]::before,
+	[data-theme='zine'] .slide[data-layout]::after,
+	[data-theme='zine'] .slide[data-layout] *::before,
+	[data-theme='zine'] .slide[data-layout] *::after {
+		animation: none !important;
+		transition: none !important;
+	}
+}

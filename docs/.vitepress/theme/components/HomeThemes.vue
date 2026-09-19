@@ -3,34 +3,34 @@ import { ref, onMounted, onUnmounted } from 'vue'
 
 const themes = [
   {
-    name: 'Paper',
-    vibe: 'Ultra-clean & premium',
-    gradient: 'linear-gradient(135deg, #ffffff 0%, #f5f5f4 50%, #ffffff 100%)',
-    accent: '#78716c'
+    name: 'Terminal',
+    vibe: 'One long tmux session',
+    gradient: 'linear-gradient(135deg, #0f1a16 0%, #1d2b25 50%, #ffb84d 100%)',
+    accent: '#ffb84d'
   },
   {
-    name: 'Noir',
-    vibe: 'Cinematic & sophisticated',
-    gradient: 'linear-gradient(135deg, #0a0a0a 0%, #1a1a1a 50%, #d4af37 100%)',
-    accent: '#d4af37'
+    name: 'Swiss',
+    vibe: 'Grid, grotesk, one red',
+    gradient: 'linear-gradient(135deg, #f4f4f0 0%, #deddd6 50%, #d40b1e 100%)',
+    accent: '#d40b1e'
   },
   {
-    name: 'Aurora',
-    vibe: 'Vibrant & dynamic',
-    gradient: 'linear-gradient(135deg, #4c1d95 0%, #0ea5e9 50%, #14b8a6 100%)',
-    accent: '#0ea5e9'
+    name: 'Blueprint',
+    vibe: 'A sheet from the drawing set',
+    gradient: 'linear-gradient(135deg, #0f3a75 0%, #174688 50%, #ffd447 100%)',
+    accent: '#ffd447'
   },
   {
-    name: 'Phosphor',
-    vibe: 'CRT & hacker aesthetic',
-    gradient: 'linear-gradient(135deg, #000000 0%, #001100 50%, #00ff00 100%)',
-    accent: '#00ff00'
+    name: 'Riso',
+    vibe: 'A two-ink print off the drum',
+    gradient: 'linear-gradient(135deg, #f3eee0 0%, #f9f5ea 50%, #ff48b0 100%)',
+    accent: '#ff48b0'
   },
   {
-    name: 'Poster',
-    vibe: 'Bold & graphic',
-    gradient: 'linear-gradient(135deg, #000000 0%, #ffffff 50%, #ef4444 100%)',
-    accent: '#ef4444'
+    name: 'Keynote',
+    vibe: 'One idea on a dark stage',
+    gradient: 'linear-gradient(135deg, #06070a 0%, #1a212d 50%, #7cc7ff 100%)',
+    accent: '#7cc7ff'
   }
 ]
 
@@ -61,7 +61,7 @@ onUnmounted(() => {
     <div class="themes-header">
       <span class="themes-label">Themes</span>
       <h2 class="themes-heading">Built-in themes</h2>
-      <p class="themes-subheading">Choose a style that fits your presentation</p>
+      <p class="themes-subheading">Five of the 21 built-in themes. Press <code>t</code> while presenting to cycle them all.</p>
     </div>
 
     <div class="themes-grid">

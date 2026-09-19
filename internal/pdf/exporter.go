@@ -61,6 +61,13 @@ type ExportResult struct {
 	Duration time.Duration
 	// FileSize is the size of the generated PDF in bytes.
 	FileSize int64
+	// BrokenSlides lists the one-based slide numbers that showed a slide or
+	// component error card (see ErrorCardSelector) at export time. A
+	// broken slide still gets a page in the PDF - the card is what's on
+	// it - this is only for the caller to warn about. Only exportSlides
+	// checks for error cards; ContentNotes and ContentBoth exports never
+	// populate this.
+	BrokenSlides []int
 }
 
 // Exporter handles PDF generation from tap presentations.
@@ -322,6 +329,7 @@ func (e *Exporter) exportSlides(ctx context.Context, page playwright.Page, serve
 
 	// Capture each slide as a screenshot
 	var screenshotPaths []string
+	var brokenSlides []int
 	for i := 0; i < slideCount; i++ {
 		// Check for context cancellation
 		select {
@@ -356,8 +364,25 @@ func (e *Exporter) exportSlides(ctx context.Context, page playwright.Page, serve
 			return nil, fmt.Errorf("failed to wait for maps on slide %d: %w", i+1, err)
 		}
 
-		// Small delay to ensure animations complete
-		time.Sleep(200 * time.Millisecond)
+		// Wait for web fonts and any running CSS animation or transition to
+		// settle - print mode shows a slide's final state, and a component
+		// (such as the rolling deploy example) can animate into that final
+		// state over several hundred milliseconds, longer than a fixed
+		// delay would reliably cover.
+		if err := waitForFonts(page); err != nil {
+			return nil, fmt.Errorf("failed to wait for fonts on slide %d: %w", i+1, err)
+		}
+		if err := waitForAnimations(page); err != nil {
+			return nil, fmt.Errorf("failed to wait for animations on slide %d: %w", i+1, err)
+		}
+
+		// A broken slide (a component that throws at render, or a slide
+		// that fails to render) still gets a page - the card is what
+		// renders - so this only records it for a warning, once the whole
+		// export succeeds; it never stops the loop.
+		if _, hasError := detectErrorCard(page); hasError {
+			brokenSlides = append(brokenSlides, i+1)
+		}
 
 		// Take a screenshot
 		screenshotPath := filepath.Join(tempDir, fmt.Sprintf("slide-%03d.png", i))
@@ -382,8 +407,9 @@ func (e *Exporter) exportSlides(ctx context.Context, page playwright.Page, serve
 	}
 
 	return &ExportResult{
-		OutputPath: output,
-		PageCount:  slideCount,
+		OutputPath:   output,
+		PageCount:    slideCount,
+		BrokenSlides: brokenSlides,
 	}, nil
 }
 

@@ -2,8 +2,10 @@ package transformer
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 
+	"github.com/MiniCodeMonkey/tap/internal/components"
 	"github.com/MiniCodeMonkey/tap/internal/config"
 	"github.com/MiniCodeMonkey/tap/internal/parser"
 )
@@ -140,20 +142,18 @@ func TestTransformWithDefaultTransition(t *testing.T) {
 	}
 }
 
-func TestTransformWithFragments(t *testing.T) {
+func TestTransformCopiesFragmentCountAndSlotOrder(t *testing.T) {
 	cfg := config.DefaultConfig()
 	tr := New(cfg)
 
 	pres := &parser.Presentation{
 		Slides: []parser.Slide{
 			{
-				Index: 0,
-				HTML:  "<p>Content</p>",
-				Fragments: []parser.Fragment{
-					{Index: 0, Content: "First point"},
-					{Index: 1, Content: "Second point"},
-					{Index: 2, Content: "Third point"},
-				},
+				Index:         0,
+				HTML:          "<p>Content</p>",
+				Slots:         map[string]string{"default": "<p>Content</p>"},
+				SlotOrder:     []string{"default"},
+				FragmentCount: 3,
 			},
 		},
 	}
@@ -161,18 +161,11 @@ func TestTransformWithFragments(t *testing.T) {
 	result := tr.Transform(pres)
 	slide := result.Slides[0]
 
-	if len(slide.Fragments) != 3 {
-		t.Fatalf("expected 3 fragments, got %d", len(slide.Fragments))
+	if slide.FragmentCount != 3 {
+		t.Errorf("expected fragmentCount 3, got %d", slide.FragmentCount)
 	}
-
-	for i, frag := range slide.Fragments {
-		if frag.Index != i {
-			t.Errorf("fragment %d: expected index %d, got %d", i, i, frag.Index)
-		}
-	}
-
-	if slide.Fragments[0].Content != "First point" {
-		t.Errorf("fragment 0: unexpected content %q", slide.Fragments[0].Content)
+	if len(slide.SlotOrder) != 1 || slide.SlotOrder[0] != "default" {
+		t.Errorf("expected slotOrder [default], got %v", slide.SlotOrder)
 	}
 }
 
@@ -337,9 +330,7 @@ func TestTransformJSONSerializable(t *testing.T) {
 					Background: "#000000",
 					Notes:      "Test notes",
 				},
-				Fragments: []parser.Fragment{
-					{Index: 0, Content: "Fragment 1"},
-				},
+				FragmentCount: 1,
 				CodeBlocks: []parser.CodeBlock{
 					{Language: "go", Code: "fmt.Println(\"hello\")"},
 				},
@@ -395,7 +386,7 @@ func TestTransformNoBackgroundWhenEmpty(t *testing.T) {
 	}
 }
 
-func TestTransformNoFragmentsOmittedInJSON(t *testing.T) {
+func TestTransformFragmentCountZeroWhenNoPauseMarkers(t *testing.T) {
 	cfg := config.DefaultConfig()
 	tr := New(cfg)
 
@@ -407,21 +398,8 @@ func TestTransformNoFragmentsOmittedInJSON(t *testing.T) {
 
 	result := tr.Transform(pres)
 
-	// Check that the slide's Fragments field is nil (will be omitted due to omitempty)
-	if result.Slides[0].Fragments != nil {
-		t.Error("expected slide Fragments to be nil when no pause markers present")
-	}
-
-	// Marshal just the slide to verify omitempty behavior
-	slideData, err := json.Marshal(result.Slides[0])
-	if err != nil {
-		t.Fatalf("failed to marshal slide: %v", err)
-	}
-
-	// Check that fragments key is omitted from the slide JSON (due to omitempty)
-	slideJSON := string(slideData)
-	if containsField(slideJSON, "fragments") {
-		t.Error("expected 'fragments' field to be omitted from slide when empty")
+	if result.Slides[0].FragmentCount != 0 {
+		t.Errorf("expected fragmentCount 0 when no pause markers present, got %d", result.Slides[0].FragmentCount)
 	}
 }
 
@@ -694,29 +672,29 @@ func TestDetectLayoutQuote(t *testing.T) {
 	}
 }
 
-func TestDetectLayoutTwoColumn(t *testing.T) {
+func TestDetectLayoutColumns(t *testing.T) {
 	testCases := []struct {
 		name     string
 		html     string
-		content  string
+		slots    map[string]string
 		expected string
 	}{
 		{
-			name:     "Two column with separator",
-			html:     "<p>Left content</p>\n<p>|||</p>\n<p>Right content</p>",
-			content:  "Left content\n\n|||\n\nRight content",
+			name:     "left and right slots",
+			html:     "<p>Left content</p><p>Right content</p>",
+			slots:    map[string]string{"left": "<p>Left content</p>", "right": "<p>Right content</p>"},
 			expected: "two-column",
 		},
 		{
-			name:     "Two column inline separator",
-			html:     "<p>Left ||| Right</p>",
-			content:  "Left ||| Right",
-			expected: "two-column",
+			name:     "left, center, and right slots",
+			html:     "<p>Left</p><p>Center</p><p>Right</p>",
+			slots:    map[string]string{"left": "<p>Left</p>", "center": "<p>Center</p>", "right": "<p>Right</p>"},
+			expected: "three-column",
 		},
 		{
-			name:     "No separator - not two-column",
+			name:     "no column slots - not two-column",
 			html:     "<p>Just regular content</p>",
-			content:  "Just regular content",
+			slots:    map[string]string{"default": "<p>Just regular content</p>"},
 			expected: "default",
 		},
 	}
@@ -728,7 +706,7 @@ func TestDetectLayoutTwoColumn(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			pres := &parser.Presentation{
 				Slides: []parser.Slide{
-					{Index: 0, HTML: tc.html, Content: tc.content},
+					{Index: 0, HTML: tc.html, Slots: tc.slots},
 				},
 			}
 			result := tr.Transform(pres)
@@ -956,8 +934,8 @@ func TestResolveImagePathSupportedFormats(t *testing.T) {
 		"animation.gif",
 		"vector.svg",
 		"modern.webp",
-		"IMAGE.PNG",  // uppercase
-		"Photo.JPG",  // mixed case
+		"IMAGE.PNG", // uppercase
+		"Photo.JPG", // mixed case
 		"file.JPEG",
 	}
 
@@ -1125,6 +1103,302 @@ func TestTransformWithImagePathResolution(t *testing.T) {
 	expectedHTML := `<h1>Slide with image</h1><p><img src="/local/images/photo.png" alt="Photo"></p>`
 	if result.Slides[0].HTML != expectedHTML {
 		t.Errorf("HTML with resolved paths:\n  got:      %q\n  expected: %q", result.Slides[0].HTML, expectedHTML)
+	}
+}
+
+func TestTransformResolvesImagePathsInSlots(t *testing.T) {
+	cfg := config.DefaultConfig()
+	tr := NewWithBaseDir(cfg, "/presentations/demo")
+
+	pres := &parser.Presentation{
+		Slides: []parser.Slide{
+			{
+				Index: 0,
+				HTML:  `<p>Text</p><img src="a.png">`,
+				Slots: map[string]string{
+					"default": "<p>Text</p>",
+					"figure":  `<img src="a.png">`,
+				},
+				SlotOrder: []string{"default", "figure"},
+			},
+		},
+	}
+
+	result := tr.Transform(pres)
+	slide := result.Slides[0]
+
+	expectedFigure := `<img src="/local/a.png">`
+	if slide.Slots["figure"] != expectedFigure {
+		t.Errorf("expected slots[figure] %q, got %q", expectedFigure, slide.Slots["figure"])
+	}
+}
+
+func TestCountStepsWithMapCodeBlock(t *testing.T) {
+	cfg := config.DefaultConfig()
+	tr := New(cfg)
+
+	pres := &parser.Presentation{
+		Slides: []parser.Slide{
+			{
+				Index: 0,
+				HTML:  "<pre><code>map data</code></pre>",
+				CodeBlocks: []parser.CodeBlock{
+					{Language: "map", Code: "{}"},
+				},
+			},
+		},
+	}
+
+	result := tr.Transform(pres)
+	if result.Slides[0].Steps != 1 {
+		t.Errorf("expected steps 1 for a slide with a map code block, got %d", result.Slides[0].Steps)
+	}
+}
+
+func TestCountStepsWithoutMapCodeBlock(t *testing.T) {
+	cfg := config.DefaultConfig()
+	tr := New(cfg)
+
+	pres := &parser.Presentation{
+		Slides: []parser.Slide{
+			{
+				Index: 0,
+				HTML:  "<pre><code>SELECT 1</code></pre>",
+				CodeBlocks: []parser.CodeBlock{
+					{Language: "sql", Code: "SELECT 1"},
+				},
+			},
+		},
+	}
+
+	result := tr.Transform(pres)
+	if result.Slides[0].Steps != 0 {
+		t.Errorf("expected steps 0 for a slide without a map code block, got %d", result.Slides[0].Steps)
+	}
+}
+
+func TestTransform_WholeSlideComponent_SetsLayoutAndComponent(t *testing.T) {
+	cfg := config.DefaultConfig()
+	tr := New(cfg)
+	tr.SetComponents(map[string]components.Result{
+		"./slides/RollingDeploy.jsx": {
+			Bundle: &components.Bundle{Name: "RollingDeploy", Hash: "abc123", JavaScript: []byte("js"), CSS: []byte("css")},
+		},
+	})
+
+	pres := &parser.Presentation{
+		Slides: []parser.Slide{
+			{Index: 0, Directives: parser.SlideDirectives{Layout: "./slides/RollingDeploy.jsx"}},
+		},
+	}
+
+	result := tr.Transform(pres)
+	slide := result.Slides[0]
+	if slide.Layout != "component" {
+		t.Fatalf("expected layout %q, got %q", "component", slide.Layout)
+	}
+	if slide.Component == nil {
+		t.Fatal("expected slide.Component to be set")
+	}
+	if slide.Component.Source != "./slides/RollingDeploy.jsx" {
+		t.Errorf("expected source %q, got %q", "./slides/RollingDeploy.jsx", slide.Component.Source)
+	}
+	if slide.Component.URL != "/components/RollingDeploy-abc123.js" {
+		t.Errorf("expected url %q, got %q", "/components/RollingDeploy-abc123.js", slide.Component.URL)
+	}
+	if slide.Component.CSS != "/components/RollingDeploy-abc123.css" {
+		t.Errorf("expected css %q, got %q", "/components/RollingDeploy-abc123.css", slide.Component.CSS)
+	}
+	if slide.Component.Error != "" {
+		t.Errorf("expected no error, got %q", slide.Component.Error)
+	}
+}
+
+func TestTransform_WholeSlideComponent_BuildErrorSurfaces(t *testing.T) {
+	cfg := config.DefaultConfig()
+	tr := New(cfg)
+	tr.SetComponents(map[string]components.Result{
+		"./slides/Broken.jsx": {
+			Errors: []components.BuildError{{File: "Broken.jsx", Line: 2, Column: 1, Message: "Unexpected end of file"}},
+		},
+	})
+
+	pres := &parser.Presentation{
+		Slides: []parser.Slide{
+			{Index: 0, Directives: parser.SlideDirectives{Layout: "./slides/Broken.jsx"}},
+		},
+	}
+
+	result := tr.Transform(pres)
+	slide := result.Slides[0]
+	if slide.Layout != "component" {
+		t.Fatalf("expected layout %q even when the build fails, got %q", "component", slide.Layout)
+	}
+	if slide.Component == nil || slide.Component.Error == "" {
+		t.Fatalf("expected slide.Component.Error to carry the build error, got %+v", slide.Component)
+	}
+	if !strings.Contains(slide.Component.Error, "Broken.jsx:2:1: Unexpected end of file") {
+		t.Errorf("expected error to carry the formatted message, got %q", slide.Component.Error)
+	}
+	if slide.Component.URL != "" {
+		t.Errorf("expected no url for a broken component, got %q", slide.Component.URL)
+	}
+}
+
+func TestTransform_InlineComponents_URLAndProps(t *testing.T) {
+	cfg := config.DefaultConfig()
+	tr := New(cfg)
+	tr.SetComponents(map[string]components.Result{
+		"./charts/LatencyDrop.jsx": {
+			Bundle: &components.Bundle{Name: "LatencyDrop", Hash: "def456", JavaScript: []byte("js")},
+		},
+	})
+
+	pres := &parser.Presentation{
+		Slides: []parser.Slide{
+			{
+				Index: 0,
+				Components: []parser.Component{
+					{Index: 0, Source: "./charts/LatencyDrop.jsx", Props: json.RawMessage(`{"before":412}`)},
+				},
+			},
+		},
+	}
+
+	result := tr.Transform(pres)
+	slide := result.Slides[0]
+	if len(slide.Components) != 1 {
+		t.Fatalf("expected 1 inline component, got %d", len(slide.Components))
+	}
+	comp := slide.Components[0]
+	if comp.Index != 0 || comp.Source != "./charts/LatencyDrop.jsx" {
+		t.Errorf("unexpected inline component identity: %+v", comp)
+	}
+	if comp.URL != "/components/LatencyDrop-def456.js" {
+		t.Errorf("expected url %q, got %q", "/components/LatencyDrop-def456.js", comp.URL)
+	}
+	if comp.CSS != "" {
+		t.Errorf("expected no css, got %q", comp.CSS)
+	}
+	if string(comp.Props) != `{"before":412}` {
+		t.Errorf("expected props to pass through, got %q", string(comp.Props))
+	}
+}
+
+func TestTransform_ComponentURLPrefix_UsedWhenSet(t *testing.T) {
+	cfg := config.DefaultConfig()
+	tr := New(cfg)
+	tr.SetComponentURLPrefix("components/")
+	tr.SetComponents(map[string]components.Result{
+		"./slides/RollingDeploy.jsx": {
+			Bundle: &components.Bundle{Name: "RollingDeploy", Hash: "abc123", JavaScript: []byte("js")},
+		},
+	})
+
+	pres := &parser.Presentation{
+		Slides: []parser.Slide{
+			{Index: 0, Directives: parser.SlideDirectives{Layout: "./slides/RollingDeploy.jsx"}},
+		},
+	}
+
+	result := tr.Transform(pres)
+	if result.Slides[0].Component.URL != "components/RollingDeploy-abc123.js" {
+		t.Errorf("expected relative url, got %q", result.Slides[0].Component.URL)
+	}
+}
+
+func TestCountSteps_DirectiveWins(t *testing.T) {
+	cfg := config.DefaultConfig()
+	tr := New(cfg)
+	tr.SetComponents(map[string]components.Result{
+		"./slides/RollingDeploy.jsx": {
+			Bundle: &components.Bundle{Name: "RollingDeploy", Hash: "abc123", HasStepsExport: true, Steps: 3},
+		},
+	})
+
+	pres := &parser.Presentation{
+		Slides: []parser.Slide{
+			{
+				Index:      0,
+				Directives: parser.SlideDirectives{Layout: "./slides/RollingDeploy.jsx", Steps: 5, HasSteps: true},
+			},
+		},
+	}
+
+	result := tr.Transform(pres)
+	if result.Slides[0].Steps != 5 {
+		t.Errorf("expected the steps directive (5) to win over the static export (3), got %d", result.Slides[0].Steps)
+	}
+}
+
+func TestCountSteps_ExplicitZeroDirectiveWinsOverStaticExport(t *testing.T) {
+	cfg := config.DefaultConfig()
+	tr := New(cfg)
+	tr.SetComponents(map[string]components.Result{
+		"./slides/RollingDeploy.jsx": {
+			Bundle: &components.Bundle{Name: "RollingDeploy", Hash: "abc123", HasStepsExport: true, Steps: 5},
+		},
+	})
+
+	pres := &parser.Presentation{
+		Slides: []parser.Slide{
+			{
+				Index:      0,
+				Directives: parser.SlideDirectives{Layout: "./slides/RollingDeploy.jsx", Steps: 0, HasSteps: true},
+			},
+		},
+	}
+
+	result := tr.Transform(pres)
+	if result.Slides[0].Steps != 0 {
+		t.Errorf("expected an explicit steps: 0 directive to win over the static export (5), got %d", result.Slides[0].Steps)
+	}
+}
+
+func TestCountSteps_StaticExportUsedWhenNoDirective(t *testing.T) {
+	cfg := config.DefaultConfig()
+	tr := New(cfg)
+	tr.SetComponents(map[string]components.Result{
+		"./slides/RollingDeploy.jsx": {
+			Bundle: &components.Bundle{Name: "RollingDeploy", Hash: "abc123", HasStepsExport: true, Steps: 4},
+		},
+	})
+
+	pres := &parser.Presentation{
+		Slides: []parser.Slide{
+			{Index: 0, Directives: parser.SlideDirectives{Layout: "./slides/RollingDeploy.jsx"}},
+		},
+	}
+
+	result := tr.Transform(pres)
+	if result.Slides[0].Steps != 4 {
+		t.Errorf("expected the static export (4), got %d", result.Slides[0].Steps)
+	}
+}
+
+func TestCountSteps_InlineComponentsUseMaximum(t *testing.T) {
+	cfg := config.DefaultConfig()
+	tr := New(cfg)
+	tr.SetComponents(map[string]components.Result{
+		"./a.jsx": {Bundle: &components.Bundle{Name: "A", Hash: "1", HasStepsExport: true, Steps: 2}},
+		"./b.jsx": {Bundle: &components.Bundle{Name: "B", Hash: "2", HasStepsExport: true, Steps: 5}},
+	})
+
+	pres := &parser.Presentation{
+		Slides: []parser.Slide{
+			{
+				Index: 0,
+				Components: []parser.Component{
+					{Index: 0, Source: "./a.jsx", Props: json.RawMessage("{}")},
+					{Index: 1, Source: "./b.jsx", Props: json.RawMessage("{}")},
+				},
+			},
+		},
+	}
+
+	result := tr.Transform(pres)
+	if result.Slides[0].Steps != 5 {
+		t.Errorf("expected the maximum of the inline components' steps (5), got %d", result.Slides[0].Steps)
 	}
 }
 

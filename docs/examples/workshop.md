@@ -17,7 +17,7 @@ This example demonstrates how to structure an interactive workshop with:
 
 ## Features Used
 
-- **Theme**: `paper` for readability during exercises
+- **Theme**: `lab-notebook` for readability and a figure-led feel during exercises
 - **Layouts**: `title`, `two-column`, `code-focus`, `section`
 - **Live Code**: SQLite driver for hands-on database exercises
 - **Fragments**: Step-by-step reveals for instructions
@@ -27,7 +27,7 @@ This example demonstrates how to structure an interactive workshop with:
 ````markdown
 ---
 title: SQL Fundamentals Workshop
-theme: paper
+theme: lab-notebook
 author: Workshop Instructor
 date: 2026-01-24
 aspectRatio: "16:9"
@@ -124,7 +124,7 @@ layout: two-column
 
 ## Exercise 1
 
-|||
+::left
 
 ### Your Task
 
@@ -140,7 +140,7 @@ Write a query to find:
 - Use `ORDER BY` for sorting
 - Use `DESC` for descending order
 
-|||
+::right
 
 ### Solution
 
@@ -215,7 +215,7 @@ layout: two-column
 
 ## Exercise 2
 
-|||
+::left
 
 ### Your Task
 
@@ -225,7 +225,7 @@ Find the average page count for books published:
 
 Compare the results.
 
-|||
+::right
 
 ### Solution
 
@@ -310,12 +310,12 @@ ORDER BY avg_rating DESC;
 
 ### Key Concepts Covered
 
-- `CREATE TABLE` — Define schema
-- `INSERT` — Add data
-- `SELECT` — Query data
-- `WHERE` — Filter results
-- `GROUP BY` — Aggregate data
-- `JOIN` — Combine tables
+- `CREATE TABLE`: Define schema
+- `INSERT`: Add data
+- `SELECT`: Query data
+- `WHERE`: Filter results
+- `GROUP BY`: Aggregate data
+- `JOIN`: Combine tables
 
 ---
 

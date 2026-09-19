@@ -2,19 +2,23 @@
  * Asciinema player utilities for rendering terminal recordings in slides.
  * Finds <pre><code class="language-asciinema"> blocks and replaces them
  * with interactive asciinema-player instances.
+ *
+ * The player and its CSS are bundled (the `asciinema-player` npm package),
+ * not loaded from a CDN at runtime: tap is used on stage, often without
+ * reliable network, the same reason fonts are bundled. Both are pulled in
+ * through a dynamic import() so they land in their own lazy chunk, loaded
+ * only once a slide actually has an asciinema block.
  */
 
-/** CDN URLs for asciinema-player */
-const ASCIINEMA_PLAYER_JS =
-	'https://cdn.jsdelivr.net/npm/asciinema-player@3.9.0/dist/bundle/asciinema-player.min.js';
-const ASCIINEMA_PLAYER_CSS =
-	'https://cdn.jsdelivr.net/npm/asciinema-player@3.9.0/dist/bundle/asciinema-player.min.css';
+import type { Options as AsciinemaPlayerOptions, Player as AsciinemaPlayerInstance } from 'asciinema-player';
+
+export type { AsciinemaPlayerInstance, AsciinemaPlayerOptions };
 
 /** Available playback speeds */
 const SPEED_OPTIONS = [0.5, 1.0, 1.5, 2.0, 3.0];
 
-/** Track loaded state */
-let libraryLoaded = false;
+/** The dynamically-imported asciinema-player module, once loaded. */
+let playerModule: typeof import('asciinema-player') | null = null;
 
 /** Parsed asciinema config from code block content */
 interface AsciinemaConfig {
@@ -26,53 +30,26 @@ interface AsciinemaConfig {
 	cols?: number;
 	rows?: number;
 	idleTimeLimit?: number;
-	fit?: string;
+	fit?: 'width' | 'height' | 'both' | 'none';
 	poster?: string;
 	controls?: boolean;
 }
 
 /**
- * Load the asciinema-player library from CDN.
+ * Load the asciinema-player module and its CSS, both as a lazy, on-demand
+ * chunk. Safe to call repeatedly: the module is cached in `playerModule`
+ * after the first successful load.
  */
-async function loadLibrary(): Promise<void> {
-	if (libraryLoaded && (window as any).AsciinemaPlayer) {
-		return;
+async function loadLibrary(): Promise<typeof import('asciinema-player')> {
+	if (playerModule) {
+		return playerModule;
 	}
 
-	// Load CSS if not present
-	if (!document.querySelector(`link[href="${ASCIINEMA_PLAYER_CSS}"]`)) {
-		const link = document.createElement('link');
-		link.rel = 'stylesheet';
-		link.href = ASCIINEMA_PLAYER_CSS;
-		document.head.appendChild(link);
-	}
-
-	// Load JS if not present
-	const existingScript = document.querySelector(`script[src="${ASCIINEMA_PLAYER_JS}"]`);
-	if (!existingScript) {
-		await new Promise<void>((resolve, reject) => {
-			const script = document.createElement('script');
-			script.src = ASCIINEMA_PLAYER_JS;
-			script.async = true;
-			script.onload = () => resolve();
-			script.onerror = () => reject(new Error('Failed to load asciinema-player library'));
-			document.head.appendChild(script);
-		});
-	} else {
-		// Wait for existing script to finish loading
-		await new Promise<void>((resolve) => {
-			const checkLoaded = () => {
-				if ((window as any).AsciinemaPlayer) {
-					resolve();
-				} else {
-					setTimeout(checkLoaded, 50);
-				}
-			};
-			checkLoaded();
-		});
-	}
-
-	libraryLoaded = true;
+	// The CSS import is side-effect-only (no bindings used): the bundler
+	// injects it as a <style> tag when this chunk loads.
+	await import('asciinema-player/dist/bundle/asciinema-player.css');
+	playerModule = await import('asciinema-player');
+	return playerModule;
 }
 
 /**
@@ -115,7 +92,9 @@ function parseConfig(content: string): AsciinemaConfig | null {
 	if (config.cols !== undefined) result.cols = parseInt(config.cols, 10);
 	if (config.rows !== undefined) result.rows = parseInt(config.rows, 10);
 	if (config.idleTimeLimit !== undefined) result.idleTimeLimit = parseFloat(config.idleTimeLimit);
-	if (config.fit !== undefined) result.fit = config.fit;
+	if (config.fit === 'width' || config.fit === 'height' || config.fit === 'both' || config.fit === 'none') {
+		result.fit = config.fit;
+	}
 	if (config.poster !== undefined) result.poster = config.poster;
 	if (config.controls !== undefined) result.controls = config.controls === 'true';
 
@@ -125,10 +104,7 @@ function parseConfig(content: string): AsciinemaConfig | null {
 /**
  * Create controls overlay for the player.
  */
-function createControls(
-	player: any,
-	config: AsciinemaConfig
-): HTMLElement {
+function createControls(player: AsciinemaPlayerInstance, config: AsciinemaConfig): HTMLElement {
 	const overlay = document.createElement('div');
 	overlay.className = 'controls-overlay';
 
@@ -139,16 +115,16 @@ function createControls(
 	const playPauseBtn = document.createElement('button');
 	playPauseBtn.className = 'control-button play-pause';
 	playPauseBtn.title = isPlaying ? 'Pause' : 'Play';
-	playPauseBtn.textContent = isPlaying ? '\u23F8' : '\u25B7';
+	playPauseBtn.textContent = isPlaying ? '⏸' : '▷';
 	playPauseBtn.addEventListener('click', () => {
 		if (isPlaying) {
-			player.pause();
+			void player.pause();
 			isPlaying = false;
 		} else {
-			player.play();
+			void player.play();
 			isPlaying = true;
 		}
-		playPauseBtn.textContent = isPlaying ? '\u23F8' : '\u25B7';
+		playPauseBtn.textContent = isPlaying ? '⏸' : '▷';
 		playPauseBtn.title = isPlaying ? 'Pause' : 'Play';
 	});
 
@@ -173,18 +149,24 @@ function createControls(
 }
 
 /**
- * Find and render all asciinema code blocks within an element.
- * Replaces <pre><code class="language-asciinema"> blocks with asciinema players.
+ * Find and render all asciinema code blocks within an element, replacing
+ * each <pre><code class="language-asciinema"> block with an interactive
+ * asciinema-player instance. Returns the players created on this call, so
+ * the caller (useRichBlocks) can dispose them later: when its host slide
+ * unmounts or this block is re-rendered with different content.
  */
-export async function renderAsciinemaBlocksInElement(element: HTMLElement): Promise<void> {
-	const codeBlocks = element.querySelectorAll<HTMLElement>('pre > code.language-asciinema');
+export async function renderAsciinemaBlocksInElement(element: HTMLElement): Promise<AsciinemaPlayerInstance[]> {
+	// Scoped to .slot descendants so DOM a deck-supplied component owns
+	// outside of a slot is never mutated here.
+	const codeBlocks = element.querySelectorAll<HTMLElement>('.slot pre > code.language-asciinema');
 
 	if (codeBlocks.length === 0) {
-		return;
+		return [];
 	}
 
+	let AsciinemaPlayer: typeof import('asciinema-player');
 	try {
-		await loadLibrary();
+		AsciinemaPlayer = await loadLibrary();
 	} catch (err) {
 		console.error('Failed to load asciinema-player library:', err);
 		// Show error in each block
@@ -195,16 +177,15 @@ export async function renderAsciinemaBlocksInElement(element: HTMLElement): Prom
 			errorDiv.className = 'asciinema-player-wrapper error';
 			errorDiv.innerHTML =
 				'<div class="error-state">' +
-				'<span class="error-icon">\u26A0</span>' +
+				'<span class="error-icon">⚠</span>' +
 				'<span class="error-text">Failed to load asciinema player library</span>' +
 				'</div>';
 			pre.replaceWith(errorDiv);
 		});
-		return;
+		return [];
 	}
 
-	const AsciinemaPlayer = (window as any).AsciinemaPlayer;
-	if (!AsciinemaPlayer) return;
+	const players: AsciinemaPlayerInstance[] = [];
 
 	for (const codeBlock of Array.from(codeBlocks)) {
 		const pre = codeBlock.parentElement;
@@ -220,7 +201,7 @@ export async function renderAsciinemaBlocksInElement(element: HTMLElement): Prom
 			errorDiv.className = 'asciinema-player-wrapper error';
 			errorDiv.innerHTML =
 				'<div class="error-state">' +
-				'<span class="error-icon">\u26A0</span>' +
+				'<span class="error-icon">⚠</span>' +
 				'<span class="error-text">Missing src in asciinema config</span>' +
 				'<span class="error-hint">Use: ```asciinema {src: "./recording.cast"}</span>' +
 				'</div>';
@@ -243,7 +224,7 @@ export async function renderAsciinemaBlocksInElement(element: HTMLElement): Prom
 		try {
 			// Build player options
 			const showControls = config.controls ?? false;
-			const options: Record<string, any> = {
+			const options: AsciinemaPlayerOptions = {
 				autoPlay: config.autoPlay ?? false,
 				speed: config.speed ?? 1.0,
 				loop: config.loop ?? false,
@@ -260,6 +241,7 @@ export async function renderAsciinemaBlocksInElement(element: HTMLElement): Prom
 			if (config.poster) options.poster = config.poster;
 
 			const player = AsciinemaPlayer.create(config.src, playerContainer, options);
+			players.push(player);
 
 			// Add custom controls
 			const controls = createControls(player, config);
@@ -269,11 +251,18 @@ export async function renderAsciinemaBlocksInElement(element: HTMLElement): Prom
 			errorDiv.className = 'asciinema-player-wrapper error';
 			errorDiv.innerHTML =
 				'<div class="error-state">' +
-				`<span class="error-icon">\u26A0</span>` +
+				`<span class="error-icon">⚠</span>` +
 				`<span class="error-text">Failed to create asciinema player: ${err instanceof Error ? err.message : 'Unknown error'}</span>` +
 				`<span class="error-hint">Check that ${config.src} exists and is accessible.</span>` +
 				'</div>';
 			wrapper.replaceWith(errorDiv);
 		}
 	}
+
+	return players;
+}
+
+/** Resets the cached player module. Test-only. */
+export function resetAsciinemaLoaderState(): void {
+	playerModule = null;
 }

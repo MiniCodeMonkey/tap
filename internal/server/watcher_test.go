@@ -248,6 +248,213 @@ func TestWatcher_FileCreate(t *testing.T) {
 	mu.Unlock()
 }
 
+func TestWatcher_RecursiveSubdirectoryChange(t *testing.T) {
+	tmpDir := t.TempDir()
+	mdFile := filepath.Join(tmpDir, "test.md")
+	if err := os.WriteFile(mdFile, []byte("# Test"), 0644); err != nil {
+		t.Fatalf("failed to create test file: %v", err)
+	}
+
+	slidesDir := filepath.Join(tmpDir, "slides")
+	if err := os.MkdirAll(slidesDir, 0755); err != nil {
+		t.Fatalf("failed to create slides dir: %v", err)
+	}
+	componentFile := filepath.Join(slidesDir, "RollingDeploy.jsx")
+	if err := os.WriteFile(componentFile, []byte("export default function () {}"), 0644); err != nil {
+		t.Fatalf("failed to create component file: %v", err)
+	}
+
+	w, err := NewWatcher(mdFile)
+	if err != nil {
+		t.Fatalf("NewWatcher() error = %v", err)
+	}
+
+	var callCount atomic.Int32
+	w.SetOnChange(func(path string) { callCount.Add(1) })
+	w.SetDebounceTime(10 * time.Millisecond)
+
+	if err := w.Start(); err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+	defer w.Stop()
+
+	time.Sleep(50 * time.Millisecond)
+
+	if err := os.WriteFile(componentFile, []byte("export default function () { return null; }"), 0644); err != nil {
+		t.Fatalf("failed to update component file: %v", err)
+	}
+
+	time.Sleep(100 * time.Millisecond)
+
+	if callCount.Load() == 0 {
+		t.Error("onChange was not called for a change in a subdirectory of the deck directory")
+	}
+}
+
+func TestWatcher_SkipsNodeModules(t *testing.T) {
+	tmpDir := t.TempDir()
+	mdFile := filepath.Join(tmpDir, "test.md")
+	if err := os.WriteFile(mdFile, []byte("# Test"), 0644); err != nil {
+		t.Fatalf("failed to create test file: %v", err)
+	}
+
+	nodeModulesDir := filepath.Join(tmpDir, "node_modules", "some-lib")
+	if err := os.MkdirAll(nodeModulesDir, 0755); err != nil {
+		t.Fatalf("failed to create node_modules dir: %v", err)
+	}
+	libFile := filepath.Join(nodeModulesDir, "index.js")
+	if err := os.WriteFile(libFile, []byte("module.exports = {}"), 0644); err != nil {
+		t.Fatalf("failed to create lib file: %v", err)
+	}
+
+	w, err := NewWatcher(mdFile)
+	if err != nil {
+		t.Fatalf("NewWatcher() error = %v", err)
+	}
+
+	var callCount atomic.Int32
+	w.SetOnChange(func(path string) { callCount.Add(1) })
+	w.SetDebounceTime(10 * time.Millisecond)
+
+	if err := w.Start(); err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+	defer w.Stop()
+
+	time.Sleep(50 * time.Millisecond)
+
+	if err := os.WriteFile(libFile, []byte("module.exports = { changed: true }"), 0644); err != nil {
+		t.Fatalf("failed to update lib file: %v", err)
+	}
+
+	time.Sleep(100 * time.Millisecond)
+
+	if callCount.Load() != 0 {
+		t.Error("onChange was called for a change inside node_modules, which should not be watched")
+	}
+}
+
+func TestWatcher_SkipsDotDirectoriesAndDist(t *testing.T) {
+	tmpDir := t.TempDir()
+	mdFile := filepath.Join(tmpDir, "test.md")
+	if err := os.WriteFile(mdFile, []byte("# Test"), 0644); err != nil {
+		t.Fatalf("failed to create test file: %v", err)
+	}
+
+	gitDir := filepath.Join(tmpDir, ".git", "objects")
+	if err := os.MkdirAll(gitDir, 0755); err != nil {
+		t.Fatalf("failed to create .git dir: %v", err)
+	}
+	gitFile := filepath.Join(gitDir, "pack")
+	if err := os.WriteFile(gitFile, []byte("git internals"), 0644); err != nil {
+		t.Fatalf("failed to create git file: %v", err)
+	}
+
+	distDir := filepath.Join(tmpDir, "dist")
+	if err := os.MkdirAll(distDir, 0755); err != nil {
+		t.Fatalf("failed to create dist dir: %v", err)
+	}
+	distFile := filepath.Join(distDir, "index.html")
+	if err := os.WriteFile(distFile, []byte("<html></html>"), 0644); err != nil {
+		t.Fatalf("failed to create dist file: %v", err)
+	}
+
+	w, err := NewWatcher(mdFile)
+	if err != nil {
+		t.Fatalf("NewWatcher() error = %v", err)
+	}
+
+	var callCount atomic.Int32
+	w.SetOnChange(func(path string) { callCount.Add(1) })
+	w.SetDebounceTime(10 * time.Millisecond)
+
+	if err := w.Start(); err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+	defer w.Stop()
+
+	time.Sleep(50 * time.Millisecond)
+
+	if err := os.WriteFile(gitFile, []byte("changed"), 0644); err != nil {
+		t.Fatalf("failed to update git file: %v", err)
+	}
+	if err := os.WriteFile(distFile, []byte("<html>changed</html>"), 0644); err != nil {
+		t.Fatalf("failed to update dist file: %v", err)
+	}
+
+	time.Sleep(100 * time.Millisecond)
+
+	if callCount.Load() != 0 {
+		t.Errorf("onChange was called %d time(s) for changes inside .git and dist, which should not be watched", callCount.Load())
+	}
+
+	// Creating a skipped directory itself while the watcher is running
+	// (e.g. `git init` in the deck folder) must not trigger a rebuild.
+	callCount.Store(0)
+	freshGitDir := filepath.Join(tmpDir, ".git2")
+	if err := os.Mkdir(freshGitDir, 0755); err != nil {
+		t.Fatalf("failed to create fresh dot dir: %v", err)
+	}
+
+	time.Sleep(100 * time.Millisecond)
+
+	if callCount.Load() != 0 {
+		t.Error("onChange was called for creating a skipped directory itself, which should not trigger a rebuild")
+	}
+}
+
+func TestWatcher_DeckRootSkippableName_StillWatchesSubtree(t *testing.T) {
+	for _, rootName := range []string{".drafts", "dist"} {
+		t.Run(rootName, func(t *testing.T) {
+			parentDir := t.TempDir()
+			deckDir := filepath.Join(parentDir, rootName)
+			if err := os.MkdirAll(deckDir, 0755); err != nil {
+				t.Fatalf("failed to create deck dir: %v", err)
+			}
+
+			mdFile := filepath.Join(deckDir, "test.md")
+			if err := os.WriteFile(mdFile, []byte("# Test"), 0644); err != nil {
+				t.Fatalf("failed to create test file: %v", err)
+			}
+
+			slidesDir := filepath.Join(deckDir, "slides")
+			if err := os.MkdirAll(slidesDir, 0755); err != nil {
+				t.Fatalf("failed to create slides dir: %v", err)
+			}
+			componentFile := filepath.Join(slidesDir, "RollingDeploy.jsx")
+			if err := os.WriteFile(componentFile, []byte("export default function () {}"), 0644); err != nil {
+				t.Fatalf("failed to create component file: %v", err)
+			}
+
+			w, err := NewWatcher(mdFile)
+			if err != nil {
+				t.Fatalf("NewWatcher() error = %v", err)
+			}
+
+			var callCount atomic.Int32
+			w.SetOnChange(func(path string) { callCount.Add(1) })
+			w.SetDebounceTime(10 * time.Millisecond)
+
+			if err := w.Start(); err != nil {
+				t.Fatalf("Start() error = %v", err)
+			}
+			defer w.Stop()
+
+			time.Sleep(50 * time.Millisecond)
+
+			if err := os.WriteFile(componentFile, []byte("export default function () { return null; }"), 0644); err != nil {
+				t.Fatalf("failed to update component file: %v", err)
+			}
+
+			time.Sleep(100 * time.Millisecond)
+
+			if callCount.Load() == 0 {
+				t.Errorf("onChange was not called for a change in a subfolder of a deck directory named %q, which must still be watched", rootName)
+			}
+		})
+	}
+}
+
 func TestWatcher_FileRename(t *testing.T) {
 	tmpDir := t.TempDir()
 	mdFile := filepath.Join(tmpDir, "test.md")
@@ -371,6 +578,49 @@ func TestWatcher_NoCallback(t *testing.T) {
 	// Test passes if no panic occurred
 }
 
+// TestWatcher_TriggerOnChangeSerializesCallback verifies that two
+// overlapping triggerOnChange calls never run the onChange callback
+// concurrently: a slow rebuild must finish before the next one starts,
+// so a faster later call can't have its result overtaken mid-flight.
+func TestWatcher_TriggerOnChangeSerializesCallback(t *testing.T) {
+	tmpDir := t.TempDir()
+	mdFile := filepath.Join(tmpDir, "test.md")
+	if err := os.WriteFile(mdFile, []byte("# Test"), 0644); err != nil {
+		t.Fatalf("failed to create test file: %v", err)
+	}
+
+	w, err := NewWatcher(mdFile)
+	if err != nil {
+		t.Fatalf("NewWatcher() error = %v", err)
+	}
+
+	var active atomic.Int32
+	var overlapped atomic.Bool
+	w.SetOnChange(func(path string) {
+		if active.Add(1) > 1 {
+			overlapped.Store(true)
+		}
+		time.Sleep(20 * time.Millisecond)
+		active.Add(-1)
+	})
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		w.triggerOnChange("a")
+	}()
+	go func() {
+		defer wg.Done()
+		w.triggerOnChange("b")
+	}()
+	wg.Wait()
+
+	if overlapped.Load() {
+		t.Error("onChange ran concurrently for two triggerOnChange calls, want them serialized")
+	}
+}
+
 func TestWatcher_DefaultDebounceTime(t *testing.T) {
 	tmpDir := t.TempDir()
 	mdFile := filepath.Join(tmpDir, "test.md")
@@ -443,4 +693,110 @@ func TestWatcher_ConcurrentAccess(t *testing.T) {
 	wg.Wait()
 
 	// Test passes if no race condition
+}
+
+// TestWatcher_AddExtraDirs_WatchesFileOutsideDeckTree verifies that a
+// directory added through AddExtraDirs (used for a component's imports that
+// live outside the deck directory tree, from esbuild's metafile inputs) is
+// watched even though it is never reached by the recursive walk of the deck
+// directory itself.
+func TestWatcher_AddExtraDirs_WatchesFileOutsideDeckTree(t *testing.T) {
+	rootDir := t.TempDir()
+	deckDir := filepath.Join(rootDir, "deck")
+	sharedDir := filepath.Join(rootDir, "shared")
+	if err := os.MkdirAll(deckDir, 0755); err != nil {
+		t.Fatalf("failed to create deck dir: %v", err)
+	}
+	if err := os.MkdirAll(sharedDir, 0755); err != nil {
+		t.Fatalf("failed to create shared dir: %v", err)
+	}
+
+	mdFile := filepath.Join(deckDir, "test.md")
+	if err := os.WriteFile(mdFile, []byte("# Test"), 0644); err != nil {
+		t.Fatalf("failed to create test file: %v", err)
+	}
+	sharedFile := filepath.Join(sharedDir, "Thing.jsx")
+	if err := os.WriteFile(sharedFile, []byte("export default function Thing() {}"), 0644); err != nil {
+		t.Fatalf("failed to create shared file: %v", err)
+	}
+
+	w, err := NewWatcher(mdFile)
+	if err != nil {
+		t.Fatalf("NewWatcher() error = %v", err)
+	}
+
+	var callCount atomic.Int32
+	w.SetOnChange(func(path string) { callCount.Add(1) })
+	w.SetDebounceTime(10 * time.Millisecond)
+
+	if err := w.Start(); err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+	defer w.Stop()
+
+	w.AddExtraDirs([]string{sharedDir})
+
+	time.Sleep(50 * time.Millisecond)
+
+	if err := os.WriteFile(sharedFile, []byte("export default function Thing() { return null; }"), 0644); err != nil {
+		t.Fatalf("failed to update shared file: %v", err)
+	}
+
+	time.Sleep(100 * time.Millisecond)
+
+	if callCount.Load() == 0 {
+		t.Error("onChange was not called for a change to a file outside the deck tree added via AddExtraDirs")
+	}
+}
+
+// TestWatcher_AddExtraDirs_SkipsNodeModules verifies that AddExtraDirs does
+// not add a directory under node_modules, even when it lies outside the
+// deck tree (a bare import can resolve into an ancestor's node_modules).
+func TestWatcher_AddExtraDirs_SkipsNodeModules(t *testing.T) {
+	rootDir := t.TempDir()
+	deckDir := filepath.Join(rootDir, "deck")
+	libDir := filepath.Join(rootDir, "node_modules", "some-lib")
+	if err := os.MkdirAll(deckDir, 0755); err != nil {
+		t.Fatalf("failed to create deck dir: %v", err)
+	}
+	if err := os.MkdirAll(libDir, 0755); err != nil {
+		t.Fatalf("failed to create lib dir: %v", err)
+	}
+
+	mdFile := filepath.Join(deckDir, "test.md")
+	if err := os.WriteFile(mdFile, []byte("# Test"), 0644); err != nil {
+		t.Fatalf("failed to create test file: %v", err)
+	}
+	libFile := filepath.Join(libDir, "index.js")
+	if err := os.WriteFile(libFile, []byte("module.exports = {}"), 0644); err != nil {
+		t.Fatalf("failed to create lib file: %v", err)
+	}
+
+	w, err := NewWatcher(mdFile)
+	if err != nil {
+		t.Fatalf("NewWatcher() error = %v", err)
+	}
+
+	var callCount atomic.Int32
+	w.SetOnChange(func(path string) { callCount.Add(1) })
+	w.SetDebounceTime(10 * time.Millisecond)
+
+	if err := w.Start(); err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+	defer w.Stop()
+
+	w.AddExtraDirs([]string{libDir})
+
+	time.Sleep(50 * time.Millisecond)
+
+	if err := os.WriteFile(libFile, []byte("module.exports = { changed: true }"), 0644); err != nil {
+		t.Fatalf("failed to update lib file: %v", err)
+	}
+
+	time.Sleep(100 * time.Millisecond)
+
+	if callCount.Load() != 0 {
+		t.Error("onChange was called for a change under node_modules added via AddExtraDirs, which should be skipped")
+	}
 }

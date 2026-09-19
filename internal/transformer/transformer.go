@@ -2,10 +2,12 @@
 package transformer
 
 import (
+	"encoding/json"
 	"path/filepath"
 	"regexp"
 	"strings"
 
+	"github.com/MiniCodeMonkey/tap/internal/components"
 	"github.com/MiniCodeMonkey/tap/internal/config"
 	"github.com/MiniCodeMonkey/tap/internal/parser"
 )
@@ -18,32 +20,63 @@ type TransformedPresentation struct {
 
 // TransformedSlide represents a slide ready for frontend rendering.
 type TransformedSlide struct {
-	Background  *BackgroundConfig      `json:"background,omitempty"`
-	Layout      string                 `json:"layout"`
-	HTML        string                 `json:"html"`
-	Transition  string                 `json:"transition,omitempty"`
-	Notes       string                 `json:"notes,omitempty"`
-	Tag         string                 `json:"tag,omitempty"`
-	Badge       string                 `json:"badge,omitempty"`
-	CodeBlocks  []TransformedCodeBlock `json:"codeBlocks,omitempty"`
-	Fragments   []TransformedFragment  `json:"fragments,omitempty"`
-	Index       int                    `json:"index"`
-	Scroll      bool                   `json:"scroll,omitempty"`
-	ScrollSpeed int                    `json:"scrollSpeed,omitempty"`
+	Background    *BackgroundConfig      `json:"background,omitempty"`
+	Layout        string                 `json:"layout"`
+	HTML          string                 `json:"html"`
+	Slots         map[string]string      `json:"slots"`
+	SlotOrder     []string               `json:"slotOrder"`
+	FragmentCount int                    `json:"fragmentCount"`
+	Steps         int                    `json:"steps"`
+	Transition    string                 `json:"transition,omitempty"`
+	Notes         string                 `json:"notes,omitempty"`
+	Tag           string                 `json:"tag,omitempty"`
+	Badge         string                 `json:"badge,omitempty"`
+	CodeBlocks    []TransformedCodeBlock `json:"codeBlocks,omitempty"`
+	Index         int                    `json:"index"`
+	Scroll        bool                   `json:"scroll,omitempty"`
+	ScrollSpeed   int                    `json:"scrollSpeed,omitempty"`
+	// Component describes the whole-slide component when Layout is
+	// "component" (the slide's layout directive names a component file).
+	Component *WholeSlideComponent `json:"component,omitempty"`
+	// Components describes each inline ```component fence found on the
+	// slide, in document order.
+	Components []InlineComponent `json:"components,omitempty"`
+	// StepsInvalid carries parser.SlideDirectives.StepsInvalid through to
+	// layouts.Validate, which turns it into a slide warning; it is not
+	// part of the frontend's slide JSON.
+	StepsInvalid bool `json:"-"`
+}
+
+// WholeSlideComponent is the slide JSON shape for a layout directive that
+// names a component file.
+type WholeSlideComponent struct {
+	Source string `json:"source"`
+	URL    string `json:"url,omitempty"`
+	CSS    string `json:"css,omitempty"`
+	// Error is the formatted build error when the component failed to
+	// build; the frontend shows an error card instead of rendering it.
+	Error string `json:"error,omitempty"`
+}
+
+// InlineComponent is the slide JSON shape for one ```component fence.
+type InlineComponent struct {
+	Index  int             `json:"index"`
+	Source string          `json:"source"`
+	URL    string          `json:"url,omitempty"`
+	CSS    string          `json:"css,omitempty"`
+	Props  json.RawMessage `json:"props"`
+	// Error is the formatted build error when the component failed to
+	// build; the frontend shows an error card instead of rendering it.
+	Error string `json:"error,omitempty"`
 }
 
 // TransformedCodeBlock represents a code block ready for frontend rendering.
 type TransformedCodeBlock struct {
-	Language   string `json:"language"`
-	Code       string `json:"code"`
-	Driver     string `json:"driver,omitempty"`
-	Connection string `json:"connection,omitempty"`
-}
-
-// TransformedFragment represents a fragment group for incremental reveals.
-type TransformedFragment struct {
-	Content string `json:"content"`
-	Index   int    `json:"index"`
+	Language       string `json:"language"`
+	Code           string `json:"code"`
+	Driver         string `json:"driver,omitempty"`
+	Connection     string `json:"connection,omitempty"`
+	HighlightLines string `json:"highlightLines,omitempty"`
 }
 
 // BackgroundConfig holds background styling for a slide.
@@ -56,6 +89,16 @@ type BackgroundConfig struct {
 type Transformer struct {
 	config  *config.Config
 	baseDir string // Base directory for resolving relative paths
+	// components holds each distinct component path's build result, set by
+	// SetComponents before Transform. A nil map means no component was
+	// resolved for any path (every lookup misses, which transformSlide
+	// treats as "not resolved").
+	components map[string]components.Result
+	// componentURLPrefix is prepended to a bundle's "<name>-<hash>.<ext>"
+	// to build its URL. Empty means the dev server default ("/components/");
+	// the static builder sets a relative "components/" so the built folder
+	// works from any base path (see the builder's image path handling).
+	componentURLPrefix string
 }
 
 // New creates a new Transformer with the given configuration.
@@ -79,6 +122,21 @@ func (t *Transformer) SetBaseDir(baseDir string) {
 	t.baseDir = baseDir
 }
 
+// SetComponents provides the build result for every distinct component
+// path the presentation's slides use (see internal/components.Resolve), so
+// Transform can fill in component URLs, CSS, and errors.
+func (t *Transformer) SetComponents(resolved map[string]components.Result) {
+	t.components = resolved
+}
+
+// SetComponentURLPrefix sets the prefix used to build a component bundle's
+// URL, replacing the dev server default of "/components/". The static
+// builder passes a relative "components/" so the built output works when
+// served from any base path.
+func (t *Transformer) SetComponentURLPrefix(prefix string) {
+	t.componentURLPrefix = prefix
+}
+
 // Transform converts a parsed Presentation into a TransformedPresentation
 // suitable for JSON serialization and frontend consumption.
 func (t *Transformer) Transform(pres *parser.Presentation) *TransformedPresentation {
@@ -97,25 +155,43 @@ func (t *Transformer) Transform(pres *parser.Presentation) *TransformedPresentat
 
 // transformSlide converts a single parser.Slide to TransformedSlide.
 func (t *Transformer) transformSlide(slide parser.Slide) TransformedSlide {
-	layout := t.resolveLayout(slide)
 	html := t.resolveImagePaths(slide.HTML)
 	html = t.resolveAsciinemaPaths(html)
 
-	// Process HTML for layouts that use ||| column separator
-	if layout == "two-column" || layout == "split-media" || layout == "sidebar" {
-		html = processTwoColumnHTML(html)
-	} else if layout == "three-column" {
-		html = processThreeColumnHTML(html)
+	slots := make(map[string]string, len(slide.Slots))
+	for name, slotHTML := range slide.Slots {
+		resolved := t.resolveImagePaths(slotHTML)
+		resolved = t.resolveAsciinemaPaths(resolved)
+		slots[name] = resolved
 	}
 
 	transformed := TransformedSlide{
-		Index:  slide.Index,
-		HTML:   html,
-		Layout: layout,
-		Notes:  slide.Directives.Notes,
-		Tag:    slide.Directives.Tag,
-		Badge:  slide.Directives.Badge,
+		Index:         slide.Index,
+		HTML:          html,
+		Slots:         slots,
+		SlotOrder:     slide.SlotOrder,
+		FragmentCount: slide.FragmentCount,
+		Notes:         slide.Directives.Notes,
+		Tag:           slide.Directives.Tag,
+		Badge:         slide.Directives.Badge,
+		StepsInvalid:  slide.Directives.StepsInvalid,
 	}
+
+	if components.IsComponentPath(slide.Directives.Layout) {
+		transformed.Layout = "component"
+		transformed.Component = t.buildWholeSlideComponent(slide.Directives.Layout)
+	} else {
+		transformed.Layout = t.resolveLayout(slide)
+	}
+
+	if len(slide.Components) > 0 {
+		transformed.Components = make([]InlineComponent, len(slide.Components))
+		for i, component := range slide.Components {
+			transformed.Components[i] = t.buildInlineComponent(component)
+		}
+	}
+
+	transformed.Steps = t.countSteps(slide)
 
 	// Set transition (per-slide directive overrides global config)
 	if slide.Directives.Transition != "" {
@@ -124,26 +200,16 @@ func (t *Transformer) transformSlide(slide parser.Slide) TransformedSlide {
 		transformed.Transition = t.config.Transition
 	}
 
-	// Transform fragments
-	if len(slide.Fragments) > 0 {
-		transformed.Fragments = make([]TransformedFragment, len(slide.Fragments))
-		for i, frag := range slide.Fragments {
-			transformed.Fragments[i] = TransformedFragment{
-				Content: frag.Content,
-				Index:   frag.Index,
-			}
-		}
-	}
-
 	// Transform code blocks
 	if len(slide.CodeBlocks) > 0 {
 		transformed.CodeBlocks = make([]TransformedCodeBlock, len(slide.CodeBlocks))
 		for i, block := range slide.CodeBlocks {
 			transformed.CodeBlocks[i] = TransformedCodeBlock{
-				Language:   block.Language,
-				Code:       block.Code,
-				Driver:     block.Meta.Driver,
-				Connection: block.Meta.Connection,
+				Language:       block.Language,
+				Code:           block.Code,
+				Driver:         block.Meta.Driver,
+				Connection:     block.Meta.Connection,
+				HighlightLines: block.Meta.HighlightLines,
 			}
 		}
 	}
@@ -164,6 +230,118 @@ func (t *Transformer) transformSlide(slide parser.Slide) TransformedSlide {
 	return transformed
 }
 
+// countSteps returns the number of clicker presses that step-driven content
+// on the slide uses. The slide's own "steps" directive always wins.
+// Otherwise: a "map" fence gives a floor of 1 (the pre-existing rule); a
+// whole-slide component's static "export const steps" export and, for
+// inline components, the maximum across all of them, raise it further.
+func (t *Transformer) countSteps(slide parser.Slide) int {
+	if slide.Directives.HasSteps {
+		return slide.Directives.Steps
+	}
+
+	steps := 0
+	for _, block := range slide.CodeBlocks {
+		if block.Language == "map" {
+			steps = 1
+		}
+	}
+
+	if components.IsComponentPath(slide.Directives.Layout) {
+		if bundle := t.resolvedBundle(slide.Directives.Layout); bundle != nil && bundle.HasStepsExport && bundle.Steps > steps {
+			steps = bundle.Steps
+		}
+	}
+
+	for _, component := range slide.Components {
+		if bundle := t.resolvedBundle(component.Source); bundle != nil && bundle.HasStepsExport && bundle.Steps > steps {
+			steps = bundle.Steps
+		}
+	}
+
+	return steps
+}
+
+// resolvedBundle looks up a component source path's build result, and
+// returns its Bundle, or nil when the path wasn't resolved or failed to
+// build.
+func (t *Transformer) resolvedBundle(source string) *components.Bundle {
+	result, ok := t.components[source]
+	if !ok {
+		return nil
+	}
+	return result.Bundle
+}
+
+// componentURL builds a bundle's URL for the given extension ("js" or
+// "css"), using componentURLPrefix (or the dev server default).
+func (t *Transformer) componentURL(bundle *components.Bundle, extension string) string {
+	prefix := t.componentURLPrefix
+	if prefix == "" {
+		prefix = "/components/"
+	}
+	return prefix + bundle.Name + "-" + bundle.Hash + "." + extension
+}
+
+// buildWholeSlideComponent builds the slide JSON's "component" field for a
+// layout directive that names a component file.
+func (t *Transformer) buildWholeSlideComponent(source string) *WholeSlideComponent {
+	component := &WholeSlideComponent{Source: source}
+
+	result, ok := t.components[source]
+	if !ok {
+		component.Error = "component not resolved"
+		return component
+	}
+	if result.Bundle == nil {
+		component.Error = joinBuildErrors(result.Errors)
+		return component
+	}
+
+	component.URL = t.componentURL(result.Bundle, "js")
+	if len(result.Bundle.CSS) > 0 {
+		component.CSS = t.componentURL(result.Bundle, "css")
+	}
+	return component
+}
+
+// buildInlineComponent builds one entry of the slide JSON's "components"
+// array for a ```component fence.
+func (t *Transformer) buildInlineComponent(component parser.Component) InlineComponent {
+	inline := InlineComponent{
+		Index:  component.Index,
+		Source: component.Source,
+		Props:  component.Props,
+	}
+
+	result, ok := t.components[component.Source]
+	if !ok {
+		inline.Error = "component not resolved"
+		return inline
+	}
+	if result.Bundle == nil {
+		inline.Error = joinBuildErrors(result.Errors)
+		return inline
+	}
+
+	inline.URL = t.componentURL(result.Bundle, "js")
+	if len(result.Bundle.CSS) > 0 {
+		inline.CSS = t.componentURL(result.Bundle, "css")
+	}
+	return inline
+}
+
+// joinBuildErrors joins a component's build errors into the single message
+// a slide's component.error or components[i].error carries, one per line
+// in the spec's "<file>:<line>:<column>: <message>" format.
+func joinBuildErrors(buildErrors []components.BuildError) string {
+	lines := make([]string, len(buildErrors))
+	for i, buildError := range buildErrors {
+		lines[i] = buildError.Error()
+	}
+	return strings.Join(lines, "\n")
+}
+
 // resolveLayout determines the layout for a slide.
 // If a layout directive is specified, it takes precedence.
 // Otherwise, auto-detects layout based on content.
@@ -176,18 +354,24 @@ func (t *Transformer) resolveLayout(slide parser.Slide) string {
 
 // detectLayout auto-detects the appropriate layout based on slide content.
 // Detection priority:
-//  1. two-column: contains ||| separator
-//  2. title: only H1, optional subtitle (paragraph or small text)
-//  3. section: only H2 (large section header)
-//  4. code-focus: single code block taking >50% of content
-//  5. quote: blockquote as primary content
-//  6. default: everything else
+//  1. three-column: slots named left, center, and right
+//  2. two-column: slots named left and right
+//  3. title: only H1, optional subtitle (paragraph or small text)
+//  4. section: only H2 (large section header)
+//  5. code-focus: single code block taking >50% of content
+//  6. quote: blockquote as primary content
+//  7. default: everything else
 func detectLayout(slide parser.Slide) string {
 	html := slide.HTML
-	content := slide.Content
 
-	// Check for two-column layout (||| separator in content)
-	if containsTwoColumnSeparator(content) {
+	// Check for column layouts based on slot names.
+	_, hasLeft := slide.Slots["left"]
+	_, hasRight := slide.Slots["right"]
+	_, hasCenter := slide.Slots["center"]
+	if hasLeft && hasCenter && hasRight {
+		return "three-column"
+	}
+	if hasLeft && hasRight {
 		return "two-column"
 	}
 
@@ -212,17 +396,6 @@ func detectLayout(slide parser.Slide) string {
 	}
 
 	return "default"
-}
-
-// containsTwoColumnSeparator checks if the content has a ||| column separator.
-func containsTwoColumnSeparator(content string) bool {
-	// Look for ||| on its own line or as a separator
-	for i := 0; i <= len(content)-3; i++ {
-		if content[i:i+3] == "|||" {
-			return true
-		}
-	}
-	return false
 }
 
 // isTitleLayout checks if the HTML contains only an H1, with an optional subtitle.
@@ -357,75 +530,6 @@ func countHTMLTag(html, tag string) int {
 	return count
 }
 
-// columnSeparatorPattern matches ||| in HTML, possibly wrapped in <p> tags.
-var columnSeparatorPattern = regexp.MustCompile(`(?s)<p>\s*\|\|\|\s*</p>|\|\|\|`)
-
-// processTwoColumnHTML transforms HTML content for two-column layout.
-// It finds the ||| separator and wraps content before and after in column divs.
-func processTwoColumnHTML(html string) string {
-	// Find the separator
-	loc := columnSeparatorPattern.FindStringIndex(html)
-	if loc == nil {
-		// No separator found, return as-is
-		return html
-	}
-
-	// Split at the first separator
-	leftContent := strings.TrimSpace(html[:loc[0]])
-	rightContent := strings.TrimSpace(html[loc[1]:])
-
-	// Check for a second separator (for content before the columns)
-	loc2 := columnSeparatorPattern.FindStringIndex(rightContent)
-	if loc2 != nil {
-		// Three parts: header, left column, right column
-		// The first part (leftContent) is the header
-		// The middle part is the actual left column
-		// The last part is the right column
-		headerContent := leftContent
-		leftContent = strings.TrimSpace(rightContent[:loc2[0]])
-		rightContent = strings.TrimSpace(rightContent[loc2[1]:])
-
-		return headerContent + "\n" +
-			`<div class="column column-left">` + leftContent + `</div>` +
-			`<div class="column column-right">` + rightContent + `</div>`
-	}
-
-	// Two parts: left column, right column
-	return `<div class="column column-left">` + leftContent + `</div>` +
-		`<div class="column column-right">` + rightContent + `</div>`
-}
-
-// processThreeColumnHTML transforms HTML content for three-column layout.
-// It finds the ||| separators and wraps content in column divs.
-func processThreeColumnHTML(html string) string {
-	// Find the first separator
-	loc1 := columnSeparatorPattern.FindStringIndex(html)
-	if loc1 == nil {
-		// No separator found, return as-is
-		return html
-	}
-
-	// Split at the first separator
-	leftContent := strings.TrimSpace(html[:loc1[0]])
-	remaining := strings.TrimSpace(html[loc1[1]:])
-
-	// Find the second separator
-	loc2 := columnSeparatorPattern.FindStringIndex(remaining)
-	if loc2 == nil {
-		// Only two parts, treat as two-column
-		return `<div class="column">` + leftContent + `</div>` +
-			`<div class="column">` + remaining + `</div>`
-	}
-
-	// Three parts
-	middleContent := strings.TrimSpace(remaining[:loc2[0]])
-	rightContent := strings.TrimSpace(remaining[loc2[1]:])
-
-	return `<div class="column">` + leftContent + `</div>` +
-		`<div class="column">` + middleContent + `</div>` +
-		`<div class="column">` + rightContent + `</div>`
-}
-
 // parseBackground parses a background directive value and determines its type.
 func (t *Transformer) parseBackground(value string) *BackgroundConfig {
 	// Detect background type based on value format
@@ -496,9 +600,9 @@ func (t *Transformer) resolveImagePaths(html string) string {
 			return match
 		}
 
-		prefix := submatches[1]  // <img ... src="
-		src := submatches[2]     // the path
-		suffix := submatches[3]  // " ...>
+		prefix := submatches[1] // <img ... src="
+		src := submatches[2]    // the path
+		suffix := submatches[3] // " ...>
 
 		resolved := t.resolveImagePath(src)
 		return prefix + resolved + suffix
