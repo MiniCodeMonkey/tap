@@ -141,8 +141,10 @@ export function isPreviewDisabled(module: { preview?: unknown }): boolean {
 
 /**
  * The error card shown in dev when a component fails to build or render.
- * Detected by `tap screenshot` via the deck-error-card class (present in
- * both forms below).
+ * Detected by `tap screenshot` via the deck-error-card class, and by `tap
+ * pdf` via its data-message attribute (see ErrorCardSelector in
+ * internal/pdf/capture.go) - both present in both forms below, so neither
+ * tool needs to parse the card's visible text apart from its source path.
  *
  * In the audience-safe form (see shouldUseSafeErrorForm), the full card is
  * kept in the DOM - visually hidden, its message moved to a data-message
@@ -166,7 +168,7 @@ function ErrorCard({ source, message, fallback = null }: { source: string; messa
 		);
 	}
 	return (
-		<div className="deck-error-card" data-source={source}>
+		<div className="deck-error-card" data-source={source} data-message={message}>
 			<p className="deck-error-card-source">{source}</p>
 			<p className="deck-error-card-message">{message}</p>
 		</div>

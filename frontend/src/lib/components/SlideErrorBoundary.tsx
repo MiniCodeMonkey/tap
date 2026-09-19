@@ -43,7 +43,11 @@ function SlideErrorDisplay({ message, fallback }: { message: string; fallback: R
 			</>
 		);
 	}
-	return <div className="slide-error deck-error-card">{message}</div>;
+	return (
+		<div className="slide-error deck-error-card" data-message={message}>
+			{message}
+		</div>
+	);
 }
 
 export class SlideErrorBoundary extends Component<SlideErrorBoundaryProps, SlideErrorBoundaryState> {

@@ -131,6 +131,7 @@ describe('DeckComponent', () => {
 		const card = container.querySelector('.deck-error-card');
 		expect(card).not.toBeNull();
 		expect(card?.getAttribute('data-source')).toBe('slides/Broken.jsx');
+		expect(card?.getAttribute('data-message')).toBe('slides/Broken.jsx:3:7: Unexpected "}"');
 		expect(card?.textContent).toContain('Unexpected');
 	});
 
