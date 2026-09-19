@@ -1,6 +1,7 @@
 package parser
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -711,7 +712,7 @@ func TestParseCodeBlockMeta_Empty(t *testing.T) {
 
 func TestParseCodeBlocks_Direct(t *testing.T) {
 	content := "```sql {driver: mysql}\nSELECT * FROM users;\n```"
-	blocks := parseCodeBlocks(content)
+	blocks := parseCodeBlocksFromMarkdown(content)
 
 	if len(blocks) != 1 {
 		t.Fatalf("expected 1 block, got %d", len(blocks))
@@ -725,6 +726,98 @@ func TestParseCodeBlocks_Direct(t *testing.T) {
 	}
 	if blocks[0].Code != "SELECT * FROM users;" {
 		t.Errorf("expected code 'SELECT * FROM users;', got %q", blocks[0].Code)
+	}
+}
+
+func TestParseCodeBlockMeta_HighlightLinesSingle(t *testing.T) {
+	meta := parseCodeBlockMeta("3")
+	if meta.HighlightLines != "3" {
+		t.Errorf("expected highlight lines '3', got %q", meta.HighlightLines)
+	}
+	if meta.Driver != "" || meta.Connection != "" {
+		t.Errorf("expected no driver/connection for a line spec, got %+v", meta)
+	}
+}
+
+func TestParseCodeBlockMeta_HighlightLinesRange(t *testing.T) {
+	meta := parseCodeBlockMeta("3-4")
+	if meta.HighlightLines != "3-4" {
+		t.Errorf("expected highlight lines '3-4', got %q", meta.HighlightLines)
+	}
+}
+
+func TestParseCodeBlockMeta_HighlightLinesList(t *testing.T) {
+	meta := parseCodeBlockMeta("1, 3-5")
+	if meta.HighlightLines != "1,3-5" {
+		t.Errorf("expected highlight lines '1,3-5' (whitespace stripped), got %q", meta.HighlightLines)
+	}
+}
+
+func TestParseCodeBlocks_HighlightLines(t *testing.T) {
+	content := "```php {3-4}\n<?php\necho 1;\necho 2;\necho 3;\n```"
+	blocks := parseCodeBlocksFromMarkdown(content)
+
+	if len(blocks) != 1 {
+		t.Fatalf("expected 1 block, got %d", len(blocks))
+	}
+	if blocks[0].Language != "php" {
+		t.Errorf("expected language 'php', got %q", blocks[0].Language)
+	}
+	if blocks[0].Meta.HighlightLines != "3-4" {
+		t.Errorf("expected highlight lines '3-4', got %q", blocks[0].Meta.HighlightLines)
+	}
+}
+
+func TestParse_HighlightLines_RendersDataAttribute(t *testing.T) {
+	p := New()
+	content := []byte("```js {3}\nconst a = 1;\nconst b = 2;\nconst c = 3;\n```")
+
+	pres, err := p.Parse(content)
+	if err != nil {
+		t.Fatalf("Parse() returned error: %v", err)
+	}
+
+	html := pres.Slides[0].HTML
+	if !strings.Contains(html, `class="language-js" data-highlight-lines="3"`) {
+		t.Errorf("expected rendered HTML to carry data-highlight-lines, got: %s", html)
+	}
+}
+
+func TestParse_HighlightLines_DoesNotAffectDriverBlocks(t *testing.T) {
+	p := New()
+	content := []byte("```sql {driver: sqlite, connection: demo}\nSELECT 1;\n```")
+
+	pres, err := p.Parse(content)
+	if err != nil {
+		t.Fatalf("Parse() returned error: %v", err)
+	}
+
+	html := pres.Slides[0].HTML
+	if strings.Contains(html, "data-highlight-lines") {
+		t.Errorf("driver code block should not get a data-highlight-lines attribute, got: %s", html)
+	}
+	if pres.Slides[0].CodeBlocks[0].Meta.Driver != "sqlite" {
+		t.Errorf("expected driver 'sqlite' to still parse, got %+v", pres.Slides[0].CodeBlocks[0].Meta)
+	}
+}
+
+func TestParse_HighlightLines_InNamedSlot(t *testing.T) {
+	p := New()
+	content := []byte("::left\n" +
+		"```go {1,3}\n" +
+		"package main\n" +
+		"\n" +
+		"func main() {}\n" +
+		"```\n")
+
+	pres, err := p.Parse(content)
+	if err != nil {
+		t.Fatalf("Parse() returned error: %v", err)
+	}
+
+	slot := pres.Slides[0].Slots["left"]
+	if !strings.Contains(slot, `data-highlight-lines="1,3"`) {
+		t.Errorf("expected named slot HTML to carry data-highlight-lines, got: %s", slot)
 	}
 }
 
@@ -750,24 +843,19 @@ Second content block.`)
 	}
 
 	slide := pres.Slides[0]
-	if len(slide.Fragments) != 2 {
-		t.Fatalf("expected 2 fragments, got %d", len(slide.Fragments))
+	// The first content block is always visible; only the content after the pause is a fragment.
+	if slide.FragmentCount != 1 {
+		t.Fatalf("expected 1 fragment, got %d", slide.FragmentCount)
 	}
 
-	// First fragment
-	if slide.Fragments[0].Index != 0 {
-		t.Errorf("expected first fragment index 0, got %d", slide.Fragments[0].Index)
+	if !contains(slide.HTML, "First content block") {
+		t.Error("HTML should contain 'First content block'")
 	}
-	if !contains(slide.Fragments[0].Content, "First content block") {
-		t.Errorf("first fragment should contain 'First content block', got %q", slide.Fragments[0].Content)
+	if !contains(slide.HTML, `data-fragment-index="0"`) {
+		t.Error("HTML should contain data-fragment-index=0")
 	}
-
-	// Second fragment
-	if slide.Fragments[1].Index != 1 {
-		t.Errorf("expected second fragment index 1, got %d", slide.Fragments[1].Index)
-	}
-	if !contains(slide.Fragments[1].Content, "Second content block") {
-		t.Errorf("second fragment should contain 'Second content block', got %q", slide.Fragments[1].Content)
+	if !contains(slide.HTML, "Second content block") {
+		t.Error("HTML should contain 'Second content block'")
 	}
 }
 
@@ -799,22 +887,22 @@ func TestParse_Fragments_MultiplePauses(t *testing.T) {
 	}
 
 	slide := pres.Slides[0]
-	if len(slide.Fragments) != 4 {
-		t.Fatalf("expected 4 fragments, got %d", len(slide.Fragments))
+	// Item 1 is always visible; Items 2-4 are fragments.
+	if slide.FragmentCount != 3 {
+		t.Fatalf("expected 3 fragments, got %d", slide.FragmentCount)
 	}
 
-	// Verify each fragment index
-	for i, frag := range slide.Fragments {
-		if frag.Index != i {
-			t.Errorf("fragment %d has incorrect index: expected %d, got %d", i, i, frag.Index)
+	for i := 0; i < 3; i++ {
+		if !contains(slide.HTML, `data-fragment-index="`+intToString(i)+`"`) {
+			t.Errorf("HTML should contain data-fragment-index=%d", i)
 		}
 	}
 
 	// Verify content
 	expectations := []string{"Item 1", "Item 2", "Item 3", "Item 4"}
-	for i, expected := range expectations {
-		if !contains(slide.Fragments[i].Content, expected) {
-			t.Errorf("fragment %d should contain %q, got %q", i, expected, slide.Fragments[i].Content)
+	for _, expected := range expectations {
+		if !contains(slide.HTML, expected) {
+			t.Errorf("HTML should contain %q", expected)
 		}
 	}
 }
@@ -837,16 +925,13 @@ All content appears at once.`)
 	}
 
 	slide := pres.Slides[0]
-	// With no pause markers, should have 1 fragment with all content
-	if len(slide.Fragments) != 1 {
-		t.Fatalf("expected 1 fragment (no pauses), got %d", len(slide.Fragments))
+	// With no pause markers, there are no fragments; all content is visible.
+	if slide.FragmentCount != 0 {
+		t.Fatalf("expected 0 fragments (no pauses), got %d", slide.FragmentCount)
 	}
 
-	if slide.Fragments[0].Index != 0 {
-		t.Errorf("expected fragment index 0, got %d", slide.Fragments[0].Index)
-	}
-	if !contains(slide.Fragments[0].Content, "No Fragments") {
-		t.Error("fragment should contain all slide content")
+	if !contains(slide.HTML, "No Fragments") {
+		t.Error("HTML should contain all slide content")
 	}
 }
 
@@ -883,14 +968,15 @@ Content 5`)
 	}
 
 	slide := pres.Slides[0]
-	if len(slide.Fragments) != 5 {
-		t.Fatalf("expected 5 fragments (all pause variations recognized), got %d", len(slide.Fragments))
+	// Content 1 is always visible; Content 2-5 are fragments (all pause variations recognized).
+	if slide.FragmentCount != 4 {
+		t.Fatalf("expected 4 fragments, got %d", slide.FragmentCount)
 	}
 
 	for i := 1; i <= 5; i++ {
 		expected := "Content " + string(rune('0'+i))
-		if !contains(slide.Fragments[i-1].Content, expected) {
-			t.Errorf("fragment %d should contain %q", i-1, expected)
+		if !contains(slide.HTML, expected) {
+			t.Errorf("HTML should contain %q", expected)
 		}
 	}
 }
@@ -917,17 +1003,13 @@ Content 2`)
 	}
 
 	slide := pres.Slides[0]
-	// Empty fragments between consecutive pauses should be skipped
-	if len(slide.Fragments) != 2 {
-		t.Fatalf("expected 2 fragments (empty skipped), got %d", len(slide.Fragments))
+	// Content 1 is always visible; the empty part between the consecutive pauses is skipped,
+	// leaving Content 2 as the only fragment.
+	if slide.FragmentCount != 1 {
+		t.Fatalf("expected 1 fragment (empty skipped), got %d", slide.FragmentCount)
 	}
-
-	// Indices should be re-numbered to be consecutive
-	if slide.Fragments[0].Index != 0 {
-		t.Errorf("expected first fragment index 0, got %d", slide.Fragments[0].Index)
-	}
-	if slide.Fragments[1].Index != 1 {
-		t.Errorf("expected second fragment index 1, got %d", slide.Fragments[1].Index)
+	if !contains(slide.HTML, `data-fragment-index="0"`) {
+		t.Error("expected fragment index 0")
 	}
 }
 
@@ -964,26 +1046,25 @@ Part E`)
 		t.Fatalf("expected 2 slides, got %d", len(pres.Slides))
 	}
 
-	// Slide 1 should have 2 fragments
-	if len(pres.Slides[0].Fragments) != 2 {
-		t.Fatalf("slide 1: expected 2 fragments, got %d", len(pres.Slides[0].Fragments))
+	// Slide 1: Part A is always visible, Part B is a fragment.
+	if pres.Slides[0].FragmentCount != 1 {
+		t.Fatalf("slide 1: expected 1 fragment, got %d", pres.Slides[0].FragmentCount)
 	}
 
-	// Slide 2 should have 3 fragments
-	if len(pres.Slides[1].Fragments) != 3 {
-		t.Fatalf("slide 2: expected 3 fragments, got %d", len(pres.Slides[1].Fragments))
+	// Slide 2: Part C is always visible, Part D and Part E are fragments.
+	if pres.Slides[1].FragmentCount != 2 {
+		t.Fatalf("slide 2: expected 2 fragments, got %d", pres.Slides[1].FragmentCount)
 	}
 
-	// Each slide's fragments should have independent indices starting at 0
-	for i, frag := range pres.Slides[0].Fragments {
-		if frag.Index != i {
-			t.Errorf("slide 1, fragment %d has incorrect index: %d", i, frag.Index)
-		}
+	// Each slide's fragment indices start independently at 0.
+	if !contains(pres.Slides[0].HTML, `data-fragment-index="0"`) {
+		t.Error("slide 1: expected fragment index 0")
 	}
-	for i, frag := range pres.Slides[1].Fragments {
-		if frag.Index != i {
-			t.Errorf("slide 2, fragment %d has incorrect index: %d", i, frag.Index)
-		}
+	if !contains(pres.Slides[1].HTML, `data-fragment-index="0"`) {
+		t.Error("slide 2: expected fragment index 0")
+	}
+	if !contains(pres.Slides[1].HTML, `data-fragment-index="1"`) {
+		t.Error("slide 2: expected fragment index 1")
 	}
 }
 
@@ -1002,9 +1083,9 @@ func TestParse_Fragments_WithCodeBlocks(t *testing.T) {
 
 	slide := pres.Slides[0]
 
-	// Should have 3 fragments
-	if len(slide.Fragments) != 3 {
-		t.Fatalf("expected 3 fragments, got %d", len(slide.Fragments))
+	// First explanation is always visible; the code block and final thoughts are fragments.
+	if slide.FragmentCount != 2 {
+		t.Fatalf("expected 2 fragments, got %d", slide.FragmentCount)
 	}
 
 	// Code block should still be parsed
@@ -1012,9 +1093,9 @@ func TestParse_Fragments_WithCodeBlocks(t *testing.T) {
 		t.Fatalf("expected 1 code block, got %d", len(slide.CodeBlocks))
 	}
 
-	// Second fragment should contain the code block
-	if !contains(slide.Fragments[1].Content, "SELECT * FROM users") {
-		t.Error("second fragment should contain the SQL code")
+	// The rendered HTML should still contain the code block's content
+	if !contains(slide.HTML, "SELECT * FROM users") {
+		t.Error("HTML should contain the SQL code")
 	}
 }
 
@@ -1051,52 +1132,67 @@ Content 2`)
 		t.Error("expected fragments directive to be true")
 	}
 
-	// Should have 2 fragments
-	if len(slide.Fragments) != 2 {
-		t.Fatalf("expected 2 fragments, got %d", len(slide.Fragments))
+	// Content 1 is always visible; Content 2 is a fragment.
+	if slide.FragmentCount != 1 {
+		t.Fatalf("expected 1 fragment, got %d", slide.FragmentCount)
 	}
 
-	// Fragments should not contain directive content
-	if contains(slide.Fragments[0].Content, "layout:") {
-		t.Error("fragments should not contain directive content")
+	// HTML should not contain directive content
+	if contains(slide.HTML, "layout:") {
+		t.Error("HTML should not contain directive content")
 	}
 }
 
-func TestParseFragments_Direct(t *testing.T) {
+func TestRenderSlot_Direct(t *testing.T) {
 	p := New()
 	content := "Part 1\n\n<!-- pause -->\n\nPart 2\n\n<!-- pause -->\n\nPart 3"
-	fragments := p.parseFragments(content)
-
-	if len(fragments) != 3 {
-		t.Fatalf("expected 3 fragments, got %d", len(fragments))
+	html, nextIndex, _, _, _, _, err := p.renderSlot(content, 0, 0, 0, 1, true)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
 
+	// Part 1 is always visible; Part 2 and Part 3 are fragments.
+	if nextIndex != 2 {
+		t.Fatalf("expected next fragment index 2, got %d", nextIndex)
+	}
 	expectations := []string{"Part 1", "Part 2", "Part 3"}
-	for i, expected := range expectations {
-		if !contains(fragments[i].Content, expected) {
-			t.Errorf("fragment %d should contain %q, got %q", i, expected, fragments[i].Content)
+	for _, expected := range expectations {
+		if !contains(html, expected) {
+			t.Errorf("html should contain %q, got %q", expected, html)
 		}
-		if fragments[i].Index != i {
-			t.Errorf("fragment %d has incorrect index: %d", i, fragments[i].Index)
-		}
+	}
+	if !contains(html, `data-fragment-index="0"`) || !contains(html, `data-fragment-index="1"`) {
+		t.Errorf("html should contain fragment indices 0 and 1, got %q", html)
 	}
 }
 
-func TestParseFragments_EmptyContent(t *testing.T) {
+func TestRenderSlot_EmptyContent(t *testing.T) {
 	p := New()
-	fragments := p.parseFragments("")
-	if len(fragments) != 0 {
-		t.Errorf("expected 0 fragments for empty content, got %d", len(fragments))
+	html, nextIndex, _, _, _, _, err := p.renderSlot("", 0, 0, 0, 1, true)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if html != "" {
+		t.Errorf("expected empty html for empty content, got %q", html)
+	}
+	if nextIndex != 0 {
+		t.Errorf("expected next fragment index 0, got %d", nextIndex)
 	}
 }
 
-func TestParseFragments_OnlyPauses(t *testing.T) {
+func TestRenderSlot_OnlyPauses(t *testing.T) {
 	p := New()
 	content := "<!-- pause -->\n<!-- pause -->\n<!-- pause -->"
-	fragments := p.parseFragments(content)
-	// All empty, should result in no fragments
-	if len(fragments) != 0 {
-		t.Errorf("expected 0 fragments for only pause markers, got %d", len(fragments))
+	html, nextIndex, _, _, _, _, err := p.renderSlot(content, 0, 0, 0, 1, true)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	// All parts are empty, so there is no content and no fragments.
+	if html != "" {
+		t.Errorf("expected empty html for only pause markers, got %q", html)
+	}
+	if nextIndex != 0 {
+		t.Errorf("expected next fragment index 0, got %d", nextIndex)
 	}
 }
 
@@ -1108,7 +1204,7 @@ func TestAutoFragmentListItems(t *testing.T) {
 <li>Item 3</li>
 </ul>`
 
-	result, count := autoFragmentListItems(html)
+	result, count := autoFragmentListItems(html, 0)
 
 	if count != 3 {
 		t.Errorf("expected 3 list items, got %d", count)
@@ -1141,7 +1237,7 @@ func TestAutoFragmentListItems_WithExistingClass(t *testing.T) {
 <li class="existing">Item 1</li>
 </ul>`
 
-	result, count := autoFragmentListItems(html)
+	result, count := autoFragmentListItems(html, 0)
 
 	if count != 1 {
 		t.Errorf("expected 1 list item, got %d", count)
@@ -1157,7 +1253,7 @@ func TestAutoFragmentListItems_NoListItems(t *testing.T) {
 	html := `<h1>Title</h1>
 <p>Just a paragraph</p>`
 
-	result, count := autoFragmentListItems(html)
+	result, count := autoFragmentListItems(html, 0)
 
 	if count != 0 {
 		t.Errorf("expected 0 list items, got %d", count)
@@ -1202,15 +1298,8 @@ fragments: true
 	}
 
 	// Should have 3 fragments (one for each list item)
-	if len(slide.Fragments) != 3 {
-		t.Fatalf("expected 3 fragments for auto-fragmented list, got %d", len(slide.Fragments))
-	}
-
-	// Fragment content should be empty (content is inline in HTML)
-	for i, frag := range slide.Fragments {
-		if frag.Content != "" {
-			t.Errorf("fragment %d should have empty content for inline fragments, got %q", i, frag.Content)
-		}
+	if slide.FragmentCount != 3 {
+		t.Fatalf("expected 3 fragments for auto-fragmented list, got %d", slide.FragmentCount)
 	}
 
 	// HTML should contain fragment classes on list items
@@ -1475,5 +1564,359 @@ func TestSplitSlidesPreservingCodeBlocks_Direct(t *testing.T) {
 				t.Errorf("expected %d non-empty slides, got %d (raw: %d)", tt.expected, nonEmpty, len(result))
 			}
 		})
+	}
+}
+
+// TestParse_CodeBlockIndex_SlotOrderReversed verifies that CodeBlocks and
+// their data-code-block-index attributes are assigned in source (document)
+// order even when a slide writes ::right before ::left. A layout renders
+// slots in whatever order it wants, so index-based pairing (not DOM
+// position) is what lets the frontend find the right <pre> regardless of
+// render order.
+func TestParse_CodeBlockIndex_SlotOrderReversed(t *testing.T) {
+	p := New()
+	content := []byte("# Reordered\n\n::right\n\n```sql {driver: sqlite}\nSELECT 1;\n```\n\n::left\n\n```go\npackage main\n```")
+
+	pres, err := p.Parse(content)
+	if err != nil {
+		t.Fatalf("Parse() returned error: %v", err)
+	}
+
+	slide := pres.Slides[0]
+	if len(slide.CodeBlocks) != 2 {
+		t.Fatalf("expected 2 code blocks, got %d", len(slide.CodeBlocks))
+	}
+
+	// Source order: sql block (in ::right) comes first, go block (in ::left) second.
+	if slide.CodeBlocks[0].Language != "sql" {
+		t.Errorf("expected CodeBlocks[0] to be the sql block, got language %q", slide.CodeBlocks[0].Language)
+	}
+	if slide.CodeBlocks[1].Language != "go" {
+		t.Errorf("expected CodeBlocks[1] to be the go block, got language %q", slide.CodeBlocks[1].Language)
+	}
+
+	if !contains(slide.Slots["right"], `data-code-block-index="0"`) {
+		t.Errorf("expected slot 'right' to carry data-code-block-index=\"0\", got %q", slide.Slots["right"])
+	}
+	if !contains(slide.Slots["left"], `data-code-block-index="1"`) {
+		t.Errorf("expected slot 'left' to carry data-code-block-index=\"1\", got %q", slide.Slots["left"])
+	}
+}
+
+// TestParse_CodeBlockIndex_FenceInsideListItem verifies that a fence
+// indented inside a list item is still found and indexed. The old
+// regex-based codeBlockPattern only matched a fence at column 0, so it
+// missed this case entirely.
+func TestParse_CodeBlockIndex_FenceInsideListItem(t *testing.T) {
+	p := New()
+	content := []byte("# Slide\n\n- Item one\n\n  ```go\n  fmt.Println(\"hi\")\n  ```\n\n- Item two")
+
+	pres, err := p.Parse(content)
+	if err != nil {
+		t.Fatalf("Parse() returned error: %v", err)
+	}
+
+	slide := pres.Slides[0]
+	if len(slide.CodeBlocks) != 1 {
+		t.Fatalf("expected 1 code block found inside the list item, got %d", len(slide.CodeBlocks))
+	}
+	if slide.CodeBlocks[0].Language != "go" {
+		t.Errorf("expected language 'go', got %q", slide.CodeBlocks[0].Language)
+	}
+	if !contains(slide.HTML, `data-code-block-index="0"`) {
+		t.Errorf("expected HTML to carry data-code-block-index=\"0\", got %q", slide.HTML)
+	}
+}
+
+// TestParse_CodeBlockIndex_TildeFence verifies that a ~~~ fence is found
+// and indexed the same way a ``` fence is.
+func TestParse_CodeBlockIndex_TildeFence(t *testing.T) {
+	p := New()
+	content := []byte("# Slide\n\n~~~python\nprint('hi')\n~~~")
+
+	pres, err := p.Parse(content)
+	if err != nil {
+		t.Fatalf("Parse() returned error: %v", err)
+	}
+
+	slide := pres.Slides[0]
+	if len(slide.CodeBlocks) != 1 {
+		t.Fatalf("expected 1 code block, got %d", len(slide.CodeBlocks))
+	}
+	if slide.CodeBlocks[0].Language != "python" {
+		t.Errorf("expected language 'python', got %q", slide.CodeBlocks[0].Language)
+	}
+	if !contains(slide.HTML, `data-code-block-index="0"`) {
+		t.Errorf("expected HTML to carry data-code-block-index=\"0\", got %q", slide.HTML)
+	}
+}
+
+// TestParse_CodeBlockIndex_TwoFencesOneSlot verifies that two fences in the
+// same slot get sequential indices 0 and 1.
+func TestParse_CodeBlockIndex_TwoFencesOneSlot(t *testing.T) {
+	p := New()
+	content := []byte("# Slide\n\n```js\nconsole.log(1);\n```\n\n```py\nprint(2)\n```")
+
+	pres, err := p.Parse(content)
+	if err != nil {
+		t.Fatalf("Parse() returned error: %v", err)
+	}
+
+	slide := pres.Slides[0]
+	if len(slide.CodeBlocks) != 2 {
+		t.Fatalf("expected 2 code blocks, got %d", len(slide.CodeBlocks))
+	}
+	if !contains(slide.HTML, `data-code-block-index="0"`) || !contains(slide.HTML, `data-code-block-index="1"`) {
+		t.Errorf("expected HTML to carry data-code-block-index 0 and 1, got %q", slide.HTML)
+	}
+}
+
+// TestParse_CodeBlockIndex_FenceInsideFragment verifies that a fence after a
+// <!-- pause --> marker (inside a fragment) still receives a running index
+// that continues from fences before the pause, threaded the same way
+// nextFragmentIndex is threaded across parts.
+func TestParse_CodeBlockIndex_FenceInsideFragment(t *testing.T) {
+	p := New()
+	content := []byte("# Slide\n\n```go\npackage a\n```\n\n<!-- pause -->\n\n```go\npackage b\n```")
+
+	pres, err := p.Parse(content)
+	if err != nil {
+		t.Fatalf("Parse() returned error: %v", err)
+	}
+
+	slide := pres.Slides[0]
+	if len(slide.CodeBlocks) != 2 {
+		t.Fatalf("expected 2 code blocks, got %d", len(slide.CodeBlocks))
+	}
+	if !contains(slide.CodeBlocks[0].Code, "package a") {
+		t.Errorf("expected CodeBlocks[0] to be 'package a', got %q", slide.CodeBlocks[0].Code)
+	}
+	if !contains(slide.CodeBlocks[1].Code, "package b") {
+		t.Errorf("expected CodeBlocks[1] to be 'package b', got %q", slide.CodeBlocks[1].Code)
+	}
+	if !contains(slide.HTML, `data-code-block-index="0"`) || !contains(slide.HTML, `data-code-block-index="1"`) {
+		t.Errorf("expected HTML to carry data-code-block-index 0 and 1 across the fragment boundary, got %q", slide.HTML)
+	}
+}
+
+// TestParse_CodeBlockIndex_MapAndDriverFence verifies that a slide with both
+// a "map" fence and a driver fence gets distinct, correctly ordered indices
+// for each, so the frontend can find each one by index instead of by
+// counting <pre> elements (which is what let the map block delete the wrong
+// one before this fix).
+func TestParse_CodeBlockIndex_MapAndDriverFence(t *testing.T) {
+	p := New()
+	content := []byte("# Slide\n\n```map\ncenter: 40.7,-74.0\n```\n\n```sql {driver: sqlite}\nSELECT 1;\n```")
+
+	pres, err := p.Parse(content)
+	if err != nil {
+		t.Fatalf("Parse() returned error: %v", err)
+	}
+
+	slide := pres.Slides[0]
+	if len(slide.CodeBlocks) != 2 {
+		t.Fatalf("expected 2 code blocks, got %d", len(slide.CodeBlocks))
+	}
+	if slide.CodeBlocks[0].Language != "map" {
+		t.Errorf("expected CodeBlocks[0] to be the map block, got language %q", slide.CodeBlocks[0].Language)
+	}
+	if slide.CodeBlocks[1].Language != "sql" {
+		t.Errorf("expected CodeBlocks[1] to be the sql block, got language %q", slide.CodeBlocks[1].Language)
+	}
+	if !contains(slide.HTML, `data-code-block-index="0"`) || !contains(slide.HTML, `data-code-block-index="1"`) {
+		t.Errorf("expected HTML to carry data-code-block-index 0 and 1, got %q", slide.HTML)
+	}
+}
+
+// TestParse_ComponentFence_Placeholder verifies that a ```component fence
+// does not become a CodeBlock, gets no data-code-block-index, and renders a
+// deck-component placeholder div carrying data-component-index instead.
+func TestParse_ComponentFence_Placeholder(t *testing.T) {
+	p := New()
+	content := []byte("# Slide\n\n```component ./charts/LatencyDrop.jsx\n{ \"before\": 412, \"after\": 88 }\n```\n\n```go\npackage main\n```")
+
+	pres, err := p.Parse(content)
+	if err != nil {
+		t.Fatalf("Parse() returned error: %v", err)
+	}
+
+	slide := pres.Slides[0]
+	if len(slide.CodeBlocks) != 1 {
+		t.Fatalf("expected 1 code block (the go fence), got %d", len(slide.CodeBlocks))
+	}
+	if slide.CodeBlocks[0].Language != "go" {
+		t.Errorf("expected the go fence to be the only code block, got language %q", slide.CodeBlocks[0].Language)
+	}
+	if len(slide.Components) != 1 {
+		t.Fatalf("expected 1 component, got %d", len(slide.Components))
+	}
+	comp := slide.Components[0]
+	if comp.Index != 0 {
+		t.Errorf("expected component index 0, got %d", comp.Index)
+	}
+	if comp.Source != "./charts/LatencyDrop.jsx" {
+		t.Errorf("expected component source %q, got %q", "./charts/LatencyDrop.jsx", comp.Source)
+	}
+	if string(comp.Props) != `{ "before": 412, "after": 88 }` {
+		t.Errorf("expected component props to be the fence body, got %q", string(comp.Props))
+	}
+	if !contains(slide.HTML, `<div class="deck-component" data-component-index="0"></div>`) {
+		t.Errorf("expected HTML to carry the component placeholder, got %q", slide.HTML)
+	}
+	if !contains(slide.HTML, `data-code-block-index="0"`) {
+		t.Errorf("expected the go fence to carry data-code-block-index 0 (the component fence must not consume a code block index), got %q", slide.HTML)
+	}
+	if contains(slide.HTML, "data-code-block-index=\"1\"") {
+		t.Errorf("expected the component fence to not carry a data-code-block-index, got %q", slide.HTML)
+	}
+}
+
+// TestParse_ComponentFence_PathWithSpaces verifies that a component fence
+// path containing spaces is captured whole instead of silently becoming an
+// ordinary code block at the first space.
+func TestParse_ComponentFence_PathWithSpaces(t *testing.T) {
+	p := New()
+	content := []byte("# Slide\n\n```component ./my slides/X.jsx\n{}\n```")
+
+	pres, err := p.Parse(content)
+	if err != nil {
+		t.Fatalf("Parse() returned error: %v", err)
+	}
+
+	slide := pres.Slides[0]
+	if len(slide.Components) != 1 {
+		t.Fatalf("expected 1 component, got %d", len(slide.Components))
+	}
+	if slide.Components[0].Source != "./my slides/X.jsx" {
+		t.Errorf("expected component source %q, got %q", "./my slides/X.jsx", slide.Components[0].Source)
+	}
+}
+
+// TestParse_ComponentFence_EmptyBodyDefaultsToEmptyObject verifies that a
+// ```component fence with no body gets "{}" as its props.
+func TestParse_ComponentFence_EmptyBodyDefaultsToEmptyObject(t *testing.T) {
+	p := New()
+	content := []byte("# Slide\n\n```component ./charts/LatencyDrop.jsx\n```")
+
+	pres, err := p.Parse(content)
+	if err != nil {
+		t.Fatalf("Parse() returned error: %v", err)
+	}
+
+	slide := pres.Slides[0]
+	if len(slide.Components) != 1 {
+		t.Fatalf("expected 1 component, got %d", len(slide.Components))
+	}
+	if string(slide.Components[0].Props) != "{}" {
+		t.Errorf("expected empty props body to default to \"{}\", got %q", string(slide.Components[0].Props))
+	}
+}
+
+// TestParse_ComponentFence_InvalidJSON verifies that invalid props JSON is a
+// parse error naming the slide number and the line.
+func TestParse_ComponentFence_InvalidJSON(t *testing.T) {
+	p := New()
+	content := []byte("# Slide\n\n```component ./charts/LatencyDrop.jsx\n{ not json\n```")
+
+	_, err := p.Parse(content)
+	if err == nil {
+		t.Fatal("expected an error for invalid component props JSON, got nil")
+	}
+	if !contains(err.Error(), "slide 1") {
+		t.Errorf("expected the error to name the slide number, got %q", err.Error())
+	}
+	if !contains(err.Error(), "line 3") {
+		t.Errorf("expected the error to name the line, got %q", err.Error())
+	}
+}
+
+// TestParse_ComponentFence_InvalidJSON_AfterPauseAndSlot verifies that a bad
+// component fence's line number is the real file line even after a pause
+// marker and a slot marker earlier in the slide have shifted it away from
+// its position within the slide's own content.
+func TestParse_ComponentFence_InvalidJSON_AfterPauseAndSlot(t *testing.T) {
+	p := New()
+	content := []byte(strings.Join([]string{
+		"---",
+		"title: Deck",
+		"---",
+		"",
+		"# Slide",
+		"",
+		"<!-- pause -->",
+		"",
+		"::caption",
+		"```component ./charts/Bad.jsx",
+		"{ not json",
+		"```",
+	}, "\n"))
+
+	_, err := p.Parse(content)
+	if err == nil {
+		t.Fatal("expected an error for invalid component props JSON, got nil")
+	}
+	if !contains(err.Error(), "slide 1") {
+		t.Errorf("expected the error to name the slide number, got %q", err.Error())
+	}
+	if !contains(err.Error(), "line 10") {
+		t.Errorf("expected the error to name the real file line (10), got %q", err.Error())
+	}
+}
+
+// TestParse_ComponentFence_PropsMustBeObject verifies that a non-object
+// top-level JSON value in the props body is a parse error.
+func TestParse_ComponentFence_PropsMustBeObject(t *testing.T) {
+	p := New()
+	content := []byte("# Slide\n\n```component ./charts/LatencyDrop.jsx\n[1, 2, 3]\n```")
+
+	_, err := p.Parse(content)
+	if err == nil {
+		t.Fatal("expected an error for non-object component props, got nil")
+	}
+	if !contains(err.Error(), "must be a JSON object") {
+		t.Errorf("expected the error to say props must be a JSON object, got %q", err.Error())
+	}
+}
+
+// TestParse_StepsDirective verifies that a "steps" directive is parsed into
+// SlideDirectives.
+func TestParse_StepsDirective(t *testing.T) {
+	p := New()
+	content := []byte("<!--\nlayout: ./slides/RollingDeploy.jsx\nsteps: 5\n-->\n\n# Zero-downtime deploys")
+
+	pres, err := p.Parse(content)
+	if err != nil {
+		t.Fatalf("Parse() returned error: %v", err)
+	}
+
+	slide := pres.Slides[0]
+	if !slide.Directives.HasSteps {
+		t.Fatal("expected HasSteps to be true")
+	}
+	if slide.Directives.Steps != 5 {
+		t.Errorf("expected Steps 5, got %d", slide.Directives.Steps)
+	}
+	if slide.Directives.Layout != "./slides/RollingDeploy.jsx" {
+		t.Errorf("expected layout %q, got %q", "./slides/RollingDeploy.jsx", slide.Directives.Layout)
+	}
+}
+
+// TestParse_StepsDirectiveRejectsNegativeValue verifies that a negative
+// "steps" value is ignored and flagged, rather than reaching the slide.
+func TestParse_StepsDirectiveRejectsNegativeValue(t *testing.T) {
+	p := New()
+	content := []byte("<!--\nsteps: -1\n-->\n\n# Slide")
+
+	pres, err := p.Parse(content)
+	if err != nil {
+		t.Fatalf("Parse() returned error: %v", err)
+	}
+
+	slide := pres.Slides[0]
+	if slide.Directives.HasSteps {
+		t.Error("HasSteps = true, want false: a negative steps value must be ignored")
+	}
+	if !slide.Directives.StepsInvalid {
+		t.Error("StepsInvalid = false, want true")
 	}
 }

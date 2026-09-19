@@ -12,22 +12,22 @@ import (
 
 	"github.com/joho/godotenv"
 	"gopkg.in/yaml.v3"
+
+	"github.com/MiniCodeMonkey/tap/internal/themes"
 )
 
 // Config represents the presentation configuration from YAML frontmatter.
 type Config struct {
-	Drivers            map[string]DriverConfig `yaml:"drivers" json:"drivers,omitempty"`
-	ThemeColors        map[string]string       `yaml:"themeColors" json:"themeColors,omitempty"`
-	Title              string                  `yaml:"title" json:"title,omitempty"`
-	Theme              string                  `yaml:"theme" json:"theme,omitempty"`
-	CustomTheme        string                  `yaml:"customTheme" json:"customTheme,omitempty"`
-	Author             string                  `yaml:"author" json:"author,omitempty"`
-	Date               string                  `yaml:"date" json:"date,omitempty"`
-	AspectRatio        string                  `yaml:"aspectRatio" json:"aspectRatio,omitempty"`
-	Transition         string                  `yaml:"transition" json:"transition,omitempty"`
-	TransitionDuration int                     `yaml:"transitionDuration" json:"transitionDuration,omitempty"`
-	CodeTheme          string                  `yaml:"codeTheme" json:"codeTheme,omitempty"`
-	Fragments          bool                    `yaml:"fragments" json:"fragments,omitempty"`
+	Drivers     map[string]DriverConfig `yaml:"drivers" json:"drivers,omitempty"`
+	ThemeColors map[string]string       `yaml:"themeColors" json:"themeColors,omitempty"`
+	Title       string                  `yaml:"title" json:"title,omitempty"`
+	Theme       string                  `yaml:"theme" json:"theme,omitempty"`
+	CustomTheme string                  `yaml:"customTheme" json:"customTheme,omitempty"`
+	Author      string                  `yaml:"author" json:"author,omitempty"`
+	Date        string                  `yaml:"date" json:"date,omitempty"`
+	AspectRatio string                  `yaml:"aspectRatio" json:"aspectRatio,omitempty"`
+	Transition  string                  `yaml:"transition" json:"transition,omitempty"`
+	Fragments   bool                    `yaml:"fragments" json:"fragments,omitempty"`
 }
 
 // DriverConfig represents the configuration for a code execution driver.
@@ -114,10 +114,9 @@ func Load(path string) (*Config, error) {
 // DefaultConfig returns a Config with sensible default values.
 func DefaultConfig() *Config {
 	return &Config{
-		Theme:       "paper",
+		Theme:       "base",
 		AspectRatio: "16:9",
 		Transition:  "fade",
-		CodeTheme:   "github-dark",
 		Fragments:   true,
 		Drivers:     make(map[string]DriverConfig),
 	}
@@ -137,32 +136,6 @@ var validTransitions = map[string]bool{
 	"slide": true,
 	"push":  true,
 	"zoom":  true,
-}
-
-// validThemes contains the allowed theme values.
-var validThemes = map[string]bool{
-	"paper":     true,
-	"noir":      true,
-	"aurora":    true,
-	"phosphor":  true,
-	"poster":    true,
-	"ink":       true,
-	"bauhaus":   true,
-	"editorial": true,
-	"signal":    true,
-	"carbon":    true,
-	"spectrum":  true,
-	"mono":      true,
-	"flux":      true,
-}
-
-// legacyThemeMapping maps old theme names to new theme names for backwards compatibility.
-var legacyThemeMapping = map[string]string{
-	"minimal":   "paper",
-	"keynote":   "noir",
-	"gradient":  "aurora",
-	"terminal":  "phosphor",
-	"brutalist": "poster",
 }
 
 // validThemeColorKeys contains the allowed themeColors keys.
@@ -204,15 +177,12 @@ func isValidColor(value string) bool {
 
 // Validate checks the Config for invalid values and returns an error
 // with a descriptive message if validation fails.
-// It also normalizes legacy theme names to their new equivalents.
+// It also normalizes an unknown theme name to "base".
 func (c *Config) Validate() error {
-	// Validate and normalize theme
+	// Normalize the theme. An unknown theme falls back to "base" with a
+	// warning rather than failing validation.
 	if c.Theme != "" {
-		normalized := NormalizeTheme(c.Theme)
-		if normalized == "" {
-			return fmt.Errorf("invalid theme %q: see documentation for valid theme names", c.Theme)
-		}
-		c.Theme = normalized
+		c.Theme = NormalizeTheme(c.Theme)
 	}
 
 	// Validate aspect ratio
@@ -278,32 +248,20 @@ func (c *Config) ResolveEnvVars() {
 	}
 }
 
-// NormalizeTheme converts legacy theme names to new theme names and returns the normalized theme.
-// If the theme is a legacy name, it logs a deprecation warning and returns the new name.
-// If the theme is invalid, it returns an empty string.
+// NormalizeTheme returns the theme unchanged if it is valid. Any other theme
+// name logs a warning and falls back to "base".
 func NormalizeTheme(theme string) string {
-	// Check if it's already a valid new theme
-	if validThemes[theme] {
+	if themes.IsValid(theme) {
 		return theme
 	}
 
-	// Check if it's a legacy theme name
-	if newName, ok := legacyThemeMapping[theme]; ok {
-		log.Printf("Warning: theme %q is deprecated, please use %q instead", theme, newName)
-		return newName
-	}
-
-	// Invalid theme
-	return ""
+	log.Printf("Warning: unknown theme %q, using \"base\"", theme)
+	return "base"
 }
 
 // ValidThemeNames returns the list of valid theme names.
 func ValidThemeNames() []string {
-	names := make([]string, 0, len(validThemes))
-	for name := range validThemes {
-		names = append(names, name)
-	}
-	return names
+	return themes.Slugs()
 }
 
 // UpdateThemeInFile updates the theme field in a markdown file's frontmatter.

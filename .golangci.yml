@@ -25,9 +25,15 @@ linters-settings:
   govet:
     # Enable all analyzers
     enable-all: true
-    # Disable shadow checking (can be noisy)
     disable:
+      # Disable shadow checking (can be noisy)
       - shadow
+      # fieldalignment flags struct memory layout on nearly every struct in
+      # the codebase (JSON payloads, Bubble Tea models, config structs), and
+      # reordering them for a few saved bytes buys nothing here - none of
+      # these structs are allocated in numbers where padding matters, and
+      # the churn would touch struct literals across the whole tree.
+      - fieldalignment
   errcheck:
     # Check for errors from type assertions
     check-type-assertions: true

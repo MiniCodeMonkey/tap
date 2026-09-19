@@ -1,11 +1,10 @@
 ---
 title: Live Code Execution Demo
-theme: phosphor
+theme: base
 author: Tap Presentations
 date: 2026-01-25
 aspectRatio: "16:9"
 transition: slide
-codeTheme: github-dark
 fragments: true
 drivers:
   shell:
@@ -70,12 +69,14 @@ layout: two-column
 
 ## Code on the Left
 
+::left
+
 ```bash {driver: shell}
 # Process information
 ps aux | head -10
 ```
 
-|||
+::right
 
 ### Explanation
 

@@ -25,7 +25,6 @@ author: Test Author
 date: "2026-01-23"
 aspectRatio: "16:9"
 transition: fade
-codeTheme: github-dark
 fragments: true
 drivers:
   shell:
@@ -102,8 +101,6 @@ background: "#f0f4f8"
 
 ## Two Column %d
 
-|||
-
 ### Left Column
 
 Content on the left side.
@@ -111,7 +108,7 @@ Content on the left side.
 - Item 1
 - Item 2
 
-|||
+::right
 
 ### Right Column
 

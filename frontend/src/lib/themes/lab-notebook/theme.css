@@ -1,0 +1,1851 @@
+/**
+ * Lab Notebook theme.
+ * For an evidence-first engineering talk: every page is a ruled sheet from a
+ * bound lab notebook, set in a serif reading face, with a graph-paper margin
+ * column running down the left edge and a printed running head counting the
+ * page against the total. Claims arrive numbered, like exhibits: "Listing 3.",
+ * "Fig. 5.", "Table 7." The speaker's red pen is the only saturated color on
+ * the page; it never sets type, it only marks: an underline drawn under an
+ * emphasis, a loop circled around a result, a bracket dropped beside a quote.
+ *
+ * The canvas is a fixed 1920px wide and CSS cannot measure how long a
+ * heading is, so every heading size below is budgeted for a sentence-length
+ * line rather than a single word. Slides that carry heavy content (code, a
+ * table, a diagram, an image, many bullets) step the heading down.
+ */
+
+@import '@fontsource/stix-two-text/latin-400.css';
+@import '@fontsource/stix-two-text/latin-500.css';
+@import '@fontsource/stix-two-text/latin-600.css';
+@import '@fontsource/stix-two-text/latin-700.css';
+@import '@fontsource/stix-two-text/latin-400-italic.css';
+@import '@fontsource/stix-two-text/latin-500-italic.css';
+@import '@fontsource/stix-two-text/latin-600-italic.css';
+@import '@fontsource/ibm-plex-mono/latin-500.css';
+@import '@fontsource/ibm-plex-mono/latin-600.css';
+@import '@fontsource/ibm-plex-mono/latin-500-italic.css';
+
+[data-theme='lab-notebook'] {
+	/* ---------- design-spec tokens ---------- */
+	--bg: #fbfaf5;
+	--fg: #16181d;
+	--muted: #474b55;
+	--accent: #1b3a8c;
+	--accent-text: #1b3a8c;
+	--surface: #eef0f6;
+	--font-display: 'STIX Two Text', 'Latin Modern Roman', 'Times New Roman', serif;
+	--font-body: 'STIX Two Text', 'Latin Modern Roman', 'Times New Roman', serif;
+	--font-mono: 'IBM Plex Mono', 'Latin Modern Mono', monospace;
+	--ease: cubic-bezier(0.4, 0, 0.2, 1);
+	--dur: 700ms;
+	--space-unit: 24px;
+	--radius: 6px;
+	--stroke-width: 2px;
+
+	/* The red pen: decoration only, never text. Shapes are drawn as
+	 * stretchable inline SVGs with a non-scaling stroke, so one path works
+	 * at any element's width or height. */
+	--pen: #a80f14;
+	--pen-line: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 500 24' preserveAspectRatio='none'%3E%3Cpath d='M4 15C60 5 130 21 215 11S390 6 496 13' fill='none' stroke='%23A80F14' stroke-width='6' stroke-linecap='round' vector-effect='non-scaling-stroke'/%3E%3C/svg%3E");
+	/* A hand-drawn loop, not a mathematical ellipse: the radius wobbles
+	 * unevenly around the ring and the stroke overshoots past its own
+	 * start rather than closing cleanly, the way a pen circling a number
+	 * on a page actually does. */
+	--pen-loop: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 600 300' preserveAspectRatio='none'%3E%3Cpath d='M322 34C230 6 110 2 48 46C-6 84 -2 138 22 172C54 216 130 254 232 268C336 282 452 270 522 224C580 186 596 128 566 84C540 46 470 14 388 10C356 8 400 22 352 24' fill='none' stroke='%23A80F14' stroke-width='7' stroke-linecap='round' vector-effect='non-scaling-stroke'/%3E%3C/svg%3E");
+	--pen-bracket: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 300' preserveAspectRatio='none'%3E%3Cpath d='M34 5C12 8 16 40 17 120c1 26-4 28-12 31 9 3 13 8 12 32-2 78-5 106 17 112' fill='none' stroke='%23A80F14' stroke-width='6' stroke-linecap='round' vector-effect='non-scaling-stroke'/%3E%3C/svg%3E");
+	--pen-circle: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 300 300' preserveAspectRatio='none'%3E%3Cellipse cx='150' cy='150' rx='138' ry='128' fill='none' stroke='%23A80F14' stroke-width='7' vector-effect='non-scaling-stroke' transform='rotate(-4 150 150)'/%3E%3C/svg%3E");
+
+	/* Bridge to the base theme's token names, read by shared CSS
+	 * (rich-blocks.css, ui-components.css, the map slide, badge, tag). */
+	--color-bg: var(--bg);
+	--color-text: var(--fg);
+	--color-muted: var(--muted);
+	--color-accent: var(--accent);
+	--color-code-bg: transparent;
+	--color-code-text: var(--fg);
+	--color-code-inline-bg: color-mix(in srgb, var(--accent) 10%, transparent);
+	--color-border: var(--fg);
+	--color-surface: var(--surface);
+	--color-surface-elevated: var(--surface);
+	--color-link: var(--accent-text);
+	--font-sans: var(--font-body);
+
+	/* Shiki: text in ink, strings and comments in the two theme colors. */
+	--shiki-foreground: var(--fg);
+	--shiki-background: transparent;
+	--shiki-token-comment: var(--muted);
+	--shiki-token-string: var(--accent-text);
+	--shiki-token-string-expression: var(--accent-text);
+	--shiki-token-keyword: var(--fg);
+	--shiki-token-function: var(--fg);
+	--shiki-token-constant: var(--accent-text);
+	--shiki-token-parameter: var(--fg);
+	--shiki-token-punctuation: var(--fg);
+	--shiki-token-link: var(--accent-text);
+}
+
+@keyframes lab-notebook-fade {
+	from {
+		opacity: 0;
+		transform: translateY(10px);
+	}
+	to {
+		opacity: 1;
+		transform: translateY(0);
+	}
+}
+@keyframes lab-notebook-wipe-r {
+	from {
+		clip-path: inset(0 100% 0 0);
+	}
+	to {
+		clip-path: inset(0 0 0 0);
+	}
+}
+@keyframes lab-notebook-wipe-d {
+	from {
+		clip-path: inset(0 0 100% 0);
+	}
+	to {
+		clip-path: inset(0 0 0 0);
+	}
+}
+@keyframes lab-notebook-rule {
+	from {
+		background-size: 0% 0.16em;
+	}
+	to {
+		background-size: 100% 0.16em;
+	}
+}
+@keyframes lab-notebook-blink {
+	0%,
+	100% {
+		opacity: 1;
+	}
+	50% {
+		opacity: 0.35;
+	}
+}
+
+/* ============================================================================
+ * The page: graph-paper margin, ruled running head
+ * ============================================================================ */
+
+[data-theme='lab-notebook'] .slide[data-layout] {
+	background: var(--bg);
+	color: var(--fg);
+	font-family: var(--font-body);
+	font-size: 48px;
+	line-height: 1.3;
+	max-width: none;
+}
+[data-theme='lab-notebook'] :where(.slide[data-layout]) h1,
+[data-theme='lab-notebook'] :where(.slide[data-layout]) h2,
+[data-theme='lab-notebook'] :where(.slide[data-layout]) h3,
+[data-theme='lab-notebook'] :where(.slide[data-layout]) h4,
+[data-theme='lab-notebook'] :where(.slide[data-layout]) h5,
+[data-theme='lab-notebook'] :where(.slide[data-layout]) h6,
+[data-theme='lab-notebook'] :where(.slide[data-layout]) p,
+[data-theme='lab-notebook'] :where(.slide[data-layout]) ul,
+[data-theme='lab-notebook'] :where(.slide[data-layout]) ol,
+[data-theme='lab-notebook'] :where(.slide[data-layout]) blockquote,
+[data-theme='lab-notebook'] :where(.slide[data-layout]) pre,
+[data-theme='lab-notebook'] :where(.slide[data-layout]) table {
+	margin: 0;
+	text-wrap: balance;
+	overflow-wrap: break-word;
+}
+[data-theme='lab-notebook'] .slide[data-layout] h1,
+[data-theme='lab-notebook'] .slide[data-layout] h2,
+[data-theme='lab-notebook'] .slide[data-layout] h3,
+[data-theme='lab-notebook'] .slide[data-layout] h4,
+[data-theme='lab-notebook'] .slide[data-layout] h5,
+[data-theme='lab-notebook'] .slide[data-layout] h6 {
+	font-family: var(--font-display);
+	font-weight: 600;
+	letter-spacing: -0.012em;
+}
+
+/* The graph-paper margin column, and the ruled edge that separates it. */
+[data-theme='lab-notebook'] .slide[data-layout]::before {
+	content: '';
+	position: absolute;
+	left: 0;
+	top: 0;
+	width: 135px;
+	height: 1080px;
+	z-index: 0;
+	border-right: 3px solid var(--accent);
+	background-image:
+		linear-gradient(color-mix(in srgb, var(--accent) 30%, transparent) 2px, transparent 2px),
+		linear-gradient(90deg, color-mix(in srgb, var(--accent) 30%, transparent) 2px, transparent 2px);
+	background-size: 33px 33px;
+	background-position: -1px -1px;
+}
+/* The running head: a ruled strip holding "p. N / M" at the right. */
+[data-theme='lab-notebook'] .slide[data-layout]::after {
+	content: 'p. ' attr(data-index) ' / ' attr(data-total);
+	position: absolute;
+	left: 192px;
+	right: 96px;
+	top: 96px;
+	height: 48px;
+	z-index: 0;
+	border-bottom: 2px solid var(--fg);
+	text-align: right;
+	font-family: var(--font-body);
+	font-size: 30px;
+	font-weight: 500;
+	line-height: 36px;
+	letter-spacing: 0.12em;
+	text-transform: uppercase;
+	color: var(--muted);
+	animation: lab-notebook-fade var(--dur) var(--ease) both;
+}
+[data-theme='lab-notebook'] .slide-tag {
+	position: absolute;
+	z-index: 1;
+	left: 192px;
+	right: auto;
+	top: 96px;
+	width: auto;
+	max-width: 1100px;
+	height: 48px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-family: var(--font-body);
+	font-size: 30px;
+	font-weight: 600;
+	line-height: 48px;
+	letter-spacing: 0.12em;
+	text-transform: uppercase;
+	color: var(--accent-text);
+	animation: lab-notebook-fade var(--dur) var(--ease) both;
+}
+[data-theme='lab-notebook'] .slide-tag::before {
+	content: '\00A7\2009';
+}
+/* The badge is a small stamp above the ruled head, top-right corner. */
+[data-theme='lab-notebook'] .slide-badge {
+	position: absolute;
+	z-index: 2;
+	left: auto;
+	right: 96px;
+	top: 30px;
+	width: auto;
+	height: auto;
+	padding: 4px 16px;
+	border: 2px solid var(--accent);
+	border-radius: 999px;
+	font-family: var(--font-mono);
+	font-size: 28px;
+	font-weight: 600;
+	line-height: 1.4;
+	letter-spacing: 0.04em;
+	color: var(--accent-text);
+	background: var(--bg);
+	animation: lab-notebook-fade var(--dur) var(--ease) 100ms both;
+}
+
+[data-theme='lab-notebook'] .slide-content {
+	position: absolute;
+	width: auto;
+	height: auto;
+	left: 0;
+	right: 0;
+	top: 0;
+	bottom: 0;
+	z-index: 1;
+}
+[data-theme='lab-notebook'] [class^='layout-'] {
+	width: auto;
+	height: auto;
+	max-width: none;
+	margin: 0;
+	gap: 0;
+	padding: 196px 96px 96px 192px;
+	display: flex;
+	flex-direction: column;
+	justify-content: flex-start;
+	align-items: stretch;
+	align-content: normal;
+	text-align: left;
+}
+[data-theme='lab-notebook'] [class^='layout-'] > .slot {
+	max-width: none;
+	margin: 0;
+}
+/*
+ * A component's own root commonly fills `.deck-component-root` with an
+ * inline `position: absolute; inset: 0`, which resolves against the
+ * padding edge: real `padding` would sit inside that edge and get filled
+ * over. A transparent `border` reserves the same margin in a way the
+ * containing-block calculation honors instead of just the flow children
+ * `padding` above still correctly indents.
+ */
+[data-theme='lab-notebook'] .slide[data-layout='component'] > .slide-content > .deck-component-root,
+[data-theme='lab-notebook'] .slide[data-layout='component'] > .slide-content > .scroll-content > .deck-component-root {
+	/*
+	 * `.slide-content` fills its parent via `position: absolute; inset: 0`
+	 * but isn't a flex container, so an ordinary block child's `height:
+	 * auto` (right for the flow-based default layout) shrinks to fit -
+	 * and a component's own `position: absolute` child contributes nothing
+	 * to that fit, collapsing this box instead of sizing to the slide.
+	 */
+	width: auto;
+	height: 100%;
+	max-width: none;
+	margin: 0;
+	gap: 0;
+	border-width: 196px 96px 96px 192px;
+	border-style: solid;
+	border-color: transparent;
+	display: flex;
+	flex-direction: column;
+	justify-content: flex-start;
+	align-items: stretch;
+	align-content: normal;
+	text-align: left;
+}
+[data-theme='lab-notebook'] .slide[data-layout='component'] > .slide-content > .deck-component-root > .slot,
+[data-theme='lab-notebook'] .slide[data-layout='component'] > .slide-content > .scroll-content > .deck-component-root > .slot {
+	max-width: none;
+	margin: 0;
+}
+
+/* Figure numbering: the slide's own page number, read as an integer where
+ * the browser supports typed attr(). A theme without that support falls
+ * back to the plain word ("Listing.", "Fig.", "Table.") with no digit. */
+[data-theme='lab-notebook'] .slide[data-layout] {
+	--figure-number: '';
+}
+@supports (x: attr(x type(*))) {
+	[data-theme='lab-notebook'] .slide[data-layout] {
+		counter-reset: lab-notebook-page attr(data-index type(<integer>), 0);
+		--figure-number: ' ' counter(lab-notebook-page);
+	}
+}
+
+/* ============================================================================
+ * Minimum-size safety net. Sits right after the token bridge so every later,
+ * more specific rule in this file wins the specificity tie.
+ * ============================================================================ */
+
+[data-theme='lab-notebook'] .slot p,
+[data-theme='lab-notebook'] .slot > :where(.fragment) > p,
+[data-theme='lab-notebook'] .slot li,
+[data-theme='lab-notebook'] .slot > :where(.fragment) > li {
+	font-size: 48px;
+	line-height: 1.4;
+}
+[data-theme='lab-notebook'] pre code {
+	font-size: 40px;
+}
+[data-theme='lab-notebook'] .slot td,
+[data-theme='lab-notebook'] .slot th {
+	font-size: 46px;
+}
+
+/* ============================================================================
+ * Emphasis, links, inline code
+ * ============================================================================ */
+
+[data-theme='lab-notebook'] :where(.slide[data-layout]) strong {
+	font-weight: 700;
+	color: var(--accent-text);
+}
+/* The red pen underlines whatever is emphasised, drawn in after the text
+ * has arrived. It marks the whole run, never a single glyph, so it reads
+ * against any word count the deck happens to use. */
+[data-theme='lab-notebook'] :where(.slide[data-layout]) em {
+	position: relative;
+	font-style: italic;
+	font-weight: 500;
+	padding-bottom: 0.08em;
+	background: var(--pen-line) no-repeat 0 100% / 100% 0.16em;
+	-webkit-box-decoration-break: clone;
+	box-decoration-break: clone;
+	animation: lab-notebook-rule 500ms var(--ease) 950ms both;
+}
+[data-theme='lab-notebook'] :where(.slide[data-layout]) a {
+	color: var(--accent-text);
+	text-decoration: underline;
+	text-decoration-thickness: 2px;
+	text-underline-offset: 0.12em;
+}
+[data-theme='lab-notebook'] :where(.slide[data-layout]) a:hover {
+	color: var(--pen);
+}
+[data-theme='lab-notebook'] .slot :not(pre) > code {
+	font-family: var(--font-mono);
+	font-weight: 600;
+	font-size: 0.82em;
+	color: var(--accent-text);
+	background: var(--color-code-inline-bg);
+	padding: 0.06em 0.22em;
+	border-radius: 3px;
+}
+
+/* ============================================================================
+ * Headings
+ * ============================================================================ */
+
+[data-theme='lab-notebook'] .slot > h2,
+[data-theme='lab-notebook'] .slot > :where(.fragment) > h2 {
+	margin: 0 0 40px;
+	font-size: 100px;
+	line-height: 1.08;
+	animation: lab-notebook-fade var(--dur) var(--ease) 150ms both;
+}
+/* Short and medium headings get the impact a sentence-length line can't:
+ * sized for `long` first above, scaled up here. Written through
+ * `.slot.slot-content` so the extra class beats the plain `.slot > h2`
+ * base rule regardless of source order. */
+[data-theme='lab-notebook'] .slot.slot-content > h2[data-length='medium'],
+[data-theme='lab-notebook'] .slot.slot-content > :where(.fragment) > h2[data-length='medium'] {
+	font-size: 122px;
+}
+[data-theme='lab-notebook'] .slot.slot-content > h2[data-length='short'],
+[data-theme='lab-notebook'] .slot.slot-content > :where(.fragment) > h2[data-length='short'] {
+	font-size: 146px;
+}
+/* Heavy content below the heading: the heading steps down to leave room. */
+[data-theme='lab-notebook']
+	.slot:has(pre, table, .mermaid-diagram, .live-code-block-portal, .asciinema-player-wrapper, img, h3, li:nth-child(5))
+	> h2,
+[data-theme='lab-notebook']
+	.slot
+	> :where(.fragment):has(pre, table, .mermaid-diagram, li:nth-child(5))
+	> h2 {
+	font-size: 80px;
+	margin-bottom: 30px;
+}
+[data-theme='lab-notebook']
+	.slot.slot-content:has(pre, table, .mermaid-diagram, .live-code-block-portal, .asciinema-player-wrapper, img, h3, li:nth-child(5))
+	> h2[data-length='medium'] {
+	font-size: 96px;
+}
+[data-theme='lab-notebook']
+	.slot.slot-content:has(pre, table, .mermaid-diagram, .live-code-block-portal, .asciinema-player-wrapper, img, h3, li:nth-child(5))
+	> h2[data-length='short'] {
+	font-size: 112px;
+}
+[data-theme='lab-notebook'] .slot h3 {
+	margin-top: 36px;
+	font-size: 60px;
+	line-height: 1.2;
+	font-weight: 600;
+}
+[data-theme='lab-notebook'] .slot > h3:first-child {
+	margin-top: 0;
+}
+[data-theme='lab-notebook'] .slot h4 {
+	margin-top: 30px;
+	font-size: 50px;
+	line-height: 1.25;
+	font-style: italic;
+	font-weight: 600;
+	color: var(--accent-text);
+}
+[data-theme='lab-notebook'] .slot h5 {
+	margin-top: 24px;
+	font-family: var(--font-mono);
+	font-size: 38px;
+	line-height: 1.3;
+	font-weight: 600;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+	color: var(--muted);
+}
+[data-theme='lab-notebook'] .slot h6 {
+	margin-top: 20px;
+	font-family: var(--font-mono);
+	font-size: 30px;
+	line-height: 1.3;
+	font-weight: 500;
+	letter-spacing: 0.1em;
+	text-transform: uppercase;
+	color: var(--muted);
+}
+[data-theme='lab-notebook'] .slot h4:first-child,
+[data-theme='lab-notebook'] .slot h5:first-child,
+[data-theme='lab-notebook'] .slot h6:first-child {
+	margin-top: 0;
+}
+
+[data-theme='lab-notebook'] .slot > p,
+[data-theme='lab-notebook'] .slot > :where(.fragment) > p {
+	animation: lab-notebook-fade var(--dur) var(--ease) 300ms both;
+}
+[data-theme='lab-notebook'] .slot > p + p,
+[data-theme='lab-notebook'] .slot > :where(.fragment) > p + p,
+[data-theme='lab-notebook'] .slot > .fragment + .fragment,
+[data-theme='lab-notebook'] .slot > p + .fragment,
+[data-theme='lab-notebook'] .slot > .fragment + p,
+[data-theme='lab-notebook'] .slot > h2 + p,
+[data-theme='lab-notebook'] .slot > h3 + p,
+[data-theme='lab-notebook'] .slot > ul + p,
+[data-theme='lab-notebook'] .slot > :where(.fragment) > ul + p,
+[data-theme='lab-notebook'] .slot > p + ul,
+[data-theme='lab-notebook'] .slot > :where(.fragment) > p + ul {
+	margin-top: 32px;
+}
+
+/* ============================================================================
+ * Title
+ * ============================================================================ */
+
+[data-theme='lab-notebook'] .layout-title {
+	justify-content: center;
+}
+[data-theme='lab-notebook'] .layout-title .slot {
+	position: relative;
+}
+[data-theme='lab-notebook'] .layout-title h1 {
+	/* Budgeted for a full sentence, not a single word: a 95-character
+	 * title wraps to three lines at this size and still leaves room for
+	 * a subtitle underneath. */
+	font-size: 96px;
+	line-height: 1.14;
+	letter-spacing: -0.012em;
+	overflow-wrap: break-word;
+	animation: lab-notebook-fade var(--dur) var(--ease) 150ms both;
+}
+/* A short talk name gets the impact a 95-character title can't. */
+[data-theme='lab-notebook'] .layout-title .slot.slot-content h1[data-length='medium'] {
+	font-size: 116px;
+}
+[data-theme='lab-notebook'] .layout-title .slot.slot-content h1[data-length='short'] {
+	font-size: 148px;
+	line-height: 1.1;
+}
+/* The subtitle stays at its own fixed scale regardless of its own length:
+ * it is a secondary line under a headline that already scaled, not a
+ * heading that needs its own impact. Written with enough specificity
+ * (`.slot.slot-content` plus the attribute selector) to beat the generic
+ * `.slot.slot-content > h2[data-length]` rule below. */
+[data-theme='lab-notebook'] .layout-title .slot.slot-content h2[data-length='medium'],
+[data-theme='lab-notebook'] .layout-title .slot.slot-content h2[data-length='short'] {
+	font-size: 72px;
+}
+[data-theme='lab-notebook'] .layout-title h2 {
+	position: relative;
+	width: fit-content;
+	max-width: 100%;
+	margin: 28px 0 0;
+	padding-bottom: 0.22em;
+	font-style: italic;
+	font-weight: 500;
+	font-size: 72px;
+	line-height: 1.2;
+	overflow-wrap: break-word;
+	animation: lab-notebook-fade var(--dur) var(--ease) 300ms both;
+}
+[data-theme='lab-notebook'] .layout-title h2::after {
+	content: '';
+	position: absolute;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	height: 0.22em;
+	background: var(--pen-line) no-repeat 0 0 / 100% 100%;
+	animation: lab-notebook-wipe-r 550ms var(--ease) 950ms both;
+}
+[data-theme='lab-notebook'] .layout-title p {
+	max-width: 1300px;
+	margin-top: 56px;
+	font-size: 52px;
+	font-weight: 500;
+	line-height: 1.34;
+	padding-top: 36px;
+	border-top: 2px solid var(--fg);
+	animation: lab-notebook-fade var(--dur) var(--ease) 450ms both;
+}
+
+/* ============================================================================
+ * Section: a fresh page, fully gridded
+ * ============================================================================ */
+
+[data-theme='lab-notebook'] .slide[data-layout='section'] {
+	background-image:
+		linear-gradient(color-mix(in srgb, var(--accent) 13%, transparent) 2px, transparent 2px),
+		linear-gradient(90deg, color-mix(in srgb, var(--accent) 13%, transparent) 2px, transparent 2px);
+	background-size: 33px 33px;
+	background-position: -1px -1px;
+}
+[data-theme='lab-notebook'] .layout-section {
+	justify-content: center;
+}
+[data-theme='lab-notebook'] .slide[data-layout='section'] .slide-tag {
+	position: static;
+	display: block;
+	width: fit-content;
+	max-width: none;
+	height: auto;
+	overflow: visible;
+	white-space: normal;
+	font-size: 68px;
+	font-weight: 600;
+	line-height: 1.15;
+	letter-spacing: 0;
+	margin-bottom: 32px;
+	animation: lab-notebook-fade var(--dur) var(--ease) 150ms both;
+}
+[data-theme='lab-notebook'] .slide[data-layout='section'] .slide-tag::before {
+	content: '\00A7\2009';
+	color: var(--muted);
+	font-weight: 500;
+}
+[data-theme='lab-notebook'] .layout-section h1,
+[data-theme='lab-notebook'] .layout-section h2 {
+	position: relative;
+	width: fit-content;
+	max-width: 100%;
+	padding-bottom: 0.16em;
+	font-size: 96px;
+	line-height: 1.16;
+	letter-spacing: -0.014em;
+	animation: lab-notebook-fade var(--dur) var(--ease) 300ms both;
+}
+[data-theme='lab-notebook'] .layout-section .slot.slot-content h1[data-length='medium'],
+[data-theme='lab-notebook'] .layout-section .slot.slot-content h2[data-length='medium'] {
+	font-size: 128px;
+	line-height: 1.12;
+}
+[data-theme='lab-notebook'] .layout-section .slot.slot-content h1[data-length='short'],
+[data-theme='lab-notebook'] .layout-section .slot.slot-content h2[data-length='short'] {
+	font-size: 160px;
+	line-height: 1.1;
+	letter-spacing: -0.018em;
+}
+[data-theme='lab-notebook'] .layout-section h1::after,
+[data-theme='lab-notebook'] .layout-section h2::after {
+	content: '';
+	position: absolute;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	height: 0.16em;
+	background: var(--pen-line) no-repeat 0 0 / 100% 100%;
+	animation: lab-notebook-wipe-r 550ms var(--ease) 950ms both;
+}
+[data-theme='lab-notebook'] .layout-section p {
+	max-width: 1400px;
+	margin-top: 36px;
+	font-style: italic;
+	font-weight: 500;
+	font-size: 68px;
+	line-height: 1.3;
+	animation: lab-notebook-fade var(--dur) var(--ease) 450ms both;
+}
+
+/* ============================================================================
+ * Statement: a lone h1 on the default layout
+ * ============================================================================ */
+
+[data-theme='lab-notebook'] .layout-default .slot:has(> h1:only-child) {
+	flex: 1;
+	display: flex;
+	flex-direction: column;
+	justify-content: center;
+}
+[data-theme='lab-notebook'] .layout-default h1:only-child {
+	font-size: 108px;
+	line-height: 1.2;
+	letter-spacing: -0.014em;
+	animation: lab-notebook-fade var(--dur) var(--ease) 300ms both;
+}
+[data-theme='lab-notebook'] .layout-default .slot.slot-content h1:only-child[data-length='medium'] {
+	font-size: 132px;
+	line-height: 1.16;
+	letter-spacing: -0.016em;
+}
+[data-theme='lab-notebook'] .layout-default .slot.slot-content h1:only-child[data-length='short'] {
+	font-size: 168px;
+	line-height: 1.1;
+	letter-spacing: -0.018em;
+}
+[data-theme='lab-notebook'] .layout-default h1:only-child em {
+	font-weight: 600;
+}
+
+/* ============================================================================
+ * Bullets: enumerated like a proof
+ * ============================================================================ */
+
+[data-theme='lab-notebook'] .slot > ul,
+[data-theme='lab-notebook'] .slot > :where(.fragment) > ul,
+[data-theme='lab-notebook'] .slot > ol,
+[data-theme='lab-notebook'] .slot > :where(.fragment) > ol {
+	list-style: none;
+	padding: 0;
+	counter-reset: lab-notebook-item;
+	text-align: left;
+}
+[data-theme='lab-notebook'] .slot > ul > li,
+[data-theme='lab-notebook'] .slot > :where(.fragment) > ul > li,
+[data-theme='lab-notebook'] .slot > ol > li,
+[data-theme='lab-notebook'] .slot > :where(.fragment) > ol > li {
+	position: relative;
+	counter-increment: lab-notebook-item;
+	padding: 0 0 0 180px;
+	margin-top: 40px;
+	font-size: 48px;
+	line-height: 1.36;
+	transition:
+		opacity var(--dur) var(--ease),
+		transform var(--dur) var(--ease);
+	animation: lab-notebook-fade var(--dur) var(--ease) both;
+}
+[data-theme='lab-notebook'] .slot > ul > li:first-child,
+[data-theme='lab-notebook'] .slot > :where(.fragment) > ul > li:first-child,
+[data-theme='lab-notebook'] .slot > ol > li:first-child,
+[data-theme='lab-notebook'] .slot > :where(.fragment) > ol > li:first-child {
+	margin-top: 0;
+}
+[data-theme='lab-notebook'] .slot > ul > li::before,
+[data-theme='lab-notebook'] .slot > :where(.fragment) > ul > li::before,
+[data-theme='lab-notebook'] .slot > ol > li::before,
+[data-theme='lab-notebook'] .slot > :where(.fragment) > ol > li::before {
+	content: '(' counter(lab-notebook-item, lower-roman) ')';
+	position: absolute;
+	left: 0;
+	top: 0;
+	width: 146px;
+	text-align: right;
+	white-space: nowrap;
+	font-family: var(--font-display);
+	font-style: italic;
+	font-weight: 600;
+	font-size: 0.82em;
+	color: var(--accent-text);
+}
+[data-theme='lab-notebook'] .slot > ul > li:nth-child(1),
+[data-theme='lab-notebook'] .slot > :where(.fragment) > ul > li:nth-child(1) {
+	animation-delay: 300ms;
+}
+[data-theme='lab-notebook'] .slot > ul > li:nth-child(2),
+[data-theme='lab-notebook'] .slot > :where(.fragment) > ul > li:nth-child(2) {
+	animation-delay: 420ms;
+}
+[data-theme='lab-notebook'] .slot > ul > li:nth-child(3),
+[data-theme='lab-notebook'] .slot > :where(.fragment) > ul > li:nth-child(3) {
+	animation-delay: 540ms;
+}
+[data-theme='lab-notebook'] .slot > ul > li:nth-child(4),
+[data-theme='lab-notebook'] .slot > :where(.fragment) > ul > li:nth-child(4) {
+	animation-delay: 660ms;
+}
+[data-theme='lab-notebook'] .slot > ul > li:nth-child(n + 5),
+[data-theme='lab-notebook'] .slot > :where(.fragment) > ul > li:nth-child(n + 5) {
+	animation-delay: 780ms;
+}
+/* Five or more items: the proof tightens so seven one-line points fit. */
+[data-theme='lab-notebook'] .slot > ul:has(> li:nth-child(5)) > li,
+[data-theme='lab-notebook'] .slot > :where(.fragment) > ul:has(> li:nth-child(5)) > li,
+[data-theme='lab-notebook'] .slot > ol:has(> li:nth-child(5)) > li,
+[data-theme='lab-notebook'] .slot > :where(.fragment) > ol:has(> li:nth-child(5)) > li {
+	margin-top: 22px;
+	font-size: 44px;
+	line-height: 1.28;
+}
+[data-theme='lab-notebook'] .slide .fragment-hidden {
+	opacity: 0 !important;
+	transform: translateY(10px) !important;
+	transition: none;
+}
+[data-theme='lab-notebook'] .slide .fragment-visible {
+	opacity: 1;
+	transform: translateY(0);
+	transition:
+		opacity var(--dur) var(--ease),
+		transform var(--dur) var(--ease);
+}
+
+/* Nested lists: quieter, no roman numeral, a short dash instead. */
+[data-theme='lab-notebook'] .slot li ul,
+[data-theme='lab-notebook'] .slot li ol {
+	list-style: none;
+	padding: 0;
+	margin-top: 18px;
+	counter-reset: none;
+}
+[data-theme='lab-notebook'] .slot li li {
+	position: relative;
+	counter-increment: none;
+	padding: 0 0 0 64px;
+	margin-top: 18px;
+	font-size: 44px;
+	font-weight: 400;
+	font-style: italic;
+	color: var(--muted);
+	line-height: 1.25;
+}
+[data-theme='lab-notebook'] .slot li li::before {
+	content: '\2013';
+	position: absolute;
+	left: 8px;
+	top: 0;
+	width: auto;
+	color: var(--muted);
+	font-style: normal;
+	font-weight: 500;
+}
+[data-theme='lab-notebook'] .slot li li:first-child {
+	margin-top: 18px;
+}
+
+/* ============================================================================
+ * Code: ruled top and bottom, numbered lines
+ * ============================================================================ */
+
+[data-theme='lab-notebook'] .slot pre {
+	margin: 0 0 0 -40px;
+	padding: 12px 0;
+	border-top: 3px solid var(--fg);
+	border-bottom: 2px solid var(--fg);
+	border-radius: 0;
+	background: none;
+	overflow: visible;
+	color: var(--fg);
+	font-family: var(--font-mono);
+	font-weight: 500;
+	font-size: 40px;
+	line-height: 1.5;
+	font-variant-ligatures: none;
+	animation: lab-notebook-fade var(--dur) var(--ease) 300ms both;
+}
+[data-theme='lab-notebook'] .slot pre code {
+	display: block;
+	font: inherit;
+	font-size: inherit;
+	background: none;
+	padding: 0;
+	/* <pre> defaults to white-space: pre, which renders the raw newline
+	 * text nodes Shiki leaves between .line spans as blank lines. Each
+	 * .line sets its own white-space below, so the block spacing comes
+	 * only from that, not from doubled-up newlines in the source. */
+	white-space: normal;
+	counter-reset: lab-notebook-line;
+}
+[data-theme='lab-notebook'] .slot pre .line {
+	position: relative;
+	display: block;
+	/* Wide enough for a two-digit line number, since the scroll layout
+	 * regularly runs past nine lines. */
+	padding-left: 64px;
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+	counter-increment: lab-notebook-line;
+}
+/* Shiki always ends a block with one trailing, textless line. Hide it in
+ * both shapes it can take: a plain empty span, or one wrapping an empty
+ * .line-content (the shape a highlighted block uses). */
+[data-theme='lab-notebook'] .slot pre .line:last-child:empty,
+[data-theme='lab-notebook'] .slot pre .line:last-child:has(> .line-content:empty) {
+	display: none;
+	counter-increment: none;
+}
+[data-theme='lab-notebook'] .slot pre .line::before {
+	content: counter(lab-notebook-line);
+	position: absolute;
+	left: 0;
+	top: 0.14em;
+	width: 40px;
+	text-align: right;
+	white-space: nowrap;
+	font-family: var(--font-mono);
+	font-size: 28px;
+	font-weight: 500;
+	color: var(--muted);
+}
+[data-theme='lab-notebook'] .slot pre .tok-comment,
+[data-theme='lab-notebook'] .slot pre .line[style*='--shiki-token-comment'] {
+	font-style: italic;
+}
+/* opacity applies once, on the line itself: the same declaration also
+ * naming the nested span and .line-content gave each of them their own
+ * opacity: 0.75 layer, and a child's opacity compounds with its already
+ * dimmed ancestor's (0.75 * 0.75 = 0.5625), pushing this text under the
+ * 4.5:1 floor the code contrast check requires. */
+[data-theme='lab-notebook'] .slot pre.has-highlighted .line:not(.highlighted) span,
+[data-theme='lab-notebook'] .slot pre.has-highlighted .line:not(.highlighted) .line-content {
+	color: var(--muted) !important;
+}
+[data-theme='lab-notebook'] .slot pre.has-highlighted .line:not(.highlighted) {
+	opacity: 0.8;
+}
+[data-theme='lab-notebook'] .slot pre .line.highlighted {
+	font-weight: 600;
+	background: linear-gradient(
+		90deg,
+		transparent 44px,
+		var(--accent) 44px,
+		var(--accent) 52px,
+		color-mix(in srgb, var(--accent) 10%, transparent) 52px
+	);
+	animation: lab-notebook-fade var(--dur) var(--ease) 600ms both;
+}
+[data-theme='lab-notebook'] .slot pre .line.highlighted::before {
+	color: var(--pen);
+	font-weight: 600;
+	font-size: 34px;
+}
+[data-theme='lab-notebook'] .slot pre + p,
+[data-theme='lab-notebook'] .slot .mermaid-diagram + p,
+[data-theme='lab-notebook'] .layout-split-media .slot-default > h3 + p {
+	margin-top: 24px;
+	line-height: 1.2;
+	animation: lab-notebook-fade var(--dur) var(--ease) 600ms both;
+}
+[data-theme='lab-notebook'] .slot pre + p::before {
+	content: 'Listing' var(--figure-number) '.\2002';
+	font-weight: 700;
+	color: var(--fg);
+}
+[data-theme='lab-notebook'] .slot .mermaid-diagram + p::before {
+	content: 'Fig.' var(--figure-number) '.\2002';
+	font-weight: 700;
+	color: var(--fg);
+}
+[data-theme='lab-notebook'] .layout-split-media .slot-default > h3 + p::before {
+	content: 'Fig.' var(--figure-number) '.\2002';
+	font-weight: 700;
+	color: var(--fg);
+}
+
+/* A block the highlighter has not touched keeps the same gutter and rules. */
+[data-theme='lab-notebook'] .slot pre:not(.shiki) code {
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+}
+
+/* ============================================================================
+ * Big stat: a displayed result, circled in pen, with a footnote
+ * ============================================================================ */
+
+[data-theme='lab-notebook'] .layout-big-stat {
+	justify-content: center;
+}
+[data-theme='lab-notebook'] .layout-big-stat .slot-default {
+	text-align: center;
+}
+/* Sized for a wrapping claim first (`long`): a big-stat number is usually
+ * a short figure, but a slide that puts a whole sentence here must not run
+ * off the page. `strong` (an inline-bold number inside a paragraph, not a
+ * heading) has no `data-length` to key off, so it gets a fixed, modest
+ * size rather than the short tier's poster scale. */
+[data-theme='lab-notebook'] .layout-big-stat h1,
+[data-theme='lab-notebook'] .layout-big-stat strong {
+	position: relative;
+	display: inline-block;
+	max-width: 1500px;
+	font-size: 92px;
+	line-height: 1.28;
+	letter-spacing: -0.01em;
+	text-wrap: balance;
+	animation: lab-notebook-fade var(--dur) var(--ease) 150ms both;
+}
+[data-theme='lab-notebook'] .layout-big-stat .slot.slot-content h1[data-length='medium'] {
+	font-size: 150px;
+	line-height: 1.16;
+}
+[data-theme='lab-notebook'] .layout-big-stat .slot.slot-content h1[data-length='short'] {
+	font-size: 260px;
+	line-height: 1.1;
+	letter-spacing: -0.02em;
+}
+/* The circled-in-pen treatment only fits a short figure: a medium or long
+ * claim wraps across lines, and a loop drawn for a single word would sit
+ * wrong around several. */
+[data-theme='lab-notebook'] .layout-big-stat .slot.slot-content h1[data-length='short']::before {
+	content: '';
+	position: absolute;
+	inset: -50px -90px -46px -78px;
+	background: var(--pen-loop) no-repeat 50% 50% / 100% 100%;
+	animation: lab-notebook-wipe-r 650ms var(--ease) 900ms both;
+}
+[data-theme='lab-notebook'] .layout-big-stat .slot-caption {
+	position: relative;
+	text-align: center;
+}
+[data-theme='lab-notebook'] .layout-big-stat .slot-caption p {
+	max-width: 1400px;
+	margin: 88px auto 0;
+	padding-top: 28px;
+	border-top: 2px solid var(--fg);
+	font-size: 48px;
+	line-height: 1.36;
+	animation: lab-notebook-fade var(--dur) var(--ease) 450ms both;
+}
+[data-theme='lab-notebook'] .layout-big-stat .slot-figure {
+	margin-top: 40px;
+	text-align: center;
+}
+[data-theme='lab-notebook'] .layout-big-stat .slot-figure img {
+	/* 22% of the fixed 1080px canvas, in canvas pixels rather than a
+	 * viewport unit: the slide is always 1920x1080 before it scales as
+	 * one unit, so vh here would size against the wrong box. */
+	max-height: 238px;
+	width: auto;
+	filter: grayscale(1) contrast(1.15);
+}
+
+/* ============================================================================
+ * Quote: copied out, bracketed in the margin
+ * ============================================================================ */
+
+[data-theme='lab-notebook'] .layout-quote {
+	justify-content: center;
+}
+[data-theme='lab-notebook'] .layout-quote .slot-default blockquote {
+	position: relative;
+	margin: 0;
+	padding-left: 90px;
+	border: 0;
+	font-style: normal;
+	color: inherit;
+	animation: lab-notebook-fade var(--dur) var(--ease) 150ms both;
+}
+[data-theme='lab-notebook'] .layout-quote blockquote::before {
+	content: '';
+	position: absolute;
+	left: 0;
+	top: -10px;
+	bottom: -10px;
+	width: 44px;
+	background: var(--pen-bracket) no-repeat 50% 50% / 100% 100%;
+	animation: lab-notebook-wipe-d 550ms var(--ease) 900ms both;
+}
+[data-theme='lab-notebook'] .layout-quote blockquote p {
+	font-style: italic;
+	font-weight: 500;
+	font-size: 100px;
+	line-height: 1.22;
+	letter-spacing: -0.01em;
+	text-wrap: balance;
+}
+[data-theme='lab-notebook'] .layout-quote blockquote p::before {
+	content: '\201C';
+	position: absolute;
+	margin-left: -0.42em;
+}
+[data-theme='lab-notebook'] .layout-quote blockquote p::after {
+	content: '\201D';
+}
+[data-theme='lab-notebook'] .layout-quote .slot-attribution p {
+	margin-top: 48px;
+	padding-left: 90px;
+	font-weight: 500;
+	font-size: 48px;
+	animation: lab-notebook-fade var(--dur) var(--ease) 450ms both;
+}
+[data-theme='lab-notebook'] .layout-quote .slot-attribution p::before {
+	content: '\2014\2002';
+	color: var(--muted);
+}
+/* A blockquote on any other slide: the same bracket, at body scale. */
+[data-theme='lab-notebook'] .slot > blockquote,
+[data-theme='lab-notebook'] .slot > :where(.fragment) > blockquote {
+	position: relative;
+	padding-left: 56px;
+	border: 0;
+	font-style: italic;
+	color: var(--muted);
+}
+[data-theme='lab-notebook'] .slot > blockquote::before,
+[data-theme='lab-notebook'] .slot > :where(.fragment) > blockquote::before {
+	content: '';
+	position: absolute;
+	left: 0;
+	top: -6px;
+	bottom: -6px;
+	width: 30px;
+	background: var(--pen-bracket) no-repeat 50% 50% / 100% 100%;
+}
+
+/* ============================================================================
+ * Two columns: panels (a) and (b) of one figure
+ * ============================================================================ */
+
+[data-theme='lab-notebook'] .layout-two-column {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	grid-template-rows: auto 1fr;
+	column-gap: 80px;
+}
+[data-theme='lab-notebook'] .layout-two-column .slot-default {
+	grid-column: 1 / -1;
+}
+[data-theme='lab-notebook'] .layout-two-column .slot-left,
+[data-theme='lab-notebook'] .layout-two-column .slot-right {
+	padding: 28px 0 0;
+	border-top: 3px solid var(--fg);
+	border-bottom: 2px solid var(--fg);
+	animation: lab-notebook-fade var(--dur) var(--ease) 300ms both;
+}
+[data-theme='lab-notebook'] .layout-two-column .slot-left {
+	padding-bottom: 36px;
+}
+[data-theme='lab-notebook'] .layout-two-column .slot-right {
+	padding-bottom: 36px;
+	animation-delay: 450ms;
+}
+[data-theme='lab-notebook'] .layout-two-column h3 {
+	margin-top: 0;
+	font-size: 60px;
+	font-weight: 600;
+	font-style: italic;
+	line-height: 1.2;
+}
+[data-theme='lab-notebook'] .layout-two-column .slot-left h3::before {
+	content: '(a)\2002';
+	font-style: normal;
+	font-weight: 700;
+	color: var(--accent-text);
+}
+[data-theme='lab-notebook'] .layout-two-column .slot-right h3::before {
+	content: '(b)\2002';
+	font-style: normal;
+	font-weight: 700;
+	color: var(--accent-text);
+}
+[data-theme='lab-notebook'] .layout-two-column h3 + p {
+	margin-top: 10px;
+	font-style: italic;
+}
+/* A paragraph that is only ever a bold number gets the display treatment. */
+[data-theme='lab-notebook'] .layout-two-column .slot p:has(> strong:only-child) {
+	margin-top: 18px;
+}
+[data-theme='lab-notebook'] .layout-two-column .slot p:has(> strong:only-child) strong {
+	display: block;
+	font-style: normal;
+	font-weight: 600;
+	font-size: 150px;
+	line-height: 1.1;
+	letter-spacing: -0.02em;
+	color: var(--accent-text);
+}
+[data-theme='lab-notebook'] .layout-two-column .slot p + p {
+	margin-top: 14px;
+	line-height: 1.22;
+}
+[data-theme='lab-notebook'] .layout-two-column .slot > ul,
+[data-theme='lab-notebook'] .layout-two-column .slot > :where(.fragment) > ul {
+	margin-top: 22px;
+}
+[data-theme='lab-notebook'] .layout-two-column .slot > ul > li,
+[data-theme='lab-notebook'] .layout-two-column .slot > :where(.fragment) > ul > li {
+	padding-left: 148px;
+	margin-top: 26px;
+}
+[data-theme='lab-notebook'] .layout-two-column .slot > ul > li:first-child,
+[data-theme='lab-notebook'] .layout-two-column .slot > :where(.fragment) > ul > li:first-child {
+	margin-top: 0;
+}
+[data-theme='lab-notebook'] .layout-two-column .slot > ul > li::before,
+[data-theme='lab-notebook'] .layout-two-column .slot > :where(.fragment) > ul > li::before {
+	width: 128px;
+	font-size: 0.8em;
+	white-space: nowrap;
+}
+
+/* ============================================================================
+ * Three columns: exhibits (a), (b), (c) side by side
+ * ============================================================================ */
+
+[data-theme='lab-notebook'] .layout-three-column {
+	display: grid;
+	grid-template-columns: 1fr 1fr 1fr;
+	grid-template-rows: auto 1fr;
+	column-gap: 56px;
+	counter-reset: lab-notebook-exhibit;
+}
+[data-theme='lab-notebook'] .layout-three-column .slot-default {
+	grid-column: 1 / -1;
+}
+[data-theme='lab-notebook'] .layout-three-column .slot-left,
+[data-theme='lab-notebook'] .layout-three-column .slot-center,
+[data-theme='lab-notebook'] .layout-three-column .slot-right {
+	counter-increment: lab-notebook-exhibit;
+	padding-top: 28px;
+	border-top: 3px solid var(--fg);
+	animation: lab-notebook-fade var(--dur) var(--ease) 300ms both;
+}
+[data-theme='lab-notebook'] .layout-three-column .slot-center {
+	animation-delay: 450ms;
+}
+[data-theme='lab-notebook'] .layout-three-column .slot-right {
+	animation-delay: 600ms;
+}
+[data-theme='lab-notebook'] .layout-three-column h3 {
+	margin-top: 0;
+	font-size: 48px;
+	font-weight: 600;
+	font-style: italic;
+	line-height: 1.2;
+}
+[data-theme='lab-notebook'] .layout-three-column h3::before {
+	content: '(' counter(lab-notebook-exhibit, lower-alpha) ')\2002';
+	font-style: normal;
+	font-weight: 700;
+	color: var(--accent-text);
+}
+/* A ~500px column at body scale wraps a sentence into more lines than the
+ * slide has room for; a narrow-column scale of its own, a touch above the
+ * body floor, keeps a full-width paragraph readable without cramming. */
+[data-theme='lab-notebook'] .layout-three-column .slot p {
+	font-size: 42px;
+	line-height: 1.32;
+	margin-top: 16px;
+}
+[data-theme='lab-notebook'] .layout-three-column .slot > ul,
+[data-theme='lab-notebook'] .layout-three-column .slot > :where(.fragment) > ul {
+	margin-top: 18px;
+}
+[data-theme='lab-notebook'] .layout-three-column .slot > ul > li,
+[data-theme='lab-notebook'] .layout-three-column .slot > :where(.fragment) > ul > li {
+	padding-left: 0;
+	margin-top: 18px;
+	font-size: 42px;
+	line-height: 1.28;
+}
+[data-theme='lab-notebook'] .layout-three-column .slot > ul > li:first-child,
+[data-theme='lab-notebook'] .layout-three-column .slot > :where(.fragment) > ul > li:first-child {
+	margin-top: 0;
+}
+[data-theme='lab-notebook'] .layout-three-column .slot > ul > li::before,
+[data-theme='lab-notebook'] .layout-three-column .slot > :where(.fragment) > ul > li::before {
+	content: '\2013\2002';
+	position: static;
+	width: auto;
+	color: var(--muted);
+	font-style: normal;
+}
+
+/* ============================================================================
+ * Sidebar: the argument on the page, the receipts in the margin
+ * ============================================================================ */
+
+[data-theme='lab-notebook'] .layout-sidebar {
+	display: grid;
+	grid-template-columns: 1fr 0.5fr;
+	column-gap: 64px;
+}
+/* The sidebar slide is dense by design (a heading, an argument, a list,
+ * plus a margin column), so the heading steps down the way it does on any
+ * other heavy slide, and the main column packs at the narrow-column scale
+ * rather than the full body size. This size stays fixed across
+ * `data-length` on purpose (denser rules below beat the generic
+ * short/medium bump so a short heading doesn't blow the dense budget). */
+[data-theme='lab-notebook'] .layout-sidebar .slot-default h2 {
+	font-size: 80px;
+	margin-bottom: 24px;
+}
+[data-theme='lab-notebook'] .layout-sidebar .slot-default.slot-content h2[data-length='medium'] {
+	font-size: 96px;
+}
+[data-theme='lab-notebook'] .layout-sidebar .slot-default.slot-content h2[data-length='short'] {
+	font-size: 112px;
+}
+[data-theme='lab-notebook'] .layout-sidebar .slot-default > p {
+	font-size: 44px;
+	line-height: 1.34;
+}
+[data-theme='lab-notebook'] .layout-sidebar .slot-default > ul,
+[data-theme='lab-notebook'] .layout-sidebar .slot-default > :where(.fragment) > ul {
+	margin-top: 22px;
+}
+[data-theme='lab-notebook'] .layout-sidebar .slot-default > ul > li,
+[data-theme='lab-notebook'] .layout-sidebar .slot-default > :where(.fragment) > ul > li {
+	padding-left: 120px;
+	margin-top: 20px;
+	font-size: 44px;
+	line-height: 1.3;
+}
+[data-theme='lab-notebook'] .layout-sidebar .slot-default > ul > li:first-child,
+[data-theme='lab-notebook'] .layout-sidebar .slot-default > :where(.fragment) > ul > li:first-child {
+	margin-top: 0;
+}
+[data-theme='lab-notebook'] .layout-sidebar .slot-default > ul > li::before,
+[data-theme='lab-notebook'] .layout-sidebar .slot-default > :where(.fragment) > ul > li::before {
+	width: 96px;
+}
+[data-theme='lab-notebook'] .layout-sidebar .slot-sidebar {
+	position: relative;
+	padding: 8px 0 0 44px;
+	border-left: 3px solid var(--accent);
+	animation: lab-notebook-fade var(--dur) var(--ease) 450ms both;
+}
+[data-theme='lab-notebook'] .layout-sidebar .slot-sidebar h3 {
+	margin-top: 0;
+	font-family: var(--font-mono);
+	font-size: 32px;
+	font-weight: 600;
+	font-style: normal;
+	letter-spacing: 0.12em;
+	text-transform: uppercase;
+	color: var(--muted);
+}
+[data-theme='lab-notebook'] .layout-sidebar .slot-sidebar > ul,
+[data-theme='lab-notebook'] .layout-sidebar .slot-sidebar > :where(.fragment) > ul {
+	margin-top: 24px;
+	counter-reset: none;
+}
+[data-theme='lab-notebook'] .layout-sidebar .slot-sidebar > ul > li,
+[data-theme='lab-notebook'] .layout-sidebar .slot-sidebar > :where(.fragment) > ul > li {
+	padding-left: 0;
+	margin-top: 22px;
+	font-size: 40px;
+	line-height: 1.3;
+	counter-increment: none;
+}
+[data-theme='lab-notebook'] .layout-sidebar .slot-sidebar > ul > li:first-child,
+[data-theme='lab-notebook'] .layout-sidebar .slot-sidebar > :where(.fragment) > ul > li:first-child {
+	margin-top: 0;
+}
+[data-theme='lab-notebook'] .layout-sidebar .slot-sidebar > ul > li::before,
+[data-theme='lab-notebook'] .layout-sidebar .slot-sidebar > :where(.fragment) > ul > li::before {
+	content: '\2013\2002';
+	position: static;
+	width: auto;
+	color: var(--muted);
+	font-style: normal;
+}
+[data-theme='lab-notebook'] .layout-sidebar .slot-sidebar p {
+	font-size: 40px;
+	line-height: 1.3;
+	color: var(--muted);
+}
+
+/* ============================================================================
+ * Image: a print taped onto the page
+ * ============================================================================ */
+
+[data-theme='lab-notebook'] .layout-split-media {
+	display: grid;
+	grid-template-columns: 1.1fr 1fr;
+	column-gap: 72px;
+	align-items: start;
+}
+[data-theme='lab-notebook'] .layout-split-media .slot-default {
+	padding-top: 8px;
+}
+[data-theme='lab-notebook'] .layout-split-media .slot-default h2 {
+	font-size: 96px;
+}
+[data-theme='lab-notebook'] .layout-split-media .slot-media {
+	padding-top: 24px;
+	animation: lab-notebook-fade var(--dur) var(--ease) 300ms both;
+}
+[data-theme='lab-notebook'] .layout-split-media .slot-media p {
+	position: relative;
+	padding: 18px;
+	background: #fff;
+	border: 2px solid var(--fg);
+	transform: rotate(1.2deg);
+	box-shadow: 6px 8px 0 color-mix(in srgb, var(--fg) 14%, transparent);
+	line-height: 0;
+}
+[data-theme='lab-notebook'] .layout-split-media .slot-media p::before,
+[data-theme='lab-notebook'] .layout-split-media .slot-media p::after {
+	content: '';
+	position: absolute;
+	z-index: 1;
+	width: 170px;
+	height: 54px;
+	background: color-mix(in srgb, #e9d48a 78%, transparent);
+	border-left: 3px dashed color-mix(in srgb, var(--fg) 25%, transparent);
+	border-right: 3px dashed color-mix(in srgb, var(--fg) 25%, transparent);
+}
+[data-theme='lab-notebook'] .layout-split-media .slot-media p::before {
+	left: -60px;
+	top: -18px;
+	transform: rotate(-38deg);
+}
+[data-theme='lab-notebook'] .layout-split-media .slot-media p::after {
+	right: -60px;
+	bottom: -18px;
+	transform: rotate(-38deg);
+}
+[data-theme='lab-notebook'] .slot img {
+	display: block;
+	width: 100%;
+	height: auto;
+	filter: grayscale(1) contrast(1.15);
+}
+
+/* A photo on a plain slide gets the same taped-print treatment. */
+[data-theme='lab-notebook'] .layout-default .slot:has(p > img) {
+	flex: 1;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+	justify-content: center;
+}
+[data-theme='lab-notebook'] .layout-default .slot > p:has(> img),
+[data-theme='lab-notebook'] .layout-default .slot > :where(.fragment) > p:has(> img) {
+	position: relative;
+	width: fit-content;
+	max-width: 100%;
+	margin: 32px auto 0 0;
+	padding: 18px;
+	background: #fff;
+	border: 2px solid var(--fg);
+	box-shadow: 8px 10px 0 color-mix(in srgb, var(--fg) 14%, transparent);
+	transform: rotate(-1deg);
+	line-height: 0;
+	animation: lab-notebook-fade var(--dur) var(--ease) 300ms both;
+}
+[data-theme='lab-notebook'] .layout-default .slot > p:has(> img) img,
+[data-theme='lab-notebook'] .layout-default .slot > :where(.fragment) > p:has(> img) img {
+	/* 46% of the fixed 1080px canvas, in canvas pixels; see the same note
+	 * on the big-stat figure image above. */
+	max-height: 497px;
+	width: auto;
+	max-width: 100%;
+}
+
+/* ============================================================================
+ * Cover: a specimen card pinned to whatever fills the frame
+ * ============================================================================ */
+
+[data-theme='lab-notebook'] .layout-cover {
+	justify-content: center;
+	align-items: flex-start;
+	padding: 96px;
+}
+[data-theme='lab-notebook'] .layout-cover .slot-default {
+	position: relative;
+	max-width: 1500px;
+	padding: 72px 88px 80px;
+	background: var(--bg);
+	border: 2px solid var(--fg);
+	box-shadow: 0 0 0 10px color-mix(in srgb, var(--bg) 88%, transparent);
+	animation: lab-notebook-fade var(--dur) var(--ease) 100ms both;
+}
+[data-theme='lab-notebook'] .layout-cover .slot-default::before {
+	content: '';
+	position: absolute;
+	left: 50%;
+	top: -22px;
+	width: 30px;
+	height: 30px;
+	margin-left: -15px;
+	border-radius: 50%;
+	background: var(--pen);
+	box-shadow: 0 3px 0 color-mix(in srgb, var(--fg) 30%, transparent);
+	animation: lab-notebook-fade var(--dur) var(--ease) 0ms both;
+}
+[data-theme='lab-notebook'] .layout-cover h1 {
+	font-size: 108px;
+	line-height: 1.16;
+	animation: lab-notebook-fade var(--dur) var(--ease) 250ms both;
+}
+[data-theme='lab-notebook'] .layout-cover .slot.slot-content h1[data-length='medium'] {
+	font-size: 132px;
+	line-height: 1.12;
+}
+[data-theme='lab-notebook'] .layout-cover .slot.slot-content h1[data-length='short'] {
+	font-size: 156px;
+	line-height: 1.08;
+}
+[data-theme='lab-notebook'] .layout-cover p {
+	margin-top: 40px;
+	padding-top: 32px;
+	border-top: 2px solid var(--fg);
+	font-size: 48px;
+	line-height: 1.36;
+	animation: lab-notebook-fade var(--dur) var(--ease) 450ms both;
+}
+
+/* ============================================================================
+ * Blank: the bare sheet
+ * ============================================================================ */
+
+[data-theme='lab-notebook'] .slide[data-layout='blank'] .slide-content {
+	left: 0;
+	right: 0;
+	top: 0;
+	bottom: 0;
+}
+[data-theme='lab-notebook'] .layout-blank {
+	padding: 196px 96px 96px 192px;
+	justify-content: center;
+}
+[data-theme='lab-notebook'] .layout-blank h1 {
+	max-width: 1632px;
+	text-align: left;
+	font-size: 140px;
+	line-height: 1.1;
+	animation: lab-notebook-fade var(--dur) var(--ease) both;
+}
+/* MapLibre draws and positions its own labels and attribution. */
+[data-theme='lab-notebook'] .map-slide {
+	font-family: var(--font-body);
+	letter-spacing: normal;
+	line-height: normal;
+}
+
+/* ============================================================================
+ * Table: three-rule scientific table
+ * ============================================================================ */
+
+[data-theme='lab-notebook'] .slot > table,
+[data-theme='lab-notebook'] .slot > :where(.fragment) > table {
+	position: relative;
+	width: 100%;
+	margin-top: 32px;
+	border-collapse: collapse;
+	border-top: 4px solid var(--fg);
+	border-bottom: 4px solid var(--fg);
+	animation: lab-notebook-fade var(--dur) var(--ease) 300ms both;
+}
+[data-theme='lab-notebook'] .slot > table::before,
+[data-theme='lab-notebook'] .slot > :where(.fragment) > table::before {
+	content: 'Table' var(--figure-number) '.';
+	display: table-caption;
+	caption-side: top;
+	padding-bottom: 18px;
+	text-align: left;
+	font-size: 44px;
+	font-weight: 700;
+}
+[data-theme='lab-notebook'] .slot table th {
+	padding: 18px 32px 14px 0;
+	border-bottom: 2px solid var(--fg);
+	text-align: left;
+	font-style: italic;
+	font-weight: 600;
+	font-size: 48px;
+}
+[data-theme='lab-notebook'] .slot table td {
+	padding: 22px 32px 22px 0;
+	font-size: 50px;
+	line-height: 1.3;
+}
+[data-theme='lab-notebook'] .slot table td:first-child {
+	font-weight: 600;
+}
+[data-theme='lab-notebook'] .slot table tbody tr:first-child td {
+	padding-top: 26px;
+}
+[data-theme='lab-notebook'] .slot table tbody tr:last-child td {
+	padding-bottom: 26px;
+}
+[data-theme='lab-notebook'] table tbody tr {
+	animation: lab-notebook-fade var(--dur) var(--ease) both;
+}
+[data-theme='lab-notebook'] table tbody tr:nth-child(1) {
+	animation-delay: 420ms;
+}
+[data-theme='lab-notebook'] table tbody tr:nth-child(2) {
+	animation-delay: 540ms;
+}
+[data-theme='lab-notebook'] table tbody tr:nth-child(3) {
+	animation-delay: 660ms;
+}
+[data-theme='lab-notebook'] table tbody tr:nth-child(n + 4) {
+	animation-delay: 780ms;
+}
+/* Five or more rows: the table tightens. */
+[data-theme='lab-notebook'] .slot table tbody:has(tr:nth-child(5)) td,
+[data-theme='lab-notebook'] .slot table tbody:has(tr:nth-child(5)) th {
+	padding-top: 10px;
+	padding-bottom: 10px;
+	font-size: 48px;
+}
+
+/* ============================================================================
+ * Diagram: a line drawing in blue ink
+ * ============================================================================ */
+
+[data-theme='lab-notebook'] .layout-default .slot:has(.mermaid-diagram) {
+	flex: 1;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+}
+/* `[class^='layout-']` above sets height: auto (this theme positions
+ * layouts by padding, not a stretched 100% box), so this flex item's
+ * `flex: 1` has no definite parent height to grow into and the auto-height
+ * algorithm falls back to its flex-basis (0%) and min-height (0): the
+ * diagram collapsed to a 0-height box with a fully-formed but invisible
+ * SVG inside (its `svg` child is absolutely positioned, so it contributes
+ * no min-content height of its own to save it, unlike an image or a code
+ * block). A solid min-height gives it real space to size from; an explicit
+ * flex-basis matching it, plus a max-height clamped to the available
+ * content column, keeps the box from either collapsing again if this rule
+ * is ever copied without its min-height, or growing past the slide if a
+ * future heading/caption above it claims more room. */
+[data-theme='lab-notebook'] .slot:has(.mermaid-diagram) {
+	min-height: 0;
+}
+[data-theme='lab-notebook'] .mermaid-diagram {
+	flex: 1 1 480px;
+	min-height: 480px;
+	max-height: 640px;
+	position: relative;
+	margin-top: 24px;
+	animation: lab-notebook-fade var(--dur) var(--ease) 300ms both;
+}
+[data-theme='lab-notebook'] .mermaid-diagram svg {
+	position: absolute;
+	inset: 0;
+	display: block;
+	width: 100% !important;
+	height: 100% !important;
+	max-width: none !important;
+}
+/* Mermaid measures labels outside the slide at the fontSize theme.json
+ * declares; keep that size here rather than inheriting the 60px body rule. */
+[data-theme='lab-notebook'] .mermaid-diagram p,
+[data-theme='lab-notebook'] .mermaid-diagram span,
+[data-theme='lab-notebook'] .mermaid-diagram div {
+	margin: 0;
+	font-family: var(--font-body);
+	font-size: inherit;
+	font-weight: 400;
+	line-height: 1.4;
+	letter-spacing: 0;
+	text-align: center;
+	text-wrap: initial;
+	animation: none;
+}
+[data-theme='lab-notebook'] .mermaid-diagram .nodeLabel,
+[data-theme='lab-notebook'] .mermaid-diagram .nodeLabel p {
+	color: var(--accent-text) !important;
+}
+[data-theme='lab-notebook'] .mermaid-diagram .node.quiet .nodeLabel,
+[data-theme='lab-notebook'] .mermaid-diagram .node.quiet .nodeLabel p {
+	color: var(--muted) !important;
+}
+[data-theme='lab-notebook'] .mermaid-diagram .node foreignObject {
+	overflow: visible;
+}
+[data-theme='lab-notebook'] .mermaid-diagram .node rect,
+[data-theme='lab-notebook'] .mermaid-diagram .node polygon,
+[data-theme='lab-notebook'] .mermaid-diagram .node circle,
+[data-theme='lab-notebook'] .mermaid-diagram .node ellipse,
+[data-theme='lab-notebook'] .mermaid-diagram .node path {
+	stroke-width: 3px !important;
+}
+[data-theme='lab-notebook'] .mermaid-diagram .node.quiet rect,
+[data-theme='lab-notebook'] .mermaid-diagram .node.quiet polygon,
+[data-theme='lab-notebook'] .mermaid-diagram .node.quiet circle,
+[data-theme='lab-notebook'] .mermaid-diagram .node.quiet ellipse {
+	stroke-dasharray: 9 7;
+	stroke-width: 2.5px !important;
+}
+[data-theme='lab-notebook'] .mermaid-diagram .edgePaths path,
+[data-theme='lab-notebook'] .mermaid-diagram .flowchart-link {
+	stroke-width: 3px !important;
+}
+[data-theme='lab-notebook'] .mermaid-diagram .edgeLabel,
+[data-theme='lab-notebook'] .mermaid-diagram .edgeLabel p {
+	color: var(--fg) !important;
+	background-color: var(--bg) !important;
+}
+[data-theme='lab-notebook'] .mermaid-diagram .cluster rect {
+	fill: var(--surface) !important;
+	stroke: var(--accent) !important;
+}
+[data-theme='lab-notebook'] .mermaid-error {
+	padding: 24px 32px;
+	border: 3px solid var(--fg);
+	font-family: var(--font-mono);
+	font-size: 36px;
+	line-height: 1.3;
+}
+
+/* ============================================================================
+ * Scroll slide
+ * ============================================================================ */
+
+[data-theme='lab-notebook'] .scroll-content {
+	flex: none;
+	display: block;
+}
+[data-theme='lab-notebook'] .scroll-content [class^='layout-'] {
+	flex: none;
+	padding: 196px 96px 96px 192px;
+}
+[data-theme='lab-notebook'] .scroll-content .slot pre {
+	white-space: pre-wrap;
+}
+[data-theme='lab-notebook'] .scroll-content .slot pre .line {
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+}
+
+/* ============================================================================
+ * Live code block: the demonstration, ruled like a listing
+ * ============================================================================ */
+
+[data-theme='lab-notebook'] .live-code-block-portal {
+	width: 100%;
+}
+[data-theme='lab-notebook'] .live-code-block {
+	margin-top: 24px;
+	padding: 16px 0;
+	border-top: 3px solid var(--fg);
+	border-bottom: 2px solid var(--fg);
+	border-radius: 0;
+	background: none;
+	animation: lab-notebook-fade var(--dur) var(--ease) 300ms both;
+}
+[data-theme='lab-notebook'] .live-code-block .code-container {
+	position: relative;
+}
+[data-theme='lab-notebook'] .live-code-block .code-container pre {
+	margin: 0 0 0 -40px;
+	padding: 0;
+	border: 0;
+}
+[data-theme='lab-notebook'] .live-code-block .code-actions {
+	top: -16px;
+	right: 0;
+}
+[data-theme='lab-notebook'] .live-code-block .run-button {
+	gap: 12px;
+	padding: 0 28px;
+	border: 2px solid var(--fg);
+	border-radius: 0;
+	background: var(--bg);
+	color: var(--fg);
+	font-family: var(--font-mono);
+	font-weight: 600;
+	font-size: 34px;
+	line-height: 68px;
+	letter-spacing: 0.04em;
+	box-shadow: none;
+	transition: none;
+}
+[data-theme='lab-notebook'] .live-code-block .run-button:hover:not(:disabled) {
+	background: var(--fg);
+	color: var(--bg);
+	filter: none;
+}
+[data-theme='lab-notebook'] .live-code-block .loading-spinner {
+	width: 30px;
+	height: 30px;
+	border: 4px solid var(--surface);
+	border-top-color: var(--accent);
+}
+[data-theme='lab-notebook'] .live-code-block .result-container {
+	margin-top: 20px;
+	border: 0;
+	border-top: 2px solid var(--fg);
+	border-radius: 0;
+	background: var(--surface);
+}
+[data-theme='lab-notebook'] .live-code-block .result-header {
+	padding: 14px 24px;
+	border-bottom: 2px solid var(--fg);
+	background: none;
+}
+[data-theme='lab-notebook'] .live-code-block .result-status,
+[data-theme='lab-notebook'] .live-code-block .result-status.success,
+[data-theme='lab-notebook'] .live-code-block .result-status.error {
+	font-family: var(--font-mono);
+	font-size: 32px;
+	font-weight: 600;
+	letter-spacing: 0.06em;
+	color: var(--muted);
+}
+[data-theme='lab-notebook'] .live-code-block .result-container.error .result-header {
+	box-shadow: inset 8px 0 0 var(--pen);
+}
+[data-theme='lab-notebook'] .live-code-block .result-content {
+	padding: 24px;
+}
+[data-theme='lab-notebook'] .live-code-block .result-content .result-output,
+[data-theme='lab-notebook'] .live-code-block .result-content .result-error,
+[data-theme='lab-notebook'] .live-code-block .result-content .result-empty {
+	margin: 0;
+	font-family: var(--font-mono);
+	font-size: 44px;
+	line-height: 1.4;
+	color: var(--fg);
+	background: none;
+	border: 0;
+	animation: none;
+}
+[data-theme='lab-notebook'] .live-code-block .result-content .result-table {
+	font-family: var(--font-mono);
+	font-size: 48px;
+}
+[data-theme='lab-notebook'] .live-code-block .result-content .result-table th {
+	border-bottom: 2px solid var(--fg);
+	font-size: 48px;
+}
+[data-theme='lab-notebook'] .live-code-block .result-content .result-table td {
+	border-bottom: 1px solid var(--muted);
+	font-size: 48px;
+}
+[data-theme='lab-notebook'] .live-code-block .static-placeholder {
+	top: -16px;
+	right: 0;
+	padding: 0 20px;
+	border: 2px solid var(--muted);
+	border-radius: 0;
+	background: var(--bg);
+	color: var(--muted);
+	font-family: var(--font-mono);
+	font-size: 28px;
+	line-height: 56px;
+	letter-spacing: 0.06em;
+	backdrop-filter: none;
+	-webkit-backdrop-filter: none;
+}
+
+/* ============================================================================
+ * Asciinema: the recording, framed like a print
+ * ============================================================================ */
+
+[data-theme='lab-notebook'] .layout-default .slot:has(.asciinema-player-wrapper) {
+	flex: 1;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+}
+[data-theme='lab-notebook'] .asciinema-player-wrapper {
+	flex: 1;
+	min-height: 0;
+	margin-top: 24px;
+	padding: 18px;
+	background: #fff;
+	border: 2px solid var(--fg);
+	border-radius: 0;
+	box-shadow: 8px 10px 0 color-mix(in srgb, var(--fg) 14%, transparent);
+	overflow: hidden;
+}
+
+/* ============================================================================
+ * Print and reduced motion: nothing moves, everything is in its final state.
+ * ============================================================================ */
+
+@media print, (prefers-reduced-motion: reduce) {
+	[data-theme='lab-notebook'] .slide[data-layout],
+	[data-theme='lab-notebook'] .slide[data-layout]::before,
+	[data-theme='lab-notebook'] .slide[data-layout]::after,
+	[data-theme='lab-notebook'] .slide[data-layout] *,
+	[data-theme='lab-notebook'] .slide[data-layout] *::before,
+	[data-theme='lab-notebook'] .slide[data-layout] *::after {
+		animation: none !important;
+		transition: none !important;
+	}
+}
+/* The print hook may sit on the theme root or on any ancestor of it. */
+[data-theme='lab-notebook']:is([data-print='true'], [data-print='true'] *) .slide[data-layout],
+[data-theme='lab-notebook']:is([data-print='true'], [data-print='true'] *) .slide[data-layout]::before,
+[data-theme='lab-notebook']:is([data-print='true'], [data-print='true'] *) .slide[data-layout]::after,
+[data-theme='lab-notebook']:is([data-print='true'], [data-print='true'] *) .slide[data-layout] *,
+[data-theme='lab-notebook']:is([data-print='true'], [data-print='true'] *) .slide[data-layout] *::before,
+[data-theme='lab-notebook']:is([data-print='true'], [data-print='true'] *) .slide[data-layout] *::after {
+	animation: none !important;
+	transition: none !important;
+}

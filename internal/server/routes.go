@@ -32,6 +32,10 @@ func (s *Server) SetupRoutes() {
 	// Serve local files (images, etc.) from the presentation's base directory
 	s.mux.HandleFunc("GET /local/", s.handleLocalFiles)
 
+	// Serve component bundles from the in-memory store the dev command
+	// swaps atomically after each rebuild.
+	s.mux.HandleFunc("GET /components/", s.handleComponentBundle)
+
 	// Note: We don't wrap with logging middleware here because the TUI
 	// manages the terminal in alternate screen mode, and raw fmt.Printf
 	// output would interfere with the display. HTTP activity is visible
@@ -236,6 +240,29 @@ func (s *Server) handleLocalFiles(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(content)
+}
+
+// handleComponentBundle serves a component bundle file (JavaScript, CSS, or
+// a dev source map) from the in-memory store. Unknown names give 404;
+// responses always carry Cache-Control: no-store so a rebuilt bundle under
+// the same name (a fixed file, minus its error) is never served stale.
+func (s *Server) handleComponentBundle(w http.ResponseWriter, r *http.Request) {
+	name := strings.TrimPrefix(r.URL.Path, "/components/")
+	if name == "" || strings.Contains(name, "..") || strings.Contains(name, "/") {
+		http.NotFound(w, r)
+		return
+	}
+
+	file, ok := s.ComponentBundles().Get(name)
+	if !ok {
+		http.NotFound(w, r)
+		return
+	}
+
+	w.Header().Set("Content-Type", file.ContentType)
+	w.Header().Set("Cache-Control", "no-store")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(file.Content)
 }
 
 // getContentType returns the appropriate Content-Type header for a file path.

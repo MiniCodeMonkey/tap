@@ -1,0 +1,210 @@
+/**
+ * Base theme.
+ * A plain, readable light theme for the 1920x1080 slide canvas: white
+ * background, near-black text, one blue accent, Inter and JetBrains Mono.
+ * A later design project replaces its look; this one only needs to work.
+ */
+
+:root {
+	--font-sans: Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
+		sans-serif;
+	--font-mono: 'JetBrains Mono', 'SF Mono', Monaco, 'Cascadia Code', Consolas, 'Liberation Mono', Menlo, monospace;
+
+	--transition-duration: 400ms;
+	--transition-timing: ease-out;
+	--fragment-duration: 300ms;
+
+	--color-error: #dc2626;
+	--color-error-bg: rgba(220, 38, 38, 0.1);
+
+	--slide-padding: 5rem;
+	--content-gap: 2rem;
+	--column-gap: 3rem;
+}
+
+[data-theme='base'] {
+	/*
+	 * design-spec tokens, kept in sync with --color-* below by hand. Every
+	 * other theme defines these directly and bridges back to --color-* for
+	 * the shared chrome (see docs/reference/theme-porting.md); base predates
+	 * that convention, so it goes the other direction instead.
+	 */
+	--bg: #ffffff;
+	--fg: #18181b;
+	--muted: #52525b;
+	--accent: #2563eb;
+	--accent-text: #2563eb;
+	--surface: rgba(0, 0, 0, 0.02);
+	--font-display: Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
+		sans-serif;
+	--font-body: Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
+		sans-serif;
+	--font-mono: 'JetBrains Mono', 'SF Mono', Monaco, 'Cascadia Code', Consolas, 'Liberation Mono', Menlo, monospace;
+	--ease: ease-out;
+	--dur: 400ms;
+	--space-unit: 32px;
+	--radius: 8px;
+	--stroke-width: 1px;
+
+	--color-bg: #ffffff;
+	--color-text: #18181b;
+	--color-muted: #52525b;
+	--color-accent: #2563eb;
+	--color-code-bg: #1e1e2e;
+	--color-code-text: #e2e8f0;
+	--color-code-inline-bg: rgba(0, 0, 0, 0.06);
+	--color-border: rgba(24, 24, 27, 0.12);
+	--color-surface: rgba(0, 0, 0, 0.02);
+	--color-surface-elevated: #ffffff;
+	--color-link: var(--color-accent);
+
+	/* Shiki reads token colors from these custom properties (its
+	   CSS-variables theme), so highlighted code follows this theme without
+	   picking a separate bundled Shiki theme. Values sit on the same dark
+	   code background as `--color-code-bg`. */
+	--shiki-foreground: var(--color-code-text);
+	--shiki-background: var(--color-code-bg);
+	--shiki-token-comment: #7f848e;
+	--shiki-token-string: #98c379;
+	--shiki-token-string-expression: #e06c75;
+	--shiki-token-keyword: #c678dd;
+	--shiki-token-function: #61afef;
+	--shiki-token-constant: #d19a66;
+	--shiki-token-parameter: #e5c07b;
+	--shiki-token-punctuation: #abb2bf;
+	--shiki-token-link: #61afef;
+	--shiki-ansi-black: #1e1e2e;
+	--shiki-ansi-red: #e06c75;
+	--shiki-ansi-green: #98c379;
+	--shiki-ansi-yellow: #e5c07b;
+	--shiki-ansi-blue: #61afef;
+	--shiki-ansi-magenta: #c678dd;
+	--shiki-ansi-cyan: #56b6c2;
+	--shiki-ansi-white: #e2e8f0;
+	--shiki-ansi-bright-black: #5c6370;
+	--shiki-ansi-bright-red: #e06c75;
+	--shiki-ansi-bright-green: #98c379;
+	--shiki-ansi-bright-yellow: #e5c07b;
+	--shiki-ansi-bright-blue: #61afef;
+	--shiki-ansi-bright-magenta: #c678dd;
+	--shiki-ansi-bright-cyan: #56b6c2;
+	--shiki-ansi-bright-white: #ffffff;
+
+	font-family: var(--font-sans);
+	color: var(--color-text);
+	background-color: var(--color-bg);
+	line-height: 1.5;
+}
+
+/*
+ * More air on the plain layouts: layouts.css's shared `--slide-padding`,
+ * `--column-gap` tokens are left alone (every other theme falls back to
+ * them too), so the wider margin and gap base wants are set here instead,
+ * scoped to base only.
+ */
+[data-theme='base'] .layout-title,
+[data-theme='base'] .layout-section,
+[data-theme='base'] .layout-default,
+[data-theme='base'] .layout-two-column,
+[data-theme='base'] .layout-three-column,
+[data-theme='base'] .layout-code-focus,
+[data-theme='base'] .layout-big-stat,
+[data-theme='base'] .layout-quote,
+[data-theme='base'] .layout-sidebar,
+[data-theme='base'] .layout-blank {
+	padding: 6rem;
+}
+
+/*
+ * `.deck-component-root` positions its child with `position: relative`
+ * (layouts.css), so a component's own `position: absolute; inset: 0` root
+ * resolves against its padding edge: real `padding` here would sit inside
+ * that edge and get filled over. A transparent `border` reserves the same
+ * 6rem margin in a way the containing-block calculation honors instead.
+ * Scoped to the whole-slide form only - `.deck-component-root` is also an
+ * inline component's class, and an inline one is always nested inside a
+ * `.slot`, never a direct child of `.slide-content`.
+ */
+[data-theme='base'] .slide[data-layout='component'] > .slide-content > .deck-component-root,
+[data-theme='base'] .slide[data-layout='component'] > .slide-content > .scroll-content > .deck-component-root {
+	border-width: 6rem;
+	border-style: solid;
+	border-color: transparent;
+}
+
+[data-theme='base'] .layout-two-column {
+	gap: 4rem;
+}
+
+[data-theme='base'] .layout-three-column {
+	gap: 3rem;
+}
+
+[data-theme='base'] .layout-code-focus {
+	gap: 2rem;
+}
+
+[data-theme='base'] .layout-big-stat {
+	gap: 2.5rem;
+}
+
+/*
+ * data-length variants layouts.css didn't already give a heading: the
+ * lone-h1 "statement" slide (default layout) and the cover title. See
+ * layouts.css's .layout-title data-length rule for the general pattern.
+ */
+[data-theme='base'] .layout-default .slot-content h1[data-length='medium'] {
+	font-size: 4.25rem;
+}
+
+[data-theme='base'] .layout-default .slot-content h1[data-length='short'] {
+	font-size: 5rem;
+}
+
+[data-theme='base'] .layout-cover .slot-content h1[data-length='medium'] {
+	font-size: 5.75rem;
+}
+
+[data-theme='base'] .layout-cover .slot-content h1[data-length='short'] {
+	font-size: 6.5rem;
+}
+
+/*
+ * Cover content sits on whatever background a slide's `background`
+ * directive supplies, an inline style base has no control over and can't
+ * assume is light. Give the slot its own light, translucent panel so
+ * `--color-text` stays readable regardless.
+ */
+[data-theme='base'] .layout-cover .slot-default {
+	background: rgba(255, 255, 255, 0.92);
+	border-radius: 24px;
+	box-shadow: 0 30px 80px rgba(0, 0, 0, 0.25);
+}
+
+/* Narrower columns (sidebar rail, split-media text pane): the 40px body
+   floor still applies, just without a full-width slot's extra headroom. */
+[data-theme='base'] .layout-sidebar .slot-sidebar p,
+[data-theme='base'] .layout-sidebar .slot-sidebar li,
+[data-theme='base'] .layout-split-media .slot-default p,
+[data-theme='base'] .layout-split-media .slot-default li {
+	font-size: 2.5rem;
+	line-height: 1.4;
+}
+
+/* Content elements stay left-aligned even inside centered layouts. */
+pre,
+ul,
+ol,
+blockquote {
+	text-align: left;
+}
+
+/* A code block with highlighted lines dims its other lines so the
+   highlighted ones stand out. This is base's own dimming treatment, so it
+   is scoped to base like every other theme's; unscoped, it stacked
+   multiplicatively with each theme's own dimming on the same selector
+   (see PORT-ADDENDUM.md) and dropped several themes' dimmed code text
+   below the 4.5:1 floor the code contrast check requires. */
+[data-theme='base'] pre.has-highlighted .line:not(.highlighted) {
+	opacity: 0.5;
+}

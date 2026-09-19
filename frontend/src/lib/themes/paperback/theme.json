@@ -1,0 +1,32 @@
+{
+	"name": "Paperback",
+	"polarity": "light",
+	"pitch": "A story-led conference talk that wants the warmth and quiet authority of a mid-century paperback series.",
+	"illustration": {
+		"medium": "flat vector, vintage pulp-paperback cover illustration on warm cream paper",
+		"line": "3 to 4px strokes with a slightly worn, printed-ink feel",
+		"shapes": "rounded pill badges, simple figures and objects in a mid-century paperback-cover style",
+		"texture": "faint paper grain, light aging",
+		"palette_use": "warm cream background dominant, dark ink text color, one warm orange used as the cover accent",
+		"mood": "nostalgic, well-thumbed, mid-century pulp",
+		"avoid": "gradients, glossy modern UI, neon color, sharp digital edges"
+	},
+	"mermaid": {
+		"themeVariables": {
+			"fontFamily": "Jost",
+			"primaryColor": "#E8994A",
+			"primaryTextColor": "#1F1A17",
+			"primaryBorderColor": "#1F1A17",
+			"lineColor": "#1F1A17",
+			"secondaryColor": "#1F4E5A",
+			"secondaryTextColor": "#F3E9D2",
+			"tertiaryColor": "#E9DCBE",
+			"tertiaryTextColor": "#1F1A17",
+			"nodeTextColor": "#F3E9D2",
+			"titleColor": "#1F1A17",
+			"fontSize": "42px"
+		},
+		"quietStyle": "fill:#F3E9D2,stroke:#4F473E,color:#1F1A17",
+		"curve": "stepAfter"
+	}
+}

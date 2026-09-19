@@ -1,0 +1,36 @@
+/*
+ * Inline component contract:
+ * - Props: { slots, props, slide, step, steps, active, printMode }.
+ * - `props` holds the JSON object from the fence body, for example
+ *   { "label": "Requests per second", "value": 1200 }.
+ * - `active` is true only while this slide is the one shown to the viewer;
+ *   animate in on that transition.
+ * - In print mode (printMode === true) render the final state, no
+ *   animation.
+ * - Import only host modules (react, react/jsx-runtime, react-dom,
+ *   react-dom/client, motion, motion/react, tap) and npm packages
+ *   installed next to the deck.
+ */
+import { useActive, usePrintMode, useTheme, type DeckComponentProps } from 'tap';
+import { motion } from 'motion/react';
+
+export default function __COMPONENT_NAME__({ props }: DeckComponentProps) {
+	const active = useActive();
+	const printMode = usePrintMode();
+	const theme = useTheme();
+	const label = (props.label as string | undefined) ?? 'Label';
+	const value = (props.value as number | undefined) ?? 0;
+	const shown = active || printMode;
+
+	return (
+		<motion.div
+			initial={printMode ? false : { opacity: 0, scale: 0.9 }}
+			animate={{ opacity: shown ? 1 : 0, scale: shown ? 1 : 0.9 }}
+			transition={{ duration: 0.3 }}
+			style={{ color: 'currentColor', padding: theme.spaceUnit, borderRadius: theme.radius, border: `${theme.strokeWidth} solid currentColor` }}
+		>
+			<div style={{ fontFamily: theme.fontMono }}>{label}</div>
+			<div style={{ fontFamily: theme.fontDisplay }}>{value}</div>
+		</motion.div>
+	);
+}

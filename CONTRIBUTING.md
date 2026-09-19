@@ -18,6 +18,26 @@ make build
 make test
 ```
 
+The frontend is React 19 with Vite. `make build` compiles it into
+`embedded/dist`, which the Go binary embeds, so a frontend change is not
+visible to `tap dev` or `tap build` until you rebuild.
+
+From `frontend/`:
+
+```bash
+npm run check    # TypeScript
+npm run test     # unit tests (Vitest)
+npm run lint     # ESLint
+npm run build    # production bundle
+npm run test:e2e # end-to-end suite (Playwright)
+npm run tokens   # regenerate internal/themes/tokens.json from each theme.css
+npm run tokens:check   # fail if tokens.json is out of date
+```
+
+`internal/themes/tokens.json` is generated and committed. Change a theme's
+root token block and you must run `npm run tokens` and commit the result;
+a Go test and `npm run tokens:check` both guard it.
+
 ## Making Changes
 
 1. Create a branch for your changes
@@ -25,6 +45,118 @@ make test
 3. Run tests: `make test`
 4. Run linter: `make lint`
 5. Submit a pull request
+
+> **Known setup note:** `make lint` runs `golangci-lint`, which some local
+> toolchains fail to run when it was built against an older Go version than
+> `go.mod` targets. If that happens, fall back to `go vet ./...` and
+> `go test ./...` for the Go side.
+
+## Continuous integration
+
+`.github/workflows/ci.yml` runs on every push and pull request against
+`main`, as four jobs:
+
+- **Go Tests** - builds the frontend, runs `go vet ./...` and `go test
+  ./...` (with a real Chromium, installed by playwright-go), then
+  `golangci-lint`. Reproduce locally with:
+
+  ```bash
+  cd frontend && npm ci && npm run build && cd ..
+  go vet ./...
+  go test ./...
+  go run github.com/golangci/golangci-lint/cmd/golangci-lint@v1.64.8 run ./...
+  ```
+
+- **Frontend Tests** - unit tests, the TypeScript check, ESLint, and the
+  theme tokens check. Reproduce from `frontend/`:
+
+  ```bash
+  npm ci
+  npm run test
+  npm run check
+  npm run lint
+  npm run tokens:check
+  ```
+
+- **E2E Tests** - builds the frontend and the `tap` binary (`make
+  build`), then runs the Playwright suite in `frontend/`, which starts
+  its own dev server on port 3100. Reproduce with:
+
+  ```bash
+  make build
+  cd frontend && npx playwright install --with-deps chromium
+  npx playwright test
+  ```
+
+- **Theme Checks** - runs `frontend/e2e-themes/` against every theme,
+  with `TAP_THEME_SNAPSHOTS=off` so it skips only the visual snapshot
+  comparisons (the checked-in baselines were rendered on macOS and don't
+  match Linux font rendering); overflow, clipping, minimum text size,
+  contrast, and theme isolation all still run. Reproduce locally with the
+  two servers from "Testing the Theme Suite" above, then:
+
+  ```bash
+  cd frontend
+  TAP_THEME_SNAPSHOTS=off BASE_URL=http://localhost:5300 npx playwright test -c playwright.themes.config.ts
+  ```
+
+  Drop `TAP_THEME_SNAPSHOTS=off` to also check snapshots, but only on
+  macOS, against the committed baselines.
+
+## Testing the Theme Suite
+
+Beyond the main Go and frontend test suites, `frontend/e2e-themes/` runs a
+per-theme check suite (overflow, contrast, minimum text size, isolation,
+and visual snapshots) against a running Go server and a running Vite
+server, each on their own pair of ports so multiple runs can work on
+different themes in parallel without fighting over a snapshot folder.
+Start both, then run the suite with `BASE_URL` pointing at the Vite server:
+
+```bash
+# terminal 1, from the repo root: the Go dev server
+go run ./cmd/tap dev testdata/themes.md --port 3300 --headless
+
+# terminal 2, from frontend/: the Vite dev server, proxying to the server above
+cd frontend && TAP_API_PORT=3300 npx vite --port 5300
+
+# terminal 3, from frontend/: the theme suite
+cd frontend && BASE_URL=http://localhost:5300 npm run test:themes
+```
+
+Add `THEME=<slug>` to run the suite against a single theme instead of all
+of them. See `docs/reference/theme-porting.md` for the full workflow.
+
+## WebSocket hub state retention
+
+The dev server's hub keeps the deck's last-known slide/fragment state for
+`server.DefaultStateRetention` (10 minutes) after the last client
+disconnects, so reloading the only open window doesn't lose the current
+fragment or step. Internal/CI knob, not a user-facing flag: set
+`TAP_HUB_STATE_RETENTION` (a Go duration string, e.g. `0s`, `30s`, `5m`) on
+the process running `tap dev` to override it. The main `frontend/e2e/`
+suite shares one dev server across every spec file, so its
+`playwright.config.ts` webServer command sets `TAP_HUB_STATE_RETENTION=0s`
+to keep specs isolated - without it, a spec's viewer disconnecting would
+leave state a later spec's "no state" assertions could see.
+
+## Ports
+
+`tap dev` and `tap serve` bind before printing anything. A busy explicit
+`--port` fails with exit status 1; a busy default port falls forward to the
+next free one, up to 20 above it, and the URL that actually bound is
+printed. Two dev servers can therefore run side by side with no flags,
+though naming a port keeps it obvious which is which.
+
+The temporary servers behind `tap pdf` and `tap screenshot` bind
+`127.0.0.1`, since only tap's own headless browser talks to them. `tap dev`
+keeps `0.0.0.0` so a presenter can open it from another device.
+
+## The end-to-end suite's server
+
+`frontend/e2e/` runs against its own `tap dev` on **port 3100**, started by
+Playwright's `webServer` block with `reuseExistingServer: false`, so the
+suite always starts and owns the server it tests. Running a `tap dev` of
+your own on the default port 3000 does not disturb the tests.
 
 ## Changelog
 
@@ -122,20 +254,24 @@ tap/
 ├── cmd/tap/          # CLI entrypoint
 ├── internal/         # Internal packages
 │   ├── cli/          # Command implementations
-│   ├── parser/       # Markdown parser
+│   ├── parser/       # Markdown parser (slots, fragments, directives, notes)
+│   ├── transformer/  # Parsed slides to the frontend's slide JSON
+│   ├── layouts/      # The built-in layout and slot list, plus validation
+│   ├── components/   # esbuild bundler for deck-supplied React components
+│   ├── themes/       # The built-in theme list and generated tokens.json
 │   ├── builder/      # HTML builder
 │   ├── server/       # Dev server
+│   ├── pdf/          # Headless browser capture for tap pdf and tap screenshot
 │   ├── tui/          # Terminal UI
 │   └── gemini/       # Gemini API client
-├── frontend/         # Svelte frontend
+├── frontend/         # React frontend (frontend/src/lib/themes/ has the 21 themes)
 ├── docs/             # VitePress documentation
 ├── scripts/          # Build and release scripts
-├── themes/           # Theme definitions
 └── examples/         # Example presentations
 ```
 
 ## Code Style
 
 - Go: Follow standard Go conventions, run `golangci-lint`
-- TypeScript/Svelte: Prettier formatting
+- TypeScript/React: Prettier formatting
 - Markdown: One sentence per line in documentation

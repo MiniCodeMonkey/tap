@@ -11,10 +11,10 @@ import (
 	"sync"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 	"github.com/MiniCodeMonkey/tap/internal/config"
 	"github.com/MiniCodeMonkey/tap/internal/gemini"
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 )
 
 // ThemeBroadcaster is an interface for broadcasting theme changes via WebSocket.
@@ -106,7 +106,7 @@ func NewDevModel(cfg DevConfig) *DevModel {
 	// Set default theme if not provided
 	currentTheme := cfg.CurrentTheme
 	if currentTheme == "" {
-		currentTheme = "paper"
+		currentTheme = "base"
 	}
 
 	// Find the index of the current theme
@@ -173,8 +173,8 @@ func (m *DevModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		default:
 			// Forward spinner ticks and other messages to image generator
 			newModel, cmd := m.imageGenModel.Update(msg)
-			if newModel != nil {
-				m.imageGenModel = newModel.(*ImageGenModel)
+			if igm, ok := newModel.(*ImageGenModel); ok {
+				m.imageGenModel = igm
 				// Check if generation completed successfully - save image and update markdown
 				if m.imageGenModel.Step == ImageGenStepDone && m.imageGenModel.GeneratedImage != nil && m.imageGenModel.SavedImagePath == "" {
 					// Save the generated image
@@ -536,7 +536,9 @@ func (m *DevModel) handleImageGeneratorKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) 
 	}
 
 	// Update the image generator model
-	m.imageGenModel = newModel.(*ImageGenModel)
+	if igm, ok := newModel.(*ImageGenModel); ok {
+		m.imageGenModel = igm
+	}
 	return m, cmd
 }
 

@@ -1,0 +1,37 @@
+{
+	"name": "Blueprint",
+	"polarity": "dark",
+	"pitch": "For architecture and systems talks where every slide is a sheet from the drawing set and the diagrams are the argument.",
+	"illustration": {
+		"medium": "flat vector technical drawing, white-ink-on-blue blueprint diagram",
+		"line": "3 to 4px even strokes, drafting-table precision, dimension lines with tick marks",
+		"shapes": "rectangles, circles, and annotated technical diagrams, grid-aligned, no organic curves",
+		"texture": "faint graph-paper grid in the background",
+		"palette_use": "deep blue background dominant, white/near-white line work, one yellow accent used only for a callout or highlight",
+		"mood": "precise, engineered, under-construction",
+		"avoid": "gradients, photos, rounded corners, color outside blue/white/yellow, decorative flourish"
+	},
+	"mermaid": {
+		"themeVariables": {
+			"fontFamily": "IBM Plex Mono",
+			"primaryColor": "#0f3a75",
+			"primaryTextColor": "#ffd447",
+			"primaryBorderColor": "#ffd447",
+			"lineColor": "#f5f9ff",
+			"secondaryColor": "#174688",
+			"tertiaryColor": "#0f3a75",
+			"background": "#0f3a75",
+			"mainBkg": "#0f3a75",
+			"textColor": "#f5f9ff",
+			"titleColor": "#f5f9ff",
+			"nodeTextColor": "#ffd447",
+			"nodeBorder": "#ffd447",
+			"clusterBkg": "#174688",
+			"clusterBorder": "#c0d6f3",
+			"edgeLabelBackground": "#0f3a75",
+			"fontSize": "34px"
+		},
+		"quietStyle": "fill:#0f3a75,stroke:#f5f9ff,color:#f5f9ff",
+		"curve": "stepAfter"
+	}
+}

@@ -65,7 +65,7 @@ Back to the default fade transition.
 ```
 
 ::: tip Best Practices
-- Use `fade` for most presentations—it's smooth and professional
+- Use `fade` for most presentations, it's smooth and professional
 - Use `none` for rapid-fire slides or when you want instant switches
 - Use `zoom` sparingly for emphasis on key slides
 - Keep transitions consistent within sections for a polished feel
@@ -93,7 +93,9 @@ Second, we'll explore solutions.
 Third, we'll choose the best approach.
 ```
 
-Each `<!-- pause -->` creates a new fragment. Press the next key (Space or Right Arrow) to reveal each section.
+Each `<!-- pause -->` marker is one reveal: the slide above takes two
+presses before it advances to the next slide. The content before the first
+marker is visible as soon as the slide appears.
 
 ### Automatic List Fragments
 
@@ -170,17 +172,29 @@ fragments: false
 All items appear immediately on this slide.
 ```
 
+## Steps
+
+A deck component or a `map` fence consumes clicker presses of its own,
+called steps. They behave like fragments from the audience's side: an
+advance key moves through the slide's steps before moving on. Set the
+count with the `steps:` directive, or let a component declare it with
+`export const steps = N`. See
+[Custom Components](/guide/custom-components) and
+[Map Animations](/guide/map-animations).
+
+## Print Mode
+
+`?print=true`, PDF export, and every thumbnail render a slide in its final
+state: every fragment revealed, every step at its last value, and no
+animation. A deck component must do the same; see
+[Print mode and thumbnails](/guide/custom-components#print-mode-and-thumbnails).
+
 ## Animation Timing
 
-Themes control animation timing and easing. Each built-in theme has its own animation style:
-
-| Theme | Animation Style |
-|-------|-----------------|
-| `minimal` | Subtle, quick fades |
-| `gradient` | Smooth, flowing animations |
-| `terminal` | Minimal/instant transitions |
-| `brutalist` | Sharp, sudden reveals |
-| `keynote` | Elegant, professional timing |
+Themes control animation timing and easing, each to match its own
+personality: `terminal` favors instant, blunt transitions, `keynote` favors
+slower, more deliberate ones, `sketch` favors slightly playful timing, and
+so on. See [Themes](/guide/themes) for the full list.
 
 ## Quick Reference
 
@@ -191,6 +205,9 @@ Themes control animation timing and easing. Each built-in theme has its own anim
 | Manual pause | `<!-- pause -->` | Single slide |
 | Global fragments | `fragments: true` in frontmatter | All slides |
 | Per-slide fragments | `fragments: true` in directive | Single slide |
+| Steps for a component or map | `steps: 4` in directive | Single slide |
+| Load at a fragment | `?fragment=2` in the URL | Single load |
+| Load at a step | `?step=3` in the URL | Single load |
 
 ## Next Steps
 

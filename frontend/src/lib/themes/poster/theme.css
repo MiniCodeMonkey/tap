@@ -1,0 +1,1890 @@
+/**
+ * Poster theme.
+ * For a loud, fast, opinionated talk in the Takahashi style: every slide is
+ * a gig poster printed in black and red on yellow stock, and the words do
+ * all the work.
+ *
+ * Red never carries text, because it cannot reach 7:1 against the yellow.
+ * Red is for shapes (rules, bars, offset shadows). Emphasis is a knockout:
+ * the words sit on a black slab in yellow type.
+ *
+ * The canvas is a fixed 1920px wide, and CSS cannot measure how long a
+ * heading is, so every heading size below is budgeted for a sentence-length
+ * headline rather than for a single word. Slides that carry heavy content
+ * (code, a table, a diagram, an image, many bullets) step the heading down
+ * through `:has()`.
+ */
+
+@import '@fontsource/anton/latin-400.css';
+@import '@fontsource/archivo-narrow/latin-600.css';
+@import '@fontsource/archivo-narrow/latin-700.css';
+@import '@fontsource/inconsolata/latin-700.css';
+@import '@fontsource/inconsolata/latin-800.css';
+
+[data-theme='poster'] {
+	/* ---------- design-spec tokens ---------- */
+	--bg: #ffd60a;
+	--fg: #0b0b0b;
+	--muted: #3d3400;
+	--accent: #e0161d;
+	--accent-text: #800410;
+	--accent-2: #ffffff;
+	--surface: #f2c200;
+	--font-display: 'Anton', 'Impact', 'Arial Narrow', sans-serif;
+	--font-body: 'Archivo Narrow', 'Arial Narrow', sans-serif;
+	--font-mono: 'Inconsolata', ui-monospace, Menlo, monospace;
+	--ease: cubic-bezier(0.6, 0, 1, 0.8);
+	--dur: 240ms;
+	--space-unit: 24px;
+	--radius: 0px;
+	--stroke-width: 6px;
+
+	/*
+	 * Ink and paper. Every rule, slab and marker below is drawn in --ink on
+	 * --paper. A black panel (the section sheet, the right-hand column, the
+	 * sidebar, the live code block) swaps the two, so whatever lands inside
+	 * it inverts without a second set of selectors.
+	 */
+	--ink: var(--fg);
+	--paper: var(--bg);
+	--code-slab: var(--fg);
+	--code-type: var(--accent-2);
+
+	/* Bridge to the base theme's token names, read by the shared CSS. */
+	--color-bg: var(--bg);
+	--color-text: var(--fg);
+	--color-muted: var(--muted);
+	--color-accent: var(--accent);
+	--color-code-bg: transparent;
+	--color-code-text: var(--fg);
+	--color-code-inline-bg: var(--fg);
+	--color-border: var(--fg);
+	--color-surface: var(--surface);
+	--color-surface-elevated: var(--surface);
+	--color-link: var(--fg);
+	--font-sans: var(--font-body);
+
+	/* Shiki: black type, oxblood for literals, olive for comments. */
+	--shiki-foreground: var(--fg);
+	--shiki-background: transparent;
+	--shiki-token-comment: var(--muted);
+	--shiki-token-string: var(--accent-text);
+	--shiki-token-string-expression: var(--accent-text);
+	--shiki-token-keyword: var(--fg);
+	--shiki-token-function: var(--fg);
+	--shiki-token-constant: var(--accent-text);
+	--shiki-token-parameter: var(--fg);
+	--shiki-token-punctuation: var(--fg);
+	--shiki-token-link: var(--accent-text);
+}
+
+@keyframes poster-wipe-r {
+	from {
+		clip-path: inset(-40px 100% -40px -200px);
+	}
+	to {
+		clip-path: inset(-40px -200px -40px -200px);
+	}
+}
+@keyframes poster-wipe-d {
+	from {
+		clip-path: inset(0 -200px 100% -200px);
+	}
+	to {
+		clip-path: inset(0 -200px -200px -200px);
+	}
+}
+/*
+ * The punch: type is thrown at the sheet and stops dead. It grows into place
+ * from inside its own box, so at no point of the animation does an element
+ * reach past the position it ends in.
+ */
+@keyframes poster-slam {
+	0% {
+		transform: scale(0.8);
+		opacity: 0;
+	}
+	8% {
+		opacity: 1;
+	}
+	100% {
+		transform: scale(1);
+		opacity: 1;
+	}
+}
+@keyframes poster-paste {
+	0% {
+		transform: rotate(-1.5deg) scale(0.8);
+		opacity: 0;
+	}
+	8% {
+		opacity: 1;
+	}
+	100% {
+		transform: rotate(-1.5deg) scale(1);
+		opacity: 1;
+	}
+}
+@keyframes poster-cut {
+	from {
+		opacity: 0;
+	}
+}
+@keyframes poster-spin {
+	to {
+		transform: rotate(360deg);
+	}
+}
+
+/* ============================================================================
+ * The sheet
+ * ============================================================================ */
+
+[data-theme='poster'] .slide[data-layout] {
+	background: var(--bg);
+	color: var(--fg);
+	font-family: var(--font-body);
+	font-weight: 700;
+	font-size: 60px;
+	line-height: 76px;
+	text-transform: uppercase;
+	letter-spacing: 0.02em;
+}
+[data-theme='poster'] :where(.slide[data-layout]) h1,
+[data-theme='poster'] :where(.slide[data-layout]) h2,
+[data-theme='poster'] :where(.slide[data-layout]) h3,
+[data-theme='poster'] :where(.slide[data-layout]) h4,
+[data-theme='poster'] :where(.slide[data-layout]) h5,
+[data-theme='poster'] :where(.slide[data-layout]) h6,
+[data-theme='poster'] :where(.slide[data-layout]) p,
+[data-theme='poster'] :where(.slide[data-layout]) ul,
+[data-theme='poster'] :where(.slide[data-layout]) ol,
+[data-theme='poster'] :where(.slide[data-layout]) li,
+[data-theme='poster'] :where(.slide[data-layout]) blockquote,
+[data-theme='poster'] :where(.slide[data-layout]) pre,
+[data-theme='poster'] :where(.slide[data-layout]) table {
+	margin: 0;
+	padding: 0;
+}
+/*
+ * Weight and tracking go through custom properties at full specificity, so
+ * that no layout rule of the base theme can embolden or tighten the display
+ * face. A heading that wants different values sets the two properties.
+ */
+[data-theme='poster'] .slide[data-layout] h1,
+[data-theme='poster'] .slide[data-layout] h2,
+[data-theme='poster'] .slide[data-layout] h3,
+[data-theme='poster'] .slide[data-layout] h4,
+[data-theme='poster'] .slide[data-layout] h5,
+[data-theme='poster'] .slide[data-layout] h6 {
+	font-weight: var(--poster-heading-weight, 400);
+	letter-spacing: var(--poster-heading-tracking, 0);
+	text-transform: uppercase;
+}
+[data-theme='poster'] :where(.slide[data-layout]) h1,
+[data-theme='poster'] :where(.slide[data-layout]) h2,
+[data-theme='poster'] :where(.slide[data-layout]) h3 {
+	font-family: var(--font-display);
+	line-height: 1.04;
+	text-wrap: balance;
+	overflow-wrap: break-word;
+}
+[data-theme='poster'] :where(.slide[data-layout]) h1 {
+	font-size: 176px;
+}
+[data-theme='poster'] :where(.slide[data-layout]) p,
+[data-theme='poster'] :where(.slide[data-layout]) li {
+	text-wrap: pretty;
+	overflow-wrap: break-word;
+}
+
+/*
+ * Minimum-size floor for anything a later rule leaves unsized. It sits early
+ * in the file so that every later rule of equal specificity wins over it.
+ */
+[data-theme='poster'] .slot p,
+[data-theme='poster'] .slot li {
+	font-size: 60px;
+	line-height: 76px;
+}
+[data-theme='poster'] .slot td,
+[data-theme='poster'] .slot th {
+	font-size: 48px;
+}
+
+/* Emphasis is a knockout: the words sit on a slab of ink. */
+[data-theme='poster'] :where(.slide[data-layout]) strong,
+[data-theme='poster'] :where(.slide[data-layout]) em {
+	font-style: normal;
+	font-weight: 700;
+	color: var(--paper);
+	background: linear-gradient(var(--ink), var(--ink)) 0 50% / 100% 1.12em no-repeat;
+	padding: 0 0.16em;
+	-webkit-box-decoration-break: clone;
+	box-decoration-break: clone;
+}
+[data-theme='poster'] :where(.slide[data-layout]) h1 em,
+[data-theme='poster'] :where(.slide[data-layout]) h1 strong {
+	font-weight: 400;
+	padding: 0 0.08em;
+	background: linear-gradient(var(--ink) 0 90%, var(--accent) 90% 100%) 0 58% / 100% 1.06em no-repeat;
+}
+
+/* A link is underlined with a red rule and knocks out under the pointer. */
+[data-theme='poster'] :where(.slide[data-layout]) a {
+	color: inherit;
+	text-decoration: underline;
+	text-decoration-color: var(--accent);
+	text-decoration-thickness: 0.14em;
+	text-underline-offset: 0.12em;
+	text-decoration-skip-ink: none;
+}
+[data-theme='poster'] :where(.slide[data-layout]) a:hover {
+	color: var(--paper);
+	background: var(--ink);
+	text-decoration-color: var(--accent);
+}
+
+/* Inline code keeps its case and sits on its own slab. */
+[data-theme='poster'] .slot :not(pre) > code {
+	font-family: var(--font-mono);
+	font-size: 1em;
+	font-weight: 800;
+	text-transform: none;
+	letter-spacing: 0;
+	color: var(--code-type);
+	background: var(--code-slab);
+	padding: 0 0.18em;
+	border-radius: 0;
+}
+
+/* sheet number, top right */
+[data-theme='poster'] .slide[data-layout]::after {
+	content: attr(data-index);
+	position: absolute;
+	right: 0;
+	top: 0;
+	width: 96px;
+	height: 96px;
+	z-index: 3;
+	background: var(--fg);
+	color: var(--bg);
+	font-family: var(--font-display);
+	font-weight: 400;
+	font-size: 52px;
+	line-height: 96px;
+	text-align: center;
+	letter-spacing: 0;
+	animation: poster-wipe-d var(--dur) var(--ease) 0ms both;
+}
+[data-theme='poster'] .slide-tag {
+	position: absolute;
+	left: auto;
+	right: 96px;
+	top: 0;
+	height: 64px;
+	padding: 0 28px;
+	z-index: 3;
+	font-family: var(--font-body);
+	font-size: 34px;
+	line-height: 64px;
+	font-weight: 700;
+	letter-spacing: 0.1em;
+	white-space: nowrap;
+	background: var(--fg);
+	color: var(--bg);
+	border-right: 12px solid var(--accent);
+	animation: poster-wipe-d var(--dur) var(--ease) 60ms both;
+}
+/* The badge is a slab let in from the left edge, along the top strip. */
+[data-theme='poster'] .slide-badge {
+	position: absolute;
+	left: 0;
+	right: auto;
+	top: 0;
+	height: 64px;
+	padding: 0 28px 0 96px;
+	z-index: 3;
+	font-family: var(--font-body);
+	font-size: 34px;
+	line-height: 64px;
+	font-weight: 700;
+	letter-spacing: 0.1em;
+	white-space: nowrap;
+	background: var(--fg);
+	color: var(--bg);
+	border-right: 12px solid var(--accent);
+	animation: poster-wipe-d var(--dur) var(--ease) 120ms both;
+}
+
+[data-theme='poster'] .slide-content {
+	position: absolute;
+	width: auto;
+	height: auto;
+	left: 96px;
+	right: 96px;
+	top: 96px;
+	bottom: 96px;
+	display: flex;
+	flex-direction: column;
+}
+[data-theme='poster'] .scroll-content {
+	flex: 1;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+}
+[data-theme='poster'] [class^='layout-'],
+[data-theme='poster'] .slide[data-layout='component'] > .slide-content > .deck-component-root,
+[data-theme='poster'] .slide[data-layout='component'] > .slide-content > .scroll-content > .deck-component-root {
+	flex: 1;
+	min-height: 0;
+	width: auto;
+	height: auto;
+	padding: 0;
+	/* Cancel layouts.css's shared `.deck-component-root` border: this
+	   theme's real inset already comes from `.slide-content` above. */
+	border: 0;
+	gap: 0;
+	display: flex;
+	flex-direction: column;
+	align-items: stretch;
+	justify-content: flex-start;
+	align-content: normal;
+	text-align: left;
+}
+[data-theme='poster'] [class^='layout-'] > .slot,
+[data-theme='poster'] .slide[data-layout='component'] > .slide-content > .deck-component-root > .slot,
+[data-theme='poster'] .slide[data-layout='component'] > .slide-content > .scroll-content > .deck-component-root > .slot {
+	max-width: none;
+}
+
+/* ============================================================================
+ * Headings and body copy
+ * ============================================================================ */
+
+[data-theme='poster'] .slot > h2,
+[data-theme='poster'] .slot > :where(.fragment) > h2 {
+	position: relative;
+	font-size: 132px;
+	margin: -12px 0 48px;
+	padding-bottom: 36px;
+	transform-origin: 0 50%;
+	animation: poster-slam var(--dur) var(--ease) 0ms both;
+}
+[data-theme='poster'] .slot > h2::after,
+[data-theme='poster'] .slot > :where(.fragment) > h2::after {
+	content: '';
+	position: absolute;
+	left: 0;
+	bottom: 0;
+	width: 1920px;
+	height: 24px;
+	background: var(--accent);
+	animation: poster-wipe-r var(--dur) var(--ease) 200ms both;
+}
+/* Heavy content below the heading: the heading steps down to make room. */
+[data-theme='poster'] .slot:has(pre, table, .mermaid-diagram, img, .live-code-block-portal, .asciinema-player-wrapper, h3, li:nth-child(5)) > h2 {
+	font-size: 112px;
+	margin-bottom: 36px;
+	padding-bottom: 30px;
+}
+[data-theme='poster'] .slot h3 {
+	font-size: 84px;
+	line-height: 1.06;
+	margin-top: 36px;
+}
+[data-theme='poster'] .slot h4 {
+	width: fit-content;
+	margin-top: 24px;
+	padding: 0 24px;
+	font-family: var(--font-body);
+	--poster-heading-weight: 700;
+	font-size: 52px;
+	line-height: 72px;
+	--poster-heading-tracking: 0.12em;
+	background: var(--ink);
+	color: var(--paper);
+}
+[data-theme='poster'] .slot h5 {
+	margin-top: 22px;
+	padding-left: 28px;
+	border-left: 20px solid var(--accent);
+	font-family: var(--font-body);
+	--poster-heading-weight: 700;
+	font-size: 44px;
+	line-height: 56px;
+	--poster-heading-tracking: 0.12em;
+}
+[data-theme='poster'] .slot h6 {
+	margin-top: 18px;
+	padding-left: 48px;
+	font-family: var(--font-body);
+	--poster-heading-weight: 600;
+	font-size: 36px;
+	line-height: 48px;
+	--poster-heading-tracking: 0.2em;
+}
+[data-theme='poster'] .slot > h3:first-child,
+[data-theme='poster'] .slot > :where(.fragment) > h3:first-child,
+[data-theme='poster'] .slot > h4:first-child,
+[data-theme='poster'] .slot > :where(.fragment) > h4:first-child,
+[data-theme='poster'] .slot > h5:first-child,
+[data-theme='poster'] .slot > :where(.fragment) > h5:first-child,
+[data-theme='poster'] .slot > h6:first-child,
+[data-theme='poster'] .slot > :where(.fragment) > h6:first-child {
+	margin-top: 0;
+}
+
+[data-theme='poster'] .slot > p,
+[data-theme='poster'] .slot > :where(.fragment) > p {
+	animation: poster-wipe-r var(--dur) var(--ease) 500ms both;
+}
+[data-theme='poster'] .slot > .fragment + .fragment,
+[data-theme='poster'] .slot > p + .fragment,
+[data-theme='poster'] .slot > .fragment + p,
+[data-theme='poster'] .slot > p + p,
+[data-theme='poster'] .slot > :where(.fragment) > p + p,
+[data-theme='poster'] .slot > ul + p,
+[data-theme='poster'] .slot > :where(.fragment) > ul + p,
+[data-theme='poster'] .slot > ol + p,
+[data-theme='poster'] .slot > :where(.fragment) > ol + p,
+[data-theme='poster'] .slot > p + ul,
+[data-theme='poster'] .slot > :where(.fragment) > p + ul,
+[data-theme='poster'] .slot > p + ol,
+[data-theme='poster'] .slot > :where(.fragment) > p + ol,
+[data-theme='poster'] .slot > p + pre,
+[data-theme='poster'] .slot > :where(.fragment) > p + pre,
+[data-theme='poster'] .slot > pre + p,
+[data-theme='poster'] .slot > :where(.fragment) > pre + p,
+[data-theme='poster'] .slot > table + p,
+[data-theme='poster'] .slot > :where(.fragment) > table + p,
+[data-theme='poster'] .slot > p + table,
+[data-theme='poster'] .slot > :where(.fragment) > p + table {
+	margin-top: 32px;
+}
+
+/* ============================================================================
+ * Title
+ * ============================================================================ */
+
+[data-theme='poster'] .slide[data-layout='title']::before {
+	content: '';
+	position: absolute;
+	left: calc(100% - 1500px);
+	top: calc(100% - 1500px);
+	width: 3000px;
+	height: 3000px;
+	background: repeating-conic-gradient(var(--surface) 0 7.5deg, transparent 7.5deg 15deg);
+	animation: poster-spin 120s linear infinite;
+}
+/* A red sun sits in the corner the rays come from. */
+[data-theme='poster'] .layout-title::before {
+	content: '';
+	position: absolute;
+	right: -516px;
+	bottom: -516px;
+	width: 840px;
+	height: 840px;
+	border-radius: 50%;
+	background: var(--accent);
+	animation: poster-slam 400ms var(--ease) 100ms both;
+}
+[data-theme='poster'] .layout-title .slot {
+	position: relative;
+	z-index: 1;
+	flex: 1;
+	display: flex;
+	flex-direction: column;
+}
+[data-theme='poster'] .layout-title h1 {
+	font-size: 144px;
+	margin-top: -16px;
+	transform-origin: 0 50%;
+	animation: poster-slam var(--dur) var(--ease) 0ms both;
+}
+/*
+ * 144px is budgeted for the 95-character worst case. A short or medium
+ * title has the whole sheet to itself, so it should throw a much bigger
+ * punch: this theme lives on giant type. The extra `.slot-content` in the
+ * selector matches base's own `.layout-title .slot-content h1[data-length]`
+ * rule (layouts.css) at equal-or-higher specificity; without it base's
+ * smaller boost (7.5rem/9rem) wins the cascade and a short title renders
+ * no bigger than a long one.
+ */
+[data-theme='poster'] .layout-title .slot-content h1[data-length='medium'] {
+	font-size: 184px;
+}
+[data-theme='poster'] .layout-title .slot-content h1[data-length='short'] {
+	font-size: 240px;
+}
+/* The line under the title is a full-bleed black slab. */
+[data-theme='poster'] .layout-title h2,
+[data-theme='poster'] .layout-title .slot:not(:has(h2)) h1 + p {
+	max-width: none;
+	margin: 36px -96px 0;
+	padding: 20px 96px 26px;
+	background: var(--fg);
+	color: var(--bg);
+	box-shadow: 0 24px 0 var(--accent);
+	animation: poster-wipe-r var(--dur) var(--ease) 300ms both;
+}
+[data-theme='poster'] .layout-title h2 {
+	font-size: 112px;
+}
+[data-theme='poster'] .layout-title .slot:not(:has(h2)) h1 + p {
+	font-size: 68px;
+	line-height: 80px;
+	letter-spacing: 0.04em;
+	text-wrap: balance;
+}
+[data-theme='poster'] .layout-title h2::after {
+	content: none;
+}
+[data-theme='poster'] .layout-title p {
+	max-width: none;
+	margin: auto 0 0;
+	font-size: 64px;
+	line-height: 72px;
+	letter-spacing: 0.04em;
+	padding-left: 60px;
+	border-left: 28px solid var(--accent);
+	animation-delay: 650ms;
+}
+[data-theme='poster'] .layout-title .slot:not(:has(h2)) h1 + p {
+	border-left: 0;
+}
+
+/* ============================================================================
+ * Section: the sheet flips to black
+ * ============================================================================ */
+
+[data-theme='poster'] .slide[data-layout='section'] {
+	background: var(--fg);
+	color: var(--bg);
+	--color-text: var(--bg);
+	--ink: var(--bg);
+	--paper: var(--fg);
+	--code-slab: var(--accent-2);
+	--code-type: var(--fg);
+}
+[data-theme='poster'] .slide[data-layout='section']::after,
+[data-theme='poster'] .slide[data-layout='section'] .slide-badge,
+[data-theme='poster'] .slide[data-layout='big-stat']::after,
+[data-theme='poster'] .slide[data-layout='big-stat'] .slide-badge,
+[data-theme='poster'] .slide[data-layout='big-stat'] .slide-tag,
+[data-theme='poster'] .slide[data-layout='sidebar']::after,
+[data-theme='poster'] .slide[data-layout='sidebar'] .slide-badge {
+	background: var(--bg);
+	color: var(--fg);
+}
+[data-theme='poster'] .slide[data-layout='section'] .slide-tag {
+	left: 96px;
+	right: auto;
+	top: 96px;
+	max-width: 1632px;
+	height: auto;
+	padding: 0 32px 6px;
+	border: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	background: var(--bg);
+	color: var(--fg);
+	font-family: var(--font-display);
+	font-weight: 400;
+	font-size: 120px;
+	line-height: 150px;
+	letter-spacing: 0;
+	transform-origin: 0 50%;
+	animation: poster-slam var(--dur) var(--ease) 0ms both;
+}
+/* The tag block takes real room on this sheet, so the content box starts below it. */
+[data-theme='poster'] .slide[data-layout='section']:has(> .slide-tag) .slide-content {
+	top: 286px;
+}
+[data-theme='poster'] .layout-section .slot {
+	margin-top: auto;
+}
+[data-theme='poster'] .layout-section h1,
+[data-theme='poster'] .layout-section h2 {
+	position: relative;
+	font-size: 232px;
+	line-height: 1;
+	margin: 0;
+	padding-bottom: 72px;
+	transform-origin: 0 50%;
+	animation: poster-slam var(--dur) var(--ease) 250ms both;
+}
+/* Same cascade problem as the title's h1: match base's `.slot-content
+ * h2[data-length]` specificity or its own, smaller boost wins. */
+[data-theme='poster'] .layout-section .slot-content h1[data-length='medium'],
+[data-theme='poster'] .layout-section .slot-content h2[data-length='medium'] {
+	font-size: 288px;
+}
+[data-theme='poster'] .layout-section .slot-content h1[data-length='short'],
+[data-theme='poster'] .layout-section .slot-content h2[data-length='short'] {
+	font-size: 348px;
+}
+[data-theme='poster'] .layout-section h1::after,
+[data-theme='poster'] .layout-section h2::after {
+	content: '';
+	position: absolute;
+	left: 0;
+	bottom: 0;
+	width: 1920px;
+	height: 40px;
+	background: var(--accent);
+	animation: poster-wipe-r var(--dur) var(--ease) 500ms both;
+}
+[data-theme='poster'] .layout-section p {
+	margin-top: 36px;
+	color: var(--accent-2);
+	animation-delay: 700ms;
+}
+
+/* ============================================================================
+ * Statement: a lone h1 on the default layout
+ * ============================================================================ */
+
+[data-theme='poster'] .layout-default .slot:has(> h1:only-child) {
+	flex: 1;
+	display: flex;
+	align-items: center;
+}
+[data-theme='poster'] .layout-default h1:only-child {
+	position: relative;
+	font-size: 184px;
+	line-height: 1.1;
+	padding-bottom: 60px;
+	transform-origin: 0 50%;
+	animation: poster-slam var(--dur) var(--ease) 100ms both;
+}
+[data-theme='poster'] .layout-default h1:only-child[data-length='medium'] {
+	font-size: 216px;
+}
+[data-theme='poster'] .layout-default h1:only-child[data-length='short'] {
+	font-size: 272px;
+}
+[data-theme='poster'] .layout-default h1:only-child::after {
+	content: '';
+	position: absolute;
+	left: 0;
+	bottom: 0;
+	width: 480px;
+	height: 40px;
+	background: var(--accent);
+	animation: poster-wipe-r var(--dur) var(--ease) 350ms both;
+}
+
+/* ============================================================================
+ * Bullets: a numbered bill
+ * ============================================================================ */
+
+[data-theme='poster'] .slot > ul,
+[data-theme='poster'] .slot > :where(.fragment) > ul,
+[data-theme='poster'] .slot > ol,
+[data-theme='poster'] .slot > :where(.fragment) > ol {
+	list-style: none;
+	counter-reset: poster-item;
+	border-top: 10px solid var(--ink);
+}
+[data-theme='poster'] .slot > ul > li,
+[data-theme='poster'] .slot > :where(.fragment) > ul > li,
+[data-theme='poster'] .slot > ol > li,
+[data-theme='poster'] .slot > :where(.fragment) > ol > li {
+	position: relative;
+	counter-increment: poster-item;
+	min-height: 124px;
+	padding: 19px 0 19px 164px;
+	border-bottom: 10px solid var(--ink);
+	font-size: 60px;
+	line-height: 76px;
+	animation: poster-wipe-r var(--dur) var(--ease) both;
+}
+[data-theme='poster'] .slot > ul > li::before,
+[data-theme='poster'] .slot > :where(.fragment) > ul > li::before,
+[data-theme='poster'] .slot > ol > li::before,
+[data-theme='poster'] .slot > :where(.fragment) > ol > li::before {
+	content: counter(poster-item);
+	position: absolute;
+	left: 0;
+	top: 0;
+	bottom: 0;
+	width: 128px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	background: var(--ink);
+	color: var(--paper);
+	font-family: var(--font-display);
+	font-weight: 400;
+	font-size: 80px;
+	line-height: 1;
+	letter-spacing: 0;
+}
+[data-theme='poster'] .slot > ul > li:nth-child(1),
+[data-theme='poster'] .slot > :where(.fragment) > ul > li:nth-child(1),
+[data-theme='poster'] .slot > ol > li:nth-child(1),
+[data-theme='poster'] .slot > :where(.fragment) > ol > li:nth-child(1) {
+	animation-delay: 400ms;
+}
+[data-theme='poster'] .slot > ul > li:nth-child(2),
+[data-theme='poster'] .slot > :where(.fragment) > ul > li:nth-child(2),
+[data-theme='poster'] .slot > ol > li:nth-child(2),
+[data-theme='poster'] .slot > :where(.fragment) > ol > li:nth-child(2) {
+	animation-delay: 560ms;
+}
+[data-theme='poster'] .slot > ul > li:nth-child(3),
+[data-theme='poster'] .slot > :where(.fragment) > ul > li:nth-child(3),
+[data-theme='poster'] .slot > ol > li:nth-child(3),
+[data-theme='poster'] .slot > :where(.fragment) > ol > li:nth-child(3) {
+	animation-delay: 720ms;
+}
+[data-theme='poster'] .slot > ul > li:nth-child(4),
+[data-theme='poster'] .slot > :where(.fragment) > ul > li:nth-child(4),
+[data-theme='poster'] .slot > ol > li:nth-child(4),
+[data-theme='poster'] .slot > :where(.fragment) > ol > li:nth-child(4) {
+	animation-delay: 880ms;
+}
+[data-theme='poster'] .slot > ul > li:nth-child(n + 5),
+[data-theme='poster'] .slot > :where(.fragment) > ul > li:nth-child(n + 5),
+[data-theme='poster'] .slot > ol > li:nth-child(n + 5),
+[data-theme='poster'] .slot > :where(.fragment) > ol > li:nth-child(n + 5) {
+	animation-delay: 1040ms;
+}
+/* Five or more items: the bill tightens so that seven one-line items fit. */
+[data-theme='poster'] .slot > ul:has(> li:nth-child(5)) > li,
+[data-theme='poster'] .slot > :where(.fragment) > ul:has(> li:nth-child(5)) > li,
+[data-theme='poster'] .slot > ol:has(> li:nth-child(5)) > li,
+[data-theme='poster'] .slot > :where(.fragment) > ol:has(> li:nth-child(5)) > li {
+	min-height: 0;
+	padding-top: 6px;
+	padding-bottom: 6px;
+	border-bottom-width: 8px;
+	line-height: 70px;
+}
+[data-theme='poster'] .slot > ul:has(> li:nth-child(5)) > li::before,
+[data-theme='poster'] .slot > :where(.fragment) > ul:has(> li:nth-child(5)) > li::before,
+[data-theme='poster'] .slot > ol:has(> li:nth-child(5)) > li::before,
+[data-theme='poster'] .slot > :where(.fragment) > ol:has(> li:nth-child(5)) > li::before {
+	font-size: 60px;
+}
+
+/* Nested lists are the small print: no number, a short dash, lighter weight. */
+[data-theme='poster'] .slot li ul,
+[data-theme='poster'] .slot li ol {
+	list-style: none;
+	margin-top: 4px;
+}
+[data-theme='poster'] .slot li li {
+	position: relative;
+	padding: 0 0 0 64px;
+	font-size: 60px;
+	line-height: 72px;
+	font-weight: 600;
+	letter-spacing: 0.01em;
+}
+[data-theme='poster'] .slot li li::before {
+	content: '';
+	position: absolute;
+	left: 0;
+	top: 31px;
+	width: 40px;
+	height: 10px;
+	background: var(--ink);
+}
+
+[data-theme='poster'] .slide .fragment-hidden {
+	opacity: 0;
+	visibility: hidden;
+	clip-path: inset(-40px 100% -40px -200px);
+	transition: none;
+}
+[data-theme='poster'] .slide .fragment-visible {
+	opacity: 1;
+	visibility: visible;
+	clip-path: inset(-40px -200px -40px -200px);
+	transition:
+		clip-path var(--dur) var(--ease),
+		opacity 60ms linear;
+}
+
+/* ============================================================================
+ * Code: a full-bleed strip between two black rules
+ * ============================================================================ */
+
+/*
+ * A code block usually runs well short of the slide's full height, and
+ * pinning it directly under the heading left a dead yellow (or black, on
+ * the live block) void along the whole bottom third. Give the slot the
+ * remaining height as free flex space and let the code claim the middle
+ * of it, the same distance from the heading above as from the sheet edge
+ * below, rather than sitting flush against the top of that space.
+ */
+[data-theme='poster'] .layout-code-focus .slot,
+[data-theme='poster'] .layout-default .slot:has(> pre),
+[data-theme='poster'] .layout-default .slot:has(> .live-code-block-portal) {
+	flex: 1;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+}
+[data-theme='poster'] .layout-code-focus .slot > pre,
+[data-theme='poster'] .layout-default .slot > pre {
+	margin-top: auto;
+	margin-bottom: auto;
+}
+[data-theme='poster'] .layout-default .slot > .live-code-block-portal {
+	margin-top: auto;
+	margin-bottom: auto;
+}
+
+[data-theme='poster'] .slot pre {
+	margin: 0 -96px;
+	padding: 20px 0;
+	border-top: 10px solid var(--ink);
+	border-bottom: 10px solid var(--ink);
+	border-radius: 0;
+	overflow: visible;
+	background: transparent;
+	color: var(--ink);
+	font-family: var(--font-mono);
+	font-size: 56px;
+	line-height: 80px;
+	font-weight: 800;
+	text-transform: none;
+	letter-spacing: 0;
+	animation: poster-cut 60ms linear 300ms both;
+}
+[data-theme='poster'] .slot pre code {
+	display: block;
+	font: inherit;
+	font-size: 56px;
+	color: inherit;
+	background: none;
+	padding: 0;
+}
+/* A block the highlighter leaves as plain text keeps the same gutter. */
+[data-theme='poster'] .slot pre:not(.shiki) code {
+	padding: 0 96px 0 130px;
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+}
+[data-theme='poster'] .slot pre.shiki code {
+	display: flex;
+	flex-direction: column;
+}
+[data-theme='poster'] pre.shiki .line {
+	display: block;
+	position: relative;
+	padding: 0 96px 0 130px;
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+	animation: poster-cut 60ms linear both;
+}
+[data-theme='poster'] pre.shiki .line:last-child:empty {
+	display: none;
+}
+[data-theme='poster'] pre.shiki .line:nth-child(1) {
+	animation-delay: 350ms;
+}
+[data-theme='poster'] pre.shiki .line:nth-child(2) {
+	animation-delay: 420ms;
+}
+[data-theme='poster'] pre.shiki .line:nth-child(3) {
+	animation-delay: 490ms;
+}
+[data-theme='poster'] pre.shiki .line:nth-child(4) {
+	animation-delay: 560ms;
+}
+[data-theme='poster'] pre.shiki .line:nth-child(n + 5) {
+	animation-delay: 630ms;
+}
+/* Overrides the base theme's opacity on the same selector rather than
+ * stacking another opacity on top of it (a `.line-content` dim inside an
+ * already-dimmed `.line` compounds to 0.5 * 0.72 = 0.36, too faint to clear
+ * the 4.5:1 floor for dimmed code text on this theme's yellow ground). */
+[data-theme='poster'] pre.has-highlighted .line:not(.highlighted) {
+	opacity: 0.72;
+}
+/* The highlighted line is a black slab with a red block in the gutter. */
+[data-theme='poster'] pre.shiki .line.highlighted {
+	--shiki-foreground: var(--bg);
+	--shiki-token-comment: var(--accent-2);
+	--shiki-token-string: var(--accent-2);
+	--shiki-token-string-expression: var(--accent-2);
+	--shiki-token-keyword: var(--bg);
+	--shiki-token-function: var(--bg);
+	--shiki-token-constant: var(--accent-2);
+	--shiki-token-parameter: var(--bg);
+	--shiki-token-punctuation: var(--bg);
+	--shiki-token-link: var(--accent-2);
+	background: var(--fg);
+	color: var(--bg);
+	line-height: 112px;
+	margin: 8px 0;
+	animation: poster-wipe-r var(--dur) var(--ease) 700ms both;
+}
+[data-theme='poster'] pre.shiki .line.highlighted::before {
+	content: '';
+	position: absolute;
+	left: 0;
+	top: 0;
+	bottom: 0;
+	width: 96px;
+	background: var(--accent);
+	animation: poster-wipe-r var(--dur) var(--ease) 950ms both;
+}
+[data-theme='poster'] pre.shiki .line-number {
+	display: inline-block;
+	width: calc(var(--line-num-width, 2ch) + 1ch);
+	color: var(--muted);
+	font-weight: 700;
+}
+[data-theme='poster'] pre.shiki .line.highlighted .line-number {
+	color: var(--accent-2);
+}
+[data-theme='poster'] pre.shiki .line.diff-add {
+	box-shadow: inset 96px 0 0 var(--fg);
+}
+[data-theme='poster'] pre.shiki .line.diff-remove {
+	box-shadow: inset 96px 0 0 var(--accent);
+	text-decoration: line-through;
+	text-decoration-thickness: 6px;
+}
+[data-theme='poster'] .layout-code-focus pre + p {
+	margin-top: 32px;
+	animation-delay: 1100ms;
+}
+[data-theme='poster'] .code-block-title {
+	margin: 0 -96px;
+	padding: 0 96px 0 130px;
+	font-family: var(--font-mono);
+	font-size: 36px;
+	line-height: 60px;
+	font-weight: 800;
+	text-transform: none;
+	letter-spacing: 0;
+	background: var(--ink);
+	color: var(--paper);
+}
+
+/* ============================================================================
+ * Big stat: the number knocked out of a slab
+ * ============================================================================ */
+
+[data-theme='poster'] .layout-big-stat {
+	margin: -96px -96px 0;
+}
+[data-theme='poster'] .layout-big-stat .slot-default {
+	background: var(--fg);
+	padding: 84px 96px 36px;
+	border-bottom: 40px solid var(--accent);
+	animation: poster-wipe-d var(--dur) var(--ease) 0ms both;
+}
+[data-theme='poster'] .layout-big-stat .slot-default h1,
+[data-theme='poster'] .layout-big-stat .slot-default strong {
+	display: block;
+	padding: 0;
+	background: none;
+	font-family: var(--font-display);
+	font-weight: 400;
+	font-size: 400px;
+	line-height: 1.02;
+	letter-spacing: 0;
+	color: var(--bg);
+	text-wrap: nowrap;
+	transform-origin: 0 60%;
+	animation: poster-slam var(--dur) var(--ease) 250ms both;
+}
+/* A short stat ("40x") has the whole slab to itself; let it fill more of it. */
+[data-theme='poster'] .layout-big-stat .slot-default h1[data-length='short'] {
+	font-size: 480px;
+}
+[data-theme='poster'] .layout-big-stat .slot-default p {
+	color: var(--accent-2);
+}
+[data-theme='poster'] .layout-big-stat .slot-caption {
+	padding: 52px 96px 0;
+}
+[data-theme='poster'] .layout-big-stat .slot-caption p {
+	color: var(--fg);
+	font-size: 72px;
+	line-height: 88px;
+	text-wrap: balance;
+	max-width: 1500px;
+	animation-delay: 600ms;
+}
+[data-theme='poster'] .layout-big-stat .slot-figure {
+	padding: 24px 96px 0;
+}
+[data-theme='poster'] .layout-big-stat .slot-figure img {
+	max-height: 160px;
+	width: auto;
+}
+
+/* ============================================================================
+ * Quote
+ * ============================================================================ */
+
+[data-theme='poster'] .layout-quote {
+	justify-content: center;
+}
+[data-theme='poster'] .layout-quote .slot-default blockquote {
+	position: relative;
+	padding: 136px 0 0;
+	border: 0;
+	font-style: normal;
+	color: var(--fg);
+}
+[data-theme='poster'] .layout-quote blockquote::before {
+	content: '\201C';
+	position: absolute;
+	left: -8px;
+	top: -40px;
+	height: 210px;
+	overflow: hidden;
+	font-family: var(--font-display);
+	font-size: 440px;
+	line-height: 440px;
+	color: var(--accent);
+	transform-origin: 0 50%;
+	animation: poster-slam var(--dur) var(--ease) 0ms both;
+}
+[data-theme='poster'] .layout-quote blockquote p {
+	font-family: var(--font-display);
+	font-weight: 400;
+	font-size: 124px;
+	line-height: 1.08;
+	letter-spacing: 0;
+	text-wrap: balance;
+	transform-origin: 0 50%;
+	animation: poster-slam var(--dur) var(--ease) 250ms both;
+}
+[data-theme='poster'] .layout-quote blockquote p strong,
+[data-theme='poster'] .layout-quote blockquote p em {
+	font-weight: 400;
+}
+[data-theme='poster'] .layout-quote .slot-attribution {
+	margin-top: 52px;
+}
+[data-theme='poster'] .layout-quote .slot-attribution p {
+	width: fit-content;
+	max-width: 100%;
+	margin: 0;
+	padding: 10px 32px;
+	background: var(--fg);
+	color: var(--bg);
+	font-size: 60px;
+	line-height: 76px;
+	letter-spacing: 0.06em;
+	border-left: 28px solid var(--accent);
+	animation-delay: 650ms;
+}
+[data-theme='poster'] .layout-quote .slot-attribution p::before {
+	content: none;
+}
+/* A blockquote on any other slide: red bar, display type. */
+[data-theme='poster'] .slot > blockquote,
+[data-theme='poster'] .slot > :where(.fragment) > blockquote {
+	padding: 0 0 0 48px;
+	border-left: 28px solid var(--accent);
+	font-style: normal;
+	color: inherit;
+}
+
+/* ============================================================================
+ * Two columns: a yellow half and a black half
+ * ============================================================================ */
+
+[data-theme='poster'] .layout-two-column {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	grid-template-rows: auto 1fr;
+	column-gap: 0;
+}
+[data-theme='poster'] .layout-two-column .slot-default,
+[data-theme='poster'] .layout-three-column .slot-default {
+	grid-column: 1 / -1;
+}
+[data-theme='poster'] .layout-two-column .slot-default h2,
+[data-theme='poster'] .layout-three-column .slot-default h2,
+[data-theme='poster'] .layout-sidebar .slot-default h2 {
+	font-size: 112px;
+	margin-bottom: 0;
+	padding-bottom: 30px;
+}
+[data-theme='poster'] .layout-two-column .slot-left {
+	padding: 40px 48px 0 0;
+}
+[data-theme='poster'] .layout-two-column .slot-right,
+[data-theme='poster'] .layout-sidebar .slot-sidebar {
+	--ink: var(--bg);
+	--paper: var(--fg);
+	--code-slab: var(--accent-2);
+	--code-type: var(--fg);
+	background: var(--fg);
+	color: var(--accent-2);
+	animation: poster-wipe-r var(--dur) var(--ease) 500ms both;
+}
+[data-theme='poster'] .layout-two-column .slot-right {
+	margin: 0 -96px -96px 0;
+	padding: 40px 96px 96px 56px;
+}
+[data-theme='poster'] .layout-two-column h3,
+[data-theme='poster'] .layout-three-column h3,
+[data-theme='poster'] .layout-sidebar .slot-sidebar h3 {
+	margin: 0 0 24px;
+	font-family: var(--font-body);
+	--poster-heading-weight: 700;
+	font-size: 48px;
+	line-height: 60px;
+	--poster-heading-tracking: 0.12em;
+	color: var(--ink);
+	animation: poster-cut 60ms linear 400ms both;
+}
+[data-theme='poster'] .layout-two-column p + p {
+	margin-top: 20px;
+}
+[data-theme='poster'] .layout-two-column p strong:only-child {
+	display: block;
+	width: fit-content;
+	padding: 0;
+	background: none;
+	color: var(--ink);
+	font-family: var(--font-display);
+	font-weight: 400;
+	font-size: 200px;
+	line-height: 1.04;
+	letter-spacing: 0;
+}
+/* In a column the bill narrows: a smaller number, thinner rules. */
+[data-theme='poster'] .layout-two-column .slot > ul,
+[data-theme='poster'] .layout-two-column .slot > :where(.fragment) > ul,
+[data-theme='poster'] .layout-two-column .slot > ol,
+[data-theme='poster'] .layout-two-column .slot > :where(.fragment) > ol,
+[data-theme='poster'] .layout-sidebar .slot > ul,
+[data-theme='poster'] .layout-sidebar .slot > :where(.fragment) > ul,
+[data-theme='poster'] .layout-sidebar .slot > ol,
+[data-theme='poster'] .layout-sidebar .slot > :where(.fragment) > ol {
+	border-top-width: 8px;
+}
+[data-theme='poster'] .layout-two-column .slot > ul > li,
+[data-theme='poster'] .layout-two-column .slot > :where(.fragment) > ul > li,
+[data-theme='poster'] .layout-two-column .slot > ol > li,
+[data-theme='poster'] .layout-two-column .slot > :where(.fragment) > ol > li,
+[data-theme='poster'] .layout-sidebar .slot-default > ul > li,
+[data-theme='poster'] .layout-sidebar .slot-default > :where(.fragment) > ul > li,
+[data-theme='poster'] .layout-sidebar .slot-default > ol > li,
+[data-theme='poster'] .layout-sidebar .slot-default > :where(.fragment) > ol > li {
+	min-height: 96px;
+	padding: 12px 0 12px 116px;
+	border-bottom-width: 8px;
+	line-height: 68px;
+}
+[data-theme='poster'] .layout-two-column .slot > ul > li::before,
+[data-theme='poster'] .layout-two-column .slot > :where(.fragment) > ul > li::before,
+[data-theme='poster'] .layout-two-column .slot > ol > li::before,
+[data-theme='poster'] .layout-two-column .slot > :where(.fragment) > ol > li::before,
+[data-theme='poster'] .layout-sidebar .slot-default > ul > li::before,
+[data-theme='poster'] .layout-sidebar .slot-default > :where(.fragment) > ul > li::before,
+[data-theme='poster'] .layout-sidebar .slot-default > ol > li::before,
+[data-theme='poster'] .layout-sidebar .slot-default > :where(.fragment) > ol > li::before {
+	width: 88px;
+	font-size: 60px;
+}
+
+/* ============================================================================
+ * Three columns: three ticket stubs under one headline
+ * ============================================================================ */
+
+[data-theme='poster'] .layout-three-column {
+	display: grid;
+	grid-template-columns: 1fr 1fr 1fr;
+	grid-template-rows: auto 1fr;
+	column-gap: 40px;
+	counter-reset: poster-stub;
+}
+[data-theme='poster'] .layout-three-column .slot-left,
+[data-theme='poster'] .layout-three-column .slot-center,
+[data-theme='poster'] .layout-three-column .slot-right {
+	counter-increment: poster-stub;
+	margin-top: 40px;
+	border-top: 20px solid var(--accent);
+	animation: poster-wipe-d var(--dur) var(--ease) 400ms both;
+}
+[data-theme='poster'] .layout-three-column .slot-center {
+	animation-delay: 550ms;
+}
+[data-theme='poster'] .layout-three-column .slot-right {
+	animation-delay: 700ms;
+}
+[data-theme='poster'] .layout-three-column h3 {
+	display: flex;
+	align-items: baseline;
+	gap: 20px;
+	margin: 0;
+	padding: 4px 24px 10px;
+	font-family: var(--font-display);
+	--poster-heading-weight: 400;
+	font-size: 76px;
+	line-height: 96px;
+	--poster-heading-tracking: 0;
+	background: var(--fg);
+	color: var(--bg);
+}
+[data-theme='poster'] .layout-three-column h3::before {
+	content: counter(poster-stub);
+	color: var(--accent-2);
+}
+[data-theme='poster'] .layout-three-column .slot > ul,
+[data-theme='poster'] .layout-three-column .slot > :where(.fragment) > ul,
+[data-theme='poster'] .layout-three-column .slot > ol,
+[data-theme='poster'] .layout-three-column .slot > :where(.fragment) > ol {
+	border-top: 0;
+}
+[data-theme='poster'] .layout-three-column .slot > ul > li,
+[data-theme='poster'] .layout-three-column .slot > :where(.fragment) > ul > li,
+[data-theme='poster'] .layout-three-column .slot > ol > li,
+[data-theme='poster'] .layout-three-column .slot > :where(.fragment) > ol > li {
+	min-height: 0;
+	padding: 12px 0 12px 0;
+	border-bottom-width: 8px;
+	line-height: 66px;
+	letter-spacing: 0;
+}
+[data-theme='poster'] .layout-three-column .slot > ul > li::before,
+[data-theme='poster'] .layout-three-column .slot > :where(.fragment) > ul > li::before,
+[data-theme='poster'] .layout-three-column .slot > ol > li::before,
+[data-theme='poster'] .layout-three-column .slot > :where(.fragment) > ol > li::before {
+	content: none;
+}
+[data-theme='poster'] .layout-three-column .slot > p,
+[data-theme='poster'] .layout-three-column .slot > :where(.fragment) > p {
+	margin-top: 16px;
+	line-height: 66px;
+	letter-spacing: 0;
+}
+
+/* ============================================================================
+ * Sidebar: the argument on yellow, the receipts on a black strip
+ * ============================================================================ */
+
+[data-theme='poster'] .layout-sidebar {
+	display: grid;
+	grid-template-columns: 1fr 0.4fr;
+	grid-template-rows: 1fr;
+	column-gap: 56px;
+}
+[data-theme='poster'] .layout-sidebar .slot-default h2 {
+	margin-bottom: 32px;
+}
+[data-theme='poster'] .layout-sidebar .slot-default h2::after {
+	width: 100%;
+}
+[data-theme='poster'] .layout-sidebar .slot-default > p,
+[data-theme='poster'] .layout-sidebar .slot-default > :where(.fragment) > p {
+	line-height: 70px;
+}
+[data-theme='poster'] .layout-sidebar .slot-default > p + ul,
+[data-theme='poster'] .layout-sidebar .slot-default > :where(.fragment) > p + ul,
+[data-theme='poster'] .layout-sidebar .slot-default > p + ol,
+[data-theme='poster'] .layout-sidebar .slot-default > :where(.fragment) > p + ol {
+	margin-top: 24px;
+}
+[data-theme='poster'] .layout-sidebar .slot-sidebar {
+	margin: -96px -96px -96px 0;
+	padding: 120px 96px 96px 48px;
+	border-left: 28px solid var(--accent);
+}
+[data-theme='poster'] .layout-sidebar .slot-sidebar > ul,
+[data-theme='poster'] .layout-sidebar .slot-sidebar > :where(.fragment) > ul,
+[data-theme='poster'] .layout-sidebar .slot-sidebar > ol,
+[data-theme='poster'] .layout-sidebar .slot-sidebar > :where(.fragment) > ol {
+	border-top-width: 8px;
+}
+[data-theme='poster'] .layout-sidebar .slot-sidebar > ul > li,
+[data-theme='poster'] .layout-sidebar .slot-sidebar > :where(.fragment) > ul > li,
+[data-theme='poster'] .layout-sidebar .slot-sidebar > ol > li,
+[data-theme='poster'] .layout-sidebar .slot-sidebar > :where(.fragment) > ol > li {
+	min-height: 0;
+	padding: 14px 0;
+	border-bottom-width: 8px;
+	line-height: 66px;
+	letter-spacing: 0;
+}
+[data-theme='poster'] .layout-sidebar .slot-sidebar > ul > li::before,
+[data-theme='poster'] .layout-sidebar .slot-sidebar > :where(.fragment) > ul > li::before,
+[data-theme='poster'] .layout-sidebar .slot-sidebar > ol > li::before,
+[data-theme='poster'] .layout-sidebar .slot-sidebar > :where(.fragment) > ol > li::before {
+	content: none;
+}
+[data-theme='poster'] .layout-sidebar .slot-sidebar > p,
+[data-theme='poster'] .layout-sidebar .slot-sidebar > :where(.fragment) > p {
+	line-height: 66px;
+	letter-spacing: 0;
+}
+
+/* ============================================================================
+ * Image: a two-colour print, pasted up
+ * ============================================================================ */
+
+[data-theme='poster'] .layout-split-media {
+	display: grid;
+	grid-template-columns: 1.1fr 1fr;
+	column-gap: 80px;
+	align-items: center;
+}
+[data-theme='poster'] .layout-split-media .slot-default {
+	display: block;
+	padding: 0;
+}
+[data-theme='poster'] .layout-split-media .slot-default h2 {
+	font-size: 120px;
+	margin-bottom: 32px;
+}
+[data-theme='poster'] .layout-split-media .slot-default h2::after {
+	width: 100%;
+}
+[data-theme='poster'] .layout-split-media .slot-default h3 {
+	margin: 0 0 20px;
+	font-size: 72px;
+}
+[data-theme='poster'] .layout-split-media .slot-media {
+	display: block;
+	overflow: visible;
+	background: none;
+}
+[data-theme='poster'] .slot p:has(> img) {
+	position: relative;
+	width: fit-content;
+	max-width: calc(100% - 40px);
+	margin: 12px 40px 28px 12px;
+	border: 12px solid var(--fg);
+	background: var(--bg);
+	box-shadow: 28px 28px 0 var(--accent);
+	line-height: 0;
+	transform: rotate(-1.5deg);
+	animation: poster-paste var(--dur) var(--ease) 350ms both;
+}
+[data-theme='poster'] .slot p:has(> img) img {
+	display: block;
+	width: 100%;
+	height: auto;
+	border-radius: 0;
+	object-fit: cover;
+	filter: grayscale(1) contrast(1.5);
+	mix-blend-mode: multiply;
+}
+[data-theme='poster'] .slot p:has(> img)::after {
+	content: '';
+	position: absolute;
+	inset: 0;
+	mix-blend-mode: multiply;
+	background: radial-gradient(circle at 50% 50%, rgba(11, 11, 11, 0.34) 0 2.2px, transparent 2.8px) 0 0 / 9px 9px;
+}
+/* On a plain slide the print takes whatever height the copy leaves over. */
+[data-theme='poster'] .layout-default .slot:has(p > img) {
+	flex: 1;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+}
+[data-theme='poster'] .layout-default .slot > p:has(> img),
+[data-theme='poster'] .layout-default .slot > :where(.fragment) > p:has(> img) {
+	flex: 1;
+	min-height: 0;
+	margin-top: 36px;
+	align-self: flex-start;
+}
+[data-theme='poster'] .layout-default .slot > p:has(> img) img,
+[data-theme='poster'] .layout-default .slot > :where(.fragment) > p:has(> img) img {
+	width: auto;
+	height: 100%;
+	max-width: 100%;
+}
+
+/* ============================================================================
+ * Cover: one sheet pasted over whatever fills the frame
+ * ============================================================================ */
+
+[data-theme='poster'] .layout-cover {
+	justify-content: center;
+	align-items: flex-start;
+}
+[data-theme='poster'] .layout-cover .slot-default {
+	position: relative;
+	max-width: 1560px;
+	padding: 52px 72px 60px;
+	border: 12px solid var(--fg);
+	background: var(--bg);
+	color: var(--fg);
+	box-shadow: 36px 36px 0 var(--accent);
+	transform: rotate(-1.5deg);
+	animation: poster-paste var(--dur) var(--ease) 100ms both;
+}
+[data-theme='poster'] .layout-cover h1 {
+	font-size: 184px;
+}
+[data-theme='poster'] .layout-cover h1[data-length='medium'] {
+	font-size: 216px;
+}
+[data-theme='poster'] .layout-cover h1[data-length='short'] {
+	font-size: 256px;
+}
+[data-theme='poster'] .layout-cover p {
+	margin-top: 36px;
+	padding-top: 28px;
+	border-top: 20px solid var(--fg);
+	font-size: 64px;
+	line-height: 78px;
+	text-wrap: balance;
+	animation-delay: 450ms;
+}
+
+/* ============================================================================
+ * Blank: the bare sheet
+ * ============================================================================ */
+
+[data-theme='poster'] .slide[data-layout='blank'] .slide-content {
+	left: 0;
+	right: 0;
+	top: 0;
+	bottom: 0;
+}
+[data-theme='poster'] .layout-blank h1 {
+	max-width: 1728px;
+	text-align: center;
+	animation: poster-slam var(--dur) var(--ease) 0ms both;
+}
+/* MapLibre draws its own labels and credits; they keep their own case. */
+[data-theme='poster'] .map-slide {
+	text-transform: none;
+	letter-spacing: 0;
+	font-weight: 400;
+	line-height: normal;
+}
+[data-theme='poster'] .slide[data-layout] .map-slide a {
+	text-decoration-thickness: 1px;
+	text-decoration-color: currentColor;
+}
+[data-theme='poster'] .slide.has-map::after {
+	box-shadow: -12px 12px 0 var(--accent);
+}
+
+/* ============================================================================
+ * Table
+ * ============================================================================ */
+
+[data-theme='poster'] .slot > table,
+[data-theme='poster'] .slot > :where(.fragment) > table {
+	width: 100%;
+	border-collapse: collapse;
+	font-size: 56px;
+	line-height: 68px;
+}
+[data-theme='poster'] .slot table th {
+	text-align: left;
+	padding: 8px 32px;
+	border: 0;
+	background: var(--ink);
+	color: var(--paper);
+	font-family: var(--font-body);
+	font-weight: 700;
+	font-size: 48px;
+	line-height: 56px;
+	letter-spacing: 0.12em;
+}
+[data-theme='poster'] .slot table td {
+	padding: 14px 32px;
+	border: 0;
+	border-bottom: 10px solid var(--ink);
+	font-size: 56px;
+}
+[data-theme='poster'] .slot table td:first-child {
+	font-family: var(--font-display);
+	font-weight: 400;
+	font-size: 72px;
+	line-height: 80px;
+	letter-spacing: 0;
+	padding-left: 20px;
+}
+[data-theme='poster'] .slot table th:first-child {
+	padding-left: 20px;
+}
+/* The last column is the punchline, knocked out of black. */
+[data-theme='poster'] .slot table td:last-child:not(:first-child) {
+	background: var(--ink);
+	color: var(--paper);
+	border-bottom-color: var(--paper);
+}
+[data-theme='poster'] .slot table tbody:has(tr:nth-child(5)) td {
+	padding-top: 6px;
+	padding-bottom: 6px;
+	border-bottom-width: 8px;
+}
+[data-theme='poster'] .slot table tbody:has(tr:nth-child(5)) td:first-child {
+	font-size: 60px;
+	line-height: 68px;
+}
+[data-theme='poster'] table thead tr,
+[data-theme='poster'] table tbody tr {
+	animation: poster-wipe-r var(--dur) var(--ease) both;
+}
+[data-theme='poster'] table thead tr {
+	animation-delay: 350ms;
+}
+[data-theme='poster'] table tbody tr:nth-child(1) {
+	animation-delay: 500ms;
+}
+[data-theme='poster'] table tbody tr:nth-child(2) {
+	animation-delay: 650ms;
+}
+[data-theme='poster'] table tbody tr:nth-child(3) {
+	animation-delay: 800ms;
+}
+[data-theme='poster'] table tbody tr:nth-child(n + 4) {
+	animation-delay: 950ms;
+}
+
+/* ============================================================================
+ * Diagram
+ * ============================================================================ */
+
+[data-theme='poster'] .layout-default .slot:has(.mermaid-diagram) {
+	flex: 1;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+}
+[data-theme='poster'] .mermaid-diagram {
+	flex: 1;
+	min-height: 0;
+	display: flex;
+	justify-content: center;
+	text-transform: none;
+	letter-spacing: 0;
+	/* Matches theme.json's mermaid.fontSize: mermaid measures and sizes
+	 * every node box against that value before it ever reaches this CSS, so
+	 * this has to be the same number or a label overflows (too big) or
+	 * rattles around (too small) inside the box mermaid drew for it. 60px
+	 * was only ever set to clear the old, higher body-text floor; diagram
+	 * text is excluded from the minimum-size check (section 3.7), so it can
+	 * be sized for a diagram instead. */
+	font-size: 36px;
+	line-height: 1.3;
+	font-weight: 400;
+	animation: poster-slam var(--dur) var(--ease) 400ms both;
+}
+/* Mermaid measures its labels outside the slide, so inside the diagram the
+ * label text keeps exactly the metrics mermaid measured. Centered, not
+ * mermaid's own left-aligned default: a poster slab reads as a single
+ * centered word or short phrase, not a paragraph. */
+[data-theme='poster'] .mermaid-diagram p,
+[data-theme='poster'] .mermaid-diagram span,
+[data-theme='poster'] .mermaid-diagram div {
+	font-size: inherit;
+	line-height: inherit;
+	font-weight: inherit;
+	letter-spacing: 0;
+	text-transform: none;
+	text-wrap: initial;
+	text-align: center;
+	animation: none;
+}
+[data-theme='poster'] .mermaid-diagram svg {
+	width: 100% !important;
+	height: 100% !important;
+	max-width: none !important;
+}
+/*
+ * Flowchart colours are also pinned here, so a diagram prints in black, yellow
+ * and red whichever mermaid configuration happened to render it. The display
+ * face is narrower than any face mermaid measures with, so labels always fit.
+ */
+[data-theme='poster'] .mermaid-diagram .nodeLabel,
+[data-theme='poster'] .mermaid-diagram .edgeLabel,
+[data-theme='poster'] .mermaid-diagram .cluster-label {
+	font-family: var(--font-display) !important;
+	letter-spacing: 0.03em;
+	text-align: center !important;
+}
+[data-theme='poster'] .mermaid-diagram .node rect,
+[data-theme='poster'] .mermaid-diagram .node circle,
+[data-theme='poster'] .mermaid-diagram .node ellipse,
+[data-theme='poster'] .mermaid-diagram .node path,
+[data-theme='poster'] .mermaid-diagram .node polygon {
+	fill: var(--fg) !important;
+	stroke: var(--fg) !important;
+	stroke-width: 5px !important;
+}
+[data-theme='poster'] .mermaid-diagram .node .nodeLabel,
+[data-theme='poster'] .mermaid-diagram .node .nodeLabel p {
+	color: var(--bg) !important;
+}
+[data-theme='poster'] .mermaid-diagram .node.quiet rect,
+[data-theme='poster'] .mermaid-diagram .node.quiet circle,
+[data-theme='poster'] .mermaid-diagram .node.quiet ellipse,
+[data-theme='poster'] .mermaid-diagram .node.quiet path,
+[data-theme='poster'] .mermaid-diagram .node.quiet polygon {
+	fill: var(--bg) !important;
+}
+[data-theme='poster'] .mermaid-diagram .node.quiet .nodeLabel,
+[data-theme='poster'] .mermaid-diagram .node.quiet .nodeLabel p {
+	color: var(--fg) !important;
+}
+[data-theme='poster'] .mermaid-diagram .edgePath path,
+[data-theme='poster'] .mermaid-diagram .flowchart-link {
+	stroke: var(--accent) !important;
+	stroke-width: 7px !important;
+}
+[data-theme='poster'] .mermaid-diagram .marker,
+[data-theme='poster'] .mermaid-diagram .arrowMarkerPath {
+	fill: var(--accent) !important;
+	stroke: var(--accent) !important;
+}
+[data-theme='poster'] .mermaid-diagram .edgeLabel,
+[data-theme='poster'] .mermaid-diagram .edgeLabel p,
+[data-theme='poster'] .mermaid-diagram .labelBkg {
+	color: var(--fg) !important;
+	background-color: var(--bg) !important;
+}
+[data-theme='poster'] .mermaid-diagram .cluster rect {
+	fill: var(--surface) !important;
+	stroke: var(--fg) !important;
+	stroke-width: 5px !important;
+}
+[data-theme='poster'] .mermaid-diagram .cluster-label,
+[data-theme='poster'] .mermaid-diagram .cluster-label p {
+	color: var(--fg) !important;
+}
+[data-theme='poster'] .mermaid-error {
+	padding: 24px 32px;
+	border: 10px solid var(--fg);
+	font-family: var(--font-mono);
+	font-size: 36px;
+	line-height: 48px;
+	text-transform: none;
+	letter-spacing: 0;
+}
+[data-theme='poster'] .mermaid-diagram + p {
+	margin-top: 20px;
+	font-size: 60px;
+	line-height: 72px;
+	animation-delay: 800ms;
+}
+
+/* ============================================================================
+ * Scroll slide
+ * ============================================================================ */
+
+[data-theme='poster'] .scroll-content {
+	flex: none;
+	display: block;
+}
+[data-theme='poster'] .scroll-content [class^='layout-'] {
+	flex: none;
+}
+[data-theme='poster'] .scroll-content .slot pre,
+[data-theme='poster'] .scroll-content .slot pre code {
+	font-size: 51px;
+	line-height: 72px;
+}
+[data-theme='poster'] .scroll-content pre.shiki .line {
+	padding-left: 96px;
+}
+
+/* ============================================================================
+ * Live code block: the stage. A black slab, yellow type, a yellow button.
+ * ============================================================================ */
+
+[data-theme='poster'] .live-code-block {
+	--ink: var(--bg);
+	--paper: var(--fg);
+	--shiki-foreground: var(--bg);
+	--shiki-token-comment: var(--accent-2);
+	--shiki-token-string: var(--accent-2);
+	--shiki-token-string-expression: var(--accent-2);
+	--shiki-token-keyword: var(--bg);
+	--shiki-token-function: var(--bg);
+	--shiki-token-constant: var(--accent-2);
+	--shiki-token-parameter: var(--bg);
+	--shiki-token-punctuation: var(--bg);
+	margin: 0 -96px;
+	border-radius: 0;
+	overflow: visible;
+	background: var(--fg);
+	border-bottom: 28px solid var(--accent);
+	animation: poster-wipe-r var(--dur) var(--ease) 350ms both;
+}
+[data-theme='poster'] .live-code-block .code-container pre {
+	margin: 0;
+	padding: 40px 0;
+	border: 0;
+	border-radius: 0;
+	background: transparent !important;
+	color: var(--bg);
+}
+[data-theme='poster'] .live-code-block pre.shiki .line {
+	padding-right: 400px;
+}
+[data-theme='poster'] .live-code-block .code-actions {
+	top: 40px;
+	right: 96px;
+}
+[data-theme='poster'] .live-code-block .run-button {
+	gap: 16px;
+	padding: 0 36px;
+	border-radius: 0;
+	background: var(--bg);
+	color: var(--fg);
+	font-family: var(--font-display);
+	font-weight: 400;
+	font-size: 52px;
+	line-height: 88px;
+	letter-spacing: 0.02em;
+	text-transform: uppercase;
+	box-shadow: 10px 10px 0 var(--accent);
+	transition: none;
+}
+[data-theme='poster'] .live-code-block .run-button:hover:not(:disabled) {
+	filter: none;
+	transform: translate(4px, 4px);
+	box-shadow: 6px 6px 0 var(--accent);
+}
+[data-theme='poster'] .live-code-block .loading-spinner {
+	width: 36px;
+	height: 36px;
+	border: 6px solid var(--surface);
+	border-top-color: var(--fg);
+}
+[data-theme='poster'] .live-code-block .result-container {
+	border-radius: 0;
+	border-top: 10px solid var(--bg);
+	background: var(--fg);
+	text-transform: none;
+	letter-spacing: 0;
+}
+[data-theme='poster'] .live-code-block .result-header {
+	padding: 0 96px 0 130px;
+	border-bottom: 0;
+	background: var(--bg);
+}
+[data-theme='poster'] .live-code-block .result-status,
+[data-theme='poster'] .live-code-block .result-status.success,
+[data-theme='poster'] .live-code-block .result-status.error {
+	font-family: var(--font-body);
+	font-size: 34px;
+	line-height: 56px;
+	font-weight: 700;
+	letter-spacing: 0.12em;
+	color: var(--fg);
+}
+[data-theme='poster'] .live-code-block .result-container.error .result-header {
+	box-shadow: inset 96px 0 0 var(--accent);
+}
+[data-theme='poster'] .live-code-block .result-content {
+	padding: 24px 96px 28px 130px;
+}
+[data-theme='poster'] .live-code-block .result-content .result-output,
+[data-theme='poster'] .live-code-block .result-content .result-error,
+[data-theme='poster'] .live-code-block .result-content .result-empty {
+	margin: 0;
+	padding: 0;
+	border: 0;
+	font-family: var(--font-mono);
+	font-size: 51px;
+	line-height: 68px;
+	font-weight: 700;
+	font-style: normal;
+	color: var(--accent-2);
+	animation: none;
+}
+[data-theme='poster'] .live-code-block .result-content .result-table {
+	font-family: var(--font-mono);
+	font-size: 48px;
+	line-height: 60px;
+	color: var(--accent-2);
+}
+[data-theme='poster'] .live-code-block .result-content .result-table th {
+	background: var(--bg);
+	color: var(--fg);
+	font-size: 48px;
+	letter-spacing: 0;
+}
+[data-theme='poster'] .live-code-block .result-content .result-table td {
+	background: none;
+	color: var(--accent-2);
+	border-bottom: 4px solid var(--bg);
+	font-family: var(--font-mono);
+	font-size: 48px;
+	line-height: 60px;
+	padding: 6px 24px;
+}
+[data-theme='poster'] .live-code-block .static-placeholder {
+	top: 40px;
+	right: 96px;
+	padding: 0 28px;
+	border-radius: 0;
+	background: var(--bg);
+	color: var(--fg);
+	font-size: 32px;
+	line-height: 64px;
+	font-weight: 700;
+	letter-spacing: 0.1em;
+	backdrop-filter: none;
+	-webkit-backdrop-filter: none;
+}
+[data-theme='poster'] .live-code-block.static-mode .code-container pre {
+	opacity: 1;
+}
+
+/* ============================================================================
+ * Asciinema: the player is pasted up like a print
+ * ============================================================================ */
+
+[data-theme='poster'] .layout-default .slot:has(.asciinema-player-wrapper) {
+	flex: 1;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+}
+[data-theme='poster'] .asciinema-player-wrapper {
+	flex: 1;
+	min-height: 0;
+	margin: 0 28px 28px 0;
+	overflow: hidden;
+	border: 12px solid var(--fg);
+	border-radius: 0;
+	background: var(--fg);
+	box-shadow: 28px 28px 0 var(--accent);
+	text-transform: none;
+	letter-spacing: 0;
+}
+
+/* ============================================================================
+ * Print and reduced motion: nothing moves, everything is in its final state.
+ * ============================================================================ */
+
+@media print, (prefers-reduced-motion: reduce) {
+	[data-theme='poster'] .slide[data-layout],
+	[data-theme='poster'] .slide[data-layout]::before,
+	[data-theme='poster'] .slide[data-layout]::after,
+	[data-theme='poster'] .slide[data-layout] *,
+	[data-theme='poster'] .slide[data-layout] *::before,
+	[data-theme='poster'] .slide[data-layout] *::after {
+		animation: none !important;
+		transition: none !important;
+	}
+}
+
+/* The print hook may sit on the theme root or on any ancestor of it. */
+[data-theme='poster']:is([data-print='true'], [data-print='true'] *) .slide[data-layout],
+[data-theme='poster']:is([data-print='true'], [data-print='true'] *) .slide[data-layout]::before,
+[data-theme='poster']:is([data-print='true'], [data-print='true'] *) .slide[data-layout]::after,
+[data-theme='poster']:is([data-print='true'], [data-print='true'] *) .slide[data-layout] *,
+[data-theme='poster']:is([data-print='true'], [data-print='true'] *) .slide[data-layout] *::before,
+[data-theme='poster']:is([data-print='true'], [data-print='true'] *) .slide[data-layout] *::after {
+	animation: none !important;
+	transition: none !important;
+}

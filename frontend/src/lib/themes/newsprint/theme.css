@@ -1,0 +1,1506 @@
+/**
+ * Newsprint theme.
+ * A war story or postmortem told as front-page news: a blackletter
+ * nameplate in the running head, Besley headlines over hairline and double
+ * rules, briefs separated by column rules, halftone plates, and one spot
+ * color (press red) that points at the thing being talked about.
+ *
+ * Every rule that touches slide content is scoped to
+ * `.slide[data-layout]`, the rendered slide, never the bare `.slide`
+ * scaling frame around it. That prefix also keeps every rule here above
+ * the specificity of the shared base styles and of the reset below.
+ */
+
+@import '@fontsource/besley/latin-600.css';
+@import '@fontsource/besley/latin-900.css';
+@import '@fontsource/besley/latin-900-italic.css';
+@import '@fontsource/newsreader/latin-500.css';
+@import '@fontsource/newsreader/latin-500-italic.css';
+@import '@fontsource/newsreader/latin-700.css';
+@import '@fontsource/newsreader/latin-700-italic.css';
+@import '@fontsource/ibm-plex-mono/latin-500.css';
+@import '@fontsource/ibm-plex-mono/latin-700.css';
+@import '@fontsource/unifrakturcook/latin-700.css';
+
+[data-theme='newsprint'] {
+	--bg: #f2ede1;
+	--fg: #16130f;
+	--muted: #4a443a;
+	--accent: #980b13;
+	--accent-text: #980b13;
+	--surface: #e6e0d2;
+	--font-display: 'Besley', Georgia, serif;
+	--font-body: 'Newsreader', Georgia, serif;
+	--font-mono: 'IBM Plex Mono', 'Courier New', monospace;
+	--font-mast: 'UnifrakturCook', 'Besley', serif;
+	--ease: cubic-bezier(0.2, 0.9, 0.25, 1);
+	--dur: 360ms;
+	--space-unit: 24px;
+	--radius: 0px;
+	--stroke-width: 2px;
+	--step: 120ms;
+
+	/* Bridge to the token names the shared styles read. */
+	--color-bg: var(--bg);
+	--color-text: var(--fg);
+	--color-muted: var(--muted);
+	--color-accent: var(--accent);
+	--color-code-bg: transparent;
+	--color-code-text: var(--fg);
+	--color-code-inline-bg: var(--surface);
+	--color-border: var(--fg);
+	--color-surface: var(--surface);
+	--color-surface-elevated: var(--surface);
+	--color-link: var(--fg);
+	--font-sans: var(--font-body);
+
+	/* Shiki: ink, grey for comments, press red for literals. */
+	--shiki-foreground: var(--fg);
+	--shiki-background: transparent;
+	--shiki-token-comment: var(--muted);
+	--shiki-token-string: var(--accent-text);
+	--shiki-token-string-expression: var(--accent-text);
+	--shiki-token-keyword: var(--fg);
+	--shiki-token-function: var(--fg);
+	--shiki-token-constant: var(--accent-text);
+	--shiki-token-parameter: var(--fg);
+	--shiki-token-punctuation: var(--fg);
+	--shiki-token-link: var(--accent-text);
+}
+
+/* Motion: type is stamped, rules are drawn, body copy dries like wet ink. */
+@keyframes newsprint-stamp {
+	0% {
+		opacity: 0;
+		transform: scale(1.04);
+	}
+	55% {
+		opacity: 1;
+		transform: scale(0.995);
+	}
+	100% {
+		opacity: 1;
+		transform: scale(1);
+	}
+}
+@keyframes newsprint-fade {
+	from {
+		opacity: 0;
+	}
+	to {
+		opacity: 1;
+	}
+}
+@keyframes newsprint-wipe {
+	from {
+		clip-path: inset(0 100% 0 0);
+	}
+	to {
+		clip-path: inset(0 0 0 0);
+	}
+}
+@keyframes newsprint-drop {
+	from {
+		clip-path: inset(0 0 100% 0);
+	}
+	to {
+		clip-path: inset(0 0 0 0);
+	}
+}
+
+/* ============================================================================
+ * The page: paper, running head, folio, foot rule
+ * ============================================================================ */
+
+[data-theme='newsprint'] .slide[data-layout] {
+	display: flex;
+	flex-direction: column;
+	padding: 164px 96px 84px;
+	background-color: var(--bg);
+	color: var(--fg);
+	font: 500 48px/1.32 var(--font-body);
+	font-variant-numeric: lining-nums;
+	--tag-height: 0px;
+}
+[data-theme='newsprint'] .slide[data-layout]:has(> .slide-tag) {
+	--tag-height: 70px;
+}
+/* paper tooth */
+[data-theme='newsprint'] .slide[data-layout]::before {
+	content: '';
+	position: absolute;
+	inset: 0;
+	z-index: 9;
+	background: var(--fg);
+	opacity: 0.07;
+	pointer-events: none;
+	-webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='260' height='260'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1.9 0 0 0 -.55'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+	mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='260' height='260'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1.9 0 0 0 -.55'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+/* folio, right end of the running head */
+[data-theme='newsprint'] .slide[data-layout]::after {
+	content: 'Page ' attr(data-index) ' of ' attr(data-total);
+	position: absolute;
+	right: 96px;
+	top: 66px;
+	z-index: 3;
+	font: 700 28px/1 var(--font-body);
+	letter-spacing: 0.14em;
+	text-transform: uppercase;
+	animation: newsprint-fade 500ms linear both;
+}
+
+[data-theme='newsprint'] .slide[data-layout] :where(h1, h2, h3, h4, h5, h6, p, ul, ol, li, blockquote, pre, table, th, td, img) {
+	margin: 0;
+	padding: 0;
+	border-radius: 0;
+}
+
+[data-theme='newsprint'] .slide[data-layout] .slide-content {
+	position: relative;
+	flex: 1;
+	min-height: 0;
+	width: auto;
+	height: auto;
+	display: flex;
+	flex-direction: column;
+}
+/* Running head: the nameplate over one rule. Its paper-colored box reaches
+ * the top edge of the slide, so a scrolling slide passes under it. */
+[data-theme='newsprint'] .slide[data-layout] .slide-content::before {
+	content: 'Late Edition';
+	position: absolute;
+	left: -96px;
+	right: -96px;
+	top: calc(-164px - var(--tag-height));
+	z-index: 2;
+	height: 164px;
+	padding: 44px 96px 0;
+	background:
+		linear-gradient(var(--fg), var(--fg)) 96px 113px / calc(100% - 192px) 3px no-repeat,
+		var(--bg);
+	font: 700 46px/64px var(--font-mast);
+	animation: newsprint-wipe 620ms var(--ease) both;
+}
+/* foot rule */
+[data-theme='newsprint'] .slide[data-layout] .slide-content::after {
+	content: '';
+	position: absolute;
+	left: 0;
+	right: 0;
+	bottom: -42px;
+	height: 3px;
+	background: var(--fg);
+	animation: newsprint-wipe 620ms var(--ease) 120ms both;
+}
+[data-theme='newsprint'] .slide[data-layout] [class^='layout-'],
+[data-theme='newsprint'] .slide[data-layout='component'] > .slide-content > .deck-component-root,
+[data-theme='newsprint'] .slide[data-layout='component'] > .slide-content > .scroll-content > .deck-component-root {
+	flex: 1;
+	min-height: 0;
+	width: auto;
+	height: auto;
+	display: flex;
+	flex-direction: column;
+	justify-content: flex-start;
+	align-items: stretch;
+	align-content: normal;
+	gap: 0;
+	padding: 0;
+	/* Cancel layouts.css's shared `.deck-component-root` border: this
+	   theme's real inset already comes from `.slide-content` above. */
+	border: 0;
+	text-align: left;
+}
+[data-theme='newsprint'] .slide[data-layout] .slot {
+	--o: 0;
+	max-width: none;
+	min-width: 0;
+}
+[data-theme='newsprint'] .slide[data-layout] .slot-caption,
+[data-theme='newsprint'] .slide[data-layout] .slot-attribution,
+[data-theme='newsprint'] .slide[data-layout] .slot-left,
+[data-theme='newsprint'] .slide[data-layout] .slot-sidebar {
+	--o: 2;
+}
+[data-theme='newsprint'] .slide[data-layout] .slot-center {
+	--o: 3;
+}
+[data-theme='newsprint'] .slide[data-layout] .slot-right,
+[data-theme='newsprint'] .slide[data-layout] .slot-media {
+	--o: 4;
+}
+[data-theme='newsprint'] .slide[data-layout] .slot > * {
+	--i: 1;
+	animation: newsprint-fade 500ms linear both;
+	animation-delay: calc((var(--i) + var(--o)) * var(--step));
+}
+[data-theme='newsprint'] .slide[data-layout] .slot > :nth-child(2) {
+	--i: 2;
+}
+[data-theme='newsprint'] .slide[data-layout] .slot > :nth-child(3) {
+	--i: 3;
+}
+[data-theme='newsprint'] .slide[data-layout] .slot > :nth-child(4) {
+	--i: 4;
+}
+[data-theme='newsprint'] .slide[data-layout] .slot > :nth-child(n + 5) {
+	--i: 5;
+}
+[data-theme='newsprint'] .slide[data-layout] .slot > h1,
+[data-theme='newsprint'] .slide[data-layout] .slot > h2,
+[data-theme='newsprint'] .slide[data-layout] .slot > blockquote {
+	animation-name: newsprint-stamp;
+	animation-duration: var(--dur);
+	animation-timing-function: var(--ease);
+	transform-origin: left center;
+}
+
+/* kicker: the section marker above the headline */
+[data-theme='newsprint'] .slide[data-layout] .slide-tag {
+	position: relative;
+	top: auto;
+	left: auto;
+	z-index: 3;
+	flex: none;
+	align-self: flex-start;
+	height: var(--tag-height);
+	font: 600 34px/52px var(--font-display);
+	letter-spacing: 0.16em;
+	text-transform: uppercase;
+	color: var(--accent-text);
+	white-space: nowrap;
+	animation: newsprint-stamp var(--dur) var(--ease) both;
+	transform-origin: left center;
+}
+/* badge: an "ear", the small ruled box that sits beside a nameplate */
+[data-theme='newsprint'] .slide[data-layout] .slide-badge {
+	top: 50px;
+	left: 50%;
+	right: auto;
+	z-index: 3;
+	transform: translateX(-50%);
+	padding: 11px 20px 9px;
+	border: 3px solid var(--fg);
+	background: var(--bg);
+	font: 600 28px/1 var(--font-display);
+	letter-spacing: 0.16em;
+	text-transform: uppercase;
+	color: var(--fg);
+	white-space: nowrap;
+	animation: newsprint-fade 500ms linear 200ms both;
+}
+
+/* ============================================================================
+ * Type
+ * ============================================================================ */
+
+[data-theme='newsprint'] .slide[data-layout] :is(h1, h2, h3, h4, h5, h6) {
+	font-family: var(--font-display);
+	font-weight: 900;
+	letter-spacing: -0.022em;
+	text-wrap: balance;
+	overflow-wrap: break-word;
+	color: var(--fg);
+}
+[data-theme='newsprint'] .slide[data-layout] .slot h1 {
+	font-size: 112px;
+	line-height: 1.04;
+	letter-spacing: -0.028em;
+}
+[data-theme='newsprint'] .slide[data-layout] .slot h2 {
+	font-size: 92px;
+	line-height: 1.06;
+	margin: 0 0 30px;
+	padding-bottom: 22px;
+	border-bottom: 3px solid var(--fg);
+}
+[data-theme='newsprint'] .slide[data-layout] .slot h3 {
+	font-size: 56px;
+	line-height: 1.12;
+	margin-top: 30px;
+}
+[data-theme='newsprint'] .slide[data-layout] .slot h4 {
+	font-size: 46px;
+	line-height: 1.14;
+	font-style: italic;
+	margin-top: 24px;
+}
+[data-theme='newsprint'] .slide[data-layout] .slot h5 {
+	font: 600 38px/1.15 var(--font-display);
+	letter-spacing: 0.16em;
+	text-transform: uppercase;
+	margin-top: 24px;
+}
+[data-theme='newsprint'] .slide[data-layout] .slot h6 {
+	font: 700 30px/1.15 var(--font-body);
+	letter-spacing: 0.14em;
+	text-transform: uppercase;
+	color: var(--muted);
+	margin-top: 20px;
+}
+[data-theme='newsprint'] .slide[data-layout] .slot :is(h3, h4, h5, h6):first-child {
+	margin-top: 0;
+}
+[data-theme='newsprint'] .slide[data-layout] .slot p {
+	font-size: 48px;
+	line-height: 1.34;
+	text-wrap: pretty;
+}
+[data-theme='newsprint'] .slide[data-layout] .slot > * + p,
+[data-theme='newsprint'] .slide[data-layout] .slot > * + [class*='fragment-'] > p:first-child,
+[data-theme='newsprint'] .slide[data-layout] .slot [class*='fragment-'] > * + p {
+	margin-top: 30px;
+}
+/* consecutive paragraphs read as briefs, one hairline between each */
+[data-theme='newsprint'] .slide[data-layout] .layout-default .slot > p + p:not(:has(> img)),
+[data-theme='newsprint'] .slide[data-layout] .layout-default .slot > [class*='fragment-'] + [class*='fragment-'] > p:first-child {
+	margin-top: 36px;
+	padding-top: 32px;
+	border-top: 2px solid var(--fg);
+}
+[data-theme='newsprint'] .slide[data-layout] strong {
+	font-weight: 700;
+	color: var(--accent-text);
+}
+[data-theme='newsprint'] .slide[data-layout] em {
+	font-style: italic;
+	color: var(--accent-text);
+}
+[data-theme='newsprint'] .slide[data-layout] a {
+	color: var(--fg);
+	text-decoration: underline;
+	text-decoration-color: var(--accent);
+	text-decoration-thickness: 0.07em;
+	text-underline-offset: 0.12em;
+	transition: color var(--dur) var(--ease);
+}
+[data-theme='newsprint'] .slide[data-layout] a:hover {
+	color: var(--accent-text);
+	text-decoration-color: currentColor;
+}
+[data-theme='newsprint'] .slide[data-layout] :not(pre) > code {
+	font: 500 0.84em/1 var(--font-mono);
+	font-style: normal;
+	background: var(--surface);
+	box-shadow: inset 0 -3px 0 var(--fg);
+	padding: 0.06em 0.18em;
+	border-radius: 0;
+	color: var(--fg);
+}
+
+/* ============================================================================
+ * Title: a front page
+ * ============================================================================ */
+
+[data-theme='newsprint'] .slide[data-layout][data-layout='title'] {
+	padding-top: 40px;
+}
+[data-theme='newsprint'] .slide[data-layout][data-layout='title'] .slide-content::before {
+	position: static;
+	display: block;
+	flex: none;
+	height: auto;
+	margin: 0;
+	padding: 0 0 8px;
+	background: none;
+	text-align: center;
+	font-size: 96px;
+	line-height: 1.15;
+	border-bottom: 12px double var(--fg);
+	animation: newsprint-stamp var(--dur) var(--ease) both;
+}
+[data-theme='newsprint'] .slide[data-layout][data-layout='title']::after {
+	content: 'No. ' attr(data-index) ' of ' attr(data-total);
+	top: 186px;
+}
+[data-theme='newsprint'] .slide[data-layout] .layout-title::before {
+	content: 'All the slides that are fit to print';
+	display: block;
+	flex: none;
+	font: italic 500 30px/54px var(--font-body);
+	letter-spacing: 0.04em;
+	border-bottom: 3px solid var(--fg);
+	animation: newsprint-wipe 620ms var(--ease) 200ms both;
+}
+[data-theme='newsprint'] .slide[data-layout] .layout-title .slot {
+	flex: 1;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+	justify-content: flex-start;
+	align-items: flex-start;
+	padding-top: 36px;
+}
+[data-theme='newsprint'] .slide[data-layout] .layout-title .slot::before {
+	content: 'Top story';
+	flex: none;
+	background: var(--accent);
+	color: var(--bg);
+	font: 600 34px/1 var(--font-display);
+	letter-spacing: 0.16em;
+	text-transform: uppercase;
+	padding: 12px 18px 10px;
+	margin-bottom: 24px;
+	animation: newsprint-stamp var(--dur) var(--ease) 360ms both;
+}
+/* On the front page the kicker takes the place of the "Top story" slug. */
+[data-theme='newsprint'] .slide[data-layout][data-layout='title'] .slide-tag {
+	position: absolute;
+	left: 96px;
+	top: 296px;
+	height: auto;
+	background: var(--accent);
+	color: var(--bg);
+	line-height: 1;
+	padding: 12px 18px 10px;
+	animation-delay: 360ms;
+}
+[data-theme='newsprint'] .slide[data-layout][data-layout='title']:has(> .slide-tag) .layout-title .slot::before {
+	visibility: hidden;
+}
+[data-theme='newsprint'] .slide[data-layout][data-layout='title'] .slide-badge {
+	top: 78px;
+	left: auto;
+	right: 96px;
+	transform: none;
+}
+[data-theme='newsprint'] .slide[data-layout] .layout-title h1 {
+	font-size: 96px;
+	line-height: 1;
+	letter-spacing: -0.03em;
+	max-width: 100%;
+	--i: 4;
+}
+/* a short headline is sized for the impact the front page intended;
+ * a near-worst-case one (the long/medium cases above) is sized to still fit. */
+[data-theme='newsprint'] .slide[data-layout] .layout-title h1[data-length='medium'] {
+	font-size: 124px;
+}
+[data-theme='newsprint'] .slide[data-layout] .layout-title h1[data-length='short'] {
+	font-size: 156px;
+}
+[data-theme='newsprint'] .slide[data-layout] .layout-title h2 {
+	font-size: 62px;
+	line-height: 1.1;
+	font-style: italic;
+	margin: 18px 0 0;
+	padding: 0;
+	border: 0;
+	--i: 6;
+}
+[data-theme='newsprint'] .slide[data-layout] .layout-title p {
+	align-self: stretch;
+	max-width: none;
+	font-size: 44px;
+	font-weight: 700;
+	color: var(--fg);
+	margin: auto 0 0;
+	padding-top: 24px;
+	border-top: 12px double var(--fg);
+	--i: 8;
+}
+[data-theme='newsprint'] .slide[data-layout][data-layout='title'] .slide-content::after {
+	content: none;
+}
+
+/* ============================================================================
+ * Section: a section front
+ * ============================================================================ */
+
+[data-theme='newsprint'] .slide[data-layout][data-layout='section']:has(> .slide-tag) {
+	--tag-height: 76px;
+}
+[data-theme='newsprint'] .slide[data-layout][data-layout='section'] .slide-tag {
+	font-size: 42px;
+	line-height: 52px;
+}
+[data-theme='newsprint'] .slide[data-layout] .layout-section {
+	border-top: 14px double var(--fg);
+	justify-content: flex-end;
+}
+[data-theme='newsprint'] .slide[data-layout] .layout-section .slot {
+	padding-bottom: 12px;
+}
+/* a section front is a one- or two-word slug most of the time, so the
+ * headline is sized for a much longer one (the base rule) and scales up
+ * from there once the real length is known. */
+[data-theme='newsprint'] .slide[data-layout] .layout-section :is(h1, h2) {
+	font-size: 96px;
+	line-height: 1.04;
+	letter-spacing: -0.03em;
+	margin: 0;
+	padding: 0 0 18px;
+	border: 0;
+	hyphens: auto;
+}
+[data-theme='newsprint'] .slide[data-layout] .layout-section :is(h1, h2)[data-length='medium'] {
+	font-size: 144px;
+}
+[data-theme='newsprint'] .slide[data-layout] .layout-section :is(h1, h2)[data-length='short'] {
+	font-size: 200px;
+	letter-spacing: -0.035em;
+}
+[data-theme='newsprint'] .slide[data-layout] .layout-section p {
+	font: italic 500 52px/1.2 var(--font-body);
+	margin-top: 24px;
+	padding-top: 26px;
+	border-top: 3px solid var(--fg);
+}
+
+/* ============================================================================
+ * Statement: a banner headline (a lone h1 on the default layout)
+ * ============================================================================ */
+
+[data-theme='newsprint'] .slide[data-layout] .layout-default .slot:has(> h1:only-child) {
+	flex: 1;
+	display: flex;
+	flex-direction: column;
+	justify-content: center;
+	padding-bottom: 30px;
+}
+[data-theme='newsprint'] .slide[data-layout] .layout-default .slot > h1:only-child {
+	font-size: 92px;
+	line-height: 1.1;
+	letter-spacing: -0.03em;
+}
+[data-theme='newsprint'] .slide[data-layout] .layout-default .slot > h1:only-child[data-length='medium'] {
+	font-size: 172px;
+}
+[data-theme='newsprint'] .slide[data-layout] .layout-default .slot > h1:only-child[data-length='short'] {
+	font-size: 204px;
+	line-height: 1.01;
+}
+[data-theme='newsprint'] .slide[data-layout] .layout-default .slot:has(> h1:only-child)::after {
+	content: 'Story continues overleaf';
+	margin-top: 52px;
+	padding-top: 24px;
+	border-top: 14px double var(--fg);
+	text-align: right;
+	font: italic 500 36px/1 var(--font-body);
+	color: var(--muted);
+	animation: newsprint-wipe 620ms var(--ease) 700ms both;
+}
+
+/* ============================================================================
+ * Lists: a column of briefs
+ * ============================================================================ */
+
+[data-theme='newsprint'] .slide[data-layout] .slot :is(ul, ol):not(li *) {
+	--li-size: 50px;
+	--li-pad: 28px;
+	--li-indent: 76px;
+	--li-mark: 28px;
+	list-style: none;
+	font-size: var(--li-size);
+}
+[data-theme='newsprint'] .slide[data-layout] .slot > * + :is(ul, ol),
+[data-theme='newsprint'] .slide[data-layout] .slot > * + [class*='fragment-'] > :is(ul, ol):first-child {
+	margin-top: 20px;
+	border-top: 2px solid var(--fg);
+}
+[data-theme='newsprint'] .slide[data-layout] .slot > :is(h2, h3) + :is(ul, ol),
+[data-theme='newsprint'] .slide[data-layout] .slot > :is(h2, h3) + [class*='fragment-'] > :is(ul, ol):first-child {
+	border-top: 0;
+	margin-top: 0;
+}
+[data-theme='newsprint'] .slide[data-layout] .slot > h2 + :is(ul, ol),
+[data-theme='newsprint'] .slide[data-layout] .slot > h2 + [class*='fragment-'] > :is(ul, ol):first-child {
+	margin-top: -30px;
+}
+/* five or more briefs tighten up; seven or more run as a digest */
+[data-theme='newsprint'] .slide[data-layout] .slot :is(ul, ol):not(li *):has(> li:nth-child(5)) {
+	--li-size: 46px;
+	--li-pad: 18px;
+	--li-mark: 24px;
+}
+[data-theme='newsprint'] .slide[data-layout] .slot :is(ul, ol):not(li *):has(> li:nth-child(7)) {
+	--li-pad: 12px;
+}
+[data-theme='newsprint'] .slide[data-layout] .slot :is(ul, ol):not(li *) > li {
+	position: relative;
+	margin: 0;
+	font-size: var(--li-size);
+	line-height: 1.22;
+	padding: var(--li-pad) 0 calc(var(--li-pad) - 2px) var(--li-indent);
+	border-bottom: 2px solid var(--fg);
+	text-wrap: pretty;
+}
+[data-theme='newsprint'] .slide[data-layout] .slot ul:not(li *) > li::before {
+	content: '';
+	position: absolute;
+	left: 6px;
+	top: calc(var(--li-pad) + (var(--li-size) * 1.22 - var(--li-mark)) / 2);
+	width: var(--li-mark);
+	height: var(--li-mark);
+	background: var(--accent);
+}
+[data-theme='newsprint'] .slide[data-layout] .slot ol:not(li *) {
+	counter-reset: newsprint-brief;
+}
+[data-theme='newsprint'] .slide[data-layout] .slot ol:not(li *) > li {
+	counter-increment: newsprint-brief;
+}
+[data-theme='newsprint'] .slide[data-layout] .slot ol:not(li *) > li::before {
+	content: counter(newsprint-brief);
+	position: absolute;
+	left: 0;
+	top: var(--li-pad);
+	font: 900 1em/1.22 var(--font-display);
+	color: var(--accent-text);
+}
+[data-theme='newsprint'] .slide[data-layout] .slot :is(ul, ol):not(li *) > li:not(.fragment-hidden):not(.fragment-visible) {
+	animation: newsprint-stamp var(--dur) var(--ease) backwards;
+	transform-origin: left center;
+	animation-delay: calc((3 + var(--o)) * var(--step));
+}
+[data-theme='newsprint'] .slide[data-layout] .slot :is(ul, ol):not(li *) > li:not(.fragment-hidden):not(.fragment-visible):nth-child(2) {
+	animation-delay: calc((4 + var(--o)) * var(--step));
+}
+[data-theme='newsprint'] .slide[data-layout] .slot :is(ul, ol):not(li *) > li:not(.fragment-hidden):not(.fragment-visible):nth-child(3) {
+	animation-delay: calc((5 + var(--o)) * var(--step));
+}
+[data-theme='newsprint'] .slide[data-layout] .slot :is(ul, ol):not(li *) > li:not(.fragment-hidden):not(.fragment-visible):nth-child(n + 4) {
+	animation-delay: calc((6 + var(--o)) * var(--step));
+}
+/* nested briefs: italic, a short ink dash, no rules */
+[data-theme='newsprint'] .slide[data-layout] li > :is(ul, ol) {
+	list-style: none;
+	margin-top: 14px;
+	font-size: 44px;
+}
+[data-theme='newsprint'] .slide[data-layout] li > :is(ul, ol) > li {
+	position: relative;
+	margin: 0;
+	font-size: 44px;
+	line-height: 1.24;
+	font-style: italic;
+	padding: 8px 0 8px 52px;
+}
+[data-theme='newsprint'] .slide[data-layout] li > :is(ul, ol) > li::before {
+	content: '';
+	position: absolute;
+	left: 4px;
+	top: 32px;
+	width: 26px;
+	height: 5px;
+	background: var(--fg);
+}
+
+/* fragments are stamped onto the page as they are revealed */
+[data-theme='newsprint'] .slide[data-layout] .fragment-hidden {
+	opacity: 0;
+	transform: scale(1.04);
+	transform-origin: left center;
+}
+[data-theme='newsprint'] .slide[data-layout] .fragment-visible {
+	animation: newsprint-stamp var(--dur) var(--ease) both;
+	transform-origin: left center;
+}
+
+/* ============================================================================
+ * Code: a listing set in a column
+ * ============================================================================ */
+
+[data-theme='newsprint'] .slide[data-layout] pre {
+	position: relative;
+	margin: 0;
+	padding: 0;
+	border-left: 3px solid var(--fg);
+	border-radius: 0;
+	background: transparent;
+	overflow: hidden;
+	font: 500 40px/1.5 var(--font-mono);
+	font-variant-ligatures: none;
+}
+[data-theme='newsprint'] .slide[data-layout] .slot > * + pre,
+[data-theme='newsprint'] .slide[data-layout] .slot > * + .live-code-block {
+	margin-top: 30px;
+}
+[data-theme='newsprint'] .slide[data-layout] .slot > h2 + pre,
+[data-theme='newsprint'] .slide[data-layout] .slot > h2 + .live-code-block {
+	margin-top: 0;
+}
+[data-theme='newsprint'] .slide[data-layout] pre code {
+	display: flex;
+	flex-direction: column;
+	font: inherit;
+	font-size: 40px;
+	background: none;
+	padding: 0 16px 0 44px;
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+}
+[data-theme='newsprint'] .slide[data-layout] pre .line {
+	position: relative;
+	display: block;
+	min-height: 1.5em;
+}
+[data-theme='newsprint'] .slide[data-layout] pre.has-highlighted .line:not(.highlighted) {
+	opacity: 0.64;
+}
+[data-theme='newsprint'] .slide[data-layout] pre .line.highlighted {
+	margin: 0 -16px 0 -44px;
+	padding: 0 16px 0 44px;
+	font-weight: 700;
+	background: color-mix(in srgb, var(--fg) 9%, transparent);
+	animation: newsprint-stamp var(--dur) var(--ease) 760ms both;
+	transform-origin: left center;
+}
+[data-theme='newsprint'] .slide[data-layout] pre .line.highlighted::before {
+	content: '';
+	position: absolute;
+	left: 0;
+	top: 0;
+	bottom: 0;
+	width: 14px;
+	background: var(--accent);
+}
+[data-theme='newsprint'] .slide[data-layout] pre + p {
+	margin-top: 30px;
+	font-style: italic;
+}
+[data-theme='newsprint'] .slide[data-layout] pre + p::before {
+	content: 'Listing';
+	font: 600 30px/1 var(--font-display);
+	font-style: normal;
+	letter-spacing: 0.16em;
+	text-transform: uppercase;
+	margin-right: 22px;
+	vertical-align: 0.2em;
+}
+
+/* ============================================================================
+ * Big number
+ * ============================================================================ */
+
+[data-theme='newsprint'] .slide[data-layout] .layout-big-stat {
+	justify-content: center;
+	padding-bottom: 20px;
+}
+[data-theme='newsprint'] .slide[data-layout] .layout-big-stat .slot {
+	flex: none;
+}
+[data-theme='newsprint'] .slide[data-layout] .layout-big-stat::before {
+	content: 'By the numbers';
+	font: 600 34px/1 var(--font-display);
+	letter-spacing: 0.16em;
+	text-transform: uppercase;
+	color: var(--accent-text);
+	animation: newsprint-stamp var(--dur) var(--ease) both;
+	transform-origin: left center;
+}
+/* the figure itself is almost always short ("40x", "$2M"), so it is sized
+ * for that case (data-length="short"); a rare longer figure scales down
+ * from the base rule instead of blowing past the frame. */
+[data-theme='newsprint'] .slide[data-layout] .layout-big-stat .slot-default :is(h1, h2, strong) {
+	display: block;
+	font: 900 100px/1.06 var(--font-display);
+	letter-spacing: -0.04em;
+	color: var(--fg);
+	margin: 0 0 0 -8px;
+	padding: 0;
+	border: 0;
+}
+[data-theme='newsprint'] .slide[data-layout] .layout-big-stat .slot-default :is(h1, h2)[data-length='medium'] {
+	font-size: 160px;
+}
+[data-theme='newsprint'] .slide[data-layout] .layout-big-stat .slot-default :is(h1, h2)[data-length='short'] {
+	font-size: 330px;
+}
+[data-theme='newsprint'] .slide[data-layout] .layout-big-stat .slot-caption {
+	position: relative;
+	width: 1400px;
+	max-width: 100%;
+	padding-top: 42px;
+}
+[data-theme='newsprint'] .slide[data-layout] .layout-big-stat .slot-caption::before {
+	content: '';
+	position: absolute;
+	left: 0;
+	right: 0;
+	top: 0;
+	height: 10px;
+	background: var(--accent);
+	animation: newsprint-wipe 620ms var(--ease) 420ms both;
+}
+[data-theme='newsprint'] .slide[data-layout] .layout-big-stat .slot-caption p {
+	font-size: 52px;
+	line-height: 1.24;
+	color: var(--fg);
+	margin: 0;
+	text-wrap: balance;
+}
+[data-theme='newsprint'] .slide[data-layout] .layout-big-stat .slot-figure {
+	margin-top: 30px;
+}
+[data-theme='newsprint'] .slide[data-layout] .layout-big-stat .slot-figure img {
+	max-height: 220px;
+	width: auto;
+}
+
+/* ============================================================================
+ * Pull quote
+ * ============================================================================ */
+
+[data-theme='newsprint'] .slide[data-layout] .layout-quote {
+	justify-content: center;
+	padding-bottom: 10px;
+}
+[data-theme='newsprint'] .slide[data-layout] .layout-quote .slot {
+	flex: none;
+}
+[data-theme='newsprint'] .slide[data-layout] .layout-quote .slot-default {
+	border-top: 10px solid var(--fg);
+	border-bottom: 3px solid var(--fg);
+	padding: 22px 0 44px;
+}
+[data-theme='newsprint'] .slide[data-layout] blockquote {
+	border: 0;
+	font-style: normal;
+	color: var(--fg);
+}
+[data-theme='newsprint'] .slide[data-layout] blockquote::before {
+	content: '\201C';
+	display: block;
+	font: 900 240px/1 var(--font-display);
+	height: 128px;
+	color: var(--accent);
+	margin-left: -10px;
+}
+[data-theme='newsprint'] .slide[data-layout] .slot blockquote p {
+	font: italic 900 80px/1.16 var(--font-display);
+	letter-spacing: -0.022em;
+	text-wrap: balance;
+}
+[data-theme='newsprint'] .slide[data-layout] .slot-attribution p {
+	margin-top: 30px;
+	font: 700 44px/1.2 var(--font-body);
+	color: var(--fg);
+}
+[data-theme='newsprint'] .slide[data-layout] .slot-attribution p::before {
+	content: '';
+	display: inline-block;
+	width: 84px;
+	height: 10px;
+	background: var(--accent);
+	margin-right: 26px;
+	vertical-align: 0.24em;
+}
+/* a quotation inside running copy */
+[data-theme='newsprint'] .slide[data-layout] [class^='layout-']:not(.layout-quote) blockquote {
+	margin-top: 26px;
+	padding-left: 40px;
+	border-left: 10px solid var(--accent);
+}
+[data-theme='newsprint'] .slide[data-layout] [class^='layout-']:not(.layout-quote) blockquote::before {
+	content: none;
+}
+[data-theme='newsprint'] .slide[data-layout] [class^='layout-']:not(.layout-quote) blockquote p {
+	font-size: 52px;
+}
+
+/* ============================================================================
+ * Columns, each with a column rule
+ * ============================================================================ */
+
+[data-theme='newsprint'] .slide[data-layout] .layout-two-column {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	grid-template-rows: auto 1fr;
+}
+[data-theme='newsprint'] .slide[data-layout] .layout-three-column {
+	display: grid;
+	grid-template-columns: 1fr 1fr 1fr;
+	grid-template-rows: auto 1fr;
+}
+[data-theme='newsprint'] .slide[data-layout] :is(.layout-two-column, .layout-three-column) .slot-default {
+	grid-column: 1 / -1;
+}
+[data-theme='newsprint'] .slide[data-layout] :is(.layout-two-column, .layout-three-column) .slot:not(.slot-default) {
+	position: relative;
+	padding: 14px 56px 0;
+}
+[data-theme='newsprint'] .slide[data-layout] .layout-three-column .slot:not(.slot-default) {
+	padding-left: 40px;
+	padding-right: 40px;
+}
+[data-theme='newsprint'] .slide[data-layout] :is(.layout-two-column, .layout-three-column) .slot.slot-left {
+	padding-left: 0;
+}
+[data-theme='newsprint'] .slide[data-layout] :is(.layout-two-column, .layout-three-column) .slot.slot-right {
+	padding-right: 0;
+}
+[data-theme='newsprint'] .slide[data-layout] :is(.layout-two-column, .layout-three-column) :is(.slot-center, .slot-right)::before {
+	content: '';
+	position: absolute;
+	left: -1px;
+	top: 0;
+	bottom: 0;
+	width: 2px;
+	background: var(--fg);
+	animation: newsprint-drop 620ms var(--ease) 300ms both;
+}
+/* column label */
+[data-theme='newsprint'] .slide[data-layout] :is(.layout-two-column, .layout-three-column, .layout-sidebar) .slot:not(.slot-default) h3 {
+	font: 600 36px/1.1 var(--font-display);
+	letter-spacing: 0.16em;
+	text-transform: uppercase;
+	margin: 0;
+	padding-bottom: 18px;
+	border-bottom: 3px solid var(--fg);
+}
+/* a column is a narrow measure, so its body copy and lists run a size
+ * smaller than the full-width scale above (still clearing the 40px floor). */
+[data-theme='newsprint'] .slide[data-layout] :is(.layout-two-column, .layout-three-column, .layout-sidebar) .slot:not(.slot-default) :is(ul, ol):not(li *) {
+	--li-size: 42px;
+	--li-pad: 18px;
+	--li-indent: 50px;
+	--li-mark: 24px;
+	margin-top: 0;
+	border-top: 0;
+}
+[data-theme='newsprint'] .slide[data-layout] .layout-three-column .slot:not(.slot-default) :is(ul, ol):not(li *) {
+	--li-size: 40px;
+	--li-pad: 14px;
+	--li-indent: 38px;
+	--li-mark: 20px;
+}
+[data-theme='newsprint'] .slide[data-layout] .layout-three-column .slot:not(.slot-default) ul:not(li *) > li::before {
+	left: 2px;
+}
+[data-theme='newsprint'] .slide[data-layout] :is(.layout-two-column, .layout-three-column, .layout-sidebar) .slot:not(.slot-default) p {
+	font-size: 42px;
+	line-height: 1.3;
+	text-wrap: balance;
+}
+
+/* ============================================================================
+ * Sidebar: the argument, and a boxed sidebar with the receipts
+ * ============================================================================ */
+
+[data-theme='newsprint'] .slide[data-layout] .layout-sidebar {
+	display: grid;
+	grid-template-columns: 1fr 568px;
+	column-gap: 64px;
+}
+[data-theme='newsprint'] .slide[data-layout] .layout-sidebar .slot-default :is(ul, ol):not(li *) {
+	--li-size: 46px;
+	--li-pad: 20px;
+	--li-indent: 58px;
+	--li-mark: 26px;
+}
+[data-theme='newsprint'] .slide[data-layout] .layout-sidebar .slot-sidebar {
+	align-self: stretch;
+	padding: 30px 36px 36px;
+	border: 0;
+	border-top: 10px solid var(--fg);
+	border-bottom: 3px solid var(--fg);
+	background: var(--surface);
+	animation: newsprint-drop 700ms var(--ease) 240ms both;
+}
+[data-theme='newsprint'] .slide[data-layout] .layout-sidebar .slot-sidebar :is(ul, ol):not(li *) {
+	--li-size: 40px;
+	--li-indent: 42px;
+	--li-mark: 22px;
+}
+[data-theme='newsprint'] .slide[data-layout] .layout-sidebar .slot-sidebar :is(ul, ol):not(li *) > li:last-child {
+	border-bottom: 0;
+}
+
+/* ============================================================================
+ * Pictures: a halftone plate with a keyline
+ * ============================================================================ */
+
+[data-theme='newsprint'] .slide[data-layout] p:has(> img) {
+	position: relative;
+	overflow: hidden;
+	border: 3px solid var(--fg);
+	background: #fff;
+	mix-blend-mode: multiply;
+	line-height: 0;
+	animation-name: newsprint-drop;
+	animation-duration: 700ms;
+	animation-timing-function: var(--ease);
+}
+[data-theme='newsprint'] .slide[data-layout] p:has(> img) img {
+	display: block;
+	width: 100%;
+	height: auto;
+	max-width: 100%;
+	border-radius: 0;
+	/* A light plate screen: enough grain to read as newsprint, gentle
+	 * enough that a fine UI screenshot stays legible under it. */
+	filter: grayscale(1) contrast(1.08) brightness(1.03);
+}
+[data-theme='newsprint'] .slide[data-layout] p:has(> img)::after {
+	content: '';
+	position: absolute;
+	inset: -60%;
+	background: radial-gradient(circle closest-side at center, #000 0 46%, transparent 62%) 0 0 / 8px 8px;
+	opacity: 0.12;
+	transform: rotate(22deg);
+	pointer-events: none;
+}
+
+[data-theme='newsprint'] .slide[data-layout] .layout-split-media {
+	display: grid;
+	grid-template-columns: 1.12fr 1fr;
+	column-gap: 64px;
+	align-items: center;
+}
+[data-theme='newsprint'] .slide[data-layout] .layout-split-media .slot-default {
+	display: block;
+	padding: 28px 0 0;
+	border-top: 10px solid var(--fg);
+}
+[data-theme='newsprint'] .slide[data-layout] .layout-split-media h2 {
+	border: 0;
+	padding: 0;
+	margin-bottom: 0;
+}
+[data-theme='newsprint'] .slide[data-layout] .layout-split-media h3 {
+	margin-top: 20px;
+}
+[data-theme='newsprint'] .slide[data-layout] .layout-split-media .slot-default p {
+	font-style: italic;
+	margin-top: 28px;
+	padding-top: 28px;
+	border-top: 3px solid var(--fg);
+}
+[data-theme='newsprint'] .slide[data-layout] .layout-split-media .slot-media {
+	display: block;
+	overflow: visible;
+	background: none;
+}
+[data-theme='newsprint'] .slide[data-layout] .layout-split-media .slot-media img {
+	width: 100%;
+	height: auto;
+	max-height: 760px;
+	object-fit: cover;
+}
+
+/* A picture on a plain slide: the plate fills the right of the page and the
+ * copy beside it runs as its cutline. */
+[data-theme='newsprint'] .slide[data-layout] .layout-default .slot:has(> p > img) {
+	flex: 1;
+	min-height: 0;
+	display: grid;
+	grid-template-columns: 1fr 1.25fr;
+	grid-template-rows: auto 1fr;
+	column-gap: 64px;
+}
+[data-theme='newsprint'] .slide[data-layout] .layout-default .slot:has(> p > img) > * {
+	grid-column: 1;
+}
+[data-theme='newsprint'] .slide[data-layout] .layout-default .slot:has(> p > img) > :is(h1, h2) {
+	grid-column: 1 / -1;
+}
+[data-theme='newsprint'] .slide[data-layout] .layout-default .slot:has(> p > img) > p:not(:has(> img)) {
+	align-self: end;
+	margin: 0;
+	padding-top: 24px;
+	border-top: 10px solid var(--fg);
+	font-style: italic;
+}
+[data-theme='newsprint'] .slide[data-layout] .layout-default .slot:has(> p > img) > p:has(> img) {
+	grid-column: 2;
+	grid-row: 2 / span 12;
+	align-self: start;
+	margin: 0;
+}
+[data-theme='newsprint'] .slide[data-layout] .layout-default .slot:has(> p > img) > p:has(> img) img {
+	max-height: 640px;
+	object-fit: cover;
+}
+/* nothing but a headline and a picture: the plate takes the full measure */
+[data-theme='newsprint'] .slide[data-layout] .layout-default .slot:has(> p > img):not(:has(> :not(h1, h2, p:has(> img)))) > p:has(> img) {
+	grid-column: 1 / -1;
+}
+
+/* ============================================================================
+ * Table: agate type, like the listings page
+ * ============================================================================ */
+
+[data-theme='newsprint'] .slide[data-layout] .slot table {
+	width: 100%;
+	border-collapse: collapse;
+	border-top: 10px solid var(--fg);
+	margin-top: 6px;
+	font-size: 44px;
+	font-variant-numeric: lining-nums tabular-nums;
+}
+[data-theme='newsprint'] .slide[data-layout] .slot th {
+	text-align: left;
+	font: 600 40px/1.15 var(--font-display);
+	letter-spacing: 0.1em;
+	text-transform: uppercase;
+	padding: 26px 24px 22px 0;
+	border-bottom: 3px solid var(--fg);
+}
+[data-theme='newsprint'] .slide[data-layout] .slot td {
+	font-size: 44px;
+	line-height: 1.2;
+	padding: 26px 24px 22px 0;
+	border-bottom: 2px solid var(--fg);
+}
+[data-theme='newsprint'] .slide[data-layout] .slot td:first-child {
+	font: 900 44px/1.2 var(--font-display);
+	letter-spacing: -0.015em;
+	padding-left: 20px;
+}
+[data-theme='newsprint'] .slide[data-layout] .slot th:first-child {
+	padding-left: 20px;
+}
+[data-theme='newsprint'] .slide[data-layout] .slot tbody tr:nth-child(odd) {
+	background: var(--surface);
+}
+[data-theme='newsprint'] .slide[data-layout] .slot tbody tr {
+	animation: newsprint-fade 500ms linear both;
+	animation-delay: 420ms;
+}
+[data-theme='newsprint'] .slide[data-layout] .slot tbody tr:nth-child(2) {
+	animation-delay: 540ms;
+}
+[data-theme='newsprint'] .slide[data-layout] .slot tbody tr:nth-child(3) {
+	animation-delay: 660ms;
+}
+[data-theme='newsprint'] .slide[data-layout] .slot tbody tr:nth-child(n + 4) {
+	animation-delay: 780ms;
+}
+
+/* ============================================================================
+ * Diagram: an explainer graphic over its cutline
+ * ============================================================================ */
+
+[data-theme='newsprint'] .slide[data-layout] .layout-default .slot:has(.mermaid-diagram) {
+	flex: 1;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+}
+[data-theme='newsprint'] .slide[data-layout] .mermaid-diagram {
+	flex: 1;
+	min-height: 0;
+	display: flex;
+	justify-content: center;
+	align-items: center;
+	font-size: 30px;
+	font-weight: 500;
+	line-height: 1.3;
+}
+[data-theme='newsprint'] .slide[data-layout] .mermaid-diagram svg {
+	width: 100% !important;
+	height: 100% !important;
+	max-width: none !important;
+	overflow: visible;
+}
+[data-theme='newsprint'] .slide[data-layout] .mermaid-diagram .node :is(rect, circle, polygon, path, .label-container) {
+	stroke-width: 3px !important;
+}
+[data-theme='newsprint'] .slide[data-layout] .mermaid-diagram :is(.edgePaths path, .flowchart-link) {
+	stroke-width: 4px !important;
+}
+/* label text inside the graphic keeps mermaid's own measure */
+[data-theme='newsprint'] .slide[data-layout] .slot .mermaid-diagram :is(p, span, div, li) {
+	font-size: inherit;
+	line-height: inherit;
+	margin: 0;
+	padding: 0;
+	border: 0;
+	animation: none;
+}
+[data-theme='newsprint'] .slide[data-layout] .mermaid-diagram ~ p {
+	flex: none;
+	margin-top: 20px;
+	padding-top: 22px;
+	border-top: 10px solid var(--fg);
+	font-style: italic;
+}
+
+/* ============================================================================
+ * Cover: a full-page plate, type reversed out of the ink
+ * ============================================================================ */
+
+[data-theme='newsprint'] .slide[data-layout][data-layout='cover'] {
+	background-color: var(--fg);
+	color: var(--bg);
+}
+/* halftone screen and an ink scrim over whatever fills the frame */
+[data-theme='newsprint'] .slide[data-layout][data-layout='cover']::before {
+	z-index: 0;
+	opacity: 1;
+	-webkit-mask-image: none;
+	mask-image: none;
+	background:
+		radial-gradient(circle closest-side at center, rgba(242, 237, 225, 0.2) 0 44%, transparent 60%) 0 0 / 10px 10px,
+		linear-gradient(rgba(22, 19, 15, 0.35), rgba(22, 19, 15, 0.72));
+}
+[data-theme='newsprint'] .slide[data-layout][data-layout='cover']::after {
+	color: var(--bg);
+}
+[data-theme='newsprint'] .slide[data-layout][data-layout='cover'] .slide-content {
+	z-index: 1;
+}
+[data-theme='newsprint'] .slide[data-layout][data-layout='cover'] .slide-content::before {
+	color: var(--bg);
+	background: linear-gradient(var(--bg), var(--bg)) 96px 113px / calc(100% - 192px) 3px no-repeat;
+}
+[data-theme='newsprint'] .slide[data-layout][data-layout='cover'] .slide-content::after {
+	background: var(--bg);
+}
+[data-theme='newsprint'] .slide[data-layout][data-layout='cover'] .slide-tag {
+	color: var(--bg);
+}
+[data-theme='newsprint'] .slide[data-layout][data-layout='cover'] .slide-badge {
+	color: var(--bg);
+	background: transparent;
+	border-color: var(--bg);
+}
+[data-theme='newsprint'] .slide[data-layout] .layout-cover {
+	justify-content: flex-end;
+}
+[data-theme='newsprint'] .slide[data-layout] .layout-cover .slot-default {
+	max-width: none;
+	padding: 0 0 8px;
+}
+[data-theme='newsprint'] .slide[data-layout] .layout-cover .slot-default::before {
+	content: 'Extra';
+	display: block;
+	width: fit-content;
+	background: var(--accent);
+	color: var(--bg);
+	font: 600 34px/1 var(--font-display);
+	letter-spacing: 0.16em;
+	text-transform: uppercase;
+	padding: 12px 18px 10px;
+	margin-bottom: 28px;
+	animation: newsprint-stamp var(--dur) var(--ease) both;
+}
+[data-theme='newsprint'] .slide[data-layout] .layout-cover :is(h1, h2, h3, p, li, a) {
+	color: var(--bg);
+}
+[data-theme='newsprint'] .slide[data-layout] .layout-cover :is(strong, em) {
+	color: var(--bg);
+	text-decoration: underline;
+	text-decoration-color: var(--accent);
+	text-decoration-thickness: 0.09em;
+	text-underline-offset: 0.1em;
+}
+/* the cover's one line usually is short (the whole point of the layout), so
+ * it is sized for that (data-length="short"); a longer line scales down
+ * from the base rule instead of overrunning the frame. */
+[data-theme='newsprint'] .slide[data-layout] .layout-cover h1 {
+	font-size: 104px;
+	line-height: 1.04;
+	letter-spacing: -0.03em;
+	max-width: 1600px;
+}
+[data-theme='newsprint'] .slide[data-layout] .layout-cover h1[data-length='medium'] {
+	font-size: 144px;
+}
+[data-theme='newsprint'] .slide[data-layout] .layout-cover h1[data-length='short'] {
+	font-size: 184px;
+	line-height: 1;
+	letter-spacing: -0.032em;
+}
+[data-theme='newsprint'] .slide[data-layout] .layout-cover h2 {
+	border-color: var(--bg);
+}
+[data-theme='newsprint'] .slide[data-layout] .layout-cover p {
+	font: italic 500 52px/1.22 var(--font-body);
+	max-width: 1500px;
+	margin-top: 30px;
+	padding-top: 26px;
+	border-top: 12px double var(--bg);
+	text-wrap: balance;
+}
+
+/* ============================================================================
+ * Blank: the page furniture stays, the content is the author's
+ * ============================================================================ */
+
+[data-theme='newsprint'] .slide[data-layout] .layout-blank .slot {
+	flex: 1;
+	min-height: 0;
+}
+[data-theme='newsprint'] .slide[data-layout] .layout-blank h1 {
+	text-align: center;
+}
+/* the map runs as a keylined plate under the running head */
+[data-theme='newsprint'] .slide[data-layout].has-map {
+	padding: 164px 96px 84px;
+}
+[data-theme='newsprint'] .slide[data-layout].has-map .map-slide {
+	flex: 1;
+	min-height: 0;
+	width: auto;
+	height: auto;
+	border: 3px solid var(--fg);
+}
+[data-theme='newsprint'] .slide[data-layout].has-map .slide-content {
+	order: -1;
+	flex: none;
+	height: 0;
+	z-index: auto;
+}
+[data-theme='newsprint'] .slide[data-layout].has-map .slide-content::after {
+	content: none;
+}
+
+/* ============================================================================
+ * Scroll slide: copy runs on under the running head
+ * ============================================================================ */
+
+[data-theme='newsprint'] .slide[data-layout] .scroll-content {
+	flex: none;
+	display: flex;
+	flex-direction: column;
+}
+[data-theme='newsprint'] .slide[data-layout] .scroll-content [class^='layout-'] {
+	flex: none;
+}
+[data-theme='newsprint'] .slide[data-layout] .scroll-content pre {
+	line-height: 1.4;
+}
+
+/* ============================================================================
+ * Live code, asciinema
+ * ============================================================================ */
+
+[data-theme='newsprint'] .slide[data-layout] .live-code-block {
+	margin-bottom: 0;
+	border-radius: 0;
+	overflow: visible;
+}
+[data-theme='newsprint'] .slide[data-layout] .live-code-block:focus {
+	outline: 3px solid var(--accent);
+	outline-offset: 6px;
+}
+[data-theme='newsprint'] .slide[data-layout] .live-code-block .code-container pre {
+	border-radius: 0;
+	padding-right: 220px;
+}
+[data-theme='newsprint'] .slide[data-layout] .live-code-block .code-actions {
+	top: 0;
+	right: 0;
+}
+[data-theme='newsprint'] .slide[data-layout] .live-code-block .run-button {
+	gap: 14px;
+	padding: 14px 22px 12px;
+	border-radius: 0;
+	background-color: var(--accent);
+	color: var(--bg);
+	font: 600 30px/1 var(--font-display);
+	letter-spacing: 0.16em;
+	text-transform: uppercase;
+	transition: background-color var(--dur) var(--ease);
+}
+[data-theme='newsprint'] .slide[data-layout] .live-code-block .run-button:hover:not(:disabled) {
+	filter: none;
+	transform: none;
+	background-color: var(--fg);
+}
+[data-theme='newsprint'] .slide[data-layout] .live-code-block .loading-spinner {
+	width: 24px;
+	height: 24px;
+	border-width: 3px;
+}
+[data-theme='newsprint'] .slide[data-layout] .live-code-block .static-placeholder {
+	top: 0;
+	right: 0;
+	max-width: 46%;
+	padding: 12px 18px 10px;
+	border-radius: 0;
+	border: 3px solid var(--fg);
+	background: var(--bg);
+	-webkit-backdrop-filter: none;
+	backdrop-filter: none;
+	color: var(--fg);
+	font: italic 500 28px/1.15 var(--font-body);
+}
+[data-theme='newsprint'] .slide[data-layout] .live-code-block .static-placeholder-text {
+	white-space: normal;
+}
+[data-theme='newsprint'] .slide[data-layout] .live-code-block .result-container {
+	margin-top: 30px;
+	border-radius: 0;
+	border-top: 10px solid var(--fg);
+	border-bottom: 3px solid var(--fg);
+	background: var(--surface);
+	animation: newsprint-drop 500ms var(--ease) both;
+}
+[data-theme='newsprint'] .slide[data-layout] .live-code-block .result-container.error {
+	border-top-color: var(--accent);
+}
+[data-theme='newsprint'] .slide[data-layout] .live-code-block .result-header {
+	padding: 18px 28px 0;
+	border: 0;
+}
+[data-theme='newsprint'] .slide[data-layout] .live-code-block .result-status,
+[data-theme='newsprint'] .slide[data-layout] .live-code-block .result-status.success,
+[data-theme='newsprint'] .slide[data-layout] .live-code-block .result-status.error {
+	font: 600 28px/1 var(--font-display);
+	letter-spacing: 0.16em;
+	color: var(--fg);
+}
+[data-theme='newsprint'] .slide[data-layout] .live-code-block .result-status.error {
+	color: var(--accent-text);
+}
+[data-theme='newsprint'] .slide[data-layout] .live-code-block .result-content {
+	padding: 14px 28px 24px;
+}
+[data-theme='newsprint'] .slide[data-layout] .live-code-block .result-content :is(.result-output, .result-error) {
+	border: 0;
+	font: 500 38px/1.4 var(--font-mono);
+	color: var(--fg);
+	overflow: visible;
+}
+[data-theme='newsprint'] .slide[data-layout] .live-code-block .result-content .result-error {
+	color: var(--accent-text);
+}
+[data-theme='newsprint'] .slide[data-layout] .live-code-block .result-content .result-empty {
+	font: italic 500 36px/1.3 var(--font-body);
+}
+[data-theme='newsprint'] .slide[data-layout] .live-code-block .result-content .result-table {
+	font-size: 40px;
+	color: var(--fg);
+}
+[data-theme='newsprint'] .slide[data-layout] .live-code-block .result-content .result-table th {
+	background: none;
+	color: var(--fg);
+}
+[data-theme='newsprint'] .slide[data-layout] .asciinema-player-wrapper {
+	border: 3px solid var(--fg);
+	border-top-width: 10px;
+	background: var(--surface);
+}
+
+/* ============================================================================
+ * Minimum sizes: whatever no rule above reached still meets the floor
+ * ============================================================================ */
+
+[data-theme='newsprint'] .slot p,
+[data-theme='newsprint'] .slot li {
+	font-size: 48px;
+}
+[data-theme='newsprint'] pre code {
+	font-size: 40px;
+}
+[data-theme='newsprint'] .slot td,
+[data-theme='newsprint'] .slot th {
+	font-size: 44px;
+}
+
+/* ============================================================================
+ * Print and reduced motion: everything in its final state, nothing moves
+ * ============================================================================ */
+
+@media print, (prefers-reduced-motion: reduce) {
+	[data-theme='newsprint'] *,
+	[data-theme='newsprint'] *::before,
+	[data-theme='newsprint'] *::after {
+		animation: none !important;
+		transition: none !important;
+	}
+}

@@ -1,1283 +1,625 @@
 /**
- * Layout Typography & Spacing Styles
- *
- * These styles apply presentation-scale typography and spacing to content within each layout.
- * They use CSS custom properties from the theme system (--color-*, --font-*).
- *
- * Spacing philosophy:
- * - Slide padding: 5rem (80px) for comfortable margins from edges
- * - Vertical rhythm: Consistent 1.5-2rem spacing between sibling elements
- * - Column gaps: 4rem for two-column, 3rem for three-column
- * - Content breathing room: max-width constraints on text blocks
- *
- * Layout types:
- * - layout-title: Centered title slide with large headings
- * - layout-section: Section divider with prominent heading
- * - layout-default: Standard content with proper typography hierarchy
- * - layout-two-column: Side-by-side columns with balanced gaps
- * - layout-three-column: Three-column grid with proportional spacing
- * - layout-big-stat: Dramatic centered statistics
- * - layout-quote: Elegant quote with whitespace framing
+ * Layout structure and typography for the base theme.
+ * Layout components render a `layout-<name>` wrapper with named
+ * `slot-<name>` children (see lib/layouts/registry.ts). These rules
+ * position the slots and apply presentation-scale typography to the
+ * markdown content each slot carries.
  */
 
 /* ============================================================================
- * Layout Title - Centered title slide
+ * Shared slot typography
+ * Applies to the markdown-rendered content inside every slot.
+ * ============================================================================ */
+
+.slot-content {
+	color: var(--color-text);
+}
+
+.slot-content h1 {
+	font-size: 3.75rem;
+	line-height: 1.12;
+	letter-spacing: -0.02em;
+	font-weight: 700;
+	margin: 0;
+}
+
+.slot-content h2 {
+	font-size: 3rem;
+	line-height: 1.25;
+	font-weight: 600;
+	margin: 0;
+	margin-top: 2.25rem;
+}
+
+.slot-content h3 {
+	font-size: 2.25rem;
+	line-height: 1.35;
+	font-weight: 600;
+	margin: 0;
+	margin-top: 1.75rem;
+}
+
+.slot-content h4 {
+	font-size: 2rem;
+	line-height: 1.4;
+	font-weight: 600;
+	margin: 0;
+	margin-top: 1.5rem;
+}
+
+.slot-content h5 {
+	font-size: 1.75rem;
+	line-height: 1.4;
+	font-weight: 600;
+	margin: 0;
+	margin-top: 1.25rem;
+}
+
+.slot-content h6 {
+	font-size: 1.5rem;
+	line-height: 1.4;
+	font-weight: 600;
+	margin: 0;
+	margin-top: 1rem;
+	color: var(--color-muted);
+	text-transform: uppercase;
+	letter-spacing: 0.05em;
+}
+
+.slot-content p {
+	font-size: 2.875rem;
+	line-height: 1.5;
+	margin: 0;
+	margin-top: 1.25rem;
+}
+
+.slot-content h1:first-child,
+.slot-content h2:first-child,
+.slot-content h3:first-child,
+.slot-content h4:first-child,
+.slot-content h5:first-child,
+.slot-content h6:first-child,
+.slot-content p:first-child,
+.slot-content ul:first-child,
+.slot-content ol:first-child,
+.slot-content pre:first-child,
+.slot-content blockquote:first-child,
+.slot-content table:first-child {
+	margin-top: 0;
+}
+
+.slot-content ul,
+.slot-content ol {
+	font-size: 2.875rem;
+	line-height: 1.5;
+	margin: 0;
+	margin-top: 1.25rem;
+	padding-left: 1.3em;
+}
+
+.slot-content li {
+	margin-bottom: 0.5em;
+}
+
+.slot-content li:last-child {
+	margin-bottom: 0;
+}
+
+.slot-content li::marker {
+	color: var(--color-accent);
+}
+
+.slot-content img {
+	max-width: 100%;
+	height: auto;
+	border-radius: 8px;
+}
+
+.slot-content pre {
+	font-family: var(--font-mono);
+	font-size: 2.25rem;
+	line-height: 1.5;
+	background-color: var(--color-code-bg);
+	color: var(--color-code-text);
+	padding: 1.5em 2em;
+	border-radius: 12px;
+	overflow-x: auto;
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+	margin: 1.25rem 0 0;
+}
+
+.slot-content code {
+	font-family: var(--font-mono);
+	font-size: 0.9em;
+	background-color: var(--color-code-inline-bg);
+	padding: 0.15em 0.45em;
+	border-radius: 5px;
+}
+
+.slot-content pre code {
+	background: none;
+	padding: 0;
+	border-radius: 0;
+	font-size: inherit;
+}
+
+.slot-content blockquote {
+	border-left: 4px solid var(--color-accent);
+	padding-left: 1.75em;
+	margin: 1.25rem 0 0;
+	font-size: 2.5rem;
+	line-height: 1.5;
+	font-style: italic;
+	color: var(--color-muted);
+}
+
+.slot-content table {
+	width: 100%;
+	border-collapse: collapse;
+	font-size: 2.5rem;
+	margin-top: 1.25rem;
+}
+
+.slot-content th,
+.slot-content td {
+	padding: 0.85em 1.25em;
+	text-align: left;
+	border-bottom: 1px solid var(--color-border);
+}
+
+.slot-content th {
+	font-weight: 600;
+}
+
+.slot-content a {
+	color: var(--color-accent);
+	text-decoration: none;
+}
+
+.slot-content a:hover {
+	text-decoration: underline;
+}
+
+/* ============================================================================
+ * Layout: title - centered title slide
  * ============================================================================ */
 
 .layout-title {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  width: 100%;
-  height: 100%;
-  text-align: center;
-  color: var(--color-text);
-  padding: var(--slide-padding, 5rem);
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	width: 100%;
+	height: 100%;
+	text-align: center;
+	padding: var(--slide-padding);
 }
 
-/* Make slide-content also center its children for title layout */
-.layout-title .slide-content {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
+.layout-title .slot-content h1 {
+	font-size: 6.5rem;
+	line-height: 1.03;
+	letter-spacing: -0.03em;
+	font-weight: 800;
 }
 
-.layout-title h1 {
-  font-size: 7rem; /* slide-title */
-  line-height: 1.05;
-  letter-spacing: -0.025em; /* slightly tighter for impact */
-  font-weight: 800;
-  margin: 0;
-  color: var(--color-text);
-  text-wrap: balance; /* better line breaking for titles */
+/*
+ * data-length (internal/parser/heading_length.go) is the title's visible
+ * text length, "short" up to 24 runes, "medium" 25-60. Every theme sizes
+ * its title type for a 95-character worst case, which makes a shorter
+ * title look small by comparison; bump it up as there's more room for it.
+ * These rules apply to the base theme only; every other theme sets its own sizes per length class.
+ */
+[data-theme='base'] .layout-title .slot-content h1[data-length='medium'] {
+	font-size: 7.5rem;
 }
 
-.layout-title h2 {
-  font-size: 3.5rem; /* slide-h2 */
-  line-height: 1.25;
-  letter-spacing: -0.015em;
-  font-weight: 500; /* slightly lighter for subtitle contrast */
-  margin: 0;
-  margin-top: 1.25rem;
-  color: var(--color-muted);
-  text-wrap: balance;
+[data-theme='base'] .layout-title .slot-content h1[data-length='short'] {
+	font-size: 9rem;
 }
 
-.layout-title p {
-  font-size: 2rem; /* slide-h3 */
-  line-height: 1.5;
-  color: var(--color-muted);
-  margin: 0;
-  margin-top: 1.75rem;
-  max-width: 80%; /* prevent overly wide lines */
-}
-
-/* Subtitle in title layout - styled differently */
-.layout-title p strong {
-  color: var(--color-accent);
-  font-weight: 600;
+.layout-title .slot-content p {
+	font-size: 2.5rem;
+	line-height: 1.5;
+	color: var(--color-muted);
+	max-width: 80%;
+	margin-top: 2.5rem;
+	margin-left: auto;
+	margin-right: auto;
 }
 
 /* ============================================================================
- * Layout Section - Section divider
+ * Layout: section - large section divider
  * ============================================================================ */
 
 .layout-section {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  width: 100%;
-  height: 100%;
-  text-align: center;
-  color: var(--color-text);
-  padding: var(--slide-padding, 5rem);
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	width: 100%;
+	height: 100%;
+	text-align: center;
+	padding: var(--slide-padding);
 }
 
-/* Make slide-content also center its children for section layout */
-.layout-section .slide-content {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
+.layout-section .slot-content h2 {
+	font-size: 5.5rem;
+	line-height: 1.05;
+	letter-spacing: -0.02em;
+	font-weight: 800;
+	margin-top: 0;
+	color: var(--color-text);
 }
 
-.layout-section h1 {
-  font-size: 6rem; /* slide-title - massive for section headers */
-  line-height: 1.1;
-  letter-spacing: -0.02em;
-  font-weight: 800;
-  margin: 0;
-  color: var(--color-text);
-  text-wrap: balance;
+/* See the .layout-title data-length rule above. */
+[data-theme='base'] .layout-section .slot-content h2[data-length='medium'] {
+	font-size: 6.25rem;
 }
 
-.layout-section h2 {
-  font-size: 3rem; /* slide-h2 - subtitle for section headers */
-  line-height: 1.3;
-  letter-spacing: -0.01em;
-  font-weight: 500;
-  margin: 0;
-  margin-top: 1.25rem;
-  color: var(--color-accent);
-  text-wrap: balance;
-}
-
-.layout-section p {
-  font-size: 2rem; /* slide-body */
-  line-height: 1.6;
-  color: var(--color-muted);
-  margin: 0;
-  margin-top: 1.75rem;
-  max-width: 75%;
+[data-theme='base'] .layout-section .slot-content h2[data-length='short'] {
+	font-size: 7.25rem;
 }
 
 /* ============================================================================
- * Layout Default - Standard content layout
+ * Layout: default - standard content
  * ============================================================================ */
 
 .layout-default {
-  display: flex;
-  flex-direction: column;
-  width: 100%;
-  height: 100%;
-  color: var(--color-text);
-  gap: var(--content-gap, 2rem);
-}
-
-/* Vertical rhythm: consistent spacing between sibling elements */
-.layout-default > * + * {
-  margin-top: var(--content-gap, 2rem);
-}
-
-/* Reset gap when using flexbox gap */
-.layout-default > *:first-child {
-  margin-top: 0;
-}
-
-/* Vertical rhythm inside slide-content - applies to all layouts
-   Uses .slide-renderer prefix for higher specificity to override layout-specific margin:0 rules */
-.slide-renderer .slide-content > * + h2 {
-  margin-top: 2.5rem;
-}
-
-.slide-renderer .slide-content > * + h3 {
-  margin-top: 2rem;
-}
-
-.slide-renderer .slide-content > * + h4,
-.slide-renderer .slide-content > * + h5,
-.slide-renderer .slide-content > * + h6 {
-  margin-top: 1.5rem;
-}
-
-.slide-renderer .slide-content > h1 + *,
-.slide-renderer .slide-content > h2 + *,
-.slide-renderer .slide-content > h3 + * {
-  margin-top: 1rem;
-}
-
-.slide-renderer .slide-content > * + ul,
-.slide-renderer .slide-content > * + ol {
-  margin-top: 1rem;
-}
-
-.slide-renderer .slide-content > ul + *,
-.slide-renderer .slide-content > ol + * {
-  margin-top: 1.5rem;
-}
-
-.slide-renderer .slide-content > * + blockquote {
-  margin-top: 1.5rem;
-}
-
-.slide-renderer .slide-content > blockquote + * {
-  margin-top: 1.5rem;
-}
-
-.slide-renderer .slide-content > * + p {
-  margin-top: 1rem;
-}
-
-.layout-default h1 {
-  font-size: 4rem; /* slide-h2 for content slides */
-  line-height: 1.15;
-  letter-spacing: -0.02em;
-  font-weight: 700;
-  margin-bottom: 0;
-  text-wrap: balance;
-}
-
-.layout-default h2 {
-  font-size: 2.5rem; /* slide-h3 */
-  line-height: 1.3;
-  letter-spacing: -0.01em;
-  font-weight: 600;
-  margin-bottom: 0;
-}
-
-.layout-default h3 {
-  font-size: 2rem; /* slide-body */
-  line-height: 1.5;
-  font-weight: 600;
-  margin-bottom: 0;
-}
-
-.layout-default p {
-  font-size: 2rem; /* slide-body */
-  line-height: 1.6; /* comfortable reading line-height */
-  margin-bottom: 0;
-}
-
-.layout-default ul,
-.layout-default ol {
-  font-size: 2rem; /* slide-body */
-  line-height: 1.6;
-  margin-bottom: 0;
-  padding-left: 2em; /* increased indentation for better hierarchy */
-}
-
-.layout-default li {
-  margin-bottom: 0.75em; /* increased for better vertical rhythm */
-  padding-left: 0.5em; /* subtle padding for marker spacing */
-}
-
-.layout-default li:last-child {
-  margin-bottom: 0;
-}
-
-.layout-default li::marker {
-  color: var(--color-accent);
-}
-
-/* Nested lists get tighter spacing */
-.layout-default li ul,
-.layout-default li ol {
-  margin-top: 0.5em;
-  padding-left: 1.75em;
-}
-
-.layout-default li li {
-  margin-bottom: 0.5em;
-}
-
-.layout-default img {
-  max-width: 100%;
-  height: auto;
-  border-radius: 8px;
-}
-
-.layout-default pre {
-  font-family: var(--font-mono);
-  font-size: 1.5rem; /* slide-code */
-  line-height: 1.65;
-  background-color: var(--color-code-bg);
-  color: var(--color-code-text, #d4d4d4);
-  padding: 1.5em 2em;
-  border-radius: 12px;
-  overflow-x: auto;
-  margin: 0;
-}
-
-.layout-default code {
-  font-family: var(--font-mono);
-  font-size: 0.9em;
-  background-color: var(--color-code-inline-bg, rgba(0, 0, 0, 0.06));
-  padding: 0.15em 0.45em;
-  border-radius: 5px;
-}
-
-.layout-default pre code {
-  background: none;
-  padding: 0;
-  border-radius: 0;
-  font-size: inherit;
-}
-
-.layout-default blockquote {
-  border-left: 4px solid var(--color-accent);
-  padding-left: 1.75em;
-  padding-top: 0.25em;
-  padding-bottom: 0.25em;
-  margin: 0;
-  font-style: italic;
-  color: var(--color-muted);
-  font-size: 2rem;
-  line-height: 1.6;
-}
-
-/* Attribution in blockquotes - often final paragraph with em-dash */
-.layout-default blockquote p:last-of-type:not(:only-child) {
-  font-size: 1.5rem;
-  font-style: normal;
-  margin-top: 1rem;
-  color: color-mix(in srgb, var(--color-muted) 80%, transparent);
-}
-
-/* Nested paragraphs in blockquotes */
-.layout-default blockquote p {
-  margin: 0;
-}
-
-.layout-default blockquote p + p {
-  margin-top: 0.75em;
-}
-
-.layout-default table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 1.75rem;
-}
-
-.layout-default th,
-.layout-default td {
-  padding: 0.75em 1em;
-  text-align: left;
-  border-bottom: 1px solid var(--color-border, var(--color-muted));
-}
-
-.layout-default th {
-  font-weight: 600;
-}
-
-.layout-default a {
-  color: var(--color-accent);
-  text-decoration: none;
-}
-
-.layout-default a:hover {
-  text-decoration: underline;
+	width: 100%;
+	height: 100%;
+	padding: var(--slide-padding);
+	display: flex;
+	flex-direction: column;
+	justify-content: center;
 }
 
 /* ============================================================================
- * Layout Two Column - Side-by-side columns
+ * Layout: two-column
  * ============================================================================ */
 
 .layout-two-column {
-  display: flex;
-  flex-direction: column;
-  width: 100%;
-  height: 100%;
-  color: var(--color-text);
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: var(--column-gap);
+	width: 100%;
+	height: 100%;
+	align-content: center;
+	padding: var(--slide-padding);
 }
 
-/* Column divs generated by the transformer for ||| separated content */
-.layout-two-column .slide-content {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: var(--column-gap, 4rem);
-  width: 100%;
-  height: 100%;
-  align-items: start;
-  align-content: center;
-  padding: 0; /* content area, padding handled by parent */
-}
-
-/* Header content spans both columns */
-.layout-two-column .slide-content > :not(.column) {
-  grid-column: 1 / -1;
-  margin-bottom: 1.5rem;
-}
-
-.layout-two-column .column {
-  display: flex;
-  flex-direction: column;
-  gap: 1.75rem; /* increased internal gap for breathing room */
-}
-
-/* Balanced visual weight for columns */
-.layout-two-column .column:first-of-type {
-  padding-right: 0.5rem;
-}
-
-.layout-two-column .column:last-of-type {
-  padding-left: 0.5rem;
-}
-
-/* Typography for two-column layout */
-.layout-two-column h1 {
-  font-size: 3rem;
-  line-height: 1.2;
-  letter-spacing: -0.01em;
-  font-weight: 600;
-  margin: 0;
-  margin-bottom: 1.5rem;
-}
-
-.layout-two-column h2 {
-  font-size: 2.5rem;
-  line-height: 1.25;
-  font-weight: 600;
-  margin: 0;
-  margin-bottom: 1.25rem;
-}
-
-.layout-two-column h3 {
-  font-size: 2rem;
-  line-height: 1.3;
-  font-weight: 600;
-  margin: 0;
-  margin-bottom: 1rem;
-}
-
-.layout-two-column p {
-  font-size: 1.75rem;
-  line-height: 1.5;
-  margin: 0;
-  margin-bottom: 1rem;
-}
-
-.layout-two-column p:last-child {
-  margin-bottom: 0;
-}
-
-.layout-two-column ul,
-.layout-two-column ol {
-  font-size: 1.75rem;
-  line-height: 1.5;
-  margin: 0;
-  padding-left: 1.5em;
-}
-
-.layout-two-column li {
-  margin-bottom: 0.6em; /* slightly increased */
-  padding-left: 0.25em;
-}
-
-.layout-two-column li:last-child {
-  margin-bottom: 0;
-}
-
-.layout-two-column li::marker {
-  color: var(--color-accent);
-}
-
-/* Nested lists in columns */
-.layout-two-column li ul,
-.layout-two-column li ol {
-  margin-top: 0.4em;
-}
-
-.layout-two-column li li {
-  margin-bottom: 0.4em;
-}
-
-.layout-two-column img {
-  max-width: 100%;
-  height: auto;
-  border-radius: 8px;
-}
-
-.layout-two-column pre {
-  font-family: var(--font-mono);
-  font-size: 1.25rem;
-  line-height: 1.65;
-  background-color: var(--color-code-bg);
-  color: var(--color-code-text, #d4d4d4);
-  padding: 1.25em 1.5em;
-  border-radius: 10px;
-  overflow-x: auto;
-  margin: 0;
-}
-
-.layout-two-column code {
-  font-family: var(--font-mono);
-  font-size: 0.9em;
-  background-color: var(--color-code-inline-bg, rgba(0, 0, 0, 0.06));
-  padding: 0.15em 0.45em;
-  border-radius: 5px;
-}
-
-.layout-two-column pre code {
-  background: none;
-  padding: 0;
-  border-radius: 0;
-  font-size: inherit;
+.layout-two-column .slot-default {
+	grid-column: 1 / -1;
 }
 
 /* ============================================================================
- * Layout Three Column - Three-column grid
+ * Layout: three-column
  * ============================================================================ */
 
 .layout-three-column {
-  display: flex;
-  flex-direction: column;
-  width: 100%;
-  height: 100%;
-  color: var(--color-text);
+	display: grid;
+	grid-template-columns: 1fr 1fr 1fr;
+	gap: calc(var(--column-gap) * 0.85);
+	width: 100%;
+	height: 100%;
+	align-content: center;
+	padding: var(--slide-padding);
 }
 
-.layout-three-column .three-column-content {
-  display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
-  gap: calc(var(--column-gap, 3rem) * 0.85); /* proportionally smaller than two-column */
-  width: 100%;
-  height: 100%;
-  align-items: start;
-  align-content: center;
+.layout-three-column .slot-default {
+	grid-column: 1 / -1;
 }
 
-/* Each column gets consistent internal spacing */
-.layout-three-column .three-column-content > * {
-  display: flex;
-  flex-direction: column;
-  gap: 1.25rem;
+.layout-three-column .slot-content h1 {
+	font-size: 2.25rem;
 }
 
-/* Typography for three-column layout - slightly smaller for 3 columns */
-.layout-three-column h1 {
-  font-size: 2.5rem;
-  line-height: 1.2;
-  letter-spacing: -0.01em;
-  font-weight: 600;
-  margin: 0;
-  margin-bottom: 1.25rem;
-}
-
-.layout-three-column h2 {
-  font-size: 2rem;
-  line-height: 1.25;
-  font-weight: 600;
-  margin: 0;
-  margin-bottom: 1rem;
-}
-
-.layout-three-column h3 {
-  font-size: 1.75rem;
-  line-height: 1.3;
-  font-weight: 600;
-  margin: 0;
-  margin-bottom: 0.75rem;
-}
-
-.layout-three-column p {
-  font-size: 1.5rem;
-  line-height: 1.5;
-  margin: 0;
-  margin-bottom: 0.75rem;
-}
-
-.layout-three-column p:last-child {
-  margin-bottom: 0;
-}
-
-.layout-three-column ul,
-.layout-three-column ol {
-  font-size: 1.5rem;
-  line-height: 1.5;
-  margin: 0;
-  padding-left: 1.5em;
-}
-
-.layout-three-column li {
-  margin-bottom: 0.5em; /* slightly increased */
-  padding-left: 0.2em;
-}
-
-.layout-three-column li:last-child {
-  margin-bottom: 0;
-}
-
-.layout-three-column li::marker {
-  color: var(--color-accent);
-}
-
-/* Nested lists in three-column */
-.layout-three-column li ul,
-.layout-three-column li ol {
-  margin-top: 0.35em;
-  padding-left: 1.25em;
-}
-
-.layout-three-column li li {
-  margin-bottom: 0.35em;
-}
-
-.layout-three-column img {
-  max-width: 100%;
-  height: auto;
-  border-radius: 8px;
-}
-
-.layout-three-column pre {
-  font-family: var(--font-mono);
-  font-size: 1.125rem;
-  line-height: 1.65;
-  background-color: var(--color-code-bg);
-  color: var(--color-code-text, #d4d4d4);
-  padding: 1em 1.25em;
-  border-radius: 10px;
-  overflow-x: auto;
-  margin: 0;
-}
-
-.layout-three-column code {
-  font-family: var(--font-mono);
-  font-size: 0.9em;
-  background-color: var(--color-code-inline-bg, rgba(0, 0, 0, 0.06));
-  padding: 0.15em 0.45em;
-  border-radius: 5px;
-}
-
-.layout-three-column pre code {
-  background: none;
-  padding: 0;
-  border-radius: 0;
-  font-size: inherit;
+/* Narrow column (~540px): the 40px body floor still applies, so this is
+   the same scale as everywhere else, just without the two-column layout's
+   extra headroom. */
+.layout-three-column .slot-content p,
+.layout-three-column .slot-content ul,
+.layout-three-column .slot-content ol {
+	font-size: 2.5rem;
+	line-height: 1.4;
 }
 
 /* ============================================================================
- * Layout Sidebar - Main content with sidebar
- * ============================================================================ */
-
-.layout-sidebar {
-  display: flex;
-  flex-direction: column;
-  width: 100%;
-  height: 100%;
-  color: var(--color-text);
-}
-
-.layout-sidebar .sidebar-content {
-  display: grid;
-  grid-template-columns: 2fr 1fr;
-  gap: var(--column-gap, 4rem);
-  width: 100%;
-  height: 100%;
-  align-items: start;
-  align-content: center;
-}
-
-/* Main content area (first child) */
-.layout-sidebar .sidebar-content > :first-child {
-  display: flex;
-  flex-direction: column;
-  gap: 1.75rem;
-  padding-right: 1rem; /* breathing room from divider */
-}
-
-/* Sidebar area (second child) */
-.layout-sidebar .sidebar-content > :nth-child(2) {
-  display: flex;
-  flex-direction: column;
-  gap: 1.5rem;
-  padding-left: 2.5rem; /* increased for elegant separation */
-  border-left: 2px solid color-mix(in srgb, var(--color-muted) 60%, transparent);
-}
-
-/* Typography for sidebar layout - main area */
-.layout-sidebar h1 {
-  font-size: 3.5rem;
-  line-height: 1.2;
-  letter-spacing: -0.01em;
-  font-weight: 600;
-  margin: 0;
-  margin-bottom: 1.5rem;
-}
-
-.layout-sidebar h2 {
-  font-size: 2.5rem;
-  line-height: 1.25;
-  font-weight: 600;
-  margin: 0;
-  margin-bottom: 1.25rem;
-}
-
-.layout-sidebar h3 {
-  font-size: 2rem;
-  line-height: 1.3;
-  font-weight: 600;
-  margin: 0;
-  margin-bottom: 1rem;
-}
-
-.layout-sidebar p {
-  font-size: 1.75rem;
-  line-height: 1.5;
-  margin: 0;
-  margin-bottom: 1rem;
-}
-
-.layout-sidebar p:last-child {
-  margin-bottom: 0;
-}
-
-.layout-sidebar ul,
-.layout-sidebar ol {
-  font-size: 1.75rem;
-  line-height: 1.5;
-  margin: 0;
-  padding-left: 1.5em;
-}
-
-.layout-sidebar li {
-  margin-bottom: 0.6em;
-  padding-left: 0.25em;
-}
-
-.layout-sidebar li:last-child {
-  margin-bottom: 0;
-}
-
-.layout-sidebar li::marker {
-  color: var(--color-accent);
-}
-
-/* Nested lists in sidebar */
-.layout-sidebar li ul,
-.layout-sidebar li ol {
-  margin-top: 0.4em;
-}
-
-.layout-sidebar li li {
-  margin-bottom: 0.4em;
-}
-
-.layout-sidebar img {
-  max-width: 100%;
-  height: auto;
-  border-radius: 8px;
-}
-
-.layout-sidebar pre {
-  font-family: var(--font-mono);
-  font-size: 1.25rem;
-  line-height: 1.65;
-  background-color: var(--color-code-bg);
-  color: var(--color-code-text, #d4d4d4);
-  padding: 1.25em 1.5em;
-  border-radius: 10px;
-  overflow-x: auto;
-  margin: 0;
-}
-
-.layout-sidebar code {
-  font-family: var(--font-mono);
-  font-size: 0.9em;
-  background-color: var(--color-code-inline-bg, rgba(0, 0, 0, 0.06));
-  padding: 0.15em 0.45em;
-  border-radius: 5px;
-}
-
-.layout-sidebar pre code {
-  background: none;
-  padding: 0;
-  border-radius: 0;
-  font-size: inherit;
-}
-
-.layout-sidebar a {
-  color: var(--color-accent);
-  text-decoration: none;
-}
-
-.layout-sidebar a:hover {
-  text-decoration: underline;
-}
-
-/* ============================================================================
- * Layout Code Focus - Full-width code block layout
+ * Layout: code-focus
  * ============================================================================ */
 
 .layout-code-focus {
-  display: flex;
-  flex-direction: column;
-  width: 100%;
-  height: 100%;
-  color: var(--color-text);
-  gap: 1.5rem; /* consistent internal spacing */
+	width: 100%;
+	height: 100%;
+	padding: var(--slide-padding);
+	display: flex;
+	flex-direction: column;
+	justify-content: center;
+	gap: 1.5rem;
 }
 
-.layout-code-focus .slide-content {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-}
-
-.layout-code-focus h1,
-.layout-code-focus h2,
-.layout-code-focus h3 {
-  font-size: 2.5rem;
-  line-height: 1.25;
-  font-weight: 600;
-  margin: 0;
-  margin-bottom: 1.5rem;
-}
-
-.layout-code-focus p {
-  font-size: 1.75rem;
-  line-height: 1.5;
-  margin: 0;
-  margin-top: 1.5rem;
-  color: var(--color-muted);
-}
-
-/* Code blocks get the most space */
-.layout-code-focus pre {
-  font-family: var(--font-mono);
-  font-size: 1.5rem; /* slide-code */
-  line-height: 1.65;
-  background-color: var(--color-code-bg);
-  color: var(--color-code-text, #d4d4d4);
-  padding: 2em 2.5em;
-  border-radius: 12px;
-  overflow-x: auto;
-  margin: 0;
-}
-
-.layout-code-focus code {
-  font-family: var(--font-mono);
-  font-size: 0.9em;
-  background-color: var(--color-code-inline-bg, rgba(0, 0, 0, 0.06));
-  padding: 0.15em 0.45em;
-  border-radius: 5px;
-}
-
-.layout-code-focus pre code {
-  background: none;
-  padding: 0;
-  border-radius: 0;
-  font-size: inherit;
+.layout-code-focus .slot-content pre {
+	font-size: 2.75rem;
+	padding: 1.75em 2.25em;
 }
 
 /* ============================================================================
- * Layout Quote - Styled blockquote for impactful quotes
- * ============================================================================ */
-
-.layout-quote {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  width: 100%;
-  height: 100%;
-  color: var(--color-text);
-  text-align: center;
-  padding: var(--slide-padding, 6rem); /* extra padding for elegant whitespace */
-}
-
-/* Make slide-content also center its children for quote layout */
-.layout-quote .slide-content {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  max-width: 85%; /* constrain for elegant framing */
-}
-
-.layout-quote blockquote {
-  font-size: 3.25rem; /* slightly larger for impact */
-  line-height: 1.5;
-  font-style: italic;
-  margin: 0;
-  max-width: 90%;
-  position: relative;
-  padding-left: 3rem; /* increased padding for breathing room */
-  padding-top: 1rem;
-  padding-bottom: 1rem;
-  border-left: 5px solid var(--color-accent);
-  text-align: left;
-}
-
-.layout-quote blockquote p {
-  margin: 0;
-  margin-bottom: 1.25rem;
-}
-
-.layout-quote blockquote p:last-child {
-  margin-bottom: 0;
-}
-
-/* Attribution styling (often the last paragraph with "— Author") */
-.layout-quote blockquote p:last-of-type {
-  font-size: 2rem;
-  font-style: normal;
-  color: var(--color-muted);
-  margin-top: 2rem; /* increased spacing before attribution */
-}
-
-/* If there's only one paragraph in the blockquote, keep it styled as the quote */
-.layout-quote blockquote p:only-child {
-  font-size: 3.25rem;
-  font-style: italic;
-  color: var(--color-text);
-  margin-top: 0;
-}
-
-/* Attribution paragraph that follows the blockquote (e.g., "— Author Name") */
-.layout-quote .slide-content > p,
-.layout-quote > p {
-  font-size: 2.25rem; /* slightly larger */
-  font-weight: 500;
-  font-style: normal;
-  color: var(--color-muted);
-  margin-top: 3rem; /* increased for elegant separation */
-  text-align: left;
-  letter-spacing: 0.04em;
-  padding-left: 3rem; /* align with blockquote content */
-  max-width: 90%;
-}
-
-/* Attribution with em-dash prefix styling */
-.layout-quote .slide-content > p::before,
-.layout-quote > p::before {
-  content: "— ";
-  color: var(--color-accent);
-  font-weight: 600;
-}
-
-/* ============================================================================
- * Layout Big Stat - Large number emphasis for statistics
+ * Layout: big-stat
  * ============================================================================ */
 
 .layout-big-stat {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  width: 100%;
-  height: 100%;
-  color: var(--color-text);
-  text-align: center;
-  padding: var(--slide-padding, 5rem);
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	width: 100%;
+	height: 100%;
+	text-align: center;
+	padding: var(--slide-padding);
+	gap: 2rem;
 }
 
-/* Make slide-content also center its children for big-stat layout */
-.layout-big-stat .slide-content {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 3rem; /* breathing room between elements */
-  max-width: 90%; /* constrain width for dramatic presence */
+.layout-big-stat .slot-default {
+	max-width: 90%;
 }
 
-/* The main stat number - use h1 or strong */
-.layout-big-stat h1 {
-  font-size: 12rem; /* increased for more dramatic impact */
-  line-height: 0.95;
-  letter-spacing: -0.05em;
-  font-weight: 800;
-  margin: 0;
-  color: var(--color-accent);
-  text-shadow: 0 6px 40px color-mix(in srgb, var(--color-accent) 30%, transparent);
+.layout-big-stat .slot-default h1,
+.layout-big-stat .slot-default strong {
+	display: block;
+	font-size: 11.5rem;
+	line-height: 0.95;
+	letter-spacing: -0.05em;
+	font-weight: 800;
+	color: var(--color-accent);
+	margin: 0;
 }
 
-.layout-big-stat strong {
-  font-size: 14rem; /* increased for dramatic emphasis */
-  line-height: 0.9;
-  letter-spacing: -0.05em;
-  font-weight: 700;
-  display: block;
-  color: var(--color-accent);
-  text-shadow: 0 6px 40px color-mix(in srgb, var(--color-accent) 30%, transparent);
+/*
+ * big-stat's h1 is the slide's one-line statement (a number, or a short
+ * claim). See the .layout-title data-length rule above.
+ */
+[data-theme='base'] .layout-big-stat .slot-default h1[data-length='short'] {
+	font-size: 12.5rem;
 }
 
-/* Description text below the stat */
-.layout-big-stat p {
-  font-size: 2.75rem; /* slightly increased */
-  line-height: 1.4;
-  margin: 0;
-  margin-top: 2.5rem; /* more breathing room */
-  color: var(--color-muted);
-  max-width: 65%; /* tighter for elegant framing */
-  text-wrap: balance;
+.layout-big-stat .slot-caption {
+	max-width: 70%;
 }
 
-/* h2 in big-stat is the description below the stat */
-.layout-big-stat h2 {
-  font-size: 3.25rem; /* slightly increased */
-  line-height: 1.3;
-  letter-spacing: -0.01em;
-  font-weight: 500;
-  margin: 0;
-  margin-top: 2.5rem; /* more breathing room */
-  color: var(--color-muted);
-  max-width: 75%;
-  text-wrap: balance;
+.layout-big-stat .slot-caption p {
+	color: var(--color-muted);
+	font-size: 2.75rem;
+	line-height: 1.5;
+	margin-top: 0;
+}
+
+.layout-big-stat .slot-figure img {
+	max-height: 30vh;
 }
 
 /* ============================================================================
- * Layout Cover - Full-bleed background with centered content overlay
+ * Layout: quote
+ * ============================================================================ */
+
+.layout-quote {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	width: 100%;
+	height: 100%;
+	padding: var(--slide-padding);
+}
+
+.layout-quote .slot-default {
+	max-width: 85%;
+}
+
+.layout-quote .slot-default blockquote {
+	font-size: 3.75rem;
+	line-height: 1.45;
+	border-left: 5px solid var(--color-accent);
+	padding-left: 1.5em;
+	margin: 0;
+	font-style: italic;
+	color: var(--color-text);
+	text-align: left;
+}
+
+.layout-quote .slot-attribution {
+	max-width: 85%;
+}
+
+.layout-quote .slot-attribution p {
+	font-size: 2.5rem;
+	line-height: 1.4;
+	font-style: normal;
+	color: var(--color-muted);
+	margin-top: 1.75rem;
+	text-align: left;
+}
+
+.layout-quote .slot-attribution p::before {
+	content: '\2013\00A0';
+	color: var(--color-accent);
+}
+
+/* ============================================================================
+ * Layout: cover - full-bleed with overlay content
  * ============================================================================ */
 
 .layout-cover {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  width: 100%;
-  height: 100%;
-  color: var(--color-text);
-  text-align: center;
-  /* Cover layout is full-bleed, no padding by default */
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	width: 100%;
+	height: 100%;
+	text-align: center;
 }
 
-/* Make slide-content also center its children for cover layout */
-.layout-cover .slide-content {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 2rem; /* consistent internal spacing */
-  padding: var(--slide-padding, 5rem); /* content padding for text */
-  max-width: 85%; /* constrain text for readability */
+.layout-cover .slot-default {
+	padding: var(--slide-padding);
+	max-width: 85%;
 }
 
-/* Cover slides often have dark backgrounds, so default to white text */
-.layout-cover h1 {
-  font-size: 6rem;
-  line-height: 1.1;
-  letter-spacing: -0.02em;
-  font-weight: 700;
-  margin: 0;
-  text-shadow: 0 2px 20px rgba(0, 0, 0, 0.5);
-}
-
-.layout-cover h2 {
-  font-size: 3rem;
-  line-height: 1.25;
-  font-weight: 600;
-  margin: 0;
-  margin-top: 1.5rem;
-  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.4);
-}
-
-.layout-cover p {
-  font-size: 2rem;
-  line-height: 1.5;
-  margin: 0;
-  margin-top: 1.5rem;
-  max-width: 70%;
-  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.4);
+.layout-cover .slot-content h1 {
+	font-size: 5rem;
+	line-height: 1.08;
 }
 
 /* ============================================================================
- * Layout Split Media - Image + text side-by-side
+ * Layout: sidebar
+ * ============================================================================ */
+
+.layout-sidebar {
+	display: grid;
+	grid-template-columns: 2fr 1fr;
+	gap: var(--column-gap);
+	width: 100%;
+	height: 100%;
+	align-content: center;
+	padding: var(--slide-padding);
+}
+
+.layout-sidebar .slot-sidebar {
+	padding-left: 3rem;
+	border-left: 2px solid var(--color-border);
+}
+
+/* ============================================================================
+ * Layout: split-media
  * ============================================================================ */
 
 .layout-split-media {
-  display: flex;
-  flex-direction: column;
-  width: 100%;
-  height: 100%;
-  color: var(--color-text);
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	width: 100%;
+	height: 100%;
 }
 
-/* Override Tailwind's p-slide class for full-bleed split-media */
-.slide-renderer.layout-split-media {
-  padding: 0 !important;
+.layout-split-media .slot-default {
+	display: flex;
+	flex-direction: column;
+	justify-content: center;
+	padding: 4.5rem 5.5rem;
 }
 
-/* The slide-content becomes the grid container */
-.layout-split-media .slide-content {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0;
-  width: 100%;
-  height: 100%;
-  flex: 1;
-  min-height: 0; /* Allow grid to shrink below content height */
+.layout-split-media .slot-media {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	overflow: hidden;
+	background: var(--color-surface);
 }
 
-/* Media side (left column - typically an image) */
-.layout-split-media .column-left {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
-  background: var(--color-surface, rgba(0, 0, 0, 0.03));
-  height: 100%;
-}
-
-/* Remove paragraph margins inside left column */
-.layout-split-media .column-left p {
-  margin: 0;
-  height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.layout-split-media .column-left img {
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-  max-height: 100%;
-}
-
-/* Content side (right column) */
-.layout-split-media .column-right {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  padding: 4rem 5rem;
-  height: 100%;
-}
-
-/* Typography for split-media layout */
-.layout-split-media h1 {
-  font-size: 3.5rem;
-  line-height: 1.2;
-  letter-spacing: -0.01em;
-  font-weight: 600;
-  margin: 0;
-  margin-bottom: 1.5rem;
-}
-
-.layout-split-media h2 {
-  font-size: 2.5rem;
-  line-height: 1.25;
-  font-weight: 600;
-  margin: 0;
-  margin-bottom: 1.25rem;
-}
-
-.layout-split-media h3 {
-  font-size: 2rem;
-  line-height: 1.3;
-  font-weight: 600;
-  margin: 0;
-  margin-bottom: 1rem;
-}
-
-.layout-split-media p {
-  font-size: 1.75rem;
-  line-height: 1.5;
-  margin: 0;
-  margin-bottom: 1rem;
-}
-
-.layout-split-media p:last-child {
-  margin-bottom: 0;
-}
-
-.layout-split-media ul,
-.layout-split-media ol {
-  font-size: 1.75rem;
-  line-height: 1.5;
-  margin: 0;
-  padding-left: 1.5em;
-}
-
-.layout-split-media li {
-  margin-bottom: 0.5em;
-}
-
-.layout-split-media li:last-child {
-  margin-bottom: 0;
-}
-
-.layout-split-media li::marker {
-  color: var(--color-accent);
-}
-
-.layout-split-media pre {
-  font-family: var(--font-mono);
-  font-size: 1.25rem;
-  line-height: 1.65;
-  background-color: var(--color-code-bg);
-  color: var(--color-code-text, #d4d4d4);
-  padding: 1.25em 1.5em;
-  border-radius: 10px;
-  overflow-x: auto;
-  margin: 0;
-}
-
-.layout-split-media code {
-  font-family: var(--font-mono);
-  font-size: 0.9em;
-  background-color: var(--color-code-inline-bg, rgba(0, 0, 0, 0.06));
-  padding: 0.15em 0.45em;
-  border-radius: 5px;
-}
-
-.layout-split-media pre code {
-  background: none;
-  padding: 0;
-  border-radius: 0;
-  font-size: inherit;
+.layout-split-media .slot-media img {
+	width: 100%;
+	height: 100%;
+	object-fit: contain;
 }
 
 /* ============================================================================
- * Layout Blank - Empty canvas with minimal styling
+ * Layout: blank - empty canvas
  * ============================================================================ */
 
 .layout-blank {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  width: 100%;
-  height: 100%;
-  color: var(--color-text);
-  padding: var(--slide-padding, 5rem);
+	width: 100%;
+	height: 100%;
+	padding: var(--slide-padding);
 }
 
-/* Make slide-content also center its children for blank layout */
-.layout-blank .slide-content {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 2rem; /* consistent internal spacing */
+/* ============================================================================
+ * Layout: component - deck-supplied whole-slide component
+ * `DeckComponent` renders the component's own markup inside
+ * `.deck-component-root` (see components/DeckComponent.tsx), with no
+ * `layout-component` wrapper of its own. Give that root the same padding
+ * and full-size flex column base every other layout gets from
+ * `.layout-<name>`, so a component with `height: 100%` fills the safe area.
+ * A theme that insets `.slide-content` itself, or resets its own
+ * `[class^='layout-']` box model, overrides this at its own
+ * `[data-theme='<slug>'] .slide[data-layout='component'] > .slide-content >
+ * .deck-component-root` scope; see docs/reference/theme-porting.md's
+ * "Component slides" section.
+ *
+ * `.deck-component-root` is not unique to the whole-slide form: an inline
+ * component (`Slide.tsx` portals a `DeckComponent` straight into the
+ * `<div class="deck-component" data-component-index>` placeholder a
+ * markdown paragraph left inside a `.slot`) uses the exact same class. Only
+ * the whole-slide form is ever a direct child of `.slide-content` (or of
+ * `.scroll-content`, when `scroll: true`); an inline one is always nested
+ * inside a `.slot`. Every selector below relies on that `>` combinator
+ * chain to reach only the whole-slide form - never write a bare
+ * `.deck-component-root` selector, here or in a theme file, since it also
+ * matches every inline component on every layout.
+ * ============================================================================ */
+
+.slide[data-layout='component'] > .slide-content > .deck-component-root,
+.slide[data-layout='component'] > .slide-content > .scroll-content > .deck-component-root {
+	/*
+	 * A whole-slide component's own root commonly fills its container with
+	 * an inline `position: absolute; inset: 0` (no stylesheet rule can
+	 * override an inline style), which resolves against the nearest
+	 * positioned ancestor's padding box. Establishing that positioning
+	 * context here, rather than leaving it to whichever ancestor happens to
+	 * be positioned, guarantees the component fills exactly this box - the
+	 * one carrying the safe-area padding - not a bigger or smaller one.
+	 * That containing block is the padding edge, so real `padding` here
+	 * would sit inside it and get filled over by an inset:0 child; a
+	 * transparent `border` reserves the same visual margin in a way the
+	 * containing-block calculation actually honors.
+	 */
+	position: relative;
+	width: 100%;
+	height: 100%;
+	border: var(--slide-padding) solid transparent;
+	display: flex;
+	flex-direction: column;
 }
 
-/* Minimal typography - user controls content placement */
-.layout-blank h1,
-.layout-blank h2,
-.layout-blank h3,
-.layout-blank h4,
-.layout-blank h5,
-.layout-blank h6 {
-  margin: 0;
-  font-weight: 600;
+/* ============================================================================
+ * Slide decorations
+ * ============================================================================ */
+
+.slide-content {
+	position: relative;
+	width: 100%;
+	height: 100%;
 }
 
-.layout-blank h1 { font-size: 4rem; line-height: 1.2; }
-.layout-blank h2 { font-size: 3rem; line-height: 1.25; }
-.layout-blank h3 { font-size: 2.5rem; line-height: 1.3; }
-.layout-blank h4 { font-size: 2rem; line-height: 1.35; }
-.layout-blank h5 { font-size: 1.75rem; line-height: 1.4; }
-.layout-blank h6 { font-size: 1.5rem; line-height: 1.4; }
-
-.layout-blank p {
-  font-size: 2rem;
-  line-height: 1.5;
-  margin: 0;
+.slide-tag {
+	position: absolute;
+	top: 2rem;
+	left: 2rem;
+	font-family: var(--font-mono);
+	font-size: 1.1rem;
+	color: var(--color-muted);
+	z-index: 1;
 }
 
-.layout-blank img {
-  max-width: 100%;
-  max-height: 100%;
+.slide-badge {
+	position: absolute;
+	top: 2rem;
+	right: 2rem;
+	font-family: var(--font-mono);
+	font-size: 1.1rem;
+	color: var(--color-muted);
+	z-index: 1;
 }
 
-.layout-blank pre {
-  font-family: var(--font-mono);
-  font-size: 1.5rem;
-  line-height: 1.65;
-  background-color: var(--color-code-bg);
-  color: var(--color-code-text, #d4d4d4);
-  padding: 1.5em 2em;
-  border-radius: 12px;
-  overflow-x: auto;
-  margin: 0;
+.slide-error {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 100%;
+	height: 100%;
+	padding: var(--slide-padding);
+	color: var(--color-error);
+	font-family: var(--font-mono);
+	font-size: 1.5rem;
+	text-align: center;
 }
 
-.layout-blank code {
-  font-family: var(--font-mono);
-  font-size: 0.9em;
-  background-color: var(--color-code-inline-bg, rgba(0, 0, 0, 0.06));
-  padding: 0.15em 0.45em;
-  border-radius: 5px;
-}
-
-.layout-blank pre code {
-  background: none;
-  padding: 0;
-  border-radius: 0;
-  font-size: inherit;
-}
+/* Fragment reveal timing (.fragment-hidden / .fragment-visible) lives in
+ * lib/styles/animations.css, next to the other slide animation rules. */

@@ -82,9 +82,48 @@ Vague prompts produce unpredictable results. Include:
 | "teamwork" | "four diverse professionals collaborating around a whiteboard, modern office, warm lighting" |
 | "security" | "a shield icon with a lock, flat design, corporate blue gradient background" |
 
-### Match Your Theme
+### Matching the Theme
 
-Consider your presentation's visual style when writing prompts. For a noir theme, request dark backgrounds. For paper theme, request neutral tones.
+Every built-in theme declares its own illustration style: medium, line
+weight, shape language, texture, how the palette should be used, mood, and
+what to avoid. `tap theme show <slug> --prompt` prints that as a
+ready-to-paste style brief, with the palette as hex values:
+
+```bash
+tap theme show blueprint --prompt
+```
+
+```
+Illustration style for the "Blueprint" slide theme: flat vector technical
+drawing, white-ink-on-blue blueprint diagram. Use only this palette:
+background #0f3a75, foreground #f5f9ff, accent #ffd447, muted #c0d6f3,
+surface #174688. Palette use: deep blue background dominant, white/near-white
+line work, one yellow accent used only for a callout or highlight. Line: 3 to
+4px even strokes, drafting-table precision, dimension lines with tick marks.
+Shapes: rectangles, circles, and annotated technical diagrams, grid-aligned,
+no organic curves. Texture: faint graph-paper grid in the background. Mood:
+precise, engineered, under-construction. Avoid: gradients, photos, rounded
+corners, color outside blue/white/yellow, decorative flourish. Type feel, as
+a style hint only: Saira Condensed for display, Saira Semi Condensed for
+body. No text or lettering in the image unless asked. Canvas 16:9, sitting on
+a #0f3a75 background so it blends into the slide.
+```
+
+Put that brief in front of your own subject line:
+
+```
+<the style brief above>
+
+Subject: four app servers behind a load balancer, one of them restarting.
+```
+
+The result sits on the slide instead of fighting it: the palette matches,
+the background blends, and nothing arrives with a gradient the theme never
+uses. If you already know the deck, `tap theme show --deck slides.md
+--prompt` reads the theme from its frontmatter.
+
+See [Theme Tokens](/guide/themes#theme-tokens) for the same values as CSS
+custom properties.
 
 ### Keep It Presentation-Ready
 

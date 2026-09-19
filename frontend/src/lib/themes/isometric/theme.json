@@ -1,0 +1,41 @@
+{
+	"name": "Isometric",
+	"polarity": "light",
+	"pitch": "A friendly architecture walkthrough where the infrastructure itself is the cast: code, tables, and numbers become chunky little solids on a warm floor.",
+	"illustration": {
+		"medium": "flat vector isometric illustration on off-white, like a technical product diagram",
+		"line": "2px strokes, precise isometric angles (30 degrees), no freehand curves",
+		"shapes": "isometric boxes, servers, and simple 3D-style blocks built from flat facets",
+		"texture": "none, flat color facets with a slightly darker shade on one face to suggest depth",
+		"palette_use": "off-white background dominant, deep navy line work, one teal accent used for the highlighted facet or element",
+		"mood": "precise, structural, diagrammatic",
+		"avoid": "gradients, true perspective/vanishing points, photorealism, hand-drawn wobble"
+	},
+	"mermaid": {
+		"themeVariables": {
+			"fontFamily": "Nunito",
+			"primaryColor": "#7EC9C5",
+			"primaryTextColor": "#1B2340",
+			"primaryBorderColor": "#127F87",
+			"nodeTextColor": "#1B2340",
+			"nodeBorder": "#127F87",
+			"lineColor": "#0FA3A3",
+			"background": "#F6F2EA",
+			"mainBkg": "#7EC9C5",
+			"textColor": "#1B2340",
+			"titleColor": "#1B2340",
+			"secondaryColor": "#C4E6E3",
+			"secondaryTextColor": "#1B2340",
+			"secondaryBorderColor": "#127F87",
+			"tertiaryColor": "#DAD8D5",
+			"tertiaryTextColor": "#1B2340",
+			"tertiaryBorderColor": "#93949D",
+			"clusterBkg": "#DAD8D5",
+			"clusterBorder": "#93949D",
+			"edgeLabelBackground": "#F6F2EA",
+			"fontSize": "40px"
+		},
+		"quietStyle": "fill:#DAD8D5,stroke:#93949D,color:#1B2340",
+		"curve": "linear"
+	}
+}

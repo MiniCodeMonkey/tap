@@ -93,17 +93,34 @@ layout: two-column
 | `default` | Standard centered content |
 | `title` | Large centered title slide |
 | `section` | Section divider |
-| `two-column` | Two equal columns (separated by `|||`) |
-| `three-column` | Three columns (separated by `|||`) |
+| `two-column` | Two equal columns (`::left` and `::right` slots) |
+| `three-column` | Three columns (`::left`, `::center`, and `::right` slots) |
 | `code-focus` | Maximized code display |
 | `big-stat` | Prominent statistic or number |
 | `quote` | Styled quotation |
 | `cover` | Full-screen background image |
-| `sidebar` | Main content with sidebar (separated by `|||`) |
-| `split-media` | Media and content side by side (separated by `|||`) |
+| `sidebar` | Main content with sidebar (`::sidebar` slot) |
+| `split-media` | Media and content side by side (`::media` slot) |
 | `blank` | No default styling |
 
 See [Layouts Reference](/reference/layouts-reference) for detailed specifications.
+
+A slide with no `layout:` directive gets one picked from its content: two
+or three column slots, a lone `h1`, a lone `h2`, a dominant code block, or
+a blockquote each select a layout. See
+[Automatic Layout Selection](/reference/layouts-reference#automatic-layout-selection).
+
+**Component layouts:** a value that starts with `./` or `../` and ends in
+`.jsx`, `.tsx`, `.js`, or `.ts` names a React component file next to the
+deck, which renders the whole slide:
+
+```markdown
+<!--
+layout: ./slides/RollingDeploy.jsx
+-->
+```
+
+See [Components Reference](/reference/components-reference).
 
 #### Example: Two-Column Layout
 
@@ -120,12 +137,14 @@ layout: two-column
 - Fast execution
 - Simple setup
 
-|||
+::right
 
 ### Option B
 - More features
 - Better scaling
 ```
+
+Content before the first `::slot` marker (like the `### Option A` section above) is the default slot. A slot marker line such as `::right` starts a new named slot that runs to the next marker or the end of the slide.
 
 ---
 
@@ -293,6 +312,10 @@ background: #1a1a2e
 | URL | `https://example.com/image.jpg` |
 | Gradient | `linear-gradient(135deg, #667eea 0%, #764ba2 100%)` |
 
+Hex colors do not need quotes. `background: #1a1a2e` and `background: "#1a1a2e"` both work: the parser quotes a bare `#rgb`, `#rgba`, `#rrggbb`, or `#rrggbbaa` value before handing the directive block to YAML, since an unquoted `#` would otherwise start a YAML comment and silently empty the value.
+
+Only a genuine hex color is protected this way. A value such as `tag: #scaling` is not 3, 4, 6, or 8 hex digits, so it is still read as a YAML comment and still needs quotes: `tag: "#scaling"`.
+
 #### Example: Colored Background
 
 ```markdown
@@ -390,9 +413,9 @@ notes: |
 Faster than our previous release
 ```
 
-#### Alternative: Inline Notes Syntax
+#### Alternative: Notes Comment Anywhere in the Slide
 
-You can also add notes at the end of a slide using inline comment syntax:
+You can also write notes as their own HTML comment anywhere in the slide, most commonly after the content:
 
 ```markdown
 ---
@@ -408,13 +431,31 @@ Revenue increased 25% this quarter.
 -->
 ```
 
-Both syntaxes are equivalent; choose the one that fits your workflow.
+A comment whose content starts with `notes:` (after optional whitespace) is a notes comment. It is removed from the rendered slide, so it never reaches the HTML, and its text (blank lines trimmed from the start and end, inner line breaks kept) becomes the slide's notes. This works even when the text after `notes:` is not valid YAML, for example when it contains a colon or starts with a quote. A notes comment inside a fenced code block is left alone as code, and one inside a named `::slot` section is still removed and still counts toward the slide's notes.
+
+If a slide has both a `notes:` directive in its first comment block and one or more of these standalone notes comments, they are joined with a blank line, directive notes first. Several standalone notes comments on one slide are joined in document order, each separated by a blank line. A `<!-- pause -->` comment is never treated as notes.
+
+A comment ends at the first `-->` it contains, the same rule HTML (and the goldmark renderer tap uses) follows: comments do not nest. Notes text can therefore not contain the sequence `-->`; anything after the first `-->` closes the comment and is read as ordinary slide content instead of notes.
+
+The first directive comment can also mix real directives with free-text notes, in either order, even when the notes text is not valid YAML on its own:
+
+```markdown
+<!--
+layout: big-stat
+notes: Start time is 10am, don't run over.
+-->
+```
+
+A line that opens with a known directive key (`layout`, `transition`, `background`, `tag`, `badge`, `fragments`, `scroll`, `scroll-speed`, `steps`) is read as that directive; the `notes:` line and everything after it up to the next such line is read as notes text. Inside that notes text, a line only counts as a directive if its value is plausible for that key: `layout`, `transition`, `fragments`, `scroll`, `scroll-speed`, and `steps` need a single word with no spaces, so a sentence like `layout: keep it simple, that's the message.` stays part of the notes instead of being read as a layout.
+
+A notes line that begins with `background:`, `tag:`, or `badge:` is always read as a directive, since those keys take free-form values; the [trailing notes comment form](#alternative-notes-comment-anywhere-in-the-slide) avoids this question entirely and is the recommended form for long free-text notes.
 
 ---
 
-### class
+### tag
 
-Adds custom CSS classes to the slide for styling.
+A short decorative metadata label rendered on the slide, for example a
+chapter marker.
 
 | Property | Value |
 |----------|-------|
@@ -424,36 +465,103 @@ Adds custom CSS classes to the slide for styling.
 
 ```markdown
 <!--
-class: my-custom-slide highlight
+tag: "01 / Kickoff"
 -->
 ```
 
-Multiple classes can be space-separated. Use this with custom CSS in your theme to create specialized slide styles.
+Keep a tag word-shaped. Some themes render it at poster size, where a
+string of punctuation reads badly.
 
-#### Example: Custom Styling
+---
+
+### badge
+
+A short decorative badge rendered on the slide, for example a version
+number.
+
+| Property | Value |
+|----------|-------|
+| Type | `string` |
+| Default | None |
+| Overrides | None |
 
 ```markdown
 <!--
-class: emphasis-slide
+badge: "v2.0"
 -->
-
-# Important Point
-
-This slide has custom styling applied.
 ```
 
-In your theme's CSS:
+---
 
-```css
-.emphasis-slide {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-}
+### scroll
 
-.emphasis-slide h1 {
-  font-size: 4rem;
-  text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
-}
+Turns a long slide into a scroll reveal: the content scrolls up as you
+advance instead of overflowing the slide.
+
+| Property | Value |
+|----------|-------|
+| Type | `boolean` |
+| Default | `false` |
+| Overrides | None |
+
+```markdown
+<!--
+scroll: true
+-->
 ```
+
+---
+
+### scroll-speed
+
+The scroll reveal's duration in milliseconds. Only meaningful together
+with `scroll: true`.
+
+| Property | Value |
+|----------|-------|
+| Type | `integer` (milliseconds) |
+| Default | `2000` |
+| Overrides | None |
+
+```markdown
+<!--
+scroll: true
+scroll-speed: 4000
+-->
+```
+
+---
+
+### steps
+
+How many clicker presses this slide consumes before advancing. Used by
+step-driven content: a deck component, or a `map` fence.
+
+| Property | Value |
+|----------|-------|
+| Type | `integer` |
+| Default | The component's `export const steps`, or `1` for a `map` fence, otherwise `0` |
+| Overrides | A component's own `export const steps` |
+
+```markdown
+<!--
+layout: ./map-slide.jsx
+steps: 4
+-->
+```
+
+The directive always wins, including `steps: 0`, which pins a slide to a
+single press no matter what its components declare.
+
+::: warning Do not set both
+The directive overrides a component's `export const steps` **silently**, so
+a component whose step count later changes keeps consuming the directive's
+number, and the extra presses do nothing. Prefer the export, which keeps
+the count next to the code that defines it, and use this directive only
+when the slide has no component export to read (a `map` fence, or a
+component you cannot edit). See
+[Components Reference](/reference/components-reference#steps).
+:::
 
 ---
 
@@ -481,7 +589,7 @@ notes: |
 - Simpler to start
 - Tighter coupling
 
-|||
+::right
 
 ### Microservices
 - Independent scaling
@@ -498,7 +606,11 @@ notes: |
 | `fragments` | boolean | From frontmatter | Incremental list reveals |
 | `background` | string | Theme default | Background color/image |
 | `notes` | string | None | Speaker notes |
-| `class` | string | None | Custom CSS classes |
+| `tag` | string | None | Decorative metadata label |
+| `badge` | string | None | Decorative badge |
+| `scroll` | boolean | `false` | Scroll reveal for long content |
+| `scroll-speed` | integer | `2000` | Scroll reveal duration, in milliseconds |
+| `steps` | integer | Auto-detected | Clicker presses this slide consumes |
 
 ## Directive vs. Frontmatter
 

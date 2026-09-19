@@ -2,6 +2,31 @@
 
 A markdown-based presentation tool for technical presentations with beautiful defaults, live code execution, and a developer-first experience.
 
+## Features
+
+- **Plain markdown.** Slides separated by `---`, named slots with `::name`
+  marker lines, fragments with `<!-- pause -->`, speaker notes in an HTML
+  comment.
+- **12 layouts** with declared slots, from `title` and `big-stat` to
+  `split-media` and `blank`.
+- **21 themes**, `base` plus 20 designed ones, each built for a kind of
+  talk. Press `t` to cycle them live, or pass `?theme=<slug>` in the URL.
+- **No network on stage.** Fonts, the syntax highlighter, and the asciinema
+  player are all bundled into the binary.
+- **Live code execution** against SQLite, MySQL, PostgreSQL, shell, or any
+  driver you define, in `tap dev`.
+- **Deck-supplied React components.** Drop a `.jsx` file next to the deck
+  and use it as a whole slide or as an inline block; tap bundles it itself,
+  with no Node install. See `docs/guide/custom-components.md`.
+- **Mermaid diagrams, asciinema recordings, and animated maps** as fenced
+  blocks.
+- **Presenter view** with notes, a timer, the next slide, and live fragment
+  and step mirroring across devices.
+- **A fixed 1920px canvas** that scales as one unit, so a deck looks the
+  same on every projector.
+- **Static builds and PDF export**, plus `tap screenshot` for checking a
+  single slide from a script.
+
 ## Quick Start
 
 ```bash
@@ -9,7 +34,7 @@ A markdown-based presentation tool for technical presentations with beautiful de
 go install github.com/MiniCodeMonkey/tap@latest
 
 # Create a new presentation
-tap new my-presentation
+tap new --output my-presentation.md
 
 # Start the dev server with hot reload
 tap dev my-presentation.md
@@ -61,9 +86,12 @@ brew install MiniCodeMonkey/tap/tap
 
 ```bash
 tap new                    # Interactive wizard
-tap new -t gradient        # Specify theme
-tap new -o slides.md       # Specify output file
+tap new -t terminal        # Pre-fill the wizard's theme step
+tap new -o slides.md       # Pre-fill the output filename
 ```
+
+`tap new` always runs the wizard and needs a terminal; the flags pre-fill
+steps rather than skip them.
 
 ### Start Dev Server
 
@@ -103,6 +131,32 @@ tap add                    # Add slide to auto-detected file
 tap add slides.md          # Add slide to specific file
 ```
 
+### Screenshot a Slide
+
+```bash
+tap screenshot slides.md --slide 4                 # final state of slide 4
+tap screenshot slides.md --slide 4 --step 2        # slide 4 at presenter step 2
+tap screenshot slides.md --all --out shots/        # every slide
+```
+
+Exits with status 1 when the slide shows an error card, so a script can
+check a slide without looking at the image.
+
+### Inspect a Theme
+
+```bash
+tap theme list                       # every built-in theme
+tap theme show blueprint             # tokens and illustration style
+tap theme show blueprint --prompt    # style brief for an image model
+```
+
+### Scaffold a Deck Component
+
+```bash
+tap add component RollingDeploy            # slides/RollingDeploy.jsx
+tap add component LatencyDrop --inline     # components/LatencyDrop.jsx
+```
+
 ## Command Reference
 
 | Command | Description | Key Options |
@@ -113,6 +167,10 @@ tap add slides.md          # Add slide to specific file
 | `tap serve [dir]` | Serve static files | `-p, --port` |
 | `tap pdf <file>` | Export presentation to PDF | `-o, --output`, `--content` |
 | `tap add [file]` | Add slides interactively | - |
+| `tap screenshot <file>` | Render a slide to a PNG | `--slide`, `--all`, `--step`, `--fragment`, `--theme`, `--out`, `--width` |
+| `tap add component <Name>` | Scaffold a deck component | `--inline`, `--ts`, `--deck` |
+| `tap theme list` | List every built-in theme | `--json` |
+| `tap theme show [slug]` | Show a theme's tokens and style | `--json`, `--prompt`, `--deck` |
 | `tap --version` | Show version | - |
 | `tap --help` | Show help | - |
 
@@ -125,7 +183,7 @@ Slides are separated by `---` on its own line:
 ```markdown
 ---
 title: My Presentation
-theme: paper
+theme: terminal
 ---
 
 # Welcome
@@ -146,13 +204,14 @@ Configure your presentation using YAML frontmatter at the top of your file:
 ```yaml
 ---
 title: My Presentation
-theme: paper            # paper, noir, aurora, phosphor, poster
+theme: terminal          # base plus 20 designed themes, see docs/guide/themes.md
 author: Your Name
 date: "2024-01-15"
 aspectRatio: "16:9"     # 16:9, 4:3, 16:10
 transition: fade        # none, fade, slide, push, zoom
-codeTheme: github-dark
 fragments: true
+themeColors:            # optional: override individual theme colors
+  accent: "#ffd447"
 
 # Configure code execution drivers
 drivers:
@@ -201,14 +260,14 @@ notes: |
 - `title` - Centered title with optional subtitle
 - `section` - Large section header
 - `default` - Standard content layout
-- `two-column` - Side-by-side columns (use `|||` separator)
-- `three-column` - Three columns (use `|||` separators)
+- `two-column` - Side-by-side columns (`::right` marker)
+- `three-column` - Three columns (`::center` and `::right` markers)
 - `code-focus` - Full-width code block
-- `quote` - Styled blockquote
-- `big-stat` - Large number emphasis
+- `quote` - Styled blockquote (`::attribution` marker)
+- `big-stat` - Large number emphasis (`::caption`, `::figure` markers)
 - `cover` - Full-bleed background image
-- `sidebar` - Main content with sidebar
-- `split-media` - Image + text side-by-side
+- `sidebar` - Main content with sidebar (`::sidebar` marker)
+- `split-media` - Image + text side-by-side (`::media` marker)
 - `blank` - Empty canvas
 
 ### Fragments (Incremental Reveals)
@@ -265,20 +324,28 @@ Control image sizing and position:
 | `←` `↑` `Backspace` | Previous slide/fragment |
 | `Home` | First slide |
 | `End` | Last slide |
+| `PageDown` | Next slide/fragment |
+| `PageUp` | Previous slide/fragment |
 | `O` | Toggle overview |
 | `S` | Open presenter view |
+| `T` | Cycle themes |
 | `F` | Toggle fullscreen |
 | `Esc` | Exit fullscreen/overview |
 
 ## Themes
 
-Tap includes five built-in themes:
+Tap ships `base` plus 20 designed themes: `terminal`, `product`, `swiss`,
+`newsprint`, `zine`, `poster`, `blueprint`, `riso`, `retro-computing`,
+`paperback`, `keynote`, `editorial`, `observatory`, `arcade`, `isometric`,
+`ink`, `lab-notebook`, `bauhaus`, `sketch`, and `transit`.
 
-- **minimal** - Clean Apple-style aesthetics (default)
-- **gradient** - Modern colorful gradients with glassmorphism
-- **terminal** - Hacker aesthetic with CRT effects
-- **brutalist** - Bold, geometric, high contrast
-- **keynote** - Professional with subtle shadows
+Set one in frontmatter with `theme:`. `base` is the fallback used when a
+deck names no theme or names one that does not exist. Every theme is
+CSS-only and bundles its own fonts, so nothing loads from the network
+during a talk.
+
+Run `tap theme list` for the full list with each theme's polarity and the
+kind of talk it was built for, or see `docs/guide/themes.md`.
 
 ## Environment Variables
 

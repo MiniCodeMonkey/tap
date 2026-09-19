@@ -17,7 +17,7 @@ This example demonstrates how to structure a product demo with:
 
 ## Features Used
 
-- **Theme**: `aurora` for modern, engaging visuals
+- **Theme**: `product` for a launch-day, landing-page feel
 - **Layouts**: `title`, `big-stat`, `split-media`, `section`
 - **Live Code**: Shell driver for live CLI demos
 - **Transitions**: `fade` for smooth flow between sections
@@ -27,7 +27,7 @@ This example demonstrates how to structure a product demo with:
 ````markdown
 ---
 title: Introducing Tap
-theme: aurora
+theme: product
 author: Product Team
 date: 2026-01-24
 aspectRatio: "16:9"
@@ -57,19 +57,19 @@ Death by PowerPoint
 
 <!-- pause -->
 
-- **Context switching** — Leave your IDE to update slides
+- **Context switching**: Leave your IDE to update slides
 
 <!-- pause -->
 
-- **Outdated screenshots** — Code examples get stale
+- **Outdated screenshots**: Code examples get stale
 
 <!-- pause -->
 
-- **No interactivity** — Can't demo live code safely
+- **No interactivity**: Can't demo live code safely
 
 <!-- pause -->
 
-- **Version control nightmare** — Binary files don't diff
+- **Version control nightmare**: Binary files don't diff
 
 ---
 
@@ -97,19 +97,19 @@ Write slides in Markdown, run code live
 
 <!-- pause -->
 
-1. **Write Markdown** — Use your favorite editor
+1. **Write Markdown**: Use your favorite editor
 
 <!-- pause -->
 
-2. **Add frontmatter** — Configure themes and drivers
+2. **Add frontmatter**: Configure themes and drivers
 
 <!-- pause -->
 
-3. **Run `tap dev`** — Hot reload as you edit
+3. **Run `tap dev`**: Hot reload as you edit
 
 <!-- pause -->
 
-4. **Present** — Execute code blocks live
+4. **Present**: Execute code blocks live
 
 ---
 
@@ -119,7 +119,7 @@ layout: two-column
 
 ## Before & After
 
-|||
+::left
 
 ### Before (PowerPoint)
 
@@ -128,7 +128,7 @@ layout: two-column
 - Hope nothing changed
 - Pray the demo gods are kind
 
-|||
+::right
 
 ### After (Tap)
 
@@ -164,12 +164,12 @@ faster to create and maintain technical presentations
 <!-- pause -->
 
 > "Finally, a presentation tool that thinks like a developer."
-> — Senior Engineer, Acme Corp
+> -- Senior Engineer, Acme Corp
 
 <!-- pause -->
 
 > "Our team's technical presentations went from dreaded to delightful."
-> — Engineering Manager, StartupCo
+> -- Engineering Manager, StartupCo
 
 ---
 

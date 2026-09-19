@@ -83,7 +83,7 @@ For database drivers, you configure connections in the frontmatter. This keeps c
 
 ### SQLite
 
-SQLite is the simplest—just specify the database file:
+SQLite is the simplest: just specify the database file.
 
 ```yaml
 ---
@@ -287,11 +287,11 @@ uname -a && df -h
 
 ## Best Practices
 
-1. **Test your queries** before the presentation—run through all slides once
+1. **Test your queries** before the presentation: run through all slides once
 2. **Use read-only credentials** when connecting to production databases
 3. **Have a backup plan** if network/database connectivity fails
-4. **Keep queries fast**—audiences lose attention during long-running operations
-5. **Use SQLite for portability**—it requires no external database server
+4. **Keep queries fast.** Audiences lose attention during long-running operations
+5. **Use SQLite for portability.** It requires no external database server
 
 ## Next Steps
 

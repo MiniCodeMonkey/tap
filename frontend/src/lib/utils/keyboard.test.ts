@@ -1,6 +1,5 @@
 /**
  * Unit tests for keyboard navigation.
- * These tests will run once Vitest is configured (US-075).
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -22,12 +21,9 @@ vi.mock('$lib/stores/presentation', () => ({
 	nextSlide: vi.fn(() => true),
 	prevSlide: vi.fn(() => true),
 	goToSlide: vi.fn(() => true),
-	totalSlides: { subscribe: vi.fn((fn: (value: number) => void) => { fn(10); return () => {}; }) }
-}));
-
-// Mock svelte/store get function
-vi.mock('svelte/store', () => ({
-	get: vi.fn(() => 10)
+	usePresentationStore: { getState: vi.fn(() => ({})) },
+	selectTotalSlides: vi.fn(() => 10),
+	cycleTheme: vi.fn()
 }));
 
 describe('keyboard navigation', () => {
@@ -220,6 +216,37 @@ describe('keyboard navigation', () => {
 			});
 			expect(preventDefaultSpy).toHaveBeenCalled();
 		});
+
+		it('should cycle the theme on T', () => {
+			cleanup = setupKeyboardNavigation();
+
+			const event = new KeyboardEvent('keydown', { key: 't' });
+			const preventDefaultSpy = vi.spyOn(event, 'preventDefault');
+
+			if (keydownHandler) {
+				keydownHandler(event);
+			}
+
+			expect(presentationStore.cycleTheme).toHaveBeenCalled();
+			expect(preventDefaultSpy).toHaveBeenCalled();
+		});
+
+		it('should not cycle the theme on T while an input is focused', () => {
+			const inputElement = document.createElement('input');
+			Object.defineProperty(document, 'activeElement', {
+				value: inputElement,
+				configurable: true
+			});
+
+			cleanup = setupKeyboardNavigation();
+
+			const event = new KeyboardEvent('keydown', { key: 't' });
+			if (keydownHandler) {
+				keydownHandler(event);
+			}
+
+			expect(presentationStore.cycleTheme).not.toHaveBeenCalled();
+		});
 	});
 
 	describe('escape key', () => {
@@ -256,6 +283,35 @@ describe('keyboard navigation', () => {
 			}
 
 			expect(document.exitFullscreen).toHaveBeenCalled();
+		});
+
+		it('should blur a focused editable element instead of toggling overview or exiting fullscreen', () => {
+			const inputElement = document.createElement('input');
+			document.body.appendChild(inputElement);
+			inputElement.focus();
+			Object.defineProperty(document, 'activeElement', {
+				value: inputElement,
+				configurable: true
+			});
+			Object.defineProperty(document, 'fullscreenElement', {
+				value: document.documentElement,
+				configurable: true
+			});
+			const blurSpy = vi.spyOn(inputElement, 'blur');
+			const onToggleOverview = vi.fn();
+
+			cleanup = setupKeyboardNavigation({ onToggleOverview, isOverviewOpen: () => true });
+
+			const event = new KeyboardEvent('keydown', { key: 'Escape' });
+			if (keydownHandler) {
+				keydownHandler(event);
+			}
+
+			expect(blurSpy).toHaveBeenCalled();
+			expect(onToggleOverview).not.toHaveBeenCalled();
+			expect(document.exitFullscreen).not.toHaveBeenCalled();
+
+			inputElement.remove();
 		});
 	});
 

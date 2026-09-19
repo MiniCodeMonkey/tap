@@ -44,29 +44,46 @@ mv tap-darwin-arm64 /usr/local/bin/tap
 
 ## Create Your First Presentation
 
-Use `tap new` to scaffold a new presentation:
+Use `tap new` to scaffold a new presentation. It opens an interactive
+wizard that asks for a title, a theme, and a filename; `--output` and
+`--theme` pre-fill those steps:
 
 ```bash
-tap new my-talk
+tap new --output my-talk.md --theme terminal
 ```
 
-This creates a new file `my-talk.md` with a basic template:
+The wizard needs a terminal. If you are scripting, write the markdown file
+yourself: a deck is a plain file, and the frontmatter below is all it
+needs.
+
+It writes `my-talk.md` with eight starter slides. The first two look like
+this:
 
 ```markdown
 ---
-title: My Talk
-theme: paper
+title: "My Talk"
+theme: terminal
+author: "Your Name"
+date: "2026-09-19"
+aspectRatio: "16:9"
+transition: fade
 ---
 
-# Welcome
+# My Talk
 
-Your first slide content here.
+Your Name
 
 ---
 
-# Second Slide
+## Agenda
 
-More content...
+- Introduction
+- Main Content
+- Conclusion
+
+<!-- pause -->
+
+Take your time to go through each section.
 ```
 
 ## Start the Dev Server
@@ -77,12 +94,14 @@ Launch the development server to preview your slides:
 tap dev my-talk.md
 ```
 
-This starts a local server (typically at `http://localhost:3000`) with:
+This starts a local server at `http://localhost:3000` with:
 - Live reload on file changes
 - Presenter mode at `/presenter`
 - Live code execution support
 
-Use arrow keys or space to navigate between slides.
+Use arrow keys or space to navigate. Press `t` to try a different theme,
+`o` for the slide overview, `s` to open the presenter view, and `f` for
+fullscreen. See [Keyboard Shortcuts](/reference/keyboard-shortcuts).
 
 ## Basic Slide Syntax
 
@@ -93,7 +112,7 @@ Every presentation starts with YAML frontmatter defining global settings:
 ```yaml
 ---
 title: My Presentation
-theme: paper
+theme: terminal
 author: Your Name
 date: 2024-01-15
 ---
@@ -146,7 +165,12 @@ When you're ready to share your presentation, build it as a static site:
 tap build my-talk.md
 ```
 
-This generates optimized HTML/CSS/JS in the `dist/` directory. You can deploy this to any static hosting service like Netlify, Vercel, or GitHub Pages.
+This generates a self-contained folder in `dist/`. Every path in it is
+relative and every font is bundled, so it works from any static host,
+including a GitHub Pages project sub-path, with no configuration.
+
+Live code execution is the one thing a static build cannot do: code blocks
+with a driver show their code, unexecuted.
 
 To preview the built version locally:
 
@@ -164,3 +188,4 @@ Now that you have the basics, explore the guides to unlock Tap's full potential:
 - [Code Blocks](/guide/code-blocks) - Syntax highlighting and line highlighting
 - [Live Code Execution](/guide/live-code-execution) - Run SQL, shell commands, and more
 - [Presenter Mode](/guide/presenter-mode) - Use speaker notes and timer during presentations
+- [Custom Components](/guide/custom-components) - Add a React component from your deck's own folder

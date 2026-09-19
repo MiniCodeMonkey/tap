@@ -1,17 +1,9 @@
 import { defineConfig } from 'vitest/config';
-import { svelte } from '@sveltejs/vite-plugin-svelte';
+import react from '@vitejs/plugin-react';
 import { resolve } from 'path';
 
 export default defineConfig({
-	plugins: [
-		svelte({
-			hot: !process.env.VITEST,
-			// Force client-side compilation for tests
-			compilerOptions: {
-				dev: true
-			}
-		})
-	],
+	plugins: [react()],
 	test: {
 		// Enable globals for testing-library matchers
 		globals: true,
@@ -19,20 +11,14 @@ export default defineConfig({
 		environment: 'jsdom',
 		// Setup files for testing-library extensions
 		setupFiles: ['./src/test/setup.ts'],
-		// Include test files
-		include: ['src/**/*.{test,spec}.{js,ts}'],
+		include: ['src/**/*.{test,spec}.{js,ts,tsx}'],
 		// Coverage configuration
 		coverage: {
 			provider: 'v8',
 			reporter: ['text', 'json', 'html'],
-			// Cover only the three components required by US-075
-			include: [
-				'src/lib/components/SlideRenderer.svelte',
-				'src/lib/components/SlideContainer.svelte',
-				'src/lib/components/FragmentContainer.svelte'
-			],
 			exclude: [
 				'src/**/*.test.ts',
+				'src/**/*.test.tsx',
 				'src/**/*.spec.ts',
 				'src/test/**/*'
 			]

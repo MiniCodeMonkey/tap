@@ -1,0 +1,37 @@
+{
+	"name": "Arcade",
+	"polarity": "dark",
+	"pitch": "A high-energy war-story talk framed as a game you can win, built to stay legible on a washed-out projector.",
+	"illustration": {
+		"medium": "flat vector, synthwave arcade-cabinet illustration on deep purple",
+		"line": "2 to 3px neon-glow strokes, crisp with a slight outer glow",
+		"shapes": "sunset arcs, grid horizons, simple geometric mountains or shapes, retro-futurist composition",
+		"texture": "faint scanline or grid-horizon perspective lines",
+		"palette_use": "deep indigo/purple background dominant, hot pink accent used for the glowing focal element, sparing cyan for secondary glow",
+		"mood": "nostalgic 80s arcade, neon-lit, playful",
+		"avoid": "photorealism, soft pastel color, hand-drawn wobble, flat daylight lighting"
+	},
+	"mermaid": {
+		"themeVariables": {
+			"fontFamily": "Red Hat Mono",
+			"primaryColor": "#24197A",
+			"primaryTextColor": "#FAF8FF",
+			"primaryBorderColor": "#FF7EBD",
+			"lineColor": "#3CF2FF",
+			"background": "#181052",
+			"mainBkg": "#24197A",
+			"textColor": "#FAF8FF",
+			"nodeTextColor": "#FAF8FF",
+			"nodeBorder": "#FF7EBD",
+			"clusterBkg": "#24197A",
+			"clusterBorder": "#6A58E6",
+			"titleColor": "#FAF8FF",
+			"edgeLabelBackground": "#181052",
+			"secondaryColor": "#24197A",
+			"tertiaryColor": "#24197A",
+			"fontSize": "42px"
+		},
+		"quietStyle": "fill:#181052,stroke:#6A58E6,color:#CBC5F2",
+		"curve": "stepAfter"
+	}
+}

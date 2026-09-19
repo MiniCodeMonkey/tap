@@ -1,0 +1,1438 @@
+/**
+ * Keynote theme.
+ * For a big-room product launch: a dark stage lit from a single source
+ * overhead, one idea centered under the light at a time, and a thin band of
+ * light at the stage floor. Type carries the whole show; decoration is
+ * light, not texture.
+ *
+ * Ported from .superpowers/brainstorm/themes-v3/keynote.theme.html (the
+ * CSS-only mockup built against a fixed 11-slide deck). See
+ * docs/reference/theme-porting.md and its addendum for what changed moving
+ * from that mockup to the real app's markup.
+ */
+
+@import '@fontsource/geist/latin-400.css';
+@import '@fontsource/geist/latin-500.css';
+@import '@fontsource/geist/latin-600.css';
+@import '@fontsource/geist/latin-700.css';
+@import '@fontsource/geist-mono/latin-400.css';
+@import '@fontsource/geist-mono/latin-500.css';
+@import '@fontsource/geist-mono/latin-600.css';
+
+[data-theme='keynote'] {
+	/* ---------- design-spec tokens ---------- */
+	--bg: #06070a;
+	--fg: #f4f6fa;
+	--muted: #a9b3c1;
+	--accent: #7cc7ff;
+	--accent-text: #7cc7ff;
+	--accent-bright: #d7efff;
+	--surface: #1a212d;
+	--edge: #4d5a6e;
+	--dim: #7f8a9a;
+	--font-display: 'Geist', 'Helvetica Neue', Arial, sans-serif;
+	--font-body: 'Geist', 'Helvetica Neue', Arial, sans-serif;
+	--font-mono: 'Geist Mono', ui-monospace, Menlo, monospace;
+	--ease: cubic-bezier(0.22, 0.61, 0.24, 1);
+	--dur: 850ms;
+	--space-unit: 32px;
+	--radius: 16px;
+	--stroke-width: 1px;
+	--hairline: linear-gradient(
+		90deg,
+		transparent 0%,
+		color-mix(in srgb, var(--accent) 75%, transparent) 30%,
+		color-mix(in srgb, var(--accent) 75%, transparent) 70%,
+		transparent 100%
+	);
+	--number-fill: linear-gradient(180deg, var(--fg) 38%, var(--accent) 118%);
+
+	/*
+	 * Bridge to the base theme's own token names. layouts.css, prose.css,
+	 * rich-blocks.css and ui-components.css style the live code block, the
+	 * map slide, badges, tags, and generic prose entirely through these
+	 * `--color-*` and `--font-sans` custom properties.
+	 */
+	--color-bg: var(--bg);
+	--color-text: var(--fg);
+	--color-muted: var(--muted);
+	--color-accent: var(--accent);
+	--color-code-bg: var(--surface);
+	--color-code-text: var(--fg);
+	--color-code-inline-bg: color-mix(in srgb, var(--accent-bright) 16%, transparent);
+	--color-border: var(--edge);
+	--color-surface: var(--surface);
+	--color-surface-elevated: var(--surface);
+	--color-link: var(--accent-bright);
+	--font-sans: var(--font-body);
+
+	/* Shiki reads token colors from these custom properties directly. */
+	--shiki-foreground: var(--fg);
+	--shiki-background: var(--surface);
+	--shiki-token-comment: var(--dim);
+	--shiki-token-string: var(--accent-text);
+	--shiki-token-string-expression: var(--accent-text);
+	--shiki-token-keyword: var(--fg);
+	--shiki-token-function: var(--fg);
+	--shiki-token-constant: var(--accent-text);
+	--shiki-token-parameter: var(--fg);
+	--shiki-token-punctuation: var(--muted);
+	--shiki-token-link: var(--accent-text);
+}
+
+@keyframes keynote-settle {
+	from {
+		opacity: 0;
+		transform: scale(0.965);
+	}
+}
+@keyframes keynote-light {
+	from {
+		opacity: 0;
+	}
+}
+@keyframes keynote-rise {
+	from {
+		opacity: 0;
+		transform: translateY(24px);
+	}
+}
+@keyframes keynote-breathe {
+	from {
+		opacity: 1;
+		transform: scale(1);
+	}
+	to {
+		opacity: 0.76;
+		transform: scale(1.05);
+	}
+}
+@keyframes keynote-blink {
+	0%,
+	44% {
+		opacity: 1;
+	}
+	45%,
+	54% {
+		opacity: 0;
+	}
+	55%,
+	89% {
+		opacity: 1;
+	}
+	90%,
+	100% {
+		opacity: 0;
+	}
+}
+
+/* ============================================================================
+ * Stage: base slide chrome, overhead light, floor line
+ * ============================================================================
+ * Every selector below that reads attr(data-index)/attr(data-layout) or
+ * decorates the slide root is scoped to `.slide[data-layout]`, the real
+ * rendered slide, not the bare `.slide` class SlideCanvas also puts on its
+ * outer 1920x1080 scaling frame.
+ * ============================================================================ */
+
+[data-theme='keynote'] .slide[data-layout] {
+	isolation: isolate;
+	padding: 96px;
+	background: var(--bg);
+	color: var(--fg);
+	font-family: var(--font-body);
+	font-size: 60px;
+	font-weight: 500;
+	line-height: 1.24;
+	letter-spacing: -0.015em;
+	text-align: center;
+}
+[data-theme='keynote'] .slide :where(h1, h2, h3, h4, h5, h6, p, ul, ol, li, blockquote, pre, table) {
+	margin: 0;
+	padding: 0;
+}
+[data-theme='keynote'] .slide[data-layout]::before {
+	content: '';
+	position: absolute;
+	inset: 0;
+	z-index: -1;
+	background: radial-gradient(
+		ellipse 980px 640px at 50% -10%,
+		color-mix(in srgb, var(--accent) 26%, transparent) 0%,
+		transparent 72%
+	);
+	animation: keynote-light calc(var(--dur) * 1.3) var(--ease) both;
+}
+[data-theme='keynote'] .slide[data-layout]::after {
+	content: '';
+	position: absolute;
+	left: 0;
+	right: 0;
+	bottom: 56px;
+	height: 180px;
+	z-index: -1;
+	background:
+		linear-gradient(
+				90deg,
+				transparent 18%,
+				var(--accent) 42%,
+				var(--accent-bright) 50%,
+				var(--accent) 58%,
+				transparent 82%
+			)
+			bottom / 100% 3px no-repeat,
+		radial-gradient(ellipse 820px 170px at 50% 100%, color-mix(in srgb, var(--accent) 24%, transparent) 0%, transparent 72%);
+	animation: keynote-light calc(var(--dur) * 1.3) var(--ease) 150ms both;
+}
+[data-theme='keynote'] .slide[data-layout='title']::after,
+[data-theme='keynote'] .slide[data-layout='cover']::after {
+	display: none;
+}
+
+[data-theme='keynote'] .slide[data-layout] h1,
+[data-theme='keynote'] .slide[data-layout] h2,
+[data-theme='keynote'] .slide[data-layout] h3,
+[data-theme='keynote'] .slide[data-layout] h4,
+[data-theme='keynote'] .slide[data-layout] h5,
+[data-theme='keynote'] .slide[data-layout] h6 {
+	font-family: var(--font-display);
+	font-weight: 600;
+	letter-spacing: -0.042em;
+	text-wrap: balance;
+}
+[data-theme='keynote'] .slot > h2 {
+	margin: 0;
+	font-size: 88px;
+	line-height: 1.1;
+}
+[data-theme='keynote'] .slot > h2[data-length='medium'] {
+	font-size: 108px;
+}
+[data-theme='keynote'] .slot > h2[data-length='short'] {
+	font-size: 122px;
+}
+[data-theme='keynote'] .slot h3 {
+	font-size: 60px;
+	line-height: 1.2;
+	font-weight: 600;
+	color: var(--fg);
+	margin-top: 12px;
+	margin-bottom: 20px;
+}
+[data-theme='keynote'] .slot h4 {
+	font-size: 48px;
+	line-height: 1.25;
+	font-weight: 600;
+	color: var(--accent-text);
+	margin-top: 12px;
+	margin-bottom: 16px;
+}
+[data-theme='keynote'] .slot h5,
+[data-theme='keynote'] .slot h6 {
+	font-size: 32px;
+	line-height: 1.3;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.22em;
+	color: var(--muted);
+	margin-top: 12px;
+	margin-bottom: 14px;
+}
+[data-theme='keynote'] .slot p {
+	text-wrap: balance;
+}
+[data-theme='keynote'] .slide[data-layout] strong {
+	font-weight: 600;
+	color: var(--accent-text);
+}
+[data-theme='keynote'] .slide[data-layout] em {
+	font-style: normal;
+	color: var(--accent-text);
+}
+[data-theme='keynote'] .slide[data-layout] p code {
+	font-family: var(--font-mono);
+	font-size: 0.9em;
+	font-weight: 600;
+	letter-spacing: 0;
+	color: var(--accent-bright);
+	background: color-mix(in srgb, var(--accent-bright) 14%, transparent);
+	padding: 0.05em 0.28em;
+	border-radius: 4px;
+}
+[data-theme='keynote'] .slot li code {
+	font-family: var(--font-mono);
+	font-size: 0.62em;
+	font-weight: 600;
+	letter-spacing: 0;
+	color: var(--accent-bright);
+	background: color-mix(in srgb, var(--accent-bright) 14%, transparent);
+	padding: 0.05em 0.28em;
+	border-radius: 4px;
+}
+[data-theme='keynote'] .slide[data-layout] a {
+	color: var(--accent-bright);
+	text-decoration: underline;
+	text-decoration-color: color-mix(in srgb, var(--accent-bright) 50%, transparent);
+	text-underline-offset: 0.16em;
+}
+[data-theme='keynote'] .slide[data-layout] a:hover {
+	color: var(--fg);
+}
+
+/* status: a small folio, bottom center, the only place the frame counts itself */
+[data-theme='keynote'] .slide[data-layout]:not([data-layout='title']):not([data-layout='cover'])::marker {
+	content: none;
+}
+[data-theme='keynote'] .slide-tag {
+	position: absolute;
+	left: 96px;
+	right: 96px;
+	top: 96px;
+	font-size: 30px;
+	font-weight: 600;
+	line-height: 1.2;
+	letter-spacing: 0.26em;
+	text-transform: uppercase;
+	color: var(--muted);
+	text-align: center;
+	animation: keynote-settle var(--dur) var(--ease) both;
+}
+[data-theme='keynote'] .slide-badge {
+	top: 96px;
+	right: 96px;
+	font-family: var(--font-mono);
+	font-size: 26px;
+	font-weight: 600;
+	letter-spacing: 0.04em;
+	color: var(--bg);
+	background: var(--accent);
+	padding: 8px 20px;
+	border-radius: 100px;
+	animation: keynote-settle var(--dur) var(--ease) both;
+}
+[data-theme='keynote'] .slide-content,
+[data-theme='keynote'] [class^='layout-'],
+[data-theme='keynote'] .slide[data-layout='component'] > .slide-content > .deck-component-root,
+[data-theme='keynote'] .slide[data-layout='component'] > .slide-content > .scroll-content > .deck-component-root {
+	height: 100%;
+}
+[data-theme='keynote'] .slide:has(> .slide-tag) .slide-content {
+	padding-top: 84px;
+}
+[data-theme='keynote'] [class^='layout-'],
+[data-theme='keynote'] .slide[data-layout='component'] > .slide-content > .deck-component-root,
+[data-theme='keynote'] .slide[data-layout='component'] > .slide-content > .scroll-content > .deck-component-root {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+}
+
+/* entrance: each element in a slot settles into place, in reading order */
+[data-theme='keynote'] .slot > * {
+	animation: keynote-settle var(--dur) var(--ease) 120ms both;
+}
+[data-theme='keynote'] .slot > :nth-child(2) {
+	animation-delay: 260ms;
+}
+[data-theme='keynote'] .slot > :nth-child(3) {
+	animation-delay: 400ms;
+}
+[data-theme='keynote'] .slot > :nth-child(n + 4) {
+	animation-delay: 540ms;
+}
+[data-theme='keynote'] .slot-caption > *,
+[data-theme='keynote'] .slot-attribution > * {
+	animation-delay: 540ms;
+}
+[data-theme='keynote'] .slot > ul,
+[data-theme='keynote'] .slot > pre,
+[data-theme='keynote'] .slot > table {
+	animation: none;
+}
+
+/* ============================================================================
+ * Title
+ * ============================================================================ */
+
+[data-theme='keynote'] .layout-title {
+	justify-content: flex-start;
+	padding-top: 64px;
+	position: relative;
+}
+[data-theme='keynote'] .layout-title .slot > * {
+	animation-delay: 260ms;
+}
+/*
+ * Budgeted for a full-sentence title (a 95-character title must fit in five
+ * lines without colliding with the subtitle below it). `data-length` scales
+ * this up for shorter titles, so a one- or two-word talk name gets back the
+ * mockup's full 130px impact instead of reading at the same modest size a
+ * worst-case sentence needs.
+ */
+[data-theme='keynote'] .layout-title h1,
+[data-theme='keynote'] .layout-title h2 {
+	font-size: 92px;
+	line-height: 1.12;
+	letter-spacing: -0.04em;
+	width: 100%;
+	max-width: 1700px;
+}
+[data-theme='keynote'] .layout-title h1[data-length='medium'],
+[data-theme='keynote'] .layout-title h2[data-length='medium'] {
+	font-size: 112px;
+	line-height: 1.1;
+}
+[data-theme='keynote'] .layout-title h1[data-length='short'],
+[data-theme='keynote'] .layout-title h2[data-length='short'] {
+	font-size: 132px;
+	line-height: 1.08;
+}
+[data-theme='keynote'] .layout-title h1 {
+	color: var(--muted);
+}
+[data-theme='keynote'] .layout-title h2 {
+	animation-delay: 400ms;
+}
+[data-theme='keynote'] .layout-title h1:not(:first-child) {
+	margin-top: 4px;
+}
+[data-theme='keynote'] .layout-title p {
+	margin-top: 44px;
+	font-size: 40px;
+	letter-spacing: 0.01em;
+	color: var(--muted);
+	max-width: 1400px;
+	animation-delay: 540ms;
+}
+[data-theme='keynote'] .layout-title::before {
+	content: '';
+	position: absolute;
+	z-index: -1;
+	left: 50%;
+	top: 550px;
+	width: 2080px;
+	height: 500px;
+	margin-left: -1040px;
+	background: radial-gradient(
+		closest-side,
+		color-mix(in srgb, var(--accent) 62%, transparent) 0%,
+		color-mix(in srgb, var(--accent) 20%, transparent) 45%,
+		transparent 100%
+	);
+	animation:
+		keynote-rise calc(var(--dur) * 1.5) var(--ease) both,
+		keynote-breathe 11s ease-in-out 1600ms infinite alternate;
+}
+[data-theme='keynote'] .layout-title::after {
+	content: '';
+	position: absolute;
+	z-index: -1;
+	left: 50%;
+	top: 800px;
+	width: 5200px;
+	height: 5200px;
+	margin-left: -2600px;
+	border-radius: 50%;
+	border: 5px solid transparent;
+	background:
+		linear-gradient(180deg, var(--surface) 0px, var(--bg) 210px) padding-box,
+		linear-gradient(
+				90deg,
+				transparent 1717px,
+				var(--accent) 2216px,
+				var(--accent-bright) 2600px,
+				var(--accent) 2984px,
+				transparent 3483px
+			)
+			border-box;
+	animation: keynote-rise calc(var(--dur) * 1.5) var(--ease) both;
+}
+
+/* ============================================================================
+ * Section
+ * ============================================================================ */
+
+[data-theme='keynote'] .slide[data-layout='section'] .slide-tag {
+	top: 236px;
+	font-family: var(--font-display);
+	font-size: 84px;
+	font-weight: 600;
+	letter-spacing: 0.01em;
+	text-transform: none;
+	color: var(--accent-text);
+	animation-delay: 150ms;
+}
+[data-theme='keynote'] .slide[data-layout='section'] .slide-content {
+	padding-top: 150px;
+}
+[data-theme='keynote'] .layout-section h1,
+[data-theme='keynote'] .layout-section h2 {
+	font-size: 130px;
+	line-height: 1.08;
+	letter-spacing: -0.05em;
+	width: 100%;
+	max-width: 1700px;
+}
+[data-theme='keynote'] .layout-section h1[data-length='medium'],
+[data-theme='keynote'] .layout-section h2[data-length='medium'] {
+	font-size: 150px;
+	line-height: 1.06;
+}
+[data-theme='keynote'] .layout-section h1[data-length='short'],
+[data-theme='keynote'] .layout-section h2[data-length='short'] {
+	font-size: 168px;
+	line-height: 1.05;
+}
+[data-theme='keynote'] .layout-section p {
+	margin-top: 36px;
+	font-size: 56px;
+	color: var(--muted);
+	max-width: 1500px;
+}
+
+/* ============================================================================
+ * Default: a lone statement, bullets, table, or diagram
+ * ============================================================================ */
+
+[data-theme='keynote'] .layout-default .slot {
+	height: 100%;
+	width: 100%;
+	max-width: 1560px;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+}
+[data-theme='keynote'] .layout-default .slot:has(> h1:only-child),
+[data-theme='keynote'] .layout-default .slot:has(> h2:only-child) {
+	justify-content: center;
+	padding-bottom: 60px;
+}
+[data-theme='keynote'] .layout-default .slot > h1:only-child {
+	font-size: 112px;
+	line-height: 1.12;
+	letter-spacing: -0.05em;
+	max-width: 100%;
+}
+[data-theme='keynote'] .layout-default .slot > h1:only-child[data-length='medium'] {
+	font-size: 148px;
+	line-height: 1.08;
+}
+[data-theme='keynote'] .layout-default .slot > h1:only-child[data-length='short'] {
+	font-size: 176px;
+	line-height: 1.05;
+}
+/* a lone h2 is the shorter, sub-headline statement */
+[data-theme='keynote'] .layout-default .slot > h2:only-child {
+	font-size: 84px;
+	line-height: 1.14;
+	letter-spacing: -0.04em;
+	max-width: 100%;
+}
+[data-theme='keynote'] .layout-default .slot > h2:only-child[data-length='medium'] {
+	font-size: 108px;
+	line-height: 1.1;
+}
+[data-theme='keynote'] .layout-default .slot > h2:only-child[data-length='short'] {
+	font-size: 128px;
+	line-height: 1.06;
+}
+[data-theme='keynote'] .layout-default .slot > h2:not(:only-child) {
+	margin-bottom: 40px;
+}
+[data-theme='keynote'] .layout-default .slot > h2 ~ * {
+	margin-block: auto;
+}
+
+/* ============================================================================
+ * Bullets: lines of light between the points, no markers
+ * ============================================================================ */
+
+[data-theme='keynote'] :is(.slot, .slot > [data-fragment-index]) > ul {
+	list-style: none;
+	width: 100%;
+	max-width: 1560px;
+	text-align: center;
+}
+[data-theme='keynote'] :is(.slot, .slot > [data-fragment-index]) > ul > li {
+	position: relative;
+	padding: 36px 0;
+	font-size: 62px;
+	line-height: 1.18;
+	letter-spacing: -0.02em;
+	text-wrap: balance;
+	animation: keynote-settle calc(var(--dur) * 0.8) var(--ease) 300ms both;
+	transition:
+		opacity var(--dur) var(--ease),
+		transform var(--dur) var(--ease);
+}
+[data-theme='keynote'] :is(.slot, .slot > [data-fragment-index]) > ul > li + li::before {
+	content: '';
+	position: absolute;
+	left: 22%;
+	right: 22%;
+	top: -1px;
+	height: 2px;
+	background: var(--hairline);
+}
+[data-theme='keynote'] :is(.slot, .slot > [data-fragment-index]) > ul > li:nth-child(2) {
+	animation-delay: 400ms;
+}
+[data-theme='keynote'] :is(.slot, .slot > [data-fragment-index]) > ul > li:nth-child(3) {
+	animation-delay: 500ms;
+}
+[data-theme='keynote'] :is(.slot, .slot > [data-fragment-index]) > ul > li:nth-child(4) {
+	animation-delay: 600ms;
+}
+[data-theme='keynote'] :is(.slot, .slot > [data-fragment-index]) > ul > li:nth-child(n + 5) {
+	animation-delay: 700ms;
+}
+[data-theme='keynote'] .slide .fragment-hidden {
+	opacity: 0;
+	transform: scale(1.035);
+}
+[data-theme='keynote'] .slide .fragment-visible {
+	opacity: 1;
+	transform: scale(1);
+}
+/* Seven or more bullets: a recap slide, tighter rows, smaller heading. */
+[data-theme='keynote'] .slot:has(> ul > li:nth-child(7)) > h2 {
+	font-size: 76px;
+	margin-bottom: 20px;
+}
+[data-theme='keynote'] .slot > ul:has(> li:nth-child(7)) > li {
+	padding: 16px 0;
+	font-size: 44px;
+}
+
+/* Nested lists sit quiet, indented, dash-marked, no hairline of their own. */
+[data-theme='keynote'] .slot ul ul {
+	list-style: none;
+	width: 100%;
+	max-width: none;
+	margin-top: 16px;
+	padding-left: 48px;
+}
+[data-theme='keynote'] .slot ul ul > li {
+	position: relative;
+	padding: 10px 0 10px 44px;
+	font-weight: 500;
+	color: var(--muted);
+	text-align: left;
+}
+[data-theme='keynote'] .slot ul ul > li::before {
+	content: '\2013\00A0';
+	position: absolute;
+	left: 0;
+	top: 10px;
+	color: var(--accent-text);
+}
+[data-theme='keynote'] .slot ol {
+	width: 100%;
+	max-width: 1560px;
+	list-style: none;
+	counter-reset: keynote-ol;
+}
+[data-theme='keynote'] .slot ol > li {
+	counter-increment: keynote-ol;
+	position: relative;
+	padding: 28px 0 28px 1.6em;
+	font-size: 62px;
+	line-height: 1.18;
+	text-align: left;
+	text-wrap: balance;
+}
+[data-theme='keynote'] .slot ol > li::before {
+	content: counter(keynote-ol) '.';
+	position: absolute;
+	left: 0;
+	top: 28px;
+	color: var(--accent-text);
+	font-weight: 600;
+}
+[data-theme='keynote'] .slot ol > li + li::before {
+	content: counter(keynote-ol) '.';
+}
+[data-theme='keynote'] .slot ol > li + li {
+	border-top: none;
+}
+
+/* ============================================================================
+ * Blockquote outside the quote layout: a quiet aside, left-aligned
+ * ============================================================================ */
+
+[data-theme='keynote'] :not(.layout-quote) > :is(.slot, .slot > [data-fragment-index]) > blockquote {
+	position: relative;
+	width: 100%;
+	max-width: 1400px;
+	margin-top: 12px;
+	padding: 8px 0 8px 56px;
+	text-align: left;
+}
+[data-theme='keynote'] :not(.layout-quote) > :is(.slot, .slot > [data-fragment-index]) > blockquote::before {
+	content: '';
+	position: absolute;
+	left: 0;
+	top: 0;
+	bottom: 0;
+	width: 3px;
+	background: var(--accent);
+}
+[data-theme='keynote'] :not(.layout-quote) > :is(.slot, .slot > [data-fragment-index]) > blockquote p {
+	font-size: 48px;
+	line-height: 1.4;
+	color: var(--muted);
+}
+
+/* ============================================================================
+ * Code
+ * ============================================================================ */
+
+[data-theme='keynote'] .layout-code-focus .slot {
+	height: 100%;
+	width: 100%;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+}
+[data-theme='keynote'] .layout-code-focus .slot > h2 {
+	margin-bottom: 16px;
+}
+[data-theme='keynote'] .layout-code-focus pre {
+	margin-block: 0;
+}
+/* layouts.css gives every `pre` 2em/2.5em padding, sized for shorter
+ * mockup samples. The slot centers a flex column with `overflow: auto` on
+ * the code block; at the theme's calmer 44px code size there is room for a
+ * generous line height and padding while still showing an 8-line sample in
+ * full, so this no longer needs the cramped line height a larger code size
+ * once forced. */
+[data-theme='keynote'] .layout-code-focus pre.shiki {
+	padding: 48px 64px;
+	line-height: 1.42;
+}
+[data-theme='keynote'] .layout-code-focus p {
+	color: var(--muted);
+	margin-top: 40px;
+}
+[data-theme='keynote'] pre.shiki {
+	width: fit-content;
+	max-width: 100%;
+	text-align: left;
+	font-family: var(--font-mono);
+	font-size: 44px;
+	font-weight: 500;
+	line-height: 1.5;
+	letter-spacing: 0;
+	font-variant-ligatures: none;
+	color: var(--fg);
+}
+[data-theme='keynote'] pre.shiki code {
+	display: flex;
+	flex-direction: column;
+	font: inherit;
+}
+[data-theme='keynote'] pre.shiki .line {
+	display: block;
+	white-space: pre;
+	padding: 0 48px;
+	animation: keynote-settle var(--dur) var(--ease) 200ms both;
+}
+[data-theme='keynote'] pre.shiki .line:nth-child(2) {
+	animation-delay: 260ms;
+}
+[data-theme='keynote'] pre.shiki .line:nth-child(3) {
+	animation-delay: 320ms;
+}
+[data-theme='keynote'] pre.shiki .line:nth-child(4) {
+	animation-delay: 380ms;
+}
+[data-theme='keynote'] pre.shiki .line:nth-child(n + 5) {
+	animation-delay: 440ms;
+}
+[data-theme='keynote'] pre.shiki .line.highlighted {
+	animation-delay: 560ms;
+}
+/* Dim every line that is not highlighted; covers both shiki output shapes. */
+[data-theme='keynote'] pre.has-highlighted .line:not(.highlighted),
+[data-theme='keynote'] pre.has-highlighted .line:not(.highlighted) > * {
+	color: var(--dim);
+}
+[data-theme='keynote'] pre.has-highlighted .line.highlighted {
+	font-weight: 600;
+	background: linear-gradient(
+		90deg,
+		transparent 0%,
+		color-mix(in srgb, var(--accent) 20%, transparent) 8%,
+		color-mix(in srgb, var(--accent) 20%, transparent) 92%,
+		transparent 100%
+	);
+}
+[data-theme='keynote'] pre.shiki:empty::after,
+[data-theme='keynote'] pre.shiki .line:empty {
+	min-height: 1em;
+}
+
+/* ============================================================================
+ * Big stat
+ * ============================================================================ */
+
+[data-theme='keynote'] .layout-big-stat {
+	padding-bottom: 40px;
+}
+[data-theme='keynote'] .layout-big-stat h1 {
+	font-size: 190px;
+	line-height: 1.04;
+	letter-spacing: -0.05em;
+	padding: 0 0.06em;
+	background: var(--number-fill);
+	-webkit-background-clip: text;
+	background-clip: text;
+	color: transparent;
+}
+[data-theme='keynote'] .layout-big-stat h1[data-length='medium'] {
+	font-size: 240px;
+	line-height: 1.03;
+}
+[data-theme='keynote'] .layout-big-stat h1[data-length='short'] {
+	font-size: 300px;
+	line-height: 1.02;
+}
+[data-theme='keynote'] .layout-big-stat .slot-caption {
+	max-width: 1300px;
+	font-size: 56px;
+	color: var(--muted);
+}
+
+/* ============================================================================
+ * Quote
+ * ============================================================================ */
+
+[data-theme='keynote'] .layout-quote {
+	padding-bottom: 40px;
+}
+[data-theme='keynote'] .layout-quote .slot-default {
+	max-width: 1600px;
+}
+[data-theme='keynote'] .layout-quote blockquote {
+	font-style: normal;
+	border: 0;
+	margin: 0;
+	padding: 0;
+}
+[data-theme='keynote'] .layout-quote blockquote::before {
+	content: '\201C';
+	display: block;
+	height: 130px;
+	font-family: var(--font-display);
+	font-size: 260px;
+	font-weight: 600;
+	line-height: 1;
+	color: var(--accent);
+}
+[data-theme='keynote'] .layout-quote blockquote p {
+	font-family: var(--font-display);
+	font-size: 108px;
+	font-weight: 600;
+	line-height: 1.1;
+	letter-spacing: -0.04em;
+	max-width: 1560px;
+	text-wrap: balance;
+}
+[data-theme='keynote'] .layout-quote .slot-attribution {
+	margin-top: 56px;
+	padding-top: 40px;
+	font-size: 40px;
+	letter-spacing: 0.01em;
+	color: var(--muted);
+	background: var(--hairline) top center / 420px 2px no-repeat;
+}
+
+/* ============================================================================
+ * Two and three columns: readings either side of a line of light
+ * ============================================================================ */
+
+[data-theme='keynote'] .layout-two-column {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	grid-template-rows: auto 1fr;
+	align-items: stretch;
+	width: 100%;
+	height: 100%;
+}
+[data-theme='keynote'] .layout-two-column .slot-default {
+	grid-column: 1 / -1;
+	max-width: 1600px;
+	margin: 0 auto;
+}
+[data-theme='keynote'] .layout-two-column .slot-left,
+[data-theme='keynote'] .layout-two-column .slot-right {
+	display: flex;
+	flex-direction: column;
+	justify-content: flex-start;
+	align-items: center;
+	padding: 64px 56px 0;
+	text-align: center;
+}
+[data-theme='keynote'] .layout-two-column .slot-right {
+	background:
+		linear-gradient(
+				180deg,
+				transparent 8%,
+				color-mix(in srgb, var(--accent) 75%, transparent) 35%,
+				color-mix(in srgb, var(--accent) 75%, transparent) 65%,
+				transparent 92%
+			)
+			left center / 2px 100% no-repeat;
+}
+[data-theme='keynote'] .layout-two-column h3 {
+	font-size: 30px;
+	font-weight: 600;
+	letter-spacing: 0.26em;
+	text-transform: uppercase;
+	color: var(--muted);
+	margin: 0 0 24px;
+}
+[data-theme='keynote'] .layout-two-column .slot-left > *,
+[data-theme='keynote'] .layout-two-column .slot-right > * {
+	width: 100%;
+	max-width: 640px;
+}
+[data-theme='keynote'] .layout-two-column p {
+	color: var(--muted);
+	font-size: 44px;
+	line-height: 1.3;
+}
+[data-theme='keynote'] .layout-two-column p strong {
+	display: block;
+	font-family: var(--font-display);
+	font-size: 150px;
+	line-height: 1.05;
+	letter-spacing: -0.05em;
+	padding-right: 0.04em;
+	background: var(--number-fill);
+	-webkit-background-clip: text;
+	background-clip: text;
+	color: transparent;
+}
+[data-theme='keynote'] .layout-two-column ul {
+	max-width: 640px;
+}
+[data-theme='keynote'] .layout-two-column li {
+	font-size: 44px;
+	line-height: 1.3;
+}
+[data-theme='keynote'] .layout-two-column .slot-left > * {
+	animation-delay: 300ms;
+}
+[data-theme='keynote'] .layout-two-column .slot-right > * {
+	animation-delay: 560ms;
+}
+
+[data-theme='keynote'] .layout-three-column {
+	display: grid;
+	grid-template-columns: 1fr 1fr 1fr;
+	grid-template-rows: auto 1fr;
+	align-items: stretch;
+	width: 100%;
+	height: 100%;
+}
+[data-theme='keynote'] .layout-three-column .slot-default {
+	grid-column: 1 / -1;
+	max-width: 1600px;
+	margin: 0 auto;
+}
+[data-theme='keynote'] .layout-three-column .slot-left,
+[data-theme='keynote'] .layout-three-column .slot-center,
+[data-theme='keynote'] .layout-three-column .slot-right {
+	display: flex;
+	flex-direction: column;
+	justify-content: flex-start;
+	align-items: center;
+	padding: 56px 40px 0;
+	text-align: center;
+}
+[data-theme='keynote'] .layout-three-column .slot-center,
+[data-theme='keynote'] .layout-three-column .slot-right {
+	background:
+		linear-gradient(
+				180deg,
+				transparent 8%,
+				color-mix(in srgb, var(--accent) 65%, transparent) 35%,
+				color-mix(in srgb, var(--accent) 65%, transparent) 65%,
+				transparent 92%
+			)
+			left center / 2px 100% no-repeat;
+}
+[data-theme='keynote'] .layout-three-column h3 {
+	font-size: 28px;
+	font-weight: 600;
+	letter-spacing: 0.22em;
+	text-transform: uppercase;
+	color: var(--muted);
+	margin: 0 0 20px;
+}
+[data-theme='keynote'] .layout-three-column p,
+[data-theme='keynote'] .layout-three-column li {
+	font-size: 42px;
+	line-height: 1.3;
+	color: var(--muted);
+}
+[data-theme='keynote'] .layout-three-column .slot-center > * {
+	animation-delay: 420ms;
+}
+[data-theme='keynote'] .layout-three-column .slot-right > * {
+	animation-delay: 620ms;
+}
+
+/* ============================================================================
+ * Image: a product shot on the stage floor
+ * ============================================================================ */
+
+[data-theme='keynote'] .layout-split-media {
+	display: grid;
+	grid-template-columns: 1fr 900px;
+	column-gap: 80px;
+	align-items: center;
+	width: 100%;
+	height: 100%;
+}
+[data-theme='keynote'] .layout-split-media .slot-default {
+	text-align: left;
+	padding-bottom: 120px;
+}
+[data-theme='keynote'] .layout-split-media .slot-default > * {
+	width: 100%;
+}
+/*
+ * The text column here is roughly 750px, well short of the 1560px other
+ * slots get, so the heading keeps a fixed narrow-column size rather than
+ * scaling up with `data-length`: a short title stays one line instead of
+ * wrapping awkwardly.
+ */
+[data-theme='keynote'] .layout-split-media .slot-default > h2 {
+	font-size: 84px;
+	line-height: 1.1;
+}
+[data-theme='keynote'] .layout-split-media .slot-default p {
+	margin-top: 36px;
+	color: var(--muted);
+	font-size: 50px;
+	line-height: 1.35;
+}
+[data-theme='keynote'] .layout-split-media .slot-media {
+	padding-bottom: 120px;
+}
+[data-theme='keynote'] .layout-split-media .slot-media > * {
+	width: 100%;
+	animation-delay: 400ms;
+}
+[data-theme='keynote'] .layout-split-media img {
+	width: 100%;
+	display: block;
+	border-radius: 18px;
+	border: 2px solid var(--edge);
+	filter: saturate(0.85) brightness(0.94);
+	box-shadow: 0 0 120px color-mix(in srgb, var(--accent) 30%, transparent);
+	-webkit-box-reflect: below 10px linear-gradient(transparent 62%, rgba(255, 255, 255, 0.22));
+}
+
+/*
+ * A plain image on a default slot (not split-media) keeps the same stage
+ * treatment, scaled to whatever room is left under the heading. The parser
+ * emits a bare <img> when it carries an attribute block and a <p><img></p>
+ * otherwise, so both shapes are handled.
+ */
+[data-theme='keynote'] .layout-default .slot:has(> img, > p > img:only-child) {
+	flex: 1;
+	min-height: 0;
+	justify-content: center;
+}
+[data-theme='keynote'] .layout-default .slot > :is(h1, h2):has(~ img, ~ p > img:only-child) {
+	flex: none;
+}
+[data-theme='keynote'] .layout-default .slot > p:has(> img:only-child) {
+	flex: 1;
+	min-height: 0;
+	width: 100%;
+	display: flex;
+	justify-content: center;
+	align-items: center;
+}
+[data-theme='keynote'] .layout-default .slot > p > img:only-child,
+[data-theme='keynote'] .layout-default .slot > img {
+	width: auto;
+	height: auto;
+	max-width: 100%;
+	max-height: 100%;
+	object-fit: contain;
+	border-radius: 18px;
+	border: 2px solid var(--edge);
+	filter: saturate(0.85) brightness(0.94);
+	box-shadow: 0 0 90px color-mix(in srgb, var(--accent) 24%, transparent);
+}
+
+/* ============================================================================
+ * Table
+ * ============================================================================ */
+
+[data-theme='keynote'] :is(.slot, .slot > [data-fragment-index]) > table {
+	width: 100%;
+	max-width: 1600px;
+	border-collapse: collapse;
+	text-align: left;
+}
+[data-theme='keynote'] table th {
+	padding: 0 32px 22px;
+	font-size: 48px;
+	font-weight: 500;
+	color: var(--muted);
+}
+[data-theme='keynote'] table td {
+	padding: 30px 32px;
+	font-size: 56px;
+	font-weight: 500;
+	letter-spacing: -0.02em;
+	background: var(--hairline) top / 100% 2px no-repeat;
+}
+[data-theme='keynote'] table td:first-child {
+	font-weight: 600;
+}
+[data-theme='keynote'] table td:last-child {
+	color: var(--accent-text);
+}
+[data-theme='keynote'] table tbody tr {
+	animation: keynote-settle calc(var(--dur) * 0.8) var(--ease) 400ms both;
+}
+[data-theme='keynote'] table tbody tr:nth-child(2) {
+	animation-delay: 500ms;
+}
+[data-theme='keynote'] table tbody tr:nth-child(3) {
+	animation-delay: 600ms;
+}
+[data-theme='keynote'] table tbody tr:nth-child(n + 4) {
+	animation-delay: 700ms;
+}
+/* five or more rows: a denser table for a longer readout */
+[data-theme='keynote'] .slot table:has(tbody tr:nth-child(5)) td {
+	padding: 20px 28px;
+	font-size: 48px;
+}
+[data-theme='keynote'] .slot table:has(tbody tr:nth-child(5)) th {
+	padding: 0 28px 16px;
+	font-size: 44px;
+}
+
+/* ============================================================================
+ * Cover, sidebar, blank
+ * ============================================================================ */
+
+/*
+ * Cover is the one layout built to take the whole frame, so it gets its own
+ * mark: a lit proscenium line inset from the edge, not just a bigger
+ * version of the default statement layout.
+ */
+[data-theme='keynote'] .layout-cover {
+	position: relative;
+	padding: 96px;
+}
+[data-theme='keynote'] .layout-cover::before {
+	content: '';
+	position: absolute;
+	inset: 48px;
+	border: 2px solid color-mix(in srgb, var(--accent) 38%, transparent);
+	border-radius: 28px;
+	pointer-events: none;
+	animation: keynote-settle calc(var(--dur) * 1.2) var(--ease) both;
+}
+[data-theme='keynote'] .layout-cover::after {
+	content: '';
+	position: absolute;
+	left: 48px;
+	right: 48px;
+	top: 48px;
+	height: 3px;
+	background: var(--hairline);
+	pointer-events: none;
+	animation: keynote-light calc(var(--dur) * 1.3) var(--ease) 150ms both;
+}
+[data-theme='keynote'] .layout-cover .slot {
+	max-width: 1500px;
+}
+[data-theme='keynote'] .layout-cover h1 {
+	font-size: 116px;
+	line-height: 1.1;
+	letter-spacing: -0.045em;
+	max-width: 100%;
+}
+[data-theme='keynote'] .layout-cover h1[data-length='medium'] {
+	font-size: 140px;
+	line-height: 1.07;
+}
+[data-theme='keynote'] .layout-cover h1[data-length='short'] {
+	font-size: 160px;
+	line-height: 1.06;
+}
+[data-theme='keynote'] .layout-cover p {
+	margin-top: 44px;
+	font-size: 50px;
+	color: var(--muted);
+}
+
+[data-theme='keynote'] .layout-sidebar {
+	display: grid;
+	grid-template-columns: 1fr 0.5fr;
+	column-gap: 72px;
+	align-items: stretch;
+	width: 100%;
+	height: 100%;
+}
+[data-theme='keynote'] .layout-sidebar .slot-default {
+	text-align: left;
+	display: flex;
+	flex-direction: column;
+	justify-content: center;
+}
+[data-theme='keynote'] .layout-sidebar .slot-default > * {
+	width: 100%;
+	max-width: 1150px;
+}
+[data-theme='keynote'] .layout-sidebar :is(.slot, .slot > [data-fragment-index]) > ul {
+	max-width: 1150px;
+	text-align: left;
+}
+[data-theme='keynote'] .layout-sidebar :is(.slot, .slot > [data-fragment-index]) > ul > li + li::before {
+	left: 0;
+	right: auto;
+	width: 100%;
+}
+[data-theme='keynote'] .layout-sidebar .slot-sidebar {
+	position: relative;
+	padding: 56px 44px;
+	background: var(--surface);
+	border-radius: 20px;
+	text-align: left;
+	display: flex;
+	flex-direction: column;
+	justify-content: center;
+	animation-delay: 500ms;
+}
+[data-theme='keynote'] .layout-sidebar .slot-sidebar::before {
+	content: '';
+	position: absolute;
+	left: 0;
+	right: 0;
+	top: 0;
+	height: 2px;
+	background: var(--hairline);
+}
+[data-theme='keynote'] .layout-sidebar .slot-sidebar h3 {
+	font-size: 30px;
+	font-weight: 600;
+	letter-spacing: 0.24em;
+	text-transform: uppercase;
+	color: var(--muted);
+	margin: 0 0 24px;
+}
+[data-theme='keynote'] .layout-sidebar .slot-sidebar p,
+[data-theme='keynote'] .layout-sidebar .slot-sidebar li {
+	font-size: 42px;
+	line-height: 1.3;
+	color: var(--muted);
+}
+[data-theme='keynote'] .layout-sidebar :is(.slot-sidebar, .slot-sidebar > [data-fragment-index]) > ul > li {
+	padding: 16px 0;
+}
+[data-theme='keynote'] .layout-sidebar :is(.slot-sidebar, .slot-sidebar > [data-fragment-index]) > ul > li + li::before {
+	left: 0;
+	right: 0;
+}
+
+[data-theme='keynote'] .layout-blank {
+	padding: 96px;
+}
+
+/* ============================================================================
+ * Diagram
+ * ============================================================================ */
+
+[data-theme='keynote'] .layout-default .slot:has(.mermaid-diagram) {
+	flex: 1;
+	min-height: 0;
+	width: 100%;
+	max-width: none;
+}
+/*
+ * Mermaid labels keep the metrics mermaid measured them with, so they never
+ * outgrow their nodes. This resets `.slot p` sizing that would otherwise
+ * leak into the diagram's own <p> labels.
+ */
+[data-theme='keynote'] .mermaid-diagram {
+	display: flex;
+	justify-content: center;
+	align-items: center;
+	flex: 1;
+	min-height: 0;
+	width: 100%;
+	animation: keynote-settle calc(var(--dur) * 1.1) var(--ease) 300ms both;
+}
+/*
+ * Specificity note: this must outrank the later `.slot p` minimum-size
+ * safety net (same (0,2,1) weight, later in the file, so it would otherwise
+ * win the tie and reintroduce the overflow above). `.mermaid-diagram p` is
+ * repeated as its own selector to add a class step.
+ */
+[data-theme='keynote'] .slot .mermaid-diagram p,
+[data-theme='keynote'] .mermaid-diagram p {
+	all: unset;
+	display: block;
+	font-family: var(--font-display);
+	/* Matches theme.json's mermaid.themeVariables.fontSize: mermaid measures
+	 * node box sizes against that value, so the rendered label must stay at
+	 * the same size or it outgrows the box it was given. */
+	font-size: 40px;
+	font-weight: 400;
+	letter-spacing: normal;
+	line-height: normal;
+	white-space: nowrap;
+	color: var(--fg);
+}
+[data-theme='keynote'] .mermaid-diagram svg {
+	height: 640px !important;
+	width: auto !important;
+	max-width: 100% !important;
+	overflow: visible;
+}
+[data-theme='keynote'] .mermaid-diagram .node rect,
+[data-theme='keynote'] .mermaid-diagram .node path,
+[data-theme='keynote'] .mermaid-diagram .node polygon {
+	stroke-width: 3px !important;
+}
+[data-theme='keynote'] .mermaid-diagram .node:not(.quiet) rect,
+[data-theme='keynote'] .mermaid-diagram .node:not(.quiet) path,
+[data-theme='keynote'] .mermaid-diagram .node:not(.quiet) polygon {
+	filter: drop-shadow(0 0 14px color-mix(in srgb, var(--accent) 55%, transparent));
+}
+[data-theme='keynote'] .mermaid-diagram .flowchart-link,
+[data-theme='keynote'] .mermaid-diagram .edgePath path {
+	stroke-width: 2.5px !important;
+}
+[data-theme='keynote'] .mermaid-diagram + p {
+	margin-top: 24px;
+	animation-delay: 900ms;
+}
+
+/* ============================================================================
+ * Scroll slide
+ * ============================================================================ */
+
+[data-theme='keynote'] .scroll-content {
+	width: 100%;
+	max-width: 1560px;
+	text-align: left;
+}
+[data-theme='keynote'] .scroll-content pre.shiki {
+	width: 100%;
+	font-size: 44px;
+	line-height: 1.45;
+}
+/*
+ * The scroll layout is allowed to run taller than the slide, but never
+ * wider: a long line wraps with a hanging indent instead of clipping past
+ * the code panel's edge.
+ */
+[data-theme='keynote'] .scroll-content pre.shiki .line {
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+	padding-left: 88px;
+	text-indent: -40px;
+}
+
+/* ============================================================================
+ * Live code block and asciinema chrome
+ * Structure and behavior come from rich-blocks.css, which reads the
+ * --color-* bridge above; a couple of pieces are pulled toward the stage
+ * light identity.
+ * ============================================================================ */
+
+[data-theme='keynote'] .live-code-block-portal {
+	width: 100%;
+}
+[data-theme='keynote'] .live-code-block {
+	width: 100%;
+	max-width: 1560px;
+	border-radius: 18px;
+}
+[data-theme='keynote'] .live-code-block .code-container pre {
+	width: 100%;
+	text-align: left;
+	border-radius: 18px 18px 0 0;
+}
+[data-theme='keynote'] .live-code-block .run-button {
+	background-color: var(--accent);
+	color: var(--bg);
+	font-family: var(--font-body);
+	font-weight: 600;
+	border-radius: 100px;
+}
+[data-theme='keynote'] .live-code-block .result-container {
+	border-radius: 0 0 18px 18px;
+}
+[data-theme='keynote'] .asciinema-player-wrapper {
+	width: 100%;
+	max-width: 1560px;
+	border-radius: 18px;
+	overflow: hidden;
+	border: 2px solid var(--edge);
+	box-shadow: 0 0 80px color-mix(in srgb, var(--accent) 20%, transparent);
+}
+
+/* ============================================================================
+ * Minimum-size safety net
+ * Every layout rule above sets an explicit size for the slot text it knows
+ * about. This catches whatever it doesn't: three-column body copy, the
+ * sidebar, fragment paragraphs, and code without highlights, all of which
+ * otherwise fall back to the base theme's much smaller default typography.
+ * Rules above with a more specific selector still win the cascade.
+ * ============================================================================ */
+
+[data-theme='keynote'] .slot p,
+[data-theme='keynote'] .slot li {
+	font-size: 48px;
+	line-height: 1.4;
+}
+[data-theme='keynote'] pre code {
+	font-size: 44px;
+}
+[data-theme='keynote'] .slot td,
+[data-theme='keynote'] .slot th {
+	font-size: 48px;
+}
+
+/* ============================================================================
+ * Print and reduced motion: nothing moves, everything is in its final state.
+ * ============================================================================ */
+
+@media print, (prefers-reduced-motion: reduce) {
+	[data-theme='keynote'] .slide[data-layout],
+	[data-theme='keynote'] .slide[data-layout]::before,
+	[data-theme='keynote'] .slide[data-layout]::after,
+	[data-theme='keynote'] .slide[data-layout] *,
+	[data-theme='keynote'] .slide[data-layout] *::before,
+	[data-theme='keynote'] .slide[data-layout] *::after {
+		animation: none !important;
+		transition: none !important;
+	}
+}
+
+/* The print hook may sit on the theme root or on any ancestor of it. */
+[data-theme='keynote']:is([data-print='true'], [data-print='true'] *) .slide[data-layout],
+[data-theme='keynote']:is([data-print='true'], [data-print='true'] *) .slide[data-layout]::before,
+[data-theme='keynote']:is([data-print='true'], [data-print='true'] *) .slide[data-layout]::after,
+[data-theme='keynote']:is([data-print='true'], [data-print='true'] *) .slide[data-layout] *,
+[data-theme='keynote']:is([data-print='true'], [data-print='true'] *) .slide[data-layout] *::before,
+[data-theme='keynote']:is([data-print='true'], [data-print='true'] *) .slide[data-layout] *::after {
+	animation: none !important;
+	transition: none !important;
+}

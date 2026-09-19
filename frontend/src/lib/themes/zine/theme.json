@@ -1,0 +1,34 @@
+{
+	"name": "Zine",
+	"polarity": "light",
+	"pitch": "An opinionated, scrappy talk with a point to argue: cut, pasted, and photocopied the night before, and proud of it.",
+	"illustration": {
+		"medium": "flat vector photocopy-collage illustration, cut-and-paste zine aesthetic",
+		"line": "heavy 5 to 6px strokes, slightly uneven, like a thick marker or photocopy edge",
+		"shapes": "torn paper rectangles, tape marks, stamped boxes, deliberately off-grid placement",
+		"texture": "photocopy grain and halftone noise, visible paper edges",
+		"palette_use": "warm paper background dominant, near-black ink, one loud yellow used as a highlight block behind text or shapes",
+		"mood": "DIY, loud, urgent, a little rebellious",
+		"avoid": "gradients, smooth vector polish, 3D, soft pastel color, perfect alignment"
+	},
+	"mermaid": {
+		"themeVariables": {
+			"fontFamily": "Special Elite",
+			"primaryColor": "#FFE600",
+			"primaryTextColor": "#0D0D0D",
+			"primaryBorderColor": "#0D0D0D",
+			"lineColor": "#0D0D0D",
+			"background": "#E8E5DD",
+			"mainBkg": "#FFE600",
+			"textColor": "#0D0D0D",
+			"nodeTextColor": "#0D0D0D",
+			"nodeBorder": "#0D0D0D",
+			"clusterBkg": "#FAF8F1",
+			"clusterBorder": "#0D0D0D",
+			"edgeLabelBackground": "#FAF8F1",
+			"fontSize": "30px"
+		},
+		"quietStyle": "fill:#FAF8F1,stroke:#0D0D0D,color:#0D0D0D",
+		"curve": "basis"
+	}
+}

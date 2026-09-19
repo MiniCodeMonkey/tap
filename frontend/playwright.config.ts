@@ -12,8 +12,9 @@ export default defineConfig({
   forbidOnly: !!process.env.CI,
   // Retry on CI only
   retries: process.env.CI ? 2 : 0,
-  // Opt out of parallel tests on CI
-  workers: process.env.CI ? 1 : undefined,
+  // All specs share one dev server whose websocket syncs the current slide between
+  // every connected client, so parallel test sessions would navigate each other's pages.
+  workers: 1,
   // Reporter to use
   reporter: [
     ['html', { open: 'never' }],
@@ -21,8 +22,10 @@ export default defineConfig({
   ],
   // Shared settings for all projects
   use: {
-    // Base URL to use in tests
-    baseURL: 'http://localhost:3000',
+    // Base URL to use in tests. Port 3100 is dedicated to this suite's own
+    // server (see webServer below) so it never collides with a developer's
+    // own `tap dev` on the default port 3000.
+    baseURL: 'http://localhost:3100',
     // Collect trace on first retry
     trace: 'on-first-retry',
     // Take screenshot on failure
@@ -48,10 +51,19 @@ export default defineConfig({
 
   // Run the dev server before starting tests
   webServer: {
-    // Run the Go dev server with the sample presentation
-    command: 'cd .. && go run ./cmd/tap dev testdata/sample.md --port 3000 --headless',
-    url: 'http://localhost:3000',
-    reuseExistingServer: !process.env.CI,
+    // Run the Go dev server with the sample presentation. Every spec in
+    // this suite shares this one server; TAP_HUB_STATE_RETENTION=0s keeps
+    // its websocket hub from retaining slide/fragment state between
+    // specs (see CONTRIBUTING.md), so one spec's viewer disconnecting
+    // never leaves state behind for a later spec's "no state" assertions
+    // to see. Port 3100 is dedicated to this suite: reuseExistingServer is
+    // always false so Playwright never silently attaches to somebody
+    // else's already-running server (a developer's own `tap dev`, or a
+    // stray server left behind by another run) and serves that server's
+    // deck and stale hub state to these specs instead of its own.
+    command: 'cd .. && TAP_HUB_STATE_RETENTION=0s go run ./cmd/tap dev testdata/sample.md --port 3100 --headless',
+    url: 'http://localhost:3100',
+    reuseExistingServer: false,
     timeout: 30000, // 30 seconds to start server
   },
 });

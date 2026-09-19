@@ -1,0 +1,31 @@
+{
+	"name": "Sketch",
+	"polarity": "light",
+	"pitch": "For explainer talks that build an idea step by step, as if the speaker were drawing it on a whiteboard in front of you.",
+	"illustration": {
+		"medium": "flat vector styled as a hand-drawn notebook sketch on cream paper",
+		"line": "3 to 4px wobbly hand-drawn strokes, slightly irregular, like a felt-tip pen",
+		"shapes": "loose, imperfect circles and rectangles (irregular border-radius), doodle-like annotations",
+		"texture": "faint paper grain, no digital smoothness",
+		"palette_use": "cream background dominant, near-black ink, one soft yellow highlighter fill used behind key text or shapes, occasional red-pen accent for a correction mark",
+		"mood": "informal, thinking-out-loud, handmade",
+		"avoid": "perfectly straight lines, gradients, glossy 3D, digital UI chrome"
+	},
+	"mermaid": {
+		"themeVariables": {
+			"fontFamily": "Patrick Hand",
+			"fontSize": "40px",
+			"primaryColor": "#ffe24a",
+			"primaryTextColor": "#1b2735",
+			"primaryBorderColor": "#1b2735",
+			"lineColor": "#1b2735",
+			"nodeTextColor": "#1b2735",
+			"titleColor": "#1b2735",
+			"secondaryColor": "#f1eee1",
+			"tertiaryColor": "#fbfaf4",
+			"textColor": "#1b2735"
+		},
+		"quietStyle": "fill:#fbfaf4,stroke:#1b2735,color:#1b2735",
+		"curve": "basis"
+	}
+}

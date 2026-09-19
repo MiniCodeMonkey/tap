@@ -149,18 +149,11 @@ func (m *ImageGenModel) loadSlides() error {
 	return nil
 }
 
-// slideDelimiterRe matches "---" on its own line.
-var slideDelimiterRe = regexp.MustCompile(`(?m)^---\s*$`)
-
 // headingRe matches markdown headings (# Heading).
 var headingRe = regexp.MustCompile(`(?m)^#+\s+(.+)$`)
 
 // frontmatterRe matches YAML frontmatter at the start of a file.
 var frontmatterRe = regexp.MustCompile(`(?s)^---\n.*?\n---\n?`)
-
-// aiPromptRe matches AI prompt comments: <!-- ai-prompt: ... -->
-// It captures the prompt text in group 1.
-var aiPromptRe = regexp.MustCompile(`<!--\s*ai-prompt:\s*(.+?)\s*-->`)
 
 // aiImageRe matches AI prompt comments followed by an image on the next line.
 // Group 1: prompt text, Group 2: image path

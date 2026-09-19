@@ -1,6 +1,6 @@
 ---
 title: Map Animation Demo
-theme: paper
+theme: base
 ---
 
 # Map Animations

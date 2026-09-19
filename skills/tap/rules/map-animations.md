@@ -1,6 +1,6 @@
 # Map Animations
 
-Create animated map slides that fly between locations—perfect for visualizing journeys or showing geographic context.
+Create animated map slides that fly between locations, ideal for visualizing journeys or showing geographic context.
 
 ## Basic Usage
 

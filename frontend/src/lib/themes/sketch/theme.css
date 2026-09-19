@@ -1,0 +1,1356 @@
+/**
+ * Sketch theme.
+ * For explainer talks that build an idea step by step, as if the speaker
+ * were drawing it on a whiteboard in front of you: dot-grid board, a
+ * highlighter behind bold words, a red pen for emphasis and asides,
+ * hand-drawn wobbly boxes around code and columns, and a circled page
+ * number in the corner.
+ *
+ * Ported from .superpowers/brainstorm/themes-v3/sketch.theme.html (the
+ * CSS-only mockup built against a fixed 11-slide deck). See
+ * docs/reference/theme-porting.md for what changed moving from that mockup
+ * to the real app's markup.
+ */
+
+@import '@fontsource/patrick-hand/latin-400.css';
+@import '@fontsource/permanent-marker/latin-400.css';
+@import '@fontsource/fira-mono/latin-500.css';
+@import '@fontsource/fira-mono/latin-700.css';
+
+[data-theme='sketch'] {
+	/* ---------- design-spec tokens ---------- */
+	--bg: #fbfaf4;
+	--fg: #1b2735;
+	--muted: #4b5868;
+	--accent: #ffe24a; /* highlighter: only ever a fill behind dark text */
+	--accent-text: #a3210f; /* red pen */
+	--surface: #f1eee1;
+	--font-display: 'Permanent Marker', 'Marker Felt', 'Comic Sans MS', cursive;
+	--font-body: 'Patrick Hand', 'Marker Felt', 'Comic Sans MS', cursive;
+	--font-mono: 'Fira Mono', ui-monospace, Menlo, monospace;
+	--ease: cubic-bezier(0.4, 0.1, 0.2, 1);
+	--dur: 650ms;
+	--space-unit: 24px;
+	--radius: 24px;
+	--stroke-width: 4px;
+
+	/* hand-drawn devices: an SVG displacement filter that wobbles a box
+	 * outline, an irregular border-radius fallback for browsers that drop
+	 * `filter` (or that pair it with `mix-blend-mode`), and squiggle/arrow
+	 * strokes reused everywhere a ruled or drawn line is needed. */
+	--wobble: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='w' x='-5%25' y='-5%25' width='110%25' height='110%25'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.014' numOctaves='2' seed='4'/%3E%3CfeDisplacementMap in='SourceGraphic' scale='10'/%3E%3C/filter%3E%3C/svg%3E#w");
+	--hand-box: 255px 18px 225px 18px / 18px 225px 18px 255px;
+	--squiggle-red: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 400 28' preserveAspectRatio='none'%3E%3Cpath d='M5 12 C 60 3, 120 20, 180 11 S 300 5, 395 12 M30 23 C 120 17, 250 25, 370 20' fill='none' stroke='%23a3210f' stroke-width='6' stroke-linecap='round' vector-effect='non-scaling-stroke'/%3E%3C/svg%3E");
+	--squiggle-ink: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 400 20' preserveAspectRatio='none'%3E%3Cpath d='M4 11 C 70 4, 130 17, 200 10 S 320 5, 396 12' fill='none' stroke='%231b2735' stroke-width='6' stroke-linecap='round' vector-effect='non-scaling-stroke'/%3E%3C/svg%3E");
+	--rule-ink: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 400 12' preserveAspectRatio='none'%3E%3Cpath d='M0 6 C 80 3, 150 9, 230 6 S 340 4, 400 7' fill='none' stroke='%231b2735' stroke-width='4' stroke-linecap='round' vector-effect='non-scaling-stroke'/%3E%3C/svg%3E");
+	--rule-muted: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 400 12' preserveAspectRatio='none'%3E%3Cpath d='M0 6 C 80 3, 150 9, 230 6 S 340 4, 400 7' fill='none' stroke='%234b5868' stroke-width='4' stroke-linecap='round' vector-effect='non-scaling-stroke'/%3E%3C/svg%3E");
+	--arrow-red: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 90 60'%3E%3Cpath d='M6 33 C 24 27, 46 32, 76 30 M54 11 C 62 20, 70 26, 80 30 C 68 35, 60 42, 53 52' fill='none' stroke='%23a3210f' stroke-width='7' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+	--dash-ink: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 60 8' preserveAspectRatio='none'%3E%3Cpath d='M4 4 C 20 1, 36 7, 56 4' fill='none' stroke='%234b5868' stroke-width='4' stroke-linecap='round' vector-effect='non-scaling-stroke'/%3E%3C/svg%3E");
+	--highlighter: linear-gradient(98deg, transparent 0.6%, var(--accent) 1.6%, var(--accent) 98%, transparent 99.4%);
+
+	/*
+	 * Bridge to the base theme's own token names. layouts.css, prose.css,
+	 * rich-blocks.css and ui-components.css style the live code block, the
+	 * map slide, badges, tags, and generic prose entirely through these
+	 * `--color-*` and `--font-sans` custom properties.
+	 */
+	--color-bg: var(--bg);
+	--color-text: var(--fg);
+	--color-muted: var(--muted);
+	--color-accent: var(--accent);
+	--color-code-bg: var(--surface);
+	--color-code-text: var(--fg);
+	--color-code-inline-bg: color-mix(in srgb, var(--fg) 8%, transparent);
+	--color-border: var(--fg);
+	--color-surface: var(--surface);
+	--color-surface-elevated: var(--surface);
+	--color-link: var(--accent-text);
+	--font-sans: var(--font-body);
+
+	/* Shiki reads token colors from these custom properties directly. */
+	--shiki-foreground: var(--fg);
+	--shiki-background: var(--surface);
+	--shiki-token-comment: var(--muted);
+	--shiki-token-string: var(--accent-text);
+	--shiki-token-string-expression: var(--accent-text);
+	--shiki-token-keyword: var(--fg);
+	--shiki-token-function: var(--fg);
+	--shiki-token-constant: var(--accent-text);
+	--shiki-token-parameter: var(--fg);
+	--shiki-token-punctuation: var(--muted);
+	--shiki-token-link: var(--accent-text);
+}
+
+@keyframes sketch-write {
+	from {
+		clip-path: inset(-15% 100% -15% -2%);
+	}
+	to {
+		clip-path: inset(-15% -3% -25% -2%);
+	}
+}
+@keyframes sketch-hl {
+	from {
+		background-size: 0% 64%;
+	}
+	to {
+		background-size: 100% 64%;
+	}
+}
+@keyframes sketch-hl-tall {
+	from {
+		background-size: 0% 86%;
+	}
+	to {
+		background-size: 100% 86%;
+	}
+}
+@keyframes sketch-in {
+	from {
+		opacity: 0;
+		transform: translateY(8px) rotate(-1deg);
+	}
+}
+@keyframes sketch-pin {
+	from {
+		opacity: 0;
+		transform: translateY(-14px) rotate(1.5deg);
+	}
+}
+@keyframes sketch-bob {
+	from {
+		transform: rotate(-4deg) translateY(0);
+	}
+	to {
+		transform: rotate(3deg) translateY(-7px);
+	}
+}
+
+/* ============================================================================
+ * Minimum-size safety net
+ * Placed early (right after the token bridge) so a same-specificity rule
+ * written later in this file, on purpose, still wins by source order. More
+ * specific layout rules below win the cascade regardless of position.
+ * `:not(.mermaid-diagram p)` keeps this from fighting the diagram label
+ * reset further down, which intentionally wants a much smaller size.
+ * ============================================================================ */
+[data-theme='sketch'] .slot p:not(.mermaid-diagram p),
+[data-theme='sketch'] .slot li:not(.mermaid-diagram li) {
+	font-size: 48px;
+	line-height: 1.38;
+}
+[data-theme='sketch'] pre code {
+	font-size: 42px;
+}
+[data-theme='sketch'] .slot td,
+[data-theme='sketch'] .slot th {
+	font-size: 46px;
+}
+
+/* ============================================================================
+ * The board: base slide chrome
+ * Every rule below that reads attr(data-index)/attr(data-layout) or
+ * decorates the slide root is scoped to `.slide[data-layout]`, the real
+ * rendered slide, not the bare `.slide` class SlideCanvas also puts on its
+ * outer 1920x1080 scaling frame.
+ * ============================================================================ */
+
+[data-theme='sketch'] .slide[data-layout] {
+	color: var(--fg);
+	font-family: var(--font-body);
+	font-weight: 400;
+	font-size: 48px;
+	line-height: 1.32;
+	-webkit-text-stroke: 0.9px currentColor;
+	background:
+		radial-gradient(circle, color-mix(in srgb, var(--fg) 16%, transparent) 2px, transparent 2.6px) 28px 28px / 56px 56px,
+		var(--bg);
+}
+[data-theme='sketch'] .slide :where(h1, h2, h3, h4, h5, h6, p, ul, ol, li, blockquote, pre, table) {
+	margin: 0;
+	padding: 0;
+}
+[data-theme='sketch'] .slide[data-layout] h1,
+[data-theme='sketch'] .slide[data-layout] h2,
+[data-theme='sketch'] .slide[data-layout] h3,
+[data-theme='sketch'] .slide[data-layout] h4,
+[data-theme='sketch'] .slide[data-layout] h5,
+[data-theme='sketch'] .slide[data-layout] h6 {
+	font-family: var(--font-display);
+	font-weight: 400;
+	letter-spacing: 0;
+	text-wrap: balance;
+	-webkit-text-stroke: 0;
+}
+[data-theme='sketch'] .slide[data-layout] :where(pre, ul, ol, blockquote) {
+	text-align: left;
+}
+
+/* strong is the highlighter, em is the red pen */
+[data-theme='sketch'] .slide[data-layout] strong {
+	font-weight: 400;
+	padding: 0 0.14em;
+	margin: 0 -0.06em;
+	-webkit-text-stroke: 1.2px currentColor;
+	background: var(--highlighter) no-repeat 0 58% / 100% 64%;
+	-webkit-box-decoration-break: clone;
+	box-decoration-break: clone;
+	animation: sketch-hl var(--dur) var(--ease) 1100ms both;
+}
+[data-theme='sketch'] .slide[data-layout] em {
+	font-style: normal;
+	color: var(--accent-text);
+	padding-bottom: 0.12em;
+	background: var(--squiggle-red) no-repeat 0 100% / 100% 0.22em;
+}
+[data-theme='sketch'] .slide[data-layout] a {
+	color: var(--accent-text);
+	text-decoration: none;
+	background: var(--squiggle-red) no-repeat 0 100% / 100% 0.16em;
+	padding-bottom: 0.08em;
+}
+[data-theme='sketch'] .slide[data-layout] a:hover {
+	color: var(--fg);
+}
+
+/* page number, circled by hand */
+[data-theme='sketch'] .slide[data-layout]::after {
+	content: attr(data-index);
+	position: absolute;
+	right: 64px;
+	bottom: 52px;
+	box-sizing: border-box;
+	width: 84px;
+	height: 76px;
+	font-family: var(--font-body);
+	font-size: 40px;
+	line-height: 76px;
+	text-align: center;
+	color: var(--muted);
+	-webkit-text-stroke: 0.6px currentColor;
+	border: 4px solid var(--muted);
+	border-radius: 50% 46% 52% 44% / 48% 54% 44% 52%;
+	transform: rotate(-4deg);
+	animation: sketch-in 400ms var(--ease) 1300ms both;
+}
+[data-theme='sketch'] .slide-tag {
+	position: absolute;
+	top: 50px;
+	left: 96px;
+	right: auto;
+	bottom: auto;
+	max-width: 760px;
+	font-family: var(--font-body);
+	font-size: 44px;
+	line-height: 1.2;
+	color: var(--muted);
+	-webkit-text-stroke: 0.4px currentColor;
+	animation: sketch-in 400ms var(--ease) 0ms both;
+}
+[data-theme='sketch'] .slide-badge {
+	top: 50px;
+	right: 96px;
+	left: auto;
+	bottom: auto;
+	box-sizing: border-box;
+	padding: 4px 26px 8px;
+	font-family: var(--font-body);
+	font-size: 38px;
+	line-height: 1.3;
+	color: var(--accent-text);
+	-webkit-text-stroke: 0.4px currentColor;
+	border: 3px solid var(--accent-text);
+	border-radius: var(--hand-box);
+	transform: rotate(2deg);
+	animation: sketch-in 400ms var(--ease) 100ms both;
+}
+
+[data-theme='sketch'] .slide-content {
+	position: absolute;
+	width: auto;
+	height: auto;
+	left: 96px;
+	right: 96px;
+	top: 130px;
+	bottom: 110px;
+	display: flex;
+	flex-direction: column;
+}
+[data-theme='sketch'] [class^='layout-'],
+[data-theme='sketch'] .slide[data-layout='component'] > .slide-content > .deck-component-root,
+[data-theme='sketch'] .slide[data-layout='component'] > .slide-content > .scroll-content > .deck-component-root {
+	flex: 1;
+	min-height: 0;
+	width: auto;
+	height: auto;
+	max-width: none;
+	display: flex;
+	flex-direction: column;
+	align-items: stretch;
+	justify-content: flex-start;
+	align-content: start;
+	gap: 0;
+	padding: 0;
+	/* Cancel layouts.css's shared `.deck-component-root` border: this
+	   theme's real inset already comes from `.slide-content` above. */
+	border: 0;
+	text-align: left;
+}
+[data-theme='sketch'] [class^='layout-'] .slot,
+[data-theme='sketch'] .slide[data-layout='component'] > .slide-content > .deck-component-root .slot,
+[data-theme='sketch'] .slide[data-layout='component'] > .slide-content > .scroll-content > .deck-component-root .slot {
+	max-width: none;
+}
+
+/* ---------- headings and body copy ---------- */
+[data-theme='sketch'] .slot > h2,
+[data-theme='sketch'] .slot > :where(.fragment) > h2 {
+	width: fit-content;
+	max-width: 100%;
+	font-size: 108px;
+	line-height: 1.16;
+	padding-bottom: 22px;
+	margin-bottom: 36px;
+	background: var(--squiggle-ink) no-repeat 0 100% / 100% 18px;
+	animation: sketch-write var(--dur) var(--ease) 100ms both;
+}
+[data-theme='sketch'] .slot h3 {
+	font-family: var(--font-body);
+	font-weight: 400;
+	font-size: 68px;
+	line-height: 1.25;
+	margin-top: 20px;
+	margin-bottom: 12px;
+	-webkit-text-stroke: 0.7px currentColor;
+}
+[data-theme='sketch'] .slot h4 {
+	font-family: var(--font-body);
+	font-weight: 400;
+	font-size: 56px;
+	line-height: 1.25;
+	margin-top: 16px;
+	margin-bottom: 8px;
+	color: var(--accent-text);
+	-webkit-text-stroke: 0.5px currentColor;
+}
+[data-theme='sketch'] .slot h5,
+[data-theme='sketch'] .slot h6 {
+	font-family: var(--font-body);
+	font-weight: 400;
+	font-size: 44px;
+	line-height: 1.25;
+	margin-top: 12px;
+	margin-bottom: 6px;
+	color: var(--muted);
+	-webkit-text-stroke: 0.3px currentColor;
+}
+[data-theme='sketch'] .slot > p,
+[data-theme='sketch'] .slot > :where(.fragment) > p {
+	width: fit-content;
+	max-width: 100%;
+	animation: sketch-write var(--dur) var(--ease) 900ms both;
+}
+[data-theme='sketch'] .slot > p + p,
+[data-theme='sketch'] .slot > :where(.fragment) > p + p,
+[data-theme='sketch'] .slot > :where(.fragment) + :where(.fragment) > p {
+	margin-top: 28px;
+}
+[data-theme='sketch'] .slot :not(pre) > code {
+	font-family: var(--font-mono);
+	font-weight: 700;
+	font-size: 0.78em;
+	-webkit-text-stroke: 0;
+	padding: 0.04em 0.24em;
+	border: 4px solid var(--fg);
+	border-radius: var(--hand-box);
+}
+
+/* ---------- title ---------- */
+[data-theme='sketch'] .layout-title .slot {
+	flex: 1;
+	display: flex;
+	flex-direction: column;
+	justify-content: flex-start;
+	padding-top: 40px;
+}
+/* Sized for a 95-character worst case (the "long" class, unqualified rule
+ * below) at up to four lines without overflowing. `data-length` then scales
+ * a genuinely short title up toward the mockup's single dramatic word,
+ * instead of leaving every title this small regardless of how short it is. */
+[data-theme='sketch'] .layout-title .slot-content h1 {
+	font-size: 92px;
+	line-height: 1.2;
+	width: fit-content;
+	max-width: 100%;
+	margin-top: 0;
+	animation: sketch-write var(--dur) var(--ease) 100ms both;
+}
+[data-theme='sketch'] .layout-title .slot-content h1[data-length='medium'] {
+	font-size: 122px;
+	line-height: 1.16;
+}
+[data-theme='sketch'] .layout-title .slot-content h1[data-length='short'] {
+	font-size: 160px;
+	line-height: 1.1;
+}
+[data-theme='sketch'] .layout-title h2 {
+	font-size: 68px;
+	line-height: 1.24;
+	width: fit-content;
+	max-width: 100%;
+	padding: 0 0.12em;
+	margin: 20px -0.12em 0;
+	background: var(--highlighter) no-repeat 0 58% / 100% 64%;
+	-webkit-box-decoration-break: clone;
+	box-decoration-break: clone;
+	animation:
+		sketch-write var(--dur) var(--ease) 500ms both,
+		sketch-hl var(--dur) var(--ease) 1000ms both;
+}
+[data-theme='sketch'] .layout-title .slot::after {
+	content: '';
+	order: 2;
+	width: 480px;
+	max-width: 55%;
+	height: 26px;
+	margin-top: 36px;
+	background: var(--squiggle-red) no-repeat 0 0 / 100% 100%;
+	animation: sketch-write var(--dur) var(--ease) 1100ms both;
+}
+[data-theme='sketch'] .layout-title p {
+	order: 3;
+	margin-top: 40px;
+	font-size: 46px;
+	line-height: 1.4;
+	color: var(--muted);
+	animation: sketch-in 500ms var(--ease) 1200ms both;
+}
+/* one slow doodle: an asterisk drawn in the corner, kept clear of a
+ * multi-line title by sitting small and high in the true corner */
+[data-theme='sketch'] .slide[data-layout='title']::before {
+	content: '*';
+	position: absolute;
+	right: 90px;
+	top: 4px;
+	font-family: var(--font-display);
+	font-size: 200px;
+	line-height: 1;
+	height: 140px;
+	color: var(--accent-text);
+	transform-origin: 50% 40%;
+	animation: sketch-bob 5s ease-in-out infinite alternate;
+}
+
+/* ---------- section ---------- */
+[data-theme='sketch'] .slide[data-layout='section'] .slide-tag {
+	top: 96px;
+	left: 96px;
+	max-width: 900px;
+	padding: 8px 0;
+	font-family: var(--font-display);
+	font-size: 60px;
+	line-height: 1.2;
+	color: var(--accent-text);
+	-webkit-text-stroke: 0;
+	background: var(--squiggle-ink) no-repeat 0 100% / 100% 14px;
+	transform: rotate(-1deg);
+	animation: sketch-write var(--dur) var(--ease) 0ms both;
+}
+[data-theme='sketch'] .layout-section .slot {
+	flex: 1;
+	display: flex;
+	flex-direction: column;
+	justify-content: center;
+	padding-bottom: 20px;
+}
+[data-theme='sketch'] .layout-section .slot-content h1 {
+	width: fit-content;
+	max-width: 100%;
+	font-size: 130px;
+	line-height: 1.14;
+	padding-bottom: 24px;
+	background: var(--squiggle-ink) no-repeat 0 100% / 100% 24px;
+	animation: sketch-write var(--dur) var(--ease) 300ms both;
+}
+[data-theme='sketch'] .layout-section .slot-content h1[data-length='medium'] {
+	font-size: 170px;
+}
+[data-theme='sketch'] .layout-section .slot-content h1[data-length='short'] {
+	font-size: 210px;
+	padding-bottom: 30px;
+	background-size: 100% 30px;
+}
+[data-theme='sketch'] .layout-section p {
+	margin-top: 32px;
+	font-size: 54px;
+	line-height: 1.34;
+	color: var(--muted);
+	animation: sketch-in 500ms var(--ease) 850ms both;
+}
+
+/* ---------- statement (a lone h1/h2 on layout-default) ---------- */
+[data-theme='sketch'] .layout-default .slot:has(> h1:only-child),
+[data-theme='sketch'] .layout-default .slot:has(> h2:only-child) {
+	flex: 1;
+	display: flex;
+	align-items: center;
+}
+[data-theme='sketch'] .layout-default .slot-content h1:only-child {
+	font-size: 120px;
+	line-height: 1.22;
+	max-width: 100%;
+	animation: sketch-write 900ms var(--ease) 150ms both;
+}
+[data-theme='sketch'] .layout-default .slot-content h1[data-length='medium']:only-child {
+	font-size: 168px;
+}
+[data-theme='sketch'] .layout-default .slot-content h1[data-length='short']:only-child {
+	font-size: 210px;
+}
+[data-theme='sketch'] .layout-default h1:only-child em {
+	background-size: 100% 0.2em;
+	padding-bottom: 0.1em;
+}
+[data-theme='sketch'] .layout-default .slot-content h2:only-child {
+	font-size: 84px;
+	line-height: 1.26;
+	max-width: 100%;
+	padding-bottom: 0;
+	background: none;
+	animation: sketch-write 900ms var(--ease) 150ms both;
+}
+[data-theme='sketch'] .layout-default .slot-content h2[data-length='medium']:only-child {
+	font-size: 110px;
+}
+[data-theme='sketch'] .layout-default .slot-content h2[data-length='short']:only-child {
+	font-size: 140px;
+}
+
+/* ---------- bullets: red pen arrows ---------- */
+[data-theme='sketch'] .slot > ul,
+[data-theme='sketch'] .slot > :where(.fragment) > ul {
+	list-style: none;
+}
+[data-theme='sketch'] .slot > ul > li,
+[data-theme='sketch'] .slot > :where(.fragment) > ul > li {
+	position: relative;
+	padding-left: 130px;
+	margin-bottom: 44px;
+	font-size: 50px;
+	line-height: 1.34;
+	animation: sketch-write var(--dur) var(--ease) both;
+}
+[data-theme='sketch'] .slot > ul > li:last-child,
+[data-theme='sketch'] .slot > :where(.fragment) > ul > li:last-child {
+	margin-bottom: 0;
+}
+[data-theme='sketch'] .slot > ul > li::before,
+[data-theme='sketch'] .slot > :where(.fragment) > ul > li::before {
+	content: '';
+	position: absolute;
+	left: 0;
+	top: 9px;
+	width: 82px;
+	height: 54px;
+	background: var(--arrow-red) no-repeat 0 50% / contain;
+}
+[data-theme='sketch'] .slot > ul > li:nth-child(even)::before {
+	transform: rotate(-5deg) scaleY(-1);
+}
+[data-theme='sketch'] .slot > ul > li:nth-child(1) {
+	animation-delay: 650ms;
+}
+[data-theme='sketch'] .slot > ul > li:nth-child(2) {
+	animation-delay: 850ms;
+}
+[data-theme='sketch'] .slot > ul > li:nth-child(3) {
+	animation-delay: 1050ms;
+}
+[data-theme='sketch'] .slot > ul > li:nth-child(n + 4) {
+	animation-delay: 1250ms;
+}
+[data-theme='sketch'] .slot > :where(.fragment) > ul > li {
+	animation-delay: 0ms;
+}
+[data-theme='sketch'] .slide[data-layout] .fragment-hidden {
+	opacity: 0;
+	transform: translateY(8px) rotate(-1deg);
+}
+[data-theme='sketch'] .slide[data-layout] .fragment-visible {
+	opacity: 1;
+	transition: opacity 300ms var(--ease), transform 300ms var(--ease);
+}
+
+/* Nested lists sit inside the parent li's indent, in a quieter hand: a short
+ * hand-drawn dash instead of the red arrow, and the muted ink. */
+[data-theme='sketch'] .slot ul ul {
+	list-style: none;
+	margin-top: 20px;
+}
+[data-theme='sketch'] .slot ul ul > li {
+	position: relative;
+	padding-left: 76px;
+	margin-bottom: 22px;
+	font-size: 42px;
+	line-height: 1.36;
+	color: var(--muted);
+	-webkit-text-stroke: 0.6px currentColor;
+}
+[data-theme='sketch'] .slot ul ul > li::before {
+	content: '';
+	position: absolute;
+	left: 8px;
+	top: 34px;
+	width: 56px;
+	height: 8px;
+	background: var(--dash-ink) no-repeat 0 50% / contain;
+}
+[data-theme='sketch'] .slot ol {
+	margin-top: 20px;
+	padding-left: 130px;
+	counter-reset: sketch-ol;
+}
+[data-theme='sketch'] .slot ol > li {
+	position: relative;
+	padding: 6px 0;
+	margin-bottom: 20px;
+	counter-increment: sketch-ol;
+}
+[data-theme='sketch'] .slot ol > li::before {
+	content: counter(sketch-ol) '.';
+	position: absolute;
+	left: -100px;
+	color: var(--accent-text);
+	font-weight: 700;
+	font-family: var(--font-mono);
+}
+
+/* Seven or more bullets tighten into a dense list so a long recap slide
+ * still fits: smaller rows and a smaller heading above them. */
+[data-theme='sketch'] .slot.slot-default:has(> ul > li:nth-child(7)) > h2 {
+	font-size: 84px;
+	line-height: 1.2;
+	margin-bottom: 24px;
+}
+[data-theme='sketch'] .slot > ul:has(> li:nth-child(7)) > li {
+	padding-left: 92px;
+	margin-bottom: 18px;
+	font-size: 42px;
+}
+[data-theme='sketch'] .slot > ul:has(> li:nth-child(7)) > li::before {
+	width: 60px;
+	height: 40px;
+	top: 6px;
+}
+
+/* ---------- blockquote outside the quote layout ---------- */
+[data-theme='sketch'] .slide[data-layout]:not([data-layout='quote']) blockquote {
+	position: relative;
+	padding: 8px 0 8px 80px;
+	font-style: normal;
+	color: var(--fg);
+	animation: sketch-in 450ms var(--ease) 600ms both;
+}
+[data-theme='sketch'] .slide[data-layout]:not([data-layout='quote']) blockquote::before {
+	content: '\201C';
+	position: absolute;
+	left: 0;
+	top: -22px;
+	font-family: var(--font-display);
+	font-size: 96px;
+	line-height: 1;
+	color: var(--accent-text);
+	-webkit-text-stroke: 0;
+}
+[data-theme='sketch'] .slide[data-layout]:not([data-layout='quote']) blockquote p {
+	font-size: 48px;
+	line-height: 1.36;
+}
+
+/* ---------- code: a card drawn on the board ---------- */
+[data-theme='sketch'] .layout-code-focus .slot > h2 {
+	margin-bottom: 36px;
+}
+[data-theme='sketch'] pre.shiki {
+	position: relative;
+	padding: 40px 52px;
+	font-family: var(--font-mono);
+	font-size: 42px;
+	line-height: 1.5;
+	font-weight: 500;
+	-webkit-text-stroke: 0;
+	white-space: normal;
+	animation: sketch-in 400ms var(--ease) 450ms both;
+}
+[data-theme='sketch'] pre.shiki::before {
+	content: '';
+	position: absolute;
+	inset: 0;
+	border: 5px solid var(--fg);
+	border-radius: var(--hand-box);
+	filter: var(--wobble);
+	pointer-events: none;
+}
+[data-theme='sketch'] pre.shiki code {
+	display: flex;
+	flex-direction: column;
+	font: inherit;
+}
+[data-theme='sketch'] pre.shiki .line {
+	display: block;
+	white-space: pre-wrap;
+	word-break: break-word;
+	animation: sketch-write 500ms var(--ease) both;
+}
+[data-theme='sketch'] pre.shiki .line:nth-child(1) {
+	animation-delay: 550ms;
+}
+[data-theme='sketch'] pre.shiki .line:nth-child(2) {
+	animation-delay: 650ms;
+}
+[data-theme='sketch'] pre.shiki .line:nth-child(3) {
+	animation-delay: 750ms;
+}
+[data-theme='sketch'] pre.shiki .line:nth-child(4) {
+	animation-delay: 850ms;
+}
+[data-theme='sketch'] pre.shiki .line:nth-child(n + 5) {
+	animation-delay: 950ms;
+}
+[data-theme='sketch'] pre.shiki .line:last-child:empty,
+[data-theme='sketch'] pre.shiki .line:last-child:has(> .line-content:empty) {
+	display: none;
+}
+/* Dim every line that is not highlighted. `> *` reaches the line's children
+ * whether or not the highlighter wraps them in `.line-content`. 0.68 keeps
+ * the dimmed plain token text at least 4.5:1 against the panel background,
+ * the floor the code contrast check requires. */
+[data-theme='sketch'] pre.has-highlighted .line:not(.highlighted) > * {
+	opacity: 0.68;
+}
+[data-theme='sketch'] pre.shiki .tok-comment {
+	color: var(--muted);
+}
+[data-theme='sketch'] pre.shiki .tok-string {
+	color: var(--accent-text);
+}
+[data-theme='sketch'] pre.shiki .line.highlighted {
+	font-weight: 700;
+}
+[data-theme='sketch'] pre.shiki .line.highlighted > * {
+	display: inline-block;
+	padding: 0 0.2em;
+	margin: 0 -0.2em;
+	background: var(--highlighter) no-repeat 0 50% / 100% 86%;
+	animation: sketch-hl-tall 800ms var(--ease) 1150ms both;
+}
+[data-theme='sketch'] .slot pre + p {
+	margin-top: 40px;
+}
+[data-theme='sketch'] .layout-code-focus pre + p {
+	margin-top: 36px;
+	animation-delay: 1000ms;
+}
+
+/* ---------- big stat ---------- */
+[data-theme='sketch'] .layout-big-stat {
+	justify-content: center;
+	padding-bottom: 40px;
+}
+[data-theme='sketch'] .layout-big-stat .slot-default {
+	position: relative;
+}
+[data-theme='sketch'] .slide[data-layout] .layout-big-stat .slot-content h1 {
+	color: var(--fg);
+	font-weight: 400;
+	letter-spacing: 0;
+	width: fit-content;
+	max-width: 100%;
+	font-size: 320px;
+	line-height: 1.08;
+	padding: 0 0.12em;
+	margin-left: -0.06em;
+	background: var(--highlighter) no-repeat 0 56% / 100% 64%;
+	animation:
+		sketch-write var(--dur) var(--ease) 150ms both,
+		sketch-hl 900ms var(--ease) 750ms both;
+}
+/* A big-stat figure is built for a short number ("40x"); keep the medium
+ * and long classes modest so a longer figure or a short phrase doesn't
+ * blow past the frame. */
+[data-theme='sketch'] .slide[data-layout] .layout-big-stat .slot-content h1[data-length='medium'] {
+	font-size: 190px;
+}
+[data-theme='sketch'] .slide[data-layout] .layout-big-stat .slot-content h1[data-length='long'] {
+	font-size: 120px;
+}
+[data-theme='sketch'] .layout-big-stat .slot-default::after {
+	content: '';
+	display: block;
+	width: 560px;
+	max-width: 70%;
+	height: 40px;
+	margin: 4px 0 0 12px;
+	background: var(--squiggle-red) no-repeat 0 0 / 100% 100%;
+	animation: sketch-write var(--dur) var(--ease) 1000ms both;
+}
+[data-theme='sketch'] .layout-big-stat .slot-caption {
+	margin-top: 40px;
+}
+[data-theme='sketch'] .layout-big-stat .slot-caption p {
+	font-size: 50px;
+	line-height: 1.36;
+	max-width: 1400px;
+	text-wrap: balance;
+	color: var(--muted);
+	animation-delay: 1100ms;
+}
+[data-theme='sketch'] .layout-big-stat .slot-figure img {
+	max-height: 220px;
+	margin-top: 24px;
+}
+
+/* ---------- quote ---------- */
+[data-theme='sketch'] .layout-quote {
+	justify-content: center;
+}
+[data-theme='sketch'] .layout-quote blockquote {
+	position: relative;
+	padding-left: 240px;
+}
+[data-theme='sketch'] .layout-quote blockquote::before {
+	content: '\201C';
+	position: absolute;
+	left: 0;
+	top: -40px;
+	font-family: var(--font-display);
+	font-size: 340px;
+	line-height: 1;
+	color: var(--accent-text);
+	-webkit-text-stroke: 0;
+	animation: sketch-in 500ms var(--ease) 0ms both;
+}
+[data-theme='sketch'] .layout-quote blockquote p {
+	font-family: var(--font-display);
+	font-size: 132px;
+	line-height: 1.24;
+	-webkit-text-stroke: 0;
+	text-wrap: balance;
+	animation: sketch-write 1000ms var(--ease) 300ms both;
+}
+[data-theme='sketch'] .layout-quote .slot-attribution {
+	margin-top: 48px;
+	padding-left: 240px;
+}
+[data-theme='sketch'] .layout-quote .slot-attribution p {
+	font-size: 48px;
+	line-height: 1.36;
+	color: var(--muted);
+	animation-delay: 1150ms;
+}
+[data-theme='sketch'] .layout-quote .slot-attribution p::before {
+	content: '\2014\00a0';
+	color: var(--accent-text);
+}
+
+/* ---------- two columns: two boxes drawn side by side ---------- */
+[data-theme='sketch'] .layout-two-column {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	grid-template-rows: auto 1fr;
+	column-gap: 88px;
+	align-content: start;
+}
+[data-theme='sketch'] .layout-two-column .slot-default {
+	grid-column: 1 / -1;
+}
+[data-theme='sketch'] .layout-two-column .slot-left,
+[data-theme='sketch'] .layout-two-column .slot-right {
+	position: relative;
+	padding: 44px 52px 48px;
+	animation: sketch-in 450ms var(--ease) 500ms both;
+}
+[data-theme='sketch'] .layout-two-column .slot-right {
+	animation-delay: 850ms;
+}
+[data-theme='sketch'] .layout-two-column .slot-left::before,
+[data-theme='sketch'] .layout-two-column .slot-right::before {
+	content: '';
+	position: absolute;
+	inset: 0;
+	border: 6px solid var(--fg);
+	border-radius: var(--hand-box);
+	filter: var(--wobble);
+	pointer-events: none;
+}
+[data-theme='sketch'] .layout-two-column .slot-right::before {
+	transform: scaleX(-1);
+}
+[data-theme='sketch'] .layout-two-column h3 {
+	width: fit-content;
+	font-size: 60px;
+	line-height: 1.3;
+	margin-top: 0;
+	padding-bottom: 14px;
+	color: var(--accent-text);
+	background: var(--rule-ink) no-repeat 0 100% / 100% 12px;
+}
+[data-theme='sketch'] .layout-two-column .slot-left > *:first-child,
+[data-theme='sketch'] .layout-two-column .slot-right > *:first-child {
+	margin-top: 0;
+}
+/* A paragraph that holds only a bold number is the stat display; a paragraph
+ * with real prose stays the normal body size (real decks put bullets or a
+ * sentence in a column, not always a lone number). */
+[data-theme='sketch'] .layout-two-column p:has(> strong:only-child) strong {
+	display: block;
+	font-family: var(--font-display);
+	font-size: 150px;
+	line-height: 1.2;
+	-webkit-text-stroke: 0;
+	white-space: normal;
+	background: none;
+	animation: none;
+}
+[data-theme='sketch'] .layout-two-column .slot-left p:has(> strong:only-child) strong {
+	color: var(--fg);
+}
+[data-theme='sketch'] .layout-two-column .slot-right p:has(> strong:only-child) strong {
+	color: var(--accent-text);
+}
+[data-theme='sketch'] .layout-two-column .slot-left > ul,
+[data-theme='sketch'] .layout-two-column .slot-right > ul {
+	margin-top: 12px;
+}
+[data-theme='sketch'] .layout-two-column .slot-left > ul > li,
+[data-theme='sketch'] .layout-two-column .slot-right > ul > li {
+	font-size: 44px;
+	line-height: 1.36;
+	padding-left: 90px;
+	margin-bottom: 26px;
+}
+[data-theme='sketch'] .layout-two-column .slot-left > ul > li::before,
+[data-theme='sketch'] .layout-two-column .slot-right > ul > li::before {
+	width: 66px;
+	height: 44px;
+	top: 8px;
+}
+
+[data-theme='sketch'] .layout-three-column {
+	display: grid;
+	grid-template-columns: 1fr 1fr 1fr;
+	grid-template-rows: auto 1fr;
+	column-gap: 68px;
+	align-content: start;
+}
+[data-theme='sketch'] .layout-three-column .slot-default {
+	grid-column: 1 / -1;
+}
+[data-theme='sketch'] .layout-three-column .slot-left,
+[data-theme='sketch'] .layout-three-column .slot-center,
+[data-theme='sketch'] .layout-three-column .slot-right {
+	position: relative;
+	padding: 40px 36px 40px;
+	animation: sketch-in 450ms var(--ease) 500ms both;
+}
+[data-theme='sketch'] .layout-three-column .slot-center {
+	animation-delay: 700ms;
+}
+[data-theme='sketch'] .layout-three-column .slot-right {
+	animation-delay: 900ms;
+}
+[data-theme='sketch'] .layout-three-column .slot-left::before,
+[data-theme='sketch'] .layout-three-column .slot-center::before,
+[data-theme='sketch'] .layout-three-column .slot-right::before {
+	content: '';
+	position: absolute;
+	inset: 0;
+	border: 5px solid var(--fg);
+	border-radius: var(--hand-box);
+	filter: var(--wobble);
+	pointer-events: none;
+}
+[data-theme='sketch'] .layout-three-column .slot-center::before {
+	transform: scaleY(-1);
+}
+[data-theme='sketch'] .layout-three-column .slot-right::before {
+	transform: scaleX(-1);
+}
+[data-theme='sketch'] .layout-three-column h3 {
+	width: fit-content;
+	font-size: 52px;
+	line-height: 1.3;
+	margin-top: 0;
+	padding-bottom: 12px;
+	color: var(--accent-text);
+	background: var(--rule-ink) no-repeat 0 100% / 100% 10px;
+}
+[data-theme='sketch'] .layout-three-column .slot-left > *:first-child,
+[data-theme='sketch'] .layout-three-column .slot-center > *:first-child,
+[data-theme='sketch'] .layout-three-column .slot-right > *:first-child {
+	margin-top: 0;
+}
+[data-theme='sketch'] .layout-three-column p,
+[data-theme='sketch'] .layout-three-column li {
+	font-size: 42px;
+	line-height: 1.36;
+}
+[data-theme='sketch'] .layout-three-column .slot-left > ul > li,
+[data-theme='sketch'] .layout-three-column .slot-center > ul > li,
+[data-theme='sketch'] .layout-three-column .slot-right > ul > li {
+	padding-left: 74px;
+	margin-bottom: 22px;
+}
+[data-theme='sketch'] .layout-three-column .slot-left > ul > li::before,
+[data-theme='sketch'] .layout-three-column .slot-center > ul > li::before,
+[data-theme='sketch'] .layout-three-column .slot-right > ul > li::before {
+	width: 52px;
+	height: 36px;
+	top: 6px;
+}
+
+/* ---------- image: taped to the board ---------- */
+[data-theme='sketch'] .layout-split-media {
+	display: grid;
+	grid-template-columns: 0.86fr 1fr;
+	column-gap: 88px;
+	align-items: center;
+}
+[data-theme='sketch'] .layout-split-media .slot-default {
+	align-self: center;
+}
+[data-theme='sketch'] .layout-split-media .slot-default > *:first-child {
+	margin-top: 0;
+}
+[data-theme='sketch'] .layout-split-media .slot-default p {
+	margin-top: 16px;
+	animation-delay: 700ms;
+}
+[data-theme='sketch'] .layout-split-media .slot-media {
+	align-self: center;
+	display: block;
+}
+[data-theme='sketch'] .layout-split-media .slot-media p,
+[data-theme='sketch'] .layout-split-media .slot-media {
+	position: relative;
+}
+[data-theme='sketch'] .layout-split-media .slot-media p {
+	width: fit-content;
+	padding: 22px 22px 26px;
+	background: #ffffff;
+	border: 3px solid var(--fg);
+	margin: 0 36px 0 0;
+	box-shadow: 10px 12px 0 color-mix(in srgb, var(--fg) 22%, transparent);
+	transform: rotate(1.6deg);
+	animation: sketch-pin 500ms var(--ease) 350ms both;
+}
+[data-theme='sketch'] .layout-split-media img {
+	display: block;
+	width: 100%;
+	height: auto;
+	max-width: 620px;
+	filter: saturate(0.7) contrast(1.08);
+	border: 2px solid var(--muted);
+}
+[data-theme='sketch'] .layout-split-media .slot-media p::before,
+[data-theme='sketch'] .layout-split-media .slot-media p::after {
+	content: '';
+	position: absolute;
+	top: -30px;
+	width: 190px;
+	height: 58px;
+	z-index: 1;
+	background: color-mix(in srgb, var(--accent) 82%, transparent);
+	border-left: 3px dashed color-mix(in srgb, var(--fg) 30%, transparent);
+	border-right: 3px dashed color-mix(in srgb, var(--fg) 30%, transparent);
+}
+[data-theme='sketch'] .layout-split-media .slot-media p::before {
+	left: -60px;
+	transform: rotate(-34deg);
+}
+[data-theme='sketch'] .layout-split-media .slot-media p::after {
+	right: -60px;
+	transform: rotate(31deg);
+}
+
+/* A plain image on a default slot gets the same taped-up treatment, sized to
+ * fill the room left under the heading without ever growing past it. */
+[data-theme='sketch'] .layout-default .slot:has(> img, > p > img:only-child) {
+	flex: 1;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+}
+[data-theme='sketch'] .layout-default .slot > :is(h1, h2):has(~ img, ~ p > img:only-child) {
+	flex: none;
+}
+[data-theme='sketch'] .layout-default .slot > p:has(> img:only-child) {
+	flex: 1;
+	min-height: 0;
+	width: auto;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	animation: sketch-pin 500ms var(--ease) 400ms both;
+}
+[data-theme='sketch'] .layout-default .slot > p > img:only-child,
+[data-theme='sketch'] .layout-default .slot > img {
+	max-width: 90%;
+	max-height: 100%;
+	width: auto;
+	height: auto;
+	object-fit: contain;
+	background: #ffffff;
+	padding: 20px;
+	border: 3px solid var(--fg);
+	box-shadow: 10px 12px 0 color-mix(in srgb, var(--fg) 22%, transparent);
+	transform: rotate(-1.2deg);
+	filter: saturate(0.7) contrast(1.08);
+}
+
+/* ---------- table: ruled by hand ---------- */
+[data-theme='sketch'] .slot > table,
+[data-theme='sketch'] .slot > :where(.fragment) > table {
+	width: 100%;
+	border-collapse: collapse;
+	margin-top: 24px;
+	font-size: 46px;
+	line-height: 1.3;
+}
+[data-theme='sketch'] table th {
+	text-align: left;
+	padding: 0 28px 26px 8px;
+	font-family: var(--font-display);
+	font-weight: 400;
+	font-size: 42px;
+	line-height: 1.3;
+	color: var(--fg);
+	-webkit-text-stroke: 0;
+}
+[data-theme='sketch'] table td {
+	padding: 34px 28px 36px 8px;
+	color: var(--fg);
+}
+[data-theme='sketch'] table td:last-child {
+	color: var(--accent-text);
+	-webkit-text-stroke: 0.8px currentColor;
+}
+/* A single hand-ruled line drawn once across the whole row, not tiled per
+ * cell, so adjacent cells never show a seam where two backgrounds meet. */
+[data-theme='sketch'] table thead tr {
+	background: var(--squiggle-ink) no-repeat left bottom / 100% 16px;
+}
+[data-theme='sketch'] table tbody tr:not(:last-child) {
+	background: var(--rule-ink) no-repeat left bottom / 100% 10px;
+}
+
+/* ---------- diagram ---------- */
+[data-theme='sketch'] .layout-default .slot:has(.mermaid-diagram) {
+	flex: 1;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+}
+[data-theme='sketch'] .layout-default .slot:has(.mermaid-diagram) > h2 {
+	margin-bottom: 16px;
+}
+[data-theme='sketch'] .mermaid-diagram {
+	flex: 1;
+	min-height: 0;
+	position: relative;
+	animation: sketch-write 1100ms var(--ease) 450ms both;
+}
+[data-theme='sketch'] .mermaid-diagram svg {
+	position: absolute;
+	inset: 0;
+	width: 100% !important;
+	height: 100% !important;
+	max-width: none !important;
+	overflow: visible;
+}
+[data-theme='sketch'] .mermaid-diagram .node:not(.quiet) :is(rect, path, polygon, circle) {
+	stroke-width: 4px !important;
+	stroke-linejoin: round;
+	filter: var(--wobble);
+}
+[data-theme='sketch'] .mermaid-diagram .edgePath path,
+[data-theme='sketch'] .mermaid-diagram .flowchart-link {
+	stroke-width: 4px !important;
+	stroke-linecap: round;
+}
+/* Mermaid renders labels as <p> inside a foreignObject; reset the safety
+ * net's font-size so the diagram uses its own theme.json fontSize instead. */
+[data-theme='sketch'] .slot .mermaid-diagram p,
+[data-theme='sketch'] .slot .mermaid-diagram li {
+	font-size: 40px;
+	line-height: 1.4;
+	font-weight: 400;
+	-webkit-text-stroke: 0.4px currentColor;
+	width: auto;
+	margin: 0;
+	animation: none;
+}
+[data-theme='sketch'] .mermaid-diagram + p {
+	margin-top: 16px;
+	color: var(--muted);
+	animation-delay: 1200ms;
+}
+
+/* ---------- cover ---------- */
+[data-theme='sketch'] .layout-cover {
+	position: relative;
+	justify-content: center;
+	align-items: center;
+}
+[data-theme='sketch'] .layout-cover .slot {
+	position: relative;
+	width: fit-content;
+	max-width: 1500px;
+	padding: 64px 88px;
+	background: var(--bg);
+	border: 4px solid var(--fg);
+	box-shadow: 14px 16px 0 color-mix(in srgb, var(--fg) 20%, transparent);
+	transform: rotate(-0.8deg);
+	animation: sketch-pin 500ms var(--ease) 200ms both;
+}
+[data-theme='sketch'] .layout-cover .slot > *:first-child {
+	margin-top: 0;
+}
+[data-theme='sketch'] .layout-cover .slot-content h1 {
+	font-size: 108px;
+	line-height: 1.16;
+	max-width: 100%;
+	text-wrap: balance;
+	animation: sketch-write 700ms var(--ease) 350ms both;
+}
+[data-theme='sketch'] .layout-cover .slot-content h1[data-length='medium'] {
+	font-size: 132px;
+}
+[data-theme='sketch'] .layout-cover .slot-content h1[data-length='short'] {
+	font-size: 156px;
+}
+[data-theme='sketch'] .layout-cover p {
+	margin-top: 36px;
+	font-size: 48px;
+	line-height: 1.36;
+	color: var(--muted);
+	animation-delay: 900ms;
+}
+
+/* ---------- sidebar ---------- */
+[data-theme='sketch'] .layout-sidebar {
+	display: grid;
+	grid-template-columns: 1fr 0.5fr;
+	column-gap: 64px;
+	align-content: start;
+}
+[data-theme='sketch'] .layout-sidebar .slot-default > *:first-child {
+	margin-top: 0;
+}
+[data-theme='sketch'] .layout-sidebar .slot-sidebar {
+	position: relative;
+	align-self: start;
+	margin-top: 16px;
+	padding: 40px 44px 44px;
+	background: var(--surface);
+	border: 3px solid var(--fg);
+	box-shadow: 8px 10px 0 color-mix(in srgb, var(--fg) 18%, transparent);
+	transform: rotate(1deg);
+	animation: sketch-pin 500ms var(--ease) 500ms both;
+}
+[data-theme='sketch'] .layout-sidebar .slot-sidebar > *:first-child {
+	margin-top: 0;
+}
+[data-theme='sketch'] .layout-sidebar .slot-sidebar h3 {
+	color: var(--accent-text);
+}
+[data-theme='sketch'] .layout-sidebar .slot-sidebar p,
+[data-theme='sketch'] .layout-sidebar .slot-sidebar li {
+	font-size: 42px;
+	line-height: 1.38;
+}
+[data-theme='sketch'] .layout-sidebar .slot-sidebar > ul > li {
+	padding-left: 70px;
+	margin-bottom: 22px;
+}
+[data-theme='sketch'] .layout-sidebar .slot-sidebar > ul > li::before {
+	width: 50px;
+	height: 34px;
+	top: 6px;
+}
+
+/* ---------- blank ---------- */
+[data-theme='sketch'] .layout-blank {
+	justify-content: center;
+	align-items: center;
+	text-align: center;
+}
+[data-theme='sketch'] .layout-blank h1 {
+	font-size: 140px;
+	line-height: 1.2;
+}
+
+/* ---------- scroll slide ---------- */
+[data-theme='sketch'] .scroll-content {
+	position: relative;
+}
+[data-theme='sketch'] .scroll-content pre.shiki {
+	font-size: 42px;
+	line-height: 1.46;
+}
+[data-theme='sketch'] .scroll-content pre.shiki .line {
+	white-space: pre-wrap;
+	word-break: break-word;
+}
+
+/* ---------- live code block and asciinema chrome ----------
+ * Structure and behavior come from rich-blocks.css, which reads the
+ * --color-* bridge above; only the pieces that should look distinctly
+ * hand-drawn get their own rules here. */
+[data-theme='sketch'] .live-code-block-portal {
+	width: 100%;
+}
+[data-theme='sketch'] .live-code-block .run-button {
+	background-color: var(--accent-text);
+	color: var(--bg);
+	font-family: var(--font-body);
+	font-weight: 400;
+	border-radius: var(--hand-box);
+}
+[data-theme='sketch'] .live-code-block .code-container pre {
+	border-radius: 0;
+}
+[data-theme='sketch'] .live-code-block .code-container pre::before {
+	border-radius: var(--hand-box);
+}
+[data-theme='sketch'] .live-code-block .result-container {
+	border: 3px solid var(--fg);
+	border-top: 0;
+	border-radius: 0;
+	background: var(--surface);
+}
+/* The player library sizes its terminal from a fixed character grid, which
+ * can come out taller than the room a slide has. Give the slot the room
+ * under the heading and let the wrapper clip to it. */
+[data-theme='sketch'] .layout-default .slot:has(.asciinema-player-wrapper) {
+	flex: 1;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+}
+[data-theme='sketch'] .asciinema-player-wrapper {
+	flex: 1;
+	min-height: 0;
+	width: 100%;
+	border: 3px solid var(--fg);
+	border-radius: var(--hand-box);
+	overflow: hidden;
+}
+
+/* ---------- map slide ---------- */
+[data-theme='sketch'] .map-content-overlay .slide-tag,
+[data-theme='sketch'] .map-content-overlay .slide-badge {
+	background: var(--bg);
+	padding: 6px 20px;
+	border-radius: var(--hand-box);
+}

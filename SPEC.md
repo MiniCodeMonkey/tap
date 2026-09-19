@@ -40,7 +40,7 @@
 ```markdown
 ---
 title: My Presentation
-theme: paper
+theme: terminal
 ---
 
 # First Slide
@@ -94,33 +94,26 @@ notes: |
 
 ### 3. **Layout System**
 - **Explicit selection** via local directive block with `layout: name`
-- 10+ built-in layouts per theme:
+- 12 built-in layouts, each with its own set of named slots:
+  - Default content
   - Title slide
   - Section header
   - Two/Three column
   - Code focus (full-screen code)
   - Big stat (large number emphasis)
   - Quote
-  - Image background
+  - Image background (cover)
   - Sidebar
   - Split media (image + text)
   - Blank/Custom
 
 ### 4. **Theme System**
 
-Tap uses a modern CSS custom properties architecture with TailwindCSS utilities. Themes define CSS variables that control all visual aspects, enabling runtime theme switching and easy customization.
+Tap uses a modern CSS custom properties architecture. Themes define CSS variables that control all visual aspects, enabling runtime theme switching and easy customization.
 
 **Built-in Themes:**
 
-1. **Paper** - Ultra-clean and airy, like premium paper. Pure white backgrounds, confident Inter typography with tight letter-spacing (-0.02em), sophisticated warm accent (#78716c), and delicate shadows on code blocks. Perfect for professional presentations where content takes center stage.
-
-2. **Noir** - Cinematic film noir elegance. Deep charcoal backgrounds (#0a0a0a), crisp white text, sophisticated gold accent (#d4af37). Features Playfair Display serif for headings, Inter for body, multi-layer soft shadows, and subtle vignette effects. Ideal for executive presentations and premium brand talks.
-
-3. **Aurora** - Northern lights inspiration with vibrant color flows. Animated gradient mesh backgrounds (deep purples → electric blues → teals), glassmorphism with backdrop-blur, Space Grotesk typography, and glowing borders. Dynamic and mesmerizing for creative presentations.
-
-4. **Phosphor** - Authentic CRT monitor aesthetic. True black (#000) background, phosphor green (#00ff00) text with multi-layer glow effects (5px/10px/20px text-shadows), subtle scanline overlay, and JetBrains Mono throughout. Everything IS terminal. Perfect for hacker talks and retro-tech themes.
-
-5. **Poster** - Bold graphic design inspired by classic posters. Stark black and white with ONE electric red accent (#ef4444), Anton typeface for massive ALL CAPS headings, thick 4px borders, harsh 8px drop shadows, and zero rounded corners. Impossible to ignore.
+`base` is the plain fallback, used when a deck names no theme or names one that doesn't exist. 20 designed themes sit alongside it, each with a `light` or `dark` polarity and a one-line pitch describing the kind of talk it fits: `terminal`, `product`, `swiss`, `newsprint`, `zine`, `poster`, `blueprint`, `riso`, `retro-computing`, `paperback`, `keynote`, `editorial`, `observatory`, `arcade`, `isometric`, `ink`, `lab-notebook`, `bauhaus`, `sketch`, `transit`. See `docs/guide/themes.md` for the full pitch and polarity of each.
 
 **Theme Customization:**
 
@@ -140,7 +133,7 @@ Tap uses a modern CSS custom properties architecture with TailwindCSS utilities.
 - Themes may specify their own default transition
 
 ### 6. **Animation System**
-- **Svelte-powered** declarative animations (composable, timeline-driven)
+- **Motion-powered** declarative animations (composable, timeline-driven)
 - Built-in animation presets:
   - Typewriter effects for code
   - Count-up animations for numbers
@@ -157,15 +150,13 @@ Tap uses a modern CSS custom properties architecture with TailwindCSS utilities.
 - Configure globally in frontmatter or per-slide with local directive block
 
 ### 7. **Code Presentation**
-- **Shiki** for syntax highlighting (VS Code themes)
-  - Build-time highlighting by default (faster, smaller bundle)
-  - Runtime highlighting loaded automatically when presentation contains driver-enabled code blocks
-- Line highlighting and ranges
-- Multi-step code reveals (progressive disclosure)
+- **Shiki** for syntax highlighting, with its CSS-variables theme: token colors come from `--shiki-*` custom properties each tap theme defines, so code follows the active theme without re-highlighting
+- Highlighting runs in the browser, lazily, once per code block
+- Line highlighting and ranges from the fence info string (```` ```go {1,3-5} ````), clamped to the block's real line count
 - Code diffs visualization
 - Live code execution via driver system
-- Terminal recording playback (Asciinema)
-- Configurable font sizes per-slide
+- Terminal recording playback (Asciinema), with the player bundled rather than loaded from a CDN
+- Code text size comes from the theme, which keeps it at 36px or larger on the 1920px canvas
 
 ### 8. **Live Code Execution**
 - **Driver-based architecture** for extensibility
@@ -177,7 +168,7 @@ Tap uses a modern CSS custom properties architecture with TailwindCSS utilities.
 - Connection configuration via frontmatter (credentials via environment variables)
 - Results displayed in real-time on slide
 - Error handling and timeout protection
-- **Requires `tap dev`** — static builds display a graceful placeholder indicating live code is not available
+- **Requires `tap dev`**: static builds display a graceful placeholder indicating live code is not available
 
 **Code Block Syntax:**
 ````markdown
@@ -215,7 +206,7 @@ The driver and connection are specified in the code block's info string using `{
 - **Scaffolding commands** for creating new presentations (`tap new`)
 - **Dev server is a full TUI** (`tap dev`):
   - Live preview with hot reload
-  - File watching for instant updates (markdown, themes, images — all assets)
+  - File watching for instant updates (markdown, themes, images, all assets)
   - Built-in slide builder (press `a` to add slide)
   - Keyboard shortcuts for common operations
   - ASCII art branding and friendly interface
@@ -223,6 +214,18 @@ The driver and connection are specified in the code block's info string using `{
   - TUI presents available layouts
   - User selects layout and fills in content fields
   - Generated markdown appended to presentation file
+- **Screenshot command** (`tap screenshot`) renders one slide, or every slide, to a PNG through the PDF exporter's headless browser, with a non-zero exit status when the slide shows an error card, so an LLM can check a slide it just wrote
+- **Theme inspection** (`tap theme list`, `tap theme show`) prints a theme's tokens and illustration style, including a `--prompt` style brief for an image model
+- **Component scaffold** (`tap add component <Name>`) writes a working component file and its type declarations
+
+### 12. **Deck-Supplied Components**
+- A deck may supply React components from files in its own folder, as a whole-slide layout (`layout: ./slides/Thing.jsx`) or as an inline ```` ```component ./charts/Thing.jsx ```` fence with JSON props
+- Bundled by tap itself with esbuild's Go API: no Node install, no build step, and never over the network
+- `react`, `react/jsx-runtime`, `react-dom`, `react-dom/client`, `motion`, `motion/react`, and `tap` resolve to the host's own instances through `window.__TAP_HOST__`, so a component and the frontend share one React and one Motion
+- Any other bare import resolves from a `node_modules` folder next to the deck
+- Components receive the slide's slots, the fence's props, the presenter step, and print mode, and read the active theme's tokens with `useTheme()`
+- Step counts come from the slide's `steps:` directive or a static `export const steps = N`, read without running the file
+- See `docs/reference/components-reference.md`
 
 ---
 
@@ -256,12 +259,12 @@ The driver and connection are specified in the code block's info string using `{
   - `--content=both` - Slides with speaker notes
 - `tap add [file]` - Standalone slide builder TUI (when dev server isn't running)
 
-### Frontend: Svelte + Vite
+### Frontend: React + Vite
 
 **Core Components:**
-- **UI Framework:** Svelte 5 (compiles to tiny vanilla JS)
+- **UI Framework:** React 19
 - **Build Tool:** Vite for fast development and bundling
-- **Animation:** Svelte transitions and spring physics (no external animation libraries)
+- **Animation:** The Motion library, driven by theme-defined timing and easing
 - **Code Highlighting:** Shiki (build-time by default; runtime loaded automatically for presentations with live code drivers)
 - **WebSocket Client:** For hot reload communication
 - **Router:** Hash-based navigation (`#5` for slide 5)
@@ -294,7 +297,7 @@ The driver and connection are specified in the code block's info string using `{
 - Touch-friendly controls for tablet use
 
 **Cross-Device Support:**
-- Dev server binds to `0.0.0.0` for network access
+- Dev server binds to `0.0.0.0` for network access; the temporary servers `tap pdf` and `tap screenshot` start bind `127.0.0.1`, since only tap's own headless browser talks to them
 - Access presenter view from any device on the same network (e.g., iPad)
 - **QR Code:** Displayed in terminal on server start and available at `/qr` endpoint
   - Encodes the presenter view URL (includes password if set)
@@ -307,12 +310,17 @@ The driver and connection are specified in the code block's info string using `{
 - WebSocket broadcast keeps all connected windows in sync
 - Navigation in presenter window controls all audience windows
 - Reuses existing hot-reload WebSocket infrastructure
+- The hub retains the last slide, fragment, and step for 10 minutes after the last client disconnects (`TAP_HUB_STATE_RETENTION` overrides it), so a reload mid-talk lands back where the talk is
+- A page's load-time URL hash is weighed against the hub's state only on the **first** state message of that page load; a later one, which is what a reconnect sends, wins outright, so a reconnecting presenter is never pulled backwards past the audience
+- The retained state carries no theme, so a reconnecting window keeps the theme it was set to
+- A relayed slide index that is negative, or past the last slide, is rejected
+- `?print=true` never opens the websocket at all
 
 **Keyboard Shortcuts:**
-- `S` — Open presenter view in new window (from audience view)
-- Arrow keys / Space — Navigate slides (both views)
-- `O` — Toggle slide overview
-- `R` — Reset timer (presenter view only)
+- `S`: Open presenter view in new window (from audience view)
+- Arrow keys / Space: Navigate slides (both views)
+- `O`: Toggle slide overview
+- `R`: Reset timer (presenter view only)
 
 ### Driver System Architecture
 
@@ -322,7 +330,7 @@ The driver system enables live code execution during presentations by shelling o
 - Drivers execute external processes via `os/exec`
 - Registry pattern for driver discovery
 - Configuration via frontmatter (credentials via `.env` file)
-- Full developer control — no command restrictions (presenters control their own slides)
+- Full developer control, no command restrictions (presenters control their own slides)
 - Timeout protection (default 10s, configurable)
 - Structured result format (success, data, error)
 
@@ -353,7 +361,7 @@ The driver system enables live code execution during presentations by shelling o
    ↓
 4. Dev Server → Serves JSON to frontend via HTTP
    ↓
-5. Svelte App → Renders slides with theme + animations
+5. React App → Renders slides with theme + animations
    ↓
 6. WebSocket → Hot reload on file changes
    ↓
@@ -367,7 +375,7 @@ The driver system enables live code execution during presentations by shelling o
 ### vs. Marp
 - **More flexible layouts** (not rigid template-based)
 - **Live code execution** (not just static highlighting)
-- **Better animations** (Svelte-powered, theme-integrated)
+- **Better animations** (Motion-powered, theme-integrated)
 - **Interactive dev experience** (CLI, hot reload, slide builder)
 
 ### vs. Slidev
@@ -466,12 +474,11 @@ All configuration lives in the presentation file's YAML frontmatter. No separate
 ```yaml
 ---
 title: Presentation Title
-theme: paper               # paper (default), noir, aurora, phosphor, poster
+theme: base                 # base (default) plus 20 designed themes, see docs/guide/themes.md
 author: Name
 date: 2026-01-23
 aspectRatio: 16:9          # 16:9 (default), 4:3, or 16:10
 transition: fade           # none, fade (default), slide, push, zoom
-codeTheme: github-dark     # Shiki theme for syntax highlighting
 fragments: false           # Auto-fragment lists (default: false)
 
 # Theme color customization (optional - override specific colors)
@@ -542,7 +549,7 @@ Quickly override specific colors in any built-in theme using `themeColors` in fr
 
 ```yaml
 ---
-theme: paper
+theme: terminal
 themeColors:
   accent: "#3b82f6"    # Brand blue instead of warm gray
   background: "#f8fafc" # Slightly cooler white
@@ -556,7 +563,7 @@ themeColors:
 - `accent` - Accent color for highlights, links, list markers
 - `codeBg` - Background color for code blocks
 
-Partial overrides work — only specify what you want to change. Invalid color values are ignored with a console warning.
+Partial overrides work: only specify what you want to change. Invalid color values are ignored with a console warning.
 
 ### Custom Theme CSS
 For complete control, create your own theme CSS file:
@@ -567,46 +574,43 @@ customTheme: ./my-theme.css
 ---
 ```
 
-The path is relative to your markdown file. Your custom CSS must define a `.theme-custom` class with all required CSS variables:
+The path is relative to your markdown file. The stylesheet is served at
+`/api/custom-theme.css` and loaded after the built-in theme's CSS, so it
+can override any of that theme's custom properties or rules.
+
+Scope your rules the way a built-in theme does, with
+`[data-theme="<slug>"]`, and redefine the tokens a theme owns:
 
 ```css
-/* my-theme.css - Custom theme template */
-.theme-custom {
-  /* Required color variables */
-  --color-bg: #1a1a2e;
-  --color-text: #eaeaea;
-  --color-muted: #888888;
-  --color-accent: #e94560;
-  --color-code-bg: #16213e;
+/* my-theme.css: overrides on top of the base theme */
+[data-theme='base'] {
+  --bg: #1a1a2e;
+  --fg: #eaeaea;
+  --muted: #888888;
+  --accent: #e94560;
+  --accent-text: #e94560;
+  --surface: #16213e;
 
-  /* Optional extended colors */
-  --color-border: rgba(255, 255, 255, 0.1);
-  --color-surface: #1f1f3a;
-  --color-surface-elevated: #252550;
-  --color-link: var(--color-accent);
-  --color-code-text: #d4d4d4;
+  --font-display: 'Your Font', system-ui, sans-serif;
+  --font-body: 'Your Font', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
 
-  /* Typography */
-  --font-sans: 'Your Font', system-ui, sans-serif;
-  --font-mono: 'JetBrains Mono', monospace;
+  --ease: cubic-bezier(0.4, 0, 0.2, 1);
+  --dur: 400ms;
 
-  /* Animation timing */
-  --transition-duration: 400ms;
-  --transition-timing: ease-out;
-  --fragment-duration: 300ms;
-
-  /* Apply base styles */
-  font-family: var(--font-sans);
-  color: var(--color-text);
-  background-color: var(--color-bg);
+  --space-unit: 32px;
+  --radius: 8px;
+  --stroke-width: 2px;
 }
 
-/* Add custom typography, code styling, etc. as needed */
-.theme-custom h1 { font-weight: 700; }
-.theme-custom pre { border-radius: 8px; }
+[data-theme='base'] .slot h1 { font-weight: 700; }
 ```
 
-If the custom theme file is not found, Tap falls back to the default theme (paper) with a console warning.
+See `docs/reference/theme-porting.md` for the full contract, the Shiki
+token variables, and the selector conventions each built-in theme follows.
+
+If the stylesheet fails to load, tap logs a console warning and the
+built-in theme stays in place.
 
 ---
 
@@ -634,7 +638,7 @@ All Go tests use the standard `testing` package with table-driven tests.
 - Visual regression tests for themes
 - Cross-browser compatibility
 
-### Component Tests (Svelte)
+### Component Tests (React)
 - Slide rendering with different layouts
 - Animation triggers and timing
 - Theme application
@@ -655,7 +659,7 @@ All Go tests use the standard `testing` package with table-driven tests.
 3. **Go install:** `go install github.com/MiniCodeMonkey/tap@latest`
 
 ### System Requirements
-- **End users:** No dependencies—single binary with embedded frontend assets
+- **End users:** No dependencies, single binary with embedded frontend assets
 - **Development:** Go 1.22+, Node.js 18+ (for frontend development)
 - **Optional:** Database clients for live query drivers (mysql, psql, sqlite3)
 
@@ -684,7 +688,8 @@ All Go tests use the standard `testing` package with table-driven tests.
 
 ### Phase 3
 - Theme marketplace/gallery
-- Plugin system for custom functionality
+- A second polarity (light and dark) for every built-in theme
+- More for deck components, which ship today as whole-slide and inline React files bundled from the deck's own folder: hot module replacement without a page reload, remote component registries, and server-side rendering for PDF without a browser
 - Cloud sync and version history
 - Recording/streaming integration
 - Interactive polls and Q&A
@@ -707,17 +712,16 @@ All Go tests use the standard `testing` package with table-driven tests.
 - Built-in concurrency for dev server and file watching
 - Strong standard library (HTTP, WebSocket, file I/O)
 
-### Why Svelte Frontend?
-- Compiles to vanilla JS (tiny bundle size)
-- Built-in animation and transition system (no external animation libraries needed)
-- Reactive updates (perfect for live code)
-- Simple learning curve
-- Clean component architecture
-- Spring physics built into the framework
+### Why React Frontend?
+- Decks are written mostly by LLMs, and LLMs know React deeply: layouts and illustrations are React components, so generating or extending one is a well-trodden path
+- A deck-supplied component shares the host's React instead of bundling its own, keeping custom slide content small and consistent
+- Huge ecosystem of existing components and patterns to draw from for layouts, charts, and diagrams
+- Reactive updates (works well for live code results streaming in)
+- Familiar to the overwhelming majority of contributors
 
-### Why Not Full Framework?
+### Why Not a Bigger Framework?
 - Avoid complexity (focused tool, not a web app)
-- Faster development for focused tool
+- Faster development for a focused tool
 - Easier for contributors to understand
 - Single binary distribution
 
@@ -725,7 +729,8 @@ All Go tests use the standard `testing` package with table-driven tests.
 - Presenters have full control over code execution in their own slides (no restrictions)
 - Database credentials loaded from environment variables (never committed to git)
 - Timeout enforcement (default 10s, configurable)
-- No eval() or arbitrary code execution in frontend
+- No eval() in the frontend
+- **Deck-supplied components.** A deck component is code the deck's author chose to run. It carries exactly the same trust as raw HTML written into the deck, and it runs with the page's full privileges. Tap never fetches component code from the network: every bundle is built with esbuild from files on disk, inside the deck's own folder, plus whatever those files import. Code and stylesheets may be imported from outside the deck folder; data and asset files (JSON, text, images, fonts) must live inside it. A static build contains the bundled component code, so publishing a built deck publishes that code. Build and present only decks you trust, the same rule that already applies to live code execution.
 
 ---
 
@@ -734,7 +739,7 @@ All Go tests use the standard `testing` package with table-driven tests.
 - **Licensing:** MIT
 - **Branding:** "Tap" (use "Tap" in prose, `tap` for CLI commands, tap.sh for the domain/website)
 - **Logo:** TBD
-- **Documentation:** Separate documentation site (future priority — we want exceptional docs and getting started guides)
+- **Documentation:** Separate documentation site (future priority: we want exceptional docs and getting started guides)
 - **Telemetry:** None. Absolutely no telemetry.
 - **Versioning:** Semantic versioning (semver)
 

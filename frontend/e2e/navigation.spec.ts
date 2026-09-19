@@ -95,8 +95,8 @@ test.describe('Slide Navigation with Keyboard', () => {
   test('should navigate to last slide with End key', async ({ page }) => {
     await page.keyboard.press('End');
     await page.waitForTimeout(500);
-    // Last slide is "Thank You!"
-    await expect(page.locator('.slide-content')).toContainText('Thank You!');
+    // Last slide is "Reordered Live Code"
+    await expect(page.locator('.slide-content')).toContainText('Reordered Live Code');
   });
 
   test('should not navigate before first slide', async ({ page }) => {
@@ -118,7 +118,7 @@ test.describe('Slide Navigation with Keyboard', () => {
     await page.waitForTimeout(300);
 
     // Should still have the same content
-    await expect(page.locator('.slide-content')).toContainText('Thank You!');
+    await expect(page.locator('.slide-content')).toContainText('Reordered Live Code');
   });
 
   test('should skip keyboard navigation when input is focused', async ({ page }) => {

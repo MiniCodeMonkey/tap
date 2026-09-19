@@ -144,6 +144,11 @@
 .presenter-next-slide-panel .slide-container {
   max-width: 100%;
   max-height: 100%;
+  /* app.css makes .slide-container black by default (the letterbox around
+     the canvas). These preview panels already carry their own dark
+     background (.presenter-slide-preview, below), so let that show through
+     instead of a second, flatter black. */
+  background-color: transparent;
 }
 
 /* Next Slide Panel */
@@ -215,6 +220,11 @@
   border: 2px solid #0f3460;
   font-size: 1.25rem;
   line-height: 1.6;
+  /* Notes are plain text with line breaks preserved by the parser: keep
+     those line breaks (and blank lines between paragraphs) visible instead
+     of collapsing them into one run-on paragraph, while still wrapping long
+     lines instead of overflowing the panel. */
+  white-space: pre-wrap;
 }
 
 .presenter-notes-panel.has-notes .presenter-notes-content {

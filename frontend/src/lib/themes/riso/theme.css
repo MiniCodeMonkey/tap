@@ -1,0 +1,1496 @@
+/**
+ * Riso theme.
+ * For a warm community-conference talk that should feel like a two-ink
+ * print pulled off the drum that morning: cream stock, a navy key plate and
+ * a pink spot plate that never quite land in register, paper grain over
+ * everything, and crop marks and a sheet number in the corner like a proof
+ * sheet from the print shop.
+ *
+ * Ported from .superpowers/brainstorm/themes-v3/riso.theme.html (the
+ * CSS-only mockup built against a fixed 11-slide deck). See
+ * docs/reference/theme-porting.md and its addendum for what changed moving
+ * from that mockup to the real app's markup.
+ */
+
+@import '@fontsource/bagel-fat-one/latin-400.css';
+@import '@fontsource/bricolage-grotesque/latin-600.css';
+@import '@fontsource/bricolage-grotesque/latin-800.css';
+@import '@fontsource/space-mono/latin-700.css';
+
+[data-theme='riso'] {
+	/* ---------- design-spec tokens ---------- */
+	--bg: #f3eee0;
+	--fg: #263a78;
+	--muted: #36487e;
+	--accent: #ff48b0;
+	--accent-text: #2a1153;
+	--surface: #f9f5ea;
+	--font-display: 'Bagel Fat One', 'Arial Black', sans-serif;
+	--font-body: 'Bricolage Grotesque', 'Helvetica Neue', Arial, sans-serif;
+	--font-mono: 'Space Mono', 'Courier New', monospace;
+	--ease: cubic-bezier(0.18, 0.84, 0.24, 1);
+	--dur: 640ms;
+	--space-unit: 24px;
+	--radius: 8px;
+	--stroke-width: 3px;
+
+	/* a translucent wash of the pink plate, for overprint highlights */
+	--tint: rgba(255, 72, 176, 0.42);
+	--dots-blue: radial-gradient(circle at center, #263a78 0, #263a78 6px, transparent 6.8px);
+	--dots-pink: radial-gradient(circle at center, #ff48b0 0, #ff48b0 7px, transparent 7.8px);
+
+	/*
+	 * Bridge to the base theme's own token names. layouts.css, prose.css,
+	 * rich-blocks.css and ui-components.css style the live code block, the
+	 * map slide, badges, tags, and generic prose entirely through these
+	 * `--color-*` and `--font-sans` custom properties.
+	 */
+	--color-bg: var(--bg);
+	--color-text: var(--fg);
+	--color-muted: var(--muted);
+	--color-accent: var(--accent);
+	--color-code-bg: var(--surface);
+	--color-code-text: var(--fg);
+	--color-code-inline-bg: var(--tint);
+	--color-border: var(--fg);
+	--color-surface: var(--surface);
+	--color-surface-elevated: var(--surface);
+	--color-link: var(--accent-text);
+	--font-sans: var(--font-body);
+
+	/* Shiki reads token colors from these custom properties directly. Two
+	 * inks only: navy for everything, the overprint purple for strings and
+	 * keywords, per the brief's two-syntax-color rule. */
+	--shiki-foreground: var(--fg);
+	--shiki-background: var(--surface);
+	--shiki-token-comment: var(--muted);
+	--shiki-token-string: var(--accent-text);
+	--shiki-token-string-expression: var(--accent-text);
+	--shiki-token-keyword: var(--accent-text);
+	--shiki-token-function: var(--fg);
+	--shiki-token-constant: var(--accent-text);
+	--shiki-token-parameter: var(--fg);
+	--shiki-token-punctuation: var(--fg);
+	--shiki-token-link: var(--accent-text);
+}
+
+@keyframes riso-blue {
+	from {
+		opacity: 0;
+		transform: translate(30px, -14px);
+	}
+	to {
+		opacity: 1;
+		transform: translate(0, 0);
+	}
+}
+@keyframes riso-pink {
+	from {
+		opacity: 0;
+		transform: translate(-30px, 14px);
+	}
+	to {
+		opacity: 1;
+		transform: translate(0, 0);
+	}
+}
+@keyframes riso-fade {
+	from {
+		opacity: 0;
+	}
+}
+@keyframes riso-bar {
+	from {
+		transform: scaleX(0);
+	}
+	to {
+		transform: scaleX(1);
+	}
+}
+@keyframes riso-grain {
+	from {
+		transform: translate(0, 0);
+	}
+	to {
+		transform: translate(320px, 320px);
+	}
+}
+@keyframes riso-blink {
+	0%,
+	44% {
+		opacity: 1;
+	}
+	45%,
+	54% {
+		opacity: 0;
+	}
+	55%,
+	89% {
+		opacity: 1;
+	}
+	90%,
+	100% {
+		opacity: 0;
+	}
+}
+
+/* ============================================================================
+ * Screen: base slide chrome, paper grain, print furniture
+ * ============================================================================
+ * Every selector that reads attr(data-index)/attr(data-total) or decorates
+ * the slide root is scoped to `.slide[data-layout]`, the real rendered
+ * slide, not the bare `.slide` class SlideCanvas also puts on its outer
+ * 1920x1080 scaling frame (see theme-porting.md's markup differences).
+ * ============================================================================ */
+
+[data-theme='riso'] .slide[data-layout] {
+	background: var(--bg);
+	color: var(--fg);
+	font-family: var(--font-body);
+	font-weight: 600;
+	font-size: 46px;
+	line-height: 1.35;
+	letter-spacing: -0.02em;
+}
+/* Margin/padding reset written with :where() so it adds no specificity and
+ * still loses to every rule below that sets its own spacing. */
+[data-theme='riso'] .slide :where(h1, h2, h3, h4, h5, h6, p, ul, ol, li, blockquote, pre, table) {
+	margin: 0;
+	padding: 0;
+}
+[data-theme='riso'] .slide[data-layout] :is(h1, h2, h3, h4, h5, h6) {
+	font-family: var(--font-display);
+	font-weight: 400;
+	letter-spacing: -0.01em;
+	text-wrap: balance;
+}
+[data-theme='riso'] .slide[data-layout] strong {
+	font-weight: 800;
+	color: var(--accent-text);
+	background: linear-gradient(transparent 56%, var(--tint) 56%, var(--tint) 94%, transparent 94%);
+	padding: 0 0.06em;
+	margin: 0 -0.06em;
+}
+[data-theme='riso'] .slide[data-layout] em {
+	font-style: normal;
+	color: var(--accent-text);
+}
+[data-theme='riso'] .slide[data-layout] a {
+	color: var(--color-link);
+	text-decoration: underline;
+	text-decoration-color: var(--accent);
+	text-decoration-thickness: 4px;
+	text-underline-offset: 0.12em;
+}
+[data-theme='riso'] .slide[data-layout] a:hover {
+	color: var(--accent-text);
+	text-decoration-color: var(--accent-text);
+}
+
+/* Paper grain over the whole sheet. Oversized and translated slightly past
+ * the slide edge so the loop has room to run without a seam ever crossing
+ * the frame; harmless on the still (no seam is ever visible either way). */
+[data-theme='riso'] .slide[data-layout]::after {
+	content: '';
+	position: absolute;
+	left: -320px;
+	top: -320px;
+	width: 2560px;
+	height: 1720px;
+	pointer-events: none;
+	z-index: 20;
+	background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='320' height='320'><filter id='n' x='0' y='0' width='100%25' height='100%25'><feTurbulence type='fractalNoise' baseFrequency='0.82' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.15  0 0 0 0 0.23  0 0 0 0 0.47  0 0 0 0.55 -0.14'/></filter><rect width='320' height='320' filter='url(%23n)'/></svg>");
+	background-size: 320px 320px;
+	mix-blend-mode: multiply;
+	opacity: 0.55;
+	animation: riso-grain 48s linear infinite;
+}
+
+/* Print furniture: crop marks in each corner, a two-dot ink swatch, and the
+ * sheet number, like a proof pulled for approval. Purely decorative, so it
+ * sits outside the content padding and reads attr() directly. */
+[data-theme='riso'] .slide[data-layout]::before {
+	content: attr(data-index) '/' attr(data-total);
+	position: absolute;
+	inset: 0;
+	pointer-events: none;
+	z-index: 21;
+	display: flex;
+	align-items: flex-end;
+	justify-content: flex-end;
+	padding: 0 158px 28px 0;
+	font-family: var(--font-mono);
+	font-weight: 700;
+	font-size: 28px;
+	line-height: 1;
+	color: var(--fg);
+	background:
+		linear-gradient(var(--fg), var(--fg)) 16px 54px / 36px 3px no-repeat,
+		linear-gradient(var(--fg), var(--fg)) 54px 16px / 3px 36px no-repeat,
+		linear-gradient(var(--fg), var(--fg)) calc(100% - 16px) 54px / 36px 3px no-repeat,
+		linear-gradient(var(--fg), var(--fg)) calc(100% - 54px) 16px / 3px 36px no-repeat,
+		linear-gradient(var(--fg), var(--fg)) 16px calc(100% - 54px) / 36px 3px no-repeat,
+		linear-gradient(var(--fg), var(--fg)) 54px calc(100% - 16px) / 3px 36px no-repeat,
+		linear-gradient(var(--fg), var(--fg)) calc(100% - 16px) calc(100% - 54px) / 36px 3px no-repeat,
+		linear-gradient(var(--fg), var(--fg)) calc(100% - 54px) calc(100% - 16px) / 3px 36px no-repeat,
+		linear-gradient(var(--accent), var(--accent)) calc(100% - 116px) calc(100% - 26px) / 30px 30px no-repeat,
+		linear-gradient(var(--fg), var(--fg)) calc(100% - 84px) calc(100% - 26px) / 30px 30px no-repeat;
+	animation: riso-fade 500ms linear both;
+}
+
+/* kicker: a printed tag, top left, with a pink underline that slides in */
+[data-theme='riso'] .slide-tag {
+	position: absolute;
+	top: 96px;
+	left: 96px;
+	right: auto;
+	bottom: auto;
+	padding-bottom: 16px;
+	font-family: var(--font-mono);
+	font-size: 34px;
+	font-weight: 700;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+	line-height: 1;
+	color: var(--fg);
+	z-index: 2;
+	animation: riso-blue var(--dur) var(--ease) both;
+}
+[data-theme='riso'] .slide-tag::after {
+	content: '';
+	position: absolute;
+	left: 4px;
+	right: -4px;
+	bottom: 0;
+	height: 10px;
+	background: var(--accent);
+	mix-blend-mode: multiply;
+	transform-origin: left center;
+	animation: riso-bar 500ms var(--ease) 260ms both;
+}
+
+/* badge: an ink stamp, top right, mirroring the kicker */
+[data-theme='riso'] .slide-badge {
+	top: 96px;
+	right: 96px;
+	left: auto;
+	bottom: auto;
+	padding: 8px 20px;
+	font-family: var(--font-mono);
+	font-size: 30px;
+	font-weight: 700;
+	letter-spacing: 0.02em;
+	text-transform: uppercase;
+	color: var(--accent-text);
+	background: var(--tint);
+	border: 3px solid var(--fg);
+	border-radius: 999px;
+	z-index: 2;
+	animation: riso-pink var(--dur) var(--ease) 120ms both;
+}
+
+/* Bump every layout's top padding clear of the kicker when a tag is set. */
+[data-theme='riso'] .slide-content:has(> .slide-tag) [class^='layout-'] {
+	padding-top: 210px;
+}
+/*
+ * `.layout-default` sets its own 96px padding directly (not through a
+ * `[class^='layout-']` wildcard, so the shared 5rem/80px default this
+ * theme would otherwise fall back to is 16px short). A component's own
+ * root commonly fills `.deck-component-root` with an inline `position:
+ * absolute; inset: 0`, resolving against the padding edge, so real
+ * `padding` would sit inside it and get filled over; a transparent
+ * `border` reserves the same 96px margin instead.
+ */
+[data-theme='riso'] .slide[data-layout='component'] > .slide-content > .deck-component-root,
+[data-theme='riso'] .slide[data-layout='component'] > .slide-content > .scroll-content > .deck-component-root {
+	border-width: 96px;
+	border-style: solid;
+	border-color: transparent;
+}
+[data-theme='riso'] .slide[data-layout='component']:has(> .slide-tag) > .slide-content > .deck-component-root,
+[data-theme='riso'] .slide[data-layout='component']:has(> .slide-tag) > .slide-content > .scroll-content > .deck-component-root {
+	border-top-width: 210px;
+	border-top-style: solid;
+	border-top-color: transparent;
+}
+[data-theme='riso'] .slide-content:has(> .slide-tag) .layout-cover {
+	padding-top: 0;
+}
+
+/* ---------- entrance stagger for plain content ---------- */
+[data-theme='riso'] .slot > * {
+	animation: riso-blue var(--dur) var(--ease) both;
+}
+[data-theme='riso'] .slot > *:nth-child(1) {
+	animation-delay: 90ms;
+}
+[data-theme='riso'] .slot > *:nth-child(2) {
+	animation-delay: 200ms;
+}
+[data-theme='riso'] .slot > *:nth-child(3) {
+	animation-delay: 310ms;
+}
+[data-theme='riso'] .slot > *:nth-child(n + 4) {
+	animation-delay: 420ms;
+}
+[data-theme='riso'] .slot > ul,
+[data-theme='riso'] .slot > ol,
+[data-theme='riso'] .slot > table {
+	animation: none;
+}
+[data-theme='riso'] .slide[data-layout] :is(h1, h2) {
+	text-shadow: 6px 5px 0 var(--accent);
+}
+
+/* ---------- headings ---------- */
+/* Sized for the "heading, then bullets" default-slot pattern (a worst-case
+ * long heading first); not one of the layouts data-length is required for,
+ * so it stays one calm size rather than adding another scaling axis. */
+[data-theme='riso'] .slot > h2 {
+	font-size: 100px;
+	line-height: 1.08;
+	letter-spacing: -0.01em;
+	margin-bottom: 44px;
+	text-shadow: 7px 6px 0 var(--accent);
+}
+[data-theme='riso'] .slot h3 {
+	font-family: var(--font-mono);
+	font-weight: 700;
+	font-size: 44px;
+	letter-spacing: 0.01em;
+	margin-top: 40px;
+	margin-bottom: 24px;
+	text-wrap: initial;
+	text-shadow: none;
+}
+[data-theme='riso'] .slot h4 {
+	font-family: var(--font-mono);
+	font-weight: 700;
+	font-size: 38px;
+	color: var(--accent-text);
+	margin-top: 32px;
+	margin-bottom: 16px;
+	text-shadow: none;
+}
+[data-theme='riso'] .slot h5,
+[data-theme='riso'] .slot h6 {
+	font-family: var(--font-mono);
+	font-weight: 700;
+	font-size: 32px;
+	letter-spacing: 0.03em;
+	text-transform: uppercase;
+	color: var(--muted);
+	margin-top: 28px;
+	margin-bottom: 14px;
+	text-shadow: none;
+}
+/* Consecutive paragraphs (fragment reveals, multi-paragraph body copy) get
+ * daylight between them instead of stacking flush. */
+[data-theme='riso'] .slot > p + p,
+[data-theme='riso'] .slot > .fragment + .fragment > p {
+	margin-top: 32px;
+}
+[data-theme='riso'] .slot p code,
+[data-theme='riso'] .slot li code {
+	font-family: var(--font-mono);
+	font-weight: 700;
+	font-size: 0.78em;
+	letter-spacing: -0.02em;
+	color: var(--accent-text);
+	background: var(--tint);
+	padding: 0.02em 0.2em;
+}
+
+/* ============================================================================
+ * title
+ * ============================================================================ */
+[data-theme='riso'] .layout-title {
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	justify-content: center;
+	text-align: left;
+	align-items: stretch;
+	padding: 96px;
+}
+[data-theme='riso'] .layout-title .slot {
+	position: relative;
+	z-index: 1;
+	max-width: 1500px;
+}
+[data-theme='riso'] .layout-title h1 {
+	/* Sized for a "long" title (the kitchen sink's ~99-character worst case);
+	 * data-length overrides below scale up a shorter one so it gets the
+	 * poster impact the mockup intended. */
+	font-size: 108px;
+	line-height: 1.08;
+	letter-spacing: -0.015em;
+	text-shadow: 7px 6px 0 var(--accent);
+}
+[data-theme='riso'] .layout-title h1[data-length='medium'] {
+	font-size: 128px;
+	line-height: 1.06;
+}
+[data-theme='riso'] .layout-title h1[data-length='short'] {
+	font-size: 156px;
+	line-height: 1.04;
+}
+[data-theme='riso'] .layout-title h2 {
+	font-size: 48px;
+	line-height: 1.16;
+	color: var(--accent-text);
+	margin-top: 28px;
+	text-shadow: 6px 5px 0 var(--accent);
+}
+[data-theme='riso'] .layout-title h2[data-length='medium'] {
+	font-size: 56px;
+	line-height: 1.14;
+}
+[data-theme='riso'] .layout-title h2[data-length='short'] {
+	font-size: 68px;
+	line-height: 1.12;
+}
+[data-theme='riso'] .layout-title p {
+	margin-top: 40px;
+	font-size: 44px;
+	font-weight: 800;
+	line-height: 1.28;
+	max-width: 1200px;
+	animation-delay: 480ms;
+}
+[data-theme='riso'] .layout-title::before {
+	content: '';
+	position: absolute;
+	right: 130px;
+	bottom: 60px;
+	width: 380px;
+	height: 380px;
+	border-radius: 50%;
+	background: var(--accent);
+	mix-blend-mode: multiply;
+	animation: riso-pink var(--dur) var(--ease) 420ms both;
+}
+[data-theme='riso'] .layout-title::after {
+	content: '';
+	position: absolute;
+	right: 340px;
+	bottom: -30px;
+	width: 340px;
+	height: 340px;
+	border-radius: 50%;
+	background-image: var(--dots-blue);
+	background-size: 18px 18px;
+	mix-blend-mode: multiply;
+	animation: riso-blue var(--dur) var(--ease) 540ms both;
+}
+[data-theme='riso'] .layout-title .slot::after {
+	content: '';
+	position: absolute;
+	right: 30px;
+	bottom: 200px;
+	width: 190px;
+	height: 190px;
+	border-radius: 50%;
+	border: 18px solid var(--fg);
+	animation: riso-blue var(--dur) var(--ease) 660ms both;
+}
+
+/* ============================================================================
+ * section: a divider with a halftone disc behind the heading
+ * ============================================================================
+ * A real deck's tag is a phrase ("02 · Foundations"), not a short numeral,
+ * so it keeps the normal kicker treatment (top-left, moderate size) rather
+ * than being blown up to poster scale -- a real tag string at that size
+ * overflows the frame badly. The oversized flourish is a plain halftone
+ * disc instead. */
+[data-theme='riso'] .layout-section {
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	justify-content: flex-end;
+	text-align: left;
+	align-items: stretch;
+	padding: 96px;
+	overflow: hidden;
+}
+[data-theme='riso'] .layout-section .slot {
+	position: relative;
+	z-index: 1;
+	max-width: 1500px;
+}
+[data-theme='riso'] .layout-section::before {
+	content: '';
+	position: absolute;
+	right: -120px;
+	bottom: -160px;
+	width: 700px;
+	height: 700px;
+	border-radius: 50%;
+	background-image: var(--dots-pink);
+	background-size: 26px 26px;
+	mix-blend-mode: multiply;
+	animation: riso-pink var(--dur) var(--ease) 200ms both;
+}
+[data-theme='riso'] .layout-section::after {
+	content: '';
+	position: absolute;
+	right: 260px;
+	top: -140px;
+	width: 340px;
+	height: 340px;
+	border-radius: 50%;
+	border: 18px solid var(--fg);
+	mix-blend-mode: multiply;
+	animation: riso-blue var(--dur) var(--ease) 360ms both;
+}
+[data-theme='riso'] .layout-section h2 {
+	/*
+	 * Sized for a "long" section title (up to 60 characters); the
+	 * data-length overrides below scale up a short one (a word or two, the
+	 * common case for a divider) to the full poster size the mockup
+	 * intended. Written at the same selector depth as base's own
+	 * data-length overrides for this layout (layouts.css) so it wins the
+	 * cascade tie by loading after it, not by out-specifying it.
+	 */
+	font-size: 110px;
+	line-height: 1.04;
+	letter-spacing: -0.02em;
+	text-shadow: 10px 9px 0 var(--accent);
+}
+[data-theme='riso'] .layout-section h2[data-length='medium'] {
+	font-size: 140px;
+	line-height: 1.03;
+}
+[data-theme='riso'] .layout-section h2[data-length='short'] {
+	font-size: 176px;
+	line-height: 1.02;
+}
+[data-theme='riso'] .layout-section p {
+	margin-top: 32px;
+	font-size: 46px;
+	font-weight: 800;
+	line-height: 1.3;
+	max-width: 1300px;
+}
+
+/* ============================================================================
+ * default: statement (a lone heading), bullets, image, table, mermaid
+ * ============================================================================ */
+[data-theme='riso'] .layout-default {
+	display: flex;
+	flex-direction: column;
+	justify-content: center;
+	text-align: left;
+	align-items: stretch;
+	padding: 96px;
+}
+[data-theme='riso'] .layout-default .slot:has(> h1:only-child) {
+	justify-content: center;
+}
+[data-theme='riso'] .layout-default h1:only-child {
+	/* Sized for a "medium" statement (a full sentence, the common case);
+	 * data-length overrides below cover the short and long ends. */
+	font-size: 152px;
+	line-height: 1.04;
+	letter-spacing: -0.015em;
+	text-shadow: 9px 8px 0 var(--accent);
+}
+[data-theme='riso'] .layout-default h1[data-length='long']:only-child {
+	font-size: 126px;
+	line-height: 1.08;
+}
+[data-theme='riso'] .layout-default h1[data-length='short']:only-child {
+	font-size: 184px;
+	line-height: 1;
+}
+[data-theme='riso'] .layout-default h1:only-child em {
+	background: linear-gradient(transparent 62%, var(--accent) 62%, var(--accent) 82%, transparent 82%);
+	text-shadow: none;
+}
+/* A lone h2 is the long-sentence statement: smaller, because it is a full
+ * sentence rather than a headline (the h2 markdown habit for a thesis
+ * slide with no bullets under it). */
+[data-theme='riso'] .layout-default .slot:has(> h2:only-child) {
+	justify-content: center;
+}
+[data-theme='riso'] .layout-default .slot > h2:only-child {
+	font-size: 96px;
+	line-height: 1.12;
+	margin-bottom: 0;
+	text-shadow: 7px 6px 0 var(--accent);
+}
+[data-theme='riso'] .layout-default .slot > h2[data-length='long']:only-child {
+	font-size: 82px;
+	line-height: 1.16;
+}
+[data-theme='riso'] .layout-default .slot > h2[data-length='short']:only-child {
+	font-size: 118px;
+	line-height: 1.06;
+}
+
+/* ---------- bullets: perforation between rows ---------- */
+[data-theme='riso'] .slot > ul,
+[data-theme='riso'] .slot > :where(.fragment) > ul {
+	list-style: none;
+	margin-top: 52px;
+}
+[data-theme='riso'] .slot > ul > li,
+[data-theme='riso'] .slot > :where(.fragment) > ul > li {
+	position: relative;
+	padding: 28px 0 30px 100px;
+	font-size: 50px;
+	line-height: 1.3;
+	background: radial-gradient(circle at center, var(--fg) 0, var(--fg) 3px, transparent 3.6px) 0 100% / 20px 8px repeat-x;
+}
+[data-theme='riso'] .slot > ul > li:last-child,
+[data-theme='riso'] .slot > :where(.fragment) > ul > li:last-child {
+	background: none;
+}
+[data-theme='riso'] .slot > ul > li::before,
+[data-theme='riso'] .slot > :where(.fragment) > ul > li::before {
+	content: '';
+	position: absolute;
+	left: 4px;
+	top: 34px;
+	width: 44px;
+	height: 44px;
+	border-radius: 50%;
+	background: var(--accent);
+	mix-blend-mode: multiply;
+}
+[data-theme='riso'] .slot > ul > li::after,
+[data-theme='riso'] .slot > :where(.fragment) > ul > li::after {
+	content: '';
+	position: absolute;
+	left: 12px;
+	top: 27px;
+	width: 44px;
+	height: 44px;
+	border-radius: 50%;
+	border: 7px solid var(--fg);
+}
+/* Nested lists: quieter, no dot pair, a dash instead. Still 40px+ text --
+ * the isolation check reads any li inside `.slot`, nested or not, against
+ * the 40px body minimum, so hierarchy comes from color and marker only. */
+[data-theme='riso'] .slot ul ul {
+	list-style: none;
+	margin-top: 14px;
+}
+[data-theme='riso'] .slot ul ul > li {
+	padding: 10px 0 10px 48px;
+	font-size: 42px;
+	line-height: 1.3;
+	font-weight: 600;
+	color: var(--muted);
+	background: none;
+}
+[data-theme='riso'] .slot ul ul > li::before {
+	content: '\2013';
+	position: absolute;
+	left: 4px;
+	top: 8px;
+	width: auto;
+	height: auto;
+	background: none;
+	border: 0;
+	color: var(--muted);
+	font-weight: 800;
+}
+[data-theme='riso'] .slot ul ul > li::after {
+	content: none;
+}
+[data-theme='riso'] .slot ol {
+	margin-top: 32px;
+	padding-left: 1.5ch;
+	counter-reset: riso-count;
+}
+[data-theme='riso'] .slot ol > li {
+	position: relative;
+	list-style: none;
+	counter-increment: riso-count;
+	padding: 18px 0 18px 1.6ch;
+	font-size: 48px;
+	line-height: 1.3;
+	font-weight: 700;
+}
+[data-theme='riso'] .slot ol > li::before {
+	content: counter(riso-count) '.';
+	position: absolute;
+	left: -1.5ch;
+	color: var(--accent-text);
+	font-family: var(--font-mono);
+	font-weight: 700;
+}
+[data-theme='riso'] .slide .fragment-hidden {
+	opacity: 0;
+	transform: translate(30px, -14px);
+}
+[data-theme='riso'] .slide .fragment-visible {
+	opacity: 1;
+	transform: translate(0, 0);
+	transition:
+		opacity var(--dur) var(--ease),
+		transform var(--dur) var(--ease);
+}
+
+/* A recap slide of 7+ bullets (a dense list): tighten rows, drop the
+ * heading a size, and move body text down to the narrow-column end of the
+ * scale (still clearing the 40px body floor). */
+[data-theme='riso'] .slot:has(> ul > li:nth-child(7)) > h2 {
+	font-size: 72px;
+	margin-bottom: 28px;
+}
+[data-theme='riso'] .slot > ul:has(> li:nth-child(7)) {
+	margin-top: 12px;
+}
+[data-theme='riso'] .slot > ul:has(> li:nth-child(7)) > li {
+	padding: 10px 0 12px 76px;
+	font-size: 44px;
+	line-height: 1.28;
+}
+[data-theme='riso'] .slot > ul:has(> li:nth-child(7)) > li::before,
+[data-theme='riso'] .slot > ul:has(> li:nth-child(7)) > li::after {
+	width: 32px;
+	height: 32px;
+	top: 12px;
+}
+
+/* ---------- blockquote outside the quote layout ---------- */
+[data-theme='riso'] :not(.layout-quote) > .slot > blockquote {
+	position: relative;
+	margin-top: 40px;
+	padding: 8px 0 8px 56px;
+	color: var(--fg);
+	font-style: normal;
+}
+[data-theme='riso'] :not(.layout-quote) > .slot > blockquote::before {
+	content: '';
+	position: absolute;
+	left: 0;
+	top: 0;
+	bottom: 0;
+	width: 8px;
+	background: var(--accent);
+	mix-blend-mode: multiply;
+}
+[data-theme='riso'] :not(.layout-quote) > .slot > blockquote p {
+	font-size: 44px;
+	line-height: 1.28;
+	font-weight: 700;
+}
+
+/* ---------- image on a plain slot ---------- */
+[data-theme='riso'] .layout-default .slot:has(> img, > p > img:only-child) {
+	flex: 1;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+}
+[data-theme='riso'] .layout-default .slot > h2:has(~ img, ~ p > img:only-child) {
+	flex: none;
+}
+[data-theme='riso'] .layout-default .slot > p:has(> img:only-child) {
+	flex: 1;
+	min-height: 0;
+	display: flex;
+	justify-content: center;
+	align-items: flex-start;
+	margin-top: 44px;
+}
+[data-theme='riso'] .layout-default .slot img {
+	max-width: 100%;
+	max-height: 100%;
+	object-fit: contain;
+	border: 7px solid var(--fg);
+	box-shadow: -16px 16px 0 var(--accent);
+	/*
+	 * Filter alone, no mix-blend-mode: Chromium has a real bug where
+	 * mix-blend-mode on the same element as a filter can drop the filter
+	 * and paint the original, unfiltered image instead (confirmed by
+	 * screenshot during the port -- the duotone-via-blend-mode version of
+	 * this rule rendered in full color). The ink-frame border and shadow
+	 * carry the theme's identity instead.
+	 */
+	filter: grayscale(1) contrast(1.6) brightness(0.92);
+}
+[data-theme='riso'] .layout-default .slot > img {
+	align-self: flex-start;
+	margin-top: 44px;
+}
+
+/* ============================================================================
+ * two-column, three-column
+ * ============================================================================ */
+[data-theme='riso'] .layout-two-column {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	grid-template-rows: auto 1fr;
+	gap: 44px 0;
+	padding: 96px;
+}
+[data-theme='riso'] .layout-two-column .slot-default {
+	grid-column: 1 / -1;
+}
+[data-theme='riso'] .layout-two-column .slot-left {
+	padding-right: 64px;
+}
+[data-theme='riso'] .layout-two-column .slot-right {
+	padding-left: 72px;
+	background: radial-gradient(circle at center, var(--fg) 0, var(--fg) 3px, transparent 3.6px) 0 0 / 8px 20px repeat-y;
+}
+/* A two-column pane is narrower than a full-width slot: turn body copy
+ * down to the narrow-column step of the scale so a sentence doesn't wrap
+ * onto more lines than the row has room for. */
+[data-theme='riso'] .layout-two-column .slot p,
+[data-theme='riso'] .layout-two-column .slot li {
+	font-size: 46px;
+	line-height: 1.28;
+}
+[data-theme='riso'] .layout-two-column .slot > ul > li {
+	padding: 22px 0 24px 88px;
+}
+[data-theme='riso'] .layout-two-column .slot > ul > li::before,
+[data-theme='riso'] .layout-two-column .slot > ul > li::after {
+	width: 40px;
+	height: 40px;
+	top: 26px;
+}
+[data-theme='riso'] .layout-two-column .slot > ul > li::after {
+	left: 10px;
+	border-width: 6px;
+}
+[data-theme='riso'] .layout-three-column {
+	display: grid;
+	grid-template-columns: 1fr 1fr 1fr;
+	grid-template-rows: auto 1fr;
+	gap: 44px 56px;
+	padding: 96px;
+}
+[data-theme='riso'] .layout-three-column .slot-default {
+	grid-column: 1 / -1;
+}
+[data-theme='riso'] .layout-three-column .slot-center {
+	padding-left: 56px;
+	border-left: 3px dashed var(--muted);
+}
+[data-theme='riso'] .layout-three-column .slot-right {
+	padding-left: 56px;
+	border-left: 3px dashed var(--muted);
+}
+[data-theme='riso'] :is(.layout-two-column, .layout-three-column) h3 {
+	position: relative;
+	display: inline-block;
+	padding-bottom: 16px;
+	margin-top: 0;
+	margin-bottom: 24px;
+}
+[data-theme='riso'] :is(.layout-two-column, .layout-three-column) h3::after {
+	content: '';
+	position: absolute;
+	left: 4px;
+	right: -4px;
+	bottom: 0;
+	height: 10px;
+	background: var(--accent);
+	mix-blend-mode: multiply;
+}
+[data-theme='riso'] .layout-three-column .slot p,
+[data-theme='riso'] .layout-three-column .slot li {
+	font-size: 42px;
+	line-height: 1.3;
+}
+[data-theme='riso'] .layout-three-column .slot > ul > li {
+	padding: 16px 0 18px 68px;
+}
+[data-theme='riso'] .layout-three-column .slot > ul > li::before,
+[data-theme='riso'] .layout-three-column .slot > ul > li::after {
+	width: 34px;
+	height: 34px;
+	top: 18px;
+}
+[data-theme='riso'] .layout-three-column .slot > ul > li::after {
+	left: 9px;
+	border-width: 6px;
+}
+
+/* ============================================================================
+ * code-focus / code without highlights: a printed sheet, pink plate out of
+ * register behind it
+ * ============================================================================ */
+[data-theme='riso'] .layout-code-focus,
+[data-theme='riso'] .layout-default {
+	/* padding already set above; code chrome only needs its own box rules */
+}
+[data-theme='riso'] .slide pre.shiki {
+	position: relative;
+	margin: 48px 20px 0 0;
+	padding: 36px 0;
+	border: 7px solid var(--fg);
+	border-radius: 20px;
+	background: var(--surface);
+	color: var(--fg);
+	font-family: var(--font-mono);
+	font-weight: 700;
+	font-size: 40px;
+	line-height: 1.5;
+	letter-spacing: -0.02em;
+	overflow: hidden;
+}
+[data-theme='riso'] .slide pre.shiki::before {
+	content: '';
+	position: absolute;
+	left: 9px;
+	top: 9px;
+	right: -21px;
+	bottom: -21px;
+	border-radius: 20px;
+	border: 7px solid var(--accent);
+	mix-blend-mode: multiply;
+	pointer-events: none;
+	z-index: -1;
+	animation: riso-pink var(--dur) var(--ease) 260ms both;
+}
+[data-theme='riso'] .slide pre.shiki code {
+	display: flex;
+	flex-direction: column;
+	font: inherit;
+}
+[data-theme='riso'] .slide pre.shiki .line {
+	display: block;
+	white-space: pre;
+	padding: 0 44px;
+	overflow-wrap: anywhere;
+	white-space: pre-wrap;
+}
+[data-theme='riso'] .slide pre.has-highlighted .line {
+	opacity: 0.78;
+}
+/* `color` alone never reaches a token span: shiki gives each one its own
+ * inline `style="color:var(--shiki-token-x)"`, which beats any stylesheet
+ * rule on the span (inline style always wins), so a plain identifier kept
+ * the panel's --shiki-foreground here instead of switching to
+ * --accent-text. Redefining the shiki custom properties is what actually
+ * recolors the tokens, since inline styles still resolve custom
+ * properties through the normal cascade. */
+[data-theme='riso'] .slide pre.has-highlighted .line.highlighted {
+	opacity: 1;
+	color: var(--accent-text);
+	background: var(--tint);
+	--shiki-foreground: var(--accent-text);
+	--shiki-token-comment: var(--accent-text);
+	--shiki-token-string: var(--accent-text);
+	--shiki-token-string-expression: var(--accent-text);
+	--shiki-token-keyword: var(--accent-text);
+	--shiki-token-function: var(--accent-text);
+	--shiki-token-constant: var(--accent-text);
+	--shiki-token-parameter: var(--accent-text);
+	--shiki-token-punctuation: var(--accent-text);
+	--shiki-token-link: var(--accent-text);
+}
+[data-theme='riso'] .slide pre code .line:last-child:empty {
+	display: none;
+}
+[data-theme='riso'] .layout-code-focus pre + p,
+[data-theme='riso'] .layout-default pre + p {
+	margin-top: 36px;
+	font-size: 46px;
+	line-height: 1.28;
+	font-weight: 800;
+}
+
+/* ============================================================================
+ * big-stat
+ * ============================================================================ */
+[data-theme='riso'] .layout-big-stat {
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	justify-content: center;
+	text-align: left;
+	align-items: stretch;
+	padding: 96px;
+}
+[data-theme='riso'] .layout-big-stat h1 {
+	/*
+	 * Sized for a "long" stat (a short phrase, not just a number).
+	 * base's layouts.css colors this h1 with --color-accent (riso's
+	 * highlighter pink), which reads as a solid pink numeral rather than
+	 * this theme's navy-ink-plus-pink-overprint identity; set the ink color
+	 * explicitly here to win that tie (see the comment below on the
+	 * data-length='short' override for why the tie is won by load order,
+	 * not selector depth).
+	 */
+	font-size: 170px;
+	line-height: 1;
+	letter-spacing: -0.02em;
+	color: var(--fg);
+	text-shadow: 14px 12px 0 var(--accent);
+}
+[data-theme='riso'] .layout-big-stat h1[data-length='medium'] {
+	font-size: 220px;
+}
+/*
+ * layouts.css already special-cases a short big-stat h1 at its own
+ * specificity (.layout-big-stat .slot-default h1[data-length='short']);
+ * match that same selector depth here (not the shallower `.layout-big-stat
+ * h1` this file otherwise uses) so this rule ties it and wins by loading
+ * after it, rather than silently losing to a smaller size.
+ */
+[data-theme='riso'] .layout-big-stat h1[data-length='short'] {
+	font-size: 280px;
+}
+[data-theme='riso'] .layout-big-stat .slot-caption {
+	position: relative;
+	z-index: 1;
+	max-width: 1300px;
+}
+[data-theme='riso'] .layout-big-stat .slot-caption p {
+	margin-top: 28px;
+	font-size: 48px;
+	font-weight: 800;
+	line-height: 1.3;
+	animation-delay: 420ms;
+}
+[data-theme='riso'] .layout-big-stat::after {
+	content: '';
+	position: absolute;
+	right: 60px;
+	bottom: 40px;
+	width: 320px;
+	height: 320px;
+	border-radius: 50%;
+	background-image: var(--dots-pink);
+	background-size: 22px 22px;
+	mix-blend-mode: multiply;
+	animation: riso-pink var(--dur) var(--ease) 500ms both;
+}
+
+/* ============================================================================
+ * quote
+ * ============================================================================ */
+[data-theme='riso'] .layout-quote {
+	display: flex;
+	flex-direction: column;
+	justify-content: center;
+	padding: 96px;
+}
+[data-theme='riso'] .layout-quote .slot-default {
+	max-width: 1650px;
+}
+[data-theme='riso'] .layout-quote blockquote {
+	position: relative;
+	padding-top: 140px;
+}
+[data-theme='riso'] .layout-quote blockquote::before {
+	content: '\201C';
+	position: absolute;
+	left: -10px;
+	top: -50px;
+	font-family: var(--font-display);
+	font-size: 380px;
+	line-height: 1;
+	color: var(--accent);
+	mix-blend-mode: multiply;
+	animation: riso-pink var(--dur) var(--ease) both;
+}
+[data-theme='riso'] .layout-quote blockquote p {
+	font-family: var(--font-display);
+	font-weight: 400;
+	font-size: 78px;
+	line-height: 1.2;
+	letter-spacing: -0.015em;
+	text-wrap: balance;
+	text-shadow: 8px 7px 0 var(--accent);
+}
+[data-theme='riso'] .layout-quote .slot-attribution {
+	margin-top: 48px;
+}
+[data-theme='riso'] .layout-quote .slot-attribution p {
+	position: relative;
+	display: inline-block;
+	padding-bottom: 18px;
+	font-family: var(--font-mono);
+	font-weight: 700;
+	font-size: 48px;
+	letter-spacing: 0.01em;
+	text-transform: uppercase;
+	animation-delay: 420ms;
+}
+[data-theme='riso'] .layout-quote .slot-attribution p::after {
+	content: '';
+	position: absolute;
+	left: 4px;
+	right: -4px;
+	bottom: 0;
+	height: 10px;
+	background: var(--accent);
+	mix-blend-mode: multiply;
+}
+
+/* ============================================================================
+ * split-media: a duotone photo, pink plate behind it, halftone corner
+ * ============================================================================ */
+[data-theme='riso'] .layout-split-media {
+	display: grid;
+	grid-template-columns: 1.1fr 1fr;
+	gap: 80px;
+	align-items: center;
+	padding: 96px;
+}
+[data-theme='riso'] .layout-split-media .slot-default {
+	display: flex;
+	flex-direction: column;
+	justify-content: center;
+	padding: 0;
+}
+[data-theme='riso'] .layout-split-media .slot-default p {
+	margin-top: 32px;
+	font-size: 46px;
+	line-height: 1.3;
+}
+[data-theme='riso'] .layout-split-media .slot-media {
+	position: relative;
+	display: block;
+}
+[data-theme='riso'] .layout-split-media .slot-media p {
+	position: relative;
+	margin: 0 0 0 24px;
+	border: 7px solid var(--fg);
+	box-shadow: -20px 20px 0 var(--accent);
+	overflow: hidden;
+	animation-delay: 220ms;
+}
+[data-theme='riso'] .layout-split-media img {
+	display: block;
+	width: 100%;
+	/*
+	 * Filter alone, no mix-blend-mode -- see the comment on the plain-slot
+	 * image rule above. Chromium can silently drop a filter when
+	 * mix-blend-mode sits on the same element, painting the original
+	 * full-color image instead of the duotone.
+	 */
+	filter: grayscale(1) contrast(1.6) brightness(0.92);
+}
+[data-theme='riso'] .layout-split-media .slot-media::after {
+	content: '';
+	position: absolute;
+	right: -50px;
+	top: -70px;
+	width: 200px;
+	height: 200px;
+	border-radius: 50%;
+	background-image: var(--dots-pink);
+	background-size: 18px 18px;
+	mix-blend-mode: multiply;
+	pointer-events: none;
+	animation: riso-pink var(--dur) var(--ease) 460ms both;
+}
+
+/* ============================================================================
+ * cover: a printed card pasted onto whatever backdrop the deck sets
+ * ============================================================================
+ * `background:` frontmatter on a cover slide sets an inline background-color
+ * on the real slide element, which can be arbitrarily dark -- this theme's
+ * navy text would go unreadable straight on top of it. The slot gets its
+ * own opaque cream card instead, so the cover statement always sits on
+ * paper regardless of what color the frame around it is. */
+[data-theme='riso'] .layout-cover {
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	justify-content: center;
+	text-align: left;
+	padding: 130px;
+}
+[data-theme='riso'] .layout-cover .slot {
+	position: relative;
+	max-width: 1550px;
+	padding: 72px 88px;
+	background: var(--bg);
+	border: 7px solid var(--fg);
+	box-shadow: -22px 22px 0 var(--accent);
+}
+[data-theme='riso'] .layout-cover h1 {
+	/* Sized for a "long" cover statement; data-length overrides below scale
+	 * up a short one (the common case: cover exists for a single punchy
+	 * line). */
+	font-size: 104px;
+	line-height: 1.1;
+	letter-spacing: -0.02em;
+	text-shadow: 9px 8px 0 var(--accent);
+}
+[data-theme='riso'] .layout-cover h1[data-length='medium'] {
+	font-size: 130px;
+	line-height: 1.06;
+}
+[data-theme='riso'] .layout-cover h1[data-length='short'] {
+	font-size: 156px;
+	line-height: 1.04;
+}
+[data-theme='riso'] .layout-cover p {
+	margin-top: 36px;
+	font-size: 46px;
+	font-weight: 800;
+	line-height: 1.28;
+	max-width: 1300px;
+}
+
+/* ============================================================================
+ * sidebar: main column plus a printed receipt on the right
+ * ============================================================================ */
+[data-theme='riso'] .layout-sidebar {
+	display: grid;
+	grid-template-columns: 1fr 0.55fr;
+	gap: 72px;
+	align-items: stretch;
+	padding: 96px;
+}
+[data-theme='riso'] .layout-sidebar .slot-default {
+	display: flex;
+	flex-direction: column;
+	justify-content: center;
+}
+[data-theme='riso'] .layout-sidebar .slot-sidebar {
+	position: relative;
+	padding: 56px 44px;
+	background: var(--surface);
+	border: 5px solid var(--fg);
+	display: flex;
+	flex-direction: column;
+	justify-content: center;
+}
+[data-theme='riso'] .layout-sidebar .slot-sidebar::before {
+	content: '';
+	position: absolute;
+	left: -14px;
+	top: 40px;
+	width: 200px;
+	height: 200px;
+	border-radius: 50%;
+	background-image: var(--dots-pink);
+	background-size: 16px 16px;
+	mix-blend-mode: multiply;
+	z-index: -1;
+}
+[data-theme='riso'] .layout-sidebar .slot-sidebar h3 {
+	margin-top: 0;
+}
+[data-theme='riso'] .layout-sidebar .slot-sidebar .slot > ul > li,
+[data-theme='riso'] .layout-sidebar .slot-sidebar .slot > :where(.fragment) > ul > li,
+[data-theme='riso'] .layout-sidebar .slot-sidebar ul > li {
+	padding: 16px 0 18px 0;
+	font-size: 42px;
+	line-height: 1.3;
+	background: none;
+}
+[data-theme='riso'] .layout-sidebar .slot-sidebar ul > li::before,
+[data-theme='riso'] .layout-sidebar .slot-sidebar ul > li::after {
+	content: none;
+}
+[data-theme='riso'] .layout-sidebar .slot-sidebar ul {
+	margin-top: 20px;
+	border-top: 3px dashed var(--muted);
+	padding-top: 8px;
+}
+
+/* ============================================================================
+ * blank: no imposed chrome beyond the shared slide identity
+ * ============================================================================ */
+[data-theme='riso'] .layout-blank {
+	padding: 96px;
+}
+[data-theme='riso'] .layout-blank h1 {
+	font-size: 140px;
+	line-height: 1.08;
+	text-shadow: 8px 7px 0 var(--accent);
+}
+[data-theme='riso'] .map-slide {
+	border: 7px solid var(--fg);
+	border-radius: 20px;
+	overflow: hidden;
+}
+
+/* ============================================================================
+ * table: a printed ledger with a perforated row rule
+ * ============================================================================ */
+[data-theme='riso'] .slide table {
+	margin-top: 52px;
+	width: 100%;
+	border-collapse: collapse;
+	text-align: left;
+	border-top: 6px solid var(--fg);
+	border-bottom: 6px solid var(--fg);
+	font-size: 46px;
+	line-height: 1.2;
+}
+[data-theme='riso'] .slide th {
+	font-family: var(--font-mono);
+	font-weight: 700;
+	font-size: 42px;
+	letter-spacing: 0;
+	text-transform: uppercase;
+	padding: 28px 28px 28px 0;
+	border-bottom: 6px solid var(--fg);
+	background: linear-gradient(var(--tint), var(--tint)) 0 12px / 100% calc(100% - 12px) no-repeat;
+}
+[data-theme='riso'] .slide th:first-child,
+[data-theme='riso'] .slide td:first-child {
+	padding-left: 28px;
+}
+[data-theme='riso'] .slide td {
+	padding: 34px 28px 36px 0;
+	font-weight: 600;
+	background: radial-gradient(circle at center, var(--fg) 0, var(--fg) 3px, transparent 3.6px) 0 100% / 20px 8px repeat-x;
+}
+[data-theme='riso'] .slide tbody tr:last-child td {
+	background: none;
+}
+[data-theme='riso'] .slide td:first-child {
+	font-weight: 800;
+}
+
+/* ============================================================================
+ * mermaid diagram
+ * ============================================================================
+ * Labels are <p> elements inside .mermaid-diagram, not the slide's prose --
+ * reset every property this theme's `.slot p` rules would otherwise leak
+ * into them. */
+[data-theme='riso'] .layout-default .slot:has(.mermaid-diagram) {
+	flex: 1;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+}
+[data-theme='riso'] .mermaid-diagram {
+	flex: 1;
+	min-height: 0;
+	margin-top: 32px;
+	display: flex;
+	justify-content: center;
+}
+/*
+ * `.slide[data-layout] .mermaid-diagram p`, not the bare `.mermaid-diagram
+ * p` this rule started as: the minimum-size safety net later in this file
+ * (`.slot p { font-size: 62px }`) has the same (0,1,1) specificity and sits
+ * after this block, so it was winning the tie and overriding the explicit
+ * size below. The extra `.slide[data-layout]` ancestor raises this rule to
+ * (0,2,1), which the safety net can no longer beat regardless of order.
+ */
+[data-theme='riso'] .slide[data-layout] .mermaid-diagram p {
+	font-family: var(--font-body);
+	font-weight: 600;
+	/*
+	 * An explicit px value, not `inherit`: mermaid lays out node/foreignObject
+	 * size using theme.json's mermaid.themeVariables.fontSize (38px), so the
+	 * rendered label must match that exactly or text overflows the node it
+	 * was measured for. `inherit` pulled in this theme's base slide
+	 * font-size and made every label overlap its neighbors.
+	 */
+	font-size: 38px;
+	letter-spacing: 0;
+	line-height: 1.3;
+	white-space: nowrap;
+	margin: 0;
+	color: inherit;
+	animation: none;
+	text-shadow: none;
+	background: none;
+}
+[data-theme='riso'] .mermaid-diagram svg {
+	width: 100% !important;
+	max-width: none !important;
+	height: 100% !important;
+	overflow: visible;
+}
+[data-theme='riso'] .mermaid-diagram .node rect,
+[data-theme='riso'] .mermaid-diagram .node polygon {
+	rx: 16px;
+	stroke-width: 6px !important;
+}
+[data-theme='riso'] .mermaid-diagram .node path {
+	stroke-width: 6px !important;
+}
+[data-theme='riso'] .mermaid-diagram foreignObject {
+	overflow: visible;
+}
+[data-theme='riso'] .mermaid-diagram .flowchart-link {
+	stroke-width: 8px !important;
+	stroke-linecap: round;
+	stroke-linejoin: round;
+	mix-blend-mode: multiply;
+}
+[data-theme='riso'] .mermaid-diagram + p {
+	margin-top: 28px;
+	font-size: 44px;
+	line-height: 1.28;
+	font-weight: 800;
+}
+
+/* ============================================================================
+ * scroll slide
+ * ============================================================================ */
+[data-theme='riso'] .scroll-content pre.shiki {
+	font-size: 40px;
+	line-height: 1.45;
+}
+
+/* ============================================================================
+ * live code block and asciinema chrome
+ * ============================================================================
+ * Structure and behavior come from rich-blocks.css, which reads the
+ * --color-* bridge above; only the run button and frame borders need a
+ * tweak to read as this theme's ink rather than the shared default. */
+[data-theme='riso'] .live-code-block .run-button {
+	background-color: var(--fg);
+	color: var(--bg);
+	font-family: var(--font-mono);
+	font-weight: 700;
+	border-radius: 999px;
+}
+[data-theme='riso'] .live-code-block .code-container pre {
+	border-radius: 20px 20px 0 0;
+	border: 7px solid var(--fg);
+	border-bottom: 0;
+}
+[data-theme='riso'] .live-code-block .result-container {
+	border-radius: 0 0 20px 20px;
+	border: 7px solid var(--fg);
+	border-top: 3px dashed var(--fg);
+}
+[data-theme='riso'] .asciinema-player-wrapper {
+	border: 7px solid var(--fg);
+	border-radius: 20px;
+	overflow: hidden;
+}
+
+/* ============================================================================
+ * Minimum-size safety net
+ * ============================================================================
+ * Anything a rule above didn't explicitly size falls back to these, never
+ * to the shared stylesheet's smaller defaults. More specific rules above
+ * still win the cascade. */
+[data-theme='riso'] .slot p,
+[data-theme='riso'] .slot li {
+	font-size: 46px;
+	line-height: 1.35;
+}
+[data-theme='riso'] pre code {
+	font-size: 40px;
+}
+[data-theme='riso'] .slot td,
+[data-theme='riso'] .slot th {
+	font-size: 44px;
+}
+
+/* ============================================================================
+ * Print and reduced motion: everything in its final state, nothing moves
+ * ============================================================================ */
+@media print, (prefers-reduced-motion: reduce) {
+	[data-theme='riso'] *,
+	[data-theme='riso'] *::before,
+	[data-theme='riso'] *::after {
+		animation: none !important;
+		transition: none !important;
+	}
+}

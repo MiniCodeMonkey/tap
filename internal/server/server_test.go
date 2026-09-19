@@ -33,6 +33,13 @@ func TestNew(t *testing.T) {
 	}
 }
 
+func TestNewWithHost(t *testing.T) {
+	s := NewWithHost(8080, "127.0.0.1")
+	if s.Addr() != "127.0.0.1:8080" {
+		t.Errorf("NewWithHost(8080, \"127.0.0.1\").Addr() = %q, want %q", s.Addr(), "127.0.0.1:8080")
+	}
+}
+
 func TestPort(t *testing.T) {
 	s := New(3000)
 	if got := s.Port(); got != 3000 {

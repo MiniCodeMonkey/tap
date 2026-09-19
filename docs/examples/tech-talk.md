@@ -17,7 +17,7 @@ This example demonstrates how to structure a technical presentation with:
 
 ## Features Used
 
-- **Theme**: `paper` for clean, professional look
+- **Theme**: `swiss` for a grid-driven, argument-first look
 - **Layouts**: `title`, `section`, `code-focus`, `two-column`
 - **Live Code**: SQLite driver for database demos
 - **Fragments**: Incremental reveals for bullet points
@@ -27,7 +27,7 @@ This example demonstrates how to structure a technical presentation with:
 ````markdown
 ---
 title: Building Scalable APIs
-theme: paper
+theme: swiss
 author: Your Name
 date: 2026-01-24
 aspectRatio: "16:9"
@@ -59,19 +59,19 @@ Why most APIs fail at scale
 
 <!-- pause -->
 
-- **N+1 queries** — Database calls grow with data size
+- **N+1 queries**: Database calls grow with data size
 
 <!-- pause -->
 
-- **Missing indexes** — Full table scans on every request
+- **Missing indexes**: Full table scans on every request
 
 <!-- pause -->
 
-- **No caching** — Recomputing the same results repeatedly
+- **No caching**: Recomputing the same results repeatedly
 
 <!-- pause -->
 
-- **Synchronous processing** — Blocking on slow operations
+- **Synchronous processing**: Blocking on slow operations
 
 ---
 
@@ -81,7 +81,7 @@ layout: two-column
 
 ## Before & After
 
-|||
+::left
 
 ### Before
 
@@ -96,7 +96,7 @@ for (const user of users) {
 }
 ```
 
-|||
+::right
 
 ### After
 
@@ -181,19 +181,19 @@ Adapted from Donald Knuth
 
 <!-- pause -->
 
-1. **Profile first** — Measure before optimizing
+1. **Profile first**: Measure before optimizing
 
 <!-- pause -->
 
-2. **Index strategically** — Cover your common queries
+2. **Index strategically**: Cover your common queries
 
 <!-- pause -->
 
-3. **Cache aggressively** — But invalidate correctly
+3. **Cache aggressively**: But invalidate correctly
 
 <!-- pause -->
 
-4. **Test at scale** — Production data sizes matter
+4. **Test at scale**: Production data sizes matter
 
 ---
 

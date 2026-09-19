@@ -64,7 +64,7 @@ layout: two-column
 
 Walk through the installation process.
 
-|||
+::right
 
 ```asciinema {src: "./install.cast", autoPlay: true, loop: true}
 ```
@@ -89,7 +89,7 @@ asciinema rec --idle-time-limit 2 demo.cast
 
 1. Parser moves `{...}` config from the info string into the code block body
 2. Frontend finds `language-asciinema` code blocks in the rendered HTML
-3. Config is parsed and the asciinema-player library loads from CDN
+3. Config is parsed and the bundled asciinema-player library loads as a lazy chunk
 4. Player replaces the code block with an interactive terminal
 5. During `tap build`, `.cast` files are copied to `assets/` with content hashing
 
@@ -99,4 +99,4 @@ asciinema rec --idle-time-limit 2 demo.cast
 - Use `idleTimeLimit` to trim long pauses
 - Use `speed: 2` for demos that are mostly typing
 - Place `.cast` files next to your markdown file
-- Test playback before presenting (requires network for CDN library)
+- The player is bundled, so it works fully offline once the deck's own assets are loaded

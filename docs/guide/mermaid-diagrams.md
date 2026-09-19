@@ -112,17 +112,24 @@ erDiagram
 
 ## Theme Integration
 
-Mermaid diagrams automatically adapt to your presentation theme. Each of Tap's five themes includes a matching Mermaid color scheme:
+Mermaid diagrams automatically adapt to your presentation theme. Each of Tap's 21 themes defines its own Mermaid color scheme (node fill, stroke, and text colors that match the theme's palette, plus a matching curve style), so a flowchart in `terminal` reads as terminal-green and the same diagram in `keynote` reads as a dark launch-stage palette.
 
-| Theme | Mermaid Style |
-|-------|--------------|
-| Paper | Neutral tones with stone accents |
-| Noir | Dark background with gold highlights |
-| Aurora | Forest theme with teal and blue accents |
-| Phosphor | Terminal aesthetic with green glow |
-| Poster | High contrast with coral accents |
+When you change your presentation theme, all Mermaid diagrams re-render with matching colors. Diagrams render after the theme's fonts are ready, so labels are never measured against a fallback font.
 
-When you change your presentation theme, all Mermaid diagrams re-render with matching colors.
+### The `quiet` class
+
+Most themes also define a quiet style for background nodes, such as the app servers behind the thing you are actually talking about. Mark those nodes `quiet` and they pick up each theme's own treatment:
+
+````markdown
+```mermaid
+flowchart LR
+    A[Load balancer] --> B[app-1]
+    A --> C[app-2]
+    class B,C quiet
+```
+````
+
+Tap appends the theme's `classDef quiet` for you, unless the diagram defines its own `quiet` class or the theme sets no quiet style.
 
 ## Error Handling
 
@@ -166,7 +173,7 @@ layout: two-column
 
 Our system uses three main components.
 
-|||
+::right
 
 ```mermaid
 flowchart TD

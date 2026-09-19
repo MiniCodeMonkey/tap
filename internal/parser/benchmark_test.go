@@ -19,7 +19,6 @@ author: Test Author
 date: "2026-01-23"
 aspectRatio: "16:9"
 transition: fade
-codeTheme: github-dark
 fragments: true
 drivers:
   shell:
@@ -93,8 +92,6 @@ Final thoughts on this topic.
 
 ## Two Column %d
 
-|||
-
 ### Left Column
 
 Content on the left side.
@@ -102,7 +99,7 @@ Content on the left side.
 - Item 1
 - Item 2
 
-|||
+::right
 
 ### Right Column
 
@@ -248,18 +245,18 @@ func BenchmarkParseCodeBlocks(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		parseCodeBlocks(content)
+		parseCodeBlocksFromMarkdown(content)
 	}
 }
 
-// BenchmarkParseFragments benchmarks fragment parsing in isolation.
-func BenchmarkParseFragments(b *testing.B) {
+// BenchmarkRenderSlot benchmarks fragment-wrapped slot rendering in isolation.
+func BenchmarkRenderSlot(b *testing.B) {
 	p := New()
 	content := "Part 1\n\n<!-- pause -->\n\nPart 2\n\n<!-- pause -->\n\nPart 3\n\n<!-- pause -->\n\nPart 4\n\n<!-- pause -->\n\nPart 5"
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		p.parseFragments(content)
+		p.renderSlot(content, 0, 0, 0, 1, true)
 	}
 }
 

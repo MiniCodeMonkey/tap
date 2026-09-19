@@ -1,0 +1,30 @@
+{
+	"name": "Observatory",
+	"polarity": "dark",
+	"pitch": "A data-heavy infrastructure talk, charted like a night sky: systems as bodies, readings taken through a reticle.",
+	"illustration": {
+		"medium": "flat vector, night-sky astronomical illustration on deep navy",
+		"line": "2px strokes, thin orbital rings and constellation lines",
+		"shapes": "circles, rings, and dotted orbital paths, radial composition around a focal point",
+		"texture": "subtle star-field dots scattered in the background",
+		"palette_use": "deep navy background dominant, soft amber accent used for the focal point or highlight, pale blue for secondary line work",
+		"mood": "quiet, vast, contemplative",
+		"avoid": "gradients used heavily, bright multi-color palettes, hard-edged UI chrome, clutter"
+	},
+	"mermaid": {
+		"themeVariables": {
+			"fontFamily": "Alegreya Sans",
+			"primaryColor": "#182c57",
+			"primaryTextColor": "#eaf0fb",
+			"primaryBorderColor": "#ffb454",
+			"lineColor": "#6fb6ff",
+			"secondaryColor": "#13264d",
+			"tertiaryColor": "#0b1530",
+			"nodeTextColor": "#eaf0fb",
+			"titleColor": "#eaf0fb",
+			"fontSize": "40px"
+		},
+		"quietStyle": "fill:#182c57,stroke:#aebfdc,color:#eaf0fb",
+		"curve": "basis"
+	}
+}

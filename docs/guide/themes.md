@@ -4,7 +4,9 @@ title: Themes
 
 # Themes
 
-Themes control the visual appearance of your presentation, including typography, colors, animations, and transitions. Tap comes with thirteen built-in themes designed for different presentation styles, ranging from clean professional looks to bold artistic expressions.
+Themes control the visual appearance of your presentation: typography,
+colors, animations, transitions, and spacing. Tap ships `base` plus 20
+designed themes, each built for a particular kind of talk.
 
 ## Setting a Theme
 
@@ -12,299 +14,147 @@ Set the theme in your presentation's frontmatter:
 
 ```yaml
 ---
-theme: paper
+theme: terminal
 ---
 ```
 
-The theme applies to all slides in your presentation.
+An unknown theme name falls back to `base` with a warning, so a deck
+written against an older theme name still builds.
+
+## Switching Themes Live
+
+While presenting, press `t` to cycle through every installed theme without
+touching the frontmatter, handy for trying a room's projector against a few
+options before you start. To force a specific theme for a link or a
+recording, add `?theme=<slug>` to the URL - it beats the deck's frontmatter.
+
+## Picking a Theme
+
+Two questions narrow it down fast:
+
+- **The room.** A bright room or a projector with poor black levels washes
+  out dark themes; pick a `light`-polarity theme. A dark room lets a
+  `dark`-polarity theme's contrast do more work.
+- **The talk.** Each theme below has a one-line pitch describing the kind of
+  talk it was built for - match the pitch to your talk, not just the vibe.
 
 ## Built-in Themes
 
-### Paper
+| Theme | Polarity | Pitch |
+|-------|----------|-------|
+| `base` | light | A plain, readable default theme with no strong identity, used when a deck names no theme or names one that doesn't exist. |
+| `terminal` | dark | For infrastructure and live-coding talks where the audience lives in a shell and the deck should feel like one long tmux session. |
+| `product` | light | A launch-day talk for a developer tool, where every slide should feel like the landing page of something you want to install. |
+| `swiss` | light | An argument-driven engineering talk set like a Zurich concert poster: grid, grotesk, one red. |
+| `newsprint` | light | A war story or postmortem told as front-page news, where every slide is a headline and every number is a front-page figure. |
+| `zine` | light | An opinionated, scrappy talk with a point to argue: cut, pasted, and photocopied the night before, and proud of it. |
+| `poster` | light | For a loud, fast, opinionated talk in the Takahashi style, where every slide is a gig poster and the words do all the work. |
+| `blueprint` | dark | For architecture and systems talks where every slide is a sheet from the drawing set and the diagrams are the argument. |
+| `riso` | light | A warm community-conference talk that should feel like a two-ink print pulled off the drum that morning. |
+| `retro-computing` | light | A nostalgic, slightly mischievous systems talk told from a 1990 desktop, where every idea opens in its own window. |
+| `paperback` | light | A story-led conference talk that wants the warmth and quiet authority of a mid-century paperback series. |
+| `keynote` | dark | A big-room launch talk where one idea at a time lands on a dark stage, lit from above. |
+| `editorial` | light | A story-led talk told like a long-read magazine feature, with drop caps, pull quotes, and figures. |
+| `observatory` | dark | A data-heavy infrastructure talk, charted like a night sky: systems as bodies, readings taken through a reticle. |
+| `arcade` | dark | A high-energy war-story talk framed as a game you can win, built to stay legible on a washed-out projector. |
+| `isometric` | light | A friendly architecture walkthrough where the infrastructure itself is the cast: code, tables, and numbers become chunky little solids on a warm floor. |
+| `ink` | light | A calm, reflective talk about hard-won lessons, where each slide holds one thought and a lot of silence around it. |
+| `lab-notebook` | light | An evidence-first engineering talk where every claim arrives as a numbered figure and the speaker's red pen does the arguing. |
+| `bauhaus` | light | A bold, opinionated talk about first principles, where every idea is reduced to a circle, a triangle, or a square. |
+| `sketch` | light | For explainer talks that build an idea step by step, as if the speaker were drawing it on a whiteboard in front of you. |
+| `transit` | light | An architecture or infrastructure talk that walks the audience through a system the way a metro map walks a city. |
 
-![Paper theme preview](/images/themes/theme-paper.png)
+## Reading a Theme From the Command Line
 
-Ultra-clean and premium, like a fresh sheet of premium paper where content takes center stage.
+Two commands expose everything a theme declares, for a person writing a
+component or an LLM writing a deck.
 
-```yaml
----
-theme: paper
----
+```bash
+tap theme list              # slug, name, polarity, and pitch for all 21
+tap theme list --json
+tap theme show blueprint    # tokens and illustration style
+tap theme show blueprint --json
+tap theme show --deck slides.md   # the theme that deck's frontmatter names
 ```
 
-**Best for:** Professional presentations, corporate settings, content-heavy slides where readability is paramount.
+## Theme Tokens
 
-**Characteristics:**
-- Pure white background with near-black text
-- Inter/system-ui typography with confident letter-spacing
-- Warm accent colors (#78716c)
-- Dark code blocks (#1e1e1e) with excellent contrast
-- Smooth 400ms ease-out transitions
+Every theme defines the same set of CSS custom properties on its root
+block. They are what a custom stylesheet, a deck component, or a
+hand-written theme should build on, instead of hard-coded colors:
 
-### Noir
+| Token | Meaning |
+|-------|---------|
+| `--bg` | Slide background |
+| `--fg` | Body text |
+| `--muted` | Secondary text and inactive states |
+| `--accent` | The one highlight color, used as a **fill** |
+| `--accent-text` | The accent in a form that is readable as **text** on `--bg` |
+| `--surface` | Panels, cards, and code backgrounds |
+| `--font-display` | Heading family |
+| `--font-body` | Body family |
+| `--font-mono` | Code family |
+| `--ease` | Animation easing |
+| `--dur` | Animation duration |
+| `--space-unit` | The theme's base spacing step |
+| `--radius` | Corner radius |
+| `--stroke-width` | Border and line weight |
 
-![Noir theme preview](/images/themes/theme-noir.png)
+Themes also set the Shiki CSS variables, so code colors follow the theme.
 
-Cinematic and sophisticated, drawing from film noir elegance with deep blacks and gold accents.
+`tap theme show <slug>` prints the current values:
 
-```yaml
----
-theme: noir
----
+```
+$ tap theme show blueprint
+Blueprint (blueprint)
+  Polarity: dark
+  Pitch: For architecture and systems talks where every slide is a sheet from the drawing set and the diagrams are the argument.
+
+  Colors:
+    background (bg): #0f3a75
+    foreground (fg): #f5f9ff
+    muted text (muted): #c0d6f3
+    accent (accent): #ffd447
+    accent (as text) (accent-text): #ffd447
+    surface (surface): #174688
+  ...
 ```
 
-**Best for:** Executive briefings, client pitches, investor meetings, premium product presentations.
+A deck component reads the same values at run time with `useTheme()`. See
+[Custom Components](/guide/custom-components#theme-tokens).
 
-**Characteristics:**
-- Deep charcoal backgrounds (#0a0a0a)
-- Crisp white text (#fafafa)
-- Sophisticated gold accent (#d4af37)
-- Playfair Display for headings, Inter for body
-- Vignette overlay and multi-layer shadows
+::: warning `--accent` is a fill, not a text color
+Several themes pick an accent that cannot be read as text on their own
+background: `zine`'s is `#ffe600` on an `#e8e5dd` page. Paint shapes with
+`--accent`; use `--accent-text` for text and thin lines that sit on
+`--bg`. The same rule applies in CSS and in a component. See
+[The color rule](/reference/components-reference#the-color-rule).
+:::
 
-### Aurora
+## Illustration Style
 
-![Aurora theme preview](/images/themes/theme-aurora.png)
+Each theme also declares how an illustration should look next to it, in
+seven short fields: `medium`, `line`, `shapes`, `texture`, `palette_use`,
+`mood`, and `avoid`. `tap theme show <slug>` prints them under
+**Illustration**.
 
-Vibrant and dynamic like the northern lights, with animated gradient mesh and glassmorphism effects.
+`tap theme show <slug> --prompt` turns the same fields into a plain-text
+style brief written for an image model:
 
-```yaml
----
-theme: aurora
----
+```
+$ tap theme show blueprint --prompt
+Illustration style for the "Blueprint" slide theme: flat vector technical
+drawing, white-ink-on-blue blueprint diagram. Use only this palette:
+background #0f3a75, foreground #f5f9ff, accent #ffd447, muted #c0d6f3,
+surface #174688. Palette use: deep blue background dominant, white/near-white
+line work, one yellow accent used only for a callout or highlight. Line: 3 to
+4px even strokes, drafting-table precision, dimension lines with tick marks.
+...
 ```
 
-**Best for:** Startup pitches, creative presentations, product launches, conference talks.
-
-**Characteristics:**
-- Animated gradient backgrounds (purple to blue to teal)
-- Glassmorphism with backdrop-blur-xl
-- Space Grotesk typography
-- Semi-transparent dark glass code blocks with cyan glow
-- Mesmerizing 20s gradient mesh animation
-
-### Phosphor
-
-![Phosphor theme preview](/images/themes/theme-phosphor.png)
-
-Authentic CRT monitor aesthetic with glowing phosphor green text, scanlines, and retro-futuristic hacker vibes.
-
-```yaml
----
-theme: phosphor
----
-```
-
-**Best for:** Developer conferences, security talks, technical deep-dives, hacking demos.
-
-**Characteristics:**
-- True black (#000) background
-- Phosphor green (#00ff00) primary color
-- Multi-layer text shadows for glow effect
-- Scanline overlay via repeating-linear-gradient
-- JetBrains Mono throughout
-- Screen curve vignette
-
-### Poster
-
-![Poster theme preview](/images/themes/theme-poster.png)
-
-Bold graphic design with giant typography, thick borders, and high contrast that's impossible to ignore.
-
-```yaml
----
-theme: poster
----
-```
-
-**Best for:** Design talks, making statements, standing out, architectural presentations.
-
-**Characteristics:**
-- Stark black (#000) and white (#fff)
-- Electric red accent (#ef4444)
-- Anton font for ALL CAPS headings
-- Thick 4px borders with 8px 8px 0 drop shadows
-- No rounded corners - everything sharp
-- Inverted code blocks (white on black)
-
-### Ink
-
-![Ink theme preview](/images/themes/theme-ink.png)
-
-Japanese calligraphy-inspired zen minimalism with brush stroke aesthetics and washi paper texture.
-
-```yaml
----
-theme: ink
----
-```
-
-**Best for:** Zen presentations, mindfulness talks, Japanese culture topics, minimalist design showcases.
-
-**Characteristics:**
-- Cream/off-white background (#f5f1e8) with sumi black text (#1a1a1a)
-- Vermillion red accent (#c41e3a) for emphasis
-- Noto Serif JP typography for elegant serif styling
-- Subtle washi paper texture via CSS gradients
-- Brush stroke decorative elements for blockquotes and dividers
-- Hanko seal accent on title slides
-
-### Bauhaus
-
-![Bauhaus theme preview](/images/themes/theme-bauhaus.png)
-
-Geometric modernism with bold primary colors and constructivist design principles.
-
-```yaml
----
-theme: bauhaus
----
-```
-
-**Best for:** Design school presentations, modernism discussions, architecture talks, bold statements.
-
-**Characteristics:**
-- Stark white background (#ffffff) with black text (#000000)
-- Primary colors only: red (#e53935), yellow (#fdd835), blue (#1e88e5)
-- Bebas Neue geometric sans-serif typography
-- Bold geometric shapes as decorative elements
-- Thick black borders with sharp corners
-- Asymmetric grid-based layouts
-
-### Editorial
-
-![Editorial theme preview](/images/themes/theme-editorial.png)
-
-Classic magazine publishing design with elegant typography and sophisticated layout.
-
-```yaml
----
-theme: editorial
----
-```
-
-**Best for:** Publishing talks, journalism presentations, content strategy, brand storytelling.
-
-**Characteristics:**
-- Crisp white background (#ffffff) with true black text (#000000)
-- Single spot color: deep burgundy (#7f1d1d)
-- Playfair Display for headlines, Source Serif Pro for body
-- Drop cap styling for first paragraphs
-- Fine hairline rules (1px borders)
-- Large quotation marks for pull quotes
-
-### Signal
-
-![Signal theme preview](/images/themes/theme-signal.png)
-
-Developer-first aesthetic inspired by Vercel and Nuxt, with neon green accents and metadata-rich layouts.
-
-```yaml
----
-theme: signal
----
-```
-
-**Best for:** Developer conferences, technical talks, API showcases, open-source project presentations.
-
-**Characteristics:**
-- Near-white background (#fafafa) with pure black text
-- Neon green accent (#00dc82) for emphasis
-- Instrument Sans typography throughout
-- True black code blocks (#0a0a0a) with green highlights
-- Hairline border list separators instead of bullets
-- Tag/badge directive support for metadata display
-
-### Carbon
-
-![Carbon theme preview](/images/themes/theme-carbon.png)
-
-IBM Carbon design system aesthetic with sharp corners, systematic spacing, and red accent marks.
-
-```yaml
----
-theme: carbon
----
-```
-
-**Best for:** Enterprise presentations, design system talks, IBM-aligned events, data-heavy slides.
-
-**Characteristics:**
-- Pure white background with IBM design language
-- Sharp 0-radius corners throughout
-- Carbon red accent (#da1e28)
-- IBM Plex Sans and IBM Plex Mono typography
-- Inverted title slides (dark background, red top bar)
-- Numbered list items in monospace (01, 02, 03...)
-
-### Spectrum
-
-![Spectrum theme preview](/images/themes/theme-spectrum.png)
-
-Gradient-forward modern SaaS design with indigo-to-pink spectrum accents and card-style layouts.
-
-```yaml
----
-theme: spectrum
----
-```
-
-**Best for:** SaaS product launches, startup pitches, marketing presentations, modern brand talks.
-
-**Characteristics:**
-- Off-white background (#fcfcfd) with dark text
-- Indigo-purple-pink gradient accent
-- Sora geometric sans-serif typography
-- Fira Code for code blocks with ligature support
-- 14px rounded corners throughout
-- Gradient text on title headings
-- Card-style list items with gradient number badges
-
-### Mono
-
-![Mono theme preview](/images/themes/theme-mono.png)
-
-Ultra-minimal design driven entirely by typography weight contrast, from thin 300 to black 900.
-
-```yaml
----
-theme: mono
----
-```
-
-**Best for:** Design talks, typography discussions, minimal presentations, academic lectures.
-
-**Characteristics:**
-- Pure white background with pure black text
-- Single blue accent (#2563eb) used sparingly
-- Outfit font with extreme weight range (300–900)
-- Weight contrast as the primary design tool
-- Chevron (›) list markers
-- Sharp 2px radius code blocks
-- Arrow (→) element on title slides
-
-### Flux
-
-![Flux theme preview](/images/themes/theme-flux.png)
-
-Polished SaaS product feel with warm tones, indigo accents, and interface-inspired design patterns.
-
-```yaml
----
-theme: flux
----
-```
-
-**Best for:** Product demos, SaaS presentations, team updates, feature announcements.
-
-**Characteristics:**
-- Warm off-white background (#fafaf9)
-- Indigo accent (#4f46e5) for interactive elements
-- Plus Jakarta Sans with friendly character
-- Filled-circle (●) bullet markers
-- 12px rounded code blocks with dot-separated labels
-- Chip tag badges on title slides
-- Italic emphasis in accent color
+Put that text in front of your own image request and the result sits on the
+slide instead of fighting it. See
+[AI Image Generation](/guide/ai-images#matching-the-theme).
 
 ## What Themes Control
 
@@ -314,49 +164,32 @@ Each theme defines:
 |--------|-------------|
 | **Typography** | Font families, sizes, weights, and line heights for headings, body text, and code |
 | **Colors** | Background colors, text colors, accent colors, and syntax highlighting palette |
-| **Animations** | How elements appear on slides (fade, slide, bounce, etc.) |
-| **Transitions** | How slides transition between each other (fade, push, slide, zoom) |
+| **Animations** | How elements appear on slides |
+| **Transitions** | How slides transition between each other |
 | **Spacing** | Padding, margins, and overall layout density |
 | **Code styling** | Code block appearance, syntax highlighting colors, and font sizing |
-
-## Theme Reference Table
-
-| Theme | Vibe | Background | Typography |
-|-------|------|------------|------------|
-| `paper` | Ultra-clean, premium | Light (#ffffff) | Inter/system-ui |
-| `noir` | Cinematic, sophisticated | Dark (#0a0a0a) | Playfair Display + Inter |
-| `aurora` | Vibrant, dynamic | Animated gradient | Space Grotesk |
-| `phosphor` | CRT, hacker aesthetic | Black (#000) | JetBrains Mono |
-| `poster` | Bold, graphic | High contrast | Anton + system sans |
-| `ink` | Zen, calligraphy | Cream (#f5f1e8) | Noto Serif JP |
-| `bauhaus` | Geometric modernism | White (#ffffff) | Bebas Neue |
-| `editorial` | Magazine publishing | White (#ffffff) | Playfair Display + Source Serif Pro |
-| `signal` | Developer, metadata-rich | Near-white (#fafafa) | Instrument Sans |
-| `carbon` | IBM design system | White (#ffffff) | IBM Plex Sans + IBM Plex Mono |
-| `spectrum` | Gradient SaaS | Off-white (#fcfcfd) | Sora + Fira Code |
-| `mono` | Ultra-minimal typography | White (#ffffff) | Outfit |
-| `flux` | Polished SaaS product | Warm off-white (#fafaf9) | Plus Jakarta Sans |
 
 ## Customizing Themes
 
 ### Color Overrides
 
-Override theme colors using `themeColors` in frontmatter:
+Override a handful of colors on top of a built-in theme with `themeColors`
+in frontmatter:
 
 ```yaml
 ---
-theme: paper
+theme: terminal
 themeColors:
   accent: "#ff0000"
-  background: "#f5f5f5"
+  background: "#0d0d0d"
 ---
 ```
 
-Available color keys: `background`, `text`, `muted`, `accent`, `codeBg`
+Available color keys: `background`, `text`, `muted`, `accent`, `codeBg`.
 
 ### Custom Theme CSS
 
-For complete customization, create your own theme CSS file:
+For complete customization, point `customTheme` at your own CSS file:
 
 ```yaml
 ---
@@ -364,16 +197,9 @@ customTheme: "./my-theme.css"
 ---
 ```
 
-Your CSS file should define these CSS custom properties:
-
-```css
-.theme-custom {
-  --color-bg: #ffffff;
-  --color-text: #0a0a0a;
-  --color-muted: #71717a;
-  --color-accent: #3b82f6;
-  --color-code-bg: #1e1e1e;
-  --font-sans: Inter, system-ui, sans-serif;
-  --font-mono: 'JetBrains Mono', monospace;
-}
-```
+Tap serves that file and loads it after the built-in theme's CSS, so it can
+override any of the theme's custom properties or rules. See
+`docs/reference/theme-porting.md` for the full set of CSS custom properties
+a theme defines and the selector conventions (`[data-theme="..."]`) to
+follow, and for lessons learned porting the 20 built-in themes - the same
+pitfalls apply to a hand-written custom theme.

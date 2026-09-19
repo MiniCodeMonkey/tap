@@ -31,14 +31,15 @@ The skill is installed to your skills directory and automatically loaded in futu
 The skill teaches AI assistants about:
 
 - **Slide syntax** - Markdown structure, slide separators, frontmatter
-- **Layouts** - All 11 layouts and their slot markers
-- **Themes** - Built-in themes and customization options
+- **Layouts** - All 12 layouts and their slot markers
+- **Themes** - All 21 built-in themes, their tokens, and customization options
 - **Live code execution** - Driver configuration for SQL, shell, and custom languages
 - **Animations** - Transitions, fragments, and incremental reveals
 - **Code blocks** - Syntax highlighting, line highlighting, diffs
 - **Mermaid diagrams** - Flowcharts, sequence diagrams, ER diagrams
 - **AI images** - Gemini image generation from prompts
 - **CLI commands** - All tap commands and their options
+- **Deck components** - Writing a React component next to the deck, and checking it with `tap screenshot`
 - **Best practices** - Presentation design tips
 
 ## Usage
@@ -68,6 +69,10 @@ Set up SQLite live code execution with an in-memory database
 
 ```
 Convert these bullet points into incremental fragments
+```
+
+```
+Write a component that animates a rolling deploy across four app servers
 ```
 
 ## Skill Source

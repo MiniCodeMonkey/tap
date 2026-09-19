@@ -1,0 +1,34 @@
+{
+	"name": "Swiss",
+	"polarity": "light",
+	"pitch": "An argument-driven engineering talk set like a Zurich concert poster: grid, grotesk, one red.",
+	"illustration": {
+		"medium": "flat vector, Swiss International Style poster graphic on off-white",
+		"line": "2px hairline rules, dead straight, grid-aligned, no taper",
+		"shapes": "rectangles, circles, and one diagonal or grid element, strict alignment, generous negative space",
+		"texture": "none, pure flat color",
+		"palette_use": "off-white background dominant, black type, one red used sparingly as the single accent",
+		"mood": "precise, argued, confident restraint",
+		"avoid": "gradients, drop shadows, rounded corners, decoration, more than one accent color"
+	},
+	"mermaid": {
+		"themeVariables": {
+			"fontFamily": "Archivo",
+			"primaryColor": "#f4f4f0",
+			"primaryTextColor": "#111111",
+			"primaryBorderColor": "#d40b1e",
+			"lineColor": "#111111",
+			"background": "#f4f4f0",
+			"mainBkg": "#f4f4f0",
+			"textColor": "#111111",
+			"nodeTextColor": "#111111",
+			"nodeBorder": "#d40b1e",
+			"clusterBkg": "#deddd6",
+			"clusterBorder": "#111111",
+			"edgeLabelBackground": "#f4f4f0",
+			"fontSize": "34px"
+		},
+		"quietStyle": "fill:#deddd6,stroke:#deddd6,color:#111111",
+		"curve": "stepAfter"
+	}
+}

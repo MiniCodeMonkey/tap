@@ -1,0 +1,1316 @@
+/**
+ * Editorial theme.
+ * For a story-led talk told like a long-read magazine feature: a running
+ * head with a folio rule, a masthead cover, drop-cap statements, numbered
+ * briefs set beside a headline, pull quotes with an oversized quote mark,
+ * and photographs treated as tipped-in plates. Warm cream stock, a single
+ * press-red accent, Fraunces display serif over Newsreader body serif.
+ *
+ * Ported from .superpowers/brainstorm/themes-v3/editorial.theme.html (the
+ * CSS-only mockup built against a fixed 11-slide deck). See
+ * docs/reference/theme-porting.md and its addendum for the general porting
+ * technique this file follows: `.slide[data-layout]` scoping (never the
+ * bare `.slide` scaling frame), the token bridge, and the minimum-size
+ * safety net at the end of the file.
+ */
+
+@import '@fontsource/fraunces/latin-400.css';
+@import '@fontsource/fraunces/latin-500.css';
+@import '@fontsource/fraunces/latin-600.css';
+@import '@fontsource/fraunces/latin-500-italic.css';
+@import '@fontsource/fraunces/latin-600-italic.css';
+@import '@fontsource/newsreader/latin-400.css';
+@import '@fontsource/newsreader/latin-500.css';
+@import '@fontsource/newsreader/latin-700.css';
+@import '@fontsource/newsreader/latin-400-italic.css';
+@import '@fontsource/newsreader/latin-500-italic.css';
+@import '@fontsource/newsreader/latin-700-italic.css';
+@import '@fontsource/ibm-plex-mono/latin-400.css';
+@import '@fontsource/ibm-plex-mono/latin-500.css';
+@import '@fontsource/ibm-plex-mono/latin-600.css';
+
+[data-theme='editorial'] {
+	/* ---------- design-spec tokens ---------- */
+	--bg: #f4ecdd;
+	--fg: #1d1813;
+	--muted: #4f4539;
+	--accent: #8a2b1e;
+	--accent-text: #8a2b1e;
+	--accent-soft: #d9b77c;
+	--surface: #eadfc8;
+	--dim: #85796a;
+	--hairline: rgba(29, 24, 19, 0.4);
+	--font-display: 'Fraunces', 'Times New Roman', serif;
+	--font-body: 'Newsreader', Georgia, serif;
+	--font-mono: 'IBM Plex Mono', ui-monospace, Menlo, monospace;
+	--ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+	--dur: 700ms;
+	--space-unit: 24px;
+	--radius: 2px;
+	--stroke-width: 2px;
+
+	/*
+	 * Bridge to the base theme's own token names. layouts.css, prose.css,
+	 * rich-blocks.css and ui-components.css style the live code block, the
+	 * map slide, badges, tags, and generic prose entirely through these
+	 * `--color-*` and `--font-sans` custom properties.
+	 */
+	--color-bg: var(--bg);
+	--color-text: var(--fg);
+	--color-muted: var(--muted);
+	--color-accent: var(--accent);
+	--color-code-bg: transparent;
+	--color-code-text: var(--fg);
+	--color-code-inline-bg: var(--surface);
+	--color-border: var(--fg);
+	--color-surface: var(--surface);
+	--color-surface-elevated: var(--surface);
+	--color-link: var(--accent-text);
+	--font-sans: var(--font-body);
+
+	/* Shiki reads token colors from these custom properties directly. */
+	--shiki-foreground: var(--fg);
+	--shiki-background: transparent;
+	/* Darker than --dim itself: --dim reads at a comfortable contrast for
+	   slide-scale text but only 3.6:1 on the live code block's lighter
+	   panel, under the 4.5:1 floor the code contrast check requires for
+	   comment tokens. */
+	--shiki-token-comment: #6b6053;
+	--shiki-token-string: var(--accent-text);
+	--shiki-token-string-expression: var(--accent-text);
+	--shiki-token-keyword: var(--fg);
+	--shiki-token-function: var(--fg);
+	--shiki-token-constant: var(--accent-text);
+	--shiki-token-parameter: var(--fg);
+	--shiki-token-punctuation: var(--muted);
+	--shiki-token-link: var(--accent-text);
+}
+
+/* Motion: the page settles into place, rules draw themselves, a masthead
+ * rule wipes on. Nothing overshoots; every keyframe grows toward 1. */
+@keyframes editorial-rise {
+	from {
+		opacity: 0;
+		transform: translateY(30px);
+	}
+}
+@keyframes editorial-fade {
+	from {
+		opacity: 0;
+	}
+}
+@keyframes editorial-rule {
+	from {
+		transform: scaleX(0);
+	}
+}
+@keyframes editorial-drop {
+	from {
+		clip-path: inset(0 0 100% 0);
+	}
+	to {
+		clip-path: inset(0 0 0 0);
+	}
+}
+
+/* ============================================================================
+ * The page: warm stock, running head, folio
+ * ============================================================================ */
+
+[data-theme='editorial'] .slide[data-layout] {
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	padding: 190px 96px 96px;
+	background:
+		url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='320' height='320'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .2 0 0 0 0 .15 0 0 0 0 .1 0 0 0 .16 0'/%3E%3C/filter%3E%3Crect width='320' height='320' filter='url(%23n)'/%3E%3C/svg%3E"),
+		var(--bg);
+	color: var(--fg);
+	font-family: var(--font-body);
+	font-size: 48px;
+	font-weight: 500;
+	line-height: 1.2;
+	letter-spacing: -0.005em;
+	font-optical-sizing: auto;
+}
+[data-theme='editorial'] .slide[data-layout] :where(h1, h2, h3, h4, h5, h6, p, ul, ol, li, blockquote, pre, table) {
+	margin: 0;
+	padding: 0;
+}
+/*
+ * Running head: the folio, right-aligned above a rule. The box reaches the
+ * top edge of the slide and carries an opaque background so a scrolling
+ * slide's content passes under it rather than showing through.
+ */
+[data-theme='editorial'] .slide[data-layout]::before {
+	content: attr(data-index) ' of ' attr(data-total);
+	position: absolute;
+	left: 0;
+	right: 0;
+	top: 0;
+	z-index: 4;
+	height: 138px;
+	padding: 84px 96px 0;
+	background: var(--bg);
+	border-bottom: 2px solid var(--fg);
+	box-sizing: border-box;
+	text-align: right;
+	font-family: var(--font-body);
+	font-size: 34px;
+	font-style: italic;
+	font-weight: 500;
+	line-height: 1;
+	animation: editorial-fade var(--dur) var(--ease) both;
+}
+[data-theme='editorial'] .slide[data-layout] .slide-tag {
+	position: absolute;
+	top: 86px;
+	left: 96px;
+	right: auto;
+	z-index: 5;
+	font-family: var(--font-body);
+	font-size: 28px;
+	font-weight: 600;
+	line-height: 1.2;
+	letter-spacing: 0.18em;
+	text-transform: uppercase;
+	color: var(--fg);
+	animation: editorial-fade var(--dur) var(--ease) both;
+}
+/* badge: a small boxed stamp opposite the tag, above the folio rule */
+[data-theme='editorial'] .slide[data-layout] .slide-badge {
+	top: 40px;
+	right: 96px;
+	left: auto;
+	z-index: 6;
+	padding: 8px 16px 6px;
+	border: 2px solid var(--fg);
+	background: var(--bg);
+	font-family: var(--font-body);
+	font-size: 26px;
+	font-weight: 600;
+	line-height: 1;
+	letter-spacing: 0.1em;
+	text-transform: uppercase;
+	color: var(--accent-text);
+	animation: editorial-fade var(--dur) var(--ease) 120ms both;
+}
+
+[data-theme='editorial'] .slide[data-layout] .slide-content {
+	position: relative;
+	flex: 1;
+	min-height: 0;
+	width: auto;
+	height: auto;
+	display: flex;
+	flex-direction: column;
+}
+[data-theme='editorial'] .slide[data-layout] [class^='layout-'],
+[data-theme='editorial'] .slide[data-layout='component'] > .slide-content > .deck-component-root,
+[data-theme='editorial'] .slide[data-layout='component'] > .slide-content > .scroll-content > .deck-component-root {
+	flex: 1;
+	min-height: 0;
+	width: auto;
+	height: auto;
+	display: flex;
+	flex-direction: column;
+	justify-content: flex-start;
+	align-items: stretch;
+	align-content: normal;
+	gap: 0;
+	padding: 0;
+	/* Cancel layouts.css's shared `.deck-component-root` border: this
+	   theme's real inset already comes from `.slide-content` above. */
+	border: 0;
+	text-align: left;
+}
+[data-theme='editorial'] .slide[data-layout] .slot {
+	max-width: none;
+	min-width: 0;
+}
+
+/* entrance: lines rise gently into place, like a page settling */
+[data-theme='editorial'] .slide[data-layout] .slot > * {
+	animation: editorial-rise var(--dur) var(--ease) 110ms both;
+}
+[data-theme='editorial'] .slide[data-layout] .slot > :nth-child(2) {
+	animation-delay: 240ms;
+}
+[data-theme='editorial'] .slide[data-layout] .slot > :nth-child(3) {
+	animation-delay: 370ms;
+}
+[data-theme='editorial'] .slide[data-layout] .slot > :nth-child(n + 4) {
+	animation-delay: 500ms;
+}
+[data-theme='editorial'] .slide[data-layout] .slot > ul,
+[data-theme='editorial'] .slide[data-layout] .slot > ol {
+	animation: none;
+}
+
+/* ============================================================================
+ * Type
+ * ============================================================================ */
+
+[data-theme='editorial'] .slide[data-layout] :is(h1, h2, h3, h4, h5, h6) {
+	font-family: var(--font-display);
+	font-weight: 600;
+	line-height: 1.06;
+	letter-spacing: -0.025em;
+	text-wrap: balance;
+	overflow-wrap: break-word;
+	color: var(--fg);
+}
+[data-theme='editorial'] .slide[data-layout] .slot > h2 {
+	font-size: 108px;
+	margin: 0;
+}
+[data-theme='editorial'] .slide[data-layout] .slot > h2::before {
+	content: '';
+	display: block;
+	width: 88px;
+	height: 5px;
+	margin-bottom: 26px;
+	background: var(--accent);
+}
+[data-theme='editorial'] .slide[data-layout] .slot h3 {
+	font-size: 32px;
+	font-weight: 600;
+	line-height: 1.2;
+	letter-spacing: 0.2em;
+	text-transform: uppercase;
+	color: var(--accent-text);
+	margin-top: 40px;
+}
+[data-theme='editorial'] .slide[data-layout] .slot h4 {
+	font-size: 46px;
+	font-weight: 600;
+	font-style: italic;
+	line-height: 1.15;
+	color: var(--fg);
+	margin-top: 30px;
+}
+[data-theme='editorial'] .slide[data-layout] .slot h5 {
+	font-family: var(--font-body);
+	font-size: 38px;
+	font-weight: 700;
+	line-height: 1.15;
+	letter-spacing: 0.02em;
+	color: var(--muted);
+	margin-top: 24px;
+}
+[data-theme='editorial'] .slide[data-layout] .slot h6 {
+	font-family: var(--font-body);
+	font-size: 32px;
+	font-weight: 600;
+	font-style: italic;
+	line-height: 1.15;
+	color: var(--dim);
+	margin-top: 20px;
+}
+[data-theme='editorial'] .slide[data-layout] .slot :is(h3, h4, h5, h6):first-child {
+	margin-top: 0;
+}
+[data-theme='editorial'] .slide[data-layout] .slot p {
+	text-wrap: pretty;
+}
+[data-theme='editorial'] .slide[data-layout] .slot > * + p {
+	margin-top: 24px;
+}
+[data-theme='editorial'] .slide[data-layout] .slot strong {
+	font-weight: 700;
+	color: var(--accent-text);
+}
+[data-theme='editorial'] .slide[data-layout] .slot em {
+	font-style: italic;
+	font-weight: 500;
+	color: var(--accent-text);
+}
+[data-theme='editorial'] .slide[data-layout] .slot a {
+	color: var(--fg);
+	text-decoration: underline;
+	text-decoration-color: var(--accent-soft);
+	text-decoration-thickness: 0.06em;
+	text-underline-offset: 0.14em;
+	transition: color var(--dur) var(--ease), text-decoration-color var(--dur) var(--ease);
+}
+[data-theme='editorial'] .slide[data-layout] .slot a:hover {
+	color: var(--accent-text);
+	text-decoration-color: var(--accent-text);
+}
+[data-theme='editorial'] .slide[data-layout] .slot :where(:not(pre)) > code {
+	font-family: var(--font-mono);
+	font-size: 0.8em;
+	font-style: normal;
+	font-weight: 600;
+	letter-spacing: 0;
+	color: var(--fg);
+	background: var(--surface);
+	padding: 0.06em 0.28em;
+	border-radius: 2px;
+}
+
+/* ============================================================================
+ * Title: the cover of the issue
+ * ============================================================================ */
+
+[data-theme='editorial'] .slide[data-layout='title'] {
+	padding-top: 170px;
+}
+[data-theme='editorial'] .slide[data-layout='title']::after {
+	content: '';
+	position: absolute;
+	left: 96px;
+	right: 96px;
+	top: 122px;
+	height: 10px;
+	background: var(--fg);
+	transform-origin: left center;
+	animation: editorial-rule calc(var(--dur) * 1.2) var(--ease) both;
+}
+[data-theme='editorial'] .slide[data-layout] .layout-title {
+	justify-content: center;
+}
+[data-theme='editorial'] .slide[data-layout] .layout-title .slot {
+	flex: none;
+	position: relative;
+}
+/*
+ * Budgeted for a full sentence, not the mockup's short two-word title: a
+ * 95-character title at this size wraps to about four lines and still
+ * leaves room for the subtitle and byline rule below it. Short titles are
+ * smaller here than the mockup's dramatic single-line display size.
+ */
+[data-theme='editorial'] .slide[data-layout] .layout-title :is(h1, h2) {
+	font-size: 104px;
+	line-height: 1.08;
+	letter-spacing: -0.03em;
+}
+/* short and medium titles get the dramatic single-line size the mockup
+ * intended; 104px above stays the worst-case budget for a 95-character one. */
+[data-theme='editorial'] .slide[data-layout] .layout-title h1[data-length='medium'] {
+	font-size: 128px;
+}
+[data-theme='editorial'] .slide[data-layout] .layout-title h1[data-length='short'] {
+	font-size: 168px;
+}
+[data-theme='editorial'] .slide[data-layout] .layout-title h2 {
+	font-style: italic;
+	font-weight: 500;
+	font-size: 60px;
+	color: var(--accent-text);
+	margin-top: 20px;
+}
+[data-theme='editorial'] .slide[data-layout] .layout-title h2::before {
+	display: none;
+}
+[data-theme='editorial'] .slide[data-layout] .layout-title p {
+	position: relative;
+	margin-top: 48px;
+	padding-top: 24px;
+	border-top: 2px solid var(--fg);
+	font-size: 48px;
+	font-style: italic;
+	line-height: 1.25;
+	max-width: none;
+}
+[data-theme='editorial'] .slide[data-layout] .layout-title p::before {
+	content: '';
+	display: inline-block;
+	vertical-align: middle;
+	width: 88px;
+	height: 5px;
+	margin: 0 28px 6px 0;
+	background: var(--accent);
+}
+
+/* ============================================================================
+ * Section: a chapter opener with a numeral marker
+ * ============================================================================ */
+
+/*
+ * Real tags are words ("02 · Foundations"), not bare numerals, so the tag
+ * stays a modest italic kicker line above the headline rather than a
+ * poster-sized mark: at display size a word-length tag would run off the
+ * slide edge.
+ */
+[data-theme='editorial'] .slide[data-layout='section'] .slide-tag {
+	top: 260px;
+	left: 96px;
+	right: 96px;
+	max-width: none;
+	overflow: visible;
+	white-space: normal;
+	font-family: var(--font-display);
+	font-size: 60px;
+	font-style: italic;
+	font-weight: 500;
+	line-height: 1.15;
+	letter-spacing: -0.01em;
+	text-transform: none;
+	color: var(--accent);
+	animation: editorial-rise var(--dur) var(--ease) both;
+}
+[data-theme='editorial'] .slide[data-layout] .layout-section {
+	justify-content: flex-end;
+}
+[data-theme='editorial'] .slide[data-layout] .layout-section .slot {
+	flex: none;
+	padding-top: 34px;
+	border-top: 2px solid var(--fg);
+}
+[data-theme='editorial'] .slide[data-layout] .layout-section h1,
+[data-theme='editorial'] .slide[data-layout] .layout-section h2 {
+	font-size: 112px;
+	line-height: 1;
+	letter-spacing: -0.035em;
+}
+/* a short chapter word ("Foundations") gets the mockup's full poster size;
+ * 112px above is the budget for a section title that runs long. */
+[data-theme='editorial'] .slide[data-layout] .layout-section h1[data-length='medium'],
+[data-theme='editorial'] .slide[data-layout] .layout-section h2[data-length='medium'] {
+	font-size: 148px;
+}
+[data-theme='editorial'] .slide[data-layout] .layout-section h1[data-length='short'],
+[data-theme='editorial'] .slide[data-layout] .layout-section h2[data-length='short'] {
+	font-size: 176px;
+}
+[data-theme='editorial'] .slide[data-layout] .layout-section h2::before {
+	display: none;
+}
+[data-theme='editorial'] .slide[data-layout] .layout-section p {
+	margin-top: 20px;
+	font-size: 48px;
+	font-style: italic;
+	color: var(--muted);
+}
+
+/* ============================================================================
+ * Statement: an opening line with a two-line drop cap (lone h1/h2 on default)
+ * ============================================================================ */
+
+[data-theme='editorial'] .slide[data-layout] .layout-default .slot {
+	flex: 1;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+}
+[data-theme='editorial'] .slide[data-layout] .layout-default .slot:has(> h1:only-child),
+[data-theme='editorial'] .slide[data-layout] .layout-default .slot:has(> h2:only-child) {
+	justify-content: center;
+	padding-bottom: 40px;
+}
+[data-theme='editorial'] .slide[data-layout] .layout-default .slot > h1:only-child {
+	display: flow-root;
+	font-size: 128px;
+	font-weight: 500;
+	line-height: 1.1;
+	letter-spacing: -0.03em;
+	text-wrap: wrap;
+}
+/* a one- or two-word statement gets the dramatic drop-cap size; 128px above
+ * is the budget for a full sentence like "Every system has a bottleneck." */
+[data-theme='editorial'] .slide[data-layout] .layout-default .slot > h1[data-length='medium']:only-child {
+	font-size: 172px;
+	line-height: 1.07;
+}
+[data-theme='editorial'] .slide[data-layout] .layout-default .slot > h1[data-length='short']:only-child {
+	font-size: 216px;
+	line-height: 1.03;
+}
+[data-theme='editorial'] .slide[data-layout] .layout-default .slot > h1:only-child::first-letter {
+	float: left;
+	margin: 0.035em 0.07em 0 -0.03em;
+	font-size: 2.5em;
+	font-weight: 600;
+	line-height: 0.76;
+	color: var(--accent);
+}
+[data-theme='editorial'] .slide[data-layout] .layout-default .slot > h2:only-child {
+	font-size: 96px;
+	line-height: 1.12;
+}
+[data-theme='editorial'] .slide[data-layout] .layout-default .slot > h2[data-length='medium']:only-child {
+	font-size: 120px;
+	line-height: 1.1;
+}
+[data-theme='editorial'] .slide[data-layout] .layout-default .slot > h2[data-length='short']:only-child {
+	font-size: 150px;
+	line-height: 1.05;
+}
+[data-theme='editorial'] .slide[data-layout] .layout-default .slot > h2:only-child::before {
+	display: none;
+}
+[data-theme='editorial'] .slide[data-layout] .layout-default .slot:has(> h1:only-child)::after,
+[data-theme='editorial'] .slide[data-layout] .layout-default .slot:has(> h2:only-child)::after {
+	content: '';
+	width: 240px;
+	height: 5px;
+	margin-top: 64px;
+	background: var(--fg);
+	animation: editorial-rule var(--dur) var(--ease) 500ms both;
+}
+
+/* ============================================================================
+ * Lists: headline left, numbered briefs right, hairlines between
+ * ============================================================================ */
+
+[data-theme='editorial'] .slide[data-layout] .layout-default .slot:has(> :is(ul, ol):not(li *)) {
+	display: grid;
+	grid-template-columns: 730px 1fr;
+	grid-template-rows: 1fr;
+	column-gap: 72px;
+}
+[data-theme='editorial'] .slide[data-layout] .layout-default .slot:has(> :is(ul, ol):not(li *)) > h2 {
+	overflow-wrap: break-word;
+}
+[data-theme='editorial'] .slide[data-layout] .slot :is(ul, ol):not(li *) {
+	align-self: end;
+	list-style: none;
+	counter-reset: editorial-item;
+	border-bottom: 2px solid var(--fg);
+}
+[data-theme='editorial'] .slide[data-layout] .slot :is(ul, ol):not(li *) > li {
+	position: relative;
+	counter-increment: editorial-item;
+	padding: 34px 0 40px 96px;
+	border-top: 2px solid var(--hairline);
+	font-size: 50px;
+	line-height: 1.3;
+	text-wrap: pretty;
+	animation: editorial-rise var(--dur) var(--ease) 300ms both;
+}
+[data-theme='editorial'] .slide[data-layout] .slot :is(ul, ol):not(li *) > li:first-child {
+	border-top: 5px solid var(--fg);
+}
+[data-theme='editorial'] .slide[data-layout] .slot :is(ul, ol):not(li *) > li::before {
+	content: counter(editorial-item);
+	position: absolute;
+	left: 0;
+	top: 22px;
+	font-family: var(--font-display);
+	font-size: 72px;
+	font-style: italic;
+	font-weight: 500;
+	line-height: 1.16;
+	color: var(--accent);
+}
+[data-theme='editorial'] .slide[data-layout] .slot :is(ul, ol):not(li *) > li:nth-child(2) {
+	animation-delay: 420ms;
+}
+[data-theme='editorial'] .slide[data-layout] .slot :is(ul, ol):not(li *) > li:nth-child(3) {
+	animation-delay: 540ms;
+}
+[data-theme='editorial'] .slide[data-layout] .slot :is(ul, ol):not(li *) > li:nth-child(4) {
+	animation-delay: 660ms;
+}
+[data-theme='editorial'] .slide[data-layout] .slot :is(ul, ol):not(li *) > li:nth-child(n + 5) {
+	animation-delay: 760ms;
+}
+[data-theme='editorial'] .slide[data-layout] .slot .fragment-hidden {
+	opacity: 0;
+	transform: translateY(30px);
+}
+[data-theme='editorial'] .slide[data-layout] .slot .fragment-visible {
+	opacity: 1;
+	transform: none;
+	transition: opacity var(--dur) var(--ease), transform var(--dur) var(--ease);
+}
+/* nested briefs: quieter, an italic dash, no counter of their own */
+[data-theme='editorial'] .slide[data-layout] .slot li > :is(ul, ol) {
+	list-style: none;
+	margin-top: 16px;
+	border-bottom: 0;
+	align-self: auto;
+}
+[data-theme='editorial'] .slide[data-layout] .slot li > :is(ul, ol) > li {
+	position: relative;
+	counter-increment: none;
+	padding: 10px 0 10px 48px;
+	border-top: 0;
+	font-size: 46px;
+	font-style: italic;
+	color: var(--muted);
+	animation: none;
+}
+[data-theme='editorial'] .slide[data-layout] .slot li > :is(ul, ol) > li::before {
+	content: '\2013';
+	position: absolute;
+	left: 0;
+	top: 10px;
+	font-family: var(--font-body);
+	font-size: 46px;
+	font-style: normal;
+	font-weight: 700;
+	line-height: 1;
+	color: var(--accent-text);
+}
+/* seven or more briefs run as a tighter digest: narrow-column scale */
+[data-theme='editorial'] .slide[data-layout] .slot:has(> :is(ul, ol):not(li *) > li:nth-child(7)) > h2 {
+	font-size: 84px;
+	margin-bottom: 8px;
+}
+[data-theme='editorial'] .slide[data-layout] .slot :is(ul, ol):not(li *):has(> li:nth-child(7)) > li {
+	padding: 16px 0 20px 72px;
+	font-size: 42px;
+}
+[data-theme='editorial'] .slide[data-layout] .slot :is(ul, ol):not(li *):has(> li:nth-child(7)) > li::before {
+	top: 14px;
+	font-size: 58px;
+}
+
+/* plain blockquote as an aside, outside the quote layout */
+[data-theme='editorial'] .slide[data-layout] [class^='layout-']:not(.layout-quote) blockquote {
+	margin-top: 30px;
+	padding-left: 56px;
+	border-left: 5px solid var(--accent);
+	font-style: italic;
+	color: var(--fg);
+}
+[data-theme='editorial'] .slide[data-layout] [class^='layout-']:not(.layout-quote) blockquote p {
+	font-family: var(--font-display);
+	font-size: 52px;
+	font-weight: 500;
+	font-style: italic;
+	line-height: 1.25;
+	text-wrap: balance;
+}
+
+/* ============================================================================
+ * Code: set as a figure between rules, with an italic caption
+ * ============================================================================ */
+
+[data-theme='editorial'] .slide[data-layout] .layout-code-focus .slot {
+	justify-content: flex-end;
+}
+[data-theme='editorial'] .slide[data-layout] pre.shiki {
+	margin-top: auto;
+	padding: 32px 0;
+	border-top: 5px solid var(--fg);
+	border-bottom: 2px solid var(--fg);
+	background: transparent;
+	overflow: hidden;
+	font-family: var(--font-mono);
+	font-size: 42px;
+	font-weight: 500;
+	line-height: 1.45;
+	letter-spacing: 0;
+	font-variant-ligatures: none;
+	color: var(--fg);
+	animation: editorial-fade var(--dur) var(--ease) 250ms both;
+}
+[data-theme='editorial'] .slide[data-layout] pre.shiki code {
+	display: flex;
+	flex-direction: column;
+	font: inherit;
+	font-size: inherit;
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+}
+[data-theme='editorial'] .slide[data-layout] pre.shiki .line {
+	position: relative;
+	display: block;
+	white-space: pre;
+	padding: 6px 40px;
+	min-height: 1.45em;
+	animation: editorial-rise var(--dur) var(--ease) 380ms both;
+}
+[data-theme='editorial'] .slide[data-layout] pre.shiki .line:nth-child(2) {
+	animation-delay: 460ms;
+}
+[data-theme='editorial'] .slide[data-layout] pre.shiki .line:nth-child(3) {
+	animation-delay: 540ms;
+}
+[data-theme='editorial'] .slide[data-layout] pre.shiki .line:nth-child(4) {
+	animation-delay: 620ms;
+}
+[data-theme='editorial'] .slide[data-layout] pre.shiki .line:nth-child(n + 5) {
+	animation-delay: 700ms;
+}
+[data-theme='editorial'] .slide[data-layout] pre.has-highlighted .line:not(.highlighted),
+[data-theme='editorial'] .slide[data-layout] pre.has-highlighted .line:not(.highlighted) > * {
+	color: var(--dim);
+	font-weight: 400;
+}
+[data-theme='editorial'] .slide[data-layout] pre.shiki .line.highlighted {
+	font-weight: 600;
+	background: color-mix(in srgb, var(--accent-soft) 45%, transparent);
+	box-shadow: inset 10px 0 0 var(--accent);
+}
+[data-theme='editorial'] .slide[data-layout] pre + p {
+	margin-top: 24px;
+	font-style: italic;
+	color: var(--muted);
+}
+[data-theme='editorial'] .slide[data-layout] pre + p::before {
+	content: 'Fig. \2014 ';
+	font-style: normal;
+	font-weight: 600;
+	color: var(--accent-text);
+}
+
+/* ============================================================================
+ * Big number
+ * ============================================================================ */
+
+[data-theme='editorial'] .slide[data-layout] .layout-big-stat {
+	justify-content: center;
+	padding-bottom: 30px;
+}
+[data-theme='editorial'] .slide[data-layout] .layout-big-stat .slot-default {
+	flex: none;
+}
+[data-theme='editorial'] .slide[data-layout] .layout-big-stat .slot-default :is(h1, h2) {
+	margin-left: -12px;
+	font-size: 96px;
+	line-height: 1.05;
+	letter-spacing: -0.03em;
+	color: var(--accent);
+}
+/* the stat itself ("40x") is almost always short, at poster size; a longer
+ * claim wraps across several lines, so it stays modest instead of also
+ * reaching for poster size. */
+[data-theme='editorial'] .slide[data-layout] .layout-big-stat .slot-default h1[data-length='medium'],
+[data-theme='editorial'] .slide[data-layout] .layout-big-stat .slot-default h2[data-length='medium'] {
+	font-size: 150px;
+	letter-spacing: -0.04em;
+}
+[data-theme='editorial'] .slide[data-layout] .layout-big-stat .slot-default h1[data-length='short'],
+[data-theme='editorial'] .slide[data-layout] .layout-big-stat .slot-default h2[data-length='short'] {
+	font-size: 340px;
+	line-height: 1;
+	letter-spacing: -0.045em;
+}
+[data-theme='editorial'] .slide[data-layout] .layout-big-stat .slot-default h2::before {
+	display: none;
+}
+[data-theme='editorial'] .slide[data-layout] .layout-big-stat .slot-caption {
+	flex: none;
+	margin-top: 36px;
+	padding-top: 36px;
+	border-top: 2px solid var(--fg);
+}
+[data-theme='editorial'] .slide[data-layout] .layout-big-stat .slot-caption p {
+	max-width: 1300px;
+	font-size: 50px;
+	font-style: italic;
+	text-wrap: balance;
+}
+[data-theme='editorial'] .slide[data-layout] .layout-big-stat .slot-figure {
+	flex: none;
+	margin-top: 30px;
+}
+[data-theme='editorial'] .slide[data-layout] .layout-big-stat .slot-figure img {
+	max-height: 220px;
+	border: 2px solid var(--fg);
+	filter: sepia(0.35) contrast(1.06) saturate(0.8);
+}
+
+/* ============================================================================
+ * Quote: a pull quote
+ * ============================================================================ */
+
+[data-theme='editorial'] .slide[data-layout] .layout-quote {
+	justify-content: center;
+	padding-bottom: 20px;
+}
+[data-theme='editorial'] .slide[data-layout] .layout-quote .slot {
+	flex: none;
+}
+[data-theme='editorial'] .slide[data-layout] .layout-quote blockquote {
+	position: relative;
+}
+[data-theme='editorial'] .slide[data-layout] .layout-quote blockquote::before {
+	content: '\201C';
+	display: block;
+	height: 108px;
+	margin-left: -8px;
+	font-family: var(--font-display);
+	font-size: 230px;
+	font-weight: 600;
+	line-height: 0.92;
+	color: var(--accent);
+}
+/*
+ * Budgeted so a quote that wraps to four lines still leaves room for the
+ * attribution below it inside the available slide height; the mockup's
+ * single short line was closer to 176px but that overflows on longer
+ * quotes.
+ */
+[data-theme='editorial'] .slide[data-layout] .layout-quote blockquote p {
+	font-family: var(--font-display);
+	max-width: 1600px;
+	font-size: 96px;
+	font-style: italic;
+	font-weight: 500;
+	line-height: 1.18;
+	letter-spacing: -0.03em;
+	text-wrap: balance;
+}
+[data-theme='editorial'] .slide[data-layout] .layout-quote .slot-attribution {
+	flex: none;
+	margin-top: 44px;
+}
+[data-theme='editorial'] .slide[data-layout] .layout-quote .slot-attribution p {
+	font-size: 44px;
+	font-weight: 600;
+	letter-spacing: 0.18em;
+	text-transform: uppercase;
+}
+[data-theme='editorial'] .slide[data-layout] .layout-quote .slot-attribution p::before {
+	content: '';
+	display: inline-block;
+	vertical-align: middle;
+	width: 88px;
+	height: 5px;
+	margin: 0 28px 8px 0;
+	background: var(--accent);
+}
+
+/* ============================================================================
+ * Two columns and three columns, with column rules
+ * ============================================================================ */
+
+[data-theme='editorial'] .slide[data-layout] .layout-two-column {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	grid-template-rows: auto auto;
+	align-content: space-between;
+}
+[data-theme='editorial'] .slide[data-layout] .layout-three-column {
+	display: grid;
+	grid-template-columns: 1fr 1fr 1fr;
+	grid-template-rows: auto auto;
+	align-content: space-between;
+	column-gap: 56px;
+}
+[data-theme='editorial'] .slide[data-layout] :is(.layout-two-column, .layout-three-column) .slot-default {
+	grid-column: 1 / -1;
+}
+[data-theme='editorial'] .slide[data-layout] .layout-two-column .slot-left,
+[data-theme='editorial'] .slide[data-layout] .layout-two-column .slot-right,
+[data-theme='editorial'] .slide[data-layout] .layout-three-column .slot-left,
+[data-theme='editorial'] .slide[data-layout] .layout-three-column .slot-center,
+[data-theme='editorial'] .slide[data-layout] .layout-three-column .slot-right {
+	padding-top: 26px;
+	border-top: 5px solid var(--fg);
+}
+[data-theme='editorial'] .slide[data-layout] .layout-two-column .slot-left {
+	padding-right: 64px;
+}
+[data-theme='editorial'] .slide[data-layout] .layout-two-column .slot-right {
+	padding-left: 64px;
+	border-left: 2px solid var(--fg);
+}
+[data-theme='editorial'] .slide[data-layout] .layout-three-column .slot-left {
+	padding-right: 40px;
+}
+[data-theme='editorial'] .slide[data-layout] .layout-three-column .slot-center {
+	padding: 0 40px;
+	border-left: 2px solid var(--fg);
+}
+[data-theme='editorial'] .slide[data-layout] .layout-three-column .slot-right {
+	padding-left: 40px;
+	border-left: 2px solid var(--fg);
+}
+[data-theme='editorial'] .slide[data-layout] :is(.layout-two-column, .layout-three-column) h3:first-child {
+	margin-top: 0;
+}
+[data-theme='editorial'] .slide[data-layout] :is(.layout-two-column, .layout-three-column) p {
+	text-wrap: balance;
+}
+[data-theme='editorial'] .slide[data-layout] :is(.layout-two-column, .layout-three-column) h3 + p {
+	font-style: italic;
+	color: var(--muted);
+}
+/* narrow-column scale: two-column panes run under 800px, three-column
+ * panes under 550px, so both get a smaller body size than a plain slide. */
+[data-theme='editorial'] .slide[data-layout] .layout-two-column p,
+[data-theme='editorial'] .slide[data-layout] .layout-two-column :is(ul, ol):not(li *) > li {
+	font-size: 44px;
+}
+[data-theme='editorial'] .slide[data-layout] .layout-three-column p,
+[data-theme='editorial'] .slide[data-layout] .layout-three-column :is(ul, ol):not(li *) > li {
+	font-size: 42px;
+	padding-left: 76px;
+}
+[data-theme='editorial'] .slide[data-layout] .layout-three-column :is(ul, ol):not(li *) > li::before {
+	font-size: 56px;
+	top: 12px;
+}
+/* a paragraph that is only a bold figure sets as a giant pull number; scoped
+ * to that exact shape so an ordinary bold word never blows up */
+[data-theme='editorial'] .slide[data-layout] .layout-two-column p:has(> strong:only-child) strong {
+	display: block;
+	font-family: var(--font-display);
+	font-size: 190px;
+	font-style: normal;
+	font-weight: 600;
+	line-height: 1.05;
+	letter-spacing: -0.04em;
+	color: var(--fg);
+}
+[data-theme='editorial'] .slide[data-layout] .layout-two-column .slot-left > * {
+	animation-delay: 300ms;
+}
+[data-theme='editorial'] .slide[data-layout] .layout-two-column .slot-right > * {
+	animation-delay: 520ms;
+}
+
+/* ============================================================================
+ * Sidebar: the argument, and a boxed sidebar with the receipts
+ * ============================================================================ */
+
+[data-theme='editorial'] .slide[data-layout] .layout-sidebar {
+	display: grid;
+	grid-template-columns: 1fr 580px;
+	column-gap: 64px;
+}
+[data-theme='editorial'] .slide[data-layout] .layout-sidebar .slot-sidebar {
+	padding: 6px 0 0 48px;
+	border-left: 2px solid var(--fg);
+	animation: editorial-drop var(--dur) var(--ease) 300ms both;
+}
+[data-theme='editorial'] .slide[data-layout] .layout-sidebar .slot-sidebar h3 {
+	margin-top: 0;
+}
+[data-theme='editorial'] .slide[data-layout] .layout-sidebar .slot-sidebar :is(ul, ol):not(li *) {
+	margin-top: 20px;
+}
+[data-theme='editorial'] .slide[data-layout] .layout-sidebar .slot-sidebar :is(ul, ol):not(li *) > li {
+	padding: 20px 0 24px 68px;
+	font-size: 42px;
+}
+[data-theme='editorial'] .slide[data-layout] .layout-sidebar .slot-sidebar :is(ul, ol):not(li *) > li::before {
+	font-size: 56px;
+	top: 14px;
+}
+
+/* ============================================================================
+ * Pictures: a plate tipped onto the page, toned to the stock
+ * ============================================================================ */
+
+[data-theme='editorial'] .slide[data-layout] .layout-split-media {
+	display: grid;
+	grid-template-columns: 1fr 940px;
+	column-gap: 72px;
+	align-items: center;
+}
+[data-theme='editorial'] .slide[data-layout] .layout-split-media .slot-default p {
+	margin-top: 36px;
+	font-style: italic;
+	color: var(--muted);
+}
+[data-theme='editorial'] .slide[data-layout] .layout-split-media .slot-media {
+	flex: none;
+}
+[data-theme='editorial'] .slide[data-layout] .layout-split-media .slot-media p {
+	padding: 20px;
+	border: 2px solid var(--fg);
+	background: #fbf6ea;
+	box-shadow: 14px 14px 0 var(--accent-soft);
+	animation-delay: 380ms;
+}
+[data-theme='editorial'] .slide[data-layout] .layout-split-media img {
+	display: block;
+	width: 100%;
+	filter: sepia(0.35) contrast(1.06) saturate(0.8);
+	mix-blend-mode: multiply;
+}
+/* a photograph on a plain default slot gets the same tipped-plate treatment */
+[data-theme='editorial'] .slide[data-layout] .layout-default .slot:has(> p > img:only-child) {
+	display: grid;
+	grid-template-columns: 1fr 900px;
+	grid-template-rows: auto 1fr;
+	column-gap: 72px;
+	align-items: center;
+}
+[data-theme='editorial'] .slide[data-layout] .layout-default .slot:has(> p > img:only-child) > :is(h1, h2) {
+	grid-column: 1 / -1;
+}
+[data-theme='editorial'] .slide[data-layout] .layout-default .slot > p:not(:has(> img)) {
+	max-width: 100%;
+}
+[data-theme='editorial'] .slide[data-layout] .layout-default .slot > p:has(> img:only-child) {
+	position: relative;
+	padding: 20px;
+	border: 2px solid var(--fg);
+	background: #fbf6ea;
+	box-shadow: 14px 14px 0 var(--accent-soft);
+	align-self: center;
+}
+[data-theme='editorial'] .slide[data-layout] .layout-default .slot > p > img:only-child {
+	display: block;
+	width: 100%;
+	height: auto;
+	filter: sepia(0.35) contrast(1.06) saturate(0.8);
+	mix-blend-mode: multiply;
+}
+/* nothing but a headline and the plate: the plate takes the full measure */
+[data-theme='editorial'] .slide[data-layout] .layout-default .slot:has(> p > img:only-child):not(:has(> :not(h1, h2, p:has(> img)))) {
+	grid-template-columns: 1fr;
+}
+
+/* ============================================================================
+ * Table
+ * ============================================================================ */
+
+[data-theme='editorial'] .slide[data-layout] .slot table {
+	width: 100%;
+	margin-top: auto;
+	border-collapse: collapse;
+	text-align: left;
+	border-top: 5px solid var(--fg);
+	border-bottom: 2px solid var(--fg);
+}
+[data-theme='editorial'] .slide[data-layout] .slot th {
+	padding: 18px 32px 16px 0;
+	font-size: 42px;
+	font-style: italic;
+	font-weight: 500;
+	color: var(--muted);
+	border-bottom: 2px solid var(--fg);
+}
+[data-theme='editorial'] .slide[data-layout] .slot td {
+	padding: 26px 32px 30px 0;
+	font-size: 46px;
+	line-height: 1.25;
+	border-top: 2px solid var(--hairline);
+}
+[data-theme='editorial'] .slide[data-layout] .slot td:first-child {
+	font-family: var(--font-display);
+	font-weight: 600;
+	letter-spacing: -0.02em;
+}
+[data-theme='editorial'] .slide[data-layout] .slot tbody tr {
+	animation: editorial-rise var(--dur) var(--ease) 380ms both;
+}
+[data-theme='editorial'] .slide[data-layout] .slot tbody tr:nth-child(2) {
+	animation-delay: 480ms;
+}
+[data-theme='editorial'] .slide[data-layout] .slot tbody tr:nth-child(3) {
+	animation-delay: 580ms;
+}
+[data-theme='editorial'] .slide[data-layout] .slot tbody tr:nth-child(n + 4) {
+	animation-delay: 680ms;
+}
+
+/* ============================================================================
+ * Diagram: a figure with its caption set beside it
+ * ============================================================================ */
+
+[data-theme='editorial'] .slide[data-layout] .layout-default .slot:has(> .mermaid-diagram) {
+	display: grid;
+	grid-template-columns: 1fr 560px;
+	grid-template-rows: auto 1fr;
+	column-gap: 72px;
+}
+[data-theme='editorial'] .slide[data-layout] .layout-default .slot:has(> .mermaid-diagram) > h2 {
+	grid-column: 1 / -1;
+}
+[data-theme='editorial'] .slide[data-layout] .mermaid-diagram {
+	align-self: stretch;
+	display: flex;
+	justify-content: center;
+	align-items: center;
+	padding-top: 24px;
+	border-top: 5px solid var(--fg);
+	font-weight: 400;
+	letter-spacing: normal;
+	line-height: normal;
+	animation: editorial-fade var(--dur) var(--ease) 300ms both;
+}
+/* labels keep the metrics mermaid measured them with, reset here so this
+ * theme's `.slot p` sizing does not leak into diagram labels */
+[data-theme='editorial'] .slide[data-layout] .mermaid-diagram p {
+	margin: 0;
+	padding: 0;
+	font-family: inherit;
+	font-size: inherit;
+	font-weight: inherit;
+	letter-spacing: inherit;
+	line-height: inherit;
+	text-wrap: wrap;
+	animation: none;
+}
+[data-theme='editorial'] .slide[data-layout] .mermaid-diagram svg {
+	display: block;
+	width: 100% !important;
+	height: 100% !important;
+	max-width: 100% !important;
+	overflow: visible;
+}
+[data-theme='editorial'] .slide[data-layout] .mermaid-diagram ~ p {
+	align-self: end;
+	padding-top: 28px;
+	border-top: 2px solid var(--fg);
+	font-style: italic;
+	text-wrap: balance;
+}
+[data-theme='editorial'] .slide[data-layout] .mermaid-diagram .node :is(rect, path, polygon, circle) {
+	stroke-width: 3px !important;
+}
+[data-theme='editorial'] .slide[data-layout] .mermaid-diagram :is(.flowchart-link, .edgePath path) {
+	stroke-width: 4px !important;
+	stroke-dasharray: 1 11 !important;
+	stroke-linecap: round;
+}
+
+/* ============================================================================
+ * Cover: the whole frame given to one idea
+ * ============================================================================
+ * The slide's own `background:` directive is an inline style on the slide
+ * element and can beat this theme's background, so the cover keeps text
+ * readable on any author background by setting it on a paper-colored panel
+ * rather than on the slide itself. */
+
+[data-theme='editorial'] .slide[data-layout] .layout-cover {
+	justify-content: center;
+	align-items: flex-start;
+	padding: 96px;
+}
+[data-theme='editorial'] .slide[data-layout] .layout-cover .slot {
+	flex: none;
+	max-width: 1500px;
+	padding: 72px 88px;
+	background: color-mix(in srgb, var(--bg) 94%, transparent);
+	border: 2px solid var(--fg);
+	box-shadow: 18px 18px 0 var(--accent-soft);
+}
+[data-theme='editorial'] .slide[data-layout] .layout-cover h1 {
+	font-size: 104px;
+	line-height: 1.05;
+}
+/* a short line ("One idea per slide") gets the mockup's poster size; 104px
+ * above is the budget for a cover headline that runs long. */
+[data-theme='editorial'] .slide[data-layout] .layout-cover h1[data-length='medium'] {
+	font-size: 128px;
+	line-height: 1.03;
+}
+[data-theme='editorial'] .slide[data-layout] .layout-cover h1[data-length='short'] {
+	font-size: 152px;
+	line-height: 1.02;
+}
+[data-theme='editorial'] .slide[data-layout] .layout-cover p {
+	margin-top: 40px;
+	padding-top: 34px;
+	border-top: 2px solid var(--fg);
+	font-size: 48px;
+	font-style: italic;
+	color: var(--muted);
+}
+
+/* ============================================================================
+ * Blank
+ * ============================================================================ */
+
+[data-theme='editorial'] .slide[data-layout] .layout-blank {
+	justify-content: center;
+	align-items: center;
+	text-align: center;
+}
+[data-theme='editorial'] .slide[data-layout] .layout-blank h1 {
+	font-size: 120px;
+}
+
+/*
+ * Map fills the frame; the running head stays fixed above it. MapLibre's
+ * own stylesheet sets `.maplibregl-map { position: relative }`, which
+ * overrides base's `.map-slide { position: absolute }` at equal
+ * specificity depending on load order and leaves the map sized to a
+ * shrink-to-fit flex item instead of the full slide. Reassert the fill
+ * explicitly at a higher specificity so the map always fills the frame.
+ */
+[data-theme='editorial'] .slide.has-map[data-layout] {
+	padding: 0;
+}
+[data-theme='editorial'] .slide.has-map[data-layout] .map-slide {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+}
+[data-theme='editorial'] .slide.has-map[data-layout] .map-content-overlay {
+	position: relative;
+	z-index: 1;
+	padding: 190px 96px 96px;
+}
+
+/* ============================================================================
+ * Scroll slide: copy runs on under the running head, clipped horizontally
+ * ============================================================================ */
+
+[data-theme='editorial'] .slide[data-layout] .scroll-content {
+	flex: none;
+	display: flex;
+	flex-direction: column;
+}
+[data-theme='editorial'] .slide[data-layout] .scroll-content [class^='layout-'] {
+	flex: none;
+}
+[data-theme='editorial'] .slide[data-layout] .scroll-content pre.shiki {
+	margin-top: 0;
+}
+
+/* ============================================================================
+ * Live code block and asciinema chrome
+ * Structure and behavior come from rich-blocks.css, which reads the
+ * --color-* bridge above; only the run button and result rules keep the
+ * page-figure device (rules, not rounded corners).
+ * ============================================================================ */
+
+[data-theme='editorial'] .slide[data-layout] .live-code-block {
+	border-radius: 0;
+}
+[data-theme='editorial'] .slide[data-layout] .live-code-block .code-container pre {
+	border-radius: 0;
+	border-top: 5px solid var(--fg);
+	border-bottom: 2px solid var(--fg);
+}
+[data-theme='editorial'] .slide[data-layout] .live-code-block .run-button {
+	border-radius: 0;
+	background-color: var(--accent);
+	color: var(--bg);
+	font-family: var(--font-body);
+	font-weight: 600;
+	font-style: italic;
+}
+[data-theme='editorial'] .slide[data-layout] .live-code-block .result-container {
+	border-radius: 0;
+	border-top: 2px solid var(--fg);
+	background: var(--surface);
+}
+[data-theme='editorial'] .slide[data-layout] .asciinema-player-wrapper {
+	border: 2px solid var(--fg);
+	border-top: 5px solid var(--fg);
+	background: var(--surface);
+}
+
+/* ============================================================================
+ * Print and reduced motion: everything in its final state, nothing moves
+ * ============================================================================ */
+
+@media print, (prefers-reduced-motion: reduce) {
+	[data-theme='editorial'] *,
+	[data-theme='editorial'] *::before,
+	[data-theme='editorial'] *::after {
+		animation: none !important;
+		transition: none !important;
+	}
+}
+
+/* ============================================================================
+ * Minimum sizes: whatever no rule above reached still meets the floor
+ * ============================================================================ */
+
+[data-theme='editorial'] .slot p,
+[data-theme='editorial'] .slot li {
+	font-size: 48px;
+	line-height: 1.45;
+}
+[data-theme='editorial'] pre code {
+	font-size: 42px;
+}
+[data-theme='editorial'] .slot td,
+[data-theme='editorial'] .slot th {
+	font-size: 44px;
+}

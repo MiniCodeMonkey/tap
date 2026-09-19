@@ -3,22 +3,18 @@
  * Handles all keyboard shortcuts for slide navigation and presentation controls.
  */
 
-import { nextSlide, prevSlide, goToSlide, totalSlides } from '$lib/stores/presentation';
-import { get } from 'svelte/store';
+import {
+	nextSlide,
+	prevSlide,
+	goToSlide,
+	usePresentationStore,
+	selectTotalSlides,
+	cycleTheme
+} from '$lib/stores/presentation';
 
 // ============================================================================
 // Types
 // ============================================================================
-
-/**
- * State for overview and fullscreen modes.
- */
-export interface KeyboardState {
-	isOverviewOpen: boolean;
-	isFullscreen: boolean;
-	onToggleOverview?: () => void;
-	onOpenPresenter?: () => void;
-}
 
 /**
  * Options for keyboard navigation setup.
@@ -50,6 +46,8 @@ export interface KeyboardOptions {
 // Internal State
 // ============================================================================
 
+// Assumes a single active listener; a second concurrent setupKeyboardHandler()
+// call overwrites this rather than stacking.
 let currentOptions: KeyboardOptions = {};
 
 // ============================================================================
@@ -156,6 +154,19 @@ function isFullscreen(): boolean {
  * Handle keyboard events for presentation navigation.
  */
 function handleKeyDown(event: KeyboardEvent): void {
+	// Escape blurs a focused editable element instead of falling through to
+	// isInputFocused()'s early return below, which would otherwise make
+	// Escape do nothing at all - not even overview/fullscreen - while an
+	// input or textarea has focus. This is the one key a focused editable
+	// element does not swallow: it takes the keyboard back from the
+	// element on this same press, and nothing else on that same press (no
+	// overview toggle, no fullscreen exit).
+	if (event.key === 'Escape' && isInputFocused()) {
+		event.preventDefault();
+		(document.activeElement as HTMLElement | null)?.blur();
+		return;
+	}
+
 	// Skip if input is focused
 	if (isInputFocused()) {
 		return;
@@ -214,7 +225,7 @@ function handleKeyDown(event: KeyboardEvent): void {
 	// End - go to last slide
 	if (key === 'End') {
 		event.preventDefault();
-		const total = get(totalSlides);
+		const total = selectTotalSlides(usePresentationStore.getState());
 		if (total > 0) {
 			goToSlide(total - 1);
 		}
@@ -235,6 +246,13 @@ function handleKeyDown(event: KeyboardEvent): void {
 		if (currentOptions.onToggleOverview) {
 			currentOptions.onToggleOverview();
 		}
+		return;
+	}
+
+	// T - cycle through themes
+	if (key === 't' || key === 'T') {
+		event.preventDefault();
+		cycleTheme();
 		return;
 	}
 
@@ -261,14 +279,13 @@ function handleKeyDown(event: KeyboardEvent): void {
  * ```typescript
  * import { setupKeyboardNavigation } from '$lib/utils/keyboard';
  *
- * // In your Svelte component
- * onMount(() => {
+ * useEffect(() => {
  *   const cleanup = setupKeyboardNavigation({
- *     onToggleOverview: () => { overviewOpen = !overviewOpen },
+ *     onToggleOverview: () => setOverviewOpen((open) => !open),
  *     isOverviewOpen: () => overviewOpen,
  *   });
  *   return cleanup;
- * });
+ * }, [overviewOpen]);
  * ```
  */
 export function setupKeyboardNavigation(options: KeyboardOptions = {}): () => void {

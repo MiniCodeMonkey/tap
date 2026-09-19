@@ -22,27 +22,45 @@ After building, your presentation is output to the `dist/` directory:
 
 ```
 dist/
-├── index.html         # Main presentation entry point
-├── assets/
-│   ├── style.css      # Optimized presentation styles
-│   └── main.js        # Bundled JavaScript
-├── images/            # Copied image assets
-└── fonts/             # Font files (if used)
+├── index.html         # Audience view, with the deck's JSON embedded
+├── presenter.html     # Presenter view
+├── assets/            # Hashed JS and CSS chunks, bundled fonts, and copied images
+└── components/        # Bundled deck components, when the deck uses any
 ```
+
+Everything the deck needs is in that folder. The fonts, the syntax
+highlighter, and the asciinema player are all bundled, so a built deck
+needs no network at all. Every path is relative, so the folder works from
+any sub-path without a base-path flag.
 
 ### Build Options
 
-| Flag | Description |
-|------|-------------|
-| `--out <dir>` | Custom output directory (default: `dist/`) |
-| `--base <path>` | Base path for deployment (e.g., `/slides/`) |
-| `--minify` | Enable additional minification |
+| Flag | Short | Description |
+|------|-------|-------------|
+| `--output <dir>` | `-o` | Output directory (default: `dist`) |
 
 **Example with custom output:**
 
 ```bash
-tap build slides.md --out ./public --base /demo/
+tap build slides.md --output ./public
 ```
+
+### What a Static Build Cannot Do
+
+- **Live code execution.** A code block with a `driver` shows its code as
+  written; nothing runs. Use `tap dev` for a live demo.
+- **Hot reload and cross-device sync.** There is no server, so the viewer
+  and the presenter view never open a websocket and never try to
+  reconnect.
+- **The AI image generator and the slide builder.** Both live in the
+  `tap dev` terminal.
+
+Everything else works, including themes, the `t` key, fragments, steps,
+deck components, mermaid, asciinema, and the overview.
+
+`tap build` exits with status 1, printing to standard error, when a slide
+names an unknown layout, uses a slot its layout does not declare, or has a
+deck component that fails to build.
 
 ## Previewing the Build
 
@@ -56,15 +74,14 @@ This starts a local HTTP server serving your built files, simulating a productio
 
 ### Serve Options
 
-| Flag | Description |
-|------|-------------|
-| `--port <number>` | Port to serve on (default: 8080) |
-| `--host <ip>` | Host to bind to (default: localhost) |
+| Flag | Short | Description |
+|------|-------|-------------|
+| `--port <number>` | `-p` | Port to serve on (default: `3000`) |
 
 **Example:**
 
 ```bash
-tap serve dist --port 3000
+tap serve dist --port 8080
 ```
 
 ::: tip
@@ -109,12 +126,14 @@ npx vercel dist
 
 ### GitHub Pages
 
-1. Build with the correct base path:
+1. Build the deck:
    ```bash
-   tap build slides.md --base /your-repo-name/
+   tap build slides.md
    ```
 
-2. Deploy the `dist/` directory to the `gh-pages` branch
+2. Deploy the `dist/` directory to the `gh-pages` branch. Every asset path
+   in the build is relative, so a project page under
+   `https://user.github.io/your-repo/` works without extra configuration.
 
 ### Any Static Host
 
@@ -138,12 +157,13 @@ This generates a high-quality PDF with each slide as a page.
 
 ### PDF Export Options
 
-| Flag | Description |
-|------|-------------|
-| `--out <file>` | Output filename (default: `slides.pdf`) |
-| `--format <type>` | Page format: `slides`, `notes`, `both` |
-| `--paper <size>` | Paper size: `letter`, `a4`, `16:9`, `4:3` |
-| `--margin <px>` | Page margins in pixels |
+| Flag | Short | Description |
+|------|-------|-------------|
+| `--output <file>` | `-o` | Output filename (default: the deck's name with a `.pdf` extension) |
+| `--content <type>` | | What to include: `slides` (default), `notes`, or `both` |
+
+Page size follows the deck's own `aspectRatio`, so there is no paper-size
+flag.
 
 ### Export Formats
 
@@ -158,7 +178,7 @@ Exports just the presentation slides, one per page.
 **Notes only:**
 
 ```bash
-tap pdf slides.md --format notes
+tap pdf slides.md --content notes
 ```
 
 Exports speaker notes as a document, useful for printing a script.
@@ -166,7 +186,7 @@ Exports speaker notes as a document, useful for printing a script.
 **Slides with notes:**
 
 ```bash
-tap pdf slides.md --format both
+tap pdf slides.md --content both
 ```
 
 Exports each slide with its corresponding speaker notes below, ideal for handouts or review materials.
@@ -178,14 +198,29 @@ Exports each slide with its corresponding speaker notes below, ideal for handout
 tap pdf presentation.md
 
 # Custom output filename
-tap pdf slides.md --out quarterly-review.pdf
+tap pdf slides.md --output quarterly-review.pdf
 
-# A4 paper with notes
-tap pdf slides.md --format both --paper a4 --out handout.pdf
+# Slides with notes below each one, as a handout
+tap pdf slides.md --content both --output handout.pdf
 
-# Slides only, letter size
-tap pdf slides.md --format slides --paper letter
+# Speaker notes only, as a script
+tap pdf slides.md --content notes --output script.pdf
 ```
+
+## Screenshotting One Slide
+
+`tap screenshot` renders a single slide state to a PNG through the same
+headless browser, which is faster than a full PDF when you only want to
+check one slide:
+
+```bash
+tap screenshot slides.md --slide 12
+tap screenshot slides.md --slide 12 --step 3
+tap screenshot slides.md --all --out shots/
+```
+
+It exits with status 1 when the slide shows an error card, so it works as
+a check in a script. See [CLI Commands](/reference/cli-commands#tap-screenshot).
 
 ::: tip
 PDF export captures your presentation at a specific moment. If you have live code execution enabled, the results shown in the PDF will be whatever was displayed at export time.
@@ -226,11 +261,12 @@ git commit -m "Update built presentation"
 | Command | Description |
 |---------|-------------|
 | `tap build slides.md` | Build for production |
-| `tap build slides.md --out ./public` | Build to custom directory |
+| `tap build slides.md --output ./public` | Build to custom directory |
 | `tap serve dist` | Preview built presentation |
 | `tap pdf slides.md` | Export to PDF (slides only) |
-| `tap pdf slides.md --format notes` | Export notes only |
-| `tap pdf slides.md --format both` | Export slides with notes |
+| `tap pdf slides.md --content notes` | Export notes only |
+| `tap pdf slides.md --content both` | Export slides with notes |
+| `tap screenshot slides.md --slide 4` | Render one slide to a PNG |
 
 ## Next Steps
 

@@ -1,62 +1,54 @@
 # CLI Commands
 
-Complete reference for Tap CLI commands.
+Complete reference for Tap CLI commands. See `docs/reference/cli-commands.md` for the full docs site reference.
 
 ## tap new
 
-Create a new presentation.
+Create a new presentation with an interactive wizard.
 
 ```bash
-tap new [name]
+tap new
 ```
 
 | Flag | Short | Description |
 |------|-------|-------------|
-| `--theme <name>` | `-t` | Theme (default: `paper`) |
-| `--template <type>` | | Template: `blank`, `demo`, `talk` |
-| `--dir <path>` | `-d` | Directory (default: current) |
-| `--force` | `-f` | Overwrite existing file |
+| `--theme <slug>` | `-t` | Pre-fill the wizard's theme step |
+| `--output <file>` | `-o` | Pre-fill the output filename |
+
+The wizard always runs and needs a terminal, so an agent working
+unattended should write the markdown file directly rather than call
+`tap new`.
 
 Examples:
 ```bash
-tap new my-talk
-tap new quarterly-review --theme noir
-tap new demo --template demo
-tap new slides --dir ./presentations
+tap new                            # interactive wizard
+tap new --theme terminal           # wizard, terminal theme pre-filled
+tap new --theme keynote --output launch.md
 ```
 
 ## tap dev
 
-Start development server with live reload.
+Start the development server with live reload and live code execution.
 
 ```bash
-tap dev <file>
+tap dev [file]
 ```
 
 | Flag | Short | Description |
 |------|-------|-------------|
-| `--port <number>` | `-p` | Port (default: `3000`) |
-| `--host <ip>` | | Host (default: `localhost`) |
-| `--open` | `-o` | Open browser |
-| `--no-live-reload` | | Disable live reload |
-| `--password <pass>` | | Presenter mode password |
-| `--qr` | | Display QR code |
+| `--port <number>` | `-p` | Port for the dev server (default: `3000`) |
+| `--presenter-password <pass>` | | Password to protect the presenter view |
+| `--headless` | | Run without the TUI, for testing/automation |
 
 Examples:
 ```bash
 tap dev slides.md
-tap dev slides.md --port 8080 --open
-tap dev slides.md --host 0.0.0.0  # Network access
-tap dev slides.md --password secret123
+tap dev slides.md --port 8080
 ```
-
-URLs:
-- `http://localhost:3000` - Audience view
-- `http://localhost:3000/presenter` - Presenter view
 
 ## tap build
 
-Build production-ready static version.
+Build a production-ready static version. Static builds don't execute live code.
 
 ```bash
 tap build <file>
@@ -64,24 +56,17 @@ tap build <file>
 
 | Flag | Short | Description |
 |------|-------|-------------|
-| `--out <dir>` | `-o` | Output directory (default: `dist/`) |
-| `--base <path>` | `-b` | Base path for deployment |
-| `--minify` | `-m` | Enable minification |
-| `--watch` | `-w` | Watch for changes |
+| `--output <dir>` | `-o` | Output directory (default: `dist`) |
 
 Examples:
 ```bash
 tap build slides.md
-tap build slides.md --out ./public
-tap build slides.md --base /my-repo/  # GitHub Pages
-tap build slides.md --minify
+tap build slides.md --output ./public
 ```
-
-**Note:** Static builds don't execute live code.
 
 ## tap serve
 
-Serve built presentation locally.
+Serve a built presentation locally.
 
 ```bash
 tap serve [dir]
@@ -89,21 +74,11 @@ tap serve [dir]
 
 | Flag | Short | Description |
 |------|-------|-------------|
-| `--port <number>` | `-p` | Port (default: `8080`) |
-| `--host <ip>` | | Host (default: `localhost`) |
-| `--open` | `-o` | Open browser |
-| `--cors` | | Enable CORS |
-
-Examples:
-```bash
-tap serve
-tap serve ./public
-tap serve dist --port 3000 --open
-```
+| `--port <number>` | `-p` | Port for the server (default: `3000`) |
 
 ## tap pdf
 
-Export to PDF.
+Export a presentation to PDF.
 
 ```bash
 tap pdf <file>
@@ -111,71 +86,94 @@ tap pdf <file>
 
 | Flag | Short | Description |
 |------|-------|-------------|
-| `--out <file>` | `-o` | Output filename |
-| `--format <type>` | `-f` | Format: `slides`, `notes`, `both` |
-| `--paper <size>` | | Size: `letter`, `a4`, `16:9`, `4:3` |
-| `--margin <px>` | `-m` | Page margins |
-| `--quality <level>` | `-q` | Quality: `low`, `medium`, `high` |
+| `--output <file>` | `-o` | Output PDF file path (default: `<input>.pdf`) |
+| `--content <type>` | | Content to include: `slides`, `notes`, or `both` |
 
 Examples:
 ```bash
 tap pdf slides.md
-tap pdf slides.md --out quarterly-review.pdf
-tap pdf slides.md --format both  # Slides with notes
-tap pdf slides.md --format notes  # Speaker script
-tap pdf slides.md --paper a4 --margin 20
+tap pdf slides.md --output quarterly-review.pdf
+tap pdf slides.md --content both   # slides with speaker notes
 ```
+
+## tap screenshot
+
+Render one slide, or every slide, to a PNG. Exits with status 1 when the
+slide shows an error card, which makes it a self-check.
+
+```bash
+tap screenshot <file> [flags]
+```
+
+| Flag | Description |
+|------|-------------|
+| `--slide <n>` | One-based slide number. Required unless `--all` |
+| `--all` | Every slide's final state, into a folder |
+| `--step <k>` | Render that presenter step, without print mode |
+| `--fragment <k>` | Render with fragments revealed through index `k`, without print mode |
+| `--theme <slug>` | Render with this theme instead of the deck's own |
+| `--out <path>` | Output PNG file, or folder with `--all` |
+| `--width <px>` | Viewport width (default `1920`); height follows the aspect ratio |
+
+Without `--step` or `--fragment`, the slide renders its final state in
+print mode. On success it prints only the paths it wrote, one per line.
+
+Examples:
+```bash
+tap screenshot deck.md --slide 12
+tap screenshot deck.md --slide 12 --step 3
+tap screenshot deck.md --all --out shots/
+tap screenshot deck.md --slide 2 --out check.png || echo "slide 2 is broken"
+```
+
+## tap theme
+
+```bash
+tap theme list [--json]
+tap theme show <slug> [--json | --prompt]
+tap theme show --deck <file> [--prompt]
+```
+
+`show` prints a theme's name, polarity, pitch, tokens, and illustration
+style. `--prompt` prints a style brief to paste in front of an image model
+request so illustrations match the theme.
 
 ## tap add
 
-Add slide or asset to existing presentation.
+Add a new slide interactively.
 
 ```bash
 tap add [file]
 ```
 
-| Flag | Short | Description |
-|------|-------|-------------|
-| `--layout <name>` | `-l` | Layout for new slide |
-| `--position <n>` | `-p` | Insert position |
-| `--title <text>` | `-t` | Slide title |
-| `--image <path>` | `-i` | Add image asset |
-| `--interactive` | | Interactive mode |
+## tap add component
 
-Examples:
+Scaffold a deck-supplied React component. See
+`skills/tap/rules/components.md`.
+
 ```bash
-tap add slides.md
-tap add slides.md --layout two-column
-tap add slides.md --position 3 --title "New Section"
-tap add slides.md --image ./photo.png
+tap add component <Name> [--inline] [--ts] [--deck <file>]
 ```
 
 ## Global Flags
 
-| Flag | Description |
-|------|-------------|
-| `--help` | Show help |
-| `--version` | Show version |
-| `--verbose` | Verbose output |
-| `--quiet` | Suppress output |
-| `--no-color` | Disable colors |
+| Flag | Short | Description |
+|------|-------|-------------|
+| `--verbose` | `-v` | Enable verbose output |
 
-## Environment Variables
-
-| Variable | Description |
-|----------|-------------|
-| `TAP_PORT` | Default dev port |
-| `TAP_HOST` | Default dev host |
-| `TAP_THEME` | Default theme |
-| `NO_COLOR` | Disable colors |
+Errors and warnings go to standard error; a command's real output goes to
+standard output.
 
 ## Quick Reference
 
 | Command | Description |
 |---------|-------------|
-| `tap new [name]` | Create presentation |
-| `tap dev <file>` | Start dev server |
-| `tap build <file>` | Build for production |
+| `tap new` | Create a presentation (interactive wizard) |
+| `tap dev [file]` | Start dev server with live code execution |
+| `tap build <file>` | Build for production (static, no live code) |
 | `tap serve [dir]` | Serve built files |
 | `tap pdf <file>` | Export to PDF |
-| `tap add [file]` | Add slide/asset |
+| `tap screenshot <file>` | Render a slide to a PNG (exit 1 if broken) |
+| `tap add [file]` | Add a slide interactively |
+| `tap add component <Name>` | Scaffold a deck component |
+| `tap theme list` / `tap theme show` | Inspect a theme's tokens and style |

@@ -4,81 +4,131 @@ title: Keyboard Shortcuts
 
 # Keyboard Shortcuts
 
-Quick reference for all keyboard shortcuts in Tap presentations.
+Every key tap listens for, in the audience view, the presenter view, and
+the `tap dev` terminal.
 
-## Navigation Shortcuts
+Keys are ignored while an input, textarea, select, or `contenteditable`
+element has focus.
 
-Control slide navigation during your presentation.
+## Audience View
+
+The main presentation window, at `http://localhost:3000`.
+
+### Navigation
 
 | Shortcut | Action |
 |----------|--------|
-| **Right** / **Space** | Next slide |
-| **Left** | Previous slide |
-| **Up** | Previous slide |
-| **Down** | Next slide |
-| **Home** | Go to first slide |
-| **End** | Go to last slide |
-| **1-9** | Go to slide number (1-9) |
+| **Right**, **Down**, **Space**, **Enter**, **PageDown** | Next fragment or step, then next slide |
+| **Left**, **Up**, **Backspace**, **PageUp** | Previous fragment or step, then previous slide |
+| **Home** | First slide |
+| **End** | Last slide |
 
-::: tip Fragments
-When a slide has fragments (incremental reveals), **Right**/**Space** advances to the next fragment before moving to the next slide.
+::: tip Fragments and steps
+On a slide with fragments or a step-driven component, an advance key moves
+through those first and only then moves to the next slide. A slide with two
+`<!-- pause -->` markers takes two presses before it advances.
 :::
 
-## View Controls
-
-Switch between different presentation views.
+### View controls
 
 | Shortcut | Action |
 |----------|--------|
-| **S** | Open presenter view in new window |
-| **O** | Toggle slide overview |
+| **S** | Open the presenter view in a new window |
+| **O** | Toggle the slide overview |
+| **T** | Cycle to the next theme |
 | **F** | Toggle fullscreen |
-| **Esc** | Exit overview or fullscreen |
+| **Esc** | Blur a focused input, or close the overview, or exit fullscreen |
 
-## Presenter Mode Shortcuts
+Navigation keys are ignored while an input, textarea, select, or
+`contenteditable` element inside a slide has focus, so a form on a slide
+can be typed into. **Escape** blurs that element and gives the clicker back;
+it does not also close the overview or leave fullscreen on that same press.
 
-Additional shortcuts available in presenter view.
+In the overview, arrow keys move the selection and **Enter** jumps to the
+selected slide. Other shortcuts are ignored while the overview is open.
+
+**T** cycles through every built-in theme without touching the deck's
+frontmatter. To force one theme for a link or a recording, add
+`?theme=<slug>` to the URL instead.
+
+## Presenter View
+
+The window at `http://localhost:3000/presenter`, or opened with **S**.
 
 | Shortcut | Action |
 |----------|--------|
-| **R** | Reset timer |
-| **B** | Black screen (pause presentation) |
+| **Right**, **Down**, **Space**, **Enter** | Next fragment or step, then next slide |
+| **Left**, **Up**, **Backspace** | Previous fragment or step, then previous slide |
+| **Home** | First slide |
+| **End** | Last slide |
+| **R** | Reset the timer |
 
-::: tip Presentation Pause
-Press **B** to show a black screen when you need to pause the presentation for discussion or a break. Press **B** again or any navigation key to resume.
-:::
+Navigation in the presenter view is broadcast to every connected audience
+view, and the other way round.
 
-## Quick Reference Table
+## Dev Server Terminal
 
-All shortcuts at a glance:
+The `tap dev` terminal interface, not the browser.
 
-| Category | Shortcut | Action |
-|----------|----------|--------|
-| Navigation | **Right** / **Space** | Next slide |
-| Navigation | **Left** | Previous slide |
-| Navigation | **Up** | Previous slide |
-| Navigation | **Down** | Next slide |
-| Navigation | **Home** | First slide |
-| Navigation | **End** | Last slide |
-| Navigation | **1-9** | Jump to slide number |
-| View | **S** | Open presenter view |
-| View | **O** | Toggle overview |
-| View | **F** | Toggle fullscreen |
-| View | **Esc** | Exit overlay/fullscreen |
-| Presenter | **R** | Reset timer |
-| Presenter | **B** | Black screen |
+| Shortcut | Action |
+|----------|--------|
+| **A** | Open the slide builder and append a new slide |
+| **O** | Open the audience view in your browser |
+| **P** | Open the presenter view in your browser |
+| **R** | Trigger a manual reload |
+| **T** | Open the theme picker |
+| **E** | Export the deck to PDF |
+| **I** | Open the AI image generator (needs `GEMINI_API_KEY`) |
+| **Q**, **Ctrl+C** | Stop the dev server |
 
-## Touch Gestures
+In the theme picker, **Up**/**K** and **Down**/**J** move the selection,
+**Enter** applies the theme to every connected browser and writes it into
+the deck's frontmatter, and **Esc** or **Q** closes the picker without
+changing anything.
 
-On touch-enabled devices:
+## URL Parameters
 
-| Gesture | Action |
-|---------|--------|
-| **Swipe left** | Next slide |
-| **Swipe right** | Previous slide |
-| **Tap** | Next slide/fragment |
+Not keyboard shortcuts, but the same job from a link or a script.
+
+| Parameter | Effect |
+|-----------|--------|
+| `?theme=<slug>` | Render with that theme instead of the deck's own |
+| `?print=true` | Print mode: every fragment and step at its final state, no animation, no websocket |
+| `?capture=true` | Capture mode: no websocket, no connection badge, and the requested step or fragment rendered settled |
+| `?live=true` | With `capture=true`, keeps animations and timers running instead of settling |
+| `?step=<k>` | Load the slide at presenter step `k`, clamped to the slide's own maximum |
+| `?fragment=<k>` | Load the slide with fragments revealed through index `k`, clamped |
+| `#<n>` | The URL hash selects the slide, by one-based slide number (`#5`) |
+
+`?step=` and `?fragment=` are read once at load and never again, so normal
+clicker navigation is unaffected. `tap screenshot --step` and `--fragment`
+use them, together with `?capture=true`.
+
+`?capture=true` exists for a stepped or fragment screenshot. Such a capture
+renders the requested presenter state rather than the deck's final state,
+but it runs against a temporary server with no websocket route, so a
+connect attempt would retry forever and bake a "Reconnecting" badge into
+the image. Capture mode drops the websocket and the badge.
+
+By default a capture is also **settled**: the requested step or fragment is
+shown with animations and timers finished, so the image is that state's
+resting appearance rather than a frame caught partway toward it. Unlike
+print mode, settling does not move the step or the fragment; it only stops
+things animating toward it.
+
+`?live=true`, which `tap screenshot --wait` adds, turns the settling off
+and leaves the page genuinely live. The wait it pairs with starts once the
+page is ready, not at navigation, so it catches an animation that runs on
+a timer or longer than the readiness waits.
+
+`tap screenshot` sets both for you. Print mode never needs either, since it
+already skips the websocket and shows the final state.
+
+The keyboard reference for these states is in
+[Print mode](/reference/components-reference#print-mode).
 
 ## See Also
 
-- [Presenter Mode](/guide/presenter-mode) — Full presenter mode guide with cross-device setup
-- [Animations & Transitions](/guide/animations-transitions) — Configure fragments and transitions
+- [Presenter Mode](/guide/presenter-mode) - Full presenter mode guide with cross-device setup
+- [Animations & Transitions](/guide/animations-transitions) - Configure fragments and transitions
+- [Themes](/guide/themes) - The theme list and how to pick one

@@ -27,17 +27,28 @@ flowchart LR
 
 ## Theme Integration
 
-Mermaid diagrams automatically match the presentation theme:
+Each of the 21 themes defines its own Mermaid colors (node fill, stroke,
+and text) and curve style in its `theme.json`, so a diagram always sits in
+the deck's palette. A flowchart in `terminal` reads terminal-green; the
+same diagram in `blueprint` reads as white line work on drafting blue.
 
-| Theme | Mermaid Appearance |
-|-------|-------------------|
-| paper | Neutral with stone accents |
-| noir | Dark with gold accents |
-| aurora | Forest with teal/blue |
-| phosphor | Terminal green glow |
-| poster | High contrast with coral |
+Diagrams render after the theme's fonts are ready and re-render when the
+theme changes, including the `t` key and `?theme=`.
 
-Diagrams re-render when the theme changes.
+A diagram can mark its app-server style nodes with the `quiet` class to
+pick up each theme's own quiet styling:
+
+````markdown
+```mermaid
+flowchart LR
+    A[Load balancer] --> B[app-1]
+    A --> C[app-2]
+    class B,C quiet
+```
+````
+
+Tap appends the theme's `classDef quiet` for you, unless the diagram
+defines its own `quiet` class.
 
 ## Common Patterns
 
@@ -89,7 +100,7 @@ layout: two-column
 
 Description of the process.
 
-|||
+::right
 
 ```mermaid
 flowchart TD

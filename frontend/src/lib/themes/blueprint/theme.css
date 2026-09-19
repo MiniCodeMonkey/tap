@@ -1,0 +1,1707 @@
+/**
+ * Blueprint theme.
+ * For architecture and systems talks where every slide is a sheet from the
+ * drawing set: a framed sheet on a drafting grid, a title block in the
+ * bottom right corner that names the drawing and counts the sheets,
+ * headings that carry a dimension line, bullets as numbered item balloons,
+ * and one yellow pencil for the thing being talked about.
+ *
+ * Selector conventions used throughout (see docs/reference/theme-porting.md):
+ * slide chrome is scoped to `.slide[data-layout]`, the real rendered slide;
+ * content rules are scoped through `.slot` so they outrank the shared
+ * `.slot-content` typography in layouts.css.
+ */
+
+@import '@fontsource/saira-condensed/latin-600.css';
+@import '@fontsource/saira-condensed/latin-700.css';
+@import '@fontsource/saira-semi-condensed/latin-500.css';
+@import '@fontsource/saira-semi-condensed/latin-600.css';
+@import '@fontsource/ibm-plex-mono/latin-500.css';
+@import '@fontsource/ibm-plex-mono/latin-600.css';
+
+[data-theme='blueprint'] {
+	/* ---------- design-spec tokens ---------- */
+	--bg: #0f3a75;
+	--fg: #f5f9ff;
+	--muted: #c0d6f3;
+	--accent: #ffd447;
+	--accent-text: #ffd447;
+	--surface: #174688;
+	--font-display: 'Saira Condensed', 'Arial Narrow', sans-serif;
+	--font-body: 'Saira Semi Condensed', 'Arial Narrow', sans-serif;
+	--font-mono: 'IBM Plex Mono', ui-monospace, Menlo, monospace;
+	--ease: cubic-bezier(0.65, 0, 0.35, 1);
+	--dur: 800ms;
+	--space-unit: 24px;
+	--radius: 0px;
+	--stroke-width: 4px;
+
+	--grid-minor: color-mix(in srgb, var(--fg) 7%, transparent);
+	--grid-major: color-mix(in srgb, var(--fg) 16%, transparent);
+	/* A dimension line: end ticks, arrowheads, and the line between them, as one shape. */
+	--dimension: polygon(
+		0 0,
+		4px 0,
+		4px 50%,
+		34px calc(50% - 10px),
+		34px calc(50% - 2px),
+		calc(100% - 34px) calc(50% - 2px),
+		calc(100% - 34px) calc(50% - 10px),
+		calc(100% - 4px) 50%,
+		calc(100% - 4px) 0,
+		100% 0,
+		100% 100%,
+		calc(100% - 4px) 100%,
+		calc(100% - 4px) 50%,
+		calc(100% - 34px) calc(50% + 10px),
+		calc(100% - 34px) calc(50% + 2px),
+		34px calc(50% + 2px),
+		34px calc(50% + 10px),
+		4px 50%,
+		4px 100%,
+		0 100%
+	);
+	/* A centre line: long dash, short dash, the drafting convention for an axis. */
+	--centre-line: repeating-linear-gradient(
+		180deg,
+		var(--muted) 0 44px,
+		transparent 44px 58px,
+		var(--muted) 58px 66px,
+		transparent 66px 80px
+	);
+
+	/* Bridge to the token names the shared stylesheets read. */
+	--color-bg: var(--bg);
+	--color-text: var(--fg);
+	--color-muted: var(--muted);
+	--color-accent: var(--accent);
+	--color-code-bg: var(--bg);
+	--color-code-text: var(--fg);
+	--color-code-inline-bg: transparent;
+	--color-border: var(--fg);
+	--color-surface: var(--surface);
+	--color-surface-elevated: var(--surface);
+	--color-link: var(--fg);
+	--font-sans: var(--font-body);
+
+	/* Shiki: the text color, the muted pencil for comments, the yellow pencil for strings. */
+	--shiki-foreground: var(--fg);
+	--shiki-background: transparent;
+	--shiki-token-comment: var(--muted);
+	--shiki-token-string: var(--accent-text);
+	--shiki-token-string-expression: var(--accent-text);
+	--shiki-token-keyword: var(--fg);
+	--shiki-token-function: var(--fg);
+	--shiki-token-constant: var(--fg);
+	--shiki-token-parameter: var(--fg);
+	--shiki-token-punctuation: var(--fg);
+	--shiki-token-link: var(--accent-text);
+}
+
+@keyframes blueprint-plot {
+	from {
+		clip-path: inset(-10% 100% -10% -2%);
+	}
+	to {
+		clip-path: inset(-10% -3% -10% -2%);
+	}
+}
+@keyframes blueprint-fade {
+	from {
+		opacity: 0;
+	}
+}
+@keyframes blueprint-span {
+	from {
+		transform: scaleX(0);
+	}
+	to {
+		transform: scaleX(1);
+	}
+}
+@keyframes blueprint-rise {
+	from {
+		transform: scaleY(0);
+	}
+	to {
+		transform: scaleY(1);
+	}
+}
+
+/* ============================================================================
+ * The sheet: grid, frame, title block, section cell, revision cell
+ * ============================================================================ */
+
+[data-theme='blueprint'] .slide[data-layout] {
+	color: var(--fg);
+	font-family: var(--font-body);
+	font-weight: 500;
+	font-size: 62px;
+	line-height: 80px;
+	background:
+		linear-gradient(var(--grid-major) 2px, transparent 2px) 40px 40px / 200px 200px,
+		linear-gradient(90deg, var(--grid-major) 2px, transparent 2px) 40px 40px / 200px 200px,
+		linear-gradient(var(--grid-minor) 1px, transparent 1px) 40px 40px / 40px 40px,
+		linear-gradient(90deg, var(--grid-minor) 1px, transparent 1px) 40px 40px / 40px 40px,
+		var(--bg);
+}
+
+/* Frame of the sheet, with a centring mark on each side. */
+[data-theme='blueprint'] .slide[data-layout]::before {
+	content: '';
+	position: absolute;
+	inset: 40px;
+	border: 4px solid var(--fg);
+	outline: 2px solid var(--muted);
+	outline-offset: 10px;
+	pointer-events: none;
+	background:
+		linear-gradient(var(--fg), var(--fg)) 50% 0 / 4px 20px no-repeat,
+		linear-gradient(var(--fg), var(--fg)) 50% 100% / 4px 20px no-repeat,
+		linear-gradient(var(--fg), var(--fg)) 0 50% / 20px 4px no-repeat,
+		linear-gradient(var(--fg), var(--fg)) 100% 50% / 20px 4px no-repeat;
+}
+
+/* Title block, bottom right of every sheet: drawing name over sheet count. */
+[data-theme='blueprint'] .slide[data-layout]::after {
+	content: 'DWG  ' attr(data-layout) '\A SHEET  ' attr(data-index) ' OF ' attr(data-total);
+	position: absolute;
+	right: 40px;
+	bottom: 40px;
+	width: 380px;
+	height: 112px;
+	padding: 0 22px;
+	white-space: pre;
+	font-family: var(--font-mono);
+	font-size: 28px;
+	line-height: 52px;
+	font-weight: 500;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+	color: var(--fg);
+	border: 4px solid var(--fg);
+	background:
+		linear-gradient(var(--fg), var(--fg)) 0 51px / 100% 2px no-repeat;
+	background-color: inherit;
+	animation: blueprint-fade 400ms var(--ease) 0ms both;
+}
+
+/* The tag is one more cell of the title block, to its left. */
+[data-theme='blueprint'] .slide-tag {
+	position: absolute;
+	top: auto;
+	left: auto;
+	right: 416px;
+	bottom: 40px;
+	height: 112px;
+	min-width: 260px;
+	max-width: 1000px;
+	padding: 0 22px;
+	overflow: hidden;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+	z-index: 1;
+	font-family: var(--font-mono);
+	font-size: 28px;
+	line-height: 52px;
+	font-weight: 600;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+	color: var(--accent-text);
+	border: 4px solid var(--fg);
+	background:
+		linear-gradient(var(--fg), var(--fg)) 0 51px / 100% 2px no-repeat;
+	background-color: inherit;
+	animation: blueprint-fade 400ms var(--ease) 100ms both;
+}
+[data-theme='blueprint'] .slide-tag::before {
+	content: 'SECTION';
+	display: block;
+	font-weight: 500;
+	color: var(--fg);
+}
+
+/* The badge is the revision cell, hung from the top right corner of the frame. */
+[data-theme='blueprint'] .slide-badge {
+	top: 40px;
+	right: 40px;
+	height: 60px;
+	padding: 0 22px;
+	white-space: nowrap;
+	z-index: 1;
+	font-family: var(--font-mono);
+	font-size: 28px;
+	line-height: 52px;
+	font-weight: 600;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+	color: var(--accent-text);
+	border: 4px solid var(--fg);
+	background-color: inherit;
+	animation: blueprint-fade 400ms var(--ease) 100ms both;
+}
+[data-theme='blueprint'] .slide-badge::before {
+	content: 'REV';
+	display: inline-block;
+	height: 52px;
+	margin-right: 18px;
+	padding-right: 18px;
+	font-weight: 500;
+	color: var(--fg);
+	border-right: 2px solid var(--fg);
+}
+
+/*
+ * The drawing area. width and height are set to auto because the shared
+ * `.slide-content { width: 100%; height: 100% }` otherwise over-constrains
+ * the absolutely positioned box and the right and bottom insets are dropped.
+ */
+[data-theme='blueprint'] .slide-content {
+	position: absolute;
+	width: auto;
+	height: auto;
+	left: 96px;
+	right: 96px;
+	top: 92px;
+	bottom: 176px;
+	display: flex;
+	flex-direction: column;
+}
+[data-theme='blueprint'] [class^='layout-'],
+[data-theme='blueprint'] .slide[data-layout='component'] > .slide-content > .deck-component-root,
+[data-theme='blueprint'] .slide[data-layout='component'] > .slide-content > .scroll-content > .deck-component-root {
+	flex: 1;
+	min-height: 0;
+	width: auto;
+	height: auto;
+	padding: 0;
+	/* Cancel layouts.css's shared `.deck-component-root` border: this
+	   theme's real inset already comes from `.slide-content` above. */
+	border: 0;
+	gap: 0;
+	display: flex;
+	flex-direction: column;
+	align-items: stretch;
+	justify-content: flex-start;
+	align-content: normal;
+	text-align: left;
+}
+[data-theme='blueprint'] [class^='layout-'] > .slot,
+[data-theme='blueprint'] .slide[data-layout='component'] > .slide-content > .deck-component-root > .slot,
+[data-theme='blueprint'] .slide[data-layout='component'] > .slide-content > .scroll-content > .deck-component-root > .slot {
+	max-width: none;
+	padding: 0;
+}
+
+/* ============================================================================
+ * Type
+ * ============================================================================ */
+
+[data-theme='blueprint'] .slot :where(h1, h2, h3, h4, h5, h6, p, ul, ol, li, blockquote, pre, table) {
+	margin: 0;
+	padding: 0;
+}
+[data-theme='blueprint'] .slot :where(h1, h2, h3, h4, h5, h6) {
+	font-family: var(--font-display);
+	font-weight: 700;
+	text-transform: uppercase;
+	text-wrap: balance;
+	color: var(--fg);
+}
+[data-theme='blueprint'] .slot strong {
+	color: var(--accent-text);
+	font-weight: 600;
+}
+[data-theme='blueprint'] .slot em {
+	color: var(--accent-text);
+	font-style: normal;
+}
+
+/* Links: the text color on a yellow pencil underline; hover picks up the pencil. */
+[data-theme='blueprint'] .slot a {
+	color: var(--fg);
+	text-decoration: underline;
+	text-decoration-color: var(--accent);
+	text-decoration-thickness: 5px;
+	text-underline-offset: 0.16em;
+	text-decoration-skip-ink: none;
+	transition: color 200ms var(--ease);
+}
+[data-theme='blueprint'] .slot a:hover {
+	color: var(--accent-text);
+}
+
+/* Headings carry a dimension line. A first-level heading that shares the
+ * slide with other content is drawn the same way as a second-level one. */
+[data-theme='blueprint'] :is(.slot, .fragment) > h2,
+[data-theme='blueprint'] .slot-default > h1:not(:only-child) {
+	position: relative;
+	width: fit-content;
+	max-width: 100%;
+	font-size: 116px;
+	line-height: 116px;
+	letter-spacing: 0.01em;
+	padding-bottom: 50px;
+	margin-bottom: 32px;
+	animation: blueprint-plot var(--dur) var(--ease) 100ms both;
+}
+[data-theme='blueprint'] :is(.slot, .fragment) > h2::after,
+[data-theme='blueprint'] .slot-default > h1:not(:only-child)::after {
+	content: '';
+	position: absolute;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	height: 36px;
+	background: var(--fg);
+	clip-path: var(--dimension);
+	transform-origin: 0 50%;
+	animation: blueprint-span var(--dur) var(--ease) 300ms both;
+}
+[data-theme='blueprint'] .slot h1 {
+	font-size: 130px;
+	line-height: 126px;
+}
+[data-theme='blueprint'] .slot h1[data-length='medium'] {
+	font-size: 148px;
+	line-height: 140px;
+}
+[data-theme='blueprint'] .slot h1[data-length='short'] {
+	font-size: 160px;
+	line-height: 152px;
+}
+[data-theme='blueprint'] .slot h3 {
+	font-size: 76px;
+	line-height: 80px;
+	letter-spacing: 0.01em;
+}
+[data-theme='blueprint'] .slot h4 {
+	font-family: var(--font-body);
+	font-weight: 600;
+	font-size: 60px;
+	line-height: 72px;
+	text-transform: none;
+	color: var(--accent-text);
+}
+[data-theme='blueprint'] .slot h5 {
+	width: fit-content;
+	padding: 0 18px;
+	font-family: var(--font-mono);
+	font-weight: 600;
+	font-size: 38px;
+	line-height: 54px;
+	letter-spacing: 0.08em;
+	border: 3px solid var(--fg);
+}
+[data-theme='blueprint'] .slot h6 {
+	font-family: var(--font-mono);
+	font-weight: 500;
+	font-size: 32px;
+	line-height: 44px;
+	letter-spacing: 0.08em;
+	color: var(--muted);
+}
+[data-theme='blueprint'] .slot h6::before {
+	content: '';
+	display: inline-block;
+	width: 72px;
+	height: 3px;
+	margin-right: 20px;
+	vertical-align: middle;
+	background: var(--muted);
+}
+[data-theme='blueprint'] :is(.slot, .fragment) > * + :is(h3, h4, h5, h6) {
+	margin-top: 28px;
+}
+[data-theme='blueprint'] :is(.slot, .fragment) > :is(h3, h4, h5, h6) + * {
+	margin-top: 16px;
+}
+
+[data-theme='blueprint'] :is(.slot, .fragment) > p {
+	width: fit-content;
+	max-width: 100%;
+	text-wrap: pretty;
+	animation: blueprint-plot var(--dur) var(--ease) 800ms both;
+}
+[data-theme='blueprint'] :is(.slot, .fragment) > p + p,
+[data-theme='blueprint'] :is(.slot, .fragment) > :is(ul, ol, pre, table, .mermaid-diagram) + p,
+[data-theme='blueprint'] :is(.slot, .fragment) > p + :is(pre, table, ul, ol) {
+	margin-top: 28px;
+}
+
+/* Inline code is a boxed callout. `pre code` is excluded: a code block is
+ * drawn by the code rules further down. */
+[data-theme='blueprint'] .slot :not(pre) > code {
+	font-family: var(--font-mono);
+	font-weight: 600;
+	font-size: 0.84em;
+	padding: 0 0.2em;
+	border: 3px solid var(--fg);
+	border-radius: 0;
+	background: transparent;
+	white-space: nowrap;
+}
+
+/* ============================================================================
+ * Title: general arrangement sheet
+ * ============================================================================ */
+
+[data-theme='blueprint'] .layout-title::before {
+	content: 'GENERAL ARRANGEMENT \00B7  NOT TO SCALE';
+	flex: none;
+	font-family: var(--font-mono);
+	font-size: 30px;
+	line-height: 40px;
+	font-weight: 500;
+	letter-spacing: 0.08em;
+	white-space: pre;
+	color: var(--muted);
+	animation: blueprint-fade 400ms var(--ease) 0ms both;
+}
+[data-theme='blueprint'] .layout-title > .slot {
+	flex: 1;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+}
+[data-theme='blueprint'] .layout-title :is(.slot, .fragment) > h1,
+[data-theme='blueprint'] .layout-title :is(.slot, .fragment) > h2 {
+	position: relative;
+	width: fit-content;
+	max-width: 100%;
+	margin: 0;
+	font-size: 130px;
+	line-height: 124px;
+	letter-spacing: 0.005em;
+}
+[data-theme='blueprint'] .layout-title :is(.slot, .fragment) > h1[data-length='medium'] {
+	font-size: 160px;
+	line-height: 150px;
+}
+[data-theme='blueprint'] .layout-title :is(.slot, .fragment) > h1[data-length='short'] {
+	font-size: 204px;
+	line-height: 192px;
+}
+/* A title that carries a subtitle is set smaller, so a long title and its
+ * subtitle still share the sheet. Sized for long first, then scaled up for
+ * a title short enough to still leave the subtitle plenty of room. */
+[data-theme='blueprint'] .layout-title :is(.slot, .fragment) > h1:has(+ h2) {
+	font-size: 124px;
+	line-height: 116px;
+}
+[data-theme='blueprint'] .layout-title :is(.slot, .fragment) > h1[data-length='medium']:has(+ h2) {
+	font-size: 148px;
+	line-height: 140px;
+}
+[data-theme='blueprint'] .layout-title :is(.slot, .fragment) > h1[data-length='short']:has(+ h2) {
+	font-size: 176px;
+	line-height: 166px;
+}
+[data-theme='blueprint'] .layout-title :is(.slot, .fragment) > h2 {
+	font-size: 64px;
+	line-height: 74px;
+	padding-top: 12px;
+}
+[data-theme='blueprint'] .layout-title :is(.slot, .fragment) > h2[data-length='medium'] {
+	font-size: 76px;
+	line-height: 84px;
+}
+[data-theme='blueprint'] .layout-title :is(.slot, .fragment) > h2[data-length='short'] {
+	font-size: 88px;
+	line-height: 92px;
+}
+[data-theme='blueprint'] .layout-title :is(.slot, .fragment) > h1 {
+	margin-top: 16px;
+	padding: 0;
+	animation: blueprint-plot var(--dur) var(--ease) 100ms both;
+}
+[data-theme='blueprint'] .layout-title :is(.slot, .fragment) > h1::after {
+	content: none;
+}
+/* The yellow dimension line closes the title: under the subtitle when there
+ * is one, under the title itself when there is not. */
+[data-theme='blueprint'] .layout-title :is(.slot, .fragment) > h1:not(:has(+ h2)) {
+	padding-bottom: 84px;
+}
+[data-theme='blueprint'] .layout-title :is(.slot, .fragment) > h2 {
+	padding-bottom: 64px;
+}
+[data-theme='blueprint'] .layout-title :is(.slot, .fragment) > h2 {
+	color: var(--accent-text);
+	animation-delay: 350ms;
+}
+[data-theme='blueprint'] .layout-title :is(.slot, .fragment) > h2::after,
+[data-theme='blueprint'] .layout-title :is(.slot, .fragment) > h1:not(:has(+ h2))::after {
+	content: '';
+	position: absolute;
+	left: 0;
+	right: 0;
+	bottom: 12px;
+	height: 44px;
+	background: var(--accent);
+	clip-path: var(--dimension);
+	transform-origin: 0 50%;
+	animation: blueprint-span var(--dur) var(--ease) 700ms both;
+}
+[data-theme='blueprint'] .layout-title :is(.slot, .fragment) > p {
+	margin: auto 0 0;
+	max-width: 1240px;
+	font-size: 64px;
+	line-height: 76px;
+	font-weight: 600;
+	color: var(--fg);
+	animation-delay: 1000ms;
+}
+/* A graphic scale bar sits above the byline. */
+[data-theme='blueprint'] .layout-title :is(.slot, .fragment) > p::before {
+	content: '';
+	display: block;
+	width: 640px;
+	max-width: 100%;
+	height: 22px;
+	margin-bottom: 30px;
+	border: 3px solid var(--fg);
+	background: repeating-linear-gradient(90deg, var(--fg) 0 80px, transparent 80px 160px);
+}
+
+/* ============================================================================
+ * Section: the section mark in outline, the name dimensioned below it
+ * ============================================================================ */
+
+[data-theme='blueprint'] .slide[data-layout='section'] .slide-tag {
+	right: auto;
+	left: 96px;
+	top: 96px;
+	bottom: auto;
+	height: auto;
+	min-width: 0;
+	max-width: 1728px;
+	padding: 0;
+	overflow: visible;
+	white-space: normal;
+	text-wrap: balance;
+	border: 0;
+	background: none;
+	font-family: var(--font-display);
+	font-size: 132px;
+	line-height: 132px;
+	font-weight: 700;
+	letter-spacing: 0.02em;
+	color: transparent;
+	-webkit-text-stroke: 4px var(--accent);
+	animation: blueprint-plot var(--dur) var(--ease) 0ms both;
+}
+[data-theme='blueprint'] .slide[data-layout='section'] .slide-tag::before {
+	content: none;
+}
+[data-theme='blueprint'] .layout-section > .slot {
+	margin-top: auto;
+}
+[data-theme='blueprint'] .layout-section :is(.slot, .fragment) > h1,
+[data-theme='blueprint'] .layout-section :is(.slot, .fragment) > h2 {
+	position: relative;
+	width: fit-content;
+	max-width: 100%;
+	margin: 0;
+	font-size: 152px;
+	line-height: 148px;
+	letter-spacing: 0;
+	padding-bottom: 76px;
+	animation: blueprint-plot var(--dur) var(--ease) 250ms both;
+}
+[data-theme='blueprint'] .layout-section :is(.slot, .fragment) > :is(h1, h2)[data-length='medium'] {
+	font-size: 200px;
+	line-height: 188px;
+}
+[data-theme='blueprint'] .layout-section :is(.slot, .fragment) > :is(h1, h2)[data-length='short'] {
+	font-size: 264px;
+	line-height: 240px;
+}
+[data-theme='blueprint'] .layout-section :is(.slot, .fragment) > h1::after,
+[data-theme='blueprint'] .layout-section :is(.slot, .fragment) > h2::after {
+	content: '';
+	position: absolute;
+	left: 0;
+	right: 0;
+	bottom: 8px;
+	height: 44px;
+	background: var(--fg);
+	clip-path: var(--dimension);
+	transform-origin: 0 50%;
+	animation: blueprint-span var(--dur) var(--ease) 600ms both;
+}
+[data-theme='blueprint'] .layout-section :is(.slot, .fragment) > p {
+	margin-top: 12px;
+	font-weight: 600;
+	animation-delay: 900ms;
+}
+
+/* ============================================================================
+ * Statement: a lone first-level heading on a default slide
+ * ============================================================================ */
+
+[data-theme='blueprint'] .layout-default > .slot:has(> h1:only-child) {
+	flex: 1;
+	display: flex;
+	align-items: center;
+}
+[data-theme='blueprint'] .layout-default :is(.slot, .fragment) > h1:only-child {
+	width: 100%;
+	max-width: 100%;
+	text-align: center;
+	font-size: 160px;
+	line-height: 152px;
+	letter-spacing: 0;
+	animation: blueprint-plot 1000ms var(--ease) 150ms both;
+}
+[data-theme='blueprint'] .layout-default :is(.slot, .fragment) > h1[data-length='medium']:only-child {
+	font-size: 216px;
+	line-height: 200px;
+}
+[data-theme='blueprint'] .layout-default :is(.slot, .fragment) > h1[data-length='short']:only-child {
+	font-size: 264px;
+	line-height: 240px;
+}
+[data-theme='blueprint'] .layout-default :is(.slot, .fragment) > h1:only-child em {
+	position: relative;
+	display: inline-block;
+}
+[data-theme='blueprint'] .layout-default :is(.slot, .fragment) > h1:only-child em::after {
+	content: '';
+	position: absolute;
+	left: 0;
+	right: 0;
+	bottom: -30px;
+	height: 40px;
+	background: var(--accent);
+	clip-path: var(--dimension);
+	transform-origin: 0 50%;
+	animation: blueprint-span var(--dur) var(--ease) 900ms both;
+}
+
+/* ============================================================================
+ * Lists: item balloons with a leader line
+ * ============================================================================ */
+
+[data-theme='blueprint'] :is(.slot, .fragment) > :is(ul, ol) {
+	--balloon: 84px;
+	--leader: 52px;
+	--balloon-text: 40px;
+	list-style: none;
+	counter-reset: blueprint-item;
+	margin-top: 8px;
+}
+[data-theme='blueprint'] :is(.slot, .fragment) > :is(ul, ol) > li {
+	position: relative;
+	counter-increment: blueprint-item;
+	padding-left: calc(var(--balloon) + var(--leader) + 28px);
+	margin-bottom: 36px;
+	min-height: var(--balloon);
+	font-size: 68px;
+	line-height: 84px;
+	text-wrap: pretty;
+	animation: blueprint-plot var(--dur) var(--ease) both;
+}
+[data-theme='blueprint'] :is(.slot, .fragment) > :is(ul, ol) > li:last-child {
+	margin-bottom: 0;
+}
+[data-theme='blueprint'] :is(.slot, .fragment) > :is(ul, ol) > li::before {
+	content: counter(blueprint-item);
+	position: absolute;
+	left: 0;
+	top: 0;
+	width: var(--balloon);
+	height: var(--balloon);
+	border: 4px solid var(--fg);
+	border-radius: 50%;
+	font-family: var(--font-mono);
+	font-size: var(--balloon-text);
+	line-height: calc(var(--balloon) - 8px);
+	font-weight: 600;
+	text-align: center;
+}
+[data-theme='blueprint'] :is(.slot, .fragment) > :is(ul, ol) > li::after {
+	content: '';
+	position: absolute;
+	left: var(--balloon);
+	top: calc(var(--balloon) / 2 - 2px);
+	width: var(--leader);
+	height: 4px;
+	background: var(--fg);
+}
+[data-theme='blueprint'] :is(.slot, .fragment) > :is(ul, ol) > li:nth-child(1) {
+	animation-delay: 600ms;
+}
+[data-theme='blueprint'] :is(.slot, .fragment) > :is(ul, ol) > li:nth-child(2) {
+	animation-delay: 750ms;
+}
+[data-theme='blueprint'] :is(.slot, .fragment) > :is(ul, ol) > li:nth-child(3) {
+	animation-delay: 900ms;
+}
+[data-theme='blueprint'] :is(.slot, .fragment) > :is(ul, ol) > li:nth-child(4) {
+	animation-delay: 1050ms;
+}
+[data-theme='blueprint'] :is(.slot, .fragment) > :is(ul, ol) > li:nth-child(n + 5) {
+	animation-delay: 1200ms;
+}
+
+/* Compact balloons: long lists, and every list that lives in a column. */
+[data-theme='blueprint'] :is(.slot, .fragment) > :is(ul, ol):has(> li:nth-child(5)),
+[data-theme='blueprint'] .layout-two-column :is(.slot, .fragment) > :is(ul, ol),
+[data-theme='blueprint'] .layout-sidebar :is(.slot, .fragment) > :is(ul, ol),
+[data-theme='blueprint'] .layout-split-media :is(.slot, .fragment) > :is(ul, ol) {
+	--balloon: 68px;
+	--leader: 24px;
+	--balloon-text: 32px;
+}
+[data-theme='blueprint'] :is(.slot, .fragment) > :is(ul, ol):has(> li:nth-child(5)) > li,
+[data-theme='blueprint'] .layout-two-column :is(.slot, .fragment) > :is(ul, ol) > li,
+[data-theme='blueprint'] .layout-sidebar :is(.slot, .fragment) > :is(ul, ol) > li,
+[data-theme='blueprint'] .layout-split-media :is(.slot, .fragment) > :is(ul, ol) > li {
+	padding-left: calc(var(--balloon) + var(--leader) + 20px);
+	margin-bottom: 16px;
+	font-size: 60px;
+	line-height: 72px;
+}
+
+/* Nested lists: a short pencil dash, no balloon. */
+[data-theme='blueprint'] .slot li > :is(ul, ol) {
+	list-style: none;
+	margin-top: 6px;
+}
+[data-theme='blueprint'] .slot li > :is(ul, ol) > li {
+	position: relative;
+	padding-left: 64px;
+	font-size: 60px;
+	line-height: 76px;
+	color: var(--muted);
+}
+[data-theme='blueprint'] .slot li > :is(ul, ol) > li::before {
+	content: '';
+	position: absolute;
+	left: 0;
+	top: 36px;
+	width: 40px;
+	height: 3px;
+	background: var(--muted);
+}
+
+/* Fragments arrive wrapped in a `.fragment` element, which is why content
+ * rules match children of `:is(.slot, .fragment)`. A fragment keeps the
+ * paragraph rhythm of the slot around it, and is plotted in when revealed
+ * rather than on slide entry. */
+[data-theme='blueprint'] .slot > :not(h1, h2, h3) + .fragment {
+	margin-top: 28px;
+}
+[data-theme='blueprint'] .slide[data-layout] .fragment-hidden,
+[data-theme='blueprint'] .slide[data-layout] .fragment-visible {
+	animation: none;
+}
+[data-theme='blueprint'] .slide[data-layout] .fragment-hidden {
+	opacity: 0;
+	clip-path: inset(-10% 100% -10% -2%);
+}
+[data-theme='blueprint'] .slide[data-layout] .fragment-visible {
+	opacity: 1;
+	clip-path: inset(-10% -3% -10% -2%);
+	transition:
+		opacity 300ms var(--ease),
+		clip-path var(--dur) var(--ease),
+		visibility 0ms;
+}
+
+/* ============================================================================
+ * Code: numbered drawing notes, the line in question boxed in yellow
+ * ============================================================================ */
+
+[data-theme='blueprint'] .slot pre {
+	position: relative;
+	padding: 0;
+	overflow: visible;
+	border-radius: 0;
+	background: transparent;
+	color: var(--fg);
+	font-family: var(--font-mono);
+	font-size: 51px;
+	line-height: 72px;
+	font-weight: 500;
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+	tab-size: 4;
+}
+[data-theme='blueprint'] .slot pre code {
+	font: inherit;
+	font-size: 51px;
+	padding: 0;
+	border: 0;
+	background: none;
+}
+/* A block that arrives without line markup gets a margin rule instead of numbers. */
+[data-theme='blueprint'] .slot pre:not(.shiki) {
+	padding-left: 40px;
+	border-left: 4px solid var(--muted);
+	animation: blueprint-plot var(--dur) var(--ease) 450ms both;
+}
+[data-theme='blueprint'] .slot pre.shiki code {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	counter-reset: blueprint-line;
+}
+[data-theme='blueprint'] .slot pre.shiki .line {
+	display: block;
+	position: relative;
+	max-width: 100%;
+	min-height: 72px;
+	padding-left: 92px;
+	white-space: pre-wrap;
+	counter-increment: blueprint-line;
+	animation: blueprint-plot 600ms var(--ease) both;
+}
+[data-theme='blueprint'] .slot pre.shiki .line::before {
+	content: counter(blueprint-line);
+	position: absolute;
+	left: 0;
+	top: 0;
+	width: 56px;
+	text-align: right;
+	font-size: 32px;
+	font-weight: 500;
+	color: var(--muted);
+}
+/* The closing newline of a block arrives as an empty last line. */
+[data-theme='blueprint'] .slot pre.shiki .line:last-child:empty {
+	display: none;
+}
+[data-theme='blueprint'] .slot pre.shiki .line-number {
+	display: none;
+}
+[data-theme='blueprint'] .slot pre.shiki .line:nth-child(1) {
+	animation-delay: 450ms;
+}
+[data-theme='blueprint'] .slot pre.shiki .line:nth-child(2) {
+	animation-delay: 550ms;
+}
+[data-theme='blueprint'] .slot pre.shiki .line:nth-child(3) {
+	animation-delay: 650ms;
+}
+[data-theme='blueprint'] .slot pre.shiki .line:nth-child(4) {
+	animation-delay: 750ms;
+}
+[data-theme='blueprint'] .slot pre.shiki .line:nth-child(n + 5) {
+	animation-delay: 850ms;
+}
+[data-theme='blueprint'] .slot pre.has-highlighted .line:not(.highlighted) > span {
+	opacity: 0.6;
+}
+[data-theme='blueprint'] .slot pre.shiki .line.highlighted {
+	font-weight: 600;
+}
+[data-theme='blueprint'] .slot pre.shiki .line.highlighted::before {
+	color: var(--accent-text);
+	font-weight: 600;
+}
+[data-theme='blueprint'] .slot pre.shiki .line.highlighted::after {
+	content: '';
+	position: absolute;
+	left: 74px;
+	right: -18px;
+	top: 2px;
+	bottom: 2px;
+	border: 4px solid var(--accent);
+	animation: blueprint-plot var(--dur) var(--ease) 1000ms both;
+}
+[data-theme='blueprint'] .layout-code-focus :is(.slot, .fragment) > h2 {
+	margin-bottom: 20px;
+}
+
+/* ============================================================================
+ * Big stat: the number is dimensioned
+ * ============================================================================ */
+
+/* Centered on the full sheet width, not banked to the left: the dimension
+ * line above the number spans the whole drawing area, so the sheet reads
+ * as one balanced callout instead of a number with empty space beside it. */
+[data-theme='blueprint'] .layout-big-stat {
+	justify-content: center;
+	align-items: center;
+}
+[data-theme='blueprint'] .layout-big-stat .slot-default {
+	width: 100%;
+	text-align: center;
+}
+[data-theme='blueprint'] .layout-big-stat .slot-default > h1,
+[data-theme='blueprint'] .layout-big-stat .slot-default > p > strong {
+	display: block;
+	position: relative;
+	width: 100%;
+	padding-top: 90px;
+	font-family: var(--font-display);
+	font-weight: 700;
+	font-size: 280px;
+	line-height: 260px;
+	letter-spacing: 0;
+	text-transform: uppercase;
+	color: var(--accent-text);
+	animation: blueprint-plot var(--dur) var(--ease) 150ms both;
+}
+[data-theme='blueprint'] .layout-big-stat .slot-default > h1[data-length='medium'] {
+	font-size: 340px;
+	line-height: 310px;
+}
+[data-theme='blueprint'] .layout-big-stat .slot-default > h1[data-length='short'] {
+	font-size: 400px;
+	line-height: 350px;
+}
+[data-theme='blueprint'] .layout-big-stat .slot-default > h1::before,
+[data-theme='blueprint'] .layout-big-stat .slot-default > p > strong::before {
+	content: '';
+	position: absolute;
+	left: 0;
+	right: 0;
+	top: 0;
+	height: 56px;
+	background: var(--fg);
+	clip-path: var(--dimension);
+	transform-origin: 0 50%;
+	animation: blueprint-span var(--dur) var(--ease) 650ms both;
+}
+[data-theme='blueprint'] .layout-big-stat .slot-default > h1::after {
+	content: none;
+}
+[data-theme='blueprint'] .layout-big-stat .slot-caption {
+	margin-top: 44px;
+	text-align: center;
+}
+[data-theme='blueprint'] .layout-big-stat .slot-caption > p {
+	max-width: 1400px;
+	margin: 0 auto;
+	font-size: 66px;
+	line-height: 84px;
+	color: var(--fg);
+	text-wrap: balance;
+	animation-delay: 1000ms;
+}
+[data-theme='blueprint'] .layout-big-stat .slot-figure {
+	margin-top: 36px;
+	text-align: center;
+}
+[data-theme='blueprint'] .layout-big-stat .slot-figure img {
+	max-height: 180px;
+}
+
+/* ============================================================================
+ * Quote: a bracketed note
+ * ============================================================================ */
+
+[data-theme='blueprint'] .layout-quote {
+	justify-content: center;
+}
+[data-theme='blueprint'] .layout-quote .slot blockquote {
+	position: relative;
+	margin: 0;
+	padding: 36px 0 36px 96px;
+	border: 0;
+	font-style: normal;
+	color: var(--fg);
+	background:
+		linear-gradient(var(--accent), var(--accent)) 0 0 / 6px 100% no-repeat,
+		linear-gradient(var(--accent), var(--accent)) 0 0 / 60px 6px no-repeat,
+		linear-gradient(var(--accent), var(--accent)) 0 100% / 60px 6px no-repeat;
+	animation: blueprint-fade 400ms var(--ease) 100ms both;
+}
+[data-theme='blueprint'] .layout-quote .slot blockquote p {
+	font-family: var(--font-display);
+	font-weight: 700;
+	font-size: 124px;
+	line-height: 124px;
+	letter-spacing: 0.005em;
+	text-transform: uppercase;
+	text-wrap: balance;
+	animation: blueprint-plot 1000ms var(--ease) 250ms both;
+}
+[data-theme='blueprint'] .layout-quote .slot blockquote p + p {
+	margin-top: 40px;
+}
+[data-theme='blueprint'] .layout-quote .slot-attribution {
+	margin-top: 52px;
+	padding-left: 96px;
+}
+[data-theme='blueprint'] .layout-quote .slot-attribution > p {
+	margin: 0;
+	font-size: 60px;
+	line-height: 72px;
+	font-weight: 600;
+	color: var(--fg);
+	animation-delay: 1100ms;
+}
+[data-theme='blueprint'] .layout-quote .slot-attribution > p::before {
+	content: '';
+	display: inline-block;
+	width: 120px;
+	height: 4px;
+	margin-right: 28px;
+	vertical-align: middle;
+	background: var(--fg);
+}
+/* A blockquote on any other slide is the same bracketed note, smaller. */
+[data-theme='blueprint'] .slot blockquote {
+	margin: 0;
+	padding: 20px 0 20px 56px;
+	border: 0;
+	font-style: normal;
+	color: var(--fg);
+	background:
+		linear-gradient(var(--accent), var(--accent)) 0 0 / 5px 100% no-repeat,
+		linear-gradient(var(--accent), var(--accent)) 0 0 / 40px 5px no-repeat,
+		linear-gradient(var(--accent), var(--accent)) 0 100% / 40px 5px no-repeat;
+}
+
+/* ============================================================================
+ * Two and three columns: details either side of a centre line
+ * ============================================================================ */
+
+[data-theme='blueprint'] .layout-two-column,
+[data-theme='blueprint'] .layout-three-column {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	grid-template-rows: auto 1fr;
+	column-gap: 0;
+	row-gap: 0;
+}
+[data-theme='blueprint'] .layout-three-column {
+	grid-template-columns: 1fr 1fr 1fr;
+}
+[data-theme='blueprint'] :is(.layout-two-column, .layout-three-column, .layout-sidebar) > .slot-default {
+	grid-column: 1 / -1;
+}
+[data-theme='blueprint'] :is(.layout-two-column, .layout-three-column, .layout-sidebar) > .slot-default > h2 {
+	font-size: 108px;
+	line-height: 108px;
+	padding-bottom: 46px;
+	margin-bottom: 28px;
+}
+[data-theme='blueprint'] .layout-two-column > .slot-left {
+	position: relative;
+	min-width: 0;
+	padding: 0 56px 0 0;
+}
+[data-theme='blueprint'] .layout-two-column > .slot-right {
+	position: relative;
+	min-width: 0;
+	padding: 0 0 0 72px;
+}
+[data-theme='blueprint'] .layout-three-column > .slot-left {
+	position: relative;
+	min-width: 0;
+	padding: 0 40px 0 0;
+}
+[data-theme='blueprint'] .layout-three-column > .slot-center,
+[data-theme='blueprint'] .layout-three-column > .slot-right {
+	position: relative;
+	min-width: 0;
+	padding: 0 0 0 44px;
+}
+[data-theme='blueprint'] .layout-three-column > .slot-center {
+	padding-right: 40px;
+}
+[data-theme='blueprint'] .layout-two-column > .slot-right::before,
+[data-theme='blueprint'] .layout-three-column > .slot-center::before,
+[data-theme='blueprint'] .layout-three-column > .slot-right::before {
+	content: '';
+	position: absolute;
+	left: 0;
+	top: 0;
+	bottom: 0;
+	width: 4px;
+	transform-origin: 50% 0;
+	background: var(--centre-line);
+	animation: blueprint-rise var(--dur) var(--ease) 500ms both;
+}
+/* A column heading is a detail label. */
+[data-theme='blueprint'] :is(.layout-two-column, .layout-three-column, .layout-sidebar) .slot:not(.slot-default) > h3 {
+	width: fit-content;
+	max-width: 100%;
+	margin: 0 0 28px;
+	padding: 0 20px;
+	font-family: var(--font-mono);
+	font-size: 40px;
+	line-height: 56px;
+	font-weight: 600;
+	letter-spacing: 0.08em;
+	border: 4px solid var(--fg);
+	animation: blueprint-fade 400ms var(--ease) 600ms both;
+}
+[data-theme='blueprint'] :is(.layout-two-column, .layout-three-column) > .slot-center > h3 {
+	animation-delay: 750ms;
+}
+[data-theme='blueprint'] :is(.layout-two-column, .layout-three-column) > .slot-right > h3 {
+	animation-delay: 900ms;
+}
+[data-theme='blueprint'] :is(.layout-two-column, .layout-three-column) .slot:not(.slot-default) > p {
+	width: auto;
+	animation-delay: 700ms;
+}
+/* Three columns are narrow: the balloon loses its leader and sits closer. */
+[data-theme='blueprint'] .layout-three-column :is(.slot, .fragment) > :is(ul, ol) {
+	--balloon: 60px;
+	--leader: 0px;
+	--balloon-text: 30px;
+}
+[data-theme='blueprint'] .layout-three-column :is(.slot, .fragment) > :is(ul, ol) > li {
+	padding-left: 84px;
+	margin-bottom: 18px;
+	font-size: 60px;
+	line-height: 70px;
+}
+[data-theme='blueprint'] .layout-three-column :is(.slot, .fragment) > :is(ul, ol) > li::before {
+	top: 5px;
+}
+
+/* ============================================================================
+ * Sidebar: the argument, and a general notes panel
+ * ============================================================================ */
+
+[data-theme='blueprint'] .layout-sidebar {
+	display: grid;
+	grid-template-columns: 1.85fr 1fr;
+	grid-template-rows: 1fr;
+	column-gap: 64px;
+	row-gap: 0;
+}
+[data-theme='blueprint'] .layout-sidebar > .slot-default {
+	grid-column: 1;
+	min-width: 0;
+}
+[data-theme='blueprint'] .layout-sidebar > .slot-sidebar {
+	position: relative;
+	min-width: 0;
+	align-self: start;
+	margin-top: 12px;
+	padding: 72px 36px 36px;
+	border: 4px solid var(--fg);
+	outline: 2px solid var(--muted);
+	outline-offset: 10px;
+	background:
+		linear-gradient(var(--fg), var(--fg)) 0 48px / 100% 2px no-repeat,
+		var(--surface);
+	animation: blueprint-fade 400ms var(--ease) 500ms both;
+}
+[data-theme='blueprint'] .layout-sidebar > .slot-sidebar::before {
+	content: 'GENERAL NOTES';
+	position: absolute;
+	left: 36px;
+	top: 0;
+	font-family: var(--font-mono);
+	font-size: 28px;
+	line-height: 48px;
+	font-weight: 500;
+	letter-spacing: 0.08em;
+	color: var(--muted);
+}
+[data-theme='blueprint'] .layout-sidebar .slot-sidebar > h3 {
+	padding: 0;
+	border: 0;
+	font-size: 44px;
+	color: var(--accent-text);
+}
+[data-theme='blueprint'] .layout-sidebar .slot-sidebar > :is(ul, ol) {
+	--balloon: 0px;
+	--leader: 0px;
+}
+[data-theme='blueprint'] .layout-sidebar .slot-sidebar > :is(ul, ol) > li {
+	padding-left: 84px;
+	margin-bottom: 14px;
+	min-height: 0;
+	line-height: 68px;
+}
+/* Notes are numbered like the notes column of a drawing: 01, 02, 03. */
+[data-theme='blueprint'] .layout-sidebar .slot-sidebar > :is(ul, ol) > li::before {
+	content: counter(blueprint-item, decimal-leading-zero);
+	width: auto;
+	height: auto;
+	border: 0;
+	border-radius: 0;
+	font-size: 36px;
+	line-height: 68px;
+	text-align: left;
+	color: var(--accent-text);
+}
+[data-theme='blueprint'] .layout-sidebar .slot-sidebar > :is(ul, ol) > li::after {
+	content: none;
+}
+[data-theme='blueprint'] .layout-sidebar .slot-sidebar > p {
+	width: auto;
+}
+
+/* ============================================================================
+ * Images: a cyanotype print in a plate frame
+ * ============================================================================ */
+
+[data-theme='blueprint'] .slot p:has(> img) {
+	position: relative;
+	width: fit-content;
+	max-width: calc(100% - 24px);
+	margin: 12px;
+	line-height: 0;
+	border: 4px solid var(--fg);
+	outline: 2px solid var(--muted);
+	outline-offset: 10px;
+	background: var(--bg);
+	animation: blueprint-plot 1000ms var(--ease) 300ms both;
+}
+[data-theme='blueprint'] .slot p:has(> img) > img {
+	display: block;
+	max-width: 100%;
+	height: auto;
+	border-radius: 0;
+	filter: grayscale(1) contrast(1.15) brightness(0.96);
+	mix-blend-mode: screen;
+}
+[data-theme='blueprint'] .slot p:has(> img)::after {
+	content: '';
+	position: absolute;
+	inset: 0;
+	mix-blend-mode: multiply;
+	background:
+		linear-gradient(color-mix(in srgb, var(--bg) 22%, transparent) 2px, transparent 2px) 0 0 / 40px 40px,
+		linear-gradient(90deg, color-mix(in srgb, var(--bg) 22%, transparent) 2px, transparent 2px) 0 0 / 40px 40px,
+		var(--muted);
+}
+
+/* split-media: the copy on the left, the plate on the right. */
+[data-theme='blueprint'] .layout-split-media {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	column-gap: 72px;
+	align-items: center;
+}
+[data-theme='blueprint'] .layout-split-media > .slot-default {
+	display: block;
+	min-width: 0;
+}
+[data-theme='blueprint'] .layout-split-media > .slot-default > h2 {
+	font-size: 108px;
+	line-height: 108px;
+}
+[data-theme='blueprint'] .layout-split-media > .slot-default > p {
+	animation-delay: 700ms;
+}
+[data-theme='blueprint'] .layout-split-media > .slot-media {
+	display: block;
+	min-width: 0;
+	overflow: visible;
+	background: none;
+}
+[data-theme='blueprint'] .layout-split-media > .slot-media p:has(> img) {
+	width: auto;
+}
+[data-theme='blueprint'] .layout-split-media > .slot-media img {
+	width: 100%;
+	height: auto;
+	max-height: 760px;
+	object-fit: cover;
+}
+
+/* An image on a plain slide: when the slide also carries copy (a second
+ * paragraph or a list), the copy sits on the left and the plate on the
+ * right. With only a heading, the plate follows it at full size. */
+[data-theme='blueprint'] .layout-default > .slot:has(> p > img):is(:has(> p:nth-of-type(2)), :has(> ul), :has(> ol)) {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) auto;
+	grid-auto-rows: min-content;
+	column-gap: 72px;
+	align-content: start;
+}
+[data-theme='blueprint'] .layout-default > .slot:has(> p > img):is(:has(> p:nth-of-type(2)), :has(> ul), :has(> ol)) > * {
+	grid-column: 1;
+}
+[data-theme='blueprint'] .layout-default > .slot:has(> p > img):is(:has(> p:nth-of-type(2)), :has(> ul), :has(> ol)) > :is(h1, h2) {
+	grid-column: 1 / -1;
+}
+[data-theme='blueprint'] .layout-default > .slot:has(> p > img):is(:has(> p:nth-of-type(2)), :has(> ul), :has(> ol)) > p:has(> img) {
+	grid-column: 2;
+	grid-row: 2 / span 12;
+	margin-top: 12px;
+}
+[data-theme='blueprint'] .layout-default > :is(.slot, .fragment) > p:has(> img) > img {
+	width: auto;
+	max-width: 880px;
+	max-height: 540px;
+}
+
+/* ============================================================================
+ * Table: a parts list
+ * ============================================================================ */
+
+[data-theme='blueprint'] .slot table {
+	width: 100%;
+	margin: 0;
+	border-collapse: collapse;
+	font-size: 56px;
+	line-height: 68px;
+	border: 4px solid var(--fg);
+	background: var(--bg);
+	animation: blueprint-fade 400ms var(--ease) 500ms both;
+}
+[data-theme='blueprint'] .slot table th {
+	text-align: left;
+	padding: 8px 32px;
+	font-family: var(--font-display);
+	font-size: 48px;
+	line-height: 60px;
+	font-weight: 600;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	color: var(--fg);
+	border: 2px solid var(--fg);
+	border-bottom-width: 4px;
+	background: var(--surface);
+}
+[data-theme='blueprint'] .slot table td {
+	padding: 20px 32px;
+	font-size: 56px;
+	font-weight: 500;
+	border: 2px solid var(--fg);
+}
+[data-theme='blueprint'] .slot table td:first-child {
+	font-family: var(--font-display);
+	font-weight: 700;
+	font-size: 60px;
+	text-transform: uppercase;
+	letter-spacing: 0.02em;
+}
+[data-theme='blueprint'] .slot table td:last-child {
+	color: var(--accent-text);
+	font-weight: 600;
+}
+[data-theme='blueprint'] .slot table tbody tr > * {
+	animation: blueprint-plot 600ms var(--ease) both;
+}
+[data-theme='blueprint'] .slot table tbody tr:nth-child(1) > * {
+	animation-delay: 700ms;
+}
+[data-theme='blueprint'] .slot table tbody tr:nth-child(2) > * {
+	animation-delay: 850ms;
+}
+[data-theme='blueprint'] .slot table tbody tr:nth-child(3) > * {
+	animation-delay: 1000ms;
+}
+[data-theme='blueprint'] .slot table tbody tr:nth-child(n + 4) > * {
+	animation-delay: 1150ms;
+}
+
+/* ============================================================================
+ * Cover: the whole sheet, held by four crop marks
+ * ============================================================================ */
+
+[data-theme='blueprint'] .layout-cover {
+	justify-content: center;
+	align-items: center;
+}
+[data-theme='blueprint'] .layout-cover > .slot {
+	position: relative;
+	max-width: 1560px;
+	padding: 64px 96px 72px;
+	text-align: center;
+	background:
+		linear-gradient(var(--accent), var(--accent)) 0 0 / 72px 6px no-repeat,
+		linear-gradient(var(--accent), var(--accent)) 0 0 / 6px 72px no-repeat,
+		linear-gradient(var(--accent), var(--accent)) 100% 0 / 72px 6px no-repeat,
+		linear-gradient(var(--accent), var(--accent)) 100% 0 / 6px 72px no-repeat,
+		linear-gradient(var(--accent), var(--accent)) 0 100% / 72px 6px no-repeat,
+		linear-gradient(var(--accent), var(--accent)) 0 100% / 6px 72px no-repeat,
+		linear-gradient(var(--accent), var(--accent)) 100% 100% / 72px 6px no-repeat,
+		linear-gradient(var(--accent), var(--accent)) 100% 100% / 6px 72px no-repeat;
+	animation: blueprint-fade 400ms var(--ease) 100ms both;
+}
+[data-theme='blueprint'] .layout-cover :is(.slot, .fragment) > h1,
+[data-theme='blueprint'] .layout-cover :is(.slot, .fragment) > h2 {
+	width: auto;
+	max-width: 100%;
+	margin: 0;
+	padding: 0;
+	font-size: 128px;
+	line-height: 126px;
+	letter-spacing: 0;
+	animation: blueprint-plot 1000ms var(--ease) 250ms both;
+}
+[data-theme='blueprint'] .layout-cover :is(.slot, .fragment) > :is(h1, h2)[data-length='medium'] {
+	font-size: 168px;
+	line-height: 160px;
+}
+[data-theme='blueprint'] .layout-cover :is(.slot, .fragment) > :is(h1, h2)[data-length='short'] {
+	font-size: 208px;
+	line-height: 192px;
+}
+[data-theme='blueprint'] .layout-cover :is(.slot, .fragment) > h1::after,
+[data-theme='blueprint'] .layout-cover :is(.slot, .fragment) > h2::after {
+	content: none;
+}
+[data-theme='blueprint'] .layout-cover :is(.slot, .fragment) > p {
+	width: auto;
+	max-width: 1200px;
+	margin: 40px auto 0;
+	font-size: 64px;
+	line-height: 80px;
+	font-weight: 600;
+	text-wrap: balance;
+	animation: blueprint-fade 600ms var(--ease) 1000ms both;
+}
+
+/* ============================================================================
+ * Blank: the sheet and nothing else
+ * ============================================================================ */
+
+[data-theme='blueprint'] .layout-blank > .slot {
+	flex: 1;
+	min-height: 0;
+}
+[data-theme='blueprint'] .layout-blank .slot h1 {
+	text-align: center;
+	animation: blueprint-plot 1000ms var(--ease) 150ms both;
+}
+
+/* The map is a plate that fills the sheet: the frame and the title block
+ * are drawn over it, and the tiles are printed as a negative, light line
+ * work on the sheet's blue. */
+[data-theme='blueprint'] .slide.has-map[data-layout]::before,
+[data-theme='blueprint'] .slide.has-map[data-layout]::after {
+	z-index: 20;
+}
+[data-theme='blueprint'] .slide.has-map .maplibregl-canvas {
+	filter: grayscale(1) invert(1) contrast(1.15);
+}
+[data-theme='blueprint'] .slide.has-map .maplibregl-canvas-container::after {
+	content: '';
+	position: absolute;
+	inset: 0;
+	pointer-events: none;
+	mix-blend-mode: screen;
+	background: var(--bg);
+}
+[data-theme='blueprint'] .slide.has-map .map-marker {
+	z-index: 2;
+}
+
+/* ============================================================================
+ * Diagram
+ * ============================================================================ */
+
+[data-theme='blueprint'] .layout-default > .slot:has(.mermaid-diagram) {
+	flex: 1;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+}
+[data-theme='blueprint'] .layout-default > .slot:has(.mermaid-diagram) > h2 {
+	font-size: 108px;
+	line-height: 108px;
+	padding-bottom: 40px;
+	margin-bottom: 8px;
+}
+[data-theme='blueprint'] .mermaid-diagram {
+	flex: 1;
+	min-height: 0;
+	display: flex;
+	justify-content: center;
+	line-height: 1.5;
+	animation: blueprint-plot 1100ms var(--ease) 450ms both;
+}
+[data-theme='blueprint'] .mermaid-diagram svg {
+	width: 100% !important;
+	height: 100% !important;
+	max-width: none !important;
+}
+[data-theme='blueprint'] .mermaid-diagram .node rect,
+[data-theme='blueprint'] .mermaid-diagram .node path,
+[data-theme='blueprint'] .mermaid-diagram .node circle,
+[data-theme='blueprint'] .mermaid-diagram .node polygon {
+	stroke-width: 3px !important;
+}
+[data-theme='blueprint'] .mermaid-diagram .edgePath path,
+[data-theme='blueprint'] .mermaid-diagram .flowchart-link {
+	stroke-width: 3px !important;
+}
+[data-theme='blueprint'] .mermaid-diagram .nodeLabel {
+	text-transform: uppercase;
+}
+/* Mermaid draws its labels as paragraphs; they keep the diagram's own
+ * lettering rather than the slide's body copy. */
+[data-theme='blueprint'] .slot .mermaid-diagram p {
+	font: inherit;
+	line-height: 1.5;
+	color: inherit;
+	animation: none;
+}
+[data-theme='blueprint'] :is(.slot, .fragment) > .mermaid-diagram + p {
+	margin-top: 8px;
+	max-width: 1240px;
+	font-size: 60px;
+	line-height: 72px;
+	animation-delay: 1200ms;
+}
+
+/* ============================================================================
+ * Scroll slide: the sheet stays put, the drawing moves under the frame
+ * ============================================================================ */
+
+[data-theme='blueprint'] .slide-content:has(> .scroll-content) {
+	overflow-x: visible;
+	overflow-y: clip;
+}
+[data-theme='blueprint'] .scroll-content {
+	flex: none;
+}
+[data-theme='blueprint'] .scroll-content > [class^='layout-'] {
+	flex: none;
+}
+
+/* ============================================================================
+ * Live code block and asciinema
+ * ============================================================================ */
+
+[data-theme='blueprint'] .live-code-block {
+	margin: 0;
+	overflow: visible;
+	border-radius: 0;
+}
+[data-theme='blueprint'] .live-code-block:focus {
+	outline: 2px solid var(--muted);
+	outline-offset: 14px;
+}
+[data-theme='blueprint'] .live-code-block .code-container pre {
+	margin: 0;
+	border-radius: 0;
+}
+[data-theme='blueprint'] .live-code-block .code-actions {
+	top: 6px;
+	right: 0;
+}
+/* The run button is a stamp: yellow, square, in the title block's lettering. */
+[data-theme='blueprint'] .live-code-block .run-button {
+	gap: 14px;
+	height: 60px;
+	padding: 0 24px;
+	font-family: var(--font-mono);
+	font-size: 28px;
+	font-weight: 600;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	color: var(--bg);
+	background-color: var(--accent);
+	border: 0;
+	border-radius: 0;
+}
+[data-theme='blueprint'] .live-code-block .run-button:hover:not(:disabled) {
+	filter: none;
+	transform: none;
+	background-color: var(--fg);
+}
+[data-theme='blueprint'] .live-code-block .loading-spinner {
+	width: 24px;
+	height: 24px;
+	border-color: color-mix(in srgb, var(--bg) 30%, transparent);
+	border-top-color: var(--bg);
+}
+[data-theme='blueprint'] .live-code-block .static-placeholder {
+	top: 6px;
+	right: 0;
+	height: 60px;
+	padding: 0 24px;
+	font-family: var(--font-mono);
+	font-size: 28px;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	color: var(--muted);
+	border: 3px solid var(--muted);
+	border-radius: 0;
+	background: var(--bg);
+	backdrop-filter: none;
+	-webkit-backdrop-filter: none;
+}
+[data-theme='blueprint'] .live-code-block .result-container {
+	margin-top: 32px;
+	border: 4px solid var(--fg);
+	border-radius: 0;
+	background: var(--surface);
+}
+[data-theme='blueprint'] .live-code-block .result-container.error {
+	border-color: var(--accent);
+}
+[data-theme='blueprint'] .live-code-block .result-header {
+	padding: 0 28px;
+	border-bottom: 2px solid var(--fg);
+}
+[data-theme='blueprint'] .live-code-block .result-status {
+	font-family: var(--font-mono);
+	font-size: 28px;
+	line-height: 52px;
+	letter-spacing: 0.08em;
+}
+[data-theme='blueprint'] .live-code-block .result-status.success {
+	color: var(--fg);
+}
+[data-theme='blueprint'] .live-code-block .result-status.error {
+	color: var(--accent-text);
+}
+[data-theme='blueprint'] .live-code-block .result-content {
+	padding: 20px 28px;
+}
+[data-theme='blueprint'] .live-code-block .result-content .result-output,
+[data-theme='blueprint'] .live-code-block .result-content .result-error,
+[data-theme='blueprint'] .live-code-block .result-content .result-empty {
+	padding: 0;
+	border: 0;
+	font-family: var(--font-mono);
+	font-size: 44px;
+	line-height: 64px;
+	font-style: normal;
+	color: var(--fg);
+	animation: none;
+}
+[data-theme='blueprint'] .live-code-block .result-content .result-error {
+	color: var(--accent-text);
+}
+[data-theme='blueprint'] .live-code-block .result-content .result-table {
+	font-size: 48px;
+}
+
+/* rich-blocks.css already fits the player to its wrapper and keeps its
+ * aspect ratio; only the frame around it belongs to the theme, not a size
+ * cap, so the recording uses the full width of the drawing area. */
+[data-theme='blueprint'] .asciinema-player-wrapper {
+	margin: 12px;
+	overflow: hidden;
+	border: 4px solid var(--fg);
+	outline: 2px solid var(--muted);
+	outline-offset: 10px;
+	background: var(--bg);
+}
+
+/* ============================================================================
+ * Minimum-size safety net
+ * ============================================================================
+ * Anything in a slot that no rule above sized falls back to these, never to
+ * the shared stylesheet's smaller defaults. More specific rules above win. */
+[data-theme='blueprint'] .slot p,
+[data-theme='blueprint'] .slot li {
+	font-size: 62px;
+	line-height: 80px;
+}
+[data-theme='blueprint'] .slot td,
+[data-theme='blueprint'] .slot th {
+	font-size: 48px;
+}
+
+/* ============================================================================
+ * Print and reduced motion: everything in its final state, nothing moves
+ * ============================================================================ */
+@media print, (prefers-reduced-motion: reduce) {
+	[data-theme='blueprint'] *,
+	[data-theme='blueprint'] *::before,
+	[data-theme='blueprint'] *::after {
+		animation: none !important;
+		transition: none !important;
+	}
+}

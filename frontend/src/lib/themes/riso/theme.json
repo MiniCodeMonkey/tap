@@ -1,0 +1,37 @@
+{
+	"name": "Riso",
+	"polarity": "light",
+	"pitch": "A warm community-conference talk that should feel like a two-ink print pulled off the drum that morning.",
+	"illustration": {
+		"medium": "flat vector styled as a risograph print, with visible color misregistration",
+		"line": "3px strokes that look slightly offset between color layers",
+		"shapes": "simple bold shapes (circles, blobs, stars) with intentional layer misalignment",
+		"texture": "grainy riso dot texture, slight color bleed at edges",
+		"palette_use": "cream paper background dominant, indigo ink for line work, one hot pink used as the overprinted riso color",
+		"mood": "playful, handmade-print, slightly imperfect",
+		"avoid": "gradients, photorealism, perfect registration, glossy 3D, more than two ink colors"
+	},
+	"mermaid": {
+		"themeVariables": {
+			"fontFamily": "Bricolage Grotesque",
+			"primaryColor": "#FBC3DD",
+			"primaryTextColor": "#2A1153",
+			"primaryBorderColor": "#263A78",
+			"lineColor": "#FF48B0",
+			"secondaryColor": "#F9F5EA",
+			"tertiaryColor": "#F9F5EA",
+			"nodeTextColor": "#2A1153",
+			"titleColor": "#263A78",
+			"background": "#F3EEE0",
+			"mainBkg": "#FBC3DD",
+			"textColor": "#2A1153",
+			"nodeBorder": "#263A78",
+			"clusterBkg": "#F9F5EA",
+			"clusterBorder": "#36487E",
+			"edgeLabelBackground": "#F3EEE0",
+			"fontSize": "38px"
+		},
+		"quietStyle": "fill:#F9F5EA,stroke:#263A78,color:#263A78",
+		"curve": "linear"
+	}
+}

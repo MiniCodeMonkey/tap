@@ -1,0 +1,34 @@
+{
+	"name": "Poster",
+	"polarity": "light",
+	"pitch": "For a loud, fast, opinionated talk in the Takahashi style, where every slide is a gig poster and the words do all the work.",
+	"illustration": {
+		"medium": "flat vector, bold concert-poster silkscreen illustration",
+		"line": "5 to 6px thick strokes, high contrast, screen-print registration",
+		"shapes": "big blocky letterforms and simple bold shapes (bursts, circles, banners), tight cropping",
+		"texture": "slight screen-print grain, hard color edges with no anti-aliasing feel",
+		"palette_use": "loud yellow background dominant, black ink, one red used for emphasis and callouts",
+		"mood": "loud, punchy, sold-out-show energy",
+		"avoid": "gradients, pastel color, soft edges, photorealism, delicate line work"
+	},
+	"mermaid": {
+		"themeVariables": {
+			"fontFamily": "Anton",
+			"primaryColor": "#0b0b0b",
+			"primaryTextColor": "#ffd60a",
+			"primaryBorderColor": "#0b0b0b",
+			"lineColor": "#e0161d",
+			"background": "#ffd60a",
+			"mainBkg": "#0b0b0b",
+			"textColor": "#0b0b0b",
+			"nodeBorder": "#0b0b0b",
+			"nodeTextColor": "#ffd60a",
+			"clusterBkg": "#f2c200",
+			"clusterBorder": "#0b0b0b",
+			"edgeLabelBackground": "#ffd60a",
+			"fontSize": "36px"
+		},
+		"quietStyle": "fill:#ffd60a,stroke:#0b0b0b,color:#0b0b0b",
+		"curve": "linear"
+	}
+}

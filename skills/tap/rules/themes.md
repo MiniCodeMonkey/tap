@@ -1,111 +1,51 @@
 # Themes
 
-Themes control typography, colors, animations, and transitions.
+Themes control typography, colors, animations, and transitions. Tap ships
+`base` plus 20 designed themes.
 
 ## Setting a Theme
 
 ```yaml
 ---
-theme: paper
+theme: terminal
 ---
 ```
 
+An unknown theme name falls back to `base` with a warning. Press `t` while
+presenting to cycle themes live, or add `?theme=<slug>` to the URL to force
+one.
+
 ## Built-in Themes
 
-### Paper
-Ultra-clean and premium.
-```yaml
-theme: paper
-```
-- Pure white background, near-black text
-- Inter/system-ui typography
-- Warm accent colors (#78716c)
-- **Best for:** Professional presentations, corporate settings
+| Theme | Polarity | Pitch |
+|-------|----------|-------|
+| `base` | light | A plain, readable default theme with no strong identity. |
+| `terminal` | dark | Infrastructure and live-coding talks: one long tmux session. |
+| `product` | light | A launch-day talk for a developer tool. |
+| `swiss` | light | An argument-driven engineering talk, Zurich concert poster style. |
+| `newsprint` | light | A war story or postmortem told as front-page news. |
+| `zine` | light | An opinionated, scrappy talk, cut and photocopied the night before. |
+| `poster` | light | A loud, fast, opinionated talk in the Takahashi style. |
+| `blueprint` | dark | Architecture and systems talks as sheets from the drawing set. |
+| `riso` | light | A warm community-conference talk, a two-ink print off the drum. |
+| `retro-computing` | light | A nostalgic systems talk told from a 1990 desktop. |
+| `paperback` | light | A story-led talk with the warmth of a mid-century paperback series. |
+| `keynote` | dark | A big-room launch talk, one idea at a time on a dark stage. |
+| `editorial` | light | A story-led talk like a long-read magazine feature. |
+| `observatory` | dark | A data-heavy infrastructure talk, charted like a night sky. |
+| `arcade` | dark | A high-energy war-story talk framed as a game you can win. |
+| `isometric` | light | A friendly architecture walkthrough with infrastructure as the cast. |
+| `ink` | light | A calm, reflective talk about hard-won lessons. |
+| `lab-notebook` | light | An evidence-first engineering talk, every claim a numbered figure. |
+| `bauhaus` | light | A bold talk about first principles: circle, triangle, square. |
+| `sketch` | light | An explainer talk that builds an idea like a whiteboard drawing. |
+| `transit` | light | An architecture talk that walks the audience like a metro map. |
 
-### Noir
-Cinematic and sophisticated.
-```yaml
-theme: noir
-```
-- Deep charcoal backgrounds (#0a0a0a)
-- Crisp white text, gold accent (#d4af37)
-- Playfair Display headings, Inter body
-- **Best for:** Executive briefings, client pitches
+## Picking a Theme
 
-### Aurora
-Vibrant and dynamic.
-```yaml
-theme: aurora
-```
-- Animated gradient backgrounds (purple to blue to teal)
-- Glassmorphism with backdrop blur
-- Space Grotesk typography
-- **Best for:** Startup pitches, creative presentations
-
-### Phosphor
-CRT monitor aesthetic.
-```yaml
-theme: phosphor
-```
-- True black (#000) background
-- Phosphor green (#00ff00) primary
-- Scanline overlay effect
-- JetBrains Mono throughout
-- **Best for:** Developer conferences, security talks
-
-### Poster
-Bold graphic design.
-```yaml
-theme: poster
-```
-- Stark black and white
-- Electric red accent (#ef4444)
-- Anton font for ALL CAPS headings
-- Thick 4px borders, no rounded corners
-- **Best for:** Design talks, making statements
-
-### Ink
-Japanese calligraphy-inspired.
-```yaml
-theme: ink
-```
-- Cream/off-white background (#f5f1e8)
-- Sumi black text, vermillion accent
-- Noto Serif JP typography
-- **Best for:** Zen presentations, minimalist design
-
-### Bauhaus
-Geometric modernism.
-```yaml
-theme: bauhaus
-```
-- Stark white background, black text
-- Primary colors: red, yellow, blue
-- Bebas Neue typography
-- **Best for:** Design talks, architecture presentations
-
-### Editorial
-Classic magazine publishing.
-```yaml
-theme: editorial
-```
-- Crisp white background, true black text
-- Deep burgundy accent (#7f1d1d)
-- Playfair Display + Source Serif Pro
-- **Best for:** Publishing talks, brand storytelling
-
-## Theme Reference
-
-| Theme | Background | Typography |
-|-------|------------|------------|
-| `paper` | Light (#ffffff) | Inter/system-ui |
-| `noir` | Dark (#0a0a0a) | Playfair Display + Inter |
-| `aurora` | Animated gradient | Space Grotesk |
-| `phosphor` | Black (#000) | JetBrains Mono |
-| `poster` | High contrast | Anton + system sans |
-| `ink` | Cream (#f5f1e8) | Noto Serif JP |
-| `bauhaus` | White (#ffffff) | Bebas Neue |
-| `editorial` | White (#ffffff) | Playfair Display + Source Serif Pro |
+Two questions: the room (bright room or weak projector: pick a `light`
+theme; dark room: a `dark` theme can carry more contrast) and the talk
+(match the pitch above to what's actually being presented).
 
 ## What Themes Control
 
@@ -121,10 +61,10 @@ theme: editorial
 ### Color Overrides
 ```yaml
 ---
-theme: paper
+theme: terminal
 themeColors:
   accent: "#ff0000"
-  background: "#f5f5f5"
+  background: "#0d0d0d"
 ---
 ```
 
@@ -137,28 +77,27 @@ customTheme: "./my-theme.css"
 ---
 ```
 
-CSS file:
-```css
-.theme-custom {
-  --color-bg: #ffffff;
-  --color-text: #0a0a0a;
-  --color-muted: #71717a;
-  --color-accent: #3b82f6;
-  --color-code-bg: #1e1e1e;
-  --font-sans: Inter, system-ui, sans-serif;
-  --font-mono: 'JetBrains Mono', monospace;
-}
+Loaded after the built-in theme's CSS, so it can override any of its custom
+properties. See `docs/reference/theme-porting.md` for the CSS custom
+property contract and selector conventions (`[data-theme="..."]`).
+
+## Theme Tokens
+
+Every theme defines the same custom properties: `--bg --fg --muted
+--accent --accent-text --surface --font-display --font-body --font-mono
+--ease --dur --space-unit --radius --stroke-width`, plus the Shiki token
+variables so code colors follow the theme.
+
+Read them, and the theme's illustration style, on the command line:
+
+```bash
+tap theme list                       # every theme
+tap theme show blueprint             # tokens and illustration style
+tap theme show blueprint --json
+tap theme show blueprint --prompt    # style brief for an image model
+tap theme show --deck deck.md --prompt
 ```
 
-## Choosing a Theme
-
-| Context | Recommended Theme |
-|---------|-------------------|
-| Corporate/professional | `paper` |
-| Executive/premium | `noir` |
-| Startup/creative | `aurora` |
-| Technical/developer | `phosphor` |
-| Design/bold statement | `poster` |
-| Minimalist/zen | `ink` |
-| Modern/geometric | `bauhaus` |
-| Publishing/editorial | `editorial` |
+A deck component reads the same values at run time with `useTheme()`. Put
+the `--prompt` brief in front of an image request so generated
+illustrations match the theme.

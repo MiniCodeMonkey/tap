@@ -28,9 +28,13 @@ docs/
 ├── examples/         # Example presentations
 ├── public/           # Static assets
 ├── getting-started.md
-├── index.md          # Homepage
-└── PERFORMANCE.md    # Performance documentation
+├── changelog.md      # Mirrors the repository CHANGELOG.md
+└── index.md          # Homepage
 ```
+
+`changelog.md` is a copy of the repository's `CHANGELOG.md` with a
+VitePress frontmatter block on top. Update the root file first, then copy
+it across.
 
 ## Adding Documentation
 
@@ -38,4 +42,4 @@ docs/
 - **Reference**: Add markdown files to `reference/` for API docs and specifications
 - **Examples**: Add markdown files to `examples/` for example presentations
 
-Update `.vitepress/config.js` to include new pages in the sidebar navigation.
+Update `.vitepress/config.ts` to include new pages in the sidebar navigation.

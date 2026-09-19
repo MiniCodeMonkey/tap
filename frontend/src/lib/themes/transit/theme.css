@@ -1,0 +1,1563 @@
+/**
+ * Transit theme.
+ * For architecture and infrastructure talks that walk the audience through a
+ * system the way a metro map walks a city: a roundel with the slide number
+ * on every panel, a black sign bar under the heading, bullets as a route
+ * line with interchange rings, code as a strip map with a red segment at
+ * the line in focus, two columns as two line colours, and a table as a
+ * service board with a colour stripe per row.
+ *
+ * Ported from .superpowers/brainstorm/themes-v3/transit.theme.html (the
+ * CSS-only mockup built against a fixed 11-slide deck). See
+ * docs/reference/theme-porting.md for what changed moving from that mockup
+ * to the real app's markup.
+ */
+
+@import '@fontsource/overpass/latin-500.css';
+@import '@fontsource/overpass/latin-600.css';
+@import '@fontsource/overpass/latin-700.css';
+@import '@fontsource/overpass/latin-800.css';
+@import '@fontsource/jetbrains-mono/latin-500.css';
+@import '@fontsource/jetbrains-mono/latin-700.css';
+
+[data-theme='transit'] {
+	/* ---------- design-spec tokens ---------- */
+	--bg: #f7f6f2;
+	--fg: #12161c;
+	--muted: #4a5058;
+	--accent: #dc241f;
+	--accent-text: #0b3fa8;
+	--surface: #e8e6de;
+	--font-display: 'Overpass', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+	--font-body: 'Overpass', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+	--font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+	--ease: cubic-bezier(0.65, 0, 0.35, 1);
+	--dur: 600ms;
+	--space-unit: 24px;
+	--radius: 4px;
+	--stroke-width: 3px;
+	/* the line colour a given panel runs on: red by default, blue for the
+	 * layouts and slides where the mockup swaps the accent (code, media,
+	 * quote, and any slide carrying a table) */
+	--line: var(--accent);
+	/* a route strip: a line with evenly spaced interchange rings, valid at
+	 * any width because it repeats */
+	--stations: radial-gradient(circle at 150px 28px, var(--bg) 0 16px, var(--fg) 17px 27px, transparent 28px) 0 0 / 300px 56px repeat-x;
+
+	/*
+	 * Bridge to the base theme's own token names. layouts.css, prose.css,
+	 * rich-blocks.css and ui-components.css style the live code block, the
+	 * map slide, badges, tags, and generic prose entirely through these
+	 * `--color-*` and `--font-sans` custom properties.
+	 */
+	--color-bg: var(--bg);
+	--color-text: var(--fg);
+	--color-muted: var(--muted);
+	--color-accent: var(--accent);
+	--color-code-bg: var(--surface);
+	--color-code-text: var(--fg);
+	--color-code-inline-bg: rgba(18, 22, 28, 0.08);
+	--color-border: var(--muted);
+	--color-surface: var(--surface);
+	--color-surface-elevated: var(--surface);
+	--color-link: var(--accent-text);
+	--font-sans: var(--font-body);
+
+	/* Shiki reads token colors from these custom properties directly. */
+	--shiki-foreground: var(--fg);
+	--shiki-background: transparent;
+	--shiki-token-comment: var(--muted);
+	--shiki-token-string: var(--accent-text);
+	--shiki-token-string-expression: var(--accent-text);
+	--shiki-token-keyword: var(--fg);
+	--shiki-token-function: var(--fg);
+	--shiki-token-constant: var(--fg);
+	--shiki-token-parameter: var(--fg);
+	--shiki-token-punctuation: var(--muted);
+	--shiki-token-link: var(--accent-text);
+}
+
+@keyframes transit-in {
+	from {
+		opacity: 0;
+		transform: translateX(-36px);
+	}
+	to {
+		opacity: 1;
+		transform: translateX(0);
+	}
+}
+@keyframes transit-fade {
+	from {
+		opacity: 0;
+	}
+	to {
+		opacity: 1;
+	}
+}
+@keyframes transit-pop {
+	from {
+		opacity: 0;
+		transform: scale(0);
+	}
+	to {
+		opacity: 1;
+		transform: scale(1);
+	}
+}
+@keyframes transit-extend {
+	from {
+		transform: scaleX(0);
+	}
+	to {
+		transform: scaleX(1);
+	}
+}
+@keyframes transit-extend-down {
+	from {
+		transform: scaleY(0);
+	}
+	to {
+		transform: scaleY(1);
+	}
+}
+@keyframes transit-draw {
+	from {
+		clip-path: inset(0 100% 0 0);
+	}
+	to {
+		clip-path: inset(0 0 0 0);
+	}
+}
+@keyframes transit-route {
+	from {
+		background-position: 100% 0;
+	}
+	to {
+		background-position: 0 0;
+	}
+}
+@keyframes transit-route-down {
+	from {
+		background-position: 0 100%;
+	}
+	to {
+		background-position: 0 0;
+	}
+}
+
+/* ============================================================================
+ * Screen: base slide chrome, roundel, tag, header bar
+ * ============================================================================
+ * Every rule that reads attr(data-index)/attr(data-layout) or decorates the
+ * slide root is scoped to `.slide[data-layout]`, the real rendered slide,
+ * not the bare `.slide` class SlideCanvas also puts on its outer 1920x1080
+ * scaling frame (see theme-porting.md's markup differences section).
+ * ============================================================================ */
+
+[data-theme='transit'] .slide[data-layout] {
+	background: var(--bg);
+	color: var(--fg);
+	font-family: var(--font-body);
+	font-weight: 600;
+	font-size: 48px;
+	line-height: 1.2;
+	letter-spacing: -0.01em;
+}
+[data-theme='transit'] .slide[data-layout='code-focus'],
+[data-theme='transit'] .slide[data-layout='split-media'],
+[data-theme='transit'] .slide[data-layout='quote'],
+[data-theme='transit'] .slide[data-layout]:has(table) {
+	--line: var(--accent-text);
+}
+/*
+ * Margin and padding reset, wrapped in `:where()` all the way through
+ * `.slide` so it never outranks a base rule or one of this file's own more
+ * specific rules; those set margin/padding explicitly wherever it matters.
+ */
+[data-theme='transit'] :where(.slide h1, .slide h2, .slide h3, .slide h4, .slide h5, .slide h6, .slide p, .slide ul, .slide ol, .slide li, .slide blockquote, .slide pre, .slide table) {
+	margin: 0;
+	padding: 0;
+}
+[data-theme='transit'] .slide-content {
+	padding: 96px;
+	box-sizing: border-box;
+}
+/*
+ * The roundel (the slide-number circle, see `.slide[data-layout]::before`
+ * below) sits at left:96px, 140px wide. A normal layout's heading clears
+ * it through two stacked reserves: the shared 80px `.layout-<name>`
+ * padding this theme never zeroes out (layouts.css), plus another ~176px
+ * of margin-left the heading rule itself adds (see the `.slot > h2` rule
+ * further down) - 96 (`.slide-content`) + 80 + 176 = 352px from the slide
+ * edge. A component's own title has neither rule, so its border-left
+ * must reserve both amounts together (80 + 176 = 256px), not just the
+ * 176px roundel clearance alone - the shared `border: 80px` this theme
+ * otherwise keeps on every other side already covers the first amount
+ * everywhere but the side this rule overrides.
+ */
+[data-theme='transit'] .slide[data-layout='component'] > .slide-content > .deck-component-root,
+[data-theme='transit'] .slide[data-layout='component'] > .slide-content > .scroll-content > .deck-component-root {
+	border-left-width: 256px;
+}
+[data-theme='transit'] .slide[data-layout] h1,
+[data-theme='transit'] .slide[data-layout] h2,
+[data-theme='transit'] .slide[data-layout] h3,
+[data-theme='transit'] .slide[data-layout] h4,
+[data-theme='transit'] .slide[data-layout] h5,
+[data-theme='transit'] .slide[data-layout] h6 {
+	font-family: var(--font-display);
+	font-weight: 800;
+	letter-spacing: -0.03em;
+	text-wrap: balance;
+}
+[data-theme='transit'] .slide[data-layout] strong {
+	font-weight: 800;
+	color: var(--accent-text);
+}
+[data-theme='transit'] .slide[data-layout] em {
+	font-style: normal;
+	color: var(--accent-text);
+}
+[data-theme='transit'] .slide[data-layout] a {
+	color: var(--accent-text);
+	text-decoration: underline;
+	text-decoration-thickness: 4px;
+	text-underline-offset: 0.12em;
+}
+[data-theme='transit'] .slide[data-layout] a:hover {
+	color: var(--accent);
+}
+
+/* the roundel: the slide number, like a line bullet on a platform sign */
+[data-theme='transit'] .slide[data-layout]::before {
+	content: attr(data-index);
+	box-sizing: border-box;
+	position: absolute;
+	z-index: 2;
+	left: 96px;
+	top: 96px;
+	width: 140px;
+	height: 140px;
+	border: 22px solid var(--line);
+	border-radius: 50%;
+	background: var(--bg);
+	font-family: var(--font-display);
+	font-weight: 800;
+	font-size: 46px;
+	line-height: 96px;
+	text-align: center;
+	letter-spacing: -0.02em;
+	animation: transit-pop 450ms var(--ease) both;
+}
+[data-theme='transit'] .slide-tag {
+	position: absolute;
+	z-index: 2;
+	top: 144px;
+	left: 272px;
+	right: auto;
+	bottom: auto;
+	height: auto;
+	font-family: var(--font-body);
+	font-weight: 800;
+	font-size: 40px;
+	line-height: 44px;
+	letter-spacing: 0;
+	word-spacing: 0.05em;
+	animation: transit-in var(--dur) var(--ease) 120ms both;
+}
+/* Overpass renders extra side-bearing around the middle dot, so a tag such
+ * as "03 · Scaling" reads with an uneven gap either side of it unless the
+ * word-spacing this rule sets is tuned down from the mockup's wider value. */
+/* The title layout's text sits on an opaque `--bg` sheet (z-index 4, see
+ * the panel comment below) so the route lines never show through it; that
+ * sheet also happens to cover the tag's fixed position whenever the title
+ * wraps wide enough to reach it. Render the tag above the sheet instead of
+ * moving either one, since the panel's footprint is content-dependent and
+ * no fixed tag position stays clear of it for every title in the deck. */
+[data-theme='transit'] .slide[data-layout='title'] .slide-tag {
+	z-index: 5;
+}
+[data-theme='transit'] .slide-badge {
+	top: 96px;
+	right: 96px;
+	left: auto;
+	bottom: auto;
+	height: 64px;
+	padding: 0 24px;
+	display: flex;
+	align-items: center;
+	font-family: var(--font-mono);
+	font-weight: 700;
+	font-size: 32px;
+	letter-spacing: 0;
+	color: var(--bg);
+	background: var(--fg);
+	z-index: 3;
+	animation: transit-pop 300ms var(--ease) 300ms both;
+}
+
+/* header: line name and the black sign bar underneath it.
+ * Sized for `long` first (a fallback this deck never actually exercises),
+ * then `medium` and `short` scale up from it. `medium` matches the size
+ * this rule carried before `data-length` existed: the kitchen-sink deck's
+ * 25-60 char headings ("Every inline element at once", "How the renderer
+ * talks to itself") already read well there, so that tuning is kept as-is. */
+[data-theme='transit'] .slide[data-layout] .slot > h2 {
+	position: relative;
+	display: flex;
+	align-items: center;
+	min-height: 140px;
+	margin: 0 0 80px 176px;
+	font-size: 92px;
+	line-height: 1.05;
+	animation: transit-in var(--dur) var(--ease) 120ms both;
+}
+[data-theme='transit'] .slide[data-layout] .slot > h2[data-length='medium'] {
+	font-size: 108px;
+	line-height: 1;
+}
+[data-theme='transit'] .slide[data-layout] .slot > h2[data-length='short'] {
+	font-size: 124px;
+	line-height: 1;
+}
+[data-theme='transit'] .slide[data-layout]:has(.slide-tag) .slot > h2 {
+	display: block;
+	min-height: 0;
+	padding-top: 46px;
+}
+[data-theme='transit'] .slide[data-layout] .slot > h2::after {
+	content: '';
+	position: absolute;
+	left: -176px;
+	right: 0;
+	bottom: -38px;
+	height: 10px;
+	background: var(--fg);
+	transform-origin: 0 50%;
+	animation: transit-extend var(--dur) var(--ease) 200ms both;
+}
+[data-theme='transit'] .slot h3 {
+	font-size: 56px;
+	line-height: 1.2;
+	margin-top: 20px;
+	margin-bottom: 12px;
+}
+[data-theme='transit'] .slot h4 {
+	font-size: 44px;
+	line-height: 1.25;
+	margin-top: 16px;
+	margin-bottom: 8px;
+	color: var(--accent-text);
+}
+[data-theme='transit'] .slot h5,
+[data-theme='transit'] .slot h6 {
+	font-size: 36px;
+	line-height: 1.3;
+	margin-top: 12px;
+	margin-bottom: 6px;
+	color: var(--muted);
+	text-transform: uppercase;
+	letter-spacing: 0.05em;
+}
+
+/* ---------- minimum-size safety net ----------
+ * Placed right after the token bridge, before any layout rule, so it never
+ * wins a same-specificity tie against a rule written later on purpose. Every
+ * layout-specific rule below carries more specificity (`.layout-x .slot p`)
+ * and still overrides it regardless of source order. Mermaid labels are
+ * excluded: they are reset separately, far below the floor, since the
+ * minimum size check does not hold diagram text to the body-copy floor.
+ * 48px body / 42px code / 44px table sit in this room's comfortable range
+ * (44-52 body, 38-44 code) rather than at the bare 40/36/40 floor. */
+[data-theme='transit'] .slot p:not(.mermaid-diagram p),
+[data-theme='transit'] .slot li:not(.mermaid-diagram li) {
+	font-size: 48px;
+	line-height: 1.4;
+}
+[data-theme='transit'] pre.shiki code {
+	font-size: 42px;
+}
+[data-theme='transit'] .slot td,
+[data-theme='transit'] .slot th {
+	font-size: 44px;
+}
+
+/* ---------- title ---------- */
+[data-theme='transit'] .slide[data-layout='title']::before {
+	content: '';
+	left: 0;
+	top: 0;
+	width: 1920px;
+	height: 1080px;
+	border: 0;
+	border-radius: 0;
+	z-index: 0;
+	background: linear-gradient(90deg, var(--accent) 50%, transparent 50%) 100% 0 / 200% 100% no-repeat;
+	clip-path: polygon(-20px 954px, 1005.8px 954px, 1205.8px 754px, 1940px 754px, 1940px 726px, 1194.2px 726px, 994.2px 926px, -20px 926px);
+	animation: transit-route 900ms var(--ease) 400ms both;
+}
+[data-theme='transit'] .slide[data-layout='title']::after {
+	content: '';
+	position: absolute;
+	left: 0;
+	top: 0;
+	width: 1920px;
+	height: 1080px;
+	background: linear-gradient(180deg, var(--accent-text) 50%, transparent 50%) 0 100% / 100% 200% no-repeat;
+	clip-path: polygon(1746px -20px, 1746px 534.2px, 1546px 734.2px, 1546px 1100px, 1574px 1100px, 1574px 745.8px, 1774px 545.8px, 1774px -20px);
+	animation: transit-route-down 900ms var(--ease) 550ms both;
+}
+/*
+ * An earlier draft of this layout put an interchange ring and a slow riding
+ * train at the diagonal routes' crossing point, as `.layout-title::before`/
+ * `::after`. That target the inner `.layout-title` div, a different element
+ * from the outer `.slide[data-layout='title']` the two route bands are
+ * drawn on (see theme-porting.md's two-elements-share-a-class note), so at
+ * the old, much larger title/subtitle sizes the title panel always grew
+ * tall enough to fully hide both behind it: dead weight, never actually
+ * seen. Rebalancing this layout's type to a smaller, more comfortable scale
+ * shrinks that panel enough to expose a stray arc of the ring instead of
+ * hiding it whole, which reads as a rendering bug rather than a design
+ * flourish. Removed rather than repositioned: the panel's height is
+ * content-dependent (`data-length`, subtitle presence), so no fixed
+ * coordinate stays clear of it for every title in the deck.
+ */
+[data-theme='transit'] .layout-title .slot {
+	position: relative;
+	z-index: 4;
+	max-width: 1620px;
+	/* a sheet behind the title block so the route lines never read as
+	 * crossing through the text, whatever its length: the panel is only as
+	 * wide and tall as the text it holds. */
+	background: var(--bg);
+	padding: 16px;
+	margin: -16px 0 0 -16px;
+	width: fit-content;
+}
+/* Give the kicker tag its own headroom above the title instead of letting
+ * the first line start flush with it. */
+[data-theme='transit'] .slide[data-layout='title']:has(.slide-tag) .slot {
+	margin-top: 64px;
+}
+/* h1 is sized for `long` first (this deck's 95-char wrap test), then
+ * `medium` and `short` scale up: a one- or two-word talk title should not
+ * read at the same size as a title that needs four lines to fit. */
+[data-theme='transit'] .layout-title .slot > h1 {
+	display: block;
+	min-height: 0;
+	max-width: 1540px;
+	margin: 0;
+	padding: 0;
+	font-size: 124px;
+	line-height: 1.05;
+	animation: transit-in var(--dur) var(--ease) both;
+}
+[data-theme='transit'] .layout-title .slot > h1[data-length='medium'] {
+	font-size: 144px;
+	line-height: 1.04;
+}
+[data-theme='transit'] .layout-title .slot > h1[data-length='short'] {
+	font-size: 168px;
+	line-height: 1.02;
+}
+/* `.slide[data-layout='title']`, not `.layout-title`: the general sign-bar
+ * rule below (used by every other layout's `.slot > h2`) matches at (0,4,1)
+ * specificity for this unqualified case, so a shorter selector here loses
+ * to it outright and every title subtitle renders at the sign-bar's size
+ * instead of its own. This form ties it and wins on source order. The same
+ * fix applies to the `data-length` overrides that follow. */
+[data-theme='transit'] .slide[data-layout='title'] .slot > h2 {
+	display: block;
+	min-height: 0;
+	max-width: 1540px;
+	margin: 24px 0 0;
+	padding: 0;
+	font-size: 64px;
+	line-height: 1.15;
+	color: var(--accent-text);
+	animation: transit-in var(--dur) var(--ease) 120ms both;
+	animation-delay: 120ms;
+}
+[data-theme='transit'] .slide[data-layout='title'] .slot > h2[data-length='medium'] {
+	font-size: 76px;
+	line-height: 1.12;
+}
+[data-theme='transit'] .slide[data-layout='title'] .slot > h2[data-length='short'] {
+	font-size: 88px;
+	line-height: 1.1;
+}
+[data-theme='transit'] .layout-title .slot > h2::after {
+	content: none;
+}
+[data-theme='transit'] .layout-title .slot > p {
+	max-width: 1300px;
+	margin-top: 56px;
+	padding-left: 28px;
+	border-left: 12px solid var(--accent);
+	font-size: 52px;
+	line-height: 1.35;
+	font-weight: 700;
+	animation: transit-in var(--dur) var(--ease) 240ms both;
+}
+
+/* ---------- section: the roundel itself, the marker on its bar ---------- */
+[data-theme='transit'] .slide[data-layout='section'] {
+	display: flex;
+	align-items: center;
+	padding-left: 900px;
+}
+[data-theme='transit'] .slide[data-layout='section']::before {
+	left: 126px;
+	top: 230px;
+	width: 620px;
+	height: 620px;
+	border-width: 104px;
+	line-height: 404px;
+	font-size: 72px;
+	animation-duration: var(--dur);
+}
+[data-theme='transit'] .slide[data-layout='section'] .slide-tag {
+	left: 76px;
+	top: 468px;
+	min-width: 720px;
+	max-width: 760px;
+	padding: 28px 40px 16px;
+	background: var(--accent-text);
+	color: var(--bg);
+	font-size: 80px;
+	line-height: 1;
+	letter-spacing: -0.02em;
+	text-align: center;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	z-index: 3;
+	animation: transit-extend var(--dur) var(--ease) 300ms both;
+}
+[data-theme='transit'] .layout-section .slot {
+	position: relative;
+}
+/* Sized for `long` first (the section name has to fit the ~950px column
+ * left of the roundel over several lines); `medium` and `short` scale up.
+ * `short` matches "Foundations", the size that already reads well here.
+ * `.slide[data-layout='section']`, not `.layout-section`: ties the general
+ * sign-bar rule's specificity for this unqualified case so it isn't
+ * silently outranked when the section heading is an `h2` (see the title h2
+ * override for the fuller explanation). Because it now ties rather than
+ * loses that fight, it also has to explicitly reset every property the
+ * sign-bar rule sets that this heading doesn't want: `display: flex` plus a
+ * `176px` left margin otherwise leak straight through (properties the tied
+ * rule doesn't itself declare fall back to the next-highest rule that does,
+ * regardless of who wins the tie), turning this heading into an
+ * off-position flex item that no longer respects `max-width`. */
+[data-theme='transit'] .slide[data-layout='section'] .slot > :is(h1, h2) {
+	display: block;
+	min-height: 0;
+	margin: 0;
+	font-size: 112px;
+	line-height: 1.02;
+	letter-spacing: -0.03em;
+	max-width: 100%;
+	text-wrap: balance;
+	animation: transit-in var(--dur) var(--ease) 360ms both;
+}
+/* `.slide[data-layout='section']`, not `.layout-section`: matches the
+ * general sign-bar h2 rule's specificity so this override isn't silently
+ * outranked by it when the section heading is an `h2` (see the title h2
+ * override above for the same fix and the reason). */
+[data-theme='transit'] .slide[data-layout='section'] .slot > :is(h1, h2)[data-length='medium'] {
+	font-size: 152px;
+	line-height: 1.01;
+}
+/* 190px (the size this rule targeted before `data-length` existed) turns
+ * out to leave "Foundations" almost exactly as wide as the ~1020px column
+ * available left of the slide's right edge: correct per the old code, but
+ * only because that code silently never applied (see the comment on the
+ * unqualified rule above) and 190px was never actually load-tested against
+ * this column width until now. 168px keeps real margin on both sides. */
+[data-theme='transit'] .slide[data-layout='section'] .slot > :is(h1, h2)[data-length='short'] {
+	font-size: 168px;
+	line-height: 1.02;
+	letter-spacing: -0.035em;
+}
+[data-theme='transit'] .layout-section .slot > :is(h1, h2)::after {
+	content: none;
+}
+[data-theme='transit'] .layout-section .slot > p {
+	margin-top: 40px;
+	padding-top: 40px;
+	border-top: 10px solid var(--fg);
+	font-weight: 700;
+	animation: transit-in var(--dur) var(--ease) 480ms both;
+}
+
+/* ---------- statement: a lone heading on layout-default ---------- */
+[data-theme='transit'] .slide[data-layout]:has(.slot > h1:only-child) .slide-tag,
+[data-theme='transit'] .slide[data-layout]:has(.slot > h2:only-child) .slide-tag,
+[data-theme='transit'] .slide[data-layout='big-stat'] .slide-tag,
+[data-theme='transit'] .slide[data-layout='quote'] .slide-tag {
+	font-size: 40px;
+	line-height: 140px;
+	top: 96px;
+}
+[data-theme='transit'] .layout-default .slot:has(> h1:only-child),
+[data-theme='transit'] .layout-default .slot:has(> h2:only-child) {
+	display: flex;
+	align-items: center;
+	min-height: 100%;
+}
+/* `medium` keeps the size this rule carried before `data-length` existed
+ * ("Every system has a bottleneck.", 31 chars, already reads well); `long`
+ * scales down to fit a worse-case statement, `short` scales up for impact.
+ * `.slide[data-layout='default']`, not `.layout-default`: ties the general
+ * sign-bar rule's specificity for the `h2:only-child` case so it isn't
+ * silently outranked (see the title h2 override for the fuller
+ * explanation); the `h1` half of each selector needs no fix but keeps the
+ * same form for one consistent pattern. */
+[data-theme='transit'] .slide[data-layout='default'] h1:only-child,
+[data-theme='transit'] .slide[data-layout='default'] h2:only-child {
+	font-size: 132px;
+	line-height: 1.08;
+	letter-spacing: -0.03em;
+	animation: transit-in var(--dur) var(--ease) 120ms both;
+}
+[data-theme='transit'] .slide[data-layout='default'] h1[data-length='medium']:only-child,
+[data-theme='transit'] .slide[data-layout='default'] h2[data-length='medium']:only-child {
+	font-size: 176px;
+	line-height: 1.02;
+	letter-spacing: -0.035em;
+}
+[data-theme='transit'] .slide[data-layout='default'] h1[data-length='short']:only-child,
+[data-theme='transit'] .slide[data-layout='default'] h2[data-length='short']:only-child {
+	font-size: 212px;
+	line-height: 1;
+	letter-spacing: -0.035em;
+}
+/* `.slide[data-layout='default']`, not `.layout-default`, and an explicit
+ * `position: static`: this decoration needs to fully replace the general
+ * sign-bar's `::after` underline (position: absolute, with its own left/
+ * right/bottom), not just add a competing `content`, or an unset property
+ * here (position included) falls through to the general rule's value even
+ * though this selector looks more specific at a glance. Tied specificity
+ * plus later source order wins the rest. */
+[data-theme='transit'] .slide[data-layout='default'] h1:only-child::after,
+[data-theme='transit'] .slide[data-layout='default'] h2:only-child::after {
+	content: '';
+	position: static;
+	display: block;
+	height: 56px;
+	margin: 72px -96px 0;
+	background:
+		var(--stations),
+		linear-gradient(var(--line), var(--line)) 0 14px / 100% 28px no-repeat;
+	animation: transit-draw 900ms var(--ease) 400ms both;
+}
+
+/* ---------- big stat ---------- */
+[data-theme='transit'] .slide[data-layout='big-stat'] .slot-default {
+	padding-top: 40px;
+}
+/* `short` (a two/three-character figure like "40x") keeps the poster size
+ * this rule always had; `medium`/`long` stay modest and are allowed to wrap,
+ * since a big-stat figure that long is the exception, not the design case. */
+[data-theme='transit'] .layout-big-stat h1 {
+	margin-left: -8px;
+	font-size: 150px;
+	line-height: 1.1;
+	letter-spacing: -0.03em;
+	white-space: normal;
+	color: var(--fg);
+	animation: transit-in var(--dur) var(--ease) 120ms both;
+}
+[data-theme='transit'] .layout-big-stat h1[data-length='medium'] {
+	font-size: 210px;
+	line-height: 1.05;
+	letter-spacing: -0.035em;
+}
+[data-theme='transit'] .layout-big-stat h1[data-length='short'] {
+	font-size: 300px;
+	line-height: 1.05;
+	letter-spacing: -0.04em;
+	white-space: nowrap;
+}
+[data-theme='transit'] .layout-big-stat .slot-caption {
+	margin-top: 40px;
+}
+[data-theme='transit'] .layout-big-stat .slot-caption::before {
+	content: '';
+	display: block;
+	height: 56px;
+	margin: 0 -96px 40px;
+	background:
+		var(--stations),
+		linear-gradient(var(--line), var(--line)) 0 14px / 100% 28px no-repeat;
+	animation: transit-draw 900ms var(--ease) 400ms both;
+}
+[data-theme='transit'] .layout-big-stat .slot-caption p {
+	max-width: 1500px;
+	font-weight: 700;
+	animation: transit-in var(--dur) var(--ease) 360ms both;
+}
+[data-theme='transit'] .layout-big-stat .slot-figure {
+	margin-top: 32px;
+}
+[data-theme='transit'] .layout-big-stat .slot-figure img {
+	max-height: 220px;
+	border: 6px solid var(--fg);
+	filter: saturate(0.75) contrast(1.06);
+}
+
+/* ---------- quote: spoken from a platform on the blue line ---------- */
+[data-theme='transit'] .slide[data-layout='quote'] .slot-default {
+	display: flex;
+	align-items: center;
+	min-height: 60%;
+	padding-left: 176px;
+	position: relative;
+}
+[data-theme='transit'] .slide[data-layout='quote'] .slot-default::before {
+	content: '';
+	position: absolute;
+	left: 56px;
+	top: -96px;
+	bottom: -96px;
+	width: 28px;
+	background: var(--line);
+	transform-origin: 50% 0;
+	animation: transit-extend-down 900ms var(--ease) 200ms both;
+}
+[data-theme='transit'] .layout-quote blockquote {
+	margin: 0;
+}
+[data-theme='transit'] .layout-quote blockquote p {
+	font-weight: 800;
+	font-size: 112px;
+	line-height: 1.05;
+	letter-spacing: -0.035em;
+	animation: transit-in var(--dur) var(--ease) 240ms both;
+}
+[data-theme='transit'] .layout-quote .slot-attribution {
+	padding-left: 176px;
+}
+[data-theme='transit'] .layout-quote .slot-attribution p {
+	position: relative;
+	margin-top: 64px !important;
+	font-weight: 700;
+	animation: transit-in var(--dur) var(--ease) 480ms both;
+}
+[data-theme='transit'] .layout-quote .slot-attribution p::before {
+	content: '';
+	position: absolute;
+	left: -148px;
+	top: 50%;
+	width: 84px;
+	height: 84px;
+	margin-top: -42px;
+	border: 13px solid var(--fg);
+	border-radius: 50%;
+	background: var(--bg);
+	animation: transit-pop 300ms var(--ease) 900ms both;
+}
+
+/* ---------- bullets: the list is the line, each point a station ---------- */
+[data-theme='transit'] .slide[data-layout] .slot > ul,
+[data-theme='transit'] .slide[data-layout] .slot > .fragment > ul {
+	position: relative;
+	list-style: none;
+	margin: 0;
+	padding: 0;
+}
+[data-theme='transit'] .slide[data-layout] .slot > ul::before,
+[data-theme='transit'] .slide[data-layout] .slot > .fragment > ul::before {
+	content: '';
+	position: absolute;
+	left: 56px;
+	top: -14px;
+	bottom: 14px;
+	width: 28px;
+	background: var(--line);
+	transform-origin: 50% 0;
+	animation: transit-extend-down 900ms var(--ease) 300ms both;
+}
+[data-theme='transit'] .slide[data-layout] .slot > ul > li,
+[data-theme='transit'] .slide[data-layout] .slot > .fragment > ul > li {
+	position: relative;
+	padding: 26px 0 26px 176px;
+	font-size: 48px;
+	line-height: 1.35;
+	font-weight: 700;
+	transition:
+		opacity var(--dur) var(--ease),
+		transform var(--dur) var(--ease);
+	animation: transit-in var(--dur) var(--ease) both;
+}
+[data-theme='transit'] .slide[data-layout] .slot > ul > li::before,
+[data-theme='transit'] .slide[data-layout] .slot > .fragment > ul > li::before {
+	content: '';
+	position: absolute;
+	left: 38px;
+	top: 28px;
+	width: 64px;
+	height: 64px;
+	border: 11px solid var(--fg);
+	border-radius: 50%;
+	background: var(--bg);
+}
+[data-theme='transit'] .slide[data-layout] .slot > ul > li:nth-child(1) {
+	animation-delay: 500ms;
+}
+[data-theme='transit'] .slide[data-layout] .slot > ul > li:nth-child(2) {
+	animation-delay: 650ms;
+}
+[data-theme='transit'] .slide[data-layout] .slot > ul > li:nth-child(3) {
+	animation-delay: 800ms;
+}
+[data-theme='transit'] .slide[data-layout] .slot > ul > li:nth-child(4) {
+	animation-delay: 950ms;
+}
+[data-theme='transit'] .slide[data-layout] .slot > ul > li:nth-child(n + 5) {
+	animation-delay: 1050ms;
+}
+[data-theme='transit'] .slide .fragment-hidden {
+	opacity: 0 !important;
+	transform: translateX(-36px) !important;
+}
+[data-theme='transit'] .slide .fragment-visible {
+	opacity: 1;
+	transform: translateX(0);
+}
+/* nested lists: a quieter station on the same line, never smaller than the
+ * 60px body floor, so weight and colour carry the demotion instead of size */
+[data-theme='transit'] .slot ul ul {
+	list-style: none;
+	margin-top: 6px;
+	padding: 0;
+}
+[data-theme='transit'] .slot ul ul > li {
+	padding: 12px 0 12px 96px;
+	font-weight: 500;
+	color: var(--muted);
+}
+[data-theme='transit'] .slot ul ul > li::before {
+	content: '';
+	width: 28px;
+	height: 28px;
+	left: 40px;
+	top: 50%;
+	margin-top: -14px;
+	border-width: 6px;
+}
+[data-theme='transit'] .slot ol {
+	margin: 0;
+	padding-left: 176px;
+	counter-reset: transit-ol;
+}
+[data-theme='transit'] .slot ol > li {
+	position: relative;
+	counter-increment: transit-ol;
+	padding: 20px 0;
+	font-weight: 700;
+}
+[data-theme='transit'] .slot ol > li::before {
+	content: counter(transit-ol, decimal-leading-zero);
+	position: absolute;
+	left: -176px;
+	top: 20px;
+	width: 130px;
+	font-family: var(--font-mono);
+	font-weight: 700;
+	color: var(--accent-text);
+}
+/* five or more bullets need to fit the same panel height: drop to the
+ * dense-list scale (40-44px) and tighten the interchange rings, rather than
+ * shrink further below that */
+[data-theme='transit'] .slot.slot-default:has(> ul > li:nth-child(5)) > h1:not(:only-child),
+[data-theme='transit'] .slot.slot-default:has(> ul > li:nth-child(5)) > h2:not(:only-child) {
+	margin-bottom: 48px;
+}
+[data-theme='transit'] .slot > ul:has(> li:nth-child(5)) > li {
+	padding: 12px 0 12px 176px;
+	font-size: 44px;
+	line-height: 1.25;
+}
+[data-theme='transit'] .slot > ul:has(> li:nth-child(5)) > li::before {
+	width: 52px;
+	height: 52px;
+	top: 20px;
+	border-width: 9px;
+}
+
+/* ---------- code: a strip map; the line in focus is where you are ---------- */
+[data-theme='transit'] .slide[data-layout] pre.shiki {
+	position: relative;
+	margin: 0;
+	padding: 0 0 0 106px;
+	background: none;
+	overflow: visible;
+	font-family: var(--font-mono);
+	font-weight: 500;
+	font-size: 42px;
+	line-height: 68px;
+	letter-spacing: 0;
+	font-variant-ligatures: none;
+	animation: transit-in var(--dur) var(--ease) 240ms both;
+}
+[data-theme='transit'] .slide[data-layout] pre.shiki::before {
+	content: '';
+	position: absolute;
+	left: 60px;
+	top: 4px;
+	bottom: 4px;
+	width: 20px;
+	background: var(--muted);
+}
+[data-theme='transit'] pre.shiki code {
+	display: block;
+	font: inherit;
+	white-space: normal;
+}
+[data-theme='transit'] .slide[data-layout] .line {
+	position: relative;
+	display: block;
+	white-space: pre-wrap;
+	word-break: break-word;
+}
+/* Shiki's trailing empty line, with or without highlighting active. */
+[data-theme='transit'] .line:empty,
+[data-theme='transit'] .line:last-child:empty,
+[data-theme='transit'] .line:last-child:has(> .line-content:empty) {
+	display: none;
+}
+[data-theme='transit'] .tok-comment {
+	color: var(--muted);
+}
+[data-theme='transit'] .tok-string {
+	color: var(--accent-text);
+}
+[data-theme='transit'] pre.has-highlighted .line:not(.highlighted),
+[data-theme='transit'] pre.has-highlighted .line:not(.highlighted) > * {
+	color: var(--muted);
+}
+[data-theme='transit'] .line.highlighted {
+	font-weight: 700;
+	background: linear-gradient(90deg, transparent 0px, var(--surface) 0px);
+}
+[data-theme='transit'] .line.highlighted > * {
+	color: var(--fg);
+}
+[data-theme='transit'] .line.highlighted::after {
+	content: '';
+	position: absolute;
+	left: -46px;
+	top: -6px;
+	bottom: -6px;
+	width: 20px;
+	background: var(--accent);
+}
+[data-theme='transit'] .line.highlighted::before {
+	content: '';
+	position: absolute;
+	z-index: 1;
+	left: -67px;
+	top: 50%;
+	width: 62px;
+	height: 62px;
+	margin-top: -31px;
+	border: 11px solid var(--fg);
+	border-radius: 50%;
+	background: var(--bg);
+	animation: transit-pop 300ms var(--ease) 900ms both;
+}
+[data-theme='transit'] .slot pre + p {
+	position: relative;
+	z-index: 1;
+	margin-top: 40px !important;
+	padding-left: 106px;
+	font-weight: 700;
+	animation: transit-in var(--dur) var(--ease) 480ms both;
+}
+[data-theme='transit'] .slot :not(pre) > code {
+	font-family: var(--font-mono);
+	font-weight: 700;
+	font-size: 0.82em;
+	letter-spacing: 0;
+	padding: 0.05em 0.22em;
+	color: var(--bg);
+	background: var(--fg);
+}
+
+/* ---------- two columns: two lines, one platform each ---------- */
+[data-theme='transit'] .layout-two-column {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	grid-template-rows: auto auto 1fr;
+	column-gap: 72px;
+	align-content: start;
+}
+[data-theme='transit'] .layout-two-column .slot-default {
+	grid-column: 1 / -1;
+}
+[data-theme='transit'] .slide[data-layout] :is(.layout-two-column, .layout-three-column) .slot-default > h2 {
+	margin-bottom: 40px;
+}
+[data-theme='transit'] .layout-two-column .slot-left,
+[data-theme='transit'] .layout-two-column .slot-right {
+	position: relative;
+	margin-top: 20px;
+	padding-top: 32px;
+	border-top: 28px solid var(--accent);
+	text-align: left;
+	animation: transit-in var(--dur) var(--ease) 300ms both;
+}
+[data-theme='transit'] .layout-two-column .slot-right {
+	border-top-color: var(--accent-text);
+	animation-delay: 450ms;
+}
+[data-theme='transit'] .layout-two-column .slot-left::before,
+[data-theme='transit'] .layout-two-column .slot-right::before {
+	content: '';
+	position: absolute;
+	left: 34px;
+	top: -50px;
+	width: 72px;
+	height: 72px;
+	border: 12px solid var(--fg);
+	border-radius: 50%;
+	background: var(--bg);
+	animation: transit-pop 300ms var(--ease) 800ms both;
+}
+[data-theme='transit'] .layout-two-column h3 {
+	display: inline-block;
+	margin: 0;
+	padding: 14px 26px 8px;
+	background: var(--fg);
+	color: var(--bg);
+	font-size: 44px;
+	line-height: 1.1;
+	letter-spacing: 0;
+}
+[data-theme='transit'] .layout-two-column h3 + p {
+	margin-top: 24px !important;
+}
+[data-theme='transit'] .layout-two-column p:has(> strong:only-child) {
+	margin-top: 0;
+}
+[data-theme='transit'] .layout-two-column p > strong:only-child {
+	display: block;
+	font-size: 150px;
+	line-height: 1.05;
+	letter-spacing: -0.04em;
+	color: var(--fg);
+}
+[data-theme='transit'] .layout-two-column .slot-right p > strong:only-child {
+	color: var(--accent-text);
+}
+/* Narrow-column body copy runs at the narrow-column scale (40-44px, not the
+ * plain-slide 44-52px range) and gets extra line-height for the air a
+ * ~800px-wide column needs. */
+[data-theme='transit'] .slide[data-layout] .layout-two-column :is(.slot-left, .slot-right) p {
+	font-size: 44px;
+	line-height: 1.3;
+}
+[data-theme='transit'] .layout-two-column p + p {
+	margin-top: 12px !important;
+}
+
+/* ---------- three columns: a third platform ---------- */
+[data-theme='transit'] .layout-three-column {
+	display: grid;
+	grid-template-columns: 1fr 1fr 1fr;
+	grid-template-rows: auto auto 1fr;
+	column-gap: 56px;
+	align-content: start;
+}
+[data-theme='transit'] .layout-three-column .slot-default {
+	grid-column: 1 / -1;
+}
+[data-theme='transit'] .layout-three-column .slot-left,
+[data-theme='transit'] .layout-three-column .slot-center,
+[data-theme='transit'] .layout-three-column .slot-right {
+	position: relative;
+	margin-top: 20px;
+	padding-top: 28px;
+	border-top: 28px solid var(--accent);
+	text-align: left;
+	animation: transit-in var(--dur) var(--ease) 300ms both;
+}
+[data-theme='transit'] .layout-three-column .slot-center {
+	border-top-color: var(--fg);
+	animation-delay: 400ms;
+}
+[data-theme='transit'] .layout-three-column .slot-right {
+	border-top-color: var(--accent-text);
+	animation-delay: 500ms;
+}
+[data-theme='transit'] .layout-three-column .slot-left::before,
+[data-theme='transit'] .layout-three-column .slot-center::before,
+[data-theme='transit'] .layout-three-column .slot-right::before {
+	content: '';
+	position: absolute;
+	left: 24px;
+	top: -50px;
+	width: 60px;
+	height: 60px;
+	border: 10px solid var(--fg);
+	border-radius: 50%;
+	background: var(--bg);
+	animation: transit-pop 300ms var(--ease) 800ms both;
+}
+[data-theme='transit'] .layout-three-column h3 {
+	display: inline-block;
+	margin: 0;
+	padding: 12px 22px 6px;
+	background: var(--fg);
+	color: var(--bg);
+	font-size: 38px;
+	line-height: 1.1;
+}
+/* Column body copy runs at the narrow-column scale; a three-up pane is
+ * narrower still, so it sits at the bottom of that range. */
+[data-theme='transit'] .slide[data-layout] .layout-three-column :is(.slot-left, .slot-center, .slot-right) :is(p, li) {
+	font-size: 42px;
+	line-height: 1.25;
+}
+[data-theme='transit'] .layout-three-column ul {
+	margin-top: 12px !important;
+}
+
+/* narrow panes wrap often: run the narrow-column scale here too, and tighten
+ * the route line's station rings and the padding around each item there and
+ * in the sidebar layout. Matched at `.slide[data-layout]` specificity so it
+ * beats the general bullet rule above instead of losing a same-property
+ * fight. */
+[data-theme='transit'] .slide[data-layout] :is(.layout-two-column, .layout-three-column, .layout-sidebar) .slot > ul::before {
+	top: -8px;
+}
+[data-theme='transit'] .slide[data-layout] :is(.layout-two-column, .layout-three-column) .slot > ul > li {
+	padding: 10px 0 10px 96px;
+	font-size: 44px;
+	line-height: 1.25;
+}
+[data-theme='transit'] .slide[data-layout] :is(.layout-two-column, .layout-three-column) .slot > ul > li::before {
+	left: 26px;
+	top: 18px;
+	width: 40px;
+	height: 40px;
+	border-width: 8px;
+}
+
+/* ---------- image: a poster case on the platform wall ---------- */
+/*
+ * The text column and the image column are two ordinary grid items, each
+ * holding its own slot whole (no `display: contents`): a grid item's own
+ * intrinsic height can overflow a short auto row when its box is carved up
+ * into several items with independent row placement, which is what made an
+ * earlier version of this layout overlap the caption under the photo.
+ */
+[data-theme='transit'] .layout-split-media {
+	display: grid;
+	grid-template-columns: 1fr 940px;
+	column-gap: 72px;
+	align-items: start;
+}
+[data-theme='transit'] .layout-split-media .slot-default {
+	min-width: 0;
+}
+[data-theme='transit'] .layout-split-media .slot-default > h3 {
+	margin-top: 20px;
+}
+[data-theme='transit'] .layout-split-media .slot-default > p {
+	animation: transit-in var(--dur) var(--ease) 360ms both;
+}
+[data-theme='transit'] .layout-split-media .slot-media {
+	position: relative;
+	z-index: 0;
+	padding-top: 60px;
+	animation: transit-in var(--dur) var(--ease) 300ms both;
+}
+[data-theme='transit'] .layout-split-media .slot-media::before {
+	content: '';
+	position: absolute;
+	z-index: -1;
+	left: -72px;
+	right: -96px;
+	top: 50%;
+	height: 28px;
+	background: var(--line);
+}
+[data-theme='transit'] .layout-split-media .slot-media p {
+	margin: 0 !important;
+	padding: 12px;
+	border: 12px solid var(--fg);
+	background: var(--fg);
+}
+[data-theme='transit'] .slide[data-layout] img {
+	display: block;
+	width: 100%;
+	filter: saturate(0.75) contrast(1.06);
+}
+/* a plain image on the default layout: framed like the split-media poster
+ * case, sized to fill what is left under the heading without overrunning it */
+[data-theme='transit'] .layout-default .slot:has(> img, > p > img:only-child) {
+	display: flex;
+	flex-direction: column;
+	min-height: 100%;
+}
+[data-theme='transit'] .layout-default .slot > p:has(> img:only-child) {
+	flex: 1;
+	min-height: 0;
+	width: auto;
+	margin: 24px 0 0 !important;
+	padding: 12px;
+	border: 12px solid var(--fg);
+	background: var(--fg);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	animation: transit-in var(--dur) var(--ease) 360ms both;
+}
+[data-theme='transit'] .layout-default .slot > p > img:only-child {
+	width: 100%;
+	height: auto;
+	max-height: 100%;
+	object-fit: contain;
+}
+[data-theme='transit'] .layout-default .slot > img {
+	flex: 0 1 auto;
+	min-height: 0;
+	width: auto;
+	max-width: 100%;
+	height: auto;
+	max-height: 100%;
+	align-self: flex-start;
+	object-fit: contain;
+	padding: 12px;
+	border: 12px solid var(--fg);
+	background: var(--fg);
+	box-sizing: border-box;
+}
+
+/* ---------- table: a service board, one line colour per row ---------- */
+[data-theme='transit'] .slide[data-layout] table {
+	width: 100%;
+	border-collapse: collapse;
+	margin-top: 20px;
+}
+[data-theme='transit'] .slide[data-layout] th {
+	padding: 26px 28px 22px 36px;
+	background: var(--fg);
+	color: var(--bg);
+	text-align: left;
+	font-family: var(--font-display);
+	font-weight: 800;
+	font-size: 44px;
+	letter-spacing: 0;
+}
+[data-theme='transit'] .slide[data-layout] th:first-child {
+	padding-left: 64px;
+}
+[data-theme='transit'] .slide[data-layout] td {
+	padding: 36px 28px 32px 36px;
+	border-bottom: 4px solid var(--fg);
+	font-size: 44px;
+	line-height: 1.3;
+}
+[data-theme='transit'] .slide[data-layout] td:first-child {
+	border-left: 28px solid var(--accent);
+	font-weight: 800;
+}
+[data-theme='transit'] .slide[data-layout] tbody tr:nth-child(4n + 2) td:first-child {
+	border-left-color: var(--accent-text);
+}
+[data-theme='transit'] .slide[data-layout] tbody tr:nth-child(4n + 3) td:first-child {
+	border-left-color: var(--fg);
+}
+[data-theme='transit'] .slide[data-layout] tbody tr:nth-child(4n + 4) td:first-child {
+	border-left-color: var(--muted);
+}
+[data-theme='transit'] .slide[data-layout] thead tr,
+[data-theme='transit'] .slide[data-layout] tbody tr {
+	animation: transit-in var(--dur) var(--ease) 300ms both;
+}
+[data-theme='transit'] .slide[data-layout] tbody tr:nth-child(1) {
+	animation-delay: 420ms;
+}
+[data-theme='transit'] .slide[data-layout] tbody tr:nth-child(2) {
+	animation-delay: 540ms;
+}
+[data-theme='transit'] .slide[data-layout] tbody tr:nth-child(3) {
+	animation-delay: 660ms;
+}
+[data-theme='transit'] .slide[data-layout] tbody tr:nth-child(n + 4) {
+	animation-delay: 780ms;
+}
+
+/* ---------- cover, sidebar, blank ---------- */
+[data-theme='transit'] .layout-cover {
+	display: flex;
+	flex-direction: column;
+	justify-content: center;
+	min-height: 100%;
+}
+/*
+ * A cover slide's `background:` frontmatter directive is an inline style
+ * on `.slide` that beats this theme's own background, so the text sits on
+ * its own sheet instead of trusting the slide behind it to be light: the
+ * cover works the same way on a photo, a dark navy fill, or nothing at all.
+ */
+[data-theme='transit'] .layout-cover .slot-default {
+	max-width: 1500px;
+	background: var(--bg);
+	padding: 64px;
+}
+/* `short` keeps the poster size this rule always had ("One idea per
+ * slide" reads well at 168px); `medium`/`long` scale down to fit a cover
+ * statement that needs more than a few words. */
+[data-theme='transit'] .layout-cover h1 {
+	font-size: 116px;
+	line-height: 1.08;
+	letter-spacing: -0.03em;
+	text-wrap: balance;
+	animation: transit-in var(--dur) var(--ease) 120ms both;
+}
+[data-theme='transit'] .layout-cover h1[data-length='medium'] {
+	font-size: 144px;
+	line-height: 1.04;
+	letter-spacing: -0.03em;
+}
+[data-theme='transit'] .layout-cover h1[data-length='short'] {
+	font-size: 168px;
+	line-height: 1.02;
+	letter-spacing: -0.035em;
+}
+[data-theme='transit'] .layout-cover h1::after {
+	content: '';
+	display: block;
+	height: 56px;
+	margin: 56px -64px 0;
+	background:
+		var(--stations),
+		linear-gradient(var(--fg), var(--fg)) 0 14px / 100% 28px no-repeat;
+	animation: transit-draw 900ms var(--ease) 400ms both;
+}
+[data-theme='transit'] .layout-cover p {
+	margin-top: 56px !important;
+	font-size: 52px;
+	line-height: 1.35;
+	font-weight: 700;
+	animation: transit-in var(--dur) var(--ease) 300ms both;
+}
+
+[data-theme='transit'] .layout-sidebar {
+	display: grid;
+	grid-template-columns: 1fr 0.5fr;
+	grid-template-rows: auto 1fr;
+	column-gap: 64px;
+	align-content: start;
+}
+[data-theme='transit'] .layout-sidebar .slot-default {
+	grid-column: 1;
+}
+[data-theme='transit'] .slide[data-layout] .layout-sidebar .slot-default > h2 {
+	margin-bottom: 48px;
+}
+/* A lead sentence ahead of the route line leaves less headroom than a
+ * bullet-only slide, so the stations sit closer together here; the body
+ * size on the items themselves is unchanged. */
+[data-theme='transit'] .slide[data-layout] .layout-sidebar .slot-default > p + ul > li {
+	padding: 8px 0 8px 176px;
+	line-height: 1.25;
+}
+[data-theme='transit'] .slide[data-layout] .layout-sidebar .slot-default > p {
+	line-height: 1.3;
+	margin-bottom: 16px !important;
+}
+[data-theme='transit'] .layout-sidebar .slot-sidebar {
+	grid-column: 2;
+	grid-row: 1 / -1;
+	position: relative;
+	padding: 48px 40px;
+	background: var(--surface);
+	border-top: 28px solid var(--accent-text);
+	animation: transit-in var(--dur) var(--ease) 400ms both;
+}
+[data-theme='transit'] .layout-sidebar .slot-sidebar::before {
+	content: '';
+	position: absolute;
+	left: 34px;
+	top: -50px;
+	width: 72px;
+	height: 72px;
+	border: 12px solid var(--fg);
+	border-radius: 50%;
+	background: var(--bg);
+	animation: transit-pop 300ms var(--ease) 800ms both;
+}
+[data-theme='transit'] .layout-sidebar .slot-sidebar h3 {
+	margin: 0 0 20px;
+	color: var(--fg);
+}
+[data-theme='transit'] .slide[data-layout] .layout-sidebar .slot-sidebar :is(p, li) {
+	font-size: 44px;
+	line-height: 1.3;
+}
+[data-theme='transit'] .layout-sidebar .slot-sidebar ul > li {
+	padding: 14px 0 14px 64px;
+}
+[data-theme='transit'] .layout-sidebar .slot-sidebar ul > li::before {
+	width: 32px;
+	height: 32px;
+	left: 20px;
+	top: 24px;
+	border-width: 7px;
+}
+[data-theme='transit'] .layout-sidebar .slot-sidebar ul::before {
+	display: none;
+}
+
+[data-theme='transit'] .layout-blank {
+	display: flex;
+	flex-direction: column;
+	justify-content: center;
+	align-items: center;
+	min-height: 100%;
+	text-align: center;
+}
+[data-theme='transit'] .layout-blank h1 {
+	font-size: 140px;
+	line-height: 1.05;
+}
+
+/* ---------- diagram: routes and interchanges ---------- */
+[data-theme='transit'] .slide[data-layout] .mermaid-diagram {
+	margin-top: -10px;
+	display: flex;
+	justify-content: center;
+	animation: transit-fade var(--dur) linear 300ms both;
+}
+[data-theme='transit'] .mermaid-diagram svg {
+	display: block;
+	width: 100% !important;
+	max-width: none !important;
+	height: 100%;
+	overflow: visible;
+}
+[data-theme='transit'] .layout-default .slot:has(.mermaid-diagram) {
+	display: flex;
+	flex-direction: column;
+	min-height: 100%;
+}
+[data-theme='transit'] .layout-default .slot:has(.mermaid-diagram) .mermaid-diagram {
+	flex: 1;
+	min-height: 0;
+	position: relative;
+}
+[data-theme='transit'] .layout-default .slot:has(.mermaid-diagram) .mermaid-diagram svg {
+	position: absolute;
+	inset: 0;
+	width: 100% !important;
+	height: 100% !important;
+}
+/* Slightly smaller than the mockup and letter-spacing tightened: mermaid
+ * sizes each node from its own internal padding around the label's measured
+ * width, so a longer word still runs close to the pill's edge; this keeps
+ * more of that margin than a larger size would. */
+[data-theme='transit'] .mermaid-diagram .nodeLabel,
+[data-theme='transit'] .mermaid-diagram .nodeLabel p {
+	margin: 0;
+	font-family: var(--font-body);
+	font-size: 28px;
+	font-weight: 600;
+	line-height: 1.3;
+	letter-spacing: -0.01em;
+	text-align: center;
+	color: var(--fg);
+	text-wrap: initial;
+}
+[data-theme='transit'] .mermaid-diagram .node foreignObject {
+	overflow: visible;
+}
+/* A stadium radius, not 50%: mermaid's node boxes are wider than they are
+ * tall, so a fixed radius large enough to round a short node fully still
+ * reads as a pill, never an ellipse, on a longer one. */
+[data-theme='transit'] .mermaid-diagram .node:not(.quiet) rect {
+	rx: 999px;
+	ry: 999px;
+}
+[data-theme='transit'] .mermaid-diagram .node :is(rect, path, polygon, circle) {
+	stroke-width: 7px !important;
+}
+[data-theme='transit'] .mermaid-diagram .node.quiet :is(rect, path, polygon, circle) {
+	stroke-width: 5px !important;
+}
+/* one line colour for every edge on a diagram of arbitrary shape; the
+ * accent picks out the first node in the flow instead of cycling per edge */
+[data-theme='transit'] .mermaid-diagram .edgePaths path,
+[data-theme='transit'] .mermaid-diagram .flowchart-link {
+	stroke: var(--accent-text) !important;
+	stroke-width: 14px !important;
+	stroke-linejoin: round;
+	marker-end: none !important;
+	marker-start: none !important;
+}
+[data-theme='transit'] .mermaid-diagram .node:first-of-type :is(rect, path, polygon, circle) {
+	stroke: var(--accent) !important;
+}
+[data-theme='transit'] .slide[data-layout] .mermaid-diagram + p {
+	margin-top: 24px !important;
+	font-weight: 700;
+	animation: transit-in var(--dur) var(--ease) 600ms both;
+}
+
+/* ---------- scroll slide ---------- */
+[data-theme='transit'] .scroll-content {
+	position: relative;
+}
+[data-theme='transit'] .scroll-content pre.shiki {
+	font-size: 42px;
+	line-height: 62px;
+}
+[data-theme='transit'] .scroll-content .line {
+	white-space: pre-wrap;
+	word-break: break-word;
+}
+
+/* ---------- live code block and asciinema chrome ----------
+ * Structure and behaviour come from rich-blocks.css, which reads the
+ * --color-* bridge above; the run button and code frame get the theme's
+ * own signage colours instead of the shared default. */
+[data-theme='transit'] .live-code-block-portal {
+	width: 100%;
+}
+[data-theme='transit'] .live-code-block .run-button {
+	background-color: var(--accent-text);
+	color: var(--bg);
+	font-family: var(--font-display);
+	font-weight: 800;
+	border-radius: 0;
+}
+[data-theme='transit'] .live-code-block .code-container pre,
+[data-theme='transit'] .live-code-block .result-container {
+	border-radius: 0;
+	border: 3px solid var(--fg);
+}
+[data-theme='transit'] .asciinema-player-wrapper {
+	border: 3px solid var(--fg);
+	overflow: hidden;
+	max-height: 100%;
+}
+/* Before the CDN player mounts (or if it never gets network), the raw
+ * fenced source is still on the page for a moment. Keep it at the code
+ * floor so a slow or offline load never trips the minimum-size check. */
+[data-theme='transit'] pre > code.language-asciinema {
+	font-size: 42px;
+}
+
+/* ---------- map slide ---------- */
+[data-theme='transit'] .map-content-overlay p {
+	background: var(--bg);
+	padding: 16px 24px;
+	border: 3px solid var(--fg);
+	width: fit-content;
+}

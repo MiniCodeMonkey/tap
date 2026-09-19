@@ -13,7 +13,7 @@ Frontmatter is YAML configuration at the start of your presentation file, enclos
 ```yaml
 ---
 title: My Presentation
-theme: paper
+theme: terminal
 author: Jane Developer
 transition: fade
 ---
@@ -73,32 +73,47 @@ date: 2024-01-15
 
 ### theme
 
-The visual theme applied to all slides. Themes control typography, colors, animations, transitions, and spacing.
+The visual theme applied to all slides. Themes control typography, colors, animations, transitions, and spacing. An unknown theme name falls back to `base` with a warning.
 
 | Property | Value |
 |----------|-------|
 | Type | `string` |
-| Default | `paper` |
+| Default | `base` |
 | Required | No |
-| Options | `paper`, `noir`, `aurora`, `phosphor`, `poster` |
 
 ```yaml
 ---
-theme: phosphor
+theme: terminal
 ---
 ```
 
 **Available themes:**
 
-| Theme | Description |
-|-------|-------------|
-| `paper` | Ultra-clean, premium design with warm accents |
-| `noir` | Cinematic, sophisticated with gold highlights |
-| `aurora` | Vibrant gradient mesh with glassmorphism |
-| `phosphor` | CRT aesthetic with phosphor green glow |
-| `poster` | Bold graphic design with thick borders |
+| Theme | Polarity | Pitch |
+|-------|----------|-------|
+| `base` | light | A plain, readable default theme with no strong identity, used when a deck names no theme or names one that doesn't exist. |
+| `terminal` | dark | For infrastructure and live-coding talks where the audience lives in a shell and the deck should feel like one long tmux session. |
+| `product` | light | A launch-day talk for a developer tool, where every slide should feel like the landing page of something you want to install. |
+| `swiss` | light | An argument-driven engineering talk set like a Zurich concert poster: grid, grotesk, one red. |
+| `newsprint` | light | A war story or postmortem told as front-page news, where every slide is a headline and every number is a front-page figure. |
+| `zine` | light | An opinionated, scrappy talk with a point to argue: cut, pasted, and photocopied the night before, and proud of it. |
+| `poster` | light | For a loud, fast, opinionated talk in the Takahashi style, where every slide is a gig poster and the words do all the work. |
+| `blueprint` | dark | For architecture and systems talks where every slide is a sheet from the drawing set and the diagrams are the argument. |
+| `riso` | light | A warm community-conference talk that should feel like a two-ink print pulled off the drum that morning. |
+| `retro-computing` | light | A nostalgic, slightly mischievous systems talk told from a 1990 desktop, where every idea opens in its own window. |
+| `paperback` | light | A story-led conference talk that wants the warmth and quiet authority of a mid-century paperback series. |
+| `keynote` | dark | A big-room launch talk where one idea at a time lands on a dark stage, lit from above. |
+| `editorial` | light | A story-led talk told like a long-read magazine feature, with drop caps, pull quotes, and figures. |
+| `observatory` | dark | A data-heavy infrastructure talk, charted like a night sky: systems as bodies, readings taken through a reticle. |
+| `arcade` | dark | A high-energy war-story talk framed as a game you can win, built to stay legible on a washed-out projector. |
+| `isometric` | light | A friendly architecture walkthrough where the infrastructure itself is the cast: code, tables, and numbers become chunky little solids on a warm floor. |
+| `ink` | light | A calm, reflective talk about hard-won lessons, where each slide holds one thought and a lot of silence around it. |
+| `lab-notebook` | light | An evidence-first engineering talk where every claim arrives as a numbered figure and the speaker's red pen does the arguing. |
+| `bauhaus` | light | A bold, opinionated talk about first principles, where every idea is reduced to a circle, a triangle, or a square. |
+| `sketch` | light | For explainer talks that build an idea step by step, as if the speaker were drawing it on a whiteboard in front of you. |
+| `transit` | light | An architecture or infrastructure talk that walks the audience through a system the way a metro map walks a city. |
 
-See [Themes](/guide/themes) for detailed descriptions and examples.
+Press `t` during a presentation to cycle themes live, or force one with the `?theme=<slug>` query parameter. See [Themes](/guide/themes) for the full guide and `docs/reference/theme-porting.md` if you want to design a new one.
 
 ### aspectRatio
 
@@ -128,6 +143,11 @@ aspectRatio: 4:3
 ::: tip
 Most modern projectors and displays use 16:9. Use 4:3 only if you know your venue has older equipment.
 :::
+
+Every slide renders on a fixed 1920px-wide canvas (1920 x 1920/aspectRatio
+px) and that whole canvas scales as one unit to fit the screen it's shown
+on, so a deck looks the same on every projector, laptop, or presenter
+panel. Themes are tuned against the 16:9 canvas.
 
 ## Animations and Transitions
 
@@ -182,62 +202,56 @@ See [Animations & Transitions](/guide/animations-transitions) for more on fragme
 
 ## Code Display
 
-### codeTheme
+Code colors and code text size come from the active theme, not from
+frontmatter. Every theme sets the Shiki CSS variables its stylesheet
+defines, so syntax highlighting always matches the deck's theme. To
+change code colors, override the theme's custom properties with
+`customTheme`, or pick a different theme.
 
-Syntax highlighting theme for code blocks. Uses Shiki themes.
+## Theme Customization
+
+### themeColors
+
+Override a handful of the active theme's colors without writing a whole
+theme.
 
 | Property | Value |
 |----------|-------|
-| Type | `string` |
-| Default | Theme-dependent |
+| Type | `object` |
+| Default | None |
 | Required | No |
 
 ```yaml
 ---
-codeTheme: github-dark
+theme: terminal
+themeColors:
+  accent: "#ff0000"
+  background: "#0d0d0d"
 ---
 ```
 
-**Popular code themes:**
+Accepted keys: `background`, `text`, `muted`, `accent`, `codeBg`.
 
-| Theme | Style |
-|-------|-------|
-| `github-dark` | GitHub's dark mode colors |
-| `github-light` | GitHub's light mode colors |
-| `nord` | Arctic, bluish color palette |
-| `dracula` | Popular dark theme |
-| `one-dark-pro` | Atom One Dark colors |
-| `monokai` | Classic dark theme |
-| `min-light` | Minimal light theme |
+### customTheme
 
-::: tip
-Each presentation theme sets a sensible default code theme. Only override if you want a specific look.
-:::
-
-### codeFontSize
-
-Font size for code blocks. Adjust for readability at presentation distance.
+Path to your own CSS file, loaded after the built-in theme's CSS so it can
+override any of the theme's custom properties or rules.
 
 | Property | Value |
 |----------|-------|
-| Type | `string` (CSS value) |
-| Default | `16px` |
+| Type | `string` (path, relative to the deck) |
+| Default | None |
 | Required | No |
 
 ```yaml
 ---
-codeFontSize: 14px
+theme: base
+customTheme: "./my-theme.css"
 ---
 ```
 
-**Recommended sizes:**
-
-| Size | Use Case |
-|------|----------|
-| `18px` | Large venue, few lines of code |
-| `16px` | Default, standard presentations |
-| `14px` | More code on screen |
-| `12px` | Dense code, close viewing |
+See [Creating Themes](/reference/theme-porting) for the full set of custom
+properties a theme defines and the selector conventions to follow.
 
 ## Live Code Execution
 
@@ -294,20 +308,24 @@ Here's a comprehensive frontmatter example using multiple options:
 title: Database Architecture Deep Dive
 author: Jane Developer
 date: 2024-03-15
-theme: phosphor
+theme: blueprint
 aspectRatio: 16:9
 transition: fade
 fragments: true
-codeTheme: github-dark
-codeFontSize: 14px
+themeColors:
+  accent: "#ffd447"
 drivers:
   sqlite:
-    database: ./demo.db
+    connections:
+      demo:
+        path: ./demo.db
   postgres:
-    host: localhost
-    database: analytics
-    user: $PGUSER
-    password: $PGPASSWORD
+    connections:
+      analytics:
+        host: localhost
+        database: analytics
+        user: $PGUSER
+        password: $PGPASSWORD
     timeout: 30
 ---
 ```
@@ -319,12 +337,12 @@ drivers:
 | `title` | string | File name | Presentation title |
 | `author` | string | None | Author name |
 | `date` | string | None | Presentation date |
-| `theme` | string | `minimal` | Visual theme |
+| `theme` | string | `base` | Visual theme |
 | `aspectRatio` | string | `16:9` | Slide aspect ratio |
 | `transition` | string | `fade` | Default slide transition |
 | `fragments` | boolean | `false` | Auto-reveal list items |
-| `codeTheme` | string | Theme default | Syntax highlighting theme |
-| `codeFontSize` | string | `16px` | Code block font size |
+| `themeColors` | object | None | Override individual theme colors |
+| `customTheme` | string | None | Path to your own CSS file |
 | `drivers` | object | None | Live code execution config |
 
 ## Next Steps

@@ -1,9 +1,12 @@
 import { test, expect } from '@playwright/test';
 import * as fs from 'fs';
 import * as path from 'path';
+import { fileURLToPath } from 'url';
+
+const dirname = path.dirname(fileURLToPath(import.meta.url));
 
 test.describe('Hot Reload', () => {
-  const sampleMdPath = path.join(__dirname, '../../testdata/sample.md');
+  const sampleMdPath = path.join(dirname, '../../testdata/sample.md');
   let originalContent: string;
 
   test.beforeAll(() => {
@@ -168,6 +171,6 @@ test.describe('WebSocket Message Handling', () => {
     await page.waitForTimeout(500);
 
     // Last slide should be visible
-    await expect(page.locator('.slide-content')).toContainText('Thank You!');
+    await expect(page.locator('.slide-content')).toContainText('Reordered Live Code');
   });
 });

@@ -4,6 +4,7 @@ package cli
 import (
 	"context"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -75,10 +76,23 @@ func runServe(cmd *cobra.Command, args []string) {
 		Muted("(%s)\n", time.Since(start).Round(time.Microsecond))
 	})
 
-	// Create HTTP server
-	addr := fmt.Sprintf("0.0.0.0:%d", servePort)
-	server := &http.Server{
-		Addr:              addr,
+	// Bind the listener synchronously, before any success output: a busy
+	// port must be known now, not discovered later from inside the
+	// goroutine below after "Serving presentation from..." has already
+	// printed. An explicitly requested port (--port) that is busy is a
+	// hard error; the default port falls back to the next one instead, so
+	// two tap serve processes can run side by side without flags.
+	listener, err := listenOnAvailablePort(servePort, cmd.Flags().Changed("port"), "tap serve")
+	if err != nil {
+		Errorln("Error:", err)
+		os.Exit(1)
+	}
+	boundPort := servePort
+	if tcpAddr, ok := listener.Addr().(*net.TCPAddr); ok {
+		boundPort = tcpAddr.Port
+	}
+
+	httpServer := &http.Server{
 		Handler:           handler,
 		ReadHeaderTimeout: 10 * time.Second,
 	}
@@ -87,8 +101,8 @@ func runServe(cmd *cobra.Command, args []string) {
 	fmt.Println()
 	Success("  Serving presentation from %s\n", dir)
 	fmt.Println()
-	fmt.Printf("  Local:   http://localhost:%d\n", servePort)
-	fmt.Printf("  Network: http://0.0.0.0:%d\n", servePort)
+	fmt.Printf("  Local:   http://localhost:%d\n", boundPort)
+	fmt.Printf("  Network: http://0.0.0.0:%d\n", boundPort)
 	fmt.Println()
 	Muted("  Press Ctrl+C to stop\n")
 	fmt.Println()
@@ -97,10 +111,10 @@ func runServe(cmd *cobra.Command, args []string) {
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 
-	// Start server in goroutine
+	// Serve on the listener already bound above, in a goroutine.
 	errCh := make(chan error, 1)
 	go func() {
-		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		if err := httpServer.Serve(listener); err != nil && err != http.ErrServerClosed {
 			errCh <- err
 		}
 	}()
@@ -119,7 +133,7 @@ func runServe(cmd *cobra.Command, args []string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	if err := server.Shutdown(ctx); err != nil {
+	if err := httpServer.Shutdown(ctx); err != nil {
 		Errorln("Error during shutdown:", err)
 		os.Exit(1)
 	}

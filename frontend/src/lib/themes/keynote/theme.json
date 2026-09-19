@@ -1,0 +1,37 @@
+{
+	"name": "Keynote",
+	"polarity": "dark",
+	"pitch": "A big-room launch talk where one idea at a time lands on a dark stage, lit from above.",
+	"illustration": {
+		"medium": "flat vector on near-black, cinematic product-launch illustration with soft glow",
+		"line": "1px hairline strokes, thin and precise, almost invisible against the dark",
+		"shapes": "simple geometric forms (circles, thin rings, subtle grids), generous negative space",
+		"texture": "soft radial glow behind key shapes, otherwise flat",
+		"palette_use": "near-black background dominant, soft sky-blue accent used as a glowing highlight, muted grey-blue for secondary detail",
+		"mood": "premium, hushed, big-stage reveal",
+		"avoid": "clutter, bright multi-color palettes, hand-drawn line, hard black outlines"
+	},
+	"mermaid": {
+		"themeVariables": {
+			"fontFamily": "Geist",
+			"primaryColor": "#1a212d",
+			"primaryTextColor": "#f4f6fa",
+			"primaryBorderColor": "#7cc7ff",
+			"lineColor": "#7cc7ff",
+			"secondaryColor": "#1a212d",
+			"tertiaryColor": "#1a212d",
+			"background": "#06070a",
+			"mainBkg": "#1a212d",
+			"textColor": "#f4f6fa",
+			"titleColor": "#f4f6fa",
+			"nodeTextColor": "#f4f6fa",
+			"nodeBorder": "#7cc7ff",
+			"clusterBkg": "#1a212d",
+			"clusterBorder": "#4d5a6e",
+			"edgeLabelBackground": "#06070a",
+			"fontSize": "40px"
+		},
+		"quietStyle": "fill:#1a212d,stroke:#4d5a6e,color:#a9b3c1",
+		"curve": "basis"
+	}
+}

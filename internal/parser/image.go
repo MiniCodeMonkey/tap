@@ -112,7 +112,7 @@ func ParseImages(content string) []ImageInfo {
 // If no attributes are found, returns an empty ImageAttributes.
 func ExtractImageAttributes(line string) ImageAttributes {
 	match := imageAttrPattern.FindStringSubmatch(line)
-	if match == nil || len(match) < 2 {
+	if len(match) < 2 {
 		return ImageAttributes{}
 	}
 

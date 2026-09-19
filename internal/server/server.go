@@ -29,17 +29,26 @@ type Server struct {
 	presenterPassword string
 	customThemePath   string
 	baseDir           string // Base directory for serving local files (images, etc.)
+	componentBundles  *ComponentBundleStore
 	mu                sync.RWMutex
 	started           bool
 }
 
-// New creates a new Server bound to the specified port.
-// The server listens on 0.0.0.0 to allow network access.
+// New creates a new Server bound to the specified port on 0.0.0.0, so a
+// presenter can open it from another device on the network. Use
+// NewWithHost to bind a narrower host, such as a build-time helper server
+// nothing outside the machine needs to reach.
 func New(port int) *Server {
+	return NewWithHost(port, "0.0.0.0")
+}
+
+// NewWithHost creates a new Server bound to the specified host and port.
+func NewWithHost(port int, host string) *Server {
 	s := &Server{
-		addr:       fmt.Sprintf("0.0.0.0:%d", port),
-		mux:        http.NewServeMux(),
-		shutdownCh: make(chan struct{}),
+		addr:             fmt.Sprintf("%s:%d", host, port),
+		mux:              http.NewServeMux(),
+		shutdownCh:       make(chan struct{}),
+		componentBundles: NewComponentBundleStore(),
 	}
 
 	s.httpServer = &http.Server{
@@ -237,4 +246,20 @@ func (s *Server) GetBaseDir() string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.baseDir
+}
+
+// SetComponentBundles atomically replaces the dev server's set of component
+// bundle files served under /components/.
+func (s *Server) SetComponentBundles(files map[string]ComponentBundleFile) {
+	s.mu.RLock()
+	store := s.componentBundles
+	s.mu.RUnlock()
+	store.Set(files)
+}
+
+// ComponentBundles returns the server's component bundle store.
+func (s *Server) ComponentBundles() *ComponentBundleStore {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.componentBundles
 }

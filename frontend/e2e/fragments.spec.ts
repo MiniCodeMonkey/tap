@@ -47,14 +47,12 @@ test.describe('Fragment Reveals', () => {
   });
 
   test('should move to next slide after all fragments revealed', async ({ page }) => {
-    // Slide 3 has 2 pause markers creating 3 fragments (indices 0, 1, 2)
-    // Starting from fragmentIndex -1, we need 4 navigations:
-    // -1 → 0 → 1 → 2 → next slide
+    // Slide 3 has 2 pause markers, which create 2 fragments (indices 0, 1):
+    // the content before the first pause is always visible. Starting from
+    // fragmentIndex -1, we need 3 navigations: -1 → 0 → 1 → next slide.
     await page.keyboard.press('ArrowRight'); // Reveal fragment 0
     await page.waitForTimeout(300);
     await page.keyboard.press('ArrowRight'); // Reveal fragment 1
-    await page.waitForTimeout(300);
-    await page.keyboard.press('ArrowRight'); // Reveal fragment 2
     await page.waitForTimeout(300);
     await page.keyboard.press('ArrowRight'); // Move to slide 4
     await page.waitForTimeout(500);
@@ -96,8 +94,7 @@ test.describe('Fragment Reveals', () => {
   });
 
   test('should handle rapid fragment navigation', async ({ page }) => {
-    // Rapidly press right multiple times (need 4 to go through 3 fragments and advance)
-    await page.keyboard.press('ArrowRight');
+    // Rapidly press right multiple times (need 3 to go through 2 fragments and advance)
     await page.keyboard.press('ArrowRight');
     await page.keyboard.press('ArrowRight');
     await page.keyboard.press('ArrowRight');

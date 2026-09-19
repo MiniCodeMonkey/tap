@@ -1,0 +1,386 @@
+/**
+ * Root component for the presenter view, served at /presenter. Shows a
+ * compact timer and slide counter, a preview of the current and next
+ * slides, and the current slide's speaker notes, with touch-friendly
+ * controls for advancing the presentation.
+ *
+ * Named PresenterApp rather than Presenter because this project's default
+ * filesystem is case-insensitive, so a file named Presenter.tsx would
+ * collide with the sibling entry point presenter.tsx.
+ *
+ * The current slide panel mirrors exactly what the audience sees: the same
+ * live fragment index and step, with the map, live code and rich content
+ * (syntax highlighting, mermaid) all running, so the speaker can read code
+ * and diagrams as clearly as the audience does. It never animates a slide
+ * transition. The next slide panel shows that slide's initial state (no
+ * fragments revealed yet) as a static, non-interactive preview, the same
+ * cheap path the overview thumbnails use: no map, no live code, no rich
+ * content processing, since it is only a look-ahead.
+ */
+
+import { useEffect, useRef, useState, type ReactNode } from 'react';
+import {
+	usePresentationStore,
+	selectCurrentSlide,
+	selectTotalSlides,
+	loadPresentation,
+	setupHashChangeListener,
+	nextSlide,
+	prevSlide,
+	goToSlide
+} from '$lib/stores/presentation';
+import { useResolvedTheme } from '$lib/hooks/useResolvedTheme';
+import {
+	broadcastPresentationState,
+	connectWebSocket,
+	detectStaticMode,
+	disconnectWebSocket,
+	useConnectionStore
+} from '$lib/stores/websocket';
+import { fetchPresentation } from '$lib/utils/fetchPresentation';
+import { SlideCanvas } from '$lib/components/SlideCanvas';
+import { Slide } from '$lib/components/Slide';
+
+/** True when exported to PDF via the "both" content option (`/presenter?print=true`). */
+const PRINT_MODE =
+	typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('print') === 'true';
+
+/** Whether the currently focused element is one the presenter is typing into. */
+function isInputFocused(): boolean {
+	const target = document.activeElement;
+	if (!target) return false;
+	const tagName = target.tagName;
+	return tagName === 'INPUT' || tagName === 'TEXTAREA' || target.getAttribute('contenteditable') === 'true';
+}
+
+function formatTime(seconds: number): string {
+	const hours = Math.floor(seconds / 3600);
+	const minutes = Math.floor((seconds % 3600) / 60);
+	const secs = seconds % 60;
+	if (hours > 0) {
+		return `${hours}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+	}
+	return `${minutes}:${secs.toString().padStart(2, '0')}`;
+}
+
+export default function PresenterApp() {
+	const [isLoading, setIsLoading] = useState(true);
+	const [loadError, setLoadError] = useState<string | null>(null);
+	const [elapsedSeconds, setElapsedSeconds] = useState(0);
+
+	const presentation = usePresentationStore((state) => state.presentation);
+	const currentSlide = usePresentationStore(selectCurrentSlide);
+	const currentSlideIndex = usePresentationStore((state) => state.currentSlideIndex);
+	const totalSlides = usePresentationStore(selectTotalSlides);
+	const currentFragmentIndex = usePresentationStore((state) => state.currentFragmentIndex);
+	const currentStep = usePresentationStore((state) => state.currentStep);
+	const scrollRevealed = usePresentationStore((state) => state.scrollRevealed);
+	const scrollTriggerCount = usePresentationStore((state) => state.scrollTriggerCount);
+	const connected = useConnectionStore((state) => state.connected);
+
+	const resolvedTheme = useResolvedTheme();
+	const theme = resolvedTheme?.slug ?? 'base';
+	const aspectRatio = presentation?.config?.aspectRatio ?? '16:9';
+	const customTheme = presentation?.config?.customTheme;
+	const nextSlideData =
+		presentation && currentSlideIndex < presentation.slides.length - 1
+			? presentation.slides[currentSlideIndex + 1]
+			: null;
+	const fragmentCount = currentSlide?.fragmentCount ?? 0;
+
+	const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+	const wakeLockRef = useRef<WakeLockSentinel | null>(null);
+
+	function resetTimer(): void {
+		setElapsedSeconds(0);
+	}
+
+	function handleNextSlide(): void {
+		nextSlide();
+		broadcastPresentationState();
+	}
+
+	function handlePrevSlide(): void {
+		prevSlide();
+		broadcastPresentationState();
+	}
+
+	useEffect(() => {
+		let cancelled = false;
+
+		async function load(): Promise<void> {
+			try {
+				const data = await fetchPresentation();
+				if (cancelled) return;
+				loadPresentation(data);
+				setIsLoading(false);
+			} catch (error) {
+				if (cancelled) return;
+				setLoadError(error instanceof Error ? error.message : 'Failed to load presentation');
+				setIsLoading(false);
+			}
+		}
+
+		void load();
+
+		const hashCleanup = setupHashChangeListener();
+
+		// A print pass (PDF export, ?print=true) is a static snapshot of one
+		// slide: it never connects the websocket, so it can never have the
+		// hub's live state applied out from under the screenshot. A static
+		// build has no server either, so the websocket must never be opened
+		// (and never retried) once static mode is confirmed.
+		if (!PRINT_MODE) {
+			void detectStaticMode().then((isStatic) => {
+				if (!cancelled && !isStatic) {
+					connectWebSocket();
+				}
+			});
+		}
+
+		timerRef.current = setInterval(() => {
+			setElapsedSeconds((seconds) => seconds + 1);
+		}, 1000);
+
+		async function requestWakeLock(): Promise<void> {
+			try {
+				if ('wakeLock' in navigator) {
+					wakeLockRef.current = await navigator.wakeLock.request('screen');
+				}
+			} catch {
+				// Wake lock request can fail (e.g. low battery) - not critical.
+			}
+		}
+
+		function handleVisibilityChange(): void {
+			if (document.visibilityState === 'visible') {
+				void requestWakeLock();
+			}
+		}
+
+		function handleKeyDown(event: KeyboardEvent): void {
+			if (isInputFocused()) return;
+
+			switch (event.key) {
+				case 'ArrowRight':
+				case 'ArrowDown':
+				case ' ':
+				case 'Enter':
+					event.preventDefault();
+					handleNextSlide();
+					break;
+				case 'ArrowLeft':
+				case 'ArrowUp':
+				case 'Backspace':
+					event.preventDefault();
+					handlePrevSlide();
+					break;
+				case 'Home':
+					event.preventDefault();
+					goToSlide(0);
+					broadcastPresentationState();
+					break;
+				case 'End': {
+					event.preventDefault();
+					const total = selectTotalSlides(usePresentationStore.getState());
+					if (total > 0) {
+						goToSlide(total - 1);
+					}
+					broadcastPresentationState();
+					break;
+				}
+				case 'r':
+				case 'R':
+					event.preventDefault();
+					resetTimer();
+					break;
+			}
+		}
+
+		void requestWakeLock();
+		window.addEventListener('keydown', handleKeyDown);
+		document.addEventListener('visibilitychange', handleVisibilityChange);
+
+		return () => {
+			cancelled = true;
+			hashCleanup();
+			disconnectWebSocket();
+			if (timerRef.current) {
+				clearInterval(timerRef.current);
+				timerRef.current = null;
+			}
+			wakeLockRef.current?.release();
+			wakeLockRef.current = null;
+			window.removeEventListener('keydown', handleKeyDown);
+			document.removeEventListener('visibilitychange', handleVisibilityChange);
+		};
+	}, []);
+
+	useEffect(() => {
+		document.title = presentation?.config?.title ? `${presentation.config.title} - Presenter` : 'Tap Presenter';
+	}, [presentation?.config?.title]);
+
+	useEffect(() => {
+		if (!customTheme) {
+			return;
+		}
+
+		const link = document.createElement('link');
+		link.rel = 'stylesheet';
+		link.type = 'text/css';
+		link.href = `/api/custom-theme.css?t=${Date.now()}`;
+		link.id = 'custom-theme-css';
+		link.onerror = () => {
+			console.warn('[tap] Custom theme CSS failed to load. Using default theme.');
+		};
+		document.head.appendChild(link);
+
+		return () => {
+			link.remove();
+		};
+	}, [customTheme]);
+
+	let content: ReactNode;
+
+	if (isLoading) {
+		content = (
+			<div className="loading-container">
+				<div className="loading-spinner" />
+				<p>Loading presentation...</p>
+			</div>
+		);
+	} else if (loadError) {
+		content = (
+			<div className="error-container">
+				<h1>Error</h1>
+				<p>{loadError}</p>
+				<button onClick={() => window.location.reload()}>Reload</button>
+			</div>
+		);
+	} else if (!presentation || !currentSlide) {
+		content = (
+			<div className="empty-container">
+				<h1>No Presentation</h1>
+				<p>No presentation data available.</p>
+			</div>
+		);
+	} else {
+		content = (
+			<div className="presenter-view">
+				<header className="presenter-header">
+					<div className="presenter-slide-counter">
+						<span className="current">{currentSlideIndex + 1}</span>
+						<span className="separator">/</span>
+						<span className="total">{totalSlides}</span>
+						{fragmentCount > 0 ? (
+							<span className="fragment-counter">
+								({currentFragmentIndex + 1}/{fragmentCount})
+							</span>
+						) : null}
+					</div>
+
+					<button
+						className="presenter-timer"
+						onClick={resetTimer}
+						title="Click to reset timer"
+						aria-label={`Elapsed time: ${formatTime(elapsedSeconds)}. Click to reset.`}
+					>
+						{formatTime(elapsedSeconds)}
+					</button>
+
+					<div className={`presenter-connection-status${connected ? ' connected' : ''}`}>
+						{connected ? 'Connected' : 'Disconnected'}
+					</div>
+				</header>
+
+				<main className="presenter-main">
+					<div className="presenter-current-slide-panel">
+						<h2 className="presenter-panel-title">Current Slide{currentSlide.scroll ? ' (Scroll)' : ''}</h2>
+						<div className="presenter-slide-preview current">
+							<SlideCanvas aspectRatio={aspectRatio} theme={theme} printMode={PRINT_MODE}>
+								<Slide
+									key={currentSlide.index}
+									slide={currentSlide}
+									active
+									printMode={PRINT_MODE}
+									fragmentIndex={PRINT_MODE ? currentSlide.fragmentCount : currentFragmentIndex}
+									step={PRINT_MODE ? currentSlide.steps : currentStep}
+									total={totalSlides}
+									scrollRevealed={scrollRevealed}
+									scrollTriggerCount={scrollTriggerCount}
+									mermaidOverrides={resolvedTheme?.mermaid}
+								/>
+							</SlideCanvas>
+						</div>
+					</div>
+
+					<div className="presenter-next-slide-panel">
+						<h2 className="presenter-panel-title">Next Slide</h2>
+						<div className="presenter-slide-preview next">
+							{nextSlideData ? (
+								<SlideCanvas aspectRatio={aspectRatio} theme={theme} printMode={PRINT_MODE}>
+									<Slide
+										key={nextSlideData.index}
+										slide={nextSlideData}
+										active={false}
+										printMode={false}
+										preview
+										fragmentIndex={-1}
+										step={0}
+										total={totalSlides}
+									/>
+								</SlideCanvas>
+							) : (
+								<div className="presenter-end-placeholder">End of Presentation</div>
+							)}
+						</div>
+					</div>
+
+					<div className={`presenter-notes-panel${currentSlide.notes ? ' has-notes' : ''}`}>
+						<h2 className="presenter-panel-title">Speaker Notes</h2>
+						<div className="presenter-notes-content">
+							{currentSlide.notes ? (
+								<div dangerouslySetInnerHTML={{ __html: currentSlide.notes }} />
+							) : (
+								<p className="presenter-no-notes">No speaker notes for this slide.</p>
+							)}
+						</div>
+					</div>
+				</main>
+
+				<footer className="presenter-controls">
+					<button
+						className="presenter-control-button prev"
+						onClick={handlePrevSlide}
+						disabled={currentSlideIndex === 0 && currentFragmentIndex < 0}
+						aria-label="Previous slide"
+					>
+						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+							<polyline points="15 18 9 12 15 6" />
+						</svg>
+						<span>Previous</span>
+					</button>
+
+					<div className="presenter-control-info">
+						<span className="presenter-keyboard-hint">Use arrow keys or space to navigate</span>
+						<span className="presenter-keyboard-hint">Press R to reset timer</span>
+					</div>
+
+					<button
+						className="presenter-control-button next"
+						onClick={handleNextSlide}
+						disabled={currentSlideIndex === totalSlides - 1 && currentFragmentIndex >= fragmentCount - 1}
+						aria-label="Next slide"
+					>
+						<span>Next</span>
+						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+							<polyline points="9 18 15 12 9 6" />
+						</svg>
+					</button>
+				</footer>
+			</div>
+		);
+	}
+
+	return <div className="slide-renderer">{content}</div>;
+}

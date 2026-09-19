@@ -236,8 +236,11 @@ func TestGenerateSlideMarkdown_TwoColumn(t *testing.T) {
 	if !strings.Contains(markdown, "## Header") {
 		t.Error("expected markdown to contain header")
 	}
-	if !strings.Contains(markdown, "|||") {
-		t.Error("expected markdown to contain column separator")
+	if !strings.Contains(markdown, "::left") {
+		t.Error("expected markdown to contain the left slot marker")
+	}
+	if !strings.Contains(markdown, "::right") {
+		t.Error("expected markdown to contain the right slot marker")
 	}
 	if !strings.Contains(markdown, "Left") {
 		t.Error("expected markdown to contain left content")
@@ -253,8 +256,11 @@ func TestGenerateSlideMarkdown_TwoColumnNoHeader(t *testing.T) {
 	if strings.Contains(markdown, "## ") {
 		t.Error("expected markdown to not contain header when empty")
 	}
-	if !strings.Contains(markdown, "|||") {
-		t.Error("expected markdown to contain column separator")
+	if !strings.Contains(markdown, "::left") {
+		t.Error("expected markdown to contain the left slot marker")
+	}
+	if !strings.Contains(markdown, "::right") {
+		t.Error("expected markdown to contain the right slot marker")
 	}
 }
 
@@ -281,7 +287,7 @@ func TestGenerateSlideMarkdown_Quote(t *testing.T) {
 	if !strings.Contains(markdown, "> \"Life is short\"") {
 		t.Error("expected markdown to contain quoted text")
 	}
-	if !strings.Contains(markdown, "— Me") {
+	if !strings.Contains(markdown, "-- Me") {
 		t.Error("expected markdown to contain author")
 	}
 }
@@ -292,7 +298,7 @@ func TestGenerateSlideMarkdown_QuoteNoAuthor(t *testing.T) {
 	if !strings.Contains(markdown, "> \"Just a quote\"") {
 		t.Error("expected markdown to contain quoted text")
 	}
-	if strings.Contains(markdown, "—") {
+	if strings.Contains(markdown, "> --") {
 		t.Error("expected markdown to not contain author dash when empty")
 	}
 }

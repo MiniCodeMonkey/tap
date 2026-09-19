@@ -93,17 +93,17 @@ SELECT * FROM large_table LIMIT 10;
 ```
 
 ### Use SQLite for Portability
-SQLite requires no external server—your presentation works anywhere.
+SQLite requires no external server, so your presentation works anywhere.
 
 ## Theme Selection
 
 | Context | Theme |
 |---------|-------|
-| Corporate/professional | `paper` |
-| Executive/investor | `noir` |
-| Startup/creative | `aurora` |
-| Developer/technical | `phosphor` |
-| Design/bold | `poster` |
+| Corporate/professional | `swiss` or `product` |
+| Executive/investor launch | `keynote` |
+| Community or scrappy talk | `zine` or `riso` |
+| Developer/technical | `terminal` |
+| Design/bold statement | `poster` or `bauhaus` |
 
 ## File Organization
 
@@ -148,4 +148,4 @@ Open `/presenter` on your laptop while audience sees main view:
 If something breaks:
 1. Advance to next slide
 2. Use backup PDF if needed
-3. Stay calm—audiences are forgiving
+3. Stay calm, audiences are forgiving

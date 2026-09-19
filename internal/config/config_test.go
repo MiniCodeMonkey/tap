@@ -341,11 +341,11 @@ func TestValidate_NilThemeColors(t *testing.T) {
 
 func TestIsValidColor_HexColors(t *testing.T) {
 	validHexColors := []string{
-		"#fff",     // 3-digit
-		"#FFF",     // 3-digit uppercase
-		"#ffffff",  // 6-digit
-		"#FFFFFF",  // 6-digit uppercase
-		"#fffa",    // 4-digit (with alpha)
+		"#fff",      // 3-digit
+		"#FFF",      // 3-digit uppercase
+		"#ffffff",   // 6-digit
+		"#FFFFFF",   // 6-digit uppercase
+		"#fffa",     // 4-digit (with alpha)
 		"#ffffffaa", // 8-digit (with alpha)
 	}
 
@@ -389,13 +389,13 @@ func TestIsValidColor_NamedColors(t *testing.T) {
 func TestIsValidColor_InvalidColors(t *testing.T) {
 	invalidColors := []string{
 		"notacolor",
-		"#gg0000",   // invalid hex chars
-		"rgb",       // function without parens
-		"",          // empty string
-		"#f",        // 1 char - too short
-		"#ff",       // 2 chars - too short
-		"#fffff",    // 5 chars - invalid (only 3, 4, 6, 8 allowed)
-		"#fffffff",  // 7 chars - invalid
+		"#gg0000",    // invalid hex chars
+		"rgb",        // function without parens
+		"",           // empty string
+		"#f",         // 1 char - too short
+		"#ff",        // 2 chars - too short
+		"#fffff",     // 5 chars - invalid (only 3, 4, 6, 8 allowed)
+		"#fffffff",   // 7 chars - invalid
 		"#fffffffff", // 9 chars - too long
 	}
 
@@ -406,62 +406,31 @@ func TestIsValidColor_InvalidColors(t *testing.T) {
 	}
 }
 
-func TestValidate_ValidThemes(t *testing.T) {
-	validThemes := []string{
-		"paper", "noir", "aurora", "phosphor", "poster",
-		"ink", "bauhaus", "editorial",
-	}
+func TestValidate_ValidTheme(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Theme = "base"
 
-	for _, theme := range validThemes {
+	if err := cfg.Validate(); err != nil {
+		t.Errorf("Validate() returned error for valid theme %q: %v", cfg.Theme, err)
+	}
+}
+
+func TestValidate_UnknownThemeFallsBackToBase(t *testing.T) {
+	// An unknown theme is not an error: it normalizes to "base" with a
+	// warning logged.
+	unknownThemes := []string{"invalid", "dark", "light", "custom", "paper", "BASE"}
+
+	for _, theme := range unknownThemes {
 		cfg := DefaultConfig()
 		cfg.Theme = theme
 
 		if err := cfg.Validate(); err != nil {
-			t.Errorf("Validate() returned error for valid theme %q: %v", theme, err)
-		}
-	}
-}
-
-func TestValidate_InvalidTheme(t *testing.T) {
-	invalidThemes := []string{"invalid", "dark", "light", "custom", "PAPER"}
-
-	for _, theme := range invalidThemes {
-		cfg := DefaultConfig()
-		cfg.Theme = theme
-
-		err := cfg.Validate()
-		if err == nil {
-			t.Errorf("Validate() should return error for invalid theme %q", theme)
+			t.Errorf("Validate() should not return error for unknown theme %q: %v", theme, err)
 			continue
 		}
 
-		if !strings.Contains(err.Error(), "theme") {
-			t.Errorf("error message should mention theme, got: %v", err)
-		}
-	}
-}
-
-func TestValidate_LegacyThemeNames(t *testing.T) {
-	// Legacy themes should be normalized to new names (no error, just warning logged)
-	legacyToNew := map[string]string{
-		"minimal":   "paper",
-		"keynote":   "noir",
-		"gradient":  "aurora",
-		"terminal":  "phosphor",
-		"brutalist": "poster",
-	}
-
-	for legacy, expected := range legacyToNew {
-		cfg := DefaultConfig()
-		cfg.Theme = legacy
-
-		if err := cfg.Validate(); err != nil {
-			t.Errorf("Validate() should not return error for legacy theme %q: %v", legacy, err)
-			continue
-		}
-
-		if cfg.Theme != expected {
-			t.Errorf("Theme should be normalized from %q to %q, got %q", legacy, expected, cfg.Theme)
+		if cfg.Theme != "base" {
+			t.Errorf("Theme should fall back to %q for unknown theme %q, got %q", "base", theme, cfg.Theme)
 		}
 	}
 }
@@ -471,22 +440,10 @@ func TestNormalizeTheme(t *testing.T) {
 		input    string
 		expected string
 	}{
-		// New themes
-		{"paper", "paper"},
-		{"noir", "noir"},
-		{"aurora", "aurora"},
-		{"phosphor", "phosphor"},
-		{"poster", "poster"},
-		// Legacy themes
-		{"minimal", "paper"},
-		{"keynote", "noir"},
-		{"gradient", "aurora"},
-		{"terminal", "phosphor"},
-		{"brutalist", "poster"},
-		// Invalid themes
-		{"invalid", ""},
-		{"dark", ""},
-		{"", ""},
+		{"base", "base"},
+		{"invalid", "base"},
+		{"paper", "base"},
+		{"", "base"},
 	}
 
 	for _, tt := range tests {
@@ -502,28 +459,11 @@ func TestNormalizeTheme(t *testing.T) {
 func TestValidThemeNames(t *testing.T) {
 	got := ValidThemeNames()
 
-	// We expect 13 themes total
-	if len(got) != 13 {
-		t.Errorf("ValidThemeNames() returned %d themes, want 13", len(got))
+	if len(got) == 0 {
+		t.Fatal("ValidThemeNames() returned no themes")
 	}
-
-	// Check that all themes are present
-	expectedThemes := []string{
-		"paper", "noir", "aurora", "phosphor", "poster",
-		"ink", "bauhaus", "editorial",
-		"signal", "carbon", "spectrum", "mono", "flux",
-	}
-	for _, theme := range expectedThemes {
-		found := false
-		for _, name := range got {
-			if name == theme {
-				found = true
-				break
-			}
-		}
-		if !found {
-			t.Errorf("ValidThemeNames() should contain %q", theme)
-		}
+	if got[0] != "base" {
+		t.Errorf("ValidThemeNames()[0] = %q, want %q", got[0], "base")
 	}
 }
 
@@ -638,5 +578,38 @@ Some content here
 	// Should still have original content
 	if !strings.Contains(string(result), "# Slide 1") {
 		t.Errorf("File should still contain original content, got:\n%s", result)
+	}
+}
+
+func TestLoad_IgnoresRemovedFrontmatterKeys(t *testing.T) {
+	// codeTheme and transitionDuration were removed from the Config struct.
+	// A deck that still sets them in frontmatter must keep parsing without
+	// an error; the YAML decoder ignores unknown keys.
+	content := `---
+title: Test
+codeTheme: dracula
+transitionDuration: 400
+---
+
+# Slide 1
+`
+	tmpFile, err := os.CreateTemp("", "test-*.md")
+	if err != nil {
+		t.Fatalf("Failed to create temp file: %v", err)
+	}
+	defer os.Remove(tmpFile.Name())
+
+	if _, err := tmpFile.WriteString(content); err != nil {
+		t.Fatalf("Failed to write temp file: %v", err)
+	}
+	tmpFile.Close()
+
+	cfg, err := Load(tmpFile.Name())
+	if err != nil {
+		t.Fatalf("Load() returned error for deck with removed frontmatter keys: %v", err)
+	}
+
+	if cfg.Title != "Test" {
+		t.Errorf("Title = %q, want %q", cfg.Title, "Test")
 	}
 }

@@ -1,0 +1,37 @@
+{
+	"name": "Transit",
+	"polarity": "light",
+	"pitch": "An architecture or infrastructure talk that walks the audience through a system the way a metro map walks a city.",
+	"illustration": {
+		"medium": "flat vector, subway-map-style diagram on off-white",
+		"line": "3px strokes in solid transit-line colors, strictly horizontal/vertical/45-degree",
+		"shapes": "circles for stations, straight line segments for routes, occasional ring for an interchange",
+		"texture": "none, completely flat",
+		"palette_use": "off-white background dominant, one red transit line and one blue transit line as the two accent colors, used the way a map legend would",
+		"mood": "clear, wayfinding, systemic",
+		"avoid": "gradients, curves that aren't 45-degree diagonals, photorealism, more than two line colors at once"
+	},
+	"mermaid": {
+		"themeVariables": {
+			"fontFamily": "Overpass",
+			"primaryColor": "#F7F6F2",
+			"primaryTextColor": "#12161C",
+			"primaryBorderColor": "#12161C",
+			"lineColor": "#0B3FA8",
+			"nodeTextColor": "#12161C",
+			"titleColor": "#12161C",
+			"secondaryColor": "#F7F6F2",
+			"tertiaryColor": "#F7F6F2",
+			"background": "#F7F6F2",
+			"mainBkg": "#F7F6F2",
+			"textColor": "#12161C",
+			"nodeBorder": "#12161C",
+			"clusterBkg": "#E8E6DE",
+			"clusterBorder": "#4A5058",
+			"edgeLabelBackground": "#F7F6F2",
+			"fontSize": "30px"
+		},
+		"quietStyle": "fill:#F7F6F2,stroke:#4A5058,color:#12161C",
+		"curve": "stepAfter"
+	}
+}

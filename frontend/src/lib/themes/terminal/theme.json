@@ -1,0 +1,33 @@
+{
+	"name": "Terminal",
+	"polarity": "dark",
+	"pitch": "For infrastructure and live-coding talks where the audience lives in a shell and the deck should feel like one long tmux session.",
+	"illustration": {
+		"medium": "flat vector on near-black, like a TUI with amber and mint green accents",
+		"line": "1 to 2px strokes, monospace-grid aligned, square caps",
+		"shapes": "rectangles, box-drawing frames, block cursors, no curves beyond small status dots",
+		"texture": "none; optional faint scanline",
+		"palette_use": "dark background dominant, amber accent and mint green accent used one or two per image",
+		"mood": "focused, playful hacker",
+		"avoid": "gradients, 3D, photos, rounded blobs, drop shadows"
+	},
+	"mermaid": {
+		"themeVariables": {
+			"fontFamily": "JetBrains Mono",
+			"primaryColor": "#0f1a16",
+			"primaryTextColor": "#ffb84d",
+			"primaryBorderColor": "#ffb84d",
+			"lineColor": "#ffb84d",
+			"background": "#0f1a16",
+			"mainBkg": "#1d2b25",
+			"textColor": "#dcebe0",
+			"nodeBorder": "#ffb84d",
+			"clusterBkg": "#1d2b25",
+			"clusterBorder": "#9db8a8",
+			"edgeLabelBackground": "#0f1a16",
+			"fontSize": "34px"
+		},
+		"quietStyle": "fill:#0f1a16,stroke:#9db8a8,color:#dcebe0",
+		"curve": "stepAfter"
+	}
+}

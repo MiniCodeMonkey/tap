@@ -1,0 +1,37 @@
+{
+	"name": "Retro Computing",
+	"polarity": "light",
+	"pitch": "A nostalgic, slightly mischievous systems talk told from a 1990 desktop, where every idea opens in its own window.",
+	"illustration": {
+		"medium": "flat vector, 1980s beige-computer UI illustration on light grey",
+		"line": "3px strokes, chunky bitmap-adjacent edges, slightly blocky corners",
+		"shapes": "simple dialog boxes, chunky icons, and system-alert motifs with hard rectangular frames",
+		"texture": "none, or a faint pixel/dither pattern for shading",
+		"palette_use": "light grey background dominant, near-black ink, one deep blue accent used for the active or highlighted element",
+		"mood": "nostalgic beige-box computing, deadpan system-alert humor",
+		"avoid": "gradients, glossy modern UI, rounded corners, photorealism, soft shadows"
+	},
+	"mermaid": {
+		"themeVariables": {
+			"fontFamily": "IBM Plex Mono",
+			"fontSize": "40px",
+			"primaryColor": "#1B2FD0",
+			"primaryTextColor": "#FFFFFF",
+			"primaryBorderColor": "#0A0A0A",
+			"lineColor": "#0A0A0A",
+			"background": "#FFFFFF",
+			"mainBkg": "#FFFFFF",
+			"textColor": "#0A0A0A",
+			"nodeTextColor": "#0A0A0A",
+			"titleColor": "#0A0A0A",
+			"nodeBorder": "#0A0A0A",
+			"clusterBkg": "#D2D2D2",
+			"clusterBorder": "#0A0A0A",
+			"edgeLabelBackground": "#FFFFFF",
+			"secondaryColor": "#D2D2D2",
+			"tertiaryColor": "#FFFFFF"
+		},
+		"quietStyle": "fill:#FFFFFF,stroke:#0A0A0A,color:#0A0A0A",
+		"curve": "stepAfter"
+	}
+}

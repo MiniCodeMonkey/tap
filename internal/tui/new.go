@@ -11,6 +11,8 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+
+	"github.com/MiniCodeMonkey/tap/internal/themes"
 )
 
 // newStep represents the current step in the new presentation wizard.
@@ -29,18 +31,17 @@ type Theme struct {
 	Description string
 }
 
-// AvailableThemes lists the themes available for new presentations.
-var AvailableThemes = []Theme{
-	{Name: "paper", Description: "Ultra-clean, airy design with premium paper aesthetic"},
-	{Name: "noir", Description: "Cinematic film noir with sophisticated gold accents"},
-	{Name: "aurora", Description: "Vibrant northern lights with glassmorphism effects"},
-	{Name: "phosphor", Description: "Authentic CRT terminal with glowing phosphor green"},
-	{Name: "poster", Description: "Bold graphic design with massive typography"},
-	{Name: "signal", Description: "Vercel/Nuxt-inspired developer aesthetic with neon green accents"},
-	{Name: "carbon", Description: "IBM Carbon design system with sharp corners and red accents"},
-	{Name: "spectrum", Description: "Gradient-forward modern SaaS with indigo-to-pink spectrum"},
-	{Name: "mono", Description: "Ultra-minimal weight-contrast typography with blue accent"},
-	{Name: "flux", Description: "Polished SaaS product feel with warm indigo accents"},
+// AvailableThemes lists the themes available for new presentations, built
+// from the built-in theme list in internal/themes.
+var AvailableThemes = buildAvailableThemes()
+
+func buildAvailableThemes() []Theme {
+	all := themes.All()
+	result := make([]Theme, len(all))
+	for i, t := range all {
+		result[i] = Theme{Name: t.Slug, Description: t.Pitch}
+	}
+	return result
 }
 
 // NewModel is the Bubble Tea model for creating new presentations.
@@ -131,6 +132,9 @@ func (m NewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// updateTitle handles the title step. It advances to the theme step, unless
+// a theme was already prefilled via --theme, in which case it skips straight
+// to the filename step.
 func (m NewModel) updateTitle(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
@@ -146,7 +150,6 @@ func (m NewModel) updateTitle(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.prefilledTheme != "" {
 				m.themeIndex = m.findThemeIndex(m.prefilledTheme)
 				m.step = stepFilename
-				// Set default filename based on title
 				m.setDefaultFilename()
 				m.filenameInput.Focus()
 				return m, textinput.Blink
@@ -267,29 +270,17 @@ func (m NewModel) generateDefaultFilename() string {
 	return filename + ".md"
 }
 
-// legacyThemeMapping maps old theme names to new theme names for backwards compatibility.
-var legacyThemeMapping = map[string]string{
-	"minimal":   "paper",
-	"keynote":   "noir",
-	"gradient":  "aurora",
-	"terminal":  "phosphor",
-	"brutalist": "poster",
-}
-
+// findThemeIndex returns the index of the theme named themeName in
+// AvailableThemes, matched case-insensitively. It returns 0 (base) if the
+// name isn't found.
 func (m NewModel) findThemeIndex(themeName string) int {
 	themeName = strings.ToLower(themeName)
-
-	// Check for legacy theme name and map to new name
-	if newName, ok := legacyThemeMapping[themeName]; ok {
-		themeName = newName
-	}
-
 	for i, t := range AvailableThemes {
 		if strings.ToLower(t.Name) == themeName {
 			return i
 		}
 	}
-	return 0 // Default to first theme
+	return 0
 }
 
 // GetResult returns the result of the wizard.
@@ -484,14 +475,14 @@ func main() {
 
 ## Two Column Layout
 
-|||
+::left
 
 **Left Column**
 
 - Point A
 - Point B
 
-|||
+::right
 
 **Right Column**
 
@@ -506,7 +497,7 @@ layout: quote
 
 > "The best way to predict the future is to invent it."
 >
-> — Alan Kay
+> -- Alan Kay
 
 ---
 

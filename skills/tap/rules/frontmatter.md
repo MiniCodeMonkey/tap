@@ -16,16 +16,10 @@ date: 2024-01-15                    # Version tracking
 
 ### theme
 ```yaml
-theme: paper  # Options: paper, noir, aurora, phosphor, poster
+theme: terminal  # base plus 20 designed themes; unknown names fall back to base
 ```
 
-| Theme | Description |
-|-------|-------------|
-| `paper` | Ultra-clean, premium design with warm accents |
-| `noir` | Cinematic, sophisticated with gold highlights |
-| `aurora` | Vibrant gradient mesh with glassmorphism |
-| `phosphor` | CRT aesthetic with phosphor green glow |
-| `poster` | Bold graphic design with thick borders |
+See `skills/tap/rules/themes.md` for the full list of 21 themes with pitch and polarity.
 
 ### aspectRatio
 ```yaml
@@ -52,19 +46,24 @@ transition: fade  # Options: none, fade, slide, push, zoom
 fragments: true  # Auto-reveal list items one at a time
 ```
 
+## Theme Customization
+
+### themeColors
+```yaml
+themeColors:          # Keys: background, text, muted, accent, codeBg
+  accent: "#ffd447"
+```
+
+### customTheme
+```yaml
+customTheme: "./my-theme.css"  # Loaded after the built-in theme's CSS
+```
+
 ## Code Display
 
-### codeTheme
-```yaml
-codeTheme: github-dark  # Shiki theme for syntax highlighting
-```
-
-Popular themes: `github-dark`, `github-light`, `nord`, `dracula`, `one-dark-pro`, `monokai`
-
-### codeFontSize
-```yaml
-codeFontSize: 14px  # Adjust for readability
-```
+Code colors and code size come from the active theme. There is no
+frontmatter option for either. Override the theme's custom properties
+with `customTheme` if you need different code colors.
 
 ## Live Code Drivers
 
@@ -92,12 +91,12 @@ drivers:
 title: Database Architecture Deep Dive
 author: Jane Developer
 date: 2024-03-15
-theme: phosphor
+theme: blueprint
 aspectRatio: 16:9
 transition: fade
 fragments: true
-codeTheme: github-dark
-codeFontSize: 14px
+themeColors:
+  accent: "#ffd447"
 drivers:
   sqlite:
     connections:
@@ -119,10 +118,11 @@ drivers:
 |--------|------|---------|
 | `title` | string | File name |
 | `author` | string | None |
-| `theme` | string | `paper` |
+| `date` | string | None |
+| `theme` | string | `base` |
 | `aspectRatio` | string | `16:9` |
 | `transition` | string | `fade` |
 | `fragments` | boolean | `false` |
-| `codeTheme` | string | Theme default |
-| `codeFontSize` | string | `16px` |
+| `themeColors` | object | None |
+| `customTheme` | string | None |
 | `drivers` | object | None |

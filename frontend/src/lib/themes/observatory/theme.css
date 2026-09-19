@@ -1,0 +1,1589 @@
+/**
+ * Observatory theme.
+ * For a data-heavy infrastructure talk, charted like a night sky: systems
+ * read as bodies, and every measurement is taken through a reticle. A deep
+ * blue field carries a fixed star field, a frame counter reads like an
+ * exposure log ("FRAME 4 / 22"), and every panel that holds a reading is
+ * framed by bracket corners, like an instrument's field of view. Bullets
+ * are a constellation: a sighted star per point, joined by a line to the
+ * next. Motion is a slow, controlled drift, as if the whole slide had just
+ * swung into position.
+ *
+ * Ported from .superpowers/brainstorm/themes-v3/observatory.theme.html (the
+ * CSS-only mockup built against a fixed 11-slide deck). See
+ * docs/reference/theme-porting.md and its addendum for the porting
+ * technique this file follows (token bridging, `.slide[data-layout]`
+ * scoping, fragment selectors, and so on).
+ */
+
+@import '@fontsource/alegreya-sans/latin-500.css';
+@import '@fontsource/alegreya-sans/latin-700.css';
+@import '@fontsource/alegreya-sans/latin-800.css';
+@import '@fontsource/alegreya-sans/latin-500-italic.css';
+@import '@fontsource/jetbrains-mono/latin-500.css';
+@import '@fontsource/jetbrains-mono/latin-600.css';
+@import '@fontsource/jetbrains-mono/latin-700.css';
+
+[data-theme='observatory'] {
+	/* ---------- design-spec tokens ---------- */
+	--bg: #0b1530;
+	--fg: #eaf0fb;
+	--muted: #aebfdc;
+	--accent: #ffb454;
+	--accent-text: #ffb454;
+	--accent-cool: #6fb6ff;
+	--surface: #182c57;
+	--bg-high: #13264d;
+	--bg-deep: #060b1a;
+	--dim: #7c8eb3;
+	--font-display: 'Alegreya Sans', 'Gill Sans', 'Trebuchet MS', sans-serif;
+	--font-body: 'Alegreya Sans', 'Gill Sans', 'Trebuchet MS', sans-serif;
+	--font-mono: 'JetBrains Mono', ui-monospace, Menlo, monospace;
+	--ease: cubic-bezier(0.3, 0, 0.12, 1);
+	--dur: 700ms;
+	--space-unit: 32px;
+	--radius: 12px;
+	--stroke-width: 2px;
+	--ring: color-mix(in srgb, var(--accent-cool) 55%, transparent);
+
+	/*
+	 * Bridge to the base theme's own token names. layouts.css, prose.css,
+	 * rich-blocks.css and ui-components.css style the live code block, the
+	 * map slide, badges, tags, and generic prose entirely through these
+	 * `--color-*` and `--font-sans` custom properties.
+	 */
+	--color-bg: var(--bg);
+	--color-text: var(--fg);
+	--color-muted: var(--muted);
+	--color-accent: var(--accent);
+	--color-code-bg: var(--bg-deep);
+	--color-code-text: var(--fg);
+	--color-code-inline-bg: rgba(234, 240, 251, 0.1);
+	--color-border: var(--accent-cool);
+	--color-surface: var(--surface);
+	--color-surface-elevated: var(--bg-high);
+	--color-link: var(--accent-cool);
+	--font-sans: var(--font-body);
+
+	/* Shiki reads token colors from these custom properties directly. */
+	--shiki-foreground: var(--fg);
+	--shiki-background: var(--bg-deep);
+	--shiki-token-comment: var(--dim);
+	--shiki-token-string: var(--accent-text);
+	--shiki-token-string-expression: var(--accent-text);
+	--shiki-token-keyword: var(--accent-cool);
+	--shiki-token-function: var(--fg);
+	--shiki-token-constant: var(--accent-text);
+	--shiki-token-parameter: var(--fg);
+	--shiki-token-punctuation: var(--accent-cool);
+	--shiki-token-link: var(--accent-cool);
+}
+
+@keyframes observatory-drift {
+	from {
+		opacity: 0;
+		transform: translate(-32px, 12px);
+	}
+}
+@keyframes observatory-fade {
+	from {
+		opacity: 0;
+	}
+}
+@keyframes observatory-arc {
+	from {
+		opacity: 0;
+		transform: rotate(-6deg);
+	}
+}
+@keyframes observatory-spin {
+	from {
+		transform: rotate(0deg);
+	}
+	to {
+		transform: rotate(360deg);
+	}
+}
+@keyframes observatory-band {
+	from {
+		clip-path: inset(0 100% 0 0);
+	}
+	to {
+		clip-path: inset(0 0 0 0);
+	}
+}
+
+/* ============================================================================
+ * Screen: the sky, the frame counter, tick rulers, the tag
+ * ============================================================================
+ * Every rule that reads attr(data-index)/attr(data-total) or decorates the
+ * slide root is scoped to `.slide[data-layout]`, the real rendered slide,
+ * never bare `.slide` (which also matches SlideCanvas's outer 1920x1080
+ * scaling wrapper and would duplicate attr()-driven content there).
+ * ============================================================================ */
+
+[data-theme='observatory'] .slide[data-layout] {
+	isolation: isolate;
+	padding: 176px 96px 96px;
+	background:
+		radial-gradient(ellipse 1500px 900px at 72% 12%, var(--bg-high) 0%, transparent 70%),
+		linear-gradient(180deg, var(--bg) 0%, var(--bg-deep) 100%) var(--bg);
+	color: var(--fg);
+	font-family: var(--font-body);
+	font-size: 48px;
+	font-weight: 500;
+	line-height: 1.3;
+}
+/*
+ * A margin/padding safety net, written entirely inside :where() so it
+ * carries zero specificity of its own (beyond the [data-theme] attribute)
+ * and never outranks a later, more targeted rule that also uses :where()
+ * for its own ancestor part, such as the bullet, table, and blockquote
+ * rules below.
+ */
+[data-theme='observatory'] :where(.slide h1, .slide h2, .slide h3, .slide h4, .slide h5, .slide h6, .slide p, .slide ul, .slide ol, .slide li, .slide blockquote, .slide pre, .slide table, .slide dl, .slide figure) {
+	margin: 0;
+	padding: 0;
+}
+[data-theme='observatory'] .slide[data-layout]::before {
+	content: '';
+	position: absolute;
+	inset: 0;
+	z-index: -2;
+	opacity: 0.8;
+	background-image:
+		radial-gradient(circle at 8% 22%, var(--fg) 0 2px, transparent 3.5px),
+		radial-gradient(circle at 17% 71%, var(--muted) 0 1.5px, transparent 3px),
+		radial-gradient(circle at 29% 9%, var(--muted) 0 2px, transparent 3.5px),
+		radial-gradient(circle at 36% 48%, var(--accent-cool) 0 1.5px, transparent 3px),
+		radial-gradient(circle at 44% 88%, var(--fg) 0 2px, transparent 3.5px),
+		radial-gradient(circle at 53% 17%, var(--muted) 0 1.5px, transparent 3px),
+		radial-gradient(circle at 61% 63%, var(--muted) 0 1.5px, transparent 3px),
+		radial-gradient(circle at 68% 33%, var(--fg) 0 2.5px, transparent 4px),
+		radial-gradient(circle at 77% 81%, var(--accent-cool) 0 2px, transparent 3.5px),
+		radial-gradient(circle at 84% 12%, var(--muted) 0 1.5px, transparent 3px),
+		radial-gradient(circle at 91% 55%, var(--fg) 0 2px, transparent 3.5px),
+		radial-gradient(circle at 96% 92%, var(--muted) 0 1.5px, transparent 3px);
+	animation: observatory-fade calc(var(--dur) * 1.4) var(--ease) both;
+}
+[data-theme='observatory'] .slide[data-layout]::after {
+	content: 'FRAME ' attr(data-index) ' / ' attr(data-total);
+	position: absolute;
+	right: 96px;
+	top: 96px;
+	font-family: var(--font-mono);
+	font-size: 28px;
+	font-weight: 600;
+	line-height: 1.2;
+	letter-spacing: 0.08em;
+	color: var(--muted);
+	animation: observatory-fade var(--dur) var(--ease) 150ms both;
+}
+[data-theme='observatory'] .slide-content::before,
+[data-theme='observatory'] .slide-content::after {
+	content: '';
+	position: absolute;
+	z-index: -1;
+	opacity: 0.75;
+	animation: observatory-fade var(--dur) var(--ease) both;
+}
+[data-theme='observatory'] .slide-content::before {
+	left: 96px;
+	right: 96px;
+	bottom: 40px;
+	height: 16px;
+	border-bottom: 2px solid var(--accent-cool);
+	background: repeating-linear-gradient(90deg, var(--accent-cool) 0 2px, transparent 2px 36px);
+}
+[data-theme='observatory'] .slide-content::after {
+	top: 96px;
+	bottom: 96px;
+	left: 40px;
+	width: 16px;
+	border-left: 2px solid var(--accent-cool);
+	background: repeating-linear-gradient(180deg, var(--accent-cool) 0 2px, transparent 2px 36px);
+}
+[data-theme='observatory'] .slide-tag {
+	position: absolute;
+	top: 96px;
+	left: 96px;
+	padding-left: 40px;
+	font-family: var(--font-mono);
+	font-size: 30px;
+	font-weight: 600;
+	line-height: 1.2;
+	letter-spacing: 0.14em;
+	text-transform: uppercase;
+	color: var(--muted);
+	background: radial-gradient(circle at 12px 50%, var(--accent) 0 5px, transparent 6px 9px, var(--accent) 10px 12px, transparent 13px) no-repeat;
+	animation: observatory-drift var(--dur) var(--ease) both;
+}
+/*
+ * The frame counter (::after on the slide root) already holds the top
+ * right corner, so the badge sits in its own row below it rather than
+ * fighting it for the same 96px inset.
+ */
+[data-theme='observatory'] .slide-badge {
+	top: 148px;
+	right: 96px;
+	padding: 10px 24px;
+	font-family: var(--font-mono);
+	font-size: 28px;
+	font-weight: 700;
+	letter-spacing: 0.06em;
+	color: var(--accent-text);
+	background: color-mix(in srgb, var(--surface) 70%, transparent);
+	border: 2px solid var(--accent-cool);
+	animation: observatory-fade var(--dur) var(--ease) 150ms both;
+}
+/* A tag makes room for the badge in the corner beside it. */
+[data-theme='observatory'] .slide:has(.slide-badge) .slide-tag {
+	right: 340px;
+}
+
+[data-theme='observatory'] .slide[data-layout] h1,
+[data-theme='observatory'] .slide[data-layout] h2,
+[data-theme='observatory'] .slide[data-layout] h3,
+[data-theme='observatory'] .slide[data-layout] h4,
+[data-theme='observatory'] .slide[data-layout] h5,
+[data-theme='observatory'] .slide[data-layout] h6 {
+	font-family: var(--font-display);
+	font-weight: 800;
+	line-height: 1.04;
+	letter-spacing: -0.02em;
+	text-wrap: balance;
+}
+[data-theme='observatory'] .slide[data-layout] strong {
+	font-weight: 800;
+	color: var(--accent-text);
+}
+[data-theme='observatory'] .slide[data-layout] em {
+	font-style: normal;
+	color: var(--accent-text);
+}
+[data-theme='observatory'] .slide[data-layout] a {
+	color: var(--accent-cool);
+	text-decoration: underline;
+	text-decoration-color: color-mix(in srgb, var(--accent-cool) 45%, transparent);
+	text-underline-offset: 0.14em;
+}
+[data-theme='observatory'] .slide[data-layout] a:hover {
+	color: var(--accent-text);
+}
+[data-theme='observatory'] .slide[data-layout] :not(pre) > code {
+	font-family: var(--font-mono);
+	font-size: 0.82em;
+	font-weight: 600;
+	color: var(--accent-cool);
+}
+
+/*
+ * Generic heading ramp, used wherever a layout doesn't size its own
+ * headings. Sized for `long` first (the worst case a 60+ character default
+ * heading has to fit), then scaled up for `medium` and `short` so a
+ * genuinely short heading keeps the impact the mockup intended.
+ */
+[data-theme='observatory'] .slot > h2 {
+	font-size: 84px;
+	margin-bottom: 20px;
+}
+[data-theme='observatory'] .slot-content h2[data-length='medium'] {
+	font-size: 96px;
+}
+[data-theme='observatory'] .slot-content h2[data-length='short'] {
+	font-size: 112px;
+}
+[data-theme='observatory'] .slot h3 {
+	font-size: 52px;
+	line-height: 1.2;
+	margin-top: 6px;
+	margin-bottom: 12px;
+	color: var(--accent-cool);
+}
+[data-theme='observatory'] .slot h4 {
+	font-size: 42px;
+	line-height: 1.25;
+	margin-top: 10px;
+	margin-bottom: 8px;
+	color: var(--fg);
+}
+[data-theme='observatory'] .slot h5,
+[data-theme='observatory'] .slot h6 {
+	font-family: var(--font-mono);
+	font-size: 30px;
+	line-height: 1.3;
+	margin-top: 8px;
+	margin-bottom: 6px;
+	color: var(--muted);
+	text-transform: uppercase;
+	letter-spacing: 0.1em;
+}
+
+/* entrance: elements drift in along a shallow arc, in reading order */
+[data-theme='observatory'] .slot > * {
+	animation: observatory-drift var(--dur) var(--ease) 120ms both;
+}
+[data-theme='observatory'] .slot > :nth-child(2) {
+	animation-delay: 240ms;
+}
+[data-theme='observatory'] .slot > :nth-child(3) {
+	animation-delay: 360ms;
+}
+[data-theme='observatory'] .slot > :nth-child(n + 4) {
+	animation-delay: 480ms;
+}
+[data-theme='observatory'] .slot > ul,
+[data-theme='observatory'] .slot > ol {
+	animation: none;
+}
+
+[data-theme='observatory'] .slide .fragment-hidden {
+	opacity: 0;
+	transform: translate(-32px, 12px);
+}
+[data-theme='observatory'] .slide .fragment-visible {
+	opacity: 1;
+	transform: none;
+	transition:
+		opacity var(--dur) var(--ease),
+		transform var(--dur) var(--ease);
+}
+
+/* ============================================================================
+ * The setting circle: a great ring with a band of tick marks, the one
+ * large instrument the theme reuses behind title, section, and any
+ * default slide that is a lone statement.
+ * ============================================================================ */
+
+[data-theme='observatory'] .layout-title::before,
+[data-theme='observatory'] .layout-section::before,
+[data-theme='observatory'] .layout-cover::before,
+[data-theme='observatory'] .layout-default:has(> h1:only-child)::before,
+[data-theme='observatory'] .layout-default:has(> h2:only-child)::before {
+	content: '';
+	position: absolute;
+	z-index: -1;
+	border-radius: 50%;
+	width: 2600px;
+	height: 2600px;
+	left: 600px;
+	top: 600px;
+	border: 2px solid var(--ring);
+	background: repeating-conic-gradient(var(--ring) 0 0.12deg, transparent 0.12deg 1deg);
+	-webkit-mask: radial-gradient(closest-side, transparent calc(100% - 30px), #000 calc(100% - 29px));
+	mask: radial-gradient(closest-side, transparent calc(100% - 30px), #000 calc(100% - 29px));
+	animation: observatory-arc calc(var(--dur) * 1.6) var(--ease) both;
+}
+
+/* ---------- title ---------- */
+[data-theme='observatory'] .layout-title {
+	display: flex;
+	flex-direction: column;
+	justify-content: flex-end;
+}
+/*
+ * The main title is sized for `long` first (the worst-case near-100
+ * character title this deck deliberately tests), then scaled up for
+ * `medium` and `short` so a one- or two-word talk name gets real impact.
+ * The subtitle (h2) is a secondary line and stays fixed: it must never
+ * out-scale the h1 above it just because it happens to be shorter text.
+ */
+[data-theme='observatory'] .layout-title h1,
+[data-theme='observatory'] .layout-title h2 {
+	line-height: 1.05;
+	letter-spacing: -0.022em;
+}
+[data-theme='observatory'] .layout-title .slot-content h1 {
+	font-size: 92px;
+}
+[data-theme='observatory'] .layout-title .slot-content h1[data-length='medium'] {
+	font-size: 104px;
+}
+[data-theme='observatory'] .layout-title .slot-content h1[data-length='short'] {
+	font-size: 118px;
+}
+[data-theme='observatory'] .layout-title h2 {
+	font-size: 62px;
+	color: var(--accent-text);
+	margin-top: 20px;
+}
+/*
+ * Beat the generic `.slot-content h2[data-length]` ramp explicitly: the
+ * subtitle keeps its fixed size at every length, it never adopts the
+ * generic short/medium bump just because "A short subtitle" happens to be
+ * short text.
+ */
+[data-theme='observatory'] .layout-title .slot-content h2[data-length='medium'],
+[data-theme='observatory'] .layout-title .slot-content h2[data-length='short'] {
+	font-size: 62px;
+}
+/*
+ * The tagline reads at instrument-label size in the mockup, but any `p`
+ * inside a `.slot` counts as body content for the minimum-size check
+ * (it checks every `p`/`li` under `.closest('.slot')`, not just direct
+ * children). Keep the mono voice, lift the size to the body minimum.
+ */
+[data-theme='observatory'] .layout-title p {
+	margin-top: 40px;
+	font-family: var(--font-mono);
+	font-size: 46px;
+	line-height: 1.4;
+	letter-spacing: 0.02em;
+	color: var(--muted);
+}
+[data-theme='observatory'] .layout-title::before {
+	width: 1080px;
+	height: 1080px;
+	left: 980px;
+	top: -160px;
+	-webkit-mask-image: radial-gradient(closest-side, transparent calc(100% - 22px), #000 calc(100% - 21px));
+	mask-image: radial-gradient(closest-side, transparent calc(100% - 22px), #000 calc(100% - 21px));
+}
+[data-theme='observatory'] .layout-title::after {
+	content: '';
+	position: absolute;
+	z-index: -1;
+	width: 1100px;
+	height: 1100px;
+	left: 970px;
+	top: -170px;
+	border-radius: 50%;
+	background:
+		radial-gradient(circle at 550px 550px, var(--fg) 0 20px, transparent 21.5px),
+		radial-gradient(circle at 381px 488px, var(--accent-cool) 0 9px, transparent 10.5px),
+		radial-gradient(circle at 803px 338px, var(--accent) 0 16px, transparent 17.5px 27px, var(--accent) 28.5px 30px, transparent 31.5px),
+		radial-gradient(circle at 310px 966px, var(--fg) 0 10px, transparent 11.5px),
+		radial-gradient(
+			circle at 550px 550px,
+			transparent 178.5px,
+			var(--ring) 179.5px 181px,
+			transparent 182px 328.5px,
+			var(--ring) 329.5px 331px,
+			transparent 332px 478.5px,
+			var(--ring) 479.5px 481px,
+			transparent 482px
+		);
+	animation:
+		observatory-arc calc(var(--dur) * 1.6) var(--ease) both,
+		observatory-spin 300s linear 1500ms infinite;
+}
+
+/* ---------- section ---------- */
+[data-theme='observatory'] .slide[data-layout='section'] .slide-tag {
+	top: 340px;
+	padding-left: 40px;
+	max-width: 1500px;
+	overflow: hidden;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+	font-size: 40px;
+	font-weight: 600;
+	line-height: 1.2;
+	letter-spacing: 0.14em;
+	color: var(--muted);
+	animation: observatory-drift var(--dur) var(--ease) 150ms both;
+}
+[data-theme='observatory'] .slide[data-layout='section'] .slide-content {
+	padding-top: 340px;
+}
+[data-theme='observatory'] .layout-section .slot {
+	max-width: 1500px;
+}
+[data-theme='observatory'] .layout-section :is(h1, h2) {
+	font-size: 128px;
+	line-height: 1.02;
+	letter-spacing: -0.025em;
+	margin-top: 40px;
+}
+[data-theme='observatory'] .layout-section .slot-content :is(h1, h2)[data-length='medium'] {
+	font-size: 150px;
+}
+[data-theme='observatory'] .layout-section .slot-content :is(h1, h2)[data-length='short'] {
+	font-size: 176px;
+}
+[data-theme='observatory'] .layout-section p {
+	margin-top: 24px;
+	font-size: 48px;
+	color: var(--muted);
+}
+
+/* ---------- statement: a lone heading on layout-default ---------- */
+[data-theme='observatory'] .layout-default .slot {
+	height: 100%;
+	display: flex;
+	flex-direction: column;
+}
+[data-theme='observatory'] .layout-default .slot:has(> h1:only-child),
+[data-theme='observatory'] .layout-default .slot:has(> h2:only-child) {
+	justify-content: center;
+	padding-bottom: 70px;
+}
+[data-theme='observatory'] .layout-default .slot > h1:only-child {
+	max-width: 1500px;
+	font-size: 128px;
+	line-height: 1.05;
+	letter-spacing: -0.025em;
+}
+[data-theme='observatory'] .layout-default .slot-content h1[data-length='medium']:only-child {
+	font-size: 148px;
+}
+[data-theme='observatory'] .layout-default .slot-content h1[data-length='short']:only-child {
+	font-size: 172px;
+}
+/* A lone h2 statement is a full sentence, budgeted smaller so it still
+ * fits in three lines at roughly 24 characters per line. */
+[data-theme='observatory'] .layout-default .slot > h2:only-child {
+	max-width: 1600px;
+	font-size: 96px;
+	line-height: 1.1;
+	letter-spacing: -0.02em;
+	margin-bottom: 0;
+}
+[data-theme='observatory'] .layout-default .slot-content h2[data-length='medium']:only-child {
+	font-size: 108px;
+}
+[data-theme='observatory'] .layout-default .slot-content h2[data-length='short']:only-child {
+	font-size: 124px;
+}
+
+/* ---------- bullets: a constellation ---------- */
+[data-theme='observatory'] :where(.slot, .slot > [data-fragment-index]) > ul {
+	list-style: none;
+	/* A fixed top margin (rather than a symmetric auto) keeps real distance
+	 * from a preceding paragraph; `margin-bottom: auto` still centers the
+	 * whole block within any slack the slot has left over. */
+	margin-top: 28px;
+	margin-bottom: auto;
+	padding-bottom: 20px;
+}
+[data-theme='observatory'] :where(.slot, .slot > [data-fragment-index]) > ul > li {
+	position: relative;
+	margin: 0;
+	padding: 18px 0 18px 96px;
+	font-size: 48px;
+	line-height: 1.3;
+	animation: observatory-drift var(--dur) var(--ease) 260ms both;
+	transition:
+		opacity var(--dur) var(--ease),
+		transform var(--dur) var(--ease);
+}
+[data-theme='observatory'] :where(.slot, .slot > [data-fragment-index]) > ul > li::before {
+	content: '';
+	position: absolute;
+	left: 8px;
+	top: 30px;
+	width: 38px;
+	height: 38px;
+	border-radius: 50%;
+	border: 3px solid var(--accent);
+	background: radial-gradient(circle, var(--accent) 0 6px, transparent 7px);
+}
+[data-theme='observatory'] :where(.slot, .slot > [data-fragment-index]) > ul > li:not(:last-child)::after {
+	content: '';
+	position: absolute;
+	left: 26px;
+	top: 78px;
+	bottom: -18px;
+	width: 2px;
+	background: var(--accent-cool);
+	transition: opacity var(--dur) var(--ease);
+}
+[data-theme='observatory'] :where(.slot, .slot > [data-fragment-index]) > ul > li:has(+ .fragment-hidden)::after {
+	opacity: 0;
+}
+[data-theme='observatory'] :where(.slot, .slot > [data-fragment-index]) > ul > li:nth-child(2) {
+	animation-delay: 360ms;
+}
+[data-theme='observatory'] :where(.slot, .slot > [data-fragment-index]) > ul > li:nth-child(3) {
+	animation-delay: 460ms;
+}
+[data-theme='observatory'] :where(.slot, .slot > [data-fragment-index]) > ul > li:nth-child(4) {
+	animation-delay: 560ms;
+}
+[data-theme='observatory'] :where(.slot, .slot > [data-fragment-index]) > ul > li:nth-child(n + 5) {
+	animation-delay: 620ms;
+}
+
+/* Nested lists sit inside the parent li's padding, quieter than the
+ * top-level constellation marker: a small hollow tick, no connecting line. */
+[data-theme='observatory'] .slot ul ul {
+	list-style: none;
+	margin-top: 6px;
+	padding-bottom: 0;
+}
+[data-theme='observatory'] .slot ul ul > li {
+	margin: 0;
+	padding: 8px 0 8px 48px;
+	font-size: 44px;
+	line-height: 1.25;
+	color: var(--muted);
+	animation: none;
+}
+[data-theme='observatory'] .slot ul ul > li::before {
+	content: '';
+	position: absolute;
+	left: 0;
+	top: 20px;
+	width: 18px;
+	height: 18px;
+	border-radius: 50%;
+	background: none;
+	border: 3px solid var(--accent-cool);
+}
+[data-theme='observatory'] .slot ul ul > li::after {
+	content: none;
+}
+[data-theme='observatory'] .slot ol {
+	list-style: none;
+	counter-reset: observatory-reading;
+	margin-top: 12px;
+}
+[data-theme='observatory'] .slot ol > li {
+	position: relative;
+	margin: 0;
+	counter-increment: observatory-reading;
+	padding: 20px 0 20px 104px;
+	font-size: 48px;
+	line-height: 1.3;
+}
+[data-theme='observatory'] .slot ol > li::before {
+	content: counter(observatory-reading, decimal-leading-zero);
+	position: absolute;
+	left: 0;
+	top: 22px;
+	font-family: var(--font-mono);
+	font-size: 30px;
+	font-weight: 700;
+	letter-spacing: 0.04em;
+	color: var(--accent-cool);
+}
+
+/*
+ * Seven or more bullets cannot fit at the normal size: spacing and the
+ * marker tighten, kept for the one recap slide a deck allows itself. This
+ * is a dense list (6 or more items), so it takes the narrow-column body
+ * scale (40-44px) rather than the plain-slide scale above it.
+ */
+[data-theme='observatory'] .slot:has(> ul > li:nth-child(7)) > h2 {
+	font-size: 68px;
+	margin-bottom: 16px;
+}
+[data-theme='observatory'] .slot > ul:has(> li:nth-child(7)) > li {
+	padding: 8px 0 8px 72px;
+	font-size: 42px;
+	line-height: 1.2;
+}
+[data-theme='observatory'] .slot > ul:has(> li:nth-child(7)) > li::before {
+	top: 12px;
+	width: 26px;
+	height: 26px;
+}
+[data-theme='observatory'] .slot > ul:has(> li:nth-child(7)) > li::after {
+	top: 42px;
+}
+
+/* ---------- blockquote outside the quote layout: a transmission aside ---------- */
+[data-theme='observatory'] :not(.layout-quote) > :where(.slot, .slot > [data-fragment-index]) > blockquote {
+	position: relative;
+	padding: 8px 0 8px 64px;
+	font-style: normal;
+	color: var(--fg);
+	animation: observatory-drift var(--dur) var(--ease) 300ms both;
+}
+[data-theme='observatory'] :not(.layout-quote) > :where(.slot, .slot > [data-fragment-index]) > blockquote::before {
+	content: '';
+	position: absolute;
+	left: 0;
+	top: 0;
+	bottom: 0;
+	width: 4px;
+	background: var(--accent-cool);
+}
+[data-theme='observatory'] :not(.layout-quote) > :where(.slot, .slot > [data-fragment-index]) > blockquote p {
+	font-size: 46px;
+	line-height: 1.4;
+	font-weight: 500;
+}
+
+/* ============================================================================
+ * Code: the line in focus sits inside the reticle
+ * ============================================================================ */
+
+[data-theme='observatory'] .layout-code-focus .slot {
+	height: 100%;
+	display: flex;
+	flex-direction: column;
+}
+[data-theme='observatory'] pre.shiki {
+	/*
+	 * flex-shrink: 0 keeps this box at its content height whenever it sits
+	 * inside a flex-column .slot (code-focus, and any layout that turns a
+	 * slot into a column). Without it, a flex item's default min-height:
+	 * auto lets the browser shrink it below its own content height to fit
+	 * the container, and the overflowing lines render past the box with no
+	 * clipping to show it: `pre`'s own background stops short, and the
+	 * last line or two of code looks like it silently vanished.
+	 */
+	flex-shrink: 0;
+	margin-block: auto;
+	/* The base layout's `.layout-code-focus .slot-content pre { padding: 2em
+	 * 2.5em }` (layouts.css) sets its em padding against this element's own
+	 * font-size, not the rule's. Setting only padding-left left the other
+	 * three sides at that rule's longhand values, recomputed against this
+	 * theme's code font size: 2em top/bottom would overflow the slide if
+	 * left to that fallback. Set every side explicitly instead. */
+	padding: 32px 36px;
+	font-family: var(--font-mono);
+	font-size: 42px;
+	font-weight: 500;
+	line-height: 66px;
+	font-variant-ligatures: none;
+	color: var(--fg);
+	animation: observatory-fade var(--dur) var(--ease) 300ms both;
+}
+[data-theme='observatory'] pre.shiki code {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	font: inherit;
+}
+[data-theme='observatory'] pre.shiki .line {
+	position: relative;
+	white-space: pre-wrap;
+	word-break: break-word;
+	padding: 0 36px;
+	margin-left: -36px;
+	animation: observatory-drift var(--dur) var(--ease) 200ms both;
+}
+[data-theme='observatory'] pre.shiki .line:nth-child(2) {
+	animation-delay: 260ms;
+}
+[data-theme='observatory'] pre.shiki .line:nth-child(3) {
+	animation-delay: 320ms;
+}
+[data-theme='observatory'] pre.shiki .line:nth-child(4) {
+	animation-delay: 380ms;
+}
+[data-theme='observatory'] pre.shiki .line:nth-child(n + 5) {
+	animation-delay: 440ms;
+}
+[data-theme='observatory'] pre.shiki .line.highlighted {
+	animation-delay: 520ms;
+	font-weight: 600;
+	background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+[data-theme='observatory'] pre.has-highlighted .line:not(.highlighted),
+[data-theme='observatory'] pre.has-highlighted .line:not(.highlighted) > * {
+	color: var(--dim);
+}
+[data-theme='observatory'] pre.shiki .line.highlighted::before,
+[data-theme='observatory'] pre.shiki .line.highlighted::after {
+	content: '';
+	position: absolute;
+	width: 28px;
+	height: 28px;
+	border: 4px solid var(--accent);
+}
+[data-theme='observatory'] pre.shiki .line.highlighted::before {
+	left: -2px;
+	top: -2px;
+	border-right: 0;
+	border-bottom: 0;
+}
+[data-theme='observatory'] pre.shiki .line.highlighted::after {
+	right: -2px;
+	bottom: -2px;
+	border-left: 0;
+	border-top: 0;
+}
+[data-theme='observatory'] pre + p {
+	margin-top: 32px;
+	font-size: 46px;
+	color: var(--muted);
+	animation-delay: 620ms;
+}
+
+/* ---------- big stat: a reading, with a scale beneath it ---------- */
+[data-theme='observatory'] .slide[data-layout='big-stat'] {
+	padding-top: 96px;
+}
+[data-theme='observatory'] .layout-big-stat {
+	display: flex;
+	flex-direction: column;
+	justify-content: center;
+	padding-bottom: 30px;
+}
+/*
+ * Sized for `long` first (a stat with several digits or a unit string),
+ * then scaled up for `medium` and `short` so a terse reading like "40x"
+ * keeps the full poster-sized impact the mockup intended.
+ */
+[data-theme='observatory'] .layout-big-stat h1 {
+	margin-left: -8px;
+	font-size: 220px;
+	line-height: 1;
+	letter-spacing: -0.03em;
+	color: var(--accent);
+}
+[data-theme='observatory'] .layout-big-stat .slot-content h1[data-length='medium'] {
+	font-size: 280px;
+}
+[data-theme='observatory'] .layout-big-stat .slot-content h1[data-length='short'] {
+	font-size: 340px;
+}
+[data-theme='observatory'] .layout-big-stat .slot-caption {
+	margin-top: 16px;
+	padding-top: 64px;
+	max-width: 1400px;
+	background:
+		repeating-linear-gradient(90deg, var(--accent-cool) 0 2px, transparent 2px 48px) 0 0 / 100% 22px no-repeat,
+		linear-gradient(var(--accent-cool), var(--accent-cool)) 0 0 / 100% 2px no-repeat;
+}
+[data-theme='observatory'] .layout-big-stat .slot-caption p {
+	font-size: 46px;
+	text-wrap: balance;
+}
+
+/* ---------- quote: a transmission, framed by the reticle corners ---------- */
+[data-theme='observatory'] .slide[data-layout='quote'] {
+	padding-top: 96px;
+}
+[data-theme='observatory'] .layout-quote {
+	display: flex;
+	flex-direction: column;
+	justify-content: center;
+}
+[data-theme='observatory'] .layout-quote blockquote {
+	position: relative;
+	padding: 56px 72px 64px;
+}
+[data-theme='observatory'] .layout-quote blockquote::before,
+[data-theme='observatory'] .layout-quote blockquote::after {
+	content: '';
+	position: absolute;
+	width: 64px;
+	height: 64px;
+	border: 5px solid var(--accent);
+}
+[data-theme='observatory'] .layout-quote blockquote::before {
+	left: 0;
+	top: 0;
+	border-right: 0;
+	border-bottom: 0;
+}
+[data-theme='observatory'] .layout-quote blockquote::after {
+	right: 0;
+	bottom: 0;
+	border-left: 0;
+	border-top: 0;
+}
+[data-theme='observatory'] .layout-quote blockquote p {
+	font-size: 108px;
+	font-style: italic;
+	font-weight: 500;
+	line-height: 1.16;
+	letter-spacing: -0.02em;
+	text-wrap: balance;
+}
+[data-theme='observatory'] .layout-quote .slot-attribution {
+	margin-top: 48px;
+	padding-left: 72px;
+}
+[data-theme='observatory'] .layout-quote .slot-attribution p {
+	font-family: var(--font-mono);
+	font-size: 44px;
+	letter-spacing: 0.02em;
+	color: var(--muted);
+	font-style: normal;
+}
+[data-theme='observatory'] .layout-quote .slot-attribution p::before {
+	content: '';
+	display: inline-block;
+	vertical-align: middle;
+	width: 64px;
+	height: 3px;
+	margin: 0 24px 6px 0;
+	background: var(--accent);
+}
+
+/* ============================================================================
+ * Panels: two, three columns and the sidebar all use bracket-corner frames,
+ * a reading held in its own field of view.
+ * ============================================================================ */
+
+[data-theme='observatory'] .layout-two-column {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	grid-template-rows: auto auto;
+	align-content: space-between;
+	column-gap: 48px;
+}
+[data-theme='observatory'] .layout-two-column .slot-default {
+	grid-column: 1 / -1;
+}
+[data-theme='observatory'] .layout-two-column .slot-left,
+[data-theme='observatory'] .layout-two-column .slot-right {
+	position: relative;
+	padding: 44px 48px 60px;
+	background: color-mix(in srgb, var(--surface) 55%, transparent);
+	animation: observatory-drift var(--dur) var(--ease) 320ms both;
+}
+[data-theme='observatory'] .layout-two-column .slot-right {
+	animation-delay: 480ms;
+}
+[data-theme='observatory'] .layout-two-column .slot-left::before,
+[data-theme='observatory'] .layout-two-column .slot-right::before,
+[data-theme='observatory'] .layout-two-column .slot-left::after,
+[data-theme='observatory'] .layout-two-column .slot-right::after {
+	content: '';
+	position: absolute;
+	width: 44px;
+	height: 44px;
+	border: 4px solid var(--accent-cool);
+}
+[data-theme='observatory'] .layout-two-column .slot-left::before,
+[data-theme='observatory'] .layout-two-column .slot-right::before {
+	left: 0;
+	top: 0;
+	border-right: 0;
+	border-bottom: 0;
+}
+[data-theme='observatory'] .layout-two-column .slot-left::after,
+[data-theme='observatory'] .layout-two-column .slot-right::after {
+	right: 0;
+	bottom: 0;
+	border-left: 0;
+	border-top: 0;
+}
+[data-theme='observatory'] .layout-two-column h3 {
+	font-family: var(--font-mono);
+	font-size: 32px;
+	font-weight: 600;
+	letter-spacing: 0.12em;
+	text-transform: uppercase;
+	color: var(--accent-cool);
+	margin-bottom: 24px;
+}
+[data-theme='observatory'] .layout-two-column p {
+	text-wrap: balance;
+}
+[data-theme='observatory'] .layout-two-column p strong {
+	font-family: var(--font-display);
+	color: var(--accent-text);
+}
+/*
+ * A two-column panel is much narrower than the full slide, so the
+ * constellation list's full-width marker (44px circle, 110px indent)
+ * wraps this deck's copy to 2-3 lines per item and can run the panel past
+ * the bottom of the slide. Inside a column, the same device shrinks: a
+ * smaller dot, a tighter indent, and no connecting line (there is no room
+ * for it to read as a line between stars rather than clutter).
+ */
+[data-theme='observatory'] .layout-two-column .slot-default h2 {
+	font-size: 76px;
+	margin-bottom: 24px;
+}
+[data-theme='observatory'] .layout-two-column .slot-default.slot-content h2[data-length='medium'] {
+	font-size: 84px;
+}
+[data-theme='observatory'] .layout-two-column .slot-default.slot-content h2[data-length='short'] {
+	font-size: 92px;
+}
+/* The panel body is a narrow column (roughly half the safe width): body
+ * copy and the constellation marker both drop to the narrow-column scale. */
+[data-theme='observatory'] .layout-two-column :where(.slot-left, .slot-right) ul > li {
+	font-size: 44px;
+	padding: 10px 0 10px 56px;
+	line-height: 1.2;
+}
+[data-theme='observatory'] .layout-two-column :where(.slot-left, .slot-right) ul > li::before {
+	left: 0;
+	top: 10px;
+	width: 26px;
+	height: 26px;
+}
+[data-theme='observatory'] .layout-two-column :where(.slot-left, .slot-right) ul > li::after {
+	content: none;
+}
+
+[data-theme='observatory'] .layout-three-column {
+	display: grid;
+	grid-template-columns: 1fr 1fr 1fr;
+	grid-template-rows: auto auto;
+	align-content: space-between;
+	column-gap: 40px;
+}
+[data-theme='observatory'] .layout-three-column .slot-default {
+	grid-column: 1 / -1;
+}
+[data-theme='observatory'] .layout-three-column .slot-left,
+[data-theme='observatory'] .layout-three-column .slot-center,
+[data-theme='observatory'] .layout-three-column .slot-right {
+	position: relative;
+	padding: 40px 36px 56px;
+	background: color-mix(in srgb, var(--surface) 55%, transparent);
+	animation: observatory-drift var(--dur) var(--ease) 320ms both;
+}
+[data-theme='observatory'] .layout-three-column .slot-center {
+	animation-delay: 420ms;
+}
+[data-theme='observatory'] .layout-three-column .slot-right {
+	animation-delay: 520ms;
+}
+[data-theme='observatory'] .layout-three-column .slot-left::before,
+[data-theme='observatory'] .layout-three-column .slot-center::before,
+[data-theme='observatory'] .layout-three-column .slot-right::before,
+[data-theme='observatory'] .layout-three-column .slot-left::after,
+[data-theme='observatory'] .layout-three-column .slot-center::after,
+[data-theme='observatory'] .layout-three-column .slot-right::after {
+	content: '';
+	position: absolute;
+	width: 36px;
+	height: 36px;
+	border: 4px solid var(--accent-cool);
+}
+[data-theme='observatory'] .layout-three-column .slot-left::before,
+[data-theme='observatory'] .layout-three-column .slot-center::before,
+[data-theme='observatory'] .layout-three-column .slot-right::before {
+	left: 0;
+	top: 0;
+	border-right: 0;
+	border-bottom: 0;
+}
+[data-theme='observatory'] .layout-three-column .slot-left::after,
+[data-theme='observatory'] .layout-three-column .slot-center::after,
+[data-theme='observatory'] .layout-three-column .slot-right::after {
+	right: 0;
+	bottom: 0;
+	border-left: 0;
+	border-top: 0;
+}
+[data-theme='observatory'] .layout-three-column h3 {
+	font-family: var(--font-mono);
+	font-size: 28px;
+	font-weight: 600;
+	letter-spacing: 0.1em;
+	text-transform: uppercase;
+	color: var(--accent-cool);
+	margin-bottom: 20px;
+}
+/* Same compaction as the two-column panel, one size down: three narrow
+ * panels wrap even harder than two. */
+[data-theme='observatory'] .layout-three-column .slot-default h2 {
+	font-size: 68px;
+	margin-bottom: 24px;
+}
+[data-theme='observatory'] .layout-three-column .slot-default.slot-content h2[data-length='medium'] {
+	font-size: 76px;
+}
+[data-theme='observatory'] .layout-three-column .slot-default.slot-content h2[data-length='short'] {
+	font-size: 84px;
+}
+[data-theme='observatory'] .layout-three-column :where(.slot-left, .slot-center, .slot-right) ul > li {
+	font-size: 42px;
+	padding: 8px 0 8px 50px;
+	line-height: 1.2;
+}
+[data-theme='observatory'] .layout-three-column :where(.slot-left, .slot-center, .slot-right) ul > li::before {
+	left: 0;
+	top: 9px;
+	width: 24px;
+	height: 24px;
+}
+[data-theme='observatory'] .layout-three-column :where(.slot-left, .slot-center, .slot-right) ul > li::after {
+	content: none;
+}
+
+/* ---------- sidebar: the main argument, and the receipts beside it ---------- */
+[data-theme='observatory'] .layout-sidebar {
+	display: grid;
+	grid-template-columns: 1fr 0.5fr;
+	column-gap: 64px;
+}
+[data-theme='observatory'] .layout-sidebar .slot-sidebar {
+	position: relative;
+	padding: 48px 44px;
+	background: color-mix(in srgb, var(--surface) 55%, transparent);
+	animation: observatory-drift var(--dur) var(--ease) 420ms both;
+}
+[data-theme='observatory'] .layout-sidebar .slot-sidebar::before,
+[data-theme='observatory'] .layout-sidebar .slot-sidebar::after {
+	content: '';
+	position: absolute;
+	width: 40px;
+	height: 40px;
+	border: 4px solid var(--accent-cool);
+}
+[data-theme='observatory'] .layout-sidebar .slot-sidebar::before {
+	left: 0;
+	top: 0;
+	border-right: 0;
+	border-bottom: 0;
+}
+[data-theme='observatory'] .layout-sidebar .slot-sidebar::after {
+	right: 0;
+	bottom: 0;
+	border-left: 0;
+	border-top: 0;
+}
+[data-theme='observatory'] .layout-sidebar .slot-sidebar h3 {
+	font-family: var(--font-mono);
+	font-size: 32px;
+	font-weight: 600;
+	letter-spacing: 0.1em;
+	text-transform: uppercase;
+	color: var(--accent-cool);
+	margin-bottom: 24px;
+}
+[data-theme='observatory'] .layout-sidebar .slot-sidebar li {
+	font-size: 42px;
+	padding-left: 68px;
+	line-height: 1.25;
+}
+[data-theme='observatory'] .layout-sidebar .slot-sidebar li::before {
+	width: 28px;
+	height: 28px;
+	top: 14px;
+}
+
+/* ============================================================================
+ * Image: a photographic plate, toned like starlight, held by the reticle
+ * corners. Applies to split-media's own slot and a plain image dropped on
+ * any other slot.
+ * ============================================================================ */
+
+[data-theme='observatory'] .slide[data-layout='split-media'] {
+	padding-top: 96px;
+}
+[data-theme='observatory'] .layout-split-media {
+	display: grid;
+	grid-template-columns: 1fr 920px;
+	column-gap: 72px;
+	align-items: center;
+}
+/* The text pane is narrower than the media pane (a fixed 920px), so its
+ * copy takes the narrow-column scale. */
+[data-theme='observatory'] .layout-split-media .slot-default p {
+	margin-top: 36px;
+	color: var(--muted);
+	font-size: 44px;
+}
+[data-theme='observatory'] .layout-split-media .slot-media,
+[data-theme='observatory'] .layout-default .slot > p:has(> img:only-child),
+[data-theme='observatory'] .layout-default .slot > img {
+	position: relative;
+	isolation: isolate;
+	padding: 26px;
+	background: linear-gradient(#bcd6ff, #bcd6ff) content-box;
+	animation: observatory-drift var(--dur) var(--ease) 380ms both;
+}
+[data-theme='observatory'] .layout-split-media .slot-media::before,
+[data-theme='observatory'] .layout-split-media .slot-media::after,
+[data-theme='observatory'] .layout-default .slot > p:has(> img:only-child)::before,
+[data-theme='observatory'] .layout-default .slot > p:has(> img:only-child)::after,
+[data-theme='observatory'] .layout-default .slot > img::before,
+[data-theme='observatory'] .layout-default .slot > img::after {
+	content: '';
+	position: absolute;
+	width: 56px;
+	height: 56px;
+	border: 5px solid var(--accent);
+	z-index: 1;
+}
+[data-theme='observatory'] .layout-split-media .slot-media::before,
+[data-theme='observatory'] .layout-default .slot > p:has(> img:only-child)::before,
+[data-theme='observatory'] .layout-default .slot > img::before {
+	left: 0;
+	top: 0;
+	border-right: 0;
+	border-bottom: 0;
+}
+[data-theme='observatory'] .layout-split-media .slot-media::after,
+[data-theme='observatory'] .layout-default .slot > p:has(> img:only-child)::after,
+[data-theme='observatory'] .layout-default .slot > img::after {
+	right: 0;
+	bottom: 0;
+	border-left: 0;
+	border-top: 0;
+}
+[data-theme='observatory'] .layout-split-media img,
+[data-theme='observatory'] .layout-default .slot img {
+	display: block;
+	width: 100%;
+	filter: grayscale(1) contrast(1.2) brightness(0.96);
+	mix-blend-mode: multiply;
+}
+/* An image on a plain default slot needs the space the heading leaves it. */
+[data-theme='observatory'] .layout-default .slot:has(> img, > p > img:only-child) {
+	flex: 1;
+	min-height: 0;
+}
+[data-theme='observatory'] .layout-default .slot > :is(h2, p):has(~ img, ~ p > img:only-child) {
+	flex: none;
+}
+[data-theme='observatory'] .layout-default .slot > p:has(> img:only-child) {
+	flex: 1;
+	min-height: 0;
+	width: 100%;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+/*
+ * The image is scaled to fill the flex space the heading and paragraph
+ * leave it, not to its own natural bitmap size: both dimensions are set to
+ * 100% of that space (now definite, from the slot's own `height: 100%`
+ * flex column) and `object-fit: contain` scales the picture up or down to
+ * fit inside it without distorting its aspect ratio.
+ */
+[data-theme='observatory'] .layout-default .slot > p > img:only-child {
+	width: 100%;
+	height: 100%;
+	object-fit: contain;
+}
+[data-theme='observatory'] .layout-default .slot > img {
+	flex: 1 1 auto;
+	min-height: 0;
+	width: 100%;
+	height: 100%;
+	object-fit: contain;
+}
+
+/* ---------- table: a log of observations on dashed chart lines ---------- */
+[data-theme='observatory'] :where(.slot, .slot > [data-fragment-index]) > table {
+	width: 100%;
+	/* Top-aligned, not auto-centered: a table with several rows can run
+	 * close enough to the bottom tick ruler that centering risks crossing
+	 * it. margin-top gives it the same clearance below the heading a list
+	 * gets, and margin-bottom absorbs any slack instead. */
+	margin-top: 28px;
+	margin-bottom: auto;
+	border-collapse: collapse;
+	text-align: left;
+}
+[data-theme='observatory'] table th {
+	padding: 0 32px 18px 0;
+	font-family: var(--font-mono);
+	font-size: 44px;
+	font-weight: 600;
+	letter-spacing: 0.02em;
+	color: var(--accent-cool);
+	border-bottom: 3px solid var(--accent-cool);
+}
+[data-theme='observatory'] table td {
+	padding: 26px 32px 28px 0;
+	font-size: 48px;
+	line-height: 1.15;
+	border-bottom: 2px dashed var(--ring);
+}
+[data-theme='observatory'] table td:first-child {
+	font-weight: 800;
+}
+[data-theme='observatory'] .slot td:first-child::before {
+	content: '';
+	display: inline-block;
+	vertical-align: middle;
+	width: 26px;
+	height: 26px;
+	margin: 0 24px 6px 0;
+	border-radius: 50%;
+	border: 3px solid var(--accent);
+	background: radial-gradient(circle, var(--accent) 0 4px, transparent 5px);
+}
+[data-theme='observatory'] tbody tr {
+	animation: observatory-drift var(--dur) var(--ease) 340ms both;
+}
+[data-theme='observatory'] tbody tr:nth-child(2) {
+	animation-delay: 420ms;
+}
+[data-theme='observatory'] tbody tr:nth-child(3) {
+	animation-delay: 500ms;
+}
+[data-theme='observatory'] tbody tr:nth-child(n + 4) {
+	animation-delay: 580ms;
+}
+
+/* Tables tighten at 4 or more rows: keep the log legible without spilling
+ * past the ruled band at the bottom of the slide. Four data rows plus a
+ * header at the base padding already runs past a typical slot's budget, so
+ * the compact treatment starts one row earlier than the bullet list's, and
+ * drops to the narrow/dense-table scale (40-44px). */
+[data-theme='observatory'] .slot:has(> table tbody tr:nth-child(4)) td,
+[data-theme='observatory'] .slot:has(> table tbody tr:nth-child(4)) th {
+	font-size: 42px;
+	padding-top: 14px;
+	padding-bottom: 14px;
+}
+
+/* ---------- cover ---------- */
+[data-theme='observatory'] .layout-cover {
+	display: flex;
+	flex-direction: column;
+	justify-content: center;
+}
+[data-theme='observatory'] .layout-cover .slot {
+	position: relative;
+	max-width: 1500px;
+	padding: 64px 80px;
+	background: color-mix(in srgb, var(--bg-deep) 62%, transparent);
+}
+[data-theme='observatory'] .layout-cover .slot::before,
+[data-theme='observatory'] .layout-cover .slot::after {
+	content: '';
+	position: absolute;
+	width: 64px;
+	height: 64px;
+	border: 5px solid var(--accent);
+	z-index: 1;
+}
+[data-theme='observatory'] .layout-cover .slot::before {
+	left: 0;
+	top: 0;
+	border-right: 0;
+	border-bottom: 0;
+}
+[data-theme='observatory'] .layout-cover .slot::after {
+	right: 0;
+	bottom: 0;
+	border-left: 0;
+	border-top: 0;
+}
+/*
+ * Sized for `long` first (a full sentence cover line), then scaled up for
+ * `medium` and `short` so a short cover statement fills the frame the way
+ * the layout's whole-slide panel treatment intends.
+ */
+[data-theme='observatory'] .layout-cover h1 {
+	font-size: 128px;
+	line-height: 1.05;
+	letter-spacing: -0.025em;
+}
+[data-theme='observatory'] .layout-cover .slot-content h1[data-length='medium'] {
+	font-size: 148px;
+}
+[data-theme='observatory'] .layout-cover .slot-content h1[data-length='short'] {
+	font-size: 172px;
+}
+[data-theme='observatory'] .layout-cover p {
+	margin-top: 36px;
+	font-size: 46px;
+	color: var(--muted);
+}
+
+/* ---------- blank ---------- */
+[data-theme='observatory'] .layout-blank {
+	position: relative;
+	height: 100%;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+[data-theme='observatory'] .layout-blank h1 {
+	font-size: 120px;
+	line-height: 1.1;
+	letter-spacing: -0.025em;
+	text-align: center;
+}
+
+/* ============================================================================
+ * Diagram: labels keep the metrics mermaid measured them with, so they
+ * never outgrow their nodes. Reset lets `.slot p` sizing from above.
+ * ============================================================================ */
+
+[data-theme='observatory'] .layout-default .slot:has(.mermaid-diagram) {
+	flex: 1;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+}
+[data-theme='observatory'] .mermaid-diagram {
+	flex: 1;
+	min-height: 0;
+	display: flex;
+	justify-content: center;
+	margin-block: auto;
+	animation: observatory-fade var(--dur) var(--ease) 380ms both;
+}
+[data-theme='observatory'] .mermaid-diagram svg {
+	display: block;
+	width: 100% !important;
+	height: 100% !important;
+	max-width: none !important;
+	overflow: visible;
+}
+/*
+ * Mermaid measured these labels at the theme.json fontSize (40px) when it
+ * laid out each node's box. The minimum-size safety net at the end of this
+ * file sets `.slot p` at the same (0,2,1) specificity, and being later in
+ * the file it would otherwise win over a plain `.mermaid-diagram p`
+ * selector, reflowing every label at 62px inside a box mermaid sized for
+ * 40px. The extra `.slot` qualifier here raises this rule to (0,3,1) so it
+ * always wins regardless of source order.
+ */
+[data-theme='observatory'] .slot .mermaid-diagram p {
+	font-family: var(--font-display);
+	font-size: 40px;
+	font-weight: 400;
+	letter-spacing: normal;
+	line-height: 1.5;
+	white-space: nowrap;
+	margin: 0;
+	padding: 0;
+}
+/*
+ * Pin the node fill, stroke, and label color from CSS as well as
+ * theme.json: on a cold load, mermaid can render one frame with the base
+ * theme's palette before the observatory overrides take effect, and a
+ * quiet-classed node's own inline `style` (from `quietStyle` in
+ * theme.json) still wins over these rules regardless.
+ */
+[data-theme='observatory'] .mermaid-diagram .node rect,
+[data-theme='observatory'] .mermaid-diagram .node path,
+[data-theme='observatory'] .mermaid-diagram .node circle,
+[data-theme='observatory'] .mermaid-diagram .node ellipse,
+[data-theme='observatory'] .mermaid-diagram .node polygon {
+	fill: var(--surface) !important;
+	stroke: var(--accent) !important;
+	stroke-width: 3px !important;
+}
+[data-theme='observatory'] .mermaid-diagram .node rect {
+	rx: 8px;
+	ry: 8px;
+}
+[data-theme='observatory'] .mermaid-diagram .nodeLabel,
+[data-theme='observatory'] .mermaid-diagram .label,
+[data-theme='observatory'] .slot .mermaid-diagram p {
+	color: var(--fg) !important;
+}
+[data-theme='observatory'] .mermaid-diagram .flowchart-link,
+[data-theme='observatory'] .mermaid-diagram .edgePath path {
+	stroke: var(--accent-cool) !important;
+	stroke-width: 2.5px !important;
+}
+[data-theme='observatory'] .mermaid-diagram .arrowheadPath,
+[data-theme='observatory'] .mermaid-diagram marker path {
+	fill: var(--accent-cool) !important;
+	stroke: var(--accent-cool) !important;
+}
+[data-theme='observatory'] .mermaid-diagram + p {
+	margin-top: 20px;
+	font-size: 46px;
+	color: var(--muted);
+	animation-delay: 620ms;
+}
+
+/* ---------- scroll slide ---------- */
+[data-theme='observatory'] .scroll-content {
+	position: relative;
+}
+[data-theme='observatory'] .scroll-content pre.shiki {
+	margin-block: 0;
+	font-size: 42px;
+	line-height: 58px;
+}
+[data-theme='observatory'] .scroll-content pre.shiki .line {
+	white-space: pre-wrap;
+	word-break: break-word;
+}
+
+/* ============================================================================
+ * Live code block and asciinema chrome. Structure and behavior come from
+ * rich-blocks.css, which reads the --color-* bridge above; only the
+ * pieces that should read distinctly as this theme's own instrument
+ * panel get an explicit override here.
+ * ============================================================================ */
+
+[data-theme='observatory'] .live-code-block .run-button {
+	background-color: var(--accent);
+	color: var(--bg-deep);
+	font-family: var(--font-mono);
+	font-weight: 700;
+	border-radius: 4px;
+}
+[data-theme='observatory'] .live-code-block .code-container pre,
+[data-theme='observatory'] .live-code-block .result-container {
+	border: 2px solid var(--accent-cool);
+	border-radius: 0;
+}
+/*
+ * Both blocks get the same bracket-corner instrument frame the two/three
+ * column panels and the quote layout use, rather than the generic rounded
+ * box `rich-blocks.css` provides by default: a small reserved margin (for
+ * the corners to sit outside the block's own border) plus two opposing
+ * L-shaped corners in the highlight accent.
+ */
+[data-theme='observatory'] .live-code-block {
+	position: relative;
+	margin-block: 28px 0.75em;
+	overflow: visible;
+}
+[data-theme='observatory'] .live-code-block::before,
+[data-theme='observatory'] .live-code-block::after {
+	content: '';
+	position: absolute;
+	width: 36px;
+	height: 36px;
+	border: 4px solid var(--accent);
+	z-index: 2;
+	pointer-events: none;
+}
+[data-theme='observatory'] .live-code-block::before {
+	left: -14px;
+	top: -14px;
+	border-right: 0;
+	border-bottom: 0;
+}
+[data-theme='observatory'] .live-code-block::after {
+	right: -14px;
+	bottom: -14px;
+	border-left: 0;
+	border-top: 0;
+}
+[data-theme='observatory'] .asciinema-player-wrapper {
+	position: relative;
+	border: 2px solid var(--accent-cool);
+	background: var(--bg-deep);
+	padding: 14px;
+	margin-top: 14px;
+}
+[data-theme='observatory'] .asciinema-player-wrapper::before,
+[data-theme='observatory'] .asciinema-player-wrapper::after {
+	content: '';
+	position: absolute;
+	width: 36px;
+	height: 36px;
+	border: 4px solid var(--accent);
+	z-index: 2;
+	pointer-events: none;
+}
+[data-theme='observatory'] .asciinema-player-wrapper::before {
+	left: -2px;
+	top: -2px;
+	border-right: 0;
+	border-bottom: 0;
+}
+[data-theme='observatory'] .asciinema-player-wrapper::after {
+	right: -2px;
+	bottom: -2px;
+	border-left: 0;
+	border-top: 0;
+}
+
+/* ============================================================================
+ * Minimum-size safety net. Every layout rule above sets an explicit size
+ * for the slot text it knows about; this catches whatever it doesn't
+ * (fragment paragraphs, panel copy, captions) so nothing falls back to
+ * the base theme's much smaller default typography.
+ * ============================================================================ */
+[data-theme='observatory'] .slot p,
+[data-theme='observatory'] .slot li {
+	font-size: 48px;
+	line-height: 1.35;
+}
+[data-theme='observatory'] pre code {
+	font-size: 42px;
+}
+[data-theme='observatory'] .slot td,
+[data-theme='observatory'] .slot th {
+	font-size: 48px;
+}

@@ -1,0 +1,34 @@
+{
+	"name": "Editorial",
+	"polarity": "light",
+	"pitch": "A story-led talk told like a long-read magazine feature, with drop caps, pull quotes, and figures.",
+	"illustration": {
+		"medium": "flat vector, literary-magazine spot illustration on warm cream paper",
+		"line": "2px strokes, slightly serif-influenced, restrained",
+		"shapes": "simple editorial motifs: a drop cap, a rule, a single figure or object, generous margins",
+		"texture": "faint paper texture, no digital gloss",
+		"palette_use": "warm cream background dominant, near-black ink, one brick-red accent used for a single editorial mark (rule, initial, or figure)",
+		"mood": "literary, considered, magazine-quality",
+		"avoid": "gradients, neon color, digital UI chrome, hand-drawn wobble, clutter"
+	},
+	"mermaid": {
+		"themeVariables": {
+			"fontFamily": "Newsreader",
+			"primaryColor": "#fbf6ea",
+			"primaryTextColor": "#1d1813",
+			"primaryBorderColor": "#1d1813",
+			"lineColor": "#8a2b1e",
+			"background": "#f4ecdd",
+			"mainBkg": "#fbf6ea",
+			"textColor": "#1d1813",
+			"nodeTextColor": "#1d1813",
+			"nodeBorder": "#1d1813",
+			"clusterBkg": "#eadfc8",
+			"clusterBorder": "#4f4539",
+			"edgeLabelBackground": "#f4ecdd",
+			"fontSize": "34px"
+		},
+		"quietStyle": "fill:#eadfc8,stroke:#4f4539,color:#1d1813",
+		"curve": "basis"
+	}
+}

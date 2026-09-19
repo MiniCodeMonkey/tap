@@ -2,14 +2,17 @@
 package parser
 
 import (
-	"bytes"
+	"encoding/json"
+	"fmt"
 	"regexp"
 	"strings"
 
 	"github.com/yuin/goldmark"
 	"github.com/yuin/goldmark/extension"
 	"github.com/yuin/goldmark/parser"
+	"github.com/yuin/goldmark/renderer"
 	"github.com/yuin/goldmark/renderer/html"
+	"github.com/yuin/goldmark/util"
 	"gopkg.in/yaml.v3"
 )
 
@@ -26,10 +29,18 @@ type Slide struct {
 	HTML string
 	// Directives contains per-slide configuration parsed from HTML comments.
 	Directives SlideDirectives
-	// Fragments contains the fragment groups for incremental reveals.
-	Fragments []Fragment
+	// Slots maps a slot name to its rendered HTML.
+	Slots map[string]string
+	// SlotOrder lists the slot names in document order.
+	SlotOrder []string
+	// FragmentCount is the number of fragment reveals on the slide.
+	FragmentCount int
 	// CodeBlocks contains the code blocks found in this slide.
 	CodeBlocks []CodeBlock
+	// Components contains the inline ```component fences found in this
+	// slide, in document order, with the running index used for their
+	// data-component-index placeholder.
+	Components []Component
 	// Index is the zero-based slide index.
 	Index int
 }
@@ -45,12 +56,13 @@ type SlideDirectives struct {
 	Fragments   bool
 	Scroll      bool // Enable scroll reveal for long content
 	ScrollSpeed int  // Animation duration in milliseconds (default: 2000)
-}
-
-// Fragment represents a content fragment for incremental reveals.
-type Fragment struct {
-	Content string
-	Index   int
+	Steps       int  // Explicit clicker-step count, overriding auto-detection
+	HasSteps    bool // Whether the "steps" directive was present
+	// StepsInvalid is true when a "steps:" directive was present but its
+	// value was negative, or did not parse as an int at all (for example a
+	// number too large for one); the directive is ignored either way, and
+	// a caller that surfaces slide warnings should tell the deck author.
+	StepsInvalid bool
 }
 
 // CodeBlock represents a fenced code block in a slide.
@@ -64,6 +76,23 @@ type CodeBlock struct {
 type CodeBlockMeta struct {
 	Driver     string
 	Connection string
+	// HighlightLines is a line-highlight spec such as "3" or "1,3-5",
+	// parsed from a fence info string like "```php {1,3-5}".
+	HighlightLines string
+}
+
+// Component represents one inline ```component fence found in a slide.
+type Component struct {
+	// Index is the per-slide running index used for the fence's
+	// placeholder (data-component-index), threaded across slots and
+	// fragments exactly like a code block's index.
+	Index int
+	// Source is the component file path as written after "component" in
+	// the fence info string, relative to the deck file.
+	Source string
+	// Props is the fence body, parsed and validated as a JSON object
+	// ("{}" when the body is empty).
+	Props json.RawMessage
 }
 
 // Parser handles markdown parsing for presentations.
@@ -87,9 +116,23 @@ func New() *Parser {
 		),
 		goldmark.WithParserOptions(
 			parser.WithAutoHeadingID(),
+			// Runs once per parse, after block/inline parsing produces the
+			// AST and before rendering; assigns each h1-h3 its data-length
+			// attribute. The priority only matters relative to other
+			// registered transformers, of which there are none yet.
+			parser.WithASTTransformers(
+				util.Prioritized(NewHeadingLengthTransformer(), 100),
+			),
 		),
 		goldmark.WithRendererOptions(
 			html.WithUnsafe(), // Allow raw HTML in markdown
+			// Priority 100 is lower than the default html.Renderer's 1000
+			// (see goldmark.NewMarkdown), which wins it registration for
+			// KindFencedCodeBlock so it can carry a line-highlight spec
+			// onto the rendered <code> tag.
+			renderer.WithNodeRenderers(
+				util.Prioritized(NewFencedCodeBlockRenderer(), 100),
+			),
 		),
 	)
 
@@ -174,76 +217,181 @@ func SplitSlidesPreservingCodeBlocks(text string) []string {
 	return slides
 }
 
+// slideChunk is one slide's raw markdown, as SplitSlidesPreservingCodeBlocks
+// would return it, plus the 1-based line (within the text passed to
+// splitSlidesPreservingCodeBlocksWithLines) that Content's first line sits
+// on.
+type slideChunk struct {
+	Content   string
+	StartLine int
+}
+
+// splitSlidesPreservingCodeBlocksWithLines splits text the same way
+// SplitSlidesPreservingCodeBlocks does, but also records each slide's
+// starting line, so Parse can turn a line number inside a slide into a
+// real line number in the deck file.
+func splitSlidesPreservingCodeBlocksWithLines(text string) []slideChunk {
+	lines := strings.Split(text, "\n")
+	var slides []slideChunk
+	var currentLines []string
+	insideCodeBlock := false
+	codeBlockFenceLength := 0
+	slideStartLine := 1
+
+	flush := func() {
+		slides = append(slides, slideChunk{Content: strings.Join(currentLines, "\n"), StartLine: slideStartLine})
+		currentLines = nil
+	}
+
+	for i, line := range lines {
+		backtickCount := countLeadingBackticks(line)
+		if backtickCount >= 3 {
+			if !insideCodeBlock {
+				insideCodeBlock = true
+				codeBlockFenceLength = backtickCount
+			} else if backtickCount >= codeBlockFenceLength {
+				trimmedAfterBackticks := strings.TrimSpace(line[backtickCount:])
+				if trimmedAfterBackticks == "" {
+					insideCodeBlock = false
+					codeBlockFenceLength = 0
+				}
+			}
+		}
+
+		if !insideCodeBlock && slideDelimiter.MatchString(line) {
+			flush()
+			slideStartLine = i + 2
+		} else {
+			currentLines = append(currentLines, line)
+		}
+	}
+
+	if len(currentLines) > 0 {
+		flush()
+	}
+
+	return slides
+}
+
 // Parse parses markdown content and returns a Presentation with slides.
 // Slides are split on "---" delimiters. Frontmatter (if present) is skipped.
 func (p *Parser) Parse(content []byte) (*Presentation, error) {
 	// Convert to string for easier manipulation
 	text := string(content)
 
-	// Skip frontmatter if present
-	text = skipFrontmatter(text)
+	// Normalize CRLF line endings to LF so a Windows-saved deck parses the
+	// same way as one saved with Unix line endings, and no stray "\r"
+	// characters end up in slide content, HTML, or notes. This never
+	// changes a line's number: each "\r\n" becomes exactly one "\n".
+	text = strings.ReplaceAll(text, "\r\n", "\n")
 
-	// Split content on --- delimiter, preserving code blocks
-	parts := SplitSlidesPreservingCodeBlocks(text)
+	// Skip frontmatter if present, and remember how many file lines it
+	// took up, so a slide's line numbers (used in component fence error
+	// messages) can be translated back to real file lines.
+	text, frontmatterLineOffset := skipFrontmatterWithLineOffset(text)
+
+	// Split content on --- delimiter, preserving code blocks, and keep
+	// each slide's starting line for the same reason.
+	chunks := splitSlidesPreservingCodeBlocksWithLines(text)
 
 	presentation := &Presentation{
-		Slides: make([]Slide, 0, len(parts)),
+		Slides: make([]Slide, 0, len(chunks)),
 	}
 
-	for _, part := range parts {
+	for _, chunk := range chunks {
 		// Trim whitespace from slide content
-		slideContent := strings.TrimSpace(part)
+		slideContent := strings.TrimSpace(chunk.Content)
 
 		// Skip empty slides
 		if slideContent == "" {
 			continue
 		}
 
+		slideFileLine := frontmatterLineOffset + chunk.StartLine + leadingWhitespaceLines(chunk.Content)
+
 		// Parse directives from HTML comments at slide start
 		directives, contentAfterDirectives := parseDirectives(slideContent)
+		// parseDirectives only ever removes a prefix, so contentAfterDirectives
+		// is always a suffix of slideContent; the newlines in what was
+		// removed are exactly the lines the directive comment took up.
+		slideFileLine += strings.Count(slideContent[:len(slideContent)-len(contentAfterDirectives)], "\n")
 
-		// Pre-process images with attributes (e.g., {width=50%}) to HTML
-		contentAfterDirectives = transformImageAttributes(contentAfterDirectives)
-
-		// Pre-process asciinema code blocks to move info string meta into body
-		contentAfterDirectives = transformAsciinemaBlocks(contentAfterDirectives)
-
-		// Render markdown to HTML (use content after directives removed)
-		html, err := p.renderHTML([]byte(contentAfterDirectives))
-		if err != nil {
-			return nil, err
-		}
-
-		// Parse code blocks from the slide content
-		codeBlocks := parseCodeBlocks(contentAfterDirectives)
-
-		// Parse fragments from pause markers and render to HTML
-		fragments := p.parseFragments(contentAfterDirectives)
-
-		// Auto-fragment list items when fragments: true and no explicit pause markers
-		if directives.Fragments && !hasPauseMarkers(contentAfterDirectives) {
-			transformedHTML, listItemCount := autoFragmentListItems(html)
-			if listItemCount > 0 {
-				html = transformedHTML
-				// Create fragment entries for each list item
-				// This tells the frontend how many fragment steps exist
-				fragments = make([]Fragment, listItemCount)
-				for i := 0; i < listItemCount; i++ {
-					fragments[i] = Fragment{
-						Content: "", // Content is inline in the HTML, not in fragment structs
-						Index:   i,
-					}
-				}
+		// Remove any further notes comments from the rest of the slide
+		// (e.g. a trailing "<!-- notes: ... -->" after the content), and
+		// join their text onto directive notes, if any, in document order.
+		// This can remove lines from the middle of the slide, which this
+		// package does not track, so a slide with a notes comment loses
+		// exact component fence line numbers.
+		var extraNotes []string
+		beforeNotes := contentAfterDirectives
+		contentAfterDirectives, extraNotes = extractNotesComments(contentAfterDirectives)
+		lineNumbersExact := len(extraNotes) == 0 && contentAfterDirectives == beforeNotes
+		if len(extraNotes) > 0 {
+			joined := strings.Join(extraNotes, "\n\n")
+			if directives.Notes != "" {
+				directives.Notes = directives.Notes + "\n\n" + joined
+			} else {
+				directives.Notes = joined
 			}
 		}
 
+		// Pre-process images with attributes (e.g., {width=50%}) to HTML.
+		// Every replacement stays on the single line the image markdown
+		// was on, so this never shifts line numbers.
+		contentAfterDirectives = transformImageAttributes(contentAfterDirectives)
+
+		// Pre-process asciinema code blocks to move info string meta into
+		// body. A block with metadata pairs turns one line into several,
+		// which does shift the lines after it.
+		if asciinemaInfoPattern.MatchString(contentAfterDirectives) {
+			lineNumbersExact = false
+		}
+		contentAfterDirectives = transformAsciinemaBlocks(contentAfterDirectives)
+
+		sections, err := splitSlots(contentAfterDirectives)
+		if err != nil {
+			return nil, fmt.Errorf("slide %d: %w", len(presentation.Slides)+1, err)
+		}
+
+		slots := make(map[string]string, len(sections))
+		slotOrder := make([]string, 0, len(sections))
+		fragmentCount := 0
+		codeBlockCount := 0
+		componentCount := 0
+		autoFragment := directives.Fragments && !hasPauseMarkers(contentAfterDirectives)
+		var fullHTML strings.Builder
+		var codeBlocks []CodeBlock
+		var components []Component
+		for _, section := range sections {
+			sectionFileLine := slideFileLine + (section.StartLine - 1)
+			slotHTML, nextFragmentIndex, nextCodeBlockIndex, nextComponentIndex, blocks, sectionComponents, err := p.renderSlot(section.Content, fragmentCount, codeBlockCount, componentCount, sectionFileLine, lineNumbersExact)
+			if err != nil {
+				return nil, fmt.Errorf("slide %d: %w", len(presentation.Slides)+1, err)
+			}
+			fragmentCount = nextFragmentIndex
+			codeBlockCount = nextCodeBlockIndex
+			componentCount = nextComponentIndex
+			codeBlocks = append(codeBlocks, blocks...)
+			components = append(components, sectionComponents...)
+			if autoFragment {
+				slotHTML, fragmentCount = autoFragmentListItems(slotHTML, fragmentCount)
+			}
+			slots[section.Name] = slotHTML
+			slotOrder = append(slotOrder, section.Name)
+			fullHTML.WriteString(slotHTML)
+		}
+		html := fullHTML.String()
+
 		slide := Slide{
-			Content:    contentAfterDirectives,
-			HTML:       html,
-			Index:      len(presentation.Slides),
-			Directives: directives,
-			Fragments:  fragments,
-			CodeBlocks: codeBlocks,
+			Content:       contentAfterDirectives,
+			HTML:          html,
+			Index:         len(presentation.Slides),
+			Directives:    directives,
+			Slots:         slots,
+			SlotOrder:     slotOrder,
+			FragmentCount: fragmentCount,
+			CodeBlocks:    codeBlocks,
+			Components:    components,
 		}
 
 		presentation.Slides = append(presentation.Slides, slide)
@@ -252,50 +400,36 @@ func (p *Parser) Parse(content []byte) (*Presentation, error) {
 	return presentation, nil
 }
 
-// skipFrontmatter removes YAML frontmatter from the beginning of the content.
-// Frontmatter is delimited by "---" at the start and end.
-func skipFrontmatter(text string) string {
-	// Check if content starts with frontmatter delimiter
-	if !strings.HasPrefix(strings.TrimSpace(text), "---") {
-		return text
+// skipFrontmatterWithLineOffset removes YAML frontmatter from the
+// beginning of text the same way skipFrontmatter does, and also returns
+// how many lines of text were removed from the front to get there (any
+// leading blank lines plus the frontmatter block itself), so a caller can
+// turn a line number within the returned string into a real line number
+// in text.
+func skipFrontmatterWithLineOffset(text string) (string, int) {
+	leadingTrimmed := strings.TrimLeft(text, " \t\r\n")
+	if !strings.HasPrefix(leadingTrimmed, "---") {
+		return text, 0
 	}
 
-	// Find the first ---
-	text = strings.TrimSpace(text)
-	if !strings.HasPrefix(text, "---") {
-		return text
+	rest := leadingTrimmed[3:]
+	closingIndex := strings.Index(rest, "\n---")
+	if closingIndex == -1 {
+		return text, 0
 	}
 
-	// Find the closing ---
-	rest := text[3:] // Skip the first "---"
-	idx := strings.Index(rest, "\n---")
-	if idx == -1 {
-		// No closing delimiter, return original
-		return text
-	}
+	frontmatterBlock := leadingTrimmed[:3+closingIndex+4]
+	afterFrontmatter := rest[closingIndex+4:]
+	remaining := strings.TrimPrefix(afterFrontmatter, "\n")
 
-	// Skip past the closing delimiter and any trailing newline
-	afterFrontmatter := rest[idx+4:] // +4 for "\n---"
-	return strings.TrimPrefix(afterFrontmatter, "\n")
+	removedLength := len(text) - len(leadingTrimmed) + len(frontmatterBlock) + (len(afterFrontmatter) - len(remaining))
+	return remaining, strings.Count(text[:removedLength], "\n")
 }
 
-// renderHTML converts markdown content to HTML.
-func (p *Parser) renderHTML(content []byte) (string, error) {
-	var buf bytes.Buffer
-	if err := p.md.Convert(content, &buf); err != nil {
-		return "", err
-	}
-	return buf.String(), nil
-}
 
 // directivePattern matches HTML comments containing YAML directives at the start of slides.
 // Example: <!-- layout: title \n transition: fade -->
 var directivePattern = regexp.MustCompile(`(?s)^\s*<!--\s*(.*?)\s*-->`)
-
-// codeBlockPattern matches fenced code blocks with info string.
-// Captures: (1) info string, (2) code content
-// Example: ```sql {driver: mysql, connection: mydb}
-var codeBlockPattern = regexp.MustCompile("(?m)^```([^\\n]*)\\n([\\s\\S]*?)\\n```")
 
 // parseDirectives extracts YAML directives from an HTML comment at the start of slide content.
 // It returns the parsed directives and the content with the directive comment removed.
@@ -307,45 +441,44 @@ func parseDirectives(content string) (SlideDirectives, string) {
 		return directives, content
 	}
 
-	// Extract the YAML content from the comment
-	yamlContent := match[1]
+	// Extract the YAML content from the comment, quoting any bare hex
+	// color values first so they survive YAML parsing (an unquoted "#"
+	// starts a YAML comment, which would otherwise silently empty the value).
+	yamlContent := quoteHexColorValues(match[1])
 
 	// Parse the YAML into the directives struct
 	// We use a map first to handle the yaml parsing, then extract fields
 	var yamlData map[string]interface{}
-	if err := yaml.Unmarshal([]byte(yamlContent), &yamlData); err != nil {
-		// If YAML parsing fails, return unchanged content
-		// This allows non-directive HTML comments to pass through
-		return directives, content
+	err := yaml.Unmarshal([]byte(yamlContent), &yamlData)
+	if err != nil {
+		// The whole comment isn't valid YAML. This happens when it mixes
+		// real directives with free-text notes that aren't valid YAML
+		// themselves (a colon or a leading quote in the notes body, for
+		// example), in either order. Split the comment line by line: a
+		// line starting with a known directive key becomes its own small
+		// YAML document, and the "notes:" line plus every line after it
+		// up to the next directive line become the free-text notes.
+		hasNotes, notesText, mixedData := splitMixedDirectiveComment(yamlContent)
+		if !hasNotes {
+			// No notes line either: leave the content unchanged so
+			// non-directive HTML comments keep passing through.
+			return directives, content
+		}
+		applyDirectiveFields(mixedData, &directives)
+		directives.Notes = notesText
+		remainingContent := strings.TrimPrefix(content, match[0])
+		remainingContent = strings.TrimLeft(remainingContent, "\n")
+		return directives, remainingContent
 	}
 
-	// Extract known directive fields
-	if layout, ok := yamlData["layout"].(string); ok {
-		directives.Layout = layout
-	}
-	if transition, ok := yamlData["transition"].(string); ok {
-		directives.Transition = transition
-	}
-	if background, ok := yamlData["background"].(string); ok {
-		directives.Background = background
-	}
-	if notes, ok := yamlData["notes"].(string); ok {
-		directives.Notes = notes
-	}
-	if fragments, ok := yamlData["fragments"].(bool); ok {
-		directives.Fragments = fragments
-	}
-	if scroll, ok := yamlData["scroll"].(bool); ok {
-		directives.Scroll = scroll
-	}
-	if scrollSpeed, ok := yamlData["scroll-speed"].(int); ok {
-		directives.ScrollSpeed = scrollSpeed
-	}
-	if tag, ok := yamlData["tag"].(string); ok {
-		directives.Tag = tag
-	}
-	if badge, ok := yamlData["badge"].(string); ok {
-		directives.Badge = badge
+	applyDirectiveFields(yamlData, &directives)
+
+	// The comment may be a pure notes comment written as free text where
+	// YAML happened to still parse, but not into a clean "notes" string
+	// (such as an unindented second line read as another mapping key).
+	// Fall back to free text in that case.
+	if directives.Notes == "" && isNotesComment(yamlContent) {
+		directives.Notes = notesTextFromComment(yamlContent)
 	}
 
 	// Remove the directive comment from content
@@ -353,6 +486,90 @@ func parseDirectives(content string) (SlideDirectives, string) {
 	remainingContent = strings.TrimLeft(remainingContent, "\n")
 
 	return directives, remainingContent
+}
+
+// directiveField describes one directive's YAML key and how its value is
+// copied out of a parsed YAML map into a SlideDirectives. This is the
+// single source of truth for which directive keys parseDirectives
+// recognizes, other than "notes" (handled separately, since its value can
+// span multiple lines and does not have to be valid YAML): applyDirectiveFields
+// iterates it to fill in known fields, and directiveKeyNames (in notes.go,
+// used to tell a directive line apart from notes prose) is derived from
+// its keys, so the two cannot drift apart.
+type directiveField struct {
+	key   string
+	apply func(yamlData map[string]interface{}, directives *SlideDirectives)
+}
+
+var directiveFields = []directiveField{
+	{"layout", func(y map[string]interface{}, d *SlideDirectives) {
+		if v, ok := y["layout"].(string); ok {
+			d.Layout = v
+		}
+	}},
+	{"transition", func(y map[string]interface{}, d *SlideDirectives) {
+		if v, ok := y["transition"].(string); ok {
+			d.Transition = v
+		}
+	}},
+	{"background", func(y map[string]interface{}, d *SlideDirectives) {
+		if v, ok := y["background"].(string); ok {
+			d.Background = v
+		}
+	}},
+	{"tag", func(y map[string]interface{}, d *SlideDirectives) {
+		if v, ok := y["tag"].(string); ok {
+			d.Tag = v
+		}
+	}},
+	{"badge", func(y map[string]interface{}, d *SlideDirectives) {
+		if v, ok := y["badge"].(string); ok {
+			d.Badge = v
+		}
+	}},
+	{"fragments", func(y map[string]interface{}, d *SlideDirectives) {
+		if v, ok := y["fragments"].(bool); ok {
+			d.Fragments = v
+		}
+	}},
+	{"scroll", func(y map[string]interface{}, d *SlideDirectives) {
+		if v, ok := y["scroll"].(bool); ok {
+			d.Scroll = v
+		}
+	}},
+	{"scroll-speed", func(y map[string]interface{}, d *SlideDirectives) {
+		if v, ok := y["scroll-speed"].(int); ok {
+			d.ScrollSpeed = v
+		}
+	}},
+	{"steps", func(y map[string]interface{}, d *SlideDirectives) {
+		raw, present := y["steps"]
+		if !present {
+			return
+		}
+		if v, ok := raw.(int); ok && v >= 0 {
+			d.Steps = v
+			d.HasSteps = true
+			return
+		}
+		d.StepsInvalid = true
+	}},
+}
+
+// applyDirectiveFields copies known directive fields, including "notes"
+// when it is a clean YAML string, out of a parsed YAML map into directives,
+// using directiveFields for every key besides "notes". It is used both for
+// a directive comment that parses as a whole and for the directive lines
+// splitMixedDirectiveComment recovers from a comment that does not; each
+// caller still falls back to free-text notes extraction itself when this
+// does not produce a usable "notes" value.
+func applyDirectiveFields(yamlData map[string]interface{}, directives *SlideDirectives) {
+	if notes, ok := yamlData["notes"].(string); ok {
+		directives.Notes = notes
+	}
+	for _, field := range directiveFields {
+		field.apply(yamlData, directives)
+	}
 }
 
 // metaPattern matches {key: value, ...} at the end of info string.
@@ -363,52 +580,20 @@ var metaPattern = regexp.MustCompile(`\{([^}]*)\}\s*$`)
 // Supports variations: <!-- pause -->, <!--pause-->, <!-- pause-->, etc.
 var pausePattern = regexp.MustCompile(`(?m)^\s*<!--\s*pause\s*-->\s*$`)
 
-// parseCodeBlocks extracts fenced code blocks from slide content.
-// It parses the info string for language and optional driver configuration.
-// Example: ```sql {driver: mysql, connection: mydb}
-func parseCodeBlocks(content string) []CodeBlock {
-	blocks := []CodeBlock{}
-
-	matches := codeBlockPattern.FindAllStringSubmatch(content, -1)
-	for _, match := range matches {
-		if len(match) < 3 {
-			continue
-		}
-
-		infoString := strings.TrimSpace(match[1])
-		code := match[2]
-
-		block := CodeBlock{
-			Code: code,
-			Meta: CodeBlockMeta{},
-		}
-
-		// Parse info string for language and metadata
-		// Format: language {driver: driverName, connection: connName}
-		if metaMatch := metaPattern.FindStringSubmatch(infoString); metaMatch != nil {
-			// Extract language (everything before the {})
-			langPart := strings.TrimSpace(infoString[:len(infoString)-len(metaMatch[0])])
-			block.Language = langPart
-
-			// Parse metadata inside {}
-			metaContent := metaMatch[1]
-			block.Meta = parseCodeBlockMeta(metaContent)
-		} else {
-			// No metadata, just language
-			block.Language = infoString
-		}
-
-		blocks = append(blocks, block)
-	}
-
-	return blocks
-}
-
 // parseCodeBlockMeta parses the content inside {} in code block info strings.
 // Supports both YAML-like (key: value) and simple (key=value) formats.
 // Example: "driver: mysql, connection: mydb" or "driver=mysql, connection=mydb"
 func parseCodeBlockMeta(content string) CodeBlockMeta {
 	meta := CodeBlockMeta{}
+
+	// A meta of digits, commas, dashes and spaces only (e.g. "3-4" or
+	// "1,3-5") is a line-highlight spec, not a driver/connection map: it
+	// isn't valid YAML flow-map syntax, so it must be checked before the
+	// YAML attempt below, which would otherwise just fail silently on it.
+	if isHighlightLinesSpec(content) {
+		meta.HighlightLines = normalizeHighlightLinesSpec(content)
+		return meta
+	}
 
 	// Try parsing as YAML first
 	var yamlData map[string]interface{}
@@ -450,53 +635,15 @@ func parseCodeBlockMeta(content string) CodeBlockMeta {
 	return meta
 }
 
-// parseFragments splits slide content on <!-- pause --> markers.
-// It returns a slice of Fragment structs, each containing HTML content for incremental reveal.
-// If no pause markers are found, returns a single fragment with all content as HTML.
-func (p *Parser) parseFragments(content string) []Fragment {
-	// Split content on pause markers
-	parts := pausePattern.Split(content, -1)
-
-	fragments := make([]Fragment, 0, len(parts))
-	for i, part := range parts {
-		// Trim whitespace from fragment content
-		trimmedContent := strings.TrimSpace(part)
-
-		// Skip empty fragments (can occur with consecutive pause markers)
-		if trimmedContent == "" {
-			continue
-		}
-
-		// Render fragment content to HTML
-		html, err := p.renderHTML([]byte(trimmedContent))
-		if err != nil {
-			// If rendering fails, use the raw content
-			html = trimmedContent
-		}
-
-		fragments = append(fragments, Fragment{
-			Content: html,
-			Index:   i,
-		})
-	}
-
-	// Re-index fragments to be consecutive (after skipping empty ones)
-	for i := range fragments {
-		fragments[i].Index = i
-	}
-
-	return fragments
-}
-
 // liPattern matches <li> opening tags (with or without attributes).
 var liPattern = regexp.MustCompile(`<li(\s[^>]*)?>`)
 
 // autoFragmentListItems transforms HTML to add fragment classes to list items.
 // It adds class="fragment fragment-hidden" and data-fragment-index attributes to each <li> element.
 // The fragment-hidden class ensures items are hidden initially until revealed by navigation.
-// Returns the transformed HTML and the number of list items found.
-func autoFragmentListItems(html string) (string, int) {
-	fragmentIndex := 0
+// Numbering starts at startIndex. Returns the transformed HTML and the next free index.
+func autoFragmentListItems(html string, startIndex int) (string, int) {
+	fragmentIndex := startIndex
 
 	result := liPattern.ReplaceAllStringFunc(html, func(match string) string {
 		index := fragmentIndex
@@ -599,11 +746,14 @@ var asciinemaInfoPattern = regexp.MustCompile("(?m)^```asciinema\\s*\\{([^}]*)\\
 // transformAsciinemaBlocks moves asciinema info string metadata into the code block body.
 // This is needed because goldmark discards everything after the language name in the info string.
 // Transforms: ```asciinema {src: "./demo.cast", autoPlay: true}
-//             ```
+//
+//	```
+//
 // Into:       ```asciinema
-//             src: ./demo.cast
-//             autoPlay: true
-//             ```
+//
+//	src: ./demo.cast
+//	autoPlay: true
+//	```
 func transformAsciinemaBlocks(content string) string {
 	return asciinemaInfoPattern.ReplaceAllStringFunc(content, func(match string) string {
 		submatches := asciinemaInfoPattern.FindStringSubmatch(match)

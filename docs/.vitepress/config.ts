@@ -66,6 +66,7 @@ export default defineConfig({
             { text: 'Mermaid Diagrams', link: '/guide/mermaid-diagrams' },
             { text: 'Map Animations', link: '/guide/map-animations' },
             { text: 'Asciinema Recordings', link: '/guide/asciinema' },
+            { text: 'Custom Components', link: '/guide/custom-components' },
             { text: 'AI Image Generation', link: '/guide/ai-images' },
             { text: 'AI Skills', link: '/guide/ai-skills' },
             { text: 'Building & Export', link: '/guide/building-export' }
@@ -81,8 +82,10 @@ export default defineConfig({
             { text: 'Frontmatter Options', link: '/reference/frontmatter-options' },
             { text: 'Slide Directives', link: '/reference/slide-directives' },
             { text: 'Layouts Reference', link: '/reference/layouts-reference' },
+            { text: 'Components Reference', link: '/reference/components-reference' },
             { text: 'Drivers', link: '/reference/drivers' },
-            { text: 'Keyboard Shortcuts', link: '/reference/keyboard-shortcuts' }
+            { text: 'Keyboard Shortcuts', link: '/reference/keyboard-shortcuts' },
+            { text: 'Creating Themes', link: '/reference/theme-porting' }
           ]
         }
       ],
