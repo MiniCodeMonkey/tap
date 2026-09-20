@@ -170,7 +170,8 @@ export function PresenterLayoutMenu({
 					</div>
 
 					<p className="presenter-layout-hint">
-						Kept on this device. <kbd>V</kbd> cycles, <kbd>1</kbd> to <kbd>5</kbd> pick one.
+						Kept on this device. <kbd>V</kbd> cycles, <kbd>1</kbd> to{' '}
+						<kbd>{availableLayouts.length}</kbd> pick one.
 					</p>
 				</div>
 			) : null}

@@ -8,8 +8,10 @@
  * during presentations with reduced eye strain.
  *
  * Layout:
- * - Header: Timer, slide counter, connection status
- * - Main: Current slide (60%) | next slide above speaker notes (40%)
+ * - Header: Timer, slide counter, layout picker, connection status
+ * - Main: a grid of named areas (current, next, notes). Which areas exist
+ *   and where they sit is decided by data-presenter-layout on the root, so
+ *   every layout difference lives here rather than in the component.
  * - Footer: Touch-friendly navigation controls
  */
 
@@ -131,11 +133,59 @@
 
 .presenter-main {
   display: grid;
-  grid-template-columns: 3fr 2fr;
-  grid-template-rows: minmax(0, 1fr);
   gap: 1rem;
   padding: 1rem;
   overflow: hidden;
+  min-height: 0;
+}
+
+.presenter-current-slide-panel {
+  grid-area: current;
+}
+
+.presenter-next-slide-panel {
+  grid-area: next;
+}
+
+.presenter-notes-panel {
+  grid-area: notes;
+}
+
+[data-presenter-layout='standard'] .presenter-main {
+  grid-template-columns: 3fr 2fr;
+  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-areas:
+    'current next'
+    'current notes';
+}
+
+[data-presenter-layout='notes-first'] .presenter-main {
+  grid-template-columns: 2fr 5fr;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  grid-template-areas:
+    'current notes'
+    'next notes'
+    '. notes';
+}
+
+[data-presenter-layout='duo'] .presenter-main {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-areas:
+    'current next'
+    'notes notes';
+}
+
+[data-presenter-layout='slide-only'] .presenter-main {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  grid-template-areas: 'current';
+}
+
+[data-presenter-layout='notes-only'] .presenter-main {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  grid-template-areas: 'notes';
 }
 
 /* Panel Titles */
@@ -148,10 +198,10 @@
   margin: 0 0 0.75rem 0;
 }
 
-/* Current Slide Panel */
-.presenter-current-slide-panel {
-  grid-column: 1;
-  grid-row: 1;
+/* The three panels share their box behaviour; the grid places them. */
+.presenter-current-slide-panel,
+.presenter-next-slide-panel,
+.presenter-notes-panel {
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -172,26 +222,6 @@
   background-color: transparent;
 }
 
-/* Right column: next slide on top, speaker notes filling the rest */
-.presenter-side {
-  grid-column: 2;
-  grid-row: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-  min-height: 0;
-  min-width: 0;
-}
-
-/* Next Slide Panel */
-.presenter-next-slide-panel {
-  flex: none;
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  overflow: hidden;
-}
-
 /* The next slide is only a cue, so it keeps the deck's aspect ratio at the
    column's width instead of growing into the notes' space. */
 .presenter-slide-preview.next {
@@ -201,12 +231,38 @@
   max-height: 45vh;
 }
 
-/* Notes Panel */
-.presenter-notes-panel {
+/* The current slide fills the space the layout gives it, except where the
+   layout makes it a cue rather than the main event. */
+.presenter-slide-preview.current {
   flex: 1;
-  display: flex;
-  flex-direction: column;
   min-height: 0;
+}
+
+[data-presenter-layout='notes-first'] .presenter-slide-preview.current,
+[data-presenter-layout='duo'] .presenter-slide-preview.current {
+  flex: none;
+  width: 100%;
+  aspect-ratio: var(--presenter-aspect-ratio, 16 / 9);
+}
+
+[data-presenter-layout='duo'] .presenter-slide-preview.next {
+  max-height: none;
+}
+
+/* Alone on the screen, the slide is centred at the deck's aspect ratio and
+   needs no label to tell it from anything else. */
+[data-presenter-layout='slide-only'] .presenter-current-slide-panel {
+  align-items: center;
+}
+
+[data-presenter-layout='slide-only'] .presenter-slide-preview.current {
+  flex: none;
+  height: 100%;
+  aspect-ratio: var(--presenter-aspect-ratio, 16 / 9);
+}
+
+[data-presenter-layout='slide-only'] .presenter-current-slide-panel .presenter-panel-title {
+  display: none;
 }
 
 .presenter-notes-header {
@@ -338,6 +394,245 @@
 }
 
 /* ============================================================================
+ * Layout menu - the header button, and its popover or bottom sheet
+ * ============================================================================ */
+
+.presenter-layout-menu {
+  position: relative;
+}
+
+.presenter-layout-trigger {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 44px;
+  padding: 0 0.875rem;
+  border-radius: 9999px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  font-family: inherit;
+  background-color: #0f3460;
+  color: #eaeaea;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.presenter-layout-trigger:hover,
+.presenter-layout-trigger:focus-visible {
+  background-color: #1a4a7a;
+}
+
+.presenter-layout-popover {
+  position: absolute;
+  top: calc(100% + 0.5rem);
+  right: 0;
+  z-index: 40;
+  width: 22rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.75rem;
+  background-color: #16213e;
+  border: 1px solid #2a3f6a;
+  border-radius: 14px;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.45);
+}
+
+.presenter-layout-popover-title,
+.presenter-notes-size-label {
+  margin: 0;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #9a9ab5;
+}
+
+.presenter-layout-option {
+  display: flex;
+  align-items: center;
+  gap: 0.875rem;
+  min-height: 56px;
+  padding: 0.625rem 0.75rem;
+  border-radius: 10px;
+  border: 2px solid #0f3460;
+  background: transparent;
+  color: #eaeaea;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.presenter-layout-option:hover {
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+.presenter-layout-option.selected {
+  border-color: #e94560;
+  background-color: rgba(233, 69, 96, 0.14);
+}
+
+.presenter-layout-option-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.presenter-layout-option-label {
+  display: block;
+  font-size: 0.9375rem;
+  font-weight: 600;
+}
+
+.presenter-layout-option-description {
+  display: block;
+  font-size: 0.8125rem;
+  color: #a8a8c0;
+}
+
+.presenter-layout-option-key,
+.presenter-layout-hint kbd {
+  font-family: 'SF Mono', Monaco, Consolas, monospace;
+  font-size: 0.75rem;
+  color: #c2c2d6;
+  background-color: #0f3460;
+  border-radius: 5px;
+  padding: 0.25rem 0.5rem;
+}
+
+.presenter-layout-separator {
+  border: none;
+  border-top: 1px solid #2a3f6a;
+  margin: 0.25rem 0;
+  width: 100%;
+}
+
+.presenter-notes-size-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.presenter-notes-size-options {
+  display: flex;
+  gap: 0.25rem;
+  padding: 0.25rem;
+  background-color: #0f0f23;
+  border-radius: 9999px;
+}
+
+.presenter-notes-size-option {
+  min-height: 36px;
+  padding: 0 1rem;
+  border: none;
+  border-radius: 9999px;
+  font-family: inherit;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  background: transparent;
+  color: #a8a8c0;
+  cursor: pointer;
+}
+
+.presenter-notes-size-option.selected {
+  background-color: #e94560;
+  color: #1a1a2e;
+}
+
+.presenter-layout-hint {
+  margin: 0;
+  font-size: 0.78125rem;
+  line-height: 1.55;
+  color: #9a9ab5;
+}
+
+/* Layout glyphs: a miniature of where each layout puts its panels. */
+.presenter-layout-glyph {
+  flex: none;
+  display: flex;
+  gap: 2px;
+  width: 36px;
+  height: 22px;
+  padding: 2px;
+  box-sizing: border-box;
+  background-color: #0f0f23;
+  border: 1px solid #2a2a4a;
+  border-radius: 4px;
+}
+
+.presenter-layout-option .presenter-layout-glyph {
+  width: 56px;
+  height: 34px;
+  gap: 3px;
+  padding: 3px;
+}
+
+.presenter-layout-glyph.stacked {
+  flex-direction: column;
+}
+
+.presenter-layout-glyph.lines {
+  flex-direction: column;
+  justify-content: center;
+  gap: 3px;
+  padding: 4px 5px;
+}
+
+.presenter-layout-glyph .glyph-row {
+  flex: 3;
+  display: flex;
+  gap: 3px;
+}
+
+.presenter-layout-glyph .glyph-column {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.presenter-layout-glyph .glyph-column.narrow {
+  flex: 2;
+}
+
+.presenter-layout-glyph .glyph-box {
+  flex: 1;
+  background-color: #4a4a7a;
+  border-radius: 2px;
+}
+
+.presenter-layout-glyph .glyph-box.current {
+  background-color: #e94560;
+}
+
+.presenter-layout-glyph .glyph-box.wide {
+  flex: 3;
+}
+
+.presenter-layout-glyph .glyph-box.notes {
+  background-color: #262649;
+}
+
+.presenter-layout-glyph .glyph-box.notes.wide {
+  flex: 5;
+}
+
+.presenter-layout-glyph .glyph-box.notes.short {
+  flex: 1;
+}
+
+.presenter-layout-glyph .glyph-line {
+  height: 3px;
+  background-color: #8a8ac0;
+  border-radius: 1px;
+}
+
+.presenter-layout-glyph .glyph-line.short {
+  width: 55%;
+}
+
+/* ============================================================================
  * Footer Controls - Touch-friendly navigation
  * ============================================================================ */
 
@@ -447,38 +742,42 @@
     font-size: 1.75rem;
   }
 
-  /* Stacked: current slide, then notes, then the next slide. On a phone
-     the notes matter more than the next-slide preview. */
+  /* A phone fills the screen exactly and never scrolls the page itself:
+     scrolling a view you are presenting from loses your place. Only the two
+     wide layouts are dropped here; the rest stack. */
   .presenter-main {
-    grid-template-columns: 1fr;
-    grid-template-rows: auto auto;
-    align-content: start;
     padding: 0.75rem;
     gap: 0.75rem;
-    overflow-y: auto;
   }
 
-  .presenter-current-slide-panel {
-    grid-column: 1;
-    grid-row: 1;
+  [data-presenter-layout='standard'] .presenter-main {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    grid-template-areas:
+      'current'
+      'notes'
+      'next';
   }
 
-  .presenter-slide-preview.current {
+  [data-presenter-layout='notes-first'] .presenter-main {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-rows: auto minmax(0, 1fr);
+    grid-template-areas:
+      'current next'
+      'notes notes';
+  }
+
+  [data-presenter-layout='notes-only'] .presenter-main {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
+    grid-template-areas: 'notes';
+  }
+
+  [data-presenter-layout='standard'] .presenter-slide-preview.current,
+  [data-presenter-layout='notes-first'] .presenter-slide-preview.current {
     flex: none;
     width: 100%;
     aspect-ratio: var(--presenter-aspect-ratio, 16 / 9);
-  }
-
-  .presenter-side {
-    grid-column: 1;
-    grid-row: 2;
-    gap: 0.75rem;
-  }
-
-  .presenter-notes-panel {
-    order: -1;
-    flex: none;
-    max-height: 40vh;
   }
 
   .presenter-notes-content {
@@ -486,8 +785,45 @@
   }
 
   .presenter-slide-preview.next {
-    width: 50%;
+    width: 55%;
     max-height: none;
+  }
+
+  [data-presenter-layout='notes-first'] .presenter-slide-preview.next {
+    width: 100%;
+  }
+
+  /* The trigger keeps its 44px target but drops its label: the glyph says
+     which layout is current, and the header is crowded on a phone. */
+  .presenter-layout-trigger {
+    width: 44px;
+    padding: 0;
+    justify-content: center;
+  }
+
+  .presenter-layout-trigger-label {
+    display: none;
+  }
+
+  /* Within thumb reach at the bottom of the screen rather than under the
+     header, which a hand holding the phone cannot comfortably reach. */
+  .presenter-layout-popover.sheet {
+    position: fixed;
+    top: auto;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    width: auto;
+    max-height: 80vh;
+    overflow-y: auto;
+    border-radius: 18px 18px 0 0;
+    border-left: none;
+    border-right: none;
+    border-bottom: none;
+  }
+
+  .presenter-layout-option {
+    min-height: 52px;
   }
 
   .presenter-controls {
@@ -513,7 +849,9 @@
 @media (prefers-reduced-motion: reduce) {
   .presenter-timer,
   .presenter-control-button,
-  .presenter-slide-preview {
+  .presenter-slide-preview,
+  .presenter-layout-trigger,
+  .presenter-layout-option {
     transition: none;
   }
 }
