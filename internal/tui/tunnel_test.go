@@ -181,3 +181,30 @@ func TestQRCodeFallsBackToTheConfiguredOne(t *testing.T) {
 		t.Errorf("qrCode() = %q, want the configured code %q", got, want)
 	}
 }
+
+// The TUI used to take every other line to make a tall code fit, which
+// leaves something that still looks like a QR code and cannot be scanned.
+func TestQRCodeIsRenderedWholeOrNotAtAll(t *testing.T) {
+	m := NewDevModel(DevConfig{TunnelURL: "https://advert-howard-sys-blocks.trycloudflare.com"})
+
+	code := m.qrCode()
+	if code == "" {
+		t.Fatal("no QR code was rendered for the tunnel URL")
+	}
+
+	view := m.viewQRCode()
+	for _, line := range strings.Split(strings.TrimRight(code, "\n"), "\n") {
+		if !strings.Contains(view, line) {
+			t.Fatalf("a module row is missing from the rendered view:\n%q", line)
+		}
+	}
+}
+
+func TestQRHeightGateLeavesRoomForTheRestOfTheScreen(t *testing.T) {
+	code := strings.Repeat("x\n", 21)
+
+	got := qrMinimumHeight(code)
+	if got <= 21 {
+		t.Errorf("qrMinimumHeight = %d for a 21-line code, want more than the code's own height", got)
+	}
+}

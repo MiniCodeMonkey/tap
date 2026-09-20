@@ -106,6 +106,60 @@ func GenerateASCIIQRCode(url string) (string, error) {
 	return sb.String(), nil
 }
 
+// GenerateCompactQRCode renders a QR code for a terminal, two module rows
+// per line using half blocks, so a code that is 41 modules tall takes 21
+// lines instead of 41.
+//
+// It is drawn inverted: a light block stands for a light module, leaving
+// the dark modules as the terminal's own background. A QR code is meant to
+// be dark-on-light, and while many scanners now cope with the reverse, not
+// all do -- and a code that scans everywhere is the whole point of putting
+// one on screen.
+//
+// Every module row is kept. Dropping rows to make a code fit produces
+// something that still looks like a QR code and cannot be scanned at all.
+func GenerateCompactQRCode(url string) (string, error) {
+	qr, err := qrcode.New(url, qrcode.Medium)
+	if err != nil {
+		return "", err
+	}
+
+	bitmap := qr.Bitmap()
+	if len(bitmap) == 0 {
+		return "", nil
+	}
+
+	// bitmap[y][x] is true for a dark module. Light is what gets drawn.
+	light := func(y, x int) bool {
+		if y >= len(bitmap) || x >= len(bitmap[y]) {
+			// Past the bottom edge on an odd number of rows: treat it as
+			// quiet zone, which is light.
+			return true
+		}
+		return !bitmap[y][x]
+	}
+
+	var sb strings.Builder
+	for y := 0; y < len(bitmap); y += 2 {
+		for x := 0; x < len(bitmap[y]); x++ {
+			top, bottom := light(y, x), light(y+1, x)
+			switch {
+			case top && bottom:
+				sb.WriteString("\u2588") // full block
+			case top:
+				sb.WriteString("\u2580") // upper half block
+			case bottom:
+				sb.WriteString("\u2584") // lower half block
+			default:
+				sb.WriteString(" ")
+			}
+		}
+		sb.WriteString("\n")
+	}
+
+	return sb.String(), nil
+}
+
 // PrintPasswordProtectionStatus prints a warning about the presenter view protection status.
 // This should be called when the server starts to inform the presenter.
 func PrintPasswordProtectionStatus(password string) {
@@ -121,8 +175,8 @@ func PrintPasswordProtectionStatus(password string) {
 
 // Terminal symbols for status messages
 var (
-	warningSymbol = "\u26A0\uFE0F "  // Warning sign
-	secureSymbol  = "\U0001F512"     // Lock emoji
+	warningSymbol = "\u26A0\uFE0F " // Warning sign
+	secureSymbol  = "\U0001F512"    // Lock emoji
 )
 
 // getLocalIP returns the local IP address by attempting to connect to an external address.

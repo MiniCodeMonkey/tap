@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+### Fixed
+
+- **The QR code in the dev terminal scans again** - A code taller than 15 lines had every other row dropped to make it fit, which leaves something that still looks like a QR code and cannot be scanned. Codes are now drawn two module rows per line with half blocks, so a tunnel URL takes 21 lines instead of 41 and keeps every row, and they are drawn dark-on-light rather than inverted, which some scanners refuse. A code is left out entirely when the window is too short for it, rather than mangled to fit.
+
 ## [2.0.0-beta.6] - 2026-09-20
 
 ### Added

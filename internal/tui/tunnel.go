@@ -129,9 +129,17 @@ func tunnelQRCode(url string) string {
 		return ""
 	}
 
-	code, err := server.GenerateASCIIQRCode(url)
+	code, err := server.GenerateCompactQRCode(url)
 	if err != nil {
 		return ""
 	}
 	return strings.TrimRight(code, "\n")
+}
+
+// qrMinimumHeight is the window height below which a QR code is left out
+// entirely: its own lines, plus room for everything else on the screen.
+// Showing a code that scrolls off the top is no better than showing none.
+func qrMinimumHeight(code string) int {
+	const chromeLines = 22 // header, URLs, status, events, help
+	return strings.Count(code, "\n") + chromeLines
 }

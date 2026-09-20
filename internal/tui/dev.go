@@ -691,7 +691,7 @@ func (m *DevModel) View() string {
 	b.WriteString("\n")
 
 	// QR Code (if available and fits)
-	if m.qrCode() != "" && m.windowHeight > 30 {
+	if m.qrCode() != "" && m.windowHeight > qrMinimumHeight(m.qrCode()) {
 		b.WriteString(m.viewQRCode())
 		b.WriteString("\n")
 	}
@@ -773,7 +773,7 @@ func (m *DevModel) viewURLs() string {
 		b.WriteString(urlStyle.Render(m.tunnelURL))
 		b.WriteString("\n")
 		b.WriteString(labelStyle.Render(""))
-		b.WriteString(RenderMuted("public, anyone with the link"))
+		b.WriteString(RenderMuted("publicly accessible"))
 	}
 
 	return b.String()
@@ -825,18 +825,11 @@ func (m *DevModel) viewQRCode() string {
 	b.WriteString(RenderSubtitle("Scan to join:"))
 	b.WriteString("\n")
 
-	// Render QR code with reduced size if needed
-	qrLines := strings.Split(m.qrCode(), "\n")
-	maxLines := 15
-	if len(qrLines) > maxLines {
-		// Take every other line for a smaller QR
-		for i := 0; i < len(qrLines) && i/2 < maxLines; i += 2 {
-			b.WriteString(qrLines[i])
-			b.WriteString("\n")
-		}
-	} else {
-		b.WriteString(m.qrCode())
-	}
+	// Every row, always. Dropping rows to make it fit leaves something
+	// that still looks like a QR code and cannot be scanned; the caller
+	// decides whether there is room for one at all (see the height check
+	// in View).
+	b.WriteString(m.qrCode())
 
 	return b.String()
 }
