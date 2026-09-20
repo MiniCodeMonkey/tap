@@ -130,6 +130,51 @@ This setup lets you:
 - See your notes without looking at your laptop
 - Advance slides with the presenter view's on-screen buttons
 
+On a touch device, both views answer to gestures instead of keys: swipe
+left for the next fragment, step or slide, swipe right to go back, and
+two-finger tap for the slide overview. A swipe shows the new slide number
+for a moment, so you can tell the gesture landed even on a deck with no
+transition.
+
+### When the Phone Is Not on the Same Network
+
+A LAN address only works when both devices sit on the same network, and a
+conference network often stops them talking to each other at all. Start the
+server with a tunnel instead:
+
+```bash
+tap dev presentation.md --tunnel
+```
+
+```
+Audience:  http://localhost:3000
+Presenter: http://localhost:3000/presenter
+Tunnel:    https://plain-shoes-arrive-lately.trycloudflare.com
+```
+
+That address works from anywhere, on any network. It is a Cloudflare Quick
+Tunnel, so it needs no Cloudflare account, no login and no configuration,
+and the random name lasts only as long as the server. It does need the
+`cloudflared` binary (`brew install cloudflared`), and `--tunnel` says so
+if it is missing.
+
+Press `u` in the dev terminal to start or stop a tunnel without
+restarting; the URL appears with a QR code to point a phone at.
+
+**Anyone with the link can watch the deck** while the tunnel is up. Stop it
+with `u`, or stop the server, when you are done.
+
+### Why a Tunnel Keeps the Screen On
+
+Both views ask the device to keep the screen awake, so a phone propped up
+as a prompter does not dim partway through a slide. That request needs a
+*secure context*, which means `https` or `localhost`.
+
+A phone opening a LAN address over plain `http` therefore has no wake lock
+available and its screen dims on its own schedule. Through a tunnel the
+page is `https`, and the screen stays on. This is the practical reason to
+use `--tunnel` even when both devices are on the same network.
+
 ### QR Code for Easy Access
 
 When you start the dev server, Tap displays a QR code in the terminal:
