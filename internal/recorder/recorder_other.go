@@ -28,3 +28,9 @@ func Preflight(string, Options) Report {
 		Blocking: true,
 	}}}
 }
+
+// StartupPreflight reports the same thing Preflight does: there is no
+// lighter check to run away from macOS, since none of this runs at all.
+func StartupPreflight() Report {
+	return Preflight("", Options{})
+}

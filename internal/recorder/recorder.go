@@ -53,6 +53,26 @@ type Finding struct {
 	Blocking bool
 }
 
+// EventType names the event severity a finding deserves in the UI: an
+// error for anything that blocks a recording, and a lower-key action
+// otherwise, so a low-disk warning does not show red next to a real
+// failure. Shared by the startup preflight and the one C triggers, so both
+// render a finding the same way.
+func (f Finding) EventType() string {
+	if f.Blocking {
+		return "error"
+	}
+	return "action"
+}
+
+// Describe joins the finding's message and fix into one line for the UI.
+func (f Finding) Describe() string {
+	if f.Fix == "" {
+		return f.Message
+	}
+	return f.Message + ". " + f.Fix
+}
+
 // Report is everything the preflight found. An empty report is a pass.
 type Report struct {
 	Findings []Finding

@@ -27,13 +27,7 @@ type checks struct {
 func buildReport(found checks) Report {
 	var report Report
 
-	if found.screenPermission != nil {
-		report.Findings = append(report.Findings, Finding{
-			Message:  "Screen Recording permission is missing",
-			Fix:      "Grant it to your terminal in System Settings > Privacy & Security > Screen Recording, then restart the terminal",
-			Blocking: true,
-		})
-	}
+	report.Findings = append(report.Findings, screenPermissionFindings(found.screenPermission)...)
 
 	if found.outputWritable != nil {
 		report.Findings = append(report.Findings, Finding{
@@ -66,4 +60,19 @@ func buildReport(found checks) Report {
 	}
 
 	return report
+}
+
+// screenPermissionFindings is the finding a missing Screen Recording grant
+// produces, or none when the check passed. It is its own function because
+// StartupPreflight runs only this one check, before the speaker decides to
+// record at all.
+func screenPermissionFindings(err error) []Finding {
+	if err == nil {
+		return nil
+	}
+	return []Finding{{
+		Message:  "Screen Recording permission is missing",
+		Fix:      "Grant it to your terminal in System Settings > Privacy & Security > Screen Recording, then restart the terminal",
+		Blocking: true,
+	}}
 }
