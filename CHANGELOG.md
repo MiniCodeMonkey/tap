@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+### Added
+
+- **Touch navigation in the audience view** - On a phone or a tablet, swipe left for the next fragment, step or slide, and swipe right to go back. A two-finger tap toggles the slide overview, where a tap picks a slide and a tap outside closes the grid. A swipe must travel at least 50 px, be more horizontal than vertical, and finish within 800 ms, so scrolling a slide, pinching to zoom and tapping a link are all left alone.
+
 ## [2.0.0-beta.4] - 2026-09-19
 
 ### Changed

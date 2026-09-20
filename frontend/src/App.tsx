@@ -21,6 +21,7 @@ import {
 	disconnectWebSocket
 } from '$lib/stores/websocket';
 import { setupKeyboardNavigation } from '$lib/utils/keyboard';
+import { setupTouchNavigation } from '$lib/utils/touch';
 import { fetchPresentation } from '$lib/utils/fetchPresentation';
 import { SlideCanvas } from '$lib/components/SlideCanvas';
 import { Slide } from '$lib/components/Slide';
@@ -135,6 +136,14 @@ export default function App() {
 			onToggleHelp: () => setHelpOpen((open) => !open),
 			isHelpOpen: () => helpOpenRef.current
 		});
+		// A phone or tablet has no keyboard, so a horizontal swipe is the only
+		// way to move between slides there.
+		const touchCleanup = setupTouchNavigation({
+			onNavigate: broadcastPresentationState,
+			onToggleOverview: () => setOverviewOpen((open) => !open),
+			isOverviewOpen: () => overviewOpenRef.current,
+			isHelpOpen: () => helpOpenRef.current
+		});
 
 		// A print pass (PDF export, ?print=true) is a static snapshot of one
 		// slide: it never connects the websocket, so it can never have the
@@ -155,6 +164,7 @@ export default function App() {
 			cancelled = true;
 			hashCleanup();
 			keyboardCleanup();
+			touchCleanup();
 			disconnectWebSocket();
 		};
 	}, []);

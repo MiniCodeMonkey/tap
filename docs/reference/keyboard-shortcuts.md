@@ -58,6 +58,26 @@ close it. A click outside the list also closes it.
 frontmatter. To force one theme for a link or a recording, add
 `?theme=<slug>` to the URL instead.
 
+### Touch gestures
+
+On a phone or a tablet, where there is no keyboard, the audience view
+answers to two gestures.
+
+| Gesture | Action |
+|---------|--------|
+| Swipe left | Next fragment or step, then next slide |
+| Swipe right | Previous fragment or step, then previous slide |
+| Two-finger tap | Toggle the slide overview |
+
+A swipe must travel at least 50 px, be more horizontal than vertical, and
+finish within 800 ms, so scrolling a long slide and tapping a link both
+still work. In the overview, tap a slide to jump to it, or tap outside the
+grid to close it.
+
+The gestures are measured, never prevented, so scrolling and pinch-zoom
+behave as the browser intends. That is also why a pinch does not open the
+overview: the browser owns that gesture.
+
 ## Presenter View
 
 The window at `http://localhost:3000/presenter`, or opened with **S**.
