@@ -94,6 +94,23 @@ func init() {
 	devCmd.Flags().StringArrayVar(&devAllowOrigins, "allow-origin", nil, "additional origin (scheme://host:port) allowed to connect to the websocket hub, or host (host:port) allowed in a request's Host header, for a contributor's Vite dev server or a non-local presenter host (repeatable)")
 }
 
+// recordingAudioOptions maps the deck's recording.audio config value to the
+// two things the recorder needs: a CoreAudio UID and whether to record
+// silently. "none" is a documented value that must record without a
+// microphone, not one that gets validated as an unknown device UID; that
+// mapping used to be split across two independent checks below, and the
+// second one missed "none" entirely, which blocked every silent recording.
+func recordingAudioOptions(configured string) (audioUID string, noAudio bool) {
+	switch configured {
+	case "none":
+		return "", true
+	case "default", "":
+		return "", false
+	default:
+		return configured, false
+	}
+}
+
 // runDevServer starts the dev server with hot reload and TUI. portExplicit
 // is whether the user passed --port themselves (cmd.Flags().Changed
 // ("port")): it decides whether a busy port fails outright or falls back
@@ -293,10 +310,7 @@ func runDevServer(file string, port int, presenterPassword string, headless bool
 		}
 	}
 
-	audioUID := cfg.Recording.Audio
-	if audioUID == "default" {
-		audioUID = ""
-	}
+	audioUID, noAudio := recordingAudioOptions(cfg.Recording.Audio)
 
 	// The controller is built before the TUI model exists, so its
 	// unexpected-exit callback closes over this variable and the TUI
@@ -308,7 +322,7 @@ func runDevServer(file string, port int, presenterPassword string, headless bool
 		DeckTitle:    cfg.Title,
 		OutputDir:    recordOutputDir,
 		AudioUID:     audioUID,
-		NoAudio:      cfg.Recording.Audio == "none",
+		NoAudio:      noAudio,
 		ShowClicks:   cfg.Recording.ShowClicks,
 		Chapters:     cfg.Recording.ChaptersEnabled(),
 		CurrentSlide: hub.CurrentSlide,

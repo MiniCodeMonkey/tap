@@ -25,3 +25,31 @@ func TestDropComponentBuildFailureWarnings(t *testing.T) {
 		t.Errorf("SlideNumber = %d, want 2 (the unrelated warning)", filtered[0].SlideNumber)
 	}
 }
+
+// TestRecordingAudioOptions covers the config-to-controller mapping that
+// Critical 1 lived in: "none" must record silently rather than being
+// validated as an unknown CoreAudio device UID, which used to block every
+// silent recording outright.
+func TestRecordingAudioOptions(t *testing.T) {
+	tests := []struct {
+		name        string
+		configured  string
+		wantUID     string
+		wantNoAudio bool
+	}{
+		{"none records silently", "none", "", true},
+		{"default uses the system input", "default", "", false},
+		{"empty is the same as default", "", "", false},
+		{"anything else is a CoreAudio UID", "BuiltInMicrophoneDevice", "BuiltInMicrophoneDevice", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			uid, noAudio := recordingAudioOptions(tt.configured)
+			if uid != tt.wantUID || noAudio != tt.wantNoAudio {
+				t.Errorf("recordingAudioOptions(%q) = (%q, %v), want (%q, %v)",
+					tt.configured, uid, noAudio, tt.wantUID, tt.wantNoAudio)
+			}
+		})
+	}
+}
