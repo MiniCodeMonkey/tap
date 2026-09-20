@@ -2,29 +2,45 @@ package recorder
 
 import (
 	"encoding/json"
-	"regexp"
-	"strconv"
 	"strings"
 )
 
-// displayCountPattern reads the display count out of screencapture's own
-// refusal, which is the only source that speaks in -D indexes. It covers
-// both the singular and plural wording.
-var displayCountPattern = regexp.MustCompile(`Only (\d+) display`)
+// displayProbe asks whether screencapture accepts the given display index.
+// Displays on darwin supplies the real implementation, which shells out for
+// a single 1x1 still; tests supply a fake so the loop is exercised without
+// ever invoking the real binary.
+type displayProbe func(display int) error
 
-// parseDisplayCount reads how many displays screencapture will accept from
-// the message it prints when asked for one that does not exist.
-func parseDisplayCount(output string) (int, bool) {
-	match := displayCountPattern.FindStringSubmatch(output)
-	if match == nil {
-		return 0, false
-	}
+// maxProbedDisplays bounds the probing loop so a pathological failure
+// cannot spin forever waiting for a refusal that never comes.
+const maxProbedDisplays = 16
 
-	count, err := strconv.Atoi(match[1])
-	if err != nil || count < 1 {
-		return 0, false
+// countDisplays finds how many displays screencapture accepts by asking for
+// display 1, then 2, then 3, and so on, until one is refused. The number of
+// consecutive successes is the count. This tests exactly what -D<n> accepts,
+// so it keeps working no matter how screencapture words its refusal, unlike
+// parsing that wording for a number.
+//
+// A probe can also fail for a reason that has nothing to do with the
+// display index, such as a missing Screen Recording permission. That
+// failure is not a display count and is not treated as one: the loop stops
+// and reports however many probes already succeeded. If none had, it
+// reports 1, since Displays is only ever called after Preflight has already
+// confirmed screencapture can capture the main display at all, so a probe
+// failing on the very first display means something else went wrong, not
+// that zero displays exist.
+func countDisplays(probe displayProbe, maxDisplays int) int {
+	count := 0
+	for display := 1; display <= maxDisplays; display++ {
+		if err := probe(display); err != nil {
+			break
+		}
+		count = display
 	}
-	return count, true
+	if count == 0 {
+		return 1
+	}
+	return count
 }
 
 // systemProfilerDisplays is the shape of the display report this code reads.
@@ -85,11 +101,11 @@ func trimRefreshRate(resolution string) string {
 
 // mergeDisplays numbers the displays the way screencapture does, from 1.
 //
-// The count is authoritative because it comes from screencapture itself.
-// The names come from a different tool, and only line up with those indexes
-// if both report the same number of displays. When they disagree, the names
-// are dropped: an unlabeled index is honest, a wrong label sends someone to
-// record the wrong screen.
+// The count is authoritative because it comes from probing screencapture
+// itself. The names come from a different tool, and only line up with
+// those indexes if both report the same number of displays. When they
+// disagree, the names are dropped: an unlabeled index is honest, a wrong
+// label sends someone to record the wrong screen.
 func mergeDisplays(count int, details []Display) []Display {
 	displays := make([]Display, 0, count)
 	named := len(details) == count
