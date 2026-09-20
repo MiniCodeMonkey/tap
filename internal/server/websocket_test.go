@@ -1538,3 +1538,65 @@ func TestWebSocketHubHandleConnectionDuringShutdown(t *testing.T) {
 		t.Fatal("HandleConnection did not return during hub shutdown within timeout")
 	}
 }
+
+func TestSetOnSlideChangeFiresForSlideMessages(t *testing.T) {
+	hub := NewWebSocketHub()
+	hub.SetPresentationMeta(10, "rev1")
+
+	received := make(chan int, 4)
+	hub.SetOnSlideChange(func(slideIndex int) { received <- slideIndex })
+
+	if err := hub.BroadcastSlide(3); err != nil {
+		t.Fatalf("BroadcastSlide() returned %v", err)
+	}
+
+	select {
+	case got := <-received:
+		if got != 3 {
+			t.Errorf("the listener saw slide %d, want 3", got)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("the listener never fired")
+	}
+}
+
+func TestSetOnSlideChangeIgnoresOtherMessages(t *testing.T) {
+	hub := NewWebSocketHub()
+
+	received := make(chan int, 4)
+	hub.SetOnSlideChange(func(slideIndex int) { received <- slideIndex })
+
+	if err := hub.BroadcastTheme("nord"); err != nil {
+		t.Fatalf("BroadcastTheme() returned %v", err)
+	}
+	if err := hub.BroadcastReload(); err != nil {
+		t.Fatalf("BroadcastReload() returned %v", err)
+	}
+
+	select {
+	case got := <-received:
+		t.Fatalf("the listener fired with slide %d for a non-slide message", got)
+	case <-time.After(100 * time.Millisecond):
+	}
+}
+
+func TestCurrentSlideReportsTheLastBroadcast(t *testing.T) {
+	hub := NewWebSocketHub()
+	hub.SetPresentationMeta(10, "rev1")
+
+	if _, ok := hub.CurrentSlide(); ok {
+		t.Error("CurrentSlide() claims to know a slide before anything was broadcast")
+	}
+
+	if err := hub.BroadcastSlide(4); err != nil {
+		t.Fatalf("BroadcastSlide() returned %v", err)
+	}
+
+	got, ok := hub.CurrentSlide()
+	if !ok {
+		t.Fatal("CurrentSlide() does not know the slide after a broadcast")
+	}
+	if got != 4 {
+		t.Errorf("CurrentSlide() = %d, want 4", got)
+	}
+}
