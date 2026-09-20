@@ -39,7 +39,7 @@ func ValidateAudioUID(uid string) error {
 	defer func() { _ = os.Remove(probe) }()
 
 	output, _ := exec.Command(defaultCommand, "-x", "-v", "-V1", "-G"+uid, outOfRangeDisplay, probe).CombinedOutput()
-	if strings.Contains(string(output), "not found") {
+	if strings.Contains(string(output), "Capture audio device") {
 		return fmt.Errorf("audio device %q not found: recording.audio takes a CoreAudio UID, not a device name", uid)
 	}
 	return nil

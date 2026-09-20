@@ -20,8 +20,9 @@ type Options struct {
 	// display. Zero is treated as 1.
 	Display int
 	// LimitSeconds caps the recording length. Zero means no cap. The test
-	// capture uses it; a talk recording is stopped by the session timers,
-	// so that one path handles both the warning and the stop.
+	// capture uses it; a talk recording has no cap here at all, since that
+	// cap is enforced by the dev TUI's own tick handler, which calls Stop
+	// once the configured duration has elapsed.
 	LimitSeconds int
 	// NoAudio records silently.
 	NoAudio bool
