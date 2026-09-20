@@ -25,6 +25,12 @@ type fakeRecorder struct {
 	testCalls           int
 	lastDisplay         int
 	gitignoreCalls      int
+	// stopBlock, when set, makes Stop wait for it to close before
+	// returning: the real controller's Stop blocks for up to killGrace
+	// while screencapture finalizes the file, and every fake before this
+	// one returned instantly, which hid the runaway-cap bug from every
+	// test built on it.
+	stopBlock chan struct{}
 }
 
 func (f *fakeRecorder) Available() bool { return f.available }
@@ -47,6 +53,9 @@ func (f *fakeRecorder) Start(display int) (string, error) {
 
 func (f *fakeRecorder) Stop() (recorder.Result, error) {
 	f.stopCalls++
+	if f.stopBlock != nil {
+		<-f.stopBlock
+	}
 	f.recording = false
 	return recorder.Result{Path: f.path, Duration: 90 * time.Second}, nil
 }
@@ -82,25 +91,43 @@ func pressC(t *testing.T, m *DevModel) tea.Cmd {
 	return cmd
 }
 
+// readyMsg runs pressC's command (the preflight/displays/audio probe) and
+// returns the recordPickerReadyMsg it produces, off the update loop exactly
+// as tea would deliver it.
+func readyMsg(t *testing.T, m *DevModel) recordPickerReadyMsg {
+	t.Helper()
+
+	cmd := pressC(t, m)
+	if cmd == nil {
+		t.Fatal("pressing c returned no command")
+	}
+	msg, ok := cmd().(recordPickerReadyMsg)
+	if !ok {
+		t.Fatalf("command returned %T, want recordPickerReadyMsg", cmd())
+	}
+	return msg
+}
+
 func TestRecordKeyStartsOnASingleDisplay(t *testing.T) {
 	fake := &fakeRecorder{available: true, displays: oneDisplay(), path: "recordings/talk.mov"}
 	m := NewDevModel(DevConfig{})
 	m.SetRecorderController(fake)
 
-	cmd := pressC(t, m)
+	msg := readyMsg(t, m)
+	_, cmd := m.applyRecordPickerReady(msg)
 	if cmd == nil {
-		t.Fatal("pressing c returned no command, so nothing would start")
+		t.Fatal("the ready message returned no command, so nothing would start")
 	}
 	if m.showRecordPicker {
 		t.Error("the picker opened for a single display, want it skipped")
 	}
 
-	msg, ok := cmd().(recordMsg)
+	recMsg, ok := cmd().(recordMsg)
 	if !ok {
 		t.Fatalf("command returned %T, want recordMsg", cmd())
 	}
-	if msg.err != nil {
-		t.Fatalf("recordMsg carries %v", msg.err)
+	if recMsg.err != nil {
+		t.Fatalf("recordMsg carries %v", recMsg.err)
 	}
 	if fake.startCalls != 1 || fake.lastDisplay != 1 {
 		t.Errorf("Start called %d times with display %d, want once with 1", fake.startCalls, fake.lastDisplay)
@@ -112,13 +139,32 @@ func TestRecordKeyOpensThePickerForTwoDisplays(t *testing.T) {
 	m := NewDevModel(DevConfig{})
 	m.SetRecorderController(fake)
 
-	pressC(t, m)
+	msg := readyMsg(t, m)
+	m.applyRecordPickerReady(msg)
 
 	if !m.showRecordPicker {
 		t.Fatal("the picker did not open for two displays")
 	}
 	if fake.startCalls != 0 {
 		t.Error("Start was called before a display was chosen")
+	}
+}
+
+func TestRecordKeyIsBusyUntilThePreflightReplies(t *testing.T) {
+	fake := &fakeRecorder{available: true, displays: oneDisplay()}
+	m := NewDevModel(DevConfig{})
+	m.SetRecorderController(fake)
+
+	if cmd := pressC(t, m); cmd == nil {
+		t.Fatal("the first c returned no command")
+	}
+
+	// A second C landing before the preflight's reply (recordPickerReadyMsg)
+	// must not run the whole probe again: that used to relaunch three
+	// subprocesses and, once it also reached Start, reset
+	// recordingStartedAt.
+	if cmd := pressC(t, m); cmd != nil {
+		t.Error("a second c before the preflight replied issued another command")
 	}
 }
 
@@ -158,7 +204,8 @@ func TestRecordKeyRefusesWhenPreflightBlocks(t *testing.T) {
 	m := NewDevModel(DevConfig{})
 	m.SetRecorderController(fake)
 
-	pressC(t, m)
+	msg := readyMsg(t, m)
+	m.applyRecordPickerReady(msg)
 
 	if fake.startCalls != 0 {
 		t.Error("Start was called although the preflight blocked")
@@ -306,6 +353,27 @@ func TestQuitConfirmYesStopsAndQuits(t *testing.T) {
 	}
 }
 
+func TestQuitConfirmCtrlCStopsAndQuitsWithoutAsking(t *testing.T) {
+	fake := &fakeRecorder{available: true, recording: true}
+	m := recordingModel(t, DevConfig{}, fake)
+	m.showQuitConfirm = true
+
+	_, cmd := m.handleKeyPress(tea.KeyMsg{Type: tea.KeyCtrlC})
+
+	if cmd == nil {
+		t.Fatal("ctrl+c returned no command, so nothing quits")
+	}
+	if fake.stopCalls != 1 {
+		t.Errorf("Stop called %d times, want once", fake.stopCalls)
+	}
+	if !m.quitting {
+		t.Error("the model is not quitting after ctrl+c")
+	}
+	if m.showQuitConfirm {
+		t.Error("the confirmation is still open after ctrl+c")
+	}
+}
+
 func TestQuitDoesNotAskWhenNothingIsRecording(t *testing.T) {
 	m := NewDevModel(DevConfig{})
 	m.SetRecorderController(&fakeRecorder{available: true})
@@ -350,6 +418,54 @@ func TestTickStopsARunawayRecording(t *testing.T) {
 	}
 }
 
+// TestRunawayCapIssuesExactlyOneStopWhileItIsSlow closes the structural gap
+// that let the runaway cap fire a Stop every tick: every fake used
+// elsewhere in this file returns from Stop instantly, so nothing exercised
+// what happens while a real Stop is still finalizing the file. It reproduces
+// that by blocking Stop on a channel and driving several ticks past the cap
+// before letting it return, the way the TUI's own tick loop would while
+// screencapture takes its time.
+func TestRunawayCapIssuesExactlyOneStopWhileItIsSlow(t *testing.T) {
+	block := make(chan struct{})
+	fake := &fakeRecorder{available: true, recording: true, stopBlock: block, path: "recordings/talk.mov"}
+	m := recordingModel(t, DevConfig{RecordWarnAfter: time.Minute, RecordStopAfter: 30 * time.Minute}, fake)
+	m.recordingStartedAt = time.Now().Add(-31 * time.Minute)
+
+	cmd := m.recordingTick()
+	if cmd == nil {
+		t.Fatal("the cap did not stop the recording")
+	}
+
+	done := make(chan tea.Msg, 1)
+	go func() { done <- cmd() }()
+
+	// Several ticks land while the first Stop is still blocked finalizing
+	// the file. Before recordBusy, each one saw m.recording still true and
+	// issued another Stop.
+	for i := 0; i < 5; i++ {
+		if extra := m.recordingTick(); extra != nil {
+			t.Fatalf("tick %d issued another Stop while one was still in flight", i)
+		}
+	}
+
+	close(block)
+
+	select {
+	case msg := <-done:
+		recMsg, ok := msg.(recordMsg)
+		if !ok {
+			t.Fatalf("command returned %T, want recordMsg", msg)
+		}
+		m.applyRecordMsg(recMsg)
+	case <-time.After(5 * time.Second):
+		t.Fatal("Stop never returned")
+	}
+
+	if fake.stopCalls != 1 {
+		t.Errorf("Stop called %d times, want exactly one", fake.stopCalls)
+	}
+}
+
 func TestTickLeavesTheCapOffWhenItIsZero(t *testing.T) {
 	fake := &fakeRecorder{available: true, recording: true}
 	m := recordingModel(t, DevConfig{RecordWarnAfter: time.Minute, RecordStopAfter: 0}, fake)
@@ -374,7 +490,8 @@ func openPicker(t *testing.T, fake *fakeRecorder) *DevModel {
 
 	m := NewDevModel(DevConfig{})
 	m.SetRecorderController(fake)
-	pressC(t, m)
+	msg := readyMsg(t, m)
+	m.applyRecordPickerReady(msg)
 
 	if !m.showRecordPicker {
 		t.Fatal("the picker did not open")
@@ -560,6 +677,25 @@ func TestGitignorePromptYesAddsTheEntry(t *testing.T) {
 	}
 	if m.showGitignorePrompt {
 		t.Error("the prompt stayed open after y")
+	}
+}
+
+func TestGitignorePromptMessageNamesTheActualEntry(t *testing.T) {
+	fake := &fakeRecorder{available: true, gitignoreSuggestion: "captures/"}
+	m := NewDevModel(DevConfig{})
+	m.SetRecorderController(fake)
+	m.recording = true
+
+	// The suggestion is captured when the prompt opens, the way the real
+	// flow does it: SuggestGitignore may name "captures/" or
+	// "talks/2026/recordings/", never the hardcoded "recordings/" the
+	// confirmation message used to print regardless.
+	m.applyRecordMsg(recordMsg{stopped: true, result: recorder.Result{Path: "captures/talk.mov"}})
+
+	m.handleKeyPress(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}})
+
+	if !strings.Contains(eventText(m), "Added captures/ to .gitignore") {
+		t.Errorf("the confirmation does not name the actual entry: %s", eventText(m))
 	}
 }
 

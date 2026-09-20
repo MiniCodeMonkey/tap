@@ -74,6 +74,18 @@ type recordEndedMsg struct {
 	err error
 }
 
+// recordPickerReadyMsg carries the result of running the preflight, listing
+// displays and reading the default audio input off the update loop: all
+// three shell out (screencapture or system_profiler), so none of them may
+// run inside Update itself without freezing the TUI for the second or two
+// they take.
+type recordPickerReadyMsg struct {
+	report      recorder.Report
+	displays    []recorder.Display
+	displaysErr error
+	audioInput  string
+}
+
 // pdfExportMsg is sent when a PDF export completes.
 type pdfExportMsg struct {
 	outputPath string
@@ -100,22 +112,28 @@ type tickMsg struct{}
 
 // DevModel is the Bubble Tea model for the dev server TUI.
 type DevModel struct { //nolint:govet // embedded structs prevent optimal alignment
-	config              DevConfig
-	state               DevState
-	eventsCh            chan DevEvent
-	recordEndedCh       chan error
-	closeCh             chan struct{}
-	themeBroadcaster    ThemeBroadcaster
-	tunnels             TunnelController
-	tunnelURL           string
-	tunnelQR            string
-	tunnelStarting      bool
-	imageGenModel       *ImageGenModel
-	addModel            *AddModel
-	recorders           RecorderController
-	recordDisplays      []recorder.Display
-	recordingPath       string
-	recordingStartedAt  time.Time
+	config             DevConfig
+	state              DevState
+	eventsCh           chan DevEvent
+	recordEndedCh      chan error
+	closeCh            chan struct{}
+	themeBroadcaster   ThemeBroadcaster
+	tunnels            TunnelController
+	tunnelURL          string
+	tunnelQR           string
+	tunnelStarting     bool
+	imageGenModel      *ImageGenModel
+	addModel           *AddModel
+	recorders          RecorderController
+	recordDisplays     []recorder.Display
+	recordingPath      string
+	recordingStartedAt time.Time
+	// recordPickerAudioInput is the default microphone name, read once
+	// when the picker opens rather than on every render.
+	recordPickerAudioInput string
+	// gitignoreSuggestion is the ignore entry offered by the prompt shown
+	// after a recording is saved, captured once when the prompt opens.
+	gitignoreSuggestion string
 	mu                  sync.RWMutex
 	windowWidth         int
 	windowHeight        int
@@ -129,6 +147,13 @@ type DevModel struct { //nolint:govet // embedded structs prevent optimal alignm
 	exportingPDF        bool
 	recording           bool
 	recordWarned        bool
+	// recordBusy is set while a start or stop is in flight (including the
+	// preflight and display probe that precede a start), and cleared once
+	// its result lands. It stops the tick loop and a repeated C from
+	// issuing another Start or Stop while one is still running: without
+	// it, a Stop that takes a few seconds to finalize the file gets one
+	// extra call per tick until the first reply arrives.
+	recordBusy          bool
 	showRecordPicker    bool
 	showQuitConfirm     bool
 	showGitignorePrompt bool
@@ -317,6 +342,9 @@ func (m *DevModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case recordMsg:
 		return m.applyRecordMsg(msg), nil
+
+	case recordPickerReadyMsg:
+		return m.applyRecordPickerReady(msg)
 
 	case wsCountMsg:
 		m.state.WebSocketClients = msg.count

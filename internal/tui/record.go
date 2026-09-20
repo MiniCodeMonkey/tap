@@ -54,8 +54,11 @@ func (m *DevModel) NoteRecordingEnded(err error) {
 }
 
 // toggleRecording is the C key: start a recording, or stop the running one.
+// recordBusy guards both directions: a Stop that takes a few seconds to
+// finalize the file, or a Start still waiting on its preflight, must not be
+// re-triggered by a second C before its result lands.
 func (m *DevModel) toggleRecording() (*DevModel, tea.Cmd) {
-	if m.recorders == nil {
+	if m.recorders == nil || m.recordBusy {
 		return m, nil
 	}
 
@@ -69,42 +72,68 @@ func (m *DevModel) toggleRecording() (*DevModel, tea.Cmd) {
 	}
 
 	if m.recording {
+		m.recordBusy = true
 		return m, m.stopRecordingCmd()
 	}
 
-	report := m.recorders.Preflight()
-	for _, finding := range report.Findings {
-		eventType := "action"
-		if finding.Blocking {
-			eventType = "error"
+	m.recordBusy = true
+	return m, m.prepareRecordingCmd()
+}
+
+// prepareRecordingCmd runs the preflight, lists displays and reads the
+// default audio input, all off the update loop: each of these shells out to
+// screencapture or system_profiler, and doing that inside Update would
+// freeze the TUI, including against the keypress meant to cancel it.
+func (m *DevModel) prepareRecordingCmd() tea.Cmd {
+	controller := m.recorders
+	return func() tea.Msg {
+		report := controller.Preflight()
+		if report.Blocked() {
+			return recordPickerReadyMsg{report: report}
 		}
-		message := finding.Message
-		if finding.Fix != "" {
-			message += ". " + finding.Fix
+
+		displays, err := controller.Displays()
+		if err != nil {
+			return recordPickerReadyMsg{report: report, displaysErr: err}
 		}
-		m.addEvent(DevEvent{Type: eventType, Message: message, Timestamp: time.Now()})
+
+		return recordPickerReadyMsg{report: report, displays: displays, audioInput: controller.DefaultAudioInput()}
 	}
-	if report.Blocked() {
+}
+
+// applyRecordPickerReady folds the outcome of prepareRecordingCmd back into
+// the model: it reports any preflight findings, then either starts the
+// recording outright (one display) or opens the picker with the audio name
+// already known.
+func (m *DevModel) applyRecordPickerReady(msg recordPickerReadyMsg) (*DevModel, tea.Cmd) {
+	for _, finding := range msg.report.Findings {
+		m.addEvent(DevEvent{Type: finding.EventType(), Message: finding.Describe(), Timestamp: time.Now()})
+	}
+	if msg.report.Blocked() {
+		m.recordBusy = false
 		return m, nil
 	}
 
-	displays, err := m.recorders.Displays()
-	if err != nil {
+	if msg.displaysErr != nil {
+		m.recordBusy = false
 		m.addEvent(DevEvent{
 			Type:      "error",
-			Message:   "Cannot list displays: " + err.Error(),
+			Message:   "Cannot list displays: " + msg.displaysErr.Error(),
 			Timestamp: time.Now(),
 		})
 		return m, nil
 	}
 
-	// One display is not a choice, so it is not worth a screen.
-	if len(displays) <= 1 {
+	// One display is not a choice, so it is not worth a screen. recordBusy
+	// stays set until the start itself replies.
+	if len(msg.displays) <= 1 {
 		return m, m.startRecordingCmd(1)
 	}
 
-	m.recordDisplays = displays
-	m.recordPickerIndex = preselectedDisplayIndex(displays, m.config.RecordDisplay)
+	m.recordBusy = false
+	m.recordDisplays = msg.displays
+	m.recordPickerIndex = preselectedDisplayIndex(msg.displays, m.config.RecordDisplay)
+	m.recordPickerAudioInput = msg.audioInput
 	m.showRecordPicker = true
 	return m, nil
 }
@@ -140,6 +169,8 @@ func (m *DevModel) stopRecordingCmd() tea.Cmd {
 
 // applyRecordMsg folds a start or stop outcome back into the model.
 func (m *DevModel) applyRecordMsg(msg recordMsg) *DevModel {
+	m.recordBusy = false
+
 	if msg.err != nil {
 		m.recording = false
 		m.addEvent(DevEvent{
@@ -159,8 +190,11 @@ func (m *DevModel) applyRecordMsg(msg recordMsg) *DevModel {
 		}
 		m.addEvent(DevEvent{Type: "action", Message: message, Timestamp: time.Now()})
 
-		if m.recorders != nil && m.recorders.SuggestGitignore() != "" {
-			m.showGitignorePrompt = true
+		if m.recorders != nil {
+			if entry := m.recorders.SuggestGitignore(); entry != "" {
+				m.gitignoreSuggestion = entry
+				m.showGitignorePrompt = true
+			}
 		}
 
 		return m
@@ -188,7 +222,10 @@ func (m *DevModel) confirmQuitWhileRecording() bool {
 // handleQuitConfirmKey drives the confirmation q opens while recording.
 func (m *DevModel) handleQuitConfirmKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
-	case "y", "Y":
+	case "y", "Y", "ctrl+c":
+		// ctrl+c never asks, even here: the overlay being open must not
+		// change that. The file still gets finalized either way, exactly
+		// as pressing y does.
 		m.showQuitConfirm = false
 		m.quitting = true
 
@@ -228,7 +265,7 @@ func (m *DevModel) handleGitignoreKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.addEvent(DevEvent{Type: "error", Message: "Could not write .gitignore: " + err.Error(), Timestamp: time.Now()})
 			return m, nil
 		}
-		m.addEvent(DevEvent{Type: "action", Message: "Added recordings/ to .gitignore", Timestamp: time.Now()})
+		m.addEvent(DevEvent{Type: "action", Message: "Added " + m.gitignoreSuggestion + " to .gitignore", Timestamp: time.Now()})
 		return m, nil
 
 	case "n", "N", "esc":
@@ -239,9 +276,12 @@ func (m *DevModel) handleGitignoreKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// viewGitignorePrompt renders the prompt.
+// viewGitignorePrompt renders the prompt. entry is the suggestion captured
+// when the prompt opened, not read again here: SuggestGitignore walks the
+// filesystem, and View runs after every message, including the one-second
+// tick.
 func (m *DevModel) viewGitignorePrompt() string {
-	entry := m.recorders.SuggestGitignore()
+	entry := m.gitignoreSuggestion
 	return "\n" + RenderTitle("Recording saved") + "\n\n" +
 		RenderMuted("  A recording is large, and this deck is in a git repository.") + "\n\n" +
 		"  Add " + entry + " to .gitignore? (y/n)\n"
@@ -251,13 +291,19 @@ func (m *DevModel) viewGitignorePrompt() string {
 // warns about one that has run long, and stops one that has run away.
 // Both thresholds come from the deck.
 func (m *DevModel) recordingTick() tea.Cmd {
-	if !m.recording {
+	// recordBusy means a Stop is already in flight (screencapture can take
+	// up to killGrace to finalize the file): ticking again here would
+	// issue another Stop every second until the first reply arrives, each
+	// one landing on an already-stopped session and returning the
+	// remembered last result instead of this one.
+	if !m.recording || m.recordBusy {
 		return nil
 	}
 
 	elapsed := time.Since(m.recordingStartedAt)
 
 	if m.config.RecordStopAfter > 0 && elapsed >= m.config.RecordStopAfter {
+		m.recordBusy = true
 		m.addEvent(DevEvent{
 			Type:      "action",
 			Message:   "Recording stopped at the " + formatElapsed(m.config.RecordStopAfter) + " cap",
@@ -327,6 +373,7 @@ func (m *DevModel) handleRecordPickerKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "enter":
 		display := m.selectedDisplay()
 		m.showRecordPicker = false
+		m.recordBusy = true
 		return m, m.startRecordingCmd(display)
 	}
 
@@ -401,8 +448,12 @@ func (m *DevModel) viewRecordPicker() string {
 
 	// The microphone is shown, not chosen: screencapture selects an input
 	// by CoreAudio UID, and a pure-Go binary cannot enumerate UIDs. Seeing
-	// the wrong microphone here is the point.
-	input := m.recorders.DefaultAudioInput()
+	// the wrong microphone here is the point. The name was read once, off
+	// the update loop, when the picker opened: reading it again here would
+	// mean View, which runs after every message including the
+	// once-a-second tick, shelling out to system_profiler on every frame
+	// the picker is on screen.
+	input := m.recordPickerAudioInput
 	if input == "" {
 		input = "no input device"
 	}
