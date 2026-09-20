@@ -1,6 +1,7 @@
 package recorder
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -20,10 +21,11 @@ type Session struct {
 	path      string
 	startedAt time.Time
 
-	mu      sync.Mutex
-	exitErr error
-	stopped bool
-	result  Result
+	mu       sync.Mutex
+	exitErr  error
+	stopOnce sync.Once
+	stopErr  error
+	result   Result
 }
 
 // Start launches the recorder. The returned Session is running until Stop
@@ -78,26 +80,36 @@ func (s *Session) Elapsed() time.Duration {
 }
 
 // Stop interrupts the recorder and waits for it to finalize the file.
-// screencapture writes a playable .mov on SIGINT; a recorder that has not
-// exited within killGrace is killed, and the result is marked truncated.
-// Stopping an already-exited session measures what it left behind.
+// Concurrent callers all receive the same result: sync.Once holds the
+// later ones until the first has finished stopping.
 func (s *Session) Stop() (Result, error) {
-	s.mu.Lock()
-	if s.stopped {
-		result := s.result
-		s.mu.Unlock()
-		return result, nil
-	}
-	s.stopped = true
-	s.mu.Unlock()
+	s.stopOnce.Do(func() {
+		result, err := s.stop()
 
+		s.mu.Lock()
+		s.result, s.stopErr = result, err
+		s.mu.Unlock()
+	})
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.result, s.stopErr
+}
+
+// stop does the actual interrupting and waiting. screencapture writes a
+// playable .mov on SIGINT; a recorder that has not exited within killGrace
+// is killed, and the result is marked truncated. Stopping an already-exited
+// session measures what it left behind. A recorder that exits on its own in
+// the window between the done check and the signal makes Signal return
+// os.ErrProcessDone; that is treated as already stopped, not as a failure.
+func (s *Session) stop() (Result, error) {
 	duration := s.Elapsed()
 	truncated := false
 
 	select {
 	case <-s.done:
 	default:
-		if err := s.command.Process.Signal(syscall.SIGINT); err != nil {
+		if err := s.command.Process.Signal(syscall.SIGINT); err != nil && !errors.Is(err, os.ErrProcessDone) {
 			return Result{}, fmt.Errorf("interrupting the recorder: %w", err)
 		}
 
@@ -114,10 +126,6 @@ func (s *Session) Stop() (Result, error) {
 	if info, err := os.Stat(s.path); err == nil {
 		result.Size = info.Size()
 	}
-
-	s.mu.Lock()
-	s.result = result
-	s.mu.Unlock()
 
 	return result, nil
 }

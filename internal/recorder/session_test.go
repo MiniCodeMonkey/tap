@@ -135,6 +135,35 @@ func TestStopAfterAnUnexpectedExitStillReturns(t *testing.T) {
 	}
 }
 
+func TestConcurrentStopsAgreeOnTheResult(t *testing.T) {
+	output := filepath.Join(t.TempDir(), "talk.mov")
+
+	session, err := Start(Options{Command: obedientRecorder(t), OutputPath: output, Display: 1})
+	if err != nil {
+		t.Fatalf("Start() returned %v", err)
+	}
+	waitForRecorderReady(t, output)
+
+	results := make(chan Result, 2)
+	for range 2 {
+		go func() {
+			result, stopErr := session.Stop()
+			if stopErr != nil {
+				t.Errorf("Stop() returned %v", stopErr)
+			}
+			results <- result
+		}()
+	}
+
+	first, second := <-results, <-results
+	if first.Path != output || second.Path != output {
+		t.Errorf("concurrent Stop() returned %q and %q, want both %q", first.Path, second.Path, output)
+	}
+	if first.Size == 0 || second.Size == 0 {
+		t.Error("a concurrent Stop() returned an empty result")
+	}
+}
+
 func TestStartRejectsAMissingRecorder(t *testing.T) {
 	_, err := Start(Options{Command: "/nonexistent/recorder", OutputPath: filepath.Join(t.TempDir(), "x.mov")})
 	if err == nil {
