@@ -160,6 +160,77 @@ func (m *DevModel) applyRecordMsg(msg recordMsg) *DevModel {
 	return m
 }
 
+// confirmQuitWhileRecording reports whether q should ask before quitting.
+// screencapture cannot resume into a file it has closed, so a mis-keyed q
+// during a talk would be unrecoverable.
+func (m *DevModel) confirmQuitWhileRecording() bool {
+	return m.recording
+}
+
+// handleQuitConfirmKey drives the confirmation q opens while recording.
+func (m *DevModel) handleQuitConfirmKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "y", "Y":
+		m.showQuitConfirm = false
+		m.quitting = true
+
+		if _, err := m.recorders.Stop(); err != nil {
+			m.addEvent(DevEvent{
+				Type:      "error",
+				Message:   "Recording failed to stop: " + err.Error(),
+				Timestamp: time.Now(),
+			})
+		}
+		m.recording = false
+
+		return m, tea.Quit
+
+	case "n", "N", "esc":
+		m.showQuitConfirm = false
+		return m, nil
+	}
+
+	return m, nil
+}
+
+// viewQuitConfirm renders the confirmation overlay.
+func (m *DevModel) viewQuitConfirm() string {
+	return "\n" + RenderTitle("Recording in progress") + "\n\n" +
+		RenderMuted("  "+filepath.Base(m.recordingPath)+"  "+formatElapsed(time.Since(m.recordingStartedAt))) + "\n\n" +
+		"  Stop recording and quit? (y/n)\n"
+}
+
+// recordingTick is the once-a-second check on a running recording: it
+// warns about one that has run long, and stops one that has run away.
+// Both thresholds come from the deck.
+func (m *DevModel) recordingTick() tea.Cmd {
+	if !m.recording {
+		return nil
+	}
+
+	elapsed := time.Since(m.recordingStartedAt)
+
+	if m.config.RecordStopAfter > 0 && elapsed >= m.config.RecordStopAfter {
+		m.addEvent(DevEvent{
+			Type:      "action",
+			Message:   "Recording stopped at the " + formatElapsed(m.config.RecordStopAfter) + " cap",
+			Timestamp: time.Now(),
+		})
+		return m.stopRecordingCmd()
+	}
+
+	if !m.recordWarned && m.config.RecordWarnAfter > 0 && elapsed >= m.config.RecordWarnAfter {
+		m.recordWarned = true
+		m.addEvent(DevEvent{
+			Type:      "error",
+			Message:   "Tap is still recording after " + formatElapsed(elapsed) + ". Press c to stop.",
+			Timestamp: time.Now(),
+		})
+	}
+
+	return nil
+}
+
 // viewRecordingStatus is the status block's recording line, or "" when
 // nothing is being recorded.
 func (m *DevModel) viewRecordingStatus() string {

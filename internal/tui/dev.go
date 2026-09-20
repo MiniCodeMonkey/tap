@@ -124,6 +124,7 @@ type DevModel struct { //nolint:govet // embedded structs prevent optimal alignm
 	recording          bool
 	recordWarned       bool
 	showRecordPicker   bool
+	showQuitConfirm    bool
 }
 
 // NewDevModel creates a new DevModel for the dev server TUI.
@@ -328,8 +329,8 @@ func (m *DevModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tickMsg:
-		// Periodic tick - just redraw
-		return m, tickCmd()
+		// Periodic tick - redraw, and check on any running recording
+		return m, tea.Batch(tickCmd(), m.recordingTick())
 	}
 
 	return m, nil
@@ -347,6 +348,11 @@ func (m *DevModel) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleRecordPickerKey(msg)
 	}
 
+	// Handle the quit confirmation if it's open
+	if m.showQuitConfirm {
+		return m.handleQuitConfirmKey(msg)
+	}
+
 	// Handle image generator if it's open
 	if m.showImageGenerator && m.imageGenModel != nil {
 		return m.handleImageGeneratorKey(msg)
@@ -358,7 +364,17 @@ func (m *DevModel) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 
 	switch msg.String() {
-	case "q", "ctrl+c":
+	case "q":
+		if m.confirmQuitWhileRecording() {
+			m.showQuitConfirm = true
+			return m, nil
+		}
+		m.quitting = true
+		return m, tea.Quit
+
+	case "ctrl+c":
+		// Not always a deliberate keystroke, and the file must be
+		// finalized either way, so this one never asks.
 		m.quitting = true
 		return m, tea.Quit
 
@@ -685,6 +701,11 @@ func (m *DevModel) addEvent(event DevEvent) {
 
 // View implements tea.Model.
 func (m *DevModel) View() string {
+	// Show the quit confirmation if it's open
+	if m.showQuitConfirm {
+		return m.viewQuitConfirm()
+	}
+
 	if m.quitting {
 		return RenderMuted("Shutting down server...\n")
 	}

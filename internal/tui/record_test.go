@@ -233,6 +233,127 @@ func TestApplyRecordMsgReportsAFailedStart(t *testing.T) {
 	}
 }
 
+func recordingModel(t *testing.T, cfg DevConfig, fake *fakeRecorder) *DevModel {
+	t.Helper()
+
+	m := NewDevModel(cfg)
+	m.SetRecorderController(fake)
+	m.recording = true
+	m.recordingPath = "recordings/talk.mov"
+	m.recordingStartedAt = time.Now()
+	return m
+}
+
+func TestQuitAsksWhileRecording(t *testing.T) {
+	fake := &fakeRecorder{available: true, recording: true}
+	m := recordingModel(t, DevConfig{}, fake)
+
+	_, cmd := m.handleKeyPress(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+
+	if cmd != nil {
+		t.Error("q quit immediately while recording")
+	}
+	if !m.showQuitConfirm {
+		t.Fatal("q did not open the confirmation")
+	}
+	if m.quitting {
+		t.Error("the model is quitting although the confirmation is open")
+	}
+	if !strings.Contains(m.View(), "Stop recording and quit?") {
+		t.Errorf("the confirmation is not on screen:\n%s", m.View())
+	}
+}
+
+func TestQuitConfirmNoReturnsToTheTUI(t *testing.T) {
+	fake := &fakeRecorder{available: true, recording: true}
+	m := recordingModel(t, DevConfig{}, fake)
+	m.showQuitConfirm = true
+
+	m.handleKeyPress(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
+
+	if m.showQuitConfirm {
+		t.Error("n left the confirmation open")
+	}
+	if m.quitting {
+		t.Error("n quit anyway")
+	}
+	if fake.stopCalls != 0 {
+		t.Error("n stopped the recording")
+	}
+}
+
+func TestQuitConfirmYesStopsAndQuits(t *testing.T) {
+	fake := &fakeRecorder{available: true, recording: true}
+	m := recordingModel(t, DevConfig{}, fake)
+	m.showQuitConfirm = true
+
+	_, cmd := m.handleKeyPress(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}})
+
+	if cmd == nil {
+		t.Fatal("y returned no command, so nothing quits")
+	}
+	if fake.stopCalls != 1 {
+		t.Errorf("Stop called %d times, want once", fake.stopCalls)
+	}
+	if !m.quitting {
+		t.Error("the model is not quitting after y")
+	}
+}
+
+func TestQuitDoesNotAskWhenNothingIsRecording(t *testing.T) {
+	m := NewDevModel(DevConfig{})
+	m.SetRecorderController(&fakeRecorder{available: true})
+
+	_, cmd := m.handleKeyPress(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+
+	if cmd == nil {
+		t.Error("q did not quit with no recording running")
+	}
+	if m.showQuitConfirm {
+		t.Error("q asked about a recording that is not running")
+	}
+}
+
+func TestTickWarnsOnceAboutALongRecording(t *testing.T) {
+	fake := &fakeRecorder{available: true, recording: true}
+	m := recordingModel(t, DevConfig{RecordWarnAfter: time.Minute, RecordStopAfter: time.Hour}, fake)
+	m.recordingStartedAt = time.Now().Add(-2 * time.Minute)
+
+	m.recordingTick()
+	m.recordingTick()
+
+	warnings := strings.Count(eventText(m), "still recording")
+	if warnings != 1 {
+		t.Errorf("the long-recording warning appeared %d times, want once", warnings)
+	}
+}
+
+func TestTickStopsARunawayRecording(t *testing.T) {
+	fake := &fakeRecorder{available: true, recording: true}
+	m := recordingModel(t, DevConfig{RecordWarnAfter: time.Minute, RecordStopAfter: 30 * time.Minute}, fake)
+	m.recordingStartedAt = time.Now().Add(-31 * time.Minute)
+
+	cmd := m.recordingTick()
+	if cmd == nil {
+		t.Fatal("the cap did not stop the recording")
+	}
+	cmd()
+
+	if fake.stopCalls != 1 {
+		t.Errorf("Stop called %d times, want once", fake.stopCalls)
+	}
+}
+
+func TestTickLeavesTheCapOffWhenItIsZero(t *testing.T) {
+	fake := &fakeRecorder{available: true, recording: true}
+	m := recordingModel(t, DevConfig{RecordWarnAfter: time.Minute, RecordStopAfter: 0}, fake)
+	m.recordingStartedAt = time.Now().Add(-10 * time.Hour)
+
+	if cmd := m.recordingTick(); cmd != nil {
+		t.Error("a disabled cap stopped the recording")
+	}
+}
+
 // eventText joins the model's recent event messages for assertions.
 func eventText(m *DevModel) string {
 	var parts []string
