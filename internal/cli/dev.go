@@ -452,15 +452,14 @@ func runDevServer(file string, port int, presenterPassword string, headless bool
 
 		// The probe is cheap and the result is not stored anywhere: Tap
 		// keeps no state between runs, and macOS raises its consent
-		// dialog once per application in any case.
+		// dialog once per application in any case. This only checks the
+		// Screen Recording permission, not the full four-check preflight:
+		// that one also creates the output directory, which stays created
+		// on demand, when the speaker actually presses C.
 		go func() {
-			report := recordings.Preflight()
+			report := recordings.StartupPreflight()
 			for _, finding := range report.Findings {
-				message := finding.Message
-				if finding.Fix != "" {
-					message += ". " + finding.Fix
-				}
-				model.SendEvent("error", message)
+				model.SendEvent(finding.EventType(), finding.Describe())
 			}
 		}()
 

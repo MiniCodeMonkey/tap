@@ -88,6 +88,13 @@ func (c *recordController) Preflight() recorder.Report {
 	return recorder.Preflight(c.options.OutputDir, c.recorderOptions("", 0, 0))
 }
 
+// StartupPreflight checks only the Screen Recording permission, the one
+// failure worth surfacing before the speaker decides whether to record at
+// all. Unlike Preflight, it does not create the output directory.
+func (c *recordController) StartupPreflight() recorder.Report {
+	return recorder.StartupPreflight()
+}
+
 // Recording reports whether a recording is running.
 func (c *recordController) Recording() bool {
 	c.mu.Lock()
