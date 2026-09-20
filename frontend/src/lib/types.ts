@@ -121,6 +121,8 @@ export interface PresentationConfig {
 	showProgressBar?: boolean;
 	/** Whether the theme draws slide numbers (default: true) */
 	slideNumbers?: boolean;
+	/** Layout the presenter view opens in (default: 'standard') */
+	presenterLayout?: string;
 }
 
 // ============================================================================

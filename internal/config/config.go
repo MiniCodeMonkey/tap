@@ -31,6 +31,10 @@ type Config struct {
 	// SlideNumbers turns off the slide number the theme draws on every
 	// slide when set to false. Nil (the key left out) keeps the numbers.
 	SlideNumbers *bool `yaml:"slideNumbers" json:"slideNumbers,omitempty"`
+	// PresenterLayout names the layout the presenter view opens in. It is a
+	// suggestion: a device that has chosen a layout for itself keeps that
+	// choice. An empty value means the deck expresses no preference.
+	PresenterLayout string `yaml:"presenterLayout" json:"presenterLayout,omitempty"`
 }
 
 // DriverConfig represents the configuration for a code execution driver.
@@ -132,6 +136,15 @@ var validAspectRatios = map[string]bool{
 	"16:10": true,
 }
 
+// validPresenterLayouts contains the allowed presenterLayout values.
+var validPresenterLayouts = map[string]bool{
+	"standard":    true,
+	"notes-first": true,
+	"duo":         true,
+	"slide-only":  true,
+	"notes-only":  true,
+}
+
 // validTransitions contains the allowed transition values.
 var validTransitions = map[string]bool{
 	"none":  true,
@@ -191,6 +204,11 @@ func (c *Config) Validate() error {
 	// Validate aspect ratio
 	if c.AspectRatio != "" && !validAspectRatios[c.AspectRatio] {
 		return fmt.Errorf("invalid aspectRatio %q: must be one of 16:9, 4:3, or 16:10", c.AspectRatio)
+	}
+
+	// Validate presenter layout
+	if c.PresenterLayout != "" && !validPresenterLayouts[c.PresenterLayout] {
+		return fmt.Errorf("invalid presenterLayout %q: must be one of standard, notes-first, duo, slide-only, notes-only", c.PresenterLayout)
 	}
 
 	// Validate transition

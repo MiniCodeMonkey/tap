@@ -654,3 +654,34 @@ func TestLoad_SlideNumbers(t *testing.T) {
 		})
 	}
 }
+
+func TestValidate_ValidPresenterLayouts(t *testing.T) {
+	layouts := []string{"standard", "notes-first", "duo", "slide-only", "notes-only"}
+	for _, layout := range layouts {
+		cfg := DefaultConfig()
+		cfg.PresenterLayout = layout
+		if err := cfg.Validate(); err != nil {
+			t.Errorf("expected %q to be valid, got %v", layout, err)
+		}
+	}
+}
+
+func TestValidate_EmptyPresenterLayout(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.PresenterLayout = ""
+	if err := cfg.Validate(); err != nil {
+		t.Errorf("expected an empty presenterLayout to be valid, got %v", err)
+	}
+}
+
+func TestValidate_InvalidPresenterLayout(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.PresenterLayout = "sidebar"
+	err := cfg.Validate()
+	if err == nil {
+		t.Fatal("expected an error for an unknown presenterLayout")
+	}
+	if !strings.Contains(err.Error(), "invalid presenterLayout") {
+		t.Errorf("unexpected error text: %v", err)
+	}
+}
