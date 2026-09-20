@@ -130,7 +130,7 @@ func NewDevModel(cfg DevConfig) *DevModel {
 	return &DevModel{
 		config:    cfg,
 		tunnelURL: cfg.TunnelURL,
-		tunnelQR:  tunnelQRCode(cfg.TunnelURL),
+		tunnelQR:  tunnelQRCode(presenterTarget(cfg.TunnelURL, cfg.PresenterPassword)),
 		state: DevState{
 			RecentEvents: make([]DevEvent, 0, 10),
 		},
@@ -822,7 +822,7 @@ func (m *DevModel) viewQRCode() string {
 	var b strings.Builder
 
 	b.WriteString("\n")
-	b.WriteString(RenderSubtitle("Scan to join:"))
+	b.WriteString(RenderSubtitle("Scan for the presenter view:"))
 	b.WriteString("\n")
 
 	// Every row, always. Dropping rows to make it fit leaves something

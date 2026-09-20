@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+### Changed
+
+- **The dev terminal's QR code opens the presenter view** - Scanning it on a phone lands on the speaker notes and the controls rather than the slides, and the presenter view now carries a "Slides" link in its header to get to the deck itself. A presenter password is carried in the scanned URL, so the view opens straight away.
+
+- **The QR code shows in a shorter window** - The height it asks for is now measured against the real screen rather than assuming a tall terminal, so an ordinary window shows the code instead of hiding it.
+
 ## [2.0.0-beta.7] - 2026-09-20
 
 ### Fixed

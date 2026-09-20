@@ -89,6 +89,27 @@
   transform: scale(0.98);
 }
 
+/*
+ * The way out to the deck itself. A phone that scanned the dev server's QR
+ * code lands on this view, so the link has to be big enough for a finger.
+ */
+.presenter-slides-link {
+  padding: 0.5rem 1rem;
+  border-radius: 9999px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  text-decoration: none;
+  background-color: rgba(255, 255, 255, 0.08);
+  color: inherit;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  transition: background-color 0.15s ease;
+}
+
+.presenter-slides-link:hover,
+.presenter-slides-link:focus-visible {
+  background-color: rgba(255, 255, 255, 0.16);
+}
+
 /* Connection Status */
 .presenter-connection-status {
   padding: 0.5rem 1rem;

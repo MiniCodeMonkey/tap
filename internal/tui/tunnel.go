@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"net/url"
 	"strings"
 	"time"
 
@@ -102,7 +103,7 @@ func (m *DevModel) applyTunnelMsg(msg tunnelMsg) *DevModel {
 	}
 
 	m.tunnelURL = msg.url
-	m.tunnelQR = tunnelQRCode(msg.url)
+	m.tunnelQR = tunnelQRCode(presenterTarget(msg.url, m.config.PresenterPassword))
 	m.addEvent(DevEvent{
 		Type:      "action",
 		Message:   "Tunnel up: " + msg.url,
@@ -119,6 +120,22 @@ func (m *DevModel) qrCode() string {
 		return m.tunnelQR
 	}
 	return m.config.QRCodeASCII
+}
+
+// presenterTarget is where a scanned QR code should land: the presenter
+// view, which carries the speaker notes and the controls, and which links
+// on to the slides themselves. A password rides along, since the view is
+// gated without it.
+func presenterTarget(tunnelURL, presenterPassword string) string {
+	if tunnelURL == "" {
+		return ""
+	}
+
+	target := strings.TrimSuffix(tunnelURL, "/") + "/presenter"
+	if presenterPassword != "" {
+		target += "?key=" + url.QueryEscape(presenterPassword)
+	}
+	return target
 }
 
 // tunnelQRCode renders a URL as a scannable block-character QR code, or ""
@@ -140,6 +157,10 @@ func tunnelQRCode(url string) string {
 // entirely: its own lines, plus room for everything else on the screen.
 // Showing a code that scrolls off the top is no better than showing none.
 func qrMinimumHeight(code string) int {
-	const chromeLines = 22 // header, URLs, status, events, help
+	// Measured against the real screen: title, file, four URL lines, three
+	// status lines, the section's own label, the help footer, and the
+	// blank lines between them. The events list shrinks on its own, so it
+	// is not counted.
+	const chromeLines = 16
 	return strings.Count(code, "\n") + chromeLines
 }

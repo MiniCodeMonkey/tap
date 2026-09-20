@@ -208,3 +208,42 @@ func TestQRHeightGateLeavesRoomForTheRestOfTheScreen(t *testing.T) {
 		t.Errorf("qrMinimumHeight = %d for a 21-line code, want more than the code's own height", got)
 	}
 }
+
+func TestPresenterTargetIsWhereAScanLands(t *testing.T) {
+	tests := []struct {
+		name     string
+		url      string
+		password string
+		want     string
+	}{
+		{
+			name: "plain tunnel",
+			url:  "https://calm-river.trycloudflare.com",
+			want: "https://calm-river.trycloudflare.com/presenter",
+		},
+		{
+			name: "trailing slash",
+			url:  "https://calm-river.trycloudflare.com/",
+			want: "https://calm-river.trycloudflare.com/presenter",
+		},
+		{
+			name:     "password rides along, escaped",
+			url:      "https://calm-river.trycloudflare.com",
+			password: "a b&c",
+			want:     "https://calm-river.trycloudflare.com/presenter?key=a+b%26c",
+		},
+		{
+			name: "no tunnel, no target",
+			url:  "",
+			want: "",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := presenterTarget(test.url, test.password); got != test.want {
+				t.Errorf("presenterTarget(%q, %q) = %q, want %q", test.url, test.password, got, test.want)
+			}
+		})
+	}
+}

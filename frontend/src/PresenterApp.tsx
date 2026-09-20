@@ -355,6 +355,16 @@ export default function PresenterApp() {
 						{formatTime(elapsedSeconds)}
 					</button>
 
+					{/*
+					 * Scanning the dev server's QR code lands here, on the
+					 * notes and the controls. This is the way back out to the
+					 * deck itself, on the same host, so it works over a
+					 * tunnel as well as over localhost.
+					 */}
+					<a className="presenter-slides-link" href="/" title="Open the slides in this window">
+						Slides
+					</a>
+
 					<div className={`presenter-connection-status${connected ? ' connected' : ''}`}>
 						{connected ? 'Connected' : 'Disconnected'}
 					</div>
