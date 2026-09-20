@@ -194,6 +194,41 @@ func TestControllerStopTwiceReturnsTheSameResult(t *testing.T) {
 	}
 }
 
+func TestCloseRemovesTestCaptures(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "recordings")
+
+	opened := make(chan string, 1)
+	controller := newRecordController(recordControllerOptions{
+		DeckTitle:    "My Talk",
+		OutputDir:    dir,
+		CommandName:  fakeInstantRecorderBinary(t),
+		CurrentSlide: func() (int, bool) { return 0, true },
+		TitleFor:     func(int) string { return "Title" },
+		OpenFile:     func(path string) error { opened <- path; return nil },
+	})
+
+	if err := controller.Test(1); err != nil {
+		t.Fatalf("Test() returned %v", err)
+	}
+
+	var path string
+	select {
+	case path = <-opened:
+	case <-time.After(10 * time.Second):
+		t.Fatal("the test capture never opened a file")
+	}
+
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("the test capture is missing before Close(): %v", err)
+	}
+
+	controller.Close()
+
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Errorf("Close() left the test capture behind: stat returned %v", err)
+	}
+}
+
 func TestControllerStopWithoutStart(t *testing.T) {
 	controller := testController(t, t.TempDir(), func() (int, bool) { return 0, true })
 

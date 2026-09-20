@@ -229,6 +229,10 @@ func (c *recordController) Stop() (recorder.Result, error) {
 func (c *recordController) Test(display int) error {
 	path := filepath.Join(os.TempDir(), fmt.Sprintf("tap-test-capture-%d.mov", time.Now().UnixNano()))
 
+	c.mu.Lock()
+	c.testCapturePaths = append(c.testCapturePaths, path)
+	c.mu.Unlock()
+
 	session, err := recorder.Start(c.recorderOptions(path, display, testCaptureSeconds))
 	if err != nil {
 		return err

@@ -342,6 +342,10 @@ func runDevServer(file string, port int, presenterPassword string, headless bool
 	// Stop is idempotent, so this runs safely on every exit path,
 	// including when the TUI already stopped the recording itself.
 	defer func() { _, _ = recordings.Stop() }()
+	// Test captures are scratch files under the OS temp directory, never
+	// the talk itself, so they are removed unconditionally on every exit
+	// path rather than left for the OS to clean up eventually.
+	defer recordings.Close()
 
 	hub.SetOnSlideChange(recordings.NoteSlideChange)
 
