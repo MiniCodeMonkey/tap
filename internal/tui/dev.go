@@ -31,6 +31,7 @@ type DevConfig struct {
 	PresenterPassword string
 	MarkdownFile      string
 	CurrentTheme      string
+	TunnelURL         string
 	// Version is the tap version shown next to the title, for example
 	// "v2.0.0-beta.2", or "dev" for a local build.
 	Version string
@@ -91,6 +92,10 @@ type DevModel struct { //nolint:govet // embedded structs prevent optimal alignm
 	eventsCh           chan DevEvent
 	closeCh            chan struct{}
 	themeBroadcaster   ThemeBroadcaster
+	tunnels            TunnelController
+	tunnelURL          string
+	tunnelQR           string
+	tunnelStarting     bool
 	imageGenModel      *ImageGenModel
 	addModel           *AddModel
 	mu                 sync.RWMutex
@@ -123,7 +128,9 @@ func NewDevModel(cfg DevConfig) *DevModel {
 	}
 
 	return &DevModel{
-		config: cfg,
+		config:    cfg,
+		tunnelURL: cfg.TunnelURL,
+		tunnelQR:  tunnelQRCode(cfg.TunnelURL),
 		state: DevState{
 			RecentEvents: make([]DevEvent, 0, 10),
 		},
@@ -268,6 +275,9 @@ func (m *DevModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.addEvent(msg.event)
 		return m, m.listenForEvents()
 
+	case tunnelMsg:
+		return m.applyTunnelMsg(msg), nil
+
 	case wsCountMsg:
 		m.state.WebSocketClients = msg.count
 		return m, nil
@@ -379,6 +389,10 @@ func (m *DevModel) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			Timestamp: time.Now(),
 		})
 		return m, nil
+
+	case "u":
+		// Start or stop the public tunnel
+		return m.toggleTunnel()
 
 	case "t":
 		// Open theme picker
@@ -677,7 +691,7 @@ func (m *DevModel) View() string {
 	b.WriteString("\n")
 
 	// QR Code (if available and fits)
-	if m.config.QRCodeASCII != "" && m.windowHeight > 30 {
+	if m.qrCode() != "" && m.windowHeight > 30 {
 		b.WriteString(m.viewQRCode())
 		b.WriteString("\n")
 	}
@@ -748,6 +762,20 @@ func (m *DevModel) viewURLs() string {
 		b.WriteString(RenderMuted("(password protected)"))
 	}
 
+	switch {
+	case m.tunnelStarting:
+		b.WriteString("\n")
+		b.WriteString(labelStyle.Render("Tunnel:"))
+		b.WriteString(RenderMuted("starting..."))
+	case m.tunnelURL != "":
+		b.WriteString("\n")
+		b.WriteString(labelStyle.Render("Tunnel:"))
+		b.WriteString(urlStyle.Render(m.tunnelURL))
+		b.WriteString("\n")
+		b.WriteString(labelStyle.Render(""))
+		b.WriteString(RenderMuted("public, anyone with the link"))
+	}
+
 	return b.String()
 }
 
@@ -798,7 +826,7 @@ func (m *DevModel) viewQRCode() string {
 	b.WriteString("\n")
 
 	// Render QR code with reduced size if needed
-	qrLines := strings.Split(m.config.QRCodeASCII, "\n")
+	qrLines := strings.Split(m.qrCode(), "\n")
 	maxLines := 15
 	if len(qrLines) > maxLines {
 		// Take every other line for a smaller QR
@@ -807,7 +835,7 @@ func (m *DevModel) viewQRCode() string {
 			b.WriteString("\n")
 		}
 	} else {
-		b.WriteString(m.config.QRCodeASCII)
+		b.WriteString(m.qrCode())
 	}
 
 	return b.String()
@@ -912,9 +940,10 @@ func (m *DevModel) viewHelp() string {
 		Bold(true)
 
 	help := fmt.Sprintf(
-		"%s open browser • %s presenter view • %s theme • %s add slide • %s image • %s export pdf • %s reload • %s quit\n%s in the browser lists its shortcuts",
+		"%s open browser • %s presenter view • %s tunnel • %s theme • %s add slide • %s image • %s export pdf • %s reload • %s quit\n%s in the browser lists its shortcuts",
 		keyStyle.Render("o"),
 		keyStyle.Render("p"),
+		keyStyle.Render("u"),
 		keyStyle.Render("t"),
 		keyStyle.Render("a"),
 		keyStyle.Render("i"),

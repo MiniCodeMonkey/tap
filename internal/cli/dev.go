@@ -29,6 +29,7 @@ var (
 	devPresenterPassword string
 	devHeadless          bool
 	devAllowOrigins      []string
+	devTunnel            bool
 )
 
 // devCmd represents the dev command
@@ -47,7 +48,8 @@ Examples:
   tap dev slides.md                      # Start server on port 3000
   tap dev slides.md --port 8080          # Use custom port
   tap dev slides.md -p 8080              # Short form
-  tap dev slides.md --presenter-password secret  # Protect presenter view`,
+  tap dev slides.md --presenter-password secret  # Protect presenter view
+  tap dev slides.md --tunnel             # Also serve it on a public https URL`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		var file string
@@ -74,7 +76,7 @@ Examples:
 			file = args[0]
 		}
 
-		return runDevServer(file, devPort, devPresenterPassword, devHeadless, cmd.Flags().Changed("port"), devAllowOrigins)
+		return runDevServer(file, devPort, devPresenterPassword, devHeadless, cmd.Flags().Changed("port"), devAllowOrigins, devTunnel)
 	},
 }
 
@@ -86,6 +88,7 @@ func init() {
 	devCmd.Flags().IntVarP(&devPort, "port", "p", 3000, "port for the dev server")
 	devCmd.Flags().StringVar(&devPresenterPassword, "presenter-password", "", "password to protect the presenter view")
 	devCmd.Flags().BoolVar(&devHeadless, "headless", false, "run without TUI (for testing/automation)")
+	devCmd.Flags().BoolVar(&devTunnel, "tunnel", false, "also serve the deck on a public https URL through a Cloudflare Quick Tunnel (needs cloudflared; no account required)")
 	devCmd.Flags().StringArrayVar(&devAllowOrigins, "allow-origin", nil, "additional origin (scheme://host:port) allowed to connect to the websocket hub, or host (host:port) allowed in a request's Host header, for a contributor's Vite dev server or a non-local presenter host (repeatable)")
 }
 
@@ -93,7 +96,7 @@ func init() {
 // is whether the user passed --port themselves (cmd.Flags().Changed
 // ("port")): it decides whether a busy port fails outright or falls back
 // to the next one (see startOnAvailablePort).
-func runDevServer(file string, port int, presenterPassword string, headless bool, portExplicit bool, allowOrigins []string) error {
+func runDevServer(file string, port int, presenterPassword string, headless bool, portExplicit bool, allowOrigins []string, wantTunnel bool) error {
 	// Resolve absolute path
 	absFile, err := filepath.Abs(file)
 	if err != nil {
@@ -253,6 +256,29 @@ func runDevServer(file string, port int, presenterPassword string, headless bool
 		presenterURL += "?key=" + url.QueryEscape(presenterPassword)
 	}
 
+	// A tunnel puts the deck on a public https URL, which is also the only
+	// way a phone gets a secure context (and so a screen wake lock) from a
+	// dev server. The controller also keeps the Host allow-list in step.
+	tunnels := newTunnelController(port, allowOrigins, srv, hub)
+	defer func() { _ = tunnels.Stop() }()
+
+	tunnelURL := ""
+	if wantTunnel {
+		if !tunnels.Available() {
+			return notInstalledError()
+		}
+
+		fmt.Println()
+		Muted("  Starting tunnel...\n")
+
+		startCtx, cancelStart := context.WithTimeout(context.Background(), 45*time.Second)
+		tunnelURL, err = tunnels.Start(startCtx)
+		cancelStart()
+		if err != nil {
+			return fmt.Errorf("starting the tunnel: %w", err)
+		}
+	}
+
 	// Set up signal handling for graceful shutdown
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
@@ -265,6 +291,9 @@ func runDevServer(file string, port int, presenterPassword string, headless bool
 		fmt.Printf("  Version:   %s\n", displayVersion())
 		fmt.Printf("  Audience:  %s\n", audienceURL)
 		fmt.Printf("  Presenter: %s\n", presenterURL)
+		if tunnelURL != "" {
+			fmt.Printf("  Tunnel:    %s\n", tunnelURL)
+		}
 		fmt.Println()
 		Muted("  Press Ctrl+C to stop\n")
 		fmt.Println()
@@ -319,12 +348,14 @@ func runDevServer(file string, port int, presenterPassword string, headless bool
 			PresenterPassword: presenterPassword,
 			CurrentTheme:      cfg.Theme,
 			Version:           displayVersion(),
+			TunnelURL:         tunnelURL,
 		}
 
 		// Create TUI model
 		model := tui.NewDevModel(tuiCfg)
 		model.UpdateWatcherStatus(true)
 		model.SetThemeBroadcaster(hub)
+		model.SetTunnelController(tunnels)
 
 		// Track WebSocket client count
 		hub.SetOnClientCountChange(func(count int) {

@@ -139,6 +139,7 @@ The `tap dev` terminal interface, not the browser.
 | **R** | Trigger a manual reload |
 | **T** | Open the theme picker |
 | **E** | Export the deck to PDF |
+| **U** | Start or stop a public tunnel, and show its URL and QR code |
 | **I** | Open the AI image generator (needs `GEMINI_API_KEY`) |
 | **Q**, **Ctrl+C** | Stop the dev server |
 

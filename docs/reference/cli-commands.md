@@ -108,7 +108,41 @@ tap dev [file]
 | `--port <number>` | `-p` | Port to serve on (default: `3000`) |
 | `--presenter-password <pass>` | | Password gating the presenter view and `/qr`, and gating who may drive other windows. Any characters are allowed |
 | `--allow-origin <value>` | | An additional origin (`scheme://host:port`) allowed to connect to the websocket hub, **or** a host (`host:port`) allowed in a request's `Host` header. Repeatable |
+| `--tunnel` | | Also serve the deck on a public `https` URL through a Cloudflare Quick Tunnel. Needs `cloudflared`; no Cloudflare account |
 | `--headless` | | Run without the terminal UI, for testing/automation |
+
+#### Sharing a deck with `--tunnel`
+
+`--tunnel` starts a Cloudflare Quick Tunnel next to the dev server and
+prints the public address it hands back:
+
+```
+Audience:  http://localhost:3000
+Presenter: http://localhost:3000/presenter
+Tunnel:    https://plain-shoes-arrive-lately.trycloudflare.com
+```
+
+A Quick Tunnel needs no Cloudflare account, no login and no configuration.
+The name is random, it lasts only as long as the server, and nothing is
+registered anywhere. Press `u` in the dev terminal to start or stop a
+tunnel without restarting, and the terminal shows a QR code to point a
+phone at.
+
+It needs the `cloudflared` binary on `PATH`:
+
+```bash
+brew install cloudflared      # macOS
+winget install --id Cloudflare.cloudflared   # Windows
+```
+
+Two things worth knowing. **Anyone with the link can watch the deck** while
+the tunnel is up, so treat the URL as the password it is not. And the
+tunnel is the only way a phone gets a *secure context* from a dev server,
+which is what browser features such as the screen wake lock require; over
+plain `http` to a LAN address those features are simply unavailable.
+
+While a tunnel runs, its hostname is added to the `Host` allow-list below,
+and it is removed again when the tunnel stops.
 
 `tap dev` checks two things, to keep a page on another site from driving
 your deck and to block DNS rebinding.
