@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+## [2.0.0-beta.5] - 2026-09-20
+
 ### Added
 
 - **The mouse pointer hides itself while presenting** - In fullscreen, the pointer disappears after 2.5 still seconds, so it does not sit on a slide on a TV or a projector, and comes back on the next movement. In a window it is never touched.
