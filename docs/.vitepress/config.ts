@@ -62,6 +62,7 @@ export default defineConfig({
             { text: 'Code Blocks', link: '/guide/code-blocks' },
             { text: 'Live Code Execution', link: '/guide/live-code-execution' },
             { text: 'Presenter Mode', link: '/guide/presenter-mode' },
+            { text: 'Talk Recording', link: '/guide/recording' },
             { text: 'Images & Media', link: '/guide/images-media' },
             { text: 'Mermaid Diagrams', link: '/guide/mermaid-diagrams' },
             { text: 'Map Animations', link: '/guide/map-animations' },

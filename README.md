@@ -22,6 +22,9 @@ A markdown-based presentation tool for technical presentations with beautiful de
   blocks.
 - **Presenter view** with notes, a timer, the next slide, and live fragment
   and step mirroring across devices.
+- **Talk recording.** Press `c` in `tap dev` to record the screen and your
+  microphone, with a chapter list of slide timings written beside the video.
+  macOS only.
 - **A fixed 1920px canvas** that scales as one unit, so a deck looks the
   same on every projector.
 - **Static builds and PDF export**, plus `tap screenshot` for checking a
