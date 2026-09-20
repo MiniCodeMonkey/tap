@@ -60,6 +60,45 @@ Press **S** during the presentation to open the presenter view in a new window.
 
 The presenter view includes everything you need to deliver a polished presentation:
 
+### Layouts
+
+Not every talk wants the same screen. Pick one of five layouts from the
+button in the presenter header, which shows the current layout and a small
+diagram of it:
+
+| Layout | Id | What it shows |
+|--------|----|---------------|
+| **Standard** | `standard` | A big current slide on the left, the next slide and the notes on the right. This is the default. |
+| **Notes first** | `notes-first` | The notes take most of the width; both slides shrink to small cues. For a talk you read from. |
+| **Duo** | `duo` | The current and next slides at equal size, with the notes on a strip below. For demos and builds. |
+| **Slide only** | `slide-only` | The current slide alone, as a confidence monitor. No notes, no look-ahead. |
+| **Notes only** | `notes-only` | The notes fill the screen. The projector already has the slide. |
+
+Press **V** to cycle to the next layout without opening the menu. While the
+menu is open, **1** to **5** jump straight to a layout, and **Esc** closes
+the menu. Digits do nothing while the menu is closed.
+
+On a screen narrower than 768px, Duo and Slide only are dropped, because two
+slides side by side do not fit a phone. The menu opens as a sheet at the
+bottom of the screen rather than under the header, within reach of a thumb.
+If your saved layout is one of the two wide ones, a narrow screen shows
+Notes first instead and switches back when the window is wide again.
+
+Your choice is kept per device, in this browser, across every deck. A deck
+can suggest a starting layout with the `presenterLayout` frontmatter key:
+
+```yaml
+---
+title: Quarterly Results
+presenterLayout: notes-first
+---
+```
+
+That is only a suggestion. Once you have picked a layout on a device, that
+device keeps your choice and ignores the deck's. For a one-off, add
+`?layout=notes-only` to the presenter URL; it wins over both and is never
+saved.
+
 ### Speaker Notes
 
 Your notes appear in the right column of the presenter view, under the next
@@ -87,8 +126,20 @@ the slide works too, and is the better form for long free text. See
 
 To change the notes font size, press **-** or **=**, or use the **A-** and
 **A+** buttons in the notes panel title. The presenter view remembers the
-size in this browser. On a narrow screen such as a phone, the panels stack
-with the notes above the next slide preview.
+size in this browser.
+
+The notes size control in the layout menu offers two ways to size them:
+
+- **Manual** - one size for the whole deck, the one **-** and **=** set.
+  This is the default.
+- **Fit to panel** - each slide's notes are scaled to fill the panel
+  without scrolling, between 1rem and whatever the manual size is. In this
+  mode **-** and **=** move that upper limit, so you can still ask for
+  everything a notch smaller. Notes too long to fit even at 1rem stay at
+  1rem and scroll.
+
+Add `?notesSize=fit` to the presenter URL to turn fitting on for one
+session without saving it.
 
 ### Timer
 
@@ -274,9 +325,11 @@ In the presenter view:
 | **Left**, **Up**, **Backspace**, **PageUp** | Previous fragment or step, then previous slide |
 | **Home** / **End** | First / last slide |
 | **R** | Reset timer |
-| **-** / **=** | Smaller / larger speaker notes |
+| **-** / **=** | Smaller / larger speaker notes, or the fitting limit |
+| **V** | Next presenter layout |
+| **1** to **5** | Pick a layout, while the layout menu is open |
 | **?** | Show or hide the list of shortcuts |
-| **Esc** | Close the list of shortcuts |
+| **Esc** | Close the layout menu, or the list of shortcuts |
 
 In the audience view:
 

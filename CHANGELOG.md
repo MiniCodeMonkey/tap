@@ -6,7 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+### Added
+
+- **Five presenter layouts, switchable mid-talk** - The presenter view is no longer one fixed arrangement. **Standard** is what it has always been, a big current slide with the next slide and the notes beside it. **Notes first** gives the notes most of the width and shrinks both slides to cues, for a talk you read from. **Duo** puts the current and next slides at equal size with the notes on a strip below, for demos and builds. **Slide only** is a confidence monitor with no notes and no look-ahead. **Notes only** fills the screen with the script, for when the projector already has the slide. A button in the presenter header shows the current layout and opens the list; `V` cycles to the next one, and `1` to `5` pick one while the list is open. Two slides side by side do not fit a phone, so Duo and Slide only are offered only above 768px, and below that the list opens as a sheet at the bottom of the screen where a thumb can reach it.
+
+- **Speaker notes that scale to fit their panel** - A new notes size control offers **Fit to panel** alongside the existing manual size. Fitting picks a font size per slide so the whole slide's notes are visible without scrolling, searching between 1rem and whatever the manual size is, and re-measuring when the slide changes or the window resizes. In this mode `-` and `=` move that upper limit rather than the size itself, so a speaker who wants everything a notch smaller still gets that. Notes too long to fit even at 1rem stay at 1rem and scroll, which is what they did before. Manual stays the default.
+
+- **`presenterLayout:` frontmatter** - A deck can suggest which layout the presenter view opens in. It is only a suggestion: the layout is a property of the screen you are looking at rather than of the deck, so a device that has picked a layout keeps its own choice. The order is `?layout=` on the URL, then this browser's saved choice, then the deck's key, then Standard. `?layout=` and `?notesSize=` are one-off overrides and are never saved.
+
 ### Changed
+
+- **A phone no longer scrolls the presenter view** - The stacked phone layout used to cap the notes at 40% of the screen height and let the whole page scroll, which loses your place mid-sentence. Each layout now fills the screen exactly, and only the notes themselves scroll, and only when the size is set manually.
 
 - **The dev terminal's QR code opens the presenter view** - Scanning it on a phone lands on the speaker notes and the controls rather than the slides, and the presenter view now carries a "Slides" link in its header to get to the deck itself. A presenter password is carried in the scanned URL, so the view opens straight away.
 
