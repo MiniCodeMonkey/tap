@@ -28,12 +28,12 @@ Settings > Privacy & Security > Screen Recording**, enable your terminal
 (Terminal, iTerm, Ghostty, whichever you use), and **restart the terminal**
 for the grant to take effect.
 
-`tap dev` checks this at every startup on macOS, by taking a tiny test
-screenshot, and says nothing when it succeeds. If the permission is
-missing, or was revoked, the terminal prints a warning naming the exact fix
-above. This check runs whether or not the deck asks for recording, so a
-missing grant surfaces while you are still setting up rather than when you
-press **C** on stage.
+`tap dev` checks this when it starts the terminal interface on macOS, by
+taking a tiny test screenshot, and says nothing when it succeeds. If the
+permission is missing, or was revoked, the terminal prints a warning
+naming the exact fix above. This check runs whether or not the deck asks
+for recording, so a missing grant surfaces while you are still setting up
+rather than when you press **C** on stage.
 
 ## Choosing a Display
 
@@ -110,6 +110,7 @@ whether to add one:
   Recording saved
 
   A recording is large, and this deck is in a git repository.
+
   Add recordings/ to .gitignore? (y/n)
 ```
 
@@ -153,6 +154,7 @@ A worked example, ready to paste into a YouTube description:
 2:15 What this adds
 5:03 Live demo
 9:47 Questions
+1:04:12 Live demo
 ```
 
 ## Long Recordings
