@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/joho/godotenv"
 	"gopkg.in/yaml.v3"
@@ -34,7 +35,75 @@ type Config struct {
 	// PresenterLayout names the layout the presenter view opens in. It is a
 	// suggestion: a device that has chosen a layout for itself keeps that
 	// choice. An empty value means the deck expresses no preference.
-	PresenterLayout string `yaml:"presenterLayout" json:"presenterLayout,omitempty"`
+	PresenterLayout string    `yaml:"presenterLayout" json:"presenterLayout,omitempty"`
+	Recording       Recording `yaml:"recording" json:"recording,omitempty"`
+}
+
+// Recording configures the screen recording the dev TUI can start. Every
+// key is optional; an omitted block leaves the defaults in place.
+type Recording struct {
+	// Output is the directory recordings are written to, relative to the
+	// deck. Empty means "recordings" next to the deck.
+	Output string `yaml:"output" json:"output,omitempty"`
+	// Audio selects the microphone: "default" or empty for the system
+	// default input, "none" for a silent recording, or a CoreAudio device
+	// UID. Names and indexes are not accepted by the recorder.
+	Audio string `yaml:"audio" json:"audio,omitempty"`
+	// WarnAfter is how long a recording runs before the TUI warns about it.
+	WarnAfter string `yaml:"warnAfter" json:"warnAfter,omitempty"`
+	// StopAfter is how long a recording runs before it stops itself. "off"
+	// disables the cap.
+	StopAfter string `yaml:"stopAfter" json:"stopAfter,omitempty"`
+	// Display preselects an entry in the record picker. Zero means the
+	// picker opens on the main display.
+	Display int `yaml:"display" json:"display,omitempty"`
+	// ShowClicks draws mouse clicks in the recording.
+	ShowClicks bool `yaml:"showClicks" json:"showClicks,omitempty"`
+	// Chapters turns off the sidecar chapter list when set to false. Nil
+	// (the key left out) writes the list.
+	Chapters *bool `yaml:"chapters" json:"chapters,omitempty"`
+}
+
+// defaultWarnAfter is when a running recording starts nagging: long enough
+// that no ordinary talk reaches it, short enough to catch one left running
+// through the hallway conversation afterwards.
+const defaultWarnAfter = 90 * time.Minute
+
+// defaultStopAfter bounds a forgotten recording before it fills a disk.
+const defaultStopAfter = 3 * time.Hour
+
+// WarnAfterDuration is how long a recording runs before the TUI warns.
+func (r *Recording) WarnAfterDuration() time.Duration {
+	return parseRecordingDuration(r.WarnAfter, defaultWarnAfter)
+}
+
+// StopAfterDuration is how long a recording runs before it stops itself.
+// Zero means the cap is off.
+func (r *Recording) StopAfterDuration() time.Duration {
+	if strings.EqualFold(strings.TrimSpace(r.StopAfter), "off") {
+		return 0
+	}
+	return parseRecordingDuration(r.StopAfter, defaultStopAfter)
+}
+
+// ChaptersEnabled reports whether the sidecar chapter list is written.
+func (r *Recording) ChaptersEnabled() bool {
+	return r.Chapters == nil || *r.Chapters
+}
+
+// parseRecordingDuration falls back to the default for an empty or
+// unparseable value. Validate is what reports an unparseable one; the
+// accessors stay total so a bad value never stops a recording mid-talk.
+func parseRecordingDuration(value string, fallback time.Duration) time.Duration {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return fallback
+	}
+	parsed, err := time.ParseDuration(value)
+	if err != nil || parsed <= 0 {
+		return fallback
+	}
+	return parsed
 }
 
 // DriverConfig represents the configuration for a code execution driver.
@@ -221,6 +290,29 @@ func (c *Config) Validate() error {
 		if !validThemeColorKeys[key] {
 			return fmt.Errorf("invalid themeColors key %q: must be one of background, text, muted, accent, or codeBg", key)
 		}
+	}
+
+	// Validate recording durations
+	for _, field := range []struct {
+		name  string
+		value string
+	}{
+		{"warnAfter", c.Recording.WarnAfter},
+		{"stopAfter", c.Recording.StopAfter},
+	} {
+		value := strings.TrimSpace(field.value)
+		if value == "" || (field.name == "stopAfter" && strings.EqualFold(value, "off")) {
+			continue
+		}
+		parsed, err := time.ParseDuration(value)
+		if err != nil || parsed <= 0 {
+			return fmt.Errorf("invalid recording.%s %q: must be a positive duration such as 90m or 3h", field.name, field.value)
+		}
+	}
+
+	// Validate recording display
+	if c.Recording.Display < 0 {
+		return fmt.Errorf("invalid recording.display %d: must be 0 or greater", c.Recording.Display)
 	}
 
 	return nil

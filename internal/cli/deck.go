@@ -25,7 +25,7 @@ import (
 // warnings from a successful bundle are returned for the caller to print
 // with printComponentWarningsToStderr.
 func prepareDeck(file string, cfg *config.Config, baseDir string) (*server.Server, *transformer.TransformedPresentation, []layouts.Warning, []components.BuildError, []components.BuildError, error) {
-	pres, warnings, resolvedComponents, componentBuildErrs, err := loadPresentation(file, cfg, baseDir)
+	pres, warnings, resolvedComponents, componentBuildErrs, _, err := loadPresentation(file, cfg, baseDir)
 	if err != nil {
 		return nil, nil, nil, nil, nil, err
 	}

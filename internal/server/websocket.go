@@ -92,6 +92,11 @@ type Client struct {
 // ClientCountCallback is called when the number of connected clients changes.
 type ClientCountCallback func(count int)
 
+// SlideChangeCallback is called with the slide index every time one is
+// broadcast, whatever client moved it. The recorder uses it to build a
+// chapter list; the hub itself knows nothing about recording.
+type SlideChangeCallback func(slideIndex int)
+
 // WebSocketHub manages WebSocket connections and message broadcasting.
 type WebSocketHub struct {
 	clients             map[*Client]bool
@@ -100,6 +105,7 @@ type WebSocketHub struct {
 	unregister          chan *Client
 	done                chan struct{}
 	onClientCountChange ClientCountCallback
+	onSlideChange       SlideChangeCallback
 	// lastSlideState is the most recently broadcast "slide" message. A
 	// client that registers after the talk is underway (a presenter window
 	// opened mid-talk, or a viewer that reconnects) is sent a copy of this,
@@ -482,6 +488,26 @@ func (h *WebSocketHub) notifyClientCountChange() {
 	}
 }
 
+// SetOnSlideChange sets a callback to be called when a slide is broadcast.
+func (h *WebSocketHub) SetOnSlideChange(callback SlideChangeCallback) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.onSlideChange = callback
+}
+
+// CurrentSlide is the slide the deck is on, and whether that is known at
+// all. It is not known before the first slide message, or after the hub has
+// forgotten the state because nobody was connected.
+func (h *WebSocketHub) CurrentSlide() (int, bool) {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+
+	if h.lastSlideState == nil || h.lastSlideState.SlideIndex == nil {
+		return 0, false
+	}
+	return *h.lastSlideState.SlideIndex, true
+}
+
 // Broadcast sends a message to all connected clients. Initial is always
 // cleared first, whether this call originated internally (BroadcastSlide,
 // BroadcastTheme) or from relaying a client's own message (readPump): only
@@ -504,7 +530,15 @@ func (h *WebSocketHub) Broadcast(msg Message) error {
 		stateCopy.Theme = ""
 		h.mu.Lock()
 		h.lastSlideState = &stateCopy
+		callback := h.onSlideChange
 		h.mu.Unlock()
+
+		// The listener runs on its own goroutine: a slow one must not
+		// hold up the broadcast that puts the slide on screen.
+		if callback != nil && stateCopy.SlideIndex != nil {
+			slideIndex := *stateCopy.SlideIndex
+			go callback(slideIndex)
+		}
 	}
 
 	select {

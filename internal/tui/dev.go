@@ -13,6 +13,7 @@ import (
 
 	"github.com/MiniCodeMonkey/tap/internal/config"
 	"github.com/MiniCodeMonkey/tap/internal/gemini"
+	"github.com/MiniCodeMonkey/tap/internal/recorder"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
@@ -36,6 +37,13 @@ type DevConfig struct {
 	// "v2.0.0-beta.2", or "dev" for a local build.
 	Version string
 	Port    int
+	// RecordWarnAfter is how long a recording runs before the TUI warns.
+	RecordWarnAfter time.Duration
+	// RecordStopAfter is how long a recording runs before it stops itself.
+	// Zero means no cap.
+	RecordStopAfter time.Duration
+	// RecordDisplay preselects an entry in the record picker.
+	RecordDisplay int
 }
 
 // DevState holds the current state of the dev server.
@@ -59,6 +67,11 @@ type DevEvent struct {
 // devEventMsg is sent when a new event occurs.
 type devEventMsg struct {
 	event DevEvent
+}
+
+// recordEndedMsg is sent when the recorder stopped without being asked.
+type recordEndedMsg struct {
+	err error
 }
 
 // pdfExportMsg is sent when a PDF export completes.
@@ -87,27 +100,38 @@ type tickMsg struct{}
 
 // DevModel is the Bubble Tea model for the dev server TUI.
 type DevModel struct { //nolint:govet // embedded structs prevent optimal alignment
-	config             DevConfig
-	state              DevState
-	eventsCh           chan DevEvent
-	closeCh            chan struct{}
-	themeBroadcaster   ThemeBroadcaster
-	tunnels            TunnelController
-	tunnelURL          string
-	tunnelQR           string
-	tunnelStarting     bool
-	imageGenModel      *ImageGenModel
-	addModel           *AddModel
-	mu                 sync.RWMutex
-	windowWidth        int
-	windowHeight       int
-	currentTheme       string
-	themePickerIndex   int
-	quitting           bool
-	showThemePicker    bool
-	showImageGenerator bool
-	showSlideBuilder   bool
-	exportingPDF       bool
+	config              DevConfig
+	state               DevState
+	eventsCh            chan DevEvent
+	recordEndedCh       chan error
+	closeCh             chan struct{}
+	themeBroadcaster    ThemeBroadcaster
+	tunnels             TunnelController
+	tunnelURL           string
+	tunnelQR            string
+	tunnelStarting      bool
+	imageGenModel       *ImageGenModel
+	addModel            *AddModel
+	recorders           RecorderController
+	recordDisplays      []recorder.Display
+	recordingPath       string
+	recordingStartedAt  time.Time
+	mu                  sync.RWMutex
+	windowWidth         int
+	windowHeight        int
+	currentTheme        string
+	themePickerIndex    int
+	recordPickerIndex   int
+	quitting            bool
+	showThemePicker     bool
+	showImageGenerator  bool
+	showSlideBuilder    bool
+	exportingPDF        bool
+	recording           bool
+	recordWarned        bool
+	showRecordPicker    bool
+	showQuitConfirm     bool
+	showGitignorePrompt bool
 }
 
 // NewDevModel creates a new DevModel for the dev server TUI.
@@ -135,6 +159,7 @@ func NewDevModel(cfg DevConfig) *DevModel {
 			RecentEvents: make([]DevEvent, 0, 10),
 		},
 		eventsCh:         make(chan DevEvent, 100),
+		recordEndedCh:    make(chan error, 1),
 		closeCh:          make(chan struct{}),
 		currentTheme:     currentTheme,
 		themePickerIndex: themeIndex,
@@ -160,6 +185,8 @@ func (m *DevModel) listenForEvents() tea.Cmd {
 		select {
 		case event := <-m.eventsCh:
 			return devEventMsg{event: event}
+		case err := <-m.recordEndedCh:
+			return recordEndedMsg{err: err}
 		case <-m.closeCh:
 			return nil
 		}
@@ -275,8 +302,21 @@ func (m *DevModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.addEvent(msg.event)
 		return m, m.listenForEvents()
 
+	case recordEndedMsg:
+		m.recording = false
+		m.recordWarned = false
+		m.addEvent(DevEvent{
+			Type:      "error",
+			Message:   "Recording stopped unexpectedly: " + msg.err.Error(),
+			Timestamp: time.Now(),
+		})
+		return m, m.listenForEvents()
+
 	case tunnelMsg:
 		return m.applyTunnelMsg(msg), nil
+
+	case recordMsg:
+		return m.applyRecordMsg(msg), nil
 
 	case wsCountMsg:
 		m.state.WebSocketClients = msg.count
@@ -309,8 +349,8 @@ func (m *DevModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tickMsg:
-		// Periodic tick - just redraw
-		return m, tickCmd()
+		// Periodic tick - redraw, and check on any running recording
+		return m, tea.Batch(tickCmd(), m.recordingTick())
 	}
 
 	return m, nil
@@ -321,6 +361,21 @@ func (m *DevModel) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// Handle theme picker if it's open
 	if m.showThemePicker {
 		return m.handleThemePickerKey(msg)
+	}
+
+	// Handle record picker if it's open
+	if m.showRecordPicker {
+		return m.handleRecordPickerKey(msg)
+	}
+
+	// Handle the quit confirmation if it's open
+	if m.showQuitConfirm {
+		return m.handleQuitConfirmKey(msg)
+	}
+
+	// Handle the .gitignore prompt if it's open
+	if m.showGitignorePrompt {
+		return m.handleGitignoreKey(msg)
 	}
 
 	// Handle image generator if it's open
@@ -334,7 +389,17 @@ func (m *DevModel) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 
 	switch msg.String() {
-	case "q", "ctrl+c":
+	case "q":
+		if m.confirmQuitWhileRecording() {
+			m.showQuitConfirm = true
+			return m, nil
+		}
+		m.quitting = true
+		return m, tea.Quit
+
+	case "ctrl+c":
+		// Not always a deliberate keystroke, and the file must be
+		// finalized either way, so this one never asks.
 		m.quitting = true
 		return m, tea.Quit
 
@@ -393,6 +458,10 @@ func (m *DevModel) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "u":
 		// Start or stop the public tunnel
 		return m.toggleTunnel()
+
+	case "c":
+		// Start or stop a recording of the talk
+		return m.toggleRecording()
 
 	case "t":
 		// Open theme picker
@@ -657,6 +726,16 @@ func (m *DevModel) addEvent(event DevEvent) {
 
 // View implements tea.Model.
 func (m *DevModel) View() string {
+	// Show the quit confirmation if it's open
+	if m.showQuitConfirm {
+		return m.viewQuitConfirm()
+	}
+
+	// Show the .gitignore prompt if it's open
+	if m.showGitignorePrompt {
+		return m.viewGitignorePrompt()
+	}
+
 	if m.quitting {
 		return RenderMuted("Shutting down server...\n")
 	}
@@ -664,6 +743,11 @@ func (m *DevModel) View() string {
 	// Show theme picker overlay if active
 	if m.showThemePicker {
 		return m.viewThemePicker()
+	}
+
+	// Show record picker overlay if active
+	if m.showRecordPicker {
+		return m.viewRecordPicker()
 	}
 
 	// Show image generator overlay if active
@@ -814,6 +898,13 @@ func (m *DevModel) viewStatus() string {
 		b.WriteString(RenderMuted("○ not running"))
 	}
 
+	// Recording
+	if status := m.viewRecordingStatus(); status != "" {
+		b.WriteString("\n")
+		b.WriteString(labelStyle.Render("Recording:"))
+		b.WriteString(RenderError(status))
+	}
+
 	return b.String()
 }
 
@@ -932,19 +1023,27 @@ func (m *DevModel) viewHelp() string {
 		Foreground(ColorPrimary).
 		Bold(true)
 
-	help := fmt.Sprintf(
-		"%s open browser • %s presenter view • %s tunnel • %s theme • %s add slide • %s image • %s export pdf • %s reload • %s quit\n%s in the browser lists its shortcuts",
-		keyStyle.Render("o"),
-		keyStyle.Render("p"),
-		keyStyle.Render("u"),
-		keyStyle.Render("t"),
-		keyStyle.Render("a"),
-		keyStyle.Render("i"),
-		keyStyle.Render("e"),
-		keyStyle.Render("r"),
-		keyStyle.Render("q"),
-		keyStyle.Render("?"),
-	)
+	keys := []string{
+		keyStyle.Render("o") + " open browser",
+		keyStyle.Render("p") + " presenter view",
+		keyStyle.Render("u") + " tunnel",
+		keyStyle.Render("t") + " theme",
+		keyStyle.Render("a") + " add slide",
+		keyStyle.Render("i") + " image",
+		keyStyle.Render("e") + " export pdf",
+		keyStyle.Render("r") + " reload",
+	}
+	if m.recorders != nil && m.recorders.Available() {
+		label := " record"
+		if m.recording {
+			label = " stop recording"
+		}
+		keys = append(keys, keyStyle.Render("c")+label)
+	}
+	keys = append(keys, keyStyle.Render("q")+" quit")
+
+	help := strings.Join(keys, " • ") + "\n" +
+		keyStyle.Render("?") + " in the browser lists its shortcuts"
 
 	return helpStyle.Render(help)
 }
