@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+## [2.0.0-beta.6] - 2026-09-20
+
 ### Added
 
 - **`tap dev --tunnel` puts the deck on a public https URL** - Through a Cloudflare Quick Tunnel, which needs no Cloudflare account, no login and no configuration: `cloudflared` dials out and Cloudflare hands back a random `*.trycloudflare.com` address that lasts as long as the server. Press `u` in the dev terminal to start or stop one mid-session; the URL appears with a QR code to point a phone at. The tunnel's hostname is added to the Host allow-list while it runs and removed when it stops, so nothing else becomes reachable. `cloudflared` has to be installed (`brew install cloudflared`), and `--tunnel` says so plainly when it is not. Anyone with the link can watch the deck, so the terminal says so.
