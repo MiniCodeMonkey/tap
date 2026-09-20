@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestValidate_ValidAspectRatios(t *testing.T) {
@@ -683,5 +684,95 @@ func TestValidate_InvalidPresenterLayout(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "invalid presenterLayout") {
 		t.Errorf("unexpected error text: %v", err)
+	}
+}
+
+func TestRecordingDefaults(t *testing.T) {
+	cfg := DefaultConfig()
+
+	if got := cfg.Recording.WarnAfterDuration(); got != 90*time.Minute {
+		t.Errorf("WarnAfterDuration() = %v, want 90m", got)
+	}
+	if got := cfg.Recording.StopAfterDuration(); got != 3*time.Hour {
+		t.Errorf("StopAfterDuration() = %v, want 3h", got)
+	}
+	if !cfg.Recording.ChaptersEnabled() {
+		t.Error("chapters are off by default, want on")
+	}
+}
+
+func TestRecordingParsesFrontmatter(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "deck.md")
+	content := `---
+title: My Talk
+recording:
+  output: ./captures
+  audio: BuiltInMicrophoneDevice
+  display: 2
+  showClicks: true
+  chapters: false
+  warnAfter: 45m
+  stopAfter: 90m
+---
+
+# Slide
+`
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load() returned %v", err)
+	}
+
+	if cfg.Recording.Output != "./captures" {
+		t.Errorf("Output = %q, want ./captures", cfg.Recording.Output)
+	}
+	if cfg.Recording.Audio != "BuiltInMicrophoneDevice" {
+		t.Errorf("Audio = %q, want BuiltInMicrophoneDevice", cfg.Recording.Audio)
+	}
+	if cfg.Recording.Display != 2 {
+		t.Errorf("Display = %d, want 2", cfg.Recording.Display)
+	}
+	if !cfg.Recording.ShowClicks {
+		t.Error("ShowClicks is false, want true")
+	}
+	if cfg.Recording.ChaptersEnabled() {
+		t.Error("chapters are on, want off")
+	}
+	if got := cfg.Recording.WarnAfterDuration(); got != 45*time.Minute {
+		t.Errorf("WarnAfterDuration() = %v, want 45m", got)
+	}
+	if got := cfg.Recording.StopAfterDuration(); got != 90*time.Minute {
+		t.Errorf("StopAfterDuration() = %v, want 90m", got)
+	}
+}
+
+func TestRecordingStopAfterOffDisablesTheCap(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Recording.StopAfter = "off"
+
+	if got := cfg.Recording.StopAfterDuration(); got != 0 {
+		t.Errorf("StopAfterDuration() = %v, want 0 for \"off\"", got)
+	}
+}
+
+func TestRecordingRejectsUnparseableDuration(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Recording.WarnAfter = "soon"
+
+	if err := cfg.Validate(); err == nil {
+		t.Fatal("Validate() accepted warnAfter \"soon\", want an error")
+	}
+}
+
+func TestRecordingRejectsNegativeDisplay(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Recording.Display = -1
+
+	if err := cfg.Validate(); err == nil {
+		t.Fatal("Validate() accepted display -1, want an error")
 	}
 }
