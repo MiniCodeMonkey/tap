@@ -51,14 +51,19 @@ type recordControllerOptions struct {
 type recordController struct {
 	options recordControllerOptions
 
-	mu       sync.Mutex
-	session  *recorder.Session
-	chapters *recorder.Chapters
+	mu          sync.Mutex
+	session     *recorder.Session
+	chapters    *recorder.Chapters
+	chapterPath string
 	// lastResult is the most recent finished recording, so a later Stop
 	// from the shutdown path can still say where the file went. The TUI's
 	// quit confirmation stops the recorder itself and then exits, which
 	// would otherwise leave nobody holding the path.
 	lastResult recorder.Result
+	// testCapturePaths are the temp-directory files Test has written this
+	// run, so Close can remove them: the spec promises they do not outlive
+	// the TUI.
+	testCapturePaths []string
 }
 
 // newRecordController builds the controller the TUI drives.
@@ -124,10 +129,16 @@ func (c *recordController) Start(display int) (string, error) {
 
 	if c.options.Chapters {
 		c.chapters = recorder.NewChapters(startedAt)
+		// The chapter path is known now, not just at Stop, so every Add
+		// below can write the whole list straight away: if screencapture
+		// dies mid-talk, the sidecar file on disk is never more than one
+		// slide change stale.
+		c.chapterPath = recorder.ChapterPath(path)
 		// Whatever is on screen when recording starts is the first
 		// chapter, so a recording begun mid-deck still labels its opening.
 		if slideIndex, known := c.currentSlide(); known {
 			c.chapters.Add(startedAt, slideIndex, c.titleFor(slideIndex))
+			_ = c.chapters.WriteTo(c.chapterPath)
 		}
 	}
 
@@ -139,8 +150,20 @@ func (c *recordController) Start(display int) (string, error) {
 
 		c.mu.Lock()
 		current := c.session == session
+		var result recorder.Result
 		if current {
-			c.session, c.chapters = nil, nil
+			chapterPath := c.chapterPath
+			c.session, c.chapters, c.chapterPath = nil, nil, ""
+			result = recorder.Result{
+				Path:        session.Path(),
+				ChapterPath: chapterPath,
+				Duration:    session.Elapsed(),
+				Truncated:   true,
+			}
+			if info, statErr := os.Stat(session.Path()); statErr == nil {
+				result.Size = info.Size()
+			}
+			c.lastResult = result
 		}
 		c.mu.Unlock()
 
@@ -165,7 +188,7 @@ func (c *recordController) Start(display int) (string, error) {
 func (c *recordController) Stop() (recorder.Result, error) {
 	c.mu.Lock()
 	session, chapters := c.session, c.chapters
-	c.session, c.chapters = nil, nil
+	c.session, c.chapters, c.chapterPath = nil, nil, ""
 	lastResult := c.lastResult
 	c.mu.Unlock()
 
@@ -221,12 +244,32 @@ func (c *recordController) Test(display int) error {
 func (c *recordController) NoteSlideChange(slideIndex int) {
 	c.mu.Lock()
 	chapters := c.chapters
+	chapterPath := c.chapterPath
 	c.mu.Unlock()
 
 	if chapters == nil {
 		return
 	}
 	chapters.Add(time.Now(), slideIndex, c.titleFor(slideIndex))
+	// Written on every change, not just at Stop, so a crash mid-talk
+	// leaves a chapter list current to the last slide shown rather than
+	// none at all.
+	if chapterPath != "" {
+		_ = chapters.WriteTo(chapterPath)
+	}
+}
+
+// Close removes any test captures made during this run. It is safe to call
+// even when Test was never used.
+func (c *recordController) Close() {
+	c.mu.Lock()
+	paths := c.testCapturePaths
+	c.testCapturePaths = nil
+	c.mu.Unlock()
+
+	for _, path := range paths {
+		_ = os.Remove(path)
+	}
 }
 
 // recorderOptions builds the options for one capture.

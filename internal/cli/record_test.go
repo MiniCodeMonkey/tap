@@ -267,6 +267,51 @@ func TestControllerDoesNotReportAnOrdinaryStop(t *testing.T) {
 	}
 }
 
+func TestControllerCrashSetsLastResultWithTheChapterPath(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "recordings")
+
+	quitter := filepath.Join(t.TempDir(), "quitting-recorder")
+	if err := os.WriteFile(quitter, []byte("#!/bin/sh\nexit 3\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	died := make(chan error, 1)
+	controller := newRecordController(recordControllerOptions{
+		DeckTitle:        "My Talk",
+		OutputDir:        dir,
+		Chapters:         true,
+		CommandName:      quitter,
+		CurrentSlide:     func() (int, bool) { return 0, true },
+		TitleFor:         func(int) string { return "Title" },
+		OpenFile:         func(string) error { return nil },
+		OnUnexpectedExit: func(err error) { died <- err },
+	})
+
+	if _, err := controller.Start(1); err != nil {
+		t.Fatalf("Start() returned %v", err)
+	}
+
+	select {
+	case <-died:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the controller never reported the recorder exiting")
+	}
+
+	// The crash happened well before anyone called Stop, so the next Stop
+	// (runDevServer's deferred one, say) must still be able to say where
+	// the file and its chapter list went.
+	result, err := controller.Stop()
+	if err != nil {
+		t.Fatalf("Stop() after a crash returned %v", err)
+	}
+	if result.Path == "" {
+		t.Error("Stop() after a crash returned no path")
+	}
+	if result.ChapterPath == "" {
+		t.Error("Stop() after a crash returned no chapter path, so the crash summary prints nothing")
+	}
+}
+
 func TestGitignoreEntryFollowsTheOutputDirectory(t *testing.T) {
 	root := gitRepo(t)
 	controller := testController(t, filepath.Join(root, "captures"), func() (int, bool) { return 0, true })
