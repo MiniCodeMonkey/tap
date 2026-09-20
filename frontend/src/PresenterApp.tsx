@@ -50,6 +50,16 @@ import { ShortcutHelp } from '$lib/components/ShortcutHelp';
 import { PresenterLayoutMenu } from '$lib/components/PresenterLayoutMenu';
 import { usePresenterLayout } from '$lib/hooks/usePresenterLayout';
 import { useFitText } from '$lib/hooks/useFitText';
+import {
+	NOTES_FIT_MAX_SIZE,
+	NOTES_FIT_MIN_SIZE,
+	NOTES_FIT_SCALE_MAX,
+	NOTES_FIT_SCALE_MIN,
+	NOTES_FIT_SCALE_STEP,
+	clampFitScale,
+	readStoredFitScale,
+	writeStoredFitScale
+} from '$lib/utils/fitText';
 import { HELP_KEY, PRESENTER_SHORTCUTS } from '$lib/utils/shortcuts';
 
 /** True when exported to PDF via the "both" content option (`/presenter?print=true`). */
@@ -122,6 +132,9 @@ export default function PresenterApp() {
 	const helpOpenRef = useRef(helpOpen);
 	helpOpenRef.current = helpOpen;
 	const [notesFontSize, setNotesFontSize] = useState(readNotesFontSize);
+	// In fit mode the size comes from the panel, and this scales that result:
+	// A- and A+ ask for a notch smaller rather than an absolute size.
+	const [notesFitScale, setNotesFitScale] = useState(readStoredFitScale);
 	const [layoutMenuOpen, setLayoutMenuOpen] = useState(false);
 	const layoutMenuOpenRef = useRef(layoutMenuOpen);
 	layoutMenuOpenRef.current = layoutMenuOpen;
@@ -144,6 +157,8 @@ export default function PresenterApp() {
 	// state through a ref rather than through its closure.
 	const presenterLayoutRef = useRef(presenterLayout);
 	presenterLayoutRef.current = presenterLayout;
+	const notesSizeModeRef = useRef(notesSizeMode);
+	notesSizeModeRef.current = notesSizeMode;
 
 	const showCurrentSlide = layout !== 'notes-only';
 	const showNextSlide = layout !== 'slide-only' && layout !== 'notes-only';
@@ -162,11 +177,19 @@ export default function PresenterApp() {
 	const fittedNotesFontSize = useFitText({
 		enabled: notesSizeMode === 'fit',
 		elementRef: notesContentRef,
-		capSize: notesFontSize,
-		minSize: NOTES_FONT_SIZE_MIN,
+		capSize: NOTES_FIT_MAX_SIZE,
+		minSize: NOTES_FIT_MIN_SIZE,
 		step: NOTES_FONT_SIZE_STEP,
 		contentKey: `${currentSlide?.index ?? -1}:${layout}`
 	});
+
+	const fitting = notesSizeMode === 'fit';
+	const activeNotesSize = fitting ? notesFitScale : notesFontSize;
+	const activeNotesSizeMin = fitting ? NOTES_FIT_SCALE_MIN : NOTES_FONT_SIZE_MIN;
+	const activeNotesSizeMax = fitting ? NOTES_FIT_SCALE_MAX : NOTES_FONT_SIZE_MAX;
+	const appliedNotesFontSize = fitting
+		? Math.max(NOTES_FIT_MIN_SIZE, fittedNotesFontSize * notesFitScale)
+		: notesFontSize;
 
 	const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -184,7 +207,18 @@ export default function PresenterApp() {
 		broadcastPresentationState();
 	}
 
+	// A- and A+ move whichever size is in play: the size read at in manual
+	// mode, the ceiling fitting may grow to in fit mode.
 	function changeNotesFontSize(delta: number): void {
+		if (notesSizeModeRef.current === 'fit') {
+			const step = delta < 0 ? -NOTES_FIT_SCALE_STEP : NOTES_FIT_SCALE_STEP;
+			setNotesFitScale((scale) => {
+				const next = clampFitScale(scale + step);
+				writeStoredFitScale(next);
+				return next;
+			});
+			return;
+		}
 		setNotesFontSize((size) => {
 			const next = clampNotesFontSize(size + delta);
 			writeNotesFontSize(next);
@@ -496,7 +530,7 @@ export default function PresenterApp() {
 										type="button"
 										className="presenter-notes-font-button"
 										onClick={() => changeNotesFontSize(-NOTES_FONT_SIZE_STEP)}
-										disabled={notesFontSize <= NOTES_FONT_SIZE_MIN}
+										disabled={activeNotesSize <= activeNotesSizeMin}
 										aria-label="Smaller speaker notes"
 										title="Smaller notes (-)"
 									>
@@ -506,7 +540,7 @@ export default function PresenterApp() {
 										type="button"
 										className="presenter-notes-font-button"
 										onClick={() => changeNotesFontSize(NOTES_FONT_SIZE_STEP)}
-										disabled={notesFontSize >= NOTES_FONT_SIZE_MAX}
+										disabled={activeNotesSize >= activeNotesSizeMax}
 										aria-label="Larger speaker notes"
 										title="Larger notes (=)"
 									>
@@ -517,7 +551,7 @@ export default function PresenterApp() {
 							<div
 								className="presenter-notes-content"
 								ref={notesContentRef}
-								style={{ fontSize: `${fittedNotesFontSize}rem` }}
+								style={{ fontSize: `${appliedNotesFontSize}rem` }}
 							>
 								{currentSlide.notes ? (
 									<div dangerouslySetInnerHTML={{ __html: currentSlide.notes }} />

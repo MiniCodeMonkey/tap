@@ -1,5 +1,13 @@
-import { describe, expect, it, vi } from 'vitest';
-import { findFittingSize } from './fitText';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import {
+	NOTES_FIT_MAX_SIZE,
+	NOTES_FIT_SCALE_MAX,
+	NOTES_FIT_SCALE_MIN,
+	clampFitScale,
+	findFittingSize,
+	readStoredFitScale,
+	writeStoredFitScale
+} from './fitText';
 
 const BOUNDS = { minSize: 1, maxSize: 3, step: 0.125 };
 
@@ -31,5 +39,32 @@ describe('findFittingSize', () => {
 	it('returns the floor when the bounds are inverted or equal', () => {
 		expect(findFittingSize({ minSize: 2, maxSize: 2, step: 0.125, fits: () => true })).toBe(2);
 		expect(findFittingSize({ minSize: 2, maxSize: 1, step: 0.125, fits: () => true })).toBe(2);
+	});
+});
+
+afterEach(() => {
+	window.localStorage.clear();
+});
+
+describe('fitting bounds and scale', () => {
+	it('searches well past the manual reading size, which tops out at 3rem', () => {
+		expect(NOTES_FIT_MAX_SIZE).toBeGreaterThan(3);
+	});
+
+	it('starts at full size', () => {
+		expect(readStoredFitScale()).toBe(NOTES_FIT_SCALE_MAX);
+	});
+
+	it('clamps a scale to the allowed range and to one decimal', () => {
+		expect(clampFitScale(0.1)).toBe(NOTES_FIT_SCALE_MIN);
+		expect(clampFitScale(3)).toBe(NOTES_FIT_SCALE_MAX);
+		expect(clampFitScale(0.7000000000000001)).toBe(0.7);
+	});
+
+	it('round-trips through localStorage and ignores junk', () => {
+		writeStoredFitScale(0.8);
+		expect(readStoredFitScale()).toBe(0.8);
+		window.localStorage.setItem('tap-presenter-notes-fit-scale', 'small');
+		expect(readStoredFitScale()).toBe(NOTES_FIT_SCALE_MAX);
 	});
 });

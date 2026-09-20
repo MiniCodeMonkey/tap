@@ -414,4 +414,53 @@ describe('PresenterApp', () => {
 			expect(container.querySelector('.presenter-notes-panel')).toBeInTheDocument();
 		});
 	});
+	describe('fitting the speaker notes', () => {
+		function notesFontSize(container: HTMLElement): string {
+			const notes = container.querySelector('.presenter-notes-content') as HTMLElement;
+			return notes.style.fontSize;
+		}
+
+		it('lets fitting grow past the manual reading size', async () => {
+			// jsdom lays nothing out, so the panel measures as zero height and
+			// the hook falls back to its ceiling. That makes the ceiling
+			// observable: it must be larger than the 3rem manual maximum.
+			window.localStorage.setItem('tap-presenter-notes-size-mode', 'fit');
+			const { container } = render(<PresenterApp />);
+			await waitFor(() => expect(container.querySelector('.presenter-notes-content')).toBeInTheDocument());
+			expect(notesFontSize(container)).toBe('6rem');
+		});
+
+		it('scales the fitted size with - and =, leaving the manual size alone', async () => {
+			window.localStorage.setItem('tap-presenter-notes-size-mode', 'fit');
+			const { container } = render(<PresenterApp />);
+			await waitFor(() => expect(container.querySelector('.presenter-notes-content')).toBeInTheDocument());
+
+			fireEvent.keyDown(window, { key: '-' });
+
+			expect(notesFontSize(container)).toBe('5.4rem');
+			expect(window.localStorage.getItem('tap-presenter-notes-fit-scale')).toBe('0.9');
+			expect(window.localStorage.getItem('tap-presenter-notes-font-size')).toBeNull();
+		});
+
+		it('never scales above the fitted size, and stops at half', async () => {
+			window.localStorage.setItem('tap-presenter-notes-size-mode', 'fit');
+			const { container } = render(<PresenterApp />);
+			await waitFor(() => expect(container.querySelector('.presenter-notes-content')).toBeInTheDocument());
+
+			fireEvent.keyDown(window, { key: '=' });
+			expect(notesFontSize(container)).toBe('6rem');
+
+			for (let press = 0; press < 10; press++) {
+				fireEvent.keyDown(window, { key: '-' });
+			}
+			expect(window.localStorage.getItem('tap-presenter-notes-fit-scale')).toBe('0.5');
+			expect(notesFontSize(container)).toBe('3rem');
+		});
+
+		it('keeps using the manual size when fitting is off', async () => {
+			const { container } = render(<PresenterApp />);
+			await waitFor(() => expect(container.querySelector('.presenter-notes-content')).toBeInTheDocument());
+			expect(notesFontSize(container)).toBe('1.5rem');
+		});
+	});
 });

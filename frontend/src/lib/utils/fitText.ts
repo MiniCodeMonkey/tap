@@ -39,3 +39,49 @@ export function findFittingSize({ minSize, maxSize, step, fits }: FitTextOptions
 	}
 	return sizeAt(low);
 }
+
+/**
+ * Bounds for fitting, and the scale applied to the result.
+ *
+ * Fitting searches up to NOTES_FIT_MAX_SIZE rather than the manual reading
+ * size: the manual size answers "how big do I want to read" and tops out at
+ * 3rem, while fitting has to be free to fill a notes-first panel across a
+ * laptop screen.
+ *
+ * A- and A+ then scale that result rather than moving a ceiling. A ceiling
+ * would do nothing until it dropped below the size the current slide already
+ * fits at, and it would mean different things on a slide with two lines of
+ * notes and one with twenty. A scale is a notch smaller everywhere.
+ */
+export const NOTES_FIT_MIN_SIZE = 1;
+export const NOTES_FIT_MAX_SIZE = 6;
+export const NOTES_FIT_SCALE_MIN = 0.5;
+export const NOTES_FIT_SCALE_MAX = 1;
+export const NOTES_FIT_SCALE_STEP = 0.1;
+export const NOTES_FIT_SCALE_STORAGE_KEY = 'tap-presenter-notes-fit-scale';
+
+export function clampFitScale(scale: number): number {
+	const bounded = Math.min(NOTES_FIT_SCALE_MAX, Math.max(NOTES_FIT_SCALE_MIN, scale));
+	// Stepping by 0.1 accumulates float noise; one decimal is the resolution.
+	return Math.round(bounded * 10) / 10;
+}
+
+export function readStoredFitScale(): number {
+	try {
+		const stored = Number.parseFloat(
+			window.localStorage.getItem(NOTES_FIT_SCALE_STORAGE_KEY) ?? ''
+		);
+		return Number.isFinite(stored) ? clampFitScale(stored) : NOTES_FIT_SCALE_MAX;
+	} catch {
+		// Storage can be unavailable (private window, blocked site data).
+		return NOTES_FIT_SCALE_MAX;
+	}
+}
+
+export function writeStoredFitScale(scale: number): void {
+	try {
+		window.localStorage.setItem(NOTES_FIT_SCALE_STORAGE_KEY, String(scale));
+	} catch {
+		// The scale then lasts only until reload.
+	}
+}

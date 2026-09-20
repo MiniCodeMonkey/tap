@@ -132,11 +132,12 @@ The notes size control in the layout menu offers two ways to size them:
 
 - **Manual** - one size for the whole deck, the one **-** and **=** set.
   This is the default.
-- **Fit to panel** - each slide's notes are scaled to fill the panel
-  without scrolling, between 1rem and whatever the manual size is. In this
-  mode **-** and **=** move that upper limit, so you can still ask for
-  everything a notch smaller. Notes too long to fit even at 1rem stay at
-  1rem and scroll.
+- **Fit to panel** - each slide's notes are sized to fill the panel without
+  scrolling, up to 6rem. A slide with two lines of notes gets much larger
+  text than one with twenty. In this mode **-** and **=** scale that result
+  down to as little as half and back up again, so you can ask for everything
+  a notch smaller without giving up the fitting. Notes too long to fit even
+  at 1rem stay at 1rem and scroll.
 
 Add `?notesSize=fit` to the presenter URL to turn fitting on for one
 session without saving it.
@@ -325,7 +326,7 @@ In the presenter view:
 | **Left**, **Up**, **Backspace**, **PageUp** | Previous fragment or step, then previous slide |
 | **Home** / **End** | First / last slide |
 | **R** | Reset timer |
-| **-** / **=** | Smaller / larger speaker notes, or the fitting limit |
+| **-** / **=** | Smaller / larger speaker notes, or the fitting scale |
 | **V** | Next presenter layout |
 | **1** to **5** | Pick a layout, while the layout menu is open |
 | **?** | Show or hide the list of shortcuts |
