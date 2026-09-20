@@ -43,6 +43,7 @@ const samplePresentation: Presentation = {
 describe('PresenterApp', () => {
 	beforeEach(() => {
 		resetPresentation();
+		window.localStorage.clear();
 		vi.stubGlobal(
 			'fetch',
 			vi.fn(() =>
@@ -349,6 +350,68 @@ describe('PresenterApp', () => {
 			fireEvent.keyDown(window, { key: '=' });
 			expect(notesFontSize(container)).toBe('1.625rem');
 			vi.restoreAllMocks();
+		});
+	});
+	describe('layouts', () => {
+		it('opens in the standard layout and shows every panel', async () => {
+			const { container } = render(<PresenterApp />);
+			await waitFor(() => expect(container.querySelector('.presenter-view')).toBeInTheDocument());
+			expect(container.querySelector('.presenter-view')?.getAttribute('data-presenter-layout')).toBe(
+				'standard'
+			);
+			expect(container.querySelector('.presenter-current-slide-panel')).toBeInTheDocument();
+			expect(container.querySelector('.presenter-next-slide-panel')).toBeInTheDocument();
+			expect(container.querySelector('.presenter-notes-panel')).toBeInTheDocument();
+		});
+
+		it('cycles the layout with the V key', async () => {
+			const { container } = render(<PresenterApp />);
+			await waitFor(() => expect(container.querySelector('.presenter-view')).toBeInTheDocument());
+
+			fireEvent.keyDown(window, { key: 'v' });
+
+			await waitFor(() =>
+				expect(
+					container.querySelector('.presenter-view')?.getAttribute('data-presenter-layout')
+				).toBe('notes-first')
+			);
+		});
+
+		it('ignores digits while the layout menu is closed', async () => {
+			const { container } = render(<PresenterApp />);
+			await waitFor(() => expect(container.querySelector('.presenter-view')).toBeInTheDocument());
+
+			fireEvent.keyDown(window, { key: '5' });
+
+			expect(container.querySelector('.presenter-view')?.getAttribute('data-presenter-layout')).toBe(
+				'standard'
+			);
+		});
+
+		it('drops the notes and next panels in the slide-only layout', async () => {
+			window.localStorage.setItem('tap-presenter-layout', 'slide-only');
+			const { container } = render(<PresenterApp />);
+			await waitFor(() =>
+				expect(
+					container.querySelector('.presenter-view')?.getAttribute('data-presenter-layout')
+				).toBe('slide-only')
+			);
+			expect(container.querySelector('.presenter-current-slide-panel')).toBeInTheDocument();
+			expect(container.querySelector('.presenter-next-slide-panel')).toBeNull();
+			expect(container.querySelector('.presenter-notes-panel')).toBeNull();
+		});
+
+		it('drops the slide panels in the notes-only layout', async () => {
+			window.localStorage.setItem('tap-presenter-layout', 'notes-only');
+			const { container } = render(<PresenterApp />);
+			await waitFor(() =>
+				expect(
+					container.querySelector('.presenter-view')?.getAttribute('data-presenter-layout')
+				).toBe('notes-only')
+			);
+			expect(container.querySelector('.presenter-current-slide-panel')).toBeNull();
+			expect(container.querySelector('.presenter-next-slide-panel')).toBeNull();
+			expect(container.querySelector('.presenter-notes-panel')).toBeInTheDocument();
 		});
 	});
 });

@@ -47,6 +47,9 @@ import { setupWakeLock } from '$lib/utils/wakeLock';
 import { SlideCanvas } from '$lib/components/SlideCanvas';
 import { Slide } from '$lib/components/Slide';
 import { ShortcutHelp } from '$lib/components/ShortcutHelp';
+import { PresenterLayoutMenu } from '$lib/components/PresenterLayoutMenu';
+import { usePresenterLayout } from '$lib/hooks/usePresenterLayout';
+import { useFitText } from '$lib/hooks/useFitText';
 import { HELP_KEY, PRESENTER_SHORTCUTS } from '$lib/utils/shortcuts';
 
 /** True when exported to PDF via the "both" content option (`/presenter?print=true`). */
@@ -119,6 +122,10 @@ export default function PresenterApp() {
 	const helpOpenRef = useRef(helpOpen);
 	helpOpenRef.current = helpOpen;
 	const [notesFontSize, setNotesFontSize] = useState(readNotesFontSize);
+	const [layoutMenuOpen, setLayoutMenuOpen] = useState(false);
+	const layoutMenuOpenRef = useRef(layoutMenuOpen);
+	layoutMenuOpenRef.current = layoutMenuOpen;
+	const notesContentRef = useRef<HTMLDivElement | null>(null);
 
 	const presentation = usePresentationStore((state) => state.presentation);
 	const currentSlide = usePresentationStore(selectCurrentSlide);
@@ -130,6 +137,18 @@ export default function PresenterApp() {
 	const scrollTriggerCount = usePresentationStore((state) => state.scrollTriggerCount);
 	const connected = useConnectionStore((state) => state.connected);
 
+	const presenterLayout = usePresenterLayout(presentation?.config?.presenterLayout);
+	const { layout, notesSizeMode } = presenterLayout;
+
+	// The keyboard handler is installed once, so it reaches the current layout
+	// state through a ref rather than through its closure.
+	const presenterLayoutRef = useRef(presenterLayout);
+	presenterLayoutRef.current = presenterLayout;
+
+	const showCurrentSlide = layout !== 'notes-only';
+	const showNextSlide = layout !== 'slide-only' && layout !== 'notes-only';
+	const showNotes = layout !== 'slide-only';
+
 	const resolvedTheme = useResolvedTheme();
 	const theme = resolvedTheme?.slug ?? 'base';
 	const aspectRatio = presentation?.config?.aspectRatio ?? '16:9';
@@ -139,6 +158,15 @@ export default function PresenterApp() {
 			? presentation.slides[currentSlideIndex + 1]
 			: null;
 	const fragmentCount = currentSlide?.fragmentCount ?? 0;
+
+	const fittedNotesFontSize = useFitText({
+		enabled: notesSizeMode === 'fit',
+		elementRef: notesContentRef,
+		capSize: notesFontSize,
+		minSize: NOTES_FONT_SIZE_MIN,
+		step: NOTES_FONT_SIZE_STEP,
+		contentKey: `${currentSlide?.index ?? -1}:${layout}`
+	});
 
 	const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -204,6 +232,13 @@ export default function PresenterApp() {
 		function handleKeyDown(event: KeyboardEvent): void {
 			if (isInputFocused()) return;
 
+			// Escape closes the layout menu before anything else looks at the key.
+			if (layoutMenuOpenRef.current && event.key === 'Escape') {
+				event.preventDefault();
+				setLayoutMenuOpen(false);
+				return;
+			}
+
 			// While the shortcut overlay is open, only ? and Escape reach it
 			// (to close it); every other key is ignored.
 			if (helpOpenRef.current) {
@@ -263,6 +298,27 @@ export default function PresenterApp() {
 					event.preventDefault();
 					changeNotesFontSize(NOTES_FONT_SIZE_STEP);
 					break;
+				case 'v':
+				case 'V':
+					event.preventDefault();
+					presenterLayoutRef.current.cycleLayout();
+					break;
+				case '1':
+				case '2':
+				case '3':
+				case '4':
+				case '5': {
+					// Digits pick a layout only while the menu is open, leaving them
+					// free for jumping to a slide by number.
+					if (!layoutMenuOpenRef.current) break;
+					event.preventDefault();
+					const chosen = presenterLayoutRef.current.availableLayouts[Number(event.key) - 1];
+					if (chosen) {
+						presenterLayoutRef.current.setLayout(chosen.id);
+						setLayoutMenuOpen(false);
+					}
+					break;
+				}
 			}
 		}
 
@@ -333,7 +389,7 @@ export default function PresenterApp() {
 		);
 	} else {
 		content = (
-			<div className="presenter-view">
+			<div className="presenter-view" data-presenter-layout={layout} data-notes-size={notesSizeMode}>
 				<header className="presenter-header">
 					<div className="presenter-slide-counter">
 						<span className="current">{currentSlideIndex + 1}</span>
@@ -355,6 +411,17 @@ export default function PresenterApp() {
 						{formatTime(elapsedSeconds)}
 					</button>
 
+					<PresenterLayoutMenu
+						layout={presenterLayout.layout}
+						availableLayouts={presenterLayout.availableLayouts}
+						onSelectLayout={presenterLayout.setLayout}
+						notesSizeMode={presenterLayout.notesSizeMode}
+						onSelectNotesSizeMode={presenterLayout.setNotesSizeMode}
+						isNarrow={presenterLayout.isNarrow}
+						isOpen={layoutMenuOpen}
+						onOpenChange={setLayoutMenuOpen}
+					/>
+
 					{/*
 					 * Scanning the dev server's QR code lands here, on the
 					 * notes and the controls. This is the way back out to the
@@ -374,28 +441,30 @@ export default function PresenterApp() {
 					className="presenter-main"
 					style={{ ['--presenter-aspect-ratio' as string]: cssAspectRatio(aspectRatio) }}
 				>
-					<div className="presenter-current-slide-panel">
-						<h2 className="presenter-panel-title">Current Slide{currentSlide.scroll ? ' (Scroll)' : ''}</h2>
-						<div className="presenter-slide-preview current">
-							<SlideCanvas aspectRatio={aspectRatio} theme={theme} printMode={PRINT_MODE}>
-								<Slide
-									key={currentSlide.index}
-									slide={currentSlide}
-									active
-									printMode={PRINT_MODE}
-									fragmentIndex={PRINT_MODE ? currentSlide.fragmentCount : currentFragmentIndex}
-									step={PRINT_MODE ? currentSlide.steps : currentStep}
-									total={totalSlides}
-									scrollRevealed={scrollRevealed}
-									scrollTriggerCount={scrollTriggerCount}
-									mermaidOverrides={resolvedTheme?.mermaid}
-								/>
-							</SlideCanvas>
-						</div>
-					</div>
+					{showCurrentSlide ? (
+						<section className="presenter-current-slide-panel">
+							<h2 className="presenter-panel-title">Current Slide{currentSlide.scroll ? ' (Scroll)' : ''}</h2>
+							<div className="presenter-slide-preview current">
+								<SlideCanvas aspectRatio={aspectRatio} theme={theme} printMode={PRINT_MODE}>
+									<Slide
+										key={currentSlide.index}
+										slide={currentSlide}
+										active
+										printMode={PRINT_MODE}
+										fragmentIndex={PRINT_MODE ? currentSlide.fragmentCount : currentFragmentIndex}
+										step={PRINT_MODE ? currentSlide.steps : currentStep}
+										total={totalSlides}
+										scrollRevealed={scrollRevealed}
+										scrollTriggerCount={scrollTriggerCount}
+										mermaidOverrides={resolvedTheme?.mermaid}
+									/>
+								</SlideCanvas>
+							</div>
+						</section>
+					) : null}
 
-					<div className="presenter-side">
-						<div className="presenter-next-slide-panel">
+					{showNextSlide ? (
+						<section className="presenter-next-slide-panel">
 							<h2 className="presenter-panel-title">Next Slide</h2>
 							<div className="presenter-slide-preview next">
 								{nextSlideData ? (
@@ -415,9 +484,11 @@ export default function PresenterApp() {
 									<div className="presenter-end-placeholder">End of Presentation</div>
 								)}
 							</div>
-						</div>
+						</section>
+					) : null}
 
-						<div className={`presenter-notes-panel${currentSlide.notes ? ' has-notes' : ''}`}>
+					{showNotes ? (
+						<section className={`presenter-notes-panel${currentSlide.notes ? ' has-notes' : ''}`}>
 							<div className="presenter-notes-header">
 								<h2 className="presenter-panel-title">Speaker Notes</h2>
 								<div className="presenter-notes-font-controls">
@@ -443,15 +514,19 @@ export default function PresenterApp() {
 									</button>
 								</div>
 							</div>
-							<div className="presenter-notes-content" style={{ fontSize: `${notesFontSize}rem` }}>
+							<div
+								className="presenter-notes-content"
+								ref={notesContentRef}
+								style={{ fontSize: `${fittedNotesFontSize}rem` }}
+							>
 								{currentSlide.notes ? (
 									<div dangerouslySetInnerHTML={{ __html: currentSlide.notes }} />
 								) : (
 									<p className="presenter-no-notes">No speaker notes for this slide.</p>
 								)}
 							</div>
-						</div>
-					</div>
+						</section>
+					) : null}
 				</main>
 
 				<footer className="presenter-controls">

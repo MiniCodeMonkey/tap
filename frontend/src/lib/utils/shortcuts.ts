@@ -64,5 +64,12 @@ export const PRESENTER_SHORTCUTS: ShortcutGroup[] = [
 			{ keys: ['?'], action: 'Show or hide these shortcuts' },
 			{ keys: ['Esc'], action: 'Close this list' }
 		]
+	},
+	{
+		title: 'Layout',
+		shortcuts: [
+			{ keys: ['V'], action: 'Next presenter layout' },
+			{ keys: ['1', '2', '3', '4', '5'], action: 'Pick a layout while the layout menu is open' }
+		]
 	}
 ];
