@@ -23,6 +23,7 @@ import {
 import { setupKeyboardNavigation } from '$lib/utils/keyboard';
 import { setupTouchNavigation } from '$lib/utils/touch';
 import { setupCursorAutoHide } from '$lib/utils/cursor';
+import { setupWakeLock } from '$lib/utils/wakeLock';
 import { fetchPresentation } from '$lib/utils/fetchPresentation';
 import { SlideCanvas } from '$lib/components/SlideCanvas';
 import { Slide } from '$lib/components/Slide';
@@ -154,6 +155,11 @@ export default function App() {
 				setSwipe((previous) => ({ direction, moved, nonce: previous.nonce + 1 }))
 		});
 
+		// A deck is watched, not touched, so the screen would otherwise dim
+		// and lock partway through a slide. Not during a capture, which has
+		// no screen to keep awake.
+		const wakeLock = PRINT_MODE || CAPTURE_MODE ? { release: () => {} } : setupWakeLock();
+
 		// Presenting fullscreen on a TV: the pointer hides once it sits still.
 		// Never during a capture, which must not depend on pointer state.
 		const cursorCleanup =
@@ -180,6 +186,7 @@ export default function App() {
 			keyboardCleanup();
 			touchCleanup();
 			cursorCleanup();
+			wakeLock.release();
 			disconnectWebSocket();
 		};
 	}, []);

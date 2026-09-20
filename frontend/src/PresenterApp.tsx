@@ -43,6 +43,7 @@ import {
 	useConnectionStore
 } from '$lib/stores/websocket';
 import { fetchPresentation } from '$lib/utils/fetchPresentation';
+import { setupWakeLock } from '$lib/utils/wakeLock';
 import { SlideCanvas } from '$lib/components/SlideCanvas';
 import { Slide } from '$lib/components/Slide';
 import { ShortcutHelp } from '$lib/components/ShortcutHelp';
@@ -140,7 +141,6 @@ export default function PresenterApp() {
 	const fragmentCount = currentSlide?.fragmentCount ?? 0;
 
 	const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-	const wakeLockRef = useRef<WakeLockSentinel | null>(null);
 
 	function resetTimer(): void {
 		setElapsedSeconds(0);
@@ -200,22 +200,6 @@ export default function PresenterApp() {
 		timerRef.current = setInterval(() => {
 			setElapsedSeconds((seconds) => seconds + 1);
 		}, 1000);
-
-		async function requestWakeLock(): Promise<void> {
-			try {
-				if ('wakeLock' in navigator) {
-					wakeLockRef.current = await navigator.wakeLock.request('screen');
-				}
-			} catch {
-				// Wake lock request can fail (e.g. low battery) - not critical.
-			}
-		}
-
-		function handleVisibilityChange(): void {
-			if (document.visibilityState === 'visible') {
-				void requestWakeLock();
-			}
-		}
 
 		function handleKeyDown(event: KeyboardEvent): void {
 			if (isInputFocused()) return;
@@ -282,9 +266,9 @@ export default function PresenterApp() {
 			}
 		}
 
-		void requestWakeLock();
+		// Presenting from a phone or a propped-up laptop: keep the screen on.
+		const wakeLock = setupWakeLock();
 		window.addEventListener('keydown', handleKeyDown);
-		document.addEventListener('visibilitychange', handleVisibilityChange);
 
 		return () => {
 			cancelled = true;
@@ -294,10 +278,8 @@ export default function PresenterApp() {
 				clearInterval(timerRef.current);
 				timerRef.current = null;
 			}
-			wakeLockRef.current?.release();
-			wakeLockRef.current = null;
+			wakeLock.release();
 			window.removeEventListener('keydown', handleKeyDown);
-			document.removeEventListener('visibilitychange', handleVisibilityChange);
 		};
 	}, []);
 

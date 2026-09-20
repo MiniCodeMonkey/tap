@@ -58,6 +58,17 @@ close it. A click outside the list also closes it.
 frontmatter. To force one theme for a link or a recording, add
 `?theme=<slug>` to the URL instead.
 
+### The screen staying awake
+
+Both the audience view and the presenter view ask the device to keep the
+screen on while a deck is open, and ask again each time the page becomes
+visible, since a browser drops the lock on a tab switch or a lock screen.
+
+The Screen Wake Lock API is only available in a secure context, so this
+works over `https` and on `localhost`. A phone opening a `tap dev` server
+by LAN address over plain `http` has no wake lock available, and its screen
+dims on its own schedule.
+
 ### The mouse pointer
 
 While the deck is fullscreen, the pointer hides after 2.5 seconds without

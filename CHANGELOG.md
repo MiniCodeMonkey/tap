@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+### Added
+
+- **The screen stays awake in the audience view** - A deck is watched, not touched, so a phone propped up as a prompter used to dim and lock partway through a slide. The audience view now holds a screen wake lock, re-taking it whenever the page becomes visible again, the way the presenter view already did. Both views share one implementation. The Screen Wake Lock API needs a secure context, so this applies over `https` or on `localhost`, and not over plain `http` to a LAN address.
+
 ## [2.0.0-beta.5] - 2026-09-20
 
 ### Added
