@@ -312,7 +312,7 @@ func (c *Config) Validate() error {
 
 	// Validate recording display
 	if c.Recording.Display < 0 {
-		return fmt.Errorf("invalid recording.display %d: must be 1 or greater", c.Recording.Display)
+		return fmt.Errorf("invalid recording.display %d: must be 0 or greater", c.Recording.Display)
 	}
 
 	return nil
