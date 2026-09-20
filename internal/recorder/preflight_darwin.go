@@ -42,17 +42,18 @@ func checkScreenPermission() error {
 	return nil
 }
 
-// checkOutputWritable makes sure a recording has somewhere to land.
+// checkOutputWritable makes sure a recording has somewhere to land. Only the
+// write decides the verdict; removing the probe afterward is housekeeping
+// and must not fail the check.
 func checkOutputWritable(dir string) error {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
 
 	probe := filepath.Join(dir, ".tap-write-probe")
-	if err := os.WriteFile(probe, []byte("ok"), 0o600); err != nil {
-		return err
-	}
-	return os.Remove(probe)
+	defer func() { _ = os.Remove(probe) }()
+
+	return os.WriteFile(probe, []byte("ok"), 0o600)
 }
 
 // freeSpace is free space on the volume holding dir, or 0 when it cannot
