@@ -534,7 +534,10 @@ func (h *WebSocketHub) Broadcast(msg Message) error {
 		h.mu.Unlock()
 
 		// The listener runs on its own goroutine: a slow one must not
-		// hold up the broadcast that puts the slide on screen.
+		// hold up the broadcast that puts the slide on screen. That also
+		// means two slide changes in quick succession give the listener no
+		// ordering guarantee at all; recorder.Chapters.Add's clamp against
+		// an out-of-order timestamp exists only because of this.
 		if callback != nil && stateCopy.SlideIndex != nil {
 			slideIndex := *stateCopy.SlideIndex
 			go callback(slideIndex)
