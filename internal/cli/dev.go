@@ -298,6 +298,12 @@ func runDevServer(file string, port int, presenterPassword string, headless bool
 		audioUID = ""
 	}
 
+	// The controller is built before the TUI model exists, so its
+	// unexpected-exit callback closes over this variable and the TUI
+	// branch below fills it in once the model is created. Headless mode
+	// leaves it nil, and the callback tolerates that.
+	var devModel *tui.DevModel
+
 	recordings := newRecordController(recordControllerOptions{
 		DeckTitle:    cfg.Title,
 		OutputDir:    recordOutputDir,
@@ -312,6 +318,11 @@ func runDevServer(file string, port int, presenterPassword string, headless bool
 				return fmt.Sprintf("Slide %d", slideIndex+1)
 			}
 			return recorder.SlideTitle(slides[slideIndex].Content, slideIndex)
+		},
+		OnUnexpectedExit: func(err error) {
+			if devModel != nil {
+				devModel.NoteRecordingEnded(err)
+			}
 		},
 	})
 	// Stop is idempotent, so this runs safely on every exit path,
@@ -423,6 +434,7 @@ func runDevServer(file string, port int, presenterPassword string, headless bool
 		model.SetThemeBroadcaster(hub)
 		model.SetTunnelController(tunnels)
 		model.SetRecorderController(recordings)
+		devModel = model
 
 		// The probe is cheap and the result is not stored anywhere: Tap
 		// keeps no state between runs, and macOS raises its consent

@@ -40,6 +40,18 @@ func (m *DevModel) SetRecorderController(controller RecorderController) {
 	m.recorders = controller
 }
 
+// NoteRecordingEnded is called from outside the update loop when the
+// recorder stopped without being asked to, so the TUI stops claiming a
+// recording that is no longer running.
+func (m *DevModel) NoteRecordingEnded(err error) {
+	m.mu.Lock()
+	m.recording = false
+	m.recordWarned = false
+	m.mu.Unlock()
+
+	m.SendEvent("error", "Recording stopped unexpectedly: "+err.Error())
+}
+
 // toggleRecording is the C key: start a recording, or stop the running one.
 func (m *DevModel) toggleRecording() (*DevModel, tea.Cmd) {
 	if m.recorders == nil {

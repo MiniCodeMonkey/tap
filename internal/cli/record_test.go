@@ -201,3 +201,68 @@ func TestControllerStopWithoutStart(t *testing.T) {
 		t.Errorf("Stop() with nothing running returned %v, want nil", err)
 	}
 }
+
+func TestControllerReportsARecorderThatDiesOnItsOwn(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "recordings")
+
+	quitter := filepath.Join(t.TempDir(), "quitting-recorder")
+	if err := os.WriteFile(quitter, []byte("#!/bin/sh\nexit 3\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	died := make(chan error, 1)
+	controller := newRecordController(recordControllerOptions{
+		DeckTitle:        "My Talk",
+		OutputDir:        dir,
+		CommandName:      quitter,
+		CurrentSlide:     func() (int, bool) { return 0, false },
+		TitleFor:         func(int) string { return "Title" },
+		OpenFile:         func(string) error { return nil },
+		OnUnexpectedExit: func(err error) { died <- err },
+	})
+
+	if _, err := controller.Start(1); err != nil {
+		t.Fatalf("Start() returned %v", err)
+	}
+
+	select {
+	case err := <-died:
+		if err == nil {
+			t.Error("the callback fired with no error")
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("the controller never reported the recorder exiting")
+	}
+
+	if controller.Recording() {
+		t.Error("the controller still believes it is recording")
+	}
+}
+
+func TestControllerDoesNotReportAnOrdinaryStop(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "recordings")
+
+	died := make(chan error, 1)
+	controller := newRecordController(recordControllerOptions{
+		DeckTitle:        "My Talk",
+		OutputDir:        dir,
+		CommandName:      fakeRecorderBinary(t),
+		CurrentSlide:     func() (int, bool) { return 0, false },
+		TitleFor:         func(int) string { return "Title" },
+		OpenFile:         func(string) error { return nil },
+		OnUnexpectedExit: func(err error) { died <- err },
+	})
+
+	if _, err := controller.Start(1); err != nil {
+		t.Fatalf("Start() returned %v", err)
+	}
+	if _, err := controller.Stop(); err != nil {
+		t.Fatalf("Stop() returned %v", err)
+	}
+
+	select {
+	case err := <-died:
+		t.Fatalf("a deliberate stop reported an unexpected exit: %v", err)
+	case <-time.After(500 * time.Millisecond):
+	}
+}

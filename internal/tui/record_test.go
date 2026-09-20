@@ -487,3 +487,19 @@ func TestPickerNamesDisplaysByIndexWhenNamesAreMissing(t *testing.T) {
 		t.Errorf("the picker does not fall back to plain indexes:\n%s", view)
 	}
 }
+
+func TestNoteRecordingEndedClearsTheState(t *testing.T) {
+	m := NewDevModel(DevConfig{})
+	m.SetRecorderController(&fakeRecorder{available: true})
+	m.recording = true
+	m.recordingPath = "recordings/talk.mov"
+
+	m.NoteRecordingEnded(errors.New("exit status 3"))
+
+	if m.recording {
+		t.Error("the model still believes it is recording")
+	}
+	if !strings.Contains(m.viewStatus(), "watcher") {
+		t.Error("the status block lost its other rows")
+	}
+}

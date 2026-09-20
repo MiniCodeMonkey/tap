@@ -40,6 +40,9 @@ type recordControllerOptions struct {
 	ShowClicks bool
 	// Chapters writes the sidecar chapter list.
 	Chapters bool
+	// OnUnexpectedExit is called when the recorder stops without being
+	// asked to: a revoked permission, a full disk, a crash.
+	OnUnexpectedExit func(err error)
 }
 
 // recordController is the dev server's recording, from the TUI's side of
@@ -126,6 +129,28 @@ func (c *recordController) Start(display int) (string, error) {
 			c.chapters.Add(startedAt, slideIndex, c.titleFor(slideIndex))
 		}
 	}
+
+	// Watch for a recorder that ends by itself. Stop clears c.session, so
+	// comparing against it is what tells a deliberate stop apart from an
+	// exit nobody asked for.
+	go func() {
+		<-session.Done()
+
+		c.mu.Lock()
+		current := c.session == session
+		if current {
+			c.session, c.chapters = nil, nil
+		}
+		c.mu.Unlock()
+
+		if current && c.options.OnUnexpectedExit != nil {
+			err := session.ExitError()
+			if err == nil {
+				err = fmt.Errorf("the recorder stopped on its own")
+			}
+			c.options.OnUnexpectedExit(err)
+		}
+	}()
 
 	return path, nil
 }
