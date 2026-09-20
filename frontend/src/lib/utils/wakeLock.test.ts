@@ -5,15 +5,26 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { setupWakeLock } from './wakeLock';
 
-/** A sentinel that records whether it was released. */
-function makeSentinel(): WakeLockSentinel & { released: boolean } {
+/**
+ * A sentinel that records whether it was released, and that can fire the
+ * `release` event the platform fires when it takes the lock back.
+ */
+function makeSentinel(): WakeLockSentinel & { released: boolean; drop: () => void } {
+	const target = new EventTarget();
 	const sentinel = {
 		released: false,
 		release: vi.fn(async () => {
 			sentinel.released = true;
-		})
+		}),
+		addEventListener: target.addEventListener.bind(target),
+		removeEventListener: target.removeEventListener.bind(target),
+		/** Simulates the platform releasing the lock on its own. */
+		drop: () => {
+			sentinel.released = true;
+			target.dispatchEvent(new Event('release'));
+		}
 	};
-	return sentinel as unknown as WakeLockSentinel & { released: boolean };
+	return sentinel as unknown as WakeLockSentinel & { released: boolean; drop: () => void };
 }
 
 function setVisibility(state: DocumentVisibilityState): void {
@@ -104,5 +115,74 @@ describe('wake lock', () => {
 		await Promise.resolve();
 		expect(handle.current()).toBeNull();
 		handle.release();
+	});
+
+	it('takes the lock back when the platform drops it', async () => {
+		const handle = setupWakeLock();
+		await vi.waitFor(() => expect(handle.current()).not.toBeNull());
+		const sentinel = handle.current() as WakeLockSentinel & { drop: () => void };
+
+		sentinel.drop();
+
+		await vi.waitFor(() => expect(request).toHaveBeenCalledTimes(2));
+		await vi.waitFor(() => expect(handle.current()).not.toBe(sentinel));
+		handle.release();
+	});
+
+	it('asks again after a refusal instead of giving up on one attempt', async () => {
+		vi.useFakeTimers();
+		try {
+			request.mockRejectedValueOnce(new Error('NotAllowedError'));
+
+			const handle = setupWakeLock();
+			await vi.waitFor(() => expect(request).toHaveBeenCalledTimes(1));
+			expect(handle.current()).toBeNull();
+
+			await vi.advanceTimersByTimeAsync(5_000);
+
+			await vi.waitFor(() => expect(handle.current()).not.toBeNull());
+			handle.release();
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
+	it('asks again on the first touch after a refusal', async () => {
+		request.mockRejectedValueOnce(new Error('NotAllowedError'));
+
+		const handle = setupWakeLock();
+		await vi.waitFor(() => expect(request).toHaveBeenCalledTimes(1));
+		expect(handle.current()).toBeNull();
+
+		document.dispatchEvent(new Event('pointerdown'));
+
+		await vi.waitFor(() => expect(handle.current()).not.toBeNull());
+		handle.release();
+	});
+
+	it('does not ask again on a touch while the lock is held', async () => {
+		const handle = setupWakeLock();
+		await vi.waitFor(() => expect(request).toHaveBeenCalledTimes(1));
+
+		document.dispatchEvent(new Event('pointerdown'));
+		await Promise.resolve();
+
+		expect(request).toHaveBeenCalledTimes(1);
+		handle.release();
+	});
+
+	it('stops asking after release, whatever fires next', async () => {
+		request.mockRejectedValueOnce(new Error('NotAllowedError'));
+		const handle = setupWakeLock();
+		await vi.waitFor(() => expect(request).toHaveBeenCalledTimes(1));
+
+		handle.release();
+
+		document.dispatchEvent(new Event('pointerdown'));
+		setVisibility('visible');
+		document.dispatchEvent(new Event('visibilitychange'));
+		await Promise.resolve();
+
+		expect(request).toHaveBeenCalledTimes(1);
 	});
 });

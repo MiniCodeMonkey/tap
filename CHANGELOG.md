@@ -22,6 +22,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 - **The QR code shows in a shorter window** - The height it asks for is now measured against the real screen rather than assuming a tall terminal, so an ordinary window shows the code instead of hiding it.
 
+### Fixed
+
+- **The screen keeps staying awake on a phone** - The wake lock was asked for exactly once, when the view opened, and a browser that refused that one request was never asked again, so a phone showing speaker notes dimmed and locked anyway. Safari refuses a request made while the page is still settling after load or after coming back to the foreground, which is precisely when the only request was made. A refusal is now retried, the first touch or key press asks again (a request made from a gesture is the one browsers grant most readily), and a lock the platform takes back on its own is re-taken as soon as it fires its `release` event. This applies to the audience view and the presenter view alike, and still only in a secure context: over `https` (`tap dev --tunnel` gives you one) or on `localhost`.
+
 ## [2.0.0-beta.7] - 2026-09-20
 
 ### Fixed
