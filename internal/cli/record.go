@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -263,23 +264,48 @@ func openInDefaultApplication(path string) error {
 	return exec.Command("open", path).Start()
 }
 
-// gitignoreEntry is what a recordings directory looks like in a .gitignore.
-const gitignoreEntry = "recordings/"
+// gitignoreEntry is how this deck's recordings directory should appear
+// in a .gitignore: its path relative to the repository root, so a deck
+// that points recording.output somewhere else still ignores the
+// directory it actually fills. It is empty when there is nothing
+// sensible to offer, which is the case outside a repository or when the
+// recordings land at the repository root itself.
+func (c *recordController) gitignoreEntry() string {
+	root, found := repositoryRoot(c.options.OutputDir)
+	if !found {
+		return ""
+	}
+
+	relative, err := filepath.Rel(root, c.options.OutputDir)
+	if err != nil || relative == "." || strings.HasPrefix(relative, "..") {
+		return ""
+	}
+
+	return filepath.ToSlash(relative) + "/"
+}
 
 // SuggestGitignore is the ignore entry worth offering, or "" when there is
 // nothing to offer: outside a git repository, or when it is already there.
 func (c *recordController) SuggestGitignore() string {
-	if needed, _ := gitignoreState(c.options.OutputDir, gitignoreEntry); needed {
-		return gitignoreEntry
+	entry := c.gitignoreEntry()
+	if entry == "" {
+		return ""
+	}
+	if needed, _ := gitignoreState(c.options.OutputDir, entry); needed {
+		return entry
 	}
 	return ""
 }
 
 // AddGitignoreEntry ignores the recordings directory.
 func (c *recordController) AddGitignoreEntry() error {
-	needed, gitignorePath := gitignoreState(c.options.OutputDir, gitignoreEntry)
+	entry := c.gitignoreEntry()
+	if entry == "" {
+		return nil
+	}
+	needed, gitignorePath := gitignoreState(c.options.OutputDir, entry)
 	if !needed {
 		return nil
 	}
-	return appendGitignoreEntry(gitignorePath, gitignoreEntry)
+	return appendGitignoreEntry(gitignorePath, entry)
 }

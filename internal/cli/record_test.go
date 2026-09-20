@@ -266,3 +266,29 @@ func TestControllerDoesNotReportAnOrdinaryStop(t *testing.T) {
 	case <-time.After(500 * time.Millisecond):
 	}
 }
+
+func TestGitignoreEntryFollowsTheOutputDirectory(t *testing.T) {
+	root := gitRepo(t)
+	controller := testController(t, filepath.Join(root, "captures"), func() (int, bool) { return 0, true })
+
+	if got := controller.SuggestGitignore(); got != "captures/" {
+		t.Errorf("SuggestGitignore() = %q, want captures/", got)
+	}
+}
+
+func TestGitignoreEntryIsEmptyOutsideARepository(t *testing.T) {
+	controller := testController(t, filepath.Join(t.TempDir(), "recordings"), func() (int, bool) { return 0, true })
+
+	if got := controller.SuggestGitignore(); got != "" {
+		t.Errorf("SuggestGitignore() = %q, want an empty string outside a repository", got)
+	}
+}
+
+func TestGitignoreEntryHandlesANestedOutputDirectory(t *testing.T) {
+	root := gitRepo(t)
+	controller := testController(t, filepath.Join(root, "talks", "2026", "recordings"), func() (int, bool) { return 0, true })
+
+	if got := controller.SuggestGitignore(); got != "talks/2026/recordings/" {
+		t.Errorf("SuggestGitignore() = %q, want talks/2026/recordings/", got)
+	}
+}

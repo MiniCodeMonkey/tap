@@ -60,5 +60,5 @@ func appendGitignoreEntry(gitignorePath, entry string) error {
 	}
 	text += entry + "\n"
 
-	return os.WriteFile(gitignorePath, []byte(text), 0o600)
+	return os.WriteFile(gitignorePath, []byte(text), 0o644)
 }
