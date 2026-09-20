@@ -8,6 +8,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Added
 
+- **The mouse pointer hides itself while presenting** - In fullscreen, the pointer disappears after 2.5 still seconds, so it does not sit on a slide on a TV or a projector, and comes back on the next movement. In a window it is never touched.
+
 - **A swipe says where it landed** - A small pill fades in at the bottom of the screen with the new slide number, and says "First slide" or "Last slide" when a swipe hits either end. A deck with no transition changes instantly, so without this a swipe looks like nothing happened.
 
 - **Touch navigation in the audience view** - On a phone or a tablet, swipe left for the next fragment, step or slide, and swipe right to go back. A two-finger tap toggles the slide overview, where a tap picks a slide and a tap outside closes the grid. A swipe must travel at least 50 px, be more horizontal than vertical, and finish within 800 ms, so scrolling a slide, pinching to zoom and tapping a link are all left alone.

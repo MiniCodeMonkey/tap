@@ -22,6 +22,7 @@ import {
 } from '$lib/stores/websocket';
 import { setupKeyboardNavigation } from '$lib/utils/keyboard';
 import { setupTouchNavigation } from '$lib/utils/touch';
+import { setupCursorAutoHide } from '$lib/utils/cursor';
 import { fetchPresentation } from '$lib/utils/fetchPresentation';
 import { SlideCanvas } from '$lib/components/SlideCanvas';
 import { Slide } from '$lib/components/Slide';
@@ -153,6 +154,11 @@ export default function App() {
 				setSwipe((previous) => ({ direction, moved, nonce: previous.nonce + 1 }))
 		});
 
+		// Presenting fullscreen on a TV: the pointer hides once it sits still.
+		// Never during a capture, which must not depend on pointer state.
+		const cursorCleanup =
+			PRINT_MODE || CAPTURE_MODE ? () => {} : setupCursorAutoHide();
+
 		// A print pass (PDF export, ?print=true) is a static snapshot of one
 		// slide: it never connects the websocket, so it can never have the
 		// hub's live state applied out from under the screenshot. A static
@@ -173,6 +179,7 @@ export default function App() {
 			hashCleanup();
 			keyboardCleanup();
 			touchCleanup();
+			cursorCleanup();
 			disconnectWebSocket();
 		};
 	}, []);

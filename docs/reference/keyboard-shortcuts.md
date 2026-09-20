@@ -58,6 +58,16 @@ close it. A click outside the list also closes it.
 frontmatter. To force one theme for a link or a recording, add
 `?theme=<slug>` to the URL instead.
 
+### The mouse pointer
+
+While the deck is fullscreen, the pointer hides after 2.5 seconds without
+movement and reappears on the next move, click or scroll. Presenting on a
+TV or a projector therefore needs nothing switched on beforehand, and
+pointing at something on a slide still works.
+
+Outside fullscreen the pointer is left alone, so it never vanishes while
+you are working on a deck in a window.
+
 ### Touch gestures
 
 On a phone or a tablet, where there is no keyboard, the audience view

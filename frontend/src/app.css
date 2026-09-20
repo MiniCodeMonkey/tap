@@ -204,3 +204,14 @@ body {
 	margin: 0;
 	color: rgba(255, 255, 255, 0.7);
 }
+
+/*
+ * The pointer hides itself after a few still seconds in fullscreen, so it
+ * does not sit on a slide on a TV or a projector. Every descendant has to
+ * be covered too: a thumbnail or a link sets its own cursor, which would
+ * otherwise bring the pointer back. See lib/utils/cursor.ts.
+ */
+body.cursor-hidden,
+body.cursor-hidden * {
+	cursor: none !important;
+}
