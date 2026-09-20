@@ -74,9 +74,16 @@ finish within 800 ms, so scrolling a long slide and tapping a link both
 still work. In the overview, tap a slide to jump to it, or tap outside the
 grid to close it.
 
-The gestures are measured, never prevented, so scrolling and pinch-zoom
-behave as the browser intends. That is also why a pinch does not open the
-overview: the browser owns that gesture.
+A swipe raises a small pill at the bottom of the screen with the new slide
+number, or "First slide" / "Last slide" when there is nowhere further to
+go. A deck with no transition changes instantly, so without it a swipe can
+look like nothing happened.
+
+Only a drag that is clearly horizontal is taken from the browser, and only
+once it is clearly horizontal, so the page cannot scroll under the finger
+mid-swipe. Vertical panning and pinch-zoom stay with the browser. That is
+also why a pinch does not open the overview: the browser owns that
+gesture.
 
 ## Presenter View
 

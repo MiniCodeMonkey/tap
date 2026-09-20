@@ -32,6 +32,8 @@ html,
 body {
 	margin: 0;
 	padding: 0;
+	/* Nothing above the deck scrolls, so a drag must not bounce the page. */
+	overscroll-behavior: none;
 }
 
 /*
@@ -54,6 +56,15 @@ body {
 	height: 100vh;
 	overflow: hidden;
 	background-color: #000;
+	/*
+	 * A horizontal drag belongs to swipe navigation, so the browser must not
+	 * also scroll or rubber-band the page under the finger, which is what
+	 * made the page jump on every swipe. Vertical panning and pinch-zoom
+	 * stay with the browser: a slide can scroll, and taking zoom away from a
+	 * viewer who needs it is not ours to do.
+	 */
+	touch-action: pan-y pinch-zoom;
+	overscroll-behavior: none;
 }
 
 /*

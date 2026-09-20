@@ -32,8 +32,30 @@ export interface SlideOverviewProps {
 	onClose?: () => void;
 }
 
-/** Number of columns in the grid at its widest, matching the CSS default. */
-const GRID_COLUMNS = 5;
+/**
+ * Columns to move by on ArrowUp/ArrowDown before the grid has been measured,
+ * and wherever getComputedStyle cannot report the tracks.
+ */
+const FALLBACK_COLUMNS = 5;
+
+/**
+ * Count the grid's columns as the browser actually laid them out.
+ * The column count belongs to the stylesheet, which varies it by viewport
+ * width and by whether the pointer is a finger, so it cannot be a constant
+ * here: an inline `--grid-columns` would override every one of those rules.
+ */
+function countColumns(grid: HTMLElement | null): number {
+	if (!grid || typeof window === 'undefined') {
+		return FALLBACK_COLUMNS;
+	}
+
+	const tracks = window.getComputedStyle(grid).gridTemplateColumns;
+	if (!tracks || tracks === 'none') {
+		return FALLBACK_COLUMNS;
+	}
+
+	return tracks.split(' ').filter(Boolean).length || FALLBACK_COLUMNS;
+}
 
 /**
  * How far outside the viewport a thumbnail starts rendering its slide, so a
@@ -93,6 +115,26 @@ export function SlideOverview({
 	const currentIndex = usePresentationStore((state) => state.currentSlideIndex);
 	const [focusedIndex, setFocusedIndex] = useState(currentIndex);
 	const containerRef = useRef<HTMLDivElement>(null);
+	const gridRef = useRef<HTMLDivElement>(null);
+	const [columns, setColumns] = useState(FALLBACK_COLUMNS);
+
+	// Keep the arrow keys moving by whatever the stylesheet laid out, which
+	// changes with the window width and on a rotated phone.
+	useEffect(() => {
+		if (!isOpen) {
+			return;
+		}
+
+		const measure = (): void => setColumns(countColumns(gridRef.current));
+		measure();
+
+		window.addEventListener('resize', measure);
+		window.addEventListener('orientationchange', measure);
+		return () => {
+			window.removeEventListener('resize', measure);
+			window.removeEventListener('orientationchange', measure);
+		};
+	}, [isOpen]);
 
 	// Reset the focus ring to the current slide each time the overview opens.
 	useEffect(() => {
@@ -129,11 +171,11 @@ export function SlideOverview({
 				break;
 			case 'ArrowDown':
 				event.preventDefault();
-				setFocusedIndex((index) => Math.min(index + GRID_COLUMNS, slides.length - 1));
+				setFocusedIndex((index) => Math.min(index + columns, slides.length - 1));
 				break;
 			case 'ArrowUp':
 				event.preventDefault();
-				setFocusedIndex((index) => Math.max(index - GRID_COLUMNS, 0));
+				setFocusedIndex((index) => Math.max(index - columns, 0));
 				break;
 			case 'Enter':
 			case ' ':
@@ -168,12 +210,7 @@ export function SlideOverview({
 			<div className="overview-backdrop" role="presentation" onClick={() => onClose?.()} />
 
 			<div className="overview-content">
-				<div
-					className="thumbnail-grid"
-					style={{ ['--grid-columns' as string]: GRID_COLUMNS }}
-					role="listbox"
-					aria-label="Select a slide"
-				>
+				<div className="thumbnail-grid" ref={gridRef} role="listbox" aria-label="Select a slide">
 					{slides.map((slide, index) => (
 						<button
 							key={slide.index}

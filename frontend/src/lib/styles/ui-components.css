@@ -413,3 +413,93 @@
 		animation: none;
 	}
 }
+
+/* ============================================================================
+ * Swipe Feedback - a short confirmation that a swipe moved the deck
+ *
+ * A deck with no transition changes instantly, so on a phone a swipe can
+ * look like nothing happened. This names the new position for a moment,
+ * then fades.
+ *
+ * It sits low on the screen, which on a phone in portrait is the black
+ * letterbox below the slide, and in landscape is over the slide itself. It
+ * therefore carries its own surface: a dark, blurred pill with a hairline
+ * edge, legible on black and on a bright slide alike.
+ * ========================================================================= */
+
+.swipe-feedback {
+	position: fixed;
+	left: 50%;
+	bottom: max(1.75rem, env(safe-area-inset-bottom, 0) + 1rem);
+	z-index: 9000;
+	display: flex;
+	align-items: center;
+	gap: 0.45rem;
+	padding: 0.4rem 0.85rem;
+	font-family: var(--font-body, system-ui, sans-serif);
+	font-size: 0.8125rem;
+	font-variant-numeric: tabular-nums;
+	letter-spacing: 0.01em;
+	line-height: 1;
+	color: rgba(255, 255, 255, 0.88);
+	background-color: rgba(18, 18, 18, 0.62);
+	border: 1px solid rgba(255, 255, 255, 0.14);
+	border-radius: 999px;
+	box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+	backdrop-filter: blur(10px) saturate(1.2);
+	-webkit-backdrop-filter: blur(10px) saturate(1.2);
+	pointer-events: none;
+	will-change: opacity, transform;
+	animation: swipe-feedback-fade 1.05s cubic-bezier(0.22, 0.61, 0.36, 1) forwards;
+}
+
+/* The deck did not move: a swipe past the first or the last slide. */
+.swipe-feedback.blocked {
+	color: rgba(255, 255, 255, 0.62);
+}
+
+.swipe-feedback-position {
+	font-weight: 500;
+}
+
+/* The direction chevron is quieter than the number it points away from. */
+.swipe-feedback-arrow {
+	opacity: 0.55;
+	font-size: 0.95rem;
+}
+
+@keyframes swipe-feedback-fade {
+	0% {
+		opacity: 0;
+		transform: translateX(-50%) translateY(4px) scale(0.98);
+	}
+	12% {
+		opacity: 1;
+		transform: translateX(-50%) translateY(0) scale(1);
+	}
+	62% {
+		opacity: 1;
+		transform: translateX(-50%) translateY(0) scale(1);
+	}
+	100% {
+		opacity: 0;
+		transform: translateX(-50%) translateY(-2px) scale(1);
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.swipe-feedback {
+		transform: translateX(-50%);
+		animation: swipe-feedback-hold 1.05s steps(1, end) forwards;
+	}
+
+	@keyframes swipe-feedback-hold {
+		0%,
+		99% {
+			opacity: 1;
+		}
+		100% {
+			opacity: 0;
+		}
+	}
+}

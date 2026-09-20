@@ -25,7 +25,7 @@ function dispatchTouch(
 	target: EventTarget = document.body
 ): void {
 	const touches = points.map((point) => ({ clientX: point.x, clientY: point.y }));
-	const event = new Event(type, { bubbles: true });
+	const event = new Event(type, { bubbles: true, cancelable: true });
 	Object.defineProperty(event, 'touches', {
 		value: type === 'touchend' ? [] : touches
 	});
@@ -323,6 +323,86 @@ describe('touch navigation', () => {
 			cleanup = setupTouchNavigation({ onNavigate });
 			swipe(-10, 0);
 			expect(onNavigate).not.toHaveBeenCalled();
+		});
+	});
+
+	describe('claiming the gesture from the browser', () => {
+		/** Dispatch a touchmove and report whether the default was prevented. */
+		function move(x: number, y: number): boolean {
+			const touches = [{ clientX: x, clientY: y }];
+			const event = new Event('touchmove', { bubbles: true, cancelable: true });
+			Object.defineProperty(event, 'touches', { value: touches });
+			Object.defineProperty(event, 'changedTouches', { value: touches });
+			Object.defineProperty(event, 'target', { value: document.body });
+			window.dispatchEvent(event);
+			return event.defaultPrevented;
+		}
+
+		it('takes a clearly horizontal drag, so the page cannot scroll under it', () => {
+			dispatchTouch('touchstart', [{ x: 200, y: 200 }]);
+			expect(move(170, 203)).toBe(true);
+		});
+
+		it('leaves a vertical drag to the browser', () => {
+			dispatchTouch('touchstart', [{ x: 200, y: 200 }]);
+			expect(move(197, 120)).toBe(false);
+		});
+
+		it('leaves a drag alone until it has travelled far enough to be horizontal', () => {
+			dispatchTouch('touchstart', [{ x: 200, y: 200 }]);
+			expect(move(195, 200)).toBe(false);
+		});
+
+		it('leaves a two-finger gesture to the browser, so pinch-zoom still works', () => {
+			dispatchTouch('touchstart', [
+				{ x: 180, y: 200 },
+				{ x: 260, y: 200 }
+			]);
+			const touches = [
+				{ clientX: 100, clientY: 200 },
+				{ clientX: 340, clientY: 200 }
+			];
+			const event = new Event('touchmove', { bubbles: true, cancelable: true });
+			Object.defineProperty(event, 'touches', { value: touches });
+			Object.defineProperty(event, 'changedTouches', { value: touches });
+			Object.defineProperty(event, 'target', { value: document.body });
+			window.dispatchEvent(event);
+			expect(event.defaultPrevented).toBe(false);
+		});
+	});
+
+	describe('swipe feedback', () => {
+		it('reports the direction and that the deck moved', () => {
+			const onSwipe = vi.fn();
+			cleanup();
+			cleanup = setupTouchNavigation({ onSwipe });
+			swipe(-120, 0);
+			expect(onSwipe).toHaveBeenCalledWith('next', true);
+		});
+
+		it('reports a swipe that changed nothing, at the end of the deck', () => {
+			vi.mocked(presentationStore.nextSlide).mockReturnValueOnce(false);
+			const onSwipe = vi.fn();
+			cleanup();
+			cleanup = setupTouchNavigation({ onSwipe });
+			swipe(-120, 0);
+			expect(onSwipe).toHaveBeenCalledWith('next', false);
+		});
+
+		it('reports a backwards swipe', () => {
+			const onSwipe = vi.fn();
+			cleanup();
+			cleanup = setupTouchNavigation({ onSwipe });
+			swipe(120, 0);
+			expect(onSwipe).toHaveBeenCalledWith('prev', true);
+		});
+
+		it('says nothing when the gesture is ignored', () => {
+			const onSwipe = vi.fn();
+			cleanup();
+			cleanup = setupTouchNavigation({ onSwipe });
+			swipe(-10, 0);
+			expect(onSwipe).not.toHaveBeenCalled();
 		});
 	});
 

@@ -32,6 +32,30 @@ afterEach(() => {
 });
 
 describe('SlideOverview', () => {
+	describe('column count', () => {
+		it('leaves the column count to the stylesheet', () => {
+			// An inline custom property would beat every media query, which is
+			// how the grid ended up five columns wide on a phone.
+			const { container } = render(<SlideOverview slides={makeSlides(6)} isOpen />);
+			const grid = container.querySelector('.thumbnail-grid') as HTMLElement;
+			expect(grid.style.getPropertyValue('--grid-columns')).toBe('');
+		});
+
+		it('moves down by the measured number of columns', () => {
+			vi.spyOn(window, 'getComputedStyle').mockReturnValue({
+				gridTemplateColumns: '100px 100px'
+			} as unknown as CSSStyleDeclaration);
+
+			const { container } = render(<SlideOverview slides={makeSlides(9)} isOpen />);
+			const dialog = container.querySelector('.slide-overview') as HTMLElement;
+
+			fireEvent.keyDown(dialog, { key: 'ArrowDown' });
+			expect(container.querySelectorAll('.thumbnail')[2]?.className).toContain('focused');
+
+			vi.mocked(window.getComputedStyle).mockRestore();
+		});
+	});
+
 	describe('lazy thumbnails', () => {
 		/** Capture the observers a render creates, so a test can drive them. */
 		function stubIntersectionObserver(): {

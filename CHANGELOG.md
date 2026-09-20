@@ -8,6 +8,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Added
 
+- **A swipe says where it landed** - A small pill fades in at the bottom of the screen with the new slide number, and says "First slide" or "Last slide" when a swipe hits either end. A deck with no transition changes instantly, so without this a swipe looks like nothing happened.
+
 - **Touch navigation in the audience view** - On a phone or a tablet, swipe left for the next fragment, step or slide, and swipe right to go back. A two-finger tap toggles the slide overview, where a tap picks a slide and a tap outside closes the grid. A swipe must travel at least 50 px, be more horizontal than vertical, and finish within 800 ms, so scrolling a slide, pinching to zoom and tapping a link are all left alone.
 
 ### Changed
@@ -17,6 +19,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - **Bigger thumbnails on a touch device** - The overview grid is one column up to 600 px wide and two above it, rather than the three to five a mouse gets, so a thumbnail is big enough to read and to hit with a finger.
 
 ### Fixed
+
+- **The page no longer drifts vertically during a horizontal swipe** - Once a drag is clearly sideways, swipe navigation claims it, so the browser stops scrolling the page under the finger. A vertical drag and a pinch are still the browser's, so a scrollable slide scrolls and zoom keeps working.
 
 - **The overview no longer closes itself the moment a two-finger tap opens it** - The synthetic click a browser fires after a touch sequence landed on the backdrop the gesture had just opened. That one click is now swallowed.
 

@@ -7,8 +7,8 @@
  * and swipe right goes back.
  *
  * A two-finger tap toggles the overview, the touch equivalent of `o`. A
- * pinch would read better, but the page allows browser zoom and these
- * listeners are passive, so a pinch belongs to the browser.
+ * pinch would read better, but the page allows browser zoom, so a pinch
+ * belongs to the browser.
  */
 
 import { nextSlide, prevSlide } from '$lib/stores/presentation';
@@ -43,6 +43,14 @@ export interface TouchOptions {
 	 * Use this to broadcast slide changes to other views.
 	 */
 	onNavigate?: () => void;
+
+	/**
+	 * Callback after a swipe moved the deck, with the direction it went.
+	 * Use this to show the viewer that the gesture landed: a deck with no
+	 * transition changes instantly, and a swipe that hits the first or last
+	 * slide changes nothing at all.
+	 */
+	onSwipe?: (direction: 'next' | 'prev', moved: boolean) => void;
 }
 
 // ============================================================================
@@ -55,6 +63,14 @@ export interface TouchOptions {
  * tap with a slightly moving finger does nothing.
  */
 const MIN_DISTANCE_PX = 50;
+
+/**
+ * How far a drag must travel sideways, in CSS pixels, before swipe
+ * navigation claims it and stops the browser scrolling underneath. Well
+ * below MIN_DISTANCE_PX: the gesture is claimed long before it counts as a
+ * swipe, so the page never drifts while the finger is still moving.
+ */
+const CLAIM_DISTANCE_PX = 12;
 
 /**
  * How much more horizontal than vertical the movement must be. A scroll down
@@ -229,6 +245,21 @@ function handleTouchMove(event: TouchEvent): void {
 		origin = null;
 	}
 
+	// Once a single-finger drag is clearly horizontal, it is ours: hold on to
+	// it so the browser does not also scroll the page a few pixels under the
+	// finger, which reads as the deck jumping on every swipe. Until then the
+	// gesture is left alone, so a scrollable slide still scrolls.
+	if (origin && event.touches.length === 1 && event.cancelable) {
+		const touch = event.touches[0];
+		if (touch) {
+			const deltaX = touch.clientX - origin.x;
+			const deltaY = touch.clientY - origin.y;
+			if (Math.abs(deltaX) > CLAIM_DISTANCE_PX && Math.abs(deltaX) > Math.abs(deltaY)) {
+				event.preventDefault();
+			}
+		}
+	}
+
 	// A pinch or a two-finger pan is not a tap.
 	if (twoFinger && event.touches.length === 2) {
 		const middle = centroid(event.touches);
@@ -285,12 +316,10 @@ function handleTouchEnd(event: TouchEvent): void {
 		return;
 	}
 
-	if (deltaX < 0) {
-		nextSlide();
-	} else {
-		prevSlide();
-	}
+	const direction = deltaX < 0 ? 'next' : 'prev';
+	const moved = direction === 'next' ? nextSlide() : prevSlide();
 
+	currentOptions.onSwipe?.(direction, moved);
 	currentOptions.onNavigate?.();
 }
 
@@ -307,8 +336,9 @@ function handleTouchCancel(): void {
  * Set up swipe navigation for the presentation.
  * Returns a cleanup function to remove the event listeners.
  *
- * Listeners are passive: the gesture is measured, never prevented, so
- * vertical scrolling and pinch-zoom keep working as they should.
+ * Only a drag that is clearly horizontal is taken from the browser, and
+ * only once it is clearly horizontal, so vertical scrolling and pinch-zoom
+ * keep working as they should.
  *
  * @param options - Configuration options for touch behavior
  * @returns Cleanup function to remove the event listeners
@@ -337,7 +367,9 @@ export function setupTouchNavigation(options: TouchOptions = {}): () => void {
 
 	const passive = { passive: true } as const;
 	window.addEventListener('touchstart', handleTouchStart, passive);
-	window.addEventListener('touchmove', handleTouchMove, passive);
+	// Not passive: a horizontal drag is claimed mid-gesture (see
+	// handleTouchMove), which needs preventDefault.
+	window.addEventListener('touchmove', handleTouchMove, { passive: false });
 	window.addEventListener('touchend', handleTouchEnd, passive);
 	window.addEventListener('touchcancel', handleTouchCancel, passive);
 

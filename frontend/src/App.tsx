@@ -28,6 +28,7 @@ import { Slide } from '$lib/components/Slide';
 import { SlideTransition } from '$lib/components/SlideTransition';
 import { ProgressBar } from '$lib/components/ProgressBar';
 import { ConnectionIndicator } from '$lib/components/ConnectionIndicator';
+import { SwipeFeedback } from '$lib/components/SwipeFeedback';
 import { SlideOverview } from '$lib/components/SlideOverview';
 import { ShortcutHelp } from '$lib/components/ShortcutHelp';
 import { AUDIENCE_SHORTCUTS } from '$lib/utils/shortcuts';
@@ -88,6 +89,11 @@ export default function App() {
 	const [overviewOpen, setOverviewOpen] = useState(false);
 	const overviewOpenRef = useRef(overviewOpen);
 	overviewOpenRef.current = overviewOpen;
+	const [swipe, setSwipe] = useState<{
+		direction: 'next' | 'prev' | null;
+		moved: boolean;
+		nonce: number;
+	}>({ direction: null, moved: false, nonce: 0 });
 	const [helpOpen, setHelpOpen] = useState(false);
 	const helpOpenRef = useRef(helpOpen);
 	helpOpenRef.current = helpOpen;
@@ -142,7 +148,9 @@ export default function App() {
 			onNavigate: broadcastPresentationState,
 			onToggleOverview: () => setOverviewOpen((open) => !open),
 			isOverviewOpen: () => overviewOpenRef.current,
-			isHelpOpen: () => helpOpenRef.current
+			isHelpOpen: () => helpOpenRef.current,
+			onSwipe: (direction, moved) =>
+				setSwipe((previous) => ({ direction, moved, nonce: previous.nonce + 1 }))
 		});
 
 		// A print pass (PDF export, ?print=true) is a static snapshot of one
@@ -250,6 +258,8 @@ export default function App() {
 				<ProgressBar show={showProgressBar} />
 
 				{!PRINT_MODE && !CAPTURE_MODE ? <ConnectionIndicator /> : null}
+
+				<SwipeFeedback direction={swipe.direction} moved={swipe.moved} nonce={swipe.nonce} />
 
 				<SlideOverview
 					slides={presentation.slides}
