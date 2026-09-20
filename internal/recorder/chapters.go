@@ -9,25 +9,57 @@ import (
 	"time"
 )
 
-// headingPattern matches an ATX markdown heading, which is where a slide's
-// title lives when it has one.
-var headingPattern = regexp.MustCompile(`(?m)^#{1,6}\s+(.+?)\s*#*\s*$`)
+// headingPattern matches one ATX heading line and captures its text.
+var headingPattern = regexp.MustCompile(`^#{1,6}\s+(.+?)\s*#*\s*$`)
 
-// emphasisPattern matches the inline markers that should not survive into a
-// chapter title.
-var emphasisPattern = regexp.MustCompile("[*_`]")
+// emphasisPattern matches paired bold and code markers around their
+// text. Underscores are left alone on purpose: a heading on these
+// slides is far more likely to hold get_user_by_id or __init__ than
+// _italics_, and mangling an identifier is worse than keeping a stray
+// marker.
+var emphasisPattern = regexp.MustCompile("\\*\\*(.+?)\\*\\*|`(.+?)`")
 
-// SlideTitle names a slide for the chapter list: its first heading, or its
-// number when it has none, which is the case for an image-only or
-// component-only slide.
+// SlideTitle names a slide for the chapter list: the text of its first
+// heading, or its number when it has none, which is the case for an
+// image-only or component-only slide. Fenced code is skipped, because a
+// comment inside a code block is not a heading however much it looks
+// like one.
 func SlideTitle(content string, index int) string {
-	if match := headingPattern.FindStringSubmatch(content); match != nil {
-		title := strings.TrimSpace(emphasisPattern.ReplaceAllString(match[1], ""))
-		if title != "" {
+	inFence := false
+
+	for _, line := range strings.Split(content, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "```") || strings.HasPrefix(trimmed, "~~~") {
+			inFence = !inFence
+			continue
+		}
+		if inFence {
+			continue
+		}
+
+		match := headingPattern.FindStringSubmatch(line)
+		if match == nil {
+			continue
+		}
+		if title := strings.TrimSpace(stripEmphasis(match[1])); title != "" {
 			return title
 		}
 	}
+
 	return fmt.Sprintf("Slide %d", index+1)
+}
+
+// stripEmphasis removes paired markers and keeps the text they wrapped.
+func stripEmphasis(text string) string {
+	return emphasisPattern.ReplaceAllStringFunc(text, func(match string) string {
+		groups := emphasisPattern.FindStringSubmatch(match)
+		for _, group := range groups[1:] {
+			if group != "" {
+				return group
+			}
+		}
+		return match
+	})
 }
 
 // chapter is one entry in the list.

@@ -35,6 +35,34 @@ func TestSlideTitleIgnoresSlotMarkersAndComments(t *testing.T) {
 	}
 }
 
+func TestSlideTitleIgnoresHeadingsInsideCodeFences(t *testing.T) {
+	content := "```bash\n# set the flag\necho hi\n```\n\n# The real title\n"
+
+	if got := SlideTitle(content, 0); got != "The real title" {
+		t.Errorf("SlideTitle() = %q, want the heading outside the fence", got)
+	}
+}
+
+func TestSlideTitleFallsBackWhenOnlyCodeCommentsLookLikeHeadings(t *testing.T) {
+	content := "```python\n# not a heading\nprint(1)\n```\n"
+
+	if got := SlideTitle(content, 2); got != "Slide 3" {
+		t.Errorf("SlideTitle() = %q, want Slide 3", got)
+	}
+}
+
+func TestSlideTitleKeepsUnderscoresInIdentifiers(t *testing.T) {
+	if got := SlideTitle("# Understanding get_user_by_id\n", 0); got != "Understanding get_user_by_id" {
+		t.Errorf("SlideTitle() = %q, want the identifier intact", got)
+	}
+}
+
+func TestSlideTitleStripsInlineCodeMarkers(t *testing.T) {
+	if got := SlideTitle("# The `geocode` call\n", 0); got != "The geocode call" {
+		t.Errorf("SlideTitle() = %q, want the backticks removed", got)
+	}
+}
+
 func TestChaptersRenderAsAYouTubeList(t *testing.T) {
 	start := time.Date(2026, 9, 20, 14, 32, 0, 0, time.UTC)
 	chapters := NewChapters(start)
