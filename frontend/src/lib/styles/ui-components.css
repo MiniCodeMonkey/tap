@@ -242,6 +242,30 @@
 	}
 }
 
+/*
+ * A finger needs a bigger target than a mouse, and a phone held sideways is
+ * wide enough to be given three or four columns by the rules above. Cap it
+ * at two, whatever the width, whenever the pointer is a finger.
+ */
+@media (pointer: coarse) {
+	.slide-overview .thumbnail-grid {
+		--grid-columns: 2;
+		gap: 1rem;
+		padding: 1rem;
+	}
+
+	.slide-overview .thumbnail-number {
+		font-size: 1rem;
+		padding: 0.35rem 0.6rem;
+	}
+}
+
+@media (pointer: coarse) and (max-width: 600px) {
+	.slide-overview .thumbnail-grid {
+		--grid-columns: 1;
+	}
+}
+
 /* ============================================================================
  * Shortcut Help - Overlay listing the keyboard shortcuts (the ? key)
  *

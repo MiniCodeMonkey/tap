@@ -251,6 +251,49 @@ describe('touch navigation', () => {
 			expect(presentationStore.prevSlide).not.toHaveBeenCalled();
 		});
 
+		it('swallows the synthetic click that follows, so the overview stays open', () => {
+			const onToggleOverview = vi.fn();
+			const backdropClick = vi.fn();
+			cleanup();
+			cleanup = setupTouchNavigation({ onToggleOverview });
+			dispatchTouch('touchstart', [
+				{ x: 180, y: 200 },
+				{ x: 260, y: 200 }
+			]);
+			dispatchTouch('touchend', [
+				{ x: 180, y: 200 },
+				{ x: 260, y: 200 }
+			]);
+
+			window.addEventListener('click', backdropClick);
+			window.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+			window.removeEventListener('click', backdropClick);
+
+			expect(onToggleOverview).toHaveBeenCalledTimes(1);
+			expect(backdropClick).not.toHaveBeenCalled();
+		});
+
+		it('swallows only one click', () => {
+			const secondClick = vi.fn();
+			cleanup();
+			cleanup = setupTouchNavigation({ onToggleOverview: vi.fn() });
+			dispatchTouch('touchstart', [
+				{ x: 180, y: 200 },
+				{ x: 260, y: 200 }
+			]);
+			dispatchTouch('touchend', [
+				{ x: 180, y: 200 },
+				{ x: 260, y: 200 }
+			]);
+
+			window.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+			window.addEventListener('click', secondClick);
+			window.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+			window.removeEventListener('click', secondClick);
+
+			expect(secondClick).toHaveBeenCalledTimes(1);
+		});
+
 		it('fires once even though lifting two fingers ends twice', () => {
 			const onToggleOverview = vi.fn();
 			cleanup();

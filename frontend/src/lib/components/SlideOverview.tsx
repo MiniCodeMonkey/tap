@@ -1,11 +1,16 @@
 /**
- * Full-screen grid of every slide, opened with the O key. Each thumbnail is
- * a real Slide rendered as a static preview inside a scaled SlideCanvas, so
- * it always matches what the audience view would show. Arrow keys move a
- * focus ring around the grid; Enter or a click jumps to that slide.
+ * Full-screen grid of every slide, opened with the O key or a two-finger
+ * tap. Each thumbnail is a real Slide rendered as a static preview inside a
+ * scaled SlideCanvas, so it always matches what the audience view would
+ * show. Arrow keys move a focus ring around the grid; Enter or a click
+ * jumps to that slide.
+ *
+ * Only the thumbnails near the viewport render their slide. A long deck of
+ * component-driven slides would otherwise mount every map, chart and
+ * highlighted code block at once, which is enough to take a phone down.
  */
 
-import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
+import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import type { Slide as SlideData, Theme } from '$lib/types';
 import { usePresentationStore, goToSlide } from '$lib/stores/presentation';
 import { broadcastPresentationState } from '$lib/stores/websocket';
@@ -29,6 +34,53 @@ export interface SlideOverviewProps {
 
 /** Number of columns in the grid at its widest, matching the CSS default. */
 const GRID_COLUMNS = 5;
+
+/**
+ * How far outside the viewport a thumbnail starts rendering its slide, so a
+ * scroll lands on a drawn thumbnail rather than an empty box.
+ */
+const RENDER_MARGIN = '300px';
+
+/**
+ * A thumbnail that mounts its children only while it is near the viewport,
+ * and drops them again once it is well clear of it. Without an
+ * IntersectionObserver (jsdom, older browsers) it renders everything, which
+ * is the behaviour this replaced.
+ */
+function LazyThumbnail({ children }: { children: ReactNode }) {
+	const ref = useRef<HTMLDivElement>(null);
+	const [visible, setVisible] = useState(typeof IntersectionObserver === 'undefined');
+
+	useEffect(() => {
+		if (typeof IntersectionObserver === 'undefined') {
+			return;
+		}
+
+		const element = ref.current;
+		if (!element) {
+			return;
+		}
+
+		const observer = new IntersectionObserver(
+			(entries) => {
+				const entry = entries[0];
+				if (entry) {
+					setVisible(entry.isIntersecting);
+				}
+			},
+			{ rootMargin: RENDER_MARGIN }
+		);
+
+		observer.observe(element);
+		return () => observer.disconnect();
+	}, []);
+
+	return (
+		<div className="thumbnail-aspect" ref={ref}>
+			{visible ? children : null}
+		</div>
+	);
+}
 
 export function SlideOverview({
 	slides,
@@ -131,7 +183,7 @@ export function SlideOverview({
 							aria-selected={index === currentIndex}
 							aria-label={`Slide ${index + 1}`}
 						>
-							<div className="thumbnail-aspect">
+							<LazyThumbnail>
 								<SlideCanvas aspectRatio={aspectRatio} theme={theme}>
 									<Slide
 										slide={slide}
@@ -143,7 +195,7 @@ export function SlideOverview({
 										total={slides.length}
 									/>
 								</SlideCanvas>
-							</div>
+							</LazyThumbnail>
 							<div className="thumbnail-number">{index + 1}</div>
 						</button>
 					))}

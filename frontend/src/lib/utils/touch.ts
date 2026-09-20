@@ -80,6 +80,14 @@ const TWO_FINGER_TAP_MS = 400;
  */
 const TWO_FINGER_DRIFT_PX = 30;
 
+/**
+ * How long to swallow the synthetic click a browser fires after a touch
+ * sequence, in milliseconds. Without this the click lands on whatever the
+ * gesture just opened -- the overview's backdrop -- and closes it again, so
+ * the grid appears for one frame and vanishes.
+ */
+const GHOST_CLICK_MS = 500;
+
 // ============================================================================
 // Internal State
 // ============================================================================
@@ -137,6 +145,32 @@ function isInteractiveTarget(target: EventTarget | null): boolean {
 	}
 
 	return false;
+}
+
+/**
+ * Swallow the next click, whoever it lands on, for a moment.
+ * Capture phase, so it never reaches the element's own handler.
+ */
+function swallowNextClick(): void {
+	if (typeof window === 'undefined') {
+		return;
+	}
+
+	let timer: ReturnType<typeof setTimeout>;
+
+	const swallow = (event: MouseEvent): void => {
+		event.preventDefault();
+		event.stopPropagation();
+		release();
+	};
+
+	const release = (): void => {
+		clearTimeout(timer);
+		window.removeEventListener('click', swallow, true);
+	};
+
+	window.addEventListener('click', swallow, true);
+	timer = setTimeout(release, GHOST_CLICK_MS);
 }
 
 /**
@@ -221,6 +255,7 @@ function handleTouchEnd(event: TouchEvent): void {
 			Date.now() - twoFingerStart.startedAt <= TWO_FINGER_TAP_MS &&
 			!(currentOptions.isHelpOpen?.() ?? false)
 		) {
+			swallowNextClick();
 			currentOptions.onToggleOverview?.();
 		}
 		return;

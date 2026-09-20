@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render } from '@testing-library/react';
+import { act, cleanup, fireEvent, render } from '@testing-library/react';
 import { SlideOverview } from './SlideOverview';
 import { resetPresentation, usePresentationStore } from '$lib/stores/presentation';
 import { broadcastPresentationState } from '$lib/stores/websocket';
@@ -32,6 +32,76 @@ afterEach(() => {
 });
 
 describe('SlideOverview', () => {
+	describe('lazy thumbnails', () => {
+		/** Capture the observers a render creates, so a test can drive them. */
+		function stubIntersectionObserver(): {
+			trigger: (isIntersecting: boolean) => void;
+			disconnects: () => number;
+		} {
+			const callbacks: ((entries: { isIntersecting: boolean }[]) => void)[] = [];
+			let disconnected = 0;
+
+			class StubObserver {
+				constructor(callback: (entries: { isIntersecting: boolean }[]) => void) {
+					callbacks.push(callback);
+				}
+				observe(): void {}
+				unobserve(): void {}
+				disconnect(): void {
+					disconnected += 1;
+				}
+			}
+
+			vi.stubGlobal('IntersectionObserver', StubObserver);
+
+			return {
+				trigger: (isIntersecting: boolean) => {
+					for (const callback of callbacks) {
+						callback([{ isIntersecting }]);
+					}
+				},
+				disconnects: () => disconnected
+			};
+		}
+
+		afterEach(() => {
+			vi.unstubAllGlobals();
+		});
+
+		it('renders no slide content until a thumbnail comes near the viewport', () => {
+			stubIntersectionObserver();
+			const { container } = render(<SlideOverview slides={makeSlides(40)} isOpen />);
+
+			expect(container.querySelectorAll('.thumbnail')).toHaveLength(40);
+			expect(container.querySelector('.slide-container')).toBeNull();
+		});
+
+		it('renders the slide once the thumbnail intersects, and drops it again', async () => {
+			const observer = stubIntersectionObserver();
+			const { container } = render(<SlideOverview slides={makeSlides(3)} isOpen />);
+
+			await act(async () => observer.trigger(true));
+			expect(container.querySelectorAll('.slide-container').length).toBeGreaterThan(0);
+
+			await act(async () => observer.trigger(false));
+			expect(container.querySelector('.slide-container')).toBeNull();
+		});
+
+		it('disconnects its observers when the overview unmounts', async () => {
+			const observer = stubIntersectionObserver();
+			const { unmount } = render(<SlideOverview slides={makeSlides(3)} isOpen />);
+
+			unmount();
+			expect(observer.disconnects()).toBe(3);
+		});
+
+		it('renders every thumbnail where IntersectionObserver is missing', () => {
+			vi.stubGlobal('IntersectionObserver', undefined);
+			const { container } = render(<SlideOverview slides={makeSlides(3)} isOpen />);
+			expect(container.querySelectorAll('.slide-container').length).toBeGreaterThan(0);
+		});
+	});
+
 	it('renders nothing when closed', () => {
 		const { container } = render(<SlideOverview slides={makeSlides(3)} isOpen={false} />);
 		expect(container.firstChild).toBeNull();
