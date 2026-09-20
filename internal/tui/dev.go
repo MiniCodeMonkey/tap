@@ -69,6 +69,11 @@ type devEventMsg struct {
 	event DevEvent
 }
 
+// recordEndedMsg is sent when the recorder stopped without being asked.
+type recordEndedMsg struct {
+	err error
+}
+
 // pdfExportMsg is sent when a PDF export completes.
 type pdfExportMsg struct {
 	outputPath string
@@ -98,6 +103,7 @@ type DevModel struct { //nolint:govet // embedded structs prevent optimal alignm
 	config             DevConfig
 	state              DevState
 	eventsCh           chan DevEvent
+	recordEndedCh      chan error
 	closeCh            chan struct{}
 	themeBroadcaster   ThemeBroadcaster
 	tunnels            TunnelController
@@ -152,6 +158,7 @@ func NewDevModel(cfg DevConfig) *DevModel {
 			RecentEvents: make([]DevEvent, 0, 10),
 		},
 		eventsCh:         make(chan DevEvent, 100),
+		recordEndedCh:    make(chan error, 1),
 		closeCh:          make(chan struct{}),
 		currentTheme:     currentTheme,
 		themePickerIndex: themeIndex,
@@ -177,6 +184,8 @@ func (m *DevModel) listenForEvents() tea.Cmd {
 		select {
 		case event := <-m.eventsCh:
 			return devEventMsg{event: event}
+		case err := <-m.recordEndedCh:
+			return recordEndedMsg{err: err}
 		case <-m.closeCh:
 			return nil
 		}
@@ -290,6 +299,16 @@ func (m *DevModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case devEventMsg:
 		m.addEvent(msg.event)
+		return m, m.listenForEvents()
+
+	case recordEndedMsg:
+		m.recording = false
+		m.recordWarned = false
+		m.addEvent(DevEvent{
+			Type:      "error",
+			Message:   "Recording stopped unexpectedly: " + msg.err.Error(),
+			Timestamp: time.Now(),
+		})
 		return m, m.listenForEvents()
 
 	case tunnelMsg:

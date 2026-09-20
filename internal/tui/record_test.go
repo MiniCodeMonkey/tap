@@ -496,10 +496,18 @@ func TestNoteRecordingEndedClearsTheState(t *testing.T) {
 
 	m.NoteRecordingEnded(errors.New("exit status 3"))
 
+	msg := m.listenForEvents()()
+	ended, ok := msg.(recordEndedMsg)
+	if !ok {
+		t.Fatalf("listenForEvents returned %T, want recordEndedMsg", msg)
+	}
+
+	m.Update(ended)
+
 	if m.recording {
 		t.Error("the model still believes it is recording")
 	}
-	if !strings.Contains(m.viewStatus(), "watcher") {
-		t.Error("the status block lost its other rows")
+	if !strings.Contains(eventText(m), "exit status 3") {
+		t.Errorf("the unexpected exit is not in the events: %s", eventText(m))
 	}
 }
