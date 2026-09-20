@@ -505,10 +505,12 @@ func runDevServer(file string, port int, presenterPassword string, headless bool
 		// Quitting the TUI stops a running recording without going
 		// through applyRecordMsg, so the speaker never sees where the
 		// file went; the TUI is gone by now, so print it to the
-		// terminal instead. Stop is idempotent, so this is safe whether
-		// or not the TUI already stopped the recording itself.
+		// terminal instead. Stop is idempotent and remembers the last
+		// finished recording, so this also fires (correctly, as a
+		// summary rather than a fresh event) when the recording was
+		// already stopped with c well before quitting.
 		if result, err := recordings.Stop(); err == nil && result.Path != "" {
-			Success("  Recording saved to %s\n", result.Path)
+			Success("  Last recording: %s\n", result.Path)
 			if result.ChapterPath != "" {
 				Muted("  Chapters: %s\n", result.ChapterPath)
 			}
