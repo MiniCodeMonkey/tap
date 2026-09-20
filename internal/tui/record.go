@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 	"path/filepath"
+	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -179,4 +180,121 @@ func formatElapsed(elapsed time.Duration) string {
 		return fmt.Sprintf("%d:%02d:%02d", hours, minutes, seconds)
 	}
 	return fmt.Sprintf("%d:%02d", minutes, seconds)
+}
+
+// handleRecordPickerKey drives the record picker overlay.
+func (m *DevModel) handleRecordPickerKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "esc", "q":
+		m.showRecordPicker = false
+		return m, nil
+
+	case "up", "k":
+		if m.recordPickerIndex > 0 {
+			m.recordPickerIndex--
+		}
+		return m, nil
+
+	case "down", "j":
+		if m.recordPickerIndex < len(m.recordDisplays)-1 {
+			m.recordPickerIndex++
+		}
+		return m, nil
+
+	case "t":
+		// A test stays in the picker, so a wrong screen can be corrected
+		// and tested again without starting over.
+		return m, m.testRecordingCmd(m.selectedDisplay())
+
+	case "enter":
+		display := m.selectedDisplay()
+		m.showRecordPicker = false
+		return m, m.startRecordingCmd(display)
+	}
+
+	return m, nil
+}
+
+// selectedDisplay is the screencapture index the picker is sitting on.
+func (m *DevModel) selectedDisplay() int {
+	if m.recordPickerIndex < 0 || m.recordPickerIndex >= len(m.recordDisplays) {
+		return 1
+	}
+	return m.recordDisplays[m.recordPickerIndex].Index
+}
+
+// testRecordingCmd runs a short test capture off the update loop.
+func (m *DevModel) testRecordingCmd(display int) tea.Cmd {
+	controller := m.recorders
+	return func() tea.Msg {
+		if err := controller.Test(display); err != nil {
+			return devEventMsg{event: DevEvent{
+				Type:      "error",
+				Message:   "Test capture failed: " + err.Error(),
+				Timestamp: time.Now(),
+			}}
+		}
+		return devEventMsg{event: DevEvent{
+			Type:      "action",
+			Message:   "Test capture opened. Watch it and listen for your microphone.",
+			Timestamp: time.Now(),
+		}}
+	}
+}
+
+// displayLabel names a display for the picker. A display with no name is
+// shown by index: an unlabeled screen is better than a wrongly labeled one.
+func displayLabel(display recorder.Display) string {
+	label := display.Name
+	if label == "" {
+		label = fmt.Sprintf("Display %d", display.Index)
+	}
+	if display.Resolution != "" {
+		label += "   " + display.Resolution
+	}
+	if display.Main {
+		label += "   main"
+	}
+	return label
+}
+
+// viewRecordPicker renders the record picker overlay.
+func (m *DevModel) viewRecordPicker() string {
+	var b strings.Builder
+
+	b.WriteString("\n")
+	b.WriteString(RenderTitle("Record"))
+	b.WriteString("\n\n")
+
+	b.WriteString(RenderSubtitle("Display"))
+	b.WriteString("\n")
+	for position, display := range m.recordDisplays {
+		if position == m.recordPickerIndex {
+			b.WriteString(RenderSuccess("  > " + displayLabel(display)))
+		} else {
+			b.WriteString(RenderMuted("    " + displayLabel(display)))
+		}
+		b.WriteString("\n")
+	}
+
+	b.WriteString("\n")
+	b.WriteString(RenderSubtitle("Audio"))
+	b.WriteString("\n")
+
+	// The microphone is shown, not chosen: screencapture selects an input
+	// by CoreAudio UID, and a pure-Go binary cannot enumerate UIDs. Seeing
+	// the wrong microphone here is the point.
+	input := m.recorders.DefaultAudioInput()
+	if input == "" {
+		input = "no input device"
+	}
+	b.WriteString(RenderMuted("    " + input + " (system default input)"))
+	b.WriteString("\n")
+	b.WriteString(RenderMuted("    Change it in System Settings or the menu bar."))
+	b.WriteString("\n\n")
+
+	b.WriteString(RenderMuted("  enter start    t test 5s    esc cancel"))
+	b.WriteString("\n")
+
+	return b.String()
 }

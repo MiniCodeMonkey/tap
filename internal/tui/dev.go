@@ -342,6 +342,11 @@ func (m *DevModel) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleThemePickerKey(msg)
 	}
 
+	// Handle record picker if it's open
+	if m.showRecordPicker {
+		return m.handleRecordPickerKey(msg)
+	}
+
 	// Handle image generator if it's open
 	if m.showImageGenerator && m.imageGenModel != nil {
 		return m.handleImageGeneratorKey(msg)
@@ -687,6 +692,11 @@ func (m *DevModel) View() string {
 	// Show theme picker overlay if active
 	if m.showThemePicker {
 		return m.viewThemePicker()
+	}
+
+	// Show record picker overlay if active
+	if m.showRecordPicker {
+		return m.viewRecordPicker()
 	}
 
 	// Show image generator overlay if active

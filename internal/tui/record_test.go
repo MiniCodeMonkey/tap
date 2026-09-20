@@ -241,3 +241,128 @@ func eventText(m *DevModel) string {
 	}
 	return strings.Join(parts, "\n")
 }
+
+func openPicker(t *testing.T, fake *fakeRecorder) *DevModel {
+	t.Helper()
+
+	m := NewDevModel(DevConfig{})
+	m.SetRecorderController(fake)
+	pressC(t, m)
+
+	if !m.showRecordPicker {
+		t.Fatal("the picker did not open")
+	}
+	return m
+}
+
+func pressInPicker(t *testing.T, m *DevModel, key string) tea.Cmd {
+	t.Helper()
+
+	var msg tea.KeyMsg
+	switch key {
+	case "enter":
+		msg = tea.KeyMsg{Type: tea.KeyEnter}
+	case "esc":
+		msg = tea.KeyMsg{Type: tea.KeyEsc}
+	case "down":
+		msg = tea.KeyMsg{Type: tea.KeyDown}
+	default:
+		msg = tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(key)}
+	}
+
+	_, cmd := m.handleKeyPress(msg)
+	return cmd
+}
+
+func TestPickerStartsTheChosenDisplay(t *testing.T) {
+	fake := &fakeRecorder{available: true, displays: twoDisplays(), path: "recordings/talk.mov"}
+	m := openPicker(t, fake)
+
+	pressInPicker(t, m, "down")
+	cmd := pressInPicker(t, m, "enter")
+
+	if cmd == nil {
+		t.Fatal("enter in the picker returned no command")
+	}
+	if _, ok := cmd().(recordMsg); !ok {
+		t.Fatalf("command returned %T, want recordMsg", cmd())
+	}
+	if fake.lastDisplay != 2 {
+		t.Errorf("Start used display %d, want 2", fake.lastDisplay)
+	}
+	if m.showRecordPicker {
+		t.Error("the picker is still open after starting")
+	}
+}
+
+func TestPickerEscapeStartsNothing(t *testing.T) {
+	fake := &fakeRecorder{available: true, displays: twoDisplays()}
+	m := openPicker(t, fake)
+
+	pressInPicker(t, m, "esc")
+
+	if m.showRecordPicker {
+		t.Error("escape left the picker open")
+	}
+	if fake.startCalls != 0 {
+		t.Error("escape started a recording")
+	}
+}
+
+func TestPickerTestKeyRunsATestAndStaysOpen(t *testing.T) {
+	fake := &fakeRecorder{available: true, displays: twoDisplays()}
+	m := openPicker(t, fake)
+
+	pressInPicker(t, m, "down")
+	cmd := pressInPicker(t, m, "t")
+
+	if cmd == nil {
+		t.Fatal("t in the picker returned no command")
+	}
+	cmd()
+
+	if fake.testCalls != 1 {
+		t.Errorf("Test called %d times, want once", fake.testCalls)
+	}
+	if fake.lastDisplay != 2 {
+		t.Errorf("Test used display %d, want the selected 2", fake.lastDisplay)
+	}
+	if !m.showRecordPicker {
+		t.Error("the picker closed after a test, want it open so the choice can change")
+	}
+	if fake.startCalls != 0 {
+		t.Error("the test started a real recording")
+	}
+}
+
+func TestPickerSelectionStopsAtTheEnds(t *testing.T) {
+	m := openPicker(t, &fakeRecorder{available: true, displays: twoDisplays()})
+
+	pressInPicker(t, m, "down")
+	pressInPicker(t, m, "down")
+
+	if m.recordPickerIndex != 1 {
+		t.Errorf("recordPickerIndex = %d, want it held at the last entry", m.recordPickerIndex)
+	}
+}
+
+func TestPickerShowsDisplaysAndTheAudioInput(t *testing.T) {
+	m := openPicker(t, &fakeRecorder{available: true, displays: twoDisplays()})
+
+	view := m.viewRecordPicker()
+	for _, want := range []string{"Color LCD", "DELL U2720Q", "3840 x 2160", "main", "MacBook Pro Microphone", "System Settings"} {
+		if !strings.Contains(view, want) {
+			t.Errorf("the picker does not show %q:\n%s", want, view)
+		}
+	}
+}
+
+func TestPickerNamesDisplaysByIndexWhenNamesAreMissing(t *testing.T) {
+	displays := []recorder.Display{{Index: 1, Main: true}, {Index: 2}}
+	m := openPicker(t, &fakeRecorder{available: true, displays: displays})
+
+	view := m.viewRecordPicker()
+	if !strings.Contains(view, "Display 1") || !strings.Contains(view, "Display 2") {
+		t.Errorf("the picker does not fall back to plain indexes:\n%s", view)
+	}
+}
