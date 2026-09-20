@@ -25,6 +25,8 @@ type RecorderController interface {
 	Test(display int) error
 	Recording() bool
 	Elapsed() time.Duration
+	SuggestGitignore() string
+	AddGitignoreEntry() error
 }
 
 // recordMsg reports the outcome of a start or stop to the update loop.
@@ -156,6 +158,11 @@ func (m *DevModel) applyRecordMsg(msg recordMsg) *DevModel {
 			message += ", and it may be incomplete: the recorder had to be killed"
 		}
 		m.addEvent(DevEvent{Type: "action", Message: message, Timestamp: time.Now()})
+
+		if m.recorders != nil && m.recorders.SuggestGitignore() != "" {
+			m.showGitignorePrompt = true
+		}
+
 		return m
 	}
 
@@ -209,6 +216,35 @@ func (m *DevModel) viewQuitConfirm() string {
 	return "\n" + RenderTitle("Recording in progress") + "\n\n" +
 		RenderMuted("  "+filepath.Base(m.recordingPath)+"  "+formatElapsed(time.Since(m.recordingStartedAt))) + "\n\n" +
 		"  Stop recording and quit? (y/n)\n"
+}
+
+// handleGitignoreKey drives the prompt shown after a recording is saved
+// inside a git repository.
+func (m *DevModel) handleGitignoreKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "y", "Y":
+		m.showGitignorePrompt = false
+		if err := m.recorders.AddGitignoreEntry(); err != nil {
+			m.addEvent(DevEvent{Type: "error", Message: "Could not write .gitignore: " + err.Error(), Timestamp: time.Now()})
+			return m, nil
+		}
+		m.addEvent(DevEvent{Type: "action", Message: "Added recordings/ to .gitignore", Timestamp: time.Now()})
+		return m, nil
+
+	case "n", "N", "esc":
+		m.showGitignorePrompt = false
+		return m, nil
+	}
+
+	return m, nil
+}
+
+// viewGitignorePrompt renders the prompt.
+func (m *DevModel) viewGitignorePrompt() string {
+	entry := m.recorders.SuggestGitignore()
+	return "\n" + RenderTitle("Recording saved") + "\n\n" +
+		RenderMuted("  A recording is large, and this deck is in a git repository.") + "\n\n" +
+		"  Add " + entry + " to .gitignore? (y/n)\n"
 }
 
 // recordingTick is the once-a-second check on a running recording: it

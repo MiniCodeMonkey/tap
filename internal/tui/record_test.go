@@ -13,16 +13,18 @@ import (
 
 // fakeRecorder stands in for the CLI's controller.
 type fakeRecorder struct {
-	displays    []recorder.Display
-	report      recorder.Report
-	startErr    error
-	path        string
-	available   bool
-	recording   bool
-	startCalls  int
-	stopCalls   int
-	testCalls   int
-	lastDisplay int
+	displays            []recorder.Display
+	report              recorder.Report
+	startErr            error
+	path                string
+	gitignoreSuggestion string
+	available           bool
+	recording           bool
+	startCalls          int
+	stopCalls           int
+	testCalls           int
+	lastDisplay         int
+	gitignoreCalls      int
 }
 
 func (f *fakeRecorder) Available() bool { return f.available }
@@ -58,6 +60,10 @@ func (f *fakeRecorder) Test(display int) error {
 func (f *fakeRecorder) Recording() bool { return f.recording }
 
 func (f *fakeRecorder) Elapsed() time.Duration { return 0 }
+
+func (f *fakeRecorder) SuggestGitignore() string { return f.gitignoreSuggestion }
+
+func (f *fakeRecorder) AddGitignoreEntry() error { f.gitignoreCalls++; return nil }
 
 func oneDisplay() []recorder.Display {
 	return []recorder.Display{{Index: 1, Name: "Color LCD", Resolution: "2294 x 1432", Main: true}}
@@ -509,5 +515,66 @@ func TestNoteRecordingEndedClearsTheState(t *testing.T) {
 	}
 	if !strings.Contains(eventText(m), "exit status 3") {
 		t.Errorf("the unexpected exit is not in the events: %s", eventText(m))
+	}
+}
+
+func TestStoppingOffersTheGitignoreEntry(t *testing.T) {
+	fake := &fakeRecorder{available: true, gitignoreSuggestion: "recordings/"}
+	m := NewDevModel(DevConfig{})
+	m.SetRecorderController(fake)
+	m.recording = true
+
+	m.applyRecordMsg(recordMsg{stopped: true, result: recorder.Result{Path: "recordings/talk.mov"}})
+
+	if !m.showGitignorePrompt {
+		t.Fatal("stopping did not offer the .gitignore entry")
+	}
+	if !strings.Contains(m.View(), "recordings/") {
+		t.Errorf("the prompt does not name the entry:\n%s", m.View())
+	}
+}
+
+func TestStoppingIsQuietWhenNothingToIgnore(t *testing.T) {
+	fake := &fakeRecorder{available: true, gitignoreSuggestion: ""}
+	m := NewDevModel(DevConfig{})
+	m.SetRecorderController(fake)
+	m.recording = true
+
+	m.applyRecordMsg(recordMsg{stopped: true, result: recorder.Result{Path: "recordings/talk.mov"}})
+
+	if m.showGitignorePrompt {
+		t.Error("the prompt appeared outside a git repository")
+	}
+}
+
+func TestGitignorePromptYesAddsTheEntry(t *testing.T) {
+	fake := &fakeRecorder{available: true, gitignoreSuggestion: "recordings/"}
+	m := NewDevModel(DevConfig{})
+	m.SetRecorderController(fake)
+	m.showGitignorePrompt = true
+
+	m.handleKeyPress(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}})
+
+	if fake.gitignoreCalls != 1 {
+		t.Errorf("AddGitignoreEntry called %d times, want once", fake.gitignoreCalls)
+	}
+	if m.showGitignorePrompt {
+		t.Error("the prompt stayed open after y")
+	}
+}
+
+func TestGitignorePromptNoChangesNothing(t *testing.T) {
+	fake := &fakeRecorder{available: true, gitignoreSuggestion: "recordings/"}
+	m := NewDevModel(DevConfig{})
+	m.SetRecorderController(fake)
+	m.showGitignorePrompt = true
+
+	m.handleKeyPress(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
+
+	if fake.gitignoreCalls != 0 {
+		t.Error("n wrote to .gitignore")
+	}
+	if m.showGitignorePrompt {
+		t.Error("the prompt stayed open after n")
 	}
 }

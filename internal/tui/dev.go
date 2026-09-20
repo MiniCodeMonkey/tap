@@ -100,37 +100,38 @@ type tickMsg struct{}
 
 // DevModel is the Bubble Tea model for the dev server TUI.
 type DevModel struct { //nolint:govet // embedded structs prevent optimal alignment
-	config             DevConfig
-	state              DevState
-	eventsCh           chan DevEvent
-	recordEndedCh      chan error
-	closeCh            chan struct{}
-	themeBroadcaster   ThemeBroadcaster
-	tunnels            TunnelController
-	tunnelURL          string
-	tunnelQR           string
-	tunnelStarting     bool
-	imageGenModel      *ImageGenModel
-	addModel           *AddModel
-	recorders          RecorderController
-	recordDisplays     []recorder.Display
-	recordingPath      string
-	recordingStartedAt time.Time
-	mu                 sync.RWMutex
-	windowWidth        int
-	windowHeight       int
-	currentTheme       string
-	themePickerIndex   int
-	recordPickerIndex  int
-	quitting           bool
-	showThemePicker    bool
-	showImageGenerator bool
-	showSlideBuilder   bool
-	exportingPDF       bool
-	recording          bool
-	recordWarned       bool
-	showRecordPicker   bool
-	showQuitConfirm    bool
+	config              DevConfig
+	state               DevState
+	eventsCh            chan DevEvent
+	recordEndedCh       chan error
+	closeCh             chan struct{}
+	themeBroadcaster    ThemeBroadcaster
+	tunnels             TunnelController
+	tunnelURL           string
+	tunnelQR            string
+	tunnelStarting      bool
+	imageGenModel       *ImageGenModel
+	addModel            *AddModel
+	recorders           RecorderController
+	recordDisplays      []recorder.Display
+	recordingPath       string
+	recordingStartedAt  time.Time
+	mu                  sync.RWMutex
+	windowWidth         int
+	windowHeight        int
+	currentTheme        string
+	themePickerIndex    int
+	recordPickerIndex   int
+	quitting            bool
+	showThemePicker     bool
+	showImageGenerator  bool
+	showSlideBuilder    bool
+	exportingPDF        bool
+	recording           bool
+	recordWarned        bool
+	showRecordPicker    bool
+	showQuitConfirm     bool
+	showGitignorePrompt bool
 }
 
 // NewDevModel creates a new DevModel for the dev server TUI.
@@ -370,6 +371,11 @@ func (m *DevModel) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// Handle the quit confirmation if it's open
 	if m.showQuitConfirm {
 		return m.handleQuitConfirmKey(msg)
+	}
+
+	// Handle the .gitignore prompt if it's open
+	if m.showGitignorePrompt {
+		return m.handleGitignoreKey(msg)
 	}
 
 	// Handle image generator if it's open
@@ -723,6 +729,11 @@ func (m *DevModel) View() string {
 	// Show the quit confirmation if it's open
 	if m.showQuitConfirm {
 		return m.viewQuitConfirm()
+	}
+
+	// Show the .gitignore prompt if it's open
+	if m.showGitignorePrompt {
+		return m.viewGitignorePrompt()
 	}
 
 	if m.quitting {

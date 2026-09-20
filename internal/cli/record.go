@@ -262,3 +262,24 @@ func (c *recordController) titleFor(slideIndex int) string {
 func openInDefaultApplication(path string) error {
 	return exec.Command("open", path).Start()
 }
+
+// gitignoreEntry is what a recordings directory looks like in a .gitignore.
+const gitignoreEntry = "recordings/"
+
+// SuggestGitignore is the ignore entry worth offering, or "" when there is
+// nothing to offer: outside a git repository, or when it is already there.
+func (c *recordController) SuggestGitignore() string {
+	if needed, _ := gitignoreState(c.options.OutputDir, gitignoreEntry); needed {
+		return gitignoreEntry
+	}
+	return ""
+}
+
+// AddGitignoreEntry ignores the recordings directory.
+func (c *recordController) AddGitignoreEntry() error {
+	needed, gitignorePath := gitignoreState(c.options.OutputDir, gitignoreEntry)
+	if !needed {
+		return nil
+	}
+	return appendGitignoreEntry(gitignorePath, gitignoreEntry)
+}
