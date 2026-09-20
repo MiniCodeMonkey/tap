@@ -113,7 +113,8 @@ export function resolveLayout({
 export function nextLayout(current: PresenterLayout, isNarrow: boolean): PresenterLayout {
 	const offered = availableLayouts(isNarrow);
 	const index = offered.findIndex((entry) => entry.id === current);
-	return offered[(index + 1) % offered.length].id;
+	const next = offered[(index + 1) % offered.length];
+	return next ? next.id : DEFAULT_LAYOUT;
 }
 
 export function resolveNotesSizeMode({
