@@ -30,10 +30,12 @@ for the grant to take effect.
 
 `tap dev` checks this when it starts the terminal interface on macOS, by
 taking a tiny test screenshot, and says nothing when it succeeds. If the
-permission is missing, or was revoked, the terminal prints a warning
-naming the exact fix above. This check runs whether or not the deck asks
-for recording, so a missing grant surfaces while you are still setting up
-rather than when you press **C** on stage.
+permission is missing, or was revoked, the check fails immediately and the
+terminal prints a warning naming the exact fix above. This check runs
+whether or not the deck asks for recording, so a missing grant surfaces
+while you are still setting up rather than when you press **C** on stage.
+The same grant covers audio capture too, so macOS never raises a separate
+microphone prompt on top of it.
 
 ## Choosing a Display
 
@@ -93,7 +95,10 @@ would just be typing.
 
 By default, recordings are written to a `recordings/` directory next to
 the deck, alongside a matching chapter file with the same name and a
-`.txt` extension. Set `recording.output` to write somewhere else:
+`.txt` extension. Nothing creates that directory until you actually press
+**C**: `tap dev` does not touch the filesystem just because a deck's
+frontmatter has a `recording` block. Set `recording.output` to write
+somewhere else:
 
 ```yaml
 recording:
