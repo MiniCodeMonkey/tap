@@ -36,7 +36,7 @@ func TestPrepareDeck_ServesComponentBundles(t *testing.T) {
 	// only to get at the resolved component map so the test knows which
 	// bundle file names to expect; prepareDeck itself is what the fix
 	// exercises.
-	_, _, resolvedComponents, componentErrs, err := loadPresentation(deckPath, cfg, baseDir)
+	_, _, resolvedComponents, componentErrs, _, err := loadPresentation(deckPath, cfg, baseDir)
 	if err != nil {
 		t.Fatalf("failed to load presentation: %v", err)
 	}

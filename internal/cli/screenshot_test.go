@@ -321,7 +321,7 @@ func TestScreenshotIntegration(t *testing.T) {
 		t.Fatalf("failed to load config: %v", err)
 	}
 
-	pres, _, resolvedComponents, componentErrs, err := loadPresentation(sampleDeck, cfg, baseDir)
+	pres, _, resolvedComponents, componentErrs, _, err := loadPresentation(sampleDeck, cfg, baseDir)
 	if err != nil {
 		t.Fatalf("failed to load presentation: %v", err)
 	}
@@ -549,7 +549,7 @@ func TestScreenshotIntegration_RollingDeployStepsDiffer(t *testing.T) {
 		t.Fatalf("failed to load config: %v", err)
 	}
 
-	pres, _, resolvedComponents, componentErrs, err := loadPresentation(deckPath, cfg, baseDir)
+	pres, _, resolvedComponents, componentErrs, _, err := loadPresentation(deckPath, cfg, baseDir)
 	if err != nil {
 		t.Fatalf("failed to load presentation: %v", err)
 	}

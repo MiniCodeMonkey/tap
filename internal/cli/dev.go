@@ -10,6 +10,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -17,6 +18,7 @@ import (
 	"github.com/MiniCodeMonkey/tap/internal/config"
 	"github.com/MiniCodeMonkey/tap/internal/layouts"
 	"github.com/MiniCodeMonkey/tap/internal/parser"
+	"github.com/MiniCodeMonkey/tap/internal/recorder"
 	"github.com/MiniCodeMonkey/tap/internal/server"
 	"github.com/MiniCodeMonkey/tap/internal/transformer"
 	"github.com/MiniCodeMonkey/tap/internal/tui"
@@ -121,9 +123,26 @@ func runDevServer(file string, port int, presenterPassword string, headless bool
 	}
 
 	// Parse and transform the presentation
-	pres, warnings, resolvedComponents, componentBuildErrs, err := loadPresentation(absFile, cfg, baseDir)
+	pres, warnings, resolvedComponents, componentBuildErrs, rawSlides, err := loadPresentation(absFile, cfg, baseDir)
 	if err != nil {
 		return fmt.Errorf("failed to load presentation: %w", err)
+	}
+
+	// currentSlides gives the recording controller's TitleFor a live view
+	// of the deck's raw markdown slides, so a chapter title is always
+	// named from whatever is loaded right now. presMu guards rawSlides
+	// because the watcher goroutine below writes it on every reload while
+	// TitleFor can run concurrently from the hub's own goroutine.
+	var presMu sync.RWMutex
+	currentSlides := func() []parser.Slide {
+		presMu.RLock()
+		defer presMu.RUnlock()
+		return rawSlides
+	}
+	setRawSlides := func(slides []parser.Slide) {
+		presMu.Lock()
+		rawSlides = slides
+		presMu.Unlock()
 	}
 	// The TUI has not started yet at this point either way, so stderr is
 	// always safe here.
@@ -222,7 +241,7 @@ func runDevServer(file string, port int, presenterPassword string, headless bool
 			return
 		}
 
-		newPres, warnings, newResolvedComponents, newComponentBuildErrs, err := loadPresentation(absFile, newCfg, baseDir)
+		newPres, warnings, newResolvedComponents, newComponentBuildErrs, newRawSlides, err := loadPresentation(absFile, newCfg, baseDir)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error reloading presentation: %v\n", err)
 			return
@@ -234,6 +253,7 @@ func runDevServer(file string, port int, presenterPassword string, headless bool
 		printComponentErrorsToStderr(newComponentBuildErrs)
 		printComponentWarningsToStderr(componentWarnings(newResolvedComponents))
 
+		setRawSlides(newRawSlides)
 		watcher.AddExtraDirs(externalInputDirs(newResolvedComponents, baseDir))
 		srv.SetComponentBundles(componentBundleFiles(newResolvedComponents))
 		srv.SetPresentation(newPres)
@@ -261,6 +281,48 @@ func runDevServer(file string, port int, presenterPassword string, headless bool
 	// dev server. The controller also keeps the Host allow-list in step.
 	tunnels := newTunnelController(port, allowOrigins, srv, hub)
 	defer func() { _ = tunnels.Stop() }()
+
+	// Recording is opt-in at the keyboard, but its preflight runs at
+	// startup so a missing permission is found during setup rather than
+	// on stage.
+	recordOutputDir := filepath.Join(baseDir, "recordings")
+	if cfg.Recording.Output != "" {
+		recordOutputDir = cfg.Recording.Output
+		if !filepath.IsAbs(recordOutputDir) {
+			recordOutputDir = filepath.Join(baseDir, recordOutputDir)
+		}
+	}
+
+	audioUID := cfg.Recording.Audio
+	if audioUID == "default" {
+		audioUID = ""
+	}
+
+	recordings := newRecordController(recordControllerOptions{
+		DeckTitle:    cfg.Title,
+		OutputDir:    recordOutputDir,
+		AudioUID:     audioUID,
+		NoAudio:      cfg.Recording.Audio == "none",
+		ShowClicks:   cfg.Recording.ShowClicks,
+		Chapters:     cfg.Recording.ChaptersEnabled(),
+		CurrentSlide: hub.CurrentSlide,
+		TitleFor: func(slideIndex int) string {
+			slides := currentSlides()
+			if slideIndex < 0 || slideIndex >= len(slides) {
+				return fmt.Sprintf("Slide %d", slideIndex+1)
+			}
+			return recorder.SlideTitle(slides[slideIndex].Content, slideIndex)
+		},
+	})
+	// Stop is idempotent, so this runs safely on every exit path,
+	// including when the TUI already stopped the recording itself.
+	defer func() { _, _ = recordings.Stop() }()
+
+	hub.SetOnSlideChange(recordings.NoteSlideChange)
+
+	if !recorder.Supported() && cfg.Recording != (config.Recording{}) {
+		Warning("Recording is macOS only; the recording block in this deck is ignored\n")
+	}
 
 	tunnelURL := ""
 	if wantTunnel {
@@ -307,7 +369,7 @@ func runDevServer(file string, port int, presenterPassword string, headless bool
 				return
 			}
 
-			newPres, warnings, newResolvedComponents, newComponentBuildErrs, err := loadPresentation(absFile, newCfg, baseDir)
+			newPres, warnings, newResolvedComponents, newComponentBuildErrs, newRawSlides, err := loadPresentation(absFile, newCfg, baseDir)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "Error reloading presentation: %v\n", err)
 				return
@@ -326,6 +388,7 @@ func runDevServer(file string, port int, presenterPassword string, headless bool
 				srv.SetCustomThemePath(newCustomThemePath)
 			}
 
+			setRawSlides(newRawSlides)
 			watcher.AddExtraDirs(externalInputDirs(newResolvedComponents, baseDir))
 			srv.SetComponentBundles(componentBundleFiles(newResolvedComponents))
 			srv.SetPresentation(newPres)
@@ -349,6 +412,9 @@ func runDevServer(file string, port int, presenterPassword string, headless bool
 			CurrentTheme:      cfg.Theme,
 			Version:           displayVersion(),
 			TunnelURL:         tunnelURL,
+			RecordWarnAfter:   cfg.Recording.WarnAfterDuration(),
+			RecordStopAfter:   cfg.Recording.StopAfterDuration(),
+			RecordDisplay:     cfg.Recording.Display,
 		}
 
 		// Create TUI model
@@ -356,6 +422,21 @@ func runDevServer(file string, port int, presenterPassword string, headless bool
 		model.UpdateWatcherStatus(true)
 		model.SetThemeBroadcaster(hub)
 		model.SetTunnelController(tunnels)
+		model.SetRecorderController(recordings)
+
+		// The probe is cheap and the result is not stored anywhere: Tap
+		// keeps no state between runs, and macOS raises its consent
+		// dialog once per application in any case.
+		go func() {
+			report := recordings.Preflight()
+			for _, finding := range report.Findings {
+				message := finding.Message
+				if finding.Fix != "" {
+					message += ". " + finding.Fix
+				}
+				model.SendEvent("error", message)
+			}
+		}()
 
 		// Track WebSocket client count
 		hub.SetOnClientCountChange(func(count int) {
@@ -371,7 +452,7 @@ func runDevServer(file string, port int, presenterPassword string, headless bool
 				return
 			}
 
-			newPres, warnings, newResolvedComponents, newComponentBuildErrs, err := loadPresentation(absFile, newCfg, baseDir)
+			newPres, warnings, newResolvedComponents, newComponentBuildErrs, newRawSlides, err := loadPresentation(absFile, newCfg, baseDir)
 			if err != nil {
 				model.SetError(err)
 				return
@@ -407,6 +488,7 @@ func runDevServer(file string, port int, presenterPassword string, headless bool
 			// worth showing; the model clears them on the next reload that
 			// has none, so a warning never outlives the build it came from.
 			model.SetWarnings(componentWarningLines(componentWarnings(newResolvedComponents)))
+			setRawSlides(newRawSlides)
 			watcher.AddExtraDirs(externalInputDirs(newResolvedComponents, baseDir))
 			srv.SetComponentBundles(componentBundleFiles(newResolvedComponents))
 			srv.SetPresentation(newPres)
@@ -418,6 +500,18 @@ func runDevServer(file string, port int, presenterPassword string, headless bool
 		// Run the TUI (blocks until user quits)
 		if err := tui.RunDevTUIWithModel(model); err != nil {
 			return fmt.Errorf("TUI error: %w", err)
+		}
+
+		// Quitting the TUI stops a running recording without going
+		// through applyRecordMsg, so the speaker never sees where the
+		// file went; the TUI is gone by now, so print it to the
+		// terminal instead. Stop is idempotent, so this is safe whether
+		// or not the TUI already stopped the recording itself.
+		if result, err := recordings.Stop(); err == nil && result.Path != "" {
+			Success("  Recording saved to %s\n", result.Path)
+			if result.ChapterPath != "" {
+				Muted("  Chapters: %s\n", result.ChapterPath)
+			}
 		}
 	}
 
@@ -434,19 +528,23 @@ func runDevServer(file string, port int, presenterPassword string, headless bool
 // decide where to show them: printLayoutWarningsToStderr and
 // printComponentErrorsToStderr for a plain terminal, or through the TUI
 // model's own message path when the TUI owns the terminal (see the reload
-// handler in the TUI branch of Run).
-func loadPresentation(file string, cfg *config.Config, baseDir string) (*transformer.TransformedPresentation, []layouts.Warning, map[string]components.Result, []components.BuildError, error) {
+// handler in the TUI branch of Run). The returned []parser.Slide is the
+// deck's raw markdown slides, in the same order as the returned
+// presentation's Slides: the recording controller's chapter titles need the
+// original markdown (for its headings), which the transformed, HTML-only
+// presentation no longer carries.
+func loadPresentation(file string, cfg *config.Config, baseDir string) (*transformer.TransformedPresentation, []layouts.Warning, map[string]components.Result, []components.BuildError, []parser.Slide, error) {
 	// Read file content
 	content, err := os.ReadFile(file)
 	if err != nil {
-		return nil, nil, nil, nil, fmt.Errorf("failed to read file: %w", err)
+		return nil, nil, nil, nil, nil, fmt.Errorf("failed to read file: %w", err)
 	}
 
 	// Parse markdown
 	p := parser.New()
 	parsed, err := p.Parse(content)
 	if err != nil {
-		return nil, nil, nil, nil, fmt.Errorf("failed to parse markdown: %s: %w", file, err)
+		return nil, nil, nil, nil, nil, fmt.Errorf("failed to parse markdown: %s: %w", file, err)
 	}
 
 	// Resolve and bundle every component the presentation's slides use.
@@ -461,7 +559,7 @@ func loadPresentation(file string, cfg *config.Config, baseDir string) (*transfo
 	t.SetComponents(resolvedComponents)
 	transformed := t.Transform(parsed)
 
-	return transformed, layouts.Validate(transformed), resolvedComponents, componentBuildErrs, nil
+	return transformed, layouts.Validate(transformed), resolvedComponents, componentBuildErrs, parsed.Slides, nil
 }
 
 // printLayoutWarningsToStderr prints one line to stderr for each layout or
