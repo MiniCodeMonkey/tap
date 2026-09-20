@@ -50,6 +50,11 @@ type recordController struct {
 	mu       sync.Mutex
 	session  *recorder.Session
 	chapters *recorder.Chapters
+	// lastResult is the most recent finished recording, so a later Stop
+	// from the shutdown path can still say where the file went. The TUI's
+	// quit confirmation stops the recorder itself and then exits, which
+	// would otherwise leave nobody holding the path.
+	lastResult recorder.Result
 }
 
 // newRecordController builds the controller the TUI drives.
@@ -125,15 +130,21 @@ func (c *recordController) Start(display int) (string, error) {
 	return path, nil
 }
 
-// Stop ends the recording and writes the chapter list.
+// Stop ends the recording and writes the chapter list. Calling it again
+// once nothing is running returns the last recording's result instead of
+// an empty one, mirroring recorder.Session.Stop's own idempotent contract:
+// the TUI's quit confirmation stops the recorder itself and then exits
+// before runDevServer's own Stop runs, so that later call still needs
+// something to print.
 func (c *recordController) Stop() (recorder.Result, error) {
 	c.mu.Lock()
 	session, chapters := c.session, c.chapters
 	c.session, c.chapters = nil, nil
+	lastResult := c.lastResult
 	c.mu.Unlock()
 
 	if session == nil {
-		return recorder.Result{}, nil
+		return lastResult, nil
 	}
 
 	result, err := session.Stop()
@@ -148,6 +159,10 @@ func (c *recordController) Stop() (recorder.Result, error) {
 		}
 		result.ChapterPath = chapterPath
 	}
+
+	c.mu.Lock()
+	c.lastResult = result
+	c.mu.Unlock()
 
 	return result, nil
 }

@@ -168,6 +168,32 @@ func TestControllerTestCaptureOpensAFileAndRecordsNothingPermanent(t *testing.T)
 	}
 }
 
+func TestControllerStopTwiceReturnsTheSameResult(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "recordings")
+	controller := testController(t, dir, func() (int, bool) { return 0, true })
+
+	if _, err := controller.Start(1); err != nil {
+		t.Fatalf("Start() returned %v", err)
+	}
+
+	first, err := controller.Stop()
+	if err != nil {
+		t.Fatalf("Stop() returned %v", err)
+	}
+
+	second, err := controller.Stop()
+	if err != nil {
+		t.Fatalf("second Stop() returned %v", err)
+	}
+
+	if second.Path != first.Path {
+		t.Errorf("second Stop() returned path %q, want %q", second.Path, first.Path)
+	}
+	if second.ChapterPath != first.ChapterPath {
+		t.Errorf("second Stop() returned chapter path %q, want %q", second.ChapterPath, first.ChapterPath)
+	}
+}
+
 func TestControllerStopWithoutStart(t *testing.T) {
 	controller := testController(t, t.TempDir(), func() (int, bool) { return 0, true })
 
