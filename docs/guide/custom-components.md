@@ -847,7 +847,8 @@ TAP_HUB_STATE_RETENTION=0s tap dev deck.md --port 4000
 **Any file change under the deck folder reloads the page** and remounts
 every component, which restarts their animations. Write screenshots and
 scratch files **outside** the deck folder, or into a dot folder or a folder
-named `dist`: the watcher skips both.
+named `dist`: the watcher skips both. It also skips the recordings folder
+and Finder's `.DS_Store` files.
 
 ```bash
 tap screenshot deck.md --slide 3 --out ../shots/s3.png   # outside the deck

@@ -239,11 +239,25 @@ func runDevServer(file string, port int, presenterPassword string, headless bool
 	}
 	port = srv.Port()
 
+	recordOutputDir := filepath.Join(baseDir, "recordings")
+	if cfg.Recording.Output != "" {
+		recordOutputDir = cfg.Recording.Output
+		if !filepath.IsAbs(recordOutputDir) {
+			recordOutputDir = filepath.Join(baseDir, recordOutputDir)
+		}
+	}
+
 	// Set up file watcher
 	watcher, err := server.NewWatcher(absFile)
 	if err != nil {
 		return fmt.Errorf("failed to create file watcher: %w", err)
 	}
+	// A recording rewrites its chapter list on every slide change and
+	// streams the movie file as it goes; both land in the recordings
+	// directory, usually inside the deck folder. Watching it would rebuild
+	// the deck and reload every window, resetting the presenter timer, on
+	// each slide change during a recorded talk.
+	watcher.IgnoreDir(recordOutputDir)
 	// A component can import a file from outside the deck directory tree
 	// (e.g. "../shared/Thing.jsx"); the recursive watch below only covers
 	// the deck directory itself, so such a file's directory needs adding
@@ -302,14 +316,6 @@ func runDevServer(file string, port int, presenterPassword string, headless bool
 	// Recording is opt-in at the keyboard, but its preflight runs at
 	// startup so a missing permission is found during setup rather than
 	// on stage.
-	recordOutputDir := filepath.Join(baseDir, "recordings")
-	if cfg.Recording.Output != "" {
-		recordOutputDir = cfg.Recording.Output
-		if !filepath.IsAbs(recordOutputDir) {
-			recordOutputDir = filepath.Join(baseDir, recordOutputDir)
-		}
-	}
-
 	audioUID, noAudio := recordingAudioOptions(cfg.Recording.Audio)
 
 	// The controller is built before the TUI model exists, so its

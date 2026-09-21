@@ -20,6 +20,9 @@ type Watcher struct {
 	doneCh       chan struct{}
 	mdFile       string
 	mdDir        string
+	// ignoredDirs holds absolute directories whose contents never trigger
+	// onChange (see IgnoreDir).
+	ignoredDirs  []string
 	mu           sync.Mutex
 	// callbackMu serializes onChange invocations, so a rebuild slower than
 	// the debounce window can never run concurrently with the next one and
@@ -74,6 +77,45 @@ func (w *Watcher) SetDebounceTime(d time.Duration) {
 	w.debounceTime = d
 }
 
+// IgnoreDir excludes dir and everything under it from the watch: nothing
+// written there triggers onChange. It is for directories tap itself writes
+// output to while the deck is open, such as the recordings directory, whose
+// writes are never deck input. A dir that is the deck directory or one of
+// its ancestors is refused, since ignoring it would stop the deck itself
+// from being watched. Call it before Start so the directory is never added.
+func (w *Watcher) IgnoreDir(dir string) {
+	if dir == "" {
+		return
+	}
+	absDir, err := filepath.Abs(dir)
+	if err != nil {
+		return
+	}
+	if absDir == w.mdDir || isWithin(w.mdDir, absDir) {
+		return
+	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.ignoredDirs = append(w.ignoredDirs, absDir)
+}
+
+// isIgnored reports whether path is an ignored directory or lies under one.
+func (w *Watcher) isIgnored(path string) bool {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	for _, dir := range w.ignoredDirs {
+		if path == dir || isWithin(path, dir) {
+			return true
+		}
+	}
+	return false
+}
+
+// isWithin reports whether path lies strictly under dir.
+func isWithin(path string, dir string) bool {
+	return strings.HasPrefix(path, dir+string(filepath.Separator))
+}
+
 // Start starts watching for file changes.
 // The watcher runs in a goroutine and can be stopped with Stop().
 func (w *Watcher) Start() error {
@@ -111,9 +153,9 @@ func (w *Watcher) Start() error {
 // node_modules (can be enormous, never relevant), any directory whose name
 // starts with "." such as .git (version control internals, editor
 // swapfiles), and a directory literally named "dist" (tap build's default
-// output directory).
+// output directory), plus any directory passed to IgnoreDir.
 func (w *Watcher) shouldSkipDir(path string, name string) bool {
-	return name == "node_modules" || name == "dist" || strings.HasPrefix(name, ".")
+	return name == "node_modules" || name == "dist" || strings.HasPrefix(name, ".") || w.isIgnored(path)
 }
 
 // addTree adds root and every subdirectory under it (skipping directories
@@ -227,6 +269,14 @@ func (w *Watcher) run() {
 				w.running = false
 				w.mu.Unlock()
 				return
+			}
+
+			// Events from the parent directory still name an ignored
+			// directory itself (it being created, say), and Finder writes
+			// .DS_Store whenever someone browses the deck folder. Neither
+			// is deck input, so neither may rebuild and reload the deck.
+			if w.isIgnored(event.Name) || filepath.Base(event.Name) == ".DS_Store" {
+				continue
 			}
 
 			// Handle file rename/move - re-add the markdown file if it was renamed

@@ -10,6 +10,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+### Fixed
+
+- **Recording a talk no longer reloads the deck on every slide change** - A recording rewrites its chapter list each time the slide changes, and the recordings folder sits inside the deck folder by default, so `tap dev` saw a file change, rebuilt the deck and reloaded every window. Each reload flashed the page and reset the presenter timer. The dev watcher now ignores the recordings folder (the default one, or the one `recording.output` names) and Finder's `.DS_Store` files.
+
 ## [2.0.0-beta.7] - 2026-09-20
 
 ### Fixed

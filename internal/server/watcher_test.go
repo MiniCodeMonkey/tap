@@ -808,3 +808,127 @@ func TestWatcher_AddExtraDirs_SkipsNodeModules(t *testing.T) {
 		t.Error("onChange was called for a change under node_modules added via AddExtraDirs, which should be skipped")
 	}
 }
+
+func TestWatcher_IgnoreDir_SkipsRecordingOutput(t *testing.T) {
+	tmpDir := t.TempDir()
+	mdFile := filepath.Join(tmpDir, "test.md")
+	if err := os.WriteFile(mdFile, []byte("# Test"), 0644); err != nil {
+		t.Fatalf("failed to create test file: %v", err)
+	}
+	existingDir := filepath.Join(tmpDir, "recordings")
+	if err := os.MkdirAll(existingDir, 0755); err != nil {
+		t.Fatalf("failed to create recordings dir: %v", err)
+	}
+	createdLaterDir := filepath.Join(tmpDir, "takes")
+
+	w, err := NewWatcher(mdFile)
+	if err != nil {
+		t.Fatalf("NewWatcher() error = %v", err)
+	}
+	w.IgnoreDir(existingDir)
+	w.IgnoreDir(createdLaterDir)
+
+	var callCount atomic.Int32
+	w.SetOnChange(func(path string) { callCount.Add(1) })
+	w.SetDebounceTime(10 * time.Millisecond)
+
+	if err := w.Start(); err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+	defer w.Stop()
+
+	time.Sleep(50 * time.Millisecond)
+
+	if err := os.WriteFile(filepath.Join(existingDir, "talk.txt"), []byte("0:00 Intro\n"), 0600); err != nil {
+		t.Fatalf("failed to write chapter file: %v", err)
+	}
+	if err := os.MkdirAll(createdLaterDir, 0755); err != nil {
+		t.Fatalf("failed to create takes dir: %v", err)
+	}
+	time.Sleep(50 * time.Millisecond)
+	if err := os.WriteFile(filepath.Join(createdLaterDir, "talk.txt"), []byte("0:00 Intro\n"), 0600); err != nil {
+		t.Fatalf("failed to write chapter file: %v", err)
+	}
+
+	time.Sleep(100 * time.Millisecond)
+
+	if got := callCount.Load(); got != 0 {
+		t.Errorf("onChange called %d times for writes inside ignored directories, want 0", got)
+	}
+}
+
+func TestWatcher_SkipsDSStore(t *testing.T) {
+	tmpDir := t.TempDir()
+	mdFile := filepath.Join(tmpDir, "test.md")
+	if err := os.WriteFile(mdFile, []byte("# Test"), 0644); err != nil {
+		t.Fatalf("failed to create test file: %v", err)
+	}
+
+	w, err := NewWatcher(mdFile)
+	if err != nil {
+		t.Fatalf("NewWatcher() error = %v", err)
+	}
+
+	var callCount atomic.Int32
+	w.SetOnChange(func(path string) { callCount.Add(1) })
+	w.SetDebounceTime(10 * time.Millisecond)
+
+	if err := w.Start(); err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+	defer w.Stop()
+
+	time.Sleep(50 * time.Millisecond)
+
+	if err := os.WriteFile(filepath.Join(tmpDir, ".DS_Store"), []byte("finder"), 0644); err != nil {
+		t.Fatalf("failed to write .DS_Store: %v", err)
+	}
+
+	time.Sleep(100 * time.Millisecond)
+
+	if got := callCount.Load(); got != 0 {
+		t.Errorf("onChange called %d times for a .DS_Store write, want 0", got)
+	}
+}
+
+func TestWatcher_IgnoreDir_RefusesDeckDirectory(t *testing.T) {
+	tmpDir := t.TempDir()
+	mdFile := filepath.Join(tmpDir, "test.md")
+	if err := os.WriteFile(mdFile, []byte("# Test"), 0644); err != nil {
+		t.Fatalf("failed to create test file: %v", err)
+	}
+	assetFile := filepath.Join(tmpDir, "diagram.svg")
+	if err := os.WriteFile(assetFile, []byte("<svg/>"), 0644); err != nil {
+		t.Fatalf("failed to create asset file: %v", err)
+	}
+
+	w, err := NewWatcher(mdFile)
+	if err != nil {
+		t.Fatalf("NewWatcher() error = %v", err)
+	}
+	// A recording output configured as "." or ".." resolves to the deck
+	// directory or its parent; neither may switch off the deck's own watch.
+	w.IgnoreDir(tmpDir)
+	w.IgnoreDir(filepath.Dir(tmpDir))
+
+	var callCount atomic.Int32
+	w.SetOnChange(func(path string) { callCount.Add(1) })
+	w.SetDebounceTime(10 * time.Millisecond)
+
+	if err := w.Start(); err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+	defer w.Stop()
+
+	time.Sleep(50 * time.Millisecond)
+
+	if err := os.WriteFile(assetFile, []byte("<svg></svg>"), 0644); err != nil {
+		t.Fatalf("failed to update asset file: %v", err)
+	}
+
+	time.Sleep(100 * time.Millisecond)
+
+	if callCount.Load() == 0 {
+		t.Error("onChange was not called for an asset change after IgnoreDir was given the deck directory")
+	}
+}
