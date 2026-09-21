@@ -853,7 +853,7 @@ style (no stylesheet rule can override an inline style), so:
   pattern), add the scoped whole-slide-root selector to the same list: it
   doesn't match the `[class^='layout-']` attribute selector on its own.
 - Where a theme reserves chrome space with an in-flow sibling inside the
-  layout wrapper (terminal's `cat slide.md` prompt line), that flow
+  layout wrapper (terminal's blank prompt line), that flow
   sibling doesn't push an `inset: 0` child down the way it pushes a normal
   flow child down. Reserve the same space with a border (or, for a
   fixed-position chrome element like a page-number roundel that isn't
@@ -909,7 +909,7 @@ the example deck carries neither.
 | riso | 96 | 96 | 96 | 96 | `.layout-default` sets its own 96px padding directly, not through the shared default (tag adds +114 top when set) |
 | sketch | 96 | 96 | 130 | 110 | none major |
 | swiss | 96 | 96 | 186 | 96 | top rule + page number band |
-| terminal | 96 | 96 | 156 | 120 | `$`/`cat slide.md` prompt line, reserved in the top figure |
+| terminal | 96 | 96 | 156 | 120 | blank prompt line, reserved in the top figure |
 | transit | 352 | 176 | 176 | 176 | roundel (slide-number circle) plus the shared unmodified layout padding, both reserved in the left figure |
 | zine | 96 | 96 | 96 | 96 | none (tag adds +44 top when set) |
 

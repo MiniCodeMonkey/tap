@@ -2,8 +2,8 @@
  * Terminal theme.
  * For infrastructure and live-coding talks where the audience lives in a
  * shell and the deck should feel like one long tmux session: a status bar
- * along the bottom, a prompt above every slide, and a `cat slide.md`
- * command that changes with the layout in front of it.
+ * along the bottom and a prompt line above every slide, blank except on
+ * the title slide.
  *
  * Ported from .superpowers/brainstorm/themes-v3/terminal.theme.html (the
  * CSS-only mockup built against a fixed 11-slide deck). See
@@ -176,7 +176,7 @@
    it. The window is named after the deck's title, or "zsh" when the deck
    has none. A long title ends in an ellipsis before the position counter. */
 [data-theme='terminal'] .slide[data-layout]::before {
-	content: ' ' attr(data-index) ':zsh*';
+	content: ' ' attr(data-index) ':zsh';
 	position: absolute;
 	left: 0;
 	right: 0;
@@ -198,7 +198,7 @@
 	animation: terminal-pop 100ms steps(2, jump-none) 0ms both;
 }
 [data-theme='terminal'] .slide[data-layout][data-deck-title]::before {
-	content: ' ' attr(data-index) ':' attr(data-deck-title) '*';
+	content: ' ' attr(data-index) ':' attr(data-deck-title);
 }
 [data-theme='terminal'] .slide[data-layout]::after {
 	content: attr(data-index) '/' attr(data-total);
@@ -263,7 +263,7 @@
 	color: var(--muted);
 }
 
-/* prompt line: every slide is the output of one command */
+/* prompt line: a blank line above every slide, kept for spacing */
 [data-theme='terminal'] .slide-content {
 	/*
 	 * width/height: auto override the base theme's `.slide-content { width:
@@ -285,7 +285,7 @@
 	flex-direction: column;
 }
 [data-theme='terminal'] .slide-content::before {
-	content: '$';
+	content: none;
 	position: absolute;
 	left: 0;
 	top: 0;
@@ -319,7 +319,7 @@
 	max-width: none;
 }
 [data-theme='terminal'] [class^='layout-']::before {
-	content: 'cat slide.md';
+	content: ' ';
 	display: block;
 	flex: none;
 	width: fit-content;
@@ -336,13 +336,13 @@
 /*
  * The component's own root div commonly fills its container with
  * `position: absolute; inset: 0`, an inline style no stylesheet rule can
- * override. A flow sibling (the `cat slide.md` line above) never reserves
+ * override. A flow sibling (the blank prompt line above) never reserves
  * space for an abspos box, so it would sit under the prompt instead of
  * below it. `inset: 0` on that box resolves against the padding edge of
  * the nearest positioned ancestor, so padding alone can't push it down
  * (the containing block includes the padding area). A transparent border
- * does, since the containing block starts after the border; draw "cat
- * slide.md" as an absolutely positioned overlay inside that reserved
+ * does, since the containing block starts after the border; draw the
+ * prompt line as an absolutely positioned overlay inside that reserved
  * strip (`top` negative by the same amount) instead of a flow element, so
  * it works whether the component's child flows or not.
  *
@@ -376,7 +376,7 @@
 }
 [data-theme='terminal'] .slide[data-layout='component'] > .slide-content > .deck-component-root::before,
 [data-theme='terminal'] .slide[data-layout='component'] > .slide-content > .scroll-content > .deck-component-root::before {
-	content: 'cat slide.md';
+	content: ' ';
 	position: absolute;
 	top: -72px;
 	left: 0;
@@ -390,55 +390,15 @@
 	white-space: pre;
 	animation: terminal-type 300ms steps(14, end) 0ms both;
 }
+/* The title slide is the one place the prompt shows a command. */
+[data-theme='terminal'] .slide[data-layout='title'] > .slide-content::before {
+	content: '$';
+}
 [data-theme='terminal'] .layout-title::before {
 	content: './present --fullscreen';
 }
-[data-theme='terminal'] .layout-section::before {
-	content: 'cd next/ && ls';
-}
-[data-theme='terminal'] .layout-code-focus::before {
-	content: 'vim +/focus';
-}
-[data-theme='terminal'] .layout-big-stat::before {
-	content: 'wc -l';
-}
-[data-theme='terminal'] .layout-quote::before {
-	content: 'fortune';
-}
-[data-theme='terminal'] .layout-two-column::before {
-	content: 'tmux split-window -h';
-}
-[data-theme='terminal'] .layout-three-column::before {
-	content: 'tmux split-window -h -h';
-}
-[data-theme='terminal'] .layout-split-media::before {
-	content: 'open attachment';
-}
-[data-theme='terminal'] .layout-cover::before {
-	content: 'fullscreen.sh';
-}
-[data-theme='terminal'] .layout-sidebar::before {
-	content: 'tmux split-window -v -p 25';
-}
 [data-theme='terminal'] .layout-blank::before {
 	content: none;
-}
-[data-theme='terminal'] .layout-default:has(h1:only-child)::before,
-[data-theme='terminal'] .layout-default:has(h2:only-child)::before {
-	content: 'echo $THESIS';
-}
-[data-theme='terminal'] .layout-default:has(ul)::before {
-	content: 'ls -1';
-}
-[data-theme='terminal'] .layout-default:has(table)::before {
-	content: 'column -t';
-}
-[data-theme='terminal'] .layout-default:has(.mermaid-diagram)::before,
-[data-theme='terminal'] .layout-default:has(.mermaid-source)::before {
-	content: 'tree --infra';
-}
-[data-theme='terminal'] .layout-default:has(img)::before {
-	content: 'feh screenshot.jpg';
 }
 
 /* ---------- headings and body copy ---------- */
