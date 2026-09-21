@@ -39,20 +39,24 @@
 
 .connection-indicator {
 	position: fixed;
-	top: 1rem;
-	right: 1rem;
+	top: max(1rem, env(safe-area-inset-top, 0) + 0.5rem);
+	right: max(1rem, env(safe-area-inset-right, 0) + 0.5rem);
 	z-index: 9000;
 	display: flex;
 	align-items: center;
-	gap: 0.5rem;
-	padding: 0.5rem 1rem;
-	font-size: 0.75rem;
-	font-weight: 500;
-	color: var(--color-muted);
-	background-color: rgba(0, 0, 0, 0.6);
-	border-radius: 6px;
-	backdrop-filter: blur(4px);
-	-webkit-backdrop-filter: blur(4px);
+	gap: 0.6rem;
+	padding: 0.5rem 0.85rem 0.5rem 0.75rem;
+	/* Fixed colors, not theme tokens: this sits outside any themed slide
+	 * and must read the same on a black letterbox and on a bright slide. */
+	font-family: var(--font-body, system-ui, sans-serif);
+	color: rgba(255, 255, 255, 0.92);
+	background-color: rgba(18, 18, 18, 0.72);
+	border: 1px solid rgba(239, 68, 68, 0.45);
+	border-radius: 10px;
+	box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+	backdrop-filter: blur(10px) saturate(1.2);
+	-webkit-backdrop-filter: blur(10px) saturate(1.2);
+	pointer-events: none;
 	animation: connection-indicator-slide-in 0.3s ease-out;
 }
 
@@ -68,14 +72,12 @@
 }
 
 .indicator-dot {
+	flex: none;
 	width: 8px;
 	height: 8px;
 	border-radius: 50%;
-	background-color: #ef4444; /* red for disconnected */
-}
-
-.connection-indicator.reconnecting .indicator-dot {
-	background-color: #f59e0b; /* amber for reconnecting */
+	background-color: #ef4444;
+	box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.25);
 }
 
 .indicator-dot.pulse {
@@ -95,7 +97,21 @@
 }
 
 .indicator-text {
-	font-family: var(--font-mono);
+	display: flex;
+	flex-direction: column;
+	gap: 0.15rem;
+	line-height: 1.2;
+}
+
+.indicator-title {
+	font-size: 0.8125rem;
+	font-weight: 600;
+}
+
+.indicator-detail {
+	font-family: var(--font-mono, ui-monospace, monospace);
+	font-size: 0.6875rem;
+	color: rgba(255, 255, 255, 0.62);
 }
 
 /* ============================================================================

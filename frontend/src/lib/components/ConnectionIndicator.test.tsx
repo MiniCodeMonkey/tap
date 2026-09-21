@@ -48,6 +48,7 @@ describe('ConnectionIndicator', () => {
 
 		const indicator = container.querySelector('.connection-indicator');
 		expect(indicator).toHaveClass('disconnected');
+		expect(indicator).toHaveTextContent('Tap server offline');
 		expect(indicator).toHaveTextContent('Disconnected');
 	});
 
@@ -65,5 +66,21 @@ describe('ConnectionIndicator', () => {
 		const indicator = container.querySelector('.connection-indicator');
 		expect(indicator).toHaveClass('reconnecting');
 		expect(indicator).toHaveTextContent('Reconnecting... (3)');
+	});
+
+	it('names the host it cannot reach, so a stale tab on an old port stands out', () => {
+		useConnectionStore.setState({
+			staticModeDetected: true,
+			staticMode: false,
+			connected: false,
+			reconnecting: true,
+			reconnectAttempt: 1
+		});
+
+		const { container } = render(<ConnectionIndicator />);
+
+		const indicator = container.querySelector('.connection-indicator');
+		expect(indicator).toHaveTextContent(window.location.host);
+		expect(indicator).toHaveAttribute('aria-label', expect.stringContaining(`offline at ${window.location.host}`));
 	});
 });
