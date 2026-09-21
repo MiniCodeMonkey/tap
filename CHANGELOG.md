@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+## [2.0.0-rc.1] - 2026-09-21
+
 ### Added
 
 - **Record a talk from `tap dev`** - Press `C` to record the screen and microphone on macOS, and press it again to stop. Recording uses `screencapture`, which is built into macOS, so there is nothing to install. With more than one display attached, a picker opens first, and `t` runs a five second test capture that opens in QuickTime Player. A chapter list of slide timings is written beside the movie and updated on every slide change, so a crash mid-talk still leaves one. A `recording:` frontmatter block sets the output folder, the microphone (`audio: none` records silently), the display, time warnings and a hard stop (`warnAfter`, `stopAfter`), and whether to show clicks or write chapters. `tap dev` checks the Screen Recording permission at startup, so a missing grant shows up during setup rather than on stage. See the Talk Recording guide.

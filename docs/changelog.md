@@ -10,9 +10,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+## [2.0.0-rc.1] - 2026-09-21
+
+### Added
+
+- **Record a talk from `tap dev`** - Press `C` to record the screen and microphone on macOS, and press it again to stop. Recording uses `screencapture`, which is built into macOS, so there is nothing to install. With more than one display attached, a picker opens first, and `t` runs a five second test capture that opens in QuickTime Player. A chapter list of slide timings is written beside the movie and updated on every slide change, so a crash mid-talk still leaves one. A `recording:` frontmatter block sets the output folder, the microphone (`audio: none` records silently), the display, time warnings and a hard stop (`warnAfter`, `stopAfter`), and whether to show clicks or write chapters. `tap dev` checks the Screen Recording permission at startup, so a missing grant shows up during setup rather than on stage. See the Talk Recording guide.
+
+- **Five presenter layouts, switchable mid-talk** - **Standard** is the familiar big current slide with the next slide and notes beside it. **Notes first** gives the notes most of the width, for a talk you read from. **Duo** shows the current and next slides at equal size with the notes below, for demos and builds. **Slide only** is a confidence monitor. **Notes only** fills the screen with the script. A button in the presenter header opens the list; `V` cycles layouts, and `1` to `5` pick one while the list is open. Duo and Slide only are offered only above 768px, and on a phone the list opens as a sheet at the bottom of the screen.
+
+- **Speaker notes that scale to fit their panel** - A new **Fit to panel** notes size picks a font size per slide so the slide's notes fill the panel without scrolling, from 1rem up to 6rem, re-measured when the slide changes or the window resizes. In this mode `-` and `=` scale the fitted size down to half and back. Notes too long to fit at 1rem stay at 1rem and scroll. Manual stays the default.
+
+- **`presenterLayout:` frontmatter** - A deck can suggest the layout the presenter view opens in. A device that has picked a layout keeps its own choice. The order is `?layout=` on the URL, then the browser's saved choice, then the deck's key, then Standard. `?layout=` and `?notesSize=` are one-off overrides and are never saved.
+
+### Changed
+
+- **A phone no longer scrolls the presenter view** - Each layout now fills the screen exactly, and only the notes scroll, and only when the size is set manually. The old phone layout capped the notes at 40% of the screen and let the whole page scroll, which lost your place mid-sentence.
+
+- **The dev terminal's QR code opens the presenter view** - Scanning it on a phone lands on the speaker notes and controls, and a new "Slides" link in the presenter header gets to the deck itself. A presenter password is carried in the scanned URL, so the view opens straight away.
+
+- **The QR code shows in a shorter window** - The height it needs is measured against the real screen rather than assuming a tall terminal.
+
 ### Fixed
 
-- **Recording a talk no longer reloads the deck on every slide change** - A recording rewrites its chapter list each time the slide changes, and the recordings folder sits inside the deck folder by default, so `tap dev` saw a file change, rebuilt the deck and reloaded every window. Each reload flashed the page and reset the presenter timer. The dev watcher now ignores the recordings folder (the default one, or the one `recording.output` names) and Finder's `.DS_Store` files.
+- **The screen keeps staying awake on a phone** - The wake lock was asked for once, when the view opened, and Safari often refuses a request made while the page is still settling, so a phone showing notes dimmed and locked anyway. A refusal is now retried, the first touch or key press asks again, and a lock the platform takes back is re-taken at once. This applies to both views, over `https` (`tap dev --tunnel` gives you one) or on `localhost`.
+
+- **Recording a talk no longer reloads the deck on every slide change** - The chapter list is rewritten on each slide change, and the recordings folder sits inside the deck folder by default, so `tap dev` rebuilt the deck and reloaded every window, flashing the page and resetting the presenter timer. The dev watcher now ignores the recordings folder and Finder's `.DS_Store` files.
 
 ## [2.0.0-beta.7] - 2026-09-20
 
