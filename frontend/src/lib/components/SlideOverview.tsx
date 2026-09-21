@@ -2,15 +2,16 @@
  * Full-screen grid of every slide, opened with the O key or a two-finger
  * tap. Each thumbnail is a real Slide rendered as a static preview inside a
  * scaled SlideCanvas, so it always matches what the audience view would
- * show. Arrow keys move a focus ring around the grid; Enter or a click
- * jumps to that slide.
+ * show. It opens scrolled to the current slide, which stays highlighted.
+ * Arrow keys move a focus ring around the grid, scrolling to keep it in
+ * view; Enter or a click jumps to that slide.
  *
  * Only the thumbnails near the viewport render their slide. A long deck of
  * component-driven slides would otherwise mount every map, chart and
  * highlighted code block at once, which is enough to take a phone down.
  */
 
-import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import type { Slide as SlideData, Theme } from '$lib/types';
 import { usePresentationStore, goToSlide } from '$lib/stores/presentation';
 import { broadcastPresentationState } from '$lib/stores/websocket';
@@ -114,6 +115,7 @@ export function SlideOverview({
 }: SlideOverviewProps) {
 	const currentIndex = usePresentationStore((state) => state.currentSlideIndex);
 	const [focusedIndex, setFocusedIndex] = useState(currentIndex);
+	const [wasOpen, setWasOpen] = useState(isOpen);
 	const containerRef = useRef<HTMLDivElement>(null);
 	const gridRef = useRef<HTMLDivElement>(null);
 	const [columns, setColumns] = useState(FALLBACK_COLUMNS);
@@ -137,13 +139,42 @@ export function SlideOverview({
 	}, [isOpen]);
 
 	// Reset the focus ring to the current slide each time the overview opens.
-	useEffect(() => {
+	// This happens during render, not in an effect, so the first committed
+	// frame already has it there; an effect would leave the scroll effect
+	// below one render holding the previous opening's focus position.
+	if (isOpen !== wasOpen) {
+		setWasOpen(isOpen);
 		if (isOpen) {
 			setFocusedIndex(currentIndex);
+		}
+	}
+
+	useEffect(() => {
+		if (isOpen) {
 			containerRef.current?.focus();
 		}
+	}, [isOpen]);
+
+	// The grid unmounts while the overview is closed, so each opening starts
+	// scrolled to the top. Center the current slide before the first paint,
+	// so the overview never shows slide 1 and then jumps.
+	useLayoutEffect(() => {
+		if (!isOpen) {
+			return;
+		}
+		const current = gridRef.current?.children[currentIndex];
+		current?.scrollIntoView?.({ block: 'center', inline: 'nearest' });
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [isOpen]);
+
+	// Keep the focus ring on screen as the arrow keys move it past the edge.
+	useEffect(() => {
+		if (!isOpen) {
+			return;
+		}
+		const focused = gridRef.current?.children[focusedIndex];
+		focused?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
+	}, [isOpen, focusedIndex]);
 
 	if (!isOpen) {
 		return null;

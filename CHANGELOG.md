@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+### Changed
+
+- **The slide overview opens on the current slide** - Pressing `O` deep into a deck used to open the overview scrolled to the top, on slide 1, so finding your place meant scrolling back down. It now opens with the current slide centered and highlighted, before the first frame is drawn, so it never shows slide 1 and then jumps. The arrow keys scroll the grid to keep the focus ring on screen. `O` works as a way to jump around a deck and come back.
+
 ## [2.0.0-rc.1] - 2026-09-21
 
 ### Added

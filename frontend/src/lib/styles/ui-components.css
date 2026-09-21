@@ -157,6 +157,8 @@
 	background-color: var(--color-bg, #fff);
 	transition: border-color 0.2s ease, box-shadow 0.2s ease;
 	padding: 0;
+	/* Room for the focus glow when scrolling a thumbnail to the edge */
+	scroll-margin: 1rem;
 }
 
 .slide-overview .thumbnail:hover {

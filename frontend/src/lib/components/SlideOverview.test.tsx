@@ -183,4 +183,70 @@ describe('SlideOverview', () => {
 		expect(thumbnails[1]).toHaveClass('current');
 		expect(thumbnails[0]).not.toHaveClass('current');
 	});
+
+	describe('scrolling', () => {
+		function spyOnScroll() {
+			const calls: { element: Element; options: ScrollIntoViewOptions | undefined }[] = [];
+			Element.prototype.scrollIntoView = vi.fn(function (this: Element, options?: boolean | ScrollIntoViewOptions) {
+				calls.push({ element: this, options: typeof options === 'object' ? options : undefined });
+			});
+			return calls;
+		}
+
+		afterEach(() => {
+			// jsdom has no scrollIntoView of its own; the component tolerates that.
+			delete (Element.prototype as { scrollIntoView?: unknown }).scrollIntoView;
+		});
+
+		it('centers the current slide each time the overview opens', () => {
+			usePresentationStore.setState({ presentation: { config: {}, slides: makeSlides(40) }, currentSlideIndex: 27 });
+			const calls = spyOnScroll();
+
+			const { container, rerender } = render(<SlideOverview slides={makeSlides(40)} isOpen />);
+			const centered = () => calls.filter((call) => call.options?.block === 'center');
+			expect(centered()).toHaveLength(1);
+			expect(centered()[0].element).toBe(container.querySelectorAll('.thumbnail')[27]);
+
+			rerender(<SlideOverview slides={makeSlides(40)} isOpen={false} />);
+			act(() => usePresentationStore.setState({ currentSlideIndex: 3 }));
+			rerender(<SlideOverview slides={makeSlides(40)} isOpen />);
+
+			expect(centered()).toHaveLength(2);
+			expect(centered()[1].element).toBe(container.querySelectorAll('.thumbnail')[3]);
+		});
+
+		it('never scrolls to the previous opening\'s focus position on reopen', () => {
+			usePresentationStore.setState({ presentation: { config: {}, slides: makeSlides(40) }, currentSlideIndex: 27 });
+			const calls = spyOnScroll();
+
+			const { container, rerender } = render(<SlideOverview slides={makeSlides(40)} isOpen />);
+			rerender(<SlideOverview slides={makeSlides(40)} isOpen={false} />);
+			act(() => usePresentationStore.setState({ currentSlideIndex: 1 }));
+			calls.length = 0;
+			rerender(<SlideOverview slides={makeSlides(40)} isOpen />);
+
+			const thumbnails = container.querySelectorAll('.thumbnail');
+			expect(calls.length).toBeGreaterThan(0);
+			expect(calls.every((call) => call.element === thumbnails[1])).toBe(true);
+		});
+
+		it('keeps the focus ring in view as the arrow keys move it', () => {
+			usePresentationStore.setState({ presentation: { config: {}, slides: makeSlides(40) }, currentSlideIndex: 0 });
+			const calls = spyOnScroll();
+
+			const { container } = render(<SlideOverview slides={makeSlides(40)} isOpen />);
+			const dialog = container.querySelector('.slide-overview')!;
+			fireEvent.keyDown(dialog, { key: 'End' });
+
+			const last = calls[calls.length - 1];
+			expect(last.element).toBe(container.querySelectorAll('.thumbnail')[39]);
+			expect(last.options?.block).toBe('nearest');
+		});
+
+		it('opens without error where scrollIntoView does not exist', () => {
+			usePresentationStore.setState({ presentation: { config: {}, slides: makeSlides(3) }, currentSlideIndex: 2 });
+
+			expect(() => render(<SlideOverview slides={makeSlides(3)} isOpen />)).not.toThrow();
+		});
+	});
 });
