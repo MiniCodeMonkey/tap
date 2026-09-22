@@ -4,7 +4,7 @@ import { SlideTransition } from './SlideTransition';
 import { heldBlockers, resetBlockersForTests } from '$lib/ready/blockers';
 
 function mockMatchMedia(matches: boolean): void {
-	vi.mocked(window.matchMedia).mockImplementation((query: string) => ({
+	vi.spyOn(window, 'matchMedia').mockImplementation((query: string) => ({
 		matches,
 		media: query,
 		onchange: null,
@@ -90,6 +90,12 @@ describe('SlideTransition', () => {
 	});
 
 	it('swaps content when slideKey changes', () => {
+		// Reduced motion, so the swap is synchronous: this test is about the
+		// content swapping, not about the animated transition itself, which
+		// AnimatePresence would otherwise hold "first" through until a real
+		// exit animation finishes.
+		mockMatchMedia(true);
+
 		const { rerender } = render(
 			<SlideTransition slideKey={0} transition="fade" direction="forward">
 				<div>first</div>
@@ -110,10 +116,6 @@ describe('SlideTransition', () => {
 describe('SlideTransition and the ready signal', () => {
 	beforeEach(() => {
 		resetBlockersForTests();
-		// vi.restoreAllMocks() in the outer afterEach cannot undo a plain
-		// vi.fn()'s mockImplementation (only vi.spyOn's), so an earlier test's
-		// reduced-motion mock can otherwise leak into these.
-		mockMatchMedia(false);
 	});
 
 	it('holds an animations blocker while it moves to the next slide', async () => {
