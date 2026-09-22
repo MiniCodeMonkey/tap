@@ -300,7 +300,14 @@ export interface Presentation {
 /**
  * WebSocket message types for hot reload and sync.
  */
-export type WebSocketMessageType = 'connected' | 'reload' | 'update' | 'slide' | 'theme' | 'recording';
+export type WebSocketMessageType =
+	| 'connected'
+	| 'reload'
+	| 'update'
+	| 'slide'
+	| 'theme'
+	| 'recording'
+	| 'file-changed';
 
 /**
  * WebSocket message from the server.
@@ -350,6 +357,8 @@ export interface WebSocketMessage {
 	 * internal/server/websocket.go's SetPresentMode). Absent otherwise.
 	 */
 	mode?: 'present';
+	/** The file that changed on disk, on a "file-changed" message (tap dev --app). */
+	path?: string;
 }
 
 // ============================================================================

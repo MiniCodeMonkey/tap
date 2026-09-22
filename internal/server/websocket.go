@@ -42,6 +42,9 @@ const (
 	// /api/presentation again and replaces its deck data in place,
 	// instead of reloading (see UpdateMessage).
 	MessageUpdate MessageType = "update"
+	// MessageFileChanged tells clients that a file changed on disk that
+	// tap did not write, in tap dev --app. The page reloads.
+	MessageFileChanged MessageType = "file-changed"
 )
 
 // Message represents a WebSocket message sent between server and clients.
@@ -85,7 +88,9 @@ type Message struct {
 	Version string `json:"version,omitempty"`
 	// Disk is set only on a "recording" message: "low", "full", or absent
 	// when the disk is fine.
-	Disk           string `json:"disk,omitempty"`
+	Disk string `json:"disk,omitempty"`
+	// Path is set only on a "file-changed" message: the file that changed.
+	Path           string `json:"path,omitempty"`
 	SlideIndex     *int   `json:"slideIndex,omitempty"`
 	Fragment       *int   `json:"fragment,omitempty"`
 	Step           *int   `json:"step,omitempty"`
@@ -573,6 +578,22 @@ func (h *WebSocketHub) CurrentSlide() (int, bool) {
 	return *h.lastSlideState.SlideIndex, true
 }
 
+// CurrentPosition is the slide the deck is on, 0-based, and its step, and
+// whether they are known at all (see CurrentSlide). A slide message
+// without a step is step 0.
+func (h *WebSocketHub) CurrentPosition() (slideIndex, step int, known bool) {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+
+	if h.lastSlideState == nil || h.lastSlideState.SlideIndex == nil {
+		return 0, 0, false
+	}
+	if h.lastSlideState.Step != nil {
+		step = *h.lastSlideState.Step
+	}
+	return *h.lastSlideState.SlideIndex, step, true
+}
+
 // Broadcast sends a message to all connected clients. Initial is always
 // cleared first, whether this call originated internally (BroadcastSlide,
 // BroadcastTheme) or from relaying a client's own message (readPump): only
@@ -661,6 +682,11 @@ func (h *WebSocketHub) BroadcastDiskStatus(status string) error {
 	h.diskStatus = status
 	h.mu.Unlock()
 	return h.Broadcast(Message{Type: MessageRecording, Disk: status})
+}
+
+// BroadcastFileChanged tells every client that path changed on disk.
+func (h *WebSocketHub) BroadcastFileChanged(path string) error {
+	return h.Broadcast(Message{Type: MessageFileChanged, Path: path})
 }
 
 // ClientCount returns the number of connected clients.

@@ -394,6 +394,11 @@ export class WebSocketClient {
 				this.handleReload();
 				break;
 
+			case 'file-changed':
+				// A file changed on disk that tap did not write (tap dev --app).
+				this.handleReload();
+				break;
+
 			case 'update':
 				// The deck changed: fetch it and re-render in place
 				this.handleUpdate();
