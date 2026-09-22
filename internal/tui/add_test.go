@@ -1,8 +1,6 @@
 package tui
 
 import (
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -326,96 +324,12 @@ func TestGenerateSlideMarkdown_DefaultValues(t *testing.T) {
 	}
 }
 
-func TestGetValueOrDefault(t *testing.T) {
-	tests := []struct {
-		name       string
-		values     []string
-		index      int
-		defaultVal string
-		expected   string
-	}{
-		{"value exists", []string{"hello"}, 0, "default", "hello"},
-		{"value is empty", []string{""}, 0, "default", "default"},
-		{"index out of range", []string{"a"}, 5, "default", "default"},
-		{"empty slice", []string{}, 0, "default", "default"},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := getValueOrDefault(tt.values, tt.index, tt.defaultVal)
-			if result != tt.expected {
-				t.Errorf("expected '%s', got '%s'", tt.expected, result)
-			}
-		})
-	}
-}
-
-func TestFormatContent(t *testing.T) {
-	tests := []struct {
-		name     string
-		input    string
-		expected string
-	}{
-		{"single line", "hello", "hello"},
-		{"multiple lines", "line1\nline2", "line1\nline2"},
-		{"with whitespace", "  line1  \n  line2  ", "line1\nline2"},
-		{"empty lines", "line1\n\nline2", "line1\n\nline2"},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := formatContent(tt.input)
-			if result != tt.expected {
-				t.Errorf("expected '%s', got '%s'", tt.expected, result)
-			}
-		})
-	}
-}
-
-func TestAppendToFile(t *testing.T) {
-	// Create a temporary file
-	dir := t.TempDir()
-	filePath := filepath.Join(dir, "test.md")
-
-	// Create initial content
-	err := os.WriteFile(filePath, []byte("# Initial\n"), 0644)
-	if err != nil {
-		t.Fatalf("failed to create test file: %v", err)
-	}
-
-	// Append content
-	err = appendToFile(filePath, "\n---\n\n## New Slide\n")
-	if err != nil {
-		t.Fatalf("failed to append to file: %v", err)
-	}
-
-	// Read back and verify
-	content, err := os.ReadFile(filePath)
-	if err != nil {
-		t.Fatalf("failed to read file: %v", err)
-	}
-
-	if !strings.Contains(string(content), "# Initial") {
-		t.Error("expected file to contain initial content")
-	}
-	if !strings.Contains(string(content), "## New Slide") {
-		t.Error("expected file to contain appended content")
-	}
-}
-
-func TestAppendToFile_NonExistent(t *testing.T) {
-	dir := t.TempDir()
-	filePath := filepath.Join(dir, "nonexistent.md")
-
-	err := appendToFile(filePath, "content")
-	if err == nil {
-		t.Error("expected error when appending to non-existent file")
-	}
-}
-
 func TestAvailableLayouts(t *testing.T) {
 	// Verify all required layouts are present
-	requiredLayouts := []string{"title", "section", "default", "two-column", "code-focus", "quote", "big-stat"}
+	requiredLayouts := []string{"title", "section", "default", "two-column", "three-column", "code-focus", "big-stat", "quote", "cover", "sidebar", "split-media", "blank"}
+	if len(AvailableLayouts) != len(requiredLayouts) {
+		t.Errorf("AvailableLayouts has %d layouts, want %d", len(AvailableLayouts), len(requiredLayouts))
+	}
 
 	for _, required := range requiredLayouts {
 		found := false
