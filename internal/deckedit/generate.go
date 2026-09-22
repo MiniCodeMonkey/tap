@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/MiniCodeMonkey/tap/internal/builder"
 	"github.com/MiniCodeMonkey/tap/internal/config"
 	"github.com/MiniCodeMonkey/tap/internal/gemini"
 )
@@ -109,10 +110,32 @@ func PlaceGeneratedImage(placement Placement, image gemini.ImageResult) (PlacedI
 }
 
 // deleteImage removes an image given by its path relative to the deck's
-// folder. A file that is already gone is not an error.
+// folder. A file that is already gone is not an error. imagePath comes
+// from the deck's own markdown, unsanitized, so it is confined to the
+// deck's folder with the same rule internal/builder uses for the read
+// and export path before it is removed: a dot-dot path, an absolute
+// path, or a symlink inside the folder that targets something outside
+// it is refused, not deleted.
 func deleteImage(deckPath, imagePath string) error {
-	err := os.Remove(filepath.Join(filepath.Dir(deckPath), imagePath))
-	if err != nil && !os.IsNotExist(err) {
+	deckDir := filepath.Dir(deckPath)
+	target := imagePath
+	if !filepath.IsAbs(target) {
+		target = filepath.Join(deckDir, imagePath)
+	}
+
+	if _, err := os.Lstat(target); err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return fmt.Errorf("failed to delete old image: %w", err)
+	}
+
+	confinedPath, err := builder.AssetWithinBaseDir(deckDir, target)
+	if err != nil {
+		return fmt.Errorf("refusing to delete %s: it resolves outside the deck's folder: %w", imagePath, err)
+	}
+
+	if err := os.Remove(confinedPath); err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("failed to delete old image: %w", err)
 	}
 	return nil

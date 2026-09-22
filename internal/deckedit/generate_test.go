@@ -111,6 +111,104 @@ func TestPlaceGeneratedImageOldFileAlreadyMissingIsNotAnError(t *testing.T) {
 	}
 }
 
+func TestPlaceGeneratedImageRefusesToDeleteOutsideTheDeckFolder(t *testing.T) {
+	rootDir := t.TempDir()
+	deckDir := filepath.Join(rootDir, "deck")
+	if err := os.MkdirAll(deckDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	victim := writeFile(t, filepath.Join(rootDir, "victim.txt"), "do not delete me")
+	deck := writeFile(t, filepath.Join(deckDir, "talk.md"),
+		"# One\n\n<!-- ai-prompt: a blue whale -->\n![](../victim.txt)\n")
+
+	replacing := AIImage{Prompt: "a blue whale", ImagePath: "../victim.txt"}
+	placed, err := PlaceGeneratedImage(Placement{DeckPath: deck, Prompt: "a green whale", Replacing: &replacing}, pngImage("new image"))
+	if err != nil {
+		t.Fatalf("PlaceGeneratedImage() error = %v", err)
+	}
+	if placed.DeleteError == nil {
+		t.Error("DeleteError = nil, want a refusal for a dot-dot path outside the deck folder")
+	}
+	if placed.DeletedPath != "" {
+		t.Errorf("DeletedPath = %q, want nothing deleted", placed.DeletedPath)
+	}
+	if _, err := os.Stat(victim); err != nil {
+		t.Errorf("victim file outside the deck folder was deleted: %v", err)
+	}
+}
+
+func TestPlaceGeneratedImageRefusesToDeleteThroughASymlinkOutsideTheDeckFolder(t *testing.T) {
+	rootDir := t.TempDir()
+	deckDir := filepath.Join(rootDir, "deck")
+	if err := os.MkdirAll(deckDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(deckDir, "images"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	victim := writeFile(t, filepath.Join(rootDir, "victim.png"), "do not delete me")
+	link := filepath.Join(deckDir, "images", "old.png")
+	if err := os.Symlink(victim, link); err != nil {
+		t.Fatal(err)
+	}
+	deck := writeFile(t, filepath.Join(deckDir, "talk.md"),
+		"# One\n\n<!-- ai-prompt: a blue whale -->\n![](images/old.png)\n")
+
+	replacing := AIImage{Prompt: "a blue whale", ImagePath: "images/old.png"}
+	placed, err := PlaceGeneratedImage(Placement{DeckPath: deck, Prompt: "a green whale", Replacing: &replacing}, pngImage("new image"))
+	if err != nil {
+		t.Fatalf("PlaceGeneratedImage() error = %v", err)
+	}
+	if placed.DeleteError == nil {
+		t.Error("DeleteError = nil, want a refusal for a symlink resolving outside the deck folder")
+	}
+	if _, err := os.Stat(victim); err != nil {
+		t.Errorf("victim file outside the deck folder was deleted: %v", err)
+	}
+}
+
+func TestPlaceGeneratedImageRefusesToDeleteAnAbsolutePathOutsideTheDeckFolder(t *testing.T) {
+	deckDir := t.TempDir()
+	victimDir := t.TempDir()
+	victim := writeFile(t, filepath.Join(victimDir, "victim.txt"), "do not delete me")
+	deck := writeFile(t, filepath.Join(deckDir, "talk.md"),
+		"# One\n\n<!-- ai-prompt: a blue whale -->\n![]("+victim+")\n")
+
+	replacing := AIImage{Prompt: "a blue whale", ImagePath: victim}
+	placed, err := PlaceGeneratedImage(Placement{DeckPath: deck, Prompt: "a green whale", Replacing: &replacing}, pngImage("new image"))
+	if err != nil {
+		t.Fatalf("PlaceGeneratedImage() error = %v", err)
+	}
+	if placed.DeleteError == nil {
+		t.Error("DeleteError = nil, want a refusal for an absolute path outside the deck folder")
+	}
+	if _, err := os.Stat(victim); err != nil {
+		t.Errorf("victim file outside the deck folder was deleted: %v", err)
+	}
+}
+
+func TestPlaceGeneratedImageStillDeletesAnOrdinaryOldImageInTheFolder(t *testing.T) {
+	deckDir := t.TempDir()
+	oldPath := writeFile(t, filepath.Join(deckDir, "images", "generated-old00000.png"), "old image")
+	deck := writeFile(t, filepath.Join(deckDir, "talk.md"),
+		"# One\n\n<!-- ai-prompt: a blue whale -->\n![](images/generated-old00000.png)\n")
+
+	replacing := AIImage{Prompt: "a blue whale", ImagePath: "images/generated-old00000.png"}
+	placed, err := PlaceGeneratedImage(Placement{DeckPath: deck, Prompt: "a green whale", Replacing: &replacing}, pngImage("new image"))
+	if err != nil {
+		t.Fatalf("PlaceGeneratedImage() error = %v", err)
+	}
+	if placed.DeleteError != nil {
+		t.Errorf("DeleteError = %v, want an ordinary in-folder delete to still succeed", placed.DeleteError)
+	}
+	if placed.DeletedPath != "images/generated-old00000.png" {
+		t.Errorf("DeletedPath = %q, want the old image path", placed.DeletedPath)
+	}
+	if _, err := os.Stat(oldPath); !os.IsNotExist(err) {
+		t.Error("the old image should be deleted")
+	}
+}
+
 func TestPlaceGeneratedImageSlideOutOfRange(t *testing.T) {
 	deck := writeFile(t, filepath.Join(t.TempDir(), "talk.md"), "# One\n")
 	if _, err := PlaceGeneratedImage(Placement{DeckPath: deck, SlideIndex: 4, Prompt: "x"}, pngImage("x")); err == nil {

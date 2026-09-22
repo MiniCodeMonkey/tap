@@ -167,7 +167,7 @@ func (b *Builder) Build(cfg *config.Config, pres *parser.Presentation) (*BuildRe
 			// through "../", that path's encoded form, an absolute path,
 			// or a symlink inside the folder that targets something
 			// outside it.
-			confinedPath, err := b.assetWithinBaseDir(sourcePath)
+			confinedPath, err := AssetWithinBaseDir(b.baseDir, sourcePath)
 			if err != nil {
 				result.Warnings = append(result.Warnings, fmt.Sprintf("image resolves outside the deck's folder, skipped: %s", reportedPath))
 				continue
@@ -212,7 +212,7 @@ func (b *Builder) Build(cfg *config.Config, pres *parser.Presentation) (*BuildRe
 			// (see resolveImageSourcePath); this only refuses a plain or
 			// absolute traversal attempt, not one written in its
 			// encoded form, since that form is never decoded here.
-			confinedPath, err := b.assetWithinBaseDir(sourcePath)
+			confinedPath, err := AssetWithinBaseDir(b.baseDir, sourcePath)
 			if err != nil {
 				result.Warnings = append(result.Warnings, fmt.Sprintf("recording resolves outside the deck's folder, skipped: %s", resolvedPath))
 				continue
@@ -455,25 +455,25 @@ func (b *Builder) resolveImageSourcePath(resolvedPath string) (sourcePath, repor
 	return "", reportedPath, fmt.Errorf("no file at %s", reportedPath)
 }
 
-// assetWithinBaseDir resolves symlinks in both b.baseDir and sourcePath
-// and confirms the resolved source sits inside the resolved base
-// directory. sourcePath must already exist (both of Build's callers only
-// call this after a successful os.Stat), so EvalSymlinks on it either
-// succeeds or reports a real filesystem error. This is what stops a deck
-// from reaching a file outside its own folder: a literal "../", that
-// path's percent-encoded form once resolveImageSourcePath has decoded
-// it, an absolute path, or a symlink that lives inside the deck's folder
-// but targets something outside it. A Builder with no baseDir set (only
-// tests construct one this way; every real command sets one through
-// SetBaseDir) has no folder to enforce, so nothing is refused.
-func (b *Builder) assetWithinBaseDir(sourcePath string) (string, error) {
-	if b.baseDir == "" {
+// AssetWithinBaseDir resolves symlinks in both baseDir and sourcePath and
+// confirms the resolved source sits inside the resolved base directory.
+// sourcePath must already exist, so EvalSymlinks on it either succeeds or
+// reports a real filesystem error. This is what stops a deck from
+// reaching a file outside its own folder: a literal "../", that path's
+// percent-encoded form once resolveImageSourcePath has decoded it, an
+// absolute path, or a symlink that lives inside the deck's folder but
+// targets something outside it. An empty baseDir (only tests pass one
+// this way; every real command sets one through SetBaseDir, or a caller
+// outside internal/builder passes the deck's own folder) has no folder
+// to enforce, so nothing is refused.
+func AssetWithinBaseDir(baseDir, sourcePath string) (string, error) {
+	if baseDir == "" {
 		return sourcePath, nil
 	}
 
-	resolvedBase, err := filepath.EvalSymlinks(b.baseDir)
+	resolvedBase, err := filepath.EvalSymlinks(baseDir)
 	if err != nil {
-		resolvedBase = b.baseDir
+		resolvedBase = baseDir
 	}
 	resolvedBase, err = filepath.Abs(resolvedBase)
 	if err != nil {
