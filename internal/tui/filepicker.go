@@ -79,6 +79,32 @@ func findMarkdownFiles() []string {
 	return result
 }
 
+// NewFilePickerModelWith creates a file picker over files, in the order
+// given.
+func NewFilePickerModelWith(files []string) FilePickerModel {
+	return FilePickerModel{files: files}
+}
+
+// RunFilePickerWith runs the file picker over files and returns the
+// chosen one. The result is Aborted when files is empty or the person
+// pressed Esc, q or Ctrl+C.
+func RunFilePickerWith(files []string) (FilePickerResult, error) {
+	model := NewFilePickerModelWith(files)
+	if !model.HasFiles() {
+		return FilePickerResult{Aborted: true}, nil
+	}
+
+	finalModel, err := tea.NewProgram(model).Run()
+	if err != nil {
+		return FilePickerResult{}, err
+	}
+	m, ok := finalModel.(FilePickerModel)
+	if !ok {
+		return FilePickerResult{Aborted: true}, nil
+	}
+	return m.GetResult(), nil
+}
+
 // HasFiles returns true if there are files to select from.
 func (m FilePickerModel) HasFiles() bool {
 	return len(m.files) > 0

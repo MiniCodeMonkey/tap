@@ -247,3 +247,14 @@ func TestFindMarkdownFiles_IgnoresDirectories(t *testing.T) {
 		t.Errorf("expected 'real.md', got %q", m.files[0])
 	}
 }
+
+func TestNewFilePickerModelWithKeepsTheGivenOrder(t *testing.T) {
+	m := NewFilePickerModelWith([]string{"talks/b.md", "talks/a.md"})
+	if !m.HasFiles() {
+		t.Fatal("HasFiles() = false")
+	}
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if got := updated.(FilePickerModel).GetResult().File; got != "talks/b.md" {
+		t.Errorf("selected %q, want the first file given", got)
+	}
+}
