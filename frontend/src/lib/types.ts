@@ -283,7 +283,7 @@ export interface Presentation {
 /**
  * WebSocket message types for hot reload and sync.
  */
-export type WebSocketMessageType = 'connected' | 'reload' | 'slide' | 'theme';
+export type WebSocketMessageType = 'connected' | 'reload' | 'slide' | 'theme' | 'recording';
 
 /**
  * WebSocket message from the server.
@@ -314,6 +314,8 @@ export interface WebSocketMessage {
 	 * case). Absent when the hub has never had a presentation set.
 	 */
 	revision?: string;
+	/** Recording disk status on a "recording" message. Absent means the disk is fine. */
+	disk?: 'low' | 'full';
 }
 
 // ============================================================================

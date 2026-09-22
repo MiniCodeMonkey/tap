@@ -30,6 +30,7 @@ import { Slide } from '$lib/components/Slide';
 import { SlideTransition } from '$lib/components/SlideTransition';
 import { ProgressBar } from '$lib/components/ProgressBar';
 import { ConnectionIndicator } from '$lib/components/ConnectionIndicator';
+import { DiskIndicator } from '$lib/components/DiskIndicator';
 import { SwipeFeedback } from '$lib/components/SwipeFeedback';
 import { SlideOverview } from '$lib/components/SlideOverview';
 import { ShortcutHelp } from '$lib/components/ShortcutHelp';
@@ -271,7 +272,12 @@ export default function App() {
 
 				<ProgressBar show={showProgressBar} />
 
-				{!PRINT_MODE && !CAPTURE_MODE ? <ConnectionIndicator /> : null}
+				{!PRINT_MODE && !CAPTURE_MODE ? (
+					<>
+						<ConnectionIndicator />
+						<DiskIndicator />
+					</>
+				) : null}
 
 				<SwipeFeedback direction={swipe.direction} moved={swipe.moved} nonce={swipe.nonce} />
 

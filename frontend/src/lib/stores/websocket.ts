@@ -40,6 +40,8 @@ export interface ConnectionState {
 	staticMode: boolean;
 	/** Whether static mode detection has completed. */
 	staticModeDetected: boolean;
+	/** How full the recordings disk is, from the server's "recording" messages. */
+	diskStatus: 'ok' | 'low' | 'full';
 }
 
 const initialConnectionState: ConnectionState = {
@@ -47,7 +49,8 @@ const initialConnectionState: ConnectionState = {
 	reconnecting: false,
 	reconnectAttempt: 0,
 	staticMode: false,
-	staticModeDetected: false
+	staticModeDetected: false,
+	diskStatus: 'ok'
 };
 
 export const useConnectionStore = create<ConnectionState>(() => ({ ...initialConnectionState }));
@@ -377,6 +380,10 @@ export class WebSocketClient {
 				// Switch to a different theme
 				this.handleThemeChange(message.theme);
 				break;
+
+			case 'recording':
+				useConnectionStore.setState({ diskStatus: message.disk ?? 'ok' });
+				break;
 		}
 	}
 
@@ -397,6 +404,8 @@ export class WebSocketClient {
 	 * compared, exactly as this one's was.
 	 */
 	private handleConnected(revision: string | undefined): void {
+		// The hub resends a non-fine disk status right after "connected", so a stale one from before a reconnect is cleared here.
+		useConnectionStore.setState({ diskStatus: 'ok' });
 		if (!this.hasSeenFirstConnected) {
 			this.hasSeenFirstConnected = true;
 			this.firstRevision = revision;

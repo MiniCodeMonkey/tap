@@ -222,6 +222,17 @@ describe('WebSocketClient', () => {
 			expect(client.isConnected()).toBe(true);
 		});
 
+		it('stores the disk status from a recording message and resets it on connect', () => {
+			client.connect();
+			mockWs?.simulateOpen();
+
+			mockWs?.simulateMessage({ type: 'recording', disk: 'low' });
+			expect(useConnectionStore.getState().diskStatus).toBe('low');
+
+			mockWs?.simulateMessage({ type: 'connected' });
+			expect(useConnectionStore.getState().diskStatus).toBe('ok');
+		});
+
 		describe('deck revision on "connected" messages', () => {
 			it('does not reload on the first "connected" message, even when it carries a revision', () => {
 				const reloadSpy = vi.fn();
