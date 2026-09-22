@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/MiniCodeMonkey/tap/internal/config"
+	"github.com/MiniCodeMonkey/tap/internal/deckedit"
 	"github.com/MiniCodeMonkey/tap/internal/gemini"
 	"github.com/MiniCodeMonkey/tap/internal/recorder"
 	tea "github.com/charmbracelet/bubbletea"
@@ -639,7 +639,7 @@ func (m *DevModel) handleThemePickerKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.config.MarkdownFile != "" {
 			absPath, err := filepath.Abs(m.config.MarkdownFile)
 			if err == nil {
-				if err := config.UpdateThemeInFile(absPath, selectedTheme); err != nil {
+				if err := deckedit.SetTheme(absPath, selectedTheme); err != nil {
 					m.addEvent(DevEvent{
 						Type:      "error",
 						Message:   fmt.Sprintf("Failed to save theme: %v", err),

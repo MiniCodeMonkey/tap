@@ -42,6 +42,7 @@ var expectedCommands = []string{
 	"tap slide list",
 	"tap theme",
 	"tap theme list",
+	"tap theme set",
 	"tap theme show",
 }
 
