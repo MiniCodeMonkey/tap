@@ -154,6 +154,9 @@ func runBuild(cmd *cobra.Command, args []string) error {
 	spinner.stop()
 
 	printComponentWarningsToStderr(componentWarnings(resolvedComponents))
+	for _, warning := range result.Warnings {
+		Warning("warning: %s\n", warning)
+	}
 
 	if buildJSON {
 		return printJSONOK(cmd.OutOrStdout(), struct {

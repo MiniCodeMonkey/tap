@@ -889,3 +889,125 @@ func TestBuild_LeavesOutSkippedSlides(t *testing.T) {
 		t.Errorf("embedded slides = %+v, want two slides indexed 0 and 1", data.Slides)
 	}
 }
+
+// buildWithRenderedImage parses markdown referencing an image at
+// imagesDir/imageName through the real parser (which renders it with
+// goldmark, so the src attribute the builder later sees is percent-encoded
+// and HTML-entity-escaped the same way a real deck's would be), writes
+// imageContent at that path, and runs a real Build. It returns the build
+// result and the built index.html.
+func buildWithRenderedImage(t *testing.T, imageName, imageContent string) (*BuildResult, string) {
+	t.Helper()
+	tmpDir := t.TempDir()
+	outputDir := filepath.Join(tmpDir, "dist")
+	baseDir := filepath.Join(tmpDir, "presentation")
+	imagesDir := filepath.Join(baseDir, "images")
+	if err := os.MkdirAll(imagesDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(imagesDir, imageName), []byte(imageContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	markdown := "# Slide\n\n![alt](images/" + imageName + ")\n"
+	pres, err := parser.New().Parse([]byte(markdown))
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+
+	b := NewWithOutput(outputDir)
+	b.SetBaseDir(baseDir)
+	result, err := b.Build(config.DefaultConfig(), pres)
+	if err != nil {
+		t.Fatalf("Build() error = %v", err)
+	}
+
+	indexContent, err := os.ReadFile(filepath.Join(outputDir, "index.html"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return result, string(indexContent)
+}
+
+// TestBuild_DecodesRenderedImagePaths covers the characters the
+// re-review found: goldmark percent-encodes some of them and HTML-entity
+// escapes others in the rendered <img src>, and a non-Latin name is
+// percent-encoded byte for byte. The builder must undo both before
+// opening the file on disk, or the image is silently dropped.
+func TestBuild_DecodesRenderedImagePaths(t *testing.T) {
+	tests := map[string]string{
+		"braces":     "brace{file}.png",
+		"brackets":   "bracket[file].png",
+		"pipe":       "pipe|file.png",
+		"caret":      "caret^file.png",
+		"backslash":  "back\\slash.png",
+		"ampersand":  "amp&file.png",
+		"percent":    "percent%file.png",
+		"chinese":    "图表.png",
+		"danish":     "dänisch-å-ø-æ.png",
+	}
+	for name, imageName := range tests {
+		t.Run(name, func(t *testing.T) {
+			result, indexHTML := buildWithRenderedImage(t, imageName, "image bytes for "+name)
+			if len(result.Warnings) != 0 {
+				t.Errorf("Build() warnings = %v, want none", result.Warnings)
+			}
+			if !strings.Contains(indexHTML, `src=\"assets/`) {
+				t.Errorf("index.html has no rewritten assets/ src for %s:\n%s", imageName, indexHTML)
+			}
+			if strings.Contains(indexHTML, "images/"+imageName) && !strings.Contains(indexHTML, "\\u") {
+				t.Errorf("index.html still references the unresolved source path for %s", imageName)
+			}
+		})
+	}
+}
+
+// TestBuild_WarnsWhenAnImageCannotBeFoundAfterDecoding covers a genuinely
+// missing image: decoding must not turn a real lookup failure into
+// silence either.
+func TestBuild_WarnsWhenAnImageCannotBeFoundAfterDecoding(t *testing.T) {
+	tmpDir := t.TempDir()
+	outputDir := filepath.Join(tmpDir, "dist")
+	baseDir := filepath.Join(tmpDir, "presentation")
+	if err := os.MkdirAll(baseDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	pres := &parser.Presentation{
+		Slides: []parser.Slide{
+			{Index: 0, HTML: `<img src="images/missing%20file.png">`},
+		},
+	}
+
+	b := NewWithOutput(outputDir)
+	b.SetBaseDir(baseDir)
+	result, err := b.Build(config.DefaultConfig(), pres)
+	if err != nil {
+		t.Fatalf("Build() error = %v", err)
+	}
+	if len(result.Warnings) != 1 {
+		t.Fatalf("Build() warnings = %v, want exactly one", result.Warnings)
+	}
+	if !strings.Contains(result.Warnings[0], "missing file.png") {
+		t.Errorf("warning = %q, want it to name the decoded path", result.Warnings[0])
+	}
+}
+
+func TestDecodeAssetPath(t *testing.T) {
+	tests := map[string]string{
+		"brace%7Bfile%7D.png":   "brace{file}.png",
+		"amp&amp;file.png":      "amp&file.png",
+		"percent%file.png":      "percent%file.png",
+		"quote&quot;file.png":   `quote"file.png`,
+		"%E5%9B%BE%E8%A1%A8":    "图表",
+		"already-plain.png":     "already-plain.png",
+		"%":                     "%",
+		"%2":                    "%2",
+		"%zz.png":               "%zz.png",
+	}
+	for input, want := range tests {
+		if got := decodeAssetPath(input); got != want {
+			t.Errorf("decodeAssetPath(%q) = %q, want %q", input, got, want)
+		}
+	}
+}

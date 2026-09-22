@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"html"
 	"io"
 	"os"
 	"path/filepath"
@@ -34,6 +35,7 @@ type BuildResult struct {
 	BuildTime time.Duration // Total build duration
 	FileCount int           // Number of files generated
 	TotalSize int64         // Total size of all files in bytes
+	Warnings  []string      // One entry per referenced file Build could not find
 }
 
 // Builder generates static files from a tap presentation.
@@ -152,15 +154,24 @@ func (b *Builder) Build(cfg *config.Config, pres *parser.Presentation) (*BuildRe
 			// Strip this prefix to resolve the actual file path on disk.
 			resolvedPath := strings.TrimPrefix(imgPath, "/local/")
 
-			sourcePath := resolvedPath
-			if !filepath.IsAbs(resolvedPath) && b.baseDir != "" {
-				sourcePath = filepath.Join(b.baseDir, resolvedPath)
+			// The renderer HTML-entity-escapes and percent-encodes the
+			// path it writes into src, so what extractImagePaths pulled
+			// out of the HTML is not the file's real name. Undo both
+			// before looking the file up on disk.
+			decodedPath := decodeAssetPath(resolvedPath)
+
+			sourcePath := decodedPath
+			if !filepath.IsAbs(decodedPath) && b.baseDir != "" {
+				sourcePath = filepath.Join(b.baseDir, decodedPath)
 			}
 
 			// Copy the image with content hash
 			hashedPath, size, err := b.copyWithHash(sourcePath, assetsDir)
 			if err != nil {
-				// Skip images that can't be found (might be external URLs or invalid)
+				// A file genuinely missing after decoding is reported,
+				// not silently dropped, so a broken image has a reason
+				// instead of just disappearing.
+				result.Warnings = append(result.Warnings, fmt.Sprintf("image not found: %s", decodedPath))
 				continue
 			}
 
@@ -395,6 +406,53 @@ func rewriteAsciinemaPaths(html string, pathMapping map[string]string) string {
 func isAbsoluteURL(path string) bool {
 	lowerPath := strings.ToLower(path)
 	return strings.HasPrefix(lowerPath, "http://") || strings.HasPrefix(lowerPath, "https://")
+}
+
+// decodeAssetPath undoes the escaping the renderer applies to an <img>
+// src before writing it into a slide's HTML: HTML entity escaping first
+// (the outer layer, applied when the attribute value is written), then
+// percent-encoding (the inner layer, applied to the link destination
+// itself). The result is the real file name on disk, in whatever script
+// the author gave it.
+func decodeAssetPath(src string) string {
+	return percentDecode(html.UnescapeString(src))
+}
+
+// percentDecode decodes "%XX" escapes in s. A "%" not followed by two hex
+// digits is left as it is instead of failing the whole string: a name a
+// person typed by hand, rather than one tap sanitized, can hold a literal
+// "%" that was never an escape.
+func percentDecode(s string) string {
+	var decoded strings.Builder
+	decoded.Grow(len(s))
+	for i := 0; i < len(s); i++ {
+		if s[i] == '%' && i+2 < len(s) {
+			if hi, ok := hexDigit(s[i+1]); ok {
+				if lo, ok := hexDigit(s[i+2]); ok {
+					decoded.WriteByte(hi<<4 | lo)
+					i += 2
+					continue
+				}
+			}
+		}
+		decoded.WriteByte(s[i])
+	}
+	return decoded.String()
+}
+
+// hexDigit is the value of a single hex digit character, or false when b
+// is not one.
+func hexDigit(b byte) (byte, bool) {
+	switch {
+	case b >= '0' && b <= '9':
+		return b - '0', true
+	case b >= 'a' && b <= 'f':
+		return b - 'a' + 10, true
+	case b >= 'A' && b <= 'F':
+		return b - 'A' + 10, true
+	default:
+		return 0, false
+	}
 }
 
 // CopyEmbeddedAssets copies all embedded frontend assets to the output directory.
