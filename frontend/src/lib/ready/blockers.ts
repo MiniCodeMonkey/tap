@@ -13,9 +13,14 @@ export type ReadyBlockerKind = 'fonts' | 'images' | 'map' | 'component' | 'error
 
 /**
  * How long whenNoBlockers waits for every blocker to release before giving
- * up. The same as the longest probe timeout in probes.ts, so a stuck
- * blocker never holds a settle round longer than a stuck probe already
- * could.
+ * up. Shorter than some blockers can legitimately run: MapSlide.tsx holds
+ * one for up to 10000ms while a map's tiles load, and a fly-to hold is its
+ * animation duration plus another timeout on top, routinely longer still.
+ * A round that times out with a blocker held simply loops (see
+ * waitUntilSettled in readySignal.ts), so this is not a bug, but it does
+ * mean the real worst case for a cycle that keeps re-arming a blocker is
+ * MAX_SETTLE_ROUNDS times this timeout, which can run past tap's 30
+ * second per-slide export timeout (internal/pdf/ready.go).
  */
 export const BLOCKER_TIMEOUT_MS = 5000;
 
