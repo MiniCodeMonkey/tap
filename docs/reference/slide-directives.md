@@ -227,7 +227,6 @@ When enabled, bullet points appear one at a time as you advance.
 ```markdown
 ---
 title: My Talk
-fragments: false
 ---
 
 # All at Once
@@ -253,13 +252,18 @@ fragments: true
 Items appear one by one.
 ```
 
+The first slide has no `fragments` directive, so it uses the default (`false`) and shows its whole list at once. The second slide's own directive turns fragments on for itself only; the first slide is unaffected.
+
 #### Example: Disable Fragments for One Slide
 
 ```markdown
 ---
 title: My Talk
-fragments: true
 ---
+
+<!--
+fragments: true
+-->
 
 # Step by Step
 
@@ -281,6 +285,8 @@ fragments: false
 
 This slide shows all content at once.
 ```
+
+`false` is already the default, so you rarely need to write it out. It's worth being explicit when you're copying a directive block from a slide that turned fragments on, or want a slide to stay static even if a neighboring slide's fragments are on.
 
 ---
 
@@ -631,7 +637,7 @@ notes: |
 |-----------|------|---------|-------------|
 | `layout` | string | `default` | Slide layout |
 | `transition` | string | From frontmatter | Transition animation |
-| `fragments` | boolean | From frontmatter | Incremental list reveals |
+| `fragments` | boolean | `false` | Incremental list reveals |
 | `background` | string | Theme default | Background color/image |
 | `notes` | string | None | Speaker notes |
 | `tag` | string | None | Decorative metadata label |
@@ -656,12 +662,11 @@ notes: |
 ---
 title: My Talk
 transition: fade
-fragments: false
 ---
 
 # Slide 1
 
-Uses global settings: fade transition, no fragments.
+Uses the frontmatter transition: fade. Fragments default to false, since nothing here turns them on.
 
 ---
 
@@ -672,13 +677,13 @@ fragments: true
 
 # Slide 2
 
-Overrides: zoom transition, fragments enabled.
+Overrides the transition to zoom, and turns fragments on for this slide only.
 
 ---
 
 # Slide 3
 
-Back to global settings: fade transition, no fragments.
+Back to the frontmatter transition, fade. Fragments are false again too, but not because Slide 2's setting expired: fragments have no frontmatter-level setting to fall back to, so every slide without its own `fragments` directive is `false` on its own.
 ```
 
 ## Next Steps
