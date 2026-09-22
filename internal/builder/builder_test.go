@@ -850,3 +850,42 @@ func TestBuildResult_Stats(t *testing.T) {
 		t.Error("expected positive build time")
 	}
 }
+
+func TestBuild_LeavesOutSkippedSlides(t *testing.T) {
+	outputDir := filepath.Join(t.TempDir(), "dist")
+	pres := &parser.Presentation{Slides: []parser.Slide{
+		{Index: 0, HTML: "<p>Kept first</p>"},
+		{Index: 1, HTML: "<p>Left out of the build</p>", Directives: parser.SlideDirectives{Skip: true}},
+		{Index: 2, HTML: "<p>Kept second</p>"},
+	}}
+
+	if _, err := NewWithOutput(outputDir).Build(config.DefaultConfig(), pres); err != nil {
+		t.Fatalf("Build failed: %v", err)
+	}
+
+	content, err := os.ReadFile(filepath.Join(outputDir, "index.html"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	html := string(content)
+	if strings.Contains(html, "Left out of the build") {
+		t.Error("index.html holds the skipped slide's text")
+	}
+
+	startMarker := `<script id="presentation-data" type="application/json">`
+	start := strings.Index(html, startMarker)
+	if start == -1 {
+		t.Fatal("presentation data script tag not found")
+	}
+	start += len(startMarker)
+	end := strings.Index(html[start:], "</script>")
+	var data struct {
+		Slides []transformer.TransformedSlide `json:"slides"`
+	}
+	if err := json.Unmarshal([]byte(html[start:start+end]), &data); err != nil {
+		t.Fatalf("embedded JSON is invalid: %v", err)
+	}
+	if len(data.Slides) != 2 || data.Slides[1].Index != 1 || !strings.Contains(data.Slides[1].HTML, "Kept second") {
+		t.Errorf("embedded slides = %+v, want two slides indexed 0 and 1", data.Slides)
+	}
+}

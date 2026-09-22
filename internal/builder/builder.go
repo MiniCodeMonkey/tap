@@ -106,7 +106,9 @@ func (b *Builder) Build(cfg *config.Config, pres *parser.Presentation) (*BuildRe
 	trans := transformer.NewWithBaseDir(cfg, b.baseDir)
 	trans.SetComponents(b.components)
 	trans.SetComponentURLPrefix("components/")
-	transformed := trans.Transform(pres)
+	// A slide whose skip directive is true is left out of the built deck
+	// entirely, not just hidden, so its content is not published.
+	transformed, _ := transformer.WithoutSkippedSlides(trans.Transform(pres))
 
 	// Write every successfully built component bundle to dist/components/.
 	componentCount, componentSize, err := b.writeComponentBundles()
