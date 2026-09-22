@@ -1,0 +1,357 @@
+{
+  "slides": [
+    {
+      "number": 1,
+      "startLine": 16,
+      "endLine": 18,
+      "layout": "title",
+      "title": "SQL Live Demo",
+      "fragments": 0,
+      "steps": 0,
+      "skip": false,
+      "errors": [],
+      "codeBlocks": []
+    },
+    {
+      "number": 2,
+      "startLine": 22,
+      "endLine": 30,
+      "layout": "default",
+      "title": "SQLite in Memory",
+      "fragments": 0,
+      "steps": 0,
+      "skip": false,
+      "errors": [],
+      "codeBlocks": [
+        {
+          "block": 1,
+          "language": "sql",
+          "driver": "sqlite",
+          "live": true,
+          "line": 26
+        }
+      ]
+    },
+    {
+      "number": 3,
+      "startLine": 34,
+      "endLine": 40,
+      "layout": "section",
+      "title": "Creating Tables",
+      "fragments": 0,
+      "steps": 0,
+      "skip": false,
+      "errors": [],
+      "codeBlocks": []
+    },
+    {
+      "number": 4,
+      "startLine": 44,
+      "endLine": 53,
+      "layout": "code-focus",
+      "title": "Create the Users Table",
+      "fragments": 0,
+      "steps": 0,
+      "skip": false,
+      "errors": [],
+      "codeBlocks": [
+        {
+          "block": 1,
+          "language": "sql",
+          "driver": "sqlite",
+          "live": true,
+          "line": 46
+        }
+      ]
+    },
+    {
+      "number": 5,
+      "startLine": 57,
+      "endLine": 66,
+      "layout": "code-focus",
+      "title": "Insert Sample Data",
+      "fragments": 0,
+      "steps": 0,
+      "skip": false,
+      "errors": [],
+      "codeBlocks": [
+        {
+          "block": 1,
+          "language": "sql",
+          "driver": "sqlite",
+          "live": true,
+          "line": 59
+        }
+      ]
+    },
+    {
+      "number": 6,
+      "startLine": 70,
+      "endLine": 76,
+      "layout": "default",
+      "title": "Query the Data",
+      "fragments": 0,
+      "steps": 0,
+      "skip": false,
+      "errors": [],
+      "codeBlocks": [
+        {
+          "block": 1,
+          "language": "sql",
+          "driver": "sqlite",
+          "live": true,
+          "line": 72
+        }
+      ]
+    },
+    {
+      "number": 7,
+      "startLine": 80,
+      "endLine": 86,
+      "layout": "section",
+      "title": "Advanced Queries",
+      "fragments": 0,
+      "steps": 0,
+      "skip": false,
+      "errors": [],
+      "codeBlocks": []
+    },
+    {
+      "number": 8,
+      "startLine": 90,
+      "endLine": 97,
+      "layout": "default",
+      "title": "Filtering with WHERE",
+      "fragments": 0,
+      "steps": 0,
+      "skip": false,
+      "errors": [],
+      "codeBlocks": [
+        {
+          "block": 1,
+          "language": "sql",
+          "driver": "sqlite",
+          "live": true,
+          "line": 92
+        }
+      ]
+    },
+    {
+      "number": 9,
+      "startLine": 101,
+      "endLine": 109,
+      "layout": "code-focus",
+      "title": "Aggregation",
+      "fragments": 0,
+      "steps": 0,
+      "skip": false,
+      "errors": [],
+      "codeBlocks": [
+        {
+          "block": 1,
+          "language": "sql",
+          "driver": "sqlite",
+          "live": true,
+          "line": 103
+        }
+      ]
+    },
+    {
+      "number": 10,
+      "startLine": 113,
+      "endLine": 139,
+      "layout": "two-column",
+      "title": "Create Products Table",
+      "fragments": 0,
+      "steps": 0,
+      "skip": false,
+      "errors": [],
+      "codeBlocks": [
+        {
+          "block": 1,
+          "language": "sql",
+          "driver": "sqlite",
+          "live": true,
+          "line": 121
+        }
+      ]
+    },
+    {
+      "number": 11,
+      "startLine": 143,
+      "endLine": 153,
+      "layout": "code-focus",
+      "title": "Add Products",
+      "fragments": 0,
+      "steps": 0,
+      "skip": false,
+      "errors": [],
+      "codeBlocks": [
+        {
+          "block": 1,
+          "language": "sql",
+          "driver": "sqlite",
+          "live": true,
+          "line": 145
+        }
+      ]
+    },
+    {
+      "number": 12,
+      "startLine": 157,
+      "endLine": 168,
+      "layout": "code-focus",
+      "title": "Products by Category",
+      "fragments": 0,
+      "steps": 0,
+      "skip": false,
+      "errors": [],
+      "codeBlocks": [
+        {
+          "block": 1,
+          "language": "sql",
+          "driver": "sqlite",
+          "live": true,
+          "line": 159
+        }
+      ]
+    },
+    {
+      "number": 13,
+      "startLine": 172,
+      "endLine": 190,
+      "layout": "code-focus",
+      "title": "Complex Queries",
+      "fragments": 0,
+      "steps": 0,
+      "skip": false,
+      "errors": [],
+      "codeBlocks": [
+        {
+          "block": 1,
+          "language": "sql",
+          "driver": "sqlite",
+          "live": true,
+          "line": 178
+        }
+      ]
+    },
+    {
+      "number": 14,
+      "startLine": 194,
+      "endLine": 206,
+      "layout": "code-focus",
+      "title": "Creating Orders",
+      "fragments": 0,
+      "steps": 0,
+      "skip": false,
+      "errors": [],
+      "codeBlocks": [
+        {
+          "block": 1,
+          "language": "sql",
+          "driver": "sqlite",
+          "live": true,
+          "line": 196
+        }
+      ]
+    },
+    {
+      "number": 15,
+      "startLine": 210,
+      "endLine": 220,
+      "layout": "code-focus",
+      "title": "Sample Orders",
+      "fragments": 0,
+      "steps": 0,
+      "skip": false,
+      "errors": [],
+      "codeBlocks": [
+        {
+          "block": 1,
+          "language": "sql",
+          "driver": "sqlite",
+          "live": true,
+          "line": 212
+        }
+      ]
+    },
+    {
+      "number": 16,
+      "startLine": 224,
+      "endLine": 240,
+      "layout": "code-focus",
+      "title": "Joining Tables",
+      "fragments": 0,
+      "steps": 0,
+      "skip": false,
+      "errors": [],
+      "codeBlocks": [
+        {
+          "block": 1,
+          "language": "sql",
+          "driver": "sqlite",
+          "live": true,
+          "line": 230
+        }
+      ]
+    },
+    {
+      "number": 17,
+      "startLine": 244,
+      "endLine": 256,
+      "layout": "code-focus",
+      "title": "Customer Spending",
+      "fragments": 0,
+      "steps": 0,
+      "skip": false,
+      "errors": [],
+      "codeBlocks": [
+        {
+          "block": 1,
+          "language": "sql",
+          "driver": "sqlite",
+          "live": true,
+          "line": 246
+        }
+      ]
+    },
+    {
+      "number": 18,
+      "startLine": 260,
+      "endLine": 266,
+      "layout": "big-stat",
+      "title": "100%",
+      "fragments": 0,
+      "steps": 0,
+      "skip": false,
+      "errors": [],
+      "codeBlocks": []
+    },
+    {
+      "number": 19,
+      "startLine": 270,
+      "endLine": 286,
+      "layout": "default",
+      "title": "Why Live SQL?",
+      "fragments": 4,
+      "steps": 0,
+      "skip": false,
+      "errors": [],
+      "codeBlocks": []
+    },
+    {
+      "number": 20,
+      "startLine": 290,
+      "endLine": 296,
+      "layout": "title",
+      "title": "SQL Made Interactive",
+      "fragments": 0,
+      "steps": 0,
+      "skip": false,
+      "errors": [],
+      "codeBlocks": []
+    }
+  ],
+  "errors": []
+}
