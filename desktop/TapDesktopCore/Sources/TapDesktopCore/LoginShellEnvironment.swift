@@ -9,9 +9,6 @@ public struct LoginShellEnvironment: Equatable, Sendable {
         case failed(String)
     }
 
-    public static let beginMarker = "__TAP_ENVIRONMENT_BEGIN__"
-    public static let endMarker = "__TAP_ENVIRONMENT_END__"
-
     public let variables: [String: String]
     public let outcome: Outcome
 
@@ -20,38 +17,62 @@ public struct LoginShellEnvironment: Equatable, Sendable {
         return "Tap could not read your login shell environment (\(reason)). tap runs with the default environment."
     }
 
-    /// The variables printed by `env -0` between the two markers.
+    /// A random, unguessable marker pair for one run of the login shell.
     ///
-    /// A noisy profile can print the marker text itself, so a begin marker
-    /// is not necessarily ours. We take the last begin marker that has an
-    /// end marker somewhere after it: everything our own script prints
-    /// comes after anything the profile printed, so that pairing is the one
-    /// our script emitted. A record that does not parse as `KEY=VALUE` means
-    /// the payload was not what we expect, so the whole parse fails rather
-    /// than returning a partial result.
-    public static func parse(_ output: Data) -> [String: String]? {
-        let text = String(decoding: output, as: UTF8.self)
-        var searchStart = text.startIndex
-        var chosenBegin: Range<String.Index>?
-        var chosenEnd: Range<String.Index>?
-        while let begin = text.range(of: beginMarker, range: searchStart..<text.endIndex) {
-            if let end = text.range(of: endMarker, range: begin.upperBound..<text.endIndex) {
-                chosenBegin = begin
-                chosenEnd = end
-            }
-            searchStart = begin.upperBound
+    /// Earlier versions used fixed marker literals, which anything a dotfile
+    /// prints (by accident, or by a value that happens to contain the
+    /// literal text) could collide with. A per-run token nothing has ever
+    /// seen before closes that off entirely: no dotfile can print a token
+    /// it was never given.
+    struct Markers: Equatable {
+        let token: String
+        var begin: String { "__TAP_ENVIRONMENT_BEGIN_\(token)__" }
+        var end: String { "__TAP_ENVIRONMENT_END_\(token)__" }
+
+        /// 128 bits from the system random source, rendered as lowercase
+        /// hex so the token is only letters and digits: it is embedded in a
+        /// single-quoted string the shell executes, and this alphabet
+        /// cannot break out of that quoting.
+        static func generate() -> Markers {
+            let bytes = (0..<16).map { _ in UInt8.random(in: 0...255) }
+            return Markers(token: bytes.map { String(format: "%02x", $0) }.joined())
         }
-        guard let begin = chosenBegin, let end = chosenEnd else { return nil }
+    }
+
+    /// The variables printed by `env -0` between one run's markers.
+    ///
+    /// Because the markers are unguessable, any occurrence of either marker
+    /// in the output other than the one pair our own script printed means
+    /// something is wrong, not that a profile's noise needs to be worked
+    /// around: we require exactly one begin marker and exactly one end
+    /// marker, with the begin before the end, and fail cleanly otherwise. A
+    /// record that does not parse as `KEY=VALUE` also fails the whole parse
+    /// rather than returning a partial result.
+    static func parse(_ output: Data, markers: Markers) -> [String: String]? {
+        let text = String(decoding: output, as: UTF8.self)
+        let begins = ranges(of: markers.begin, in: text)
+        let ends = ranges(of: markers.end, in: text)
+        guard begins.count == 1, ends.count == 1, begins[0].upperBound <= ends[0].lowerBound else { return nil }
         var variables: [String: String] = [:]
-        for record in text[begin.upperBound..<end.lowerBound].split(separator: "\u{0}") {
+        for record in text[begins[0].upperBound..<ends[0].lowerBound].split(separator: "\u{0}") {
             guard let equals = record.firstIndex(of: "="), equals != record.startIndex else { return nil }
             variables[String(record[..<equals])] = String(record[record.index(after: equals)...])
         }
         return variables
     }
 
+    private static func ranges(of marker: String, in text: String) -> [Range<String.Index>] {
+        var found: [Range<String.Index>] = []
+        var searchStart = text.startIndex
+        while let range = text.range(of: marker, range: searchStart..<text.endIndex) {
+            found.append(range)
+            searchStart = range.upperBound
+        }
+        return found
+    }
+
     /// Runs `<shell> -l -i -c <script>`, where the script prints `env -0`
-    /// between the markers, so a profile that prints text cannot spoil it.
+    /// between a fresh, unguessable marker pair.
     public static func load(shellPath: String, timeout: TimeInterval = 5,
                             fallback: [String: String] = ProcessInfo.processInfo.environment) async -> LoginShellEnvironment {
         await withCheckedContinuation { continuation in
@@ -65,7 +86,8 @@ public struct LoginShellEnvironment: Equatable, Sendable {
         func failed(_ reason: String) -> LoginShellEnvironment {
             LoginShellEnvironment(variables: fallback, outcome: .failed(reason))
         }
-        let script = "printf '%s' '\(beginMarker)'; /usr/bin/env -0; printf '%s' '\(endMarker)'"
+        let markers = Markers.generate()
+        let script = "printf '%s' '\(markers.begin)'; /usr/bin/env -0; printf '%s' '\(markers.end)'"
         let process = Process()
         process.executableURL = URL(fileURLWithPath: shellPath)
         process.arguments = ["-l", "-i", "-c", script]
@@ -102,10 +124,10 @@ public struct LoginShellEnvironment: Equatable, Sendable {
             defer { lock.unlock() }
             return collected
         }
-        while parse(snapshot()) == nil, Date() < drainDeadline { usleep(10_000) }
+        while parse(snapshot(), markers: markers) == nil, Date() < drainDeadline { usleep(10_000) }
         output.fileHandleForReading.readabilityHandler = nil
         guard process.terminationStatus == 0 else { return failed("the shell exited with status \(process.terminationStatus)") }
-        guard var variables = parse(snapshot()), !variables.isEmpty else { return failed("the shell printed no environment") }
+        guard var variables = parse(snapshot(), markers: markers), !variables.isEmpty else { return failed("the shell printed no environment") }
         if variables["PATH"] == nil { variables["PATH"] = fallback["PATH"] ?? "/usr/bin:/bin:/usr/sbin:/sbin" }
         return LoginShellEnvironment(variables: variables, outcome: .loaded)
     }

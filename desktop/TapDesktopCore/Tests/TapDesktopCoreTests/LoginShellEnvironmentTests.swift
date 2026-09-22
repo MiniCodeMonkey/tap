@@ -3,32 +3,65 @@ import XCTest
 
 final class LoginShellEnvironmentTests: XCTestCase {
     func testParsesTheVariablesBetweenTheMarkers() {
-        let output = "profile noise\n" + LoginShellEnvironment.beginMarker + "PATH=/opt/bin:/usr/bin\u{0}MULTI=line one\nline two\u{0}" + LoginShellEnvironment.endMarker
-        XCTAssertEqual(LoginShellEnvironment.parse(Data(output.utf8)), ["PATH": "/opt/bin:/usr/bin", "MULTI": "line one\nline two"])
-        XCTAssertNil(LoginShellEnvironment.parse(Data("no markers".utf8)))
+        let markers = LoginShellEnvironment.Markers.generate()
+        let output = "profile noise\n" + markers.begin + "PATH=/opt/bin:/usr/bin\u{0}MULTI=line one\nline two\u{0}" + markers.end
+        XCTAssertEqual(LoginShellEnvironment.parse(Data(output.utf8), markers: markers), ["PATH": "/opt/bin:/usr/bin", "MULTI": "line one\nline two"])
+        XCTAssertNil(LoginShellEnvironment.parse(Data("no markers".utf8), markers: markers))
     }
 
-    func testTakesTheLastBeginMarkerWhenAProfilePrintsItFirst() {
-        let output = LoginShellEnvironment.beginMarker + "trace: entering profile\n" +
-            LoginShellEnvironment.beginMarker + "PATH=/usr/bin" + LoginShellEnvironment.endMarker
-        XCTAssertEqual(LoginShellEnvironment.parse(Data(output.utf8)), ["PATH": "/usr/bin"])
+    func testTwoRunsUseDifferentMarkers() {
+        let first = LoginShellEnvironment.Markers.generate()
+        let second = LoginShellEnvironment.Markers.generate()
+        XCTAssertNotEqual(first, second)
+        XCTAssertNotEqual(first.begin, second.begin)
+        XCTAssertNotEqual(first.end, second.end)
     }
 
-    func testTakesTheLastPairWhenAProfilePrintsBothMarkersFirst() {
-        let output = LoginShellEnvironment.beginMarker + "FAKE=1" + LoginShellEnvironment.endMarker +
-            "more profile noise\n" +
-            LoginShellEnvironment.beginMarker + "PATH=/usr/bin" + LoginShellEnvironment.endMarker
-        XCTAssertEqual(LoginShellEnvironment.parse(Data(output.utf8)), ["PATH": "/usr/bin"])
+    func testTheTokenIsOnlyLettersAndDigits() {
+        let markers = LoginShellEnvironment.Markers.generate()
+        XCTAssertFalse(markers.token.isEmpty)
+        XCTAssertTrue(markers.token.allSatisfy { $0.isLetter || $0.isNumber })
+        // 128 bits of entropy, rendered as lowercase hex: 32 characters.
+        XCTAssertEqual(markers.token.count, 32)
+    }
+
+    func testFailsCleanlyWhenAnotherMarkerPairAppearsAfterTheRealOne() {
+        // A stray marker pair after the real one must not be mistaken for
+        // ours just because it uses this run's own token.
+        let markers = LoginShellEnvironment.Markers.generate()
+        let output = markers.begin + "PATH=/usr/bin" + markers.end + "later noise " + markers.begin + "junk" + markers.end
+        XCTAssertNil(LoginShellEnvironment.parse(Data(output.utf8), markers: markers))
+    }
+
+    func testFailsCleanlyWhenAnUnmatchedBeginMarkerAppearsAfterTheRealBegin() {
+        // A second begin marker with no marker of its own to close it must
+        // not be silently absorbed into the real payload.
+        let markers = LoginShellEnvironment.Markers.generate()
+        let output = markers.begin + "PATH=/usr/bin" + markers.begin + "MORE=1" + markers.end
+        XCTAssertNil(LoginShellEnvironment.parse(Data(output.utf8), markers: markers))
+    }
+
+    func testFailsCleanlyWhenAVariablesValueContainsMarkerText() {
+        // If a variable's own value happens to contain the marker text
+        // (here, this run's own markers, the worst realistic case), that is
+        // a second occurrence of each marker, and the parse must refuse to
+        // guess which pair is real rather than hand back that value as the
+        // whole environment.
+        let markers = LoginShellEnvironment.Markers.generate()
+        let output = markers.begin + "TRAP=" + markers.begin + "fake" + markers.end + "\u{0}PATH=/usr/bin" + markers.end
+        XCTAssertNil(LoginShellEnvironment.parse(Data(output.utf8), markers: markers))
     }
 
     func testReturnsNilWhenTheEndMarkerNeverAppears() {
-        let output = "profile noise\n" + LoginShellEnvironment.beginMarker + "PATH=/usr/bin"
-        XCTAssertNil(LoginShellEnvironment.parse(Data(output.utf8)))
+        let markers = LoginShellEnvironment.Markers.generate()
+        let output = "profile noise\n" + markers.begin + "PATH=/usr/bin"
+        XCTAssertNil(LoginShellEnvironment.parse(Data(output.utf8), markers: markers))
     }
 
     func testReturnsNilForARecordThatIsNotKeyEqualsValue() {
-        let output = LoginShellEnvironment.beginMarker + "PATH=/usr/bin\u{0}not-a-record" + LoginShellEnvironment.endMarker
-        XCTAssertNil(LoginShellEnvironment.parse(Data(output.utf8)))
+        let markers = LoginShellEnvironment.Markers.generate()
+        let output = markers.begin + "PATH=/usr/bin\u{0}not-a-record" + markers.end
+        XCTAssertNil(LoginShellEnvironment.parse(Data(output.utf8), markers: markers))
     }
 
     func testLoadsFromANoisyShell() async throws {
