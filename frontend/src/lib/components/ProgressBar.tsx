@@ -28,12 +28,15 @@ export function ProgressBar({ show = true }: ProgressBarProps) {
 	// floored to 1, which would claim progress that has not happened.
 	const progressPercent = (position / total) * 100;
 
+	// The minimum stays fixed at 0, the value the fill calculation above
+	// already treats as empty, so a screen reader's own percentage
+	// ((value - min) / (max - min)) always agrees with the bar it draws.
 	return (
 		<div
 			className="progress-bar-container"
 			role="progressbar"
 			aria-valuenow={position}
-			aria-valuemin={Math.min(position, 1)}
+			aria-valuemin={0}
 			aria-valuemax={total}
 			aria-label={`Presentation progress: slide ${position} of ${total}`}
 		>

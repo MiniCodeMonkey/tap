@@ -62,7 +62,7 @@ describe('ProgressBar', () => {
 
 		const bar = container.querySelector('.progress-bar-container');
 		expect(bar).toHaveAttribute('aria-valuenow', '3');
-		expect(bar).toHaveAttribute('aria-valuemin', '1');
+		expect(bar).toHaveAttribute('aria-valuemin', '0');
 		expect(bar).toHaveAttribute('aria-valuemax', '10');
 	});
 
@@ -80,7 +80,7 @@ describe('ProgressBar', () => {
 		// tap dev opens a skipped slide directly. Slide 0 here is skipped and
 		// nothing presented comes before it, so there is no "Nth presented
 		// slide" to report - the bar reports 0, not a value floored up into
-		// range, and aria-valuemin drops to match so aria-valuenow stays valid.
+		// range, matching the fixed aria-valuemin of 0.
 		usePresentationStore.setState({ presentation: makePresentation(3, [0]), currentSlideIndex: 0 });
 
 		const { container } = render(<ProgressBar />);
