@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/MiniCodeMonkey/tap/internal/recorder"
 )
 
 // fakeRecorderBinary writes a script that finalizes its output on SIGINT,
@@ -370,5 +372,72 @@ func TestGitignoreEntryHandlesANestedOutputDirectory(t *testing.T) {
 
 	if got := controller.SuggestGitignore(); got != "talks/2026/recordings/" {
 		t.Errorf("SuggestGitignore() = %q, want talks/2026/recordings/", got)
+	}
+}
+
+func TestControllerStopsWhenTheDiskFills(t *testing.T) {
+	levels := make(chan recorder.DiskLevel, 4)
+	controller := newRecordController(recordControllerOptions{
+		DeckTitle:   "My Talk",
+		OutputDir:   t.TempDir(),
+		CommandName: fakeRecorderBinary(t),
+		FreeSpace:   func(string) (uint64, error) { return 512 << 20, nil },
+		OnDiskLevel: func(level recorder.DiskLevel) { levels <- level },
+	})
+
+	if _, err := controller.Start(1); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case level := <-levels:
+		if level != recorder.DiskFull {
+			t.Fatalf("level = %v, want DiskFull", level)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("no disk level reported")
+	}
+	if controller.Recording() {
+		t.Error("the controller is still recording on a full disk")
+	}
+}
+
+// TestControllerReportsDiskOKAfterAnOrdinaryStopFollowingLowDisk covers the
+// ruling that extends the brief: a normal Stop (not the DiskFull stop) after
+// the watch last reported DiskLow reports DiskOK, so the "almost full" badge
+// does not stay up once recording ends.
+func TestControllerReportsDiskOKAfterAnOrdinaryStopFollowingLowDisk(t *testing.T) {
+	levels := make(chan recorder.DiskLevel, 4)
+	free := uint64(4 << 30)
+	controller := newRecordController(recordControllerOptions{
+		DeckTitle:   "My Talk",
+		OutputDir:   t.TempDir(),
+		CommandName: fakeRecorderBinary(t),
+		FreeSpace:   func(string) (uint64, error) { return free, nil },
+		OnDiskLevel: func(level recorder.DiskLevel) { levels <- level },
+	})
+
+	if _, err := controller.Start(1); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case level := <-levels:
+		if level != recorder.DiskLow {
+			t.Fatalf("level = %v, want DiskLow", level)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("no disk level reported")
+	}
+
+	if _, err := controller.Stop(); err != nil {
+		t.Fatalf("Stop() returned %v", err)
+	}
+
+	select {
+	case level := <-levels:
+		if level != recorder.DiskOK {
+			t.Fatalf("level = %v, want DiskOK after an ordinary stop", level)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("no DiskOK reported after stopping")
 	}
 }

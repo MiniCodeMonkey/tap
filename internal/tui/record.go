@@ -53,6 +53,30 @@ func (m *DevModel) NoteRecordingEnded(err error) {
 	}
 }
 
+// NoteDiskLevel is called from outside the update loop when the
+// recordings disk changes level.
+func (m *DevModel) NoteDiskLevel(level recorder.DiskLevel) {
+	select {
+	case m.diskLevelCh <- level:
+	default:
+	}
+}
+
+// applyDiskLevel reports a disk level. At DiskFull the controller has
+// already stopped the recording.
+func (m *DevModel) applyDiskLevel(level recorder.DiskLevel) {
+	switch level {
+	case recorder.DiskLow:
+		m.addEvent(DevEvent{Type: "error", Message: "Disk almost full, recording stops at 1 GB", Timestamp: time.Now()})
+	case recorder.DiskFull:
+		if !m.config.Present {
+			m.recording = false
+			m.recordWarned = false
+		}
+		m.addEvent(DevEvent{Type: "error", Message: "Recording stopped: disk full", Timestamp: time.Now()})
+	}
+}
+
 // toggleRecording is the C key: start a recording, or stop the running one.
 // recordBusy guards both directions: a Stop that takes a few seconds to
 // finalize the file, or a Start still waiting on its preflight, must not be

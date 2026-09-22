@@ -44,6 +44,9 @@ type DevConfig struct {
 	RecordStopAfter time.Duration
 	// RecordDisplay preselects an entry in the record picker.
 	RecordDisplay int
+	// Present runs the TUI for tap present: no editing keys, no file
+	// watcher, and the recording state shown large.
+	Present bool
 }
 
 // DevState holds the current state of the dev server.
@@ -72,6 +75,11 @@ type devEventMsg struct {
 // recordEndedMsg is sent when the recorder stopped without being asked.
 type recordEndedMsg struct {
 	err error
+}
+
+// diskLevelMsg carries a change of the recordings disk level.
+type diskLevelMsg struct {
+	level recorder.DiskLevel
 }
 
 // recordPickerReadyMsg carries the result of running the preflight, listing
@@ -116,6 +124,7 @@ type DevModel struct { //nolint:govet // embedded structs prevent optimal alignm
 	state              DevState
 	eventsCh           chan DevEvent
 	recordEndedCh      chan error
+	diskLevelCh        chan recorder.DiskLevel
 	closeCh            chan struct{}
 	themeBroadcaster   ThemeBroadcaster
 	tunnels            TunnelController
@@ -185,6 +194,7 @@ func NewDevModel(cfg DevConfig) *DevModel {
 		},
 		eventsCh:         make(chan DevEvent, 100),
 		recordEndedCh:    make(chan error, 1),
+		diskLevelCh:      make(chan recorder.DiskLevel, 4),
 		closeCh:          make(chan struct{}),
 		currentTheme:     currentTheme,
 		themePickerIndex: themeIndex,
@@ -212,6 +222,8 @@ func (m *DevModel) listenForEvents() tea.Cmd {
 			return devEventMsg{event: event}
 		case err := <-m.recordEndedCh:
 			return recordEndedMsg{err: err}
+		case level := <-m.diskLevelCh:
+			return diskLevelMsg{level: level}
 		case <-m.closeCh:
 			return nil
 		}
@@ -335,6 +347,10 @@ func (m *DevModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			Message:   "Recording stopped unexpectedly: " + msg.err.Error(),
 			Timestamp: time.Now(),
 		})
+		return m, m.listenForEvents()
+
+	case diskLevelMsg:
+		m.applyDiskLevel(msg.level)
 		return m, m.listenForEvents()
 
 	case tunnelMsg:

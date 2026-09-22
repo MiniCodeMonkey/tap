@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -44,6 +45,12 @@ type recordControllerOptions struct {
 	// OnUnexpectedExit is called when the recorder stops without being
 	// asked to: a revoked permission, a full disk, a crash.
 	OnUnexpectedExit func(err error)
+	// FreeSpace reads free space on the recordings volume. Tests use it;
+	// production leaves it nil for recorder.FreeSpace.
+	FreeSpace func(string) (uint64, error)
+	// OnDiskLevel is told each change of the disk level while recording.
+	// At DiskFull the controller has already stopped the recording.
+	OnDiskLevel func(recorder.DiskLevel)
 }
 
 // recordController is the dev server's recording, from the TUI's side of
@@ -64,6 +71,11 @@ type recordController struct {
 	// run, so Close can remove them: the spec promises they do not outlive
 	// the TUI.
 	testCapturePaths []string
+	// diskWatch is the running recording's free-space poll, kept here so
+	// Stop can read its last reported level to decide whether to report
+	// DiskOK once recording ends.
+	diskWatch     *diskWatch
+	stopDiskWatch context.CancelFunc
 }
 
 // newRecordController builds the controller the TUI drives.
@@ -134,6 +146,12 @@ func (c *recordController) Start(display int) (string, error) {
 	}
 	c.session = session
 
+	diskContext, stopDiskWatch := context.WithCancel(context.Background())
+	c.stopDiskWatch = stopDiskWatch
+	watch := newDiskWatch(c.options.OutputDir, c.options.FreeSpace, c.noteDiskLevel)
+	c.diskWatch = watch
+	go watch.run(diskContext, diskPollInterval)
+
 	if c.options.Chapters {
 		c.chapters = recorder.NewChapters(startedAt)
 		// The chapter path is known now, not just at Stop, so every Add
@@ -158,9 +176,13 @@ func (c *recordController) Start(display int) (string, error) {
 		c.mu.Lock()
 		current := c.session == session
 		var result recorder.Result
+		var stop context.CancelFunc
 		if current {
 			chapterPath := c.chapterPath
 			c.session, c.chapters, c.chapterPath = nil, nil, ""
+			stop = c.stopDiskWatch
+			c.stopDiskWatch = nil
+			c.diskWatch = nil
 			result = recorder.Result{
 				Path:        session.Path(),
 				ChapterPath: chapterPath,
@@ -174,6 +196,10 @@ func (c *recordController) Start(display int) (string, error) {
 		}
 		c.mu.Unlock()
 
+		if stop != nil {
+			stop()
+		}
+
 		if current && c.options.OnUnexpectedExit != nil {
 			err := session.ExitError()
 			if err == nil {
@@ -184,6 +210,17 @@ func (c *recordController) Start(display int) (string, error) {
 	}()
 
 	return path, nil
+}
+
+// noteDiskLevel stops the recording on a full disk before reporting, so
+// the file is finalized while there is still room to write its index.
+func (c *recordController) noteDiskLevel(level recorder.DiskLevel) {
+	if level == recorder.DiskFull {
+		_, _ = c.Stop()
+	}
+	if c.options.OnDiskLevel != nil {
+		c.options.OnDiskLevel(level)
+	}
 }
 
 // Stop ends the recording and writes the chapter list. Calling it again
@@ -197,10 +234,27 @@ func (c *recordController) Stop() (recorder.Result, error) {
 	session, chapters := c.session, c.chapters
 	c.session, c.chapters, c.chapterPath = nil, nil, ""
 	lastResult := c.lastResult
+	stop := c.stopDiskWatch
+	watch := c.diskWatch
+	c.stopDiskWatch = nil
+	c.diskWatch = nil
 	c.mu.Unlock()
 
 	if session == nil {
 		return lastResult, nil
+	}
+
+	if stop != nil {
+		stop()
+	}
+	// This is an ordinary stop (the user or the shutdown path), not the
+	// DiskFull stop noteDiskLevel makes itself: at that point the watch's
+	// level is already DiskFull, so it is left alone and the "stopped: disk
+	// full" badge stays up until the next recording starts. A watch that
+	// last reported DiskLow is put back to DiskOK, so the "almost full"
+	// badge does not linger once recording ends.
+	if watch != nil && watch.currentLevel() == recorder.DiskLow && c.options.OnDiskLevel != nil {
+		c.options.OnDiskLevel(recorder.DiskOK)
 	}
 
 	result, err := session.Stop()
