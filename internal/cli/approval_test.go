@@ -14,15 +14,30 @@ import (
 	"github.com/MiniCodeMonkey/tap/internal/usersettings"
 )
 
-// fakeAsker answers every approval request with answer, and keeps them.
+// fakeAsker answers every approval request with answer, and keeps them, or
+// with err when it is set, to stand in for the terminal or standard input
+// failing outright rather than the person answering no.
 type fakeAsker struct {
 	requests []approvalRequest
 	answer   bool
+	err      error
 }
 
 func (asker *fakeAsker) askApproval(request approvalRequest) (bool, error) {
 	asker.requests = append(asker.requests, request)
-	return asker.answer, nil
+	return asker.answer, asker.err
+}
+
+// resolveKey resolves path with usersettings.ResolveDeck and fails the
+// test if it cannot, the same way liveCodeApproval itself would refuse an
+// unresolvable deck.
+func resolveKey(t *testing.T, path string) usersettings.DeckKey {
+	t.Helper()
+	key, err := usersettings.ResolveDeck(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return key
 }
 
 // approvalFixture returns a deck with shell blocks on slides 1 and 2 and a
@@ -62,11 +77,7 @@ func makeDeckFile(t *testing.T) string {
 	if err := os.WriteFile(path, []byte("stub"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	resolved, err := resolveApprovalDeck(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return resolved
+	return resolveKey(t, path).String()
 }
 
 func approvalInputFor(t *testing.T, cfg *config.Config, pres *transformer.TransformedPresentation, asker approvalAsker) (approvalInput, *bytes.Buffer) {
@@ -97,7 +108,7 @@ func TestApprovalAsksOnceAndRemembersTheAnswer(t *testing.T) {
 		t.Errorf("policy = %+v, want python and shell", policy)
 	}
 	settings, _ := usersettings.Load(input.SettingsPath)
-	if !settings.Approved(input.Deck, []string{"python", "shell"}) {
+	if !settings.Approved(resolveKey(t, input.Deck), []string{"python", "shell"}) {
 		t.Errorf("the approval was not saved: %+v", settings)
 	}
 
@@ -168,7 +179,7 @@ func TestApprovalAsksOnlyAboutANewDriver(t *testing.T) {
 	asker := &fakeAsker{answer: false}
 	input, _ := approvalInputFor(t, cfg, pres, asker)
 	var settings usersettings.Settings
-	settings.Approve(input.Deck, []string{"shell"}, approvalNow)
+	settings.Approve(resolveKey(t, input.Deck), []string{"shell"}, approvalNow)
 	if err := usersettings.Save(input.SettingsPath, settings); err != nil {
 		t.Fatal(err)
 	}
@@ -196,27 +207,46 @@ func TestApprovalAsksOnlyAboutANewDriver(t *testing.T) {
 		t.Fatal(err)
 	}
 	saved, _ := usersettings.Load(input.SettingsPath)
-	approval, _ := saved.ApprovalFor(input.Deck)
+	approval, _ := saved.ApprovalFor(resolveKey(t, input.Deck))
 	if strings.Join(approval.Drivers, ",") != "python,shell" {
 		t.Errorf("approved drivers = %v, want python and shell", approval.Drivers)
 	}
 }
 
-func TestApprovalAsksAgainForAMovedDeck(t *testing.T) {
+// TestApprovalAsksAgainAfterARealMove approves a deck, moves the actual
+// file on disk to a new path (rather than stubbing a stored path that
+// could never itself resolve), and confirms the deck at its new location
+// is asked about again rather than inheriting the old approval.
+func TestApprovalAsksAgainAfterARealMove(t *testing.T) {
+	dir := t.TempDir()
+	oldPath := filepath.Join(dir, "old.md")
+	if err := os.WriteFile(oldPath, []byte("stub"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
 	cfg, pres := approvalFixture("shell")
 	asker := &fakeAsker{answer: true}
 	input, _ := approvalInputFor(t, cfg, pres, asker)
-	var settings usersettings.Settings
-	settings.Approve("/old/place/talk.md", []string{"shell"}, approvalNow)
-	if err := usersettings.Save(input.SettingsPath, settings); err != nil {
-		t.Fatal(err)
-	}
+	input.Deck = oldPath
 
 	if _, err := liveCodeApproval(input); err != nil {
 		t.Fatal(err)
 	}
 	if len(asker.requests) != 1 {
-		t.Errorf("asked %d times, want once for the deck at its new path", len(asker.requests))
+		t.Fatalf("asked %d times approving the deck at its old path, want once", len(asker.requests))
+	}
+
+	newPath := filepath.Join(dir, "new.md")
+	if err := os.Rename(oldPath, newPath); err != nil {
+		t.Fatal(err)
+	}
+	input.Deck = newPath
+
+	if _, err := liveCodeApproval(input); err != nil {
+		t.Fatal(err)
+	}
+	if len(asker.requests) != 2 {
+		t.Errorf("asked %d times after the deck moved, want a second ask for the deck at its new path", len(asker.requests))
 	}
 }
 
@@ -260,7 +290,7 @@ func TestApprovalNeverAsksWithoutATerminal(t *testing.T) {
 	}
 
 	var settings usersettings.Settings
-	settings.Approve(input.Deck, []string{"shell"}, approvalNow)
+	settings.Approve(resolveKey(t, input.Deck), []string{"shell"}, approvalNow)
 	if err := usersettings.Save(input.SettingsPath, settings); err != nil {
 		t.Fatal(err)
 	}
@@ -311,13 +341,16 @@ func TestApprovalIgnoresAnUnreadableSettingsFile(t *testing.T) {
 	}
 }
 
-// The tests below exercise resolveApprovalDeck and liveCodeApproval's use
-// of it: this is the gate the whole plan exists to build, and a gate that
-// can be fooled by spelling is not a gate. Approval must be keyed by the
-// resolved deck so the same deck reached through a symlink, a relative
-// path, a path with "..", or a different spelling of an existing name
-// always matches its own approval, and a deck that cannot be resolved at
-// all is never approved.
+// The tests below exercise usersettings.ResolveDeck and liveCodeApproval's
+// use of it: this is the gate the whole plan exists to build, and a gate
+// that can be fooled by spelling is not a gate. Approval must be keyed by
+// the resolved deck so the same deck reached through a symlink, a
+// relative path, a path with "..", or a different spelling of an existing
+// name always matches its own approval, and a deck that cannot be
+// resolved at all is never approved. usersettings itself carries the
+// exhaustive resolution tests (symlinked directory component, the
+// fail-open case-sensitive direction, and so on); the tests here confirm
+// liveCodeApproval actually uses it end to end.
 
 func TestApprovalResolvesASymlinkToTheRealDeck(t *testing.T) {
 	dir := t.TempDir()
@@ -329,10 +362,7 @@ func TestApprovalResolvesASymlinkToTheRealDeck(t *testing.T) {
 	if err := os.Symlink(real, link); err != nil {
 		t.Fatal(err)
 	}
-	resolvedReal, err := resolveApprovalDeck(real)
-	if err != nil {
-		t.Fatal(err)
-	}
+	resolvedReal := resolveKey(t, real)
 
 	cfg, pres := approvalFixture("shell")
 	asker := &fakeAsker{answer: true}
@@ -371,10 +401,7 @@ func TestApprovalResolvesARelativePath(t *testing.T) {
 	if err := os.WriteFile(path, []byte("stub"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	resolved, err := resolveApprovalDeck(path)
-	if err != nil {
-		t.Fatal(err)
-	}
+	resolved := resolveKey(t, path)
 
 	cfg, pres := approvalFixture("shell")
 	asker := &fakeAsker{answer: true}
@@ -397,10 +424,7 @@ func TestApprovalResolvesAPathWithDotDot(t *testing.T) {
 	if err := os.WriteFile(path, []byte("stub"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	resolved, err := resolveApprovalDeck(path)
-	if err != nil {
-		t.Fatal(err)
-	}
+	resolved := resolveKey(t, path)
 
 	cfg, pres := approvalFixture("shell")
 	asker := &fakeAsker{answer: true}
@@ -427,16 +451,10 @@ func TestApprovalResolvesADifferentlyCasedSpelling(t *testing.T) {
 		t.Skip("this filesystem is case sensitive, so a different spelling names a different file")
 	}
 
-	resolvedUpper, err := resolveApprovalDeck(upper)
-	if err != nil {
-		t.Fatal(err)
-	}
-	resolvedLower, err := resolveApprovalDeck(lower)
-	if err != nil {
-		t.Fatal(err)
-	}
+	resolvedUpper := resolveKey(t, upper)
+	resolvedLower := resolveKey(t, lower)
 	if resolvedUpper != resolvedLower {
-		t.Fatalf("resolveApprovalDeck(%q) = %q, resolveApprovalDeck(%q) = %q, want the same path", upper, resolvedUpper, lower, resolvedLower)
+		t.Fatalf("ResolveDeck(%q) = %v, ResolveDeck(%q) = %v, want the same key", upper, resolvedUpper, lower, resolvedLower)
 	}
 
 	cfg, pres := approvalFixture("shell")

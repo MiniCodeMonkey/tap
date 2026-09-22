@@ -78,11 +78,10 @@ func Save(path string, settings Settings) error {
 	return os.WriteFile(path, raw, 0o600)
 }
 
-// ApprovalFor returns the approval stored for deck, an absolute path.
-func (s Settings) ApprovalFor(deck string) (Approval, bool) {
-	deck = filepath.Clean(deck)
+// ApprovalFor returns the approval stored for deck.
+func (s Settings) ApprovalFor(deck DeckKey) (Approval, bool) {
 	for _, approval := range s.Approvals {
-		if filepath.Clean(approval.Deck) == deck {
+		if approval.Deck == deck.path {
 			return approval, true
 		}
 	}
@@ -90,7 +89,7 @@ func (s Settings) ApprovalFor(deck string) (Approval, bool) {
 }
 
 // Approved reports whether deck is approved for every driver in drivers.
-func (s Settings) Approved(deck string, drivers []string) bool {
+func (s Settings) Approved(deck DeckKey, drivers []string) bool {
 	approval, found := s.ApprovalFor(deck)
 	if !found {
 		return false
@@ -105,27 +104,39 @@ func (s Settings) Approved(deck string, drivers []string) bool {
 
 // Approve records that deck may run drivers. An approval already stored
 // for the deck keeps its drivers and gains the new ones.
-func (s *Settings) Approve(deck string, drivers []string, at time.Time) {
-	deck = filepath.Clean(deck)
+func (s *Settings) Approve(deck DeckKey, drivers []string, at time.Time) {
 	merged := append([]string{}, drivers...)
 	if existing, found := s.ApprovalFor(deck); found {
 		merged = append(merged, existing.Drivers...)
 	}
 	s.Revoke(deck)
 	s.Approvals = append(s.Approvals, Approval{
-		Deck:       deck,
+		Deck:       deck.path,
 		Drivers:    uniqueSorted(merged),
 		ApprovedAt: at.UTC().Truncate(time.Second),
 	})
 }
 
-// Revoke removes the approval for deck, and reports whether there was one.
-func (s *Settings) Revoke(deck string) bool {
-	deck = filepath.Clean(deck)
+// Revoke removes the approval for deck, and reports whether there was
+// one. Because deck is a DeckKey, this only ever revokes a deck that
+// still exists on disk; for one that does not, see RevokeStoredPath.
+func (s *Settings) Revoke(deck DeckKey) bool {
+	return s.RevokeStoredPath(deck.path)
+}
+
+// RevokeStoredPath removes the approval whose stored path is exactly
+// deck, without resolving it, and reports whether there was one. This is
+// the escape hatch from DeckKey: ResolveDeck cannot produce a key for a
+// deck that no longer exists on disk, so revoking that approval has
+// nothing to key by except the path already on file. A caller uses this
+// only for a deck it cannot resolve, by copying the exact path
+// Settings.Approvals (or tap approval list) prints; ordinary revocation
+// goes through ResolveDeck and Revoke.
+func (s *Settings) RevokeStoredPath(deck string) bool {
 	kept := make([]Approval, 0, len(s.Approvals))
 	removed := false
 	for _, approval := range s.Approvals {
-		if filepath.Clean(approval.Deck) == deck {
+		if approval.Deck == deck {
 			removed = true
 			continue
 		}

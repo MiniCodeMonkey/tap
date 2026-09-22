@@ -4,8 +4,6 @@ import (
 	"bufio"
 	"fmt"
 	"io"
-	"os"
-	"path/filepath"
 	"slices"
 	"sort"
 	"strconv"
@@ -91,16 +89,18 @@ type approvalInput struct {
 // and a yes is stored in the user settings. A no, or a run that may not
 // ask, stores nothing and keeps the drivers approved before.
 //
-// Approval is matched by resolving Deck to its absolute path, with
-// symlinks resolved and, on a case-insensitive filesystem, its on-disk
-// case restored, and comparing that resolved form to the same resolved
-// form stored by an earlier approval. Without this, the same deck reached
-// through a symlink, a relative path, a path with a ".." segment, or a
-// different spelling of its name would not match its own approval, and
-// worse, an unrelated file could be made to match one by spelling alone.
-// A deck that cannot be resolved, most often because it no longer exists,
-// fails closed: liveCodeApproval never asks and never stores an approval
-// for it.
+// Approval is matched by usersettings.DeckKey, which usersettings.
+// ResolveDeck alone can produce: it resolves Deck to its absolute path,
+// with symlinks resolved and, on a case-insensitive filesystem, its
+// on-disk case restored. Without this, the same deck reached through a
+// symlink, a relative path, a path with a ".." segment, or a different
+// spelling of its name would not match its own approval, and worse, an
+// unrelated file could be made to match one by spelling alone. Because
+// Approved, Approve and ApprovalFor take only a DeckKey, this function
+// cannot compare or store an unresolved path even by accident. A deck
+// that cannot be resolved, most often because it no longer exists, fails
+// closed: liveCodeApproval never asks and never stores an approval for
+// it.
 func liveCodeApproval(input approvalInput) (server.LiveCodePolicy, error) {
 	blocks := runnableBlocks(input.Presentation)
 	if len(blocks) == 0 {
@@ -111,11 +111,12 @@ func liveCodeApproval(input approvalInput) (server.LiveCodePolicy, error) {
 		return server.LiveCodePolicy{AllowAll: true}, nil
 	}
 
-	deck, err := resolveApprovalDeck(input.Deck)
+	deckKey, err := usersettings.ResolveDeck(input.Deck)
 	if err != nil {
 		fmt.Fprintf(input.Out, "Live code is off: %s could not be resolved: %v\n", input.Deck, err)
 		return server.LiveCodePolicy{}, nil
 	}
+	deck := deckKey.String()
 
 	declared := input.Config.DeclaredDrivers()
 	settings, err := usersettings.Load(input.SettingsPath)
@@ -125,11 +126,11 @@ func liveCodeApproval(input approvalInput) (server.LiveCodePolicy, error) {
 		fmt.Fprintf(input.Out, "Ignoring %s, it could not be read: %v\n", input.SettingsPath, err)
 		settings = usersettings.Settings{}
 	}
-	if settings.Approved(deck, declared) {
+	if settings.Approved(deckKey, declared) {
 		return server.LiveCodePolicy{Drivers: declared}, nil
 	}
 
-	previous, _ := settings.ApprovalFor(deck)
+	previous, _ := settings.ApprovalFor(deckKey)
 	var approvedBefore, wanted []string
 	for _, name := range declared {
 		if slices.Contains(previous.Drivers, name) {
@@ -150,63 +151,11 @@ func liveCodeApproval(input approvalInput) (server.LiveCodePolicy, error) {
 		return server.LiveCodePolicy{Drivers: approvedBefore}, nil
 	}
 
-	settings.Approve(deck, declared, input.Now())
+	settings.Approve(deckKey, declared, input.Now())
 	if err := usersettings.Save(input.SettingsPath, settings); err != nil {
 		return server.LiveCodePolicy{}, fmt.Errorf("saving the live code approval: %w", err)
 	}
 	return server.LiveCodePolicy{Drivers: declared}, nil
-}
-
-// resolveApprovalDeck resolves deck to the form approvals are keyed by: an
-// absolute path, with symlinks resolved, and, on a filesystem that treats
-// case as insignificant, rewritten to the case each component actually
-// has on disk. Two spellings of the same deck resolve to the same string;
-// a deck that does not exist, or whose folder cannot be read, cannot be
-// resolved at all, and the caller must treat that as not approved.
-func resolveApprovalDeck(deck string) (string, error) {
-	absolute, err := filepath.Abs(deck)
-	if err != nil {
-		return "", err
-	}
-	resolved, err := filepath.EvalSymlinks(absolute)
-	if err != nil {
-		return "", err
-	}
-	return onDiskCase(resolved)
-}
-
-// onDiskCase rewrites every component of resolved, an absolute path with
-// symlinks already resolved, to the spelling its directory actually holds.
-// filepath.EvalSymlinks does not do this: on a case-insensitive filesystem
-// it happily resolves "TALK.MD" against a file named "talk.md" and hands
-// back "TALK.MD" unchanged, so two spellings of the same deck would still
-// compare unequal as strings. Reading each directory's real entries closes
-// that gap without depending on anything platform-specific.
-func onDiskCase(resolved string) (string, error) {
-	volume := filepath.VolumeName(resolved)
-	rest := strings.TrimPrefix(resolved[len(volume):], string(filepath.Separator))
-	current := volume + string(filepath.Separator)
-	if rest == "" {
-		return current, nil
-	}
-	for _, part := range strings.Split(rest, string(filepath.Separator)) {
-		entries, err := os.ReadDir(current)
-		if err != nil {
-			return "", err
-		}
-		spelling := part
-		for _, entry := range entries {
-			if entry.Name() == part {
-				spelling = part
-				break
-			}
-			if strings.EqualFold(entry.Name(), part) {
-				spelling = entry.Name()
-			}
-		}
-		current = filepath.Join(current, spelling)
-	}
-	return current, nil
 }
 
 // runnableBlocks returns the live code blocks that use a declared driver,
