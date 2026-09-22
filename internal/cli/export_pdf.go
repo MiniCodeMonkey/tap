@@ -125,7 +125,7 @@ func runExportPDF(cmd *cobra.Command, args []string) error {
 	// Step 2: Parse the deck, build its React components, and start a
 	// temporary server (port 0 = random available port) with the
 	// presentation and component bundles registered on it - exactly the
-	// setup tap screenshot uses, via the shared prepareDeck (see
+	// setup tap export images uses, via the shared prepareDeck (see
 	// internal/cli/deck.go), so the two commands cannot drift apart.
 	spinner.update("Parsing presentation and building components")
 	srv, _, warnings, componentBuildErrs, componentBuildWarnings, err := prepareDeck(absPath, cfg, baseDir)
