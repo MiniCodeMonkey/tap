@@ -39,6 +39,12 @@ const (
 // deck picker, without choosing. It exits 130 and prints nothing.
 var errCancelled = errors.New("cancelled")
 
+// errInterrupted marks a failure caused by Ctrl-C (SIGINT) or SIGTERM
+// during a capture or export: the command prints "interrupted" to standard
+// error instead of the usual "Error: ..." line and exits with status 130,
+// the conventional exit code for a process killed by SIGINT.
+var errInterrupted = errors.New("interrupted")
+
 // commandError carries the exit code and the --json error code of a
 // failed command. reported is true when the command already printed its
 // own diagnostics to standard error, so execute prints nothing more there.
@@ -81,8 +87,6 @@ func classify(err error) (exitCode int, code string, reported bool) {
 		return exitInterrupted, codeCancelled, true
 	case errors.As(err, &commandErr):
 		return commandErr.exitCode, commandErr.code, commandErr.reported
-	case errors.Is(err, errSilent):
-		return exitUserError, codeFailed, true
 	default:
 		return exitUserError, codeFailed, false
 	}

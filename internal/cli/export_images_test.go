@@ -102,17 +102,17 @@ func TestValidateStepAndFragment(t *testing.T) {
 		fragment    int
 		wantErr     bool
 	}{
-		{"step within range", true, 2, false, 0, false},
-		{"step at zero", true, 0, false, 0, false},
-		{"step at max", true, 3, false, 0, false},
+		{"step 1 is the first step", true, 1, false, 0, false},
+		{"step 0 is before the first step", true, 0, false, 0, false},
+		{"step at the last step", true, 3, false, 0, false},
 		{"step below zero", true, -1, false, 0, true},
-		{"step above max", true, 4, false, 0, true},
+		{"step past the last step", true, 4, false, 0, true},
 		{"no step given, never checked", false, 99, false, 0, false},
-		{"fragment within range", false, 0, true, 2, false},
-		{"fragment at -1 (none revealed)", false, 0, true, -1, false},
-		{"fragment at max", false, 0, true, 3, false},
-		{"fragment below -1", false, 0, true, -2, true},
-		{"fragment above max", false, 0, true, 4, true},
+		{"fragment 1 is the first fragment", false, 0, true, 1, false},
+		{"fragment 0 shows none", false, 0, true, 0, false},
+		{"fragment at the last fragment", false, 0, true, 4, false},
+		{"fragment below zero", false, 0, true, -1, true},
+		{"fragment past the last fragment", false, 0, true, 5, true},
 	}
 
 	for _, tt := range tests {
@@ -121,7 +121,62 @@ func TestValidateStepAndFragment(t *testing.T) {
 			if (err != nil) != tt.wantErr {
 				t.Errorf("validateStepAndFragment() error = %v, wantErr %v", err, tt.wantErr)
 			}
+			if err != nil {
+				if _, code, _ := classify(err); code != codeOutOfRange {
+					t.Errorf("code = %q, want %q", code, codeOutOfRange)
+				}
+			}
 		})
+	}
+}
+
+func TestCaptureState(t *testing.T) {
+	slide := transformer.TransformedSlide{Steps: 3, FragmentCount: 4}
+	tests := []struct {
+		name         string
+		hasStep      bool
+		step         int
+		hasFragment  bool
+		fragment     int
+		wantStep     int
+		wantFragment int
+	}{
+		{"both left out is the final state", false, 0, false, 0, 3, 3},
+		{"step given, fragments final", true, 1, false, 0, 1, 3},
+		{"fragment given, steps final", false, 0, true, 1, 3, 0},
+		{"fragment 0 shows none", false, 0, true, 0, 3, -1},
+		{"both given", true, 2, true, 2, 2, 1},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			step, fragment := captureState(tt.hasStep, tt.step, tt.hasFragment, tt.fragment, slide)
+			if step != tt.wantStep || fragment != tt.wantFragment {
+				t.Errorf("captureState() = (%d, %d), want (%d, %d)", step, fragment, tt.wantStep, tt.wantFragment)
+			}
+		})
+	}
+}
+
+func TestExportImagesCommandShape(t *testing.T) {
+	command, _, err := rootCmd.Find([]string{"export", "images"})
+	if err != nil || command.Name() != "images" {
+		t.Fatalf("tap export images not found: %v", err)
+	}
+	if command.Use != "images [deck]" {
+		t.Errorf("Use = %q, want %q", command.Use, "images [deck]")
+	}
+	for name, shorthand := range map[string]string{"output": "o", "theme": "t", "json": "", "slide": "", "step": "", "fragment": ""} {
+		flag := command.Flags().Lookup(name)
+		if flag == nil {
+			t.Errorf("missing --%s", name)
+			continue
+		}
+		if flag.Shorthand != shorthand {
+			t.Errorf("--%s shorthand = %q, want %q", name, flag.Shorthand, shorthand)
+		}
+	}
+	if command.Flags().Lookup("out") != nil {
+		t.Error("--out should be removed")
 	}
 }
 
@@ -179,7 +234,7 @@ func TestResolveAllOutputDir(t *testing.T) {
 // whose render shows an error card) is collected, not fatal, so the rest
 // of the deck's slides still get captured and written. Cheap - no browser,
 // no server - unlike the end-to-end coverage in
-// TestScreenshotCommand_StdoutStderrSeparation.
+// TestExportImagesCommand_StdoutStderrSeparation.
 func TestCaptureAllSlides_ContinuesPastBrokenSlide(t *testing.T) {
 	tempDir := t.TempDir()
 
@@ -293,7 +348,7 @@ func contains(haystack, needle string) bool {
 	})()
 }
 
-// TestScreenshotIntegration renders slide 1 of testdata/sample.md to a temp
+// TestExportImagesIntegration renders slide 1 of testdata/sample.md to a temp
 // folder and checks the PNG's dimensions and that two different slides
 // produce different bytes. It requires the Playwright browser; skipped in
 // short mode, following the existing PDF integration tests
@@ -305,7 +360,7 @@ func contains(haystack, needle string) bool {
 // (embedded/dist, embedded by another in-progress task) does not yet
 // contain. See the frontend unit tests in
 // frontend/src/lib/stores/presentation.test.ts for that behavior.
-func TestScreenshotIntegration(t *testing.T) {
+func TestExportImagesIntegration(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test in short mode")
 	}
@@ -414,10 +469,10 @@ func TestScreenshotIntegration(t *testing.T) {
 	}
 }
 
-// TestScreenshotCommand_StdoutStderrSeparation runs the real tap binary as
-// a subprocess, so fatih/color's Error writer (bound once, at process
+// TestExportImagesCommand_StdoutStderrSeparation runs the real tap binary
+// as a subprocess, so fatih/color's Error writer (bound once, at process
 // start, to the real file descriptor 2) is genuinely redirected the way it
-// would be for `tap screenshot ... 2>/dev/null` - reassigning the
+// would be for `tap export images ... 2>/dev/null` - reassigning the
 // in-process os.Stderr *variable* from inside this test package would not
 // do that, since color.Error already holds its own reference to the
 // original stderr file. Checks that a failure prints nothing to standard
@@ -425,7 +480,7 @@ func TestScreenshotIntegration(t *testing.T) {
 // only the written path to standard output, nothing to standard error.
 // Requires the Playwright browser for the success case; skipped in short
 // mode like the other integration tests in this file.
-func TestScreenshotCommand_StdoutStderrSeparation(t *testing.T) {
+func TestExportImagesCommand_StdoutStderrSeparation(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test in short mode")
 	}
@@ -434,7 +489,7 @@ func TestScreenshotCommand_StdoutStderrSeparation(t *testing.T) {
 
 	t.Run("failure prints only to standard error", func(t *testing.T) {
 		var stdout, stderr bytes.Buffer
-		cmd := exec.Command(binary, "screenshot", "does-not-exist.md", "--slide", "1")
+		cmd := exec.Command(binary, "export", "images", "does-not-exist.md", "--slide", "1")
 		cmd.Stdout = &stdout
 		cmd.Stderr = &stderr
 
@@ -464,12 +519,12 @@ func TestScreenshotCommand_StdoutStderrSeparation(t *testing.T) {
 		outputPath := filepath.Join(t.TempDir(), "slide-1.png")
 
 		var stdout, stderr bytes.Buffer
-		cmd := exec.Command(binary, "screenshot", sampleDeck, "--slide", "1", "--out", outputPath)
+		cmd := exec.Command(binary, "export", "images", sampleDeck, "--slide", "1", "--output", outputPath)
 		cmd.Stdout = &stdout
 		cmd.Stderr = &stderr
 
 		if err := cmd.Run(); err != nil {
-			t.Fatalf("tap screenshot failed: %v\nstderr: %s", err, stderr.String())
+			t.Fatalf("tap export images failed: %v\nstderr: %s", err, stderr.String())
 		}
 		if got := strings.TrimRight(stdout.String(), "\n"); got != outputPath {
 			t.Errorf("standard output = %q, want %q", got, outputPath)
@@ -531,7 +586,7 @@ func buildTapBinaryForTest(t *testing.T) string {
 // step and checks the two PNGs differ: proof that --step actually renders
 // a different presenter state rather than always falling back to the
 // final one. Requires the Playwright browser; skipped in short mode and
-// when the browser isn't installed, following TestScreenshotIntegration
+// when the browser isn't installed, following TestExportImagesIntegration
 // above.
 func TestScreenshotIntegration_RollingDeployStepsDiffer(t *testing.T) {
 	if testing.Short() {
