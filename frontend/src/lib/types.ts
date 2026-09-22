@@ -61,30 +61,6 @@ export const DEFAULT_THEME: Theme = 'base';
 // ============================================================================
 
 /**
- * Connection configuration for a driver.
- * Matches Go's ConnectionConfig struct.
- */
-export interface ConnectionConfig {
-	host?: string;
-	user?: string;
-	password?: string;
-	database?: string;
-	path?: string;
-	port?: number;
-}
-
-/**
- * Driver configuration for code execution.
- * Matches Go's DriverConfig struct.
- */
-export interface DriverConfig {
-	connections?: Record<string, ConnectionConfig>;
-	command?: string;
-	args?: string[];
-	timeout?: number;
-}
-
-/**
  * Theme color override keys.
  * Maps to CSS custom properties:
  * - background -> --color-bg
@@ -106,7 +82,8 @@ export interface ThemeColors {
  * Matches Go's Config struct.
  */
 export interface PresentationConfig {
-	drivers?: Record<string, DriverConfig>;
+	// Driver settings (live code connections and credentials) never leave
+	// the presenter's machine, so they have no field here.
 	themeColors?: ThemeColors;
 	title?: string;
 	theme?: string;
