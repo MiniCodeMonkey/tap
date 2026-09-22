@@ -738,26 +738,31 @@ func (m *DevModel) handleSlideBuilderKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 // openBrowserCmd returns a command that opens a URL in the default browser.
-// exportPDFCmd runs `tap pdf <file>` as a background command.
+// exportPDFCmd runs `tap export pdf <file>` as a background command.
 func (m *DevModel) exportPDFCmd() tea.Cmd {
 	file := m.config.MarkdownFile
 	ext := filepath.Ext(file)
 	outputPath := strings.TrimSuffix(file, ext) + ".pdf"
 
 	return func() tea.Msg {
-		// Use the current binary to run the pdf subcommand
+		// Use the current binary to run tap export pdf
 		binary, err := os.Executable()
 		if err != nil {
 			return pdfExportMsg{err: fmt.Errorf("failed to find executable: %w", err)}
 		}
 
-		cmd := exec.Command(binary, "pdf", file)
+		cmd := exec.Command(binary, pdfExportArgs(file)...)
 		if output, err := cmd.CombinedOutput(); err != nil {
 			return pdfExportMsg{err: fmt.Errorf("PDF export failed: %s", strings.TrimSpace(string(output)))}
 		}
 
 		return pdfExportMsg{outputPath: outputPath}
 	}
+}
+
+// pdfExportArgs is the tap command line that exports file to a PDF.
+func pdfExportArgs(file string) []string {
+	return []string{"export", "pdf", file}
 }
 
 func openBrowserCmd(url string) tea.Cmd {

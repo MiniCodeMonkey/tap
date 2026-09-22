@@ -781,3 +781,10 @@ func TestDevModel_ViewHeaderShowsVersion(t *testing.T) {
 		t.Errorf("viewHeader() = %q, want the served file", header)
 	}
 }
+
+func TestPDFExportArgsUseExportPDF(t *testing.T) {
+	got := strings.Join(pdfExportArgs("talk.md"), " ")
+	if got != "export pdf talk.md" {
+		t.Errorf("pdfExportArgs() = %q, want %q", got, "export pdf talk.md")
+	}
+}
