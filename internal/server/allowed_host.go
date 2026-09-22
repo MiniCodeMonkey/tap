@@ -5,6 +5,7 @@ package server
 import (
 	"net"
 	"net/netip"
+	"net/url"
 	"os"
 	"strings"
 )
@@ -77,4 +78,25 @@ func allowedHostsFromOrigins(origins []string) map[string]struct{} {
 		hosts[hostnameWithoutPort(hostWithPort)] = struct{}{}
 	}
 	return hosts
+}
+
+// isAllowedOrigin reports whether a request carrying the given Origin
+// header may act on this server. No Origin at all is accepted, because
+// only a browser sends one. Otherwise the origin must either name this
+// same server (its host equals the request's Host header, and that host
+// passes isAllowedHost, which defeats DNS rebinding) or be listed exactly
+// in allowedOrigins (the --allow-origin flag and tunnel origins). An
+// opaque "null" origin never matches either rule.
+func isAllowedOrigin(origin string, requestHost string, allowedHosts map[string]struct{}, allowedOrigins map[string]struct{}) bool {
+	if origin == "" {
+		return true
+	}
+	if _, exactlyAllowed := allowedOrigins[origin]; exactlyAllowed {
+		return true
+	}
+	originURL, err := url.Parse(origin)
+	if err != nil {
+		return false
+	}
+	return originURL.Host == requestHost && isAllowedHost(requestHost, allowedHosts)
 }

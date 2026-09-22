@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
-	"net/url"
 	"sync"
 	"time"
 
@@ -270,21 +269,12 @@ func (h *WebSocketHub) SetAllowedOrigins(origins []string) {
 //
 // Anything else is rejected.
 func (h *WebSocketHub) checkOrigin(r *http.Request) bool {
-	origin := r.Header.Get("Origin")
-	if origin == "" {
-		return true
-	}
-
 	h.mu.RLock()
 	allowedHosts := h.allowedHosts
-	_, exactlyAllowed := h.allowedOrigins[origin]
+	allowedOrigins := h.allowedOrigins
 	h.mu.RUnlock()
 
-	if originURL, err := url.Parse(origin); err == nil && originURL.Host == r.Host && isAllowedHost(r.Host, allowedHosts) {
-		return true
-	}
-
-	return exactlyAllowed
+	return isAllowedOrigin(r.Header.Get("Origin"), r.Host, allowedHosts, allowedOrigins)
 }
 
 // SetPresenterPassword tells the hub the dev server's current
