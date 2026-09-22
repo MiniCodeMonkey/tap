@@ -100,6 +100,26 @@ func TestRunChapterListHasASectionPerSegment(t *testing.T) {
 	_, _ = run.Finish(true)
 }
 
+func TestRunSeedsTheFirstChapterOnTheTitleSlideWhenUnknown(t *testing.T) {
+	slides := &slideState{}
+	run := testRun(t, obedientRecorder(t), slides)
+
+	first, _ := run.StartSegment(1)
+	waitForRecorderReady(t, first)
+
+	chapters := readChapters(t, run)
+	if chapters != "01.mov\n0:00 Title\n" {
+		t.Errorf("chapters.txt = %q, want a title chapter seeded from the unknown slide", chapters)
+	}
+
+	run.NoteSlide(1)
+	chapters = readChapters(t, run)
+	if !strings.Contains(chapters, "Talk starts\n") {
+		t.Errorf("chapters.txt misses the talk start after an unknown slide:\n%s", chapters)
+	}
+	_, _ = run.Finish(true)
+}
+
 func TestRunMovesTheTalkStartToTheLastDeparture(t *testing.T) {
 	slides := &slideState{known: true}
 	run := testRun(t, obedientRecorder(t), slides)

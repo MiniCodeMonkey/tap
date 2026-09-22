@@ -116,10 +116,14 @@ func (r *Run) StartSegment(display int) (string, error) {
 	}
 	startedAt := r.options.Now()
 
+	// A segment's first chapter is the slide the deck is on when it
+	// starts. A freshly opened deck starts on its title slide, and the
+	// title slide never broadcasts a slide change on its own, so an
+	// unknown slide is seeded as slide 0 rather than left without a
+	// chapter.
 	next := &segment{name: name, session: session, chapters: NewChapters(startedAt)}
-	if slideIndex, known := r.currentSlide(); known {
-		next.chapters.Add(startedAt, slideIndex, r.titleFor(slideIndex))
-	}
+	slideIndex, _ := r.currentSlide()
+	next.chapters.Add(startedAt, slideIndex, r.titleFor(slideIndex))
 
 	previous := r.current
 	r.segments = append(r.segments, next)
