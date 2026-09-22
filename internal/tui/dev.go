@@ -166,6 +166,11 @@ type DevModel struct { //nolint:govet // embedded structs prevent optimal alignm
 	showRecordPicker    bool
 	showQuitConfirm     bool
 	showGitignorePrompt bool
+	presentRecorder     PresentRecorder
+	reload              func() error
+	showKeepPrompt      bool
+	discardRecording    bool
+	quitAfterGitignore  bool
 }
 
 // NewDevModel creates a new DevModel for the dev server TUI.
@@ -208,10 +213,11 @@ func (m *DevModel) SetThemeBroadcaster(tb ThemeBroadcaster) {
 
 // Init implements tea.Model.
 func (m *DevModel) Init() tea.Cmd {
-	return tea.Batch(
-		m.listenForEvents(),
-		tickCmd(),
-	)
+	commands := []tea.Cmd{m.listenForEvents(), tickCmd()}
+	if m.config.Present {
+		commands = append(commands, openBrowserCmd(m.config.AudienceURL))
+	}
+	return tea.Batch(commands...)
 }
 
 // listenForEvents returns a command that listens for external events.
@@ -395,6 +401,16 @@ func (m *DevModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tickMsg:
 		// Periodic tick - redraw, and check on any running recording
 		return m, tea.Batch(tickCmd(), m.recordingTick())
+
+	case presentToggleMsg:
+		if msg.err != nil {
+			m.addEvent(DevEvent{Type: "error", Message: "Recording failed: " + msg.err.Error(), Timestamp: time.Now()})
+		}
+		return m, nil
+
+	case reloadMsg:
+		m.applyReloadMsg(msg)
+		return m, nil
 	}
 
 	return m, nil
@@ -422,6 +438,11 @@ func (m *DevModel) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleGitignoreKey(msg)
 	}
 
+	// Handle the keep prompt if it's open
+	if m.showKeepPrompt {
+		return m.handleKeepPromptKey(msg)
+	}
+
 	// Handle image generator if it's open
 	if m.showImageGenerator && m.imageGenModel != nil {
 		return m.handleImageGeneratorKey(msg)
@@ -430,6 +451,12 @@ func (m *DevModel) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// Handle slide builder if it's open
 	if m.showSlideBuilder && m.addModel != nil {
 		return m.handleSlideBuilderKey(msg)
+	}
+
+	// Present mode has its own, narrower key map: none of the editing keys
+	// below are safe during a talk.
+	if m.config.Present {
+		return m.handlePresentKey(msg)
 	}
 
 	switch msg.String() {
@@ -492,12 +519,7 @@ func (m *DevModel) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case "r":
 		// Manual reload
-		m.addEvent(DevEvent{
-			Type:      "reload",
-			Message:   "Manual reload triggered",
-			Timestamp: time.Now(),
-		})
-		return m, nil
+		return m, m.reloadCmd()
 
 	case "u":
 		// Start or stop the public tunnel
@@ -780,6 +802,11 @@ func (m *DevModel) View() string {
 		return m.viewGitignorePrompt()
 	}
 
+	// Show the keep prompt if it's open
+	if m.showKeepPrompt {
+		return m.viewKeepPrompt()
+	}
+
 	if m.quitting {
 		return RenderMuted("Shutting down server...\n")
 	}
@@ -809,6 +836,11 @@ func (m *DevModel) View() string {
 	// Header
 	b.WriteString(m.viewHeader())
 	b.WriteString("\n")
+
+	if m.config.Present {
+		b.WriteString(m.viewPresentRecording())
+		b.WriteString("\n")
+	}
 
 	// Server URLs section
 	b.WriteString(m.viewURLs())
@@ -855,7 +887,11 @@ func (m *DevModel) viewHeader() string {
 	mutedStyle := lipgloss.NewStyle().
 		Foreground(ColorMuted)
 
-	title := titleStyle.Render("⚡ Tap Dev Server")
+	titleText := "⚡ Tap Dev Server"
+	if m.config.Present {
+		titleText = "● PRESENTING"
+	}
+	title := titleStyle.Render(titleText)
 	if m.config.Version != "" {
 		title += " " + mutedStyle.Render(m.config.Version)
 	}
@@ -936,17 +972,22 @@ func (m *DevModel) viewStatus() string {
 
 	// Watcher status
 	b.WriteString(labelStyle.Render("File watcher:"))
-	if m.state.WatcherRunning {
+	switch {
+	case m.config.Present:
+		b.WriteString(RenderMuted("○ off (r reloads)"))
+	case m.state.WatcherRunning:
 		b.WriteString(RenderSuccess("● watching"))
-	} else {
+	default:
 		b.WriteString(RenderMuted("○ not running"))
 	}
 
 	// Recording
-	if status := m.viewRecordingStatus(); status != "" {
-		b.WriteString("\n")
-		b.WriteString(labelStyle.Render("Recording:"))
-		b.WriteString(RenderError(status))
+	if !m.config.Present {
+		if status := m.viewRecordingStatus(); status != "" {
+			b.WriteString("\n")
+			b.WriteString(labelStyle.Render("Recording:"))
+			b.WriteString(RenderError(status))
+		}
 	}
 
 	return b.String()
@@ -1066,6 +1107,18 @@ func (m *DevModel) viewHelp() string {
 	keyStyle := lipgloss.NewStyle().
 		Foreground(ColorPrimary).
 		Bold(true)
+
+	if m.config.Present {
+		keys := []string{
+			keyStyle.Render("o") + " open slides",
+			keyStyle.Render("p") + " presenter view",
+			keyStyle.Render("r") + " reload",
+			keyStyle.Render("u") + " tunnel",
+			keyStyle.Render("c") + " record",
+			keyStyle.Render("q") + " quit",
+		}
+		return helpStyle.Render(strings.Join(keys, " • "))
+	}
 
 	keys := []string{
 		keyStyle.Render("o") + " open browser",
