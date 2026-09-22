@@ -63,3 +63,30 @@ func TestParse_ConferenceTalkQueryIsLive(t *testing.T) {
 		t.Errorf("slide 4 block meta = %+v, want sqlite, incident, 2-3", block.Meta)
 	}
 }
+
+func TestFenceLinesMatchTheSlideCodeBlocks(t *testing.T) {
+	markdown := "<!--\nlayout: code-focus\n-->\n\n" +
+		"```sql {driver: sqlite}\nSELECT 1;\n```\n\n" +
+		"```component ./Chart.jsx\n{}\n```\n\n" +
+		"- item\n\n  ```bash\n  ls\n  ```\n\n" +
+		"```\nplain\n```"
+
+	got := FenceLines(markdown)
+	want := []int{5, 15, 19}
+	if len(got) != len(want) {
+		t.Fatalf("FenceLines() = %v, want %v", got, want)
+	}
+	for index := range want {
+		if got[index] != want[index] {
+			t.Errorf("FenceLines()[%d] = %d, want %d", index, got[index], want[index])
+		}
+	}
+
+	pres, err := New().Parse([]byte(markdown))
+	if err != nil {
+		t.Fatalf("Parse() returned error: %v", err)
+	}
+	if len(pres.Slides[0].CodeBlocks) != len(want) {
+		t.Errorf("the slide has %d code blocks, FenceLines found %d", len(pres.Slides[0].CodeBlocks), len(want))
+	}
+}
