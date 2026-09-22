@@ -50,9 +50,15 @@ type Server struct {
 	// WebSocketHub.allowedOrigins; tap dev sets both from the same value.
 	allowedOrigins map[string]struct{}
 	// routes lists every pattern registered on mux, for Routes.
-	routes  []string
-	mu      sync.RWMutex
-	started bool
+	routes []string
+	// appAuth is the token of a tap --app run, which serveHTTP checks on
+	// every request. It is nil outside --app mode.
+	appAuth *AppAuth
+	// tunnelHost is the host of the running tunnel, or "" (see
+	// SetTunnelHost).
+	tunnelHost string
+	mu         sync.RWMutex
+	started    bool
 }
 
 // New creates a new Server bound to the specified port on 0.0.0.0, so a
