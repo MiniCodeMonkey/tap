@@ -29,7 +29,7 @@ func TestPresentCommandIsRegistered(t *testing.T) {
 	if err != nil || command.Name() != "present" {
 		t.Fatalf("present command not found: %v", err)
 	}
-	for _, flag := range []string{"port", "no-record", "lan"} {
+	for _, flag := range []string{"port", "no-record", "lan", "allow-code"} {
 		if command.Flags().Lookup(flag) == nil {
 			t.Errorf("present lacks --%s", flag)
 		}
@@ -48,6 +48,16 @@ func TestDevHasTheLANFlag(t *testing.T) {
 	}
 	if command.Flags().Lookup("lan") == nil {
 		t.Error("dev lacks --lan")
+	}
+}
+
+func TestDevHasTheAllowCodeFlag(t *testing.T) {
+	command, _, err := rootCmd.Find([]string{"dev"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if command.Flags().Lookup("allow-code") == nil {
+		t.Error("dev lacks --allow-code")
 	}
 }
 
