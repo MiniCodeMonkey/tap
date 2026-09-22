@@ -633,9 +633,12 @@ export function updatePresentationInPlace(data: Presentation): void {
 	const slideIndex = total > 0 ? clamp(current.currentSlideIndex, 0, total - 1) : 0;
 	const slide = slides[slideIndex] ?? null;
 	// The step and fragment counts come from the freshly fetched slide, not
-	// the (possibly reused) merged one: an unchanged hash means this slide's
-	// own content did not change, but says nothing about whether the deck
-	// around it did, so the reused object's counts can be stale.
+	// the (possibly reused) merged one, though in practice the two never
+	// disagree: SlideHash (internal/transformer) marshals the whole
+	// transformed slide, including its step and fragment counts, with only
+	// the index and the hash itself blanked, so an unchanged hash implies
+	// unchanged counts too. Reading from the freshly fetched slide is kept
+	// anyway as the defensive choice, since it costs nothing here.
 	const fetchedSlide = data.slides[slideIndex] ?? null;
 	const sameSlide = slideIndex === current.currentSlideIndex;
 
