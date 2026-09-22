@@ -37,3 +37,22 @@ func ComputeRevision(pres *transformer.TransformedPresentation, componentBundleF
 	sum := h.Sum(nil)
 	return hex.EncodeToString(sum[:6])
 }
+
+// ChangedSlides returns the 1-based numbers of the slides in next whose
+// content differs from the slide at the same position in previous, by
+// their content hashes (see transformer.SlideHash). A slide past the end of
+// previous counts as changed, and so does every slide when previous is
+// nil. A removed slide is not listed, because it no longer has a number.
+// The result is never nil, so it encodes as [] in the "update" message.
+func ChangedSlides(previous, next *transformer.TransformedPresentation) []int {
+	changed := []int{}
+	if next == nil {
+		return changed
+	}
+	for index, slide := range next.Slides {
+		if previous == nil || index >= len(previous.Slides) || previous.Slides[index].Hash != slide.Hash {
+			changed = append(changed, index+1)
+		}
+	}
+	return changed
+}

@@ -357,6 +357,38 @@ func TestHandlePresenter_NoPasswordConfigured(t *testing.T) {
 	}
 }
 
+func TestHandleAPIPresentationCarriesTheRevision(t *testing.T) {
+	s := New(0)
+	s.SetPresentation(&transformer.TransformedPresentation{
+		Config: config.Config{Title: "Deck"},
+		Slides: []transformer.TransformedSlide{{Index: 0, Layout: "default", HTML: "<h1>One</h1>", Hash: "abc"}},
+	})
+	s.SetRevision("r1")
+
+	request := httptest.NewRequest(http.MethodGet, "/api/presentation", nil)
+	recorder := httptest.NewRecorder()
+	s.handleAPIPresentation(recorder, request)
+
+	var body struct {
+		Revision string `json:"revision"`
+		Config   struct {
+			Title string `json:"title"`
+		} `json:"config"`
+		Slides []struct {
+			Hash string `json:"hash"`
+		} `json:"slides"`
+	}
+	if err := json.NewDecoder(recorder.Body).Decode(&body); err != nil {
+		t.Fatalf("decoding the body: %v", err)
+	}
+	if body.Revision != "r1" {
+		t.Errorf("revision = %q, want %q", body.Revision, "r1")
+	}
+	if body.Config.Title != "Deck" || len(body.Slides) != 1 || body.Slides[0].Hash != "abc" {
+		t.Errorf("body = %+v, want the deck's config and slides next to the revision", body)
+	}
+}
+
 func TestHandleAPIPresentation_NoPresentation(t *testing.T) {
 	s := New(0)
 
