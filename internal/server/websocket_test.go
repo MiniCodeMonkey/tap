@@ -1600,3 +1600,69 @@ func TestCurrentSlideReportsTheLastBroadcast(t *testing.T) {
 		t.Errorf("CurrentSlide() = %d, want 4", got)
 	}
 }
+
+// dialDiskTestHub connects one client to a hub that already broadcast the
+// given disk statuses, and returns it.
+func dialDiskTestHub(t *testing.T, ctx context.Context, statuses ...string) *websocket.Conn {
+	t.Helper()
+	hub := NewWebSocketHub()
+	go hub.Run()
+	t.Cleanup(hub.Stop)
+
+	for _, status := range statuses {
+		if err := hub.BroadcastDiskStatus(status); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(hub.HandleConnection))
+	t.Cleanup(server.Close)
+
+	conn, _, err := websocket.Dial(ctx, "ws"+strings.TrimPrefix(server.URL, "http")+"/", nil)
+	if err != nil {
+		t.Fatalf("websocket.Dial() error = %v", err)
+	}
+	t.Cleanup(func() { conn.Close(websocket.StatusNormalClosure, "") })
+	return conn
+}
+
+func readHubMessage(t *testing.T, ctx context.Context, conn *websocket.Conn) Message {
+	t.Helper()
+	_, data, err := conn.Read(ctx)
+	if err != nil {
+		t.Fatalf("Read() error = %v", err)
+	}
+	var message Message
+	if err := json.Unmarshal(data, &message); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v", err)
+	}
+	return message
+}
+
+func TestWebSocketHubSendsTheDiskStatusToALateJoiner(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	conn := dialDiskTestHub(t, ctx, "low")
+
+	if first := readHubMessage(t, ctx, conn); first.Type != MessageConnected {
+		t.Fatalf("first message = %+v, want connected", first)
+	}
+	if second := readHubMessage(t, ctx, conn); second.Type != MessageRecording || second.Disk != "low" {
+		t.Errorf("second message = %+v, want a low disk status", second)
+	}
+}
+
+func TestWebSocketHubSendsNoDiskStatusOnceTheDiskIsFine(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	conn := dialDiskTestHub(t, ctx, "low", "")
+
+	if first := readHubMessage(t, ctx, conn); first.Type != MessageConnected {
+		t.Fatalf("first message = %+v, want connected", first)
+	}
+	quiet, stop := context.WithTimeout(ctx, 200*time.Millisecond)
+	defer stop()
+	if _, data, err := conn.Read(quiet); err == nil {
+		t.Errorf("got an unexpected message: %s", data)
+	}
+}

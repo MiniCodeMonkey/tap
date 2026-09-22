@@ -34,6 +34,9 @@ const (
 	MessageSlide MessageType = "slide"
 	// MessageTheme signals clients to switch to a specific theme.
 	MessageTheme MessageType = "theme"
+	// MessageRecording carries the recording's disk status to every
+	// client, for the low disk badge.
+	MessageRecording MessageType = "recording"
 )
 
 // Message represents a WebSocket message sent between server and clients.
@@ -63,14 +66,17 @@ const (
 // socket was down and reload (see frontend/src/lib/stores/websocket.ts).
 // Fields ordered by size for memory alignment.
 type Message struct {
-	Type           MessageType `json:"type"`
-	Theme          string      `json:"theme,omitempty"`
-	Revision       string      `json:"revision,omitempty"`
-	SlideIndex     *int        `json:"slideIndex,omitempty"`
-	Fragment       *int        `json:"fragment,omitempty"`
-	Step           *int        `json:"step,omitempty"`
-	ScrollRevealed *bool       `json:"scrollRevealed,omitempty"`
-	Initial        bool        `json:"initial,omitempty"`
+	Type     MessageType `json:"type"`
+	Theme    string      `json:"theme,omitempty"`
+	Revision string      `json:"revision,omitempty"`
+	// Disk is set only on a "recording" message: "low", "full", or absent
+	// when the disk is fine.
+	Disk           string `json:"disk,omitempty"`
+	SlideIndex     *int   `json:"slideIndex,omitempty"`
+	Fragment       *int   `json:"fragment,omitempty"`
+	Step           *int   `json:"step,omitempty"`
+	ScrollRevealed *bool  `json:"scrollRevealed,omitempty"`
+	Initial        bool   `json:"initial,omitempty"`
 }
 
 // Client represents a connected WebSocket client.
@@ -146,6 +152,9 @@ type WebSocketHub struct {
 	// reloads off its first connection (see the frontend's handling of an
 	// absent revision in frontend/src/lib/stores/websocket.ts).
 	revision string
+	// diskStatus is the last disk status broadcast, sent again to each
+	// client that connects later so a reloaded window still shows it.
+	diskStatus string
 	// allowedOrigins holds the extra origins a WebSocket upgrade is
 	// accepted from, beyond same-host connections - the tap dev
 	// --allow-origin flag, for a contributor's Vite dev server running on
@@ -402,6 +411,10 @@ func (h *WebSocketHub) Run() {
 				initialData, _ = json.Marshal(initialMsg)
 			}
 			revision := h.revision
+			var diskData []byte
+			if h.diskStatus != "" {
+				diskData, _ = json.Marshal(Message{Type: MessageRecording, Disk: h.diskStatus})
+			}
 			h.notifyClientCountChange()
 			h.mu.Unlock()
 
@@ -429,6 +442,12 @@ func (h *WebSocketHub) Run() {
 			if initialData != nil {
 				select {
 				case client.send <- initialData:
+				default:
+				}
+			}
+			if diskData != nil {
+				select {
+				case client.send <- diskData:
 				default:
 				}
 			}
@@ -566,6 +585,15 @@ func (h *WebSocketHub) BroadcastSlide(slideIndex int) error {
 // BroadcastTheme sends a theme change message to all clients.
 func (h *WebSocketHub) BroadcastTheme(themeName string) error {
 	return h.Broadcast(Message{Type: MessageTheme, Theme: themeName})
+}
+
+// BroadcastDiskStatus tells every client how full the recordings disk is,
+// and remembers it for clients that connect later.
+func (h *WebSocketHub) BroadcastDiskStatus(status string) error {
+	h.mu.Lock()
+	h.diskStatus = status
+	h.mu.Unlock()
+	return h.Broadcast(Message{Type: MessageRecording, Disk: status})
 }
 
 // ClientCount returns the number of connected clients.
