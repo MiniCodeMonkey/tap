@@ -274,6 +274,7 @@ The stdio pipes are the control channel. Only the parent process can read or wri
 
 - Every request needs `Authorization: Bearer <token>`, and the WebSocket upgrade needs the token too. The page gets it from a cookie that tap sets when the app loads the first URL with a one-time `?launch=` code. That code is printed in the ready line and expires on first use, so the token itself never appears in a URL.
 - `PUT /api/app/source` takes the buffer and answers with the `tap slide list` structure. tap renders from the buffer until the next `{"type": "saved"}` command.
+- Every request body has a size limit, enforced with `http.MaxBytesReader` before the body is read. The limit is 8 MB for `PUT /api/app/source` and 64 KB for the other routes. A larger body gets 413.
 - The PR #14 guard (a same-origin `Origin` header and a JSON body) applies to every mutating route.
 
 ### Events on stdout
