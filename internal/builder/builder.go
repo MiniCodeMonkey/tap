@@ -89,6 +89,23 @@ func (b *Builder) Build(cfg *config.Config, pres *parser.Presentation) (*BuildRe
 		OutputDir: b.outputDir,
 	}
 
+	// Transform presentation to frontend-ready format. Component bundle
+	// URLs are relative ("components/<name>-<hash>.js"), the same way
+	// image and asciinema paths below are made relative, so the built
+	// folder works when served from any base path.
+	trans := transformer.NewWithBaseDir(cfg, b.baseDir)
+	trans.SetComponents(b.components)
+	trans.SetComponentURLPrefix("components/")
+	// A slide whose skip directive is true is left out of the built deck
+	// entirely, not just hidden, so its content is not published. Check
+	// this before creating the output directory or copying any assets, so
+	// a deck that cannot be built leaves nothing behind, the same way
+	// export pdf and export images do.
+	transformed, _ := transformer.WithoutSkippedSlides(trans.Transform(pres))
+	if len(transformed.Slides) == 0 {
+		return nil, ErrAllSlidesSkipped
+	}
+
 	// Create output directory structure
 	if err := os.MkdirAll(b.outputDir, 0755); err != nil {
 		return nil, fmt.Errorf("failed to create output directory: %w", err)
@@ -106,20 +123,6 @@ func (b *Builder) Build(cfg *config.Config, pres *parser.Presentation) (*BuildRe
 	}
 	result.FileCount += assetCount
 	result.TotalSize += assetSize
-
-	// Transform presentation to frontend-ready format. Component bundle
-	// URLs are relative ("components/<name>-<hash>.js"), the same way
-	// image and asciinema paths below are made relative, so the built
-	// folder works when served from any base path.
-	trans := transformer.NewWithBaseDir(cfg, b.baseDir)
-	trans.SetComponents(b.components)
-	trans.SetComponentURLPrefix("components/")
-	// A slide whose skip directive is true is left out of the built deck
-	// entirely, not just hidden, so its content is not published.
-	transformed, _ := transformer.WithoutSkippedSlides(trans.Transform(pres))
-	if len(transformed.Slides) == 0 {
-		return nil, ErrAllSlidesSkipped
-	}
 
 	// Write every successfully built component bundle to dist/components/.
 	componentCount, componentSize, err := b.writeComponentBundles()
