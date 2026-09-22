@@ -259,6 +259,13 @@ describe('SlideOverview', () => {
 		expect(thumbnails[0].classList.contains('skipped')).toBe(false);
 		expect(thumbnails[1].querySelector('.thumbnail-number')?.textContent).toBe('Skipped');
 		expect(thumbnails[2].querySelector('.thumbnail-number')?.textContent).toBe('2');
-		expect(thumbnails[1].getAttribute('aria-label')).toBe('Slide 2, skipped');
+		// A skipped slide has no presented number, so its aria-label states
+		// no number at all, the same as its visible "Skipped" label - never
+		// a deck position that could coincide with another slide's presented
+		// number (here, slide 3's presented number is also 2).
+		expect(thumbnails[1].getAttribute('aria-label')).toBe('Skipped slide');
+		expect(thumbnails[2].getAttribute('aria-label')).toBe('Slide 2');
+		const ariaLabels = Array.from(thumbnails).map((thumbnail) => thumbnail.getAttribute('aria-label'));
+		expect(new Set(ariaLabels).size).toBe(ariaLabels.length);
 	});
 });

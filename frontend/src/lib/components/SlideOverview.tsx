@@ -255,7 +255,11 @@ export function SlideOverview({
 								onClick={() => selectSlide(index)}
 								role="option"
 								aria-selected={index === currentIndex}
-								aria-label={skipped ? `Slide ${index + 1}, skipped` : `Slide ${number}`}
+								// A skipped slide has no presented number, so its label
+								// states none, the same as its visible "Skipped" text
+								// below - never the deck position, which could read as
+								// (and be misheard for) another slide's presented number.
+								aria-label={skipped ? 'Skipped slide' : `Slide ${number}`}
 							>
 								<LazyThumbnail>
 									<SlideCanvas aspectRatio={aspectRatio} theme={theme}>
