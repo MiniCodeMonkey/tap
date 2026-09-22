@@ -15,6 +15,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - **`skip: true` leaves a slide out of the talk** - A skipped slide stays in the file and keeps its number, but the arrow keys pass over it in the audience and presenter views, slide numbers and the progress bar leave it out, and `tap build` and `tap export` leave it out of their output. `tap dev` still shows it with a "Skipped" marker when you open it directly.
 - **`tap slide list [deck]`** - Lists each slide with the lines it covers in the file, its layout, title, step and fragment counts, whether it is skipped, its errors, and its code blocks with their drivers. `--json` prints the same for editors and scripts.
 - **`tap deck schema`** - Lists every frontmatter key tap understands, with its type, default, allowed values and description. `--json` prints it for editors and tools.
+- **`tap theme set <slug> [deck]`** - Writes `theme:` in the deck's frontmatter, the same change the `t` key makes in `tap dev`. An unknown slug exits 1 with the list of themes.
+- **`tap theme show <slug> --image`** - Renders a title slide in a theme to a PNG, for theme pickers. The image is cached per theme and tap version, so the second call returns at once. `-o` copies it to a file.
+- **`tap image add <file> [deck]`** - Copies an image into `images/` next to the deck, as `name-2.png` when the name is taken, and prints the markdown that shows it. `--slide N` also adds it to the end of slide N.
+- **`tap image generate` and `tap image regenerate`** - The `i` key's AI image generator as commands. `generate --slide N --prompt "..."` adds a new image to a slide. `regenerate --slide N --image <path>` makes an image again in place, with its own prompt or a new one, and deletes the old file. Both write exactly what the `i` key writes.
+- **`tap slide add --layout <name>`** - Appends a slide in any of the 12 layouts without the wizard, and without a terminal. `--print` prints the template and writes nothing. The wizard now offers all 12 layouts, up from 7.
 
 ### Security
 
@@ -28,6 +33,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - **A live code block that also highlights lines runs again** - A fence such as `sql {driver: sqlite, connection: demo} {2-3}` lost its driver, because only the last `{...}` group was read, so the block had no Run button. Both groups now count, in either order.
 - **A `---` inside a `~~~` fence or an indented fence stays in its slide** - It used to split the slide in two, while the fence still rendered as code.
 - **The deck-wide `fragments` frontmatter key is gone** - It was documented as a way to auto-reveal every slide's bullet lists at once, in released versions, but nothing in tap ever read it; setting it in frontmatter did nothing. It is now gone from the docs, the skill, and `tap deck schema`. The per-slide `fragments` directive is unaffected and still works as documented.
+- **Regenerating an AI image keeps the new file** - When the new image had the same bytes as the old one, it got the same file name, and deleting the old file deleted the new one. The old file is now kept in that case. A regenerate prompt with a `$` in it is also written as typed.
 
 ### Changed
 

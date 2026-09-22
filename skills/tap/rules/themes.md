@@ -15,6 +15,10 @@ An unknown theme name falls back to `base` with a warning. Press `t` while
 presenting to cycle themes live, or add `?theme=<slug>` to the URL to force
 one.
 
+From the command line, `tap theme set <slug> [deck]` writes the same key,
+the change the `t` key makes. A deck with no frontmatter gets one; an
+unknown slug exits 1 with the list of themes.
+
 ## Built-in Themes
 
 | Theme | Polarity | Pitch |

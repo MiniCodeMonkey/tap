@@ -6,6 +6,8 @@ title: Layouts
 
 Layouts control how content is arranged on your slides. Tap provides a variety of built-in layouts to suit different presentation needs.
 
+`tap slide add --layout <name>` appends a slide in any of the 12 layouts below straight from the command line, no wizard needed; add `--print` to see its template without writing anything. See [CLI Commands](/reference/cli-commands#tap-slide-add).
+
 ## Automatic Layout Behavior
 
 A slide with no `layout:` directive gets one picked from its content:
