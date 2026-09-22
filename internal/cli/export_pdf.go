@@ -114,6 +114,10 @@ func runExportPDF(cmd *cobra.Command, args []string) error {
 
 	// Start spinner
 	spinner := newSpinner("Preparing PDF export")
+	if progress.enabled() {
+		// Progress lines replace the spinner on stderr.
+		spinner.isTerminal = func() bool { return false }
+	}
 	spinner.start()
 
 	// Step 1: Load configuration from frontmatter

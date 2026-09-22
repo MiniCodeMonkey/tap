@@ -1,6 +1,8 @@
 package cli
 
 import (
+	"bufio"
+	"bytes"
 	"context"
 	"net/http"
 	"os"
@@ -12,6 +14,7 @@ import (
 
 	"github.com/MiniCodeMonkey/tap/internal/config"
 	"github.com/MiniCodeMonkey/tap/internal/pdf"
+	"github.com/creack/pty"
 )
 
 func TestExportPDFCommandShape(t *testing.T) {
@@ -169,5 +172,82 @@ func TestPDFExportIntegration(t *testing.T) {
 	}
 	if info.Size() == 0 {
 		t.Error("exported PDF is empty")
+	}
+}
+
+// TestExportPDFProgress_TerminalOutputIsAllJSON runs tap export pdf
+// --progress json with a real pseudo-terminal attached as the process's
+// standard error, the way a real terminal session looks. The spinner
+// (see newSpinner in internal/cli/build.go) writes straight to os.Stderr,
+// bypassing cmd.ErrOrStderr(), so a test that only captures the command's
+// stderr into a buffer never sees them collide. Without the guard in
+// runExportPDF that forces the spinner to think standard error is not a
+// terminal while progress is enabled, this test fails with a line like
+// "⠦ Generating PDF (this may take a moment){"phase":"render",...}"
+// instead of a clean JSON line.
+func TestExportPDFProgress_TerminalOutputIsAllJSON(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
+
+	deckPath, err := filepath.Abs(filepath.Join("..", "..", "examples", "basic.md"))
+	if err != nil {
+		t.Fatalf("failed to resolve deck path: %v", err)
+	}
+
+	probe, err := pdf.New()
+	if err != nil {
+		t.Fatalf("pdf.New() error = %v", err)
+	}
+	requireBrowser(t, probe)
+	_ = probe.Close()
+
+	outputPath := filepath.Join(t.TempDir(), "basic.pdf")
+
+	ptmx, pts, err := pty.Open()
+	if err != nil {
+		t.Fatalf("pty.Open() error = %v", err)
+	}
+	defer ptmx.Close()
+
+	originalStderr := os.Stderr
+	os.Stderr = pts
+	t.Cleanup(func() { os.Stderr = originalStderr })
+
+	captured := &bytes.Buffer{}
+	readDone := make(chan struct{})
+	go func() {
+		defer close(readDone)
+		_, _ = captured.ReadFrom(ptmx)
+	}()
+
+	var stdout bytes.Buffer
+	exitCode := execute(rootCmd, []string{
+		"export", "pdf", deckPath, "-o", outputPath, "--progress", "json",
+	}, &stdout, pts)
+
+	os.Stderr = originalStderr
+	_ = pts.Close()
+	<-readDone
+
+	if exitCode != exitOK {
+		t.Fatalf("exit code = %d, want %d; captured stderr:\n%s", exitCode, exitOK, captured.String())
+	}
+
+	scanner := bufio.NewScanner(strings.NewReader(captured.String()))
+	sawProgressLine := false
+	for scanner.Scan() {
+		line := strings.TrimRight(scanner.Text(), "\r")
+		if line == "" {
+			continue
+		}
+		if !strings.HasPrefix(line, "{") {
+			t.Errorf("stderr line is not pure JSON: %q", line)
+		} else {
+			sawProgressLine = true
+		}
+	}
+	if !sawProgressLine {
+		t.Error("expected at least one JSON progress line on stderr")
 	}
 }
