@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -75,5 +76,29 @@ func TestImageGenerateMatchesTheImageKey(t *testing.T) {
 	requireSameFolders(t, tuiDeck, commandDeck)
 	if len(folderSnapshot(t, filepath.Dir(tuiDeck))) != 2 {
 		t.Error("the TUI path wrote no image: the parity check compared two unchanged folders")
+	}
+}
+
+func TestImageRegenerateMatchesTheImageKey(t *testing.T) {
+	useFakeImageGenerator(t)
+	tuiDeck, commandDeck := twoDeckCopies(t, "talk.md", regenerateDeck)
+	writeDeckFile(t, filepath.Dir(tuiDeck), "images/generated-old00000.png", "old image")
+	writeDeckFile(t, filepath.Dir(commandDeck), "images/generated-old00000.png", "old image")
+
+	// i opens the generator, Down and Enter pick slide 2, Down and Enter
+	// pick "Regenerate" (the first option is "Add new image"), and Ctrl+D
+	// submits the prompt the TUI fills in from the old image.
+	model := tea.Model(tui.NewDevModel(tui.DevConfig{MarkdownFile: tuiDeck}))
+	model, _ = pressKeys(model, runeKey("i"), tea.KeyMsg{Type: tea.KeyDown}, tea.KeyMsg{Type: tea.KeyEnter},
+		tea.KeyMsg{Type: tea.KeyDown}, tea.KeyMsg{Type: tea.KeyEnter})
+	model, submit := pressKeys(model, tea.KeyMsg{Type: tea.KeyCtrlD})
+	deliverCommand(model, submit)
+
+	if exitCode, _, stderr := runTap(t, "image", "regenerate", commandDeck, "--slide", "2", "--image", "images/generated-old00000.png"); exitCode != exitOK {
+		t.Fatalf("tap image regenerate exited %d: %s", exitCode, stderr)
+	}
+	requireSameFolders(t, tuiDeck, commandDeck)
+	if _, err := os.Stat(filepath.Join(filepath.Dir(tuiDeck), "images", "generated-old00000.png")); !os.IsNotExist(err) {
+		t.Error("the TUI path did not regenerate: the old image is still there")
 	}
 }

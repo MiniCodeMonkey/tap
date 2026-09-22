@@ -31,6 +31,14 @@ var (
 	imageGenerateJSON   bool
 )
 
+// Flags for tap image regenerate.
+var (
+	imageRegenerateSlide  int
+	imageRegenerateImage  string
+	imageRegeneratePrompt string
+	imageRegenerateJSON   bool
+)
+
 // imageCmd groups the commands for a deck's images.
 var imageCmd = &cobra.Command{
 	Use:   "image",
@@ -82,10 +90,29 @@ Examples:
 	RunE: runImageGenerate,
 }
 
+// imageRegenerateCmd makes an AI image again and replaces it in place.
+var imageRegenerateCmd = &cobra.Command{
+	Use:   "regenerate [deck]",
+	Short: "Generate an AI image again and replace it in place",
+	Long: `Generate an AI image on a slide again, as the i key in tap dev does,
+and replace it where it is. The old image file is deleted.
+
+--image names the image by the path the slide links to, for example
+images/generated-1a2b3c4d.png. Without --prompt, tap reuses the prompt in
+the image's ai-prompt comment.
+
+Examples:
+  tap image regenerate --slide 3 --image images/generated-1a2b3c4d.png
+  tap image regenerate talk.md --slide 3 --image images/generated-1a2b3c4d.png --prompt "..."`,
+	Args: cobra.MaximumNArgs(1),
+	RunE: runImageRegenerate,
+}
+
 func init() {
 	rootCmd.AddCommand(imageCmd)
 	imageCmd.AddCommand(imageAddCmd)
 	imageCmd.AddCommand(imageGenerateCmd)
+	imageCmd.AddCommand(imageRegenerateCmd)
 
 	imageAddCmd.Flags().IntVar(&imageAddSlide, "slide", 0, "also add the image at the end of this slide, from 1")
 	imageAddCmd.Flags().BoolVar(&imageAddJSON, "json", false, "print the result as JSON")
@@ -93,6 +120,11 @@ func init() {
 	imageGenerateCmd.Flags().IntVar(&imageGenerateSlide, "slide", 0, "slide to add the image to, from 1 (required)")
 	imageGenerateCmd.Flags().StringVar(&imageGeneratePrompt, "prompt", "", "what the image shows (required)")
 	imageGenerateCmd.Flags().BoolVar(&imageGenerateJSON, "json", false, "print the result as JSON")
+
+	imageRegenerateCmd.Flags().IntVar(&imageRegenerateSlide, "slide", 0, "slide the image is on, from 1 (required)")
+	imageRegenerateCmd.Flags().StringVar(&imageRegenerateImage, "image", "", "path of the AI image to replace, as the slide links to it (required)")
+	imageRegenerateCmd.Flags().StringVar(&imageRegeneratePrompt, "prompt", "", "a new prompt (default: the image's own prompt)")
+	imageRegenerateCmd.Flags().BoolVar(&imageRegenerateJSON, "json", false, "print the result as JSON")
 }
 
 // addedImageResult is the --json result of tap image add. Slide is 0 when
@@ -212,6 +244,80 @@ func runImageGenerate(cmd *cobra.Command, args []string) error {
 	}
 	fmt.Fprintln(cmd.OutOrStdout(), filepath.ToSlash(placed.Path))
 	return nil
+}
+
+func runImageRegenerate(cmd *cobra.Command, args []string) error {
+	if !cmd.Flags().Changed("slide") {
+		return userError(codeUsage, errors.New("--slide is required"))
+	}
+	if imageRegenerateImage == "" {
+		return userError(codeUsage, errors.New("--image is required"))
+	}
+	deck, err := resolveDeck(firstArg(args))
+	if err != nil {
+		return err
+	}
+	slideIndex, err := slideIndexFromFlag(deck, imageRegenerateSlide)
+	if err != nil {
+		return err
+	}
+	replacing, err := findAIImage(deck, slideIndex, imageRegenerateImage)
+	if err != nil {
+		return err
+	}
+	prompt := replacing.Prompt
+	if cmd.Flags().Changed("prompt") {
+		prompt = strings.TrimSpace(imageRegeneratePrompt)
+		if prompt == "" {
+			return userError(codeUsage, errors.New("--prompt is empty"))
+		}
+	}
+
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	placed, err := generateAndPlace(ctx, deckedit.Placement{DeckPath: deck, SlideIndex: slideIndex, Prompt: prompt, Replacing: &replacing})
+	if err != nil {
+		return err
+	}
+	if placed.DeleteError != nil {
+		fmt.Fprintf(cmd.ErrOrStderr(), "Warning: %v\n", placed.DeleteError)
+	}
+
+	if imageRegenerateJSON {
+		return printJSONOK(cmd.OutOrStdout(), generatedImageResult{
+			Deck:     deck,
+			Slide:    imageRegenerateSlide,
+			Image:    filepath.ToSlash(placed.Path),
+			Prompt:   prompt,
+			Markdown: placed.Markdown,
+			Replaced: filepath.ToSlash(replacing.ImagePath),
+		})
+	}
+	fmt.Fprintln(cmd.OutOrStdout(), filepath.ToSlash(placed.Path))
+	return nil
+}
+
+// findAIImage returns the AI image on the slide at slideIndex whose link
+// is imagePath. Paths compare after cleaning, so ./images/a.png matches
+// images/a.png.
+func findAIImage(deck string, slideIndex int, imagePath string) (deckedit.AIImage, error) {
+	content, err := os.ReadFile(deck)
+	if err != nil {
+		return deckedit.AIImage{}, userError(codeDeckNotFound, fmt.Errorf("cannot read %s: %w", deck, err))
+	}
+	images := deckedit.ParseAIImages(deckedit.SlideBodies(string(content))[slideIndex])
+	paths := make([]string, 0, len(images))
+	for _, image := range images {
+		if filepath.Clean(image.ImagePath) == filepath.Clean(imagePath) {
+			return image, nil
+		}
+		paths = append(paths, image.ImagePath)
+	}
+	onSlide := "it has none"
+	if len(paths) > 0 {
+		onSlide = "its AI images are " + strings.Join(paths, ", ")
+	}
+	return deckedit.AIImage{}, userError(codeImageNotFound, fmt.Errorf("slide %d has no AI image %s: %s", slideIndex+1, imagePath, onSlide))
 }
 
 // generateAndPlace generates an image for placement.Prompt and places it

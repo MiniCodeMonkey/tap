@@ -185,6 +185,88 @@ func TestImageGenerateWithoutAnAPIKey(t *testing.T) {
 	}
 }
 
+const regenerateDeck = "# One\n\n---\n\n# Two\n\nBefore\n\n<!-- ai-prompt: a blue whale -->\n![](images/generated-old00000.png)\n\nAfter\n"
+
+func writeRegenerateDeck(t *testing.T, dir string) string {
+	t.Helper()
+	writeDeckFile(t, dir, "images/generated-old00000.png", "old image")
+	return writeDeckFile(t, dir, "talk.md", regenerateDeck)
+}
+
+func TestImageRegenerateReusesThePromptAndReplacesInPlace(t *testing.T) {
+	fake := useFakeImageGenerator(t)
+	deckDir := t.TempDir()
+	deck := writeRegenerateDeck(t, deckDir)
+
+	exitCode, stdout, stderr := runTap(t, "image", "regenerate", deck, "--slide", "2", "--image", "images/generated-old00000.png", "--json")
+	if exitCode != exitOK {
+		t.Fatalf("exit code = %d, stderr %q", exitCode, stderr)
+	}
+	if len(fake.prompts) != 1 || fake.prompts[0] != "a blue whale" {
+		t.Errorf("generator prompts = %q, want the old prompt", fake.prompts)
+	}
+	newImage := "images/" + deckedit.GenerateImageFilename([]byte("png bytes for a blue whale"), "image/png")
+	if !strings.Contains(stdout, `"image": "`+newImage+`"`) || !strings.Contains(stdout, `"replaced": "images/generated-old00000.png"`) {
+		t.Errorf("stdout = %s", stdout)
+	}
+	content, _ := os.ReadFile(deck)
+	want := "# One\n\n---\n\n# Two\n\nBefore\n\n<!-- ai-prompt: a blue whale -->\n![](" + newImage + ")\n\nAfter\n"
+	if string(content) != want {
+		t.Errorf("deck = %q, want %q", content, want)
+	}
+	if _, err := os.Stat(filepath.Join(deckDir, "images", "generated-old00000.png")); !os.IsNotExist(err) {
+		t.Error("the old image should be deleted")
+	}
+}
+
+func TestImageRegenerateWithANewPrompt(t *testing.T) {
+	fake := useFakeImageGenerator(t)
+	deck := writeRegenerateDeck(t, t.TempDir())
+	exitCode, _, stderr := runTap(t, "image", "regenerate", deck, "--slide", "2", "--image", "./images/generated-old00000.png", "--prompt", "a green whale")
+	if exitCode != exitOK {
+		t.Fatalf("exit code = %d, stderr %q", exitCode, stderr)
+	}
+	if len(fake.prompts) != 1 || fake.prompts[0] != "a green whale" {
+		t.Errorf("generator prompts = %q", fake.prompts)
+	}
+	content, _ := os.ReadFile(deck)
+	if !strings.Contains(string(content), "<!-- ai-prompt: a green whale -->") {
+		t.Errorf("deck = %q", content)
+	}
+}
+
+func TestImageRegenerateAnImageThatIsNotOnTheSlide(t *testing.T) {
+	useFakeImageGenerator(t)
+	deck := writeRegenerateDeck(t, t.TempDir())
+	exitCode, stdout, _ := runTap(t, "image", "regenerate", deck, "--slide", "1", "--image", "images/generated-old00000.png", "--json")
+	if exitCode != exitUserError || !strings.Contains(stdout, `"code": "image_not_found"`) {
+		t.Errorf("(%d, %q), want exit 1 and image_not_found", exitCode, stdout)
+	}
+	content, _ := os.ReadFile(deck)
+	if string(content) != regenerateDeck {
+		t.Errorf("deck changed to %q", content)
+	}
+}
+
+func TestImageRegenerateNeedsSlideAndImage(t *testing.T) {
+	useFakeImageGenerator(t)
+	deck := writeRegenerateDeck(t, t.TempDir())
+	// Each case runs in its own subtest so runTap's flag reset, which
+	// fires on subtest cleanup, happens between cases; otherwise a flag
+	// set in one case would leak into the next.
+	for _, args := range [][]string{
+		{"image", "regenerate", deck, "--image", "images/generated-old00000.png", "--json"},
+		{"image", "regenerate", deck, "--slide", "2", "--json"},
+	} {
+		t.Run(strings.Join(args, " "), func(t *testing.T) {
+			exitCode, stdout, _ := runTap(t, args...)
+			if exitCode != exitUserError || !strings.Contains(stdout, `"code": "usage"`) {
+				t.Errorf("%v: (%d, %q), want exit 1 and usage", args, exitCode, stdout)
+			}
+		})
+	}
+}
+
 func TestImageGenerationErrorExitCodes(t *testing.T) {
 	tests := []struct {
 		errorType    gemini.ErrorType
