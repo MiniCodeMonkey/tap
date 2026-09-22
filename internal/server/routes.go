@@ -36,25 +36,25 @@ func (s *Server) SetupRoutes() {
 	// own file names, aliased to the same handlers. A trailing-slash
 	// variant of /presenter redirects to the canonical path; everything
 	// else unmatched falls through to ServeMux's own 404.
-	s.mux.HandleFunc("GET /{$}", s.handleIndex)
-	s.mux.HandleFunc("GET /index.html", s.handleIndex)
-	s.mux.HandleFunc("GET /presenter", s.requireAllowedHost(s.handlePresenter))
-	s.mux.HandleFunc("GET /presenter.html", s.requireAllowedHost(s.handlePresenter))
-	s.mux.HandleFunc("GET /presenter/", s.requireAllowedHost(redirectToCanonicalPath("/presenter")))
-	s.mux.HandleFunc("GET /api/presentation", s.requireAllowedHost(s.handleAPIPresentation))
-	s.mux.HandleFunc("GET /api/custom-theme.css", s.requireAllowedHost(s.handleCustomTheme))
-	s.mux.HandleFunc("POST /api/execute", s.requireAllowedHost(s.requireSameOriginJSON(s.handleAPIExecute)))
-	s.mux.HandleFunc("GET /qr", s.requireAllowedHost(s.handleQR))
+	s.handleRoute("GET /{$}", s.handleIndex)
+	s.handleRoute("GET /index.html", s.handleIndex)
+	s.handleRoute("GET /presenter", s.requireAllowedHost(s.handlePresenter))
+	s.handleRoute("GET /presenter.html", s.requireAllowedHost(s.handlePresenter))
+	s.handleRoute("GET /presenter/", s.requireAllowedHost(redirectToCanonicalPath("/presenter")))
+	s.handleRoute("GET /api/presentation", s.requireAllowedHost(s.handleAPIPresentation))
+	s.handleRoute("GET /api/custom-theme.css", s.requireAllowedHost(s.handleCustomTheme))
+	s.handleRoute("POST /api/execute", s.requireAllowedHost(s.requireSameOriginJSON(s.handleAPIExecute)))
+	s.handleRoute("GET /qr", s.requireAllowedHost(s.handleQR))
 
 	// Serve static assets (JS, CSS) from embedded dist/assets/
-	s.mux.HandleFunc("GET /assets/", s.handleAssets)
+	s.handleRoute("GET /assets/", s.handleAssets)
 
 	// Serve local files (images, etc.) from the presentation's base directory
-	s.mux.HandleFunc("GET /local/", s.requireAllowedHost(s.handleLocalFiles))
+	s.handleRoute("GET /local/", s.requireAllowedHost(s.handleLocalFiles))
 
 	// Serve component bundles from the in-memory store the dev command
 	// swaps atomically after each rebuild.
-	s.mux.HandleFunc("GET /components/", s.requireAllowedHost(s.handleComponentBundle))
+	s.handleRoute("GET /components/", s.requireAllowedHost(s.handleComponentBundle))
 
 	// Note: We don't wrap with logging middleware here because the TUI
 	// manages the terminal in alternate screen mode, and raw fmt.Printf

@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"strconv"
 	"time"
@@ -45,8 +46,32 @@ func (s *Server) handleAPIExecute(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Parse request body
+	// Read the whole body before parsing it, so a body over the front
+	// door's limit is caught even when it is not valid JSON: a decoder
+	// reading straight from the request can hit a syntax error on the
+	// first bad byte, before ever reading far enough to trip
+	// http.MaxBytesReader.
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		if IsBodyTooLarge(err) {
+			w.WriteHeader(http.StatusRequestEntityTooLarge)
+			_ = json.NewEncoder(w).Encode(ExecuteResponse{
+				Success: false,
+				Error:   "Request body too large",
+			})
+			return
+		}
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(ExecuteResponse{
+			Success: false,
+			Error:   fmt.Sprintf("Invalid request body: %v", err),
+		})
+		return
+	}
+
 	var req ExecuteRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := json.Unmarshal(body, &req); err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(ExecuteResponse{

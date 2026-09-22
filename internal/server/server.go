@@ -49,8 +49,10 @@ type Server struct {
 	// request's Origin header by requireSameOriginJSON. Mirrors
 	// WebSocketHub.allowedOrigins; tap dev sets both from the same value.
 	allowedOrigins map[string]struct{}
-	mu             sync.RWMutex
-	started        bool
+	// routes lists every pattern registered on mux, for Routes.
+	routes  []string
+	mu      sync.RWMutex
+	started bool
 }
 
 // New creates a new Server bound to the specified port on 0.0.0.0, so a
@@ -72,7 +74,7 @@ func NewWithHost(port int, host string) *Server {
 
 	s.httpServer = &http.Server{
 		Addr:              s.addr,
-		Handler:           s.mux,
+		Handler:           http.HandlerFunc(s.serveHTTP),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 
@@ -160,13 +162,13 @@ func (s *Server) ListensOnLoopbackOnly() bool {
 // RegisterHandler registers an HTTP handler for the given pattern.
 // This should be called before Start().
 func (s *Server) RegisterHandler(pattern string, handler http.Handler) {
-	s.mux.Handle(pattern, handler)
+	s.handleRoute(pattern, handler.ServeHTTP)
 }
 
 // RegisterHandlerFunc registers an HTTP handler function for the given pattern.
 // This should be called before Start().
 func (s *Server) RegisterHandlerFunc(pattern string, handler http.HandlerFunc) {
-	s.mux.HandleFunc(pattern, handler)
+	s.handleRoute(pattern, handler)
 }
 
 // Start starts the HTTP server in a goroutine.
