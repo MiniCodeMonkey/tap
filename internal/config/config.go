@@ -444,7 +444,7 @@ func UpdateThemeInFile(path string, newTheme string) error {
 	if strings.TrimSpace(lines[0]) != "---" {
 		// No frontmatter - add one with just the theme
 		newContent := fmt.Sprintf("---\ntheme: %s\n---\n%s", newTheme, string(content))
-		return writeFileAtomically(path, []byte(newContent), info.Mode().Perm())
+		return WriteFileAtomically(path, []byte(newContent), info.Mode().Perm())
 	}
 
 	// Find the end of frontmatter
@@ -483,45 +483,7 @@ func UpdateThemeInFile(path string, newTheme string) error {
 	}
 
 	newContent := strings.Join(lines, "\n")
-	return writeFileAtomically(path, []byte(newContent), info.Mode().Perm())
-}
-
-// writeFileAtomically writes content to a new temporary file in path's
-// directory, then renames it into place, so a crash, a full disk or a
-// killed process mid-write leaves path holding either the old content or
-// the new content, never a mix of both. The rename stays within one
-// directory because a rename across filesystems is not atomic. perm is
-// applied to the temporary file before the rename, so path keeps its
-// existing permissions.
-func writeFileAtomically(path string, content []byte, perm os.FileMode) error {
-	dir := filepath.Dir(path)
-	tempFile, err := os.CreateTemp(dir, ".tap-*.tmp")
-	if err != nil {
-		return fmt.Errorf("failed to create temp file: %w", err)
-	}
-	tempPath := tempFile.Name()
-	removeTemp := true
-	defer func() {
-		if removeTemp {
-			os.Remove(tempPath)
-		}
-	}()
-
-	if _, err := tempFile.Write(content); err != nil {
-		tempFile.Close()
-		return fmt.Errorf("failed to write temp file: %w", err)
-	}
-	if err := tempFile.Close(); err != nil {
-		return fmt.Errorf("failed to close temp file: %w", err)
-	}
-	if err := os.Chmod(tempPath, perm); err != nil {
-		return fmt.Errorf("failed to set file permissions: %w", err)
-	}
-	if err := os.Rename(tempPath, path); err != nil {
-		return fmt.Errorf("failed to replace file: %w", err)
-	}
-	removeTemp = false
-	return nil
+	return WriteFileAtomically(path, []byte(newContent), info.Mode().Perm())
 }
 
 // ResolveCustomThemePath resolves the customTheme path relative to the given base directory.

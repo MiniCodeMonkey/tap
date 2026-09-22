@@ -6,10 +6,10 @@ package deckedit
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 	"regexp"
 	"strings"
 
+	"github.com/MiniCodeMonkey/tap/internal/config"
 	"github.com/MiniCodeMonkey/tap/internal/parser"
 )
 
@@ -96,46 +96,9 @@ func InsertIntoFile(deckPath string, slideIndex int, markdown string) error {
 	if err != nil {
 		return err
 	}
-	if err := writeFileAtomically(deckPath, []byte(updated), info.Mode().Perm()); err != nil {
+	if err := config.WriteFileAtomically(deckPath, []byte(updated), info.Mode().Perm()); err != nil {
 		return fmt.Errorf("failed to write markdown file: %w", err)
 	}
-	return nil
-}
-
-// writeFileAtomically writes content to a new temporary file in path's
-// directory, then renames it into place, so path is left as either its old
-// content or its new content, never a mix of both. The temporary file is
-// created in the same directory as path because a rename across
-// filesystems is not atomic. perm is applied to the temporary file before
-// the rename, so path keeps its existing permissions.
-func writeFileAtomically(path string, content []byte, perm os.FileMode) error {
-	dir := filepath.Dir(path)
-	tempFile, err := os.CreateTemp(dir, ".tap-*.tmp")
-	if err != nil {
-		return fmt.Errorf("failed to create temp file: %w", err)
-	}
-	tempPath := tempFile.Name()
-	removeTemp := true
-	defer func() {
-		if removeTemp {
-			os.Remove(tempPath)
-		}
-	}()
-
-	if _, err := tempFile.Write(content); err != nil {
-		tempFile.Close()
-		return fmt.Errorf("failed to write temp file: %w", err)
-	}
-	if err := tempFile.Close(); err != nil {
-		return fmt.Errorf("failed to close temp file: %w", err)
-	}
-	if err := os.Chmod(tempPath, perm); err != nil {
-		return fmt.Errorf("failed to set file permissions: %w", err)
-	}
-	if err := os.Rename(tempPath, path); err != nil {
-		return fmt.Errorf("failed to replace file: %w", err)
-	}
-	removeTemp = false
 	return nil
 }
 
