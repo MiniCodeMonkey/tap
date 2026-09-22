@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/MiniCodeMonkey/tap/internal/components"
@@ -84,6 +85,14 @@ type TransformedCodeBlock struct {
 	Driver         string `json:"driver,omitempty"`
 	Connection     string `json:"connection,omitempty"`
 	HighlightLines string `json:"highlightLines,omitempty"`
+	// Problem says why this live block cannot run, such as a driver the
+	// deck does not declare. The page shows it in the block, and
+	// /api/execute refuses the block with it.
+	Problem string `json:"problem,omitempty"`
+	// Block is the block's number among the slide's live code blocks (the
+	// blocks with a driver), counted from 1, and 0 for any other block. A
+	// Run button sends it with the slide number to /api/execute.
+	Block int `json:"block,omitempty"`
 }
 
 // BackgroundConfig holds background styling for a slide.
@@ -106,6 +115,9 @@ type Transformer struct {
 	// the static builder sets a relative "components/" so the built folder
 	// works from any base path (see the builder's image path handling).
 	componentURLPrefix string
+	// usedDrivers is every driver a live code block in the deck names,
+	// sorted, for the message that shows the whole drivers block to paste.
+	usedDrivers []string
 }
 
 // New creates a new Transformer with the given configuration.
@@ -147,6 +159,8 @@ func (t *Transformer) SetComponentURLPrefix(prefix string) {
 // Transform converts a parsed Presentation into a TransformedPresentation
 // suitable for JSON serialization and frontend consumption.
 func (t *Transformer) Transform(pres *parser.Presentation) *TransformedPresentation {
+	t.usedDrivers = usedDrivers(pres)
+
 	result := &TransformedPresentation{
 		Config: *t.config,
 		Slides: make([]TransformedSlide, 0, len(pres.Slides)),
@@ -158,6 +172,21 @@ func (t *Transformer) Transform(pres *parser.Presentation) *TransformedPresentat
 	}
 
 	return result
+}
+
+// usedDrivers returns every driver a code block in pres names, sorted and
+// without repeats.
+func usedDrivers(pres *parser.Presentation) []string {
+	var names []string
+	for _, slide := range pres.Slides {
+		for _, block := range slide.CodeBlocks {
+			if block.Meta.Driver != "" && !slices.Contains(names, block.Meta.Driver) {
+				names = append(names, block.Meta.Driver)
+			}
+		}
+	}
+	slices.Sort(names)
+	return names
 }
 
 // WithoutSkippedSlides returns a copy of presentation without the slides
@@ -235,6 +264,7 @@ func (t *Transformer) transformSlide(slide parser.Slide) TransformedSlide {
 	// Transform code blocks
 	if len(slide.CodeBlocks) > 0 {
 		transformed.CodeBlocks = make([]TransformedCodeBlock, len(slide.CodeBlocks))
+		liveBlock := 0
 		for i, block := range slide.CodeBlocks {
 			transformed.CodeBlocks[i] = TransformedCodeBlock{
 				Language:       block.Language,
@@ -242,6 +272,14 @@ func (t *Transformer) transformSlide(slide parser.Slide) TransformedSlide {
 				Driver:         block.Meta.Driver,
 				Connection:     block.Meta.Connection,
 				HighlightLines: block.Meta.HighlightLines,
+			}
+			if block.Meta.Driver == "" {
+				continue
+			}
+			liveBlock++
+			transformed.CodeBlocks[i].Block = liveBlock
+			if t.config != nil && !t.config.DriverDeclared(block.Meta.Driver) {
+				transformed.CodeBlocks[i].Problem = t.config.UndeclaredDriverMessage(block.Meta.Driver, t.usedDrivers)
 			}
 		}
 	}
