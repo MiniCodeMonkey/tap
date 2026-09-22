@@ -85,19 +85,17 @@ func (m *DevModel) applyReloadMsg(msg reloadMsg) {
 	m.addEvent(DevEvent{Type: "reload", Message: "Reloaded the deck", Timestamp: time.Now()})
 }
 
-// togglePresentRecordingCmd runs c: Toggle is a quick state flip on the
-// CLI's run (it hands off the slow part, starting or finalizing the
-// segment, to its own goroutine), so it runs here rather than being
-// deferred through a tea.Cmd; only reporting its error waits for the
-// update loop.
+// togglePresentRecordingCmd runs c off the update loop: stopping a segment
+// waits for screencapture to finalize the file, which can take a few
+// seconds, and calling Toggle inside Update would freeze the TUI for that
+// long.
 func (m *DevModel) togglePresentRecordingCmd() tea.Cmd {
 	recorder := m.presentRecorder
 	if recorder == nil {
 		return nil
 	}
-	err := recorder.Toggle()
 	return func() tea.Msg {
-		return presentToggleMsg{err: err}
+		return presentToggleMsg{err: recorder.Toggle()}
 	}
 }
 

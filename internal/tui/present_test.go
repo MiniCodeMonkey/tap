@@ -97,7 +97,11 @@ func TestPresentModeHelpListsOnlyTheKeptKeys(t *testing.T) {
 
 func TestPresentModeCTogglesTheRecording(t *testing.T) {
 	recorder := &fakePresentRecorder{}
-	press(presentModel(recorder), "c")
+	_, command := press(presentModel(recorder), "c")
+	if command == nil {
+		t.Fatal("c returned no command")
+	}
+	command()
 	if recorder.toggles != 1 {
 		t.Errorf("toggles = %d, want 1", recorder.toggles)
 	}
