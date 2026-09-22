@@ -380,19 +380,19 @@ func openInDefaultApplication(path string) error {
 	return exec.Command("open", path).Start()
 }
 
-// gitignoreEntry is how this deck's recordings directory should appear
-// in a .gitignore: its path relative to the repository root, so a deck
-// that points recording.output somewhere else still ignores the
-// directory it actually fills. It is empty when there is nothing
-// sensible to offer, which is the case outside a repository or when the
-// recordings land at the repository root itself.
-func (c *recordController) gitignoreEntry() string {
-	root, found := repositoryRoot(c.options.OutputDir)
+// gitignoreEntryFor is how a recordings directory should appear in a
+// .gitignore: its path relative to the repository root, so a deck that
+// points recording.output somewhere else still ignores the directory it
+// actually fills. It is empty when there is nothing sensible to offer,
+// which is the case outside a repository or when the recordings land at
+// the repository root itself.
+func gitignoreEntryFor(outputDir string) string {
+	root, found := repositoryRoot(outputDir)
 	if !found {
 		return ""
 	}
 
-	relative, err := filepath.Rel(root, c.options.OutputDir)
+	relative, err := filepath.Rel(root, outputDir)
 	if err != nil || relative == "." || strings.HasPrefix(relative, "..") {
 		return ""
 	}
@@ -400,28 +400,40 @@ func (c *recordController) gitignoreEntry() string {
 	return filepath.ToSlash(relative) + "/"
 }
 
-// SuggestGitignore is the ignore entry worth offering, or "" when there is
-// nothing to offer: outside a git repository, or when it is already there.
-func (c *recordController) SuggestGitignore() string {
-	entry := c.gitignoreEntry()
+// suggestGitignore is the ignore entry worth offering for outputDir, or ""
+// when there is nothing to offer: outside a git repository, or when it is
+// already there.
+func suggestGitignore(outputDir string) string {
+	entry := gitignoreEntryFor(outputDir)
 	if entry == "" {
 		return ""
 	}
-	if needed, _ := gitignoreState(c.options.OutputDir, entry); needed {
+	if needed, _ := gitignoreState(outputDir, entry); needed {
 		return entry
 	}
 	return ""
 }
 
-// AddGitignoreEntry ignores the recordings directory.
-func (c *recordController) AddGitignoreEntry() error {
-	entry := c.gitignoreEntry()
+// addGitignoreEntry ignores outputDir.
+func addGitignoreEntry(outputDir string) error {
+	entry := gitignoreEntryFor(outputDir)
 	if entry == "" {
 		return nil
 	}
-	needed, gitignorePath := gitignoreState(c.options.OutputDir, entry)
+	needed, gitignorePath := gitignoreState(outputDir, entry)
 	if !needed {
 		return nil
 	}
 	return appendGitignoreEntry(gitignorePath, entry)
+}
+
+// SuggestGitignore is the ignore entry worth offering, or "" when there is
+// nothing to offer: outside a git repository, or when it is already there.
+func (c *recordController) SuggestGitignore() string {
+	return suggestGitignore(c.options.OutputDir)
+}
+
+// AddGitignoreEntry ignores the recordings directory.
+func (c *recordController) AddGitignoreEntry() error {
+	return addGitignoreEntry(c.options.OutputDir)
 }
