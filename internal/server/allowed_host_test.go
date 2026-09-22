@@ -130,3 +130,33 @@ func TestRequireAllowedHost_RejectsDisallowedHostHeader(t *testing.T) {
 		}
 	})
 }
+
+func TestIsAllowedOrigin(t *testing.T) {
+	allowedOrigins := map[string]struct{}{"http://localhost:5173": {}}
+	allowedHosts := allowedHostsFromOrigins([]string{"http://localhost:5173"})
+
+	cases := []struct {
+		name        string
+		origin      string
+		requestHost string
+		want        bool
+	}{
+		{"no origin header", "", "127.0.0.1:3000", true},
+		{"same origin on loopback", "http://127.0.0.1:3000", "127.0.0.1:3000", true},
+		{"same origin on localhost", "http://localhost:3000", "localhost:3000", true},
+		{"explicitly allowed origin", "http://localhost:5173", "localhost:3000", true},
+		{"foreign site", "https://evil.com", "127.0.0.1:3000", false},
+		{"opaque null origin", "null", "127.0.0.1:3000", false},
+		{"same host but different port", "http://localhost:4000", "localhost:3000", false},
+		{"rebinding name matching its own host", "http://evil.com:3000", "evil.com:3000", false},
+		{"unparseable origin", "http://[::1", "127.0.0.1:3000", false},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			got := isAllowedOrigin(testCase.origin, testCase.requestHost, allowedHosts, allowedOrigins)
+			if got != testCase.want {
+				t.Errorf("isAllowedOrigin(%q, %q) = %v, want %v", testCase.origin, testCase.requestHost, got, testCase.want)
+			}
+		})
+	}
+}

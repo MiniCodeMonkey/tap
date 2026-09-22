@@ -8,8 +8,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Added
 
-- **`tap present`**: give a talk without live reload, and optionally record every run, following the projector across HDMI swaps.
+- **`tap present`** - Give a talk without live reload, and optionally record every run, following the projector across HDMI swaps.
 - **A low disk guard for recording** in both `tap dev` and `tap present` - a warning below 5 GB free, and the recording stops itself below 1 GB, so it never fills the disk.
+
+### Security
+
+- **`tap dev` rejects cross-site requests to run code** - A web page open in the same browser could send a plain `POST` to `http://127.0.0.1:<port>/api/execute`. The browser hid the response, but the server still ran the request. `tap dev` now refuses any code execution request whose `Origin` is another site or whose body is not `application/json`, with 403 and 415 respectively. The slides' own Run buttons, `--allow-origin` origins and tunnel origins keep working. The same origin rule now guards both HTTP and WebSocket connections.
 
 ### Changed
 
