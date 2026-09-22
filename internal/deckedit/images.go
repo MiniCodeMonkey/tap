@@ -20,18 +20,27 @@ var imageExtensions = map[string]bool{
 	".webp": true, ".svg": true, ".avif": true,
 }
 
-// linkUnsafePattern matches runs of characters that need escaping in a
-// plain markdown link destination, or that break the link once it is
-// rendered and read back off disk: whitespace; the parentheses that would
-// otherwise close the link early; angle brackets, which would otherwise
-// look like the <path> form; single and double quotes and the backtick,
-// which goldmark percent-encodes in the rendered src, so the builder's
-// asset copy looks for a name that no longer matches the file on disk;
-// and "#", which a browser reads as the start of a URL fragment, so an
-// image with one in its name never loads in tap dev or tap present even
-// though the built output, which never opens the file through a browser
-// URL, still finds it.
-var linkUnsafePattern = regexp.MustCompile("[\\s()<>'\"`#]+")
+// linkUnsafePattern matches runs of characters that break the markdown
+// link itself, or that a URL treats specially, regardless of how any
+// particular renderer happens to encode them. internal/builder decodes
+// both the percent-encoding and the HTML entity escaping a renderer
+// applies to a rendered <img src>, so this sanitizer no longer needs to
+// enumerate every character a renderer might encode; that would be
+// chasing the renderer's behavior instead of the actual constraint. What
+// is left is unsafe on its own terms:
+//   - whitespace, "(" and ")": an unenclosed markdown link destination
+//     ends at the first whitespace, and ")" closes it early;
+//   - "<" and ">": would make the destination look like the <path> form;
+//   - "'", "\"" and "`": would end the attribute or code span they sit
+//     inside, in an HTML or markdown context that does not percent-encode
+//     them;
+//   - "#": a browser reads everything after it as a URL fragment, so an
+//     image with one in its name loads in the static build (which never
+//     opens the file through a browser URL) but not in tap dev or tap
+//     present;
+//   - "?": a browser reads everything after it as a query string, the
+//     same failure as "#" in the same places.
+var linkUnsafePattern = regexp.MustCompile("[\\s()<>'\"`#?]+")
 
 // AddedImage is an image copied into a deck's images folder. Path is
 // relative to the deck's folder.

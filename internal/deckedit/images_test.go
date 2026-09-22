@@ -7,6 +7,10 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/MiniCodeMonkey/tap/internal/builder"
+	"github.com/MiniCodeMonkey/tap/internal/config"
+	"github.com/MiniCodeMonkey/tap/internal/parser"
 )
 
 func writeFile(t *testing.T, path, content string) string {
@@ -101,6 +105,7 @@ func TestAddImageSanitizesTheCopiedName(t *testing.T) {
 		"it's a diagram.png": "it-s-a-diagram.png",
 		"back`tick.png":      "back-tick.png",
 		"diagram#1.png":      "diagram-1.png",
+		"diagram?v2.png":     "diagram-v2.png",
 	}
 	for sourceName, wantName := range tests {
 		source := writeFile(t, filepath.Join(t.TempDir(), sourceName), "png bytes")
@@ -136,28 +141,83 @@ func TestAddImageSanitizingCanClash(t *testing.T) {
 	}
 }
 
-// TestAddImageLeavesOtherCharactersAlone covers characters the reviewer
-// checked against goldmark's actual render but that do not need
-// sanitizing: "%" and ";" pass through goldmark unchanged in a link
-// destination, and a non-Latin name is not touched either.
+// TestAddImageLeavesOtherCharactersAlone covers characters that do not
+// break the markdown link syntax or a URL, so the sanitizer leaves them
+// alone: "%" and ";" are neither. What a renderer or a browser might do
+// with such a name afterward is internal/builder's job, not this
+// sanitizer's; see TestAddImageNonLatinNameSurvivesABuild for a case of
+// that proven through a real build, rather than asserted here.
 func TestAddImageLeavesOtherCharactersAlone(t *testing.T) {
 	deckDir := t.TempDir()
 	deck := writeFile(t, filepath.Join(deckDir, "talk.md"), "# One\n")
 
-	names := []string{"progress 50%.png", "diagram;v2.png", "图表.png"}
+	names := []string{"progress-50%.png", "diagram;v2.png"}
 	for _, sourceName := range names {
 		source := writeFile(t, filepath.Join(t.TempDir(), sourceName), "png bytes")
 		added, err := AddImage(deck, source)
 		if err != nil {
 			t.Fatalf("AddImage(%q) error = %v", sourceName, err)
 		}
-		wantName := sanitizeForLink(sourceName)
-		if sourceName != "progress 50%.png" && added.Path != filepath.Join("images", sourceName) {
+		if added.Path != filepath.Join("images", sourceName) {
 			t.Errorf("AddImage(%q).Path = %q, want images/%s unchanged", sourceName, added.Path, sourceName)
 		}
-		if _, err := os.Stat(filepath.Join(deckDir, "images", wantName)); err != nil {
-			t.Errorf("copied file not found under %q: %v", wantName, err)
+		if _, err := os.Stat(filepath.Join(deckDir, "images", sourceName)); err != nil {
+			t.Errorf("copied file not found under %q: %v", sourceName, err)
 		}
+	}
+}
+
+// TestAddImageNonLatinNameSurvivesABuild proves a non-Latin file name
+// survives, rather than asserting the sanitizer happened to leave it
+// alone: a name the sanitizer does not touch can still be lost later, in
+// internal/builder, if the renderer's own encoding of it is not undone
+// before the builder looks the file up on disk (see
+// internal/builder.TestBuild_DecodesRenderedImagePaths for the same
+// proof against every character the renderer is known to encode). A
+// person naming their files in their own language is not an edge case.
+func TestAddImageNonLatinNameSurvivesABuild(t *testing.T) {
+	deckDir := t.TempDir()
+	deck := writeFile(t, filepath.Join(deckDir, "talk.md"), "# One\n")
+	source := writeFile(t, filepath.Join(t.TempDir(), "图表.png"), "png bytes")
+
+	added, err := AddImage(deck, source)
+	if err != nil {
+		t.Fatalf("AddImage() error = %v", err)
+	}
+	if added.Path != filepath.Join("images", "图表.png") {
+		t.Fatalf("AddImage().Path = %q, want images/图表.png unchanged", added.Path)
+	}
+
+	markdown := "# One\n\n" + added.Markdown + "\n"
+	pres, err := parser.New().Parse([]byte(markdown))
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+
+	outputDir := t.TempDir()
+	b := builder.NewWithOutput(outputDir)
+	b.SetBaseDir(deckDir)
+	result, err := b.Build(config.DefaultConfig(), pres)
+	if err != nil {
+		t.Fatalf("Build() error = %v", err)
+	}
+	if len(result.Warnings) != 0 {
+		t.Errorf("Build() warnings = %v, want none", result.Warnings)
+	}
+
+	assetsDir := filepath.Join(outputDir, "assets")
+	entries, err := os.ReadDir(assetsDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var foundImage bool
+	for _, entry := range entries {
+		if strings.HasSuffix(entry.Name(), ".png") && entry.Name() != "图表.png" {
+			foundImage = true
+		}
+	}
+	if !foundImage {
+		t.Error("the non-Latin named image was not copied into the built assets")
 	}
 }
 
