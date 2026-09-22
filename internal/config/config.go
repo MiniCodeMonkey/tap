@@ -134,8 +134,9 @@ type ConnectionConfig struct {
 
 // Load reads a markdown file and parses its YAML frontmatter into a
 // Config (see FromSource). When the deck has frontmatter, it also loads
-// the .env file in the deck's folder and resolves environment variables
-// in the driver settings.
+// the .env file in the deck's folder into the environment, for a driver
+// setting's ${NAME} to read when the driver runs. Every value in the
+// returned Config stays literal.
 func Load(path string) (*Config, error) {
 	source, err := os.ReadFile(path)
 	if err != nil {
@@ -147,13 +148,11 @@ func Load(path string) (*Config, error) {
 		return cfg, err
 	}
 
-	// Load .env file from presentation directory
+	// Load a .env file next to the deck into the environment, where a
+	// driver setting's ${NAME} reads it when the driver runs.
 	if err := LoadEnv(filepath.Dir(path)); err != nil {
 		return nil, fmt.Errorf("failed to load .env file: %w", err)
 	}
-
-	// Resolve environment variables in sensitive fields
-	cfg.ResolveEnvVars()
 
 	return cfg, nil
 }
@@ -360,9 +359,6 @@ func (c *Config) Validate() error {
 	return nil
 }
 
-// envVarPattern matches environment variable references like $VAR_NAME or ${VAR_NAME}.
-var envVarPattern = regexp.MustCompile(`\$\{?([A-Za-z_][A-Za-z0-9_]*)\}?`)
-
 // LoadEnv loads environment variables from a .env file in the specified directory.
 // If the .env file doesn't exist, it returns nil (no error).
 func LoadEnv(dir string) error {
@@ -371,36 +367,6 @@ func LoadEnv(dir string) error {
 		return nil
 	}
 	return godotenv.Load(envPath)
-}
-
-// resolveEnvVars replaces $VAR_NAME and ${VAR_NAME} syntax with actual
-// environment variable values. If a variable is not set, the reference
-// is left unchanged.
-func resolveEnvVars(s string) string {
-	return envVarPattern.ReplaceAllStringFunc(s, func(match string) string {
-		// Extract variable name from match
-		varName := envVarPattern.FindStringSubmatch(match)[1]
-		if value, exists := os.LookupEnv(varName); exists {
-			return value
-		}
-		return match
-	})
-}
-
-// ResolveEnvVars resolves environment variable references in sensitive config fields.
-// This includes passwords and other credential-related fields in driver connections.
-func (c *Config) ResolveEnvVars() {
-	for driverName, driver := range c.Drivers {
-		for connName, conn := range driver.Connections {
-			conn.Password = resolveEnvVars(conn.Password)
-			conn.User = resolveEnvVars(conn.User)
-			conn.Host = resolveEnvVars(conn.Host)
-			conn.Database = resolveEnvVars(conn.Database)
-			conn.Path = resolveEnvVars(conn.Path)
-			driver.Connections[connName] = conn
-		}
-		c.Drivers[driverName] = driver
-	}
 }
 
 // NormalizeTheme returns the theme unchanged if it is valid. Any other theme
