@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -99,27 +98,11 @@ func (p *progressReporter) Result(payload any) error {
 	if !p.enabled() {
 		return nil
 	}
-	body := []byte("{}")
-	if payload != nil {
-		encoded, err := json.Marshal(payload)
-		if err != nil {
-			return internalError(codeInternal, fmt.Errorf("encoding the progress result: %w", err))
-		}
-		body = encoded
+	line, err := jsonEnvelope("progress result", `{"phase":"done","ok":true`, payload, false)
+	if err != nil {
+		return err
 	}
-	if len(body) < 2 || body[0] != '{' {
-		return internalError(codeInternal, fmt.Errorf("the progress result must be an object, got %s", body))
-	}
-
-	var line bytes.Buffer
-	line.WriteString(`{"phase":"done","ok":true`)
-	if rest := body[1:]; string(rest) == "}" {
-		line.WriteByte('}')
-	} else {
-		line.WriteByte(',')
-		line.Write(rest)
-	}
-	p.writeLine(line.Bytes())
+	p.writeLine(line)
 	return nil
 }
 
