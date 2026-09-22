@@ -30,7 +30,13 @@ func presentRecordingWanted(input consentInput) (bool, error) {
 
 	settings, err := usersettings.Load(input.SettingsPath)
 	if err != nil {
-		return false, err
+		// A malformed settings file must not stop the talk: treat consent
+		// as unanswered instead of failing outright, so an interactive
+		// run asks again and a non-interactive run just does not record.
+		// The file itself is left alone unless the speaker answers the
+		// prompt below, which overwrites it with a well-formed one.
+		fmt.Fprintf(input.Out, "Ignoring %s, it could not be read: %v\n", input.SettingsPath, err)
+		settings = usersettings.Settings{}
 	}
 	if settings.Present.Record != nil {
 		return *settings.Present.Record, nil
