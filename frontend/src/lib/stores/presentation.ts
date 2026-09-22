@@ -632,13 +632,22 @@ export function updatePresentationInPlace(data: Presentation): void {
 	const total = slides.length;
 	const slideIndex = total > 0 ? clamp(current.currentSlideIndex, 0, total - 1) : 0;
 	const slide = slides[slideIndex] ?? null;
+	// The step and fragment counts come from the freshly fetched slide, not
+	// the (possibly reused) merged one: an unchanged hash means this slide's
+	// own content did not change, but says nothing about whether the deck
+	// around it did, so the reused object's counts can be stale.
+	const fetchedSlide = data.slides[slideIndex] ?? null;
 	const sameSlide = slideIndex === current.currentSlideIndex;
 
 	usePresentationStore.setState({
 		presentation,
 		currentSlideIndex: slideIndex,
-		currentStep: clamp(current.currentStep, 0, Math.max(slide?.steps ?? 0, 0)),
-		currentFragmentIndex: clamp(current.currentFragmentIndex, -1, Math.max((slide?.fragmentCount ?? 0) - 1, -1)),
+		currentStep: clamp(current.currentStep, 0, Math.max(fetchedSlide?.steps ?? 0, 0)),
+		currentFragmentIndex: clamp(
+			current.currentFragmentIndex,
+			-1,
+			Math.max((fetchedSlide?.fragmentCount ?? 0) - 1, -1)
+		),
 		scrollRevealed: sameSlide && slide?.scroll === true ? current.scrollRevealed : false
 	});
 

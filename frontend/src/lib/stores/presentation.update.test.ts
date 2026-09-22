@@ -72,6 +72,19 @@ describe('updatePresentationInPlace', () => {
 		expect(usePresentationStore.getState().currentStep).toBe(1);
 	});
 
+	it('clamps the step from the fetched counts even when the slide keeps its old hash and object', () => {
+		// A slide's hash covers only its own content, not the deck around it,
+		// so an unchanged hash at this index does not guarantee its step
+		// count is unchanged too. The clamp must still read the freshly
+		// fetched slide's steps, not the reused object's.
+		loadPresentation(makeDeck('r1', [makeSlide(0, 'a', { steps: 4 })]));
+		usePresentationStore.setState({ currentStep: 4 });
+
+		updatePresentationInPlace(makeDeck('r2', [makeSlide(0, 'a', { steps: 1 })]));
+
+		expect(usePresentationStore.getState().currentStep).toBe(1);
+	});
+
 	it('clamps the fragment when the slide loses fragments', () => {
 		loadPresentation(makeDeck('r1', [makeSlide(0, 'a', { fragmentCount: 3 })]));
 		usePresentationStore.setState({ currentFragmentIndex: 2 });
