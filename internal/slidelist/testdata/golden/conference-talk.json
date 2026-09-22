@@ -1,0 +1,121 @@
+{
+  "slides": [
+    {
+      "number": 1,
+      "startLine": 10,
+      "endLine": 14,
+      "layout": "title",
+      "title": "Debugging Production at 3am",
+      "fragments": 0,
+      "steps": 0,
+      "skip": false,
+      "errors": [],
+      "codeBlocks": []
+    },
+    {
+      "number": 2,
+      "startLine": 18,
+      "endLine": 20,
+      "layout": "section",
+      "title": "The Page",
+      "fragments": 0,
+      "steps": 0,
+      "skip": false,
+      "errors": [],
+      "codeBlocks": []
+    },
+    {
+      "number": 3,
+      "startLine": 24,
+      "endLine": 32,
+      "layout": "default",
+      "title": "What We Knew",
+      "fragments": 1,
+      "steps": 0,
+      "skip": false,
+      "errors": [],
+      "codeBlocks": []
+    },
+    {
+      "number": 4,
+      "startLine": 36,
+      "endLine": 46,
+      "layout": "code-focus",
+      "title": "",
+      "fragments": 0,
+      "steps": 0,
+      "skip": false,
+      "errors": [],
+      "codeBlocks": [
+        {
+          "block": 1,
+          "language": "sql",
+          "driver": "sqlite",
+          "live": true,
+          "line": 40
+        }
+      ]
+    },
+    {
+      "number": 5,
+      "startLine": 50,
+      "endLine": 68,
+      "layout": "two-column",
+      "title": "Root Cause",
+      "fragments": 0,
+      "steps": 0,
+      "skip": false,
+      "errors": [],
+      "codeBlocks": []
+    },
+    {
+      "number": 6,
+      "startLine": 72,
+      "endLine": 80,
+      "layout": "big-stat",
+      "title": "11 min",
+      "fragments": 0,
+      "steps": 0,
+      "skip": false,
+      "errors": [],
+      "codeBlocks": []
+    },
+    {
+      "number": 7,
+      "startLine": 84,
+      "endLine": 86,
+      "layout": "section",
+      "title": "What Changed",
+      "fragments": 0,
+      "steps": 0,
+      "skip": false,
+      "errors": [],
+      "codeBlocks": []
+    },
+    {
+      "number": 8,
+      "startLine": 90,
+      "endLine": 94,
+      "layout": "default",
+      "title": "Three Fixes",
+      "fragments": 0,
+      "steps": 0,
+      "skip": false,
+      "errors": [],
+      "codeBlocks": []
+    },
+    {
+      "number": 9,
+      "startLine": 98,
+      "endLine": 106,
+      "layout": "quote",
+      "title": "",
+      "fragments": 0,
+      "steps": 0,
+      "skip": false,
+      "errors": [],
+      "codeBlocks": []
+    }
+  ],
+  "errors": []
+}

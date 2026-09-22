@@ -147,7 +147,7 @@ Tap uses a modern CSS custom properties architecture. Themes define CSS variable
 - Use `<!-- pause -->` inline to create reveal points within a slide
 - Lists can auto-fragment with `fragments: true` in local directives (reveals bullets one at a time)
 - Fragments work with all content types (text, code, images)
-- Configure globally in frontmatter or per-slide with local directive block
+- Set per slide with a local directive block; there is no deck-wide frontmatter equivalent
 
 ### 7. **Code Presentation**
 - **Shiki** for syntax highlighting, with its CSS-variables theme: token colors come from `--shiki-*` custom properties each tap theme defines, so code follows the active theme without re-highlighting
@@ -479,7 +479,6 @@ author: Name
 date: 2026-01-23
 aspectRatio: 16:9          # 16:9 (default), 4:3, or 16:10
 transition: fade           # none, fade (default), slide, push, zoom
-fragments: false           # Auto-fragment lists (default: false)
 
 # Theme color customization (optional - override specific colors)
 themeColors:

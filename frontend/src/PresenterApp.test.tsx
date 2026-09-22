@@ -463,4 +463,42 @@ describe('PresenterApp', () => {
 			expect(notesFontSize(container)).toBe('1.5rem');
 		});
 	});
+
+	it('previews the next presented slide and counts only presented slides', async () => {
+		const withSkip: Presentation = {
+			config: { title: 'Test Deck' },
+			slides: ['one', 'two', 'three'].map((word, index) => ({
+				index,
+				layout: 'default',
+				html: `<p>Slide ${word}</p>`,
+				slots: { default: `<p>Slide ${word}</p>` },
+				slotOrder: ['default'],
+				fragmentCount: 0,
+				steps: 0,
+				skip: index === 1
+			}))
+		};
+		// An earlier test's navigation can leave a hash in the URL, which
+		// would open a skipped slide directly.
+		window.history.replaceState(null, '', '/presenter');
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(() =>
+				Promise.resolve({ ok: true, statusText: 'OK', json: () => Promise.resolve(withSkip) } as Response)
+			)
+		);
+
+		const { container } = render(<PresenterApp />);
+
+		await waitFor(() => {
+			expect(container.querySelector('.presenter-next-slide-panel')?.textContent).toContain('Slide three');
+		});
+		expect(container.querySelector('.presenter-slide-counter .total')?.textContent).toBe('2');
+		expect(container.querySelector('.presenter-slide-counter .current')?.textContent).toBe('1');
+
+		act(() => {
+			usePresentationStore.setState({ currentSlideIndex: 1 });
+		});
+		expect(container.querySelector('.presenter-slide-counter .current')?.textContent).toBe('Skipped');
+	});
 });

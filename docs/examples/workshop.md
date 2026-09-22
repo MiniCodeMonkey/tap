@@ -32,7 +32,6 @@ author: Workshop Instructor
 date: 2026-01-24
 aspectRatio: "16:9"
 transition: fade
-fragments: true
 drivers:
   sqlite:
     connections:

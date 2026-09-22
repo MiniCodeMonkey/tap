@@ -1,0 +1,153 @@
+{
+  "slides": [
+    {
+      "number": 1,
+      "startLine": 10,
+      "endLine": 12,
+      "layout": "title",
+      "title": "Getting Started with Tap",
+      "fragments": 0,
+      "steps": 0,
+      "skip": false,
+      "errors": [],
+      "codeBlocks": []
+    },
+    {
+      "number": 2,
+      "startLine": 16,
+      "endLine": 23,
+      "layout": "default",
+      "title": "What is Tap?",
+      "fragments": 0,
+      "steps": 0,
+      "skip": false,
+      "errors": [],
+      "codeBlocks": []
+    },
+    {
+      "number": 3,
+      "startLine": 27,
+      "endLine": 38,
+      "layout": "default",
+      "title": "Slide Basics",
+      "fragments": 0,
+      "steps": 0,
+      "skip": false,
+      "errors": [],
+      "codeBlocks": []
+    },
+    {
+      "number": 4,
+      "startLine": 42,
+      "endLine": 52,
+      "layout": "code-focus",
+      "title": "Code Blocks",
+      "fragments": 0,
+      "steps": 0,
+      "skip": false,
+      "errors": [],
+      "codeBlocks": [
+        {
+          "block": 1,
+          "language": "javascript",
+          "driver": "",
+          "live": false,
+          "line": 46
+        }
+      ]
+    },
+    {
+      "number": 5,
+      "startLine": 56,
+      "endLine": 68,
+      "layout": "default",
+      "title": "Using Fragments",
+      "fragments": 3,
+      "steps": 0,
+      "skip": false,
+      "errors": [],
+      "codeBlocks": []
+    },
+    {
+      "number": 6,
+      "startLine": 72,
+      "endLine": 90,
+      "layout": "two-column",
+      "title": "Two Column Layout",
+      "fragments": 0,
+      "steps": 0,
+      "skip": false,
+      "errors": [],
+      "codeBlocks": []
+    },
+    {
+      "number": 7,
+      "startLine": 94,
+      "endLine": 100,
+      "layout": "quote",
+      "title": "",
+      "fragments": 0,
+      "steps": 0,
+      "skip": false,
+      "errors": [],
+      "codeBlocks": []
+    },
+    {
+      "number": 8,
+      "startLine": 104,
+      "endLine": 112,
+      "layout": "default",
+      "title": "Images",
+      "fragments": 0,
+      "steps": 0,
+      "skip": false,
+      "errors": [],
+      "codeBlocks": [
+        {
+          "block": 1,
+          "language": "markdown",
+          "driver": "",
+          "live": false,
+          "line": 108
+        }
+      ]
+    },
+    {
+      "number": 9,
+      "startLine": 116,
+      "endLine": 122,
+      "layout": "section",
+      "title": "Section Breaks",
+      "fragments": 0,
+      "steps": 0,
+      "skip": false,
+      "errors": [],
+      "codeBlocks": []
+    },
+    {
+      "number": 10,
+      "startLine": 126,
+      "endLine": 137,
+      "layout": "default",
+      "title": "Keyboard Shortcuts",
+      "fragments": 0,
+      "steps": 0,
+      "skip": false,
+      "errors": [],
+      "codeBlocks": []
+    },
+    {
+      "number": 11,
+      "startLine": 141,
+      "endLine": 147,
+      "layout": "title",
+      "title": "Thank You!",
+      "fragments": 0,
+      "steps": 0,
+      "skip": false,
+      "errors": [],
+      "codeBlocks": []
+    }
+  ],
+  "errors": []
+}

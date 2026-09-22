@@ -173,8 +173,10 @@ tap component new LatencyDrop --inline     # components/LatencyDrop.jsx
 | `tap serve [dir]` | Serve static files | `-p, --port` |
 | `tap export pdf [deck]` | Export presentation to PDF | `-o, --output`, `--content` |
 | `tap slide add [deck]` | Add slides interactively | - |
+| `tap slide list [deck]` | List each slide, its lines, layout and errors | `--json` |
 | `tap export images [deck]` | Render a slide to a PNG | `--slide`, `--all`, `--step`, `--fragment`, `-t, --theme`, `-o, --output`, `--width` |
 | `tap component new <Name> [deck]` | Scaffold a deck component | `--inline`, `--ts` |
+| `tap deck schema` | List every frontmatter key, type and default | `--json` |
 | `tap theme list` | List every built-in theme | `--json` |
 | `tap theme show [slug\|deck]` | Show a theme's tokens and style | `--json`, `--prompt` |
 | `tap --version` | Show version | - |
@@ -220,7 +222,6 @@ author: Your Name
 date: "2024-01-15"
 aspectRatio: "16:9"     # 16:9, 4:3, 16:10
 transition: fade        # none, fade, slide, push, zoom
-fragments: true
 themeColors:            # optional: override individual theme colors
   accent: "#ffd447"
 
@@ -265,6 +266,11 @@ notes: |
 
 ## Slide Content
 ```
+
+Add `skip: true` to a slide's directive block to leave it out of the talk
+without deleting it: presenting, slide counts, `tap build` and `tap
+export` leave it out, but it keeps its number and `tap dev` still shows it
+when you open it directly. See `docs/reference/slide-directives.md`.
 
 ### Available Layouts
 

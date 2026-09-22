@@ -9,7 +9,7 @@ export default defineConfig({
   title: siteTitle,
   description: siteDescription,
 
-  srcExclude: ['**/ralph/**'],
+  srcExclude: ['**/ralph/**', '**/superpowers/**'],
 
   head: [
     // Favicon

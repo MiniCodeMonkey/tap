@@ -45,6 +45,13 @@ type TransformedSlide struct {
 	// layouts.Validate, which turns it into a slide warning; it is not
 	// part of the frontend's slide JSON.
 	StepsInvalid bool `json:"-"`
+	// Skip is true for a slide whose skip directive is true. The frontend
+	// passes over it when presenting and leaves it out of slide counts.
+	Skip bool `json:"skip,omitempty"`
+	// SkipInvalid carries parser.SlideDirectives.SkipInvalid through to
+	// layouts.Validate, which turns it into a slide warning, the same way
+	// StepsInvalid does; it is not part of the frontend's slide JSON.
+	SkipInvalid bool `json:"-"`
 }
 
 // WholeSlideComponent is the slide JSON shape for a layout directive that
@@ -153,6 +160,29 @@ func (t *Transformer) Transform(pres *parser.Presentation) *TransformedPresentat
 	return result
 }
 
+// WithoutSkippedSlides returns a copy of presentation without the slides
+// whose skip directive is true. The kept slides' Index values are
+// renumbered from 0, so the copy is a complete deck of its own, the way
+// tap build and tap export pdf render it. The copy shares each slide's
+// maps and slices with presentation. deckNumbers holds the 1-based number
+// each kept slide has in the full deck, in order.
+func WithoutSkippedSlides(presentation *TransformedPresentation) (kept *TransformedPresentation, deckNumbers []int) {
+	kept = &TransformedPresentation{
+		Config: presentation.Config,
+		Slides: make([]TransformedSlide, 0, len(presentation.Slides)),
+	}
+	deckNumbers = make([]int, 0, len(presentation.Slides))
+	for index, slide := range presentation.Slides {
+		if slide.Skip {
+			continue
+		}
+		slide.Index = len(kept.Slides)
+		kept.Slides = append(kept.Slides, slide)
+		deckNumbers = append(deckNumbers, index+1)
+	}
+	return kept, deckNumbers
+}
+
 // transformSlide converts a single parser.Slide to TransformedSlide.
 func (t *Transformer) transformSlide(slide parser.Slide) TransformedSlide {
 	html := t.resolveImagePaths(slide.HTML)
@@ -175,6 +205,8 @@ func (t *Transformer) transformSlide(slide parser.Slide) TransformedSlide {
 		Tag:           slide.Directives.Tag,
 		Badge:         slide.Directives.Badge,
 		StepsInvalid:  slide.Directives.StepsInvalid,
+		Skip:          slide.Directives.Skip,
+		SkipInvalid:   slide.Directives.SkipInvalid,
 	}
 
 	if components.IsComponentPath(slide.Directives.Layout) {

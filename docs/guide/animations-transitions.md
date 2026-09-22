@@ -99,18 +99,9 @@ marker is visible as soon as the slide appears.
 
 ### Automatic List Fragments
 
-Enable automatic fragments for bullet lists by setting `fragments: true`:
-
-#### Globally in Frontmatter
-
-```yaml
----
-title: My Presentation
-fragments: true
----
-```
-
-#### Per-Slide in Directive Block
+Enable automatic fragments for a slide's bullet lists by setting
+`fragments: true` in that slide's directive block. Fragments are set per
+slide; there is no deck-wide frontmatter equivalent.
 
 ```markdown
 <!--
@@ -128,13 +119,12 @@ With `fragments: true`, each list item appears one at a time as you advance.
 
 ### Combining Pause and List Fragments
 
-You can use both techniques in the same presentation:
+You can use both techniques on the same slide:
 
 ```markdown
----
-title: Product Launch
+<!--
 fragments: true
----
+-->
 
 # Why Our Product?
 
@@ -153,24 +143,6 @@ In this example:
 1. The heading appears
 2. Each bullet appears one by one (from `fragments: true`)
 3. The final text appears after another advance (from `<!-- pause -->`)
-
-### Disabling Fragments for a Slide
-
-If you've enabled fragments globally but want a specific slide to show all content at once:
-
-```markdown
-<!--
-fragments: false
--->
-
-# Reference Slide
-
-- Item one
-- Item two
-- Item three
-
-All items appear immediately on this slide.
-```
 
 ## Steps
 
@@ -203,8 +175,7 @@ so on. See [Themes](/guide/themes) for the full list.
 | Global transition | `transition: fade` in frontmatter | All slides |
 | Per-slide transition | `transition: zoom` in directive | Single slide |
 | Manual pause | `<!-- pause -->` | Single slide |
-| Global fragments | `fragments: true` in frontmatter | All slides |
-| Per-slide fragments | `fragments: true` in directive | Single slide |
+| Fragments | `fragments: true` in directive | Single slide |
 | Steps for a component or map | `steps: 4` in directive | Single slide |
 | Load at a fragment | `?fragment=2` in the URL | Single load |
 | Load at a step | `?step=3` in the URL | Single load |

@@ -3,63 +3,21 @@ package recorder
 import (
 	"fmt"
 	"os"
-	"regexp"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/MiniCodeMonkey/tap/internal/parser"
 )
 
-// headingPattern matches one ATX heading line and captures its text.
-var headingPattern = regexp.MustCompile(`^#{1,6}\s+(.+?)\s*#*\s*$`)
-
-// emphasisPattern matches paired bold and code markers around their
-// text. Underscores are left alone on purpose: a heading on these
-// slides is far more likely to hold get_user_by_id or __init__ than
-// _italics_, and mangling an identifier is worse than keeping a stray
-// marker.
-var emphasisPattern = regexp.MustCompile("\\*\\*(.+?)\\*\\*|`(.+?)`")
-
 // SlideTitle names a slide for the chapter list: the text of its first
-// heading, or its number when it has none, which is the case for an
-// image-only or component-only slide. Fenced code is skipped, because a
-// comment inside a code block is not a heading however much it looks
-// like one.
+// heading (see parser.SlideTitle), or its number when it has none, which
+// is the case for an image-only or component-only slide.
 func SlideTitle(content string, index int) string {
-	inFence := false
-
-	for _, line := range strings.Split(content, "\n") {
-		trimmed := strings.TrimSpace(line)
-		if strings.HasPrefix(trimmed, "```") || strings.HasPrefix(trimmed, "~~~") {
-			inFence = !inFence
-			continue
-		}
-		if inFence {
-			continue
-		}
-
-		match := headingPattern.FindStringSubmatch(line)
-		if match == nil {
-			continue
-		}
-		if title := strings.TrimSpace(stripEmphasis(match[1])); title != "" {
-			return title
-		}
+	if title := parser.SlideTitle(content); title != "" {
+		return title
 	}
-
 	return fmt.Sprintf("Slide %d", index+1)
-}
-
-// stripEmphasis removes paired markers and keeps the text they wrapped.
-func stripEmphasis(text string) string {
-	return emphasisPattern.ReplaceAllStringFunc(text, func(match string) string {
-		groups := emphasisPattern.FindStringSubmatch(match)
-		for _, group := range groups[1:] {
-			if group != "" {
-				return group
-			}
-		}
-		return match
-	})
 }
 
 // chapter is one entry in the list.

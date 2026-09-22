@@ -3,14 +3,7 @@
  * Handles all keyboard shortcuts for slide navigation and presentation controls.
  */
 
-import {
-	nextSlide,
-	prevSlide,
-	goToSlide,
-	usePresentationStore,
-	selectTotalSlides,
-	cycleTheme
-} from '$lib/stores/presentation';
+import { nextSlide, prevSlide, goToFirstSlide, goToLastSlide, cycleTheme } from '$lib/stores/presentation';
 import { HELP_KEY } from './shortcuts';
 import { useConnectionStore } from '$lib/stores/websocket';
 
@@ -245,21 +238,18 @@ function handleKeyDown(event: KeyboardEvent): void {
 		return;
 	}
 
-	// Home - go to first slide
+	// Home - go to the first slide a talk shows
 	if (key === 'Home') {
 		event.preventDefault();
-		goToSlide(0);
+		goToFirstSlide();
 		currentOptions.onNavigate?.();
 		return;
 	}
 
-	// End - go to last slide
+	// End - go to the last slide a talk shows
 	if (key === 'End') {
 		event.preventDefault();
-		const total = selectTotalSlides(usePresentationStore.getState());
-		if (total > 0) {
-			goToSlide(total - 1);
-		}
+		goToLastSlide();
 		currentOptions.onNavigate?.();
 		return;
 	}

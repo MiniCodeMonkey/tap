@@ -1,0 +1,97 @@
+{
+  "slides": [
+    {
+      "number": 1,
+      "startLine": 10,
+      "endLine": 14,
+      "layout": "title",
+      "title": "Postmark CLI",
+      "fragments": 0,
+      "steps": 0,
+      "skip": false,
+      "errors": [],
+      "codeBlocks": []
+    },
+    {
+      "number": 2,
+      "startLine": 18,
+      "endLine": 30,
+      "layout": "split-media",
+      "title": "Install in One Line",
+      "fragments": 0,
+      "steps": 0,
+      "skip": false,
+      "errors": [],
+      "codeBlocks": [
+        {
+          "block": 1,
+          "language": "bash",
+          "driver": "",
+          "live": false,
+          "line": 28
+        }
+      ]
+    },
+    {
+      "number": 3,
+      "startLine": 34,
+      "endLine": 51,
+      "layout": "three-column",
+      "title": "What's Inside",
+      "fragments": 0,
+      "steps": 0,
+      "skip": false,
+      "errors": [],
+      "codeBlocks": []
+    },
+    {
+      "number": 4,
+      "startLine": 55,
+      "endLine": 63,
+      "layout": "big-stat",
+      "title": "40ms",
+      "fragments": 0,
+      "steps": 0,
+      "skip": false,
+      "errors": [],
+      "codeBlocks": []
+    },
+    {
+      "number": 5,
+      "startLine": 67,
+      "endLine": 80,
+      "layout": "sidebar",
+      "title": "Built for CI",
+      "fragments": 0,
+      "steps": 0,
+      "skip": false,
+      "errors": [],
+      "codeBlocks": []
+    },
+    {
+      "number": 6,
+      "startLine": 84,
+      "endLine": 86,
+      "layout": "section",
+      "title": "Try It Today",
+      "fragments": 0,
+      "steps": 0,
+      "skip": false,
+      "errors": [],
+      "codeBlocks": []
+    },
+    {
+      "number": 7,
+      "startLine": 90,
+      "endLine": 94,
+      "layout": "default",
+      "title": "Get Started",
+      "fragments": 0,
+      "steps": 0,
+      "skip": false,
+      "errors": [],
+      "codeBlocks": []
+    }
+  ],
+  "errors": []
+}
