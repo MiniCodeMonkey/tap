@@ -8,8 +8,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/MiniCodeMonkey/tap/internal/config"
 	"github.com/MiniCodeMonkey/tap/internal/themes"
 	"github.com/MiniCodeMonkey/tap/internal/tui"
+	"github.com/MiniCodeMonkey/tap/internal/usersettings"
 	"github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"
 )
@@ -40,6 +42,9 @@ falling back to defaults for anything not given, and only the written
 path is printed to standard output. An existing file at that path is left
 alone unless --force is also given.
 
+The new deck is approved to run live code with the drivers its frontmatter
+declares.
+
 Examples:
   tap new                          # Interactive mode
   tap new --theme terminal         # Create with the Terminal theme
@@ -57,7 +62,7 @@ Examples:
 		}
 
 		if newYes || newJSON || !stdinIsTerminal() {
-			return runNewNonInteractive()
+			return runNewNonInteractive(cmd)
 		}
 
 		result, err := tui.RunNewWizard(newTheme, newOutput)
@@ -67,6 +72,7 @@ Examples:
 		if result.Aborted {
 			return errCancelled
 		}
+		recordNewDeckApproval(cmd, result.Filename)
 		return nil
 	},
 }
@@ -96,7 +102,7 @@ var stdinIsTerminal = func() bool {
 // standard output. It is used both for --yes and for the case where
 // standard input is not a terminal, so scripts, CI and LLM agents that
 // invoke tap new never hang waiting on the TUI.
-func runNewNonInteractive() error {
+func runNewNonInteractive(cmd *cobra.Command) error {
 	title := newTitle
 	if title == "" {
 		title = tui.DefaultTitle
@@ -129,11 +135,45 @@ func runNewNonInteractive() error {
 		return internalError(codeInternal, fmt.Errorf("failed to write %s: %w", output, err))
 	}
 
+	recordNewDeckApproval(cmd, output)
+
 	if newJSON {
-		return printJSONOK(os.Stdout, struct {
+		return printJSONOK(cmd.OutOrStdout(), struct {
 			Deck string `json:"deck"`
 		}{Deck: output})
 	}
-	fmt.Println(output)
+	fmt.Fprintln(cmd.OutOrStdout(), output)
 	return nil
+}
+
+// approveNewDeck approves the deck tap new just wrote, with the drivers
+// its frontmatter declares, so the person who made it is not asked about
+// it.
+func approveNewDeck(deck string, now time.Time) error {
+	key, err := usersettings.ResolveDeck(deck)
+	if err != nil {
+		return err
+	}
+	cfg, err := config.Load(key.String())
+	if err != nil {
+		return err
+	}
+	settingsPath, err := usersettings.Path()
+	if err != nil {
+		return err
+	}
+	settings, err := usersettings.Load(settingsPath)
+	if err != nil {
+		return err
+	}
+	settings.Approve(key, cfg.DeclaredDrivers(), now)
+	return usersettings.Save(settingsPath, settings)
+}
+
+// recordNewDeckApproval approves a new deck, and only warns when that
+// fails: the deck is written either way.
+func recordNewDeckApproval(cmd *cobra.Command, deck string) {
+	if err := approveNewDeck(deck, time.Now()); err != nil {
+		fmt.Fprintf(cmd.ErrOrStderr(), "warning: could not record the live code approval for %s: %v\n", deck, err)
+	}
 }
