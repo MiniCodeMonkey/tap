@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/MiniCodeMonkey/tap/internal/config"
+	"github.com/MiniCodeMonkey/tap/internal/driver"
 	"github.com/MiniCodeMonkey/tap/internal/transformer"
 )
 
@@ -909,5 +910,61 @@ func TestListensOnLoopbackOnly(t *testing.T) {
 	}
 	if NewWithHost(0, "0.0.0.0").ListensOnLoopbackOnly() {
 		t.Error("0.0.0.0 is not loopback only")
+	}
+}
+
+func getPresentationJSON(t *testing.T, s *Server) map[string]json.RawMessage {
+	t.Helper()
+	s.SetupRoutes()
+	request := httptest.NewRequest(http.MethodGet, "/api/presentation", nil)
+	request.Host = "localhost"
+	recorder := httptest.NewRecorder()
+	s.mux.ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d: %s", recorder.Code, recorder.Body.String())
+	}
+	var body map[string]json.RawMessage
+	if err := json.Unmarshal(recorder.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	return body
+}
+
+func TestPresentationListsTheDriversThisRunAllows(t *testing.T) {
+	s := NewWithHost(0, "127.0.0.1")
+	s.SetRegistry(driver.NewRegistry())
+	s.SetPresentation(&transformer.TransformedPresentation{
+		Config: config.Config{Drivers: map[string]config.DriverConfig{"shell": {}, "sqlite": {}}},
+		Slides: []transformer.TransformedSlide{{Index: 0}},
+	})
+	s.SetLiveCodePolicy(LiveCodePolicy{Drivers: []string{"sqlite", "mysql"}})
+
+	body := getPresentationJSON(t, s)
+	if string(body["liveCode"]) != `{"drivers":["sqlite"]}` {
+		t.Errorf("liveCode = %s, want only the declared, approved sqlite", body["liveCode"])
+	}
+	if _, found := body["slides"]; !found {
+		t.Error("the slides are missing")
+	}
+}
+
+func TestPresentationListsNoDriverForAnUnapprovedDeck(t *testing.T) {
+	s := NewWithHost(0, "127.0.0.1")
+	s.SetRegistry(driver.NewRegistry())
+	s.SetPresentation(&transformer.TransformedPresentation{
+		Config: config.Config{Drivers: map[string]config.DriverConfig{"shell": {}}},
+	})
+	body := getPresentationJSON(t, s)
+	if string(body["liveCode"]) != `{"drivers":[]}` {
+		t.Errorf("liveCode = %s, want an empty list", body["liveCode"])
+	}
+}
+
+func TestPresentationHasNoLiveCodeWithoutARegistry(t *testing.T) {
+	s := NewWithHost(0, "127.0.0.1")
+	s.SetPresentation(&transformer.TransformedPresentation{})
+	body := getPresentationJSON(t, s)
+	if _, found := body["liveCode"]; found {
+		t.Errorf("liveCode = %s, want no key on a server that cannot run code", body["liveCode"])
 	}
 }

@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/MiniCodeMonkey/tap/embedded"
+	"github.com/MiniCodeMonkey/tap/internal/transformer"
 )
 
 // SetupRoutes configures all HTTP routes on the server.
@@ -188,6 +189,35 @@ func (s *Server) presenterAuthorized(r *http.Request) bool {
 	return subtle.ConstantTimeCompare([]byte(key), []byte(password)) == 1
 }
 
+// presentationResponse is the GET /api/presentation body: the deck, and
+// which of its drivers this run lets run when the server can run code.
+type presentationResponse struct {
+	*transformer.TransformedPresentation
+	LiveCode *liveCodeStatus `json:"liveCode,omitempty"`
+}
+
+// liveCodeStatus tells the page which live code blocks can run. A block
+// whose driver is not in Drivers shows "Not approved".
+type liveCodeStatus struct {
+	Drivers []string `json:"drivers"`
+}
+
+// liveCodeStatusFor returns the live code status for pres, or nil when the
+// server has no driver registry and so runs no code at all.
+func (s *Server) liveCodeStatusFor(pres *transformer.TransformedPresentation) *liveCodeStatus {
+	if s.GetRegistry() == nil {
+		return nil
+	}
+	policy := s.LiveCodePolicy()
+	allowed := []string{}
+	for _, name := range pres.Config.DeclaredDrivers() {
+		if policy.Allows(name) {
+			allowed = append(allowed, name)
+		}
+	}
+	return &liveCodeStatus{Drivers: allowed}
+}
+
 // handleAPIPresentation returns the presentation data as JSON.
 func (s *Server) handleAPIPresentation(w http.ResponseWriter, r *http.Request) {
 	pres := s.GetPresentation()
@@ -204,7 +234,10 @@ func (s *Server) handleAPIPresentation(w http.ResponseWriter, r *http.Request) {
 	// Disable caching so changes are always picked up
 	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
 	w.WriteHeader(http.StatusOK)
-	if err := json.NewEncoder(w).Encode(pres); err != nil {
+	if err := json.NewEncoder(w).Encode(presentationResponse{
+		TransformedPresentation: pres,
+		LiveCode:                s.liveCodeStatusFor(pres),
+	}); err != nil {
 		// If encoding fails, we've already started writing the response
 		// so we can't change the status code. Just log internally.
 		fmt.Printf("Error encoding presentation JSON: %v\n", err)
