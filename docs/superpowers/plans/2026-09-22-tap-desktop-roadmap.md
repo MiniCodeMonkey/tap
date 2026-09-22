@@ -44,7 +44,7 @@ Each plan is one branch from an up-to-date `main`, in its own worktree under `/U
 
 ## Decisions for the desktop app (the user, 2026-09-22)
 
-- **Mockups:** the "Tap Desktop Mockups" HTML artifact, https://claude.ai/artifact/RZrigSvqULJKQCiBVxVb48 (17 screens). Desktop plans read it for layout and visual detail. Where the mockups and the design spec differ, the spec wins.
+- **Mockups:** the "Tap Desktop Mockups" HTML artifact, https://claude.ai/artifact/RZrigSvqULJKQCiBVxVb48. It still shows the older floating slide panel; the decided behavior is peek on hover and click to pin. Desktop plans read it for layout and visual detail. Where the mockups and the design spec differ, the spec wins.
 - **CI:** a GitHub Actions macOS job builds the app, runs the XCTest unit tests, and runs the check that every feature scenario has a test with its name. XCUITests run locally only.
 
 ## Contracts between plans
