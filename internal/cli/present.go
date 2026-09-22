@@ -7,7 +7,6 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/MiniCodeMonkey/tap/internal/recorder"
-	"github.com/MiniCodeMonkey/tap/internal/tui"
 	"github.com/MiniCodeMonkey/tap/internal/usersettings"
 )
 
@@ -17,7 +16,7 @@ var (
 )
 
 var presentCmd = &cobra.Command{
-	Use:   "present [file]",
+	Use:   "present [deck]",
 	Short: "Give the talk: serve the deck, open it, and record the run",
 	Long: `Serve the deck for a talk or a practice run of it.
 
@@ -28,25 +27,14 @@ recorded from launch until you quit, following the projector across HDMI
 swaps.
 
 Examples:
+  tap present                  # The deck in this folder
   tap present slides.md
   tap present slides.md --no-record   # skip recording for this run`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		var file string
-		if len(args) == 0 {
-			result, err := tui.RunFilePicker()
-			if err != nil {
-				return err
-			}
-			if result.Aborted {
-				if result.File == "" {
-					cmd.Print(tui.RenderNoFilesError())
-				}
-				return nil
-			}
-			file = result.File
-		} else {
-			file = args[0]
+		file, err := resolveDeck(firstArg(args))
+		if err != nil {
+			return err
 		}
 
 		settingsPath, err := usersettings.Path()

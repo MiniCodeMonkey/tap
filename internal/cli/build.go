@@ -19,11 +19,12 @@ import (
 // Flags for the build command
 var (
 	buildOutput string
+	buildJSON   bool
 )
 
 // buildCmd represents the build command
 var buildCmd = &cobra.Command{
-	Use:   "build <file>",
+	Use:   "build [deck]",
 	Short: "Build presentation to static HTML",
 	Long: `Build a presentation to static HTML files for deployment.
 
@@ -39,11 +40,12 @@ The generated files include:
 Note: Live code execution is not available in static builds.
 
 Examples:
+  tap build                             # The deck in this folder, to dist/
   tap build slides.md                   # Build to dist/ directory
   tap build slides.md --output public   # Build to custom directory
   tap build slides.md -o ./build        # Short form`,
-	Args: cobra.ExactArgs(1),
-	Run:  runBuild,
+	Args: cobra.MaximumNArgs(1),
+	RunE: runBuild,
 }
 
 func init() {
@@ -52,23 +54,20 @@ func init() {
 
 	// Command-specific flags
 	buildCmd.Flags().StringVarP(&buildOutput, "output", "o", "dist", "output directory for static files")
+	buildCmd.Flags().BoolVar(&buildJSON, "json", false, "print the result as JSON")
 }
 
 // runBuild executes the build command logic
-func runBuild(cmd *cobra.Command, args []string) {
-	file := args[0]
-
-	// Validate that the file exists
-	if _, err := os.Stat(file); os.IsNotExist(err) {
-		Errorln("Error: file not found:", file)
-		os.Exit(1)
+func runBuild(cmd *cobra.Command, args []string) error {
+	file, err := resolveDeck(firstArg(args))
+	if err != nil {
+		return err
 	}
 
 	// Get absolute path for base directory resolution
 	absPath, err := filepath.Abs(file)
 	if err != nil {
-		Errorln("Error: failed to resolve file path:", err)
-		os.Exit(1)
+		return internalError(codeInternal, fmt.Errorf("failed to resolve file path: %w", err))
 	}
 	baseDir := filepath.Dir(absPath)
 
@@ -81,15 +80,13 @@ func runBuild(cmd *cobra.Command, args []string) {
 	cfg, err := config.Load(file)
 	if err != nil {
 		spinner.stop()
-		Errorln("Error: failed to load configuration:", err)
-		os.Exit(1)
+		return userError(codeInvalidDeck, fmt.Errorf("failed to load configuration: %w", err))
 	}
 
 	// Validate configuration
 	if err := cfg.Validate(); err != nil {
 		spinner.stop()
-		Errorln("Error: invalid configuration:", err)
-		os.Exit(1)
+		return userError(codeInvalidDeck, fmt.Errorf("invalid configuration: %w", err))
 	}
 
 	// Step 2: Read and parse the presentation file
@@ -97,16 +94,14 @@ func runBuild(cmd *cobra.Command, args []string) {
 	content, err := os.ReadFile(file)
 	if err != nil {
 		spinner.stop()
-		Errorln("Error: failed to read file:", err)
-		os.Exit(1)
+		return userError(codeDeckNotFound, fmt.Errorf("failed to read file: %w", err))
 	}
 
 	p := parser.New()
 	pres, err := p.Parse(content)
 	if err != nil {
 		spinner.stop()
-		Errorln("Error: failed to parse presentation:", file, err)
-		os.Exit(1)
+		return userError(codeInvalidDeck, fmt.Errorf("failed to parse presentation: %s: %w", file, err))
 	}
 
 	// Resolve and bundle every component the presentation's slides use.
@@ -120,7 +115,7 @@ func runBuild(cmd *cobra.Command, args []string) {
 	if len(componentBuildErrs) > 0 {
 		spinner.stop()
 		printComponentErrorsToStderr(componentBuildErrs)
-		os.Exit(1)
+		return reportedError(codeComponentBuild, componentErrorsError(componentBuildErrs))
 	}
 
 	// Validate layouts and slots before building. This transforms pres to
@@ -136,7 +131,7 @@ func runBuild(cmd *cobra.Command, args []string) {
 		for _, warning := range warnings {
 			fmt.Fprintf(os.Stderr, "error: %s: slide %d: %s\n", file, warning.SlideNumber, warning.Message)
 		}
-		os.Exit(1)
+		return reportedError(codeInvalidDeck, fmt.Errorf("%d layout error(s)", len(warnings)))
 	}
 
 	// Step 3: Build static files
@@ -148,8 +143,7 @@ func runBuild(cmd *cobra.Command, args []string) {
 	result, err := b.Build(cfg, pres)
 	if err != nil {
 		spinner.stop()
-		Errorln("Error: build failed:", err)
-		os.Exit(1)
+		return internalError(codeInternal, fmt.Errorf("build failed: %w", err))
 	}
 
 	// Stop spinner and show results
@@ -157,7 +151,14 @@ func runBuild(cmd *cobra.Command, args []string) {
 
 	printComponentWarningsToStderr(componentWarnings(resolvedComponents))
 
-	// Print success message and build stats
+	if buildJSON {
+		return printJSONOK(cmd.OutOrStdout(), struct {
+			Output string `json:"output"`
+			Files  int    `json:"files"`
+			Bytes  int64  `json:"bytes"`
+		}{Output: result.OutputDir, Files: result.FileCount, Bytes: result.TotalSize})
+	}
+
 	Successln("\nBuild complete!")
 	fmt.Println()
 	fmt.Printf("  Output:     %s\n", result.OutputDir)
@@ -165,9 +166,8 @@ func runBuild(cmd *cobra.Command, args []string) {
 	fmt.Printf("  Total size: %s\n", formatSize(result.TotalSize))
 	fmt.Printf("  Build time: %s\n", formatDuration(result.BuildTime))
 	fmt.Println()
-
-	// Show next steps
 	Muted("Run 'tap serve %s' to preview the build.\n", result.OutputDir)
+	return nil
 }
 
 // spinner provides a simple terminal spinner for progress display

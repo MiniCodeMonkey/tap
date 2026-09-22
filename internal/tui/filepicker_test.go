@@ -201,20 +201,6 @@ func TestFilePickerModel_View(t *testing.T) {
 	}
 }
 
-func TestRenderNoFilesError(t *testing.T) {
-	output := RenderNoFilesError()
-
-	if !strings.Contains(output, "No markdown files found") {
-		t.Error("expected error message to contain 'No markdown files found'")
-	}
-	if !strings.Contains(output, "tap new") {
-		t.Error("expected error message to suggest 'tap new'")
-	}
-	if !strings.Contains(output, "tap dev") {
-		t.Error("expected error message to suggest 'tap dev'")
-	}
-}
-
 func TestFindMarkdownFiles_IgnoresDirectories(t *testing.T) {
 	// Create temp directory
 	tmpDir, err := os.MkdirTemp("", "filepicker-test-*")

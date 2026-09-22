@@ -3,7 +3,6 @@ package tui
 
 import (
 	"os"
-	"path/filepath"
 	"sort"
 	"strings"
 
@@ -205,50 +204,4 @@ func (m FilePickerModel) GetResult() FilePickerResult {
 		File:    m.selected,
 		Aborted: m.quitting || m.selected == "",
 	}
-}
-
-// RunFilePicker runs the file picker and returns the selected file.
-// Returns empty result if no files found or user cancelled.
-func RunFilePicker() (FilePickerResult, error) {
-	model := NewFilePickerModel()
-
-	if !model.HasFiles() {
-		return FilePickerResult{Aborted: true}, nil
-	}
-
-	p := tea.NewProgram(model)
-	finalModel, err := p.Run()
-	if err != nil {
-		return FilePickerResult{}, err
-	}
-
-	m, ok := finalModel.(FilePickerModel)
-	if !ok {
-		return FilePickerResult{Aborted: true}, nil
-	}
-
-	return m.GetResult(), nil
-}
-
-// RenderNoFilesError returns a formatted error message when no markdown files are found.
-func RenderNoFilesError() string {
-	var b strings.Builder
-
-	b.WriteString("\n")
-	b.WriteString(RenderError("No markdown files found"))
-	b.WriteString("\n\n")
-
-	b.WriteString(RenderMuted("  To get started:\n\n"))
-	b.WriteString("  1. Create a new presentation:\n")
-	b.WriteString(RenderHighlight("     tap new"))
-	b.WriteString("\n\n")
-	b.WriteString("  2. Or specify a file directly:\n")
-	b.WriteString(RenderHighlight("     tap dev slides.md"))
-	b.WriteString("\n\n")
-
-	cwd, _ := filepath.Abs(".")
-	b.WriteString(RenderMuted("  Current directory: " + cwd))
-	b.WriteString("\n\n")
-
-	return b.String()
 }
