@@ -25,6 +25,9 @@ var removedFlags = []string{"out", "deck", "verbose"}
 // expectedCommands is every visible command. A part of tap that adds a
 // command adds it here.
 var expectedCommands = []string{
+	"tap approval",
+	"tap approval list",
+	"tap approval revoke",
 	"tap build",
 	"tap component",
 	"tap component new",
