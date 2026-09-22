@@ -6,6 +6,8 @@ import "github.com/spf13/cobra"
 var exportCmd = &cobra.Command{
 	Use:   "export",
 	Short: "Export a deck to a PDF or to images",
+	Args:  cobra.ArbitraryArgs,
+	RunE:  runUnknownGroupSubcommand,
 }
 
 func init() {

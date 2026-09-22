@@ -29,6 +29,8 @@ var (
 var componentCmd = &cobra.Command{
 	Use:   "component",
 	Short: "Work with a deck's React components",
+	Args:  cobra.ArbitraryArgs,
+	RunE:  runUnknownGroupSubcommand,
 }
 
 // componentNewCmd scaffolds a component from a template.

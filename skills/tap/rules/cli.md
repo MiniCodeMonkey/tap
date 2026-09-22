@@ -57,9 +57,11 @@ tap dev [deck]
 | `--headless` | | Run without the TUI, for testing/automation |
 
 The server listens on this machine only, unless `--lan` opens it to the
-local network. With `--lan`, the terminal shows a `Network:` presenter URL
-and a QR code for it; `--tunnel` works without `--lan` and shows its own
-QR code instead. `/qr` needs `--lan`; without it the endpoint answers 404.
+local network. With `--lan`, any device on the network can open the deck
+and run its live code blocks. The terminal then shows a `Network:`
+presenter URL and a QR code for it; `--tunnel` works without `--lan` and
+shows its own QR code instead. `/qr` needs `--lan`; without it the
+endpoint answers 404.
 
 Examples:
 ```bash
@@ -84,6 +86,9 @@ tap present [deck]
 | `--port <number>` | `-p` | Port for the server (default: `3000`) |
 | `--lan` | | Listen on the local network too, so a phone on the same network can open the presenter view. Without it, only this machine can connect |
 | `--no-record` | | Do not record this run |
+
+With `--lan`, any device on the network can open the deck and run its
+live code blocks.
 
 Examples:
 ```bash

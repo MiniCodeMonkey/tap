@@ -54,9 +54,9 @@ that starts on a timer or runs longer than the readiness waits.
 
 Exits with status 1 and a one-line message on a missing deck, an
 out-of-range slide, step or fragment, an unknown theme, an out-of-range
---wait, a browser that cannot start, or a rendered slide that shows a
-slide or component error card. On success, prints the path of each file
-written, one per line, and nothing else.
+--wait, or a rendered slide that shows a slide or component error card.
+Exits with status 2 when a browser cannot start. On success, prints the
+path of each file written, one per line, and nothing else.
 
 Examples:
   tap export images --slide 12                       # The deck in this folder, slide 12
@@ -249,7 +249,7 @@ func runExportImages(cmd *cobra.Command, args []string) error {
 		if ctx.Err() != nil {
 			return errInterrupted
 		}
-		return err
+		return userError(codeBrokenSlides, err)
 	}
 
 	return printWrittenImages(cmd, []string{outputPath})

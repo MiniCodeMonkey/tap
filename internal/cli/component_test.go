@@ -90,7 +90,7 @@ func TestScaffoldComponentReturnsFilesAndSnippet(t *testing.T) {
 	}
 }
 
-func TestAddComponentWholeSlideJSX(t *testing.T) {
+func TestComponentNewWholeSlideJSX(t *testing.T) {
 	dir := t.TempDir()
 	resetComponentFlags()
 
@@ -115,7 +115,7 @@ func TestAddComponentWholeSlideJSX(t *testing.T) {
 	}
 }
 
-func TestAddComponentWholeSlideTSX(t *testing.T) {
+func TestComponentNewWholeSlideTSX(t *testing.T) {
 	dir := t.TempDir()
 	resetComponentFlags()
 	componentTS = true
@@ -147,7 +147,7 @@ func TestAddComponentWholeSlideTSX(t *testing.T) {
 	}
 }
 
-func TestAddComponentInlineJSX(t *testing.T) {
+func TestComponentNewInlineJSX(t *testing.T) {
 	dir := t.TempDir()
 	resetComponentFlags()
 	componentInline = true
@@ -162,7 +162,7 @@ func TestAddComponentInlineJSX(t *testing.T) {
 	assertBuildsCleanly(t, componentPath, dir)
 }
 
-func TestAddComponentInlineTSX(t *testing.T) {
+func TestComponentNewInlineTSX(t *testing.T) {
 	dir := t.TempDir()
 	resetComponentFlags()
 	componentInline = true
@@ -187,7 +187,7 @@ func TestAddComponentInlineTSX(t *testing.T) {
 	}
 }
 
-func TestAddComponentInvalidName(t *testing.T) {
+func TestComponentNewInvalidName(t *testing.T) {
 	dir := t.TempDir()
 	resetComponentFlags()
 
@@ -198,7 +198,7 @@ func TestAddComponentInvalidName(t *testing.T) {
 	})
 }
 
-func TestAddComponentRefusesOverwrite(t *testing.T) {
+func TestComponentNewRefusesOverwrite(t *testing.T) {
 	dir := t.TempDir()
 	resetComponentFlags()
 
@@ -216,7 +216,7 @@ func TestAddComponentRefusesOverwrite(t *testing.T) {
 	})
 }
 
-func TestAddComponentLeavesExistingTapEnv(t *testing.T) {
+func TestComponentNewLeavesExistingTapEnv(t *testing.T) {
 	dir := t.TempDir()
 	resetComponentFlags()
 	componentTS = true

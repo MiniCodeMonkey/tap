@@ -93,7 +93,7 @@ func RunFilePickerWith(files []string) (FilePickerResult, error) {
 		return FilePickerResult{Aborted: true}, nil
 	}
 
-	finalModel, err := tea.NewProgram(model).Run()
+	finalModel, err := tea.NewProgram(model, tea.WithOutput(os.Stderr)).Run()
 	if err != nil {
 		return FilePickerResult{}, err
 	}

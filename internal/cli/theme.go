@@ -31,6 +31,8 @@ var themeCmd = &cobra.Command{
 	Long: `Give people and LLMs command-line access to each built-in theme's
 tokens and illustration style, so an image model can be prompted for
 illustrations that fit a theme.`,
+	Args: cobra.ArbitraryArgs,
+	RunE: runUnknownGroupSubcommand,
 }
 
 // themeListCmd lists every built-in theme.

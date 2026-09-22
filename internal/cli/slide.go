@@ -12,6 +12,8 @@ import (
 var slideCmd = &cobra.Command{
 	Use:   "slide",
 	Short: "Work with the slides in a deck",
+	Args:  cobra.ArbitraryArgs,
+	RunE:  runUnknownGroupSubcommand,
 }
 
 // slideAddCmd appends a slide through the interactive wizard.

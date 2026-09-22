@@ -120,10 +120,11 @@ tap dev [deck]
 | `--headless` | | Run without the terminal UI, for testing/automation |
 
 The server listens on this machine only, unless `--lan` opens it to the
-local network. With `--lan`, the terminal shows a `Network:` presenter URL
-and a QR code for it. `--tunnel` works without `--lan` and shows its own
-QR code instead. `/qr` needs `--lan`: without it, its network URLs would
-not work, and the endpoint answers 404.
+local network. With `--lan`, any device on the network can open the deck
+and run its live code blocks. The terminal then shows a `Network:`
+presenter URL and a QR code for it. `--tunnel` works without `--lan` and
+shows its own QR code instead. `/qr` needs `--lan`: without it, its
+network URLs would not work, and the endpoint answers 404.
 
 #### Sharing a deck with `--tunnel`
 
@@ -250,7 +251,8 @@ tap present [deck]
 | `--no-record` | | Do not record this run |
 
 The server listens on this machine only, unless `--lan` opens it to the
-local network, the same as `tap dev`.
+local network, the same as `tap dev`. With `--lan`, any device on the
+network can open the deck and run its live code blocks.
 
 ### Examples
 

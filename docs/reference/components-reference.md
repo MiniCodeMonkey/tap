@@ -418,7 +418,7 @@ Tap does **not** stop:
   `requestAnimationFrame`, a state machine, a canvas loop
 
 So a fade that Motion drives will still fade in a PDF unless you set
-`transition={{ duration: printMode ? 0 : 0.4 }}` yourself, and a timer will
+<code v-pre>transition={{ duration: printMode ? 0 : 0.4 }}</code> yourself, and a timer will
 still tick unless you gate it. Treat the enforcement as a safety net for
 the transform cases, not as a reason to skip the check.
 

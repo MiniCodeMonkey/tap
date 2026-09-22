@@ -687,7 +687,7 @@ component root, which stops CSS keyframes and CSS transitions.
 It does **not** stop Motion animations of `opacity`, `color`, or
 `backgroundColor`, and it cannot stop your own timers. A Motion fade still
 fades in a PDF unless you write
-`transition={{ duration: printMode ? 0 : 0.4 }}` yourself.
+<code v-pre>transition={{ duration: printMode ? 0 : 0.4 }}</code> yourself.
 
 Because CSS animations are switched off rather than fast-forwarded, an
 element that only reaches its final look through
@@ -708,7 +708,7 @@ slide's total, and `active: false`.
 
 Two habits keep that honest:
 
-- Give Motion `transition={{ duration: printMode ? 0 : 0.3 }}` and
+- Give Motion <code v-pre>transition={{ duration: printMode ? 0 : 0.3 }}</code> and
   `initial={printMode ? false : {...}}`.
 - Never start a timer or an animation on mount without checking
   `useActive()` or `usePrintMode()` first.
