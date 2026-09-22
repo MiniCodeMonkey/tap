@@ -203,6 +203,25 @@ Add a new slide interactively. It needs a terminal.
 tap slide add [deck]
 ```
 
+## tap slide list
+
+List every slide of a deck: its number, lines, layout, title, step and
+fragment counts, whether it is skipped, its errors, and its code blocks.
+
+```bash
+tap slide list [deck] [--json]
+```
+
+Example:
+```bash
+tap slide list slides.md
+```
+
+`--json`:
+```json
+{"ok": true, "slides": [{"number": 4, "startLine": 36, "endLine": 46, "layout": "code-focus", "title": "", "fragments": 0, "steps": 0, "skip": false, "errors": [], "codeBlocks": [{"block": 1, "language": "sql", "driver": "sqlite", "live": true, "line": 40}]}], "errors": []}
+```
+
 ## tap component new
 
 Scaffold a deck-supplied React component. See
@@ -215,6 +234,26 @@ tap component new <Name> [deck] [--inline] [--ts] [--json]
 `--json`:
 ```json
 {"ok": true, "files": ["slides/RollingDeploy.jsx"], "snippet": "::component RollingDeploy\n"}
+```
+
+## tap deck schema
+
+List every frontmatter key tap understands, with its type, default,
+allowed values and description. Nested keys use dots; `<name>` stands for
+a name the deck picks, such as a driver's.
+
+```bash
+tap deck schema [--json]
+```
+
+Example:
+```bash
+tap deck schema --json | head -40
+```
+
+`--json`:
+```json
+{"ok": true, "keys": [{"name": "theme", "type": "string", "default": "base", "values": ["base", "terminal", "..."], "description": "The built-in theme. An unknown name falls back to base with a warning."}]}
 ```
 
 ## tap theme
@@ -266,5 +305,7 @@ standard output.
 | `tap export pdf [deck]` | Export to PDF |
 | `tap export images [deck]` | Render a slide to a PNG (exit 1 if broken) |
 | `tap slide add [deck]` | Add a slide interactively |
+| `tap slide list [deck]` | List each slide, its lines, layout and errors |
 | `tap component new <Name> [deck]` | Scaffold a deck component |
+| `tap deck schema` | List every frontmatter key, type and default |
 | `tap theme list` / `tap theme show` | Inspect a theme's tokens and style |

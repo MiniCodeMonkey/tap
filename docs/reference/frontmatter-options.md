@@ -10,6 +10,8 @@ Complete reference for all frontmatter configuration options in Tap presentation
 
 Frontmatter is YAML configuration at the start of your presentation file, enclosed in triple dashes (`---`). These settings apply globally to your entire presentation unless overridden by slide directives.
 
+`tap deck schema` lists every key on this page with its type, default and allowed values, and `tap deck schema --json` prints them for editors and tools.
+
 ```yaml
 ---
 title: My Presentation

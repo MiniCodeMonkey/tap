@@ -565,6 +565,35 @@ component you cannot edit). See
 
 ---
 
+### skip
+
+Leaves the slide out of the talk without deleting it.
+
+| Property | Value |
+|----------|-------|
+| Type | `boolean` |
+| Default | `false` |
+
+```markdown
+<!-- skip: true -->
+
+# A slide for the long version of this talk
+```
+
+A skipped slide is left out of presenting: the arrow keys pass over it in
+the audience view and the presenter view, and slide numbers, the progress
+bar and the presenter's counter leave it out. `tap build` and
+`tap export pdf` leave it out of their output, and `tap export images --all`
+writes no image for it.
+
+It keeps its place and its number in the deck, so `#4` in the URL and
+`tap slide list` still count it. In `tap dev`, opening it directly (with the
+URL, or from the overview) shows it with a "Skipped" marker, so you can
+still write and check it. `tap export images --slide 4` renders it too,
+because you asked for it by number.
+
+---
+
 ## Combining Directives
 
 Use multiple directives together in a single block:
@@ -611,6 +640,7 @@ notes: |
 | `scroll` | boolean | `false` | Scroll reveal for long content |
 | `scroll-speed` | integer | `2000` | Scroll reveal duration, in milliseconds |
 | `steps` | integer | Auto-detected | Clicker presses this slide consumes |
+| `skip` | boolean | `false` | Leave the slide out of presenting and exports |
 
 ## Directive vs. Frontmatter
 
