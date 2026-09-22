@@ -96,6 +96,21 @@ func TestPlaceGeneratedImageWritesADollarSignAsTyped(t *testing.T) {
 	}
 }
 
+func TestPlaceGeneratedImageOldFileAlreadyMissingIsNotAnError(t *testing.T) {
+	deckDir := t.TempDir()
+	deck := writeFile(t, filepath.Join(deckDir, "talk.md"),
+		"# One\n\n<!-- ai-prompt: a blue whale -->\n![](images/generated-old00000.png)\n")
+
+	replacing := AIImage{Prompt: "a blue whale", ImagePath: "images/generated-old00000.png"}
+	placed, err := PlaceGeneratedImage(Placement{DeckPath: deck, Prompt: "a green whale", Replacing: &replacing}, pngImage("new image"))
+	if err != nil {
+		t.Fatalf("PlaceGeneratedImage() error = %v", err)
+	}
+	if placed.DeleteError != nil {
+		t.Errorf("DeleteError = %v, want nil for an already-missing file", placed.DeleteError)
+	}
+}
+
 func TestPlaceGeneratedImageSlideOutOfRange(t *testing.T) {
 	deck := writeFile(t, filepath.Join(t.TempDir(), "talk.md"), "# One\n")
 	if _, err := PlaceGeneratedImage(Placement{DeckPath: deck, SlideIndex: 4, Prompt: "x"}, pngImage("x")); err == nil {

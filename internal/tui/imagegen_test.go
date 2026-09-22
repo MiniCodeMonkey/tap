@@ -2355,3 +2355,53 @@ Content
 		t.Error("view should mention 'continue' in help text")
 	}
 }
+
+func TestImageGenModel_PlaceImageWithoutAGeneratedImage(t *testing.T) {
+	tmpDir := t.TempDir()
+	mdFile := filepath.Join(tmpDir, "test.md")
+	if err := os.WriteFile(mdFile, []byte("# One\n"), 0644); err != nil {
+		t.Fatalf("failed to write test file: %v", err)
+	}
+
+	model, err := NewImageGenModel(mdFile)
+	if err != nil {
+		t.Fatalf("failed to create model: %v", err)
+	}
+
+	if _, err := model.PlaceImage(); err == nil {
+		t.Error("PlaceImage() with no generated image should return an error")
+	}
+}
+
+func TestImageGenModel_PlaceImage(t *testing.T) {
+	tmpDir := t.TempDir()
+	mdFile := filepath.Join(tmpDir, "test.md")
+	if err := os.WriteFile(mdFile, []byte("# One\n\n---\n\n# Two\n"), 0644); err != nil {
+		t.Fatalf("failed to write test file: %v", err)
+	}
+
+	model, err := NewImageGenModel(mdFile)
+	if err != nil {
+		t.Fatalf("failed to create model: %v", err)
+	}
+	model.SelectedIndex = 1
+	model.Prompt = "a red fox"
+	model.GeneratedImage = &ImageGenerateResult{ImageData: []byte("image bytes"), ContentType: "image/png"}
+
+	placed, err := model.PlaceImage()
+	if err != nil {
+		t.Fatalf("PlaceImage() error = %v", err)
+	}
+	if placed.Path == "" || placed.Markdown == "" {
+		t.Errorf("placed = %+v, want a path and markdown", placed)
+	}
+
+	saved, err := os.ReadFile(filepath.Join(tmpDir, placed.Path))
+	if err != nil || string(saved) != "image bytes" {
+		t.Errorf("saved image = (%q, %v)", saved, err)
+	}
+	content, _ := os.ReadFile(mdFile)
+	if !strings.Contains(string(content), placed.Markdown) {
+		t.Errorf("deck = %q, want it to contain %q", content, placed.Markdown)
+	}
+}
