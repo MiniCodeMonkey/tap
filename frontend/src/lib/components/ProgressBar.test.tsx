@@ -75,4 +75,21 @@ describe('ProgressBar', () => {
 		expect(fill.style.width).toBe('50%');
 		expect(container.querySelector('[role="progressbar"]')?.getAttribute('aria-valuemax')).toBe('4');
 	});
+
+	it('reports an honest, in-range value on a skipped slide opened before any presented one', () => {
+		// tap dev opens a skipped slide directly. Slide 0 here is skipped and
+		// nothing presented comes before it, so there is no "Nth presented
+		// slide" to report - the bar reports 0, not a value floored up into
+		// range, and aria-valuemin drops to match so aria-valuenow stays valid.
+		usePresentationStore.setState({ presentation: makePresentation(3, [0]), currentSlideIndex: 0 });
+
+		const { container } = render(<ProgressBar />);
+
+		const fill = container.querySelector('.progress-bar-fill') as HTMLElement;
+		expect(fill.style.width).toBe('0%');
+		const bar = container.querySelector('[role="progressbar"]');
+		expect(bar).toHaveAttribute('aria-valuenow', '0');
+		expect(bar).toHaveAttribute('aria-valuemin', '0');
+		expect(bar).toHaveAttribute('aria-valuemax', '2');
+	});
 });

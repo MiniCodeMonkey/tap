@@ -433,6 +433,11 @@ describe('Slide', () => {
 
 	describe('skipped slides', () => {
 		afterEach(() => {
+			// Unmount before resetting the stores: Slide subscribes to both, so
+			// a reset that runs first (this describe's afterEach runs before the
+			// file-level afterEach's cleanup() above) would force a state update
+			// on a still-mounted Slide outside of act().
+			cleanup();
 			resetPresentation();
 			useConnectionStore.setState({ presentMode: false });
 		});

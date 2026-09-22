@@ -21,8 +21,11 @@ export function ProgressBar({ show = true }: ProgressBarProps) {
 		return null;
 	}
 
-	// Skipped slides are left out of both numbers. On the first slide this
-	// shows 1/total progress, and on the last one 100%.
+	// Skipped slides are left out of both numbers. On the first presented
+	// slide this shows 1/total progress, and on the last one 100%. Opening a
+	// skipped slide directly - tap dev only, ahead of any presented slide -
+	// leaves position at 0: an empty bar, honestly reported rather than
+	// floored to 1, which would claim progress that has not happened.
 	const progressPercent = (position / total) * 100;
 
 	return (
@@ -30,7 +33,7 @@ export function ProgressBar({ show = true }: ProgressBarProps) {
 			className="progress-bar-container"
 			role="progressbar"
 			aria-valuenow={position}
-			aria-valuemin={1}
+			aria-valuemin={Math.min(position, 1)}
 			aria-valuemax={total}
 			aria-label={`Presentation progress: slide ${position} of ${total}`}
 		>
