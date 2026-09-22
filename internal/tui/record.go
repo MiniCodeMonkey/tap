@@ -53,6 +53,30 @@ func (m *DevModel) NoteRecordingEnded(err error) {
 	}
 }
 
+// NoteDiskLevel is called from outside the update loop when the
+// recordings disk changes level.
+func (m *DevModel) NoteDiskLevel(level recorder.DiskLevel) {
+	select {
+	case m.diskLevelCh <- level:
+	default:
+	}
+}
+
+// applyDiskLevel reports a disk level. At DiskFull the controller has
+// already stopped the recording.
+func (m *DevModel) applyDiskLevel(level recorder.DiskLevel) {
+	switch level {
+	case recorder.DiskLow:
+		m.addEvent(DevEvent{Type: "error", Message: "Disk almost full, recording stops at 1 GB", Timestamp: time.Now()})
+	case recorder.DiskFull:
+		if !m.config.Present {
+			m.recording = false
+			m.recordWarned = false
+		}
+		m.addEvent(DevEvent{Type: "error", Message: "Recording stopped: disk full", Timestamp: time.Now()})
+	}
+}
+
 // toggleRecording is the C key: start a recording, or stop the running one.
 // recordBusy guards both directions: a Stop that takes a few seconds to
 // finalize the file, or a Start still waiting on its preflight, must not be
@@ -255,21 +279,43 @@ func (m *DevModel) viewQuitConfirm() string {
 		"  Stop recording and quit? (y/n)\n"
 }
 
+// gitignoreWriter is whichever recorder offered the gitignore entry the
+// prompt is showing: the dev recorder outside present mode, the present
+// recorder inside it.
+func (m *DevModel) gitignoreWriter() interface{ AddGitignoreEntry() error } {
+	if m.config.Present {
+		return m.presentRecorder
+	}
+	return m.recorders
+}
+
 // handleGitignoreKey drives the prompt shown after a recording is saved
 // inside a git repository.
 func (m *DevModel) handleGitignoreKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "y", "Y":
 		m.showGitignorePrompt = false
-		if err := m.recorders.AddGitignoreEntry(); err != nil {
+		if err := m.gitignoreWriter().AddGitignoreEntry(); err != nil {
 			m.addEvent(DevEvent{Type: "error", Message: "Could not write .gitignore: " + err.Error(), Timestamp: time.Now()})
+			if m.quitAfterGitignore {
+				m.quitting = true
+				return m, tea.Quit
+			}
 			return m, nil
 		}
 		m.addEvent(DevEvent{Type: "action", Message: "Added " + m.gitignoreSuggestion + " to .gitignore", Timestamp: time.Now()})
+		if m.quitAfterGitignore {
+			m.quitting = true
+			return m, tea.Quit
+		}
 		return m, nil
 
 	case "n", "N", "esc":
 		m.showGitignorePrompt = false
+		if m.quitAfterGitignore {
+			m.quitting = true
+			return m, tea.Quit
+		}
 		return m, nil
 	}
 
@@ -291,6 +337,12 @@ func (m *DevModel) viewGitignorePrompt() string {
 // warns about one that has run long, and stops one that has run away.
 // Both thresholds come from the deck.
 func (m *DevModel) recordingTick() tea.Cmd {
+	// Present runs its own recording, driven by c and the CLI's disk guard,
+	// not the dev warning and cap here.
+	if m.config.Present {
+		return nil
+	}
+
 	// recordBusy means a Stop is already in flight (screencapture can take
 	// up to killGrace to finalize the file): ticking again here would
 	// issue another Stop every second until the first reply arrives, each

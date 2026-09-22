@@ -9,6 +9,13 @@ again to stop. Recording writes a chapter list of slide timings beside the
 video, so a video description is most of the way written by the time you
 stop talking.
 
+## Recording every talk automatically
+
+`tap dev` is for writing a talk, so it never records on its own; **C** is
+always a manual choice. For giving the talk itself, `tap present` can
+record every run from launch to quit without a key press, following the
+projector across HDMI swaps. See the [Presenting](/guide/presenting) guide.
+
 ## macOS Only
 
 Recording uses `screencapture`, the capture binary already built into

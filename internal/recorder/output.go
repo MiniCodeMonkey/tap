@@ -34,6 +34,28 @@ func OutputPath(dir, deckTitle string, start time.Time) (string, error) {
 	}
 }
 
+// RunDir creates the folder for one tap present run: the slugified deck
+// title plus the local start time, with a numeric suffix when that folder
+// already exists. It never reuses a folder.
+func RunDir(parent, deckTitle string, start time.Time) (string, error) {
+	if err := os.MkdirAll(parent, 0o755); err != nil {
+		return "", fmt.Errorf("creating the recordings directory: %w", err)
+	}
+
+	base := filepath.Join(parent, fmt.Sprintf("%s-%s", slugify(deckTitle), start.Format("2006-01-02-1504")))
+	candidate := base
+	for attempt := 2; ; attempt++ {
+		err := os.Mkdir(candidate, 0o755)
+		if err == nil {
+			return candidate, nil
+		}
+		if !os.IsExist(err) {
+			return "", fmt.Errorf("creating the run folder: %w", err)
+		}
+		candidate = fmt.Sprintf("%s-%d", base, attempt)
+	}
+}
+
 // ChapterPath is the sidecar chapter list for a recording.
 func ChapterPath(moviePath string) string {
 	return strings.TrimSuffix(moviePath, filepath.Ext(moviePath)) + ".txt"

@@ -25,6 +25,8 @@ A markdown-based presentation tool for technical presentations with beautiful de
 - **Talk recording.** Press `c` in `tap dev` to record the screen and your
   microphone, with a chapter list of slide timings written beside the video.
   macOS only.
+- **`tap present`.** Give the talk without live reload, and record every
+  run automatically, following the projector across HDMI swaps.
 - **A fixed 1920px canvas** that scales as one unit, so a deck looks the
   same on every projector.
 - **Static builds and PDF export**, plus `tap screenshot` for checking a
@@ -166,6 +168,7 @@ tap add component LatencyDrop --inline     # components/LatencyDrop.jsx
 |---------|-------------|-------------|
 | `tap new` | Create a new presentation | `-t, --theme`, `-o, --output` |
 | `tap dev <file>` | Start dev server with hot reload | `-p, --port`, `--presenter-password` |
+| `tap present [file]` | Give a talk: no reload, audience view opens, optional auto-recording | `-p, --port`, `--no-record` |
 | `tap build <file>` | Build static HTML output | `-o, --output` |
 | `tap serve [dir]` | Serve static files | `-p, --port` |
 | `tap pdf <file>` | Export presentation to PDF | `-o, --output`, `--content` |

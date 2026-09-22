@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -44,6 +45,12 @@ type recordControllerOptions struct {
 	// OnUnexpectedExit is called when the recorder stops without being
 	// asked to: a revoked permission, a full disk, a crash.
 	OnUnexpectedExit func(err error)
+	// FreeSpace reads free space on the recordings volume. Tests use it;
+	// production leaves it nil for recorder.FreeSpace.
+	FreeSpace func(string) (uint64, error)
+	// OnDiskLevel is told each change of the disk level while recording.
+	// At DiskFull the controller has already stopped the recording.
+	OnDiskLevel func(recorder.DiskLevel)
 }
 
 // recordController is the dev server's recording, from the TUI's side of
@@ -64,6 +71,11 @@ type recordController struct {
 	// run, so Close can remove them: the spec promises they do not outlive
 	// the TUI.
 	testCapturePaths []string
+	// diskWatch is the running recording's free-space poll, kept here so
+	// Stop can read its last reported level to decide whether to report
+	// DiskOK once recording ends.
+	diskWatch     *diskWatch
+	stopDiskWatch context.CancelFunc
 }
 
 // newRecordController builds the controller the TUI drives.
@@ -134,6 +146,12 @@ func (c *recordController) Start(display int) (string, error) {
 	}
 	c.session = session
 
+	diskContext, stopDiskWatch := context.WithCancel(context.Background())
+	c.stopDiskWatch = stopDiskWatch
+	watch := newDiskWatch(c.options.OutputDir, c.options.FreeSpace, c.noteDiskLevel)
+	c.diskWatch = watch
+	go watch.run(diskContext, diskPollInterval)
+
 	if c.options.Chapters {
 		c.chapters = recorder.NewChapters(startedAt)
 		// The chapter path is known now, not just at Stop, so every Add
@@ -158,9 +176,15 @@ func (c *recordController) Start(display int) (string, error) {
 		c.mu.Lock()
 		current := c.session == session
 		var result recorder.Result
+		var stop context.CancelFunc
+		var watch *diskWatch
 		if current {
 			chapterPath := c.chapterPath
 			c.session, c.chapters, c.chapterPath = nil, nil, ""
+			stop = c.stopDiskWatch
+			watch = c.diskWatch
+			c.stopDiskWatch = nil
+			c.diskWatch = nil
 			result = recorder.Result{
 				Path:        session.Path(),
 				ChapterPath: chapterPath,
@@ -174,6 +198,11 @@ func (c *recordController) Start(display int) (string, error) {
 		}
 		c.mu.Unlock()
 
+		if stop != nil {
+			stop()
+		}
+		c.reportDiskOKIfLow(watch)
+
 		if current && c.options.OnUnexpectedExit != nil {
 			err := session.ExitError()
 			if err == nil {
@@ -184,6 +213,30 @@ func (c *recordController) Start(display int) (string, error) {
 	}()
 
 	return path, nil
+}
+
+// noteDiskLevel stops the recording on a full disk before reporting, so
+// the file is finalized while there is still room to write its index.
+func (c *recordController) noteDiskLevel(level recorder.DiskLevel) {
+	if level == recorder.DiskFull {
+		_, _ = c.Stop()
+	}
+	if c.options.OnDiskLevel != nil {
+		c.options.OnDiskLevel(level)
+	}
+}
+
+// reportDiskOKIfLow is called once a recording has ended for any reason
+// other than the DiskFull stop noteDiskLevel makes itself: at that point
+// the watch's level is already DiskFull, so it is left alone and the
+// "stopped: disk full" badge stays up until the next recording starts. A
+// watch that last reported DiskLow is put back to DiskOK, so the "almost
+// full" badge does not linger once recording has ended, whether that end
+// was a deliberate Stop or the recorder exiting on its own.
+func (c *recordController) reportDiskOKIfLow(watch *diskWatch) {
+	if watch != nil && watch.currentLevel() == recorder.DiskLow && c.options.OnDiskLevel != nil {
+		c.options.OnDiskLevel(recorder.DiskOK)
+	}
 }
 
 // Stop ends the recording and writes the chapter list. Calling it again
@@ -197,11 +250,20 @@ func (c *recordController) Stop() (recorder.Result, error) {
 	session, chapters := c.session, c.chapters
 	c.session, c.chapters, c.chapterPath = nil, nil, ""
 	lastResult := c.lastResult
+	stop := c.stopDiskWatch
+	watch := c.diskWatch
+	c.stopDiskWatch = nil
+	c.diskWatch = nil
 	c.mu.Unlock()
 
 	if session == nil {
 		return lastResult, nil
 	}
+
+	if stop != nil {
+		stop()
+	}
+	c.reportDiskOKIfLow(watch)
 
 	result, err := session.Stop()
 	if err != nil {
@@ -318,19 +380,19 @@ func openInDefaultApplication(path string) error {
 	return exec.Command("open", path).Start()
 }
 
-// gitignoreEntry is how this deck's recordings directory should appear
-// in a .gitignore: its path relative to the repository root, so a deck
-// that points recording.output somewhere else still ignores the
-// directory it actually fills. It is empty when there is nothing
-// sensible to offer, which is the case outside a repository or when the
-// recordings land at the repository root itself.
-func (c *recordController) gitignoreEntry() string {
-	root, found := repositoryRoot(c.options.OutputDir)
+// gitignoreEntryFor is how a recordings directory should appear in a
+// .gitignore: its path relative to the repository root, so a deck that
+// points recording.output somewhere else still ignores the directory it
+// actually fills. It is empty when there is nothing sensible to offer,
+// which is the case outside a repository or when the recordings land at
+// the repository root itself.
+func gitignoreEntryFor(outputDir string) string {
+	root, found := repositoryRoot(outputDir)
 	if !found {
 		return ""
 	}
 
-	relative, err := filepath.Rel(root, c.options.OutputDir)
+	relative, err := filepath.Rel(root, outputDir)
 	if err != nil || relative == "." || strings.HasPrefix(relative, "..") {
 		return ""
 	}
@@ -338,28 +400,40 @@ func (c *recordController) gitignoreEntry() string {
 	return filepath.ToSlash(relative) + "/"
 }
 
-// SuggestGitignore is the ignore entry worth offering, or "" when there is
-// nothing to offer: outside a git repository, or when it is already there.
-func (c *recordController) SuggestGitignore() string {
-	entry := c.gitignoreEntry()
+// suggestGitignore is the ignore entry worth offering for outputDir, or ""
+// when there is nothing to offer: outside a git repository, or when it is
+// already there.
+func suggestGitignore(outputDir string) string {
+	entry := gitignoreEntryFor(outputDir)
 	if entry == "" {
 		return ""
 	}
-	if needed, _ := gitignoreState(c.options.OutputDir, entry); needed {
+	if needed, _ := gitignoreState(outputDir, entry); needed {
 		return entry
 	}
 	return ""
 }
 
-// AddGitignoreEntry ignores the recordings directory.
-func (c *recordController) AddGitignoreEntry() error {
-	entry := c.gitignoreEntry()
+// addGitignoreEntry ignores outputDir.
+func addGitignoreEntry(outputDir string) error {
+	entry := gitignoreEntryFor(outputDir)
 	if entry == "" {
 		return nil
 	}
-	needed, gitignorePath := gitignoreState(c.options.OutputDir, entry)
+	needed, gitignorePath := gitignoreState(outputDir, entry)
 	if !needed {
 		return nil
 	}
 	return appendGitignoreEntry(gitignorePath, entry)
+}
+
+// SuggestGitignore is the ignore entry worth offering, or "" when there is
+// nothing to offer: outside a git repository, or when it is already there.
+func (c *recordController) SuggestGitignore() string {
+	return suggestGitignore(c.options.OutputDir)
+}
+
+// AddGitignoreEntry ignores the recordings directory.
+func (c *recordController) AddGitignoreEntry() error {
+	return addGitignoreEntry(c.options.OutputDir)
 }

@@ -699,6 +699,38 @@ func TestGitignorePromptMessageNamesTheActualEntry(t *testing.T) {
 	}
 }
 
+func TestDiskFullStopsTheRecordingInTheTUI(t *testing.T) {
+	model := NewDevModel(DevConfig{})
+	model.recording = true
+
+	updated, _ := model.Update(diskLevelMsg{level: recorder.DiskFull})
+	devModel := updated.(*DevModel)
+
+	if devModel.recording {
+		t.Error("the TUI still shows recording")
+	}
+	last := devModel.state.RecentEvents[len(devModel.state.RecentEvents)-1]
+	if last.Type != "error" || !strings.Contains(last.Message, "Recording stopped: disk full") {
+		t.Errorf("last event = %+v", last)
+	}
+}
+
+func TestDiskLowWarnsInTheTUI(t *testing.T) {
+	model := NewDevModel(DevConfig{})
+	model.recording = true
+
+	updated, _ := model.Update(diskLevelMsg{level: recorder.DiskLow})
+	devModel := updated.(*DevModel)
+
+	if !devModel.recording {
+		t.Error("a low disk stopped the recording")
+	}
+	last := devModel.state.RecentEvents[len(devModel.state.RecentEvents)-1]
+	if !strings.Contains(last.Message, "Disk almost full, recording stops at 1 GB") {
+		t.Errorf("last event = %+v", last)
+	}
+}
+
 func TestGitignorePromptNoChangesNothing(t *testing.T) {
 	fake := &fakeRecorder{available: true, gitignoreSuggestion: "recordings/"}
 	m := NewDevModel(DevConfig{})

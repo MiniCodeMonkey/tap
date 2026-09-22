@@ -156,3 +156,43 @@ func TestEmptyChaptersAreEmpty(t *testing.T) {
 		t.Error("a chapter list with no entries does not report as empty")
 	}
 }
+
+func TestChaptersRenderTheMarkBeforeTheSlideItShares(t *testing.T) {
+	start := time.Date(2026, 9, 21, 19, 32, 0, 0, time.UTC)
+	chapters := NewChapters(start)
+
+	chapters.Add(start, 0, "Title")
+	chapters.Add(start.Add(47*time.Second), 1, "Agenda")
+	chapters.SetMark(start.Add(47*time.Second), "Talk starts")
+
+	want := "0:00 Title\n0:47 Talk starts\n0:47 Agenda\n"
+	if got := chapters.Render(); got != want {
+		t.Errorf("Render() =\n%q\nwant\n%q", got, want)
+	}
+}
+
+func TestChaptersRenderAMarkAfterTheLastSlide(t *testing.T) {
+	start := time.Date(2026, 9, 21, 19, 32, 0, 0, time.UTC)
+	chapters := NewChapters(start)
+
+	chapters.Add(start, 0, "Title")
+	chapters.SetMark(start.Add(time.Minute), "Talk starts")
+
+	want := "0:00 Title\n1:00 Talk starts\n"
+	if got := chapters.Render(); got != want {
+		t.Errorf("Render() =\n%q\nwant\n%q", got, want)
+	}
+}
+
+func TestChaptersClearMark(t *testing.T) {
+	start := time.Date(2026, 9, 21, 19, 32, 0, 0, time.UTC)
+	chapters := NewChapters(start)
+
+	chapters.Add(start, 0, "Title")
+	chapters.SetMark(start.Add(time.Minute), "Talk starts")
+	chapters.ClearMark()
+
+	if got := chapters.Render(); got != "0:00 Title\n" {
+		t.Errorf("Render() = %q, want only the title", got)
+	}
+}

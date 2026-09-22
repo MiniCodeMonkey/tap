@@ -84,6 +84,17 @@
 	animation: connection-indicator-pulse 1.5s ease-in-out infinite;
 }
 
+/* The low disk badge is a warning, not an outage: amber until the
+ * recording has actually stopped. */
+.disk-indicator.disk-low {
+	border-color: rgba(245, 158, 11, 0.5);
+}
+
+.disk-indicator.disk-low .indicator-dot {
+	background-color: #f59e0b;
+	box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.25);
+}
+
 @keyframes connection-indicator-pulse {
 	0%,
 	100% {

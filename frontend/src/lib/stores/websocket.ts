@@ -40,6 +40,14 @@ export interface ConnectionState {
 	staticMode: boolean;
 	/** Whether static mode detection has completed. */
 	staticModeDetected: boolean;
+	/** How full the recordings disk is, from the server's "recording" messages. */
+	diskStatus: 'ok' | 'low' | 'full';
+	/**
+	 * Whether the hub is running tap present rather than tap dev, from the
+	 * "connected" message's mode field. False (the tap dev default) leaves
+	 * shortcuts like the theme cycle key working as they always have.
+	 */
+	presentMode: boolean;
 }
 
 const initialConnectionState: ConnectionState = {
@@ -47,7 +55,9 @@ const initialConnectionState: ConnectionState = {
 	reconnecting: false,
 	reconnectAttempt: 0,
 	staticMode: false,
-	staticModeDetected: false
+	staticModeDetected: false,
+	diskStatus: 'ok',
+	presentMode: false
 };
 
 export const useConnectionStore = create<ConnectionState>(() => ({ ...initialConnectionState }));
@@ -360,7 +370,7 @@ export class WebSocketClient {
 	private dispatchMessage(message: WebSocketMessage): void {
 		switch (message.type) {
 			case 'connected':
-				this.handleConnected(message.revision);
+				this.handleConnected(message.revision, message.mode);
 				break;
 
 			case 'reload':
@@ -377,6 +387,10 @@ export class WebSocketClient {
 				// Switch to a different theme
 				this.handleThemeChange(message.theme);
 				break;
+
+			case 'recording':
+				useConnectionStore.setState({ diskStatus: message.disk ?? 'ok' });
+				break;
 		}
 	}
 
@@ -389,6 +403,10 @@ export class WebSocketClient {
 	 * while its socket was down, notices the deck changed instead of going
 	 * on showing the old one until someone reloads manually.
 	 *
+	 * Also sets presentMode on every "connected" message (not just the
+	 * first), since it reflects the hub's current mode rather than
+	 * something to compare across reconnects.
+	 *
 	 * Never reloads on the very first "connected" message, even when the
 	 * hub already has a revision by then (a page that loads after the hub
 	 * has been running a while) - there is nothing to compare it against
@@ -396,7 +414,9 @@ export class WebSocketClient {
 	 * WebSocketClient's first "connected" message is recorded, not
 	 * compared, exactly as this one's was.
 	 */
-	private handleConnected(revision: string | undefined): void {
+	private handleConnected(revision: string | undefined, mode: 'present' | undefined): void {
+		// The hub resends a non-fine disk status right after "connected", so a stale one from before a reconnect is cleared here.
+		useConnectionStore.setState({ diskStatus: 'ok', presentMode: mode === 'present' });
 		if (!this.hasSeenFirstConnected) {
 			this.hasSeenFirstConnected = true;
 			this.firstRevision = revision;

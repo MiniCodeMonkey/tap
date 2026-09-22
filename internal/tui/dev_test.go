@@ -167,13 +167,22 @@ func TestDevModel_HandleKeyPress_Add(t *testing.T) {
 
 func TestDevModel_HandleKeyPress_Reload(t *testing.T) {
 	model := NewDevModel(DevConfig{})
+	calls := 0
+	model.SetReloader(func() error { calls++; return nil })
 
 	msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("r")}
-	newModel, _ := model.Update(msg)
+	newModel, cmd := model.Update(msg)
 	m := newModel.(*DevModel)
 
 	if m.quitting {
 		t.Error("model should not be quitting after 'r' key")
+	}
+	if cmd == nil {
+		t.Fatal("expected 'r' to return a reload command")
+	}
+	m.Update(cmd())
+	if calls != 1 {
+		t.Errorf("reloader calls = %d, want 1", calls)
 	}
 
 	// Check that an event was added
@@ -183,13 +192,13 @@ func TestDevModel_HandleKeyPress_Reload(t *testing.T) {
 
 	found := false
 	for _, e := range events {
-		if strings.Contains(e.Message, "Manual reload") {
+		if strings.Contains(e.Message, "Reloaded the deck") {
 			found = true
 			break
 		}
 	}
 	if !found {
-		t.Error("expected 'Manual reload' event to be added")
+		t.Error("expected 'Reloaded the deck' event to be added")
 	}
 }
 

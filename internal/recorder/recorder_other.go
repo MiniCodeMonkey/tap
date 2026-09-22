@@ -17,6 +17,9 @@ func Displays() ([]Display, error) { return nil, errUnsupported }
 // Screens is unsupported off macOS.
 func Screens() ([]Screen, error) { return nil, errUnsupported }
 
+// FreeSpace is unsupported off macOS.
+func FreeSpace(string) (uint64, error) { return 0, errUnsupported }
+
 // DefaultAudioInput names the microphone a recording would use.
 func DefaultAudioInput() string { return "" }
 

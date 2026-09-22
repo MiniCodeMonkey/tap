@@ -47,6 +47,7 @@ import { setupWakeLock } from '$lib/utils/wakeLock';
 import { SlideCanvas } from '$lib/components/SlideCanvas';
 import { Slide } from '$lib/components/Slide';
 import { ShortcutHelp } from '$lib/components/ShortcutHelp';
+import { DiskIndicator } from '$lib/components/DiskIndicator';
 import { PresenterLayoutMenu } from '$lib/components/PresenterLayoutMenu';
 import { usePresenterLayout } from '$lib/hooks/usePresenterLayout';
 import { useFitText } from '$lib/hooks/useFitText';
@@ -594,6 +595,7 @@ export default function PresenterApp() {
 					</button>
 				</footer>
 
+				<DiskIndicator />
 				<ShortcutHelp groups={PRESENTER_SHORTCUTS} theme={theme} isOpen={helpOpen} onClose={() => setHelpOpen(false)} />
 			</div>
 		);

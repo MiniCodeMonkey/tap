@@ -33,6 +33,9 @@ const (
 	MessageSlide MessageType = "slide"
 	// MessageTheme signals clients to switch to a specific theme.
 	MessageTheme MessageType = "theme"
+	// MessageRecording carries the recording's disk status to every
+	// client, for the low disk badge.
+	MessageRecording MessageType = "recording"
 )
 
 // Message represents a WebSocket message sent between server and clients.
@@ -62,14 +65,22 @@ const (
 // socket was down and reload (see frontend/src/lib/stores/websocket.ts).
 // Fields ordered by size for memory alignment.
 type Message struct {
-	Type           MessageType `json:"type"`
-	Theme          string      `json:"theme,omitempty"`
-	Revision       string      `json:"revision,omitempty"`
-	SlideIndex     *int        `json:"slideIndex,omitempty"`
-	Fragment       *int        `json:"fragment,omitempty"`
-	Step           *int        `json:"step,omitempty"`
-	ScrollRevealed *bool       `json:"scrollRevealed,omitempty"`
-	Initial        bool        `json:"initial,omitempty"`
+	Type     MessageType `json:"type"`
+	Theme    string      `json:"theme,omitempty"`
+	Revision string      `json:"revision,omitempty"`
+	// Mode is set to "present" only on a "connected" message sent while the
+	// hub is running in tap present mode (see SetPresentMode), so a client
+	// can tell tap present apart from tap dev and turn off shortcuts that
+	// only make sense while developing, such as the theme cycle key.
+	Mode string `json:"mode,omitempty"`
+	// Disk is set only on a "recording" message: "low", "full", or absent
+	// when the disk is fine.
+	Disk           string `json:"disk,omitempty"`
+	SlideIndex     *int   `json:"slideIndex,omitempty"`
+	Fragment       *int   `json:"fragment,omitempty"`
+	Step           *int   `json:"step,omitempty"`
+	ScrollRevealed *bool  `json:"scrollRevealed,omitempty"`
+	Initial        bool   `json:"initial,omitempty"`
 }
 
 // Client represents a connected WebSocket client.
@@ -145,6 +156,9 @@ type WebSocketHub struct {
 	// reloads off its first connection (see the frontend's handling of an
 	// absent revision in frontend/src/lib/stores/websocket.ts).
 	revision string
+	// diskStatus is the last disk status broadcast, sent again to each
+	// client that connects later so a reloaded window still shows it.
+	diskStatus string
 	// allowedOrigins holds the extra origins a WebSocket upgrade is
 	// accepted from, beyond same-host connections - the tap dev
 	// --allow-origin flag, for a contributor's Vite dev server running on
@@ -169,7 +183,12 @@ type WebSocketHub struct {
 	// dev command sets the same value here and on every candidate Server so
 	// a cookie either of them issues validates.
 	presenterSessionToken string
-	mu                    sync.RWMutex
+	// present is whether the hub is serving tap present rather than tap
+	// dev (see SetPresentMode). When true, every "connected" message
+	// carries Mode "present", so a client can turn off shortcuts that only
+	// make sense while developing, such as the theme cycle key.
+	present bool
+	mu      sync.RWMutex
 }
 
 // DefaultStateRetention is how long the hub keeps the last-known slide
@@ -298,6 +317,17 @@ func (h *WebSocketHub) SetPresenterSessionToken(token string) {
 	h.presenterSessionToken = token
 }
 
+// SetPresentMode tells the hub whether it is serving tap present rather
+// than tap dev, so the "connected" message it sends at register time can
+// carry Mode "present" and let a client turn off shortcuts that only make
+// sense while developing, such as the theme cycle key. Safe to call at any
+// time, including before Run starts or while clients are connected.
+func (h *WebSocketHub) SetPresentMode(present bool) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.present = present
+}
+
 // checkPresenterAuth reports whether r may send navigation messages once
 // connected: always true when no presenter password is configured, and
 // otherwise true only when r carries PresenterAuthCookieName equal to the
@@ -392,6 +422,14 @@ func (h *WebSocketHub) Run() {
 				initialData, _ = json.Marshal(initialMsg)
 			}
 			revision := h.revision
+			var mode string
+			if h.present {
+				mode = "present"
+			}
+			var diskData []byte
+			if h.diskStatus != "" {
+				diskData, _ = json.Marshal(Message{Type: MessageRecording, Disk: h.diskStatus})
+			}
 			h.notifyClientCountChange()
 			h.mu.Unlock()
 
@@ -411,7 +449,7 @@ func (h *WebSocketHub) Run() {
 			// distinct connections (see hasSeenFirstRevision in the
 			// frontend), and "connected" already fires exactly once per
 			// connection.
-			connectedMsg, _ := json.Marshal(Message{Type: MessageConnected, Revision: revision})
+			connectedMsg, _ := json.Marshal(Message{Type: MessageConnected, Revision: revision, Mode: mode})
 			select {
 			case client.send <- connectedMsg:
 			default:
@@ -419,6 +457,12 @@ func (h *WebSocketHub) Run() {
 			if initialData != nil {
 				select {
 				case client.send <- initialData:
+				default:
+				}
+			}
+			if diskData != nil {
+				select {
+				case client.send <- diskData:
 				default:
 				}
 			}
@@ -556,6 +600,15 @@ func (h *WebSocketHub) BroadcastSlide(slideIndex int) error {
 // BroadcastTheme sends a theme change message to all clients.
 func (h *WebSocketHub) BroadcastTheme(themeName string) error {
 	return h.Broadcast(Message{Type: MessageTheme, Theme: themeName})
+}
+
+// BroadcastDiskStatus tells every client how full the recordings disk is,
+// and remembers it for clients that connect later.
+func (h *WebSocketHub) BroadcastDiskStatus(status string) error {
+	h.mu.Lock()
+	h.diskStatus = status
+	h.mu.Unlock()
+	return h.Broadcast(Message{Type: MessageRecording, Disk: status})
 }
 
 // ClientCount returns the number of connected clients.

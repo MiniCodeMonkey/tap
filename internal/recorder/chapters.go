@@ -77,6 +77,10 @@ type Chapters struct {
 	start   time.Time
 	lastAt  time.Time
 	entries []chapter
+	// mark is a single labelled moment, such as the start of the talk,
+	// rendered in time order among the slide entries. A new mark replaces
+	// the old one.
+	mark *chapter
 }
 
 // NewChapters starts a list for a recording that began at start.
@@ -135,17 +139,48 @@ func (c *Chapters) Empty() bool {
 	return len(c.entries) == 0
 }
 
+// SetMark places the chapter list's one mark at the given time.
+func (c *Chapters) SetMark(at time.Time, title string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	offset := at.Sub(c.start)
+	if offset < 0 {
+		offset = 0
+	}
+	c.mark = &chapter{offset: offset, title: title, slideIndex: -1}
+}
+
+// ClearMark removes the mark.
+func (c *Chapters) ClearMark() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.mark = nil
+}
+
 // Render is the chapter list as text.
 func (c *Chapters) Render() string {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	var builder strings.Builder
-	for _, entry := range c.entries {
+	write := func(entry chapter) {
 		builder.WriteString(formatOffset(entry.offset))
 		builder.WriteString(" ")
 		builder.WriteString(entry.title)
 		builder.WriteString("\n")
+	}
+
+	markWritten := c.mark == nil
+	for _, entry := range c.entries {
+		if !markWritten && c.mark.offset <= entry.offset {
+			write(*c.mark)
+			markWritten = true
+		}
+		write(entry)
+	}
+	if !markWritten {
+		write(*c.mark)
 	}
 	return builder.String()
 }
