@@ -85,11 +85,14 @@ func TestExportReportsRenderProgress(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test in short mode")
 	}
+	// SlotOrder must not be nil for either slide: the frontend calls .filter
+	// on it unconditionally for every non-component layout, and a nil slice
+	// there crashes the render tree, which the ready signal waits on.
 	presentation := &transformer.TransformedPresentation{
 		Config: *config.DefaultConfig(),
 		Slides: []transformer.TransformedSlide{
-			{Index: 0, HTML: "<h1>Slide 1</h1>", Layout: "title"},
-			{Index: 1, HTML: "<h1>Slide 2</h1>", Layout: "default"},
+			{Index: 0, Layout: "title", Slots: map[string]string{"default": "<h1>Slide 1</h1>"}, SlotOrder: []string{"default"}},
+			{Index: 1, Layout: "default", Slots: map[string]string{"default": "<h1>Slide 2</h1>"}, SlotOrder: []string{"default"}},
 		},
 	}
 	srv := server.New(0)
