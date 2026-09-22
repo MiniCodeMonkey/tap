@@ -33,6 +33,7 @@ const (
 	codeInterrupted    = "interrupted"
 	codeCancelled      = "cancelled"
 	codeInternal       = "internal"
+	codeInvalidRequest = "invalid_request"
 )
 
 // errCancelled means the person closed an interactive prompt, such as the

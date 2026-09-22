@@ -716,10 +716,16 @@ func loadPresentation(file string, cfg *config.Config, baseDir string) (*transfo
 	if err != nil {
 		return nil, nil, nil, nil, nil, fmt.Errorf("failed to read file: %w", err)
 	}
+	return loadPresentationSource(content, file, cfg, baseDir)
+}
 
+// loadPresentationSource is loadPresentation for a deck's text that is
+// already in memory, such as the app's unsaved buffer. file names the deck
+// in error messages.
+func loadPresentationSource(source []byte, file string, cfg *config.Config, baseDir string) (*transformer.TransformedPresentation, []layouts.Warning, map[string]components.Result, []components.BuildError, []parser.Slide, error) {
 	// Parse markdown
 	p := parser.New()
-	parsed, err := p.Parse(content)
+	parsed, err := p.Parse(source)
 	if err != nil {
 		return nil, nil, nil, nil, nil, fmt.Errorf("failed to parse markdown: %s: %w", file, err)
 	}
