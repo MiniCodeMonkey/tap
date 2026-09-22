@@ -2,6 +2,8 @@
 package transformer
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"path/filepath"
 	"regexp"
@@ -41,6 +43,11 @@ type TransformedSlide struct {
 	// Components describes each inline ```component fence found on the
 	// slide, in document order.
 	Components []InlineComponent `json:"components,omitempty"`
+	// Hash identifies the slide's content (see SlideHash). The frontend
+	// keeps a slide it already rendered when the slide at the same
+	// position has the same hash, and tap dev lists the slides whose hash
+	// changed in its "update" message.
+	Hash string `json:"hash"`
 	// StepsInvalid carries parser.SlideDirectives.StepsInvalid through to
 	// layouts.Validate, which turns it into a slide warning; it is not
 	// part of the frontend's slide JSON.
@@ -154,10 +161,31 @@ func (t *Transformer) Transform(pres *parser.Presentation) *TransformedPresentat
 
 	for _, slide := range pres.Slides {
 		transformed := t.transformSlide(slide)
+		transformed.Hash = SlideHash(transformed)
 		result.Slides = append(result.Slides, transformed)
 	}
 
 	return result
+}
+
+// SlideHash returns a short hash of everything the frontend renders for
+// slide: its JSON with Index and Hash left out, so a slide that only moved
+// keeps its hash. json.Marshal sorts map keys, so equal slides always give
+// equal hashes. Returns "" if marshalling fails, which cannot realistically
+// happen for this struct; callers that compare two hashes - ChangedSlides in
+// internal/server/revision.go, and the unchanged check in
+// updatePresentationInPlace in frontend/src/lib/stores/presentation.ts -
+// must never treat two empty hashes as equal, or a slide whose hash could
+// not be computed would be reported unchanged and never re-rendered.
+func SlideHash(slide TransformedSlide) string {
+	slide.Index = 0
+	slide.Hash = ""
+	data, err := json.Marshal(slide)
+	if err != nil {
+		return ""
+	}
+	sum := sha256.Sum256(data)
+	return hex.EncodeToString(sum[:6])
 }
 
 // WithoutSkippedSlides returns a copy of presentation without the slides
@@ -182,6 +210,7 @@ func WithoutSkippedSlides(presentation *TransformedPresentation) (kept *Transfor
 	}
 	return kept, deckNumbers
 }
+
 
 // transformSlide converts a single parser.Slide to TransformedSlide.
 func (t *Transformer) transformSlide(slide parser.Slide) TransformedSlide {

@@ -40,7 +40,13 @@ func prepareDeck(file string, cfg *config.Config, baseDir string) (*server.Serve
 	srv := server.NewWithHost(0, "127.0.0.1")
 	srv.SetPresentation(pres)
 	srv.SetBaseDir(baseDir)
-	srv.SetComponentBundles(componentBundleFiles(resolvedComponents))
+	bundleFiles := componentBundleFiles(resolvedComponents)
+	srv.SetComponentBundles(bundleFiles)
+	// tap export pdf and tap export images render this server's print
+	// pages with a headless browser, not a WebSocket connection, so their
+	// only way to read the deck's revision for the ready signal is
+	// /api/presentation (see Server.SetRevision).
+	srv.SetRevision(server.ComputeRevision(pres, bundleFiles))
 	if customThemePath, themeErr := cfg.ResolveCustomThemePath(baseDir); themeErr == nil && customThemePath != "" {
 		srv.SetCustomThemePath(customThemePath)
 	}

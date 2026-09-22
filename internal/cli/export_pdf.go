@@ -20,9 +20,10 @@ import (
 
 // Flags for the pdf command
 var (
-	pdfOutput  string
-	pdfContent string
-	pdfJSON    bool
+	pdfOutput   string
+	pdfContent  string
+	pdfJSON     bool
+	pdfProgress string
 )
 
 // exportPDFCmd represents the export pdf command
@@ -46,7 +47,8 @@ Examples:
   tap export pdf slides.md -o talk.pdf        # Short form
   tap export pdf slides.md --content notes    # Only speaker notes
   tap export pdf slides.md --content both     # Slides with notes
-  tap export pdf slides.md --json             # Print the result as JSON`,
+  tap export pdf slides.md --json             # Print the result as JSON
+  tap export pdf slides.md --progress json   # Progress as JSON lines on stderr`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: runExportPDF,
 }
@@ -57,6 +59,7 @@ func init() {
 	exportPDFCmd.Flags().StringVarP(&pdfOutput, "output", "o", "", "output PDF file path (default: <deck>.pdf)")
 	exportPDFCmd.Flags().StringVar(&pdfContent, "content", "slides", "content to include: slides, notes, or both")
 	exportPDFCmd.Flags().BoolVar(&pdfJSON, "json", false, "print the result as JSON")
+	exportPDFCmd.Flags().StringVar(&pdfProgress, "progress", "", "print progress to stderr as JSON lines (json)")
 }
 
 // runExportPDF implements the export pdf command. It returns an error
@@ -79,6 +82,11 @@ func runExportPDF(cmd *cobra.Command, args []string) error {
 	// through to the OS default handler, which is what actually kills the
 	// process immediately.
 	context.AfterFunc(signalCtx, stop)
+
+	progress, err := newProgressReporter(pdfProgress, cmd.ErrOrStderr())
+	if err != nil {
+		return err
+	}
 
 	file, err := resolveDeck(firstArg(args))
 	if err != nil {
@@ -108,6 +116,10 @@ func runExportPDF(cmd *cobra.Command, args []string) error {
 
 	// Start spinner
 	spinner := newSpinner("Preparing PDF export")
+	if progress.enabled() {
+		// Progress lines replace the spinner on stderr.
+		spinner.isTerminal = func() bool { return false }
+	}
 	spinner.start()
 
 	// Step 1: Load configuration from frontmatter
@@ -174,6 +186,10 @@ func runExportPDF(cmd *cobra.Command, args []string) error {
 		return internalError(codeBrowser, fmt.Errorf("failed to create PDF exporter: %w", err))
 	}
 
+	if progress.enabled() {
+		exporter.SetProgress(progress)
+	}
+
 	// Ensure exporter is cleaned up on exit
 	defer func() {
 		_ = exporter.Close()
@@ -217,17 +233,21 @@ func runExportPDF(cmd *cobra.Command, args []string) error {
 		fmt.Fprintf(os.Stderr, "warning: slide %d shows an error card: %s\n", broken.SlideNumber, broken.Message)
 	}
 
+	brokenSlides := make([]brokenSlideJSON, 0, len(result.BrokenSlides))
+	for _, broken := range result.BrokenSlides {
+		brokenSlides = append(brokenSlides, brokenSlideJSON{Slide: broken.SlideNumber, Message: broken.Message})
+	}
+	jsonResult := exportPDFResult{
+		Output:       result.OutputPath,
+		Pages:        result.PageCount,
+		Bytes:        result.FileSize,
+		BrokenSlides: brokenSlides,
+	}
+	if err := progress.Result(jsonResult); err != nil {
+		return err
+	}
 	if pdfJSON {
-		brokenSlides := make([]brokenSlideJSON, 0, len(result.BrokenSlides))
-		for _, broken := range result.BrokenSlides {
-			brokenSlides = append(brokenSlides, brokenSlideJSON{Slide: broken.SlideNumber, Message: broken.Message})
-		}
-		return printJSONOK(cmd.OutOrStdout(), exportPDFResult{
-			Output:       result.OutputPath,
-			Pages:        result.PageCount,
-			Bytes:        result.FileSize,
-			BrokenSlides: brokenSlides,
-		})
+		return printJSONOK(cmd.OutOrStdout(), jsonResult)
 	}
 
 	Successln("\nPDF export complete!")

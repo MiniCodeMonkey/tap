@@ -12,6 +12,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Added
 
+- **`--progress json`** on `tap export pdf`, `tap export images` and `tap build` - One JSON line per step on stderr, such as `{"phase":"render","done":7,"total":14}`, download progress for the export browser on a first run, and a final line with the result. Made for scripts and for Tap Desktop.
+- **A ready signal for every page** - Each tap page reports when the slide on screen has finished rendering, through `window.__tapReady`, a `tap:ready` event, and a `tapReady` message for a macOS web view. Exports and Tap Desktop's thumbnails wait for it.
 - **`skip: true` leaves a slide out of the talk** - A skipped slide stays in the file and keeps its number, but the arrow keys pass over it in the audience and presenter views, slide numbers and the progress bar leave it out, and `tap build` and `tap export` leave it out of their output. `tap dev` still shows it with a "Skipped" marker when you open it directly.
 - **`tap slide list [deck]`** - Lists each slide with the lines it covers in the file, its layout, title, step and fragment counts, whether it is skipped, its errors, and its code blocks with their drivers. `--json` prints the same for editors and scripts.
 - **`tap deck schema`** - Lists every frontmatter key tap understands, with its type, default, allowed values and description. `--json` prints it for editors and tools.
@@ -37,6 +39,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - **`--step` and `--fragment` are 1-based** - `tap export images --step 2` renders the slide after its second step, and `--fragment 1` shows the first fragment. A flag you leave out means the final state. `--fragment` used to count from 0.
 - **One `--json` shape** - `new`, `build`, `export pdf`, `export images`, `component new`, `theme list` and `theme show` print `{"ok": true, ...}` or `{"ok": false, "error": {"code", "message"}}`. `tap theme list --json` used to print a bare array. It now prints `{"ok": true, "themes": [...]}`.
 - **Exit codes** - 0 on success, 1 for a problem you can fix, 2 for a problem in tap or its environment, and 130 when interrupted.
+- **Saving updates `tap dev` pages in place** - A saved edit used to reload every open page. The page now fetches the deck and re-renders only the slides that changed, keeping its slide, fragment and step, so a component keeps its state and fonts do not reload. A changed custom theme file, or `r`, still reloads the page.
+- **Exports wait for the page, not a checklist** - `tap export pdf` and `tap export images` wait for the page's own ready signal before each capture, instead of network idle and a list of checks. The output is the same. A slide that does not finish rendering within 30 seconds fails with a message that names it.
 
 ## [2.0.0-rc.1] - 2026-09-21
 

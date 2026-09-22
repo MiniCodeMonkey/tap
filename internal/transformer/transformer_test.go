@@ -1460,6 +1460,68 @@ func TestIsSupportedImageFormat(t *testing.T) {
 	}
 }
 
+func transformMarkdown(t *testing.T, markdown string) *TransformedPresentation {
+	t.Helper()
+	parsed, err := parser.New().Parse([]byte(markdown))
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+	return New(config.DefaultConfig()).Transform(parsed)
+}
+
+func TestTransformSetsASlideHash(t *testing.T) {
+	presentation := transformMarkdown(t, "# One\n\n---\n\n# Two\n")
+	for index, slide := range presentation.Slides {
+		if len(slide.Hash) != 12 {
+			t.Errorf("slide %d hash = %q, want 12 hex characters", index+1, slide.Hash)
+		}
+		if slide.Hash != SlideHash(slide) {
+			t.Errorf("slide %d hash = %q, want SlideHash() = %q", index+1, slide.Hash, SlideHash(slide))
+		}
+	}
+	if presentation.Slides[0].Hash == presentation.Slides[1].Hash {
+		t.Error("two slides with different content have the same hash")
+	}
+}
+
+func TestSlideHashChangesOnlyWithContent(t *testing.T) {
+	before := transformMarkdown(t, "# One\n\n---\n\n# Two\n\n---\n\n# Three\n")
+	after := transformMarkdown(t, "# One\n\n---\n\n# Two, edited\n\n---\n\n# Three\n")
+
+	if before.Slides[0].Hash != after.Slides[0].Hash {
+		t.Error("slide 1 did not change, but its hash did")
+	}
+	if before.Slides[1].Hash == after.Slides[1].Hash {
+		t.Error("slide 2 changed, but its hash did not")
+	}
+	if before.Slides[2].Hash != after.Slides[2].Hash {
+		t.Error("slide 3 did not change, but its hash did")
+	}
+}
+
+func TestSlideHashLeavesOutThePosition(t *testing.T) {
+	slide := TransformedSlide{Index: 0, Layout: "default", HTML: "<h1>Same</h1>"}
+	moved := slide
+	moved.Index = 7
+	if SlideHash(slide) != SlideHash(moved) {
+		t.Error("a slide that only moved got a different hash")
+	}
+	withOldHash := slide
+	withOldHash.Hash = "ffffffffffff"
+	if SlideHash(slide) != SlideHash(withOldHash) {
+		t.Error("SlideHash() depends on the slide's own Hash field")
+	}
+}
+
+func TestSlideHashChangesWithSkip(t *testing.T) {
+	slide := TransformedSlide{Index: 0, Layout: "default", HTML: "<h1>Same</h1>"}
+	skipped := slide
+	skipped.Skip = true
+	if SlideHash(slide) == SlideHash(skipped) {
+		t.Error("marking a slide skipped did not change its hash")
+	}
+}
+
 func TestTransform_CarriesSkip(t *testing.T) {
 	pres := &parser.Presentation{Slides: []parser.Slide{
 		{Index: 0, HTML: "<p>one</p>"},

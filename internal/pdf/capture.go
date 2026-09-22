@@ -40,11 +40,10 @@ type CaptureOptions struct {
 	// Theme, if non-empty, selects a theme through ?theme=<slug>.
 	Theme string
 	// WaitMS, when greater than 0, sleeps this many milliseconds after the
-	// existing readiness waits (network idle, images, maps, fonts, CSS
-	// animations) before capturing - for the rare case where a moment
-	// mid-animation is wanted rather than the settled state. A capture with
-	// WaitMS > 0 stays live (?live=true): print/settled semantics never
-	// apply, since waiting only makes sense for something still running.
+	// page reports the slide ready, before capturing: for the rare case
+	// where a moment mid-animation is wanted rather than the settled
+	// state. A capture with WaitMS > 0 stays live (?live=true), so
+	// components and themes animate instead of settling.
 	WaitMS int
 }
 
@@ -93,16 +92,15 @@ func buildSlideURL(serverURL string, options CaptureOptions) string {
 }
 
 // CaptureSlide renders one slide state, per options, and writes it as a PNG to
-// outputPath. It waits for the page to settle - network idle, images, map
-// tiles, web fonts, and any running CSS animations or transitions - before
-// screenshotting, then fails with a descriptive error if the rendered slide
-// shows a slide or component error card (see ErrorCardSelector). With
-// options.WaitMS > 0, it sleeps that many extra milliseconds after all of
-// the above, for a capture that deliberately wants a moment mid-animation
-// rather than the settled state. ctx is checked before the capture starts
-// and again before the screenshot is taken, so a caller looping over
-// several slides (tap export images --all) can stop between slides on
-// cancellation instead of starting one it will only throw away.
+// outputPath. It waits for the page's ready signal (see waitForReady), then
+// fails with a descriptive error if the rendered slide shows a slide or
+// component error card (see ErrorCardSelector). With options.WaitMS > 0, it
+// sleeps that many extra milliseconds after the signal, for a capture that
+// deliberately wants a moment mid-animation rather than the settled state.
+// ctx is checked before the capture starts and again before the screenshot
+// is taken, so a caller looping over several slides (tap export images
+// --all) can stop between slides on cancellation instead of starting one it
+// will only throw away.
 func (e *Exporter) CaptureSlide(ctx context.Context, serverURL string, options CaptureOptions, outputPath string) error {
 	if err := ctx.Err(); err != nil {
 		return err
@@ -130,31 +128,13 @@ func (e *Exporter) CaptureSlide(ctx context.Context, serverURL string, options C
 		return fmt.Errorf("failed to navigate to slide %d: %w", options.SlideNumber, err)
 	}
 
-	if err := page.WaitForLoadState(playwright.PageWaitForLoadStateOptions{
-		State: playwright.LoadStateNetworkidle,
-	}); err != nil {
-		return fmt.Errorf("failed to wait for slide %d to load: %w", options.SlideNumber, err)
-	}
-
-	if err := e.waitForImages(page); err != nil {
-		return fmt.Errorf("failed to wait for images on slide %d: %w", options.SlideNumber, err)
-	}
-	if err := e.waitForMaps(page); err != nil {
-		return fmt.Errorf("failed to wait for maps on slide %d: %w", options.SlideNumber, err)
-	}
-	if err := waitForFonts(page); err != nil {
-		return fmt.Errorf("failed to wait for fonts on slide %d: %w", options.SlideNumber, err)
-	}
-	if err := waitForAnimations(page); err != nil {
-		return fmt.Errorf("failed to wait for animations on slide %d: %w", options.SlideNumber, err)
+	if err := waitForReady(page, options.SlideNumber); err != nil {
+		return err
 	}
 
 	if options.WaitMS > 0 {
-		// Applied after every readiness wait above, not instead of them: a
-		// live capture (see buildSlideURL) still wants network, images,
-		// maps and fonts settled - only the "is anything still animating"
-		// part is skipped, by design, since this is the one case where an
-		// answer of "yes, still animating" is the point.
+		// Applied after the ready signal: a live capture still waits for
+		// fonts, images, maps and components, and then this long on top.
 		if _, err := page.Evaluate(fmt.Sprintf(`() => new Promise((resolve) => setTimeout(resolve, %d))`, options.WaitMS)); err != nil {
 			return fmt.Errorf("failed to wait %dms on slide %d: %w", options.WaitMS, options.SlideNumber, err)
 		}
@@ -182,46 +162,6 @@ func (e *Exporter) CaptureSlide(ctx context.Context, serverURL string, options C
 	}
 
 	return nil
-}
-
-// waitForFonts waits for every web font used on the page to finish
-// loading, via the CSS Font Loading API's document.fonts.ready promise.
-func waitForFonts(page playwright.Page) error {
-	_, err := page.Evaluate(`() => {
-		if (!document.fonts || !document.fonts.ready) {
-			return Promise.resolve();
-		}
-		return document.fonts.ready;
-	}`)
-	return err
-}
-
-// waitForAnimations waits for every running CSS animation and transition on
-// the page to finish, via the Web Animations API's Animation.finished
-// promises, with a timeout so a deliberately infinite animation (a looping
-// spinner, for example) cannot hang a capture forever. Two animation frames
-// are awaited afterward so the final frame has actually painted before the
-// screenshot is taken.
-func waitForAnimations(page playwright.Page) error {
-	_, err := page.Evaluate(`() => {
-		return new Promise((resolve) => {
-			const settle = () => {
-				requestAnimationFrame(() => requestAnimationFrame(resolve));
-			};
-			const timeout = setTimeout(settle, 3000);
-			const animations = document.getAnimations ? document.getAnimations() : [];
-			if (animations.length === 0) {
-				clearTimeout(timeout);
-				settle();
-				return;
-			}
-			Promise.allSettled(animations.map((animation) => animation.finished)).then(() => {
-				clearTimeout(timeout);
-				settle();
-			});
-		});
-	}`)
-	return err
 }
 
 // detectErrorCard reports whether the rendered slide shows a slide or

@@ -13,7 +13,7 @@
 
 import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import type { Slide as SlideData, Theme } from '$lib/types';
-import { usePresentationStore, goToSlide } from '$lib/stores/presentation';
+import { usePresentationStore, goToSlide, slideKey } from '$lib/stores/presentation';
 import { broadcastPresentationState } from '$lib/stores/websocket';
 import { isSkipped, presentedSlideCount, presentedSlideNumber } from '$lib/utils/skip';
 import { SlideCanvas } from './SlideCanvas';
@@ -250,7 +250,7 @@ export function SlideOverview({
 						const number = presentedSlideNumber(slides, index);
 						return (
 							<button
-								key={slide.index}
+								key={slideKey(slide)}
 								className={`thumbnail${index === currentIndex ? ' current' : ''}${index === focusedIndex ? ' focused' : ''}${skipped ? ' skipped' : ''}`}
 								onClick={() => selectSlide(index)}
 								role="option"

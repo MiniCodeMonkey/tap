@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/MiniCodeMonkey/tap/embedded"
+	"github.com/MiniCodeMonkey/tap/internal/transformer"
 )
 
 // SetupRoutes configures all HTTP routes on the server.
@@ -188,6 +189,13 @@ func (s *Server) presenterAuthorized(r *http.Request) bool {
 	return subtle.ConstantTimeCompare([]byte(key), []byte(password)) == 1
 }
 
+// presentationResponse is the /api/presentation body: the deck's own
+// fields, and the revision the page reports in its ready signal.
+type presentationResponse struct {
+	*transformer.TransformedPresentation
+	Revision string `json:"revision"`
+}
+
 // handleAPIPresentation returns the presentation data as JSON.
 func (s *Server) handleAPIPresentation(w http.ResponseWriter, r *http.Request) {
 	pres := s.GetPresentation()
@@ -204,7 +212,8 @@ func (s *Server) handleAPIPresentation(w http.ResponseWriter, r *http.Request) {
 	// Disable caching so changes are always picked up
 	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
 	w.WriteHeader(http.StatusOK)
-	if err := json.NewEncoder(w).Encode(pres); err != nil {
+	response := presentationResponse{TransformedPresentation: pres, Revision: s.Revision()}
+	if err := json.NewEncoder(w).Encode(response); err != nil {
 		// If encoding fails, we've already started writing the response
 		// so we can't change the status code. Just log internally.
 		fmt.Printf("Error encoding presentation JSON: %v\n", err)
