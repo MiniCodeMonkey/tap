@@ -2,8 +2,10 @@ package cli
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -70,6 +72,42 @@ func TestNewProgressReporterRejectsAnUnknownFormat(t *testing.T) {
 	}
 	if exitCode, code, _ := classify(err); exitCode != exitUserError || code != codeUsage {
 		t.Errorf("classify() = (%d, %q), want (%d, %q)", exitCode, code, exitUserError, codeUsage)
+	}
+}
+
+func TestProgressReporterWriteLineIsSafeForConcurrentWriters(t *testing.T) {
+	var output bytes.Buffer
+	reporter, err := newProgressReporter("json", &output)
+	if err != nil {
+		t.Fatalf("newProgressReporter() error = %v", err)
+	}
+
+	const steps = 200
+	var group sync.WaitGroup
+	group.Add(2)
+	go func() {
+		defer group.Done()
+		for i := 0; i < steps; i++ {
+			reporter.Step(progressPhaseLoad, i, steps)
+		}
+	}()
+	go func() {
+		defer group.Done()
+		for i := 0; i < steps; i++ {
+			reporter.Step(progressPhaseBundle, i, steps)
+		}
+	}()
+	group.Wait()
+
+	lines := strings.Split(strings.TrimSuffix(output.String(), "\n"), "\n")
+	if len(lines) != 2*steps {
+		t.Fatalf("got %d lines, want %d: writes interleaved, truncating or merging lines", len(lines), 2*steps)
+	}
+	for _, line := range lines {
+		var fields map[string]any
+		if err := json.Unmarshal([]byte(line), &fields); err != nil {
+			t.Fatalf("line is not a complete JSON object: %v: %q", err, line)
+		}
 	}
 }
 
