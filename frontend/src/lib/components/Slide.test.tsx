@@ -477,5 +477,21 @@ describe('Slide', () => {
 			);
 			expect(container.querySelector('.slide-skipped-marker')).toBeNull();
 		});
+
+		it('leaves the marker out in a live capture (tap export images --wait), where settleComponents is false', () => {
+			loadPresentation({ config: {}, slides });
+			const { container } = render(
+				<Slide
+					slide={slides[1]}
+					active
+					printMode={false}
+					captureMode
+					fragmentIndex={-1}
+					step={0}
+					total={2}
+				/>
+			);
+			expect(container.querySelector('.slide-skipped-marker')).toBeNull();
+		});
 	});
 });

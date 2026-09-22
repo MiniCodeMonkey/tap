@@ -62,6 +62,15 @@ export interface SlideProps {
 	 * while it asked for them.
 	 */
 	settleComponents?: boolean;
+	/**
+	 * True for any screenshot capture (`tap export images`), live or
+	 * settled - unlike `settleComponents`, which is false for a live capture
+	 * (`--wait`). The skipped marker stays out of a capture either way, so
+	 * `--slide N` and `--slide N --wait M` produce the same clean PNG for a
+	 * skipped slide. Mirrors the `capture` query param App.tsx already
+	 * guards the connection indicator with.
+	 */
+	captureMode?: boolean;
 }
 
 const DEFAULT_SCROLL_SPEED = 2000;
@@ -101,7 +110,8 @@ export function Slide({
 	scrollTriggerCount = 0,
 	preview = false,
 	mermaidOverrides,
-	settleComponents = false
+	settleComponents = false,
+	captureMode = false
 }: SlideProps) {
 	// Only what a deck component sees (through LayoutComponent for the
 	// whole-slide form, and the inline portal props below) - see
@@ -158,7 +168,7 @@ export function Slide({
 	// slide shows its number among the slides a talk shows.
 	const skipped = isSkipped(slide);
 	const presentMode = useConnectionStore((state) => state.presentMode);
-	const showSkippedMarker = skipped && !printMode && !settleComponents && !presentMode;
+	const showSkippedMarker = skipped && !printMode && !captureMode && !presentMode;
 	const presentedNumber = usePresentationStore((state) =>
 		presentedSlideNumber(state.presentation?.slides ?? [], slide.index)
 	);

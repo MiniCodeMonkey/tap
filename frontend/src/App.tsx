@@ -271,6 +271,7 @@ export default function App() {
 							active
 							printMode={PRINT_MODE}
 							settleComponents={SETTLE}
+							captureMode={CAPTURE_MODE}
 							fragmentIndex={PRINT_MODE ? currentSlide.fragmentCount : currentFragmentIndex}
 							step={PRINT_MODE ? currentSlide.steps : currentStep}
 							total={totalSlides}
