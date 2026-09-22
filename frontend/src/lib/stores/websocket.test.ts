@@ -315,6 +315,193 @@ describe('WebSocketClient', () => {
 			expect(reloadSpy).toHaveBeenCalled();
 		});
 
+		describe('"update" messages', () => {
+			function deck(revision: string, secondSlideSteps: number): Presentation {
+				return {
+					config: { title: 'Deck' },
+					revision,
+					slides: [
+						{
+							index: 0,
+							layout: 'default',
+							html: '<p>1</p>',
+							slots: {},
+							slotOrder: [],
+							fragmentCount: 0,
+							steps: 0,
+							hash: `a-${revision}`
+						},
+						{
+							index: 1,
+							layout: 'default',
+							html: '<p>2</p>',
+							slots: {},
+							slotOrder: [],
+							fragmentCount: 0,
+							steps: secondSlideSteps,
+							hash: 'b'
+						}
+					]
+				};
+			}
+
+			function respondWith(...presentations: Presentation[]): ReturnType<typeof vi.fn> {
+				const fetchMock = vi.fn();
+				for (const presentation of presentations) {
+					fetchMock.mockResolvedValueOnce({
+						ok: true,
+						statusText: 'OK',
+						json: () => Promise.resolve(presentation)
+					} as Response);
+				}
+				vi.stubGlobal('fetch', fetchMock);
+				return fetchMock;
+			}
+
+			function stubWindow(reloadSpy: ReturnType<typeof vi.fn>): void {
+				vi.stubGlobal('window', {
+					location: {
+						protocol: 'http:',
+						host: 'localhost:3000',
+						reload: reloadSpy,
+						hash: '#2',
+						search: '',
+						pathname: '/'
+					},
+					history: { replaceState: vi.fn() }
+				});
+			}
+
+			it('applies the new deck in place, keeping the slide and step, with no reload', async () => {
+				const reloadSpy = vi.fn();
+				stubWindow(reloadSpy);
+				loadPresentation(deck('r1', 3));
+				usePresentationStore.setState({ currentSlideIndex: 1, currentStep: 2 });
+				const fetchMock = respondWith(deck('r2', 3));
+
+				client.connect();
+				mockWs?.simulateOpen();
+				mockWs?.simulateMessage({ type: 'update', revision: 'r2', slides: [1] });
+
+				await vi.waitFor(() => {
+					expect(usePresentationStore.getState().presentation?.revision).toBe('r2');
+				});
+				expect(fetchMock).toHaveBeenCalledWith('/api/presentation');
+				expect(usePresentationStore.getState().currentSlideIndex).toBe(1);
+				expect(usePresentationStore.getState().currentStep).toBe(2);
+				expect(reloadSpy).not.toHaveBeenCalled();
+			});
+
+			it('clamps the step when the current slide lost steps', async () => {
+				stubWindow(vi.fn());
+				loadPresentation(deck('r1', 3));
+				usePresentationStore.setState({ currentSlideIndex: 1, currentStep: 3 });
+				respondWith(deck('r2', 1));
+
+				client.connect();
+				mockWs?.simulateOpen();
+				mockWs?.simulateMessage({ type: 'update', revision: 'r2', slides: [2] });
+
+				await vi.waitFor(() => {
+					expect(usePresentationStore.getState().currentStep).toBe(1);
+				});
+			});
+
+			it('reloads the page when the new deck cannot be fetched', async () => {
+				const reloadSpy = vi.fn();
+				stubWindow(reloadSpy);
+				loadPresentation(deck('r1', 0));
+				vi.stubGlobal(
+					'fetch',
+					vi.fn().mockResolvedValue({ ok: false, statusText: 'Not Found' } as Response)
+				);
+
+				client.connect();
+				mockWs?.simulateOpen();
+				mockWs?.simulateMessage({ type: 'update', revision: 'r2', slides: [] });
+
+				await vi.waitFor(() => {
+					expect(reloadSpy).toHaveBeenCalledTimes(1);
+				});
+			});
+
+			it('applies only the newest of two overlapping updates', async () => {
+				stubWindow(vi.fn());
+				loadPresentation(deck('r1', 0));
+				let resolveFirst!: (response: Response) => void;
+				const fetchMock = vi
+					.fn()
+					.mockReturnValueOnce(
+						new Promise<Response>((resolve) => {
+							resolveFirst = resolve;
+						})
+					)
+					.mockResolvedValueOnce({
+						ok: true,
+						statusText: 'OK',
+						json: () => Promise.resolve(deck('r3', 0))
+					} as Response);
+				vi.stubGlobal('fetch', fetchMock);
+
+				client.connect();
+				mockWs?.simulateOpen();
+				mockWs?.simulateMessage({ type: 'update', revision: 'r2', slides: [1] });
+				mockWs?.simulateMessage({ type: 'update', revision: 'r3', slides: [1] });
+
+				await vi.waitFor(() => {
+					expect(usePresentationStore.getState().presentation?.revision).toBe('r3');
+				});
+				resolveFirst({
+					ok: true,
+					statusText: 'OK',
+					json: () => Promise.resolve(deck('r2', 0))
+				} as Response);
+				await new Promise((resolve) => setTimeout(resolve, 0));
+
+				expect(usePresentationStore.getState().presentation?.revision).toBe('r3');
+			});
+
+			it('does not reload on a reconnect to the revision an update already applied', async () => {
+				const reloadSpy = vi.fn();
+				stubWindow(reloadSpy);
+				loadPresentation(deck('r1', 0));
+				respondWith(deck('r2', 0));
+
+				client.connect();
+				mockWs?.simulateOpen();
+				mockWs?.simulateMessage({ type: 'connected', revision: 'r1' });
+				mockWs?.simulateMessage({ type: 'update', revision: 'r2', slides: [1] });
+				await vi.waitFor(() => {
+					expect(usePresentationStore.getState().presentation?.revision).toBe('r2');
+				});
+
+				if (mockWs) mockWs.readyState = MockWebSocket.CLOSED;
+				client.connect();
+				mockWs?.simulateOpen();
+				mockWs?.simulateMessage({ type: 'connected', revision: 'r2' });
+
+				expect(reloadSpy).not.toHaveBeenCalled();
+			});
+		});
+
+		it('reloads on a reconnect to a different tap version', () => {
+			const reloadSpy = vi.fn();
+			vi.stubGlobal('window', {
+				location: { protocol: 'http:', host: 'localhost:3000', reload: reloadSpy }
+			});
+
+			client.connect();
+			mockWs?.simulateOpen();
+			mockWs?.simulateMessage({ type: 'connected', revision: 'abc123', version: 'v2.0.0' });
+
+			if (mockWs) mockWs.readyState = MockWebSocket.CLOSED;
+			client.connect();
+			mockWs?.simulateOpen();
+			mockWs?.simulateMessage({ type: 'connected', revision: 'abc123', version: 'v2.1.0' });
+
+			expect(reloadSpy).toHaveBeenCalledTimes(1);
+		});
+
 		it('should handle "slide" message by navigating to slide', () => {
 			// Set up a presentation with slides
 			const testPresentation: Presentation = {
