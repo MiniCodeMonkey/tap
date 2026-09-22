@@ -581,7 +581,12 @@ func runDevServer(options serverOptions) error {
 		// srv, hub and the model; reloadMu makes the two callers mutually
 		// exclusive.
 		var reloadMu sync.Mutex
-		reloadInTUI := func(path string) {
+		// reloadInTUI reloads the deck and reports the outcome through the
+		// model's own message path. manual is true for r, which drives
+		// applyReloadMsg's own "Reloaded the deck" event; the file-watch
+		// wrapper below passes false and reports the reload itself, so the
+		// two callers never both announce the same reload.
+		reloadInTUI := func(path string, manual bool) error {
 			reloadMu.Lock()
 			defer reloadMu.Unlock()
 
@@ -589,13 +594,13 @@ func runDevServer(options serverOptions) error {
 			newCfg, err := config.Load(absFile)
 			if err != nil {
 				model.SetError(err)
-				return
+				return err
 			}
 
 			newPres, warnings, newResolvedComponents, newComponentBuildErrs, newRawSlides, err := loadPresentation(absFile, newCfg, baseDir)
 			if err != nil {
 				model.SetError(err)
-				return
+				return err
 			}
 
 			// Update custom theme path if changed
@@ -634,12 +639,14 @@ func runDevServer(options serverOptions) error {
 			srv.SetPresentation(newPres)
 			hub.SetPresentationMeta(len(newPres.Slides), server.ComputeRevision(newPres, componentBundleFiles(newResolvedComponents)))
 			_ = hub.BroadcastReload()
-			model.SendReloadEvent(path)
-		}
-		watcher.SetOnChange(reloadInTUI)
-		model.SetReloader(func() error {
-			reloadInTUI(absFile)
+			if !manual {
+				model.SendReloadEvent(path)
+			}
 			return nil
+		}
+		watcher.SetOnChange(func(path string) { _ = reloadInTUI(path, false) })
+		model.SetReloader(func() error {
+			return reloadInTUI(absFile, true)
 		})
 
 		// Run the TUI (blocks until user quits)
