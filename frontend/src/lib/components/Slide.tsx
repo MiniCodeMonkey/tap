@@ -222,7 +222,11 @@ export function Slide({
 						</SlideErrorBoundary>
 					</ScrollReveal>
 					{livePortals.map((portal) =>
-						createPortal(<LiveCodeBlock codeBlock={portal.codeBlock} />, portal.container, portal.key)
+						createPortal(
+							<LiveCodeBlock codeBlock={portal.codeBlock} slideNumber={slide.index + 1} />,
+							portal.container,
+							portal.key
+						)
 					)}
 					{deckComponentPortals.map((portal) => {
 						const info = slide.components?.find((component) => component.index === portal.index);

@@ -3,17 +3,21 @@
  * Highlights its own code on mount (it is mounted into a portal in place of
  * the plain `<pre>` before the slide's general highlighting pass runs, so it
  * never gets highlighted twice), shows a run control when live execution is
- * available, and renders the result returned by `POST /api/execute`.
+ * available, and renders the result returned by `POST /api/execute`, which
+ * it sends only the slide and block number, never the code.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import type { CodeBlock, ExecuteRequest, ExecuteResponse } from '$lib/types';
 import { highlight } from '../utils/highlighting';
 import { selectLiveExecutionAvailable, useConnectionStore } from '../stores/websocket';
+import { usePresentationStore } from '../stores/presentation';
 
 export interface LiveCodeBlockProps {
 	/** The code block data, including the driver to execute it against, if any. */
 	codeBlock: CodeBlock;
+	/** The number of the slide the block is on, counted from 1. */
+	slideNumber: number;
 }
 
 function escapeHtml(text: string): string {
@@ -56,7 +60,7 @@ function formatTableData(data: Record<string, unknown>[]): string {
 	return html;
 }
 
-export function LiveCodeBlock({ codeBlock }: LiveCodeBlockProps) {
+export function LiveCodeBlock({ codeBlock, slideNumber }: LiveCodeBlockProps) {
 	const [isExecuting, setIsExecuting] = useState(false);
 	const [result, setResult] = useState<ExecuteResponse | null>(null);
 	const [hasError, setHasError] = useState(false);
@@ -64,9 +68,16 @@ export function LiveCodeBlock({ codeBlock }: LiveCodeBlockProps) {
 	const containerRef = useRef<HTMLDivElement>(null);
 
 	const liveExecutionAvailable = useConnectionStore(selectLiveExecutionAvailable);
+	const liveCode = usePresentationStore((state) => state.presentation?.liveCode);
 
 	const hasDriver = !!codeBlock.driver;
-	const canExecute = hasDriver && liveExecutionAvailable;
+	const problem = hasDriver && liveExecutionAvailable ? codeBlock.problem : undefined;
+	// A server that sends no live code status (tap export's) keeps the Run
+	// button; /api/execute still refuses anything it may not run.
+	const approved = !liveCode || (!!codeBlock.driver && liveCode.drivers.includes(codeBlock.driver));
+	const runnable = hasDriver && liveExecutionAvailable && !problem && codeBlock.block !== undefined;
+	const canExecute = runnable && approved;
+	const notApproved = runnable && !approved;
 	const showStaticPlaceholder = hasDriver && !liveExecutionAvailable;
 
 	useEffect(() => {
@@ -95,11 +106,7 @@ export function LiveCodeBlock({ codeBlock }: LiveCodeBlockProps) {
 		setHasError(false);
 		setResult(null);
 
-		const request: ExecuteRequest = {
-			driver: codeBlock.driver!,
-			code: codeBlock.code,
-			connection: codeBlock.connection
-		};
+		const request: ExecuteRequest = { slide: slideNumber, block: codeBlock.block! };
 
 		try {
 			const response = await fetch('/api/execute', {
@@ -120,7 +127,7 @@ export function LiveCodeBlock({ codeBlock }: LiveCodeBlockProps) {
 		} finally {
 			setIsExecuting(false);
 		}
-	}, [canExecute, isExecuting, codeBlock]);
+	}, [canExecute, isExecuting, codeBlock, slideNumber]);
 
 	const handleKeyDown = useCallback(
 		(event: KeyboardEvent<HTMLDivElement>) => {
@@ -198,6 +205,18 @@ export function LiveCodeBlock({ codeBlock }: LiveCodeBlockProps) {
 					</div>
 				)}
 
+				{notApproved && (
+					<div className="code-actions">
+						<button
+							className="run-button not-approved"
+							disabled
+							title="Approve this deck when tap dev or tap present asks at startup, or pass --allow-code"
+						>
+							Not approved
+						</button>
+					</div>
+				)}
+
 				{showStaticPlaceholder && (
 					<div className="static-placeholder">
 						<span className="static-placeholder-icon" aria-hidden="true">
@@ -207,6 +226,12 @@ export function LiveCodeBlock({ codeBlock }: LiveCodeBlockProps) {
 					</div>
 				)}
 			</div>
+
+			{problem && (
+				<pre className="live-code-problem" role="note">
+					{problem}
+				</pre>
+			)}
 
 			{result && (
 				<div className={`result-container${hasError ? ' error' : ''}`}>

@@ -163,6 +163,10 @@ export interface CodeBlock {
 	connection?: string;
 	/** Line-highlight spec such as "3" or "1,3-5", from a fence like "```php {1,3-5}". */
 	highlightLines?: string;
+	/** The block's number among the slide's live code blocks, counted from 1. Absent for a block without a driver. */
+	block?: number;
+	/** Why this live block cannot run, such as a driver the deck does not declare. */
+	problem?: string;
 }
 
 /**
@@ -250,12 +254,23 @@ export interface Slide {
 // ============================================================================
 
 /**
+ * Which drivers this run of tap dev or tap present lets run.
+ * Matches Go's liveCodeStatus.
+ */
+export interface LiveCodeStatus {
+	/** The declared drivers this run allows. A block whose driver is missing shows "Not approved". */
+	drivers: string[];
+}
+
+/**
  * Complete presentation data from the backend.
  * Matches Go's TransformedPresentation struct.
  */
 export interface Presentation {
 	config: PresentationConfig;
 	slides: Slide[];
+	/** Present when the server can run live code; absent for a static build or an export. */
+	liveCode?: LiveCodeStatus;
 }
 
 // ============================================================================
@@ -311,12 +326,12 @@ export interface WebSocketMessage {
 // ============================================================================
 
 /**
- * Request body for code execution API.
+ * Request to run one live code block of the loaded deck.
+ * Both numbers count from 1; tap runs the code the deck holds there.
  */
 export interface ExecuteRequest {
-	driver: string;
-	code: string;
-	connection?: string;
+	slide: number;
+	block: number;
 }
 
 /**
