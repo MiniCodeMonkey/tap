@@ -8,6 +8,29 @@ final class LoginShellEnvironmentTests: XCTestCase {
         XCTAssertNil(LoginShellEnvironment.parse(Data("no markers".utf8)))
     }
 
+    func testTakesTheLastBeginMarkerWhenAProfilePrintsItFirst() {
+        let output = LoginShellEnvironment.beginMarker + "trace: entering profile\n" +
+            LoginShellEnvironment.beginMarker + "PATH=/usr/bin" + LoginShellEnvironment.endMarker
+        XCTAssertEqual(LoginShellEnvironment.parse(Data(output.utf8)), ["PATH": "/usr/bin"])
+    }
+
+    func testTakesTheLastPairWhenAProfilePrintsBothMarkersFirst() {
+        let output = LoginShellEnvironment.beginMarker + "FAKE=1" + LoginShellEnvironment.endMarker +
+            "more profile noise\n" +
+            LoginShellEnvironment.beginMarker + "PATH=/usr/bin" + LoginShellEnvironment.endMarker
+        XCTAssertEqual(LoginShellEnvironment.parse(Data(output.utf8)), ["PATH": "/usr/bin"])
+    }
+
+    func testReturnsNilWhenTheEndMarkerNeverAppears() {
+        let output = "profile noise\n" + LoginShellEnvironment.beginMarker + "PATH=/usr/bin"
+        XCTAssertNil(LoginShellEnvironment.parse(Data(output.utf8)))
+    }
+
+    func testReturnsNilForARecordThatIsNotKeyEqualsValue() {
+        let output = LoginShellEnvironment.beginMarker + "PATH=/usr/bin\u{0}not-a-record" + LoginShellEnvironment.endMarker
+        XCTAssertNil(LoginShellEnvironment.parse(Data(output.utf8)))
+    }
+
     func testLoadsFromANoisyShell() async throws {
         let shell = try TestScripts.make("""
         echo "welcome to a noisy profile"

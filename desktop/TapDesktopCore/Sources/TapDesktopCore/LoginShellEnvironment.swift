@@ -21,13 +21,30 @@ public struct LoginShellEnvironment: Equatable, Sendable {
     }
 
     /// The variables printed by `env -0` between the two markers.
+    ///
+    /// A noisy profile can print the marker text itself, so a begin marker
+    /// is not necessarily ours. We take the last begin marker that has an
+    /// end marker somewhere after it: everything our own script prints
+    /// comes after anything the profile printed, so that pairing is the one
+    /// our script emitted. A record that does not parse as `KEY=VALUE` means
+    /// the payload was not what we expect, so the whole parse fails rather
+    /// than returning a partial result.
     public static func parse(_ output: Data) -> [String: String]? {
         let text = String(decoding: output, as: UTF8.self)
-        guard let begin = text.range(of: beginMarker),
-              let end = text.range(of: endMarker, range: begin.upperBound..<text.endIndex) else { return nil }
+        var searchStart = text.startIndex
+        var chosenBegin: Range<String.Index>?
+        var chosenEnd: Range<String.Index>?
+        while let begin = text.range(of: beginMarker, range: searchStart..<text.endIndex) {
+            if let end = text.range(of: endMarker, range: begin.upperBound..<text.endIndex) {
+                chosenBegin = begin
+                chosenEnd = end
+            }
+            searchStart = begin.upperBound
+        }
+        guard let begin = chosenBegin, let end = chosenEnd else { return nil }
         var variables: [String: String] = [:]
         for record in text[begin.upperBound..<end.lowerBound].split(separator: "\u{0}") {
-            guard let equals = record.firstIndex(of: "="), equals != record.startIndex else { continue }
+            guard let equals = record.firstIndex(of: "="), equals != record.startIndex else { return nil }
             variables[String(record[..<equals])] = String(record[record.index(after: equals)...])
         }
         return variables
