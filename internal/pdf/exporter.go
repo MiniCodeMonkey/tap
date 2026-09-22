@@ -81,6 +81,8 @@ type BrokenSlide struct {
 type Exporter struct {
 	pw      *playwright.Playwright
 	browser playwright.Browser
+	// progress receives download and render progress; nil reports nothing.
+	progress Progress
 }
 
 // New creates a new Exporter.
@@ -96,9 +98,7 @@ func (e *Exporter) launchBrowser() error {
 	}
 
 	// Install browsers if not already installed
-	err := playwright.Install(&playwright.RunOptions{
-		Browsers: []string{"chromium"},
-	})
+	err := playwright.Install(e.installOptions())
 	if err != nil {
 		return fmt.Errorf("failed to install playwright browsers: %w", err)
 	}
@@ -371,6 +371,7 @@ func (e *Exporter) exportSlides(ctx context.Context, page playwright.Page, serve
 			return nil, fmt.Errorf("failed to capture slide %d: %w", i+1, err)
 		}
 		screenshotPaths = append(screenshotPaths, screenshotPath)
+		e.reportRender(i+1, slideCount)
 	}
 
 	// Combine screenshots into a PDF
@@ -484,6 +485,7 @@ func (e *Exporter) exportNotes(ctx context.Context, page playwright.Page, server
 			noteText = s
 		}
 		allNotes = append(allNotes, noteText)
+		e.reportRender(i+1, slideCount)
 	}
 
 	// Create an HTML page with all the notes
@@ -587,6 +589,7 @@ func (e *Exporter) exportBoth(ctx context.Context, page playwright.Page, serverU
 			return nil, fmt.Errorf("failed to capture slide %d: %w", i+1, err)
 		}
 		screenshotPaths = append(screenshotPaths, screenshotPath)
+		e.reportRender(i+1, slideCount)
 	}
 
 	// Combine screenshots into a PDF
