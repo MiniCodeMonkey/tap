@@ -13,7 +13,7 @@
 
 import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import type { Slide as SlideData, Theme } from '$lib/types';
-import { usePresentationStore, goToSlide } from '$lib/stores/presentation';
+import { usePresentationStore, goToSlide, slideKey } from '$lib/stores/presentation';
 import { broadcastPresentationState } from '$lib/stores/websocket';
 import { SlideCanvas } from './SlideCanvas';
 import { Slide } from './Slide';
@@ -244,7 +244,7 @@ export function SlideOverview({
 				<div className="thumbnail-grid" ref={gridRef} role="listbox" aria-label="Select a slide">
 					{slides.map((slide, index) => (
 						<button
-							key={slide.index}
+							key={slideKey(slide)}
 							className={`thumbnail${index === currentIndex ? ' current' : ''}${index === focusedIndex ? ' focused' : ''}`}
 							onClick={() => selectSlide(index)}
 							role="option"

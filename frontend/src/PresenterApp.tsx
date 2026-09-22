@@ -32,7 +32,8 @@ import {
 	setupHashChangeListener,
 	nextSlide,
 	prevSlide,
-	goToSlide
+	goToSlide,
+	slideKey
 } from '$lib/stores/presentation';
 import { useResolvedTheme } from '$lib/hooks/useResolvedTheme';
 import {
@@ -505,7 +506,7 @@ export default function PresenterApp() {
 								{nextSlideData ? (
 									<SlideCanvas aspectRatio={aspectRatio} theme={theme} printMode={PRINT_MODE}>
 										<Slide
-											key={nextSlideData.index}
+											key={slideKey(nextSlideData)}
 											slide={nextSlideData}
 											active={false}
 											printMode={false}

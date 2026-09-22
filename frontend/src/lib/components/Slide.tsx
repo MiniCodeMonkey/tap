@@ -2,9 +2,10 @@
  * Renders one slide: picks its layout, provides fragment context to every
  * slot, wraps scroll-reveal slides in ScrollReveal, and isolates layout
  * render failures behind an error boundary.
+ * Memoized, so a slide whose object and props did not change skips its render.
  */
 
-import { useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { memo, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { createPortal } from 'react-dom';
 import type { BackgroundConfig, Slide as SlideData } from '$lib/types';
 import { resolveLayout } from '../layouts/registry';
@@ -88,7 +89,7 @@ function rawSlotContent(slide: SlideData): string {
 	return slide.slotOrder.map((name) => slide.slots[name] ?? '').join('');
 }
 
-export function Slide({
+function SlideView({
 	slide,
 	active,
 	printMode,
@@ -235,3 +236,11 @@ export function Slide({
 		</SlideContext.Provider>
 	);
 }
+
+/**
+ * A slide, memoized: an in-place update keeps the object of every slide
+ * whose content hash did not change (see updatePresentationInPlace), so
+ * those slides skip rendering. A slide still re-renders on its own when a
+ * store value it reads changes.
+ */
+export const Slide = memo(SlideView);
