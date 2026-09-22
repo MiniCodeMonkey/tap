@@ -120,3 +120,103 @@ func TestAppendSlideToAMissingFileFails(t *testing.T) {
 		t.Error("AppendSlide() on a missing file should fail")
 	}
 }
+
+func TestAppendSlideFollowsASymlinkToUpdateTheRealFile(t *testing.T) {
+	dir := t.TempDir()
+	realDir := filepath.Join(dir, "real")
+	if err := os.Mkdir(realDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	realPath := filepath.Join(realDir, "talk.md")
+	if err := os.WriteFile(realPath, []byte("# One\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	linkDir := filepath.Join(dir, "link")
+	if err := os.Mkdir(linkDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	linkPath := filepath.Join(linkDir, "talk.md")
+	if err := os.Symlink(realPath, linkPath); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := AppendSlide(linkPath, "## Two\n"); err != nil {
+		t.Fatalf("AppendSlide() error = %v", err)
+	}
+
+	linkInfo, err := os.Lstat(linkPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if linkInfo.Mode()&os.ModeSymlink == 0 {
+		t.Fatal("AppendSlide() replaced the symlink with a regular file")
+	}
+	target, err := os.Readlink(linkPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if target != realPath {
+		t.Errorf("symlink now points to %q, want %q", target, realPath)
+	}
+
+	content, err := os.ReadFile(realPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(content) != "# One\n\n---\n\n## Two\n" {
+		t.Errorf("real file = %q", content)
+	}
+}
+
+func TestAppendSlideLeavesTheDeckUnchangedWhenTheWriteFails(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("running as root, which ignores directory permissions")
+	}
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "talk.md")
+	content := "# One\n"
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// A read-only directory stops the temp file AppendSlide creates next to
+	// the deck, simulating a write failure partway through.
+	if err := os.Chmod(dir, 0o500); err != nil {
+		t.Fatalf("Failed to chmod dir: %v", err)
+	}
+	defer os.Chmod(dir, 0o755)
+
+	if err := AppendSlide(path, "## Two\n"); err == nil {
+		t.Fatal("AppendSlide() returned no error, want an error from the read-only directory")
+	}
+
+	if err := os.Chmod(dir, 0o755); err != nil {
+		t.Fatalf("Failed to restore dir permissions: %v", err)
+	}
+	got, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("Failed to read deck file: %v", err)
+	}
+	if string(got) != content {
+		t.Errorf("deck file changed after a failed append:\ngot:  %q\nwant: %q", got, content)
+	}
+}
+
+func TestAppendSlidePreservesThePermissions(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "talk.md")
+	if err := os.WriteFile(path, []byte("# One\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := AppendSlide(path, "## Two\n"); err != nil {
+		t.Fatalf("AppendSlide() error = %v", err)
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode().Perm() != 0o600 {
+		t.Errorf("permissions = %v, want 0600", info.Mode().Perm())
+	}
+}

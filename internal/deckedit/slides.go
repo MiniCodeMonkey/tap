@@ -103,15 +103,22 @@ func InsertIntoFile(deckPath string, slideIndex int, markdown string) error {
 }
 
 // AppendSlide adds a slide at the end of the deck file: SlideSeparator,
-// then slideMarkdown.
+// then slideMarkdown. The file is written atomically, so a crash, a full
+// disk or a killed process mid-append leaves the deck as it was before the
+// call or fully updated, never truncated or half-written, and a deck
+// reached through a symlink has its real file updated, keeping the link.
 func AppendSlide(deckPath, slideMarkdown string) error {
-	file, err := os.OpenFile(deckPath, os.O_APPEND|os.O_WRONLY, 0o644)
+	info, err := os.Stat(deckPath)
 	if err != nil {
-		return fmt.Errorf("failed to open file: %w", err)
+		return fmt.Errorf("failed to stat markdown file: %w", err)
 	}
-	if _, err := file.WriteString(SlideSeparator + slideMarkdown); err != nil {
-		_ = file.Close()
-		return fmt.Errorf("failed to write to file: %w", err)
+	content, err := os.ReadFile(deckPath)
+	if err != nil {
+		return fmt.Errorf("failed to read markdown file: %w", err)
 	}
-	return file.Close()
+	updated := string(content) + SlideSeparator + slideMarkdown
+	if err := config.WriteFileAtomically(deckPath, []byte(updated), info.Mode().Perm()); err != nil {
+		return fmt.Errorf("failed to write markdown file: %w", err)
+	}
+	return nil
 }
