@@ -281,3 +281,26 @@ func TestNoteSlideDoesNotWaitForASlowStop(t *testing.T) {
 	<-started
 	_, _ = run.Finish(false)
 }
+
+func TestRunCountsItsSegments(t *testing.T) {
+	run := testRun(t, obedientRecorder(t), &slideState{known: true})
+	if run.Segments() != 0 {
+		t.Errorf("Segments() = %d before any segment, want 0", run.Segments())
+	}
+	first, err := run.StartSegment(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitForRecorderReady(t, first)
+	second, err := run.StartSegment(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitForRecorderReady(t, second)
+	if run.Segments() != 2 {
+		t.Errorf("Segments() = %d, want 2", run.Segments())
+	}
+	if _, err := run.Finish(true); err != nil {
+		t.Fatal(err)
+	}
+}

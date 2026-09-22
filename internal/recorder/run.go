@@ -204,6 +204,13 @@ func (r *Run) Started() bool {
 	return len(r.segments) > 0
 }
 
+// Segments is how many segments the run has started.
+func (r *Run) Segments() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return len(r.segments)
+}
+
 // SegmentElapsed is how long the current segment has run.
 func (r *Run) SegmentElapsed() time.Duration {
 	r.mu.Lock()
