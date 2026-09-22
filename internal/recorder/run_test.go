@@ -171,22 +171,30 @@ func TestRunFinishWithoutASegmentDoesNothing(t *testing.T) {
 	}
 }
 
+type exitReport struct {
+	err error
+	ran time.Duration
+}
+
 func TestRunReportsASegmentThatStopsOnItsOwn(t *testing.T) {
-	exited := make(chan error, 1)
+	exited := make(chan exitReport, 1)
 	run := NewRun(RunOptions{
 		Parent:        t.TempDir(),
 		DeckTitle:     "My Talk",
 		Base:          Options{Command: writeFakeRecorder(t, "exit 3\n"), NoAudio: true},
-		OnSegmentExit: func(err error, ran time.Duration) { exited <- err },
+		OnSegmentExit: func(err error, ran time.Duration) { exited <- exitReport{err, ran} },
 	})
 
 	if _, err := run.StartSegment(1); err != nil {
 		t.Fatal(err)
 	}
 	select {
-	case err := <-exited:
-		if err == nil {
+	case report := <-exited:
+		if report.err == nil {
 			t.Error("want the exit error")
+		}
+		if report.ran <= 0 || report.ran >= 5*time.Second {
+			t.Errorf("ran = %v, want a positive duration under 5s", report.ran)
 		}
 	case <-time.After(5 * time.Second):
 		t.Fatal("OnSegmentExit was never called")
@@ -215,4 +223,41 @@ func TestRunDoesNotReportAStopItAskedFor(t *testing.T) {
 		t.Error("OnSegmentExit fired for a requested stop")
 	case <-time.After(200 * time.Millisecond):
 	}
+}
+
+func TestNoteSlideDoesNotWaitForASlowStop(t *testing.T) {
+	previousGrace := killGrace
+	killGrace = 2 * time.Second
+	t.Cleanup(func() { killGrace = previousGrace })
+
+	// This recorder ignores SIGINT, so stopping it blocks for killGrace
+	// while it is killed.
+	stubborn := writeFakeRecorder(t, "trap '' INT\nprintf ready > \"$last.ready\"\nsleep 60 &\nwait $!\n")
+	slides := &slideState{known: true}
+	run := testRun(t, stubborn, slides)
+
+	first, err := run.StartSegment(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitForRecorderReady(t, first)
+
+	started := make(chan struct{})
+	go func() {
+		_, _ = run.StartSegment(2)
+		close(started)
+	}()
+
+	// Give StartSegment(2) time to switch r.current and begin stopping the
+	// slow first segment before NoteSlide is called.
+	time.Sleep(50 * time.Millisecond)
+
+	before := time.Now()
+	run.NoteSlide(1)
+	if elapsed := time.Since(before); elapsed >= time.Second {
+		t.Errorf("NoteSlide took %v while a segment was stopping, want well under killGrace", elapsed)
+	}
+
+	<-started
+	_, _ = run.Finish(false)
 }

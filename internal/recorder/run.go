@@ -82,16 +82,23 @@ func NewRun(options RunOptions) *Run {
 
 // StartSegment starts a new segment on display and then stops the current
 // one, so the audio gap between them is as short as possible.
+// StartSegment stops the previous segment only after releasing r.mu, since
+// Session.Stop can take up to killGrace and every other Run method,
+// including a poller reading Recording or SegmentElapsed once a second,
+// would otherwise stall behind it. r.current already points at the new
+// segment by the time the previous one is stopped, so watchSegment still
+// sees a requested stop rather than reporting it as unexpected.
 func (r *Run) StartSegment(display int) (string, error) {
 	r.mu.Lock()
-	defer r.mu.Unlock()
 
 	if r.finished {
+		r.mu.Unlock()
 		return "", errors.New("the run has finished")
 	}
 	if r.dir == "" {
 		dir, err := RunDir(r.options.Parent, r.options.DeckTitle, r.options.Now())
 		if err != nil {
+			r.mu.Unlock()
 			return "", err
 		}
 		r.dir = dir
@@ -104,6 +111,7 @@ func (r *Run) StartSegment(display int) (string, error) {
 
 	session, err := Start(options)
 	if err != nil {
+		r.mu.Unlock()
 		return "", err
 	}
 	startedAt := r.options.Now()
@@ -116,38 +124,42 @@ func (r *Run) StartSegment(display int) (string, error) {
 	previous := r.current
 	r.segments = append(r.segments, next)
 	r.current = next
+	r.writeChaptersLocked()
+	r.mu.Unlock()
+
 	go r.watchSegment(next)
 
 	if previous != nil {
-		r.stopLocked(previous)
+		_ = r.stopAndRecordTruncated(previous)
 	}
-	r.writeChaptersLocked()
 	return options.OutputPath, nil
 }
 
-// StopSegment stops the current segment, if any.
+// StopSegment stops the current segment, if any, without holding r.mu while
+// it does: see StartSegment.
 func (r *Run) StopSegment() error {
 	r.mu.Lock()
-	defer r.mu.Unlock()
-
 	if r.current == nil {
+		r.mu.Unlock()
 		return nil
 	}
 	previous := r.current
 	r.current = nil
-	return r.stopLocked(previous)
+	r.mu.Unlock()
+
+	return r.stopAndRecordTruncated(previous)
 }
 
-// stopLocked stops a segment that is no longer current. It is called with
-// r.mu held; Session.Stop takes up to killGrace, which is acceptable
-// because nothing else in the run can usefully proceed meanwhile.
-func (r *Run) stopLocked(stopping *segment) error {
-	if r.current == stopping {
-		r.current = nil
-	}
+// stopAndRecordTruncated stops a segment that is no longer current. It is
+// called without r.mu held, so a slow Session.Stop (up to killGrace) never
+// blocks another Run method; it takes the lock only briefly afterward to
+// record whether the recorder had to be killed.
+func (r *Run) stopAndRecordTruncated(stopping *segment) error {
 	result, err := stopping.session.Stop()
 	if result.Truncated {
+		r.mu.Lock()
 		r.truncated = true
+		r.mu.Unlock()
 	}
 	return err
 }
@@ -243,7 +255,9 @@ func (r *Run) Dir() string {
 
 // Finish stops the run and keeps or deletes its folder. A run that never
 // left the first slide is deleted whatever keep says. Finish is
-// idempotent: later calls return the first summary.
+// idempotent: later calls return the first summary. Unlike StartSegment and
+// StopSegment, Finish stops the last segment while still holding r.mu:
+// the run is ending, so nothing else needs the lock in the meantime.
 func (r *Run) Finish(keep bool) (RunSummary, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -255,7 +269,13 @@ func (r *Run) Finish(keep bool) (RunSummary, error) {
 
 	var stopErr error
 	if r.current != nil {
-		stopErr = r.stopLocked(r.current)
+		stopping := r.current
+		r.current = nil
+		result, err := stopping.session.Stop()
+		if result.Truncated {
+			r.truncated = true
+		}
+		stopErr = err
 	}
 	if r.dir == "" {
 		return r.summary, stopErr
