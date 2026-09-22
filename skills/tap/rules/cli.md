@@ -70,6 +70,8 @@ tap dev slides.md --port 8080
 tap dev slides.md --lan            # let a phone on the same network connect
 ```
 
+Saving the deck updates open pages in place and keeps the current slide and step; there is no need to reload the browser.
+
 ## tap present
 
 Serve the deck for a talk or a practice run of it. Unlike `tap dev`, it
@@ -109,6 +111,7 @@ tap build [deck]
 |------|-------|-------------|
 | `--output <dir>` | `-o` | Output directory (default: `dist`) |
 | `--json` | | Print the result as JSON |
+| `--progress json` | | progress as JSON lines on stderr |
 
 Examples:
 ```bash
@@ -146,6 +149,7 @@ tap export pdf [deck]
 | `--output <file>` | `-o` | Output PDF file path (default: `<deck>.pdf`) |
 | `--content <type>` | | Content to include: `slides`, `notes`, or `both` |
 | `--json` | | Print the result as JSON |
+| `--progress json` | | progress as JSON lines on stderr |
 
 Examples:
 ```bash
@@ -178,6 +182,7 @@ tap export images [deck] [flags]
 | `--output <path>` | `-o` | Output PNG file, or folder with `--all` |
 | `--width <px>` | | Viewport width (default `1920`); height follows the aspect ratio |
 | `--json` | | Print the written files as JSON |
+| `--progress json` | | progress as JSON lines on stderr |
 
 Without `--step` or `--fragment`, the slide renders its final state in
 print mode. On success it prints only the paths it wrote, one per line.
@@ -250,6 +255,7 @@ the theme of the deck in the current folder.
   or its environment, `130` interrupted.
 - The old names `tap pdf`, `tap screenshot`, `tap add` and `tap add
   component` print the new name and exit 1.
+- `--progress json` prints one JSON line per step on stderr (`{"phase":"render","done":2,"total":9}`) and a final `{"phase":"done","ok":true,...}` line with the `--json` result fields. Use it when a program needs progress; use `--json` when it only needs the result.
 
 Errors and warnings go to standard error; a command's real output goes to
 standard output.

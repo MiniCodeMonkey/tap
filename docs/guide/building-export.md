@@ -175,6 +175,10 @@ This generates a high-quality PDF with each slide as a page.
 Page size follows the deck's own `aspectRatio`, so there is no paper-size
 flag.
 
+### How tap knows a slide is ready
+
+Before it captures a slide, the export waits until the page reports that the slide has finished rendering: fonts and images are loaded, maps have drawn their tiles, components have loaded (or shown their error card), and slide transitions and theme animations are done. A slide gets 30 seconds. See "Ready signal" in the CLI reference for how other tools can wait for the same signal.
+
 ### Export Formats
 
 **Slides only (default):**
@@ -230,11 +234,19 @@ tap export images slides.md --all --output shots/
 ```
 
 It exits with status 1 when the slide shows an error card, so it works as
-a check in a script. See [CLI Commands](/reference/cli-commands#tap-export-images).
+a check in a script. The capture waits for the same ready signal as a PDF export. See [CLI Commands](/reference/cli-commands#tap-export-images).
 
 ::: tip
 PDF export captures your presentation at a specific moment. If you have live code execution enabled, the results shown in the PDF will be whatever was displayed at export time.
 :::
+
+## Progress for Scripts and Apps
+
+Add `--progress json` to `tap export pdf`, `tap export images` or `tap build` to get one JSON line per step on stderr, and a final line with the result:
+
+    tap export pdf talk.md --output talk.pdf --progress json
+
+See "Progress output" in the CLI reference for every line's fields.
 
 ## Best Practices
 

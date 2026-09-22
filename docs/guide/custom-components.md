@@ -846,11 +846,7 @@ open 'http://localhost:<port>/?capture=true&step=2#3'
 TAP_HUB_STATE_RETENTION=0s tap dev deck.md --port 4000
 ```
 
-**Any file change under the deck folder reloads the page** and remounts
-every component, which restarts their animations. Write screenshots and
-scratch files **outside** the deck folder, or into a dot folder or a folder
-named `dist`: the watcher skips both. It also skips the recordings folder
-and Finder's `.DS_Store` files.
+**A file change under the deck folder updates the page in place.** A slide whose content did not change keeps its component mounted, with its state and its step. A component whose file changed gets a new bundle and mounts again, which restarts its animations. A change to the custom theme file reloads the whole page. Write screenshots and scratch files **outside** the deck folder, or into a dot folder or a folder named `dist`: the watcher skips both. It also skips the recordings folder and Finder's `.DS_Store` files.
 
 ```bash
 tap export images deck.md --slide 3 --output ../shots/s3.png   # outside the deck
