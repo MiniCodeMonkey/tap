@@ -195,13 +195,6 @@ func (e *Exporter) Export(ctx context.Context, serverURL string, opts ExportOpti
 		return nil, fmt.Errorf("failed to navigate to presentation: %w", err)
 	}
 
-	// Wait for the presentation to load
-	if err := page.WaitForLoadState(playwright.PageWaitForLoadStateOptions{
-		State: playwright.LoadStateNetworkidle,
-	}); err != nil {
-		return nil, fmt.Errorf("failed to wait for page load: %w", err)
-	}
-
 	// Get total slide count
 	slideCount, err := e.getSlideCount(page)
 	if err != nil {
@@ -354,33 +347,10 @@ func (e *Exporter) exportSlides(ctx context.Context, page playwright.Page, serve
 			return nil, fmt.Errorf("failed to navigate to slide %d: %w", i+1, err)
 		}
 
-		// Wait for slide to render
-		if err := page.WaitForLoadState(playwright.PageWaitForLoadStateOptions{
-			State: playwright.LoadStateNetworkidle,
-		}); err != nil {
-			return nil, fmt.Errorf("failed to wait for slide %d to load: %w", i+1, err)
-		}
-
-		// Wait for all images to be fully loaded
-		if err := e.waitForImages(page); err != nil {
-			return nil, fmt.Errorf("failed to wait for images on slide %d: %w", i+1, err)
-		}
-
-		// Wait for map tiles to load (if slide has a map)
-		if err := e.waitForMaps(page); err != nil {
-			return nil, fmt.Errorf("failed to wait for maps on slide %d: %w", i+1, err)
-		}
-
-		// Wait for web fonts and any running CSS animation or transition to
-		// settle - print mode shows a slide's final state, and a component
-		// (such as the rolling deploy example) can animate into that final
-		// state over several hundred milliseconds, longer than a fixed
-		// delay would reliably cover.
-		if err := waitForFonts(page); err != nil {
-			return nil, fmt.Errorf("failed to wait for fonts on slide %d: %w", i+1, err)
-		}
-		if err := waitForAnimations(page); err != nil {
-			return nil, fmt.Errorf("failed to wait for animations on slide %d: %w", i+1, err)
+		// The page reports when this slide has settled: fonts, images,
+		// maps, components and animations are all done.
+		if err := waitForReady(page, i+1); err != nil {
+			return nil, err
 		}
 
 		// A broken slide (a component that throws at render, or a slide
@@ -475,109 +445,6 @@ func loadPNG(path string) (image.Image, error) {
 	return png.Decode(f)
 }
 
-// waitForImages waits for all images on the page to be fully loaded.
-func (e *Exporter) waitForImages(page playwright.Page) error {
-	// Wait for all images to complete loading with a timeout
-	_, err := page.Evaluate(`() => {
-		return new Promise((resolve, reject) => {
-			const timeout = setTimeout(() => {
-				resolve(); // Don't fail on timeout, just continue
-			}, 5000);
-
-			const images = Array.from(document.querySelectorAll('img'));
-			if (images.length === 0) {
-				clearTimeout(timeout);
-				resolve();
-				return;
-			}
-
-			let loaded = 0;
-			const total = images.length;
-
-			const checkComplete = () => {
-				loaded++;
-				if (loaded >= total) {
-					clearTimeout(timeout);
-					resolve();
-				}
-			};
-
-			images.forEach(img => {
-				if (img.complete && img.naturalHeight !== 0) {
-					checkComplete();
-				} else {
-					img.addEventListener('load', checkComplete);
-					img.addEventListener('error', checkComplete); // Count errors as "done"
-				}
-			});
-		});
-	}`)
-	return err
-}
-
-// waitForMaps waits for map tiles to be loaded on the page.
-// Maps use MapLibre GL which exposes __tapMapReady on window when ready.
-func (e *Exporter) waitForMaps(page playwright.Page) error {
-	// Check if page has a map and wait for it to be ready
-	_, err := page.Evaluate(`() => {
-		return new Promise((resolve) => {
-			// If no map on this slide, resolve immediately
-			const mapSlide = document.querySelector('.map-slide');
-			if (!mapSlide) {
-				resolve();
-				return;
-			}
-
-			// Set a timeout for map loading (3 seconds max)
-			const timeout = setTimeout(() => {
-				console.warn('Map tiles timeout - continuing anyway');
-				resolve();
-			}, 3000);
-
-			// Check if map is already ready
-			if (window.__tapMapReady && window.__tapMap) {
-				// Wait for tiles to load
-				const map = window.__tapMap;
-				if (map.loaded() && map.areTilesLoaded && map.areTilesLoaded()) {
-					clearTimeout(timeout);
-					resolve();
-					return;
-				}
-
-				// Wait for idle event (all tiles loaded)
-				map.once('idle', () => {
-					clearTimeout(timeout);
-					resolve();
-				});
-				return;
-			}
-
-			// Poll for map ready state
-			const checkInterval = setInterval(() => {
-				if (window.__tapMapReady && window.__tapMap) {
-					clearInterval(checkInterval);
-					const map = window.__tapMap;
-					if (map.loaded() && map.areTilesLoaded && map.areTilesLoaded()) {
-						clearTimeout(timeout);
-						resolve();
-						return;
-					}
-					map.once('idle', () => {
-						clearTimeout(timeout);
-						resolve();
-					});
-				}
-			}, 100);
-
-			// Also clear interval on timeout
-			setTimeout(() => {
-				clearInterval(checkInterval);
-			}, 3000);
-		});
-	}`)
-	return err
-}
-
 // exportNotes exports only the speaker notes to PDF.
 // It creates an HTML page with all notes and converts it to PDF.
 func (e *Exporter) exportNotes(ctx context.Context, page playwright.Page, serverURL string, slideCount int, output string) (*ExportResult, error) {
@@ -598,14 +465,11 @@ func (e *Exporter) exportNotes(ctx context.Context, page playwright.Page, server
 			return nil, fmt.Errorf("failed to navigate to slide %d: %w", i+1, err)
 		}
 
-		if err := page.WaitForLoadState(playwright.PageWaitForLoadStateOptions{
-			State: playwright.LoadStateNetworkidle,
-		}); err != nil {
-			return nil, fmt.Errorf("failed to wait for slide %d: %w", i+1, err)
+		// The page reports when this slide has settled: fonts, images,
+		// maps, components and animations are all done.
+		if err := waitForReady(page, i+1); err != nil {
+			return nil, err
 		}
-
-		// Small delay for content to render
-		time.Sleep(100 * time.Millisecond)
 
 		// Extract notes text
 		notes, err := page.Evaluate(`() => {
@@ -707,24 +571,11 @@ func (e *Exporter) exportBoth(ctx context.Context, page playwright.Page, serverU
 			return nil, fmt.Errorf("failed to navigate to slide %d: %w", i+1, err)
 		}
 
-		if err := page.WaitForLoadState(playwright.PageWaitForLoadStateOptions{
-			State: playwright.LoadStateNetworkidle,
-		}); err != nil {
-			return nil, fmt.Errorf("failed to wait for slide %d: %w", i+1, err)
+		// The page reports when this slide has settled: fonts, images,
+		// maps, components and animations are all done.
+		if err := waitForReady(page, i+1); err != nil {
+			return nil, err
 		}
-
-		// Wait for all images to be fully loaded
-		if err := e.waitForImages(page); err != nil {
-			return nil, fmt.Errorf("failed to wait for images on slide %d: %w", i+1, err)
-		}
-
-		// Wait for map tiles to load (if slide has a map)
-		if err := e.waitForMaps(page); err != nil {
-			return nil, fmt.Errorf("failed to wait for maps on slide %d: %w", i+1, err)
-		}
-
-		// Small delay for content to render
-		time.Sleep(200 * time.Millisecond)
 
 		// Take a screenshot of the presenter view
 		screenshotPath := filepath.Join(tempDir, fmt.Sprintf("slide-%03d.png", i))

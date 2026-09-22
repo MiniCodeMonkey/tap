@@ -83,13 +83,18 @@ func TestExportSlides(t *testing.T) {
 	}
 	defer os.RemoveAll(tempDir)
 
-	// Create a test presentation with multiple slides
+	// Create a test presentation with multiple slides. SlotOrder must not
+	// be nil for any slide: the frontend calls .filter on it unconditionally
+	// for every non-component layout (see Slide.tsx), and a real deck's
+	// transformer output never leaves it nil - only a hand-built fixture
+	// like this one could, and a nil slice there crashes the whole render
+	// tree, which the ready signal now waits on.
 	pres := &transformer.TransformedPresentation{
 		Config: *config.DefaultConfig(),
 		Slides: []transformer.TransformedSlide{
-			{Index: 0, HTML: "<h1>Slide 1</h1>", Layout: "title"},
-			{Index: 1, HTML: "<h1>Slide 2</h1><p>Content</p>", Layout: "default"},
-			{Index: 2, HTML: "<h1>Slide 3</h1><p>More content</p>", Layout: "default"},
+			{Index: 0, Layout: "title", Slots: map[string]string{"default": "<h1>Slide 1</h1>"}, SlotOrder: []string{"default"}},
+			{Index: 1, Layout: "default", Slots: map[string]string{"default": "<h1>Slide 2</h1><p>Content</p>"}, SlotOrder: []string{"default"}},
+			{Index: 2, Layout: "default", Slots: map[string]string{"default": "<h1>Slide 3</h1><p>More content</p>"}, SlotOrder: []string{"default"}},
 		},
 	}
 
@@ -285,12 +290,13 @@ func TestGetSlideCountRetriesUntilLoaded(t *testing.T) {
 	}
 	defer os.RemoveAll(tempDir)
 
-	// Create a presentation with multiple slides
+	// Create a presentation with multiple slides. See the SlotOrder note in
+	// TestExportSlides above: it must not be nil for any slide.
 	pres := &transformer.TransformedPresentation{
 		Config: *config.DefaultConfig(),
 		Slides: []transformer.TransformedSlide{
-			{Index: 0, HTML: "<h1>Slide 1</h1>", Layout: "title"},
-			{Index: 1, HTML: "<h1>Slide 2</h1>", Layout: "default"},
+			{Index: 0, Layout: "title", Slots: map[string]string{"default": "<h1>Slide 1</h1>"}, SlotOrder: []string{"default"}},
+			{Index: 1, Layout: "default", Slots: map[string]string{"default": "<h1>Slide 2</h1>"}, SlotOrder: []string{"default"}},
 		},
 	}
 
@@ -355,14 +361,18 @@ func TestExportSlidesWithImages(t *testing.T) {
 	}
 	t.Logf("Created red test image: %s (%d bytes)", imgPath, imgStat.Size())
 
-	// Create a presentation with the red image displayed prominently
+	// Create a presentation with the red image displayed prominently. See
+	// the SlotOrder note in TestExportSlides above: it must not be nil.
 	pres := &transformer.TransformedPresentation{
 		Config: *config.DefaultConfig(),
 		Slides: []transformer.TransformedSlide{
 			{
 				Index:  0,
-				HTML:   `<div style="display:flex;justify-content:center;align-items:center;height:100%;"><img src="/local/red-image.png" alt="Red" style="width:400px;height:400px;"></div>`,
 				Layout: "default",
+				Slots: map[string]string{
+					"default": `<div style="display:flex;justify-content:center;align-items:center;height:100%;"><img src="/local/red-image.png" alt="Red" style="width:400px;height:400px;"></div>`,
+				},
+				SlotOrder: []string{"default"},
 			},
 		},
 	}
