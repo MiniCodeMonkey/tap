@@ -163,8 +163,18 @@ func (b *Builder) Build(cfg *config.Config, pres *parser.Presentation) (*BuildRe
 				continue
 			}
 
+			// A deck cannot reach a file outside its own folder, whether
+			// through "../", that path's encoded form, an absolute path,
+			// or a symlink inside the folder that targets something
+			// outside it.
+			confinedPath, err := b.assetWithinBaseDir(sourcePath)
+			if err != nil {
+				result.Warnings = append(result.Warnings, fmt.Sprintf("image resolves outside the deck's folder, skipped: %s", reportedPath))
+				continue
+			}
+
 			// Copy the image with content hash
-			hashedPath, size, err := b.copyWithHash(sourcePath, assetsDir)
+			hashedPath, size, err := b.copyWithHash(confinedPath, assetsDir)
 			if err != nil {
 				result.Warnings = append(result.Warnings, fmt.Sprintf("image not found: %s", reportedPath))
 				continue
@@ -194,8 +204,21 @@ func (b *Builder) Build(cfg *config.Config, pres *parser.Presentation) (*BuildRe
 			if !filepath.IsAbs(resolvedPath) && b.baseDir != "" {
 				sourcePath = filepath.Join(b.baseDir, resolvedPath)
 			}
+			if _, statErr := os.Stat(sourcePath); statErr != nil {
+				continue
+			}
 
-			hashedPath, size, err := b.copyWithHash(sourcePath, assetsDir)
+			// Recording paths are not decoded the way image paths are
+			// (see resolveImageSourcePath); this only refuses a plain or
+			// absolute traversal attempt, not one written in its
+			// encoded form, since that form is never decoded here.
+			confinedPath, err := b.assetWithinBaseDir(sourcePath)
+			if err != nil {
+				result.Warnings = append(result.Warnings, fmt.Sprintf("recording resolves outside the deck's folder, skipped: %s", resolvedPath))
+				continue
+			}
+
+			hashedPath, size, err := b.copyWithHash(confinedPath, assetsDir)
 			if err != nil {
 				continue
 			}
@@ -430,6 +453,47 @@ func (b *Builder) resolveImageSourcePath(resolvedPath string) (sourcePath, repor
 		}
 	}
 	return "", reportedPath, fmt.Errorf("no file at %s", reportedPath)
+}
+
+// assetWithinBaseDir resolves symlinks in both b.baseDir and sourcePath
+// and confirms the resolved source sits inside the resolved base
+// directory. sourcePath must already exist (both of Build's callers only
+// call this after a successful os.Stat), so EvalSymlinks on it either
+// succeeds or reports a real filesystem error. This is what stops a deck
+// from reaching a file outside its own folder: a literal "../", that
+// path's percent-encoded form once resolveImageSourcePath has decoded
+// it, an absolute path, or a symlink that lives inside the deck's folder
+// but targets something outside it. A Builder with no baseDir set (only
+// tests construct one this way; every real command sets one through
+// SetBaseDir) has no folder to enforce, so nothing is refused.
+func (b *Builder) assetWithinBaseDir(sourcePath string) (string, error) {
+	if b.baseDir == "" {
+		return sourcePath, nil
+	}
+
+	resolvedBase, err := filepath.EvalSymlinks(b.baseDir)
+	if err != nil {
+		resolvedBase = b.baseDir
+	}
+	resolvedBase, err = filepath.Abs(resolvedBase)
+	if err != nil {
+		return "", fmt.Errorf("failed to resolve base directory: %w", err)
+	}
+
+	resolvedSource, err := filepath.EvalSymlinks(sourcePath)
+	if err != nil {
+		return "", fmt.Errorf("failed to resolve asset path: %w", err)
+	}
+	resolvedSource, err = filepath.Abs(resolvedSource)
+	if err != nil {
+		return "", fmt.Errorf("failed to resolve asset path: %w", err)
+	}
+
+	rel, err := filepath.Rel(resolvedBase, resolvedSource)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("%s resolves outside %s", sourcePath, resolvedBase)
+	}
+	return resolvedSource, nil
 }
 
 // decodeAssetPath undoes the escaping the renderer applies to an <img>

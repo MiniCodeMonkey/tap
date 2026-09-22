@@ -1028,3 +1028,136 @@ func TestBuild_KeepsALiteralPercentEscapedFileName(t *testing.T) {
 		t.Errorf("index.html has no rewritten assets/ src for %s:\n%s", imageName, indexHTML)
 	}
 }
+
+// TestBuild_RefusesPathTraversal covers every shape the re-review named:
+// a plain "..", the percent-encoded form of one, an absolute path, and a
+// symlink that lives inside the deck's folder but targets something
+// outside it. Each must be refused and warned about, and the secret file
+// must not appear anywhere in the built output.
+func TestBuild_RefusesPathTraversal(t *testing.T) {
+	tests := map[string]func(t *testing.T, tmpDir, baseDir string) string{
+		"plain dot-dot": func(t *testing.T, tmpDir, baseDir string) string {
+			if err := os.WriteFile(filepath.Join(tmpDir, "secret.png"), []byte("secret"), 0644); err != nil {
+				t.Fatal(err)
+			}
+			return "../secret.png"
+		},
+		"percent-encoded dot-dot": func(t *testing.T, tmpDir, baseDir string) string {
+			if err := os.WriteFile(filepath.Join(tmpDir, "secret.png"), []byte("secret"), 0644); err != nil {
+				t.Fatal(err)
+			}
+			return "%2e%2e/secret.png"
+		},
+		"absolute path": func(t *testing.T, tmpDir, baseDir string) string {
+			secretPath := filepath.Join(tmpDir, "elsewhere", "secret.png")
+			if err := os.MkdirAll(filepath.Dir(secretPath), 0755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(secretPath, []byte("secret"), 0644); err != nil {
+				t.Fatal(err)
+			}
+			return secretPath
+		},
+		"symlink inside the folder pointing outside": func(t *testing.T, tmpDir, baseDir string) string {
+			secretPath := filepath.Join(tmpDir, "elsewhere", "secret.png")
+			if err := os.MkdirAll(filepath.Dir(secretPath), 0755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(secretPath, []byte("secret"), 0644); err != nil {
+				t.Fatal(err)
+			}
+			linkPath := filepath.Join(baseDir, "link.png")
+			if err := os.Symlink(secretPath, linkPath); err != nil {
+				t.Fatal(err)
+			}
+			return "link.png"
+		},
+	}
+
+	for name, setup := range tests {
+		t.Run(name, func(t *testing.T) {
+			tmpDir := t.TempDir()
+			outputDir := filepath.Join(tmpDir, "dist")
+			baseDir := filepath.Join(tmpDir, "presentation")
+			if err := os.MkdirAll(baseDir, 0755); err != nil {
+				t.Fatal(err)
+			}
+			imagePath := setup(t, tmpDir, baseDir)
+
+			markdown := "# Slide\n\n![alt](" + imagePath + ")\n"
+			pres, err := parser.New().Parse([]byte(markdown))
+			if err != nil {
+				t.Fatalf("Parse() error = %v", err)
+			}
+
+			b := NewWithOutput(outputDir)
+			b.SetBaseDir(baseDir)
+			result, err := b.Build(config.DefaultConfig(), pres)
+			if err != nil {
+				t.Fatalf("Build() error = %v", err)
+			}
+			if len(result.Warnings) != 1 {
+				t.Fatalf("Build() warnings = %v, want exactly one", result.Warnings)
+			}
+
+			assetsDir := filepath.Join(outputDir, "assets")
+			entries, err := os.ReadDir(assetsDir)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, entry := range entries {
+				content, err := os.ReadFile(filepath.Join(assetsDir, entry.Name()))
+				if err == nil && string(content) == "secret" {
+					t.Errorf("the outside file was copied into the built output as %s", entry.Name())
+				}
+			}
+		})
+	}
+}
+
+// TestBuild_AllowsOrdinaryPathsInsideTheFolder is the control for
+// TestBuild_RefusesPathTraversal: a relative path that stays inside the
+// deck's folder, including one in a subfolder, must still work.
+func TestBuild_AllowsOrdinaryPathsInsideTheFolder(t *testing.T) {
+	tmpDir := t.TempDir()
+	outputDir := filepath.Join(tmpDir, "dist")
+	baseDir := filepath.Join(tmpDir, "presentation")
+	subDir := filepath.Join(baseDir, "images", "nested")
+	if err := os.MkdirAll(subDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(subDir, "photo.png"), []byte("photo bytes"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	markdown := "# Slide\n\n![alt](images/nested/photo.png)\n"
+	pres, err := parser.New().Parse([]byte(markdown))
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+
+	b := NewWithOutput(outputDir)
+	b.SetBaseDir(baseDir)
+	result, err := b.Build(config.DefaultConfig(), pres)
+	if err != nil {
+		t.Fatalf("Build() error = %v", err)
+	}
+	if len(result.Warnings) != 0 {
+		t.Errorf("Build() warnings = %v, want none", result.Warnings)
+	}
+
+	assetsDir := filepath.Join(outputDir, "assets")
+	entries, err := os.ReadDir(assetsDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var foundImage bool
+	for _, entry := range entries {
+		if strings.HasPrefix(entry.Name(), "photo.") && strings.HasSuffix(entry.Name(), ".png") {
+			foundImage = true
+		}
+	}
+	if !foundImage {
+		t.Error("the subfolder image was not copied into the built assets")
+	}
+}
