@@ -932,7 +932,9 @@ func getPresentationJSON(t *testing.T, s *Server) map[string]json.RawMessage {
 
 func TestPresentationListsTheDriversThisRunAllows(t *testing.T) {
 	s := NewWithHost(0, "127.0.0.1")
-	s.SetRegistry(driver.NewRegistry())
+	registry := driver.NewRegistry()
+	registry.Register(&mockDriver{name: "sqlite"})
+	s.SetRegistry(registry)
 	s.SetPresentation(&transformer.TransformedPresentation{
 		Config: config.Config{Drivers: map[string]config.DriverConfig{"shell": {}, "sqlite": {}}},
 		Slides: []transformer.TransformedSlide{{Index: 0}},
@@ -945,6 +947,28 @@ func TestPresentationListsTheDriversThisRunAllows(t *testing.T) {
 	}
 	if _, found := body["slides"]; !found {
 		t.Error("the slides are missing")
+	}
+}
+
+// TestPresentationOmitsADeclaredDriverTheRegistryNeverBuilt covers a custom
+// driver declared with no command: buildDriverRegistry skips it, so it is
+// declared and can be approved, but never actually runs. The advisory list
+// must not promise it, or the page shows a Run button that /api/execute
+// then refuses with "driver not found".
+func TestPresentationOmitsADeclaredDriverTheRegistryNeverBuilt(t *testing.T) {
+	s := NewWithHost(0, "127.0.0.1")
+	registry := driver.NewRegistry()
+	registry.Register(&mockDriver{name: "sqlite"})
+	s.SetRegistry(registry)
+	s.SetPresentation(&transformer.TransformedPresentation{
+		Config: config.Config{Drivers: map[string]config.DriverConfig{"sqlite": {}, "python": {}}},
+		Slides: []transformer.TransformedSlide{{Index: 0}},
+	})
+	s.SetLiveCodePolicy(LiveCodePolicy{Drivers: []string{"sqlite", "python"}})
+
+	body := getPresentationJSON(t, s)
+	if string(body["liveCode"]) != `{"drivers":["sqlite"]}` {
+		t.Errorf("liveCode = %s, want python left out: it is declared and approved but the registry never built it", body["liveCode"])
 	}
 }
 
