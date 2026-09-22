@@ -65,6 +65,12 @@ func TestChangedSlides(t *testing.T) {
 		{"a slide was inserted first", presentationWithHashes("a", "b"), presentationWithHashes("z", "a", "b"), []int{1, 2, 3}},
 		{"no previous deck", nil, presentationWithHashes("a", "b"), []int{1, 2}},
 		{"no next deck", presentationWithHashes("a"), nil, []int{}},
+		// SlideHash (internal/transformer) returns "" when json.Marshal
+		// fails for a slide. Two empty hashes must never compare equal, or
+		// a genuinely changed slide whose marshal keeps failing would be
+		// reported unchanged and never re-rendered.
+		{"both hashes are empty", presentationWithHashes(""), presentationWithHashes(""), []int{1}},
+		{"previous hash is empty, next is not", presentationWithHashes(""), presentationWithHashes("a"), []int{1}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

@@ -164,7 +164,11 @@ func (t *Transformer) Transform(pres *parser.Presentation) *TransformedPresentat
 // SlideHash returns a short hash of everything the frontend renders for
 // slide: its JSON with Index and Hash left out, so a slide that only moved
 // keeps its hash. json.Marshal sorts map keys, so equal slides always give
-// equal hashes.
+// equal hashes. Returns "" if marshalling fails, which cannot realistically
+// happen for this struct; callers that compare two hashes (see ChangedSlides
+// in internal/server/revision.go) must never treat two empty hashes as
+// equal, or a slide whose hash could not be computed would be reported
+// unchanged and never re-rendered.
 func SlideHash(slide TransformedSlide) string {
 	slide.Index = 0
 	slide.Hash = ""

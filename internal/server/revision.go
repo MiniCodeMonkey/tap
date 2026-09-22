@@ -44,13 +44,23 @@ func ComputeRevision(pres *transformer.TransformedPresentation, componentBundleF
 // previous counts as changed, and so does every slide when previous is
 // nil. A removed slide is not listed, because it no longer has a number.
 // The result is never nil, so it encodes as [] in the "update" message.
+//
+// SlideHash returns "" when it fails to marshal a slide. An empty hash
+// never counts as equal to another empty hash, on either side of the
+// comparison, so a slide whose hash could not be computed is always
+// reported changed instead of silently skipped.
 func ChangedSlides(previous, next *transformer.TransformedPresentation) []int {
 	changed := []int{}
 	if next == nil {
 		return changed
 	}
 	for index, slide := range next.Slides {
-		if previous == nil || index >= len(previous.Slides) || previous.Slides[index].Hash != slide.Hash {
+		if previous == nil || index >= len(previous.Slides) {
+			changed = append(changed, index+1)
+			continue
+		}
+		previousHash := previous.Slides[index].Hash
+		if slide.Hash == "" || previousHash == "" || previousHash != slide.Hash {
 			changed = append(changed, index+1)
 		}
 	}
