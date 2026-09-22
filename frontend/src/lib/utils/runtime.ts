@@ -7,7 +7,8 @@
  * a static build is the `#presentation-data` script tag a static build's
  * index.html embeds (see internal/builder/builder.go), which the live
  * server's own index.html never carries (see internal/server/routes.go's
- * handleIndex, which every live command - dev, pdf, screenshot - serves the
+ * handleIndex, which every live command - dev, present, export pdf, export
+images - serves the
  * same embedded index.html through). `frontend/src/lib/stores/websocket.ts`
  * uses the same element to skip connecting a websocket in a build.
  * `import.meta.env.DEV` still counts on its own, for the frontend's own Vite

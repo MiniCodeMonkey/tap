@@ -175,7 +175,7 @@ func findTheme(slug string) (themes.Theme, bool) {
 	return themes.Theme{}, false
 }
 
-// unknownThemeError is defined in screenshot.go and reused here: it reports
+// unknownThemeError is defined in export_images.go and reused here: it reports
 // an unknown theme slug, listing every valid one.
 
 // ============================================================================

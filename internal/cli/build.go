@@ -121,7 +121,7 @@ func runBuild(cmd *cobra.Command, args []string) error {
 	// Validate layouts and slots before building. This transforms pres to
 	// check for warnings, and Builder.Build below transforms it again
 	// internally; Builder's API takes the untransformed presentation, and
-	// every other caller (dev server, pdf, tests) relies on that, so the
+	// every other caller (dev server, export pdf, tests) relies on that, so the
 	// second pass isn't threaded through here.
 	trans := transformer.NewWithBaseDir(cfg, baseDir)
 	trans.SetComponents(resolvedComponents)

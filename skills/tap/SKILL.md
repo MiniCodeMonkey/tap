@@ -254,7 +254,7 @@ Detailed rules live under `skills/tap/rules/`:
 7. **code-blocks** - Syntax highlighting, line highlighting, diffs
 8. **live-code** - Drivers for SQLite, MySQL, PostgreSQL, shell
 9. **themes** - The 21 themes, their tokens, and customization
-10. **cli** - tap new/dev/build/serve/pdf/screenshot/theme commands
+10. **cli** - tap new/dev/present/build/serve/export/slide/component/theme commands
 11. **best-practices** - Presentation design tips
 12. **mermaid** - Mermaid diagram support (flowcharts, sequence, ER, etc.)
 13. **ai-images** - AI image generation from prompts
