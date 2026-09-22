@@ -1070,10 +1070,7 @@ func (m *DevModel) viewHelp() string {
 	}
 	keys = append(keys, keyStyle.Render("q")+" quit")
 
-	help := strings.Join(keys, " • ") + "\n" +
-		keyStyle.Render("?") + " in the browser lists its shortcuts"
-
-	return helpStyle.Render(help)
+	return helpStyle.Render(strings.Join(keys, " • "))
 }
 
 // viewThemePicker renders the theme picker overlay.
