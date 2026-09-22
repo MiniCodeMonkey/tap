@@ -18,6 +18,15 @@ enum TestScripts {
     }
 }
 
+/// The path with every symlink resolved, the way a child process's `pwd -P`
+/// sees it. `URL.resolvingSymlinksInPath()` leaves `/var` and `/tmp`
+/// unresolved on this machine, so a real `realpath(3)` call is needed here.
+func realPath(of url: URL) -> String {
+    var buffer = [Int8](repeating: 0, count: Int(PATH_MAX))
+    guard let resolved = realpath(url.path, &buffer) else { return url.path }
+    return String(cString: resolved)
+}
+
 struct WaitTimedOut: Error, CustomStringConvertible {
     let description: String
 }
