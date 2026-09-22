@@ -46,10 +46,7 @@ transition: fade  # Options: none, fade, slide, push, zoom
 | `push` | Push old slide out |
 | `zoom` | Zoom effect |
 
-### fragments
-```yaml
-fragments: true  # Auto-reveal list items one at a time
-```
+There is no frontmatter option for fragments; auto-revealing list items is set per slide with the `fragments` directive (see `skills/tap/rules/slide-directives.md`).
 
 ## Theme Customization
 
@@ -99,7 +96,6 @@ date: 2024-03-15
 theme: blueprint
 aspectRatio: 16:9
 transition: fade
-fragments: true
 themeColors:
   accent: "#ffd447"
 drivers:
@@ -128,7 +124,6 @@ drivers:
 | `aspectRatio` | string | `16:9` |
 | `slideNumbers` | boolean | `true` |
 | `transition` | string | `fade` |
-| `fragments` | boolean | `false` |
 | `themeColors` | object | None |
 | `customTheme` | string | None |
 | `drivers` | object | None |

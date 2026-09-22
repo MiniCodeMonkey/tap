@@ -1,0 +1,77 @@
+{
+  "slides": [
+    {
+      "number": 1,
+      "startLine": 10,
+      "endLine": 12,
+      "layout": "title",
+      "title": "Zero-Downtime Deploys",
+      "fragments": 0,
+      "steps": 0,
+      "skip": false,
+      "errors": [],
+      "codeBlocks": []
+    },
+    {
+      "number": 2,
+      "startLine": 16,
+      "endLine": 20,
+      "layout": "default",
+      "title": "The Setup",
+      "fragments": 0,
+      "steps": 0,
+      "skip": false,
+      "errors": [],
+      "codeBlocks": []
+    },
+    {
+      "number": 3,
+      "startLine": 24,
+      "endLine": 31,
+      "layout": "./slides/RollingDeploy.jsx",
+      "title": "The Rollout",
+      "fragments": 0,
+      "steps": 5,
+      "skip": false,
+      "errors": [],
+      "codeBlocks": []
+    },
+    {
+      "number": 4,
+      "startLine": 35,
+      "endLine": 44,
+      "layout": "default",
+      "title": "What It Bought Us",
+      "fragments": 1,
+      "steps": 0,
+      "skip": false,
+      "errors": [],
+      "codeBlocks": []
+    },
+    {
+      "number": 5,
+      "startLine": 48,
+      "endLine": 64,
+      "layout": "two-column",
+      "title": "Two Regions, Two Numbers",
+      "fragments": 0,
+      "steps": 0,
+      "skip": false,
+      "errors": [],
+      "codeBlocks": []
+    },
+    {
+      "number": 6,
+      "startLine": 68,
+      "endLine": 70,
+      "layout": "title",
+      "title": "Ship Without the 3am Page",
+      "fragments": 0,
+      "steps": 0,
+      "skip": false,
+      "errors": [],
+      "codeBlocks": []
+    }
+  ],
+  "errors": []
+}

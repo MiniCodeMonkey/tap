@@ -1,0 +1,105 @@
+{
+  "slides": [
+    {
+      "number": 1,
+      "startLine": 5,
+      "endLine": 11,
+      "layout": "default",
+      "title": "Fences keep their separators",
+      "fragments": 0,
+      "steps": 0,
+      "skip": false,
+      "errors": [],
+      "codeBlocks": [
+        {
+          "block": 1,
+          "language": "yaml",
+          "driver": "",
+          "live": false,
+          "line": 7
+        }
+      ]
+    },
+    {
+      "number": 2,
+      "startLine": 15,
+      "endLine": 18,
+      "layout": "code-focus",
+      "title": "",
+      "fragments": 0,
+      "steps": 0,
+      "skip": false,
+      "errors": [],
+      "codeBlocks": [
+        {
+          "block": 1,
+          "language": "markdown",
+          "driver": "",
+          "live": false,
+          "line": 15
+        }
+      ]
+    },
+    {
+      "number": 3,
+      "startLine": 22,
+      "endLine": 26,
+      "layout": "default",
+      "title": "",
+      "fragments": 0,
+      "steps": 0,
+      "skip": false,
+      "errors": [],
+      "codeBlocks": [
+        {
+          "block": 1,
+          "language": "markdown",
+          "driver": "",
+          "live": false,
+          "line": 22
+        }
+      ]
+    },
+    {
+      "number": 4,
+      "startLine": 30,
+      "endLine": 34,
+      "layout": "default",
+      "title": "",
+      "fragments": 0,
+      "steps": 0,
+      "skip": false,
+      "errors": [],
+      "codeBlocks": [
+        {
+          "block": 1,
+          "language": "yaml",
+          "driver": "",
+          "live": false,
+          "line": 32
+        }
+      ]
+    },
+    {
+      "number": 5,
+      "startLine": 38,
+      "endLine": 45,
+      "layout": "default",
+      "title": "A skipped slide",
+      "fragments": 0,
+      "steps": 0,
+      "skip": true,
+      "errors": [],
+      "codeBlocks": [
+        {
+          "block": 1,
+          "language": "sql",
+          "driver": "sqlite",
+          "live": true,
+          "line": 42
+        }
+      ]
+    }
+  ],
+  "errors": []
+}

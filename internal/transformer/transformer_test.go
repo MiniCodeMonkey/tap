@@ -1512,3 +1512,63 @@ func TestSlideHashLeavesOutThePosition(t *testing.T) {
 		t.Error("SlideHash() depends on the slide's own Hash field")
 	}
 }
+
+func TestSlideHashChangesWithSkip(t *testing.T) {
+	slide := TransformedSlide{Index: 0, Layout: "default", HTML: "<h1>Same</h1>"}
+	skipped := slide
+	skipped.Skip = true
+	if SlideHash(slide) == SlideHash(skipped) {
+		t.Error("marking a slide skipped did not change its hash")
+	}
+}
+
+func TestTransform_CarriesSkip(t *testing.T) {
+	pres := &parser.Presentation{Slides: []parser.Slide{
+		{Index: 0, HTML: "<p>one</p>"},
+		{Index: 1, HTML: "<p>two</p>", Directives: parser.SlideDirectives{Skip: true}},
+	}}
+
+	result := New(config.DefaultConfig()).Transform(pres)
+	if result.Slides[0].Skip || !result.Slides[1].Skip {
+		t.Fatalf("Skip = (%v, %v), want (false, true)", result.Slides[0].Skip, result.Slides[1].Skip)
+	}
+
+	kept, err := json.Marshal(result.Slides[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(kept), `"skip"`) {
+		t.Errorf("slide JSON %s has a skip field, want it left out when false", kept)
+	}
+	skipped, err := json.Marshal(result.Slides[1])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(skipped), `"skip":true`) {
+		t.Errorf("slide JSON %s, want \"skip\":true", skipped)
+	}
+}
+
+func TestWithoutSkippedSlides(t *testing.T) {
+	presentation := &TransformedPresentation{Slides: []TransformedSlide{
+		{Index: 0, HTML: "one"},
+		{Index: 1, HTML: "two", Skip: true},
+		{Index: 2, HTML: "three"},
+		{Index: 3, HTML: "four", Skip: true},
+	}}
+
+	kept, deckNumbers := WithoutSkippedSlides(presentation)
+
+	if len(kept.Slides) != 2 || kept.Slides[0].HTML != "one" || kept.Slides[1].HTML != "three" {
+		t.Fatalf("kept slides = %+v, want one and three", kept.Slides)
+	}
+	if kept.Slides[0].Index != 0 || kept.Slides[1].Index != 1 {
+		t.Errorf("kept indexes = (%d, %d), want (0, 1)", kept.Slides[0].Index, kept.Slides[1].Index)
+	}
+	if len(deckNumbers) != 2 || deckNumbers[0] != 1 || deckNumbers[1] != 3 {
+		t.Errorf("deckNumbers = %v, want [1 3]", deckNumbers)
+	}
+	if len(presentation.Slides) != 4 || presentation.Slides[2].Index != 2 {
+		t.Error("WithoutSkippedSlides changed the presentation it was given")
+	}
+}

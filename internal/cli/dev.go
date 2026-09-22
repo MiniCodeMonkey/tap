@@ -277,7 +277,7 @@ func runDevServer(options serverOptions) error {
 		}
 	}
 
-	recordOutputDir := filepath.Join(baseDir, "recordings")
+	recordOutputDir := filepath.Join(baseDir, config.DefaultRecordingOutput)
 	if cfg.Recording.Output != "" {
 		recordOutputDir = cfg.Recording.Output
 		if !filepath.IsAbs(recordOutputDir) {

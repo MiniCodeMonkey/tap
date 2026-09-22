@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/MiniCodeMonkey/tap/internal/config"
 	"github.com/MiniCodeMonkey/tap/internal/driver"
@@ -516,4 +517,10 @@ func TestHandleAPIExecute_ConcurrentSetRegistryDoesNotRace(t *testing.T) {
 		s.handleAPIExecute(recorder, request)
 	}
 	<-done
+}
+
+func TestDefaultExecuteTimeoutMatchesTheSchemaDefault(t *testing.T) {
+	if want := time.Duration(config.DefaultDriverTimeoutSeconds) * time.Second; DefaultExecuteTimeout != want {
+		t.Errorf("DefaultExecuteTimeout = %s, want %s from config.DefaultDriverTimeoutSeconds", DefaultExecuteTimeout, want)
+	}
 }

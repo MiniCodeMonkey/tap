@@ -6,10 +6,13 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import {
 	usePresentationStore,
 	selectCurrentSlide,
-	selectTotalSlides,
+	selectPresentedSlideCount,
+	selectPresentedSlideNumber,
 	nextSlide,
 	prevSlide,
 	goToSlide,
+	goToFirstSlide,
+	goToLastSlide,
 	nextFragment,
 	prevFragment,
 	applyRemoteState,
@@ -39,6 +42,7 @@ interface SlideOptions {
 	fragmentCount?: number;
 	steps?: number;
 	scroll?: boolean;
+	skip?: boolean;
 }
 
 function makeSlide(index: number, options: SlideOptions = {}): Slide {
@@ -50,7 +54,8 @@ function makeSlide(index: number, options: SlideOptions = {}): Slide {
 		slotOrder: [],
 		fragmentCount: options.fragmentCount ?? 0,
 		steps: options.steps ?? 0,
-		scroll: options.scroll
+		scroll: options.scroll,
+		skip: options.skip
 	};
 }
 
@@ -120,15 +125,6 @@ describe('presentation store', () => {
 			expect(selectCurrentSlide(usePresentationStore.getState())).toEqual(testPresentation.slides[2]);
 		});
 
-		it('selectTotalSlides should return 0 when no presentation', () => {
-			expect(selectTotalSlides(usePresentationStore.getState())).toBe(0);
-		});
-
-		it('selectTotalSlides should return slide count', () => {
-			const testPresentation = createTestPresentation(5);
-			usePresentationStore.setState({ presentation: testPresentation });
-			expect(selectTotalSlides(usePresentationStore.getState())).toBe(5);
-		});
 	});
 
 	describe('nextSlide', () => {
@@ -761,6 +757,89 @@ describe('presentation store', () => {
 
 			cycleTheme();
 			expect(usePresentationStore.getState().themeOverride).toBe('base');
+		});
+	});
+
+	describe('skipped slides', () => {
+		it('nextSlide passes over a skipped slide', () => {
+			loadPresentation(createTestPresentation(4, [{}, { skip: true }, {}, {}]));
+			expect(nextSlide()).toBe(true);
+			expect(usePresentationStore.getState().currentSlideIndex).toBe(2);
+		});
+
+		it('prevSlide passes over a skipped slide and lands on its final state', () => {
+			loadPresentation(createTestPresentation(3, [{ steps: 2 }, { skip: true }, {}]));
+			goToSlide(2);
+			expect(prevSlide()).toBe(true);
+			const state = usePresentationStore.getState();
+			expect(state.currentSlideIndex).toBe(0);
+			expect(state.currentStep).toBe(2);
+		});
+
+		it('nextSlide stays put when only skipped slides follow', () => {
+			loadPresentation(createTestPresentation(2, [{}, { skip: true }]));
+			expect(nextSlide()).toBe(false);
+			expect(usePresentationStore.getState().currentSlideIndex).toBe(0);
+		});
+
+		it('goToSlide still opens a skipped slide', () => {
+			loadPresentation(createTestPresentation(3, [{}, { skip: true }, {}]));
+			expect(goToSlide(1)).toBe(true);
+			expect(usePresentationStore.getState().currentSlideIndex).toBe(1);
+		});
+
+		it('moves on from a skipped slide that was opened directly', () => {
+			loadPresentation(createTestPresentation(3, [{}, { skip: true }, {}]));
+			goToSlide(1);
+			nextSlide();
+			expect(usePresentationStore.getState().currentSlideIndex).toBe(2);
+		});
+
+		it('starts on the first slide that is not skipped when the URL names none', () => {
+			loadPresentation(createTestPresentation(3, [{ skip: true }, {}, {}]));
+			expect(usePresentationStore.getState().currentSlideIndex).toBe(1);
+		});
+
+		it('starts on a skipped slide that the URL hash names', () => {
+			mockWindow.location.hash = '#1';
+			loadPresentation(createTestPresentation(3, [{ skip: true }, {}, {}]));
+			expect(usePresentationStore.getState().currentSlideIndex).toBe(0);
+		});
+
+		it('goToFirstSlide and goToLastSlide pass over skipped slides', () => {
+			loadPresentation(createTestPresentation(4, [{ skip: true }, {}, {}, { skip: true }]));
+			goToLastSlide();
+			expect(usePresentationStore.getState().currentSlideIndex).toBe(2);
+			goToFirstSlide();
+			expect(usePresentationStore.getState().currentSlideIndex).toBe(1);
+		});
+
+		it('counts only the slides that are not skipped', () => {
+			loadPresentation(createTestPresentation(3, [{}, { skip: true }, {}]));
+			const state = () => usePresentationStore.getState();
+			expect(selectPresentedSlideCount(state())).toBe(2);
+			goToSlide(2);
+			expect(selectPresentedSlideNumber(state())).toBe(2);
+			goToSlide(1);
+			expect(selectPresentedSlideNumber(state())).toBeNull();
+		});
+
+		it('leaves a viewer in place when every slide is skipped', () => {
+			loadPresentation(createTestPresentation(2, [{ skip: true }, { skip: true }]));
+			const state = () => usePresentationStore.getState();
+
+			expect(selectPresentedSlideCount(state())).toBe(0);
+			expect(selectPresentedSlideNumber(state())).toBeNull();
+
+			const startIndex = state().currentSlideIndex;
+			expect(goToFirstSlide()).toBe(false);
+			expect(state().currentSlideIndex).toBe(startIndex);
+			expect(goToLastSlide()).toBe(false);
+			expect(state().currentSlideIndex).toBe(startIndex);
+			expect(nextSlide()).toBe(false);
+			expect(state().currentSlideIndex).toBe(startIndex);
+			expect(prevSlide()).toBe(false);
+			expect(state().currentSlideIndex).toBe(startIndex);
 		});
 	});
 });

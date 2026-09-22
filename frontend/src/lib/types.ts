@@ -116,7 +116,6 @@ export interface PresentationConfig {
 	date?: string;
 	aspectRatio?: string;
 	transition?: Transition;
-	fragments?: boolean;
 	/** Whether to show the progress bar (default: true) */
 	showProgressBar?: boolean;
 	/** Whether the theme draws slide numbers (default: true) */
@@ -257,6 +256,12 @@ export interface Slide {
 	fragmentCount: number;
 	/** Number of presenter steps, including the initial state */
 	steps: number;
+	/**
+	 * True when the slide's skip directive is set. Presenting passes over it
+	 * and slide counts leave it out, but it keeps its place and its number
+	 * in the deck.
+	 */
+	skip?: boolean;
 	/** The whole-slide component when layout is "component". */
 	component?: SlideComponentInfo;
 	/** Each inline ```component fence found on the slide, in document order. */

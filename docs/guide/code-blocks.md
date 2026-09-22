@@ -90,6 +90,21 @@ def connect_to_database():
 Highlight 1-3 lines at a time for clarity. Highlighting too many lines reduces the effectiveness.
 :::
 
+### With Live Code
+
+A live code block can highlight lines too. Give the driver and the lines as
+two groups, in either order:
+
+````markdown
+```sql {driver: sqlite, connection: demo} {2-3}
+SELECT region, count(*) AS errors
+FROM request_log
+WHERE status >= 500
+```
+````
+
+Write the outer fence with four backticks so the inner one shows.
+
 ## Code Diffs
 
 Show additions and removals using diff syntax:

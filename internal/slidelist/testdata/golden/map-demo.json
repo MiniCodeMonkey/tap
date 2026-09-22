@@ -1,0 +1,157 @@
+{
+  "slides": [
+    {
+      "number": 1,
+      "startLine": 6,
+      "endLine": 8,
+      "layout": "title",
+      "title": "Map Animations",
+      "fragments": 0,
+      "steps": 0,
+      "skip": false,
+      "errors": [],
+      "codeBlocks": []
+    },
+    {
+      "number": 2,
+      "startLine": 12,
+      "endLine": 14,
+      "layout": "default",
+      "title": "New York to Los Angeles",
+      "fragments": 0,
+      "steps": 0,
+      "skip": false,
+      "errors": [],
+      "codeBlocks": []
+    },
+    {
+      "number": 3,
+      "startLine": 18,
+      "endLine": 28,
+      "layout": "blank",
+      "title": "",
+      "fragments": 0,
+      "steps": 1,
+      "skip": false,
+      "errors": [],
+      "codeBlocks": [
+        {
+          "block": 1,
+          "language": "map",
+          "driver": "",
+          "live": false,
+          "line": 20
+        }
+      ]
+    },
+    {
+      "number": 4,
+      "startLine": 32,
+      "endLine": 34,
+      "layout": "default",
+      "title": "Paris to Rome",
+      "fragments": 0,
+      "steps": 0,
+      "skip": false,
+      "errors": [],
+      "codeBlocks": []
+    },
+    {
+      "number": 5,
+      "startLine": 38,
+      "endLine": 47,
+      "layout": "blank",
+      "title": "",
+      "fragments": 0,
+      "steps": 1,
+      "skip": false,
+      "errors": [],
+      "codeBlocks": [
+        {
+          "block": 1,
+          "language": "map",
+          "driver": "",
+          "live": false,
+          "line": 40
+        }
+      ]
+    },
+    {
+      "number": 6,
+      "startLine": 51,
+      "endLine": 53,
+      "layout": "default",
+      "title": "Tokyo City Zoom",
+      "fragments": 0,
+      "steps": 0,
+      "skip": false,
+      "errors": [],
+      "codeBlocks": []
+    },
+    {
+      "number": 7,
+      "startLine": 57,
+      "endLine": 66,
+      "layout": "blank",
+      "title": "",
+      "fragments": 0,
+      "steps": 1,
+      "skip": false,
+      "errors": [],
+      "codeBlocks": [
+        {
+          "block": 1,
+          "language": "map",
+          "driver": "",
+          "live": false,
+          "line": 59
+        }
+      ]
+    },
+    {
+      "number": 8,
+      "startLine": 70,
+      "endLine": 72,
+      "layout": "default",
+      "title": "London Cinematic",
+      "fragments": 0,
+      "steps": 0,
+      "skip": false,
+      "errors": [],
+      "codeBlocks": []
+    },
+    {
+      "number": 9,
+      "startLine": 76,
+      "endLine": 87,
+      "layout": "blank",
+      "title": "",
+      "fragments": 0,
+      "steps": 1,
+      "skip": false,
+      "errors": [],
+      "codeBlocks": [
+        {
+          "block": 1,
+          "language": "map",
+          "driver": "",
+          "live": false,
+          "line": 78
+        }
+      ]
+    },
+    {
+      "number": 10,
+      "startLine": 91,
+      "endLine": 93,
+      "layout": "title",
+      "title": "Thank You",
+      "fragments": 0,
+      "steps": 0,
+      "skip": false,
+      "errors": [],
+      "codeBlocks": []
+    }
+  ],
+  "errors": []
+}

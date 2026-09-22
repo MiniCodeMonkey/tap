@@ -2,6 +2,7 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -169,6 +170,9 @@ func runBuild(cmd *cobra.Command, args []string) error {
 	result, err := b.Build(cfg, pres)
 	if err != nil {
 		spinner.stop()
+		if errors.Is(err, builder.ErrAllSlidesSkipped) {
+			return userError(codeInvalidDeck, err)
+		}
 		return internalError(codeInternal, fmt.Errorf("build failed: %w", err))
 	}
 	progress.Step(progressPhaseWrite, 4, buildSteps)

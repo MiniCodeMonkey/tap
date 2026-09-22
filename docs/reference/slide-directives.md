@@ -212,8 +212,7 @@ Controls incremental reveals for list items on this slide.
 | Property | Value |
 |----------|-------|
 | Type | `boolean` |
-| Default | Inherited from frontmatter (default: `false`) |
-| Overrides | `fragments` in frontmatter |
+| Default | `false` |
 
 ```markdown
 <!--
@@ -228,7 +227,6 @@ When enabled, bullet points appear one at a time as you advance.
 ```markdown
 ---
 title: My Talk
-fragments: false
 ---
 
 # All at Once
@@ -254,13 +252,18 @@ fragments: true
 Items appear one by one.
 ```
 
+The first slide has no `fragments` directive, so it uses the default (`false`) and shows its whole list at once. The second slide's own directive turns fragments on for itself only; the first slide is unaffected.
+
 #### Example: Disable Fragments for One Slide
 
 ```markdown
 ---
 title: My Talk
-fragments: true
 ---
+
+<!--
+fragments: true
+-->
 
 # Step by Step
 
@@ -282,6 +285,8 @@ fragments: false
 
 This slide shows all content at once.
 ```
+
+`false` is already the default, so you rarely need to write it out. It's worth being explicit when you're copying a directive block from a slide that turned fragments on, or want a slide to stay static even if a neighboring slide's fragments are on.
 
 ---
 
@@ -565,6 +570,35 @@ component you cannot edit). See
 
 ---
 
+### skip
+
+Leaves the slide out of the talk without deleting it.
+
+| Property | Value |
+|----------|-------|
+| Type | `boolean` |
+| Default | `false` |
+
+```markdown
+<!-- skip: true -->
+
+# A slide for the long version of this talk
+```
+
+A skipped slide is left out of presenting: the arrow keys pass over it in
+the audience view and the presenter view, and slide numbers, the progress
+bar and the presenter's counter leave it out. `tap build` and
+`tap export pdf` leave it out of their output, and `tap export images --all`
+writes no image for it.
+
+It keeps its place and its number in the deck, so `#4` in the URL and
+`tap slide list` still count it. In `tap dev`, opening it directly (with the
+URL, or from the overview) shows it with a "Skipped" marker, so you can
+still write and check it. `tap export images --slide 4` renders it too,
+because you asked for it by number.
+
+---
+
 ## Combining Directives
 
 Use multiple directives together in a single block:
@@ -603,7 +637,7 @@ notes: |
 |-----------|------|---------|-------------|
 | `layout` | string | `default` | Slide layout |
 | `transition` | string | From frontmatter | Transition animation |
-| `fragments` | boolean | From frontmatter | Incremental list reveals |
+| `fragments` | boolean | `false` | Incremental list reveals |
 | `background` | string | Theme default | Background color/image |
 | `notes` | string | None | Speaker notes |
 | `tag` | string | None | Decorative metadata label |
@@ -611,6 +645,7 @@ notes: |
 | `scroll` | boolean | `false` | Scroll reveal for long content |
 | `scroll-speed` | integer | `2000` | Scroll reveal duration, in milliseconds |
 | `steps` | integer | Auto-detected | Clicker presses this slide consumes |
+| `skip` | boolean | `false` | Leave the slide out of presenting and exports |
 
 ## Directive vs. Frontmatter
 
@@ -627,12 +662,11 @@ notes: |
 ---
 title: My Talk
 transition: fade
-fragments: false
 ---
 
 # Slide 1
 
-Uses global settings: fade transition, no fragments.
+Uses the frontmatter transition: fade. Fragments default to false, since nothing here turns them on.
 
 ---
 
@@ -643,13 +677,13 @@ fragments: true
 
 # Slide 2
 
-Overrides: zoom transition, fragments enabled.
+Overrides the transition to zoom, and turns fragments on for this slide only.
 
 ---
 
 # Slide 3
 
-Back to global settings: fade transition, no fragments.
+Back to the frontmatter transition, fade. Fragments are false again too, but not because Slide 2's setting expired: fragments have no frontmatter-level setting to fall back to, so every slide without its own `fragments` directive is `false` on its own.
 ```
 
 ## Next Steps

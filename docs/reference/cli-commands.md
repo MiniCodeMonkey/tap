@@ -539,6 +539,73 @@ tap slide add talk.md      # A specific deck
 
 ---
 
+## tap slide list
+
+List every slide of a deck: its number, the lines it covers in the file, its layout, title, step and fragment counts, whether it is skipped, its errors, and its code blocks with their drivers.
+
+### Usage
+
+```bash
+tap slide list [deck]
+```
+
+### Flags
+
+| Flag | Description |
+|------|-------------|
+| `--json` | Print the slide list as JSON |
+
+### Output
+
+A table with one row per slide: `#`, `LINES`, `LAYOUT`, `TITLE`, `STEPS`, `FRAGMENTS`, and `NOTES` (whether the slide is skipped, the driver of each live code block, and how many errors it has). The deck's own errors, such as frontmatter that fails to parse, print before the table; each slide's own errors print after it.
+
+Line numbers are 1-based. A slide's range covers its text, including its directive comment, without the blank lines around it. The `---` separator lines and the frontmatter belong to no slide.
+
+Slide numbers count skipped slides, so they match the numbers every other tap command uses.
+
+### Examples
+
+```bash
+tap slide list                 # The deck in this folder
+tap slide list talk.md
+tap slide list talk.md --json  # For editors and scripts
+```
+
+### `--json`
+
+```json
+{"ok": true, "slides": [...], "errors": []}
+```
+
+Each slide has `number`, `startLine`, `endLine`, `layout`, `title`, `fragments`, `steps`, `skip`, `errors`, and `codeBlocks` (each with `block`, `language`, `driver`, `live`, `line`). There is also a top-level `errors` list for problems with the deck as a whole.
+
+For example, slide 4 of the conference talk example, which has a live SQL block:
+
+```json
+{
+  "number": 4,
+  "startLine": 36,
+  "endLine": 46,
+  "layout": "code-focus",
+  "title": "",
+  "fragments": 0,
+  "steps": 0,
+  "skip": false,
+  "errors": [],
+  "codeBlocks": [
+    {
+      "block": 1,
+      "language": "sql",
+      "driver": "sqlite",
+      "live": true,
+      "line": 40
+    }
+  ]
+}
+```
+
+---
+
 ## tap component new
 
 Scaffold a deck-supplied React component from a template. See [Custom Components](/guide/custom-components).
@@ -577,6 +644,45 @@ tap component new RollingDeploy talks/deck.md  # next to talks/deck.md
 ```json
 {"ok": true, "files": ["slides/RollingDeploy.jsx"], "snippet": "::component RollingDeploy\n"}
 ```
+
+---
+
+## tap deck schema
+
+List every frontmatter key tap understands, with its type, its default, its allowed values, and what it does. Editors and tools can build a form or completions from `--json`.
+
+### Usage
+
+```bash
+tap deck schema
+```
+
+### Flags
+
+| Flag | Description |
+|------|-------------|
+| `--json` | Print the schema as JSON |
+
+### Output
+
+A table with one row per key: `KEY`, `TYPE`, `DEFAULT`, `VALUES`, and `DESCRIPTION`. A nested key, such as one under `themeColors` or `recording`, is shown with its parent joined by a dot, for example `recording.audio`. A key under a map, such as `drivers`, uses `<name>` for the name the deck picks, for example `drivers.<name>.command`.
+
+A key's type is one of six: `string`, `boolean`, `integer`, `list` (of strings), `object` (a fixed set of nested keys), or `map` (entries under names the deck picks, each with the nested keys).
+
+### Examples
+
+```bash
+tap deck schema
+tap deck schema --json | head -40
+```
+
+### `--json`
+
+```json
+{"ok": true, "keys": [...]}
+```
+
+Each key has `name`, `type`, `default`, `values`, `description`, and `keys` (its nested keys, for an `object` or a `map`).
 
 ---
 
@@ -703,7 +809,9 @@ and exits 2 when a browser cannot start or a temporary server cannot bind.
 | `tap export pdf [deck]` | Export to PDF | `tap export pdf slides.md` |
 | `tap export images [deck]` | Render a slide to a PNG | `tap export images slides.md --slide 4` |
 | `tap slide add [deck]` | Add a slide interactively | `tap slide add slides.md` |
+| `tap slide list [deck]` | List each slide, its lines, layout and errors | `tap slide list slides.md --json` |
 | `tap component new <Name> [deck]` | Scaffold a deck component | `tap component new RollingDeploy` |
+| `tap deck schema` | List every frontmatter key, type and default | `tap deck schema --json` |
 | `tap theme list` | List every built-in theme | `tap theme list --json` |
 | `tap theme show [slug\|deck]` | Show a theme's tokens and style | `tap theme show blueprint --prompt` |
 

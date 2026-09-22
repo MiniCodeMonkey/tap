@@ -180,14 +180,7 @@ func buildCodeBlock(fcb *ast.FencedCodeBlock, source []byte) CodeBlock {
 	block.Code = strings.TrimSuffix(code.String(), "\n")
 
 	if fcb.Info != nil {
-		info := fcb.Info.Segment.Value(source)
-		if _, meta, ok := splitCodeFenceInfo(string(info)); ok {
-			if isHighlightLinesSpec(meta) {
-				block.Meta.HighlightLines = normalizeHighlightLinesSpec(meta)
-			} else {
-				block.Meta = parseCodeBlockMeta(meta)
-			}
-		}
+		block.Meta = parseFenceMeta(string(fcb.Info.Segment.Value(source)))
 	}
 
 	return block
@@ -231,4 +224,49 @@ func parseCodeBlocksFromMarkdown(content string) []CodeBlock {
 	doc := codeBlockScanner.Parser().Parse(reader)
 	blocks, _, _, _, _ := collectCodeBlocks(doc, []byte(content), 0, 0, 1, false)
 	return blocks
+}
+
+// FenceLines returns the 1-based line, within markdown, of each fenced
+// code block's opening fence, in document order, leaving out ```component
+// fences. Given a slide's text as it stands in the deck file, the result
+// lines up with that slide's CodeBlocks: FenceLines(text)[i] is the line
+// of CodeBlocks[i]. A directive or notes comment holds no fence, so the
+// raw text and the parsed slide see the same fences. The line is 0 when
+// goldmark gives no position, which happens only for an empty fence with
+// no info string.
+func FenceLines(markdown string) []int {
+	source := []byte(markdown)
+	doc := codeBlockScanner.Parser().Parse(text.NewReader(source))
+
+	var lines []int
+	_ = ast.Walk(doc, func(node ast.Node, entering bool) (ast.WalkStatus, error) {
+		fence, isFence := node.(*ast.FencedCodeBlock)
+		if !entering || !isFence {
+			return ast.WalkContinue, nil
+		}
+		info := ""
+		if fence.Info != nil {
+			info = strings.TrimSpace(string(fence.Info.Segment.Value(source)))
+		}
+		if componentFencePattern.MatchString(info) {
+			return ast.WalkContinue, nil
+		}
+		lines = append(lines, openingFenceLine(source, fence))
+		return ast.WalkContinue, nil
+	})
+	return lines
+}
+
+// openingFenceLine returns the 1-based line of a fence's opening line. A
+// fence with an info string starts on the info string's line. A fence
+// without one starts on the line before its first content line. An empty
+// fence with no info string has no position, so it gives 0.
+func openingFenceLine(source []byte, fence *ast.FencedCodeBlock) int {
+	if fence.Info != nil {
+		return fencedCodeBlockLine(source, fence)
+	}
+	if fence.Lines().Len() > 0 {
+		return fencedCodeBlockLine(source, fence) - 1
+	}
+	return 0
 }

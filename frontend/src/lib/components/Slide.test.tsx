@@ -4,6 +4,7 @@ import { Slide } from './Slide';
 import { resolveLayout } from '../layouts/registry';
 import type { Slide as SlideData } from '$lib/types';
 import { loadPresentation, resetPresentation } from '$lib/stores/presentation';
+import { useConnectionStore } from '$lib/stores/websocket';
 
 vi.mock('../layouts/registry', async (importOriginal) => {
 	const actual = await importOriginal<typeof import('../layouts/registry')>();
@@ -427,6 +428,70 @@ describe('Slide', () => {
 			const props = deckComponentSpy.mock.calls[0][0] as unknown as { step: number; printMode: boolean };
 			expect(props.step).toBe(2);
 			expect(props.printMode).toBe(true);
+		});
+	});
+
+	describe('skipped slides', () => {
+		afterEach(() => {
+			// Unmount before resetting the stores: Slide subscribes to both, so
+			// a reset that runs first (this describe's afterEach runs before the
+			// file-level afterEach's cleanup() above) would force a state update
+			// on a still-mounted Slide outside of act().
+			cleanup();
+			resetPresentation();
+			useConnectionStore.setState({ presentMode: false });
+		});
+
+		const slides = [makeSlide({ index: 0 }), makeSlide({ index: 1, skip: true }), makeSlide({ index: 2 })];
+
+		it('numbers a slide among the slides that are not skipped', () => {
+			loadPresentation({ config: {}, slides });
+			const { container } = render(
+				<Slide slide={slides[2]} active printMode={false} fragmentIndex={-1} step={0} total={2} />
+			);
+			expect(container.querySelector('.slide')?.getAttribute('data-index')).toBe('2');
+		});
+
+		it('marks a skipped slide opened directly and hides its number', () => {
+			loadPresentation({ config: {}, slides });
+			const { container } = render(
+				<Slide slide={slides[1]} active printMode={false} fragmentIndex={-1} step={0} total={2} />
+			);
+			const root = container.querySelector('.slide');
+			expect(root?.getAttribute('data-skipped')).toBe('true');
+			expect(root?.getAttribute('data-slide-numbers')).toBe('off');
+			expect(container.querySelector('.slide-skipped-marker')?.textContent).toBe('Skipped');
+		});
+
+		it('leaves the marker out in print mode', () => {
+			loadPresentation({ config: {}, slides });
+			const { container } = render(<Slide slide={slides[1]} active printMode fragmentIndex={0} step={0} total={2} />);
+			expect(container.querySelector('.slide-skipped-marker')).toBeNull();
+		});
+
+		it('leaves the marker out during tap present', () => {
+			useConnectionStore.setState({ presentMode: true });
+			loadPresentation({ config: {}, slides });
+			const { container } = render(
+				<Slide slide={slides[1]} active printMode={false} fragmentIndex={-1} step={0} total={2} />
+			);
+			expect(container.querySelector('.slide-skipped-marker')).toBeNull();
+		});
+
+		it('leaves the marker out in a live capture (tap export images --wait), where settleComponents is false', () => {
+			loadPresentation({ config: {}, slides });
+			const { container } = render(
+				<Slide
+					slide={slides[1]}
+					active
+					printMode={false}
+					captureMode
+					fragmentIndex={-1}
+					step={0}
+					total={2}
+				/>
+			);
+			expect(container.querySelector('.slide-skipped-marker')).toBeNull();
 		});
 	});
 });

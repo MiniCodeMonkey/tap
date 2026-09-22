@@ -1,6 +1,8 @@
 package parser
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -1918,5 +1920,144 @@ func TestParse_StepsDirectiveRejectsNegativeValue(t *testing.T) {
 	}
 	if !slide.Directives.StepsInvalid {
 		t.Error("StepsInvalid = false, want true")
+	}
+}
+
+func TestParse_SkipDirective(t *testing.T) {
+	content := []byte("# One\n\n---\n\n<!--\nlayout: section\nskip: true\n-->\n\n# Two\n\n---\n\n<!-- skip: false -->\n\n# Three")
+
+	pres, err := New().Parse(content)
+	if err != nil {
+		t.Fatalf("Parse() returned error: %v", err)
+	}
+	if len(pres.Slides) != 3 {
+		t.Fatalf("got %d slides, want 3: a skipped slide stays in the parsed deck", len(pres.Slides))
+	}
+	for index, want := range []bool{false, true, false} {
+		if got := pres.Slides[index].Directives.Skip; got != want {
+			t.Errorf("slide %d: Skip = %v, want %v", index+1, got, want)
+		}
+	}
+	if pres.Slides[1].Directives.Layout != "section" {
+		t.Errorf("slide 2 layout = %q, want section: skip sits beside other directives", pres.Slides[1].Directives.Layout)
+	}
+	if strings.Contains(pres.Slides[1].Content, "skip") {
+		t.Errorf("slide 2 content = %q, want the directive comment removed", pres.Slides[1].Content)
+	}
+}
+
+func TestParse_SkipDirectiveIgnoresANonBoolean(t *testing.T) {
+	pres, err := New().Parse([]byte("<!-- skip: maybe -->\n\n# Slide"))
+	if err != nil {
+		t.Fatalf("Parse() returned error: %v", err)
+	}
+	if pres.Slides[0].Directives.Skip {
+		t.Error("Skip = true for skip: maybe, want false")
+	}
+	if !pres.Slides[0].Directives.SkipInvalid {
+		t.Error("SkipInvalid = false, want true: skip: maybe is silently ignored otherwise")
+	}
+}
+
+// TestParse_SkipDirectiveFlagsYAMLTruthyStrings covers the value an author
+// is most likely to type by mistake: YAML resolves "yes" (and an empty
+// value) as a string, not a boolean, so a naive bool assertion leaves the
+// slide presented with no error and no warning, while the author believes
+// it is hidden.
+func TestParse_SkipDirectiveFlagsYAMLTruthyStrings(t *testing.T) {
+	for name, content := range map[string]string{
+		"yes":   "<!-- skip: yes -->\n\n# Slide",
+		"empty": "<!-- skip: -->\n\n# Slide",
+	} {
+		t.Run(name, func(t *testing.T) {
+			pres, err := New().Parse([]byte(content))
+			if err != nil {
+				t.Fatalf("Parse() returned error: %v", err)
+			}
+			if pres.Slides[0].Directives.Skip {
+				t.Error("Skip = true, want false: a non-boolean value must not skip the slide")
+			}
+			if !pres.Slides[0].Directives.SkipInvalid {
+				t.Error("SkipInvalid = false, want true")
+			}
+		})
+	}
+}
+
+func TestParse_SlideLineRangesOfTheConferenceTalk(t *testing.T) {
+	content, err := os.ReadFile(filepath.Join("..", "..", "examples", "conference-talk.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	pres, err := New().Parse(content)
+	if err != nil {
+		t.Fatalf("Parse() returned error: %v", err)
+	}
+
+	want := [][2]int{{10, 14}, {18, 20}, {24, 32}, {36, 46}, {50, 68}, {72, 80}, {84, 86}, {90, 94}, {98, 106}}
+	if len(pres.Slides) != len(want) {
+		t.Fatalf("got %d slides, want %d", len(pres.Slides), len(want))
+	}
+	for index, slide := range pres.Slides {
+		if slide.StartLine != want[index][0] || slide.EndLine != want[index][1] {
+			t.Errorf("slide %d: lines %d-%d, want %d-%d", index+1, slide.StartLine, slide.EndLine, want[index][0], want[index][1])
+		}
+	}
+}
+
+func TestParse_SlideLineRanges(t *testing.T) {
+	tests := []struct {
+		name    string
+		content string
+		want    [][2]int
+	}{
+		{"no frontmatter", "# One\n\n---\n\n\n# Two\nmore\n", [][2]int{{1, 1}, {6, 7}}},
+		{"windows line endings", "---\r\ntitle: T\r\n---\r\n\r\n# One\r\n---\r\n# Two\r\n", [][2]int{{5, 5}, {7, 7}}},
+		{"an empty chunk is no slide", "# One\n---\n\n---\n# Two", [][2]int{{1, 1}, {5, 5}}},
+		{"a separator inside a fence", "# One\n\n```yaml\n---\n```\n\n---\n# Two", [][2]int{{1, 5}, {8, 8}}},
+		{"blank lines before the frontmatter", "\n\n---\ntitle: T\n---\n# One", [][2]int{{6, 6}}},
+		{"a directive comment is part of the slide", "<!--\nlayout: title\n-->\n\n# One\n", [][2]int{{1, 5}}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			pres, err := New().Parse([]byte(tt.content))
+			if err != nil {
+				t.Fatalf("Parse() returned error: %v", err)
+			}
+			if len(pres.Slides) != len(tt.want) {
+				t.Fatalf("got %d slides, want %d", len(pres.Slides), len(tt.want))
+			}
+			for index, slide := range pres.Slides {
+				if slide.StartLine != tt.want[index][0] || slide.EndLine != tt.want[index][1] {
+					t.Errorf("slide %d: lines %d-%d, want %d-%d", index+1, slide.StartLine, slide.EndLine, tt.want[index][0], tt.want[index][1])
+				}
+			}
+		})
+	}
+}
+
+func TestParseKeepingErrorsKeepsTheBrokenSlide(t *testing.T) {
+	content := []byte("# One\n\n---\n\n## Two\n\n```component ./Chart.jsx\n{not json}\n```\n\n---\n\n# Three")
+
+	pres, slideErrors := New().ParseKeepingErrors(content)
+	if len(pres.Slides) != 3 {
+		t.Fatalf("got %d slides, want 3", len(pres.Slides))
+	}
+	if len(slideErrors) != 1 || slideErrors[1] == nil {
+		t.Fatalf("slideErrors = %v, want one error for index 1", slideErrors)
+	}
+	if !strings.Contains(slideErrors[1].Error(), "invalid component props JSON") {
+		t.Errorf("error = %v, want it to name the props JSON", slideErrors[1])
+	}
+	broken := pres.Slides[1]
+	if broken.Index != 1 || broken.StartLine != 5 || broken.EndLine != 9 {
+		t.Errorf("broken slide = index %d, lines %d-%d, want index 1, lines 5-9", broken.Index, broken.StartLine, broken.EndLine)
+	}
+	if !strings.Contains(pres.Slides[2].HTML, "Three") {
+		t.Errorf("slide 3 HTML = %q, want the slides after a broken one parsed", pres.Slides[2].HTML)
+	}
+
+	if _, err := New().Parse(content); err == nil || !strings.HasPrefix(err.Error(), "slide 2: ") {
+		t.Errorf("Parse() error = %v, want one that starts with \"slide 2: \"", err)
 	}
 }

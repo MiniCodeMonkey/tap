@@ -776,3 +776,25 @@ func TestRecordingRejectsNegativeDisplay(t *testing.T) {
 		t.Fatal("Validate() accepted display -1, want an error")
 	}
 }
+
+func TestFromSource(t *testing.T) {
+	cfg, err := FromSource([]byte("---\ntitle: Talk\ntheme: swiss\n---\n\n# One\n"))
+	if err != nil {
+		t.Fatalf("FromSource() error = %v", err)
+	}
+	if cfg.Title != "Talk" || cfg.Theme != "swiss" || cfg.AspectRatio != "16:9" {
+		t.Errorf("cfg = %+v, want the frontmatter over the defaults", cfg)
+	}
+
+	cfg, err = FromSource([]byte("# No frontmatter\n"))
+	if err != nil || cfg.Theme != "base" {
+		t.Errorf("FromSource() without frontmatter = (%+v, %v), want the defaults", cfg, err)
+	}
+
+	if _, err := FromSource([]byte("---\ntitle: Talk\n")); err == nil {
+		t.Error("FromSource() with unclosed frontmatter should fail")
+	}
+	if _, err := FromSource([]byte("")); err == nil {
+		t.Error("FromSource() of an empty deck should fail, as Load does")
+	}
+}

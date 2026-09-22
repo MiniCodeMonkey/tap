@@ -63,6 +63,16 @@ func TestSlideTitleStripsInlineCodeMarkers(t *testing.T) {
 	}
 }
 
+func TestSlideTitleFallsBackWhenTheOnlyHeadingIsInsideANestedFence(t *testing.T) {
+	// The four-backtick opener is not closed by the three-backtick line, so
+	// "# Title" sits inside the fence and is code, not a heading.
+	content := "````\n```\n# Title\n````\n"
+
+	if got := SlideTitle(content, 6); got != "Slide 7" {
+		t.Errorf("SlideTitle() = %q, want Slide 7", got)
+	}
+}
+
 func TestChaptersRenderAsAYouTubeList(t *testing.T) {
 	start := time.Date(2026, 9, 20, 14, 32, 0, 0, time.UTC)
 	chapters := NewChapters(start)

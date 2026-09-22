@@ -32,8 +32,8 @@ func normalizeHighlightLinesSpec(content string) string {
 // fencedCodeBlockRenderer renders ast.FencedCodeBlock the same way
 // goldmark's default html.Renderer does, except it also reads the full,
 // unparsed info string (goldmark's default renderer keeps only the first
-// token as the language class and silently drops the rest) and, when its
-// trailing "{...}" is a line-highlight spec, carries it onto the rendered
+// token as the language class and silently drops the rest) and, when one of
+// its "{...}" groups is a line-highlight spec, carries it onto the rendered
 // <code> tag as a data-highlight-lines attribute. The frontend's
 // highlightCodeBlocksInElement reads that attribute to pass highlightLines
 // through to Shiki.
@@ -80,10 +80,9 @@ func (r *fencedCodeBlockRenderer) renderFencedCodeBlock(
 			_, _ = w.WriteString("\"")
 		}
 		if n.Info != nil {
-			info := n.Info.Segment.Value(source)
-			if _, meta, ok := splitCodeFenceInfo(string(info)); ok && isHighlightLinesSpec(meta) {
+			if meta := parseFenceMeta(string(n.Info.Segment.Value(source))); meta.HighlightLines != "" {
 				_, _ = w.WriteString(" data-highlight-lines=\"")
-				_, _ = w.WriteString(normalizeHighlightLinesSpec(meta))
+				_, _ = w.WriteString(meta.HighlightLines)
 				_, _ = w.WriteString("\"")
 			}
 		}
@@ -106,15 +105,39 @@ func (r *fencedCodeBlockRenderer) renderFencedCodeBlock(
 	return ast.WalkContinue, nil
 }
 
-// splitCodeFenceInfo splits a fence info string, e.g. "php {3-4}", into its
-// language part and the content of a trailing "{...}", mirroring the
-// splitting parseCodeBlocks does. ok is false when there is no "{...}" meta.
-func splitCodeFenceInfo(infoString string) (language string, meta string, ok bool) {
-	trimmed := strings.TrimSpace(infoString)
-	match := metaPattern.FindStringSubmatch(trimmed)
-	if match == nil {
-		return trimmed, "", false
+// splitCodeFenceInfo splits a fence info string into its language part
+// and the content of each "{...}" group that ends it, in order. So
+// "sql {driver: sqlite} {2-3}" gives "sql" and ["driver: sqlite", "2-3"].
+func splitCodeFenceInfo(infoString string) (language string, groups []string) {
+	remaining := strings.TrimSpace(infoString)
+	for {
+		match := metaPattern.FindStringSubmatch(remaining)
+		if match == nil {
+			break
+		}
+		groups = append([]string{match[1]}, groups...)
+		remaining = strings.TrimSpace(remaining[:len(remaining)-len(match[0])])
 	}
-	language = strings.TrimSpace(trimmed[:len(trimmed)-len(match[0])])
-	return language, match[1], true
+	return remaining, groups
+}
+
+// parseFenceMeta reads every "{...}" group of a fence info string. A group
+// that is a line-highlight spec sets HighlightLines. Any other group sets
+// Driver and Connection. The groups can come in either order.
+func parseFenceMeta(infoString string) CodeBlockMeta {
+	_, groups := splitCodeFenceInfo(infoString)
+	var meta CodeBlockMeta
+	for _, group := range groups {
+		groupMeta := parseCodeBlockMeta(group)
+		if groupMeta.HighlightLines != "" {
+			meta.HighlightLines = groupMeta.HighlightLines
+		}
+		if groupMeta.Driver != "" {
+			meta.Driver = groupMeta.Driver
+		}
+		if groupMeta.Connection != "" {
+			meta.Connection = groupMeta.Connection
+		}
+	}
+	return meta
 }

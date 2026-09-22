@@ -1,0 +1,252 @@
+{
+  "slides": [
+    {
+      "number": 1,
+      "startLine": 18,
+      "endLine": 20,
+      "layout": "title",
+      "title": "Live Code Execution",
+      "fragments": 0,
+      "steps": 0,
+      "skip": false,
+      "errors": [],
+      "codeBlocks": []
+    },
+    {
+      "number": 2,
+      "startLine": 24,
+      "endLine": 34,
+      "layout": "default",
+      "title": "Shell Commands",
+      "fragments": 0,
+      "steps": 0,
+      "skip": false,
+      "errors": [],
+      "codeBlocks": [
+        {
+          "block": 1,
+          "language": "bash",
+          "driver": "shell",
+          "live": true,
+          "line": 28
+        }
+      ]
+    },
+    {
+      "number": 3,
+      "startLine": 38,
+      "endLine": 50,
+      "layout": "code-focus",
+      "title": "File System Operations",
+      "fragments": 0,
+      "steps": 0,
+      "skip": false,
+      "errors": [],
+      "codeBlocks": [
+        {
+          "block": 1,
+          "language": "bash",
+          "driver": "shell",
+          "live": true,
+          "line": 44
+        }
+      ]
+    },
+    {
+      "number": 4,
+      "startLine": 54,
+      "endLine": 62,
+      "layout": "default",
+      "title": "Environment Variables",
+      "fragments": 0,
+      "steps": 0,
+      "skip": false,
+      "errors": [],
+      "codeBlocks": [
+        {
+          "block": 1,
+          "language": "bash",
+          "driver": "shell",
+          "live": true,
+          "line": 58
+        }
+      ]
+    },
+    {
+      "number": 5,
+      "startLine": 66,
+      "endLine": 88,
+      "layout": "two-column",
+      "title": "Code on the Left",
+      "fragments": 0,
+      "steps": 0,
+      "skip": false,
+      "errors": [],
+      "codeBlocks": [
+        {
+          "block": 1,
+          "language": "bash",
+          "driver": "shell",
+          "live": true,
+          "line": 74
+        }
+      ]
+    },
+    {
+      "number": 6,
+      "startLine": 92,
+      "endLine": 103,
+      "layout": "code-focus",
+      "title": "Python Examples",
+      "fragments": 0,
+      "steps": 0,
+      "skip": false,
+      "errors": [],
+      "codeBlocks": [
+        {
+          "block": 1,
+          "language": "python",
+          "driver": "python",
+          "live": true,
+          "line": 96
+        }
+      ]
+    },
+    {
+      "number": 7,
+      "startLine": 107,
+      "endLine": 128,
+      "layout": "code-focus",
+      "title": "Data Processing with Python",
+      "fragments": 0,
+      "steps": 0,
+      "skip": false,
+      "errors": [],
+      "codeBlocks": [
+        {
+          "block": 1,
+          "language": "python",
+          "driver": "python",
+          "live": true,
+          "line": 113
+        }
+      ]
+    },
+    {
+      "number": 8,
+      "startLine": 132,
+      "endLine": 150,
+      "layout": "default",
+      "title": "Incremental Code Execution",
+      "fragments": 2,
+      "steps": 0,
+      "skip": false,
+      "errors": [],
+      "codeBlocks": [
+        {
+          "block": 1,
+          "language": "bash",
+          "driver": "shell",
+          "live": true,
+          "line": 138
+        },
+        {
+          "block": 2,
+          "language": "bash",
+          "driver": "shell",
+          "live": true,
+          "line": 147
+        }
+      ]
+    },
+    {
+      "number": 9,
+      "startLine": 154,
+      "endLine": 160,
+      "layout": "section",
+      "title": "Error Handling",
+      "fragments": 0,
+      "steps": 0,
+      "skip": false,
+      "errors": [],
+      "codeBlocks": []
+    },
+    {
+      "number": 10,
+      "startLine": 164,
+      "endLine": 174,
+      "layout": "default",
+      "title": "Graceful Error Display",
+      "fragments": 0,
+      "steps": 0,
+      "skip": false,
+      "errors": [],
+      "codeBlocks": [
+        {
+          "block": 1,
+          "language": "bash",
+          "driver": "shell",
+          "live": true,
+          "line": 168
+        }
+      ]
+    },
+    {
+      "number": 11,
+      "startLine": 178,
+      "endLine": 189,
+      "layout": "default",
+      "title": "Timeout Protection",
+      "fragments": 0,
+      "steps": 0,
+      "skip": false,
+      "errors": [],
+      "codeBlocks": [
+        {
+          "block": 1,
+          "language": "bash",
+          "driver": "shell",
+          "live": true,
+          "line": 182
+        }
+      ]
+    },
+    {
+      "number": 12,
+      "startLine": 193,
+      "endLine": 199,
+      "layout": "big-stat",
+      "title": "30s",
+      "fragments": 0,
+      "steps": 0,
+      "skip": false,
+      "errors": [],
+      "codeBlocks": []
+    },
+    {
+      "number": 13,
+      "startLine": 203,
+      "endLine": 219,
+      "layout": "default",
+      "title": "Best Practices",
+      "fragments": 4,
+      "steps": 0,
+      "skip": false,
+      "errors": [],
+      "codeBlocks": []
+    },
+    {
+      "number": 14,
+      "startLine": 223,
+      "endLine": 229,
+      "layout": "title",
+      "title": "Live Coding Made Easy",
+      "fragments": 0,
+      "steps": 0,
+      "skip": false,
+      "errors": [],
+      "codeBlocks": []
+    }
+  ],
+  "errors": []
+}

@@ -3,6 +3,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/signal"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/MiniCodeMonkey/tap/internal/config"
 	"github.com/MiniCodeMonkey/tap/internal/pdf"
+	"github.com/MiniCodeMonkey/tap/internal/transformer"
 	"github.com/spf13/cobra"
 )
 
@@ -140,7 +142,7 @@ func runExportPDF(cmd *cobra.Command, args []string) error {
 	// setup tap export images uses, via the shared prepareDeck (see
 	// internal/cli/deck.go), so the two commands cannot drift apart.
 	spinner.update("Parsing presentation and building components")
-	srv, _, warnings, componentBuildErrs, componentBuildWarnings, err := prepareDeck(absPath, cfg, baseDir)
+	srv, pres, warnings, componentBuildErrs, componentBuildWarnings, err := prepareDeck(absPath, cfg, baseDir)
 	if err != nil {
 		spinner.stop()
 		return fmt.Errorf("failed to load presentation: %w", err)
@@ -163,6 +165,15 @@ func runExportPDF(cmd *cobra.Command, args []string) error {
 		defer cancel()
 		_ = srv.Shutdown(ctx)
 	}()
+
+	// The PDF holds only the slides a talk shows. The temporary server
+	// serves a copy of the deck without skipped slides, and deckNumbers
+	// turns a page number back into the slide's number in the deck.
+	presented, deckNumbers := transformer.WithoutSkippedSlides(pres)
+	if len(presented.Slides) == 0 {
+		return userError(codeInvalidDeck, errors.New("every slide has skip: true, so there is nothing to export"))
+	}
+	srv.SetPresentation(presented)
 
 	// Get the server URL
 	serverURL := fmt.Sprintf("http://localhost:%d", srv.Port())
@@ -212,6 +223,8 @@ func runExportPDF(cmd *cobra.Command, args []string) error {
 	// Stop spinner and show results
 	spinner.stop()
 
+	result.BrokenSlides = renumberBrokenSlides(result.BrokenSlides, deckNumbers)
+
 	// A slide that shows an error card at export time (a component that
 	// throws at render, or a slide that fails to render) still ends up in
 	// the PDF - the broken page just shows the card - so this only warns,
@@ -245,6 +258,20 @@ func runExportPDF(cmd *cobra.Command, args []string) error {
 	fmt.Printf("  Time:      %s\n", formatDuration(result.Duration))
 	fmt.Println()
 	return nil
+}
+
+// renumberBrokenSlides turns the page numbers in broken, which count only
+// the slides the PDF holds, into the deck's own slide numbers.
+// deckNumbers[page-1] is the deck number of that page.
+func renumberBrokenSlides(broken []pdf.BrokenSlide, deckNumbers []int) []pdf.BrokenSlide {
+	renumbered := make([]pdf.BrokenSlide, len(broken))
+	for index, slide := range broken {
+		renumbered[index] = slide
+		if slide.SlideNumber >= 1 && slide.SlideNumber <= len(deckNumbers) {
+			renumbered[index].SlideNumber = deckNumbers[slide.SlideNumber-1]
+		}
+	}
+	return renumbered
 }
 
 // exportPDFResult is the --json result of tap export pdf.

@@ -17,6 +17,17 @@ import (
 	"github.com/creack/pty"
 )
 
+func TestRenumberBrokenSlidesUsesDeckNumbers(t *testing.T) {
+	broken := []pdf.BrokenSlide{{SlideNumber: 1, Message: "a"}, {SlideNumber: 2, Message: "b"}}
+	got := renumberBrokenSlides(broken, []int{1, 3})
+	if got[0].SlideNumber != 1 || got[1].SlideNumber != 3 || got[1].Message != "b" {
+		t.Errorf("renumberBrokenSlides() = %+v, want pages 1 and 2 as deck slides 1 and 3", got)
+	}
+	if broken[1].SlideNumber != 2 {
+		t.Error("renumberBrokenSlides() changed its input")
+	}
+}
+
 func TestExportPDFCommandShape(t *testing.T) {
 	command, _, err := rootCmd.Find([]string{"export", "pdf"})
 	if err != nil || command.Name() != "pdf" || command.Parent().Name() != "export" {

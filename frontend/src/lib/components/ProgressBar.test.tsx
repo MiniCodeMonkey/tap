@@ -4,7 +4,7 @@ import { ProgressBar } from './ProgressBar';
 import { usePresentationStore, resetPresentation } from '$lib/stores/presentation';
 import type { Presentation } from '$lib/types';
 
-function makePresentation(slideCount: number): Presentation {
+function makePresentation(slideCount: number, skipped: number[] = []): Presentation {
 	return {
 		config: {},
 		slides: Array.from({ length: slideCount }, (_, index) => ({
@@ -14,7 +14,8 @@ function makePresentation(slideCount: number): Presentation {
 			slots: {},
 			slotOrder: [],
 			fragmentCount: 0,
-			steps: 0
+			steps: 0,
+			skip: skipped.includes(index)
 		}))
 	};
 }
@@ -61,7 +62,34 @@ describe('ProgressBar', () => {
 
 		const bar = container.querySelector('.progress-bar-container');
 		expect(bar).toHaveAttribute('aria-valuenow', '3');
-		expect(bar).toHaveAttribute('aria-valuemin', '1');
+		expect(bar).toHaveAttribute('aria-valuemin', '0');
 		expect(bar).toHaveAttribute('aria-valuemax', '10');
+	});
+
+	it('counts only the slides that are not skipped', () => {
+		usePresentationStore.setState({ presentation: makePresentation(5, [1]), currentSlideIndex: 2 });
+
+		const { container } = render(<ProgressBar />);
+
+		const fill = container.querySelector('.progress-bar-fill') as HTMLElement;
+		expect(fill.style.width).toBe('50%');
+		expect(container.querySelector('[role="progressbar"]')?.getAttribute('aria-valuemax')).toBe('4');
+	});
+
+	it('reports an honest, in-range value on a skipped slide opened before any presented one', () => {
+		// tap dev opens a skipped slide directly. Slide 0 here is skipped and
+		// nothing presented comes before it, so there is no "Nth presented
+		// slide" to report - the bar reports 0, not a value floored up into
+		// range, matching the fixed aria-valuemin of 0.
+		usePresentationStore.setState({ presentation: makePresentation(3, [0]), currentSlideIndex: 0 });
+
+		const { container } = render(<ProgressBar />);
+
+		const fill = container.querySelector('.progress-bar-fill') as HTMLElement;
+		expect(fill.style.width).toBe('0%');
+		const bar = container.querySelector('[role="progressbar"]');
+		expect(bar).toHaveAttribute('aria-valuenow', '0');
+		expect(bar).toHaveAttribute('aria-valuemin', '0');
+		expect(bar).toHaveAttribute('aria-valuemax', '2');
 	});
 });
