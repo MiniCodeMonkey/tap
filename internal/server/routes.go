@@ -189,10 +189,12 @@ func (s *Server) presenterAuthorized(r *http.Request) bool {
 	return subtle.ConstantTimeCompare([]byte(key), []byte(password)) == 1
 }
 
-// presentationResponse is the GET /api/presentation body: the deck, and
-// which of its drivers this run lets run when the server can run code.
+// presentationResponse is the GET /api/presentation body: the client-facing
+// view of the deck (transformer.PublicPresentation, never the full
+// TransformedPresentation with its driver settings), and which of its
+// drivers this run lets run when the server can run code.
 type presentationResponse struct {
-	*transformer.TransformedPresentation
+	transformer.PublicPresentation
 	LiveCode *liveCodeStatus `json:"liveCode,omitempty"`
 }
 
@@ -240,8 +242,8 @@ func (s *Server) handleAPIPresentation(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
 	w.WriteHeader(http.StatusOK)
 	if err := json.NewEncoder(w).Encode(presentationResponse{
-		TransformedPresentation: pres,
-		LiveCode:                s.liveCodeStatusFor(pres),
+		PublicPresentation: pres.Public(),
+		LiveCode:           s.liveCodeStatusFor(pres),
 	}); err != nil {
 		// If encoding fails, we've already started writing the response
 		// so we can't change the status code. Just log internally.

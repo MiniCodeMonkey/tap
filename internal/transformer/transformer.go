@@ -13,10 +13,64 @@ import (
 	"github.com/MiniCodeMonkey/tap/internal/parser"
 )
 
-// TransformedPresentation is the JSON-serializable output for the frontend.
+// TransformedPresentation is the deck's whole transformed state, held on
+// the server. It carries the full Config, including a driver's command,
+// arguments, timeout and connection details, which is why nothing marshals
+// it straight to a client: a handler that serves a presentation to a page
+// or a static export calls Public() instead.
 type TransformedPresentation struct {
 	Config config.Config      `json:"config"`
 	Slides []TransformedSlide `json:"slides"`
+}
+
+// PublicConfig is the subset of Config a client may see: enough to render
+// the deck and label its slide numbers, theme and layout, never a
+// driver's command, arguments or timeout, nor a connection's host, user,
+// password, database, path or port. A field reaches PublicConfig only by
+// a line added here in publicConfigFrom; adding a field to Config does not
+// add it here, which is the point.
+type PublicConfig struct {
+	Title           string            `json:"title,omitempty"`
+	Theme           string            `json:"theme,omitempty"`
+	CustomTheme     string            `json:"customTheme,omitempty"`
+	AspectRatio     string            `json:"aspectRatio,omitempty"`
+	Transition      string            `json:"transition,omitempty"`
+	ThemeColors     map[string]string `json:"themeColors,omitempty"`
+	SlideNumbers    *bool             `json:"slideNumbers,omitempty"`
+	PresenterLayout string            `json:"presenterLayout,omitempty"`
+}
+
+// publicConfigFrom builds the config subset a client may see from the
+// deck's full configuration, field by field.
+func publicConfigFrom(cfg config.Config) PublicConfig {
+	return PublicConfig{
+		Title:           cfg.Title,
+		Theme:           cfg.Theme,
+		CustomTheme:     cfg.CustomTheme,
+		AspectRatio:     cfg.AspectRatio,
+		Transition:      cfg.Transition,
+		ThemeColors:     cfg.ThemeColors,
+		SlideNumbers:    cfg.SlideNumbers,
+		PresenterLayout: cfg.PresenterLayout,
+	}
+}
+
+// PublicPresentation is what a client actually receives for a deck: the
+// slides, and only the config fields the page reads (see PublicConfig). It
+// is what /api/presentation and a static build's embedded presentation
+// data both serialize; neither ever marshals a TransformedPresentation
+// directly.
+type PublicPresentation struct {
+	Config PublicConfig       `json:"config"`
+	Slides []TransformedSlide `json:"slides"`
+}
+
+// Public returns the client-facing view of p.
+func (p *TransformedPresentation) Public() PublicPresentation {
+	return PublicPresentation{
+		Config: publicConfigFrom(p.Config),
+		Slides: p.Slides,
+	}
 }
 
 // TransformedSlide represents a slide ready for frontend rendering.

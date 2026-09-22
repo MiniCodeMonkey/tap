@@ -992,3 +992,125 @@ func TestPresentationHasNoLiveCodeWithoutARegistry(t *testing.T) {
 		t.Errorf("liveCode = %s, want no key on a server that cannot run code", body["liveCode"])
 	}
 }
+
+// deckWithConnectionSetting builds a deck config whose one driver has one
+// connection, so a test can compare a literal secret against a
+// placeholder one under an otherwise identical response.
+func deckWithConnectionSetting(password string) *transformer.TransformedPresentation {
+	return &transformer.TransformedPresentation{
+		Config: config.Config{
+			Title: "Talk with a database",
+			Drivers: map[string]config.DriverConfig{
+				"postgres": {
+					Command: "psql",
+					Args:    []string{"--quiet"},
+					Timeout: 5,
+					Connections: map[string]config.ConnectionConfig{
+						"prod": {
+							Host:     "db.internal.example.com",
+							User:     "admin",
+							Password: password,
+							Database: "billing",
+							Port:     5432,
+						},
+					},
+				},
+			},
+		},
+		Slides: []transformer.TransformedSlide{
+			{
+				Index:  0,
+				Layout: "default",
+				CodeBlocks: []transformer.TransformedCodeBlock{
+					{Language: "sql", Code: "select 1", Driver: "postgres", Connection: "prod", Block: 1},
+				},
+			},
+		},
+	}
+}
+
+// TestPresentationNeverServesALiteralPassword covers the measured leak: a
+// password typed directly into a deck's frontmatter must never come back
+// in /api/presentation's body, and neither must any other connection or
+// driver setting, only the driver and connection names the page already
+// carries per code block.
+func TestPresentationNeverServesALiteralPassword(t *testing.T) {
+	s := NewWithHost(0, "127.0.0.1")
+	s.SetPresentation(deckWithConnectionSetting("hunter2literal"))
+
+	rawBody := func() string {
+		s.SetupRoutes()
+		request := httptest.NewRequest(http.MethodGet, "/api/presentation", nil)
+		request.Host = "localhost"
+		recorder := httptest.NewRecorder()
+		s.mux.ServeHTTP(recorder, request)
+		if recorder.Code != http.StatusOK {
+			t.Fatalf("status = %d: %s", recorder.Code, recorder.Body.String())
+		}
+		return recorder.Body.String()
+	}
+	body := rawBody()
+
+	for _, forbidden := range []string{
+		"hunter2literal", "db.internal.example.com", "admin", "billing", "5432",
+		"psql", "--quiet", `"drivers"`, `"connections"`, `"command"`, `"args"`,
+		`"timeout"`, `"host"`, `"user"`, `"password"`, `"database"`, `"port"`,
+	} {
+		if strings.Contains(body, forbidden) {
+			t.Errorf("/api/presentation body contains %q, want it absent entirely: %s", forbidden, body)
+		}
+	}
+
+	if !strings.Contains(body, `"title":"Talk with a database"`) {
+		t.Errorf("/api/presentation dropped a setting the page genuinely reads: %s", body)
+	}
+	if !strings.Contains(body, `"driver":"postgres"`) || !strings.Contains(body, `"connection":"prod"`) {
+		t.Errorf("/api/presentation dropped the driver/connection names the Run button needs: %s", body)
+	}
+}
+
+// TestPresentationNeverServesAPlaceholderConnectionValue covers the other
+// half of the same leak: a deck that references a secret with ${NAME}
+// rather than typing it in gets the identical treatment. The page never
+// receives the connection at all, placeholder or not.
+func TestPresentationNeverServesAPlaceholderConnectionValue(t *testing.T) {
+	s := NewWithHost(0, "127.0.0.1")
+	s.SetPresentation(deckWithConnectionSetting("${DB_PASSWORD}"))
+
+	body := getPresentationJSON(t, s)
+	slidesJSON := string(body["slides"])
+	configJSON := string(body["config"])
+
+	for _, forbidden := range []string{"${DB_PASSWORD}", "db.internal.example.com", "admin", "billing", "connections", "password"} {
+		if strings.Contains(slidesJSON, forbidden) || strings.Contains(configJSON, forbidden) {
+			t.Errorf("/api/presentation body contains %q for a placeholder-valued connection, want it absent entirely: config=%s slides=%s", forbidden, configJSON, slidesJSON)
+		}
+	}
+}
+
+// TestPresentationConfigNeverEmbedsTheWholeConfigStruct guards the shape
+// of the wire format itself: decoding the config object into a Go map must
+// find only settings the page is deliberately given, never a driver's
+// name as a top-level key. This is what would fail if handleAPIPresentation
+// ever went back to encoding *transformer.TransformedPresentation (whose
+// Config field is the full config.Config) instead of pres.Public().
+func TestPresentationConfigNeverEmbedsTheWholeConfigStruct(t *testing.T) {
+	s := NewWithHost(0, "127.0.0.1")
+	s.SetPresentation(deckWithConnectionSetting("hunter2literal"))
+
+	body := getPresentationJSON(t, s)
+	var configFields map[string]json.RawMessage
+	if err := json.Unmarshal(body["config"], &configFields); err != nil {
+		t.Fatalf("decoding config: %v", err)
+	}
+
+	allowed := map[string]bool{
+		"title": true, "theme": true, "customTheme": true, "aspectRatio": true,
+		"transition": true, "themeColors": true, "slideNumbers": true, "presenterLayout": true,
+	}
+	for key := range configFields {
+		if !allowed[key] {
+			t.Errorf("config carries unexpected key %q; the config struct may have been embedded wholesale again: %v", key, configFields)
+		}
+	}
+}

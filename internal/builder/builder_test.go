@@ -246,6 +246,71 @@ func TestGenerateIndexHTML(t *testing.T) {
 	}
 }
 
+// TestGenerateIndexHTML_NeverEmbedsDriverOrConnectionSettings covers the
+// same leak /api/presentation closes, for a static tap build: the
+// exported index.html embeds the presentation as a script tag anyone who
+// downloads the file can read, so it must never carry a driver's command,
+// arguments or timeout, nor a connection's host, user, password, database,
+// path or port, literal or ${NAME}-referenced alike.
+func TestGenerateIndexHTML_NeverEmbedsDriverOrConnectionSettings(t *testing.T) {
+	tmpDir := t.TempDir()
+	b := NewWithOutput(tmpDir)
+
+	pres := &transformer.TransformedPresentation{
+		Config: config.Config{
+			Title: "Talk with a database",
+			Drivers: map[string]config.DriverConfig{
+				"postgres": {
+					Command: "psql",
+					Args:    []string{"--quiet"},
+					Timeout: 5,
+					Connections: map[string]config.ConnectionConfig{
+						"prod": {
+							Host:     "db.internal.example.com",
+							User:     "admin",
+							Password: "hunter2literal",
+							Database: "billing",
+							Port:     5432,
+						},
+					},
+				},
+			},
+		},
+		Slides: []transformer.TransformedSlide{
+			{
+				Index:  0,
+				Layout: "default",
+				CodeBlocks: []transformer.TransformedCodeBlock{
+					{Language: "sql", Code: "select 1", Driver: "postgres", Connection: "prod", Block: 1},
+				},
+			},
+		},
+	}
+
+	path := filepath.Join(tmpDir, "index.html")
+	if _, err := b.generateIndexHTML(path, pres); err != nil {
+		t.Fatalf("generateIndexHTML failed: %v", err)
+	}
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("failed to read generated file: %v", err)
+	}
+	html := string(content)
+
+	for _, forbidden := range []string{
+		"hunter2literal", "db.internal.example.com", "admin", "billing", "5432",
+		"psql", "--quiet", `"drivers"`, `"connections"`, `"command"`, `"args"`,
+		`"timeout"`, `"host"`, `"user"`, `"password"`, `"database"`, `"port"`,
+	} {
+		if strings.Contains(html, forbidden) {
+			t.Errorf("generated index.html contains %q, want it absent entirely", forbidden)
+		}
+	}
+	if !strings.Contains(html, `"driver":"postgres"`) || !strings.Contains(html, `"connection":"prod"`) {
+		t.Error("generated index.html dropped the driver/connection names the Run button needs")
+	}
+}
+
 func TestBuild_CreatesOutputDirectory(t *testing.T) {
 	// Create temp directory for test
 	tmpDir := t.TempDir()
