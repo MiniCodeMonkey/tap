@@ -78,8 +78,33 @@ Examples:
 			file = args[0]
 		}
 
-		return runDevServer(file, devPort, devPresenterPassword, devHeadless, cmd.Flags().Changed("port"), devAllowOrigins, devTunnel)
+		return runDevServer(serverOptions{
+			file:              file,
+			port:              devPort,
+			portExplicit:      cmd.Flags().Changed("port"),
+			presenterPassword: devPresenterPassword,
+			headless:          devHeadless,
+			allowOrigins:      devAllowOrigins,
+			tunnel:            devTunnel,
+		})
 	},
+}
+
+// serverOptions is everything runDevServer needs from tap dev or
+// tap present.
+type serverOptions struct {
+	file              string
+	presenterPassword string
+	allowOrigins      []string
+	port              int
+	portExplicit      bool
+	headless          bool
+	tunnel            bool
+	// present runs tap present: no file watcher, the audience view opens
+	// at launch, and recording follows the run instead of the c key.
+	present bool
+	// record starts recording at launch. Only tap present sets it.
+	record bool
 }
 
 func init() {
@@ -115,7 +140,10 @@ func recordingAudioOptions(configured string) (audioUID string, noAudio bool) {
 // is whether the user passed --port themselves (cmd.Flags().Changed
 // ("port")): it decides whether a busy port fails outright or falls back
 // to the next one (see startOnAvailablePort).
-func runDevServer(file string, port int, presenterPassword string, headless bool, portExplicit bool, allowOrigins []string, wantTunnel bool) error {
+func runDevServer(options serverOptions) error {
+	file, port, presenterPassword, headless := options.file, options.port, options.presenterPassword, options.headless
+	portExplicit, allowOrigins, wantTunnel := options.portExplicit, options.allowOrigins, options.tunnel
+
 	// Resolve absolute path
 	absFile, err := filepath.Abs(file)
 	if err != nil {
@@ -292,10 +320,12 @@ func runDevServer(file string, port int, presenterPassword string, headless bool
 		_ = hub.BroadcastReload()
 	})
 
-	if err := watcher.Start(); err != nil {
-		return fmt.Errorf("failed to start file watcher: %w", err)
+	if !options.present {
+		if err := watcher.Start(); err != nil {
+			return fmt.Errorf("failed to start file watcher: %w", err)
+		}
+		defer func() { _ = watcher.Stop() }()
 	}
-	defer func() { _ = watcher.Stop() }()
 
 	// Generate URLs
 	audienceURL := fmt.Sprintf("http://localhost:%d", port)
@@ -324,6 +354,14 @@ func runDevServer(file string, port int, presenterPassword string, headless bool
 	// leaves it nil, and the callback tolerates that.
 	var devModel *tui.DevModel
 
+	titleFor := func(slideIndex int) string {
+		slides := currentSlides()
+		if slideIndex < 0 || slideIndex >= len(slides) {
+			return fmt.Sprintf("Slide %d", slideIndex+1)
+		}
+		return recorder.SlideTitle(slides[slideIndex].Content, slideIndex)
+	}
+
 	recordings := newRecordController(recordControllerOptions{
 		DeckTitle:    cfg.Title,
 		OutputDir:    recordOutputDir,
@@ -332,16 +370,16 @@ func runDevServer(file string, port int, presenterPassword string, headless bool
 		ShowClicks:   cfg.Recording.ShowClicks,
 		Chapters:     cfg.Recording.ChaptersEnabled(),
 		CurrentSlide: hub.CurrentSlide,
-		TitleFor: func(slideIndex int) string {
-			slides := currentSlides()
-			if slideIndex < 0 || slideIndex >= len(slides) {
-				return fmt.Sprintf("Slide %d", slideIndex+1)
-			}
-			return recorder.SlideTitle(slides[slideIndex].Content, slideIndex)
-		},
+		TitleFor:     titleFor,
 		OnUnexpectedExit: func(err error) {
 			if devModel != nil {
 				devModel.NoteRecordingEnded(err)
+			}
+		},
+		OnDiskLevel: func(level recorder.DiskLevel) {
+			_ = hub.BroadcastDiskStatus(diskStatusName(level))
+			if devModel != nil {
+				devModel.NoteDiskLevel(level)
 			}
 		},
 	})
@@ -353,7 +391,39 @@ func runDevServer(file string, port int, presenterPassword string, headless bool
 	// path rather than left for the OS to clean up eventually.
 	defer recordings.Close()
 
-	hub.SetOnSlideChange(recordings.NoteSlideChange)
+	// present is the tap present recorder, driven by the hub's slide
+	// changes instead of the c key. It is nil for tap dev.
+	var present *presentRecorder
+	if options.present {
+		present = newPresentRecorder(presentRecorderOptions{
+			Run: recorder.RunOptions{
+				Parent:       recordOutputDir,
+				DeckTitle:    cfg.Title,
+				Base:         recorder.Options{AudioUID: audioUID, NoAudio: noAudio, ShowClicks: cfg.Recording.ShowClicks},
+				Chapters:     cfg.Recording.ChaptersEnabled(),
+				CurrentSlide: hub.CurrentSlide,
+				TitleFor:     titleFor,
+			},
+			OutputDir: recordOutputDir,
+			OnEvent: func(eventType, message string) {
+				if devModel != nil {
+					devModel.SendEvent(eventType, message)
+				}
+			},
+			OnDiskLevel: func(level recorder.DiskLevel) {
+				_ = hub.BroadcastDiskStatus(diskStatusName(level))
+				if devModel != nil {
+					devModel.NoteDiskLevel(level)
+				}
+			},
+		})
+		// A kept recording must survive SIGTERM and every early return, not
+		// just a clean quit through the TUI branch below.
+		defer func() { _, _ = present.Finish(true) }()
+		hub.SetOnSlideChange(present.NoteSlideChange)
+	} else {
+		hub.SetOnSlideChange(recordings.NoteSlideChange)
+	}
 
 	if !recorder.Supported() && cfg.Recording != (config.Recording{}) {
 		Warning("Recording is macOS only; the recording block in this deck is ignored\n")
@@ -450,6 +520,7 @@ func runDevServer(file string, port int, presenterPassword string, headless bool
 			RecordWarnAfter:   cfg.Recording.WarnAfterDuration(),
 			RecordStopAfter:   cfg.Recording.StopAfterDuration(),
 			RecordDisplay:     cfg.Recording.Display,
+			Present:           options.present,
 		}
 
 		// Create TUI model
@@ -460,26 +531,45 @@ func runDevServer(file string, port int, presenterPassword string, headless bool
 		model.SetRecorderController(recordings)
 		devModel = model
 
-		// The probe is cheap and the result is not stored anywhere: Tap
-		// keeps no state between runs, and macOS raises its consent
-		// dialog once per application in any case. This only checks the
-		// Screen Recording permission, not the full four-check preflight:
-		// that one also creates the output directory, which stays created
-		// on demand, when the speaker actually presses C.
-		go func() {
-			report := recordings.StartupPreflight()
-			for _, finding := range report.Findings {
-				model.SendEvent(finding.EventType(), finding.Describe())
+		if present != nil {
+			model.SetPresentRecorder(present)
+			if recorder.Supported() {
+				report := recordings.StartupPreflight()
+				for _, finding := range report.Findings {
+					if finding.Blocking {
+						present.Block(finding.Describe())
+					}
+				}
+				recordContext, stopRecording := context.WithCancel(context.Background())
+				defer stopRecording()
+				present.Begin(recordContext, options.record)
+			} else {
+				present.Block("Recording is macOS only")
 			}
-		}()
+		} else {
+			// The probe is cheap and the result is not stored anywhere: Tap
+			// keeps no state between runs, and macOS raises its consent
+			// dialog once per application in any case. This only checks the
+			// Screen Recording permission, not the full four-check preflight:
+			// that one also creates the output directory, which stays created
+			// on demand, when the speaker actually presses C.
+			go func() {
+				report := recordings.StartupPreflight()
+				for _, finding := range report.Findings {
+					model.SendEvent(finding.EventType(), finding.Describe())
+				}
+			}()
+		}
 
 		// Track WebSocket client count
 		hub.SetOnClientCountChange(func(count int) {
 			model.UpdateWebSocketCount(count)
 		})
 
-		// Update watcher to also update TUI
-		watcher.SetOnChange(func(path string) {
+		// Update watcher to also update TUI. reloadInTUI also backs r, so
+		// tap present (which never starts the watcher) can still reload
+		// the deck from disk by hand.
+		reloadInTUI := func(path string) {
 			// Reload config and presentation
 			newCfg, err := config.Load(absFile)
 			if err != nil {
@@ -530,6 +620,11 @@ func runDevServer(file string, port int, presenterPassword string, headless bool
 			hub.SetPresentationMeta(len(newPres.Slides), server.ComputeRevision(newPres, componentBundleFiles(newResolvedComponents)))
 			_ = hub.BroadcastReload()
 			model.SendReloadEvent(path)
+		}
+		watcher.SetOnChange(reloadInTUI)
+		model.SetReloader(func() error {
+			reloadInTUI(absFile)
+			return nil
 		})
 
 		// Run the TUI (blocks until user quits)
@@ -537,14 +632,27 @@ func runDevServer(file string, port int, presenterPassword string, headless bool
 			return fmt.Errorf("TUI error: %w", err)
 		}
 
-		// Quitting the TUI stops a running recording without going
-		// through applyRecordMsg, so the speaker never sees where the
-		// file went; the TUI is gone by now, so print it to the
-		// terminal instead. Stop is idempotent and remembers the last
-		// finished recording, so this also fires (correctly, as a
-		// summary rather than a fresh event) when the recording was
-		// already stopped with c well before quitting.
-		if result, err := recordings.Stop(); err == nil && result.Path != "" {
+		if present != nil {
+			summary, err := present.Finish(model.KeepRecording())
+			switch {
+			case err != nil:
+				Warning("  Recording: %v\n", err)
+			case summary.Dir == "":
+			case summary.NeverLeftFirstSlide:
+				Muted("  Deleted the recording: the deck never left the first slide.\n")
+			case summary.Deleted:
+				Muted("  Deleted the recording.\n")
+			default:
+				Success("  Recording kept: %s\n", summary.Dir)
+			}
+		} else if result, err := recordings.Stop(); err == nil && result.Path != "" {
+			// Quitting the TUI stops a running recording without going
+			// through applyRecordMsg, so the speaker never sees where the
+			// file went; the TUI is gone by now, so print it to the
+			// terminal instead. Stop is idempotent and remembers the last
+			// finished recording, so this also fires (correctly, as a
+			// summary rather than a fresh event) when the recording was
+			// already stopped with c well before quitting.
 			Success("  Last recording: %s\n", result.Path)
 			if result.ChapterPath != "" {
 				Muted("  Chapters: %s\n", result.ChapterPath)
