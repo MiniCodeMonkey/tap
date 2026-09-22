@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/MiniCodeMonkey/tap/internal/layouts"
+	"github.com/MiniCodeMonkey/tap/internal/recorder"
 )
 
 // TestDropComponentBuildFailureWarnings verifies that a "component ...
@@ -63,6 +64,9 @@ func TestRecordingAudioOptions(t *testing.T) {
 // the lighter StartupPreflight, which must not create that directory on
 // every tap present.
 func TestPresentLaunchPreflightCreatesTheOutputDirOnlyWhenRecordingAtLaunch(t *testing.T) {
+	if !recorder.Supported() {
+		t.Skip("the full preflight runs on macOS only")
+	}
 	waitOutputDir := filepath.Join(t.TempDir(), "recordings")
 	waitController := newRecordController(recordControllerOptions{DeckTitle: "My Talk", OutputDir: waitOutputDir})
 	presentLaunchPreflight(waitController, false)
