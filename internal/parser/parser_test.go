@@ -1954,6 +1954,34 @@ func TestParse_SkipDirectiveIgnoresANonBoolean(t *testing.T) {
 	if pres.Slides[0].Directives.Skip {
 		t.Error("Skip = true for skip: maybe, want false")
 	}
+	if !pres.Slides[0].Directives.SkipInvalid {
+		t.Error("SkipInvalid = false, want true: skip: maybe is silently ignored otherwise")
+	}
+}
+
+// TestParse_SkipDirectiveFlagsYAMLTruthyStrings covers the value an author
+// is most likely to type by mistake: YAML resolves "yes" (and an empty
+// value) as a string, not a boolean, so a naive bool assertion leaves the
+// slide presented with no error and no warning, while the author believes
+// it is hidden.
+func TestParse_SkipDirectiveFlagsYAMLTruthyStrings(t *testing.T) {
+	for name, content := range map[string]string{
+		"yes":   "<!-- skip: yes -->\n\n# Slide",
+		"empty": "<!-- skip: -->\n\n# Slide",
+	} {
+		t.Run(name, func(t *testing.T) {
+			pres, err := New().Parse([]byte(content))
+			if err != nil {
+				t.Fatalf("Parse() returned error: %v", err)
+			}
+			if pres.Slides[0].Directives.Skip {
+				t.Error("Skip = true, want false: a non-boolean value must not skip the slide")
+			}
+			if !pres.Slides[0].Directives.SkipInvalid {
+				t.Error("SkipInvalid = false, want true")
+			}
+		})
+	}
 }
 
 func TestParse_SlideLineRangesOfTheConferenceTalk(t *testing.T) {

@@ -48,6 +48,10 @@ type TransformedSlide struct {
 	// Skip is true for a slide whose skip directive is true. The frontend
 	// passes over it when presenting and leaves it out of slide counts.
 	Skip bool `json:"skip,omitempty"`
+	// SkipInvalid carries parser.SlideDirectives.SkipInvalid through to
+	// layouts.Validate, which turns it into a slide warning, the same way
+	// StepsInvalid does; it is not part of the frontend's slide JSON.
+	SkipInvalid bool `json:"-"`
 }
 
 // WholeSlideComponent is the slide JSON shape for a layout directive that
@@ -202,6 +206,7 @@ func (t *Transformer) transformSlide(slide parser.Slide) TransformedSlide {
 		Badge:         slide.Directives.Badge,
 		StepsInvalid:  slide.Directives.StepsInvalid,
 		Skip:          slide.Directives.Skip,
+		SkipInvalid:   slide.Directives.SkipInvalid,
 	}
 
 	if components.IsComponentPath(slide.Directives.Layout) {

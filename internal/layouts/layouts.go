@@ -64,6 +64,13 @@ func Validate(presentation *transformer.TransformedPresentation) []Warning {
 			})
 		}
 
+		if slide.SkipInvalid {
+			warnings = append(warnings, Warning{
+				SlideNumber: slideNumber,
+				Message:     "skip: directive ignored (must be true or false)",
+			})
+		}
+
 		// A component path is exempt from the built-in layout list and may
 		// use any slot name; the only thing checked here is whether it
 		// resolved to a bundle at all (a missing file is reported the same

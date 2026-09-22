@@ -111,6 +111,20 @@ func TestBuildCountsAComponentsSteps(t *testing.T) {
 	}
 }
 
+func TestBuildFlagsANonBooleanSkipValue(t *testing.T) {
+	result, err := Build([]byte("<!-- skip: yes -->\n\n# One"), t.TempDir())
+	if err != nil {
+		t.Fatalf("Build() error = %v", err)
+	}
+	slide := result.Slides[0]
+	if slide.Skip {
+		t.Error("Skip = true, want false: skip: yes must not skip the slide")
+	}
+	if errors := strings.Join(slide.Errors, "\n"); !strings.Contains(errors, "skip") {
+		t.Errorf("slide errors = %q, want a warning naming the skip directive", errors)
+	}
+}
+
 func TestBuildJSONShape(t *testing.T) {
 	encoded, err := json.Marshal(buildSource(t, "<!-- layout: section -->\n# One\n"))
 	if err != nil {

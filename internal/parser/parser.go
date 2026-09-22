@@ -76,6 +76,12 @@ type SlideDirectives struct {
 	// slide counts, tap build and tap export leave the slide out. tap dev
 	// still shows it when someone goes to it directly.
 	Skip bool
+	// SkipInvalid is true when a "skip:" directive was present but its
+	// value did not parse as a YAML boolean, for example "yes" (which YAML
+	// resolves as a string, not true) or an empty value. The directive is
+	// ignored either way, and a caller that surfaces slide warnings should
+	// tell the deck author, the same way StepsInvalid does.
+	SkipInvalid bool
 }
 
 // CodeBlock represents a fenced code block in a slide.
@@ -561,9 +567,15 @@ var directiveFields = []directiveField{
 		d.StepsInvalid = true
 	}},
 	{"skip", func(y map[string]interface{}, d *SlideDirectives) {
-		if v, ok := y["skip"].(bool); ok {
-			d.Skip = v
+		raw, present := y["skip"]
+		if !present {
+			return
 		}
+		if v, ok := raw.(bool); ok {
+			d.Skip = v
+			return
+		}
+		d.SkipInvalid = true
 	}},
 }
 
