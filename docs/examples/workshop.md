@@ -1,5 +1,7 @@
 ---
 title: Workshop
+drivers:
+  sqlite: {}
 ---
 
 # Workshop

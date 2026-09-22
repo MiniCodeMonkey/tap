@@ -5,6 +5,11 @@ author: On-Call Engineer
 date: 2026-01-25
 aspectRatio: "16:9"
 transition: fade
+drivers:
+  sqlite:
+    connections:
+      incident:
+        database: ":memory:"
 ---
 
 <!-- layout: title -->

@@ -37,7 +37,7 @@ func TestBuildTheConferenceTalk(t *testing.T) {
 	}
 
 	third := result.Slides[2]
-	if third.Number != 3 || third.StartLine != 24 || third.EndLine != 32 || third.Title != "What We Knew" || third.Fragments != 1 || third.Steps != 0 || third.Skip {
+	if third.Number != 3 || third.StartLine != 29 || third.EndLine != 37 || third.Title != "What We Knew" || third.Fragments != 1 || third.Steps != 0 || third.Skip {
 		t.Errorf("slide 3 = %+v", third)
 	}
 
@@ -45,7 +45,7 @@ func TestBuildTheConferenceTalk(t *testing.T) {
 	if fourth.Layout != "code-focus" {
 		t.Errorf("slide 4 layout = %q, want code-focus", fourth.Layout)
 	}
-	want := CodeBlock{Block: 1, Language: "sql", Driver: "sqlite", Live: true, Line: 40}
+	want := CodeBlock{Block: 1, Language: "sql", Driver: "sqlite", Live: true, Line: 45}
 	if len(fourth.CodeBlocks) != 1 || fourth.CodeBlocks[0] != want {
 		t.Errorf("slide 4 code blocks = %+v, want [%+v]", fourth.CodeBlocks, want)
 	}
