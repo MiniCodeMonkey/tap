@@ -177,10 +177,12 @@ func (c *recordController) Start(display int) (string, error) {
 		current := c.session == session
 		var result recorder.Result
 		var stop context.CancelFunc
+		var watch *diskWatch
 		if current {
 			chapterPath := c.chapterPath
 			c.session, c.chapters, c.chapterPath = nil, nil, ""
 			stop = c.stopDiskWatch
+			watch = c.diskWatch
 			c.stopDiskWatch = nil
 			c.diskWatch = nil
 			result = recorder.Result{
@@ -199,6 +201,7 @@ func (c *recordController) Start(display int) (string, error) {
 		if stop != nil {
 			stop()
 		}
+		c.reportDiskOKIfLow(watch)
 
 		if current && c.options.OnUnexpectedExit != nil {
 			err := session.ExitError()
@@ -220,6 +223,19 @@ func (c *recordController) noteDiskLevel(level recorder.DiskLevel) {
 	}
 	if c.options.OnDiskLevel != nil {
 		c.options.OnDiskLevel(level)
+	}
+}
+
+// reportDiskOKIfLow is called once a recording has ended for any reason
+// other than the DiskFull stop noteDiskLevel makes itself: at that point
+// the watch's level is already DiskFull, so it is left alone and the
+// "stopped: disk full" badge stays up until the next recording starts. A
+// watch that last reported DiskLow is put back to DiskOK, so the "almost
+// full" badge does not linger once recording has ended, whether that end
+// was a deliberate Stop or the recorder exiting on its own.
+func (c *recordController) reportDiskOKIfLow(watch *diskWatch) {
+	if watch != nil && watch.currentLevel() == recorder.DiskLow && c.options.OnDiskLevel != nil {
+		c.options.OnDiskLevel(recorder.DiskOK)
 	}
 }
 
@@ -247,15 +263,7 @@ func (c *recordController) Stop() (recorder.Result, error) {
 	if stop != nil {
 		stop()
 	}
-	// This is an ordinary stop (the user or the shutdown path), not the
-	// DiskFull stop noteDiskLevel makes itself: at that point the watch's
-	// level is already DiskFull, so it is left alone and the "stopped: disk
-	// full" badge stays up until the next recording starts. A watch that
-	// last reported DiskLow is put back to DiskOK, so the "almost full"
-	// badge does not linger once recording ends.
-	if watch != nil && watch.currentLevel() == recorder.DiskLow && c.options.OnDiskLevel != nil {
-		c.options.OnDiskLevel(recorder.DiskOK)
-	}
+	c.reportDiskOKIfLow(watch)
 
 	result, err := session.Stop()
 	if err != nil {

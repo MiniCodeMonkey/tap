@@ -405,6 +405,64 @@ func TestControllerStopsWhenTheDiskFills(t *testing.T) {
 // ruling that extends the brief: a normal Stop (not the DiskFull stop) after
 // the watch last reported DiskLow reports DiskOK, so the "almost full" badge
 // does not stay up once recording ends.
+// TestControllerReportsDiskOKAfterAnUnexpectedExitFollowingLowDisk covers
+// the fix-round-1 finding: the unexpected-exit goroutine used to cancel the
+// disk watch without applying the same DiskOK rule Stop applies, leaving
+// the "almost full" badge up after a recorder that exits on its own.
+func TestControllerReportsDiskOKAfterAnUnexpectedExitFollowingLowDisk(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "recordings")
+
+	// Sleeps long enough for the watch's first check (which runs
+	// synchronously as Start returns) to land before the recorder exits on
+	// its own.
+	quitter := filepath.Join(t.TempDir(), "slow-quitting-recorder")
+	if err := os.WriteFile(quitter, []byte("#!/bin/sh\nsleep 0.3\nexit 3\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	levels := make(chan recorder.DiskLevel, 4)
+	died := make(chan error, 1)
+	controller := newRecordController(recordControllerOptions{
+		DeckTitle:        "My Talk",
+		OutputDir:        dir,
+		CommandName:      quitter,
+		CurrentSlide:     func() (int, bool) { return 0, false },
+		TitleFor:         func(int) string { return "Title" },
+		OpenFile:         func(string) error { return nil },
+		FreeSpace:        func(string) (uint64, error) { return 4 << 30, nil },
+		OnDiskLevel:      func(level recorder.DiskLevel) { levels <- level },
+		OnUnexpectedExit: func(err error) { died <- err },
+	})
+
+	if _, err := controller.Start(1); err != nil {
+		t.Fatalf("Start() returned %v", err)
+	}
+
+	select {
+	case level := <-levels:
+		if level != recorder.DiskLow {
+			t.Fatalf("level = %v, want DiskLow", level)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("no disk level reported")
+	}
+
+	select {
+	case <-died:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the controller never reported the recorder exiting")
+	}
+
+	select {
+	case level := <-levels:
+		if level != recorder.DiskOK {
+			t.Fatalf("level = %v, want DiskOK after an unexpected exit", level)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("no DiskOK reported after the recorder exited on its own")
+	}
+}
+
 func TestControllerReportsDiskOKAfterAnOrdinaryStopFollowingLowDisk(t *testing.T) {
 	levels := make(chan recorder.DiskLevel, 4)
 	free := uint64(4 << 30)
