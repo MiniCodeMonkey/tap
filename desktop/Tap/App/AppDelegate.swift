@@ -11,6 +11,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        NSApp.mainMenu = MainMenu.build()
         AppEnvironment.shared.warmUp()
+    }
+
+    @objc func showAbout(_ sender: Any?) {
+        NSApp.orderFrontStandardAboutPanel(options: aboutPanelOptions())
+    }
+
+    /// The About panel names the bundled tap's version.
+    func aboutPanelOptions() -> [NSApplication.AboutPanelOptionKey: Any] {
+        let version = AppEnvironment.shared.bundledTapVersion ?? "unknown"
+        return [.credits: NSAttributedString(string: "Bundled tap \(version)")]
+    }
+
+    @objc func showHelp(_ sender: Any?) {
+        NSWorkspace.shared.open(URL(string: "https://github.com/MiniCodeMonkey/tap")!)
     }
 }
