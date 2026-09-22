@@ -171,7 +171,9 @@ This command prints each slide with the fields the app needs. The same Go functi
 ]}
 ```
 
-Line numbers are 1-based and cover the slide's text, including its directive comment. They exclude the `---` separator lines and the frontmatter.
+Line numbers are 1-based and cover the slide's text, including its directive comment, without leading or trailing blank lines. Blank lines next to a `---` separator belong to no slide. The separator lines and the frontmatter are excluded.
+
+Code blocks must be detected with every attribute form tap accepts. The prototype got an empty list for the example deck's ```` ```sql {driver: sqlite, connection: incident} {2-3} ```` fence, so that exact fence is a required test case.
 
 `fragments` and `steps` are the two separate counters the frontend already walks: `fragments` counts `<!-- pause -->` reveals, and `steps` is the transformer's `countSteps` result, which includes `export const steps` from a whole-slide component and the largest count among inline components, unless a `steps:` directive overrides it. Both numbers therefore come from the transformer after the component bundles are built, not from the parser alone. When a saved `.jsx` file changes its `steps` export, tap rebuilds the bundle and sends a new slide list.
 
@@ -209,13 +211,14 @@ The TUI keys stay, and they call these functions.
 
 ### 5.1 One ready signal
 
-The frontend sets `window.__tapReady = {slide, step}` and dispatches a `tap:ready` event once the slide has settled:
+This is a hard prerequisite: without it, the prototype's thumbnails were missing component charts. The frontend sets `window.__tapReady = {revision, slide, step}` and dispatches a `tap:ready` event once the slide has settled. When the page runs inside the app, it also calls `window.webkit.messageHandlers.tapReady.postMessage({revision, slide, step})` if that handler exists. The app registers the handler and never injects script. The thumbnail renderer loads `?print=true` and has no WebSocket, so this handler is how it learns that a slide is ready. The slide has settled when:
 
 - fonts are loaded;
 - images are complete;
 - maps have reported ready;
 - components have settled;
-- no error card is still pending.
+- no error card is still pending;
+- transitions and theme animations have finished.
 
 It resets when the slide or step changes. `tap export pdf`, `tap export images`, and the app's thumbnail renderer all wait for this one signal. The checklist that `internal/pdf/exporter.go` puts together today moves into the frontend, which is the only code that knows when rendering has finished.
 
@@ -264,6 +267,7 @@ Findings:
 
 - It binds to `127.0.0.1` on a free port. It opens no browser and shows no TUI.
 - It generates a 32-byte random token.
+- It exits when stdin reaches end of file, so a crashed or killed app never leaves tap running.
 - **stdout** carries only JSON lines. The first line is `{"type": "ready", "port": 49152, "token": "…"}`. Later lines are events.
 - **stdin** carries JSON lines with commands and answers from the app.
 - **stderr** carries human-readable logs, which the app shows in Window > Tap Log.

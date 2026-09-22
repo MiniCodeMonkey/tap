@@ -83,6 +83,8 @@ In `--app` mode, tap:
 
 The app starts every tap process with the login shell environment. An app launched from Finder does not inherit it, so the app runs `$SHELL -l -i -c env` once at launch, with a timeout. If that fails, the app falls back to the default environment and shows a notice.
 
+A tap process started with `--app` exits when its stdin closes, so a crashed or killed app never leaves tap processes behind. The prototype left 10 orphaned `tap dev` processes before this rule.
+
 When a tap process exits unexpectedly, the app restarts it with backoff, and the editor keeps working. The preview shows "Restarting preview" over the last good render. After 3 exits in 30 seconds, the app stops retrying and shows tap's last stderr lines with "Try Again". Window > Tap Log shows each process's output, and the About window shows the bundled tap version.
 
 ## The protocol between the app and tap
@@ -96,7 +98,7 @@ When a tap process exits unexpectedly, the app restarts it with backoff, and the
 ## Editor
 
 - `NSTextView` on TextKit 2, with its own neutral look that follows system light and dark mode. The deck theme appears only in the preview and the thumbnails.
-- The frontmatter is hidden, so slide 1 is the first box. The Deck tab of the inspector edits the frontmatter.
+- The frontmatter is hidden, so slide 1 is the first box. The Deck tab edits the frontmatter. Hiding uses the TextKit 2 layout fragment enumeration, and the app keeps the caret and every selection out of the hidden range. Without that clamp, Up Arrow and a keystroke edited the frontmatter in the prototype. Select All, Find, Replace, and Undo must be tested against the hidden range.
 - Each slide is a rounded box. The header shows the number, layout, title, a step count badge, and a live-code badge with the driver. The `---` line stays in the text and is drawn as a faint divider.
 - Highlighting covers markdown plus tap's own syntax: `::slot` markers, `<!-- pause -->`, and directive comments. Speaker notes stay inline, dimmed and in italics. The editor never folds or hides text.
 - Parse and render errors mark the box in red and show the message on the line, like Xcode issues. Where the app can fix the problem, it offers a fix-it, for example "Allow shell in This Deck".
@@ -110,6 +112,8 @@ When a tap process exits unexpectedly, the app restarts it with backoff, and the
 - The main area is a 50/50 split: the editor on the left, and on the right a large pane with Preview and Deck tabs. The split divider can be dragged.
 - The slide panel (thumbnails) has two states. **Floating:** a glass panel over the left edge of the editor, shown and hidden with a toolbar button or a key. **Pinned:** the pin in its header docks it as a normal `NSSplitViewController` sidebar, and the editor and the right pane share the rest of the width.
 - On first launch the panel is pinned, so people find it. Each window then remembers its own state.
+- The app owns the divider. It restores 50/50 after the panel is pinned, unpinned, or collapsed, and after the window resizes, unless the user dragged the divider.
+- The editor's content scrolls under the unified toolbar with the standard macOS 26 scroll edge effect.
 - The pinned state is a stock sidebar. The floating state is a small custom overlay, because AppKit has no stock "overlay until pinned" sidebar.
 
 ## Slide panel and slide operations
@@ -132,14 +136,15 @@ The right half of the window has two tabs: Preview and Deck.
 
 ## Performance
 
-- The preview is a live render, never a screenshot. After a typing pause of about 100 ms, the app sends the buffer, tap parses it (about 2 ms for 100 slides) and sends an `update` message, and the page replaces its data in place and re-renders only the changed slide. The spike measured 2 to 3 ms from the PUT until the new text is visible, so the typing pause dominates, and an update arrives about 100 ms after the last keystroke. A `.jsx` edit takes about 400 ms, because tap rebuilds the bundle.
+- The preview is a live render, never a screenshot. After a typing pause of about 100 ms, the app sends the buffer, tap parses it (about 2 ms for 100 slides) and sends an `update` message, and the page replaces its data in place and re-renders only the changed slide. Measured in the native prototype on an M4 Max: from the PUT until the new text is in a real `WKWebView` takes 1.7 ms on a 9-slide deck, and 13.8 ms on a 200-slide deck with a component on every slide (about 43 ms to a painted frame). tap's parse, build, and transform is about 10 ms of that. From a keystroke to the new text is 104 ms and 116 ms, most of it the 100 ms typing pause. A `.jsx` edit takes about 400 ms, because tap rebuilds the bundle. If updates ever need to be faster, look first at tap's pipeline on large decks, then at the page's full `/api/presentation` fetch on every `update`.
 - While presenting, the talk windows show only their current slides.
 - No browser is launched for previews. `tap export` uses headless Chromium, but only for export.
-- The current slide's thumbnail is a snapshot of the live preview, which already shows the slide with all steps revealed, so it updates as soon as the preview does.
-- The other thumbnails are static images. One hidden `WKWebView` inside the app renders them in a queue: visible thumbnails first, then nearby ones, then the rest at idle. The queue pauses while you type. Before each snapshot, it waits for tap's single ready signal, the same one `tap export` uses.
+- Thumbnails are static images from one hidden `WKWebView`. The current slide goes to the front of the queue after each update, so its thumbnail follows within about 25 ms. It is not a snapshot of the live preview, which can be caught in the middle of a transition or a theme animation.
+- The hidden `WKWebView` lives inside a visible window's view hierarchy, behind other content. In an off-screen window, WebKit suspends the page and nothing finishes rendering. It loads the page with `?print=true`, so it never joins the WebSocket hub and never moves the preview, and it scales the 1920x1080 print layout down. It renders slides in a queue: visible thumbnails first, then nearby ones, then the rest at idle. The queue pauses while you type. Before each snapshot, it waits for tap's single ready signal, the same one `tap export` uses.
+- A cold pass over every thumbnail took 0.3 s for 9 slides and 4.9 s for 200 slides in the prototype, about 24 ms per slide, most of it waiting for the slide to render. `takeSnapshot` itself took under 2 ms.
 - Thumbnails are cached on disk, keyed by a hash of the slide text, theme, component bundle, and canvas size. After a theme change, the old thumbnails stay visible with an "updating" mark until the new ones replace them.
-- Parsing is cheap: `BenchmarkParse100Slides` takes 1.7 ms and `BenchmarkParse200Slides` takes 3.3 ms, so a full parse after each typing pause is fine.
-- Targets on a generated 200-slide deck with a component on every slide: typing under 16 ms, preview updates under 200 ms, and reopening loads every thumbnail from the cache.
+- The parser alone is cheap: `BenchmarkParse200Slides` takes 3.3 ms. The full pipeline, with component builds and the transformer, takes about 10 ms on the 200-slide deck.
+- Targets on a generated 200-slide deck with a component on every slide: typing under 16 ms, preview updates under 200 ms, and reopening loads every thumbnail from the cache. The prototype measured typing with slide boxes at 1.6 ms median, 6 ms p95, and 10 ms worst, to the frame commit. Drawing the boxes cost about 0.4 ms.
 
 ## Presenting
 
