@@ -33,7 +33,6 @@ vi.mock('$lib/stores/presentation', () => ({
 	goToFirstSlide: vi.fn(() => true),
 	goToLastSlide: vi.fn(() => true),
 	usePresentationStore: { getState: vi.fn(() => ({})) },
-	selectTotalSlides: vi.fn(() => 10),
 	cycleTheme: vi.fn()
 }));
 

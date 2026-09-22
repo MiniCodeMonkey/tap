@@ -62,13 +62,6 @@ export const selectCurrentSlide = (state: PresentationState): Slide | null => {
 };
 
 /**
- * Total number of slides in the presentation.
- */
-export const selectTotalSlides = (state: PresentationState): number => {
-	return state.presentation?.slides.length ?? 0;
-};
-
-/**
  * Number of slides a talk shows, leaving out skipped slides. This is the
  * count the audience and the presenter see.
  */

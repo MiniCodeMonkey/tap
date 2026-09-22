@@ -6,7 +6,6 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import {
 	usePresentationStore,
 	selectCurrentSlide,
-	selectTotalSlides,
 	selectPresentedSlideCount,
 	selectPresentedSlideNumber,
 	nextSlide,
@@ -126,15 +125,6 @@ describe('presentation store', () => {
 			expect(selectCurrentSlide(usePresentationStore.getState())).toEqual(testPresentation.slides[2]);
 		});
 
-		it('selectTotalSlides should return 0 when no presentation', () => {
-			expect(selectTotalSlides(usePresentationStore.getState())).toBe(0);
-		});
-
-		it('selectTotalSlides should return slide count', () => {
-			const testPresentation = createTestPresentation(5);
-			usePresentationStore.setState({ presentation: testPresentation });
-			expect(selectTotalSlides(usePresentationStore.getState())).toBe(5);
-		});
 	});
 
 	describe('nextSlide', () => {
@@ -828,7 +818,6 @@ describe('presentation store', () => {
 			loadPresentation(createTestPresentation(3, [{}, { skip: true }, {}]));
 			const state = () => usePresentationStore.getState();
 			expect(selectPresentedSlideCount(state())).toBe(2);
-			expect(selectTotalSlides(state())).toBe(3);
 			goToSlide(2);
 			expect(selectPresentedSlideNumber(state())).toBe(2);
 			goToSlide(1);
