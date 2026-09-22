@@ -85,7 +85,6 @@ func TestJSONRequested(t *testing.T) {
 }
 
 func TestExecutePrintsAJSONErrorForAJSONCommand(t *testing.T) {
-	t.Skip("theme show gets error codes in Task 7")
 	exitCode, stdout, stderr := runTap(t, "theme", "show", "no-such-theme-or-deck", "--json")
 	if exitCode != exitUserError {
 		t.Errorf("exit code = %d, want %d", exitCode, exitUserError)

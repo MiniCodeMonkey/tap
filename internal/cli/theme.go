@@ -2,7 +2,7 @@
 package cli
 
 import (
-	"encoding/json"
+	"errors"
 	"fmt"
 	"math"
 	"os"
@@ -22,7 +22,6 @@ var (
 	themeListJSON   bool
 	themeShowJSON   bool
 	themeShowPrompt bool
-	themeShowDeck   string
 )
 
 // themeCmd is the parent command for theme inspection.
@@ -39,12 +38,12 @@ var themeListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List every built-in theme",
 	Args:  cobra.NoArgs,
-	Run:   runThemeList,
+	RunE:  runThemeList,
 }
 
 // themeShowCmd shows one theme's tokens and illustration style.
 var themeShowCmd = &cobra.Command{
-	Use:   "show [slug]",
+	Use:   "show [slug|deck]",
 	Short: "Show one theme's tokens and illustration style",
 	Long: `Show a theme's name, polarity, pitch, tokens (colors, fonts, motion,
 spacing), and illustration style.
@@ -53,15 +52,16 @@ With --prompt, prints a ready-to-paste style brief for an image model
 instead: palette with hex values and roles, line and shape language,
 texture, mood, things to avoid, and the canvas size.
 
-Without a slug, --deck <file> reads the theme from that deck's frontmatter.
+The argument is a theme slug, or a deck file or folder whose theme to
+show. With no argument, tap uses the deck in the current folder.
 
 Examples:
   tap theme show terminal
   tap theme show terminal --json
   tap theme show terminal --prompt
-  tap theme show --deck slides.md --prompt`,
+  tap theme show slides.md --prompt`,
 	Args: cobra.MaximumNArgs(1),
-	Run:  runThemeShow,
+	RunE: runThemeShow,
 }
 
 func init() {
@@ -69,98 +69,99 @@ func init() {
 	themeCmd.AddCommand(themeListCmd)
 	themeCmd.AddCommand(themeShowCmd)
 
-	themeListCmd.Flags().BoolVar(&themeListJSON, "json", false, "print the list as a JSON array")
+	themeListCmd.Flags().BoolVar(&themeListJSON, "json", false, "print the list as JSON")
 
 	themeShowCmd.Flags().BoolVar(&themeShowJSON, "json", false, "print the theme as JSON")
 	themeShowCmd.Flags().BoolVar(&themeShowPrompt, "prompt", false, "print a style brief for an image model")
-	themeShowCmd.Flags().StringVar(&themeShowDeck, "deck", "", "read the theme from this deck's frontmatter instead of naming a slug")
 }
 
 // runThemeList implements `tap theme list`.
-func runThemeList(cmd *cobra.Command, args []string) {
+func runThemeList(cmd *cobra.Command, args []string) error {
 	all := themes.All()
-
 	if themeListJSON {
-		encoder := json.NewEncoder(os.Stdout)
-		encoder.SetIndent("", "  ")
-		if err := encoder.Encode(all); err != nil {
-			Errorln("Error:", err)
-			os.Exit(1)
-		}
-		return
+		return printJSONOK(cmd.OutOrStdout(), struct {
+			Themes []themes.Theme `json:"themes"`
+		}{Themes: all})
 	}
 
-	writer := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+	writer := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
 	fmt.Fprintln(writer, "SLUG\tNAME\tPOLARITY\tPITCH")
 	for _, theme := range all {
 		fmt.Fprintf(writer, "%s\t%s\t%s\t%s\n", theme.Slug, theme.Name, theme.Polarity, theme.Pitch)
 	}
-	writer.Flush()
+	return writer.Flush()
 }
 
 // runThemeShow implements `tap theme show`.
-func runThemeShow(cmd *cobra.Command, args []string) {
+func runThemeShow(cmd *cobra.Command, args []string) error {
 	if themeShowJSON && themeShowPrompt {
-		Errorln("Error: --json and --prompt cannot be used together")
-		os.Exit(1)
+		return userError(codeUsage, errors.New("--json and --prompt cannot be used together"))
 	}
 
-	slug, err := resolveThemeShowSlug(args)
+	slug, err := resolveThemeShowSlug(firstArg(args))
 	if err != nil {
-		Errorln("Error:", err)
-		os.Exit(1)
+		return err
 	}
-
 	theme, ok := findTheme(slug)
 	if !ok {
-		Errorln("Error:", unknownThemeError(slug))
-		os.Exit(1)
+		return userError(codeUnknownTheme, unknownThemeError(slug))
 	}
-
 	tokens, ok := themes.Tokens(slug)
 	if !ok {
-		Errorln(fmt.Sprintf("Error: theme %q has no tokens", slug))
-		os.Exit(1)
+		return internalError(codeInternal, fmt.Errorf("theme %q has no tokens", slug))
 	}
 	illustration, _ := themes.Illustration(slug)
 
 	switch {
 	case themeShowPrompt:
-		fmt.Println(buildThemePrompt(theme, tokens, illustration))
+		fmt.Fprintln(cmd.OutOrStdout(), buildThemePrompt(theme, tokens, illustration))
 	case themeShowJSON:
-		printThemeJSON(theme, tokens, illustration)
+		return printJSONOK(cmd.OutOrStdout(), themeShowJSONOutput{
+			Slug:         theme.Slug,
+			Name:         theme.Name,
+			Polarity:     theme.Polarity,
+			Pitch:        theme.Pitch,
+			Tokens:       buildThemeTokensJSON(tokens),
+			Illustration: illustration,
+			Canvas:       themeCanvasJSON{Ratio: "16:9", Width: 1920, Height: 1080},
+		})
 	default:
 		printThemeHuman(theme, tokens, illustration)
 	}
+	return nil
 }
 
-// resolveThemeShowSlug resolves the slug `tap theme show` should describe:
-// the positional argument if given, or --deck's own theme. An unknown or
-// missing deck theme falls back to "base", with a note on standard error.
-func resolveThemeShowSlug(args []string) (string, error) {
-	if len(args) > 0 {
-		return args[0], nil
+// resolveThemeShowSlug returns the theme tap theme show describes. arg is
+// a built-in slug, or a deck file or folder whose theme to use. An empty
+// arg means the deck in the current folder. A deck that names no theme
+// uses "base", with a note on standard error.
+func resolveThemeShowSlug(arg string) (string, error) {
+	if arg != "" && themes.IsValid(arg) {
+		return arg, nil
+	}
+	if arg != "" {
+		if _, err := os.Stat(arg); os.IsNotExist(err) {
+			return "", userError(codeUnknownTheme, unknownThemeError(arg))
+		}
 	}
 
-	if themeShowDeck == "" {
-		return "", fmt.Errorf("a theme slug or --deck <file> is required")
-	}
-
-	cfg, err := config.Load(themeShowDeck)
+	deck, err := resolveDeck(arg)
 	if err != nil {
-		return "", fmt.Errorf("failed to load %s: %w", themeShowDeck, err)
+		return "", err
+	}
+	cfg, err := config.Load(deck)
+	if err != nil {
+		return "", userError(codeInvalidDeck, fmt.Errorf("failed to load %s: %w", deck, err))
 	}
 	if err := cfg.Validate(); err != nil {
-		return "", fmt.Errorf("invalid configuration in %s: %w", themeShowDeck, err)
+		return "", userError(codeInvalidDeck, fmt.Errorf("invalid configuration in %s: %w", deck, err))
 	}
-
 	if cfg.Theme == "" {
-		Warningln(fmt.Sprintf("Warning: %s names no theme, using \"base\"", themeShowDeck))
+		Warningln(fmt.Sprintf("Warning: %s names no theme, using \"base\"", deck))
 		return "base", nil
 	}
-
-	// cfg.Validate() already normalized an unknown theme to "base" and
-	// logged a warning to standard error.
+	// cfg.Validate() already turned an unknown theme into "base" and
+	// printed a warning to standard error.
 	return cfg.Theme, nil
 }
 
@@ -342,25 +343,6 @@ func buildThemeTokensJSON(tokens map[string]string) themeTokensJSON {
 			StrokeWidth: tokens["--stroke-width"],
 		},
 		Other: other,
-	}
-}
-
-func printThemeJSON(theme themes.Theme, tokens map[string]string, illustration themes.IllustrationStyle) {
-	output := themeShowJSONOutput{
-		Slug:         theme.Slug,
-		Name:         theme.Name,
-		Polarity:     theme.Polarity,
-		Pitch:        theme.Pitch,
-		Tokens:       buildThemeTokensJSON(tokens),
-		Illustration: illustration,
-		Canvas:       themeCanvasJSON{Ratio: "16:9", Width: 1920, Height: 1080},
-	}
-
-	encoder := json.NewEncoder(os.Stdout)
-	encoder.SetIndent("", "  ")
-	if err := encoder.Encode(output); err != nil {
-		Errorln("Error:", err)
-		os.Exit(1)
 	}
 }
 
