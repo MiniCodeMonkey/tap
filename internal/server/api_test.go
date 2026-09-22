@@ -14,6 +14,21 @@ import (
 	"github.com/MiniCodeMonkey/tap/internal/transformer"
 )
 
+// presentationWithBlock returns a presentation with one slide that holds
+// one live code block.
+func presentationWithBlock(driverName, connection, code string) *transformer.TransformedPresentation {
+	return &transformer.TransformedPresentation{
+		Slides: []transformer.TransformedSlide{{
+			CodeBlocks: []transformer.TransformedCodeBlock{{
+				Language:   "bash",
+				Code:       code,
+				Driver:     driverName,
+				Connection: connection,
+			}},
+		}},
+	}
+}
+
 // mockDriver is a test driver that returns predefined results.
 type mockDriver struct {
 	name   string
@@ -26,6 +41,43 @@ func (m *mockDriver) Name() string {
 
 func (m *mockDriver) Execute(_ context.Context, _ string, _ map[string]string) driver.Result {
 	return m.result
+}
+
+func TestHandleAPIExecute_RejectsCodeThatIsNotInTheDeck(t *testing.T) {
+	s := New(0)
+	registry := driver.NewRegistry()
+	registry.Register(&mockDriver{name: "test", result: driver.Result{Success: true, Output: "ran"}})
+	s.SetRegistry(registry)
+	s.SetPresentation(presentationWithBlock("test", "", "echo deck"))
+
+	for _, body := range []ExecuteRequest{
+		{Driver: "test", Code: "echo attacker"},
+		{Driver: "test", Code: "echo deck", Connection: "other"},
+		{Driver: "shell", Code: "echo deck"},
+	} {
+		bodyBytes, _ := json.Marshal(body)
+		request := httptest.NewRequest(http.MethodPost, "/api/execute", bytes.NewReader(bodyBytes))
+		recorder := httptest.NewRecorder()
+		s.handleAPIExecute(recorder, request)
+		if recorder.Code != http.StatusForbidden {
+			t.Errorf("%+v: status = %d, want %d", body, recorder.Code, http.StatusForbidden)
+		}
+	}
+}
+
+func TestHandleAPIExecute_RejectsEverythingWithNoDeck(t *testing.T) {
+	s := New(0)
+	registry := driver.NewRegistry()
+	registry.Register(&mockDriver{name: "test", result: driver.Result{Success: true}})
+	s.SetRegistry(registry)
+
+	bodyBytes, _ := json.Marshal(ExecuteRequest{Driver: "test", Code: "echo hi"})
+	request := httptest.NewRequest(http.MethodPost, "/api/execute", bytes.NewReader(bodyBytes))
+	recorder := httptest.NewRecorder()
+	s.handleAPIExecute(recorder, request)
+	if recorder.Code != http.StatusForbidden {
+		t.Errorf("status = %d, want %d", recorder.Code, http.StatusForbidden)
+	}
 }
 
 func TestHandleAPIExecute_MethodNotAllowed(t *testing.T) {
@@ -142,6 +194,7 @@ func TestHandleAPIExecute_NoRegistry(t *testing.T) {
 func TestHandleAPIExecute_DriverNotFound(t *testing.T) {
 	s := New(0)
 	s.SetRegistry(driver.NewRegistry())
+	s.SetPresentation(presentationWithBlock("nonexistent", "", "echo hello"))
 
 	body := ExecuteRequest{
 		Driver: "nonexistent",
@@ -182,6 +235,7 @@ func TestHandleAPIExecute_Success(t *testing.T) {
 		},
 	})
 	s.SetRegistry(reg)
+	s.SetPresentation(presentationWithBlock("test", "", "print('Hello, World!')"))
 
 	body := ExecuteRequest{
 		Driver: "test",
@@ -222,6 +276,7 @@ func TestHandleAPIExecute_ExecutionError(t *testing.T) {
 		},
 	})
 	s.SetRegistry(reg)
+	s.SetPresentation(presentationWithBlock("test", "", "invalid command"))
 
 	body := ExecuteRequest{
 		Driver: "test",
@@ -266,6 +321,7 @@ func TestHandleAPIExecute_WithData(t *testing.T) {
 		},
 	})
 	s.SetRegistry(reg)
+	s.SetPresentation(presentationWithBlock("sql", "", "SELECT * FROM users"))
 
 	body := ExecuteRequest{
 		Driver: "sql",

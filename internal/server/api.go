@@ -77,6 +77,20 @@ func (s *Server) handleAPIExecute(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Only code that is a live block in the loaded deck runs. The server
+	// listens on every interface, and a client outside a browser can send
+	// any Origin header, so the same-origin check alone does not stop a
+	// request from running arbitrary code.
+	if !s.deckHasLiveBlock(req.Driver, req.Connection, req.Code) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusForbidden)
+		_ = json.NewEncoder(w).Encode(ExecuteResponse{
+			Success: false,
+			Error:   "This code is not a live code block in the loaded deck",
+		})
+		return
+	}
+
 	// Check if driver exists
 	if !s.registry.Has(req.Driver) {
 		w.Header().Set("Content-Type", "application/json")
@@ -181,6 +195,23 @@ func (s *Server) getExecutionTimeout(driverName string) time.Duration {
 	}
 
 	return DefaultExecuteTimeout
+}
+
+// deckHasLiveBlock reports whether the loaded deck has a live code block
+// with exactly this driver, connection and code.
+func (s *Server) deckHasLiveBlock(driverName, connection, code string) bool {
+	presentation := s.GetPresentation()
+	if presentation == nil {
+		return false
+	}
+	for _, slide := range presentation.Slides {
+		for _, block := range slide.CodeBlocks {
+			if block.Driver == driverName && block.Connection == connection && block.Code == code {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // SetRegistry sets the driver registry for the server.
