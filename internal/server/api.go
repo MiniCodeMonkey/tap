@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/MiniCodeMonkey/tap/internal/config"
 	"github.com/MiniCodeMonkey/tap/internal/driver"
 )
 
@@ -28,7 +29,7 @@ type ExecuteResponse struct {
 }
 
 // DefaultExecuteTimeout is the default timeout for code execution.
-const DefaultExecuteTimeout = 30 * time.Second
+const DefaultExecuteTimeout = time.Duration(config.DefaultDriverTimeoutSeconds) * time.Second
 
 // handleAPIExecute handles POST /api/execute requests to execute code via a driver.
 func (s *Server) handleAPIExecute(w http.ResponseWriter, r *http.Request) {
