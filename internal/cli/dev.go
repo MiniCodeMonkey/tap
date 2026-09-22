@@ -537,7 +537,10 @@ func runDevServer(options serverOptions) error {
 				report := recordings.StartupPreflight()
 				for _, finding := range report.Findings {
 					if finding.Blocking {
+						// The speaker sees the first actionable reason, not
+						// whichever blocking finding happened to come last.
 						present.Block(finding.Describe())
+						break
 					}
 				}
 				recordContext, stopRecording := context.WithCancel(context.Background())
@@ -568,8 +571,17 @@ func runDevServer(options serverOptions) error {
 
 		// Update watcher to also update TUI. reloadInTUI also backs r, so
 		// tap present (which never starts the watcher) can still reload
-		// the deck from disk by hand.
+		// the deck from disk by hand. The watcher serializes its own calls
+		// (see server.Watcher's callbackMu), but r runs on Bubble Tea's
+		// command goroutine outside that lock, so a file-save reload and a
+		// manual r could otherwise interleave their writes to rawSlides,
+		// srv, hub and the model; reloadMu makes the two callers mutually
+		// exclusive.
+		var reloadMu sync.Mutex
 		reloadInTUI := func(path string) {
+			reloadMu.Lock()
+			defer reloadMu.Unlock()
+
 			// Reload config and presentation
 			newCfg, err := config.Load(absFile)
 			if err != nil {
