@@ -10,12 +10,11 @@ import (
 	"github.com/MiniCodeMonkey/tap/internal/components"
 )
 
-// resetAddComponentFlags clears the package-level flag variables the
-// add component tests mutate, so tests don't leak state into each other.
-func resetAddComponentFlags() {
-	addComponentInline = false
-	addComponentTS = false
-	addComponentDeck = ""
+// resetComponentFlags clears the package-level flag variables the
+// component tests mutate, so tests don't leak state into each other.
+func resetComponentFlags() {
+	componentInline = false
+	componentTS = false
 }
 
 // withWorkingDirectory runs fn with the process working directory set to
@@ -37,20 +36,18 @@ func withWorkingDirectory(t *testing.T, dir string, fn func()) {
 	fn()
 }
 
-// TestAddComponentDeckFlagAsDirectory checks that --deck given a directory
-// (the deck folder itself, not a markdown file inside it) writes into that
-// directory, not its parent.
-func TestAddComponentDeckFlagAsDirectory(t *testing.T) {
+// TestComponentNewDeckFolderArgument checks that a folder argument writes
+// into that folder, not its parent.
+func TestComponentNewDeckFolderArgument(t *testing.T) {
 	parent := t.TempDir()
 	deckDir := filepath.Join(parent, "my-talk")
 	if err := os.Mkdir(deckDir, 0o755); err != nil {
 		t.Fatalf("failed to create deck directory: %v", err)
 	}
-	resetAddComponentFlags()
-	addComponentDeck = deckDir
+	resetComponentFlags()
 
-	if err := runAddComponentE("RollingDeploy"); err != nil {
-		t.Fatalf("runAddComponentE: %v", err)
+	if _, err := scaffoldComponent("RollingDeploy", deckDir); err != nil {
+		t.Fatalf("scaffoldComponent: %v", err)
 	}
 
 	componentPath := filepath.Join(deckDir, "slides", "RollingDeploy.jsx")
@@ -64,13 +61,42 @@ func TestAddComponentDeckFlagAsDirectory(t *testing.T) {
 	}
 }
 
-func TestAddComponentWholeSlideJSX(t *testing.T) {
+func TestComponentNewCommandShape(t *testing.T) {
+	command, _, err := rootCmd.Find([]string{"component", "new"})
+	if err != nil || command.Name() != "new" || command.Parent().Name() != "component" {
+		t.Fatalf("tap component new not found: %v", err)
+	}
+	if command.Use != "new <Name> [deck]" {
+		t.Errorf("Use = %q, want %q", command.Use, "new <Name> [deck]")
+	}
+	if command.Flags().Lookup("deck") != nil {
+		t.Error("--deck should be removed: the deck is a positional argument")
+	}
+}
+
+func TestScaffoldComponentReturnsFilesAndSnippet(t *testing.T) {
+	resetComponentFlags()
+	deckDir := t.TempDir()
+	result, err := scaffoldComponent("RollingDeploy", deckDir)
+	if err != nil {
+		t.Fatalf("scaffoldComponent() error = %v", err)
+	}
+	wantFile := filepath.Join(deckDir, "slides", "RollingDeploy.jsx")
+	if len(result.Files) != 1 || result.Files[0] != wantFile {
+		t.Errorf("Files = %v, want [%s]", result.Files, wantFile)
+	}
+	if result.Snippet != componentSnippet("RollingDeploy", "jsx", false) {
+		t.Errorf("Snippet = %q", result.Snippet)
+	}
+}
+
+func TestComponentNewWholeSlideJSX(t *testing.T) {
 	dir := t.TempDir()
-	resetAddComponentFlags()
+	resetComponentFlags()
 
 	withWorkingDirectory(t, dir, func() {
-		if err := runAddComponentE("RollingDeploy"); err != nil {
-			t.Fatalf("runAddComponentE: %v", err)
+		if _, err := scaffoldComponent("RollingDeploy", ""); err != nil {
+			t.Fatalf("scaffoldComponent: %v", err)
 		}
 	})
 
@@ -89,14 +115,14 @@ func TestAddComponentWholeSlideJSX(t *testing.T) {
 	}
 }
 
-func TestAddComponentWholeSlideTSX(t *testing.T) {
+func TestComponentNewWholeSlideTSX(t *testing.T) {
 	dir := t.TempDir()
-	resetAddComponentFlags()
-	addComponentTS = true
+	resetComponentFlags()
+	componentTS = true
 
 	withWorkingDirectory(t, dir, func() {
-		if err := runAddComponentE("RollingDeploy"); err != nil {
-			t.Fatalf("runAddComponentE: %v", err)
+		if _, err := scaffoldComponent("RollingDeploy", ""); err != nil {
+			t.Fatalf("scaffoldComponent: %v", err)
 		}
 	})
 
@@ -121,14 +147,14 @@ func TestAddComponentWholeSlideTSX(t *testing.T) {
 	}
 }
 
-func TestAddComponentInlineJSX(t *testing.T) {
+func TestComponentNewInlineJSX(t *testing.T) {
 	dir := t.TempDir()
-	resetAddComponentFlags()
-	addComponentInline = true
+	resetComponentFlags()
+	componentInline = true
 
 	withWorkingDirectory(t, dir, func() {
-		if err := runAddComponentE("LatencyDrop"); err != nil {
-			t.Fatalf("runAddComponentE: %v", err)
+		if _, err := scaffoldComponent("LatencyDrop", ""); err != nil {
+			t.Fatalf("scaffoldComponent: %v", err)
 		}
 	})
 
@@ -136,15 +162,15 @@ func TestAddComponentInlineJSX(t *testing.T) {
 	assertBuildsCleanly(t, componentPath, dir)
 }
 
-func TestAddComponentInlineTSX(t *testing.T) {
+func TestComponentNewInlineTSX(t *testing.T) {
 	dir := t.TempDir()
-	resetAddComponentFlags()
-	addComponentInline = true
-	addComponentTS = true
+	resetComponentFlags()
+	componentInline = true
+	componentTS = true
 
 	withWorkingDirectory(t, dir, func() {
-		if err := runAddComponentE("LatencyDrop"); err != nil {
-			t.Fatalf("runAddComponentE: %v", err)
+		if _, err := scaffoldComponent("LatencyDrop", ""); err != nil {
+			t.Fatalf("scaffoldComponent: %v", err)
 		}
 	})
 
@@ -161,26 +187,26 @@ func TestAddComponentInlineTSX(t *testing.T) {
 	}
 }
 
-func TestAddComponentInvalidName(t *testing.T) {
+func TestComponentNewInvalidName(t *testing.T) {
 	dir := t.TempDir()
-	resetAddComponentFlags()
+	resetComponentFlags()
 
 	withWorkingDirectory(t, dir, func() {
-		if err := runAddComponentE("rollingDeploy"); err == nil {
+		if _, err := scaffoldComponent("rollingDeploy", ""); err == nil {
 			t.Fatalf("expected an error for a non-PascalCase name")
 		}
 	})
 }
 
-func TestAddComponentRefusesOverwrite(t *testing.T) {
+func TestComponentNewRefusesOverwrite(t *testing.T) {
 	dir := t.TempDir()
-	resetAddComponentFlags()
+	resetComponentFlags()
 
 	withWorkingDirectory(t, dir, func() {
-		if err := runAddComponentE("RollingDeploy"); err != nil {
-			t.Fatalf("first runAddComponentE: %v", err)
+		if _, err := scaffoldComponent("RollingDeploy", ""); err != nil {
+			t.Fatalf("first scaffoldComponent: %v", err)
 		}
-		err := runAddComponentE("RollingDeploy")
+		_, err := scaffoldComponent("RollingDeploy", "")
 		if err == nil {
 			t.Fatalf("expected an error on the second write")
 		}
@@ -190,10 +216,10 @@ func TestAddComponentRefusesOverwrite(t *testing.T) {
 	})
 }
 
-func TestAddComponentLeavesExistingTapEnv(t *testing.T) {
+func TestComponentNewLeavesExistingTapEnv(t *testing.T) {
 	dir := t.TempDir()
-	resetAddComponentFlags()
-	addComponentTS = true
+	resetComponentFlags()
+	componentTS = true
 
 	envPath := filepath.Join(dir, "tap-env.d.ts")
 	custom := []byte("// custom tap-env.d.ts, left alone\n")
@@ -207,8 +233,8 @@ func TestAddComponentLeavesExistingTapEnv(t *testing.T) {
 	}
 
 	withWorkingDirectory(t, dir, func() {
-		if err := runAddComponentE("RollingDeploy"); err != nil {
-			t.Fatalf("runAddComponentE: %v", err)
+		if _, err := scaffoldComponent("RollingDeploy", ""); err != nil {
+			t.Fatalf("scaffoldComponent: %v", err)
 		}
 	})
 

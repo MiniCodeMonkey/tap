@@ -243,7 +243,7 @@ func TestThemeShowCommand_JSONHoldsExpectedKeys(t *testing.T) {
 		t.Fatalf("failed to parse JSON output: %v\noutput: %s", err, stdout.String())
 	}
 
-	for _, key := range []string{"slug", "name", "polarity", "pitch", "tokens", "illustration", "canvas"} {
+	for _, key := range []string{"ok", "slug", "name", "polarity", "pitch", "tokens", "illustration", "canvas"} {
 		if _, ok := output[key]; !ok {
 			t.Errorf("JSON output is missing top-level key %q", key)
 		}
@@ -307,27 +307,66 @@ func TestThemeShowCommand_UnknownSlugListsValidThemes(t *testing.T) {
 	}
 }
 
-// TestResolveThemeShowSlug_DeckPicksDeckTheme verifies, in-process, that
-// --deck reads the slug from a deck's own frontmatter theme.
-// resolveThemeShowSlug reads the package-level --deck flag variable
-// directly (as cobra's Run functions do), so the test sets and restores it
-// itself rather than going through a cobra command.
-func TestResolveThemeShowSlug_DeckPicksDeckTheme(t *testing.T) {
-	deckPath := filepath.Join(t.TempDir(), "deck.md")
-	deckContent := "---\ntheme: swiss\ntitle: Demo\n---\n\n# Slide\n"
-	if err := os.WriteFile(deckPath, []byte(deckContent), 0o644); err != nil {
-		t.Fatalf("failed to write test deck: %v", err)
+func TestResolveThemeShowSlug(t *testing.T) {
+	dir := t.TempDir()
+	deckPath := filepath.Join(dir, "deck.md")
+	if err := os.WriteFile(deckPath, []byte("---\ntheme: swiss\ntitle: Demo\n---\n\n# Slide\n"), 0o644); err != nil {
+		t.Fatal(err)
 	}
 
-	previous := themeShowDeck
-	themeShowDeck = deckPath
-	defer func() { themeShowDeck = previous }()
-
-	slug, err := resolveThemeShowSlug(nil)
-	if err != nil {
-		t.Fatalf("resolveThemeShowSlug() error = %v", err)
+	tests := []struct {
+		name     string
+		arg      string
+		wantSlug string
+		wantCode string
+	}{
+		{"a built-in slug", "terminal", "terminal", ""},
+		{"a deck file uses its theme", deckPath, "swiss", ""},
+		{"a deck folder uses its deck's theme", dir, "swiss", ""},
+		{"neither a slug nor a path", "no-such-theme", "", codeUnknownTheme},
 	}
-	if slug != "swiss" {
-		t.Errorf("slug = %q, want %q (the deck's own theme)", slug, "swiss")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			slug, err := resolveThemeShowSlug(tt.arg)
+			if tt.wantCode != "" {
+				if _, code, _ := classify(err); code != tt.wantCode {
+					t.Errorf("code = %q, want %q (err %v)", code, tt.wantCode, err)
+				}
+				return
+			}
+			if err != nil || slug != tt.wantSlug {
+				t.Errorf("resolveThemeShowSlug(%q) = (%q, %v), want %q", tt.arg, slug, err, tt.wantSlug)
+			}
+		})
+	}
+}
+
+func TestThemeShowWithNoArgumentUsesTheDeckInTheFolder(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "deck.md"), []byte("---\ntheme: swiss\n---\n\n# Slide\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	withWorkingDirectory(t, dir, func() {
+		slug, err := resolveThemeShowSlug("")
+		if err != nil || slug != "swiss" {
+			t.Errorf("resolveThemeShowSlug(\"\") = (%q, %v), want swiss", slug, err)
+		}
+	})
+}
+
+func TestThemeListJSONIsAnObject(t *testing.T) {
+	exitCode, stdout, _ := runTap(t, "theme", "list", "--json")
+	if exitCode != exitOK {
+		t.Fatalf("exit code = %d", exitCode)
+	}
+	var output struct {
+		OK     bool             `json:"ok"`
+		Themes []map[string]any `json:"themes"`
+	}
+	if err := json.Unmarshal([]byte(stdout), &output); err != nil {
+		t.Fatalf("stdout is not a JSON object: %v\n%s", err, stdout)
+	}
+	if !output.OK || len(output.Themes) == 0 {
+		t.Errorf("output = %+v, want ok and a theme list", output)
 	}
 }

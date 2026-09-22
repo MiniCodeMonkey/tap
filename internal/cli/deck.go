@@ -14,8 +14,8 @@ import (
 // prepareDeck loads a deck (see loadPresentation: parse, build its
 // deck-supplied React components, transform) and starts a temporary server
 // with the deck's presentation and component bundles registered on it -
-// the setup tap pdf and tap screenshot both need before doing any browser
-// work, so the two commands cannot drift apart.
+// the setup tap export pdf and tap export images both need before doing
+// any browser work, so the two commands cannot drift apart.
 //
 // When the deck's components fail to build, prepareDeck returns those
 // errors and a nil server without starting one: the caller prints them
@@ -27,7 +27,7 @@ import (
 func prepareDeck(file string, cfg *config.Config, baseDir string) (*server.Server, *transformer.TransformedPresentation, []layouts.Warning, []components.BuildError, []components.BuildError, error) {
 	pres, warnings, resolvedComponents, componentBuildErrs, _, err := loadPresentation(file, cfg, baseDir)
 	if err != nil {
-		return nil, nil, nil, nil, nil, err
+		return nil, nil, nil, nil, nil, userError(codeInvalidDeck, err)
 	}
 	if len(componentBuildErrs) > 0 {
 		return nil, pres, warnings, componentBuildErrs, nil, nil
@@ -46,7 +46,7 @@ func prepareDeck(file string, cfg *config.Config, baseDir string) (*server.Serve
 	}
 	srv.SetupRoutes()
 	if err := srv.Start(); err != nil {
-		return nil, pres, warnings, nil, nil, fmt.Errorf("failed to start temporary server: %w", err)
+		return nil, pres, warnings, nil, nil, internalError(codeInternal, fmt.Errorf("failed to start temporary server: %w", err))
 	}
 
 	return srv, pres, warnings, nil, componentBuildWarnings, nil

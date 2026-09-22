@@ -39,7 +39,16 @@ func portInUseError(requestedPort int, commandName string) error {
 // port is not fatal: the next maxPortFallbackAttempts ports are tried in
 // turn instead, so two tap dev processes (or two decks, or two agents)
 // can run side by side without flags.
-func startOnAvailablePort(requestedPort int, explicit bool, commandName string, build func(port int) *server.Server) (*server.Server, error) {
+//
+// loopback is whether build binds to loopback rather than the wildcard
+// address (true unless the caller passed --lan). On macOS, binding
+// 127.0.0.1:P succeeds even when another process already holds the
+// wildcard *:P, so a plain bind attempt on a loopback address would miss
+// that collision and let two unrelated servers share the port. When
+// loopback is true, each candidate port is first probed with a wildcard
+// listen; a port the probe finds busy is treated the same as a bind
+// failure, without ever building or starting a real server on it.
+func startOnAvailablePort(requestedPort int, explicit bool, commandName string, loopback bool, build func(port int) *server.Server) (*server.Server, error) {
 	attempts := 1
 	if !explicit {
 		attempts = maxPortFallbackAttempts + 1
@@ -48,6 +57,16 @@ func startOnAvailablePort(requestedPort int, explicit bool, commandName string, 
 	var lastAttemptErr error
 	for i := 0; i < attempts; i++ {
 		candidatePort := requestedPort + i
+		if loopback {
+			busy, probeErr := wildcardPortBusy(candidatePort)
+			if probeErr != nil {
+				return nil, fmt.Errorf("failed to probe port: %w", probeErr)
+			}
+			if busy {
+				lastAttemptErr = fmt.Errorf("port %d: %w", candidatePort, syscall.EADDRINUSE)
+				continue
+			}
+		}
 		startedServer := build(candidatePort)
 		err := startedServer.Start()
 		if err == nil {
@@ -63,6 +82,24 @@ func startOnAvailablePort(requestedPort int, explicit bool, commandName string, 
 		return nil, portInUseError(requestedPort, commandName)
 	}
 	return nil, fmt.Errorf("could not find a free port from %d to %d: %w", requestedPort, requestedPort+maxPortFallbackAttempts, lastAttemptErr)
+}
+
+// wildcardPortBusy reports whether port is held by a wildcard listener
+// (something bound to *:port), by probing a wildcard listen on it and
+// closing the probe listener immediately, before any real bind is
+// attempted. On macOS a loopback bind (127.0.0.1:port) succeeds even
+// while another process holds the wildcard address on the same port, so
+// this probe is what actually catches that collision.
+func wildcardPortBusy(port int) (bool, error) {
+	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
+	if err != nil {
+		if isPortInUseError(err) {
+			return true, nil
+		}
+		return false, err
+	}
+	_ = listener.Close()
+	return false, nil
 }
 
 // listenOnAvailablePort binds a TCP listener on requestedPort the same way

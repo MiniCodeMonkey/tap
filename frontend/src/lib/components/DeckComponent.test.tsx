@@ -109,7 +109,7 @@ describe('DeckComponent', () => {
 		expect((await findByTestId('widget')).textContent).toBe('hello');
 	});
 
-	it('shows an error card with the class tap screenshot detects and the source path, in dev, on a build error', () => {
+	it('shows an error card with the class tap export images detects and the source path, in dev, on a build error', () => {
 		(import.meta.env as { DEV: boolean }).DEV = true;
 		const slide = makeSlide();
 
@@ -161,7 +161,7 @@ describe('DeckComponent', () => {
 		unmark();
 	});
 
-	it('shows an error card with the class tap screenshot detects when the loaded module has no default export, in dev', async () => {
+	it('shows an error card with the class tap export images detects when the loaded module has no default export, in dev', async () => {
 		(import.meta.env as { DEV: boolean }).DEV = true;
 		const importer = vi.fn().mockResolvedValue({ named: () => null });
 		const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});

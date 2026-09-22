@@ -60,7 +60,7 @@ tap build slides.md --output ./public
   it fetches the presentation from `/api/presentation`, which only
   `tap dev` serves, so it cannot load from a static build. The presenter
   view, with its notes, timer, and next-slide panel, is a `tap dev`
-  feature. Export notes with `tap pdf --content notes` or
+  feature. Export notes with `tap export pdf --content notes` or
   `--content both` if you need them alongside a static deck.
 - **The AI image generator and the slide builder.** Both live in the
   `tap dev` terminal.
@@ -160,7 +160,7 @@ Simply upload the contents of the `dist/` directory to your web root.
 Export your presentation to PDF for offline sharing or printing:
 
 ```bash
-tap pdf slides.md
+tap export pdf slides.md
 ```
 
 This generates a high-quality PDF with each slide as a page.
@@ -180,7 +180,7 @@ flag.
 **Slides only (default):**
 
 ```bash
-tap pdf slides.md
+tap export pdf slides.md
 ```
 
 Exports just the presentation slides, one per page.
@@ -188,7 +188,7 @@ Exports just the presentation slides, one per page.
 **Notes only:**
 
 ```bash
-tap pdf slides.md --content notes
+tap export pdf slides.md --content notes
 ```
 
 Exports speaker notes as a document, useful for printing a script.
@@ -196,7 +196,7 @@ Exports speaker notes as a document, useful for printing a script.
 **Slides with notes:**
 
 ```bash
-tap pdf slides.md --content both
+tap export pdf slides.md --content both
 ```
 
 Exports each slide with its corresponding speaker notes below, ideal for handouts or review materials.
@@ -205,32 +205,32 @@ Exports each slide with its corresponding speaker notes below, ideal for handout
 
 ```bash
 # Basic PDF export
-tap pdf presentation.md
+tap export pdf presentation.md
 
 # Custom output filename
-tap pdf slides.md --output quarterly-review.pdf
+tap export pdf slides.md --output quarterly-review.pdf
 
 # Slides with notes below each one, as a handout
-tap pdf slides.md --content both --output handout.pdf
+tap export pdf slides.md --content both --output handout.pdf
 
 # Speaker notes only, as a script
-tap pdf slides.md --content notes --output script.pdf
+tap export pdf slides.md --content notes --output script.pdf
 ```
 
 ## Screenshotting One Slide
 
-`tap screenshot` renders a single slide state to a PNG through the same
+`tap export images` renders a single slide state to a PNG through the same
 headless browser, which is faster than a full PDF when you only want to
 check one slide:
 
 ```bash
-tap screenshot slides.md --slide 12
-tap screenshot slides.md --slide 12 --step 3
-tap screenshot slides.md --all --out shots/
+tap export images slides.md --slide 12
+tap export images slides.md --slide 12 --step 3
+tap export images slides.md --all --output shots/
 ```
 
 It exits with status 1 when the slide shows an error card, so it works as
-a check in a script. See [CLI Commands](/reference/cli-commands#tap-screenshot).
+a check in a script. See [CLI Commands](/reference/cli-commands#tap-export-images).
 
 ::: tip
 PDF export captures your presentation at a specific moment. If you have live code execution enabled, the results shown in the PDF will be whatever was displayed at export time.
@@ -273,10 +273,10 @@ git commit -m "Update built presentation"
 | `tap build slides.md` | Build for production |
 | `tap build slides.md --output ./public` | Build to custom directory |
 | `tap serve dist` | Preview built presentation |
-| `tap pdf slides.md` | Export to PDF (slides only) |
-| `tap pdf slides.md --content notes` | Export notes only |
-| `tap pdf slides.md --content both` | Export slides with notes |
-| `tap screenshot slides.md --slide 4` | Render one slide to a PNG |
+| `tap export pdf slides.md` | Export to PDF (slides only) |
+| `tap export pdf slides.md --content notes` | Export notes only |
+| `tap export pdf slides.md --content both` | Export slides with notes |
+| `tap export images slides.md --slide 4` | Render one slide to a PNG |
 
 ## Next Steps
 

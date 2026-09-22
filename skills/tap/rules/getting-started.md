@@ -91,7 +91,7 @@ tap serve dist
 ## Essential Workflow
 
 1. `tap new --yes ...` (or `tap new` for the wizard) to write the markdown file
-2. `tap dev <file>` - Develop with live preview
-3. `tap screenshot <file> --slide <n>` - Check one slide; exit status 1 means it is broken
-4. `tap build <file>` - Build for deployment
-5. `tap pdf <file>` - Export to PDF
+2. `tap dev [deck]` - Develop with live preview
+3. `tap export images [deck] --slide <n>` - Check one slide; exit status 1 means it is broken
+4. `tap build [deck]` - Build for deployment
+5. `tap export pdf [deck]` - Export to PDF

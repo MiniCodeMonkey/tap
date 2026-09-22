@@ -368,12 +368,12 @@ Which step that is depends on the caller:
 
 | Caller | `step` | `printMode` |
 |--------|--------|-------------|
-| `tap pdf` | `steps` | `true` |
+| `tap export pdf` | `steps` | `true` |
 | `?print=true` | `steps` | `true` |
 | Overview grid, presenter next-slide panel | `steps` | `true` |
-| `tap screenshot` with no `--step`/`--fragment` | `steps` | `true` |
-| `tap screenshot --step k` | `k` | `true` |
-| `tap screenshot --step k --wait <ms>` | `k` | `false` (live) |
+| `tap export images` with no `--step`/`--fragment` | `steps` | `true` |
+| `tap export images --step k` | `k` | `true` |
+| `tap export images --step k --wait <ms>` | `k` | `false` (live) |
 
 `--wait` starts its clock once the page is ready (network idle, fonts
 loaded, running animations finished), not at navigation, so it suits an
@@ -381,7 +381,7 @@ animation that starts on a timer or runs longer than those waits.
 
 ::: warning Never treat print mode as "the final state"
 A component that branches on `printMode` to jump to its last step produces
-a **wrong** stepped capture: `tap screenshot --step 2` would show step 5.
+a **wrong** stepped capture: `tap export images --step 2` would show step 5.
 Branch on `printMode` only to skip animation and timers, and always derive
 what to show from `step`.
 :::
@@ -418,7 +418,7 @@ Tap does **not** stop:
   `requestAnimationFrame`, a state machine, a canvas loop
 
 So a fade that Motion drives will still fade in a PDF unless you set
-`transition={{ duration: printMode ? 0 : 0.4 }}` yourself, and a timer will
+<code v-pre>transition={{ duration: printMode ? 0 : 0.4 }}</code> yourself, and a timer will
 still tick unless you gate it. Treat the enforcement as a safety net for
 the transform cases, not as a reason to skip the check.
 
@@ -452,7 +452,7 @@ Tap resets Motion's presence context around every deck component, both the
 whole-slide and the inline form. Without that, the `<AnimatePresence
 initial={false}>` that wraps slide transitions would propagate
 `initial: false` into the component's tree and skip its own mount
-animation, so a reload, a deep link, or `tap screenshot --step k` would
+animation, so a reload, a deep link, or `tap export images --step k` would
 land on the animation's end state.
 
 With the reset, a component's own `initial` to `animate` transition runs
@@ -465,10 +465,10 @@ slide-level transition is unaffected.
 | Mode | `step` | `printMode` | `active` |
 |------|--------|-------------|----------|
 | Live viewer | current | `false` | `true` |
-| `?print=true`, `tap pdf` | `steps` | `true` | `true` |
+| `?print=true`, `tap export pdf` | `steps` | `true` | `true` |
 | Preview (overview grid, presenter next-slide panel) | `steps` | `true` | `false` |
-| `?capture=true` (`tap screenshot --step k`) | the requested `k` | `true` | `true` |
-| `?capture=true&live=true` (`tap screenshot --wait`) | the requested `k` | `false` | `true` |
+| `?capture=true` (`tap export images --step k`) | the requested `k` | `true` | `true` |
+| `?capture=true&live=true` (`tap export images --wait`) | the requested `k` | `false` | `true` |
 | Presenter current-slide panel | current | `false` | `true` |
 
 Fragments follow the same shape: print mode reveals them all, a capture
@@ -666,7 +666,7 @@ There are three forms, and which one you get depends on who is looking.
 | A normal viewer window, not fullscreen | Full card |
 | The presenter view (`/presenter`) | Full card |
 | `?debug=true` | Full card |
-| `?print=true`, `?capture=true`, `tap pdf`, `tap screenshot` | Full card |
+| `?print=true`, `?capture=true`, `tap export pdf`, `tap export images` | Full card |
 | A **fullscreen** viewer | Audience-safe |
 | `?present=true` | Audience-safe |
 | A static `tap build` output | Silent fallback |
@@ -683,14 +683,14 @@ reload.
 
 Even in the audience-safe form the `.deck-error-card` element stays in the
 DOM, hidden, carrying the message in `data-message` and the file in
-`data-source`. `tap screenshot` still finds it, still exits 1, and now
+`data-source`. `tap export images` still finds it, still exits 1, and now
 reports the message:
 
 ```
 Error: slide 2 shows an error card: component blew up on purpose
 ```
 
-`tap pdf` prints the same message as a warning and still writes the PDF:
+`tap export pdf` prints the same message as a warning and still writes the PDF:
 
 ```
 warning: slide 2 shows an error card: component blew up on purpose
@@ -716,7 +716,7 @@ capture, or in a preview, since those have no user waiting on a slide.
 ### The card itself
 
 The error card is a `<div class="deck-error-card" data-source="...">` for a
-component, and `.slide-error` for a slide-level failure. `tap screenshot`
+component, and `.slide-error` for a slide-level failure. `tap export images`
 looks for `.slide-error, .deck-error-card` and exits with status 1 when it
 finds one, which is what makes an automated self-check work.
 
@@ -728,22 +728,22 @@ a 404 while `tap dev` is restarting, the rejected import is evicted from
 the cache rather than remembered, so leaving the slide and entering it
 again retries the import. A reload is no longer needed to recover.
 
-### tap pdf
+### tap export pdf
 
-`tap pdf` builds and registers component bundles through the same shared
-setup `tap screenshot` uses, so a PDF renders every component. Each one is
+`tap export pdf` builds and registers component bundles through the same shared
+setup `tap export images` uses, so a PDF renders every component. Each one is
 exported in its final state: `printMode = true` and `step = steps`, the
 same as a thumbnail.
 
 Failures split by kind:
 
 - **A component that fails to build** stops the export before any browser
-  work. `tap pdf` prints the same
-  `error: <file>:<line>:<column>: <message>` line `tap screenshot` does,
+  work. `tap export pdf` prints the same
+  `error: <file>:<line>:<column>: <message>` line `tap export images` does,
   writes no PDF, and exits with status 1.
 - **A slide that shows an error card at export time** (a component that
   throws while rendering, or any slide that fails to render) is still
-  written to the PDF, card and all. `tap pdf` prints
+  written to the PDF, card and all. `tap export pdf` prints
   `warning: slide <n> shows an error card` to standard error, one line per
   affected slide, and exits 0. The rest of the deck exports normally, so a
   handout is never lost to one broken slide.
@@ -786,8 +786,8 @@ The measured safe area for every theme is in
 care about:
 
 ```bash
-tap screenshot deck.md --slide 3 --theme terminal --out terminal.png
-tap screenshot deck.md --slide 3 --theme zine --out zine.png
+tap export images deck.md --slide 3 --theme terminal --output terminal.png
+tap export images deck.md --slide 3 --theme zine --output zine.png
 ```
 
 ## Auto-playing components
@@ -821,13 +821,13 @@ useEffect(() => {
 }, [done, active]);
 ```
 
-Check both halves with `tap screenshot --step 0` and `--step 1`.
+Check both halves with `tap export images --step 0` and `--step 1`.
 
 ## Motion gotchas
 
 Tap embeds **Motion 12** (`motion` `^12.23.24`, currently resolving to
 12.43.0). Everything here was reproduced against that version with
-`tap screenshot --wait`, and rechecked after the mount-animation fix.
+`tap export images --wait`, and rechecked after the mount-animation fix.
 
 ### `animate()`'s `delay` runs `onUpdate` with the start value
 
@@ -874,7 +874,7 @@ nobody re-adds a workaround for them:
 | A transition with `duration: 0` plus a `delay` applies at once and ignores the delay | Not reproduced. The delay is honored: a `duration: 0, delay: 2` opacity stays at 0 through 1.5 seconds and flips to 1 after 2. |
 
 If you hit one of these after a Motion upgrade, reproduce it with a scratch
-component and `tap screenshot --wait` before working around it.
+component and `tap export images --wait` before working around it.
 
 ## Slide JSON
 
@@ -903,7 +903,7 @@ For reference when reading a built `index.html`, the transformer adds:
 
 ## Type declarations
 
-`tap add component --ts` writes two files next to the deck, each only when
+`tap component new --ts` writes two files next to the deck, each only when
 it does not already exist:
 
 - `tap-env.d.ts`: declares the `tap` module, every helper it exports
@@ -925,7 +925,7 @@ static build contains the bundled code. Only build decks you trust.
 ## See also
 
 - [Custom Components](/guide/custom-components) - the tutorial
-- [CLI Commands](/reference/cli-commands) - `tap screenshot`, `tap add component`, `tap theme`
+- [CLI Commands](/reference/cli-commands) - `tap export images`, `tap component new`, `tap theme`
 - [Themes](/guide/themes) - the token list and each theme's illustration style
 - [Creating Themes](/reference/theme-porting#component-slides) - the per-theme safe area for a component slide
 - [Layouts Reference](/reference/layouts-reference) - the built-in layouts and their slots

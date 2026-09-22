@@ -1,7 +1,7 @@
 /**
  * Catches a render failure in one slide's layout so the rest of the
  * presentation keeps working. In a server-backed runtime (`tap dev`, `tap
- * pdf`, `tap screenshot`, or the frontend's own dev server - see
+ * export pdf`, `tap export images`, or the frontend's own dev server - see
  * isDevRuntime) it shows an error card naming the slide, so a broken slide
  * is visible as broken instead of silently falling back; in a static `tap
  * build` output it falls back to the slide's raw slot content instead of

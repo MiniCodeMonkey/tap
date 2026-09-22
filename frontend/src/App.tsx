@@ -41,17 +41,17 @@ import { resolveTransition, type TransitionDirection } from '$lib/utils/transiti
 const PRINT_MODE =
 	typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('print') === 'true';
 
-// A stepped or fragment screenshot (tap screenshot --step/--fragment) opens
+// A stepped or fragment screenshot (tap export images --step/--fragment) opens
 // this live, non-print viewer so it can render an exact presenter state -
 // print mode always shows the final step and fragment, which a stepped
 // capture must not. It still runs against a temporary server that never
-// serves the websocket route (see internal/cli/screenshot.go), so it must
+// serves the websocket route (see internal/cli/export_images.go), so it must
 // behave like print mode for the websocket: never connect, and never show
 // the connection badge, or a capture bakes "Reconnecting..." into the PNG.
 const CAPTURE_MODE =
 	typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('capture') === 'true';
 
-// `tap screenshot --wait <ms>` (see internal/pdf/capture.go) keeps a capture
+// `tap export images --wait <ms>` (see internal/pdf/capture.go) keeps a capture
 // genuinely live - a running animation is exactly what --wait is for - so it
 // skips the settled treatment below. Without --wait, the default, a capture
 // is a still: `?live=true` is absent and the capture settles.

@@ -74,7 +74,7 @@ tap theme list              # slug, name, polarity, and pitch for all 21
 tap theme list --json
 tap theme show blueprint    # tokens and illustration style
 tap theme show blueprint --json
-tap theme show --deck slides.md   # the theme that deck's frontmatter names
+tap theme show slides.md   # the theme that deck's frontmatter names
 ```
 
 ## Theme Tokens

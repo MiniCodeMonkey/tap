@@ -432,3 +432,17 @@ func TestRegisterCustomDrivers_NilMap(t *testing.T) {
 		t.Errorf("expected no drivers registered, got %d", len(registry.List()))
 	}
 }
+
+func TestRegisterCustomDriversSetsTheWorkingDir(t *testing.T) {
+	registry := NewRegistry()
+	RegisterCustomDrivers(registry, map[string]DriverConfigInput{
+		"python": {Command: "python3", WorkingDir: "/tmp/deck"},
+	})
+	custom, ok := registry.Get("python").(*CustomDriver)
+	if !ok {
+		t.Fatal("python is not a *CustomDriver")
+	}
+	if custom.WorkingDir != "/tmp/deck" {
+		t.Errorf("WorkingDir = %q, want /tmp/deck", custom.WorkingDir)
+	}
+}

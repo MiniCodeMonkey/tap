@@ -171,9 +171,9 @@ One of Tap's most powerful features is the ability to control your presentation 
 
 ### Using an iPad or Phone as a Controller
 
-1. Start `tap dev` on your laptop
+1. Start `tap dev --lan` on your laptop
 2. Connect your iPad/phone to the same network
-3. Navigate to `http://<your-laptop-ip>:3000/presenter` on your device
+3. Scan the QR code in the terminal, or open the Network URL it shows
 4. Your device becomes a wireless presentation remote
 
 This setup lets you:
@@ -229,18 +229,25 @@ use `--tunnel` even when both devices are on the same network.
 
 ### QR Code for Easy Access
 
-When you start the dev server, Tap displays a QR code in the terminal:
+The dev server's terminal shows a QR code only when there is a URL worth
+scanning:
+
+- With `--lan`, the terminal shows a `Network:` presenter URL and a QR
+  code for it.
+- With `--tunnel`, it shows the tunnel's QR code instead.
+- With neither, it shows no QR code, since only this machine can connect.
 
 ```bash
-tap dev presentation.md
+tap dev presentation.md --lan
 
 # Output includes:
-#   Local:   http://localhost:3000
-#   Network: http://192.168.1.100:3000
+#   Audience:  http://localhost:3000
+#   Presenter: http://localhost:3000/presenter
+#   Network:   http://192.168.1.100:3000/presenter
 #   [QR CODE]
 ```
 
-Scan the QR code with your phone or tablet to instantly open the presentation. Navigate to `/presenter` for the presenter view.
+Scan the QR code with your phone or tablet to instantly open the presenter view.
 
 ## On Stage
 
@@ -294,7 +301,9 @@ work: the window it opens inherits the cookie.
 | Valid cookie, no key | 200 |
 
 `/qr` is gated the same way, so the QR code cannot be used to hand out
-presenter access to anyone who can reach the server.
+presenter access to anyone who can reach the server. It also needs
+`--lan`: without it, its network URLs would not work, and the endpoint
+answers 404.
 
 When password protection is enabled:
 

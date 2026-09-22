@@ -48,7 +48,7 @@ export interface SlideProps {
 	/** The active theme's mermaid settings, from its theme.json. */
 	mermaidOverrides?: MermaidThemeOverrides;
 	/**
-	 * True for a settled screenshot capture (`tap screenshot`, without
+	 * True for a settled screenshot capture (`tap export images`, without
 	 * `--wait`): a deck component must render without animating, the same as
 	 * `printMode`, but - unlike `printMode` - at the REQUESTED step and
 	 * fragment, not forced to the slide's final state. Kept separate from

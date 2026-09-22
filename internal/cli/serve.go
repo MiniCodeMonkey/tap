@@ -38,10 +38,10 @@ Examples:
   tap serve --port 8080        # Use custom port
   tap serve ./build -p 8080    # Both options together`,
 	Args: cobra.MaximumNArgs(1),
-	Run:  runServe,
+	RunE: runServe,
 }
 
-func runServe(cmd *cobra.Command, args []string) {
+func runServe(cmd *cobra.Command, args []string) error {
 	// Determine directory to serve
 	dir := "dist"
 	if len(args) > 0 {
@@ -51,18 +51,15 @@ func runServe(cmd *cobra.Command, args []string) {
 	// Check if directory exists
 	info, err := os.Stat(dir)
 	if os.IsNotExist(err) {
-		Errorln("Error: Directory does not exist:", dir)
 		fmt.Println()
-		Muted("  Hint: Run 'tap build <file>' first to generate static files.\n")
-		os.Exit(1)
+		Muted("  Hint: Run 'tap build [deck]' first to generate static files.\n")
+		return userError(codeDeckNotFound, fmt.Errorf("directory does not exist: %s", dir))
 	}
 	if err != nil {
-		Errorln("Error: Cannot access directory:", err)
-		os.Exit(1)
+		return userError(codeUsage, fmt.Errorf("cannot access directory: %w", err))
 	}
 	if !info.IsDir() {
-		Errorln("Error: Not a directory:", dir)
-		os.Exit(1)
+		return userError(codeUsage, fmt.Errorf("not a directory: %s", dir))
 	}
 
 	// Create file server
@@ -84,8 +81,7 @@ func runServe(cmd *cobra.Command, args []string) {
 	// two tap serve processes can run side by side without flags.
 	listener, err := listenOnAvailablePort(servePort, cmd.Flags().Changed("port"), "tap serve")
 	if err != nil {
-		Errorln("Error:", err)
-		os.Exit(1)
+		return userError(codeUsage, err)
 	}
 	boundPort := servePort
 	if tcpAddr, ok := listener.Addr().(*net.TCPAddr); ok {
@@ -122,8 +118,7 @@ func runServe(cmd *cobra.Command, args []string) {
 	// Wait for signal or error
 	select {
 	case err := <-errCh:
-		Errorln("Server error:", err)
-		os.Exit(1)
+		return internalError(codeInternal, fmt.Errorf("server error: %w", err))
 	case <-sigCh:
 		fmt.Println()
 		Info("Shutting down server...\n")
@@ -134,11 +129,11 @@ func runServe(cmd *cobra.Command, args []string) {
 	defer cancel()
 
 	if err := httpServer.Shutdown(ctx); err != nil {
-		Errorln("Error during shutdown:", err)
-		os.Exit(1)
+		return internalError(codeInternal, fmt.Errorf("error during shutdown: %w", err))
 	}
 
 	Successln("Server stopped.")
+	return nil
 }
 
 func init() {

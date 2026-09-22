@@ -31,7 +31,7 @@ func Successln(a ...any) {
 // Error prints an error message in red to standard error. Errors are
 // diagnostics, not command output, so they must never land on standard
 // output where a script or an LLM reading a command's result (for example
-// tap screenshot's written paths) would see them mixed in.
+// tap export images's written paths) would see them mixed in.
 func Error(format string, a ...any) {
 	errorColor.Fprintf(color.Error, format, a...)
 }

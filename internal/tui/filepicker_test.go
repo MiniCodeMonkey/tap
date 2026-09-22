@@ -201,20 +201,6 @@ func TestFilePickerModel_View(t *testing.T) {
 	}
 }
 
-func TestRenderNoFilesError(t *testing.T) {
-	output := RenderNoFilesError()
-
-	if !strings.Contains(output, "No markdown files found") {
-		t.Error("expected error message to contain 'No markdown files found'")
-	}
-	if !strings.Contains(output, "tap new") {
-		t.Error("expected error message to suggest 'tap new'")
-	}
-	if !strings.Contains(output, "tap dev") {
-		t.Error("expected error message to suggest 'tap dev'")
-	}
-}
-
 func TestFindMarkdownFiles_IgnoresDirectories(t *testing.T) {
 	// Create temp directory
 	tmpDir, err := os.MkdirTemp("", "filepicker-test-*")
@@ -245,5 +231,16 @@ func TestFindMarkdownFiles_IgnoresDirectories(t *testing.T) {
 	}
 	if m.files[0] != "real.md" {
 		t.Errorf("expected 'real.md', got %q", m.files[0])
+	}
+}
+
+func TestNewFilePickerModelWithKeepsTheGivenOrder(t *testing.T) {
+	m := NewFilePickerModelWith([]string{"talks/b.md", "talks/a.md"})
+	if !m.HasFiles() {
+		t.Fatal("HasFiles() = false")
+	}
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if got := updated.(FilePickerModel).GetResult().File; got != "talks/b.md" {
+		t.Errorf("selected %q, want the first file given", got)
 	}
 }

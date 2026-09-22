@@ -32,11 +32,12 @@ var (
 	devHeadless          bool
 	devAllowOrigins      []string
 	devTunnel            bool
+	devLAN               bool
 )
 
 // devCmd represents the dev command
 var devCmd = &cobra.Command{
-	Use:   "dev [file]",
+	Use:   "dev [deck]",
 	Short: "Start the development server",
 	Long: `Start the development server to preview and present your slides.
 
@@ -46,38 +47,23 @@ The dev server provides:
   - Presenter view with speaker notes
   - Live code execution for supported drivers
 
+The server listens on this machine only. --lan opens it to the local
+network, and --tunnel puts it on a public https URL.
+
 Examples:
+  tap dev                                 # The deck in this folder
   tap dev slides.md                      # Start server on port 3000
   tap dev slides.md --port 8080          # Use custom port
   tap dev slides.md -p 8080              # Short form
   tap dev slides.md --presenter-password secret  # Protect presenter view
-  tap dev slides.md --tunnel             # Also serve it on a public https URL`,
+  tap dev slides.md --tunnel             # Also serve it on a public https URL
+  tap dev slides.md --lan                # Let a phone on the same network connect`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		var file string
-
-		if len(args) == 0 {
-			// No file provided - show file picker or error
-			result, err := tui.RunFilePicker()
-			if err != nil {
-				return err
-			}
-
-			if result.Aborted {
-				if result.File == "" {
-					// No files found - show helpful error
-					fmt.Print(tui.RenderNoFilesError())
-					return nil
-				}
-				// User cancelled
-				return nil
-			}
-
-			file = result.File
-		} else {
-			file = args[0]
+		file, err := resolveDeck(firstArg(args))
+		if err != nil {
+			return err
 		}
-
 		return runDevServer(serverOptions{
 			file:              file,
 			port:              devPort,
@@ -86,6 +72,7 @@ Examples:
 			headless:          devHeadless,
 			allowOrigins:      devAllowOrigins,
 			tunnel:            devTunnel,
+			lan:               devLAN,
 		})
 	},
 }
@@ -100,6 +87,8 @@ type serverOptions struct {
 	portExplicit      bool
 	headless          bool
 	tunnel            bool
+	// lan listens on every interface, so a phone on the same network can connect.
+	lan bool
 	// present runs tap present: no file watcher, the audience view opens
 	// at launch, and recording follows the run instead of the c key.
 	present bool
@@ -116,6 +105,7 @@ func init() {
 	devCmd.Flags().StringVar(&devPresenterPassword, "presenter-password", "", "password to protect the presenter view")
 	devCmd.Flags().BoolVar(&devHeadless, "headless", false, "run without TUI (for testing/automation)")
 	devCmd.Flags().BoolVar(&devTunnel, "tunnel", false, "also serve the deck on a public https URL through a Cloudflare Quick Tunnel (needs cloudflared; no account required)")
+	devCmd.Flags().BoolVar(&devLAN, "lan", false, "listen on the local network too, so a phone on the same network can open the presenter view (default: this machine only)")
 	devCmd.Flags().StringArrayVar(&devAllowOrigins, "allow-origin", nil, "additional origin (scheme://host:port) allowed to connect to the websocket hub, or host (host:port) allowed in a request's Host header, for a contributor's Vite dev server or a non-local presenter host (repeatable)")
 }
 
@@ -152,7 +142,7 @@ func runDevServer(options serverOptions) error {
 
 	// Check file exists
 	if _, err := os.Stat(absFile); os.IsNotExist(err) {
-		return fmt.Errorf("file not found: %s", file)
+		return userError(codeDeckNotFound, fmt.Errorf("file not found: %s", file))
 	}
 
 	baseDir := filepath.Dir(absFile)
@@ -160,17 +150,17 @@ func runDevServer(options serverOptions) error {
 	// Load configuration from frontmatter
 	cfg, err := config.Load(absFile)
 	if err != nil {
-		return fmt.Errorf("failed to load config: %w", err)
+		return userError(codeInvalidDeck, fmt.Errorf("failed to load config: %w", err))
 	}
 
 	if err := cfg.Validate(); err != nil {
-		return fmt.Errorf("invalid config: %w", err)
+		return userError(codeInvalidDeck, fmt.Errorf("invalid config: %w", err))
 	}
 
 	// Parse and transform the presentation
 	pres, warnings, resolvedComponents, componentBuildErrs, rawSlides, err := loadPresentation(absFile, cfg, baseDir)
 	if err != nil {
-		return fmt.Errorf("failed to load presentation: %w", err)
+		return userError(codeInvalidDeck, fmt.Errorf("failed to load presentation: %w", err))
 	}
 
 	// currentSlides gives the recording controller's TitleFor a live view
@@ -229,7 +219,7 @@ func runDevServer(options serverOptions) error {
 	if presenterPassword != "" {
 		presenterSessionToken, err = server.GeneratePresenterSessionToken()
 		if err != nil {
-			return fmt.Errorf("failed to generate presenter session token: %w", err)
+			return internalError(codeInternal, fmt.Errorf("failed to generate presenter session token: %w", err))
 		}
 	}
 	hub.SetPresenterSessionToken(presenterSessionToken)
@@ -249,12 +239,13 @@ func runDevServer(options serverOptions) error {
 	// without flags. Each candidate gets its own Server, configured the
 	// same way, since Server.New fixes its address at construction.
 	buildServer := func(candidatePort int) *server.Server {
-		candidate := server.New(candidatePort)
+		candidate := server.NewWithHost(candidatePort, listenHost(options.lan))
 		candidate.SetPresentation(pres)
 		candidate.SetPresenterPassword(presenterPassword)
 		candidate.SetPresenterSessionToken(presenterSessionToken)
 		candidate.SetAllowedOrigins(allowOrigins)
 		candidate.SetBaseDir(baseDir) // Enable serving local files (images, etc.)
+		candidate.SetRegistry(buildDriverRegistry(cfg, baseDir))
 		candidate.SetComponentBundles(componentBundleFiles(resolvedComponents))
 		if customThemePath != "" {
 			candidate.SetCustomThemePath(customThemePath)
@@ -264,11 +255,20 @@ func runDevServer(options serverOptions) error {
 		return candidate
 	}
 
-	srv, err := startOnAvailablePort(port, portExplicit, "tap dev", buildServer)
+	srv, err := startOnAvailablePort(port, portExplicit, "tap dev", !options.lan, buildServer)
 	if err != nil {
 		return err
 	}
 	port = srv.Port()
+
+	var networkURL, networkQRCode string
+	if options.lan {
+		var found bool
+		networkURL, networkQRCode, found = lanPresenterAddress(port, presenterPassword)
+		if !found {
+			Warning("--lan: no local network address found; only this machine can connect\n")
+		}
+	}
 
 	recordOutputDir := filepath.Join(baseDir, "recordings")
 	if cfg.Recording.Output != "" {
@@ -318,6 +318,7 @@ func runDevServer(options serverOptions) error {
 		setRawSlides(newRawSlides)
 		watcher.AddExtraDirs(externalInputDirs(newResolvedComponents, baseDir))
 		srv.SetComponentBundles(componentBundleFiles(newResolvedComponents))
+		srv.SetRegistry(buildDriverRegistry(newCfg, baseDir))
 		srv.SetPresentation(newPres)
 		hub.SetPresentationMeta(len(newPres.Slides), server.ComputeRevision(newPres, componentBundleFiles(newResolvedComponents)))
 		_ = hub.BroadcastReload()
@@ -462,6 +463,9 @@ func runDevServer(options serverOptions) error {
 		fmt.Printf("  Version:   %s\n", displayVersion())
 		fmt.Printf("  Audience:  %s\n", audienceURL)
 		fmt.Printf("  Presenter: %s\n", presenterURL)
+		if networkURL != "" {
+			fmt.Printf("  Network:   %s\n", networkURL)
+		}
 		if tunnelURL != "" {
 			fmt.Printf("  Tunnel:    %s\n", tunnelURL)
 		}
@@ -500,6 +504,7 @@ func runDevServer(options serverOptions) error {
 			setRawSlides(newRawSlides)
 			watcher.AddExtraDirs(externalInputDirs(newResolvedComponents, baseDir))
 			srv.SetComponentBundles(componentBundleFiles(newResolvedComponents))
+			srv.SetRegistry(buildDriverRegistry(newCfg, baseDir))
 			srv.SetPresentation(newPres)
 			hub.SetPresentationMeta(len(newPres.Slides), server.ComputeRevision(newPres, componentBundleFiles(newResolvedComponents)))
 			_ = hub.BroadcastReload()
@@ -517,6 +522,8 @@ func runDevServer(options serverOptions) error {
 			Port:              port,
 			AudienceURL:       audienceURL,
 			PresenterURL:      presenterURL,
+			NetworkURL:        networkURL,
+			QRCodeASCII:       networkQRCode,
 			PresenterPassword: presenterPassword,
 			CurrentTheme:      cfg.Theme,
 			Version:           displayVersion(),
@@ -638,6 +645,7 @@ func runDevServer(options serverOptions) error {
 			setRawSlides(newRawSlides)
 			watcher.AddExtraDirs(externalInputDirs(newResolvedComponents, baseDir))
 			srv.SetComponentBundles(componentBundleFiles(newResolvedComponents))
+			srv.SetRegistry(buildDriverRegistry(newCfg, baseDir))
 			srv.SetPresentation(newPres)
 			hub.SetPresentationMeta(len(newPres.Slides), server.ComputeRevision(newPres, componentBundleFiles(newResolvedComponents)))
 			_ = hub.BroadcastReload()
@@ -653,7 +661,7 @@ func runDevServer(options serverOptions) error {
 
 		// Run the TUI (blocks until user quits)
 		if err := tui.RunDevTUIWithModel(model); err != nil {
-			return fmt.Errorf("TUI error: %w", err)
+			return internalError(codeInternal, fmt.Errorf("TUI error: %w", err))
 		}
 
 		if present != nil {
@@ -731,8 +739,8 @@ func loadPresentation(file string, cfg *config.Config, baseDir string) (*transfo
 
 	// Resolve and bundle every component the presentation's slides use.
 	// Dev builds keep source maps and skip minification. loadPresentation
-	// is only ever used against a live server (tap dev, tap pdf, tap
-	// screenshot all share it), so an emitted asset's URL always starts
+	// is only ever used against a live server (tap dev, tap export pdf, tap
+	// export images all share it), so an emitted asset's URL always starts
 	// from the server root.
 	resolvedComponents, componentBuildErrs := buildComponents(parsed, baseDir, false, true, "/components/")
 

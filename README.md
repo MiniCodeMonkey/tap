@@ -29,7 +29,7 @@ A markdown-based presentation tool for technical presentations with beautiful de
   run automatically, following the projector across HDMI swaps.
 - **A fixed 1920px canvas** that scales as one unit, so a deck looks the
   same on every projector.
-- **Static builds and PDF export**, plus `tap screenshot` for checking a
+- **Static builds and PDF export**, plus `tap export images` for checking a
   single slide from a script.
 
 ## Quick Start
@@ -123,25 +123,25 @@ tap serve public -p 8080   # Custom directory and port
 ### Export to PDF
 
 ```bash
-tap pdf slides.md          # Export to slides.pdf
-tap pdf slides.md -o presentation.pdf  # Custom output path
-tap pdf slides.md --content notes      # Include speaker notes
-tap pdf slides.md --content both       # Include slides and notes
+tap export pdf slides.md          # Export to slides.pdf
+tap export pdf slides.md -o presentation.pdf  # Custom output path
+tap export pdf slides.md --content notes      # Include speaker notes
+tap export pdf slides.md --content both       # Include slides and notes
 ```
 
 ### Add Slides Interactively
 
 ```bash
-tap add                    # Add slide to auto-detected file
-tap add slides.md          # Add slide to specific file
+tap slide add                    # Add slide to auto-detected file
+tap slide add slides.md          # Add slide to specific file
 ```
 
 ### Screenshot a Slide
 
 ```bash
-tap screenshot slides.md --slide 4                 # final state of slide 4
-tap screenshot slides.md --slide 4 --step 2        # slide 4 at presenter step 2
-tap screenshot slides.md --all --out shots/        # every slide
+tap export images slides.md --slide 4                 # final state of slide 4
+tap export images slides.md --slide 4 --step 2        # slide 4 at presenter step 2
+tap export images slides.md --all -o shots/            # every slide
 ```
 
 Exits with status 1 when the slide shows an error card, so a script can
@@ -158,27 +158,32 @@ tap theme show blueprint --prompt    # style brief for an image model
 ### Scaffold a Deck Component
 
 ```bash
-tap add component RollingDeploy            # slides/RollingDeploy.jsx
-tap add component LatencyDrop --inline     # components/LatencyDrop.jsx
+tap component new RollingDeploy            # slides/RollingDeploy.jsx
+tap component new LatencyDrop --inline     # components/LatencyDrop.jsx
 ```
 
 ## Command Reference
 
 | Command | Description | Key Options |
 |---------|-------------|-------------|
-| `tap new` | Create a new presentation | `-t, --theme`, `-o, --output` |
-| `tap dev <file>` | Start dev server with hot reload | `-p, --port`, `--presenter-password` |
-| `tap present [file]` | Give a talk: no reload, audience view opens, optional auto-recording | `-p, --port`, `--no-record` |
-| `tap build <file>` | Build static HTML output | `-o, --output` |
+| `tap new [deck]` | Create a new presentation | `-t, --theme`, `-o, --output` |
+| `tap dev [deck]` | Start dev server with hot reload | `-p, --port`, `--presenter-password`, `--lan` |
+| `tap present [deck]` | Give a talk: no reload, audience view opens, optional auto-recording | `-p, --port`, `--no-record`, `--lan` |
+| `tap build [deck]` | Build static HTML output | `-o, --output` |
 | `tap serve [dir]` | Serve static files | `-p, --port` |
-| `tap pdf <file>` | Export presentation to PDF | `-o, --output`, `--content` |
-| `tap add [file]` | Add slides interactively | - |
-| `tap screenshot <file>` | Render a slide to a PNG | `--slide`, `--all`, `--step`, `--fragment`, `--theme`, `--out`, `--width` |
-| `tap add component <Name>` | Scaffold a deck component | `--inline`, `--ts`, `--deck` |
+| `tap export pdf [deck]` | Export presentation to PDF | `-o, --output`, `--content` |
+| `tap slide add [deck]` | Add slides interactively | - |
+| `tap export images [deck]` | Render a slide to a PNG | `--slide`, `--all`, `--step`, `--fragment`, `-t, --theme`, `-o, --output`, `--width` |
+| `tap component new <Name> [deck]` | Scaffold a deck component | `--inline`, `--ts` |
 | `tap theme list` | List every built-in theme | `--json` |
-| `tap theme show [slug]` | Show a theme's tokens and style | `--json`, `--prompt`, `--deck` |
+| `tap theme show [slug\|deck]` | Show a theme's tokens and style | `--json`, `--prompt` |
 | `tap --version` | Show version | - |
 | `tap --help` | Show help | - |
+
+`[deck]` is optional everywhere it appears: a deck file, a deck folder, or
+left out to use the only deck in the current folder. See
+`docs/reference/cli-commands.md` for every flag and the `--json` shape of
+each command.
 
 ## Writing Presentations
 

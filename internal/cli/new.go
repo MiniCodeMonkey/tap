@@ -2,6 +2,7 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -20,16 +21,18 @@ var (
 	newOutput string
 	newYes    bool
 	newForce  bool
+	newJSON   bool
 )
 
 // newCmd represents the new command
 var newCmd = &cobra.Command{
-	Use:   "new",
+	Use:   "new [deck]",
 	Short: "Create a new presentation",
 	Long: `Create a new markdown presentation with the specified theme.
 
 This command creates a new presentation file with frontmatter configuration
-and example slides to help you get started quickly.
+and example slides to help you get started quickly. [deck] is the path of
+the new deck, the same as --output.
 
 With no terminal attached to standard input, or with --yes, the wizard is
 skipped: the file is written straight from --title, --theme and --output,
@@ -42,25 +45,29 @@ Examples:
   tap new --theme terminal         # Create with the Terminal theme
   tap new --output my-talk.md      # Create with custom filename
   tap new -t terminal -o demo.md   # Combine options
+  tap new my-talk.md --yes            # Write my-talk.md with no wizard
   tap new --yes --title "My Talk" --theme terminal --output talk.md   # No wizard`,
-	Run: func(cmd *cobra.Command, args []string) {
-		if newYes || !stdinIsTerminal() {
-			if err := runNewNonInteractive(); err != nil {
-				Errorln("Error:", err)
-				os.Exit(1)
+	Args: cobra.MaximumNArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		if deck := firstArg(args); deck != "" {
+			if cmd.Flags().Changed("output") {
+				return userError(codeUsage, errors.New("give the deck path once: as the argument or with --output"))
 			}
-			return
+			newOutput = deck
+		}
+
+		if newYes || newJSON || !stdinIsTerminal() {
+			return runNewNonInteractive()
 		}
 
 		result, err := tui.RunNewWizard(newTheme, newOutput)
 		if err != nil {
-			Error("Failed to create presentation: %v", err)
-			os.Exit(1)
+			return internalError(codeInternal, fmt.Errorf("failed to create presentation: %w", err))
 		}
-
 		if result.Aborted {
-			os.Exit(0)
+			return errCancelled
 		}
+		return nil
 	},
 }
 
@@ -74,6 +81,7 @@ func init() {
 	newCmd.Flags().StringVarP(&newOutput, "output", "o", "", "output filename for the presentation")
 	newCmd.Flags().BoolVarP(&newYes, "yes", "y", false, "skip the interactive wizard and write the file from flags and defaults")
 	newCmd.Flags().BoolVar(&newForce, "force", false, "overwrite --output if it already exists (non-interactive mode only)")
+	newCmd.Flags().BoolVar(&newJSON, "json", false, "print the written deck as JSON (skips the wizard)")
 }
 
 // stdinIsTerminal reports whether standard input is a terminal. A var, not
@@ -98,7 +106,7 @@ func runNewNonInteractive() error {
 	if theme == "" {
 		theme = tui.DefaultTheme()
 	} else if !themes.IsValid(theme) {
-		return unknownThemeError(theme)
+		return userError(codeUnknownTheme, unknownThemeError(theme))
 	}
 
 	output := newOutput
@@ -110,17 +118,22 @@ func runNewNonInteractive() error {
 
 	if _, err := os.Stat(output); err == nil {
 		if !newForce {
-			return fmt.Errorf("%s already exists; use --force to overwrite", output)
+			return userError(codeExists, fmt.Errorf("%s already exists; use --force to overwrite", output))
 		}
 	} else if !os.IsNotExist(err) {
-		return fmt.Errorf("failed to check %s: %w", output, err)
+		return internalError(codeInternal, fmt.Errorf("failed to check %s: %w", output, err))
 	}
 
 	content := tui.GenerateStarterMarkdown(title, theme, time.Now().Format("2006-01-02"), "Your Name")
 	if err := os.WriteFile(output, []byte(content), 0o644); err != nil {
-		return fmt.Errorf("failed to write %s: %w", output, err)
+		return internalError(codeInternal, fmt.Errorf("failed to write %s: %w", output, err))
 	}
 
+	if newJSON {
+		return printJSONOK(os.Stdout, struct {
+			Deck string `json:"deck"`
+		}{Deck: output})
+	}
 	fmt.Println(output)
 	return nil
 }

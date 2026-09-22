@@ -173,7 +173,7 @@ Not keyboard shortcuts, but the same job from a link or a script.
 clicker navigation is unaffected. They are also removed from the address
 bar on the first navigation, so a link you share after clicking around does
 not pin the reader to the step you started on. Every other query parameter
-stays. `tap screenshot --step` and `--fragment`
+stays. `tap export images --step` and `--fragment`
 use them, together with `?capture=true`.
 
 `?capture=true` exists for a stepped or fragment screenshot. Such a capture
@@ -188,12 +188,12 @@ resting appearance rather than a frame caught partway toward it. Unlike
 print mode, settling does not move the step or the fragment; it only stops
 things animating toward it.
 
-`?live=true`, which `tap screenshot --wait` adds, turns the settling off
+`?live=true`, which `tap export images --wait` adds, turns the settling off
 and leaves the page genuinely live. The wait it pairs with starts once the
 page is ready, not at navigation, so it catches an animation that runs on
 a timer or longer than the readiness waits.
 
-`tap screenshot` sets both for you. Print mode never needs either, since it
+`tap export images` sets both for you. Print mode never needs either, since it
 already skips the websocket and shows the final state.
 
 The keyboard reference for these states is in

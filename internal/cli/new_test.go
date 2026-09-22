@@ -15,6 +15,27 @@ func resetNewFlags() {
 	newOutput = ""
 	newYes = false
 	newForce = false
+	newJSON = false
+}
+
+func TestNewRejectsADeckArgumentAndOutputTogether(t *testing.T) {
+	exitCode, _, stderr := runTap(t, "new", "a.md", "--output", "b.md", "--yes")
+	if exitCode != exitUserError {
+		t.Errorf("exit code = %d, want %d (stderr %q)", exitCode, exitUserError, stderr)
+	}
+}
+
+func TestNewDeckArgumentIsTheOutputPath(t *testing.T) {
+	dir := t.TempDir()
+	withWorkingDirectory(t, dir, func() {
+		exitCode, _, stderr := runTap(t, "new", "talk.md", "--yes")
+		if exitCode != exitOK {
+			t.Fatalf("exit code = %d, stderr %q", exitCode, stderr)
+		}
+	})
+	if _, err := os.Stat(filepath.Join(dir, "talk.md")); err != nil {
+		t.Errorf("talk.md was not written: %v", err)
+	}
 }
 
 func TestRunNewNonInteractiveDefaults(t *testing.T) {

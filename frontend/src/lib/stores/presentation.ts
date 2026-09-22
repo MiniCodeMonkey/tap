@@ -466,7 +466,7 @@ function clampHashSlideIndex(hashIndex: number | null, total: number): number {
  * Parse `?step=` and `?fragment=` from the URL query string. Each is null
  * when absent or not a valid integer. Used only at load (see
  * resolveInitialStepAndFragment) to land directly on a specific presenter
- * step and/or fragment - `tap screenshot --step`/`--fragment` navigates
+ * step and/or fragment - `tap export images --step`/`--fragment` navigates
  * here instead of driving the clicker - without disturbing normal
  * clicker-driven navigation, which never touches these params.
  */
