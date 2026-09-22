@@ -175,8 +175,8 @@ func (p *presentRecorder) noteSegmentExit(err error, ran time.Duration) {
 
 	p.mu.Lock()
 	p.held = true
-	p.mu.Unlock()
 	p.state.Store(tui.PresentNotRecording)
+	p.mu.Unlock()
 	p.event("error", "Recording stopped: "+err.Error())
 }
 
@@ -185,8 +185,8 @@ func (p *presentRecorder) noteDiskLevel(level recorder.DiskLevel) {
 		p.mu.Lock()
 		p.held = true
 		_ = p.run.StopSegment()
-		p.mu.Unlock()
 		p.state.Store(tui.PresentNotRecording)
+		p.mu.Unlock()
 	}
 	if p.options.OnDiskLevel != nil {
 		p.options.OnDiskLevel(level)
