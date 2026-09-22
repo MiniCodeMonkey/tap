@@ -110,11 +110,11 @@ When a tap process exits unexpectedly, the app restarts it with backoff, and the
 ## Window layout
 
 - The main area is a 50/50 split: the editor on the left, and on the right a large pane with Preview and Deck tabs. The split divider can be dragged.
-- The slide panel (thumbnails) has two states. **Floating:** a glass panel over the left edge of the editor, shown and hidden with a toolbar button or a key. **Pinned:** the pin in its header docks it as a normal `NSSplitViewController` sidebar, and the editor and the right pane share the rest of the width.
+- The slide panel (thumbnails) has two states. **Peek:** hovering the toolbar's sidebar button shows the panel as a glass overlay. It stays while the pointer is over the button or the panel, so you can click a slide to jump to it, and it hides when the pointer leaves. Nothing sits over the text while you write. **Pinned:** clicking the button pins the panel as a normal `NSSplitViewController` sidebar that pushes the editor and the right pane to the right, so nothing overlaps. Clicking again unpins it.
 - On first launch the panel is pinned, so people find it. Each window then remembers its own state.
 - The app owns the divider. It restores 50/50 after the panel is pinned, unpinned, or collapsed, and after the window resizes, unless the user dragged the divider.
 - The editor's content scrolls under the unified toolbar with the standard macOS 26 scroll edge effect.
-- The pinned state is a stock sidebar. The floating state is a small custom overlay, because AppKit has no stock "overlay until pinned" sidebar.
+- The pinned state is a stock sidebar. The peek state is a small custom overlay driven by a tracking area on the button, because AppKit has no stock "peek on hover" sidebar.
 
 ## Slide panel and slide operations
 

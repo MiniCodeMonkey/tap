@@ -4,8 +4,21 @@ Feature: Preview
 
   Scenario: Split layout
     Then the editor and the preview each take half of the window, and the divider can be dragged
-    And the slide panel floats over the editor, or is pinned as a sidebar with the pin in its header
-    And on first launch it is pinned, and each window remembers its state after that
+    And on first launch the slide panel is pinned, and each window remembers its state after that
+
+  Scenario: Peek at the slide panel
+    Given the slide panel is not pinned
+    When I hover the sidebar button in the toolbar
+    Then the panel appears as a glass overlay
+    And I can click a slide in it to jump there
+    When the pointer leaves the button and the panel
+    Then the panel hides
+
+  Scenario: Pin the slide panel
+    When I click the sidebar button
+    Then the panel docks as a sidebar and pushes the editor and preview to the right, with no overlap
+    When I click it again
+    Then the panel unpins, and hovering the button peeks at it again
 
   Scenario: The preview follows the cursor
     Given the cursor is in slide 3
