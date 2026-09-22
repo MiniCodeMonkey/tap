@@ -48,7 +48,9 @@ async function renderApp(): Promise<typeof import('$lib/stores/presentation')> {
 	const store = await import('$lib/stores/presentation');
 	store.resetPresentation();
 	const { default: App } = await import('./App');
-	render(<App />);
+	await act(async () => {
+		render(<App />);
+	});
 	return store;
 }
 
