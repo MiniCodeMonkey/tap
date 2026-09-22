@@ -153,6 +153,38 @@ func TestPresentRecorderStopsOnAFullDisk(t *testing.T) {
 	_, _ = present.Finish(true)
 }
 
+// TestPresentRecorderToggleRefusesToStartOnAFullDisk covers ruling 4: c
+// must not start a new segment while the disk is still full, since
+// noteDiskLevel would just stop it again right away.
+func TestPresentRecorderToggleRefusesToStartOnAFullDisk(t *testing.T) {
+	levels := make(chan recorder.DiskLevel, 4)
+	feed := &screenFeed{screens: laptopScreens}
+	present := testPresentRecorder(t, feed, 512<<20)
+	present.options.OnDiskLevel = func(level recorder.DiskLevel) { levels <- level }
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	present.Begin(ctx, true)
+	select {
+	case level := <-levels:
+		if level != recorder.DiskFull {
+			t.Fatalf("level = %v, want full", level)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("no disk level")
+	}
+	waitForState(t, present, tui.PresentNotRecording)
+
+	err := present.Toggle()
+	if err == nil || err.Error() != "disk full: free space before recording" {
+		t.Fatalf("Toggle() = %v, want the disk full error", err)
+	}
+	if present.State() != tui.PresentNotRecording {
+		t.Error("Toggle started a segment while the disk is still full")
+	}
+	_, _ = present.Finish(true)
+}
+
 func TestPresentRecorderBlockedNeverStarts(t *testing.T) {
 	feed := &screenFeed{screens: laptopScreens}
 	present := testPresentRecorder(t, feed, 50<<30)

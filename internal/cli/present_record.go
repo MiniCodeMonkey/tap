@@ -54,6 +54,10 @@ type presentRecorder struct {
 	mu       sync.Mutex
 	follower recorder.Follower
 	held     bool
+	// diskWatch is the run's free-space poll, kept here so Toggle can
+	// refuse to start a segment while the disk is still full instead of
+	// starting one that noteDiskLevel would immediately stop again.
+	diskWatch *diskWatch
 
 	state atomic.Value // tui.PresentRecordingState
 
@@ -102,7 +106,11 @@ func (p *presentRecorder) Begin(ctx context.Context, startNow bool) {
 
 	p.recheck(startNow)
 	go p.pollDisplays(ctx)
-	go newDiskWatch(p.options.OutputDir, p.options.FreeSpace, p.noteDiskLevel).run(ctx, p.options.DiskInterval)
+	watch := newDiskWatch(p.options.OutputDir, p.options.FreeSpace, p.noteDiskLevel)
+	p.mu.Lock()
+	p.diskWatch = watch
+	p.mu.Unlock()
+	go watch.run(ctx, p.options.DiskInterval)
 }
 
 func (p *presentRecorder) pollDisplays(ctx context.Context) {
@@ -214,6 +222,9 @@ func (p *presentRecorder) Toggle() error {
 		p.held = true
 		p.state.Store(tui.PresentNotRecording)
 		return p.run.StopSegment()
+	}
+	if p.diskWatch != nil && p.diskWatch.currentLevel() == recorder.DiskFull {
+		return errors.New("disk full: free space before recording")
 	}
 
 	p.held = false
