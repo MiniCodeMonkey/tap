@@ -247,7 +247,7 @@ func TestCaptureAllSlides_ContinuesPastBrokenSlide(t *testing.T) {
 		return os.WriteFile(outputPath, []byte("fake png"), 0644)
 	}
 
-	written, broken, err := captureAllSlides(context.Background(), fakeCapture, "http://localhost:0", 4, 1920, 1080, "", tempDir)
+	written, broken, err := captureAllSlides(context.Background(), fakeCapture, "http://localhost:0", []int{1, 2, 3, 4}, 1920, 1080, "", tempDir)
 	if err != nil {
 		t.Fatalf("captureAllSlides() error = %v", err)
 	}
@@ -295,7 +295,7 @@ func TestCaptureAllSlides_MkdirFailureIsFatal(t *testing.T) {
 		return nil
 	}
 
-	_, _, err := captureAllSlides(context.Background(), fakeCapture, "http://localhost:0", 2, 1920, 1080, "", filepath.Join(blockingFile, "slides"))
+	_, _, err := captureAllSlides(context.Background(), fakeCapture, "http://localhost:0", []int{1, 2}, 1920, 1080, "", filepath.Join(blockingFile, "slides"))
 	if err == nil {
 		t.Fatal("expected an error when the output directory can't be created")
 	}
@@ -322,7 +322,7 @@ func TestCaptureAllSlides_CancelledContextStopsEvenWithoutWrappingCanceled(t *te
 		return os.WriteFile(outputPath, []byte("fake png"), 0644)
 	}
 
-	written, broken, err := captureAllSlides(ctx, fakeCapture, "http://localhost:0", 4, 1920, 1080, "", tempDir)
+	written, broken, err := captureAllSlides(ctx, fakeCapture, "http://localhost:0", []int{1, 2, 3, 4}, 1920, 1080, "", tempDir)
 	if err == nil {
 		t.Fatal("expected an error when the context is cancelled mid-loop")
 	}
@@ -334,6 +334,27 @@ func TestCaptureAllSlides_CancelledContextStopsEvenWithoutWrappingCanceled(t *te
 	}
 	if len(written) != 1 {
 		t.Errorf("expected only slide 1 written, got %v", written)
+	}
+}
+
+func TestCaptureAllSlidesCapturesOnlyTheGivenNumbers(t *testing.T) {
+	tempDir := t.TempDir()
+	var calls []int
+	fakeCapture := func(ctx context.Context, serverURL string, options pdf.CaptureOptions, outputPath string) error {
+		calls = append(calls, options.SlideNumber)
+		return os.WriteFile(outputPath, []byte("fake png"), 0o644)
+	}
+
+	written, broken, err := captureAllSlides(context.Background(), fakeCapture, "http://localhost:0", []int{1, 3}, 1920, 1080, "", tempDir)
+	if err != nil || len(broken) != 0 {
+		t.Fatalf("captureAllSlides() = (%v, %v, %v)", written, broken, err)
+	}
+	if len(calls) != 2 || calls[0] != 1 || calls[1] != 3 {
+		t.Errorf("captured slides %v, want [1 3]", calls)
+	}
+	want := []string{filepath.Join(tempDir, "slide-001.png"), filepath.Join(tempDir, "slide-003.png")}
+	if strings.Join(written, ",") != strings.Join(want, ",") {
+		t.Errorf("written = %v, want %v: files keep the deck's slide numbers", written, want)
 	}
 }
 
