@@ -45,6 +45,13 @@ type Slide struct {
 	Components []Component
 	// Index is the zero-based slide index.
 	Index int
+	// StartLine and EndLine are the 1-based, inclusive lines of the deck
+	// file the slide covers: its text, including its directive comment,
+	// without leading or trailing blank lines. Blank lines next to a "---"
+	// separator belong to no slide, and neither do the separator lines
+	// and the frontmatter.
+	StartLine int
+	EndLine   int
 }
 
 // SlideDirectives contains per-slide configuration options.
@@ -251,130 +258,152 @@ func splitSlidesPreservingCodeBlocksWithLines(text string) []slideChunk {
 }
 
 // Parse parses markdown content and returns a Presentation with slides.
-// Slides are split on "---" delimiters. Frontmatter (if present) is skipped.
+// Slides are split on "---" delimiters. Frontmatter (if present) is
+// skipped. A slide that fails to parse fails the whole parse, naming the
+// first such slide.
 func (p *Parser) Parse(content []byte) (*Presentation, error) {
-	// Convert to string for easier manipulation
-	text := string(content)
+	presentation, slideErrors := p.ParseKeepingErrors(content)
+	for index := range presentation.Slides {
+		if err, failed := slideErrors[index]; failed {
+			return nil, fmt.Errorf("slide %d: %w", index+1, err)
+		}
+	}
+	return presentation, nil
+}
 
+// ParseKeepingErrors parses content the way Parse does, but a slide that
+// fails to parse stays in the presentation with its Index, line range,
+// Directives and Content, and no HTML. slideErrors maps the 0-based index
+// of each such slide to its error. An editor uses it to show every slide
+// of a deck while one of them is broken.
+func (p *Parser) ParseKeepingErrors(content []byte) (presentation *Presentation, slideErrors map[int]error) {
 	// Normalize CRLF line endings to LF so a Windows-saved deck parses the
 	// same way as one saved with Unix line endings, and no stray "\r"
 	// characters end up in slide content, HTML, or notes. This never
 	// changes a line's number: each "\r\n" becomes exactly one "\n".
-	text = strings.ReplaceAll(text, "\r\n", "\n")
+	text := strings.ReplaceAll(string(content), "\r\n", "\n")
 
 	// Skip frontmatter if present, and remember how many file lines it
-	// took up, so a slide's line numbers (used in component fence error
-	// messages) can be translated back to real file lines.
+	// took up, so a slide's line numbers can be translated back to real
+	// file lines.
 	text, frontmatterLineOffset := skipFrontmatterWithLineOffset(text)
 
 	// Split content on --- delimiter, preserving code blocks, and keep
 	// each slide's starting line for the same reason.
 	chunks := splitSlidesPreservingCodeBlocksWithLines(text)
 
-	presentation := &Presentation{
-		Slides: make([]Slide, 0, len(chunks)),
-	}
-
+	presentation = &Presentation{Slides: make([]Slide, 0, len(chunks))}
+	slideErrors = map[int]error{}
 	for _, chunk := range chunks {
-		// Trim whitespace from slide content
-		slideContent := strings.TrimSpace(chunk.Content)
-
 		// Skip empty slides
-		if slideContent == "" {
+		if strings.TrimSpace(chunk.Content) == "" {
 			continue
 		}
-
-		slideFileLine := frontmatterLineOffset + chunk.StartLine + leadingWhitespaceLines(chunk.Content)
-
-		// Parse directives from HTML comments at slide start
-		directives, contentAfterDirectives := parseDirectives(slideContent)
-		// parseDirectives only ever removes a prefix, so contentAfterDirectives
-		// is always a suffix of slideContent; the newlines in what was
-		// removed are exactly the lines the directive comment took up.
-		slideFileLine += strings.Count(slideContent[:len(slideContent)-len(contentAfterDirectives)], "\n")
-
-		// Remove any further notes comments from the rest of the slide
-		// (e.g. a trailing "<!-- notes: ... -->" after the content), and
-		// join their text onto directive notes, if any, in document order.
-		// This can remove lines from the middle of the slide, which this
-		// package does not track, so a slide with a notes comment loses
-		// exact component fence line numbers.
-		var extraNotes []string
-		beforeNotes := contentAfterDirectives
-		contentAfterDirectives, extraNotes = extractNotesComments(contentAfterDirectives)
-		lineNumbersExact := len(extraNotes) == 0 && contentAfterDirectives == beforeNotes
-		if len(extraNotes) > 0 {
-			joined := strings.Join(extraNotes, "\n\n")
-			if directives.Notes != "" {
-				directives.Notes = directives.Notes + "\n\n" + joined
-			} else {
-				directives.Notes = joined
-			}
-		}
-
-		// Pre-process images with attributes (e.g., {width=50%}) to HTML.
-		// Every replacement stays on the single line the image markdown
-		// was on, so this never shifts line numbers.
-		contentAfterDirectives = transformImageAttributes(contentAfterDirectives, len(presentation.Slides)+1)
-
-		// Pre-process asciinema code blocks to move info string meta into
-		// body. A block with metadata pairs turns one line into several,
-		// which does shift the lines after it.
-		if asciinemaInfoPattern.MatchString(contentAfterDirectives) {
-			lineNumbersExact = false
-		}
-		contentAfterDirectives = transformAsciinemaBlocks(contentAfterDirectives)
-
-		sections, err := splitSlots(contentAfterDirectives)
+		index := len(presentation.Slides)
+		slide, err := p.parseSlide(chunk, frontmatterLineOffset, index)
 		if err != nil {
-			return nil, fmt.Errorf("slide %d: %w", len(presentation.Slides)+1, err)
+			slideErrors[index] = err
 		}
-
-		slots := make(map[string]string, len(sections))
-		slotOrder := make([]string, 0, len(sections))
-		fragmentCount := 0
-		codeBlockCount := 0
-		componentCount := 0
-		autoFragment := directives.Fragments && !hasPauseMarkers(contentAfterDirectives)
-		var fullHTML strings.Builder
-		var codeBlocks []CodeBlock
-		var components []Component
-		for _, section := range sections {
-			sectionFileLine := slideFileLine + (section.StartLine - 1)
-			slotHTML, nextFragmentIndex, nextCodeBlockIndex, nextComponentIndex, blocks, sectionComponents, err := p.renderSlot(section.Content, fragmentCount, codeBlockCount, componentCount, sectionFileLine, lineNumbersExact)
-			if err != nil {
-				return nil, fmt.Errorf("slide %d: %w", len(presentation.Slides)+1, err)
-			}
-			fragmentCount = nextFragmentIndex
-			codeBlockCount = nextCodeBlockIndex
-			componentCount = nextComponentIndex
-			codeBlocks = append(codeBlocks, blocks...)
-			components = append(components, sectionComponents...)
-			if autoFragment {
-				slotHTML, fragmentCount = autoFragmentListItems(slotHTML, fragmentCount)
-			}
-			slots[section.Name] = slotHTML
-			slotOrder = append(slotOrder, section.Name)
-			fullHTML.WriteString(slotHTML)
-		}
-		html := fullHTML.String()
-
-		slide := Slide{
-			Content:       contentAfterDirectives,
-			HTML:          html,
-			Index:         len(presentation.Slides),
-			Directives:    directives,
-			Slots:         slots,
-			SlotOrder:     slotOrder,
-			FragmentCount: fragmentCount,
-			CodeBlocks:    codeBlocks,
-			Components:    components,
-		}
-
 		presentation.Slides = append(presentation.Slides, slide)
 	}
+	return presentation, slideErrors
+}
 
-	return presentation, nil
+// parseSlide parses one non-empty chunk into the slide with the given
+// 0-based index. frontmatterLineOffset is the number of file lines before
+// the text the chunk came from. When the slide fails to parse, the
+// returned slide still has its Index, line range, Directives and Content.
+func (p *Parser) parseSlide(chunk slideChunk, frontmatterLineOffset int, index int) (Slide, error) {
+	// Trim whitespace from slide content
+	slideContent := strings.TrimSpace(chunk.Content)
+	startLine := frontmatterLineOffset + chunk.StartLine + leadingWhitespaceLines(chunk.Content)
+	slide := Slide{
+		Index:     index,
+		StartLine: startLine,
+		EndLine:   startLine + strings.Count(slideContent, "\n"),
+	}
+
+	// Parse directives from HTML comments at slide start
+	directives, contentAfterDirectives := parseDirectives(slideContent)
+	// parseDirectives only ever removes a prefix, so contentAfterDirectives
+	// is always a suffix of slideContent; the newlines in what was
+	// removed are exactly the lines the directive comment took up.
+	slideFileLine := startLine + strings.Count(slideContent[:len(slideContent)-len(contentAfterDirectives)], "\n")
+
+	// Remove any further notes comments from the rest of the slide
+	// (e.g. a trailing "<!-- notes: ... -->" after the content), and
+	// join their text onto directive notes, if any, in document order.
+	// This can remove lines from the middle of the slide, which this
+	// package does not track, so a slide with a notes comment loses
+	// exact component fence line numbers.
+	var extraNotes []string
+	beforeNotes := contentAfterDirectives
+	contentAfterDirectives, extraNotes = extractNotesComments(contentAfterDirectives)
+	lineNumbersExact := len(extraNotes) == 0 && contentAfterDirectives == beforeNotes
+	if len(extraNotes) > 0 {
+		joined := strings.Join(extraNotes, "\n\n")
+		if directives.Notes != "" {
+			directives.Notes = directives.Notes + "\n\n" + joined
+		} else {
+			directives.Notes = joined
+		}
+	}
+	slide.Directives = directives
+
+	// Pre-process images with attributes (e.g., {width=50%}) to HTML.
+	// Every replacement stays on the single line the image markdown
+	// was on, so this never shifts line numbers.
+	contentAfterDirectives = transformImageAttributes(contentAfterDirectives, index+1)
+
+	// Pre-process asciinema code blocks to move info string meta into
+	// body. A block with metadata pairs turns one line into several,
+	// which does shift the lines after it.
+	if asciinemaInfoPattern.MatchString(contentAfterDirectives) {
+		lineNumbersExact = false
+	}
+	contentAfterDirectives = transformAsciinemaBlocks(contentAfterDirectives)
+	slide.Content = contentAfterDirectives
+
+	sections, err := splitSlots(contentAfterDirectives)
+	if err != nil {
+		return slide, err
+	}
+
+	slots := make(map[string]string, len(sections))
+	slotOrder := make([]string, 0, len(sections))
+	fragmentCount := 0
+	codeBlockCount := 0
+	componentCount := 0
+	autoFragment := directives.Fragments && !hasPauseMarkers(contentAfterDirectives)
+	var fullHTML strings.Builder
+	var codeBlocks []CodeBlock
+	var components []Component
+	for _, section := range sections {
+		sectionFileLine := slideFileLine + (section.StartLine - 1)
+		slotHTML, nextFragmentIndex, nextCodeBlockIndex, nextComponentIndex, blocks, sectionComponents, err := p.renderSlot(section.Content, fragmentCount, codeBlockCount, componentCount, sectionFileLine, lineNumbersExact)
+		if err != nil {
+			return slide, err
+		}
+		fragmentCount = nextFragmentIndex
+		codeBlockCount = nextCodeBlockIndex
+		componentCount = nextComponentIndex
+		codeBlocks = append(codeBlocks, blocks...)
+		components = append(components, sectionComponents...)
+		if autoFragment {
+			slotHTML, fragmentCount = autoFragmentListItems(slotHTML, fragmentCount)
+		}
+		slots[section.Name] = slotHTML
+		slotOrder = append(slotOrder, section.Name)
+		fullHTML.WriteString(slotHTML)
+	}
+
+	slide.HTML = fullHTML.String()
+	slide.Slots = slots
+	slide.SlotOrder = slotOrder
+	slide.FragmentCount = fragmentCount
+	slide.CodeBlocks = codeBlocks
+	slide.Components = components
+	return slide, nil
 }
 
 // skipFrontmatterWithLineOffset removes YAML frontmatter from the
