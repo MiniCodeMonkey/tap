@@ -138,6 +138,20 @@ describe('updatePresentationInPlace', () => {
 		expect(usePresentationStore.getState().presentation?.slides[0]).toBe(next.slides[0]);
 	});
 
+	it('replaces a slide with an empty hash, even when the previous slide also had an empty hash', () => {
+		// An empty hash means SlideHash (internal/transformer) failed to
+		// marshal the slide, so two empty hashes must never compare equal -
+		// that would report a genuinely changed slide as unchanged and it
+		// would never re-render.
+		const first = makeDeck('r1', [makeSlide(0, '')]);
+		loadPresentation(first);
+
+		const next = makeDeck('r2', [makeSlide(0, '')]);
+		updatePresentationInPlace(next);
+
+		expect(usePresentationStore.getState().presentation?.slides[0]).toBe(next.slides[0]);
+	});
+
 	it('uses the new slide when a slide moved to another position', () => {
 		const first = makeDeck('r1', [makeSlide(0, 'a'), makeSlide(1, 'b')]);
 		loadPresentation(first);

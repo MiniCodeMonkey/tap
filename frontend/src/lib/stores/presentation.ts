@@ -657,7 +657,12 @@ export function updatePresentationInPlace(data: Presentation): void {
 	const previousSlides = previous?.slides ?? [];
 	const slides = data.slides.map((slide, index) => {
 		const previousSlide = previousSlides[index];
-		const unchanged = previousSlide !== undefined && slide.hash !== undefined && previousSlide.hash === slide.hash;
+		// An empty hash means SlideHash (internal/transformer) failed to
+		// marshal the slide, so two empty hashes are never treated as equal:
+		// that would report a genuinely changed slide as unchanged and it
+		// would never re-render.
+		const unchanged =
+			previousSlide !== undefined && !!slide.hash && !!previousSlide.hash && previousSlide.hash === slide.hash;
 		return unchanged ? previousSlide : slide;
 	});
 	const config =
