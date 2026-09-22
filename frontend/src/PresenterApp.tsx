@@ -52,6 +52,7 @@ import { DiskIndicator } from '$lib/components/DiskIndicator';
 import { PresenterLayoutMenu } from '$lib/components/PresenterLayoutMenu';
 import { usePresenterLayout } from '$lib/hooks/usePresenterLayout';
 import { useFitText } from '$lib/hooks/useFitText';
+import { useReadySignal } from '$lib/ready/useReadySignal';
 import {
 	NOTES_FIT_MAX_SIZE,
 	NOTES_FIT_MIN_SIZE,
@@ -183,6 +184,18 @@ export default function PresenterApp() {
 		minSize: NOTES_FIT_MIN_SIZE,
 		step: NOTES_FONT_SIZE_STEP,
 		contentKey: `${currentSlide?.index ?? -1}:${layout}`
+	});
+
+	// tap export pdf --content both and --content notes capture this page,
+	// so it reports the ready signal for its current slide too.
+	useReadySignal({
+		enabled: !isLoading && loadError === null && currentSlide !== null,
+		revision: presentation?.revision ?? '',
+		slide: currentSlideIndex + 1,
+		step: PRINT_MODE ? (currentSlide?.steps ?? 0) : currentStep,
+		fragment: PRINT_MODE ? (currentSlide?.fragmentCount ?? 0) : currentFragmentIndex,
+		theme,
+		includeInfiniteAnimations: PRINT_MODE
 	});
 
 	const fitting = notesSizeMode === 'fit';

@@ -3,6 +3,7 @@
  * Loads the presentation, wires up keyboard navigation and hot reload, and
  * renders the current slide inside the scaled canvas, along with the
  * progress bar, the connection indicator, and the slide overview.
+ * Reports the ready signal for the slide on screen.
  */
 
 import { useEffect, useRef, useState, type ReactNode } from 'react';
@@ -25,6 +26,7 @@ import { setupKeyboardNavigation } from '$lib/utils/keyboard';
 import { setupTouchNavigation } from '$lib/utils/touch';
 import { setupCursorAutoHide } from '$lib/utils/cursor';
 import { setupWakeLock } from '$lib/utils/wakeLock';
+import { useReadySignal } from '$lib/ready/useReadySignal';
 import { fetchPresentation } from '$lib/utils/fetchPresentation';
 import { SlideCanvas } from '$lib/components/SlideCanvas';
 import { Slide } from '$lib/components/Slide';
@@ -129,6 +131,20 @@ export default function App() {
 	const customTheme = presentation?.config?.customTheme;
 	const showProgressBar = presentation?.config?.showProgressBar !== false;
 	const transition = resolveTransition(currentSlide?.transition, presentation?.config?.transition);
+
+	// Tells tap export and Tap Desktop when the slide on screen has settled
+	// (see lib/ready/readySignal.ts). Print mode renders the final step and
+	// fragment, so it reports those. A print or capture page waits for
+	// looping animations too, as exports always have.
+	useReadySignal({
+		enabled: !isLoading && loadError === null && currentSlide !== null,
+		revision: presentation?.revision ?? '',
+		slide: currentSlideIndex + 1,
+		step: PRINT_MODE ? (currentSlide?.steps ?? 0) : currentStep,
+		fragment: PRINT_MODE ? (currentSlide?.fragmentCount ?? 0) : currentFragmentIndex,
+		theme,
+		includeInfiniteAnimations: PRINT_MODE || CAPTURE_MODE
+	});
 
 	useEffect(() => {
 		let cancelled = false;
