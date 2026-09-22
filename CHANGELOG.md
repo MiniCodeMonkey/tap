@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+### Security
+
+- **`tap dev` rejects cross-site requests to run code** - A web page open in the same browser could send a plain `POST` to `http://127.0.0.1:<port>/api/execute`. The browser hid the response, but the server still ran the request. `tap dev` now refuses any code execution request whose `Origin` is another site or whose body is not `application/json`, with 403 and 415 respectively. The slides' own Run buttons, `--allow-origin` origins and tunnel origins keep working. The same origin rule now guards both HTTP and WebSocket connections.
+
 ### Changed
 
 - **The slide overview opens on the current slide** - Pressing `O` deep into a deck used to open the overview scrolled to the top, on slide 1, so finding your place meant scrolling back down. It now opens with the current slide centered and highlighted, before the first frame is drawn, so it never shows slide 1 and then jumps. The arrow keys scroll the grid to keep the focus ring on screen. `O` works as a way to jump around a deck and come back.
