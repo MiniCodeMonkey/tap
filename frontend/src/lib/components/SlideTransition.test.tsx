@@ -136,6 +136,23 @@ describe('SlideTransition and the ready signal', () => {
 		await waitFor(() => expect(heldBlockers()).toEqual([]), { timeout: 3000 });
 	});
 
+	it('renders the incoming slide once a real transition completes', async () => {
+		const { rerender } = render(
+			<SlideTransition slideKey={0} transition="fade" direction="forward">
+				<div>first</div>
+			</SlideTransition>
+		);
+		expect(screen.getByText('first')).toBeInTheDocument();
+
+		rerender(
+			<SlideTransition slideKey={1} transition="fade" direction="forward">
+				<div>second</div>
+			</SlideTransition>
+		);
+
+		await waitFor(() => expect(screen.getByText('second')).toBeInTheDocument(), { timeout: 3000 });
+	});
+
 	it('holds nothing in print mode', () => {
 		const { rerender } = render(
 			<SlideTransition slideKey={0} transition="fade" direction="forward" printMode>
