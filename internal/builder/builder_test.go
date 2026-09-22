@@ -889,3 +889,37 @@ func TestBuild_LeavesOutSkippedSlides(t *testing.T) {
 		t.Errorf("embedded slides = %+v, want two slides indexed 0 and 1", data.Slides)
 	}
 }
+
+func TestGenerateIndexHTML_LeavesDriverSettingsOut(t *testing.T) {
+	tmpDir := t.TempDir()
+	b := NewWithOutput(tmpDir)
+
+	pres := &transformer.TransformedPresentation{
+		Config: config.Config{
+			Title: "Live Queries",
+			Drivers: map[string]config.DriverConfig{
+				"postgres": {
+					Connections: map[string]config.ConnectionConfig{
+						"default": {Host: "db.internal", User: "analyst", Password: "hunter2-secret"},
+					},
+				},
+			},
+		},
+		Slides: []transformer.TransformedSlide{},
+	}
+	path := filepath.Join(tmpDir, "index.html")
+	if _, err := b.generateIndexHTML(path, pres); err != nil {
+		t.Fatalf("generateIndexHTML failed: %v", err)
+	}
+
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("failed to read generated file: %v", err)
+	}
+	html := string(content)
+	for _, leaked := range []string{"hunter2-secret", "db.internal", "analyst", "drivers"} {
+		if strings.Contains(html, leaked) {
+			t.Errorf("index.html contains driver setting %q; driver settings must never reach the browser", leaked)
+		}
+	}
+}
