@@ -73,12 +73,20 @@ func checkOutputWritable(dir string) error {
 	return os.WriteFile(probe, []byte("ok"), 0o600)
 }
 
-// freeSpace is free space on the volume holding dir, or 0 when it cannot
-// be read.
-func freeSpace(dir string) uint64 {
+// FreeSpace is the free space on the volume holding dir.
+func FreeSpace(dir string) (uint64, error) {
 	var stat syscall.Statfs_t
 	if err := syscall.Statfs(dir, &stat); err != nil {
+		return 0, err
+	}
+	return stat.Bavail * uint64(stat.Bsize), nil
+}
+
+// freeSpace is FreeSpace for the preflight, 0 when it cannot be read.
+func freeSpace(dir string) uint64 {
+	free, err := FreeSpace(dir)
+	if err != nil {
 		return 0
 	}
-	return stat.Bavail * uint64(stat.Bsize)
+	return free
 }
