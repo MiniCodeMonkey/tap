@@ -149,13 +149,6 @@ func runApprovalRevoke(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// approvalDeckPath returns the absolute path an approval for arg is
-// stored under, without revoking anything.
-func approvalDeckPath(arg string) (string, error) {
-	deck, _, _, err := resolveApprovalTarget(arg)
-	return deck, err
-}
-
 // resolveApprovalTarget turns the revoke argument into the settings key
 // an approval is stored under, and reports whether the deck could be
 // resolved. arg is a deck file or its folder.
