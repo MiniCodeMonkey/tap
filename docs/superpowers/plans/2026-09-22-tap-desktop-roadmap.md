@@ -19,8 +19,8 @@
 | P3 | `2026-09-22-deck-features-skip-schema-slide-list.md` | Part 3 | P1 | written |
 | P4 | `2026-09-22-commands-behind-tui-keys.md` | Part 4 | P1, P3 | written |
 | P5 | `2026-09-22-ready-signal-updates-progress.md` | Part 5 | P1 (command names only) | written |
-| P6 | `2026-09-22-app-mode.md` | Part 6 | P2, P3, P5 | being written |
-| D2 | `2026-09-22-desktop-app-shell.md` | Desktop milestone 2 | P6 | to write after P6 is written |
+| P6 | `2026-09-22-app-mode.md` | Part 6 | P2, P3, P5 | written |
+| D2 | `2026-09-22-desktop-app-shell.md` | Desktop milestone 2 | P6 | being written |
 | D3 | `desktop-sidebar-thumbnails-slide-operations.md` | Desktop milestone 3 | D2, P4 (`slide add --print`) | outline below; detailed plan written when D2 is done |
 | D4 | `desktop-presenting.md` | Desktop milestone 4 | D3 | outline below |
 | D5 | `desktop-live-code-deck-tab-fixits.md` | Desktop milestone 5 | D4, P2 | outline below |
