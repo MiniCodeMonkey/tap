@@ -1920,3 +1920,36 @@ func TestParse_StepsDirectiveRejectsNegativeValue(t *testing.T) {
 		t.Error("StepsInvalid = false, want true")
 	}
 }
+
+func TestParse_SkipDirective(t *testing.T) {
+	content := []byte("# One\n\n---\n\n<!--\nlayout: section\nskip: true\n-->\n\n# Two\n\n---\n\n<!-- skip: false -->\n\n# Three")
+
+	pres, err := New().Parse(content)
+	if err != nil {
+		t.Fatalf("Parse() returned error: %v", err)
+	}
+	if len(pres.Slides) != 3 {
+		t.Fatalf("got %d slides, want 3: a skipped slide stays in the parsed deck", len(pres.Slides))
+	}
+	for index, want := range []bool{false, true, false} {
+		if got := pres.Slides[index].Directives.Skip; got != want {
+			t.Errorf("slide %d: Skip = %v, want %v", index+1, got, want)
+		}
+	}
+	if pres.Slides[1].Directives.Layout != "section" {
+		t.Errorf("slide 2 layout = %q, want section: skip sits beside other directives", pres.Slides[1].Directives.Layout)
+	}
+	if strings.Contains(pres.Slides[1].Content, "skip") {
+		t.Errorf("slide 2 content = %q, want the directive comment removed", pres.Slides[1].Content)
+	}
+}
+
+func TestParse_SkipDirectiveIgnoresANonBoolean(t *testing.T) {
+	pres, err := New().Parse([]byte("<!-- skip: maybe -->\n\n# Slide"))
+	if err != nil {
+		t.Fatalf("Parse() returned error: %v", err)
+	}
+	if pres.Slides[0].Directives.Skip {
+		t.Error("Skip = true for skip: maybe, want false")
+	}
+}

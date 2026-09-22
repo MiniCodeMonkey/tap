@@ -65,6 +65,10 @@ type SlideDirectives struct {
 	// number too large for one); the directive is ignored either way, and
 	// a caller that surfaces slide warnings should tell the deck author.
 	StepsInvalid bool
+	// Skip is true when the slide's "skip" directive is true. Presenting,
+	// slide counts, tap build and tap export leave the slide out. tap dev
+	// still shows it when someone goes to it directly.
+	Skip bool
 }
 
 // CodeBlock represents a fenced code block in a slide.
@@ -556,6 +560,11 @@ var directiveFields = []directiveField{
 			return
 		}
 		d.StepsInvalid = true
+	}},
+	{"skip", func(y map[string]interface{}, d *SlideDirectives) {
+		if v, ok := y["skip"].(bool); ok {
+			d.Skip = v
+		}
 	}},
 }
 
