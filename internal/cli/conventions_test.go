@@ -28,6 +28,8 @@ var expectedCommands = []string{
 	"tap build",
 	"tap component",
 	"tap component new",
+	"tap deck",
+	"tap deck schema",
 	"tap dev",
 	"tap export",
 	"tap export images",
