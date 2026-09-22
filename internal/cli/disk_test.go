@@ -20,9 +20,26 @@ func TestDiskWatchReportsOnlyChanges(t *testing.T) {
 	free = 512 << 20
 	watch.check()
 
-	want := []recorder.DiskLevel{recorder.DiskLow, recorder.DiskFull}
-	if len(levels) != len(want) || levels[0] != want[0] || levels[1] != want[1] {
+	want := []recorder.DiskLevel{recorder.DiskOK, recorder.DiskLow, recorder.DiskFull}
+	if len(levels) != len(want) || levels[0] != want[0] || levels[1] != want[1] || levels[2] != want[2] {
 		t.Errorf("levels = %v, want %v", levels, want)
+	}
+}
+
+// TestDiskWatchFirstCheckAlwaysReportsEvenAtDiskOK covers the ruling that a
+// fresh watch (the one Start makes for a recording after a previous
+// DiskFull stop, for example) must announce DiskOK on its own first check
+// rather than silently matching the DiskOK zero value and staying quiet.
+func TestDiskWatchFirstCheckAlwaysReportsEvenAtDiskOK(t *testing.T) {
+	var levels []recorder.DiskLevel
+	watch := newDiskWatch(t.TempDir(), func(string) (uint64, error) { return 50 << 30, nil }, func(level recorder.DiskLevel) {
+		levels = append(levels, level)
+	})
+
+	watch.check()
+
+	if len(levels) != 1 || levels[0] != recorder.DiskOK {
+		t.Errorf("levels = %v, want a single DiskOK report", levels)
 	}
 }
 

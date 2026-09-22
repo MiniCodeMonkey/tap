@@ -401,6 +401,52 @@ func TestControllerStopsWhenTheDiskFills(t *testing.T) {
 	}
 }
 
+// TestControllerReportsDiskOKOnTheNextStartAfterADiskFullStop covers the
+// ruling that a Start right after a DiskFull stop must report DiskOK once
+// there is room again: the fresh diskWatch it creates used to start at the
+// DiskOK zero value and stay quiet on a first check that also found
+// DiskOK, leaving every browser showing "disk full" throughout the new
+// recording.
+func TestControllerReportsDiskOKOnTheNextStartAfterADiskFullStop(t *testing.T) {
+	levels := make(chan recorder.DiskLevel, 4)
+	free := uint64(512 << 20)
+	controller := newRecordController(recordControllerOptions{
+		DeckTitle:   "My Talk",
+		OutputDir:   t.TempDir(),
+		CommandName: fakeRecorderBinary(t),
+		FreeSpace:   func(string) (uint64, error) { return free, nil },
+		OnDiskLevel: func(level recorder.DiskLevel) { levels <- level },
+	})
+
+	if _, err := controller.Start(1); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case level := <-levels:
+		if level != recorder.DiskFull {
+			t.Fatalf("level = %v, want DiskFull", level)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("no disk level reported")
+	}
+	if controller.Recording() {
+		t.Fatal("setup: still recording after the DiskFull stop")
+	}
+
+	free = 50 << 30
+	if _, err := controller.Start(1); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case level := <-levels:
+		if level != recorder.DiskOK {
+			t.Fatalf("level = %v, want DiskOK on the next start", level)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("no DiskOK reported on the next start after a full disk")
+	}
+}
+
 // TestControllerReportsDiskOKAfterAnOrdinaryStopFollowingLowDisk covers the
 // ruling that extends the brief: a normal Stop (not the DiskFull stop) after
 // the watch last reported DiskLow reports DiskOK, so the "almost full" badge

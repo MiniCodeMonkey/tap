@@ -11,8 +11,18 @@ import (
 // diskPollInterval is how often a running recording checks free space.
 const diskPollInterval = 10 * time.Second
 
+// diskLevelUnset is not a valid recorder.DiskLevel. A fresh diskWatch
+// starts here instead of at DiskOK's zero value, so its first check always
+// reports its level instead of silently matching an unset level that looks
+// the same as DiskOK: without that, a watch started right after a
+// DiskFull stop (tap dev's next recording, say) would find DiskOK on its
+// first check, see no change from the zero value, and never tell anyone
+// the disk is fine again, leaving the "disk full" status up throughout the
+// new recording.
+const diskLevelUnset recorder.DiskLevel = -1
+
 // diskWatch reports each change of the recordings disk's level. The first
-// check reports only when the level is not DiskOK.
+// check always reports its level.
 type diskWatch struct {
 	dir     string
 	free    func(string) (uint64, error)
@@ -26,7 +36,7 @@ func newDiskWatch(dir string, free func(string) (uint64, error), onLevel func(re
 	if free == nil {
 		free = recorder.FreeSpace
 	}
-	return &diskWatch{dir: dir, free: free, onLevel: onLevel}
+	return &diskWatch{dir: dir, free: free, onLevel: onLevel, level: diskLevelUnset}
 }
 
 // check reads free space once. An unreadable volume leaves the level as
