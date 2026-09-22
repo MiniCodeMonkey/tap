@@ -4,7 +4,7 @@
 
 **Goal:** Move tap to the noun-grouped command tree with one set of conventions (deck resolver, flags, `--json`, exit codes, 1-based numbers), and connect the live code driver registry in `tap dev` and `tap present`.
 
-**Architecture:** Commands return errors instead of calling `os.Exit`. One `execute` function turns every error into an exit code (0, 1, 2 or 130) and, for `--json`, into one error object on stdout. One `resolveDeck` function picks the deck for every command that takes `[deck]`. Old command names become hidden stubs that print one line and exit 1. `runDevServer` builds a `driver.Registry` from the built-in drivers and the deck's `drivers:` map, and rebuilds it on every reload. `/api/execute` runs only code that is a live block in the loaded deck.
+**Architecture:** Commands return errors instead of calling `os.Exit`. One `execute` function turns every error into an exit code (0, 1, 2 or 130) and, for `--json`, into one error object on stdout. One `resolveDeck` function picks the deck for every command that takes `[deck]`. Old command names become hidden stubs that print one line and exit 1. `runDevServer` builds a `driver.Registry` from the built-in drivers and the deck's `drivers:` map, and rebuilds it on every reload. `/api/execute` runs only code that is a live block in the loaded deck. `tap dev` and `tap present` listen on `127.0.0.1` unless `--lan` is given.
 
 **Tech Stack:** Go 1.24, cobra, pflag, Bubble Tea (the file picker), `net/http` for the server.
 
@@ -40,7 +40,7 @@ The spec leaves these open. Each one is marked **(plan decision)** where it is u
 8. **`--json` on `tap new` skips the wizard,** as `--yes` does.
 9. **`--json` in part 1** goes on `new`, `build`, `export pdf`, `export images`, `component new`, `theme list` and `theme show`. The long-running commands (`dev`, `present`, `serve`) and the `slide add` wizard get no `--json`.
 10. **`component new --json` prints the snippet as a field now.** Part 4 lists this, but it costs one struct field here, and it avoids a second change to the output shape.
-11. **The execute guard (Task 10).** See the next section.
+11. **The execute guard (Task 10).** See the next section. **Settled:** the user chose "guard and bind 127.0.0.1" for PR 2.
 
 ## Safety: the registry must not ship without a guard
 
@@ -48,14 +48,16 @@ The dev server binds `0.0.0.0` (`server.New`), and `--tunnel` puts it on a publi
 
 Section 2.2 (execute by reference) closes this, but 2.2 is not part of this plan. So Task 10 adds a small guard first: `/api/execute` runs a request only when its driver, connection and code are equal to a live code block in the loaded deck. Otherwise it answers 403. The frontend does not change, because it already sends the block's own code. Section 2.2 later replaces the guard with the `{slide, block}` reference.
 
-Task 10 lands before Task 11, so no commit connects the registry without the guard. If the reviewer does not want the guard, the other safe choice is to hold Tasks 10 and 11 until 2.2 is ready, and ship them together.
+The guard alone still lets any machine on the network run the deck's own blocks. So Task 11 also changes where the server listens: `tap dev` and `tap present` bind `127.0.0.1` by default, and bind `0.0.0.0` only with the new `--lan` flag. The phone remote over the local network needs `--lan`. `--tunnel` works without it, because `cloudflared` connects to `http://127.0.0.1:<port>` (`internal/tunnel/tunnel.go`).
+
+Tasks 10 and 11 land before Task 12, so no commit connects the registry without both protections. The user chose this approach ("guard and bind 127.0.0.1") for PR 2.
 
 ## Pull requests
 
-- **PR 1:** Tasks 1 to 9 and Task 12 (part 1). This PR must merge before 2.0.0 is final.
-- **PR 2:** Tasks 10 and 11 (section 2.1), with their changelog lines. It can merge after PR 1, or with it.
+- **PR 1:** Tasks 1 to 9 and Task 13 (part 1). This PR must merge before 2.0.0 is final.
+- **PR 2:** Tasks 10, 11 and 12 (section 2.1), with their changelog and docs lines. It can merge after PR 1, or with it. It changes the default network exposure, so it should also land before 2.0.0 is final.
 
-`tap present` is already on main (commit 280372c, PR #15). It shares `runDevServer` with `tap dev`, so it gets the resolver in Task 8 and the registry in Task 11 with no extra work.
+`tap present` is already on main (commit 280372c, PR #15). It shares `runDevServer` with `tap dev`, so it gets the resolver in Task 8, the loopback default in Task 11 and the registry in Task 12 with no extra work.
 
 The TUI `r` key already reloads the deck in `tap dev` on main: `DevModel.handleKeyPress` calls `m.reloadCmd()`, and `runDevServer` passes `reloadInTUI` to `SetReloader` for both commands. `TestDevModel_HandleKeyPress_Reload` in `internal/tui/dev_test.go` covers it. No task is needed. Task 9 only runs that test again.
 
@@ -79,6 +81,9 @@ The TUI `r` key already reloads the deck in `tap dev` on main: `DevModel.handleK
 | `internal/tui/dev.go` | modify | The PDF key runs `tap export pdf` |
 | `internal/driver/custom.go` | modify | `DriverConfigInput.WorkingDir` |
 | `internal/server/api.go` | modify | The live block guard |
+| `internal/cli/network.go` | new | `listenHost`, `lanPresenterAddress` for `--lan` |
+| `internal/server/routes.go` | modify | `/qr` explains `--lan` on a loopback-only server |
+| `internal/tui/dev.go` | modify | `DevConfig.NetworkURL`, shown with the LAN QR code |
 | Docs | modify | `README.md`, `CONTRIBUTING.md`, `docs/reference/*.md`, `docs/guide/*.md`, `skills/tap/**`, `CHANGELOG.md` |
 
 Test files move with their source files: `pdf_test.go` to `export_pdf_test.go`, `screenshot_test.go` to `export_images_test.go`, `add_component_test.go` to `component_test.go`.
@@ -2670,7 +2675,403 @@ git commit -m "fix(server): run only code that is a live block in the loaded dec
 
 ---
 
-### Task 11: Connect the driver registry in `tap dev` and `tap present`
+### Task 11: Listen on 127.0.0.1 unless `--lan` is given
+
+**Files:**
+- Create: `internal/cli/network.go`
+- Create: `internal/cli/network_test.go`
+- Modify: `internal/cli/dev.go`, `internal/cli/present.go`, `internal/cli/root_test.go`
+- Modify: `internal/server/routes.go`, `internal/server/server.go`, `internal/server/routes_test.go`
+- Modify: `internal/tui/dev.go`, `internal/tui/dev_test.go`
+
+**Interfaces:**
+- Consumes: `server.NewWithHost` (existing), `server.GeneratePresenterURL`, `server.GenerateCompactQRCode` (existing, `internal/server/qr.go`)
+- Produces:
+  - `func listenHost(lan bool) string`: `"0.0.0.0"` with `--lan`, else `"127.0.0.1"`
+  - `func lanPresenterAddress(port int, presenterPassword string) (presenterURL, qrCode string, ok bool)`
+  - `serverOptions.lan bool`; the flag `--lan` on `tap dev` and `tap present`
+  - `func (s *Server) ListensOnLoopbackOnly() bool` in `internal/server`
+  - `DevConfig.NetworkURL string` in `internal/tui`
+
+**What exists today.** `runDevServer` builds each server with `server.New`, which binds `0.0.0.0`. The TUI has a `DevConfig.QRCodeASCII` field, and `DevModel.qrCode()` falls back to it when no tunnel runs. But `runDevServer` never sets that field, so today the TUI shows a QR code only for a tunnel. The presenter-mode guide describes a "Network:" URL and a LAN QR code that the TUI does not show. `GET /qr` renders an HTML page with the LAN address (`GenerateAudienceURL` auto-detects the IP), and nothing in the frontend links to it.
+
+**After this task.**
+- `tap dev` and `tap present` bind `127.0.0.1`. The TUI and headless output show only `localhost` URLs.
+- With `--lan`, they bind `0.0.0.0`. The TUI shows a "Network:" line with the LAN presenter URL, and the LAN QR code through the existing `QRCodeASCII` fallback. Headless mode prints the same "Network:" line.
+- `--tunnel` works with or without `--lan`. `cloudflared` connects to `http://127.0.0.1:<port>` (`internal/tunnel/tunnel.go`), which a loopback listener accepts. A running tunnel's QR code still wins over the LAN one, as `qrCode()` does today.
+- `GET /qr` on a loopback-only server answers 404 with `The QR page needs the server on the network: start tap dev with --lan`. Its LAN URLs would not work there.
+- `tap serve` and the temporary export server do not change. `tap serve` serves only a static build and runs no code. The export server already binds `127.0.0.1`.
+- The audience URL stays `http://localhost:<port>`. Browsers that try `::1` first fall back to `127.0.0.1`.
+
+- [ ] **Step 1: Write the failing tests**
+
+`internal/cli/network_test.go`:
+
+```go
+package cli
+
+import (
+	"bytes"
+	"fmt"
+	"net"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"syscall"
+	"testing"
+	"time"
+)
+
+func TestListenHost(t *testing.T) {
+	if got := listenHost(false); got != "127.0.0.1" {
+		t.Errorf("listenHost(false) = %q, want 127.0.0.1", got)
+	}
+	if got := listenHost(true); got != "0.0.0.0" {
+		t.Errorf("listenHost(true) = %q, want 0.0.0.0", got)
+	}
+}
+
+// firstLANAddress returns a non-loopback IPv4 address of this machine, or
+// skips the test when there is none.
+func firstLANAddress(t *testing.T) string {
+	t.Helper()
+	addresses, err := net.InterfaceAddrs()
+	if err != nil {
+		t.Skipf("cannot list interface addresses: %v", err)
+	}
+	for _, address := range addresses {
+		prefix, ok := address.(*net.IPNet)
+		if ok && !prefix.IP.IsLoopback() && prefix.IP.To4() != nil {
+			return prefix.IP.String()
+		}
+	}
+	t.Skip("this machine has no non-loopback IPv4 address")
+	return ""
+}
+
+// startHeadlessDev starts tap dev --headless on a free port with extra
+// arguments, waits until it answers on 127.0.0.1, and stops it when the
+// test ends.
+func startHeadlessDev(t *testing.T, extra ...string) int {
+	t.Helper()
+	binary := buildTapBinaryForTest(t)
+	deckPath := filepath.Join(t.TempDir(), "deck.md")
+	if err := os.WriteFile(deckPath, []byte("---\ntitle: Net\n---\n\n# One\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	port := freePort(t)
+	args := append([]string{"dev", deckPath, "--headless", "--port", fmt.Sprint(port)}, extra...)
+	command := exec.Command(binary, args...)
+	var output bytes.Buffer
+	command.Stdout = &output
+	command.Stderr = &output
+	if err := command.Start(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		_ = command.Process.Signal(syscall.SIGINT)
+		_ = command.Wait()
+	})
+
+	deadline := time.Now().Add(20 * time.Second)
+	for {
+		connection, err := net.DialTimeout("tcp", fmt.Sprintf("127.0.0.1:%d", port), 200*time.Millisecond)
+		if err == nil {
+			connection.Close()
+			return port
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("tap dev did not start:\n%s", output.String())
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+}
+
+func TestDevListensOnLoopbackOnlyByDefault(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping subprocess test in short mode")
+	}
+	lanAddress := firstLANAddress(t)
+	port := startHeadlessDev(t)
+
+	connection, err := net.DialTimeout("tcp", fmt.Sprintf("%s:%d", lanAddress, port), time.Second)
+	if err == nil {
+		connection.Close()
+		t.Errorf("tap dev answered on %s:%d, want loopback only", lanAddress, port)
+	}
+}
+
+func TestDevListensOnTheNetworkWithLAN(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping subprocess test in short mode")
+	}
+	lanAddress := firstLANAddress(t)
+	port := startHeadlessDev(t, "--lan")
+
+	connection, err := net.DialTimeout("tcp", fmt.Sprintf("%s:%d", lanAddress, port), time.Second)
+	if err != nil {
+		t.Errorf("tap dev --lan did not answer on %s:%d: %v", lanAddress, port, err)
+		return
+	}
+	connection.Close()
+}
+```
+
+Add `freePort` to `network_test.go` too. Task 12 reuses it:
+
+```go
+// freePort returns a TCP port that is free right now.
+func freePort(t *testing.T) int {
+	t.Helper()
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer listener.Close()
+	return listener.Addr().(*net.TCPAddr).Port
+}
+```
+
+The two tests skip on a machine with no LAN address, such as some CI containers. The unit test `TestListenHost` always runs.
+
+In `internal/cli/root_test.go`, add `"lan"` to the flags `TestPresentCommandIsRegistered` expects, and add:
+
+```go
+func TestDevHasTheLANFlag(t *testing.T) {
+	command, _, err := rootCmd.Find([]string{"dev"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if command.Flags().Lookup("lan") == nil {
+		t.Error("dev lacks --lan")
+	}
+}
+```
+
+In `internal/server/routes_test.go`, add:
+
+```go
+func TestQRPageExplainsLANOnALoopbackServer(t *testing.T) {
+	s := NewWithHost(0, "127.0.0.1")
+	s.SetupRoutes()
+	request := httptest.NewRequest(http.MethodGet, "/qr", nil)
+	request.Host = "localhost"
+	recorder := httptest.NewRecorder()
+	s.mux.ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusNotFound {
+		t.Errorf("status = %d, want %d", recorder.Code, http.StatusNotFound)
+	}
+	if !strings.Contains(recorder.Body.String(), "--lan") {
+		t.Errorf("body = %q, want it to name --lan", recorder.Body.String())
+	}
+}
+
+func TestListensOnLoopbackOnly(t *testing.T) {
+	if !NewWithHost(0, "127.0.0.1").ListensOnLoopbackOnly() {
+		t.Error("127.0.0.1 should be loopback only")
+	}
+	if NewWithHost(0, "0.0.0.0").ListensOnLoopbackOnly() {
+		t.Error("0.0.0.0 is not loopback only")
+	}
+}
+```
+
+Check how the existing tests in `routes_test.go` send requests through the mux (field `s.mux` or a `Handler()` method), and do the same.
+
+In `internal/tui/dev_test.go`, add:
+
+```go
+func TestViewURLsShowsTheNetworkURL(t *testing.T) {
+	model := NewDevModel(DevConfig{
+		AudienceURL:  "http://localhost:3000",
+		PresenterURL: "http://localhost:3000/presenter",
+		NetworkURL:   "http://192.168.1.20:3000/presenter",
+	})
+	if !strings.Contains(model.viewURLs(), "http://192.168.1.20:3000/presenter") {
+		t.Error("viewURLs() does not show the network URL")
+	}
+	plain := NewDevModel(DevConfig{AudienceURL: "http://localhost:3000"})
+	if strings.Contains(plain.viewURLs(), "Network") {
+		t.Error("viewURLs() shows a Network line without --lan")
+	}
+}
+```
+
+- [ ] **Step 2: Run the tests to verify they fail**
+
+Run: `go test ./internal/cli ./internal/server ./internal/tui -run 'TestListenHost|TestDevHasTheLANFlag|TestPresentCommandIsRegistered|TestQRPageExplainsLAN|TestListensOnLoopbackOnly|TestViewURLsShowsTheNetworkURL' -short`
+Expected: compile failures, `undefined: listenHost`, `undefined: ListensOnLoopbackOnly`, `unknown field NetworkURL`.
+
+Run: `go test ./internal/cli -run TestDevListensOnLoopbackOnlyByDefault -v`
+Expected: FAIL, tap dev answers on the LAN address (or SKIP with no LAN address).
+
+- [ ] **Step 3: Write `internal/cli/network.go`**
+
+```go
+package cli
+
+import (
+	"net/url"
+
+	"github.com/MiniCodeMonkey/tap/internal/server"
+)
+
+// listenHost is the address tap dev and tap present listen on. They
+// listen on loopback only, unless --lan opens them to the local network.
+func listenHost(lan bool) string {
+	if lan {
+		return "0.0.0.0"
+	}
+	return "127.0.0.1"
+}
+
+// lanPresenterAddress returns the presenter URL on this machine's LAN
+// address and a QR code of it, for a phone on the same network. ok is
+// false when the machine has no LAN address, or when the QR code cannot
+// be drawn.
+func lanPresenterAddress(port int, presenterPassword string) (presenterURL, qrCode string, ok bool) {
+	presenterURL, err := server.GeneratePresenterURL(server.QRConfig{Port: port, PresenterPassword: presenterPassword})
+	if err != nil {
+		return "", "", false
+	}
+	parsed, err := url.Parse(presenterURL)
+	if err != nil || parsed.Hostname() == "localhost" {
+		return "", "", false
+	}
+	qrCode, err = server.GenerateCompactQRCode(presenterURL)
+	if err != nil {
+		return presenterURL, "", true
+	}
+	return presenterURL, qrCode, true
+}
+```
+
+`GeneratePresenterURL` falls back to `localhost` when it finds no LAN address. That fallback is why the function checks the host.
+
+- [ ] **Step 4: Add `ListensOnLoopbackOnly` and the `/qr` message (`internal/server`)**
+
+In `server.go`, below `Port()`:
+
+```go
+// ListensOnLoopbackOnly reports whether the server accepts connections
+// only from this machine.
+func (s *Server) ListensOnLoopbackOnly() bool {
+	s.mu.RLock()
+	address := s.addr
+	s.mu.RUnlock()
+	host, _, err := net.SplitHostPort(address)
+	if err != nil {
+		return false
+	}
+	if host == "localhost" {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
+}
+```
+
+`server.go` already imports `net`.
+
+In `routes.go`, at the start of `handleQR`, before the presenter check:
+
+```go
+	// The page shows LAN addresses, which a server that listens on
+	// loopback only does not answer.
+	if s.ListensOnLoopbackOnly() {
+		http.Error(w, "The QR page needs the server on the network: start tap dev with --lan", http.StatusNotFound)
+		return
+	}
+```
+
+- [ ] **Step 5: Show the network URL in the TUI (`internal/tui/dev.go`)**
+
+Add a field to `DevConfig`, next to `PresenterURL`:
+
+```go
+	// NetworkURL is the presenter URL on this machine's LAN address. It is
+	// set only when the server listens on the network (--lan).
+	NetworkURL string
+```
+
+In `viewURLs`, after the presenter line and its password note, add:
+
+```go
+	if m.config.NetworkURL != "" {
+		b.WriteString("\n")
+		b.WriteString(labelStyle.Render("Network:"))
+		b.WriteString(urlStyle.Render(m.config.NetworkURL))
+	}
+```
+
+`qrCode()` already falls back to `m.config.QRCodeASCII`, so no change is needed there. Update its comment only if it no longer matches: it says "the one the config carried in", which is the LAN QR code now.
+
+- [ ] **Step 6: Add `--lan` and bind the host (`internal/cli/dev.go`, `present.go`)**
+
+1. Add `lan bool` to `serverOptions`, with the comment `// lan listens on every interface, so a phone on the same network can connect.`
+2. Add the flag to both commands:
+
+```go
+	devCmd.Flags().BoolVar(&devLAN, "lan", false, "listen on the local network too, so a phone on the same network can open the presenter view (default: this machine only)")
+```
+
+```go
+	presentCmd.Flags().BoolVar(&presentLAN, "lan", false, "listen on the local network too, so a phone on the same network can open the presenter view (default: this machine only)")
+```
+
+Add `devLAN bool` and `presentLAN bool` to each command's flag `var` block, and pass `lan: devLAN` and `lan: presentLAN` in each `serverOptions{...}`.
+
+3. In `buildServer`, change `candidate := server.New(candidatePort)` to:
+
+```go
+		candidate := server.NewWithHost(candidatePort, listenHost(options.lan))
+```
+
+4. After `port = srv.Port()`, compute the LAN address once:
+
+```go
+	var networkURL, networkQRCode string
+	if options.lan {
+		var found bool
+		networkURL, networkQRCode, found = lanPresenterAddress(port, presenterPassword)
+		if !found {
+			Warning("--lan: no local network address found; only this machine can connect\n")
+		}
+	}
+```
+
+5. In the headless block, after the `Presenter:` line, add:
+
+```go
+		if networkURL != "" {
+			fmt.Printf("  Network:   %s\n", networkURL)
+		}
+```
+
+6. In `tuiCfg`, set `NetworkURL: networkURL` and `QRCodeASCII: networkQRCode`.
+7. Add `tap dev slides.md --lan                # Let a phone on the same network connect` to the `dev` examples, and a line to the `Long` text: "The server listens on this machine only. --lan opens it to the local network, and --tunnel puts it on a public https URL."
+
+- [ ] **Step 7: Run the tests to verify they pass**
+
+Run: `go test ./internal/cli ./internal/server ./internal/tui -run 'TestListenHost|TestDevHasTheLANFlag|TestPresentCommandIsRegistered|TestQRPage|TestListensOnLoopbackOnly|TestViewURLs|TestEveryCommandFollows' -short -v`
+Expected: PASS.
+
+Run: `go test ./internal/cli -run 'TestDevListensOn' -v`
+Expected: PASS, or SKIP on a machine with no LAN address.
+
+Run: `go test ./... -short`
+Expected: PASS. If a server test relied on `server.New` in `runDevServer`, it does not exist: only `runDevServer` changes, and `server.New` still binds `0.0.0.0` for its other callers.
+
+- [ ] **Step 8: Commit**
+
+```bash
+git add internal/cli/network.go internal/cli/network_test.go internal/cli/dev.go internal/cli/present.go internal/cli/root_test.go internal/server/server.go internal/server/routes.go internal/server/routes_test.go internal/tui/dev.go internal/tui/dev_test.go
+git commit -m "feat(dev)!: listen on 127.0.0.1 unless --lan is given"
+```
+
+---
+
+### Task 12: Connect the driver registry in `tap dev` and `tap present`
 
 **Files:**
 - Create: `internal/cli/drivers.go`
@@ -2681,7 +3082,7 @@ git commit -m "fix(server): run only code that is a live block in the loaded dec
 - Modify: `internal/driver/custom_test.go`
 
 **Interfaces:**
-- Consumes: the guard (Task 10); `buildTapBinaryForTest` (existing, `export_images_test.go`)
+- Consumes: the guard (Task 10); the loopback default and `freePort` (Task 11); `buildTapBinaryForTest` (existing, `export_images_test.go`)
 - Produces:
   - `DriverConfigInput.WorkingDir string` in `internal/driver`
   - `func buildDriverRegistry(cfg *config.Config, baseDir string) *driver.Registry`
@@ -2756,7 +3157,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -2768,17 +3168,6 @@ import (
 )
 
 const liveCodeDeck = "---\ntitle: Live code\n---\n\n# Run it\n\n```bash {driver: 'shell'}\necho hello from tap\n```\n"
-
-// freePort returns a TCP port that is free right now.
-func freePort(t *testing.T) int {
-	t.Helper()
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer listener.Close()
-	return listener.Addr().(*net.TCPAddr).Port
-}
 
 // TestDevRunsALiveShellBlock starts a real tap dev and runs the deck's
 // shell block through /api/execute, as the Run button does.
@@ -2994,7 +3383,7 @@ git commit -m "fix(dev): connect the driver registry so live code runs in tap de
 
 ---
 
-### Task 12: Docs, skill and changelog
+### Task 13: Docs, skill and changelog
 
 **Files:**
 - Modify: `README.md`, `CONTRIBUTING.md`
@@ -3051,6 +3440,13 @@ Remove `--verbose` from any global flag list.
 
 In `docs/guide/live-code-execution.md`, add a short section "What tap runs": `tap dev` and `tap present` run only the live code blocks that are in the deck. A request with any other code gets 403. `tap build` and `tap export` never run code.
 
+- [ ] **Step 4a: Document `--lan`**
+
+- In `docs/reference/cli-commands.md` and `skills/tap/rules/cli.md`, add `--lan` to the flag tables of `tap dev` and `tap present`: "Listen on the local network too, so a phone on the same network can open the presenter view. Without it, only this machine can connect." Where the reference says the dev server is reachable from the network, say that this needs `--lan`.
+- In `docs/guide/presenter-mode.md`, "Using an iPad or Phone as a Controller": step 1 becomes "Start `tap dev --lan` on your laptop". Step 3 becomes "Scan the QR code in the terminal, or open the Network URL it shows".
+- In the same guide, rewrite "QR Code for Easy Access" to match the TUI: with `--lan`, the terminal shows a `Network:` presenter URL and a QR code for it. With `--tunnel`, it shows the tunnel's QR code instead. With neither, it shows no QR code.
+- Where `/qr` is described (`docs/guide/presenter-mode.md`, `docs/reference/cli-commands.md`), say that it needs `--lan`.
+
 - [ ] **Step 5: Add the changelog entries**
 
 In `CHANGELOG.md` and `docs/changelog.md`, under `## [Unreleased]`, add these. Match each file's existing style.
@@ -3075,10 +3471,16 @@ Under `### Fixed`:
 Under `### Security`:
 
 ```markdown
-- **Only the deck's own code runs** - `/api/execute` runs a request only when its driver, connection and code are a live code block in the loaded deck, and answers 403 otherwise. The dev server listens on the network and can be tunneled, and a client outside a browser can send any `Origin` header, so the same-origin check alone did not stop other code.
+- **Only the deck's own code runs** - `/api/execute` runs a request only when its driver, connection and code are a live code block in the loaded deck, and answers 403 otherwise. With `--lan` or `--tunnel` other devices can reach the server, and a client outside a browser can send any `Origin` header, so the same-origin check alone does not stop other code.
 ```
 
-The `### Fixed` and `### Security` entries go in PR 2 (Tasks 10 and 11). The `### Changed` entries go in PR 1.
+Also under `### Security`, because this changes the default network exposure:
+
+```markdown
+- **`tap dev` and `tap present` listen on this machine only** - They used to listen on every network interface, so any device on the same network could open the deck, and could call `/api/execute`. They now listen on `127.0.0.1`. Pass `--lan` to let a phone on the same network open the presenter view. The terminal then shows the network URL and a QR code for it. `--tunnel` works without `--lan`. `/qr` answers 404 without `--lan`, because its network URLs would not work.
+```
+
+The `### Fixed` and both `### Security` entries go in PR 2 (Tasks 10, 11 and 12), with the step 4 and step 4a docs. The `### Changed` entries go in PR 1.
 
 - [ ] **Step 6: Check the docs build and the frontend**
 
@@ -3107,3 +3509,4 @@ git commit -m "docs: describe the noun-grouped command tree and its conventions"
 - [ ] Build the binary and try the new tree by hand in a folder with one deck and in a folder with two:
   - `tap dev`, `tap export pdf --json`, `tap export images --slide 1 --step 1 -o /tmp/s.png`, `tap theme show`, `tap component new Demo`, `tap pdf` (prints the rename line, exits 1), `echo $?` after each.
   - In `tap dev`, click Run on a shell block and see its output.
+  - Start `tap dev` and open `http://<LAN IP>:3000` from a phone: it must fail. Start `tap dev --lan`: the TUI shows a `Network:` URL and a QR code, and the phone opens the presenter view. Start `tap dev --tunnel` without `--lan`: the tunnel URL works from the phone.
