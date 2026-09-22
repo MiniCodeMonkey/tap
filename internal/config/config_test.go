@@ -584,6 +584,41 @@ Some content here
 	}
 }
 
+func TestUpdateThemeInFile_LeavesTheDeckUnchangedWhenTheWriteFails(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("running as root, which ignores directory permissions")
+	}
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "deck.md")
+	content := "---\ntitle: Test\ntheme: paper\n---\n\n# Slide 1\n"
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatalf("Failed to write deck file: %v", err)
+	}
+
+	// A read-only directory stops the temp file UpdateThemeInFile creates
+	// next to the deck, simulating a write failure partway through.
+	if err := os.Chmod(dir, 0o500); err != nil {
+		t.Fatalf("Failed to chmod dir: %v", err)
+	}
+	defer os.Chmod(dir, 0o755)
+
+	if err := UpdateThemeInFile(path, "noir"); err == nil {
+		t.Fatal("UpdateThemeInFile() returned no error, want an error from the read-only directory")
+	}
+
+	if err := os.Chmod(dir, 0o755); err != nil {
+		t.Fatalf("Failed to restore dir permissions: %v", err)
+	}
+	result, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("Failed to read deck file: %v", err)
+	}
+	if string(result) != content {
+		t.Errorf("deck file changed after a failed write:\ngot:  %q\nwant: %q", result, content)
+	}
+}
+
 func TestLoad_IgnoresRemovedFrontmatterKeys(t *testing.T) {
 	// codeTheme and transitionDuration were removed from the Config struct.
 	// A deck that still sets them in frontmatter must keep parsing without

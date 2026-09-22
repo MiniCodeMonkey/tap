@@ -66,6 +66,41 @@ func TestInsertIntoFile(t *testing.T) {
 	}
 }
 
+func TestInsertIntoFileLeavesTheDeckUnchangedWhenTheWriteFails(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("running as root, which ignores directory permissions")
+	}
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "talk.md")
+	content := "# One\n\n---\n\n# Two\n"
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// A read-only directory stops the temp file InsertIntoFile creates next
+	// to the deck, simulating a write failure partway through.
+	if err := os.Chmod(dir, 0o500); err != nil {
+		t.Fatalf("Failed to chmod dir: %v", err)
+	}
+	defer os.Chmod(dir, 0o755)
+
+	if err := InsertIntoFile(path, 1, "![a](images/a.png)"); err == nil {
+		t.Fatal("InsertIntoFile() returned no error, want an error from the read-only directory")
+	}
+
+	if err := os.Chmod(dir, 0o755); err != nil {
+		t.Fatalf("Failed to restore dir permissions: %v", err)
+	}
+	got, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("Failed to read deck file: %v", err)
+	}
+	if string(got) != content {
+		t.Errorf("deck file changed after a failed write:\ngot:  %q\nwant: %q", got, content)
+	}
+}
+
 func TestAppendSlideAddsTheSeparatorAndTheSlide(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "talk.md")
 	if err := os.WriteFile(path, []byte("# One\n"), 0o644); err != nil {
