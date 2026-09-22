@@ -4,7 +4,7 @@ import { ProgressBar } from './ProgressBar';
 import { usePresentationStore, resetPresentation } from '$lib/stores/presentation';
 import type { Presentation } from '$lib/types';
 
-function makePresentation(slideCount: number): Presentation {
+function makePresentation(slideCount: number, skipped: number[] = []): Presentation {
 	return {
 		config: {},
 		slides: Array.from({ length: slideCount }, (_, index) => ({
@@ -14,7 +14,8 @@ function makePresentation(slideCount: number): Presentation {
 			slots: {},
 			slotOrder: [],
 			fragmentCount: 0,
-			steps: 0
+			steps: 0,
+			skip: skipped.includes(index)
 		}))
 	};
 }
@@ -63,5 +64,15 @@ describe('ProgressBar', () => {
 		expect(bar).toHaveAttribute('aria-valuenow', '3');
 		expect(bar).toHaveAttribute('aria-valuemin', '1');
 		expect(bar).toHaveAttribute('aria-valuemax', '10');
+	});
+
+	it('counts only the slides that are not skipped', () => {
+		usePresentationStore.setState({ presentation: makePresentation(5, [1]), currentSlideIndex: 2 });
+
+		const { container } = render(<ProgressBar />);
+
+		const fill = container.querySelector('.progress-bar-fill') as HTMLElement;
+		expect(fill.style.width).toBe('50%');
+		expect(container.querySelector('[role="progressbar"]')?.getAttribute('aria-valuemax')).toBe('4');
 	});
 });

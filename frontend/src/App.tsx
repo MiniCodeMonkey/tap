@@ -9,7 +9,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import {
 	usePresentationStore,
 	selectCurrentSlide,
-	selectTotalSlides,
+	selectPresentedSlideCount,
 	loadPresentation,
 	setupHashChangeListener
 } from '$lib/stores/presentation';
@@ -115,7 +115,7 @@ export default function App() {
 	const presentation = usePresentationStore((state) => state.presentation);
 	const currentSlide = usePresentationStore(selectCurrentSlide);
 	const currentSlideIndex = usePresentationStore((state) => state.currentSlideIndex);
-	const totalSlides = usePresentationStore(selectTotalSlides);
+	const totalSlides = usePresentationStore(selectPresentedSlideCount);
 	const currentFragmentIndex = usePresentationStore((state) => state.currentFragmentIndex);
 	const currentStep = usePresentationStore((state) => state.currentStep);
 	const scrollRevealed = usePresentationStore((state) => state.scrollRevealed);

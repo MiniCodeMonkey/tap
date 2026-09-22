@@ -9,7 +9,7 @@
  */
 
 import { useEffect, useState } from 'react';
-import { usePresentationStore, selectTotalSlides } from '$lib/stores/presentation';
+import { usePresentationStore, selectPresentedSlideCount, selectPresentedSlideNumber } from '$lib/stores/presentation';
 
 export interface SwipeFeedbackProps {
 	/** Which way the last swipe went, or null before the first one. */
@@ -28,7 +28,8 @@ const VISIBLE_MS = 900;
 
 export function SwipeFeedback({ direction, moved, nonce }: SwipeFeedbackProps) {
 	const currentIndex = usePresentationStore((state) => state.currentSlideIndex);
-	const total = usePresentationStore(selectTotalSlides);
+	const presentedNumber = usePresentationStore(selectPresentedSlideNumber);
+	const total = usePresentationStore(selectPresentedSlideCount);
 	const [visible, setVisible] = useState(false);
 
 	useEffect(() => {
@@ -58,7 +59,7 @@ export function SwipeFeedback({ direction, moved, nonce }: SwipeFeedbackProps) {
 				</span>
 			) : null}
 			<span className="swipe-feedback-position">
-				{moved ? `${currentIndex + 1} / ${total}` : direction === 'next' ? 'Last slide' : 'First slide'}
+				{moved ? `${presentedNumber ?? currentIndex + 1} / ${total}` : direction === 'next' ? 'Last slide' : 'First slide'}
 			</span>
 			{direction === 'next' ? (
 				<span className="swipe-feedback-arrow" aria-hidden="true">

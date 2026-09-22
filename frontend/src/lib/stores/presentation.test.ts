@@ -834,5 +834,23 @@ describe('presentation store', () => {
 			goToSlide(1);
 			expect(selectPresentedSlideNumber(state())).toBeNull();
 		});
+
+		it('leaves a viewer in place when every slide is skipped', () => {
+			loadPresentation(createTestPresentation(2, [{ skip: true }, { skip: true }]));
+			const state = () => usePresentationStore.getState();
+
+			expect(selectPresentedSlideCount(state())).toBe(0);
+			expect(selectPresentedSlideNumber(state())).toBeNull();
+
+			const startIndex = state().currentSlideIndex;
+			expect(goToFirstSlide()).toBe(false);
+			expect(state().currentSlideIndex).toBe(startIndex);
+			expect(goToLastSlide()).toBe(false);
+			expect(state().currentSlideIndex).toBe(startIndex);
+			expect(nextSlide()).toBe(false);
+			expect(state().currentSlideIndex).toBe(startIndex);
+			expect(prevSlide()).toBe(false);
+			expect(state().currentSlideIndex).toBe(startIndex);
+		});
 	});
 });

@@ -30,6 +30,8 @@ vi.mock('$lib/stores/presentation', () => ({
 	nextSlide: vi.fn(() => true),
 	prevSlide: vi.fn(() => true),
 	goToSlide: vi.fn(() => true),
+	goToFirstSlide: vi.fn(() => true),
+	goToLastSlide: vi.fn(() => true),
 	usePresentationStore: { getState: vi.fn(() => ({})) },
 	selectTotalSlides: vi.fn(() => 10),
 	cycleTheme: vi.fn()
@@ -137,7 +139,7 @@ describe('keyboard navigation', () => {
 	});
 
 	describe('navigation keys', () => {
-		it('should go to first slide on Home', () => {
+		it('should go to the first presented slide on Home', () => {
 			cleanup = setupKeyboardNavigation();
 
 			const event = new KeyboardEvent('keydown', { key: 'Home' });
@@ -147,11 +149,11 @@ describe('keyboard navigation', () => {
 				keydownHandler(event);
 			}
 
-			expect(presentationStore.goToSlide).toHaveBeenCalledWith(0);
+			expect(presentationStore.goToFirstSlide).toHaveBeenCalled();
 			expect(preventDefaultSpy).toHaveBeenCalled();
 		});
 
-		it('should go to last slide on End', () => {
+		it('should go to the last presented slide on End', () => {
 			cleanup = setupKeyboardNavigation();
 
 			const event = new KeyboardEvent('keydown', { key: 'End' });
@@ -161,7 +163,7 @@ describe('keyboard navigation', () => {
 				keydownHandler(event);
 			}
 
-			expect(presentationStore.goToSlide).toHaveBeenCalledWith(9); // 10 - 1
+			expect(presentationStore.goToLastSlide).toHaveBeenCalled();
 			expect(preventDefaultSpy).toHaveBeenCalled();
 		});
 	});

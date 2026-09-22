@@ -532,3 +532,19 @@
 		}
 	}
 }
+
+/* A skipped slide opened directly in tap dev. See Slide.tsx. */
+.slide-skipped-marker {
+	position: absolute;
+	top: 32px;
+	right: 32px;
+	z-index: 20;
+	padding: 10px 22px;
+	border-radius: 999px;
+	background: rgba(0, 0, 0, 0.72);
+	color: #fff;
+	font: 600 28px/1 Inter, system-ui, sans-serif;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	pointer-events: none;
+}
