@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -338,6 +339,34 @@ func TestApprovalIgnoresAnUnreadableSettingsFile(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "Ignoring") {
 		t.Errorf("output = %q, want the unreadable file named", out.String())
+	}
+}
+
+// TestApprovalPrintsTheAskersErrorRatherThanTreatingItAsANo confirms an
+// error reading the answer (a broken terminal, a closed pipe in app mode)
+// is distinguished from a plain no: the cause is printed, not dropped,
+// even though the outcome is the same fail-closed refusal either way.
+func TestApprovalPrintsTheAskersErrorRatherThanTreatingItAsANo(t *testing.T) {
+	cfg, pres := approvalFixture("shell")
+	failure := errors.New("reading standard input: broken pipe")
+	asker := &fakeAsker{err: failure}
+	input, out := approvalInputFor(t, cfg, pres, asker)
+
+	policy, err := liveCodeApproval(input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(policy.Drivers) != 0 || policy.AllowAll {
+		t.Errorf("policy = %+v, want nothing allowed", policy)
+	}
+	if !strings.Contains(out.String(), failure.Error()) {
+		t.Errorf("output = %q, want the asker's error named", out.String())
+	}
+	if strings.Contains(out.String(), "tap asks again next time.") {
+		t.Errorf("output = %q, want the error distinguished from a plain no", out.String())
+	}
+	if _, statErr := os.Stat(input.SettingsPath); !os.IsNotExist(statErr) {
+		t.Error("an asker error saved the settings file")
 	}
 }
 

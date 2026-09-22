@@ -145,8 +145,12 @@ func liveCodeApproval(input approvalInput) (server.LiveCodePolicy, error) {
 		return server.LiveCodePolicy{Drivers: approvedBefore}, nil
 	}
 
-	approved, err := input.Asker.askApproval(newApprovalRequest(deck, input.Config, blocks, wanted, approvedBefore))
-	if err != nil || !approved {
+	approved, askErr := input.Asker.askApproval(newApprovalRequest(deck, input.Config, blocks, wanted, approvedBefore))
+	if askErr != nil {
+		fmt.Fprintf(input.Out, "Live code is off for %s in this run: %v\n", joinWithAnd(wanted), askErr)
+		return server.LiveCodePolicy{Drivers: approvedBefore}, nil
+	}
+	if !approved {
 		fmt.Fprintf(input.Out, "Live code is off for %s in this run. tap asks again next time.\n", joinWithAnd(wanted))
 		return server.LiveCodePolicy{Drivers: approvedBefore}, nil
 	}
