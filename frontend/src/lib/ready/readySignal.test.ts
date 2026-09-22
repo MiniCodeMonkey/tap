@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { holdReady, resetBlockersForTests, type ReadyBlockerKind } from './blockers';
+import { BLOCKER_TIMEOUT_MS, holdReady, resetBlockersForTests, type ReadyBlockerKind } from './blockers';
 import type { ReadyProbes } from './probes';
 import { MAX_SETTLE_ROUNDS, READY_EVENT, clearReady, startReadyCycle, waitUntilSettled, type ReadyPayload } from './readySignal';
 
@@ -45,6 +45,7 @@ beforeEach(() => {
 
 afterEach(() => {
 	delete (window as unknown as ReadyWindow).webkit;
+	vi.useRealTimers();
 });
 
 describe('startReadyCycle', () => {
@@ -188,5 +189,32 @@ describe('waitUntilSettled', () => {
 
 		expect(settled).toBe(true);
 		expect(paint).toHaveBeenCalledTimes(2);
+	});
+
+	it('finishes as not settled within MAX_SETTLE_ROUNDS when a blocker is never released', async () => {
+		vi.useFakeTimers();
+		holdReady('component');
+
+		const settledPromise = waitUntilSettled(instantProbes(), () => false);
+		await vi.advanceTimersByTimeAsync(MAX_SETTLE_ROUNDS * BLOCKER_TIMEOUT_MS);
+
+		await expect(settledPromise).resolves.toBe(false);
+	});
+
+	it('settles once a blocker still held after one timeout is released', async () => {
+		vi.useFakeTimers();
+		let release: (() => void) | null = holdReady('component');
+		const fonts = vi.fn(() => {
+			if (fonts.mock.calls.length === 2) {
+				release?.();
+			}
+			return Promise.resolve();
+		});
+
+		const settledPromise = waitUntilSettled(instantProbes({ fonts }), () => false);
+		await vi.advanceTimersByTimeAsync(BLOCKER_TIMEOUT_MS);
+
+		await expect(settledPromise).resolves.toBe(true);
+		expect(fonts).toHaveBeenCalledTimes(2);
 	});
 });

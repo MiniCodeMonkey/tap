@@ -11,6 +11,14 @@ import { useLayoutEffect } from 'react';
 /** What a blocker waits on. */
 export type ReadyBlockerKind = 'fonts' | 'images' | 'map' | 'component' | 'error-card' | 'animations';
 
+/**
+ * How long whenNoBlockers waits for every blocker to release before giving
+ * up. The same as the longest probe timeout in probes.ts, so a stuck
+ * blocker never holds a settle round longer than a stuck probe already
+ * could.
+ */
+export const BLOCKER_TIMEOUT_MS = 5000;
+
 const held = new Map<number, ReadyBlockerKind>();
 const listeners = new Set<() => void>();
 let nextBlockerId = 1;
@@ -50,18 +58,27 @@ export function subscribeToBlockers(listener: () => void): () => void {
 	};
 }
 
-/** Resolves once no blocker is held. */
-export function whenNoBlockers(): Promise<void> {
+/**
+ * Resolves once no blocker is held, or after `timeoutMs`, whichever comes
+ * first. A blocker that is never released gives up instead of waiting
+ * forever, so a settle round always ends.
+ */
+export function whenNoBlockers(timeoutMs: number): Promise<void> {
 	if (held.size === 0) {
 		return Promise.resolve();
 	}
 	return new Promise((resolve) => {
+		const timer = setTimeout(finish, timeoutMs);
 		const unsubscribe = subscribeToBlockers(() => {
 			if (held.size === 0) {
-				unsubscribe();
-				resolve();
+				finish();
 			}
 		});
+		function finish(): void {
+			clearTimeout(timer);
+			unsubscribe();
+			resolve();
+		}
 	});
 }
 

@@ -10,7 +10,7 @@
  * of steps taken on that slide.
  */
 
-import { heldBlockers, whenNoBlockers } from './blockers';
+import { BLOCKER_TIMEOUT_MS, heldBlockers, whenNoBlockers } from './blockers';
 import type { ReadyProbes } from './probes';
 
 export interface ReadyPayload {
@@ -22,7 +22,12 @@ export interface ReadyPayload {
 /** The event dispatched on window when a slide has settled. */
 export const READY_EVENT = 'tap:ready';
 
-/** A cycle publishes after this many rounds even if fonts keep starting to load. */
+/**
+ * A cycle runs at most this many rounds before giving up. Every wait a
+ * round makes, including a held blocker's (see BLOCKER_TIMEOUT_MS), times
+ * out on its own, so this cap is always reached even if fonts keep
+ * starting to load or a blocker is never released.
+ */
 export const MAX_SETTLE_ROUNDS = 20;
 
 interface ReadyWindow {
@@ -69,7 +74,7 @@ export async function waitUntilSettled(probes: ReadyProbes, isCancelled: () => b
 	for (let round = 0; round < MAX_SETTLE_ROUNDS; round += 1) {
 		await probes.fonts();
 		await probes.images();
-		await whenNoBlockers();
+		await whenNoBlockers(BLOCKER_TIMEOUT_MS);
 		await probes.animations();
 		await probes.paint();
 		if (isCancelled()) {

@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { cleanup, render } from '@testing-library/react';
 import {
+	BLOCKER_TIMEOUT_MS,
 	heldBlockers,
 	holdReady,
 	resetBlockersForTests,
@@ -45,7 +46,7 @@ describe('blockers', () => {
 		const releaseFirst = holdReady('component');
 		const releaseSecond = holdReady('map');
 		let resolved = false;
-		const waiting = whenNoBlockers().then(() => {
+		const waiting = whenNoBlockers(BLOCKER_TIMEOUT_MS).then(() => {
 			resolved = true;
 		});
 
