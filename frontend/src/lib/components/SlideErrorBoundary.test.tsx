@@ -34,7 +34,7 @@ describe('SlideErrorBoundary', () => {
 			expect(container.querySelector('.deck-error-marker')?.textContent).toBe('component error');
 
 			// The full, visible card (no ?present=true) carries the same
-			// attribute: `tap pdf` reads data-message first (see
+			// attribute: `tap export pdf` reads data-message first (see
 			// ErrorCardSelector in internal/pdf/capture.go) so its warning
 			// never falls back to concatenating the card's own text nodes.
 			cleanup();

@@ -18,7 +18,7 @@ export interface SlideCanvasProps {
 	fullscreen?: boolean;
 	/**
 	 * True for a PDF export pass (`?print=true`) or a settled screenshot
-	 * capture (`tap screenshot`, without `--wait` - see App.tsx's SETTLE).
+	 * capture (`tap export images`, without `--wait` - see App.tsx's SETTLE).
 	 * Applied as data-print on the same element as data-theme, so a
 	 * theme's CSS can turn its own animations and transitions off without
 	 * any JS of its own.

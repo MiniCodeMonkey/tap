@@ -14,7 +14,7 @@ describe('isDevRuntime', () => {
 		expect(isDevRuntime()).toBe(true);
 	});
 
-	it('is true when the page has no #presentation-data element (a live server: tap dev, tap pdf, tap screenshot)', () => {
+	it('is true when the page has no #presentation-data element (a live server: tap dev, tap export pdf, tap export images)', () => {
 		(import.meta.env as { DEV: boolean }).DEV = false;
 		expect(document.getElementById('presentation-data')).toBeNull();
 		expect(isDevRuntime()).toBe(true);

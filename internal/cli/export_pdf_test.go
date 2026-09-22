@@ -48,7 +48,7 @@ func TestExportPDFMissingDeckIsAUserError(t *testing.T) {
 // TestPrepareDeck_ServesComponentBundles checks that the server prepareDeck
 // starts (see internal/cli/deck.go) actually serves every component bundle
 // file the deck's components resolve to, at status 200 - the bug this test
-// guards against is tap pdf never registering those bundles on its
+// guards against is tap export pdf never registering those bundles on its
 // temporary server, so a PDF's component slides showed a "component not
 // resolved" error card even though the components built fine. Needs no
 // browser, so it runs unconditionally.

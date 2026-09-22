@@ -95,7 +95,7 @@ tap theme list                       # every theme
 tap theme show blueprint             # tokens and illustration style
 tap theme show blueprint --json
 tap theme show blueprint --prompt    # style brief for an image model
-tap theme show --deck deck.md --prompt
+tap theme show deck.md --prompt
 ```
 
 A deck component reads the same values at run time with `useTheme()`. Put

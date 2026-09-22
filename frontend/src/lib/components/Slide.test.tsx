@@ -273,7 +273,7 @@ describe('Slide', () => {
 		// (see $lib/utils/runtime), which also checks for the
 		// #presentation-data element a static build's index.html embeds (see
 		// internal/builder/builder.go). Without it, this render would still
-		// count as a live server (tap dev, tap pdf, tap screenshot) and show
+		// count as a live server (tap dev, tap export pdf, tap export images) and show
 		// the error card, per the ruling that a broken slide must be visible
 		// as broken everywhere except a static build.
 		const originalDev = import.meta.env.DEV;

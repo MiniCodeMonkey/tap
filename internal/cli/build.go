@@ -198,7 +198,7 @@ func stderrIsTerminal() bool {
 
 // start begins the spinner animation, writing to standard error - progress
 // output, not a command's result, which only ever belongs on standard
-// output (see tap build and tap pdf's own success lines). It draws
+// output (see tap build and tap export pdf's own success lines). It draws
 // nothing at all when standard error is not a terminal (redirected to a
 // file, piped, or running in CI): a spinner frame with no terminal to
 // erase it just leaves a stream of "\r..." noise behind.

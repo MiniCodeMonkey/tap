@@ -71,7 +71,7 @@ export function useStep(): { step: number; steps: number } {
 
 /**
  * Whether this render should settle, without animation: PDF export, a
- * thumbnail/preview, or a `tap screenshot` capture (without `--wait`).
+ * thumbnail/preview, or a `tap export images` capture (without `--wait`).
  * PDF export and a preview always pair this with the final step (see
  * useStep()); a screenshot capture pairs it with the REQUESTED step
  * instead - `usePrintMode()` only says "don't animate getting there",
@@ -103,7 +103,7 @@ interface StepProps {
  * `printMode` never overrides this: a true print export or a preview
  * already receives `step` forced to the slide's final step count (see
  * LayoutComponent.tsx), so it settles into "the final step's state" on its
- * own; a settled screenshot capture (`tap screenshot`, without `--wait`)
+ * own; a settled screenshot capture (`tap export images`, without `--wait`)
  * pairs `printMode` with the REQUESTED step instead, and a Step must
  * honor that request the same as it would live, just without animating.
  */

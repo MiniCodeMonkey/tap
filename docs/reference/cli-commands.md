@@ -18,13 +18,13 @@ Run `tap --help` to see all available commands, or `tap <command> --help` for co
 
 ## tap new
 
-Create a new presentation. With a terminal attached, `tap new` opens an interactive wizard that walks you through a title, a theme, and a filename; the flags pre-fill those steps. With `--yes` (or `-y`), or with no terminal attached to standard input, the wizard is skipped: the file is written straight from the flags, with defaults for anything not given, and only the written path goes to standard output. This is the mode for scripts, CI, and LLM agents.
+Create a new presentation. `[deck]` is the path of the new deck, the same as `--output`. With a terminal attached, `tap new` opens an interactive wizard that walks you through a title, a theme, and a filename; the flags pre-fill those steps. With `--yes` (or `-y`), or with no terminal attached to standard input, the wizard is skipped: the file is written straight from the flags, with defaults for anything not given, and only the written path goes to standard output. This is the mode for scripts, CI, and LLM agents.
 
 ### Usage
 
 ```bash
 tap new
-tap new --yes [--title <title>] [--theme <slug>] [--output <file>] [--force]
+tap new [deck] --yes [--title <title>] [--theme <slug>] [--output <file>] [--force]
 ```
 
 ### Flags
@@ -36,6 +36,7 @@ tap new --yes [--title <title>] [--theme <slug>] [--output <file>] [--force]
 | `--output <file>` | `-o` | Output filename (default: derived from the title, for example `my-talk.md`) |
 | `--yes` | `-y` | Skip the wizard and write the file from flags and defaults |
 | `--force` | | Overwrite `--output` if it already exists (non-interactive mode only) |
+| `--json` | | Print the written deck as JSON (skips the wizard) |
 
 ### Examples
 
@@ -57,6 +58,12 @@ tap new --yes --output talk.md --force
 ```
 
 Non-interactive mode refuses to overwrite an existing `--output` file unless `--force` is given. With no terminal attached to standard input, `tap new` behaves as if `--yes` was passed, so it never hangs waiting on the wizard.
+
+### `--json`
+
+```json
+{"ok": true, "deck": "talk.md"}
+```
 
 ### Output
 
@@ -98,7 +105,7 @@ Start the development server with live reload and live code execution for real-t
 ### Usage
 
 ```bash
-tap dev [file]
+tap dev [deck]
 ```
 
 ### Flags
@@ -106,10 +113,17 @@ tap dev [file]
 | Flag | Short | Description |
 |------|-------|-------------|
 | `--port <number>` | `-p` | Port to serve on (default: `3000`) |
+| `--lan` | | Listen on the local network too, so a phone on the same network can open the presenter view. Without it, only this machine can connect |
 | `--presenter-password <pass>` | | Password gating the presenter view and `/qr`, and gating who may drive other windows. Any characters are allowed |
 | `--allow-origin <value>` | | An additional origin (`scheme://host:port`) allowed to connect to the websocket hub, **or** a host (`host:port`) allowed in a request's `Host` header. Repeatable |
 | `--tunnel` | | Also serve the deck on a public `https` URL through a Cloudflare Quick Tunnel. Needs `cloudflared`; no Cloudflare account |
 | `--headless` | | Run without the terminal UI, for testing/automation |
+
+The server listens on this machine only, unless `--lan` opens it to the
+local network. With `--lan`, the terminal shows a `Network:` presenter URL
+and a QR code for it. `--tunnel` works without `--lan` and shows its own
+QR code instead. `/qr` needs `--lan`: without it, its network URLs would
+not work, and the endpoint answers 404.
 
 #### Sharing a deck with `--tunnel`
 
@@ -162,9 +176,10 @@ the allow list. A rejected one is logged, for example
 private, or allowed host`.
 
 ::: warning Reaching tap through a custom name or a tunnel
-LAN IP addresses, `localhost`, and `.local` names work with no flag. A
-custom DNS name, or a tunnel such as an ngrok or Tailscale hostname, does
-not: pass it with `--allow-origin`, repeating the flag for each one.
+LAN IP addresses, `localhost`, and `.local` names pass the `Host` check
+with no `--allow-origin` flag, but still need `--lan` to be reachable at
+all. A custom DNS name, or a tunnel such as an ngrok or Tailscale
+hostname, needs `--allow-origin`, repeating the flag for each one.
 
 ```bash
 tap dev slides.md --allow-origin talk.example.com
@@ -216,6 +231,38 @@ When the dev server starts, it provides:
 
 ---
 
+## tap present
+
+Serve the deck for a talk or a practice run of it. Unlike `tap dev`, `tap present` does not reload when files change (press `r` to reload), opens the slides at launch, and leaves out the keys that edit the deck. If you opt in the first time you run it, every `tap present` run is recorded from launch until you quit, following the projector across HDMI swaps.
+
+### Usage
+
+```bash
+tap present [deck]
+```
+
+### Flags
+
+| Flag | Short | Description |
+|------|-------|-------------|
+| `--port <number>` | `-p` | Port to serve on (default: `3000`) |
+| `--lan` | | Listen on the local network too, so a phone on the same network can open the presenter view. Without it, only this machine can connect |
+| `--no-record` | | Do not record this run |
+
+The server listens on this machine only, unless `--lan` opens it to the
+local network, the same as `tap dev`.
+
+### Examples
+
+```bash
+tap present                        # The deck in this folder
+tap present slides.md
+tap present slides.md --no-record  # Skip recording for this run
+tap present slides.md --lan        # Let a phone on the same network connect
+```
+
+---
+
 ## tap build
 
 Build a production-ready static version of your presentation.
@@ -223,7 +270,7 @@ Build a production-ready static version of your presentation.
 ### Usage
 
 ```bash
-tap build <file>
+tap build [deck]
 ```
 
 ### Flags
@@ -231,6 +278,7 @@ tap build <file>
 | Flag | Short | Description |
 |------|-------|-------------|
 | `--output <dir>` | `-o` | Output directory (default: `dist`) |
+| `--json` | | Print the result as JSON |
 
 ### Behavior
 
@@ -246,6 +294,12 @@ tap build slides.md
 
 # Build to a custom directory
 tap build slides.md --output ./public
+```
+
+### `--json`
+
+```json
+{"ok": true, "output": "dist", "files": 12, "bytes": 483920}
 ```
 
 ::: warning
@@ -292,22 +346,23 @@ Use `tap serve` to verify your production build before deploying. This catches i
 
 ---
 
-## tap pdf
+## tap export pdf
 
 Export your presentation to PDF format.
 
 ### Usage
 
 ```bash
-tap pdf <file>
+tap export pdf [deck]
 ```
 
 ### Flags
 
 | Flag | Short | Description |
 |------|-------|-------------|
-| `--output <file>` | `-o` | Output PDF file path (default: `<input>.pdf`) |
+| `--output <file>` | `-o` | Output PDF file path (default: `<deck>.pdf`) |
 | `--content <type>` | | Content to include: `slides`, `notes`, or `both` (default: `slides`) |
+| `--json` | | Print the result as JSON |
 
 ### Content Types
 
@@ -321,21 +376,21 @@ tap pdf <file>
 
 ```bash
 # Basic PDF export
-tap pdf slides.md
+tap export pdf slides.md
 
 # Custom output filename
-tap pdf slides.md --output quarterly-review.pdf
+tap export pdf slides.md --output quarterly-review.pdf
 
 # Export slides with notes (handout format)
-tap pdf slides.md --content both
+tap export pdf slides.md --content both
 
 # Export notes only (speaker script)
-tap pdf slides.md --content notes
+tap export pdf slides.md --content notes
 ```
 
 ### Behavior
 
-`tap pdf` exits with status **130** on Ctrl-C or SIGTERM, after finishing
+`tap export pdf` exits with status **130** on Ctrl-C or SIGTERM, after finishing
 its cleanup, printing `interrupted` on standard error. This holds whether
 the signal reaches the process directly or the terminal signals the whole
 process group. A second Ctrl-C during that cleanup exits at once, so a
@@ -344,17 +399,17 @@ is written to standard error and draws nothing when standard error is not a
 terminal, so standard output holds only the result lines; warnings print
 after the spinner has stopped.
 
-Each slide is exported in its final state: every fragment revealed, every step at its last value, and no animation. Deck components are built and registered the same way `tap screenshot` does it, so a component appears in the PDF with `printMode = true` and `step = steps`.
+Each slide is exported in its final state: every fragment revealed, every step at its last value, and no animation. Deck components are built and registered the same way `tap export images` does it, so a component appears in the PDF with `printMode = true` and `step = steps`.
 
 Page size follows the deck's own `aspectRatio`.
 
-`tap pdf` exits with status 1, writing no PDF, when a deck component fails to build. It prints the same line `tap build` and `tap screenshot` do:
+`tap export pdf` exits with status 1, writing no PDF, when a deck component fails to build. It prints the same line `tap build` and `tap export images` do:
 
 ```
 error: slides/RollingDeploy.jsx:12:8: Expected ")" but found "}"
 ```
 
-A slide that shows an error card at export time, such as a component that throws while rendering, is still written to the PDF. `tap pdf` prints one line per affected slide to standard error and exits 0:
+A slide that shows an error card at export time, such as a component that throws while rendering, is still written to the PDF. `tap export pdf` prints one line per affected slide to standard error and exits 0:
 
 ```
 warning: slide 4 shows an error card: component blew up on purpose
@@ -367,34 +422,47 @@ rather than only where.
 PDF export captures your presentation at export time. If you have live code execution, the results shown are whatever was displayed when you ran the export.
 :::
 
+### `--json`
+
+```json
+{"ok": true, "output": "slides.pdf", "pages": 24, "bytes": 1048576, "brokenSlides": []}
+```
+
+`brokenSlides` lists any slide that showed an error card at export time, with its 1-based slide number and the card's message:
+
+```json
+{"ok": true, "output": "slides.pdf", "pages": 24, "bytes": 1048576, "brokenSlides": [{"slide": 4, "message": "component blew up on purpose"}]}
+```
+
 ---
 
-## tap screenshot
+## tap export images
 
-Render one slide, or every slide, to a PNG. Tap starts a temporary server and drives the same headless Chromium `tap pdf` uses. It is built for checking a slide you just wrote, by hand or from a script.
+Render one slide, or every slide, to a PNG. Tap starts a temporary server and drives the same headless Chromium `tap export pdf` uses. It is built for checking a slide you just wrote, by hand or from a script.
 
 ### Usage
 
 ```bash
-tap screenshot <file> [flags]
+tap export images [deck] [flags]
 ```
 
 ### Flags
 
-| Flag | Description |
-|------|-------------|
-| `--slide <n>` | One-based slide number to capture. Required unless `--all` |
-| `--all` | Capture every slide's final state into a folder instead of one slide |
-| `--step <k>` | Presenter step to render, without print mode |
-| `--fragment <k>` | Fragment index to render, without print mode (default `-1`) |
-| `--theme <slug>` | Theme slug to render with, instead of the deck's own theme |
-| `--out <path>` | Output PNG file, or output folder with `--all`. Default derived from the deck's file name |
-| `--wait <ms>` | Keep the capture live and wait this long after the page is ready, instead of settling it (`0` to `60000`) |
-| `--width <px>` | Viewport width in pixels; height follows the deck's aspect ratio (default `1920`) |
+| Flag | Short | Description |
+|------|-------|-------------|
+| `--slide <n>` | | One-based slide number to capture. Required unless `--all` |
+| `--all` | | Capture every slide's final state into a folder instead of one slide |
+| `--step <k>` | | Render the slide after this many steps, from 0 (default: the final step) |
+| `--fragment <k>` | | Render the slide with this many fragments shown, from 0 (default: all) |
+| `--theme <slug>` | `-t` | Theme slug to render with, instead of the deck's own theme |
+| `--output <path>` | `-o` | Output PNG file, or output folder with `--all`. Default derived from the deck's file name |
+| `--wait <ms>` | | Keep the capture live and wait this long after the page is ready, instead of settling it (`0` to `60000`) |
+| `--width <px>` | | Viewport width in pixels; height follows the deck's aspect ratio (default `1920`) |
+| `--json` | | Print the written files as JSON |
 
 ### Behavior
 
-With neither `--step` nor `--fragment`, the slide renders its final state through print mode, exactly as `tap pdf` would.
+With neither `--step` nor `--fragment`, the slide renders its final state through print mode, exactly as `tap export pdf` would.
 
 With either flag, the slide renders that exact presenter state, **settled**: the requested step or fragment, with every component and theme animation given its finished appearance rather than caught partway through. The step is not moved to the deck's final value the way true print mode moves it.
 
@@ -418,52 +486,65 @@ Error: slide 2 shows an error card: component blew up on purpose
 
 ```bash
 # Final state of slide 12
-tap screenshot deck.md --slide 12
+tap export images deck.md --slide 12
 
-# Slide 12 at presenter step 3, settled
-tap screenshot deck.md --slide 12 --step 3
+# Slide 12 after its third step, settled
+tap export images deck.md --slide 12 --step 3
 
 # Live, 400ms past readiness, for a timer-driven animation
-tap screenshot deck.md --slide 12 --step 3 --wait 400
+tap export images deck.md --slide 12 --step 3 --wait 400
 
 # Custom output file
-tap screenshot deck.md --slide 12 --out slide.png
+tap export images deck.md --slide 12 --output slide.png
 
 # Every slide's final state into a folder
-tap screenshot deck.md --all --out shots/
+tap export images deck.md --all --output shots/
 
 # Render with a specific theme
-tap screenshot deck.md --slide 3 --theme bauhaus
+tap export images deck.md --slide 3 --theme bauhaus
 
 # Use the exit status as a self-check
-tap screenshot deck.md --slide 2 --out check.png || echo "slide 2 is broken"
+tap export images deck.md --slide 2 --output check.png || echo "slide 2 is broken"
+```
+
+### `--json`
+
+```json
+{"ok": true, "files": ["slide-012.png"]}
 ```
 
 ---
 
-## tap add
+## tap slide add
 
-Add a new slide to an existing presentation interactively.
+Add a new slide to an existing presentation interactively. It needs a terminal.
 
 ### Usage
 
 ```bash
-tap add [file]
+tap slide add [deck]
+```
+
+### Examples
+
+```bash
+tap slide add              # The deck in this folder
+tap slide add talk.md      # A specific deck
 ```
 
 ---
 
-## tap add component
+## tap component new
 
 Scaffold a deck-supplied React component from a template. See [Custom Components](/guide/custom-components).
 
 ### Usage
 
 ```bash
-tap add component <Name> [flags]
+tap component new <Name> [deck] [flags]
 ```
 
-`<Name>` must be a PascalCase identifier, for example `RollingDeploy`. The command refuses to overwrite an existing file.
+`<Name>` must be a PascalCase identifier, for example `RollingDeploy`. `[deck]` is a deck file or a deck folder; the default is the current folder. The command refuses to overwrite an existing file.
 
 ### Flags
 
@@ -471,7 +552,7 @@ tap add component <Name> [flags]
 |------|-------------|
 | `--inline` | Scaffold an inline block component instead of a whole-slide one |
 | `--ts` | Write a `.tsx` file, plus `tap-env.d.ts` and `tap-shims.d.ts` next to the deck |
-| `--deck <path>` | The deck the component belongs to. A file uses its folder; a **directory** is used as the deck folder itself. Default: the current directory |
+| `--json` | Print the written files and the snippet as JSON |
 
 Without `--inline`, the file goes to `slides/<Name>.jsx`. With `--inline`, it goes to `components/<Name>.jsx`. With `--ts`, the extension is `.tsx`, and the two declaration files are written only when they do not already exist. `tap-shims.d.ts` is skipped when `node_modules/@types/react` exists next to the deck or above it.
 
@@ -480,10 +561,16 @@ The command prints the files it wrote, then the markdown snippet to paste into t
 ### Examples
 
 ```bash
-tap add component RollingDeploy                  # slides/RollingDeploy.jsx
-tap add component LatencyDrop --inline           # components/LatencyDrop.jsx
-tap add component RollingDeploy --ts             # slides/RollingDeploy.tsx
-tap add component RollingDeploy --deck deck.md   # relative to deck.md's folder
+tap component new RollingDeploy                # slides/RollingDeploy.jsx
+tap component new LatencyDrop --inline         # components/LatencyDrop.jsx
+tap component new RollingDeploy --ts           # slides/RollingDeploy.tsx
+tap component new RollingDeploy talks/deck.md  # next to talks/deck.md
+```
+
+### `--json`
+
+```json
+{"ok": true, "files": ["slides/RollingDeploy.jsx"], "snippet": "::component RollingDeploy\n"}
 ```
 
 ---
@@ -499,19 +586,30 @@ tap theme list
 tap theme list --json
 ```
 
-Prints every built-in theme's slug, name, polarity, and pitch as a table, or as a JSON array with `--json`.
+| Flag | Description |
+|------|-------------|
+| `--json` | Print the list as JSON |
+
+Prints every built-in theme's slug, name, polarity, and pitch as a table, or with `--json`.
+
+#### `--json`
+
+```json
+{"ok": true, "themes": [{"slug": "terminal", "name": "Terminal", "polarity": "dark", "pitch": "..."}]}
+```
 
 ### tap theme show
 
 ```bash
-tap theme show <slug> [flags]
+tap theme show [slug|deck] [flags]
 ```
 
 | Flag | Description |
 |------|-------------|
 | `--json` | Print the theme as JSON |
 | `--prompt` | Print a style brief for an image model |
-| `--deck <file>` | Read the theme from that deck's frontmatter instead of naming a slug |
+
+The argument is a theme slug, or a deck file or folder whose theme to show. With no argument, tap uses the deck in the current folder.
 
 Without a flag, prints the theme's name, polarity, pitch, colors, fonts, motion, spacing tokens, and illustration style.
 
@@ -524,26 +622,46 @@ tap theme list
 tap theme show terminal
 tap theme show terminal --json
 tap theme show blueprint --prompt
-tap theme show --deck slides.md --prompt
+tap theme show slides.md --prompt
+```
+
+#### `--json`
+
+```json
+{"ok": true, "slug": "terminal", "name": "Terminal", "polarity": "dark", "pitch": "...", "tokens": {"...": "..."}, "illustration": {"...": "..."}, "canvas": {"ratio": "16:9", "width": 1920, "height": 1080}}
 ```
 
 ---
 
-## Global Flags
+## Conventions
 
-| Flag | Short | Description |
-|------|-------|-------------|
-| `--verbose` | `-v` | Enable verbose output |
+These hold across every command.
+
+- `[deck]` is optional. It is a deck file or a folder. With no deck, tap
+  uses the only deck in the current folder, opens a picker on a terminal,
+  or exits with the list of decks.
+- `--output/-o`, `--theme/-t`, `--port/-p`, `--yes/-y` and `--json` mean
+  the same thing on every command that has them.
+- `--json` prints `{"ok": true, ...}` or `{"ok": false, "error": {"code":
+  "...", "message": "..."}}`. See each command's own `--json` section for
+  its result fields.
+- Numbers are 1-based. `--step N` is the slide after N steps, `--fragment
+  N` is the slide with N fragments shown, `0` is the state before the
+  first one, and a flag you leave out means the final state.
+- Exit codes: `0` success, `1` a problem you can fix, `2` a problem in tap
+  or its environment, `130` interrupted.
+- The old names `tap pdf`, `tap screenshot`, `tap add` and `tap add
+  component` print the new name and exit 1.
 
 ## Output Streams
 
 Every command writes its real output to standard output and its errors and
 warnings to standard error. A script can therefore read, for example,
-`tap screenshot`'s written paths without filtering diagnostics out of them.
+`tap export images`'s written paths without filtering diagnostics out of them.
 
 Commands exit with status 1 on failure. `tap build` fails on an unknown
 layout, an undeclared slot, or a deck component that does not build;
-`tap screenshot` also fails on an out-of-range slide, step, or fragment, an
+`tap export images` also fails on an out-of-range slide, step, or fragment, an
 unknown theme, or a rendered slide that shows an error card.
 
 ---
@@ -552,16 +670,17 @@ unknown theme, or a rendered slide that shows an error card.
 
 | Command | Description | Example |
 |---------|-------------|---------|
-| `tap new` | Create a new presentation (wizard, or non-interactive with `--yes`) | `tap new --yes --theme terminal --output talk.md` |
-| `tap dev [file]` | Start dev server | `tap dev slides.md` |
-| `tap build <file>` | Build for production | `tap build slides.md` |
+| `tap new [deck]` | Create a new presentation (wizard, or non-interactive with `--yes`) | `tap new --yes --theme terminal --output talk.md` |
+| `tap dev [deck]` | Start dev server | `tap dev slides.md` |
+| `tap present [deck]` | Give the talk: serve, open, and record the run | `tap present slides.md` |
+| `tap build [deck]` | Build for production | `tap build slides.md` |
 | `tap serve [dir]` | Serve built files | `tap serve dist` |
-| `tap pdf <file>` | Export to PDF | `tap pdf slides.md` |
-| `tap screenshot <file>` | Render a slide to a PNG | `tap screenshot slides.md --slide 4` |
-| `tap add [file]` | Add a slide interactively | `tap add slides.md` |
-| `tap add component <Name>` | Scaffold a deck component | `tap add component RollingDeploy` |
+| `tap export pdf [deck]` | Export to PDF | `tap export pdf slides.md` |
+| `tap export images [deck]` | Render a slide to a PNG | `tap export images slides.md --slide 4` |
+| `tap slide add [deck]` | Add a slide interactively | `tap slide add slides.md` |
+| `tap component new <Name> [deck]` | Scaffold a deck component | `tap component new RollingDeploy` |
 | `tap theme list` | List every built-in theme | `tap theme list --json` |
-| `tap theme show <slug>` | Show a theme's tokens and style | `tap theme show blueprint --prompt` |
+| `tap theme show [slug\|deck]` | Show a theme's tokens and style | `tap theme show blueprint --prompt` |
 
 ---
 

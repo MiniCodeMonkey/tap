@@ -125,7 +125,7 @@ my-presentation/
 2. **Check fonts** - Ensure fonts render at presentation distance
 3. **Verify images** - All paths resolve correctly
 4. **Test presenter mode** - Notes visible at `/presenter`
-5. **Export backup PDF** - `tap pdf slides.md` just in case
+5. **Export backup PDF** - `tap export pdf slides.md` just in case
 6. **Check transitions** - Smooth on target hardware
 7. **Prepare offline** - Build with `tap build` if network uncertain
 

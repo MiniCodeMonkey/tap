@@ -119,7 +119,7 @@ Subject: four app servers behind a load balancer, one of them restarting.
 
 The result sits on the slide instead of fighting it: the palette matches,
 the background blends, and nothing arrives with a gradient the theme never
-uses. If you already know the deck, `tap theme show --deck slides.md
+uses. If you already know the deck, `tap theme show slides.md
 --prompt` reads the theme from its frontmatter.
 
 See [Theme Tokens](/guide/themes#theme-tokens) for the same values as CSS

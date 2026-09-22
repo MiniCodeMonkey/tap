@@ -1,6 +1,6 @@
 /**
- * Whether this render is server-backed (`tap dev`, `tap pdf`, `tap
- * screenshot`, or the frontend's own `npm run dev`) rather than a static
+ * Whether this render is server-backed (`tap dev`, `tap export pdf`, `tap
+ * export images`, or the frontend's own `npm run dev`) rather than a static
  * `tap build` output. The embedded frontend (embedded/dist) is always a
  * production Vite build, so `import.meta.env.DEV` is always false when it
  * runs inside the real `tap` binary - the signal that actually distinguishes

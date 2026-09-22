@@ -30,8 +30,8 @@ tap new --theme terminal -o my-talk.md   # same wizard, with those steps pre-fil
 tap new --yes --title "My Talk" --theme terminal --output my-talk.md   # no wizard, scriptable
 tap dev my-talk.md                 # start the dev server (live code execution works here)
 tap build my-talk.md               # build a static site (no live code execution)
-tap pdf my-talk.md                 # export to PDF
-tap screenshot my-talk.md --slide 4 --out check.png   # render one slide, exit 1 if it is broken
+tap export pdf my-talk.md                 # export to PDF
+tap export images my-talk.md --slide 4 --output check.png   # render one slide, exit 1 if it is broken
 tap theme list                     # every built-in theme
 tap theme show terminal --prompt   # style brief for an image model
 ```
@@ -42,7 +42,7 @@ unattended agent should pass `--yes` instead (or rely on it automatically:
 which writes the file straight from `--title`, `--theme`, and `--output`
 with no wizard.
 
-Check your own work by rendering it: `tap screenshot` exits with status 1
+Check your own work by rendering it: `tap export images` exits with status 1
 when a slide shows an error card, and `tap build` exits 1 on any component
 build error. Neither needs a browser window.
 
@@ -260,4 +260,4 @@ Detailed rules live under `skills/tap/rules/`:
 13. **ai-images** - AI image generation from prompts
 14. **asciinema** - Asciinema terminal recording playback
 15. **map-animations** - Animated map slides
-16. **components** - Deck-supplied React components, `tap add component`, `tap screenshot`
+16. **components** - Deck-supplied React components, `tap component new`, `tap export images`

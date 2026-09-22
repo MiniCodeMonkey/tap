@@ -10,6 +10,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+### Security
+
+- **Only the deck's own code runs** - `/api/execute` runs a request only when its driver, connection and code are a live code block in the loaded deck, and answers 403 otherwise. With `--lan` or `--tunnel` other devices can reach the server, and a client outside a browser can send any `Origin` header, so the same-origin check alone does not stop other code.
+
+- **`tap dev` and `tap present` listen on this machine only** - They used to listen on every network interface, so any device on the same network could open the deck, and could call `/api/execute`. They now listen on `127.0.0.1`. Pass `--lan` to let a phone on the same network open the presenter view. The terminal then shows the network URL and a QR code for it. `--tunnel` works without `--lan`. `/qr` answers 404 without `--lan`, because its network URLs would not work.
+
+### Fixed
+
+- **Live code runs in `tap dev` and `tap present`** - The Run button answered "Driver registry not configured" in every real run. Both commands now load the built-in drivers and the deck's custom `drivers:`, run them in the deck's folder, and reload them when the deck changes.
+
+### Changed
+
+- **Commands are grouped by noun** - `tap pdf` is now `tap export pdf`, `tap screenshot` is `tap export images`, `tap add` is `tap slide add`, and `tap add component` is `tap component new`. The old names print the new one and exit 1. There are no aliases.
+- **Every command finds the deck the same way** - `[deck]` is optional on `dev`, `present`, `build`, `new`, `export pdf`, `export images`, `slide add`, `component new` and `theme show`. It takes a file or a folder. With no deck, tap uses the only deck in the folder, opens a picker on a terminal, or exits with the list of decks. `--deck` is removed from `component new` and `theme show`.
+- **One set of flags** - `--output/-o` replaces `tap screenshot --out`, and `export images` gets `-t` for `--theme`. The unused global `--verbose` flag is removed.
+- **`--step` and `--fragment` are 1-based** - `tap export images --step 2` renders the slide after its second step, and `--fragment 1` shows the first fragment. A flag you leave out means the final state. `--fragment` used to count from 0.
+- **One `--json` shape** - `new`, `build`, `export pdf`, `export images`, `component new`, `theme list` and `theme show` print `{"ok": true, ...}` or `{"ok": false, "error": {"code", "message"}}`. `tap theme list --json` used to print a bare array. It now prints `{"ok": true, "themes": [...]}`.
+- **Exit codes** - 0 on success, 1 for a problem you can fix, 2 for a problem in tap or its environment, and 130 when interrupted.
+
 ## [2.0.0-rc.1] - 2026-09-21
 
 ### Added

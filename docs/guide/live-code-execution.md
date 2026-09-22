@@ -25,6 +25,12 @@ This is perfect for:
 Live code execution only works when using `tap dev`. Static builds created with `tap build` will show the code blocks but won't execute them. This is by design for security and portability.
 :::
 
+## What tap runs
+
+`tap dev` and `tap present` run only the live code blocks that are in the
+loaded deck. A request to run any other driver, connection, or code gets
+403. `tap build` and `tap export` never run code.
+
 ## The Driver Concept
 
 Tap uses **drivers** to execute code. A driver is a connector that knows how to run a specific type of code and format the results. When you want code to execute, you specify which driver should handle it.

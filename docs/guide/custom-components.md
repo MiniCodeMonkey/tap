@@ -33,11 +33,11 @@ the other three keep serving.
 
 ## Scaffold a component
 
-`tap add component` writes a working starting point rather than an empty
+`tap component new` writes a working starting point rather than an empty
 file:
 
 ```bash
-tap add component RollingDeploy --deck deck.md
+tap component new RollingDeploy deck.md
 ```
 
 It prints the file it wrote and the markdown snippet to paste into the
@@ -59,7 +59,9 @@ Useful flags:
 |------|--------|
 | `--inline` | Writes `components/<Name>.jsx` and prints a ```` ```component ```` fence instead |
 | `--ts` | Writes a `.tsx` file, plus `tap-env.d.ts` and `tap-shims.d.ts` next to the deck |
-| `--deck <file>` | Resolves the folders relative to that deck instead of the current directory |
+
+`[deck]` is a deck file or a deck folder that the component's folders are
+resolved relative to; the default is the current directory.
 
 `<Name>` must be PascalCase. The command refuses to overwrite an existing
 file.
@@ -118,7 +120,7 @@ module too, which is why `useEffect` and `useState` are available.
 
 Steps are a number, not a sequence of events. Everything visible is a pure
 function of `step`, so jumping straight to step 4 with `?step=4` or
-`tap screenshot --step 4` looks exactly like clicking there.
+`tap export images --step 4` looks exactly like clicking there.
 
 ```jsx
 /** The server at `index`'s version and state for the given step and roll phase. */
@@ -549,8 +551,8 @@ condition, so there is one code path for the final state.
 Check both halves without a browser:
 
 ```bash
-tap screenshot deck.md --slide 1 --step 0 --out playing.png
-tap screenshot deck.md --slide 1 --step 1 --out settled.png
+tap export images deck.md --slide 1 --step 0 --output playing.png
+tap export images deck.md --slide 1 --step 1 --output settled.png
 ```
 
 ::: warning Never loop forever without the gate
@@ -588,9 +590,9 @@ The measured safe area for every theme is in
 themes you actually care about:
 
 ```bash
-tap screenshot deck.md --slide 3 --theme terminal --out terminal.png
-tap screenshot deck.md --slide 3 --theme blueprint --out blueprint.png
-tap screenshot deck.md --slide 3 --theme zine --out zine.png
+tap export images deck.md --slide 3 --theme terminal --output terminal.png
+tap export images deck.md --slide 3 --theme blueprint --output blueprint.png
+tap export images deck.md --slide 3 --theme zine --output zine.png
 ```
 
 ## Theme tokens
@@ -658,11 +660,11 @@ This is the rule that catches people out, so it is worth stating flatly.
 
 For PDF export, `?print=true`, and thumbnails the current step happens to
 be `steps`, so they do show the final state, as they always did. But
-`tap screenshot --step 2` also passes `printMode = true`, with `step = 2`,
+`tap export images --step 2` also passes `printMode = true`, with `step = 2`,
 so that capture shows step 2 settled.
 
 ```jsx
-// Wrong. tap screenshot --step 2 would show step 5.
+// Wrong. tap export images --step 2 would show step 5.
 const shown = printMode ? SERVERS.length : step;
 
 // Right. printMode only decides whether to animate.
@@ -726,7 +728,7 @@ A component's own `initial` to `animate` transition runs even on the very
 first slide a page loads on. Tap resets Motion's presence context around
 every deck component, so the `AnimatePresence` that drives slide
 transitions cannot suppress it. A reload, a deep link, or
-`tap screenshot --step k --wait 300` all show the animation actually
+`tap export images --step k --wait 300` all show the animation actually
 running rather than its end state.
 
 A component may nest its own `AnimatePresence` for its own enter and exit
@@ -808,7 +810,7 @@ error: slides/RollingDeploy.jsx:12:8: Expected ")" but found "}"
 ```
 
 The affected slide shows an **error card** with the file and the message,
-in `tap dev`, `tap pdf`, and `tap screenshot` alike. Other slides keep
+in `tap dev`, `tap export pdf`, and `tap export images` alike. Other slides keep
 working, so you can navigate past it. A PDF of a deck with a broken slide
 has the error card on that page rather than a blank one.
 
@@ -820,10 +822,10 @@ keeps a shipped deck usable on stage.
 `tap build` itself exits with status 1 on any component build error, so a
 broken component never reaches that fallback by accident.
 
-`tap pdf` builds components the same way, so a PDF has each one in its
+`tap export pdf` builds components the same way, so a PDF has each one in its
 final state. A component that fails to **build** stops the export with the
 same `error:` line and exit status 1. A slide that shows an error card at
-export time is still written to the PDF, and `tap pdf` prints
+export time is still written to the PDF, and `tap export pdf` prints
 `warning: slide <n> shows an error card` to standard error and exits 0, so
 one broken slide never costs you the handout.
 
@@ -851,8 +853,8 @@ named `dist`: the watcher skips both. It also skips the recordings folder
 and Finder's `.DS_Store` files.
 
 ```bash
-tap screenshot deck.md --slide 3 --out ../shots/s3.png   # outside the deck
-tap screenshot deck.md --slide 3 --out .shots/s3.png     # skipped by the watcher
+tap export images deck.md --slide 3 --output ../shots/s3.png   # outside the deck
+tap export images deck.md --slide 3 --output .shots/s3.png     # skipped by the watcher
 ```
 
 **Give each `tap dev` its own `--port`** when you run several. The default
@@ -862,21 +864,21 @@ forget, but you will not know which server you are looking at.
 **Check end states with `--step`, moments with `--wait`.**
 
 ```bash
-tap screenshot deck.md --slide 3 --step 2              # step 2, settled
-tap screenshot deck.md --slide 3 --step 2 --wait 400   # 400ms past readiness
+tap export images deck.md --slide 3 --step 2              # step 2, settled
+tap export images deck.md --slide 3 --step 2 --wait 400   # 400ms past readiness
 ```
 
 ## Check a slide without opening a browser
 
-`tap screenshot` renders one slide state to a PNG through the same headless
-browser `tap pdf` uses. It is built for checking a component you just
+`tap export images` renders one slide state to a PNG through the same headless
+browser `tap export pdf` uses. It is built for checking a component you just
 wrote:
 
 ```bash
-tap screenshot deck.md --slide 3 --out check.png
-tap screenshot deck.md --slide 3 --step 2 --out step-2.png
-tap screenshot deck.md --slide 3 --theme keynote --out keynote.png
-tap screenshot deck.md --all --out shots/
+tap export images deck.md --slide 3 --output check.png
+tap export images deck.md --slide 3 --step 2 --output step-2.png
+tap export images deck.md --slide 3 --theme keynote --output keynote.png
+tap export images deck.md --all --output shots/
 ```
 
 With neither `--step` nor `--fragment`, the slide renders its final state
@@ -898,15 +900,15 @@ the slide shows an error card or a component fails to build, so a script
 can tell a good render from a broken one without looking at the image:
 
 ```bash
-tap screenshot deck.md --slide 3 --out check.png || echo "slide 3 is broken"
+tap export images deck.md --slide 3 --output check.png || echo "slide 3 is broken"
 ```
 
 ## Next steps
 
 - [Components Reference](/reference/components-reference) - the full
   contract, bundling rules, and error formats
-- [CLI Commands](/reference/cli-commands) - `tap screenshot`,
-  `tap add component`, `tap theme`
+- [CLI Commands](/reference/cli-commands) - `tap export images`,
+  `tap component new`, `tap theme`
 - [Themes](/guide/themes) - tokens and each theme's illustration style
 - [Creating Themes](/reference/theme-porting#component-slides) - the
   per-theme safe area for a component slide
