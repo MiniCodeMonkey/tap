@@ -48,6 +48,7 @@ The SQLite driver executes SQL queries against a SQLite database file or in-memo
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
 | `path` | `string` | `:memory:` | Path to SQLite database file, or `:memory:` for in-memory |
+| `database` | `string` | `:memory:` | An older spelling of `path`, kept working for existing decks. `path` wins when both are set. |
 
 ### Frontmatter Configuration
 
