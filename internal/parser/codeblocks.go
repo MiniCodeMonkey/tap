@@ -180,14 +180,7 @@ func buildCodeBlock(fcb *ast.FencedCodeBlock, source []byte) CodeBlock {
 	block.Code = strings.TrimSuffix(code.String(), "\n")
 
 	if fcb.Info != nil {
-		info := fcb.Info.Segment.Value(source)
-		if _, meta, ok := splitCodeFenceInfo(string(info)); ok {
-			if isHighlightLinesSpec(meta) {
-				block.Meta.HighlightLines = normalizeHighlightLinesSpec(meta)
-			} else {
-				block.Meta = parseCodeBlockMeta(meta)
-			}
-		}
+		block.Meta = parseFenceMeta(string(fcb.Info.Segment.Value(source)))
 	}
 
 	return block

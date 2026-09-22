@@ -584,8 +584,9 @@ func applyDirectiveFields(yamlData map[string]interface{}, directives *SlideDire
 	}
 }
 
-// metaPattern matches {key: value, ...} at the end of info string.
-// Example: sql {driver: mysql, connection: mydb}
+// metaPattern matches one {key: value, ...} group at the end of an info
+// string. splitCodeFenceInfo applies it repeatedly, so an info string can
+// carry several groups, such as sql {driver: mysql} {2-3}.
 var metaPattern = regexp.MustCompile(`\{([^}]*)\}\s*$`)
 
 // pausePattern matches <!-- pause --> markers for fragment splitting.
@@ -607,7 +608,11 @@ func parseCodeBlockMeta(content string) CodeBlockMeta {
 		return meta
 	}
 
-	// Try parsing as YAML first
+	// Try parsing as YAML first. A "key=value" pair has no colon, so YAML's
+	// flow-map syntax reads it as a single key mapped to null (its shorthand
+	// for "key: null") rather than failing to parse; when that happens,
+	// fall through to the key=value parser below instead of returning an
+	// empty meta.
 	var yamlData map[string]interface{}
 	// Wrap in braces for valid YAML map format
 	if err := yaml.Unmarshal([]byte("{"+content+"}"), &yamlData); err == nil {
@@ -617,7 +622,10 @@ func parseCodeBlockMeta(content string) CodeBlockMeta {
 		if connection, ok := yamlData["connection"].(string); ok {
 			meta.Connection = connection
 		}
-		return meta
+		if meta.Driver != "" || meta.Connection != "" || !strings.Contains(content, "=") {
+			return meta
+		}
+		meta = CodeBlockMeta{}
 	}
 
 	// Fall back to simple key=value or key: value parsing
