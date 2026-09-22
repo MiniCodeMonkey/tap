@@ -255,7 +255,7 @@ func runDevServer(options serverOptions) error {
 		return candidate
 	}
 
-	srv, err := startOnAvailablePort(port, portExplicit, "tap dev", buildServer)
+	srv, err := startOnAvailablePort(port, portExplicit, "tap dev", !options.lan, buildServer)
 	if err != nil {
 		return err
 	}
