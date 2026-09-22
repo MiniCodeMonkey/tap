@@ -417,8 +417,9 @@ func runDevServer(options serverOptions) error {
 				}
 			},
 		})
-		// A kept recording must survive SIGTERM and every early return, not
-		// just a clean quit through the TUI branch below.
+		// A kept recording must survive an early return above this point
+		// and RunDevTUIWithModel itself returning an error below, not just
+		// a clean quit through the TUI branch's own present.Finish call.
 		defer func() { _, _ = present.Finish(true) }()
 		hub.SetOnSlideChange(present.NoteSlideChange)
 	} else {
@@ -534,7 +535,7 @@ func runDevServer(options serverOptions) error {
 		if present != nil {
 			model.SetPresentRecorder(present)
 			if recorder.Supported() {
-				report := recordings.StartupPreflight()
+				report := presentLaunchPreflight(recordings, options.record)
 				for _, finding := range report.Findings {
 					if finding.Blocking {
 						// The speaker sees the first actionable reason, not
@@ -547,7 +548,9 @@ func runDevServer(options serverOptions) error {
 				defer stopRecording()
 				present.Begin(recordContext, options.record)
 			} else {
-				present.Block("Recording is macOS only")
+				// Recording is never offered off macOS, so this is not a
+				// failure worth the error-styled Block treatment; leaving
+				// present unblocked shows a plain NOT RECORDING instead.
 			}
 		} else {
 			// The probe is cheap and the result is not stored anywhere: Tap
@@ -677,6 +680,19 @@ func runDevServer(options serverOptions) error {
 	defer cancel()
 
 	return srv.Shutdown(ctx)
+}
+
+// presentLaunchPreflight picks the preflight a tap present launch runs.
+// Recording from launch (startNow) needs the full Preflight, the same one
+// the dev controller runs before c: it also creates the output directory,
+// which Begin(startNow: true) needs right away instead of on demand.
+// Waiting to record keeps the lighter StartupPreflight, which does not
+// create that directory.
+func presentLaunchPreflight(recordings *recordController, startNow bool) recorder.Report {
+	if startNow {
+		return recordings.Preflight()
+	}
+	return recordings.StartupPreflight()
 }
 
 // loadPresentation reads, parses, resolves components for, and transforms a

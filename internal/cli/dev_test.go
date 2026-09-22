@@ -1,6 +1,8 @@
 package cli
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/MiniCodeMonkey/tap/internal/layouts"
@@ -51,5 +53,27 @@ func TestRecordingAudioOptions(t *testing.T) {
 					tt.configured, uid, noAudio, tt.wantUID, tt.wantNoAudio)
 			}
 		})
+	}
+}
+
+// TestPresentLaunchPreflightCreatesTheOutputDirOnlyWhenRecordingAtLaunch
+// covers ruling 5: recording from launch needs the full Preflight (the
+// same one the dev controller runs before c), which creates the output
+// directory Begin(startNow: true) needs right away; waiting for c keeps
+// the lighter StartupPreflight, which must not create that directory on
+// every tap present.
+func TestPresentLaunchPreflightCreatesTheOutputDirOnlyWhenRecordingAtLaunch(t *testing.T) {
+	waitOutputDir := filepath.Join(t.TempDir(), "recordings")
+	waitController := newRecordController(recordControllerOptions{DeckTitle: "My Talk", OutputDir: waitOutputDir})
+	presentLaunchPreflight(waitController, false)
+	if _, err := os.Stat(waitOutputDir); !os.IsNotExist(err) {
+		t.Errorf("StartupPreflight (not recording at launch) created %s", waitOutputDir)
+	}
+
+	recordOutputDir := filepath.Join(t.TempDir(), "recordings")
+	launchController := newRecordController(recordControllerOptions{DeckTitle: "My Talk", OutputDir: recordOutputDir})
+	presentLaunchPreflight(launchController, true)
+	if _, err := os.Stat(recordOutputDir); err != nil {
+		t.Errorf("the full Preflight (recording at launch) did not create %s: %v", recordOutputDir, err)
 	}
 }
