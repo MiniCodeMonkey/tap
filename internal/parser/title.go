@@ -17,7 +17,10 @@ var titleEmphasisPattern = regexp.MustCompile("\\*\\*(.+?)\\*\\*|`(.+?)`")
 // SlideTitle returns the text of a slide's first ATX heading, with bold
 // and code markers removed, or "" when the slide has no heading. Fenced
 // code is skipped, because a comment inside a code block is not a heading
-// however much it looks like one.
+// however much it looks like one. A fence closes only on a run of the same
+// character at least as long as its opener, so a heading inside a nested
+// fence (a shorter or differently-charactered run) is still code, not a
+// title.
 func SlideTitle(content string) string {
 	var fences fenceTracker
 	for _, line := range strings.Split(content, "\n") {

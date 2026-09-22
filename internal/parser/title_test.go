@@ -14,6 +14,8 @@ func TestSlideTitle(t *testing.T) {
 		{"a heading in a tilde fence is code", "~~~\n# not a title\n~~~\n\n# Real", "Real"},
 		{"no heading", "![](diagram.png)", ""},
 		{"closing hashes are dropped", "# Title #", "Title"},
+		{"a shorter run inside a longer fence does not close it", "````\n```\n# Title\n````", ""},
+		{"a different fence character inside does not close it", "```\n~~~\n# Title\n```", ""},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
