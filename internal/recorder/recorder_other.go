@@ -14,6 +14,9 @@ func Supported() bool { return false }
 // here.
 func Displays() ([]Display, error) { return nil, errUnsupported }
 
+// Screens is unsupported off macOS.
+func Screens() ([]Screen, error) { return nil, errUnsupported }
+
 // DefaultAudioInput names the microphone a recording would use.
 func DefaultAudioInput() string { return "" }
 
