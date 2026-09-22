@@ -61,14 +61,34 @@ public struct PreviewNavigator: Equatable, Sendable {
         return message
     }
 
-    /// tap sent a new slide list. Refreshes the shown slide's counts.
+    /// tap sent a new slide list. Refreshes the shown slide's counts. If the
+    /// shown slide is gone, for example because it was deleted, falls back
+    /// to the slide now at that position, clamped to the last slide when the
+    /// deck got shorter, or clears the shown slide when the deck is empty.
+    /// The navigator never keeps naming a slide the deck does not contain.
     public mutating func slidesChanged(_ slides: [Slide]) -> SlideMessage? {
-        guard let slideNumber, let slide = slides.first(where: { $0.number == slideNumber }) else { return nil }
-        guard slide.steps != steps || slide.fragments != fragments else { return nil }
-        let wasShowingEverything = positionIndex == revealCount
-        steps = slide.steps
-        fragments = slide.fragments
-        positionIndex = wasShowingEverything ? revealCount : min(positionIndex, revealCount)
+        guard let slideNumber else { return nil }
+        if let slide = slides.first(where: { $0.number == slideNumber }) {
+            guard slide.steps != steps || slide.fragments != fragments else { return nil }
+            let wasShowingEverything = positionIndex == revealCount
+            steps = slide.steps
+            fragments = slide.fragments
+            positionIndex = wasShowingEverything ? revealCount : min(positionIndex, revealCount)
+            return message
+        }
+
+        let wasPinnedHere = pinnedSlideNumber == slideNumber
+        guard !slides.isEmpty else {
+            self.slideNumber = nil
+            steps = 0
+            fragments = 0
+            positionIndex = 0
+            pinnedSlideNumber = nil
+            return nil
+        }
+        let fallbackIndex = min(max(slideNumber - 1, 0), slides.count - 1)
+        show(slides[fallbackIndex])
+        if wasPinnedHere { pinnedSlideNumber = self.slideNumber }
         return message
     }
 

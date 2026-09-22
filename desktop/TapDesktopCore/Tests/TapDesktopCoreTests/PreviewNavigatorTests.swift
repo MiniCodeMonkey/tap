@@ -55,4 +55,40 @@ final class PreviewNavigatorTests: XCTestCase {
         XCTAssertEqual(navigator.slidesChanged([plain, more]), SlideMessage(slideIndex: 2, fragment: 2, step: 0))
         XCTAssertNil(navigator.slidesChanged([plain, more]), "the same counts send nothing")
     }
+
+    func testDeletingTheShownSlideFromTheMiddleFallsBackToTheSlideNowAtThatPosition() {
+        var navigator = PreviewNavigator()
+        _ = navigator.cursorMoved(to: fragments) // number 3, at position index 2
+        let remaining = [
+            Slide(number: 1, startLine: 1, endLine: 1),
+            Slide(number: 2, startLine: 2, endLine: 2),
+            Slide(number: 4, startLine: 10, endLine: 12, fragments: 1),
+        ]
+        XCTAssertEqual(navigator.slidesChanged(remaining), SlideMessage(slideIndex: 3, fragment: 0, step: 0))
+        XCTAssertEqual(navigator.slideNumber, 4)
+        XCTAssertEqual(navigator.revealCount, 1)
+    }
+
+    func testDeletingTheLastShownSlideFallsBackToTheNewLastSlide() {
+        var navigator = PreviewNavigator()
+        let last = Slide(number: 4, startLine: 20, endLine: 22, fragments: 1)
+        _ = navigator.cursorMoved(to: last)
+        let shorter = [
+            Slide(number: 1, startLine: 1, endLine: 1),
+            Slide(number: 2, startLine: 2, endLine: 2),
+            Slide(number: 3, startLine: 3, endLine: 9, steps: 2),
+        ]
+        XCTAssertEqual(navigator.slidesChanged(shorter), SlideMessage(slideIndex: 2, fragment: -1, step: 2))
+        XCTAssertEqual(navigator.slideNumber, 3)
+        XCTAssertEqual(navigator.revealCount, 2)
+    }
+
+    func testDeletingEveryVisibleSlideClearsTheNavigator() {
+        var navigator = PreviewNavigator()
+        _ = navigator.cursorMoved(to: fragments)
+        XCTAssertNil(navigator.slidesChanged([]))
+        XCTAssertNil(navigator.slideNumber)
+        XCTAssertEqual(navigator.revealCount, 0)
+        XCTAssertNil(navigator.message)
+    }
 }
