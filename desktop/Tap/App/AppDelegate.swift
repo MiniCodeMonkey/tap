@@ -15,6 +15,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         AppEnvironment.shared.warmUp()
     }
 
+    /// There is no untitled document to offer: "New deck" is deliberately
+    /// inert until it has its own sheet. Without this, AppKit tries to open
+    /// one anyway, fails, and presents the failure as a modal alert that
+    /// blocks the app (and any test host) forever.
+    func applicationShouldOpenUntitledFile(_ sender: NSApplication) -> Bool {
+        false
+    }
+
     @objc func showAbout(_ sender: Any?) {
         NSApp.orderFrontStandardAboutPanel(options: aboutPanelOptions())
     }
