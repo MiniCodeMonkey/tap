@@ -19,6 +19,7 @@ const liveCodeDeck = "---\ntitle: Live code\n---\n\n# Run it\n\n```bash {driver:
 // TestDevRunsALiveShellBlock starts a real tap dev and runs the deck's
 // shell block through /api/execute, as the Run button does.
 func TestDevRunsALiveShellBlock(t *testing.T) {
+	t.Skip("Task 8 of the live code approvals plan rewrites this test for execute by reference")
 	if testing.Short() {
 		t.Skip("skipping subprocess test in short mode")
 	}

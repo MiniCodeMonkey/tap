@@ -2,22 +2,30 @@
 package server
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"net/http"
+	"os"
+	"slices"
 	"strconv"
 	"time"
 
 	"github.com/MiniCodeMonkey/tap/internal/config"
 	"github.com/MiniCodeMonkey/tap/internal/driver"
+	"github.com/MiniCodeMonkey/tap/internal/transformer"
 )
 
-// ExecuteRequest represents a request to execute code via a driver.
+// ExecuteRequest names one live code block of the loaded deck. Both
+// numbers count from 1: Slide is the slide's number in the deck, and Block
+// counts the live code blocks within that slide. tap runs the code the deck
+// holds there, never code sent by the page.
 type ExecuteRequest struct {
-	Driver     string `json:"driver"`
-	Code       string `json:"code"`
-	Connection string `json:"connection,omitempty"`
+	Slide int `json:"slide"`
+	Block int `json:"block"`
 }
 
 // ExecuteResponse represents the response from code execution.
@@ -31,39 +39,59 @@ type ExecuteResponse struct {
 // DefaultExecuteTimeout is the default timeout for code execution.
 const DefaultExecuteTimeout = time.Duration(config.DefaultDriverTimeoutSeconds) * time.Second
 
-// handleAPIExecute handles POST /api/execute requests to execute code via a driver.
+// LiveCodePolicy is which drivers a run of tap dev or tap present lets
+// /api/execute use. It comes from the approval check at startup.
+type LiveCodePolicy struct {
+	// Drivers are the drivers the person approved for this deck.
+	Drivers []string
+	// AllowAll lets every declared driver run, for --allow-code.
+	AllowAll bool
+}
+
+// Allows reports whether the policy lets a block with driverName run.
+func (p LiveCodePolicy) Allows(driverName string) bool {
+	return p.AllowAll || slices.Contains(p.Drivers, driverName)
+}
+
+// codeInBodyMessage answers a request that sends code instead of a block
+// reference.
+const codeInBodyMessage = `/api/execute runs a live code block of the deck by reference. Send {"slide": n, "block": n}, not code.`
+
+// notApprovedMessage answers a request for a driver this run does not
+// allow. The page shows "Not approved" for the same blocks.
+const notApprovedMessage = "Not approved: this deck may not run code with this driver. Approve it when tap dev or tap present asks at startup in a terminal, or pass --allow-code for this run."
+
+// handleAPIExecute handles POST /api/execute: it runs one live code block
+// of the loaded deck, named by slide and block number.
 func (s *Server) handleAPIExecute(w http.ResponseWriter, r *http.Request) {
-	// Only allow POST method
 	if r.Method != http.MethodPost {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusMethodNotAllowed)
-		_ = json.NewEncoder(w).Encode(ExecuteResponse{
-			Success: false,
-			Error:   "Method not allowed",
-		})
+		writeExecuteError(w, http.StatusMethodNotAllowed, "Method not allowed")
 		return
 	}
 
-	// Parse request body
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		writeExecuteError(w, http.StatusBadRequest, fmt.Sprintf("Invalid request body: %v", err))
+		return
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(body, &fields); err != nil {
+		writeExecuteError(w, http.StatusBadRequest, fmt.Sprintf("Invalid request body: %v", err))
+		return
+	}
+	if _, sendsCode := fields["code"]; sendsCode {
+		writeExecuteError(w, http.StatusBadRequest, codeInBodyMessage)
+		return
+	}
 	var req ExecuteRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(ExecuteResponse{
-			Success: false,
-			Error:   fmt.Sprintf("Invalid request body: %v", err),
-		})
+	decoder := json.NewDecoder(bytes.NewReader(body))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&req); err != nil {
+		writeExecuteError(w, http.StatusBadRequest, fmt.Sprintf("Invalid request body: %v", err))
 		return
 	}
-
-	// Validate required fields
-	if req.Driver == "" {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(ExecuteResponse{
-			Success: false,
-			Error:   "driver field is required",
-		})
+	if req.Slide < 1 || req.Block < 1 {
+		writeExecuteError(w, http.StatusBadRequest, "slide and block are required, and both count from 1")
 		return
 	}
 
@@ -71,64 +99,47 @@ func (s *Server) handleAPIExecute(w http.ResponseWriter, r *http.Request) {
 	// reload, so every use below reads this local snapshot rather than
 	// s.registry directly.
 	registry := s.GetRegistry()
-
-	// Check if registry is set
 	if registry == nil {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusInternalServerError)
-		_ = json.NewEncoder(w).Encode(ExecuteResponse{
-			Success: false,
-			Error:   "Driver registry not configured",
-		})
+		writeExecuteError(w, http.StatusInternalServerError, "Driver registry not configured")
 		return
 	}
 
-	// Only code that is a live block in the loaded deck runs. Other
-	// devices can reach the server when tap dev is started with --lan or
-	// --tunnel, and a client outside a browser can send any Origin
-	// header, so the same-origin check alone does not stop a request from
-	// running arbitrary code.
-	if !s.deckHasLiveBlock(req.Driver, req.Connection, req.Code) {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusForbidden)
-		_ = json.NewEncoder(w).Encode(ExecuteResponse{
-			Success: false,
-			Error:   "This code is not a live code block in the loaded deck",
-		})
+	block, err := findLiveBlock(s.GetPresentation(), req.Slide, req.Block)
+	if err != nil {
+		writeExecuteError(w, http.StatusNotFound, err.Error())
+		return
+	}
+	if block.Problem != "" {
+		writeExecuteError(w, http.StatusUnprocessableEntity, block.Problem)
+		return
+	}
+	if !s.LiveCodePolicy().Allows(block.Driver) {
+		writeExecuteError(w, http.StatusForbidden, notApprovedMessage)
+		return
+	}
+	if !registry.Has(block.Driver) {
+		writeExecuteError(w, http.StatusBadRequest, fmt.Sprintf("driver not found: %s", block.Driver))
 		return
 	}
 
-	// Check if driver exists
-	if !registry.Has(req.Driver) {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(ExecuteResponse{
-			Success: false,
-			Error:   fmt.Sprintf("driver not found: %s", req.Driver),
-		})
+	execConfig, err := s.buildExecutionConfig(block.Driver, block.Connection)
+	if err != nil {
+		writeExecuteError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	// Build config from connection
-	config := s.buildExecutionConfig(req.Driver, req.Connection)
-
-	// Create context with timeout
-	timeout := s.getExecutionTimeout(req.Driver)
+	timeout := s.getExecutionTimeout(block.Driver)
 	ctx, cancel := context.WithTimeout(r.Context(), timeout)
 	defer cancel()
 
-	// Execute code
-	result := registry.Execute(ctx, req.Driver, req.Code, config)
+	result := registry.Execute(ctx, block.Driver, block.Code, execConfig)
 
-	// Determine HTTP status based on result
 	w.Header().Set("Content-Type", "application/json")
 	if result.Success {
 		w.WriteHeader(http.StatusOK)
 	} else {
 		w.WriteHeader(http.StatusInternalServerError)
 	}
-
-	// Return response
 	_ = json.NewEncoder(w).Encode(ExecuteResponse{
 		Success: result.Success,
 		Output:  result.Output,
@@ -137,27 +148,62 @@ func (s *Server) handleAPIExecute(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// buildExecutionConfig builds the config map for driver execution
-// by looking up connection details from the presentation config.
-func (s *Server) buildExecutionConfig(driverName, connectionName string) map[string]string {
+// writeExecuteError writes a failed /api/execute response.
+func writeExecuteError(w http.ResponseWriter, status int, message string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(ExecuteResponse{Success: false, Error: message})
+}
+
+// findLiveBlock returns live code block blockNumber of slide slideNumber,
+// both counted from 1. A slide is found by its number in the deck, not by
+// its position in the list, so a list that leaves slides out still finds
+// the right one.
+func findLiveBlock(pres *transformer.TransformedPresentation, slideNumber, blockNumber int) (transformer.TransformedCodeBlock, error) {
+	if pres == nil {
+		//nolint:staticcheck // the message is shown in the page as a sentence
+		return transformer.TransformedCodeBlock{}, errors.New("No presentation loaded")
+	}
+	for _, slide := range pres.Slides {
+		if slide.Index+1 != slideNumber {
+			continue
+		}
+		for _, block := range slide.CodeBlocks {
+			if block.Block == blockNumber {
+				return block, nil
+			}
+		}
+		//nolint:staticcheck // the message is shown in the page as a sentence
+		return transformer.TransformedCodeBlock{}, fmt.Errorf("Slide %d has no live code block %d", slideNumber, blockNumber)
+	}
+	//nolint:staticcheck // the message is shown in the page as a sentence
+	return transformer.TransformedCodeBlock{}, fmt.Errorf("The deck has no slide %d", slideNumber)
+}
+
+// buildExecutionConfig builds the config map for driver execution by
+// looking up connection details from the presentation config. ${NAME} in
+// the connection expands here, when the block runs, so the page never
+// receives the value.
+func (s *Server) buildExecutionConfig(driverName, connectionName string) (map[string]string, error) {
 	config := make(map[string]string)
 
-	// Get presentation to access config
 	pres := s.GetPresentation()
 	if pres == nil {
-		return config
+		return config, nil
 	}
 
-	// Look up driver config
 	driverConfig, exists := pres.Config.Drivers[driverName]
 	if !exists {
-		return config
+		return config, nil
 	}
 
-	// Look up connection config if specified
 	if connectionName != "" {
 		if connConfig, exists := driverConfig.Connections[connectionName]; exists {
-			// Map connection config fields to driver config keys
+			expanded, err := connConfig.Expanded(fmt.Sprintf("drivers.%s.connections.%s", driverName, connectionName), os.LookupEnv)
+			if err != nil {
+				return nil, err
+			}
+			connConfig = expanded
 			if connConfig.Host != "" {
 				config["host"] = connConfig.Host
 			}
@@ -179,12 +225,11 @@ func (s *Server) buildExecutionConfig(driverName, connectionName string) map[str
 		}
 	}
 
-	// Add timeout from driver config if specified
 	if driverConfig.Timeout > 0 {
 		config["timeout"] = strconv.Itoa(driverConfig.Timeout)
 	}
 
-	return config
+	return config, nil
 }
 
 // getExecutionTimeout returns the timeout for a driver execution.
@@ -204,23 +249,6 @@ func (s *Server) getExecutionTimeout(driverName string) time.Duration {
 	return DefaultExecuteTimeout
 }
 
-// deckHasLiveBlock reports whether the loaded deck has a live code block
-// with exactly this driver, connection and code.
-func (s *Server) deckHasLiveBlock(driverName, connection, code string) bool {
-	presentation := s.GetPresentation()
-	if presentation == nil {
-		return false
-	}
-	for _, slide := range presentation.Slides {
-		for _, block := range slide.CodeBlocks {
-			if block.Driver == driverName && block.Connection == connection && block.Code == code {
-				return true
-			}
-		}
-	}
-	return false
-}
-
 // SetRegistry sets the driver registry for the server.
 // This must be called before SetupRoutes() if you want the execute endpoint to work.
 func (s *Server) SetRegistry(registry *driver.Registry) {
@@ -234,4 +262,19 @@ func (s *Server) GetRegistry() *driver.Registry {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.registry
+}
+
+// SetLiveCodePolicy sets which drivers /api/execute may run. tap dev and
+// tap present set it once at startup, from the approval check.
+func (s *Server) SetLiveCodePolicy(policy LiveCodePolicy) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.liveCodePolicy = policy
+}
+
+// LiveCodePolicy returns which drivers /api/execute may run.
+func (s *Server) LiveCodePolicy() LiveCodePolicy {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.liveCodePolicy
 }

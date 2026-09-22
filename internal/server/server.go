@@ -23,8 +23,11 @@ import (
 // Server is the HTTP server for serving presentations in development mode.
 type Server struct {
 	// Fields ordered by size for better memory alignment
-	presentation          *transformer.TransformedPresentation
-	registry              *driver.Registry
+	presentation *transformer.TransformedPresentation
+	registry     *driver.Registry
+	// liveCodePolicy is which drivers /api/execute may run in this run.
+	// The zero value allows none.
+	liveCodePolicy        LiveCodePolicy
 	httpServer            *http.Server
 	mux                   *http.ServeMux
 	shutdownCh            chan struct{}

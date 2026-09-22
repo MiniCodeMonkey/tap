@@ -257,7 +257,7 @@ func TestExecuteRejectsCrossSiteRequests(t *testing.T) {
 	srv.SetupRoutes()
 	srv.SetAllowedOrigins([]string{"http://localhost:5173"})
 
-	body := `{"driver":"shell","code":"echo hi"}`
+	body := `{"slide": 1, "block": 1}`
 	cases := []struct {
 		name        string
 		origin      string
