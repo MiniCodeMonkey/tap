@@ -23,6 +23,7 @@ type appDeckSource struct {
 	remembered []byte
 	mu         sync.Mutex
 	hasBuffer  bool
+	seq        uint64
 }
 
 func newAppDeckSource(file string) *appDeckSource {
@@ -42,12 +43,27 @@ func (source *appDeckSource) current() ([]byte, error) {
 	return os.ReadFile(source.file)
 }
 
-// setBuffer makes buffer the text tap renders, until dropBuffer.
-func (source *appDeckSource) setBuffer(buffer []byte) {
+// setBuffer makes buffer the text tap renders, until dropBuffer. It returns
+// the sequence number assigned to buffer, which a render started for an
+// older buffer can compare against isCurrent to tell whether a newer buffer
+// has since arrived.
+func (source *appDeckSource) setBuffer(buffer []byte) uint64 {
 	source.mu.Lock()
 	defer source.mu.Unlock()
 	source.buffer = buffer
 	source.hasBuffer = true
+	source.seq++
+	return source.seq
+}
+
+// isCurrent reports whether seq is still the sequence of the buffer tap was
+// most recently given. A render started for an older sequence uses this to
+// tell it has been superseded, so it can discard its result instead of
+// publishing a stale deck over a newer one.
+func (source *appDeckSource) isCurrent(seq uint64) bool {
+	source.mu.Lock()
+	defer source.mu.Unlock()
+	return source.seq == seq
 }
 
 // dropBuffer goes back to the deck file. The app sends "saved" after it
@@ -100,7 +116,15 @@ type appSourceRequest struct {
 // answers with the buffer's slide list, the structure tap slide list
 // --json prints. A buffer that does not render still gets its slide list,
 // whose errors say what is wrong, and the pages keep the last good render.
-func handleAppSource(source *appDeckSource, render func(buffer []byte) error, baseDir string, log io.Writer) http.HandlerFunc {
+//
+// render runs unserialized: two PUTs in flight render concurrently, and a
+// slower render for an older buffer is not allowed to block a faster
+// render for a newer one. Before render publishes its result (for example
+// by making the parsed presentation visible to other handlers), it must
+// call current and skip publishing when current reports false, since that
+// means a newer buffer has already arrived and its own render is the one
+// that should be visible.
+func handleAppSource(source *appDeckSource, render func(buffer []byte, current func() bool) error, baseDir string, log io.Writer) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
@@ -120,8 +144,8 @@ func handleAppSource(source *appDeckSource, render func(buffer []byte) error, ba
 		}
 
 		buffer := []byte(*request.Source)
-		source.setBuffer(buffer)
-		if err := render(buffer); err != nil {
+		seq := source.setBuffer(buffer)
+		if err := render(buffer, func() bool { return source.isCurrent(seq) }); err != nil {
 			fmt.Fprintf(log, "Not showing the buffer: %v\n", err)
 		}
 		result, err := slidelist.Build(buffer, baseDir)

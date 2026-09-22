@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/MiniCodeMonkey/tap/internal/config"
@@ -89,7 +90,7 @@ func TestAppSourceRendersTheBufferAndAnswersWithTheSlideList(t *testing.T) {
 	deckPath := writeAppTestDeck(t, "# On Disk\n")
 	source := newAppDeckSource(deckPath)
 	var rendered []byte
-	handler := handleAppSource(source, func(buffer []byte) error { rendered = buffer; return nil }, filepath.Dir(deckPath), &bytes.Buffer{})
+	handler := handleAppSource(source, func(buffer []byte, current func() bool) error { rendered = buffer; return nil }, filepath.Dir(deckPath), &bytes.Buffer{})
 
 	response := putAppSource(handler, `{"source": "# One\n\n---\n\n# Two\n"}`)
 	if response.Code != http.StatusOK || response.Header().Get("Content-Type") != "application/json" {
@@ -116,7 +117,7 @@ func TestAppSourceRendersTheBufferAndAnswersWithTheSlideList(t *testing.T) {
 func TestAppSourceRejectsABodyThatIsNotASource(t *testing.T) {
 	source := newAppDeckSource(writeAppTestDeck(t, "# One\n"))
 	renders := 0
-	handler := handleAppSource(source, func([]byte) error { renders++; return nil }, t.TempDir(), &bytes.Buffer{})
+	handler := handleAppSource(source, func([]byte, func() bool) error { renders++; return nil }, t.TempDir(), &bytes.Buffer{})
 	for _, body := range []string{`{}`, `{"source": 3}`, `{"source": "# A", "extra": 1}`, `not json`} {
 		response := putAppSource(handler, body)
 		if response.Code != http.StatusBadRequest || !strings.Contains(response.Body.String(), `"code": "invalid_request"`) {
@@ -129,7 +130,7 @@ func TestAppSourceRejectsABodyThatIsNotASource(t *testing.T) {
 }
 
 func TestAppSourceAnswers413ForABodyOverTheLimit(t *testing.T) {
-	handler := handleAppSource(newAppDeckSource(writeAppTestDeck(t, "# One\n")), func([]byte) error { return nil }, t.TempDir(), &bytes.Buffer{})
+	handler := handleAppSource(newAppDeckSource(writeAppTestDeck(t, "# One\n")), func([]byte, func() bool) error { return nil }, t.TempDir(), &bytes.Buffer{})
 	recorder := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodPut, "http://127.0.0.1:3000/api/app/source", strings.NewReader(`{"source": "a long deck"}`))
 	request.Body = http.MaxBytesReader(recorder, request.Body, 10)
@@ -141,7 +142,7 @@ func TestAppSourceAnswers413ForABodyOverTheLimit(t *testing.T) {
 
 func TestAppSourceStillListsSlidesWhenTheBufferDoesNotRender(t *testing.T) {
 	var log bytes.Buffer
-	handler := handleAppSource(newAppDeckSource(writeAppTestDeck(t, "# One\n")), func([]byte) error { return errors.New("frontmatter: bad") }, t.TempDir(), &log)
+	handler := handleAppSource(newAppDeckSource(writeAppTestDeck(t, "# One\n")), func([]byte, func() bool) error { return errors.New("frontmatter: bad") }, t.TempDir(), &log)
 	response := putAppSource(handler, `{"source": "# Still A Slide\n"}`)
 	var list slideListResponse
 	_ = json.Unmarshal(response.Body.Bytes(), &list)
@@ -150,6 +151,52 @@ func TestAppSourceStillListsSlidesWhenTheBufferDoesNotRender(t *testing.T) {
 	}
 	if !strings.Contains(log.String(), "frontmatter: bad") {
 		t.Errorf("log = %q, want the render error", log.String())
+	}
+}
+
+func TestAppSourceDiscardsAStaleRenderThatFinishesAfterANewerOne(t *testing.T) {
+	source := newAppDeckSource(writeAppTestDeck(t, "# One\n"))
+	oldEnteredRender := make(chan struct{})
+	releaseOldRender := make(chan struct{})
+
+	var mu sync.Mutex
+	var published []byte
+
+	handler := handleAppSource(source, func(buffer []byte, current func() bool) error {
+		if string(buffer) == "# Old\n" {
+			close(oldEnteredRender)
+			<-releaseOldRender
+		}
+		if !current() {
+			return nil
+		}
+		mu.Lock()
+		published = buffer
+		mu.Unlock()
+		return nil
+	}, t.TempDir(), &bytes.Buffer{})
+
+	oldDone := make(chan struct{})
+	go func() {
+		putAppSource(handler, `{"source": "# Old\n"}`)
+		close(oldDone)
+	}()
+
+	// Wait until the older PUT's render has started (its setBuffer has
+	// already landed) before sending the newer PUT, so setBuffer calls
+	// land in order while the older render is still deliberately slow.
+	<-oldEnteredRender
+	putAppSource(handler, `{"source": "# New\n"}`)
+
+	// Only now let the older, slower render finish, after the newer,
+	// faster render has already published.
+	close(releaseOldRender)
+	<-oldDone
+
+	mu.Lock()
+	defer mu.Unlock()
+	if string(published) != "# New\n" {
+		t.Errorf("published %q, want the newer buffer even though its render finished first", published)
 	}
 }
 
