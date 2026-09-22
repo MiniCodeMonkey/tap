@@ -8,6 +8,7 @@ import {
 	resolveComponentURL
 } from './DeckComponent';
 import { Slot } from './Slot';
+import { heldBlockers, resetBlockersForTests, subscribeToBlockers, type ReadyBlockerKind } from '$lib/ready/blockers';
 
 afterEach(() => cleanup());
 beforeEach(() => __resetDeckComponentCachesForTests());
@@ -704,5 +705,96 @@ describe('DeckComponent', () => {
 		const after = await findByTestId('subtitle');
 
 		expect(after).toBe(before);
+	});
+});
+
+describe('DeckComponent and the ready signal', () => {
+	beforeEach(() => resetBlockersForTests());
+
+	function renderComponent(importer: (url: string) => Promise<unknown>, url = '/components/Chart-1.js') {
+		return render(
+			<DeckComponent
+				source="slides/Chart.jsx"
+				url={url}
+				props={{}}
+				slots={{}}
+				slide={makeSlide()}
+				step={0}
+				steps={0}
+				active
+				printMode={false}
+				importer={importer}
+			/>
+		);
+	}
+
+	it('holds a component blocker until the bundle has loaded and rendered', async () => {
+		let resolveImport!: (module: unknown) => void;
+		const importer = vi.fn(
+			() =>
+				new Promise((resolve) => {
+					resolveImport = resolve;
+				})
+		);
+		const { container } = renderComponent(importer);
+		expect(heldBlockers()).toEqual(['component']);
+
+		await act(async () => {
+			resolveImport({ default: () => <p className="chart">chart</p> });
+		});
+
+		await waitFor(() => expect(container.querySelector('.chart')).not.toBeNull());
+		await waitFor(() => expect(heldBlockers()).toEqual([]));
+	});
+
+	it('holds an error-card blocker from a failed load until the error card is on screen', async () => {
+		const seen: ReadyBlockerKind[][] = [];
+		const unsubscribe = subscribeToBlockers(() => seen.push(heldBlockers()));
+		let rejectImport!: (error: Error) => void;
+		const importer = vi.fn(
+			() =>
+				new Promise((_, reject) => {
+					rejectImport = reject;
+				})
+		);
+		const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+		const { container } = renderComponent(importer, '/components/Broken-1.js');
+
+		await act(async () => {
+			rejectImport(new Error('boom'));
+		});
+
+		await waitFor(() => expect(container.querySelector('.deck-error-card')).not.toBeNull());
+		await waitFor(() => expect(heldBlockers()).toEqual([]));
+		unsubscribe();
+		consoleError.mockRestore();
+		expect(seen.some((kinds) => kinds.includes('error-card'))).toBe(true);
+	});
+
+	it('holds nothing for a component with a build error', () => {
+		render(
+			<DeckComponent
+				source="slides/Broken.jsx"
+				url=""
+				buildError="slides/Broken.jsx:3:7: bad"
+				props={{}}
+				slots={{}}
+				slide={makeSlide()}
+				step={0}
+				steps={0}
+				active
+				printMode={false}
+			/>
+		);
+		expect(heldBlockers()).toEqual([]);
+	});
+
+	it('releases its blocker when it unmounts before the bundle loads', () => {
+		const importer = vi.fn(() => new Promise(() => {}));
+		const { unmount } = renderComponent(importer, '/components/Never-1.js');
+		expect(heldBlockers()).toEqual(['component']);
+
+		unmount();
+		expect(heldBlockers()).toEqual([]);
 	});
 });
