@@ -86,4 +86,57 @@ final class SlideRangeTrackerTests: XCTestCase {
         let boxes = SlideRangeTracker.boxes(for: [Slide(number: 1, startLine: 40, endLine: 41)], in: "one line" as NSString)
         XCTAssertTrue(boxes.isEmpty)
     }
+
+    // Three slides: "# One" at 0..<5, "# Two" at 12..<17, "# Three" at 24..<31.
+    let threeSlideText = "# One\n\n---\n\n# Two\n\n---\n\n# Three\n"
+    let threeSlideList = SlideList(slides: [Slide(number: 1, startLine: 1, endLine: 1, title: "One"),
+                                            Slide(number: 2, startLine: 5, endLine: 5, title: "Two"),
+                                            Slide(number: 3, startLine: 9, endLine: 9, title: "Three")], errors: [])
+
+    func threeSlideTracker() -> SlideRangeTracker {
+        var tracker = SlideRangeTracker()
+        let generation = tracker.beginSend()
+        _ = tracker.apply(threeSlideList, sentText: threeSlideText, sentGeneration: generation,
+                          currentLength: (threeSlideText as NSString).length)
+        return tracker
+    }
+
+    func testADeletionThatCrossesASlideBoundaryLeavesValidRanges() {
+        var tracker = threeSlideTracker()
+        XCTAssertEqual(tracker.boxes.map(\.range), [NSRange(location: 0, length: 5), NSRange(location: 12, length: 5),
+                                                     NSRange(location: 24, length: 7)])
+        // Delete from inside slide 1, through the gap, into slide 2.
+        tracker.recordEdit(location: 3, oldLength: 11, newLength: 0)
+        let newLength = (threeSlideText as NSString).length - 11
+        for box in tracker.boxes {
+            XCTAssertGreaterThanOrEqual(box.range.length, 0, "no range has a negative length")
+            XCTAssertGreaterThanOrEqual(NSMaxRange(box.range), box.range.location, "no range ends before it starts")
+            XCTAssertLessThanOrEqual(NSMaxRange(box.range), newLength, "no range extends past the new end of the text")
+        }
+        XCTAssertEqual(tracker.boxes.map(\.range), [NSRange(location: 0, length: 3), NSRange(location: 3, length: 3),
+                                                     NSRange(location: 13, length: 7)])
+    }
+
+    func testADeletionThatExactlyEmptiesASlideZeroesItAndShiftsLaterSlidesUp() {
+        var tracker = threeSlideTracker()
+        // Delete precisely slide 2's range.
+        tracker.recordEdit(location: 12, oldLength: 5, newLength: 0)
+        let ranges = tracker.boxes.map(\.range)
+        XCTAssertEqual(ranges[0], NSRange(location: 0, length: 5), "slide 1 is untouched")
+        XCTAssertEqual(ranges[1], NSRange(location: 12, length: 0), "slide 2 becomes zero length, not inverted")
+        XCTAssertEqual(ranges[2], NSRange(location: 19, length: 7), "slide 3 shifts up by exactly the deleted length")
+    }
+
+    func testEditsRecordedInflightReplayInTheOrderTheyWereRecorded() {
+        var tracker = appliedTracker()
+        let generation = tracker.beginSend()
+        // Two edits whose combined effect depends on replay order: first removes
+        // the gap after slide 1, then inserts inside slide 1's remaining text.
+        // Replayed backwards or skipped, slide 1 ends up a different length.
+        tracker.recordEdit(location: 5, oldLength: 7, newLength: 0)
+        tracker.recordEdit(location: 3, oldLength: 0, newLength: 4)
+        _ = tracker.apply(list, sentText: text, sentGeneration: generation, currentLength: 15)
+        XCTAssertEqual(tracker.boxes.map(\.range), [NSRange(location: 0, length: 9), NSRange(location: 9, length: 5)],
+                       "replaying the log out of order would give slide 1 a different length")
+    }
 }
