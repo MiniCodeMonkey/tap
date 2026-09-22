@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"path/filepath"
 	"regexp"
 	"strings"
 
@@ -398,7 +397,7 @@ func (m *ImageGenModel) submitPrompt() (tea.Model, tea.Cmd) {
 func (m *ImageGenModel) generateImageCmd() tea.Cmd {
 	prompt := m.Prompt
 	return func() tea.Msg {
-		client, err := gemini.NewClientFromEnv()
+		client, err := deckedit.NewImageGenerator()
 		if err != nil {
 			return imageGenerateMsg{result: ImageGenerateResult{Error: err}}
 		}
@@ -917,150 +916,21 @@ func (m *ImageGenModel) GetSelectedSlide() *SlideInfo {
 	return nil
 }
 
-// GetImagesDir returns the path to the images directory for the markdown file.
-// The images directory is always "images/" relative to the markdown file's directory.
-func (m *ImageGenModel) GetImagesDir() string {
-	mdDir := filepath.Dir(m.MarkdownFile)
-	return filepath.Join(mdDir, "images")
-}
-
-// EnsureImagesDir creates the images directory if it doesn't exist.
-// Returns the path to the images directory on success.
-func (m *ImageGenModel) EnsureImagesDir() (string, error) {
-	imagesDir := m.GetImagesDir()
-
-	// Check if directory already exists
-	info, err := os.Stat(imagesDir)
-	if err == nil {
-		if !info.IsDir() {
-			return "", fmt.Errorf("images path exists but is not a directory: %s", imagesDir)
-		}
-		return imagesDir, nil
-	}
-
-	// If error is not "not exists", return it
-	if !os.IsNotExist(err) {
-		return "", fmt.Errorf("failed to check images directory: %w", err)
-	}
-
-	// Create directory with parents
-	if err := os.MkdirAll(imagesDir, 0755); err != nil {
-		return "", fmt.Errorf("failed to create images directory: %w", err)
-	}
-
-	return imagesDir, nil
-}
-
 // IsCancelled returns true if the user cancelled the workflow.
 func (m *ImageGenModel) IsCancelled() bool {
 	return m == nil
 }
 
-// GenerateImageFilename creates a content-hashed filename for an image.
-// SaveGeneratedImage saves the generated image to the images directory.
-// It returns the relative path to the saved image (e.g., "images/generated-a1b2c3d4.png").
-func (m *ImageGenModel) SaveGeneratedImage() (string, error) {
+// PlaceImage saves the generated image and records it in the deck: at the
+// end of the selected slide, or in place of the image being regenerated.
+func (m *ImageGenModel) PlaceImage() (deckedit.PlacedImage, error) {
 	if m.GeneratedImage == nil {
-		return "", fmt.Errorf("no generated image to save")
+		return deckedit.PlacedImage{}, fmt.Errorf("no generated image to save")
 	}
-
-	// Ensure images directory exists
-	imagesDir, err := m.EnsureImagesDir()
-	if err != nil {
-		return "", fmt.Errorf("failed to ensure images directory: %w", err)
-	}
-
-	// Generate filename
-	filename := deckedit.GenerateImageFilename(m.GeneratedImage.ImageData, m.GeneratedImage.ContentType)
-
-	// Full path for saving
-	fullPath := filepath.Join(imagesDir, filename)
-
-	// Write file
-	if err := os.WriteFile(fullPath, m.GeneratedImage.ImageData, 0644); err != nil {
-		return "", fmt.Errorf("failed to write image file: %w", err)
-	}
-
-	// Return relative path (images/filename)
-	relativePath := filepath.Join("images", filename)
-	return relativePath, nil
-}
-
-// InsertImageIntoMarkdown inserts an AI-generated image into the markdown file
-// at the end of the selected slide's content (before the next --- separator).
-// The image is inserted with the format: <!-- ai-prompt: {prompt} -->\n![](imagePath)
-func (m *ImageGenModel) InsertImageIntoMarkdown(imagePath string) error {
-	// Read the current markdown content
-	content, err := os.ReadFile(m.MarkdownFile)
-	if err != nil {
-		return fmt.Errorf("failed to read markdown file: %w", err)
-	}
-
-	// Insert the image into the content
-	newContent, err := deckedit.InsertAIImage(string(content), m.SelectedIndex, m.Prompt, imagePath)
-	if err != nil {
-		return fmt.Errorf("failed to insert image: %w", err)
-	}
-
-	// Write the updated content back to the file
-	if err := os.WriteFile(m.MarkdownFile, []byte(newContent), 0644); err != nil {
-		return fmt.Errorf("failed to write markdown file: %w", err)
-	}
-
-	return nil
-}
-
-// DeleteOldImage deletes the old image file when regenerating.
-// It resolves the image path relative to the markdown file's directory.
-func (m *ImageGenModel) DeleteOldImage() error {
-	if m.SelectedImage == nil {
-		return nil // Nothing to delete, not regenerating
-	}
-
-	oldImagePath := m.SelectedImage.ImagePath
-
-	// Resolve the path relative to the markdown file's directory
-	mdDir := filepath.Dir(m.MarkdownFile)
-	fullPath := filepath.Join(mdDir, oldImagePath)
-
-	// Check if the file exists
-	if _, err := os.Stat(fullPath); os.IsNotExist(err) {
-		// File doesn't exist, nothing to delete
-		return nil
-	}
-
-	// Delete the file
-	if err := os.Remove(fullPath); err != nil {
-		return fmt.Errorf("failed to delete old image: %w", err)
-	}
-
-	return nil
-}
-
-// ReplaceImageInMarkdown replaces an existing AI-generated image in the markdown file.
-// This preserves the image's position in the markdown (doesn't move it to the end of the slide).
-// The old image reference (comment + image) is replaced with the new one.
-func (m *ImageGenModel) ReplaceImageInMarkdown(newImagePath string) error {
-	if m.SelectedImage == nil {
-		return fmt.Errorf("no selected image to replace")
-	}
-
-	// Read the current markdown content
-	content, err := os.ReadFile(m.MarkdownFile)
-	if err != nil {
-		return fmt.Errorf("failed to read markdown file: %w", err)
-	}
-
-	// Replace the image in the content
-	newContent, err := deckedit.ReplaceAIImage(string(content), m.SelectedImage.Prompt, m.SelectedImage.ImagePath, m.Prompt, newImagePath)
-	if err != nil {
-		return fmt.Errorf("failed to replace image: %w", err)
-	}
-
-	// Write the updated content back to the file
-	if err := os.WriteFile(m.MarkdownFile, []byte(newContent), 0644); err != nil {
-		return fmt.Errorf("failed to write markdown file: %w", err)
-	}
-
-	return nil
+	return deckedit.PlaceGeneratedImage(deckedit.Placement{
+		DeckPath:   m.MarkdownFile,
+		SlideIndex: m.SelectedIndex,
+		Prompt:     m.Prompt,
+		Replacing:  m.SelectedImage,
+	}, gemini.ImageResult{Data: m.GeneratedImage.ImageData, ContentType: m.GeneratedImage.ContentType})
 }

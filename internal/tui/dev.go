@@ -261,51 +261,24 @@ func (m *DevModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.imageGenModel = igm
 				// Check if generation completed successfully - save image and update markdown
 				if m.imageGenModel.Step == ImageGenStepDone && m.imageGenModel.GeneratedImage != nil && m.imageGenModel.SavedImagePath == "" {
-					// Save the generated image
-					savedPath, err := m.imageGenModel.SaveGeneratedImage()
+					placed, err := m.imageGenModel.PlaceImage()
 					if err != nil {
 						m.SetError(err)
 						m.addEvent(DevEvent{
 							Type:      "error",
-							Message:   "Failed to save generated image",
+							Message:   "Failed to add the generated image to the deck",
 							Timestamp: time.Now(),
 						})
 						return m, cmd
 					}
+					savedPath := placed.Path
 					m.imageGenModel.SavedImagePath = savedPath
-
-					// Insert or replace image in markdown
-					if m.imageGenModel.SelectedImage != nil {
-						// Regenerating - replace existing image
-						if err := m.imageGenModel.ReplaceImageInMarkdown(savedPath); err != nil {
-							m.SetError(err)
-							m.addEvent(DevEvent{
-								Type:      "error",
-								Message:   "Failed to update markdown",
-								Timestamp: time.Now(),
-							})
-							return m, cmd
-						}
-						// Delete old image file
-						if err := m.imageGenModel.DeleteOldImage(); err != nil {
-							// Log but don't fail - the new image is already saved
-							m.addEvent(DevEvent{
-								Type:      "error",
-								Message:   "Failed to delete old image (non-fatal)",
-								Timestamp: time.Now(),
-							})
-						}
-					} else {
-						// Adding new image
-						if err := m.imageGenModel.InsertImageIntoMarkdown(savedPath); err != nil {
-							m.SetError(err)
-							m.addEvent(DevEvent{
-								Type:      "error",
-								Message:   "Failed to update markdown",
-								Timestamp: time.Now(),
-							})
-							return m, cmd
-						}
+					if placed.DeleteError != nil {
+						m.addEvent(DevEvent{
+							Type:      "error",
+							Message:   "Failed to delete old image (non-fatal)",
+							Timestamp: time.Now(),
+						})
 					}
 
 					// Send reload event
