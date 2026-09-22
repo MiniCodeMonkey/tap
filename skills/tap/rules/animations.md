@@ -64,16 +64,8 @@ Third, we'll choose the best approach.
 Press Space or Right Arrow to reveal each section.
 
 ### Automatic List Fragments
-Enable auto-reveal for bullet lists:
+Enable auto-reveal for a slide's bullet list with a per-slide directive:
 
-**Globally:**
-```yaml
----
-fragments: true
----
-```
-
-**Per-Slide:**
 ```markdown
 <!--
 fragments: true
@@ -90,10 +82,9 @@ Each bullet appears one at a time.
 
 ### Combining Pause and Fragments
 ```markdown
----
-title: Product Launch
+<!--
 fragments: true
----
+-->
 
 # Why Our Product?
 
@@ -135,5 +126,4 @@ All items appear immediately.
 | Global transition | `transition: fade` in frontmatter | All slides |
 | Per-slide transition | `transition: zoom` in directive | Single slide |
 | Manual pause | `<!-- pause -->` | Single slide |
-| Global fragments | `fragments: true` in frontmatter | All slides |
 | Per-slide fragments | `fragments: true` in directive | Single slide |

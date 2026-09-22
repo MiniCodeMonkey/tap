@@ -27,6 +27,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - **Live code runs in `tap dev` and `tap present`** - The Run button answered "Driver registry not configured" in every real run. Both commands now load the built-in drivers and the deck's custom `drivers:`, run them in the deck's folder, and reload them when the deck changes.
 - **A live code block that also highlights lines runs again** - A fence such as `sql {driver: sqlite, connection: demo} {2-3}` lost its driver, because only the last `{...}` group was read, so the block had no Run button. Both groups now count, in either order.
 - **A `---` inside a `~~~` fence or an indented fence stays in its slide** - It used to split the slide in two, while the fence still rendered as code.
+- **The deck-wide `fragments` frontmatter key is gone** - It was documented as a way to auto-reveal every slide's bullet lists at once, in released versions, but nothing in tap ever read it; setting it in frontmatter did nothing. It is now gone from the docs, the skill, and `tap deck schema`. The per-slide `fragments` directive is unaffected and still works as documented.
 
 ### Changed
 

@@ -222,7 +222,6 @@ author: Your Name
 date: "2024-01-15"
 aspectRatio: "16:9"     # 16:9, 4:3, 16:10
 transition: fade        # none, fade, slide, push, zoom
-fragments: true
 themeColors:            # optional: override individual theme colors
   accent: "#ffd447"
 
