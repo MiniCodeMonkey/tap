@@ -477,6 +477,52 @@ func TestWebSocketHubConnectedMessageCarriesRevision(t *testing.T) {
 	}
 }
 
+func TestWebSocketHubConnectedMessageCarriesPresentMode(t *testing.T) {
+	hub := NewWebSocketHub()
+	go hub.Run()
+	defer hub.Stop()
+
+	server := httptest.NewServer(http.HandlerFunc(hub.HandleConnection))
+	defer server.Close()
+	wsURL := "ws" + strings.TrimPrefix(server.URL, "http") + "/"
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	readConnected := func() Message {
+		conn, _, err := websocket.Dial(ctx, wsURL, nil)
+		if err != nil {
+			t.Fatalf("websocket.Dial() error = %v", err)
+		}
+		defer conn.Close(websocket.StatusNormalClosure, "")
+		_, data, err := conn.Read(ctx)
+		if err != nil {
+			t.Fatalf("conn.Read() error = %v", err)
+		}
+		var msg Message
+		if err := json.Unmarshal(data, &msg); err != nil {
+			t.Fatalf("json.Unmarshal() error = %v", err)
+		}
+		return msg
+	}
+
+	first := readConnected()
+	if first.Mode != "" {
+		t.Errorf("Mode = %q, want empty before SetPresentMode is ever called", first.Mode)
+	}
+
+	hub.SetPresentMode(true)
+	second := readConnected()
+	if second.Mode != "present" {
+		t.Errorf("Mode = %q, want %q", second.Mode, "present")
+	}
+
+	hub.SetPresentMode(false)
+	third := readConnected()
+	if third.Mode != "" {
+		t.Errorf("Mode = %q, want empty once present mode is turned back off", third.Mode)
+	}
+}
+
 // TestWebSocketHubOriginCheck covers checkOrigin's rules: no Origin header,
 // an Origin whose host matches the request's own Host header, and an Origin
 // explicitly allowed via SetAllowedOrigins are all accepted; anything else

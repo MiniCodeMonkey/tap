@@ -316,6 +316,12 @@ export interface WebSocketMessage {
 	revision?: string;
 	/** Recording disk status on a "recording" message. Absent means the disk is fine. */
 	disk?: 'low' | 'full';
+	/**
+	 * Set to 'present' only on a "connected" message sent while the hub is
+	 * running tap present rather than tap dev (see
+	 * internal/server/websocket.go's SetPresentMode). Absent otherwise.
+	 */
+	mode?: 'present';
 }
 
 // ============================================================================

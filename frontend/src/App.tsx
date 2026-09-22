@@ -18,7 +18,8 @@ import {
 	broadcastPresentationState,
 	connectWebSocket,
 	detectStaticMode,
-	disconnectWebSocket
+	disconnectWebSocket,
+	useConnectionStore
 } from '$lib/stores/websocket';
 import { setupKeyboardNavigation } from '$lib/utils/keyboard';
 import { setupTouchNavigation } from '$lib/utils/touch';
@@ -100,6 +101,16 @@ export default function App() {
 	const [helpOpen, setHelpOpen] = useState(false);
 	const helpOpenRef = useRef(helpOpen);
 	helpOpenRef.current = helpOpen;
+	const presentMode = useConnectionStore((state) => state.presentMode);
+	// The T shortcut does nothing during tap present (see keyboard.ts), so
+	// the overlay leaves its row out rather than listing a key that no
+	// longer does anything.
+	const audienceShortcuts = presentMode
+		? AUDIENCE_SHORTCUTS.map((group) => ({
+				...group,
+				shortcuts: group.shortcuts.filter((shortcut) => !shortcut.keys.includes('T'))
+			}))
+		: AUDIENCE_SHORTCUTS;
 
 	const presentation = usePresentationStore((state) => state.presentation);
 	const currentSlide = usePresentationStore(selectCurrentSlide);
@@ -289,7 +300,7 @@ export default function App() {
 					onClose={() => setOverviewOpen(false)}
 				/>
 
-				<ShortcutHelp groups={AUDIENCE_SHORTCUTS} theme={theme} isOpen={helpOpen} onClose={() => setHelpOpen(false)} />
+				<ShortcutHelp groups={audienceShortcuts} theme={theme} isOpen={helpOpen} onClose={() => setHelpOpen(false)} />
 			</>
 		);
 	}

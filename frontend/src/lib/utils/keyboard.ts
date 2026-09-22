@@ -12,6 +12,7 @@ import {
 	cycleTheme
 } from '$lib/stores/presentation';
 import { HELP_KEY } from './shortcuts';
+import { useConnectionStore } from '$lib/stores/websocket';
 
 // ============================================================================
 // Types
@@ -279,8 +280,12 @@ function handleKeyDown(event: KeyboardEvent): void {
 		return;
 	}
 
-	// T - cycle through themes
+	// T - cycle through themes, except during tap present, where a stray T
+	// must not change what the audience sees.
 	if (key === 't' || key === 'T') {
+		if (useConnectionStore.getState().presentMode) {
+			return;
+		}
 		event.preventDefault();
 		cycleTheme();
 		return;

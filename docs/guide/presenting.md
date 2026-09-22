@@ -24,7 +24,9 @@ With no file it shows the same picker as `tap dev`.
   **p** to open the presenter view when you need it.
 - **The editing keys do nothing.** `a` (add slide), `i` (image), `t`
   (theme) and `e` (PDF export) write to the deck or a file next to it, and
-  none of that belongs in a talk, so they are unbound.
+  none of that belongs in a talk, so they are unbound. The browser's own
+  `T` shortcut (cycle theme) is off too, so a stray keypress on stage
+  cannot change what the audience sees.
 
 The header reads `● PRESENTING`, and the keys that remain are:
 

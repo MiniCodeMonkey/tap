@@ -69,6 +69,11 @@ type Message struct {
 	Type     MessageType `json:"type"`
 	Theme    string      `json:"theme,omitempty"`
 	Revision string      `json:"revision,omitempty"`
+	// Mode is set to "present" only on a "connected" message sent while the
+	// hub is running in tap present mode (see SetPresentMode), so a client
+	// can tell tap present apart from tap dev and turn off shortcuts that
+	// only make sense while developing, such as the theme cycle key.
+	Mode string `json:"mode,omitempty"`
 	// Disk is set only on a "recording" message: "low", "full", or absent
 	// when the disk is fine.
 	Disk           string `json:"disk,omitempty"`
@@ -179,7 +184,12 @@ type WebSocketHub struct {
 	// dev command sets the same value here and on every candidate Server so
 	// a cookie either of them issues validates.
 	presenterSessionToken string
-	mu                    sync.RWMutex
+	// present is whether the hub is serving tap present rather than tap
+	// dev (see SetPresentMode). When true, every "connected" message
+	// carries Mode "present", so a client can turn off shortcuts that only
+	// make sense while developing, such as the theme cycle key.
+	present bool
+	mu      sync.RWMutex
 }
 
 // DefaultStateRetention is how long the hub keeps the last-known slide
@@ -317,6 +327,17 @@ func (h *WebSocketHub) SetPresenterSessionToken(token string) {
 	h.presenterSessionToken = token
 }
 
+// SetPresentMode tells the hub whether it is serving tap present rather
+// than tap dev, so the "connected" message it sends at register time can
+// carry Mode "present" and let a client turn off shortcuts that only make
+// sense while developing, such as the theme cycle key. Safe to call at any
+// time, including before Run starts or while clients are connected.
+func (h *WebSocketHub) SetPresentMode(present bool) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.present = present
+}
+
 // checkPresenterAuth reports whether r may send navigation messages once
 // connected: always true when no presenter password is configured, and
 // otherwise true only when r carries PresenterAuthCookieName equal to the
@@ -411,6 +432,10 @@ func (h *WebSocketHub) Run() {
 				initialData, _ = json.Marshal(initialMsg)
 			}
 			revision := h.revision
+			var mode string
+			if h.present {
+				mode = "present"
+			}
 			var diskData []byte
 			if h.diskStatus != "" {
 				diskData, _ = json.Marshal(Message{Type: MessageRecording, Disk: h.diskStatus})
@@ -434,7 +459,7 @@ func (h *WebSocketHub) Run() {
 			// distinct connections (see hasSeenFirstRevision in the
 			// frontend), and "connected" already fires exactly once per
 			// connection.
-			connectedMsg, _ := json.Marshal(Message{Type: MessageConnected, Revision: revision})
+			connectedMsg, _ := json.Marshal(Message{Type: MessageConnected, Revision: revision, Mode: mode})
 			select {
 			case client.send <- connectedMsg:
 			default:

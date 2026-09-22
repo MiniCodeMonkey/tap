@@ -233,6 +233,9 @@ func runDevServer(options serverOptions) error {
 		}
 	}
 	hub.SetPresenterSessionToken(presenterSessionToken)
+	if options.present {
+		hub.SetPresentMode(true)
+	}
 	go hub.Run()
 	defer hub.Stop()
 

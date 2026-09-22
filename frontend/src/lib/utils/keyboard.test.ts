@@ -11,6 +11,15 @@ import {
 	checkFullscreen
 } from './keyboard';
 import * as presentationStore from '$lib/stores/presentation';
+import { useConnectionStore } from '$lib/stores/websocket';
+
+// Mock the connection store: keyboard.ts only reads presentMode off it, and
+// the real module's top-level usePresentationStore.subscribe call would
+// otherwise blow up against the mocked presentation store above.
+vi.mock('$lib/stores/websocket', async () => {
+	const { create } = await import('zustand');
+	return { useConnectionStore: create(() => ({ presentMode: false })) };
+});
 
 // ============================================================================
 // Mock Setup
@@ -32,6 +41,7 @@ describe('keyboard navigation', () => {
 
 	beforeEach(() => {
 		vi.clearAllMocks();
+		useConnectionStore.setState({ presentMode: false });
 
 		// Mock window.addEventListener to capture the handler
 		const originalAddEventListener = window.addEventListener;
@@ -246,6 +256,22 @@ describe('keyboard navigation', () => {
 			}
 
 			expect(presentationStore.cycleTheme).not.toHaveBeenCalled();
+		});
+
+		it('should not cycle the theme on T during tap present', () => {
+			useConnectionStore.setState({ presentMode: true });
+			cleanup = setupKeyboardNavigation();
+
+			const event = new KeyboardEvent('keydown', { key: 't' });
+			const preventDefaultSpy = vi.spyOn(event, 'preventDefault');
+			if (keydownHandler) {
+				keydownHandler(event);
+			}
+
+			expect(presentationStore.cycleTheme).not.toHaveBeenCalled();
+			expect(preventDefaultSpy).not.toHaveBeenCalled();
+
+			useConnectionStore.setState({ presentMode: false });
 		});
 	});
 
