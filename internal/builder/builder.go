@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -19,6 +20,13 @@ import (
 	"github.com/MiniCodeMonkey/tap/internal/parser"
 	"github.com/MiniCodeMonkey/tap/internal/transformer"
 )
+
+// ErrAllSlidesSkipped is returned by Build when every slide in the
+// presentation has skip: true, so the built deck would have no slides to
+// show. Both export pdf and export images reject the same deck the same
+// way (see internal/cli/export_pdf.go and internal/cli/export_images.go);
+// callers turn this into the same user-facing invalid_deck error.
+var ErrAllSlidesSkipped = errors.New("every slide has skip: true, so there is nothing to export")
 
 // BuildResult contains statistics about the completed build.
 type BuildResult struct {
@@ -109,6 +117,9 @@ func (b *Builder) Build(cfg *config.Config, pres *parser.Presentation) (*BuildRe
 	// A slide whose skip directive is true is left out of the built deck
 	// entirely, not just hidden, so its content is not published.
 	transformed, _ := transformer.WithoutSkippedSlides(trans.Transform(pres))
+	if len(transformed.Slides) == 0 {
+		return nil, ErrAllSlidesSkipped
+	}
 
 	// Write every successfully built component bundle to dist/components/.
 	componentCount, componentSize, err := b.writeComponentBundles()
