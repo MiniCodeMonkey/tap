@@ -13,19 +13,25 @@ public final class TapClient: @unchecked Sendable {
         self.session = session
     }
 
-    public var baseURL: URL { URL(string: "http://127.0.0.1:\(ready.port)")! }
-    public var previewURL: URL { URL(string: "http://127.0.0.1:\(ready.port)/")! }
-    public var previewLaunchURL: URL { URL(string: "http://127.0.0.1:\(ready.port)/?launch=\(ready.launch)")! }
+    /// Builds a URL against the one running tap. `scheme` is the only thing
+    /// that changes between the HTTP endpoints and the WebSocket.
+    private func url(scheme: String = "http", path: String = "") -> URL {
+        URL(string: "\(scheme)://127.0.0.1:\(ready.port)\(path)")!
+    }
+
+    public var baseURL: URL { url() }
+    public var previewURL: URL { url(path: "/") }
+    public var previewLaunchURL: URL { url(path: "/?launch=\(ready.launch)") }
 
     public func authorizedRequest(path: String) -> URLRequest {
-        var request = URLRequest(url: URL(string: "http://127.0.0.1:\(ready.port)\(path)")!)
+        var request = URLRequest(url: url(path: path))
         request.setValue("Bearer \(ready.token)", forHTTPHeaderField: "Authorization")
         request.timeoutInterval = 10
         return request
     }
 
     public func socketRequest() -> URLRequest {
-        var request = URLRequest(url: URL(string: "ws://127.0.0.1:\(ready.port)/ws")!)
+        var request = URLRequest(url: url(scheme: "ws", path: "/ws"))
         request.setValue("Bearer \(ready.token)", forHTTPHeaderField: "Authorization")
         return request
     }
