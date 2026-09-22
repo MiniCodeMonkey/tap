@@ -57,15 +57,60 @@ func AppSessionCookieName(port int) string {
 	return "tap_app_" + strconv.Itoa(port)
 }
 
+// audienceRoutes are the routes reachable with no app token: what an
+// audience member's browser or a phone remote needs to render the deck and
+// follow along, whatever address they reached the server on. /presenter
+// keeps its own presenter-password gate on top (see handlePresenter);
+// nothing here needs a second one. Everything else, including every route
+// under AppSourcePath's /api/app/ prefix and POST /api/execute (which runs
+// code), always needs the token: see needsAppToken for why route identity,
+// not the request's Host header, is what decides.
+var audienceRoutes = map[string]struct{}{
+	"GET /{$}":                  {},
+	"GET /index.html":           {},
+	"GET /presenter":            {},
+	"GET /presenter.html":       {},
+	"GET /presenter/":           {},
+	"GET /api/presentation":     {},
+	"GET /api/custom-theme.css": {},
+	"GET /assets/":              {},
+	"GET /local/":               {},
+	"GET /components/":          {},
+	"GET /ws":                   {},
+}
+
+// needsAppToken reports whether r must carry the app token to reach its
+// handler. It asks the server's own mux which registered pattern r
+// matches - the exact lookup that will dispatch the request right after -
+// and checks that pattern against audienceRoutes. A request that matches
+// no registered pattern needs the token too, so an unknown path is never
+// accidentally exempt.
+//
+// This is deliberately not a Host check. A pattern like
+// "the request came through the tunnel" sounds like an authorization
+// decision, but Host is a header the client sends, so any local process,
+// and once a tunnel is up, anyone who has seen the tunnel URL the
+// presenter shares with the room, can set it to whatever they like. Route
+// identity comes from the server's own routing table instead, which a
+// request cannot forge by sending a header.
+func (s *Server) needsAppToken(r *http.Request) bool {
+	_, pattern := s.mux.Handler(r)
+	_, exempt := audienceRoutes[pattern]
+	return !exempt
+}
+
 // authorize reports whether r may go on to the routes. When it may not, it
 // has already answered: 401 without the token, a redirect that sets the
 // cookie for a valid launch code, and 403 for a used or wrong one.
-func (a *AppAuth) authorize(w http.ResponseWriter, r *http.Request, port int) bool {
+func (a *AppAuth) authorize(w http.ResponseWriter, r *http.Request, s *Server) bool {
 	if code := r.URL.Query().Get("launch"); code != "" {
-		a.exchangeLaunchCode(w, r, code, port)
+		a.exchangeLaunchCode(w, r, code, s.Port())
 		return false
 	}
-	if a.carriesToken(r, port) {
+	if !s.needsAppToken(r) {
+		return true
+	}
+	if a.carriesToken(r, s.Port()) {
 		return true
 	}
 	w.Header().Set("WWW-Authenticate", `Bearer realm="tap"`)
@@ -120,24 +165,11 @@ func secretsEqual(given, want string) bool {
 	return subtle.ConstantTimeCompare([]byte(given), []byte(want)) == 1
 }
 
-// SetAppAuth puts the server behind auth: from then on every request needs
-// the token. tap dev --app and tap present --app call it before Start.
+// SetAppAuth puts the server behind auth: from then on every request to a
+// route outside audienceRoutes needs the token. tap dev --app and tap
+// present --app call it before Start.
 func (s *Server) SetAppAuth(auth *AppAuth) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.appAuth = auth
-}
-
-// SetTunnelHost tells the server the host of the running tunnel, or ""
-// when none runs.
-func (s *Server) SetTunnelHost(host string) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.tunnelHost = host
-}
-
-// arrivedThroughTunnel reports whether r came in through the running
-// tunnel, whose host is tunnelHost.
-func arrivedThroughTunnel(r *http.Request, tunnelHost string) bool {
-	return tunnelHost != "" && hostnameWithoutPort(r.Host) == tunnelHost
 }

@@ -15,7 +15,9 @@ import (
 )
 
 // startAppServer starts a loopback server with the page routes, the
-// WebSocket hub and an app token, and returns it with its base URL.
+// WebSocket hub, a synthetic app control route standing in for a future
+// route under AppSourcePath's /api/app/ prefix, and an app token. It
+// returns the server, the auth and the base URL.
 func startAppServer(t *testing.T) (*Server, *AppAuth, string) {
 	t.Helper()
 	s := NewWithHost(0, "127.0.0.1")
@@ -25,6 +27,12 @@ func startAppServer(t *testing.T) (*Server, *AppAuth, string) {
 	go hub.Run()
 	t.Cleanup(hub.Stop)
 	s.RegisterHandlerFunc("GET /ws", hub.HandleConnection)
+	// A stand-in for a real /api/app/ route (the real PUT AppSourcePath
+	// route is registered by a later task). It must behave like every
+	// other route under that prefix: always needs the token.
+	s.RegisterHandlerFunc("GET "+AppSourcePath, func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
 	auth, err := NewAppAuth()
 	if err != nil {
 		t.Fatal(err)
@@ -56,6 +64,26 @@ func getStatus(t *testing.T, client *http.Client, url, headerName, headerValue s
 	return response
 }
 
+// getStatusWithHost is getStatus, but sets the request's Host header
+// instead of a request header, to test that Host cannot decide an
+// authorization question.
+func getStatusWithHost(t *testing.T, client *http.Client, url, host string) *http.Response {
+	t.Helper()
+	request, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if host != "" {
+		request.Host = host
+	}
+	response, err := client.Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response.Body.Close()
+	return response
+}
+
 func TestNewAppAuthMakesFreshSecrets(t *testing.T) {
 	first, err := NewAppAuth()
 	if err != nil {
@@ -75,9 +103,12 @@ func TestNewAppAuthMakesFreshSecrets(t *testing.T) {
 	}
 }
 
-func TestAppAuthRejectsARequestWithoutTheToken(t *testing.T) {
-	_, _, base := startAppServer(t)
-	for _, path := range []string{"/", "/api/presentation", "/presenter", "/assets/index.js"} {
+// TestAppAuthControlRoutesNeedTheToken checks the app's control surface: a
+// route that is not one of the audience's, such as AppSourcePath. It must
+// refuse a request without the token and accept one with it.
+func TestAppAuthControlRoutesNeedTheToken(t *testing.T) {
+	_, auth, base := startAppServer(t)
+	for _, path := range []string{AppSourcePath, "/qr"} {
 		response := getStatus(t, http.DefaultClient, base+path, "", "")
 		if response.StatusCode != http.StatusUnauthorized {
 			t.Errorf("GET %s without the token: status %d, want 401", path, response.StatusCode)
@@ -86,17 +117,57 @@ func TestAppAuthRejectsARequestWithoutTheToken(t *testing.T) {
 			t.Errorf("GET %s: WWW-Authenticate = %q, want Bearer", path, response.Header.Get("WWW-Authenticate"))
 		}
 	}
-	wrong := getStatus(t, http.DefaultClient, base+"/api/presentation", "Authorization", "Bearer "+strings.Repeat("0", 64))
+	wrong := getStatus(t, http.DefaultClient, base+AppSourcePath, "Authorization", "Bearer "+strings.Repeat("0", 64))
 	if wrong.StatusCode != http.StatusUnauthorized {
-		t.Errorf("a wrong token: status %d, want 401", wrong.StatusCode)
+		t.Errorf("a wrong token on a control route: status %d, want 401", wrong.StatusCode)
+	}
+	right := getStatus(t, http.DefaultClient, base+AppSourcePath, "Authorization", "Bearer "+auth.Token())
+	if right.StatusCode != http.StatusOK {
+		t.Errorf("the right token on a control route: status %d, want 200", right.StatusCode)
 	}
 }
 
-func TestAppAuthAcceptsTheBearerToken(t *testing.T) {
-	_, auth, base := startAppServer(t)
-	response := getStatus(t, http.DefaultClient, base+"/api/presentation", "Authorization", "Bearer "+auth.Token())
+// TestAppAuthAudienceRoutesNeedNoToken checks that what an audience member
+// or a phone remote needs - the deck page, its assets, the presentation
+// data and the presenter view - works with no token at all, on the
+// ordinary loopback address, because these routes carry nothing an app
+// token protects.
+func TestAppAuthAudienceRoutesNeedNoToken(t *testing.T) {
+	_, _, base := startAppServer(t)
+	for _, path := range []string{"/", "/api/presentation", "/presenter", "/assets/index.js"} {
+		response := getStatus(t, http.DefaultClient, base+path, "", "")
+		if response.StatusCode == http.StatusUnauthorized {
+			t.Errorf("GET %s without the token: status %d, want anything but 401 (an audience route)", path, response.StatusCode)
+		}
+	}
+}
+
+// TestAppAuthForgedHostDoesNotBypassTheToken is the regression test for the
+// auth bypass: a request cannot buy its way onto a control route by
+// setting a Host header, forged or otherwise. Host is a value the client
+// sends, so it can never be the thing an authorization decision turns on.
+func TestAppAuthForgedHostDoesNotBypassTheToken(t *testing.T) {
+	_, _, base := startAppServer(t)
+	for _, host := range []string{"quiet-river.trycloudflare.com", "127.0.0.1", ""} {
+		response := getStatusWithHost(t, http.DefaultClient, base+AppSourcePath, host)
+		if response.StatusCode != http.StatusUnauthorized {
+			t.Errorf("GET %s with Host %q and no token: status %d, want 401", AppSourcePath, host, response.StatusCode)
+		}
+	}
+}
+
+// TestAppAuthAudienceRoutesIgnoreHost checks the other side of the same
+// fix: an audience route needs no token whatever the Host header claims,
+// because route identity, not Host, is what decides. SetAllowedOrigins
+// stands in for a real tunnel starting, so this isolates the app-token
+// question from the unrelated DNS-rebinding host allow-list that
+// requireAllowedHost enforces on some of these routes independently.
+func TestAppAuthAudienceRoutesIgnoreHost(t *testing.T) {
+	s, _, base := startAppServer(t)
+	s.SetAllowedOrigins([]string{"quiet-river.trycloudflare.com"})
+	response := getStatusWithHost(t, http.DefaultClient, base+"/api/presentation", "quiet-river.trycloudflare.com")
 	if response.StatusCode != http.StatusOK {
-		t.Errorf("status %d, want 200", response.StatusCode)
+		t.Errorf("GET /api/presentation with a forged Host: status %d, want 200", response.StatusCode)
 	}
 }
 
@@ -108,7 +179,10 @@ func TestAppAuthTradesTheLaunchCodeForACookieOnce(t *testing.T) {
 	}
 	page := &http.Client{Jar: jar}
 
-	response := getStatus(t, page, base+"/api/presentation?launch="+auth.LaunchCode(), "", "")
+	// Spend the launch code against a control route, so the cookie it
+	// sets is the thing actually proven, not an accident of an audience
+	// route that would have answered 200 regardless.
+	response := getStatus(t, page, base+AppSourcePath+"?launch="+auth.LaunchCode(), "", "")
 	if response.StatusCode != http.StatusOK {
 		t.Fatalf("the launch URL ended with status %d, want 200", response.StatusCode)
 	}
@@ -124,68 +198,30 @@ func TestAppAuthTradesTheLaunchCodeForACookieOnce(t *testing.T) {
 	if session == nil || session.Value != auth.Token() {
 		t.Fatalf("cookies = %v, want %s set to the token", jar.Cookies(response.Request.URL), AppSessionCookieName(s.Port()))
 	}
-	if again := getStatus(t, page, base+"/api/presentation", "", ""); again.StatusCode != http.StatusOK {
-		t.Errorf("a request with the cookie: status %d, want 200", again.StatusCode)
+	if again := getStatus(t, page, base+AppSourcePath, "", ""); again.StatusCode != http.StatusOK {
+		t.Errorf("a control route with the cookie: status %d, want 200", again.StatusCode)
 	}
 
-	reused := getStatus(t, &http.Client{}, base+"/api/presentation?launch="+auth.LaunchCode(), "", "")
+	reused := getStatus(t, &http.Client{}, base+AppSourcePath+"?launch="+auth.LaunchCode(), "", "")
 	if reused.StatusCode != http.StatusForbidden {
 		t.Errorf("the launch code a second time: status %d, want 403", reused.StatusCode)
 	}
 }
 
-func TestAppAuthGuardsTheWebSocketUpgrade(t *testing.T) {
-	s, auth, base := startAppServer(t)
+// TestAppAuthTheWebSocketNeedsNoToken checks that the WebSocket upgrade,
+// one of the audience's routes, works with no token, the same as the deck
+// page it serves.
+func TestAppAuthTheWebSocketNeedsNoToken(t *testing.T) {
+	_, _, base := startAppServer(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	url := "ws" + strings.TrimPrefix(base, "http") + "/ws"
 
-	_, response, err := websocket.Dial(ctx, url, nil)
-	if err == nil {
-		t.Fatal("the WebSocket opened without the token")
+	conn, _, err := websocket.Dial(ctx, url, nil)
+	if err != nil {
+		t.Fatalf("the WebSocket did not open with no token: %v", err)
 	}
-	if response == nil || response.StatusCode != http.StatusUnauthorized {
-		t.Errorf("upgrade without the token: response %v, want 401", response)
-	}
-
-	for _, header := range []http.Header{
-		{"Authorization": {"Bearer " + auth.Token()}},
-		{"Cookie": {AppSessionCookieName(s.Port()) + "=" + auth.Token()}},
-	} {
-		conn, _, err := websocket.Dial(ctx, url, &websocket.DialOptions{HTTPHeader: header})
-		if err != nil {
-			t.Errorf("upgrade with %v: %v", header, err)
-			continue
-		}
-		_ = conn.Close(websocket.StatusNormalClosure, "")
-	}
-}
-
-func TestAppAuthLetsTheTunnelIn(t *testing.T) {
-	s, _, base := startAppServer(t)
-	s.SetAllowedOrigins([]string{"quiet-river.trycloudflare.com", "https://quiet-river.trycloudflare.com"})
-	throughTunnel := func() int {
-		request, err := http.NewRequest(http.MethodGet, base+"/api/presentation", nil)
-		if err != nil {
-			t.Fatal(err)
-		}
-		request.Host = "quiet-river.trycloudflare.com"
-		response, err := http.DefaultClient.Do(request)
-		if err != nil {
-			t.Fatal(err)
-		}
-		response.Body.Close()
-		return response.StatusCode
-	}
-
-	s.SetTunnelHost("quiet-river.trycloudflare.com")
-	if status := throughTunnel(); status != http.StatusOK {
-		t.Errorf("through the running tunnel: status %d, want 200", status)
-	}
-	s.SetTunnelHost("")
-	if status := throughTunnel(); status != http.StatusUnauthorized {
-		t.Errorf("after the tunnel stopped: status %d, want 401", status)
-	}
+	_ = conn.Close(websocket.StatusNormalClosure, "")
 }
 
 func TestServerWithoutAppAuthNeedsNoToken(t *testing.T) {

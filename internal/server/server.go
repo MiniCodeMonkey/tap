@@ -52,13 +52,10 @@ type Server struct {
 	// routes lists every pattern registered on mux, for Routes.
 	routes []string
 	// appAuth is the token of a tap --app run, which serveHTTP checks on
-	// every request. It is nil outside --app mode.
+	// every request outside audienceRoutes. It is nil outside --app mode.
 	appAuth *AppAuth
-	// tunnelHost is the host of the running tunnel, or "" (see
-	// SetTunnelHost).
-	tunnelHost string
-	mu         sync.RWMutex
-	started    bool
+	mu      sync.RWMutex
+	started bool
 }
 
 // New creates a new Server bound to the specified port on 0.0.0.0, so a

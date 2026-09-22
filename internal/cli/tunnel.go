@@ -92,13 +92,8 @@ func (c *tunnelController) applyOriginsLocked() {
 		origins = append(origins, c.active.Host(), c.active.URL())
 	}
 
-	tunnelHost := ""
-	if c.active != nil {
-		tunnelHost = c.active.Host()
-	}
 	if c.srv != nil {
 		c.srv.SetAllowedOrigins(origins)
-		c.srv.SetTunnelHost(tunnelHost)
 	}
 	if c.hub != nil {
 		c.hub.SetAllowedOrigins(origins)

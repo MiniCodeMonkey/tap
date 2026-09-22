@@ -48,19 +48,16 @@ func WriteBodyTooLarge(w http.ResponseWriter) {
 }
 
 // serveHTTP is the server's front door. Every request passes through it
-// before the mux. With an app token set, it answers every request that
-// lacks the token. It caps the body before any handler reads it, and it
-// applies the same-origin JSON guard to every method that can change
-// state, so no mutating route can be registered without the guard.
+// before the mux. With an app token set, it answers every request to a
+// route outside audienceRoutes that lacks the token. It caps the body
+// before any handler reads it, and it applies the same-origin JSON guard
+// to every method that can change state, so no mutating route can be
+// registered without the guard.
 func (s *Server) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	s.mu.RLock()
 	auth := s.appAuth
-	tunnelHost := s.tunnelHost
 	s.mu.RUnlock()
-	// A phone that opens the tunnel URL has no app token. It gets what the
-	// tunnel gives anyone, as with plain tap dev --tunnel, and the presenter
-	// password still guards the presenter view.
-	if auth != nil && !arrivedThroughTunnel(r, tunnelHost) && !auth.authorize(w, r, s.Port()) {
+	if auth != nil && !auth.authorize(w, r, s) {
 		return
 	}
 
