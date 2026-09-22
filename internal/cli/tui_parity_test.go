@@ -5,6 +5,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/MiniCodeMonkey/tap/internal/layouts"
 	"github.com/MiniCodeMonkey/tap/internal/tui"
 )
 
@@ -38,4 +39,22 @@ func TestThemeSetMatchesTheThemePickerKey(t *testing.T) {
 		t.Fatalf("tap theme set exited %d: %s", exitCode, stderr)
 	}
 	requireSameFolders(t, tuiDeck, commandDeck)
+}
+
+func TestSlideAddLayoutMatchesTheWizardKey(t *testing.T) {
+	for index, template := range layouts.Templates() {
+		t.Run(template.Name, func(t *testing.T) {
+			tuiDeck, commandDeck := twoDeckCopies(t, "talk.md", "# One\n")
+
+			model := tea.Model(tui.NewDevModel(tui.DevConfig{MarkdownFile: tuiDeck}))
+			model, _ = pressKeys(model, runeKey("a"))
+			model, _ = pressKeys(model, repeatKey(tea.KeyMsg{Type: tea.KeyDown}, index)...)
+			pressKeys(model, tea.KeyMsg{Type: tea.KeyEnter}, tea.KeyMsg{Type: tea.KeyCtrlD})
+
+			if exitCode, _, stderr := runTap(t, "slide", "add", commandDeck, "--layout", template.Name); exitCode != exitOK {
+				t.Fatalf("tap slide add exited %d: %s", exitCode, stderr)
+			}
+			requireSameFolders(t, tuiDeck, commandDeck)
+		})
+	}
 }
