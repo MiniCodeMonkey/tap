@@ -61,12 +61,16 @@ func execute(root *cobra.Command, args []string, stdout, stderr io.Writer) int {
 	root.SetArgs(args)
 	root.SetOut(stdout)
 	root.SetErr(stderr)
-	_, err := root.ExecuteC()
+	command, err := root.ExecuteC()
 	if err == nil {
 		return exitOK
 	}
 
-	exitCode, _, reported := classify(err)
+	exitCode, code, reported := classify(err)
+	if jsonRequested(command) {
+		_ = printJSONError(stdout, code, err.Error())
+		return exitCode
+	}
 	switch {
 	case reported:
 	case errors.Is(err, errInterrupted):
