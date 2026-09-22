@@ -39,7 +39,7 @@
     {
       "number": 4,
       "startLine": 41,
-      "endLine": 51,
+      "endLine": 58,
       "layout": "code-focus",
       "title": "",
       "fragments": 0,
@@ -58,8 +58,8 @@
     },
     {
       "number": 5,
-      "startLine": 55,
-      "endLine": 73,
+      "startLine": 62,
+      "endLine": 80,
       "layout": "two-column",
       "title": "Root Cause",
       "fragments": 0,
@@ -70,8 +70,8 @@
     },
     {
       "number": 6,
-      "startLine": 77,
-      "endLine": 85,
+      "startLine": 84,
+      "endLine": 92,
       "layout": "big-stat",
       "title": "11 min",
       "fragments": 0,
@@ -82,8 +82,8 @@
     },
     {
       "number": 7,
-      "startLine": 89,
-      "endLine": 91,
+      "startLine": 96,
+      "endLine": 98,
       "layout": "section",
       "title": "What Changed",
       "fragments": 0,
@@ -94,8 +94,8 @@
     },
     {
       "number": 8,
-      "startLine": 95,
-      "endLine": 99,
+      "startLine": 102,
+      "endLine": 106,
       "layout": "default",
       "title": "Three Fixes",
       "fragments": 0,
@@ -106,8 +106,8 @@
     },
     {
       "number": 9,
-      "startLine": 103,
-      "endLine": 111,
+      "startLine": 110,
+      "endLine": 118,
       "layout": "quote",
       "title": "",
       "fragments": 0,

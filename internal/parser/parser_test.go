@@ -1994,7 +1994,7 @@ func TestParse_SlideLineRangesOfTheConferenceTalk(t *testing.T) {
 		t.Fatalf("Parse() returned error: %v", err)
 	}
 
-	want := [][2]int{{15, 19}, {23, 25}, {29, 37}, {41, 51}, {55, 73}, {77, 85}, {89, 91}, {95, 99}, {103, 111}}
+	want := [][2]int{{15, 19}, {23, 25}, {29, 37}, {41, 58}, {62, 80}, {84, 92}, {96, 98}, {102, 106}, {110, 118}}
 	if len(pres.Slides) != len(want) {
 		t.Fatalf("got %d slides, want %d", len(pres.Slides), len(want))
 	}

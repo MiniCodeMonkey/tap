@@ -42,7 +42,14 @@ Nothing in the runbook covered this.
 layout: code-focus
 -->
 
-```sql {driver: sqlite, connection: incident} {2-3}
+```sql {driver: sqlite, connection: incident} {9-10}
+CREATE TABLE request_log (region TEXT, status INTEGER, ts TEXT);
+INSERT INTO request_log VALUES
+  ('us-east', 500, datetime('now', '-10 minutes')),
+  ('us-east', 503, datetime('now', '-3 minutes')),
+  ('us-west', 200, datetime('now', '-5 minutes')),
+  ('eu-west', 500, datetime('now', '-90 minutes'));
+
 SELECT region, count(*) AS errors
 FROM request_log
 WHERE status >= 500 AND ts > datetime('now', '-1 hour')
