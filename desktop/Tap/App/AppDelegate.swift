@@ -13,6 +13,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.mainMenu = MainMenu.build()
         AppEnvironment.shared.warmUp()
+        NSDocumentController.shared.autosavingDelay = 1
     }
 
     /// There is no untitled document to offer: "New deck" is deliberately

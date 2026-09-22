@@ -10,6 +10,34 @@ class HostedTestCase: XCTestCase {
     override func setUp() async throws {
         configHome = try Fixtures.temporaryFolder()
         AppEnvironment.shared.extraEnvironment["XDG_CONFIG_HOME"] = configHome.path
+        // `tap dev --app` is not implemented by the bundled tap on this
+        // branch (Task 13, on a parallel branch, adds it), so every hosted
+        // test that opens a document runs a fake tap in its place.
+        AppEnvironment.shared.tapExecutableURL = try FakeTap.ready()
+    }
+
+    override func tearDown() async throws {
+        for document in NSDocumentController.shared.documents {
+            document.close()
+        }
+        try await Task.sleep(nanoseconds: 100_000_000)
+    }
+
+    func openDeck(_ url: URL) async throws -> DeckDocument {
+        let (document, _) = try await NSDocumentController.shared.openDocument(withContentsOf: url, display: true)
+        return try XCTUnwrap(document as? DeckDocument)
+    }
+
+    func waitForRunningTap(_ document: DeckDocument) async throws -> TapReady {
+        let session = try XCTUnwrap(document.sessionController?.session)
+        try await waitUntil(timeout: 30, "tap to be ready") { if case .running = session.state { return true } else { return false } }
+        guard case .running(let ready) = session.state else { throw CancellationError() }
+        return ready
+    }
+
+    func waitForBoxes(_ document: DeckDocument, count: Int) async throws {
+        let editor = try XCTUnwrap(document.sessionController?.editor)
+        try await waitUntil(timeout: 30, "\(count) boxes") { editor.boxes.count == count }
     }
 
     /// Polls `condition` until it is true.
