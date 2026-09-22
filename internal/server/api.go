@@ -66,8 +66,13 @@ func (s *Server) handleAPIExecute(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Read the registry once: SetRegistry runs concurrently on every
+	// reload, so every use below reads this local snapshot rather than
+	// s.registry directly.
+	registry := s.GetRegistry()
+
 	// Check if registry is set
-	if s.registry == nil {
+	if registry == nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
 		_ = json.NewEncoder(w).Encode(ExecuteResponse{
@@ -77,10 +82,11 @@ func (s *Server) handleAPIExecute(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Only code that is a live block in the loaded deck runs. The server
-	// listens on every interface, and a client outside a browser can send
-	// any Origin header, so the same-origin check alone does not stop a
-	// request from running arbitrary code.
+	// Only code that is a live block in the loaded deck runs. Other
+	// devices can reach the server when tap dev is started with --lan or
+	// --tunnel, and a client outside a browser can send any Origin
+	// header, so the same-origin check alone does not stop a request from
+	// running arbitrary code.
 	if !s.deckHasLiveBlock(req.Driver, req.Connection, req.Code) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusForbidden)
@@ -92,7 +98,7 @@ func (s *Server) handleAPIExecute(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Check if driver exists
-	if !s.registry.Has(req.Driver) {
+	if !registry.Has(req.Driver) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(ExecuteResponse{
@@ -111,7 +117,7 @@ func (s *Server) handleAPIExecute(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 
 	// Execute code
-	result := s.registry.Execute(ctx, req.Driver, req.Code, config)
+	result := registry.Execute(ctx, req.Driver, req.Code, config)
 
 	// Determine HTTP status based on result
 	w.Header().Set("Content-Type", "application/json")

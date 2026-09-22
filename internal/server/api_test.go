@@ -485,3 +485,35 @@ func TestSetGetRegistry(t *testing.T) {
 		t.Error("expected to get the same registry back")
 	}
 }
+
+// TestHandleAPIExecute_ConcurrentSetRegistryDoesNotRace reproduces the
+// data race between a request reading s.registry directly and a reload
+// calling SetRegistry concurrently (the reload path tap dev takes on
+// every file change). Run with -race: it fails on the unguarded reads,
+// and passes once handleAPIExecute reads the registry once through
+// GetRegistry and uses that local value throughout.
+func TestHandleAPIExecute_ConcurrentSetRegistryDoesNotRace(t *testing.T) {
+	s := New(0)
+	registry := driver.NewRegistry()
+	registry.Register(&mockDriver{name: "test", result: driver.Result{Success: true, Output: "ran"}})
+	s.SetRegistry(registry)
+	s.SetPresentation(presentationWithBlock("test", "", "echo deck"))
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for i := 0; i < 200; i++ {
+			s.SetRegistry(driver.NewRegistry())
+		}
+		s.SetRegistry(registry)
+	}()
+
+	body := ExecuteRequest{Driver: "test", Code: "echo deck"}
+	bodyBytes, _ := json.Marshal(body)
+	for i := 0; i < 200; i++ {
+		request := httptest.NewRequest(http.MethodPost, "/api/execute", bytes.NewReader(bodyBytes))
+		recorder := httptest.NewRecorder()
+		s.handleAPIExecute(recorder, request)
+	}
+	<-done
+}
