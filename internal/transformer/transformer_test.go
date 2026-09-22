@@ -1084,6 +1084,41 @@ func TestResolveImagePathsNoBaseDir(t *testing.T) {
 	}
 }
 
+func TestResolveAsciinemaPathsInHTML(t *testing.T) {
+	cfg := config.DefaultConfig()
+	tr := NewWithBaseDir(cfg, "/presentations/demo")
+
+	testCases := []struct {
+		name     string
+		html     string
+		expected string
+	}{
+		{
+			// This is the tag exactly as the markdown renderer emits it: the
+			// language class plus the data-code-block-index attribute the
+			// renderer always adds. A pattern that only matches the bare
+			// class="language-asciinema" tag never fires on real output.
+			name:     "renderer's real tag with data-code-block-index",
+			html:     `<pre><code class="language-asciinema" data-code-block-index="0">src: demo.cast</code></pre>`,
+			expected: `<pre><code class="language-asciinema" data-code-block-index="0">src: /local/demo.cast</code></pre>`,
+		},
+		{
+			name:     "bare tag with no extra attributes",
+			html:     `<code class="language-asciinema">src: demo.cast</code>`,
+			expected: `<code class="language-asciinema">src: /local/demo.cast</code>`,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			result := tr.resolveAsciinemaPaths(tc.html)
+			if result != tc.expected {
+				t.Errorf("resolveAsciinemaPaths failed:\n  got:      %q\n  expected: %q", result, tc.expected)
+			}
+		})
+	}
+}
+
 func TestTransformWithImagePathResolution(t *testing.T) {
 	cfg := config.DefaultConfig()
 	tr := NewWithBaseDir(cfg, "/presentations/demo")

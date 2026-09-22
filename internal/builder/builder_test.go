@@ -170,6 +170,80 @@ func TestRewriteImagePaths(t *testing.T) {
 	}
 }
 
+func TestExtractAsciinemaPaths(t *testing.T) {
+	tests := []struct {
+		name     string
+		html     string
+		expected []string
+	}{
+		{
+			name:     "no asciinema blocks",
+			html:     "<p>Hello world</p>",
+			expected: nil,
+		},
+		{
+			// This is the tag exactly as the markdown renderer emits it: the
+			// language class plus the data-code-block-index attribute the
+			// renderer always adds. A pattern that only matches the bare
+			// class="language-asciinema" tag never fires on real output.
+			name:     "renderer's real tag with data-code-block-index",
+			html:     `<pre><code class="language-asciinema" data-code-block-index="0">src: demo.cast</code></pre>`,
+			expected: []string{"demo.cast"},
+		},
+		{
+			name:     "bare tag with no extra attributes",
+			html:     `<code class="language-asciinema">src: demo.cast</code>`,
+			expected: []string{"demo.cast"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := extractAsciinemaPaths(tt.html)
+			if len(result) != len(tt.expected) {
+				t.Errorf("expected %d paths, got %d (%v)", len(tt.expected), len(result), result)
+				return
+			}
+			for i, path := range result {
+				if path != tt.expected[i] {
+					t.Errorf("path %d: expected %q, got %q", i, tt.expected[i], path)
+				}
+			}
+		})
+	}
+}
+
+func TestRewriteAsciinemaPaths(t *testing.T) {
+	tests := []struct {
+		name     string
+		html     string
+		mapping  map[string]string
+		expected string
+	}{
+		{
+			name:     "renderer's real tag with data-code-block-index",
+			html:     `<pre><code class="language-asciinema" data-code-block-index="0">src: demo.cast</code></pre>`,
+			mapping:  map[string]string{"demo.cast": "assets/demo.abc12345.cast"},
+			expected: `<pre><code class="language-asciinema" data-code-block-index="0">src: assets/demo.abc12345.cast</code></pre>`,
+		},
+		{
+			name:     "bare tag with no extra attributes",
+			html:     `<code class="language-asciinema">src: demo.cast</code>`,
+			mapping:  map[string]string{"demo.cast": "assets/demo.abc12345.cast"},
+			expected: `<code class="language-asciinema">src: assets/demo.abc12345.cast</code>`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := rewriteAsciinemaPaths(tt.html, tt.mapping)
+			if result != tt.expected {
+				t.Errorf("expected %q, got %q", tt.expected, result)
+			}
+		})
+	}
+}
+
 func TestIsAbsoluteURL(t *testing.T) {
 	tests := []struct {
 		path     string

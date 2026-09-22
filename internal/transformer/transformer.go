@@ -713,7 +713,10 @@ func (t *Transformer) resolveImagePath(path string) string {
 }
 
 // asciinemaBlockPattern matches asciinema code blocks and captures the content.
-var asciinemaBlockPattern = regexp.MustCompile(`<code class="language-asciinema">([\s\S]*?)</code>`)
+// The renderer always adds a data-code-block-index attribute after the class
+// (and may add others later), so this matches on the class alone and
+// tolerates any other attributes the tag carries, in any order.
+var asciinemaBlockPattern = regexp.MustCompile(`(<code class="language-asciinema"[^>]*>)([\s\S]*?)</code>`)
 
 // asciinemaSrcPattern matches "src: path" lines in asciinema block content.
 var asciinemaSrcPattern = regexp.MustCompile(`(?m)^src:\s*(?:&quot;|"|')?([^"'&\n]+)(?:&quot;|"|')?$`)
@@ -726,10 +729,11 @@ func (t *Transformer) resolveAsciinemaPaths(html string) string {
 
 	return asciinemaBlockPattern.ReplaceAllStringFunc(html, func(match string) string {
 		submatches := asciinemaBlockPattern.FindStringSubmatch(match)
-		if len(submatches) < 2 {
+		if len(submatches) < 3 {
 			return match
 		}
-		content := submatches[1]
+		openTag := submatches[1]
+		content := submatches[2]
 
 		newContent := asciinemaSrcPattern.ReplaceAllStringFunc(content, func(srcLine string) string {
 			srcMatches := asciinemaSrcPattern.FindStringSubmatch(srcLine)
@@ -748,7 +752,7 @@ func (t *Transformer) resolveAsciinemaPaths(html string) string {
 			return "src: /local/" + cleanPath
 		})
 
-		return `<code class="language-asciinema">` + newContent + `</code>`
+		return openTag + newContent + `</code>`
 	})
 }
 
