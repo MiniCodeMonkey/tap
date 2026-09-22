@@ -6,12 +6,44 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/MiniCodeMonkey/tap/internal/config"
 	"github.com/MiniCodeMonkey/tap/internal/pdf"
 )
+
+func TestExportPDFCommandShape(t *testing.T) {
+	command, _, err := rootCmd.Find([]string{"export", "pdf"})
+	if err != nil || command.Name() != "pdf" || command.Parent().Name() != "export" {
+		t.Fatalf("tap export pdf not found: %v", err)
+	}
+	if command.Use != "pdf [deck]" {
+		t.Errorf("Use = %q, want %q", command.Use, "pdf [deck]")
+	}
+	for name, shorthand := range map[string]string{"output": "o", "content": "", "json": ""} {
+		flag := command.Flags().Lookup(name)
+		if flag == nil {
+			t.Errorf("missing --%s", name)
+			continue
+		}
+		if flag.Shorthand != shorthand {
+			t.Errorf("--%s shorthand = %q, want %q", name, flag.Shorthand, shorthand)
+		}
+	}
+}
+
+func TestExportPDFMissingDeckIsAUserError(t *testing.T) {
+	missing := filepath.Join(t.TempDir(), "missing.md")
+	exitCode, stdout, _ := runTap(t, "export", "pdf", missing, "--json")
+	if exitCode != exitUserError {
+		t.Errorf("exit code = %d, want %d", exitCode, exitUserError)
+	}
+	if !strings.Contains(stdout, `"code": "deck_not_found"`) {
+		t.Errorf("stdout = %q, want a deck_not_found JSON error", stdout)
+	}
+}
 
 // TestPrepareDeck_ServesComponentBundles checks that the server prepareDeck
 // starts (see internal/cli/deck.go) actually serves every component bundle

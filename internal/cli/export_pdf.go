@@ -3,7 +3,6 @@ package cli
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"os"
 	"os/signal"
@@ -21,11 +20,12 @@ import (
 var (
 	pdfOutput  string
 	pdfContent string
+	pdfJSON    bool
 )
 
-// pdfCmd represents the pdf command
-var pdfCmd = &cobra.Command{
-	Use:   "pdf <file>",
+// exportPDFCmd represents the export pdf command
+var exportPDFCmd = &cobra.Command{
+	Use:   "pdf [deck]",
 	Short: "Export presentation to PDF",
 	Long: `Export a presentation to a PDF file.
 
@@ -38,49 +38,32 @@ You can choose what content to include in the PDF:
   - both:   Slides with speaker notes below
 
 Examples:
-  tap pdf slides.md                        # Export to slides.pdf
-  tap pdf slides.md --output handout.pdf   # Custom output filename
-  tap pdf slides.md -o talk.pdf            # Short form
-  tap pdf slides.md --content notes        # Export only speaker notes
-  tap pdf slides.md --content both         # Slides with notes`,
-	Args: cobra.ExactArgs(1),
-	Run:  runPDF,
+  tap export pdf                              # The deck in this folder, to <deck>.pdf
+  tap export pdf slides.md                    # Export to slides.pdf
+  tap export pdf slides.md --output handout.pdf
+  tap export pdf slides.md -o talk.pdf        # Short form
+  tap export pdf slides.md --content notes    # Only speaker notes
+  tap export pdf slides.md --content both     # Slides with notes
+  tap export pdf slides.md --json             # Print the result as JSON`,
+	Args: cobra.MaximumNArgs(1),
+	RunE: runExportPDF,
 }
 
 func init() {
-	// Register the pdf command with root
-	rootCmd.AddCommand(pdfCmd)
+	exportCmd.AddCommand(exportPDFCmd)
 
-	// Command-specific flags
-	pdfCmd.Flags().StringVarP(&pdfOutput, "output", "o", "", "output PDF file path (default: <input>.pdf)")
-	pdfCmd.Flags().StringVar(&pdfContent, "content", "slides", "content to include: slides, notes, or both")
+	exportPDFCmd.Flags().StringVarP(&pdfOutput, "output", "o", "", "output PDF file path (default: <deck>.pdf)")
+	exportPDFCmd.Flags().StringVar(&pdfContent, "content", "slides", "content to include: slides, notes, or both")
+	exportPDFCmd.Flags().BoolVar(&pdfJSON, "json", false, "print the result as JSON")
 }
 
-// runPDF is the command's cobra.Run entry point. It delegates to runPDFE,
-// which owns the temporary server and PDF exporter (and their cleanup) for
-// the whole export, and turns its returned error into the command's one
-// exit(1). Keeping that work in a function that returns an error, rather
-// than calling os.Exit from deep inside it, is what lets every defer along
-// the way (server shutdown, exporter close) actually run before the
-// process exits - os.Exit skips deferred calls, which would otherwise
-// orphan the headless browser and the temporary server on every failure
-// path after they start.
-func runPDF(cmd *cobra.Command, args []string) {
-	if err := runPDFE(args); err != nil {
-		if errors.Is(err, errInterrupted) {
-			fmt.Fprintln(os.Stderr, "interrupted")
-			os.Exit(130)
-		}
-		if !errors.Is(err, errSilent) {
-			Errorln("Error:", err)
-		}
-		os.Exit(1)
-	}
-}
-
-// runPDFE implements the pdf command. See runPDF for why this is a
-// separate, error-returning function.
-func runPDFE(args []string) error {
+// runExportPDF implements the export pdf command. It returns an error
+// rather than calling os.Exit from deep inside it, which is what lets
+// every defer along the way (server shutdown, exporter close) actually
+// run before the process exits - os.Exit skips deferred calls, which
+// would otherwise orphan the headless browser and the temporary server on
+// every failure path after they start.
+func runExportPDF(cmd *cobra.Command, args []string) error {
 	// Cancelled on Ctrl-C (SIGINT) or SIGTERM, so the export loop below can
 	// stop between slides instead of leaving a headless browser running
 	// past the deferred cleanup below.
@@ -95,11 +78,9 @@ func runPDFE(args []string) error {
 	// process immediately.
 	context.AfterFunc(signalCtx, stop)
 
-	file := args[0]
-
-	// Validate that the file exists
-	if _, err := os.Stat(file); os.IsNotExist(err) {
-		return fmt.Errorf("file not found: %s", file)
+	file, err := resolveDeck(firstArg(args))
+	if err != nil {
+		return err
 	}
 
 	// Get absolute path for base directory resolution
@@ -112,7 +93,7 @@ func runPDFE(args []string) error {
 	// Validate content type
 	contentType, err := pdf.ValidateContentType(pdfContent)
 	if err != nil {
-		return err
+		return userError(codeUsage, err)
 	}
 
 	// Determine output path
@@ -132,13 +113,13 @@ func runPDFE(args []string) error {
 	cfg, err := config.Load(file)
 	if err != nil {
 		spinner.stop()
-		return fmt.Errorf("failed to load configuration: %w", err)
+		return userError(codeInvalidDeck, fmt.Errorf("failed to load configuration: %w", err))
 	}
 
 	// Validate configuration
 	if err := cfg.Validate(); err != nil {
 		spinner.stop()
-		return fmt.Errorf("invalid configuration: %w", err)
+		return userError(codeInvalidDeck, fmt.Errorf("invalid configuration: %w", err))
 	}
 
 	// Step 2: Parse the deck, build its React components, and start a
@@ -159,7 +140,7 @@ func runPDFE(args []string) error {
 	printLayoutWarningsToStderr(absPath, warnings)
 	if len(componentBuildErrs) > 0 {
 		printComponentErrorsToStderr(componentBuildErrs)
-		return errSilent
+		return reportedError(codeComponentBuild, componentErrorsError(componentBuildErrs))
 	}
 	printComponentWarningsToStderr(componentBuildWarnings)
 	spinner.start()
@@ -179,7 +160,7 @@ func runPDFE(args []string) error {
 	exporter, err := pdf.New()
 	if err != nil {
 		spinner.stop()
-		return fmt.Errorf("failed to create PDF exporter: %w", err)
+		return internalError(codeBrowser, fmt.Errorf("failed to create PDF exporter: %w", err))
 	}
 
 	// Ensure exporter is cleaned up on exit
@@ -209,7 +190,7 @@ func runPDFE(args []string) error {
 		if signalCtx.Err() != nil {
 			return errInterrupted
 		}
-		return fmt.Errorf("PDF export failed: %w", err)
+		return internalError(codeExportFailed, fmt.Errorf("PDF export failed: %w", err))
 	}
 
 	// Stop spinner and show results
@@ -223,7 +204,19 @@ func runPDFE(args []string) error {
 		fmt.Fprintf(os.Stderr, "warning: slide %d shows an error card: %s\n", broken.SlideNumber, broken.Message)
 	}
 
-	// Print success message and export stats
+	if pdfJSON {
+		brokenSlides := make([]brokenSlideJSON, 0, len(result.BrokenSlides))
+		for _, broken := range result.BrokenSlides {
+			brokenSlides = append(brokenSlides, brokenSlideJSON{Slide: broken.SlideNumber, Message: broken.Message})
+		}
+		return printJSONOK(cmd.OutOrStdout(), exportPDFResult{
+			Output:       result.OutputPath,
+			Pages:        result.PageCount,
+			Bytes:        result.FileSize,
+			BrokenSlides: brokenSlides,
+		})
+	}
+
 	Successln("\nPDF export complete!")
 	fmt.Println()
 	fmt.Printf("  Output:    %s\n", result.OutputPath)
@@ -232,4 +225,19 @@ func runPDFE(args []string) error {
 	fmt.Printf("  Time:      %s\n", formatDuration(result.Duration))
 	fmt.Println()
 	return nil
+}
+
+// exportPDFResult is the --json result of tap export pdf.
+type exportPDFResult struct {
+	Output       string            `json:"output"`
+	Pages        int               `json:"pages"`
+	Bytes        int64             `json:"bytes"`
+	BrokenSlides []brokenSlideJSON `json:"brokenSlides"`
+}
+
+// brokenSlideJSON is one slide that showed an error card, with its
+// 1-based number.
+type brokenSlideJSON struct {
+	Slide   int    `json:"slide"`
+	Message string `json:"message"`
 }
