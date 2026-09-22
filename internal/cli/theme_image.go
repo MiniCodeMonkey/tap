@@ -3,9 +3,11 @@ package cli
 import (
 	"context"
 	"fmt"
+	"image/png"
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -21,6 +23,12 @@ const (
 	themeImageWidth  = 1280
 	themeImageHeight = 720
 )
+
+// staleThemeImagePartialAge is how old a *.partial*.png file has to be
+// before sweepStaleThemeImagePartials treats it as orphaned by a hard
+// kill rather than owned by a render still in progress. It is far longer
+// than any real render takes, so it never races a live one.
+const staleThemeImagePartialAge = time.Hour
 
 // themeImageCacheRoot is the folder the theme image cache lives under.
 // Tests point it at a temporary folder.
@@ -58,23 +66,21 @@ func showThemeImage(cmd *cobra.Command, theme themes.Theme) error {
 		return err
 	}
 
-	cached := false
-	if Version != "dev" {
-		if info, err := os.Stat(cachePath); err == nil && info.Mode().IsRegular() {
-			cached = true
-		}
-	}
-	if !cached {
-		if err := renderIntoCache(theme, cachePath); err != nil {
-			return err
-		}
-	}
+	cached := Version != "dev" && validThemeImage(cachePath)
 
 	image := cachePath
-	if themeShowOutput != "" {
-		content, err := os.ReadFile(cachePath)
+	if !cached {
+		renderedPath, err := renderIntoCache(theme, cachePath)
 		if err != nil {
-			return internalError(codeInternal, fmt.Errorf("reading the cached theme image: %w", err))
+			return err
+		}
+		image = renderedPath
+	}
+
+	if themeShowOutput != "" {
+		content, err := os.ReadFile(image)
+		if err != nil {
+			return internalError(codeInternal, fmt.Errorf("reading the rendered theme image: %w", err))
 		}
 		if err := os.WriteFile(themeShowOutput, content, 0o644); err != nil {
 			return userError(codeFailed, fmt.Errorf("cannot write %s: %w", themeShowOutput, err))
@@ -89,33 +95,119 @@ func showThemeImage(cmd *cobra.Command, theme themes.Theme) error {
 	return nil
 }
 
-// renderIntoCache renders theme into a temporary file next to cachePath
-// and moves it into place, so a cancelled render never leaves a partial
-// image in the cache.
-func renderIntoCache(theme themes.Theme, cachePath string) error {
-	if err := os.MkdirAll(filepath.Dir(cachePath), 0o755); err != nil {
-		return internalError(codeInternal, fmt.Errorf("creating the theme image cache: %w", err))
+// renderIntoCache renders theme and returns the path of the rendered
+// image. It renders into a temporary file next to cachePath and moves it
+// into place, so a cancelled render never leaves a partial image visible
+// at the cache path. The cache is an optimisation, not a requirement: when
+// the cache directory cannot be created, written to, or moved into (a
+// read-only or full disk), the render still happens, just to a plain
+// temporary file outside the cache, so the command still succeeds and
+// still produces its image.
+func renderIntoCache(theme themes.Theme, cachePath string) (string, error) {
+	cacheDir := filepath.Dir(cachePath)
+	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
+		return renderToTemporaryFile(theme)
 	}
-	temporary, err := os.CreateTemp(filepath.Dir(cachePath), theme.Slug+".partial*.png")
+	sweepStaleThemeImagePartials(cacheDir)
+
+	temporary, err := os.CreateTemp(cacheDir, theme.Slug+".partial*.png")
 	if err != nil {
-		return internalError(codeInternal, fmt.Errorf("creating the theme image cache: %w", err))
+		return renderToTemporaryFile(theme)
 	}
 	temporaryPath := temporary.Name()
 	_ = temporary.Close()
-	defer os.Remove(temporaryPath)
 
+	if err := renderTheme(theme, temporaryPath); err != nil {
+		_ = os.Remove(temporaryPath)
+		return "", err
+	}
+	if err := os.Rename(temporaryPath, cachePath); err != nil {
+		// The render itself succeeded; only moving it into the cache
+		// failed (for example the disk filled between MkdirAll and
+		// here). Serve the rendered file directly instead of failing
+		// the command over a cache write.
+		return temporaryPath, nil
+	}
+	return cachePath, nil
+}
+
+// renderToTemporaryFile renders theme to a plain temporary file outside
+// the theme image cache, for when the cache directory itself cannot be
+// used. The command still succeeds and still produces an image; it just
+// gets no persistent cache entry this time.
+func renderToTemporaryFile(theme themes.Theme) (string, error) {
+	temporary, err := os.CreateTemp("", theme.Slug+"-*.png")
+	if err != nil {
+		return "", internalError(codeInternal, fmt.Errorf("creating a temporary file for the theme image: %w", err))
+	}
+	temporaryPath := temporary.Name()
+	_ = temporary.Close()
+
+	if err := renderTheme(theme, temporaryPath); err != nil {
+		_ = os.Remove(temporaryPath)
+		return "", err
+	}
+	return temporaryPath, nil
+}
+
+// renderTheme renders theme to outputPath, cancelling the render and
+// reporting errInterrupted on SIGINT or SIGTERM.
+func renderTheme(theme themes.Theme, outputPath string) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	if err := renderThemeImage(ctx, theme, temporaryPath); err != nil {
+	if err := renderThemeImage(ctx, theme, outputPath); err != nil {
 		if ctx.Err() != nil {
 			return errInterrupted
 		}
 		return err
 	}
-	if err := os.Rename(temporaryPath, cachePath); err != nil {
-		return internalError(codeInternal, fmt.Errorf("saving the theme image: %w", err))
-	}
 	return nil
+}
+
+// validThemeImage reports whether path is a complete, undamaged PNG. A
+// cache hit is only trusted after this passes: a corrupt or truncated
+// file sitting at the cache path (external tampering, disk corruption) is
+// treated as a cache miss, so the entry gets re-rendered and replaced
+// rather than served as a false success.
+func validThemeImage(path string) bool {
+	info, err := os.Stat(path)
+	if err != nil || !info.Mode().IsRegular() {
+		return false
+	}
+	file, err := os.Open(path)
+	if err != nil {
+		return false
+	}
+	defer file.Close()
+	_, err = png.Decode(file)
+	return err == nil
+}
+
+// sweepStaleThemeImagePartials removes *.partial*.png files from dir that
+// are older than staleThemeImagePartialAge. A hard kill (SIGKILL, a
+// panic) during a render skips the deferred cleanup and the rename into
+// place, leaving its temporary file orphaned in the cache directory
+// forever; this sweeps those out on the next render into the same
+// directory, without touching a partial recent enough that a live render
+// might still own it, and without ever touching a finished cache entry
+// (those never match the *.partial*.png pattern). Best effort: any error
+// is ignored, since a failed cleanup must never fail the command.
+func sweepStaleThemeImagePartials(dir string) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return
+	}
+	cutoff := time.Now().Add(-staleThemeImagePartialAge)
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.Contains(entry.Name(), ".partial") {
+			continue
+		}
+		info, err := entry.Info()
+		if err != nil || info.ModTime().After(cutoff) {
+			continue
+		}
+		_ = os.Remove(filepath.Join(dir, entry.Name()))
+	}
 }
 
 // themeImageDeck is a one-slide deck that shows theme on a title slide:

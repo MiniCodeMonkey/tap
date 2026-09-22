@@ -1,17 +1,40 @@
 package cli
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"image"
+	"image/color"
 	"image/png"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/MiniCodeMonkey/tap/internal/pdf"
 	"github.com/MiniCodeMonkey/tap/internal/themes"
 )
+
+// fakeThemeImagePNG returns a valid, minimal one-pixel PNG. useFakeThemeRenderer
+// writes this for its fake renders, so a cache hit's PNG validity check
+// trusts them the same way it would trust a real render.
+func fakeThemeImagePNG() []byte {
+	pixel := image.NewRGBA(image.Rect(0, 0, 1, 1))
+	pixel.Set(0, 0, color.RGBA{R: 1, G: 2, B: 3, A: 255})
+	var buffer bytes.Buffer
+	_ = png.Encode(&buffer, pixel)
+	return buffer.Bytes()
+}
+
+// requireValidPNG fails the test unless content decodes as a PNG.
+func requireValidPNG(t *testing.T, content []byte) {
+	t.Helper()
+	if _, err := png.Decode(bytes.NewReader(content)); err != nil {
+		t.Errorf("content is not a valid PNG: %v", err)
+	}
+}
 
 // useFakeThemeRenderer replaces the browser renderer and the cache folder
 // for the rest of the test, sets a release version, and returns the
@@ -23,7 +46,7 @@ func useFakeThemeRenderer(t *testing.T) (renders *int, cacheRoot string) {
 	originalRender, originalRoot, originalVersion := renderThemeImage, themeImageCacheRoot, Version
 	renderThemeImage = func(ctx context.Context, theme themes.Theme, outputPath string) error {
 		count++
-		return os.WriteFile(outputPath, []byte("png of "+theme.Slug), 0o644)
+		return os.WriteFile(outputPath, fakeThemeImagePNG(), 0o644)
 	}
 	themeImageCacheRoot = func() (string, error) { return cacheRoot, nil }
 	Version = "9.9.9-test"
@@ -45,9 +68,10 @@ func TestThemeShowImageRendersOnceThenUsesTheCache(t *testing.T) {
 		t.Errorf("stdout = %q, want %q", stdout, wantPath)
 	}
 	content, err := os.ReadFile(wantPath)
-	if err != nil || string(content) != "png of terminal" {
-		t.Errorf("cached image = (%q, %v)", content, err)
+	if err != nil {
+		t.Fatalf("reading cached image: %v", err)
 	}
+	requireValidPNG(t, content)
 
 	exitCode, stdout, _ = runTap(t, "theme", "show", "terminal", "--image", "--json")
 	if exitCode != exitOK {
@@ -82,9 +106,10 @@ func TestThemeShowImageOutputCopiesTheImage(t *testing.T) {
 		t.Errorf("(%d, %q), want (0, %q)", exitCode, stdout, output)
 	}
 	content, err := os.ReadFile(output)
-	if err != nil || string(content) != "png of terminal" {
-		t.Errorf("output file = (%q, %v)", content, err)
+	if err != nil {
+		t.Fatalf("reading output file: %v", err)
 	}
+	requireValidPNG(t, content)
 }
 
 func TestThemeShowImageInADevBuildAlwaysRenders(t *testing.T) {
@@ -104,6 +129,117 @@ func TestThemeShowImageNewVersionRendersAgain(t *testing.T) {
 	runTap(t, "theme", "show", "terminal", "--image")
 	if *renders != 2 {
 		t.Errorf("rendered %d times, want 2", *renders)
+	}
+}
+
+// TestThemeShowImageStillRendersWhenCacheDirIsUnusable covers a read-only
+// or full cache directory: the cache is an optimisation, so the command
+// must still render and still produce its image when it cannot be
+// written, not fail outright.
+func TestThemeShowImageStillRendersWhenCacheDirIsUnusable(t *testing.T) {
+	_, cacheRoot := useFakeThemeRenderer(t)
+	// Block the cache directory: put a plain file where "tap" would need
+	// to be a directory, so nothing under it can ever be created.
+	if err := os.WriteFile(filepath.Join(cacheRoot, "tap"), []byte("blocked"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	output := filepath.Join(t.TempDir(), "preview.png")
+	exitCode, stdout, stderr := runTap(t, "theme", "show", "terminal", "--image", "-o", output)
+	if exitCode != exitOK {
+		t.Fatalf("exit code = %d, stderr %q", exitCode, stderr)
+	}
+	if stdout != output+"\n" {
+		t.Errorf("stdout = %q, want %q", stdout, output)
+	}
+	content, err := os.ReadFile(output)
+	if err != nil {
+		t.Fatalf("reading output file: %v", err)
+	}
+	requireValidPNG(t, content)
+}
+
+// TestThemeShowImageIgnoresACorruptCacheEntry covers a corrupt or
+// truncated file sitting at the cache path: it must not be trusted as a
+// cache hit, and must be re-rendered and replaced.
+func TestThemeShowImageIgnoresACorruptCacheEntry(t *testing.T) {
+	_, cacheRoot := useFakeThemeRenderer(t)
+	cachePath := filepath.Join(cacheRoot, "tap", "themes", "9.9.9-test", "terminal.png")
+
+	tests := map[string][]byte{
+		"truncated": []byte("\x89PNG\r\n\x1a\n"),
+		"zeroed":    make([]byte, 4096),
+	}
+	for name, content := range tests {
+		content := content
+		t.Run(name, func(t *testing.T) {
+			if err := os.MkdirAll(filepath.Dir(cachePath), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(cachePath, content, 0o644); err != nil {
+				t.Fatal(err)
+			}
+
+			exitCode, stdout, stderr := runTap(t, "theme", "show", "terminal", "--image", "--json")
+			if exitCode != exitOK {
+				t.Fatalf("exit code = %d, stderr %q", exitCode, stderr)
+			}
+			var output struct {
+				Cached bool `json:"cached"`
+			}
+			if err := json.Unmarshal([]byte(stdout), &output); err != nil {
+				t.Fatalf("stdout is not JSON: %v\n%s", err, stdout)
+			}
+			if output.Cached {
+				t.Errorf("a corrupt cache entry was trusted as a hit")
+			}
+			replaced, err := os.ReadFile(cachePath)
+			if err != nil {
+				t.Fatalf("reading replaced cache entry: %v", err)
+			}
+			if bytes.Equal(replaced, content) {
+				t.Errorf("cache entry was not replaced")
+			}
+			requireValidPNG(t, replaced)
+		})
+	}
+}
+
+// TestThemeShowImageSweepsStalePartials covers a hard kill during a
+// render: it leaves a *.partial*.png file behind with nothing to remove
+// it, so the cache directory must sweep old ones on the next render,
+// without touching a partial file recent enough that a live render might
+// still own it.
+func TestThemeShowImageSweepsStalePartials(t *testing.T) {
+	_, cacheRoot := useFakeThemeRenderer(t)
+	cacheDir := filepath.Join(cacheRoot, "tap", "themes", "9.9.9-test")
+	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	stale := filepath.Join(cacheDir, "other.partial111.png")
+	if err := os.WriteFile(stale, []byte("orphaned"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	old := time.Now().Add(-2 * time.Hour)
+	if err := os.Chtimes(stale, old, old); err != nil {
+		t.Fatal(err)
+	}
+
+	fresh := filepath.Join(cacheDir, "other.partial222.png")
+	if err := os.WriteFile(fresh, []byte("in progress"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	exitCode, _, stderr := runTap(t, "theme", "show", "terminal", "--image")
+	if exitCode != exitOK {
+		t.Fatalf("exit code = %d, stderr %q", exitCode, stderr)
+	}
+	if _, err := os.Stat(stale); !os.IsNotExist(err) {
+		t.Errorf("stale partial file was not swept: %v", err)
+	}
+	if _, err := os.Stat(fresh); err != nil {
+		t.Errorf("a fresh partial file (possibly a live render) was swept: %v", err)
 	}
 }
 
