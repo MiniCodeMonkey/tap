@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { holdReady, resetBlockersForTests, type ReadyBlockerKind } from './blockers';
 import type { ReadyProbes } from './probes';
-import { READY_EVENT, clearReady, startReadyCycle, type ReadyPayload } from './readySignal';
+import { MAX_SETTLE_ROUNDS, READY_EVENT, clearReady, startReadyCycle, waitUntilSettled, type ReadyPayload } from './readySignal';
 
 interface ReadyWindow {
 	__tapReady?: ReadyPayload | null;
@@ -152,5 +152,41 @@ describe('startReadyCycle', () => {
 		(window as unknown as ReadyWindow).webkit = { messageHandlers: {} };
 		startReadyCycle(payload, instantProbes());
 		await vi.waitFor(() => expect(readyValue()).toEqual(payload));
+	});
+});
+
+describe('waitUntilSettled', () => {
+	it('never reports settled while a blocker is held on every round through MAX_SETTLE_ROUNDS', async () => {
+		let release: (() => void) | null = null;
+		const fonts = vi.fn(() => {
+			release?.();
+			return Promise.resolve();
+		});
+		const animations = vi.fn(() => {
+			release = holdReady('component');
+			return Promise.resolve();
+		});
+
+		const settled = await waitUntilSettled(instantProbes({ fonts, animations }), () => false);
+
+		expect(settled).toBe(false);
+		expect(fonts).toHaveBeenCalledTimes(MAX_SETTLE_ROUNDS);
+		expect(animations).toHaveBeenCalledTimes(MAX_SETTLE_ROUNDS);
+	});
+
+	it('reports settled once the blocker held during an early round is released', async () => {
+		let release: (() => void) | null = null;
+		const paint = vi.fn(() => {
+			if (paint.mock.calls.length === 1) {
+				release = holdReady('component');
+				setTimeout(() => release?.(), 0);
+			}
+			return Promise.resolve();
+		});
+
+		const settled = await waitUntilSettled(instantProbes({ paint }), () => false);
+
+		expect(settled).toBe(true);
+		expect(paint).toHaveBeenCalledTimes(2);
 	});
 });
