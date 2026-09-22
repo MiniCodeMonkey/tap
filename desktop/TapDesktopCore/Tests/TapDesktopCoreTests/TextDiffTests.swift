@@ -23,6 +23,16 @@ final class TextDiffTests: XCTestCase {
         XCTAssertEqual(replacement, TextReplacement(range: NSRange(location: 1, length: 2), replacement: "\u{1F601}"))
     }
 
+    func testNeverSplitsATrailingSurrogatePair() {
+        // U+1F600 and U+1F200 share their trailing surrogate unit but not their leading one.
+        let replacement = TextDiff.replacement(from: "a\u{1F600}", to: "b\u{1F200}")
+        XCTAssertEqual(replacement, TextReplacement(range: NSRange(location: 0, length: 3), replacement: "b\u{1F200}"))
+    }
+
+    func testARepeatedCharacterDoesNotLetTheSuffixScanOverlapThePrefix() {
+        XCTAssertEqual(TextDiff.replacement(from: "aaa", to: "aa"), TextReplacement(range: NSRange(location: 2, length: 1), replacement: ""))
+    }
+
     func testApplyingTheReplacementGivesTheNewText() {
         let old = "---\ntitle: A\n---\n\n# One\n\n---\n\n# Two\n"
         let new = "---\ntitle: B\n---\n\n# One\n\n---\n\n# Two, again\n"

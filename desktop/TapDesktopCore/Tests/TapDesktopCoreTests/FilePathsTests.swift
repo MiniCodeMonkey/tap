@@ -11,4 +11,12 @@ final class FilePathsTests: XCTestCase {
         XCTAssertTrue(FilePaths.same(file, file.path.hasPrefix("/private") ? file : throughPrivate))
         XCTAssertFalse(FilePaths.same(file, folder.appendingPathComponent("other.md")))
     }
+
+    func testPathsThroughTheVarSymlinkAreTheSameWhenTheFinalComponentDoesNotExist() throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let missing = folder.appendingPathComponent("does-not-exist.md")
+        let throughPrivate = URL(fileURLWithPath: "/private" + missing.path)
+        XCTAssertTrue(FilePaths.same(missing, missing.path.hasPrefix("/private") ? missing : throughPrivate))
+    }
 }
