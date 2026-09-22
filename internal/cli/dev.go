@@ -32,6 +32,7 @@ var (
 	devHeadless          bool
 	devAllowOrigins      []string
 	devTunnel            bool
+	devLAN               bool
 )
 
 // devCmd represents the dev command
@@ -46,13 +47,17 @@ The dev server provides:
   - Presenter view with speaker notes
   - Live code execution for supported drivers
 
+The server listens on this machine only. --lan opens it to the local
+network, and --tunnel puts it on a public https URL.
+
 Examples:
   tap dev                                 # The deck in this folder
   tap dev slides.md                      # Start server on port 3000
   tap dev slides.md --port 8080          # Use custom port
   tap dev slides.md -p 8080              # Short form
   tap dev slides.md --presenter-password secret  # Protect presenter view
-  tap dev slides.md --tunnel             # Also serve it on a public https URL`,
+  tap dev slides.md --tunnel             # Also serve it on a public https URL
+  tap dev slides.md --lan                # Let a phone on the same network connect`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		file, err := resolveDeck(firstArg(args))
@@ -67,6 +72,7 @@ Examples:
 			headless:          devHeadless,
 			allowOrigins:      devAllowOrigins,
 			tunnel:            devTunnel,
+			lan:               devLAN,
 		})
 	},
 }
@@ -81,6 +87,8 @@ type serverOptions struct {
 	portExplicit      bool
 	headless          bool
 	tunnel            bool
+	// lan listens on every interface, so a phone on the same network can connect.
+	lan bool
 	// present runs tap present: no file watcher, the audience view opens
 	// at launch, and recording follows the run instead of the c key.
 	present bool
@@ -97,6 +105,7 @@ func init() {
 	devCmd.Flags().StringVar(&devPresenterPassword, "presenter-password", "", "password to protect the presenter view")
 	devCmd.Flags().BoolVar(&devHeadless, "headless", false, "run without TUI (for testing/automation)")
 	devCmd.Flags().BoolVar(&devTunnel, "tunnel", false, "also serve the deck on a public https URL through a Cloudflare Quick Tunnel (needs cloudflared; no account required)")
+	devCmd.Flags().BoolVar(&devLAN, "lan", false, "listen on the local network too, so a phone on the same network can open the presenter view (default: this machine only)")
 	devCmd.Flags().StringArrayVar(&devAllowOrigins, "allow-origin", nil, "additional origin (scheme://host:port) allowed to connect to the websocket hub, or host (host:port) allowed in a request's Host header, for a contributor's Vite dev server or a non-local presenter host (repeatable)")
 }
 
@@ -230,7 +239,7 @@ func runDevServer(options serverOptions) error {
 	// without flags. Each candidate gets its own Server, configured the
 	// same way, since Server.New fixes its address at construction.
 	buildServer := func(candidatePort int) *server.Server {
-		candidate := server.New(candidatePort)
+		candidate := server.NewWithHost(candidatePort, listenHost(options.lan))
 		candidate.SetPresentation(pres)
 		candidate.SetPresenterPassword(presenterPassword)
 		candidate.SetPresenterSessionToken(presenterSessionToken)
@@ -250,6 +259,15 @@ func runDevServer(options serverOptions) error {
 		return err
 	}
 	port = srv.Port()
+
+	var networkURL, networkQRCode string
+	if options.lan {
+		var found bool
+		networkURL, networkQRCode, found = lanPresenterAddress(port, presenterPassword)
+		if !found {
+			Warning("--lan: no local network address found; only this machine can connect\n")
+		}
+	}
 
 	recordOutputDir := filepath.Join(baseDir, "recordings")
 	if cfg.Recording.Output != "" {
@@ -443,6 +461,9 @@ func runDevServer(options serverOptions) error {
 		fmt.Printf("  Version:   %s\n", displayVersion())
 		fmt.Printf("  Audience:  %s\n", audienceURL)
 		fmt.Printf("  Presenter: %s\n", presenterURL)
+		if networkURL != "" {
+			fmt.Printf("  Network:   %s\n", networkURL)
+		}
 		if tunnelURL != "" {
 			fmt.Printf("  Tunnel:    %s\n", tunnelURL)
 		}
@@ -498,6 +519,8 @@ func runDevServer(options serverOptions) error {
 			Port:              port,
 			AudienceURL:       audienceURL,
 			PresenterURL:      presenterURL,
+			NetworkURL:        networkURL,
+			QRCodeASCII:       networkQRCode,
 			PresenterPassword: presenterPassword,
 			CurrentTheme:      cfg.Theme,
 			Version:           displayVersion(),

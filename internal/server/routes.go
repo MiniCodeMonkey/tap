@@ -243,6 +243,13 @@ func (s *Server) handleCustomTheme(w http.ResponseWriter, r *http.Request) {
 // unauthenticated request on the network could read the password straight
 // off this page without ever passing the presenter gate.
 func (s *Server) handleQR(w http.ResponseWriter, r *http.Request) {
+	// The page shows LAN addresses, which a server that listens on
+	// loopback only does not answer.
+	if s.ListensOnLoopbackOnly() {
+		http.Error(w, "The QR page needs the server on the network: start tap dev with --lan", http.StatusNotFound)
+		return
+	}
+
 	if !s.presenterAuthorized(r) {
 		http.Error(w, "Forbidden: presenter password required. Use ?key=<password>", http.StatusForbidden)
 		return

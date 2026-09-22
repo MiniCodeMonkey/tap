@@ -788,3 +788,18 @@ func TestPDFExportArgsUseExportPDF(t *testing.T) {
 		t.Errorf("pdfExportArgs() = %q, want %q", got, "export pdf talk.md")
 	}
 }
+
+func TestViewURLsShowsTheNetworkURL(t *testing.T) {
+	model := NewDevModel(DevConfig{
+		AudienceURL:  "http://localhost:3000",
+		PresenterURL: "http://localhost:3000/presenter",
+		NetworkURL:   "http://192.168.1.20:3000/presenter",
+	})
+	if !strings.Contains(model.viewURLs(), "http://192.168.1.20:3000/presenter") {
+		t.Error("viewURLs() does not show the network URL")
+	}
+	plain := NewDevModel(DevConfig{AudienceURL: "http://localhost:3000"})
+	if strings.Contains(plain.viewURLs(), "Network") {
+		t.Error("viewURLs() shows a Network line without --lan")
+	}
+}

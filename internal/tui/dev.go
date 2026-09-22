@@ -26,8 +26,11 @@ type ThemeBroadcaster interface {
 // DevConfig holds configuration for the dev TUI.
 // Fields ordered by size for memory alignment.
 type DevConfig struct {
-	AudienceURL       string
-	PresenterURL      string
+	AudienceURL  string
+	PresenterURL string
+	// NetworkURL is the presenter URL on this machine's LAN address. It is
+	// set only when the server listens on the network (--lan).
+	NetworkURL        string
 	QRCodeASCII       string
 	PresenterPassword string
 	MarkdownFile      string
@@ -929,6 +932,12 @@ func (m *DevModel) viewURLs() string {
 		b.WriteString("\n")
 		b.WriteString(labelStyle.Render(""))
 		b.WriteString(RenderMuted("(password protected)"))
+	}
+
+	if m.config.NetworkURL != "" {
+		b.WriteString("\n")
+		b.WriteString(labelStyle.Render("Network:"))
+		b.WriteString(urlStyle.Render(m.config.NetworkURL))
 	}
 
 	switch {
