@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -248,4 +250,45 @@ func TestConcurrentSetGetPresentation(t *testing.T) {
 	<-done
 
 	// If we get here without a race condition, the test passes
+}
+
+func TestExecuteRejectsCrossSiteRequests(t *testing.T) {
+	srv := New(0)
+	srv.SetupRoutes()
+	srv.SetAllowedOrigins([]string{"http://localhost:5173"})
+
+	body := `{"driver":"shell","code":"echo hi"}`
+	cases := []struct {
+		name        string
+		origin      string
+		contentType string
+		wantStatus  int
+	}{
+		{"foreign site with text/plain", "https://evil.com", "text/plain", http.StatusForbidden},
+		{"foreign site with json", "https://evil.com", "application/json", http.StatusForbidden},
+		{"opaque null origin", "null", "application/json", http.StatusForbidden},
+		{"same origin with text/plain", "http://127.0.0.1:3000", "text/plain", http.StatusUnsupportedMediaType},
+		{"no origin with form encoding", "", "application/x-www-form-urlencoded", http.StatusUnsupportedMediaType},
+		{"no content type", "", "", http.StatusUnsupportedMediaType},
+		{"same origin with json", "http://127.0.0.1:3000", "application/json", http.StatusInternalServerError},
+		{"same origin with json and charset", "http://127.0.0.1:3000", "application/json; charset=utf-8", http.StatusInternalServerError},
+		{"allowed dev origin with json", "http://localhost:5173", "application/json", http.StatusInternalServerError},
+		{"no origin with json", "", "application/json", http.StatusInternalServerError},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			request := httptest.NewRequest(http.MethodPost, "http://127.0.0.1:3000/api/execute", strings.NewReader(body))
+			if testCase.origin != "" {
+				request.Header.Set("Origin", testCase.origin)
+			}
+			if testCase.contentType != "" {
+				request.Header.Set("Content-Type", testCase.contentType)
+			}
+			recorder := httptest.NewRecorder()
+			srv.mux.ServeHTTP(recorder, request)
+			if recorder.Code != testCase.wantStatus {
+				t.Errorf("status = %d, want %d (body: %s)", recorder.Code, testCase.wantStatus, recorder.Body.String())
+			}
+		})
+	}
 }

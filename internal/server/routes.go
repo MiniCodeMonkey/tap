@@ -42,7 +42,7 @@ func (s *Server) SetupRoutes() {
 	s.mux.HandleFunc("GET /presenter/", s.requireAllowedHost(redirectToCanonicalPath("/presenter")))
 	s.mux.HandleFunc("GET /api/presentation", s.requireAllowedHost(s.handleAPIPresentation))
 	s.mux.HandleFunc("GET /api/custom-theme.css", s.requireAllowedHost(s.handleCustomTheme))
-	s.mux.HandleFunc("POST /api/execute", s.requireAllowedHost(s.handleAPIExecute))
+	s.mux.HandleFunc("POST /api/execute", s.requireAllowedHost(s.requireSameOriginJSON(s.handleAPIExecute)))
 	s.mux.HandleFunc("GET /qr", s.requireAllowedHost(s.handleQR))
 
 	// Serve static assets (JS, CSS) from embedded dist/assets/

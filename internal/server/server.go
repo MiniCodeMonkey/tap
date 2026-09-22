@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"mime"
 	"net"
 	"net/http"
 	"os"
@@ -39,8 +40,13 @@ type Server struct {
 	// rebinding. Mirrors WebSocketHub.allowedHosts; tap dev sets both from
 	// the same flag value.
 	allowedHosts map[string]struct{}
-	mu           sync.RWMutex
-	started      bool
+	// allowedOrigins is the --allow-origin flag as full origins
+	// ("http://localhost:5173"), matched exactly against a mutating
+	// request's Origin header by requireSameOriginJSON. Mirrors
+	// WebSocketHub.allowedOrigins; tap dev sets both from the same value.
+	allowedOrigins map[string]struct{}
+	mu             sync.RWMutex
+	started        bool
 }
 
 // New creates a new Server bound to the specified port on 0.0.0.0, so a
@@ -273,11 +279,17 @@ func (s *Server) SetCustomThemePath(path string) {
 // SetAllowedOrigins sets the --allow-origin values requireAllowedHost
 // checks a request's Host header against, on top of localhost, a loopback,
 // private, or link-local IP, a ".local" name, and this machine's own
-// hostname (see isAllowedHost). tap dev calls this with the same value it
-// passes to WebSocketHub.SetAllowedOrigins.
+// hostname (see isAllowedHost). It also sets the exact origins
+// requireSameOriginJSON accepts in a mutating request's Origin header.
+// tap dev calls this with the same value it passes to
+// WebSocketHub.SetAllowedOrigins.
 func (s *Server) SetAllowedOrigins(origins []string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.allowedOrigins = make(map[string]struct{}, len(origins))
+	for _, origin := range origins {
+		s.allowedOrigins[origin] = struct{}{}
+	}
 	s.allowedHosts = allowedHostsFromOrigins(origins)
 }
 
@@ -293,6 +305,33 @@ func (s *Server) requireAllowedHost(next http.HandlerFunc) http.HandlerFunc {
 		s.mu.RUnlock()
 		if !isAllowedHost(r.Host, allowedHosts) {
 			http.Error(w, "Forbidden: host not allowed; use --allow-origin to allow it", http.StatusForbidden)
+			return
+		}
+		next(w, r)
+	}
+}
+
+// requireSameOriginJSON wraps a mutating handler so it only runs for a
+// request that a page on another site could not have sent. The Origin
+// header must pass isAllowedOrigin, and the body must be declared as
+// application/json. A cross-site page can send a text/plain or form POST
+// without a CORS preflight, and requireAllowedHost alone lets it through
+// because its Host header is this machine's own; a JSON content type
+// forces the preflight this server never approves.
+func (s *Server) requireSameOriginJSON(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		s.mu.RLock()
+		allowedHosts := s.allowedHosts
+		allowedOrigins := s.allowedOrigins
+		s.mu.RUnlock()
+
+		if !isAllowedOrigin(r.Header.Get("Origin"), r.Host, allowedHosts, allowedOrigins) {
+			http.Error(w, "Forbidden: cross-origin request; use --allow-origin to allow it", http.StatusForbidden)
+			return
+		}
+		mediaType, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
+		if err != nil || mediaType != "application/json" {
+			http.Error(w, "Unsupported Media Type: send application/json", http.StatusUnsupportedMediaType)
 			return
 		}
 		next(w, r)
