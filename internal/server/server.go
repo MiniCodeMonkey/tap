@@ -73,6 +73,14 @@ func NewWithHost(port int, host string) *Server {
 		Addr:              s.addr,
 		Handler:           s.mux,
 		ReadHeaderTimeout: 10 * time.Second,
+		// ReadTimeout bounds how long a request, headers plus body, may
+		// take to arrive. Without it, a body sent one byte at a time
+		// pins a goroutine and its buffered memory indefinitely, even
+		// under handleAPIExecute's MaxBytesReader cap. Ten seconds
+		// matches ReadHeaderTimeout above: any legitimate request on
+		// this server (a handful of JSON bytes, or a GET with no body)
+		// completes in a small fraction of that.
+		ReadTimeout: 10 * time.Second,
 	}
 
 	return s

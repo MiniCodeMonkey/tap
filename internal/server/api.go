@@ -69,6 +69,18 @@ func (s *Server) handleAPIExecute(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// A legitimate body is a couple of small integers, well under a
+	// hundred bytes. This caps it before the read, so a body far larger
+	// than any real request cannot be held in memory: the read below
+	// fails once the limit is crossed and falls into the existing 400
+	// path, with no new branch or message.
+	// A legitimate body is a couple of small integers, well under a
+	// hundred bytes. This caps it before the read, so a body far larger
+	// than any real request cannot be held in memory: the read below
+	// fails once the limit is crossed and falls into the existing 400
+	// path, with no new branch or message.
+	r.Body = http.MaxBytesReader(w, r.Body, 64<<10)
+
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		writeExecuteError(w, http.StatusBadRequest, fmt.Sprintf("Invalid request body: %v", err))

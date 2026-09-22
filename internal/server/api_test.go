@@ -121,6 +121,18 @@ func TestExecuteRejectsACodeBody(t *testing.T) {
 	}
 }
 
+func TestExecuteRejectsAnOversizedBody(t *testing.T) {
+	s, test := executeServer(t, LiveCodePolicy{AllowAll: true})
+	body := `{"slide": 1, "block": 1}` + strings.Repeat(" ", 70*1024)
+	status, response := postExecute(t, s, body)
+	if status != http.StatusBadRequest || !strings.Contains(response.Error, "Invalid request body") {
+		t.Errorf("status %d, error %q", status, response.Error)
+	}
+	if test.ranCode != "" {
+		t.Errorf("ran %q with an oversized body", test.ranCode)
+	}
+}
+
 func TestExecuteRejectsUnknownFields(t *testing.T) {
 	s, _ := executeServer(t, LiveCodePolicy{AllowAll: true})
 	status, response := postExecute(t, s, `{"slide": 2, "block": 1, "driver": "test"}`)
@@ -157,6 +169,51 @@ func TestExecuteRejectsAnUnknownBlock(t *testing.T) {
 		if status != http.StatusNotFound || response.Error != want {
 			t.Errorf("%s: status %d, error %q, want 404 %q", body, status, response.Error, want)
 		}
+	}
+}
+
+// TestExecuteRejectsANonLiveBlock pins the invariant that a code block
+// with no driver, whose Block field is always 0 (see the transformer's
+// TestTransformNumbersLiveBlocksAndFlagsUndeclaredDrivers), can never be
+// reached by a reference: a request always asks for a block number of at
+// least 1, so a block sitting at position 1 in the slide but carrying no
+// driver is refused as an unknown block rather than treated as block 1.
+// The test builds the presentation by hand, independent of the
+// transformer, so it holds even if that detail of the transformer changed.
+func TestExecuteRejectsANonLiveBlock(t *testing.T) {
+	s := New(0)
+	registry := driver.NewRegistry()
+	registry.Register(&recordingDriver{name: "test"})
+	s.SetRegistry(registry)
+	s.SetPresentation(&transformer.TransformedPresentation{
+		Slides: []transformer.TransformedSlide{
+			{Index: 0, CodeBlocks: []transformer.TransformedCodeBlock{
+				{Language: "go", Code: "package main"},
+			}},
+		},
+	})
+	s.SetLiveCodePolicy(LiveCodePolicy{AllowAll: true})
+
+	status, response := postExecute(t, s, `{"slide": 1, "block": 1}`)
+	if status != http.StatusNotFound || response.Error != "Slide 1 has no live code block 1" {
+		t.Errorf("status %d, error %q", status, response.Error)
+	}
+}
+
+// TestExecuteRejectsAReferenceWithNoDeckLoaded reaches the no-presentation
+// branch of findLiveBlock through the handler. The registry is set, so the
+// request is not short-circuited by the earlier "Driver registry not
+// configured" check.
+func TestExecuteRejectsAReferenceWithNoDeckLoaded(t *testing.T) {
+	s := New(0)
+	registry := driver.NewRegistry()
+	registry.Register(&recordingDriver{name: "test"})
+	s.SetRegistry(registry)
+	s.SetLiveCodePolicy(LiveCodePolicy{AllowAll: true})
+
+	status, response := postExecute(t, s, `{"slide": 1, "block": 1}`)
+	if status != http.StatusNotFound || response.Error != "No presentation loaded" {
+		t.Errorf("status %d, error %q", status, response.Error)
 	}
 }
 
