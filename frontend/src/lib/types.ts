@@ -116,7 +116,6 @@ export interface PresentationConfig {
 	date?: string;
 	aspectRatio?: string;
 	transition?: Transition;
-	fragments?: boolean;
 	/** Whether to show the progress bar (default: true) */
 	showProgressBar?: boolean;
 	/** Whether the theme draws slide numbers (default: true) */
