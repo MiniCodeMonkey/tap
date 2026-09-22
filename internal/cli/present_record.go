@@ -165,8 +165,12 @@ func (p *presentRecorder) applyLocked(decision recorder.FollowDecision) {
 // as a display hiccup and recovered by starting a new segment on whatever
 // the display rule says now. A segment that exited sooner almost certainly
 // hit a problem that would recur immediately (a revoked permission, for
-// example), so the run is held instead of respawning in a hot loop, and
-// the speaker is told why recording stopped.
+// example), so it is not respawned on the spot, which would spin a hot
+// loop; the run is left NotRecording and the speaker is told why. It is
+// not held, though: the display poll still only acts on a changed
+// decision, so nothing restarts until the display actually changes (or the
+// speaker presses c), and a real change (the replug this is meant to
+// survive, for example) starts a fresh segment without needing a manual c.
 func (p *presentRecorder) noteSegmentExit(err error, ran time.Duration) {
 	if ran >= minSegmentRunToRespawn {
 		p.recheck(true)
@@ -174,7 +178,6 @@ func (p *presentRecorder) noteSegmentExit(err error, ran time.Duration) {
 	}
 
 	p.mu.Lock()
-	p.held = true
 	p.state.Store(tui.PresentNotRecording)
 	p.mu.Unlock()
 	p.event("error", "Recording stopped: "+err.Error())

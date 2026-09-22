@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -200,11 +201,11 @@ func fakeExitingRecorderBinary(t *testing.T) string {
 	return path
 }
 
-// TestPresentRecorderHoldsAfterAnImmediateSegmentExit covers ruling 1: a
-// segment that exits before it could plausibly have recorded anything must
-// not be respawned in a hot loop. The run should end up NotRecording and
-// held, and it must not have kept creating new segment files.
-func TestPresentRecorderHoldsAfterAnImmediateSegmentExit(t *testing.T) {
+// TestPresentRecorderDoesNotHotLoopAfterAnImmediateSegmentExit covers ruling
+// 1: a segment that exits before it could plausibly have recorded anything
+// must not be respawned in a hot loop. The run should end up NotRecording
+// and report why, and it must not have kept creating new segment files.
+func TestPresentRecorderDoesNotHotLoopAfterAnImmediateSegmentExit(t *testing.T) {
 	feed := &screenFeed{screens: laptopScreens}
 	outputDir := filepath.Join(t.TempDir(), "recordings")
 	events := make(chan string, 8)
@@ -266,6 +267,73 @@ loop:
 		if count > 2 {
 			t.Errorf("segment files = %d, want at most 2 (no hot loop)", count)
 		}
+	}
+	_, _ = present.Finish(true)
+}
+
+// TestPresentRecorderStartsANewSegmentAfterAFastExitOnDisplayChange covers
+// ruling 1's fix: a fast segment exit must not hold the run past the next
+// real display change (a replug, whose first capture can die while macOS
+// is still configuring the display, for example). The run should attempt a
+// fresh segment as soon as the screen list changes, without a manual c.
+func TestPresentRecorderStartsANewSegmentAfterAFastExitOnDisplayChange(t *testing.T) {
+	feed := &screenFeed{screens: laptopScreens}
+	outputDir := filepath.Join(t.TempDir(), "recordings")
+	events := make(chan string, 16)
+	present := newPresentRecorder(presentRecorderOptions{
+		Run: recorder.RunOptions{
+			Parent:    outputDir,
+			DeckTitle: "My Talk",
+			Base:      recorder.Options{Command: fakeExitingRecorderBinary(t), NoAudio: true},
+			Chapters:  true,
+		},
+		OutputDir:    outputDir,
+		ListScreens:  feed.list,
+		FreeSpace:    func(string) (uint64, error) { return 50 << 30, nil },
+		OnEvent:      func(eventType, message string) { events <- eventType + ":" + message },
+		PollInterval: 20 * time.Millisecond,
+		DiskInterval: 20 * time.Millisecond,
+	})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	present.Begin(ctx, true)
+	waitForState(t, present, tui.PresentNotRecording)
+
+	// Drain the first segment's own lifecycle (its start, then its fast
+	// exit) before changing the screens, so the assertion below only
+	// counts an event from the recovery this test is checking for.
+	deadline := time.After(2 * time.Second)
+drain:
+	for {
+		select {
+		case msg := <-events:
+			if strings.HasPrefix(msg, "error:") {
+				break drain
+			}
+		case <-deadline:
+			t.Fatal("the first segment never reported its fast exit")
+		}
+	}
+
+	feed.set(projectorScreens)
+
+	sawNewSegment := false
+	deadline = time.After(2 * time.Second)
+loop:
+	for {
+		select {
+		case msg := <-events:
+			if strings.HasPrefix(msg, "action:Recording") {
+				sawNewSegment = true
+				break loop
+			}
+		case <-deadline:
+			break loop
+		}
+	}
+	if !sawNewSegment {
+		t.Error("a display change after a fast segment exit did not start a new segment")
 	}
 	_, _ = present.Finish(true)
 }
