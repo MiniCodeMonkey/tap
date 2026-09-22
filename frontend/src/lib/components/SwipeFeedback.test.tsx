@@ -29,4 +29,15 @@ describe('SwipeFeedback', () => {
 		const { container } = render(<SwipeFeedback direction="next" moved nonce={1} />);
 		expect(container.querySelector('.swipe-feedback-position')?.textContent).toBe('2 / 2');
 	});
+
+	it('on a directly-opened skipped slide, counts the presented slides before it rather than its deck position', () => {
+		// currentSlideIndex 1 is the skipped slide (deck position 2), and
+		// the total is 2 (the presented slides). Its deck position over the
+		// presented total would read "2 / 2" - as if it were the last
+		// presented slide, which it is not. The presented slide before it
+		// (index 0) is the only one presented so far, so this must read "1 / 2".
+		usePresentationStore.setState({ presentation, currentSlideIndex: 1 });
+		const { container } = render(<SwipeFeedback direction="next" moved nonce={1} />);
+		expect(container.querySelector('.swipe-feedback-position')?.textContent).toBe('1 / 2');
+	});
 });

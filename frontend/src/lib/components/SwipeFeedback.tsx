@@ -10,6 +10,7 @@
 
 import { useEffect, useState } from 'react';
 import { usePresentationStore, selectPresentedSlideCount, selectPresentedSlideNumber } from '$lib/stores/presentation';
+import { presentedSlidesThrough } from '$lib/utils/skip';
 
 export interface SwipeFeedbackProps {
 	/** Which way the last swipe went, or null before the first one. */
@@ -27,7 +28,15 @@ export interface SwipeFeedbackProps {
 const VISIBLE_MS = 900;
 
 export function SwipeFeedback({ direction, moved, nonce }: SwipeFeedbackProps) {
-	const currentIndex = usePresentationStore((state) => state.currentSlideIndex);
+	// A directly-opened skipped slide has no presented number of its own
+	// (selectPresentedSlideNumber is null for it). The fallback must stay in
+	// the same numbering space as `total` (presented slides, ProgressBar's
+	// convention too) rather than the slide's deck position, or the pill
+	// mixes two numbering systems - a skipped slide's deck position can
+	// equal, or exceed, the presented total.
+	const presentedThrough = usePresentationStore((state) =>
+		presentedSlidesThrough(state.presentation?.slides ?? [], state.currentSlideIndex)
+	);
 	const presentedNumber = usePresentationStore(selectPresentedSlideNumber);
 	const total = usePresentationStore(selectPresentedSlideCount);
 	const [visible, setVisible] = useState(false);
@@ -59,7 +68,7 @@ export function SwipeFeedback({ direction, moved, nonce }: SwipeFeedbackProps) {
 				</span>
 			) : null}
 			<span className="swipe-feedback-position">
-				{moved ? `${presentedNumber ?? currentIndex + 1} / ${total}` : direction === 'next' ? 'Last slide' : 'First slide'}
+				{moved ? `${presentedNumber ?? presentedThrough} / ${total}` : direction === 'next' ? 'Last slide' : 'First slide'}
 			</span>
 			{direction === 'next' ? (
 				<span className="swipe-feedback-arrow" aria-hidden="true">
