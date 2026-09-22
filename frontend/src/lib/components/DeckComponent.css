@@ -1,7 +1,7 @@
 /*
  * Print mode must never animate forever: a deck component that ignores
  * usePrintMode() and starts a CSS keyframe animation with an infinite
- * repeat count keeps `tap pdf`'s waitForAnimations waiting and captures a
+ * repeat count keeps `tap export pdf`'s waitForAnimations waiting and captures a
  * random frame (see internal/pdf/capture.go). Motion's <MotionConfig
  * reducedMotion="always"> in DeckComponent.tsx only reaches Motion's own
  * transform and layout animations, never a component's raw CSS - but

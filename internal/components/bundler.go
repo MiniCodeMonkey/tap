@@ -118,7 +118,7 @@ type Options struct {
 	SourceMaps    bool
 	// AssetPublicPath is the URL prefix baked into an emitted asset's URL
 	// (see Bundle.Assets): "/components/" for a live server (tap dev, tap
-	// pdf, tap screenshot, all serving from the same root), "components/"
+	// export pdf, tap export images, all serving from the same root), "components/"
 	// (no leading slash) for tap build's static output, so the deck still
 	// works when deployed under a sub-path. An asset small enough to
 	// inline as a data URL never uses this.

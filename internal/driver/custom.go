@@ -182,10 +182,11 @@ func RegisterCustomDrivers(registry *Registry, drivers map[string]DriverConfigIn
 
 		// Create and register custom driver
 		driver := NewCustomDriver(CustomDriverConfig{
-			Name:    name,
-			Command: cfg.Command,
-			Args:    cfg.Args,
-			Timeout: cfg.Timeout,
+			Name:       name,
+			Command:    cfg.Command,
+			Args:       cfg.Args,
+			Timeout:    cfg.Timeout,
+			WorkingDir: cfg.WorkingDir,
 		})
 		registry.Register(driver)
 	}
@@ -196,7 +197,8 @@ func RegisterCustomDrivers(registry *Registry, drivers map[string]DriverConfigIn
 //
 //nolint:govet // fieldalignment: struct layout is optimized for readability
 type DriverConfigInput struct {
-	Args    []string
-	Command string
-	Timeout int
+	Args       []string
+	Command    string
+	WorkingDir string
+	Timeout    int
 }

@@ -39,7 +39,7 @@ The skill teaches AI assistants about:
 - **Mermaid diagrams** - Flowcharts, sequence diagrams, ER diagrams
 - **AI images** - Gemini image generation from prompts
 - **CLI commands** - All tap commands and their options
-- **Deck components** - Writing a React component next to the deck, and checking it with `tap screenshot`
+- **Deck components** - Writing a React component next to the deck, and checking it with `tap export images`
 - **Best practices** - Presentation design tips
 
 ## Usage

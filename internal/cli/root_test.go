@@ -1,6 +1,10 @@
 package cli
 
-import "testing"
+import (
+	"path/filepath"
+	"strings"
+	"testing"
+)
 
 func TestDisplayVersion(t *testing.T) {
 	original := Version
@@ -25,7 +29,7 @@ func TestPresentCommandIsRegistered(t *testing.T) {
 	if err != nil || command.Name() != "present" {
 		t.Fatalf("present command not found: %v", err)
 	}
-	for _, flag := range []string{"port", "no-record"} {
+	for _, flag := range []string{"port", "no-record", "lan"} {
 		if command.Flags().Lookup(flag) == nil {
 			t.Errorf("present lacks --%s", flag)
 		}
@@ -34,5 +38,35 @@ func TestPresentCommandIsRegistered(t *testing.T) {
 		if command.Flags().Lookup(flag) != nil {
 			t.Errorf("present should not have --%s", flag)
 		}
+	}
+}
+
+func TestDevHasTheLANFlag(t *testing.T) {
+	command, _, err := rootCmd.Find([]string{"dev"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if command.Flags().Lookup("lan") == nil {
+		t.Error("dev lacks --lan")
+	}
+}
+
+func TestDeckCommandsTakeAnOptionalDeck(t *testing.T) {
+	for _, path := range [][]string{{"dev"}, {"present"}, {"build"}, {"new"}} {
+		command, _, err := rootCmd.Find(path)
+		if err != nil {
+			t.Fatalf("%v not found: %v", path, err)
+		}
+		want := path[0] + " [deck]"
+		if command.Use != want {
+			t.Errorf("Use = %q, want %q", command.Use, want)
+		}
+	}
+}
+
+func TestBuildMissingDeckJSON(t *testing.T) {
+	exitCode, stdout, _ := runTap(t, "build", filepath.Join(t.TempDir(), "missing.md"), "--json")
+	if exitCode != exitUserError || !strings.Contains(stdout, `"code": "deck_not_found"`) {
+		t.Errorf("exit %d, stdout %q", exitCode, stdout)
 	}
 }

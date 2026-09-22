@@ -10,14 +10,15 @@ build step, no network.
 ## Start from the scaffold, not a blank file
 
 ```bash
-tap add component RollingDeploy --deck deck.md   # slides/RollingDeploy.jsx
-tap add component LatencyDrop --inline --deck deck.md   # components/LatencyDrop.jsx
+tap component new RollingDeploy deck.md   # slides/RollingDeploy.jsx
+tap component new LatencyDrop --inline deck.md   # components/LatencyDrop.jsx
 ```
 
 Flags: `--inline` for a block inside a normal slide, `--ts` for `.tsx` plus
-`tap-env.d.ts` and `tap-shims.d.ts`, `--deck <file>` to resolve folders
-relative to that deck. `<Name>` must be PascalCase. The command refuses to
-overwrite an existing file and prints the markdown snippet to paste.
+`tap-env.d.ts` and `tap-shims.d.ts`. `[deck]` is a deck file or folder to
+resolve folders relative to. `<Name>` must be PascalCase. The command
+refuses to overwrite an existing file and prints the markdown snippet to
+paste.
 
 ## Two authoring forms
 
@@ -167,7 +168,7 @@ full-height column flex container.
 - Themes put different chrome on a slide (title blocks, page numbers, HUD
   bands), so the usable area differs. Per-theme safe areas are in
   `docs/reference/theme-porting.md` under "Component slides"; do not design
-  to the numbers, check with `tap screenshot --theme <slug>`.
+  to the numbers, check with `tap export images --theme <slug>`.
 
 ## Working example
 
@@ -189,7 +190,7 @@ const RESTART_MS = 950;
 ```
 
 Everything visible is a pure function of `step`, so jumping straight to a
-step with `?step=` or `tap screenshot --step` looks the same as clicking
+step with `?step=` or `tap export images --step` looks the same as clicking
 there:
 
 ```jsx
@@ -333,7 +334,7 @@ Rules, all mandatory:
   `setInterval`, and recursive `requestAnimationFrame` all run once per
   thumbnail, simultaneously.
 
-Prove both halves: `tap screenshot deck.md --slide N --step 0` and
+Prove both halves: `tap export images deck.md --slide N --step 0` and
 `--step 1`.
 
 ## Print mode
@@ -341,8 +342,8 @@ Prove both halves: `tap screenshot deck.md --slide N --step 0` and
 **`printMode = true` means "render the settled state of the CURRENT
 `step`, no animation, no timers". It does NOT mean "show the last step".**
 
-For `tap pdf`, `?print=true`, and previews the current step is `steps`, so
-they do show the final state. But `tap screenshot --step 2` also sets
+For `tap export pdf`, `?print=true`, and previews the current step is `steps`, so
+they do show the final state. But `tap export images --step 2` also sets
 `printMode = true`, with `step = 2`. A component that branches on
 `printMode` to jump to its last step produces a wrong stepped capture.
 
@@ -380,10 +381,10 @@ What a component receives:
 | Mode | `step` | `printMode` | `active` |
 |------|--------|-------------|----------|
 | Live viewer | current | `false` | `true` |
-| `?print=true`, `tap pdf` | `steps` | `true` | `true` |
+| `?print=true`, `tap export pdf` | `steps` | `true` | `true` |
 | Preview (overview, presenter next panel) | `steps` | `true` | `false` |
-| `tap screenshot --step k` | `k` | `true` | `true` |
-| `tap screenshot --step k --wait` | `k` | `false` | `true` |
+| `tap export images --step k` | `k` | `true` | `true` |
+| `tap export images --step k --wait` | `k` | `false` | `true` |
 | Presenter current panel | current | `false` | `true` |
 
 ## Thumbnails
@@ -424,7 +425,7 @@ line:
 tap theme show blueprint
 tap theme show blueprint --json
 tap theme show blueprint --prompt     # style brief for an image model
-tap theme show --deck deck.md --prompt
+tap theme show deck.md --prompt
 ```
 
 Use `--prompt` in front of an image request so generated illustrations
@@ -465,14 +466,14 @@ Tap embeds Motion 12 (currently 12.43.0).
   (they animate correctly since the presence-context fix); keyframe arrays
   on SVG `cx`/`cy`; `duration: 0` with a `delay` (the delay is honored).
 
-## Check your own work with tap screenshot
+## Check your own work with tap export images
 
 Never claim a component works without rendering it.
 
 ```bash
-tap screenshot deck.md --slide 2 --out check.png            # final state
-tap screenshot deck.md --slide 2 --step 2 --out step-2.png  # one step
-tap screenshot deck.md --all --out shots/                   # every slide
+tap export images deck.md --slide 2 --output check.png            # final state
+tap export images deck.md --slide 2 --step 2 --output step-2.png  # one step
+tap export images deck.md --all --output shots/                   # every slide
 ```
 
 With neither `--step` nor `--fragment`, the slide renders its final state
@@ -484,7 +485,7 @@ the page is **ready** (network idle, fonts, running animations finished),
 not after navigation. A short mount animation is over before the wait
 starts, so `--wait` suits timer-driven or long animations.
 
-**The exit status is the check.** `tap screenshot` exits 1, with a message
+**The exit status is the check.** `tap export images` exits 1, with a message
 on standard error, when the deck is missing, a slide, step, or fragment is
 out of range, the theme is unknown, a component fails to build, the
 browser cannot start, or the rendered slide shows a slide or component
@@ -496,7 +497,7 @@ error and exits 1. It cannot be combined with `--slide`, `--step`, or
 `--fragment`.
 
 ```bash
-tap screenshot deck.md --slide 2 --out check.png || echo "slide 2 is broken"
+tap export images deck.md --slide 2 --output check.png || echo "slide 2 is broken"
 ```
 
 `tap build deck.md` also exits 1 on any component build error, so a build
@@ -551,7 +552,7 @@ rest of the slide untouched for an inline one) plus a small muted
 `component error` chip. Fullscreen is followed live, so entering or leaving
 it switches forms at once. A static `tap build` output falls back silently.
 The hidden `.deck-error-card` element stays in the DOM either way, with
-`data-message` and `data-source`, so `tap screenshot` still exits 1 and
+`data-message` and `data-source`, so `tap export images` still exits 1 and
 reports the message:
 
 ```
@@ -568,10 +569,10 @@ back instead of showing a card: a whole-slide component renders the slide's
 slots with the `default` layout, an inline one leaves the slot's raw
 content, so a shipped deck stays usable on stage.
 
-`tap pdf` builds components too, and exports each in its final state
+`tap export pdf` builds components too, and exports each in its final state
 (`printMode = true`, `step = steps`). A build error stops it with the same
 `error:` line and exit status 1. A slide that shows an error card is still
-written to the PDF; `tap pdf` prints
+written to the PDF; `tap export pdf` prints
 `warning: slide <n> shows an error card: <message>` to standard error and
 exits 0.
 

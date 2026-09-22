@@ -19,7 +19,7 @@ import (
 // map for the transformer plus a flattened, deterministically ordered list
 // of build errors for terminal output. assetPublicPath is the URL prefix
 // baked into an emitted (not inlined) asset's URL: "/components/" for a
-// live server (dev, pdf, screenshot), "components/" for tap build's static
+// live server (dev, present, export pdf, export images), "components/" for tap build's static
 // output - see components.Options.AssetPublicPath.
 func buildComponents(parsed *parser.Presentation, deckDirectory string, minify bool, sourceMaps bool, assetPublicPath string) (map[string]components.Result, []components.BuildError) {
 	resolved := components.Resolve(parsed, deckDirectory, components.Options{

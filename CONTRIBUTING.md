@@ -164,9 +164,10 @@ next free one, up to 20 above it, and the URL that actually bound is
 printed. Two dev servers can therefore run side by side with no flags,
 though naming a port keeps it obvious which is which.
 
-The temporary servers behind `tap pdf` and `tap screenshot` bind
+The temporary servers behind `tap export pdf` and `tap export images` bind
 `127.0.0.1`, since only tap's own headless browser talks to them. `tap dev`
-keeps `0.0.0.0` so a presenter can open it from another device.
+and `tap present` also bind `127.0.0.1` by default; `--lan` switches them
+to `0.0.0.0` so a presenter can open the deck from another device.
 
 ## Changelog preparation
 
@@ -315,7 +316,7 @@ tap/
 │   ├── themes/       # The built-in theme list and generated tokens.json
 │   ├── builder/      # HTML builder
 │   ├── server/       # Dev server
-│   ├── pdf/          # Headless browser capture for tap pdf and tap screenshot
+│   ├── pdf/          # Headless browser capture for tap export pdf and tap export images
 │   ├── tui/          # Terminal UI
 │   └── gemini/       # Gemini API client
 ├── frontend/         # React frontend (frontend/src/lib/themes/ has the 21 themes)

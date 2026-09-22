@@ -119,6 +119,23 @@ func (s *Server) Port() int {
 	return p
 }
 
+// ListensOnLoopbackOnly reports whether the server accepts connections
+// only from this machine.
+func (s *Server) ListensOnLoopbackOnly() bool {
+	s.mu.RLock()
+	address := s.addr
+	s.mu.RUnlock()
+	host, _, err := net.SplitHostPort(address)
+	if err != nil {
+		return false
+	}
+	if host == "localhost" {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
+}
+
 // RegisterHandler registers an HTTP handler for the given pattern.
 // This should be called before Start().
 func (s *Server) RegisterHandler(pattern string, handler http.Handler) {

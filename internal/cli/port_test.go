@@ -30,7 +30,7 @@ func TestStartOnAvailablePort_ExplicitPortBusyFails(t *testing.T) {
 
 	build := func(port int) *server.Server { return server.New(port) }
 
-	srv, err := startOnAvailablePort(busyPort, true, "tap dev", build)
+	srv, err := startOnAvailablePort(busyPort, true, "tap dev", false, build)
 	if err == nil {
 		_ = srv.Shutdown(context.Background())
 		t.Fatal("expected an error for an explicitly requested, already-busy port")
@@ -48,7 +48,7 @@ func TestStartOnAvailablePort_DefaultPortBusyFallsBack(t *testing.T) {
 
 	build := func(port int) *server.Server { return server.New(port) }
 
-	srv, err := startOnAvailablePort(busyPort, false, "tap dev", build)
+	srv, err := startOnAvailablePort(busyPort, false, "tap dev", false, build)
 	if err != nil {
 		t.Fatalf("expected the default port to fall back instead of failing, got: %v", err)
 	}
@@ -63,5 +63,49 @@ func TestStartOnAvailablePort_DefaultPortBusyFallsBack(t *testing.T) {
 	}
 	if srv.Port() <= busyPort || srv.Port() > busyPort+maxPortFallbackAttempts {
 		t.Errorf("Port() = %d, want it within (%d, %d]", srv.Port(), busyPort, busyPort+maxPortFallbackAttempts)
+	}
+}
+
+// TestStartOnAvailablePort_LoopbackExplicitPortShadowedByWildcardFails
+// reproduces the macOS port-shadowing bug: another process holds the
+// wildcard address on busyPort, but a loopback-only server can still bind
+// 127.0.0.1:busyPort successfully, so a naive bind attempt would miss the
+// collision entirely. With loopback true, the explicit port must fail
+// instead of silently sharing the port with the other process.
+func TestStartOnAvailablePort_LoopbackExplicitPortShadowedByWildcardFails(t *testing.T) {
+	busyPort := heldPort(t)
+
+	build := func(port int) *server.Server { return server.NewWithHost(port, "127.0.0.1") }
+
+	srv, err := startOnAvailablePort(busyPort, true, "tap dev", true, build)
+	if err == nil {
+		_ = srv.Shutdown(context.Background())
+		t.Fatal("expected an error for an explicit loopback port shadowed by a wildcard listener")
+	}
+	if !strings.Contains(err.Error(), fmt.Sprintf("port %d is already in use", busyPort)) {
+		t.Errorf("error = %q, want it to name the busy port", err.Error())
+	}
+}
+
+// TestStartOnAvailablePort_LoopbackDefaultPortShadowedByWildcardFallsBack
+// is the default-port counterpart: the wildcard-shadowed port is not
+// fatal, the fallback moves on to the next port instead.
+func TestStartOnAvailablePort_LoopbackDefaultPortShadowedByWildcardFallsBack(t *testing.T) {
+	busyPort := heldPort(t)
+
+	build := func(port int) *server.Server { return server.NewWithHost(port, "127.0.0.1") }
+
+	srv, err := startOnAvailablePort(busyPort, false, "tap dev", true, build)
+	if err != nil {
+		t.Fatalf("expected the default loopback port to fall back instead of failing, got: %v", err)
+	}
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		_ = srv.Shutdown(ctx)
+	}()
+
+	if srv.Port() == busyPort {
+		t.Errorf("Port() = %d, want a different port than the shadowed one (%d)", srv.Port(), busyPort)
 	}
 }

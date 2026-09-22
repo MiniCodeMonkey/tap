@@ -1,8 +1,8 @@
 /**
  * Capture mode (`?capture=true`) is a stepped or fragment screenshot (tap
- * screenshot --step/--fragment): it renders the live, non-print viewer at an
+ * export images --step/--fragment): it renders the live, non-print viewer at an
  * exact presenter state, against a temporary server that never serves the
- * websocket route (see internal/cli/screenshot.go and buildSlideURL in
+ * websocket route (see internal/cli/export_images.go and buildSlideURL in
  * internal/pdf/capture.go). Like print mode, it must never open the
  * websocket or show the connection badge - otherwise a "Reconnecting..."
  * badge gets baked into the PNG. App.tsx reads its CAPTURE_MODE flag from

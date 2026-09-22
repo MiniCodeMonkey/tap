@@ -141,14 +141,14 @@ export function isPreviewDisabled(module: { preview?: unknown }): boolean {
 
 /**
  * The error card shown in dev when a component fails to build or render.
- * Detected by `tap screenshot` via the deck-error-card class, and by `tap
- * pdf` via its data-message attribute (see ErrorCardSelector in
+ * Detected by `tap export images` via the deck-error-card class, and by `tap
+ * export pdf` via its data-message attribute (see ErrorCardSelector in
  * internal/pdf/capture.go) - both present in both forms below, so neither
  * tool needs to parse the card's visible text apart from its source path.
  *
  * In the audience-safe form (see shouldUseSafeErrorForm), the full card is
  * kept in the DOM - visually hidden, its message moved to a data-message
- * attribute - rather than removed, so tap screenshot and tests still find
+ * attribute - rather than removed, so tap export images and tests still find
  * it by class; only a small "component error" marker is visible next to
  * `fallback` (the slide's normal slot content for a whole-slide component,
  * nothing for an inline one), so the room sees the slide instead of an
@@ -316,14 +316,14 @@ export function DeckComponent({
 						    which otherwise reaches every motion element in a deck
 						    component's own tree and blocks its mount animation on
 						    the first render of the slide it starts on (a reload, a
-						    deep link, `tap screenshot --step k`). A component that
+						    deep link, `tap export images --step k`). A component that
 						    wants its own AnimatePresence still nests one normally
 						    under this null value. */}
 						<PresenceContext.Provider value={null}>
 							{/* Print mode (and a settled capture, which passes printMode
 							    the same way) forces every Motion transform and layout
 							    animation in the component's tree to its end state
-							    instantly, so tap pdf's waitForAnimations never waits on
+							    instantly, so tap export pdf's waitForAnimations never waits on
 							    one and a screenshot never lands mid-animation. It leaves
 							    opacity and color animations running - see
 							    DeckComponent.css for the CSS-driven animations this does

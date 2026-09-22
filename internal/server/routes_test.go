@@ -887,3 +887,27 @@ func TestHandleComponentBundle_RejectsPathTraversal(t *testing.T) {
 		t.Errorf("expected status %d, got %d", http.StatusNotFound, resp.StatusCode)
 	}
 }
+
+func TestQRPageExplainsLANOnALoopbackServer(t *testing.T) {
+	s := NewWithHost(0, "127.0.0.1")
+	s.SetupRoutes()
+	request := httptest.NewRequest(http.MethodGet, "/qr", nil)
+	request.Host = "localhost"
+	recorder := httptest.NewRecorder()
+	s.mux.ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusNotFound {
+		t.Errorf("status = %d, want %d", recorder.Code, http.StatusNotFound)
+	}
+	if !strings.Contains(recorder.Body.String(), "--lan") {
+		t.Errorf("body = %q, want it to name --lan", recorder.Body.String())
+	}
+}
+
+func TestListensOnLoopbackOnly(t *testing.T) {
+	if !NewWithHost(0, "127.0.0.1").ListensOnLoopbackOnly() {
+		t.Error("127.0.0.1 should be loopback only")
+	}
+	if NewWithHost(0, "0.0.0.0").ListensOnLoopbackOnly() {
+		t.Error("0.0.0.0 is not loopback only")
+	}
+}

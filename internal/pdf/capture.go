@@ -27,7 +27,7 @@ type CaptureOptions struct {
 	// Width and Height are the viewport size in pixels.
 	Width, Height int
 	// Print renders the slide's final state through print mode
-	// (?print=true), the same URL form tap pdf uses. Set this or Step/
+	// (?print=true), the same URL form tap export pdf uses. Set this or Step/
 	// Fragment, not both: print mode always shows the final step and
 	// fragment state, so it overrides them.
 	Print bool
@@ -68,7 +68,7 @@ func buildSlideURL(serverURL string, options CaptureOptions) string {
 		// the live, non-print viewer to render an exact presenter state,
 		// but it is still a capture: the temporary server this runs
 		// against never serves the websocket route (see
-		// cli.runScreenshotE), so the frontend must never try to connect it
+		// cli.runExportImages), so the frontend must never try to connect it
 		// or show the connection badge. See capture=true's handling next to
 		// App.tsx's PRINT_MODE/CAPTURE_MODE read.
 		query.Set("capture", "true")
@@ -101,7 +101,7 @@ func buildSlideURL(serverURL string, options CaptureOptions) string {
 // the above, for a capture that deliberately wants a moment mid-animation
 // rather than the settled state. ctx is checked before the capture starts
 // and again before the screenshot is taken, so a caller looping over
-// several slides (tap screenshot --all) can stop between slides on
+// several slides (tap export images --all) can stop between slides on
 // cancellation instead of starting one it will only throw away.
 func (e *Exporter) CaptureSlide(ctx context.Context, serverURL string, options CaptureOptions, outputPath string) error {
 	if err := ctx.Err(); err != nil {
@@ -257,8 +257,8 @@ func detectErrorCard(page playwright.Page) (message string, hasError bool) {
 }
 
 // EnsureBrowser makes sure the exporter's browser is running, launching it
-// if necessary. Exported so callers outside this package (tap screenshot)
-// can surface the exact "browser cannot start" error tap pdf gives, and
+// if necessary. Exported so callers outside this package (tap export images)
+// can surface the exact "browser cannot start" error tap export pdf gives, and
 // fail fast before doing any other work.
 func (e *Exporter) EnsureBrowser() error {
 	return e.launchBrowser()

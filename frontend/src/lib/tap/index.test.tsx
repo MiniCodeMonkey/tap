@@ -97,7 +97,7 @@ describe('Step', () => {
 	});
 
 	it('a settled capture (printMode true, but NOT forced to the slide total) hides a Step not yet reached at the REQUESTED step', () => {
-		// Regression test: a `tap screenshot --step 0` capture on a slide
+		// Regression test: a `tap export images --step 0` capture on a slide
 		// whose deck component settles via printMode must not show a Step
 		// gated on a later step just because printMode is true - printMode
 		// only says "don't animate", never "show the final step's content".
