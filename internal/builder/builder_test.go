@@ -1011,3 +1011,20 @@ func TestDecodeAssetPath(t *testing.T) {
 		}
 	}
 }
+
+// TestBuild_KeepsALiteralPercentEscapedFileName covers the exact
+// regression a naive "always decode" fix would reintroduce: a file
+// genuinely named with a percent followed by two hex digits, which the
+// renderer leaves alone (goldmark does not touch a lone "%", and tap
+// image add's sanitizer deliberately allows it) must resolve to itself,
+// not to whatever decoding those two hex digits would produce.
+func TestBuild_KeepsALiteralPercentEscapedFileName(t *testing.T) {
+	imageName := "already%20encoded.png"
+	result, indexHTML := buildWithRenderedImage(t, imageName, "literal percent bytes")
+	if len(result.Warnings) != 0 {
+		t.Errorf("Build() warnings = %v, want none", result.Warnings)
+	}
+	if !strings.Contains(indexHTML, `src=\"assets/`) {
+		t.Errorf("index.html has no rewritten assets/ src for %s:\n%s", imageName, indexHTML)
+	}
+}

@@ -154,24 +154,19 @@ func (b *Builder) Build(cfg *config.Config, pres *parser.Presentation) (*BuildRe
 			// Strip this prefix to resolve the actual file path on disk.
 			resolvedPath := strings.TrimPrefix(imgPath, "/local/")
 
-			// The renderer HTML-entity-escapes and percent-encodes the
-			// path it writes into src, so what extractImagePaths pulled
-			// out of the HTML is not the file's real name. Undo both
-			// before looking the file up on disk.
-			decodedPath := decodeAssetPath(resolvedPath)
-
-			sourcePath := decodedPath
-			if !filepath.IsAbs(decodedPath) && b.baseDir != "" {
-				sourcePath = filepath.Join(b.baseDir, decodedPath)
+			sourcePath, reportedPath, err := b.resolveImageSourcePath(resolvedPath)
+			if err != nil {
+				// A file genuinely missing after decoding is reported,
+				// not silently dropped, so a broken image has a reason
+				// instead of just disappearing.
+				result.Warnings = append(result.Warnings, fmt.Sprintf("image not found: %s", reportedPath))
+				continue
 			}
 
 			// Copy the image with content hash
 			hashedPath, size, err := b.copyWithHash(sourcePath, assetsDir)
 			if err != nil {
-				// A file genuinely missing after decoding is reported,
-				// not silently dropped, so a broken image has a reason
-				// instead of just disappearing.
-				result.Warnings = append(result.Warnings, fmt.Sprintf("image not found: %s", decodedPath))
+				result.Warnings = append(result.Warnings, fmt.Sprintf("image not found: %s", reportedPath))
 				continue
 			}
 
@@ -406,6 +401,35 @@ func rewriteAsciinemaPaths(html string, pathMapping map[string]string) string {
 func isAbsoluteURL(path string) bool {
 	lowerPath := strings.ToLower(path)
 	return strings.HasPrefix(lowerPath, "http://") || strings.HasPrefix(lowerPath, "https://")
+}
+
+// resolveImageSourcePath turns resolvedPath, an image src already
+// stripped of its "/local/" dev-server prefix, into the file to open.
+// It tries the path exactly as written first: a file genuinely named
+// with something that looks like an escape, such as a literal "%20",
+// must resolve to itself, not to whatever decoding it would produce.
+// Only when nothing exists at the literal path does it fall back to
+// decodeAssetPath's undoing of the renderer's own escaping. reportedPath,
+// for a caller's warning, is the last path tried: the literal one when
+// nothing needed decoding, the decoded one when the literal path did not
+// exist.
+func (b *Builder) resolveImageSourcePath(resolvedPath string) (sourcePath, reportedPath string, err error) {
+	candidates := []string{resolvedPath}
+	if decoded := decodeAssetPath(resolvedPath); decoded != resolvedPath {
+		candidates = append(candidates, decoded)
+	}
+
+	for _, candidate := range candidates {
+		reportedPath = candidate
+		candidateSource := candidate
+		if !filepath.IsAbs(candidate) && b.baseDir != "" {
+			candidateSource = filepath.Join(b.baseDir, candidate)
+		}
+		if _, statErr := os.Stat(candidateSource); statErr == nil {
+			return candidateSource, candidate, nil
+		}
+	}
+	return "", reportedPath, fmt.Errorf("no file at %s", reportedPath)
 }
 
 // decodeAssetPath undoes the escaping the renderer applies to an <img>
