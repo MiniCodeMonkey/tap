@@ -29,10 +29,16 @@ type TransformedPresentation struct {
 // password, database, path or port. A field reaches PublicConfig only by
 // a line added here in publicConfigFrom; adding a field to Config does not
 // add it here, which is the point.
+//
+// CustomTheme is a bool, not the configured path: the page only ever
+// branches on whether a custom theme exists before requesting its CSS
+// from /api/custom-theme.css (see App.tsx and PresenterApp.tsx), never on
+// the path itself, so publishing the path would only hand out the deck's
+// directory layout for nothing the page reads.
 type PublicConfig struct {
 	Title           string            `json:"title,omitempty"`
 	Theme           string            `json:"theme,omitempty"`
-	CustomTheme     string            `json:"customTheme,omitempty"`
+	CustomTheme     bool              `json:"customTheme,omitempty"`
 	AspectRatio     string            `json:"aspectRatio,omitempty"`
 	Transition      string            `json:"transition,omitempty"`
 	ThemeColors     map[string]string `json:"themeColors,omitempty"`
@@ -46,7 +52,7 @@ func publicConfigFrom(cfg config.Config) PublicConfig {
 	return PublicConfig{
 		Title:           cfg.Title,
 		Theme:           cfg.Theme,
-		CustomTheme:     cfg.CustomTheme,
+		CustomTheme:     cfg.CustomTheme != "",
 		AspectRatio:     cfg.AspectRatio,
 		Transition:      cfg.Transition,
 		ThemeColors:     cfg.ThemeColors,

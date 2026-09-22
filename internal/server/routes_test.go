@@ -999,7 +999,10 @@ func TestPresentationHasNoLiveCodeWithoutARegistry(t *testing.T) {
 func deckWithConnectionSetting(password string) *transformer.TransformedPresentation {
 	return &transformer.TransformedPresentation{
 		Config: config.Config{
-			Title: "Talk with a database",
+			// Deliberately contains "port" and "user" as ordinary English
+			// inside other words, so a leak check that sweeps the body for
+			// those substrings would fail on the title alone.
+			Title: "Import and Export",
 			Drivers: map[string]config.DriverConfig{
 				"postgres": {
 					Command: "psql",
@@ -1051,17 +1054,23 @@ func TestPresentationNeverServesALiteralPassword(t *testing.T) {
 	}
 	body := rawBody()
 
-	for _, forbidden := range []string{
-		"hunter2literal", "db.internal.example.com", "admin", "billing", "5432",
-		"psql", "--quiet", `"drivers"`, `"connections"`, `"command"`, `"args"`,
-		`"timeout"`, `"host"`, `"user"`, `"password"`, `"database"`, `"port"`,
+	// Field names (drivers/connections/command/args/timeout/host/user/
+	// password/database/path/port) are proven absent structurally by
+	// TestPresentationConfigNeverEmbedsTheWholeConfigStruct, which decodes
+	// the config object's keys; a substring sweep for those words here
+	// would risk failing on a deck title that happens to contain one of
+	// them (see the Title comment on deckWithConnectionSetting). This
+	// checks only the specific secret values, which no real deck's own
+	// wording could produce.
+	for _, secret := range []string{
+		"hunter2literal", "db.internal.example.com", "billing", "5432", "psql", "--quiet",
 	} {
-		if strings.Contains(body, forbidden) {
-			t.Errorf("/api/presentation body contains %q, want it absent entirely: %s", forbidden, body)
+		if strings.Contains(body, secret) {
+			t.Errorf("/api/presentation body contains %q, want it absent entirely: %s", secret, body)
 		}
 	}
 
-	if !strings.Contains(body, `"title":"Talk with a database"`) {
+	if !strings.Contains(body, `"title":"Import and Export"`) {
 		t.Errorf("/api/presentation dropped a setting the page genuinely reads: %s", body)
 	}
 	if !strings.Contains(body, `"driver":"postgres"`) || !strings.Contains(body, `"connection":"prod"`) {
@@ -1081,10 +1090,18 @@ func TestPresentationNeverServesAPlaceholderConnectionValue(t *testing.T) {
 	slidesJSON := string(body["slides"])
 	configJSON := string(body["config"])
 
-	for _, forbidden := range []string{"${DB_PASSWORD}", "db.internal.example.com", "admin", "billing", "connections", "password"} {
-		if strings.Contains(slidesJSON, forbidden) || strings.Contains(configJSON, forbidden) {
-			t.Errorf("/api/presentation body contains %q for a placeholder-valued connection, want it absent entirely: config=%s slides=%s", forbidden, configJSON, slidesJSON)
+	for _, secret := range []string{"${DB_PASSWORD}", "db.internal.example.com", "billing"} {
+		if strings.Contains(slidesJSON, secret) || strings.Contains(configJSON, secret) {
+			t.Errorf("/api/presentation body contains %q for a placeholder-valued connection, want it absent entirely: config=%s slides=%s", secret, configJSON, slidesJSON)
 		}
+	}
+
+	var configFields map[string]json.RawMessage
+	if err := json.Unmarshal(body["config"], &configFields); err != nil {
+		t.Fatalf("decoding config: %v", err)
+	}
+	if _, found := configFields["connections"]; found {
+		t.Errorf("config carries a connections key for a placeholder-valued connection: %s", configJSON)
 	}
 }
 

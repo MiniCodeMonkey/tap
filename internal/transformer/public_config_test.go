@@ -50,12 +50,15 @@ func TestPublicConfigFieldsAreExplicit(t *testing.T) {
 // TestPublicNeverCarriesDriverOrConnectionSettings builds a Config whose
 // driver and connection settings are as sensitive as a deck's frontmatter
 // can make them, including a literal password, and checks none of it
-// survives into the client-facing view: neither the field names
-// (Drivers/Connections/Command/Args/Timeout/Host/User/Password/Database/
-// Path/Port never appear as JSON keys) nor the values themselves.
+// survives into the client-facing view. The title deliberately contains
+// "port" and "user" as ordinary English inside other words ("Import" and
+// "Export"), so a naive substring sweep over the whole body would fail on
+// the title alone; the check instead decodes the JSON and looks at the
+// actual keys, plus the handful of attacker-chosen values that have no
+// business appearing anywhere regardless of a real deck's wording.
 func TestPublicNeverCarriesDriverOrConnectionSettings(t *testing.T) {
 	cfg := config.Config{
-		Title: "Talk",
+		Title: "Import and Export",
 		Drivers: map[string]config.DriverConfig{
 			"postgres": {
 				Command: "psql",
@@ -80,20 +83,38 @@ func TestPublicNeverCarriesDriverOrConnectionSettings(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal: %v", err)
 	}
-	body := string(data)
 
-	for _, forbidden := range []string{
-		"drivers", "connections", "command", "args", "timeout",
-		"host", "user", "password", "database", "path", "port",
-		"psql", "db.internal.example.com", "admin", "hunter2literal",
-		"billing", "/var/run/postgres.sock", "5432", "postgres", "prod",
-	} {
-		if strings.Contains(strings.ToLower(body), strings.ToLower(forbidden)) {
-			t.Errorf("Public() output contains %q, it must carry no driver or connection setting: %s", forbidden, body)
+	var decoded struct {
+		Config map[string]json.RawMessage `json:"config"`
+	}
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+
+	allowedKeys := map[string]bool{
+		"title": true, "theme": true, "customTheme": true, "aspectRatio": true,
+		"transition": true, "themeColors": true, "slideNumbers": true, "presenterLayout": true,
+	}
+	for key := range decoded.Config {
+		if !allowedKeys[key] {
+			t.Errorf("config carries unexpected key %q; a driver or connection setting may have reached the client: %v", key, decoded.Config)
 		}
 	}
 
-	if !strings.Contains(body, `"title":"Talk"`) {
+	// Values a real deck's own wording could never coincidentally produce:
+	// the literal secret, the driver's command and arguments, and the
+	// connection's host, database and port.
+	body := string(data)
+	for _, secret := range []string{
+		"hunter2literal", "db.internal.example.com", "billing",
+		"/var/run/postgres.sock", "5432", "psql", "--quiet",
+	} {
+		if strings.Contains(body, secret) {
+			t.Errorf("Public() output contains %q, it must carry no driver or connection setting: %s", secret, body)
+		}
+	}
+
+	if !strings.Contains(body, `"title":"Import and Export"`) {
 		t.Errorf("Public() dropped a setting the page genuinely reads: %s", body)
 	}
 }

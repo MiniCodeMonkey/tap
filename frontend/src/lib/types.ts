@@ -57,32 +57,11 @@ export type Theme = string;
 export const DEFAULT_THEME: Theme = 'base';
 
 // ============================================================================
-// Config Types (matches internal/config/config.go)
+// Config Types (matches internal/transformer.PublicConfig, the subset of
+// internal/config/config.go's Config the server actually sends; it never
+// includes a driver's settings or a connection's details - see
+// internal/transformer/transformer.go's PublicConfig doc comment)
 // ============================================================================
-
-/**
- * Connection configuration for a driver.
- * Matches Go's ConnectionConfig struct.
- */
-export interface ConnectionConfig {
-	host?: string;
-	user?: string;
-	password?: string;
-	database?: string;
-	path?: string;
-	port?: number;
-}
-
-/**
- * Driver configuration for code execution.
- * Matches Go's DriverConfig struct.
- */
-export interface DriverConfig {
-	connections?: Record<string, ConnectionConfig>;
-	command?: string;
-	args?: string[];
-	timeout?: number;
-}
 
 /**
  * Theme color override keys.
@@ -102,18 +81,16 @@ export interface ThemeColors {
 }
 
 /**
- * Presentation configuration from YAML frontmatter.
- * Matches Go's Config struct.
+ * Presentation configuration the server sends the page. Matches Go's
+ * transformer.PublicConfig, not the deck's full Config: it carries no
+ * driver's settings and no connection's details.
  */
 export interface PresentationConfig {
-	drivers?: Record<string, DriverConfig>;
 	themeColors?: ThemeColors;
 	title?: string;
 	theme?: string;
-	/** Path to a custom CSS theme file (relative to markdown file) */
-	customTheme?: string;
-	author?: string;
-	date?: string;
+	/** Whether the deck configures a custom CSS theme; the page requests its CSS from /api/custom-theme.css, it never sees the configured path. */
+	customTheme?: boolean;
 	aspectRatio?: string;
 	transition?: Transition;
 	/** Whether to show the progress bar (default: true) */

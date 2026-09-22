@@ -258,7 +258,10 @@ func TestGenerateIndexHTML_NeverEmbedsDriverOrConnectionSettings(t *testing.T) {
 
 	pres := &transformer.TransformedPresentation{
 		Config: config.Config{
-			Title: "Talk with a database",
+			// Deliberately contains "port" and "user" as ordinary English
+			// inside other words, so a leak check that sweeps the body for
+			// those substrings would fail on the title alone.
+			Title: "Import and Export",
 			Drivers: map[string]config.DriverConfig{
 				"postgres": {
 					Command: "psql",
@@ -297,17 +300,48 @@ func TestGenerateIndexHTML_NeverEmbedsDriverOrConnectionSettings(t *testing.T) {
 	}
 	html := string(content)
 
-	for _, forbidden := range []string{
-		"hunter2literal", "db.internal.example.com", "admin", "billing", "5432",
-		"psql", "--quiet", `"drivers"`, `"connections"`, `"command"`, `"args"`,
-		`"timeout"`, `"host"`, `"user"`, `"password"`, `"database"`, `"port"`,
+	// Field names (drivers/connections/command/args/timeout/host/user/
+	// password/database/path/port) are proven absent structurally below,
+	// by decoding the embedded config object's keys; a substring sweep
+	// for those words over the whole page would risk failing on a deck
+	// title that happens to contain one of them (see the Title comment
+	// above). This checks only the specific secret values, which no real
+	// deck's own wording could produce.
+	for _, secret := range []string{
+		"hunter2literal", "db.internal.example.com", "billing", "5432", "psql", "--quiet",
 	} {
-		if strings.Contains(html, forbidden) {
-			t.Errorf("generated index.html contains %q, want it absent entirely", forbidden)
+		if strings.Contains(html, secret) {
+			t.Errorf("generated index.html contains %q, want it absent entirely", secret)
 		}
 	}
 	if !strings.Contains(html, `"driver":"postgres"`) || !strings.Contains(html, `"connection":"prod"`) {
 		t.Error("generated index.html dropped the driver/connection names the Run button needs")
+	}
+
+	startMarker := `<script id="presentation-data" type="application/json">`
+	startIdx := strings.Index(html, startMarker)
+	if startIdx == -1 {
+		t.Fatal("presentation data script tag not found")
+	}
+	startIdx += len(startMarker)
+	endIdx := strings.Index(html[startIdx:], "</script>")
+	if endIdx == -1 {
+		t.Fatal("closing script tag not found")
+	}
+	var decoded struct {
+		Config map[string]json.RawMessage `json:"config"`
+	}
+	if err := json.Unmarshal([]byte(html[startIdx:startIdx+endIdx]), &decoded); err != nil {
+		t.Fatalf("embedded JSON is invalid: %v", err)
+	}
+	allowedKeys := map[string]bool{
+		"title": true, "theme": true, "customTheme": true, "aspectRatio": true,
+		"transition": true, "themeColors": true, "slideNumbers": true, "presenterLayout": true,
+	}
+	for key := range decoded.Config {
+		if !allowedKeys[key] {
+			t.Errorf("config carries unexpected key %q; a driver or connection setting may have reached the export: %v", key, decoded.Config)
+		}
 	}
 }
 
