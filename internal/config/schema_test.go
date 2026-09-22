@@ -110,6 +110,20 @@ func TestSchemaCoversEveryConfigKey(t *testing.T) {
 	}
 }
 
+// TestSchemaExcludesDeadFragmentsKey documents the decision on the
+// frontmatter-level "fragments" key: nothing in tap reads Config.Fragments
+// (only a slide's own fragments directive, parser.SlideDirectives.Fragments,
+// does anything), so tap deck schema must not publish it as a working
+// default. Schema() leaves it out entirely rather than publish a default
+// the docs and the program's actual behaviour disagree on.
+func TestSchemaExcludesDeadFragmentsKey(t *testing.T) {
+	for _, key := range Schema() {
+		if key.Name == "fragments" {
+			t.Error(`Schema() has a "fragments" key, want none: nothing reads Config.Fragments`)
+		}
+	}
+}
+
 // findSchemaKey returns the key at a dotted path such as
 // "recording.warnAfter" or "drivers.<name>.timeout".
 func findSchemaKey(t *testing.T, path string) SchemaKey {
@@ -179,7 +193,6 @@ func TestSchemaDefaultsMatchTheConfigDefaults(t *testing.T) {
 		"theme":                   defaults.Theme,
 		"aspectRatio":             defaults.AspectRatio,
 		"transition":              defaults.Transition,
-		"fragments":               defaults.Fragments,
 		"slideNumbers":            true,
 		"drivers.<name>.timeout":  DefaultDriverTimeoutSeconds,
 		"recording.output":        DefaultRecordingOutput,

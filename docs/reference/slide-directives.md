@@ -212,8 +212,7 @@ Controls incremental reveals for list items on this slide.
 | Property | Value |
 |----------|-------|
 | Type | `boolean` |
-| Default | Inherited from frontmatter (default: `false`) |
-| Overrides | `fragments` in frontmatter |
+| Default | `false` |
 
 ```markdown
 <!--

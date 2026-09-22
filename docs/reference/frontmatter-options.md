@@ -208,25 +208,7 @@ transition: slide
 
 Individual slides can override this using the `transition` directive. See [Animations & Transitions](/guide/animations-transitions).
 
-### fragments
-
-Enable automatic fragment reveals for list items. When enabled, bullet points appear one at a time as you advance.
-
-| Property | Value |
-|----------|-------|
-| Type | `boolean` |
-| Default | `false` |
-| Required | No |
-
-```yaml
----
-fragments: true
----
-```
-
-When `true`, all bullet lists in the presentation will reveal incrementally. Individual slides can override this with the `fragments` directive.
-
-See [Animations & Transitions](/guide/animations-transitions) for more on fragments and the `<!-- pause -->` directive.
+A slide's own `fragments` directive reveals its list items one at a time; see [Animations & Transitions](/guide/animations-transitions) for more on fragments and the `<!-- pause -->` directive. There is no deck-wide frontmatter equivalent: fragments are set per slide.
 
 ## Code Display
 
@@ -339,7 +321,6 @@ date: 2024-03-15
 theme: blueprint
 aspectRatio: 16:9
 transition: fade
-fragments: true
 themeColors:
   accent: "#ffd447"
 drivers:
@@ -369,7 +350,6 @@ drivers:
 | `aspectRatio` | string | `16:9` | Slide aspect ratio |
 | `slideNumbers` | boolean | `true` | Show the theme's slide numbers |
 | `transition` | string | `fade` | Default slide transition |
-| `fragments` | boolean | `false` | Auto-reveal list items |
 | `themeColors` | object | None | Override individual theme colors |
 | `customTheme` | string | None | Path to your own CSS file |
 | `drivers` | object | None | Live code execution config |

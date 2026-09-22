@@ -29,7 +29,6 @@ type Config struct {
 	Date        string                  `yaml:"date" json:"date,omitempty"`
 	AspectRatio string                  `yaml:"aspectRatio" json:"aspectRatio,omitempty"`
 	Transition  string                  `yaml:"transition" json:"transition,omitempty"`
-	Fragments   bool                    `yaml:"fragments" json:"fragments,omitempty"`
 	// SlideNumbers turns off the slide number the theme draws on every
 	// slide when set to false. Nil (the key left out) keeps the numbers.
 	SlideNumbers *bool `yaml:"slideNumbers" json:"slideNumbers,omitempty"`
@@ -221,7 +220,6 @@ func DefaultConfig() *Config {
 		Theme:       "base",
 		AspectRatio: "16:9",
 		Transition:  "fade",
-		Fragments:   true,
 		Drivers:     make(map[string]DriverConfig),
 	}
 }

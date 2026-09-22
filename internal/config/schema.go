@@ -37,7 +37,6 @@ func Schema() []SchemaKey {
 		{Name: "themeColors", Type: "object", Description: "CSS colors that replace the theme's own.", Keys: themeColorSchemaKeys()},
 		{Name: "aspectRatio", Type: "string", Default: defaults.AspectRatio, Values: aspectRatioValues, Description: "The shape of every slide."},
 		{Name: "transition", Type: "string", Default: defaults.Transition, Values: transitionValues, Description: "The animation between slides. A slide's transition directive overrides it."},
-		{Name: "fragments", Type: "boolean", Default: defaults.Fragments, Description: "Reveal list items one at a time on every slide. A slide's fragments directive overrides it."},
 		{Name: "slideNumbers", Type: "boolean", Default: true, Description: "Whether the theme draws a slide number on every slide."},
 		{Name: "presenterLayout", Type: "string", Values: presenterLayoutValues, Description: "The layout the presenter view opens in, unless the device has chosen one."},
 		{Name: "drivers", Type: "map", Description: "Live code drivers by name, with their settings.", Keys: driverSchemaKeys()},
