@@ -236,10 +236,10 @@ drivers:
   mysql:
     connections:
       prod:
-        host: $DB_HOST
+        host: ${DB_HOST}
         port: 3306
-        user: $DB_USER
-        password: $DB_PASSWORD
+        user: ${DB_USER}
+        password: ${DB_PASSWORD}
         database: mydb
   python:
     command: python3
@@ -366,17 +366,17 @@ kind of talk it was built for, or see `docs/guide/themes.md`.
 
 ## Environment Variables
 
-Use environment variables in your configuration for secrets:
+String values in `drivers:` settings can read the environment with `${NAME}`:
 
 ```yaml
 drivers:
   mysql:
     connections:
       prod:
-        password: $DB_PASSWORD
+        password: ${DB_PASSWORD}
 ```
 
-Tap automatically loads `.env` files from the presentation directory.
+`${NAME}` expands when a block runs, not when the deck loads, so the value never reaches the slide page or a `tap build` folder. Tap automatically loads `.env` files from the presentation directory. A variable that is not set fails the block with a message that names it, rather than passing an empty string through.
 
 ## Development
 

@@ -121,7 +121,7 @@ drivers:
         port: 3306
         database: myapp
         user: demo_user
-        password: $MYSQL_PASSWORD
+        password: ${MYSQL_PASSWORD}
 ---
 ```
 
@@ -151,10 +151,10 @@ drivers:
   mysql:
     connections:
       production:
-        host: $MYSQL_HOST
-        database: $MYSQL_DATABASE
-        user: $MYSQL_USER
-        password: $MYSQL_PASSWORD
+        host: ${MYSQL_HOST}
+        database: ${MYSQL_DATABASE}
+        user: ${MYSQL_USER}
+        password: ${MYSQL_PASSWORD}
 ---
 ```
 
@@ -198,7 +198,7 @@ drivers:
         port: 5432
         database: analytics
         user: demo_user
-        password: $PGPASSWORD
+        password: ${PGPASSWORD}
 ---
 ```
 
@@ -367,22 +367,25 @@ When a timeout is reached:
 2. A timeout error is displayed on the slide
 3. The presentation continues normally
 
-### Environment Variable Substitution
+### Environment variables
 
-All driver configuration values support environment variable substitution using `$` prefix:
+String values in `drivers:` settings can read the environment with `${NAME}`:
 
 ```yaml
----
 drivers:
   postgres:
-    host: $DB_HOST
-    database: $DB_NAME
-    user: $DB_USER
-    password: $DB_PASSWORD
----
+    connections:
+      demo:
+        host: ${PGHOST}
+        user: ${PGUSER}
+        password: ${PGPASSWORD}
 ```
 
-This keeps sensitive credentials out of your presentation files.
+- tap expands `${NAME}` when a block runs, not when it loads the deck, so the value never reaches the slide page or a `tap build` folder.
+- A `.env` file next to the deck is read too.
+- A variable that is not set makes the block fail with a message that names it. It never becomes an empty string.
+- `$${` writes a literal `${`. Any other `$` stays as it is, so `$PGPASSWORD` without braces is not expanded.
+- Only driver settings expand. Other frontmatter keys, such as `title`, stay as written.
 
 ---
 

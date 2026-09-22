@@ -25,12 +25,6 @@ This is perfect for:
 Live code execution only works when using `tap dev`. Static builds created with `tap build` will show the code blocks but won't execute them. This is by design for security and portability.
 :::
 
-## What tap runs
-
-`tap dev` and `tap present` run only the live code blocks that are in the
-loaded deck. A request to run any other driver, connection, or code gets
-403. `tap build` and `tap export` never run code.
-
 ## The Driver Concept
 
 Tap uses **drivers** to execute code. A driver is a connector that knows how to run a specific type of code and format the results. When you want code to execute, you specify which driver should handle it.
@@ -83,6 +77,56 @@ ls -la | head -10
 
 Shell output is rendered with syntax highlighting.
 
+## Declare the drivers a deck uses
+
+Every driver a live code block uses must be a key under `drivers:` in the frontmatter. A driver with no settings is declared as `{}`:
+
+```yaml
+---
+title: My Talk
+drivers:
+  shell: {}
+  sqlite:
+    connections:
+      demo:
+        database: ":memory:"
+---
+```
+
+A block whose driver is not declared never runs. The block shows what to add, and `tap dev` prints the same message with the file and line:
+
+```
+warning: talk.md:24: This deck does not declare the shell driver. Add "shell: {}" under drivers in the frontmatter.
+```
+
+## Approving a deck
+
+A deck with live code runs nothing until you approve it. The first time `tap dev` or `tap present` opens it in a terminal, tap asks before the TUI starts:
+
+```
+This deck can run code on this computer:
+  /Users/me/talks/talk.md
+
+  python     1 block on slide 7, runs: python3 -c
+  shell      2 blocks on slides 3, 5
+
+A yes is remembered for this deck, so every future run skips this question; undo it with tap approval revoke /Users/me/talks/talk.md.
+
+Allow this deck to run code? Type s to show the code. [y/N/s]
+```
+
+- `s` prints every block, then asks again. Return means no.
+- A yes is saved in `~/.config/tap/settings.yaml` with the deck's path and its drivers. Editing the code never asks again.
+- A no saves nothing. The deck still previews and presents, its Run buttons show "Not approved", and tap asks again next time.
+- A new driver in the frontmatter asks again, and names only the new driver. A moved deck asks again, because approvals are keyed by path.
+- `tap new` approves the deck it creates.
+- Without a terminal, or with `--headless`, tap never asks. An unapproved deck's live code stays off. `--allow-code` turns it on for that run and saves nothing.
+- `tap approval list` shows the approved decks, and `tap approval revoke <deck>` removes one.
+
+## What tap runs
+
+A Run button sends only the slide number and the block number, such as `{"slide": 4, "block": 1}`. tap runs the code the deck file holds at that position, with that block's driver and connection. `/api/execute` refuses a request that carries code (400), an unknown slide or block (404), a block whose driver the deck does not declare (422), and a driver this run has not approved (403). `tap build` and `tap export` never run code.
+
 ## Connection Configuration
 
 For database drivers, you configure connections in the frontmatter. This keeps credentials and connection details at the top of your presentation file.
@@ -131,28 +175,25 @@ drivers:
 ---
 ```
 
-## Environment Variables for Credentials
+### Environment variables
 
-**Never hardcode passwords in your presentation files.** Use environment variables for sensitive credentials:
+String values in `drivers:` settings can read the environment with `${NAME}`:
 
 ```yaml
----
 drivers:
   postgres:
-    host: localhost
-    database: analytics
-    user: $PGUSER
-    password: $PGPASSWORD
----
+    connections:
+      demo:
+        host: ${PGHOST}
+        user: ${PGUSER}
+        password: ${PGPASSWORD}
 ```
 
-Values starting with `$` are replaced with the corresponding environment variable. Set them before running Tap:
-
-```bash
-export PGUSER=demo
-export PGPASSWORD=secret123
-tap dev slides.md
-```
+- tap expands `${NAME}` when a block runs, not when it loads the deck, so the value never reaches the slide page or a `tap build` folder.
+- A `.env` file next to the deck is read too.
+- A variable that is not set makes the block fail with a message that names it. It never becomes an empty string.
+- `$${` writes a literal `${`. Any other `$` stays as it is, so `$PGPASSWORD` without braces is not expanded.
+- Only driver settings expand. Other frontmatter keys, such as `title`, stay as written.
 
 ::: tip Credential Management
 For team presentations, consider using a `.env` file (excluded from version control) or your organization's secrets management solution.
@@ -288,7 +329,7 @@ uname -a && df -h
 | `{driver: 'mysql'}` | Execute with MySQL driver |
 | `{driver: 'postgres'}` | Execute with PostgreSQL driver |
 | `{driver: 'shell'}` | Execute with shell driver |
-| `$ENV_VAR` in config | Use environment variable |
+| `${ENV_VAR}` in a driver setting | Use environment variable |
 | `timeout: N` | Set timeout in seconds |
 
 ## Best Practices
