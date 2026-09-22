@@ -28,7 +28,7 @@
 
 ## Decisions this plan makes
 
-The spec leaves these open. Each one is marked **(plan decision)** where it is used. The reviewer should confirm or change them before work starts.
+The spec leaves these open. Each one is marked **(plan decision)** where it is used. The user approved all eleven as written on 2026-09-22.
 
 1. **Which `.md` files are decks.** The resolver counts every `.md` file in the folder except `README.md`, `CHANGELOG.md`, `CONTRIBUTING.md` and `LICENSE.md` (any case). This is the exclusion list `tap add` uses today.
 2. **Esc in the deck picker** exits 130 with no message. Today it exits 0.
