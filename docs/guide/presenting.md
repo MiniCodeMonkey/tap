@@ -87,14 +87,14 @@ file name:
 
 ```
 01.mov
-00:00 Title
-00:41 Agenda
-00:44 Title
+0:00 Title
+0:41 Agenda
+0:44 Title
 02.mov
-00:00 Title
-00:47 Talk starts
-00:47 Agenda
-03:12 Live demo
+0:00 Title
+0:47 Talk starts
+0:47 Agenda
+3:12 Live demo
 ```
 
 `Talk starts` marks the last time the deck left the title slide. Clicking
