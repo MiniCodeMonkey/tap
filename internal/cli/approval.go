@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"io"
+	"os"
 	"slices"
 	"sort"
 	"strconv"
@@ -183,7 +184,7 @@ func newApprovalRequest(deck string, cfg *config.Config, blocks []approvalBlock,
 	for _, name := range wanted {
 		entry := approvalDriver{Name: name, Slides: []int{}}
 		if settings := cfg.Drivers[name]; settings.Command != "" && !slices.Contains(builtInDriverNames, name) {
-			entry.Command = strings.Join(append([]string{settings.Command}, settings.Args...), " ")
+			entry.Command = displayedCommand(name, settings)
 		}
 		for _, block := range blocks {
 			if block.Driver != name {
@@ -204,6 +205,20 @@ func newApprovalRequest(deck string, cfg *config.Config, blocks []approvalBlock,
 		return request.Blocks[i].Block < request.Blocks[j].Block
 	})
 	return request
+}
+
+// displayedCommand returns what a custom driver's command will actually
+// run, with its ${NAME} variables expanded, so the prompt shows the same
+// thing the driver runs rather than the literal frontmatter text. A
+// variable that is not set falls back to the literal, unexpanded text:
+// the prompt's job is to inform, not to fail the question over a problem
+// the block itself will report when it runs.
+func displayedCommand(name string, settings config.DriverConfig) string {
+	command, args, err := settings.ExpandedCommand(name, os.LookupEnv)
+	if err != nil {
+		return strings.Join(append([]string{settings.Command}, settings.Args...), " ")
+	}
+	return strings.Join(append([]string{command}, args...), " ")
 }
 
 // terminalAsker asks on the terminal, before the TUI starts.
@@ -257,6 +272,7 @@ func printApprovalRequest(out io.Writer, request approvalRequest) {
 	if len(request.ApprovedBefore) > 0 {
 		fmt.Fprintf(out, "\n  Already approved: %s\n", strings.Join(request.ApprovedBefore, ", "))
 	}
+	fmt.Fprintf(out, "\nA yes is remembered for this deck, so every future run skips this question; undo it with tap approval revoke %s.\n", request.Deck)
 	fmt.Fprintln(out)
 }
 

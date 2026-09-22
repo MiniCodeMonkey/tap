@@ -282,6 +282,13 @@ func runDevServer(options serverOptions) error {
 		candidate.SetAllowedOrigins(allowOrigins)
 		candidate.SetBaseDir(baseDir) // Enable serving local files (images, etc.)
 		candidate.SetRegistry(buildDriverRegistry(cfg, baseDir))
+		// The policy stays the same for the whole run. A driver added by a
+		// reload is not in it, so its blocks show "Not approved" until the
+		// next start asks. This also means an approved custom driver whose
+		// command changes mid-run (a git pull, an edited frontmatter) has
+		// its new command run without asking again: approval is keyed by
+		// driver name, not by command, and the registry below is rebuilt on
+		// every reload while this policy is not.
 		candidate.SetLiveCodePolicy(liveCodePolicy)
 		candidate.SetComponentBundles(componentBundleFiles(resolvedComponents))
 		if customThemePath != "" {
