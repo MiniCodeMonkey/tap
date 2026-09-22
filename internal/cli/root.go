@@ -2,7 +2,9 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
+	"io"
 	"os"
 
 	"github.com/spf13/cobra"
@@ -21,9 +23,6 @@ func displayVersion() string {
 	}
 	return "v" + Version
 }
-
-// Global flags
-var verbose bool
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
@@ -45,20 +44,35 @@ func init() {
 	// Customize version template to show "tap version X.Y.Z"
 	rootCmd.SetVersionTemplate("tap version {{.Version}}\n")
 
-	// Global flags available to all subcommands
-	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "enable verbose output")
+	rootCmd.SetFlagErrorFunc(func(command *cobra.Command, err error) error {
+		return userError(codeUsage, err)
+	})
 }
 
-// Execute runs the root command and returns exit code
+// Execute runs tap with the process arguments and returns its exit code.
 func Execute() int {
-	if err := rootCmd.Execute(); err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		return 1
-	}
-	return 0
+	return execute(rootCmd, os.Args[1:], os.Stdout, os.Stderr)
 }
 
-// Verbose returns true if verbose mode is enabled
-func Verbose() bool {
-	return verbose
+// execute runs root with args and turns the result into an exit code. It
+// is the only place that prints a failed command's error, so every
+// command reports errors the same way.
+func execute(root *cobra.Command, args []string, stdout, stderr io.Writer) int {
+	root.SetArgs(args)
+	root.SetOut(stdout)
+	root.SetErr(stderr)
+	_, err := root.ExecuteC()
+	if err == nil {
+		return exitOK
+	}
+
+	exitCode, _, reported := classify(err)
+	switch {
+	case reported:
+	case errors.Is(err, errInterrupted):
+		fmt.Fprintln(stderr, "interrupted")
+	default:
+		errorColor.Fprintln(stderr, "Error:", err)
+	}
+	return exitCode
 }
