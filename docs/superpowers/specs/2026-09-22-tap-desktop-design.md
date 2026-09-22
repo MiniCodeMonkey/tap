@@ -52,7 +52,7 @@ The `.md` file on disk is the only source of truth. The app never writes a priva
 
 ## Platform and repo
 
-- macOS 14 or later.
+- macOS 14 or later. On macOS 26 the app uses the system's glass: `NSGlassEffectView` for the slide panel overlay, and the macOS 26 toolbar and sidebar styles. On macOS 14 and 15 it falls back to `NSVisualEffectView` and the older styles, and it may look less polished there.
 - An AppKit core: the editor, sidebar, windows, and presenting. SwiftUI is used only for sheets and settings.
 - Documents use `NSDocument`: native tabs, recent files, autosave in place, Revert To, and file coordination that sees external writes.
 - The app registers for `.md` as an Alternate editor. It appears in Open With without becoming the default.
@@ -89,7 +89,7 @@ When a tap process exits unexpectedly, the app restarts it with backoff, and the
 
 ## The protocol between the app and tap
 
-- `PUT /api/app/source` sends the unsaved buffer after a typing pause of about 100 ms. The response lists the slides: line range, layout, title, step count, skip flag, errors, and each code block with its driver. tap renders from the buffer until the next save.
+- `PUT /api/app/source` sends the unsaved buffer after a typing pause of about 100 ms. The response lists the slides: line range, layout, title, fragment and step counts, skip flag, errors, and each code block with its driver. The prerequisites document defines the response, including which lines a range covers. tap renders from the buffer until the next save.
 - The existing WebSocket carries rendered updates to the preview, and a new `file-changed` message so the preview reloads. The app itself learns about file changes, questions, recording, and the tunnel from the stdout events.
 - The app drives slide and step positions through the existing WebSocket `slide` message. It never injects JavaScript into the page.
 - Commands that need no server run as subcommands: `tap new`, `tap theme list`, `tap theme show`, `tap theme set`, `tap image …`, `tap component new`, `tap slide add --print`, `tap deck schema`, `tap export …`, and `tap build`.
@@ -222,8 +222,8 @@ tap owns this rule, so the CLI and the app behave the same way.
 Each milestone ends with a working app. The tap prerequisites come first. They are specified in their own document.
 
 1. The tap prerequisites for writing: `--app` mode, the slide list with ranges, the `file-changed` message, and the render-ready signal.
-2. The app shell: documents, the editor with boxes, the Preview tab, the welcome window, and the tap process lifecycle.
-3. The sidebar, thumbnails and cache, and slide operations, including multi-select and the layout gallery.
+2. The app shell: documents, the editor with boxes, the Preview tab, the welcome window, and the tap process lifecycle. This milestone starts from the native prototype (`spike-native-prototype.md`). Its editor (box drawing, range shifting, frontmatter hiding with the selection clamp) moves into `desktop/`, without the measurement probe and benchmark hooks. The benchmark harness stays as a performance regression check.
+3. The sidebar, thumbnails and cache, and slide operations, including multi-select and the layout gallery. The prototype's pinned and overlay panel switch and its thumbnail renderer are the starting point.
 4. Presenting and rehearsing through `tap present --app`, with the recording sheets.
 5. Live code approval in the app, the Deck tab, and the fix-its.
 6. Creating decks, themes, images, components, export, and Settings.
