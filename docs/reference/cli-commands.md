@@ -474,7 +474,7 @@ On success the command prints the path of each file written, one per line, and n
 
 `--all` writes `slide-001.png`, `slide-002.png`, and so on into the output folder. It does not stop at the first broken slide: it tries every slide, prints the paths it did write to standard output, then prints one `slide N: <reason>` line per broken slide to standard error and exits 1. `--all` cannot be combined with `--slide`, `--step`, or `--fragment`.
 
-It exits with status 1, and a message on standard error, on any of: a missing deck, an out-of-range slide, step, fragment, or `--wait`, an unknown theme, a deck component that fails to build, a browser that cannot start, or a rendered slide that shows a slide or component error card. A component build error fails before any image is written.
+It exits with status 1, and a message on standard error, on any of: a missing deck, an out-of-range slide, step, fragment, or `--wait`, an unknown theme, a deck component that fails to build, or a rendered slide that shows a slide or component error card. A component build error fails before any image is written. It exits with status 2 when a browser cannot start.
 
 On Ctrl-C or SIGTERM it finishes its cleanup, prints `interrupted` on standard error, and exits with status **130**, whether the signal reaches the process directly or the terminal signals the whole process group. A second Ctrl-C during the cleanup exits at once.
 
@@ -661,10 +661,13 @@ Every command writes its real output to standard output and its errors and
 warnings to standard error. A script can therefore read, for example,
 `tap export images`'s written paths without filtering diagnostics out of them.
 
-Commands exit with status 1 on failure. `tap build` fails on an unknown
+Commands use the exit codes described under [Conventions](#conventions): `0`
+on success, `1` for a problem you can fix, `2` for a problem in tap or its
+environment, and `130` when interrupted. `tap build` exits 1 on an unknown
 layout, an undeclared slot, or a deck component that does not build;
-`tap export images` also fails on an out-of-range slide, step, or fragment, an
-unknown theme, or a rendered slide that shows an error card.
+`tap export images` also exits 1 on an out-of-range slide, step, or
+fragment, an unknown theme, or a rendered slide that shows an error card,
+and exits 2 when a browser cannot start or a temporary server cannot bind.
 
 ---
 
