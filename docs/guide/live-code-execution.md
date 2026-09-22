@@ -140,7 +140,9 @@ SQLite is the simplest: just specify the database file.
 title: Database Demo
 drivers:
   sqlite:
-    database: ./data/demo.db
+    connections:
+      demo:
+        database: ./data/demo.db
 ---
 ```
 
@@ -153,10 +155,12 @@ If no database is specified, Tap uses an in-memory SQLite database.
 title: MySQL Demo
 drivers:
   mysql:
-    host: localhost
-    port: 3306
-    database: myapp
-    user: demo_user
+    connections:
+      demo:
+        host: localhost
+        port: 3306
+        database: myapp
+        user: demo_user
 ---
 ```
 
@@ -167,11 +171,12 @@ drivers:
 title: PostgreSQL Demo
 drivers:
   postgres:
-    host: localhost
-    port: 5432
-    database: analytics
-    user: demo_user
-    sslmode: prefer
+    connections:
+      demo:
+        host: localhost
+        port: 5432
+        database: analytics
+        user: demo_user
 ---
 ```
 
@@ -210,7 +215,9 @@ To prevent runaway queries or infinite loops from freezing your presentation, Ta
 ---
 drivers:
   sqlite:
-    database: ./demo.db
+    connections:
+      demo:
+        database: ./demo.db
     timeout: 30  # seconds
 ---
 ```
@@ -284,10 +291,14 @@ You can configure multiple drivers and use different ones throughout your presen
 title: Full Stack Demo
 drivers:
   sqlite:
-    database: ./app.db
+    connections:
+      demo:
+        database: ./app.db
   postgres:
-    host: localhost
-    database: analytics
+    connections:
+      analytics:
+        host: localhost
+        database: analytics
   shell:
     cwd: ./demo
 ---
@@ -300,7 +311,7 @@ Then use the appropriate driver for each code block:
 
 # Local Database
 
-```sql {driver: 'sqlite'}
+```sql {driver: 'sqlite', connection: 'demo'}
 SELECT COUNT(*) FROM users;
 ```
 
@@ -308,7 +319,7 @@ SELECT COUNT(*) FROM users;
 
 # Analytics
 
-```sql {driver: 'postgres'}
+```sql {driver: 'postgres', connection: 'analytics'}
 SELECT date, SUM(revenue) FROM sales GROUP BY date;
 ```
 
