@@ -170,37 +170,20 @@ func countLeadingBackticks(line string) int {
 	return count
 }
 
-// SplitSlidesPreservingCodeBlocks splits text on "---" delimiters while preserving
-// code blocks. Any "---" inside a fenced code block (``` or ````) is NOT treated
-// as a slide delimiter.
+// SplitSlidesPreservingCodeBlocks splits text on "---" delimiters while
+// preserving code blocks. A "---" inside a fenced code block (backticks or
+// tildes, see fenceTracker) is not a slide delimiter.
 func SplitSlidesPreservingCodeBlocks(text string) []string {
 	lines := strings.Split(text, "\n")
 	var slides []string
 	var currentSlide strings.Builder
-	insideCodeBlock := false
-	codeBlockFenceLength := 0
+	var fences fenceTracker
 
 	for i, line := range lines {
-		// Check for code block fence (must be at least 3 backticks)
-		backtickCount := countLeadingBackticks(line)
-		if backtickCount >= 3 {
-			if !insideCodeBlock {
-				// Opening a code block
-				insideCodeBlock = true
-				codeBlockFenceLength = backtickCount
-			} else if backtickCount >= codeBlockFenceLength {
-				// Check if this is a closing fence (just backticks, possibly with trailing whitespace)
-				trimmedAfterBackticks := strings.TrimSpace(line[backtickCount:])
-				if trimmedAfterBackticks == "" {
-					// Closing the code block
-					insideCodeBlock = false
-					codeBlockFenceLength = 0
-				}
-			}
-		}
+		insideFence := fences.advance(line)
 
-		// Check for slide delimiter only when not in a code block
-		if !insideCodeBlock && slideDelimiter.MatchString(line) {
+		// A "---" line is a slide delimiter only outside a fenced code block
+		if !insideFence && slideDelimiter.MatchString(line) {
 			// End current slide, start new one
 			slides = append(slides, currentSlide.String())
 			currentSlide.Reset()
@@ -241,8 +224,7 @@ func splitSlidesPreservingCodeBlocksWithLines(text string) []slideChunk {
 	lines := strings.Split(text, "\n")
 	var slides []slideChunk
 	var currentLines []string
-	insideCodeBlock := false
-	codeBlockFenceLength := 0
+	var fences fenceTracker
 	slideStartLine := 1
 
 	flush := func() {
@@ -251,21 +233,9 @@ func splitSlidesPreservingCodeBlocksWithLines(text string) []slideChunk {
 	}
 
 	for i, line := range lines {
-		backtickCount := countLeadingBackticks(line)
-		if backtickCount >= 3 {
-			if !insideCodeBlock {
-				insideCodeBlock = true
-				codeBlockFenceLength = backtickCount
-			} else if backtickCount >= codeBlockFenceLength {
-				trimmedAfterBackticks := strings.TrimSpace(line[backtickCount:])
-				if trimmedAfterBackticks == "" {
-					insideCodeBlock = false
-					codeBlockFenceLength = 0
-				}
-			}
-		}
+		insideFence := fences.advance(line)
 
-		if !insideCodeBlock && slideDelimiter.MatchString(line) {
+		if !insideFence && slideDelimiter.MatchString(line) {
 			flush()
 			slideStartLine = i + 2
 		} else {
