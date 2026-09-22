@@ -21,10 +21,17 @@ var imageExtensions = map[string]bool{
 }
 
 // linkUnsafePattern matches runs of characters that need escaping in a
-// plain markdown link destination: whitespace, the parentheses that
-// would otherwise close the link early, and angle brackets, which would
-// otherwise look like the <path> form.
-var linkUnsafePattern = regexp.MustCompile(`[\s()<>]+`)
+// plain markdown link destination, or that break the link once it is
+// rendered and read back off disk: whitespace; the parentheses that would
+// otherwise close the link early; angle brackets, which would otherwise
+// look like the <path> form; single and double quotes and the backtick,
+// which goldmark percent-encodes in the rendered src, so the builder's
+// asset copy looks for a name that no longer matches the file on disk;
+// and "#", which a browser reads as the start of a URL fragment, so an
+// image with one in its name never loads in tap dev or tap present even
+// though the built output, which never opens the file through a browser
+// URL, still finds it.
+var linkUnsafePattern = regexp.MustCompile("[\\s()<>'\"`#]+")
 
 // AddedImage is an image copied into a deck's images folder. Path is
 // relative to the deck's folder.
@@ -62,8 +69,8 @@ func EnsureImagesDir(deckPath string) (string, error) {
 // Spaces, parentheses and other characters that would need escaping in a
 // markdown link are replaced with "-" in the copied name, and -2, -3 and
 // so on are added before the extension when the sanitized name is taken.
-// A source already in the images folder is used where it is, without a
-// copy.
+// A source already in the images folder under a name that needs no
+// sanitizing is used where it is, without a copy.
 func AddImage(deckPath, sourcePath string) (AddedImage, error) {
 	if !imageExtensions[strings.ToLower(filepath.Ext(sourcePath))] {
 		return AddedImage{}, fmt.Errorf("%w: %s (tap accepts png, jpg, jpeg, gif, webp, svg and avif)", ErrNotAnImage, sourcePath)
@@ -81,10 +88,17 @@ func AddImage(deckPath, sourcePath string) (AddedImage, error) {
 		return AddedImage{}, err
 	}
 	baseName := filepath.Base(sourcePath)
-	if existing, err := os.Stat(filepath.Join(imagesDir, baseName)); err == nil && os.SameFile(existing, sourceInfo) {
-		return newAddedImage(baseName, baseName), nil
-	}
 	sanitizedName := sanitizeForLink(baseName)
+	// A source already sitting in the images folder is used where it is,
+	// without a copy, but only when its on-disk name already needs no
+	// sanitizing: a pre-existing image named with a space or another
+	// unsafe character still gets a fresh, safely named copy, so the link
+	// tap writes is one goldmark and the builder actually resolve.
+	if sanitizedName == baseName {
+		if existing, err := os.Stat(filepath.Join(imagesDir, baseName)); err == nil && os.SameFile(existing, sourceInfo) {
+			return newAddedImage(baseName, baseName), nil
+		}
+	}
 	name, err := copyToFreeName(sourcePath, imagesDir, sanitizedName)
 	if err != nil {
 		return AddedImage{}, err

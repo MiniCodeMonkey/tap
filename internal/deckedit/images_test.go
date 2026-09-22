@@ -5,6 +5,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -94,8 +95,12 @@ func TestAddImageSanitizesTheCopiedName(t *testing.T) {
 	deck := writeFile(t, filepath.Join(deckDir, "talk.md"), "# One\n")
 
 	tests := map[string]string{
-		"my diagram.png": "my-diagram.png",
-		"chart (v2).png": "chart-v2.png",
+		"my diagram.png":     "my-diagram.png",
+		"chart (v2).png":     "chart-v2.png",
+		`he said "hi".png`:   "he-said-hi.png",
+		"it's a diagram.png": "it-s-a-diagram.png",
+		"back`tick.png":      "back-tick.png",
+		"diagram#1.png":      "diagram-1.png",
 	}
 	for sourceName, wantName := range tests {
 		source := writeFile(t, filepath.Join(t.TempDir(), sourceName), "png bytes")
@@ -128,6 +133,60 @@ func TestAddImageSanitizingCanClash(t *testing.T) {
 	}
 	if added.Path != filepath.Join("images", "my-diagram-2.png") {
 		t.Errorf("Path = %q, want images/my-diagram-2.png", added.Path)
+	}
+}
+
+// TestAddImageLeavesOtherCharactersAlone covers characters the reviewer
+// checked against goldmark's actual render but that do not need
+// sanitizing: "%" and ";" pass through goldmark unchanged in a link
+// destination, and a non-Latin name is not touched either.
+func TestAddImageLeavesOtherCharactersAlone(t *testing.T) {
+	deckDir := t.TempDir()
+	deck := writeFile(t, filepath.Join(deckDir, "talk.md"), "# One\n")
+
+	names := []string{"progress 50%.png", "diagram;v2.png", "图表.png"}
+	for _, sourceName := range names {
+		source := writeFile(t, filepath.Join(t.TempDir(), sourceName), "png bytes")
+		added, err := AddImage(deck, source)
+		if err != nil {
+			t.Fatalf("AddImage(%q) error = %v", sourceName, err)
+		}
+		wantName := sanitizeForLink(sourceName)
+		if sourceName != "progress 50%.png" && added.Path != filepath.Join("images", sourceName) {
+			t.Errorf("AddImage(%q).Path = %q, want images/%s unchanged", sourceName, added.Path, sourceName)
+		}
+		if _, err := os.Stat(filepath.Join(deckDir, "images", wantName)); err != nil {
+			t.Errorf("copied file not found under %q: %v", wantName, err)
+		}
+	}
+}
+
+// TestAddImageAlreadyInImagesWithAnUnsafeNameCopiesUnderASafeName covers
+// the same-file fast path: a deck whose images folder already holds a
+// file named before this sanitizing existed (with a raw space in it)
+// must not have that raw name handed back as a link destination.
+func TestAddImageAlreadyInImagesWithAnUnsafeNameCopiesUnderASafeName(t *testing.T) {
+	deckDir := t.TempDir()
+	deck := writeFile(t, filepath.Join(deckDir, "talk.md"), "# One\n")
+	source := writeFile(t, filepath.Join(deckDir, "images", "my diagram.png"), "png bytes")
+
+	added, err := AddImage(deck, source)
+	if err != nil {
+		t.Fatalf("AddImage() error = %v", err)
+	}
+	if added.Path != filepath.Join("images", "my-diagram.png") {
+		t.Errorf("Path = %q, want images/my-diagram.png", added.Path)
+	}
+	if strings.Contains(added.Markdown, " ") {
+		t.Errorf("Markdown = %q, still has a raw space", added.Markdown)
+	}
+	copied, err := os.ReadFile(filepath.Join(deckDir, "images", "my-diagram.png"))
+	if err != nil || string(copied) != "png bytes" {
+		t.Errorf("copied file = (%q, %v)", copied, err)
+	}
+	// The original, unsafely named file is left in place.
+	if _, err := os.Stat(filepath.Join(deckDir, "images", "my diagram.png")); err != nil {
+		t.Errorf("original file removed: %v", err)
 	}
 }
 
