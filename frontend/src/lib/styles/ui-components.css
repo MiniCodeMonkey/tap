@@ -246,6 +246,11 @@
 	background-color: #10b981;
 }
 
+/* A skipped slide in the overview grid is dimmed, with "Skipped" for its number. */
+.slide-overview .thumbnail.skipped > :not(.thumbnail-number) {
+	opacity: 0.45;
+}
+
 /* Responsive adjustments */
 @media (max-width: 1400px) {
 	.slide-overview .thumbnail-grid {

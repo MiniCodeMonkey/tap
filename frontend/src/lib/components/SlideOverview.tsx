@@ -15,6 +15,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type 
 import type { Slide as SlideData, Theme } from '$lib/types';
 import { usePresentationStore, goToSlide } from '$lib/stores/presentation';
 import { broadcastPresentationState } from '$lib/stores/websocket';
+import { isSkipped, presentedSlideCount, presentedSlideNumber } from '$lib/utils/skip';
 import { SlideCanvas } from './SlideCanvas';
 import { Slide } from './Slide';
 
@@ -180,6 +181,8 @@ export function SlideOverview({
 		return null;
 	}
 
+	const presentedCount = presentedSlideCount(slides);
+
 	function selectSlide(index: number): void {
 		goToSlide(index);
 		// Mirror keyboard navigation, which broadcasts after every navigation
@@ -242,31 +245,35 @@ export function SlideOverview({
 
 			<div className="overview-content">
 				<div className="thumbnail-grid" ref={gridRef} role="listbox" aria-label="Select a slide">
-					{slides.map((slide, index) => (
-						<button
-							key={slide.index}
-							className={`thumbnail${index === currentIndex ? ' current' : ''}${index === focusedIndex ? ' focused' : ''}`}
-							onClick={() => selectSlide(index)}
-							role="option"
-							aria-selected={index === currentIndex}
-							aria-label={`Slide ${index + 1}`}
-						>
-							<LazyThumbnail>
-								<SlideCanvas aspectRatio={aspectRatio} theme={theme}>
-									<Slide
-										slide={slide}
-										active={false}
-										printMode
-										preview
-										fragmentIndex={slide.fragmentCount}
-										step={slide.steps}
-										total={slides.length}
-									/>
-								</SlideCanvas>
-							</LazyThumbnail>
-							<div className="thumbnail-number">{index + 1}</div>
-						</button>
-					))}
+					{slides.map((slide, index) => {
+						const skipped = isSkipped(slide);
+						const number = presentedSlideNumber(slides, index);
+						return (
+							<button
+								key={slide.index}
+								className={`thumbnail${index === currentIndex ? ' current' : ''}${index === focusedIndex ? ' focused' : ''}${skipped ? ' skipped' : ''}`}
+								onClick={() => selectSlide(index)}
+								role="option"
+								aria-selected={index === currentIndex}
+								aria-label={skipped ? `Slide ${index + 1}, skipped` : `Slide ${number}`}
+							>
+								<LazyThumbnail>
+									<SlideCanvas aspectRatio={aspectRatio} theme={theme}>
+										<Slide
+											slide={slide}
+											active={false}
+											printMode
+											preview
+											fragmentIndex={slide.fragmentCount}
+											step={slide.steps}
+											total={presentedCount}
+										/>
+									</SlideCanvas>
+								</LazyThumbnail>
+								<div className="thumbnail-number">{number ?? 'Skipped'}</div>
+							</button>
+						);
+					})}
 				</div>
 			</div>
 		</div>

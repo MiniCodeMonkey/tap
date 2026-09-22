@@ -27,12 +27,14 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import {
 	usePresentationStore,
 	selectCurrentSlide,
-	selectTotalSlides,
+	selectPresentedSlideCount,
+	selectPresentedSlideNumber,
 	loadPresentation,
 	setupHashChangeListener,
 	nextSlide,
 	prevSlide,
-	goToSlide
+	goToFirstSlide,
+	goToLastSlide
 } from '$lib/stores/presentation';
 import { useResolvedTheme } from '$lib/hooks/useResolvedTheme';
 import {
@@ -43,6 +45,7 @@ import {
 	useConnectionStore
 } from '$lib/stores/websocket';
 import { fetchPresentation } from '$lib/utils/fetchPresentation';
+import { nextPresentedIndex } from '$lib/utils/skip';
 import { setupWakeLock } from '$lib/utils/wakeLock';
 import { SlideCanvas } from '$lib/components/SlideCanvas';
 import { Slide } from '$lib/components/Slide';
@@ -144,7 +147,8 @@ export default function PresenterApp() {
 	const presentation = usePresentationStore((state) => state.presentation);
 	const currentSlide = usePresentationStore(selectCurrentSlide);
 	const currentSlideIndex = usePresentationStore((state) => state.currentSlideIndex);
-	const totalSlides = usePresentationStore(selectTotalSlides);
+	const totalSlides = usePresentationStore(selectPresentedSlideCount);
+	const presentedNumber = usePresentationStore(selectPresentedSlideNumber);
 	const currentFragmentIndex = usePresentationStore((state) => state.currentFragmentIndex);
 	const currentStep = usePresentationStore((state) => state.currentStep);
 	const scrollRevealed = usePresentationStore((state) => state.scrollRevealed);
@@ -169,10 +173,9 @@ export default function PresenterApp() {
 	const theme = resolvedTheme?.slug ?? 'base';
 	const aspectRatio = presentation?.config?.aspectRatio ?? '16:9';
 	const customTheme = presentation?.config?.customTheme;
-	const nextSlideData =
-		presentation && currentSlideIndex < presentation.slides.length - 1
-			? presentation.slides[currentSlideIndex + 1]
-			: null;
+	// The next slide the talk shows, passing over skipped slides.
+	const nextSlideIndex = presentation ? nextPresentedIndex(presentation.slides, currentSlideIndex) : null;
+	const nextSlideData = presentation && nextSlideIndex !== null ? presentation.slides[nextSlideIndex] : null;
 	const fragmentCount = currentSlide?.fragmentCount ?? 0;
 
 	const fittedNotesFontSize = useFitText({
@@ -306,18 +309,14 @@ export default function PresenterApp() {
 					break;
 				case 'Home':
 					event.preventDefault();
-					goToSlide(0);
+					goToFirstSlide();
 					broadcastPresentationState();
 					break;
-				case 'End': {
+				case 'End':
 					event.preventDefault();
-					const total = selectTotalSlides(usePresentationStore.getState());
-					if (total > 0) {
-						goToSlide(total - 1);
-					}
+					goToLastSlide();
 					broadcastPresentationState();
 					break;
-				}
 				case 'r':
 				case 'R':
 					event.preventDefault();
@@ -427,7 +426,7 @@ export default function PresenterApp() {
 			<div className="presenter-view" data-presenter-layout={layout} data-notes-size={notesSizeMode}>
 				<header className="presenter-header">
 					<div className="presenter-slide-counter">
-						<span className="current">{currentSlideIndex + 1}</span>
+						<span className="current">{presentedNumber ?? 'Skipped'}</span>
 						<span className="separator">/</span>
 						<span className="total">{totalSlides}</span>
 						{fragmentCount > 0 ? (
@@ -585,7 +584,7 @@ export default function PresenterApp() {
 					<button
 						className="presenter-control-button next"
 						onClick={handleNextSlide}
-						disabled={currentSlideIndex === totalSlides - 1 && currentFragmentIndex >= fragmentCount - 1}
+						disabled={nextSlideData === null && currentFragmentIndex >= fragmentCount - 1}
 						aria-label="Next slide"
 					>
 						<span>Next</span>

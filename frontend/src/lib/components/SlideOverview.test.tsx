@@ -249,4 +249,16 @@ describe('SlideOverview', () => {
 			expect(() => render(<SlideOverview slides={makeSlides(3)} isOpen />)).not.toThrow();
 		});
 	});
+
+	it('dims a skipped slide and numbers the others among the presented slides', () => {
+		const slides = makeSlides(3).map((slide, index) => ({ ...slide, skip: index === 1 }));
+		const { container } = render(<SlideOverview slides={slides} isOpen />);
+
+		const thumbnails = container.querySelectorAll('.thumbnail');
+		expect(thumbnails[1].classList.contains('skipped')).toBe(true);
+		expect(thumbnails[0].classList.contains('skipped')).toBe(false);
+		expect(thumbnails[1].querySelector('.thumbnail-number')?.textContent).toBe('Skipped');
+		expect(thumbnails[2].querySelector('.thumbnail-number')?.textContent).toBe('2');
+		expect(thumbnails[1].getAttribute('aria-label')).toBe('Slide 2, skipped');
+	});
 });
