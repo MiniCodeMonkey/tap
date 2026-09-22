@@ -537,6 +537,9 @@ func runDevServer(options serverOptions) error {
 
 		if present != nil {
 			model.SetPresentRecorder(present)
+			// Recording is never offered off macOS, so there is nothing to
+			// block there: the run stays unblocked and shows a plain NOT
+			// RECORDING rather than an error.
 			if recorder.Supported() {
 				report := presentLaunchPreflight(recordings, options.record)
 				for _, finding := range report.Findings {
@@ -550,10 +553,6 @@ func runDevServer(options serverOptions) error {
 				recordContext, stopRecording := context.WithCancel(context.Background())
 				defer stopRecording()
 				present.Begin(recordContext, options.record)
-			} else {
-				// Recording is never offered off macOS, so this is not a
-				// failure worth the error-styled Block treatment; leaving
-				// present unblocked shows a plain NOT RECORDING instead.
 			}
 		} else {
 			// The probe is cheap and the result is not stored anywhere: Tap

@@ -250,7 +250,10 @@ func (p *presentRecorder) Finish(keep bool) (recorder.RunSummary, error) {
 }
 
 func (p *presentRecorder) State() tui.PresentRecordingState {
-	return p.state.Load().(tui.PresentRecordingState)
+	// Before the first store the value is empty, which reads as
+	// PresentNotRecording.
+	state, _ := p.state.Load().(tui.PresentRecordingState)
+	return state
 }
 
 func (p *presentRecorder) Elapsed() time.Duration   { return p.run.SegmentElapsed() }
