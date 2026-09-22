@@ -15,19 +15,25 @@ import (
 //go:embed templates/component.jsx.tmpl templates/component.tsx.tmpl templates/inline.jsx.tmpl templates/inline.tsx.tmpl templates/tap-env.d.ts templates/tap-shims.d.ts
 var componentTemplatesFS embed.FS
 
-// componentNamePattern is the PascalCase identifier tap add component requires.
+// componentNamePattern is the PascalCase identifier tap component new requires.
 var componentNamePattern = regexp.MustCompile(`^[A-Z][A-Za-z0-9]*$`)
 
-// Flags for the add component command
+// Flags for the component new command
 var (
-	addComponentInline bool
-	addComponentTS     bool
-	addComponentDeck   string
+	componentInline bool
+	componentTS     bool
+	componentJSON   bool
 )
 
-// addComponentCmd represents "tap add component"
-var addComponentCmd = &cobra.Command{
-	Use:   "component <Name>",
+// componentCmd groups the commands for deck-supplied React components.
+var componentCmd = &cobra.Command{
+	Use:   "component",
+	Short: "Work with a deck's React components",
+}
+
+// componentNewCmd scaffolds a component from a template.
+var componentNewCmd = &cobra.Command{
+	Use:   "new <Name> [deck]",
 	Short: "Scaffold a deck-supplied React component",
 	Long: `Scaffold a deck-supplied React component from a template.
 
@@ -37,66 +43,77 @@ the file is a .tsx, and tap-env.d.ts and tap-shims.d.ts are written next
 to the deck (each only when it does not already exist), so editors and
 LLM type checks work without installing anything.
 
-<Name> must be a PascalCase identifier, for example RollingDeploy.
+<Name> must be a PascalCase identifier, for example RollingDeploy. [deck]
+is a deck file or a deck folder; the default is the current folder.
 
 Examples:
-  tap add component RollingDeploy                  # slides/RollingDeploy.jsx
-  tap add component LatencyDrop --inline            # components/LatencyDrop.jsx
-  tap add component RollingDeploy --ts               # slides/RollingDeploy.tsx
-  tap add component RollingDeploy --deck deck.md      # relative to deck.md's folder`,
-	Args: cobra.ExactArgs(1),
-	Run:  runAddComponent,
+  tap component new RollingDeploy                # slides/RollingDeploy.jsx
+  tap component new LatencyDrop --inline         # components/LatencyDrop.jsx
+  tap component new RollingDeploy --ts           # slides/RollingDeploy.tsx
+  tap component new RollingDeploy talks/deck.md  # next to talks/deck.md`,
+	Args: cobra.RangeArgs(1, 2),
+	RunE: runComponentNew,
 }
 
 func init() {
-	addCmd.AddCommand(addComponentCmd)
+	rootCmd.AddCommand(componentCmd)
+	componentCmd.AddCommand(componentNewCmd)
 
-	addComponentCmd.Flags().BoolVar(&addComponentInline, "inline", false, "scaffold an inline block component instead of a whole-slide one")
-	addComponentCmd.Flags().BoolVar(&addComponentTS, "ts", false, "write a .tsx file and a tap-env.d.ts next to the deck")
-	addComponentCmd.Flags().StringVar(&addComponentDeck, "deck", "", "deck file or deck folder the component belongs to (default: the current directory)")
+	componentNewCmd.Flags().BoolVar(&componentInline, "inline", false, "scaffold an inline block component instead of a whole-slide one")
+	componentNewCmd.Flags().BoolVar(&componentTS, "ts", false, "write a .tsx file and a tap-env.d.ts next to the deck")
+	componentNewCmd.Flags().BoolVar(&componentJSON, "json", false, "print the written files and the snippet as JSON")
 }
 
-func runAddComponent(cmd *cobra.Command, args []string) {
-	if err := runAddComponentE(args[0]); err != nil {
-		Errorln("Error:", err)
-		os.Exit(1)
+// componentScaffold is what tap component new wrote, and the markdown
+// snippet that uses the component.
+type componentScaffold struct {
+	Files   []string `json:"files"`
+	Snippet string   `json:"snippet"`
+}
+
+func runComponentNew(cmd *cobra.Command, args []string) error {
+	var deckArg string
+	if len(args) > 1 {
+		deckArg = args[1]
 	}
+	result, err := scaffoldComponent(args[0], deckArg)
+	if err != nil {
+		return err
+	}
+	if componentJSON {
+		return printJSONOK(cmd.OutOrStdout(), result)
+	}
+	for _, file := range result.Files {
+		fmt.Println(file)
+	}
+	fmt.Println()
+	fmt.Print(result.Snippet)
+	return nil
 }
 
-func runAddComponentE(name string) error {
+// scaffoldComponent writes a component from a template into the deck at
+// deckArg (a deck file or a deck folder), and returns the files it wrote
+// and the markdown snippet that uses the component.
+func scaffoldComponent(name, deckArg string) (componentScaffold, error) {
 	if !componentNamePattern.MatchString(name) {
-		return fmt.Errorf("invalid component name %q: must be a PascalCase identifier, for example RollingDeploy", name)
+		return componentScaffold{}, userError(codeUsage, fmt.Errorf("invalid component name %q: must be a PascalCase identifier, for example RollingDeploy", name))
 	}
 
-	targetDir := "."
-	if addComponentDeck != "" {
-		info, err := os.Stat(addComponentDeck)
-		if os.IsNotExist(err) {
-			return fmt.Errorf("deck not found: %s", addComponentDeck)
-		}
-		if err != nil {
-			return fmt.Errorf("failed to stat %s: %w", addComponentDeck, err)
-		}
-		if info.IsDir() {
-			// --deck given a directory is the deck folder itself, not a
-			// markdown file inside it - use it directly rather than
-			// filepath.Dir'ing up to its parent.
-			targetDir = addComponentDeck
-		} else {
-			targetDir = filepath.Dir(addComponentDeck)
-		}
+	targetDir, err := resolveDeckFolder(deckArg)
+	if err != nil {
+		return componentScaffold{}, err
 	}
 
 	extension := "jsx"
 	templateName := "templates/component.jsx.tmpl"
 	subfolder := "slides"
-	if addComponentTS {
+	if componentTS {
 		extension = "tsx"
 		templateName = "templates/component.tsx.tmpl"
 	}
-	if addComponentInline {
+	if componentInline {
 		subfolder = "components"
-		if addComponentTS {
+		if componentTS {
 			templateName = "templates/inline.tsx.tmpl"
 		} else {
 			templateName = "templates/inline.jsx.tmpl"
@@ -105,28 +122,28 @@ func runAddComponentE(name string) error {
 
 	componentPath := filepath.Join(targetDir, subfolder, name+"."+extension)
 	if _, err := os.Stat(componentPath); err == nil {
-		return fmt.Errorf("component file already exists: %s", componentPath)
+		return componentScaffold{}, userError(codeExists, fmt.Errorf("component file already exists: %s", componentPath))
 	}
 
 	rendered, err := renderComponentTemplate(templateName, name)
 	if err != nil {
-		return err
+		return componentScaffold{}, err
 	}
 
 	if err := os.MkdirAll(filepath.Dir(componentPath), 0o755); err != nil {
-		return fmt.Errorf("failed to create %s: %w", filepath.Dir(componentPath), err)
+		return componentScaffold{}, fmt.Errorf("failed to create %s: %w", filepath.Dir(componentPath), err)
 	}
 	if err := os.WriteFile(componentPath, rendered, 0o644); err != nil {
-		return fmt.Errorf("failed to write %s: %w", componentPath, err)
+		return componentScaffold{}, fmt.Errorf("failed to write %s: %w", componentPath, err)
 	}
 
 	written := []string{componentPath}
 
-	if addComponentTS {
+	if componentTS {
 		envPath := filepath.Join(targetDir, "tap-env.d.ts")
 		if _, err := os.Stat(envPath); os.IsNotExist(err) {
 			if err := writeEmbeddedTemplate(envPath, "templates/tap-env.d.ts"); err != nil {
-				return err
+				return componentScaffold{}, err
 			}
 			written = append(written, envPath)
 		}
@@ -137,19 +154,13 @@ func runAddComponentE(name string) error {
 		shimsPath := filepath.Join(targetDir, "tap-shims.d.ts")
 		if _, err := os.Stat(shimsPath); os.IsNotExist(err) && !hasTypesReactAncestor(targetDir) {
 			if err := writeEmbeddedTemplate(shimsPath, "templates/tap-shims.d.ts"); err != nil {
-				return err
+				return componentScaffold{}, err
 			}
 			written = append(written, shimsPath)
 		}
 	}
 
-	for _, file := range written {
-		fmt.Println(file)
-	}
-	fmt.Println()
-	fmt.Print(componentSnippet(name, extension, addComponentInline))
-
-	return nil
+	return componentScaffold{Files: written, Snippet: componentSnippet(name, extension, componentInline)}, nil
 }
 
 // componentNamePlaceholder marks the component's name in a template. Plain

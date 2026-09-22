@@ -1,5 +1,5 @@
 // Type declarations for the `tap` helper module and the deck component
-// contract. Written once next to the deck by `tap add component`; an
+// contract. Written once next to the deck by `tap component new`; an
 // existing tap-env.d.ts is left alone, so edit this file freely.
 
 declare module 'tap' {
