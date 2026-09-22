@@ -6,6 +6,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/MiniCodeMonkey/tap/internal/deckedit"
+	"github.com/MiniCodeMonkey/tap/internal/gemini"
 )
 
 const imageDeck = "# One\n\n---\n\n# Two\n"
@@ -96,5 +99,106 @@ func TestImageAddErrors(t *testing.T) {
 				t.Errorf("(%d, %q), want exit 1 and code %s", exitCode, stdout, tt.code)
 			}
 		})
+	}
+}
+
+func TestImageGenerateAddsTheImageToTheSlide(t *testing.T) {
+	fake := useFakeImageGenerator(t)
+	deckDir := t.TempDir()
+	deck := writeDeckFile(t, deckDir, "talk.md", imageDeck)
+
+	exitCode, stdout, stderr := runTap(t, "image", "generate", deck, "--slide", "2", "--prompt", "a red fox", "--json")
+	if exitCode != exitOK {
+		t.Fatalf("exit code = %d, stderr %q", exitCode, stderr)
+	}
+	if len(fake.prompts) != 1 || fake.prompts[0] != "a red fox" {
+		t.Errorf("generator prompts = %q", fake.prompts)
+	}
+	var output struct {
+		OK       bool   `json:"ok"`
+		Deck     string `json:"deck"`
+		Slide    int    `json:"slide"`
+		Image    string `json:"image"`
+		Prompt   string `json:"prompt"`
+		Markdown string `json:"markdown"`
+	}
+	if err := json.Unmarshal([]byte(stdout), &output); err != nil {
+		t.Fatalf("stdout is not JSON: %v\n%s", err, stdout)
+	}
+	wantImage := "images/" + deckedit.GenerateImageFilename([]byte("png bytes for a red fox"), "image/png")
+	if !output.OK || output.Slide != 2 || output.Image != wantImage || output.Prompt != "a red fox" {
+		t.Errorf("output = %+v, want image %s", output, wantImage)
+	}
+	content, _ := os.ReadFile(deck)
+	if !strings.HasSuffix(strings.TrimRight(string(content), "\n"), "<!-- ai-prompt: a red fox -->\n![]("+wantImage+")") {
+		t.Errorf("deck = %q", content)
+	}
+	if _, err := os.Stat(filepath.Join(deckDir, wantImage)); err != nil {
+		t.Errorf("image not saved: %v", err)
+	}
+}
+
+func TestImageGeneratePrintsTheImagePath(t *testing.T) {
+	useFakeImageGenerator(t)
+	deck := writeDeckFile(t, t.TempDir(), "talk.md", imageDeck)
+	_, stdout, _ := runTap(t, "image", "generate", deck, "--slide", "1", "--prompt", "a red fox")
+	want := "images/" + deckedit.GenerateImageFilename([]byte("png bytes for a red fox"), "image/png") + "\n"
+	if stdout != want {
+		t.Errorf("stdout = %q, want %q", stdout, want)
+	}
+}
+
+func TestImageGenerateUsageErrors(t *testing.T) {
+	useFakeImageGenerator(t)
+	deck := writeDeckFile(t, t.TempDir(), "talk.md", imageDeck)
+	tests := []struct {
+		name string
+		args []string
+		code string
+	}{
+		{"no slide", []string{"image", "generate", deck, "--prompt", "x", "--json"}, codeUsage},
+		{"no prompt", []string{"image", "generate", deck, "--slide", "1", "--json"}, codeUsage},
+		{"blank prompt", []string{"image", "generate", deck, "--slide", "1", "--prompt", "  ", "--json"}, codeUsage},
+		{"slide out of range", []string{"image", "generate", deck, "--slide", "9", "--prompt", "x", "--json"}, codeOutOfRange},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			exitCode, stdout, _ := runTap(t, tt.args...)
+			if exitCode != exitUserError || !strings.Contains(stdout, `"code": "`+tt.code+`"`) {
+				t.Errorf("(%d, %q), want exit 1 and code %s", exitCode, stdout, tt.code)
+			}
+		})
+	}
+}
+
+func TestImageGenerateWithoutAnAPIKey(t *testing.T) {
+	original := deckedit.NewImageGenerator
+	deckedit.NewImageGenerator = func() (deckedit.ImageGenerator, error) {
+		return nil, &gemini.APIError{Type: gemini.ErrorTypeAuth, Message: "API key is required"}
+	}
+	t.Cleanup(func() { deckedit.NewImageGenerator = original })
+
+	deck := writeDeckFile(t, t.TempDir(), "talk.md", imageDeck)
+	exitCode, stdout, _ := runTap(t, "image", "generate", deck, "--slide", "1", "--prompt", "x", "--json")
+	if exitCode != exitUserError || !strings.Contains(stdout, `"code": "no_api_key"`) {
+		t.Errorf("(%d, %q), want exit 1 and no_api_key", exitCode, stdout)
+	}
+}
+
+func TestImageGenerationErrorExitCodes(t *testing.T) {
+	tests := []struct {
+		errorType    gemini.ErrorType
+		wantExitCode int
+	}{
+		{gemini.ErrorTypeContentPolicy, exitUserError},
+		{gemini.ErrorTypeRateLimit, exitUserError},
+		{gemini.ErrorTypeNetwork, exitInternal},
+		{gemini.ErrorTypeServer, exitInternal},
+	}
+	for _, tt := range tests {
+		exitCode, code, _ := classify(imageGenerationError(&gemini.APIError{Type: tt.errorType, Message: "x"}))
+		if exitCode != tt.wantExitCode || code != codeImageGeneration {
+			t.Errorf("%s: classify() = (%d, %q), want (%d, %q)", tt.errorType, exitCode, code, tt.wantExitCode, codeImageGeneration)
+		}
 	}
 }

@@ -36,6 +36,7 @@ var expectedCommands = []string{
 	"tap export pdf",
 	"tap image",
 	"tap image add",
+	"tap image generate",
 	"tap new",
 	"tap present",
 	"tap serve",

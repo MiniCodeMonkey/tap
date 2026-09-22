@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"sort"
@@ -8,6 +9,9 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+
+	"github.com/MiniCodeMonkey/tap/internal/deckedit"
+	"github.com/MiniCodeMonkey/tap/internal/gemini"
 )
 
 // writeDeckFile writes content to dir/name and returns the path.
@@ -102,4 +106,50 @@ func repeatKey(key tea.KeyMsg, count int) []tea.KeyMsg {
 		keys = append(keys, key)
 	}
 	return keys
+}
+
+// fakeImageGenerator stands in for the Gemini API. Each image's bytes are
+// derived from its prompt, so the same prompt gives the same file name.
+type fakeImageGenerator struct {
+	err     error
+	prompts []string
+}
+
+func (f *fakeImageGenerator) GenerateImage(ctx context.Context, prompt string) (*gemini.ImageResult, error) {
+	f.prompts = append(f.prompts, prompt)
+	if f.err != nil {
+		return nil, f.err
+	}
+	return &gemini.ImageResult{Data: []byte("png bytes for " + prompt), ContentType: "image/png"}, nil
+}
+
+// useFakeImageGenerator makes tap and the TUI use a fake generator for
+// the rest of the test, and sets GEMINI_API_KEY so the TUI opens its
+// image generator.
+func useFakeImageGenerator(t *testing.T) *fakeImageGenerator {
+	t.Helper()
+	t.Setenv("GEMINI_API_KEY", "test-key")
+	fake := &fakeImageGenerator{}
+	original := deckedit.NewImageGenerator
+	deckedit.NewImageGenerator = func() (deckedit.ImageGenerator, error) { return fake, nil }
+	t.Cleanup(func() { deckedit.NewImageGenerator = original })
+	return fake
+}
+
+// deliverCommand runs command and sends each message it produces to
+// model, flattening batches. It does not run the commands those messages
+// return, so a spinner tick does not loop.
+func deliverCommand(model tea.Model, command tea.Cmd) tea.Model {
+	if command == nil {
+		return model
+	}
+	message := command()
+	if batch, ok := message.(tea.BatchMsg); ok {
+		for _, inner := range batch {
+			model = deliverCommand(model, inner)
+		}
+		return model
+	}
+	model, _ = model.Update(message)
+	return model
 }

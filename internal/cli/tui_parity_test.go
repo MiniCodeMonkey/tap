@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"path/filepath"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -56,5 +57,23 @@ func TestSlideAddLayoutMatchesTheWizardKey(t *testing.T) {
 			}
 			requireSameFolders(t, tuiDeck, commandDeck)
 		})
+	}
+}
+
+func TestImageGenerateMatchesTheImageKey(t *testing.T) {
+	useFakeImageGenerator(t)
+	tuiDeck, commandDeck := twoDeckCopies(t, "talk.md", "---\ntheme: paper\n---\n\n# One\n\n---\n\n# Two\n\nText\n")
+
+	model := tea.Model(tui.NewDevModel(tui.DevConfig{MarkdownFile: tuiDeck}))
+	model, _ = pressKeys(model, runeKey("i"), tea.KeyMsg{Type: tea.KeyDown}, tea.KeyMsg{Type: tea.KeyEnter}, runeKey("a red fox"))
+	model, submit := pressKeys(model, tea.KeyMsg{Type: tea.KeyCtrlD})
+	deliverCommand(model, submit)
+
+	if exitCode, _, stderr := runTap(t, "image", "generate", commandDeck, "--slide", "2", "--prompt", "a red fox"); exitCode != exitOK {
+		t.Fatalf("tap image generate exited %d: %s", exitCode, stderr)
+	}
+	requireSameFolders(t, tuiDeck, commandDeck)
+	if len(folderSnapshot(t, filepath.Dir(tuiDeck))) != 2 {
+		t.Error("the TUI path wrote no image: the parity check compared two unchanged folders")
 	}
 }

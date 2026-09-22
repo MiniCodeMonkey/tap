@@ -1,21 +1,34 @@
 package cli
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io/fs"
 	"os"
+	"os/signal"
 	"path/filepath"
+	"strings"
+	"syscall"
 
 	"github.com/spf13/cobra"
 
+	"github.com/MiniCodeMonkey/tap/internal/config"
 	"github.com/MiniCodeMonkey/tap/internal/deckedit"
+	"github.com/MiniCodeMonkey/tap/internal/gemini"
 )
 
 // Flags for tap image add.
 var (
 	imageAddSlide int
 	imageAddJSON  bool
+)
+
+// Flags for tap image generate.
+var (
+	imageGenerateSlide  int
+	imageGeneratePrompt string
+	imageGenerateJSON   bool
 )
 
 // imageCmd groups the commands for a deck's images.
@@ -50,12 +63,36 @@ Examples:
 	RunE: runImageAdd,
 }
 
+// imageGenerateCmd generates an image with AI and adds it to a slide.
+var imageGenerateCmd = &cobra.Command{
+	Use:   "generate [deck]",
+	Short: "Generate an image with AI and add it to a slide",
+	Long: `Generate an image from a prompt with Google Gemini, as the i key in
+tap dev does, and add it at the end of a slide.
+
+The image is saved as images/generated-<hash>.<ext> next to the deck, and
+the slide gets an ai-prompt comment with the prompt, so tap image
+regenerate can make it again. GEMINI_API_KEY must be set, in the
+environment or in a .env file next to the deck.
+
+Examples:
+  tap image generate --slide 3 --prompt "a lighthouse at dusk, flat vector"
+  tap image generate talk.md --slide 3 --prompt "..." --json`,
+	Args: cobra.MaximumNArgs(1),
+	RunE: runImageGenerate,
+}
+
 func init() {
 	rootCmd.AddCommand(imageCmd)
 	imageCmd.AddCommand(imageAddCmd)
+	imageCmd.AddCommand(imageGenerateCmd)
 
 	imageAddCmd.Flags().IntVar(&imageAddSlide, "slide", 0, "also add the image at the end of this slide, from 1")
 	imageAddCmd.Flags().BoolVar(&imageAddJSON, "json", false, "print the result as JSON")
+
+	imageGenerateCmd.Flags().IntVar(&imageGenerateSlide, "slide", 0, "slide to add the image to, from 1 (required)")
+	imageGenerateCmd.Flags().StringVar(&imageGeneratePrompt, "prompt", "", "what the image shows (required)")
+	imageGenerateCmd.Flags().BoolVar(&imageGenerateJSON, "json", false, "print the result as JSON")
 }
 
 // addedImageResult is the --json result of tap image add. Slide is 0 when
@@ -127,4 +164,90 @@ func slideIndexFromFlag(deck string, slideNumber int) (int, error) {
 		return 0, userError(codeOutOfRange, slideOutOfRangeError(slideNumber, total))
 	}
 	return slideNumber - 1, nil
+}
+
+// generatedImageResult is the --json result of tap image generate and tap
+// image regenerate. Replaced is the image that regenerate replaced.
+type generatedImageResult struct {
+	Deck     string `json:"deck"`
+	Slide    int    `json:"slide"`
+	Image    string `json:"image"`
+	Prompt   string `json:"prompt"`
+	Markdown string `json:"markdown"`
+	Replaced string `json:"replaced,omitempty"`
+}
+
+func runImageGenerate(cmd *cobra.Command, args []string) error {
+	if !cmd.Flags().Changed("slide") {
+		return userError(codeUsage, errors.New("--slide is required"))
+	}
+	prompt := strings.TrimSpace(imageGeneratePrompt)
+	if prompt == "" {
+		return userError(codeUsage, errors.New("--prompt is required"))
+	}
+	deck, err := resolveDeck(firstArg(args))
+	if err != nil {
+		return err
+	}
+	slideIndex, err := slideIndexFromFlag(deck, imageGenerateSlide)
+	if err != nil {
+		return err
+	}
+
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	placed, err := generateAndPlace(ctx, deckedit.Placement{DeckPath: deck, SlideIndex: slideIndex, Prompt: prompt})
+	if err != nil {
+		return err
+	}
+
+	if imageGenerateJSON {
+		return printJSONOK(cmd.OutOrStdout(), generatedImageResult{
+			Deck:     deck,
+			Slide:    imageGenerateSlide,
+			Image:    filepath.ToSlash(placed.Path),
+			Prompt:   prompt,
+			Markdown: placed.Markdown,
+		})
+	}
+	fmt.Fprintln(cmd.OutOrStdout(), filepath.ToSlash(placed.Path))
+	return nil
+}
+
+// generateAndPlace generates an image for placement.Prompt and places it
+// in the deck through deckedit.PlaceGeneratedImage, the function the TUI
+// i key also uses. It reads GEMINI_API_KEY from a .env file next to the
+// deck when the environment has none.
+func generateAndPlace(ctx context.Context, placement deckedit.Placement) (deckedit.PlacedImage, error) {
+	if err := config.LoadEnv(filepath.Dir(placement.DeckPath)); err != nil {
+		return deckedit.PlacedImage{}, userError(codeInvalidDeck, fmt.Errorf("cannot read the .env file next to %s: %w", placement.DeckPath, err))
+	}
+	generator, err := deckedit.NewImageGenerator()
+	if err != nil {
+		return deckedit.PlacedImage{}, userError(codeNoAPIKey, fmt.Errorf("cannot start image generation: %w", err))
+	}
+	image, err := generator.GenerateImage(ctx, placement.Prompt)
+	if err != nil {
+		if ctx.Err() != nil {
+			return deckedit.PlacedImage{}, errInterrupted
+		}
+		return deckedit.PlacedImage{}, imageGenerationError(err)
+	}
+	placed, err := deckedit.PlaceGeneratedImage(placement, *image)
+	if err != nil {
+		return deckedit.PlacedImage{}, internalError(codeInternal, err)
+	}
+	return placed, nil
+}
+
+// imageGenerationError classifies a failed generation. A network or
+// server failure is a problem in the environment (exit 2); a refused
+// prompt, a rate limit or a bad key is one the person can fix (exit 1).
+func imageGenerationError(err error) error {
+	wrapped := fmt.Errorf("image generation failed: %w", err)
+	var apiError *gemini.APIError
+	if errors.As(err, &apiError) && (apiError.Type == gemini.ErrorTypeNetwork || apiError.Type == gemini.ErrorTypeServer) {
+		return internalError(codeImageGeneration, wrapped)
+	}
+	return userError(codeImageGeneration, wrapped)
 }
