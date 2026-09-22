@@ -201,6 +201,17 @@ describe('waitUntilSettled', () => {
 		await expect(settledPromise).resolves.toBe(false);
 	});
 
+	it('finishes as not settled within MAX_SETTLE_ROUNDS when no blocker is held but a probe never settles', async () => {
+		// No blocker is ever held here: settledNow stays false the whole
+		// time, as it would while a stylesheet or web font never finishes
+		// loading. The cap must not treat "no blocker held" alone as
+		// settled, or the exporter captures the slide with fallback fonts
+		// instead of failing loudly.
+		const settled = await waitUntilSettled(instantProbes({ settledNow: () => false }), () => false);
+
+		expect(settled).toBe(false);
+	});
+
 	it('settles once a blocker still held after one timeout is released', async () => {
 		vi.useFakeTimers();
 		let release: (() => void) | null = holdReady('component');

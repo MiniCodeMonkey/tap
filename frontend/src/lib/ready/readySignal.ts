@@ -68,7 +68,9 @@ export function publishReady(payload: ReadyPayload): void {
  * fonts, images, every blocker's release, animations, and a paint. The
  * page has settled after a round that ends with no blocker held and
  * nothing loading. Resolves false when the cycle was cancelled, or when
- * MAX_SETTLE_ROUNDS ran out and a blocker is still held.
+ * MAX_SETTLE_ROUNDS ran out without a round that saw both no blocker held
+ * and the probes settled - a page that never finishes loading a stylesheet
+ * or a font fails the export loudly instead of being captured half drawn.
  */
 export async function waitUntilSettled(probes: ReadyProbes, isCancelled: () => boolean): Promise<boolean> {
 	for (let round = 0; round < MAX_SETTLE_ROUNDS; round += 1) {
@@ -84,7 +86,7 @@ export async function waitUntilSettled(probes: ReadyProbes, isCancelled: () => b
 			return true;
 		}
 	}
-	return heldBlockers().length === 0 && !isCancelled();
+	return false;
 }
 
 let currentCycle = 0;
