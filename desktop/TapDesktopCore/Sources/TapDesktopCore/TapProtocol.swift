@@ -5,11 +5,19 @@ public struct TapReady: Codable, Equatable, Sendable {
     public let port: Int
     public let token: String
     public let launch: String
+    /// The presenter secret. It is what separates driving the deck from
+    /// watching it: a WebSocket connection relays its slide messages to the
+    /// other pages only once it has traded this secret for the presenter
+    /// cookie, and the presenter view is served only to a request holding
+    /// one of the two. See `AppAuth.PresenterPassword` in
+    /// internal/server/app_auth.go.
+    public let presenter: String
 
-    public init(port: Int, token: String, launch: String) {
+    public init(port: Int, token: String, launch: String, presenter: String = "") {
         self.port = port
         self.token = token
         self.launch = launch
+        self.presenter = presenter
     }
 }
 
@@ -114,6 +122,7 @@ public enum TapEvent: Equatable, Sendable {
         let port: Int?
         let token: String?
         let launch: String?
+        let presenter: String?
         let path: String?
         let slides: [Slide]?
         let errors: [String]?
@@ -129,7 +138,10 @@ public enum TapEvent: Equatable, Sendable {
         switch envelope.type {
         case "ready":
             guard let port = envelope.port, let token = envelope.token, let launch = envelope.launch else { return nil }
-            return .ready(TapReady(port: port, token: token, launch: launch))
+            // presenter is missing only from a tap older than app mode's
+            // presenter secret. TapClient refuses to authorize on an empty
+            // one rather than opening a socket that cannot drive the deck.
+            return .ready(TapReady(port: port, token: token, launch: launch, presenter: envelope.presenter ?? ""))
         case "file-changed":
             guard let path = envelope.path else { return nil }
             let list = envelope.slides.map { SlideList(slides: $0, errors: envelope.errors ?? []) }

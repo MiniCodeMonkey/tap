@@ -22,6 +22,44 @@ public final class TapClient: @unchecked Sendable {
     public var baseURL: URL { url() }
     public var previewURL: URL { url(path: "/") }
     public var previewLaunchURL: URL { url(path: "/?launch=\(ready.launch)") }
+    /// The presenter view, carrying the ready line's presenter secret. tap
+    /// answers with the presenter cookie and a redirect to the same path
+    /// without the key, so the secret leaves the address bar at once.
+    public var presenterLaunchURL: URL { url(path: "/presenter?key=\(ready.presenter)") }
+
+    /// The cookie tap issues in exchange for the presenter secret.
+    public static let presenterCookieName = "tap_presenter_key"
+
+    /// The presenter cookie's value, once `authorizePresenter` has fetched it.
+    public private(set) var presenterCookie: String?
+
+    /// Trades the ready line's presenter secret for the hub's presenter
+    /// cookie, and keeps it for `socketRequest`. Until the app holds that
+    /// cookie the hub relays none of its slide messages to the pages, so the
+    /// preview and the presenter window cannot drive the deck: see
+    /// `WebSocketHub.checkPresenterAuth` in internal/server/websocket.go.
+    ///
+    /// The redirect is not followed, because the cookie is on the redirect's
+    /// own response and reading the header is what proves tap issued it.
+    @discardableResult
+    public func authorizePresenter() async throws -> String {
+        guard !ready.presenter.isEmpty else {
+            throw TapErrorPayload(code: "no_presenter_secret", message: "the ready line carried no presenter secret")
+        }
+        var request = URLRequest(url: presenterLaunchURL)
+        request.timeoutInterval = 10
+        let (_, response) = try await session.data(for: request, delegate: RedirectBlocker())
+        guard let http = response as? HTTPURLResponse, let fields = http.allHeaderFields as? [String: String] else {
+            throw TapErrorPayload(code: "presenter_refused", message: "tap gave no HTTP answer for the presenter secret")
+        }
+        let cookies = HTTPCookie.cookies(withResponseHeaderFields: fields, for: baseURL)
+        guard let cookie = cookies.first(where: { $0.name == Self.presenterCookieName }) else {
+            throw TapErrorPayload(code: "presenter_refused",
+                                  message: "tap answered \(http.statusCode) without a presenter cookie")
+        }
+        presenterCookie = cookie.value
+        return cookie.value
+    }
 
     public func authorizedRequest(path: String) -> URLRequest {
         var request = URLRequest(url: url(path: path))
@@ -33,6 +71,9 @@ public final class TapClient: @unchecked Sendable {
     public func socketRequest() -> URLRequest {
         var request = URLRequest(url: url(scheme: "ws", path: "/ws"))
         request.setValue("Bearer \(ready.token)", forHTTPHeaderField: "Authorization")
+        if let presenterCookie {
+            request.setValue("\(Self.presenterCookieName)=\(presenterCookie)", forHTTPHeaderField: "Cookie")
+        }
         return request
     }
 
@@ -108,5 +149,14 @@ public final class TapSocket {
                 }
             }
         }
+    }
+}
+
+/// Stops URLSession following a redirect, so the redirect's own response,
+/// and the `Set-Cookie` header on it, is what the caller reads.
+private final class RedirectBlocker: NSObject, URLSessionTaskDelegate, Sendable {
+    func urlSession(_ session: URLSession, task: URLSessionTask,
+                    willPerformHTTPRedirection response: HTTPURLResponse, newRequest request: URLRequest) async -> URLRequest? {
+        nil
     }
 }

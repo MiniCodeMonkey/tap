@@ -3,8 +3,12 @@ import XCTest
 
 final class TapProtocolTests: XCTestCase {
     func testDecodesTheReadyLine() {
-        let event = TapEvent.decode(line: #"{"type":"ready","port":49152,"token":"abc","launch":"def"}"#)
-        XCTAssertEqual(event, .ready(TapReady(port: 49152, token: "abc", launch: "def")))
+        let event = TapEvent.decode(line: #"{"type":"ready","port":49152,"token":"abc","launch":"def","presenter":"ghi"}"#)
+        XCTAssertEqual(event, .ready(TapReady(port: 49152, token: "abc", launch: "def", presenter: "ghi")))
+        // A tap older than the presenter secret still reaches running, and
+        // TapClient refuses to authorize on the empty secret instead.
+        let withoutPresenter = TapEvent.decode(line: #"{"type":"ready","port":49152,"token":"abc","launch":"def"}"#)
+        XCTAssertEqual(withoutPresenter, .ready(TapReady(port: 49152, token: "abc", launch: "def", presenter: "")))
     }
 
     func testDecodesFileChangedForTheDeckAndForAComponent() {

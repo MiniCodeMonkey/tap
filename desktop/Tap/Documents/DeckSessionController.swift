@@ -100,13 +100,31 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
         let newClient = TapClient(ready: ready)
         client = newClient
         sourceSync.sender = { source in try await newClient.putSource(source) }
+        previewViewController.load(client: newClient)
+        // The presenter secret comes first: a socket opened without the
+        // cookie it buys is relayed to nobody, so the preview would never
+        // move. A refusal is logged and the socket is opened anyway, because
+        // hearing the hub is still worth having.
+        Task { @MainActor [weak self] in
+            do {
+                try await newClient.authorizePresenter()
+            } catch {
+                self?.session.log.append("tap refused the presenter secret: \(error)", source: .app)
+            }
+            guard let self, !self.stopped, self.client === newClient else { return }
+            self.openSocket(with: newClient)
+        }
+        Task { await sourceSync.sendNow() }
+    }
+
+    /// Opens the app's own hub connection and sends it the current intent.
+    private func openSocket(with newClient: TapClient) {
+        socket?.close()
         let newSocket = newClient.openSocket()
         newSocket.onMessage = { [weak self] message in self?.onHubMessage?(message) }
         newSocket.resume()
         socket = newSocket
-        previewViewController.load(client: newClient)
         if let message = navigator.message { newSocket.send(message) }
-        Task { await sourceSync.sendNow() }
     }
 
     // MARK: EditorTextViewDelegate
