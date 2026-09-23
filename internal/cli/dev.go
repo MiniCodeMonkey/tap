@@ -532,6 +532,12 @@ func runDevServer(options serverOptions) (err error) {
 				if devModel != nil {
 					devModel.SendEvent(eventType, message)
 				}
+				if options.app {
+					fmt.Fprintf(os.Stderr, "%s: %s\n", eventType, message)
+					if eventType == "error" {
+						appEvents.emit(appErrorEvent{Type: appEventError, Code: appErrorRecordingFailed, Message: message})
+					}
+				}
 			},
 			OnDiskLevel: func(level recorder.DiskLevel) {
 				appDisk.set(level)

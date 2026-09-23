@@ -22,6 +22,7 @@ import (
 
 	"github.com/coder/websocket"
 
+	"github.com/MiniCodeMonkey/tap/internal/recorder"
 	"github.com/MiniCodeMonkey/tap/internal/server"
 	"github.com/MiniCodeMonkey/tap/internal/usersettings"
 )
@@ -47,20 +48,20 @@ func (log *appLogBuffer) String() string {
 // appProcess is a tap --app process that a test started, with its
 // standard output read line by line.
 type appProcess struct {
-	t       *testing.T
-	stdin   io.WriteCloser
-	events  chan map[string]any
-	done    chan struct{}
-	exitErr error
-	stderr  *appLogBuffer
+	t         *testing.T
+	stdin     io.WriteCloser
+	events    chan map[string]any
+	done      chan struct{}
+	exitErr   error
+	stderr    *appLogBuffer
 	base      string
 	token     string
 	launch    string
 	presenter string
-	port    int
-	mu      sync.Mutex
-	lines   []string
-	backlog []map[string]any
+	port      int
+	mu        sync.Mutex
+	lines     []string
+	backlog   []map[string]any
 }
 
 // copyAppFixture copies testdata/app, the --app fixture, to a temporary
@@ -863,4 +864,83 @@ func TestAppDevLeavesViewingOpenAndClosesSteering(t *testing.T) {
 	if err := process.waitForExit(); err != nil {
 		t.Fatalf("tap exited with %v:\n%s", err, process.stderr)
 	}
+}
+
+func TestAppPresentAsksItsQuestionsOnStdout(t *testing.T) {
+	configHome := t.TempDir()
+	process := startAppProcess(t, configHome, "present", "--app", copyAppFixture(t))
+	settingsPath := filepath.Join(configHome, "tap", "settings.yaml")
+
+	if recorder.Supported() {
+		consent := process.next(appEventQuestion)
+		payload, _ := consent["payload"].(map[string]any)
+		if consent["kind"] != appQuestionRecordConsent || payload["settingsPath"] != settingsPath {
+			t.Fatalf("first question = %v, want record-consent", consent)
+		}
+		process.send(fmt.Sprintf(`{"type":"answer","id":%q,"value":false}`, consent["id"]))
+	}
+	approval := process.next(appEventQuestion)
+	if approval["kind"] != appQuestionApproval {
+		t.Fatalf("question = %v, want approval", approval)
+	}
+	process.send(fmt.Sprintf(`{"type":"answer","id":%q,"value":false}`, approval["id"]))
+	if event := process.next(appEventRecording); event["state"] != "stopped" {
+		t.Errorf("recording event = %v, want stopped", event)
+	}
+
+	process.send(`{"type":"quit"}`)
+	if err := process.waitForExit(); err != nil {
+		t.Errorf("exit: %v", err)
+	}
+	process.assertOnlyJSONLines()
+	if recorder.Supported() {
+		settings, err := usersettings.Load(settingsPath)
+		if err != nil || settings.Present.Record == nil || *settings.Present.Record {
+			t.Errorf("settings = %+v, %v; want present.record false", settings, err)
+		}
+	}
+	for _, prompt := range []string{"(y/n)", "[y/N/s]", "Keep this recording?"} {
+		if strings.Contains(process.stderr.String(), prompt) {
+			t.Errorf("tap prompted on the terminal: %q", prompt)
+		}
+	}
+}
+
+func TestAppPresentReportsTheAudiencePosition(t *testing.T) {
+	process := startAppProcess(t, t.TempDir(), "present", "--app", "--no-record", copyAppFixture(t))
+	// tap present --app sets the same generated presenter password as tap
+	// dev --app, so steering the deck needs the presenter secret, the way
+	// the app's own presenter window carries it. A plain connection can only
+	// watch.
+	conn, ctx := process.dialPresenterWebSocket()
+	if err := conn.Write(ctx, websocket.MessageText, []byte(`{"type":"slide","slideIndex":2,"step":1}`)); err != nil {
+		t.Fatal(err)
+	}
+	if event := process.next(appEventSlide); event["slide"] != float64(3) || event["step"] != float64(1) {
+		t.Errorf("slide event = %v, want slide 3, step 1", event)
+	}
+}
+
+func TestAppPresentShowsOnlyTheSavedDeck(t *testing.T) {
+	deck := copyAppFixture(t)
+	process := startAppProcess(t, t.TempDir(), "present", "--app", "--no-record", deck)
+	if status, _ := process.putSource("# Unsaved"); status != http.StatusNotFound && status != http.StatusMethodNotAllowed {
+		t.Errorf("PUT in tap present --app: status %d, want no such route", status)
+	}
+	process.send(`{"type":"saved"}`)
+	process.nextWhere(appEventError, func(event map[string]any) bool { return event["code"] == appErrorNotEditing })
+
+	onDisk, err := os.ReadFile(deck)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(deck, []byte(strings.Replace(string(onDisk), "# App Mode Fixture", "# Reloaded From Disk", 1)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(300 * time.Millisecond)
+	if strings.Contains(process.presentation(), "Reloaded From Disk") {
+		t.Error("tap present --app picked up a file change without a reload")
+	}
+	process.send(`{"type":"reload"}`)
+	waitUntil(t, "the reload shows the file", func() bool { return strings.Contains(process.presentation(), "Reloaded From Disk") })
 }

@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"errors"
 	"os"
 
 	"github.com/mattn/go-isatty"
@@ -11,10 +12,12 @@ import (
 )
 
 var (
-	presentPort      int
-	presentNoRecord  bool
-	presentLAN       bool
-	presentAllowCode bool
+	presentPort              int
+	presentNoRecord          bool
+	presentLAN               bool
+	presentAllowCode         bool
+	presentApp               bool
+	presentPresenterPassword string
 )
 
 var presentCmd = &cobra.Command{
@@ -31,9 +34,33 @@ swaps.
 Examples:
   tap present                  # The deck in this folder
   tap present slides.md
-  tap present slides.md --no-record   # skip recording for this run`,
+  tap present slides.md --no-record   # skip recording for this run
+  tap present slides.md --presenter-password secret   # Protect the presenter view, then press u for a phone remote`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		if presentApp {
+			if len(args) == 0 {
+				return userError(codeUsage, errors.New("--app needs the deck: tap present --app <deck>"))
+			}
+			file, err := resolveDeck(args[0])
+			if err != nil {
+				return err
+			}
+			// The recording question goes to the app after the ready line
+			// (see runDevServer), never to the terminal.
+			return runDevServer(serverOptions{
+				file:              file,
+				port:              presentPort,
+				portExplicit:      cmd.Flags().Changed("port"),
+				presenterPassword: presentPresenterPassword,
+				lan:               presentLAN,
+				allowCode:         presentAllowCode,
+				present:           true,
+				app:               true,
+				noRecord:          presentNoRecord,
+			})
+		}
+
 		file, err := resolveDeck(firstArg(args))
 		if err != nil {
 			return err
@@ -56,13 +83,14 @@ Examples:
 		}
 
 		return runDevServer(serverOptions{
-			file:         file,
-			port:         presentPort,
-			portExplicit: cmd.Flags().Changed("port"),
-			present:      true,
-			record:       record,
-			lan:          presentLAN,
-			allowCode:    presentAllowCode,
+			file:              file,
+			port:              presentPort,
+			portExplicit:      cmd.Flags().Changed("port"),
+			presenterPassword: presentPresenterPassword,
+			present:           true,
+			record:            record,
+			lan:               presentLAN,
+			allowCode:         presentAllowCode,
 		})
 	},
 }
@@ -74,4 +102,6 @@ func init() {
 	presentCmd.Flags().BoolVar(&presentNoRecord, "no-record", false, "do not record this run")
 	presentCmd.Flags().BoolVar(&presentLAN, "lan", false, "listen on the local network too, so a phone on the same network can open the presenter view (default: this machine only)")
 	presentCmd.Flags().BoolVar(&presentAllowCode, "allow-code", false, "let the deck's live code run for this run without an approval, and save none")
+	presentCmd.Flags().BoolVar(&presentApp, "app", false, "run as the engine of the Tap desktop app: JSON events on standard output, commands on standard input (an interface for the app, not for people)")
+	presentCmd.Flags().StringVar(&presentPresenterPassword, "presenter-password", "", "password to protect the presenter view, for a phone remote over the tunnel (press u)")
 }

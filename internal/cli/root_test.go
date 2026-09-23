@@ -29,7 +29,7 @@ func TestPresentCommandIsRegistered(t *testing.T) {
 	if err != nil || command.Name() != "present" {
 		t.Fatalf("present command not found: %v", err)
 	}
-	for _, flag := range []string{"port", "no-record", "lan", "allow-code"} {
+	for _, flag := range []string{"port", "no-record", "lan", "allow-code", "app", "presenter-password"} {
 		if command.Flags().Lookup(flag) == nil {
 			t.Errorf("present lacks --%s", flag)
 		}
@@ -37,6 +37,19 @@ func TestPresentCommandIsRegistered(t *testing.T) {
 	for _, flag := range []string{"headless", "tunnel"} {
 		if command.Flags().Lookup(flag) != nil {
 			t.Errorf("present should not have --%s", flag)
+		}
+	}
+}
+
+func TestPresentAppRejectsFlagsThatDoNotFit(t *testing.T) {
+	deck := copyAppFixture(t)
+	for _, args := range [][]string{
+		{"present", "--app"},
+		{"present", "--app", deck, "--lan"},
+	} {
+		exitCode, stdout, stderr := runTap(t, args...)
+		if exitCode != exitUserError || stdout != "" {
+			t.Errorf("tap %v: exit %d, stdout %q, stderr %q; want exit 1 and nothing on stdout", args, exitCode, stdout, stderr)
 		}
 	}
 }
