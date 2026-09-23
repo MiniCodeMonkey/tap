@@ -46,6 +46,10 @@ final class PreviewViewController: NSViewController, WKNavigationDelegate, WKUID
     /// than whenever WebKit gets round to reporting it.
     private(set) var pageLoadCount = 0
     private var allowedPort: Int?
+    /// Opens a URL outside the app. Production hands this to `NSWorkspace`;
+    /// a test replaces it to see what the app tried to open without
+    /// touching the person's browser.
+    var openExternally: (URL) -> Void = { url in NSWorkspace.shared.open(url) }
 
     override init(nibName: NSNib.Name?, bundle: Bundle?) {
         let configuration = WKWebViewConfiguration()
@@ -151,17 +155,32 @@ final class PreviewViewController: NSViewController, WKNavigationDelegate, WKUID
 
     // MARK: WebKit
 
+    /// A deck's own page is hostile input: it can redirect itself, submit a
+    /// form or open a window with no click at all, and none of that may
+    /// reach anything outside the sandboxed preview. The one navigation
+    /// worth handing to the system browser is a person actually clicking a
+    /// plain web link, so both conditions have to hold: `navigationType` is
+    /// `.linkActivated`, WebKit's own record of a click on an anchor, and
+    /// the scheme is `http` or `https`. The scheme check stands even for a
+    /// genuine click, so a link a page points at `file:`, `javascript:` or
+    /// another app's registered scheme still goes nowhere.
+    static func isExternalWebLink(url: URL, navigationType: WKNavigationType) -> Bool {
+        navigationType == .linkActivated && (url.scheme == "http" || url.scheme == "https")
+    }
+
     func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction) async -> WKNavigationActionPolicy {
         guard let url = navigationAction.request.url else { return .cancel }
         if url.host == "127.0.0.1", url.port == allowedPort { return .allow }
         if url.scheme == "about" || url.scheme == "blob" || url.scheme == "data" { return .allow }
-        if navigationAction.targetFrame?.isMainFrame ?? true { NSWorkspace.shared.open(url) }
+        if Self.isExternalWebLink(url: url, navigationType: navigationAction.navigationType) { openExternally(url) }
         return .cancel
     }
 
     func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration,
                  for navigationAction: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
-        if let url = navigationAction.request.url { NSWorkspace.shared.open(url) }
+        if let url = navigationAction.request.url, Self.isExternalWebLink(url: url, navigationType: navigationAction.navigationType) {
+            openExternally(url)
+        }
         return nil
     }
 
