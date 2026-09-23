@@ -78,6 +78,59 @@ describe('LiveCodeBlock', () => {
 		});
 	});
 
+	it('sends the revision this page rendered from along with the reference', async () => {
+		usePresentationStore.setState({
+			presentation: { config: {}, slides: [], revision: 'rev-42' }
+		});
+		const fetchMock = vi.fn(async () =>
+			({ ok: true, json: async () => ({ success: true, output: 'ok' }) }) as unknown as Response
+		);
+		vi.stubGlobal('fetch', fetchMock);
+
+		render(<LiveCodeBlock codeBlock={sqlBlock()} slideNumber={4} />);
+		fireEvent.click(screen.getByRole('button', { name: 'Run code' }));
+
+		await waitFor(() => {
+			expect(fetchMock).toHaveBeenCalledWith(
+				'/api/execute',
+				expect.objectContaining({
+					method: 'POST',
+					body: JSON.stringify({ slide: 4, block: 1, revision: 'rev-42' })
+				})
+			);
+		});
+		usePresentationStore.setState({ presentation: null });
+	});
+
+	it('shows a distinct, non-retried refusal when the server reports the deck changed', async () => {
+		const fetchMock = vi.fn(async () =>
+			({
+				ok: false,
+				json: async () => ({
+					success: false,
+					code: 'stale_revision',
+					error: 'The deck changed since this page loaded, so its Run buttons no longer match what is on screen. Reload the page and try again.'
+				})
+			}) as unknown as Response
+		);
+		vi.stubGlobal('fetch', fetchMock);
+
+		render(<LiveCodeBlock codeBlock={sqlBlock()} slideNumber={4} />);
+		fireEvent.click(screen.getByRole('button', { name: 'Run code' }));
+
+		expect(await screen.findByText('Deck changed')).toBeInTheDocument();
+		expect(screen.queryByText('Error')).not.toBeInTheDocument();
+		expect(
+			await screen.findByText(
+				'The deck changed since this page loaded, so its Run buttons no longer match what is on screen. Reload the page and try again.'
+			)
+		).toBeInTheDocument();
+
+		// The refusal is not retried automatically: exactly one request was
+		// made, and the deck-changed message stays on screen.
+		await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+	});
+
 	it('renders tabular results as a table', async () => {
 		const fetchMock = vi.fn(async () =>
 			({

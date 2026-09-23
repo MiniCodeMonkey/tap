@@ -69,6 +69,7 @@ export function LiveCodeBlock({ codeBlock, slideNumber }: LiveCodeBlockProps) {
 
 	const liveExecutionAvailable = useConnectionStore(selectLiveExecutionAvailable);
 	const liveCode = usePresentationStore((state) => state.presentation?.liveCode);
+	const revision = usePresentationStore((state) => state.presentation?.revision);
 
 	const hasDriver = !!codeBlock.driver;
 	const problem = hasDriver && liveExecutionAvailable ? codeBlock.problem : undefined;
@@ -106,7 +107,7 @@ export function LiveCodeBlock({ codeBlock, slideNumber }: LiveCodeBlockProps) {
 		setHasError(false);
 		setResult(null);
 
-		const request: ExecuteRequest = { slide: slideNumber, block: codeBlock.block! };
+		const request: ExecuteRequest = { slide: slideNumber, block: codeBlock.block!, revision };
 
 		try {
 			const response = await fetch('/api/execute', {
@@ -127,7 +128,7 @@ export function LiveCodeBlock({ codeBlock, slideNumber }: LiveCodeBlockProps) {
 		} finally {
 			setIsExecuting(false);
 		}
-	}, [canExecute, isExecuting, codeBlock, slideNumber]);
+	}, [canExecute, isExecuting, codeBlock, slideNumber, revision]);
 
 	const handleKeyDown = useCallback(
 		(event: KeyboardEvent<HTMLDivElement>) => {
@@ -156,6 +157,14 @@ export function LiveCodeBlock({ codeBlock, slideNumber }: LiveCodeBlockProps) {
 
 		return '<span class="result-empty">No output</span>';
 	}, [result]);
+
+	// The server refused the request because the deck changed since this
+	// page rendered it: the reference may no longer name the code shown
+	// here. Shown distinctly from an ordinary execution error, and never
+	// retried automatically, since retrying with the new revision would
+	// silently run whatever now sits at that position, the exact failure
+	// this refusal exists to prevent.
+	const isStaleDeck = result?.code === 'stale_revision';
 
 	const classes = [
 		'live-code-block',
@@ -236,7 +245,9 @@ export function LiveCodeBlock({ codeBlock, slideNumber }: LiveCodeBlockProps) {
 			{result && (
 				<div className={`result-container${hasError ? ' error' : ''}`}>
 					<div className="result-header">
-						{hasError ? (
+						{isStaleDeck ? (
+							<span className="result-status error">Deck changed</span>
+						) : hasError ? (
 							<span className="result-status error">Error</span>
 						) : (
 							<span className="result-status success">Output</span>

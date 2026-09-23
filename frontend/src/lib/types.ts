@@ -353,10 +353,15 @@ export interface WebSocketMessage {
 /**
  * Request to run one live code block of the loaded deck.
  * Both numbers count from 1; tap runs the code the deck holds there.
+ * Revision is the deck's revision (Presentation.revision) this page had
+ * rendered when it sent the request, so the server can tell a reference
+ * still resolved against the deck it was read from apart from one whose
+ * deck has since changed underneath it.
  */
 export interface ExecuteRequest {
 	slide: number;
 	block: number;
+	revision?: string;
 }
 
 /**
@@ -366,6 +371,13 @@ export interface ExecuteResponse {
 	success: boolean;
 	output?: string;
 	error?: string;
+	/**
+	 * Set only when the server refused the request instead of running it.
+	 * `'stale_revision'` means the request's revision no longer matches the
+	 * deck: the reference may now name different code than the page shows,
+	 * and the response must not be retried automatically.
+	 */
+	code?: string;
 	data?: Record<string, unknown>[];
 }
 
