@@ -11,6 +11,7 @@ function track(promise: Promise<void>): { done: () => boolean } {
 
 afterEach(() => {
 	vi.useRealTimers();
+	vi.unstubAllGlobals();
 	document.body.innerHTML = '';
 	document.head.querySelectorAll('link').forEach((link) => link.remove());
 });
@@ -21,7 +22,7 @@ describe('images', () => {
 		Object.defineProperty(image, 'complete', { value: false, configurable: true });
 		document.body.appendChild(image);
 
-		const waiting = track(createDomProbes({ includeInfiniteAnimations: false }).images());
+		const waiting = track(createDomProbes({ includeInfiniteAnimations: false, requirePaint: false }).images());
 		await Promise.resolve();
 		expect(waiting.done()).toBe(false);
 
@@ -34,7 +35,7 @@ describe('images', () => {
 		Object.defineProperty(image, 'complete', { value: false, configurable: true });
 		document.body.appendChild(image);
 
-		const waiting = track(createDomProbes({ includeInfiniteAnimations: false }).images());
+		const waiting = track(createDomProbes({ includeInfiniteAnimations: false, requirePaint: false }).images());
 		image.dispatchEvent(new Event('error'));
 		await vi.waitFor(() => expect(waiting.done()).toBe(true));
 	});
@@ -45,7 +46,7 @@ describe('images', () => {
 		Object.defineProperty(image, 'complete', { value: false, configurable: true });
 		document.body.appendChild(image);
 
-		const waiting = track(createDomProbes({ includeInfiniteAnimations: false }).images());
+		const waiting = track(createDomProbes({ includeInfiniteAnimations: false, requirePaint: false }).images());
 		await vi.advanceTimersByTimeAsync(IMAGE_TIMEOUT_MS - 1);
 		expect(waiting.done()).toBe(false);
 		await vi.advanceTimersByTimeAsync(1);
@@ -57,7 +58,7 @@ describe('images', () => {
 		Object.defineProperty(image, 'complete', { value: true, configurable: true });
 		document.body.appendChild(image);
 
-		await expect(createDomProbes({ includeInfiniteAnimations: false }).images()).resolves.toBeUndefined();
+		await expect(createDomProbes({ includeInfiniteAnimations: false, requirePaint: false }).images()).resolves.toBeUndefined();
 	});
 });
 
@@ -66,7 +67,7 @@ describe('stylesheets and fonts', () => {
 		const link = document.createElement('link');
 		link.rel = 'stylesheet';
 		document.head.appendChild(link);
-		const probes = createDomProbes({ includeInfiniteAnimations: false });
+		const probes = createDomProbes({ includeInfiniteAnimations: false, requirePaint: false });
 		expect(probes.settledNow()).toBe(false);
 
 		const waiting = track(probes.fonts());
@@ -84,7 +85,7 @@ describe('stylesheets and fonts', () => {
 		link.rel = 'stylesheet';
 		document.head.appendChild(link);
 
-		const waiting = track(createDomProbes({ includeInfiniteAnimations: false }).fonts());
+		const waiting = track(createDomProbes({ includeInfiniteAnimations: false, requirePaint: false }).fonts());
 		await vi.advanceTimersByTimeAsync(STYLESHEET_TIMEOUT_MS);
 		expect(waiting.done()).toBe(true);
 	});
@@ -98,7 +99,7 @@ describe('stylesheets and fonts', () => {
 			})
 		};
 		const fakeDocument = { querySelectorAll: () => [], fonts } as unknown as Document;
-		const probes = createDomProbes({ includeInfiniteAnimations: false, document: fakeDocument });
+		const probes = createDomProbes({ includeInfiniteAnimations: false, requirePaint: false, document: fakeDocument });
 		expect(probes.settledNow()).toBe(false);
 
 		const waiting = track(probes.fonts());
@@ -128,7 +129,7 @@ describe('animations', () => {
 	it('waits for a running animation to finish', async () => {
 		const running = fakeAnimation(400);
 		const waiting = track(
-			createDomProbes({ includeInfiniteAnimations: false, document: documentWith([running.animation]) }).animations()
+			createDomProbes({ includeInfiniteAnimations: false, requirePaint: false, document: documentWith([running.animation]) }).animations()
 		);
 		await Promise.resolve();
 		expect(waiting.done()).toBe(false);
@@ -140,7 +141,7 @@ describe('animations', () => {
 	it('ignores an animation that repeats forever on a live page', async () => {
 		const looping = fakeAnimation(Infinity);
 		await expect(
-			createDomProbes({ includeInfiniteAnimations: false, document: documentWith([looping.animation]) }).animations()
+			createDomProbes({ includeInfiniteAnimations: false, requirePaint: false, document: documentWith([looping.animation]) }).animations()
 		).resolves.toBeUndefined();
 	});
 
@@ -148,11 +149,112 @@ describe('animations', () => {
 		vi.useFakeTimers();
 		const looping = fakeAnimation(Infinity);
 		const waiting = track(
-			createDomProbes({ includeInfiniteAnimations: true, document: documentWith([looping.animation]) }).animations()
+			createDomProbes({ includeInfiniteAnimations: true, requirePaint: true, document: documentWith([looping.animation]) }).animations()
 		);
 		await vi.advanceTimersByTimeAsync(ANIMATION_TIMEOUT_MS - 1);
 		expect(waiting.done()).toBe(false);
 		await vi.advanceTimersByTimeAsync(1);
 		expect(waiting.done()).toBe(true);
+	});
+});
+
+describe('paint', () => {
+	/** An animation frame queue the test runs by hand, as a browser does when it draws. */
+	function controllableFrames(): { drawFrame: () => void; pending: () => number } {
+		let callbacks: FrameRequestCallback[] = [];
+		vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+			callbacks.push(callback);
+			return callbacks.length;
+		});
+		return {
+			drawFrame: () => {
+				const due = callbacks;
+				callbacks = [];
+				for (const callback of due) {
+					callback(0);
+				}
+			},
+			pending: () => callbacks.length
+		};
+	}
+
+	/** A document whose visibility the test controls, with working event listeners. */
+	function documentWithVisibility(state: DocumentVisibilityState): {
+		document: Document;
+		hide: () => void;
+	} {
+		const events = new EventTarget();
+		const target = {
+			querySelectorAll: () => [],
+			visibilityState: state,
+			addEventListener: events.addEventListener.bind(events),
+			removeEventListener: events.removeEventListener.bind(events)
+		};
+		return {
+			document: target as unknown as Document,
+			hide: () => {
+				target.visibilityState = 'hidden';
+				events.dispatchEvent(new Event('visibilitychange'));
+			}
+		};
+	}
+
+	it('waits for two animation frames on a visible page', async () => {
+		const frames = controllableFrames();
+		const page = documentWithVisibility('visible');
+
+		const waiting = track(
+			createDomProbes({ includeInfiniteAnimations: false, requirePaint: false, document: page.document }).paint()
+		);
+		await Promise.resolve();
+		expect(waiting.done()).toBe(false);
+
+		frames.drawFrame();
+		await Promise.resolve();
+		expect(waiting.done()).toBe(false);
+
+		frames.drawFrame();
+		await vi.waitFor(() => expect(waiting.done()).toBe(true));
+	});
+
+	it('does not wait for a paint on a live page that is already hidden', async () => {
+		controllableFrames();
+		const page = documentWithVisibility('hidden');
+
+		await expect(
+			createDomProbes({ includeInfiniteAnimations: false, requirePaint: false, document: page.document }).paint()
+		).resolves.toBeUndefined();
+	});
+
+	it('stops waiting for a paint when a live page is hidden mid-wait', async () => {
+		controllableFrames();
+		const page = documentWithVisibility('visible');
+
+		const waiting = track(
+			createDomProbes({ includeInfiniteAnimations: false, requirePaint: false, document: page.document }).paint()
+		);
+		await Promise.resolve();
+		expect(waiting.done()).toBe(false);
+
+		page.hide();
+		await vi.waitFor(() => expect(waiting.done()).toBe(true));
+	});
+
+	it('waits for a real paint on a capture page, hidden or not', async () => {
+		const frames = controllableFrames();
+		const page = documentWithVisibility('hidden');
+
+		const waiting = track(
+			createDomProbes({ includeInfiniteAnimations: false, requirePaint: true, document: page.document }).paint()
+		);
+		await Promise.resolve();
+		expect(waiting.done()).toBe(false);
+
+		frames.drawFrame();
+		await Promise.resolve();
+		expect(waiting.done()).toBe(false);
+
+		frames.drawFrame();
+		await vi.waitFor(() => expect(waiting.done()).toBe(true));
 	});
 });

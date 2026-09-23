@@ -198,7 +198,11 @@ export default function PresenterApp() {
 		step: PRINT_MODE ? (currentSlide?.steps ?? 0) : currentStep,
 		fragment: PRINT_MODE ? (currentSlide?.fragmentCount ?? 0) : currentFragmentIndex,
 		theme,
-		includeInfiniteAnimations: PRINT_MODE
+		includeInfiniteAnimations: PRINT_MODE,
+		// Only a print pass is captured, so only it waits for a paint; a
+		// live presenter window reports ready on a settled DOM, hidden or
+		// not (see DomProbeOptions.requirePaint).
+		requirePaint: PRINT_MODE
 	});
 
 	const fitting = notesSizeMode === 'fit';

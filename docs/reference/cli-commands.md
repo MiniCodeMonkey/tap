@@ -1059,6 +1059,8 @@ stdout keeps the command's normal output (or its `--json` result). Warnings can 
 
 Every tap page reports when the slide on screen has finished rendering: fonts and images loaded, maps drawn, components loaded, error cards shown, and transitions and theme animations done. It sets `window.__tapReady` to `{"revision": "...", "slide": 3, "step": 1}` (`slide` counts from 1), dispatches a `tap:ready` event on `window` with the same object, and, inside a macOS web view that registered a `tapReady` message handler, posts it to that handler. `window.__tapReady` is `null` while a slide is still rendering, and resets when the slide, step, fragment, theme or deck changes. `tap export pdf` and `tap export images` wait for this signal before each capture.
 
+A hidden page is the one case where rendering and painting part ways. A window that is covered, minimized or on another space runs no animation frames in WebKit, so a paint there never arrives. A live page therefore reports ready once its DOM has settled, whether or not it has painted, and a window hidden mid-render still reports. A page that is about to be photographed keeps the stricter meaning and waits for a real paint: that is `?print=true` (PDF export and the desktop app's thumbnails) and `?capture=true` (image export), which are never hidden, since a capture of a page that has not drawn comes out blank.
+
 ## Output Streams
 
 Every command writes its real output to standard output and its errors and

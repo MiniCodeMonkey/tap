@@ -4,7 +4,9 @@
  * last change has painted. Each check resolves when there is nothing left
  * to wait for, or when its time limit runs out, so a broken image or a
  * looping animation never holds the signal forever. The limits are the ones
- * tap's exporter has always used.
+ * tap's exporter has always used. The paint check has no time limit: it
+ * ends on a hidden page instead, which is the one case where the frames it
+ * waits for never come (see DomProbeOptions.requirePaint).
  */
 
 /** How long to wait for stylesheets to load. */
@@ -24,7 +26,7 @@ export interface ReadyProbes {
 	images(): Promise<void>;
 	/** Resolves when running animations have finished. */
 	animations(): Promise<void>;
-	/** Resolves after two animation frames, so the last change has painted. */
+	/** Resolves after two animation frames, so the last change has painted. See DomProbeOptions.requirePaint. */
 	paint(): Promise<void>;
 	/** Whether nothing is loading right now: no stylesheet and no web font. */
 	settledNow(): boolean;
@@ -38,6 +40,18 @@ export interface DomProbeOptions {
 	 * does not hold every ready cycle for the full limit.
 	 */
 	includeInfiniteAnimations: boolean;
+	/**
+	 * Whether ready means the page has painted, or only that its DOM has
+	 * settled. A capture (a PDF export, an image export, the desktop app's
+	 * thumbnail renderer) photographs the page, so it requires a real
+	 * paint: without one the picture comes out blank, and it is worth
+	 * waiting for a window that never draws until the export's own time
+	 * limit runs out. A live page requires only a settled DOM, so a hidden
+	 * window still reports ready: WebKit runs no animation frames for a
+	 * page that is covered, minimized or on another space, so a paint
+	 * there is a wait with no end (see paintWhenVisible).
+	 */
+	requirePaint: boolean;
 	/** The document to check. Defaults to the page's own. */
 	document?: Document;
 }
@@ -106,13 +120,44 @@ async function waitForAnimations(target: Document, includeInfinite: boolean): Pr
 	await settleWithin(Promise.allSettled(running.map((animation) => animation.finished)), ANIMATION_TIMEOUT_MS);
 }
 
-function nextPaint(): Promise<void> {
+/**
+ * Resolves once two animation frames have run, so the last change has
+ * painted. A hidden page draws nothing, and WebKit runs no animation
+ * frames for one, so unless the caller requires a paint the wait ends the
+ * moment the page is hidden, whether it already was or becomes hidden
+ * partway through. Ready then means the DOM has settled, which is what a
+ * live page's reader asks about; only a capture needs the pixels.
+ */
+function paintWhenVisible(target: Document, requirePaint: boolean): Promise<void> {
 	return new Promise((resolve) => {
 		if (typeof requestAnimationFrame !== 'function') {
 			setTimeout(resolve, 16);
 			return;
 		}
-		requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+		if (requirePaint) {
+			requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+			return;
+		}
+		let settled = false;
+		const finish = (): void => {
+			if (settled) {
+				return;
+			}
+			settled = true;
+			target.removeEventListener('visibilitychange', onVisibilityChange);
+			resolve();
+		};
+		const onVisibilityChange = (): void => {
+			if (target.visibilityState === 'hidden') {
+				finish();
+			}
+		};
+		if (target.visibilityState === 'hidden') {
+			resolve();
+			return;
+		}
+		target.addEventListener('visibilitychange', onVisibilityChange);
+		requestAnimationFrame(() => requestAnimationFrame(finish));
 	});
 }
 
@@ -123,7 +168,7 @@ export function createDomProbes(options: DomProbeOptions): ReadyProbes {
 		fonts: () => waitForStylesheetsAndFonts(target),
 		images: () => waitForImages(target),
 		animations: () => waitForAnimations(target, options.includeInfiniteAnimations),
-		paint: nextPaint,
+		paint: () => paintWhenVisible(target, options.requirePaint),
 		settledNow: () => {
 			const fonts: FontFaceSet | undefined = target.fonts;
 			return pendingStylesheets(target).length === 0 && fonts?.status !== 'loading';
