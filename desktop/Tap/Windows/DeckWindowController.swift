@@ -39,12 +39,54 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
 
     static let previewItemIdentifier = NSToolbarItem.Identifier("preview")
 
+    private(set) var previewWindowController: PreviewWindowController?
+
     @objc func togglePreview(_ sender: Any?) {
+        if let controller = previewWindowController {
+            controller.close()
+            return
+        }
         splitViewController.setPreviewHidden(!splitViewController.isPreviewHidden)
     }
 
     @objc func togglePreviewPin(_ sender: Any?) {
         sessionController.togglePin()
+    }
+
+    /// Moves the preview into its own window. It keeps following the cursor.
+    @objc func showPreviewInWindow(_ sender: Any?) {
+        if let existing = previewWindowController {
+            existing.showWindow(nil)
+            return
+        }
+        let preview = sessionController.previewViewController
+        preview.view.removeFromSuperview()
+        preview.removeFromParent()
+        let controller = PreviewWindowController(title: "\(window?.title ?? "Deck"): Preview")
+        controller.window?.contentViewController = preview
+        controller.window?.setContentSize(NSSize(width: 960, height: 640))
+        controller.onClose = { [weak self] in self?.dockPreview() }
+        previewWindowController = controller
+        splitViewController.setPreviewHidden(true)
+        NSApp.activate(ignoringOtherApps: true)
+        controller.window?.makeKeyAndOrderFront(nil)
+    }
+
+    /// Puts the preview back next to the editor.
+    func dockPreview() {
+        guard let controller = previewWindowController else { return }
+        previewWindowController = nil
+        controller.window?.contentViewController = nil
+        sessionController.inspectorViewController.embed(sessionController.previewViewController)
+        splitViewController.setPreviewHidden(false)
+    }
+
+    func windowWillClose(_ notification: Notification) {
+        if let controller = previewWindowController {
+            controller.onClose = nil
+            previewWindowController = nil
+            controller.close()
+        }
     }
 
     func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {

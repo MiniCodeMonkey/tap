@@ -102,6 +102,7 @@ enum MainMenu {
         let menu = NSMenu(title: "View")
         menu.addItem(item("Hide Preview", action: #selector(DeckWindowController.togglePreview(_:)), key: "0", modifiers: [.command, .option]))
         menu.addItem(item("Pin Preview", action: #selector(DeckWindowController.togglePreviewPin(_:)), key: "p", modifiers: [.command, .shift]))
+        menu.addItem(item("Preview in Window", action: #selector(DeckWindowController.showPreviewInWindow(_:))))
         menu.addItem(.separator())
         menu.addItem(item("Enter Full Screen", action: #selector(NSWindow.toggleFullScreen(_:)), key: "f", modifiers: [.command, .control]))
         return menu
