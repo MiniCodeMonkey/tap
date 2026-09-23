@@ -364,16 +364,28 @@ func (session *appSession) tunnel(start bool) {
 // (WorkerJoinTimeout already gave up on it) happens to be holding tunnelMu
 // itself, waiting for it here would reintroduce the same hang this fix
 // removes. It is best effort, bounded the same way as the worker join: the
-// process is exiting either way, and a Stop that will not return promptly
+// process is exiting either way, and a call that will not return promptly
 // is abandoned rather than allowed to hold up shutdown further.
+//
+// Every call into tunnels, including the URL() guard that decides whether
+// there is anything to stop, runs inside the same bounded goroutine as
+// Stop(). The concrete TunnelController serializes Start, Stop and URL on
+// one internal mutex, so if the abandoned worker task is stuck inside
+// Start holding that mutex, URL() blocks on it exactly as Stop() would;
+// leaving the guard outside the bound would let that block hold up quit
+// indefinitely, which is the same failure class WorkerJoinTimeout exists
+// to close.
 func (session *appSession) stopTunnelAtExit() {
 	tunnels := session.options.Tunnels
-	if tunnels == nil || tunnels.URL() == "" {
+	if tunnels == nil {
 		return
 	}
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
+		if tunnels.URL() == "" {
+			return
+		}
 		if err := tunnels.Stop(); err != nil {
 			session.fail(appErrorTunnelFailed, "stopping the tunnel at quit: "+err.Error())
 			return

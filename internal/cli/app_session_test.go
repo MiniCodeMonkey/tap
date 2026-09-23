@@ -71,6 +71,46 @@ func (tunnels *fakeTunnels) URL() string {
 func (tunnels *fakeTunnels) Available() bool     { return tunnels.available }
 func (tunnels *fakeTunnels) InstallHint() string { return "brew install cloudflared" }
 
+// fakeLockedTunnels is modeled on the real tunnelController
+// (internal/cli/tunnel.go): a single mutex guards Start, Stop and URL
+// alike. Its Start ignores ctx and never returns, holding that mutex for
+// as long as the goroutine that called it lives -- exactly what an
+// abandoned worker task stuck inside a real tunnel Start looks like from
+// the outside.
+type fakeLockedTunnels struct {
+	mu      sync.Mutex
+	url     string
+	entered chan struct{}
+}
+
+var _ tui.TunnelController = (*fakeLockedTunnels)(nil)
+
+func (tunnels *fakeLockedTunnels) Start(ctx context.Context) (string, error) {
+	tunnels.mu.Lock()
+	defer tunnels.mu.Unlock()
+	if tunnels.entered != nil {
+		close(tunnels.entered)
+	}
+	<-make(chan struct{}) // blocks forever, ignoring ctx, holding mu
+	return "", nil
+}
+
+func (tunnels *fakeLockedTunnels) Stop() error {
+	tunnels.mu.Lock()
+	defer tunnels.mu.Unlock()
+	tunnels.url = ""
+	return nil
+}
+
+func (tunnels *fakeLockedTunnels) URL() string {
+	tunnels.mu.Lock()
+	defer tunnels.mu.Unlock()
+	return tunnels.url
+}
+
+func (tunnels *fakeLockedTunnels) Available() bool     { return true }
+func (tunnels *fakeLockedTunnels) InstallHint() string { return "brew install cloudflared" }
+
 // sessionHarness runs runAppSession with test channels.
 type sessionHarness struct {
 	commands  chan appCommand
@@ -472,6 +512,37 @@ func TestAppSessionQuitStopsARunningTunnel(t *testing.T) {
 	if url := tunnels.URL(); url != "" {
 		t.Errorf("tunnel url = %q after quit, want stopped", url)
 	}
+}
+
+// TestAppSessionQuitReturnsWhenTheTunnelURLGuardBlocksOnAStuckStart
+// reproduces the hang stopTunnelAtExit's guard clause reopened: the guard
+// used to call tunnels.URL() synchronously, outside the same bounded
+// section that wraps Stop(). Using fakeLockedTunnels (modeled on the real
+// tunnelController, whose Start, Stop and URL all share one mutex), a
+// tunnel Start is left stuck holding that mutex when quit is sent, so
+// WorkerJoinTimeout gives up on the worker join, and stopTunnelAtExit's own
+// URL() call then contends for the same mutex the stuck Start still holds.
+// Before the fix that call sits outside stopTunnelAtExit's bounded
+// goroutine, so it blocks forever and runAppSession never returns, failing
+// at waitForEnd's five-second bound. After the fix, the URL() call moves
+// inside the same select/time.After(WorkerJoinTimeout) that already wraps
+// Stop(), so the whole interaction with the tunnel controller is bounded
+// and quit returns well within that timeout.
+func TestAppSessionQuitReturnsWhenTheTunnelURLGuardBlocksOnAStuckStart(t *testing.T) {
+	entered := make(chan struct{})
+	tunnels := &fakeLockedTunnels{entered: entered}
+	harness := startAppSessionForTest(t, func(options *appSessionOptions) {
+		options.Tunnels = tunnels
+		options.WorkerJoinTimeout = 200 * time.Millisecond
+	})
+	start := true
+
+	harness.send(appCommand{Type: appCommandTunnel, Start: &start})
+	<-entered
+	harness.log.next(t, appEventTunnel) // "starting"
+
+	harness.send(appCommand{Type: appCommandQuit})
+	harness.waitForEnd(t)
 }
 
 // TestAppSessionKeepRecordingTimeoutIsShort forces the timing rather than
