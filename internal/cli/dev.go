@@ -237,8 +237,19 @@ func runDevServer(options serverOptions) (err error) {
 
 	baseDir := filepath.Dir(absFile)
 
-	// Load configuration from frontmatter
-	cfg, err := config.Load(absFile)
+	// Load configuration from frontmatter. In tap dev --app, frontmatter
+	// that fails to parse does not fail the run (see loadAppConfig): the
+	// editor is the tool built to fix a broken deck, and it must still be
+	// able to open one. tap present --app keeps the plain, fatal
+	// behavior: it has no route for re-rendering or editing the deck, so
+	// there is no channel to report the problem through besides failing
+	// before the presenter goes on stage with it.
+	var cfg *config.Config
+	if options.app && !options.present {
+		cfg, err = loadAppConfig(absFile)
+	} else {
+		cfg, err = config.Load(absFile)
+	}
 	if err != nil {
 		return userError(codeInvalidDeck, fmt.Errorf("failed to load config: %w", err))
 	}
@@ -1114,6 +1125,30 @@ func presentLaunchPreflight(recordings *recordController, startNow bool) recorde
 		return recordings.Preflight()
 	}
 	return recordings.StartupPreflight()
+}
+
+// loadAppConfig loads path's config the way config.Load does, except that
+// frontmatter which fails to parse falls back to config.DefaultConfig()
+// instead of failing, the same fallback slidelist.Build already makes for
+// PUT /api/app/source. tap dev --app takes this path so a deck with a
+// frontmatter typo still opens: the problem is not lost, it reappears as
+// one of the slide list's errors the next time the app asks for it (an
+// initial PUT of its own buffer, or any edit after). A file that cannot
+// be read at all is a different, still-fatal problem: reading it is what
+// this function attempts first, and that error is returned unchanged.
+func loadAppConfig(path string) (*config.Config, error) {
+	source, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open file: %w", err)
+	}
+	cfg, err := config.FromSource(source)
+	if err != nil {
+		return config.DefaultConfig(), nil
+	}
+	if err := config.LoadEnv(filepath.Dir(path)); err != nil {
+		return nil, fmt.Errorf("failed to load .env file: %w", err)
+	}
+	return cfg, nil
 }
 
 // loadPresentation reads, parses, resolves components for, and transforms a
