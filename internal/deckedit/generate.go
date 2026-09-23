@@ -18,9 +18,14 @@ type ImageGenerator interface {
 
 // NewImageGenerator returns the generator that tap image generate, tap
 // image regenerate and the TUI i key use: the Gemini client, configured
-// from GEMINI_API_KEY. Tests replace it with a fake, so no test calls the
-// Gemini API.
-var NewImageGenerator = func() (ImageGenerator, error) {
+// from GEMINI_API_KEY. It first loads the .env file next to deckPath, so a
+// deck with no frontmatter still picks up a key kept there, the same as a
+// deck with frontmatter does through config.Load. Tests replace it with a
+// fake, so no test calls the Gemini API.
+var NewImageGenerator = func(deckPath string) (ImageGenerator, error) {
+	if err := config.LoadEnv(filepath.Dir(deckPath)); err != nil {
+		return nil, fmt.Errorf("cannot read the .env file next to %s: %w", deckPath, err)
+	}
 	client, err := gemini.NewClientFromEnv()
 	if err != nil {
 		return nil, err

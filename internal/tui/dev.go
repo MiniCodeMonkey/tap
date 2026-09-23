@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/MiniCodeMonkey/tap/internal/config"
 	"github.com/MiniCodeMonkey/tap/internal/deckedit"
 	"github.com/MiniCodeMonkey/tap/internal/gemini"
 	"github.com/MiniCodeMonkey/tap/internal/recorder"
@@ -541,7 +542,11 @@ func (m *DevModel) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
-		// Check for GEMINI_API_KEY
+		// Load a .env file next to the deck before checking for the key, the
+		// same as tap image generate does, so a deck with no frontmatter
+		// still picks up a key kept there instead of being told to add one
+		// it already added.
+		_ = config.LoadEnv(filepath.Dir(m.config.MarkdownFile))
 		if !gemini.HasAPIKey() {
 			m.SetError(fmt.Errorf("GEMINI_API_KEY not set. Add it to your .env file to use AI image generation"))
 			m.addEvent(DevEvent{

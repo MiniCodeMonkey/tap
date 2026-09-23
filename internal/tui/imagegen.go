@@ -396,8 +396,9 @@ func (m *ImageGenModel) submitPrompt() (tea.Model, tea.Cmd) {
 // generateImageCmd returns a command that generates an image using the Gemini API.
 func (m *ImageGenModel) generateImageCmd() tea.Cmd {
 	prompt := m.Prompt
+	deckPath := m.MarkdownFile
 	return func() tea.Msg {
-		client, err := deckedit.NewImageGenerator()
+		client, err := deckedit.NewImageGenerator(deckPath)
 		if err != nil {
 			return imageGenerateMsg{result: ImageGenerateResult{Error: err}}
 		}

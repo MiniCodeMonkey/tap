@@ -13,7 +13,6 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/MiniCodeMonkey/tap/internal/config"
 	"github.com/MiniCodeMonkey/tap/internal/deckedit"
 	"github.com/MiniCodeMonkey/tap/internal/gemini"
 )
@@ -322,13 +321,10 @@ func findAIImage(deck string, slideIndex int, imagePath string) (deckedit.AIImag
 
 // generateAndPlace generates an image for placement.Prompt and places it
 // in the deck through deckedit.PlaceGeneratedImage, the function the TUI
-// i key also uses. It reads GEMINI_API_KEY from a .env file next to the
-// deck when the environment has none.
+// i key also uses. deckedit.NewImageGenerator reads GEMINI_API_KEY from a
+// .env file next to the deck when the environment has none.
 func generateAndPlace(ctx context.Context, placement deckedit.Placement) (deckedit.PlacedImage, error) {
-	if err := config.LoadEnv(filepath.Dir(placement.DeckPath)); err != nil {
-		return deckedit.PlacedImage{}, userError(codeInvalidDeck, fmt.Errorf("cannot read the .env file next to %s: %w", placement.DeckPath, err))
-	}
-	generator, err := deckedit.NewImageGenerator()
+	generator, err := deckedit.NewImageGenerator(placement.DeckPath)
 	if err != nil {
 		return deckedit.PlacedImage{}, userError(codeNoAPIKey, fmt.Errorf("cannot start image generation: %w", err))
 	}

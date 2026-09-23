@@ -173,7 +173,7 @@ func TestImageGenerateUsageErrors(t *testing.T) {
 
 func TestImageGenerateWithoutAnAPIKey(t *testing.T) {
 	original := deckedit.NewImageGenerator
-	deckedit.NewImageGenerator = func() (deckedit.ImageGenerator, error) {
+	deckedit.NewImageGenerator = func(deckPath string) (deckedit.ImageGenerator, error) {
 		return nil, &gemini.APIError{Type: gemini.ErrorTypeAuth, Message: "API key is required"}
 	}
 	t.Cleanup(func() { deckedit.NewImageGenerator = original })

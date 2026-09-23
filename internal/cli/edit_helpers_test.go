@@ -131,7 +131,7 @@ func useFakeImageGenerator(t *testing.T) *fakeImageGenerator {
 	t.Setenv("GEMINI_API_KEY", "test-key")
 	fake := &fakeImageGenerator{}
 	original := deckedit.NewImageGenerator
-	deckedit.NewImageGenerator = func() (deckedit.ImageGenerator, error) { return fake, nil }
+	deckedit.NewImageGenerator = func(deckPath string) (deckedit.ImageGenerator, error) { return fake, nil }
 	t.Cleanup(func() { deckedit.NewImageGenerator = original })
 	return fake
 }
