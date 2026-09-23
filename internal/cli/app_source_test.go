@@ -270,6 +270,68 @@ func TestAppSourceDropsABufferRenderThatOutlivesTheSave(t *testing.T) {
 	}
 }
 
+// TestAppDeckSourceDoesNotBroadcastASupersededRendersList proves the
+// residual race the re-review flagged: dev.go broadcasts whatever list
+// renderCurrentAndList hands back, so a render whose publish step is
+// skipped because a newer write landed must hand back a nil list too, not
+// one built from text that will never reach the screen. The ordering is
+// forced with channels, as the other supersession tests in this file do,
+// rather than hoped for.
+func TestAppDeckSourceDoesNotBroadcastASupersededRendersList(t *testing.T) {
+	directory := t.TempDir()
+	file := filepath.Join(directory, "talk.md")
+	if err := os.WriteFile(file, []byte("# One\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	source := newAppDeckSource(file)
+
+	entered := make(chan struct{})
+	release := make(chan struct{})
+	var publishedOld atomic.Int64
+
+	oldDone := make(chan struct{})
+	var oldList *slidelist.Result
+	var oldErr error
+	go func() {
+		defer close(oldDone)
+		oldList, oldErr = source.renderCurrentAndList(directory, func(text []byte) (func(), error) {
+			close(entered)
+			<-release
+			return func() { publishedOld.Add(1) }, nil
+		})
+	}()
+
+	// Wait until the older render has taken its sequence and started its
+	// build, then land a newer write before letting it finish.
+	<-entered
+	source.setBuffer([]byte("# Newer\n---\n# Second\n"))
+	close(release)
+	<-oldDone
+
+	if oldErr != nil {
+		t.Fatalf("rendering: %v", oldErr)
+	}
+	if publishedOld.Load() != 0 {
+		t.Error("the superseded render published, want its publish step never called")
+	}
+	if oldList != nil {
+		t.Errorf("list = %+v, want nil: the render never published, so its list must not reach a caller that broadcasts it", oldList)
+	}
+
+	newList, err := source.renderCurrentAndList(directory, func(text []byte) (func(), error) {
+		return func() {}, nil
+	})
+	if err != nil {
+		t.Fatalf("rendering the newer text: %v", err)
+	}
+	if newList == nil {
+		t.Fatal("no slide list for the newer, unsuperseded render")
+	}
+	if len(newList.Slides) != 2 {
+		t.Errorf("the newer slide list has %d slides, want 2", len(newList.Slides))
+	}
+}
+
 func TestLoadPresentationSourceRendersTheGivenText(t *testing.T) {
 	deckPath := writeAppTestDeck(t, "# On Disk\n")
 	presentation, _, _, _, _, err := loadPresentationSource([]byte("# In The Buffer\n"), deckPath, config.DefaultConfig(), filepath.Dir(deckPath))
@@ -282,9 +344,12 @@ func TestLoadPresentationSourceRendersTheGivenText(t *testing.T) {
 }
 
 // TestAppDeckSourceListsTheTextItRendered covers the slide list that
-// rides along with a file-changed event. It has to describe the text that
-// was just rendered, so a PUT landing during the render cannot leave the
-// app with a list of one deck and a screen showing another.
+// rides along with a file-changed event. build is handed the exact text
+// that was snapshotted for this render, not text re-read afterwards, so a
+// PUT landing while the render is going cannot leave build looking at one
+// deck while a screen shows another. That same PUT also supersedes this
+// render, so its list is correctly withheld; see
+// TestAppDeckSourceDoesNotBroadcastASupersededRendersList for that half.
 func TestAppDeckSourceListsTheTextItRendered(t *testing.T) {
 	directory := t.TempDir()
 	file := filepath.Join(directory, "talk.md")
@@ -296,7 +361,8 @@ func TestAppDeckSourceListsTheTextItRendered(t *testing.T) {
 	var built []byte
 	list, err := source.renderCurrentAndList(directory, func(text []byte) (func(), error) {
 		built = text
-		// A PUT landing while this render is still going.
+		// A PUT landing while this render is still going, which
+		// supersedes it.
 		source.setBuffer([]byte("# Newer\n---\n# Second\n"))
 		return func() {}, nil
 	})
@@ -306,10 +372,7 @@ func TestAppDeckSourceListsTheTextItRendered(t *testing.T) {
 	if string(built) != "# Rendered\n" {
 		t.Fatalf("rendered %q, want the deck file", built)
 	}
-	if list == nil {
-		t.Fatal("no slide list")
-	}
-	if len(list.Slides) != 1 {
-		t.Errorf("the slide list has %d slides, want the 1 of the text that was rendered", len(list.Slides))
+	if list != nil {
+		t.Errorf("list = %+v, want nil: this render was superseded by the PUT, so it must not publish a list either", list)
 	}
 }

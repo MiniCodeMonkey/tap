@@ -130,16 +130,37 @@ func (source *appDeckSource) renderCurrent(build appRenderBuilder) error {
 // slide list of that same text. The list is built from the text the
 // render was handed rather than read again afterwards, so a PUT landing
 // in between cannot leave the app with a list describing one deck and a
-// screen showing another. The list comes back even when the render fails,
-// since a deck that will not render still has slides to name, and is nil
-// only when the text could not be read or would not parse.
+// screen showing another.
+//
+// The list is also withheld whenever the render itself is: build's publish
+// step runs only while render finds this the newest sequence (see render),
+// and the list is built inside that same publish step, not before it. A
+// render that build fails to produce still gets its list, since a deck that
+// will not render still has slides to name and that failure has nothing to
+// do with supersession, but a render that build succeeds at and render then
+// finds superseded hands back a nil list along with never publishing,
+// because both are decided by the one sequence check. There is no way to
+// get a list out of this function for text that was never, and will never
+// be, put on screen.
 func (source *appDeckSource) renderCurrentAndList(baseDir string, build appRenderBuilder) (*slidelist.Result, error) {
 	var list *slidelist.Result
-	err := source.renderCurrent(func(text []byte) (func(), error) {
+	buildList := func(text []byte) {
 		if built, listErr := slidelist.Build(text, baseDir); listErr == nil {
 			list = &built
 		}
-		return build(text)
+	}
+	err := source.renderCurrent(func(text []byte) (func(), error) {
+		publish, buildErr := build(text)
+		if buildErr != nil {
+			buildList(text)
+			return nil, buildErr
+		}
+		return func() {
+			buildList(text)
+			if publish != nil {
+				publish()
+			}
+		}, nil
 	})
 	return list, err
 }
