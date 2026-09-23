@@ -11,6 +11,11 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
     private(set) var client: TapClient?
     private(set) var socket: TapSocket?
     private(set) var sourceSync: SourceSync!
+    /// True once `stop()` has run. A source-sync PUT started before then can
+    /// still resolve after: its answer belongs to a state that no longer
+    /// exists and must not reach the editor, the same as a stale render
+    /// must not publish over a newer one.
+    private var stopped = false
     /// Runs after each slide list is applied to the editor.
     var onSlideListApplied: ((SlideList) -> Void)?
     var onHubMessage: ((HubMessage) -> Void)?
@@ -22,8 +27,8 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
         let deckURL = document.fileURL ?? FileManager.default.temporaryDirectory.appendingPathComponent("Untitled.md")
         session = TapSession(deckURL: deckURL, configuration: AppEnvironment.shared.sessionConfiguration())
         super.init()
-        sourceSync = SourceSync(text: { [unowned self] in self.editor.string },
-                                beginSend: { [unowned self] in self.editor.beginSend() })
+        sourceSync = SourceSync(text: { [weak self] in self?.editor.string ?? "" },
+                                beginSend: { [weak self] in self?.editor.beginSend() ?? 0 })
         sourceSync.onAnswer = { [weak self] list, sentText, generation in
             self?.applySlideList(list, sentText: sentText, generation: generation)
         }
@@ -40,6 +45,7 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
     }
 
     func stop() {
+        stopped = true
         socket?.close()
         socket = nil
         sourceSync.sender = nil
@@ -54,6 +60,7 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
     }
 
     private func applySlideList(_ list: SlideList, sentText: String, generation: Int) {
+        guard !stopped else { return }
         editor.apply(list, sentText: sentText, sentGeneration: generation)
         onSlideListApplied?(list)
     }
