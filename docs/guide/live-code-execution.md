@@ -118,7 +118,7 @@ Allow this deck to run code? Type s to show the code. [y/N/s]
 - `s` prints every block, then asks again. Return means no.
 - A yes is saved in `~/.config/tap/settings.yaml` with the deck's path and its drivers. Editing the code never asks again.
 - A no saves nothing. The deck still previews and presents, its Run buttons show "Not approved", and tap asks again next time.
-- A new driver in the frontmatter asks again, and names only the new driver. A moved deck asks again, because approvals are keyed by path.
+- A new driver in the frontmatter asks again, and names only the new driver. A moved deck asks again, because approvals are keyed by path, not by the deck's content. This cuts both ways: replace the file at an approved path with a different deck, and if that deck's drivers are already covered by the approval, tap runs its code without asking again. Only overwrite an approved path with a deck you trust.
 - `tap new` approves the deck it creates.
 - Without a terminal, or with `--headless`, tap never asks. An unapproved deck's live code stays off. `--allow-code` turns it on for that run and saves nothing.
 - `tap approval list` shows the approved decks, and `tap approval revoke <deck>` removes one.
