@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/MiniCodeMonkey/tap/internal/recorder"
 	"github.com/MiniCodeMonkey/tap/internal/server"
 	"github.com/MiniCodeMonkey/tap/internal/tui"
 )
@@ -52,7 +53,7 @@ const (
 	// and quit calls into exactly that through Finish. A deadline at or
 	// under five seconds would abandon a recorder that Tap's own code is
 	// still legitimately waiting out, which loses the end of the
-	// recording. Eight leaves three seconds on top for stopping the
+	// recording. The three seconds on top are for stopping the
 	// segment, writing chapters.txt, deleting a discarded run's folder,
 	// and whatever the earlier joins spent. The ceiling is a person
 	// watching a window refuse to close: eight seconds is only ever
@@ -63,7 +64,13 @@ const (
 	// quit of a recording run whose keep-recording question is answered
 	// takes a few milliseconds, and a reload still in flight costs only
 	// the reload's own work.
-	appQuitDeadline = 8 * time.Second
+	//
+	// It is derived from recorder.KillGrace rather than written as a
+	// number, so a change to how long a recorder gets to finalize its
+	// file moves this with it. Written by hand they would drift, and the
+	// cost of drifting the wrong way is a recording truncated on quit
+	// while tap was still legitimately waiting for it.
+
 	// appQuitJoinGrace is the shortest look a join takes, even when the
 	// quit deadline is already spent. Without it a join reached after
 	// the deadline gives up before the goroutine it is waiting on has
@@ -74,6 +81,10 @@ const (
 	// anything: five of them together are a twentieth of the deadline.
 	appQuitJoinGrace = 50 * time.Millisecond
 )
+
+// appQuitDeadline is a variable rather than a constant only because
+// recorder.KillGrace is one, so that tests can shorten both together.
+var appQuitDeadline = recorder.KillGrace + 3*time.Second
 
 // appSessionOptions is what the --app control loop drives.
 type appSessionOptions struct {

@@ -77,9 +77,9 @@ func TestStopKillsARecorderThatIgnoresInterrupt(t *testing.T) {
 	output := filepath.Join(t.TempDir(), "talk.mov")
 	stubborn := writeFakeRecorder(t, "trap '' INT\nprintf ready > \"$last.ready\"\nsleep 60 &\nwait $!\n")
 
-	previousGrace := killGrace
-	killGrace = 200 * time.Millisecond
-	t.Cleanup(func() { killGrace = previousGrace })
+	previousGrace := KillGrace
+	KillGrace = 200 * time.Millisecond
+	t.Cleanup(func() { KillGrace = previousGrace })
 
 	session, err := Start(Options{Command: stubborn, OutputPath: output, Display: 1})
 	if err != nil {

@@ -10,9 +10,12 @@ import (
 	"time"
 )
 
-// killGrace is how long a recorder gets to finalize its file after being
-// interrupted, before it is killed. A variable so tests can shorten it.
-var killGrace = 5 * time.Second
+// KillGrace is how long a recorder gets to finalize its file after being
+// interrupted, before it is killed. Callers that bound their own shutdown
+// must leave at least this long for a recording to finish, or they abandon
+// a recorder that was still legitimately writing and truncate the file.
+// A variable so tests can shorten it.
+var KillGrace = 5 * time.Second
 
 // Session is one running recorder process.
 type Session struct {
@@ -97,7 +100,7 @@ func (s *Session) Stop() (Result, error) {
 }
 
 // stop does the actual interrupting and waiting. screencapture writes a
-// playable .mov on SIGINT; a recorder that has not exited within killGrace
+// playable .mov on SIGINT; a recorder that has not exited within KillGrace
 // is killed, and the result is marked truncated. Stopping an already-exited
 // session measures what it left behind. A recorder that exits on its own in
 // the window between the done check and the signal makes Signal return
@@ -115,7 +118,7 @@ func (s *Session) stop() (Result, error) {
 
 		select {
 		case <-s.done:
-		case <-time.After(killGrace):
+		case <-time.After(KillGrace):
 			_ = s.command.Process.Kill()
 			<-s.done
 			truncated = true
