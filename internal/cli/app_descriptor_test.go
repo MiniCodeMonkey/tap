@@ -4,13 +4,16 @@ import (
 	"bufio"
 	"fmt"
 	"io"
+	"log"
 	"net"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/fatih/color"
 	"golang.org/x/sys/unix"
 )
 
@@ -261,71 +264,68 @@ func TestAppDevQuitsAfterAbortedPresentationRequestsWithTheLogUnread(t *testing.
 	app.requireCleanProtocol()
 }
 
-// TestAppModeTakesTheStandardDescriptorsAway is the one test worth
-// keeping about the mechanism rather than about a symptom: it fails if
-// the redirect is removed. The four tests above would each go on failing
-// too, but they take a subprocess and a minute between them, and this one
-// says in one place what the property is.
-//
-// It stands two files in for the streams an app reads. The protocol is a
-// file, so the test can read back exactly what arrived on it. The log is
-// a pipe nobody reads and nobody ever will, which is what an app that
-// stopped draining its log panel looks like from the inside of tap.
-//
-// Two things are checked. Standard output and standard error must no
-// longer name the files they named, because a descriptor that is still
-// there is a descriptor a raw write can reach. And a raw write, in every
-// spelling, must return promptly however much of it there is: with the
-// descriptors taken away it lands in a pipe tap drains, and without them
-// it blocks on the app forever.
-//
-// What this cannot show from inside the test binary is the color
-// helpers and the log package, which hold the process's own standard
-// output and standard error rather than the values of os.Stdout and
-// os.Stderr, and the test cannot substitute the process's own without
-// swallowing go test's output. In a real run those are precisely the
-// descriptors that are taken away, and the subprocess tests above drive
-// the log package through internal/config and internal/server.
-func TestAppModeTakesTheStandardDescriptorsAway(t *testing.T) {
-	directory := t.TempDir()
-	protocolFile, err := os.Create(filepath.Join(directory, "stdout"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	logRead, logWrite, err := os.Pipe()
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() {
-		_ = logWrite.Close()
-		_ = logRead.Close()
-	})
-	realStandardOutput, realStandardError := os.Stdout, os.Stderr
-	os.Stdout, os.Stderr = protocolFile, logWrite
-	t.Cleanup(func() { os.Stdout, os.Stderr = realStandardOutput, realStandardError })
-	// Independent handles on what the two stand-ins point at now, so the
-	// test can ask later whether the descriptors still point there. A
-	// duplicate shares the open file, which is what os.SameFile compares.
-	protocolBefore, logBefore := duplicateOf(t, protocolFile), duplicateOf(t, logWrite)
+// appDescriptorChildEnv marks the re-execution of this test binary that
+// stands in for a tap process whose descriptors an --app run has taken
+// away. The mechanism takes the process's real standard output and
+// standard error, so the only place to observe it is a process whose real
+// standard output and standard error are the two streams an app gives
+// tap. Swapping the os.Stdout and os.Stderr variables inside this test
+// binary would measure two stand-ins instead, and a stand-in made by
+// os.Pipe carries a registration in the runtime's poller that no
+// descriptor an app hands tap has.
+const appDescriptorChildEnv = "TAP_APP_DESCRIPTORS_UNDER_THE_REDIRECT"
 
-	protocol, log, restore, err := claimStdoutForApp()
+// descriptorsUnderTheAppRedirect is the child half of the test below. Its
+// real standard output is a file, which is where the protocol has to end
+// up and nothing else may, and its real standard error is a pipe nobody
+// reads, which is what an app that stopped draining its log panel looks
+// like from the inside of tap. It reports why it failed on descriptor 3
+// and exits non-zero, because after the redirect there is nowhere else
+// left for it to say anything.
+func descriptorsUnderTheAppRedirect() {
+	report := os.NewFile(3, "report")
+	fail := func(format string, args ...any) {
+		fmt.Fprintf(report, format+"\n", args...)
+		os.Exit(4)
+	}
+	// Independent handles on what the two descriptors name now, so the
+	// child can ask later whether they still name it. A duplicate shares
+	// the open file, which is what os.SameFile compares.
+	protocolBefore, err := duplicateForComparison(1)
 	if err != nil {
-		t.Fatal(err)
+		fail("duplicating standard output: %v", err)
 	}
-	t.Cleanup(restore)
-	t.Cleanup(closeAppLog)
-	events := newAppEventWriter(protocol, log)
-
-	if sameOpenFile(t, os.Stdout, protocolBefore) {
-		t.Error("standard output still names the file it named, so a raw write can still reach it")
-	}
-	if sameOpenFile(t, os.Stderr, logBefore) {
-		t.Error("standard error still names the app's log pipe, so a raw write can still block on the app")
+	logBefore, err := duplicateForComparison(2)
+	if err != nil {
+		fail("duplicating standard error: %v", err)
 	}
 
-	// Every spelling a guard that matches syntax has to be told about,
-	// and more of them than the app's log pipe holds. A pipe takes about
-	// 64 KB before a write to it blocks.
+	protocol, appLog, restore, err := claimStdoutForApp()
+	if err != nil {
+		fail("claimStdoutForApp: %v", err)
+	}
+	events := newAppEventWriter(protocol, appLog)
+
+	same, err := namesTheSameFile(os.Stdout, protocolBefore)
+	if err != nil {
+		fail("comparing standard output: %v", err)
+	}
+	if same {
+		fail("standard output still names the file it named, so a raw write can still reach it")
+	}
+	same, err = namesTheSameFile(os.Stderr, logBefore)
+	if err != nil {
+		fail("comparing standard error: %v", err)
+	}
+	if same {
+		fail("standard error still names the app's log pipe, so a raw write can still block on the app")
+	}
+
+	// Every spelling a guard that matches syntax has to be told about, and
+	// more of them than the app's log pipe holds. The colour helpers and
+	// the log package are in the list because they hold the process's own
+	// standard output and standard error, captured at process start, and
+	// those are exactly the descriptors the redirect takes.
 	written := make(chan struct{})
 	go func() {
 		defer close(written)
@@ -335,12 +335,15 @@ func TestAppModeTakesTheStandardDescriptorsAway(t *testing.T) {
 			_, _ = io.WriteString(os.Stderr, "an io.WriteString nobody is reading\n")
 			alias := os.Stderr
 			fmt.Fprintln(alias, "a write through an alias nobody is reading")
+			_, _ = color.New(color.FgRed).Println("a colour helper on standard output nobody is reading")
+			_, _ = color.New(color.FgRed).Fprintln(color.Error, "a colour helper on standard error nobody is reading")
+			log.Println("the log package nobody is reading")
 		}
 	}()
 	select {
 	case <-written:
-	case <-time.After(30 * time.Second):
-		t.Fatal("raw writes to standard output and standard error blocked on an app that is not reading its log pipe, so the descriptors were not taken away")
+	case <-time.After(appDescriptorFloodBound):
+		fail("raw writes to standard output and standard error blocked on an app that is not reading its log pipe, so the descriptors were not taken away")
 	}
 
 	events.emit(appReadyEvent{Type: appEventReady, Port: 1, Token: "t", Launch: "l", Presenter: "p"})
@@ -348,12 +351,104 @@ func TestAppModeTakesTheStandardDescriptorsAway(t *testing.T) {
 	restore()
 	closeAppLog()
 
-	if !sameOpenFile(t, os.Stdout, protocolBefore) {
-		t.Error("restore did not give standard output back")
+	same, err = namesTheSameFile(os.Stdout, protocolBefore)
+	if err != nil {
+		fail("comparing standard output after restore: %v", err)
 	}
-	if !sameOpenFile(t, os.Stderr, logBefore) {
-		t.Error("restore did not give standard error back")
+	if !same {
+		fail("restore did not give standard output back")
 	}
+	same, err = namesTheSameFile(os.Stderr, logBefore)
+	if err != nil {
+		fail("comparing standard error after restore: %v", err)
+	}
+	if !same {
+		fail("restore did not give standard error back")
+	}
+	fmt.Fprintln(report, "every raw write returned and both descriptors came back")
+	os.Exit(0)
+}
+
+// appDescriptorFloodBound is how long the flood of raw writes has to
+// finish in. With the descriptors taken away every one of them lands in a
+// pipe tap drains and the flood takes milliseconds; without them the
+// first write that fills the app's log pipe waits for as long as the app
+// lives, so anything short of the app's lifetime tells the two apart.
+const appDescriptorFloodBound = 30 * time.Second
+
+// TestAppModeTakesTheStandardDescriptorsAway is the one test worth
+// keeping about the mechanism rather than about a symptom: it fails if
+// the redirect is removed. The four tests above would each go on failing
+// too, but they take a subprocess and a minute between them, and this one
+// says in one place what the property is.
+//
+// It runs the test binary again with the two streams an app gives tap:
+// standard output a file, so the test can read back exactly what arrived
+// on it, and standard error a pipe nobody reads and nobody ever will.
+// Those are the process's real descriptors, which is what the mechanism
+// takes and what every writer in the process, including the ones that
+// captured standard output and standard error at process start, is
+// holding.
+//
+// Three things are checked. Standard output and standard error must no
+// longer name the files they named, because a descriptor that is still
+// there is a descriptor a raw write can reach. A raw write, in every
+// spelling, must return promptly however much of it there is: with the
+// descriptors taken away it lands in a pipe tap drains, and without them
+// it blocks on the app forever. And the file standing in for the app's
+// protocol stream must hold the ready line and nothing else, so a
+// spelling that escaped the redirect and printed on standard output is
+// caught even if it never blocked.
+func TestAppModeTakesTheStandardDescriptorsAway(t *testing.T) {
+	if os.Getenv(appDescriptorChildEnv) != "" {
+		descriptorsUnderTheAppRedirect()
+		return
+	}
+	if testing.Short() {
+		t.Skip("skipping subprocess test in short mode")
+	}
+	directory := t.TempDir()
+	protocolFile, err := os.Create(filepath.Join(directory, "stdout"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	reportFile, err := os.Create(filepath.Join(directory, "report"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The app's log stream. The read end is held open and never read for
+	// the whole run, which is what wedges it, and closing it early would
+	// turn the wedge into a broken pipe instead.
+	logRead, logWrite, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	command := exec.Command(os.Args[0], "-test.run=^TestAppModeTakesTheStandardDescriptorsAway$")
+	command.Env = append(os.Environ(), appDescriptorChildEnv+"=1")
+	command.Stdout = protocolFile
+	command.Stderr = logWrite
+	command.ExtraFiles = []*os.File{reportFile}
+	if err := command.Start(); err != nil {
+		t.Fatal(err)
+	}
+	_ = logWrite.Close()
+	t.Cleanup(func() { _ = logRead.Close() })
+
+	exited := make(chan error, 1)
+	go func() { exited <- command.Wait() }()
+	var waitErr error
+	select {
+	case waitErr = <-exited:
+	case <-time.After(appDescriptorFloodBound + 30*time.Second):
+		_ = command.Process.Kill()
+		t.Fatal("the child never exited, so a raw write to a descriptor the redirect was supposed to have taken away is still waiting on an app that is not reading its log pipe")
+	}
+	reason, _ := os.ReadFile(reportFile.Name())
+	if waitErr != nil {
+		t.Fatalf("the process under the redirect failed: %v\n%s", waitErr, reason)
+	}
+	t.Logf("%s", reason)
+
 	protocolText, err := os.ReadFile(protocolFile.Name())
 	if err != nil {
 		t.Fatal(err)
@@ -363,30 +458,28 @@ func TestAppModeTakesTheStandardDescriptorsAway(t *testing.T) {
 	}
 }
 
-// duplicateOf is a second descriptor on whatever file names now, which
-// keeps pointing there when file itself is pointed somewhere else.
-func duplicateOf(t *testing.T, file *os.File) *os.File {
-	t.Helper()
-	descriptor, err := unix.Dup(int(file.Fd()))
+// duplicateForComparison is a second descriptor on whatever the given
+// descriptor names now, which keeps naming it when the descriptor itself
+// is pointed somewhere else. It is close-on-exec so that nothing tap
+// starts inherits a way back to the streams the redirect took.
+func duplicateForComparison(descriptor int) (*os.File, error) {
+	duplicate, err := unix.FcntlInt(uintptr(descriptor), unix.F_DUPFD_CLOEXEC, 0)
 	if err != nil {
-		t.Fatal(err)
+		return nil, err
 	}
-	duplicate := os.NewFile(uintptr(descriptor), file.Name())
-	t.Cleanup(func() { _ = duplicate.Close() })
-	return duplicate
+	return os.NewFile(uintptr(duplicate), "duplicate"), nil
 }
 
-// sameOpenFile reports whether two descriptors name the same file, which
-// is how this test asks whether a descriptor was replaced.
-func sameOpenFile(t *testing.T, one, other *os.File) bool {
-	t.Helper()
+// namesTheSameFile reports whether two descriptors name the same file,
+// which is how this test asks whether a descriptor was replaced.
+func namesTheSameFile(one, other *os.File) (bool, error) {
 	oneInfo, err := one.Stat()
 	if err != nil {
-		t.Fatal(err)
+		return false, err
 	}
 	otherInfo, err := other.Stat()
 	if err != nil {
-		t.Fatal(err)
+		return false, err
 	}
-	return os.SameFile(oneInfo, otherInfo)
+	return os.SameFile(oneInfo, otherInfo), nil
 }

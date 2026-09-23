@@ -215,6 +215,25 @@ func duplicateCloseOnExec(descriptor int) (int, error) {
 // behind, which is the same load under which the bounded writer is
 // already dropping, and a log line is advisory. What it buys is that the
 // process's death never waits for anything.
+//
+// There is one write the redirect cannot bound, and it is the reason
+// nothing pollable may sit on descriptor 1 or 2. A write through an
+// *os.File that Go has registered with its runtime poller waits inside
+// the poller when the destination is full, and that registration follows
+// the open file description the file was made from, not the descriptor
+// number. Pointing the number at the drained pipe with dup2 therefore
+// leaves the registration on the file the number used to name. On Linux
+// epoll holds that description itself, so the write waits for the app's
+// unread log pipe to become writable and never returns; macOS resolves
+// the same wait by descriptor number, so the write is woken by the new
+// destination and lands. tap is clear of this because nothing puts a
+// poller-registered file on either descriptor: os.Stdout and os.Stderr
+// are os.NewFile over the blocking pipes an app hands tap, which Go
+// leaves unpollable, so a write to them that finds the pipe full gets
+// EAGAIN back as an error and returns. Files that are pollable, os.Pipe's
+// ends among them, belong anywhere but descriptor 1 and 2, and the write
+// end above is reached only through the two descriptors dup2 points at
+// it, never through the *os.File os.Pipe returned.
 func descriptorOf(file *os.File) (int, error) {
 	connection, err := file.SyscallConn()
 	if err != nil {
