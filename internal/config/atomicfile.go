@@ -1,10 +1,24 @@
 package config
 
 import (
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 )
+
+// describeFileError strips the temporary file's own name out of an error
+// from the os package, keeping only the underlying reason (permission
+// denied, no space left, and so on). The person who asked for a deck to be
+// written never created tap's scratch file and cannot act on its name.
+func describeFileError(err error) error {
+	var pathErr *fs.PathError
+	if errors.As(err, &pathErr) {
+		return pathErr.Err
+	}
+	return err
+}
 
 // WriteFileAtomically writes content to a new temporary file, then renames
 // it into place, so a crash, a full disk or a killed process mid-write
@@ -31,7 +45,7 @@ func WriteFileAtomically(path string, content []byte, perm os.FileMode) error {
 	dir := filepath.Dir(target)
 	tempFile, err := os.CreateTemp(dir, ".tap-*.tmp")
 	if err != nil {
-		return fmt.Errorf("failed to create temp file: %w", err)
+		return fmt.Errorf("failed to write %s: %w", path, describeFileError(err))
 	}
 	tempPath := tempFile.Name()
 	removeTemp := true
@@ -43,16 +57,16 @@ func WriteFileAtomically(path string, content []byte, perm os.FileMode) error {
 
 	if _, err := tempFile.Write(content); err != nil {
 		tempFile.Close()
-		return fmt.Errorf("failed to write temp file: %w", err)
+		return fmt.Errorf("failed to write %s: %w", path, describeFileError(err))
 	}
 	if err := tempFile.Close(); err != nil {
-		return fmt.Errorf("failed to close temp file: %w", err)
+		return fmt.Errorf("failed to write %s: %w", path, describeFileError(err))
 	}
 	if err := os.Chmod(tempPath, perm); err != nil {
-		return fmt.Errorf("failed to set file permissions: %w", err)
+		return fmt.Errorf("failed to write %s: %w", path, describeFileError(err))
 	}
 	if err := os.Rename(tempPath, target); err != nil {
-		return fmt.Errorf("failed to replace file: %w", err)
+		return fmt.Errorf("failed to write %s: %w", path, describeFileError(err))
 	}
 	removeTemp = false
 	return nil

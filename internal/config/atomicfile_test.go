@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -166,5 +167,30 @@ func TestWriteFileAtomicallyRemovesTheTempFileWhenTheRenameFails(t *testing.T) {
 		if entry.Name() != "not-a-file" {
 			t.Errorf("stray temp file left behind: %s", entry.Name())
 		}
+	}
+}
+
+func TestWriteFileAtomicallyNamesTheDeckNotTheScratchFileOnFailure(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "deck.md")
+	if err := os.WriteFile(path, []byte("old"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(dir, 0o500); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		os.Chmod(dir, 0o755)
+	})
+
+	err := WriteFileAtomically(path, []byte("new"), 0o640)
+	if err == nil {
+		t.Fatal("WriteFileAtomically() error = nil, want a permission error")
+	}
+	if strings.Contains(err.Error(), ".tap-") {
+		t.Errorf("error = %q, leaks tap's scratch file name", err.Error())
+	}
+	if !strings.Contains(err.Error(), path) {
+		t.Errorf("error = %q, want it to name %q", err.Error(), path)
 	}
 }
