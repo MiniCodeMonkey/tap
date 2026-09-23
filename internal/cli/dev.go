@@ -177,7 +177,7 @@ func runDevServer(options serverOptions) (err error) {
 			port, portExplicit = 0, true
 		}
 		stdout, restoreStdout := claimStdoutForApp()
-		appEvents = newAppEventWriter(stdout)
+		appEvents = newAppEventWriter(stdout, os.Stderr)
 		defer func() {
 			if err != nil {
 				_, code, _ := classify(err)

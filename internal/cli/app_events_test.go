@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -37,7 +38,7 @@ func (log *eventLog) Write(data []byte) (int, error) {
 func newTestEvents(t *testing.T) (*appEventWriter, *eventLog) {
 	t.Helper()
 	log := &eventLog{lines: make(chan map[string]any, 256)}
-	events := newAppEventWriter(log)
+	events := newAppEventWriter(log, io.Discard)
 	t.Cleanup(events.close)
 	return events, log
 }
@@ -84,7 +85,7 @@ func (log *eventLog) drainHas(eventType string) bool {
 
 func TestAppEventWriterWritesWholeLinesFromManyGoroutines(t *testing.T) {
 	var output bytes.Buffer
-	writer := newAppEventWriter(&output)
+	writer := newAppEventWriter(&output, io.Discard)
 	var group sync.WaitGroup
 	for sender := range 20 {
 		group.Add(1)
@@ -112,7 +113,7 @@ func TestAppEventWriterWritesWholeLinesFromManyGoroutines(t *testing.T) {
 
 func TestAppEventWriterDropsEventsAfterClose(t *testing.T) {
 	var output bytes.Buffer
-	writer := newAppEventWriter(&output)
+	writer := newAppEventWriter(&output, io.Discard)
 	writer.emit(appSlideEvent{Type: appEventSlide, Slide: 1})
 	writer.close()
 	writer.emit(appSlideEvent{Type: appEventSlide, Slide: 2})
@@ -131,7 +132,7 @@ func (writer *failingWriter) Write([]byte) (int, error) {
 
 func TestAppEventWriterStopsWritingAfterAFailedWrite(t *testing.T) {
 	output := &failingWriter{}
-	writer := newAppEventWriter(output)
+	writer := newAppEventWriter(output, io.Discard)
 	for range 3 {
 		writer.emit(appSlideEvent{Type: appEventSlide, Slide: 1})
 	}
@@ -180,7 +181,7 @@ func TestClaimStdoutForAppSendsEverythingElseToStderr(t *testing.T) {
 	t.Cleanup(func() { os.Stdout, os.Stderr = realStdout, realStderr })
 
 	stdout, restore := claimStdoutForApp()
-	writer := newAppEventWriter(stdout)
+	writer := newAppEventWriter(stdout, os.Stderr)
 	fmt.Println("plain text")
 	Success("colored text\n")
 	Info("more text\n")
@@ -220,7 +221,7 @@ func (writer *blockedWriter) Write(data []byte) (int, error) {
 func TestCloseAppEventWriterGivesUpOnStandardOutputThatNeverDrains(t *testing.T) {
 	output := &blockedWriter{entered: make(chan struct{}), release: make(chan struct{})}
 	defer close(output.release)
-	events := newAppEventWriter(output)
+	events := newAppEventWriter(output, io.Discard)
 	events.emit(appErrorEvent{Type: appEventError, Code: appErrorBusy, Message: "the first line, which blocks"})
 	<-output.entered
 	events.emit(appErrorEvent{Type: appEventError, Code: appErrorBusy, Message: "the line that never gets out"})
@@ -243,7 +244,7 @@ func TestCloseAppEventWriterGivesUpOnStandardOutputThatNeverDrains(t *testing.T)
 
 func TestCloseAppEventWriterWritesTheQueuedLines(t *testing.T) {
 	output := &appLogBuffer{}
-	events := newAppEventWriter(output)
+	events := newAppEventWriter(output, io.Discard)
 	events.emit(appErrorEvent{Type: appEventError, Code: appErrorBusy, Message: "on its way out"})
 	var stderr bytes.Buffer
 	closeAppEventWriter(events, &stderr)
@@ -252,5 +253,74 @@ func TestCloseAppEventWriterWritesTheQueuedLines(t *testing.T) {
 	}
 	if stderr.Len() != 0 {
 		t.Errorf("stderr = %q, want nothing", stderr.String())
+	}
+}
+
+// TestAppEventWriterDropsEventsWhenStandardOutputIsBlocked holds the
+// writer goroutine inside one Write, fills the queue behind it, and then
+// emits more. Every emit has to return: a writer whose job is telling the
+// app what happened must never be the thing that stops the app hearing
+// anything, and the quit path itself emits.
+func TestAppEventWriterDropsEventsWhenStandardOutputIsBlocked(t *testing.T) {
+	output := &blockedWriter{entered: make(chan struct{}), release: make(chan struct{})}
+	defer close(output.release)
+	log := &appLogBuffer{}
+	writer := newAppEventWriter(output, log)
+
+	writer.emit(appErrorEvent{Type: appEventError, Code: appErrorBusy, Message: "the line the writer is stuck on"})
+	<-output.entered
+
+	const extra = 5
+	emitted := make(chan struct{})
+	go func() {
+		defer close(emitted)
+		for index := range appEventQueueSize + extra {
+			writer.emit(appErrorEvent{Type: appEventError, Code: appErrorBusy, Message: fmt.Sprintf("line %d", index)})
+		}
+	}()
+	select {
+	case <-emitted:
+	case <-time.After(3 * time.Second):
+		t.Fatal("emit did not return on a full queue, so every caller of emit hangs once the app stops reading standard output")
+	}
+
+	if count := strings.Count(log.String(), "\n"); count != 1 {
+		t.Errorf("standard error has %d lines, want one line for the whole run of drops:\n%s", count, log)
+	}
+	if !strings.Contains(log.String(), "dropping app events") {
+		t.Errorf("standard error = %q, want the drops named", log)
+	}
+}
+
+// TestAppEventWriterReportsHowManyEventsItDropped checks the other end of
+// a run of drops: one line when the drops start, one when standard output
+// takes events again, and the count of what was lost in between.
+func TestAppEventWriterReportsHowManyEventsItDropped(t *testing.T) {
+	output := &blockedWriter{entered: make(chan struct{}), release: make(chan struct{})}
+	log := &appLogBuffer{}
+	writer := newAppEventWriter(output, log)
+
+	writer.emit(appErrorEvent{Type: appEventError, Code: appErrorBusy, Message: "the line the writer is stuck on"})
+	<-output.entered
+	const extra = 5
+	for index := range appEventQueueSize + extra {
+		writer.emit(appErrorEvent{Type: appEventError, Code: appErrorBusy, Message: fmt.Sprintf("line %d", index)})
+	}
+
+	// Let the queue drain, so the next emit finds room and ends the run.
+	close(output.release)
+	deadline := time.Now().Add(10 * time.Second)
+	for len(writer.lines) > 0 && time.Now().Before(deadline) {
+		time.Sleep(5 * time.Millisecond)
+	}
+	writer.emit(appErrorEvent{Type: appEventError, Code: appErrorBusy, Message: "after the block"})
+	writer.close()
+
+	want := fmt.Sprintf("%d app events were dropped", extra)
+	if !strings.Contains(log.String(), want) {
+		t.Errorf("standard error = %q, want %q", log, want)
+	}
+	if count := strings.Count(log.String(), "\n"); count != 2 {
+		t.Errorf("standard error has %d lines, want two: the drops starting and the count once they stop:\n%s", count, log)
 	}
 }

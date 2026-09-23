@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"os"
 	"sync"
 	"time"
 
@@ -126,16 +125,24 @@ type appErrorEvent struct {
 // the order the events were queued, so lines never interleave.
 type appEventWriter struct {
 	output io.Writer
+	log    io.Writer
 	lines  chan []byte
 	done   chan struct{}
 	mu     sync.RWMutex
 	closed bool
+	// dropMu guards dropped, the length of the run of events emit has
+	// thrown away since the queue last had room for one.
+	dropMu  sync.Mutex
+	dropped int
 }
 
-// newAppEventWriter starts the writer goroutine for output.
-func newAppEventWriter(output io.Writer) *appEventWriter {
+// newAppEventWriter starts the writer goroutine for output. log is where
+// the writer reports its own trouble, which in --app mode is standard
+// error: an event saying standard output is broken has nowhere to go.
+func newAppEventWriter(output, log io.Writer) *appEventWriter {
 	writer := &appEventWriter{
 		output: output,
+		log:    log,
 		lines:  make(chan []byte, appEventQueueSize),
 		done:   make(chan struct{}),
 	}
@@ -154,16 +161,26 @@ func (writer *appEventWriter) run() {
 			// The app has gone. tap quits when its standard input closes,
 			// so the remaining events have nowhere to go.
 			failed = true
-			fmt.Fprintf(os.Stderr, "Standard output closed: %v\n", err)
+			fmt.Fprintf(writer.log, "Standard output closed: %v\n", err)
 		}
 	}
 }
 
-// emit queues event as one JSON line. It does nothing after close.
+// emit queues event as one JSON line. It does nothing after close, and it
+// never blocks: a full queue means the writer goroutine is stuck inside a
+// write to standard output, which happens when the app has stopped
+// reading its child's pipe. Waiting for room there would stop whoever
+// emitted, and the quit path emits, so the process that is trying to
+// leave would be held by the writer whose whole job is telling the app
+// what happened. The event is dropped instead, and the drop is named on
+// standard error.
+//
+// The queue holds appEventQueueSize lines, which a healthy run never
+// fills, so a drop always means the app is not reading.
 func (writer *appEventWriter) emit(event any) {
 	line, err := json.Marshal(event)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Encoding an app event: %v\n", err)
+		fmt.Fprintf(writer.log, "Encoding an app event: %v\n", err)
 		return
 	}
 	line = append(line, '\n')
@@ -173,7 +190,40 @@ func (writer *appEventWriter) emit(event any) {
 	if writer.closed {
 		return
 	}
-	writer.lines <- line
+	select {
+	case writer.lines <- line:
+		writer.noteQueued()
+	default:
+		writer.noteDropped()
+	}
+}
+
+// noteDropped counts one dropped event and names the run on standard
+// error once, at its first drop. A stuck standard output drops every
+// event that follows, so a line per drop would bury the reason under
+// thousands of copies of itself. One line opens the run and one closes it
+// (see noteQueued), whatever its length.
+func (writer *appEventWriter) noteDropped() {
+	writer.dropMu.Lock()
+	writer.dropped++
+	first := writer.dropped == 1
+	writer.dropMu.Unlock()
+	if first {
+		fmt.Fprintln(writer.log, "Standard output is not being read: dropping app events.")
+	}
+}
+
+// noteQueued ends a run of drops, reporting how many events were lost, so
+// the app's log says what it missed rather than only that it missed
+// something.
+func (writer *appEventWriter) noteQueued() {
+	writer.dropMu.Lock()
+	dropped := writer.dropped
+	writer.dropped = 0
+	writer.dropMu.Unlock()
+	if dropped > 0 {
+		fmt.Fprintf(writer.log, "Standard output is being read again: %d app events were dropped.\n", dropped)
+	}
 }
 
 // close stops taking events, and returns once every queued line is
