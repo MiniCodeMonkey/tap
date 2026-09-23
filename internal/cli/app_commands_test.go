@@ -75,3 +75,78 @@ func TestReadAppCommandsDropsACommandWhenTheQueueIsFull(t *testing.T) {
 		t.Errorf("error = %v, want busy", event)
 	}
 }
+
+func TestReadAppCommandsSkipsAnOversizedLineAndKeepsReading(t *testing.T) {
+	events, log := newTestEvents(t)
+	questions := newAppQuestions(events)
+	huge := strings.Repeat("x", appCommandLineLimit+1)
+	input := strings.NewReader(huge + "\n" + `{"type":"reload"}` + "\n")
+	commands := make(chan appCommand, appCommandQueueSize)
+	readAppCommands(input, questions, events, commands)
+
+	if event := log.next(t, appEventError); event["code"] != appErrorInvalidCommand {
+		t.Errorf("error code = %v, want %s", event["code"], appErrorInvalidCommand)
+	}
+	var got []appCommand
+	for command := range commands {
+		got = append(got, command)
+	}
+	if len(got) != 1 || got[0].Type != appCommandReload {
+		t.Fatalf("commands = %+v, want just reload behind the oversized line", got)
+	}
+}
+
+func TestReadAppCommandsReportsExactlyOneErrorPerOversizedLine(t *testing.T) {
+	events, log := newTestEvents(t)
+	questions := newAppQuestions(events)
+	huge := strings.Repeat("y", appCommandLineLimit*2)
+	input := strings.NewReader(huge + "\n")
+	commands := make(chan appCommand, appCommandQueueSize)
+	readAppCommands(input, questions, events, commands)
+
+	if event := log.next(t, appEventError); event["code"] != appErrorInvalidCommand {
+		t.Errorf("error code = %v, want %s", event["code"], appErrorInvalidCommand)
+	}
+	if log.drainHas(appEventError) {
+		t.Error("a single oversized line produced more than one error event")
+	}
+}
+
+func TestReadAppCommandsDoesNotExecuteTheTailOfAnOversizedLine(t *testing.T) {
+	events, log := newTestEvents(t)
+	questions := newAppQuestions(events)
+	tail := `{"type":"reload"}`
+	padding := strings.Repeat("z", appCommandLineLimit+1-len(tail))
+	input := strings.NewReader(padding + tail + "\n")
+	commands := make(chan appCommand, appCommandQueueSize)
+	readAppCommands(input, questions, events, commands)
+
+	if event := log.next(t, appEventError); event["code"] != appErrorInvalidCommand {
+		t.Errorf("error code = %v, want %s", event["code"], appErrorInvalidCommand)
+	}
+	if _, open := <-commands; open {
+		t.Error("the tail of the oversized line was queued as a command, but it must be discarded whole")
+	}
+}
+
+func TestReadAppCommandsSkipsSeveralOversizedLinesInARow(t *testing.T) {
+	events, log := newTestEvents(t)
+	questions := newAppQuestions(events)
+	huge := strings.Repeat("w", appCommandLineLimit+1)
+	input := strings.NewReader(huge + "\n" + huge + "\n" + huge + "\n" + `{"type":"reload"}` + "\n")
+	commands := make(chan appCommand, appCommandQueueSize)
+	readAppCommands(input, questions, events, commands)
+
+	for range 3 {
+		if event := log.next(t, appEventError); event["code"] != appErrorInvalidCommand {
+			t.Errorf("error code = %v, want %s", event["code"], appErrorInvalidCommand)
+		}
+	}
+	var got []appCommand
+	for command := range commands {
+		got = append(got, command)
+	}
+	if len(got) != 1 || got[0].Type != appCommandReload {
+		t.Fatalf("commands = %+v, want just reload after three oversized lines", got)
+	}
+}

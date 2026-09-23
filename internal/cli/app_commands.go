@@ -38,41 +38,85 @@ type appCommand struct {
 // readAppCommands reads one JSON command per line from input until it
 // ends. An answer goes straight to questions, so a question can be
 // answered while the control loop waits on it. Every other command goes
-// to commands. At the end of input, every question ends unanswered and
-// commands closes, which tells the control loop to quit.
+// to commands. A line longer than appCommandLineLimit costs only that
+// line: it is reported as one appErrorInvalidCommand event and the rest
+// of it is discarded, so nothing further down the same line is ever
+// parsed as a command, and the next line is read normally. At the end of
+// input, every question ends unanswered and commands closes, which tells
+// the control loop to quit.
 func readAppCommands(input io.Reader, questions *appQuestions, events *appEventWriter, commands chan<- appCommand) {
 	defer close(commands)
 	defer questions.close()
 
-	scanner := bufio.NewScanner(input)
-	scanner.Buffer(make([]byte, 0, 64*1024), appCommandLineLimit)
-	for scanner.Scan() {
-		line := bytes.TrimSpace(scanner.Bytes())
-		if len(line) == 0 {
-			continue
+	reader := bufio.NewReaderSize(input, 64*1024)
+	for {
+		raw, oversized, err := readAppCommandLine(reader, appCommandLineLimit)
+		if oversized {
+			events.emit(appErrorEvent{Type: appEventError, Code: appErrorInvalidCommand, Message: fmt.Sprintf("line longer than %d bytes, dropped", appCommandLineLimit)})
+		} else {
+			handleAppCommandLine(raw, questions, events, commands)
 		}
-		var command appCommand
-		if err := json.Unmarshal(line, &command); err != nil || command.Type == "" {
-			events.emit(appErrorEvent{Type: appEventError, Code: appErrorInvalidCommand, Message: fmt.Sprintf("not a command: %.200s", line)})
-			continue
-		}
-		if command.Type == appCommandAnswer {
-			if err := questions.answer(command.ID, command.Value); err != nil {
-				code := appErrorInvalidAnswer
-				if errors.Is(err, errUnknownQuestion) {
-					code = appErrorUnknownQuestion
-				}
-				events.emit(appErrorEvent{Type: appEventError, Code: code, Message: err.Error()})
+		if err != nil {
+			if !errors.Is(err, io.EOF) {
+				fmt.Fprintf(os.Stderr, "Reading commands from standard input: %v\n", err)
 			}
-			continue
-		}
-		select {
-		case commands <- command:
-		default:
-			events.emit(appErrorEvent{Type: appEventError, Code: appErrorBusy, Message: fmt.Sprintf("too many commands at once, so %s was dropped", command.Type)})
+			return
 		}
 	}
-	if err := scanner.Err(); err != nil {
-		fmt.Fprintf(os.Stderr, "Reading commands from standard input: %v\n", err)
+}
+
+// readAppCommandLine reads one line from reader, whole. When the line is
+// longer than limit, oversized is true, line is empty, and the rest of
+// the oversized line, up to and including its newline, is still consumed
+// from reader so it can never be mistaken for the start of the next
+// line. err is io.EOF once there are no more lines.
+func readAppCommandLine(reader *bufio.Reader, limit int) (line []byte, oversized bool, err error) {
+	var buffer []byte
+	for {
+		chunk, isPrefix, readErr := reader.ReadLine()
+		if readErr != nil {
+			return nil, false, readErr
+		}
+		if !oversized {
+			if len(buffer)+len(chunk) > limit {
+				oversized = true
+				buffer = nil
+			} else {
+				buffer = append(buffer, chunk...)
+			}
+		}
+		if !isPrefix {
+			return buffer, oversized, nil
+		}
+	}
+}
+
+// handleAppCommandLine parses one already-read line as a command and
+// routes it, exactly as readAppCommands did inline before oversized
+// lines needed their own handling.
+func handleAppCommandLine(raw []byte, questions *appQuestions, events *appEventWriter, commands chan<- appCommand) {
+	line := bytes.TrimSpace(raw)
+	if len(line) == 0 {
+		return
+	}
+	var command appCommand
+	if err := json.Unmarshal(line, &command); err != nil || command.Type == "" {
+		events.emit(appErrorEvent{Type: appEventError, Code: appErrorInvalidCommand, Message: fmt.Sprintf("not a command: %.200s", line)})
+		return
+	}
+	if command.Type == appCommandAnswer {
+		if err := questions.answer(command.ID, command.Value); err != nil {
+			code := appErrorInvalidAnswer
+			if errors.Is(err, errUnknownQuestion) {
+				code = appErrorUnknownQuestion
+			}
+			events.emit(appErrorEvent{Type: appEventError, Code: code, Message: err.Error()})
+		}
+		return
+	}
+	select {
+	case commands <- command:
+	default:
+		events.emit(appErrorEvent{Type: appEventError, Code: appErrorBusy, Message: fmt.Sprintf("too many commands at once, so %s was dropped", command.Type)})
 	}
 }
