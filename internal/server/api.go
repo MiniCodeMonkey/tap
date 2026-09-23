@@ -22,16 +22,22 @@ import (
 // ExecuteRequest names one live code block of the loaded deck. Both
 // numbers count from 1: Slide is the slide's number in the deck, and Block
 // counts the live code blocks within that slide. tap runs the code the deck
-// holds there, never code sent by the page.
+// holds there, never code sent by the page. Revision is the deck's
+// revision (see ComputeRevision) the page had rendered when it sent the
+// request, so a reference resolved against a deck that has since changed
+// can be told apart from one still current; see
+// handleAPIExecute's revision check.
 type ExecuteRequest struct {
-	Slide int `json:"slide"`
-	Block int `json:"block"`
+	Slide    int    `json:"slide"`
+	Block    int    `json:"block"`
+	Revision string `json:"revision"`
 }
 
 // ExecuteResponse represents the response from code execution.
 type ExecuteResponse struct {
 	Output  string                   `json:"output,omitempty"`
 	Error   string                   `json:"error,omitempty"`
+	Code    string                   `json:"code,omitempty"`
 	Data    []map[string]interface{} `json:"data,omitempty"`
 	Success bool                     `json:"success"`
 }
@@ -60,6 +66,17 @@ const codeInBodyMessage = `/api/execute runs a live code block of the deck by re
 // notApprovedMessage answers a request for a driver this run does not
 // allow. The page shows "Not approved" for the same blocks.
 const notApprovedMessage = "Not approved: this deck may not run code with this driver. Approve it when tap dev or tap present asks at startup in a terminal, or pass --allow-code for this run."
+
+// staleRevisionErrorCode marks an ExecuteResponse refused because the
+// request's revision does not match the deck currently loaded, so the
+// frontend can tell this refusal apart from any other error and show its
+// own message rather than a generic one.
+const staleRevisionErrorCode = "stale_revision"
+
+// staleRevisionMessage answers a request whose revision does not match the
+// deck currently loaded: the slide and block numbers it names may now
+// point at different code than the page showed when it was rendered.
+const staleRevisionMessage = "The deck changed since this page loaded, so its Run buttons no longer match what is on screen. Reload the page and try again."
 
 // handleAPIExecute handles POST /api/execute: it runs one live code block
 // of the loaded deck, named by slide and block number.
@@ -104,6 +121,16 @@ func (s *Server) handleAPIExecute(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.Slide < 1 || req.Block < 1 {
 		writeExecuteError(w, http.StatusBadRequest, "slide and block are required, and both count from 1")
+		return
+	}
+	// A reference is only a slide and block number, so it stays meaningful
+	// only as long as the deck it was resolved against. The request must
+	// carry the revision the page had rendered when it sent the reference;
+	// a mismatch, including a missing revision, means the deck may have
+	// changed underneath it, so the block is refused rather than run on
+	// the chance the reference still names the same code.
+	if req.Revision != s.Revision() {
+		writeExecuteErrorWithCode(w, http.StatusConflict, staleRevisionErrorCode, staleRevisionMessage)
 		return
 	}
 
@@ -160,11 +187,20 @@ func (s *Server) handleAPIExecute(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// writeExecuteError writes a failed /api/execute response.
+// writeExecuteError writes a failed /api/execute response with no error
+// code: the frontend has no reason to branch on this failure beyond
+// showing the message.
 func writeExecuteError(w http.ResponseWriter, status int, message string) {
+	writeExecuteErrorWithCode(w, status, "", message)
+}
+
+// writeExecuteErrorWithCode writes a failed /api/execute response carrying
+// an error code the frontend can match on, distinct from message text that
+// may be reworded.
+func writeExecuteErrorWithCode(w http.ResponseWriter, status int, code, message string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(ExecuteResponse{Success: false, Error: message})
+	_ = json.NewEncoder(w).Encode(ExecuteResponse{Success: false, Error: message, Code: code})
 }
 
 // findLiveBlock returns live code block blockNumber of slide slideNumber,

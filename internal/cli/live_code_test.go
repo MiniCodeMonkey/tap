@@ -67,6 +67,25 @@ func startDevForLiveCode(t *testing.T, deckPath, configHome string, extra ...str
 	}
 }
 
+// fetchRevision returns the deck's current revision from
+// GET /api/presentation, the way the page reads it before sending a Run
+// button's request.
+func fetchRevision(t *testing.T, base string) string {
+	t.Helper()
+	response, err := http.Get(base + "/api/presentation")
+	if err != nil {
+		t.Fatalf("GET /api/presentation: %v", err)
+	}
+	defer response.Body.Close()
+	var result struct {
+		Revision string `json:"revision"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&result); err != nil {
+		t.Fatalf("decoding /api/presentation: %v", err)
+	}
+	return result.Revision
+}
+
 // postExecute sends body to /api/execute the way the Run button does, and
 // returns the status and the output or error text.
 func postExecute(t *testing.T, base, body string) (int, string) {
@@ -98,8 +117,9 @@ func TestDevRunsALiveShellBlockByReference(t *testing.T) {
 		t.Skip("skipping subprocess test in short mode")
 	}
 	base := startDevForLiveCode(t, writeLiveCodeDeck(t), t.TempDir(), "--allow-code")
+	revision := fetchRevision(t, base)
 
-	status, text := postExecute(t, base, `{"slide": 1, "block": 1}`)
+	status, text := postExecute(t, base, fmt.Sprintf(`{"slide": 1, "block": 1, "revision": %q}`, revision))
 	if status != http.StatusOK || !strings.Contains(text, "hello from tap") {
 		t.Errorf("the deck's block: status %d, output %q, want 200 and \"hello from tap\"", status, text)
 	}
@@ -116,8 +136,9 @@ func TestDevKeepsLiveCodeOffForAnUnapprovedDeck(t *testing.T) {
 	}
 	configHome := t.TempDir()
 	base := startDevForLiveCode(t, writeLiveCodeDeck(t), configHome)
+	revision := fetchRevision(t, base)
 
-	status, text := postExecute(t, base, `{"slide": 1, "block": 1}`)
+	status, text := postExecute(t, base, fmt.Sprintf(`{"slide": 1, "block": 1, "revision": %q}`, revision))
 	if status != http.StatusForbidden || !strings.Contains(text, "Not approved") {
 		t.Errorf("status %d, output %q, want 403 Not approved", status, text)
 	}
@@ -143,7 +164,8 @@ func TestDevRunsAnApprovedDeckWithoutATerminal(t *testing.T) {
 	}
 
 	base := startDevForLiveCode(t, deckPath, configHome)
-	status, text := postExecute(t, base, `{"slide": 1, "block": 1}`)
+	revision := fetchRevision(t, base)
+	status, text := postExecute(t, base, fmt.Sprintf(`{"slide": 1, "block": 1, "revision": %q}`, revision))
 	if status != http.StatusOK || !strings.Contains(text, "hello from tap") {
 		t.Errorf("status %d, output %q, want 200", status, text)
 	}

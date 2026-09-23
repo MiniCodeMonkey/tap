@@ -238,6 +238,75 @@ func TestExecuteRejectsAnUnapprovedDeck(t *testing.T) {
 	}
 }
 
+// TestExecuteRefusesAStaleReference reproduces the reviewer's scenario:
+// a reference is captured along with the revision it was rendered from,
+// then a live block is inserted above the target on the same slide, so
+// the same {slide, block} pair now names different code. Replaying the
+// old reference with the old revision must be refused rather than run.
+func TestExecuteRefusesAStaleReference(t *testing.T) {
+	s, test := executeServer(t, approvedTest)
+	s.SetRevision("rev-before")
+
+	// The ordinary case: the revision the page rendered from still
+	// matches, so the block the presenter can see is the block that runs.
+	status, response := postExecute(t, s, `{"slide": 2, "block": 1, "revision": "rev-before"}`)
+	if status != http.StatusOK || !response.Success || response.Output != "ran: echo one" {
+		t.Fatalf("ordinary case: status %d, response %+v", status, response)
+	}
+
+	// A live block is inserted above the target on the same slide (the
+	// deck reloads, as it does in tap dev while the author edits), so
+	// block 1 now names different code, and the revision changes with it.
+	presentation := liveDeck()
+	presentation.Slides[1].CodeBlocks = append(
+		[]transformer.TransformedCodeBlock{
+			{Language: "bash", Code: "echo SURPRISE", Driver: "test", Block: 1},
+		},
+		presentation.Slides[1].CodeBlocks...,
+	)
+	// Renumber the live blocks the way the transformer would: 1-based,
+	// live blocks only, in document order.
+	next := 1
+	for i := range presentation.Slides[1].CodeBlocks {
+		block := &presentation.Slides[1].CodeBlocks[i]
+		if block.Driver == "" {
+			continue
+		}
+		block.Block = next
+		next++
+	}
+	s.SetPresentation(presentation)
+	s.SetRevision("rev-after")
+
+	// Replaying the old reference with the old revision must be refused,
+	// not run against whatever now sits at that position.
+	status, response = postExecute(t, s, `{"slide": 2, "block": 1, "revision": "rev-before"}`)
+	if status != http.StatusConflict || response.Code != staleRevisionErrorCode {
+		t.Errorf("stale replay: status %d, response %+v", status, response)
+	}
+	if test.ranCode != "echo one" {
+		t.Errorf("stale replay ran %q, want the block to stay unrun (last real run was %q)", test.ranCode, "echo one")
+	}
+
+	// A request with no revision at all must also be refused.
+	status, response = postExecute(t, s, `{"slide": 2, "block": 1}`)
+	if status != http.StatusConflict || response.Code != staleRevisionErrorCode {
+		t.Errorf("missing revision: status %d, response %+v", status, response)
+	}
+
+	// A revision that never existed must also be refused.
+	status, response = postExecute(t, s, `{"slide": 2, "block": 1, "revision": "rev-that-never-existed"}`)
+	if status != http.StatusConflict || response.Code != staleRevisionErrorCode {
+		t.Errorf("unknown revision: status %d, response %+v", status, response)
+	}
+
+	// The current revision still runs the block now at that reference.
+	status, response = postExecute(t, s, `{"slide": 2, "block": 1, "revision": "rev-after"}`)
+	if status != http.StatusOK || !response.Success || response.Output != "ran: echo SURPRISE" {
+		t.Errorf("current revision: status %d, response %+v", status, response)
+	}
+}
+
 func TestExecuteWithNoPolicySetRunsNothing(t *testing.T) {
 	s := New(0)
 	registry := driver.NewRegistry()
