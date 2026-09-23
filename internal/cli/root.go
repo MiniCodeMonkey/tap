@@ -62,6 +62,15 @@ func execute(root *cobra.Command, args []string, stdout, stderr io.Writer) int {
 	root.SetOut(stdout)
 	root.SetErr(stderr)
 	command, err := root.ExecuteC()
+	// In --app mode standard error belongs to the bounded log writer, and
+	// it is still open here: the last line of the run goes through it,
+	// and it closes once that line is queued. A raw write on the statement
+	// before the exit is a write that can outlive the process the app is
+	// waiting on.
+	defer closeAppLog()
+	if appLog := appLogForFinalOutput(); appLog != nil {
+		stderr = appLog
+	}
 	if err == nil {
 		return exitOK
 	}

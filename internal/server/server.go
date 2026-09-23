@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"io"
 	"mime"
 	"net"
 	"net/http"
@@ -54,6 +55,11 @@ type Server struct {
 	allowedOrigins map[string]struct{}
 	// routes lists every pattern registered on mux, for Routes.
 	routes []string
+	// log is where a serving error is reported. It is standard error by
+	// default, and in --app mode the bounded writer that owns standard
+	// error, so this line cannot block on a log pipe the app is not
+	// draining. SetLog changes it before Start.
+	log io.Writer
 	// appAuth is the token of a tap --app run, which serveHTTP checks on
 	// every request outside audienceRoutes. It is nil outside --app mode.
 	appAuth *AppAuth
@@ -76,6 +82,7 @@ func NewWithHost(port int, host string) *Server {
 		mux:              http.NewServeMux(),
 		shutdownCh:       make(chan struct{}),
 		componentBundles: NewComponentBundleStore(),
+		log:              os.Stderr,
 	}
 
 	s.httpServer = &http.Server{
@@ -212,9 +219,12 @@ func (s *Server) Start() error {
 	s.mu.Unlock()
 
 	// Start serving in a goroutine
+	s.mu.RLock()
+	serveLog := s.log
+	s.mu.RUnlock()
 	go func() {
 		if err := s.httpServer.Serve(listener); err != nil && err != http.ErrServerClosed {
-			fmt.Fprintf(os.Stderr, "HTTP server error: %v\n", err)
+			fmt.Fprintf(serveLog, "HTTP server error: %v\n", err)
 		}
 	}()
 
@@ -324,6 +334,16 @@ func GeneratePresenterSessionToken() (string, error) {
 }
 
 // SetCustomThemePath sets the path to a custom CSS theme file.
+// SetLog points a serving error at log instead of standard error. In
+// --app mode that is the bounded log writer, which drops a line rather
+// than wait for an app that is not reading its child's log pipe. Call it
+// before Start.
+func (s *Server) SetLog(log io.Writer) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.log = log
+}
+
 func (s *Server) SetCustomThemePath(path string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

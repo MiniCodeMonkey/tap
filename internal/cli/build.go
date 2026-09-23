@@ -140,7 +140,7 @@ func runBuild(cmd *cobra.Command, args []string) error {
 	resolvedComponents, componentBuildErrs := buildComponents(pres, baseDir, true, false, "components/")
 	if len(componentBuildErrs) > 0 {
 		spinner.stop()
-		printComponentErrorsToStderr(componentBuildErrs)
+		printComponentErrors(os.Stderr, componentBuildErrs)
 		return reportedError(codeComponentBuild, componentErrorsError(componentBuildErrs))
 	}
 
@@ -180,7 +180,7 @@ func runBuild(cmd *cobra.Command, args []string) error {
 	// Stop spinner and show results
 	spinner.stop()
 
-	printComponentWarningsToStderr(componentWarnings(resolvedComponents))
+	printComponentWarnings(os.Stderr, componentWarnings(resolvedComponents))
 	for _, warning := range result.Warnings {
 		Warning("warning: %s\n", warning)
 	}

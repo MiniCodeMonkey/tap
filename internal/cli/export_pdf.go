@@ -151,12 +151,12 @@ func runExportPDF(cmd *cobra.Command, args []string) error {
 	// first so a warning line never lands mid-frame, then start it again
 	// (with the next step's message) once they are printed.
 	spinner.stop()
-	printLayoutWarningsToStderr(absPath, warnings)
+	printLayoutWarnings(os.Stderr, absPath, warnings)
 	if len(componentBuildErrs) > 0 {
-		printComponentErrorsToStderr(componentBuildErrs)
+		printComponentErrors(os.Stderr, componentBuildErrs)
 		return reportedError(codeComponentBuild, componentErrorsError(componentBuildErrs))
 	}
-	printComponentWarningsToStderr(componentBuildWarnings)
+	printComponentWarnings(os.Stderr, componentBuildWarnings)
 	spinner.start()
 
 	// Ensure server is cleaned up on exit

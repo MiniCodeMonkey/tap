@@ -13,6 +13,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/fatih/color"
+
 	"github.com/MiniCodeMonkey/tap/internal/slidelist"
 )
 
@@ -180,24 +182,34 @@ func TestClaimStdoutForAppSendsEverythingElseToStderr(t *testing.T) {
 	os.Stdout, os.Stderr = fakeStdout, fakeStderr
 	t.Cleanup(func() { os.Stdout, os.Stderr = realStdout, realStderr })
 
+	previousColorOutput, previousColorError := color.Output, color.Error
 	stdout, log, restore := claimStdoutForApp()
 	writer := newAppEventWriter(stdout, log)
 	fmt.Println("plain text")
 	Success("colored text\n")
 	Info("more text\n")
+	// Warning and Error write to color.Error, which claimStdoutForApp
+	// redirects too: a render path produces warnings by the screenful,
+	// and every one of them has to go through the bounded writer.
+	Warning("warned text\n")
+	Errorln("failed text")
 	writer.emit(appReadyEvent{Type: appEventReady, Port: 1, Token: "t", Launch: "l", Presenter: "p"})
 	writer.close()
 	restore()
+	closeAppLog()
 
 	if os.Stdout != fakeStdout {
 		t.Error("restore did not give standard output back")
+	}
+	if color.Output != previousColorOutput || color.Error != previousColorError {
+		t.Error("restore did not give both of color's writers back")
 	}
 	stdoutText, _ := os.ReadFile(fakeStdout.Name())
 	stderrText, _ := os.ReadFile(fakeStderr.Name())
 	if string(stdoutText) != `{"type":"ready","port":1,"token":"t","launch":"l","presenter":"p"}`+"\n" {
 		t.Errorf("stdout = %q, want only the ready line", stdoutText)
 	}
-	for _, want := range []string{"plain text", "colored text", "more text"} {
+	for _, want := range []string{"plain text", "colored text", "more text", "warned text", "failed text"} {
 		if !strings.Contains(string(stderrText), want) {
 			t.Errorf("stderr lacks %q: %q", want, stderrText)
 		}

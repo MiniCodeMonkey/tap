@@ -268,9 +268,9 @@ func runDevServer(options serverOptions) (err error) {
 	}
 	// The TUI has not started yet at this point either way, so stderr is
 	// always safe here.
-	printLayoutWarningsToStderr(absFile, dropComponentBuildFailureWarnings(warnings))
-	printComponentErrorsToStderr(componentBuildErrs)
-	printComponentWarningsToStderr(componentWarnings(resolvedComponents))
+	printLayoutWarnings(appLog, absFile, dropComponentBuildFailureWarnings(warnings))
+	printComponentErrors(appLog, componentBuildErrs)
+	printComponentWarnings(appLog, componentWarnings(resolvedComponents))
 
 	startupDriverWarnings := undeclaredDriverWarnings(absFile, pres)
 	for _, warning := range startupDriverWarnings {
@@ -360,6 +360,9 @@ func runDevServer(options serverOptions) (err error) {
 	// same way, since Server.New fixes its address at construction.
 	buildServer := func(candidatePort int) *server.Server {
 		candidate := server.NewWithHost(candidatePort, listenHost(options.lan))
+		// A serving error is a log line like every other, so it goes to
+		// the writer that owns standard error for this run.
+		candidate.SetLog(appLog)
 		if appAuth != nil {
 			candidate.SetAppAuth(appAuth)
 		}
@@ -447,9 +450,9 @@ func runDevServer(options serverOptions) (err error) {
 		// This handler only runs before the headless/TUI branch below
 		// installs its own (the TUI has not started yet either way), so
 		// stderr is safe here.
-		printLayoutWarningsToStderr(absFile, dropComponentBuildFailureWarnings(warnings))
-		printComponentErrorsToStderr(newComponentBuildErrs)
-		printComponentWarningsToStderr(componentWarnings(newResolvedComponents))
+		printLayoutWarnings(appLog, absFile, dropComponentBuildFailureWarnings(warnings))
+		printComponentErrors(appLog, newComponentBuildErrs)
+		printComponentWarnings(appLog, componentWarnings(newResolvedComponents))
 		for _, warning := range undeclaredDriverWarnings(absFile, newPres) {
 			fmt.Fprintln(appLog, warning)
 		}
@@ -670,9 +673,9 @@ func runDevServer(options serverOptions) (err error) {
 
 			return func() {
 				// Standard error is the Tap Log in --app mode.
-				printLayoutWarningsToStderr(absFile, dropComponentBuildFailureWarnings(warnings))
-				printComponentErrorsToStderr(newComponentBuildErrs)
-				printComponentWarningsToStderr(componentWarnings(newResolvedComponents))
+				printLayoutWarnings(appLog, absFile, dropComponentBuildFailureWarnings(warnings))
+				printComponentErrors(appLog, newComponentBuildErrs)
+				printComponentWarnings(appLog, componentWarnings(newResolvedComponents))
 				if !deckSource.buffering() {
 					// These warnings carry line numbers from the deck file,
 					// which an unsaved buffer does not match.
@@ -881,9 +884,9 @@ func runDevServer(options serverOptions) (err error) {
 				return
 			}
 			// No TUI in headless mode, so stderr is always safe.
-			printLayoutWarningsToStderr(absFile, dropComponentBuildFailureWarnings(warnings))
-			printComponentErrorsToStderr(newComponentBuildErrs)
-			printComponentWarningsToStderr(componentWarnings(newResolvedComponents))
+			printLayoutWarnings(appLog, absFile, dropComponentBuildFailureWarnings(warnings))
+			printComponentErrors(appLog, newComponentBuildErrs)
+			printComponentWarnings(appLog, componentWarnings(newResolvedComponents))
 			for _, warning := range undeclaredDriverWarnings(absFile, newPres) {
 				fmt.Fprintln(appLog, warning)
 			}
@@ -1082,7 +1085,19 @@ func runDevServer(options serverOptions) (err error) {
 	ctx, cancel := context.WithTimeout(context.Background(), appQuitShutdownBound(appQuit))
 	defer cancel()
 
-	return srv.Shutdown(ctx)
+	if shutdownErr := srv.Shutdown(ctx); shutdownErr != nil {
+		if !errors.Is(shutdownErr, context.DeadlineExceeded) {
+			return shutdownErr
+		}
+		// A graceful shutdown that runs out of time means a request was
+		// still in flight, which one page still loading is enough to
+		// cause. The listener is closed and the connections go with the
+		// process, so this is a note about a tidy exit rather than a
+		// failure: reporting it as one exits 1 and tells the app its
+		// child crashed on an ordinary quit.
+		fmt.Fprintln(appLog, "warning: a request was still in flight at shutdown; closing it with the process")
+	}
+	return nil
 }
 
 // presentLaunchPreflight picks the preflight a tap present launch runs.
@@ -1101,8 +1116,8 @@ func presentLaunchPreflight(recordings *recordController, startNow bool) recorde
 // loadPresentation reads, parses, resolves components for, and transforms a
 // presentation file. It also returns any layout or slot warnings found and
 // the resolved components (bundles and build errors), letting the caller
-// decide where to show them: printLayoutWarningsToStderr and
-// printComponentErrorsToStderr for a plain terminal, or through the TUI
+// decide where to show them: printLayoutWarnings and
+// printComponentErrors for a plain terminal, or through the TUI
 // model's own message path when the TUI owns the terminal (see the reload
 // handler in the TUI branch of Run). The returned []parser.Slide is the
 // deck's raw markdown slides, in the same order as the returned
@@ -1144,20 +1159,22 @@ func loadPresentationSource(source []byte, file string, cfg *config.Config, base
 	return transformed, layouts.Validate(transformed), resolvedComponents, componentBuildErrs, parsed.Slides, nil
 }
 
-// printLayoutWarningsToStderr prints one line to stderr for each layout or
-// slot warning. Only safe to call when nothing else owns the terminal (the
-// TUI has not started, or is not in use); the TUI branch of Run routes
-// warnings through the model instead.
-func printLayoutWarningsToStderr(file string, warnings []layouts.Warning) {
+// printLayoutWarnings writes one line to log for each layout or slot
+// warning. log is standard error for a command run from a terminal and
+// the bounded --app log writer under --app; see printComponentErrors for
+// why the writer is an argument. Only safe to call when nothing else owns
+// the terminal (the TUI has not started, or is not in use); the TUI
+// branch of Run routes warnings through the model instead.
+func printLayoutWarnings(log io.Writer, file string, warnings []layouts.Warning) {
 	for _, warning := range warnings {
-		fmt.Fprintf(os.Stderr, "warning: %s: slide %d: %s\n", file, warning.SlideNumber, warning.Message)
+		fmt.Fprintf(log, "warning: %s: slide %d: %s\n", file, warning.SlideNumber, warning.Message)
 	}
 }
 
 // dropComponentBuildFailureWarnings removes the "component ... failed to
 // build: ..." warning layouts.Validate adds for a broken whole-slide
 // component. tap dev always prints that same failure as an "error:" line
-// (see printComponentErrorsToStderr) right next to the warning list; a
+// (see printComponentErrors) right next to the warning list; a
 // caller that also does so should filter here first, so the broken
 // component is reported once, not twice.
 func dropComponentBuildFailureWarnings(warnings []layouts.Warning) []layouts.Warning {

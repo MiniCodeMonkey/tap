@@ -198,7 +198,7 @@ func TestComponentWarnings_FlattensSortedByPathAndFormatsEachLine(t *testing.T) 
 // TestComponentWarningLines_FormatsWithWarningPrefix checks the plain
 // "warning: ..." lines fed to the TUI model's warnings display (see
 // internal/tui/dev.go's viewWarnings): the same format
-// printComponentWarningsToStderr prints, but as strings a caller renders
+// printComponentWarnings prints, but as strings a caller renders
 // itself instead of writing straight to the terminal.
 func TestComponentWarningLines_FormatsWithWarningPrefix(t *testing.T) {
 	warnings := []components.BuildError{
