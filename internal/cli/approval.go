@@ -156,9 +156,21 @@ func liveCodeApproval(input approvalInput) (server.LiveCodePolicy, error) {
 		return server.LiveCodePolicy{Drivers: approvedBefore}, nil
 	}
 
-	settings.Approve(deckKey, declared, input.Now())
-	if err := usersettings.Save(input.SettingsPath, settings); err != nil {
-		return server.LiveCodePolicy{}, fmt.Errorf("saving the live code approval: %w", err)
+	// Reload under the lock rather than reusing the settings read above:
+	// the person may have taken a while to answer the prompt, and another
+	// tap process could have saved its own approval for a different deck
+	// in the meantime. Merging into a fresh read keeps that approval
+	// instead of overwriting it.
+	saveErr := usersettings.WithLock(input.SettingsPath, func() error {
+		fresh, err := usersettings.Load(input.SettingsPath)
+		if err != nil {
+			fresh = usersettings.Settings{}
+		}
+		fresh.Approve(deckKey, declared, input.Now())
+		return usersettings.Save(input.SettingsPath, fresh)
+	})
+	if saveErr != nil {
+		return server.LiveCodePolicy{}, fmt.Errorf("saving the live code approval: %w", saveErr)
 	}
 	return server.LiveCodePolicy{Drivers: declared}, nil
 }

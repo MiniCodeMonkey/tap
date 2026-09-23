@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -44,6 +45,110 @@ func TestSaveThenLoad(t *testing.T) {
 	settings, err := Load(path)
 	if err != nil || settings.Present.Record == nil || !*settings.Present.Record {
 		t.Errorf("Load = %+v, %v; want record: true", settings, err)
+	}
+}
+
+func TestSavePreservesTheExistingFileMode(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "settings.yaml")
+	if err := os.WriteFile(path, []byte("present: {}\n"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+
+	record := true
+	if err := Save(path, Settings{Present: Present{Record: &record}}); err != nil {
+		t.Fatal(err)
+	}
+
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode().Perm() != 0o640 {
+		t.Errorf("Save changed the file mode to %v, want 0640 preserved", info.Mode().Perm())
+	}
+}
+
+// TestConcurrentSavesWithoutLockCanLoseAnApproval reproduces the race the
+// review found: two callers each Load, then modify, then Save, with
+// neither seeing the other's change first. A barrier forces both Loads to
+// finish before either Save runs, so this is not a matter of luck: with
+// no coordination, whichever Save finishes last always overwrites the
+// first save's approval, no matter how the goroutines are scheduled.
+func TestConcurrentSavesWithoutLockCanLoseAnApproval(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "settings.yaml")
+	deckA := deckFile(t, "a.md")
+	deckB := deckFile(t, "b.md")
+
+	barrier := make(chan struct{})
+	var loaded sync.WaitGroup
+	loaded.Add(2)
+	var wg sync.WaitGroup
+	wg.Add(2)
+	save := func(deck DeckKey) {
+		defer wg.Done()
+		settings, err := Load(path)
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		// Both goroutines must finish Load before either proceeds to
+		// Save, so the loss below is forced, not a matter of luck.
+		loaded.Done()
+		<-barrier
+		settings.Approve(deck, []string{"shell"}, approvalTime)
+		if err := Save(path, settings); err != nil {
+			t.Error(err)
+		}
+	}
+	go save(deckA)
+	go save(deckB)
+	loaded.Wait()
+	close(barrier)
+	wg.Wait()
+
+	settings, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(settings.Approvals) != 1 {
+		t.Fatalf("got %d approvals, want exactly 1 lost to the unlocked race: %+v", len(settings.Approvals), settings.Approvals)
+	}
+}
+
+// TestWithLockKeepsBothConcurrentApprovals is the same race as
+// TestConcurrentSavesWithoutLockCanLoseAnApproval, but with each
+// load-modify-save sequence run through WithLock. Both approvals survive.
+func TestWithLockKeepsBothConcurrentApprovals(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "settings.yaml")
+	deckA := deckFile(t, "a.md")
+	deckB := deckFile(t, "b.md")
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+	save := func(deck DeckKey) {
+		defer wg.Done()
+		err := WithLock(path, func() error {
+			settings, err := Load(path)
+			if err != nil {
+				return err
+			}
+			settings.Approve(deck, []string{"shell"}, approvalTime)
+			return Save(path, settings)
+		})
+		if err != nil {
+			t.Error(err)
+		}
+	}
+	go save(deckA)
+	go save(deckB)
+	wg.Wait()
+
+	settings, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(settings.Approvals) != 2 {
+		t.Fatalf("WithLock did not prevent the lost update: got %d approvals, want 2: %+v", len(settings.Approvals), settings.Approvals)
 	}
 }
 

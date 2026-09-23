@@ -114,29 +114,42 @@ func runApprovalRevoke(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	settingsPath, settings, err := loadApprovalSettings()
+	settingsPath, err := usersettings.Path()
 	if err != nil {
-		return err
+		return internalError(codeInternal, err)
 	}
 
-	// A deck still on disk is revoked by its DeckKey, resolved fresh so
-	// the store never sees an unresolved path. A deck that no longer
-	// exists cannot be resolved at all, so RevokeStoredPath, the one
-	// function the approval store still takes a plain string for, is the
-	// only way to reach its approval: it was keyed by that stored path
-	// when it was approved, and there is nothing left on disk to resolve
-	// again.
 	var revoked bool
-	if resolved {
-		revoked = settings.Revoke(key)
-	} else {
-		revoked = settings.RevokeStoredPath(deck)
+	lockErr := usersettings.WithLock(settingsPath, func() error {
+		settings, err := usersettings.Load(settingsPath)
+		if err != nil {
+			return userError(codeInvalidSettings, err)
+		}
+		// A deck still on disk is revoked by its DeckKey, resolved fresh
+		// so the store never sees an unresolved path. A deck that no
+		// longer exists cannot be resolved at all, so RevokeStoredPath,
+		// the one function the approval store still takes a plain string
+		// for, is the only way to reach its approval: it was keyed by
+		// that stored path when it was approved, and there is nothing
+		// left on disk to resolve again.
+		if resolved {
+			revoked = settings.Revoke(key)
+		} else {
+			revoked = settings.RevokeStoredPath(deck)
+		}
+		if !revoked {
+			return nil
+		}
+		if err := usersettings.Save(settingsPath, settings); err != nil {
+			return internalError(codeInternal, err)
+		}
+		return nil
+	})
+	if lockErr != nil {
+		return lockErr
 	}
 	if !revoked {
 		return userError(codeNotApproved, fmt.Errorf("%s is not approved to run live code", deck))
-	}
-	if err := usersettings.Save(settingsPath, settings); err != nil {
-		return internalError(codeInternal, err)
 	}
 
 	out := cmd.OutOrStdout()

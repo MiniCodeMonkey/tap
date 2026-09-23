@@ -162,12 +162,14 @@ func approveNewDeck(deck string, now time.Time) error {
 	if err != nil {
 		return err
 	}
-	settings, err := usersettings.Load(settingsPath)
-	if err != nil {
-		return err
-	}
-	settings.Approve(key, cfg.DeclaredDrivers(), now)
-	return usersettings.Save(settingsPath, settings)
+	return usersettings.WithLock(settingsPath, func() error {
+		settings, err := usersettings.Load(settingsPath)
+		if err != nil {
+			return err
+		}
+		settings.Approve(key, cfg.DeclaredDrivers(), now)
+		return usersettings.Save(settingsPath, settings)
+	})
 }
 
 // recordNewDeckApproval approves a new deck, and only warns when that
