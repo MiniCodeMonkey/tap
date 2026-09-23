@@ -473,13 +473,13 @@ func TestAppSessionQuitJoinsAnInProgressTunnelStart(t *testing.T) {
 // open forever, and quit can never get through it. Before this fix, this
 // test fails at waitForEnd's own five-second bound ("the session did not
 // end"), because nothing in end() ever gives up on the worker. After the
-// fix, the join itself is bounded by WorkerJoinTimeout, so quit returns
+// fix, the join itself is bounded by QuitDeadline, so quit returns
 // well inside that bound regardless of what the stuck command does.
 func TestAppSessionQuitReturnsEvenWhenACommandNeverFinishes(t *testing.T) {
 	entered := make(chan struct{})
 	block := make(chan struct{}) // never closed: the command blocks forever
 	harness := startAppSessionForTest(t, func(options *appSessionOptions) {
-		options.WorkerJoinTimeout = 200 * time.Millisecond
+		options.QuitDeadline = 200 * time.Millisecond
 		options.Reload = func(context.Context) error {
 			close(entered)
 			<-block
@@ -521,20 +521,20 @@ func TestAppSessionQuitStopsARunningTunnel(t *testing.T) {
 // section that wraps Stop(). Using fakeLockedTunnels (modeled on the real
 // tunnelController, whose Start, Stop and URL all share one mutex), a
 // tunnel Start is left stuck holding that mutex when quit is sent, so
-// WorkerJoinTimeout gives up on the worker join, and stopTunnelAtExit's own
+// QuitDeadline gives up on the worker join, and stopTunnelAtExit's own
 // URL() call then contends for the same mutex the stuck Start still holds.
 // Before the fix that call sits outside stopTunnelAtExit's bounded
 // goroutine, so it blocks forever and runAppSession never returns, failing
 // at waitForEnd's five-second bound. After the fix, the URL() call moves
-// inside the same select/time.After(WorkerJoinTimeout) that already wraps
-// Stop(), so the whole interaction with the tunnel controller is bounded
-// and quit returns well within that timeout.
+// inside the same bounded goroutine that already wraps Stop(), so the
+// whole interaction with the tunnel controller is bounded and quit returns
+// well within the quit deadline.
 func TestAppSessionQuitReturnsWhenTheTunnelURLGuardBlocksOnAStuckStart(t *testing.T) {
 	entered := make(chan struct{})
 	tunnels := &fakeLockedTunnels{entered: entered}
 	harness := startAppSessionForTest(t, func(options *appSessionOptions) {
 		options.Tunnels = tunnels
-		options.WorkerJoinTimeout = 200 * time.Millisecond
+		options.QuitDeadline = 200 * time.Millisecond
 	})
 	start := true
 
@@ -706,7 +706,7 @@ func drainErrorEvents(log *eventLog) []map[string]any {
 func TestAppSessionQuitReturnsWhenStartupIgnoresCancellation(t *testing.T) {
 	entered := make(chan struct{})
 	harness := startAppSessionForTest(t, func(options *appSessionOptions) {
-		options.WorkerJoinTimeout = 200 * time.Millisecond
+		options.QuitDeadline = 200 * time.Millisecond
 		options.Startup = func(context.Context) {
 			close(entered)
 			<-make(chan struct{}) // blocks forever, ignoring ctx
@@ -735,7 +735,7 @@ func TestAppSessionQuitReturnsWhenTheRecordingReporterBlocks(t *testing.T) {
 	present := &fakeLockedPresent{}
 	harness := startAppSessionForTest(t, func(options *appSessionOptions) {
 		options.Present = present
-		options.WorkerJoinTimeout = 200 * time.Millisecond
+		options.QuitDeadline = 200 * time.Millisecond
 		options.RecordingInterval = 5 * time.Millisecond
 	})
 	present.mu.Lock() // never unlocked: the next sampling blocks inside report()
@@ -764,7 +764,7 @@ func TestAppSessionQuitReturnsWhenEverythingIsStuckAtOnce(t *testing.T) {
 	tunnels := &fakeLockedTunnels{entered: tunnelEntered}
 	present := &fakeLockedPresent{}
 	harness := startAppSessionForTest(t, func(options *appSessionOptions) {
-		options.WorkerJoinTimeout = 200 * time.Millisecond
+		options.QuitDeadline = 200 * time.Millisecond
 		options.RecordingInterval = 5 * time.Millisecond
 		options.Present = present
 		options.Tunnels = tunnels
@@ -809,7 +809,7 @@ func TestAppSessionQuitReturnsWhenFinishingTheRecordingBlocks(t *testing.T) {
 	present := &fakePresent{dir: "/talks/recordings/run", finishBlock: make(chan struct{})}
 	harness := startAppSessionForTest(t, func(options *appSessionOptions) {
 		options.Present = present
-		options.WorkerJoinTimeout = 200 * time.Millisecond
+		options.QuitDeadline = 200 * time.Millisecond
 		options.KeepRecordingTimeout = 100 * time.Millisecond
 	})
 
@@ -822,5 +822,141 @@ func TestAppSessionQuitReturnsWhenFinishingTheRecordingBlocks(t *testing.T) {
 	}
 	if message, _ := events[0]["message"].(string); !strings.Contains(message, "finishing the recording") {
 		t.Errorf("message = %q, want it to name finishing the recording", message)
+	}
+}
+
+// fakeStuckStopTunnels reports a running tunnel whose Stop never returns,
+// without a stuck Start holding the mutex. It is how a test gets the
+// tunnel stop stuck at exit while leaving the worker, the startup and the
+// reporter free to join, which is the only arrangement that reaches
+// finishing the recording with something else already given up on.
+type fakeStuckStopTunnels struct{}
+
+var _ tui.TunnelController = (*fakeStuckStopTunnels)(nil)
+
+func (tunnels *fakeStuckStopTunnels) Start(context.Context) (string, error) {
+	return "https://quiet-river.trycloudflare.com", nil
+}
+
+func (tunnels *fakeStuckStopTunnels) Stop() error {
+	<-make(chan struct{}) // blocks forever
+	return nil
+}
+
+func (tunnels *fakeStuckStopTunnels) URL() string {
+	return "https://quiet-river.trycloudflare.com"
+}
+
+func (tunnels *fakeStuckStopTunnels) Available() bool     { return true }
+func (tunnels *fakeStuckStopTunnels) InstallHint() string { return "brew install cloudflared" }
+
+// TestAppSessionQuitSpendsOneDeadlineNotOnePerStuckPart is the difference
+// between a bounded quit and a quick one. Each join used to carry a bound
+// of its own, so a quit with several stuck parts cost the sum of them; the
+// whole quit now shares a single deadline, and a join that starts after it
+// is spent does not wait at all. A quit with four stuck parts therefore
+// costs about one deadline, not four.
+func TestAppSessionQuitSpendsOneDeadlineNotOnePerStuckPart(t *testing.T) {
+	const deadline = 400 * time.Millisecond
+
+	t.Run("the startup, the reporter, a command and the tunnel", func(t *testing.T) {
+		startupEntered := make(chan struct{})
+		tunnelEntered := make(chan struct{})
+		tunnels := &fakeLockedTunnels{entered: tunnelEntered}
+		present := &fakeLockedPresent{}
+		harness := startAppSessionForTest(t, func(options *appSessionOptions) {
+			options.QuitDeadline = deadline
+			options.RecordingInterval = 5 * time.Millisecond
+			options.Present = present
+			options.Tunnels = tunnels
+			options.Startup = func(context.Context) {
+				close(startupEntered)
+				<-make(chan struct{}) // blocks forever, ignoring ctx
+			}
+		})
+		<-startupEntered
+		start := true
+		harness.send(appCommand{Type: appCommandTunnel, Start: &start})
+		<-tunnelEntered
+		present.mu.Lock() // never unlocked: the reporter blocks inside report()
+		time.Sleep(50 * time.Millisecond)
+
+		elapsed := timeQuit(t, harness)
+		if elapsed < deadline {
+			t.Errorf("quit took %v, want at least the one deadline of %v", elapsed, deadline)
+		}
+		if elapsed > 2*deadline {
+			t.Errorf("quit took %v, want about one deadline of %v, not one per stuck part", elapsed, deadline)
+		}
+	})
+
+	t.Run("the tunnel and finishing the recording", func(t *testing.T) {
+		present := &fakePresent{dir: "/talks/recordings/run", finishBlock: make(chan struct{})}
+		harness := startAppSessionForTest(t, func(options *appSessionOptions) {
+			options.QuitDeadline = deadline
+			options.KeepRecordingTimeout = deadline
+			options.Present = present
+			options.Tunnels = &fakeStuckStopTunnels{}
+		})
+
+		elapsed := timeQuit(t, harness)
+		if elapsed < deadline {
+			t.Errorf("quit took %v, want at least the one deadline of %v", elapsed, deadline)
+		}
+		if elapsed > 2*deadline {
+			t.Errorf("quit took %v, want about one deadline of %v, not one per stuck part", elapsed, deadline)
+		}
+	})
+}
+
+// timeQuit sends quit and reports how long the session took to end.
+func timeQuit(t *testing.T, harness *sessionHarness) time.Duration {
+	t.Helper()
+	started := time.Now()
+	harness.send(appCommand{Type: appCommandQuit})
+	harness.waitForEnd(t)
+	return time.Since(started)
+}
+
+// TestAppSessionTheKeepRecordingAnswerDoesNotSpendTheQuitDeadline is the
+// one wait in quit that is not a sign of trouble. The deadline bounds how
+// long the app is left unresponsive with nothing said; while the
+// keep-recording question is outstanding the app knows exactly what quit
+// is waiting for and is the one holding it up, so that time is given back.
+// Here the answer takes most of the deadline and finishing the recording
+// takes most of it again: charging the answer to the deadline would
+// abandon the save the question was asked about.
+func TestAppSessionTheKeepRecordingAnswerDoesNotSpendTheQuitDeadline(t *testing.T) {
+	const deadline = 300 * time.Millisecond
+	present := &fakePresent{
+		dir:            "/talks/recordings/run",
+		started:        true,
+		leftFirstSlide: true,
+		segment:        2,
+		finishBlock:    make(chan struct{}),
+	}
+	harness := startAppSessionForTest(t, func(options *appSessionOptions) {
+		options.QuitDeadline = deadline
+		options.KeepRecordingTimeout = 2 * deadline
+		options.Present = present
+	})
+	go func() {
+		question := harness.log.next(t, appEventQuestion)
+		time.Sleep(5 * deadline / 6)
+		harness.answer(t, question, "true")
+		time.Sleep(2 * deadline / 3)
+		close(present.finishBlock)
+	}()
+
+	harness.send(appCommand{Type: appCommandQuit})
+	harness.waitForEnd(t)
+
+	if events := drainErrorEvents(harness.log); len(events) != 0 {
+		t.Fatalf("error events = %v, want none: the answer's own time is not the deadline's", events)
+	}
+	var finished, kept bool
+	present.set(func(present *fakePresent) { finished, kept = present.finished, present.kept })
+	if !finished || !kept {
+		t.Errorf("finished = %v, kept = %v, want the recording finished and kept", finished, kept)
 	}
 }
