@@ -57,10 +57,16 @@ type appLogWriter struct {
 	done   chan struct{}
 	mu     sync.RWMutex
 	closed bool
-	// dropMu guards dropped, the length of the run of lines Write has
-	// thrown away since the queue last had room for one.
-	dropMu  sync.Mutex
-	dropped int
+	// dropMu guards the two drop counts. dropped is the length of the run
+	// of lines Write has thrown away since the queue last had room for
+	// one, and droppedTotal is every line this writer has ever thrown
+	// away. The run says how much is missing from what the app is about
+	// to read; the total says how much is missing from the whole run of
+	// tap, which is the question a log panel could not otherwise answer
+	// at all.
+	dropMu       sync.Mutex
+	dropped      int
+	droppedTotal int
 }
 
 var _ io.Writer = (*appLogWriter)(nil)
@@ -119,13 +125,22 @@ func (writer *appLogWriter) Write(data []byte) (int, error) {
 	return len(data), nil
 }
 
-// noteDropped counts one dropped line. Unlike the event writer's drop, it
-// says nothing at the time: the pipe it would say it on is the one that
-// is not being read.
+// noteDropped counts one dropped line, against the run and against the
+// total. Unlike the event writer's drop, it says nothing at the time: the
+// pipe it would say it on is the one that is not being read.
 func (writer *appLogWriter) noteDropped() {
 	writer.dropMu.Lock()
 	writer.dropped++
+	writer.droppedTotal++
 	writer.dropMu.Unlock()
+}
+
+// dropNoticeLine is what the app is told about a run of drops: how many
+// lines the run that just ended cost, and how many the whole run of tap
+// has cost so far. The total is what lets a log panel say it is missing
+// something rather than only that it missed something once.
+func dropNoticeLine(dropped, total int) []byte {
+	return fmt.Appendf(nil, "Standard error was not being read: %d log lines were dropped, %d in total this run.\n", dropped, total)
 }
 
 // noteQueued ends a run of drops, queueing one line that says how many
@@ -135,15 +150,14 @@ func (writer *appLogWriter) noteDropped() {
 // simply keeps counting.
 func (writer *appLogWriter) noteQueued() {
 	writer.dropMu.Lock()
-	dropped := writer.dropped
+	dropped, total := writer.dropped, writer.droppedTotal
 	writer.dropped = 0
 	writer.dropMu.Unlock()
 	if dropped == 0 {
 		return
 	}
-	notice := fmt.Appendf(nil, "Standard error was not being read: %d log lines were dropped.\n", dropped)
 	select {
-	case writer.lines <- notice:
+	case writer.lines <- dropNoticeLine(dropped, total):
 	default:
 		writer.dropMu.Lock()
 		writer.dropped += dropped
@@ -151,9 +165,30 @@ func (writer *appLogWriter) noteQueued() {
 	}
 }
 
-// close stops taking lines and waits, for at most appLogCloseBound, for
-// the ones already queued to reach standard error. It is safe to call
-// more than once.
+// flushDropNotice spends whatever a run of drops has reached, without
+// waiting for a line to spend it on. A count is otherwise spent on the
+// next line that finds room, so a burst that ends while the queue is
+// still full is a burst nothing follows and the app is never told about:
+// its panel is missing lines and cannot tell that it is. Close is the one
+// moment at which no later line is coming, so the count is spent here or
+// nowhere.
+func (writer *appLogWriter) flushDropNotice() {
+	writer.dropMu.Lock()
+	dropped, total := writer.dropped, writer.droppedTotal
+	writer.dropped = 0
+	writer.dropMu.Unlock()
+	if dropped == 0 {
+		return
+	}
+	select {
+	case writer.lines <- dropNoticeLine(dropped, total):
+	default:
+	}
+}
+
+// close flushes the last run of drops, stops taking lines, and waits, for
+// at most appLogCloseBound, for the ones already queued to reach standard
+// error. It is safe to call more than once.
 //
 // The wait is written out here rather than going through quitJoiner,
 // which is where every other wait in the quit path belongs, because the
@@ -165,6 +200,7 @@ func (writer *appLogWriter) close() {
 	writer.mu.Lock()
 	if !writer.closed {
 		writer.closed = true
+		writer.flushDropNotice()
 		close(writer.lines)
 	}
 	writer.mu.Unlock()
