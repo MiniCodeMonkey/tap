@@ -68,8 +68,9 @@ func closeAppLog() {
 // and counts when its queue is full. After this returns there is nowhere
 // a raw write can go except that pipe: a write from any package, through
 // any alias, in any syntax, on any goroutine, is bounded because there is
-// no other destination left. Child processes that inherit the descriptors
-// are bounded by the same construction.
+// no other destination left. A child process inherits the two redirected
+// descriptors, so its output goes into the same pipe and is bounded by
+// the same drain.
 //
 // The protocol is safe from all of this because it no longer travels on
 // the descriptor. Standard output is duplicated first, and that
@@ -78,17 +79,26 @@ func closeAppLog() {
 // The log's real destination is a duplicate of standard error taken the
 // same way, so the two streams the app reads are exactly what they were.
 //
+// Both duplicates are taken close-on-exec, which is the only thing that
+// keeps them out of the children tap starts, and a deck's live code is a
+// child process. A deck is what --app mode treats as hostile: a duplicate
+// it could name would let it write whatever it liked on the stream the
+// app parses as the protocol, forged events included, and would hand it
+// the raw standard error the redirect exists to make unreachable. The two
+// redirected descriptors are left inheritable on purpose, because a
+// child's output belongs in the log like anything else.
+//
 // restore gives both descriptors back and waits, bounded, for what is
 // still in the pipe to reach the log. The bounded writer stays open and
 // registered across it, because the process has one more line to print
 // after the command returns and that line must still reach the app.
 func claimStdoutForApp() (protocol *os.File, log *appLogWriter, restore func(), err error) {
 	standardOutput, standardError := int(os.Stdout.Fd()), int(os.Stderr.Fd())
-	protocolDescriptor, err := unix.Dup(standardOutput)
+	protocolDescriptor, err := duplicateCloseOnExec(standardOutput)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("duplicating standard output for the app protocol: %w", err)
 	}
-	logDescriptor, err := unix.Dup(standardError)
+	logDescriptor, err := duplicateCloseOnExec(standardError)
 	if err != nil {
 		_ = unix.Close(protocolDescriptor)
 		return nil, nil, nil, fmt.Errorf("duplicating standard error for the app log: %w", err)
@@ -169,6 +179,16 @@ func claimStdoutForApp() (protocol *os.File, log *appLogWriter, restore func(), 
 		})
 	}
 	return protocol, log, restore, nil
+}
+
+// duplicateCloseOnExec is a second descriptor on the same open file that
+// a child process does not inherit. os/exec keeps a descriptor out of a
+// child only by relying on close-on-exec, and plain dup clears the flag,
+// so the one call that takes the duplicate and sets the flag together is
+// what makes the duplicate private. Doing it in two calls would leave a
+// window in which another goroutine's exec inherits it.
+func duplicateCloseOnExec(descriptor int) (int, error) {
+	return unix.FcntlInt(uintptr(descriptor), unix.F_DUPFD_CLOEXEC, 0)
 }
 
 // drainAppLogPipe moves everything written to the redirected descriptors
