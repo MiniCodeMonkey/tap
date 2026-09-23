@@ -1841,3 +1841,39 @@ func TestWebSocketHubCurrentPosition(t *testing.T) {
 		t.Errorf("a slide message without a step: CurrentPosition() = %d, %d; want 4, 0", index, gotStep)
 	}
 }
+
+// TestWebSocketHubRelaysOnlySlideAndThemeMessages checks that a page can
+// only move slides and switch themes over the WebSocket. It cannot answer
+// a tap --app question, reach the recording, or make other pages reload.
+func TestWebSocketHubRelaysOnlySlideAndThemeMessages(t *testing.T) {
+	hub := NewWebSocketHub()
+	go hub.Run()
+	defer hub.Stop()
+
+	sender, _, ctx := dialHub(t, hub)
+	receiver, _, _ := dialHub(t, hub)
+	time.Sleep(50 * time.Millisecond)
+
+	for _, message := range []string{
+		`{"type":"answer","id":"q1","value":true}`,
+		`{"type":"recording","disk":"full"}`,
+		`{"type":"quit"}`,
+		`{"type":"reload"}`,
+		`{"type":"update","revision":"r9","slides":[1]}`,
+		`{"type":"file-changed","path":"/etc/hosts"}`,
+		`{"type":"slide","slideIndex":0}`,
+	} {
+		if err := sender.Write(ctx, websocket.MessageText, []byte(message)); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	_, data, err := receiver.Read(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var relayed Message
+	if err := json.Unmarshal(data, &relayed); err != nil || relayed.Type != MessageSlide {
+		t.Errorf("the first relayed message is %s, want the slide message", data)
+	}
+}

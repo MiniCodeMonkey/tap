@@ -254,6 +254,20 @@ func (process *appProcess) waitForExit() error {
 	}
 }
 
+// remainingEvents drains and returns every event a process has emitted
+// but a test has not yet consumed with next or nextWhere: the backlog,
+// plus whatever is still buffered on the events channel. Call it only
+// after waitForExit, once the channel is closed and nothing more will
+// arrive, so the range below terminates instead of blocking.
+func (process *appProcess) remainingEvents() []map[string]any {
+	process.t.Helper()
+	events := append([]map[string]any{}, process.backlog...)
+	for event := range process.events {
+		events = append(events, event)
+	}
+	return events
+}
+
 // assertOnlyJSONLines checks every stdout line tap printed: each one is a
 // JSON object with a type.
 func (process *appProcess) assertOnlyJSONLines() {
@@ -943,4 +957,61 @@ func TestAppPresentShowsOnlyTheSavedDeck(t *testing.T) {
 	}
 	process.send(`{"type":"reload"}`)
 	waitUntil(t, "the reload shows the file", func() bool { return strings.Contains(process.presentation(), "Reloaded From Disk") })
+}
+
+// TestAppModeHasNoRouteThatAnswersOrRecords sends everything a page on the
+// same origin could send, with the token, while a question is open. None
+// of it answers the question or reaches the recording, because questions
+// and control commands travel only over standard input.
+func TestAppModeHasNoRouteThatAnswersOrRecords(t *testing.T) {
+	configHome := t.TempDir()
+	process := startAppProcess(t, configHome, "present", "--app", "--no-record", copyAppFixture(t))
+	question := process.next(appEventQuestion)
+	id, _ := question["id"].(string)
+
+	body := []byte(fmt.Sprintf(`{"type":"answer","id":%q,"value":true,"action":"stop","start":true}`, id))
+	for _, path := range []string{
+		"/api/answer", "/api/app/answer", "/api/question", "/api/app/question",
+		"/api/command", "/api/app/command", "/api/approval", "/api/app/approval",
+		"/api/recording", "/api/app/recording", "/api/record", "/api/tunnel",
+		"/api/quit", "/api/app/quit",
+	} {
+		for _, method := range []string{http.MethodPost, http.MethodPut} {
+			if status, _ := process.do(method, path, body, process.appHeader()); status != http.StatusNotFound && status != http.StatusMethodNotAllowed {
+				t.Errorf("%s %s: status %d, want no such route", method, path, status)
+			}
+		}
+	}
+
+	conn, ctx := process.dialWebSocket()
+	for _, message := range []string{
+		fmt.Sprintf(`{"type":"answer","id":%q,"value":true}`, id),
+		`{"type":"recording","action":"stop"}`,
+		`{"type":"tunnel","start":true}`,
+		`{"type":"quit"}`,
+	} {
+		if err := conn.Write(ctx, websocket.MessageText, []byte(message)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	time.Sleep(time.Second)
+
+	if status, _ := process.do(http.MethodGet, "/api/presentation", nil, http.Header{"Authorization": {"Bearer " + process.token}}); status != http.StatusOK {
+		t.Error("a page message stopped tap")
+	}
+	if _, err := os.Stat(filepath.Join(configHome, "tap", "settings.yaml")); !os.IsNotExist(err) {
+		t.Errorf("a page saved an approval (stat error %v)", err)
+	}
+
+	// The question is still open: its answer on stdin is accepted.
+	process.send(fmt.Sprintf(`{"type":"answer","id":%q,"value":false}`, id))
+	process.send(`{"type":"quit"}`)
+	if err := process.waitForExit(); err != nil {
+		t.Errorf("exit: %v", err)
+	}
+	for _, event := range process.remainingEvents() {
+		if event["type"] == appEventTunnel || event["code"] == appErrorUnknownQuestion {
+			t.Errorf("a page message reached tap: %v", event)
+		}
+	}
 }
