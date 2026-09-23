@@ -31,11 +31,13 @@ func printJSONOK(w io.Writer, payload any) error {
 func jsonEnvelope(label, prefix string, payload any, indent bool) ([]byte, error) {
 	body := []byte("{}")
 	if payload != nil {
-		encoded, err := json.Marshal(payload)
-		if err != nil {
+		var buf bytes.Buffer
+		encoder := json.NewEncoder(&buf)
+		encoder.SetEscapeHTML(false)
+		if err := encoder.Encode(payload); err != nil {
 			return nil, internalError(codeInternal, fmt.Errorf("encoding the %s: %w", label, err))
 		}
-		body = encoded
+		body = bytes.TrimRight(buf.Bytes(), "\n")
 	}
 	if len(body) < 2 || body[0] != '{' {
 		return nil, internalError(codeInternal, fmt.Errorf("the %s must be an object, got %s", label, body))
@@ -70,6 +72,7 @@ type jsonError struct {
 func printJSONError(w io.Writer, code, message string) error {
 	encoder := json.NewEncoder(w)
 	encoder.SetIndent("", "  ")
+	encoder.SetEscapeHTML(false)
 	return encoder.Encode(struct {
 		OK    bool      `json:"ok"`
 		Error jsonError `json:"error"`

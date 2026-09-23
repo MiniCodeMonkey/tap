@@ -96,3 +96,19 @@ func TestExecutePrintsAJSONErrorForAJSONCommand(t *testing.T) {
 		t.Errorf("stdout = %q, want a JSON error with code unknown_theme", stdout)
 	}
 }
+
+func TestPrintJSONOKDoesNotEscapeHTML(t *testing.T) {
+	var out bytes.Buffer
+	payload := struct {
+		Markdown string `json:"markdown"`
+	}{"<!-- ai-prompt: a red fox --> & more"}
+	if err := printJSONOK(&out, payload); err != nil {
+		t.Fatalf("printJSONOK() error = %v", err)
+	}
+	if strings.Contains(out.String(), "\\u003c") || strings.Contains(out.String(), "\\u0026") {
+		t.Errorf("printJSONOK() escaped HTML: %q", out.String())
+	}
+	if !strings.Contains(out.String(), "<!-- ai-prompt: a red fox --> & more") {
+		t.Errorf("printJSONOK() wrote %q, want the literal markdown", out.String())
+	}
+}
