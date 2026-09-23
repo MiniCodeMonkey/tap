@@ -112,12 +112,14 @@ func claimStdoutForApp() (protocol *os.File, log *appLogWriter, restore func(), 
 		_ = unix.Close(logDescriptor)
 		return nil, nil, nil, fmt.Errorf("opening the app log pipe: %w", err)
 	}
-	// Fd puts the write end back in blocking mode, so a raw write waits
-	// for room rather than failing with EAGAIN. Waiting for room is never
-	// waiting for the app: the drain goroutine below empties this pipe
-	// whatever the app does. The read end keeps its own mode, which is
-	// what lets that goroutine read without tying up a thread.
-	writeEnd := int(writer.Fd())
+	writeEnd, err := descriptorOf(writer)
+	if err != nil {
+		_ = reader.Close()
+		_ = writer.Close()
+		_ = unix.Close(protocolDescriptor)
+		_ = unix.Close(logDescriptor)
+		return nil, nil, nil, fmt.Errorf("taking the write end of the app log pipe: %w", err)
+	}
 	release := func() {
 		_ = reader.Close()
 		_ = writer.Close()
@@ -189,6 +191,40 @@ func claimStdoutForApp() (protocol *os.File, log *appLogWriter, restore func(), 
 // window in which another goroutine's exec inherits it.
 func duplicateCloseOnExec(descriptor int) (int, error) {
 	return unix.FcntlInt(uintptr(descriptor), unix.F_DUPFD_CLOEXEC, 0)
+}
+
+// descriptorOf is file's descriptor number, left exactly as os.Pipe made
+// it. File.Fd would do the same thing and also put the descriptor back in
+// blocking mode, and blocking is the one mode the redirect target must
+// not be in.
+//
+// A blocking write end means a write that finds the pipe full waits for
+// the drain goroutine to make room. That reads as a bounded wait, and for
+// every writer in Go it is. It is not bounded for the runtime: a panic is
+// printed with the runtime's own write to descriptor 2, and the runtime
+// prints it only after stopping every goroutine in the process. The drain
+// is one of them, so during that write the pipe has no reader and cannot
+// acquire one. A trace larger than the room left in the pipe would wait
+// there for room nothing will ever make, and a tap that has already
+// panicked and is still running is worse than any log line.
+//
+// Non-blocking makes that write fail instead, so the runtime finishes
+// printing what fits and the process exits on its own. The cost is
+// ordinary lines: a write that finds the pipe full is lost rather than
+// waited out, and can be cut short. That only happens while the drain is
+// behind, which is the same load under which the bounded writer is
+// already dropping, and a log line is advisory. What it buys is that the
+// process's death never waits for anything.
+func descriptorOf(file *os.File) (int, error) {
+	connection, err := file.SyscallConn()
+	if err != nil {
+		return 0, err
+	}
+	descriptor := -1
+	if err := connection.Control(func(raw uintptr) { descriptor = int(raw) }); err != nil {
+		return 0, err
+	}
+	return descriptor, nil
 }
 
 // drainAppLogPipe moves everything written to the redirected descriptors
