@@ -283,7 +283,7 @@ drivers:
   sqlite:
     connections:
       demo:
-        database: ./data/demo.db
+        path: ./data/demo.db
   postgres:
     connections:
       analytics:

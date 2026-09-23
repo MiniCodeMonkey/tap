@@ -89,7 +89,7 @@ drivers:
   sqlite:
     connections:
       demo:
-        database: ":memory:"
+        path: ":memory:"
 ---
 ```
 
@@ -133,7 +133,7 @@ For database drivers, you configure connections in the frontmatter. This keeps c
 
 ### SQLite
 
-SQLite is the simplest: just specify the database file.
+SQLite is the simplest: just specify the database file with `path`.
 
 ```yaml
 ---
@@ -142,11 +142,11 @@ drivers:
   sqlite:
     connections:
       demo:
-        database: ./data/demo.db
+        path: ./data/demo.db
 ---
 ```
 
-If no database is specified, Tap uses an in-memory SQLite database.
+If no path is specified, Tap uses an in-memory SQLite database. `database` is an older spelling of `path`, kept working for decks that already use it; `path` wins when both are set. New decks should use `path`.
 
 ### MySQL
 
@@ -217,7 +217,7 @@ drivers:
   sqlite:
     connections:
       demo:
-        database: ./demo.db
+        path: ./demo.db
     timeout: 30  # seconds
 ---
 ```
@@ -293,7 +293,7 @@ drivers:
   sqlite:
     connections:
       demo:
-        database: ./app.db
+        path: ./app.db
   postgres:
     connections:
       analytics:

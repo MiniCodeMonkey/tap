@@ -232,7 +232,7 @@ drivers:
   sqlite:
     connections:
       default:
-        database: ":memory:"
+        path: ":memory:"
   mysql:
     connections:
       prod:
