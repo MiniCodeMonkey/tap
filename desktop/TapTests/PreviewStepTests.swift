@@ -34,14 +34,17 @@ final class PreviewStepTests: HostedTestCase {
         controller.editor.moveCursor(toSlide: 2)
         try await waitForPreview(document, slide: 3)
 
-        controller.togglePin()
+        // Presses the actual button rather than calling togglePin() directly,
+        // so this exercises the button's wiring (onPinToggled), not just the
+        // navigator logic underneath it.
+        controller.previewViewController.pinButton.performClick(nil)
         XCTAssertEqual(controller.previewViewController.statusLabel.stringValue, "Slide 3, pinned")
         XCTAssertEqual(controller.previewViewController.pinButton.state, .on)
         controller.editor.moveCursor(toSlide: 0)
         try await Task.sleep(nanoseconds: 700_000_000)
         XCTAssertEqual(controller.previewViewController.lastReady?.slide, 3, "the preview keeps showing the pinned slide")
 
-        controller.togglePin()
+        controller.previewViewController.pinButton.performClick(nil)
         try await waitForPreview(document, slide: 1)
         XCTAssertEqual(controller.previewViewController.statusLabel.stringValue, "Slide 1, follows the cursor")
     }

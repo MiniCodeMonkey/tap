@@ -36,6 +36,27 @@ final class WindowLayoutTests: HostedTestCase {
         XCTAssertNotEqual(split.editorItem.viewController.view.frame.width, 499.5, accuracy: 1, "a dragged divider stays where the user put it")
     }
 
+    func testTogglePreviewPinAndItsMenuItemTitle() async throws {
+        let document = try await openDeckAndWaitForPreview(try Fixtures.copyDeck("plain.md"))
+        let controller = try windowController(for: document)
+        let sessionController = try XCTUnwrap(document.sessionController)
+        let menuItem = NSMenuItem(title: "", action: #selector(DeckWindowController.togglePreviewPin(_:)), keyEquivalent: "")
+
+        XCTAssertFalse(sessionController.navigator.isPinned)
+        XCTAssertTrue(controller.validateMenuItem(menuItem))
+        XCTAssertEqual(menuItem.title, "Pin Preview")
+
+        controller.togglePreviewPin(nil)
+        XCTAssertTrue(sessionController.navigator.isPinned)
+        XCTAssertTrue(controller.validateMenuItem(menuItem))
+        XCTAssertEqual(menuItem.title, "Unpin Preview")
+
+        controller.togglePreviewPin(nil)
+        XCTAssertFalse(sessionController.navigator.isPinned)
+        XCTAssertTrue(controller.validateMenuItem(menuItem))
+        XCTAssertEqual(menuItem.title, "Pin Preview")
+    }
+
     func testTheEditorTextStartsBelowTheToolbar() async throws {
         let document = try await openDeck(try Fixtures.copyDeck("plain.md"))
         let controller = try windowController(for: document)
