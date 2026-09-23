@@ -4,8 +4,25 @@
 set -eu
 
 repository_root="$(cd "$SRCROOT/.." && pwd)"
-if [ ! -f "$repository_root/embedded/dist/index.html" ]; then
+built_assets="$repository_root/embedded/dist/index.html"
+if [ ! -f "$built_assets" ]; then
 	echo "error: $repository_root/embedded/dist is missing. Run 'make frontend' in $repository_root first." >&2
+	exit 1
+fi
+
+# tap embeds embedded/dist, so an app built from assets older than the
+# frontend they came from runs yesterday's page against today's Swift, and
+# the app's own tests then measure a page nobody wrote. Every input to the
+# bundle lives under frontend/, so anything there touched after the last
+# build means the assets are stale. node_modules is the one exception: npm
+# rewrites it without changing what vite emits.
+stale_sources="$(find "$repository_root/frontend" \
+	-name node_modules -prune -o \
+	-type f -newer "$built_assets" -print 2>/dev/null | head -5)"
+if [ -n "$stale_sources" ]; then
+	echo "error: $repository_root/embedded/dist is older than the frontend source. Run 'make frontend' in $repository_root first." >&2
+	echo "changed since the assets were built:" >&2
+	echo "$stale_sources" | sed 's|^|  |' >&2
 	exit 1
 fi
 
