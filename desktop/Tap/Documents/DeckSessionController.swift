@@ -18,6 +18,14 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
     /// exists and must not reach the editor, the same as a stale render
     /// must not publish over a newer one.
     private var stopped = false
+    /// NSTextView replays undo and redo directly against the text storage,
+    /// never through didChangeText, so editorTextDidChange never fires for
+    /// them (confirmed directly: it fires once for a typed edit and not at
+    /// all for the undo that reverts it). The document's own edited flag is
+    /// kept in step with undo and redo by observing its undo manager
+    /// instead, which is what actually announces those.
+    private var undoObserver: NSObjectProtocol?
+    private var redoObserver: NSObjectProtocol?
     /// Runs after each slide list is applied to the editor.
     var onSlideListApplied: ((SlideList) -> Void)?
     var onHubMessage: ((HubMessage) -> Void)?
@@ -48,6 +56,14 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
         previewViewController.onStepForward = { [weak self] in self?.sendPreviewMessage(self?.navigator.stepForward()) }
         previewViewController.onPinToggled = { [weak self] in self?.togglePin() }
         previewViewController.onTryAgain = { [weak self] in self?.session.tryAgain() }
+        if let documentUndoManager = document.undoManager {
+            undoObserver = NotificationCenter.default.addObserver(forName: .NSUndoManagerDidUndoChange, object: documentUndoManager, queue: nil) { [weak self] _ in
+                MainActor.assumeIsolated { self?.document?.updateChangeCount(.changeUndone) }
+            }
+            redoObserver = NotificationCenter.default.addObserver(forName: .NSUndoManagerDidRedoChange, object: documentUndoManager, queue: nil) { [weak self] _ in
+                MainActor.assumeIsolated { self?.document?.updateChangeCount(.changeRedone) }
+            }
+        }
     }
 
     /// Pins the slide the preview shows, or unpins it and follows the cursor again.
@@ -68,6 +84,8 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
 
     func stop() {
         stopped = true
+        if let undoObserver { NotificationCenter.default.removeObserver(undoObserver) }
+        if let redoObserver { NotificationCenter.default.removeObserver(redoObserver) }
         socket?.close()
         socket = nil
         sourceSync.sender = nil
@@ -158,9 +176,14 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
     // MARK: EditorTextViewDelegate
 
     func editorTextDidChange(_ editor: EditorTextView) {
-        // A real edit, as opposed to loading the disk version (which sets
-        // the text storage directly and never reaches here). NSDocument
-        // needs this to know it has something to autosave.
+        // NSTextView registers its own undo actions without ever calling
+        // updateChangeCount, so a forward edit needs telling NSDocument by
+        // hand. This never fires for undo or redo themselves: NSTextView
+        // replays those directly against the text storage, bypassing
+        // didChangeText entirely (confirmed directly: instrumented, this
+        // method fired once for a typed edit and not at all for the undo
+        // that reverted it). Undo and redo are instead announced by the
+        // document's own undo manager notifications, observed in init.
         document?.updateChangeCount(.changeDone)
         sourceSync.textDidChange()
     }

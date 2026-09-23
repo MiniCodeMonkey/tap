@@ -57,4 +57,43 @@ final class AutosaveTests: HostedTestCase {
         XCTAssertFalse(controller.session.log.text.contains("saved the deck"),
                        "Save To must not tell tap the deck file was saved")
     }
+
+    /// The edited flag follows undo and redo, checked synchronously right
+    /// after each call. Autosave is held off for the whole test: on a
+    /// machine under heavy load, the ordinary 1 second delay is not a
+    /// reliable guarantee that autosave cannot slip in between two
+    /// consecutive lines of test code and confuse what is being measured.
+    func testUndoAndRedoTrackTheEditedFlag() async throws {
+        let originalDelay = NSDocumentController.shared.autosavingDelay
+        NSDocumentController.shared.autosavingDelay = 300
+        defer { NSDocumentController.shared.autosavingDelay = originalDelay }
+
+        let deck = try Fixtures.copyDeck("plain.md")
+        let document = try await openDeck(deck)
+        _ = try await waitForRunningTap(document)
+        XCTAssertFalse(document.isDocumentEdited, "opening a deck does not mark it edited")
+
+        let controller = try XCTUnwrap(document.sessionController)
+        let window = try XCTUnwrap(document.windowControllers.first?.window)
+        window.makeFirstResponder(controller.editor)
+        XCTAssertTrue(controller.editor.undoManager === document.undoManager,
+                     "the editor's undo manager is the document's own")
+
+        let originalText = controller.editor.string
+        controller.editor.setSelectedRange(NSRange(location: (controller.editor.string as NSString).length, length: 0))
+        controller.editor.insertText("A new line.", replacementRange: NSRange(location: NSNotFound, length: 0))
+        // Closes the coalesced typing group immediately, rather than waiting
+        // for the run loop's own event boundary, so undo has something
+        // committed to act on right away.
+        controller.editor.breakUndoCoalescing()
+        XCTAssertTrue(document.isDocumentEdited, "typing marks the document edited")
+
+        controller.editor.undoManager?.undo()
+        XCTAssertEqual(controller.editor.string, originalText, "undo actually reverted the text")
+        XCTAssertFalse(document.isDocumentEdited, "the document is not edited immediately after undo, before autosave could run")
+
+        controller.editor.undoManager?.redo()
+        XCTAssertTrue(controller.editor.string.contains("A new line."), "redo actually reapplied the text")
+        XCTAssertTrue(document.isDocumentEdited, "redo marks the document edited again")
+    }
 }

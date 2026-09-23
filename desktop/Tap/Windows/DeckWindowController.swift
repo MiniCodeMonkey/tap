@@ -37,6 +37,14 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
         window?.makeFirstResponder(sessionController.editor)
     }
 
+    // The editor's undo manager is the document's own, so an undo or redo
+    // typed here posts on the same manager DeckSessionController observes
+    // to keep the document's edited flag in step (see
+    // DeckSessionController.init).
+    func windowWillReturnUndoManager(_ window: NSWindow) -> UndoManager? {
+        sessionController.document?.undoManager
+    }
+
     static let previewItemIdentifier = NSToolbarItem.Identifier("preview")
 
     private(set) var previewWindowController: PreviewWindowController?
