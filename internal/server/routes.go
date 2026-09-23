@@ -196,6 +196,9 @@ func (s *Server) presenterAuthorized(r *http.Request) bool {
 type presentationResponse struct {
 	transformer.PublicPresentation
 	LiveCode *liveCodeStatus `json:"liveCode,omitempty"`
+	// Revision is the deck's revision, which the page reports in its
+	// ready signal.
+	Revision string `json:"revision"`
 }
 
 // liveCodeStatus tells the page which live code blocks can run. A block
@@ -244,6 +247,7 @@ func (s *Server) handleAPIPresentation(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewEncoder(w).Encode(presentationResponse{
 		PublicPresentation: pres.Public(),
 		LiveCode:           s.liveCodeStatusFor(pres),
+		Revision:           s.Revision(),
 	}); err != nil {
 		// If encoding fails, we've already started writing the response
 		// so we can't change the status code. Just log internally.

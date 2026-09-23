@@ -699,3 +699,49 @@ func TestScreenshotIntegration_RollingDeployStepsDiffer(t *testing.T) {
 		t.Error("expected step 0 and the final state to produce different PNG bytes, got identical images")
 	}
 }
+
+// TestExportImagesWaitsForAComponentBundle exports a whole-slide component
+// that paints the slide red. The PNG is red only if the capture waited for
+// the bundle to load and render, which is what the ready signal is for.
+func TestExportImagesWaitsForAComponentBundle(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping browser test in short mode")
+	}
+	deckFolder := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(deckFolder, "slides"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	component := "export default function Solid() {\n  return <div style={{ position: 'absolute', inset: 0, background: 'rgb(255, 0, 0)' }} />;\n}\n"
+	if err := os.WriteFile(filepath.Join(deckFolder, "slides", "Solid.jsx"), []byte(component), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	deckPath := filepath.Join(deckFolder, "deck.md")
+	deck := "---\ntitle: Solid\n---\n\n<!--\nlayout: ./slides/Solid.jsx\n-->\n\n# Solid\n"
+	if err := os.WriteFile(deckPath, []byte(deck), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	outputPath := filepath.Join(deckFolder, "solid.png")
+	exitCode, _, stderr := runTap(t, "export", "images", deckPath, "--slide", "1", "--output", outputPath)
+	if exitCode != exitOK {
+		if exitCode == exitInternal && os.Getenv("CI") == "" {
+			t.Skipf("skipping: the export could not start a browser: %s", stderr)
+		}
+		t.Fatalf("tap export images exited %d: %s", exitCode, stderr)
+	}
+
+	file, err := os.Open(outputPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer file.Close()
+	picture, err := png.Decode(file)
+	if err != nil {
+		t.Fatalf("png.Decode() error = %v", err)
+	}
+	bounds := picture.Bounds()
+	red, green, blue, _ := picture.At(bounds.Dx()/2, bounds.Dy()/2).RGBA()
+	if red>>8 < 200 || green>>8 > 60 || blue>>8 > 60 {
+		t.Errorf("center pixel = (%d, %d, %d), want red: the component had not rendered", red>>8, green>>8, blue>>8)
+	}
+}

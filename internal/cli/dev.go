@@ -265,7 +265,9 @@ func runDevServer(options serverOptions) error {
 	go hub.Run()
 	defer hub.Stop()
 
-	hub.SetPresentationMeta(len(pres.Slides), server.ComputeRevision(pres, componentBundleFiles(resolvedComponents)))
+	initialRevision := server.ComputeRevision(pres, componentBundleFiles(resolvedComponents))
+	hub.SetPresentationMeta(len(pres.Slides), initialRevision)
+	hub.SetVersion(displayVersion())
 
 	// Create, configure, and start the server. A candidate port that is
 	// already bound (another tap dev, or anything else, listening on it)
@@ -277,6 +279,7 @@ func runDevServer(options serverOptions) error {
 	buildServer := func(candidatePort int) *server.Server {
 		candidate := server.NewWithHost(candidatePort, listenHost(options.lan))
 		candidate.SetPresentation(pres)
+		candidate.SetRevision(initialRevision)
 		candidate.SetPresenterPassword(presenterPassword)
 		candidate.SetPresenterSessionToken(presenterSessionToken)
 		candidate.SetAllowedOrigins(allowOrigins)
@@ -304,6 +307,10 @@ func runDevServer(options serverOptions) error {
 		return err
 	}
 	port = srv.Port()
+
+	// Every reload below goes through publisher, which decides whether
+	// open pages update in place or reload.
+	publisher := newDeckPublisher(srv, hub, pres, initialRevision, customThemePath)
 
 	var networkURL, networkQRCode string
 	if options.lan {
@@ -364,11 +371,8 @@ func runDevServer(options serverOptions) error {
 
 		setRawSlides(newRawSlides)
 		watcher.AddExtraDirs(externalInputDirs(newResolvedComponents, baseDir))
-		srv.SetComponentBundles(componentBundleFiles(newResolvedComponents))
 		srv.SetRegistry(buildDriverRegistry(newCfg, baseDir))
-		srv.SetPresentation(newPres)
-		hub.SetPresentationMeta(len(newPres.Slides), server.ComputeRevision(newPres, componentBundleFiles(newResolvedComponents)))
-		_ = hub.BroadcastReload()
+		publisher.publish(newPres, componentBundleFiles(newResolvedComponents), customThemePath, false)
 	})
 
 	if !options.present {
@@ -543,21 +547,12 @@ func runDevServer(options serverOptions) error {
 			}
 
 			// Update custom theme path if changed
-			newCustomThemePath, err := newCfg.ResolveCustomThemePath(baseDir)
-			if err != nil {
-				Warning("Custom theme not loaded on reload: %v\n", err)
-				srv.SetCustomThemePath("")
-			} else {
-				srv.SetCustomThemePath(newCustomThemePath)
-			}
+			newCustomThemePath := resolveCustomThemePathForReload(newCfg, baseDir, srv)
 
 			setRawSlides(newRawSlides)
 			watcher.AddExtraDirs(externalInputDirs(newResolvedComponents, baseDir))
-			srv.SetComponentBundles(componentBundleFiles(newResolvedComponents))
 			srv.SetRegistry(buildDriverRegistry(newCfg, baseDir))
-			srv.SetPresentation(newPres)
-			hub.SetPresentationMeta(len(newPres.Slides), server.ComputeRevision(newPres, componentBundleFiles(newResolvedComponents)))
-			_ = hub.BroadcastReload()
+			publisher.publish(newPres, componentBundleFiles(newResolvedComponents), newCustomThemePath, false)
 			Info("Reloaded: %s\n", path)
 		})
 
@@ -669,14 +664,7 @@ func runDevServer(options serverOptions) error {
 			}
 
 			// Update custom theme path if changed
-			newCustomThemePath, err := newCfg.ResolveCustomThemePath(baseDir)
-			if err != nil {
-				// Log warning but continue - use empty path to disable custom theme
-				Warning("Custom theme not loaded on reload: %v\n", err)
-				srv.SetCustomThemePath("")
-			} else {
-				srv.SetCustomThemePath(newCustomThemePath)
-			}
+			newCustomThemePath := resolveCustomThemePathForReload(newCfg, baseDir, srv)
 
 			// The TUI owns the terminal here, so layout and component
 			// build errors go through the model's own message path
@@ -700,11 +688,10 @@ func runDevServer(options serverOptions) error {
 			model.SetWarnings(append(componentWarningLines(componentWarnings(newResolvedComponents)), undeclaredDriverWarnings(absFile, newPres)...))
 			setRawSlides(newRawSlides)
 			watcher.AddExtraDirs(externalInputDirs(newResolvedComponents, baseDir))
-			srv.SetComponentBundles(componentBundleFiles(newResolvedComponents))
 			srv.SetRegistry(buildDriverRegistry(newCfg, baseDir))
-			srv.SetPresentation(newPres)
-			hub.SetPresentationMeta(len(newPres.Slides), server.ComputeRevision(newPres, componentBundleFiles(newResolvedComponents)))
-			_ = hub.BroadcastReload()
+			// r forces a full reload, so a person can always get a fresh
+			// page. A file change updates open pages in place.
+			publisher.publish(newPres, componentBundleFiles(newResolvedComponents), newCustomThemePath, manual)
 			if !manual {
 				model.SendReloadEvent(path)
 			}

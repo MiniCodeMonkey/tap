@@ -35,8 +35,12 @@ type Server struct {
 	presenterPassword     string
 	presenterSessionToken string
 	customThemePath       string
-	baseDir               string // Base directory for serving local files (images, etc.)
-	componentBundles      *ComponentBundleStore
+	// revision is the served deck's content hash (see ComputeRevision).
+	// /api/presentation returns it, so a page with no WebSocket (a print
+	// page) can still report it in its ready signal.
+	revision         string
+	baseDir          string // Base directory for serving local files (images, etc.)
+	componentBundles *ComponentBundleStore
 	// allowedHosts is the --allow-origin flag reduced to bare hosts (see
 	// allowedHostsFromOrigins), checked by requireAllowedHost against a
 	// request's Host header on the routes that matter against DNS
@@ -100,6 +104,23 @@ func (s *Server) GetPresentation() *transformer.TransformedPresentation {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.presentation
+}
+
+// SetRevision sets the revision /api/presentation reports. tap dev calls
+// it with the result of ComputeRevision on every load and reload.
+// This method is thread-safe.
+func (s *Server) SetRevision(revision string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.revision = revision
+}
+
+// Revision returns the revision set with SetRevision, or "" when none was.
+// This method is thread-safe.
+func (s *Server) Revision() string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.revision
 }
 
 // Addr returns the server address.

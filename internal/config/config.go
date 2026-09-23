@@ -20,7 +20,11 @@ import (
 
 // Config represents the presentation configuration from YAML frontmatter.
 type Config struct {
-	Drivers     map[string]DriverConfig `yaml:"drivers" json:"drivers,omitempty"`
+	// Drivers holds live code connection settings, including credentials
+	// resolved from the environment. They stay on the presenter's machine:
+	// the JSON the browser receives, from tap dev, tap build, and any
+	// other serialization of a deck, never carries them.
+	Drivers     map[string]DriverConfig `yaml:"drivers" json:"-"`
 	ThemeColors map[string]string       `yaml:"themeColors" json:"themeColors,omitempty"`
 	Title       string                  `yaml:"title" json:"title,omitempty"`
 	Theme       string                  `yaml:"theme" json:"theme,omitempty"`

@@ -27,7 +27,9 @@ type MessageType string
 const (
 	// MessageConnected is sent when a client connects.
 	MessageConnected MessageType = "connected"
-	// MessageReload signals clients to reload the page.
+	// MessageReload tells clients to reload the page. tap dev sends it only
+	// when an update in place is not enough: a changed custom theme file,
+	// or the r key.
 	MessageReload MessageType = "reload"
 	// MessageSlide signals clients to navigate to a specific slide.
 	MessageSlide MessageType = "slide"
@@ -36,6 +38,10 @@ const (
 	// MessageRecording carries the recording's disk status to every
 	// client, for the low disk badge.
 	MessageRecording MessageType = "recording"
+	// MessageUpdate tells clients the deck changed: a page fetches
+	// /api/presentation again and replaces its deck data in place,
+	// instead of reloading (see UpdateMessage).
+	MessageUpdate MessageType = "update"
 )
 
 // Message represents a WebSocket message sent between server and clients.
@@ -73,6 +79,10 @@ type Message struct {
 	// can tell tap present apart from tap dev and turn off shortcuts that
 	// only make sense while developing, such as the theme cycle key.
 	Mode string `json:"mode,omitempty"`
+	// Version is the tap version, set only on a "connected" message once
+	// SetVersion has been called. A page compares it across reconnects and
+	// reloads when tap itself changed, since the page's own code is tap's.
+	Version string `json:"version,omitempty"`
 	// Disk is set only on a "recording" message: "low", "full", or absent
 	// when the disk is fine.
 	Disk           string `json:"disk,omitempty"`
@@ -81,6 +91,15 @@ type Message struct {
 	Step           *int   `json:"step,omitempty"`
 	ScrollRevealed *bool  `json:"scrollRevealed,omitempty"`
 	Initial        bool   `json:"initial,omitempty"`
+}
+
+// UpdateMessage is the "update" message: the deck's new revision, and the
+// 1-based numbers of the slides whose content changed (see ChangedSlides).
+// Slides is always an array, never null.
+type UpdateMessage struct {
+	Type     MessageType `json:"type"`
+	Revision string      `json:"revision"`
+	Slides   []int       `json:"slides"`
 }
 
 // Client represents a connected WebSocket client.
@@ -156,6 +175,9 @@ type WebSocketHub struct {
 	// reloads off its first connection (see the frontend's handling of an
 	// absent revision in frontend/src/lib/stores/websocket.ts).
 	revision string
+	// version is the tap version sent on every "connected" message (see
+	// SetVersion). Empty until set, and then omitted from the message.
+	version string
 	// diskStatus is the last disk status broadcast, sent again to each
 	// client that connects later so a reloaded window still shows it.
 	diskStatus string
@@ -233,6 +255,14 @@ func (h *WebSocketHub) SetPresentationMeta(slideCount int, revision string) {
 	defer h.mu.Unlock()
 	h.slideCount = slideCount
 	h.revision = revision
+}
+
+// SetVersion sets the tap version that every "connected" message carries
+// from then on. Safe to call at any time.
+func (h *WebSocketHub) SetVersion(version string) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.version = version
 }
 
 // validSlideIndex reports whether slideIndex is acceptable in a relayed
@@ -422,6 +452,7 @@ func (h *WebSocketHub) Run() {
 				initialData, _ = json.Marshal(initialMsg)
 			}
 			revision := h.revision
+			version := h.version
 			var mode string
 			if h.present {
 				mode = "present"
@@ -449,7 +480,7 @@ func (h *WebSocketHub) Run() {
 			// distinct connections (see hasSeenFirstRevision in the
 			// frontend), and "connected" already fires exactly once per
 			// connection.
-			connectedMsg, _ := json.Marshal(Message{Type: MessageConnected, Revision: revision, Mode: mode})
+			connectedMsg, _ := json.Marshal(Message{Type: MessageConnected, Revision: revision, Mode: mode, Version: version})
 			select {
 			case client.send <- connectedMsg:
 			default:
@@ -578,18 +609,39 @@ func (h *WebSocketHub) Broadcast(msg Message) error {
 		}
 	}
 
+	h.queueBroadcast(data)
+	return nil
+}
+
+// queueBroadcast hands an encoded message to Run, which sends it to every
+// client. A full broadcast channel drops the message rather than block
+// the caller.
+func (h *WebSocketHub) queueBroadcast(data []byte) {
 	select {
 	case h.broadcast <- data:
 	default:
 		// Broadcast channel is full, skip
 	}
-
-	return nil
 }
 
 // BroadcastReload sends a reload message to all clients.
 func (h *WebSocketHub) BroadcastReload() error {
 	return h.Broadcast(Message{Type: MessageReload})
+}
+
+// BroadcastUpdate sends an "update" message with the deck's new revision
+// and the 1-based numbers of the slides that changed. A nil slides list is
+// sent as [].
+func (h *WebSocketHub) BroadcastUpdate(revision string, slides []int) error {
+	if slides == nil {
+		slides = []int{}
+	}
+	data, err := json.Marshal(UpdateMessage{Type: MessageUpdate, Revision: revision, Slides: slides})
+	if err != nil {
+		return err
+	}
+	h.queueBroadcast(data)
+	return nil
 }
 
 // BroadcastSlide sends a slide navigation message to all clients.

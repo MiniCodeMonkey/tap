@@ -632,6 +632,77 @@ export function loadPresentation(data: Presentation): void {
 }
 
 /**
+ * A React key for a slide in a list of slides: its position and content
+ * hash, so a list re-renders only the slides whose content changed. A
+ * slide with no hash falls back to its position.
+ */
+export function slideKey(slide: Slide): string {
+	return slide.hash ? `${slide.index}:${slide.hash}` : String(slide.index);
+}
+
+/**
+ * Replace the deck with a newer copy without reloading the page, after an
+ * "update" message (see stores/websocket.ts). Unlike loadPresentation, this
+ * keeps the current slide, fragment and step, clamped to the new deck's
+ * counts, and keeps the scroll reveal when the slide stays the same.
+ *
+ * A slide keeps its old object when the slide at the same position has the
+ * same content hash, and the config keeps its old object when it did not
+ * change, so a memoized Slide (see components/Slide.tsx) skips re-rendering
+ * everything the edit did not touch.
+ */
+export function updatePresentationInPlace(data: Presentation): void {
+	const current = usePresentationStore.getState();
+	const previous = current.presentation;
+	const previousSlides = previous?.slides ?? [];
+	const slides = data.slides.map((slide, index) => {
+		const previousSlide = previousSlides[index];
+		// An empty hash means SlideHash (internal/transformer) failed to
+		// marshal the slide, so two empty hashes are never treated as equal:
+		// that would report a genuinely changed slide as unchanged and it
+		// would never re-render.
+		const unchanged =
+			previousSlide !== undefined && !!slide.hash && !!previousSlide.hash && previousSlide.hash === slide.hash;
+		return unchanged ? previousSlide : slide;
+	});
+	const config =
+		previous && JSON.stringify(previous.config) === JSON.stringify(data.config) ? previous.config : data.config;
+	const presentation: Presentation = { ...data, config, slides };
+
+	const total = slides.length;
+	const slideIndex = total > 0 ? clamp(current.currentSlideIndex, 0, total - 1) : 0;
+	const slide = slides[slideIndex] ?? null;
+	// The step and fragment counts come from the freshly fetched slide, not
+	// the (possibly reused) merged one, though in practice the two never
+	// disagree: SlideHash (internal/transformer) marshals the whole
+	// transformed slide, including its step and fragment counts, with only
+	// the index and the hash itself blanked, so an unchanged hash implies
+	// unchanged counts too. Reading from the freshly fetched slide is kept
+	// anyway as the defensive choice, since it costs nothing here.
+	const fetchedSlide = data.slides[slideIndex] ?? null;
+	const sameSlide = slideIndex === current.currentSlideIndex;
+
+	usePresentationStore.setState({
+		presentation,
+		currentSlideIndex: slideIndex,
+		currentStep: clamp(current.currentStep, 0, Math.max(fetchedSlide?.steps ?? 0, 0)),
+		currentFragmentIndex: clamp(
+			current.currentFragmentIndex,
+			-1,
+			Math.max((fetchedSlide?.fragmentCount ?? 0) - 1, -1)
+		),
+		scrollRevealed: sameSlide && slide?.scroll === true ? current.scrollRevealed : false
+	});
+
+	if (typeof window !== 'undefined') {
+		(window as unknown as { presentation: Presentation }).presentation = presentation;
+	}
+	if (!sameSlide) {
+		updateURLHash(slideIndex);
+	}
+}
+
+/**
  * Set the theme override from a WebSocket message.
  * This temporarily overrides the theme without modifying the markdown file.
  */

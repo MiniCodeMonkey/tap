@@ -277,8 +277,12 @@ func (b *Builder) writeComponentBundles() (int, int64, error) {
 // imgSrcPattern matches img src attributes in HTML.
 var imgSrcPattern = regexp.MustCompile(`(<img\s[^>]*src=["'])([^"']+)(["'][^>]*>)`)
 
-// asciinemaBlockPattern matches asciinema code blocks and captures the content.
-var asciinemaBlockPattern = regexp.MustCompile(`<code class="language-asciinema">([\s\S]*?)</code>`)
+// asciinemaBlockPattern matches asciinema code blocks and captures the
+// opening tag and the content. The renderer always adds a
+// data-code-block-index attribute after the class (and may add others
+// later), so this matches on the class alone and tolerates any other
+// attributes the tag carries, in any order.
+var asciinemaBlockPattern = regexp.MustCompile(`(<code class="language-asciinema"[^>]*>)([\s\S]*?)</code>`)
 
 // ascinemaSrcPattern matches "src: path" lines in asciinema block content.
 var ascinemaSrcPattern = regexp.MustCompile(`(?m)^src:\s*(?:&quot;|"|')?([^"'&\n]+)(?:&quot;|"|')?$`)
@@ -355,10 +359,10 @@ func extractAsciinemaPaths(html string) []string {
 	var paths []string
 	blocks := asciinemaBlockPattern.FindAllStringSubmatch(html, -1)
 	for _, block := range blocks {
-		if len(block) < 2 {
+		if len(block) < 3 {
 			continue
 		}
-		content := block[1]
+		content := block[2]
 		srcMatches := ascinemaSrcPattern.FindStringSubmatch(content)
 		if len(srcMatches) >= 2 {
 			paths = append(paths, strings.TrimSpace(srcMatches[1]))
@@ -371,10 +375,11 @@ func extractAsciinemaPaths(html string) []string {
 func rewriteAsciinemaPaths(html string, pathMapping map[string]string) string {
 	return asciinemaBlockPattern.ReplaceAllStringFunc(html, func(match string) string {
 		submatches := asciinemaBlockPattern.FindStringSubmatch(match)
-		if len(submatches) < 2 {
+		if len(submatches) < 3 {
 			return match
 		}
-		content := submatches[1]
+		openTag := submatches[1]
+		content := submatches[2]
 		// Replace src paths in the content
 		newContent := ascinemaSrcPattern.ReplaceAllStringFunc(content, func(srcLine string) string {
 			srcMatches := ascinemaSrcPattern.FindStringSubmatch(srcLine)
@@ -387,7 +392,7 @@ func rewriteAsciinemaPaths(html string, pathMapping map[string]string) string {
 			}
 			return srcLine
 		})
-		return `<code class="language-asciinema">` + newContent + `</code>`
+		return openTag + newContent + `</code>`
 	})
 }
 

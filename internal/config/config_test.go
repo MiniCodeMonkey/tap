@@ -662,3 +662,26 @@ func TestFromSource(t *testing.T) {
 		t.Error("FromSource() of an empty deck should fail, as Load does")
 	}
 }
+
+func TestConfigJSON_LeavesDriversOut(t *testing.T) {
+	cfg := Config{
+		Title: "Deck",
+		Drivers: map[string]DriverConfig{
+			"mysql": {Connections: map[string]ConnectionConfig{
+				"default": {Host: "localhost", User: "root", Password: "s3cret"},
+			}},
+		},
+	}
+	data, err := json.Marshal(cfg)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	for _, leaked := range []string{"drivers", "Drivers", "s3cret", "root"} {
+		if strings.Contains(string(data), leaked) {
+			t.Errorf("config JSON contains %q: %s", leaked, data)
+		}
+	}
+	if !strings.Contains(string(data), `"title":"Deck"`) {
+		t.Errorf("config JSON lost the title: %s", data)
+	}
+}

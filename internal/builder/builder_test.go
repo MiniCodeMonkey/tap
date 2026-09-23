@@ -170,6 +170,80 @@ func TestRewriteImagePaths(t *testing.T) {
 	}
 }
 
+func TestExtractAsciinemaPaths(t *testing.T) {
+	tests := []struct {
+		name     string
+		html     string
+		expected []string
+	}{
+		{
+			name:     "no asciinema blocks",
+			html:     "<p>Hello world</p>",
+			expected: nil,
+		},
+		{
+			// This is the tag exactly as the markdown renderer emits it: the
+			// language class plus the data-code-block-index attribute the
+			// renderer always adds. A pattern that only matches the bare
+			// class="language-asciinema" tag never fires on real output.
+			name:     "renderer's real tag with data-code-block-index",
+			html:     `<pre><code class="language-asciinema" data-code-block-index="0">src: demo.cast</code></pre>`,
+			expected: []string{"demo.cast"},
+		},
+		{
+			name:     "bare tag with no extra attributes",
+			html:     `<code class="language-asciinema">src: demo.cast</code>`,
+			expected: []string{"demo.cast"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := extractAsciinemaPaths(tt.html)
+			if len(result) != len(tt.expected) {
+				t.Errorf("expected %d paths, got %d (%v)", len(tt.expected), len(result), result)
+				return
+			}
+			for i, path := range result {
+				if path != tt.expected[i] {
+					t.Errorf("path %d: expected %q, got %q", i, tt.expected[i], path)
+				}
+			}
+		})
+	}
+}
+
+func TestRewriteAsciinemaPaths(t *testing.T) {
+	tests := []struct {
+		name     string
+		html     string
+		mapping  map[string]string
+		expected string
+	}{
+		{
+			name:     "renderer's real tag with data-code-block-index",
+			html:     `<pre><code class="language-asciinema" data-code-block-index="0">src: demo.cast</code></pre>`,
+			mapping:  map[string]string{"demo.cast": "assets/demo.abc12345.cast"},
+			expected: `<pre><code class="language-asciinema" data-code-block-index="0">src: assets/demo.abc12345.cast</code></pre>`,
+		},
+		{
+			name:     "bare tag with no extra attributes",
+			html:     `<code class="language-asciinema">src: demo.cast</code>`,
+			mapping:  map[string]string{"demo.cast": "assets/demo.abc12345.cast"},
+			expected: `<code class="language-asciinema">src: assets/demo.abc12345.cast</code>`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := rewriteAsciinemaPaths(tt.html, tt.mapping)
+			if result != tt.expected {
+				t.Errorf("expected %q, got %q", tt.expected, result)
+			}
+		})
+	}
+}
+
 func TestIsAbsoluteURL(t *testing.T) {
 	tests := []struct {
 		path     string
@@ -986,5 +1060,39 @@ func TestBuild_LeavesOutSkippedSlides(t *testing.T) {
 	}
 	if len(data.Slides) != 2 || data.Slides[1].Index != 1 || !strings.Contains(data.Slides[1].HTML, "Kept second") {
 		t.Errorf("embedded slides = %+v, want two slides indexed 0 and 1", data.Slides)
+	}
+}
+
+func TestGenerateIndexHTML_LeavesDriverSettingsOut(t *testing.T) {
+	tmpDir := t.TempDir()
+	b := NewWithOutput(tmpDir)
+
+	pres := &transformer.TransformedPresentation{
+		Config: config.Config{
+			Title: "Live Queries",
+			Drivers: map[string]config.DriverConfig{
+				"postgres": {
+					Connections: map[string]config.ConnectionConfig{
+						"default": {Host: "db.internal", User: "analyst", Password: "hunter2-secret"},
+					},
+				},
+			},
+		},
+		Slides: []transformer.TransformedSlide{},
+	}
+	path := filepath.Join(tmpDir, "index.html")
+	if _, err := b.generateIndexHTML(path, pres); err != nil {
+		t.Fatalf("generateIndexHTML failed: %v", err)
+	}
+
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("failed to read generated file: %v", err)
+	}
+	html := string(content)
+	for _, leaked := range []string{"hunter2-secret", "db.internal", "analyst", "drivers"} {
+		if strings.Contains(html, leaked) {
+			t.Errorf("index.html contains driver setting %q; driver settings must never reach the browser", leaked)
+		}
 	}
 }

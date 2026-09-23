@@ -226,7 +226,7 @@ When the dev server starts, it provides:
 
 ### Features
 
-- **Live reload**: Changes to your markdown file are instantly reflected
+- **Live updates**: Saving the deck updates every open page in place. Only the slides you changed re-render, and each page keeps its slide, fragment and step (moved back if the slide lost steps). A changed custom theme file, or `r` in the terminal, reloads the page instead.
 - **Live code execution**: Run SQL, shell commands, and other drivers
 - **Presenter mode**: Access speaker notes and timer at `/presenter`
 - **Cross-device sync**: Control from one device, display on another
@@ -283,6 +283,7 @@ tap build [deck]
 |------|-------|-------------|
 | `--output <dir>` | `-o` | Output directory (default: `dist`) |
 | `--json` | | Print the result as JSON |
+| `--progress json` | none | Print progress to stderr as JSON lines, for a program driving tap (see Progress output). |
 
 ### Behavior
 
@@ -367,6 +368,7 @@ tap export pdf [deck]
 | `--output <file>` | `-o` | Output PDF file path (default: `<deck>.pdf`) |
 | `--content <type>` | | Content to include: `slides`, `notes`, or `both` (default: `slides`) |
 | `--json` | | Print the result as JSON |
+| `--progress json` | none | Print progress to stderr as JSON lines, for a program driving tap (see Progress output). |
 
 ### Content Types
 
@@ -463,6 +465,7 @@ tap export images [deck] [flags]
 | `--wait <ms>` | | Keep the capture live and wait this long after the page is ready, instead of settling it (`0` to `60000`) |
 | `--width <px>` | | Viewport width in pixels; height follows the deck's aspect ratio (default `1920`) |
 | `--json` | | Print the written files as JSON |
+| `--progress json` | none | Print progress to stderr as JSON lines, for a program driving tap (see Progress output). |
 
 ### Behavior
 
@@ -782,6 +785,23 @@ These hold across every command.
   or its environment, `130` interrupted.
 - The old names `tap pdf`, `tap screenshot`, `tap add` and `tap add
   component` print the new name and exit 1.
+
+### Progress output
+
+`tap export pdf`, `tap export images` and `tap build` accept `--progress json`. Each step prints one JSON object on its own line to stderr:
+
+    {"phase":"render","done":7,"total":14}
+
+- `export pdf` and `export images` print one `render` line per slide (per notes page for `--content notes`).
+- `build` prints `load`, `parse`, `bundle` and `write`, with `total` 4.
+- A first export downloads the export browser and prints `{"phase":"download","bytes":52428800,"totalBytes":170175488}` lines while it does. Each downloaded archive starts again from 0.
+- The last line is `{"phase":"done","ok":true, ...}` with the same fields as the command's `--json` result, or `{"phase":"done","ok":false,"error":{"code":"...","message":"..."}}`.
+
+stdout keeps the command's normal output (or its `--json` result). Warnings can still appear on stderr as plain text; read only the lines that start with `{`.
+
+### Ready signal
+
+Every tap page reports when the slide on screen has finished rendering: fonts and images loaded, maps drawn, components loaded, error cards shown, and transitions and theme animations done. It sets `window.__tapReady` to `{"revision": "...", "slide": 3, "step": 1}` (`slide` counts from 1), dispatches a `tap:ready` event on `window` with the same object, and, inside a macOS web view that registered a `tapReady` message handler, posts it to that handler. `window.__tapReady` is `null` while a slide is still rendering, and resets when the slide, step, fragment, theme or deck changes. `tap export pdf` and `tap export images` wait for this signal before each capture.
 
 ## Output Streams
 

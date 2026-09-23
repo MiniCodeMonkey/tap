@@ -86,6 +86,8 @@ export interface ThemeColors {
  * driver's settings and no connection's details.
  */
 export interface PresentationConfig {
+	// Driver settings (live code connections and credentials) never leave
+	// the presenter's machine, so they have no field here.
 	themeColors?: ThemeColors;
 	title?: string;
 	theme?: string;
@@ -247,6 +249,12 @@ export interface Slide {
 	component?: SlideComponentInfo;
 	/** Each inline ```component fence found on the slide, in document order. */
 	components?: SlideComponentInfo[];
+	/**
+	 * Short hash of the slide's content, without its position (see
+	 * SlideHash in internal/transformer). The same hash at the same
+	 * position means the same slide.
+	 */
+	hash?: string;
 }
 
 // ============================================================================
@@ -271,6 +279,12 @@ export interface Presentation {
 	slides: Slide[];
 	/** Present when the server can run live code; absent for a static build or an export. */
 	liveCode?: LiveCodeStatus;
+	/**
+	 * The deck's revision (see ComputeRevision in internal/server), from
+	 * /api/presentation. The ready signal reports it. Absent in a static
+	 * build.
+	 */
+	revision?: string;
 }
 
 // ============================================================================
@@ -280,7 +294,7 @@ export interface Presentation {
 /**
  * WebSocket message types for hot reload and sync.
  */
-export type WebSocketMessageType = 'connected' | 'reload' | 'slide' | 'theme' | 'recording';
+export type WebSocketMessageType = 'connected' | 'reload' | 'update' | 'slide' | 'theme' | 'recording';
 
 /**
  * WebSocket message from the server.
@@ -306,11 +320,22 @@ export interface WebSocketMessage {
 	 */
 	initial?: boolean;
 	/**
-	 * Short content hash of the deck currently served, sent only on a
-	 * "connected" message (see internal/server/websocket.go's register
-	 * case). Absent when the hub has never had a presentation set.
+	 * Short content hash of the deck currently served, on a "connected"
+	 * message (see internal/server/websocket.go's register case) and on an
+	 * "update" message. Absent when the hub has never had a presentation set.
 	 */
 	revision?: string;
+	/**
+	 * The 1-based numbers of the slides whose content changed, on an
+	 * "update" message. The page fetches the whole deck either way; this
+	 * says which slides will re-render.
+	 */
+	slides?: number[];
+	/**
+	 * The tap version, on a "connected" message. A reconnect to another
+	 * version reloads the page, since the page's code comes from tap.
+	 */
+	version?: string;
 	/** Recording disk status on a "recording" message. Absent means the disk is fine. */
 	disk?: 'low' | 'full';
 	/**
