@@ -337,7 +337,10 @@ func generateAndPlace(ctx context.Context, placement deckedit.Placement) (decked
 	}
 	placed, err := deckedit.PlaceGeneratedImage(placement, *image)
 	if err != nil {
-		return deckedit.PlacedImage{}, internalError(codeInternal, err)
+		// A deck or images folder that cannot be written is a problem the
+		// person can fix, exit 1, the same classification tap theme set
+		// and tap slide add give it.
+		return deckedit.PlacedImage{}, userError(codeInvalidDeck, fmt.Errorf("cannot add the image to %s: %w", placement.DeckPath, err))
 	}
 	return placed, nil
 }
