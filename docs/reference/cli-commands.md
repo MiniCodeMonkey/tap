@@ -250,7 +250,7 @@ tap present [deck]
 | `--port <number>` | `-p` | Port to serve on (default: `3000`) |
 | `--lan` | | Listen on the local network too, so a phone on the same network can open the presenter view. Without it, only this machine can connect |
 | `--no-record` | | Do not record this run |
-| `--allow-code` | | Run the deck's live code for this run without an approval, and save none. For `--headless` and scripts |
+| `--allow-code` | | Run the deck's live code for this run without an approval, and save none. For scripts and other non-interactive runs |
 
 The server listens on this machine only, unless `--lan` opens it to the
 local network, the same as `tap dev`. With `--lan`, any device on the
