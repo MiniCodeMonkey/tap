@@ -1008,7 +1008,7 @@ tap approval list --json
 
 `--json` prints `{"ok": true, "approvals": [{"deck": "/Users/me/talks/talk.md", "drivers": ["shell", "sqlite"], "approvedAt": "2026-09-22T19:32:00Z"}]}`.
 
-### tap approval revoke <deck>
+### tap approval revoke
 
 Removes a deck's approval. tap asks again the next time it opens the deck. `<deck>` is the file or its folder. A moved or deleted deck can be revoked by its old path. An unapproved deck is exit 1 with the code `not_approved`.
 
