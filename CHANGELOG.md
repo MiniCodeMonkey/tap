@@ -23,6 +23,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - **Approve a deck before it runs code** - A deck with live code runs nothing until you approve it. `tap dev` and `tap present` ask once in the terminal, before the TUI starts, and list the drivers, the command of any custom driver, and which slides have blocks. `s` shows the code. The answer is saved in `~/.config/tap/settings.yaml`, keyed by the deck's path and its drivers, so editing code never asks again, while a new driver or a moved deck does. A no saves nothing: the deck still presents, and its Run buttons show "Not approved". `tap new` approves the decks it creates.
 - **`tap approval list` and `tap approval revoke <deck>`** - See and remove approvals. Both take `--json`.
 - **`--allow-code`** on `tap dev` and `tap present` - Runs live code for that run without an approval, and saves none. Without a terminal, or with `--headless`, tap never asks, and an unapproved deck's live code stays off.
+- **`--app` mode for `tap dev` and `tap present`** - The interface the Tap desktop app runs tap through. tap listens on 127.0.0.1 behind a per-launch token, prints JSON events on standard output, takes commands and answers on standard input, and exits when standard input closes. The live code approval, the recording question and "Keep this recording?" arrive as events instead of terminal prompts. `PUT /api/app/source` renders an unsaved buffer and answers with the slide list. See App mode in the CLI reference.
+- **`tap present --presenter-password`** - Protect the presenter view during a talk, for a phone remote over the tunnel (`u`).
 
 ### Security
 
@@ -37,6 +39,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - **A deck's image or recording path can no longer reach outside the deck's folder** - A path in a deck's markdown, such as `../secret.png`, its percent-encoded form, an absolute path, or a symlink inside `images/` that points somewhere else, used to be followed wherever it led, on both `tap build` and `tap export`. tap now refuses any asset that resolves outside the deck's folder, with a warning naming the path, so a deck someone sends you cannot pull a file off the machine that builds it into the site you publish.
 
 - **Regenerating an AI image can no longer delete a file outside the deck's folder** - `tap image regenerate` and the `i` key deleted the old image at whatever path the deck's markdown named, through the same hole as above. The delete now goes through the same containment check as reads: a path that resolves outside the deck's folder is refused and the file is left on disk.
+
+- **Every request body has a size limit** - 64 KB, and 8 MB for the desktop app's unsaved buffer. A larger body gets 413 before tap reads it. The same-origin JSON guard now covers every route that changes something, not only `/api/execute`.
 
 ### Fixed
 
