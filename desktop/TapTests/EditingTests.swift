@@ -62,28 +62,19 @@ final class EditingTests: HostedTestCase {
         XCTAssertTrue(header.badges.contains("sqlite"))
     }
 
-    /// The bar is reached by a programmatic edit. `replaceText` sets
-    /// `isApplyingProgrammaticEdit`, which is the flag `shouldChangeText`
-    /// reads in order to skip the clamp, so this is the path the app itself
-    /// uses to load the disk version, not a path a person can take: someone
-    /// typing into the hidden frontmatter is beeped and refused.
-    ///
-    /// The route a person takes to this bar is opening a deck whose
-    /// frontmatter is already broken on disk, and that cannot be tested from
-    /// here: `tap dev --app` answers such a file with an invalid_deck error
-    /// event and exits, so no session ever runs to answer a PUT. What is
-    /// asserted below, the bar and the frontmatter coming out of hiding once
-    /// the slide list carries an error, is the same end state either route
-    /// produces.
-    func testDeckErrorsShowABarAndTheFrontmatter() async throws {
-        let document = try await openDeck(try Fixtures.copyAppFixture())
+    /// The bar the way a person meets it: opening a deck whose frontmatter
+    /// is already broken on disk. `tap dev --app` falls back to the default
+    /// configuration, starts, and reports the parse failure in the slide
+    /// list it answers with, so the app has a session to talk to and an
+    /// error to show. The frontmatter comes out of hiding with it, because
+    /// a person cannot fix what the editor will not let them see.
+    func testOpeningADeckBrokenOnDiskShowsTheBarAndTheFrontmatter() async throws {
+        let document = try await openDeck(try Fixtures.copyDeck("broken-frontmatter.md"))
         let controller = try XCTUnwrap(document.sessionController)
-        try await waitForBoxes(document, count: 4)
-        // The first match is the frontmatter's title, not the heading below it.
-        let title = (controller.editor.string as NSString).range(of: "App Mode Fixture")
-        controller.editor.replaceText(in: title, with: "[unclosed", actionName: "Break the frontmatter")
+        try await waitForBoxes(document, count: 2)
         try await waitUntil(timeout: 30, "the deck errors bar") { controller.editorViewController.bar(.deckErrors) != nil }
-        XCTAssertEqual(controller.editor.hiddenLength, 0)
+        XCTAssertEqual(controller.editor.hiddenLength, 0, "the frontmatter is shown until it is fixed")
+        XCTAssertTrue(controller.editor.string.hasPrefix("---\ntitle: [unclosed"), "including the line that does not parse")
         XCTAssertTrue(controller.editorViewController.bar(.deckErrors)?.message.hasPrefix("The deck settings have a problem") ?? false)
     }
 }
