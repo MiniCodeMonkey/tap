@@ -2,6 +2,7 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -18,8 +19,9 @@ import (
 
 // Flags for the build command
 var (
-	buildOutput string
-	buildJSON   bool
+	buildOutput   string
+	buildJSON     bool
+	buildProgress string
 )
 
 // buildCmd represents the build command
@@ -43,7 +45,8 @@ Examples:
   tap build                             # The deck in this folder, to dist/
   tap build slides.md                   # Build to dist/ directory
   tap build slides.md --output public   # Build to custom directory
-  tap build slides.md -o ./build        # Short form`,
+  tap build slides.md -o ./build        # Short form
+  tap build talk.md --progress json      # Progress as JSON lines on stderr`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: runBuild,
 }
@@ -55,10 +58,27 @@ func init() {
 	// Command-specific flags
 	buildCmd.Flags().StringVarP(&buildOutput, "output", "o", "dist", "output directory for static files")
 	buildCmd.Flags().BoolVar(&buildJSON, "json", false, "print the result as JSON")
+	buildCmd.Flags().StringVar(&buildProgress, "progress", "", "print progress to stderr as JSON lines (json)")
+}
+
+// buildSteps is the number of --progress json steps tap build reports:
+// load, parse, bundle and write.
+const buildSteps = 4
+
+// buildResultJSON is the --json and progress result of tap build.
+type buildResultJSON struct {
+	Output string `json:"output"`
+	Files  int    `json:"files"`
+	Bytes  int64  `json:"bytes"`
 }
 
 // runBuild executes the build command logic
 func runBuild(cmd *cobra.Command, args []string) error {
+	progress, err := newProgressReporter(buildProgress, cmd.ErrOrStderr())
+	if err != nil {
+		return err
+	}
+
 	file, err := resolveDeck(firstArg(args))
 	if err != nil {
 		return err
@@ -73,6 +93,10 @@ func runBuild(cmd *cobra.Command, args []string) error {
 
 	// Start spinner
 	spinner := newSpinner("Building presentation")
+	if progress.enabled() {
+		// Progress lines replace the spinner on stderr.
+		spinner.isTerminal = func() bool { return false }
+	}
 	spinner.start()
 
 	// Step 1: Load configuration from frontmatter
@@ -88,6 +112,7 @@ func runBuild(cmd *cobra.Command, args []string) error {
 		spinner.stop()
 		return userError(codeInvalidDeck, fmt.Errorf("invalid configuration: %w", err))
 	}
+	progress.Step(progressPhaseLoad, 1, buildSteps)
 
 	// Step 2: Read and parse the presentation file
 	spinner.update("Parsing presentation")
@@ -103,6 +128,7 @@ func runBuild(cmd *cobra.Command, args []string) error {
 		spinner.stop()
 		return userError(codeInvalidDeck, fmt.Errorf("failed to parse presentation: %s: %w", file, err))
 	}
+	progress.Step(progressPhaseParse, 2, buildSteps)
 
 	// Resolve and bundle every component the presentation's slides use.
 	// Static builds minify and skip source maps. Any bundle error fails
@@ -133,6 +159,7 @@ func runBuild(cmd *cobra.Command, args []string) error {
 		}
 		return reportedError(codeInvalidDeck, fmt.Errorf("%d layout error(s)", len(warnings)))
 	}
+	progress.Step(progressPhaseBundle, 3, buildSteps)
 
 	// Step 3: Build static files
 	spinner.update("Generating static files")
@@ -143,20 +170,24 @@ func runBuild(cmd *cobra.Command, args []string) error {
 	result, err := b.Build(cfg, pres)
 	if err != nil {
 		spinner.stop()
+		if errors.Is(err, builder.ErrAllSlidesSkipped) {
+			return userError(codeInvalidDeck, err)
+		}
 		return internalError(codeInternal, fmt.Errorf("build failed: %w", err))
 	}
+	progress.Step(progressPhaseWrite, 4, buildSteps)
 
 	// Stop spinner and show results
 	spinner.stop()
 
 	printComponentWarningsToStderr(componentWarnings(resolvedComponents))
 
+	jsonResult := buildResultJSON{Output: result.OutputDir, Files: result.FileCount, Bytes: result.TotalSize}
+	if err := progress.Result(jsonResult); err != nil {
+		return err
+	}
 	if buildJSON {
-		return printJSONOK(cmd.OutOrStdout(), struct {
-			Output string `json:"output"`
-			Files  int    `json:"files"`
-			Bytes  int64  `json:"bytes"`
-		}{Output: result.OutputDir, Files: result.FileCount, Bytes: result.TotalSize})
+		return printJSONOK(cmd.OutOrStdout(), jsonResult)
 	}
 
 	Successln("\nBuild complete!")

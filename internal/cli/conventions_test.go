@@ -12,11 +12,12 @@ import (
 // flagConventions is the one short form each shared flag has on every
 // command. An empty string means the flag has no short form.
 var flagConventions = map[string]string{
-	"output": "o",
-	"theme":  "t",
-	"port":   "p",
-	"yes":    "y",
-	"json":   "",
+	"output":   "o",
+	"theme":    "t",
+	"port":     "p",
+	"yes":      "y",
+	"json":     "",
+	"progress": "",
 }
 
 // removedFlags must not come back on any command.
@@ -28,6 +29,8 @@ var expectedCommands = []string{
 	"tap build",
 	"tap component",
 	"tap component new",
+	"tap deck",
+	"tap deck schema",
 	"tap dev",
 	"tap export",
 	"tap export images",
@@ -37,6 +40,7 @@ var expectedCommands = []string{
 	"tap serve",
 	"tap slide",
 	"tap slide add",
+	"tap slide list",
 	"tap theme",
 	"tap theme list",
 	"tap theme show",

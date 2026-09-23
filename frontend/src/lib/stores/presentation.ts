@@ -7,6 +7,14 @@
 import { create } from 'zustand';
 import type { Presentation, Slide, Theme } from '$lib/types';
 import { listThemes } from '$lib/themes/loader';
+import {
+	firstPresentedIndex,
+	lastPresentedIndex,
+	nextPresentedIndex,
+	presentedSlideCount,
+	presentedSlideNumber,
+	previousPresentedIndex
+} from '$lib/utils/skip';
 
 // ============================================================================
 // Store State
@@ -54,10 +62,19 @@ export const selectCurrentSlide = (state: PresentationState): Slide | null => {
 };
 
 /**
- * Total number of slides in the presentation.
+ * Number of slides a talk shows, leaving out skipped slides. This is the
+ * count the audience and the presenter see.
  */
-export const selectTotalSlides = (state: PresentationState): number => {
-	return state.presentation?.slides.length ?? 0;
+export const selectPresentedSlideCount = (state: PresentationState): number => {
+	return presentedSlideCount(state.presentation?.slides ?? []);
+};
+
+/**
+ * The current slide's 1-based number among the slides a talk shows, or
+ * null when the current slide is skipped.
+ */
+export const selectPresentedSlideNumber = (state: PresentationState): number | null => {
+	return presentedSlideNumber(state.presentation?.slides ?? [], state.currentSlideIndex);
 };
 
 /**
@@ -146,7 +163,7 @@ export function resetStrippedLoadTimeQueryParams(): void {
  * 1. Steps - advance the presenter step within the slide.
  * 2. Scroll - reveal the slide's scroll content.
  * 3. Fragments - reveal fragments one by one.
- * 4. Next slide - advance to the next slide, resetting step/scroll/fragment state.
+ * 4. Next slide - advance to the next slide that is not skipped, resetting step/scroll/fragment state.
  * Returns true if navigation occurred.
  */
 export function nextSlide(): boolean {
@@ -174,9 +191,8 @@ export function nextSlide(): boolean {
 		return true;
 	}
 
-	const total = state.presentation?.slides.length ?? 0;
-	if (state.currentSlideIndex < total - 1) {
-		const newSlideIndex = state.currentSlideIndex + 1;
+	const newSlideIndex = nextPresentedIndex(state.presentation?.slides ?? [], state.currentSlideIndex);
+	if (newSlideIndex !== null) {
 		usePresentationStore.setState({
 			currentSlideIndex: newSlideIndex,
 			currentStep: 0,
@@ -195,7 +211,7 @@ export function nextSlide(): boolean {
  * 1. Fragments - hide fragments in reverse order.
  * 2. Scroll - reset the slide's scroll content to the top.
  * 3. Steps - retreat the presenter step within the slide.
- * 4. Previous slide - go to the previous slide, landing on its final state
+ * 4. Previous slide - go to the previous slide that is not skipped, landing on its final state
  *    (all steps taken, scrolled to the bottom, all fragments visible).
  * Returns true if navigation occurred.
  */
@@ -221,8 +237,8 @@ export function prevSlide(): boolean {
 		return true;
 	}
 
-	if (state.currentSlideIndex > 0) {
-		const newSlideIndex = state.currentSlideIndex - 1;
+	const newSlideIndex = previousPresentedIndex(state.presentation?.slides ?? [], state.currentSlideIndex);
+	if (newSlideIndex !== null) {
 		const newSlide = state.presentation?.slides[newSlideIndex] ?? null;
 		const newFragmentCount = newSlide?.fragmentCount ?? 0;
 		const newHasScroll = newSlide?.scroll === true;
@@ -241,7 +257,8 @@ export function prevSlide(): boolean {
 
 /**
  * Navigate directly to a specific slide.
- * Resets step, fragment and scroll state.
+ * Resets step, fragment and scroll state. A skipped slide opens too: going
+ * to a slide directly is how tap dev shows one while writing it.
  */
 export function goToSlide(index: number): boolean {
 	stripLoadTimeQueryParams();
@@ -259,6 +276,18 @@ export function goToSlide(index: number): boolean {
 	});
 	updateURLHash(index);
 	return true;
+}
+
+/** Go to the first slide a talk shows, passing over skipped slides. */
+export function goToFirstSlide(): boolean {
+	const index = firstPresentedIndex(usePresentationStore.getState().presentation?.slides ?? []);
+	return index === null ? false : goToSlide(index);
+}
+
+/** Go to the last slide a talk shows, passing over skipped slides. */
+export function goToLastSlide(): boolean {
+	const index = lastPresentedIndex(usePresentationStore.getState().presentation?.slides ?? []);
+	return index === null ? false : goToSlide(index);
 }
 
 /** Clamps value to the inclusive [min, max] range. */
@@ -456,10 +485,16 @@ function recordHashSlideIndexAtLoad(): number | null {
 	return hashIndex;
 }
 
-/** Clamps a hash-named slide index (or 0, if there was none) to a valid slide. */
-function clampHashSlideIndex(hashIndex: number | null, total: number): number {
-	const slideIndex = hashIndex ?? 0;
-	return total > 0 ? Math.min(slideIndex, total - 1) : slideIndex;
+/**
+ * The slide a page load opens on: the one the URL hash names, clamped to
+ * the deck, which may be a skipped slide; or, with no hash, the first
+ * slide that is not skipped.
+ */
+function initialSlideIndex(hashIndex: number | null, slides: readonly Slide[]): number {
+	if (hashIndex === null) {
+		return firstPresentedIndex(slides) ?? 0;
+	}
+	return slides.length > 0 ? Math.min(hashIndex, slides.length - 1) : hashIndex;
 }
 
 /**
@@ -509,7 +544,7 @@ export function initializeFromURL(): void {
 	const state = usePresentationStore.getState();
 	const total = state.presentation?.slides.length ?? 0;
 	if (total > 0) {
-		const slideIndex = clampHashSlideIndex(hashIndex, total);
+		const slideIndex = initialSlideIndex(hashIndex, state.presentation?.slides ?? []);
 		const slide = state.presentation?.slides[slideIndex] ?? null;
 		const { step, fragment } = resolveInitialStepAndFragment(slide);
 		usePresentationStore.setState({
@@ -580,7 +615,7 @@ export function resetPresentation(): void {
  */
 export function loadPresentation(data: Presentation): void {
 	const hashIndex = recordHashSlideIndexAtLoad();
-	const slideIndex = clampHashSlideIndex(hashIndex, data.slides.length);
+	const slideIndex = initialSlideIndex(hashIndex, data.slides);
 	const { step, fragment } = resolveInitialStepAndFragment(data.slides[slideIndex] ?? null);
 	usePresentationStore.setState({
 		presentation: data,
@@ -593,6 +628,77 @@ export function loadPresentation(data: Presentation): void {
 	// Expose on window for PDF exporter to access slide count
 	if (typeof window !== 'undefined') {
 		(window as unknown as { presentation: Presentation }).presentation = data;
+	}
+}
+
+/**
+ * A React key for a slide in a list of slides: its position and content
+ * hash, so a list re-renders only the slides whose content changed. A
+ * slide with no hash falls back to its position.
+ */
+export function slideKey(slide: Slide): string {
+	return slide.hash ? `${slide.index}:${slide.hash}` : String(slide.index);
+}
+
+/**
+ * Replace the deck with a newer copy without reloading the page, after an
+ * "update" message (see stores/websocket.ts). Unlike loadPresentation, this
+ * keeps the current slide, fragment and step, clamped to the new deck's
+ * counts, and keeps the scroll reveal when the slide stays the same.
+ *
+ * A slide keeps its old object when the slide at the same position has the
+ * same content hash, and the config keeps its old object when it did not
+ * change, so a memoized Slide (see components/Slide.tsx) skips re-rendering
+ * everything the edit did not touch.
+ */
+export function updatePresentationInPlace(data: Presentation): void {
+	const current = usePresentationStore.getState();
+	const previous = current.presentation;
+	const previousSlides = previous?.slides ?? [];
+	const slides = data.slides.map((slide, index) => {
+		const previousSlide = previousSlides[index];
+		// An empty hash means SlideHash (internal/transformer) failed to
+		// marshal the slide, so two empty hashes are never treated as equal:
+		// that would report a genuinely changed slide as unchanged and it
+		// would never re-render.
+		const unchanged =
+			previousSlide !== undefined && !!slide.hash && !!previousSlide.hash && previousSlide.hash === slide.hash;
+		return unchanged ? previousSlide : slide;
+	});
+	const config =
+		previous && JSON.stringify(previous.config) === JSON.stringify(data.config) ? previous.config : data.config;
+	const presentation: Presentation = { ...data, config, slides };
+
+	const total = slides.length;
+	const slideIndex = total > 0 ? clamp(current.currentSlideIndex, 0, total - 1) : 0;
+	const slide = slides[slideIndex] ?? null;
+	// The step and fragment counts come from the freshly fetched slide, not
+	// the (possibly reused) merged one, though in practice the two never
+	// disagree: SlideHash (internal/transformer) marshals the whole
+	// transformed slide, including its step and fragment counts, with only
+	// the index and the hash itself blanked, so an unchanged hash implies
+	// unchanged counts too. Reading from the freshly fetched slide is kept
+	// anyway as the defensive choice, since it costs nothing here.
+	const fetchedSlide = data.slides[slideIndex] ?? null;
+	const sameSlide = slideIndex === current.currentSlideIndex;
+
+	usePresentationStore.setState({
+		presentation,
+		currentSlideIndex: slideIndex,
+		currentStep: clamp(current.currentStep, 0, Math.max(fetchedSlide?.steps ?? 0, 0)),
+		currentFragmentIndex: clamp(
+			current.currentFragmentIndex,
+			-1,
+			Math.max((fetchedSlide?.fragmentCount ?? 0) - 1, -1)
+		),
+		scrollRevealed: sameSlide && slide?.scroll === true ? current.scrollRevealed : false
+	});
+
+	if (typeof window !== 'undefined') {
+		(window as unknown as { presentation: Presentation }).presentation = presentation;
+	}
+	if (!sameSlide) {
+		updateURLHash(slideIndex);
 	}
 }
 

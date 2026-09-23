@@ -3,6 +3,7 @@ package config
 
 import (
 	"bufio"
+	"bytes"
 	"fmt"
 	"log"
 	"os"
@@ -19,7 +20,11 @@ import (
 
 // Config represents the presentation configuration from YAML frontmatter.
 type Config struct {
-	Drivers     map[string]DriverConfig `yaml:"drivers" json:"drivers,omitempty"`
+	// Drivers holds live code connection settings, including credentials
+	// resolved from the environment. They stay on the presenter's machine:
+	// the JSON the browser receives, from tap dev, tap build, and any
+	// other serialization of a deck, never carries them.
+	Drivers     map[string]DriverConfig `yaml:"drivers" json:"-"`
 	ThemeColors map[string]string       `yaml:"themeColors" json:"themeColors,omitempty"`
 	Title       string                  `yaml:"title" json:"title,omitempty"`
 	Theme       string                  `yaml:"theme" json:"theme,omitempty"`
@@ -28,7 +33,6 @@ type Config struct {
 	Date        string                  `yaml:"date" json:"date,omitempty"`
 	AspectRatio string                  `yaml:"aspectRatio" json:"aspectRatio,omitempty"`
 	Transition  string                  `yaml:"transition" json:"transition,omitempty"`
-	Fragments   bool                    `yaml:"fragments" json:"fragments,omitempty"`
 	// SlideNumbers turns off the slide number the theme draws on every
 	// slide when set to false. Nil (the key left out) keeps the numbers.
 	SlideNumbers *bool `yaml:"slideNumbers" json:"slideNumbers,omitempty"`
@@ -38,6 +42,14 @@ type Config struct {
 	PresenterLayout string    `yaml:"presenterLayout" json:"presenterLayout,omitempty"`
 	Recording       Recording `yaml:"recording" json:"recording,omitempty"`
 }
+
+// DefaultDriverTimeoutSeconds is how long a live code run may take when
+// the deck's driver settings give no timeout.
+const DefaultDriverTimeoutSeconds = 30
+
+// DefaultRecordingOutput is where recordings go, relative to the deck,
+// when recording.output is not set.
+const DefaultRecordingOutput = "recordings"
 
 // Recording configures the screen recording the dev TUI can start. Every
 // key is optional; an omitted block leaves the defaults in place.
@@ -124,27 +136,56 @@ type ConnectionConfig struct {
 	Port     int    `yaml:"port"`
 }
 
-// Load reads a markdown file and parses its YAML frontmatter into a Config.
-// The frontmatter is expected to be enclosed between "---" delimiters at the
-// start of the file.
+// Load reads a markdown file and parses its YAML frontmatter into a
+// Config (see FromSource). When the deck has frontmatter, it also loads
+// the .env file in the deck's folder and resolves environment variables
+// in the driver settings.
 func Load(path string) (*Config, error) {
-	file, err := os.Open(path)
+	source, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open file: %w", err)
 	}
-	defer file.Close()
 
-	scanner := bufio.NewScanner(file)
+	cfg, found, err := parseFrontmatter(source)
+	if err != nil || !found {
+		return cfg, err
+	}
+
+	// Load .env file from presentation directory
+	if err := LoadEnv(filepath.Dir(path)); err != nil {
+		return nil, fmt.Errorf("failed to load .env file: %w", err)
+	}
+
+	// Resolve environment variables in sensitive fields
+	cfg.ResolveEnvVars()
+
+	return cfg, nil
+}
+
+// FromSource parses the YAML frontmatter at the start of a deck's markdown
+// into a Config, with Load's rules: the first line must be "---", and a
+// deck without frontmatter gets DefaultConfig. Unlike Load, it reads no
+// .env file and resolves no environment variables, so it has no side
+// effects.
+func FromSource(source []byte) (*Config, error) {
+	cfg, _, err := parseFrontmatter(source)
+	return cfg, err
+}
+
+// parseFrontmatter parses the frontmatter of source over DefaultConfig.
+// found is false when source has no frontmatter.
+func parseFrontmatter(source []byte) (cfg *Config, found bool, err error) {
+	scanner := bufio.NewScanner(bytes.NewReader(source))
 
 	// Check for frontmatter start delimiter
 	if !scanner.Scan() {
-		return nil, fmt.Errorf("empty file")
+		return nil, false, fmt.Errorf("empty file")
 	}
 
 	firstLine := strings.TrimSpace(scanner.Text())
 	if firstLine != "---" {
 		// No frontmatter, return default config
-		return DefaultConfig(), nil
+		return DefaultConfig(), false, nil
 	}
 
 	// Read frontmatter content until closing delimiter
@@ -162,29 +203,19 @@ func Load(path string) (*Config, error) {
 	}
 
 	if err := scanner.Err(); err != nil {
-		return nil, fmt.Errorf("error reading file: %w", err)
+		return nil, false, fmt.Errorf("error reading file: %w", err)
 	}
 
 	if !foundEnd {
-		return nil, fmt.Errorf("frontmatter not closed: missing closing ---")
+		return nil, false, fmt.Errorf("frontmatter not closed: missing closing ---")
 	}
 
 	// Parse YAML frontmatter
-	cfg := DefaultConfig()
+	cfg = DefaultConfig()
 	if err := yaml.Unmarshal([]byte(frontmatter.String()), cfg); err != nil {
-		return nil, fmt.Errorf("failed to parse frontmatter: %w", err)
+		return nil, false, fmt.Errorf("failed to parse frontmatter: %w", err)
 	}
-
-	// Load .env file from presentation directory
-	dir := filepath.Dir(path)
-	if err := LoadEnv(dir); err != nil {
-		return nil, fmt.Errorf("failed to load .env file: %w", err)
-	}
-
-	// Resolve environment variables in sensitive fields
-	cfg.ResolveEnvVars()
-
-	return cfg, nil
+	return cfg, true, nil
 }
 
 // DefaultConfig returns a Config with sensible default values.
@@ -193,43 +224,58 @@ func DefaultConfig() *Config {
 		Theme:       "base",
 		AspectRatio: "16:9",
 		Transition:  "fade",
-		Fragments:   true,
 		Drivers:     make(map[string]DriverConfig),
 	}
 }
 
+// aspectRatioValues lists the allowed aspectRatio values, in the order
+// the schema shows them.
+var aspectRatioValues = []string{"16:9", "4:3", "16:10"}
+
 // validAspectRatios contains the allowed aspect ratio values.
-var validAspectRatios = map[string]bool{
-	"16:9":  true,
-	"4:3":   true,
-	"16:10": true,
-}
+var validAspectRatios = valueSet(aspectRatioValues)
+
+// presenterLayoutValues lists the allowed presenterLayout values.
+var presenterLayoutValues = []string{"standard", "notes-first", "duo", "slide-only", "notes-only"}
 
 // validPresenterLayouts contains the allowed presenterLayout values.
-var validPresenterLayouts = map[string]bool{
-	"standard":    true,
-	"notes-first": true,
-	"duo":         true,
-	"slide-only":  true,
-	"notes-only":  true,
-}
+var validPresenterLayouts = valueSet(presenterLayoutValues)
+
+// transitionValues lists the allowed transition values.
+var transitionValues = []string{"none", "fade", "slide", "push", "zoom"}
 
 // validTransitions contains the allowed transition values.
-var validTransitions = map[string]bool{
-	"none":  true,
-	"fade":  true,
-	"slide": true,
-	"push":  true,
-	"zoom":  true,
+var validTransitions = valueSet(transitionValues)
+
+// themeColorKeys lists the allowed themeColors keys and the CSS custom
+// property each one sets.
+var themeColorKeys = []struct {
+	name     string
+	property string
+}{
+	{"background", "--color-bg"},
+	{"text", "--color-text"},
+	{"muted", "--color-muted"},
+	{"accent", "--color-accent"},
+	{"codeBg", "--color-code-bg"},
 }
 
 // validThemeColorKeys contains the allowed themeColors keys.
-var validThemeColorKeys = map[string]bool{
-	"background": true, // maps to --color-bg
-	"text":       true, // maps to --color-text
-	"muted":      true, // maps to --color-muted
-	"accent":     true, // maps to --color-accent
-	"codeBg":     true, // maps to --color-code-bg
+var validThemeColorKeys = func() map[string]bool {
+	keys := make(map[string]bool, len(themeColorKeys))
+	for _, key := range themeColorKeys {
+		keys[key.name] = true
+	}
+	return keys
+}()
+
+// valueSet turns a list of allowed values into a set for lookups.
+func valueSet(values []string) map[string]bool {
+	set := make(map[string]bool, len(values))
+	for _, value := range values {
+		set[value] = true
+	}
+	return set
 }
 
 // hexColorPattern matches valid CSS hex colors (#RGB, #RRGGBB, #RGBA, #RRGGBBAA).

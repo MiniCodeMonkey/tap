@@ -2,9 +2,14 @@ import '@testing-library/jest-dom/vitest';
 import { vi } from 'vitest';
 
 // Mock window.matchMedia for components that check for reduced motion.
+// jsdom has no matchMedia of its own, so a stub is defined first and then
+// spied on: vi.spyOn, unlike a plain vi.fn(), is undone by a test's
+// vi.restoreAllMocks(), so a test's own mockImplementation cannot leak into
+// the tests that run after it.
 Object.defineProperty(window, 'matchMedia', {
 	writable: true,
-	value: vi.fn().mockImplementation((query: string) => ({
+	configurable: true,
+	value: (query: string) => ({
 		matches: false,
 		media: query,
 		onchange: null,
@@ -13,8 +18,9 @@ Object.defineProperty(window, 'matchMedia', {
 		addEventListener: vi.fn(),
 		removeEventListener: vi.fn(),
 		dispatchEvent: vi.fn()
-	}))
+	})
 });
+vi.spyOn(window, 'matchMedia');
 
 // Mock ResizeObserver for SlideCanvas.
 class MockResizeObserver {

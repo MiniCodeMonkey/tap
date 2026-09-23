@@ -14,6 +14,7 @@
 import { useEffect, useState } from 'react';
 import { usePresentationStore, selectCurrentThemeSlug } from '$lib/stores/presentation';
 import { loadTheme, type ThemeDefinition } from '$lib/themes/loader';
+import { useReadyHold } from '$lib/ready/blockers';
 
 export function useResolvedTheme(): ThemeDefinition | null {
 	const requestedTheme = usePresentationStore(selectCurrentThemeSlug);
@@ -21,16 +22,19 @@ export function useResolvedTheme(): ThemeDefinition | null {
 	// The theme actually applied lags one step behind requestedTheme: it only
 	// updates once loadTheme resolves (its CSS and fonts loaded), so
 	// data-theme never switches to a theme whose styles aren't ready yet.
-	const [resolvedTheme, setResolvedTheme] = useState<ThemeDefinition | null>(null);
+	const [resolved, setResolved] = useState<{ requested: string; definition: ThemeDefinition } | null>(null);
 	useEffect(() => {
 		let cancelled = false;
 		void loadTheme(requestedTheme).then((definition) => {
-			if (!cancelled) setResolvedTheme(definition);
+			if (!cancelled) setResolved({ requested: requestedTheme, definition });
 		});
 		return () => {
 			cancelled = true;
 		};
 	}, [requestedTheme]);
 
-	return resolvedTheme;
+	// The ready signal waits until the requested theme is the one applied.
+	useReadyHold('fonts', resolved?.requested !== requestedTheme);
+
+	return resolved?.definition ?? null;
 }

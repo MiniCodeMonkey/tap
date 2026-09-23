@@ -247,7 +247,7 @@ func TestCaptureAllSlides_ContinuesPastBrokenSlide(t *testing.T) {
 		return os.WriteFile(outputPath, []byte("fake png"), 0644)
 	}
 
-	written, broken, err := captureAllSlides(context.Background(), fakeCapture, "http://localhost:0", 4, 1920, 1080, "", tempDir)
+	written, broken, err := captureAllSlides(context.Background(), fakeCapture, "http://localhost:0", []int{1, 2, 3, 4}, 1920, 1080, "", tempDir)
 	if err != nil {
 		t.Fatalf("captureAllSlides() error = %v", err)
 	}
@@ -295,7 +295,7 @@ func TestCaptureAllSlides_MkdirFailureIsFatal(t *testing.T) {
 		return nil
 	}
 
-	_, _, err := captureAllSlides(context.Background(), fakeCapture, "http://localhost:0", 2, 1920, 1080, "", filepath.Join(blockingFile, "slides"))
+	_, _, err := captureAllSlides(context.Background(), fakeCapture, "http://localhost:0", []int{1, 2}, 1920, 1080, "", filepath.Join(blockingFile, "slides"))
 	if err == nil {
 		t.Fatal("expected an error when the output directory can't be created")
 	}
@@ -322,7 +322,7 @@ func TestCaptureAllSlides_CancelledContextStopsEvenWithoutWrappingCanceled(t *te
 		return os.WriteFile(outputPath, []byte("fake png"), 0644)
 	}
 
-	written, broken, err := captureAllSlides(ctx, fakeCapture, "http://localhost:0", 4, 1920, 1080, "", tempDir)
+	written, broken, err := captureAllSlides(ctx, fakeCapture, "http://localhost:0", []int{1, 2, 3, 4}, 1920, 1080, "", tempDir)
 	if err == nil {
 		t.Fatal("expected an error when the context is cancelled mid-loop")
 	}
@@ -334,6 +334,27 @@ func TestCaptureAllSlides_CancelledContextStopsEvenWithoutWrappingCanceled(t *te
 	}
 	if len(written) != 1 {
 		t.Errorf("expected only slide 1 written, got %v", written)
+	}
+}
+
+func TestCaptureAllSlidesCapturesOnlyTheGivenNumbers(t *testing.T) {
+	tempDir := t.TempDir()
+	var calls []int
+	fakeCapture := func(ctx context.Context, serverURL string, options pdf.CaptureOptions, outputPath string) error {
+		calls = append(calls, options.SlideNumber)
+		return os.WriteFile(outputPath, []byte("fake png"), 0o644)
+	}
+
+	written, broken, err := captureAllSlides(context.Background(), fakeCapture, "http://localhost:0", []int{1, 3}, 1920, 1080, "", tempDir)
+	if err != nil || len(broken) != 0 {
+		t.Fatalf("captureAllSlides() = (%v, %v, %v)", written, broken, err)
+	}
+	if len(calls) != 2 || calls[0] != 1 || calls[1] != 3 {
+		t.Errorf("captured slides %v, want [1 3]", calls)
+	}
+	want := []string{filepath.Join(tempDir, "slide-001.png"), filepath.Join(tempDir, "slide-003.png")}
+	if strings.Join(written, ",") != strings.Join(want, ",") {
+		t.Errorf("written = %v, want %v: files keep the deck's slide numbers", written, want)
 	}
 }
 
@@ -676,5 +697,51 @@ func TestScreenshotIntegration_RollingDeployStepsDiffer(t *testing.T) {
 	}
 	if bytes.Equal(step0Bytes, finalBytes) {
 		t.Error("expected step 0 and the final state to produce different PNG bytes, got identical images")
+	}
+}
+
+// TestExportImagesWaitsForAComponentBundle exports a whole-slide component
+// that paints the slide red. The PNG is red only if the capture waited for
+// the bundle to load and render, which is what the ready signal is for.
+func TestExportImagesWaitsForAComponentBundle(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping browser test in short mode")
+	}
+	deckFolder := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(deckFolder, "slides"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	component := "export default function Solid() {\n  return <div style={{ position: 'absolute', inset: 0, background: 'rgb(255, 0, 0)' }} />;\n}\n"
+	if err := os.WriteFile(filepath.Join(deckFolder, "slides", "Solid.jsx"), []byte(component), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	deckPath := filepath.Join(deckFolder, "deck.md")
+	deck := "---\ntitle: Solid\n---\n\n<!--\nlayout: ./slides/Solid.jsx\n-->\n\n# Solid\n"
+	if err := os.WriteFile(deckPath, []byte(deck), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	outputPath := filepath.Join(deckFolder, "solid.png")
+	exitCode, _, stderr := runTap(t, "export", "images", deckPath, "--slide", "1", "--output", outputPath)
+	if exitCode != exitOK {
+		if exitCode == exitInternal && os.Getenv("CI") == "" {
+			t.Skipf("skipping: the export could not start a browser: %s", stderr)
+		}
+		t.Fatalf("tap export images exited %d: %s", exitCode, stderr)
+	}
+
+	file, err := os.Open(outputPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer file.Close()
+	picture, err := png.Decode(file)
+	if err != nil {
+		t.Fatalf("png.Decode() error = %v", err)
+	}
+	bounds := picture.Bounds()
+	red, green, blue, _ := picture.At(bounds.Dx()/2, bounds.Dy()/2).RGBA()
+	if red>>8 < 200 || green>>8 > 60 || blue>>8 > 60 {
+		t.Errorf("center pixel = (%d, %d, %d), want red: the component had not rendered", red>>8, green>>8, blue>>8)
 	}
 }

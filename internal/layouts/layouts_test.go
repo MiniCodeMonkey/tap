@@ -150,6 +150,26 @@ func TestValidate_StepsInvalidWarns(t *testing.T) {
 	}
 }
 
+func TestValidate_SkipInvalidWarns(t *testing.T) {
+	pres := &transformer.TransformedPresentation{
+		Slides: []transformer.TransformedSlide{
+			{Layout: "default", SlotOrder: []string{"default"}, SkipInvalid: true},
+		},
+	}
+
+	warnings := Validate(pres)
+
+	if len(warnings) != 1 {
+		t.Fatalf("Validate() returned %d warnings, want 1: %+v", len(warnings), warnings)
+	}
+	if warnings[0].SlideNumber != 1 {
+		t.Errorf("SlideNumber = %d, want 1", warnings[0].SlideNumber)
+	}
+	if !strings.Contains(warnings[0].Message, "skip") {
+		t.Errorf("Message %q should mention the skip directive", warnings[0].Message)
+	}
+}
+
 func TestSlots(t *testing.T) {
 	slots, ok := Slots("two-column")
 	if !ok {

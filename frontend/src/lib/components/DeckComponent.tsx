@@ -11,9 +11,11 @@ import {
 	Component,
 	lazy,
 	Suspense,
+	useCallback,
 	useEffect,
 	useMemo,
 	useRef,
+	useState,
 	type ComponentType,
 	type ReactNode
 } from 'react';
@@ -21,6 +23,7 @@ import { MotionConfig, PresenceContext } from 'motion/react';
 import type { DeckComponentProps, Slide as SlideData } from '$lib/types';
 import { isDevRuntime } from '$lib/utils/runtime';
 import { useSafeErrorForm } from '$lib/hooks/useSafeErrorForm';
+import { useReadyHold } from '$lib/ready/blockers';
 import { DeckComponentContext } from '../tap';
 import './DeckComponent.css';
 
@@ -188,6 +191,8 @@ interface DeckComponentBoundaryProps {
 	source: string;
 	buildFallback: ReactNode;
 	children: ReactNode;
+	/** Called after the boundary has committed its error card or fallback. */
+	onCaught?: () => void;
 }
 
 interface DeckComponentBoundaryState {
@@ -210,6 +215,7 @@ class DeckComponentBoundary extends Component<DeckComponentBoundaryProps, DeckCo
 
 	componentDidCatch(error: unknown): void {
 		console.error(`[tap] Component ${this.props.source} failed to render`, error);
+		this.props.onCaught?.();
 	}
 
 	render(): ReactNode {
@@ -228,6 +234,21 @@ class DeckComponentBoundary extends Component<DeckComponentBoundaryProps, DeckCo
 		return this.props.children;
 	}
 }
+
+/**
+ * Calls onSettled when it commits. Rendered inside Suspense next to the
+ * lazy component, it commits only once the bundle has loaded and the
+ * component has rendered.
+ */
+function ComponentSettled({ onSettled }: { onSettled: () => void }) {
+	useEffect(() => {
+		onSettled();
+	}, [onSettled]);
+	return null;
+}
+
+/** Where one bundle is on its way to the screen, for the ready signal. */
+type LoadPhase = 'loading' | 'failed' | 'settled';
 
 export interface DeckComponentHostProps {
 	/** The component file's path, relative to the deck, e.g. "slides/RollingDeploy.jsx". */
@@ -289,6 +310,37 @@ export function DeckComponent({
 		[url, importer, preview, source, printMode]
 	);
 
+	// The ready signal waits for this component: a bundle that is still
+	// loading holds a "component" blocker, and one that failed holds an
+	// "error-card" blocker until the boundary below has committed its card
+	// or fallback. A build error renders its card at once and holds
+	// nothing. Keyed by source and URL, like the boundary, so a new bundle
+	// starts over.
+	const loadKey = `${source}\u0000${url}`;
+	const [load, setLoad] = useState<{ key: string; phase: LoadPhase }>({ key: loadKey, phase: 'loading' });
+	const phase: LoadPhase = buildError ? 'settled' : load.key === loadKey ? load.phase : 'loading';
+	useReadyHold('component', phase === 'loading');
+	useReadyHold('error-card', phase === 'failed');
+	const markSettled = useCallback(() => setLoad({ key: loadKey, phase: 'settled' }), [loadKey]);
+
+	// Watches the same cached import the lazy component uses, to learn
+	// that it failed before the boundary has shown the error.
+	useEffect(() => {
+		if (buildError) {
+			return undefined;
+		}
+		let cancelled = false;
+		importModule(url, importer, printMode ? undefined : { source }).catch(() => {
+			if (cancelled) return;
+			setLoad((previous) =>
+				previous.key === loadKey && previous.phase === 'settled' ? previous : { key: loadKey, phase: 'failed' }
+			);
+		});
+		return () => {
+			cancelled = true;
+		};
+	}, [buildError, url, importer, printMode, source, loadKey]);
+
 	if (buildError) {
 		return (
 			<div ref={rootRef} className="deck-component-root">
@@ -309,7 +361,12 @@ export function DeckComponent({
 				    the error card), but a different bundle is a fresh mount, so its
 				    error boundary starts clean instead of carrying over a failure
 				    from whatever used to be at this placeholder. */}
-				<DeckComponentBoundary key={`${source}\u0000${url}`} source={source} buildFallback={buildFallback}>
+				<DeckComponentBoundary
+					key={`${source}\u0000${url}`}
+					source={source}
+					buildFallback={buildFallback}
+					onCaught={markSettled}
+				>
 					<Suspense fallback={null}>
 						{/* Resets presence context to null instead of inheriting
 						    SlideTransition's outer <AnimatePresence initial={false}>,
@@ -323,13 +380,14 @@ export function DeckComponent({
 							{/* Print mode (and a settled capture, which passes printMode
 							    the same way) forces every Motion transform and layout
 							    animation in the component's tree to its end state
-							    instantly, so tap export pdf's waitForAnimations never waits on
-							    one and a screenshot never lands mid-animation. It leaves
-							    opacity and color animations running - see
+							    instantly, so the ready signal's animation check never
+							    waits on one and a screenshot never lands mid-animation.
+							    It leaves opacity and color animations running - see
 							    DeckComponent.css for the CSS-driven animations this does
 							    not reach. */}
 							<MotionConfig reducedMotion={printMode ? 'always' : 'never'}>
 								<LazyComponent slots={slots} props={props} slide={slide} step={step} steps={steps} active={active} printMode={printMode} />
+								<ComponentSettled onSettled={markSettled} />
 							</MotionConfig>
 						</PresenceContext.Provider>
 					</Suspense>

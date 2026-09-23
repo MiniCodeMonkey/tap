@@ -131,6 +131,17 @@ steps: 4
 directive overrides the export silently, so the two drift apart. Prefer the
 export.
 
+### skip
+Leaves the slide out of the talk without deleting it.
+```markdown
+<!-- skip: true -->
+
+# A slide for the long version of this talk
+```
+A skipped slide stays in the file and keeps its number, but presenting,
+slide counts, `tap build` and `tap export` leave it out. `tap dev` still
+shows it, marked, when you open it directly.
+
 ## Combining Directives
 
 Use multiple directives in one block:

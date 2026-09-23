@@ -13,6 +13,7 @@ import { highlightCodeBlocksInElement } from '../utils/highlighting';
 import { renderMermaidBlocksInElement, type MermaidThemeOverrides } from '../utils/mermaid';
 import { renderAsciinemaBlocksInElement, type AsciinemaPlayerInstance } from '../utils/asciinema';
 import { parseMapConfig } from '../utils/map';
+import { holdReady } from '$lib/ready/blockers';
 
 /** Disposes every player in the list, tolerating a player that errors on dispose (already gone). */
 function disposeAsciinemaPlayers(players: AsciinemaPlayerInstance[]): void {
@@ -222,6 +223,10 @@ export function useRichBlocks(
 			element.dataset.richProcessed = signature;
 		}
 
+		// The slide holds a "component" blocker while this chain runs, so
+		// the ready signal waits for mermaid, asciinema and Shiki output.
+		const releaseReady = holdReady('component');
+
 		void (async () => {
 			try {
 				if (isNewContent) {
@@ -254,6 +259,8 @@ export function useRichBlocks(
 				}
 			} catch (err) {
 				console.error('Error processing slide rich content:', err);
+			} finally {
+				releaseReady();
 			}
 		})();
 	}, [elementRef, slide, active, printMode, onLiveCodeBlocksChange, onDeckComponentsChange, mermaidOverrides]);

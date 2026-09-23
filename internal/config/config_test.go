@@ -776,3 +776,48 @@ func TestRecordingRejectsNegativeDisplay(t *testing.T) {
 		t.Fatal("Validate() accepted display -1, want an error")
 	}
 }
+
+func TestFromSource(t *testing.T) {
+	cfg, err := FromSource([]byte("---\ntitle: Talk\ntheme: swiss\n---\n\n# One\n"))
+	if err != nil {
+		t.Fatalf("FromSource() error = %v", err)
+	}
+	if cfg.Title != "Talk" || cfg.Theme != "swiss" || cfg.AspectRatio != "16:9" {
+		t.Errorf("cfg = %+v, want the frontmatter over the defaults", cfg)
+	}
+
+	cfg, err = FromSource([]byte("# No frontmatter\n"))
+	if err != nil || cfg.Theme != "base" {
+		t.Errorf("FromSource() without frontmatter = (%+v, %v), want the defaults", cfg, err)
+	}
+
+	if _, err := FromSource([]byte("---\ntitle: Talk\n")); err == nil {
+		t.Error("FromSource() with unclosed frontmatter should fail")
+	}
+	if _, err := FromSource([]byte("")); err == nil {
+		t.Error("FromSource() of an empty deck should fail, as Load does")
+	}
+}
+
+func TestConfigJSON_LeavesDriversOut(t *testing.T) {
+	cfg := Config{
+		Title: "Deck",
+		Drivers: map[string]DriverConfig{
+			"mysql": {Connections: map[string]ConnectionConfig{
+				"default": {Host: "localhost", User: "root", Password: "s3cret"},
+			}},
+		},
+	}
+	data, err := json.Marshal(cfg)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	for _, leaked := range []string{"drivers", "Drivers", "s3cret", "root"} {
+		if strings.Contains(string(data), leaked) {
+			t.Errorf("config JSON contains %q: %s", leaked, data)
+		}
+	}
+	if !strings.Contains(string(data), `"title":"Deck"`) {
+		t.Errorf("config JSON lost the title: %s", data)
+	}
+}

@@ -3,7 +3,8 @@
  * through the presentation the current slide is.
  */
 
-import { usePresentationStore, selectTotalSlides } from '$lib/stores/presentation';
+import { usePresentationStore, selectPresentedSlideCount } from '$lib/stores/presentation';
+import { presentedSlidesThrough } from '$lib/utils/skip';
 
 export interface ProgressBarProps {
 	/** Whether to show the progress bar (can be disabled via config). */
@@ -11,25 +12,33 @@ export interface ProgressBarProps {
 }
 
 export function ProgressBar({ show = true }: ProgressBarProps) {
-	const currentIndex = usePresentationStore((state) => state.currentSlideIndex);
-	const total = usePresentationStore(selectTotalSlides);
+	const position = usePresentationStore((state) =>
+		presentedSlidesThrough(state.presentation?.slides ?? [], state.currentSlideIndex)
+	);
+	const total = usePresentationStore(selectPresentedSlideCount);
 
 	if (!show || total <= 0) {
 		return null;
 	}
 
-	// On the first slide (index 0) this shows 1/total progress; on the last
-	// slide (index total - 1) it shows 100%.
-	const progressPercent = ((currentIndex + 1) / total) * 100;
+	// Skipped slides are left out of both numbers. On the first presented
+	// slide this shows 1/total progress, and on the last one 100%. Opening a
+	// skipped slide directly - tap dev only, ahead of any presented slide -
+	// leaves position at 0: an empty bar, honestly reported rather than
+	// floored to 1, which would claim progress that has not happened.
+	const progressPercent = (position / total) * 100;
 
+	// The minimum stays fixed at 0, the value the fill calculation above
+	// already treats as empty, so a screen reader's own percentage
+	// ((value - min) / (max - min)) always agrees with the bar it draws.
 	return (
 		<div
 			className="progress-bar-container"
 			role="progressbar"
-			aria-valuenow={currentIndex + 1}
-			aria-valuemin={1}
+			aria-valuenow={position}
+			aria-valuemin={0}
 			aria-valuemax={total}
-			aria-label={`Presentation progress: slide ${currentIndex + 1} of ${total}`}
+			aria-label={`Presentation progress: slide ${position} of ${total}`}
 		>
 			<div className="progress-bar-fill" style={{ width: `${progressPercent}%` }} />
 		</div>

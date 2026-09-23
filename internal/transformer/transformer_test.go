@@ -1084,6 +1084,41 @@ func TestResolveImagePathsNoBaseDir(t *testing.T) {
 	}
 }
 
+func TestResolveAsciinemaPathsInHTML(t *testing.T) {
+	cfg := config.DefaultConfig()
+	tr := NewWithBaseDir(cfg, "/presentations/demo")
+
+	testCases := []struct {
+		name     string
+		html     string
+		expected string
+	}{
+		{
+			// This is the tag exactly as the markdown renderer emits it: the
+			// language class plus the data-code-block-index attribute the
+			// renderer always adds. A pattern that only matches the bare
+			// class="language-asciinema" tag never fires on real output.
+			name:     "renderer's real tag with data-code-block-index",
+			html:     `<pre><code class="language-asciinema" data-code-block-index="0">src: demo.cast</code></pre>`,
+			expected: `<pre><code class="language-asciinema" data-code-block-index="0">src: /local/demo.cast</code></pre>`,
+		},
+		{
+			name:     "bare tag with no extra attributes",
+			html:     `<code class="language-asciinema">src: demo.cast</code>`,
+			expected: `<code class="language-asciinema">src: /local/demo.cast</code>`,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			result := tr.resolveAsciinemaPaths(tc.html)
+			if result != tc.expected {
+				t.Errorf("resolveAsciinemaPaths failed:\n  got:      %q\n  expected: %q", result, tc.expected)
+			}
+		})
+	}
+}
+
 func TestTransformWithImagePathResolution(t *testing.T) {
 	cfg := config.DefaultConfig()
 	tr := NewWithBaseDir(cfg, "/presentations/demo")
@@ -1457,5 +1492,118 @@ func TestIsSupportedImageFormat(t *testing.T) {
 				t.Errorf("isSupportedImageFormat(%q) = %v, expected %v", tc.path, result, tc.expected)
 			}
 		})
+	}
+}
+
+func transformMarkdown(t *testing.T, markdown string) *TransformedPresentation {
+	t.Helper()
+	parsed, err := parser.New().Parse([]byte(markdown))
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+	return New(config.DefaultConfig()).Transform(parsed)
+}
+
+func TestTransformSetsASlideHash(t *testing.T) {
+	presentation := transformMarkdown(t, "# One\n\n---\n\n# Two\n")
+	for index, slide := range presentation.Slides {
+		if len(slide.Hash) != 12 {
+			t.Errorf("slide %d hash = %q, want 12 hex characters", index+1, slide.Hash)
+		}
+		if slide.Hash != SlideHash(slide) {
+			t.Errorf("slide %d hash = %q, want SlideHash() = %q", index+1, slide.Hash, SlideHash(slide))
+		}
+	}
+	if presentation.Slides[0].Hash == presentation.Slides[1].Hash {
+		t.Error("two slides with different content have the same hash")
+	}
+}
+
+func TestSlideHashChangesOnlyWithContent(t *testing.T) {
+	before := transformMarkdown(t, "# One\n\n---\n\n# Two\n\n---\n\n# Three\n")
+	after := transformMarkdown(t, "# One\n\n---\n\n# Two, edited\n\n---\n\n# Three\n")
+
+	if before.Slides[0].Hash != after.Slides[0].Hash {
+		t.Error("slide 1 did not change, but its hash did")
+	}
+	if before.Slides[1].Hash == after.Slides[1].Hash {
+		t.Error("slide 2 changed, but its hash did not")
+	}
+	if before.Slides[2].Hash != after.Slides[2].Hash {
+		t.Error("slide 3 did not change, but its hash did")
+	}
+}
+
+func TestSlideHashLeavesOutThePosition(t *testing.T) {
+	slide := TransformedSlide{Index: 0, Layout: "default", HTML: "<h1>Same</h1>"}
+	moved := slide
+	moved.Index = 7
+	if SlideHash(slide) != SlideHash(moved) {
+		t.Error("a slide that only moved got a different hash")
+	}
+	withOldHash := slide
+	withOldHash.Hash = "ffffffffffff"
+	if SlideHash(slide) != SlideHash(withOldHash) {
+		t.Error("SlideHash() depends on the slide's own Hash field")
+	}
+}
+
+func TestSlideHashChangesWithSkip(t *testing.T) {
+	slide := TransformedSlide{Index: 0, Layout: "default", HTML: "<h1>Same</h1>"}
+	skipped := slide
+	skipped.Skip = true
+	if SlideHash(slide) == SlideHash(skipped) {
+		t.Error("marking a slide skipped did not change its hash")
+	}
+}
+
+func TestTransform_CarriesSkip(t *testing.T) {
+	pres := &parser.Presentation{Slides: []parser.Slide{
+		{Index: 0, HTML: "<p>one</p>"},
+		{Index: 1, HTML: "<p>two</p>", Directives: parser.SlideDirectives{Skip: true}},
+	}}
+
+	result := New(config.DefaultConfig()).Transform(pres)
+	if result.Slides[0].Skip || !result.Slides[1].Skip {
+		t.Fatalf("Skip = (%v, %v), want (false, true)", result.Slides[0].Skip, result.Slides[1].Skip)
+	}
+
+	kept, err := json.Marshal(result.Slides[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(kept), `"skip"`) {
+		t.Errorf("slide JSON %s has a skip field, want it left out when false", kept)
+	}
+	skipped, err := json.Marshal(result.Slides[1])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(skipped), `"skip":true`) {
+		t.Errorf("slide JSON %s, want \"skip\":true", skipped)
+	}
+}
+
+func TestWithoutSkippedSlides(t *testing.T) {
+	presentation := &TransformedPresentation{Slides: []TransformedSlide{
+		{Index: 0, HTML: "one"},
+		{Index: 1, HTML: "two", Skip: true},
+		{Index: 2, HTML: "three"},
+		{Index: 3, HTML: "four", Skip: true},
+	}}
+
+	kept, deckNumbers := WithoutSkippedSlides(presentation)
+
+	if len(kept.Slides) != 2 || kept.Slides[0].HTML != "one" || kept.Slides[1].HTML != "three" {
+		t.Fatalf("kept slides = %+v, want one and three", kept.Slides)
+	}
+	if kept.Slides[0].Index != 0 || kept.Slides[1].Index != 1 {
+		t.Errorf("kept indexes = (%d, %d), want (0, 1)", kept.Slides[0].Index, kept.Slides[1].Index)
+	}
+	if len(deckNumbers) != 2 || deckNumbers[0] != 1 || deckNumbers[1] != 3 {
+		t.Errorf("deckNumbers = %v, want [1 3]", deckNumbers)
+	}
+	if len(presentation.Slides) != 4 || presentation.Slides[2].Index != 2 {
+		t.Error("WithoutSkippedSlides changed the presentation it was given")
 	}
 }

@@ -225,7 +225,7 @@ When the dev server starts, it provides:
 
 ### Features
 
-- **Live reload**: Changes to your markdown file are instantly reflected
+- **Live updates**: Saving the deck updates every open page in place. Only the slides you changed re-render, and each page keeps its slide, fragment and step (moved back if the slide lost steps). A changed custom theme file, or `r` in the terminal, reloads the page instead.
 - **Live code execution**: Run SQL, shell commands, and other drivers
 - **Presenter mode**: Access speaker notes and timer at `/presenter`
 - **Cross-device sync**: Control from one device, display on another
@@ -281,6 +281,7 @@ tap build [deck]
 |------|-------|-------------|
 | `--output <dir>` | `-o` | Output directory (default: `dist`) |
 | `--json` | | Print the result as JSON |
+| `--progress json` | none | Print progress to stderr as JSON lines, for a program driving tap (see Progress output). |
 
 ### Behavior
 
@@ -365,6 +366,7 @@ tap export pdf [deck]
 | `--output <file>` | `-o` | Output PDF file path (default: `<deck>.pdf`) |
 | `--content <type>` | | Content to include: `slides`, `notes`, or `both` (default: `slides`) |
 | `--json` | | Print the result as JSON |
+| `--progress json` | none | Print progress to stderr as JSON lines, for a program driving tap (see Progress output). |
 
 ### Content Types
 
@@ -461,6 +463,7 @@ tap export images [deck] [flags]
 | `--wait <ms>` | | Keep the capture live and wait this long after the page is ready, instead of settling it (`0` to `60000`) |
 | `--width <px>` | | Viewport width in pixels; height follows the deck's aspect ratio (default `1920`) |
 | `--json` | | Print the written files as JSON |
+| `--progress json` | none | Print progress to stderr as JSON lines, for a program driving tap (see Progress output). |
 
 ### Behavior
 
@@ -536,6 +539,73 @@ tap slide add talk.md      # A specific deck
 
 ---
 
+## tap slide list
+
+List every slide of a deck: its number, the lines it covers in the file, its layout, title, step and fragment counts, whether it is skipped, its errors, and its code blocks with their drivers.
+
+### Usage
+
+```bash
+tap slide list [deck]
+```
+
+### Flags
+
+| Flag | Description |
+|------|-------------|
+| `--json` | Print the slide list as JSON |
+
+### Output
+
+A table with one row per slide: `#`, `LINES`, `LAYOUT`, `TITLE`, `STEPS`, `FRAGMENTS`, and `NOTES` (whether the slide is skipped, the driver of each live code block, and how many errors it has). The deck's own errors, such as frontmatter that fails to parse, print before the table; each slide's own errors print after it.
+
+Line numbers are 1-based. A slide's range covers its text, including its directive comment, without the blank lines around it. The `---` separator lines and the frontmatter belong to no slide.
+
+Slide numbers count skipped slides, so they match the numbers every other tap command uses.
+
+### Examples
+
+```bash
+tap slide list                 # The deck in this folder
+tap slide list talk.md
+tap slide list talk.md --json  # For editors and scripts
+```
+
+### `--json`
+
+```json
+{"ok": true, "slides": [...], "errors": []}
+```
+
+Each slide has `number`, `startLine`, `endLine`, `layout`, `title`, `fragments`, `steps`, `skip`, `errors`, and `codeBlocks` (each with `block`, `language`, `driver`, `live`, `line`). There is also a top-level `errors` list for problems with the deck as a whole.
+
+For example, slide 4 of the conference talk example, which has a live SQL block:
+
+```json
+{
+  "number": 4,
+  "startLine": 36,
+  "endLine": 46,
+  "layout": "code-focus",
+  "title": "",
+  "fragments": 0,
+  "steps": 0,
+  "skip": false,
+  "errors": [],
+  "codeBlocks": [
+    {
+      "block": 1,
+      "language": "sql",
+      "driver": "sqlite",
+      "live": true,
+      "line": 40
+    }
+  ]
+}
+```
+
+---
+
 ## tap component new
 
 Scaffold a deck-supplied React component from a template. See [Custom Components](/guide/custom-components).
@@ -574,6 +644,45 @@ tap component new RollingDeploy talks/deck.md  # next to talks/deck.md
 ```json
 {"ok": true, "files": ["slides/RollingDeploy.jsx"], "snippet": "::component RollingDeploy\n"}
 ```
+
+---
+
+## tap deck schema
+
+List every frontmatter key tap understands, with its type, its default, its allowed values, and what it does. Editors and tools can build a form or completions from `--json`.
+
+### Usage
+
+```bash
+tap deck schema
+```
+
+### Flags
+
+| Flag | Description |
+|------|-------------|
+| `--json` | Print the schema as JSON |
+
+### Output
+
+A table with one row per key: `KEY`, `TYPE`, `DEFAULT`, `VALUES`, and `DESCRIPTION`. A nested key, such as one under `themeColors` or `recording`, is shown with its parent joined by a dot, for example `recording.audio`. A key under a map, such as `drivers`, uses `<name>` for the name the deck picks, for example `drivers.<name>.command`.
+
+A key's type is one of six: `string`, `boolean`, `integer`, `list` (of strings), `object` (a fixed set of nested keys), or `map` (entries under names the deck picks, each with the nested keys).
+
+### Examples
+
+```bash
+tap deck schema
+tap deck schema --json | head -40
+```
+
+### `--json`
+
+```json
+{"ok": true, "keys": [...]}
+```
+
+Each key has `name`, `type`, `default`, `values`, `description`, and `keys` (its nested keys, for an `object` or a `map`).
 
 ---
 
@@ -655,6 +764,23 @@ These hold across every command.
 - The old names `tap pdf`, `tap screenshot`, `tap add` and `tap add
   component` print the new name and exit 1.
 
+### Progress output
+
+`tap export pdf`, `tap export images` and `tap build` accept `--progress json`. Each step prints one JSON object on its own line to stderr:
+
+    {"phase":"render","done":7,"total":14}
+
+- `export pdf` and `export images` print one `render` line per slide (per notes page for `--content notes`).
+- `build` prints `load`, `parse`, `bundle` and `write`, with `total` 4.
+- A first export downloads the export browser and prints `{"phase":"download","bytes":52428800,"totalBytes":170175488}` lines while it does. Each downloaded archive starts again from 0.
+- The last line is `{"phase":"done","ok":true, ...}` with the same fields as the command's `--json` result, or `{"phase":"done","ok":false,"error":{"code":"...","message":"..."}}`.
+
+stdout keeps the command's normal output (or its `--json` result). Warnings can still appear on stderr as plain text; read only the lines that start with `{`.
+
+### Ready signal
+
+Every tap page reports when the slide on screen has finished rendering: fonts and images loaded, maps drawn, components loaded, error cards shown, and transitions and theme animations done. It sets `window.__tapReady` to `{"revision": "...", "slide": 3, "step": 1}` (`slide` counts from 1), dispatches a `tap:ready` event on `window` with the same object, and, inside a macOS web view that registered a `tapReady` message handler, posts it to that handler. `window.__tapReady` is `null` while a slide is still rendering, and resets when the slide, step, fragment, theme or deck changes. `tap export pdf` and `tap export images` wait for this signal before each capture.
+
 ## Output Streams
 
 Every command writes its real output to standard output and its errors and
@@ -683,7 +809,9 @@ and exits 2 when a browser cannot start or a temporary server cannot bind.
 | `tap export pdf [deck]` | Export to PDF | `tap export pdf slides.md` |
 | `tap export images [deck]` | Render a slide to a PNG | `tap export images slides.md --slide 4` |
 | `tap slide add [deck]` | Add a slide interactively | `tap slide add slides.md` |
+| `tap slide list [deck]` | List each slide, its lines, layout and errors | `tap slide list slides.md --json` |
 | `tap component new <Name> [deck]` | Scaffold a deck component | `tap component new RollingDeploy` |
+| `tap deck schema` | List every frontmatter key, type and default | `tap deck schema --json` |
 | `tap theme list` | List every built-in theme | `tap theme list --json` |
 | `tap theme show [slug\|deck]` | Show a theme's tokens and style | `tap theme show blueprint --prompt` |
 

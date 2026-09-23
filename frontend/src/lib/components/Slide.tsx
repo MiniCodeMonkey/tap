@@ -2,16 +2,19 @@
  * Renders one slide: picks its layout, provides fragment context to every
  * slot, wraps scroll-reveal slides in ScrollReveal, and isolates layout
  * render failures behind an error boundary.
+ * Memoized, so a slide whose object and props did not change skips its render.
  */
 
-import { useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { memo, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { createPortal } from 'react-dom';
 import type { BackgroundConfig, Slide as SlideData } from '$lib/types';
 import { resolveLayout } from '../layouts/registry';
 import { usePresentationStore } from '../stores/presentation';
+import { useConnectionStore } from '../stores/websocket';
 import { useRichBlocks, type DeckComponentPortal, type LiveCodeBlockPortal } from '../hooks/useRichBlocks';
 import type { MermaidThemeOverrides } from '../utils/mermaid';
 import { parseMapConfig } from '../utils/map';
+import { isSkipped, presentedSlideNumber } from '../utils/skip';
 import { DeckComponent } from './DeckComponent';
 import { LiveCodeBlock } from './LiveCodeBlock';
 import { MapSlide } from './MapSlide';
@@ -26,7 +29,7 @@ export interface SlideProps {
 	printMode: boolean;
 	fragmentIndex: number;
 	step: number;
-	/** Total slide count, shown as data-total on the slide root. */
+	/** Number of slides a talk shows, leaving out skipped slides, shown as data-total on the slide root. */
 	total: number;
 	/** Whether this slide's scroll reveal is currently scrolled into view. */
 	scrollRevealed?: boolean;
@@ -60,6 +63,15 @@ export interface SlideProps {
 	 * while it asked for them.
 	 */
 	settleComponents?: boolean;
+	/**
+	 * True for any screenshot capture (`tap export images`), live or
+	 * settled - unlike `settleComponents`, which is false for a live capture
+	 * (`--wait`). The skipped marker stays out of a capture either way, so
+	 * `--slide N` and `--slide N --wait M` produce the same clean PNG for a
+	 * skipped slide. Mirrors the `capture` query param App.tsx already
+	 * guards the connection indicator with.
+	 */
+	captureMode?: boolean;
 }
 
 const DEFAULT_SCROLL_SPEED = 2000;
@@ -88,7 +100,7 @@ function rawSlotContent(slide: SlideData): string {
 	return slide.slotOrder.map((name) => slide.slots[name] ?? '').join('');
 }
 
-export function Slide({
+function SlideView({
 	slide,
 	active,
 	printMode,
@@ -99,7 +111,8 @@ export function Slide({
 	scrollTriggerCount = 0,
 	preview = false,
 	mermaidOverrides,
-	settleComponents = false
+	settleComponents = false,
+	captureMode = false
 }: SlideProps) {
 	// Only what a deck component sees (through LayoutComponent for the
 	// whole-slide form, and the inline portal props below) - see
@@ -149,6 +162,17 @@ export function Slide({
 	// `slideNumbers: false` in the frontmatter, data-slide-numbers="off"
 	// tells each theme to leave it out.
 	const slideNumbersOff = usePresentationStore((state) => state.presentation?.config?.slideNumbers === false);
+	// A skipped slide only shows when someone goes to it directly, which is
+	// how tap dev lets its author check it. It carries a marker then,
+	// except in print and capture passes, and during tap present, where the
+	// audience could see it. It never shows a slide number, and every other
+	// slide shows its number among the slides a talk shows.
+	const skipped = isSkipped(slide);
+	const presentMode = useConnectionStore((state) => state.presentMode);
+	const showSkippedMarker = skipped && !printMode && !captureMode && !presentMode;
+	const presentedNumber = usePresentationStore((state) =>
+		presentedSlideNumber(state.presentation?.slides ?? [], slide.index)
+	);
 	// The deck title, for themes that print it on every slide (the terminal
 	// theme's tmux window tab). Absent when the deck has no title.
 	const deckTitle = usePresentationStore((state) => state.presentation?.config?.title?.trim() || undefined);
@@ -161,14 +185,16 @@ export function Slide({
 			<div
 				className={`slide${mapConfig ? ' has-map' : ''}`}
 				data-layout={slide.layout}
-				data-index={slide.index + 1}
+				data-index={presentedNumber ?? slide.index + 1}
 				data-total={total}
-				data-slide-numbers={slideNumbersOff ? 'off' : undefined}
+				data-slide-numbers={slideNumbersOff || skipped ? 'off' : undefined}
+				data-skipped={skipped ? 'true' : undefined}
 				data-deck-title={deckTitle}
 				style={getBackgroundStyle(slide.background)}
 			>
 				{slide.tag ? <div className="slide-tag">{slide.tag}</div> : null}
 				{slide.badge ? <div className="slide-badge">{slide.badge}</div> : null}
+				{showSkippedMarker ? <div className="slide-skipped-marker">Skipped</div> : null}
 				{mapConfig && !preview ? (
 					<MapSlide config={mapConfig} step={step} active={active} printMode={printMode} />
 				) : null}
@@ -235,3 +261,11 @@ export function Slide({
 		</SlideContext.Provider>
 	);
 }
+
+/**
+ * A slide, memoized: an in-place update keeps the object of every slide
+ * whose content hash did not change (see updatePresentationInPlace), so
+ * those slides skip rendering. A slide still re-renders on its own when a
+ * store value it reads changes.
+ */
+export const Slide = memo(SlideView);

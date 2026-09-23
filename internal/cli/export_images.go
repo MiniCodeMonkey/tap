@@ -3,6 +3,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math"
 	"os"
@@ -31,6 +32,7 @@ var (
 	screenshotAll      bool
 	screenshotWait     int
 	screenshotJSON     bool
+	screenshotProgress string
 )
 
 // exportImagesCmd represents the export images command
@@ -66,7 +68,8 @@ Examples:
   tap export images deck.md --slide 12 -o slide.png  # Custom output file
   tap export images deck.md --all                    # Every slide's final state
   tap export images deck.md --slide 3 -t bauhaus     # Render with a specific theme
-  tap export images deck.md --all --json             # Print the written files as JSON`,
+  tap export images deck.md --all --json             # Print the written files as JSON
+  tap export images deck.md --all --progress json   # Progress as JSON lines on stderr`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: runExportImages,
 }
@@ -83,6 +86,7 @@ func init() {
 	exportImagesCmd.Flags().BoolVar(&screenshotAll, "all", false, "capture every slide's final state into a folder instead of one slide")
 	exportImagesCmd.Flags().IntVar(&screenshotWait, "wait", 0, "milliseconds to wait after the page is ready before capturing, instead of settling (0-60000)")
 	exportImagesCmd.Flags().BoolVar(&screenshotJSON, "json", false, "print the written files as JSON")
+	exportImagesCmd.Flags().StringVar(&screenshotProgress, "progress", "", "print progress to stderr as JSON lines (json)")
 }
 
 // runExportImages implements the export images command. It returns an
@@ -105,6 +109,11 @@ func runExportImages(cmd *cobra.Command, args []string) error {
 	// default handler, which is what actually kills the process
 	// immediately.
 	context.AfterFunc(ctx, stop)
+
+	progress, err := newProgressReporter(screenshotProgress, cmd.ErrOrStderr())
+	if err != nil {
+		return err
+	}
 
 	hasSlideFlag := cmd.Flags().Changed("slide")
 	hasStepFlag := cmd.Flags().Changed("step")
@@ -174,6 +183,9 @@ func runExportImages(cmd *cobra.Command, args []string) error {
 		if err := validateStepAndFragment(hasStepFlag, screenshotStep, hasFragmentFlag, screenshotFragment, *slide, screenshotSlide); err != nil {
 			return err
 		}
+		if slide.Skip {
+			fmt.Fprintf(cmd.ErrOrStderr(), "note: slide %d has skip: true, so presenting and exports leave it out. It is rendered because you asked for it by number.\n", screenshotSlide)
+		}
 	}
 
 	width, height, err := resolveDimensions(cfg.AspectRatio, screenshotWidth)
@@ -190,6 +202,9 @@ func runExportImages(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return internalError(codeBrowser, fmt.Errorf("failed to create browser exporter: %w", err))
 	}
+	if progress.enabled() {
+		exporter.SetProgress(progress)
+	}
 	defer func() { _ = exporter.Close() }()
 
 	if err := exporter.EnsureBrowser(); err != nil {
@@ -197,7 +212,11 @@ func runExportImages(cmd *cobra.Command, args []string) error {
 	}
 
 	if screenshotAll {
-		written, broken, err := captureAllSlides(ctx, exporter.CaptureSlide, serverURL, total, width, height, screenshotTheme, resolveAllOutputDir(screenshotOutput, file))
+		_, deckNumbers := transformer.WithoutSkippedSlides(pres)
+		if len(deckNumbers) == 0 {
+			return userError(codeInvalidDeck, errors.New("every slide has skip: true, so there is nothing to export"))
+		}
+		written, broken, err := captureAllSlides(ctx, countCaptures(exporter.CaptureSlide, progress, len(deckNumbers)), serverURL, deckNumbers, width, height, screenshotTheme, resolveAllOutputDir(screenshotOutput, file))
 		if err != nil {
 			// A real Ctrl-C signals the whole process group, so the
 			// headless browser often dies first and capture fails with its
@@ -219,6 +238,9 @@ func runExportImages(cmd *cobra.Command, args []string) error {
 				}
 			}
 			return reportedError(codeBrokenSlides, fmt.Errorf("%d slide(s) failed to capture", len(broken)))
+		}
+		if err := progress.Result(exportImagesResult{Files: written}); err != nil {
+			return err
 		}
 		return printWrittenImages(cmd, written)
 	}
@@ -251,7 +273,11 @@ func runExportImages(cmd *cobra.Command, args []string) error {
 		}
 		return userError(codeBrokenSlides, err)
 	}
+	progress.Render(1, 1)
 
+	if err := progress.Result(exportImagesResult{Files: []string{outputPath}}); err != nil {
+		return err
+	}
 	return printWrittenImages(cmd, []string{outputPath})
 }
 
@@ -259,14 +285,29 @@ func runExportImages(cmd *cobra.Command, args []string) error {
 // the --json result.
 func printWrittenImages(cmd *cobra.Command, paths []string) error {
 	if screenshotJSON {
-		return printJSONOK(cmd.OutOrStdout(), struct {
-			Files []string `json:"files"`
-		}{Files: paths})
+		return printJSONOK(cmd.OutOrStdout(), exportImagesResult{Files: paths})
 	}
 	for _, path := range paths {
 		fmt.Fprintln(cmd.OutOrStdout(), path)
 	}
 	return nil
+}
+
+// exportImagesResult is the --json and progress result of tap export images.
+type exportImagesResult struct {
+	Files []string `json:"files"`
+}
+
+// countCaptures wraps capture so that each finished capture, whether it
+// worked or not, reports render progress: done of total.
+func countCaptures(capture captureFunc, progress *progressReporter, total int) captureFunc {
+	done := 0
+	return func(ctx context.Context, serverURL string, options pdf.CaptureOptions, outputPath string) error {
+		err := capture(ctx, serverURL, options, outputPath)
+		done++
+		progress.Render(done, total)
+		return err
+	}
 }
 
 // brokenSlide describes one slide that failed to capture during --all: a
@@ -282,33 +323,32 @@ type brokenSlide struct {
 // browser.
 type captureFunc func(ctx context.Context, serverURL string, options pdf.CaptureOptions, outputPath string) error
 
-// captureAllSlides writes one PNG per slide, at its final state, into
-// outputDir, named slide-001.png and so on. It tries every slide even
-// after one fails: a broken slide (a capture error, or a rendered error
-// card) is collected and does not stop the rest from being written. The
-// only fatal errors are one that stops the loop before it can try any
-// slide at all (failing to create outputDir), and ctx being cancelled
-// (Ctrl-C or SIGTERM), which is checked between slides so the loop stops
-// there instead of starting one more capture.
+// captureAllSlides writes one PNG per slide in slideNumbers, at its final
+// state, into outputDir, named by the slide's deck number: slide-001.png
+// and so on. The caller passes the deck numbers of every slide that is
+// not skipped. It tries every slide even after one fails: a broken slide
+// (a capture error, or a rendered error card) is collected and does not
+// stop the rest from being written. The only fatal errors are one that
+// stops the loop before it can try any slide at all (failing to create
+// outputDir), and ctx being cancelled (Ctrl-C or SIGTERM), which is
+// checked between slides so the loop stops there instead of starting one
+// more capture.
 //
 // Returns the paths successfully written, in slide order, and the slides
-// that failed, also in slide order. Printing - the written paths to
-// standard output, one "slide N: reason" line per broken slide to standard
-// error - is the caller's job, which is what keeps this loop cheap to
-// test against a fake captureFunc.
-func captureAllSlides(ctx context.Context, capture captureFunc, serverURL string, slideCount int, width, height int, theme, outputDir string) ([]string, []brokenSlide, error) {
+// that failed, also in slide order. Printing is the caller's job, which
+// keeps this loop cheap to test against a fake captureFunc.
+func captureAllSlides(ctx context.Context, capture captureFunc, serverURL string, slideNumbers []int, width, height int, theme, outputDir string) ([]string, []brokenSlide, error) {
 	if err := os.MkdirAll(outputDir, 0755); err != nil {
 		return nil, nil, fmt.Errorf("failed to create output directory: %w", err)
 	}
 
 	var written []string
 	var broken []brokenSlide
-	for i := 0; i < slideCount; i++ {
+	for _, slideNumber := range slideNumbers {
 		if err := ctx.Err(); err != nil {
 			return written, broken, err
 		}
 
-		slideNumber := i + 1
 		outputPath := filepath.Join(outputDir, fmt.Sprintf("slide-%03d.png", slideNumber))
 		options := pdf.CaptureOptions{
 			SlideNumber: slideNumber,
