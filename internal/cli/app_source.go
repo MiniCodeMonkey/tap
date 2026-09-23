@@ -126,6 +126,24 @@ func (source *appDeckSource) renderCurrent(build appRenderBuilder) error {
 	return source.render(text, seq, build)
 }
 
+// renderCurrentAndList renders the text tap shows now and returns the
+// slide list of that same text. The list is built from the text the
+// render was handed rather than read again afterwards, so a PUT landing
+// in between cannot leave the app with a list describing one deck and a
+// screen showing another. The list comes back even when the render fails,
+// since a deck that will not render still has slides to name, and is nil
+// only when the text could not be read or would not parse.
+func (source *appDeckSource) renderCurrentAndList(baseDir string, build appRenderBuilder) (*slidelist.Result, error) {
+	var list *slidelist.Result
+	err := source.renderCurrent(func(text []byte) (func(), error) {
+		if built, listErr := slidelist.Build(text, baseDir); listErr == nil {
+			list = &built
+		}
+		return build(text)
+	})
+	return list, err
+}
+
 // render builds text and publishes the result only while seq is still the
 // newest sequence. The check and the publish step happen together under
 // publishMu, which every publish takes, so a superseded render cannot

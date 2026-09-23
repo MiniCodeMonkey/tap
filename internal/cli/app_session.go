@@ -107,7 +107,15 @@ type appSessionOptions struct {
 	// Saved is the saved command. It is nil in tap present --app, which
 	// has no buffer. Like Reload, it takes the session's context and
 	// should honour it.
-	Saved   func(ctx context.Context) error
+	Saved func(ctx context.Context) error
+	// Run, with EndRun, is the context of the whole run, and the call
+	// that ends it. The session takes it as its own and cancels it as
+	// the first step of quit, so work the caller started with the same
+	// context - the renders a PUT or the file watcher sets going - stops
+	// where a reload does, instead of carrying on into a server that is
+	// going away. Left nil, the session makes its own.
+	Run     context.Context
+	EndRun  context.CancelFunc
 	Tunnels tui.TunnelController
 	// Present is the tap present run. It is nil in tap dev --app.
 	Present    appPresentControl
@@ -183,7 +191,10 @@ func runAppSession(options appSessionOptions) {
 		options.QuitDeadline = appQuitDeadline
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := options.Run, options.EndRun
+	if ctx == nil || cancel == nil {
+		ctx, cancel = context.WithCancel(context.Background())
+	}
 	defer cancel()
 
 	session := &appSession{

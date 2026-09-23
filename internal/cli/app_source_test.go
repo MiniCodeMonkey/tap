@@ -280,3 +280,36 @@ func TestLoadPresentationSourceRendersTheGivenText(t *testing.T) {
 		t.Errorf("slides = %+v, want the buffer's text", presentation.Slides)
 	}
 }
+
+// TestAppDeckSourceListsTheTextItRendered covers the slide list that
+// rides along with a file-changed event. It has to describe the text that
+// was just rendered, so a PUT landing during the render cannot leave the
+// app with a list of one deck and a screen showing another.
+func TestAppDeckSourceListsTheTextItRendered(t *testing.T) {
+	directory := t.TempDir()
+	file := filepath.Join(directory, "talk.md")
+	if err := os.WriteFile(file, []byte("# Rendered\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	source := newAppDeckSource(file)
+
+	var built []byte
+	list, err := source.renderCurrentAndList(directory, func(text []byte) (func(), error) {
+		built = text
+		// A PUT landing while this render is still going.
+		source.setBuffer([]byte("# Newer\n---\n# Second\n"))
+		return func() {}, nil
+	})
+	if err != nil {
+		t.Fatalf("rendering: %v", err)
+	}
+	if string(built) != "# Rendered\n" {
+		t.Fatalf("rendered %q, want the deck file", built)
+	}
+	if list == nil {
+		t.Fatal("no slide list")
+	}
+	if len(list.Slides) != 1 {
+		t.Errorf("the slide list has %d slides, want the 1 of the text that was rendered", len(list.Slides))
+	}
+}

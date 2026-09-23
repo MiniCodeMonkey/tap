@@ -576,6 +576,14 @@ func runDevServer(options serverOptions) (err error) {
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 
 	if options.app {
+		// appCtx is the run's context, which runAppSession takes as its
+		// own and cancels as the first step of quit. Every render started
+		// outside a command - a PUT, the file watcher - carries it, so
+		// renderApp's own checks are live on exactly the paths most
+		// likely to be in flight when the run ends.
+		appCtx, endAppRun := context.WithCancel(context.Background())
+		defer endAppRun()
+
 		deckSource := newAppDeckSource(absFile)
 		if initialSource, readErr := os.ReadFile(absFile); readErr == nil {
 			deckSource.remember(initialSource)
@@ -657,7 +665,7 @@ func runDevServer(options serverOptions) (err error) {
 		var saved func(ctx context.Context) error
 		if !options.present {
 			srv.RegisterHandlerFunc("PUT "+server.AppSourcePath, handleAppSource(deckSource, func(buffer []byte) (func(), error) {
-				return renderApp(context.Background(), buffer, false)
+				return renderApp(appCtx, buffer, false)
 			}, baseDir, os.Stderr))
 			saved = func(ctx context.Context) error {
 				deckSource.dropBuffer()
@@ -686,7 +694,7 @@ func runDevServer(options serverOptions) (err error) {
 						// a deleted deck leaves the last render on screen.
 						return
 					}
-					if renderErr := renderCurrentForApp(context.Background(), false); renderErr != nil {
+					if renderErr := renderCurrentForApp(appCtx, false); renderErr != nil {
 						fmt.Fprintf(os.Stderr, "Error reloading presentation: %v\n", renderErr)
 					}
 					return
@@ -694,16 +702,14 @@ func runDevServer(options serverOptions) (err error) {
 
 				// Another file in the deck folder, such as a component:
 				// render again, and send the slide list, whose step counts
-				// can change with a component's steps export.
-				if renderErr := renderCurrentForApp(context.Background(), false); renderErr != nil {
+				// can change with a component's steps export. The list
+				// comes from the very text that was rendered, so it
+				// always describes what the app is looking at.
+				list, renderErr := deckSource.renderCurrentAndList(baseDir, func(text []byte) (func(), error) {
+					return renderApp(appCtx, text, false)
+				})
+				if renderErr != nil {
 					fmt.Fprintf(os.Stderr, "Error reloading presentation: %v\n", renderErr)
-				}
-				var list *slidelist.Result
-				source, sourceErr := deckSource.current()
-				if sourceErr != nil {
-					fmt.Fprintf(os.Stderr, "Error reading %s: %v\n", absFile, sourceErr)
-				} else if built, listErr := slidelist.Build(source, baseDir); listErr == nil {
-					list = &built
 				}
 				emitFileChanged(path, list)
 			})
@@ -790,6 +796,8 @@ func runDevServer(options serverOptions) (err error) {
 				return renderCurrentForApp(ctx, true)
 			},
 			Saved:             saved,
+			Run:               appCtx,
+			EndRun:            endAppRun,
 			Tunnels:           tunnels,
 			Present:           presentControl,
 			DiskStatus:        appDisk.get,

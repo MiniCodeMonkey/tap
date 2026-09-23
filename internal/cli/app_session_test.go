@@ -960,3 +960,33 @@ func TestAppSessionTheKeepRecordingAnswerDoesNotSpendTheQuitDeadline(t *testing.
 		t.Errorf("finished = %v, kept = %v, want the recording finished and kept", finished, kept)
 	}
 }
+
+// TestRunAppSessionUsesTheRunContextItWasGiven covers the context the
+// caller starts its own work with: the renders a PUT or the file watcher
+// sets going. The session takes that context as its own, so quit cancels
+// them at the same moment it cancels a reload, rather than leaving them
+// to publish into a server that is going away.
+func TestRunAppSessionUsesTheRunContextItWasGiven(t *testing.T) {
+	run, endRun := context.WithCancel(context.Background())
+	defer endRun()
+	startupContext := make(chan context.Context, 1)
+	harness := startAppSessionForTest(t, func(options *appSessionOptions) {
+		options.Run, options.EndRun = run, endRun
+		options.Startup = func(ctx context.Context) { startupContext <- ctx }
+	})
+
+	select {
+	case ctx := <-startupContext:
+		if ctx != run {
+			t.Error("the session made its own context, so work the caller starts with the run context outlives quit")
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("the startup never ran")
+	}
+
+	harness.closeInput()
+	harness.waitForEnd(t)
+	if run.Err() == nil {
+		t.Error("the run context is still live after the session ended")
+	}
+}
