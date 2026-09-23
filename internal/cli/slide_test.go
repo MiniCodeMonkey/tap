@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/MiniCodeMonkey/tap/internal/layouts"
 )
 
 func TestSlideAddCommandShape(t *testing.T) {
@@ -111,5 +113,41 @@ func TestSlideAddPrintNeedsALayout(t *testing.T) {
 	exitCode, _, stderr := runTap(t, "slide", "add", "--print")
 	if exitCode != exitUserError || !strings.Contains(stderr, "--print needs --layout") {
 		t.Errorf("(%d, %q), want exit 1 and a message about --layout", exitCode, stderr)
+	}
+}
+
+// TestSlideAddPrintJSONWithoutALayoutListsEveryLayout covers the
+// controller's ruling on open question 4: with no --layout, --print --json
+// prints every layout instead of refusing, so the app's layout gallery
+// hard-codes no names.
+func TestSlideAddPrintJSONWithoutALayoutListsEveryLayout(t *testing.T) {
+	exitCode, stdout, stderr := runTap(t, "slide", "add", "--print", "--json")
+	if exitCode != exitOK {
+		t.Fatalf("exit code = %d, stderr %q", exitCode, stderr)
+	}
+	var output struct {
+		OK      bool `json:"ok"`
+		Layouts []struct {
+			Name     string `json:"name"`
+			Template string `json:"template"`
+		} `json:"layouts"`
+	}
+	if err := json.Unmarshal([]byte(stdout), &output); err != nil {
+		t.Fatalf("stdout is not JSON: %v\n%s", err, stdout)
+	}
+	if !output.OK {
+		t.Fatalf("ok = false: %s", stdout)
+	}
+	wantNames := layouts.Templates()
+	if len(output.Layouts) != len(wantNames) {
+		t.Fatalf("got %d layouts, want %d: %v", len(output.Layouts), len(wantNames), output.Layouts)
+	}
+	for i, want := range wantNames {
+		if output.Layouts[i].Name != want.Name {
+			t.Errorf("layout %d name = %q, want %q (wizard order)", i, output.Layouts[i].Name, want.Name)
+		}
+		if output.Layouts[i].Template == "" {
+			t.Errorf("layout %d (%s) has an empty template", i, output.Layouts[i].Name)
+		}
 	}
 }

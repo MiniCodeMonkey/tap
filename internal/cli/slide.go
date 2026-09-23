@@ -69,9 +69,26 @@ type slideAddResult struct {
 	Markdown string `json:"markdown"`
 }
 
+// layoutListEntry is one layout in the --json result of tap slide add
+// --print --json with no --layout.
+type layoutListEntry struct {
+	Name     string `json:"name"`
+	Template string `json:"template"`
+}
+
+// layoutListResult is the --json result of tap slide add --print --json
+// with no --layout: every layout's template, in the wizard's order, so
+// the app's layout gallery hard-codes no layout names.
+type layoutListResult struct {
+	Layouts []layoutListEntry `json:"layouts"`
+}
+
 func runSlideAdd(cmd *cobra.Command, args []string) error {
 	if slideAddLayout != "" {
 		return addSlideFromTemplate(cmd, args)
+	}
+	if slideAddPrint && slideAddJSON {
+		return printAllLayouts(cmd)
 	}
 	if slideAddPrint {
 		return userError(codeUsage, errors.New("--print needs --layout"))
@@ -95,6 +112,23 @@ func runSlideAdd(cmd *cobra.Command, args []string) error {
 		return errCancelled
 	}
 	return nil
+}
+
+// printAllLayouts prints every layout's template, in the wizard's order:
+// the controller's ruling for tap slide add --print --json with no
+// --layout, so the app's layout gallery reads it instead of hard-coding
+// layout names.
+func printAllLayouts(cmd *cobra.Command) error {
+	templates := layouts.Templates()
+	entries := make([]layoutListEntry, len(templates))
+	for i, template := range templates {
+		body, err := layouts.RenderSlide(template.Name, nil)
+		if err != nil {
+			return internalError(codeInternal, err)
+		}
+		entries[i] = layoutListEntry{Name: template.Name, Template: body}
+	}
+	return printJSONOK(cmd.OutOrStdout(), layoutListResult{Layouts: entries})
 }
 
 // addSlideFromTemplate prints or appends the template of --layout.

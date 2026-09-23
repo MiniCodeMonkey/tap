@@ -542,8 +542,8 @@ tap slide add --layout <name> --print
 | Flag | Description |
 |------|-------------|
 | `--layout <name>` | Append that layout's template without the wizard. Works without a terminal |
-| `--print` | With `--layout`, print the template and write nothing. The template has no `---` separator in front of it, and no deck is needed |
-| `--json` | With `--layout`: `{"ok": true, "deck": "...", "layout": "...", "markdown": "..."}`. With `--print`, `deck` is left out |
+| `--print` | With `--layout`, print the template and write nothing. The template has no `---` separator in front of it, and no deck is needed. With `--json` and no `--layout`, list every layout's template instead |
+| `--json` | With `--layout`: `{"ok": true, "deck": "...", "layout": "...", "markdown": "..."}`. With `--print`, `deck` is left out. With `--print` and no `--layout`: `{"ok": true, "layouts": [...]}`, every layout's template |
 
 ### Examples
 
@@ -553,6 +553,7 @@ tap slide add talk.md                       # The wizard, for a specific deck
 tap slide add talk.md --layout quote        # Append a quote slide, no wizard
 tap slide add --layout big-stat --print     # Print the big-stat template, write nothing
 tap slide add --layout big-stat --print --json
+tap slide add --print --json                # List every layout's template
 ```
 
 ### `--json`
@@ -565,6 +566,18 @@ With `--print`, `deck` is left out:
 
 ```json
 {"ok": true, "layout": "big-stat", "markdown": "<!--\nlayout: big-stat\n-->\n\n# 100%\n\nDescription\n"}
+```
+
+With `--print --json` and no `--layout`, tap lists every layout, in the
+wizard's order, so a caller such as the desktop app's layout gallery does
+not hard-code layout names:
+
+```json
+{"ok": true, "layouts": [
+  {"name": "title", "template": "<!--\nlayout: title\n-->\n\n# My Title\n\nOptional subtitle\n"},
+  {"name": "section", "template": "..."},
+  ...
+]}
 ```
 
 ---
