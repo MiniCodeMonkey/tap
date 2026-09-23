@@ -58,23 +58,35 @@ func SlideBodies(content string) []string {
 }
 
 // InsertIntoSlide returns content with markdown added at the end of the
-// slide at slideIndex, after one blank line.
+// slide at slideIndex, after one blank line. Every other slide, and every
+// separator not adjacent to the edited slide, comes back byte for byte as
+// it was: parser.SplitSlidesRaw keeps the exact text between delimiters, so
+// only the edited part is rewritten and the rest is rejoined unchanged.
 func InsertIntoSlide(content string, slideIndex int, markdown string) (string, error) {
-	frontmatter, parts, slideParts := splitDeck(content)
+	frontmatter := frontmatterPattern.FindString(content)
+	parts, separators := parser.SplitSlidesRaw(content[len(frontmatter):])
+
+	var slideParts []int
+	for index, part := range parts {
+		if strings.TrimSpace(part) != "" {
+			slideParts = append(slideParts, index)
+		}
+	}
 	if slideIndex < 0 || slideIndex >= len(slideParts) {
 		return "", &SlideRangeError{Index: slideIndex, Total: len(slideParts)}
 	}
 
 	partIndex := slideParts[slideIndex]
-	parts[partIndex] = strings.TrimRight(parts[partIndex], " \t\n") + "\n\n" + markdown + "\n"
+	parts[partIndex] = strings.TrimRight(parts[partIndex], " \t\n") + "\n\n" + strings.TrimRight(markdown, "\n") + "\n"
 
 	var result strings.Builder
 	result.WriteString(frontmatter)
-	for index, part := range parts {
-		result.WriteString(part)
-		if index < len(parts)-1 {
-			result.WriteString("---\n")
-		}
+	result.WriteString(parts[0])
+	for index, separator := range separators {
+		result.WriteString("\n")
+		result.WriteString(separator)
+		result.WriteString("\n")
+		result.WriteString(parts[index+1])
 	}
 	return result.String(), nil
 }

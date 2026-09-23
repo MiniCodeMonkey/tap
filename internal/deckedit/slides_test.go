@@ -2,6 +2,7 @@ package deckedit
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -201,6 +202,123 @@ func TestAppendSlideLeavesTheDeckUnchangedWhenTheWriteFails(t *testing.T) {
 	}
 	if string(got) != content {
 		t.Errorf("deck file changed after a failed append:\ngot:  %q\nwant: %q", got, content)
+	}
+}
+
+func TestInsertIntoSlideTwiceKeepsAllSlideBoundaries(t *testing.T) {
+	content := "# One\n\n---\n\n# Two\n\n---\n\n# Three\n"
+
+	afterFirst, err := InsertIntoSlide(content, 0, "![d](images/d.png)")
+	if err != nil {
+		t.Fatalf("first InsertIntoSlide() error = %v", err)
+	}
+	if got := SlideBodies(afterFirst); len(got) != 3 {
+		t.Fatalf("after first insert: %d slides, want 3: %q", len(got), got)
+	}
+
+	afterSecond, err := InsertIntoSlide(afterFirst, 1, "![d-2](images/d-2.png)")
+	if err != nil {
+		t.Fatalf("second InsertIntoSlide() error = %v", err)
+	}
+
+	bodies := SlideBodies(afterSecond)
+	if len(bodies) != 3 {
+		t.Fatalf("after second insert: %d slides, want 3: %q", len(bodies), bodies)
+	}
+	if !strings.Contains(bodies[0], "# One") || !strings.Contains(bodies[0], "![d](images/d.png)") {
+		t.Errorf("slide 0 = %q, want it to keep # One and the first image", bodies[0])
+	}
+	if !strings.Contains(bodies[1], "# Two") || !strings.Contains(bodies[1], "![d-2](images/d-2.png)") {
+		t.Errorf("slide 1 = %q, want it to keep # Two and the second image", bodies[1])
+	}
+	if bodies[2] != "# Three" {
+		t.Errorf("slide 2 = %q, want %q untouched", bodies[2], "# Three")
+	}
+}
+
+func TestInsertIntoSlideIsIdempotentOverManyEdits(t *testing.T) {
+	content := "# One\n\n---\n\n# Two\n\n---\n\n# Three\n"
+	current := content
+	for round := 0; round < 10; round++ {
+		slideIndex := round % 3
+		var err error
+		current, err = InsertIntoSlide(current, slideIndex, fmt.Sprintf("![r%d](images/r%d.png)", round, round))
+		if err != nil {
+			t.Fatalf("round %d: InsertIntoSlide() error = %v", round, err)
+		}
+		bodies := SlideBodies(current)
+		if len(bodies) != 3 {
+			t.Fatalf("round %d: %d slides, want 3: %q", round, len(bodies), bodies)
+		}
+	}
+}
+
+func TestInsertIntoSlideLeavesUntouchedSlidesByteIdentical(t *testing.T) {
+	tests := []struct {
+		name         string
+		content      string
+		slideIndex   int
+		markdown     string
+		wantContains []string
+		wantSlides   int
+	}{
+		{
+			name:         "no trailing newline",
+			content:      "# One\n\n---\n\n# Two",
+			slideIndex:   1,
+			markdown:     "![a](images/a.png)",
+			wantContains: []string{"# One\n\n---\n\n"},
+			wantSlides:   2,
+		},
+		{
+			name:         "separators already use different spacing",
+			content:      "# One\n\n---   \n\n# Two\n\n---\n\n# Three\n",
+			slideIndex:   0,
+			markdown:     "![a](images/a.png)",
+			wantContains: []string{"---   \n\n# Two"},
+			wantSlides:   3,
+		},
+		{
+			name:         "separator inside a fenced code block is not a boundary",
+			content:      "# One\n\n```yaml\n---\nkey: value\n```\n\n---\n\n# Two\n",
+			slideIndex:   1,
+			markdown:     "![a](images/a.png)",
+			wantContains: []string{"```yaml\n---\nkey: value\n```"},
+			wantSlides:   2,
+		},
+		{
+			name:         "insertion into the first slide",
+			content:      "# One\n\n---\n\n# Two\n\n---\n\n# Three\n",
+			slideIndex:   0,
+			markdown:     "![a](images/a.png)",
+			wantContains: []string{"# Three\n"},
+			wantSlides:   3,
+		},
+		{
+			name:         "insertion into the last slide",
+			content:      "# One\n\n---\n\n# Two\n\n---\n\n# Three\n",
+			slideIndex:   2,
+			markdown:     "![a](images/a.png)",
+			wantContains: []string{"# One\n\n---\n\n# Two\n\n---\n\n"},
+			wantSlides:   3,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := InsertIntoSlide(tt.content, tt.slideIndex, tt.markdown)
+			if err != nil {
+				t.Fatalf("InsertIntoSlide() error = %v", err)
+			}
+			for _, want := range tt.wantContains {
+				if !strings.Contains(got, want) {
+					t.Errorf("InsertIntoSlide() = %q, want it to contain the untouched text %q", got, want)
+				}
+			}
+			if bodies := SlideBodies(got); len(bodies) != tt.wantSlides {
+				t.Errorf("InsertIntoSlide() produced %d slides, want %d: %q", len(bodies), tt.wantSlides, bodies)
+			}
+		})
 	}
 }
 
