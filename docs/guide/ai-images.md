@@ -45,6 +45,26 @@ While running `tap dev`, press `i` to open the image generator.
 | `Esc` | Cancel / Go back |
 | `r` | Retry on error |
 
+## From the Command Line
+
+`tap image generate` and `tap image regenerate` are the `i` key's
+generator as commands, for scripts and CI. They write the same files the
+`i` key does.
+
+```bash
+tap image generate --slide 3 --prompt "a lighthouse at dusk, flat vector"
+```
+
+Generates a new image with Gemini and adds it at the end of slide 3.
+
+```bash
+tap image regenerate --slide 3 --image images/generated-1a2b3c4d.png
+```
+
+Makes the AI image at that path again, in place, reusing its own prompt.
+See [CLI Commands](/reference/cli-commands#tap-image-generate) for the
+full flag reference.
+
 ## Markdown Format
 
 Generated images are stored with their prompt as metadata:
@@ -65,6 +85,8 @@ To regenerate an existing AI image:
 3. Choose the image to regenerate from the list
 4. Edit the prompt if desired, or submit to regenerate with the same prompt
 5. The new image replaces the old one (old file is deleted)
+
+Or run `tap image regenerate --slide N --image <path>` from the command line.
 
 ## Writing Effective Prompts
 

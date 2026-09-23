@@ -147,6 +147,108 @@ func TestSQLiteDriver_Execute_FileDatabase(t *testing.T) {
 	}
 }
 
+func TestSQLiteDriver_Execute_PathConfig_FileDatabase(t *testing.T) {
+	if !hasSQLite3() {
+		t.Skip("sqlite3 not installed")
+	}
+
+	// A deck's connection names its database file with "path", the key
+	// the schema and docs document for sqlite. It must be honored, not
+	// silently ignored in favor of an empty in-memory database.
+	tmpDir, err := os.MkdirTemp("", "sqlite-driver-test")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	dbPath := filepath.Join(tmpDir, "real-data.db")
+	driver := NewSQLiteDriver("")
+	ctx := context.Background()
+
+	setup := "CREATE TABLE rows_on_disk (value TEXT); INSERT INTO rows_on_disk VALUES ('from-the-real-file');"
+	result := driver.Execute(ctx, setup, map[string]string{"path": dbPath})
+	if !result.Success {
+		t.Fatalf("failed to seed file database via path: %s", result.Error)
+	}
+
+	result = driver.Execute(ctx, "SELECT value FROM rows_on_disk;", map[string]string{"path": dbPath})
+	if !result.Success {
+		t.Fatalf("expected success reading via path, got error: %s", result.Error)
+	}
+	if !strings.Contains(result.Output, "from-the-real-file") {
+		t.Errorf("expected the row written to the file, got %q", result.Output)
+	}
+}
+
+func TestSQLiteDriver_Execute_PathConfig_UnusableFile(t *testing.T) {
+	if !hasSQLite3() {
+		t.Skip("sqlite3 not installed")
+	}
+
+	// A path naming a file that cannot be opened (its directory does not
+	// exist) must fail clearly. It must never fall back to an empty
+	// in-memory database.
+	driver := NewSQLiteDriver("")
+	ctx := context.Background()
+
+	result := driver.Execute(ctx, "SELECT 1;", map[string]string{"path": "/nonexistent-dir-xyz/data.db"})
+	if result.Success {
+		t.Fatal("expected failure for an unopenable path, got success")
+	}
+	if result.Error == "" {
+		t.Error("expected an error message explaining the failure")
+	}
+}
+
+func TestSQLiteDriver_Execute_DatabaseConfig_StillWorks(t *testing.T) {
+	if !hasSQLite3() {
+		t.Skip("sqlite3 not installed")
+	}
+
+	// Existing decks spell the key "database". That must keep working
+	// exactly as it does today.
+	tmpDir, err := os.MkdirTemp("", "sqlite-driver-test")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	dbPath := filepath.Join(tmpDir, "legacy.db")
+	driver := NewSQLiteDriver("")
+	ctx := context.Background()
+
+	setup := "CREATE TABLE legacy_rows (value TEXT); INSERT INTO legacy_rows VALUES ('via-database-key');"
+	result := driver.Execute(ctx, setup, map[string]string{"database": dbPath})
+	if !result.Success {
+		t.Fatalf("failed to seed file database via database key: %s", result.Error)
+	}
+
+	result = driver.Execute(ctx, "SELECT value FROM legacy_rows;", map[string]string{"database": dbPath})
+	if !result.Success {
+		t.Fatalf("expected success reading via database key, got error: %s", result.Error)
+	}
+	if !strings.Contains(result.Output, "via-database-key") {
+		t.Errorf("expected the row written to the file, got %q", result.Output)
+	}
+}
+
+func TestSQLiteDriver_Execute_NoDatabaseField_DefaultsToInMemory(t *testing.T) {
+	if !hasSQLite3() {
+		t.Skip("sqlite3 not installed")
+	}
+
+	driver := NewSQLiteDriver("")
+	ctx := context.Background()
+
+	result := driver.Execute(ctx, "SELECT sqlite_version();", map[string]string{})
+	if !result.Success {
+		t.Errorf("expected success with the in-memory default, got error: %s", result.Error)
+	}
+	if result.Output == "" {
+		t.Error("expected version output from the in-memory default")
+	}
+}
+
 func TestSQLiteDriver_Execute_SyntaxError(t *testing.T) {
 	if !hasSQLite3() {
 		t.Skip("sqlite3 not installed")

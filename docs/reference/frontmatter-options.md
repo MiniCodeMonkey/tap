@@ -275,17 +275,23 @@ Configure live code execution drivers. Each driver connects to a different backe
 | Default | None |
 | Required | No (only for live code execution) |
 
+Required for live code: every driver a block uses must be a key here. `shell: {}` declares a driver with no settings.
+
 ```yaml
 ---
 drivers:
   sqlite:
-    database: ./data/demo.db
+    connections:
+      demo:
+        path: ./data/demo.db
   postgres:
-    host: localhost
-    port: 5432
-    database: analytics
-    user: $PGUSER
-    password: $PGPASSWORD
+    connections:
+      analytics:
+        host: localhost
+        port: 5432
+        database: analytics
+        user: ${PGUSER}
+        password: ${PGPASSWORD}
   shell:
     cwd: ./scripts
     timeout: 30
@@ -305,7 +311,25 @@ drivers:
 Live code execution only works with `tap dev`. Static builds (`tap build`) do not execute code.
 :::
 
-**Environment variables:** Values starting with `$` are replaced with environment variables. Never hardcode passwords in your files.
+### Environment variables
+
+String values in `drivers:` settings can read the environment with `${NAME}`:
+
+```yaml
+drivers:
+  postgres:
+    connections:
+      demo:
+        host: ${PGHOST}
+        user: ${PGUSER}
+        password: ${PGPASSWORD}
+```
+
+- tap expands `${NAME}` when a block runs, not when it loads the deck, so the value never reaches the slide page or a `tap build` folder.
+- A `.env` file next to the deck is read too.
+- A variable that is not set makes the block fail with a message that names it. It never becomes an empty string.
+- `$${` writes a literal `${`. Any other `$` stays as it is, so `$PGPASSWORD` without braces is not expanded.
+- Only driver settings expand. Other frontmatter keys, such as `title`, stay as written.
 
 See [Drivers Reference](/reference/drivers) for complete driver configuration options.
 
@@ -333,8 +357,8 @@ drivers:
       analytics:
         host: localhost
         database: analytics
-        user: $PGUSER
-        password: $PGPASSWORD
+        user: ${PGUSER}
+        password: ${PGPASSWORD}
     timeout: 30
 ---
 ```

@@ -2,11 +2,13 @@ package cli
 
 import (
 	"context"
+	"os"
 	"sort"
 	"strings"
 	"testing"
 
 	"github.com/MiniCodeMonkey/tap/internal/config"
+	"github.com/MiniCodeMonkey/tap/internal/driver"
 )
 
 func TestBuildDriverRegistryHasTheBuiltInDrivers(t *testing.T) {
@@ -30,6 +32,50 @@ func TestBuildDriverRegistryAddsCustomDrivers(t *testing.T) {
 	}
 	if registry.Has("nothing") {
 		t.Error("a drivers: entry with no command is not a custom driver")
+	}
+}
+
+func TestBuildDriverRegistryExpandsACustomCommand(t *testing.T) {
+	t.Setenv("TAP_TEST_INTERPRETER", "python3")
+	cfg := &config.Config{Drivers: map[string]config.DriverConfig{
+		"python": {Command: "${TAP_TEST_INTERPRETER}", Args: []string{"-c"}},
+	}}
+	registry := buildDriverRegistry(cfg, t.TempDir())
+	custom, ok := registry.Get("python").(*driver.CustomDriver)
+	if !ok {
+		t.Fatalf("python is %T, want *driver.CustomDriver", registry.Get("python"))
+	}
+	if custom.Command != "python3" {
+		t.Errorf("command = %q, want python3", custom.Command)
+	}
+}
+
+func TestBuildDriverRegistryFailsABlockOnAnUnsetCommandVariable(t *testing.T) {
+	t.Setenv("TAP_TEST_UNSET_INTERPRETER", "")
+	os.Unsetenv("TAP_TEST_UNSET_INTERPRETER")
+	cfg := &config.Config{Drivers: map[string]config.DriverConfig{
+		"python": {Command: "${TAP_TEST_UNSET_INTERPRETER}"},
+	}}
+	registry := buildDriverRegistry(cfg, t.TempDir())
+	if !registry.Has("python") {
+		t.Fatal("python is missing: its blocks must fail with the reason, not with driver not found")
+	}
+	result := registry.Execute(context.Background(), "python", "print(1)", map[string]string{})
+	if result.Success || !strings.Contains(result.Error, "TAP_TEST_UNSET_INTERPRETER is not set") {
+		t.Errorf("result = %+v, want the unset variable named", result)
+	}
+}
+
+func TestBuildDriverRegistryKeepsTheBuiltInShell(t *testing.T) {
+	t.Setenv("TAP_TEST_UNSET_SHELL", "")
+	os.Unsetenv("TAP_TEST_UNSET_SHELL")
+	cfg := &config.Config{Drivers: map[string]config.DriverConfig{
+		"shell": {Command: "${TAP_TEST_UNSET_SHELL}"},
+	}}
+	registry := buildDriverRegistry(cfg, t.TempDir())
+	result := registry.Execute(context.Background(), "shell", "echo built in", map[string]string{})
+	if !result.Success || !strings.Contains(result.Output, "built in") {
+		t.Errorf("shell = %+v, want the built-in shell driver", result)
 	}
 }
 

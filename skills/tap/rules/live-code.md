@@ -30,6 +30,10 @@ SELECT * FROM users LIMIT 5;
 ```
 ````
 
+**Declare every driver.** A deck with live code lists each driver it uses under `drivers:` in the frontmatter, `shell: {}` for one with no settings. A block with an undeclared driver never runs. When you add a live code block, add its driver to `drivers:` in the same edit.
+
+**Approval.** The person running the deck approves it once in the terminal. `tap new` approves the decks it creates. For a headless run in a script or test, pass `--allow-code`.
+
 ## Database Configuration
 
 ### SQLite
@@ -54,7 +58,7 @@ drivers:
         port: 3306
         database: myapp
         user: demo_user
-        password: $MYSQL_PASSWORD
+        password: ${MYSQL_PASSWORD}
 ---
 ```
 
@@ -68,8 +72,8 @@ drivers:
         host: localhost
         port: 5432
         database: analytics
-        user: $PGUSER
-        password: $PGPASSWORD
+        user: ${PGUSER}
+        password: ${PGPASSWORD}
 ---
 ```
 
@@ -118,28 +122,25 @@ print(json.dumps(data, indent=2))
 ```
 ````
 
-## Environment Variables
+### Environment variables
 
-**Never hardcode passwords.** Use `$` prefix:
+String values in `drivers:` settings can read the environment with `${NAME}`:
+
 ```yaml
----
 drivers:
   postgres:
     connections:
-      prod:
-        host: localhost
-        database: analytics
-        user: $PGUSER
-        password: $PGPASSWORD
----
+      demo:
+        host: ${PGHOST}
+        user: ${PGUSER}
+        password: ${PGPASSWORD}
 ```
 
-Set before running:
-```bash
-export PGUSER=demo
-export PGPASSWORD=secret123
-tap dev slides.md
-```
+- tap expands `${NAME}` when a block runs, not when it loads the deck, so the value never reaches the slide page or a `tap build` folder.
+- A `.env` file next to the deck is read too.
+- A variable that is not set makes the block fail with a message that names it. It never becomes an empty string.
+- `$${` writes a literal `${`. Any other `$` stays as it is, so `$PGPASSWORD` without braces is not expanded.
+- Only driver settings expand. Other frontmatter keys, such as `title`, stay as written.
 
 ## Timeout Protection
 

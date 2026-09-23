@@ -1084,6 +1084,41 @@ func TestResolveImagePathsNoBaseDir(t *testing.T) {
 	}
 }
 
+func TestResolveAsciinemaPathsInHTML(t *testing.T) {
+	cfg := config.DefaultConfig()
+	tr := NewWithBaseDir(cfg, "/presentations/demo")
+
+	testCases := []struct {
+		name     string
+		html     string
+		expected string
+	}{
+		{
+			// This is the tag exactly as the markdown renderer emits it: the
+			// language class plus the data-code-block-index attribute the
+			// renderer always adds. A pattern that only matches the bare
+			// class="language-asciinema" tag never fires on real output.
+			name:     "renderer's real tag with data-code-block-index",
+			html:     `<pre><code class="language-asciinema" data-code-block-index="0">src: demo.cast</code></pre>`,
+			expected: `<pre><code class="language-asciinema" data-code-block-index="0">src: /local/demo.cast</code></pre>`,
+		},
+		{
+			name:     "bare tag with no extra attributes",
+			html:     `<code class="language-asciinema">src: demo.cast</code>`,
+			expected: `<code class="language-asciinema">src: /local/demo.cast</code>`,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			result := tr.resolveAsciinemaPaths(tc.html)
+			if result != tc.expected {
+				t.Errorf("resolveAsciinemaPaths failed:\n  got:      %q\n  expected: %q", result, tc.expected)
+			}
+		})
+	}
+}
+
 func TestTransformWithImagePathResolution(t *testing.T) {
 	cfg := config.DefaultConfig()
 	tr := NewWithBaseDir(cfg, "/presentations/demo")
@@ -1570,5 +1605,58 @@ func TestWithoutSkippedSlides(t *testing.T) {
 	}
 	if len(presentation.Slides) != 4 || presentation.Slides[2].Index != 2 {
 		t.Error("WithoutSkippedSlides changed the presentation it was given")
+	}
+}
+
+func TestTransformNumbersLiveBlocksAndFlagsUndeclaredDrivers(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Drivers = map[string]config.DriverConfig{"sqlite": {}}
+	pres := &parser.Presentation{Slides: []parser.Slide{
+		{Index: 0, CodeBlocks: []parser.CodeBlock{
+			{Language: "go", Code: "package main"},
+			{Language: "sql", Code: "SELECT 1;", Meta: parser.CodeBlockMeta{Driver: "sqlite"}},
+			{Language: "bash", Code: "ls", Meta: parser.CodeBlockMeta{Driver: "shell"}},
+		}},
+		{Index: 1, CodeBlocks: []parser.CodeBlock{
+			{Language: "sql", Code: "SELECT 2;", Meta: parser.CodeBlockMeta{Driver: "sqlite"}},
+		}},
+	}}
+
+	result := New(cfg).Transform(pres)
+	first := result.Slides[0].CodeBlocks
+	if first[0].Block != 0 || first[1].Block != 1 || first[2].Block != 2 {
+		t.Errorf("blocks = %d, %d, %d; want 0, 1, 2", first[0].Block, first[1].Block, first[2].Block)
+	}
+	if second := result.Slides[1].CodeBlocks[0].Block; second != 1 {
+		t.Errorf("slide 2 block = %d, want 1: numbering starts again on every slide", second)
+	}
+	if first[1].Problem != "" {
+		t.Errorf("a declared driver has a problem: %q", first[1].Problem)
+	}
+	want := `This deck does not declare the shell driver. Add "shell: {}" under drivers in the frontmatter.`
+	if first[2].Problem != want {
+		t.Errorf("problem = %q, want %q", first[2].Problem, want)
+	}
+}
+
+func TestTransformShowsTheDriversBlockWhenTheDeckDeclaresNone(t *testing.T) {
+	pres := &parser.Presentation{Slides: []parser.Slide{
+		{Index: 0, CodeBlocks: []parser.CodeBlock{{Language: "sql", Code: "SELECT 1;", Meta: parser.CodeBlockMeta{Driver: "sqlite"}}}},
+		{Index: 1, CodeBlocks: []parser.CodeBlock{{Language: "bash", Code: "ls", Meta: parser.CodeBlockMeta{Driver: "shell"}}}},
+	}}
+	result := New(config.DefaultConfig()).Transform(pres)
+	want := "This deck does not declare the sqlite driver. Add this to the frontmatter:\n\ndrivers:\n  shell: {}\n  sqlite: {}"
+	if got := result.Slides[0].CodeBlocks[0].Problem; got != want {
+		t.Errorf("problem = %q, want %q", got, want)
+	}
+}
+
+func TestLiveBlockJSONFields(t *testing.T) {
+	encoded, err := json.Marshal(TransformedCodeBlock{Language: "sql", Code: "x", Driver: "sqlite", Block: 1, Problem: "p"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(encoded), `"block":1`) || !strings.Contains(string(encoded), `"problem":"p"`) {
+		t.Errorf("JSON = %s", encoded)
 	}
 }

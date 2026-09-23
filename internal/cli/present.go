@@ -11,9 +11,10 @@ import (
 )
 
 var (
-	presentPort     int
-	presentNoRecord bool
-	presentLAN      bool
+	presentPort      int
+	presentNoRecord  bool
+	presentLAN       bool
+	presentAllowCode bool
 )
 
 var presentCmd = &cobra.Command{
@@ -61,6 +62,7 @@ Examples:
 			present:      true,
 			record:       record,
 			lan:          presentLAN,
+			allowCode:    presentAllowCode,
 		})
 	},
 }
@@ -71,4 +73,5 @@ func init() {
 	presentCmd.Flags().IntVarP(&presentPort, "port", "p", 3000, "port for the server")
 	presentCmd.Flags().BoolVar(&presentNoRecord, "no-record", false, "do not record this run")
 	presentCmd.Flags().BoolVar(&presentLAN, "lan", false, "listen on the local network too, so a phone on the same network can open the presenter view (default: this machine only)")
+	presentCmd.Flags().BoolVar(&presentAllowCode, "allow-code", false, "let the deck's live code run for this run without an approval, and save none")
 }

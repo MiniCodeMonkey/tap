@@ -59,8 +59,8 @@ func TestParse_ConferenceTalkQueryIsLive(t *testing.T) {
 		t.Fatalf("Parse() returned error: %v", err)
 	}
 	block := pres.Slides[3].CodeBlocks[0]
-	if block.Meta.Driver != "sqlite" || block.Meta.Connection != "incident" || block.Meta.HighlightLines != "2-3" {
-		t.Errorf("slide 4 block meta = %+v, want sqlite, incident, 2-3", block.Meta)
+	if block.Meta.Driver != "sqlite" || block.Meta.Connection != "incident" || block.Meta.HighlightLines != "9-10" {
+		t.Errorf("slide 4 block meta = %+v, want sqlite, incident, 9-10", block.Meta)
 	}
 }
 

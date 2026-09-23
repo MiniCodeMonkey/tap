@@ -23,8 +23,11 @@ import (
 // Server is the HTTP server for serving presentations in development mode.
 type Server struct {
 	// Fields ordered by size for better memory alignment
-	presentation          *transformer.TransformedPresentation
-	registry              *driver.Registry
+	presentation *transformer.TransformedPresentation
+	registry     *driver.Registry
+	// liveCodePolicy is which drivers /api/execute may run in this run.
+	// The zero value allows none.
+	liveCodePolicy        LiveCodePolicy
 	httpServer            *http.Server
 	mux                   *http.ServeMux
 	shutdownCh            chan struct{}
@@ -79,6 +82,14 @@ func NewWithHost(port int, host string) *Server {
 		Addr:              s.addr,
 		Handler:           http.HandlerFunc(s.serveHTTP),
 		ReadHeaderTimeout: 10 * time.Second,
+		// ReadTimeout bounds how long a request, headers plus body, may
+		// take to arrive. Without it, a body sent one byte at a time
+		// pins a goroutine and its buffered memory indefinitely, even
+		// under handleAPIExecute's MaxBytesReader cap. Ten seconds
+		// matches ReadHeaderTimeout above: any legitimate request on
+		// this server (a handful of JSON bytes, or a GET with no body)
+		// completes in a small fraction of that.
+		ReadTimeout: 10 * time.Second,
 	}
 
 	return s

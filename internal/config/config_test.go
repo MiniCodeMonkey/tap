@@ -116,142 +116,6 @@ func TestValidate_MultipleErrors(t *testing.T) {
 	}
 }
 
-func TestResolveEnvVars_SimpleVariable(t *testing.T) {
-	// Set up test environment variable
-	os.Setenv("TEST_DB_PASSWORD", "secret123")
-	defer os.Unsetenv("TEST_DB_PASSWORD")
-
-	result := resolveEnvVars("$TEST_DB_PASSWORD")
-	if result != "secret123" {
-		t.Errorf("resolveEnvVars($TEST_DB_PASSWORD) = %q, want %q", result, "secret123")
-	}
-}
-
-func TestResolveEnvVars_BracesSyntax(t *testing.T) {
-	// Set up test environment variable
-	os.Setenv("TEST_DB_USER", "admin")
-	defer os.Unsetenv("TEST_DB_USER")
-
-	result := resolveEnvVars("${TEST_DB_USER}")
-	if result != "admin" {
-		t.Errorf("resolveEnvVars(${TEST_DB_USER}) = %q, want %q", result, "admin")
-	}
-}
-
-func TestResolveEnvVars_MixedContent(t *testing.T) {
-	os.Setenv("TEST_HOST", "localhost")
-	os.Setenv("TEST_PORT", "5432")
-	defer os.Unsetenv("TEST_HOST")
-	defer os.Unsetenv("TEST_PORT")
-
-	result := resolveEnvVars("postgres://$TEST_HOST:${TEST_PORT}/mydb")
-	expected := "postgres://localhost:5432/mydb"
-	if result != expected {
-		t.Errorf("resolveEnvVars() = %q, want %q", result, expected)
-	}
-}
-
-func TestResolveEnvVars_UndefinedVariable(t *testing.T) {
-	// Ensure variable is not set
-	os.Unsetenv("UNDEFINED_VAR")
-
-	result := resolveEnvVars("$UNDEFINED_VAR")
-	if result != "$UNDEFINED_VAR" {
-		t.Errorf("resolveEnvVars($UNDEFINED_VAR) = %q, want %q (unchanged)", result, "$UNDEFINED_VAR")
-	}
-}
-
-func TestResolveEnvVars_NoVariables(t *testing.T) {
-	input := "plain text without variables"
-	result := resolveEnvVars(input)
-	if result != input {
-		t.Errorf("resolveEnvVars() = %q, want %q", result, input)
-	}
-}
-
-func TestResolveEnvVars_EmptyString(t *testing.T) {
-	result := resolveEnvVars("")
-	if result != "" {
-		t.Errorf("resolveEnvVars(\"\") = %q, want empty string", result)
-	}
-}
-
-func TestConfig_ResolveEnvVars(t *testing.T) {
-	// Set up test environment variables
-	os.Setenv("TEST_MYSQL_PASSWORD", "mysql_secret")
-	os.Setenv("TEST_MYSQL_USER", "mysql_admin")
-	defer os.Unsetenv("TEST_MYSQL_PASSWORD")
-	defer os.Unsetenv("TEST_MYSQL_USER")
-
-	cfg := &Config{
-		Drivers: map[string]DriverConfig{
-			"mysql": {
-				Connections: map[string]ConnectionConfig{
-					"default": {
-						Host:     "localhost",
-						User:     "$TEST_MYSQL_USER",
-						Password: "$TEST_MYSQL_PASSWORD",
-						Database: "testdb",
-						Port:     3306,
-					},
-				},
-			},
-		},
-	}
-
-	cfg.ResolveEnvVars()
-
-	conn := cfg.Drivers["mysql"].Connections["default"]
-	if conn.User != "mysql_admin" {
-		t.Errorf("User = %q, want %q", conn.User, "mysql_admin")
-	}
-	if conn.Password != "mysql_secret" {
-		t.Errorf("Password = %q, want %q", conn.Password, "mysql_secret")
-	}
-	// Non-variable fields should remain unchanged
-	if conn.Host != "localhost" {
-		t.Errorf("Host = %q, want %q", conn.Host, "localhost")
-	}
-}
-
-func TestConfig_ResolveEnvVars_MultipleDrivers(t *testing.T) {
-	os.Setenv("TEST_PG_PASSWORD", "pg_secret")
-	os.Setenv("TEST_SQLITE_PATH", "/data/test.db")
-	defer os.Unsetenv("TEST_PG_PASSWORD")
-	defer os.Unsetenv("TEST_SQLITE_PATH")
-
-	cfg := &Config{
-		Drivers: map[string]DriverConfig{
-			"postgres": {
-				Connections: map[string]ConnectionConfig{
-					"prod": {
-						Password: "${TEST_PG_PASSWORD}",
-					},
-				},
-			},
-			"sqlite": {
-				Connections: map[string]ConnectionConfig{
-					"local": {
-						Path: "$TEST_SQLITE_PATH",
-					},
-				},
-			},
-		},
-	}
-
-	cfg.ResolveEnvVars()
-
-	pgConn := cfg.Drivers["postgres"].Connections["prod"]
-	if pgConn.Password != "pg_secret" {
-		t.Errorf("postgres password = %q, want %q", pgConn.Password, "pg_secret")
-	}
-
-	sqliteConn := cfg.Drivers["sqlite"].Connections["local"]
-	if sqliteConn.Path != "/data/test.db" {
-		t.Errorf("sqlite path = %q, want %q", sqliteConn.Path, "/data/test.db")
-	}
-}
-
 func TestLoadEnv_NonexistentFile(t *testing.T) {
 	// LoadEnv should return nil for non-existent .env file
 	err := LoadEnv("/nonexistent/directory")
@@ -584,6 +448,41 @@ Some content here
 	}
 }
 
+func TestUpdateThemeInFile_LeavesTheDeckUnchangedWhenTheWriteFails(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("running as root, which ignores directory permissions")
+	}
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "deck.md")
+	content := "---\ntitle: Test\ntheme: paper\n---\n\n# Slide 1\n"
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatalf("Failed to write deck file: %v", err)
+	}
+
+	// A read-only directory stops the temp file UpdateThemeInFile creates
+	// next to the deck, simulating a write failure partway through.
+	if err := os.Chmod(dir, 0o500); err != nil {
+		t.Fatalf("Failed to chmod dir: %v", err)
+	}
+	defer os.Chmod(dir, 0o755)
+
+	if err := UpdateThemeInFile(path, "noir"); err == nil {
+		t.Fatal("UpdateThemeInFile() returned no error, want an error from the read-only directory")
+	}
+
+	if err := os.Chmod(dir, 0o755); err != nil {
+		t.Fatalf("Failed to restore dir permissions: %v", err)
+	}
+	result, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("Failed to read deck file: %v", err)
+	}
+	if string(result) != content {
+		t.Errorf("deck file changed after a failed write:\ngot:  %q\nwant: %q", result, content)
+	}
+}
+
 func TestLoad_IgnoresRemovedFrontmatterKeys(t *testing.T) {
 	// codeTheme and transitionDuration were removed from the Config struct.
 	// A deck that still sets them in frontmatter must keep parsing without
@@ -796,5 +695,28 @@ func TestFromSource(t *testing.T) {
 	}
 	if _, err := FromSource([]byte("")); err == nil {
 		t.Error("FromSource() of an empty deck should fail, as Load does")
+	}
+}
+
+func TestConfigJSON_LeavesDriversOut(t *testing.T) {
+	cfg := Config{
+		Title: "Deck",
+		Drivers: map[string]DriverConfig{
+			"mysql": {Connections: map[string]ConnectionConfig{
+				"default": {Host: "localhost", User: "root", Password: "s3cret"},
+			}},
+		},
+	}
+	data, err := json.Marshal(cfg)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	for _, leaked := range []string{"drivers", "Drivers", "s3cret", "root"} {
+		if strings.Contains(string(data), leaked) {
+			t.Errorf("config JSON contains %q: %s", leaked, data)
+		}
+	}
+	if !strings.Contains(string(data), `"title":"Deck"`) {
+		t.Errorf("config JSON lost the title: %s", data)
 	}
 }
