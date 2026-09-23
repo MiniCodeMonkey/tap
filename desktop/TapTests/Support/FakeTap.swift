@@ -160,13 +160,64 @@ struct FakeSlide {
     }
 }
 
+/// Follows fenced code blocks through markdown one line at a time, the same
+/// rules `fenceTracker` in `internal/parser/fences.go` follows: a fence
+/// opens with a run of at least three backticks or tildes, indented by at
+/// most three spaces (a backtick fence's info string cannot itself hold a
+/// backtick). It closes at a line that is a run of the same character, at
+/// least as long as the opening run, indented by at most three spaces, with
+/// only spaces after it. The zero value is outside any fence.
+private struct FenceTracker {
+    private var character: Character?
+    private var length = 0
+
+    /// Reads the next line and reports whether it belongs to a fenced code
+    /// block, counting the opening and closing fence lines, and, when this
+    /// line opens a fence, the fence's info string (the text after the
+    /// opening run of fence characters).
+    mutating func advance(_ line: String) -> (insideFence: Bool, opened: (character: Character, info: String)?) {
+        let (runCharacter, run, rest, isRun) = FenceTracker.fenceRun(line)
+        if length == 0 {
+            guard isRun, !(runCharacter == "`" && rest.contains("`")) else {
+                return (false, nil)
+            }
+            character = runCharacter
+            length = run
+            return (true, (runCharacter, rest))
+        }
+        if isRun, runCharacter == character, run >= length, rest.trimmingCharacters(in: .whitespaces).isEmpty {
+            character = nil
+            length = 0
+        }
+        return (true, nil)
+    }
+
+    /// Whether `line` starts, after at most three spaces, with a run of at
+    /// least three backticks or three tildes. Returns the run's character
+    /// and length, and the rest of the line after the run.
+    private static func fenceRun(_ line: String) -> (character: Character, run: Int, rest: String, isRun: Bool) {
+        let characters = Array(line)
+        var indent = 0
+        while indent < characters.count, characters[indent] == " " { indent += 1 }
+        guard indent <= 3, indent < characters.count else { return (" ", 0, "", false) }
+        let fenceCharacter = characters[indent]
+        guard fenceCharacter == "`" || fenceCharacter == "~" else { return (" ", 0, "", false) }
+        var run = 1
+        while indent + run < characters.count, characters[indent + run] == fenceCharacter { run += 1 }
+        guard run >= 3 else { return (" ", 0, "", false) }
+        let rest = String(characters[(indent + run)...])
+        return (fenceCharacter, run, rest, true)
+    }
+}
+
 /// A small stand-in for tap's own slide parser, used only to answer
 /// `FakeTap`'s `PUT /api/app/source`. It understands exactly what the
 /// fixtures in `desktop/TapTests/Fixtures` need: YAML frontmatter (only
-/// enough to notice unbalanced brackets and braces), `---` separators,
-/// `<!-- layout: NAME -->` directives against a known layout list,
-/// `# ` headings as titles, `<!-- pause -->` as a fragment, and fenced code
-/// blocks with an inline `{driver: NAME}` attribute marking them live.
+/// enough to notice unbalanced brackets and braces), `---` separators
+/// aware of fenced code blocks, `<!-- layout: NAME -->` directives against
+/// a known layout list, `# ` headings as titles, `<!-- pause -->` as a
+/// fragment, and fenced code blocks (excluding ```component fences) with
+/// an inline `{driver: NAME}` attribute marking them live.
 enum FakeSlideParser {
     /// The full built-in layout registry, copied from
     /// `internal/layouts/layouts.json` in the tap repository. Keep this in
@@ -197,8 +248,10 @@ enum FakeSlideParser {
 
         var segments: [[Int]] = []
         var current: [Int] = []
+        var fences = FenceTracker()
         for index in contentStart..<lines.count {
-            if lines[index].trimmingCharacters(in: .whitespaces) == "---" {
+            let (insideFence, _) = fences.advance(lines[index])
+            if !insideFence, lines[index].trimmingCharacters(in: .whitespaces) == "---" {
                 segments.append(current)
                 current = []
             } else {
@@ -232,7 +285,7 @@ enum FakeSlideParser {
         var fragments = 0
         var errors: [String] = []
         var codeBlocks: [FakeCodeBlock] = []
-        var insideFence = false
+        var fences = FenceTracker()
 
         for lineIndex in indices {
             let line = lines[lineIndex]
@@ -249,11 +302,9 @@ enum FakeSlideParser {
             if trimmed.contains("<!-- pause -->") {
                 fragments += 1
             }
-            if !insideFence, trimmed.hasPrefix("```") {
-                insideFence = true
-                codeBlocks.append(fence(trimmed, line: lineIndex + 1, block: codeBlocks.count))
-            } else if insideFence, trimmed == "```" {
-                insideFence = false
+            let (_, opened) = fences.advance(line)
+            if let opened, !isComponentFence(opened.info) {
+                codeBlocks.append(fence(info: opened.info, line: lineIndex + 1, block: codeBlocks.count))
             }
         }
 
@@ -267,9 +318,20 @@ enum FakeSlideParser {
         return inner.trimmingCharacters(in: .whitespaces)
     }
 
-    /// Parses a fence's opening line, `` ```language {attribute: value, ...} ``.
-    private static func fence(_ line: String, line lineNumber: Int, block: Int) -> FakeCodeBlock {
-        let info = line.dropFirst(3)
+    /// Whether a fence's info string names a component fence, the same
+    /// shape `componentFencePattern` in `internal/parser/codeblocks.go`
+    /// matches: the word "component" followed by whitespace and a path.
+    private static func isComponentFence(_ info: String) -> Bool {
+        let trimmedInfo = info.trimmingCharacters(in: .whitespaces)
+        guard trimmedInfo.hasPrefix("component") else { return false }
+        let rest = trimmedInfo.dropFirst("component".count)
+        guard let first = rest.first, first == " " || first == "\t" else { return false }
+        return !rest.trimmingCharacters(in: .whitespaces).isEmpty
+    }
+
+    /// Parses a fence's info string, `` language {attribute: value, ...} ``,
+    /// the text after the opening run of fence characters.
+    private static func fence(info: String, line lineNumber: Int, block: Int) -> FakeCodeBlock {
         let language = String(info.prefix { $0 != " " && $0 != "{" })
         var driver = ""
         if let braceStart = info.firstIndex(of: "{"), let braceEnd = info.firstIndex(of: "}") {
