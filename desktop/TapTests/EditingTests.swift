@@ -51,7 +51,18 @@ final class EditingTests: HostedTestCase {
                                     "the message has its own line under the header")
     }
 
-    func testCodeBlocksWithALiveDriver() async throws {
+    /// PLACEHOLDER, contract unsettled: this does not confirm that tap sends
+    /// a `live` field. No such field exists anywhere in
+    /// `internal/parser` (`CodeBlockMeta` in `internal/parser/parser.go` has
+    /// only `Driver`, `Connection` and `HighlightLines`). `FakeSlideParser`
+    /// invents `live: !driver.isEmpty` on the desktop test side only, to
+    /// stand in for logic the still-unwritten `tap dev --app` endpoint has
+    /// not yet defined. This test exercises the desktop's own consumption
+    /// of that shape (`BoxHeader` filtering `codeBlocks` on `.live`), not
+    /// anything tap has agreed to produce. Re-verify against the real
+    /// endpoint once the app-mode branch (Task 13) lands, and update or
+    /// remove this placeholder then.
+    func testCodeBlocksWithALiveDriverPlaceholderFieldUnconfirmedByTap() async throws {
         let document = try await openDeck(try Fixtures.copyDeck("seven-slides.md"))
         try await waitForBoxes(document, count: 7)
         let header = try XCTUnwrap(document.sessionController?.editor.header(forBoxAt: 3))

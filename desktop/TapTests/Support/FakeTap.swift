@@ -127,7 +127,12 @@ enum FakeTap {
     }
 }
 
-/// One code block on a fake slide, in the shape tap reports.
+/// One code block on a fake slide. `block`, `language`, `driver` and `line`
+/// are in the shape tap reports (`CodeBlockMeta` in
+/// `internal/parser/parser.go`). `live` is NOT: no such field exists in the
+/// real parser. It is this fake's own invention, standing in for logic the
+/// unimplemented `tap dev --app` endpoint has not yet defined, and it is
+/// asserted on only by a test named and commented as a placeholder.
 struct FakeCodeBlock {
     let block: Int
     let language: String
@@ -167,7 +172,17 @@ struct FakeSlide {
 /// `# ` headings as titles, `<!-- pause -->` as a fragment, and fenced code
 /// blocks with an inline `{driver: NAME}` attribute marking them live.
 enum FakeSlideParser {
-    static let knownLayouts: Set<String> = ["default", "title", "section", "code-focus"]
+    /// The full built-in layout registry, copied from
+    /// `internal/layouts/layouts.json` in the tap repository. Keep this in
+    /// sync with that file if it changes.
+    static let knownLayouts: Set<String> = [
+        "big-stat", "blank", "code-focus", "cover", "default", "quote",
+        "section", "sidebar", "split-media", "three-column", "title", "two-column",
+    ]
+
+    /// Sorted the same way `internal/layouts/layouts.go`'s `loadRegistry`
+    /// sorts `layoutNames`, so the error message's suffix matches real tap's.
+    private static let sortedKnownLayouts = knownLayouts.sorted()
 
     static func parse(_ text: String) -> (slides: [FakeSlide], errors: [String]) {
         let lines = text.components(separatedBy: "\n")
@@ -229,7 +244,7 @@ enum FakeSlideParser {
             if let name = layoutDirective(trimmed) {
                 layout = name
                 if !knownLayouts.contains(name) {
-                    errors.append("unknown layout: \"\(name)\"")
+                    errors.append("unknown layout \"\(name)\" (valid layouts: \(sortedKnownLayouts.joined(separator: ", ")))")
                 }
             }
             if title.isEmpty, trimmed.hasPrefix("# "), !trimmed.hasPrefix("##") {
