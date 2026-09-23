@@ -43,9 +43,16 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
         splitViewController.setPreviewHidden(!splitViewController.isPreviewHidden)
     }
 
+    @objc func togglePreviewPin(_ sender: Any?) {
+        sessionController.togglePin()
+    }
+
     func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
         if menuItem.action == #selector(togglePreview(_:)) {
             menuItem.title = splitViewController.isPreviewHidden ? "Show Preview" : "Hide Preview"
+        }
+        if menuItem.action == #selector(togglePreviewPin(_:)) {
+            menuItem.title = sessionController.navigator.isPinned ? "Unpin Preview" : "Pin Preview"
         }
         return true
     }

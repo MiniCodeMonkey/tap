@@ -46,6 +46,18 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
         inspectorViewController.embed(previewViewController)
         previewViewController.onStepBackward = { [weak self] in self?.sendPreviewMessage(self?.navigator.stepBackward()) }
         previewViewController.onStepForward = { [weak self] in self?.sendPreviewMessage(self?.navigator.stepForward()) }
+        previewViewController.onPinToggled = { [weak self] in self?.togglePin() }
+    }
+
+    /// Pins the slide the preview shows, or unpins it and follows the cursor again.
+    func togglePin() {
+        if navigator.isPinned {
+            let cursorSlide = editor.currentBoxIndex.map { editor.boxes[$0].slide }
+            sendPreviewMessage(navigator.unpin(cursorSlide: cursorSlide))
+        } else {
+            navigator.pin()
+            sendPreviewMessage(nil)
+        }
     }
 
     func start() {
