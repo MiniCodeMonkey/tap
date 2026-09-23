@@ -24,6 +24,13 @@ public struct RestartPolicy: Sendable {
 
     public var recentExitCount: Int { exits.count }
 
+    /// The clause naming how many times tap exited and in what window: the
+    /// one fact both the session's log line and the preview overlay report
+    /// when the app gives up restarting tap.
+    public var exitSummary: String {
+        "tap exited \(maximumExits) times in \(Int(window)) seconds"
+    }
+
     public mutating func recordExit(at date: Date) -> RestartDecision {
         exits = exits.filter { date.timeIntervalSince($0) <= window }
         exits.append(date)

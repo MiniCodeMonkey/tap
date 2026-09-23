@@ -156,9 +156,11 @@ final class PreviewViewController: NSViewController, WKNavigationDelegate, WKUID
         }
     }
 
-    /// `pausedMessage` explains a session the app stopped on purpose, such as
-    /// while the deck file is deleted.
-    func showSessionState(_ state: TapSession.State, pausedMessage: String? = nil) {
+    /// `restartPolicy` names the session's own exit count and window, so the
+    /// stopped notice reports the numbers that actually made it give up
+    /// rather than a fixed guess. `pausedMessage` explains a session the app
+    /// stopped on purpose, such as while the deck file is deleted.
+    func showSessionState(_ state: TapSession.State, restartPolicy: RestartPolicy, pausedMessage: String? = nil) {
         switch state {
         case .running:
             overlay.hide()
@@ -167,7 +169,7 @@ final class PreviewViewController: NSViewController, WKNavigationDelegate, WKUID
         case .starting, .restarting:
             overlay.show(title: "Restarting preview.", detail: "Showing the last good render.", output: [], opaque: false, buttons: false)
         case .failed(let lastOutput):
-            overlay.show(title: "The preview stopped", detail: "tap exited 3 times in 30 seconds. Last output:",
+            overlay.show(title: "The preview stopped", detail: "\(restartPolicy.exitSummary). Last output:",
                          output: lastOutput, opaque: true, buttons: true)
         case .stopped:
             if let pausedMessage {

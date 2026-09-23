@@ -2,6 +2,27 @@ import XCTest
 @testable import Tap
 
 final class RestartTests: HostedTestCase {
+    /// The very first `.starting` a fresh deck goes through, before it has
+    /// ever shown anything, must never flash the "Restarting preview."
+    /// overlay over a preview that has nothing to restart from. Driven
+    /// directly against a fresh `PreviewViewController`, with no running tap
+    /// and no WebKit painting involved, so it cannot be flaky under load.
+    func testFirstLaunchNeverFlashesTheOverlay() {
+        let controller = PreviewViewController()
+        _ = controller.view
+        XCTAssertTrue(controller.overlay.isHidden)
+
+        controller.showSessionState(.starting, restartPolicy: RestartPolicy())
+        XCTAssertTrue(controller.overlay.isHidden, "a first launch must never flash the restarting overlay")
+
+        // Once the overlay is already visible (a restart after a crash),
+        // a further .starting (Try Again starting over) keeps showing it.
+        controller.showSessionState(.restarting(after: 0.1), restartPolicy: RestartPolicy())
+        XCTAssertFalse(controller.overlay.isHidden)
+        controller.showSessionState(.starting, restartPolicy: RestartPolicy())
+        XCTAssertFalse(controller.overlay.isHidden, "a .starting after the overlay has already shown must keep showing it")
+    }
+
     func testCrashAndRestart() async throws {
         let document = try await openDeckAndWaitForPreview(try Fixtures.copyAppFixture())
         let controller = try XCTUnwrap(document.sessionController)

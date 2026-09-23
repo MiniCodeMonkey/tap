@@ -32,4 +32,12 @@ final class RestartPolicyTests: XCTestCase {
         let delays = (0..<5).map { policy.recordExit(at: start + Double($0)) }
         XCTAssertEqual(delays, [.restart(after: 1), .restart(after: 2), .restart(after: 3), .restart(after: 3), .restart(after: 3)])
     }
+
+    /// This sentence feeds both the session's own log line and the preview
+    /// overlay's "The preview stopped" text, so it must always name this
+    /// policy's real numbers, not a fixed "3 times in 30 seconds".
+    func testExitSummaryNamesThisPolicysOwnNumbers() {
+        XCTAssertEqual(RestartPolicy().exitSummary, "tap exited 3 times in 30 seconds")
+        XCTAssertEqual(RestartPolicy(window: 60, maximumExits: 5).exitSummary, "tap exited 5 times in 60 seconds")
+    }
 }

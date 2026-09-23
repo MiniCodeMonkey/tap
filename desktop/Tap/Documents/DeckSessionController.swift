@@ -110,7 +110,7 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
     }
 
     private func sessionStateChanged(_ state: TapSession.State) {
-        previewViewController.showSessionState(state)
+        previewViewController.showSessionState(state, restartPolicy: session.restartPolicy)
         socket?.close()
         socket = nil
         guard case .running(let ready) = state else {

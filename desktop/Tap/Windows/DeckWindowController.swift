@@ -63,6 +63,7 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
         preview.view.removeFromSuperview()
         preview.removeFromParent()
         let controller = PreviewWindowController(title: "\(window?.title ?? "Deck"): Preview")
+        controller.deckWindowController = self
         controller.window?.contentViewController = preview
         controller.window?.setContentSize(NSSize(width: 960, height: 640))
         controller.onClose = { [weak self] in self?.dockPreview() }

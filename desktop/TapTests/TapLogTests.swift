@@ -100,4 +100,29 @@ final class TapLogWindowTests: HostedTestCase {
 
         logWindow.close()
     }
+
+    /// `AppDelegate.showTapLog` resolves the deck to show through
+    /// `AppDelegate.deck(owning:)`, which must find the right deck whether
+    /// the key window is the deck window itself or its preview detached
+    /// into a window of its own (`DeckWindowController.showPreviewInWindow`).
+    /// `NSApp.keyWindow` cannot be driven from this hosted test host (see
+    /// `testShowSelectsTheGivenLogNotTheFirstOpened` above), so this drives
+    /// the resolution function directly with real windows instead; the one
+    /// line this leaves uncovered is `showTapLog`'s own
+    /// `NSApp.keyWindow` read.
+    func testShowTapLogFindsTheDeckOwningADetachedPreviewWindow() async throws {
+        let document = try await openDeckAndWaitForPreview(try Fixtures.copyAppFixture())
+        let deckWindowController = try XCTUnwrap(document.windowControllers.first as? DeckWindowController)
+        try await waitForBoxes(document, count: 4)
+
+        XCTAssertTrue(AppDelegate.deck(owning: deckWindowController.window) === deckWindowController)
+        XCTAssertNil(AppDelegate.deck(owning: nil))
+
+        deckWindowController.showPreviewInWindow(nil)
+        let previewWindow = try XCTUnwrap(deckWindowController.previewWindowController?.window)
+        XCTAssertTrue(AppDelegate.deck(owning: previewWindow) === deckWindowController,
+                      "the detached preview window must resolve back to the deck it was detached from")
+
+        deckWindowController.dockPreview()
+    }
 }

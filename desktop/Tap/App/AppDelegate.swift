@@ -34,8 +34,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return [.credits: NSAttributedString(string: "Bundled tap \(version)")]
     }
 
+    /// The deck that owns a window, whether that window is the deck's own
+    /// window or its preview detached into a window of its own (see
+    /// `DeckWindowController.showPreviewInWindow`). Kept as a standalone
+    /// function so it can be tested against a real window without driving
+    /// `NSApp.keyWindow`.
+    static func deck(owning window: NSWindow?) -> DeckWindowController? {
+        if let deck = window?.windowController as? DeckWindowController { return deck }
+        return (window?.windowController as? PreviewWindowController)?.deckWindowController
+    }
+
     @objc func showTapLog(_ sender: Any?) {
-        let keyDeck = NSApp.keyWindow?.windowController as? DeckWindowController
+        let keyDeck = Self.deck(owning: NSApp.keyWindow)
         TapLogWindowController.shared.show(log: keyDeck?.sessionController.session.log)
     }
 

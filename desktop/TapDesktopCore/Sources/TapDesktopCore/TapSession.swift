@@ -41,6 +41,9 @@ public final class TapSession {
     public var onStateChange: ((State) -> Void)?
     public var onEvent: ((TapEvent) -> Void)?
     public var processIdentifier: Int32? { process?.isRunning == true ? process?.processIdentifier : nil }
+    /// The restart policy this session runs, so a caller can report the same
+    /// exit count and window the session itself logs on giving up.
+    public var restartPolicy: RestartPolicy { policy }
 
     private let configuration: Configuration
     private var policy: RestartPolicy
@@ -189,7 +192,7 @@ public final class TapSession {
             restartWork = work
             DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
         case .giveUp:
-            log.append("tap exited \(policy.maximumExits) times in \(Int(policy.window)) seconds; the app stopped restarting it", source: .app)
+            log.append("\(policy.exitSummary); the app stopped restarting it", source: .app)
             state = .failed(lastOutput: log.lastLines(8, from: .standardError))
         }
     }
