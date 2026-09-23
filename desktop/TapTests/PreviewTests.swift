@@ -3,7 +3,6 @@ import XCTest
 
 final class PreviewTests: HostedTestCase {
     func testThePreviewFollowsTheCursor() async throws {
-        throw XCTSkip("Waits on Task 13: needs the internal/cli/testdata/app fixture directory, which does not exist on this branch.")
         let document = try await openDeckAndWaitForPreview(try Fixtures.copyAppFixture())
         let controller = try XCTUnwrap(document.sessionController)
         try await waitForBoxes(document, count: 4)
@@ -16,7 +15,6 @@ final class PreviewTests: HostedTestCase {
     }
 
     func testThePreviewUpdatesWhileIType() async throws {
-        throw XCTSkip("Waits on Task 13: needs the internal/cli/testdata/app fixture directory, which does not exist on this branch.")
         let document = try await openDeckAndWaitForPreview(try Fixtures.copyAppFixture())
         let controller = try XCTUnwrap(document.sessionController)
         try await waitForBoxes(document, count: 4)
@@ -35,7 +33,6 @@ final class PreviewTests: HostedTestCase {
     }
 
     func testThePreviewIsTheAudienceView() async throws {
-        throw XCTSkip("Waits on Task 13: needs the internal/cli/testdata/app fixture directory, which does not exist on this branch.")
         let document = try await openDeckAndWaitForPreview(try Fixtures.copyAppFixture())
         let url = try XCTUnwrap(document.sessionController?.previewViewController.webView.url)
         XCTAssertEqual(url.path, "/")
@@ -44,7 +41,6 @@ final class PreviewTests: HostedTestCase {
     }
 
     func testThePreviewShowsTheAudienceSafeErrorForm() async throws {
-        throw XCTSkip("Waits on Task 13: needs a real audience page and websocket, which the fake tap does not provide.")
         let document = try await openDeckAndWaitForPreview(try Fixtures.copyDeck("throwing"))
         let controller = try XCTUnwrap(document.sessionController)
         try await waitForBoxes(document, count: 2)
@@ -55,7 +51,6 @@ final class PreviewTests: HostedTestCase {
     }
 
     func testThePreviewUpdatesInPlace() async throws {
-        throw XCTSkip("Waits on Task 13: needs the internal/cli/testdata/app fixture directory, which does not exist on this branch.")
         let document = try await openDeckAndWaitForPreview(try Fixtures.copyAppFixture())
         let controller = try XCTUnwrap(document.sessionController)
         try await waitForBoxes(document, count: 4)
@@ -88,8 +83,11 @@ final class PreviewTests: HostedTestCase {
         let output = Pipe()
         process.standardOutput = output
         try? process.run()
+        // The listing is read before the wait, because ps writes more than a
+        // pipe holds and would block forever on a full one.
+        let listing = output.fileHandleForReading.readDataToEndOfFile()
         process.waitUntilExit()
-        return String(decoding: output.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+        return String(decoding: listing, as: UTF8.self)
             .split(separator: "\n")
             .filter { $0.trimmingCharacters(in: .whitespaces).hasPrefix("\(parent) ") }
             .filter { $0.localizedCaseInsensitiveContains("chrom") }

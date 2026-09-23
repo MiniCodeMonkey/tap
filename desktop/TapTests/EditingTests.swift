@@ -52,8 +52,8 @@ final class EditingTests: HostedTestCase {
     }
 
     /// `live` is defined in `internal/slidelist/slidelist.go` (`CodeBlock.Live`),
-    /// computed there as `block.Meta.Driver != ""`. `FakeSlideParser` computes
-    /// it the same way.
+    /// computed there as `block.Meta.Driver != ""`, and this test reads it
+    /// from the bundled tap's own answer.
     func testCodeBlocksWithALiveDriver() async throws {
         let document = try await openDeck(try Fixtures.copyDeck("seven-slides.md"))
         try await waitForBoxes(document, count: 7)
@@ -62,9 +62,18 @@ final class EditingTests: HostedTestCase {
         XCTAssertTrue(header.badges.contains("sqlite"))
     }
 
+    /// The bar is reached the way a person reaches it, by breaking the
+    /// frontmatter of a deck that is already open. A deck whose frontmatter
+    /// is broken on disk cannot be opened at all: `tap dev --app` answers
+    /// that file with an invalid_deck error event and exits, so no session
+    /// ever runs to answer a PUT.
     func testDeckErrorsShowABarAndTheFrontmatter() async throws {
-        let document = try await openDeck(try Fixtures.copyDeck("broken-frontmatter.md"))
+        let document = try await openDeck(try Fixtures.copyAppFixture())
         let controller = try XCTUnwrap(document.sessionController)
+        try await waitForBoxes(document, count: 4)
+        // The first match is the frontmatter's title, not the heading below it.
+        let title = (controller.editor.string as NSString).range(of: "App Mode Fixture")
+        controller.editor.replaceText(in: title, with: "[unclosed", actionName: "Break the frontmatter")
         try await waitUntil(timeout: 30, "the deck errors bar") { controller.editorViewController.bar(.deckErrors) != nil }
         XCTAssertEqual(controller.editor.hiddenLength, 0)
         XCTAssertTrue(controller.editorViewController.bar(.deckErrors)?.message.hasPrefix("The deck settings have a problem") ?? false)

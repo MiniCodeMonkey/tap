@@ -1,8 +1,9 @@
 import XCTest
 @testable import Tap
 
-/// A test that runs inside Tap.app. tap gets its own settings folder, so
-/// tests never read or write the user's approvals.
+/// A test that runs inside Tap.app, driving the real `tap dev --app` the
+/// bundle carries. tap gets its own settings folder, so tests never read
+/// or write the user's approvals.
 @MainActor
 class HostedTestCase: XCTestCase {
     private(set) var configHome: URL!
@@ -10,10 +11,6 @@ class HostedTestCase: XCTestCase {
     override func setUp() async throws {
         configHome = try Fixtures.temporaryFolder()
         AppEnvironment.shared.extraEnvironment["XDG_CONFIG_HOME"] = configHome.path
-        // `tap dev --app` is not implemented by the bundled tap on this
-        // branch (Task 13, on a parallel branch, adds it), so every hosted
-        // test that opens a document runs a fake tap in its place.
-        AppEnvironment.shared.tapExecutableURL = try FakeTap.ready()
     }
 
     override func tearDown() async throws {
@@ -25,7 +22,14 @@ class HostedTestCase: XCTestCase {
 
     func openDeck(_ url: URL) async throws -> DeckDocument {
         let (document, _) = try await NSDocumentController.shared.openDocument(withContentsOf: url, display: true)
-        return try XCTUnwrap(document as? DeckDocument)
+        let deck = try XCTUnwrap(document as? DeckDocument)
+        // The audience page reports a slide ready only once it has painted,
+        // and a window the window server treats as off screen never paints.
+        // A test runner is not a person clicking on the app, so the window
+        // is brought forward here rather than left to chance.
+        NSApp.activate(ignoringOtherApps: true)
+        deck.windowControllers.first?.window?.orderFrontRegardless()
+        return deck
     }
 
     func waitForRunningTap(_ document: DeckDocument) async throws -> TapReady {
