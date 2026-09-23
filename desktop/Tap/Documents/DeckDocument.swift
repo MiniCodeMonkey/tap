@@ -43,4 +43,20 @@ final class DeckDocument: NSDocument {
         MainActor.assumeIsolated { self.sessionController?.stop() }
         super.close()
     }
+
+    // A save that lands somewhere other than this document's own file, such
+    // as an elsewhere autosave or a Save To, does not change what tap should
+    // be showing for this deck, so tap is told only when the URL just
+    // written matches fileURL. A Save As does move the document, and by the
+    // time this completion handler runs, fileURL already reflects that, so
+    // it counts.
+    override func save(to url: URL, ofType typeName: String, for saveOperation: NSDocument.SaveOperationType,
+                       completionHandler: @escaping (Error?) -> Void) {
+        super.save(to: url, ofType: typeName, for: saveOperation) { [weak self] error in
+            if error == nil, let self, let fileURL = self.fileURL, FilePaths.same(fileURL, url) {
+                self.sessionController?.documentDidSave()
+            }
+            completionHandler(error)
+        }
+    }
 }

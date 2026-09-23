@@ -81,6 +81,12 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
         sourceSync.textDidChange()
     }
 
+    /// The buffer is on disk. tap drops the buffer it renders and reads the file.
+    func documentDidSave() {
+        session.send(.saved)
+        session.log.append("saved the deck", source: .app)
+    }
+
     private func applySlideList(_ list: SlideList, sentText: String, generation: Int) {
         guard !stopped else { return }
         // An answer the editor refuses was computed from text the editor no
@@ -152,6 +158,10 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
     // MARK: EditorTextViewDelegate
 
     func editorTextDidChange(_ editor: EditorTextView) {
+        // A real edit, as opposed to loading the disk version (which sets
+        // the text storage directly and never reaches here). NSDocument
+        // needs this to know it has something to autosave.
+        document?.updateChangeCount(.changeDone)
         sourceSync.textDidChange()
     }
 
