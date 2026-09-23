@@ -29,6 +29,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 - **`tap dev` and `tap present` listen on this machine only** - They used to listen on every network interface, so any device on the same network could open the deck, and could call `/api/execute`. They now listen on `127.0.0.1`. Pass `--lan` to let a phone on the same network open the presenter view. The terminal then shows the network URL and a QR code for it. `--tunnel` works without `--lan`. `/qr` answers 404 without `--lan`, because its network URLs would not work.
 
+- **A deck's image or recording path can no longer reach outside the deck's folder** - A path in a deck's markdown, such as `../secret.png`, its percent-encoded form, an absolute path, or a symlink inside `images/` that points somewhere else, used to be followed wherever it led, on both `tap build` and `tap export`. tap now refuses any asset that resolves outside the deck's folder, with a warning naming the path, so a deck someone sends you cannot pull a file off the machine that builds it into the site you publish.
+
+- **Regenerating an AI image can no longer delete a file outside the deck's folder** - `tap image regenerate` and the `i` key deleted the old image at whatever path the deck's markdown named, through the same hole as above. The delete now goes through the same containment check as reads: a path that resolves outside the deck's folder is refused and the file is left on disk.
+
 ### Fixed
 
 - **Live code runs in `tap dev` and `tap present`** - The Run button answered "Driver registry not configured" in every real run. Both commands now load the built-in drivers and the deck's custom `drivers:`, run them in the deck's folder, and reload them when the deck changes.
@@ -36,6 +40,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - **A `---` inside a `~~~` fence or an indented fence stays in its slide** - It used to split the slide in two, while the fence still rendered as code.
 - **The deck-wide `fragments` frontmatter key is gone** - It was documented as a way to auto-reveal every slide's bullet lists at once, in released versions, but nothing in tap ever read it; setting it in frontmatter did nothing. It is now gone from the docs, the skill, and `tap deck schema`. The per-slide `fragments` directive is unaffected and still works as documented.
 - **Regenerating an AI image keeps the new file** - When the new image had the same bytes as the old one, it got the same file name, and deleting the old file deleted the new one. The old file is now kept in that case. A regenerate prompt with a `$` in it is also written as typed.
+- **A missing image is reported, not silently dropped** - `tap build` used to skip an image it could not find with no message anywhere. It now prints a warning naming the file, the same way component build warnings already do.
+- **An image with a non-Latin or special-character name builds correctly** - The renderer HTML-entity-escapes and percent-encodes an image's path before writing it into the page, and the builder opened that encoded string as a file path, so a name with a quote, backtick, brackets, or non-ASCII characters was silently skipped. The builder now decodes the path before looking the file up on disk.
 
 ### Changed
 
