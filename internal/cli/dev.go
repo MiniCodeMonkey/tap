@@ -22,6 +22,7 @@ import (
 	"github.com/MiniCodeMonkey/tap/internal/server"
 	"github.com/MiniCodeMonkey/tap/internal/transformer"
 	"github.com/MiniCodeMonkey/tap/internal/tui"
+	"github.com/MiniCodeMonkey/tap/internal/usersettings"
 	"github.com/spf13/cobra"
 )
 
@@ -33,6 +34,7 @@ var (
 	devAllowOrigins      []string
 	devTunnel            bool
 	devLAN               bool
+	devAllowCode         bool
 )
 
 // devCmd represents the dev command
@@ -50,6 +52,9 @@ The dev server provides:
 The server listens on this machine only. --lan opens it to the local
 network, and --tunnel puts it on a public https URL.
 
+A deck with live code asks for approval once, in the terminal, before it
+runs anything. tap approval list shows the approved decks.
+
 Examples:
   tap dev                                 # The deck in this folder
   tap dev slides.md                      # Start server on port 3000
@@ -57,7 +62,8 @@ Examples:
   tap dev slides.md -p 8080              # Short form
   tap dev slides.md --presenter-password secret  # Protect presenter view
   tap dev slides.md --tunnel             # Also serve it on a public https URL
-  tap dev slides.md --lan                # Let a phone on the same network connect`,
+  tap dev slides.md --lan                # Let a phone on the same network connect
+  tap dev slides.md --headless --allow-code   # Run live code without asking, for this run only`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		file, err := resolveDeck(firstArg(args))
@@ -73,6 +79,7 @@ Examples:
 			allowOrigins:      devAllowOrigins,
 			tunnel:            devTunnel,
 			lan:               devLAN,
+			allowCode:         devAllowCode,
 		})
 	},
 }
@@ -94,6 +101,9 @@ type serverOptions struct {
 	present bool
 	// record starts recording at launch. Only tap present sets it.
 	record bool
+	// allowCode lets live code run for this run without an approval, and
+	// stores nothing. It is --allow-code.
+	allowCode bool
 }
 
 func init() {
@@ -107,6 +117,7 @@ func init() {
 	devCmd.Flags().BoolVar(&devTunnel, "tunnel", false, "also serve the deck on a public https URL through a Cloudflare Quick Tunnel (needs cloudflared; no account required)")
 	devCmd.Flags().BoolVar(&devLAN, "lan", false, "listen on the local network too, so a phone on the same network can open the presenter view (default: this machine only)")
 	devCmd.Flags().StringArrayVar(&devAllowOrigins, "allow-origin", nil, "additional origin (scheme://host:port) allowed to connect to the websocket hub, or host (host:port) allowed in a request's Host header, for a contributor's Vite dev server or a non-local presenter host (repeatable)")
+	devCmd.Flags().BoolVar(&devAllowCode, "allow-code", false, "let the deck's live code run for this run without an approval, and save none (for --headless and scripts)")
 }
 
 // recordingAudioOptions maps the deck's recording.audio config value to the
@@ -185,6 +196,31 @@ func runDevServer(options serverOptions) error {
 	printComponentErrorsToStderr(componentBuildErrs)
 	printComponentWarningsToStderr(componentWarnings(resolvedComponents))
 
+	startupDriverWarnings := undeclaredDriverWarnings(absFile, pres)
+	for _, warning := range startupDriverWarnings {
+		fmt.Fprintln(os.Stderr, warning)
+	}
+
+	// Live code approval happens here, before the TUI owns the terminal.
+	settingsPath, err := usersettings.Path()
+	if err != nil {
+		return internalError(codeInternal, err)
+	}
+	liveCodePolicy, err := liveCodeApproval(approvalInput{
+		Now:          time.Now,
+		Config:       cfg,
+		Presentation: pres,
+		Asker:        terminalAsker{in: os.Stdin, out: os.Stdout},
+		Out:          os.Stdout,
+		SettingsPath: settingsPath,
+		Deck:         absFile,
+		AllowCode:    options.allowCode,
+		Interactive:  stdinIsTerminal() && !headless,
+	})
+	if err != nil {
+		return internalError(codeInternal, err)
+	}
+
 	// Resolve custom theme path if configured
 	customThemePath, err := cfg.ResolveCustomThemePath(baseDir)
 	if err != nil {
@@ -249,6 +285,14 @@ func runDevServer(options serverOptions) error {
 		candidate.SetAllowedOrigins(allowOrigins)
 		candidate.SetBaseDir(baseDir) // Enable serving local files (images, etc.)
 		candidate.SetRegistry(buildDriverRegistry(cfg, baseDir))
+		// The policy stays the same for the whole run. A driver added by a
+		// reload is not in it, so its blocks show "Not approved" until the
+		// next start asks. This also means an approved custom driver whose
+		// command changes mid-run (a git pull, an edited frontmatter) has
+		// its new command run without asking again: approval is keyed by
+		// driver name, not by command, and the registry below is rebuilt on
+		// every reload while this policy is not.
+		candidate.SetLiveCodePolicy(liveCodePolicy)
 		candidate.SetComponentBundles(componentBundleFiles(resolvedComponents))
 		if customThemePath != "" {
 			candidate.SetCustomThemePath(customThemePath)
@@ -321,6 +365,9 @@ func runDevServer(options serverOptions) error {
 		printLayoutWarningsToStderr(absFile, dropComponentBuildFailureWarnings(warnings))
 		printComponentErrorsToStderr(newComponentBuildErrs)
 		printComponentWarningsToStderr(componentWarnings(newResolvedComponents))
+		for _, warning := range undeclaredDriverWarnings(absFile, newPres) {
+			fmt.Fprintln(os.Stderr, warning)
+		}
 
 		setRawSlides(newRawSlides)
 		watcher.AddExtraDirs(externalInputDirs(newResolvedComponents, baseDir))
@@ -495,6 +542,9 @@ func runDevServer(options serverOptions) error {
 			printLayoutWarningsToStderr(absFile, dropComponentBuildFailureWarnings(warnings))
 			printComponentErrorsToStderr(newComponentBuildErrs)
 			printComponentWarningsToStderr(componentWarnings(newResolvedComponents))
+			for _, warning := range undeclaredDriverWarnings(absFile, newPres) {
+				fmt.Fprintln(os.Stderr, warning)
+			}
 
 			// Update custom theme path if changed
 			newCustomThemePath := resolveCustomThemePathForReload(newCfg, baseDir, srv)
@@ -536,6 +586,12 @@ func runDevServer(options serverOptions) error {
 		model.SetTunnelController(tunnels)
 		model.SetRecorderController(recordings)
 		devModel = model
+
+		// The terminal lines above scroll away when the TUI starts, so the
+		// TUI shows them too.
+		if len(startupDriverWarnings) > 0 {
+			model.SetWarnings(startupDriverWarnings)
+		}
 
 		if present != nil {
 			model.SetPresentRecorder(present)
@@ -629,7 +685,7 @@ func runDevServer(options serverOptions) error {
 			// for example) are not fatal enough to be an error, but still
 			// worth showing; the model clears them on the next reload that
 			// has none, so a warning never outlives the build it came from.
-			model.SetWarnings(componentWarningLines(componentWarnings(newResolvedComponents)))
+			model.SetWarnings(append(componentWarningLines(componentWarnings(newResolvedComponents)), undeclaredDriverWarnings(absFile, newPres)...))
 			setRawSlides(newRawSlides)
 			watcher.AddExtraDirs(externalInputDirs(newResolvedComponents, baseDir))
 			srv.SetRegistry(buildDriverRegistry(newCfg, baseDir))

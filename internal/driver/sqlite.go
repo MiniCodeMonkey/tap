@@ -33,7 +33,10 @@ func (d *SQLiteDriver) Name() string {
 
 // Execute runs the provided SQL query against a SQLite database.
 // The config map supports the following keys:
-//   - database: path to the SQLite database file, or ":memory:" for in-memory (default: ":memory:")
+//   - path: path to the SQLite database file, or ":memory:" for in-memory (default: ":memory:").
+//     This is the key the schema and docs document for sqlite.
+//   - database: an older spelling of path, kept working for decks that already use it. path wins
+//     when both are set.
 //   - timeout: execution timeout in seconds (default: 30)
 //   - workdir: override the working directory for resolving relative database paths
 func (d *SQLiteDriver) Execute(ctx context.Context, code string, config map[string]string) Result {
@@ -49,9 +52,16 @@ func (d *SQLiteDriver) Execute(ctx context.Context, code string, config map[stri
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	// Get database path (default to in-memory)
+	// Get database path (default to in-memory). "path" is the documented
+	// sqlite key; "database" is an older spelling that must keep working.
+	// A file that path or database names is never silently swapped for an
+	// empty in-memory database: sqlite3 either opens it or this command
+	// fails with a clear error.
 	database := ":memory:"
 	if dbPath, ok := config["database"]; ok && dbPath != "" {
+		database = dbPath
+	}
+	if dbPath, ok := config["path"]; ok && dbPath != "" {
 		database = dbPath
 	}
 

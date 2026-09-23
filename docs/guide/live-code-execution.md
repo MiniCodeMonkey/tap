@@ -21,15 +21,9 @@ This is perfect for:
 - Teaching programming concepts
 - System administration tutorials
 
-::: warning Development Mode Only
-Live code execution only works when using `tap dev`. Static builds created with `tap build` will show the code blocks but won't execute them. This is by design for security and portability.
+::: warning Not in Static Builds
+Live code execution works when a server is running the deck, with `tap dev` or `tap present`. Static builds created with `tap build` (or `tap export`) will show the code blocks but won't execute them. This is by design for security and portability.
 :::
-
-## What tap runs
-
-`tap dev` and `tap present` run only the live code blocks that are in the
-loaded deck. A request to run any other driver, connection, or code gets
-403. `tap build` and `tap export` never run code.
 
 ## The Driver Concept
 
@@ -83,24 +77,76 @@ ls -la | head -10
 
 Shell output is rendered with syntax highlighting.
 
+## Declare the drivers a deck uses
+
+Every driver a live code block uses must be a key under `drivers:` in the frontmatter. A driver with no settings is declared as `{}`:
+
+```yaml
+---
+title: My Talk
+drivers:
+  shell: {}
+  sqlite:
+    connections:
+      demo:
+        path: ":memory:"
+---
+```
+
+A block whose driver is not declared never runs. The block shows what to add, and `tap dev` prints the same message with the file and line:
+
+```
+warning: talk.md:24: This deck does not declare the shell driver. Add "shell: {}" under drivers in the frontmatter.
+```
+
+## Approving a deck
+
+A deck with live code runs nothing until you approve it. The first time `tap dev` or `tap present` opens it in a terminal, tap asks before the TUI starts:
+
+```
+This deck can run code on this computer:
+  /Users/me/talks/talk.md
+
+  python     1 block on slide 7, runs: python3 -c
+  shell      2 blocks on slides 3, 5
+
+A yes is remembered for this deck, so every future run skips this question; undo it with tap approval revoke /Users/me/talks/talk.md.
+
+Allow this deck to run code? Type s to show the code. [y/N/s]
+```
+
+- `s` prints every block, then asks again. Return means no.
+- A yes is saved in `~/.config/tap/settings.yaml` with the deck's path and its drivers. Editing the code never asks again.
+- A no saves nothing. The deck still previews and presents, its Run buttons show "Not approved", and tap asks again next time.
+- A new driver in the frontmatter asks again, and names only the new driver. A moved deck asks again, because approvals are keyed by path, not by the deck's content. This cuts both ways: replace the file at an approved path with a different deck, and if that deck's drivers are already covered by the approval, tap runs its code without asking again. Only overwrite an approved path with a deck you trust.
+- `tap new` approves the deck it creates.
+- Without a terminal, or with `--headless`, tap never asks. An unapproved deck's live code stays off. `--allow-code` turns it on for that run and saves nothing.
+- `tap approval list` shows the approved decks, and `tap approval revoke <deck>` removes one.
+
+## What tap runs
+
+A Run button sends only the slide number and the block number, such as `{"slide": 4, "block": 1}`. tap runs the code the deck file holds at that position, with that block's driver and connection. `/api/execute` refuses a request that carries code (400), an unknown slide or block (404), a block whose driver the deck does not declare (422), and a driver this run has not approved (403). `tap build` and `tap export` never run code.
+
 ## Connection Configuration
 
 For database drivers, you configure connections in the frontmatter. This keeps credentials and connection details at the top of your presentation file.
 
 ### SQLite
 
-SQLite is the simplest: just specify the database file.
+SQLite is the simplest: just specify the database file with `path`.
 
 ```yaml
 ---
 title: Database Demo
 drivers:
   sqlite:
-    database: ./data/demo.db
+    connections:
+      demo:
+        path: ./data/demo.db
 ---
 ```
 
-If no database is specified, Tap uses an in-memory SQLite database.
+If no path is specified, Tap uses an in-memory SQLite database. `database` is an older spelling of `path`, kept working for decks that already use it; `path` wins when both are set. New decks should use `path`.
 
 ### MySQL
 
@@ -109,10 +155,12 @@ If no database is specified, Tap uses an in-memory SQLite database.
 title: MySQL Demo
 drivers:
   mysql:
-    host: localhost
-    port: 3306
-    database: myapp
-    user: demo_user
+    connections:
+      demo:
+        host: localhost
+        port: 3306
+        database: myapp
+        user: demo_user
 ---
 ```
 
@@ -123,36 +171,34 @@ drivers:
 title: PostgreSQL Demo
 drivers:
   postgres:
-    host: localhost
-    port: 5432
-    database: analytics
-    user: demo_user
-    sslmode: prefer
+    connections:
+      demo:
+        host: localhost
+        port: 5432
+        database: analytics
+        user: demo_user
 ---
 ```
 
-## Environment Variables for Credentials
+### Environment variables
 
-**Never hardcode passwords in your presentation files.** Use environment variables for sensitive credentials:
+String values in `drivers:` settings can read the environment with `${NAME}`:
 
 ```yaml
----
 drivers:
   postgres:
-    host: localhost
-    database: analytics
-    user: $PGUSER
-    password: $PGPASSWORD
----
+    connections:
+      demo:
+        host: ${PGHOST}
+        user: ${PGUSER}
+        password: ${PGPASSWORD}
 ```
 
-Values starting with `$` are replaced with the corresponding environment variable. Set them before running Tap:
-
-```bash
-export PGUSER=demo
-export PGPASSWORD=secret123
-tap dev slides.md
-```
+- tap expands `${NAME}` when a block runs, not when it loads the deck, so the value never reaches the slide page or a `tap build` folder.
+- A `.env` file next to the deck is read too.
+- A variable that is not set makes the block fail with a message that names it. It never becomes an empty string.
+- `$${` writes a literal `${`. Any other `$` stays as it is, so `$PGPASSWORD` without braces is not expanded.
+- Only driver settings expand. Other frontmatter keys, such as `title`, stay as written.
 
 ::: tip Credential Management
 For team presentations, consider using a `.env` file (excluded from version control) or your organization's secrets management solution.
@@ -169,7 +215,9 @@ To prevent runaway queries or infinite loops from freezing your presentation, Ta
 ---
 drivers:
   sqlite:
-    database: ./demo.db
+    connections:
+      demo:
+        path: ./demo.db
     timeout: 30  # seconds
 ---
 ```
@@ -243,10 +291,14 @@ You can configure multiple drivers and use different ones throughout your presen
 title: Full Stack Demo
 drivers:
   sqlite:
-    database: ./app.db
+    connections:
+      demo:
+        path: ./app.db
   postgres:
-    host: localhost
-    database: analytics
+    connections:
+      analytics:
+        host: localhost
+        database: analytics
   shell:
     cwd: ./demo
 ---
@@ -259,7 +311,7 @@ Then use the appropriate driver for each code block:
 
 # Local Database
 
-```sql {driver: 'sqlite'}
+```sql {driver: 'sqlite', connection: 'demo'}
 SELECT COUNT(*) FROM users;
 ```
 
@@ -267,7 +319,7 @@ SELECT COUNT(*) FROM users;
 
 # Analytics
 
-```sql {driver: 'postgres'}
+```sql {driver: 'postgres', connection: 'analytics'}
 SELECT date, SUM(revenue) FROM sales GROUP BY date;
 ```
 
@@ -288,7 +340,7 @@ uname -a && df -h
 | `{driver: 'mysql'}` | Execute with MySQL driver |
 | `{driver: 'postgres'}` | Execute with PostgreSQL driver |
 | `{driver: 'shell'}` | Execute with shell driver |
-| `$ENV_VAR` in config | Use environment variable |
+| `${ENV_VAR}` in a driver setting | Use environment variable |
 | `timeout: N` | Set timeout in seconds |
 
 ## Best Practices

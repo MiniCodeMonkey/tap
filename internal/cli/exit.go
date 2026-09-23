@@ -39,6 +39,8 @@ const (
 	codeNoAPIKey        = "no_api_key"
 	codeImageGeneration = "image_generation"
 	codeImageNotFound   = "image_not_found"
+	codeNotApproved     = "not_approved"
+	codeInvalidSettings = "invalid_settings"
 )
 
 // errCancelled means the person closed an interactive prompt, such as the

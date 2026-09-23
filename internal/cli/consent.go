@@ -64,9 +64,17 @@ func presentRecordingWanted(input consentInput) (bool, error) {
 }
 
 func saveConsent(path string, settings usersettings.Settings, record bool) error {
-	settings.Present.Record = &record
-	if err := usersettings.Save(path, settings); err != nil {
-		return err
-	}
-	return nil
+	// Reload under the lock rather than reusing settings: the person may
+	// have taken a while to answer the prompt, and another tap process
+	// could have saved an approval or its own consent answer in the
+	// meantime. Merging into a fresh read keeps that change instead of
+	// overwriting it.
+	return usersettings.WithLock(path, func() error {
+		fresh, err := usersettings.Load(path)
+		if err != nil {
+			fresh = settings
+		}
+		fresh.Present.Record = &record
+		return usersettings.Save(path, fresh)
+	})
 }

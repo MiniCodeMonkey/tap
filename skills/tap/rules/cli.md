@@ -55,6 +55,7 @@ tap dev [deck]
 | `--lan` | | Listen on the local network too, so a phone on the same network can open the presenter view. Without it, only this machine can connect |
 | `--presenter-password <pass>` | | Password to protect the presenter view |
 | `--headless` | | Run without the TUI, for testing/automation |
+| `--allow-code` | | Run the deck's live code for this run without an approval, and save none. For `--headless` and scripts |
 
 The server listens on this machine only, unless `--lan` opens it to the
 local network. With `--lan`, any device on the network can open the deck
@@ -88,6 +89,7 @@ tap present [deck]
 | `--port <number>` | `-p` | Port for the server (default: `3000`) |
 | `--lan` | | Listen on the local network too, so a phone on the same network can open the presenter view. Without it, only this machine can connect |
 | `--no-record` | | Do not record this run |
+| `--allow-code` | | Run the deck's live code for this run without an approval, and save none. For `--headless` and scripts |
 
 With `--lan`, any device on the network can open the deck and run its
 live code blocks.
@@ -243,7 +245,7 @@ tap slide list slides.md
 
 `--json`:
 ```json
-{"ok": true, "slides": [{"number": 4, "startLine": 36, "endLine": 46, "layout": "code-focus", "title": "", "fragments": 0, "steps": 0, "skip": false, "errors": [], "codeBlocks": [{"block": 1, "language": "sql", "driver": "sqlite", "live": true, "line": 40}]}], "errors": []}
+{"ok": true, "slides": [{"number": 4, "startLine": 41, "endLine": 51, "layout": "code-focus", "title": "", "fragments": 0, "steps": 0, "skip": false, "errors": [], "codeBlocks": [{"block": 1, "language": "sql", "driver": "sqlite", "live": true, "line": 45}]}], "errors": []}
 ```
 
 ## tap component new
@@ -371,6 +373,27 @@ and the list of themes.
 `theme set --json`:
 ```json
 {"ok": true, "deck": "talk.md", "theme": "blueprint"}
+```
+
+## tap approval list
+
+Lists the decks allowed to run live code, with the drivers each may use and when it was approved.
+
+```bash
+tap approval list [--json]
+```
+
+`--json`:
+```json
+{"ok": true, "approvals": [{"deck": "/Users/me/talks/talk.md", "drivers": ["shell", "sqlite"], "approvedAt": "2026-09-22T19:32:00Z"}]}
+```
+
+## tap approval revoke <deck>
+
+Removes a deck's approval. tap asks again the next time it opens the deck. `<deck>` is the file or its folder. A moved or deleted deck can be revoked by its old path. An unapproved deck is exit 1 with the code `not_approved`.
+
+```bash
+tap approval revoke talk.md [--json]
 ```
 
 ## Conventions

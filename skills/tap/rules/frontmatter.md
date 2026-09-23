@@ -69,6 +69,8 @@ with `customTheme` if you need different code colors.
 
 ## Live Code Drivers
 
+Required for live code: every driver a block uses must be a key here. `shell: {}` declares a driver with no settings.
+
 ```yaml
 drivers:
   sqlite:
@@ -80,8 +82,8 @@ drivers:
       analytics:
         host: localhost
         database: analytics
-        user: $PGUSER
-        password: $PGPASSWORD
+        user: ${PGUSER}
+        password: ${PGPASSWORD}
   shell:
     timeout: 30
 ```
@@ -108,8 +110,8 @@ drivers:
       analytics:
         host: localhost
         database: analytics
-        user: $PGUSER
-        password: $PGPASSWORD
+        user: ${PGUSER}
+        password: ${PGPASSWORD}
 ---
 ```
 

@@ -118,6 +118,7 @@ tap dev [deck]
 | `--allow-origin <value>` | | An additional origin (`scheme://host:port`) allowed to connect to the websocket hub, **or** a host (`host:port`) allowed in a request's `Host` header. Repeatable |
 | `--tunnel` | | Also serve the deck on a public `https` URL through a Cloudflare Quick Tunnel. Needs `cloudflared`; no Cloudflare account |
 | `--headless` | | Run without the terminal UI, for testing/automation |
+| `--allow-code` | | Run the deck's live code for this run without an approval, and save none. For `--headless` and scripts |
 
 The server listens on this machine only, unless `--lan` opens it to the
 local network. With `--lan`, any device on the network can open the deck
@@ -249,6 +250,7 @@ tap present [deck]
 | `--port <number>` | `-p` | Port to serve on (default: `3000`) |
 | `--lan` | | Listen on the local network too, so a phone on the same network can open the presenter view. Without it, only this machine can connect |
 | `--no-record` | | Do not record this run |
+| `--allow-code` | | Run the deck's live code for this run without an approval, and save none. For scripts and other non-interactive runs |
 
 The server listens on this machine only, unless `--lan` opens it to the
 local network, the same as `tap dev`. With `--lan`, any device on the
@@ -627,8 +629,8 @@ For example, slide 4 of the conference talk example, which has a live SQL block:
 ```json
 {
   "number": 4,
-  "startLine": 36,
-  "endLine": 46,
+  "startLine": 41,
+  "endLine": 51,
   "layout": "code-focus",
   "title": "",
   "fragments": 0,
@@ -641,7 +643,7 @@ For example, slide 4 of the conference talk example, which has a live SQL block:
       "language": "sql",
       "driver": "sqlite",
       "live": true,
-      "line": 40
+      "line": 45
     }
   ]
 }
@@ -993,6 +995,26 @@ tap theme set blueprint talk.md --json
 
 ```json
 {"ok": true, "deck": "talk.md", "theme": "blueprint"}
+```
+
+### tap approval list
+
+Lists the decks allowed to run live code, with the drivers each may use and when it was approved.
+
+```bash
+tap approval list
+tap approval list --json
+```
+
+`--json` prints `{"ok": true, "approvals": [{"deck": "/Users/me/talks/talk.md", "drivers": ["shell", "sqlite"], "approvedAt": "2026-09-22T19:32:00Z"}]}`.
+
+### tap approval revoke
+
+Removes a deck's approval. tap asks again the next time it opens the deck. `<deck>` is the file or its folder. A moved or deleted deck can be revoked by its old path. An unapproved deck is exit 1 with the code `not_approved`.
+
+```bash
+tap approval revoke talk.md
+tap approval revoke talk.md --json   # {"ok": true, "deck": "/Users/me/talks/talk.md"}
 ```
 
 ---

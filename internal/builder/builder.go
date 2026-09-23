@@ -593,8 +593,11 @@ func (b *Builder) CopyEmbeddedAssets() (int, int64, error) {
 // generateIndexHTML creates the index.html file by injecting presentation JSON
 // into the real Vite-built frontend template, so all themes, fonts, and styles work.
 func (b *Builder) generateIndexHTML(path string, pres *transformer.TransformedPresentation) (int64, error) {
-	// Serialize presentation to JSON
-	presJSON, err := json.Marshal(pres)
+	// Serialize the client-facing view, never the full presentation: a
+	// static export is a file anyone who gets it can read, and the full
+	// presentation carries each driver's command, arguments, timeout and
+	// connection details.
+	presJSON, err := json.Marshal(pres.Public())
 	if err != nil {
 		return 0, fmt.Errorf("failed to marshal presentation: %w", err)
 	}

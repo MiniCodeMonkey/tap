@@ -22,10 +22,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - **`tap image add <file> [deck]`** - Copies an image into `images/` next to the deck, as `name-2.png` when the name is taken, and prints the markdown that shows it. `--slide N` also adds it to the end of slide N.
 - **`tap image generate` and `tap image regenerate`** - The `i` key's AI image generator as commands. `generate --slide N --prompt "..."` adds a new image to a slide. `regenerate --slide N --image <path>` makes an image again in place, with its own prompt or a new one, and deletes the old file. Both write exactly what the `i` key writes.
 - **`tap slide add --layout <name>`** - Appends a slide in any of the 12 layouts without the wizard, and without a terminal. `--print` prints the template and writes nothing. The wizard now offers all 12 layouts, up from 7.
+- **Approve a deck before it runs code** - A deck with live code runs nothing until you approve it. `tap dev` and `tap present` ask once in the terminal, before the TUI starts, and list the drivers, the command of any custom driver, and which slides have blocks. `s` shows the code. The answer is saved in `~/.config/tap/settings.yaml`, keyed by the deck's path and its drivers, so editing code never asks again, while a new driver or a moved deck does. A no saves nothing: the deck still presents, and its Run buttons show "Not approved". `tap new` approves the decks it creates.
+- **`tap approval list` and `tap approval revoke <deck>`** - See and remove approvals. Both take `--json`.
+- **`--allow-code`** on `tap dev` and `tap present` - Runs live code for that run without an approval, and saves none. Without a terminal, or with `--headless`, tap never asks, and an unapproved deck's live code stays off.
 
 ### Security
 
-- **Only the deck's own code runs** - `/api/execute` runs a request only when its driver, connection and code are a live code block in the loaded deck, and answers 403 otherwise. With `--lan` or `--tunnel` other devices can reach the server, and a client outside a browser can send any `Origin` header, so the same-origin check alone does not stop other code.
+- **Run buttons send a block reference, not code** - `/api/execute` accepts only `{"slide": n, "block": n}` and runs the code the deck file holds there. A request that carries code gets 400. Together with approvals, a page, a component or another client can run only the deck's own blocks, and only after you approved the deck.
+
+- **Secrets in driver settings stay out of the page** - Environment variables used to be expanded when the deck loaded, so an expanded password went to the page in `/api/presentation` and into `tap build` output. They now expand only when a driver runs.
 
 - **`tap dev` and `tap present` listen on this machine only** - They used to listen on every network interface, so any device on the same network could open the deck, and could call `/api/execute`. They now listen on `127.0.0.1`. Pass `--lan` to let a phone on the same network open the presenter view. The terminal then shows the network URL and a QR code for it. `--tunnel` works without `--lan`. `/qr` answers 404 without `--lan`, because its network URLs would not work.
 
@@ -45,6 +50,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Changed
 
+- **A deck declares the drivers it uses** - Every driver a live code block uses must be a key under `drivers:` in the frontmatter, `shell: {}` for one with no settings. A block with an undeclared driver does not run, and shows the line to add. `tap dev` prints the same message with the file and line.
+- **Environment variables in driver settings use `${NAME}`** - `${PGPASSWORD}` expands when the block runs. `$PGPASSWORD` without braces is no longer expanded, `$${` writes a literal `${`, and a variable that is not set fails the block with a message that names it instead of passing the text through.
 - **Commands are grouped by noun** - `tap pdf` is now `tap export pdf`, `tap screenshot` is `tap export images`, `tap add` is `tap slide add`, and `tap add component` is `tap component new`. The old names print the new one and exit 1. There are no aliases.
 - **Every command finds the deck the same way** - `[deck]` is optional on `dev`, `present`, `build`, `new`, `export pdf`, `export images`, `slide add`, `component new` and `theme show`. It takes a file or a folder. With no deck, tap uses the only deck in the folder, opens a picker on a terminal, or exits with the list of decks. `--deck` is removed from `component new` and `theme show`.
 - **One set of flags** - `--output/-o` replaces `tap screenshot --out`, and `export images` gets `-t` for `--theme`. The unused global `--verbose` flag is removed.

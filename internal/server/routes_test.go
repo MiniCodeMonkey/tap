@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/MiniCodeMonkey/tap/internal/config"
+	"github.com/MiniCodeMonkey/tap/internal/driver"
 	"github.com/MiniCodeMonkey/tap/internal/transformer"
 )
 
@@ -941,5 +942,224 @@ func TestListensOnLoopbackOnly(t *testing.T) {
 	}
 	if NewWithHost(0, "0.0.0.0").ListensOnLoopbackOnly() {
 		t.Error("0.0.0.0 is not loopback only")
+	}
+}
+
+func getPresentationJSON(t *testing.T, s *Server) map[string]json.RawMessage {
+	t.Helper()
+	s.SetupRoutes()
+	request := httptest.NewRequest(http.MethodGet, "/api/presentation", nil)
+	request.Host = "localhost"
+	recorder := httptest.NewRecorder()
+	s.mux.ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d: %s", recorder.Code, recorder.Body.String())
+	}
+	var body map[string]json.RawMessage
+	if err := json.Unmarshal(recorder.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	return body
+}
+
+func TestPresentationListsTheDriversThisRunAllows(t *testing.T) {
+	s := NewWithHost(0, "127.0.0.1")
+	registry := driver.NewRegistry()
+	registry.Register(&mockDriver{name: "sqlite"})
+	s.SetRegistry(registry)
+	s.SetPresentation(&transformer.TransformedPresentation{
+		Config: config.Config{Drivers: map[string]config.DriverConfig{"shell": {}, "sqlite": {}}},
+		Slides: []transformer.TransformedSlide{{Index: 0}},
+	})
+	s.SetLiveCodePolicy(LiveCodePolicy{Drivers: []string{"sqlite", "mysql"}})
+
+	body := getPresentationJSON(t, s)
+	if string(body["liveCode"]) != `{"drivers":["sqlite"]}` {
+		t.Errorf("liveCode = %s, want only the declared, approved sqlite", body["liveCode"])
+	}
+	if _, found := body["slides"]; !found {
+		t.Error("the slides are missing")
+	}
+}
+
+// TestPresentationOmitsADeclaredDriverTheRegistryNeverBuilt covers a custom
+// driver declared with no command: buildDriverRegistry skips it, so it is
+// declared and can be approved, but never actually runs. The advisory list
+// must not promise it, or the page shows a Run button that /api/execute
+// then refuses with "driver not found".
+func TestPresentationOmitsADeclaredDriverTheRegistryNeverBuilt(t *testing.T) {
+	s := NewWithHost(0, "127.0.0.1")
+	registry := driver.NewRegistry()
+	registry.Register(&mockDriver{name: "sqlite"})
+	s.SetRegistry(registry)
+	s.SetPresentation(&transformer.TransformedPresentation{
+		Config: config.Config{Drivers: map[string]config.DriverConfig{"sqlite": {}, "python": {}}},
+		Slides: []transformer.TransformedSlide{{Index: 0}},
+	})
+	s.SetLiveCodePolicy(LiveCodePolicy{Drivers: []string{"sqlite", "python"}})
+
+	body := getPresentationJSON(t, s)
+	if string(body["liveCode"]) != `{"drivers":["sqlite"]}` {
+		t.Errorf("liveCode = %s, want python left out: it is declared and approved but the registry never built it", body["liveCode"])
+	}
+}
+
+func TestPresentationListsNoDriverForAnUnapprovedDeck(t *testing.T) {
+	s := NewWithHost(0, "127.0.0.1")
+	s.SetRegistry(driver.NewRegistry())
+	s.SetPresentation(&transformer.TransformedPresentation{
+		Config: config.Config{Drivers: map[string]config.DriverConfig{"shell": {}}},
+	})
+	body := getPresentationJSON(t, s)
+	if string(body["liveCode"]) != `{"drivers":[]}` {
+		t.Errorf("liveCode = %s, want an empty list", body["liveCode"])
+	}
+}
+
+func TestPresentationHasNoLiveCodeWithoutARegistry(t *testing.T) {
+	s := NewWithHost(0, "127.0.0.1")
+	s.SetPresentation(&transformer.TransformedPresentation{})
+	body := getPresentationJSON(t, s)
+	if _, found := body["liveCode"]; found {
+		t.Errorf("liveCode = %s, want no key on a server that cannot run code", body["liveCode"])
+	}
+}
+
+// deckWithConnectionSetting builds a deck config whose one driver has one
+// connection, so a test can compare a literal secret against a
+// placeholder one under an otherwise identical response.
+func deckWithConnectionSetting(password string) *transformer.TransformedPresentation {
+	return &transformer.TransformedPresentation{
+		Config: config.Config{
+			// Deliberately contains "port" and "user" as ordinary English
+			// inside other words, so a leak check that sweeps the body for
+			// those substrings would fail on the title alone.
+			Title: "Import and Export",
+			Drivers: map[string]config.DriverConfig{
+				"postgres": {
+					Command: "psql",
+					Args:    []string{"--quiet"},
+					Timeout: 5,
+					Connections: map[string]config.ConnectionConfig{
+						"prod": {
+							Host:     "db.internal.example.com",
+							User:     "admin",
+							Password: password,
+							Database: "billing",
+							Port:     5432,
+						},
+					},
+				},
+			},
+		},
+		Slides: []transformer.TransformedSlide{
+			{
+				Index:  0,
+				Layout: "default",
+				CodeBlocks: []transformer.TransformedCodeBlock{
+					{Language: "sql", Code: "select 1", Driver: "postgres", Connection: "prod", Block: 1},
+				},
+			},
+		},
+	}
+}
+
+// TestPresentationNeverServesALiteralPassword covers the measured leak: a
+// password typed directly into a deck's frontmatter must never come back
+// in /api/presentation's body, and neither must any other connection or
+// driver setting, only the driver and connection names the page already
+// carries per code block.
+func TestPresentationNeverServesALiteralPassword(t *testing.T) {
+	s := NewWithHost(0, "127.0.0.1")
+	s.SetPresentation(deckWithConnectionSetting("hunter2literal"))
+
+	rawBody := func() string {
+		s.SetupRoutes()
+		request := httptest.NewRequest(http.MethodGet, "/api/presentation", nil)
+		request.Host = "localhost"
+		recorder := httptest.NewRecorder()
+		s.mux.ServeHTTP(recorder, request)
+		if recorder.Code != http.StatusOK {
+			t.Fatalf("status = %d: %s", recorder.Code, recorder.Body.String())
+		}
+		return recorder.Body.String()
+	}
+	body := rawBody()
+
+	// Field names (drivers/connections/command/args/timeout/host/user/
+	// password/database/path/port) are proven absent structurally by
+	// TestPresentationConfigNeverEmbedsTheWholeConfigStruct, which decodes
+	// the config object's keys; a substring sweep for those words here
+	// would risk failing on a deck title that happens to contain one of
+	// them (see the Title comment on deckWithConnectionSetting). This
+	// checks only the specific secret values, which no real deck's own
+	// wording could produce.
+	for _, secret := range []string{
+		"hunter2literal", "db.internal.example.com", "billing", "5432", "psql", "--quiet",
+	} {
+		if strings.Contains(body, secret) {
+			t.Errorf("/api/presentation body contains %q, want it absent entirely: %s", secret, body)
+		}
+	}
+
+	if !strings.Contains(body, `"title":"Import and Export"`) {
+		t.Errorf("/api/presentation dropped a setting the page genuinely reads: %s", body)
+	}
+	if !strings.Contains(body, `"driver":"postgres"`) || !strings.Contains(body, `"connection":"prod"`) {
+		t.Errorf("/api/presentation dropped the driver/connection names the Run button needs: %s", body)
+	}
+}
+
+// TestPresentationNeverServesAPlaceholderConnectionValue covers the other
+// half of the same leak: a deck that references a secret with ${NAME}
+// rather than typing it in gets the identical treatment. The page never
+// receives the connection at all, placeholder or not.
+func TestPresentationNeverServesAPlaceholderConnectionValue(t *testing.T) {
+	s := NewWithHost(0, "127.0.0.1")
+	s.SetPresentation(deckWithConnectionSetting("${DB_PASSWORD}"))
+
+	body := getPresentationJSON(t, s)
+	slidesJSON := string(body["slides"])
+	configJSON := string(body["config"])
+
+	for _, secret := range []string{"${DB_PASSWORD}", "db.internal.example.com", "billing"} {
+		if strings.Contains(slidesJSON, secret) || strings.Contains(configJSON, secret) {
+			t.Errorf("/api/presentation body contains %q for a placeholder-valued connection, want it absent entirely: config=%s slides=%s", secret, configJSON, slidesJSON)
+		}
+	}
+
+	var configFields map[string]json.RawMessage
+	if err := json.Unmarshal(body["config"], &configFields); err != nil {
+		t.Fatalf("decoding config: %v", err)
+	}
+	if _, found := configFields["connections"]; found {
+		t.Errorf("config carries a connections key for a placeholder-valued connection: %s", configJSON)
+	}
+}
+
+// TestPresentationConfigNeverEmbedsTheWholeConfigStruct guards the shape
+// of the wire format itself: decoding the config object into a Go map must
+// find only settings the page is deliberately given, never a driver's
+// name as a top-level key. This is what would fail if handleAPIPresentation
+// ever went back to encoding *transformer.TransformedPresentation (whose
+// Config field is the full config.Config) instead of pres.Public().
+func TestPresentationConfigNeverEmbedsTheWholeConfigStruct(t *testing.T) {
+	s := NewWithHost(0, "127.0.0.1")
+	s.SetPresentation(deckWithConnectionSetting("hunter2literal"))
+
+	body := getPresentationJSON(t, s)
+	var configFields map[string]json.RawMessage
+	if err := json.Unmarshal(body["config"], &configFields); err != nil {
+		t.Fatalf("decoding config: %v", err)
+	}
+
+	allowed := map[string]bool{
+		"title": true, "theme": true, "customTheme": true, "aspectRatio": true,
+		"transition": true, "themeColors": true, "slideNumbers": true, "presenterLayout": true,
+	}
+	for key := range configFields {
+		if !allowed[key] {
+			t.Errorf("config carries unexpected key %q; the config struct may have been embedded wholesale again: %v", key, configFields)
+		}
 	}
 }
