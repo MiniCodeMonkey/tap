@@ -122,14 +122,72 @@ final class EditorTextViewTests: HostedTestCase {
         XCTAssertEqual(editor.deckErrors, ["frontmatter: bad"])
     }
 
+    // Two slides with a body line each, so an edit can join them and still
+    // leave the second one text of its own.
+    let bodiedDeck = "---\ntitle: Deck\n---\n\n# One\n\nAlpha\n\n---\n\n# Two\n\nBeta\n"
+    var bodiedSlides: SlideList {
+        SlideList(slides: [Slide(number: 1, startLine: 5, endLine: 7, title: "One"),
+                           Slide(number: 2, startLine: 11, endLine: 13, title: "Two")], errors: [])
+    }
+
+    final class Recorder: EditorTextViewDelegate {
+        var onSlide: (Int?) -> Void = { _ in }
+        func editorTextDidChange(_ editor: EditorTextView) {}
+        func editor(_ editor: EditorTextView, currentSlideDidChange index: Int?) { onSlide(index) }
+    }
+
+    /// The defect this covers: a person clicks a slide and the cursor ends
+    /// up in a neighbouring one, so the preview shows a slide nobody asked
+    /// for. It needs the boxes to move around the move, which the test
+    /// forces rather than waits for: a PUT goes out, the person deletes
+    /// across a slide boundary while it is in flight, which pulls both
+    /// slides onto the text that is left, then clicks the second slide, and
+    /// tap's answer is handed to the editor in the same turn.
+    func testAMoveLandsInTheSlideAskedForWhenARenderArrivesWithIt() {
+        let editor = makeEditor(bodiedDeck, list: bodiedSlides)
+        let recorder = Recorder()
+        var reported: [Int?] = []
+        recorder.onSlide = { reported.append($0) }
+        editor.editorDelegate = recorder
+
+        // The text as it stands goes to tap.
+        let generation = editor.beginSend()
+        // The person selects from inside slide 1's body into slide 2's
+        // heading and deletes.
+        let text = bodiedDeck as NSString
+        let from = text.range(of: "Alpha").location + 2
+        let to = text.range(of: "# Two").location + 3
+        editor.setSelectedRange(NSRange(location: from, length: to - from))
+        editor.deleteBackward(nil)
+
+        // The person clicks slide 2.
+        editor.moveCursor(toSlide: 1)
+        XCTAssertEqual(editor.currentBoxIndex, 1, "the cursor is in the slide the person clicked")
+        XCTAssertEqual(editor.tracker.currentBoxIndex(caret: editor.selectedRange().location), 1,
+                       "the caret reads back as that slide, not a neighbour: "
+                       + "caret=\(editor.selectedRange()) boxes=\(editor.boxes.map(\.range))")
+        XCTAssertEqual(reported.last, 1, "and that is the slide the preview is told about")
+
+        // tap's answer for the text sent before the deletion arrives now.
+        editor.apply(bodiedSlides, sentText: bodiedDeck, sentGeneration: generation)
+        XCTAssertEqual(editor.currentBoxIndex, 1, "the render does not move the cursor to another slide")
+        XCTAssertEqual(reported.last, 1)
+    }
+
+    /// An answer to a send begun before the whole text was replaced names
+    /// lines of a document that is gone, so it is refused rather than laid
+    /// over the text that replaced it.
+    func testARenderForTextThatWasReplacedIsRefused() {
+        let editor = makeEditor()
+        let generation = editor.beginSend()
+        editor.load(text: "# Only" + "\n")
+        XCTAssertFalse(editor.apply(slides, sentText: deck, sentGeneration: generation))
+        XCTAssertTrue(editor.boxes.isEmpty)
+    }
+
     func testMovingTheCursorToASlideSelectsItsBox() {
         let editor = makeEditor()
         var reported: [Int?] = []
-        final class Recorder: EditorTextViewDelegate {
-            var onSlide: (Int?) -> Void = { _ in }
-            func editorTextDidChange(_ editor: EditorTextView) {}
-            func editor(_ editor: EditorTextView, currentSlideDidChange index: Int?) { onSlide(index) }
-        }
         let recorder = Recorder()
         recorder.onSlide = { reported.append($0) }
         editor.editorDelegate = recorder

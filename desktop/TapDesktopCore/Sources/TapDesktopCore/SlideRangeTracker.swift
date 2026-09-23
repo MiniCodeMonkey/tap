@@ -27,6 +27,11 @@ public struct SlideRangeTracker: Sendable {
     public private(set) var boxes: [SlideBox] = []
     public private(set) var deckErrors: [String] = []
     public private(set) var generation = 0
+    /// The first generation whose answer still describes a document that
+    /// exists. `reset` moves it past every send begun before the text was
+    /// replaced, so those answers are refused instead of landing on text
+    /// they were never computed from.
+    private var earliestLiveGeneration = 0
     private var editLog: [Edit] = []
 
     public init() {}
@@ -35,6 +40,8 @@ public struct SlideRangeTracker: Sendable {
         boxes = []
         deckErrors = []
         editLog = []
+        generation += 1
+        earliestLiveGeneration = generation
     }
 
     /// Records that the text as of now goes to tap, and returns its generation.
@@ -47,12 +54,17 @@ public struct SlideRangeTracker: Sendable {
         for index in boxes.indices {
             boxes[index].range = Self.shift(boxes[index].range, location: location, oldLength: oldLength, newLength: newLength)
         }
+        boxes = Self.separated(boxes)
         editLog.append(Edit(generation: generation, location: location, oldLength: oldLength, newLength: newLength))
     }
 
     /// Applies tap's slide list for the text sent as `sentGeneration`, and
-    /// returns the regions whose paragraph roles may have changed.
-    public mutating func apply(_ list: SlideList, sentText: String, sentGeneration: Int, currentLength: Int) -> [NSRange] {
+    /// returns the regions whose paragraph roles may have changed. It
+    /// returns nil for an answer to a send begun before the text was
+    /// replaced: the edits that would place its boxes are gone with the
+    /// text they described, so the answer cannot be placed at all.
+    public mutating func apply(_ list: SlideList, sentText: String, sentGeneration: Int, currentLength: Int) -> [NSRange]? {
+        guard sentGeneration >= earliestLiveGeneration else { return nil }
         var newBoxes = Self.boxes(for: list.slides, in: sentText as NSString)
         for edit in editLog where edit.generation >= sentGeneration {
             for index in newBoxes.indices {
@@ -60,6 +72,7 @@ public struct SlideRangeTracker: Sendable {
                                                    oldLength: edit.oldLength, newLength: edit.newLength)
             }
         }
+        newBoxes = Self.separated(newBoxes)
         editLog.removeAll { $0.generation < sentGeneration }
         let dirty = Self.changedRegions(old: boxes, new: newBoxes, length: currentLength)
         boxes = newBoxes
@@ -71,6 +84,24 @@ public struct SlideRangeTracker: Sendable {
     /// while the deck has deck-level errors, so the frontmatter can be fixed.
     public var hiddenPrefixLength: Int {
         deckErrors.isEmpty ? (boxes.first?.range.location ?? 0) : 0
+    }
+
+    /// The caret for a slide's box: the end of the box's first heading
+    /// line, or the box's start when it has none. It is read from the same
+    /// boxes the index names, and `currentBoxIndex` gives that index back
+    /// for it, so the caret a move computes and the slide the caret is
+    /// attributed to are one answer rather than two that can disagree.
+    public func caret(forBoxAt index: Int, in text: NSString) -> Int? {
+        guard boxes.indices.contains(index) else { return nil }
+        let box = boxes[index]
+        let start = min(box.range.location, text.length)
+        let scanned = NSRange(location: start, length: min(NSMaxRange(box.range), text.length) - start)
+        var offset = 0
+        for line in text.substring(with: scanned).components(separatedBy: "\n") {
+            if line.hasPrefix("#") { return start + offset + (line as NSString).length }
+            offset += (line as NSString).length + 1
+        }
+        return start
     }
 
     public func boxIndex(containing position: Int) -> Int? {
@@ -94,6 +125,24 @@ public struct SlideRangeTracker: Sendable {
     public func currentBoxIndex(caret: Int) -> Int? {
         if let exact = boxIndex(containing: caret) { return exact }
         return boxes.lastIndex { $0.range.location <= caret }
+    }
+
+    /// Keeps the boxes a sequence in which every position belongs to at
+    /// most one box. An edit spanning a slide boundary pulls the boxes on
+    /// both sides onto the text that is left, so without this two boxes can
+    /// share a position, and a shared position has no answer to which slide
+    /// it belongs to: the search for it returns whichever box it reaches
+    /// first. The text that survived the edit stays with the earlier box,
+    /// and the later one starts after it.
+    static func separated(_ boxes: [SlideBox]) -> [SlideBox] {
+        var separated = boxes
+        for index in separated.indices.dropFirst() {
+            let previousEnd = separated[index - 1].end
+            guard separated[index].range.location <= previousEnd else { continue }
+            let start = previousEnd + 1
+            separated[index].range = NSRange(location: start, length: max(0, separated[index].end - start))
+        }
+        return separated
     }
 
     /// Shifts a box by an edit so the box keeps covering the same text. Text

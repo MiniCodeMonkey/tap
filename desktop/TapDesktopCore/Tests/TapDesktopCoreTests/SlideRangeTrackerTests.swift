@@ -39,7 +39,7 @@ final class SlideRangeTrackerTests: XCTestCase {
         let dirty = tracker.apply(answer, sentText: sentText, sentGeneration: generation, currentLength: 22)
         XCTAssertEqual(tracker.boxes.map(\.range), shifted)
         XCTAssertEqual(tracker.boxes[0].slide.title, "Oneabc")
-        XCTAssertTrue(dirty.isEmpty, "an answer that matches the shifted boxes restyles nothing")
+        XCTAssertEqual(dirty, [], "an answer that matches the shifted boxes restyles nothing")
     }
 
     func testAnAnswerThatMovesABoundaryReturnsTheRegionToRestyle() {
@@ -47,7 +47,7 @@ final class SlideRangeTrackerTests: XCTestCase {
         let generation = tracker.beginSend()
         let joined = SlideList(slides: [Slide(number: 1, startLine: 1, endLine: 5)], errors: [])
         let dirty = tracker.apply(joined, sentText: text, sentGeneration: generation, currentLength: 18)
-        XCTAssertFalse(dirty.isEmpty)
+        XCTAssertFalse(dirty?.isEmpty ?? true)
         XCTAssertEqual(tracker.boxes.count, 1)
     }
 
@@ -113,8 +113,67 @@ final class SlideRangeTrackerTests: XCTestCase {
             XCTAssertGreaterThanOrEqual(NSMaxRange(box.range), box.range.location, "no range ends before it starts")
             XCTAssertLessThanOrEqual(NSMaxRange(box.range), newLength, "no range extends past the new end of the text")
         }
-        XCTAssertEqual(tracker.boxes.map(\.range), [NSRange(location: 0, length: 3), NSRange(location: 3, length: 3),
+        // Both slides are pulled onto the text the deletion left. Slide 1
+        // keeps it and slide 2 starts after it, so no position is in two
+        // boxes and the caret at the join has one slide to belong to.
+        XCTAssertEqual(tracker.boxes.map(\.range), [NSRange(location: 0, length: 3), NSRange(location: 4, length: 2),
                                                      NSRange(location: 13, length: 7)])
+    }
+
+    func testNoPositionIsInTwoBoxesAfterAnEditAcrossABoundary() {
+        var tracker = threeSlideTracker()
+        tracker.recordEdit(location: 3, oldLength: 11, newLength: 0)
+        for (index, box) in tracker.boxes.enumerated().dropFirst() {
+            XCTAssertGreaterThan(box.range.location, tracker.boxes[index - 1].end,
+                                 "box \(index) starts inside the box before it")
+        }
+    }
+
+    func testTheCaretForABoxIsReadBackAsThatBox() {
+        var tracker = threeSlideTracker()
+        func check(_ note: String) {
+            for index in tracker.boxes.indices {
+                let caret = tracker.caret(forBoxAt: index, in: threeSlideText as NSString)
+                XCTAssertEqual(tracker.currentBoxIndex(caret: caret ?? -1), index,
+                               "\(note): the caret for box \(index) belongs to another box")
+            }
+        }
+        check("as tap answered")
+        tracker.recordEdit(location: 3, oldLength: 11, newLength: 0)
+        check("after a deletion across a slide boundary")
+        tracker.recordEdit(location: 3, oldLength: 0, newLength: 6)
+        check("after typing at the join")
+    }
+
+    func testASlideListWhoseLinesOverlapStillGivesEachPositionOneSlide() {
+        var tracker = SlideRangeTracker()
+        let generation = tracker.beginSend()
+        // Two slides tap reports over the same lines.
+        _ = tracker.apply(SlideList(slides: [Slide(number: 1, startLine: 1, endLine: 5),
+                                             Slide(number: 2, startLine: 3, endLine: 5)], errors: []),
+                          sentText: threeSlideText, sentGeneration: generation,
+                          currentLength: (threeSlideText as NSString).length)
+        XCTAssertGreaterThan(tracker.boxes[1].range.location, tracker.boxes[0].end,
+                             "the second slide starts after the first ends")
+        for index in tracker.boxes.indices {
+            let caret = tracker.caret(forBoxAt: index, in: threeSlideText as NSString)
+            XCTAssertEqual(tracker.currentBoxIndex(caret: caret ?? -1), index)
+        }
+    }
+
+    func testAnAnswerForTextThatIsGoneIsRefused() {
+        var tracker = threeSlideTracker()
+        // A PUT goes out, and the whole document is replaced before it
+        // answers, the way Revert To replaces it.
+        let generation = tracker.beginSend()
+        tracker.reset()
+        tracker.recordEdit(location: 0, oldLength: 0, newLength: 31)
+        XCTAssertNil(tracker.apply(threeSlideList, sentText: threeSlideText, sentGeneration: generation, currentLength: 31),
+                     "the answer describes text the editor no longer holds")
+        XCTAssertTrue(tracker.boxes.isEmpty, "and it leaves no boxes behind that name the wrong lines")
+        let next = tracker.beginSend()
+        XCTAssertNotNil(tracker.apply(threeSlideList, sentText: threeSlideText, sentGeneration: next, currentLength: 31),
+                        "the answer for the text that replaced it is taken")
     }
 
     func testADeletionThatExactlyEmptiesASlideZeroesItAndShiftsLaterSlidesUp() {
@@ -136,7 +195,7 @@ final class SlideRangeTrackerTests: XCTestCase {
         tracker.recordEdit(location: 5, oldLength: 7, newLength: 0)
         tracker.recordEdit(location: 3, oldLength: 0, newLength: 4)
         _ = tracker.apply(list, sentText: text, sentGeneration: generation, currentLength: 15)
-        XCTAssertEqual(tracker.boxes.map(\.range), [NSRange(location: 0, length: 9), NSRange(location: 9, length: 5)],
+        XCTAssertEqual(tracker.boxes.map(\.range), [NSRange(location: 0, length: 9), NSRange(location: 10, length: 4)],
                        "replaying the log out of order would give slide 1 a different length")
     }
 }

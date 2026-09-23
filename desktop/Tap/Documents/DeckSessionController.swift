@@ -70,7 +70,10 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
 
     private func applySlideList(_ list: SlideList, sentText: String, generation: Int) {
         guard !stopped else { return }
-        editor.apply(list, sentText: sentText, sentGeneration: generation)
+        // An answer the editor refuses was computed from text the editor no
+        // longer holds. Nothing it says about this deck is true any more,
+        // so none of what follows runs on it.
+        guard editor.apply(list, sentText: sentText, sentGeneration: generation) else { return }
         if let first = list.errors.first {
             if editorViewController.bar(.deckErrors)?.message != "The deck settings have a problem: \(first)" {
                 editorViewController.showBar(DocumentBarView(kind: .deckErrors, message: "The deck settings have a problem: \(first)",

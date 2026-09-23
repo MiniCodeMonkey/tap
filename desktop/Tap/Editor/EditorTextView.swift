@@ -111,10 +111,14 @@ final class EditorTextView: NSTextView {
     /// Records that the text as of now goes to tap, and returns its generation.
     func beginSend() -> Int { tracker.beginSend() }
 
-    /// Applies tap's slide list for the text sent as `sentGeneration`.
-    func apply(_ list: SlideList, sentText: String, sentGeneration: Int) {
+    /// Applies tap's slide list for the text sent as `sentGeneration`, and
+    /// says whether it was applied. An answer to a send begun before the
+    /// text was replaced is refused: it describes a document that is gone.
+    @discardableResult
+    func apply(_ list: SlideList, sentText: String, sentGeneration: Int) -> Bool {
         let oldErrors = Dictionary(boxes.map { ("\($0.range.location):\($0.range.length)", $0.slide.errors.count) }) { first, _ in first }
-        var dirty = tracker.apply(list, sentText: sentText, sentGeneration: sentGeneration, currentLength: (string as NSString).length)
+        guard var dirty = tracker.apply(list, sentText: sentText, sentGeneration: sentGeneration,
+                                        currentLength: (string as NSString).length) else { return false }
         for box in boxes where oldErrors["\(box.range.location):\(box.range.length)"].map({ $0 != box.slide.errors.count }) ?? false {
             dirty.append(box.range)
         }
@@ -126,6 +130,7 @@ final class EditorTextView: NSTextView {
         updateHiddenLayout()
         updateCurrentBox()
         needsDisplay = true
+        return true
     }
 
     func header(forBoxAt index: Int) -> BoxHeader {
@@ -279,22 +284,18 @@ final class EditorTextView: NSTextView {
         editorDelegate?.editor(self, currentSlideDidChange: index)
     }
 
-    /// Puts the cursor at the end of the slide's first heading, or at its start.
+    /// Puts the cursor at the end of the slide's first heading, or at its
+    /// start.
+    ///
+    /// The caret comes from the tracker, which resolves it against the same
+    /// boxes the index names and gives that index back for it. Working the
+    /// caret out here from the box and the text separately made the caret
+    /// and the slide it is read back as two answers, and a render or an
+    /// edit landing around the move left them naming different slides.
     func moveCursor(toSlide index: Int) {
-        guard boxes.indices.contains(index) else { return }
-        let box = boxes[index]
-        let text = string as NSString
-        var target = box.range.location
-        var offset = 0
-        for line in text.substring(with: box.range).components(separatedBy: "\n") {
-            if line.hasPrefix("#") {
-                target = box.range.location + offset + (line as NSString).length
-                break
-            }
-            offset += (line as NSString).length + 1
-        }
-        setSelectedRange(NSRange(location: target, length: 0))
-        scrollRangeToVisible(box.range)
+        guard let caret = tracker.caret(forBoxAt: index, in: string as NSString) else { return }
+        setSelectedRange(NSRange(location: caret, length: 0))
+        scrollRangeToVisible(boxes[index].range)
     }
 
     override func didChangeText() {
