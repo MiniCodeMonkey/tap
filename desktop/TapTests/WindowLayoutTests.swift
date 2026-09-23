@@ -30,6 +30,7 @@ final class WindowLayoutTests: HostedTestCase {
         // divider: growing the window back out should still rebalance it.
         controller.window?.setContentSize(NSSize(width: 600, height: 800))
         split.view.layoutSubtreeIfNeeded()
+        XCTAssertFalse(split.dividerPolicy.userMovedDivider, "AppKit pinning both panes to their minimum thickness is not a person dragging the divider")
         controller.window?.setContentSize(NSSize(width: 1201, height: 800))
         split.view.layoutSubtreeIfNeeded()
         XCTAssertEqual(split.editorItem.viewController.view.frame.width, split.inspectorItem.viewController.view.frame.width, accuracy: 2, "the divider splits whatever width the window actually has")
