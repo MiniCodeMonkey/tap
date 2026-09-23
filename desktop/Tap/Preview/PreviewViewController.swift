@@ -33,10 +33,12 @@ final class PreviewViewController: NSViewController, WKNavigationDelegate, WKUID
     /// Holds the web view and anything laid over it.
     let pageContainer = NSView()
 
+    let overlay = PreviewOverlayView()
     var onReady: ((ReadyPayload) -> Void)?
     var onStepBackward: (() -> Void)?
     var onStepForward: (() -> Void)?
     var onPinToggled: (() -> Void)?
+    var onTryAgain: (() -> Void)?
     private(set) var lastReady: ReadyPayload?
     /// How many times the preview has been pointed at a page. Every reload
     /// of the preview goes through `load`, and an in-place update goes
@@ -74,6 +76,9 @@ final class PreviewViewController: NSViewController, WKNavigationDelegate, WKUID
         pinButton.target = self
         pinButton.action = #selector(pinPressed(_:))
         pinButton.setAccessibilityIdentifier("pin")
+        overlay.tryAgainButton.target = self
+        overlay.tryAgainButton.action = #selector(tryAgainPressed(_:))
+        overlay.showLogButton.action = #selector(AppDelegate.showTapLog(_:))
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
@@ -91,6 +96,8 @@ final class PreviewViewController: NSViewController, WKNavigationDelegate, WKUID
         stepRow.spacing = 10
         webView.translatesAutoresizingMaskIntoConstraints = false
         pageContainer.addSubview(webView)
+        overlay.translatesAutoresizingMaskIntoConstraints = false
+        pageContainer.addSubview(overlay)
         for view in [statusLabel, pageContainer, stepRow] as [NSView] {
             view.translatesAutoresizingMaskIntoConstraints = false
             root.addSubview(view)
@@ -106,6 +113,10 @@ final class PreviewViewController: NSViewController, WKNavigationDelegate, WKUID
             webView.leadingAnchor.constraint(equalTo: pageContainer.leadingAnchor),
             webView.trailingAnchor.constraint(equalTo: pageContainer.trailingAnchor),
             webView.bottomAnchor.constraint(equalTo: pageContainer.bottomAnchor),
+            overlay.topAnchor.constraint(equalTo: pageContainer.topAnchor),
+            overlay.leadingAnchor.constraint(equalTo: pageContainer.leadingAnchor),
+            overlay.trailingAnchor.constraint(equalTo: pageContainer.trailingAnchor),
+            overlay.bottomAnchor.constraint(equalTo: pageContainer.bottomAnchor),
             stepRow.topAnchor.constraint(equalTo: pageContainer.bottomAnchor, constant: 12),
             stepRow.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 20),
             stepRow.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -20),
@@ -143,6 +154,30 @@ final class PreviewViewController: NSViewController, WKNavigationDelegate, WKUID
         } catch {
             return "script failed: \(error)"
         }
+    }
+
+    /// `pausedMessage` explains a session the app stopped on purpose, such as
+    /// while the deck file is deleted.
+    func showSessionState(_ state: TapSession.State, pausedMessage: String? = nil) {
+        switch state {
+        case .running:
+            overlay.hide()
+        case .starting where overlay.isHidden:
+            break
+        case .starting, .restarting:
+            overlay.show(title: "Restarting preview.", detail: "Showing the last good render.", output: [], opaque: false, buttons: false)
+        case .failed(let lastOutput):
+            overlay.show(title: "The preview stopped", detail: "tap exited 3 times in 30 seconds. Last output:",
+                         output: lastOutput, opaque: true, buttons: true)
+        case .stopped:
+            if let pausedMessage {
+                overlay.show(title: "The preview is paused", detail: pausedMessage, output: [], opaque: false, buttons: false)
+            }
+        }
+    }
+
+    @objc private func tryAgainPressed(_ sender: NSButton) {
+        onTryAgain?()
     }
 
     @objc private func stepControlPressed(_ sender: NSSegmentedControl) {

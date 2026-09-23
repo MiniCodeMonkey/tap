@@ -47,6 +47,7 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
         previewViewController.onStepBackward = { [weak self] in self?.sendPreviewMessage(self?.navigator.stepBackward()) }
         previewViewController.onStepForward = { [weak self] in self?.sendPreviewMessage(self?.navigator.stepForward()) }
         previewViewController.onPinToggled = { [weak self] in self?.togglePin() }
+        previewViewController.onTryAgain = { [weak self] in self?.session.tryAgain() }
     }
 
     /// Pins the slide the preview shows, or unpins it and follows the cursor again.
@@ -109,6 +110,7 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
     }
 
     private func sessionStateChanged(_ state: TapSession.State) {
+        previewViewController.showSessionState(state)
         socket?.close()
         socket = nil
         guard case .running(let ready) = state else {
