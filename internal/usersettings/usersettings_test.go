@@ -10,6 +10,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"golang.org/x/sys/unix"
 )
 
 func TestPathUsesXDGConfigHome(t *testing.T) {
@@ -155,55 +157,64 @@ func TestWithLockKeepsBothConcurrentApprovals(t *testing.T) {
 	}
 }
 
-// TestWithLockBreaksAStaleLockFileAndWritesUnderIt reproduces the gap the
-// final re-review found: a lock file left behind by a process that was
-// killed while holding it. WithLock must not treat that file as an
-// impassable obstacle to wait out and then quietly step around; it must
-// recognize it as abandoned, remove it, and take a fresh lock of its own
-// before running fn, the same as it would with no lock file at all.
-func TestWithLockBreaksAStaleLockFileAndWritesUnderIt(t *testing.T) {
+// TestWithLockDoesNotBlockOnALockFileLeftByAKilledProcess replaces the
+// old age-heuristic test for a killed holder: it used to check that a
+// lock file older than lockStaleAge got renamed away and replaced. There
+// is no age to guess at now. The kernel drops an flock the instant the
+// holding file descriptor closes, which is exactly what happens when a
+// process dies, killed or not, so a second file descriptor standing in
+// for a dead process's lock (opened, locked, then closed without ever
+// calling WithLock) must let the very next WithLock through immediately.
+func TestWithLockDoesNotBlockOnALockFileLeftByAKilledProcess(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "settings.yaml")
 	lockPath := path + lockSuffix
-	if err := os.WriteFile(lockPath, []byte(""), 0o600); err != nil {
+	if err := os.MkdirAll(filepath.Dir(lockPath), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	old := time.Now().Add(-2 * lockStaleAge)
-	if err := os.Chtimes(lockPath, old, old); err != nil {
-		t.Fatal(err)
-	}
-
-	var lockDuringFn os.FileInfo
-	err := WithLock(path, func() error {
-		lockDuringFn, _ = os.Stat(lockPath)
-		return Save(path, Settings{})
-	})
+	stray, err := os.OpenFile(lockPath, os.O_CREATE|os.O_WRONLY, 0o600)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if lockDuringFn == nil {
-		t.Fatal("no lock file was held while fn ran; the stale lock was stepped around instead of broken and replaced")
+	if err := unix.Flock(int(stray.Fd()), unix.LOCK_EX); err != nil {
+		t.Fatal(err)
 	}
-	if lockDuringFn.ModTime().Equal(old) {
-		t.Error("fn ran beside the original stale lock file, not under a fresh one taken in its place")
+	// Closing this descriptor without unlocking stands in for the
+	// holding process dying: the kernel releases the flock the moment
+	// the descriptor closes, the same as it would on process exit.
+	if err := stray.Close(); err != nil {
+		t.Fatal(err)
 	}
-	if _, err := os.Stat(lockPath); !os.IsNotExist(err) {
-		t.Errorf("lock file left behind after WithLock returned: %v", err)
+
+	start := time.Now()
+	ran := false
+	err = WithLock(path, func() error {
+		ran = true
+		return nil
+	})
+	elapsed := time.Since(start)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ran {
+		t.Fatal("WithLock did not run fn")
+	}
+	if elapsed > 100*time.Millisecond {
+		t.Errorf("WithLock took %v to notice the lock was released, want near-instant", elapsed)
 	}
 }
 
-// TestWithLockBreakingAStaleLockDoesNotLetTwoWritersInAtOnce attacks the
-// break itself: many callers start against the same abandoned lock file
-// at once, so more than one of them could decide it is stale and try to
-// claim it. Only one may ever succeed at a time; if two both proceeded
-// into fn believing they held the lock, this catches the overlap.
+// TestWithLockBreakingAStaleLockDoesNotLetTwoWritersInAtOnce keeps its
+// name and shape from before the fix -- many callers contend at once for
+// a lock file that is already sitting on disk, as if left by another
+// process -- but no longer marks that file's timestamp as stale: under
+// the flock-based lock, an unheld lock file needs no staleness judgment
+// at all, it is simply available. Only one caller may ever be inside fn
+// at a time; if two both proceeded believing they held the lock, this
+// catches the overlap.
 func TestWithLockBreakingAStaleLockDoesNotLetTwoWritersInAtOnce(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "settings.yaml")
 	lockPath := path + lockSuffix
 	if err := os.WriteFile(lockPath, []byte(""), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	old := time.Now().Add(-2 * lockStaleAge)
-	if err := os.Chtimes(lockPath, old, old); err != nil {
 		t.Fatal(err)
 	}
 
@@ -270,8 +281,14 @@ func TestTwentyWayContentionSerializesWithNothingLost(t *testing.T) {
 	if len(settings.Approvals) != writers {
 		t.Fatalf("got %d approvals after 20-way contention, want %d: nothing should be lost", len(settings.Approvals), writers)
 	}
-	if _, err := os.Stat(path + lockSuffix); !os.IsNotExist(err) {
-		t.Errorf("lock file left behind after all writers finished: %v", err)
+	// The lock file itself is expected to remain on disk: removing it
+	// after each release would race with a caller that already opened
+	// it and is about to flock it, since deleting the name does not
+	// free the lock held on the still-open file behind it. Leaving an
+	// empty, permanently reusable lock file in place is what keeps the
+	// flock itself the single source of truth for who holds it.
+	if _, err := os.Stat(path + lockSuffix); err != nil {
+		t.Errorf("lock file missing after all writers finished: %v", err)
 	}
 }
 
@@ -307,22 +324,30 @@ func TestWithLockWarnsOnStderrWhenItFallsBackUnlocked(t *testing.T) {
 	}
 }
 
-// TestWithLockNeverHangsForeverOnAFreshLockItCannotAcquire confirms the
-// bounded wait the final re-review demanded stays intact: a lock file
-// with a current timestamp looks like it could belong to a live writer,
-// so it must not be broken as stale, but WithLock still must not wait for
-// it indefinitely.
-func TestWithLockNeverHangsForeverOnAFreshLockItCannotAcquire(t *testing.T) {
+// TestWithLockNeverHangsForeverOnALockItCannotAcquire confirms the
+// bounded wait stays intact against a lock that is genuinely, currently
+// held: a second file descriptor on the same lock file, flocked and
+// kept open for the rest of the test, stands in for another live tap
+// process. WithLock must still give up after lockAcquireTimeout and run
+// fn unlocked rather than wait for a lock that might never be released.
+func TestWithLockNeverHangsForeverOnALockItCannotAcquire(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "settings.yaml")
 	lockPath := path + lockSuffix
-	if err := os.WriteFile(lockPath, []byte(""), 0o600); err != nil {
+	if err := os.MkdirAll(filepath.Dir(lockPath), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = os.Remove(lockPath) })
+	holder, err := os.OpenFile(lockPath, os.O_CREATE|os.O_WRONLY, 0o600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := unix.Flock(int(holder.Fd()), unix.LOCK_EX); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = holder.Close() })
 
 	start := time.Now()
 	ran := false
-	err := WithLock(path, func() error {
+	err = WithLock(path, func() error {
 		ran = true
 		return nil
 	})
@@ -334,21 +359,18 @@ func TestWithLockNeverHangsForeverOnAFreshLockItCannotAcquire(t *testing.T) {
 		t.Fatal("WithLock did not run fn")
 	}
 	if elapsed > 10*time.Second {
-		t.Fatalf("WithLock waited %v for a lock it could never break or acquire, want a bounded wait", elapsed)
+		t.Fatalf("WithLock waited %v for a lock it could never acquire, want a bounded wait", elapsed)
 	}
 }
 
 // TestWithLockRecoversWhenADirectorySitsAtTheLockPath confirms a
-// directory occupying the lock path, old enough to look abandoned, does
-// not wedge tap forever: WithLock still returns and still runs fn.
+// directory occupying the lock path does not wedge tap forever: opening
+// it as a regular file fails immediately, so WithLock falls back to
+// running fn unlocked rather than waiting out the acquire timeout.
 func TestWithLockRecoversWhenADirectorySitsAtTheLockPath(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "settings.yaml")
 	lockPath := path + lockSuffix
 	if err := os.Mkdir(lockPath, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	old := time.Now().Add(-2 * lockStaleAge)
-	if err := os.Chtimes(lockPath, old, old); err != nil {
 		t.Fatal(err)
 	}
 
