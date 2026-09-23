@@ -1063,7 +1063,8 @@ func testAppModeHasNoRouteThatAnswersOrRecords(t *testing.T, args []string) {
 // thought to name, and the route nobody names is exactly the one that
 // gets through.
 //
-// Adding a route here is the deliberate step. Ask first whether it
+// The order here does not matter: the test sorts both sides before
+// comparing them. Adding a route here is the deliberate step. Ask first whether it
 // answers a question or controls the recording, because those travel only
 // over standard input and output, and whether it belongs on the audience
 // allow-list in internal/server (audienceRoutes) or behind the app token.
@@ -1110,7 +1111,12 @@ func TestAppModeServesOnlyTheRoutesOnTheAllowList(t *testing.T) {
 	for _, appMode := range appModeCommands {
 		t.Run(appMode.name, func(t *testing.T) {
 			process := startAppProcess(t, t.TempDir(), append(append([]string{}, appMode.args...), copyAppFixture(t))...)
-			want := appServerRoutes[appMode.name]
+			// Sorted here rather than by hand: the comparison is
+			// between two sets, and a legitimate route written in the
+			// wrong place in the list above is a maintenance mistake,
+			// not a rogue route.
+			want := slices.Clone(appServerRoutes[appMode.name])
+			slices.Sort(want)
 			got := process.routes()
 			if !slices.Equal(got, want) {
 				t.Errorf("routes:\n got %v\nwant %v", got, want)
