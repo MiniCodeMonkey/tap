@@ -2,7 +2,7 @@ import AppKit
 
 /// A deck's window: the editor on the left and the Preview pane on the right,
 /// under a unified toolbar. Deck windows open as tabs of each other.
-final class DeckWindowController: NSWindowController, NSWindowDelegate {
+final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolbarDelegate, NSMenuItemValidation {
     let sessionController: DeckSessionController
     let splitViewController: MainSplitViewController
 
@@ -23,6 +23,11 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate {
         super.init(window: window)
         window.delegate = self
         shouldCascadeWindows = true
+
+        let toolbar = NSToolbar(identifier: "TapDeckToolbar")
+        toolbar.delegate = self
+        toolbar.displayMode = .iconOnly
+        window.toolbar = toolbar
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
@@ -30,5 +35,39 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate {
     override func windowDidLoad() {
         super.windowDidLoad()
         window?.makeFirstResponder(sessionController.editor)
+    }
+
+    static let previewItemIdentifier = NSToolbarItem.Identifier("preview")
+
+    @objc func togglePreview(_ sender: Any?) {
+        splitViewController.setPreviewHidden(!splitViewController.isPreviewHidden)
+    }
+
+    func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
+        if menuItem.action == #selector(togglePreview(_:)) {
+            menuItem.title = splitViewController.isPreviewHidden ? "Show Preview" : "Hide Preview"
+        }
+        return true
+    }
+
+    func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
+        [.flexibleSpace, Self.previewItemIdentifier]
+    }
+
+    func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
+        toolbarDefaultItemIdentifiers(toolbar)
+    }
+
+    func toolbar(_ toolbar: NSToolbar, itemForItemIdentifier identifier: NSToolbarItem.Identifier,
+                 willBeInsertedIntoToolbar flag: Bool) -> NSToolbarItem? {
+        guard identifier == Self.previewItemIdentifier else { return nil }
+        let item = NSToolbarItem(itemIdentifier: identifier)
+        item.label = "Preview"
+        item.toolTip = "Show or hide the preview"
+        item.image = NSImage(systemSymbolName: "sidebar.right", accessibilityDescription: "Preview")
+        item.isBordered = true
+        item.target = self
+        item.action = #selector(togglePreview(_:))
+        return item
     }
 }

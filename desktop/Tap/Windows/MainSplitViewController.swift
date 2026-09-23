@@ -26,6 +26,8 @@ final class MainSplitViewController: NSSplitViewController {
         splitView.dividerStyle = .thin
     }
 
+    var isPreviewHidden: Bool { inspectorItem.isCollapsed }
+
     override func viewDidLayout() {
         super.viewDidLayout()
         balance()
@@ -40,10 +42,26 @@ final class MainSplitViewController: NSSplitViewController {
         isBalancing = false
     }
 
+    /// Hides the right pane, so the editor takes the full width, or shows it again at 50/50.
+    func setPreviewHidden(_ hidden: Bool) {
+        inspectorItem.isCollapsed = hidden
+        if !hidden {
+            dividerPolicy.reset()
+            view.needsLayout = true
+            view.layoutSubtreeIfNeeded()
+            balance()
+        }
+    }
+
+    /// Records a drag of the divider. After it, the divider stays where the user put it.
+    func userDidDragDivider() {
+        dividerPolicy.userDragged()
+    }
+
     override func splitViewDidResizeSubviews(_ notification: Notification) {
         super.splitViewDidResizeSubviews(notification)
         if !isBalancing, notification.userInfo?["NSSplitViewDividerIndex"] != nil {
-            dividerPolicy.userDragged()
+            userDidDragDivider()
         }
     }
 }

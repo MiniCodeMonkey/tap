@@ -100,6 +100,8 @@ enum MainMenu {
 
     static func viewMenu() -> NSMenu {
         let menu = NSMenu(title: "View")
+        menu.addItem(item("Hide Preview", action: #selector(DeckWindowController.togglePreview(_:)), key: "0", modifiers: [.command, .option]))
+        menu.addItem(.separator())
         menu.addItem(item("Enter Full Screen", action: #selector(NSWindow.toggleFullScreen(_:)), key: "f", modifiers: [.command, .control]))
         return menu
     }
