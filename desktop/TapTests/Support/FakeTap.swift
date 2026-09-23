@@ -127,12 +127,8 @@ enum FakeTap {
     }
 }
 
-/// One code block on a fake slide. `block`, `language`, `driver` and `line`
-/// are in the shape tap reports (`CodeBlockMeta` in
-/// `internal/parser/parser.go`). `live` is NOT: no such field exists in the
-/// real parser. It is this fake's own invention, standing in for logic the
-/// unimplemented `tap dev --app` endpoint has not yet defined, and it is
-/// asserted on only by a test named and commented as a placeholder.
+/// One code block on a fake slide, in the shape tap reports
+/// (`CodeBlock` in `internal/slidelist/slidelist.go`).
 struct FakeCodeBlock {
     let block: Int
     let language: String
