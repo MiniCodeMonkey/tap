@@ -1,6 +1,8 @@
 package cli
 
 import (
+	"os"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
@@ -82,7 +84,7 @@ func TestCommandTree(t *testing.T) {
 
 // themeSlugInExampleRe finds theme slugs named in --help text, either as an
 // argument to "theme set" or as a value in a printed JSON "theme" field.
-var themeSlugInExampleRe = regexp.MustCompile(`theme set (\S+)|"theme":\s*"([^"]+)"`)
+var themeSlugInExampleRe = regexp.MustCompile(`theme set ([a-z][a-z0-9-]*)|"theme":\s*"([a-z][a-z0-9-]*)"`)
 
 // TestHelpTextThemeExamplesAreRealThemes fails if any command's --help text
 // names a theme slug, in a "theme set" example or a JSON "theme" field, that
@@ -91,23 +93,75 @@ var themeSlugInExampleRe = regexp.MustCompile(`theme set (\S+)|"theme":\s*"([^"]
 func TestHelpTextThemeExamplesAreRealThemes(t *testing.T) {
 	for _, command := range visibleCommands(rootCmd) {
 		path := command.CommandPath()
-		args := append(strings.Fields(strings.TrimPrefix(path, "tap")), "--help")
-		exitCode, stdout, stderr := runTap(t, args...)
-		if exitCode != exitOK {
-			t.Fatalf("%s --help exited %d: %s", path, exitCode, stderr)
-		}
+		t.Run(path, func(t *testing.T) {
+			args := append(strings.Fields(strings.TrimPrefix(path, "tap")), "--help")
+			exitCode, stdout, stderr := runTap(t, args...)
+			if exitCode != exitOK {
+				t.Fatalf("%s --help exited %d: %s", path, exitCode, stderr)
+			}
 
-		for _, match := range themeSlugInExampleRe.FindAllStringSubmatch(stdout, -1) {
-			slug := match[1]
-			if slug == "" {
-				slug = match[2]
+			for _, match := range themeSlugInExampleRe.FindAllStringSubmatch(stdout, -1) {
+				slug := match[1]
+				if slug == "" {
+					slug = match[2]
+				}
+				if slug == "" || slug == "<slug>" {
+					continue
+				}
+				if !themes.IsValid(slug) {
+					t.Errorf("%s --help names theme slug %q, which is not a real theme (run tap theme list)", path, slug)
+				}
 			}
-			if slug == "" || slug == "<slug>" {
-				continue
+		})
+	}
+}
+
+// docsThemeExampleDirs holds the docs that copy tap theme set examples out
+// of --help text. TestHelpTextThemeExamplesAreRealThemes only ever sees a
+// slug that started in --help, not one typed straight into these files.
+var docsThemeExampleDirs = []string{
+	filepath.Join("..", "..", "docs", "guide"),
+	filepath.Join("..", "..", "docs", "reference"),
+	filepath.Join("..", "..", "skills"),
+}
+
+// TestDocsThemeExamplesAreRealThemes fails if any markdown file under
+// docsThemeExampleDirs names a theme slug, in a "theme set" example or a
+// JSON "theme" field, that is not one of the real themes. This is the gap
+// TestHelpTextThemeExamplesAreRealThemes leaves: a wrong slug typed
+// straight into a doc, not copied from --help, is what actually hurt
+// someone before b55c79f.
+func TestDocsThemeExamplesAreRealThemes(t *testing.T) {
+	for _, dir := range docsThemeExampleDirs {
+		err := filepath.WalkDir(dir, func(path string, entry os.DirEntry, err error) error {
+			if err != nil {
+				return err
 			}
-			if !themes.IsValid(slug) {
-				t.Errorf("%s --help names theme slug %q, which is not a real theme (run tap theme list)", path, slug)
+			if entry.IsDir() || filepath.Ext(path) != ".md" {
+				return nil
 			}
+			t.Run(path, func(t *testing.T) {
+				content, err := os.ReadFile(path)
+				if err != nil {
+					t.Fatalf("reading %s: %v", path, err)
+				}
+				for _, match := range themeSlugInExampleRe.FindAllStringSubmatch(string(content), -1) {
+					slug := match[1]
+					if slug == "" {
+						slug = match[2]
+					}
+					if slug == "" || slug == "<slug>" {
+						continue
+					}
+					if !themes.IsValid(slug) {
+						t.Errorf("%s names theme slug %q, which is not a real theme (run tap theme list)", path, slug)
+					}
+				}
+			})
+			return nil
+		})
+		if err != nil {
+			t.Fatalf("walking %s: %v", dir, err)
 		}
 	}
 }
