@@ -241,8 +241,8 @@ func TestPresenterTargetIsWhereAScanLands(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			if got := presenterTarget(test.url, test.password); got != test.want {
-				t.Errorf("presenterTarget(%q, %q) = %q, want %q", test.url, test.password, got, test.want)
+			if got := PresenterTarget(test.url, test.password); got != test.want {
+				t.Errorf("PresenterTarget(%q, %q) = %q, want %q", test.url, test.password, got, test.want)
 			}
 		})
 	}

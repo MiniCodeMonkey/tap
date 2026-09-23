@@ -125,7 +125,11 @@ func TestExecuteRejectsAnOversizedBody(t *testing.T) {
 	s, test := executeServer(t, LiveCodePolicy{AllowAll: true})
 	body := `{"slide": 1, "block": 1}` + strings.Repeat(" ", 70*1024)
 	status, response := postExecute(t, s, body)
-	if status != http.StatusBadRequest || !strings.Contains(response.Error, "Invalid request body") {
+	// The front door answers an oversized body with 413 on every other
+	// route, so this one does too: a body over the limit is a different
+	// failure from a body tap could not parse, and the desktop app reads
+	// the status.
+	if status != http.StatusRequestEntityTooLarge || !strings.Contains(response.Error, "too large") {
 		t.Errorf("status %d, error %q", status, response.Error)
 	}
 	if test.ranCode != "" {

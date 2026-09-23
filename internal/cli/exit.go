@@ -41,6 +41,7 @@ const (
 	codeImageNotFound   = "image_not_found"
 	codeNotApproved     = "not_approved"
 	codeInvalidSettings = "invalid_settings"
+	codeInvalidRequest  = "invalid_request"
 )
 
 // errCancelled means the person closed an interactive prompt, such as the

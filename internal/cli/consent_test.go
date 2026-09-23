@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -9,6 +10,41 @@ import (
 
 	"github.com/MiniCodeMonkey/tap/internal/usersettings"
 )
+
+type fakeConsentAsker struct {
+	record   bool
+	answered bool
+	asked    int
+}
+
+func (asker *fakeConsentAsker) askRecordConsent() (bool, bool) {
+	asker.asked++
+	return asker.record, asker.answered
+}
+
+func TestPresentRecordingWantedAsksThroughTheAsker(t *testing.T) {
+	settingsPath := filepath.Join(t.TempDir(), "settings.yaml")
+	asker := &fakeConsentAsker{record: true, answered: true}
+	record, err := presentRecordingWanted(consentInput{SettingsPath: settingsPath, Out: io.Discard, Supported: true, Interactive: true, Asker: asker})
+	if err != nil || !record || asker.asked != 1 {
+		t.Fatalf("record = %v, err = %v, asked %d times", record, err, asker.asked)
+	}
+	settings, err := usersettings.Load(settingsPath)
+	if err != nil || settings.Present.Record == nil || !*settings.Present.Record {
+		t.Errorf("settings = %+v, %v; want present.record true", settings, err)
+	}
+}
+
+func TestPresentRecordingWantedSavesNothingWithoutAnAnswer(t *testing.T) {
+	settingsPath := filepath.Join(t.TempDir(), "settings.yaml")
+	record, err := presentRecordingWanted(consentInput{SettingsPath: settingsPath, Out: io.Discard, Supported: true, Interactive: true, Asker: &fakeConsentAsker{}})
+	if err != nil || record {
+		t.Errorf("record = %v, err = %v; want false", record, err)
+	}
+	if _, err := os.Stat(settingsPath); !os.IsNotExist(err) {
+		t.Errorf("an unanswered question saved the settings file (stat error %v)", err)
+	}
+}
 
 func consentFor(t *testing.T, typed string) (consentInput, *bytes.Buffer) {
 	t.Helper()

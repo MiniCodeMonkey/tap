@@ -246,7 +246,9 @@ func (p *presentRecorder) Finish(keep bool) (recorder.RunSummary, error) {
 	p.mu.Lock()
 	p.held = true
 	p.mu.Unlock()
-	return p.run.Finish(keep)
+	summary, err := p.run.Finish(keep)
+	p.state.Store(tui.PresentNotRecording)
+	return summary, err
 }
 
 func (p *presentRecorder) State() tui.PresentRecordingState {
@@ -261,6 +263,13 @@ func (p *presentRecorder) Started() bool            { return p.run.Started() }
 func (p *presentRecorder) LeftFirstSlide() bool     { return p.run.LeftFirstSlide() }
 func (p *presentRecorder) SuggestGitignore() string { return suggestGitignore(p.options.OutputDir) }
 func (p *presentRecorder) AddGitignoreEntry() error { return addGitignoreEntry(p.options.OutputDir) }
+
+// Segment is the number of the current or last segment, from 1, or 0
+// before the first.
+func (p *presentRecorder) Segment() int { return p.run.Segments() }
+
+// Dir is the run's folder, or "" before the first segment.
+func (p *presentRecorder) Dir() string { return p.run.Dir() }
 
 func (p *presentRecorder) Blocked() string {
 	p.blockedMu.Lock()

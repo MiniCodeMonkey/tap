@@ -14,9 +14,40 @@ type consentInput struct {
 	SettingsPath string
 	In           io.Reader
 	Out          io.Writer
-	NoRecord     bool
-	Supported    bool
-	Interactive  bool
+	// Asker asks the question. Nil asks on In and Out, at the terminal.
+	Asker       consentAsker
+	NoRecord    bool
+	Supported   bool
+	Interactive bool
+}
+
+// consentAsker asks whether to record every tap present run. answered is
+// false when no answer came, and then nothing is saved.
+type consentAsker interface {
+	askRecordConsent() (record, answered bool)
+}
+
+// terminalConsentAsker asks at the terminal.
+type terminalConsentAsker struct {
+	in  io.Reader
+	out io.Writer
+}
+
+func (asker terminalConsentAsker) askRecordConsent() (record, answered bool) {
+	reader := bufio.NewReader(asker.in)
+	for {
+		fmt.Fprint(asker.out, "Record automatically every time you run tap present? (y/n) ")
+		line, readErr := reader.ReadString('\n')
+		switch strings.ToLower(strings.TrimSpace(line)) {
+		case "y", "yes":
+			return true, true
+		case "n", "no":
+			return false, true
+		}
+		if readErr != nil {
+			return false, false
+		}
+	}
 }
 
 // presentRecordingWanted decides whether this tap present run records from
@@ -47,20 +78,15 @@ func presentRecordingWanted(input consentInput) (bool, error) {
 		return false, nil
 	}
 
-	reader := bufio.NewReader(input.In)
-	for {
-		fmt.Fprint(input.Out, "Record automatically every time you run tap present? (y/n) ")
-		line, readErr := reader.ReadString('\n')
-		switch strings.ToLower(strings.TrimSpace(line)) {
-		case "y", "yes":
-			return true, saveConsent(input.SettingsPath, settings, true)
-		case "n", "no":
-			return false, saveConsent(input.SettingsPath, settings, false)
-		}
-		if readErr != nil {
-			return false, nil
-		}
+	asker := input.Asker
+	if asker == nil {
+		asker = terminalConsentAsker{in: input.In, out: input.Out}
 	}
+	record, answered := asker.askRecordConsent()
+	if !answered {
+		return false, nil
+	}
+	return record, saveConsent(input.SettingsPath, settings, record)
 }
 
 func saveConsent(path string, settings usersettings.Settings, record bool) error {

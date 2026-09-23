@@ -197,7 +197,7 @@ func NewDevModel(cfg DevConfig) *DevModel {
 	return &DevModel{
 		config:    cfg,
 		tunnelURL: cfg.TunnelURL,
-		tunnelQR:  tunnelQRCode(presenterTarget(cfg.TunnelURL, cfg.PresenterPassword)),
+		tunnelQR:  tunnelQRCode(PresenterTarget(cfg.TunnelURL, cfg.PresenterPassword)),
 		state: DevState{
 			RecentEvents: make([]DevEvent, 0, 10),
 		},

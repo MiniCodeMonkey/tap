@@ -95,6 +95,10 @@ func (s *Server) handleAPIExecute(w http.ResponseWriter, r *http.Request) {
 
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
+		if IsBodyTooLarge(err) {
+			writeExecuteError(w, http.StatusRequestEntityTooLarge, "Request body too large")
+			return
+		}
 		writeExecuteError(w, http.StatusBadRequest, fmt.Sprintf("Invalid request body: %v", err))
 		return
 	}

@@ -431,3 +431,25 @@ func TestPresentRecorderStateReadsThroughASegmentSwitch(t *testing.T) {
 	}
 	_, _ = present.Finish(true)
 }
+
+func TestPresentRecorderReportsItsSegmentAndFolder(t *testing.T) {
+	feed := &screenFeed{screens: laptopScreens}
+	present := testPresentRecorder(t, feed, 50<<30)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	if present.Segment() != 0 || present.Dir() != "" {
+		t.Errorf("before recording: segment %d, folder %q", present.Segment(), present.Dir())
+	}
+	present.Begin(ctx, true)
+	waitForState(t, present, tui.PresentRecording)
+	if present.Segment() != 1 || present.Dir() == "" {
+		t.Errorf("recording: segment %d, folder %q", present.Segment(), present.Dir())
+	}
+	if _, err := present.Finish(true); err != nil {
+		t.Fatal(err)
+	}
+	if present.State() != tui.PresentNotRecording {
+		t.Errorf("state after Finish = %v, want not recording", present.State())
+	}
+}
