@@ -6,11 +6,12 @@
  * needs comes in as props.
  */
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, type MutableRefObject } from 'react';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import type { MapConfig } from '$lib/types';
 import { getMapLibreEasing, resolveMapStyle } from '../utils/map';
+import { holdReady } from '$lib/ready/blockers';
 
 export interface MapSlideProps {
 	/** Parsed configuration for the `map` code block. */
@@ -25,6 +26,32 @@ export interface MapSlideProps {
 
 /** Duration in milliseconds for the quick reset animation back to the start view. */
 const RESET_DURATION = 500;
+
+/** How long the ready signal waits for a new map to load its style. */
+export const MAP_LOAD_TIMEOUT_MS = 10000;
+
+/** How long the ready signal waits for a map to go idle after it loaded or moved. */
+export const MAP_READY_TIMEOUT_MS = 3000;
+
+/**
+ * Holds a "map" blocker until the next "idle" event releases it through
+ * `releaseRef`, or until `timeoutMs` passes. Releases the hold that
+ * `releaseRef` already had, so a map holds at most one blocker.
+ */
+function holdMapUntilIdle(releaseRef: MutableRefObject<(() => void) | null>, timeoutMs: number): void {
+	releaseRef.current?.();
+	const release = holdReady('map');
+	let timer: ReturnType<typeof setTimeout> | undefined;
+	const releaseThisHold = (): void => {
+		clearTimeout(timer);
+		release();
+		if (releaseRef.current === releaseThisHold) {
+			releaseRef.current = null;
+		}
+	};
+	timer = setTimeout(releaseThisHold, timeoutMs);
+	releaseRef.current = releaseThisHold;
+}
 
 function prefersReducedMotion(): boolean {
 	if (typeof window === 'undefined') return false;
@@ -55,6 +82,9 @@ export function MapSlide({ config, step, active = true, printMode = false }: Map
 	const endMarkerRef = useRef<maplibregl.Marker | null>(null);
 	const isReadyRef = useRef(false);
 	const previousStepRef = useRef(step);
+	// The ready signal waits while this map draws: from mount until its
+	// first "idle" after "load", and during each move until the next "idle".
+	const releaseMapHoldRef = useRef<(() => void) | null>(null);
 
 	// Create the map once per config, positioned directly at the view that
 	// matches the step it mounts at, so returning to an already-animated map
@@ -79,6 +109,7 @@ export function MapSlide({ config, step, active = true, printMode = false }: Map
 		});
 		mapRef.current = map;
 		isReadyRef.current = false;
+		holdMapUntilIdle(releaseMapHoldRef, MAP_LOAD_TIMEOUT_MS);
 
 		map.on('load', () => {
 			isReadyRef.current = true;
@@ -125,13 +156,22 @@ export function MapSlide({ config, step, active = true, printMode = false }: Map
 				(window as unknown as { __tapMap: maplibregl.Map }).__tapMap = map;
 				(window as unknown as { __tapMapReady: boolean }).__tapMapReady = true;
 			}
+
+			holdMapUntilIdle(releaseMapHoldRef, MAP_READY_TIMEOUT_MS);
 		});
 
 		map.on('error', (event) => {
 			console.error('Map error:', event);
 		});
 
+		map.on('idle', () => {
+			if (isReadyRef.current) {
+				releaseMapHoldRef.current?.();
+			}
+		});
+
 		return () => {
+			releaseMapHoldRef.current?.();
 			startMarkerRef.current?.remove();
 			startMarkerRef.current = null;
 			endMarkerRef.current?.remove();
@@ -163,6 +203,7 @@ export function MapSlide({ config, step, active = true, printMode = false }: Map
 
 		if (step >= 1 && wasStep < 1) {
 			if (printMode || prefersReducedMotion()) {
+				holdMapUntilIdle(releaseMapHoldRef, MAP_READY_TIMEOUT_MS);
 				map.jumpTo({
 					center: toMapLibreCoords(config.end),
 					zoom: config.endZoom,
@@ -170,6 +211,7 @@ export function MapSlide({ config, step, active = true, printMode = false }: Map
 					bearing: config.bearing
 				});
 			} else {
+				holdMapUntilIdle(releaseMapHoldRef, config.duration + MAP_READY_TIMEOUT_MS);
 				map.flyTo({
 					center: toMapLibreCoords(config.end),
 					zoom: config.endZoom,
@@ -181,6 +223,7 @@ export function MapSlide({ config, step, active = true, printMode = false }: Map
 			}
 		} else if (step < 1 && wasStep >= 1) {
 			if (prefersReducedMotion()) {
+				holdMapUntilIdle(releaseMapHoldRef, MAP_READY_TIMEOUT_MS);
 				map.jumpTo({
 					center: toMapLibreCoords(config.start),
 					zoom: config.zoom,
@@ -188,6 +231,7 @@ export function MapSlide({ config, step, active = true, printMode = false }: Map
 					bearing: config.bearing
 				});
 			} else {
+				holdMapUntilIdle(releaseMapHoldRef, RESET_DURATION + MAP_READY_TIMEOUT_MS);
 				map.flyTo({
 					center: toMapLibreCoords(config.start),
 					zoom: config.zoom,

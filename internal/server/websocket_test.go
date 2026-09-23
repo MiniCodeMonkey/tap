@@ -1712,3 +1712,86 @@ func TestWebSocketHubSendsNoDiskStatusOnceTheDiskIsFine(t *testing.T) {
 		t.Errorf("got an unexpected message: %s", data)
 	}
 }
+
+// dialHub connects to hub through a test server and reads the "connected"
+// message, which it returns.
+func dialHub(t *testing.T, hub *WebSocketHub) (*websocket.Conn, Message, context.Context) {
+	t.Helper()
+	testServer := httptest.NewServer(http.HandlerFunc(hub.HandleConnection))
+	t.Cleanup(testServer.Close)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	t.Cleanup(cancel)
+
+	conn, _, err := websocket.Dial(ctx, "ws"+strings.TrimPrefix(testServer.URL, "http")+"/", nil)
+	if err != nil {
+		t.Fatalf("websocket.Dial() error = %v", err)
+	}
+	t.Cleanup(func() { _ = conn.Close(websocket.StatusNormalClosure, "") })
+
+	_, data, err := conn.Read(ctx)
+	if err != nil {
+		t.Fatalf("reading the connected message: %v", err)
+	}
+	var connected Message
+	if err := json.Unmarshal(data, &connected); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v", err)
+	}
+	return conn, connected, ctx
+}
+
+func TestWebSocketHubBroadcastUpdate(t *testing.T) {
+	hub := NewWebSocketHub()
+	go hub.Run()
+	defer hub.Stop()
+
+	conn, _, ctx := dialHub(t, hub)
+	time.Sleep(50 * time.Millisecond)
+
+	if err := hub.BroadcastUpdate("r2", []int{2, 5}); err != nil {
+		t.Fatalf("BroadcastUpdate() error = %v", err)
+	}
+	_, data, err := conn.Read(ctx)
+	if err != nil {
+		t.Fatalf("conn.Read() error = %v", err)
+	}
+	if string(data) != `{"type":"update","revision":"r2","slides":[2,5]}` {
+		t.Errorf("update message = %s", data)
+	}
+}
+
+func TestWebSocketHubBroadcastUpdateWithNoChangedSlides(t *testing.T) {
+	hub := NewWebSocketHub()
+	go hub.Run()
+	defer hub.Stop()
+
+	conn, _, ctx := dialHub(t, hub)
+	time.Sleep(50 * time.Millisecond)
+
+	if err := hub.BroadcastUpdate("r3", nil); err != nil {
+		t.Fatalf("BroadcastUpdate() error = %v", err)
+	}
+	_, data, err := conn.Read(ctx)
+	if err != nil {
+		t.Fatalf("conn.Read() error = %v", err)
+	}
+	if string(data) != `{"type":"update","revision":"r3","slides":[]}` {
+		t.Errorf("update message = %s, want slides as an empty array", data)
+	}
+}
+
+func TestWebSocketHubConnectedMessageCarriesTheVersion(t *testing.T) {
+	hub := NewWebSocketHub()
+	go hub.Run()
+	defer hub.Stop()
+
+	_, before, _ := dialHub(t, hub)
+	if before.Version != "" {
+		t.Errorf("Version = %q before SetVersion, want empty", before.Version)
+	}
+
+	hub.SetVersion("v2.1.0")
+	_, after, _ := dialHub(t, hub)
+	if after.Version != "v2.1.0" {
+		t.Errorf("Version = %q, want %q", after.Version, "v2.1.0")
+	}
+}

@@ -9,8 +9,10 @@ import {
 	applyRemoteState,
 	usePresentationStore,
 	setThemeOverride,
-	getHashSlideIndexAtLoad
+	getHashSlideIndexAtLoad,
+	updatePresentationInPlace
 } from '$lib/stores/presentation';
+import { fetchPresentation } from '$lib/utils/fetchPresentation';
 
 // ============================================================================
 // Constants
@@ -267,19 +269,33 @@ export class WebSocketClient {
 	/**
 	 * Whether this page load (or, in a test, this client instance) has
 	 * received its first "connected" message yet. Set together with
-	 * firstRevision the first time one arrives; every "connected" message
-	 * after that is a reconnect, compared against firstRevision instead of
-	 * remembered.
+	 * knownRevision and firstVersion the first time one arrives; every
+	 * "connected" message after that is a reconnect, compared against those
+	 * instead of remembered.
 	 */
 	private hasSeenFirstConnected: boolean = false;
 
 	/**
-	 * The deck revision from this page load's first "connected" message
-	 * (see internal/server/websocket.go's Revision field). undefined until
-	 * that first message arrives, or if it carried no revision at all (a
-	 * hub that has never had a presentation set).
+	 * The deck revision this page shows: the one from this page load's
+	 * first "connected" message, then the one from each "update" it
+	 * applied. undefined until the first "connected" message, or when that
+	 * message carried no revision (a hub that has never had a presentation
+	 * set).
 	 */
-	private firstRevision: string | undefined = undefined;
+	private knownRevision: string | undefined = undefined;
+
+	/**
+	 * The tap version from this page load's first "connected" message. A
+	 * reconnect to a hub with another version reloads the page, because the
+	 * page's own code comes from tap.
+	 */
+	private firstVersion: string | undefined = undefined;
+
+	/**
+	 * Counts "update" messages, so that only the newest one's fetch is
+	 * applied when two overlap.
+	 */
+	private updateSequence: number = 0;
 
 	constructor(url?: string) {
 		// Default to current host with /ws path
@@ -370,12 +386,17 @@ export class WebSocketClient {
 	private dispatchMessage(message: WebSocketMessage): void {
 		switch (message.type) {
 			case 'connected':
-				this.handleConnected(message.revision, message.mode);
+				this.handleConnected(message.revision, message.mode, message.version);
 				break;
 
 			case 'reload':
 				// Hot reload - refresh the page
 				this.handleReload();
+				break;
+
+			case 'update':
+				// The deck changed: fetch it and re-render in place
+				this.handleUpdate();
 				break;
 
 			case 'slide':
@@ -395,10 +416,11 @@ export class WebSocketClient {
 	}
 
 	/**
-	 * Handle a "connected" message: remembers the revision carried by the
-	 * first one this page load receives, and reloads the page on any later
-	 * one (a reconnect - the socket dropped and came back, or the hub
-	 * itself restarted) whose revision differs from that first one. This is
+	 * Handle a "connected" message: remembers the revision and tap version
+	 * carried by the first one this page load receives, and reloads the page
+	 * on any later one (a reconnect - the socket dropped and came back, or
+	 * the hub itself restarted) whose revision differs from the one this
+	 * page shows, or whose tap version differs from the first one. This is
 	 * how a window left open through a `tap dev` restart, or a deck reload
 	 * while its socket was down, notices the deck changed instead of going
 	 * on showing the old one until someone reloads manually.
@@ -407,24 +429,51 @@ export class WebSocketClient {
 	 * first), since it reflects the hub's current mode rather than
 	 * something to compare across reconnects.
 	 *
-	 * Never reloads on the very first "connected" message, even when the
-	 * hub already has a revision by then (a page that loads after the hub
-	 * has been running a while) - there is nothing to compare it against
-	 * yet. Never loops: a reload starts a new page load, and the new
-	 * WebSocketClient's first "connected" message is recorded, not
-	 * compared, exactly as this one's was.
+	 * Never reloads on the very first "connected" message - there is
+	 * nothing to compare it against yet. Never loops: a reload starts a new
+	 * page load, and the new WebSocketClient's first "connected" message is
+	 * recorded, not compared.
 	 */
-	private handleConnected(revision: string | undefined, mode: 'present' | undefined): void {
+	private handleConnected(
+		revision: string | undefined,
+		mode: 'present' | undefined,
+		version: string | undefined
+	): void {
 		// The hub resends a non-fine disk status right after "connected", so a stale one from before a reconnect is cleared here.
 		useConnectionStore.setState({ diskStatus: 'ok', presentMode: mode === 'present' });
 		if (!this.hasSeenFirstConnected) {
 			this.hasSeenFirstConnected = true;
-			this.firstRevision = revision;
+			this.knownRevision = revision;
+			this.firstVersion = version;
 			return;
 		}
-		if (revision !== undefined && revision !== this.firstRevision) {
+		const revisionChanged = revision !== undefined && revision !== this.knownRevision;
+		const versionChanged =
+			version !== undefined && this.firstVersion !== undefined && version !== this.firstVersion;
+		if (revisionChanged || versionChanged) {
 			this.handleReload();
 		}
+	}
+
+	/**
+	 * Handle an "update" message: fetch the deck again and replace it in the
+	 * store without reloading (see updatePresentationInPlace), so the slide,
+	 * fragment, step and every component's state survive an edit. Only the
+	 * newest of overlapping updates applies. A fetch that fails reloads the
+	 * page instead, which is never worse than an update.
+	 */
+	private handleUpdate(): void {
+		this.updateSequence += 1;
+		const sequence = this.updateSequence;
+		fetchPresentation()
+			.then((data) => {
+				if (sequence !== this.updateSequence) return;
+				updatePresentationInPlace(data);
+				this.knownRevision = data.revision ?? this.knownRevision;
+			})
+			.catch(() => {
+				if (sequence === this.updateSequence) this.handleReload();
+			});
 	}
 
 	/**
@@ -557,7 +606,9 @@ export class WebSocketClient {
 		this.shouldReconnect = false;
 		this.hasOpenedBefore = false;
 		this.hasSeenFirstConnected = false;
-		this.firstRevision = undefined;
+		this.knownRevision = undefined;
+		this.firstVersion = undefined;
+		this.updateSequence = 0;
 
 		if (this.reconnectTimeout) {
 			clearTimeout(this.reconnectTimeout);

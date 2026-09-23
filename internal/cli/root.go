@@ -67,8 +67,17 @@ func execute(root *cobra.Command, args []string, stdout, stderr io.Writer) int {
 	}
 
 	exitCode, code, reported := classify(err)
+	// A --progress json run ends with one "done" line on stderr, so a
+	// program reading the lines learns the outcome without parsing text.
+	progress := progressRequested(command)
+	if progress {
+		writeProgressFailure(stderr, code, err.Error())
+	}
 	if jsonRequested(command) {
 		_ = printJSONError(stdout, code, err.Error())
+		return exitCode
+	}
+	if progress {
 		return exitCode
 	}
 	switch {

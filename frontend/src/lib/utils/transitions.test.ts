@@ -11,7 +11,7 @@ import {
 } from './transitions';
 
 function mockMatchMedia(matches: boolean): void {
-	vi.mocked(window.matchMedia).mockImplementation((query: string) => ({
+	vi.spyOn(window, 'matchMedia').mockImplementation((query: string) => ({
 		matches,
 		media: query,
 		onchange: null,

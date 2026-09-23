@@ -1,7 +1,8 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render } from '@testing-library/react';
 import { act } from 'react';
-import { MapSlide } from './MapSlide';
+import { MAP_LOAD_TIMEOUT_MS, MapSlide } from './MapSlide';
+import { heldBlockers, resetBlockersForTests } from '$lib/ready/blockers';
 import type { MapConfig } from '$lib/types';
 
 /**
@@ -225,5 +226,60 @@ describe('MapSlide', () => {
 
 		expect((window as unknown as { __tapMap: unknown }).__tapMap).toBeDefined();
 		expect((window as unknown as { __tapMapReady: boolean }).__tapMapReady).toBe(true);
+	});
+});
+
+describe('MapSlide and the ready signal', () => {
+	beforeEach(() => resetBlockersForTests());
+	afterEach(() => {
+		cleanup();
+		vi.useRealTimers();
+		MockMap.instances = [];
+	});
+
+	it('holds a map blocker until the map is idle after it loaded', () => {
+		render(<MapSlide config={baseConfig()} step={0} />);
+		expect(heldBlockers()).toEqual(['map']);
+
+		act(() => latestMap().trigger('idle'));
+		expect(heldBlockers()).toEqual(['map']);
+
+		act(() => latestMap().trigger('load'));
+		expect(heldBlockers()).toEqual(['map']);
+
+		act(() => latestMap().trigger('idle'));
+		expect(heldBlockers()).toEqual([]);
+	});
+
+	it('stops waiting for a map that never loads', () => {
+		vi.useFakeTimers();
+		render(<MapSlide config={baseConfig()} step={0} />);
+		expect(heldBlockers()).toEqual(['map']);
+
+		act(() => {
+			vi.advanceTimersByTime(MAP_LOAD_TIMEOUT_MS);
+		});
+		expect(heldBlockers()).toEqual([]);
+	});
+
+	it('holds again while the map flies to the next step', () => {
+		const config = baseConfig();
+		const { rerender } = render(<MapSlide config={config} step={0} />);
+		act(() => latestMap().trigger('load'));
+		act(() => latestMap().trigger('idle'));
+		expect(heldBlockers()).toEqual([]);
+
+		rerender(<MapSlide config={config} step={1} />);
+		expect(latestMap().flyTo).toHaveBeenCalled();
+		expect(heldBlockers()).toEqual(['map']);
+
+		act(() => latestMap().trigger('idle'));
+		expect(heldBlockers()).toEqual([]);
+	});
+
+	it('releases its blocker when it unmounts', () => {
+		const { unmount } = render(<MapSlide config={baseConfig()} step={0} />);
+		unmount();
+		expect(heldBlockers()).toEqual([]);
 	});
 });

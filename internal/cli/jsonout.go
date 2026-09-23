@@ -13,34 +13,51 @@ import (
 // {"ok": true} followed by the fields of payload, in their declared order.
 // payload must encode to a JSON object, or be nil for no fields.
 func printJSONOK(w io.Writer, payload any) error {
+	body, err := jsonEnvelope("JSON result", `{"ok":true`, payload, true)
+	if err != nil {
+		return err
+	}
+	body = append(body, '\n')
+	_, err = w.Write(body)
+	return err
+}
+
+// jsonEnvelope splices the fields of payload into a JSON object that starts
+// with prefix, such as `{"ok":true` or `{"phase":"done","ok":true`. payload
+// must encode to a JSON object, or be nil for no fields. label names the
+// value in error messages ("JSON result", "progress result"). indent
+// pretty-prints the result with two-space indentation; a progress line
+// stays on one line instead.
+func jsonEnvelope(label, prefix string, payload any, indent bool) ([]byte, error) {
 	body := []byte("{}")
 	if payload != nil {
 		encoded, err := json.Marshal(payload)
 		if err != nil {
-			return internalError(codeInternal, fmt.Errorf("encoding the JSON result: %w", err))
+			return nil, internalError(codeInternal, fmt.Errorf("encoding the %s: %w", label, err))
 		}
 		body = encoded
 	}
 	if len(body) < 2 || body[0] != '{' {
-		return internalError(codeInternal, fmt.Errorf("the JSON result must be an object, got %s", body))
+		return nil, internalError(codeInternal, fmt.Errorf("the %s must be an object, got %s", label, body))
 	}
 
 	var combined bytes.Buffer
-	combined.WriteString(`{"ok":true`)
+	combined.WriteString(prefix)
 	if rest := body[1:]; string(rest) == "}" {
 		combined.WriteByte('}')
 	} else {
 		combined.WriteByte(',')
 		combined.Write(rest)
 	}
+	if !indent {
+		return combined.Bytes(), nil
+	}
 
 	var indented bytes.Buffer
 	if err := json.Indent(&indented, combined.Bytes(), "", "  "); err != nil {
-		return internalError(codeInternal, fmt.Errorf("formatting the JSON result: %w", err))
+		return nil, internalError(codeInternal, fmt.Errorf("formatting the %s: %w", label, err))
 	}
-	indented.WriteByte('\n')
-	_, err := w.Write(indented.Bytes())
-	return err
+	return indented.Bytes(), nil
 }
 
 // jsonError is the "error" field of a failed command's --json result.
