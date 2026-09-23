@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -32,10 +33,10 @@ const (
 	// already refuses to queue more than that many commands, so a task
 	// queue of the same size never has to make handle wait for room.
 	appTaskQueueSize = appCommandQueueSize
-	// appWorkerJoinTimeout bounds how long quit waits for the worker's
-	// current task to finish. Reload, Saved, a recording action and a
-	// tunnel stop are all otherwise synchronous with no bound of their
-	// own, so without this, one that never returns would hang quit
+	// appWorkerJoinTimeout bounds how long quit waits for any one piece
+	// of work it does not control, the worker's current task among them.
+	// Reload, Saved, a recording action and a tunnel stop are all
+	// otherwise synchronous with no bound of their own, so without this, one that never returns would hang quit
 	// itself, not just leak a goroutine. When it expires, the task is
 	// abandoned (it may still be running, detached, on its own
 	// goroutine) and shutdown continues without it -- finishing tidily
@@ -52,7 +53,9 @@ type appSessionOptions struct {
 	Commands <-chan appCommand
 	Signals  <-chan os.Signal
 	// Startup runs once on its own goroutine: the recording consent and
-	// the live code approval. Its context ends when the run ends.
+	// the live code approval. Its context ends when the run ends, and it
+	// should honour it: quit waits for Startup to return only up to
+	// WorkerJoinTimeout, and then leaves it running and says so.
 	Startup func(ctx context.Context)
 	// Reload is the reload command: render the deck again and reload every
 	// page, as r does. It takes the session's context and should honour
@@ -80,10 +83,12 @@ type appSessionOptions struct {
 	// recording, so quit always returns even when standard input stays
 	// open unanswered.
 	KeepRecordingTimeout time.Duration
-	// WorkerJoinTimeout bounds how long quit waits for the worker's
-	// current task to finish before giving up on it and continuing
-	// shutdown anyway, so a command that ignores cancellation cannot
-	// hold the process open forever.
+	// WorkerJoinTimeout bounds every wait quit makes on work the session
+	// does not control: the startup, the recording reporter, the
+	// worker's current task, stopping the tunnel, and finishing the
+	// recording. Each wait gives up after this long and continues
+	// shutdown anyway, so nothing that ignores cancellation can hold the
+	// process open forever. Every one of them goes through quitJoiner.
 	WorkerJoinTimeout time.Duration
 }
 
@@ -171,24 +176,21 @@ func runAppSession(options appSessionOptions) {
 
 	end := func(askToKeep bool) {
 		cancel()
-		<-startupDone
-		<-reporterDone
-		workerJoined := true
-		select {
-		case <-session.workerDone:
-		case <-time.After(options.WorkerJoinTimeout):
-			workerJoined = false
-			session.fail(appErrorCommandStuck, fmt.Sprintf("a command did not stop within %s of quit; leaving it running in the background and shutting down anyway", options.WorkerJoinTimeout))
-		}
-		session.stopTunnelAtExit()
-		if workerJoined {
-			session.finishRecording(askToKeep)
+		joiner := &quitJoiner{session: session}
+		defer joiner.report()
+		bound := options.WorkerJoinTimeout
+		startupJoined := joiner.join("the startup", appErrorStartupStuck, bound, startupDone)
+		reporterJoined := joiner.join("the recording reporter", appErrorReporterStuck, bound, reporterDone)
+		workerJoined := joiner.join("a command", appErrorCommandStuck, bound, session.workerDone)
+		session.stopTunnelAtExit(joiner)
+		if workerJoined && reporterJoined && startupJoined {
+			session.finishRecordingAtExit(joiner, askToKeep)
 		} else {
-			// The abandoned task may still hold the recording's own
-			// lock, so finishRecording is skipped rather than risking
-			// end() itself hanging on the same state finishRecording
-			// would need to touch.
-			fmt.Fprintln(options.Log, "Skipping the recording summary: a stuck command left its state unknown.")
+			// Whatever was given up on may still hold the recording's
+			// own lock, so finishing the recording is skipped rather
+			// than spending another bound on state already known to be
+			// unreliable.
+			fmt.Fprintln(options.Log, "Skipping the recording summary: something stuck left its state unknown.")
 		}
 	}
 
@@ -375,7 +377,7 @@ func (session *appSession) tunnel(start bool) {
 // leaving the guard outside the bound would let that block hold up quit
 // indefinitely, which is the same failure class WorkerJoinTimeout exists
 // to close.
-func (session *appSession) stopTunnelAtExit() {
+func (session *appSession) stopTunnelAtExit(joiner *quitJoiner) {
 	tunnels := session.options.Tunnels
 	if tunnels == nil {
 		return
@@ -392,11 +394,57 @@ func (session *appSession) stopTunnelAtExit() {
 		}
 		session.options.Events.emit(appTunnelEvent{Type: appEventTunnel, State: "stopped"})
 	}()
+	joiner.join("stopping the tunnel", appErrorTunnelFailed, session.options.WorkerJoinTimeout, done)
+}
+
+// quitJoiner is how the quit path waits for anything it does not control.
+// Every join in end() goes through it, because a join written by hand is a
+// join whose bound and whose report of an expiry are left to be
+// remembered, and four rounds of this file's history say they are not. A
+// join through quitJoiner cannot be unbounded, and cannot expire quietly.
+//
+// A quit where several parts are stuck reports twice, never once per part.
+// The first expiry is sent the moment it happens, under that join's own
+// code, so an app watching a quit that is taking a while hears what is
+// holding it up while it is still happening. Later expiries in the same
+// quit are collected rather than sent, and report() closes with a single
+// event naming every part that was given up on, so the app still learns
+// all of them without being handed a burst of near-identical errors on the
+// way out. Every expiry is logged either way, so standard error keeps the
+// full sequence.
+type quitJoiner struct {
+	session *appSession
+	stuck   []string
+}
+
+// join waits for done, giving up after bound, and reports whether done
+// closed in time. what names the part being waited for, in a message that
+// reads as the subject of "did not finish": "the startup", "a command".
+// code is the error code the first expiry of a quit is sent under.
+func (joiner *quitJoiner) join(what, code string, bound time.Duration, done <-chan struct{}) bool {
 	select {
 	case <-done:
-	case <-time.After(session.options.WorkerJoinTimeout):
-		session.fail(appErrorTunnelFailed, fmt.Sprintf("stopping the tunnel did not finish within %s of quit; it may still be running", session.options.WorkerJoinTimeout))
+		return true
+	case <-time.After(bound):
 	}
+	joiner.stuck = append(joiner.stuck, what)
+	message := fmt.Sprintf("%s did not finish within %s of quit; leaving it running in the background and shutting down anyway", what, bound)
+	if len(joiner.stuck) == 1 {
+		joiner.session.fail(code, message)
+	} else {
+		fmt.Fprintf(joiner.session.options.Log, "error: %s\n", message)
+	}
+	return false
+}
+
+// report closes a quit that gave up on more than one part with one event
+// naming all of them. A quit that gave up on nothing, or on a single part
+// already reported as it happened, says nothing more.
+func (joiner *quitJoiner) report() {
+	if len(joiner.stuck) < 2 {
+		return
+	}
+	joiner.session.fail(appErrorShutdownStuck, "quit gave up waiting for "+strings.Join(joiner.stuck, ", ")+"; they may still be running")
 }
 
 // emitTunnelRunning sends the running tunnel's URL and a QR code of its
@@ -407,6 +455,26 @@ func (session *appSession) emitTunnelRunning(url string) {
 		event.QR = qr
 	}
 	session.options.Events.emit(event)
+}
+
+// finishRecordingAtExit finishes the recording on its own goroutine and
+// joins it through joiner, so the last calls quit makes into the tap
+// present run are bounded like every other call quit makes into something
+// it does not own. Its bound is the keep-recording bound plus the join
+// bound, because finishRecording legitimately spends the first of those
+// waiting for an answer, and only the time after that is a sign of a run
+// that will not finish.
+func (session *appSession) finishRecordingAtExit(joiner *quitJoiner, askToKeep bool) {
+	if session.options.Present == nil {
+		return
+	}
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		session.finishRecording(askToKeep)
+	}()
+	bound := session.options.KeepRecordingTimeout + session.options.WorkerJoinTimeout
+	joiner.join("finishing the recording", appErrorRecordingFailed, bound, done)
 }
 
 // finishRecording ends a tap present run. It asks keep-recording first

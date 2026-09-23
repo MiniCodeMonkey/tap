@@ -12,7 +12,11 @@ import (
 // fakePresent is a tap present run for tests: Toggle stops a recording, or
 // starts the next segment.
 type fakePresent struct {
-	mu             sync.Mutex
+	mu sync.Mutex
+	// finishBlock, when set, holds Finish until it closes. It is not
+	// taken under mu: a run whose Finish is slow does not lock out the
+	// rest of the interface.
+	finishBlock    chan struct{}
 	toggleErr      error
 	dir            string
 	state          tui.PresentRecordingState
@@ -72,6 +76,9 @@ func (present *fakePresent) Segment() int {
 func (present *fakePresent) Dir() string { return present.dir }
 
 func (present *fakePresent) Finish(keep bool) (recorder.RunSummary, error) {
+	if present.finishBlock != nil {
+		<-present.finishBlock
+	}
 	present.mu.Lock()
 	defer present.mu.Unlock()
 	present.finished, present.kept = true, keep

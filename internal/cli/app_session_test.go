@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/MiniCodeMonkey/tap/internal/recorder"
 	"github.com/MiniCodeMonkey/tap/internal/tui"
 )
 
@@ -621,5 +622,205 @@ func TestSlideReporterSendsEachNewPosition(t *testing.T) {
 	}
 	if second := log.next(t, appEventSlide); second["slide"] != float64(3) || second["step"] != float64(1) {
 		t.Errorf("second = %v, want slide 3 step 1; the same position twice must send one event", second)
+	}
+}
+
+// fakeLockedPresent is a tap present run whose mutex a test can take and
+// never give back, the way the real presentRecorder's mutex is taken by
+// whatever is in the middle of a recorder call. Every method goes through
+// that one mutex, so a reporter sampling the run while the mutex is held
+// blocks inside report() and cannot notice its context ending.
+type fakeLockedPresent struct {
+	mu sync.Mutex
+}
+
+var _ appPresentControl = (*fakeLockedPresent)(nil)
+
+func (present *fakeLockedPresent) State() tui.PresentRecordingState {
+	present.mu.Lock()
+	defer present.mu.Unlock()
+	return tui.PresentNotRecording
+}
+
+func (present *fakeLockedPresent) Elapsed() time.Duration {
+	present.mu.Lock()
+	defer present.mu.Unlock()
+	return 0
+}
+
+func (present *fakeLockedPresent) Toggle() error {
+	present.mu.Lock()
+	defer present.mu.Unlock()
+	return nil
+}
+
+func (present *fakeLockedPresent) Started() bool {
+	present.mu.Lock()
+	defer present.mu.Unlock()
+	return true
+}
+
+func (present *fakeLockedPresent) LeftFirstSlide() bool {
+	present.mu.Lock()
+	defer present.mu.Unlock()
+	return true
+}
+
+func (present *fakeLockedPresent) Blocked() string { return "" }
+
+func (present *fakeLockedPresent) Segment() int {
+	present.mu.Lock()
+	defer present.mu.Unlock()
+	return 1
+}
+
+func (present *fakeLockedPresent) Dir() string { return "/talks/recordings/run" }
+
+func (present *fakeLockedPresent) Finish(keep bool) (recorder.RunSummary, error) {
+	present.mu.Lock()
+	defer present.mu.Unlock()
+	return recorder.RunSummary{}, nil
+}
+
+// drainErrorEvents returns every error event written so far, in order, so
+// a test can say what quit reported and what it did not repeat.
+func drainErrorEvents(log *eventLog) []map[string]any {
+	time.Sleep(50 * time.Millisecond)
+	var events []map[string]any
+	for {
+		select {
+		case event := <-log.lines:
+			if event["type"] == appEventError {
+				events = append(events, event)
+			}
+		default:
+			return events
+		}
+	}
+}
+
+// TestAppSessionQuitReturnsWhenStartupIgnoresCancellation drives the first
+// of the two unbounded joins end() used to reach before its bounded one: a
+// Startup that never looks at its context and never returns. The join on
+// startupDone has to give up on it, and say so, or quit never returns.
+func TestAppSessionQuitReturnsWhenStartupIgnoresCancellation(t *testing.T) {
+	entered := make(chan struct{})
+	harness := startAppSessionForTest(t, func(options *appSessionOptions) {
+		options.WorkerJoinTimeout = 200 * time.Millisecond
+		options.Startup = func(context.Context) {
+			close(entered)
+			<-make(chan struct{}) // blocks forever, ignoring ctx
+		}
+	})
+	<-entered
+
+	harness.send(appCommand{Type: appCommandQuit})
+	harness.waitForEnd(t)
+
+	events := drainErrorEvents(harness.log)
+	if len(events) != 1 || events[0]["code"] != appErrorStartupStuck {
+		t.Fatalf("error events = %v, want one startup_stuck", events)
+	}
+	if message, _ := events[0]["message"].(string); !strings.Contains(message, "startup") {
+		t.Errorf("message = %q, want it to name the startup", message)
+	}
+}
+
+// TestAppSessionQuitReturnsWhenTheRecordingReporterBlocks drives the second
+// unbounded join: the recording reporter cannot return between ticks while
+// its own sampling is blocked on the run's mutex, so joining it
+// unconditionally holds quit open for as long as that mutex is held. The
+// worker is idle here, so the reporter is the only thing stuck.
+func TestAppSessionQuitReturnsWhenTheRecordingReporterBlocks(t *testing.T) {
+	present := &fakeLockedPresent{}
+	harness := startAppSessionForTest(t, func(options *appSessionOptions) {
+		options.Present = present
+		options.WorkerJoinTimeout = 200 * time.Millisecond
+		options.RecordingInterval = 5 * time.Millisecond
+	})
+	present.mu.Lock() // never unlocked: the next sampling blocks inside report()
+	time.Sleep(50 * time.Millisecond)
+
+	harness.send(appCommand{Type: appCommandQuit})
+	harness.waitForEnd(t)
+
+	events := drainErrorEvents(harness.log)
+	if len(events) != 1 || events[0]["code"] != appErrorReporterStuck {
+		t.Fatalf("error events = %v, want one reporter_stuck", events)
+	}
+}
+
+// TestAppSessionQuitReturnsWhenEverythingIsStuckAtOnce is the combination:
+// a startup that ignores cancellation, a recording reporter blocked on the
+// run's mutex, a command stuck inside a tunnel start, and that same stuck
+// start holding the tunnel controller's mutex so stopping the tunnel at
+// exit blocks too. Quit still returns, and the app still learns all four:
+// the first expiry is reported on its own as it happens, and one closing
+// event names every part that was given up on, instead of one event per
+// part.
+func TestAppSessionQuitReturnsWhenEverythingIsStuckAtOnce(t *testing.T) {
+	startupEntered := make(chan struct{})
+	tunnelEntered := make(chan struct{})
+	tunnels := &fakeLockedTunnels{entered: tunnelEntered}
+	present := &fakeLockedPresent{}
+	harness := startAppSessionForTest(t, func(options *appSessionOptions) {
+		options.WorkerJoinTimeout = 200 * time.Millisecond
+		options.RecordingInterval = 5 * time.Millisecond
+		options.Present = present
+		options.Tunnels = tunnels
+		options.Startup = func(context.Context) {
+			close(startupEntered)
+			<-make(chan struct{}) // blocks forever, ignoring ctx
+		}
+	})
+	<-startupEntered
+	start := true
+	harness.send(appCommand{Type: appCommandTunnel, Start: &start})
+	<-tunnelEntered
+	present.mu.Lock() // never unlocked: the reporter blocks inside report()
+	time.Sleep(50 * time.Millisecond)
+
+	harness.send(appCommand{Type: appCommandQuit})
+	harness.waitForEnd(t)
+
+	events := drainErrorEvents(harness.log)
+	if len(events) != 2 {
+		t.Fatalf("error events = %v, want two: the first expiry and one closing summary", events)
+	}
+	if events[0]["code"] != appErrorStartupStuck {
+		t.Errorf("first error event = %v, want startup_stuck", events[0])
+	}
+	if events[1]["code"] != appErrorShutdownStuck {
+		t.Fatalf("second error event = %v, want shutdown_stuck", events[1])
+	}
+	summary, _ := events[1]["message"].(string)
+	for _, what := range []string{"startup", "reporter", "command", "tunnel"} {
+		if !strings.Contains(summary, what) {
+			t.Errorf("summary %q does not name the stuck %s", summary, what)
+		}
+	}
+}
+
+// TestAppSessionQuitReturnsWhenFinishingTheRecordingBlocks covers the last
+// call quit makes into something it does not own: the run's own Finish.
+// Nothing else is stuck here, so quit reaches it, and only a bound on it
+// lets quit return when the run never finishes.
+func TestAppSessionQuitReturnsWhenFinishingTheRecordingBlocks(t *testing.T) {
+	present := &fakePresent{dir: "/talks/recordings/run", finishBlock: make(chan struct{})}
+	harness := startAppSessionForTest(t, func(options *appSessionOptions) {
+		options.Present = present
+		options.WorkerJoinTimeout = 200 * time.Millisecond
+		options.KeepRecordingTimeout = 100 * time.Millisecond
+	})
+
+	harness.send(appCommand{Type: appCommandQuit})
+	harness.waitForEnd(t)
+
+	events := drainErrorEvents(harness.log)
+	if len(events) != 1 || events[0]["code"] != appErrorRecordingFailed {
+		t.Fatalf("error events = %v, want one recording_failed", events)
+	}
+	if message, _ := events[0]["message"].(string); !strings.Contains(message, "finishing the recording") {
+		t.Errorf("message = %q, want it to name finishing the recording", message)
 	}
 }
