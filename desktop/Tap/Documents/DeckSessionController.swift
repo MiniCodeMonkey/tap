@@ -8,6 +8,8 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
     let session: TapSession
     let editorViewController = EditorViewController()
     let inspectorViewController = InspectorViewController()
+    let previewViewController = PreviewViewController()
+    private(set) var navigator = PreviewNavigator()
     private(set) var client: TapClient?
     private(set) var socket: TapSocket?
     private(set) var sourceSync: SourceSync!
@@ -37,6 +39,9 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
         }
         session.onStateChange = { [weak self] state in self?.sessionStateChanged(state) }
         editor.editorDelegate = self
+        inspectorViewController.embed(previewViewController)
+        previewViewController.onStepBackward = { [weak self] in self?.sendPreviewMessage(self?.navigator.stepBackward()) }
+        previewViewController.onStepForward = { [weak self] in self?.sendPreviewMessage(self?.navigator.stepForward()) }
     }
 
     func start() {
@@ -70,7 +75,18 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
         } else {
             editorViewController.hideBar(.deckErrors)
         }
+        // New counts for the shown slide, and a new number when slides moved around the cursor.
+        sendPreviewMessage(navigator.slidesChanged(list.slides))
+        if let index = editor.currentBoxIndex {
+            sendPreviewMessage(navigator.cursorMoved(to: editor.boxes[index].slide))
+        }
         onSlideListApplied?(list)
+    }
+
+    /// Moves the preview through the hub, and updates its labels.
+    func sendPreviewMessage(_ message: SlideMessage?) {
+        if let message { socket?.send(message) }
+        previewViewController.show(navigator)
     }
 
     private func sessionStateChanged(_ state: TapSession.State) {
@@ -88,6 +104,8 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
         newSocket.onMessage = { [weak self] message in self?.onHubMessage?(message) }
         newSocket.resume()
         socket = newSocket
+        previewViewController.load(client: newClient)
+        if let message = navigator.message { newSocket.send(message) }
         Task { await sourceSync.sendNow() }
     }
 
@@ -97,5 +115,8 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
         sourceSync.textDidChange()
     }
 
-    func editor(_ editor: EditorTextView, currentSlideDidChange index: Int?) {}
+    func editor(_ editor: EditorTextView, currentSlideDidChange index: Int?) {
+        guard let index, editor.boxes.indices.contains(index) else { return }
+        sendPreviewMessage(navigator.cursorMoved(to: editor.boxes[index].slide))
+    }
 }

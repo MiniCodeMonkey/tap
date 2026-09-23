@@ -40,6 +40,21 @@ class HostedTestCase: XCTestCase {
         try await waitUntil(timeout: 30, "\(count) boxes") { editor.boxes.count == count }
     }
 
+    func openDeckAndWaitForPreview(_ url: URL) async throws -> DeckDocument {
+        let document = try await openDeck(url)
+        _ = try await waitForRunningTap(document)
+        let preview = try XCTUnwrap(document.sessionController?.previewViewController)
+        try await waitUntil(timeout: 30, "the preview's first ready signal") { preview.lastReady != nil }
+        return document
+    }
+
+    @discardableResult
+    func waitForPreview(_ document: DeckDocument, slide: Int, timeout: TimeInterval = 15) async throws -> ReadyPayload {
+        let preview = try XCTUnwrap(document.sessionController?.previewViewController)
+        try await waitUntil(timeout: timeout, "the preview on slide \(slide)") { preview.lastReady?.slide == slide }
+        return try XCTUnwrap(preview.lastReady)
+    }
+
     /// Polls `condition` until it is true.
     //
     // condition is called across await points inside the loop below, which
