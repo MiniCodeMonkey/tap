@@ -187,9 +187,12 @@ func runDevServer(options serverOptions) (err error) {
 			// A free port, which the ready line reports.
 			port, portExplicit = 0, true
 		}
-		stdout, log, restoreStdout := claimStdoutForApp()
+		protocol, log, restoreStdout, claimErr := claimStdoutForApp()
+		if claimErr != nil {
+			return internalError(codeInternal, claimErr)
+		}
 		appLog = log
-		appEvents = newAppEventWriter(stdout, appLog)
+		appEvents = newAppEventWriter(protocol, appLog)
 		defer func() {
 			if err != nil {
 				_, code, _ := classify(err)

@@ -1,22 +1,25 @@
 package cli
 
 import (
+	"bufio"
+	"fmt"
 	"io"
 	"os"
 	"os/signal"
 	"sync"
 	"syscall"
+	"time"
 
-	"github.com/fatih/color"
+	"golang.org/x/sys/unix"
 )
 
 // appLogInUse is the bounded standard error writer of the --app run in
 // progress, and nil outside --app mode. It outlives runDevServer on
 // purpose: execute prints a failed command's error after the command has
-// returned, and that print is the process's last line. A raw write there
-// would be the one unbounded write of the run, on the statement before
-// the exit, where a log pipe the app is not draining costs the process
-// its exit. execute writes through this instead, and closes it after.
+// returned, and that print is the process's last line. It arrives after
+// the descriptors have been given back, so it is the one write of the run
+// the redirect does not cover, and it goes through this writer instead.
+// execute closes it.
 var (
 	appLogMu    sync.Mutex
 	appLogInUse *appLogWriter
@@ -46,41 +49,97 @@ func closeAppLog() {
 	}
 }
 
-// claimStdoutForApp gives standard output to the --app event writer
-// alone, and returns the real standard output for it along with the
-// bounded writer that owns standard error. Until restore runs, everything
-// else that prints to standard output, fmt.Print and the color helpers
-// alike, prints to standard error, which the app shows as the Tap Log. A
-// write to a closed pipe returns an error instead of killing tap, so a
-// recording is still finished when the app has gone.
+// claimStdoutForApp takes the process's standard output and standard
+// error descriptors away for the life of an --app run, and hands back the
+// real standard output for the protocol along with the bounded writer
+// that owns the log.
 //
-// The color helpers are pointed at the bounded log writer rather than at
-// standard error itself, so a warning printed while the app is not
-// reading its log pipe is dropped like any other log line instead of
-// holding the goroutine that printed it. Both of color's writers are
-// redirected: Success, Muted and Info write to color.Output, while
-// Warning and Error write to color.Error, and a warning is exactly the
-// kind of line a render path produces by the screenful. os.Stdout has to
-// stay a file, so a bare fmt.Print still reaches standard error directly;
-// every fmt.Print in tap dev and tap present is in a branch --app does
-// not run, and the render path and the quit path, where a blocked write
-// costs the process its exit, print through the writer.
+// Recognising a raw write and routing it somewhere safe does not work.
+// The set of ways to name a descriptor is open -- an alias, a method on
+// the file, io.WriteString, a color writer, a helper taking the writer as
+// an argument, the log package's own copy of standard error captured at
+// process start, a package that knows nothing about --app at all -- and
+// the cost of missing one is the process's exit, because a write to a
+// pipe the app is not draining blocks for as long as the app lives.
 //
-// restore hands standard output and both of color's writers back, but
-// leaves the log writer open and registered, because the process has one
-// more line to print after the command returns. execute closes it.
-func claimStdoutForApp() (stdout *os.File, log *appLogWriter, restore func()) {
-	stdout = os.Stdout
-	log = newAppLogWriter(os.Stderr)
-	previousColorOutput, previousColorError := color.Output, color.Error
-	os.Stdout = os.Stderr
-	color.Output = log
-	color.Error = log
+// So the descriptor is taken away instead. Both of the process's own
+// descriptors point at one pipe, and a goroutine drains that pipe into
+// the bounded log writer, which takes a line without waiting and drops
+// and counts when its queue is full. After this returns there is nowhere
+// a raw write can go except that pipe: a write from any package, through
+// any alias, in any syntax, on any goroutine, is bounded because there is
+// no other destination left. Child processes that inherit the descriptors
+// are bounded by the same construction.
+//
+// The protocol is safe from all of this because it no longer travels on
+// the descriptor. Standard output is duplicated first, and that
+// duplicate, which no package-level write can name, is what the event
+// writer gets. One JSON object per line goes there and nothing else does.
+// The log's real destination is a duplicate of standard error taken the
+// same way, so the two streams the app reads are exactly what they were.
+//
+// restore gives both descriptors back and waits, bounded, for what is
+// still in the pipe to reach the log. The bounded writer stays open and
+// registered across it, because the process has one more line to print
+// after the command returns and that line must still reach the app.
+func claimStdoutForApp() (protocol *os.File, log *appLogWriter, restore func(), err error) {
+	standardOutput, standardError := int(os.Stdout.Fd()), int(os.Stderr.Fd())
+	protocolDescriptor, err := unix.Dup(standardOutput)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("duplicating standard output for the app protocol: %w", err)
+	}
+	logDescriptor, err := unix.Dup(standardError)
+	if err != nil {
+		_ = unix.Close(protocolDescriptor)
+		return nil, nil, nil, fmt.Errorf("duplicating standard error for the app log: %w", err)
+	}
+	protocol = os.NewFile(uintptr(protocolDescriptor), "app protocol")
+	log = newAppLogWriter(os.NewFile(uintptr(logDescriptor), "app log"))
+
+	reader, writer, err := os.Pipe()
+	if err != nil {
+		_ = unix.Close(protocolDescriptor)
+		_ = unix.Close(logDescriptor)
+		return nil, nil, nil, fmt.Errorf("opening the app log pipe: %w", err)
+	}
+	// Fd puts the write end back in blocking mode, so a raw write waits
+	// for room rather than failing with EAGAIN. Waiting for room is never
+	// waiting for the app: the drain goroutine below empties this pipe
+	// whatever the app does. The read end keeps its own mode, which is
+	// what lets that goroutine read without tying up a thread.
+	writeEnd := int(writer.Fd())
+	release := func() {
+		_ = reader.Close()
+		_ = writer.Close()
+		_ = unix.Close(protocolDescriptor)
+		_ = unix.Close(logDescriptor)
+	}
+	if err := unix.Dup2(writeEnd, standardOutput); err != nil {
+		release()
+		return nil, nil, nil, fmt.Errorf("pointing standard output at the app log pipe: %w", err)
+	}
+	if err := unix.Dup2(writeEnd, standardError); err != nil {
+		_ = unix.Dup2(protocolDescriptor, standardOutput)
+		release()
+		return nil, nil, nil, fmt.Errorf("pointing standard error at the app log pipe: %w", err)
+	}
+	// The two descriptors above are the only copies of the write end that
+	// are wanted. Closing this one is what lets restore's handing them
+	// back end the drain goroutine's read.
+	_ = writer.Close()
+
+	drained := make(chan struct{})
+	go drainAppLogPipe(reader, log, drained)
 
 	appLogMu.Lock()
 	appLogInUse = log
 	appLogMu.Unlock()
 
+	// A write to the app's log pipe after the app has gone gets SIGPIPE,
+	// whose default is to kill the process. Ignoring it turns that into an
+	// error return, so a recording is still finished when the app has
+	// gone. The redirect itself cannot raise it: tap holds the read end of
+	// the pipe the descriptors point at for as long as they point at it.
 	brokenPipes := make(chan os.Signal, 1)
 	signal.Notify(brokenPipes, syscall.SIGPIPE)
 	go func() {
@@ -88,11 +147,45 @@ func claimStdoutForApp() (stdout *os.File, log *appLogWriter, restore func()) {
 		}
 	}()
 
-	return stdout, log, func() {
-		signal.Stop(brokenPipes)
-		close(brokenPipes)
-		os.Stdout = stdout
-		color.Output = previousColorOutput
-		color.Error = previousColorError
+	var once sync.Once
+	restore = func() {
+		once.Do(func() {
+			signal.Stop(brokenPipes)
+			close(brokenPipes)
+			_ = unix.Dup2(protocolDescriptor, standardOutput)
+			_ = unix.Dup2(logDescriptor, standardError)
+			// No copy of the write end is left now, so the drain
+			// goroutine reads what is still in the pipe and stops. The
+			// wait is bounded like every other wait on the quit path, and
+			// what it gives up on is some advisory lines on a process
+			// that is about to exit.
+			timer := time.NewTimer(appLogCloseBound)
+			defer timer.Stop()
+			select {
+			case <-drained:
+			case <-timer.C:
+			}
+			_ = reader.Close()
+		})
+	}
+	return protocol, log, restore, nil
+}
+
+// drainAppLogPipe moves everything written to the redirected descriptors
+// into the bounded log writer, a line at a time so a dropped line is a
+// whole line. It never waits on anything but the pipe: the writer takes a
+// line without waiting and drops it when its queue is full, which is what
+// makes a raw write to a redirected descriptor impossible to block on.
+func drainAppLogPipe(reader *os.File, log io.Writer, drained chan<- struct{}) {
+	defer close(drained)
+	lines := bufio.NewReader(reader)
+	for {
+		line, err := lines.ReadBytes('\n')
+		if len(line) > 0 {
+			_, _ = log.Write(line)
+		}
+		if err != nil {
+			return
+		}
 	}
 }

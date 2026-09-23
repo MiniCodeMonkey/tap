@@ -4,16 +4,13 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
-	"go/ast"
-	"go/parser"
-	"go/printer"
-	"go/token"
 	"io"
 	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -32,6 +29,37 @@ type unreadLogApp struct {
 	port    int
 	token   string
 	base    string
+	// strayMu guards stray, the lines on standard output that were not one
+	// JSON object. The protocol is one object per line and nothing else,
+	// so any line here is a log line that reached the protocol stream.
+	strayMu sync.Mutex
+	stray   []string
+}
+
+// noteStray records a line of standard output that was not one JSON
+// object.
+func (app *unreadLogApp) noteStray(line string) {
+	app.strayMu.Lock()
+	app.stray = append(app.stray, line)
+	app.strayMu.Unlock()
+}
+
+// requireCleanProtocol fails the test if anything but one JSON object per
+// line reached standard output. Standard output is the protocol, and a
+// log line landing in it is as bad as a log line blocking: the app stops
+// being able to parse what its child is saying.
+func (app *unreadLogApp) requireCleanProtocol() {
+	app.t.Helper()
+	app.strayMu.Lock()
+	defer app.strayMu.Unlock()
+	if len(app.stray) == 0 {
+		return
+	}
+	shown := app.stray
+	if len(shown) > 5 {
+		shown = shown[:5]
+	}
+	app.t.Errorf("%d line(s) on standard output were not protocol objects, the first of them:\n%s", len(app.stray), strings.Join(shown, "\n"))
 }
 
 // startAppWithUnreadLog starts tap with args and its own settings folder,
@@ -72,11 +100,13 @@ func startAppWithUnreadLog(t *testing.T, args ...string) *unreadLogApp {
 		scanner.Buffer(make([]byte, 0, 64*1024), 16<<20)
 		for scanner.Scan() {
 			var event map[string]any
-			if json.Unmarshal(scanner.Bytes(), &event) == nil {
-				select {
-				case app.events <- event:
-				default:
-				}
+			if json.Unmarshal(scanner.Bytes(), &event) != nil {
+				app.noteStray(scanner.Text())
+				continue
+			}
+			select {
+			case app.events <- event:
+			default:
 			}
 		}
 		app.exited <- command.Wait()
@@ -279,181 +309,4 @@ func TestAppDevRendersWhenStandardErrorIsNotReadAndTheDeckWarns(t *testing.T) {
 			t.Fatalf("the file watcher stopped reporting changes after %d of them", touch)
 		}
 	}
-}
-
-// rawStandardErrorWrites are the functions in package cli that write
-// straight to the raw standard error descriptor, each with the reason it
-// is out of reach of --app mode. Everything tap does under --app goes
-// through the bounded log writer instead, because a write to a pipe the
-// app is not draining blocks for as long as the app lives, and a blocked
-// write is how this branch has lost the process's exit before.
-var rawStandardErrorWrites = map[string]string{
-	"runBuild":        "tap build has no --app",
-	"runExportPDF":    "tap export pdf has no --app",
-	"runExportImages": "tap export images has no --app",
-	"spinner.start":   "draws nothing unless standard error is a terminal, which an app pipe is not",
-	"spinner.stop":    "erases what start drew, under the same terminal check",
-}
-
-// TestNoRawStandardErrorWriteIsReachableInAppMode reads package cli and
-// requires every write to os.Stderr to be in a function that --app mode
-// cannot reach. Patching the one call a reproduction happened to find
-// leaves the others, so the rule is the writer, not the call site: a new
-// raw write has to be named here, with the reason --app never runs it,
-// before it can land.
-func TestNoRawStandardErrorWriteIsReachableInAppMode(t *testing.T) {
-	entries, err := os.ReadDir(".")
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, entry := range entries {
-		name := entry.Name()
-		if !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
-			continue
-		}
-		fileSet := token.NewFileSet()
-		source, err := parser.ParseFile(fileSet, name, nil, 0)
-		if err != nil {
-			t.Fatal(err)
-		}
-		for _, declaration := range source.Decls {
-			function, isFunction := declaration.(*ast.FuncDecl)
-			if !isFunction {
-				continue
-			}
-			functionName := function.Name.Name
-			if function.Recv != nil && len(function.Recv.List) == 1 {
-				functionName = receiverTypeName(function.Recv.List[0].Type) + "." + functionName
-			}
-			ast.Inspect(function, func(node ast.Node) bool {
-				call, isCall := node.(*ast.CallExpr)
-				if !isCall || !writesToRawStandardError(call) {
-					return true
-				}
-				if reason, known := rawStandardErrorWrites[functionName]; known {
-					t.Logf("%s in %s writes to the raw descriptor on purpose: %s", functionName, name, reason)
-					return true
-				}
-				var text strings.Builder
-				if err := printer.Fprint(&text, fileSet, call); err != nil {
-					t.Fatal(err)
-				}
-				t.Errorf("%s in %s writes straight to standard error, which --app mode must not reach:\n%s", functionName, name, text.String())
-				return true
-			})
-		}
-	}
-}
-
-// receiverTypeName is a method receiver's type name, without the pointer.
-func receiverTypeName(expression ast.Expr) string {
-	if star, isPointer := expression.(*ast.StarExpr); isPointer {
-		expression = star.X
-	}
-	if name, isName := expression.(*ast.Ident); isName {
-		return name.Name
-	}
-	return "?"
-}
-
-// writesToRawStandardError reports whether call hands os.Stderr to one of
-// fmt's writers. A reference to os.Stderr that is not written to, such as
-// the default value of a log writer or a terminal check, is not a write.
-func writesToRawStandardError(call *ast.CallExpr) bool {
-	selector, isSelector := call.Fun.(*ast.SelectorExpr)
-	if !isSelector {
-		return false
-	}
-	qualifier, isName := selector.X.(*ast.Ident)
-	if !isName || qualifier.Name != "fmt" || !strings.HasPrefix(selector.Sel.Name, "Fprint") {
-		return false
-	}
-	if len(call.Args) == 0 {
-		return false
-	}
-	target, isTarget := call.Args[0].(*ast.SelectorExpr)
-	if !isTarget {
-		return false
-	}
-	owner, isOwner := target.X.(*ast.Ident)
-	return isOwner && owner.Name == "os" && target.Sel.Name == "Stderr"
-}
-
-// TestNoBarePrintInRunDevServerIsReachableInAppMode covers the one thing
-// the redirect above cannot reach. os.Stdout has to stay a real file, so
-// --app mode points it at standard error itself rather than at the
-// bounded writer, and a bare fmt.Print is therefore the one write in tap
-// dev and tap present that still goes to the raw descriptor. Every one of
-// them has to sit in a branch --app does not run: the tunnel banner, the
-// headless banner, the terminal interface. --app rejects --headless and
-// starts no tunnel of its own, so the condition is the proof.
-func TestNoBarePrintInRunDevServerIsReachableInAppMode(t *testing.T) {
-	fileSet := token.NewFileSet()
-	source, err := parser.ParseFile(fileSet, "dev.go", nil, 0)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var runDevServer *ast.FuncDecl
-	for _, declaration := range source.Decls {
-		if function, isFunction := declaration.(*ast.FuncDecl); isFunction && function.Name.Name == "runDevServer" {
-			runDevServer = function
-		}
-	}
-	if runDevServer == nil {
-		t.Fatal("runDevServer is not in dev.go any more; move this test with it")
-	}
-
-	var ancestors []ast.Node
-	ast.Inspect(runDevServer, func(node ast.Node) bool {
-		if node == nil {
-			ancestors = ancestors[:len(ancestors)-1]
-			return false
-		}
-		ancestors = append(ancestors, node)
-		call, isCall := node.(*ast.CallExpr)
-		if !isCall || !isBarePrint(call) || guardedAgainstAppMode(fileSet, ancestors) {
-			return true
-		}
-		var text strings.Builder
-		if err := printer.Fprint(&text, fileSet, call); err != nil {
-			t.Fatal(err)
-		}
-		t.Errorf("a bare print in runDevServer is not in a branch --app skips, so it writes to the raw descriptor:\n%s", text.String())
-		return true
-	})
-}
-
-// isBarePrint reports whether call is one of fmt's package-level prints,
-// which write to os.Stdout rather than to a writer a caller chose.
-func isBarePrint(call *ast.CallExpr) bool {
-	selector, isSelector := call.Fun.(*ast.SelectorExpr)
-	if !isSelector {
-		return false
-	}
-	qualifier, isName := selector.X.(*ast.Ident)
-	if !isName || qualifier.Name != "fmt" {
-		return false
-	}
-	name := selector.Sel.Name
-	return name == "Print" || name == "Printf" || name == "Println"
-}
-
-// guardedAgainstAppMode reports whether any enclosing if statement asks
-// about --app or about headless mode, which --app cannot be combined
-// with.
-func guardedAgainstAppMode(fileSet *token.FileSet, ancestors []ast.Node) bool {
-	for _, ancestor := range ancestors {
-		branch, isBranch := ancestor.(*ast.IfStmt)
-		if !isBranch {
-			continue
-		}
-		var condition strings.Builder
-		if printer.Fprint(&condition, fileSet, branch.Cond) != nil {
-			continue
-		}
-		if strings.Contains(condition.String(), "options.app") || strings.Contains(condition.String(), "headless") {
-			return true
-		}
-	}
-	return false
 }
