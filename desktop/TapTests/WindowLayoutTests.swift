@@ -25,6 +25,11 @@ final class WindowLayoutTests: HostedTestCase {
         let document = try await openDeck(try Fixtures.copyDeck("plain.md"))
         let controller = try windowController(for: document)
         let split = controller.splitViewController
+        // Below 641 (320 + 1 + 320) AppKit itself pins both panes to their
+        // minimum thickness, which must not read as a person dragging the
+        // divider: growing the window back out should still rebalance it.
+        controller.window?.setContentSize(NSSize(width: 600, height: 800))
+        split.view.layoutSubtreeIfNeeded()
         controller.window?.setContentSize(NSSize(width: 1201, height: 800))
         split.view.layoutSubtreeIfNeeded()
         XCTAssertEqual(split.editorItem.viewController.view.frame.width, split.inspectorItem.viewController.view.frame.width, accuracy: 2, "the divider splits whatever width the window actually has")
