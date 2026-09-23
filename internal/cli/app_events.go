@@ -45,14 +45,18 @@ const (
 // appEventQueueSize is how many events can wait for the writer.
 const appEventQueueSize = 1024
 
-// appReadyEvent is the first line on standard output.
+// appReadyEvent is the first line on standard output. Presenter is the
+// secret a client needs to drive the audience's deck, which the app
+// passes as ?key= when it opens the presenter view; watching needs
+// nothing.
 //
 //nolint:govet // fieldalignment: field order is the JSON output order
 type appReadyEvent struct {
-	Type   string `json:"type"`
-	Port   int    `json:"port"`
-	Token  string `json:"token"`
-	Launch string `json:"launch"`
+	Type      string `json:"type"`
+	Port      int    `json:"port"`
+	Token     string `json:"token"`
+	Launch    string `json:"launch"`
+	Presenter string `json:"presenter"`
 }
 
 // appFileChangedEvent reports a file that the watcher saw change and tap

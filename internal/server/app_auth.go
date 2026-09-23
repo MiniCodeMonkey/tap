@@ -17,13 +17,15 @@ import (
 // as a cookie in exchange for the one-time launch code, so the token never
 // appears in a URL.
 type AppAuth struct {
-	token      string
-	launchCode string
-	mu         sync.Mutex
-	launchUsed bool
+	token             string
+	launchCode        string
+	presenterPassword string
+	mu                sync.Mutex
+	launchUsed        bool
 }
 
-// NewAppAuth makes a token and a launch code, 32 random bytes each.
+// NewAppAuth makes a token, a launch code and a presenter password, 32
+// random bytes each.
 func NewAppAuth() (*AppAuth, error) {
 	token, err := randomHex(32)
 	if err != nil {
@@ -33,7 +35,11 @@ func NewAppAuth() (*AppAuth, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &AppAuth{token: token, launchCode: launchCode}, nil
+	presenterPassword, err := randomHex(32)
+	if err != nil {
+		return nil, err
+	}
+	return &AppAuth{token: token, launchCode: launchCode, presenterPassword: presenterPassword}, nil
 }
 
 func randomHex(size int) (string, error) {
@@ -49,6 +55,16 @@ func (a *AppAuth) Token() string { return a.token }
 
 // LaunchCode is the one-time code the app puts in the first URL it loads.
 func (a *AppAuth) LaunchCode() string { return a.launchCode }
+
+// PresenterPassword is the secret that separates steering the deck from
+// watching it. The audience routes stay open to anyone with the address
+// or the tunnel link, and /ws is one of them, but a WebSocket connection
+// only relays its slide and theme messages to everyone else once it has
+// proved it knows this (see WebSocketHub.checkPresenterAuth). A desktop
+// app is a program rather than a person, so it can hold a generated
+// secret without anyone typing it. A user who passes
+// --presenter-password keeps theirs; this is only the default.
+func (a *AppAuth) PresenterPassword() string { return a.presenterPassword }
 
 // AppSessionCookieName is the cookie that carries the token for the server
 // on port. Cookies do not keep ports apart, and the app runs tap dev and

@@ -11,6 +11,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/cookiejar"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -52,9 +53,10 @@ type appProcess struct {
 	done    chan struct{}
 	exitErr error
 	stderr  *appLogBuffer
-	base    string
-	token   string
-	launch  string
+	base      string
+	token     string
+	launch    string
+	presenter string
 	port    int
 	mu      sync.Mutex
 	lines   []string
@@ -164,6 +166,7 @@ func startAppProcess(t *testing.T, configHome string, args ...string) *appProces
 	process.port = int(port)
 	process.token, _ = ready["token"].(string)
 	process.launch, _ = ready["launch"].(string)
+	process.presenter, _ = ready["presenter"].(string)
 	process.base = fmt.Sprintf("http://127.0.0.1:%d", process.port)
 	return process
 }
@@ -369,6 +372,82 @@ func (process *appProcess) dialWebSocket() (*websocket.Conn, context.Context) {
 	process.t.Cleanup(func() { _ = conn.Close(websocket.StatusNormalClosure, "") })
 	readWebSocketUntil(process.t, ctx, conn, "connected")
 	return conn, ctx
+}
+
+// dialAudienceWebSocket opens the WebSocket the way anyone with the
+// address does: no app token, no presenter cookie. Viewing is open in
+// --app mode, so this connection registers and receives every broadcast.
+func (process *appProcess) dialAudienceWebSocket() (*websocket.Conn, context.Context) {
+	process.t.Helper()
+	return process.dialWebSocketWith(nil)
+}
+
+// dialPresenterWebSocket opens the WebSocket the way the app's own
+// presenter window does: it loads /presenter with the presenter secret
+// from the ready line, which answers with the presenter auth cookie, and
+// carries that cookie into the connection.
+func (process *appProcess) dialPresenterWebSocket() (*websocket.Conn, context.Context) {
+	process.t.Helper()
+	return process.dialWebSocketWith(http.Header{"Cookie": {server.PresenterAuthCookieName + "=" + process.presenterCookie()}})
+}
+
+// presenterCookie trades the presenter secret for the presenter auth
+// cookie value, as a browser loading the presenter page does.
+func (process *appProcess) presenterCookie() string {
+	process.t.Helper()
+	request, err := http.NewRequest(http.MethodGet, process.base+"/presenter?key="+url.QueryEscape(process.presenter), nil)
+	if err != nil {
+		process.t.Fatal(err)
+	}
+	client := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	response, err := client.Do(request)
+	if err != nil {
+		process.t.Fatalf("loading the presenter page: %v", err)
+	}
+	defer response.Body.Close()
+	for _, cookie := range response.Cookies() {
+		if cookie.Name == server.PresenterAuthCookieName {
+			return cookie.Value
+		}
+	}
+	body, _ := io.ReadAll(response.Body)
+	process.t.Fatalf("the presenter page set no auth cookie: %d %s", response.StatusCode, body)
+	return ""
+}
+
+func (process *appProcess) dialWebSocketWith(header http.Header) (*websocket.Conn, context.Context) {
+	process.t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	process.t.Cleanup(cancel)
+	conn, _, err := websocket.Dial(ctx, fmt.Sprintf("ws://127.0.0.1:%d/ws", process.port), &websocket.DialOptions{HTTPHeader: header})
+	if err != nil {
+		process.t.Fatalf("dialing the WebSocket: %v", err)
+	}
+	process.t.Cleanup(func() { _ = conn.Close(websocket.StatusNormalClosure, "") })
+	readWebSocketUntil(process.t, ctx, conn, "connected")
+	return conn, ctx
+}
+
+// sendSlide sends the message a client uses to drive every other client
+// to a slide.
+func sendSlide(t *testing.T, ctx context.Context, conn *websocket.Conn, index int) {
+	t.Helper()
+	message, err := json.Marshal(map[string]any{"type": "slide", "slideIndex": index})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := conn.Write(ctx, websocket.MessageText, message); err != nil {
+		t.Fatalf("sending a slide message: %v", err)
+	}
+}
+
+// readSlideIndex reads until a relayed slide message arrives and returns
+// the slide it names.
+func readSlideIndex(t *testing.T, ctx context.Context, conn *websocket.Conn) int {
+	t.Helper()
+	message := readWebSocketUntil(t, ctx, conn, "slide")
+	index, _ := message["slideIndex"].(float64)
+	return int(index)
 }
 
 // readWebSocketUntil reads messages until one of messageType arrives.
@@ -754,5 +833,34 @@ func TestAppDevReportsAStartupFailureAsAnErrorEvent(t *testing.T) {
 	var event map[string]any
 	if len(lines) != 1 || json.Unmarshal([]byte(lines[0]), &event) != nil || event["type"] != appEventError || event["code"] == "" {
 		t.Errorf("stdout = %q, want one error event\nstderr: %s", stdout.String(), stderr.String())
+	}
+}
+
+// TestAppDevLeavesViewingOpenAndClosesSteering covers the ruling that
+// --app mode sets a presenter password of its own: the audience routes,
+// the WebSocket among them, stay reachable by anyone with the address or
+// the tunnel link, but driving the audience's deck needs the secret the
+// ready line hands the app.
+func TestAppDevLeavesViewingOpenAndClosesSteering(t *testing.T) {
+	process := startAppProcess(t, t.TempDir(), "dev", "--app", copyAppFixture(t))
+	if len(process.presenter) != 64 {
+		t.Fatalf("ready line presenter secret %q, want 64 hex characters", process.presenter)
+	}
+
+	audience, audienceCtx := process.dialAudienceWebSocket()
+	presenter, presenterCtx := process.dialPresenterWebSocket()
+
+	// A client without the secret can watch, so it may not steer.
+	sendSlide(t, audienceCtx, audience, 1)
+	time.Sleep(250 * time.Millisecond)
+	// A client with the secret steers, and the watcher sees where it went.
+	sendSlide(t, presenterCtx, presenter, 2)
+	if index := readSlideIndex(t, audienceCtx, audience); index != 2 {
+		t.Errorf("the audience was driven to slide %d, want 2: a client without the presenter secret steered the deck", index)
+	}
+
+	process.send(`{"type":"quit"}`)
+	if err := process.waitForExit(); err != nil {
+		t.Fatalf("tap exited with %v:\n%s", err, process.stderr)
 	}
 }

@@ -147,7 +147,7 @@ func TestAppEventJSON(t *testing.T) {
 		event any
 		want  string
 	}{
-		{appReadyEvent{Type: appEventReady, Port: 49152, Token: "t", Launch: "l"}, `{"type":"ready","port":49152,"token":"t","launch":"l"}`},
+		{appReadyEvent{Type: appEventReady, Port: 49152, Token: "t", Launch: "l", Presenter: "p"}, `{"type":"ready","port":49152,"token":"t","launch":"l","presenter":"p"}`},
 		{appFileChangedEvent{Type: appEventFileChanged, Path: "/talks/talk.md"}, `{"type":"file-changed","path":"/talks/talk.md"}`},
 		{
 			appFileChangedEvent{Type: appEventFileChanged, Path: "/talks/slides/Counter.jsx", Result: &slidelist.Result{Slides: []slidelist.Slide{}, Errors: []string{}}},
@@ -185,7 +185,7 @@ func TestClaimStdoutForAppSendsEverythingElseToStderr(t *testing.T) {
 	fmt.Println("plain text")
 	Success("colored text\n")
 	Info("more text\n")
-	writer.emit(appReadyEvent{Type: appEventReady, Port: 1, Token: "t", Launch: "l"})
+	writer.emit(appReadyEvent{Type: appEventReady, Port: 1, Token: "t", Launch: "l", Presenter: "p"})
 	writer.close()
 	restore()
 
@@ -194,7 +194,7 @@ func TestClaimStdoutForAppSendsEverythingElseToStderr(t *testing.T) {
 	}
 	stdoutText, _ := os.ReadFile(fakeStdout.Name())
 	stderrText, _ := os.ReadFile(fakeStderr.Name())
-	if string(stdoutText) != `{"type":"ready","port":1,"token":"t","launch":"l"}`+"\n" {
+	if string(stdoutText) != `{"type":"ready","port":1,"token":"t","launch":"l","presenter":"p"}`+"\n" {
 		t.Errorf("stdout = %q, want only the ready line", stdoutText)
 	}
 	for _, want := range []string{"plain text", "colored text", "more text"} {

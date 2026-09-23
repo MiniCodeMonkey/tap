@@ -190,6 +190,17 @@ func runDevServer(options serverOptions) (err error) {
 		if err != nil {
 			return internalError(codeInternal, err)
 		}
+		if presenterPassword == "" {
+			// Viewing is open in --app mode and steering is not. The
+			// WebSocket is an audience route, so without a presenter
+			// password any local process, and anyone holding the tunnel
+			// link, could drive the audience's deck. The app holds this
+			// generated secret instead of a person typing one, and the
+			// ready line hands it over. A --presenter-password of the
+			// user's own is left alone, and nothing changes for tap dev
+			// without --app.
+			presenterPassword = appAuth.PresenterPassword()
+		}
 	}
 
 	// Resolve absolute path
@@ -767,7 +778,7 @@ func runDevServer(options serverOptions) (err error) {
 			_ = hub.BroadcastReload()
 		}
 
-		appEvents.emit(appReadyEvent{Type: appEventReady, Port: port, Token: appAuth.Token(), Launch: appAuth.LaunchCode()})
+		appEvents.emit(appReadyEvent{Type: appEventReady, Port: port, Token: appAuth.Token(), Launch: appAuth.LaunchCode(), Presenter: presenterPassword})
 		go readAppCommands(os.Stdin, questions, appEvents, commands)
 		runAppSession(appSessionOptions{
 			Events:    appEvents,
