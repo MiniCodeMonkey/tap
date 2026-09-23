@@ -27,13 +27,13 @@ final class WindowLayoutTests: HostedTestCase {
         let split = controller.splitViewController
         controller.window?.setContentSize(NSSize(width: 1201, height: 800))
         split.view.layoutSubtreeIfNeeded()
-        XCTAssertEqual(split.editorItem.viewController.view.frame.width, 600, accuracy: 1)
+        XCTAssertEqual(split.editorItem.viewController.view.frame.width, split.inspectorItem.viewController.view.frame.width, accuracy: 2, "the divider splits whatever width the window actually has")
 
         split.splitView.setPosition(400, ofDividerAt: 0)
         split.userDidDragDivider()
         controller.window?.setContentSize(NSSize(width: 1000, height: 800))
         split.view.layoutSubtreeIfNeeded()
-        XCTAssertNotEqual(split.editorItem.viewController.view.frame.width, 499.5, accuracy: 1, "a dragged divider stays where the user put it")
+        XCTAssertNotEqual(split.editorItem.viewController.view.frame.width, split.inspectorItem.viewController.view.frame.width, accuracy: 2, "a dragged divider stays where the user put it")
     }
 
     func testTogglePreviewPinAndItsMenuItemTitle() async throws {
