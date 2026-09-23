@@ -103,7 +103,7 @@ func (m *DevModel) applyTunnelMsg(msg tunnelMsg) *DevModel {
 	}
 
 	m.tunnelURL = msg.url
-	m.tunnelQR = tunnelQRCode(presenterTarget(msg.url, m.config.PresenterPassword))
+	m.tunnelQR = tunnelQRCode(PresenterTarget(msg.url, m.config.PresenterPassword))
 	m.addEvent(DevEvent{
 		Type:      "action",
 		Message:   "Tunnel up: " + msg.url,
@@ -122,11 +122,11 @@ func (m *DevModel) qrCode() string {
 	return m.config.QRCodeASCII
 }
 
-// presenterTarget is where a scanned QR code should land: the presenter
+// PresenterTarget is where a scanned QR code should land: the presenter
 // view, which carries the speaker notes and the controls, and which links
 // on to the slides themselves. A password rides along, since the view is
 // gated without it.
-func presenterTarget(tunnelURL, presenterPassword string) string {
+func PresenterTarget(tunnelURL, presenterPassword string) string {
 	if tunnelURL == "" {
 		return ""
 	}
