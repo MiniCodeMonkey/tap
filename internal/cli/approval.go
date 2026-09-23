@@ -57,9 +57,9 @@ type approvalBlock struct {
 }
 
 // approvalAsker puts an approval request to the person and returns the
-// answer. The terminal asks on standard input. tap dev --app sends the
-// request as a question event and reads the answer from standard input.
-// Never the slide page, where page script could answer.
+// answer. The only implementation, terminalAsker, asks on standard
+// input, before the TUI starts. Never the slide page, where page script
+// could answer.
 type approvalAsker interface {
 	askApproval(request approvalRequest) (bool, error)
 }
