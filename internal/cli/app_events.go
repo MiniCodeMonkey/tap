@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"sync"
+	"time"
 
 	"github.com/MiniCodeMonkey/tap/internal/slidelist"
 )
@@ -185,4 +186,40 @@ func (writer *appEventWriter) close() {
 	}
 	writer.mu.Unlock()
 	<-writer.done
+}
+
+// appEventCloseBound is how long closing the event writer waits for the
+// lines already queued to reach standard output.
+const appEventCloseBound = 2 * time.Second
+
+// closeAppEventWriter closes events the way the session's quit path waits
+// for everything else it does not control: through quitJoiner, so the wait
+// is bounded and its expiry is loud. The writer's own close waits for its
+// goroutine to finish draining the queue, and that goroutine writes to
+// standard output. An app that has stopped reading its child's pipe leaves
+// that write blocked for as long as the app lives, so an unbounded wait
+// here would hang the last step of a quit whose every other step is
+// already bounded.
+//
+// The bound is its own rather than what is left of the session's quit
+// deadline: this also runs on the path that reports a startup failure,
+// where no session ever ran and there is no deadline to inherit. Nothing
+// here waits on a recorder either, so the deadline derived from the
+// recorder's kill grace is not the right length. All that is left is some
+// queued lines reaching a pipe, which takes microseconds unless the pipe
+// is not being read at all.
+//
+// An expiry is loud on standard error alone. The app not reading standard
+// output is the only way to get here, so an error event would have nowhere
+// to go even if the writer were still taking them.
+func closeAppEventWriter(events *appEventWriter, log io.Writer) {
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		events.close()
+	}()
+	joiner := newQuitJoiner(func(code, message string) {
+		fmt.Fprintf(log, "error: %s: %s\n", code, message)
+	}, log, appEventCloseBound)
+	joiner.join("writing the last events", appErrorShutdownStuck, done)
 }

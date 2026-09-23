@@ -202,3 +202,55 @@ func TestClaimStdoutForAppSendsEverythingElseToStderr(t *testing.T) {
 		}
 	}
 }
+
+// blockedWriter is standard output when the app has stopped reading its
+// child's pipe: the write never returns.
+type blockedWriter struct {
+	entered chan struct{}
+	release chan struct{}
+	once    sync.Once
+}
+
+func (writer *blockedWriter) Write(data []byte) (int, error) {
+	writer.once.Do(func() { close(writer.entered) })
+	<-writer.release
+	return len(data), nil
+}
+
+func TestCloseAppEventWriterGivesUpOnStandardOutputThatNeverDrains(t *testing.T) {
+	output := &blockedWriter{entered: make(chan struct{}), release: make(chan struct{})}
+	defer close(output.release)
+	events := newAppEventWriter(output)
+	events.emit(appErrorEvent{Type: appEventError, Code: appErrorBusy, Message: "the first line, which blocks"})
+	<-output.entered
+	events.emit(appErrorEvent{Type: appEventError, Code: appErrorBusy, Message: "the line that never gets out"})
+
+	var log bytes.Buffer
+	returned := make(chan struct{})
+	go func() {
+		defer close(returned)
+		closeAppEventWriter(events, &log)
+	}()
+	select {
+	case <-returned:
+	case <-time.After(appEventCloseBound + 5*time.Second):
+		t.Fatal("closing the event writer never returned, so quit would hang on a standard output nothing reads")
+	}
+	if !strings.Contains(log.String(), "writing the last events") {
+		t.Errorf("log = %q, want the expiry named on standard error", log.String())
+	}
+}
+
+func TestCloseAppEventWriterWritesTheQueuedLines(t *testing.T) {
+	output := &appLogBuffer{}
+	events := newAppEventWriter(output)
+	events.emit(appErrorEvent{Type: appEventError, Code: appErrorBusy, Message: "on its way out"})
+	var stderr bytes.Buffer
+	closeAppEventWriter(events, &stderr)
+	if !strings.Contains(output.String(), "on its way out") {
+		t.Errorf("output = %q, want the queued event", output.String())
+	}
+	if stderr.Len() != 0 {
+		t.Errorf("stderr = %q, want nothing", stderr.String())
+	}
+}

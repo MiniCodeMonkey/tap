@@ -80,3 +80,27 @@ func TestBuildMissingDeckJSON(t *testing.T) {
 		t.Errorf("exit %d, stdout %q", exitCode, stdout)
 	}
 }
+
+func TestDevHasTheAppFlag(t *testing.T) {
+	command, _, err := rootCmd.Find([]string{"dev"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if command.Flags().Lookup("app") == nil {
+		t.Error("dev lacks --app")
+	}
+}
+
+func TestDevAppRejectsFlagsThatDoNotFit(t *testing.T) {
+	deck := copyAppFixture(t)
+	for _, args := range [][]string{
+		{"dev", "--app"},
+		{"dev", "--app", deck, "--headless"},
+		{"dev", "--app", deck, "--lan"},
+	} {
+		exitCode, stdout, stderr := runTap(t, args...)
+		if exitCode != exitUserError || stdout != "" {
+			t.Errorf("tap %v: exit %d, stdout %q, stderr %q; want exit 1 and nothing on stdout", args, exitCode, stdout, stderr)
+		}
+	}
+}

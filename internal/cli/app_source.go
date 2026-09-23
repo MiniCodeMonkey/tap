@@ -22,8 +22,12 @@ type appDeckSource struct {
 	buffer     []byte
 	remembered []byte
 	mu         sync.Mutex
-	hasBuffer  bool
-	seq        uint64
+	// publishMu is held across the sequence check and the publish step of
+	// a render, so a superseded render cannot slip its result in between
+	// the two (see render).
+	publishMu sync.Mutex
+	hasBuffer bool
+	seq       uint64
 }
 
 func newAppDeckSource(file string) *appDeckSource {
@@ -56,23 +60,95 @@ func (source *appDeckSource) setBuffer(buffer []byte) uint64 {
 	return source.seq
 }
 
-// isCurrent reports whether seq is still the sequence of the buffer tap was
-// most recently given. A render started for an older sequence uses this to
-// tell it has been superseded, so it can discard its result instead of
-// publishing a stale deck over a newer one.
+// isCurrent reports whether seq is still the newest sequence tap has
+// handed out. A render started for an older sequence has been superseded.
 func (source *appDeckSource) isCurrent(seq uint64) bool {
 	source.mu.Lock()
 	defer source.mu.Unlock()
 	return source.seq == seq
 }
 
+// currentSequence returns the text tap renders now, the buffer while there
+// is one and the deck file otherwise, together with the sequence number of
+// this render. Every render takes a sequence, not only a buffer's, so a
+// render of the deck file supersedes a buffer render still in flight
+// exactly as a newer buffer does. The sequence is taken before the file is
+// read, so a buffer that arrives during the read is the newer one.
+func (source *appDeckSource) currentSequence() ([]byte, uint64, error) {
+	source.mu.Lock()
+	source.seq++
+	seq := source.seq
+	if source.hasBuffer {
+		buffer := source.buffer
+		source.mu.Unlock()
+		return buffer, seq, nil
+	}
+	source.mu.Unlock()
+
+	text, err := os.ReadFile(source.file)
+	if err != nil {
+		return nil, 0, err
+	}
+	return text, seq, nil
+}
+
 // dropBuffer goes back to the deck file. The app sends "saved" after it
-// wrote the buffer to disk.
+// wrote the buffer to disk. It takes a new sequence, so a render of the
+// buffer still in flight is superseded by the save rather than publishing
+// the buffer over the deck file afterwards.
 func (source *appDeckSource) dropBuffer() {
 	source.mu.Lock()
 	defer source.mu.Unlock()
 	source.buffer = nil
 	source.hasBuffer = false
+	source.seq++
+}
+
+// appRenderBuilder renders text and returns the step that makes the result
+// visible: serving the new deck and telling every open page. All the work
+// happens before that step, and none of it is visible until the step runs,
+// so a render that has been superseded is thrown away whole.
+type appRenderBuilder func(text []byte) (publish func(), err error)
+
+// renderBuffer makes buffer the text tap renders, until dropBuffer, and
+// publishes a render of it.
+func (source *appDeckSource) renderBuffer(buffer []byte, build appRenderBuilder) error {
+	return source.render(buffer, source.setBuffer(buffer), build)
+}
+
+// renderCurrent renders the text tap shows now: the buffer while there is
+// one, and the deck file otherwise.
+func (source *appDeckSource) renderCurrent(build appRenderBuilder) error {
+	text, seq, err := source.currentSequence()
+	if err != nil {
+		return err
+	}
+	return source.render(text, seq, build)
+}
+
+// render builds text and publishes the result only while seq is still the
+// newest sequence. The check and the publish step happen together under
+// publishMu, which every publish takes, so a superseded render cannot
+// publish: it either finds a newer sequence and throws its result away, or
+// it publishes first and the newer render waits and publishes over it.
+// There is no order of events that leaves the older deck on screen, and
+// the caller has nothing to remember, since publishing is the deck
+// source's to do and not the caller's.
+func (source *appDeckSource) render(text []byte, seq uint64, build appRenderBuilder) error {
+	publish, err := build(text)
+	if err != nil {
+		return err
+	}
+	source.publishMu.Lock()
+	defer source.publishMu.Unlock()
+	if !source.isCurrent(seq) {
+		return nil
+	}
+	if publish != nil {
+		publish()
+	}
+	source.remember(text)
+	return nil
 }
 
 // buffering reports whether tap renders the app's buffer.
@@ -117,14 +193,13 @@ type appSourceRequest struct {
 // --json prints. A buffer that does not render still gets its slide list,
 // whose errors say what is wrong, and the pages keep the last good render.
 //
-// render runs unserialized: two PUTs in flight render concurrently, and a
+// build runs unserialized: two PUTs in flight render concurrently, and a
 // slower render for an older buffer is not allowed to block a faster
-// render for a newer one. Before render publishes its result (for example
-// by making the parsed presentation visible to other handlers), it must
-// call current and skip publishing when current reports false, since that
-// means a newer buffer has already arrived and its own render is the one
-// that should be visible.
-func handleAppSource(source *appDeckSource, render func(buffer []byte, current func() bool) error, baseDir string, log io.Writer) http.HandlerFunc {
+// render for a newer one. Which of them ends up on screen is not this
+// handler's to decide: it hands the buffer to the deck source, which
+// publishes a render only while it is still the newest one (see
+// appDeckSource.render).
+func handleAppSource(source *appDeckSource, build appRenderBuilder, baseDir string, log io.Writer) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
@@ -144,8 +219,7 @@ func handleAppSource(source *appDeckSource, render func(buffer []byte, current f
 		}
 
 		buffer := []byte(*request.Source)
-		seq := source.setBuffer(buffer)
-		if err := render(buffer, func() bool { return source.isCurrent(seq) }); err != nil {
+		if err := source.renderBuffer(buffer, build); err != nil {
 			fmt.Fprintf(log, "Not showing the buffer: %v\n", err)
 		}
 		result, err := slidelist.Build(buffer, baseDir)

@@ -222,7 +222,7 @@ func runAppSession(options appSessionOptions) {
 
 	end := func(askToKeep bool) {
 		cancel()
-		joiner := newQuitJoiner(session)
+		joiner := newQuitJoiner(session.fail, options.Log, options.QuitDeadline)
 		defer joiner.report()
 		startupJoined := joiner.join("the startup", appErrorStartupStuck, startupDone)
 		reporterJoined := joiner.join("the recording reporter", appErrorReporterStuck, reporterDone)
@@ -467,8 +467,18 @@ func (session *appSession) stopTunnelAtExit(joiner *quitJoiner) {
 // each join waits for whatever is left of the deadline, and a join reached
 // once it is spent takes only appQuitJoinGrace, long enough to see work
 // that is already done, before reporting it stuck and moving on.
+//
+// It takes its report and its log rather than a session, so the quit path
+// outside the session, closing the event writer once the session has
+// returned, joins the same way instead of growing a hand-written wait of
+// its own.
 type quitJoiner struct {
-	session *appSession
+	// fail logs message and tells the app, as session.fail does.
+	fail func(code, message string)
+	log  io.Writer
+	// bound is the whole quit's deadline, named in the message an expiry
+	// reports.
+	bound time.Duration
 	// mu guards deadline alone. Every join runs on end()'s goroutine, so
 	// stuck needs no lock, but the deadline is also moved by the
 	// detached goroutine finishing the recording.
@@ -477,8 +487,8 @@ type quitJoiner struct {
 	stuck    []string
 }
 
-func newQuitJoiner(session *appSession) *quitJoiner {
-	return &quitJoiner{session: session, deadline: time.Now().Add(session.options.QuitDeadline)}
+func newQuitJoiner(fail func(code, message string), log io.Writer, bound time.Duration) *quitJoiner {
+	return &quitJoiner{fail: fail, log: log, bound: bound, deadline: time.Now().Add(bound)}
 }
 
 // remaining is what is left of the quit deadline, at or below zero once it
@@ -548,11 +558,11 @@ func (joiner *quitJoiner) join(what, code string, done <-chan struct{}) bool {
 	case <-grace.C:
 	}
 	joiner.stuck = append(joiner.stuck, what)
-	message := fmt.Sprintf("%s did not finish within quit's %s; leaving it running in the background and shutting down anyway", what, joiner.session.options.QuitDeadline)
+	message := fmt.Sprintf("%s did not finish within quit's %s; leaving it running in the background and shutting down anyway", what, joiner.bound)
 	if len(joiner.stuck) == 1 {
-		joiner.session.fail(code, message)
+		joiner.fail(code, message)
 	} else {
-		fmt.Fprintf(joiner.session.options.Log, "error: %s\n", message)
+		fmt.Fprintf(joiner.log, "error: %s\n", message)
 	}
 	return false
 }
@@ -564,7 +574,7 @@ func (joiner *quitJoiner) report() {
 	if len(joiner.stuck) < 2 {
 		return
 	}
-	joiner.session.fail(appErrorShutdownStuck, "quit gave up waiting for "+strings.Join(joiner.stuck, ", ")+"; they may still be running")
+	joiner.fail(appErrorShutdownStuck, "quit gave up waiting for "+strings.Join(joiner.stuck, ", ")+"; they may still be running")
 }
 
 // emitTunnelRunning sends the running tunnel's URL and a QR code of its

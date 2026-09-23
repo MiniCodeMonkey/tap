@@ -20,6 +20,7 @@ import (
 	"github.com/MiniCodeMonkey/tap/internal/parser"
 	"github.com/MiniCodeMonkey/tap/internal/recorder"
 	"github.com/MiniCodeMonkey/tap/internal/server"
+	"github.com/MiniCodeMonkey/tap/internal/slidelist"
 	"github.com/MiniCodeMonkey/tap/internal/transformer"
 	"github.com/MiniCodeMonkey/tap/internal/tui"
 	"github.com/MiniCodeMonkey/tap/internal/usersettings"
@@ -35,6 +36,7 @@ var (
 	devTunnel            bool
 	devLAN               bool
 	devAllowCode         bool
+	devApp               bool
 )
 
 // devCmd represents the dev command
@@ -66,6 +68,9 @@ Examples:
   tap dev slides.md --headless --allow-code   # Run live code without asking, for this run only`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		if devApp && len(args) == 0 {
+			return userError(codeUsage, errors.New("--app needs the deck: tap dev --app <deck>"))
+		}
 		file, err := resolveDeck(firstArg(args))
 		if err != nil {
 			return err
@@ -80,6 +85,7 @@ Examples:
 			tunnel:            devTunnel,
 			lan:               devLAN,
 			allowCode:         devAllowCode,
+			app:               devApp,
 		})
 	},
 }
@@ -104,6 +110,13 @@ type serverOptions struct {
 	// allowCode lets live code run for this run without an approval, and
 	// stores nothing. It is --allow-code.
 	allowCode bool
+	// app runs tap as the engine of the Tap desktop app (--app): no TUI
+	// and no browser, a loopback server on a free port behind a token,
+	// JSON events on standard output and commands on standard input.
+	app bool
+	// noRecord is tap present --no-record. Only --app reads it: without
+	// --app, tap present settles recording before runDevServer.
+	noRecord bool
 }
 
 func init() {
@@ -118,6 +131,7 @@ func init() {
 	devCmd.Flags().BoolVar(&devLAN, "lan", false, "listen on the local network too, so a phone on the same network can open the presenter view (default: this machine only)")
 	devCmd.Flags().StringArrayVar(&devAllowOrigins, "allow-origin", nil, "additional origin (scheme://host:port) allowed to connect to the websocket hub, or host (host:port) allowed in a request's Host header, for a contributor's Vite dev server or a non-local presenter host (repeatable)")
 	devCmd.Flags().BoolVar(&devAllowCode, "allow-code", false, "let the deck's live code run for this run without an approval, and save none (for --headless and scripts)")
+	devCmd.Flags().BoolVar(&devApp, "app", false, "run as the engine of the Tap desktop app: JSON events on standard output, commands on standard input (an interface for the app, not for people)")
 }
 
 // recordingAudioOptions maps the deck's recording.audio config value to the
@@ -141,9 +155,42 @@ func recordingAudioOptions(configured string) (audioUID string, noAudio bool) {
 // is whether the user passed --port themselves (cmd.Flags().Changed
 // ("port")): it decides whether a busy port fails outright or falls back
 // to the next one (see startOnAvailablePort).
-func runDevServer(options serverOptions) error {
+func runDevServer(options serverOptions) (err error) {
 	file, port, presenterPassword, headless := options.file, options.port, options.presenterPassword, options.headless
 	portExplicit, allowOrigins, wantTunnel := options.portExplicit, options.allowOrigins, options.tunnel
+
+	// In --app mode standard output carries only the event lines. Every
+	// failure from here on is also an error event, the only line when tap
+	// cannot start.
+	var appEvents *appEventWriter
+	var appAuth *server.AppAuth
+	appDisk := &appDiskStatus{}
+	if options.app {
+		if headless {
+			return userError(codeUsage, errors.New("--app and --headless cannot be combined"))
+		}
+		if options.lan {
+			return userError(codeUsage, errors.New("--app listens on 127.0.0.1 only, so it cannot be combined with --lan"))
+		}
+		if !portExplicit {
+			// A free port, which the ready line reports.
+			port, portExplicit = 0, true
+		}
+		stdout, restoreStdout := claimStdoutForApp()
+		appEvents = newAppEventWriter(stdout)
+		defer func() {
+			if err != nil {
+				_, code, _ := classify(err)
+				appEvents.emit(appErrorEvent{Type: appEventError, Code: code, Message: err.Error()})
+			}
+			closeAppEventWriter(appEvents, os.Stderr)
+			restoreStdout()
+		}()
+		appAuth, err = server.NewAppAuth()
+		if err != nil {
+			return internalError(codeInternal, err)
+		}
+	}
 
 	// Resolve absolute path
 	absFile, err := filepath.Abs(file)
@@ -206,19 +253,25 @@ func runDevServer(options serverOptions) error {
 	if err != nil {
 		return internalError(codeInternal, err)
 	}
-	liveCodePolicy, err := liveCodeApproval(approvalInput{
-		Now:          time.Now,
-		Config:       cfg,
-		Presentation: pres,
-		Asker:        terminalAsker{in: os.Stdin, out: os.Stdout},
-		Out:          os.Stdout,
-		SettingsPath: settingsPath,
-		Deck:         absFile,
-		AllowCode:    options.allowCode,
-		Interactive:  stdinIsTerminal() && !headless,
-	})
-	if err != nil {
-		return internalError(codeInternal, err)
+	// In --app mode the question goes to the app after the ready line (see
+	// the --app branch below), and live code stays off until it is
+	// answered.
+	var liveCodePolicy server.LiveCodePolicy
+	if !options.app {
+		liveCodePolicy, err = liveCodeApproval(approvalInput{
+			Now:          time.Now,
+			Config:       cfg,
+			Presentation: pres,
+			Asker:        terminalAsker{in: os.Stdin, out: os.Stdout},
+			Out:          os.Stdout,
+			SettingsPath: settingsPath,
+			Deck:         absFile,
+			AllowCode:    options.allowCode,
+			Interactive:  stdinIsTerminal() && !headless,
+		})
+		if err != nil {
+			return internalError(codeInternal, err)
+		}
 	}
 
 	// Resolve custom theme path if configured
@@ -278,6 +331,9 @@ func runDevServer(options serverOptions) error {
 	// same way, since Server.New fixes its address at construction.
 	buildServer := func(candidatePort int) *server.Server {
 		candidate := server.NewWithHost(candidatePort, listenHost(options.lan))
+		if appAuth != nil {
+			candidate.SetAppAuth(appAuth)
+		}
 		candidate.SetPresentation(pres)
 		candidate.SetRevision(initialRevision)
 		candidate.SetPresenterPassword(presenterPassword)
@@ -432,6 +488,7 @@ func runDevServer(options serverOptions) error {
 			}
 		},
 		OnDiskLevel: func(level recorder.DiskLevel) {
+			appDisk.set(level)
 			_ = hub.BroadcastDiskStatus(diskStatusName(level))
 			if devModel != nil {
 				devModel.NoteDiskLevel(level)
@@ -466,6 +523,7 @@ func runDevServer(options serverOptions) error {
 				}
 			},
 			OnDiskLevel: func(level recorder.DiskLevel) {
+				appDisk.set(level)
 				_ = hub.BroadcastDiskStatus(diskStatusName(level))
 				if devModel != nil {
 					devModel.NoteDiskLevel(level)
@@ -486,7 +544,7 @@ func runDevServer(options serverOptions) error {
 	}
 
 	tunnelURL := ""
-	if wantTunnel {
+	if wantTunnel && !options.app {
 		if !tunnels.Available() {
 			return notInstalledError()
 		}
@@ -506,7 +564,229 @@ func runDevServer(options serverOptions) error {
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 
-	if headless {
+	if options.app {
+		deckSource := newAppDeckSource(absFile)
+		if initialSource, readErr := os.ReadFile(absFile); readErr == nil {
+			deckSource.remember(initialSource)
+		}
+
+		// renderApp renders source, the app's buffer or the deck file, and
+		// returns the step that serves the result and tells every open
+		// page about it. It is the only path that changes what --app mode
+		// shows. Nothing it does before that step is visible anywhere, and
+		// the deck source runs the step only while this render is still
+		// the newest one, so a render another has overtaken is thrown away
+		// whole rather than published over the newer deck.
+		//
+		// forceReload decides between the two ways a page is told the deck
+		// changed, and the choice is the caller's alone. An ordinary edit,
+		// a save, or a component rebuilt by the watcher passes false: open
+		// pages fetch the deck and re-render the slides that changed,
+		// keeping the audience's position and everything a slide is
+		// holding, such as a running animation or the output of a live
+		// code block. Only the reload command passes true, which loads
+		// every page again and throws all of that away. See
+		// deckPublisher.publish for what each one sends.
+		renderApp := func(ctx context.Context, source []byte, forceReload bool) (func(), error) {
+			if ctxErr := ctx.Err(); ctxErr != nil {
+				return nil, ctxErr
+			}
+			newCfg, loadErr := config.FromSource(source)
+			if loadErr != nil {
+				return nil, fmt.Errorf("failed to load config: %w", loadErr)
+			}
+			if loadErr := newCfg.Validate(); loadErr != nil {
+				return nil, fmt.Errorf("invalid config: %w", loadErr)
+			}
+			newPres, warnings, newResolvedComponents, newComponentBuildErrs, newRawSlides, loadErr := loadPresentationSource(source, absFile, newCfg, baseDir)
+			if loadErr != nil {
+				return nil, fmt.Errorf("failed to load presentation: %w", loadErr)
+			}
+			newCustomThemePath, themeErr := newCfg.ResolveCustomThemePath(baseDir)
+			if themeErr != nil {
+				Warning("Custom theme not loaded on reload: %v\n", themeErr)
+				newCustomThemePath = ""
+			}
+			if ctxErr := ctx.Err(); ctxErr != nil {
+				return nil, ctxErr
+			}
+
+			return func() {
+				// Standard error is the Tap Log in --app mode.
+				printLayoutWarningsToStderr(absFile, dropComponentBuildFailureWarnings(warnings))
+				printComponentErrorsToStderr(newComponentBuildErrs)
+				printComponentWarningsToStderr(componentWarnings(newResolvedComponents))
+				if !deckSource.buffering() {
+					// These warnings carry line numbers from the deck file,
+					// which an unsaved buffer does not match.
+					for _, warning := range undeclaredDriverWarnings(absFile, newPres) {
+						fmt.Fprintln(os.Stderr, warning)
+					}
+				}
+				srv.SetCustomThemePath(newCustomThemePath)
+				srv.SetRegistry(buildDriverRegistry(newCfg, baseDir))
+				setRawSlides(newRawSlides)
+				watcher.AddExtraDirs(externalInputDirs(newResolvedComponents, baseDir))
+				publisher.publish(newPres, componentBundleFiles(newResolvedComponents), newCustomThemePath, forceReload)
+			}, nil
+		}
+		// renderCurrentForApp renders what tap shows now: the app's buffer
+		// while there is one, and the deck file otherwise.
+		renderCurrentForApp := func(ctx context.Context, forceReload bool) error {
+			return deckSource.renderCurrent(func(source []byte) (func(), error) {
+				return renderApp(ctx, source, forceReload)
+			})
+		}
+
+		questions := newAppQuestions(appEvents)
+		commands := make(chan appCommand, appCommandQueueSize)
+
+		// tap present --app has no buffer and no watcher: the audience sees
+		// only what the deck file held at the last reload.
+		var saved func(ctx context.Context) error
+		if !options.present {
+			srv.RegisterHandlerFunc("PUT "+server.AppSourcePath, handleAppSource(deckSource, func(buffer []byte) (func(), error) {
+				return renderApp(context.Background(), buffer, false)
+			}, baseDir, os.Stderr))
+			saved = func(ctx context.Context) error {
+				deckSource.dropBuffer()
+				return renderCurrentForApp(ctx, false)
+			}
+
+			emitFileChanged := func(path string, list *slidelist.Result) {
+				appEvents.emit(appFileChangedEvent{Type: appEventFileChanged, Path: path, Result: list})
+				_ = hub.BroadcastFileChanged(path)
+			}
+			watcher.SetOnChange(func(path string) {
+				if filepath.Clean(path) == absFile {
+					changed, readErr := deckSource.diskChanged()
+					if readErr != nil && !os.IsNotExist(readErr) {
+						fmt.Fprintf(os.Stderr, "Error reading %s: %v\n", absFile, readErr)
+						return
+					}
+					if readErr == nil && !changed {
+						// The app's own save, or a write of what tap
+						// already shows.
+						return
+					}
+					emitFileChanged(absFile, nil)
+					if readErr != nil || deckSource.buffering() {
+						// The buffer wins until the app says it saved, and
+						// a deleted deck leaves the last render on screen.
+						return
+					}
+					if renderErr := renderCurrentForApp(context.Background(), false); renderErr != nil {
+						fmt.Fprintf(os.Stderr, "Error reloading presentation: %v\n", renderErr)
+					}
+					return
+				}
+
+				// Another file in the deck folder, such as a component:
+				// render again, and send the slide list, whose step counts
+				// can change with a component's steps export.
+				if renderErr := renderCurrentForApp(context.Background(), false); renderErr != nil {
+					fmt.Fprintf(os.Stderr, "Error reloading presentation: %v\n", renderErr)
+				}
+				var list *slidelist.Result
+				source, sourceErr := deckSource.current()
+				if sourceErr != nil {
+					fmt.Fprintf(os.Stderr, "Error reading %s: %v\n", absFile, sourceErr)
+				} else if built, listErr := slidelist.Build(source, baseDir); listErr == nil {
+					list = &built
+				}
+				emitFileChanged(path, list)
+			})
+		}
+
+		var presentControl appPresentControl
+		recordContext, stopRecording := context.WithCancel(context.Background())
+		defer stopRecording()
+		if present != nil {
+			presentControl = present
+			slides := newSlideReporter(appEvents)
+			hub.SetOnSlideChange(func(slideIndex int) {
+				present.NoteSlideChange(slideIndex)
+				if index, step, known := hub.CurrentPosition(); known {
+					slides.report(index, step)
+				}
+			})
+		}
+
+		startup := func(ctx context.Context) {
+			if present != nil {
+				record, consentErr := presentRecordingWanted(consentInput{
+					SettingsPath: settingsPath,
+					Out:          os.Stderr,
+					NoRecord:     options.noRecord,
+					Supported:    recorder.Supported(),
+					Interactive:  true,
+					Asker:        appConsentAsker{ctx: ctx, questions: questions, settingsPath: settingsPath},
+				})
+				if consentErr != nil {
+					appEvents.emit(appErrorEvent{Type: appEventError, Code: codeInternal, Message: "saving the recording answer: " + consentErr.Error()})
+				}
+				if ctx.Err() != nil {
+					return
+				}
+				// The same launch as the TUI branch of tap present.
+				if recorder.Supported() {
+					report := presentLaunchPreflight(recordings, record)
+					for _, finding := range report.Findings {
+						if finding.Blocking {
+							present.Block(finding.Describe())
+							appEvents.emit(appErrorEvent{Type: appEventError, Code: appErrorRecordingBlocked, Message: finding.Describe()})
+							break
+						}
+					}
+					present.Begin(recordContext, record)
+				}
+			}
+			if ctx.Err() != nil {
+				return
+			}
+
+			// The live code approval is its own question, never answered by
+			// the recording consent above: one yes must not turn on both.
+			policy, approvalErr := liveCodeApproval(approvalInput{
+				Now:          time.Now,
+				Config:       cfg,
+				Presentation: pres,
+				Asker:        appApprovalAsker{ctx: ctx, questions: questions},
+				Out:          os.Stderr,
+				SettingsPath: settingsPath,
+				Deck:         absFile,
+				AllowCode:    options.allowCode,
+				Interactive:  true,
+			})
+			if approvalErr != nil {
+				appEvents.emit(appErrorEvent{Type: appEventError, Code: codeInternal, Message: approvalErr.Error()})
+				return
+			}
+			srv.SetLiveCodePolicy(policy)
+			// Pages read which drivers may run from /api/presentation.
+			_ = hub.BroadcastReload()
+		}
+
+		appEvents.emit(appReadyEvent{Type: appEventReady, Port: port, Token: appAuth.Token(), Launch: appAuth.LaunchCode()})
+		go readAppCommands(os.Stdin, questions, appEvents, commands)
+		runAppSession(appSessionOptions{
+			Events:    appEvents,
+			Questions: questions,
+			Commands:  commands,
+			Signals:   sigCh,
+			Startup:   startup,
+			Reload: func(ctx context.Context) error {
+				return renderCurrentForApp(ctx, true)
+			},
+			Saved:             saved,
+			Tunnels:           tunnels,
+			Present:           presentControl,
+			DiskStatus:        appDisk.get,
+			Log:               os.Stderr,
+			PresenterPassword: presenterPassword,
+			StartTunnel:       wantTunnel,
+		})
+	} else if headless {
 		// Headless mode - no TUI, just log and wait for signal
 		fmt.Println()
 		Success("  Dev server running (headless mode)\n")
