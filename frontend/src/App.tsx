@@ -135,7 +135,11 @@ export default function App() {
 	// Tells tap export and Tap Desktop when the slide on screen has settled
 	// (see lib/ready/readySignal.ts). Print mode renders the final step and
 	// fragment, so it reports those. A print or capture page waits for
-	// looping animations too, as exports always have.
+	// looping animations too, as exports always have, and is the only kind
+	// of page that waits for a paint: it is about to be photographed. A
+	// live page reports ready on a settled DOM, so a covered or minimized
+	// window, which WebKit runs no animation frames for, still tells Tap
+	// Desktop that it caught up with an edit.
 	useReadySignal({
 		enabled: !isLoading && loadError === null && currentSlide !== null,
 		revision: presentation?.revision ?? '',
@@ -143,7 +147,8 @@ export default function App() {
 		step: PRINT_MODE ? (currentSlide?.steps ?? 0) : currentStep,
 		fragment: PRINT_MODE ? (currentSlide?.fragmentCount ?? 0) : currentFragmentIndex,
 		theme,
-		includeInfiniteAnimations: PRINT_MODE || CAPTURE_MODE
+		includeInfiniteAnimations: PRINT_MODE || CAPTURE_MODE,
+		requirePaint: PRINT_MODE || CAPTURE_MODE
 	});
 
 	useEffect(() => {

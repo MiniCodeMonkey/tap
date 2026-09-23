@@ -23,6 +23,8 @@ export interface ReadySignalState {
 	theme: string;
 	/** See DomProbeOptions.includeInfiniteAnimations. */
 	includeInfiniteAnimations: boolean;
+	/** See DomProbeOptions.requirePaint. */
+	requirePaint: boolean;
 }
 
 export function useReadySignal({
@@ -32,15 +34,16 @@ export function useReadySignal({
 	step,
 	fragment,
 	theme,
-	includeInfiniteAnimations
+	includeInfiniteAnimations,
+	requirePaint
 }: ReadySignalState): void {
 	useEffect(() => {
 		if (!enabled) {
 			clearReady();
 			return undefined;
 		}
-		return startReadyCycle({ revision, slide, step }, createDomProbes({ includeInfiniteAnimations }));
+		return startReadyCycle({ revision, slide, step }, createDomProbes({ includeInfiniteAnimations, requirePaint }));
 		// fragment and theme are not read here, but a change to either is a
 		// new rendering that has to settle again.
-	}, [enabled, revision, slide, step, fragment, theme, includeInfiniteAnimations]);
+	}, [enabled, revision, slide, step, fragment, theme, includeInfiniteAnimations, requirePaint]);
 }
