@@ -220,6 +220,41 @@ func SplitSlidesPreservingCodeBlocks(text string) []string {
 	return slides
 }
 
+// SplitSlidesRaw splits text on "---" delimiter lines the same way
+// SplitSlidesPreservingCodeBlocks does (a delimiter inside a fenced code
+// block, see fenceTracker, is not a boundary), but keeps every line's exact
+// text, including blank lines and a separator's own trailing whitespace.
+// separators[i] is the literal delimiter line between parts[i] and
+// parts[i+1], so len(separators) == len(parts)-1.
+//
+// A caller rebuilding text from these parts reproduces it exactly with:
+//
+//	result := parts[0]
+//	for i, sep := range separators {
+//		result += "\n" + sep + "\n" + parts[i+1]
+//	}
+//
+// That lets a caller change one part and rejoin the rest byte for byte,
+// unlike SplitSlidesPreservingCodeBlocks, which drops the blank line right
+// after a delimiter and so cannot be rejoined losslessly.
+func SplitSlidesRaw(text string) (parts []string, separators []string) {
+	lines := strings.Split(text, "\n")
+	var fences fenceTracker
+	start := 0
+
+	for i, line := range lines {
+		insideFence := fences.advance(line)
+		if !insideFence && slideDelimiter.MatchString(line) {
+			parts = append(parts, strings.Join(lines[start:i], "\n"))
+			separators = append(separators, line)
+			start = i + 1
+		}
+	}
+	parts = append(parts, strings.Join(lines[start:], "\n"))
+
+	return parts, separators
+}
+
 // slideChunk is one slide's raw markdown, as SplitSlidesPreservingCodeBlocks
 // would return it, plus the 1-based line (within the text passed to
 // splitSlidesPreservingCodeBlocksWithLines) that Content's first line sits

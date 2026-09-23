@@ -1063,6 +1063,278 @@ func TestBuild_LeavesOutSkippedSlides(t *testing.T) {
 	}
 }
 
+// buildWithRenderedImage parses markdown referencing an image at
+// imagesDir/imageName through the real parser (which renders it with
+// goldmark, so the src attribute the builder later sees is percent-encoded
+// and HTML-entity-escaped the same way a real deck's would be), writes
+// imageContent at that path, and runs a real Build. It returns the build
+// result and the built index.html.
+func buildWithRenderedImage(t *testing.T, imageName, imageContent string) (*BuildResult, string) {
+	t.Helper()
+	tmpDir := t.TempDir()
+	outputDir := filepath.Join(tmpDir, "dist")
+	baseDir := filepath.Join(tmpDir, "presentation")
+	imagesDir := filepath.Join(baseDir, "images")
+	if err := os.MkdirAll(imagesDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(imagesDir, imageName), []byte(imageContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	markdown := "# Slide\n\n![alt](images/" + imageName + ")\n"
+	pres, err := parser.New().Parse([]byte(markdown))
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+
+	b := NewWithOutput(outputDir)
+	b.SetBaseDir(baseDir)
+	result, err := b.Build(config.DefaultConfig(), pres)
+	if err != nil {
+		t.Fatalf("Build() error = %v", err)
+	}
+
+	indexContent, err := os.ReadFile(filepath.Join(outputDir, "index.html"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return result, string(indexContent)
+}
+
+// TestBuild_DecodesRenderedImagePaths covers the characters the
+// re-review found: goldmark percent-encodes some of them and HTML-entity
+// escapes others in the rendered <img src>, and a non-Latin name is
+// percent-encoded byte for byte. The builder must undo both before
+// opening the file on disk, or the image is silently dropped.
+func TestBuild_DecodesRenderedImagePaths(t *testing.T) {
+	tests := map[string]string{
+		"braces":    "brace{file}.png",
+		"brackets":  "bracket[file].png",
+		"pipe":      "pipe|file.png",
+		"caret":     "caret^file.png",
+		"backslash": "back\\slash.png",
+		"ampersand": "amp&file.png",
+		"percent":   "percent%file.png",
+		"chinese":   "图表.png",
+		"danish":    "dänisch-å-ø-æ.png",
+	}
+	for name, imageName := range tests {
+		t.Run(name, func(t *testing.T) {
+			result, indexHTML := buildWithRenderedImage(t, imageName, "image bytes for "+name)
+			if len(result.Warnings) != 0 {
+				t.Errorf("Build() warnings = %v, want none", result.Warnings)
+			}
+			if !strings.Contains(indexHTML, `src=\"assets/`) {
+				t.Errorf("index.html has no rewritten assets/ src for %s:\n%s", imageName, indexHTML)
+			}
+			if strings.Contains(indexHTML, "images/"+imageName) && !strings.Contains(indexHTML, "\\u") {
+				t.Errorf("index.html still references the unresolved source path for %s", imageName)
+			}
+		})
+	}
+}
+
+// TestBuild_WarnsWhenAnImageCannotBeFoundAfterDecoding covers a genuinely
+// missing image: decoding must not turn a real lookup failure into
+// silence either.
+func TestBuild_WarnsWhenAnImageCannotBeFoundAfterDecoding(t *testing.T) {
+	tmpDir := t.TempDir()
+	outputDir := filepath.Join(tmpDir, "dist")
+	baseDir := filepath.Join(tmpDir, "presentation")
+	if err := os.MkdirAll(baseDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	pres := &parser.Presentation{
+		Slides: []parser.Slide{
+			{Index: 0, HTML: `<img src="images/missing%20file.png">`},
+		},
+	}
+
+	b := NewWithOutput(outputDir)
+	b.SetBaseDir(baseDir)
+	result, err := b.Build(config.DefaultConfig(), pres)
+	if err != nil {
+		t.Fatalf("Build() error = %v", err)
+	}
+	if len(result.Warnings) != 1 {
+		t.Fatalf("Build() warnings = %v, want exactly one", result.Warnings)
+	}
+	if !strings.Contains(result.Warnings[0], "missing file.png") {
+		t.Errorf("warning = %q, want it to name the decoded path", result.Warnings[0])
+	}
+}
+
+func TestDecodeAssetPath(t *testing.T) {
+	tests := map[string]string{
+		"brace%7Bfile%7D.png": "brace{file}.png",
+		"amp&amp;file.png":    "amp&file.png",
+		"percent%file.png":    "percent%file.png",
+		"quote&quot;file.png": `quote"file.png`,
+		"%E5%9B%BE%E8%A1%A8":  "图表",
+		"already-plain.png":   "already-plain.png",
+		"%":                   "%",
+		"%2":                  "%2",
+		"%zz.png":             "%zz.png",
+	}
+	for input, want := range tests {
+		if got := decodeAssetPath(input); got != want {
+			t.Errorf("decodeAssetPath(%q) = %q, want %q", input, got, want)
+		}
+	}
+}
+
+// TestBuild_KeepsALiteralPercentEscapedFileName covers the exact
+// regression a naive "always decode" fix would reintroduce: a file
+// genuinely named with a percent followed by two hex digits, which the
+// renderer leaves alone (goldmark does not touch a lone "%", and tap
+// image add's sanitizer deliberately allows it) must resolve to itself,
+// not to whatever decoding those two hex digits would produce.
+func TestBuild_KeepsALiteralPercentEscapedFileName(t *testing.T) {
+	imageName := "already%20encoded.png"
+	result, indexHTML := buildWithRenderedImage(t, imageName, "literal percent bytes")
+	if len(result.Warnings) != 0 {
+		t.Errorf("Build() warnings = %v, want none", result.Warnings)
+	}
+	if !strings.Contains(indexHTML, `src=\"assets/`) {
+		t.Errorf("index.html has no rewritten assets/ src for %s:\n%s", imageName, indexHTML)
+	}
+}
+
+// TestBuild_RefusesPathTraversal covers every shape the re-review named:
+// a plain "..", the percent-encoded form of one, an absolute path, and a
+// symlink that lives inside the deck's folder but targets something
+// outside it. Each must be refused and warned about, and the secret file
+// must not appear anywhere in the built output.
+func TestBuild_RefusesPathTraversal(t *testing.T) {
+	tests := map[string]func(t *testing.T, tmpDir, baseDir string) string{
+		"plain dot-dot": func(t *testing.T, tmpDir, baseDir string) string {
+			if err := os.WriteFile(filepath.Join(tmpDir, "secret.png"), []byte("secret"), 0644); err != nil {
+				t.Fatal(err)
+			}
+			return "../secret.png"
+		},
+		"percent-encoded dot-dot": func(t *testing.T, tmpDir, baseDir string) string {
+			if err := os.WriteFile(filepath.Join(tmpDir, "secret.png"), []byte("secret"), 0644); err != nil {
+				t.Fatal(err)
+			}
+			return "%2e%2e/secret.png"
+		},
+		"absolute path": func(t *testing.T, tmpDir, baseDir string) string {
+			secretPath := filepath.Join(tmpDir, "elsewhere", "secret.png")
+			if err := os.MkdirAll(filepath.Dir(secretPath), 0755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(secretPath, []byte("secret"), 0644); err != nil {
+				t.Fatal(err)
+			}
+			return secretPath
+		},
+		"symlink inside the folder pointing outside": func(t *testing.T, tmpDir, baseDir string) string {
+			secretPath := filepath.Join(tmpDir, "elsewhere", "secret.png")
+			if err := os.MkdirAll(filepath.Dir(secretPath), 0755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(secretPath, []byte("secret"), 0644); err != nil {
+				t.Fatal(err)
+			}
+			linkPath := filepath.Join(baseDir, "link.png")
+			if err := os.Symlink(secretPath, linkPath); err != nil {
+				t.Fatal(err)
+			}
+			return "link.png"
+		},
+	}
+
+	for name, setup := range tests {
+		t.Run(name, func(t *testing.T) {
+			tmpDir := t.TempDir()
+			outputDir := filepath.Join(tmpDir, "dist")
+			baseDir := filepath.Join(tmpDir, "presentation")
+			if err := os.MkdirAll(baseDir, 0755); err != nil {
+				t.Fatal(err)
+			}
+			imagePath := setup(t, tmpDir, baseDir)
+
+			markdown := "# Slide\n\n![alt](" + imagePath + ")\n"
+			pres, err := parser.New().Parse([]byte(markdown))
+			if err != nil {
+				t.Fatalf("Parse() error = %v", err)
+			}
+
+			b := NewWithOutput(outputDir)
+			b.SetBaseDir(baseDir)
+			result, err := b.Build(config.DefaultConfig(), pres)
+			if err != nil {
+				t.Fatalf("Build() error = %v", err)
+			}
+			if len(result.Warnings) != 1 {
+				t.Fatalf("Build() warnings = %v, want exactly one", result.Warnings)
+			}
+
+			assetsDir := filepath.Join(outputDir, "assets")
+			entries, err := os.ReadDir(assetsDir)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, entry := range entries {
+				content, err := os.ReadFile(filepath.Join(assetsDir, entry.Name()))
+				if err == nil && string(content) == "secret" {
+					t.Errorf("the outside file was copied into the built output as %s", entry.Name())
+				}
+			}
+		})
+	}
+}
+
+// TestBuild_AllowsOrdinaryPathsInsideTheFolder is the control for
+// TestBuild_RefusesPathTraversal: a relative path that stays inside the
+// deck's folder, including one in a subfolder, must still work.
+func TestBuild_AllowsOrdinaryPathsInsideTheFolder(t *testing.T) {
+	tmpDir := t.TempDir()
+	outputDir := filepath.Join(tmpDir, "dist")
+	baseDir := filepath.Join(tmpDir, "presentation")
+	subDir := filepath.Join(baseDir, "images", "nested")
+	if err := os.MkdirAll(subDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(subDir, "photo.png"), []byte("photo bytes"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	markdown := "# Slide\n\n![alt](images/nested/photo.png)\n"
+	pres, err := parser.New().Parse([]byte(markdown))
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+
+	b := NewWithOutput(outputDir)
+	b.SetBaseDir(baseDir)
+	result, err := b.Build(config.DefaultConfig(), pres)
+	if err != nil {
+		t.Fatalf("Build() error = %v", err)
+	}
+	if len(result.Warnings) != 0 {
+		t.Errorf("Build() warnings = %v, want none", result.Warnings)
+	}
+
+	assetsDir := filepath.Join(outputDir, "assets")
+	entries, err := os.ReadDir(assetsDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var foundImage bool
+	for _, entry := range entries {
+		if strings.HasPrefix(entry.Name(), "photo.") && strings.HasSuffix(entry.Name(), ".png") {
+			foundImage = true
+		}
+	}
+	if !foundImage {
+		t.Error("the subfolder image was not copied into the built assets")
+	}
+}
+
 func TestGenerateIndexHTML_LeavesDriverSettingsOut(t *testing.T) {
 	tmpDir := t.TempDir()
 	b := NewWithOutput(tmpDir)

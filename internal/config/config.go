@@ -391,8 +391,15 @@ func ValidThemeNames() []string {
 
 // UpdateThemeInFile updates the theme field in a markdown file's frontmatter.
 // If the file has no frontmatter, it adds one with just the theme.
-// If the frontmatter has no theme field, it adds one.
+// If the frontmatter has no theme field, it adds one. The file is written
+// atomically: on success the deck holds the new content, and on failure it
+// is left exactly as it was.
 func UpdateThemeInFile(path string, newTheme string) error {
+	info, err := os.Stat(path)
+	if err != nil {
+		return fmt.Errorf("failed to stat file: %w", err)
+	}
+
 	content, err := os.ReadFile(path)
 	if err != nil {
 		return fmt.Errorf("failed to read file: %w", err)
@@ -407,7 +414,7 @@ func UpdateThemeInFile(path string, newTheme string) error {
 	if strings.TrimSpace(lines[0]) != "---" {
 		// No frontmatter - add one with just the theme
 		newContent := fmt.Sprintf("---\ntheme: %s\n---\n%s", newTheme, string(content))
-		return os.WriteFile(path, []byte(newContent), 0644)
+		return WriteFileAtomically(path, []byte(newContent), info.Mode().Perm())
 	}
 
 	// Find the end of frontmatter
@@ -446,7 +453,7 @@ func UpdateThemeInFile(path string, newTheme string) error {
 	}
 
 	newContent := strings.Join(lines, "\n")
-	return os.WriteFile(path, []byte(newContent), 0644)
+	return WriteFileAtomically(path, []byte(newContent), info.Mode().Perm())
 }
 
 // ResolveCustomThemePath resolves the customTheme path relative to the given base directory.

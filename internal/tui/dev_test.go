@@ -2,6 +2,7 @@ package tui
 
 import (
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -621,6 +622,45 @@ func TestDevModel_HandleKeyPress_Image_NoAPIKey(t *testing.T) {
 	}
 	if !found {
 		t.Error("expected error event about missing GEMINI_API_KEY")
+	}
+}
+
+func TestDevModel_HandleKeyPress_Image_PicksUpAPIKeyFromEnvFileWithoutFrontmatter(t *testing.T) {
+	// Ensure GEMINI_API_KEY is not set in the real environment; the key
+	// must come from the .env file next to the deck.
+	originalKey := os.Getenv("GEMINI_API_KEY")
+	os.Unsetenv("GEMINI_API_KEY")
+	defer func() {
+		if originalKey != "" {
+			os.Setenv("GEMINI_API_KEY", originalKey)
+		} else {
+			os.Unsetenv("GEMINI_API_KEY")
+		}
+	}()
+
+	dir := t.TempDir()
+	deckPath := filepath.Join(dir, "talk.md")
+	if err := os.WriteFile(deckPath, []byte("# One\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, ".env"), []byte("GEMINI_API_KEY=test-key\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	model := NewDevModel(DevConfig{MarkdownFile: deckPath})
+
+	msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("i")}
+	newModel, _ := model.Update(msg)
+	m := newModel.(*DevModel)
+
+	m.mu.RLock()
+	err := m.state.Error
+	m.mu.RUnlock()
+	if err != nil {
+		t.Errorf("expected no error, the deck's .env file has the key, got: %v", err)
+	}
+	if !m.showImageGenerator {
+		t.Error("showImageGenerator should be true once the .env file supplies the key")
 	}
 }
 

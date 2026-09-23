@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"html"
 	"io"
 	"os"
 	"path/filepath"
@@ -34,6 +35,7 @@ type BuildResult struct {
 	BuildTime time.Duration // Total build duration
 	FileCount int           // Number of files generated
 	TotalSize int64         // Total size of all files in bytes
+	Warnings  []string      // One entry per referenced file Build could not find
 }
 
 // Builder generates static files from a tap presentation.
@@ -152,15 +154,29 @@ func (b *Builder) Build(cfg *config.Config, pres *parser.Presentation) (*BuildRe
 			// Strip this prefix to resolve the actual file path on disk.
 			resolvedPath := strings.TrimPrefix(imgPath, "/local/")
 
-			sourcePath := resolvedPath
-			if !filepath.IsAbs(resolvedPath) && b.baseDir != "" {
-				sourcePath = filepath.Join(b.baseDir, resolvedPath)
+			sourcePath, reportedPath, err := b.resolveImageSourcePath(resolvedPath)
+			if err != nil {
+				// A file genuinely missing after decoding is reported,
+				// not silently dropped, so a broken image has a reason
+				// instead of just disappearing.
+				result.Warnings = append(result.Warnings, fmt.Sprintf("image not found: %s", reportedPath))
+				continue
+			}
+
+			// A deck cannot reach a file outside its own folder, whether
+			// through "../", that path's encoded form, an absolute path,
+			// or a symlink inside the folder that targets something
+			// outside it.
+			confinedPath, err := AssetWithinBaseDir(b.baseDir, sourcePath)
+			if err != nil {
+				result.Warnings = append(result.Warnings, fmt.Sprintf("image resolves outside the deck's folder, skipped: %s", reportedPath))
+				continue
 			}
 
 			// Copy the image with content hash
-			hashedPath, size, err := b.copyWithHash(sourcePath, assetsDir)
+			hashedPath, size, err := b.copyWithHash(confinedPath, assetsDir)
 			if err != nil {
-				// Skip images that can't be found (might be external URLs or invalid)
+				result.Warnings = append(result.Warnings, fmt.Sprintf("image not found: %s", reportedPath))
 				continue
 			}
 
@@ -188,8 +204,21 @@ func (b *Builder) Build(cfg *config.Config, pres *parser.Presentation) (*BuildRe
 			if !filepath.IsAbs(resolvedPath) && b.baseDir != "" {
 				sourcePath = filepath.Join(b.baseDir, resolvedPath)
 			}
+			if _, statErr := os.Stat(sourcePath); statErr != nil {
+				continue
+			}
 
-			hashedPath, size, err := b.copyWithHash(sourcePath, assetsDir)
+			// Recording paths are not decoded the way image paths are
+			// (see resolveImageSourcePath); this only refuses a plain or
+			// absolute traversal attempt, not one written in its
+			// encoded form, since that form is never decoded here.
+			confinedPath, err := AssetWithinBaseDir(b.baseDir, sourcePath)
+			if err != nil {
+				result.Warnings = append(result.Warnings, fmt.Sprintf("recording resolves outside the deck's folder, skipped: %s", resolvedPath))
+				continue
+			}
+
+			hashedPath, size, err := b.copyWithHash(confinedPath, assetsDir)
 			if err != nil {
 				continue
 			}
@@ -400,6 +429,123 @@ func rewriteAsciinemaPaths(html string, pathMapping map[string]string) string {
 func isAbsoluteURL(path string) bool {
 	lowerPath := strings.ToLower(path)
 	return strings.HasPrefix(lowerPath, "http://") || strings.HasPrefix(lowerPath, "https://")
+}
+
+// resolveImageSourcePath turns resolvedPath, an image src already
+// stripped of its "/local/" dev-server prefix, into the file to open.
+// It tries the path exactly as written first: a file genuinely named
+// with something that looks like an escape, such as a literal "%20",
+// must resolve to itself, not to whatever decoding it would produce.
+// Only when nothing exists at the literal path does it fall back to
+// decodeAssetPath's undoing of the renderer's own escaping. reportedPath,
+// for a caller's warning, is the last path tried: the literal one when
+// nothing needed decoding, the decoded one when the literal path did not
+// exist.
+func (b *Builder) resolveImageSourcePath(resolvedPath string) (sourcePath, reportedPath string, err error) {
+	candidates := []string{resolvedPath}
+	if decoded := decodeAssetPath(resolvedPath); decoded != resolvedPath {
+		candidates = append(candidates, decoded)
+	}
+
+	for _, candidate := range candidates {
+		reportedPath = candidate
+		candidateSource := candidate
+		if !filepath.IsAbs(candidate) && b.baseDir != "" {
+			candidateSource = filepath.Join(b.baseDir, candidate)
+		}
+		if _, statErr := os.Stat(candidateSource); statErr == nil {
+			return candidateSource, candidate, nil
+		}
+	}
+	return "", reportedPath, fmt.Errorf("no file at %s", reportedPath)
+}
+
+// AssetWithinBaseDir resolves symlinks in both baseDir and sourcePath and
+// confirms the resolved source sits inside the resolved base directory.
+// sourcePath must already exist, so EvalSymlinks on it either succeeds or
+// reports a real filesystem error. This is what stops a deck from
+// reaching a file outside its own folder: a literal "../", that path's
+// percent-encoded form once resolveImageSourcePath has decoded it, an
+// absolute path, or a symlink that lives inside the deck's folder but
+// targets something outside it. An empty baseDir (only tests pass one
+// this way; every real command sets one through SetBaseDir, or a caller
+// outside internal/builder passes the deck's own folder) has no folder
+// to enforce, so nothing is refused.
+func AssetWithinBaseDir(baseDir, sourcePath string) (string, error) {
+	if baseDir == "" {
+		return sourcePath, nil
+	}
+
+	resolvedBase, err := filepath.EvalSymlinks(baseDir)
+	if err != nil {
+		resolvedBase = baseDir
+	}
+	resolvedBase, err = filepath.Abs(resolvedBase)
+	if err != nil {
+		return "", fmt.Errorf("failed to resolve base directory: %w", err)
+	}
+
+	resolvedSource, err := filepath.EvalSymlinks(sourcePath)
+	if err != nil {
+		return "", fmt.Errorf("failed to resolve asset path: %w", err)
+	}
+	resolvedSource, err = filepath.Abs(resolvedSource)
+	if err != nil {
+		return "", fmt.Errorf("failed to resolve asset path: %w", err)
+	}
+
+	rel, err := filepath.Rel(resolvedBase, resolvedSource)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("%s resolves outside %s", sourcePath, resolvedBase)
+	}
+	return resolvedSource, nil
+}
+
+// decodeAssetPath undoes the escaping the renderer applies to an <img>
+// src before writing it into a slide's HTML: HTML entity escaping first
+// (the outer layer, applied when the attribute value is written), then
+// percent-encoding (the inner layer, applied to the link destination
+// itself). The result is the real file name on disk, in whatever script
+// the author gave it.
+func decodeAssetPath(src string) string {
+	return percentDecode(html.UnescapeString(src))
+}
+
+// percentDecode decodes "%XX" escapes in s. A "%" not followed by two hex
+// digits is left as it is instead of failing the whole string: a name a
+// person typed by hand, rather than one tap sanitized, can hold a literal
+// "%" that was never an escape.
+func percentDecode(s string) string {
+	var decoded strings.Builder
+	decoded.Grow(len(s))
+	for i := 0; i < len(s); i++ {
+		if s[i] == '%' && i+2 < len(s) {
+			if hi, ok := hexDigit(s[i+1]); ok {
+				if lo, ok := hexDigit(s[i+2]); ok {
+					decoded.WriteByte(hi<<4 | lo)
+					i += 2
+					continue
+				}
+			}
+		}
+		decoded.WriteByte(s[i])
+	}
+	return decoded.String()
+}
+
+// hexDigit is the value of a single hex digit character, or false when b
+// is not one.
+func hexDigit(b byte) (byte, bool) {
+	switch {
+	case b >= '0' && b <= '9':
+		return b - '0', true
+	case b >= 'a' && b <= 'f':
+		return b - 'a' + 10, true
+	case b >= 'A' && b <= 'F':
+		return b - 'A' + 10, true
+	default:
+		return 0, false
+	}
 }
 
 // CopyEmbeddedAssets copies all embedded frontend assets to the output directory.

@@ -33,6 +33,12 @@ const (
 	codeInterrupted     = "interrupted"
 	codeCancelled       = "cancelled"
 	codeInternal        = "internal"
+	codeUnknownLayout   = "unknown_layout"
+	codeFileNotFound    = "file_not_found"
+	codeNotAnImage      = "not_an_image"
+	codeNoAPIKey        = "no_api_key"
+	codeImageGeneration = "image_generation"
+	codeImageNotFound   = "image_not_found"
 	codeNotApproved     = "not_approved"
 	codeInvalidSettings = "invalid_settings"
 )

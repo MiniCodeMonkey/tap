@@ -204,10 +204,29 @@ tap export images deck.md --slide 2 --output check.png || echo "slide 2 is broke
 
 ## tap slide add
 
-Add a new slide interactively. It needs a terminal.
+Add a new slide. Without flags, an interactive wizard asks for a layout
+and content; it needs a terminal. With `--layout`, tap appends that
+layout's template without asking, and works without a terminal. Both
+offer all 12 layouts: `title`, `section`, `default`, `two-column`,
+`code-focus`, `quote`, `big-stat`, `three-column`, `sidebar`,
+`split-media`, `cover`, `blank`.
 
 ```bash
 tap slide add [deck]
+tap slide add [deck] --layout <name>
+tap slide add --layout <name> --print
+```
+
+| Flag | Description |
+|------|-------------|
+| `--layout <name>` | Append that layout's template without the wizard. Works without a terminal |
+| `--print` | With `--layout`, print the template and write nothing. No `---` separator in front, no deck needed |
+| `--json` | With `--layout`: `{"ok": true, "deck", "layout", "markdown"}`. With `--print`, `deck` is left out |
+
+Examples:
+```bash
+tap slide add talk.md --layout quote
+tap slide add --layout big-stat --print
 ```
 
 ## tap slide list
@@ -243,6 +262,61 @@ tap component new <Name> [deck] [--inline] [--ts] [--json]
 {"ok": true, "files": ["slides/RollingDeploy.jsx"], "snippet": "::component RollingDeploy\n"}
 ```
 
+## tap image add
+
+Copy an image into `images/` next to a deck and print the markdown that
+shows it. Keeps the file's name, except whitespace, parentheses, angle
+brackets, quotes, backtick, `#`, and `?` become `-` so the link needs no
+escaping (`my diagram (v2).png` -> `my-diagram-v2.png`); adds `-2`, `-3`
+before the extension when the resulting name is taken. Accepts png, jpg,
+jpeg, gif, webp, svg, and avif.
+
+```bash
+tap image add <file> [deck] [--slide <n>] [--json]
+```
+
+`--slide N` also adds the markdown at the end of slide N.
+
+Errors: `file_not_found`, `not_an_image`, `out_of_range`.
+
+`--json`:
+```json
+{"ok": true, "deck": "talk.md", "image": "images/diagram.png", "markdown": "![diagram](images/diagram.png)", "slide": 3}
+```
+
+## tap image generate
+
+The `i` key's AI image generator as a command. Generates an image with
+Gemini and adds it at the end of a slide, the same files the `i` key
+writes: `images/generated-<hash>.<ext>` and an `<!-- ai-prompt: ... -->`
+comment. Needs `GEMINI_API_KEY`, in the environment or a `.env` file next
+to the deck.
+
+```bash
+tap image generate [deck] --slide <n> --prompt "..." [--json]
+```
+
+Errors: `usage`, `out_of_range`, `no_api_key`, `image_generation` (exit 2
+for a network or server failure, 1 otherwise).
+
+`--json`:
+```json
+{"ok": true, "deck": "talk.md", "slide": 3, "image": "images/generated-1a2b3c4d.png", "prompt": "...", "markdown": "..."}
+```
+
+## tap image regenerate
+
+Makes an AI image again in place and replaces it, deleting the old file.
+Without `--prompt`, reuses the image's own prompt.
+
+```bash
+tap image regenerate [deck] --slide <n> --image <path> [--prompt "..."] [--json]
+```
+
+Errors: as `tap image generate`, plus `image_not_found`.
+
+`--json`: same as `tap image generate`, plus `"replaced": "<old path>"`.
+
 ## tap deck schema
 
 List every frontmatter key tap understands, with its type, default,
@@ -267,7 +341,8 @@ tap deck schema --json | head -40
 
 ```bash
 tap theme list [--json]
-tap theme show [slug|deck] [--json | --prompt]
+tap theme show [slug|deck] [--json | --prompt | --image [-o <file>]]
+tap theme set <slug> [deck] [--json]
 ```
 
 `show` prints a theme's name, polarity, pitch, tokens, and illustration
@@ -275,9 +350,29 @@ style. `--prompt` prints a style brief to paste in front of an image model
 request so illustrations match the theme. With no argument, `show` uses
 the theme of the deck in the current folder.
 
+`show --image` renders a title slide in the theme to a 1280x720 PNG and
+prints its path. The image is cached per theme and tap version, in the
+user cache folder under `tap/themes/<version>/<slug>.png`, so a repeat
+call returns at once. `-o`/`--output` copies it to a file instead.
+
+`set <slug> [deck]` writes `theme: <slug>` into the deck's frontmatter,
+the same change the `t` key makes in `tap dev`. A deck with no
+frontmatter gets one. An unknown slug exits 1 with code `unknown_theme`
+and the list of themes.
+
 `theme list --json`:
 ```json
 {"ok": true, "themes": [{"slug": "terminal", "name": "Terminal", "polarity": "dark", "pitch": "..."}]}
+```
+
+`theme show --image --json`:
+```json
+{"ok": true, "slug": "terminal", "image": "/Users/you/Library/Caches/tap/themes/2.0.0/terminal.png", "cached": true}
+```
+
+`theme set --json`:
+```json
+{"ok": true, "deck": "talk.md", "theme": "blueprint"}
 ```
 
 ## tap approval list
@@ -333,8 +428,12 @@ standard output.
 | `tap serve [dir]` | Serve built files |
 | `tap export pdf [deck]` | Export to PDF |
 | `tap export images [deck]` | Render a slide to a PNG (exit 1 if broken) |
-| `tap slide add [deck]` | Add a slide interactively |
+| `tap slide add [deck]` | Add a slide, by wizard or `--layout` |
 | `tap slide list [deck]` | List each slide, its lines, layout and errors |
 | `tap component new <Name> [deck]` | Scaffold a deck component |
+| `tap image add <file> [deck]` | Copy an image into `images/` |
+| `tap image generate [deck]` | Generate an AI image onto a slide |
+| `tap image regenerate [deck]` | Generate an AI image again, in place |
 | `tap deck schema` | List every frontmatter key, type and default |
 | `tap theme list` / `tap theme show` | Inspect a theme's tokens and style |
+| `tap theme set <slug> [deck]` | Set a deck's theme |

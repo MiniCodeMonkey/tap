@@ -3,12 +3,14 @@ package tui
 
 import (
 	"fmt"
-	"os"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+
+	"github.com/MiniCodeMonkey/tap/internal/deckedit"
+	"github.com/MiniCodeMonkey/tap/internal/layouts"
 )
 
 // addStep represents the current step in the add slide wizard.
@@ -35,27 +37,38 @@ type LayoutField struct {
 	Multiline   bool
 }
 
-// AvailableLayouts lists the layouts available for new slides.
-var AvailableLayouts = []Layout{
-	{
-		Name:        "title",
-		Description: "Title slide with centered heading",
-		ASCII: `
+// AvailableLayouts lists the layouts the wizard offers, built from the
+// templates in internal/layouts.
+var AvailableLayouts = buildAvailableLayouts()
+
+func buildAvailableLayouts() []Layout {
+	templates := layouts.Templates()
+	result := make([]Layout, len(templates))
+	for index, template := range templates {
+		fields := make([]LayoutField, len(template.Fields))
+		for fieldIndex, field := range template.Fields {
+			fields[fieldIndex] = LayoutField{Name: field.Name, Placeholder: field.Placeholder, Multiline: field.Multiline}
+		}
+		result[index] = Layout{
+			Name:        template.Name,
+			Description: template.Description,
+			ASCII:       layoutPreviews[template.Name],
+			Fields:      fields,
+		}
+	}
+	return result
+}
+
+// layoutPreviews is the ASCII sketch the wizard shows for each layout.
+var layoutPreviews = map[string]string{
+	"title": `
 ┌─────────────────────┐
 │                     │
 │      # Title        │
 │      subtitle       │
 │                     │
 └─────────────────────┘`,
-		Fields: []LayoutField{
-			{Name: "Title", Placeholder: "My Title"},
-			{Name: "Subtitle", Placeholder: "Optional subtitle"},
-		},
-	},
-	{
-		Name:        "section",
-		Description: "Section header for topic transitions",
-		ASCII: `
+	"section": `
 ┌─────────────────────┐
 │                     │
 │                     │
@@ -63,14 +76,7 @@ var AvailableLayouts = []Layout{
 │                     │
 │                     │
 └─────────────────────┘`,
-		Fields: []LayoutField{
-			{Name: "Section Title", Placeholder: "Section Name"},
-		},
-	},
-	{
-		Name:        "default",
-		Description: "Standard content slide",
-		ASCII: `
+	"default": `
 ┌─────────────────────┐
 │ ## Header           │
 │                     │
@@ -78,15 +84,7 @@ var AvailableLayouts = []Layout{
 │ - Point two         │
 │ - Point three       │
 └─────────────────────┘`,
-		Fields: []LayoutField{
-			{Name: "Header", Placeholder: "Slide Header"},
-			{Name: "Content", Placeholder: "Bullet points or paragraphs", Multiline: true},
-		},
-	},
-	{
-		Name:        "two-column",
-		Description: "Side-by-side content columns",
-		ASCII: `
+	"two-column": `
 ┌─────────────────────┐
 │ ## Header           │
 │          ┃          │
@@ -94,16 +92,7 @@ var AvailableLayouts = []Layout{
 │  column  ┃   column │
 │          ┃          │
 └─────────────────────┘`,
-		Fields: []LayoutField{
-			{Name: "Header", Placeholder: "Optional Header"},
-			{Name: "Left Column", Placeholder: "Left side content", Multiline: true},
-			{Name: "Right Column", Placeholder: "Right side content", Multiline: true},
-		},
-	},
-	{
-		Name:        "code-focus",
-		Description: "Full-width code block",
-		ASCII: `
+	"code-focus": `
 ┌─────────────────────┐
 │ ┌─────────────────┐ │
 │ │ func main() {   │ │
@@ -111,15 +100,7 @@ var AvailableLayouts = []Layout{
 │ │ }               │ │
 │ └─────────────────┘ │
 └─────────────────────┘`,
-		Fields: []LayoutField{
-			{Name: "Language", Placeholder: "go, python, javascript..."},
-			{Name: "Code", Placeholder: "Your code here", Multiline: true},
-		},
-	},
-	{
-		Name:        "quote",
-		Description: "Styled blockquote with attribution",
-		ASCII: `
+	"quote": `
 ┌─────────────────────┐
 │                     │
 │  "Quote text..."    │
@@ -127,15 +108,7 @@ var AvailableLayouts = []Layout{
 │        -- Author    │
 │                     │
 └─────────────────────┘`,
-		Fields: []LayoutField{
-			{Name: "Quote", Placeholder: "The quote text"},
-			{Name: "Author", Placeholder: "Author name"},
-		},
-	},
-	{
-		Name:        "big-stat",
-		Description: "Large number with description",
-		ASCII: `
+	"big-stat": `
 ┌─────────────────────┐
 │                     │
 │        99%          │
@@ -143,11 +116,46 @@ var AvailableLayouts = []Layout{
 │    of developers    │
 │    love this tool   │
 └─────────────────────┘`,
-		Fields: []LayoutField{
-			{Name: "Statistic", Placeholder: "99%"},
-			{Name: "Description", Placeholder: "Description of the statistic"},
-		},
-	},
+	"three-column": `
+┌─────────────────────┐
+│ ## Header           │
+│      ┃       ┃      │
+│ Left ┃Center ┃Right │
+│      ┃       ┃      │
+│      ┃       ┃      │
+└─────────────────────┘`,
+	"sidebar": `
+┌─────────────────────┐
+│ ## Header    ┃ Side │
+│              ┃      │
+│ Main content ┃ - a  │
+│              ┃ - b  │
+│              ┃      │
+└─────────────────────┘`,
+	"split-media": `
+┌─────────────────────┐
+│ ## Header ┃ ┌─────┐ │
+│           ┃ │     │ │
+│ Text      ┃ │ img │ │
+│           ┃ │     │ │
+│           ┃ └─────┘ │
+└─────────────────────┘`,
+	"cover": `
+┌─────────────────────┐
+│░░░░░░░░░░░░░░░░░░░░░│
+│░░░░░░░░░░░░░░░░░░░░░│
+│░░░░   # Title   ░░░░│
+│░░░░░░░░░░░░░░░░░░░░░│
+│░░░░░░░░░░░░░░░░░░░░░│
+└─────────────────────┘`,
+	"blank": `
+┌─────────────────────┐
+│                     │
+│                     │
+│      (empty)        │
+│                     │
+│                     │
+└─────────────────────┘`,
 }
 
 // AddModel is the Bubble Tea model for adding slides interactively.
@@ -319,13 +327,8 @@ func (m AddModel) updateContent(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m AddModel) finalize() (tea.Model, tea.Cmd) {
-	// Generate markdown
-	markdown := m.generateMarkdown()
-
-	// If we have a file path, append to it
 	if m.filePath != "" {
-		err := appendToFile(m.filePath, markdown)
-		if err != nil {
+		if err := deckedit.AppendSlide(m.filePath, m.slideBody()); err != nil {
 			m.err = err
 			m.step = addStepDone
 			return m, tea.Quit
@@ -337,118 +340,31 @@ func (m AddModel) finalize() (tea.Model, tea.Cmd) {
 	return m, tea.Quit
 }
 
-func (m AddModel) generateMarkdown() string {
-	layout := AvailableLayouts[m.layoutIndex]
+// fieldValues returns the trimmed text of each field, in order.
+func (m AddModel) fieldValues() []string {
 	values := make([]string, len(m.textInputs))
-	for i, ti := range m.textInputs {
-		values[i] = strings.TrimSpace(ti.Value())
+	for index, input := range m.textInputs {
+		values[index] = strings.TrimSpace(input.Value())
 	}
-
-	return GenerateSlideMarkdown(layout.Name, values)
+	return values
 }
 
-// GenerateSlideMarkdown generates markdown for a slide based on layout and field values.
-// Exported for testing.
+// slideBody is the new slide's markdown, without the separator.
+func (m AddModel) slideBody() string {
+	body, _ := layouts.RenderSlide(AvailableLayouts[m.layoutIndex].Name, m.fieldValues())
+	return body
+}
+
+func (m AddModel) generateMarkdown() string {
+	return deckedit.SlideSeparator + m.slideBody()
+}
+
+// GenerateSlideMarkdown returns the text the wizard appends for a slide in
+// layoutName: the slide separator, then the layout's template filled with
+// values. An unknown layout gives the separator alone.
 func GenerateSlideMarkdown(layoutName string, values []string) string {
-	var b strings.Builder
-
-	// Start with slide separator
-	b.WriteString("\n---\n\n")
-
-	switch layoutName {
-	case "title":
-		title := getValueOrDefault(values, 0, "Title")
-		subtitle := getValueOrDefault(values, 1, "")
-		b.WriteString(fmt.Sprintf("# %s\n", title))
-		if subtitle != "" {
-			b.WriteString(fmt.Sprintf("\n%s\n", subtitle))
-		}
-
-	case "section":
-		section := getValueOrDefault(values, 0, "Section")
-		b.WriteString(fmt.Sprintf("## %s\n", section))
-
-	case "default":
-		header := getValueOrDefault(values, 0, "Header")
-		content := getValueOrDefault(values, 1, "- Point one\n- Point two")
-		b.WriteString(fmt.Sprintf("## %s\n\n", header))
-		b.WriteString(formatContent(content))
-		b.WriteString("\n")
-
-	case "two-column":
-		header := getValueOrDefault(values, 0, "")
-		left := getValueOrDefault(values, 1, "Left content")
-		right := getValueOrDefault(values, 2, "Right content")
-		if header != "" {
-			b.WriteString(fmt.Sprintf("## %s\n\n", header))
-		}
-		b.WriteString("::left\n\n")
-		b.WriteString(formatContent(left))
-		b.WriteString("\n\n::right\n\n")
-		b.WriteString(formatContent(right))
-		b.WriteString("\n")
-
-	case "code-focus":
-		b.WriteString("<!--\nlayout: code-focus\n-->\n\n")
-		language := getValueOrDefault(values, 0, "")
-		code := getValueOrDefault(values, 1, "// Your code here")
-		b.WriteString(fmt.Sprintf("```%s\n%s\n```\n", language, code))
-
-	case "quote":
-		b.WriteString("<!--\nlayout: quote\n-->\n\n")
-		quote := getValueOrDefault(values, 0, "Your quote here")
-		author := getValueOrDefault(values, 1, "")
-		b.WriteString(fmt.Sprintf("> %q\n", quote))
-		if author != "" {
-			b.WriteString(fmt.Sprintf(">\n> -- %s\n", author))
-		}
-
-	case "big-stat":
-		b.WriteString("<!--\nlayout: big-stat\n-->\n\n")
-		stat := getValueOrDefault(values, 0, "100%")
-		description := getValueOrDefault(values, 1, "Description")
-		b.WriteString(fmt.Sprintf("# %s\n\n%s\n", stat, description))
-	}
-
-	return b.String()
-}
-
-func getValueOrDefault(values []string, index int, defaultVal string) string {
-	if index < len(values) && values[index] != "" {
-		return values[index]
-	}
-	return defaultVal
-}
-
-func formatContent(content string) string {
-	// Ensure each line is properly formatted
-	lines := strings.Split(content, "\n")
-	var result strings.Builder
-	for i, line := range lines {
-		line = strings.TrimSpace(line)
-		if line != "" {
-			result.WriteString(line)
-		}
-		if i < len(lines)-1 {
-			result.WriteString("\n")
-		}
-	}
-	return result.String()
-}
-
-func appendToFile(filePath, content string) error {
-	f, err := os.OpenFile(filePath, os.O_APPEND|os.O_WRONLY, 0644)
-	if err != nil {
-		return fmt.Errorf("failed to open file: %w", err)
-	}
-	defer f.Close()
-
-	_, err = f.WriteString(content)
-	if err != nil {
-		return fmt.Errorf("failed to write to file: %w", err)
-	}
-
-	return nil
+	body, _ := layouts.RenderSlide(layoutName, values)
+	return deckedit.SlideSeparator + body
 }
 
 // GetResult returns the result of the wizard.
