@@ -959,13 +959,39 @@ func TestAppPresentShowsOnlyTheSavedDeck(t *testing.T) {
 	waitUntil(t, "the reload shows the file", func() bool { return strings.Contains(process.presentation(), "Reloaded From Disk") })
 }
 
+// appModeCommands are the tap commands that serve a running --app
+// process. The property under test, that no HTTP route answers a
+// question or touches recording, is about app mode as a whole, not
+// about one command in it: the real PUT /api/app/source route, for
+// instance, is registered only in tap dev --app's branch of
+// runDevServer, so testing tap present --app alone would never see a
+// rogue route added next to it. Add a mode here as its own entry, not a
+// copy of the test.
+var appModeCommands = []struct {
+	name string
+	args []string
+}{
+	{name: "dev", args: []string{"dev", "--app"}},
+	{name: "present", args: []string{"present", "--app", "--no-record"}},
+}
+
 // TestAppModeHasNoRouteThatAnswersOrRecords sends everything a page on the
 // same origin could send, with the token, while a question is open. None
 // of it answers the question or reaches the recording, because questions
-// and control commands travel only over standard input.
+// and control commands travel only over standard input. It runs under
+// every command in appModeCommands, since the property holds (or fails)
+// per mode, not per test.
 func TestAppModeHasNoRouteThatAnswersOrRecords(t *testing.T) {
+	for _, appMode := range appModeCommands {
+		t.Run(appMode.name, func(t *testing.T) {
+			testAppModeHasNoRouteThatAnswersOrRecords(t, appMode.args)
+		})
+	}
+}
+
+func testAppModeHasNoRouteThatAnswersOrRecords(t *testing.T, args []string) {
 	configHome := t.TempDir()
-	process := startAppProcess(t, configHome, "present", "--app", "--no-record", copyAppFixture(t))
+	process := startAppProcess(t, configHome, append(append([]string{}, args...), copyAppFixture(t))...)
 	question := process.next(appEventQuestion)
 	id, _ := question["id"].(string)
 
@@ -975,6 +1001,17 @@ func TestAppModeHasNoRouteThatAnswersOrRecords(t *testing.T) {
 		"/api/command", "/api/app/command", "/api/approval", "/api/app/approval",
 		"/api/recording", "/api/app/recording", "/api/record", "/api/tunnel",
 		"/api/quit", "/api/app/quit",
+		// A case variant of an answer/recording path: an exact-string
+		// route allowlist (the route-registry test) would catch a new
+		// pattern in any case, but a request line is case sensitive, so
+		// this black-box probe needs its own entries to catch the same
+		// shape on its own.
+		"/API/app/answer", "/api/APP/recording",
+		// A different method on a path that is otherwise legitimately
+		// registered (GET /api/presentation): the route-registry test
+		// would catch a new pattern here too, but this probe list needs
+		// its own entry so the black-box layer isn't only riding along.
+		"/api/presentation",
 	} {
 		for _, method := range []string{http.MethodPost, http.MethodPut} {
 			if status, _ := process.do(method, path, body, process.appHeader()); status != http.StatusNotFound && status != http.StatusMethodNotAllowed {
