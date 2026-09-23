@@ -17,17 +17,35 @@ import (
 	"github.com/MiniCodeMonkey/tap/internal/tui"
 )
 
-// fakeTunnels starts a tunnel at once, unless startErr is set.
+// fakeTunnels starts a tunnel at once, unless startErr is set. When
+// startBlock is set, Start waits for it to close, or for ctx to end,
+// before completing; startEntered, when set, closes as soon as Start is
+// called, and startReturned reports whether Start has returned yet. Both
+// let a test observe a tunnel start goroutine's lifecycle from outside.
 type fakeTunnels struct {
-	mu        sync.Mutex
-	startErr  error
-	url       string
-	available bool
+	mu            sync.Mutex
+	startErr      error
+	url           string
+	available     bool
+	startBlock    chan struct{}
+	startEntered  chan struct{}
+	startReturned atomic.Bool
 }
 
 var _ tui.TunnelController = (*fakeTunnels)(nil)
 
-func (tunnels *fakeTunnels) Start(context.Context) (string, error) {
+func (tunnels *fakeTunnels) Start(ctx context.Context) (string, error) {
+	if tunnels.startEntered != nil {
+		close(tunnels.startEntered)
+	}
+	defer tunnels.startReturned.Store(true)
+	if tunnels.startBlock != nil {
+		select {
+		case <-tunnels.startBlock:
+		case <-ctx.Done():
+			return "", ctx.Err()
+		}
+	}
 	tunnels.mu.Lock()
 	defer tunnels.mu.Unlock()
 	if tunnels.startErr != nil {
@@ -352,6 +370,103 @@ func TestAppSessionUnknownCommand(t *testing.T) {
 	harness.send(appCommand{Type: "dance"})
 	if event := harness.log.next(t, appEventError); event["code"] != appErrorUnknownCommand {
 		t.Errorf("event = %v, want unknown_command", event)
+	}
+}
+
+// TestAppSessionQuitDoesNotHangOnAnUnansweredKeepRecordingQuestion reproduces
+// the hang: quit asks keep-recording, standard input stays open, and
+// nothing ever answers. Before the fix, ask() waits on context.Background()
+// forever, so runAppSession never returns and this test fails when
+// waitForEnd's five-second bound trips. After the fix, the ask is bounded
+// by KeepRecordingTimeout, so the session ends on its own well inside that
+// bound.
+func TestAppSessionQuitDoesNotHangOnAnUnansweredKeepRecordingQuestion(t *testing.T) {
+	present := &fakePresent{dir: "/talks/recordings/run", state: tui.PresentRecording, segment: 1, started: true, leftFirstSlide: true}
+	harness := startAppSessionForTest(t, func(options *appSessionOptions) {
+		options.Present = present
+		options.KeepRecordingTimeout = 100 * time.Millisecond
+	})
+
+	harness.send(appCommand{Type: appCommandQuit})
+	question := harness.log.next(t, appEventQuestion)
+	if question["kind"] != appQuestionKeepRecording {
+		t.Fatalf("question = %v, want keep-recording", question)
+	}
+	// Deliberately answer nothing and leave standard input open: the
+	// harness's own t.Cleanup only closes input after this function
+	// returns, so waitForEnd here can only succeed if the ask itself is
+	// bounded.
+	harness.waitForEnd(t)
+}
+
+// TestAppSessionQuitJoinsAnInProgressTunnelStart reproduces the second
+// hang-shaped bug: quit returning while a tunnel-start goroutine is still
+// running. Before the fix, the tunnel's own timeout context is rooted in
+// context.Background(), so cancelling the session does not reach it, and
+// runAppSession returns while fakeTunnels.Start is still blocked on
+// startBlock, which this test never closes -- startReturned is still false
+// right after waitForEnd. After the fix, the tunnel's context is derived
+// from the session's, so quit cancels it, Start returns promptly, and
+// runAppSession joins that goroutine before returning.
+func TestAppSessionQuitJoinsAnInProgressTunnelStart(t *testing.T) {
+	tunnels := &fakeTunnels{available: true, startBlock: make(chan struct{}), startEntered: make(chan struct{})}
+	harness := startAppSessionForTest(t, func(options *appSessionOptions) { options.Tunnels = tunnels })
+	start := true
+
+	harness.send(appCommand{Type: appCommandTunnel, Start: &start})
+	<-tunnels.startEntered
+	harness.log.next(t, appEventTunnel) // "starting"
+
+	harness.send(appCommand{Type: appCommandQuit})
+	harness.waitForEnd(t)
+
+	if !tunnels.startReturned.Load() {
+		t.Error("runAppSession returned while the tunnel start goroutine was still running")
+	}
+}
+
+// TestAppSessionCommandsRunInSendOrder forces the ordering question rather
+// than hoping for it: reload is made artificially slower than saved, so
+// per-command goroutines racing for the shared order slice would almost
+// certainly record saved before reload in at least one of the ten pairs.
+// A single worker draining commands in send order records every pair as
+// reload-then-saved regardless of how long any one command takes.
+func TestAppSessionCommandsRunInSendOrder(t *testing.T) {
+	var mu sync.Mutex
+	var order []string
+	harness := startAppSessionForTest(t, func(options *appSessionOptions) {
+		options.Reload = func() error {
+			time.Sleep(30 * time.Millisecond)
+			mu.Lock()
+			order = append(order, "reload")
+			mu.Unlock()
+			return nil
+		}
+		options.Saved = func() error {
+			mu.Lock()
+			order = append(order, "saved")
+			mu.Unlock()
+			return nil
+		}
+	})
+
+	const pairs = 10
+	for i := 0; i < pairs; i++ {
+		harness.send(appCommand{Type: appCommandReload})
+		harness.send(appCommand{Type: appCommandSaved})
+	}
+	waitUntil(t, "every command ran", func() bool {
+		mu.Lock()
+		defer mu.Unlock()
+		return len(order) == pairs*2
+	})
+
+	mu.Lock()
+	defer mu.Unlock()
+	for i := 0; i < pairs; i++ {
+		if order[2*i] != "reload" || order[2*i+1] != "saved" {
+			t.Fatalf("pair %d = %v, want [reload saved] (full order = %v)", i, order[2*i:2*i+2], order)
+		}
 	}
 }
 

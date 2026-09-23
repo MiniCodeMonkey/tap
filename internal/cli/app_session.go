@@ -17,6 +17,14 @@ const (
 	appTunnelStartTimeout = 45 * time.Second
 	// appTunnelQRSize is the width of the tunnel QR code PNG, in pixels.
 	appTunnelQRSize = 512
+	// appKeepRecordingTimeout bounds the keep-recording question quit
+	// asks, so quit always returns even when standard input stays open
+	// and nothing answers.
+	appKeepRecordingTimeout = 30 * time.Second
+	// appTaskQueueSize matches appCommandQueueSize: readAppCommandLine
+	// already refuses to queue more than that many commands, so a task
+	// queue of the same size never has to make handle wait for room.
+	appTaskQueueSize = appCommandQueueSize
 )
 
 // appSessionOptions is what the --app control loop drives.
@@ -46,6 +54,11 @@ type appSessionOptions struct {
 	RecordingInterval time.Duration
 	// StartTunnel starts the tunnel right away, for --tunnel.
 	StartTunnel bool
+	// KeepRecordingTimeout bounds how long quit waits for an answer to
+	// the keep-recording question before giving up and keeping the
+	// recording, so quit always returns even when standard input stays
+	// open unanswered.
+	KeepRecordingTimeout time.Duration
 }
 
 // keepRecordingPayload is the payload of a keep-recording question.
@@ -55,9 +68,19 @@ type keepRecordingPayload struct {
 }
 
 type appSession struct {
-	options     appSessionOptions
+	options appSessionOptions
+	// ctx ends when the run ends. Every goroutine handle starts is tied
+	// to it, and its own timeouts (the tunnel start, the keep-recording
+	// question) are derived from it, so quit reaches every one of them
+	// instead of only the ones already listening on ctx.Done() directly.
+	ctx         context.Context
 	recordingMu sync.Mutex
 	tunnelMu    sync.Mutex
+	// tasks is the ordered queue handle feeds. A single worker goroutine
+	// drains it, so commands are carried out in the order they were
+	// sent, without making the command reader wait for one to finish.
+	tasks      chan func()
+	workerDone chan struct{}
 }
 
 // runAppSession is the control loop of tap dev --app and tap present
@@ -76,10 +99,23 @@ func runAppSession(options appSessionOptions) {
 	if options.RecordingInterval == 0 {
 		options.RecordingInterval = appRecordingInterval
 	}
-	session := &appSession{options: options}
+	if options.KeepRecordingTimeout == 0 {
+		options.KeepRecordingTimeout = appKeepRecordingTimeout
+	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+
+	session := &appSession{
+		options:    options,
+		ctx:        ctx,
+		tasks:      make(chan func(), appTaskQueueSize),
+		workerDone: make(chan struct{}),
+	}
+	go func() {
+		defer close(session.workerDone)
+		session.runWorker()
+	}()
 
 	startupDone := make(chan struct{})
 	go func() {
@@ -101,13 +137,14 @@ func runAppSession(options appSessionOptions) {
 	}
 
 	if options.StartTunnel {
-		go session.tunnel(true)
+		session.enqueue(func() { session.tunnel(true) })
 	}
 
 	end := func(askToKeep bool) {
 		cancel()
 		<-startupDone
 		<-reporterDone
+		<-session.workerDone
 		session.finishRecording(askToKeep)
 	}
 
@@ -132,28 +169,62 @@ func runAppSession(options appSessionOptions) {
 	}
 }
 
-// handle starts one command. Commands that take time run on their own
-// goroutine, so the loop stays free for quit.
+// handle queues one command for the worker goroutine. Commands run in the
+// order handle queues them, on a single goroutine, so the loop that reads
+// them stays free for quit without commands racing each other for it.
 func (session *appSession) handle(command appCommand) {
 	switch command.Type {
 	case appCommandReload:
-		go session.runAction(appCommandReload, session.options.Reload)
+		session.enqueue(func() { session.runAction(appCommandReload, session.options.Reload) })
 	case appCommandSaved:
 		if session.options.Saved == nil {
 			session.fail(appErrorNotEditing, "saved works only in tap dev --app; tap present --app reads the deck file on reload")
 			return
 		}
-		go session.runAction(appCommandSaved, session.options.Saved)
+		session.enqueue(func() { session.runAction(appCommandSaved, session.options.Saved) })
 	case appCommandTunnel:
 		if command.Start == nil {
 			session.fail(appErrorInvalidCommand, `tunnel needs "start": true or false`)
 			return
 		}
-		go session.tunnel(*command.Start)
+		start := *command.Start
+		session.enqueue(func() { session.tunnel(start) })
 	case appCommandRecording:
-		go session.recording(command.Action)
+		action := command.Action
+		session.enqueue(func() { session.recording(action) })
 	default:
 		session.fail(appErrorUnknownCommand, fmt.Sprintf("unknown command %q", command.Type))
+	}
+}
+
+// enqueue queues task for the worker goroutine, or drops it once ctx has
+// ended: by then nothing is left to carry it out, and the run is already
+// on its way down.
+func (session *appSession) enqueue(task func()) {
+	select {
+	case session.tasks <- task:
+	case <-session.ctx.Done():
+	}
+}
+
+// runWorker carries out queued commands one at a time, in the order they
+// were queued, until ctx ends or the queue is closed.
+func (session *appSession) runWorker() {
+	for {
+		select {
+		case <-session.ctx.Done():
+			return
+		default:
+		}
+		select {
+		case task, open := <-session.tasks:
+			if !open {
+				return
+			}
+			task()
+		case <-session.ctx.Done():
+			return
+		}
 	}
 }
 
@@ -226,7 +297,7 @@ func (session *appSession) tunnel(start bool) {
 	}
 
 	session.options.Events.emit(appTunnelEvent{Type: appEventTunnel, State: "starting"})
-	ctx, cancel := context.WithTimeout(context.Background(), appTunnelStartTimeout)
+	ctx, cancel := context.WithTimeout(session.ctx, appTunnelStartTimeout)
 	defer cancel()
 	url, err := tunnels.Start(ctx)
 	if err != nil {
@@ -258,7 +329,9 @@ func (session *appSession) finishRecording(askToKeep bool) {
 	keep := true
 	if askToKeep && present.Started() && present.LeftFirstSlide() {
 		payload := keepRecordingPayload{Directory: present.Dir(), Segments: present.Segment()}
-		if answer, answered := session.options.Questions.ask(context.Background(), appQuestionKeepRecording, payload); answered {
+		ctx, cancel := context.WithTimeout(context.Background(), session.options.KeepRecordingTimeout)
+		defer cancel()
+		if answer, answered := session.options.Questions.ask(ctx, appQuestionKeepRecording, payload); answered {
 			keep = answer
 		}
 	}
