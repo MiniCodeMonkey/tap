@@ -131,6 +131,16 @@ final class PreviewViewController: NSViewController, WKNavigationDelegate, WKUID
         (try? await webView.evaluateJavaScript("document.body.innerText") as? String) ?? ""
     }
 
+    /// Evaluates `script` in the page and describes what came back. Tests
+    /// read it when they need to say which side of the hub a stall is on.
+    func pageValue(_ script: String) async -> String {
+        do {
+            return String(describing: try await webView.evaluateJavaScript(script))
+        } catch {
+            return "script failed: \(error)"
+        }
+    }
+
     @objc private func stepControlPressed(_ sender: NSSegmentedControl) {
         if sender.selectedSegment == 0 { onStepBackward?() } else { onStepForward?() }
     }

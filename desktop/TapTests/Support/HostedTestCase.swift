@@ -65,8 +65,30 @@ class HostedTestCase: XCTestCase {
 
     @discardableResult
     func waitForPreview(_ document: DeckDocument, slide: Int, timeout: TimeInterval = 15) async throws -> ReadyPayload {
-        let preview = try XCTUnwrap(document.sessionController?.previewViewController)
-        try await waitUntil(timeout: timeout, "the preview on slide \(slide)") { preview.lastReady?.slide == slide }
+        let controller = try XCTUnwrap(document.sessionController)
+        let preview = controller.previewViewController
+        let deadline = Date().addingTimeInterval(timeout)
+        while preview.lastReady?.slide != slide {
+            if Date() > deadline {
+                // Which side stalled is the whole question when this times
+                // out: whether the app ever asked for the slide, and whether
+                // the page took the request and failed to settle. The page's
+                // own signal is window.__tapReady, null while a slide is
+                // settling, and the caret and the boxes say whether the
+                // cursor is where the test put it.
+                let script = "JSON.stringify({ready: window.__tapReady, hidden: document.hidden})"
+                let inThePage = await preview.pageValue(script)
+                let intent = String(describing: controller.navigator.message)
+                XCTFail("timed out waiting for the preview on slide \(slide). "
+                        + "lastReady=\(String(describing: preview.lastReady)) intent=\(intent) "
+                        + "socket=\(controller.socket == nil ? "none" : "open") page=\(inThePage) "
+                        + "caret=\(controller.editor.selectedRange()) "
+                        + "box=\(String(describing: controller.editor.currentBoxIndex)) "
+                        + "boxes=\(controller.editor.boxes.map(\.slide.number))")
+                throw CancellationError()
+            }
+            try await Task.sleep(nanoseconds: 20_000_000)
+        }
         return try XCTUnwrap(preview.lastReady)
     }
 
