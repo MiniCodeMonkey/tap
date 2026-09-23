@@ -34,6 +34,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return [.credits: NSAttributedString(string: "Bundled tap \(version)")]
     }
 
+    @objc func showTapLog(_ sender: Any?) {
+        let keyDeck = NSApp.keyWindow?.windowController as? DeckWindowController
+        TapLogWindowController.shared.show(log: keyDeck?.sessionController.session.log)
+    }
+
     @objc func showHelp(_ sender: Any?) {
         NSWorkspace.shared.open(URL(string: "https://github.com/MiniCodeMonkey/tap")!)
     }

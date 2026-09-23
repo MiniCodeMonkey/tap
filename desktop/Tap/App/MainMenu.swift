@@ -121,6 +121,8 @@ enum MainMenu {
         menu.addItem(item("Minimize", action: #selector(NSWindow.performMiniaturize(_:)), key: "m"))
         menu.addItem(item("Zoom", action: #selector(NSWindow.performZoom(_:))))
         menu.addItem(.separator())
+        menu.addItem(item("Tap Log", action: #selector(AppDelegate.showTapLog(_:)), key: "l", modifiers: [.command, .option]))
+        menu.addItem(.separator())
         menu.addItem(item("Bring All to Front", action: #selector(NSApplication.arrangeInFront(_:))))
         return menu
     }
