@@ -36,6 +36,7 @@ const (
 	appErrorTunnelFailed      = "tunnel_failed"
 	appErrorRecordingFailed   = "recording_failed"
 	appErrorRecordingBlocked  = "recording_blocked"
+	appErrorCommandStuck      = "command_stuck"
 )
 
 // appEventQueueSize is how many events can wait for the writer.

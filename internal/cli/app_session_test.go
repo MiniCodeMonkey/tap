@@ -96,7 +96,7 @@ func startAppSessionForTest(t *testing.T, configure func(options *appSessionOpti
 		Questions:         harness.questions,
 		Commands:          harness.commands,
 		Signals:           harness.signals,
-		Reload:            func() error { return nil },
+		Reload:            func(context.Context) error { return nil },
 		Tunnels:           &fakeTunnels{available: true},
 		Log:               io.Discard,
 		RecordingInterval: 10 * time.Millisecond,
@@ -156,7 +156,7 @@ func waitUntil(t *testing.T, what string, condition func() bool) {
 func TestAppSessionReloadCommand(t *testing.T) {
 	var reloads atomic.Int32
 	harness := startAppSessionForTest(t, func(options *appSessionOptions) {
-		options.Reload = func() error { reloads.Add(1); return nil }
+		options.Reload = func(context.Context) error { reloads.Add(1); return nil }
 	})
 	harness.send(appCommand{Type: appCommandReload})
 	waitUntil(t, "the deck reloaded", func() bool { return reloads.Load() == 1 })
@@ -164,7 +164,7 @@ func TestAppSessionReloadCommand(t *testing.T) {
 
 func TestAppSessionReportsAFailedReload(t *testing.T) {
 	harness := startAppSessionForTest(t, func(options *appSessionOptions) {
-		options.Reload = func() error { return errors.New("frontmatter: bad") }
+		options.Reload = func(context.Context) error { return errors.New("frontmatter: bad") }
 	})
 	harness.send(appCommand{Type: appCommandReload})
 	event := harness.log.next(t, appEventError)
@@ -176,7 +176,7 @@ func TestAppSessionReportsAFailedReload(t *testing.T) {
 func TestAppSessionSavedCommand(t *testing.T) {
 	var saves atomic.Int32
 	harness := startAppSessionForTest(t, func(options *appSessionOptions) {
-		options.Saved = func() error { saves.Add(1); return nil }
+		options.Saved = func(context.Context) error { saves.Add(1); return nil }
 	})
 	harness.send(appCommand{Type: appCommandSaved})
 	waitUntil(t, "saved ran", func() bool { return saves.Load() == 1 })
@@ -425,6 +425,75 @@ func TestAppSessionQuitJoinsAnInProgressTunnelStart(t *testing.T) {
 	}
 }
 
+// TestAppSessionQuitReturnsEvenWhenACommandNeverFinishes reproduces the
+// Critical the previous fix round introduced: end() joins the worker
+// unconditionally, on session.workerDone, with no bound at all, so a
+// command that never returns (a stuck reload, here) holds runAppSession
+// open forever, and quit can never get through it. Before this fix, this
+// test fails at waitForEnd's own five-second bound ("the session did not
+// end"), because nothing in end() ever gives up on the worker. After the
+// fix, the join itself is bounded by WorkerJoinTimeout, so quit returns
+// well inside that bound regardless of what the stuck command does.
+func TestAppSessionQuitReturnsEvenWhenACommandNeverFinishes(t *testing.T) {
+	entered := make(chan struct{})
+	block := make(chan struct{}) // never closed: the command blocks forever
+	harness := startAppSessionForTest(t, func(options *appSessionOptions) {
+		options.WorkerJoinTimeout = 200 * time.Millisecond
+		options.Reload = func(context.Context) error {
+			close(entered)
+			<-block
+			return nil
+		}
+	})
+	harness.send(appCommand{Type: appCommandReload})
+	<-entered
+	harness.send(appCommand{Type: appCommandQuit})
+	harness.waitForEnd(t)
+}
+
+// TestAppSessionQuitStopsARunningTunnel reproduces the Critical the review
+// found still open: ending a session used to only stop watching a running
+// tunnel, never call Stop on it. Before this fix, the tunnel is started to
+// completion, quit is sent, runAppSession returns, and the fake tunnel
+// controller's URL is still set -- exactly what the reviewer found by
+// driving the same sequence against a real cloudflared tunnel. After the
+// fix, ending the session stops a tunnel still running.
+func TestAppSessionQuitStopsARunningTunnel(t *testing.T) {
+	tunnels := &fakeTunnels{available: true}
+	harness := startAppSessionForTest(t, func(options *appSessionOptions) { options.Tunnels = tunnels })
+	start := true
+
+	harness.send(appCommand{Type: appCommandTunnel, Start: &start})
+	harness.log.nextWhere(t, appEventTunnel, func(event map[string]any) bool { return event["state"] == "running" })
+
+	harness.send(appCommand{Type: appCommandQuit})
+	harness.waitForEnd(t)
+
+	if url := tunnels.URL(); url != "" {
+		t.Errorf("tunnel url = %q after quit, want stopped", url)
+	}
+}
+
+// TestAppSessionKeepRecordingTimeoutIsShort forces the timing rather than
+// asserting the constant directly: it drives quit into an unanswered
+// keep-recording question, using the package's real default (no override),
+// and requires the session to end well under waitForEnd's five-second
+// bound. Before this fix the default is 30s, so this test fails at that
+// same five-second bound. After the fix the default is a few seconds, so
+// the session ends on its own with room to spare.
+func TestAppSessionKeepRecordingTimeoutIsShort(t *testing.T) {
+	present := &fakePresent{dir: "/talks/recordings/run", state: tui.PresentRecording, segment: 1, started: true, leftFirstSlide: true}
+	harness := startAppSessionForTest(t, func(options *appSessionOptions) { options.Present = present })
+
+	harness.send(appCommand{Type: appCommandQuit})
+	harness.log.next(t, appEventQuestion)
+	started := time.Now()
+	harness.waitForEnd(t)
+	if elapsed := time.Since(started); elapsed > 4*time.Second {
+		t.Errorf("quit took %s to return unanswered; want a few seconds, well under the old 30s default", elapsed)
+	}
+}
+
 // TestAppSessionCommandsRunInSendOrder forces the ordering question rather
 // than hoping for it: reload is made artificially slower than saved, so
 // per-command goroutines racing for the shared order slice would almost
@@ -435,14 +504,14 @@ func TestAppSessionCommandsRunInSendOrder(t *testing.T) {
 	var mu sync.Mutex
 	var order []string
 	harness := startAppSessionForTest(t, func(options *appSessionOptions) {
-		options.Reload = func() error {
+		options.Reload = func(context.Context) error {
 			time.Sleep(30 * time.Millisecond)
 			mu.Lock()
 			order = append(order, "reload")
 			mu.Unlock()
 			return nil
 		}
-		options.Saved = func() error {
+		options.Saved = func(context.Context) error {
 			mu.Lock()
 			order = append(order, "saved")
 			mu.Unlock()

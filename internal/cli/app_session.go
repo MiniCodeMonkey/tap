@@ -19,12 +19,29 @@ const (
 	appTunnelQRSize = 512
 	// appKeepRecordingTimeout bounds the keep-recording question quit
 	// asks, so quit always returns even when standard input stays open
-	// and nothing answers.
-	appKeepRecordingTimeout = 30 * time.Second
+	// and nothing answers. It is short on purpose: quit is a path whose
+	// whole point is that the window is closing, so an app not watching
+	// for the keep-recording event specifically sees silence for this
+	// long and cannot tell it apart from a hang. The unanswered default
+	// is "keep the recording" (safe, no data loss), so a short bound
+	// costs little: a few seconds is plenty of room for a desktop app to
+	// show its own dialog and reply, without exposing a long
+	// unresponsive window on the way out.
+	appKeepRecordingTimeout = 3 * time.Second
 	// appTaskQueueSize matches appCommandQueueSize: readAppCommandLine
 	// already refuses to queue more than that many commands, so a task
 	// queue of the same size never has to make handle wait for room.
 	appTaskQueueSize = appCommandQueueSize
+	// appWorkerJoinTimeout bounds how long quit waits for the worker's
+	// current task to finish. Reload, Saved, a recording action and a
+	// tunnel stop are all otherwise synchronous with no bound of their
+	// own, so without this, one that never returns would hang quit
+	// itself, not just leak a goroutine. When it expires, the task is
+	// abandoned (it may still be running, detached, on its own
+	// goroutine) and shutdown continues without it -- finishing tidily
+	// is preferable, never mandatory, since the process is on its way
+	// out regardless.
+	appWorkerJoinTimeout = 5 * time.Second
 )
 
 // appSessionOptions is what the --app control loop drives.
@@ -38,11 +55,15 @@ type appSessionOptions struct {
 	// the live code approval. Its context ends when the run ends.
 	Startup func(ctx context.Context)
 	// Reload is the reload command: render the deck again and reload every
-	// page, as r does.
-	Reload func() error
+	// page, as r does. It takes the session's context and should honour
+	// it: quit cancels this context, and a Reload that keeps working
+	// past that is only saved from hanging quit by WorkerJoinTimeout, a
+	// backstop of last resort, not a substitute for checking ctx.
+	Reload func(ctx context.Context) error
 	// Saved is the saved command. It is nil in tap present --app, which
-	// has no buffer.
-	Saved   func() error
+	// has no buffer. Like Reload, it takes the session's context and
+	// should honour it.
+	Saved   func(ctx context.Context) error
 	Tunnels tui.TunnelController
 	// Present is the tap present run. It is nil in tap dev --app.
 	Present    appPresentControl
@@ -59,6 +80,11 @@ type appSessionOptions struct {
 	// recording, so quit always returns even when standard input stays
 	// open unanswered.
 	KeepRecordingTimeout time.Duration
+	// WorkerJoinTimeout bounds how long quit waits for the worker's
+	// current task to finish before giving up on it and continuing
+	// shutdown anyway, so a command that ignores cancellation cannot
+	// hold the process open forever.
+	WorkerJoinTimeout time.Duration
 }
 
 // keepRecordingPayload is the payload of a keep-recording question.
@@ -102,6 +128,9 @@ func runAppSession(options appSessionOptions) {
 	if options.KeepRecordingTimeout == 0 {
 		options.KeepRecordingTimeout = appKeepRecordingTimeout
 	}
+	if options.WorkerJoinTimeout == 0 {
+		options.WorkerJoinTimeout = appWorkerJoinTimeout
+	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -144,8 +173,23 @@ func runAppSession(options appSessionOptions) {
 		cancel()
 		<-startupDone
 		<-reporterDone
-		<-session.workerDone
-		session.finishRecording(askToKeep)
+		workerJoined := true
+		select {
+		case <-session.workerDone:
+		case <-time.After(options.WorkerJoinTimeout):
+			workerJoined = false
+			session.fail(appErrorCommandStuck, fmt.Sprintf("a command did not stop within %s of quit; leaving it running in the background and shutting down anyway", options.WorkerJoinTimeout))
+		}
+		session.stopTunnelAtExit()
+		if workerJoined {
+			session.finishRecording(askToKeep)
+		} else {
+			// The abandoned task may still hold the recording's own
+			// lock, so finishRecording is skipped rather than risking
+			// end() itself hanging on the same state finishRecording
+			// would need to touch.
+			fmt.Fprintln(options.Log, "Skipping the recording summary: a stuck command left its state unknown.")
+		}
 	}
 
 	for {
@@ -228,8 +272,12 @@ func (session *appSession) runWorker() {
 	}
 }
 
-func (session *appSession) runAction(name string, action func() error) {
-	if err := action(); err != nil {
+// runAction carries out a Reload or Saved command with session.ctx, so a
+// quit already in progress reaches it the same way it reaches a tunnel
+// start: through cancellation, not only through WorkerJoinTimeout giving
+// up on the wait.
+func (session *appSession) runAction(name string, action func(ctx context.Context) error) {
+	if err := action(session.ctx); err != nil {
 		session.fail(appErrorReloadFailed, fmt.Sprintf("%s: %v", name, err))
 	}
 }
@@ -306,6 +354,37 @@ func (session *appSession) tunnel(start bool) {
 		return
 	}
 	session.emitTunnelRunning(url)
+}
+
+// stopTunnelAtExit stops a tunnel still running when the session ends, so
+// closing a session actually closes the deck's public exposure, not just
+// the goroutine that started it. It deliberately bypasses tunnelMu:
+// session.ctx is already cancelled by the time end() calls this, no new
+// tunnel command can be enqueued, and if the abandoned worker task
+// (WorkerJoinTimeout already gave up on it) happens to be holding tunnelMu
+// itself, waiting for it here would reintroduce the same hang this fix
+// removes. It is best effort, bounded the same way as the worker join: the
+// process is exiting either way, and a Stop that will not return promptly
+// is abandoned rather than allowed to hold up shutdown further.
+func (session *appSession) stopTunnelAtExit() {
+	tunnels := session.options.Tunnels
+	if tunnels == nil || tunnels.URL() == "" {
+		return
+	}
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		if err := tunnels.Stop(); err != nil {
+			session.fail(appErrorTunnelFailed, "stopping the tunnel at quit: "+err.Error())
+			return
+		}
+		session.options.Events.emit(appTunnelEvent{Type: appEventTunnel, State: "stopped"})
+	}()
+	select {
+	case <-done:
+	case <-time.After(session.options.WorkerJoinTimeout):
+		session.fail(appErrorTunnelFailed, fmt.Sprintf("stopping the tunnel did not finish within %s of quit; it may still be running", session.options.WorkerJoinTimeout))
+	}
 }
 
 // emitTunnelRunning sends the running tunnel's URL and a QR code of its
