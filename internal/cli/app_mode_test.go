@@ -852,6 +852,133 @@ func TestAppDevReportsAStartupFailureAsAnErrorEvent(t *testing.T) {
 	}
 }
 
+// TestAppDevOpensADeckWithUnparseableFrontmatter covers the ruling that
+// unparseable frontmatter is not fatal in tap dev --app: the editor is the
+// tool built to fix a broken deck, so it must still open one. tap falls
+// back to the default configuration, the way slidelist.Build already
+// does for PUT /api/app/source, and the problem shows up in the slide
+// list's errors rather than as a startup failure.
+func TestAppDevOpensADeckWithUnparseableFrontmatter(t *testing.T) {
+	deckDir := t.TempDir()
+	deck := filepath.Join(deckDir, "broken.md")
+	// The frontmatter delimiter is never closed, so config.FromSource
+	// fails to parse it (see TestFromSource in internal/config).
+	broken := "---\ntitle: Broken\n\n# One\n"
+	if err := os.WriteFile(deck, []byte(broken), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	process := startAppProcess(t, t.TempDir(), "dev", "--app", deck)
+
+	status, body := process.putSource(broken)
+	if status != http.StatusOK {
+		t.Fatalf("PUT /api/app/source on unparseable frontmatter: status %d, body %s", status, body)
+	}
+	var result struct {
+		Errors []string `json:"errors"`
+	}
+	if err := json.Unmarshal([]byte(body), &result); err != nil {
+		t.Fatalf("decoding the slide list: %v\nbody: %s", err, body)
+	}
+	found := false
+	for _, message := range result.Errors {
+		if strings.Contains(message, "frontmatter") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("slide list errors = %v, want one mentioning frontmatter", result.Errors)
+	}
+
+	// tap kept running: no fatal error event, and it still answers quit.
+	process.noEvent(appEventError, 250*time.Millisecond)
+	process.send(`{"type":"quit"}`)
+	if err := process.waitForExit(); err != nil {
+		t.Fatalf("tap exited with %v:\n%s", err, process.stderr)
+	}
+}
+
+// TestAppPresentStaysFatalOnUnparseableFrontmatter covers the other side
+// of that ruling: tap present --app has no route for editing or
+// re-rendering the deck, so there is no channel to report a recoverable
+// problem through, and a presenter about to go on stage should be told
+// before tap ever starts rather than see a silently substituted default
+// configuration. Unparseable frontmatter stays fatal there.
+func TestAppPresentStaysFatalOnUnparseableFrontmatter(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping subprocess test in short mode")
+	}
+	deck := filepath.Join(t.TempDir(), "broken.md")
+	if err := os.WriteFile(deck, []byte("---\ntitle: Broken\n\n# One\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	command := exec.Command(buildTapBinaryForTest(t), "present", "--app", deck)
+	command.Env = append(os.Environ(), "XDG_CONFIG_HOME="+t.TempDir())
+	var stdout, stderr bytes.Buffer
+	command.Stdout, command.Stderr = &stdout, &stderr
+	if err := command.Run(); err == nil {
+		t.Fatal("tap present --app started on a deck with unparseable frontmatter")
+	}
+	lines := strings.Split(strings.TrimSpace(stdout.String()), "\n")
+	var event map[string]any
+	if len(lines) != 1 || json.Unmarshal([]byte(lines[0]), &event) != nil || event["type"] != appEventError || event["code"] == "" {
+		t.Errorf("stdout = %q, want one error event\nstderr: %s", stdout.String(), stderr.String())
+	}
+}
+
+// TestAppDevStaysFatalOnAGenuinelyBrokenDeck covers the conditions that
+// must stay fatal in tap dev --app even after unparseable frontmatter
+// became recoverable: a deck file that does not exist, a path that is a
+// directory, and a file that cannot be read. None of these are a
+// frontmatter problem a default configuration can paper over.
+//
+// A missing deck or a directory is caught by resolveDeck before tap dev
+// --app ever claims standard output for the JSON protocol (see
+// devCmd.RunE), so those two fail with a plain message on standard error
+// rather than a JSON error event; a deck that exists but cannot be read
+// fails inside runDevServer itself, after the protocol has started, so it
+// does produce one. What every case must share is that tap never starts:
+// no ready line, and a non-zero exit.
+func TestAppDevStaysFatalOnAGenuinelyBrokenDeck(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping subprocess test in short mode")
+	}
+	assertFatal := func(t *testing.T, deck string) {
+		t.Helper()
+		command := exec.Command(buildTapBinaryForTest(t), "dev", "--app", deck)
+		command.Env = append(os.Environ(), "XDG_CONFIG_HOME="+t.TempDir())
+		var stdout, stderr bytes.Buffer
+		command.Stdout, command.Stderr = &stdout, &stderr
+		if err := command.Run(); err == nil {
+			t.Fatalf("tap dev --app started on %s", deck)
+		}
+		if strings.Contains(stdout.String(), `"type":"ready"`) {
+			t.Errorf("deck %s: printed a ready line, want tap to never start\nstdout: %s", deck, stdout.String())
+		}
+	}
+
+	t.Run("deck file does not exist", func(t *testing.T) {
+		assertFatal(t, filepath.Join(t.TempDir(), "missing.md"))
+	})
+	t.Run("path is a directory", func(t *testing.T) {
+		assertFatal(t, t.TempDir())
+	})
+	t.Run("file cannot be read", func(t *testing.T) {
+		deck := filepath.Join(t.TempDir(), "unreadable.md")
+		if err := os.WriteFile(deck, []byte("# One\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chmod(deck, 0o000); err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = os.Chmod(deck, 0o644) })
+		if os.Geteuid() == 0 {
+			t.Skip("running as root: an unreadable file is still readable")
+		}
+		assertFatal(t, deck)
+	})
+}
+
 // TestAppDevLeavesViewingOpenAndClosesSteering covers the ruling that
 // --app mode sets a presenter password of its own: the audience routes,
 // the WebSocket among them, stay reachable by anyone with the address or
