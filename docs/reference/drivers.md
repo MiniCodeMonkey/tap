@@ -7,7 +7,7 @@ title: Drivers
 Complete reference for all code execution drivers in Tap. Drivers enable live code execution during presentations using `tap dev`.
 
 ::: warning Development Mode Only
-Live code execution only works in development mode (`tap dev`). Static builds show code blocks but don't execute them.
+Live code execution works when tap is serving the deck: `tap dev` and `tap present`. Static builds show code blocks but don't execute them.
 :::
 
 ## Overview
