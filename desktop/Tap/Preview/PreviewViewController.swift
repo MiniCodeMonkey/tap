@@ -38,7 +38,13 @@ final class PreviewViewController: NSViewController, WKNavigationDelegate, WKUID
     var onStepForward: (() -> Void)?
     var onPinToggled: (() -> Void)?
     private(set) var lastReady: ReadyPayload?
-    private(set) var finishedNavigationCount = 0
+    /// How many times the preview has been pointed at a page. Every reload
+    /// of the preview goes through `load`, and an in-place update goes
+    /// through none: the page keeps its document and rerenders from the hub.
+    /// The count rises inside `load`, before the navigation it starts, so
+    /// what reads it sees a reload the moment the app asks for one rather
+    /// than whenever WebKit gets round to reporting it.
+    private(set) var pageLoadCount = 0
     private var allowedPort: Int?
 
     override init(nibName: NSNib.Name?, bundle: Bundle?) {
@@ -106,6 +112,7 @@ final class PreviewViewController: NSViewController, WKNavigationDelegate, WKUID
     /// Loads the audience page of a newly started tap. The launch code works
     /// once: tap sets its cookie and redirects to the same URL without it.
     func load(client: TapClient) {
+        pageLoadCount += 1
         allowedPort = client.ready.port
         lastReady = nil
         webView.load(URLRequest(url: client.previewLaunchURL))
@@ -140,10 +147,6 @@ final class PreviewViewController: NSViewController, WKNavigationDelegate, WKUID
         if url.scheme == "about" || url.scheme == "blob" || url.scheme == "data" { return .allow }
         if navigationAction.targetFrame?.isMainFrame ?? true { NSWorkspace.shared.open(url) }
         return .cancel
-    }
-
-    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-        finishedNavigationCount += 1
     }
 
     func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration,

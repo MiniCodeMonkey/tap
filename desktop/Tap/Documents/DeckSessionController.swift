@@ -21,6 +21,10 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
     /// Runs after each slide list is applied to the editor.
     var onSlideListApplied: ((SlideList) -> Void)?
     var onHubMessage: ((HubMessage) -> Void)?
+    /// Trades the ready line's presenter secret for the hub cookie. It is a
+    /// closure so a test can hold the exchange open across a restart, which
+    /// is the race the guard after it turns away.
+    var exchangePresenterSecret: (TapClient) async throws -> Void = { try await $0.authorizePresenter() }
 
     var editor: EditorTextView { editorViewController.textView }
 
@@ -105,9 +109,10 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
         // cookie it buys is relayed to nobody, so the preview would never
         // move. A refusal is logged and the socket is opened anyway, because
         // hearing the hub is still worth having.
+        let exchange = exchangePresenterSecret
         Task { @MainActor [weak self] in
             do {
-                try await newClient.authorizePresenter()
+                try await exchange(newClient)
             } catch {
                 self?.session.log.append("tap refused the presenter secret: \(error)", source: .app)
             }

@@ -7,8 +7,9 @@ final class AppEnvironment {
     static let shared = AppEnvironment()
     static let didLoadNotification = Notification.Name("TapAppEnvironmentDidLoad")
 
-    /// The tap every session runs. The `TapExecutablePath` default replaces
-    /// it, which UI tests use to run a fake tap.
+    /// The tap every session runs: the one inside the bundle, unless the
+    /// `TapExecutablePath` default names another. Every test runs the
+    /// bundled tap.
     var tapExecutableURL: URL
     /// Variables added on top of the login shell environment.
     var extraEnvironment: [String: String] = [:]

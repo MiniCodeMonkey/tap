@@ -62,11 +62,19 @@ final class EditingTests: HostedTestCase {
         XCTAssertTrue(header.badges.contains("sqlite"))
     }
 
-    /// The bar is reached the way a person reaches it, by breaking the
-    /// frontmatter of a deck that is already open. A deck whose frontmatter
-    /// is broken on disk cannot be opened at all: `tap dev --app` answers
-    /// that file with an invalid_deck error event and exits, so no session
-    /// ever runs to answer a PUT.
+    /// The bar is reached by a programmatic edit. `replaceText` sets
+    /// `isApplyingProgrammaticEdit`, which is the flag `shouldChangeText`
+    /// reads in order to skip the clamp, so this is the path the app itself
+    /// uses to load the disk version, not a path a person can take: someone
+    /// typing into the hidden frontmatter is beeped and refused.
+    ///
+    /// The route a person takes to this bar is opening a deck whose
+    /// frontmatter is already broken on disk, and that cannot be tested from
+    /// here: `tap dev --app` answers such a file with an invalid_deck error
+    /// event and exits, so no session ever runs to answer a PUT. What is
+    /// asserted below, the bar and the frontmatter coming out of hiding once
+    /// the slide list carries an error, is the same end state either route
+    /// produces.
     func testDeckErrorsShowABarAndTheFrontmatter() async throws {
         let document = try await openDeck(try Fixtures.copyAppFixture())
         let controller = try XCTUnwrap(document.sessionController)

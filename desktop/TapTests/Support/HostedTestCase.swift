@@ -15,9 +15,20 @@ class HostedTestCase: XCTestCase {
 
     override func tearDown() async throws {
         for document in NSDocumentController.shared.documents {
+            // The window goes off screen first. document.close() returns
+            // before the window server has taken its window down, and a deck
+            // window left standing sits over the next test's preview, whose
+            // audience page then never paints and never reports a slide
+            // ready. Ordering it out is immediate; closing is not.
+            for windowController in document.windowControllers {
+                windowController.window?.orderOut(nil)
+            }
             document.close()
         }
-        try await Task.sleep(nanoseconds: 100_000_000)
+        try await waitUntil(timeout: 10, "every deck window to go away") {
+            NSDocumentController.shared.documents.isEmpty
+                && !NSApp.windows.contains { $0.isVisible && $0.windowController is DeckWindowController }
+        }
     }
 
     func openDeck(_ url: URL) async throws -> DeckDocument {

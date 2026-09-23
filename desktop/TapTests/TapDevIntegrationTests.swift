@@ -83,25 +83,22 @@ final class TapDevIntegrationTests: HostedTestCase {
         let plainTextStatus = try await status(of: plainText)
         XCTAssertEqual(plainTextStatus, 415)
 
-        // A WebSocket upgrade without the token is allowed, because the
-        // audience's own page opens it. What the token does not buy, and
-        // the presenter secret does, is the right to drive other clients:
-        // see WebSocketHub.checkPresenterAuth.
-        let socket = URLSession(configuration: .ephemeral).webSocketTask(with: URL(string: "ws://127.0.0.1:\(ready.port)/ws")!)
-        socket.resume()
-        _ = try await socket.receive()
-        socket.cancel(with: .goingAway, reason: nil)
-
-        // With the token, the upgrade works.
-        let authorized = URLSession(configuration: .ephemeral).webSocketTask(with: client.socketRequest())
-        authorized.resume()
-        let first = try await authorized.receive()
-        if case .string(let text) = first {
+        // /ws is an audience route too: the upgrade works with the token and
+        // without it alike, because the audience's own page opens it holding
+        // no app token. What the token does not buy, and the presenter secret
+        // does, is the right to drive the other clients: see
+        // WebSocketHub.checkPresenterAuth.
+        let bare = URLRequest(url: URL(string: "ws://127.0.0.1:\(ready.port)/ws")!)
+        for request in [bare, client.socketRequest()] {
+            let socket = URLSession(configuration: .ephemeral).webSocketTask(with: request)
+            socket.resume()
+            guard case .string(let text) = try await socket.receive() else {
+                XCTFail("expected the connected message")
+                continue
+            }
             XCTAssertEqual(HubMessage.decode(text), .other(type: "connected"))
-        } else {
-            XCTFail("expected the connected message")
+            socket.cancel(with: .goingAway, reason: nil)
         }
-        authorized.cancel(with: .goingAway, reason: nil)
     }
 
     /// Collects hub messages off one socket for as long as it is held. A

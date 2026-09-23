@@ -15,7 +15,8 @@ final class PreviewTests: HostedTestCase {
     }
 
     func testThePreviewUpdatesWhileIType() async throws {
-        let document = try await openDeckAndWaitForPreview(try Fixtures.copyAppFixture())
+        let deck = try Fixtures.copyAppFixture()
+        let document = try await openDeckAndWaitForPreview(deck)
         let controller = try XCTUnwrap(document.sessionController)
         try await waitForBoxes(document, count: 4)
         controller.editor.moveCursor(toSlide: 2)
@@ -23,13 +24,19 @@ final class PreviewTests: HostedTestCase {
         let headingEnd = (controller.editor.string as NSString).range(of: "# Fragments").upperBound
         controller.editor.setSelectedRange(NSRange(location: headingEnd, length: 0))
         controller.editor.insertText(" edited", replacementRange: NSRange(location: NSNotFound, length: 0))
-        let typed = Date()
         try await waitUntil(timeout: 5, "a new revision in the preview") {
             controller.previewViewController.lastReady.map { $0.revision != before.revision && $0.slide == 3 } ?? false
         }
-        XCTAssertLessThan(Date().timeIntervalSince(typed), 0.2, "the preview shows an edit within 200 ms after the typing pause starts")
         let text = await controller.previewViewController.pageText()
         XCTAssertTrue(text.contains("Fragments edited"))
+        // While I type, not when I save: the edit reached the preview out of
+        // the unsaved buffer, and the deck on disk still holds the old text.
+        // How long that took is a property of the machine, so it is not
+        // asserted here; the debounce that decides when the send goes out is
+        // covered by TapDesktopCore's SourceSyncTests.
+        XCTAssertTrue(controller.editor.string.contains("# Fragments edited"), "the edit is only in the buffer")
+        let onDisk = try String(contentsOf: deck, encoding: .utf8)
+        XCTAssertFalse(onDisk.contains("Fragments edited"), "nothing was written to the deck file")
     }
 
     func testThePreviewIsTheAudienceView() async throws {
@@ -56,7 +63,7 @@ final class PreviewTests: HostedTestCase {
         try await waitForBoxes(document, count: 4)
         controller.editor.moveCursor(toSlide: 2)
         let before = try await waitForPreview(document, slide: 3)
-        let navigations = controller.previewViewController.finishedNavigationCount
+        let loads = controller.previewViewController.pageLoadCount
         var messages: [HubMessage] = []
         controller.onHubMessage = { messages.append($0) }
 
@@ -66,10 +73,22 @@ final class PreviewTests: HostedTestCase {
         try await waitUntil(timeout: 5, "an update message") {
             messages.contains { if case .update(_, let slides) = $0 { return slides.contains(3) } else { return false } }
         }
-        try await waitUntil(timeout: 5, "the re-rendered slide") { controller.previewViewController.lastReady?.revision != before.revision }
+        // Reading the edit out of the page is what puts the assertions
+        // after everything the edit sets off. A reload is not visible in
+        // lastReady, which a reload only clears, nor reliably in WebKit's
+        // navigation callbacks, which arrive whenever the run loop gets to
+        // them; it is visible in pageLoadCount, which rises inside load()
+        // the moment the app asks for a new page.
+        var text = ""
+        let deadline = Date().addingTimeInterval(15)
+        while !text.contains("Fragments again") && Date() < deadline {
+            text = await controller.previewViewController.pageText()
+            try await Task.sleep(nanoseconds: 20_000_000)
+        }
 
         XCTAssertFalse(messages.contains(.reload), "tap sends update, not reload")
-        XCTAssertEqual(controller.previewViewController.finishedNavigationCount, navigations, "the page did not reload")
+        XCTAssertTrue(text.contains("Fragments again"), "the preview shows the edit")
+        XCTAssertEqual(controller.previewViewController.pageLoadCount, loads, "the page did not reload")
         XCTAssertEqual(controller.previewViewController.lastReady?.step, before.step, "the current step is kept")
 
         let tapProcess = try XCTUnwrap(controller.session.processIdentifier)

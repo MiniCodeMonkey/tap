@@ -23,6 +23,8 @@ public struct TapReady: Codable, Equatable, Sendable {
 
 /// One fenced code block of a slide, as tap reports it.
 public struct CodeBlock: Codable, Equatable, Sendable {
+    /// Which fenced block of the slide this is, counting from 1, as
+    /// `CodeBlock.Block` in internal/slidelist/slidelist.go defines it.
     public let block: Int
     public let language: String
     public let driver: String
