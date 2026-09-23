@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"sync/atomic"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -116,14 +117,20 @@ const lockSuffix = ".lock"
 // lockRetryInterval and lockAcquireTimeout bound how long WithLock waits
 // to acquire the settings lock before giving fn the settings unlocked. A
 // load-modify-save normally holds the lock for a fraction of a second, so
-// this is generous for real contention; a lock file left behind by a tap
-// process that crashed while holding it must not wedge every later run
-// forever, so a caller that still cannot acquire it after the timeout
-// proceeds anyway; losing an approval to a decade-old stale lock file is
-// better than tap refusing to start.
+// this is generous for real contention. lockStaleAge is the other half of
+// that story: a lock file older than this was left behind by a tap
+// process that crashed or was killed while holding it, since no live
+// load-modify-save runs anywhere near this long, and WithLock breaks it
+// rather than waiting it out. lockAcquireTimeout stays comfortably above
+// lockStaleAge so a caller that starts waiting right as a crash happens
+// still lives to see the lock turn stale and break it, rather than
+// giving up first; it remains a backstop for whatever a stale check
+// cannot fix, such as a lock directory it has no permission to touch, so
+// a caller still cannot wait forever.
 const (
 	lockRetryInterval  = 10 * time.Millisecond
-	lockAcquireTimeout = 2 * time.Second
+	lockStaleAge       = 2 * time.Second
+	lockAcquireTimeout = 3 * time.Second
 )
 
 // WithLock runs fn, which is expected to Load, modify and Save the
@@ -135,10 +142,18 @@ const (
 // but there is nothing to stop two correct writes from racing on stale
 // data. WithLock closes that window by making the whole sequence run
 // one process at a time.
+//
+// A caller that cannot get the lock, whether because it is held by a
+// live process, stuck behind a stale one it could not break, or blocked
+// by something else entirely, still runs fn: refusing to save the user's
+// settings at all would be worse than the lost-update race the lock
+// exists to prevent. It reports that fallback on standard error, since
+// running unlocked silently is exactly the failure mode that let the
+// race come back permanently after a single crash.
 func WithLock(path string, fn func() error) error {
 	lockPath := path + lockSuffix
 	if err := os.MkdirAll(filepath.Dir(lockPath), 0o755); err != nil {
-		return fn()
+		return unlockedFallback(fn)
 	}
 	deadline := time.Now().Add(lockAcquireTimeout)
 	for {
@@ -148,14 +163,87 @@ func WithLock(path string, fn func() error) error {
 				lock.Close()
 				os.Remove(lockPath)
 			}()
+			return fn()
+		}
+		if !os.IsExist(err) {
 			break
 		}
-		if !os.IsExist(err) || time.Now().After(deadline) {
+		breakStaleLock(lockPath)
+		if time.Now().After(deadline) {
 			break
 		}
 		time.Sleep(lockRetryInterval)
 	}
+	return unlockedFallback(fn)
+}
+
+// unlockedFallback runs fn without the settings lock held, after warning
+// standard error that it is doing so. Every path in WithLock that gives
+// up on the lock funnels through here, so the warning can never be
+// skipped by accident.
+func unlockedFallback(fn func() error) error {
+	fmt.Fprintln(os.Stderr, "tap: could not get the settings lock, so this change might race with another tap process; if approvals or consent seem to disappear, that is why.")
 	return fn()
+}
+
+// breakCounter makes the scratch name breakStaleLock renames a stale
+// lock to unique across goroutines in this process, on top of the pid
+// that already makes it unique across processes.
+var breakCounter atomic.Uint64
+
+// breakStaleLock removes lockPath if, and only if, it is old enough that
+// no live WithLock caller could still be holding it: a load-modify-save
+// cycle finishes in milliseconds, so anything older than lockStaleAge was
+// left behind by a process that exited without releasing it.
+//
+// Breaking a lock is itself a race: two callers can both see the same
+// stale file and both decide to break it at once. breakStaleLock closes
+// that window with an atomic rename rather than a bare remove. Renaming
+// lockPath to a name unique to this call (unique across processes via
+// the pid, and across goroutines of the same process via breakCounter,
+// since two goroutines of one process share a pid) can only ever move
+// whatever currently sits at lockPath; if another caller already renamed
+// it away, this rename fails with a "no such file" error and
+// breakStaleLock does nothing, leaving that other caller's break
+// (successful or not) alone. The name must be unique per call and not
+// just per process: two callers renaming to the same shared name could
+// otherwise have the second rename silently overwrite the first
+// caller's claimed file, including one that is in fact a live lock a
+// third caller only just created, which would let that third caller's
+// lock vanish out from under it. With a unique name, only the one
+// caller whose rename actually moved the file goes on to inspect and
+// remove it, so at most one caller ever removes a given stale lock.
+//
+// The remaining gap is the moment between the Stat that judged the file
+// stale and the Rename that claims it: a live process could finish
+// releasing the old lock and take a brand new one in that instant, and
+// this rename would grab the new one instead. breakStaleLock guards
+// against exactly that by comparing the claimed file's ModTime to the one
+// it observed before renaming; a mismatch means a fresh lock was caught
+// instead of the stale one, so it is put back rather than deleted. That
+// window is a handful of CPU instructions wide against a multi-second
+// staleness threshold, the same order of narrowness as the acquire
+// timeout's own residual risk, and is not eliminated further here.
+func breakStaleLock(lockPath string) {
+	info, err := os.Stat(lockPath)
+	if err != nil || time.Since(info.ModTime()) < lockStaleAge {
+		return
+	}
+	claimed := fmt.Sprintf("%s.stale.%d.%d", lockPath, os.Getpid(), breakCounter.Add(1))
+	if err := os.Rename(lockPath, claimed); err != nil {
+		return
+	}
+	claimedInfo, err := os.Stat(claimed)
+	if err != nil || !claimedInfo.ModTime().Equal(info.ModTime()) {
+		// What got renamed away was not the file just inspected: a live
+		// process created it in the gap between the Stat and the
+		// Rename above. Put it back rather than delete a live lock.
+		// Nothing further to do if that fails; the caller's own retry
+		// loop will notice the lock is still there either way.
+		_ = os.Rename(claimed, lockPath)
+		return
+	}
+	_ = os.RemoveAll(claimed)
 }
 
 // ApprovalFor returns the approval stored for deck.

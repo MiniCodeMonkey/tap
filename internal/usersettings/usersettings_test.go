@@ -1,10 +1,13 @@
 package usersettings
 
 import (
+	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -150,6 +153,240 @@ func TestWithLockKeepsBothConcurrentApprovals(t *testing.T) {
 	if len(settings.Approvals) != 2 {
 		t.Fatalf("WithLock did not prevent the lost update: got %d approvals, want 2: %+v", len(settings.Approvals), settings.Approvals)
 	}
+}
+
+// TestWithLockBreaksAStaleLockFileAndWritesUnderIt reproduces the gap the
+// final re-review found: a lock file left behind by a process that was
+// killed while holding it. WithLock must not treat that file as an
+// impassable obstacle to wait out and then quietly step around; it must
+// recognize it as abandoned, remove it, and take a fresh lock of its own
+// before running fn, the same as it would with no lock file at all.
+func TestWithLockBreaksAStaleLockFileAndWritesUnderIt(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "settings.yaml")
+	lockPath := path + lockSuffix
+	if err := os.WriteFile(lockPath, []byte(""), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	old := time.Now().Add(-2 * lockStaleAge)
+	if err := os.Chtimes(lockPath, old, old); err != nil {
+		t.Fatal(err)
+	}
+
+	var lockDuringFn os.FileInfo
+	err := WithLock(path, func() error {
+		lockDuringFn, _ = os.Stat(lockPath)
+		return Save(path, Settings{})
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if lockDuringFn == nil {
+		t.Fatal("no lock file was held while fn ran; the stale lock was stepped around instead of broken and replaced")
+	}
+	if lockDuringFn.ModTime().Equal(old) {
+		t.Error("fn ran beside the original stale lock file, not under a fresh one taken in its place")
+	}
+	if _, err := os.Stat(lockPath); !os.IsNotExist(err) {
+		t.Errorf("lock file left behind after WithLock returned: %v", err)
+	}
+}
+
+// TestWithLockBreakingAStaleLockDoesNotLetTwoWritersInAtOnce attacks the
+// break itself: many callers start against the same abandoned lock file
+// at once, so more than one of them could decide it is stale and try to
+// claim it. Only one may ever succeed at a time; if two both proceeded
+// into fn believing they held the lock, this catches the overlap.
+func TestWithLockBreakingAStaleLockDoesNotLetTwoWritersInAtOnce(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "settings.yaml")
+	lockPath := path + lockSuffix
+	if err := os.WriteFile(lockPath, []byte(""), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	old := time.Now().Add(-2 * lockStaleAge)
+	if err := os.Chtimes(lockPath, old, old); err != nil {
+		t.Fatal(err)
+	}
+
+	const writers = 20
+	var active int32
+	var overlapped int32
+	var wg sync.WaitGroup
+	wg.Add(writers)
+	for i := 0; i < writers; i++ {
+		go func() {
+			defer wg.Done()
+			err := WithLock(path, func() error {
+				if atomic.AddInt32(&active, 1) > 1 {
+					atomic.StoreInt32(&overlapped, 1)
+				}
+				time.Sleep(5 * time.Millisecond)
+				atomic.AddInt32(&active, -1)
+				return nil
+			})
+			if err != nil {
+				t.Error(err)
+			}
+		}()
+	}
+	wg.Wait()
+
+	if atomic.LoadInt32(&overlapped) != 0 {
+		t.Fatal("two writers ran inside WithLock at once while racing to break the same stale lock")
+	}
+}
+
+// TestTwentyWayContentionSerializesWithNothingLost guards a property the
+// final re-review confirmed by hand with a throwaway test but never
+// committed: ordinary contention among many well-behaved writers, with no
+// stale lock involved, still serializes correctly and drops nothing.
+func TestTwentyWayContentionSerializesWithNothingLost(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "settings.yaml")
+	const writers = 20
+	var wg sync.WaitGroup
+	wg.Add(writers)
+	for i := 0; i < writers; i++ {
+		deck := deckFile(t, fmt.Sprintf("deck-%d.md", i))
+		go func(deck DeckKey) {
+			defer wg.Done()
+			err := WithLock(path, func() error {
+				settings, err := Load(path)
+				if err != nil {
+					return err
+				}
+				settings.Approve(deck, []string{"shell"}, approvalTime)
+				return Save(path, settings)
+			})
+			if err != nil {
+				t.Error(err)
+			}
+		}(deck)
+	}
+	wg.Wait()
+
+	settings, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(settings.Approvals) != writers {
+		t.Fatalf("got %d approvals after 20-way contention, want %d: nothing should be lost", len(settings.Approvals), writers)
+	}
+	if _, err := os.Stat(path + lockSuffix); !os.IsNotExist(err) {
+		t.Errorf("lock file left behind after all writers finished: %v", err)
+	}
+}
+
+// TestWithLockWarnsOnStderrWhenItFallsBackUnlocked covers the other half
+// of the fix: whenever WithLock cannot get the lock and runs fn anyway,
+// it must say so, in one sentence a person can act on, rather than doing
+// it silently. A read-only settings directory forces the fallback
+// immediately, without waiting out the acquire timeout.
+func TestWithLockWarnsOnStderrWhenItFallsBackUnlocked(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "settings.yaml")
+	if err := os.Chmod(dir, 0o500); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(dir, 0o700) })
+
+	ran := false
+	stderr := captureStderr(t, func() {
+		err := WithLock(path, func() error {
+			ran = true
+			return nil
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	if !ran {
+		t.Fatal("WithLock did not run fn at all")
+	}
+	if !strings.Contains(stderr, "lock") {
+		t.Errorf("stderr = %q, want a plain-sentence warning about the unlocked fallback", stderr)
+	}
+}
+
+// TestWithLockNeverHangsForeverOnAFreshLockItCannotAcquire confirms the
+// bounded wait the final re-review demanded stays intact: a lock file
+// with a current timestamp looks like it could belong to a live writer,
+// so it must not be broken as stale, but WithLock still must not wait for
+// it indefinitely.
+func TestWithLockNeverHangsForeverOnAFreshLockItCannotAcquire(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "settings.yaml")
+	lockPath := path + lockSuffix
+	if err := os.WriteFile(lockPath, []byte(""), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Remove(lockPath) })
+
+	start := time.Now()
+	ran := false
+	err := WithLock(path, func() error {
+		ran = true
+		return nil
+	})
+	elapsed := time.Since(start)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ran {
+		t.Fatal("WithLock did not run fn")
+	}
+	if elapsed > 10*time.Second {
+		t.Fatalf("WithLock waited %v for a lock it could never break or acquire, want a bounded wait", elapsed)
+	}
+}
+
+// TestWithLockRecoversWhenADirectorySitsAtTheLockPath confirms a
+// directory occupying the lock path, old enough to look abandoned, does
+// not wedge tap forever: WithLock still returns and still runs fn.
+func TestWithLockRecoversWhenADirectorySitsAtTheLockPath(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "settings.yaml")
+	lockPath := path + lockSuffix
+	if err := os.Mkdir(lockPath, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	old := time.Now().Add(-2 * lockStaleAge)
+	if err := os.Chtimes(lockPath, old, old); err != nil {
+		t.Fatal(err)
+	}
+
+	ran := false
+	err := WithLock(path, func() error {
+		ran = true
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ran {
+		t.Fatal("WithLock did not run fn")
+	}
+}
+
+// captureStderr redirects os.Stderr for the duration of fn and returns
+// what was written to it.
+func captureStderr(t *testing.T, fn func()) string {
+	t.Helper()
+	original := os.Stderr
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.Stderr = w
+	defer func() { os.Stderr = original }()
+
+	fn()
+
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+	out, err := io.ReadAll(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(out)
 }
 
 var approvalTime = time.Date(2026, 9, 22, 19, 32, 0, 0, time.UTC)
