@@ -16,6 +16,15 @@ final class PreviewWindowTests: HostedTestCase {
         XCTAssertTrue(previewWindow.styleMask.contains(.resizable))
         XCTAssertTrue(windowController.splitViewController.isPreviewHidden)
 
+        // A person choosing Preview in Window is already in the app, so the
+        // new window comes forward with it. A test runner is not, and a
+        // window of an app the window server has never activated counts as
+        // covered: the page in it reports document.hidden, stops running,
+        // and never reports a slide ready. openDeck brings the deck window
+        // forward for the same reason.
+        NSApp.activate(ignoringOtherApps: true)
+        previewWindow.orderFrontRegardless()
+
         controller.editor.moveCursor(toSlide: 2)
         try await waitForPreview(document, slide: 3)
 

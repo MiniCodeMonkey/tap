@@ -68,7 +68,6 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
         controller.onClose = { [weak self] in self?.dockPreview() }
         previewWindowController = controller
         splitViewController.setPreviewHidden(true)
-        NSApp.activate(ignoringOtherApps: true)
         controller.window?.makeKeyAndOrderFront(nil)
     }
 
