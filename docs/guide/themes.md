@@ -27,7 +27,7 @@ no frontmatter gets one, and an unknown slug exits 1 with the list of
 themes:
 
 ```bash
-tap theme set midnight talk.md
+tap theme set blueprint talk.md
 ```
 
 ## Switching Themes Live

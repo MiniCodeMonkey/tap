@@ -695,10 +695,12 @@ tap image add <file> [deck] --slide <n>
 
 ### Behavior
 
-The copy keeps the file's name. When the resulting name is already taken,
-tap adds `-2`, `-3`, and so on before the extension, for example
-`diagram-2.png`. Accepted formats: png, jpg, jpeg, gif, webp, svg, and
-avif.
+The copy keeps the file's name, except that whitespace, parentheses, angle
+brackets, quotes, backtick, `#`, and `?` are each replaced with `-`, so the
+link tap writes needs no escaping. `my diagram (v2).png` is copied as
+`my-diagram-v2.png`. When the resulting name is already taken, tap adds
+`-2`, `-3`, and so on before the extension, for example `diagram-2.png`.
+Accepted formats: png, jpg, jpeg, gif, webp, svg, and avif.
 
 ### Examples
 
@@ -967,14 +969,14 @@ tap theme set <slug> [deck]
 
 ```bash
 tap theme set terminal
-tap theme set midnight talk.md
-tap theme set midnight talk.md --json
+tap theme set blueprint talk.md
+tap theme set blueprint talk.md --json
 ```
 
 ### `--json`
 
 ```json
-{"ok": true, "deck": "talk.md", "theme": "midnight"}
+{"ok": true, "deck": "talk.md", "theme": "blueprint"}
 ```
 
 ---
@@ -1035,7 +1037,7 @@ and exits 2 when a browser cannot start or a temporary server cannot bind.
 | `tap deck schema` | List every frontmatter key, type and default | `tap deck schema --json` |
 | `tap theme list` | List every built-in theme | `tap theme list --json` |
 | `tap theme show [slug\|deck]` | Show a theme's tokens and style | `tap theme show blueprint --prompt` |
-| `tap theme set <slug> [deck]` | Set a deck's theme | `tap theme set midnight talk.md` |
+| `tap theme set <slug> [deck]` | Set a deck's theme | `tap theme set blueprint talk.md` |
 
 ---
 

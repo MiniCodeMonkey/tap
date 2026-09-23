@@ -23,8 +23,8 @@ current folder. See tap theme list for the slugs.
 
 Examples:
   tap theme set terminal
-  tap theme set midnight talk.md
-  tap theme set midnight talk.md --json`,
+  tap theme set blueprint talk.md
+  tap theme set blueprint talk.md --json`,
 	Args: cobra.RangeArgs(1, 2),
 	RunE: runThemeSet,
 }

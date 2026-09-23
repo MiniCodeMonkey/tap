@@ -258,8 +258,11 @@ tap component new <Name> [deck] [--inline] [--ts] [--json]
 ## tap image add
 
 Copy an image into `images/` next to a deck and print the markdown that
-shows it. Keeps the file's name, or adds `-2`, `-3` before the extension
-when it is taken. Accepts png, jpg, jpeg, gif, webp, svg, and avif.
+shows it. Keeps the file's name, except whitespace, parentheses, angle
+brackets, quotes, backtick, `#`, and `?` become `-` so the link needs no
+escaping (`my diagram (v2).png` -> `my-diagram-v2.png`); adds `-2`, `-3`
+before the extension when the resulting name is taken. Accepts png, jpg,
+jpeg, gif, webp, svg, and avif.
 
 ```bash
 tap image add <file> [deck] [--slide <n>] [--json]
@@ -362,7 +365,7 @@ and the list of themes.
 
 `theme set --json`:
 ```json
-{"ok": true, "deck": "talk.md", "theme": "midnight"}
+{"ok": true, "deck": "talk.md", "theme": "blueprint"}
 ```
 
 ## Conventions

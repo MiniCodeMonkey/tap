@@ -1,12 +1,15 @@
 package cli
 
 import (
+	"regexp"
 	"sort"
 	"strings"
 	"testing"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
+
+	"github.com/MiniCodeMonkey/tap/internal/themes"
 )
 
 // flagConventions is the one short form each shared flag has on every
@@ -73,6 +76,38 @@ func TestCommandTree(t *testing.T) {
 	sort.Strings(paths)
 	if strings.Join(paths, "\n") != strings.Join(expectedCommands, "\n") {
 		t.Errorf("commands:\n%s\n\nwant:\n%s", strings.Join(paths, "\n"), strings.Join(expectedCommands, "\n"))
+	}
+}
+
+// themeSlugInExampleRe finds theme slugs named in --help text, either as an
+// argument to "theme set" or as a value in a printed JSON "theme" field.
+var themeSlugInExampleRe = regexp.MustCompile(`theme set (\S+)|"theme":\s*"([^"]+)"`)
+
+// TestHelpTextThemeExamplesAreRealThemes fails if any command's --help text
+// names a theme slug, in a "theme set" example or a JSON "theme" field, that
+// is not one of the real themes. A stale slug in a help example is what a
+// person copies and runs, so it must resolve.
+func TestHelpTextThemeExamplesAreRealThemes(t *testing.T) {
+	for _, command := range visibleCommands(rootCmd) {
+		path := command.CommandPath()
+		args := append(strings.Fields(strings.TrimPrefix(path, "tap")), "--help")
+		exitCode, stdout, stderr := runTap(t, args...)
+		if exitCode != exitOK {
+			t.Fatalf("%s --help exited %d: %s", path, exitCode, stderr)
+		}
+
+		for _, match := range themeSlugInExampleRe.FindAllStringSubmatch(stdout, -1) {
+			slug := match[1]
+			if slug == "" {
+				slug = match[2]
+			}
+			if slug == "" || slug == "<slug>" {
+				continue
+			}
+			if !themes.IsValid(slug) {
+				t.Errorf("%s --help names theme slug %q, which is not a real theme (run tap theme list)", path, slug)
+			}
+		}
 	}
 }
 
