@@ -21,8 +21,8 @@ This is perfect for:
 - Teaching programming concepts
 - System administration tutorials
 
-::: warning Development Mode Only
-Live code execution only works when using `tap dev`. Static builds created with `tap build` will show the code blocks but won't execute them. This is by design for security and portability.
+::: warning Not in Static Builds
+Live code execution works when a server is running the deck, with `tap dev` or `tap present`. Static builds created with `tap build` (or `tap export`) will show the code blocks but won't execute them. This is by design for security and portability.
 :::
 
 ## The Driver Concept
