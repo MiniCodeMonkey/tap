@@ -62,6 +62,14 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
     private func applySlideList(_ list: SlideList, sentText: String, generation: Int) {
         guard !stopped else { return }
         editor.apply(list, sentText: sentText, sentGeneration: generation)
+        if let first = list.errors.first {
+            if editorViewController.bar(.deckErrors)?.message != "The deck settings have a problem: \(first)" {
+                editorViewController.showBar(DocumentBarView(kind: .deckErrors, message: "The deck settings have a problem: \(first)",
+                                                             detail: "The frontmatter is shown until it is fixed.", buttons: []))
+            }
+        } else {
+            editorViewController.hideBar(.deckErrors)
+        }
         onSlideListApplied?(list)
     }
 
