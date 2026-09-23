@@ -3,20 +3,17 @@ package tui
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
 	"os"
-	"path/filepath"
 	"regexp"
 	"strings"
 
+	"github.com/MiniCodeMonkey/tap/internal/deckedit"
+	"github.com/MiniCodeMonkey/tap/internal/gemini"
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textarea"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/MiniCodeMonkey/tap/internal/gemini"
-	"github.com/MiniCodeMonkey/tap/internal/parser"
 )
 
 // ImageGenStep represents the current step in the image generation workflow.
@@ -152,71 +149,25 @@ func (m *ImageGenModel) loadSlides() error {
 // headingRe matches markdown headings (# Heading).
 var headingRe = regexp.MustCompile(`(?m)^#+\s+(.+)$`)
 
-// frontmatterRe matches YAML frontmatter at the start of a file.
-var frontmatterRe = regexp.MustCompile(`(?s)^---\n.*?\n---\n?`)
+// AIImageInfo is an AI-generated image on a slide.
+type AIImageInfo = deckedit.AIImage
 
-// aiImageRe matches AI prompt comments followed by an image on the next line.
-// Group 1: prompt text, Group 2: image path
-// Only matches if the image is directly on the next line (possibly with leading spaces, but no blank lines).
-var aiImageRe = regexp.MustCompile(`<!--\s*ai-prompt:\s*(.+?)\s*-->\n[ \t]*!\[\]\(([^)]+)\)`)
-
-// AIImageInfo contains information about an AI-generated image.
-type AIImageInfo struct {
-	// Prompt is the AI prompt used to generate the image.
-	Prompt string
-	// ImagePath is the path to the generated image file.
-	ImagePath string
-}
-
-// parseSlides extracts slide information from markdown content.
+// parseSlides lists the slides in markdown content, with the AI-generated
+// images on each.
 func parseSlides(content string) []SlideInfo {
-	// Remove frontmatter if present
-	content = frontmatterRe.ReplaceAllString(content, "")
-
-	// Split on slide delimiter, preserving code blocks
-	parts := parser.SplitSlidesPreservingCodeBlocks(content)
-
-	slides := make([]SlideInfo, 0, len(parts))
-	for _, part := range parts {
-		part = strings.TrimSpace(part)
-		if part == "" {
-			continue
-		}
-
-		aiImages := parseAIImages(part)
-		slide := SlideInfo{
-			Index:        len(slides),
-			Title:        extractSlideTitle(part),
+	bodies := deckedit.SlideBodies(content)
+	slides := make([]SlideInfo, 0, len(bodies))
+	for index, body := range bodies {
+		aiImages := deckedit.ParseAIImages(body)
+		slides = append(slides, SlideInfo{
+			Index:        index,
+			Title:        extractSlideTitle(body),
 			AIImages:     aiImages,
 			HasAIImages:  len(aiImages) > 0,
 			AIImageCount: len(aiImages),
-		}
-
-		slides = append(slides, slide)
+		})
 	}
-
 	return slides
-}
-
-// parseAIImages extracts AI-generated image info from slide content.
-// It looks for <!-- ai-prompt: ... --> comments followed by image references.
-func parseAIImages(content string) []AIImageInfo {
-	matches := aiImageRe.FindAllStringSubmatch(content, -1)
-	if matches == nil {
-		return nil
-	}
-
-	images := make([]AIImageInfo, 0, len(matches))
-	for _, match := range matches {
-		if len(match) >= 3 {
-			images = append(images, AIImageInfo{
-				Prompt:    match[1],
-				ImagePath: match[2],
-			})
-		}
-	}
-
-	return images
 }
 
 // extractSlideTitle extracts the title from slide content.
@@ -445,8 +396,9 @@ func (m *ImageGenModel) submitPrompt() (tea.Model, tea.Cmd) {
 // generateImageCmd returns a command that generates an image using the Gemini API.
 func (m *ImageGenModel) generateImageCmd() tea.Cmd {
 	prompt := m.Prompt
+	deckPath := m.MarkdownFile
 	return func() tea.Msg {
-		client, err := gemini.NewClientFromEnv()
+		client, err := deckedit.NewImageGenerator(deckPath)
 		if err != nil {
 			return imageGenerateMsg{result: ImageGenerateResult{Error: err}}
 		}
@@ -965,272 +917,21 @@ func (m *ImageGenModel) GetSelectedSlide() *SlideInfo {
 	return nil
 }
 
-// GetImagesDir returns the path to the images directory for the markdown file.
-// The images directory is always "images/" relative to the markdown file's directory.
-func (m *ImageGenModel) GetImagesDir() string {
-	mdDir := filepath.Dir(m.MarkdownFile)
-	return filepath.Join(mdDir, "images")
-}
-
-// EnsureImagesDir creates the images directory if it doesn't exist.
-// Returns the path to the images directory on success.
-func (m *ImageGenModel) EnsureImagesDir() (string, error) {
-	imagesDir := m.GetImagesDir()
-
-	// Check if directory already exists
-	info, err := os.Stat(imagesDir)
-	if err == nil {
-		if !info.IsDir() {
-			return "", fmt.Errorf("images path exists but is not a directory: %s", imagesDir)
-		}
-		return imagesDir, nil
-	}
-
-	// If error is not "not exists", return it
-	if !os.IsNotExist(err) {
-		return "", fmt.Errorf("failed to check images directory: %w", err)
-	}
-
-	// Create directory with parents
-	if err := os.MkdirAll(imagesDir, 0755); err != nil {
-		return "", fmt.Errorf("failed to create images directory: %w", err)
-	}
-
-	return imagesDir, nil
-}
-
 // IsCancelled returns true if the user cancelled the workflow.
 func (m *ImageGenModel) IsCancelled() bool {
 	return m == nil
 }
 
-// GenerateImageFilename creates a content-hashed filename for an image.
-// The filename format is "generated-{hash}.{ext}" where hash is the first 8
-// characters of the SHA256 hash of the image data.
-func GenerateImageFilename(imageData []byte, contentType string) string {
-	// Generate SHA256 hash of image data
-	hash := sha256.Sum256(imageData)
-	hashStr := hex.EncodeToString(hash[:])
-	shortHash := hashStr[:8] // First 8 characters
-
-	// Determine file extension from content type
-	ext := GetExtensionFromContentType(contentType)
-
-	return fmt.Sprintf("generated-%s.%s", shortHash, ext)
-}
-
-// GetExtensionFromContentType returns the file extension for a MIME content type.
-// Defaults to "png" if the content type is unknown.
-func GetExtensionFromContentType(contentType string) string {
-	switch contentType {
-	case "image/png":
-		return "png"
-	case "image/jpeg", "image/jpg":
-		return "jpg"
-	case "image/gif":
-		return "gif"
-	case "image/webp":
-		return "webp"
-	default:
-		return "png"
-	}
-}
-
-// SaveGeneratedImage saves the generated image to the images directory.
-// It returns the relative path to the saved image (e.g., "images/generated-a1b2c3d4.png").
-func (m *ImageGenModel) SaveGeneratedImage() (string, error) {
+// PlaceImage saves the generated image and records it in the deck: at the
+// end of the selected slide, or in place of the image being regenerated.
+func (m *ImageGenModel) PlaceImage() (deckedit.PlacedImage, error) {
 	if m.GeneratedImage == nil {
-		return "", fmt.Errorf("no generated image to save")
+		return deckedit.PlacedImage{}, fmt.Errorf("no generated image to save")
 	}
-
-	// Ensure images directory exists
-	imagesDir, err := m.EnsureImagesDir()
-	if err != nil {
-		return "", fmt.Errorf("failed to ensure images directory: %w", err)
-	}
-
-	// Generate filename
-	filename := GenerateImageFilename(m.GeneratedImage.ImageData, m.GeneratedImage.ContentType)
-
-	// Full path for saving
-	fullPath := filepath.Join(imagesDir, filename)
-
-	// Write file
-	if err := os.WriteFile(fullPath, m.GeneratedImage.ImageData, 0644); err != nil {
-		return "", fmt.Errorf("failed to write image file: %w", err)
-	}
-
-	// Return relative path (images/filename)
-	relativePath := filepath.Join("images", filename)
-	return relativePath, nil
-}
-
-// InsertImageIntoMarkdown inserts an AI-generated image into the markdown file
-// at the end of the selected slide's content (before the next --- separator).
-// The image is inserted with the format: <!-- ai-prompt: {prompt} -->\n![](imagePath)
-func (m *ImageGenModel) InsertImageIntoMarkdown(imagePath string) error {
-	// Read the current markdown content
-	content, err := os.ReadFile(m.MarkdownFile)
-	if err != nil {
-		return fmt.Errorf("failed to read markdown file: %w", err)
-	}
-
-	// Insert the image into the content
-	newContent, err := insertImageIntoSlide(string(content), m.SelectedIndex, m.Prompt, imagePath)
-	if err != nil {
-		return fmt.Errorf("failed to insert image: %w", err)
-	}
-
-	// Write the updated content back to the file
-	if err := os.WriteFile(m.MarkdownFile, []byte(newContent), 0644); err != nil {
-		return fmt.Errorf("failed to write markdown file: %w", err)
-	}
-
-	return nil
-}
-
-// DeleteOldImage deletes the old image file when regenerating.
-// It resolves the image path relative to the markdown file's directory.
-func (m *ImageGenModel) DeleteOldImage() error {
-	if m.SelectedImage == nil {
-		return nil // Nothing to delete, not regenerating
-	}
-
-	oldImagePath := m.SelectedImage.ImagePath
-
-	// Resolve the path relative to the markdown file's directory
-	mdDir := filepath.Dir(m.MarkdownFile)
-	fullPath := filepath.Join(mdDir, oldImagePath)
-
-	// Check if the file exists
-	if _, err := os.Stat(fullPath); os.IsNotExist(err) {
-		// File doesn't exist, nothing to delete
-		return nil
-	}
-
-	// Delete the file
-	if err := os.Remove(fullPath); err != nil {
-		return fmt.Errorf("failed to delete old image: %w", err)
-	}
-
-	return nil
-}
-
-// ReplaceImageInMarkdown replaces an existing AI-generated image in the markdown file.
-// This preserves the image's position in the markdown (doesn't move it to the end of the slide).
-// The old image reference (comment + image) is replaced with the new one.
-func (m *ImageGenModel) ReplaceImageInMarkdown(newImagePath string) error {
-	if m.SelectedImage == nil {
-		return fmt.Errorf("no selected image to replace")
-	}
-
-	// Read the current markdown content
-	content, err := os.ReadFile(m.MarkdownFile)
-	if err != nil {
-		return fmt.Errorf("failed to read markdown file: %w", err)
-	}
-
-	// Replace the image in the content
-	newContent, err := replaceImageInContent(string(content), m.SelectedImage.Prompt, m.SelectedImage.ImagePath, m.Prompt, newImagePath)
-	if err != nil {
-		return fmt.Errorf("failed to replace image: %w", err)
-	}
-
-	// Write the updated content back to the file
-	if err := os.WriteFile(m.MarkdownFile, []byte(newContent), 0644); err != nil {
-		return fmt.Errorf("failed to write markdown file: %w", err)
-	}
-
-	return nil
-}
-
-// replaceImageInContent replaces an existing AI image reference in markdown content.
-// It finds the old prompt comment + image and replaces it with the new one.
-func replaceImageInContent(content string, oldPrompt string, oldImagePath string, newPrompt string, newImagePath string) (string, error) {
-	// Build the old pattern to find: <!-- ai-prompt: {oldPrompt} -->\n![](oldImagePath)
-	// We need to escape special regex characters in the prompt and path
-	escapedOldPrompt := regexp.QuoteMeta(oldPrompt)
-	escapedOldPath := regexp.QuoteMeta(oldImagePath)
-
-	// Match the comment followed by the image (with possible leading whitespace on the image line)
-	patternStr := fmt.Sprintf(`<!--\s*ai-prompt:\s*%s\s*-->\n[ \t]*!\[\]\(%s\)`, escapedOldPrompt, escapedOldPath)
-	pattern, err := regexp.Compile(patternStr)
-	if err != nil {
-		return "", fmt.Errorf("failed to compile replacement pattern: %w", err)
-	}
-
-	// Check if the pattern exists in the content
-	if !pattern.MatchString(content) {
-		return "", fmt.Errorf("could not find the existing image reference to replace")
-	}
-
-	// Build the new markdown
-	newMarkdown := fmt.Sprintf("<!-- ai-prompt: %s -->\n![](%s)", newPrompt, newImagePath)
-
-	// Replace the old with the new
-	newContent := pattern.ReplaceAllString(content, newMarkdown)
-
-	return newContent, nil
-}
-
-// insertImageIntoSlide inserts an image reference into a specific slide in markdown content.
-// It returns the modified content with the image inserted at the end of the specified slide.
-func insertImageIntoSlide(content string, slideIndex int, prompt string, imagePath string) (string, error) {
-	// Build the image markdown to insert
-	imageMarkdown := fmt.Sprintf("<!-- ai-prompt: %s -->\n![](%s)", prompt, imagePath)
-
-	// Check if content has frontmatter
-	hasFrontmatter := false
-	frontmatter := ""
-	contentAfterFrontmatter := content
-
-	if frontmatterRe.MatchString(content) {
-		hasFrontmatter = true
-		match := frontmatterRe.FindString(content)
-		frontmatter = match
-		contentAfterFrontmatter = content[len(match):]
-	}
-
-	// Split the content (after frontmatter) by slide delimiter, preserving code blocks
-	parts := parser.SplitSlidesPreservingCodeBlocks(contentAfterFrontmatter)
-
-	// Find non-empty slide indices (matching parseSlides behavior)
-	slidePartIndices := []int{}
-	for i, part := range parts {
-		if strings.TrimSpace(part) != "" {
-			slidePartIndices = append(slidePartIndices, i)
-		}
-	}
-
-	// Check if slideIndex is valid
-	if slideIndex < 0 || slideIndex >= len(slidePartIndices) {
-		return "", fmt.Errorf("invalid slide index: %d (have %d slides)", slideIndex, len(slidePartIndices))
-	}
-
-	// Get the actual part index for this slide
-	partIndex := slidePartIndices[slideIndex]
-
-	// Insert the image at the end of the slide's content
-	slideContent := parts[partIndex]
-
-	// Trim trailing whitespace but preserve structure
-	trimmedSlide := strings.TrimRight(slideContent, " \t\n")
-
-	// Add the image with proper newlines
-	parts[partIndex] = trimmedSlide + "\n\n" + imageMarkdown + "\n"
-
-	// Rebuild the content with separators
-	var result strings.Builder
-	if hasFrontmatter {
-		result.WriteString(frontmatter)
-	}
-
-	for i, part := range parts {
-		result.WriteString(part)
-		if i < len(parts)-1 {
-			result.WriteString("---\n")
-		}
-	}
-
-	return result.String(), nil
+	return deckedit.PlaceGeneratedImage(deckedit.Placement{
+		DeckPath:   m.MarkdownFile,
+		SlideIndex: m.SelectedIndex,
+		Prompt:     m.Prompt,
+		Replacing:  m.SelectedImage,
+	}, gemini.ImageResult{Data: m.GeneratedImage.ImageData, ContentType: m.GeneratedImage.ContentType})
 }

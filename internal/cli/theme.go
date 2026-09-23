@@ -22,6 +22,8 @@ var (
 	themeListJSON   bool
 	themeShowJSON   bool
 	themeShowPrompt bool
+	themeShowImage  bool
+	themeShowOutput string
 )
 
 // themeCmd is the parent command for theme inspection.
@@ -57,11 +59,18 @@ texture, mood, things to avoid, and the canvas size.
 The argument is a theme slug, or a deck file or folder whose theme to
 show. With no argument, tap uses the deck in the current folder.
 
+With --image, tap renders a title slide in the theme to a 1280x720 PNG
+and prints its path. The image is cached per theme and tap version in the
+user cache folder, under tap/themes/<version>/<slug>.png, so the second
+call returns at once. -o copies it to a file.
+
 Examples:
   tap theme show terminal
   tap theme show terminal --json
   tap theme show terminal --prompt
-  tap theme show slides.md --prompt`,
+  tap theme show slides.md --prompt
+  tap theme show terminal --image
+  tap theme show terminal --image -o terminal.png`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: runThemeShow,
 }
@@ -75,6 +84,8 @@ func init() {
 
 	themeShowCmd.Flags().BoolVar(&themeShowJSON, "json", false, "print the theme as JSON")
 	themeShowCmd.Flags().BoolVar(&themeShowPrompt, "prompt", false, "print a style brief for an image model")
+	themeShowCmd.Flags().BoolVar(&themeShowImage, "image", false, "render a title slide in the theme to a PNG and print its path")
+	themeShowCmd.Flags().StringVarP(&themeShowOutput, "output", "o", "", "copy the --image PNG to this file")
 }
 
 // runThemeList implements `tap theme list`.
@@ -99,6 +110,12 @@ func runThemeShow(cmd *cobra.Command, args []string) error {
 	if themeShowJSON && themeShowPrompt {
 		return userError(codeUsage, errors.New("--json and --prompt cannot be used together"))
 	}
+	if themeShowImage && themeShowPrompt {
+		return userError(codeUsage, errors.New("--image and --prompt cannot be used together"))
+	}
+	if themeShowOutput != "" && !themeShowImage {
+		return userError(codeUsage, errors.New("--output needs --image"))
+	}
 
 	slug, err := resolveThemeShowSlug(firstArg(args))
 	if err != nil {
@@ -107,6 +124,9 @@ func runThemeShow(cmd *cobra.Command, args []string) error {
 	theme, ok := findTheme(slug)
 	if !ok {
 		return userError(codeUnknownTheme, unknownThemeError(slug))
+	}
+	if themeShowImage {
+		return showThemeImage(cmd, theme)
 	}
 	tokens, ok := themes.Tokens(slug)
 	if !ok {
