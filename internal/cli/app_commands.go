@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
 )
 
 // Command types on standard input in --app mode.
@@ -43,8 +42,9 @@ type appCommand struct {
 // of it is discarded, so nothing further down the same line is ever
 // parsed as a command, and the next line is read normally. At the end of
 // input, every question ends unanswered and commands closes, which tells
-// the control loop to quit.
-func readAppCommands(input io.Reader, questions *appQuestions, events *appEventWriter, commands chan<- appCommand) {
+// the control loop to quit. log is where the reader's own trouble goes,
+// which in --app mode is the bounded writer that owns standard error.
+func readAppCommands(input io.Reader, log io.Writer, questions *appQuestions, events *appEventWriter, commands chan<- appCommand) {
 	defer close(commands)
 	defer questions.close()
 
@@ -58,7 +58,7 @@ func readAppCommands(input io.Reader, questions *appQuestions, events *appEventW
 		}
 		if err != nil {
 			if !errors.Is(err, io.EOF) {
-				fmt.Fprintf(os.Stderr, "Reading commands from standard input: %v\n", err)
+				fmt.Fprintf(log, "Reading commands from standard input: %v\n", err)
 			}
 			return
 		}
@@ -92,8 +92,10 @@ func readAppCommandLine(reader *bufio.Reader, limit int) (line []byte, oversized
 }
 
 // handleAppCommandLine parses one already-read line as a command and
-// routes it, exactly as readAppCommands did inline before oversized
-// lines needed their own handling.
+// routes it: an answer straight to questions, every other command to the
+// commands queue, and anything unparseable to an invalid_command event.
+// A line that arrives while the queue is full is dropped as busy rather
+// than made to wait, so the reader stays free for the next line.
 func handleAppCommandLine(raw []byte, questions *appQuestions, events *appEventWriter, commands chan<- appCommand) {
 	line := bytes.TrimSpace(raw)
 	if len(line) == 0 {

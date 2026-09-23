@@ -15,6 +15,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -1051,4 +1052,90 @@ func testAppModeHasNoRouteThatAnswersOrRecords(t *testing.T, args []string) {
 			t.Errorf("a page message reached tap: %v", event)
 		}
 	}
+}
+
+// appServerRoutes is every HTTP route a composed --app server is allowed
+// to have, per mode. It is an allow-list over the whole routing table, so
+// a route registered anywhere, in SetupRoutes or in either of
+// runDevServer's own branches, and whatever it is called, has to be added
+// here before it can exist. That is the difference between this and the
+// black-box probes below it: a probe can only look for paths somebody
+// thought to name, and the route nobody names is exactly the one that
+// gets through.
+//
+// Adding a route here is the deliberate step. Ask first whether it
+// answers a question or controls the recording, because those travel only
+// over standard input and output, and whether it belongs on the audience
+// allow-list in internal/server (audienceRoutes) or behind the app token.
+var appServerRoutes = map[string][]string{
+	"dev": {
+		"GET /api/custom-theme.css",
+		"GET /api/presentation",
+		"GET /assets/",
+		"GET /components/",
+		"GET /index.html",
+		"GET /local/",
+		"GET /presenter",
+		"GET /presenter.html",
+		"GET /presenter/",
+		"GET /qr",
+		"GET /ws",
+		"GET /{$}",
+		"POST /api/execute",
+		"PUT " + server.AppSourcePath,
+	},
+	"present": {
+		"GET /api/custom-theme.css",
+		"GET /api/presentation",
+		"GET /assets/",
+		"GET /components/",
+		"GET /index.html",
+		"GET /local/",
+		"GET /presenter",
+		"GET /presenter.html",
+		"GET /presenter/",
+		"GET /qr",
+		"GET /ws",
+		"GET /{$}",
+		"POST /api/execute",
+	},
+}
+
+// TestAppModeServesOnlyTheRoutesOnTheAllowList reads the route table the
+// running process reports and compares it, whole, against
+// appServerRoutes. It runs under every command in appModeCommands, since
+// the two modes register different routes and each one's table is its own
+// property.
+func TestAppModeServesOnlyTheRoutesOnTheAllowList(t *testing.T) {
+	for _, appMode := range appModeCommands {
+		t.Run(appMode.name, func(t *testing.T) {
+			process := startAppProcess(t, t.TempDir(), append(append([]string{}, appMode.args...), copyAppFixture(t))...)
+			want := appServerRoutes[appMode.name]
+			got := process.routes()
+			if !slices.Equal(got, want) {
+				t.Errorf("routes:\n got %v\nwant %v", got, want)
+			}
+		})
+	}
+}
+
+// routes is the route table tap reports on standard error at startup,
+// sorted. It waits for the line, because standard error is written by its
+// own goroutine and may still be a moment behind the ready line.
+func (process *appProcess) routes() []string {
+	process.t.Helper()
+	const prefix = "Routes: "
+	var line string
+	waitUntil(process.t, "the route table on standard error", func() bool {
+		for _, candidate := range strings.Split(process.stderr.String(), "\n") {
+			if after, found := strings.CutPrefix(candidate, prefix); found {
+				line = after
+				return true
+			}
+		}
+		return false
+	})
+	routes := strings.Split(strings.TrimSpace(line), ", ")
+	slices.Sort(routes)
+	return routes
 }

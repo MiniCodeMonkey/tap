@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/cookiejar"
 	"strings"
@@ -235,5 +236,55 @@ func TestServerWithoutAppAuthNeedsNoToken(t *testing.T) {
 	response := getStatus(t, http.DefaultClient, fmt.Sprintf("http://127.0.0.1:%d/api/presentation", s.Port()), "", "")
 	if response.StatusCode != http.StatusOK {
 		t.Errorf("plain tap dev: status %d, want 200", response.StatusCode)
+	}
+}
+
+// getStatusAndBody sends a GET and returns the status and the body, so a
+// test can compare not just that two requests were refused but that they
+// were refused the same way.
+func getStatusAndBody(t *testing.T, url string) (int, string) {
+	t.Helper()
+	response, err := http.Get(url) //nolint:noctx // a loopback test server
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	body, err := io.ReadAll(response.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return response.StatusCode, string(body)
+}
+
+// TestNewAppAuthGivesTheLaunchCodeALifetime checks that a launch code
+// carries an expiry at all. The code rides in the first URL the app
+// loads, which is the one place a tap secret is written down outside the
+// app's own memory, so it is worth no more than the moment it is used in.
+func TestNewAppAuthGivesTheLaunchCodeALifetime(t *testing.T) {
+	auth, err := NewAppAuth()
+	if err != nil {
+		t.Fatal(err)
+	}
+	left := time.Until(auth.launchExpires)
+	if left <= 0 || left > 5*time.Minute {
+		t.Errorf("a fresh launch code has %s left, want a short lifetime in the region of a minute or two", left)
+	}
+}
+
+// TestAppAuthLaunchCodeExpires checks that an unused code stops working
+// once its lifetime is up, and that it then fails exactly as an unknown
+// code does: same status, same message, nothing that tells the sender
+// which of the two it got wrong.
+func TestAppAuthLaunchCodeExpires(t *testing.T) {
+	_, auth, base := startAppServer(t)
+	auth.launchExpires = time.Now().Add(-time.Second)
+
+	expiredStatus, expiredBody := getStatusAndBody(t, base+AppSourcePath+"?launch="+auth.LaunchCode())
+	if expiredStatus != http.StatusForbidden {
+		t.Errorf("an expired launch code: status %d, want 403", expiredStatus)
+	}
+	unknownStatus, unknownBody := getStatusAndBody(t, base+AppSourcePath+"?launch="+strings.Repeat("a", 64))
+	if expiredStatus != unknownStatus || expiredBody != unknownBody {
+		t.Errorf("an expired code answered %d %q, an unknown one %d %q; they must not be told apart", expiredStatus, expiredBody, unknownStatus, unknownBody)
 	}
 }

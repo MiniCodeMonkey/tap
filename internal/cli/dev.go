@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net/url"
 	"os"
 	"os/signal"
@@ -165,6 +166,16 @@ func runDevServer(options serverOptions) (err error) {
 	var appEvents *appEventWriter
 	var appAuth *server.AppAuth
 	appDisk := &appDiskStatus{}
+	// appLog is where every human-readable line goes. Outside --app mode
+	// it is standard error itself; in --app mode it is the bounded writer
+	// that owns standard error, so a log line never waits for an app that
+	// has stopped reading its child's log pipe.
+	var appLog io.Writer = os.Stderr
+	// appQuit is the quit deadline the --app session established, handed
+	// back by runAppSession so the cleanup below waits on what is left of
+	// it. It stays nil outside --app mode and until a quit starts, and
+	// joinQuit calls straight through when it is.
+	var appQuit *quitJoiner
 	if options.app {
 		if headless {
 			return userError(codeUsage, errors.New("--app and --headless cannot be combined"))
@@ -176,14 +187,21 @@ func runDevServer(options serverOptions) (err error) {
 			// A free port, which the ready line reports.
 			port, portExplicit = 0, true
 		}
-		stdout, restoreStdout := claimStdoutForApp()
-		appEvents = newAppEventWriter(stdout, os.Stderr)
+		stdout, log, restoreStdout := claimStdoutForApp()
+		appLog = log
+		appEvents = newAppEventWriter(stdout, appLog)
 		defer func() {
 			if err != nil {
 				_, code, _ := classify(err)
 				appEvents.emit(appErrorEvent{Type: appEventError, Code: code, Message: err.Error()})
 			}
-			closeAppEventWriter(appEvents, os.Stderr)
+			// The last word on a quit that gave up on several parts,
+			// sent here rather than as the session ends because the
+			// cleanup between the two can add to the list.
+			if appQuit != nil {
+				appQuit.report()
+			}
+			closeAppEventWriter(appEvents, appLog)
 			restoreStdout()
 		}()
 		appAuth, err = server.NewAppAuth()
@@ -256,7 +274,7 @@ func runDevServer(options serverOptions) (err error) {
 
 	startupDriverWarnings := undeclaredDriverWarnings(absFile, pres)
 	for _, warning := range startupDriverWarnings {
-		fmt.Fprintln(os.Stderr, warning)
+		fmt.Fprintln(appLog, warning)
 	}
 
 	// Live code approval happens here, before the TUI owns the terminal.
@@ -417,13 +435,13 @@ func runDevServer(options serverOptions) (err error) {
 		// Reload config and presentation
 		newCfg, err := config.Load(absFile)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error reloading config: %v\n", err)
+			fmt.Fprintf(appLog, "Error reloading config: %v\n", err)
 			return
 		}
 
 		newPres, warnings, newResolvedComponents, newComponentBuildErrs, newRawSlides, err := loadPresentation(absFile, newCfg, baseDir)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error reloading presentation: %v\n", err)
+			fmt.Fprintf(appLog, "Error reloading presentation: %v\n", err)
 			return
 		}
 		// This handler only runs before the headless/TUI branch below
@@ -433,7 +451,7 @@ func runDevServer(options serverOptions) (err error) {
 		printComponentErrorsToStderr(newComponentBuildErrs)
 		printComponentWarningsToStderr(componentWarnings(newResolvedComponents))
 		for _, warning := range undeclaredDriverWarnings(absFile, newPres) {
-			fmt.Fprintln(os.Stderr, warning)
+			fmt.Fprintln(appLog, warning)
 		}
 
 		setRawSlides(newRawSlides)
@@ -446,7 +464,9 @@ func runDevServer(options serverOptions) (err error) {
 		if err := watcher.Start(); err != nil {
 			return fmt.Errorf("failed to start file watcher: %w", err)
 		}
-		defer func() { _ = watcher.Stop() }()
+		defer func() {
+			joinQuit(appQuit, "stopping the file watcher", appErrorShutdownStuck, func() { _ = watcher.Stop() })
+		}()
 	}
 
 	// Generate URLs
@@ -463,7 +483,14 @@ func runDevServer(options serverOptions) (err error) {
 	// way a phone gets a secure context (and so a screen wake lock) from a
 	// dev server. The controller also keeps the Host allow-list in step.
 	tunnels := newTunnelController(port, allowOrigins, srv, hub)
-	defer func() { _ = tunnels.Stop() }()
+	// Stop takes the controller's own mutex, which a tunnel start the
+	// session already gave up on holds for the whole of tunnel.Start. The
+	// session refuses to wait on that mutex for exactly that reason, so
+	// this waits on the same quit deadline instead of undoing that bound
+	// a few microseconds later.
+	defer func() {
+		joinQuit(appQuit, "stopping the tunnel at exit", appErrorTunnelFailed, func() { _ = tunnels.Stop() })
+	}()
 
 	// Recording is opt-in at the keyboard, but its preflight runs at
 	// startup so a missing permission is found during setup rather than
@@ -533,7 +560,7 @@ func runDevServer(options serverOptions) (err error) {
 					devModel.SendEvent(eventType, message)
 				}
 				if options.app {
-					fmt.Fprintf(os.Stderr, "%s: %s\n", eventType, message)
+					fmt.Fprintf(appLog, "%s: %s\n", eventType, message)
 					if eventType == "error" {
 						appEvents.emit(appErrorEvent{Type: appEventError, Code: appErrorRecordingFailed, Message: message})
 					}
@@ -550,7 +577,12 @@ func runDevServer(options serverOptions) (err error) {
 		// A kept recording must survive an early return above this point
 		// and RunDevTUIWithModel itself returning an error below, not just
 		// a clean quit through the TUI branch's own present.Finish call.
-		defer func() { _, _ = present.Finish(true) }()
+		// Finish takes the recording run's own lock, which the goroutine
+		// the session deliberately abandoned may still hold, so this waits
+		// on the quit deadline like every other call into the run.
+		defer func() {
+			joinQuit(appQuit, "finishing the recording at exit", appErrorRecordingFailed, func() { _, _ = present.Finish(true) })
+		}()
 		hub.SetOnSlideChange(present.NoteSlideChange)
 	} else {
 		hub.SetOnSlideChange(recordings.NoteSlideChange)
@@ -645,7 +677,7 @@ func runDevServer(options serverOptions) (err error) {
 					// These warnings carry line numbers from the deck file,
 					// which an unsaved buffer does not match.
 					for _, warning := range undeclaredDriverWarnings(absFile, newPres) {
-						fmt.Fprintln(os.Stderr, warning)
+						fmt.Fprintln(appLog, warning)
 					}
 				}
 				srv.SetCustomThemePath(newCustomThemePath)
@@ -672,7 +704,7 @@ func runDevServer(options serverOptions) (err error) {
 		if !options.present {
 			srv.RegisterHandlerFunc("PUT "+server.AppSourcePath, handleAppSource(deckSource, func(buffer []byte) (func(), error) {
 				return renderApp(appCtx, buffer, false)
-			}, baseDir, os.Stderr))
+			}, baseDir, appLog))
 			saved = func(ctx context.Context) error {
 				deckSource.dropBuffer()
 				return renderCurrentForApp(ctx, false)
@@ -686,7 +718,7 @@ func runDevServer(options serverOptions) (err error) {
 				if filepath.Clean(path) == absFile {
 					changed, readErr := deckSource.diskChanged()
 					if readErr != nil && !os.IsNotExist(readErr) {
-						fmt.Fprintf(os.Stderr, "Error reading %s: %v\n", absFile, readErr)
+						fmt.Fprintf(appLog, "Error reading %s: %v\n", absFile, readErr)
 						return
 					}
 					if readErr == nil && !changed {
@@ -701,7 +733,7 @@ func runDevServer(options serverOptions) (err error) {
 						return
 					}
 					if renderErr := renderCurrentForApp(appCtx, false); renderErr != nil {
-						fmt.Fprintf(os.Stderr, "Error reloading presentation: %v\n", renderErr)
+						fmt.Fprintf(appLog, "Error reloading presentation: %v\n", renderErr)
 					}
 					return
 				}
@@ -715,7 +747,7 @@ func runDevServer(options serverOptions) (err error) {
 					return renderApp(appCtx, text, false)
 				})
 				if renderErr != nil {
-					fmt.Fprintf(os.Stderr, "Error reloading presentation: %v\n", renderErr)
+					fmt.Fprintf(appLog, "Error reloading presentation: %v\n", renderErr)
 				}
 				emitFileChanged(path, list)
 			})
@@ -739,7 +771,7 @@ func runDevServer(options serverOptions) (err error) {
 			if present != nil {
 				record, consentErr := presentRecordingWanted(consentInput{
 					SettingsPath: settingsPath,
-					Out:          os.Stderr,
+					Out:          appLog,
 					NoRecord:     options.noRecord,
 					Supported:    recorder.Supported(),
 					Interactive:  true,
@@ -775,7 +807,7 @@ func runDevServer(options serverOptions) (err error) {
 				Config:       cfg,
 				Presentation: pres,
 				Asker:        appApprovalAsker{ctx: ctx, questions: questions},
-				Out:          os.Stderr,
+				Out:          appLog,
 				SettingsPath: settingsPath,
 				Deck:         absFile,
 				AllowCode:    options.allowCode,
@@ -790,9 +822,14 @@ func runDevServer(options serverOptions) (err error) {
 			_ = hub.BroadcastReload()
 		}
 
+		// The composed routing table, which is what actually decides
+		// whether a request needs the app token (see needsAppToken) and
+		// the one thing an integrator debugging a 401 or a 404 cannot
+		// otherwise see. It is also what the route allow-list test reads.
+		fmt.Fprintf(appLog, "Routes: %s\n", strings.Join(srv.Routes(), ", "))
 		appEvents.emit(appReadyEvent{Type: appEventReady, Port: port, Token: appAuth.Token(), Launch: appAuth.LaunchCode(), Presenter: presenterPassword})
-		go readAppCommands(os.Stdin, questions, appEvents, commands)
-		runAppSession(appSessionOptions{
+		go readAppCommands(os.Stdin, appLog, questions, appEvents, commands)
+		appQuit = runAppSession(appSessionOptions{
 			Events:    appEvents,
 			Questions: questions,
 			Commands:  commands,
@@ -807,7 +844,7 @@ func runDevServer(options serverOptions) (err error) {
 			Tunnels:           tunnels,
 			Present:           presentControl,
 			DiskStatus:        appDisk.get,
-			Log:               os.Stderr,
+			Log:               appLog,
 			PresenterPassword: presenterPassword,
 			StartTunnel:       wantTunnel,
 		})
@@ -834,13 +871,13 @@ func runDevServer(options serverOptions) (err error) {
 			// Reload config and presentation
 			newCfg, err := config.Load(absFile)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error reloading config: %v\n", err)
+				fmt.Fprintf(appLog, "Error reloading config: %v\n", err)
 				return
 			}
 
 			newPres, warnings, newResolvedComponents, newComponentBuildErrs, newRawSlides, err := loadPresentation(absFile, newCfg, baseDir)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error reloading presentation: %v\n", err)
+				fmt.Fprintf(appLog, "Error reloading presentation: %v\n", err)
 				return
 			}
 			// No TUI in headless mode, so stderr is always safe.
@@ -848,7 +885,7 @@ func runDevServer(options serverOptions) (err error) {
 			printComponentErrorsToStderr(newComponentBuildErrs)
 			printComponentWarningsToStderr(componentWarnings(newResolvedComponents))
 			for _, warning := range undeclaredDriverWarnings(absFile, newPres) {
-				fmt.Fprintln(os.Stderr, warning)
+				fmt.Fprintln(appLog, warning)
 			}
 
 			// Update custom theme path if changed
@@ -1040,8 +1077,9 @@ func runDevServer(options serverOptions) (err error) {
 		}
 	}
 
-	// Graceful shutdown
-	ctx, cancel := context.WithTimeout(context.Background(), 5*1e9) // 5 seconds
+	// Graceful shutdown, inside the quit deadline in --app mode rather
+	// than five seconds of its own on top of it.
+	ctx, cancel := context.WithTimeout(context.Background(), appQuitShutdownBound(appQuit))
 	defer cancel()
 
 	return srv.Shutdown(ctx)

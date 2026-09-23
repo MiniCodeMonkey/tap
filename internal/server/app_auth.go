@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 )
 
 // AppAuth is the per-launch secret of a tap --app server. The app sends
@@ -17,6 +18,9 @@ import (
 // as a cookie in exchange for the one-time launch code, so the token never
 // appears in a URL.
 type AppAuth struct {
+	// launchExpires is when the launch code stops working, whether or
+	// not it was ever used. See LaunchCodeLifetime.
+	launchExpires     time.Time
 	token             string
 	launchCode        string
 	presenterPassword string
@@ -24,8 +28,24 @@ type AppAuth struct {
 	launchUsed        bool
 }
 
+// LaunchCodeLifetime is how long a launch code is worth anything. The
+// code is the one tap secret that is written down outside the app's own
+// memory: it rides in the query string of the first URL the app loads,
+// where it can reach a shell history, a crash log, a screen recording or
+// a proxy log. Its whole job is to survive the moment between tap
+// printing the ready line and the app opening its first window, which is
+// a fraction of a second, so it is worth nothing after that. Two minutes
+// is far more room than that moment needs and far less than the life of
+// the run, which is what an unused code was worth before.
+//
+// It is not a substitute for the one-time rule, which still holds: a code
+// is spent by the first page load whether or not it has expired. The two
+// close different windows, one on reuse and one on a code that was never
+// used at all.
+const LaunchCodeLifetime = 2 * time.Minute
+
 // NewAppAuth makes a token, a launch code and a presenter password, 32
-// random bytes each.
+// random bytes each. The launch code expires LaunchCodeLifetime from now.
 func NewAppAuth() (*AppAuth, error) {
 	token, err := randomHex(32)
 	if err != nil {
@@ -39,7 +59,12 @@ func NewAppAuth() (*AppAuth, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &AppAuth{token: token, launchCode: launchCode, presenterPassword: presenterPassword}, nil
+	return &AppAuth{
+		launchExpires:     time.Now().Add(LaunchCodeLifetime),
+		token:             token,
+		launchCode:        launchCode,
+		presenterPassword: presenterPassword,
+	}, nil
 }
 
 func randomHex(size int) (string, error) {
@@ -53,7 +78,8 @@ func randomHex(size int) (string, error) {
 // Token is the secret every request must carry.
 func (a *AppAuth) Token() string { return a.token }
 
-// LaunchCode is the one-time code the app puts in the first URL it loads.
+// LaunchCode is the one-time code the app puts in the first URL it
+// loads, good until LaunchCodeLifetime from the start of the run.
 func (a *AppAuth) LaunchCode() string { return a.launchCode }
 
 // PresenterPassword is the secret that separates steering the deck from
@@ -145,20 +171,26 @@ func (a *AppAuth) carriesToken(r *http.Request, port int) bool {
 }
 
 // exchangeLaunchCode sets the session cookie for a launch code that was
-// never used, and redirects to the same URL without the code.
+// never used and has not expired, and redirects to the same URL without
+// the code.
+//
+// Expired, spent and wrong all fail the same way, with one status and one
+// message. Telling them apart would tell someone holding a code they
+// found in a log whether it was ever the right one, which is the only
+// thing they would still be missing.
 func (a *AppAuth) exchangeLaunchCode(w http.ResponseWriter, r *http.Request, code string, port int) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "Forbidden: a launch code works only on a page load", http.StatusForbidden)
 		return
 	}
 	a.mu.Lock()
-	valid := !a.launchUsed && secretsEqual(code, a.launchCode)
+	valid := !a.launchUsed && time.Now().Before(a.launchExpires) && secretsEqual(code, a.launchCode)
 	if valid {
 		a.launchUsed = true
 	}
 	a.mu.Unlock()
 	if !valid {
-		http.Error(w, "Forbidden: this launch code is wrong or was already used", http.StatusForbidden)
+		http.Error(w, "Forbidden: this launch code is wrong, expired, or was already used", http.StatusForbidden)
 		return
 	}
 

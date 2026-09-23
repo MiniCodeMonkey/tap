@@ -174,7 +174,7 @@ type appSession struct {
 // should end: a quit command, which asks keep-recording first when the run
 // has a recording, the end of standard input, or a signal. The last two
 // ask nothing and keep the recording.
-func runAppSession(options appSessionOptions) {
+func runAppSession(options appSessionOptions) *quitJoiner {
 	if options.Log == nil {
 		options.Log = os.Stderr
 	}
@@ -231,9 +231,15 @@ func runAppSession(options appSessionOptions) {
 		session.enqueue(func() { session.tunnel(true) })
 	}
 
+	// quit is the joiner end() builds, handed back so the cleanup that
+	// runs after this function returns waits on the same deadline rather
+	// than on a fresh allowance of its own. It is nil until a quit
+	// starts.
+	var quit *quitJoiner
 	end := func(askToKeep bool) {
 		cancel()
 		joiner := newQuitJoiner(session.fail, options.Log, options.QuitDeadline)
+		quit = joiner
 		defer joiner.report()
 		startupJoined := joiner.join("the startup", appErrorStartupStuck, startupDone)
 		reporterJoined := joiner.join("the recording reporter", appErrorReporterStuck, reporterDone)
@@ -256,17 +262,17 @@ func runAppSession(options appSessionOptions) {
 			if !open {
 				fmt.Fprintln(options.Log, "Standard input closed, shutting down.")
 				end(false)
-				return
+				return quit
 			}
 			if command.Type == appCommandQuit {
 				end(true)
-				return
+				return quit
 			}
 			session.handle(command)
 		case <-options.Signals:
 			fmt.Fprintln(options.Log, "Interrupted, shutting down.")
 			end(false)
-			return
+			return quit
 		}
 	}
 }
@@ -496,6 +502,9 @@ type quitJoiner struct {
 	mu       sync.Mutex
 	deadline time.Time
 	stuck    []string
+	// reported is how many of stuck the closing event has already named,
+	// so a second report() adds only what is new.
+	reported int
 }
 
 func newQuitJoiner(fail func(code, message string), log io.Writer, bound time.Duration) *quitJoiner {
@@ -581,11 +590,62 @@ func (joiner *quitJoiner) join(what, code string, done <-chan struct{}) bool {
 // report closes a quit that gave up on more than one part with one event
 // naming all of them. A quit that gave up on nothing, or on a single part
 // already reported as it happened, says nothing more.
+//
+// It is called twice on a full quit, once as the session ends and once
+// when the cleanup after the session has finished, because the second
+// stretch can give up on parts the first one had not reached yet. A call
+// that has nothing new to add says nothing, so the ordinary quit still
+// closes in silence and an app never gets the same list twice.
 func (joiner *quitJoiner) report() {
-	if len(joiner.stuck) < 2 {
+	if len(joiner.stuck) < 2 || len(joiner.stuck) == joiner.reported {
 		return
 	}
+	joiner.reported = len(joiner.stuck)
 	joiner.fail(appErrorShutdownStuck, "quit gave up waiting for "+strings.Join(joiner.stuck, ", ")+"; they may still be running")
+}
+
+// joinQuit is how the quit path outside the session bounds a cleanup call
+// it does not own. stop runs on its own goroutine and the wait goes
+// through joiner, so the call takes what is left of the one quit deadline
+// and no more, and an expiry is named rather than silent. A call given up
+// on keeps running, detached, on a process that is leaving anyway.
+//
+// joiner is nil outside --app mode, where these same defers run under a
+// person watching a terminal rather than under an app waiting on a pipe,
+// and stop is then simply called. That is deliberate: the bound exists
+// because the app cannot tell a slow quit from a hang, and a person can.
+func joinQuit(joiner *quitJoiner, what, code string, stop func()) {
+	if joiner == nil {
+		stop()
+		return
+	}
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		stop()
+	}()
+	joiner.join(what, code, done)
+}
+
+// appServerShutdownBound is the longest a graceful HTTP shutdown takes
+// when it is not sharing a quit deadline with anything: tap dev's own
+// terminal interface, tap present, and every other exit from
+// runDevServer.
+const appServerShutdownBound = 5 * time.Second
+
+// appQuitShutdownBound is how long the graceful HTTP shutdown gets. In
+// --app mode it comes out of the same quit deadline as everything else
+// the session waited on, instead of being five seconds of its own added
+// on top: the deadline is the whole quit's, and a shutdown that sits
+// outside it makes the worst case the sum of two bounds rather than the
+// one the design and the docs describe. A quit that has already spent its
+// deadline still gets appQuitJoinGrace, long enough for a server with no
+// connection left to close at once.
+func appQuitShutdownBound(joiner *quitJoiner) time.Duration {
+	if joiner == nil {
+		return appServerShutdownBound
+	}
+	return max(min(joiner.remaining(), appServerShutdownBound), appQuitJoinGrace)
 }
 
 // emitTunnelRunning sends the running tunnel's URL and a QR code of its

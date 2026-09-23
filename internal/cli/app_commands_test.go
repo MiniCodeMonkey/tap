@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"io"
 	"strings"
 	"testing"
 )
@@ -17,7 +18,7 @@ func TestReadAppCommandsRoutesAnswersAndQueuesCommands(t *testing.T) {
 		`{"type":"tunnel","start":false}` + "\n" +
 		`{"type":"recording","action":"stop"}` + "\n")
 	commands := make(chan appCommand, appCommandQueueSize)
-	readAppCommands(input, questions, events, commands)
+	readAppCommands(input, io.Discard, questions, events, commands)
 
 	if got := receiveOutcome(t, outcome); got != [2]bool{true, true} {
 		t.Errorf("the answer did not reach the question: %v", got)
@@ -41,7 +42,7 @@ func TestReadAppCommandsReportsBadLines(t *testing.T) {
 		`{"type":"answer","id":"q9","value":true}` + "\n" +
 		`{"id":"no type"}` + "\n")
 	commands := make(chan appCommand, appCommandQueueSize)
-	readAppCommands(input, questions, events, commands)
+	readAppCommands(input, io.Discard, questions, events, commands)
 
 	for _, want := range []string{appErrorInvalidCommand, appErrorUnknownQuestion, appErrorInvalidCommand} {
 		if event := log.next(t, appEventError); event["code"] != want {
@@ -57,7 +58,7 @@ func TestReadAppCommandsClosesQuestionsAtTheEndOfInput(t *testing.T) {
 	log.next(t, appEventQuestion)
 
 	commands := make(chan appCommand, appCommandQueueSize)
-	readAppCommands(strings.NewReader(""), questions, events, commands)
+	readAppCommands(strings.NewReader(""), io.Discard, questions, events, commands)
 
 	if got := receiveOutcome(t, outcome); got[1] {
 		t.Errorf("outcome = %v, want unanswered once standard input closed", got)
@@ -70,7 +71,7 @@ func TestReadAppCommandsClosesQuestionsAtTheEndOfInput(t *testing.T) {
 func TestReadAppCommandsDropsACommandWhenTheQueueIsFull(t *testing.T) {
 	events, log := newTestEvents(t)
 	commands := make(chan appCommand, 1)
-	readAppCommands(strings.NewReader(`{"type":"reload"}`+"\n"+`{"type":"reload"}`+"\n"), newAppQuestions(events), events, commands)
+	readAppCommands(strings.NewReader(`{"type":"reload"}`+"\n"+`{"type":"reload"}`+"\n"), io.Discard, newAppQuestions(events), events, commands)
 	if event := log.next(t, appEventError); event["code"] != appErrorBusy {
 		t.Errorf("error = %v, want busy", event)
 	}
@@ -82,7 +83,7 @@ func TestReadAppCommandsSkipsAnOversizedLineAndKeepsReading(t *testing.T) {
 	huge := strings.Repeat("x", appCommandLineLimit+1)
 	input := strings.NewReader(huge + "\n" + `{"type":"reload"}` + "\n")
 	commands := make(chan appCommand, appCommandQueueSize)
-	readAppCommands(input, questions, events, commands)
+	readAppCommands(input, io.Discard, questions, events, commands)
 
 	if event := log.next(t, appEventError); event["code"] != appErrorInvalidCommand {
 		t.Errorf("error code = %v, want %s", event["code"], appErrorInvalidCommand)
@@ -102,7 +103,7 @@ func TestReadAppCommandsReportsExactlyOneErrorPerOversizedLine(t *testing.T) {
 	huge := strings.Repeat("y", appCommandLineLimit*2)
 	input := strings.NewReader(huge + "\n")
 	commands := make(chan appCommand, appCommandQueueSize)
-	readAppCommands(input, questions, events, commands)
+	readAppCommands(input, io.Discard, questions, events, commands)
 
 	if event := log.next(t, appEventError); event["code"] != appErrorInvalidCommand {
 		t.Errorf("error code = %v, want %s", event["code"], appErrorInvalidCommand)
@@ -119,7 +120,7 @@ func TestReadAppCommandsDoesNotExecuteTheTailOfAnOversizedLine(t *testing.T) {
 	padding := strings.Repeat("z", appCommandLineLimit+1-len(tail))
 	input := strings.NewReader(padding + tail + "\n")
 	commands := make(chan appCommand, appCommandQueueSize)
-	readAppCommands(input, questions, events, commands)
+	readAppCommands(input, io.Discard, questions, events, commands)
 
 	if event := log.next(t, appEventError); event["code"] != appErrorInvalidCommand {
 		t.Errorf("error code = %v, want %s", event["code"], appErrorInvalidCommand)
@@ -135,7 +136,7 @@ func TestReadAppCommandsSkipsSeveralOversizedLinesInARow(t *testing.T) {
 	huge := strings.Repeat("w", appCommandLineLimit+1)
 	input := strings.NewReader(huge + "\n" + huge + "\n" + huge + "\n" + `{"type":"reload"}` + "\n")
 	commands := make(chan appCommand, appCommandQueueSize)
-	readAppCommands(input, questions, events, commands)
+	readAppCommands(input, io.Discard, questions, events, commands)
 
 	for range 3 {
 		if event := log.next(t, appEventError); event["code"] != appErrorInvalidCommand {

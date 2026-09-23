@@ -180,8 +180,8 @@ func TestClaimStdoutForAppSendsEverythingElseToStderr(t *testing.T) {
 	os.Stdout, os.Stderr = fakeStdout, fakeStderr
 	t.Cleanup(func() { os.Stdout, os.Stderr = realStdout, realStderr })
 
-	stdout, restore := claimStdoutForApp()
-	writer := newAppEventWriter(stdout, os.Stderr)
+	stdout, log, restore := claimStdoutForApp()
+	writer := newAppEventWriter(stdout, log)
 	fmt.Println("plain text")
 	Success("colored text\n")
 	Info("more text\n")
