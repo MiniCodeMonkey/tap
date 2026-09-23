@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net/url"
 	"os"
 	"os/signal"
@@ -20,8 +21,10 @@ import (
 	"github.com/MiniCodeMonkey/tap/internal/parser"
 	"github.com/MiniCodeMonkey/tap/internal/recorder"
 	"github.com/MiniCodeMonkey/tap/internal/server"
+	"github.com/MiniCodeMonkey/tap/internal/slidelist"
 	"github.com/MiniCodeMonkey/tap/internal/transformer"
 	"github.com/MiniCodeMonkey/tap/internal/tui"
+	"github.com/MiniCodeMonkey/tap/internal/usersettings"
 	"github.com/spf13/cobra"
 )
 
@@ -33,6 +36,8 @@ var (
 	devAllowOrigins      []string
 	devTunnel            bool
 	devLAN               bool
+	devAllowCode         bool
+	devApp               bool
 )
 
 // devCmd represents the dev command
@@ -50,6 +55,9 @@ The dev server provides:
 The server listens on this machine only. --lan opens it to the local
 network, and --tunnel puts it on a public https URL.
 
+A deck with live code asks for approval once, in the terminal, before it
+runs anything. tap approval list shows the approved decks.
+
 Examples:
   tap dev                                 # The deck in this folder
   tap dev slides.md                      # Start server on port 3000
@@ -57,9 +65,13 @@ Examples:
   tap dev slides.md -p 8080              # Short form
   tap dev slides.md --presenter-password secret  # Protect presenter view
   tap dev slides.md --tunnel             # Also serve it on a public https URL
-  tap dev slides.md --lan                # Let a phone on the same network connect`,
+  tap dev slides.md --lan                # Let a phone on the same network connect
+  tap dev slides.md --headless --allow-code   # Run live code without asking, for this run only`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		if devApp && len(args) == 0 {
+			return userError(codeUsage, errors.New("--app needs the deck: tap dev --app <deck>"))
+		}
 		file, err := resolveDeck(firstArg(args))
 		if err != nil {
 			return err
@@ -73,6 +85,8 @@ Examples:
 			allowOrigins:      devAllowOrigins,
 			tunnel:            devTunnel,
 			lan:               devLAN,
+			allowCode:         devAllowCode,
+			app:               devApp,
 		})
 	},
 }
@@ -94,6 +108,16 @@ type serverOptions struct {
 	present bool
 	// record starts recording at launch. Only tap present sets it.
 	record bool
+	// allowCode lets live code run for this run without an approval, and
+	// stores nothing. It is --allow-code.
+	allowCode bool
+	// app runs tap as the engine of the Tap desktop app (--app): no TUI
+	// and no browser, a loopback server on a free port behind a token,
+	// JSON events on standard output and commands on standard input.
+	app bool
+	// noRecord is tap present --no-record. Only --app reads it: without
+	// --app, tap present settles recording before runDevServer.
+	noRecord bool
 }
 
 func init() {
@@ -107,6 +131,8 @@ func init() {
 	devCmd.Flags().BoolVar(&devTunnel, "tunnel", false, "also serve the deck on a public https URL through a Cloudflare Quick Tunnel (needs cloudflared; no account required)")
 	devCmd.Flags().BoolVar(&devLAN, "lan", false, "listen on the local network too, so a phone on the same network can open the presenter view (default: this machine only)")
 	devCmd.Flags().StringArrayVar(&devAllowOrigins, "allow-origin", nil, "additional origin (scheme://host:port) allowed to connect to the websocket hub, or host (host:port) allowed in a request's Host header, for a contributor's Vite dev server or a non-local presenter host (repeatable)")
+	devCmd.Flags().BoolVar(&devAllowCode, "allow-code", false, "let the deck's live code run for this run without an approval, and save none (for --headless and scripts)")
+	devCmd.Flags().BoolVar(&devApp, "app", false, "run as the engine of the Tap desktop app: JSON events on standard output, commands on standard input (an interface for the app, not for people)")
 }
 
 // recordingAudioOptions maps the deck's recording.audio config value to the
@@ -130,9 +156,73 @@ func recordingAudioOptions(configured string) (audioUID string, noAudio bool) {
 // is whether the user passed --port themselves (cmd.Flags().Changed
 // ("port")): it decides whether a busy port fails outright or falls back
 // to the next one (see startOnAvailablePort).
-func runDevServer(options serverOptions) error {
+func runDevServer(options serverOptions) (err error) {
 	file, port, presenterPassword, headless := options.file, options.port, options.presenterPassword, options.headless
 	portExplicit, allowOrigins, wantTunnel := options.portExplicit, options.allowOrigins, options.tunnel
+
+	// In --app mode standard output carries only the event lines. Every
+	// failure from here on is also an error event, the only line when tap
+	// cannot start.
+	var appEvents *appEventWriter
+	var appAuth *server.AppAuth
+	appDisk := &appDiskStatus{}
+	// appLog is where every human-readable line goes. Outside --app mode
+	// it is standard error itself; in --app mode it is the bounded writer
+	// that owns standard error, so a log line never waits for an app that
+	// has stopped reading its child's log pipe.
+	var appLog io.Writer = os.Stderr
+	// appQuit is the quit deadline the --app session established, handed
+	// back by runAppSession so the cleanup below waits on what is left of
+	// it. It stays nil outside --app mode and until a quit starts, and
+	// joinQuit calls straight through when it is.
+	var appQuit *quitJoiner
+	if options.app {
+		if headless {
+			return userError(codeUsage, errors.New("--app and --headless cannot be combined"))
+		}
+		if options.lan {
+			return userError(codeUsage, errors.New("--app listens on 127.0.0.1 only, so it cannot be combined with --lan"))
+		}
+		if !portExplicit {
+			// A free port, which the ready line reports.
+			port, portExplicit = 0, true
+		}
+		protocol, log, restoreStdout, claimErr := claimStdoutForApp()
+		if claimErr != nil {
+			return internalError(codeInternal, claimErr)
+		}
+		appLog = log
+		appEvents = newAppEventWriter(protocol, appLog)
+		defer func() {
+			if err != nil {
+				_, code, _ := classify(err)
+				appEvents.emit(appErrorEvent{Type: appEventError, Code: code, Message: err.Error()})
+			}
+			// The last word on a quit that gave up on several parts,
+			// sent here rather than as the session ends because the
+			// cleanup between the two can add to the list.
+			if appQuit != nil {
+				appQuit.report()
+			}
+			closeAppEventWriter(appEvents, appLog)
+			restoreStdout()
+		}()
+		appAuth, err = server.NewAppAuth()
+		if err != nil {
+			return internalError(codeInternal, err)
+		}
+		if presenterPassword == "" {
+			// Viewing is open in --app mode and steering is not. The
+			// WebSocket is an audience route, so without a presenter
+			// password any local process, and anyone holding the tunnel
+			// link, could drive the audience's deck. The app holds this
+			// generated secret instead of a person typing one, and the
+			// ready line hands it over. A --presenter-password of the
+			// user's own is left alone, and nothing changes for tap dev
+			// without --app.
+			presenterPassword = appAuth.PresenterPassword()
+		}
+	}
 
 	// Resolve absolute path
 	absFile, err := filepath.Abs(file)
@@ -181,9 +271,40 @@ func runDevServer(options serverOptions) error {
 	}
 	// The TUI has not started yet at this point either way, so stderr is
 	// always safe here.
-	printLayoutWarningsToStderr(absFile, dropComponentBuildFailureWarnings(warnings))
-	printComponentErrorsToStderr(componentBuildErrs)
-	printComponentWarningsToStderr(componentWarnings(resolvedComponents))
+	printLayoutWarnings(appLog, absFile, dropComponentBuildFailureWarnings(warnings))
+	printComponentErrors(appLog, componentBuildErrs)
+	printComponentWarnings(appLog, componentWarnings(resolvedComponents))
+
+	startupDriverWarnings := undeclaredDriverWarnings(absFile, pres)
+	for _, warning := range startupDriverWarnings {
+		fmt.Fprintln(appLog, warning)
+	}
+
+	// Live code approval happens here, before the TUI owns the terminal.
+	settingsPath, err := usersettings.Path()
+	if err != nil {
+		return internalError(codeInternal, err)
+	}
+	// In --app mode the question goes to the app after the ready line (see
+	// the --app branch below), and live code stays off until it is
+	// answered.
+	var liveCodePolicy server.LiveCodePolicy
+	if !options.app {
+		liveCodePolicy, err = liveCodeApproval(approvalInput{
+			Now:          time.Now,
+			Config:       cfg,
+			Presentation: pres,
+			Asker:        terminalAsker{in: os.Stdin, out: os.Stdout},
+			Out:          os.Stdout,
+			SettingsPath: settingsPath,
+			Deck:         absFile,
+			AllowCode:    options.allowCode,
+			Interactive:  stdinIsTerminal() && !headless,
+		})
+		if err != nil {
+			return internalError(codeInternal, err)
+		}
+	}
 
 	// Resolve custom theme path if configured
 	customThemePath, err := cfg.ResolveCustomThemePath(baseDir)
@@ -242,6 +363,12 @@ func runDevServer(options serverOptions) error {
 	// same way, since Server.New fixes its address at construction.
 	buildServer := func(candidatePort int) *server.Server {
 		candidate := server.NewWithHost(candidatePort, listenHost(options.lan))
+		// A serving error is a log line like every other, so it goes to
+		// the writer that owns standard error for this run.
+		candidate.SetLog(appLog)
+		if appAuth != nil {
+			candidate.SetAppAuth(appAuth)
+		}
 		candidate.SetPresentation(pres)
 		candidate.SetRevision(initialRevision)
 		candidate.SetPresenterPassword(presenterPassword)
@@ -249,6 +376,14 @@ func runDevServer(options serverOptions) error {
 		candidate.SetAllowedOrigins(allowOrigins)
 		candidate.SetBaseDir(baseDir) // Enable serving local files (images, etc.)
 		candidate.SetRegistry(buildDriverRegistry(cfg, baseDir))
+		// The policy stays the same for the whole run. A driver added by a
+		// reload is not in it, so its blocks show "Not approved" until the
+		// next start asks. This also means an approved custom driver whose
+		// command changes mid-run (a git pull, an edited frontmatter) has
+		// its new command run without asking again: approval is keyed by
+		// driver name, not by command, and the registry below is rebuilt on
+		// every reload while this policy is not.
+		candidate.SetLiveCodePolicy(liveCodePolicy)
 		candidate.SetComponentBundles(componentBundleFiles(resolvedComponents))
 		if customThemePath != "" {
 			candidate.SetCustomThemePath(customThemePath)
@@ -306,21 +441,24 @@ func runDevServer(options serverOptions) error {
 		// Reload config and presentation
 		newCfg, err := config.Load(absFile)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error reloading config: %v\n", err)
+			fmt.Fprintf(appLog, "Error reloading config: %v\n", err)
 			return
 		}
 
 		newPres, warnings, newResolvedComponents, newComponentBuildErrs, newRawSlides, err := loadPresentation(absFile, newCfg, baseDir)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error reloading presentation: %v\n", err)
+			fmt.Fprintf(appLog, "Error reloading presentation: %v\n", err)
 			return
 		}
 		// This handler only runs before the headless/TUI branch below
 		// installs its own (the TUI has not started yet either way), so
 		// stderr is safe here.
-		printLayoutWarningsToStderr(absFile, dropComponentBuildFailureWarnings(warnings))
-		printComponentErrorsToStderr(newComponentBuildErrs)
-		printComponentWarningsToStderr(componentWarnings(newResolvedComponents))
+		printLayoutWarnings(appLog, absFile, dropComponentBuildFailureWarnings(warnings))
+		printComponentErrors(appLog, newComponentBuildErrs)
+		printComponentWarnings(appLog, componentWarnings(newResolvedComponents))
+		for _, warning := range undeclaredDriverWarnings(absFile, newPres) {
+			fmt.Fprintln(appLog, warning)
+		}
 
 		setRawSlides(newRawSlides)
 		watcher.AddExtraDirs(externalInputDirs(newResolvedComponents, baseDir))
@@ -332,7 +470,9 @@ func runDevServer(options serverOptions) error {
 		if err := watcher.Start(); err != nil {
 			return fmt.Errorf("failed to start file watcher: %w", err)
 		}
-		defer func() { _ = watcher.Stop() }()
+		defer func() {
+			joinQuit(appQuit, "stopping the file watcher", appErrorShutdownStuck, func() { _ = watcher.Stop() })
+		}()
 	}
 
 	// Generate URLs
@@ -349,7 +489,14 @@ func runDevServer(options serverOptions) error {
 	// way a phone gets a secure context (and so a screen wake lock) from a
 	// dev server. The controller also keeps the Host allow-list in step.
 	tunnels := newTunnelController(port, allowOrigins, srv, hub)
-	defer func() { _ = tunnels.Stop() }()
+	// Stop takes the controller's own mutex, which a tunnel start the
+	// session already gave up on holds for the whole of tunnel.Start. The
+	// session refuses to wait on that mutex for exactly that reason, so
+	// this waits on the same quit deadline instead of undoing that bound
+	// a few microseconds later.
+	defer func() {
+		joinQuit(appQuit, "stopping the tunnel at exit", appErrorTunnelFailed, func() { _ = tunnels.Stop() })
+	}()
 
 	// Recording is opt-in at the keyboard, but its preflight runs at
 	// startup so a missing permission is found during setup rather than
@@ -385,6 +532,7 @@ func runDevServer(options serverOptions) error {
 			}
 		},
 		OnDiskLevel: func(level recorder.DiskLevel) {
+			appDisk.set(level)
 			_ = hub.BroadcastDiskStatus(diskStatusName(level))
 			if devModel != nil {
 				devModel.NoteDiskLevel(level)
@@ -417,8 +565,15 @@ func runDevServer(options serverOptions) error {
 				if devModel != nil {
 					devModel.SendEvent(eventType, message)
 				}
+				if options.app {
+					fmt.Fprintf(appLog, "%s: %s\n", eventType, message)
+					if eventType == "error" {
+						appEvents.emit(appErrorEvent{Type: appEventError, Code: appErrorRecordingFailed, Message: message})
+					}
+				}
 			},
 			OnDiskLevel: func(level recorder.DiskLevel) {
+				appDisk.set(level)
 				_ = hub.BroadcastDiskStatus(diskStatusName(level))
 				if devModel != nil {
 					devModel.NoteDiskLevel(level)
@@ -428,7 +583,12 @@ func runDevServer(options serverOptions) error {
 		// A kept recording must survive an early return above this point
 		// and RunDevTUIWithModel itself returning an error below, not just
 		// a clean quit through the TUI branch's own present.Finish call.
-		defer func() { _, _ = present.Finish(true) }()
+		// Finish takes the recording run's own lock, which the goroutine
+		// the session deliberately abandoned may still hold, so this waits
+		// on the quit deadline like every other call into the run.
+		defer func() {
+			joinQuit(appQuit, "finishing the recording at exit", appErrorRecordingFailed, func() { _, _ = present.Finish(true) })
+		}()
 		hub.SetOnSlideChange(present.NoteSlideChange)
 	} else {
 		hub.SetOnSlideChange(recordings.NoteSlideChange)
@@ -439,7 +599,7 @@ func runDevServer(options serverOptions) error {
 	}
 
 	tunnelURL := ""
-	if wantTunnel {
+	if wantTunnel && !options.app {
 		if !tunnels.Available() {
 			return notInstalledError()
 		}
@@ -459,7 +619,242 @@ func runDevServer(options serverOptions) error {
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 
-	if headless {
+	if options.app {
+		// appCtx is the run's context, which runAppSession takes as its
+		// own and cancels as the first step of quit. Every render started
+		// outside a command - a PUT, the file watcher - carries it, so
+		// renderApp's own checks are live on exactly the paths most
+		// likely to be in flight when the run ends.
+		appCtx, endAppRun := context.WithCancel(context.Background())
+		defer endAppRun()
+
+		deckSource := newAppDeckSource(absFile)
+		if initialSource, readErr := os.ReadFile(absFile); readErr == nil {
+			deckSource.remember(initialSource)
+		}
+
+		// renderApp renders source, the app's buffer or the deck file, and
+		// returns the step that serves the result and tells every open
+		// page about it. It is the only path that changes what --app mode
+		// shows. Nothing it does before that step is visible anywhere, and
+		// the deck source runs the step only while this render is still
+		// the newest one, so a render another has overtaken is thrown away
+		// whole rather than published over the newer deck.
+		//
+		// forceReload decides between the two ways a page is told the deck
+		// changed, and the choice is the caller's alone. An ordinary edit,
+		// a save, or a component rebuilt by the watcher passes false: open
+		// pages fetch the deck and re-render the slides that changed,
+		// keeping the audience's position and everything a slide is
+		// holding, such as a running animation or the output of a live
+		// code block. Only the reload command passes true, which loads
+		// every page again and throws all of that away. See
+		// deckPublisher.publish for what each one sends.
+		renderApp := func(ctx context.Context, source []byte, forceReload bool) (func(), error) {
+			if ctxErr := ctx.Err(); ctxErr != nil {
+				return nil, ctxErr
+			}
+			newCfg, loadErr := config.FromSource(source)
+			if loadErr != nil {
+				return nil, fmt.Errorf("failed to load config: %w", loadErr)
+			}
+			if loadErr := newCfg.Validate(); loadErr != nil {
+				return nil, fmt.Errorf("invalid config: %w", loadErr)
+			}
+			newPres, warnings, newResolvedComponents, newComponentBuildErrs, newRawSlides, loadErr := loadPresentationSource(source, absFile, newCfg, baseDir)
+			if loadErr != nil {
+				return nil, fmt.Errorf("failed to load presentation: %w", loadErr)
+			}
+			newCustomThemePath, themeErr := newCfg.ResolveCustomThemePath(baseDir)
+			if themeErr != nil {
+				Warning("Custom theme not loaded on reload: %v\n", themeErr)
+				newCustomThemePath = ""
+			}
+			if ctxErr := ctx.Err(); ctxErr != nil {
+				return nil, ctxErr
+			}
+
+			return func() {
+				// Standard error is the Tap Log in --app mode.
+				printLayoutWarnings(appLog, absFile, dropComponentBuildFailureWarnings(warnings))
+				printComponentErrors(appLog, newComponentBuildErrs)
+				printComponentWarnings(appLog, componentWarnings(newResolvedComponents))
+				if !deckSource.buffering() {
+					// These warnings carry line numbers from the deck file,
+					// which an unsaved buffer does not match.
+					for _, warning := range undeclaredDriverWarnings(absFile, newPres) {
+						fmt.Fprintln(appLog, warning)
+					}
+				}
+				srv.SetCustomThemePath(newCustomThemePath)
+				srv.SetRegistry(buildDriverRegistry(newCfg, baseDir))
+				setRawSlides(newRawSlides)
+				watcher.AddExtraDirs(externalInputDirs(newResolvedComponents, baseDir))
+				publisher.publish(newPres, componentBundleFiles(newResolvedComponents), newCustomThemePath, forceReload)
+			}, nil
+		}
+		// renderCurrentForApp renders what tap shows now: the app's buffer
+		// while there is one, and the deck file otherwise.
+		renderCurrentForApp := func(ctx context.Context, forceReload bool) error {
+			return deckSource.renderCurrent(func(source []byte) (func(), error) {
+				return renderApp(ctx, source, forceReload)
+			})
+		}
+
+		questions := newAppQuestions(appEvents)
+		commands := make(chan appCommand, appCommandQueueSize)
+
+		// tap present --app has no buffer and no watcher: the audience sees
+		// only what the deck file held at the last reload.
+		var saved func(ctx context.Context) error
+		if !options.present {
+			srv.RegisterHandlerFunc("PUT "+server.AppSourcePath, handleAppSource(deckSource, func(buffer []byte) (func(), error) {
+				return renderApp(appCtx, buffer, false)
+			}, baseDir, appLog))
+			saved = func(ctx context.Context) error {
+				deckSource.dropBuffer()
+				return renderCurrentForApp(ctx, false)
+			}
+
+			emitFileChanged := func(path string, list *slidelist.Result) {
+				appEvents.emit(appFileChangedEvent{Type: appEventFileChanged, Path: path, Result: list})
+				_ = hub.BroadcastFileChanged(path)
+			}
+			watcher.SetOnChange(func(path string) {
+				if filepath.Clean(path) == absFile {
+					changed, readErr := deckSource.diskChanged()
+					if readErr != nil && !os.IsNotExist(readErr) {
+						fmt.Fprintf(appLog, "Error reading %s: %v\n", absFile, readErr)
+						return
+					}
+					if readErr == nil && !changed {
+						// The app's own save, or a write of what tap
+						// already shows.
+						return
+					}
+					emitFileChanged(absFile, nil)
+					if readErr != nil || deckSource.buffering() {
+						// The buffer wins until the app says it saved, and
+						// a deleted deck leaves the last render on screen.
+						return
+					}
+					if renderErr := renderCurrentForApp(appCtx, false); renderErr != nil {
+						fmt.Fprintf(appLog, "Error reloading presentation: %v\n", renderErr)
+					}
+					return
+				}
+
+				// Another file in the deck folder, such as a component:
+				// render again, and send the slide list, whose step counts
+				// can change with a component's steps export. The list
+				// comes from the very text that was rendered, so it
+				// always describes what the app is looking at.
+				list, renderErr := deckSource.renderCurrentAndList(baseDir, func(text []byte) (func(), error) {
+					return renderApp(appCtx, text, false)
+				})
+				if renderErr != nil {
+					fmt.Fprintf(appLog, "Error reloading presentation: %v\n", renderErr)
+				}
+				emitFileChanged(path, list)
+			})
+		}
+
+		var presentControl appPresentControl
+		recordContext, stopRecording := context.WithCancel(context.Background())
+		defer stopRecording()
+		if present != nil {
+			presentControl = present
+			slides := newSlideReporter(appEvents)
+			hub.SetOnSlideChange(func(slideIndex int) {
+				present.NoteSlideChange(slideIndex)
+				if index, step, known := hub.CurrentPosition(); known {
+					slides.report(index, step)
+				}
+			})
+		}
+
+		startup := func(ctx context.Context) {
+			if present != nil {
+				record, consentErr := presentRecordingWanted(consentInput{
+					SettingsPath: settingsPath,
+					Out:          appLog,
+					NoRecord:     options.noRecord,
+					Supported:    recorder.Supported(),
+					Interactive:  true,
+					Asker:        appConsentAsker{ctx: ctx, questions: questions, settingsPath: settingsPath},
+				})
+				if consentErr != nil {
+					appEvents.emit(appErrorEvent{Type: appEventError, Code: codeInternal, Message: "saving the recording answer: " + consentErr.Error()})
+				}
+				if ctx.Err() != nil {
+					return
+				}
+				// The same launch as the TUI branch of tap present.
+				if recorder.Supported() {
+					report := presentLaunchPreflight(recordings, record)
+					for _, finding := range report.Findings {
+						if finding.Blocking {
+							present.Block(finding.Describe())
+							appEvents.emit(appErrorEvent{Type: appEventError, Code: appErrorRecordingBlocked, Message: finding.Describe()})
+							break
+						}
+					}
+					present.Begin(recordContext, record)
+				}
+			}
+			if ctx.Err() != nil {
+				return
+			}
+
+			// The live code approval is its own question, never answered by
+			// the recording consent above: one yes must not turn on both.
+			policy, approvalErr := liveCodeApproval(approvalInput{
+				Now:          time.Now,
+				Config:       cfg,
+				Presentation: pres,
+				Asker:        appApprovalAsker{ctx: ctx, questions: questions},
+				Out:          appLog,
+				SettingsPath: settingsPath,
+				Deck:         absFile,
+				AllowCode:    options.allowCode,
+				Interactive:  true,
+			})
+			if approvalErr != nil {
+				appEvents.emit(appErrorEvent{Type: appEventError, Code: codeInternal, Message: approvalErr.Error()})
+				return
+			}
+			srv.SetLiveCodePolicy(policy)
+			// Pages read which drivers may run from /api/presentation.
+			_ = hub.BroadcastReload()
+		}
+
+		// The composed routing table, which is what actually decides
+		// whether a request needs the app token (see needsAppToken) and
+		// the one thing an integrator debugging a 401 or a 404 cannot
+		// otherwise see. It is also what the route allow-list test reads.
+		fmt.Fprintf(appLog, "Routes: %s\n", strings.Join(srv.Routes(), ", "))
+		appEvents.emit(appReadyEvent{Type: appEventReady, Port: port, Token: appAuth.Token(), Launch: appAuth.LaunchCode(), Presenter: presenterPassword})
+		go readAppCommands(os.Stdin, appLog, questions, appEvents, commands)
+		appQuit = runAppSession(appSessionOptions{
+			Events:    appEvents,
+			Questions: questions,
+			Commands:  commands,
+			Signals:   sigCh,
+			Startup:   startup,
+			Reload: func(ctx context.Context) error {
+				return renderCurrentForApp(ctx, true)
+			},
+			Saved:             saved,
+			Run:               appCtx,
+			EndRun:            endAppRun,
+			Tunnels:           tunnels,
+			Present:           presentControl,
+			DiskStatus:        appDisk.get,
+			Log:               appLog,
+			PresenterPassword: presenterPassword,
+			StartTunnel:       wantTunnel,
+		})
+	} else if headless {
 		// Headless mode - no TUI, just log and wait for signal
 		fmt.Println()
 		Success("  Dev server running (headless mode)\n")
@@ -482,19 +877,22 @@ func runDevServer(options serverOptions) error {
 			// Reload config and presentation
 			newCfg, err := config.Load(absFile)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error reloading config: %v\n", err)
+				fmt.Fprintf(appLog, "Error reloading config: %v\n", err)
 				return
 			}
 
 			newPres, warnings, newResolvedComponents, newComponentBuildErrs, newRawSlides, err := loadPresentation(absFile, newCfg, baseDir)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error reloading presentation: %v\n", err)
+				fmt.Fprintf(appLog, "Error reloading presentation: %v\n", err)
 				return
 			}
 			// No TUI in headless mode, so stderr is always safe.
-			printLayoutWarningsToStderr(absFile, dropComponentBuildFailureWarnings(warnings))
-			printComponentErrorsToStderr(newComponentBuildErrs)
-			printComponentWarningsToStderr(componentWarnings(newResolvedComponents))
+			printLayoutWarnings(appLog, absFile, dropComponentBuildFailureWarnings(warnings))
+			printComponentErrors(appLog, newComponentBuildErrs)
+			printComponentWarnings(appLog, componentWarnings(newResolvedComponents))
+			for _, warning := range undeclaredDriverWarnings(absFile, newPres) {
+				fmt.Fprintln(appLog, warning)
+			}
 
 			// Update custom theme path if changed
 			newCustomThemePath := resolveCustomThemePathForReload(newCfg, baseDir, srv)
@@ -536,6 +934,12 @@ func runDevServer(options serverOptions) error {
 		model.SetTunnelController(tunnels)
 		model.SetRecorderController(recordings)
 		devModel = model
+
+		// The terminal lines above scroll away when the TUI starts, so the
+		// TUI shows them too.
+		if len(startupDriverWarnings) > 0 {
+			model.SetWarnings(startupDriverWarnings)
+		}
 
 		if present != nil {
 			model.SetPresentRecorder(present)
@@ -629,7 +1033,7 @@ func runDevServer(options serverOptions) error {
 			// for example) are not fatal enough to be an error, but still
 			// worth showing; the model clears them on the next reload that
 			// has none, so a warning never outlives the build it came from.
-			model.SetWarnings(componentWarningLines(componentWarnings(newResolvedComponents)))
+			model.SetWarnings(append(componentWarningLines(componentWarnings(newResolvedComponents)), undeclaredDriverWarnings(absFile, newPres)...))
 			setRawSlides(newRawSlides)
 			watcher.AddExtraDirs(externalInputDirs(newResolvedComponents, baseDir))
 			srv.SetRegistry(buildDriverRegistry(newCfg, baseDir))
@@ -679,11 +1083,24 @@ func runDevServer(options serverOptions) error {
 		}
 	}
 
-	// Graceful shutdown
-	ctx, cancel := context.WithTimeout(context.Background(), 5*1e9) // 5 seconds
+	// Graceful shutdown, inside the quit deadline in --app mode rather
+	// than five seconds of its own on top of it.
+	ctx, cancel := context.WithTimeout(context.Background(), appQuitShutdownBound(appQuit))
 	defer cancel()
 
-	return srv.Shutdown(ctx)
+	if shutdownErr := srv.Shutdown(ctx); shutdownErr != nil {
+		if !errors.Is(shutdownErr, context.DeadlineExceeded) {
+			return shutdownErr
+		}
+		// A graceful shutdown that runs out of time means a request was
+		// still in flight, which one page still loading is enough to
+		// cause. The listener is closed and the connections go with the
+		// process, so this is a note about a tidy exit rather than a
+		// failure: reporting it as one exits 1 and tells the app its
+		// child crashed on an ordinary quit.
+		fmt.Fprintln(appLog, "warning: a request was still in flight at shutdown; closing it with the process")
+	}
+	return nil
 }
 
 // presentLaunchPreflight picks the preflight a tap present launch runs.
@@ -702,8 +1119,8 @@ func presentLaunchPreflight(recordings *recordController, startNow bool) recorde
 // loadPresentation reads, parses, resolves components for, and transforms a
 // presentation file. It also returns any layout or slot warnings found and
 // the resolved components (bundles and build errors), letting the caller
-// decide where to show them: printLayoutWarningsToStderr and
-// printComponentErrorsToStderr for a plain terminal, or through the TUI
+// decide where to show them: printLayoutWarnings and
+// printComponentErrors for a plain terminal, or through the TUI
 // model's own message path when the TUI owns the terminal (see the reload
 // handler in the TUI branch of Run). The returned []parser.Slide is the
 // deck's raw markdown slides, in the same order as the returned
@@ -716,10 +1133,16 @@ func loadPresentation(file string, cfg *config.Config, baseDir string) (*transfo
 	if err != nil {
 		return nil, nil, nil, nil, nil, fmt.Errorf("failed to read file: %w", err)
 	}
+	return loadPresentationSource(content, file, cfg, baseDir)
+}
 
+// loadPresentationSource is loadPresentation for a deck's text that is
+// already in memory, such as the app's unsaved buffer. file names the deck
+// in error messages.
+func loadPresentationSource(source []byte, file string, cfg *config.Config, baseDir string) (*transformer.TransformedPresentation, []layouts.Warning, map[string]components.Result, []components.BuildError, []parser.Slide, error) {
 	// Parse markdown
 	p := parser.New()
-	parsed, err := p.Parse(content)
+	parsed, err := p.Parse(source)
 	if err != nil {
 		return nil, nil, nil, nil, nil, fmt.Errorf("failed to parse markdown: %s: %w", file, err)
 	}
@@ -739,20 +1162,22 @@ func loadPresentation(file string, cfg *config.Config, baseDir string) (*transfo
 	return transformed, layouts.Validate(transformed), resolvedComponents, componentBuildErrs, parsed.Slides, nil
 }
 
-// printLayoutWarningsToStderr prints one line to stderr for each layout or
-// slot warning. Only safe to call when nothing else owns the terminal (the
-// TUI has not started, or is not in use); the TUI branch of Run routes
-// warnings through the model instead.
-func printLayoutWarningsToStderr(file string, warnings []layouts.Warning) {
+// printLayoutWarnings writes one line to log for each layout or slot
+// warning. log is standard error for a command run from a terminal and
+// the bounded --app log writer under --app; see printComponentErrors for
+// why the writer is an argument. Only safe to call when nothing else owns
+// the terminal (the TUI has not started, or is not in use); the TUI
+// branch of Run routes warnings through the model instead.
+func printLayoutWarnings(log io.Writer, file string, warnings []layouts.Warning) {
 	for _, warning := range warnings {
-		fmt.Fprintf(os.Stderr, "warning: %s: slide %d: %s\n", file, warning.SlideNumber, warning.Message)
+		fmt.Fprintf(log, "warning: %s: slide %d: %s\n", file, warning.SlideNumber, warning.Message)
 	}
 }
 
 // dropComponentBuildFailureWarnings removes the "component ... failed to
 // build: ..." warning layouts.Validate adds for a broken whole-slide
 // component. tap dev always prints that same failure as an "error:" line
-// (see printComponentErrorsToStderr) right next to the warning list; a
+// (see printComponentErrors) right next to the warning list; a
 // caller that also does so should filter here first, so the broken
 // component is reported once, not twice.
 func dropComponentBuildFailureWarnings(warnings []layouts.Warning) []layouts.Warning {

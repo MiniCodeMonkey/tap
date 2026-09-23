@@ -315,6 +315,23 @@ describe('WebSocketClient', () => {
 			expect(reloadSpy).toHaveBeenCalled();
 		});
 
+		it('should reload the page on a "file-changed" message', () => {
+			const reloadSpy = vi.fn();
+			vi.stubGlobal('window', {
+				location: {
+					protocol: 'http:',
+					host: 'localhost:3000',
+					reload: reloadSpy
+				}
+			});
+
+			client.connect();
+			mockWs?.simulateOpen();
+			mockWs?.simulateMessage({ type: 'file-changed', path: '/talks/talk.md' });
+
+			expect(reloadSpy).toHaveBeenCalled();
+		});
+
 		describe('"update" messages', () => {
 			function deck(revision: string, secondSlideSteps: number): Presentation {
 				return {

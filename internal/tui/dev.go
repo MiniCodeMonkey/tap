@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/MiniCodeMonkey/tap/internal/config"
+	"github.com/MiniCodeMonkey/tap/internal/deckedit"
 	"github.com/MiniCodeMonkey/tap/internal/gemini"
 	"github.com/MiniCodeMonkey/tap/internal/recorder"
 	tea "github.com/charmbracelet/bubbletea"
@@ -196,7 +197,7 @@ func NewDevModel(cfg DevConfig) *DevModel {
 	return &DevModel{
 		config:    cfg,
 		tunnelURL: cfg.TunnelURL,
-		tunnelQR:  tunnelQRCode(presenterTarget(cfg.TunnelURL, cfg.PresenterPassword)),
+		tunnelQR:  tunnelQRCode(PresenterTarget(cfg.TunnelURL, cfg.PresenterPassword)),
 		state: DevState{
 			RecentEvents: make([]DevEvent, 0, 10),
 		},
@@ -261,51 +262,24 @@ func (m *DevModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.imageGenModel = igm
 				// Check if generation completed successfully - save image and update markdown
 				if m.imageGenModel.Step == ImageGenStepDone && m.imageGenModel.GeneratedImage != nil && m.imageGenModel.SavedImagePath == "" {
-					// Save the generated image
-					savedPath, err := m.imageGenModel.SaveGeneratedImage()
+					placed, err := m.imageGenModel.PlaceImage()
 					if err != nil {
 						m.SetError(err)
 						m.addEvent(DevEvent{
 							Type:      "error",
-							Message:   "Failed to save generated image",
+							Message:   "Failed to add the generated image to the deck",
 							Timestamp: time.Now(),
 						})
 						return m, cmd
 					}
+					savedPath := placed.Path
 					m.imageGenModel.SavedImagePath = savedPath
-
-					// Insert or replace image in markdown
-					if m.imageGenModel.SelectedImage != nil {
-						// Regenerating - replace existing image
-						if err := m.imageGenModel.ReplaceImageInMarkdown(savedPath); err != nil {
-							m.SetError(err)
-							m.addEvent(DevEvent{
-								Type:      "error",
-								Message:   "Failed to update markdown",
-								Timestamp: time.Now(),
-							})
-							return m, cmd
-						}
-						// Delete old image file
-						if err := m.imageGenModel.DeleteOldImage(); err != nil {
-							// Log but don't fail - the new image is already saved
-							m.addEvent(DevEvent{
-								Type:      "error",
-								Message:   "Failed to delete old image (non-fatal)",
-								Timestamp: time.Now(),
-							})
-						}
-					} else {
-						// Adding new image
-						if err := m.imageGenModel.InsertImageIntoMarkdown(savedPath); err != nil {
-							m.SetError(err)
-							m.addEvent(DevEvent{
-								Type:      "error",
-								Message:   "Failed to update markdown",
-								Timestamp: time.Now(),
-							})
-							return m, cmd
-						}
+					if placed.DeleteError != nil {
+						m.addEvent(DevEvent{
+							Type:      "error",
+							Message:   "Failed to delete old image (non-fatal)",
+							Timestamp: time.Now(),
+						})
 					}
 
 					// Send reload event
@@ -568,7 +542,11 @@ func (m *DevModel) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
-		// Check for GEMINI_API_KEY
+		// Load a .env file next to the deck before checking for the key, the
+		// same as tap image generate does, so a deck with no frontmatter
+		// still picks up a key kept there instead of being told to add one
+		// it already added.
+		_ = config.LoadEnv(filepath.Dir(m.config.MarkdownFile))
 		if !gemini.HasAPIKey() {
 			m.SetError(fmt.Errorf("GEMINI_API_KEY not set. Add it to your .env file to use AI image generation"))
 			m.addEvent(DevEvent{
@@ -639,7 +617,7 @@ func (m *DevModel) handleThemePickerKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.config.MarkdownFile != "" {
 			absPath, err := filepath.Abs(m.config.MarkdownFile)
 			if err == nil {
-				if err := config.UpdateThemeInFile(absPath, selectedTheme); err != nil {
+				if err := deckedit.SetTheme(absPath, selectedTheme); err != nil {
 					m.addEvent(DevEvent{
 						Type:      "error",
 						Message:   fmt.Sprintf("Failed to save theme: %v", err),

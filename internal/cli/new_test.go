@@ -5,6 +5,12 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/MiniCodeMonkey/tap/internal/config"
+	"github.com/MiniCodeMonkey/tap/internal/parser"
+	"github.com/MiniCodeMonkey/tap/internal/transformer"
+	"github.com/MiniCodeMonkey/tap/internal/tui"
+	"github.com/MiniCodeMonkey/tap/internal/usersettings"
 )
 
 // resetNewFlags clears the package-level flag variables the new command
@@ -38,12 +44,83 @@ func TestNewDeckArgumentIsTheOutputPath(t *testing.T) {
 	}
 }
 
+func TestNewApprovesTheDeckItWrites(t *testing.T) {
+	configHome := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", configHome)
+	dir := t.TempDir()
+
+	var deckPath string
+	withWorkingDirectory(t, dir, func() {
+		exitCode, _, stderr := runTap(t, "new", "talk.md", "--yes")
+		if exitCode != exitOK {
+			t.Fatalf("exit %d, stderr %q", exitCode, stderr)
+		}
+		deckPath, _ = filepath.Abs("talk.md")
+	})
+
+	settings, err := usersettings.Load(filepath.Join(configHome, "tap", "settings.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	key, err := usersettings.ResolveDeck(deckPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, found := settings.ApprovalFor(key); !found {
+		t.Errorf("no approval for %s: %+v", deckPath, settings.Approvals)
+	}
+}
+
+func TestNewJSONStaysJSONWhenTheApprovalCannotBeSaved(t *testing.T) {
+	configHome := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", configHome)
+	if err := os.MkdirAll(filepath.Join(configHome, "tap"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(configHome, "tap", "settings.yaml"), []byte("approvals: [not: valid"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	withWorkingDirectory(t, t.TempDir(), func() {
+		exitCode, stdout, stderr := runTap(t, "new", "talk.md", "--json")
+		if exitCode != exitOK || !strings.HasPrefix(stdout, "{") {
+			t.Errorf("exit %d, stdout %q", exitCode, stdout)
+		}
+		if !strings.Contains(stderr, "could not record the live code approval") {
+			t.Errorf("stderr = %q, want the warning", stderr)
+		}
+	})
+}
+
+func TestStarterDeclaresEveryDriverItUses(t *testing.T) {
+	content := tui.GenerateStarterMarkdown("Title", tui.DefaultTheme(), "2026-09-22", "Author")
+	deckPath := filepath.Join(t.TempDir(), "starter.md")
+	if err := os.WriteFile(deckPath, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := config.Load(deckPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	parsed, err := parser.New().Parse([]byte(content))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, slide := range transformer.New(cfg).Transform(parsed).Slides {
+		for _, block := range slide.CodeBlocks {
+			if block.Problem != "" {
+				t.Errorf("slide %d: %s", slide.Index+1, block.Problem)
+			}
+		}
+	}
+}
+
 func TestRunNewNonInteractiveDefaults(t *testing.T) {
 	dir := t.TempDir()
 	resetNewFlags()
 
 	withWorkingDirectory(t, dir, func() {
-		if err := runNewNonInteractive(); err != nil {
+		if err := runNewNonInteractive(newCmd); err != nil {
 			t.Fatalf("runNewNonInteractive: %v", err)
 		}
 	})
@@ -67,7 +144,7 @@ func TestRunNewNonInteractiveFlags(t *testing.T) {
 	newTheme = "terminal"
 	newOutput = filepath.Join(dir, "talk.md")
 
-	if err := runNewNonInteractive(); err != nil {
+	if err := runNewNonInteractive(newCmd); err != nil {
 		t.Fatalf("runNewNonInteractive: %v", err)
 	}
 
@@ -88,7 +165,7 @@ func TestRunNewNonInteractiveAppendsMdSuffix(t *testing.T) {
 	resetNewFlags()
 	newOutput = filepath.Join(dir, "talk")
 
-	if err := runNewNonInteractive(); err != nil {
+	if err := runNewNonInteractive(newCmd); err != nil {
 		t.Fatalf("runNewNonInteractive: %v", err)
 	}
 
@@ -103,7 +180,7 @@ func TestRunNewNonInteractiveUnknownTheme(t *testing.T) {
 	newOutput = filepath.Join(dir, "talk.md")
 	newTheme = "not-a-real-theme"
 
-	err := runNewNonInteractive()
+	err := runNewNonInteractive(newCmd)
 	if err == nil {
 		t.Fatal("expected an error for an unknown theme, got nil")
 	}
@@ -122,7 +199,7 @@ func TestRunNewNonInteractiveRefusesToOverwrite(t *testing.T) {
 	resetNewFlags()
 	newOutput = outputPath
 
-	err := runNewNonInteractive()
+	err := runNewNonInteractive(newCmd)
 	if err == nil {
 		t.Fatal("expected an error refusing to overwrite an existing file, got nil")
 	}
@@ -150,7 +227,7 @@ func TestRunNewNonInteractiveForceOverwrites(t *testing.T) {
 	newOutput = outputPath
 	newForce = true
 
-	if err := runNewNonInteractive(); err != nil {
+	if err := runNewNonInteractive(newCmd); err != nil {
 		t.Fatalf("runNewNonInteractive: %v", err)
 	}
 

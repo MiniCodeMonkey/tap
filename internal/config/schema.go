@@ -63,8 +63,8 @@ func driverSchemaKeys() []SchemaKey {
 			{Name: "host", Type: "string", Description: "The database host. ${NAME} reads it from the environment or .env."},
 			{Name: "user", Type: "string", Description: "The user name. ${NAME} reads it from the environment or .env."},
 			{Name: "password", Type: "string", Description: "The password. Write ${NAME} to read it from the environment or .env instead of the deck."},
-			{Name: "database", Type: "string", Description: "The database name. ${NAME} reads it from the environment or .env."},
-			{Name: "path", Type: "string", Description: "A database file, relative to the deck, for sqlite. ${NAME} reads it from the environment or .env."},
+			{Name: "database", Type: "string", Description: "The database name for mysql and postgres. For sqlite, an older spelling of path, kept working for existing decks. ${NAME} reads it from the environment or .env."},
+			{Name: "path", Type: "string", Description: "A database file, relative to the deck, for sqlite. Wins over database when both are set. ${NAME} reads it from the environment or .env."},
 			{Name: "port", Type: "integer", Description: "The database port."},
 		}},
 	}

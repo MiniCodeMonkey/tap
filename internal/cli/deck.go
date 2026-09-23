@@ -19,11 +19,11 @@ import (
 //
 // When the deck's components fail to build, prepareDeck returns those
 // errors and a nil server without starting one: the caller prints them
-// with printComponentErrorsToStderr and exits 1, never launching a
+// with printComponentErrors and exits 1, never launching a
 // browser. Any layout or slot warnings are returned either way, for the
-// caller to print with printLayoutWarningsToStderr, and any esbuild
+// caller to print with printLayoutWarnings, and any esbuild
 // warnings from a successful bundle are returned for the caller to print
-// with printComponentWarningsToStderr.
+// with printComponentWarnings.
 func prepareDeck(file string, cfg *config.Config, baseDir string) (*server.Server, *transformer.TransformedPresentation, []layouts.Warning, []components.BuildError, []components.BuildError, error) {
 	pres, warnings, resolvedComponents, componentBuildErrs, _, err := loadPresentation(file, cfg, baseDir)
 	if err != nil {

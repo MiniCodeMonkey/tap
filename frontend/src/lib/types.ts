@@ -57,7 +57,10 @@ export type Theme = string;
 export const DEFAULT_THEME: Theme = 'base';
 
 // ============================================================================
-// Config Types (matches internal/config/config.go)
+// Config Types (matches internal/transformer.PublicConfig, the subset of
+// internal/config/config.go's Config the server actually sends; it never
+// includes a driver's settings or a connection's details - see
+// internal/transformer/transformer.go's PublicConfig doc comment)
 // ============================================================================
 
 /**
@@ -78,8 +81,9 @@ export interface ThemeColors {
 }
 
 /**
- * Presentation configuration from YAML frontmatter.
- * Matches Go's Config struct.
+ * Presentation configuration the server sends the page. Matches Go's
+ * transformer.PublicConfig, not the deck's full Config: it carries no
+ * driver's settings and no connection's details.
  */
 export interface PresentationConfig {
 	// Driver settings (live code connections and credentials) never leave
@@ -87,10 +91,8 @@ export interface PresentationConfig {
 	themeColors?: ThemeColors;
 	title?: string;
 	theme?: string;
-	/** Path to a custom CSS theme file (relative to markdown file) */
-	customTheme?: string;
-	author?: string;
-	date?: string;
+	/** Whether the deck configures a custom CSS theme; the page requests its CSS from /api/custom-theme.css, it never sees the configured path. */
+	customTheme?: boolean;
 	aspectRatio?: string;
 	transition?: Transition;
 	/** Whether to show the progress bar (default: true) */
@@ -163,6 +165,10 @@ export interface CodeBlock {
 	connection?: string;
 	/** Line-highlight spec such as "3" or "1,3-5", from a fence like "```php {1,3-5}". */
 	highlightLines?: string;
+	/** The block's number among the slide's live code blocks, counted from 1. Absent for a block without a driver. */
+	block?: number;
+	/** Why this live block cannot run, such as a driver the deck does not declare. */
+	problem?: string;
 }
 
 /**
@@ -256,12 +262,23 @@ export interface Slide {
 // ============================================================================
 
 /**
+ * Which drivers this run of tap dev or tap present lets run.
+ * Matches Go's liveCodeStatus.
+ */
+export interface LiveCodeStatus {
+	/** The declared drivers this run allows. A block whose driver is missing shows "Not approved". */
+	drivers: string[];
+}
+
+/**
  * Complete presentation data from the backend.
  * Matches Go's TransformedPresentation struct.
  */
 export interface Presentation {
 	config: PresentationConfig;
 	slides: Slide[];
+	/** Present when the server can run live code; absent for a static build or an export. */
+	liveCode?: LiveCodeStatus;
 	/**
 	 * The deck's revision (see ComputeRevision in internal/server), from
 	 * /api/presentation. The ready signal reports it. Absent in a static
@@ -277,7 +294,14 @@ export interface Presentation {
 /**
  * WebSocket message types for hot reload and sync.
  */
-export type WebSocketMessageType = 'connected' | 'reload' | 'update' | 'slide' | 'theme' | 'recording';
+export type WebSocketMessageType =
+	| 'connected'
+	| 'reload'
+	| 'update'
+	| 'slide'
+	| 'theme'
+	| 'recording'
+	| 'file-changed';
 
 /**
  * WebSocket message from the server.
@@ -327,6 +351,8 @@ export interface WebSocketMessage {
 	 * internal/server/websocket.go's SetPresentMode). Absent otherwise.
 	 */
 	mode?: 'present';
+	/** The file that changed on disk, on a "file-changed" message (tap dev --app). */
+	path?: string;
 }
 
 // ============================================================================
@@ -334,12 +360,17 @@ export interface WebSocketMessage {
 // ============================================================================
 
 /**
- * Request body for code execution API.
+ * Request to run one live code block of the loaded deck.
+ * Both numbers count from 1; tap runs the code the deck holds there.
+ * Revision is the deck's revision (Presentation.revision) this page had
+ * rendered when it sent the request, so the server can tell a reference
+ * still resolved against the deck it was read from apart from one whose
+ * deck has since changed underneath it.
  */
 export interface ExecuteRequest {
-	driver: string;
-	code: string;
-	connection?: string;
+	slide: number;
+	block: number;
+	revision?: string;
 }
 
 /**
@@ -349,6 +380,13 @@ export interface ExecuteResponse {
 	success: boolean;
 	output?: string;
 	error?: string;
+	/**
+	 * Set only when the server refused the request instead of running it.
+	 * `'stale_revision'` means the request's revision no longer matches the
+	 * deck: the reference may now name different code than the page shows,
+	 * and the response must not be retried automatically.
+	 */
+	code?: string;
 	data?: Record<string, unknown>[];
 }
 

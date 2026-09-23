@@ -118,6 +118,8 @@ tap dev [deck]
 | `--allow-origin <value>` | | An additional origin (`scheme://host:port`) allowed to connect to the websocket hub, **or** a host (`host:port`) allowed in a request's `Host` header. Repeatable |
 | `--tunnel` | | Also serve the deck on a public `https` URL through a Cloudflare Quick Tunnel. Needs `cloudflared`; no Cloudflare account |
 | `--headless` | | Run without the terminal UI, for testing/automation |
+| `--allow-code` | | Run the deck's live code for this run without an approval, and save none. For `--headless` and scripts |
+| `--app` | | Run as the engine of the Tap desktop app. An interface for the app, not for people. See [App mode](#app-mode-app) |
 
 The server listens on this machine only, unless `--lan` opens it to the
 local network. With `--lan`, any device on the network can open the deck
@@ -249,6 +251,9 @@ tap present [deck]
 | `--port <number>` | `-p` | Port to serve on (default: `3000`) |
 | `--lan` | | Listen on the local network too, so a phone on the same network can open the presenter view. Without it, only this machine can connect |
 | `--no-record` | | Do not record this run |
+| `--allow-code` | | Run the deck's live code for this run without an approval, and save none. For scripts and other non-interactive runs |
+| `--app` | | Run as the engine of the Tap desktop app. See [App mode](#app-mode-app) |
+| `--presenter-password <pass>` | | Protect the presenter view with a password, for a phone remote over the tunnel (press `u`) |
 
 The server listens on this machine only, unless `--lan` opens it to the
 local network, the same as `tap dev`. With `--lan`, any device on the
@@ -522,19 +527,62 @@ tap export images deck.md --slide 2 --output check.png || echo "slide 2 is broke
 
 ## tap slide add
 
-Add a new slide to an existing presentation interactively. It needs a terminal.
+Add a new slide to a deck. Without flags, an interactive wizard asks for a
+layout and the content of each section; it needs a terminal. With
+`--layout`, tap appends that layout's template without asking, and works
+without a terminal. The wizard and `--layout` both offer all 12 layouts:
+`title`, `section`, `default`, `two-column`, `code-focus`, `quote`,
+`big-stat`, `three-column`, `sidebar`, `split-media`, `cover`, `blank`.
 
 ### Usage
 
 ```bash
 tap slide add [deck]
+tap slide add [deck] --layout <name>
+tap slide add --layout <name> --print
 ```
+
+### Flags
+
+| Flag | Description |
+|------|-------------|
+| `--layout <name>` | Append that layout's template without the wizard. Works without a terminal |
+| `--print` | With `--layout`, print the template and write nothing. The template has no `---` separator in front of it, and no deck is needed. With `--json` and no `--layout`, list every layout's template instead |
+| `--json` | With `--layout`: `{"ok": true, "deck": "...", "layout": "...", "markdown": "..."}`. With `--print`, `deck` is left out. With `--print` and no `--layout`: `{"ok": true, "layouts": [...]}`, every layout's template |
 
 ### Examples
 
 ```bash
-tap slide add              # The deck in this folder
-tap slide add talk.md      # A specific deck
+tap slide add                               # The wizard, for the deck in this folder
+tap slide add talk.md                       # The wizard, for a specific deck
+tap slide add talk.md --layout quote        # Append a quote slide, no wizard
+tap slide add --layout big-stat --print     # Print the big-stat template, write nothing
+tap slide add --layout big-stat --print --json
+tap slide add --print --json                # List every layout's template
+```
+
+### `--json`
+
+```json
+{"ok": true, "deck": "talk.md", "layout": "quote", "markdown": "<!--\nlayout: quote\n-->\n\n> \"Your quote here\"\n"}
+```
+
+With `--print`, `deck` is left out:
+
+```json
+{"ok": true, "layout": "big-stat", "markdown": "<!--\nlayout: big-stat\n-->\n\n# 100%\n\nDescription\n"}
+```
+
+With `--print --json` and no `--layout`, tap lists every layout, in the
+wizard's order, so a caller such as the desktop app's layout gallery does
+not hard-code layout names:
+
+```json
+{"ok": true, "layouts": [
+  {"name": "title", "template": "<!--\nlayout: title\n-->\n\n# My Title\n\nOptional subtitle\n"},
+  {"name": "section", "template": "..."},
+  ...
+]}
 ```
 
 ---
@@ -584,8 +632,8 @@ For example, slide 4 of the conference talk example, which has a live SQL block:
 ```json
 {
   "number": 4,
-  "startLine": 36,
-  "endLine": 46,
+  "startLine": 41,
+  "endLine": 51,
   "layout": "code-focus",
   "title": "",
   "fragments": 0,
@@ -598,7 +646,7 @@ For example, slide 4 of the conference talk example, which has a live SQL block:
       "language": "sql",
       "driver": "sqlite",
       "live": true,
-      "line": 40
+      "line": 45
     }
   ]
 }
@@ -644,6 +692,167 @@ tap component new RollingDeploy talks/deck.md  # next to talks/deck.md
 ```json
 {"ok": true, "files": ["slides/RollingDeploy.jsx"], "snippet": "::component RollingDeploy\n"}
 ```
+
+---
+
+## tap image add
+
+Copy an image into the `images/` folder next to a deck and print the
+markdown that shows it.
+
+### Usage
+
+```bash
+tap image add <file> [deck]
+tap image add <file> [deck] --slide <n>
+```
+
+### Flags
+
+| Flag | Description |
+|------|-------------|
+| `--slide <n>` | Also add the markdown at the end of slide N, from 1 |
+| `--json` | Print the result as JSON |
+
+### Behavior
+
+The copy keeps the file's name, except that whitespace, parentheses, angle
+brackets, quotes, backtick, `#`, and `?` are each replaced with `-`, so the
+link tap writes needs no escaping. `my diagram (v2).png` is copied as
+`my-diagram-v2.png`. When the resulting name is already taken, tap adds
+`-2`, `-3`, and so on before the extension, for example `diagram-2.png`.
+Accepted formats: png, jpg, jpeg, gif, webp, svg, and avif.
+
+### Examples
+
+```bash
+tap image add ~/Desktop/diagram.png
+tap image add diagram.png talk.md --slide 3
+tap image add diagram.png --json
+```
+
+### `--json`
+
+```json
+{"ok": true, "deck": "talk.md", "image": "images/diagram.png", "markdown": "![diagram](images/diagram.png)"}
+```
+
+`slide` is present only with `--slide`:
+
+```json
+{"ok": true, "deck": "talk.md", "image": "images/diagram.png", "markdown": "![diagram](images/diagram.png)", "slide": 3}
+```
+
+### Errors
+
+| Code | Cause |
+|------|-------|
+| `file_not_found` | `<file>` does not exist |
+| `not_an_image` | `<file>` is not one of the accepted formats |
+| `out_of_range` | `--slide` names a slide the deck does not have |
+
+---
+
+## tap image generate
+
+Generate an image from a prompt with Google Gemini, as the `i` key in
+`tap dev` does, and add it at the end of a slide.
+
+### Usage
+
+```bash
+tap image generate [deck] --slide <n> --prompt "..."
+```
+
+### Flags
+
+| Flag | Description |
+|------|-------------|
+| `--slide <n>` | Slide to add the image to, from 1 (required) |
+| `--prompt <text>` | What the image shows (required) |
+| `--json` | Print the result as JSON |
+
+### Behavior
+
+The image is saved as `images/generated-<hash>.<ext>` next to the deck,
+and the slide gets an `<!-- ai-prompt: ... -->` comment with the prompt,
+so `tap image regenerate` can make it again. `GEMINI_API_KEY` must be set,
+in the environment or in a `.env` file next to the deck. On success the
+command prints the image's path.
+
+### Examples
+
+```bash
+tap image generate --slide 3 --prompt "a lighthouse at dusk, flat vector"
+tap image generate talk.md --slide 3 --prompt "a lighthouse at dusk, flat vector" --json
+```
+
+### `--json`
+
+```json
+{"ok": true, "deck": "talk.md", "slide": 3, "image": "images/generated-1a2b3c4d.png", "prompt": "a lighthouse at dusk, flat vector", "markdown": "<!-- ai-prompt: a lighthouse at dusk, flat vector -->\n![](images/generated-1a2b3c4d.png)"}
+```
+
+### Errors
+
+| Code | Cause | Exit |
+|------|-------|------|
+| `usage` | `--slide` or `--prompt` is missing | 1 |
+| `out_of_range` | `--slide` names a slide the deck does not have | 1 |
+| `no_api_key` | `GEMINI_API_KEY` is not set | 1 |
+| `image_generation` | Generation failed | 2 for a network or server failure, 1 otherwise |
+
+---
+
+## tap image regenerate
+
+Generate an AI image on a slide again, as the `i` key in `tap dev` does,
+and replace it where it is. The old image file is deleted.
+
+### Usage
+
+```bash
+tap image regenerate [deck] --slide <n> --image <path> [--prompt "..."]
+```
+
+### Flags
+
+| Flag | Description |
+|------|-------------|
+| `--slide <n>` | Slide the image is on, from 1 (required) |
+| `--image <path>` | Path of the AI image to replace, as the slide links to it (required) |
+| `--prompt <text>` | A new prompt (default: the image's own prompt) |
+| `--json` | Print the result as JSON |
+
+### Behavior
+
+`--image` names the image by the path the slide links to, for example
+`images/generated-1a2b3c4d.png`. Without `--prompt`, tap reuses the
+prompt in the image's `ai-prompt` comment. On success the command prints
+the new image's path.
+
+### Examples
+
+```bash
+tap image regenerate --slide 3 --image images/generated-1a2b3c4d.png
+tap image regenerate talk.md --slide 3 --image images/generated-1a2b3c4d.png --prompt "a lighthouse at dawn, flat vector"
+```
+
+### `--json`
+
+Same fields as `tap image generate`, plus `replaced`:
+
+```json
+{"ok": true, "deck": "talk.md", "slide": 3, "image": "images/generated-5e6f7a8b.png", "prompt": "a lighthouse at dawn, flat vector", "markdown": "<!-- ai-prompt: a lighthouse at dawn, flat vector -->\n![](images/generated-5e6f7a8b.png)", "replaced": "images/generated-1a2b3c4d.png"}
+```
+
+### Errors
+
+Same as `tap image generate`, plus:
+
+| Code | Cause |
+|------|-------|
+| `image_not_found` | `--image` does not name an AI image on that slide |
 
 ---
 
@@ -715,16 +924,20 @@ Prints every built-in theme's slug, name, polarity, and pitch as a table, or wit
 tap theme show [slug|deck] [flags]
 ```
 
-| Flag | Description |
-|------|-------------|
-| `--json` | Print the theme as JSON |
-| `--prompt` | Print a style brief for an image model |
+| Flag | Short | Description |
+|------|-------|-------------|
+| `--json` | | Print the theme as JSON |
+| `--prompt` | | Print a style brief for an image model |
+| `--image` | | Render a title slide in the theme to a 1280x720 PNG and print its path |
+| `--output <file>` | `-o` | With `--image`, copy the PNG to this file and print that path |
 
 The argument is a theme slug, or a deck file or folder whose theme to show. With no argument, tap uses the deck in the current folder.
 
 Without a flag, prints the theme's name, polarity, pitch, colors, fonts, motion, spacing tokens, and illustration style.
 
 With `--prompt`, prints a plain-text style brief to paste in front of an image model request: the palette with hex values and roles, how the palette should be used, line and shape language, texture, mood, things to avoid, a type feel hint, and the canvas ratio.
+
+With `--image`, tap renders a title slide in the theme to a 1280x720 PNG and prints its path. The image is cached per theme and tap version, in the user cache folder under `tap/themes/<version>/<slug>.png` (`~/Library/Caches/tap/themes/...` on macOS), so a repeat call returns at once. `-o`/`--output` copies the PNG to a file of your choosing and prints that path instead.
 
 ### Examples
 
@@ -734,12 +947,77 @@ tap theme show terminal
 tap theme show terminal --json
 tap theme show blueprint --prompt
 tap theme show slides.md --prompt
+tap theme show terminal --image
+tap theme show terminal --image -o terminal.png
+tap theme show terminal --image --json
 ```
 
 #### `--json`
 
 ```json
 {"ok": true, "slug": "terminal", "name": "Terminal", "polarity": "dark", "pitch": "...", "tokens": {"...": "..."}, "illustration": {"...": "..."}, "canvas": {"ratio": "16:9", "width": 1920, "height": 1080}}
+```
+
+With `--image --json`:
+
+```json
+{"ok": true, "slug": "terminal", "image": "/Users/you/Library/Caches/tap/themes/2.0.0/terminal.png", "cached": true}
+```
+
+---
+
+## tap theme set
+
+Write the `theme:` key into a deck's frontmatter, the same change the `t` key makes in `tap dev`.
+
+### Usage
+
+```bash
+tap theme set <slug> [deck]
+```
+
+### Flags
+
+| Flag | Description |
+|------|-------------|
+| `--json` | Print the result as JSON |
+
+### Behavior
+
+`[deck]` is a deck file or folder; with no deck, tap uses the deck in the current folder. A deck with no frontmatter gets one. An unknown slug exits 1 with code `unknown_theme` and prints the list of themes.
+
+### Examples
+
+```bash
+tap theme set terminal
+tap theme set blueprint talk.md
+tap theme set blueprint talk.md --json
+```
+
+### `--json`
+
+```json
+{"ok": true, "deck": "talk.md", "theme": "blueprint"}
+```
+
+### tap approval list
+
+Lists the decks allowed to run live code, with the drivers each may use and when it was approved.
+
+```bash
+tap approval list
+tap approval list --json
+```
+
+`--json` prints `{"ok": true, "approvals": [{"deck": "/Users/me/talks/talk.md", "drivers": ["shell", "sqlite"], "approvedAt": "2026-09-22T19:32:00Z"}]}`.
+
+### tap approval revoke
+
+Removes a deck's approval. tap asks again the next time it opens the deck. `<deck>` is the file or its folder. A moved or deleted deck can be revoked by its old path. An unapproved deck is exit 1 with the code `not_approved`.
+
+```bash
+tap approval revoke talk.md
+tap approval revoke talk.md --json   # {"ok": true, "deck": "/Users/me/talks/talk.md"}
 ```
 
 ---
@@ -808,14 +1086,113 @@ and exits 2 when a browser cannot start or a temporary server cannot bind.
 | `tap serve [dir]` | Serve built files | `tap serve dist` |
 | `tap export pdf [deck]` | Export to PDF | `tap export pdf slides.md` |
 | `tap export images [deck]` | Render a slide to a PNG | `tap export images slides.md --slide 4` |
-| `tap slide add [deck]` | Add a slide interactively | `tap slide add slides.md` |
+| `tap slide add [deck]` | Add a slide, by wizard or `--layout` | `tap slide add --layout quote talk.md` |
 | `tap slide list [deck]` | List each slide, its lines, layout and errors | `tap slide list slides.md --json` |
 | `tap component new <Name> [deck]` | Scaffold a deck component | `tap component new RollingDeploy` |
+| `tap image add <file> [deck]` | Copy an image into `images/` | `tap image add diagram.png --slide 3` |
+| `tap image generate [deck]` | Generate an AI image onto a slide | `tap image generate --slide 3 --prompt "..."` |
+| `tap image regenerate [deck]` | Generate an AI image again, in place | `tap image regenerate --slide 3 --image images/generated-1a2b3c4d.png` |
 | `tap deck schema` | List every frontmatter key, type and default | `tap deck schema --json` |
 | `tap theme list` | List every built-in theme | `tap theme list --json` |
 | `tap theme show [slug\|deck]` | Show a theme's tokens and style | `tap theme show blueprint --prompt` |
+| `tap theme set <slug> [deck]` | Set a deck's theme | `tap theme set blueprint talk.md` |
 
 ---
+
+## App mode (`--app`)
+
+`tap dev --app <deck>` and `tap present --app [--no-record] <deck>` are the interface between tap and the Tap desktop app. They are documented so the app and tap agree, and they can change with the app. Use the plain commands yourself.
+
+In `--app` mode, tap:
+
+- listens on `127.0.0.1` only, on a free port (`--port` picks one), and cannot be combined with `--lan` or `--headless`;
+- opens no browser and shows no terminal interface;
+- exits when its standard input closes, so a closed or crashed app never leaves tap running;
+- prints only JSON lines on standard output, and human-readable logs on standard error.
+
+**The app must give tap two separate pipes: one for standard output, one for standard error.** Do not merge them into one, the way `2>&1` does. tap writes the protocol and the log from two different writers, and if both land on the same pipe, the two writers interleave inside it. Under load that tears the JSON event stream: a line arrives broken and the app cannot parse it, at well over a hundred broken event lines per run in measurement. This is not something the app can tune around, it breaks under every configuration, and it is an integration error rather than a property of tap's writers. Wire up two pipes before you launch tap.
+
+Without `--presenter-password`, `--app` mode generates one. The reason is the websocket: it is deliberately open to anyone with the link, the same way `tap dev --tunnel` already works, so a phone in the audience can follow along without a token. But that same websocket relays slide and theme messages, so without a password anyone holding the link, or any local process, could steer the deck instead of only watching it. Viewing stays open; steering needs the secret. A generated password is only the default: passing `--presenter-password` yourself still wins.
+
+An app that opens the presenter view must pass the ready line's `presenter` secret as `?key=`, or its own presenter window has no way to drive the deck it just launched.
+
+### Standard output
+
+The first line is the ready line:
+
+```json
+{"type": "ready", "port": 49152, "token": "…", "launch": "…", "presenter": "…"}
+```
+
+`presenter` is the presenter password in effect for this run, whether it was generated or passed with `--presenter-password`.
+
+Every later line is an event:
+
+| `type` | When | Fields |
+|---|---|---|
+| `file-changed` | a file in the deck folder changed that tap did not write (`tap dev` only) | `path`, and for a file other than the deck, `slides` and `errors` as `tap slide list --json` prints them |
+| `question` | tap needs an answer | `id`, `kind` (`approval`, `record-consent`, `keep-recording`), `payload` |
+| `recording` | the recording state changes (`tap present` only) | `state` (`recording`, `paused`, `stopped`), `segment`, `elapsed` (seconds), `disk` (`ok`, `low`, `full`) |
+| `tunnel` | the tunnel state changes | `state` (`starting`, `running`, `stopped`), `url`, `qr` (a PNG of the presenter view's URL, base64) |
+| `slide` | the audience position changes (`tap present` only) | `slide` (from 1), `step` |
+| `error` | a fatal or reportable error | `code`, `message` |
+
+When tap cannot start, an `error` event is the only line, and tap exits 1 or 2.
+
+Standard output has a single writer, so lines never interleave. If the app stops reading it, for instance because its own event loop is stuck, tap does not block waiting for room: an event that cannot be queued at once is dropped instead. tap says so on standard error once when a run of drops starts, and once more, with the count, when the queue has room again and the run ends. A healthy app that keeps reading never sees a drop.
+
+### Standard input
+
+One JSON command per line:
+
+| `type` | Effect |
+|---|---|
+| `answer` | Answers a question: `{"type": "answer", "id": "q1", "value": true}`. Every answer is `true` or `false`. |
+| `saved` | The app saved its buffer to the deck file. tap drops the buffer and reads the file. `tap dev` only. |
+| `reload` | Renders the deck again and reloads every page, as `r` does. |
+| `tunnel` | `{"type": "tunnel", "start": true}` or `false`, as `u` does. |
+| `recording` | `{"type": "recording", "action": "new-segment"}` or `"stop"`, as `c` does. `tap present` only. |
+| `quit` | Shuts down. When the run has a recording, tap first asks `keep-recording`. |
+
+Questions and commands travel only over standard input and output, which only the app can reach. No HTTP route and no WebSocket message answers a question or changes the recording.
+
+Quit waits for nothing without a bound. The whole shutdown shares one deadline, a little over the recorder's kill grace, rather than a fresh allowance per step: the startup, the recording reporter, the command in flight, the tunnel, the file watcher, finishing the recording and the HTTP server all draw on the same one. Whatever is still stuck when it runs out is named in an `error` event with its own code instead of hanging the process, and tap exits anyway.
+
+Three things sit outside that deadline, each bounded in its own right. The `keep-recording` question gets a few seconds of its own, because that is quit waiting for the app rather than the app waiting for quit, and no answer keeps the recording. Flushing the events already queued for standard output gets two seconds at the very end, and flushing the log lines already queued for standard error gets half a second after that. So a quit with every single part of tap stuck at once still returns in well under twenty seconds, and an ordinary quit takes microseconds.
+
+A quit exits 0. That includes a quit that catches a request in flight, which one page still loading is enough to cause: the graceful HTTP shutdown then runs out of its share of the deadline, tap says so as a warning on standard error, and the connection goes with the process. An exit code other than 0 means tap really did fail.
+
+Neither pipe can hold quit open. An event that cannot be queued at once is dropped (see [Standard output](#standard-output)), and so is a log line (see [Standard error](#standard-error)). A log line is advisory, and losing one is always a smaller cost than a process that will not exit.
+
+### Standard error
+
+Standard error is the log, for a panel in the app rather than for parsing: warnings from the deck's layouts and components, driver and approval notices, the reason quit gave up on something. The protocol is on standard output alone, and nothing on standard error is ever part of it.
+
+At startup tap names the server's whole routing table:
+
+```
+Routes: GET /api/presentation, GET /qr, GET /ws, POST /api/execute, PUT /api/app/source, …
+```
+
+That table is what decides whether a request needs the app token, so it is the one input to a 401 or a 404 that an integrator cannot otherwise see. It carries no port, no token, no launch code and no password.
+
+Every line tap writes in `--app` mode goes through a bounded writer: events through the one that owns the protocol stream, everything else through the one that owns the log. Neither ever waits for the app. That is not a rule tap follows, it is the only thing left open to it: for the life of an `--app` run tap takes its own standard output and standard error away and points both at a pipe it drains into that writer itself. The protocol travels on a duplicate of standard output taken before the swap, which no ordinary print can name and which no child process inherits, so one JSON object per line still goes there and nothing else does. A print from anywhere in tap or in a library it uses, however it is spelled and on whatever goroutine, lands in the log. A child process tap starts, including a deck's own live code, writes into the same pipe and is bounded the same way.
+
+The writer drops, and that is the part an integrator sees. These warnings always went to standard error, which in `--app` mode has always been the app's log pipe, so an app reading its child's log already received them. What they used to do was hold tap up once that pipe filled. Now a line that cannot be queued at once is thrown away instead, so the log is lossy exactly when it is busiest: a deck that warns on every slide produces several times a pipe buffer of warnings per parse, and most of them do not arrive. For a log panel that is the right trade, but it is loss, not new volume.
+
+What does arrive is a count. The next line through, once the log drains again, carries `Standard error was not being read: <n> log lines were dropped, <total> in total this run.` The first number is the run that just ended; the second is everything this run of tap has lost, so a panel can say how much of the whole session is missing rather than only how much one gap cost. A burst that ends while the log is still unread has no next line to carry its count, so tap flushes a last notice when it closes the log, which is the final moment a count can be spent. There is no third pipe to report any of this on, and an event on standard output would put a diagnostic about the log into the stream the app parses.
+
+This count is a floor, not a total, and treat it that way: the absence of a notice is not proof that nothing was lost. It only counts lines the bounded writer itself drops after they reach its queue. A line can also be lost earlier, at the pipe, before it ever gets that far, and that loss is never in the count. That happens under a heavy flood while the app is reading the log as fast as it can: a fast reader keeps the writer's queue empty, so the queue never fills and no notice is ever queued, but the pipe itself is now the slow link and lines are cut there instead, silently. Measured at a 115 MB flood of 128,000 lines with the app reading flat out: 2.8% to 4.4% of lines lost, and zero notices printed. So the quiet case is not the safe case, it is the opposite: a log panel that never sees a notice can still be missing thousands of lines, precisely because the app is keeping up well enough that the pipe, not the queue, is where the loss happens. None of this shows up at ordinary volumes. A single writer producing 4,000 lines and 324 KB delivers every line intact, and so does a run eight times busier; loss only appears under floods far beyond what tap produces in normal use.
+
+One thing does not go through the writer: a panic. The Go runtime writes a panic message and stack trace to standard error itself, and only after it has stopped every goroutine in the process, so the goroutine draining the pipe cannot run and the trace dies in the pipe with the process. An `--app` engine that panics exits with status 2 and its log panel will usually show nothing about it; run tap from a terminal to see the trace. What is guaranteed is the exit. The pipe is non-blocking, so the runtime's write fails rather than waiting for room that nothing left alive can make, and a tap that has panicked never stays running.
+
+### HTTP
+
+- Every request outside the audience's own routes needs `Authorization: Bearer <token>`. The WebSocket upgrade is one of those audience routes and takes no credential, by design, so a phone remote and an audience link work (see the next bullet). A page gets the token as a cookie: the app loads its first URL with `?launch=<launch>`, and tap sets the cookie and redirects to the same URL without the code. The code works once, and only within two minutes of tap generating it, a hair before the server binds and so a hair before the ready line: it exists to cover the moment between tap starting and the app opening its first window, and it is the one tap secret that is written down in a URL. A code that is spent, expired or simply wrong is refused the same way, with `403` and one message.
+- Routes are default-deny: only the audience's own `GET` routes (the deck, the presenter view, its assets, `/ws`, and the routes the audience needs to follow along) are exempt from the token. Every one of them stays exempt whether the request arrives on `127.0.0.1` or through a running tunnel, because that is what lets a phone remote and an audience link work. Every other route, including `PUT /api/app/source` and `POST /api/execute`, always needs the token, and a newly added route needs it by default too: exemption takes a deliberate change to the allow-list, not the other way around. The presenter password guards the presenter view and steering on top of this, as with `tap dev --tunnel`.
+- `PUT /api/app/source` (`tap dev --app` only) takes the unsaved buffer as `{"source": "<markdown>"}` and answers with the slide list, the same object `tap slide list --json` prints. It requires the app token and goes through the same body-size and same-origin checks as every other mutating route. tap renders the buffer until the next `saved` command.
+- A request that changes something must come from the same origin and send `Content-Type: application/json`.
+- A request body may be at most 8 MB for `PUT /api/app/source` and 64 KB for every other route. A larger body gets 413.
 
 ## Next Steps
 

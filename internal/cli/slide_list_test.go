@@ -45,7 +45,7 @@ func TestSlideListJSON(t *testing.T) {
 		t.Fatalf("output = %+v", output)
 	}
 	block := output.Slides[3].CodeBlocks[0]
-	if block.Driver != "sqlite" || !block.Live || block.Line != 40 {
+	if block.Driver != "sqlite" || !block.Live || block.Line != 45 {
 		t.Errorf("slide 4 block = %+v", block)
 	}
 }

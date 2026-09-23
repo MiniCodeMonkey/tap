@@ -2,8 +2,8 @@
   "slides": [
     {
       "number": 1,
-      "startLine": 10,
-      "endLine": 14,
+      "startLine": 15,
+      "endLine": 19,
       "layout": "title",
       "title": "Debugging Production at 3am",
       "fragments": 0,
@@ -14,8 +14,8 @@
     },
     {
       "number": 2,
-      "startLine": 18,
-      "endLine": 20,
+      "startLine": 23,
+      "endLine": 25,
       "layout": "section",
       "title": "The Page",
       "fragments": 0,
@@ -26,8 +26,8 @@
     },
     {
       "number": 3,
-      "startLine": 24,
-      "endLine": 32,
+      "startLine": 29,
+      "endLine": 37,
       "layout": "default",
       "title": "What We Knew",
       "fragments": 1,
@@ -38,8 +38,8 @@
     },
     {
       "number": 4,
-      "startLine": 36,
-      "endLine": 46,
+      "startLine": 41,
+      "endLine": 58,
       "layout": "code-focus",
       "title": "",
       "fragments": 0,
@@ -52,14 +52,14 @@
           "language": "sql",
           "driver": "sqlite",
           "live": true,
-          "line": 40
+          "line": 45
         }
       ]
     },
     {
       "number": 5,
-      "startLine": 50,
-      "endLine": 68,
+      "startLine": 62,
+      "endLine": 80,
       "layout": "two-column",
       "title": "Root Cause",
       "fragments": 0,
@@ -70,8 +70,8 @@
     },
     {
       "number": 6,
-      "startLine": 72,
-      "endLine": 80,
+      "startLine": 84,
+      "endLine": 92,
       "layout": "big-stat",
       "title": "11 min",
       "fragments": 0,
@@ -82,8 +82,8 @@
     },
     {
       "number": 7,
-      "startLine": 84,
-      "endLine": 86,
+      "startLine": 96,
+      "endLine": 98,
       "layout": "section",
       "title": "What Changed",
       "fragments": 0,
@@ -94,8 +94,8 @@
     },
     {
       "number": 8,
-      "startLine": 90,
-      "endLine": 94,
+      "startLine": 102,
+      "endLine": 106,
       "layout": "default",
       "title": "Three Fixes",
       "fragments": 0,
@@ -106,8 +106,8 @@
     },
     {
       "number": 9,
-      "startLine": 98,
-      "endLine": 106,
+      "startLine": 110,
+      "endLine": 118,
       "layout": "quote",
       "title": "",
       "fragments": 0,

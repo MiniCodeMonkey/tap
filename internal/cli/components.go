@@ -4,7 +4,7 @@ package cli
 import (
 	"errors"
 	"fmt"
-	"os"
+	"io"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -115,13 +115,17 @@ func externalInputDirs(resolved map[string]components.Result, deckDirectory stri
 	return directories
 }
 
-// printComponentErrorsToStderr prints one line per component build error in
-// the spec's exact terminal format ("error: <file>:<line>:<column>:
-// <message>"). Only safe to call when nothing else owns the terminal,
-// mirroring printLayoutWarningsToStderr.
-func printComponentErrorsToStderr(buildErrors []components.BuildError) {
+// printComponentErrors writes one line per component build error to log,
+// in the spec's exact terminal format ("error: <file>:<line>:<column>:
+// <message>"). log is standard error for a command run from a terminal
+// and the bounded --app log writer under --app, which is why the writer
+// is an argument: a render in --app mode can produce these by the
+// screenful, and a raw write to a log pipe the app is not draining
+// blocks for as long as the app lives. Only safe to call when nothing
+// else owns the terminal, mirroring printLayoutWarnings.
+func printComponentErrors(log io.Writer, buildErrors []components.BuildError) {
 	for _, buildError := range buildErrors {
-		fmt.Fprintf(os.Stderr, "error: %s\n", buildError.Error())
+		fmt.Fprintf(log, "error: %s\n", buildError.Error())
 	}
 }
 
@@ -144,14 +148,14 @@ func componentWarnings(resolved map[string]components.Result) []components.Build
 	return warnings
 }
 
-// printComponentWarningsToStderr prints one line per component build
-// warning, in the same "warning: <file>:<line>:<column>: <message>" format
+// printComponentWarnings writes one line per component build warning to
+// log, in the same "warning: <file>:<line>:<column>: <message>" format
 // tap uses for other warnings. A warning never fails the build; only safe
 // to call when nothing else owns the terminal, mirroring
-// printComponentErrorsToStderr.
-func printComponentWarningsToStderr(warnings []components.BuildError) {
+// printComponentErrors, which also has the reason log is an argument.
+func printComponentWarnings(log io.Writer, warnings []components.BuildError) {
 	for _, warning := range warnings {
-		Warning("warning: %s\n", warning.Error())
+		warningColor.Fprintf(log, "warning: %s\n", warning.Error())
 	}
 }
 

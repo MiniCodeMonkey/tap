@@ -154,12 +154,12 @@ func runExportImages(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("failed to load presentation: %w", err)
 	}
-	printLayoutWarningsToStderr(absPath, warnings)
+	printLayoutWarnings(os.Stderr, absPath, warnings)
 	if len(componentBuildErrs) > 0 {
-		printComponentErrorsToStderr(componentBuildErrs)
+		printComponentErrors(os.Stderr, componentBuildErrs)
 		return reportedError(codeComponentBuild, componentErrorsError(componentBuildErrs))
 	}
-	printComponentWarningsToStderr(componentBuildWarnings)
+	printComponentWarnings(os.Stderr, componentBuildWarnings)
 	defer func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()

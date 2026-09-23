@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { Slide } from './Slide';
 import { resolveLayout } from '../layouts/registry';
 import type { Slide as SlideData } from '$lib/types';
@@ -429,6 +429,33 @@ describe('Slide', () => {
 			expect(props.step).toBe(2);
 			expect(props.printMode).toBe(true);
 		});
+	});
+
+	it('runs a live code block by its slide number and block number', async () => {
+		useConnectionStore.setState({ connected: true, staticMode: false });
+		const fetchMock = vi.fn(
+			async () => ({ ok: true, json: async () => ({ success: true, output: 'ok' }) }) as unknown as Response
+		);
+		vi.stubGlobal('fetch', fetchMock);
+		const slide = makeSlide({
+			index: 3,
+			slots: { default: '<pre><code class="language-sql" data-code-block-index="0">SELECT 1;</code></pre>' },
+			codeBlocks: [{ language: 'sql', code: 'SELECT 1;', driver: 'sqlite', block: 1 }]
+		});
+
+		try {
+			render(<Slide slide={slide} active printMode={false} fragmentIndex={-1} step={0} total={5} />);
+			fireEvent.click(await screen.findByRole('button', { name: 'Run code' }));
+			await waitFor(() => {
+				expect(fetchMock).toHaveBeenCalledWith(
+					'/api/execute',
+					expect.objectContaining({ body: JSON.stringify({ slide: 4, block: 1 }) })
+				);
+			});
+		} finally {
+			vi.unstubAllGlobals();
+			useConnectionStore.setState({ connected: false, staticMode: false });
+		}
 	});
 
 	describe('skipped slides', () => {

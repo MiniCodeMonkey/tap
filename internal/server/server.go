@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"io"
 	"mime"
 	"net"
 	"net/http"
@@ -23,8 +24,11 @@ import (
 // Server is the HTTP server for serving presentations in development mode.
 type Server struct {
 	// Fields ordered by size for better memory alignment
-	presentation          *transformer.TransformedPresentation
-	registry              *driver.Registry
+	presentation *transformer.TransformedPresentation
+	registry     *driver.Registry
+	// liveCodePolicy is which drivers /api/execute may run in this run.
+	// The zero value allows none.
+	liveCodePolicy        LiveCodePolicy
 	httpServer            *http.Server
 	mux                   *http.ServeMux
 	shutdownCh            chan struct{}
@@ -49,8 +53,18 @@ type Server struct {
 	// request's Origin header by requireSameOriginJSON. Mirrors
 	// WebSocketHub.allowedOrigins; tap dev sets both from the same value.
 	allowedOrigins map[string]struct{}
-	mu             sync.RWMutex
-	started        bool
+	// routes lists every pattern registered on mux, for Routes.
+	routes []string
+	// log is where a serving error is reported. It is standard error by
+	// default, and in --app mode the bounded writer that owns standard
+	// error, so this line cannot block on a log pipe the app is not
+	// draining. SetLog changes it before Start.
+	log io.Writer
+	// appAuth is the token of a tap --app run, which serveHTTP checks on
+	// every request outside audienceRoutes. It is nil outside --app mode.
+	appAuth *AppAuth
+	mu      sync.RWMutex
+	started bool
 }
 
 // New creates a new Server bound to the specified port on 0.0.0.0, so a
@@ -68,12 +82,21 @@ func NewWithHost(port int, host string) *Server {
 		mux:              http.NewServeMux(),
 		shutdownCh:       make(chan struct{}),
 		componentBundles: NewComponentBundleStore(),
+		log:              os.Stderr,
 	}
 
 	s.httpServer = &http.Server{
 		Addr:              s.addr,
-		Handler:           s.mux,
+		Handler:           http.HandlerFunc(s.serveHTTP),
 		ReadHeaderTimeout: 10 * time.Second,
+		// ReadTimeout bounds how long a request, headers plus body, may
+		// take to arrive. Without it, a body sent one byte at a time
+		// pins a goroutine and its buffered memory indefinitely, even
+		// under handleAPIExecute's MaxBytesReader cap. Ten seconds
+		// matches ReadHeaderTimeout above: any legitimate request on
+		// this server (a handful of JSON bytes, or a GET with no body)
+		// completes in a small fraction of that.
+		ReadTimeout: 10 * time.Second,
 	}
 
 	return s
@@ -160,13 +183,13 @@ func (s *Server) ListensOnLoopbackOnly() bool {
 // RegisterHandler registers an HTTP handler for the given pattern.
 // This should be called before Start().
 func (s *Server) RegisterHandler(pattern string, handler http.Handler) {
-	s.mux.Handle(pattern, handler)
+	s.handleRoute(pattern, handler.ServeHTTP)
 }
 
 // RegisterHandlerFunc registers an HTTP handler function for the given pattern.
 // This should be called before Start().
 func (s *Server) RegisterHandlerFunc(pattern string, handler http.HandlerFunc) {
-	s.mux.HandleFunc(pattern, handler)
+	s.handleRoute(pattern, handler)
 }
 
 // Start starts the HTTP server in a goroutine.
@@ -196,9 +219,12 @@ func (s *Server) Start() error {
 	s.mu.Unlock()
 
 	// Start serving in a goroutine
+	s.mu.RLock()
+	serveLog := s.log
+	s.mu.RUnlock()
 	go func() {
 		if err := s.httpServer.Serve(listener); err != nil && err != http.ErrServerClosed {
-			fmt.Fprintf(os.Stderr, "HTTP server error: %v\n", err)
+			fmt.Fprintf(serveLog, "HTTP server error: %v\n", err)
 		}
 	}()
 
@@ -308,6 +334,16 @@ func GeneratePresenterSessionToken() (string, error) {
 }
 
 // SetCustomThemePath sets the path to a custom CSS theme file.
+// SetLog points a serving error at log instead of standard error. In
+// --app mode that is the bounded log writer, which drops a line rather
+// than wait for an app that is not reading its child's log pipe. Call it
+// before Start.
+func (s *Server) SetLog(log io.Writer) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.log = log
+}
+
 func (s *Server) SetCustomThemePath(path string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

@@ -1795,3 +1795,85 @@ func TestWebSocketHubConnectedMessageCarriesTheVersion(t *testing.T) {
 		t.Errorf("Version = %q, want %q", after.Version, "v2.1.0")
 	}
 }
+
+func TestWebSocketHubBroadcastFileChanged(t *testing.T) {
+	hub := NewWebSocketHub()
+	go hub.Run()
+	defer hub.Stop()
+
+	conn, _, ctx := dialHub(t, hub)
+	time.Sleep(50 * time.Millisecond)
+
+	if err := hub.BroadcastFileChanged("/talks/talk.md"); err != nil {
+		t.Fatalf("BroadcastFileChanged() error = %v", err)
+	}
+	_, data, err := conn.Read(ctx)
+	if err != nil {
+		t.Fatalf("conn.Read() error = %v", err)
+	}
+	if string(data) != `{"type":"file-changed","path":"/talks/talk.md"}` {
+		t.Errorf("message = %s", data)
+	}
+}
+
+func TestWebSocketHubCurrentPosition(t *testing.T) {
+	hub := NewWebSocketHub()
+	go hub.Run()
+	defer hub.Stop()
+
+	if _, _, known := hub.CurrentPosition(); known {
+		t.Error("the position is known before any slide message")
+	}
+
+	slide, step := 3, 2
+	if err := hub.Broadcast(Message{Type: MessageSlide, SlideIndex: &slide, Step: &step}); err != nil {
+		t.Fatal(err)
+	}
+	if index, gotStep, known := hub.CurrentPosition(); !known || index != 3 || gotStep != 2 {
+		t.Errorf("CurrentPosition() = %d, %d, %v; want 3, 2, true", index, gotStep, known)
+	}
+
+	next := 4
+	if err := hub.Broadcast(Message{Type: MessageSlide, SlideIndex: &next}); err != nil {
+		t.Fatal(err)
+	}
+	if index, gotStep, _ := hub.CurrentPosition(); index != 4 || gotStep != 0 {
+		t.Errorf("a slide message without a step: CurrentPosition() = %d, %d; want 4, 0", index, gotStep)
+	}
+}
+
+// TestWebSocketHubRelaysOnlySlideAndThemeMessages checks that a page can
+// only move slides and switch themes over the WebSocket. It cannot answer
+// a tap --app question, reach the recording, or make other pages reload.
+func TestWebSocketHubRelaysOnlySlideAndThemeMessages(t *testing.T) {
+	hub := NewWebSocketHub()
+	go hub.Run()
+	defer hub.Stop()
+
+	sender, _, ctx := dialHub(t, hub)
+	receiver, _, _ := dialHub(t, hub)
+	time.Sleep(50 * time.Millisecond)
+
+	for _, message := range []string{
+		`{"type":"answer","id":"q1","value":true}`,
+		`{"type":"recording","disk":"full"}`,
+		`{"type":"quit"}`,
+		`{"type":"reload"}`,
+		`{"type":"update","revision":"r9","slides":[1]}`,
+		`{"type":"file-changed","path":"/etc/hosts"}`,
+		`{"type":"slide","slideIndex":0}`,
+	} {
+		if err := sender.Write(ctx, websocket.MessageText, []byte(message)); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	_, data, err := receiver.Read(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var relayed Message
+	if err := json.Unmarshal(data, &relayed); err != nil || relayed.Type != MessageSlide {
+		t.Errorf("the first relayed message is %s, want the slide message", data)
+	}
+}

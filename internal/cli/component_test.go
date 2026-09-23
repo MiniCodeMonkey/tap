@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -58,6 +59,28 @@ func TestComponentNewDeckFolderArgument(t *testing.T) {
 	parentComponentPath := filepath.Join(parent, "slides", "RollingDeploy.jsx")
 	if _, err := os.Stat(parentComponentPath); err == nil {
 		t.Errorf("did not expect a component written into the parent directory at %s", parentComponentPath)
+	}
+}
+
+func TestComponentNewJSONPrintsTheSnippet(t *testing.T) {
+	deckDir := t.TempDir()
+	exitCode, stdout, stderr := runTap(t, "component", "new", "Counter", deckDir, "--json")
+	if exitCode != exitOK {
+		t.Fatalf("exit code = %d, stderr %q", exitCode, stderr)
+	}
+	var output struct {
+		OK      bool     `json:"ok"`
+		Files   []string `json:"files"`
+		Snippet string   `json:"snippet"`
+	}
+	if err := json.Unmarshal([]byte(stdout), &output); err != nil {
+		t.Fatalf("stdout is not JSON: %v\n%s", err, stdout)
+	}
+	if !output.OK || len(output.Files) != 1 {
+		t.Errorf("output = %+v, want ok and one file", output)
+	}
+	if output.Snippet != componentSnippet("Counter", "jsx", false) {
+		t.Errorf("snippet = %q, want %q", output.Snippet, componentSnippet("Counter", "jsx", false))
 	}
 }
 

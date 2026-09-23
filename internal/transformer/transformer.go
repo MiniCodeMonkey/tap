@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/MiniCodeMonkey/tap/internal/components"
@@ -14,10 +15,70 @@ import (
 	"github.com/MiniCodeMonkey/tap/internal/parser"
 )
 
-// TransformedPresentation is the JSON-serializable output for the frontend.
+// TransformedPresentation is the deck's whole transformed state, held on
+// the server. It carries the full Config, including a driver's command,
+// arguments, timeout and connection details, which is why nothing marshals
+// it straight to a client: a handler that serves a presentation to a page
+// or a static export calls Public() instead.
 type TransformedPresentation struct {
 	Config config.Config      `json:"config"`
 	Slides []TransformedSlide `json:"slides"`
+}
+
+// PublicConfig is the subset of Config a client may see: enough to render
+// the deck and label its slide numbers, theme and layout, never a
+// driver's command, arguments or timeout, nor a connection's host, user,
+// password, database, path or port. A field reaches PublicConfig only by
+// a line added here in publicConfigFrom; adding a field to Config does not
+// add it here, which is the point.
+//
+// CustomTheme is a bool, not the configured path: the page only ever
+// branches on whether a custom theme exists before requesting its CSS
+// from /api/custom-theme.css (see App.tsx and PresenterApp.tsx), never on
+// the path itself, so publishing the path would only hand out the deck's
+// directory layout for nothing the page reads.
+type PublicConfig struct {
+	Title           string            `json:"title,omitempty"`
+	Theme           string            `json:"theme,omitempty"`
+	CustomTheme     bool              `json:"customTheme,omitempty"`
+	AspectRatio     string            `json:"aspectRatio,omitempty"`
+	Transition      string            `json:"transition,omitempty"`
+	ThemeColors     map[string]string `json:"themeColors,omitempty"`
+	SlideNumbers    *bool             `json:"slideNumbers,omitempty"`
+	PresenterLayout string            `json:"presenterLayout,omitempty"`
+}
+
+// publicConfigFrom builds the config subset a client may see from the
+// deck's full configuration, field by field.
+func publicConfigFrom(cfg config.Config) PublicConfig {
+	return PublicConfig{
+		Title:           cfg.Title,
+		Theme:           cfg.Theme,
+		CustomTheme:     cfg.CustomTheme != "",
+		AspectRatio:     cfg.AspectRatio,
+		Transition:      cfg.Transition,
+		ThemeColors:     cfg.ThemeColors,
+		SlideNumbers:    cfg.SlideNumbers,
+		PresenterLayout: cfg.PresenterLayout,
+	}
+}
+
+// PublicPresentation is what a client actually receives for a deck: the
+// slides, and only the config fields the page reads (see PublicConfig). It
+// is what /api/presentation and a static build's embedded presentation
+// data both serialize; neither ever marshals a TransformedPresentation
+// directly.
+type PublicPresentation struct {
+	Config PublicConfig       `json:"config"`
+	Slides []TransformedSlide `json:"slides"`
+}
+
+// Public returns the client-facing view of p.
+func (p *TransformedPresentation) Public() PublicPresentation {
+	return PublicPresentation{
+		Config: publicConfigFrom(p.Config),
+		Slides: p.Slides,
+	}
 }
 
 // TransformedSlide represents a slide ready for frontend rendering.
@@ -91,6 +152,14 @@ type TransformedCodeBlock struct {
 	Driver         string `json:"driver,omitempty"`
 	Connection     string `json:"connection,omitempty"`
 	HighlightLines string `json:"highlightLines,omitempty"`
+	// Problem says why this live block cannot run, such as a driver the
+	// deck does not declare. The page shows it in the block, and
+	// /api/execute refuses the block with it.
+	Problem string `json:"problem,omitempty"`
+	// Block is the block's number among the slide's live code blocks (the
+	// blocks with a driver), counted from 1, and 0 for any other block. A
+	// Run button sends it with the slide number to /api/execute.
+	Block int `json:"block,omitempty"`
 }
 
 // BackgroundConfig holds background styling for a slide.
@@ -113,6 +182,9 @@ type Transformer struct {
 	// the static builder sets a relative "components/" so the built folder
 	// works from any base path (see the builder's image path handling).
 	componentURLPrefix string
+	// usedDrivers is every driver a live code block in the deck names,
+	// sorted, for the message that shows the whole drivers block to paste.
+	usedDrivers []string
 }
 
 // New creates a new Transformer with the given configuration.
@@ -154,6 +226,8 @@ func (t *Transformer) SetComponentURLPrefix(prefix string) {
 // Transform converts a parsed Presentation into a TransformedPresentation
 // suitable for JSON serialization and frontend consumption.
 func (t *Transformer) Transform(pres *parser.Presentation) *TransformedPresentation {
+	t.usedDrivers = usedDrivers(pres)
+
 	result := &TransformedPresentation{
 		Config: *t.config,
 		Slides: make([]TransformedSlide, 0, len(pres.Slides)),
@@ -166,6 +240,21 @@ func (t *Transformer) Transform(pres *parser.Presentation) *TransformedPresentat
 	}
 
 	return result
+}
+
+// usedDrivers returns every driver a code block in pres names, sorted and
+// without repeats.
+func usedDrivers(pres *parser.Presentation) []string {
+	var names []string
+	for _, slide := range pres.Slides {
+		for _, block := range slide.CodeBlocks {
+			if block.Meta.Driver != "" && !slices.Contains(names, block.Meta.Driver) {
+				names = append(names, block.Meta.Driver)
+			}
+		}
+	}
+	slices.Sort(names)
+	return names
 }
 
 // SlideHash returns a short hash of everything the frontend renders for
@@ -210,7 +299,6 @@ func WithoutSkippedSlides(presentation *TransformedPresentation) (kept *Transfor
 	}
 	return kept, deckNumbers
 }
-
 
 // transformSlide converts a single parser.Slide to TransformedSlide.
 func (t *Transformer) transformSlide(slide parser.Slide) TransformedSlide {
@@ -264,6 +352,7 @@ func (t *Transformer) transformSlide(slide parser.Slide) TransformedSlide {
 	// Transform code blocks
 	if len(slide.CodeBlocks) > 0 {
 		transformed.CodeBlocks = make([]TransformedCodeBlock, len(slide.CodeBlocks))
+		liveBlock := 0
 		for i, block := range slide.CodeBlocks {
 			transformed.CodeBlocks[i] = TransformedCodeBlock{
 				Language:       block.Language,
@@ -271,6 +360,14 @@ func (t *Transformer) transformSlide(slide parser.Slide) TransformedSlide {
 				Driver:         block.Meta.Driver,
 				Connection:     block.Meta.Connection,
 				HighlightLines: block.Meta.HighlightLines,
+			}
+			if block.Meta.Driver == "" {
+				continue
+			}
+			liveBlock++
+			transformed.CodeBlocks[i].Block = liveBlock
+			if t.config != nil && !t.config.DriverDeclared(block.Meta.Driver) {
+				transformed.CodeBlocks[i].Problem = t.config.UndeclaredDriverMessage(block.Meta.Driver, t.usedDrivers)
 			}
 		}
 	}

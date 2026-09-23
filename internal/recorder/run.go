@@ -83,7 +83,7 @@ func NewRun(options RunOptions) *Run {
 // StartSegment starts a new segment on display and then stops the current
 // one, so the audio gap between them is as short as possible.
 // StartSegment stops the previous segment only after releasing r.mu, since
-// Session.Stop can take up to killGrace and every other Run method,
+// Session.Stop can take up to KillGrace and every other Run method,
 // including a poller reading Recording or SegmentElapsed once a second,
 // would otherwise stall behind it. r.current already points at the new
 // segment by the time the previous one is stopped, so watchSegment still
@@ -155,7 +155,7 @@ func (r *Run) StopSegment() error {
 }
 
 // stopAndRecordTruncated stops a segment that is no longer current. It is
-// called without r.mu held, so a slow Session.Stop (up to killGrace) never
+// called without r.mu held, so a slow Session.Stop (up to KillGrace) never
 // blocks another Run method; it takes the lock only briefly afterward to
 // record whether the recorder had to be killed.
 func (r *Run) stopAndRecordTruncated(stopping *segment) error {
@@ -202,6 +202,13 @@ func (r *Run) Started() bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return len(r.segments) > 0
+}
+
+// Segments is how many segments the run has started.
+func (r *Run) Segments() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return len(r.segments)
 }
 
 // SegmentElapsed is how long the current segment has run.

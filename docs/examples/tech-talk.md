@@ -1,5 +1,7 @@
 ---
 title: Tech Talk
+drivers:
+  sqlite: {}
 ---
 
 # Tech Talk

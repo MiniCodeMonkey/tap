@@ -7,7 +7,7 @@ title: Drivers
 Complete reference for all code execution drivers in Tap. Drivers enable live code execution during presentations using `tap dev`.
 
 ::: warning Development Mode Only
-Live code execution only works in development mode (`tap dev`). Static builds show code blocks but don't execute them.
+Live code execution works when tap is serving the deck: `tap dev` and `tap present`. Static builds show code blocks but don't execute them.
 :::
 
 ## Overview
@@ -48,6 +48,7 @@ The SQLite driver executes SQL queries against a SQLite database file or in-memo
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
 | `path` | `string` | `:memory:` | Path to SQLite database file, or `:memory:` for in-memory |
+| `database` | `string` | `:memory:` | An older spelling of `path`, kept working for existing decks. `path` wins when both are set. |
 
 ### Frontmatter Configuration
 
@@ -121,7 +122,7 @@ drivers:
         port: 3306
         database: myapp
         user: demo_user
-        password: $MYSQL_PASSWORD
+        password: ${MYSQL_PASSWORD}
 ---
 ```
 
@@ -151,10 +152,10 @@ drivers:
   mysql:
     connections:
       production:
-        host: $MYSQL_HOST
-        database: $MYSQL_DATABASE
-        user: $MYSQL_USER
-        password: $MYSQL_PASSWORD
+        host: ${MYSQL_HOST}
+        database: ${MYSQL_DATABASE}
+        user: ${MYSQL_USER}
+        password: ${MYSQL_PASSWORD}
 ---
 ```
 
@@ -198,7 +199,7 @@ drivers:
         port: 5432
         database: analytics
         user: demo_user
-        password: $PGPASSWORD
+        password: ${PGPASSWORD}
 ---
 ```
 
@@ -367,22 +368,25 @@ When a timeout is reached:
 2. A timeout error is displayed on the slide
 3. The presentation continues normally
 
-### Environment Variable Substitution
+### Environment variables
 
-All driver configuration values support environment variable substitution using `$` prefix:
+String values in `drivers:` settings can read the environment with `${NAME}`:
 
 ```yaml
----
 drivers:
   postgres:
-    host: $DB_HOST
-    database: $DB_NAME
-    user: $DB_USER
-    password: $DB_PASSWORD
----
+    connections:
+      demo:
+        host: ${PGHOST}
+        user: ${PGUSER}
+        password: ${PGPASSWORD}
 ```
 
-This keeps sensitive credentials out of your presentation files.
+- tap expands `${NAME}` when a block runs, not when it loads the deck, so the value never reaches the slide page or a `tap build` folder.
+- A `.env` file next to the deck is read too.
+- A variable that is not set makes the block fail with a message that names it. It never becomes an empty string.
+- `$${` writes a literal `${`. Any other `$` stays as it is, so `$PGPASSWORD` without braces is not expanded.
+- Only driver settings expand. Other frontmatter keys, such as `title`, stay as written.
 
 ---
 

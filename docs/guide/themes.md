@@ -21,6 +21,15 @@ theme: terminal
 An unknown theme name falls back to `base` with a warning, so a deck
 written against an older theme name still builds.
 
+From the command line, `tap theme set <slug> [deck]` writes the same
+`theme:` key, the same change the `t` key makes in `tap dev`. A deck with
+no frontmatter gets one, and an unknown slug exits 1 with the list of
+themes:
+
+```bash
+tap theme set blueprint talk.md
+```
+
 ## Switching Themes Live
 
 While presenting, press `t` to cycle through every installed theme without
@@ -76,6 +85,14 @@ tap theme show blueprint    # tokens and illustration style
 tap theme show blueprint --json
 tap theme show slides.md   # the theme that deck's frontmatter names
 ```
+
+`tap theme show <slug> --image` renders a title slide in the theme to a
+1280x720 PNG and prints its path, for a theme picker in another tool. The
+image is cached per theme and tap version in the user cache folder, under
+`tap/themes/<version>/<slug>.png`, so the second call for the same theme
+returns at once rather than rendering again; `-o`/`--output` copies it to
+a file of your choosing. `--json` gives `{"ok": true, "slug", "image",
+"cached"}`.
 
 ## Theme Tokens
 

@@ -246,11 +246,11 @@ func TestRunDoesNotReportAStopItAskedFor(t *testing.T) {
 }
 
 func TestNoteSlideDoesNotWaitForASlowStop(t *testing.T) {
-	previousGrace := killGrace
-	killGrace = 2 * time.Second
-	t.Cleanup(func() { killGrace = previousGrace })
+	previousGrace := KillGrace
+	KillGrace = 2 * time.Second
+	t.Cleanup(func() { KillGrace = previousGrace })
 
-	// This recorder ignores SIGINT, so stopping it blocks for killGrace
+	// This recorder ignores SIGINT, so stopping it blocks for KillGrace
 	// while it is killed.
 	stubborn := writeFakeRecorder(t, "trap '' INT\nprintf ready > \"$last.ready\"\nsleep 60 &\nwait $!\n")
 	slides := &slideState{known: true}
@@ -275,9 +275,32 @@ func TestNoteSlideDoesNotWaitForASlowStop(t *testing.T) {
 	before := time.Now()
 	run.NoteSlide(1)
 	if elapsed := time.Since(before); elapsed >= time.Second {
-		t.Errorf("NoteSlide took %v while a segment was stopping, want well under killGrace", elapsed)
+		t.Errorf("NoteSlide took %v while a segment was stopping, want well under KillGrace", elapsed)
 	}
 
 	<-started
 	_, _ = run.Finish(false)
+}
+
+func TestRunCountsItsSegments(t *testing.T) {
+	run := testRun(t, obedientRecorder(t), &slideState{known: true})
+	if run.Segments() != 0 {
+		t.Errorf("Segments() = %d before any segment, want 0", run.Segments())
+	}
+	first, err := run.StartSegment(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitForRecorderReady(t, first)
+	second, err := run.StartSegment(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitForRecorderReady(t, second)
+	if run.Segments() != 2 {
+		t.Errorf("Segments() = %d, want 2", run.Segments())
+	}
+	if _, err := run.Finish(true); err != nil {
+		t.Fatal(err)
+	}
 }
