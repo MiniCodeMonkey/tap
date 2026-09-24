@@ -12,7 +12,8 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
     let panelPeek = SlidePanelPeek()
     private(set) var isPanelPinned = true
     private let slidesButton = HoverButton()
-    private var visibilityObserver: NSObjectProtocol?
+    private var sidebarCollapseObservation: NSKeyValueObservation?
+    private var isReconcilingSidebarCollapse = false
 
     init(sessionController: DeckSessionController) {
         self.sessionController = sessionController
@@ -59,33 +60,35 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
         }
         let deckURL = sessionController.document?.fileURL
         setPanelPinned(deckURL.map { AppEnvironment.shared.panelState.isPinned(deck: $0) } ?? true)
-        // AppKit's own space negotiation for a sidebar-style split item runs
-        // its first real pass only once the window actually appears on
-        // screen, joining any existing tab group, which can silently
-        // collapse a panel that was set pinned above before the window had
-        // a real frame to lay out against. This reasserts it the first
-        // time the window becomes visible, then stops watching: a later
-        // pin or unpin the person makes must not be undone by a stray
-        // occlusion change.
-        visibilityObserver = NotificationCenter.default.addObserver(forName: NSWindow.didChangeOcclusionStateNotification, object: window, queue: nil) { [weak self] _ in
+        // On every tab swap, AppKit's own window tab stack copies the prior
+        // tab's split-view divider positions into the new tab
+        // (NSWindowStackController _syncWindowFrameStateForSwapWithNewWindow,
+        // called from NSDocument.showWindows through makeKeyAndOrderFront),
+        // which can collapse or uncollapse this deck's sidebar to match
+        // whichever deck was the prior tab. This runs on every swap, not
+        // only the first show, so it is watched for the life of the window
+        // rather than disarmed after one correction. A change that leaves
+        // isCollapsed agreeing with isPanelPinned (both true, or both
+        // false, since the correct state is always the opposite of the
+        // other) is AppKit's own copy misfiring; it is corrected a turn
+        // later, after AppKit's swap has finished, which also avoids
+        // fighting the very re-assertion this triggers.
+        sidebarCollapseObservation = splitViewController.sidebarItem.observe(\.isCollapsed, options: [.new]) { [weak self] _, change in
             MainActor.assumeIsolated {
-                guard let self, window.occlusionState.contains(.visible) else { return }
-                self.setPanelPinned(self.isPanelPinned)
-                if let observer = self.visibilityObserver {
-                    NotificationCenter.default.removeObserver(observer)
-                    self.visibilityObserver = nil
+                guard let self, let isCollapsed = change.newValue, isCollapsed == self.isPanelPinned, !self.isReconcilingSidebarCollapse else { return }
+                self.isReconcilingSidebarCollapse = true
+                DispatchQueue.main.async { [weak self] in
+                    MainActor.assumeIsolated {
+                        guard let self else { return }
+                        self.isReconcilingSidebarCollapse = false
+                        self.setPanelPinned(self.isPanelPinned)
+                    }
                 }
             }
         }
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
-
-    deinit {
-        if let visibilityObserver {
-            NotificationCenter.default.removeObserver(visibilityObserver)
-        }
-    }
 
     override func windowDidLoad() {
         super.windowDidLoad()
@@ -208,6 +211,8 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
     }
 
     func windowWillClose(_ notification: Notification) {
+        sidebarCollapseObservation?.invalidate()
+        sidebarCollapseObservation = nil
         if let controller = previewWindowController {
             controller.onClose = nil
             previewWindowController = nil

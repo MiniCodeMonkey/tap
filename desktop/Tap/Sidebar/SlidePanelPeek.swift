@@ -22,7 +22,7 @@ final class SlidePanelPeek {
         overButton = true
         guard isEnabled, !isShowing else { return }
         schedule(after: showDelay) { [weak self] in
-            guard let self, self.overButton || self.overPanel else { return }
+            guard let self else { return }
             self.isShowing = true
             self.onShow?()
         }
@@ -54,7 +54,7 @@ final class SlidePanelPeek {
     private func scheduleHide() {
         guard !overButton, !overPanel else { return }
         schedule(after: hideDelay) { [weak self] in
-            guard let self, !self.overButton, !self.overPanel else { return }
+            guard let self else { return }
             self.hideNow()
         }
     }
