@@ -47,6 +47,13 @@ final class PreviewViewController: NSViewController, WKNavigationDelegate, WKUID
     /// what reads it sees a reload the moment the app asks for one rather
     /// than whenever WebKit gets round to reporting it.
     private(set) var pageLoadCount = 0
+    /// When `load` last pointed the preview at a page.
+    private(set) var lastLoadDate: Date?
+    /// How many script messages the tapReady handler has received, counting
+    /// ones whose body it could not read. A test that times out waiting for
+    /// ready reads it to tell a page that never posted from a post the app
+    /// dropped.
+    private(set) var readyMessagesReceived = 0
     private var allowedPort: Int?
     /// Opens a URL outside the app. Production hands this to `NSWorkspace`;
     /// a test replaces it to see what the app tried to open without
@@ -128,6 +135,7 @@ final class PreviewViewController: NSViewController, WKNavigationDelegate, WKUID
     /// once: tap sets its cookie and redirects to the same URL without it.
     func load(client: TapClient) {
         pageLoadCount += 1
+        lastLoadDate = Date()
         allowedPort = client.ready.port
         lastReady = nil
         webView.load(URLRequest(url: client.previewLaunchURL))
@@ -222,6 +230,7 @@ final class PreviewViewController: NSViewController, WKNavigationDelegate, WKUID
     }
 
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+        readyMessagesReceived += 1
         guard message.name == "tapReady", let body = message.body as? [String: Any],
               let slide = (body["slide"] as? NSNumber)?.intValue else { return }
         let payload = ReadyPayload(revision: body["revision"] as? String ?? "",
