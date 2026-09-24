@@ -43,6 +43,20 @@ final class WindowLayoutTests: HostedTestCase {
         XCTAssertNotEqual(split.editorItem.viewController.view.frame.width, split.inspectorItem.viewController.view.frame.width, accuracy: 2, "a dragged divider stays where the user put it")
     }
 
+    func testAnAlreadyBalancedLayoutDoesNotMoveTheDividerAgain() async throws {
+        let document = try await openDeck(try Fixtures.copyDeck("plain.md"))
+        let controller = try windowController(for: document)
+        let split = controller.splitViewController
+        XCTAssertFalse(split.isSidebarCollapsed, "the sidebar shows by default: this is the case the guard must handle")
+        split.view.layoutSubtreeIfNeeded()
+        let countAfterFirstLayout = split.setPositionCallCount
+
+        split.view.needsLayout = true
+        split.view.layoutSubtreeIfNeeded()
+
+        XCTAssertEqual(split.setPositionCallCount, countAfterFirstLayout, "a layout pass that is already balanced must not move the divider again")
+    }
+
     func testTogglePreviewPinAndItsMenuItemTitle() async throws {
         let document = try await openDeckAndWaitForPreview(try Fixtures.copyDeck("plain.md"))
         let controller = try windowController(for: document)

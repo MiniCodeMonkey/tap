@@ -45,6 +45,10 @@ final class MainSplitViewController: NSSplitViewController {
     /// The divider between the editor and the right pane, which sits after
     /// the sidebar's own divider.
     private var editorDividerIndex: Int { 1 }
+    /// How many times `balance()` has actually moved the divider. Internal,
+    /// for a test to prove an already-balanced layout does not move it
+    /// again, not for anything production code reads.
+    private(set) var setPositionCallCount = 0
 
     required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
 
@@ -95,12 +99,23 @@ final class MainSplitViewController: NSSplitViewController {
         // view (AppKit adds a fixed margin around a sidebar's content); the
         // arranged subview's width is what actually crowds the editor, so
         // that is what is read here rather than the view controller's view.
-        let leadingWidth = sidebarItem.isCollapsed ? 0 : (splitView.arrangedSubviews.first?.frame.width ?? sidebarItem.viewController.view.frame.width)
+        let arrangedSubviews = splitView.arrangedSubviews
+        let leadingWidth = sidebarItem.isCollapsed ? 0 : (arrangedSubviews.first?.frame.width ?? sidebarItem.viewController.view.frame.width)
+        // The editor's own view is wrapped by the SDK for safe-area
+        // propagation, so its frame is relative to that wrapper, not to the
+        // split view: its origin.x reads as 0 whatever the sidebar's width,
+        // which would make this guard compare a split-view offset against a
+        // value that can never match while the sidebar shows. The editor's
+        // arranged subview (the split view's own direct child) is already
+        // in the split view's coordinate space, so its maxX is what is
+        // compared here instead.
+        let editorMaxX = arrangedSubviews.count > editorDividerIndex ? arrangedSubviews[editorDividerIndex].frame.maxX : editorItem.viewController.view.frame.maxX
         guard let position = dividerPolicy.balancedPosition(totalWidth: splitView.bounds.width, dividerThickness: splitView.dividerThickness,
                                                             leadingWidth: leadingWidth),
-              abs(editorItem.viewController.view.frame.maxX - position) > 0.5 else { return }
+              abs(editorMaxX - position) > 0.5 else { return }
         isBalancing = true
         splitView.setPosition(position, ofDividerAt: editorDividerIndex)
+        setPositionCallCount += 1
         isBalancing = false
     }
 
