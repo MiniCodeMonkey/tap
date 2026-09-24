@@ -4,11 +4,29 @@
  *
  * jsdom runs no CSS, so every element reports one fake CSS animation from
  * getAnimations(), and each test checks which of them the slide finished.
+ * An inline deck component is a stand-in that counts its own mounts, since
+ * a Motion entrance replays exactly when the component mounts again.
  */
+import { useEffect, useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, render } from '@testing-library/react';
 import { Slide } from './Slide';
-import type { Slide as SlideData } from '$lib/types';
+import type { Slide as SlideData, SlideComponentInfo } from '$lib/types';
+
+const componentMounts: string[] = [];
+
+function FakeDeckComponent({ source, props }: { source: string; props: Record<string, unknown> }) {
+	// Runs once per mount, never for a prop change on a mounted instance.
+	const [mountedSource] = useState(source);
+	useEffect(() => {
+		componentMounts.push(mountedSource);
+	}, [mountedSource]);
+	return <p data-testid="deck-component">{`${source} ${String(props.label)}`}</p>;
+}
+
+vi.mock('./DeckComponent', () => ({
+	DeckComponent: (props: { source: string; props: Record<string, unknown> }) => <FakeDeckComponent {...props} />
+}));
 
 interface FakeAnimation {
 	animationName: string;
@@ -66,12 +84,24 @@ function makeSlide(index: number, body: string, fragmentCount = 0): SlideData {
 	};
 }
 
+function makeComponentSlide(index: number, heading: string, components: SlideComponentInfo[]): SlideData {
+	const placeholders = components
+		.map((component) => `<div class="deck-component" data-component-index="${component.index}"></div>`)
+		.join('');
+	return { ...makeSlide(index, `<h2>${heading}</h2>${placeholders}`), components };
+}
+
+function chart(label: string, source = './charts/LatencyDrop.jsx'): SlideComponentInfo {
+	return { index: 0, source, url: '/components/LatencyDrop-abc.js', props: { label } };
+}
+
 function renderSlide(slide: SlideData, fragmentIndex = -1) {
 	return <Slide slide={slide} active printMode={false} fragmentIndex={fragmentIndex} step={0} total={3} />;
 }
 
 beforeEach(() => {
 	animations = [];
+	componentMounts.length = 0;
 	Element.prototype.getAnimations = fakeGetAnimations;
 });
 
@@ -136,5 +166,47 @@ describe('Slide entrance animations', () => {
 		expect(classes).toEqual([true, false]);
 		expect(finishedTexts()).toEqual(expect.arrayContaining(['Title edited', 'First', 'Second']));
 		expect(animations.find((animation) => animation.infinite)?.finished).toBe(false);
+	});
+
+	it('keeps an inline deck component mounted through a live update to its slide', async () => {
+		const { container, rerender } = render(renderSlide(makeComponentSlide(3, 'Results', [chart('p95')])));
+		expect(componentMounts).toEqual(['./charts/LatencyDrop.jsx']);
+		const placeholder = container.querySelector('.deck-component');
+
+		await act(async () => {
+			rerender(renderSlide(makeComponentSlide(3, 'Results edited', [chart('p95')])));
+		});
+		await act(async () => {
+			rerender(renderSlide(makeComponentSlide(3, 'Results edited', [chart('p99')])));
+		});
+
+		expect(container.querySelector('h2')?.textContent).toBe('Results edited');
+		expect(container.querySelector('[data-testid="deck-component"]')?.textContent).toBe('./charts/LatencyDrop.jsx p99');
+		expect(container.querySelector('.deck-component')).toBe(placeholder);
+		expect(componentMounts).toEqual(['./charts/LatencyDrop.jsx']);
+	});
+
+	it('mounts an inline deck component again when navigating, even to the same component', async () => {
+		const { container, rerender } = render(renderSlide(makeComponentSlide(3, 'Results', [chart('p95')])));
+
+		await act(async () => {
+			rerender(renderSlide(makeComponentSlide(4, 'More results', [chart('us-east')])));
+		});
+
+		expect(container.querySelector('[data-testid="deck-component"]')?.textContent).toBe(
+			'./charts/LatencyDrop.jsx us-east'
+		);
+		expect(componentMounts).toEqual(['./charts/LatencyDrop.jsx', './charts/LatencyDrop.jsx']);
+	});
+
+	it('mounts a different component fresh when a live update changes the source at its position', async () => {
+		const { container, rerender } = render(renderSlide(makeComponentSlide(3, 'Results', [chart('p95')])));
+
+		await act(async () => {
+			rerender(renderSlide(makeComponentSlide(3, 'Results edited', [chart('p95', './charts/Other.jsx')])));
+		});
+
+		expect(container.querySelector('[data-testid="deck-component"]')?.textContent).toBe('./charts/Other.jsx p95');
+		expect(componentMounts).toEqual(['./charts/LatencyDrop.jsx', './charts/Other.jsx']);
 	});
 });

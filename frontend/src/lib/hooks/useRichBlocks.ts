@@ -7,7 +7,7 @@
  * mounted DOM after each render and replaces them with rendered output.
  */
 
-import { useEffect, useRef, type RefObject } from 'react';
+import { useEffect, useLayoutEffect, useRef, type RefObject } from 'react';
 import type { CodeBlock, Slide } from '$lib/types';
 import { highlightCodeBlocksInElement } from '../utils/highlighting';
 import { renderMermaidBlocksInElement, type MermaidThemeOverrides } from '../utils/mermaid';
@@ -127,6 +127,17 @@ function findDeckComponentPlaceholders(element: HTMLElement): DeckComponentPorta
 }
 
 /**
+ * What makes an inline deck component the same component across a live
+ * update: its position among the slide's components and its source file.
+ * A props change keeps the identity; a different file at that position,
+ * or a new position, is a different component and mounts fresh.
+ */
+function deckComponentIdentity(slide: Slide, index: number): string {
+	const source = slide.components?.find((component) => component.index === index)?.source ?? '';
+	return `${index}\u0000${source}`;
+}
+
+/**
  * A short, non-cryptographic hash of `value` (djb2 XOR variant), base-36
  * encoded. Used to keep `data-rich-processed` a short marker instead of a
  * copy of the slide's whole slot HTML - the attribute only needs to detect
@@ -174,21 +185,49 @@ export function useRichBlocks(
 	// needs to react to.
 	const asciinemaPlayersRef = useRef<AsciinemaPlayerInstance[]>([]);
 
+	// The placeholder each inline deck component is mounted into, by its
+	// identity on the slide on screen (see deckComponentIdentity), so a live
+	// update can hand the same element back to the same component.
+	const placeholdersRef = useRef<{ slideIndex: number; containers: Map<string, HTMLElement> } | null>(null);
+
 	// Finds inline deck component placeholders and reports them, independent
 	// of the active/printMode gate below: a preview render (the overview
 	// grid, the presenter's next-slide panel) always passes active: false and
 	// printMode: false, but the spec still requires inline components to
 	// mount there (unless a component opts out with `export const preview =
-	// false`). Unlike live code, mermaid, and asciinema, a placeholder is a
-	// synchronous, non-mutating DOM read, so it needs no isNewContent guard
-	// of its own - finding the same nodes twice (a StrictMode double-invoke)
-	// just reports the same portals twice, which is harmless.
-	useEffect(() => {
+	// false`).
+	//
+	// A live update to the slide on screen swaps the slot's HTML, which
+	// replaces every placeholder with a new, empty element. Portaling into
+	// that new element would unmount the component and mount it again,
+	// replaying its entrance on every edit. Instead, each new placeholder
+	// is swapped back for the detached one the same component (same slide,
+	// same index, same source file) is already mounted in, so the component
+	// keeps its instance and only receives new props. Navigating to another
+	// slide starts with no placeholders to reuse, so its components mount
+	// fresh and animate in. A layout effect, so the swap lands before the
+	// browser paints the empty placeholder.
+	useLayoutEffect(() => {
 		const element = elementRef.current;
 		if (!element || !element.isConnected) {
 			return;
 		}
-		onDeckComponentsChange?.(findDeckComponentPlaceholders(element));
+		const previous = placeholdersRef.current;
+		const reusable = previous && previous.slideIndex === slide.index ? previous.containers : null;
+		const containers = new Map<string, HTMLElement>();
+		const portals = findDeckComponentPlaceholders(element).map((portal) => {
+			const identity = deckComponentIdentity(slide, portal.index);
+			const mounted = reusable?.get(identity);
+			let container = portal.container;
+			if (mounted && mounted !== container && !mounted.isConnected) {
+				container.replaceWith(mounted);
+				container = mounted;
+			}
+			containers.set(identity, container);
+			return { ...portal, container };
+		});
+		placeholdersRef.current = { slideIndex: slide.index, containers };
+		onDeckComponentsChange?.(portals);
 	}, [elementRef, slide, onDeckComponentsChange]);
 
 	useEffect(() => {

@@ -1,5 +1,7 @@
 import { test, expect, type Page } from '@playwright/test';
+import { spawn, type ChildProcess } from 'child_process';
 import * as fs from 'fs';
+import * as os from 'os';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -77,5 +79,92 @@ test.describe('Live update animations', () => {
     await page.keyboard.press('ArrowRight');
     await expect(page).toHaveURL(/#4$/);
     await expect.poll(async () => (await runningEntranceAnimations(page)).length, { timeout: 3000 }).toBeGreaterThan(0);
+  });
+});
+
+/**
+ * A deck component animates in with Motion, which replays whenever the
+ * component mounts again. Runs against its own dev server on a scratch copy
+ * of examples/components (so the example itself is never edited), with
+ * `transition: none` so navigating keeps the same Slide mounted, the path
+ * where a reused component would otherwise go unnoticed.
+ */
+test.describe('Live update deck components', () => {
+  const port = 3414;
+  const baseURL = `http://localhost:${port}`;
+  const latencyChartSlide = 4;
+  let deckDirectory: string;
+  let deckPath: string;
+  let deckSource: string;
+  let server: ChildProcess;
+
+  test.beforeAll(async () => {
+    deckDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'tap-live-update-'));
+    fs.cpSync(path.join(dirname, '../../examples/components'), deckDirectory, { recursive: true });
+    deckPath = path.join(deckDirectory, 'deck.md');
+    deckSource = fs.readFileSync(deckPath, 'utf-8').replace(/^transition: .*$/m, 'transition: none');
+    fs.writeFileSync(deckPath, deckSource);
+    server = spawn('go', ['run', './cmd/tap', 'dev', deckPath, '--port', String(port), '--headless'], {
+      cwd: path.join(dirname, '../..'),
+      stdio: 'ignore',
+      detached: true,
+      env: { ...process.env, TAP_HUB_STATE_RETENTION: '0s' },
+    });
+    const deadline = Date.now() + 60_000;
+    while (Date.now() < deadline) {
+      try {
+        if ((await fetch(`${baseURL}/api/presentation`)).ok) return;
+      } catch {
+        // Not up yet.
+      }
+      await new Promise((resolve) => setTimeout(resolve, 200));
+    }
+    throw new Error(`dev server at ${baseURL} did not come up in time`);
+  });
+
+  test.afterAll(() => {
+    if (server?.pid) process.kill(-server.pid, 'SIGKILL');
+    fs.rmSync(deckDirectory, { recursive: true, force: true });
+  });
+
+  /** The chart's first bar: marks it, or reports whether it is still the marked element, and its height. */
+  function firstBar(page: Page, mark = false): Promise<{ marked: boolean; height: number }> {
+    return page.evaluate((shouldMark) => {
+      const bar = document.querySelector<HTMLElement & { liveUpdateMark?: boolean }>(
+        '.deck-component-root div[style*="height"]'
+      );
+      if (!bar) return { marked: false, height: -1 };
+      if (shouldMark) bar.liveUpdateMark = true;
+      return { marked: bar.liveUpdateMark === true, height: bar.getBoundingClientRect().height };
+    }, mark);
+  }
+
+  test('a text edit keeps the component mounted without replaying its entrance, and navigating replays it', async ({
+    page,
+  }) => {
+    await page.goto(`${baseURL}/#${latencyChartSlide}`);
+    await expect(page.locator('.slide-content')).toContainText('What It Bought Us');
+    // The bars grow in over half a second; let them finish.
+    await expect.poll(async () => (await firstBar(page)).height, { timeout: 5000 }).toBeGreaterThan(100);
+    await page.waitForTimeout(700);
+    const settled = await firstBar(page, true);
+
+    fs.writeFileSync(deckPath, deckSource.replace('## What It Bought Us', '## What It Bought Us, Measured'));
+    await expect(page.locator('.slide-content')).toContainText('What It Bought Us, Measured', { timeout: 10000 });
+
+    // Sampled over a few frames, well inside the bars' entrance duration.
+    for (let sample = 0; sample < 5; sample++) {
+      const bar = await firstBar(page);
+      expect(bar.marked).toBe(true);
+      expect(bar.height).toBeCloseTo(settled.height, 0);
+      await page.waitForTimeout(40);
+    }
+
+    // The next slide shows the same component file: it mounts fresh and grows in.
+    await page.keyboard.press('ArrowRight');
+    await page.keyboard.press('ArrowRight');
+    await expect(page).toHaveURL(new RegExp(`#${latencyChartSlide + 1}$`));
+    await expect.poll(async () => (await firstBar(page)).marked, { timeout: 3000 }).toBe(false);
+    expect((await firstBar(page)).height).toBeLessThan(settled.height / 2);
   });
 });
