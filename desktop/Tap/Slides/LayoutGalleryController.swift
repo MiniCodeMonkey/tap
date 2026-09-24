@@ -47,6 +47,11 @@ final class LayoutGalleryController: NSObject, NSCollectionViewDataSource, NSCol
                 nameLabel.topAnchor.constraint(equalTo: schematic.bottomAnchor, constant: 6),
                 nameLabel.centerXAnchor.constraint(equalTo: root.centerXAnchor),
             ])
+            // A cell is picked by a click, so it is a button to
+            // accessibility, as a thumbnail is; the identifier and the
+            // label the data source sets reach the tree through it.
+            root.setAccessibilityElement(true)
+            root.setAccessibilityRole(.button)
             view = root
         }
 

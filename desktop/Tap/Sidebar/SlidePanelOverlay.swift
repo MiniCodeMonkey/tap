@@ -44,6 +44,10 @@ final class SlidePanelOverlay: NSView {
             backing.trailingAnchor.constraint(equalTo: trailingAnchor),
             backing.bottomAnchor.constraint(equalTo: bottomAnchor),
         ])
+        // An element of its own, a group, so the identifier reaches the
+        // accessibility tree; the hosted panel stays inside it.
+        setAccessibilityElement(true)
+        setAccessibilityRole(.group)
         setAccessibilityIdentifier("slide-panel-overlay")
         isHidden = true
     }
