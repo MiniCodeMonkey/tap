@@ -44,3 +44,25 @@ D2 | 12-menus-and-shortcuts.feature | Shortcuts do not clash with the presentati
 D2 | 13-performance.feature | Typing
 D2 | 13-performance.feature | Preview update
 D2 | 13-performance.feature | The preview updates in place
+D3 | 02-slide-structure.feature | The current slide
+D3 | 02-slide-structure.feature | Sidebar and cursor are linked
+D3 | 03-slide-operations.feature | Move one slide by dragging in the sidebar
+D3 | 03-slide-operations.feature | Move with the keyboard
+D3 | 03-slide-operations.feature | Move several slides
+D3 | 03-slide-operations.feature | Move by dragging a box header in the editor
+D3 | 03-slide-operations.feature | Insert a slide with the last layout
+D3 | 03-slide-operations.feature | Pick a layout from the gallery
+D3 | 03-slide-operations.feature | Duplicate and delete
+D3 | 03-slide-operations.feature | Skip a slide
+D3 | 03-slide-operations.feature | Frontmatter never moves
+D3 | 03-slide-operations.feature | Drag slides to another deck
+D3 | 04-preview.feature | Split layout
+D3 | 04-preview.feature | Peek at the slide panel
+D3 | 04-preview.feature | Pin the slide panel
+D3 | 04-preview.feature | Step through a custom component
+D3 | 12-menus-and-shortcuts.feature | Slide menu
+D3 | 12-menus-and-shortcuts.feature | Context menu on a slide
+D3 | 12-menus-and-shortcuts.feature | VoiceOver
+D3 | 13-performance.feature | The current thumbnail follows the preview
+D3 | 13-performance.feature | Thumbnails
+D3 | 13-performance.feature | Reopen
