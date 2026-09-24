@@ -17,6 +17,13 @@ settings:
     TAP_VERSION: "0.0.0"
     MARKETING_VERSION: "$(TAP_VERSION)"
     CURRENT_PROJECT_VERSION: "1"
+  configs:
+    Benchmark:
+      ENABLE_TESTABILITY: YES
+configs:
+  Debug: debug
+  Release: release
+  Benchmark: release
 packages:
   TapDesktopCore:
     path: TapDesktopCore
@@ -91,6 +98,19 @@ targets:
       base:
         GENERATE_INFOPLIST_FILE: YES
         PRODUCT_BUNDLE_IDENTIFIER: io.geocod.tap.desktop.uitests
+  TapBenchmarks:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: TapBenchmarks
+        excludes:
+          - Decks/**
+    dependencies:
+      - target: Tap
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: io.geocod.tap.desktop.benchmarks
 schemes:
   Tap:
     build:
@@ -103,3 +123,12 @@ schemes:
       targets:
         - TapTests
         - TapUITests
+  TapBenchmarks:
+    build:
+      targets:
+        Tap: all
+        TapBenchmarks: [test]
+    test:
+      config: Benchmark
+      targets:
+        - TapBenchmarks
