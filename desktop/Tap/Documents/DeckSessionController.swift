@@ -184,10 +184,7 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
         // for a file that no longer exists no longer describes anything
         // real, and both bars competing for the same space would be worse
         // than either alone.
-        if hasDiskConflict {
-            hasDiskConflict = false
-            editorViewController.hideBar(.changedOnDisk)
-        }
+        clearDiskConflict()
         editorViewController.showBar(DocumentBarView(
             kind: .deleted, message: "\(name) was deleted.", detail: "Your text is still here, unsaved.",
             buttons: [("Save As…", { [weak self] in self?.document?.saveAs(nil) })]))
@@ -195,11 +192,16 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
         refreshEditedState()
     }
 
-    /// The deck has a new path: renamed, moved, or saved after a deletion.
+    /// The deck has a new path: renamed, moved, saved after a deletion, or
+    /// saved with Save As. A shown conflict described the old path, so it
+    /// is cleared: a Save As has just written the person's text to the new
+    /// file, and a rename keeps the file's modification date, which
+    /// `checkAutosavingSafety` still compares before the next autosave.
     func deckMoved(to url: URL) {
         session.restartsWhenExited = true
         pausedMessage = nil
         editorViewController.hideBar(.deleted)
+        clearDiskConflict()
         fileWatcher.watch(url)
         session.changeDeck(to: url)
         switch session.state {
@@ -240,10 +242,7 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
             // The disk has converged on text the app already knows about:
             // whatever conflict was showing no longer describes reality, and
             // must not survive to block a later autosave.
-            if hasDiskConflict {
-                hasDiskConflict = false
-                editorViewController.hideBar(.changedOnDisk)
-            }
+            clearDiskConflict()
             return
         }
         if document.isDocumentEdited {
@@ -251,6 +250,12 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
         } else {
             loadDiskVersion()
         }
+    }
+
+    /// Takes down the changed on disk bar and the conflict it stands for.
+    private func clearDiskConflict() {
+        hasDiskConflict = false
+        editorViewController.hideBar(.changedOnDisk)
     }
 
     private func showDiskConflict(name: String) {
@@ -267,8 +272,7 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
     /// the moment the replacement lands, rather than staying edited until
     /// the next autosave.
     func loadDiskVersion() {
-        hasDiskConflict = false
-        editorViewController.hideBar(.changedOnDisk)
+        clearDiskConflict()
         guard let document, let url = document.fileURL,
               let disk = try? String(contentsOf: url, encoding: .utf8) else { return }
         let slideNumber = editor.currentBoxIndex.map { editor.boxes[$0].slide.number }
@@ -288,8 +292,7 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
 
     /// Writes the buffer over the changed file.
     func keepMine() {
-        hasDiskConflict = false
-        editorViewController.hideBar(.changedOnDisk)
+        clearDiskConflict()
         document?.overwriteDisk { [weak self] error in
             if let error { self?.session.log.append("Keep Mine could not save: \(error.localizedDescription)", source: .app) }
         }
@@ -329,11 +332,16 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
         session.stop()
     }
 
-    /// NSDocument read the file again, for Revert To.
+    /// NSDocument read the file again, for Revert To or a Versions restore.
+    /// The editor now holds the text that was read, so a shown conflict no
+    /// longer describes anything, and the edited state is recomputed
+    /// whether or not the editor's text had to change.
     func documentDidRead(_ text: String) {
-        guard text != editor.string else { return }
-        editor.load(text: text)
-        sourceSync.textDidChange()
+        clearDiskConflict()
+        if text != editor.string {
+            editor.load(text: text)
+            sourceSync.textDidChange()
+        }
         refreshEditedState()
     }
 

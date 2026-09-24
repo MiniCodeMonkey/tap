@@ -304,6 +304,70 @@ final class ExternalChangeTests: HostedTestCase {
         XCTAssertNil(document.windowControllers.first?.window?.attachedSheet, "no alert")
     }
 
+    /// Opens seven-slides.md, types " mine" on slide 6, writes " theirs" in
+    /// its place from outside, and waits for the changed on disk bar.
+    private func openDeckWithAShownConflict() async throws -> (deck: URL, document: DeckDocument, mine: String, theirs: String) {
+        let deck = try Fixtures.copyDeck("seven-slides.md")
+        let document = try await openDeck(deck)
+        try await waitForBoxes(document, count: 7)
+        _ = try await waitForRunningTap(document)
+        let controller = try XCTUnwrap(document.sessionController)
+        controller.editor.moveCursor(toSlide: 5)
+        controller.editor.insertText(" mine", replacementRange: NSRange(location: NSNotFound, length: 0))
+        let mine = controller.editor.string
+        let theirs = mine.replacingOccurrences(of: " mine", with: " theirs")
+        try writeOutside(theirs, to: deck)
+        try await waitUntil(timeout: 10, "the changed on disk bar") { controller.editorViewController.bar(.changedOnDisk) != nil }
+        XCTAssertTrue(controller.hasDiskConflict)
+        return (deck, document, mine, theirs)
+    }
+
+    /// Asks the real close entry point whether the document may close, and
+    /// returns its answer.
+    private func canClose(_ document: DeckDocument) async throws -> Bool {
+        let spy = CanCloseSpy()
+        document.canClose(withDelegate: spy, shouldClose: #selector(CanCloseSpy.document(_:shouldClose:contextInfo:)), contextInfo: nil)
+        try await waitUntil(timeout: 5, "the close answer") { spy.results.count == 1 }
+        return spy.results[0]
+    }
+
+    /// A Save As while a conflict is showing writes the person's text to
+    /// the new file and leaves the other program's text in the old one.
+    /// The conflict described the old file, so it is gone, and the window
+    /// can close.
+    func testSaveAsDuringAConflictClearsIt() async throws {
+        let (deck, document, mine, theirs) = try await openDeckWithAShownConflict()
+        let controller = try XCTUnwrap(document.sessionController)
+
+        let moved = deck.deletingLastPathComponent().appendingPathComponent("moved.md")
+        try await document.save(to: moved, ofType: "net.daringfireball.markdown", for: .saveAsOperation)
+        XCTAssertEqual(document.fileURL.map(FilePaths.canonical), FilePaths.canonical(moved))
+        XCTAssertEqual(try String(contentsOf: deck, encoding: .utf8), theirs, "the other program's text stays in the old file")
+        XCTAssertEqual(try String(contentsOf: moved, encoding: .utf8), mine, "the new file holds the person's text")
+        XCTAssertFalse(controller.hasDiskConflict, "the conflict described the old file")
+        XCTAssertNil(controller.editorViewController.bar(.changedOnDisk), "the bar naming the old file is gone")
+        XCTAssertFalse(document.isDocumentEdited, "the new file holds the editor's text")
+        let mayClose = try await canClose(document)
+        XCTAssertTrue(mayClose, "the window can close")
+    }
+
+    /// Revert To Last Saved while a conflict is showing loads the file into
+    /// the editor, which resolves the conflict the same way Load Disk
+    /// Version does. A Versions restore reads the file through the same
+    /// path.
+    func testRevertDuringAConflictClearsIt() async throws {
+        let (deck, document, _, theirs) = try await openDeckWithAShownConflict()
+        let controller = try XCTUnwrap(document.sessionController)
+
+        try document.revert(toContentsOf: deck, ofType: "net.daringfireball.markdown")
+        XCTAssertEqual(controller.editor.string, theirs, "the editor holds the file's text")
+        XCTAssertFalse(document.isDocumentEdited)
+        XCTAssertFalse(controller.hasDiskConflict, "the editor now matches the file")
+        XCTAssertNil(controller.editorViewController.bar(.changedOnDisk), "the bar is gone")
+        let mayClose = try await canClose(document)
+        XCTAssertTrue(mayClose, "the window can close")
+    }
+
     /// The re-review's repro: tap crashes, the disk version loads while it
     /// is down (so nothing can answer it yet), an unrelated edit lands, and
     /// only then does tap restart and answer. The one answer that finally
