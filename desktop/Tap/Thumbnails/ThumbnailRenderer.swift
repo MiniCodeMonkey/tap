@@ -96,6 +96,11 @@ final class ThumbnailRenderer: NSObject, WKScriptMessageHandler, WKNavigationDel
     private var lastReady: ReadyPayload?
     private var waitingForSlide: Int?
     private var readyWaiter: CheckedContinuation<ReadyPayload?, Never>?
+    /// The load the current ready waiter belongs to. A failure reported
+    /// for any other load, such as an earlier one a newer load replaced,
+    /// can arrive while this waiter waits; only a failure of this
+    /// navigation ends the wait.
+    private(set) var currentNavigation: WKNavigation?
     private var timeoutWork: DispatchWorkItem?
     /// Per slide: failed attempts in a row for the job currently counted,
     /// when it may be tried again, and flat captures in a row for the job
@@ -241,12 +246,12 @@ final class ThumbnailRenderer: NSObject, WKScriptMessageHandler, WKNavigationDel
             lastReady = nil
             guard let url = printURL(slide: number) else { return .retry }
             navigationCount += 1
-            webView.load(URLRequest(url: url))
+            currentNavigation = webView.load(URLRequest(url: url))
         } else if lastReady?.slide != number {
             lastReady = nil
             guard let url = printURL(slide: number) else { return .retry }
             navigationCount += 1
-            webView.load(URLRequest(url: url))
+            currentNavigation = webView.load(URLRequest(url: url))
         }
         let attempt = failureCount(for: job)
         phase = .waitingForReady(slide: number, attempt: attempt)
@@ -360,10 +365,16 @@ final class ThumbnailRenderer: NSObject, WKScriptMessageHandler, WKNavigationDel
     }
 
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
-        resumeWaiter(with: nil)
+        navigationFailed(navigation)
     }
 
     func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+        navigationFailed(navigation)
+    }
+
+    /// Only a failure of the load the waiter belongs to ends its wait.
+    private func navigationFailed(_ navigation: WKNavigation?) {
+        guard let navigation, navigation === currentNavigation else { return }
         resumeWaiter(with: nil)
     }
 

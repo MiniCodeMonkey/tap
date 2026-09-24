@@ -287,6 +287,62 @@ final class ThumbnailRendererTests: HostedTestCase {
         XCTAssertEqual(renderer.phase, .idle, "the loop finished its work and stopped")
     }
 
+    /// A failure reported for a navigation other than the waiting
+    /// attempt's own, such as an earlier load a newer one replaced, must
+    /// leave the wait alone. The report is delivered here the way WebKit
+    /// delivers one, on the main queue, once the first attempt is waiting.
+    func testAnotherNavigationsFailureDoesNotEndTheWait() async throws {
+        let document = try await openDeck(try Fixtures.copyDeck("plain.md"))
+        try await waitForBoxes(document, count: 1)
+        let (renderer, _, summary) = try await makeRenderer(for: document)
+        // A real navigation that is not the renderer's: WebKit hands out
+        // navigations only from a load.
+        let otherWebView = WKWebView()
+        let otherNavigation = try XCTUnwrap(otherWebView.load(URLRequest(url: try XCTUnwrap(URL(string: "about:blank")))))
+        var attemptsSeen: [Int] = []
+        renderer.readyTimeoutForAttempt = { [weak renderer] attempt in
+            attemptsSeen.append(attempt)
+            if attempt == 0 {
+                DispatchQueue.main.async {
+                    guard let renderer else { return }
+                    renderer.webView(renderer.webView, didFailProvisionalNavigation: otherNavigation, withError: URLError(.cancelled))
+                }
+            }
+            return 15
+        }
+        var images: [Int] = []
+        renderer.onImage = { job, _, _ in images.append(job.slideNumber) }
+        renderer.setWork(jobs(for: summary), revision: summary.revision, visible: [1], current: 1)
+        try await waitForRenderer(renderer, timeout: 30, "the slide") { images == [1] }
+        XCTAssertEqual(attemptsSeen, [0], "the first attempt waited for its own page's ready")
+        XCTAssertEqual(renderer.navigationCount, 1, "no reload: the other navigation's failure did not count against this one")
+    }
+
+    /// The waiting attempt's own navigation failing still ends the wait at
+    /// once, rather than at the ready timeout.
+    func testTheWaitingNavigationsFailureEndsTheWait() async throws {
+        let document = try await openDeck(try Fixtures.copyDeck("plain.md"))
+        try await waitForBoxes(document, count: 1)
+        let (renderer, _, summary) = try await makeRenderer(for: document)
+        var attemptsSeen: [Int] = []
+        renderer.readyTimeoutForAttempt = { [weak renderer] attempt in
+            attemptsSeen.append(attempt)
+            if attempt == 0 {
+                DispatchQueue.main.async {
+                    guard let renderer else { return }
+                    renderer.webView(renderer.webView, didFail: renderer.currentNavigation, withError: URLError(.cancelled))
+                }
+            }
+            return 15
+        }
+        var images: [Int] = []
+        renderer.onImage = { job, _, _ in images.append(job.slideNumber) }
+        renderer.setWork(jobs(for: summary), revision: summary.revision, visible: [1], current: 1)
+        try await waitForRenderer(renderer, timeout: 30, "the slide") { images == [1] }
+        XCTAssertEqual(attemptsSeen, [0, 1], "the failure ended the first attempt, and a second one rendered")
+        XCTAssertEqual(renderer.navigationCount, 2)
+    }
+
     /// The failure count belongs to the job it was counted for, the same
     /// rule as the flat-capture count: a slide edited after two failed
     /// attempts starts its new content's first attempt at the first-attempt
