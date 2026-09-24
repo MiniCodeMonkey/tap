@@ -37,13 +37,12 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
         window?.makeFirstResponder(sessionController.editor)
     }
 
-    // The editor's undo manager is the document's own, so an undo or redo
-    // typed here posts on the same manager DeckSessionController observes
-    // to keep the document's edited flag in step (see
-    // DeckSessionController.init).
-    func windowWillReturnUndoManager(_ window: NSWindow) -> UndoManager? {
-        sessionController.document?.undoManager
-    }
+    // NSWindowController's own default windowWillReturnUndoManager already
+    // returns self.document?.undoManager, since this controller is the
+    // window's delegate. That already makes the editor's undo manager the
+    // document's own, which DeckSessionController relies on to observe undo
+    // and redo (see DeckSessionController.init); an explicit override here
+    // was tried and confirmed by mutation to change nothing.
 
     static let previewItemIdentifier = NSToolbarItem.Identifier("preview")
 

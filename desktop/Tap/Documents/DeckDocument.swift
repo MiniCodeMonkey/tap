@@ -2,8 +2,17 @@ import AppKit
 
 /// A deck: a plain .md file, which stays the only source of truth.
 final class DeckDocument: NSDocument {
-    /// The text as last read from disk.
+    /// The deck file's content, as last read from disk (open, revert) or as
+    /// last written by a save that wrote the deck's own file. This is what
+    /// the session controller compares the editor's text against to decide
+    /// whether the document is edited.
     private(set) var text = ""
+    /// The exact text handed to `data(ofType:)` for the save now in flight,
+    /// taken at the moment the data was produced. A person may keep typing
+    /// while the save writes to disk, so this, not the editor's text when
+    /// the save finishes, is what `text` becomes on success: it is what
+    /// actually reached the file.
+    private var savedSnapshot: String?
     private(set) var sessionController: DeckSessionController?
 
     override class var autosavesInPlace: Bool { true }
@@ -36,7 +45,11 @@ final class DeckDocument: NSDocument {
     }
 
     override nonisolated func data(ofType typeName: String) throws -> Data {
-        MainActor.assumeIsolated { Data((self.sessionController?.editor.string ?? self.text).utf8) }
+        MainActor.assumeIsolated {
+            let snapshot = self.sessionController?.editor.string ?? self.text
+            self.savedSnapshot = snapshot
+            return Data(snapshot.utf8)
+        }
     }
 
     override nonisolated func close() {
@@ -54,6 +67,9 @@ final class DeckDocument: NSDocument {
                        completionHandler: @escaping (Error?) -> Void) {
         super.save(to: url, ofType: typeName, for: saveOperation) { [weak self] error in
             if error == nil, let self, let fileURL = self.fileURL, FilePaths.same(fileURL, url) {
+                if let snapshot = self.savedSnapshot {
+                    self.text = snapshot
+                }
                 self.sessionController?.documentDidSave()
             }
             completionHandler(error)
