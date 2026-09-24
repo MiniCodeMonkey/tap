@@ -738,15 +738,26 @@ func runDevServer(options serverOptions) (err error) {
 						fmt.Fprintf(appLog, "Error reading %s: %v\n", absFile, readErr)
 						return
 					}
-					if readErr == nil && !changed {
-						// The app's own save, or a write of what tap
-						// already shows.
+					if readErr == nil && !changed && !deckSource.buffering() {
+						// The app's own save: it dropped the buffer and
+						// rendered the file before this fired, so disk
+						// already matches what tap remembers and the app
+						// already knows it saved. Silent here.
 						return
 					}
+					// Any other write that lands on the buffer still needs
+					// telling, even one whose text happens to equal it (a
+					// coincidence, or another tool echoing the buffer back):
+					// the file and the buffer now agree, which is the app's
+					// own signal to clear its edited flag, and tap staying
+					// buffered gives it nothing else to learn that from.
 					emitFileChanged(absFile, nil)
-					if readErr != nil || deckSource.buffering() {
-						// The buffer wins until the app says it saved, and
-						// a deleted deck leaves the last render on screen.
+					if readErr != nil || deckSource.buffering() || !changed {
+						// The buffer wins until the app says it saved, a
+						// deleted deck leaves the last render on screen,
+						// and a write matching what tap already renders
+						// needs no new render, only the notification just
+						// sent above.
 						return
 					}
 					if renderErr := renderCurrentForApp(appCtx, false); renderErr != nil {
