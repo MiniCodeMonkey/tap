@@ -738,7 +738,7 @@ func runDevServer(options serverOptions) (err error) {
 						fmt.Fprintf(appLog, "Error reading %s: %v\n", absFile, readErr)
 						return
 					}
-					if readErr == nil && !changed && !deckSource.buffering() {
+					if readErr == nil && suppressFileChanged(changed, deckSource.buffering()) {
 						// The app's own save: it dropped the buffer and
 						// rendered the file before this fired, so disk
 						// already matches what tap remembers and the app
