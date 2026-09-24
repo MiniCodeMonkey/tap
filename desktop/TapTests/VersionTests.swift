@@ -9,4 +9,16 @@ final class VersionTests: HostedTestCase {
         XCTAssertNotNil(tapVersion)
         XCTAssertEqual(tapVersion, appVersion)
     }
+
+    /// A session's environment closure does not keep its AppEnvironment
+    /// alive, and falls back to the app's own environment once it is gone.
+    func testSessionEnvironmentFallsBackOnceTheAppEnvironmentIsGone() async throws {
+        var environment: AppEnvironment? = AppEnvironment()
+        let configuration = try XCTUnwrap(environment).sessionConfiguration()
+        weak var released = environment
+        environment = nil
+        XCTAssertNil(released, "the configuration does not retain its AppEnvironment")
+        let variables = await configuration.environment()
+        XCTAssertEqual(variables, ProcessInfo.processInfo.environment)
+    }
 }

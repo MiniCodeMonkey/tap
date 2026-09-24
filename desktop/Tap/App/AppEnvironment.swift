@@ -45,8 +45,13 @@ final class AppEnvironment {
         return variables
     }
 
+    /// The environment closure falls back to the app's own process
+    /// environment if this object is gone, which is what tap would inherit
+    /// from the app anyway.
     func sessionConfiguration() -> TapSession.Configuration {
-        TapSession.Configuration(executableURL: tapExecutableURL, environment: { [unowned self] in await self.tapEnvironment() })
+        TapSession.Configuration(executableURL: tapExecutableURL, environment: { [weak self] in
+            await self?.tapEnvironment() ?? ProcessInfo.processInfo.environment
+        })
     }
 
     /// Runs `tap --version` and returns the version from "tap version <version>".
