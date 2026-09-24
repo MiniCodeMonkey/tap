@@ -87,9 +87,14 @@ public struct SlideRangeTracker: Sendable {
     /// operation replaced, and replaying the operation's whole-region edit
     /// onto it would stretch and collapse the boxes. The operation sends
     /// the new text right after, and that answer is the next one applied.
+    /// Raising `earliestLiveGeneration` here already keeps every edit
+    /// logged before this call out of every future replay: `generation`
+    /// only rises, so no send begun from here on can ever name a
+    /// generation that old edit was logged at. It is dropped by `apply`'s
+    /// own cleanup the next time a send succeeds, so there is nothing left
+    /// for this call to clear.
     public mutating func adopt(_ newBoxes: [SlideBox]) {
         boxes = Self.separated(newBoxes)
-        editLog = []
         generation += 1
         earliestLiveGeneration = generation
     }
