@@ -10,7 +10,8 @@ final class SlideDragUITests: UITestCase {
         let five = panel.otherElements["thumbnail-5"].firstMatch
         let three = panel.otherElements["thumbnail-3"].firstMatch
         XCTAssertTrue(five.waitForExistence(timeout: 30))
-        five.click(forDuration: 0.4, thenDragTo: three.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.05)))
+        five.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+            .click(forDuration: 0.4, thenDragTo: three.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.05)))
         let editor = application.textViews["editor"]
         XCTAssertTrue(editor.waitForExistence(timeout: 5))
         let text = try XCTUnwrap(editor.value as? String)
