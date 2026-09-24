@@ -116,6 +116,16 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
         let text: String
     }
     private var pendingCursorLoad: PendingCursorLoad?
+    /// The text tap last answered for and the editor applied. A slide
+    /// operation runs only when the editor's text equals this.
+    private(set) var lastAppliedText: String?
+    /// The boxes an undo or redo's text belongs to, left by
+    /// `registerBoxAdoption` for `undoOrRedoDidChangeText` to adopt once the
+    /// whole undo group has run.
+    var pendingBoxAdoption: [SlideBox]?
+    /// How long a queued operation waits for tap to confirm the text before
+    /// giving up. Tests shorten it.
+    var confirmationTimeout: TimeInterval = 3
     /// Runs after each slide list is applied to the editor.
     var onSlideListApplied: ((SlideList) -> Void)?
     var onHubMessage: ((HubMessage) -> Void)?
@@ -649,6 +659,7 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
         // longer holds. Nothing it says about this deck is true any more,
         // so none of what follows runs on it.
         guard editor.apply(list, sentText: sentText, sentGeneration: generation) else { return }
+        lastAppliedText = sentText
         slidePanel.setSlides(editor.boxes.map(\.slide))
         thumbnails.deckChanged()
         if let first = list.errors.first {
@@ -724,6 +735,12 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
     /// typing pause: an undo or redo is one discrete action, with no
     /// further keystrokes to wait for.
     private func undoOrRedoDidChangeText() {
+        // A slide operation's undo or redo leaves the boxes it belongs to
+        // here; adopting them first makes the send below the next answer applied.
+        if let boxes = pendingBoxAdoption {
+            pendingBoxAdoption = nil
+            adoptPendingBoxes(boxes)
+        }
         refreshEditedState()
         Task { await sourceSync.sendNow() }
     }

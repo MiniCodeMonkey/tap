@@ -133,6 +133,19 @@ final class EditorTextView: NSTextView {
         return true
     }
 
+    /// Adopts boxes the app built by permuting tap's own ranges, right
+    /// after a slide operation changed the text, so the boxes and the
+    /// sidebar show the new order without waiting for tap's next answer.
+    func adoptBoxes(_ newBoxes: [SlideBox]) {
+        tracker.adopt(newBoxes)
+        textStorage?.beginEditing()
+        restyle(NSRange(location: 0, length: (string as NSString).length))
+        textStorage?.endEditing()
+        updateHiddenLayout()
+        updateCurrentBox()
+        needsDisplay = true
+    }
+
     func header(forBoxAt index: Int) -> BoxHeader {
         BoxHeader(slide: boxes[index].slide)
     }

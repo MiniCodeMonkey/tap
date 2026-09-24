@@ -223,4 +223,16 @@ final class ThumbnailTests: HostedTestCase {
         XCTAssertEqual(controller.thumbnails.renderer.renderCount, 0, "still within the 0.5 s pause window, nothing should have rendered despite a full queue")
         try await waitUntil(timeout: 20, "a render once the pause window passes") { controller.thumbnails.renderer.renderCount > 0 }
     }
+
+    func testDuplicatedSlidesShareOneThumbnail() async throws {
+        let document = try await openDeckAndWaitForPreview(try Fixtures.copyDeck("seven-slides.md"))
+        let controller = try XCTUnwrap(document.sessionController)
+        try await waitForThumbnails(document, count: 7)
+        let renders = controller.thumbnails.renderer.renderCount
+        XCTAssertEqual(controller.perform(.duplicate(numbers: [3])), .applied)
+        try await waitForBoxes(document, count: 8)
+        try await waitForThumbnails(document, count: 8)
+        XCTAssertEqual(controller.thumbnails.key(forSlide: 3), controller.thumbnails.key(forSlide: 4))
+        XCTAssertEqual(controller.thumbnails.renderer.renderCount, renders, "a copy shares the original's image")
+    }
 }
