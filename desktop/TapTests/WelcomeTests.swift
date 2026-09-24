@@ -40,26 +40,17 @@ final class WelcomeTests: HostedTestCase {
         let deck = try Fixtures.copyAppFixture()
         _ = try await openDeckAndWaitForPreview(deck)
         try await waitUntil(timeout: 10, "the recent thumbnail") { AppEnvironment.shared.recentThumbnailStore.imageData(for: deck) != nil }
-        let data = try XCTUnwrap(AppEnvironment.shared.recentThumbnailStore.imageData(for: deck))
-        let image = try XCTUnwrap(NSBitmapImageRep(data: data))
-        let width = image.pixelsWide
-        let height = image.pixelsHigh
-        var colors = Set<[Int]>()
-        let points = [(0, 0), (width - 1, 0), (0, height - 1), (width - 1, height - 1), (width / 2, height / 2)]
-        for (x, y) in points {
-            guard let color = image.colorAt(x: x, y: y) else { continue }
-            colors.insert([Int(color.redComponent * 255), Int(color.greenComponent * 255), Int(color.blueComponent * 255)])
-        }
-        XCTAssertGreaterThan(colors.count, 1, "a blank capture reads back as a single flat colour")
+        try assertRecordedThumbnailIsNotBlank(for: deck)
     }
 
-    /// A preview collapsed out of the split view never paints, so a ready
-    /// signal that arrives while it is hidden must not be captured. A later
-    /// ready for slide 1, once the pane is shown again, does get recorded;
-    /// that second ready is delivered directly (rather than waited for
-    /// organically) because tap only ever reports ready again when the
-    /// slide, step or revision actually changes, which merely showing the
-    /// pane does not do on its own.
+    /// A preview collapsed out of the split view is
+    /// `webView.isHiddenOrHasHiddenAncestor`, so a ready signal that arrives
+    /// while it is hidden must not be captured. A later ready for slide 1,
+    /// once the pane is shown again, does get recorded; that second ready is
+    /// delivered directly (rather than waited for organically) because tap
+    /// only ever reports ready again when the slide, step or revision
+    /// actually changes, which merely showing the pane does not do on its
+    /// own.
     func testHiddenPreviewDoesNotRecordAThumbnailUntilShown() async throws {
         let deck = try Fixtures.copyAppFixture()
         let document = try await openDeck(deck)
@@ -78,5 +69,71 @@ final class WelcomeTests: HostedTestCase {
         let controller = try XCTUnwrap(document.sessionController)
         controller.previewViewController.onReady?(ReadyPayload(revision: "shown-again", slide: 1, step: 0))
         try await waitUntil(timeout: 10, "the recent thumbnail") { AppEnvironment.shared.recentThumbnailStore.imageData(for: deck) != nil }
+        try assertRecordedThumbnailIsNotBlank(for: deck)
+    }
+
+    /// `isVisible` alone does not tell a window on screen apart from one
+    /// completely covered by another opaque window: both read true. A
+    /// second, borderless, opaque window placed exactly over the deck
+    /// window is what actually clears the occlusion state's visible bit
+    /// while `isVisible` stays true, so this is the one scenario that
+    /// exercises `occlusionState.contains(.visible)` on its own, independent
+    /// of `isVisible`. A ready signal that arrives while covered must not be
+    /// captured; removing the cover and delivering a later ready for slide 1
+    /// directly (tap does not refire ready on its own for an unchanged
+    /// slide) does get recorded, and is a real render, not a blank capture.
+    func testOccludedPreviewDoesNotRecordAThumbnailUntilVisible() async throws {
+        let deck = try Fixtures.copyAppFixture()
+        let document = try await openDeck(deck)
+        let window = try XCTUnwrap(document.windowControllers.first?.window)
+
+        let cover = NSWindow(contentRect: window.frame, styleMask: [.borderless], backing: .buffered, defer: false)
+        cover.isOpaque = true
+        cover.backgroundColor = .black
+        cover.level = .floating
+        cover.hasShadow = false
+        // Without this, closing the window also releases it (AppKit's
+        // default for a window with no window controller), and this local
+        // still holding it then double-releases it when the test scope
+        // ends: confirmed by a crash (EXC_BAD_ACCESS in objc_release during
+        // XCTest's post-test deallocation check) with this line absent.
+        cover.isReleasedWhenClosed = false
+        defer {
+            cover.orderOut(nil)
+            cover.close()
+        }
+        cover.setFrame(window.frame, display: true)
+        cover.orderFrontRegardless()
+        try await waitUntil(timeout: 5, "the deck window to report occluded") { !window.occlusionState.contains(.visible) }
+        XCTAssertTrue(window.isVisible, "the deck window is still on screen, only covered")
+
+        _ = try await waitForRunningTap(document)
+        // Long enough for a ready signal to have arrived while covered, on a
+        // deck this small.
+        try await Task.sleep(nanoseconds: 1_000_000_000)
+        XCTAssertNil(AppEnvironment.shared.recentThumbnailStore.imageData(for: deck), "an occluded window must not be captured")
+
+        cover.orderOut(nil)
+        try await waitUntil(timeout: 5, "the deck window to report visible again") { window.occlusionState.contains(.visible) }
+        let controller = try XCTUnwrap(document.sessionController)
+        controller.previewViewController.onReady?(ReadyPayload(revision: "visible-again", slide: 1, step: 0))
+        try await waitUntil(timeout: 10, "the recent thumbnail") { AppEnvironment.shared.recentThumbnailStore.imageData(for: deck) != nil }
+        try assertRecordedThumbnailIsNotBlank(for: deck)
+    }
+
+    /// Samples the corners and the center of a recorded thumbnail and fails
+    /// if they are all the same colour, the signature of a blank capture.
+    private func assertRecordedThumbnailIsNotBlank(for deck: URL, file: StaticString = #filePath, line: UInt = #line) throws {
+        let data = try XCTUnwrap(AppEnvironment.shared.recentThumbnailStore.imageData(for: deck), file: file, line: line)
+        let image = try XCTUnwrap(NSBitmapImageRep(data: data), file: file, line: line)
+        let width = image.pixelsWide
+        let height = image.pixelsHigh
+        var colors = Set<[Int]>()
+        let points = [(0, 0), (width - 1, 0), (0, height - 1), (width - 1, height - 1), (width / 2, height / 2)]
+        for (x, y) in points {
+            guard let color = image.colorAt(x: x, y: y) else { continue }
+            colors.insert([Int(color.redComponent * 255), Int(color.greenComponent * 255), Int(color.blueComponent * 255)])
+        }
+        XCTAssertGreaterThan(colors.count, 1, "a blank capture reads back as a single flat colour", file: file, line: line)
     }
 }

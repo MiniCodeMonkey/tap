@@ -345,58 +345,49 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
     /// welcome window. Ready fires on a settled DOM even for a hidden or
     /// covered page (WebKit runs no animation frames there, so nothing ever
     /// paints), and a snapshot of an unpainted page comes back blank, so
-    /// this checks three things before ever touching the web view: the
-    /// window showing the preview is on screen (visible and its occlusion
-    /// state says so, not just minimized or on another space), the preview
-    /// pane itself is not hidden or collapsed (docked) or, if detached into
-    /// its own window (`DeckWindowController.showPreviewInWindow`), that
-    /// window is the one checked instead, and the page's own `document.
-    /// hidden` confirms it agrees. Failing any of that does not mark this
-    /// deck as recorded, so a later ready for slide 1, once the window or
-    /// pane is actually shown, gets another chance.
+    /// this checks the same native facts WebKit itself uses to decide
+    /// `document.hidden`, rather than asking the page (the app drives the
+    /// preview only through the WebSocket `slide` message and reads it only
+    /// through the `tapReady` handler; it never runs script in the page).
+    /// `webView.isHiddenOrHasHiddenAncestor` is true the moment a collapsed
+    /// preview pane (`MainSplitViewController.setPreviewHidden(true)`) hides
+    /// its split item's view, so this one check covers both the docked and
+    /// the detached case (`DeckWindowController.showPreviewInWindow`):
+    /// `webView.window` is always whichever window currently holds it.
+    /// `occlusionState.contains(.visible)` alone, without a separate
+    /// `isVisible` check, is what tells a window on screen apart from one
+    /// completely covered by another opaque window (both read `isVisible ==
+    /// true`); a window that is not visible at all, such as one ordered out
+    /// or miniaturized, is never observed to report the visible occlusion
+    /// bit either, so an additional `isVisible` check adds no coverage a
+    /// mutation could kill (confirmed directly: dropping it changed no
+    /// test's outcome). Failing either of these does not mark this deck as
+    /// recorded, so a later ready for slide 1, once the window or pane is
+    /// actually shown, gets another chance.
     private func previewDidRender(_ payload: ReadyPayload) {
         guard payload.slide == 1, !recordedRecentThumbnail, !isCapturingRecentThumbnail,
               let deck = document?.fileURL else { return }
-        guard let windowController = document?.windowControllers.first as? DeckWindowController else { return }
-        let previewWindow: NSWindow?
-        if let detached = windowController.previewWindowController {
-            previewWindow = detached.window
-        } else if !windowController.splitViewController.isPreviewHidden {
-            previewWindow = windowController.window
-        } else {
-            previewWindow = nil
-        }
-        guard let previewWindow, previewWindow.isVisible, previewWindow.occlusionState.contains(.visible) else { return }
+        let webView = previewViewController.webView
+        guard !webView.isHiddenOrHasHiddenAncestor,
+              let previewWindow = webView.window,
+              previewWindow.occlusionState.contains(.visible) else { return }
         isCapturingRecentThumbnail = true
-        Task { @MainActor [weak self] in
-            guard let self else { return }
-            defer { self.isCapturingRecentThumbnail = false }
-            // document.hidden bridges as an NSNumber (0 or 1), not a Swift
-            // Bool, so it is read as a number rather than compared as text.
-            // A script failure or an unexpected result is treated as hidden,
-            // the safer side: nothing is captured rather than risking a
-            // blank snapshot.
-            let hiddenResult = try? await self.previewViewController.webView.evaluateJavaScript("document.hidden")
-            let isHidden = (hiddenResult as? Bool) ?? (hiddenResult as? NSNumber)?.boolValue ?? true
-            guard !isHidden else { return }
-            await self.captureThumbnail(for: deck)
-        }
+        captureThumbnail(for: deck)
     }
 
     /// Snapshots the preview's web view and, on success only, saves it as
     /// this deck's recent thumbnail and marks the deck recorded.
-    private func captureThumbnail(for deck: URL) async {
+    private func captureThumbnail(for deck: URL) {
         let configuration = WKSnapshotConfiguration()
         configuration.snapshotWidth = 320
-        let image: NSImage? = await withCheckedContinuation { continuation in
-            previewViewController.webView.takeSnapshot(with: configuration) { image, _ in
-                continuation.resume(returning: image)
-            }
+        previewViewController.webView.takeSnapshot(with: configuration) { [weak self] image, _ in
+            guard let self else { return }
+            self.isCapturingRecentThumbnail = false
+            guard let image, let tiff = image.tiffRepresentation,
+                  let png = NSBitmapImageRep(data: tiff)?.representation(using: .png, properties: [:]) else { return }
+            self.recordedRecentThumbnail = true
+            try? AppEnvironment.shared.recentThumbnailStore.save(png, for: deck)
         }
-        guard let image, let tiff = image.tiffRepresentation,
-              let png = NSBitmapImageRep(data: tiff)?.representation(using: .png, properties: [:]) else { return }
-        recordedRecentThumbnail = true
-        try? AppEnvironment.shared.recentThumbnailStore.save(png, for: deck)
     }
 
     // internal, not private, so a test can hand it a deliberately stale or
