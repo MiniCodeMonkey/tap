@@ -858,7 +858,7 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
         if !slidePanel.selectedNumbers.contains(number) {
             slidePanel.click(slide: number, extendingSelection: false)
         }
-        return SlideContextMenu.build(for: selectedSlideNumbers, target: windowController)
+        return SlideContextMenu.build(for: selectedSlideNumbers, target: windowController, showsTextShortcuts: false)
     }
 
     func editor(_ editor: EditorTextView, currentSlideDidChange index: Int?) {
