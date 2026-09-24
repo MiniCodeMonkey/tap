@@ -11,7 +11,7 @@ import { useEffect, useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, render } from '@testing-library/react';
 import { Slide } from './Slide';
-import type { Slide as SlideData, SlideComponentInfo } from '$lib/types';
+import type { CodeBlock, Slide as SlideData, SlideComponentInfo } from '$lib/types';
 
 const componentMounts: string[] = [];
 
@@ -23,6 +23,21 @@ function FakeDeckComponent({ source, props }: { source: string; props: Record<st
 	}, [mountedSource]);
 	return <p data-testid="deck-component">{`${source} ${String(props.label)}`}</p>;
 }
+
+const liveCodeMounts: string[] = [];
+
+function FakeLiveCodeBlock({ codeBlock }: { codeBlock: CodeBlock }) {
+	// Runs once per mount, never for a prop change on a mounted instance.
+	const [mountedCode] = useState(codeBlock.code);
+	useEffect(() => {
+		liveCodeMounts.push(mountedCode);
+	}, [mountedCode]);
+	return <p data-testid="live-code">{codeBlock.code}</p>;
+}
+
+vi.mock('./LiveCodeBlock', () => ({
+	LiveCodeBlock: (props: { codeBlock: CodeBlock }) => <FakeLiveCodeBlock {...props} />
+}));
 
 vi.mock('./DeckComponent', () => ({
 	DeckComponent: (props: { source: string; props: Record<string, unknown> }) => <FakeDeckComponent {...props} />
@@ -91,6 +106,14 @@ function makeComponentSlide(index: number, heading: string, components: SlideCom
 	return { ...makeSlide(index, `<h2>${heading}</h2>${placeholders}`), components };
 }
 
+function makeLiveCodeSlide(index: number, heading: string, code: string): SlideData {
+	const block = `<pre><code class="language-bash" data-code-block-index="0">${code}</code></pre>`;
+	return {
+		...makeSlide(index, `<h2>${heading}</h2>${block}`),
+		codeBlocks: [{ language: 'bash', code, driver: 'shell', block: 1 }]
+	};
+}
+
 function chart(label: string, source = './charts/LatencyDrop.jsx'): SlideComponentInfo {
 	return { index: 0, source, url: '/components/LatencyDrop-abc.js', props: { label } };
 }
@@ -102,6 +125,7 @@ function renderSlide(slide: SlideData, fragmentIndex = -1) {
 beforeEach(() => {
 	animations = [];
 	componentMounts.length = 0;
+	liveCodeMounts.length = 0;
 	Element.prototype.getAnimations = fakeGetAnimations;
 });
 
@@ -208,5 +232,41 @@ describe('Slide entrance animations', () => {
 
 		expect(container.querySelector('[data-testid="deck-component"]')?.textContent).toBe('./charts/Other.jsx p95');
 		expect(componentMounts).toEqual(['./charts/LatencyDrop.jsx', './charts/Other.jsx']);
+	});
+
+	it('keeps a live code block mounted, with its output, through a live update elsewhere on its slide', async () => {
+		const { container, rerender } = render(renderSlide(makeLiveCodeSlide(2, 'Demo', 'echo hi')));
+		expect(liveCodeMounts).toEqual(['echo hi']);
+		const wrapper = container.querySelector('.live-code-block-portal');
+
+		await act(async () => {
+			rerender(renderSlide(makeLiveCodeSlide(2, 'Demo edited', 'echo hi')));
+		});
+
+		expect(container.querySelector('h2')?.textContent).toBe('Demo edited');
+		expect(container.querySelector('.live-code-block-portal')).toBe(wrapper);
+		expect(container.querySelectorAll('[data-testid="live-code"]')).toHaveLength(1);
+		expect(liveCodeMounts).toEqual(['echo hi']);
+	});
+
+	it('mounts a live code block fresh when a live update changes its code', async () => {
+		const { container, rerender } = render(renderSlide(makeLiveCodeSlide(2, 'Demo', 'echo hi')));
+
+		await act(async () => {
+			rerender(renderSlide(makeLiveCodeSlide(2, 'Demo', 'echo bye')));
+		});
+
+		expect(container.querySelector('[data-testid="live-code"]')?.textContent).toBe('echo bye');
+		expect(liveCodeMounts).toEqual(['echo hi', 'echo bye']);
+	});
+
+	it('mounts a live code block fresh when navigating, even to an identical block', async () => {
+		const { rerender } = render(renderSlide(makeLiveCodeSlide(2, 'Demo', 'echo hi')));
+
+		await act(async () => {
+			rerender(renderSlide(makeLiveCodeSlide(3, 'Demo again', 'echo hi')));
+		});
+
+		expect(liveCodeMounts).toEqual(['echo hi', 'echo hi']);
 	});
 });

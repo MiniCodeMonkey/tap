@@ -77,13 +77,23 @@ export interface UseRichBlocksOptions {
  * DOM position pairs the wrong block with the wrong `<pre>` whenever that
  * happens. The search is scoped to `.slot` descendants so DOM a
  * deck-supplied component owns outside of a slot is never touched.
+ *
+ * `reusable` holds the wrappers of the slide's previous content, by block
+ * identity (see liveCodeBlockIdentity), when this is a live update to the
+ * same slide. A block with the same identity gets its old, detached wrapper
+ * back instead of a new one, so the LiveCodeBlock portaled into it stays
+ * mounted and keeps its output, rather than mounting again empty.
  */
-function mountRichCodeBlocks(element: HTMLElement, codeBlocks: CodeBlock[]): LiveCodeBlockPortal[] {
-	if (codeBlocks.length === 0) {
-		return [];
-	}
-
+function mountRichCodeBlocks(
+	element: HTMLElement,
+	codeBlocks: CodeBlock[],
+	reusable: Map<string, HTMLElement> | null
+): { portals: LiveCodeBlockPortal[]; wrappers: Map<string, HTMLElement> } {
 	const portals: LiveCodeBlockPortal[] = [];
+	const wrappers = new Map<string, HTMLElement>();
+	if (codeBlocks.length === 0) {
+		return { portals, wrappers };
+	}
 
 	codeBlocks.forEach((codeBlock, index) => {
 		const code = element.querySelector<HTMLElement>(
@@ -101,13 +111,33 @@ function mountRichCodeBlocks(element: HTMLElement, codeBlocks: CodeBlock[]): Liv
 
 		if (!codeBlock.driver) return;
 
-		const wrapper = document.createElement('div');
-		wrapper.className = 'live-code-block-portal';
+		const identity = liveCodeBlockIdentity(codeBlock, index);
+		const mounted = reusable?.get(identity);
+		let wrapper: HTMLElement;
+		if (mounted && !mounted.isConnected) {
+			wrapper = mounted;
+		} else {
+			wrapper = document.createElement('div');
+			wrapper.className = 'live-code-block-portal';
+		}
 		pre.replaceWith(wrapper);
+		wrappers.set(identity, wrapper);
 		portals.push({ key: `live-code-${index}`, codeBlock, container: wrapper });
 	});
 
-	return portals;
+	return { portals, wrappers };
+}
+
+/**
+ * What makes a live code block the same block across a live update: its
+ * position among the slide's code blocks and its own source (language,
+ * driver, connection and code). The same block keeps its mounted
+ * LiveCodeBlock, and with it the output of its last run. Any change to the
+ * block's own source is a different block: its old output would describe
+ * code that is no longer on the slide, so it mounts fresh, with no output.
+ */
+function liveCodeBlockIdentity(codeBlock: CodeBlock, index: number): string {
+	return [index, codeBlock.language, codeBlock.driver ?? '', codeBlock.connection ?? '', codeBlock.code].join('\u0000');
 }
 
 /**
@@ -230,6 +260,41 @@ export function useRichBlocks(
 		onDeckComponentsChange?.(portals);
 	}, [elementRef, slide, onDeckComponentsChange]);
 
+	// The wrapper each live code block is mounted in, by its identity on the
+	// slide on screen (see liveCodeBlockIdentity), for a live update to hand
+	// back to the same block.
+	const liveCodeWrappersRef = useRef<{ slideIndex: number; wrappers: Map<string, HTMLElement> } | null>(null);
+
+	// Swaps each live code block's `<pre>` for the wrapper its LiveCodeBlock
+	// is portaled into, and removes a map block's `<pre>`, once per slot
+	// content. A layout effect, before the highlighting pass below and before
+	// the browser paints: a live update to the slide on screen replaces the
+	// slot's HTML, and each unchanged block gets its old wrapper back in the
+	// same frame, so it keeps its mounted LiveCodeBlock and its output instead
+	// of flashing the raw code and mounting again empty. Navigating to another
+	// slide starts with no wrappers to reuse, so its blocks mount fresh. The
+	// marker skips a repeat run over the same content (React StrictMode runs
+	// layout effects twice), which would find no `<pre>` left to replace.
+	useLayoutEffect(() => {
+		if (!active && !printMode) {
+			return;
+		}
+		const element = elementRef.current;
+		if (!element) {
+			return;
+		}
+		const signature = slotContentSignature(slide);
+		if (element.dataset.liveCodeProcessed === signature) {
+			return;
+		}
+		element.dataset.liveCodeProcessed = signature;
+		const previous = liveCodeWrappersRef.current;
+		const reusable = previous && previous.slideIndex === slide.index ? previous.wrappers : null;
+		const { portals, wrappers } = mountRichCodeBlocks(element, slide.codeBlocks ?? [], reusable);
+		liveCodeWrappersRef.current = { slideIndex: slide.index, wrappers };
+		onLiveCodeBlocksChange?.(portals);
+	}, [elementRef, slide, active, printMode, onLiveCodeBlocksChange]);
+
 	useEffect(() => {
 		if (!active && !printMode) {
 			return;
@@ -245,14 +310,13 @@ export function useRichBlocks(
 		// the first pass has had a chance to mutate the DOM. React StrictMode
 		// runs this effect, its cleanup, then the effect again in the same
 		// tick; `isNewContent` is computed once per run from the DOM marker, so
-		// only the first of those two runs mounts portals and starts
-		// highlighting. The async chain below is deliberately left running to
-		// completion rather than aborted on cleanup: aborting it here would
-		// leave StrictMode content permanently unhighlighted, because the
-		// second run sees the marker already claimed and skips doing the
-		// work itself. A theme change (mermaidOverrides changing with the
-		// same slide content) still needs mermaid re-rendered, but must not
-		// re-mount live code block portals or redo work that already happened
+		// only the first of those two runs starts highlighting. The async
+		// chain below is deliberately left running to completion rather than
+		// aborted on cleanup: aborting it here would leave StrictMode content
+		// permanently unhighlighted, because the second run sees the marker
+		// already claimed and skips doing the work itself. A theme change
+		// (mermaidOverrides changing with the same slide content) still needs
+		// mermaid re-rendered, but must not redo work that already happened
 		// for this content: Shiki's highlighted output follows a theme change
 		// on its own, through the `--shiki-*` CSS variables it was highlighted
 		// with.
@@ -268,11 +332,7 @@ export function useRichBlocks(
 
 		void (async () => {
 			try {
-				if (isNewContent) {
-					const portals = mountRichCodeBlocks(element, slide.codeBlocks ?? []);
-					onLiveCodeBlocksChange?.(portals);
-				}
-				// The chain above is deliberately left running to completion
+				// The chain below is deliberately left running to completion
 				// rather than aborted (see the comment above), which matters for
 				// StrictMode's synthetic cleanup, where the element stays
 				// connected. It does not matter for a slide actually unmounted by
