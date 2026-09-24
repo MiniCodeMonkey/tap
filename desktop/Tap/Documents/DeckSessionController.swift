@@ -880,8 +880,6 @@ extension DeckSessionController: SlidePanelDelegate {
         withPanelDrivingTheCursor { editor.moveCursor(toSlide: index) }
     }
 
-    func slidePanelSelectionDidChange(_ panel: SlidePanelViewController) {}
-
     func slidePanel(_ panel: SlidePanelViewController, payloadForSlides numbers: [Int]) -> SlideDragPayload? {
         dragPayload(forSlides: numbers)
     }

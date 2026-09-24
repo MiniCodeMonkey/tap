@@ -10,7 +10,6 @@ final class ThumbnailController {
     let cache: ThumbnailCache
     weak var panel: SlidePanelViewController?
     var currentSlideNumber: () -> Int? = { nil }
-    var onImagesChanged: (() -> Void)?
     var client: TapClient? {
         didSet {
             renderer.configure(client: client)
@@ -120,7 +119,6 @@ final class ThumbnailController {
         jobs = pending
         panel?.setUpdating(updating)
         handToRenderer(jobs, revision: summary.revision, visible: panel?.visibleNumbers ?? [], current: currentSlideNumber())
-        onImagesChanged?()
     }
 
     private func rendered(_ job: ThumbnailRenderer.Job, image: NSImage, png: Data) {
@@ -130,6 +128,5 @@ final class ThumbnailController {
         for (index, key) in keys.enumerated() where key == job.key {
             panel?.setImage(image, forSlide: index + 1)
         }
-        onImagesChanged?()
     }
 }

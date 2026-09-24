@@ -277,11 +277,6 @@ extension DeckSessionController {
         }
     }
 
-    @discardableResult
-    func insertSlides(markdowns: [String], beforeNumber: Int?, completion: ((SlideEditResult?) -> Void)? = nil) -> SlideOperationOutcome {
-        perform(.insert(markdowns: markdowns, beforeNumber: beforeNumber), completion: completion)
-    }
-
     /// Inserts one slide after `selection` (none, or the last slide: at
     /// the end) and selects its first slot, so typing replaces the
     /// placeholder. The selection and the focus wait for the insert to

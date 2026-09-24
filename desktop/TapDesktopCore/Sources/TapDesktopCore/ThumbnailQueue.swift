@@ -33,10 +33,6 @@ public struct ThumbnailQueue: Equatable, Sendable {
         pending = ordered + sortedRest
     }
 
-    public mutating func next() -> Int? {
-        pending.isEmpty ? nil : pending.removeFirst()
-    }
-
     public mutating func requeue(_ number: Int) {
         pending.removeAll { $0 == number }
         pending.append(number)

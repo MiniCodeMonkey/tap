@@ -16,16 +16,14 @@ final class ThumbnailQueueTests: XCTestCase {
         XCTAssertEqual(queue.pending, [1, 2, 3], "nothing to anchor on: deck order")
     }
 
-    func testNextAndRequeue() {
+    func testRequeueAndRemove() {
         var queue = ThumbnailQueue()
         queue.replace(with: [1, 2, 3], visible: [1], current: nil)
-        XCTAssertEqual(queue.next(), 1)
         queue.requeue(1)
         XCTAssertEqual(queue.pending, [2, 3, 1])
-        XCTAssertEqual(queue.next(), 2)
-        XCTAssertEqual(queue.next(), 3)
-        XCTAssertEqual(queue.next(), 1)
-        XCTAssertNil(queue.next())
+        queue.remove(2)
+        queue.remove(3)
+        queue.remove(1)
         XCTAssertTrue(queue.isEmpty)
         queue.replace(with: [4, 5], visible: [], current: nil)
         queue.remove(4)

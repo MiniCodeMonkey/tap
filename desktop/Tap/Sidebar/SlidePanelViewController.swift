@@ -3,7 +3,6 @@ import AppKit
 protocol SlidePanelDelegate: AnyObject {
     /// A click on a thumbnail. `selection` is the panel's selection after the click.
     func slidePanel(_ panel: SlidePanelViewController, didClickSlide number: Int, selection: [Int])
-    func slidePanelSelectionDidChange(_ panel: SlidePanelViewController)
     func slidePanel(_ panel: SlidePanelViewController, payloadForSlides numbers: [Int]) -> SlideDragPayload?
     func slidePanel(_ panel: SlidePanelViewController, acceptDrop payload: SlideDragPayload, beforeNumber: Int?, isMove: Bool) -> Bool
     func slidePanelContextMenu(_ panel: SlidePanelViewController) -> NSMenu?
@@ -259,11 +258,6 @@ final class SlidePanelViewController: NSViewController, NSCollectionViewDataSour
         guard clicked > 0 else { return }
         if NSApp.currentEvent?.modifierFlags.contains(.shift) != true { selectionAnchor = clicked }
         delegate?.slidePanel(self, didClickSlide: clicked, selection: selectedNumbers)
-    }
-
-    func collectionView(_ collectionView: NSCollectionView, didDeselectItemsAt indexPaths: Set<IndexPath>) {
-        guard !isSyncingSelection else { return }
-        delegate?.slidePanelSelectionDidChange(self)
     }
 
     // MARK: Drag and drop
