@@ -15,9 +15,9 @@ final class EditorHeaderDragTests: HostedTestCase {
         return (document, controller, editor)
     }
 
-    func mouseEvent(_ type: NSEvent.EventType, at point: NSPoint, in editor: EditorTextView) throws -> NSEvent {
+    func mouseEvent(_ type: NSEvent.EventType, at point: NSPoint, in editor: EditorTextView, modifierFlags: NSEvent.ModifierFlags = []) throws -> NSEvent {
         let window = try XCTUnwrap(editor.window)
-        return try XCTUnwrap(NSEvent.mouseEvent(with: type, location: editor.convert(point, to: nil), modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+        return try XCTUnwrap(NSEvent.mouseEvent(with: type, location: editor.convert(point, to: nil), modifierFlags: modifierFlags, timestamp: ProcessInfo.processInfo.systemUptime,
                                                 windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1))
     }
 
@@ -87,6 +87,28 @@ final class EditorHeaderDragTests: HostedTestCase {
         XCTAssertEqual(editor.draggingUpdated(otherInfo), .move, "otherwise a move, as in the sidebar")
         editor.draggingExited(otherInfo)
         XCTAssertNil(editor.dropIndicatorBeforeNumber)
+    }
+
+    /// Control-click is a context menu click (Task 15's) and Shift-click
+    /// extends the selection; neither starts a header drag.
+    func testModifiedClicksDoNotStartAHeaderDrag() async throws {
+        let (_, _, editor) = try await openOpsLaidOut()
+        let header5 = try XCTUnwrap(editor.headerRect(forBoxAt: 4))
+        var started: [SlideDragPayload] = []
+        editor.headerDragStarter = { payload, _, _ in started.append(payload) }
+        let down = NSPoint(x: header5.midX, y: header5.midY)
+
+        NSApp.postEvent(try mouseEvent(.leftMouseDragged, at: NSPoint(x: down.x + 12, y: down.y), in: editor), atStart: false)
+        NSApp.postEvent(try mouseEvent(.leftMouseUp, at: down, in: editor), atStart: false)
+        editor.mouseDown(with: try mouseEvent(.leftMouseDown, at: down, in: editor, modifierFlags: .control))
+        XCTAssertTrue(started.isEmpty, "a Control-click never starts a drag")
+        NSApp.discardEvents(matching: [.leftMouseDragged, .leftMouseUp], before: nil)
+
+        NSApp.postEvent(try mouseEvent(.leftMouseDragged, at: NSPoint(x: down.x + 12, y: down.y), in: editor), atStart: false)
+        NSApp.postEvent(try mouseEvent(.leftMouseUp, at: down, in: editor), atStart: false)
+        editor.mouseDown(with: try mouseEvent(.leftMouseDown, at: down, in: editor, modifierFlags: .shift))
+        XCTAssertTrue(started.isEmpty, "a Shift-click never starts a drag")
+        NSApp.discardEvents(matching: [.leftMouseDragged, .leftMouseUp], before: nil)
     }
 
     func testTheDropIndicatorHasALabel() async throws {

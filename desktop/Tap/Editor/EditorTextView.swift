@@ -529,7 +529,10 @@ final class EditorTextView: NSTextView {
     /// click, handled as any click in the text.
     override func mouseDown(with event: NSEvent) {
         let point = convert(event.locationInWindow, from: nil)
-        guard let index = boxIndex(forHeaderAt: point), let window,
+        // A Control-click is a context menu click (Task 15's), and a
+        // Shift-click extends the selection; neither starts a header drag.
+        guard !event.modifierFlags.contains(.control), !event.modifierFlags.contains(.shift),
+              let index = boxIndex(forHeaderAt: point), let window,
               let payload = editorDelegate?.editor(self, payloadForHeaderDragOfBoxAt: index) else {
             super.mouseDown(with: event)
             return
