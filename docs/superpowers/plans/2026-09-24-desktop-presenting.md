@@ -247,7 +247,7 @@ Add to `TapSessionTests.swift`:
         // FakeTap.ready reads stdin until it closes and never acts on quit.
         tap.quit(timeout: 0.3)
         try await waitUntil(timeout: 5) { tap.state == .stopped }
-        XCTAssertTrue(tap.log.text.contains("did not quit within 0 seconds"))
+        XCTAssertTrue(tap.log.text.contains("did not quit within 0.3 seconds"))
     }
 
     func testQuitBeforeTheProcessExistsStopsAtOnce() {
@@ -540,7 +540,7 @@ In `start()`, add `quitRequested = false` and `quitWork?.cancel()` as the first 
         let deadline = DispatchWorkItem { [weak self, weak process] in
             MainActor.assumeIsolated {
                 guard let self, let process, self.process === process else { return }
-                self.log.append("tap did not quit within \(Int(timeout)) seconds", source: .app)
+                self.log.append("tap did not quit within \(String(format: "%.1f", timeout)) seconds", source: .app)
                 process.stop()
             }
         }
@@ -2690,11 +2690,16 @@ final class PresentPopoverController: NSObject, NSPopoverDelegate {
         recordHint.textColor = .secondaryLabelColor
         phoneRemoteCheckbox.target = self
         phoneRemoteCheckbox.action = #selector(phoneRemoteChanged(_:))
+        // A disclosure button draws its triangle and no title; the label beside it says Advanced.
         advancedButton.bezelStyle = .disclosure
         advancedButton.setButtonType(.pushOnPushOff)
-        advancedButton.title = "Advanced"
+        advancedButton.title = ""
         advancedButton.target = self
         advancedButton.action = #selector(advancedPressed(_:))
+        advancedButton.setAccessibilityLabel("Advanced")
+        let advancedRow = NSStackView(views: [advancedButton, NSTextField(labelWithString: "Advanced")])
+        advancedRow.orientation = .horizontal
+        advancedRow.spacing = 4
         passwordField.placeholderString = "None"
         passwordField.setAccessibilityIdentifier("presenter-password")
         tunnelHint.font = .systemFont(ofSize: 11)
@@ -2725,7 +2730,7 @@ final class PresentPopoverController: NSObject, NSPopoverDelegate {
         let buttons = NSStackView(views: [NSView(), rehearseButton, startButton])
         buttons.orientation = .horizontal
         let stack = NSStackView(views: [arrangementView, singleDisplayLabel, swapButton, startRow, recordCheckbox, recordHint,
-                                        phoneRemoteCheckbox, advancedButton, advancedStack, buttons])
+                                        phoneRemoteCheckbox, advancedRow, advancedStack, buttons])
         stack.orientation = .vertical
         stack.alignment = .leading
         stack.spacing = 10
@@ -3559,8 +3564,6 @@ Add at the end of the file:
 final class PresentationContentView: NSView {
     var onMouseMoved: ((NSPoint) -> Void)?
     private var trackingArea: NSTrackingArea?
-
-    override var isFlipped: Bool { false }
 
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
@@ -4817,8 +4820,13 @@ Replace `startPresenting(_:)` with:
     func startPresenting(_ options: PresentationOptions) {
         let hint = AppEnvironment.shared.focusHint
         guard hint.hasBeenShown, focusHintSheet == nil else {
-            guard let window, focusHintSheet == nil else { return }
+            guard focusHintSheet == nil else { return }
             hint.markShown()
+            guard let window else {
+                // No window to hang a sheet on: the hint is skipped, never a reason not to present.
+                sessionController.presentation.start(options)
+                return
+            }
             let sheet = QuestionSheet.focusHint()
             focusHintSheet = sheet
             window.beginSheet(sheet) { [weak self] response in
@@ -4940,7 +4948,9 @@ final class PresentingFailureTests: PresentingTestCase {
         let deck = try XCTUnwrap(document.fileURL)
         let presentation = controller.presentation
         // An unsaved edit, and another program's change on disk: the app refuses to save over it.
-        controller.editor.insertText("# Mine\n\n", replacementRange: NSRange(location: 0, length: 0))
+        let end = (controller.editor.string as NSString).range(of: "# One").upperBound
+        controller.editor.setSelectedRange(NSRange(location: end, length: 0))
+        controller.editor.insertText(" mine", replacementRange: NSRange(location: NSNotFound, length: 0))
         try "# Theirs\n".write(to: deck, atomically: true, encoding: .utf8)
         controller.diskChanged()
         XCTAssertTrue(controller.hasDiskConflict)
@@ -5000,14 +5010,24 @@ final class PresentingFailureTests: PresentingTestCase {
     }
 
     func testATalkEndsWhenTapPresentKeepsDying() async throws {
-        AppEnvironment.shared.presentExecutableURL = try FakeTapScripts.crashing()
+        AppEnvironment.shared.presentExecutableURL = try FakeTapScripts.readyAndWaiting()
         let (_, controller) = try await openDeckForPresenting()
         let presentation = controller.presentation
-        presentation.start(PresentationOptions(mode: .play, startSlide: 1))
+        // The talk is on (the windows show after the fallback, since the fake has no pages) when tap starts dying.
+        try await startPresenting(controller, PresentationOptions(mode: .play, startSlide: 1))
+        for _ in 0..<3 {
+            try await waitUntil(timeout: 10, "a running tap present or the end") {
+                if case .failed = presentation.state { return true }
+                return presentation.session?.processIdentifier != nil
+            }
+            guard let pid = presentation.session?.processIdentifier else { break }
+            kill(pid, SIGKILL)
+            try await waitUntil(timeout: 10, "the killed process to be gone") { presentation.session?.processIdentifier != pid }
+        }
         try await waitUntil(timeout: 30, "the talk to fail") { if case .failed = presentation.state { return true } else { return false } }
         guard case .failed(let message) = presentation.state else { return XCTFail() }
         XCTAssertTrue(message.contains("tap exited 3 times in 30 seconds"), message)
-        XCTAssertTrue(message.contains("panic: runtime error"), "tap's last output is in the message")
+        XCTAssertTrue(presentation.failedAfterShowing)
         XCTAssertNil(presentation.audienceWindow)
         XCTAssertNil(presentation.presenterWindow)
         XCTAssertFalse(presentation.sleepAssertion.isHeld)
@@ -5039,9 +5059,12 @@ In `PresentationController.swift`, add stored properties after `countedAsPresent
     private(set) var lastErrorMessage: String?
     /// The log of a talk that failed, so Window > Tap Log still shows it.
     private(set) var lastTalkLog: TapLog?
+    /// True when the failure came after the windows had been shown: the
+    /// talk stopped, rather than never ran.
+    private(set) var failedAfterShowing = false
 ```
 
-In `start(_:)`, add `lastErrorMessage = nil` and `lastTalkLog = nil` after `tunnelError = nil`. In `handle(_:)`, add before `default`:
+In `start(_:)`, add `lastErrorMessage = nil`, `lastTalkLog = nil` and `failedAfterShowing = false` after `tunnelError = nil`. In `handle(_:)`, add before `default`:
 
 ```swift
         case .error(let payload):
@@ -5057,6 +5080,7 @@ In `start(_:)`, add `lastErrorMessage = nil` and `lastTalkLog = nil` after `tunn
     private func endBecauseTapFailed(lastOutput: [String]) {
         let summary = session?.restartPolicy.exitSummary ?? "tap present exited"
         let reason = lastErrorMessage ?? lastOutput.last
+        failedAfterShowing = windowsShown
         fail(reason.map { "\(summary). \($0)" } ?? summary)
         onStopped?(lastSlide)
     }
@@ -5078,7 +5102,7 @@ and in the `onStateChange` closure (Task 10), add `if state == .starting { self?
     /// The talk could not start, or tap present stopped restarting. A bar
     /// on the deck window says why, with the talk's log a click away.
     func showTalkFailed(_ message: String) {
-        let stopped = message.hasPrefix(sessionController.presentation.session?.restartPolicy.exitSummary ?? "tap exited")
+        let stopped = sessionController.presentation.failedAfterShowing
         let bar = DocumentBarView(
             kind: .talkFailed,
             message: stopped ? "The talk stopped." : "The talk could not run.",
@@ -5093,8 +5117,6 @@ and in the `onStateChange` closure (Task 10), add `if state == .starting { self?
         sessionController.editorViewController.showBar(bar)
     }
 ```
-
-`session` is nil by the time `onFailed` runs, so `stopped` reads the policy's summary from a fresh `RestartPolicy().exitSummary` instead: replace the first line with `let stopped = message.hasPrefix(RestartPolicy().exitSummary)`.
 
 - [ ] **Step 4: Run the tests one at a time**
 
