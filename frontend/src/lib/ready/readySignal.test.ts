@@ -1,7 +1,16 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { BLOCKER_TIMEOUT_MS, holdReady, resetBlockersForTests, type ReadyBlockerKind } from './blockers';
 import type { ReadyProbes } from './probes';
-import { MAX_SETTLE_ROUNDS, READY_EVENT, clearReady, startReadyCycle, waitUntilSettled, type ReadyPayload } from './readySignal';
+import {
+	MAX_SETTLE_ROUNDS,
+	READY_EVENT,
+	clearReady,
+	markReadyOff,
+	readyState,
+	startReadyCycle,
+	waitUntilSettled,
+	type ReadyPayload
+} from './readySignal';
 
 interface ReadyWindow {
 	__tapReady?: ReadyPayload | null;
@@ -227,5 +236,95 @@ describe('waitUntilSettled', () => {
 
 		await expect(settledPromise).resolves.toBe(true);
 		expect(fonts).toHaveBeenCalledTimes(2);
+	});
+});
+
+describe('__tapReadyState', () => {
+	function pageState(): Record<string, unknown> {
+		return JSON.parse(JSON.stringify((window as unknown as { __tapReadyState: unknown }).__tapReadyState)) as Record<
+			string,
+			unknown
+		>;
+	}
+
+	it('names the wait a stalled cycle is in, and for how long', async () => {
+		const paint = deferred();
+		startReadyCycle(payload, instantProbes({ paint: () => paint.promise }));
+		await settleMicrotasks();
+
+		const state = pageState();
+		expect(state.phase).toBe('paint');
+		expect(state.round).toBe(1);
+		expect(typeof state.phaseMs).toBe('number');
+		expect(typeof state.pageMs).toBe('number');
+
+		paint.resolve();
+		await vi.waitFor(() => expect(pageState().phase).toBe('published'));
+	});
+
+	it('lists the blockers held while a cycle waits for them', async () => {
+		const release = holdReady('component');
+		startReadyCycle(payload, instantProbes());
+		await settleMicrotasks();
+
+		const state = pageState();
+		expect(state.phase).toBe('blockers');
+		expect(state.blockers).toEqual([{ kind: 'component', heldMs: expect.any(Number) }]);
+		release();
+	});
+
+	it('says why a round did not settle', async () => {
+		let rounds = 0;
+		const settledNow = (): boolean => {
+			rounds += 1;
+			return rounds > 1;
+		};
+		const paint = vi.fn(() => (paint.mock.calls.length === 2 ? new Promise<void>(() => {}) : Promise.resolve()));
+		startReadyCycle(payload, instantProbes({ settledNow, paint }));
+		await settleMicrotasks();
+
+		expect(pageState()).toMatchObject({ phase: 'paint', round: 2, unsettled: ['loading'] });
+	});
+
+	it('records a cycle that ran out of rounds as gave-up, not as still waiting', async () => {
+		startReadyCycle(payload, instantProbes({ settledNow: () => false }));
+		await vi.waitFor(() => expect(pageState().phase).toBe('gave-up'));
+		expect(pageState().round).toBe(MAX_SETTLE_ROUNDS);
+		expect(readyValue()).toBeNull();
+	});
+
+	it('counts publishes and whether the message handler was there to receive them', async () => {
+		const before = readyState().published;
+		const postMessage = vi.fn();
+		(window as unknown as { webkit: unknown }).webkit = { messageHandlers: { tapReady: { postMessage } } };
+		startReadyCycle(payload, instantProbes());
+		await vi.waitFor(() => expect(pageState().phase).toBe('published'));
+
+		expect(pageState()).toMatchObject({ published: before + 1, posted: true });
+		expect(postMessage).toHaveBeenCalledTimes(1);
+	});
+
+	it('keeps a cancelled cycle from overwriting the newer one', async () => {
+		const stalled = deferred();
+		startReadyCycle(payload, instantProbes({ images: () => stalled.promise }));
+		await settleMicrotasks();
+		const cycles = readyState().cycles;
+
+		const paint = deferred();
+		startReadyCycle({ ...payload, slide: 3 }, instantProbes({ paint: () => paint.promise }));
+		stalled.resolve();
+		await settleMicrotasks();
+
+		expect(pageState()).toMatchObject({ phase: 'paint', cycles: cycles + 1 });
+	});
+
+	it('reads off while the deck has not loaded, even after a cycle started', async () => {
+		const paint = deferred();
+		startReadyCycle(payload, instantProbes({ paint: () => paint.promise }))();
+		markReadyOff();
+		paint.resolve();
+		await settleMicrotasks();
+
+		expect(pageState().phase).toBe('off');
 	});
 });

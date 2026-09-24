@@ -6,7 +6,7 @@
 
 import { useEffect } from 'react';
 import { createDomProbes } from './probes';
-import { clearReady, startReadyCycle } from './readySignal';
+import { markReadyOff, startReadyCycle } from './readySignal';
 
 export interface ReadySignalState {
 	/** False while the deck is loading or failed to load; the page then reports nothing. */
@@ -39,7 +39,7 @@ export function useReadySignal({
 }: ReadySignalState): void {
 	useEffect(() => {
 		if (!enabled) {
-			clearReady();
+			markReadyOff();
 			return undefined;
 		}
 		return startReadyCycle({ revision, slide, step }, createDomProbes({ includeInfiniteAnimations, requirePaint }));
