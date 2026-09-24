@@ -153,6 +153,7 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
         session.onStateChange = { [weak self] state in self?.sessionStateChanged(state) }
         editor.editorDelegate = self
         slidePanel.delegate = self
+        slidePanel.deckURL = document.fileURL
         editorViewController.hostHiddenView(thumbnails.renderer.webView)
         thumbnails.currentSlideNumber = { [weak self] in self?.currentSlideNumber }
         thumbnails.renderer.isPaused = { [weak self] in
@@ -293,6 +294,7 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
         if hasDiskConflict || hadDiskConflictWhenDeleted { showDiskConflict(name: url.lastPathComponent) }
         hadDiskConflictWhenDeleted = false
         fileWatcher.watch(url)
+        slidePanel.deckURL = url
         if let old = previousDeckURL {
             AppEnvironment.shared.panelState.moveState(from: old, to: url)
         }
@@ -777,4 +779,12 @@ extension DeckSessionController: SlidePanelDelegate {
     }
 
     func slidePanelSelectionDidChange(_ panel: SlidePanelViewController) {}
+
+    func slidePanel(_ panel: SlidePanelViewController, payloadForSlides numbers: [Int]) -> SlideDragPayload? {
+        dragPayload(forSlides: numbers)
+    }
+
+    func slidePanel(_ panel: SlidePanelViewController, acceptDrop payload: SlideDragPayload, beforeNumber: Int?, isMove: Bool) -> Bool {
+        dropSlides(payload: payload, beforeNumber: beforeNumber, isMove: isMove)
+    }
 }

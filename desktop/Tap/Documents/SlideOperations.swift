@@ -199,4 +199,51 @@ extension DeckSessionController {
     func insertSlides(markdowns: [String], beforeNumber: Int?, completion: ((SlideEditResult?) -> Void)? = nil) -> SlideOperationOutcome {
         perform(.insert(markdowns: markdowns, beforeNumber: beforeNumber), completion: completion)
     }
+
+    func dragPayload(forSlides numbers: [Int]) -> SlideDragPayload? {
+        guard let deck = document?.fileURL, !numbers.isEmpty else { return nil }
+        let sorted = numbers.sorted()
+        return SlideDragPayload(deckPath: deck.path, slideNumbers: sorted, markdowns: markdown(forSlides: sorted))
+    }
+
+    /// A drop of slides: a move within this deck; from another deck, an
+    /// insert here and, unless the drop is a copy, a delete there. Each
+    /// deck registers its own undo step (decision 2). The source gives the
+    /// slides up only in the insert's completion, once they are in this
+    /// deck's text: an insert that waits for tap's confirmation and is then
+    /// abandoned (no answer while tap restarts) leaves the source as it was,
+    /// so the slides are never only in an undo stack. The return value says
+    /// whether the drop was taken, applied or queued.
+    @discardableResult
+    func dropSlides(payload: SlideDragPayload, beforeNumber: Int?, isMove: Bool) -> Bool {
+        if let deck = document?.fileURL, payload.comesFrom(deck: deck) {
+            return perform(.move(numbers: payload.slideNumbers, beforeNumber: beforeNumber)).isAccepted
+        }
+        let source = isMove ? Self.document(forDeckPath: payload.deckPath)?.sessionController : nil
+        return perform(.insert(markdowns: payload.markdowns, beforeNumber: beforeNumber)) { [weak self, weak source] result in
+            guard result != nil, let source, source !== self else { return }
+            source.removeMovedSlides(payload)
+        }.isAccepted
+    }
+
+    /// Deletes the slides a drop moved out of this deck, once this deck's
+    /// own text is confirmed, and only while those slides still hold the
+    /// text that was dragged. Slides edited or shifted in the meantime stay,
+    /// with a beep: at worst a move becomes a copy, never a loss.
+    func removeMovedSlides(_ payload: SlideDragPayload) {
+        whenTextIsConfirmed { [weak self] in
+            guard let self else { return }
+            guard self.markdown(forSlides: payload.slideNumbers) == payload.markdowns else {
+                NSSound.beep()
+                return
+            }
+            self.performNow(.delete(numbers: payload.slideNumbers))
+        }
+    }
+
+    static func document(forDeckPath path: String) -> DeckDocument? {
+        let url = URL(fileURLWithPath: path)
+        return NSDocumentController.shared.documents.compactMap { $0 as? DeckDocument }
+            .first { $0.fileURL.map { FilePaths.same($0, url) } ?? false }
+    }
 }

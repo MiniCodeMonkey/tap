@@ -4,6 +4,8 @@ protocol SlidePanelDelegate: AnyObject {
     /// A click on a thumbnail. `selection` is the panel's selection after the click.
     func slidePanel(_ panel: SlidePanelViewController, didClickSlide number: Int, selection: [Int])
     func slidePanelSelectionDidChange(_ panel: SlidePanelViewController)
+    func slidePanel(_ panel: SlidePanelViewController, payloadForSlides numbers: [Int]) -> SlideDragPayload?
+    func slidePanel(_ panel: SlidePanelViewController, acceptDrop payload: SlideDragPayload, beforeNumber: Int?, isMove: Bool) -> Bool
 }
 
 /// The collection view, which remembers which item a click landed on, so
@@ -37,6 +39,12 @@ final class SlidePanelViewController: NSViewController, NSCollectionViewDataSour
     private var isSyncingSelection = false
     /// The slide last clicked without Shift: a Shift-click extends from it.
     private var selectionAnchor: Int?
+    /// The document's file, so a drop can tell a move within this deck from
+    /// one arriving from another. Set by the session controller in `init`
+    /// and again on `deckMoved`.
+    var deckURL: URL?
+    /// Whether Option is held, for a drop into another deck: a test replaces this.
+    var optionHeld: () -> Bool = { NSEvent.modifierFlags.contains(.option) }
 
     override func loadView() {
         let root = NSView()
@@ -57,6 +65,9 @@ final class SlidePanelViewController: NSViewController, NSCollectionViewDataSour
         collectionView.delegate = self
         collectionView.setAccessibilityIdentifier("slide-panel")
         collectionView.setAccessibilityLabel("Slides")
+        collectionView.registerForDraggedTypes([NSPasteboard.PasteboardType(SlideDragPayload.pasteboardType)])
+        collectionView.setDraggingSourceOperationMask([.move, .copy], forLocal: true)
+        collectionView.setDraggingSourceOperationMask([.move, .copy], forLocal: false)
         scrollView.documentView = collectionView
         scrollView.drawsBackground = false
         scrollView.hasVerticalScroller = true
@@ -213,5 +224,107 @@ final class SlidePanelViewController: NSViewController, NSCollectionViewDataSour
     func collectionView(_ collectionView: NSCollectionView, didDeselectItemsAt indexPaths: Set<IndexPath>) {
         guard !isSyncingSelection else { return }
         delegate?.slidePanelSelectionDidChange(self)
+    }
+
+    // MARK: Drag and drop
+
+    /// Where a drop lands and what it does. `proposedIndex` is the gap
+    /// before that item (`count` means after the last). A slide dropped
+    /// onto its own place, inside the dragged block, is refused. A drop
+    /// moves, within the deck and from another deck alike; with Option
+    /// held it copies, as the Finder does.
+    func dropDecision(proposedIndex: Int, payload: SlideDragPayload, deck: URL?, optionHeld: Bool) -> (beforeNumber: Int?, operation: NSDragOperation) {
+        let beforeNumber: Int? = proposedIndex < slides.count ? proposedIndex + 1 : nil
+        let sameDeck = deck.map { payload.comesFrom(deck: $0) } ?? false
+        if sameDeck {
+            let block = payload.slideNumbers.sorted()
+            let before = beforeNumber ?? (slides.count + 1)
+            if let first = block.first, let last = block.last, before >= first, before <= last + 1 {
+                return (beforeNumber, [])
+            }
+            return (beforeNumber, .move)
+        }
+        return (beforeNumber, optionHeld ? .copy : .move)
+    }
+
+    func performDrop(payload: SlideDragPayload, beforeNumber: Int?, isMove: Bool) -> Bool {
+        delegate?.slidePanel(self, acceptDrop: payload, beforeNumber: beforeNumber, isMove: isMove) ?? false
+    }
+
+    private var lastAnnouncedDrop: Int??
+
+    func collectionView(_ collectionView: NSCollectionView, canDragItemsAt indexPaths: Set<IndexPath>, with event: NSEvent) -> Bool {
+        true
+    }
+
+    func collectionView(_ collectionView: NSCollectionView, pasteboardWriterForItemAt indexPath: IndexPath) -> NSPasteboardWriting? {
+        // Every dragged item writes the whole selection's payload; the drop reads the first.
+        let numbers = selectedNumbers.contains(indexPath.item + 1) ? selectedNumbers : [indexPath.item + 1]
+        guard let payload = delegate?.slidePanel(self, payloadForSlides: numbers), let data = try? payload.data() else { return nil }
+        let item = NSPasteboardItem()
+        item.setData(data, forType: NSPasteboard.PasteboardType(SlideDragPayload.pasteboardType))
+        return item
+    }
+
+    func collectionView(_ collectionView: NSCollectionView, draggingSession session: NSDraggingSession, willBeginAt screenPoint: NSPoint,
+                        forItemsAt indexPaths: Set<IndexPath>) {
+        let numbers = selectedNumbers.isEmpty ? indexPaths.map { $0.item + 1 } : selectedNumbers
+        guard let first = numbers.min(), let image = images[first] else { return }
+        let count = numbers.count
+        session.enumerateDraggingItems(options: [], for: collectionView, classes: [NSPasteboardItem.self], searchOptions: [:]) { item, index, stop in
+            item.draggingFrame = NSRect(origin: item.draggingFrame.origin, size: NSSize(width: 164, height: 92))
+            item.imageComponentsProvider = {
+                let picture = NSDraggingImageComponent(key: .icon)
+                picture.contents = image
+                picture.frame = NSRect(x: 0, y: 0, width: 164, height: 92)
+                guard count > 1 else { return [picture] }
+                let badge = NSDraggingImageComponent(key: .label)
+                badge.contents = Self.countBadge("\(count)")
+                badge.frame = NSRect(x: 164 - 13, y: 92 - 13, width: 22, height: 22)
+                return [picture, badge]
+            }
+            // Only the first item carries an image; the others ride along invisibly.
+            if index > 0 { item.imageComponentsProvider = { [] } }
+        }
+    }
+
+    static func countBadge(_ text: String) -> NSImage {
+        NSImage(size: NSSize(width: 22, height: 22), flipped: false) { rect in
+            NSColor.systemRed.setFill()
+            NSBezierPath(ovalIn: rect).fill()
+            let attributes: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 12, weight: .bold), .foregroundColor: NSColor.white]
+            let size = (text as NSString).size(withAttributes: attributes)
+            (text as NSString).draw(at: NSPoint(x: (rect.width - size.width) / 2, y: (rect.height - size.height) / 2), withAttributes: attributes)
+            return true
+        }
+    }
+
+    private func payload(on draggingInfo: NSDraggingInfo) -> SlideDragPayload? {
+        guard let data = draggingInfo.draggingPasteboard.data(forType: NSPasteboard.PasteboardType(SlideDragPayload.pasteboardType)) else { return nil }
+        return SlideDragPayload(data: data)
+    }
+
+    func collectionView(_ collectionView: NSCollectionView, validateDrop draggingInfo: NSDraggingInfo,
+                        proposedIndexPath: AutoreleasingUnsafeMutablePointer<NSIndexPath>,
+                        dropOperation: UnsafeMutablePointer<NSCollectionView.DropOperation>) -> NSDragOperation {
+        guard let payload = payload(on: draggingInfo) else { return [] }
+        dropOperation.pointee = .before
+        let decision = dropDecision(proposedIndex: proposedIndexPath.pointee.item, payload: payload, deck: deckURL, optionHeld: optionHeld())
+        if decision.operation != [], lastAnnouncedDrop != .some(decision.beforeNumber) {
+            lastAnnouncedDrop = .some(decision.beforeNumber)
+            NSAccessibility.post(element: collectionView, notification: .announcementRequested,
+                                 userInfo: [.announcement: SlideAccessibility.dropLabel(beforeNumber: decision.beforeNumber, count: payload.slideNumbers.count),
+                                            .priority: NSAccessibilityPriorityLevel.medium.rawValue])
+        }
+        return decision.operation
+    }
+
+    func collectionView(_ collectionView: NSCollectionView, acceptDrop draggingInfo: NSDraggingInfo, indexPath: IndexPath,
+                        dropOperation: NSCollectionView.DropOperation) -> Bool {
+        guard let payload = payload(on: draggingInfo) else { return false }
+        lastAnnouncedDrop = nil
+        let decision = dropDecision(proposedIndex: indexPath.item, payload: payload, deck: deckURL, optionHeld: optionHeld())
+        guard decision.operation != [] else { return false }
+        return performDrop(payload: payload, beforeNumber: decision.beforeNumber, isMove: decision.operation == .move)
     }
 }
