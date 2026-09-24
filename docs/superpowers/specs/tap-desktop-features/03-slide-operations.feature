@@ -58,9 +58,9 @@ Feature: Slide operations
 
   Scenario: Drag slides to another deck
     When I drag slides 5 and 6 from one deck's sidebar into another deck's sidebar
-    Then the app copies them into the other deck
-    When I hold Cmd while dropping
-    Then the app moves them instead
+    Then the app moves them into the other deck, one undo step in each deck
+    When I hold Option while dropping
+    Then the app copies them instead
 
 # Note: a "---" inside a fenced block is not a separator, because the ranges come from tap's parser.
 

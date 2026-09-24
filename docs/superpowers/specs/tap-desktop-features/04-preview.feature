@@ -4,7 +4,7 @@ Feature: Preview
 
   Scenario: Split layout
     Then the editor and the preview each take half of the window, and the divider can be dragged
-    And on first launch the slide panel is pinned, and each window remembers its state after that
+    And on first launch the slide panel is pinned, and each deck remembers its state after that
 
   Scenario: Peek at the slide panel
     Given the slide panel is not pinned
