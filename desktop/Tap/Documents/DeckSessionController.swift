@@ -295,6 +295,13 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
         }
     }
 
+    /// Moves the cursor to the given slide number, if the editor still has a box for it.
+    func jumpToSlide(number: Int) {
+        guard let index = editor.boxes.firstIndex(where: { $0.slide.number == number }) else { return }
+        editor.moveCursor(toSlide: index)
+        editor.window?.makeFirstResponder(editor)
+    }
+
     /// Pins the slide the preview shows, or unpins it and follows the cursor again.
     func togglePin() {
         if navigator.isPinned {

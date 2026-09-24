@@ -88,6 +88,19 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
         splitViewController.setPreviewHidden(false)
     }
 
+    private(set) var goToSlideController: GoToSlideController?
+
+    /// Shows the Go to Slide panel over this deck's window, or brings the
+    /// existing one back if it is already open.
+    @objc func goToSlide(_ sender: Any?) {
+        guard let window else { return }
+        let controller = goToSlideController ?? GoToSlideController(
+            slides: { [weak self] in self?.sessionController.editor.boxes.map(\.slide) ?? [] },
+            jump: { [weak self] number in self?.sessionController.jumpToSlide(number: number) })
+        goToSlideController = controller
+        controller.show(over: window)
+    }
+
     func windowWillClose(_ notification: Notification) {
         if let controller = previewWindowController {
             controller.onClose = nil

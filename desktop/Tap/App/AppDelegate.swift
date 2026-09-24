@@ -1,7 +1,7 @@
 import AppKit
 
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     // main.swift's top-level code runs on the main thread but is not itself
     // main-actor isolated, so it cannot call the implicit isolated init.
     // Constructing an NSObject subclass touches no main-actor state, so an
@@ -82,5 +82,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc func showHelp(_ sender: Any?) {
         NSWorkspace.shared.open(URL(string: "https://github.com/MiniCodeMonkey/tap")!)
+    }
+
+    /// Go to Slide (Cmd+Shift+O) is a `DeckWindowController` action, found
+    /// through the responder chain of the deck's own window. That chain does
+    /// not reach it when the deck's preview is detached into a window of its
+    /// own (`DeckWindowController.showPreviewInWindow`) and that window is
+    /// key: the same gap `showTapLog` closes above. Having the same selector
+    /// here too means AppKit's nil-targeted lookup falls back to this method
+    /// once it walks past the key window to the app delegate, so Cmd+Shift+O
+    /// still opens Go to Slide for the deck that owns the detached preview.
+    @objc func goToSlide(_ sender: Any?) {
+        Self.deck(owning: NSApp.keyWindow)?.goToSlide(sender)
+    }
+
+    /// Only asked when no responder earlier in the chain answered for
+    /// `goToSlide(_:)` itself, which is `DeckWindowController`'s own case
+    /// (its `validateMenuItem` decides then). Here, with no deck window to
+    /// reach, the item must be disabled rather than enabled and inert, so
+    /// this returns false whenever the key window resolves to no deck at
+    /// all, such as the welcome window or a detached preview whose deck
+    /// window has since closed.
+    func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
+        if menuItem.action == #selector(goToSlide(_:)) {
+            return Self.deck(owning: NSApp.keyWindow) != nil
+        }
+        return true
     }
 }

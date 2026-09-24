@@ -95,7 +95,9 @@ enum MainMenu {
     }
 
     static func slideMenu() -> NSMenu {
-        NSMenu(title: "Slide")
+        let menu = NSMenu(title: "Slide")
+        menu.addItem(item("Go to Slide…", action: #selector(DeckWindowController.goToSlide(_:)), key: "o", modifiers: [.command, .shift]))
+        return menu
     }
 
     static func viewMenu() -> NSMenu {
