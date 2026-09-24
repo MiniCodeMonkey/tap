@@ -15,18 +15,35 @@ final class DeckDocument: NSDocument {
     /// before a newer `adopt(diskText:)` cannot overwrite that newer text
     /// with its own, older, still in-flight snapshot once it completes.
     private(set) var textRevision = 0
-    /// The exact text handed to `data(ofType:)` for the save now in flight,
-    /// taken at the moment the data was produced. A person may keep typing
+    /// The exact text handed to `data(ofType:)` for a save of this
+    /// document's own file, taken at the moment the data was produced, for
+    /// as long as that save is still in flight. A person may keep typing
     /// while the save writes to disk, so this, not the editor's text when
     /// the save finishes, is what `text` becomes on success: it is what
     /// actually reached the file. Also read by `DeckSessionController.
     /// diskChanged()` to recognize the app's own autosave write before
     /// "saved" is processed: the write reaches disk before that message
     /// does, so a `file-changed` report can arrive while this is still the
-    /// save in flight.
+    /// save in flight. Exists only for a same-file save: `savingOwnFile`
+    /// below keeps `data(ofType:)` from setting it at all for a save known
+    /// to land elsewhere (Save To), and
+    /// `save(to:ofType:for:completionHandler:)` clears it once its save
+    /// completes, successfully or not.
     private(set) var savedSnapshot: String?
     /// `textRevision` as of the moment `savedSnapshot` was taken.
     private var savedSnapshotRevision = 0
+    /// Whether the save now in flight through
+    /// `save(to:ofType:for:completionHandler:)`, if any, is known to land on
+    /// this document's own file. True by default, and while nothing is
+    /// saving through that method: a save is presumed to be one of this
+    /// deck's own file unless it names a different destination, which is
+    /// also what lets a test drive `data(ofType:)` directly to stand in for
+    /// a real own-file save without going through that method at all. Only
+    /// Save To (and any other save to an explicitly different destination)
+    /// sets this false, for the duration of that one save. Save As is an
+    /// own-file save: its destination becomes this document's file once the
+    /// save completes, and tap should be told about it the same as Save.
+    private var savingOwnFile = true
     private(set) var sessionController: DeckSessionController?
     /// The file name of a deck whose file was deleted, until it is saved
     /// again.
@@ -82,8 +99,10 @@ final class DeckDocument: NSDocument {
     override nonisolated func data(ofType typeName: String) throws -> Data {
         MainActor.assumeIsolated {
             let snapshot = self.sessionController?.editor.string ?? self.text
-            self.savedSnapshot = snapshot
-            self.savedSnapshotRevision = self.textRevision
+            if self.savingOwnFile {
+                self.savedSnapshot = snapshot
+                self.savedSnapshotRevision = self.textRevision
+            }
             return Data(snapshot.utf8)
         }
     }
@@ -255,13 +274,47 @@ final class DeckDocument: NSDocument {
         if saveOperation == .saveOperation, sessionController?.hasDiskConflict == true {
             return completionHandler(CocoaError(.userCancelled))
         }
+        // Save To, and any other save explicitly told to land somewhere
+        // other than this document's own file, is the one kind of save
+        // `data(ofType:)` below must not treat as taking this document's
+        // save snapshot: nothing it writes changes what tap should be
+        // showing for this deck's own file.
+        savingOwnFile = saveOperation != .saveToOperation
         super.save(to: url, ofType: typeName, for: saveOperation) { [weak self] error in
-            if error == nil, let self, let fileURL = self.fileURL, FilePaths.same(fileURL, url) {
-                self.adoptSavedSnapshotIfCurrent()
-                self.sessionController?.documentDidSave()
+            guard let self else { return completionHandler(error) }
+            if self.savingOwnFile {
+                if error == nil, let fileURL = self.fileURL, FilePaths.same(fileURL, url) {
+                    self.adoptSavedSnapshotIfCurrent()
+                    self.sessionController?.documentDidSave()
+                }
+                // The snapshot only stands for a save of this document's own
+                // file while that save is in flight: whatever this save
+                // was, it is no longer in flight once this handler runs, so
+                // nothing should keep matching against it. Cleared after
+                // the adoption above, which is the one thing still allowed
+                // to read it. A save known not to land on this document's
+                // own file, such as Save To, never sets the snapshot in the
+                // first place (`data(ofType:)`'s own `savingOwnFile` guard),
+                // so there is nothing to clear here for one of those.
+                self.savedSnapshot = nil
             }
+            // Resetting this to true leaves a save driven directly against
+            // `data(ofType:)`, such as a test standing in for a real save,
+            // treated as an own-file save by default.
+            self.savingOwnFile = true
             completionHandler(error)
         }
+    }
+
+    /// Duplicate (Cmd-Shift-S) never reaches `save(to:ofType:for:
+    /// completionHandler:)` above; it seeds the new document's data through
+    /// `data(ofType:)` directly, without writing this document's own file at
+    /// all. That call still captures whatever the editor holds into
+    /// `savedSnapshot`, so it is cleared here once the duplicate is made, the
+    /// same way a save that lands elsewhere clears it in its own completion.
+    override func duplicate() throws -> NSDocument {
+        defer { savedSnapshot = nil }
+        return try super.duplicate()
     }
 
     /// Adopts a completed save's snapshot as the deck's known text, unless a

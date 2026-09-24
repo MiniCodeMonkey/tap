@@ -380,6 +380,106 @@ final class ExternalChangeTests: HostedTestCase {
         XCTAssertTrue(document.isDocumentEdited, "the editor is still ahead of the snapshot the disk now holds")
     }
 
+    /// A Save To writes the exported text to a different file, never this
+    /// document's own, so `savedSnapshot` must not be left holding that text
+    /// as an own-write match target for the deck's real file. If it were, an
+    /// outside program writing the deck's own file with exactly that
+    /// exported text would be silently absorbed as if it were the app's own
+    /// write, which it never was. The exported text is captured from an
+    /// edited buffer and the buffer moves on again afterward, so neither
+    /// `document.text` (the original) nor `editor.string` (the later edit)
+    /// coincidentally equals it: only a leftover `savedSnapshot` could mask
+    /// the outside write below, and the fix clears it once Save To completes.
+    func testSaveToADifferentFileDoesNotMaskAnOutsideChangeMatchingTheExport() async throws {
+        let deck = try Fixtures.copyDeck("seven-slides.md")
+        let document = try await openDeck(deck)
+        try await waitForBoxes(document, count: 7)
+        _ = try await waitForRunningTap(document)
+        let controller = try XCTUnwrap(document.sessionController)
+        let original = controller.editor.string
+        let elsewhere = deck.deletingLastPathComponent().appendingPathComponent("exported-copy.md")
+        defer { try? FileManager.default.removeItem(at: elsewhere) }
+
+        controller.editor.moveCursor(toSlide: 2)
+        controller.editor.insertText(" mine", replacementRange: NSRange(location: NSNotFound, length: 0))
+        let exported = controller.editor.string
+
+        let saveToError = await withCheckedContinuation { (continuation: CheckedContinuation<Error?, Never>) in
+            document.save(to: elsewhere, ofType: "net.daringfireball.markdown", for: .saveToOperation) { error in
+                continuation.resume(returning: error)
+            }
+        }
+        XCTAssertNil(saveToError)
+        XCTAssertNil(document.savedSnapshot, "a save that lands elsewhere leaves nothing behind to match against")
+
+        // The buffer moves on again after the export, back to the original
+        // text, so it no longer holds what was exported: with no unsaved
+        // edits (editor matches document.text again), an outside write of
+        // exactly the exported text must be loaded as a real change, not
+        // swallowed as this Save To's own write.
+        let fullRange = NSRange(location: 0, length: (controller.editor.string as NSString).length)
+        controller.editor.replaceText(in: fullRange, with: original, actionName: "reset for the test")
+        XCTAssertEqual(controller.editor.string, original)
+        XCTAssertFalse(document.isDocumentEdited)
+
+        try writeOutside(exported, to: deck)
+        controller.diskChanged()
+        try await waitUntil(timeout: 10, "the exported text to be loaded as a real outside change") {
+            controller.editor.string == exported
+        }
+        XCTAssertNil(controller.editorViewController.bar(.changedOnDisk))
+        XCTAssertFalse(document.isDocumentEdited)
+
+        // Repeat with unsaved edits in the buffer: the same coincidental
+        // match must raise the conflict bar rather than being swallowed.
+        let secondDeck = try Fixtures.copyDeck("seven-slides.md")
+        let secondDocument = try await openDeck(secondDeck)
+        try await waitForBoxes(secondDocument, count: 7)
+        _ = try await waitForRunningTap(secondDocument)
+        let secondController = try XCTUnwrap(secondDocument.sessionController)
+        secondController.editor.moveCursor(toSlide: 2)
+        secondController.editor.insertText(" mine", replacementRange: NSRange(location: NSNotFound, length: 0))
+        let secondExported = secondController.editor.string
+        let secondElsewhere = secondDeck.deletingLastPathComponent().appendingPathComponent("exported-copy.md")
+        defer { try? FileManager.default.removeItem(at: secondElsewhere) }
+        let secondSaveToError = await withCheckedContinuation { (continuation: CheckedContinuation<Error?, Never>) in
+            secondDocument.save(to: secondElsewhere, ofType: "net.daringfireball.markdown", for: .saveToOperation) { error in
+                continuation.resume(returning: error)
+            }
+        }
+        XCTAssertNil(secondSaveToError)
+        secondController.editor.insertText(" more", replacementRange: NSRange(location: NSNotFound, length: 0))
+        let withMore = secondController.editor.string
+        XCTAssertNotEqual(withMore, secondExported)
+
+        try writeOutside(secondExported, to: secondDeck)
+        secondController.diskChanged()
+        try await waitUntil(timeout: 10, "the conflict bar") { secondController.editorViewController.bar(.changedOnDisk) != nil }
+        XCTAssertTrue(secondController.hasDiskConflict)
+        XCTAssertEqual(secondController.editor.string, withMore, "nothing was loaded over the unsaved edit")
+    }
+
+    /// Once an own-file save completes, whatever `data(ofType:)` captured for
+    /// it must not still be sitting there: the save is no longer in flight,
+    /// so nothing should keep matching disk text against it.
+    func testSavedSnapshotIsNilAfterAnOwnSaveCompletes() async throws {
+        let deck = try Fixtures.copyDeck("seven-slides.md")
+        let document = try await openDeck(deck)
+        try await waitForBoxes(document, count: 7)
+        _ = try await waitForRunningTap(document)
+        let controller = try XCTUnwrap(document.sessionController)
+        controller.editor.moveCursor(toSlide: 2)
+        controller.editor.insertText(" mine", replacementRange: NSRange(location: NSNotFound, length: 0))
+
+        let saveError = await withCheckedContinuation { (continuation: CheckedContinuation<Error?, Never>) in
+            document.save(to: deck, ofType: "net.daringfireball.markdown", for: .saveOperation) { error in
+                continuation.resume(returning: error)
+            }
+        }
+        XCTAssertNil(saveError)
+        XCTAssertNil(document.savedSnapshot, "the snapshot does not outlive the save it stood in for")
+    }
+
     /// A save records the text it hands to the file and the revision that
     /// was current at that moment. If a newer `adopt(diskText:)` runs before
     /// that save's completion fires, the completion's own snapshot is now
