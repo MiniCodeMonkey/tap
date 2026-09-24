@@ -1578,11 +1578,14 @@ final class PresentingTests: PresentingTestCase {
         try await waitUntil(timeout: 10, "the assertion at ready") { presentation.sleepAssertion.isHeld }
         // Three deaths in thirty seconds: the app stops restarting (D2's policy).
         for _ in 0..<3 {
-            let pid = try XCTUnwrap(presentation.session?.processIdentifier)
-            kill(pid, SIGKILL)
-            try await waitUntil(timeout: 10, "the next process or the end") {
-                presentation.session?.processIdentifier.map { $0 != pid } ?? true || presentation.state != .starting && presentation.state != .presenting
+            try await waitUntil(timeout: 10, "a running tap present or the end") {
+                if case .failed = presentation.state { return true }
+                return presentation.session?.processIdentifier != nil
             }
+            guard let pid = presentation.session?.processIdentifier else { break }
+            kill(pid, SIGKILL)
+            // The restart's process has a new identifier; the failure has none.
+            try await waitUntil(timeout: 10, "the killed process to be gone") { presentation.session?.processIdentifier != pid }
         }
         try await waitUntil(timeout: 10, "the talk to fail") { if case .failed = presentation.state { return true } else { return false } }
         XCTAssertFalse(presentation.sleepAssertion.isHeld)
@@ -2421,6 +2424,1302 @@ Mutations, each reverted, the one that can leave a window off screen first: in `
 ```bash
 git add desktop/Tap desktop/TapTests
 git commit -m "feat(desktop): arrange a talk over two displays, swap them, remember the pair, and rehearse on one"
+```
+
+---
+
+### Task 6: The Play toolbar button and the Present popover
+
+**Files:**
+- Create: `desktop/Tap/Presenting/DisplayArrangementView.swift`
+- Create: `desktop/Tap/Presenting/PresentPopoverController.swift`
+- Modify: `desktop/Tap/Windows/DeckWindowController.swift` (the Play toolbar item, `play`, `playClicked(modifiers:)`, `rehearse`, `startPresenting(_:)`, `refreshPresentingControls`, `presentPopover`)
+- Test: `desktop/TapTests/PresentPopoverTests.swift`
+
+**Interfaces:**
+- Consumes: Task 4's `PresentationController` (`currentArrangement`, `start`, `canStart`, `onStateChange`, `swapDisplays`), Task 2's `PresentationOptions`, `DisplayArrangement`; D3's `HoverButton` pattern and `LayoutGalleryController`'s popover pattern.
+- Produces: `DisplayArrangementView` with `presenterBox`, `audienceBox` (each a `ScreenBox` with `roleLabel`, `nameLabel`), `update(arrangement:)`; `PresentPopoverController` with `Context(arrangement:cursorSlide:)`, `isShown`, `arrangementView`, `singleDisplayLabel`, `swapButton`, `startFromControl`, `recordCheckbox`, `phoneRemoteCheckbox`, `advancedButton`, `advancedStack`, `passwordField`, `tunnelCheckbox`, `rehearseButton`, `startButton`, `onSwap`, `onStart`, `onRehearse`, `show(context:relativeTo:of:)`, `update(context:)`, `close()`, `options(mode:)`; `DeckWindowController.playItemIdentifier`, `playButton`, `presentPopover`, `play(_:)`, `playClicked(modifiers:)`, `rehearse(_:)`, `startPresenting(_:)`, `refreshPresentingControls()`, `popoverContext()`.
+
+- [ ] **Step 1: Write the failing tests**
+
+`desktop/TapTests/PresentPopoverTests.swift`:
+
+```swift
+import XCTest
+@testable import Tap
+
+final class PresentPopoverTests: PresentingTestCase {
+    func windowController(_ controller: DeckSessionController) throws -> DeckWindowController {
+        try XCTUnwrap(controller.editor.window?.windowController as? DeckWindowController)
+    }
+
+    func testStartFromTheFirstSlide() async throws {
+        let (_, controller) = try await openDeckForPresenting()
+        let deckWindow = try windowController(controller)
+        controller.jumpToSlide(number: 3)
+        deckWindow.playClicked(modifiers: [.shift])
+        XCTAssertFalse(deckWindow.presentPopover.isShown, "Shift-click starts at once")
+        XCTAssertEqual(controller.presentation.options?.mode, .play)
+        XCTAssertEqual(controller.presentation.options?.startSlide, 1)
+        try await waitUntil(timeout: 40, "the talk") { controller.presentation.state == .presenting }
+        let audience = try XCTUnwrap(controller.presentation.audienceWindow)
+        try await waitUntil(timeout: 20, "the audience page on slide 1") { audience.page.lastReady?.slide == 1 }
+        XCTAssertEqual(controller.currentSlideNumber, 3, "the cursor stays where it was")
+    }
+
+    func testThePopoverCollectsTheOptions() async throws {
+        let (_, controller) = try await openDeckForPresenting()
+        let deckWindow = try windowController(controller)
+        let screens = halfScreens()
+        controller.presentation.screens = { screens }
+        controller.jumpToSlide(number: 3)
+        deckWindow.playClicked(modifiers: [])
+        let popover = deckWindow.presentPopover
+        XCTAssertTrue(popover.isShown)
+        XCTAssertEqual(popover.startFromControl.label(forSegment: 0), "Slide 3")
+        XCTAssertEqual(popover.startFromControl.label(forSegment: 1), "Slide 1")
+        XCTAssertEqual(popover.startFromControl.selectedSegment, 0)
+        XCTAssertEqual(popover.arrangementView.audienceBox.nameLabel.stringValue, "Projector")
+        XCTAssertEqual(popover.arrangementView.presenterBox.nameLabel.stringValue, "Built-in Display")
+        XCTAssertFalse(popover.arrangementView.isHidden)
+        XCTAssertTrue(popover.singleDisplayLabel.isHidden)
+        XCTAssertTrue(popover.swapButton.isEnabled)
+        XCTAssertEqual(popover.recordCheckbox.state, .on)
+        XCTAssertEqual(popover.phoneRemoteCheckbox.state, .off)
+        XCTAssertTrue(popover.advancedStack.isHidden)
+
+        popover.swapButton.performClick(nil)
+        XCTAssertEqual(popover.arrangementView.audienceBox.nameLabel.stringValue, "Built-in Display", "Swap Displays swaps before the start")
+        XCTAssertEqual(controller.presentation.currentArrangement?.audience.name, "Built-in Display")
+
+        popover.advancedButton.performClick(nil)
+        XCTAssertFalse(popover.advancedStack.isHidden)
+        popover.recordCheckbox.state = .off
+        popover.passwordField.stringValue = "secret"
+        popover.tunnelCheckbox.state = .on
+        let advanced = popover.options(mode: .play)
+        XCTAssertEqual(advanced, PresentationOptions(mode: .play, startSlide: 3, record: false, phoneRemote: false, tunnel: true, presenterPassword: "secret"))
+        popover.tunnelCheckbox.state = .off
+        popover.phoneRemoteCheckbox.performClick(nil)
+        XCTAssertEqual(popover.phoneRemoteCheckbox.state, .on)
+        XCTAssertEqual(popover.tunnelCheckbox.state, .on, "the phone remote is the tunnel")
+        XCTAssertFalse(popover.tunnelCheckbox.isEnabled)
+        popover.phoneRemoteCheckbox.performClick(nil)
+        XCTAssertTrue(popover.tunnelCheckbox.isEnabled)
+        popover.tunnelCheckbox.state = .off
+        popover.passwordField.stringValue = ""
+        popover.startFromControl.selectedSegment = 1
+        XCTAssertEqual(popover.options(mode: .play), PresentationOptions(mode: .play, startSlide: 1, record: false))
+
+        popover.startButton.performClick(nil)
+        XCTAssertFalse(popover.isShown)
+        XCTAssertEqual(controller.presentation.options, PresentationOptions(mode: .play, startSlide: 1, record: false))
+        try await waitUntil(timeout: 40, "the talk") { controller.presentation.state == .presenting }
+        XCTAssertEqual(controller.presentation.session?.command, .present(record: false, presenterPassword: nil))
+        XCTAssertEqual(controller.presentation.audienceWindow?.frame, screens[0].frame, "the swap held")
+    }
+
+    func testThePopoverWithOneDisplaySaysSo() async throws {
+        let (_, controller) = try await openDeckForPresenting()
+        let deckWindow = try windowController(controller)
+        deckWindow.playClicked(modifiers: [])
+        let popover = deckWindow.presentPopover
+        XCTAssertTrue(popover.isShown)
+        XCTAssertTrue(popover.arrangementView.isHidden)
+        XCTAssertFalse(popover.singleDisplayLabel.isHidden)
+        XCTAssertFalse(popover.swapButton.isEnabled)
+        popover.rehearseButton.performClick(nil)
+        XCTAssertFalse(popover.isShown)
+        XCTAssertEqual(controller.presentation.options?.mode, .rehearse)
+        XCTAssertEqual(controller.presentation.options?.startSlide, 1)
+        try await waitUntil(timeout: 40, "the rehearsal") { controller.presentation.state == .presenting }
+    }
+
+    func testThePlayButtonFollowsTheTalk() async throws {
+        let (_, controller) = try await openDeckForPresenting()
+        let deckWindow = try windowController(controller)
+        let identifiers = try XCTUnwrap(deckWindow.window?.toolbar?.items.map(\.itemIdentifier))
+        XCTAssertTrue(identifiers.contains(DeckWindowController.playItemIdentifier))
+        XCTAssertEqual(deckWindow.playButton.accessibilityIdentifier(), "play-button")
+        XCTAssertTrue(deckWindow.playButton.isEnabled)
+        deckWindow.rehearse(nil)
+        XCTAssertFalse(deckWindow.playButton.isEnabled, "no second talk while one runs")
+        try await waitUntil(timeout: 40, "the rehearsal") { controller.presentation.state == .presenting }
+        try await stopPresenting(controller)
+        XCTAssertTrue(deckWindow.playButton.isEnabled)
+    }
+}
+```
+
+- [ ] **Step 2: Run one test to verify it fails**
+
+Run: `make -C desktop test ONLY=TapTests/PresentPopoverTests/testThePopoverWithOneDisplaySaysSo`
+Expected: the test target does not compile (`playClicked`, `presentPopover` are undefined).
+
+- [ ] **Step 3: Write `DisplayArrangementView.swift`**
+
+```swift
+import AppKit
+
+/// The popover's picture of the displays: two boxes, each the shape of its
+/// screen, labelled with its role and its name.
+final class DisplayArrangementView: NSView {
+    final class ScreenBox: NSView {
+        let roleLabel = NSTextField(labelWithString: "")
+        let nameLabel = NSTextField(labelWithString: "")
+        private var aspect: NSLayoutConstraint?
+
+        init(role: String, accessibilityIdentifier: String) {
+            super.init(frame: .zero)
+            wantsLayer = true
+            layer?.cornerRadius = 8
+            layer?.borderWidth = 1
+            layer?.borderColor = NSColor.separatorColor.cgColor
+            layer?.backgroundColor = NSColor.controlBackgroundColor.cgColor
+            roleLabel.stringValue = role
+            roleLabel.font = .systemFont(ofSize: 11, weight: .semibold)
+            nameLabel.font = .systemFont(ofSize: 11)
+            nameLabel.textColor = .secondaryLabelColor
+            nameLabel.lineBreakMode = .byTruncatingTail
+            let stack = NSStackView(views: [roleLabel, nameLabel])
+            stack.orientation = .vertical
+            stack.alignment = .centerX
+            stack.spacing = 2
+            stack.translatesAutoresizingMaskIntoConstraints = false
+            addSubview(stack)
+            NSLayoutConstraint.activate([
+                stack.centerXAnchor.constraint(equalTo: centerXAnchor),
+                stack.centerYAnchor.constraint(equalTo: centerYAnchor),
+                stack.leadingAnchor.constraint(greaterThanOrEqualTo: leadingAnchor, constant: 6),
+                widthAnchor.constraint(equalToConstant: 150),
+            ])
+            setAccessibilityElement(true)
+            setAccessibilityRole(.group)
+            setAccessibilityIdentifier(accessibilityIdentifier)
+        }
+
+        required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
+
+        func show(_ screen: ScreenInfo) {
+            nameLabel.stringValue = screen.name
+            setAccessibilityLabel("\(roleLabel.stringValue), \(screen.name)")
+            aspect?.isActive = false
+            let ratio = screen.frame.width > 0 ? max(screen.frame.height / screen.frame.width, 0.3) : 0.625
+            aspect = heightAnchor.constraint(equalTo: widthAnchor, multiplier: ratio)
+            aspect?.isActive = true
+        }
+    }
+
+    let presenterBox = ScreenBox(role: "Presenter view", accessibilityIdentifier: "presenter-screen")
+    let audienceBox = ScreenBox(role: "Audience, full screen", accessibilityIdentifier: "audience-screen")
+
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        let row = NSStackView(views: [presenterBox, audienceBox])
+        row.orientation = .horizontal
+        row.alignment = .bottom
+        row.spacing = 12
+        row.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(row)
+        NSLayoutConstraint.activate([
+            row.topAnchor.constraint(equalTo: topAnchor),
+            row.leadingAnchor.constraint(equalTo: leadingAnchor),
+            row.trailingAnchor.constraint(equalTo: trailingAnchor),
+            row.bottomAnchor.constraint(equalTo: bottomAnchor),
+        ])
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
+
+    func update(arrangement: DisplayArrangement) {
+        presenterBox.show(arrangement.presenter)
+        audienceBox.show(arrangement.audience)
+    }
+}
+```
+
+- [ ] **Step 4: Write `PresentPopoverController.swift`**
+
+```swift
+import AppKit
+
+/// The Present popover: which display is which, Swap Displays, where to
+/// start, recording, the phone remote, and the Advanced options, with
+/// Rehearse and Start Presenting. It collects `PresentationOptions`; the
+/// deck's window controller starts the talk.
+@MainActor
+final class PresentPopoverController: NSObject, NSPopoverDelegate {
+    struct Context {
+        let arrangement: DisplayArrangement?
+        let cursorSlide: Int
+    }
+
+    /// Kept here rather than read from the popover, whose `isShown` can
+    /// depend on whether the app is active (D3's gallery found the same).
+    private(set) var isShown = false
+    let arrangementView = DisplayArrangementView(frame: .zero)
+    let singleDisplayLabel = NSTextField(wrappingLabelWithString: "One display: the audience fills the screen, and Option-Tab shows the presenter view.")
+    let swapButton = NSButton(title: "Swap Displays", target: nil, action: nil)
+    let startFromControl = NSSegmentedControl(labels: ["Slide 1", "Slide 1"], trackingMode: .selectOne, target: nil, action: nil)
+    let recordCheckbox = NSButton(checkboxWithTitle: "Record the talk", target: nil, action: nil)
+    let recordHint = NSTextField(wrappingLabelWithString: "Records from the start until you stop, when recording is on for you.")
+    let phoneRemoteCheckbox = NSButton(checkboxWithTitle: "Phone remote", target: nil, action: nil)
+    let advancedButton = NSButton(title: "Advanced", target: nil, action: nil)
+    let advancedStack = NSStackView()
+    let passwordField = NSTextField()
+    let tunnelCheckbox = NSButton(checkboxWithTitle: "Public tunnel", target: nil, action: nil)
+    let tunnelHint = NSTextField(labelWithString: "Needs cloudflared.")
+    let rehearseButton = NSButton(title: "Rehearse", target: nil, action: nil)
+    let startButton = NSButton(title: "Start Presenting", target: nil, action: nil)
+    var onSwap: (() -> Void)?
+    var onStart: ((PresentationOptions) -> Void)?
+    var onRehearse: ((PresentationOptions) -> Void)?
+    private let popover = NSPopover()
+    private var context = Context(arrangement: nil, cursorSlide: 1)
+
+    override init() {
+        super.init()
+        singleDisplayLabel.font = .systemFont(ofSize: 12)
+        singleDisplayLabel.textColor = .secondaryLabelColor
+        swapButton.bezelStyle = .rounded
+        swapButton.target = self
+        swapButton.action = #selector(swapPressed(_:))
+        startFromControl.selectedSegment = 0
+        recordCheckbox.state = .on
+        recordHint.font = .systemFont(ofSize: 11)
+        recordHint.textColor = .secondaryLabelColor
+        phoneRemoteCheckbox.target = self
+        phoneRemoteCheckbox.action = #selector(phoneRemoteChanged(_:))
+        advancedButton.bezelStyle = .disclosure
+        advancedButton.setButtonType(.pushOnPushOff)
+        advancedButton.title = "Advanced"
+        advancedButton.target = self
+        advancedButton.action = #selector(advancedPressed(_:))
+        passwordField.placeholderString = "None"
+        passwordField.setAccessibilityIdentifier("presenter-password")
+        tunnelHint.font = .systemFont(ofSize: 11)
+        tunnelHint.textColor = .secondaryLabelColor
+        rehearseButton.bezelStyle = .rounded
+        rehearseButton.target = self
+        rehearseButton.action = #selector(rehearsePressed(_:))
+        startButton.bezelStyle = .rounded
+        startButton.keyEquivalent = "\r"
+        startButton.target = self
+        startButton.action = #selector(startPressed(_:))
+        startButton.setAccessibilityIdentifier("start-presenting")
+
+        let passwordRow = NSStackView(views: [NSTextField(labelWithString: "Presenter password"), passwordField])
+        passwordRow.orientation = .horizontal
+        passwordField.widthAnchor.constraint(equalToConstant: 160).isActive = true
+        let tunnelRow = NSStackView(views: [tunnelCheckbox, tunnelHint])
+        tunnelRow.orientation = .horizontal
+        advancedStack.orientation = .vertical
+        advancedStack.alignment = .leading
+        advancedStack.spacing = 6
+        advancedStack.addArrangedSubview(passwordRow)
+        advancedStack.addArrangedSubview(tunnelRow)
+        advancedStack.isHidden = true
+
+        let startRow = NSStackView(views: [NSTextField(labelWithString: "Start from"), startFromControl])
+        startRow.orientation = .horizontal
+        let buttons = NSStackView(views: [NSView(), rehearseButton, startButton])
+        buttons.orientation = .horizontal
+        let stack = NSStackView(views: [arrangementView, singleDisplayLabel, swapButton, startRow, recordCheckbox, recordHint,
+                                        phoneRemoteCheckbox, advancedButton, advancedStack, buttons])
+        stack.orientation = .vertical
+        stack.alignment = .leading
+        stack.spacing = 10
+        stack.edgeInsets = NSEdgeInsets(top: 16, left: 16, bottom: 16, right: 16)
+        stack.widthAnchor.constraint(equalToConstant: 360).isActive = true
+        buttons.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -32).isActive = true
+        singleDisplayLabel.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -32).isActive = true
+        recordHint.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -32).isActive = true
+        let content = NSViewController()
+        content.view = stack
+        popover.contentViewController = content
+        popover.behavior = .transient
+        popover.delegate = self
+        stack.setAccessibilityIdentifier("present-popover")
+    }
+
+    func show(context: Context, relativeTo rect: NSRect, of view: NSView) {
+        update(context: context)
+        popover.show(relativeTo: rect, of: view, preferredEdge: .maxY)
+        isShown = true
+    }
+
+    /// The displays or the cursor changed, or a swap happened.
+    func update(context: Context) {
+        self.context = context
+        startFromControl.setLabel("Slide \(context.cursorSlide)", forSegment: 0)
+        startFromControl.setLabel("Slide 1", forSegment: 1)
+        if let arrangement = context.arrangement, !arrangement.isSingleDisplay {
+            arrangementView.update(arrangement: arrangement)
+            arrangementView.isHidden = false
+            singleDisplayLabel.isHidden = true
+            swapButton.isEnabled = true
+        } else {
+            arrangementView.isHidden = true
+            singleDisplayLabel.isHidden = false
+            swapButton.isEnabled = false
+        }
+    }
+
+    func close() {
+        isShown = false
+        popover.performClose(nil)
+    }
+
+    func popoverDidClose(_ notification: Notification) {
+        isShown = false
+    }
+
+    /// What the controls say now.
+    func options(mode: PresentationMode) -> PresentationOptions {
+        let password = passwordField.stringValue.trimmingCharacters(in: .whitespaces)
+        return PresentationOptions(mode: mode,
+                                   startSlide: startFromControl.selectedSegment == 1 ? 1 : context.cursorSlide,
+                                   record: recordCheckbox.state == .on,
+                                   phoneRemote: phoneRemoteCheckbox.state == .on,
+                                   tunnel: tunnelCheckbox.state == .on,
+                                   presenterPassword: password.isEmpty ? nil : password)
+    }
+
+    @objc private func swapPressed(_ sender: Any?) {
+        onSwap?()
+    }
+
+    @objc private func advancedPressed(_ sender: Any?) {
+        advancedStack.isHidden = advancedButton.state == .off
+    }
+
+    /// The phone remote is the tunnel with a QR code, so the tunnel switch follows it.
+    @objc private func phoneRemoteChanged(_ sender: Any?) {
+        let on = phoneRemoteCheckbox.state == .on
+        if on { tunnelCheckbox.state = .on }
+        tunnelCheckbox.isEnabled = !on
+    }
+
+    @objc private func startPressed(_ sender: Any?) {
+        let options = options(mode: .play)
+        close()
+        onStart?(options)
+    }
+
+    @objc private func rehearsePressed(_ sender: Any?) {
+        let options = options(mode: .rehearse)
+        close()
+        onRehearse?(options)
+    }
+}
+```
+
+- [ ] **Step 5: The Play button and the actions in the window controller**
+
+In `DeckWindowController.swift`, add after `static let newSlideItemIdentifier`:
+
+```swift
+    static let playItemIdentifier = NSToolbarItem.Identifier("play")
+```
+
+After `let newSlideButton = NewSlideButton()`:
+
+```swift
+    /// The toolbar's Play button: a click opens the Present popover, a Shift-click starts from slide 1.
+    let playButton = NSButton()
+    private(set) lazy var presentPopover: PresentPopoverController = {
+        let popover = PresentPopoverController()
+        popover.onSwap = { [weak self] in
+            guard let self else { return }
+            self.sessionController.presentation.swapDisplays()
+            self.presentPopover.update(context: self.popoverContext())
+        }
+        popover.onStart = { [weak self] options in self?.startPresenting(options) }
+        popover.onRehearse = { [weak self] options in self?.startPresenting(options) }
+        return popover
+    }()
+```
+
+In `init`, after `sessionController.presentation.deckWindowController = self` (Task 4), add:
+
+```swift
+        sessionController.presentation.onStateChange = { [weak self] _ in self?.refreshPresentingControls() }
+```
+
+Add after `showLayoutGallery(_:)`:
+
+```swift
+    // MARK: Presenting
+
+    /// The Play button and Present > Play. A Shift-click starts from slide 1 at once.
+    @objc func play(_ sender: Any?) {
+        playClicked(modifiers: NSApp.currentEvent?.modifierFlags ?? [])
+    }
+
+    func playClicked(modifiers: NSEvent.ModifierFlags) {
+        guard sessionController.presentation.canStart else { return }
+        if modifiers.contains(.shift) {
+            startPresenting(PresentationOptions(mode: .play, startSlide: 1))
+            return
+        }
+        let anchor: NSView = playButton.window == nil ? (window?.contentView ?? playButton) : playButton
+        presentPopover.show(context: popoverContext(), relativeTo: anchor.bounds, of: anchor)
+    }
+
+    /// Present > Rehearse: the presenter view alone, from the cursor's slide.
+    @objc func rehearse(_ sender: Any?) {
+        guard sessionController.presentation.canStart else { return }
+        startPresenting(PresentationOptions(mode: .rehearse, startSlide: sessionController.currentSlideNumber ?? 1))
+    }
+
+    /// Every start comes here: the popover's buttons, the Shift-click and Rehearse.
+    func startPresenting(_ options: PresentationOptions) {
+        sessionController.presentation.start(options)
+        refreshPresentingControls()
+    }
+
+    func popoverContext() -> PresentPopoverController.Context {
+        PresentPopoverController.Context(arrangement: sessionController.presentation.currentArrangement,
+                                         cursorSlide: sessionController.currentSlideNumber ?? 1)
+    }
+
+    /// The toolbar's Play button follows the talk: off while one runs.
+    func refreshPresentingControls() {
+        playButton.isEnabled = sessionController.presentation.canStart
+    }
+```
+
+In `toolbarDefaultItemIdentifiers`, return `[Self.slidesItemIdentifier, .flexibleSpace, Self.newSlideItemIdentifier, Self.playItemIdentifier, Self.previewItemIdentifier]`. In `toolbar(_:itemForItemIdentifier:willBeInsertedIntoToolbar:)`, add before the `guard identifier == Self.previewItemIdentifier` line:
+
+```swift
+        if identifier == Self.playItemIdentifier {
+            let item = NSToolbarItem(itemIdentifier: identifier)
+            item.label = "Play"
+            item.toolTip = "Present from this slide. Shift-click to start from slide 1."
+            playButton.image = NSImage(systemSymbolName: "play.fill", accessibilityDescription: "Play")
+            playButton.bezelStyle = .toolbar
+            playButton.setAccessibilityIdentifier("play-button")
+            playButton.target = self
+            playButton.action = #selector(play(_:))
+            playButton.isEnabled = sessionController.presentation.canStart
+            item.view = playButton
+            return item
+        }
+```
+
+- [ ] **Step 6: Run the tests one at a time**
+
+```bash
+make -C desktop test ONLY=TapTests/PresentPopoverTests/testStartFromTheFirstSlide
+make -C desktop test ONLY=TapTests/PresentPopoverTests/testThePopoverCollectsTheOptions
+make -C desktop test ONLY=TapTests/PresentPopoverTests/testThePopoverWithOneDisplaySaysSo
+make -C desktop test ONLY=TapTests/PresentPopoverTests/testThePlayButtonFollowsTheTalk
+```
+
+Expected: all four pass. Also run `make -C desktop test ONLY=TapTests/MenuTests` and `ONLY=TapTests/WindowLayoutTests`: the toolbar gained an item and the menu is unchanged so far.
+
+- [ ] **Step 7: Mutate and commit**
+
+Mutations, each reverted: in `playClicked`, drop the `.shift` branch (expected: `testStartFromTheFirstSlide` fails, the popover shows); in `options(mode:)`, ignore `startFromControl` (expected: `testThePopoverCollectsTheOptions` fails on `startSlide: 1`); in `phoneRemoteChanged`, drop `tunnelCheckbox.state = .on` (expected: it fails on the tunnel state); in `update(context:)`, never hide `arrangementView` (expected: `testThePopoverWithOneDisplaySaysSo` fails); in `refreshPresentingControls`, always enable the button (expected: `testThePlayButtonFollowsTheTalk` fails); in `onSwap`, drop `swapDisplays()` (expected: the options test fails on `currentArrangement`).
+
+```bash
+git add desktop/Tap desktop/TapTests
+git commit -m "feat(desktop): the Play button and the Present popover with displays, start slide, recording and remote options"
+```
+
+---
+
+### Task 7: The Present menu, Escape and Option-Tab, the S key, and every tap dev key
+
+**Files:**
+- Modify: `desktop/Tap/App/MainMenu.swift` (the Present menu)
+- Modify: `desktop/Tap/Windows/DeckWindowController.swift` (`stopPresenting`, `swapDisplays`, validation)
+- Modify: `desktop/Tap/Presenting/PresentationController.swift` (the key monitor, `handleKey`)
+- Test: `desktop/TapTests/PresentMenuTests.swift`
+
+**Interfaces:**
+- Consumes: Task 4's controller (`stop`, `toggleFrontWindow`, `bringPresenterWindowForward`, `isActive`, `canStart`, `currentArrangement`), Task 6's `play`, `rehearse`; Task 3's `PresentationWindow.role`, `page.popupRequested`.
+- Produces: Present menu items Play (Cmd+Option+P), Rehearse (Cmd+Option+Shift+P), Stop (Cmd+.), Swap Displays; `DeckWindowController.stopPresenting(_:)`, `swapDisplays(_:)`, validation for the five; `PresentationController.handleKey(_:)` and the local monitor installed while the windows show.
+
+- [ ] **Step 1: Write the failing tests**
+
+`desktop/TapTests/PresentMenuTests.swift`:
+
+```swift
+import XCTest
+import WebKit
+@testable import Tap
+
+final class PresentMenuTests: PresentingTestCase {
+    func presentMenu() throws -> NSMenu {
+        try XCTUnwrap(NSApp.mainMenu?.items.first { $0.submenu?.title == "Present" }?.submenu)
+    }
+
+    func item(_ menu: NSMenu, action: Selector) throws -> NSMenuItem {
+        try XCTUnwrap(menu.items.first { $0.action == action }, "no item with \(action)")
+    }
+
+    func keyEvent(_ type: NSEvent.EventType, characters: String, keyCode: UInt16, modifiers: NSEvent.ModifierFlags = [], in window: NSWindow) throws -> NSEvent {
+        try XCTUnwrap(NSEvent.keyEvent(with: type, location: .zero, modifierFlags: modifiers, timestamp: ProcessInfo.processInfo.systemUptime,
+                                       windowNumber: window.windowNumber, context: nil, characters: characters,
+                                       charactersIgnoringModifiers: characters, isARepeat: false, keyCode: keyCode))
+    }
+
+    func testPresentingShortcuts() async throws {
+        let (_, controller) = try await openDeckForPresenting()
+        let deckWindow = try XCTUnwrap(controller.editor.window?.windowController as? DeckWindowController)
+        let menu = try presentMenu()
+        let play = try item(menu, action: #selector(DeckWindowController.play(_:)))
+        XCTAssertEqual(play.title, "Play")
+        XCTAssertEqual(play.keyEquivalent, "p")
+        XCTAssertEqual(play.keyEquivalentModifierMask, [.command, .option])
+        let rehearse = try item(menu, action: #selector(DeckWindowController.rehearse(_:)))
+        XCTAssertEqual(rehearse.keyEquivalent, "p")
+        XCTAssertEqual(rehearse.keyEquivalentModifierMask, [.command, .option, .shift])
+        let stop = try item(menu, action: #selector(DeckWindowController.stopPresenting(_:)))
+        XCTAssertEqual(stop.keyEquivalent, ".")
+        XCTAssertEqual(stop.keyEquivalentModifierMask, [.command])
+        let swap = try item(menu, action: #selector(DeckWindowController.swapDisplays(_:)))
+
+        XCTAssertTrue(deckWindow.validateMenuItem(play))
+        XCTAssertTrue(deckWindow.validateMenuItem(rehearse))
+        XCTAssertFalse(deckWindow.validateMenuItem(stop))
+        XCTAssertFalse(deckWindow.validateMenuItem(swap), "one display: nothing to swap")
+
+        // Cmd+Option+Shift+P starts rehearsing; Cmd+Option+P opens the popover to start presenting.
+        deckWindow.rehearse(nil)
+        XCTAssertEqual(controller.presentation.options?.mode, .rehearse)
+        XCTAssertFalse(deckWindow.validateMenuItem(play))
+        XCTAssertFalse(deckWindow.validateMenuItem(rehearse))
+        XCTAssertTrue(deckWindow.validateMenuItem(stop))
+        try await waitUntil(timeout: 40, "the rehearsal") { controller.presentation.state == .presenting }
+        deckWindow.stopPresenting(nil)
+        try await waitUntil(timeout: 30, "the end") { controller.presentation.state == .idle }
+        deckWindow.play(nil)
+        XCTAssertTrue(deckWindow.presentPopover.isShown)
+        deckWindow.presentPopover.close()
+    }
+
+    func testOneDisplay() async throws {
+        let (_, controller) = try await openDeckForPresenting()
+        let presentation = controller.presentation
+        try await startPresenting(controller, PresentationOptions(mode: .play, startSlide: 1))
+        let audience = try XCTUnwrap(presentation.audienceWindow)
+        let presenter = try XCTUnwrap(presentation.presenterWindow)
+        XCTAssertEqual(audience.frame, NSScreen.screens[0].frame, "the audience page fills the screen")
+        XCTAssertTrue(presentation.frontWindow === audience)
+        let optionTab = try keyEvent(.keyDown, characters: "\t", keyCode: 48, modifiers: [.option], in: audience)
+        XCTAssertNil(presentation.handleKey(optionTab), "the app takes Option-Tab")
+        XCTAssertTrue(presentation.frontWindow === presenter)
+        try await waitUntil(timeout: 5, "the presenter window in front") {
+            let order = onScreenWindowNumbers()
+            guard let a = order.firstIndex(of: audience.windowNumber), let p = order.firstIndex(of: presenter.windowNumber) else { return false }
+            return p < a
+        }
+        let again = try keyEvent(.keyDown, characters: "\t", keyCode: 48, modifiers: [.option], in: presenter)
+        XCTAssertNil(presentation.handleKey(again))
+        XCTAssertTrue(presentation.frontWindow === audience)
+        let plainTab = try keyEvent(.keyDown, characters: "\t", keyCode: 48, in: audience)
+        XCTAssertNotNil(presentation.handleKey(plainTab), "a plain Tab goes to the page")
+        let elsewhere = try keyEvent(.keyDown, characters: "\t", keyCode: 48, modifiers: [.option], in: try XCTUnwrap(controller.editor.window))
+        XCTAssertNotNil(presentation.handleKey(elsewhere), "Option-Tab in the deck window is not the app's")
+    }
+
+    func testEscapeInTheAudienceWindowStopsTheTalk() async throws {
+        let (_, controller) = try await openDeckForPresenting()
+        let presentation = controller.presentation
+        try await startPresenting(controller, PresentationOptions(mode: .play, startSlide: 1))
+        let audience = try XCTUnwrap(presentation.audienceWindow)
+        let presenter = try XCTUnwrap(presentation.presenterWindow)
+        let escapeInPresenter = try keyEvent(.keyDown, characters: "\u{1b}", keyCode: 53, in: presenter)
+        XCTAssertNotNil(presentation.handleKey(escapeInPresenter), "Escape in the presenter window is the page's while the audience window exists")
+        XCTAssertEqual(presentation.state, .presenting)
+        let escape = try keyEvent(.keyDown, characters: "\u{1b}", keyCode: 53, in: audience)
+        XCTAssertNil(presentation.handleKey(escape))
+        XCTAssertEqual(presentation.state, .stopping)
+        try await waitUntil(timeout: 30, "the end") { presentation.state == .idle }
+
+        // A rehearsal has no audience window: Escape in the presenter window stops it.
+        try await startPresenting(controller, PresentationOptions(mode: .rehearse, startSlide: 1))
+        let rehearsal = try XCTUnwrap(presentation.presenterWindow)
+        XCTAssertNil(presentation.handleKey(try keyEvent(.keyDown, characters: "\u{1b}", keyCode: 53, in: rehearsal)))
+        XCTAssertEqual(presentation.state, .stopping)
+    }
+
+    func testEveryTapDevPresenterFeatureWorks() async throws {
+        let (_, controller) = try await openDeckForPresenting()
+        let presentation = controller.presentation
+        try await startPresenting(controller, PresentationOptions(mode: .play, startSlide: 2))
+        let audience = try XCTUnwrap(presentation.audienceWindow)
+        let presenter = try XCTUnwrap(presentation.presenterWindow)
+        for page in [audience.page, presenter.page] {
+            XCTAssertTrue(page.webView.configuration.preferences.isElementFullscreenEnabled, "F goes full screen")
+            XCTAssertTrue(page.webView.configuration.websiteDataStore.isPersistent, "the presenter layout and notes size persist between launches")
+        }
+        try await waitUntil(timeout: 20, "the audience page on slide 2") { audience.page.lastReady?.slide == 2 }
+        try await waitUntil(timeout: 20, "the presenter page on slide 2") { presenter.page.lastReady?.slide == 2 }
+
+        // The arrow keys, and every other key, go to tap's page unchanged: the
+        // page moves, the hub relays it (the page holds the presenter cookie),
+        // and tap reports the new position.
+        let rightArrow = String(Character(Unicode.Scalar(UInt16(NSRightArrowFunctionKey))!))
+        audience.page.webView.keyDown(with: try keyEvent(.keyDown, characters: rightArrow, keyCode: 124, in: audience))
+        audience.page.webView.keyUp(with: try keyEvent(.keyUp, characters: rightArrow, keyCode: 124, in: audience))
+        try await waitUntil(timeout: 10, "tap's slide event for slide 3") { presentation.lastSlide == 3 }
+        try await waitUntil(timeout: 10, "the presenter page following") { presenter.page.lastReady?.slide == 3 }
+
+        // S opens the presenter view in the presenter window, never a browser popup.
+        let port = try XCTUnwrap(presentation.client).ready.port
+        audience.page.popupRequested(for: URL(string: "http://127.0.0.1:\(port)/presenter#3"), navigationType: .other)
+        XCTAssertTrue(presentation.frontWindow === presenter)
+        try await waitUntil(timeout: 5, "the presenter window in front") {
+            let order = onScreenWindowNumbers()
+            guard let a = order.firstIndex(of: audience.windowNumber), let p = order.firstIndex(of: presenter.windowNumber) else { return false }
+            return p < a
+        }
+    }
+}
+```
+
+- [ ] **Step 2: Run one test to verify it fails**
+
+Run: `make -C desktop test ONLY=TapTests/PresentMenuTests/testEscapeInTheAudienceWindowStopsTheTalk`
+Expected: the test target does not compile (`handleKey`, `stopPresenting` are undefined).
+
+- [ ] **Step 3: The Present menu and its actions**
+
+In `MainMenu.swift`, replace `presentMenu()` with:
+
+```swift
+    static func presentMenu() -> NSMenu {
+        let menu = NSMenu(title: "Present")
+        menu.addItem(item("Play", action: #selector(DeckWindowController.play(_:)), key: "p", modifiers: [.command, .option]))
+        menu.addItem(item("Rehearse", action: #selector(DeckWindowController.rehearse(_:)), key: "p", modifiers: [.command, .option, .shift]))
+        menu.addItem(.separator())
+        menu.addItem(item("Stop", action: #selector(DeckWindowController.stopPresenting(_:)), key: "."))
+        menu.addItem(item("Swap Displays", action: #selector(DeckWindowController.swapDisplays(_:))))
+        return menu
+    }
+```
+
+In `DeckWindowController.swift`, add after `refreshPresentingControls()`:
+
+```swift
+    /// Present > Stop, the toolbar's Stop, and Escape in the audience window.
+    @objc func stopPresenting(_ sender: Any?) {
+        sessionController.presentation.stop()
+    }
+
+    /// Present > Swap Displays and the toolbar's: during the talk the
+    /// windows change places; before it the popover's arrangement does.
+    @objc func swapDisplays(_ sender: Any?) {
+        sessionController.presentation.swapDisplays()
+        if presentPopover.isShown { presentPopover.update(context: popoverContext()) }
+    }
+```
+
+In `validateMenuItem(_:)`, add before `let count = ...`:
+
+```swift
+        let presentation = sessionController.presentation
+        if [#selector(play(_:)), #selector(rehearse(_:))].contains(menuItem.action) { return presentation.canStart }
+        if menuItem.action == #selector(stopPresenting(_:)) { return presentation.isActive }
+        if menuItem.action == #selector(swapDisplays(_:)) { return presentation.currentArrangement?.isSingleDisplay == false }
+```
+
+- [ ] **Step 4: The key monitor**
+
+In `PresentationController.swift`, add a stored property after `screenObserver`:
+
+```swift
+    private var keyMonitor: Any?
+```
+
+Add after `bringPresenterWindowForward()`:
+
+```swift
+    // MARK: Keys
+
+    /// Escape in the audience window ends the talk (in the presenter window
+    /// too, when there is no audience window: a rehearsal), and Option-Tab
+    /// brings the other window over this one. Every other key goes to
+    /// tap's page unchanged. Internal so a test can drive it with an event
+    /// of its own; the monitor calls it for every key down while the
+    /// windows show.
+    func handleKey(_ event: NSEvent) -> NSEvent? {
+        guard isActive, let window = event.window as? PresentationWindow,
+              window === audienceWindow || window === presenterWindow else { return event }
+        if event.keyCode == 53, window.role == .audience || audienceWindow == nil {
+            stop()
+            return nil
+        }
+        if event.keyCode == 48, event.modifierFlags.contains(.option) {
+            toggleFrontWindow()
+            return nil
+        }
+        return event
+    }
+
+    private func installKeyMonitor() {
+        guard keyMonitor == nil else { return }
+        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard let self else { return event }
+            return self.handleKey(event)
+        }
+    }
+
+    private func removeKeyMonitor() {
+        if let keyMonitor { NSEvent.removeMonitor(keyMonitor) }
+        keyMonitor = nil
+    }
+```
+
+In `showWindows()`, add `installKeyMonitor()` right after `windowsShown = true`. In `takeDownWindows()`, add `removeKeyMonitor()` as its first line.
+
+- [ ] **Step 5: Run the tests one at a time**
+
+```bash
+make -C desktop test ONLY=TapTests/PresentMenuTests/testPresentingShortcuts
+make -C desktop test ONLY=TapTests/PresentMenuTests/testOneDisplay
+make -C desktop test ONLY=TapTests/PresentMenuTests/testEscapeInTheAudienceWindowStopsTheTalk
+make -C desktop test ONLY=TapTests/PresentMenuTests/testEveryTapDevPresenterFeatureWorks
+make -C desktop test ONLY=TapTests/MenuTests
+```
+
+Expected: all pass. If `testEveryTapDevPresenterFeatureWorks` never sees `lastSlide == 3`: first check the presenter cookie is in the store (`presenterCookieInTheSharedStore()`); if it is, the key did not reach the web content. Then make the audience window's first responder the web view (`audience.makeFirstResponder(audience.page.webView)`) and send the events through `audience.sendEvent(_:)` instead of `keyDown(with:)`. If neither moves the page, the UI test in Task 14 is what proves the keys, and this test keeps the cookie, the configuration and the S key assertions and drives the position through the app's socket as `testStopPresenting` does; record it in the ledger.
+
+- [ ] **Step 6: Mutate and commit**
+
+Mutations, each reverted, the ones that can leave a screen covered first: in `handleKey`, drop the Escape branch (expected: `testEscapeInTheAudienceWindowStopsTheTalk` fails); in `handleKey`, stop on Escape in any presentation window (expected: it fails on the presenter window's Escape); in `takeDownWindows`, drop `removeKeyMonitor()` (survives here: the guard on `isActive` makes a stale monitor inert; note it, not a claim); in `handleKey`, drop the `.option` check (expected: `testOneDisplay` fails on the plain Tab); in `validateMenuItem`, return true for Stop always (expected: `testPresentingShortcuts` fails); in `presentMenu`, give Stop the key `"s"` (expected: it fails on the key equivalent).
+
+```bash
+git add desktop/Tap desktop/TapTests
+git commit -m "feat(desktop): the Present menu, Escape and Option-Tab in the talk windows, and the S key"
+```
+
+---
+
+### Task 8: The presenter toolbar, the REC dot, the edits the audience has not seen, Reload Slides and the idle cursor
+
+**Files:**
+- Create: `desktop/Tap/Presenting/PresenterToolbar.swift`
+- Modify: `desktop/Tap/Presenting/PresentationWindow.swift` (the toolbar and the dot in the presenter window, the top-edge tracking)
+- Modify: `desktop/Tap/Presenting/PresentationController.swift` (`editsNotShown`, `presentedText`, `deckTextChanged`, `reloadSlides`, the cursor timer, `refreshPresenterToolbar`)
+- Modify: `desktop/Tap/Documents/DeckSessionController.swift` (`applySlideList` reports the text; `saveForPresenting` records it)
+- Modify: `desktop/Tap/Windows/DeckWindowController.swift` (`reloadSlides(_:)`, the toolbar's actions)
+- Modify: `desktop/Tap/App/MainMenu.swift` (Reload Slides)
+- Modify: `desktop/TapTests/PresentingTests.swift` (`testTheMacStaysAwake` gains the cursor)
+- Test: `desktop/TapTests/PresenterToolbarTests.swift`
+
+**Interfaces:**
+- Consumes: Task 4's controller and `saveDeck`, Task 3's `PresentationWindow.container`, Task 2's `RecordingStatus`, `PresentationMode`; D3's `DeckSessionController.applySlideList` and `lastAppliedText`.
+- Produces: `PresenterToolbar` with `titleLabel`, `recordButton`, `editsLabel`, `reloadButton`, `swapButton`, `stopButton`, `isShown`, `hideDelay`, `onRecord`, `onReload`, `onSwap`, `onStop`, `pointerReachedTopEdge()`, `pointerLeft()`, `update(recording:editsNotShown:mode:)`; `RecordingDot`; `PresentationWindow.toolbar`, `recordingDot`, `onMouseMoved`; `PresentationController.editsNotShown`, `presentedText`, `deckTextChanged(_:)`, `reloadSlides()`, `cursorHideDelay`, `hideCursor`, `isCursorHideArmed`, `noteMouseMoved()`, `toggleRecording()`; `DeckWindowController.reloadSlides(_:)`; the Present menu item Reload Slides (Cmd+R).
+
+- [ ] **Step 1: Write the failing tests**
+
+`desktop/TapTests/PresenterToolbarTests.swift`:
+
+```swift
+import XCTest
+@testable import Tap
+
+final class PresenterToolbarTests: PresentingTestCase {
+    func testPresenterControls() async throws {
+        let (_, controller) = try await openDeckForPresenting()
+        let presentation = controller.presentation
+        try await startPresenting(controller, PresentationOptions(mode: .play, startSlide: 1))
+        let presenter = try XCTUnwrap(presentation.presenterWindow)
+        let toolbar = try XCTUnwrap(presenter.toolbar)
+        let dot = try XCTUnwrap(presenter.recordingDot)
+        XCTAssertNil(presentation.audienceWindow?.toolbar, "the audience window has no toolbar")
+        XCTAssertTrue(toolbar.isHidden, "the toolbar is out of sight until the pointer reaches the top edge")
+        XCTAssertFalse(toolbar.isShown)
+        XCTAssertTrue(dot.isHidden, "no REC dot while nothing records")
+
+        toolbar.pointerReachedTopEdge()
+        XCTAssertTrue(toolbar.isShown)
+        XCTAssertFalse(toolbar.isHidden)
+        XCTAssertEqual(toolbar.recordButton.title, "NOT RECORDING")
+        XCTAssertEqual(toolbar.reloadButton.title, "Reload Slides")
+        XCTAssertEqual(toolbar.swapButton.title, "Swap Displays")
+        XCTAssertEqual(toolbar.stopButton.title, "Stop")
+        XCTAssertTrue(toolbar.editsLabel.isHidden)
+        XCTAssertEqual(toolbar.frame.maxY, presenter.container.bounds.maxY, "it sits along the top edge")
+
+        toolbar.hideDelay = 0.1
+        toolbar.pointerLeft()
+        try await waitUntil(timeout: 2, "the toolbar to slide away") { toolbar.isHidden }
+        toolbar.pointerReachedTopEdge()
+        toolbar.pointerLeft()
+        toolbar.pointerReachedTopEdge()
+        try await Task.sleep(nanoseconds: 300_000_000)
+        XCTAssertFalse(toolbar.isHidden, "coming back cancels the hide")
+
+        // The REC dot stays visible in a corner at all times while recording.
+        presentation.handle(.recording(RecordingEvent(state: "recording", segment: 1, elapsed: 5, disk: "ok")))
+        XCTAssertFalse(dot.isHidden)
+        XCTAssertEqual(toolbar.recordButton.title, "REC 0:05")
+        XCTAssertEqual(dot.frame.maxY, presenter.container.bounds.maxY - 16, accuracy: 1)
+        XCTAssertEqual(dot.frame.maxX, presenter.container.bounds.maxX - 18, accuracy: 1)
+        toolbar.pointerLeft()
+        try await waitUntil(timeout: 2, "the toolbar away again") { toolbar.isHidden }
+        XCTAssertFalse(dot.isHidden, "the dot does not go with the toolbar")
+        presentation.handle(.recording(RecordingEvent(state: "stopped", segment: 1, elapsed: 0, disk: "ok")))
+        XCTAssertTrue(dot.isHidden)
+
+        toolbar.pointerReachedTopEdge()
+        toolbar.stopButton.performClick(nil)
+        XCTAssertEqual(presentation.state, .stopping)
+    }
+
+    func testARehearsalHasNoRecordingOrSwapControls() async throws {
+        let (_, controller) = try await openDeckForPresenting()
+        try await startPresenting(controller, PresentationOptions(mode: .rehearse, startSlide: 1))
+        let toolbar = try XCTUnwrap(controller.presentation.presenterWindow?.toolbar)
+        toolbar.pointerReachedTopEdge()
+        XCTAssertEqual(toolbar.titleLabel.stringValue, "Rehearsal")
+        XCTAssertTrue(toolbar.recordButton.isHidden)
+        XCTAssertTrue(toolbar.swapButton.isHidden)
+        XCTAssertFalse(toolbar.reloadButton.isHidden)
+        XCTAssertFalse(toolbar.stopButton.isHidden)
+    }
+
+    func testEditWhilePresenting() async throws {
+        let (document, controller) = try await openDeckForPresenting()
+        let deck = try XCTUnwrap(document.fileURL)
+        let deckWindow = try XCTUnwrap(controller.editor.window?.windowController as? DeckWindowController)
+        let presentation = controller.presentation
+        controller.jumpToSlide(number: 1)
+        try await startPresenting(controller, PresentationOptions(mode: .play, startSlide: 1))
+        let audience = try XCTUnwrap(presentation.audienceWindow)
+        let toolbar = try XCTUnwrap(presentation.presenterWindow?.toolbar)
+        try await waitUntil(timeout: 20, "the audience page on slide 1") { audience.page.lastReady?.slide == 1 }
+        var text = await audience.page.pageText()
+        XCTAssertTrue(text.contains("One"))
+        XCTAssertEqual(presentation.editsNotShown, 0)
+
+        // An edit reaches tap dev, never tap present.
+        let end = (controller.editor.string as NSString).range(of: "# One").upperBound
+        controller.editor.setSelectedRange(NSRange(location: end, length: 0))
+        controller.editor.insertText(" edited", replacementRange: NSRange(location: NSNotFound, length: 0))
+        try await waitUntil(timeout: 15, "tap dev's answer") { controller.lastAppliedText?.contains("# One edited") == true }
+        try await Task.sleep(nanoseconds: 500_000_000)
+        text = await audience.page.pageText()
+        XCTAssertFalse(text.contains("One edited"), "the audience does not see the change: tap present does not watch files")
+        XCTAssertEqual(presentation.editsNotShown, 1)
+        toolbar.pointerReachedTopEdge()
+        XCTAssertFalse(toolbar.editsLabel.isHidden)
+        XCTAssertEqual(toolbar.editsLabel.stringValue, "1 edit not shown")
+
+        // Another typing pause counts again; undoing back to the presented text counts nothing.
+        controller.editor.insertText("!", replacementRange: NSRange(location: NSNotFound, length: 0))
+        try await waitUntil(timeout: 15, "the second answer") { controller.lastAppliedText?.contains("# One edited!") == true }
+        XCTAssertEqual(presentation.editsNotShown, 2)
+        XCTAssertEqual(toolbar.editsLabel.stringValue, "2 edits not shown")
+
+        // Present > Reload Slides saves and reloads, as r does in tap present.
+        deckWindow.reloadSlides(nil)
+        try await waitUntil(timeout: 20, "the audience to show the edit") {
+            await audience.page.pageText().contains("One edited!")
+        }
+        XCTAssertEqual(presentation.editsNotShown, 0)
+        XCTAssertTrue(toolbar.editsLabel.isHidden)
+        XCTAssertTrue(try String(contentsOf: deck, encoding: .utf8).contains("# One edited!"), "Reload Slides saved the buffer first")
+        XCTAssertFalse(document.isDocumentEdited)
+    }
+}
+```
+
+`waitUntil` takes a synchronous condition; for the last wait write a small loop in the test instead:
+
+```swift
+        let deadline = Date().addingTimeInterval(20)
+        var shown = await audience.page.pageText()
+        while !shown.contains("One edited!") {
+            if Date() > deadline { XCTFail("the audience never showed the edit: \(shown)"); throw CancellationError() }
+            try await Task.sleep(nanoseconds: 200_000_000)
+            shown = await audience.page.pageText()
+        }
+```
+
+Use that loop in place of the `waitUntil` above.
+
+In `desktop/TapTests/PresentingTests.swift`, inside `testTheMacStaysAwake`, add before `try await stopPresenting(controller)`:
+
+```swift
+        // The cursor hides once the pointer has rested on a talk window.
+        presentation.cursorHideDelay = 0.1
+        var hides = 0
+        presentation.hideCursor = { hides += 1 }
+        presentation.noteMouseMoved()
+        XCTAssertTrue(presentation.isCursorHideArmed)
+        try await waitUntil(timeout: 2, "the cursor to hide") { hides == 1 }
+        XCTAssertFalse(presentation.isCursorHideArmed)
+        presentation.noteMouseMoved()
+        presentation.noteMouseMoved()
+        try await waitUntil(timeout: 2, "the cursor to hide once more") { hides == 2 }
+```
+
+- [ ] **Step 2: Run one test to verify it fails**
+
+Run: `make -C desktop test ONLY=TapTests/PresenterToolbarTests/testARehearsalHasNoRecordingOrSwapControls`
+Expected: the test target does not compile (`toolbar` is undefined on `PresentationWindow`).
+
+- [ ] **Step 3: Write `PresenterToolbar.swift`**
+
+```swift
+import AppKit
+
+/// The app's toolbar over the presenter page: REC, the edits the audience
+/// has not seen, Reload Slides, Swap Displays and Stop. It is out of sight
+/// while the speaker talks and slides in when the pointer reaches the top
+/// edge, then slides away once the pointer has left it.
+final class PresenterToolbar: NSView {
+    static let height: CGFloat = 52
+    let titleLabel = NSTextField(labelWithString: "")
+    let recordButton = NSButton(title: "NOT RECORDING", target: nil, action: nil)
+    let editsLabel = NSTextField(labelWithString: "")
+    let reloadButton = NSButton(title: "Reload Slides", target: nil, action: nil)
+    let swapButton = NSButton(title: "Swap Displays", target: nil, action: nil)
+    let stopButton = NSButton(title: "Stop", target: nil, action: nil)
+    /// How long the pointer must be away before the toolbar slides off. Tests shorten it.
+    var hideDelay: TimeInterval = 1.5
+    private(set) var isShown = false
+    var onRecord: (() -> Void)?
+    var onReload: (() -> Void)?
+    var onSwap: (() -> Void)?
+    var onStop: (() -> Void)?
+    private var hideWork: DispatchWorkItem?
+
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        wantsLayer = true
+        layer?.backgroundColor = NSColor(white: 0.12, alpha: 0.92).cgColor
+        setAccessibilityIdentifier("presenter-toolbar")
+        titleLabel.font = .systemFont(ofSize: 13, weight: .semibold)
+        titleLabel.textColor = .white
+        editsLabel.font = .systemFont(ofSize: 12)
+        editsLabel.textColor = .secondaryLabelColor
+        for button in [recordButton, reloadButton, swapButton, stopButton] {
+            button.bezelStyle = .rounded
+            button.target = self
+        }
+        recordButton.action = #selector(recordPressed(_:))
+        reloadButton.action = #selector(reloadPressed(_:))
+        swapButton.action = #selector(swapPressed(_:))
+        stopButton.action = #selector(stopPressed(_:))
+        stopButton.hasDestructiveAction = true
+        recordButton.setAccessibilityIdentifier("record-button")
+        reloadButton.setAccessibilityIdentifier("reload-slides-button")
+        swapButton.setAccessibilityIdentifier("swap-displays-button")
+        stopButton.setAccessibilityIdentifier("stop-button")
+        let row = NSStackView(views: [titleLabel, recordButton, NSView(), editsLabel, reloadButton, swapButton, stopButton])
+        row.orientation = .horizontal
+        row.spacing = 10
+        row.edgeInsets = NSEdgeInsets(top: 0, left: 16, bottom: 0, right: 16)
+        row.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(row)
+        NSLayoutConstraint.activate([
+            row.topAnchor.constraint(equalTo: topAnchor),
+            row.leadingAnchor.constraint(equalTo: leadingAnchor),
+            row.trailingAnchor.constraint(equalTo: trailingAnchor),
+            row.bottomAnchor.constraint(equalTo: bottomAnchor),
+        ])
+        isHidden = true
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
+
+    /// The pointer touched the top edge: the toolbar comes in and stays while the pointer is on it.
+    func pointerReachedTopEdge() {
+        hideWork?.cancel()
+        hideWork = nil
+        isShown = true
+        isHidden = false
+    }
+
+    /// The pointer left the toolbar: it goes after `hideDelay`, unless the pointer comes back first.
+    func pointerLeft() {
+        guard isShown else { return }
+        hideWork?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                self.isShown = false
+                self.isHidden = true
+            }
+        }
+        hideWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + hideDelay, execute: work)
+    }
+
+    /// What the talk is now. A rehearsal has no recording and nothing to swap.
+    func update(recording: RecordingStatus, editsNotShown: Int, mode: PresentationMode) {
+        titleLabel.stringValue = mode == .rehearse ? "Rehearsal" : "Presenting"
+        recordButton.title = recording.label
+        recordButton.isHidden = mode == .rehearse
+        swapButton.isHidden = mode == .rehearse
+        editsLabel.isHidden = editsNotShown == 0
+        editsLabel.stringValue = editsNotShown == 1 ? "1 edit not shown" : "\(editsNotShown) edits not shown"
+    }
+
+    @objc private func recordPressed(_ sender: Any?) { onRecord?() }
+    @objc private func reloadPressed(_ sender: Any?) { onReload?() }
+    @objc private func swapPressed(_ sender: Any?) { onSwap?() }
+    @objc private func stopPressed(_ sender: Any?) { onStop?() }
+}
+
+/// The small red dot with REC that stays in the top-right corner of the
+/// presenter window for as long as tap records.
+final class RecordingDot: NSView {
+    private let label = NSTextField(labelWithString: "REC")
+
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        wantsLayer = true
+        layer?.cornerRadius = 12
+        layer?.backgroundColor = NSColor(white: 0, alpha: 0.55).cgColor
+        setAccessibilityIdentifier("recording-dot")
+        let dot = NSView()
+        dot.wantsLayer = true
+        dot.layer?.cornerRadius = 4
+        dot.layer?.backgroundColor = NSColor.systemRed.cgColor
+        dot.translatesAutoresizingMaskIntoConstraints = false
+        label.font = .systemFont(ofSize: 12, weight: .bold)
+        label.textColor = NSColor(red: 1, green: 0.41, blue: 0.38, alpha: 1)
+        let row = NSStackView(views: [dot, label])
+        row.orientation = .horizontal
+        row.spacing = 6
+        row.edgeInsets = NSEdgeInsets(top: 4, left: 10, bottom: 4, right: 10)
+        row.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(row)
+        NSLayoutConstraint.activate([
+            dot.widthAnchor.constraint(equalToConstant: 8),
+            dot.heightAnchor.constraint(equalToConstant: 8),
+            row.topAnchor.constraint(equalTo: topAnchor),
+            row.leadingAnchor.constraint(equalTo: leadingAnchor),
+            row.trailingAnchor.constraint(equalTo: trailingAnchor),
+            row.bottomAnchor.constraint(equalTo: bottomAnchor),
+        ])
+        isHidden = true
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
+}
+```
+
+- [ ] **Step 4: The toolbar in the presenter window**
+
+In `PresentationWindow.swift`, replace `let container = NSView()` with:
+
+```swift
+    /// Holds the page and, in the presenter window, the toolbar and the REC dot over it.
+    let container = PresentationContentView()
+    /// The presenter window's toolbar; nil in the audience window.
+    private(set) var toolbar: PresenterToolbar?
+    /// The presenter window's REC dot; nil in the audience window.
+    private(set) var recordingDot: RecordingDot?
+    /// The pointer moved over this window.
+    var onMouseMoved: (() -> Void)?
+```
+
+At the end of `init`, before `container.layoutSubtreeIfNeeded()`, add:
+
+```swift
+        if role == .presenter {
+            let toolbar = PresenterToolbar(frame: .zero)
+            let dot = RecordingDot(frame: .zero)
+            for view in [toolbar, dot] as [NSView] {
+                view.translatesAutoresizingMaskIntoConstraints = false
+                container.addSubview(view)
+            }
+            NSLayoutConstraint.activate([
+                toolbar.topAnchor.constraint(equalTo: container.topAnchor),
+                toolbar.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+                toolbar.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+                toolbar.heightAnchor.constraint(equalToConstant: PresenterToolbar.height),
+                dot.topAnchor.constraint(equalTo: container.topAnchor, constant: 16),
+                dot.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -18),
+            ])
+            self.toolbar = toolbar
+            recordingDot = dot
+        }
+        container.onMouseMoved = { [weak self] point in
+            guard let self else { return }
+            self.onMouseMoved?()
+            guard let toolbar = self.toolbar else { return }
+            if point.y >= self.container.bounds.height - 2 {
+                toolbar.pointerReachedTopEdge()
+            } else if point.y < self.container.bounds.height - PresenterToolbar.height {
+                toolbar.pointerLeft()
+            }
+        }
+```
+
+Add at the end of the file:
+
+```swift
+/// The talk window's content view: it tracks the pointer everywhere in the
+/// window, so the toolbar can slide in at the top edge and the cursor can
+/// hide when idle.
+final class PresentationContentView: NSView {
+    var onMouseMoved: ((NSPoint) -> Void)?
+    private var trackingArea: NSTrackingArea?
+
+    override var isFlipped: Bool { false }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let trackingArea { removeTrackingArea(trackingArea) }
+        let area = NSTrackingArea(rect: bounds, options: [.mouseMoved, .activeAlways, .inVisibleRect], owner: self, userInfo: nil)
+        addTrackingArea(area)
+        trackingArea = area
+    }
+
+    override func mouseMoved(with event: NSEvent) {
+        onMouseMoved?(convert(event.locationInWindow, from: nil))
+    }
+}
+```
+
+- [ ] **Step 5: The controller's side**
+
+In `PresentationController.swift`, add stored properties after `pagesReported`:
+
+```swift
+    /// How many typing pauses tap dev has answered for since tap present
+    /// last read the file, so the toolbar can say what the audience has not
+    /// seen. Zero again when the text equals what was presented.
+    private(set) var editsNotShown = 0
+    /// The deck text tap present last read: at the start and after Reload Slides.
+    var presentedText: String?
+    /// How long the pointer rests on a talk window before the cursor hides.
+    var cursorHideDelay: TimeInterval = 3
+    /// Hides the cursor until the mouse moves. A test replaces it.
+    var hideCursor: () -> Void = { NSCursor.setHiddenUntilMouseMoves(true) }
+    private var cursorHideWork: DispatchWorkItem?
+    var isCursorHideArmed: Bool { cursorHideWork != nil }
+```
+
+In `start(_:)`, add `editsNotShown = 0` after `recording = RecordingStatus()`. In `makeWindow`, add after the `onPresenterPopup` line:
+
+```swift
+        window.onMouseMoved = { [weak self] in self?.noteMouseMoved() }
+        if let toolbar = window.toolbar {
+            toolbar.onRecord = { [weak self] in self?.toggleRecording() }
+            toolbar.onReload = { [weak self] in self?.reloadSlides() }
+            toolbar.onSwap = { [weak self] in self?.swapDisplays() }
+            toolbar.onStop = { [weak self] in self?.stop() }
+        }
+```
+
+In `openWindows`, add `refreshPresenterToolbar()` as the last line. In `handle(_:)`, add `refreshPresenterToolbar()` after each `onRecordingChange?(recording)`. In `takeDownWindows`, add `cursorHideWork?.cancel()` and `cursorHideWork = nil` before `sleepAssertion.release()`. Add after the `// MARK: Keys` section:
+
+```swift
+    // MARK: The presenter toolbar
+
+    func refreshPresenterToolbar() {
+        guard let presenterWindow, let options else { return }
+        presenterWindow.toolbar?.update(recording: recording, editsNotShown: editsNotShown, mode: options.mode)
+        presenterWindow.recordingDot?.isHidden = !recording.isRecording
+    }
+
+    /// tap dev answered for `text`: an edit the audience has not seen, unless
+    /// the text is back to what tap present read.
+    func deckTextChanged(_ text: String) {
+        guard isActive else { return }
+        if text == presentedText {
+            editsNotShown = 0
+        } else {
+            editsNotShown += 1
+        }
+        refreshPresenterToolbar()
+    }
+
+    /// Reload Slides: the buffer goes to the file, then tap present reads
+    /// it again, as r does.
+    func reloadSlides() {
+        guard state == .presenting else { return }
+        saveDeck { [weak self] error in
+            guard let self, self.state == .presenting else { return }
+            if let error {
+                self.session?.log.append("Reload Slides could not save the deck: \(error.localizedDescription)", source: .app)
+                return
+            }
+            self.session?.send(.reload)
+            self.editsNotShown = 0
+            self.refreshPresenterToolbar()
+        }
+    }
+
+    /// REC: stop a recording, or start a new segment, as c does.
+    func toggleRecording() {
+        guard isActive else { return }
+        session?.send(.recording(action: recording.isRecording ? .stop : .newSegment))
+    }
+
+    /// The pointer moved over a talk window: the cursor hides again after it rests.
+    func noteMouseMoved() {
+        guard isActive else { return }
+        cursorHideWork?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                self.cursorHideWork = nil
+                self.hideCursor()
+            }
+        }
+        cursorHideWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + cursorHideDelay, execute: work)
+    }
+```
+
+In `DeckSessionController.swift`, in `saveForPresenting`, add as the first line inside the `guard let document, let url` success path (right after the guard):
+
+```swift
+        presentation.presentedText = editor.string
+```
+
+In `applySlideList`, add after `lastAppliedText = sentText`:
+
+```swift
+        presentation.deckTextChanged(sentText)
+```
+
+In `DeckWindowController.swift`, add after `swapDisplays(_:)`:
+
+```swift
+    /// Present > Reload Slides and the toolbar's.
+    @objc func reloadSlides(_ sender: Any?) {
+        sessionController.presentation.reloadSlides()
+    }
+```
+
+and in `validateMenuItem`, add `if menuItem.action == #selector(reloadSlides(_:)) { return presentation.state == .presenting }` next to the Stop line. In `MainMenu.presentMenu()`, add after the Stop item:
+
+```swift
+        menu.addItem(item("Reload Slides", action: #selector(DeckWindowController.reloadSlides(_:)), key: "r"))
+```
+
+- [ ] **Step 6: Run the tests one at a time**
+
+```bash
+make -C desktop test ONLY=TapTests/PresenterToolbarTests/testPresenterControls
+make -C desktop test ONLY=TapTests/PresenterToolbarTests/testARehearsalHasNoRecordingOrSwapControls
+make -C desktop test ONLY=TapTests/PresenterToolbarTests/testEditWhilePresenting
+make -C desktop test ONLY=TapTests/PresentingTests/testTheMacStaysAwake
+make -C desktop test ONLY=TapTests/PresentMenuTests/testPresentingShortcuts
+```
+
+Expected: all pass. If `testEditWhilePresenting` never shows the edit after Reload Slides, check `tap present --app` logged `reload` in the talk's log (`presentation.session?.log.text`) and that the file holds the edit; a `reload_failed` error event names tap's reason.
+
+- [ ] **Step 7: Mutate and commit**
+
+Mutations, each reverted: in `reloadSlides`, skip `saveDeck` and send `.reload` at once (expected: `testEditWhilePresenting` fails: the file lacks the edit, so the audience never shows it); in `deckTextChanged`, drop the `text == presentedText` branch (survives: the test never undoes; add an undo step to the test if wanted, or leave as a written property); in `update(recording:editsNotShown:mode:)`, never hide `recordButton` (expected: the rehearsal test fails); in `pointerLeft`, drop the delayed hide (expected: `testPresenterControls` times out); in `refreshPresenterToolbar`, drop the dot line (expected: it fails on `dot.isHidden`); in `noteMouseMoved`, drop `cursorHideWork?.cancel()` (expected: `testTheMacStaysAwake` counts 3 hides, not 2).
+
+```bash
+git add desktop/Tap desktop/TapTests
+git commit -m "feat(desktop): the presenter toolbar, the REC dot, the edits counter, Reload Slides and the idle cursor"
 ```
 
 ---
