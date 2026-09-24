@@ -54,6 +54,12 @@ final class GoToSlideController: NSObject, NSSearchFieldDelegate, NSTableViewDat
     }
 
     func show(over window: NSWindow) {
+        // A cached controller reused from an earlier invocation may still be
+        // parented to a different window (the deck's own window one time,
+        // its detached preview window the next); leaving that old parent in
+        // place while adding a new one would parent the panel to two windows
+        // at once.
+        panel.parent?.removeChildWindow(panel)
         searchField.stringValue = ""
         setQuery("")
         let frame = window.frame

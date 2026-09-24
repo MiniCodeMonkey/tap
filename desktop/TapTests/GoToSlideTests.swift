@@ -53,4 +53,69 @@ final class GoToSlideTests: HostedTestCase {
         deckWindowController.goToSlideController?.cancel()
         deckWindowController.dockPreview()
     }
+
+    /// `AppDelegate.validateMenuItem` is what disables Go to Slide when no
+    /// deck can be resolved, rather than leaving it enabled and inert (the
+    /// task's own added requirement). The decision itself is factored into
+    /// `goToSlideIsEnabled(forKeyWindow:)`, exactly the way `deck(owning:)`
+    /// above is factored, so it can be tested against real windows without
+    /// driving `NSApp.keyWindow`. `validateMenuItem` itself is also
+    /// exercised directly with a real menu item: this host's `NSApp.keyWindow`
+    /// is always nil (see `testGoToSlideFindsTheDeckOwningADetachedPreviewWindow`),
+    /// which happens to be exactly the "no deck resolves" case, so that call
+    /// covers the disabled path through the real method; the enabled path
+    /// through `validateMenuItem` itself, which needs a real key window,
+    /// stays uncovered along with the `NSApp.keyWindow` read.
+    func testValidateMenuItemGoToSlide() async throws {
+        let document = try await openDeck(try Fixtures.copyDeck("plain.md"))
+        let deckWindowController = try XCTUnwrap(document.windowControllers.first as? DeckWindowController)
+        let appDelegate = try XCTUnwrap(NSApp.delegate as? AppDelegate)
+
+        XCTAssertTrue(AppDelegate.goToSlideIsEnabled(forKeyWindow: deckWindowController.window))
+        XCTAssertFalse(AppDelegate.goToSlideIsEnabled(forKeyWindow: nil))
+        WelcomeWindowController.shared.showWindow(nil)
+        XCTAssertFalse(AppDelegate.goToSlideIsEnabled(forKeyWindow: WelcomeWindowController.shared.window),
+                      "the welcome window resolves to no deck")
+        WelcomeWindowController.shared.window?.orderOut(nil)
+
+        let goToSlideItem = NSMenuItem(title: "Go to Slide", action: #selector(AppDelegate.goToSlide(_:)), keyEquivalent: "")
+        XCTAssertFalse(appDelegate.validateMenuItem(goToSlideItem),
+                      "no key window here, so validateMenuItem itself must disable the item")
+
+        // Other AppDelegate-targeted items are unaffected by the new check.
+        let tapLogItem = NSMenuItem(title: "Tap Log", action: #selector(AppDelegate.showTapLog(_:)), keyEquivalent: "")
+        XCTAssertTrue(appDelegate.validateMenuItem(tapLogItem))
+    }
+
+    /// The panel opens over whichever window the person invoked Go to Slide
+    /// from, which is the detached preview window when that is the source,
+    /// not always the deck's own window. Confirming a jump then brings the
+    /// deck window to the front, since that is where the visible effect (the
+    /// cursor move) actually happens; cancelling leaves window order alone.
+    func testGoToSlideOpensOverTheInvokingWindowAndBringsTheDeckWindowFrontOnConfirm() async throws {
+        let document = try await openDeckAndWaitForPreview(try Fixtures.copyAppFixture())
+        try await waitForBoxes(document, count: 4)
+        let deckWindowController = try XCTUnwrap(document.windowControllers.first as? DeckWindowController)
+        deckWindowController.showPreviewInWindow(nil)
+        let previewWindow = try XCTUnwrap(deckWindowController.previewWindowController?.window)
+        let deckWindow = try XCTUnwrap(deckWindowController.window)
+
+        previewWindow.makeKeyAndOrderFront(nil)
+        deckWindowController.showGoToSlide(over: previewWindow)
+        let outline = try XCTUnwrap(deckWindowController.goToSlideController)
+        XCTAssertTrue(outline.panel.isVisible)
+        XCTAssertTrue(outline.panel.parent === previewWindow,
+                      "the panel opens over the window it was invoked from, not always the deck's own window")
+
+        outline.setQuery("")
+        outline.confirm()
+        XCTAssertFalse(outline.panel.isVisible)
+        let orderedWindows = NSApp.orderedWindows
+        let deckIndex = try XCTUnwrap(orderedWindows.firstIndex(of: deckWindow))
+        let previewIndex = try XCTUnwrap(orderedWindows.firstIndex(of: previewWindow))
+        XCTAssertLessThan(deckIndex, previewIndex,
+                          "the deck window is ordered in front of the preview window after a confirmed jump")
+
+        deckWindowController.dockPreview()
+    }
 }

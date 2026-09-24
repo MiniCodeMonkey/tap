@@ -90,13 +90,29 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
 
     private(set) var goToSlideController: GoToSlideController?
 
-    /// Shows the Go to Slide panel over this deck's window, or brings the
-    /// existing one back if it is already open.
+    /// Shows the Go to Slide panel over this deck's own window.
     @objc func goToSlide(_ sender: Any?) {
+        showGoToSlide(over: window)
+    }
+
+    /// Shows the Go to Slide panel over the given window, or brings the
+    /// existing one back if it is already open. The window is whichever one
+    /// the person actually invoked it from: this deck's own window when
+    /// Cmd+Shift+O reaches `goToSlide(_:)` directly, or the detached preview
+    /// window when `AppDelegate.goToSlide` forwards here for that case
+    /// (`DeckWindowController.showPreviewInWindow`). A confirmed jump always
+    /// brings this deck's own window to the front afterward, since that is
+    /// where the visible effect of the jump, the cursor move, actually
+    /// happens, and the panel might have been shown over a different window
+    /// than that; cancelling leaves window order alone.
+    func showGoToSlide(over window: NSWindow?) {
         guard let window else { return }
         let controller = goToSlideController ?? GoToSlideController(
             slides: { [weak self] in self?.sessionController.editor.boxes.map(\.slide) ?? [] },
-            jump: { [weak self] number in self?.sessionController.jumpToSlide(number: number) })
+            jump: { [weak self] number in
+                self?.window?.makeKeyAndOrderFront(nil)
+                self?.sessionController.jumpToSlide(number: number)
+            })
         goToSlideController = controller
         controller.show(over: window)
     }

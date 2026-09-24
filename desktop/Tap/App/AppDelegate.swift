@@ -91,21 +91,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     /// key: the same gap `showTapLog` closes above. Having the same selector
     /// here too means AppKit's nil-targeted lookup falls back to this method
     /// once it walks past the key window to the app delegate, so Cmd+Shift+O
-    /// still opens Go to Slide for the deck that owns the detached preview.
+    /// still opens Go to Slide for the deck that owns the detached preview,
+    /// over the detached preview window itself, the one the person actually
+    /// invoked it from.
     @objc func goToSlide(_ sender: Any?) {
-        Self.deck(owning: NSApp.keyWindow)?.goToSlide(sender)
+        let keyWindow = NSApp.keyWindow
+        Self.deck(owning: keyWindow)?.showGoToSlide(over: keyWindow)
+    }
+
+    /// Whether Go to Slide should be enabled for the given key window.
+    /// Kept as a standalone function, the same way `deck(owning:)` above is,
+    /// so it can be tested against a real window without driving
+    /// `NSApp.keyWindow`.
+    static func goToSlideIsEnabled(forKeyWindow window: NSWindow?) -> Bool {
+        deck(owning: window) != nil
     }
 
     /// Only asked when no responder earlier in the chain answered for
     /// `goToSlide(_:)` itself, which is `DeckWindowController`'s own case
-    /// (its `validateMenuItem` decides then). Here, with no deck window to
-    /// reach, the item must be disabled rather than enabled and inert, so
-    /// this returns false whenever the key window resolves to no deck at
-    /// all, such as the welcome window or a detached preview whose deck
-    /// window has since closed.
+    /// (its `validateMenuItem` decides then, always true: a deck window can
+    /// always resolve its own deck). Here, with no deck window to reach, the
+    /// item must be disabled rather than enabled and inert, so this returns
+    /// false whenever the key window resolves to no deck at all, such as the
+    /// welcome window or a detached preview whose deck window has since
+    /// closed.
     func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
         if menuItem.action == #selector(goToSlide(_:)) {
-            return Self.deck(owning: NSApp.keyWindow) != nil
+            return Self.goToSlideIsEnabled(forKeyWindow: NSApp.keyWindow)
         }
         return true
     }
