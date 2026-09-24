@@ -99,9 +99,15 @@ final class TapSessionTests: XCTestCase {
         tap.start()
         try await waitUntil { if case .running = tap.state { return true } else { return false } }
         let first = try XCTUnwrap(tap.processIdentifier)
+        // The restarting state lasts only the policy's base delay, so every
+        // state is recorded as it happens rather than polled for.
+        var states: [TapSession.State] = []
+        tap.onStateChange = { states.append($0) }
         kill(first, SIGKILL)
-        try await waitUntil { if case .restarting = tap.state { return true } else { return false } }
-        try await waitUntil { if case .running = tap.state { return true } else { return false } }
+        try await waitUntil {
+            guard let restart = states.firstIndex(where: { if case .restarting = $0 { return true } else { return false } }) else { return false }
+            return states[restart...].contains { if case .running = $0 { return true } else { return false } }
+        }
         XCTAssertNotEqual(tap.processIdentifier, first)
         tap.stop()
     }
