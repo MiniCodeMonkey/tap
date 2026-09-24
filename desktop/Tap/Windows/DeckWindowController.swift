@@ -347,8 +347,13 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
         }
         if menuItem.action == #selector(copySlides(_:)) { return count > 0 }
         if menuItem.action == #selector(pasteSlides(_:)) {
+            // Type detection only: reading the pasteboard's contents here, on
+            // every menu validation, is what raises the system's clipboard
+            // privacy alert. A whitespace-only string then enables Paste, but
+            // `pasteSlides(from:after:)` still refuses it, so nothing harmful
+            // happens.
             let pasteboard = AppEnvironment.shared.slidePasteboard
-            return pasteboard.data(forType: NSPasteboard.PasteboardType(SlideDragPayload.pasteboardType)) != nil || pasteboard.string(forType: .string) != nil
+            return pasteboard.availableType(from: [NSPasteboard.PasteboardType(SlideDragPayload.pasteboardType), .string]) != nil
         }
         return true
     }
