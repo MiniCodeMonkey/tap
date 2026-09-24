@@ -74,6 +74,24 @@ final class SlideOperationTests: HostedTestCase {
         XCTAssertEqual(afterUndo.slides.map(\.title), ["One", "Two", "Three", "Three", "Four", "Five", "Six", "Seven"])
     }
 
+    /// A group already open when an operation runs belongs to someone
+    /// else, here the undo manager's own group for this run loop turn. The
+    /// operation nests inside it and leaves it open: closing it would leave
+    /// the undo manager throwing on the next registration of the turn, and
+    /// again when it closes its group at the end of the turn.
+    func testAnOperationLeavesAnOpenUndoGroupOpen() async throws {
+        let (document, controller) = try await openOps()
+        let undoManager = try XCTUnwrap(document.undoManager)
+        let owner = NSObject()
+        undoManager.registerUndo(withTarget: owner) { _ in }
+        let openLevel = undoManager.groupingLevel
+        XCTAssertGreaterThan(openLevel, 0, "a registration outside any group opens the undo manager's own group")
+        XCTAssertEqual(controller.perform(.duplicate(numbers: [3])), .applied)
+        XCTAssertEqual(undoManager.groupingLevel, openLevel, "the operation closed a group it did not open")
+        let afterDuplicate = try await titles(controller)
+        XCTAssertEqual(afterDuplicate, ["One", "Two", "Three", "Three", "Four", "Five", "Six", "Seven"])
+    }
+
     func testSkipASlide() async throws {
         let (document, controller) = try await openOps()
         XCTAssertEqual(controller.perform(.setSkip(numbers: [4], skipped: true)), .applied)

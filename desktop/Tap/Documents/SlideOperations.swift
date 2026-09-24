@@ -84,23 +84,24 @@ extension DeckSessionController {
             return nil
         }
         guard let replacement = TextDiff.replacement(from: text, to: result.text), let undoManager = document?.undoManager else { return nil }
-        // AppKit opens its own per-event group lazily, on the first undo
-        // registration of a run loop turn, and closes it only when that
-        // turn was a real NSEvent's. Two operations performed back to back
-        // with no real event in between (a menu command driven straight
-        // from code, or a hosted test) share that one dangling group
-        // unless it is drained first, which would let one undo revert both
-        // operations at once. Draining it before opening this operation's
-        // own group makes each operation gets its own top-level group
-        // regardless of whether a real event closed the previous one.
-        while undoManager.groupingLevel > 0 { undoManager.endUndoGrouping() }
-        // One group holds the box adoption and the text change. AppKit's
-        // event group would hold both on its own; the explicit group makes
-        // that a property of this code rather than of the run loop.
+        // The operation is one undo step of its own: a top-level group
+        // opened and closed here. With no group open, the automatic
+        // grouping is paused while the group is open, so the undo manager
+        // does not nest an automatic group inside it that would stay open
+        // after it and take in the next operation as well. A group that is
+        // already open belongs to someone else (the undo manager's own
+        // group for this run loop turn, holding typing, or a caller's), so
+        // the operation nests inside it and never closes it: the undo
+        // manager closes its own group at the end of the turn, and throws
+        // when a registration or that close finds its group already gone.
+        let pausesAutomaticGrouping = undoManager.groupingLevel == 0 && undoManager.groupsByEvent
+        if pausesAutomaticGrouping { undoManager.groupsByEvent = false }
+        // One group holds the box adoption and the text change.
         undoManager.beginUndoGrouping()
         registerBoxAdoption(undo: boxes, redo: result.boxes)
         editor.replaceText(in: replacement.range, with: replacement.replacement, actionName: SlideEditing.actionName(for: operation))
         undoManager.endUndoGrouping()
+        if pausesAutomaticGrouping { undoManager.groupsByEvent = true }
         // The cursor's own selection sync would collapse a multi-slide
         // selection to the caret's slide; the panel selects the operated
         // slides itself, last.
