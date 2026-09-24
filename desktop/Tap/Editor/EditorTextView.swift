@@ -3,6 +3,13 @@ import AppKit
 protocol EditorTextViewDelegate: AnyObject {
     func editorTextDidChange(_ editor: EditorTextView)
     func editor(_ editor: EditorTextView, currentSlideDidChange index: Int?)
+    func editor(_ editor: EditorTextView, payloadForHeaderDragOfBoxAt index: Int) -> SlideDragPayload?
+    func editor(_ editor: EditorTextView, dropSlides payload: SlideDragPayload, beforeNumber: Int?, isMove: Bool) -> Bool
+}
+
+extension EditorTextViewDelegate {
+    func editor(_ editor: EditorTextView, payloadForHeaderDragOfBoxAt index: Int) -> SlideDragPayload? { nil }
+    func editor(_ editor: EditorTextView, dropSlides payload: SlideDragPayload, beforeNumber: Int?, isMove: Bool) -> Bool { false }
 }
 
 /// A TextKit 2 text view that draws a rounded box behind each slide's lines.
@@ -93,6 +100,7 @@ final class EditorTextView: NSTextView {
         view.setAccessibilityIdentifier("editor")
         view.textStorage?.delegate = view
         view.textContentStorage?.delegate = view
+        view.registerForDraggedTypes(view.registeredDraggedTypes + [NSPasteboard.PasteboardType(SlideDragPayload.pasteboardType)])
         return view
     }
 
@@ -324,51 +332,123 @@ final class EditorTextView: NSTextView {
         drawBoxes(in: rect)
     }
 
-    private func drawBoxes(in rect: NSRect) {
-        guard let layoutManager = textLayoutManager,
+    /// The rectangle of a box whose start or end is inside the viewport,
+    /// in view coordinates; nil for a box that is entirely off screen. A
+    /// box that starts above the viewport has no trustworthy top, so the
+    /// rectangle is extended far above it, as drawing does.
+    func boxRect(forBoxAt index: Int) -> NSRect? {
+        guard boxes.indices.contains(index), let layoutManager = textLayoutManager,
               let contentManager = layoutManager.textContentManager,
-              let viewport = layoutManager.textViewportLayoutController.viewportRange,
-              !boxes.isEmpty else { return }
+              let viewport = layoutManager.textViewportLayoutController.viewportRange else { return nil }
         let documentStart = contentManager.documentRange.location
         let viewportStart = contentManager.offset(from: documentStart, to: viewport.location)
         let viewportEnd = contentManager.offset(from: documentStart, to: viewport.endLocation)
+        let box = boxes[index]
+        guard box.end >= viewportStart, box.range.location <= viewportEnd else { return nil }
         let origin = textContainerOrigin
         let left = origin.x - Self.boxOutset
         let right = bounds.width - origin.x + Self.boxOutset
+        let errorSpace = CGFloat(box.slide.errors.count) * Self.errorLineHeight
+        var top = visibleRect.minY - 40
+        var bottom = visibleRect.maxY + 40
+        if box.range.location >= viewportStart,
+           let location = contentManager.location(documentStart, offsetBy: box.range.location),
+           let fragment = layoutManager.textLayoutFragment(for: location),
+           let line = fragment.textLineFragments.first {
+            top = fragment.layoutFragmentFrame.minY + line.typographicBounds.minY + origin.y - Self.headerHeight - Self.boxPaddingTop - errorSpace
+        }
+        if box.end <= viewportEnd,
+           let location = contentManager.location(documentStart, offsetBy: max(box.range.location, box.end - 1)),
+           let fragment = layoutManager.textLayoutFragment(for: location),
+           let line = fragment.textLineFragments.last {
+            bottom = fragment.layoutFragmentFrame.minY + line.typographicBounds.maxY + origin.y + Self.boxPaddingBottom
+        }
+        return NSRect(x: left, y: top, width: right - left, height: bottom - top)
+    }
 
-        // The first box that ends inside or after the viewport.
+    func headerRect(forBoxAt index: Int) -> NSRect? {
+        boxRect(forBoxAt: index).map { NSRect(x: $0.minX, y: $0.minY, width: $0.width, height: Self.headerHeight) }
+    }
+
+    /// The box whose header is under `point`, in view coordinates.
+    func boxIndex(forHeaderAt point: NSPoint) -> Int? {
+        for index in visibleBoxIndices() where headerRect(forBoxAt: index)?.contains(point) == true {
+            return index
+        }
+        return nil
+    }
+
+    /// The slide number a drop at `point` lands above: the box under the
+    /// point when the point is in its upper half, the next one otherwise;
+    /// 1 above every box; nil below the last.
+    func dropBoundary(at point: NSPoint) -> Int? {
+        guard !boxes.isEmpty else { return nil }
+        for index in visibleBoxIndices() {
+            guard let rect = boxRect(forBoxAt: index) else { continue }
+            if point.y < rect.minY { return boxes[index].slide.number }
+            if point.y <= rect.maxY {
+                return point.y < rect.midY ? boxes[index].slide.number : (index + 1 < boxes.count ? boxes[index + 1].slide.number : nil)
+            }
+        }
+        if let first = visibleBoxIndices().first, let rect = boxRect(forBoxAt: first), point.y < rect.minY { return boxes[first].slide.number }
+        return nil
+    }
+
+    /// The indices of the boxes touching the viewport, in order. This is
+    /// the same walk `drawBoxes` makes.
+    private func visibleBoxIndices() -> [Int] {
+        guard let layoutManager = textLayoutManager, let contentManager = layoutManager.textContentManager,
+              let viewport = layoutManager.textViewportLayoutController.viewportRange, !boxes.isEmpty else { return [] }
+        let documentStart = contentManager.documentRange.location
+        let viewportStart = contentManager.offset(from: documentStart, to: viewport.location)
+        let viewportEnd = contentManager.offset(from: documentStart, to: viewport.endLocation)
         var low = 0
         var high = boxes.count
         while low < high {
             let middle = (low + high) / 2
             if boxes[middle].end < viewportStart { low = middle + 1 } else { high = middle }
         }
-
+        var indices: [Int] = []
         var index = low
         while index < boxes.count, boxes[index].range.location <= viewportEnd {
-            let box = boxes[index]
-            let errorSpace = CGFloat(box.slide.errors.count) * Self.errorLineHeight
-            // A box that starts above the viewport has no trustworthy frame there; extend it past the dirty rect.
-            var top = rect.minY - 40
-            var bottom = rect.maxY + 40
-            if box.range.location >= viewportStart,
-               let location = contentManager.location(documentStart, offsetBy: box.range.location),
-               let fragment = layoutManager.textLayoutFragment(for: location),
-               let line = fragment.textLineFragments.first {
-                top = fragment.layoutFragmentFrame.minY + line.typographicBounds.minY + origin.y - Self.headerHeight - Self.boxPaddingTop - errorSpace
-            }
-            if box.end <= viewportEnd,
-               let location = contentManager.location(documentStart, offsetBy: max(box.range.location, box.end - 1)),
-               let fragment = layoutManager.textLayoutFragment(for: location),
-               let line = fragment.textLineFragments.last {
-                bottom = fragment.layoutFragmentFrame.minY + line.typographicBounds.maxY + origin.y + Self.boxPaddingBottom
-            }
-            let boxRect = NSRect(x: left, y: top, width: right - left, height: bottom - top)
-            if boxRect.intersects(rect) {
-                draw(header: BoxHeader(slide: box.slide), skipped: box.slide.skip, in: boxRect, isCurrent: index == currentBoxIndex)
-            }
+            indices.append(index)
             index += 1
         }
+        return indices
+    }
+
+    private func drawBoxes(in rect: NSRect) {
+        guard !boxes.isEmpty else { return }
+        for index in visibleBoxIndices() {
+            guard let boxRect = boxRect(forBoxAt: index) else { continue }
+            if boxRect.intersects(rect) {
+                let box = boxes[index]
+                draw(header: BoxHeader(slide: box.slide), skipped: box.slide.skip, in: boxRect, isCurrent: index == currentBoxIndex)
+            }
+        }
+        if let before = dropIndicatorBeforeNumber, let y = dropIndicatorY(beforeNumber: before) {
+            let origin = textContainerOrigin
+            let left = origin.x - Self.boxOutset
+            let right = bounds.width - origin.x + Self.boxOutset
+            NSColor.controlAccentColor.setFill()
+            NSRect(x: left + 8, y: y - 1, width: right - left - 8, height: 2).fill()
+            let ring = NSBezierPath(ovalIn: NSRect(x: left + 1, y: y - 4, width: 8, height: 8))
+            NSColor.controlAccentColor.setStroke()
+            ring.lineWidth = 2
+            ring.stroke()
+        }
+    }
+
+    /// The y of the boundary above slide `beforeNumber`: the top of that
+    /// box's rectangle less half the gap, or below the last box for nil.
+    private func dropIndicatorY(beforeNumber: Int?) -> CGFloat? {
+        if let beforeNumber, let index = boxes.firstIndex(where: { $0.slide.number == beforeNumber }), let rect = boxRect(forBoxAt: index) {
+            return rect.minY - 6
+        }
+        if beforeNumber == nil, let last = boxes.indices.last, let rect = boxRect(forBoxAt: last) {
+            return rect.maxY + 6
+        }
+        return nil
     }
 
     private static let metaAttributes: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 11), .foregroundColor: NSColor.secondaryLabelColor]
@@ -423,6 +503,174 @@ final class EditorTextView: NSTextView {
                 .draw(with: NSRect(x: rect.minX + 12, y: y, width: rect.width - 24, height: Self.errorLineHeight),
                       options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
         }
+    }
+
+    // MARK: Dragging a header
+
+    private(set) var dropIndicatorBeforeNumber: Int?
+    private var dropIndicatorCount = 0
+    private static let slideType = NSPasteboard.PasteboardType(SlideDragPayload.pasteboardType)
+    static let dragThreshold: CGFloat = 4
+    var optionHeld: () -> Bool = { NSEvent.modifierFlags.contains(.option) }
+    /// Starts the drag session. A seam: a test replaces it to see what a
+    /// header drag carries without a real drag session.
+    lazy var headerDragStarter: (SlideDragPayload, NSRect, NSEvent) -> Void = { [weak self] payload, rect, event in
+        guard let self, let data = try? payload.data() else { return }
+        let item = NSPasteboardItem()
+        item.setData(data, forType: Self.slideType)
+        let draggingItem = NSDraggingItem(pasteboardWriter: item)
+        let index = self.boxes.firstIndex { $0.slide.number == payload.slideNumbers[0] } ?? 0
+        draggingItem.setDraggingFrame(rect, contents: self.headerImage(forBoxAt: index, count: payload.slideNumbers.count))
+        self.beginDraggingSession(with: [draggingItem], event: event, source: self)
+    }
+
+    /// A mouse down on a box header: a drag past the threshold drags the
+    /// slide (or the selection it belongs to); a mouse up before that is a
+    /// click, handled as any click in the text.
+    override func mouseDown(with event: NSEvent) {
+        let point = convert(event.locationInWindow, from: nil)
+        guard let index = boxIndex(forHeaderAt: point), let window,
+              let payload = editorDelegate?.editor(self, payloadForHeaderDragOfBoxAt: index) else {
+            super.mouseDown(with: event)
+            return
+        }
+        var outcome: NSEvent?
+        window.trackEvents(matching: [.leftMouseDragged, .leftMouseUp], timeout: 1.5, mode: .eventTracking) { tracked, stop in
+            guard let tracked else {
+                stop.pointee = true
+                return
+            }
+            if tracked.type == .leftMouseUp || hypot(tracked.locationInWindow.x - event.locationInWindow.x, tracked.locationInWindow.y - event.locationInWindow.y) >= Self.dragThreshold {
+                outcome = tracked
+                stop.pointee = true
+            }
+        }
+        if let outcome, outcome.type == .leftMouseDragged {
+            let rect = headerRect(forBoxAt: index) ?? NSRect(origin: point, size: NSSize(width: 200, height: Self.headerHeight))
+            headerDragStarter(payload, rect, event)
+            return
+        }
+        // A click: the caret goes where a click in the text would put it.
+        let caret = characterIndexForInsertion(at: point)
+        setSelectedRange(NSRange(location: min(caret, (string as NSString).length), length: 0))
+    }
+
+    /// The dragged picture: the header's number and title, with a count.
+    private func headerImage(forBoxAt index: Int, count: Int) -> NSImage {
+        let header = BoxHeader(slide: boxes[index].slide)
+        let text = count > 1 ? "\(header.number) \(header.meta)  +\(count - 1)" : "\(header.number) \(header.meta)"
+        let attributes: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 12, weight: .semibold), .foregroundColor: NSColor.labelColor]
+        let size = (text as NSString).size(withAttributes: attributes)
+        return NSImage(size: NSSize(width: size.width + 24, height: Self.headerHeight), flipped: false) { rect in
+            EditorPalette.boxFill.setFill()
+            NSBezierPath(roundedRect: rect, xRadius: 8, yRadius: 8).fill()
+            (text as NSString).draw(at: NSPoint(x: 12, y: (rect.height - size.height) / 2), withAttributes: attributes)
+            return true
+        }
+    }
+
+    override func draggingSession(_ session: NSDraggingSession, sourceOperationMaskFor context: NSDraggingContext) -> NSDragOperation {
+        // Only a slide drag is this view's own; a text drag keeps NSTextView's answer.
+        guard session.draggingPasteboard.data(forType: Self.slideType) != nil else {
+            return super.draggingSession(session, sourceOperationMaskFor: context)
+        }
+        return [.move, .copy]
+    }
+
+    // MARK: Dropping slides
+
+    private func slidePayload(_ sender: NSDraggingInfo) -> SlideDragPayload? {
+        sender.draggingPasteboard.data(forType: Self.slideType).flatMap { SlideDragPayload(data: $0) }
+    }
+
+    func updateDropIndicator(at point: NSPoint, count: Int) {
+        let boundary = dropBoundary(at: point)
+        if boundary != dropIndicatorBeforeNumber || count != dropIndicatorCount {
+            dropIndicatorBeforeNumber = boundary
+            dropIndicatorCount = count
+            needsDisplay = true
+            NSAccessibility.post(element: self, notification: .announcementRequested,
+                                 userInfo: [.announcement: SlideAccessibility.dropLabel(beforeNumber: boundary, count: count),
+                                            .priority: NSAccessibilityPriorityLevel.medium.rawValue])
+        }
+    }
+
+    func clearDropIndicator() {
+        guard dropIndicatorBeforeNumber != nil || dropIndicatorCount != 0 else { return }
+        dropIndicatorBeforeNumber = nil
+        dropIndicatorCount = 0
+        needsDisplay = true
+    }
+
+    /// A slide drop moves, from this deck or another; Option copies (decision 2).
+    private func slideDropOperation() -> NSDragOperation {
+        optionHeld() ? .copy : .move
+    }
+
+    override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
+        guard let payload = slidePayload(sender) else { return super.draggingEntered(sender) }
+        updateDropIndicator(at: convert(sender.draggingLocation, from: nil), count: payload.slideNumbers.count)
+        return slideDropOperation()
+    }
+
+    override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation {
+        guard let payload = slidePayload(sender) else { return super.draggingUpdated(sender) }
+        updateDropIndicator(at: convert(sender.draggingLocation, from: nil), count: payload.slideNumbers.count)
+        return slideDropOperation()
+    }
+
+    override func draggingExited(_ sender: NSDraggingInfo?) {
+        if sender.flatMap(slidePayload) != nil { clearDropIndicator() } else { super.draggingExited(sender) }
+    }
+
+    override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        guard let payload = slidePayload(sender) else { return super.performDragOperation(sender) }
+        let beforeNumber = dropBoundary(at: convert(sender.draggingLocation, from: nil))
+        return performSlideDrop(payload: payload, beforeNumber: beforeNumber, isMove: slideDropOperation() == .move)
+    }
+
+    override func draggingEnded(_ sender: NSDraggingInfo) {
+        clearDropIndicator()
+        super.draggingEnded(sender)
+    }
+
+    /// The drop itself, shared with `performDragOperation` so a test can
+    /// drive it without a real drag.
+    @discardableResult
+    func performSlideDrop(payload: SlideDragPayload, beforeNumber: Int?, isMove: Bool) -> Bool {
+        clearDropIndicator()
+        return editorDelegate?.editor(self, dropSlides: payload, beforeNumber: beforeNumber, isMove: isMove) ?? false
+    }
+
+    // MARK: Accessibility
+
+    /// The text view's own children, plus one element per visible box and
+    /// one for the drop indicator while a drag is over the editor.
+    override func accessibilityChildren() -> [Any]? {
+        var children = super.accessibilityChildren() ?? []
+        for index in visibleBoxIndices() {
+            guard let rect = boxRect(forBoxAt: index) else { continue }
+            let element = NSAccessibilityElement.element(withRole: .group, frame: convertToScreen(rect), label: SlideAccessibility.label(for: boxes[index].slide), parent: self) as! NSAccessibilityElement
+            element.setAccessibilityIdentifier("box-\(boxes[index].slide.number)")
+            children.append(element)
+        }
+        // A drag is over the editor exactly while the count is set: both
+        // update paths set it and clearDropIndicator zeroes it.
+        if dropIndicatorCount > 0 {
+            let y = dropIndicatorY(beforeNumber: dropIndicatorBeforeNumber) ?? 0
+            let rect = NSRect(x: textContainerOrigin.x - Self.boxOutset, y: y - 4, width: bounds.width, height: 8)
+            let element = NSAccessibilityElement.element(withRole: .splitter, frame: convertToScreen(rect),
+                                                         label: SlideAccessibility.dropLabel(beforeNumber: dropIndicatorBeforeNumber, count: dropIndicatorCount),
+                                                         parent: self) as! NSAccessibilityElement
+            element.setAccessibilityIdentifier("drop-indicator")
+            children.append(element)
+        }
+        return children
+    }
+
+    private func convertToScreen(_ rect: NSRect) -> NSRect {
+        guard let window else { return rect }
+        return window.convertToScreen(convert(rect, to: nil))
     }
 }
 

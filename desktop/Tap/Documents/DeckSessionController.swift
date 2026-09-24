@@ -840,6 +840,16 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
         sourceSync.textDidChange()
     }
 
+    func editor(_ editor: EditorTextView, payloadForHeaderDragOfBoxAt index: Int) -> SlideDragPayload? {
+        let number = editor.boxes[index].slide.number
+        let numbers = slidePanel.selectedNumbers.contains(number) ? slidePanel.selectedNumbers : [number]
+        return dragPayload(forSlides: numbers)
+    }
+
+    func editor(_ editor: EditorTextView, dropSlides payload: SlideDragPayload, beforeNumber: Int?, isMove: Bool) -> Bool {
+        dropSlides(payload: payload, beforeNumber: beforeNumber, isMove: isMove)
+    }
+
     func editor(_ editor: EditorTextView, currentSlideDidChange index: Int?) {
         guard let index, editor.boxes.indices.contains(index) else { return }
         sendPreviewMessage(navigator.cursorMoved(to: editor.boxes[index].slide))
