@@ -4,9 +4,11 @@
  * last change has painted. Each check resolves when there is nothing left
  * to wait for, or when its time limit runs out, so a broken image or a
  * looping animation never holds the signal forever. The limits are the ones
- * tap's exporter has always used. The paint check has no time limit: it
- * ends on a hidden page instead, which is the one case where the frames it
- * waits for never come (see DomProbeOptions.requirePaint).
+ * tap's exporter has always used. On a live page the paint check ends on a
+ * hidden page at once, and after PAINT_TIMEOUT_MS on a page that reports
+ * itself visible but runs no animation frames. A page that requires a
+ * paint (see DomProbeOptions.requirePaint) has no paint limit: it reports
+ * ready only after two real frames.
  */
 
 /** How long to wait for stylesheets to load. */
@@ -17,6 +19,15 @@ export const IMAGE_TIMEOUT_MS = 5000;
 
 /** How long to wait for running animations to finish. */
 export const ANIMATION_TIMEOUT_MS = 3000;
+
+/**
+ * How long a live page waits for the animation frames that show it has
+ * painted. A window the window server reports visible can still run no
+ * frames, while it is covered or not composited, so a live page that
+ * waited for them without a limit could never report ready. A page that
+ * requires a paint ignores this limit.
+ */
+export const PAINT_TIMEOUT_MS = 3000;
 
 /** The checks one ready round runs. createDomProbes gives the real ones; tests pass their own. */
 export interface ReadyProbes {
@@ -49,7 +60,9 @@ export interface DomProbeOptions {
 	 * limit runs out. A live page requires only a settled DOM, so a hidden
 	 * window still reports ready: WebKit runs no animation frames for a
 	 * page that is covered, minimized or on another space, so a paint
-	 * there is a wait with no end (see paintWhenVisible).
+	 * there is a wait with no end. A window reported visible that still
+	 * runs no frames reports ready after PAINT_TIMEOUT_MS (see
+	 * paintWhenVisible).
 	 */
 	requirePaint: boolean;
 	/** The document to check. Defaults to the page's own. */
@@ -95,7 +108,9 @@ async function waitForStylesheetsAndFonts(target: Document): Promise<void> {
 	}
 	const fonts: FontFaceSet | undefined = target.fonts;
 	if (fonts?.ready) {
-		await fonts.ready;
+		// settledNow still reports a font that is loading, so a round that
+		// gives up here runs again instead of reporting ready.
+		await settleWithin(fonts.ready, STYLESHEET_TIMEOUT_MS);
 	}
 }
 
@@ -125,8 +140,11 @@ async function waitForAnimations(target: Document, includeInfinite: boolean): Pr
  * painted. A hidden page draws nothing, and WebKit runs no animation
  * frames for one, so unless the caller requires a paint the wait ends the
  * moment the page is hidden, whether it already was or becomes hidden
- * partway through. Ready then means the DOM has settled, which is what a
- * live page's reader asks about; only a capture needs the pixels.
+ * partway through, and otherwise after PAINT_TIMEOUT_MS, for a page that
+ * reports itself visible but still runs no frames. Ready then means the
+ * DOM has settled, which is what a live page's reader asks about; only a
+ * capture needs the pixels, so a page that requires a paint waits for the
+ * two frames with no limit.
  */
 function paintWhenVisible(target: Document, requirePaint: boolean): Promise<void> {
 	return new Promise((resolve) => {
@@ -139,11 +157,13 @@ function paintWhenVisible(target: Document, requirePaint: boolean): Promise<void
 			return;
 		}
 		let settled = false;
+		let timer: ReturnType<typeof setTimeout> | undefined;
 		const finish = (): void => {
 			if (settled) {
 				return;
 			}
 			settled = true;
+			clearTimeout(timer);
 			target.removeEventListener('visibilitychange', onVisibilityChange);
 			resolve();
 		};
@@ -157,6 +177,7 @@ function paintWhenVisible(target: Document, requirePaint: boolean): Promise<void
 			return;
 		}
 		target.addEventListener('visibilitychange', onVisibilityChange);
+		timer = setTimeout(finish, PAINT_TIMEOUT_MS);
 		requestAnimationFrame(() => requestAnimationFrame(finish));
 	});
 }

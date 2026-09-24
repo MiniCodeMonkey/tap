@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { ANIMATION_TIMEOUT_MS, IMAGE_TIMEOUT_MS, STYLESHEET_TIMEOUT_MS, createDomProbes } from './probes';
+import { resetBlockersForTests } from './blockers';
+import { ANIMATION_TIMEOUT_MS, IMAGE_TIMEOUT_MS, PAINT_TIMEOUT_MS, STYLESHEET_TIMEOUT_MS, createDomProbes } from './probes';
+import { clearReady, startReadyCycle, type ReadyPayload } from './readySignal';
 
 function track(promise: Promise<void>): { done: () => boolean } {
 	let finished = false;
@@ -110,6 +112,20 @@ describe('stylesheets and fonts', () => {
 		resolveFonts();
 		await vi.waitFor(() => expect(waiting.done()).toBe(true));
 		expect(probes.settledNow()).toBe(true);
+	});
+
+	it('gives up on document.fonts.ready after STYLESHEET_TIMEOUT_MS, and is still not settled', async () => {
+		vi.useFakeTimers();
+		const fonts = { status: 'loading', ready: new Promise<void>(() => {}) };
+		const fakeDocument = { querySelectorAll: () => [], fonts } as unknown as Document;
+		const probes = createDomProbes({ includeInfiniteAnimations: false, requirePaint: false, document: fakeDocument });
+
+		const waiting = track(probes.fonts());
+		await vi.advanceTimersByTimeAsync(STYLESHEET_TIMEOUT_MS - 1);
+		expect(waiting.done()).toBe(false);
+		await vi.advanceTimersByTimeAsync(1);
+		expect(waiting.done()).toBe(true);
+		expect(probes.settledNow()).toBe(false);
 	});
 });
 
@@ -240,6 +256,33 @@ describe('paint', () => {
 		await vi.waitFor(() => expect(waiting.done()).toBe(true));
 	});
 
+	it('gives up waiting for a paint after PAINT_TIMEOUT_MS on a visible live page that draws no frames', async () => {
+		vi.useFakeTimers();
+		const frames = controllableFrames();
+		const page = documentWithVisibility('visible');
+
+		const waiting = track(
+			createDomProbes({ includeInfiniteAnimations: false, requirePaint: false, document: page.document }).paint()
+		);
+		await vi.advanceTimersByTimeAsync(PAINT_TIMEOUT_MS - 1);
+		expect(waiting.done()).toBe(false);
+		await vi.advanceTimersByTimeAsync(1);
+		expect(waiting.done()).toBe(true);
+		expect(frames.pending()).toBe(1);
+	});
+
+	it('never gives up waiting for a paint on a capture page that draws no frames', async () => {
+		vi.useFakeTimers();
+		controllableFrames();
+		const page = documentWithVisibility('visible');
+
+		const waiting = track(
+			createDomProbes({ includeInfiniteAnimations: false, requirePaint: true, document: page.document }).paint()
+		);
+		await vi.advanceTimersByTimeAsync(60_000);
+		expect(waiting.done()).toBe(false);
+	});
+
 	it('waits for a real paint on a capture page, hidden or not', async () => {
 		const frames = controllableFrames();
 		const page = documentWithVisibility('hidden');
@@ -256,5 +299,54 @@ describe('paint', () => {
 
 		frames.drawFrame();
 		await vi.waitFor(() => expect(waiting.done()).toBe(true));
+	});
+});
+
+describe('ready on a visible page that draws no frames', () => {
+	const payload: ReadyPayload = { revision: 'r1', slide: 1, step: 0 };
+
+	function readyValue(): ReadyPayload | null | undefined {
+		return (window as unknown as { __tapReady?: ReadyPayload | null }).__tapReady;
+	}
+
+	/** A page the window server reports visible whose browser never runs an animation frame. */
+	function visibleDocumentWithoutFrames(): Document {
+		vi.stubGlobal('requestAnimationFrame', () => 0);
+		const events = new EventTarget();
+		return {
+			querySelectorAll: () => [],
+			visibilityState: 'visible',
+			addEventListener: events.addEventListener.bind(events),
+			removeEventListener: events.removeEventListener.bind(events)
+		} as unknown as Document;
+	}
+
+	afterEach(() => {
+		clearReady();
+		resetBlockersForTests();
+	});
+
+	it('publishes ready on a live page once PAINT_TIMEOUT_MS runs out', async () => {
+		vi.useFakeTimers();
+		resetBlockersForTests();
+		const probes = createDomProbes({ includeInfiniteAnimations: false, requirePaint: false, document: visibleDocumentWithoutFrames() });
+
+		const cancel = startReadyCycle(payload, probes);
+		await vi.advanceTimersByTimeAsync(PAINT_TIMEOUT_MS - 1);
+		expect(readyValue()).toBeNull();
+		await vi.advanceTimersByTimeAsync(1);
+		expect(readyValue()).toEqual(payload);
+		cancel();
+	});
+
+	it('never publishes ready on a print page, however long it waits', async () => {
+		vi.useFakeTimers();
+		resetBlockersForTests();
+		const probes = createDomProbes({ includeInfiniteAnimations: true, requirePaint: true, document: visibleDocumentWithoutFrames() });
+
+		const cancel = startReadyCycle(payload, probes);
+		await vi.advanceTimersByTimeAsync(120_000);
+		expect(readyValue()).toBeNull();
+		cancel();
 	});
 });

@@ -29,6 +29,14 @@ const hiddenPageScript = `
 	window.cancelAnimationFrame = () => {};
 `
 
+// framelessPageScript makes a page behave the way a window does that the
+// window server reports visible while it is covered or not composited:
+// document.visibilityState stays "visible", but animation frames never run.
+const framelessPageScript = `
+	window.requestAnimationFrame = () => 0;
+	window.cancelAnimationFrame = () => {};
+`
+
 // hiddenPageDeck is the smallest deck the viewer will render: one slide,
 // no images, no deck components, so the only thing a ready cycle can be
 // waiting on is a paint.
@@ -45,12 +53,19 @@ func hiddenPageDeck() *transformer.TransformedPresentation {
 // "?print=true") in a page that reports itself hidden and runs no
 // animation frames, and reports whether the page published the ready
 // signal within hiddenReadyDeadline.
+func openHiddenPage(t *testing.T, exporter *Exporter, query string) bool {
+	t.Helper()
+	return openPageWithScript(t, exporter, hiddenPageScript, query)
+}
+
+// openPageWithScript is openHiddenPage with the page's behavior installed
+// by initScript instead of hiddenPageScript.
 //
 // It polls window.__tapReady itself rather than calling waitForReady:
 // Playwright's own WaitForFunction polls on animation frames, which this
 // page deliberately does not run, so only the page's own condition, the
 // one internal/pdf/ready.go waits on, is being tested here.
-func openHiddenPage(t *testing.T, exporter *Exporter, query string) bool {
+func openPageWithScript(t *testing.T, exporter *Exporter, initScript string, query string) bool {
 	t.Helper()
 
 	srv := server.New(0)
@@ -67,7 +82,7 @@ func openHiddenPage(t *testing.T, exporter *Exporter, query string) bool {
 	}
 	defer func() { _ = page.Close() }()
 
-	if err := page.AddInitScript(playwright.Script{Content: playwright.String(hiddenPageScript)}); err != nil {
+	if err := page.AddInitScript(playwright.Script{Content: playwright.String(initScript)}); err != nil {
 		t.Fatalf("AddInitScript() error = %v", err)
 	}
 	if _, err := page.Goto("http://localhost:" + itoa(srv.Port()) + query + "#1"); err != nil {
@@ -128,6 +143,18 @@ func TestReadyOnAHiddenPage(t *testing.T) {
 	t.Run("a capture page still waits for a paint", func(t *testing.T) {
 		if openHiddenPage(t, exporter, "?capture=true&step=0") {
 			t.Error("a capture page reported ready without painting; a PNG captured from it would be blank")
+		}
+	})
+
+	t.Run("a live page reports ready while it is visible but draws no frames", func(t *testing.T) {
+		if !openPageWithScript(t, exporter, framelessPageScript, "") {
+			t.Error("a visible live page that draws no frames never reported ready; its wait for a paint has no limit")
+		}
+	})
+
+	t.Run("a print page that is visible but draws no frames still waits for a paint", func(t *testing.T) {
+		if openPageWithScript(t, exporter, framelessPageScript, "?print=true") {
+			t.Error("a print page reported ready without painting; a PDF captured from it would be blank")
 		}
 	})
 }
