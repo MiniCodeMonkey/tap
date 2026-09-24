@@ -35,6 +35,9 @@ final class ThumbnailController {
     private var lastHandedRevision: String?
     private var lastHandedVisible: [Int] = []
     private var lastHandedCurrent: Int?
+    /// Consecutive failed summary fetches since the last one that succeeded.
+    private var summaryFetchFailures = 0
+    private static let maxSummaryFetchRetries = 1
 
     init(cache: ThumbnailCache, panel: SlidePanelViewController) {
         self.cache = cache
@@ -50,7 +53,10 @@ final class ThumbnailController {
     }
 
     /// tap rendered again: fetch the summary and refresh. One fetch runs
-    /// at a time; a call during a fetch runs another when it returns.
+    /// at a time; a call during a fetch runs another when it returns. A
+    /// fetch that fails retries once after a short back-off, so a deck
+    /// opened and only read after a failed fetch still gets its thumbnails
+    /// without waiting for the next edit.
     func deckChanged() {
         guard let client else { return }
         if fetching {
@@ -63,7 +69,12 @@ final class ThumbnailController {
             repeat {
                 self?.fetchAgain = false
                 if let summary = try? await client.presentation() {
+                    self?.summaryFetchFailures = 0
                     self?.refresh(with: summary)
+                } else if let self, self.summaryFetchFailures < Self.maxSummaryFetchRetries {
+                    self.summaryFetchFailures += 1
+                    try? await Task.sleep(nanoseconds: 500_000_000)
+                    self.fetchAgain = true
                 }
             } while self?.fetchAgain == true
         }
