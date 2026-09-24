@@ -512,6 +512,10 @@ final class EditorTextView: NSTextView {
     private static let slideType = NSPasteboard.PasteboardType(SlideDragPayload.pasteboardType)
     static let dragThreshold: CGFloat = 4
     var optionHeld: () -> Bool = { NSEvent.modifierFlags.contains(.option) }
+    /// The document's file, so a drop can tell a move within this deck
+    /// from one arriving from another. Set by the session controller in
+    /// `init` and again on `deckMoved`, as `SlidePanelViewController.deckURL` is.
+    var deckURL: URL?
     /// Starts the drag session. A seam: a test replaces it to see what a
     /// header drag carries without a real drag session.
     lazy var headerDragStarter: (SlideDragPayload, NSRect, NSEvent) -> Void = { [weak self] payload, rect, event in
@@ -605,21 +609,31 @@ final class EditorTextView: NSTextView {
         needsDisplay = true
     }
 
-    /// A slide drop moves, from this deck or another; Option copies (decision 2).
-    private func slideDropOperation() -> NSDragOperation {
-        optionHeld() ? .copy : .move
+    /// A slide drop moves, from this deck or another; Option copies
+    /// (decision 2). A drop inside the dragged block, in this deck, is
+    /// refused, as the sidebar refuses it: it would land the block back
+    /// where it already is.
+    private func slideDropOperation(payload: SlideDragPayload, at point: NSPoint) -> NSDragOperation {
+        let sameDeck = deckURL.map { payload.comesFrom(deck: $0) } ?? false
+        if sameDeck, let first = payload.slideNumbers.min(), let last = payload.slideNumbers.max() {
+            let before = dropBoundary(at: point) ?? (boxes.count + 1)
+            if before >= first, before <= last + 1 { return [] }
+        }
+        return optionHeld() ? .copy : .move
     }
 
     override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
         guard let payload = slidePayload(sender) else { return super.draggingEntered(sender) }
-        updateDropIndicator(at: convert(sender.draggingLocation, from: nil), count: payload.slideNumbers.count)
-        return slideDropOperation()
+        let point = convert(sender.draggingLocation, from: nil)
+        updateDropIndicator(at: point, count: payload.slideNumbers.count)
+        return slideDropOperation(payload: payload, at: point)
     }
 
     override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation {
         guard let payload = slidePayload(sender) else { return super.draggingUpdated(sender) }
-        updateDropIndicator(at: convert(sender.draggingLocation, from: nil), count: payload.slideNumbers.count)
-        return slideDropOperation()
+        let point = convert(sender.draggingLocation, from: nil)
+        updateDropIndicator(at: point, count: payload.slideNumbers.count)
+        return slideDropOperation(payload: payload, at: point)
     }
 
     override func draggingExited(_ sender: NSDraggingInfo?) {
@@ -628,13 +642,29 @@ final class EditorTextView: NSTextView {
 
     override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
         guard let payload = slidePayload(sender) else { return super.performDragOperation(sender) }
-        let beforeNumber = dropBoundary(at: convert(sender.draggingLocation, from: nil))
-        return performSlideDrop(payload: payload, beforeNumber: beforeNumber, isMove: slideDropOperation() == .move)
+        let point = convert(sender.draggingLocation, from: nil)
+        let beforeNumber = dropBoundary(at: point)
+        return performSlideDrop(payload: payload, beforeNumber: beforeNumber, isMove: slideDropOperation(payload: payload, at: point) == .move)
     }
 
     override func draggingEnded(_ sender: NSDraggingInfo) {
         clearDropIndicator()
         super.draggingEnded(sender)
+    }
+
+    /// NSTextView, as a drag's own source, deletes the current text
+    /// selection when a text drag it built itself ends as a move: the
+    /// drop by convention takes the text out of its old place. A header
+    /// drag is not that: it is built by hand in `headerDragStarter`, and
+    /// the move it performs is `dropSlides`'s replacement of the slide's
+    /// own range, never a deletion of whatever the editor happens to have
+    /// selected right now. Skipping `super` here keeps that selection
+    /// alone; a real text drag still gets NSTextView's own handling.
+    override func draggingSession(_ session: NSDraggingSession, endedAt screenPoint: NSPoint, operation: NSDragOperation) {
+        guard session.draggingPasteboard.data(forType: Self.slideType) != nil else {
+            super.draggingSession(session, endedAt: screenPoint, operation: operation)
+            return
+        }
     }
 
     /// The drop itself, shared with `performDragOperation` so a test can

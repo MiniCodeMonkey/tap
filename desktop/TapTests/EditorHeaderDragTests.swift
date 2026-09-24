@@ -111,6 +111,22 @@ final class EditorHeaderDragTests: HostedTestCase {
         NSApp.discardEvents(matching: [.leftMouseDragged, .leftMouseUp], before: nil)
     }
 
+    /// A header dropped onto its own place offers no operation, as the
+    /// sidebar refuses the same drop.
+    func testDroppingAHeaderOntoItsOwnPlaceOffersNoOperation() async throws {
+        let (document, controller, editor) = try await openOpsLaidOut()
+        let window = try XCTUnwrap(document.windowControllers.first?.window)
+        let header5 = try XCTUnwrap(editor.headerRect(forBoxAt: 4))
+        let payload = try XCTUnwrap(controller.dragPayload(forSlides: [5]))
+        let pasteboard = NSPasteboard(name: NSPasteboard.Name("TapTests.headerdrag.ownplace.\(UUID().uuidString)"))
+        pasteboard.clearContents()
+        let item = NSPasteboardItem()
+        item.setData(try payload.data(), forType: NSPasteboard.PasteboardType(SlideDragPayload.pasteboardType))
+        pasteboard.writeObjects([item])
+        let info = FakeDraggingInfo(pasteboard: pasteboard, location: editor.convert(NSPoint(x: header5.midX, y: header5.midY), to: nil), source: editor, window: window)
+        XCTAssertEqual(editor.draggingUpdated(info), [], "a drop onto its own place offers no operation")
+    }
+
     func testTheDropIndicatorHasALabel() async throws {
         let (_, _, editor) = try await openOpsLaidOut()
         let box2 = try XCTUnwrap(editor.boxRect(forBoxAt: 1))

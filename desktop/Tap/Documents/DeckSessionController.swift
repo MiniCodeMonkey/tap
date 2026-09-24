@@ -172,6 +172,7 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
         editor.editorDelegate = self
         slidePanel.delegate = self
         slidePanel.deckURL = document.fileURL
+        editor.deckURL = document.fileURL
         editorViewController.hostHiddenView(thumbnails.renderer.webView)
         thumbnails.currentSlideNumber = { [weak self] in self?.currentSlideNumber }
         thumbnails.renderer.isPaused = { [weak self] in
@@ -313,6 +314,7 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
         hadDiskConflictWhenDeleted = false
         fileWatcher.watch(url)
         slidePanel.deckURL = url
+        editor.deckURL = url
         if let old = previousDeckURL {
             AppEnvironment.shared.panelState.moveState(from: old, to: url)
         }
