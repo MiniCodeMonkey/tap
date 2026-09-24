@@ -3,6 +3,17 @@ import XCTest
 
 final class TapLogWindowTests: HostedTestCase {
     func testLogsAndVersion() async throws {
+        // This test is specifically about tap's buffer path (PUT
+        // /api/app/source): the broken frontmatter below must reach tap
+        // through the editor, not through a save landing on disk first.
+        // Autosave's own one second timer can otherwise outrace the
+        // explicit send below on a loaded runner, save the same broken
+        // text to disk, and have tap render the file instead, so autosave
+        // is held off for the whole test.
+        let originalDelay = NSDocumentController.shared.autosavingDelay
+        NSDocumentController.shared.autosavingDelay = 300
+        defer { NSDocumentController.shared.autosavingDelay = originalDelay }
+
         let document = try await openDeck(try Fixtures.copyAppFixture())
         _ = try await waitForRunningTap(document)
         let appDelegate = try XCTUnwrap(NSApp.delegate as? AppDelegate)
@@ -23,11 +34,8 @@ final class TapLogWindowTests: HostedTestCase {
         editor.setSelectedRange(NSRange(location: 0, length: (editor.string as NSString).length))
         editor.insertText("---\ntitle: [unclosed\n---\n", replacementRange: NSRange(location: NSNotFound, length: 0))
         // Sends the broken buffer to tap directly rather than waiting on the
-        // 100ms debounce, which autosave's own one second timer can now
-        // outrace on a loaded runner: the app would still write the same
-        // broken text to disk and say "saved" first, which logs its own
-        // failure to a different line ("error: saved: ...") and leaves this
-        // wait needing a PUT that has not gone out yet.
+        // 100ms debounce, so the wait below does not spend part of its
+        // budget on the debounce itself.
         await document.sessionController?.sourceSync.sendNow()
         let sessionController = try XCTUnwrap(document.sessionController)
         let deadline = Date().addingTimeInterval(10)
