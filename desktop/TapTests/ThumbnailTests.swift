@@ -117,6 +117,7 @@ final class ThumbnailTests: HostedTestCase {
         // Frozen before tap is even ready: nothing captures until the
         // cursor has already moved, so the render order that follows can
         // only be explained by whichever slide the queue currently favors.
+        let productionCanPaint = controller.thumbnails.renderer.canPaint
         controller.thumbnails.renderer.canPaint = { false }
         _ = try await waitForRunningTap(document)
         try await waitForBoxes(document, count: 7)
@@ -129,7 +130,11 @@ final class ThumbnailTests: HostedTestCase {
         // cursor move itself can move slide 3 ahead of slide 1.
         controller.editor.moveCursor(toSlide: 2)
         try await waitUntil(timeout: 5, "the cursor to reach slide 3") { controller.currentSlideNumber == 3 }
-        controller.thumbnails.renderer.canPaint = { true }
+        // The window paints before the gate reopens, and the gate that
+        // reopens is the production one: a load the renderer starts is one
+        // it would start for a person, on a window already painting.
+        try await waitForPreview(document, slide: 3, timeout: 30)
+        controller.thumbnails.renderer.canPaint = productionCanPaint
         try await waitForRenderer(controller.thumbnails.renderer, of: controller, timeout: 20, "the first render") { controller.thumbnails.renderer.renderCount == 1 }
         XCTAssertEqual(controller.thumbnails.renderer.lastRenderedSlide, 3, "the new cursor slide renders first")
     }
@@ -146,6 +151,7 @@ final class ThumbnailTests: HostedTestCase {
 
         let document = try await openDeck(deckURL)
         let controller = try XCTUnwrap(document.sessionController)
+        let productionCanPaint = controller.thumbnails.renderer.canPaint
         controller.thumbnails.renderer.canPaint = { false }
         _ = try await waitForRunningTap(document)
         try await waitForBoxes(document, count: 30)
@@ -159,8 +165,8 @@ final class ThumbnailTests: HostedTestCase {
         var pausedAfterFirst = false
         let originalOnImage = controller.thumbnails.renderer.onImage
         // Weakly captured, and restored below: a strong `controller` here,
-        // plus a `canPaint` left at `{ true }`, would keep this renderer
-        // alive and painting slides during later tests.
+        // plus a `canPaint` left open, would keep this renderer alive and
+        // painting slides during later tests.
         controller.thumbnails.renderer.onImage = { [weak controller] job, image, png in
             if !pausedAfterFirst {
                 pausedAfterFirst = true
@@ -172,7 +178,9 @@ final class ThumbnailTests: HostedTestCase {
             controller.thumbnails.renderer.onImage = originalOnImage
             controller.thumbnails.renderer.canPaint = { false }
         }
-        controller.thumbnails.renderer.canPaint = { true }
+        // The gate reopens to the production one once the window paints.
+        try await waitForPreview(document, slide: 1, timeout: 30)
+        controller.thumbnails.renderer.canPaint = productionCanPaint
         try await waitForRenderer(controller.thumbnails.renderer, of: controller, timeout: 20, "the current slide to render first") { controller.thumbnails.renderer.renderCount == 1 }
         XCTAssertEqual(controller.thumbnails.renderer.lastRenderedSlide, 1, "deck order with no edits starts on slide 1")
 
@@ -196,7 +204,7 @@ final class ThumbnailTests: HostedTestCase {
         try await waitUntil(timeout: 5, "the panel to scroll to the last slide") { controller.slidePanel.visibleNumbers.contains(30) }
         NotificationCenter.default.post(name: NSView.boundsDidChangeNotification, object: clipView)
 
-        controller.thumbnails.renderer.canPaint = { true }
+        controller.thumbnails.renderer.canPaint = productionCanPaint
         try await waitForRenderer(controller.thumbnails.renderer, of: controller, timeout: 20, "the second render") { controller.thumbnails.renderer.renderCount == 2 }
         XCTAssertNotEqual(controller.thumbnails.renderer.lastRenderedSlide, 2, "deck order alone would render slide 2 next")
         XCTAssertGreaterThan(controller.thumbnails.renderer.lastRenderedSlide ?? 0, 20,
@@ -210,16 +218,22 @@ final class ThumbnailTests: HostedTestCase {
         // Frozen on the paint gate until an edit is in place, so the very
         // first job the renderer would work on is one held back by the
         // typing-pause gate alone, not by anything else.
+        let productionCanPaint = controller.thumbnails.renderer.canPaint
         controller.thumbnails.renderer.canPaint = { false }
         _ = try await waitForRunningTap(document)
         try await waitForBoxes(document, count: 7)
         try await waitUntil(timeout: 20, "the queue to fill with every slide") {
             (1...7).allSatisfy { controller.thumbnails.renderer.isQueued($0) }
         }
+        // The window paints, so the production gate is open by the time the
+        // edit lands: the typing pause is then the only thing holding the
+        // renderer back.
+        try await waitForPreview(document, slide: 1, timeout: 30)
+        try await waitUntil(timeout: 10, "the production paint gate to open") { productionCanPaint() }
         controller.editor.setSelectedRange(NSRange(location: 0, length: 0))
         controller.editor.insertText(" ", replacementRange: NSRange(location: NSNotFound, length: 0))
         XCTAssertTrue(controller.thumbnails.renderer.isPaused(), "an edit just now should hold the renderer back")
-        controller.thumbnails.renderer.canPaint = { true }
+        controller.thumbnails.renderer.canPaint = productionCanPaint
         try await Task.sleep(nanoseconds: 300_000_000)
         XCTAssertEqual(controller.thumbnails.renderer.renderCount, 0, "still within the 0.5 s pause window, nothing should have rendered despite a full queue")
         try await waitForRenderer(controller.thumbnails.renderer, of: controller, timeout: 20, "a render once the pause window passes") { controller.thumbnails.renderer.renderCount > 0 }
