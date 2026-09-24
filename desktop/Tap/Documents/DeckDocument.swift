@@ -78,6 +78,7 @@ final class DeckDocument: NSDocument {
 
     /// Opens the window as a tab of an open deck window.
     override func showWindows() {
+        WelcomeWindowController.closeIfOpen()
         if let window = windowControllers.first?.window, !window.isVisible,
            let existing = NSApp.windows.first(where: { $0 !== window && $0.isVisible && $0.windowController is DeckWindowController }) {
             existing.addTabbedWindow(window, ordered: .above)

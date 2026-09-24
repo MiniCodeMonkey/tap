@@ -11,9 +11,16 @@ class HostedTestCase: XCTestCase {
     override func setUp() async throws {
         configHome = try Fixtures.temporaryFolder()
         AppEnvironment.shared.extraEnvironment["XDG_CONFIG_HOME"] = configHome.path
+        AppEnvironment.shared.recentThumbnailStore = RecentThumbnailStore(directory: try Fixtures.temporaryFolder())
     }
 
     override func tearDown() async throws {
+        // WelcomeWindowController.shared is one singleton for the whole
+        // hosted process, not a window this test created, so it is ordered
+        // out (never closed) here rather than left to whichever test last
+        // showed it: a welcome window still on screen would sit over the
+        // next test's deck window the same way a stray deck window does.
+        WelcomeWindowController.shared.window?.orderOut(nil)
         for document in NSDocumentController.shared.documents {
             // The window goes off screen first. document.close() returns
             // before the window server has taken its window down, and a deck

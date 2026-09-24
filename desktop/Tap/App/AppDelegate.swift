@@ -14,6 +14,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.mainMenu = MainMenu.build()
         AppEnvironment.shared.warmUp()
         NSDocumentController.shared.autosavingDelay = 1
+        NotificationCenter.default.addObserver(self, selector: #selector(deckWindowWillClose(_:)), name: NSWindow.willCloseNotification, object: nil)
+        // Decks opened from Finder at launch arrive first.
+        DispatchQueue.main.async { MainActor.assumeIsolated { self.showWelcomeIfNoDecks() } }
     }
 
     /// There is no untitled document to offer: "New deck" is deliberately
@@ -22,6 +25,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// blocks the app (and any test host) forever.
     func applicationShouldOpenUntitledFile(_ sender: NSApplication) -> Bool {
         false
+    }
+
+    /// The app has no untitled document and no dock-only mode: quitting the
+    /// last deck window leaves the welcome window as the way back in, not a
+    /// silent termination.
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+        false
+    }
+
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
+        if !hasVisibleWindows { showWelcomeIfNoDecks() }
+        return false
+    }
+
+    /// Shows the welcome window, unless a deck is already open. Safe to call
+    /// whenever the set of open decks might have changed: at launch, after a
+    /// deck window closes, and on a Dock reopen with no visible windows.
+    func showWelcomeIfNoDecks() {
+        guard !NSDocumentController.shared.documents.contains(where: { $0 is DeckDocument }) else { return }
+        WelcomeWindowController.shared.showWindow(nil)
+    }
+
+    /// A deck window closing can be the app's last window. `DeckDocument`
+    /// closes after its own window, so this looks one main-queue turn later,
+    /// once the document itself is gone from `NSDocumentController`.
+    @objc private func deckWindowWillClose(_ notification: Notification) {
+        guard (notification.object as? NSWindow)?.windowController is DeckWindowController else { return }
+        DispatchQueue.main.async { MainActor.assumeIsolated { self.showWelcomeIfNoDecks() } }
     }
 
     @objc func showAbout(_ sender: Any?) {

@@ -1,4 +1,5 @@
 import AppKit
+import WebKit
 
 /// Wires one document: its editor, its tap process, the PUTs that keep the
 /// boxes current, and the WebSocket connection that moves the preview.
@@ -36,6 +37,14 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
     /// True while the bar offering Load Disk Version and Keep Mine is
     /// showing, between `showDiskConflict` and whichever button resolves it.
     private(set) var hasDiskConflict = false
+    /// True once a slide-1 snapshot has been saved as this deck's recent
+    /// thumbnail. Set only on a successful capture (see `captureThumbnail`),
+    /// so a capture skipped because the preview was hidden or unpainted
+    /// leaves this false and a later ready for slide 1 tries again.
+    private var recordedRecentThumbnail = false
+    /// True while a snapshot is in flight, so two ready signals close
+    /// together do not start two overlapping snapshots.
+    private var isCapturingRecentThumbnail = false
     /// The slide number the cursor was on when `loadDiskVersion` ran, the
     /// generation that load's own text will be sent as (or the first later
     /// one, if tap is down or busy when it happens), and the text that was
@@ -84,6 +93,7 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
         previewViewController.onStepForward = { [weak self] in self?.sendPreviewMessage(self?.navigator.stepForward()) }
         previewViewController.onPinToggled = { [weak self] in self?.togglePin() }
         previewViewController.onTryAgain = { [weak self] in self?.session.tryAgain() }
+        previewViewController.onReady = { [weak self] payload in self?.previewDidRender(payload) }
         if let documentUndoManager = document.undoManager {
             undoObserver = NotificationCenter.default.addObserver(forName: .NSUndoManagerDidUndoChange, object: documentUndoManager, queue: nil) { [weak self] _ in
                 MainActor.assumeIsolated { self?.refreshEditedState() }
@@ -328,6 +338,65 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
         session.send(.saved)
         session.log.append("saved the deck", source: .app)
         refreshEditedState()
+    }
+
+    /// The first time the preview finishes slide 1 while it is actually
+    /// visible and painted, its snapshot becomes the deck's thumbnail on the
+    /// welcome window. Ready fires on a settled DOM even for a hidden or
+    /// covered page (WebKit runs no animation frames there, so nothing ever
+    /// paints), and a snapshot of an unpainted page comes back blank, so
+    /// this checks three things before ever touching the web view: the
+    /// window showing the preview is on screen (visible and its occlusion
+    /// state says so, not just minimized or on another space), the preview
+    /// pane itself is not hidden or collapsed (docked) or, if detached into
+    /// its own window (`DeckWindowController.showPreviewInWindow`), that
+    /// window is the one checked instead, and the page's own `document.
+    /// hidden` confirms it agrees. Failing any of that does not mark this
+    /// deck as recorded, so a later ready for slide 1, once the window or
+    /// pane is actually shown, gets another chance.
+    private func previewDidRender(_ payload: ReadyPayload) {
+        guard payload.slide == 1, !recordedRecentThumbnail, !isCapturingRecentThumbnail,
+              let deck = document?.fileURL else { return }
+        guard let windowController = document?.windowControllers.first as? DeckWindowController else { return }
+        let previewWindow: NSWindow?
+        if let detached = windowController.previewWindowController {
+            previewWindow = detached.window
+        } else if !windowController.splitViewController.isPreviewHidden {
+            previewWindow = windowController.window
+        } else {
+            previewWindow = nil
+        }
+        guard let previewWindow, previewWindow.isVisible, previewWindow.occlusionState.contains(.visible) else { return }
+        isCapturingRecentThumbnail = true
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            defer { self.isCapturingRecentThumbnail = false }
+            // document.hidden bridges as an NSNumber (0 or 1), not a Swift
+            // Bool, so it is read as a number rather than compared as text.
+            // A script failure or an unexpected result is treated as hidden,
+            // the safer side: nothing is captured rather than risking a
+            // blank snapshot.
+            let hiddenResult = try? await self.previewViewController.webView.evaluateJavaScript("document.hidden")
+            let isHidden = (hiddenResult as? Bool) ?? (hiddenResult as? NSNumber)?.boolValue ?? true
+            guard !isHidden else { return }
+            await self.captureThumbnail(for: deck)
+        }
+    }
+
+    /// Snapshots the preview's web view and, on success only, saves it as
+    /// this deck's recent thumbnail and marks the deck recorded.
+    private func captureThumbnail(for deck: URL) async {
+        let configuration = WKSnapshotConfiguration()
+        configuration.snapshotWidth = 320
+        let image: NSImage? = await withCheckedContinuation { continuation in
+            previewViewController.webView.takeSnapshot(with: configuration) { image, _ in
+                continuation.resume(returning: image)
+            }
+        }
+        guard let image, let tiff = image.tiffRepresentation,
+              let png = NSBitmapImageRep(data: tiff)?.representation(using: .png, properties: [:]) else { return }
+        recordedRecentThumbnail = true
+        try? AppEnvironment.shared.recentThumbnailStore.save(png, for: deck)
     }
 
     // internal, not private, so a test can hand it a deliberately stale or

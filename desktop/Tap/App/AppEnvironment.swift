@@ -13,6 +13,9 @@ final class AppEnvironment {
     var tapExecutableURL: URL
     /// Variables added on top of the login shell environment.
     var extraEnvironment: [String: String] = [:]
+    /// Where a deck's slide-1 thumbnail is saved for the welcome window. A
+    /// test replaces this with a store rooted in its own temporary folder.
+    var recentThumbnailStore = RecentThumbnailStore()
     private(set) var environmentNotice: String?
     private(set) var bundledTapVersion: String?
     private let loginShellLoader: LoginShellEnvironmentLoader
