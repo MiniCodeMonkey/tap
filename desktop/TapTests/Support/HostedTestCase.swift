@@ -58,8 +58,35 @@ class HostedTestCase: XCTestCase {
     func openDeckAndWaitForPreview(_ url: URL) async throws -> DeckDocument {
         let document = try await openDeck(url)
         _ = try await waitForRunningTap(document)
-        let preview = try XCTUnwrap(document.sessionController?.previewViewController)
-        try await waitUntil(timeout: 30, "the preview's first ready signal") { preview.lastReady != nil }
+        let controller = try XCTUnwrap(document.sessionController)
+        let preview = controller.previewViewController
+        let deadline = Date().addingTimeInterval(30)
+        while preview.lastReady == nil {
+            if Date() > deadline {
+                // A first ready signal that never arrives can be the page
+                // itself never painting (the hidden-page stall fixed in
+                // pull request 27), or tap never having been asked for
+                // anything to paint. This records both sides so a future
+                // occurrence does not need a fresh CI run to tell them
+                // apart.
+                let script = "JSON.stringify({ready: window.__tapReady, hidden: document.hidden})"
+                let inThePage = await preview.pageValue(script)
+                let window = document.windowControllers.first?.window
+                let isVisible: Bool = window?.isVisible ?? false
+                let isOnScreen: Bool = window?.occlusionState.contains(.visible) ?? false
+                let isAppActive: Bool = NSApp.isActive
+                let hasSocket: Bool = controller.socket != nil
+                var message = "timed out waiting for the preview's first ready signal. "
+                message += "page=\(inThePage) "
+                message += "windowVisible=\(isVisible) "
+                message += "windowOnScreen=\(isOnScreen) "
+                message += "appActive=\(isAppActive) "
+                message += "socket=\(hasSocket ? "open" : "none")"
+                XCTFail(message)
+                throw CancellationError()
+            }
+            try await Task.sleep(nanoseconds: 20_000_000)
+        }
         return document
     }
 
