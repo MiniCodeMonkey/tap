@@ -162,6 +162,21 @@ final class WelcomeTests: HostedTestCase {
 
         let controller = try XCTUnwrap(document.sessionController)
         let preview = controller.previewViewController
+        // Counts snapshots started, completed and flat through the same
+        // seam production wraps, so a timeout below names which of the
+        // three the capture stalled at rather than leaving it a guess.
+        var snapshotsStarted = 0
+        var snapshotsCompleted = 0
+        var snapshotsFlat = 0
+        let realSnapshot = controller.takePreviewSnapshot
+        controller.takePreviewSnapshot = { configuration, completion in
+            snapshotsStarted += 1
+            realSnapshot(configuration) { image, error in
+                snapshotsCompleted += 1
+                if let image, Self.isFlatSnapshot(image) { snapshotsFlat += 1 }
+                completion(image, error)
+            }
+        }
         let deadline = Date().addingTimeInterval(30)
         while preview.lastReady?.slide != 1 {
             if Date() > deadline {
@@ -190,10 +205,106 @@ final class WelcomeTests: HostedTestCase {
             onReady?(payload)
         }
         cover.window.orderOut(nil)
-        try await waitUntil(timeout: 10, "the recent thumbnail") { AppEnvironment.shared.recentThumbnailStore.imageData(for: deck) != nil }
+        let thumbnailDeadline = Date().addingTimeInterval(10)
+        while AppEnvironment.shared.recentThumbnailStore.imageData(for: deck) == nil {
+            if Date() > thumbnailDeadline {
+                // 3 started, 3 completed and 3 flat means the flat retries
+                // gave up too soon. More started than completed means a
+                // snapshot hung and the timeout did not clear it. 0 started
+                // means no trigger ever arrived after uncovering.
+                XCTFail("timed out waiting for the recent thumbnail. "
+                        + "snapshotsStarted=\(snapshotsStarted) snapshotsCompleted=\(snapshotsCompleted) snapshotsFlat=\(snapshotsFlat) "
+                        + "lastReady=\(String(describing: preview.lastReady)) "
+                        + "occlusion=\(window.occlusionState.rawValue)")
+                return
+            }
+            try await Task.sleep(nanoseconds: 20_000_000)
+        }
         XCTAssertEqual(readiesAfterUncovering, 0, "the thumbnail comes from the ready already received")
         XCTAssertEqual(preview.lastReady, readyWhileCovered)
         try assertRecordedThumbnailIsNotBlank(for: deck)
+    }
+
+    /// A snapshot whose completion never runs (a hung `takeSnapshot`) must
+    /// not block the deck's thumbnail forever: `isCapturingRecentThumbnail`
+    /// has to clear on its own so a later attempt can still record it.
+    func testASnapshotThatNeverCompletesDoesNotBlockTheNextCapture() async throws {
+        let deck = try Fixtures.copyAppFixture()
+        let document = try await openDeck(deck)
+        let controller = try XCTUnwrap(document.sessionController)
+        let reported = ReportedOcclusion(controller: controller)
+        var hangTheNextSnapshot = true
+        let realSnapshot = controller.takePreviewSnapshot
+        controller.takePreviewSnapshot = { configuration, completion in
+            if hangTheNextSnapshot {
+                hangTheNextSnapshot = false
+                // Never calls completion: the production timeout is what
+                // has to move this forward, not this seam.
+                return
+            }
+            realSnapshot(configuration, completion)
+        }
+        try await waitForPreview(document, slide: 1, timeout: 30)
+        let window = try XCTUnwrap(controller.previewViewController.webView.window)
+
+        reported.report(visible: true, for: window)
+        try await waitUntil(timeout: 10, "the recent thumbnail once the hung snapshot times out") { AppEnvironment.shared.recentThumbnailStore.imageData(for: deck) != nil }
+        try assertRecordedThumbnailIsNotBlank(for: deck)
+    }
+
+    /// A snapshot that keeps coming back flat while the preview stays
+    /// visible must keep being retried, not give up for good after a fixed
+    /// number of attempts.
+    func testFlatSnapshotsKeepBeingRetriedWhileVisible() async throws {
+        let deck = try Fixtures.copyAppFixture()
+        let document = try await openDeck(deck)
+        let controller = try XCTUnwrap(document.sessionController)
+        let reported = ReportedOcclusion(controller: controller)
+        var snapshotsStarted = 0
+        // More flat snapshots than the old fixed budget of 3 attempts, so a
+        // regression back to giving up after 3 would leave this deck
+        // unrecorded.
+        let flatSnapshotsBeforeARealOne = 6
+        let realSnapshot = controller.takePreviewSnapshot
+        controller.takePreviewSnapshot = { configuration, completion in
+            snapshotsStarted += 1
+            if snapshotsStarted <= flatSnapshotsBeforeARealOne {
+                let flat = NSImage(size: NSSize(width: 320, height: 180))
+                flat.lockFocus()
+                NSColor.white.setFill()
+                NSRect(x: 0, y: 0, width: 320, height: 180).fill()
+                flat.unlockFocus()
+                completion(flat, nil)
+                return
+            }
+            realSnapshot(configuration, completion)
+        }
+        try await waitForPreview(document, slide: 1, timeout: 30)
+        let window = try XCTUnwrap(controller.previewViewController.webView.window)
+
+        reported.report(visible: true, for: window)
+        try await waitUntil(timeout: 10, "the recent thumbnail once the flat retries reach a real snapshot") { AppEnvironment.shared.recentThumbnailStore.imageData(for: deck) != nil }
+        XCTAssertGreaterThan(snapshotsStarted, flatSnapshotsBeforeARealOne, "the capture must keep retrying past the old fixed attempt count")
+        try assertRecordedThumbnailIsNotBlank(for: deck)
+    }
+
+
+    /// A crude flat check for the diagnostics above: samples a grid of
+    /// points and reports whether they all read the same colour. Not the
+    /// production check, just enough to say a snapshot was blank.
+    private static func isFlatSnapshot(_ image: NSImage) -> Bool {
+        guard let tiff = image.tiffRepresentation, let bitmap = NSBitmapImageRep(data: tiff) else { return false }
+        let width = bitmap.pixelsWide
+        let height = bitmap.pixelsHigh
+        guard width > 0, height > 0 else { return true }
+        var first: [Int]?
+        for (x, y) in [(0, 0), (width - 1, 0), (0, height - 1), (width - 1, height - 1), (width / 2, height / 2)] {
+            guard let color = bitmap.colorAt(x: x, y: y) else { continue }
+            let sample = [Int(color.redComponent * 255), Int(color.greenComponent * 255), Int(color.blueComponent * 255)]
+            if let first, first != sample { return false }
+            first = first ?? sample
+        }
+        return true
     }
 
     /// The window server reports its own occlusion changes, and cannot be

@@ -67,6 +67,19 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
     /// the page paints during that report; a capture must outlast such a
     /// report to prove the window is really on screen.
     static let recentThumbnailSettleInterval: TimeInterval = 0.5
+    /// How long a slide 1 capture keeps retrying a flat snapshot before
+    /// giving up, well past any real paint time. This only bounds one
+    /// attempt at recording a deck's thumbnail: the preview re-arms a fresh
+    /// budget the next time a ready or occlusion report asks for a capture,
+    /// so a deck opened behind another window still gets its thumbnail from
+    /// whichever later event notices the preview is visible.
+    static let recentThumbnailFlatRetryBudget: TimeInterval = 10
+    /// How long a single snapshot may run before its completion is treated
+    /// as lost. `takeSnapshot` carries no timeout of its own, so without
+    /// this a snapshot whose completion never runs leaves
+    /// `isCapturingRecentThumbnail` true forever and blocks every later
+    /// attempt at this deck's thumbnail.
+    static let recentThumbnailSnapshotTimeout: TimeInterval = 5
     /// The window that held the preview when it was last seen visible, and
     /// the moment from which it has read visible continuously. Set from the
     /// occlusion notifications of that window, or from a check that finds
@@ -532,7 +545,7 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
             return
         }
         isCapturingRecentThumbnail = true
-        captureThumbnail(for: deck, visibleSince: visibleSince)
+        captureThumbnail(for: deck, visibleSince: visibleSince, deadline: Date().addingTimeInterval(Self.recentThumbnailFlatRetryBudget))
     }
 
     /// Snapshots the preview's web view and, on success only, saves it as
@@ -541,13 +554,27 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
     /// since `visibleSince` (its start has been cleared or replaced) may
     /// show a covered window, so it is discarded, and a preview visible
     /// again by then starts a fresh settle interval. A snapshot of one flat
-    /// colour is a page that has not painted yet: it is never saved, and
-    /// the capture is tried again shortly while attempts remain and the
-    /// preview has stayed visible.
-    private func captureThumbnail(for deck: URL, visibleSince: Date, remainingAttempts: Int = 3) {
+    /// colour is a page that has not painted yet: it is never saved, and the
+    /// capture is retried while the preview stays visible and `deadline`
+    /// has not passed. The snapshot itself races `recentThumbnailSnapshotTimeout`:
+    /// whichever of the real completion or the timeout runs first wins, and
+    /// `completed` keeps the loser from acting a second time.
+    private func captureThumbnail(for deck: URL, visibleSince: Date, deadline: Date, attempt: Int = 0) {
         let configuration = WKSnapshotConfiguration()
         configuration.snapshotWidth = 320
+        var completed = false
+        let timeout = DispatchWorkItem { [weak self] in
+            guard let self, !completed else { return }
+            completed = true
+            self.isCapturingRecentThumbnail = false
+            guard !self.stopped, !self.recordedRecentThumbnail else { return }
+            self.retryFlatCapture(for: deck, visibleSince: visibleSince, deadline: deadline, attempt: attempt)
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.recentThumbnailSnapshotTimeout, execute: timeout)
         takePreviewSnapshot(configuration) { [weak self] image, _ in
+            guard !completed else { return }
+            completed = true
+            timeout.cancel()
             guard let self else { return }
             self.isCapturingRecentThumbnail = false
             guard !self.stopped else { return }
@@ -558,22 +585,33 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
             }
             guard let image, let tiff = image.tiffRepresentation, let bitmap = NSBitmapImageRep(data: tiff) else { return }
             guard !bitmap.isSingleColor else {
-                guard remainingAttempts > 1 else { return }
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in
-                    MainActor.assumeIsolated {
-                        guard let self, !self.stopped, !self.recordedRecentThumbnail, !self.isCapturingRecentThumbnail,
-                              self.latestReadySlide == 1 else { return }
-                        self.refreshPreviewVisibility()
-                        guard self.previewVisibleSince == visibleSince else { return }
-                        self.isCapturingRecentThumbnail = true
-                        self.captureThumbnail(for: deck, visibleSince: visibleSince, remainingAttempts: remainingAttempts - 1)
-                    }
-                }
+                self.retryFlatCapture(for: deck, visibleSince: visibleSince, deadline: deadline, attempt: attempt)
                 return
             }
             guard let png = bitmap.representation(using: .png, properties: [:]) else { return }
             self.recordedRecentThumbnail = true
             try? AppEnvironment.shared.recentThumbnailStore.save(png, for: deck)
+        }
+    }
+
+    /// Schedules another attempt at `deck`'s thumbnail after a flat snapshot
+    /// or a snapshot whose completion never ran, while `deadline` has not
+    /// passed. The first three attempts are 0.25 s apart, close enough
+    /// together to catch a page that paints just after the settle interval;
+    /// later attempts back off to 1 s so a page still not painting does not
+    /// spend the rest of the budget snapshotting it needlessly often.
+    private func retryFlatCapture(for deck: URL, visibleSince: Date, deadline: Date, attempt: Int) {
+        guard Date() < deadline else { return }
+        let interval: TimeInterval = attempt < 2 ? 0.25 : 1
+        DispatchQueue.main.asyncAfter(deadline: .now() + interval) { [weak self] in
+            MainActor.assumeIsolated {
+                guard let self, !self.stopped, !self.recordedRecentThumbnail, !self.isCapturingRecentThumbnail,
+                      self.latestReadySlide == 1 else { return }
+                self.refreshPreviewVisibility()
+                guard self.previewVisibleSince == visibleSince else { return }
+                self.isCapturingRecentThumbnail = true
+                self.captureThumbnail(for: deck, visibleSince: visibleSince, deadline: deadline, attempt: attempt + 1)
+            }
         }
     }
 
