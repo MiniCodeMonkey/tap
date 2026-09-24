@@ -62,6 +62,20 @@ class HostedTestCase: XCTestCase {
         try await waitUntil(timeout: 30, "\(count) boxes") { editor.boxes.count == count }
     }
 
+    /// What a timed out wait records about the page. `ready` is the page's
+    /// own signal, null while a slide settles. `slides` and `text` say
+    /// whether the deck ever loaded and drew, which separates a page stuck
+    /// fetching the deck from one that drew a slide and never settled.
+    /// `animations` and `fonts` are the two things a settle round waits on
+    /// that the page itself controls.
+    static let pageStateScript = """
+        JSON.stringify({ready: window.__tapReady, hidden: document.hidden, \
+        slides: document.querySelectorAll('.slide').length, \
+        text: document.body ? document.body.innerText.slice(0, 80) : null, \
+        animations: document.getAnimations().map((animation) => animation.playState), \
+        fonts: document.fonts.status})
+        """
+
     func openDeckAndWaitForPreview(_ url: URL) async throws -> DeckDocument {
         let document = try await openDeck(url)
         _ = try await waitForRunningTap(document)
@@ -76,8 +90,7 @@ class HostedTestCase: XCTestCase {
                 // anything to paint. This records both sides so a future
                 // occurrence does not need a fresh CI run to tell them
                 // apart.
-                let script = "JSON.stringify({ready: window.__tapReady, hidden: document.hidden})"
-                let inThePage = await preview.pageValue(script)
+                let inThePage = await preview.pageValue(Self.pageStateScript)
                 let window = document.windowControllers.first?.window
                 let isVisible: Bool = window?.isVisible ?? false
                 let isOnScreen: Bool = window?.occlusionState.contains(.visible) ?? false
@@ -110,8 +123,7 @@ class HostedTestCase: XCTestCase {
                 // own signal is window.__tapReady, null while a slide is
                 // settling, and the caret and the boxes say whether the
                 // cursor is where the test put it.
-                let script = "JSON.stringify({ready: window.__tapReady, hidden: document.hidden})"
-                let inThePage = await preview.pageValue(script)
+                let inThePage = await preview.pageValue(Self.pageStateScript)
                 let intent = String(describing: controller.navigator.message)
                 XCTFail("timed out waiting for the preview on slide \(slide). "
                         + "lastReady=\(String(describing: preview.lastReady)) intent=\(intent) "
