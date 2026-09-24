@@ -471,8 +471,15 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
         // A live page that ran out of settle rounds still posts ready
         // rather than leaving the app waiting forever, but its slide 1 may
         // not have actually painted. This waits for a later, settled ready
-        // instead of capturing that one.
-        guard payload.settled else { return }
+        // instead of capturing that one, and cancels a check an earlier
+        // settled ready may have scheduled, so it cannot fire against a
+        // slide 1 that has since re-rendered unsettled.
+        guard payload.settled else {
+            pendingRecentThumbnailCheck?.cancel()
+            pendingRecentThumbnailCheck = nil
+            latestReadySlide = nil
+            return
+        }
         latestReadySlide = payload.slide
         guard payload.slide == 1 else {
             pendingRecentThumbnailCheck?.cancel()

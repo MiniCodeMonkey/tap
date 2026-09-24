@@ -288,6 +288,38 @@ final class WelcomeTests: HostedTestCase {
         try assertRecordedThumbnailIsNotBlank(for: deck)
     }
 
+    /// A settled ready that arrives before the preview has been visible for
+    /// the whole settle interval schedules a check for the moment it will
+    /// have. If slide 1 re-renders unsettled before that check fires, the
+    /// check must not still capture the stale settled render: the unsettled
+    /// ready cancels it and clears the slide this controller last acted on.
+    /// A settled ready afterwards still gets recorded normally.
+    func testAnUnsettledReadyCancelsAPendingSettleCheck() async throws {
+        let deck = try Fixtures.copyAppFixture()
+        let document = try await openDeck(deck)
+        let controller = try XCTUnwrap(document.sessionController)
+        let reported = ReportedOcclusion(controller: controller)
+        let preview = controller.previewViewController
+        try await waitForPreview(document, slide: 1, timeout: 30)
+        let window = try XCTUnwrap(preview.webView.window)
+        let appOnReady = try XCTUnwrap(preview.onReady)
+
+        // The settled ready already on file replays through this occlusion
+        // report (previewWindowOcclusionChanged) and schedules a check at
+        // the end of the settle interval.
+        reported.report(visible: true, for: window)
+        // Well inside the settle interval, so that check is still pending.
+        try await Task.sleep(nanoseconds: 200_000_000)
+        appOnReady(ReadyPayload(revision: "unsettled", slide: 1, step: 0, settled: false))
+        // Long enough for the pending check to have fired, had it not been
+        // cancelled.
+        try await Task.sleep(nanoseconds: 600_000_000)
+        XCTAssertNil(AppEnvironment.shared.recentThumbnailStore.imageData(for: deck), "an unsettled ready must cancel the check a settled one scheduled")
+
+        appOnReady(ReadyPayload(revision: "settled-after", slide: 1, step: 0))
+        try await waitUntil(timeout: 10, "the recent thumbnail") { AppEnvironment.shared.recentThumbnailStore.imageData(for: deck) != nil }
+        try assertRecordedThumbnailIsNotBlank(for: deck)
+    }
 
     /// A crude flat check for the diagnostics above: samples a grid of
     /// points and reports whether they all read the same colour. Not the
