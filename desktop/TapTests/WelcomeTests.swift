@@ -76,17 +76,24 @@ final class WelcomeTests: HostedTestCase {
     /// `settled: false` rather than leaving the app waiting forever, but its
     /// slide 1 may not actually have painted. That ready must not be
     /// captured even while the preview is visible; a later, settled ready
-    /// for slide 1 does get recorded. The preview's own `onReady` wiring is
-    /// swapped out for the duration, so the genuine page (which settles
-    /// normally and would otherwise race this test's own fabricated
-    /// readies) cannot itself record a thumbnail; only the readies
+    /// for slide 1 does get recorded. The genuine page's own ready still
+    /// lands in `preview.lastReady` before `onReady` even runs (the message
+    /// handler sets it unconditionally), so swapping out `onReady` alone
+    /// does not stop it: an occlusion report later replays `lastReady`
+    /// through `previewDidRender` regardless. The `tapReady` script handler
+    /// is removed instead, before the page can post anything, so the
+    /// genuine ready never reaches the preview at all and only the readies
     /// delivered directly below reach `previewDidRender`.
     func testUnsettledReadyDoesNotRecordAThumbnailUntilSettled() async throws {
         let deck = try Fixtures.copyAppFixture()
         let document = try await openDeck(deck)
-        _ = try await waitForRunningTap(document)
         let controller = try XCTUnwrap(document.sessionController)
         let preview = controller.previewViewController
+
+        XCTAssertEqual(preview.pageLoadCount, 0, "the page has not loaded yet, so removing its ready handler now cannot race a message already in flight")
+        preview.webView.configuration.userContentController.removeScriptMessageHandler(forName: "tapReady")
+
+        _ = try await waitForRunningTap(document)
 
         let appOnReady = try XCTUnwrap(preview.onReady)
         preview.onReady = nil
@@ -96,6 +103,7 @@ final class WelcomeTests: HostedTestCase {
         // Longer than recentThumbnailSettleInterval, so a missing guard
         // would have captured by now.
         try await Task.sleep(nanoseconds: 1_000_000_000)
+        XCTAssertNil(preview.lastReady, "the genuine page's ready reached the preview, so this run cannot isolate the fabricated ready")
         XCTAssertNil(AppEnvironment.shared.recentThumbnailStore.imageData(for: deck), "an unsettled ready must not be captured")
 
         appOnReady(ReadyPayload(revision: "settled-after", slide: 1, step: 0))
