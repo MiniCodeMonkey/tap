@@ -190,4 +190,23 @@ final class ThumbnailRendererTests: HostedTestCase {
         try await waitUntil(timeout: 20, "the slide to be delivered after a retry with a longer window") { images == [1] }
         XCTAssertGreaterThan(renderer.navigationCount, 1, "the too-short first attempt required a reload and a second, longer attempt")
     }
+
+    /// A ready for the right slide but a revision other than the one the
+    /// work was set for is a stale page, not a finished capture: nothing is
+    /// snapshotted or delivered for it.
+    func testAReadyForAStaleRevisionIsNeverDelivered() async throws {
+        let document = try await openDeck(try Fixtures.copyDeck("plain.md"))
+        try await waitForBoxes(document, count: 1)
+        let (renderer, _, summary) = try await makeRenderer(for: document)
+        var images: [Int] = []
+        renderer.onImage = { job, _, _ in images.append(job.slideNumber) }
+        var reportedRevisions: [String] = []
+        renderer.onPageRevision = { revision in reportedRevisions.append(revision) }
+        renderer.setWork(jobs(for: summary), revision: "stale-revision-tap-never-serves", visible: [1], current: 1)
+        try await waitUntil(timeout: 15, "the page's real revision to be reported as stale") { !reportedRevisions.isEmpty }
+        try await Task.sleep(nanoseconds: 500_000_000)
+        XCTAssertTrue(images.isEmpty, "a ready for the wrong revision must not be captured or delivered")
+        XCTAssertEqual(renderer.renderCount, 0)
+        XCTAssertEqual(reportedRevisions.first, summary.revision)
+    }
 }
