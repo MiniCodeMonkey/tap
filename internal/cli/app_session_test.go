@@ -546,23 +546,46 @@ func TestAppSessionQuitReturnsWhenTheTunnelURLGuardBlocksOnAStuckStart(t *testin
 	harness.waitForEnd(t)
 }
 
-// TestAppSessionKeepRecordingTimeoutIsShort forces the timing rather than
-// asserting the constant directly: it drives quit into an unanswered
-// keep-recording question, using the package's real default (no override),
-// and requires the session to end well under waitForEnd's five-second
-// bound. Before this fix the default is 30s, so this test fails at that
-// same five-second bound. After the fix the default is a few seconds, so
-// the session ends on its own with room to spare.
-func TestAppSessionKeepRecordingTimeoutIsShort(t *testing.T) {
+// TestAppSessionKeepRecordingTimeoutIsAMinute pins the 2026-09-24 decision
+// directly on the constant: quit should give a connected app up to a
+// minute to answer keep-recording, not the few seconds an earlier round
+// used for the case where the window is closing. The behavioral half of
+// this decision -- an answer that arrives late in that window is still
+// honored -- is TestAppSessionKeepRecordingAnswerAfterFourSecondsIsHonored
+// below.
+func TestAppSessionKeepRecordingTimeoutIsAMinute(t *testing.T) {
+	if appKeepRecordingTimeout != 60*time.Second {
+		t.Errorf("appKeepRecordingTimeout = %s, want 60s", appKeepRecordingTimeout)
+	}
+}
+
+// TestAppSessionKeepRecordingAnswerAfterFourSecondsIsHonored drives quit
+// into a keep-recording question using the package's real, unoverridden
+// default and answers it four seconds later, well past the three-second
+// bound an earlier round used. Before the 2026-09-24 decision to wait a
+// full minute for a connected app, the three-second bound would already
+// have given up and resolved the question unanswered (keeping the
+// recording) by the time this answer arrives, so answering it here would
+// find no open question and the recording would come out kept rather than
+// deleted. After the fix, the question is still open at four seconds, so
+// the "false" answer is honored and the recording is deleted.
+func TestAppSessionKeepRecordingAnswerAfterFourSecondsIsHonored(t *testing.T) {
 	present := &fakePresent{dir: "/talks/recordings/run", state: tui.PresentRecording, segment: 1, started: true, leftFirstSlide: true}
 	harness := startAppSessionForTest(t, func(options *appSessionOptions) { options.Present = present })
 
 	harness.send(appCommand{Type: appCommandQuit})
-	harness.log.next(t, appEventQuestion)
-	started := time.Now()
-	harness.waitForEnd(t)
-	if elapsed := time.Since(started); elapsed > 4*time.Second {
-		t.Errorf("quit took %s to return unanswered; want a few seconds, well under the old 30s default", elapsed)
+	question := harness.log.next(t, appEventQuestion)
+
+	time.Sleep(4 * time.Second)
+	harness.answer(t, question, "false")
+
+	select {
+	case <-harness.done:
+	case <-time.After(10 * time.Second):
+		t.Fatal("the session did not end")
+	}
+	if finished, kept := present.finishedWith(); !finished || kept {
+		t.Errorf("finished %v, kept %v; want finished and deleted", finished, kept)
 	}
 }
 
