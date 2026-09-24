@@ -22,6 +22,13 @@ final class TapLogWindowTests: HostedTestCase {
         let editor = try XCTUnwrap(document.sessionController?.editor)
         editor.setSelectedRange(NSRange(location: 0, length: (editor.string as NSString).length))
         editor.insertText("---\ntitle: [unclosed\n---\n", replacementRange: NSRange(location: NSNotFound, length: 0))
+        // Sends the broken buffer to tap directly rather than waiting on the
+        // 100ms debounce, which autosave's own one second timer can now
+        // outrace on a loaded runner: the app would still write the same
+        // broken text to disk and say "saved" first, which logs its own
+        // failure to a different line ("error: saved: ...") and leaves this
+        // wait needing a PUT that has not gone out yet.
+        await document.sessionController?.sourceSync.sendNow()
         try await waitUntil(timeout: 10, "a line appended after the window was already open") {
             logWindow.textView.string.contains("Not showing the buffer:")
         }

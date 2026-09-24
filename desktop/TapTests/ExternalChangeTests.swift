@@ -127,6 +127,12 @@ final class ExternalChangeTests: HostedTestCase {
         let mine = controller.editor.string
         XCTAssertTrue(document.isDocumentEdited)
 
+        // Forces the app's PUT to land at tap before the outside write below,
+        // rather than leaving the two racing: tap must still tell the app
+        // about a disk write that lands on the buffer it already has, not
+        // only one that lands while tap still has the buffer from before.
+        await controller.sourceSync.sendNow()
+
         // Something outside writes exactly the buffer's own text: the file
         // now already matches what is open, so the edited flag must clear
         // even though nothing was loaded or saved through this document.
