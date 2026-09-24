@@ -891,6 +891,59 @@ func TestWatcher_SkipsDSStore(t *testing.T) {
 	}
 }
 
+// TestWatcher_SkipsAutosaveBackupFile guards against the desktop app's own
+// autosave-in-place being mistaken for a component change: NSDocument
+// briefly writes and renames away a sibling file, the deck's base name with
+// a tilde inserted before the extension ("test.md" -> "test~.md"), on every
+// save. Without this skip, that write reaches onChange the same as a real
+// component edit would, rebuilding and reporting a change for content that
+// never actually changed.
+//
+// The file is written and left in place, never removed, the same as
+// TestWatcher_SkipsDSStore below does for .DS_Store: writing and then
+// immediately removing it made this test pass with the skip deleted too,
+// because fsnotify's darwin backend detects a changed directory by diffing
+// its listing against the one from its last look, not by an event per
+// syscall, so a create and a remove close enough together (confirmed
+// directly: this happened on every run once the writer got busy enough to
+// delay the removal, and could as easily happen the other way, delaying the
+// diff instead) can net out to no listing change at all and no callback,
+// passing regardless of whether the code being tested ever ran.
+func TestWatcher_SkipsAutosaveBackupFile(t *testing.T) {
+	tmpDir := t.TempDir()
+	mdFile := filepath.Join(tmpDir, "test.md")
+	if err := os.WriteFile(mdFile, []byte("# Test"), 0644); err != nil {
+		t.Fatalf("failed to create test file: %v", err)
+	}
+
+	w, err := NewWatcher(mdFile)
+	if err != nil {
+		t.Fatalf("NewWatcher() error = %v", err)
+	}
+
+	var callCount atomic.Int32
+	w.SetOnChange(func(path string) { callCount.Add(1) })
+	w.SetDebounceTime(10 * time.Millisecond)
+
+	if err := w.Start(); err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+	defer w.Stop()
+
+	time.Sleep(50 * time.Millisecond)
+
+	backupFile := filepath.Join(tmpDir, "test~.md")
+	if err := os.WriteFile(backupFile, []byte("# Test"), 0644); err != nil {
+		t.Fatalf("failed to write %s: %v", backupFile, err)
+	}
+
+	time.Sleep(100 * time.Millisecond)
+
+	if got := callCount.Load(); got != 0 {
+		t.Errorf("onChange called %d times for the autosave backup file, want 0", got)
+	}
+}
+
 func TestWatcher_IgnoreDir_RefusesDeckDirectory(t *testing.T) {
 	tmpDir := t.TempDir()
 	mdFile := filepath.Join(tmpDir, "test.md")

@@ -24,7 +24,7 @@ export type ReadyBlockerKind = 'fonts' | 'images' | 'map' | 'component' | 'error
  */
 export const BLOCKER_TIMEOUT_MS = 5000;
 
-const held = new Map<number, ReadyBlockerKind>();
+const held = new Map<number, { kind: ReadyBlockerKind; since: number }>();
 const listeners = new Set<() => void>();
 let nextBlockerId = 1;
 
@@ -41,7 +41,7 @@ function notify(): void {
 export function holdReady(kind: ReadyBlockerKind): () => void {
 	const id = nextBlockerId;
 	nextBlockerId += 1;
-	held.set(id, kind);
+	held.set(id, { kind, since: now() });
 	notify();
 	return () => {
 		if (held.delete(id)) {
@@ -52,7 +52,17 @@ export function holdReady(kind: ReadyBlockerKind): () => void {
 
 /** The kind of every blocker held right now, one entry per blocker. */
 export function heldBlockers(): ReadyBlockerKind[] {
-	return [...held.values()];
+	return [...held.values()].map((blocker) => blocker.kind);
+}
+
+/** Each blocker held right now and how many milliseconds it has been held, oldest first. */
+export function heldBlockerAges(): { kind: ReadyBlockerKind; heldMs: number }[] {
+	const at = now();
+	return [...held.values()].map((blocker) => ({ kind: blocker.kind, heldMs: Math.round(at - blocker.since) }));
+}
+
+function now(): number {
+	return typeof performance === 'undefined' ? Date.now() : performance.now();
 }
 
 /** Calls `listener` after every hold and release. Returns the unsubscribe function. */
