@@ -191,4 +191,18 @@ final class SlideOperationTests: HostedTestCase {
         XCTAssertEqual(afterMove.slides.map(\.title), ["One", "Two", "Three", "Four", "Five", "Six", "Eight", "Seven"],
                        "the cursor was in the new slide 8, so slide 8 moved above slide 7, and slide 7's separator stayed where it was typed")
     }
+
+    /// An operation asked for before tap has answered for the typing runs
+    /// once tap answers, whether or not its caller waits on a completion.
+    func testAnOperationQueuedBehindTypingRunsWithoutACompletion() async throws {
+        let (_, controller) = try await openOps()
+        let end = (controller.editor.string as NSString).length
+        controller.editor.setSelectedRange(NSRange(location: end, length: 0))
+        controller.editor.insertText("\n\nMore.", replacementRange: NSRange(location: NSNotFound, length: 0))
+        XCTAssertNotEqual(controller.editor.string, controller.lastAppliedText, "tap has not answered for the typing yet")
+        XCTAssertEqual(controller.perform(.duplicate(numbers: [1])), .queued)
+        try await waitUntil(timeout: 10, "the queued duplicate to land") { controller.editor.boxes.count == 8 }
+        let afterDuplicate = try await titles(controller)
+        XCTAssertEqual(afterDuplicate, ["One", "One", "Two", "Three", "Four", "Five", "Six", "Seven"])
+    }
 }

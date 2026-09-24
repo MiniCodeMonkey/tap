@@ -64,7 +64,10 @@ extension DeckSessionController {
     func perform(_ operation: SlideOperation, completion: ((SlideEditResult?) -> Void)? = nil) -> SlideOperationOutcome {
         guard editor.string == lastAppliedText else {
             whenTextIsConfirmed({ [weak self] in
-                completion?(self?.performNow(operation))
+                // Run before handing the result on: `completion?(...)` with no
+                // completion would skip evaluating its argument, the operation too.
+                let result = self?.performNow(operation)
+                completion?(result)
             }, abandoned: {
                 completion?(nil)
             })
