@@ -542,7 +542,7 @@ final class EditorTextView: NSTextView {
     /// click, handled as any click in the text.
     override func mouseDown(with event: NSEvent) {
         let point = convert(event.locationInWindow, from: nil)
-        // A Control-click is a context menu click (Task 15's), and a
+        // A Control-click is a context menu click, and a
         // Shift-click extends the selection; neither starts a header drag.
         guard !event.modifierFlags.contains(.control), !event.modifierFlags.contains(.shift),
               let index = boxIndex(forHeaderAt: point), let window,
@@ -618,8 +618,8 @@ final class EditorTextView: NSTextView {
         needsDisplay = true
     }
 
-    /// A slide drop moves, from this deck or another; Option copies
-    /// (decision 2). A drop inside the dragged block, in this deck, is
+    /// A slide drop moves, from this deck or another; Option copies.
+    /// A drop inside the dragged block, in this deck, is
     /// refused, as the sidebar refuses it: it would land the block back
     /// where it already is.
     private func slideDropOperation(payload: SlideDragPayload, at point: NSPoint) -> NSDragOperation {

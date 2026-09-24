@@ -59,7 +59,7 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
         panelPeek.onHide = { [weak self] in
             guard let self else { return }
             // Focus must not stay in a panel nobody can see: a click in the peeked
-            // panel left it in the collection view (decision 1), and a Delete there
+            // panel leaves it in the collection view, and a Delete there
             // would delete slides out of sight. The editor is inside this same
             // window, and the person's own pointer closed the peek.
             if let responder = self.window?.firstResponder as? NSView, responder.isDescendant(of: self.panelOverlay) {

@@ -105,7 +105,7 @@ enum MainMenu {
         menu.addItem(.separator())
         menu.addItem(item("Duplicate", action: #selector(DeckWindowController.duplicateSlides(_:)), key: "d"))
         menu.addItem(item("Skip Slide", action: #selector(DeckWindowController.toggleSkipSlides(_:))))
-        // Command-Delete, not Delete alone: a bare Delete key equivalent would take Backspace away from the editor (decision 3).
+        // Command-Delete, not Delete alone: a bare Delete key equivalent would take Backspace away from the editor.
         menu.addItem(item("Delete", action: #selector(DeckWindowController.deleteSlides(_:)), key: "\u{8}"))
         menu.addItem(.separator())
         let upArrow = String(Character(Unicode.Scalar(UInt16(NSUpArrowFunctionKey))!))

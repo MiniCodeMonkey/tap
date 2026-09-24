@@ -222,7 +222,7 @@ extension DeckSessionController {
     /// the boxes `undo` belong to it, and after it is redone `redo` do.
     /// AppKit reverts the text through the text storage, which shifts the
     /// boxes by the inverse edit and leaves them wrong. The closure only
-    /// notes which boxes to adopt; D2's `undoOrRedoDidChangeText`, which
+    /// notes which boxes to adopt; `undoOrRedoDidChangeText`, which
     /// runs on the undo manager's notification once the whole group has
     /// run, adopts them and then sends the text to tap. The undo manager is
     /// looked up from the target each time, never captured.
@@ -343,7 +343,7 @@ extension DeckSessionController {
 
     /// A drop of slides: a move within this deck; from another deck, an
     /// insert here and, unless the drop is a copy, a delete there. Each
-    /// deck registers its own undo step (decision 2). The source gives the
+    /// deck registers its own undo step. The source gives the
     /// slides up only in the insert's completion, once they are in this
     /// deck's text: an insert that waits for tap's confirmation and is then
     /// abandoned (no answer while tap restarts) leaves the source as it was,
