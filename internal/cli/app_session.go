@@ -21,15 +21,15 @@ const (
 	appTunnelQRSize = 512
 	// appKeepRecordingTimeout bounds the keep-recording question quit
 	// asks, so quit always returns even when standard input stays open
-	// and nothing answers. It is short on purpose: quit is a path whose
-	// whole point is that the window is closing, so an app not watching
-	// for the keep-recording event specifically sees silence for this
-	// long and cannot tell it apart from a hang. The unanswered default
-	// is "keep the recording" (safe, no data loss), so a short bound
-	// costs little: a few seconds is plenty of room for a desktop app to
-	// show its own dialog and reply, without exposing a long
-	// unresponsive window on the way out.
-	appKeepRecordingTimeout = 3 * time.Second
+	// and nothing answers. A closed standard input (the app has already
+	// exited) resolves the question at once through appQuestions.close,
+	// regardless of this bound: this is only how long quit waits on a
+	// still-connected app that has gone quiet. The unanswered default is
+	// "keep the recording" (safe, no data loss), so a generous bound
+	// costs little: a minute gives a person time to notice the app's own
+	// dialog and decide, rather than losing the choice to a timer picked
+	// for how quickly a window closes.
+	appKeepRecordingTimeout = 60 * time.Second
 	// appTaskQueueSize matches appCommandQueueSize: readAppCommandLine
 	// already refuses to queue more than that many commands, so a task
 	// queue of the same size never has to make handle wait for room.
