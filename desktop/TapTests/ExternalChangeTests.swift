@@ -125,4 +125,124 @@ final class ExternalChangeTests: HostedTestCase {
         XCTAssertEqual(controller.editor.string, mine, "the buffer itself is untouched")
         XCTAssertNil(controller.editorViewController.bar(.changedOnDisk))
     }
+
+    /// Drives `diskChanged()` directly rather than through tap's own
+    /// `file-changed` event: tap keeps rendering its own live buffer and is
+    /// not obliged to report every successive disk write to the same file
+    /// promptly, which made a version of this test that waited on a second
+    /// real tap event flaky under load. `diskChanged()` is the exact method
+    /// the event handler calls, so this tests the same logic directly.
+    func testDiskConvergingWhileAConflictIsShowingClearsIt() async throws {
+        let deck = try Fixtures.copyDeck("seven-slides.md")
+        let document = try await openDeck(deck)
+        try await waitForBoxes(document, count: 7)
+        _ = try await waitForRunningTap(document)
+        let controller = try XCTUnwrap(document.sessionController)
+        controller.editor.moveCursor(toSlide: 5)
+        controller.editor.insertText(" mine", replacementRange: NSRange(location: NSNotFound, length: 0))
+        let mine = controller.editor.string
+        try writeOutside(mine.replacingOccurrences(of: " mine", with: " theirs"), to: deck)
+        controller.diskChanged()
+        XCTAssertNotNil(controller.editorViewController.bar(.changedOnDisk))
+        XCTAssertTrue(controller.hasDiskConflict)
+
+        // The file converges on exactly what is already open, without a
+        // person ever resolving the bar: the stale conflict must not
+        // survive to block a later autosave.
+        try writeOutside(mine, to: deck)
+        controller.diskChanged()
+
+        XCTAssertNil(controller.editorViewController.bar(.changedOnDisk))
+        XCTAssertFalse(controller.hasDiskConflict, "the conflict is cleared once the disk matches the buffer")
+        XCTAssertFalse(document.isDocumentEdited)
+    }
+
+    func testPendingCursorSlideNumberDoesNotOutliveARefusedAnswer() async throws {
+        let deck = try Fixtures.copyDeck("seven-slides.md")
+        let document = try await openDeck(deck)
+        try await waitForBoxes(document, count: 7)
+        _ = try await waitForRunningTap(document)
+        let controller = try XCTUnwrap(document.sessionController)
+        controller.editor.moveCursor(toSlide: 4)
+
+        let before = controller.editor.string
+        let changed = before.replacingOccurrences(of: "# The Page", with: "# The Pages, renamed")
+        try writeOutside(changed, to: deck)
+        try await waitUntil(timeout: 10, "the disk version") { controller.editor.string == changed }
+        // loadDiskVersion just set pendingCursorSlideNumber for slide 5.
+
+        // A refused answer, computed from text this generation can no longer
+        // describe, must not leave the pending slide number for some later,
+        // unrelated slide list to pick up.
+        controller.applySlideList(SlideList(slides: [], errors: []), sentText: "stale", generation: -1)
+
+        // An edit to a different slide, and tap's real answer for it, must
+        // not have the cursor hijacked back to the load's slide.
+        controller.editor.moveCursor(toSlide: 0)
+        controller.editor.insertText("x", replacementRange: NSRange(location: NSNotFound, length: 0))
+        try await waitUntil(timeout: 10, "tap's boxes for the new edit") { controller.editor.boxes.count == 7 }
+        XCTAssertEqual(controller.editor.currentBoxIndex, 0, "a stale pending slide number from the load did not move the cursor")
+    }
+
+    func testExplicitSaveDuringAConflictDoesNotOverwrite() async throws {
+        let deck = try Fixtures.copyDeck("seven-slides.md")
+        let document = try await openDeck(deck)
+        try await waitForBoxes(document, count: 7)
+        _ = try await waitForRunningTap(document)
+        let controller = try XCTUnwrap(document.sessionController)
+        controller.editor.moveCursor(toSlide: 5)
+        controller.editor.insertText(" mine", replacementRange: NSRange(location: NSNotFound, length: 0))
+        let mine = controller.editor.string
+        let theirs = mine.replacingOccurrences(of: " mine", with: " theirs")
+        try writeOutside(theirs, to: deck)
+        try await waitUntil(timeout: 10, "the changed on disk bar") { controller.editorViewController.bar(.changedOnDisk) != nil }
+
+        // Cmd-S, through the exact action the menu item invokes.
+        document.save(nil)
+
+        // A real, unguarded save would complete well within this: give it
+        // every chance to happen before asserting it did not.
+        try await Task.sleep(nanoseconds: 500_000_000)
+        XCTAssertEqual(try String(contentsOf: deck, encoding: .utf8), theirs, "the other program's text is untouched")
+        XCTAssertNotNil(controller.editorViewController.bar(.changedOnDisk), "the bar is still showing")
+        XCTAssertTrue(document.isDocumentEdited, "still edited: nothing was saved")
+        XCTAssertNil(document.windowControllers.first?.window?.attachedSheet, "no alert")
+    }
+
+    /// Closing a window or quitting with unsaved changes, for a document
+    /// whose class declares `autosavesInPlace`, does not show the classic
+    /// Save/Don't Save/Cancel alert or call `saveDocumentWithDelegate:` at
+    /// all: NSDocument's own documented behavior for
+    /// `canCloseDocumentWithDelegate:shouldCloseSelector:contextInfo:` is to
+    /// invoke `autosaveWithImplicitCancellability(false, completionHandler:)`
+    /// directly and treat a reported error as "do not close". This drives
+    /// that exact call, which is the real close/quit path for this class,
+    /// directly: no window is asked to close and no alert is driven, so this
+    /// proves the write is blocked and the completion reports failure (which
+    /// is what makes canClose refuse to close), not that a real window
+    /// close or app quit is cancelled end to end. See the report for what
+    /// that further step leaves unproven.
+    func testCloseOrQuitAutosaveDuringAConflictDoesNotOverwrite() async throws {
+        let deck = try Fixtures.copyDeck("seven-slides.md")
+        let document = try await openDeck(deck)
+        try await waitForBoxes(document, count: 7)
+        _ = try await waitForRunningTap(document)
+        let controller = try XCTUnwrap(document.sessionController)
+        controller.editor.moveCursor(toSlide: 5)
+        controller.editor.insertText(" mine", replacementRange: NSRange(location: NSNotFound, length: 0))
+        let mine = controller.editor.string
+        let theirs = mine.replacingOccurrences(of: " mine", with: " theirs")
+        try writeOutside(theirs, to: deck)
+        try await waitUntil(timeout: 10, "the changed on disk bar") { controller.editorViewController.bar(.changedOnDisk) != nil }
+
+        let reportedError = await withCheckedContinuation { (continuation: CheckedContinuation<Error?, Never>) in
+            document.autosave(withImplicitCancellability: false) { error in continuation.resume(returning: error) }
+        }
+        XCTAssertNotNil(reportedError, "canClose treats this as a failed save and does not close")
+        XCTAssertEqual((reportedError as NSError?)?.code, CocoaError.userCancelled.rawValue, "the one error NSDocument treats as a silent refusal")
+        XCTAssertEqual(try String(contentsOf: deck, encoding: .utf8), theirs, "the other program's text is untouched")
+        XCTAssertNotNil(controller.editorViewController.bar(.changedOnDisk), "the bar is still showing")
+        XCTAssertTrue(document.isDocumentEdited, "still edited: nothing was saved")
+        XCTAssertNil(document.windowControllers.first?.window?.attachedSheet, "no alert")
+    }
 }

@@ -79,6 +79,22 @@ final class DeckDocument: NSDocument {
         if let date = diskModificationDate { fileModificationDate = date }
     }
 
+    /// The File menu's Save (Cmd-S) reaches NSDocument's default
+    /// `saveDocument(_:)`, which calls this method (`saveDocumentWithDelegate:`
+    /// in its underlying Objective-C form) directly, never through
+    /// `save(to:ofType:for:completionHandler:)` or
+    /// `autosave(withImplicitCancellability:completionHandler:)` below, for a
+    /// document whose class declares `autosavesInPlace`: confirmed by direct
+    /// observation that calling `save(_:)` while a conflict is showing writes
+    /// nothing and quietly clears `isDocumentEdited` even before this guard
+    /// existed, without ever reaching either of those overrides. Blocking it
+    /// here, before calling super at all, is what stops that: nothing runs,
+    /// the bar stays up, and the person's edits stay marked edited.
+    override func save(withDelegate delegate: Any?, didSave didSaveSelector: Selector?, contextInfo: UnsafeMutableRawPointer?) {
+        if sessionController?.hasDiskConflict == true { return }
+        super.save(withDelegate: delegate, didSave: didSaveSelector, contextInfo: contextInfo)
+    }
+
     /// Writes the buffer over the file that changed on disk.
     func overwriteDisk(completion: @escaping (Error?) -> Void) {
         guard let url = fileURL else { return completion(nil) }
@@ -98,9 +114,19 @@ final class DeckDocument: NSDocument {
         try super.checkAutosavingSafety()
     }
 
+    // `checkAutosavingSafety()` only runs for the periodic, cancellable
+    // autosave (`autosavingIsImplicitlyCancellable == true`); closing a
+    // window or quitting with unsaved changes calls this method with
+    // `false` directly, since `autosavesInPlace` is true, and never goes
+    // through `checkAutosavingSafety()` at all. This guard is that path's
+    // only defense against writing over a conflict still on screen, so it
+    // must report the cancellation as a failure to save, not as a
+    // no-op success: `.userCancelled` is the one error NSDocument treats
+    // as a silent refusal, so closing or quitting cancels instead of
+    // discarding the person's edits, with no alert shown.
     override func autosave(withImplicitCancellability autosavingIsImplicitlyCancellable: Bool,
                            completionHandler: @escaping (Error?) -> Void) {
-        if sessionController?.hasDiskConflict == true { return completionHandler(nil) }
+        if sessionController?.hasDiskConflict == true { return completionHandler(CocoaError(.userCancelled)) }
         super.autosave(withImplicitCancellability: autosavingIsImplicitlyCancellable, completionHandler: completionHandler)
     }
 
@@ -110,8 +136,19 @@ final class DeckDocument: NSDocument {
     // written matches fileURL. A Save As does move the document, and by the
     // time this completion handler runs, fileURL already reflects that, so
     // it counts.
+    //
+    // This is also the method a direct, programmatic `.saveOperation` call
+    // goes through (as this app's own tests exercise, and as `overwriteDisk`
+    // below does for Keep Mine), so while a conflict is showing,
+    // `.saveOperation` is refused here too: `.userCancelled`, no write, no
+    // alert. Keep Mine already clears `hasDiskConflict` before it calls this
+    // method, so it is never blocked by this guard. Save To and Save As
+    // write somewhere other than the conflicting file and are untouched.
     override func save(to url: URL, ofType typeName: String, for saveOperation: NSDocument.SaveOperationType,
                        completionHandler: @escaping (Error?) -> Void) {
+        if saveOperation == .saveOperation, sessionController?.hasDiskConflict == true {
+            return completionHandler(CocoaError(.userCancelled))
+        }
         super.save(to: url, ofType: typeName, for: saveOperation) { [weak self] error in
             if error == nil, let self, let fileURL = self.fileURL, FilePaths.same(fileURL, url) {
                 if let snapshot = self.savedSnapshot {

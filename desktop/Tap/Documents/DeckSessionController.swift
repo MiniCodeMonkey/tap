@@ -109,6 +109,13 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
             document.adopt(diskText: disk)
             document.acceptDiskState()
             refreshEditedState()
+            // The disk has converged on the editor's own text: whatever
+            // conflict was showing no longer describes reality, and must not
+            // survive to block a later autosave.
+            if hasDiskConflict {
+                hasDiskConflict = false
+                editorViewController.hideBar(.changedOnDisk)
+            }
             return
         }
         if document.isDocumentEdited {
@@ -199,8 +206,16 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
         refreshEditedState()
     }
 
-    private func applySlideList(_ list: SlideList, sentText: String, generation: Int) {
+    // internal, not private, so a test can hand it a deliberately stale or
+    // refused answer to prove pendingCursorSlideNumber does not outlive it.
+    func applySlideList(_ list: SlideList, sentText: String, generation: Int) {
         guard !stopped else { return }
+        // Consumed by this answer whether or not the editor accepts it: a
+        // slide number left over from a load must not wait indefinitely for
+        // the one answer that matches it and then land on some later,
+        // unrelated slide list instead.
+        let pendingNumber = pendingCursorSlideNumber
+        pendingCursorSlideNumber = nil
         // An answer the editor refuses was computed from text the editor no
         // longer holds. Nothing it says about this deck is true any more,
         // so none of what follows runs on it.
@@ -213,11 +228,8 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
         } else {
             editorViewController.hideBar(.deckErrors)
         }
-        if let number = pendingCursorSlideNumber {
-            pendingCursorSlideNumber = nil
-            if let index = editor.boxes.firstIndex(where: { $0.slide.number == number }), editor.currentBoxIndex != index {
-                editor.moveCursor(toSlide: index)
-            }
+        if let number = pendingNumber, let index = editor.boxes.firstIndex(where: { $0.slide.number == number }), editor.currentBoxIndex != index {
+            editor.moveCursor(toSlide: index)
         }
         // New counts for the shown slide, and a new number when slides moved around the cursor.
         sendPreviewMessage(navigator.slidesChanged(list.slides))
