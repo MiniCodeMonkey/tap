@@ -22,7 +22,7 @@
 | P6 | `2026-09-22-app-mode.md` | Part 6 | P2, P3, P5 | written |
 | D2 | `2026-09-22-desktop-app-shell.md` | Desktop milestone 2 | P6 | written |
 | D3 | `2026-09-24-desktop-sidebar-thumbnails-slide-operations.md` | Desktop milestone 3 | D2, P4 (`slide add --print`) | written |
-| D4 | `desktop-presenting.md` | Desktop milestone 4 | D3 | outline below |
+| D4 | `2026-09-24-desktop-presenting.md` | Desktop milestone 4 | D3 | written |
 | D5 | `desktop-live-code-deck-tab-fixits.md` | Desktop milestone 5 | D4, P2 | outline below |
 | D6 | `desktop-create-export-settings.md` | Desktop milestone 6 | D5, P4 | outline below |
 | D7 | `desktop-release.md` | Desktop milestone 7 | D6 | outline below; needs credentials the machine does not have |
