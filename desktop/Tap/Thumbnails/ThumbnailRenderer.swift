@@ -58,10 +58,13 @@ final class ThumbnailRenderer: NSObject, WKScriptMessageHandler, WKNavigationDel
     private var waitingForSlide: Int?
     private var readyWaiter: CheckedContinuation<ReadyPayload?, Never>?
     private var timeoutWork: DispatchWorkItem?
-    /// Per slide: failed attempts in a row, when it may be tried again, and flat captures in a row.
+    /// Per slide: failed attempts in a row, when it may be tried again, and
+    /// flat captures in a row for the job currently counted (a job with a
+    /// different `ThumbnailKey`, such as edited content, starts its own
+    /// count rather than inheriting one left over from the old content).
     private var failures: [Int: Int] = [:]
     private var notBefore: [Int: Date] = [:]
-    private var flatCaptures: [Int: Int] = [:]
+    private var flatCaptures: [Int: (job: Job, count: Int)] = [:]
 
     private enum Outcome { case rendered, retry }
 
@@ -92,6 +95,7 @@ final class ThumbnailRenderer: NSObject, WKScriptMessageHandler, WKNavigationDel
         lastReady = nil
         failures = [:]
         notBefore = [:]
+        flatCaptures = [:]
         pump()
     }
 
@@ -193,9 +197,15 @@ final class ThumbnailRenderer: NSObject, WKScriptMessageHandler, WKNavigationDel
         if FlatImageCheck.isFlat(image) {
             // The page reported ready after a paint, for this slide and revision, and the
             // pixels are still one colour: either the paint came late, or the slide is blank.
-            // Only several such captures in a row settle it as blank.
-            let flat = (flatCaptures[number] ?? 0) + 1
-            flatCaptures[number] = flat
+            // Only several such captures in a row for this same job settle it as blank; a job
+            // with a different key, such as edited content, starts its own count from zero.
+            let flat: Int
+            if let existing = flatCaptures[number], existing.job == job {
+                flat = existing.count + 1
+            } else {
+                flat = 1
+            }
+            flatCaptures[number] = (job: job, count: flat)
             guard flat >= Self.blankAcceptAttempts else { return .retry }
         }
         flatCaptures[number] = nil

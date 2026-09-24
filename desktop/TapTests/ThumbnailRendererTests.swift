@@ -130,4 +130,43 @@ final class ThumbnailRendererTests: HostedTestCase {
         XCTAssertEqual(renderer.navigationCount, 0, "no client, no loads: a failing load would otherwise be retried without end")
         XCTAssertTrue(renderer.isQueued(1), "the work waits for the next client")
     }
+
+    /// The flat-capture count belongs to the job it was counted for: a slide
+    /// edited after two flat captures starts its new content's count at
+    /// zero rather than being one flat capture away from being cached blank.
+    func testAFlatCaptureCountResetsWhenTheJobChanges() async throws {
+        let document = try await openDeck(try Fixtures.copyDeck("plain.md"))
+        try await waitForBoxes(document, count: 1)
+        let (renderer, _, summary) = try await makeRenderer(for: document)
+        let flat = NSImage(size: NSSize(width: 320, height: 180))
+        flat.lockFocus()
+        NSColor.white.setFill()
+        NSRect(x: 0, y: 0, width: 320, height: 180).fill()
+        flat.unlockFocus()
+        var snapshots = 0
+        renderer.snapshot = { _, _ in
+            snapshots += 1
+            return flat
+        }
+        var images: [Int] = []
+        renderer.onImage = { job, _, _ in images.append(job.slideNumber) }
+
+        let keyA = ThumbnailKey(slideHash: "hash-a", themeSignature: summary.themeSignature)
+        renderer.setWork([ThumbnailRenderer.Job(slideNumber: 1, key: keyA)], revision: summary.revision, visible: [1], current: 1)
+        try await waitUntil(timeout: 20, "two flat captures for key A") { snapshots >= 2 }
+        XCTAssertTrue(images.isEmpty, "two flat captures alone are not yet accepted as blank")
+
+        // The content changes (a different hash) before the third, deciding
+        // capture for key A ever happens.
+        let keyB = ThumbnailKey(slideHash: "hash-b", themeSignature: summary.themeSignature)
+        renderer.setWork([ThumbnailRenderer.Job(slideNumber: 1, key: keyB)], revision: summary.revision, visible: [1], current: 1)
+        let snapshotsBeforeB = snapshots
+        try await waitUntil(timeout: 20, "one more flat capture, now for key B") { snapshots > snapshotsBeforeB }
+        // With the bug, this single flat capture for the new key is treated
+        // as the job's third in a row (two inherited from key A) and gets
+        // delivered as blank right away.
+        try await Task.sleep(nanoseconds: 800_000_000)
+        XCTAssertTrue(images.isEmpty, "one flat capture of a freshly changed job must not be accepted as blank")
+        XCTAssertEqual(renderer.renderCount, 0)
+    }
 }
