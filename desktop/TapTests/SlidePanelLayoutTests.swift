@@ -24,11 +24,6 @@ final class SlidePanelLayoutTests: HostedTestCase {
         let other = try Fixtures.copyDeck("seven-slides.md")
         let otherDocument = try await openDeck(other)
         let otherController = try windowController(for: otherDocument)
-        // The panel's own occlusion-driven reassertion (see
-        // DeckWindowController.init) can land a moment after the window is
-        // first shown, once AppKit's own first real layout of the sidebar
-        // item has actually run.
-        try await waitUntil(timeout: 2, "the other deck's own panel to stay pinned") { !otherController.splitViewController.sidebarItem.isCollapsed }
         otherController.splitViewController.view.layoutSubtreeIfNeeded()
         XCTAssertTrue(otherController.isPanelPinned, "unpinning one deck leaves another pinned")
         XCTAssertFalse(otherController.splitViewController.sidebarItem.isCollapsed, "the other deck's own panel stays pinned")
@@ -45,7 +40,6 @@ final class SlidePanelLayoutTests: HostedTestCase {
         XCTAssertFalse(again.isPanelPinned, "each deck remembers its state")
         XCTAssertTrue(again.splitViewController.sidebarItem.isCollapsed)
         let otherAgain = try windowController(for: try await openDeck(other))
-        try await waitUntil(timeout: 2, "the other deck to stay pinned on reopen") { !otherAgain.splitViewController.sidebarItem.isCollapsed }
         otherAgain.splitViewController.view.layoutSubtreeIfNeeded()
         XCTAssertTrue(otherAgain.isPanelPinned, "the other deck reopens pinned, beside a deck that reopened unpinned")
         XCTAssertFalse(otherAgain.splitViewController.sidebarItem.isCollapsed)
@@ -85,6 +79,13 @@ final class SlidePanelLayoutTests: HostedTestCase {
         session.slidePanel.click(slide: 5, extendingSelection: false)
         XCTAssertEqual(session.editor.currentBoxIndex, 4, "a click in it jumps there")
 
+        // AppKit's own hidden-first-responder fallback would also land on
+        // the editor today, since it is next in the window's key view loop,
+        // which would let the app's own explicit move in onHide be removed
+        // without this test noticing. Pointing the collection view's own
+        // next key view somewhere else first means only the app's line can
+        // put focus on the editor.
+        session.slidePanel.collectionView.nextKeyView = session.previewViewController.webView
         controller.panelPeek.pointerLeftPanel()
         try await waitUntil(timeout: 2, "the overlay to hide") { controller.panelOverlay.isHidden }
         XCTAssertTrue(window.firstResponder === session.editor, "focus never stays in a hidden panel: the editor has it once the peek closes")
@@ -132,5 +133,38 @@ final class SlidePanelLayoutTests: HostedTestCase {
         controller.toggleSlidePanel(nil)
         XCTAssertTrue(controller.validateMenuItem(menuItem))
         XCTAssertEqual(menuItem.title, "Unpin Slide Panel")
+    }
+
+    /// AppKit's window tab stack copies the prior tab's split-view divider
+    /// positions into the new tab on every swap
+    /// (NSWindowStackController._syncWindowFrameStateForSwapWithNewWindow),
+    /// which can carry one deck's collapsed sidebar onto another deck that
+    /// should not be collapsed, and the reverse. Each deck's own pinned
+    /// state must survive switching to it and away from it, in both
+    /// directions, and an unpinned deck's sidebar column must never reopen
+    /// empty (the panel view belongs to the overlay while unpinned, not to
+    /// the sidebar host).
+    func testTabSwitchKeepsEachDecksPinnedState() async throws {
+        let pinnedDocument = try await openDeck(try Fixtures.copyDeck("plain.md"))
+        let pinned = try windowController(for: pinnedDocument)
+        let unpinnedDocument = try await openDeck(try Fixtures.copyDeck("seven-slides.md"))
+        let unpinned = try windowController(for: unpinnedDocument)
+        unpinned.setPanelPinned(false)
+        let pinnedWindow = try XCTUnwrap(pinned.window)
+        let unpinnedWindow = try XCTUnwrap(unpinned.window)
+        XCTAssertEqual(pinnedWindow.tabbedWindows?.count, 2, "both decks share one tab group")
+
+        for round in 1...2 {
+            pinnedWindow.tabGroup?.selectedWindow = pinnedWindow
+            try await waitUntil(timeout: 2, "the pinned deck to stay pinned after round \(round)") { !pinned.splitViewController.sidebarItem.isCollapsed }
+            XCTAssertTrue(pinned.isPanelPinned, "round \(round): switching to the pinned deck leaves it pinned")
+            XCTAssertFalse(pinned.splitViewController.sidebarItem.isCollapsed)
+
+            unpinnedWindow.tabGroup?.selectedWindow = unpinnedWindow
+            try await waitUntil(timeout: 2, "the unpinned deck to stay unpinned after round \(round)") { unpinned.splitViewController.sidebarItem.isCollapsed }
+            XCTAssertFalse(unpinned.isPanelPinned, "round \(round): switching to the unpinned deck leaves it unpinned")
+            XCTAssertTrue(unpinned.splitViewController.sidebarItem.isCollapsed)
+            XCTAssertTrue(unpinned.sidebarHost.view.subviews.isEmpty, "round \(round): the unpinned deck's sidebar column stays empty, not a column with nothing pushed into it")
+        }
     }
 }
