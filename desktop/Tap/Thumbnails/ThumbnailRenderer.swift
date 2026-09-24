@@ -241,8 +241,13 @@ final class ThumbnailRenderer: NSObject, WKScriptMessageHandler, WKNavigationDel
         return .rendered
     }
 
+    /// `render(_:)`, the only caller, never reaches this with a `lastReady`
+    /// for another slide: it resets `lastReady` to nil before loading a
+    /// fresh page for any slide or revision change, and falls through with
+    /// `lastReady` intact only when `lastReady?.slide` already equals
+    /// `slide`. So `lastReady` here, when not nil, always matches `slide`.
     private func waitForReady(slide: Int, timeout: TimeInterval) async -> ReadyPayload? {
-        if let lastReady, lastReady.slide == slide { return lastReady }
+        if let lastReady { return lastReady }
         waitingForSlide = slide
         return await withCheckedContinuation { continuation in
             readyWaiter = continuation

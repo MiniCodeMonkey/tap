@@ -739,6 +739,12 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
         guard let index, editor.boxes.indices.contains(index) else { return }
         sendPreviewMessage(navigator.cursorMoved(to: editor.boxes[index].slide))
         syncPanelSelectionToCursor()
+        // A cursor move to a slide already on screen selects it without
+        // scrolling, which fires no bounds-change notification, so the
+        // render queue's priority is stuck at whatever it was computed as
+        // during the last content change unless this reaches the renderer
+        // directly.
+        thumbnails.reprioritize()
     }
 }
 

@@ -23,17 +23,19 @@ final class ThumbnailController {
     private var jobs: [ThumbnailRenderer.Job] = []
     private var fetching = false
     private var fetchAgain = false
-    /// The pending job's key per slide, and the revision, as last handed to
-    /// the renderer. tap can answer two summaries back to back for one deck
-    /// change (the app asks once when the client is set and once after
-    /// applying the slide list); when the second answer describes the same
-    /// pending work as the first, handing it to the renderer again would
-    /// requeue a slide the renderer is already in the middle of capturing,
-    /// rendering it twice. Comparing against what was last sent, rather
-    /// than sending on every refresh, keeps the renderer's queue untouched
-    /// when nothing actually changed.
+    /// The pending job's key per slide, the revision, the visible range and
+    /// the current slide, as last handed to the renderer. tap can answer
+    /// two summaries back to back for one deck change, and a cursor move or
+    /// a scroll can report the same visible range and current slide the
+    /// renderer already has; handing the renderer the same work again would
+    /// requeue a slide it is already in the middle of capturing, rendering
+    /// it twice. Comparing against what was last sent, rather than sending
+    /// on every refresh or every reprioritize, keeps the renderer's queue
+    /// untouched when nothing actually changed.
     private var lastHandedToRenderer: [Int: ThumbnailKey] = [:]
     private var lastHandedRevision: String?
+    private var lastHandedVisible: [Int] = []
+    private var lastHandedCurrent: Int?
 
     init(cache: ThumbnailCache, panel: SlidePanelViewController) {
         self.cache = cache
@@ -71,7 +73,23 @@ final class ThumbnailController {
     /// Reorders the renderer's work around what is visible now.
     func reprioritize() {
         guard let summary = lastSummary else { return }
-        renderer.setWork(jobs, revision: summary.revision, visible: panel?.visibleNumbers ?? [], current: currentSlideNumber())
+        handToRenderer(jobs, revision: summary.revision, visible: panel?.visibleNumbers ?? [], current: currentSlideNumber())
+    }
+
+    /// Hands work to the renderer only when the job set, the revision, the
+    /// visible range or the current slide actually changed since the last
+    /// hand-off. A redundant call, such as a cursor move that lands back on
+    /// the slide the renderer already favors, would otherwise requeue an
+    /// in-flight job and render it twice.
+    private func handToRenderer(_ jobs: [ThumbnailRenderer.Job], revision: String, visible: [Int], current: Int?) {
+        let bySlide = Dictionary(uniqueKeysWithValues: jobs.map { ($0.slideNumber, $0.key) })
+        guard bySlide != lastHandedToRenderer || revision != lastHandedRevision
+                || visible != lastHandedVisible || current != lastHandedCurrent else { return }
+        lastHandedToRenderer = bySlide
+        lastHandedRevision = revision
+        lastHandedVisible = visible
+        lastHandedCurrent = current
+        renderer.setWork(jobs, revision: revision, visible: visible, current: current)
     }
 
     private func refresh(with summary: PresentationSummary) {
@@ -101,12 +119,7 @@ final class ThumbnailController {
         }
         jobs = pending
         panel?.setUpdating(updating)
-        let pendingBySlide = Dictionary(uniqueKeysWithValues: pending.map { ($0.slideNumber, $0.key) })
-        if pendingBySlide != lastHandedToRenderer || summary.revision != lastHandedRevision {
-            lastHandedToRenderer = pendingBySlide
-            lastHandedRevision = summary.revision
-            renderer.setWork(jobs, revision: summary.revision, visible: panel?.visibleNumbers ?? [], current: currentSlideNumber())
-        }
+        handToRenderer(jobs, revision: summary.revision, visible: panel?.visibleNumbers ?? [], current: currentSlideNumber())
         onImagesChanged?()
     }
 
