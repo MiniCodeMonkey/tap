@@ -60,6 +60,11 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
     /// True while a snapshot is in flight, so two ready signals close
     /// together do not start two overlapping snapshots.
     private var isCapturingRecentThumbnail = false
+    /// True once the preview has been reloaded because its slide 1 ready
+    /// was unsettled when its window became visible, so a slide 1 that
+    /// never settles costs one reload rather than one on every occlusion
+    /// report.
+    private var reloadedPreviewForAnUnsettledSlideOne = false
     /// How long the preview's window must have read visible, with no
     /// report of it becoming covered in between, before slide 1 is
     /// captured. The window server reports a freshly shown window that is
@@ -525,9 +530,40 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
     /// thumbnail once the preview's window is visible. The page has already
     /// rendered slide 1, so this reuses that ready rather than waiting for
     /// tap to render it again, which only an edit to slide 1 would cause.
+    /// A covered page can run out of settle rounds and report slide 1
+    /// unsettled, which is never captured, and nothing makes it report
+    /// again on its own, so that ready is answered by reloading the page
+    /// once the window has read visible for the settle interval: the page
+    /// then renders slide 1 on screen and reports a fresh ready.
     private func previewWindowOcclusionChanged() {
         guard let lastReady = previewViewController.lastReady, lastReady.slide == 1 else { return }
         previewDidRender(lastReady)
+        if !lastReady.settled { reloadPreviewForAnUnsettledSlideOneOnceSettled() }
+    }
+
+    /// Reloads the preview if its latest ready is still an unsettled slide
+    /// 1 and the preview has read visible for the whole settle interval, or
+    /// schedules one check for the moment it will have. It shares
+    /// `pendingRecentThumbnailCheck` with the capture, so the window being
+    /// covered again or any newer ready cancels it.
+    private func reloadPreviewForAnUnsettledSlideOneOnceSettled() {
+        pendingRecentThumbnailCheck?.cancel()
+        pendingRecentThumbnailCheck = nil
+        guard !stopped, !recordedRecentThumbnail, !reloadedPreviewForAnUnsettledSlideOne,
+              let lastReady = previewViewController.lastReady, lastReady.slide == 1, !lastReady.settled else { return }
+        refreshPreviewVisibility()
+        guard let visibleSince = previewVisibleSince else { return }
+        let remaining = Self.recentThumbnailSettleInterval - Date().timeIntervalSince(visibleSince)
+        guard remaining <= 0 else {
+            let check = DispatchWorkItem { [weak self] in
+                MainActor.assumeIsolated { self?.reloadPreviewForAnUnsettledSlideOneOnceSettled() }
+            }
+            pendingRecentThumbnailCheck = check
+            DispatchQueue.main.asyncAfter(deadline: .now() + remaining, execute: check)
+            return
+        }
+        reloadedPreviewForAnUnsettledSlideOne = true
+        previewViewController.reload()
     }
 
     /// Captures slide 1 if the preview has read visible for the whole
