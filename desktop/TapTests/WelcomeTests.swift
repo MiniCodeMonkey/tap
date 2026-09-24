@@ -210,7 +210,7 @@ final class WelcomeTests: HostedTestCase {
         XCTAssertTrue(window.occlusionState.contains(.visible), "the page paints on a window really on screen")
 
         reported.report(visible: true, for: window)
-        try await Task.sleep(nanoseconds: 100_000_000)
+        try await Task.sleep(nanoseconds: 300_000_000)
         reported.report(visible: false, for: window)
         // Well past the settle interval and any snapshot it could have
         // started.

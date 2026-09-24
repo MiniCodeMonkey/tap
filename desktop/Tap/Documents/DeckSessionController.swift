@@ -63,10 +63,10 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
     /// How long the preview's window must have read visible, with no
     /// report of it becoming covered in between, before slide 1 is
     /// captured. The window server reports a freshly shown window that is
-    /// already covered as visible for about 0.1 s within its first 0.3 s
-    /// on screen, and the page paints during that report; a capture must
-    /// outlast such a report to prove the window is really on screen.
-    static let recentThumbnailSettleInterval: TimeInterval = 0.25
+    /// already covered as visible for as long as 0.26 s under load, and
+    /// the page paints during that report; a capture must outlast such a
+    /// report to prove the window is really on screen.
+    static let recentThumbnailSettleInterval: TimeInterval = 0.5
     /// The window that held the preview when it was last seen visible, and
     /// the moment from which it has read visible continuously. Set from the
     /// occlusion notifications of that window, or from a check that finds
