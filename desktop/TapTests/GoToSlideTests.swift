@@ -60,12 +60,10 @@ final class GoToSlideTests: HostedTestCase {
     /// `goToSlideIsEnabled(forKeyWindow:)`, exactly the way `deck(owning:)`
     /// above is factored, so it can be tested against real windows without
     /// driving `NSApp.keyWindow`. `validateMenuItem` itself is also
-    /// exercised directly with a real menu item: this host's `NSApp.keyWindow`
-    /// is always nil (see `testGoToSlideFindsTheDeckOwningADetachedPreviewWindow`),
-    /// which happens to be exactly the "no deck resolves" case, so that call
-    /// covers the disabled path through the real method; the enabled path
-    /// through `validateMenuItem` itself, which needs a real key window,
-    /// stays uncovered along with the `NSApp.keyWindow` read.
+    /// exercised directly with a real menu item and must agree with that
+    /// decision for whatever `NSApp.keyWindow` is: a local host usually has
+    /// no key window, a CI runner often has one, so the comparison holds on
+    /// both without assuming either.
     func testValidateMenuItemGoToSlide() async throws {
         let document = try await openDeck(try Fixtures.copyDeck("plain.md"))
         let deckWindowController = try XCTUnwrap(document.windowControllers.first as? DeckWindowController)
@@ -79,8 +77,8 @@ final class GoToSlideTests: HostedTestCase {
         WelcomeWindowController.shared.window?.orderOut(nil)
 
         let goToSlideItem = NSMenuItem(title: "Go to Slide", action: #selector(AppDelegate.goToSlide(_:)), keyEquivalent: "")
-        XCTAssertFalse(appDelegate.validateMenuItem(goToSlideItem),
-                      "no key window here, so validateMenuItem itself must disable the item")
+        XCTAssertEqual(appDelegate.validateMenuItem(goToSlideItem), AppDelegate.goToSlideIsEnabled(forKeyWindow: NSApp.keyWindow),
+                       "validateMenuItem decides Go to Slide from the key window, whatever it is")
 
         // Other AppDelegate-targeted items are unaffected by the new check.
         let tapLogItem = NSMenuItem(title: "Tap Log", action: #selector(AppDelegate.showTapLog(_:)), keyEquivalent: "")
