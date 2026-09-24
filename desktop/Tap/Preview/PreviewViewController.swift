@@ -6,6 +6,16 @@ struct ReadyPayload: Equatable {
     let revision: String
     let slide: Int
     let step: Int
+    /// False only when a live page ran out of settle rounds and reported
+    /// ready anyway. Absent means the round settled normally.
+    let settled: Bool
+
+    init(revision: String, slide: Int, step: Int, settled: Bool = true) {
+        self.revision = revision
+        self.slide = slide
+        self.step = step
+        self.settled = settled
+    }
 }
 
 /// Forwards script messages without the user content controller keeping
@@ -235,7 +245,8 @@ final class PreviewViewController: NSViewController, WKNavigationDelegate, WKUID
               let slide = (body["slide"] as? NSNumber)?.intValue else { return }
         let payload = ReadyPayload(revision: body["revision"] as? String ?? "",
                                    slide: slide,
-                                   step: (body["step"] as? NSNumber)?.intValue ?? 0)
+                                   step: (body["step"] as? NSNumber)?.intValue ?? 0,
+                                   settled: (body["settled"] as? NSNumber)?.boolValue ?? true)
         lastReady = payload
         onReady?(payload)
     }

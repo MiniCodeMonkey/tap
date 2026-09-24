@@ -72,6 +72,37 @@ final class WelcomeTests: HostedTestCase {
         try assertRecordedThumbnailIsNotBlank(for: deck)
     }
 
+    /// A live page that ran out of settle rounds still posts ready with
+    /// `settled: false` rather than leaving the app waiting forever, but its
+    /// slide 1 may not actually have painted. That ready must not be
+    /// captured even while the preview is visible; a later, settled ready
+    /// for slide 1 does get recorded. The preview's own `onReady` wiring is
+    /// swapped out for the duration, so the genuine page (which settles
+    /// normally and would otherwise race this test's own fabricated
+    /// readies) cannot itself record a thumbnail; only the readies
+    /// delivered directly below reach `previewDidRender`.
+    func testUnsettledReadyDoesNotRecordAThumbnailUntilSettled() async throws {
+        let deck = try Fixtures.copyAppFixture()
+        let document = try await openDeck(deck)
+        _ = try await waitForRunningTap(document)
+        let controller = try XCTUnwrap(document.sessionController)
+        let preview = controller.previewViewController
+
+        let appOnReady = try XCTUnwrap(preview.onReady)
+        preview.onReady = nil
+        defer { preview.onReady = appOnReady }
+
+        appOnReady(ReadyPayload(revision: "unsettled", slide: 1, step: 0, settled: false))
+        // Longer than recentThumbnailSettleInterval, so a missing guard
+        // would have captured by now.
+        try await Task.sleep(nanoseconds: 1_000_000_000)
+        XCTAssertNil(AppEnvironment.shared.recentThumbnailStore.imageData(for: deck), "an unsettled ready must not be captured")
+
+        appOnReady(ReadyPayload(revision: "settled-after", slide: 1, step: 0))
+        try await waitUntil(timeout: 10, "the recent thumbnail") { AppEnvironment.shared.recentThumbnailStore.imageData(for: deck) != nil }
+        try assertRecordedThumbnailIsNotBlank(for: deck)
+    }
+
     /// `isVisible` alone does not tell a window on screen apart from one
     /// completely covered by another opaque window: both read true. A
     /// second, borderless, opaque window placed exactly over the deck
