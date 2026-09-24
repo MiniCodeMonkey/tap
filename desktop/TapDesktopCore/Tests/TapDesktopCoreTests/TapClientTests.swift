@@ -137,4 +137,27 @@ final class TapClientTests: XCTestCase {
             XCTAssertEqual((error as? TapErrorPayload)?.code, "no_presenter_secret")
         }
     }
+
+    func testPresentationFetchesTheSummaryWithTheToken() async throws {
+        StubURLProtocol.responseStatus = 200
+        StubURLProtocol.responseBody = Data(#"{"config": {"theme": "base"}, "slides": [{"hash": "h1", "steps": 1}], "revision": "r1"}"#.utf8)
+        let summary = try await stubbedClient().presentation()
+        XCTAssertEqual(summary.revision, "r1")
+        XCTAssertEqual(summary.slides, [SlideSummary(hash: "h1", skip: false, steps: 1)])
+        let request = try XCTUnwrap(StubURLProtocol.lastRequest)
+        XCTAssertEqual(request.httpMethod, "GET")
+        XCTAssertEqual(request.url?.absoluteString, "http://127.0.0.1:49152/api/presentation")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer " + ready.token)
+    }
+
+    func testPresentationThrowsTheStatusOnAnError() async {
+        StubURLProtocol.responseStatus = 404
+        StubURLProtocol.responseBody = Data(#"{"error": "No presentation loaded"}"#.utf8)
+        do {
+            _ = try await stubbedClient().presentation()
+            XCTFail("expected an error")
+        } catch {
+            XCTAssertEqual((error as? TapErrorPayload)?.code, "http_404")
+        }
+    }
 }
