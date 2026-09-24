@@ -57,6 +57,53 @@ final class DeckDocument: NSDocument {
         super.close()
     }
 
+    // MARK: Changes on disk
+
+    private var diskModificationDate: Date? {
+        guard let path = fileURL?.path else { return nil }
+        return (try? FileManager.default.attributesOfItem(atPath: path))?[.modificationDate] as? Date
+    }
+
+    /// Records text read from outside the document, such as a `file-changed`
+    /// event, as the deck file's known content, ahead of replacing the
+    /// editor's text to match it. Setting this first keeps the edited flag,
+    /// which compares the editor's text against this value, from reading
+    /// edited between the two steps.
+    func adopt(diskText: String) {
+        text = diskText
+    }
+
+    /// Takes the file on disk as the known version, so the next save does
+    /// not report that another program changed it.
+    func acceptDiskState() {
+        if let date = diskModificationDate { fileModificationDate = date }
+    }
+
+    /// Writes the buffer over the file that changed on disk.
+    func overwriteDisk(completion: @escaping (Error?) -> Void) {
+        guard let url = fileURL else { return completion(nil) }
+        acceptDiskState()
+        save(to: url, ofType: fileType ?? "net.daringfireball.markdown", for: .saveOperation, completionHandler: completion)
+    }
+
+    /// tap reports content changes with its `file-changed` event, and the
+    /// app loads them as an undoable edit, so NSDocument does not reload.
+    override func presentedItemDidChange() {}
+
+    override func checkAutosavingSafety() throws {
+        if let known = fileModificationDate, let onDisk = diskModificationDate, onDisk.timeIntervalSince(known) > 0.001 {
+            sessionController?.diskChanged()
+            throw CocoaError(.userCancelled)
+        }
+        try super.checkAutosavingSafety()
+    }
+
+    override func autosave(withImplicitCancellability autosavingIsImplicitlyCancellable: Bool,
+                           completionHandler: @escaping (Error?) -> Void) {
+        if sessionController?.hasDiskConflict == true { return completionHandler(nil) }
+        super.autosave(withImplicitCancellability: autosavingIsImplicitlyCancellable, completionHandler: completionHandler)
+    }
+
     // A save that lands somewhere other than this document's own file, such
     // as an elsewhere autosave or a Save To, does not change what tap should
     // be showing for this deck, so tap is told only when the URL just
