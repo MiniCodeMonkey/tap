@@ -37,13 +37,14 @@ final class PreviewViewController: NSViewController, WKNavigationDelegate, WKUID
     var onTryAgain: (() -> Void)?
     private(set) var lastReady: ReadyPayload?
     /// How many times the preview has been pointed at a page. Every reload
-    /// of the preview goes through `load`, and an in-place update goes
-    /// through none: the page keeps its document and rerenders from the hub.
-    /// The count rises inside `load`, before the navigation it starts, so
-    /// what reads it sees a reload the moment the app asks for one rather
-    /// than whenever WebKit gets round to reporting it.
+    /// of the preview the app asks for goes through `load` or `reload`, and
+    /// an in-place update goes through neither: the page keeps its document
+    /// and rerenders from the hub. The count rises inside `load` and
+    /// `reload`, before the navigation each starts, so what reads it sees a
+    /// reload the moment the app asks for one rather than whenever WebKit
+    /// gets round to reporting it.
     private(set) var pageLoadCount = 0
-    /// When `load` last pointed the preview at a page.
+    /// When `load` or `reload` last pointed the preview at a page.
     private(set) var lastLoadDate: Date?
     /// How many script messages the tapReady handler has received, counting
     /// ones whose body it could not read. A test that times out waiting for
@@ -135,6 +136,17 @@ final class PreviewViewController: NSViewController, WKNavigationDelegate, WKUID
         allowedPort = client.ready.port
         lastReady = nil
         webView.load(URLRequest(url: client.previewLaunchURL))
+    }
+
+    /// Loads the page the preview already shows again, from scratch. The
+    /// launch code is spent by now, so this reloads the address tap
+    /// redirected to, which the cookie from that launch still opens. The
+    /// page runs its ready cycle again and reports a fresh ready.
+    func reload() {
+        pageLoadCount += 1
+        lastLoadDate = Date()
+        lastReady = nil
+        webView.reload()
     }
 
     func show(_ navigator: PreviewNavigator) {
@@ -233,6 +245,13 @@ final class PreviewViewController: NSViewController, WKNavigationDelegate, WKUID
                                    slide: slide,
                                    step: (body["step"] as? NSNumber)?.intValue ?? 0,
                                    settled: (body["settled"] as? NSNumber)?.boolValue ?? true)
+        pageReportedReady(payload)
+    }
+
+    /// Records a ready the page reported and passes it on. Internal, not
+    /// private, so a test can deliver a ready of its own making through the
+    /// same path the tapReady handler uses.
+    func pageReportedReady(_ payload: ReadyPayload) {
         lastReady = payload
         onReady?(payload)
     }

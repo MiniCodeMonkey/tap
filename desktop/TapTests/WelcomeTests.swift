@@ -76,17 +76,24 @@ final class WelcomeTests: HostedTestCase {
     /// `settled: false` rather than leaving the app waiting forever, but its
     /// slide 1 may not actually have painted. That ready must not be
     /// captured even while the preview is visible; a later, settled ready
-    /// for slide 1 does get recorded. The preview's own `onReady` wiring is
-    /// swapped out for the duration, so the genuine page (which settles
-    /// normally and would otherwise race this test's own fabricated
-    /// readies) cannot itself record a thumbnail; only the readies
+    /// for slide 1 does get recorded. The genuine page's own ready still
+    /// lands in `preview.lastReady` before `onReady` even runs (the message
+    /// handler sets it unconditionally), so swapping out `onReady` alone
+    /// does not stop it: an occlusion report later replays `lastReady`
+    /// through `previewDidRender` regardless. The `tapReady` script handler
+    /// is removed instead, before the page can post anything, so the
+    /// genuine ready never reaches the preview at all and only the readies
     /// delivered directly below reach `previewDidRender`.
     func testUnsettledReadyDoesNotRecordAThumbnailUntilSettled() async throws {
         let deck = try Fixtures.copyAppFixture()
         let document = try await openDeck(deck)
-        _ = try await waitForRunningTap(document)
         let controller = try XCTUnwrap(document.sessionController)
         let preview = controller.previewViewController
+
+        XCTAssertEqual(preview.pageLoadCount, 0, "the page has not loaded yet, so removing its ready handler now cannot race a message already in flight")
+        preview.webView.configuration.userContentController.removeScriptMessageHandler(forName: "tapReady")
+
+        _ = try await waitForRunningTap(document)
 
         let appOnReady = try XCTUnwrap(preview.onReady)
         preview.onReady = nil
@@ -96,6 +103,7 @@ final class WelcomeTests: HostedTestCase {
         // Longer than recentThumbnailSettleInterval, so a missing guard
         // would have captured by now.
         try await Task.sleep(nanoseconds: 1_000_000_000)
+        XCTAssertNil(preview.lastReady, "the genuine page's ready reached the preview, so this run cannot isolate the fabricated ready")
         XCTAssertNil(AppEnvironment.shared.recentThumbnailStore.imageData(for: deck), "an unsettled ready must not be captured")
 
         appOnReady(ReadyPayload(revision: "settled-after", slide: 1, step: 0))
@@ -144,7 +152,8 @@ final class WelcomeTests: HostedTestCase {
 
     /// A deck opened behind another window renders slide 1 with no
     /// thumbnail. Uncovering the window records one from the ready the
-    /// page already sent: tap renders nothing new and no ready arrives.
+    /// page already sent, when that ready was settled: tap renders nothing
+    /// new and no ready arrives.
     func testCoveredDeckRecordsItsThumbnailOnceUncovered() async throws {
         let deck = try Fixtures.copyAppFixture()
         let document = try await openDeck(deck)
@@ -154,6 +163,21 @@ final class WelcomeTests: HostedTestCase {
 
         let controller = try XCTUnwrap(document.sessionController)
         let preview = controller.previewViewController
+        // Counts snapshots started, completed and flat through the same
+        // seam production wraps, so a timeout below names which of the
+        // three the capture stalled at rather than leaving it a guess.
+        var snapshotsStarted = 0
+        var snapshotsCompleted = 0
+        var snapshotsFlat = 0
+        let realSnapshot = controller.takePreviewSnapshot
+        controller.takePreviewSnapshot = { configuration, completion in
+            snapshotsStarted += 1
+            realSnapshot(configuration) { image, error in
+                snapshotsCompleted += 1
+                if let image, Self.isFlatSnapshot(image) { snapshotsFlat += 1 }
+                completion(image, error)
+            }
+        }
         let deadline = Date().addingTimeInterval(30)
         while preview.lastReady?.slide != 1 {
             if Date() > deadline {
@@ -181,11 +205,224 @@ final class WelcomeTests: HostedTestCase {
             readiesAfterUncovering += 1
             onReady?(payload)
         }
+        let loadsBeforeUncovering = preview.pageLoadCount
         cover.window.orderOut(nil)
-        try await waitUntil(timeout: 10, "the recent thumbnail") { AppEnvironment.shared.recentThumbnailStore.imageData(for: deck) != nil }
-        XCTAssertEqual(readiesAfterUncovering, 0, "the thumbnail comes from the ready already received")
-        XCTAssertEqual(preview.lastReady, readyWhileCovered)
+        let thumbnailDeadline = Date().addingTimeInterval(10)
+        while AppEnvironment.shared.recentThumbnailStore.imageData(for: deck) == nil {
+            if Date() > thumbnailDeadline {
+                // 3 started, 3 completed and 3 flat means the flat retries
+                // gave up too soon. More started than completed means a
+                // snapshot hung and the timeout did not clear it. 0 started
+                // means no trigger ever arrived after uncovering.
+                XCTFail("timed out waiting for the recent thumbnail. "
+                        + "snapshotsStarted=\(snapshotsStarted) snapshotsCompleted=\(snapshotsCompleted) snapshotsFlat=\(snapshotsFlat) "
+                        + "lastReady=\(String(describing: preview.lastReady)) "
+                        + "occlusion=\(window.occlusionState.rawValue)")
+                return
+            }
+            try await Task.sleep(nanoseconds: 20_000_000)
+        }
+        // A covered page that ran out of settle rounds reported slide 1
+        // unsettled, which the app answers with one reload (the test below
+        // makes that case happen every run); a settled one is captured as
+        // it is.
+        if readyWhileCovered?.settled == false {
+            XCTAssertEqual(preview.pageLoadCount, loadsBeforeUncovering + 1, "an unsettled slide 1 is answered with one reload")
+        } else {
+            XCTAssertEqual(readiesAfterUncovering, 0, "the thumbnail comes from the ready already received")
+            XCTAssertEqual(preview.lastReady, readyWhileCovered)
+            XCTAssertEqual(preview.pageLoadCount, loadsBeforeUncovering, "a settled slide 1 needs no reload")
+        }
         try assertRecordedThumbnailIsNotBlank(for: deck)
+    }
+
+    /// A deck opened behind another window can report slide 1 unsettled:
+    /// a covered page may run out of settle rounds. That ready is never
+    /// captured, and nothing makes the page report again on its own, so
+    /// once uncovered the app reloads the preview, and the page's fresh
+    /// ready, rendered on screen, is what gets recorded. The unsettled
+    /// ready is delivered here, after the genuine one, through the same
+    /// path the page's own message takes, so the case happens on every run
+    /// whatever the window server does to the covered page.
+    func testCoveredDeckWhoseSlideOneIsUnsettledReloadsOnceUncovered() async throws {
+        let deck = try Fixtures.copyAppFixture()
+        let document = try await openDeck(deck)
+        let window = try XCTUnwrap(document.windowControllers.first?.window)
+        let cover = try await coverWindow(window)
+        defer { cover.remove() }
+
+        let controller = try XCTUnwrap(document.sessionController)
+        let preview = controller.previewViewController
+        try await waitUntil(timeout: 30, "slide 1 ready behind the cover") { preview.lastReady?.slide == 1 }
+        let genuineReady = try XCTUnwrap(preview.lastReady)
+        preview.pageReportedReady(ReadyPayload(revision: genuineReady.revision, slide: 1, step: 0, settled: false))
+        let loadsBeforeUncovering = preview.pageLoadCount
+
+        cover.window.orderOut(nil)
+        let thumbnailDeadline = Date().addingTimeInterval(15)
+        while AppEnvironment.shared.recentThumbnailStore.imageData(for: deck) == nil {
+            if Date() > thumbnailDeadline {
+                XCTFail("timed out waiting for the recent thumbnail after uncovering an unsettled slide 1. "
+                        + "pageLoads=\(preview.pageLoadCount - loadsBeforeUncovering) since uncovering "
+                        + "lastReady=\(String(describing: preview.lastReady)) "
+                        + "occlusion=\(window.occlusionState.rawValue) \(appSideDiagnostics(preview))")
+                return
+            }
+            try await Task.sleep(nanoseconds: 20_000_000)
+        }
+        XCTAssertEqual(preview.pageLoadCount, loadsBeforeUncovering + 1, "the unsettled slide 1 is answered with exactly one reload")
+        try assertRecordedThumbnailIsNotBlank(for: deck)
+    }
+
+    /// A slide 1 that stays unsettled after the reload must not reload the
+    /// preview again on every later occlusion report. Every snapshot comes
+    /// back flat here, so the deck stays unrecorded and nothing but the
+    /// once-only rule stands between a second visible report and a second
+    /// reload.
+    func testAnUnsettledSlideOneReloadsThePreviewOnlyOnce() async throws {
+        let deck = try Fixtures.copyAppFixture()
+        let document = try await openDeck(deck)
+        let controller = try XCTUnwrap(document.sessionController)
+        let reported = ReportedOcclusion(controller: controller)
+        let preview = controller.previewViewController
+        controller.takePreviewSnapshot = { _, completion in
+            let flat = NSImage(size: NSSize(width: 320, height: 180))
+            flat.lockFocus()
+            NSColor.white.setFill()
+            NSRect(x: 0, y: 0, width: 320, height: 180).fill()
+            flat.unlockFocus()
+            completion(flat, nil)
+        }
+        try await waitForPreview(document, slide: 1, timeout: 30)
+        let window = try XCTUnwrap(preview.webView.window)
+        let loadsBefore = preview.pageLoadCount
+
+        preview.pageReportedReady(ReadyPayload(revision: "unsettled", slide: 1, step: 0, settled: false))
+        reported.report(visible: true, for: window)
+        try await waitUntil(timeout: 5, "the reload of the unsettled slide 1") { preview.pageLoadCount == loadsBefore + 1 }
+        try await waitUntil(timeout: 30, "the reloaded page's ready") { preview.lastReady != nil }
+
+        preview.pageReportedReady(ReadyPayload(revision: "unsettled-again", slide: 1, step: 0, settled: false))
+        reported.report(visible: false, for: window)
+        reported.report(visible: true, for: window)
+        // Well past the settle interval, so a second reload would have
+        // started by now.
+        try await Task.sleep(nanoseconds: 1_000_000_000)
+        XCTAssertEqual(preview.pageLoadCount, loadsBefore + 1, "a slide 1 still unsettled after the reload must not reload the preview again")
+    }
+
+    /// A snapshot whose completion never runs (a hung `takeSnapshot`) must
+    /// not block the deck's thumbnail forever: `isCapturingRecentThumbnail`
+    /// has to clear on its own so a later attempt can still record it.
+    func testASnapshotThatNeverCompletesDoesNotBlockTheNextCapture() async throws {
+        let deck = try Fixtures.copyAppFixture()
+        let document = try await openDeck(deck)
+        let controller = try XCTUnwrap(document.sessionController)
+        let reported = ReportedOcclusion(controller: controller)
+        var hangTheNextSnapshot = true
+        let realSnapshot = controller.takePreviewSnapshot
+        controller.takePreviewSnapshot = { configuration, completion in
+            if hangTheNextSnapshot {
+                hangTheNextSnapshot = false
+                // Never calls completion: the production timeout is what
+                // has to move this forward, not this seam.
+                return
+            }
+            realSnapshot(configuration, completion)
+        }
+        try await waitForPreview(document, slide: 1, timeout: 30)
+        let window = try XCTUnwrap(controller.previewViewController.webView.window)
+
+        reported.report(visible: true, for: window)
+        try await waitUntil(timeout: 10, "the recent thumbnail once the hung snapshot times out") { AppEnvironment.shared.recentThumbnailStore.imageData(for: deck) != nil }
+        try assertRecordedThumbnailIsNotBlank(for: deck)
+    }
+
+    /// A snapshot that keeps coming back flat while the preview stays
+    /// visible must keep being retried, not give up for good after a fixed
+    /// number of attempts.
+    func testFlatSnapshotsKeepBeingRetriedWhileVisible() async throws {
+        let deck = try Fixtures.copyAppFixture()
+        let document = try await openDeck(deck)
+        let controller = try XCTUnwrap(document.sessionController)
+        let reported = ReportedOcclusion(controller: controller)
+        var snapshotsStarted = 0
+        // More flat snapshots than the old fixed budget of 3 attempts, so a
+        // regression back to giving up after 3 would leave this deck
+        // unrecorded.
+        let flatSnapshotsBeforeARealOne = 6
+        let realSnapshot = controller.takePreviewSnapshot
+        controller.takePreviewSnapshot = { configuration, completion in
+            snapshotsStarted += 1
+            if snapshotsStarted <= flatSnapshotsBeforeARealOne {
+                let flat = NSImage(size: NSSize(width: 320, height: 180))
+                flat.lockFocus()
+                NSColor.white.setFill()
+                NSRect(x: 0, y: 0, width: 320, height: 180).fill()
+                flat.unlockFocus()
+                completion(flat, nil)
+                return
+            }
+            realSnapshot(configuration, completion)
+        }
+        try await waitForPreview(document, slide: 1, timeout: 30)
+        let window = try XCTUnwrap(controller.previewViewController.webView.window)
+
+        reported.report(visible: true, for: window)
+        try await waitUntil(timeout: 10, "the recent thumbnail once the flat retries reach a real snapshot") { AppEnvironment.shared.recentThumbnailStore.imageData(for: deck) != nil }
+        XCTAssertGreaterThan(snapshotsStarted, flatSnapshotsBeforeARealOne, "the capture must keep retrying past the old fixed attempt count")
+        try assertRecordedThumbnailIsNotBlank(for: deck)
+    }
+
+    /// A settled ready that arrives before the preview has been visible for
+    /// the whole settle interval schedules a check for the moment it will
+    /// have. If slide 1 re-renders unsettled before that check fires, the
+    /// check must not still capture the stale settled render: the unsettled
+    /// ready cancels it and clears the slide this controller last acted on.
+    /// A settled ready afterwards still gets recorded normally.
+    func testAnUnsettledReadyCancelsAPendingSettleCheck() async throws {
+        let deck = try Fixtures.copyAppFixture()
+        let document = try await openDeck(deck)
+        let controller = try XCTUnwrap(document.sessionController)
+        let reported = ReportedOcclusion(controller: controller)
+        let preview = controller.previewViewController
+        try await waitForPreview(document, slide: 1, timeout: 30)
+        let window = try XCTUnwrap(preview.webView.window)
+        let appOnReady = try XCTUnwrap(preview.onReady)
+
+        // The settled ready already on file replays through this occlusion
+        // report (previewWindowOcclusionChanged) and schedules a check at
+        // the end of the settle interval.
+        reported.report(visible: true, for: window)
+        // Well inside the settle interval, so that check is still pending.
+        try await Task.sleep(nanoseconds: 200_000_000)
+        appOnReady(ReadyPayload(revision: "unsettled", slide: 1, step: 0, settled: false))
+        // Long enough for the pending check to have fired, had it not been
+        // cancelled.
+        try await Task.sleep(nanoseconds: 600_000_000)
+        XCTAssertNil(AppEnvironment.shared.recentThumbnailStore.imageData(for: deck), "an unsettled ready must cancel the check a settled one scheduled")
+
+        appOnReady(ReadyPayload(revision: "settled-after", slide: 1, step: 0))
+        try await waitUntil(timeout: 10, "the recent thumbnail") { AppEnvironment.shared.recentThumbnailStore.imageData(for: deck) != nil }
+        try assertRecordedThumbnailIsNotBlank(for: deck)
+    }
+
+    /// A crude flat check for the diagnostics above: samples a grid of
+    /// points and reports whether they all read the same colour. Not the
+    /// production check, just enough to say a snapshot was blank.
+    private static func isFlatSnapshot(_ image: NSImage) -> Bool {
+        guard let tiff = image.tiffRepresentation, let bitmap = NSBitmapImageRep(data: tiff) else { return false }
+        let width = bitmap.pixelsWide
+        let height = bitmap.pixelsHigh
+        guard width > 0, height > 0 else { return true }
+        var first: [Int]?
+        for (x, y) in [(0, 0), (width - 1, 0), (0, height - 1), (width - 1, height - 1), (width / 2, height / 2)] {
+            guard let color = bitmap.colorAt(x: x, y: y) else { continue }
+            let sample = [Int(color.redComponent * 255), Int(color.greenComponent * 255), Int(color.blueComponent * 255)]
+            if let first, first != sample { return false }
+            first = first ?? sample
+        }
+        return true
     }
 
     /// The window server reports its own occlusion changes, and cannot be
