@@ -7,11 +7,16 @@ final class SlidePanelUITests: UITestCase {
         XCTAssertTrue(button.waitForExistence(timeout: 30))
         // Unpin first: a fresh install starts pinned.
         button.click()
-        let overlay = application.otherElements["slide-panel-overlay"]
+        // The overlay is a group; hidden, it is not in the tree at all.
+        let overlay = application.groups["slide-panel-overlay"]
         XCTAssertFalse(overlay.exists)
+        // The click left the pointer on the button, and a hover to where the
+        // pointer already is posts no new mouseEntered: leave, then come back.
+        let away = application.textViews["editor"].coordinate(withNormalizedOffset: CGVector(dx: 0.8, dy: 0.5))
+        away.hover()
         button.hover()
         XCTAssertTrue(overlay.waitForExistence(timeout: 3), "hovering the button shows the glass overlay")
-        application.textViews["editor"].coordinate(withNormalizedOffset: CGVector(dx: 0.8, dy: 0.5)).hover()
+        away.hover()
         let gone = NSPredicate(format: "exists == false")
         expectation(for: gone, evaluatedWith: overlay)
         waitForExpectations(timeout: 3)
@@ -23,7 +28,8 @@ final class SlidePanelUITests: UITestCase {
         XCTAssertTrue(button.waitForExistence(timeout: 30))
         button.press(forDuration: 0.6)
         XCTAssertTrue(application.collectionViews["layout-gallery"].waitForExistence(timeout: 3))
-        application.otherElements["layout-big-stat"].firstMatch.click()
+        // A gallery cell is a button, as a thumbnail is.
+        application.buttons["layout-big-stat"].firstMatch.click()
         let editor = application.textViews["editor"]
         XCTAssertTrue(try XCTUnwrap(editor.value as? String).contains("layout: big-stat"))
     }

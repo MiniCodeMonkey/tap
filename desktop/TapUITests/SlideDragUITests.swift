@@ -7,8 +7,9 @@ final class SlideDragUITests: UITestCase {
         let application = launch(withDeck: try copyFixture("ops.md"))
         let panel = application.collectionViews["slide-panel"]
         XCTAssertTrue(panel.waitForExistence(timeout: 30))
-        let five = panel.otherElements["thumbnail-5"].firstMatch
-        let three = panel.otherElements["thumbnail-3"].firstMatch
+        // A thumbnail is an accessibility element with the button role.
+        let five = panel.buttons["thumbnail-5"].firstMatch
+        let three = panel.buttons["thumbnail-3"].firstMatch
         XCTAssertTrue(five.waitForExistence(timeout: 30))
         five.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
             .click(forDuration: 0.4, thenDragTo: three.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.05)))
