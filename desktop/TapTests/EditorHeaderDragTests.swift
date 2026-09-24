@@ -29,12 +29,19 @@ final class EditorHeaderDragTests: HostedTestCase {
         XCTAssertNil(editor.boxIndex(forHeaderAt: NSPoint(x: header5.midX, y: header5.maxY + EditorTextView.lineHeight)), "the body of a box is not its header")
 
         // A mouse down on the header followed by a drag past the threshold starts a slide drag.
+        // A leftMouseUp is queued right behind the drag: production code
+        // consumes only the drag and never reaches it, but if mouseDown
+        // were to call super unconditionally, NSTextView's own tracking
+        // loop would otherwise wait forever for a mouse up that never
+        // comes, hanging the test instead of failing it.
         var started: [SlideDragPayload] = []
         editor.headerDragStarter = { payload, _, _ in started.append(payload) }
         let down = NSPoint(x: header5.midX, y: header5.midY)
         NSApp.postEvent(try mouseEvent(.leftMouseDragged, at: NSPoint(x: down.x + 12, y: down.y), in: editor), atStart: false)
+        NSApp.postEvent(try mouseEvent(.leftMouseUp, at: down, in: editor), atStart: false)
         editor.mouseDown(with: try mouseEvent(.leftMouseDown, at: down, in: editor))
         XCTAssertEqual(started.map(\.slideNumbers), [[5]], "the drag carries slide 5")
+        NSApp.discardEvents(matching: .leftMouseUp, before: nil)
 
         // A mouse down and up on a header with no drag is a click, which places the caret in that slide.
         editor.setSelectedRange(NSRange(location: 0, length: 0))
