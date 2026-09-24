@@ -3319,8 +3319,16 @@ final class PresenterToolbarTests: PresentingTestCase {
 
         // Present > Reload Slides saves and reloads, as r does in tap present.
         deckWindow.reloadSlides(nil)
-        try await waitUntil(timeout: 20, "the audience to show the edit") {
-            await audience.page.pageText().contains("One edited!")
+        // waitUntil takes a synchronous condition, and reading the page is async.
+        let deadline = Date().addingTimeInterval(20)
+        var shown = await audience.page.pageText()
+        while !shown.contains("One edited!") {
+            if Date() > deadline {
+                XCTFail("the audience never showed the edit: \(shown)")
+                throw CancellationError()
+            }
+            try await Task.sleep(nanoseconds: 200_000_000)
+            shown = await audience.page.pageText()
         }
         XCTAssertEqual(presentation.editsNotShown, 0)
         XCTAssertTrue(toolbar.editsLabel.isHidden)
@@ -3329,20 +3337,6 @@ final class PresenterToolbarTests: PresentingTestCase {
     }
 }
 ```
-
-`waitUntil` takes a synchronous condition; for the last wait write a small loop in the test instead:
-
-```swift
-        let deadline = Date().addingTimeInterval(20)
-        var shown = await audience.page.pageText()
-        while !shown.contains("One edited!") {
-            if Date() > deadline { XCTFail("the audience never showed the edit: \(shown)"); throw CancellationError() }
-            try await Task.sleep(nanoseconds: 200_000_000)
-            shown = await audience.page.pageText()
-        }
-```
-
-Use that loop in place of the `waitUntil` above.
 
 In `desktop/TapTests/PresentingTests.swift`, inside `testTheMacStaysAwake`, add before `try await stopPresenting(controller)`:
 
@@ -3674,10 +3668,15 @@ In `openWindows`, add `refreshPresenterToolbar()` as the last line. In `handle(_
     }
 ```
 
-In `DeckSessionController.swift`, in `saveForPresenting`, add as the first line inside the `guard let document, let url` success path (right after the guard):
+In `DeckSessionController.swift`, replace `saveForPresenting` with this version, which records the text that reaches the file whether or not a write is needed:
 
 ```swift
+    func saveForPresenting(completion: @escaping (Error?) -> Void) {
+        guard let document, let url = document.fileURL else { return completion(CocoaError(.fileNoSuchFile)) }
         presentation.presentedText = editor.string
+        guard isContentEdited else { return completion(nil) }
+        document.save(to: url, ofType: document.fileType ?? "net.daringfireball.markdown", for: .saveOperation, completionHandler: completion)
+    }
 ```
 
 In `applySlideList`, add after `lastAppliedText = sentText`:
@@ -3720,6 +3719,919 @@ Mutations, each reverted: in `reloadSlides`, skip `saveDeck` and send `.reload` 
 ```bash
 git add desktop/Tap desktop/TapTests
 git commit -m "feat(desktop): the presenter toolbar, the REC dot, the edits counter, Reload Slides and the idle cursor"
+```
+
+---
+
+### Task 9: Sheets for tap's questions: the recording consent, and the recording state as tap reports it
+
+**Files:**
+- Create: `desktop/Tap/Presenting/QuestionSheet.swift`
+- Modify: `desktop/Tap/Presenting/PresentationController.swift` (the windows step aside for a sheet, the recording timer)
+- Modify: `desktop/Tap/Windows/DeckWindowController.swift` (`presentQuestion`, `showQuestionSheet`, `questionSheet`)
+- Modify: `desktop/TapTests/Support/FakeTapScripts.swift` (`presenting(...)`, `onePixelPNG`)
+- Test: `desktop/TapTests/RecordingTests.swift`
+
+**Interfaces:**
+- Consumes: Task 4's `PendingQuestion`, `onQuestion`, `answer(id:value:)`, `windowsShown`, `frontWindow`; Task 8's `refreshPresenterToolbar`, `PresenterToolbar.recordButton`, `RecordingDot`; Task 1's `QuestionPayload`, `RecordingEvent`.
+- Produces: `QuestionSheet(kind:title:body:path:decline:accept:)` with `kind`, `titleLabel`, `bodyLabel`, `pathLabel`, `declineButton`, `acceptButton`, `button(titled:)`, `static consent(settingsPath:)`; `PresentationController.hideWindowsSharingScreen(with:)`, `restoreHiddenWindows()`, `windowsHiddenForQuestion`; `DeckWindowController.questionSheet`, `presentQuestion(_:)`, `showQuestionSheet(_:completion:)`; `FakeTapScripts.presenting(events:quit:recordingTo:)`, `QuitBehavior` (`.exit`, `.askToKeep(directory:segments:)`, `.askToKeepThenExit(after:directory:segments:)`), `tunnelUnavailable`, `onePixelPNG`.
+
+- [ ] **Step 1: The scripted tap present**
+
+Add to `desktop/TapTests/Support/FakeTapScripts.swift`, inside the enum:
+
+```swift
+    /// What the scripted tap present does with a quit command.
+    enum QuitBehavior {
+        /// Exits at once, as a run with no recording does.
+        case exit
+        /// Asks keep-recording and exits on the answer.
+        case askToKeep(directory: URL, segments: Int)
+        /// Asks keep-recording and exits after `seconds` whatever comes, as
+        /// tap does once its three-second wait is over.
+        case askToKeepThenExit(after: TimeInterval, directory: URL, segments: Int)
+    }
+
+    /// A 1 by 1 PNG, base64: the smallest QR code a fake can send.
+    static let onePixelPNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
+
+    /// A scripted `tap present --app`: it records its arguments and every
+    /// stdin line in `record`, prints a ready line (with no server behind
+    /// it), then `events` one per line, and answers commands the way tap
+    /// does: a tunnel start with a running tunnel (or, with
+    /// `tunnelUnavailable`, the error tap sends without cloudflared), a
+    /// tunnel stop with a stopped tunnel, a recording stop with a stopped
+    /// recording, a new segment with segment 2 recording, and quit as
+    /// `quit` says.
+    static func presenting(events: [String], quit: QuitBehavior = .exit, tunnelUnavailable: Bool = false, recordingTo record: URL) throws -> URL {
+        let url = try Fixtures.temporaryFolder().appendingPathComponent("tap")
+        let eventLines = events.map { "echo '\($0)'" }.joined(separator: "\n")
+        let tunnelRunning = tunnelUnavailable
+            ? #"echo '{"type":"error","code":"tunnel_unavailable","message":"the tunnel needs cloudflared: brew install cloudflared"}'"#
+            : #"echo '{"type":"tunnel","state":"starting"}'; echo '{"type":"tunnel","state":"running","url":"https://stark-lake-1234.trycloudflare.com","qr":"\#(onePixelPNG)"}'"#
+        let onQuit: String
+        switch quit {
+        case .exit:
+            onQuit = "exit 0"
+        case .askToKeep(let directory, let segments):
+            onQuit = #"echo '{"type":"question","id":"q1","kind":"keep-recording","payload":{"directory":"\#(directory.path)","segments":\#(segments)}}'"#
+        case .askToKeepThenExit(let seconds, let directory, let segments):
+            onQuit = #"echo '{"type":"question","id":"q1","kind":"keep-recording","payload":{"directory":"\#(directory.path)","segments":\#(segments)}}'; sleep \#(seconds); exit 0"#
+        }
+        try """
+        #!/bin/sh
+        echo "arguments: $@" >> "\(record.path)"
+        echo '{"type":"ready","port":1,"token":"token","launch":"launch","presenter":"presenter"}'
+        \(eventLines)
+        while IFS= read -r line; do
+          echo "stdin: $line" >> "\(record.path)"
+          case "$line" in
+            *'"type":"quit"'*) \(onQuit) ;;
+            *'"type":"answer"'*) exit 0 ;;
+            *'"type":"tunnel","start":true'*) \(tunnelRunning) ;;
+            *'"type":"tunnel","start":false'*) echo '{"type":"tunnel","state":"stopped"}' ;;
+            *'"action":"stop"'*) echo '{"type":"recording","state":"stopped","segment":1,"elapsed":0,"disk":"ok"}' ;;
+            *'"action":"new-segment"'*) echo '{"type":"recording","state":"recording","segment":2,"elapsed":0,"disk":"ok"}' ;;
+          esac
+        done
+        exit 0
+        """.write(to: url, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: url.path)
+        return url
+    }
+```
+
+The raw string `#"..."#` form keeps the JSON's quotes literal; `\#(...)` interpolates inside it.
+
+- [ ] **Step 2: Write the failing tests**
+
+`desktop/TapTests/RecordingTests.swift`:
+
+```swift
+import XCTest
+@testable import Tap
+
+final class RecordingTests: PresentingTestCase {
+    func windowController(_ controller: DeckSessionController) throws -> DeckWindowController {
+        try XCTUnwrap(controller.editor.window?.windowController as? DeckWindowController)
+    }
+
+    func testFirstTalkAsksAboutRecording() async throws {
+        try removeRecordingConsent()
+        let (_, controller) = try await openDeckForPresenting()
+        let deckWindow = try windowController(controller)
+        let presentation = controller.presentation
+        presentation.start(PresentationOptions(mode: .play, startSlide: 1))
+        try await waitUntil(timeout: 30, "tap's consent question") { presentation.pendingQuestion?.kind == "record-consent" }
+        let sheet = try XCTUnwrap(deckWindow.questionSheet)
+        XCTAssertEqual(sheet.kind, "record-consent")
+        XCTAssertTrue(deckWindow.window?.attachedSheet === sheet, "a sheet on the deck window")
+        XCTAssertEqual(sheet.titleLabel.stringValue, "Record every talk automatically?")
+        XCTAssertTrue(sheet.bodyLabel.stringValue.contains("follows the projector"))
+        XCTAssertEqual(sheet.pathLabel.stringValue, settingsFile.path, "tap says where the answer is saved")
+        XCTAssertEqual(sheet.declineButton.title, "Don't Record")
+        XCTAssertEqual(sheet.acceptButton.title, "Record Automatically")
+        XCTAssertEqual(presentation.state, .starting, "the talk waits for the answer")
+        XCTAssertFalse(presentation.windowsShown, "nothing covers the sheet")
+        XCTAssertFalse(presentation.audienceWindow?.isVisible ?? false)
+
+        try XCTUnwrap(sheet.button(titled: "Don't Record")).performClick(nil)
+        XCTAssertNil(deckWindow.questionSheet)
+        XCTAssertNil(deckWindow.window?.attachedSheet)
+        XCTAssertNil(presentation.pendingQuestion)
+        try await waitUntil(timeout: 40, "the talk") { presentation.state == .presenting }
+        try await waitUntil(timeout: 10, "tap to save the answer") {
+            (try? String(contentsOf: self.settingsFile, encoding: .utf8))?.contains("record: false") == true
+        }
+        XCTAssertFalse(presentation.recording.isRecording)
+        XCTAssertEqual(presentation.presenterWindow?.toolbar?.recordButton.title, "NOT RECORDING")
+
+        // The answer is the CLI's too: the next talk asks nothing.
+        try await stopPresenting(controller)
+        try await startPresenting(controller, PresentationOptions(mode: .play, startSlide: 1))
+        XCTAssertNil(deckWindow.questionSheet)
+    }
+
+    func testAQuestionDuringTheTalkHidesTheWindowsOnItsScreen() async throws {
+        let (_, controller) = try await openDeckForPresenting()
+        let deckWindow = try windowController(controller)
+        let presentation = controller.presentation
+        try await startPresenting(controller, PresentationOptions(mode: .play, startSlide: 1))
+        let audience = try XCTUnwrap(presentation.audienceWindow)
+        let presenter = try XCTUnwrap(presentation.presenterWindow)
+        presentation.handle(.question(id: "q9", kind: "record-consent", payload: QuestionPayload(settingsPath: "/tmp/settings.yaml")))
+        let sheet = try XCTUnwrap(deckWindow.questionSheet)
+        XCTAssertTrue(deckWindow.window?.attachedSheet === sheet)
+        XCTAssertFalse(audience.isVisible, "the talk windows on the deck window's screen step aside")
+        XCTAssertFalse(presenter.isVisible)
+        XCTAssertEqual(presentation.windowsHiddenForQuestion.count, 2)
+        try await waitUntil(timeout: 5, "the talk windows off screen") {
+            let order = onScreenWindowNumbers()
+            return !order.contains(audience.windowNumber) && !order.contains(presenter.windowNumber)
+        }
+        try XCTUnwrap(sheet.button(titled: "Record Automatically")).performClick(nil)
+        XCTAssertNil(presentation.pendingQuestion)
+        XCTAssertTrue(audience.isVisible)
+        XCTAssertTrue(presenter.isVisible)
+        XCTAssertTrue(presentation.frontWindow === audience)
+        try await waitUntil(timeout: 5, "the talk windows back") {
+            let order = onScreenWindowNumbers()
+            return order.contains(audience.windowNumber) && order.contains(presenter.windowNumber)
+        }
+        XCTAssertEqual(presentation.state, .presenting)
+    }
+
+    func testRecordingFollowsTapPresent() async throws {
+        let record = try Fixtures.temporaryFolder().appendingPathComponent("record")
+        AppEnvironment.shared.presentExecutableURL = try FakeTapScripts.presenting(
+            events: [#"{"type":"recording","state":"recording","segment":1,"elapsed":724,"disk":"ok"}"#], recordingTo: record)
+        let (_, controller) = try await openDeckForPresenting()
+        let presentation = controller.presentation
+        try await startPresenting(controller, PresentationOptions(mode: .play, startSlide: 1))
+        let toolbar = try XCTUnwrap(presentation.presenterWindow?.toolbar)
+        let dot = try XCTUnwrap(presentation.presenterWindow?.recordingDot)
+        try await waitUntil(timeout: 10, "tap's recording event") { presentation.recording.isRecording }
+        XCTAssertEqual(presentation.recording.segment, 1)
+        XCTAssertTrue(toolbar.recordButton.title.hasPrefix("REC 12:0"), "REC 12:04 as tap reports it, counting up: \(toolbar.recordButton.title)")
+        XCTAssertFalse(dot.isHidden)
+        let shown = presentation.recording.elapsed
+        try await waitUntil(timeout: 3, "the clock to count up between events") { presentation.recording.elapsed > shown }
+        XCTAssertEqual(toolbar.recordButton.title, "REC " + RecordingStatus.clock(presentation.recording.elapsed))
+
+        // REC stops the recording, and REC again starts a new segment, through tap.
+        toolbar.recordButton.performClick(nil)
+        try await waitUntil(timeout: 5, "the stop command") {
+            (try? String(contentsOf: record, encoding: .utf8))?.contains(#"stdin: {"type":"recording","action":"stop"}"#) == true
+        }
+        try await waitUntil(timeout: 5, "tap's stopped event") { !presentation.recording.isRecording }
+        XCTAssertEqual(toolbar.recordButton.title, "NOT RECORDING")
+        XCTAssertTrue(dot.isHidden)
+        toolbar.recordButton.performClick(nil)
+        try await waitUntil(timeout: 5, "the new segment") { presentation.recording.segment == 2 && presentation.recording.isRecording }
+        XCTAssertEqual(toolbar.recordButton.title, "REC 0:00")
+
+        // A blocked recording stays NOT RECORDING, with tap's reason kept.
+        presentation.handle(.recording(RecordingEvent(state: "stopped", segment: 2, elapsed: 0, disk: "ok")))
+        presentation.handle(.error(TapErrorPayload(code: "recording_blocked", message: "Screen Recording is off for Tap in System Settings")))
+        XCTAssertEqual(presentation.recording.blockedReason, "Screen Recording is off for Tap in System Settings")
+        XCTAssertEqual(toolbar.recordButton.title, "NOT RECORDING")
+    }
+}
+```
+
+- [ ] **Step 3: Run one test to verify it fails**
+
+Run: `make -C desktop test ONLY=TapTests/RecordingTests/testFirstTalkAsksAboutRecording`
+Expected: the test target does not compile (`questionSheet` is undefined).
+
+- [ ] **Step 4: Write `QuestionSheet.swift`**
+
+```swift
+import AppKit
+
+/// A question tap asked, or the Focus hint, as a sheet on the deck window:
+/// a title, a body, an optional path line and two buttons. A sheet belongs
+/// to its window; the rest of the app keeps running and nothing is
+/// app-modal.
+final class QuestionSheet: NSWindow {
+    let kind: String
+    let titleLabel = NSTextField(labelWithString: "")
+    let bodyLabel = NSTextField(wrappingLabelWithString: "")
+    let pathLabel = NSTextField(labelWithString: "")
+    let declineButton = NSButton(title: "", target: nil, action: nil)
+    let acceptButton = NSButton(title: "", target: nil, action: nil)
+
+    init(kind: String, title: String, body: String, path: String?, decline: String, accept: String) {
+        self.kind = kind
+        super.init(contentRect: NSRect(x: 0, y: 0, width: 460, height: 200), styleMask: [.titled], backing: .buffered, defer: false)
+        titleLabel.stringValue = title
+        titleLabel.font = .systemFont(ofSize: 15, weight: .bold)
+        bodyLabel.stringValue = body
+        bodyLabel.font = .systemFont(ofSize: 12.5)
+        bodyLabel.textColor = .secondaryLabelColor
+        pathLabel.stringValue = path ?? ""
+        pathLabel.isHidden = path == nil
+        pathLabel.font = .monospacedSystemFont(ofSize: 12, weight: .regular)
+        pathLabel.lineBreakMode = .byTruncatingMiddle
+        pathLabel.setAccessibilityIdentifier("question-path")
+        declineButton.title = decline
+        declineButton.bezelStyle = .rounded
+        declineButton.keyEquivalent = "\u{1b}"
+        declineButton.target = self
+        declineButton.action = #selector(declinePressed(_:))
+        acceptButton.title = accept
+        acceptButton.bezelStyle = .rounded
+        acceptButton.keyEquivalent = "\r"
+        acceptButton.target = self
+        acceptButton.action = #selector(acceptPressed(_:))
+        let buttons = NSStackView(views: [NSView(), declineButton, acceptButton])
+        buttons.orientation = .horizontal
+        buttons.spacing = 8
+        let stack = NSStackView(views: [titleLabel, bodyLabel, pathLabel, buttons])
+        stack.orientation = .vertical
+        stack.alignment = .leading
+        stack.spacing = 12
+        stack.edgeInsets = NSEdgeInsets(top: 24, left: 24, bottom: 24, right: 24)
+        stack.widthAnchor.constraint(equalToConstant: 460).isActive = true
+        bodyLabel.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -48).isActive = true
+        pathLabel.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -48).isActive = true
+        buttons.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -48).isActive = true
+        contentView = stack
+        setContentSize(stack.fittingSize)
+        isReleasedWhenClosed = false
+        setAccessibilityIdentifier("question-\(kind)")
+    }
+
+    func button(titled title: String) -> NSButton? {
+        [declineButton, acceptButton].first { $0.title == title }
+    }
+
+    @objc private func declinePressed(_ sender: Any?) {
+        sheetParent?.endSheet(self, returnCode: .cancel)
+    }
+
+    @objc private func acceptPressed(_ sender: Any?) {
+        sheetParent?.endSheet(self, returnCode: .OK)
+    }
+
+    /// tap's record-consent question. `settingsPath` is where tap saves the answer.
+    static func consent(settingsPath: String?) -> QuestionSheet {
+        QuestionSheet(kind: "record-consent",
+                      title: "Record every talk automatically?",
+                      body: "Tap records the projector screen and your microphone from the start of each talk until you stop, and follows the projector if the cable is swapped. You choose whether to keep each recording at the end. The answer is saved for you, not the deck; tap present in Terminal uses it too.",
+                      path: settingsPath,
+                      decline: "Don't Record",
+                      accept: "Record Automatically")
+    }
+}
+```
+
+- [ ] **Step 5: The sheet on the deck window, and the windows stepping aside**
+
+In `DeckWindowController.swift`, add after `presentPopover`:
+
+```swift
+    /// The sheet for tap's question, while it is up.
+    private(set) var questionSheet: QuestionSheet?
+```
+
+In `init`, after the `onStateChange` line (Task 6), add:
+
+```swift
+        sessionController.presentation.onQuestion = { [weak self] question in self?.presentQuestion(question) }
+```
+
+Add after `reloadSlides(_:)`:
+
+```swift
+    // MARK: tap's questions
+
+    /// tap asked something. Consent and keep-recording become sheets on
+    /// this window; the live code approval is D5's and is declined until
+    /// then, which runs no code.
+    func presentQuestion(_ question: PresentationController.PendingQuestion) {
+        let presentation = sessionController.presentation
+        switch question.kind {
+        case "record-consent":
+            showQuestionSheet(QuestionSheet.consent(settingsPath: question.payload.settingsPath)) { record in
+                presentation.answer(id: question.id, value: record)
+            }
+        default:
+            presentation.session?.log.append("the \(question.kind) question is not answered by this version of the app; declined", source: .app)
+            presentation.answer(id: question.id, value: false)
+        }
+    }
+
+    /// Puts `sheet` on this window and calls back with the answer. The talk's
+    /// windows on this window's screen step aside until then, and this
+    /// window comes forward: the sheet is the one thing the person must
+    /// answer, so this is the one focus move outside the talk windows.
+    func showQuestionSheet(_ sheet: QuestionSheet, completion: @escaping (Bool) -> Void) {
+        guard let window else {
+            completion(sheet.kind == "keep-recording")
+            return
+        }
+        let presentation = sessionController.presentation
+        questionSheet = sheet
+        presentation.hideWindowsSharingScreen(with: window)
+        window.makeKeyAndOrderFront(nil)
+        window.beginSheet(sheet) { [weak self] response in
+            self?.questionSheet = nil
+            completion(response == .OK)
+            presentation.restoreHiddenWindows()
+        }
+    }
+```
+
+In `PresentationController.swift`, add a stored property after `windowsShown`:
+
+```swift
+    /// The talk windows a question sheet sent off screen, to come back after the answer.
+    private(set) var windowsHiddenForQuestion: [PresentationWindow] = []
+    private var recordingTimer: Timer?
+```
+
+Add after `answer(id:value:)`:
+
+```swift
+    /// A sheet is going on `other`: the talk windows on its screen go off
+    /// screen so the sheet has nothing over it. Nothing happens before the
+    /// windows have been shown; then they simply wait.
+    func hideWindowsSharingScreen(with other: NSWindow) {
+        guard windowsShown, let screenFrame = other.screen?.frame else { return }
+        for window in [audienceWindow, presenterWindow].compactMap({ $0 }) where window.isVisible && window.frame.intersects(screenFrame) {
+            window.orderOut(nil)
+            windowsHiddenForQuestion.append(window)
+        }
+    }
+
+    /// The sheet is gone: the windows it sent away come back, the front one in front.
+    func restoreHiddenWindows() {
+        let hidden = windowsHiddenForQuestion
+        windowsHiddenForQuestion = []
+        guard isActive else { return }
+        for window in hidden where window === audienceWindow || window === presenterWindow {
+            window.orderFrontRegardless()
+        }
+        if let frontWindow, hidden.contains(where: { $0 === frontWindow }) {
+            frontWindow.makeKeyAndOrderFront(nil)
+            frontWindow.orderFrontRegardless()
+        }
+    }
+
+    /// Counts the recording's seconds up between tap's events.
+    private func startRecordingTimer() {
+        recordingTimer?.invalidate()
+        recordingTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self, self.recording.isRecording else { return }
+                self.recording.tick()
+                self.refreshPresenterToolbar()
+            }
+        }
+    }
+```
+
+In `openWindows`, add `startRecordingTimer()` after `sleepAssertion.acquire()`. In `takeDownWindows`, add as its first lines:
+
+```swift
+        recordingTimer?.invalidate()
+        recordingTimer = nil
+        windowsHiddenForQuestion = []
+```
+
+- [ ] **Step 6: Run the tests one at a time**
+
+```bash
+make -C desktop test ONLY=TapTests/RecordingTests/testFirstTalkAsksAboutRecording
+make -C desktop test ONLY=TapTests/RecordingTests/testAQuestionDuringTheTalkHidesTheWindowsOnItsScreen
+make -C desktop test ONLY=TapTests/RecordingTests/testRecordingFollowsTapPresent
+```
+
+Expected: all three pass. `testFirstTalkAsksAboutRecording` runs the real tap: with no `settings.yaml`, tap asks within milliseconds of ready, before any page has loaded, so the windows are never shown before the sheet. tap saves `present: record: false` under the test's `XDG_CONFIG_HOME`; the person's own settings are never touched.
+
+- [ ] **Step 7: Mutate and commit**
+
+Mutations, each reverted, the one that can leave a screen covered first: in `showWindowsIfReady`, drop `pendingQuestion == nil` (expected: `testFirstTalkAsksAboutRecording` fails on `windowsShown`, the windows cover the sheet); in `restoreHiddenWindows`, drop the `orderFrontRegardless` loop (expected: the mid-talk test fails on `isVisible`); in `hideWindowsSharingScreen`, drop `orderOut` (expected: it fails on `isVisible` being true); in `presentQuestion`, answer consent `true` regardless (expected: the consent test fails on `record: false`); in `startRecordingTimer`, never tick (expected: `testRecordingFollowsTapPresent` fails on the count); in `toggleRecording`, always send `.stop` (expected: it fails on segment 2); in `showQuestionSheet`, answer without a sheet (expected: the consent test fails on `attachedSheet`).
+
+```bash
+git add desktop/Tap desktop/TapTests
+git commit -m "feat(desktop): tap's questions as sheets on the deck window, the recording consent, and the recording state"
+```
+
+---
+
+### Task 10: Keep the recording
+
+**Files:**
+- Modify: `desktop/Tap/Presenting/QuestionSheet.swift` (`keepRecording`)
+- Modify: `desktop/Tap/Windows/DeckWindowController.swift` (the keep-recording case, `revealInFinder`, `folderSize`, the sheet ending when tap has already kept)
+- Test: `desktop/TapTests/KeepRecordingTests.swift`
+
+**Interfaces:**
+- Consumes: Task 9's `QuestionSheet`, `showQuestionSheet`, `presentQuestion`, `FakeTapScripts.presenting(events:quit:recordingTo:)`; Task 4's `stop`, `state`, `onStateChange`.
+- Produces: `QuestionSheet.keepRecording(directory:segments:size:)`; `DeckWindowController.revealInFinder`, `static folderSize(at:)`.
+
+- [ ] **Step 1: Write the failing tests**
+
+`desktop/TapTests/KeepRecordingTests.swift`:
+
+```swift
+import XCTest
+@testable import Tap
+
+final class KeepRecordingTests: PresentingTestCase {
+    var revealed: [URL] = []
+
+    /// A run folder with two segments and a chapters file, 3 kB in all.
+    func recordingFolder() throws -> URL {
+        let folder = try Fixtures.temporaryFolder().appendingPathComponent("conference-talk-2026-09-24-1932")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        try Data(count: 2048).write(to: folder.appendingPathComponent("segment-1.mov"))
+        try Data(count: 1024).write(to: folder.appendingPathComponent("segment-2.mov"))
+        try "00:00 Intro\n".write(to: folder.appendingPathComponent("chapters.txt"), atomically: true, encoding: .utf8)
+        return folder
+    }
+
+    func startTalk(quit: FakeTapScripts.QuitBehavior, record: URL) async throws -> (DeckSessionController, DeckWindowController) {
+        AppEnvironment.shared.presentExecutableURL = try FakeTapScripts.presenting(events: [], quit: quit, recordingTo: record)
+        let (_, controller) = try await openDeckForPresenting()
+        let deckWindow = try XCTUnwrap(controller.editor.window?.windowController as? DeckWindowController)
+        deckWindow.revealInFinder = { [weak self] url in self?.revealed.append(url) }
+        try await startPresenting(controller, PresentationOptions(mode: .play, startSlide: 1))
+        return (controller, deckWindow)
+    }
+
+    func testKeepTheRecording() async throws {
+        let folder = try recordingFolder()
+        let record = try Fixtures.temporaryFolder().appendingPathComponent("record")
+        let (controller, deckWindow) = try await startTalk(quit: .askToKeep(directory: folder, segments: 2), record: record)
+        let presentation = controller.presentation
+        deckWindow.stopPresenting(nil)
+        XCTAssertEqual(presentation.state, .stopping)
+        XCTAssertNil(presentation.audienceWindow, "the windows are already down")
+        try await waitUntil(timeout: 10, "tap's keep-recording question") { deckWindow.questionSheet?.kind == "keep-recording" }
+        let sheet = try XCTUnwrap(deckWindow.questionSheet)
+        XCTAssertTrue(deckWindow.window?.attachedSheet === sheet)
+        XCTAssertEqual(sheet.titleLabel.stringValue, "Keep this recording?")
+        XCTAssertEqual(sheet.bodyLabel.stringValue, "2 segments, 3 KB on disk.")
+        XCTAssertEqual(sheet.pathLabel.stringValue, folder.path)
+        XCTAssertEqual(sheet.declineButton.title, "Delete")
+        XCTAssertEqual(sheet.acceptButton.title, "Keep and Show in Finder")
+
+        try XCTUnwrap(sheet.button(titled: "Keep and Show in Finder")).performClick(nil)
+        XCTAssertEqual(revealed, [folder], "a kept run is revealed in Finder")
+        try await waitUntil(timeout: 5, "the answer to reach tap") {
+            (try? String(contentsOf: record, encoding: .utf8))?.contains(#"stdin: {"type":"answer","id":"q1","value":true}"#) == true
+        }
+        try await waitUntil(timeout: 10, "the talk to end") { presentation.state == .idle }
+        XCTAssertNil(deckWindow.questionSheet)
+    }
+
+    func testDeletingTheRecordingAnswersNo() async throws {
+        let folder = try recordingFolder()
+        let record = try Fixtures.temporaryFolder().appendingPathComponent("record")
+        let (controller, deckWindow) = try await startTalk(quit: .askToKeep(directory: folder, segments: 2), record: record)
+        deckWindow.stopPresenting(nil)
+        try await waitUntil(timeout: 10, "the question") { deckWindow.questionSheet?.kind == "keep-recording" }
+        try XCTUnwrap(deckWindow.questionSheet?.button(titled: "Delete")).performClick(nil)
+        XCTAssertEqual(revealed, [], "nothing to show for a deleted run")
+        try await waitUntil(timeout: 5, "the answer to reach tap") {
+            (try? String(contentsOf: record, encoding: .utf8))?.contains(#"stdin: {"type":"answer","id":"q1","value":false}"#) == true
+        }
+        try await waitUntil(timeout: 10, "the talk to end") { controller.presentation.state == .idle }
+    }
+
+    func testATapThatKeepsWithoutWaitingRevealsTheRun() async throws {
+        let folder = try recordingFolder()
+        let record = try Fixtures.temporaryFolder().appendingPathComponent("record")
+        let (controller, deckWindow) = try await startTalk(quit: .askToKeepThenExit(after: 0.5, directory: folder, segments: 1), record: record)
+        deckWindow.stopPresenting(nil)
+        try await waitUntil(timeout: 10, "the question") { deckWindow.questionSheet?.kind == "keep-recording" }
+        // tap's own three-second wait is over: it kept the recording and exited.
+        try await waitUntil(timeout: 10, "the talk to end") { controller.presentation.state == .idle }
+        XCTAssertNil(deckWindow.questionSheet, "the sheet goes with the process that asked")
+        XCTAssertNil(deckWindow.window?.attachedSheet)
+        XCTAssertEqual(revealed, [folder], "kept, so shown")
+        XCTAssertTrue(controller.session.log.text.contains("tap kept the recording"))
+    }
+}
+```
+
+- [ ] **Step 2: Run one test to verify it fails**
+
+Run: `make -C desktop test ONLY=TapTests/KeepRecordingTests/testKeepTheRecording`
+Expected: the test target does not compile (`revealInFinder` is undefined).
+
+- [ ] **Step 3: The keep-recording sheet and its ending**
+
+In `QuestionSheet.swift`, add after `consent(settingsPath:)`:
+
+```swift
+    /// tap's keep-recording question, asked when Stop ends a run that
+    /// recorded. `size` is the run folder's size, formatted.
+    static func keepRecording(directory: String, segments: Int, size: String) -> QuestionSheet {
+        QuestionSheet(kind: "keep-recording",
+                      title: "Keep this recording?",
+                      body: "\(segments) segment\(segments == 1 ? "" : "s"), \(size) on disk.",
+                      path: directory,
+                      decline: "Delete",
+                      accept: "Keep and Show in Finder")
+    }
+```
+
+In `DeckWindowController.swift`, add after `questionSheet`:
+
+```swift
+    /// Reveals a kept recording. Production opens Finder on it; a test records the URL.
+    var revealInFinder: (URL) -> Void = { url in NSWorkspace.shared.activateFileViewerSelecting([url]) }
+```
+
+In `presentQuestion(_:)`, add a case before `default`:
+
+```swift
+        case "keep-recording":
+            let directory = question.payload.directory ?? ""
+            let sheet = QuestionSheet.keepRecording(directory: directory, segments: question.payload.segments ?? 0,
+                                                    size: Self.folderSize(at: URL(fileURLWithPath: directory)))
+            showQuestionSheet(sheet) { [weak self] keep in
+                // tap keeps the recording on a yes and on no answer at all; the app
+                // never touches the folder itself.
+                presentation.answer(id: question.id, value: keep)
+                if keep, !directory.isEmpty { self?.revealInFinder(URL(fileURLWithPath: directory)) }
+            }
+```
+
+Add after `showQuestionSheet`:
+
+```swift
+    /// The size of every file under `folder`, formatted for a person.
+    static func folderSize(at folder: URL) -> String {
+        var bytes: Int64 = 0
+        if let files = FileManager.default.enumerator(at: folder, includingPropertiesForKeys: [.fileSizeKey]) {
+            for case let file as URL in files {
+                bytes += Int64((try? file.resourceValues(forKeys: [.fileSizeKey]))?.fileSize ?? 0)
+            }
+        }
+        return ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
+    }
+
+    /// tap exited while its keep-recording sheet was still up: its
+    /// three-second wait ran out and it kept the recording. The sheet ends
+    /// as a yes, so the run is revealed like any kept run.
+    func talkEnded() {
+        guard let sheet = questionSheet, sheet.kind == "keep-recording", let window else { return }
+        sessionController.session.log.append("tap kept the recording before an answer came", source: .app)
+        window.endSheet(sheet, returnCode: .OK)
+    }
+```
+
+In `init`, replace the `onStateChange` line (Task 6) with:
+
+```swift
+        sessionController.presentation.onStateChange = { [weak self] state in
+            self?.refreshPresentingControls()
+            if state == .idle { self?.talkEnded() }
+        }
+```
+
+- [ ] **Step 4: Run the tests one at a time**
+
+```bash
+make -C desktop test ONLY=TapTests/KeepRecordingTests/testKeepTheRecording
+make -C desktop test ONLY=TapTests/KeepRecordingTests/testDeletingTheRecordingAnswersNo
+make -C desktop test ONLY=TapTests/KeepRecordingTests/testATapThatKeepsWithoutWaitingRevealsTheRun
+```
+
+Expected: all three pass. `ByteCountFormatter` prints 3,072 bytes as "3 KB".
+
+- [ ] **Step 5: Mutate and commit**
+
+Mutations, each reverted: in the keep-recording case, reveal on `false` too (expected: `testDeletingTheRecordingAnswersNo` fails); answer `true` regardless (expected: it fails on the record file); in `talkEnded`, drop `endSheet` (expected: the no-wait test fails on `questionSheet`); in `keepRecording`, drop the segments count from the body (expected: `testKeepTheRecording` fails on the body).
+
+```bash
+git add desktop/Tap desktop/TapTests
+git commit -m "feat(desktop): the keep-recording sheet, revealing a kept run, and a tap that keeps without waiting"
+```
+
+---
+
+### Task 11: The phone remote and the tunnel
+
+**Files:**
+- Create: `desktop/Tap/Presenting/RemotePanel.swift`
+- Modify: `desktop/Tap/Presenting/PresentationController.swift` (`tunnel`, `tunnelError`, `setTunnel(on:)`, the tunnel start after ready)
+- Modify: `desktop/Tap/Windows/DeckWindowController.swift` (`remotePanel`, `togglePhoneRemote`, `refreshRemotePanel`)
+- Modify: `desktop/Tap/App/MainMenu.swift` (Phone Remote)
+- Test: `desktop/TapTests/PhoneRemoteTests.swift`
+
+**Interfaces:**
+- Consumes: Task 1's `TunnelEvent`, `TapCommand.tunnel(start:)`; Task 2's `PresentationOptions.wantsTunnel`; Task 9's `FakeTapScripts.presenting`; Task 3's `PresentationWindow.coveringLevel`.
+- Produces: `RemotePanel` with `qrImageView`, `urlLabel`, `noteLabel`, `messageLabel`, `turnOffButton`, `onTurnOff`, `show(tunnel:error:ownPassword:on:)`, `hide()`; `PresentationController.tunnel`, `tunnelError`, `onTunnelChange`, `setTunnel(on:)`; `DeckWindowController.remotePanel`, `togglePhoneRemote(_:)`, `refreshRemotePanel()`; the Present menu item Phone Remote.
+
+- [ ] **Step 1: Write the failing tests**
+
+`desktop/TapTests/PhoneRemoteTests.swift`:
+
+```swift
+import XCTest
+@testable import Tap
+
+final class PhoneRemoteTests: PresentingTestCase {
+    func recorded(_ record: URL) -> String {
+        (try? String(contentsOf: record, encoding: .utf8)) ?? ""
+    }
+
+    func testPhoneRemote() async throws {
+        let record = try Fixtures.temporaryFolder().appendingPathComponent("record")
+        AppEnvironment.shared.presentExecutableURL = try FakeTapScripts.presenting(events: [], recordingTo: record)
+        let (_, controller) = try await openDeckForPresenting()
+        let deckWindow = try XCTUnwrap(controller.editor.window?.windowController as? DeckWindowController)
+        let presentation = controller.presentation
+        try await startPresenting(controller, PresentationOptions(mode: .play, startSlide: 1, phoneRemote: true))
+        try await waitUntil(timeout: 5, "the tunnel command") { self.recorded(record).contains(#"stdin: {"type":"tunnel","start":true}"#) }
+        try await waitUntil(timeout: 5, "tap's running tunnel") { presentation.tunnel?.state == "running" }
+        XCTAssertEqual(presentation.tunnel?.url, "https://stark-lake-1234.trycloudflare.com")
+        let panel = deckWindow.remotePanel
+        XCTAssertTrue(panel.isVisible, "the QR code that tap generates is on screen")
+        XCTAssertEqual(panel.urlLabel.stringValue, "https://stark-lake-1234.trycloudflare.com")
+        XCTAssertEqual(panel.qrImageView.image?.size, NSSize(width: 1, height: 1), "tap's PNG, decoded")
+        XCTAssertTrue(panel.noteLabel.stringValue.contains("tap made a presenter password for this talk"))
+        XCTAssertTrue(panel.messageLabel.isHidden)
+        XCTAssertGreaterThan(panel.level.rawValue, PresentationWindow.coveringLevel.rawValue, "over the presenter window")
+        try await waitUntil(timeout: 5, "the panel on screen") { onScreenWindowNumbers().contains(panel.windowNumber) }
+
+        panel.turnOffButton.performClick(nil)
+        try await waitUntil(timeout: 5, "the tunnel stop") { self.recorded(record).contains(#"stdin: {"type":"tunnel","start":false}"#) }
+        try await waitUntil(timeout: 5, "tap's stopped tunnel") { presentation.tunnel?.state == "stopped" }
+        XCTAssertFalse(panel.isVisible)
+
+        // Present > Phone Remote turns it back on.
+        deckWindow.togglePhoneRemote(nil)
+        try await waitUntil(timeout: 5, "the tunnel again") { presentation.tunnel?.state == "running" && panel.isVisible }
+        try await stopPresenting(controller)
+        XCTAssertFalse(panel.isVisible, "the panel goes with the talk")
+    }
+
+    func testAdvancedRemoteOptions() async throws {
+        let record = try Fixtures.temporaryFolder().appendingPathComponent("record")
+        AppEnvironment.shared.presentExecutableURL = try FakeTapScripts.presenting(events: [], recordingTo: record)
+        let (_, controller) = try await openDeckForPresenting()
+        let deckWindow = try XCTUnwrap(controller.editor.window?.windowController as? DeckWindowController)
+        let presentation = controller.presentation
+        try await startPresenting(controller, PresentationOptions(mode: .play, startSlide: 1, tunnel: true, presenterPassword: "secret"))
+        XCTAssertEqual(presentation.session?.command, .present(record: true, presenterPassword: "secret"))
+        try await waitUntil(timeout: 5, "the arguments") { self.recorded(record).contains("--presenter-password secret") }
+        XCTAssertFalse(recorded(record).contains("--tunnel"), "tap present has no --tunnel flag; the tunnel is a command")
+        try await waitUntil(timeout: 5, "the tunnel command") { self.recorded(record).contains(#"stdin: {"type":"tunnel","start":true}"#) }
+        try await waitUntil(timeout: 5, "the running tunnel") { presentation.tunnel?.state == "running" }
+        XCTAssertTrue(deckWindow.remotePanel.noteLabel.stringValue.contains("your presenter password"), "the person's own password, not a generated one")
+        try await stopPresenting(controller)
+    }
+
+    func testWithoutCloudflaredThePanelSaysSo() async throws {
+        let record = try Fixtures.temporaryFolder().appendingPathComponent("record")
+        AppEnvironment.shared.presentExecutableURL = try FakeTapScripts.presenting(events: [], tunnelUnavailable: true, recordingTo: record)
+        let (_, controller) = try await openDeckForPresenting()
+        let deckWindow = try XCTUnwrap(controller.editor.window?.windowController as? DeckWindowController)
+        let presentation = controller.presentation
+        try await startPresenting(controller, PresentationOptions(mode: .play, startSlide: 1, phoneRemote: true))
+        try await waitUntil(timeout: 5, "tap's error") { presentation.tunnelError != nil }
+        let panel = deckWindow.remotePanel
+        XCTAssertTrue(panel.isVisible)
+        XCTAssertFalse(panel.messageLabel.isHidden)
+        XCTAssertTrue(panel.messageLabel.stringValue.contains("brew install cloudflared"))
+        XCTAssertNil(panel.qrImageView.image)
+        try await stopPresenting(controller)
+    }
+}
+```
+
+- [ ] **Step 2: Run one test to verify it fails**
+
+Run: `make -C desktop test ONLY=TapTests/PhoneRemoteTests/testPhoneRemote`
+Expected: the test target does not compile (`tunnel`, `remotePanel` are undefined).
+
+- [ ] **Step 3: Write `RemotePanel.swift`**
+
+```swift
+import AppKit
+
+/// The phone remote: the QR code and URL tap made for the tunnel, over the
+/// presenter window, with Turn Off Remote. The QR image comes from tap.
+final class RemotePanel: NSPanel {
+    let qrImageView = NSImageView()
+    let urlLabel = NSTextField(labelWithString: "")
+    let noteLabel = NSTextField(wrappingLabelWithString: "")
+    let messageLabel = NSTextField(wrappingLabelWithString: "")
+    let turnOffButton = NSButton(title: "Turn Off Remote", target: nil, action: nil)
+    var onTurnOff: (() -> Void)?
+
+    init() {
+        super.init(contentRect: NSRect(x: 0, y: 0, width: 360, height: 460), styleMask: [.titled, .nonactivatingPanel], backing: .buffered, defer: false)
+        title = "Phone remote"
+        level = NSWindow.Level(rawValue: PresentationWindow.coveringLevel.rawValue + 1)
+        collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        isReleasedWhenClosed = false
+        isFloatingPanel = true
+        setAccessibilityIdentifier("remote-panel")
+        let heading = NSTextField(labelWithString: "Scan to control the talk from your phone")
+        heading.font = .systemFont(ofSize: 15, weight: .bold)
+        qrImageView.imageScaling = .scaleProportionallyUpOrDown
+        qrImageView.setAccessibilityIdentifier("remote-qr")
+        urlLabel.font = .monospacedSystemFont(ofSize: 12, weight: .regular)
+        urlLabel.isSelectable = true
+        urlLabel.lineBreakMode = .byTruncatingMiddle
+        noteLabel.font = .systemFont(ofSize: 12)
+        noteLabel.textColor = .secondaryLabelColor
+        messageLabel.font = .systemFont(ofSize: 12)
+        messageLabel.textColor = .systemRed
+        turnOffButton.bezelStyle = .rounded
+        turnOffButton.target = self
+        turnOffButton.action = #selector(turnOffPressed(_:))
+        let stack = NSStackView(views: [heading, qrImageView, urlLabel, noteLabel, messageLabel, turnOffButton])
+        stack.orientation = .vertical
+        stack.alignment = .centerX
+        stack.spacing = 12
+        stack.edgeInsets = NSEdgeInsets(top: 20, left: 20, bottom: 20, right: 20)
+        stack.widthAnchor.constraint(equalToConstant: 360).isActive = true
+        qrImageView.widthAnchor.constraint(equalToConstant: 256).isActive = true
+        qrImageView.heightAnchor.constraint(equalToConstant: 256).isActive = true
+        for label in [urlLabel, noteLabel, messageLabel] {
+            label.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -40).isActive = true
+        }
+        contentView = stack
+        setContentSize(stack.fittingSize)
+    }
+
+    /// Shows tap's tunnel, or the reason there is none, centred on `frame`.
+    func show(tunnel: TunnelEvent?, error: String?, ownPassword: Bool, on frame: CGRect) {
+        if let tunnel, tunnel.state == "running" {
+            urlLabel.stringValue = tunnel.url ?? ""
+            qrImageView.image = tunnel.qr.flatMap { Data(base64Encoded: $0) }.flatMap { NSImage(data: $0) }
+            messageLabel.isHidden = true
+        } else {
+            urlLabel.stringValue = tunnel?.state == "starting" ? "Starting the tunnel…" : ""
+            qrImageView.image = nil
+            messageLabel.stringValue = error ?? ""
+            messageLabel.isHidden = error == nil
+        }
+        noteLabel.stringValue = ownPassword
+            ? "Only a phone with your presenter password can control the talk."
+            : "tap made a presenter password for this talk, so only this code works."
+        setContentSize(contentView?.fittingSize ?? frame.size)
+        setFrameOrigin(NSPoint(x: frame.midX - self.frame.width / 2, y: frame.midY - self.frame.height / 2))
+        orderFrontRegardless()
+    }
+
+    func hide() {
+        orderOut(nil)
+    }
+
+    @objc private func turnOffPressed(_ sender: Any?) {
+        onTurnOff?()
+    }
+}
+```
+
+- [ ] **Step 4: The tunnel in the controller and the panel in the window controller**
+
+In `PresentationController.swift`, add stored properties after `recordingTimer`:
+
+```swift
+    /// tap's last tunnel event, and the last tunnel error, for the remote panel.
+    private(set) var tunnel: TunnelEvent?
+    private(set) var tunnelError: String?
+    var onTunnelChange: (() -> Void)?
+```
+
+In `start(_:)`, add `tunnel = nil` and `tunnelError = nil` after `editsNotShown = 0`. In `openWindows`, add after `refreshPresenterToolbar()`:
+
+```swift
+        // A restart's tap has no tunnel; ask again whenever one is wanted.
+        if options.wantsTunnel { setTunnel(on: true) }
+```
+
+In `handle(_:)`, add cases before `default`:
+
+```swift
+        case .tunnel(let tunnelEvent):
+            tunnel = tunnelEvent
+            tunnelError = nil
+            onTunnelChange?()
+        case .error(let payload) where payload.code == "tunnel_unavailable" || payload.code == "tunnel_failed":
+            tunnelError = payload.message
+            onTunnelChange?()
+```
+
+(The `recording_blocked` case stays above these.) Add after `toggleRecording()`:
+
+```swift
+    /// Starts or stops tap's tunnel, as u does.
+    func setTunnel(on: Bool) {
+        guard isActive else { return }
+        session?.send(.tunnel(start: on))
+    }
+```
+
+In `takeDownWindows`, add `tunnel = nil` and `tunnelError = nil` after `windowsHiddenForQuestion = []`, and call `onTunnelChange?()` at the end of the method.
+
+In `DeckWindowController.swift`, add after `revealInFinder`:
+
+```swift
+    private(set) lazy var remotePanel: RemotePanel = {
+        let panel = RemotePanel()
+        panel.onTurnOff = { [weak self] in self?.sessionController.presentation.setTunnel(on: false) }
+        return panel
+    }()
+```
+
+In `init`, after the `onQuestion` line, add:
+
+```swift
+        sessionController.presentation.onTunnelChange = { [weak self] in self?.refreshRemotePanel() }
+```
+
+Add after `talkEnded()`:
+
+```swift
+    // MARK: The phone remote
+
+    /// Present > Phone Remote: the tunnel on or off.
+    @objc func togglePhoneRemote(_ sender: Any?) {
+        let presentation = sessionController.presentation
+        presentation.setTunnel(on: presentation.tunnel?.state != "running")
+    }
+
+    /// The panel follows tap's tunnel: shown with the QR code while the
+    /// tunnel runs or starts, shown with the reason when tap could not
+    /// start it, gone when it stops or the talk ends.
+    func refreshRemotePanel() {
+        let presentation = sessionController.presentation
+        let running = presentation.tunnel?.state == "running" || presentation.tunnel?.state == "starting"
+        guard presentation.isActive, running || presentation.tunnelError != nil else {
+            remotePanel.hide()
+            return
+        }
+        let screenFrame = presentation.presenterWindow?.frame ?? window?.screen?.frame ?? NSScreen.screens[0].frame
+        remotePanel.show(tunnel: presentation.tunnel, error: presentation.tunnelError,
+                         ownPassword: presentation.options?.presenterPassword != nil, on: screenFrame)
+    }
+```
+
+In `validateMenuItem`, add next to the Stop line:
+
+```swift
+        if menuItem.action == #selector(togglePhoneRemote(_:)) {
+            menuItem.state = presentation.tunnel?.state == "running" ? .on : .off
+            return presentation.isActive
+        }
+```
+
+In `MainMenu.presentMenu()`, add after Swap Displays:
+
+```swift
+        menu.addItem(item("Phone Remote", action: #selector(DeckWindowController.togglePhoneRemote(_:))))
+```
+
+- [ ] **Step 5: Run the tests one at a time**
+
+```bash
+make -C desktop test ONLY=TapTests/PhoneRemoteTests/testPhoneRemote
+make -C desktop test ONLY=TapTests/PhoneRemoteTests/testAdvancedRemoteOptions
+make -C desktop test ONLY=TapTests/PhoneRemoteTests/testWithoutCloudflaredThePanelSaysSo
+make -C desktop test ONLY=TapTests/PresentMenuTests/testPresentingShortcuts
+```
+
+Expected: all pass. Every tunnel test uses the scripted tap; no real tunnel is ever started.
+
+- [ ] **Step 6: Mutate and commit**
+
+Mutations, each reverted: in `openWindows`, drop the `wantsTunnel` line (expected: `testPhoneRemote` times out on the tunnel command); in `refreshRemotePanel`, never hide the panel (expected: it fails after Turn Off); in `handle`, drop the tunnel error case (expected: `testWithoutCloudflaredThePanelSaysSo` times out); in `RemotePanel.show`, drop the base64 decode (expected: the image size assertion fails); in `togglePhoneRemote`, always start (expected: `testPhoneRemote` fails on the second toggle's expectation only if extended; leave as noted); in `takeDownWindows`, drop `onTunnelChange?()` (expected: `testPhoneRemote` fails on the panel after the stop).
+
+```bash
+git add desktop/Tap desktop/TapTests
+git commit -m "feat(desktop): the phone remote panel with tap's QR code, the tunnel command, and the Advanced options"
 ```
 
 ---
