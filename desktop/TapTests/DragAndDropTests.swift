@@ -276,4 +276,41 @@ final class DragAndDropTests: HostedTestCase {
         let afterDrop = try await roundTrip(controller)
         XCTAssertEqual(afterDrop, beforeDrop, "nothing moved")
     }
+
+    /// A drop made before tap has answered for recent typing waits for that
+    /// answer and then checks the dragged slides again. Typing that
+    /// renumbers nothing leaves the move to land; typing that tap counts as
+    /// a new slide renumbers the dragged ones, and the move is refused
+    /// rather than moving whatever now holds the dragged numbers.
+    func testASameDeckMoveQueuedBehindTypingChecksTheSlidesAgain() async throws {
+        let (_, controller) = try await openOps()
+        let panel = controller.slidePanel
+        func typeAtTheEnd(ofSlide number: Int, _ text: String) {
+            controller.editor.setSelectedRange(NSRange(location: NSMaxRange(controller.editor.boxes[number - 1].range), length: 0))
+            controller.editor.insertText(text, replacementRange: NSRange(location: NSNotFound, length: 0))
+            XCTAssertNotEqual(controller.editor.string, controller.lastAppliedText, "tap has not answered for the typing yet")
+        }
+
+        let payload = try XCTUnwrap(controller.dragPayload(forSlides: [5]))
+        typeAtTheEnd(ofSlide: 2, "\n\nMore.")
+        let (_, accepted) = drop(try rawPasteboard(payload, name: "queued-same-deck"), into: panel, beforeIndex: 0, source: panel.collectionView, window: nil)
+        XCTAssertTrue(accepted, "the drop is taken, queued behind tap's answer")
+        try await waitUntil(timeout: 10, "the queued move to land") { controller.editor.boxes.first?.slide.title == "Five" }
+        let afterMove = try await roundTrip(controller)
+        XCTAssertEqual(afterMove, ["Five", "One", "Two", "Three", "Four", "Six", "Seven"])
+        try await waitUntil(timeout: 10, "tap's answer for the move") { controller.lastAppliedText == controller.editor.string }
+
+        let stale = try XCTUnwrap(controller.dragPayload(forSlides: [6]))
+        typeAtTheEnd(ofSlide: 2, "\n\n---\n\n# Extra")
+        XCTAssertEqual(controller.markdown(forSlides: [6]), stale.markdowns, "until tap answers, slide 6 still holds the dragged text")
+        let (_, acceptedStale) = drop(try rawPasteboard(stale, name: "queued-stale-same-deck"), into: panel, beforeIndex: 0, source: panel.collectionView, window: nil)
+        XCTAssertTrue(acceptedStale, "the drop is taken, queued behind tap's answer")
+        try await waitUntil(timeout: 10, "tap's answer for the new slide") {
+            controller.lastAppliedText == controller.editor.string && controller.editor.boxes.count == 8
+        }
+        try await Task.sleep(nanoseconds: 500_000_000)
+        let afterStaleDrop = try await roundTrip(controller)
+        XCTAssertEqual(afterStaleDrop, ["Five", "One", "Extra", "Two", "Three", "Four", "Six", "Seven"],
+                       "slide 6 is now \"Four\", not the dragged slide, so nothing moved")
+    }
 }

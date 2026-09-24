@@ -225,12 +225,26 @@ extension DeckSessionController {
             // numbers were taken at drag start, and typing since then may
             // have renumbered the slides they now name. Refuse rather than
             // move whatever now holds those numbers; one Cmd+Z is not
-            // needed because nothing changed.
+            // needed because nothing changed. A drop queued behind tap's
+            // answer checks again once the answer is in, since that answer
+            // is what renumbers the slides.
             guard markdown(forSlides: payload.slideNumbers) == payload.markdowns else {
                 NSSound.beep()
                 return false
             }
-            return perform(.move(numbers: payload.slideNumbers, beforeNumber: beforeNumber)).isAccepted
+            let move = SlideOperation.move(numbers: payload.slideNumbers, beforeNumber: beforeNumber)
+            guard editor.string == lastAppliedText else {
+                whenTextIsConfirmed { [weak self] in
+                    guard let self else { return }
+                    guard self.markdown(forSlides: payload.slideNumbers) == payload.markdowns else {
+                        NSSound.beep()
+                        return
+                    }
+                    self.performNow(move)
+                }
+                return true
+            }
+            return perform(move).isAccepted
         }
         let source = isMove ? Self.document(forDeckPath: payload.deckPath)?.sessionController : nil
         return perform(.insert(markdowns: payload.markdowns, beforeNumber: beforeNumber)) { [weak self, weak source] result in
