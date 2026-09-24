@@ -20,7 +20,7 @@ final class ThumbnailRenderer: NSObject, WKScriptMessageHandler, WKNavigationDel
     }
 
     static let viewSize = NSSize(width: 960, height: 540)
-    /// How long a slide may take to report ready before it is requeued.
+    /// How long a slide's first attempt may take to report ready before it is requeued.
     static let readyTimeout: TimeInterval = 5
 
     let webView: WKWebView
@@ -35,6 +35,16 @@ final class ThumbnailRenderer: NSObject, WKScriptMessageHandler, WKNavigationDel
     /// flat image, which no real page in a visible window produces.
     var snapshot: (WKWebView, WKSnapshotConfiguration) async throws -> NSImage = { webView, configuration in
         try await webView.takeSnapshot(configuration: configuration)
+    }
+    /// The ready wait for a job's attempt, 0 on the first try: a seam a
+    /// test shortens so it does not wait the real number of seconds the
+    /// growing timeout implies. Production doubles `readyTimeout` on each
+    /// retry up to a 30 s cap (5 s, 10 s, 20 s, then 30 s), so a slide that
+    /// legitimately takes longer than the first window (a map can hold
+    /// ready for up to 10 s) gets a longer wait instead of reloading and
+    /// timing out at 5 s for as long as the deck is open.
+    var readyTimeoutForAttempt: (Int) -> TimeInterval = { attempt in
+        min(30, ThumbnailRenderer.readyTimeout * pow(2, Double(attempt)))
     }
     /// The ready payload each slide reported when it was captured.
     private(set) var readyBySlide: [Int: ReadyPayload] = [:]
@@ -182,7 +192,8 @@ final class ThumbnailRenderer: NSObject, WKScriptMessageHandler, WKNavigationDel
             navigationCount += 1
             webView.load(URLRequest(url: url))
         }
-        guard let ready = await waitForReady(slide: number) else {
+        let attempt = failures[number] ?? 0
+        guard let ready = await waitForReady(slide: number, timeout: readyTimeoutForAttempt(attempt)) else {
             loadedRevision = nil
             return .retry
         }
@@ -219,7 +230,7 @@ final class ThumbnailRenderer: NSObject, WKScriptMessageHandler, WKNavigationDel
         return .rendered
     }
 
-    private func waitForReady(slide: Int) async -> ReadyPayload? {
+    private func waitForReady(slide: Int, timeout: TimeInterval) async -> ReadyPayload? {
         if let lastReady, lastReady.slide == slide { return lastReady }
         waitingForSlide = slide
         return await withCheckedContinuation { continuation in
@@ -228,7 +239,7 @@ final class ThumbnailRenderer: NSObject, WKScriptMessageHandler, WKNavigationDel
                 MainActor.assumeIsolated { self?.resumeWaiter(with: nil) }
             }
             timeoutWork = work
-            DispatchQueue.main.asyncAfter(deadline: .now() + Self.readyTimeout, execute: work)
+            DispatchQueue.main.asyncAfter(deadline: .now() + timeout, execute: work)
         }
     }
 

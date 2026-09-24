@@ -169,4 +169,25 @@ final class ThumbnailRendererTests: HostedTestCase {
         XCTAssertTrue(images.isEmpty, "one flat capture of a freshly changed job must not be accepted as blank")
         XCTAssertEqual(renderer.renderCount, 0)
     }
+
+    /// A slide whose real ready takes longer than the first attempt's
+    /// window still renders, because the window grows on each retry rather
+    /// than staying fixed at `readyTimeout` for as long as the deck is
+    /// open. `readyTimeoutForAttempt` is shortened here so the test does
+    /// not wait the real seconds the growing timeout implies: the first
+    /// attempt's window is set far below what tap's real ready takes,
+    /// forcing at least one retry, and the second attempt's window is
+    /// plenty. If the renderer only ever used the fixed first-attempt
+    /// timeout, the slide would never be delivered.
+    func testASlideThatNeedsLongerThanTheFirstTimeoutIsStillDelivered() async throws {
+        let document = try await openDeck(try Fixtures.copyDeck("plain.md"))
+        try await waitForBoxes(document, count: 1)
+        let (renderer, _, summary) = try await makeRenderer(for: document)
+        renderer.readyTimeoutForAttempt = { attempt in attempt == 0 ? 0.05 : 5 }
+        var images: [Int] = []
+        renderer.onImage = { job, _, _ in images.append(job.slideNumber) }
+        renderer.setWork(jobs(for: summary), revision: summary.revision, visible: [1], current: 1)
+        try await waitUntil(timeout: 20, "the slide to be delivered after a retry with a longer window") { images == [1] }
+        XCTAssertGreaterThan(renderer.navigationCount, 1, "the too-short first attempt required a reload and a second, longer attempt")
+    }
 }
