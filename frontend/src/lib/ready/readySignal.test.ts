@@ -328,3 +328,35 @@ describe('__tapReadyState', () => {
 		expect(pageState().phase).toBe('off');
 	});
 });
+
+describe('a cycle that runs out of rounds', () => {
+	it('on a live page, publishes ready anyway with settled false', async () => {
+		startReadyCycle(payload, instantProbes({ settledNow: () => false }), { publishUnsettled: true });
+
+		await vi.waitFor(() => expect(readyValue()).toEqual({ ...payload, settled: false }));
+		expect(readyState()).toMatchObject({ phase: 'published', settled: false, unsettled: ['loading'] });
+	});
+
+	it('on a page that requires a paint, publishes nothing', async () => {
+		startReadyCycle(payload, instantProbes({ settledNow: () => false }), { publishUnsettled: false });
+
+		await vi.waitFor(() => expect(readyState().phase).toBe('gave-up'));
+		expect(readyValue()).toBeNull();
+	});
+
+	it('leaves settled out of a payload that did settle', async () => {
+		startReadyCycle(payload, instantProbes(), { publishUnsettled: true });
+
+		await vi.waitFor(() => expect(readyValue()).toEqual(payload));
+		expect(readyValue()).not.toHaveProperty('settled');
+		expect(readyState().settled).toBe(true);
+	});
+
+	it('does not publish for a cycle cancelled while its rounds ran out', async () => {
+		const cancel = startReadyCycle(payload, instantProbes({ settledNow: () => false }), { publishUnsettled: true });
+		cancel();
+		await settleMicrotasks();
+
+		expect(readyValue()).toBeNull();
+	});
+});

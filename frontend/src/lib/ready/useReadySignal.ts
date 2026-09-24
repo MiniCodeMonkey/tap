@@ -42,7 +42,9 @@ export function useReadySignal({
 			markReadyOff();
 			return undefined;
 		}
-		return startReadyCycle({ revision, slide, step }, createDomProbes({ includeInfiniteAnimations, requirePaint }));
+		return startReadyCycle({ revision, slide, step }, createDomProbes({ includeInfiniteAnimations, requirePaint }), {
+			publishUnsettled: !requirePaint
+		});
 		// fragment and theme are not read here, but a change to either is a
 		// new rendering that has to settle again.
 	}, [enabled, revision, slide, step, fragment, theme, includeInfiniteAnimations, requirePaint]);

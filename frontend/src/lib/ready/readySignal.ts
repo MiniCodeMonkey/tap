@@ -23,6 +23,12 @@ export interface ReadyPayload {
 	revision: string;
 	slide: number;
 	step: number;
+	/**
+	 * Present, and false, only when a live page ran out of settle rounds and
+	 * reported ready anyway (see ReadyCycleOptions.publishUnsettled). A
+	 * reader that only wants the slide can ignore it.
+	 */
+	settled?: false;
 }
 
 /** The event dispatched on window when a slide has settled. */
@@ -40,7 +46,9 @@ export const MAX_SETTLE_ROUNDS = 20;
  * The step the ready logic is in. "off" while the deck has not loaded (no
  * cycle runs), then one of a settle round's waits, "check" while a round
  * decides whether it settled, and a cycle's outcome: "published",
- * "gave-up" once MAX_SETTLE_ROUNDS ran out, or "cancelled" when a cycle
+ * "gave-up" once MAX_SETTLE_ROUNDS ran out on a page that does not report
+ * an unsettled slide (a live page reports it: "published" with `settled`
+ * false), or "cancelled" when a cycle
  * ended without a newer one taking over.
  */
 export type ReadyPhase =
@@ -75,6 +83,8 @@ export interface ReadyState {
 	published: number;
 	/** Whether the newest publish found the tapReady message handler to post to. */
 	posted: boolean;
+	/** Whether the newest publish came from a settled round, rather than from a live page that ran out of rounds. */
+	settled: boolean;
 	/** What kept the newest cycle's latest finished round from settling: blocker kinds, and "loading" when a stylesheet or font was loading. */
 	unsettled: string[];
 	readonly phaseMs: number;
@@ -111,6 +121,7 @@ function createReadyState(): ReadyState {
 		round: 0,
 		published: 0,
 		posted: false,
+		settled: false,
 		unsettled: [],
 		get phaseMs() {
 			return Math.round(now() - this.phaseAt);
@@ -167,10 +178,14 @@ export function publishReady(payload: ReadyPayload): void {
 		return;
 	}
 	const message: ReadyPayload = { revision: payload.revision, slide: payload.slide, step: payload.step };
+	if (payload.settled === false) {
+		message.settled = false;
+	}
 	target.__tapReady = message;
 	const state = readyState();
 	state.published += 1;
 	state.posted = target.webkit?.messageHandlers?.tapReady !== undefined;
+	state.settled = payload.settled !== false;
 	enterPhase('published');
 	window.dispatchEvent(new CustomEvent<ReadyPayload>(READY_EVENT, { detail: message }));
 	target.webkit?.messageHandlers?.tapReady?.postMessage(message);
@@ -227,13 +242,29 @@ const ignoreProgress: SettleRecorder = { round: () => {}, phase: () => {}, unset
 
 let currentCycle = 0;
 
+export interface ReadyCycleOptions {
+	/**
+	 * Report ready even when MAX_SETTLE_ROUNDS runs out, with settled false
+	 * in the payload. A live page does, so a reader waiting on it (Tap
+	 * Desktop's preview) is never left waiting forever; __tapReadyState
+	 * keeps the reason in `unsettled`. A page that requires a paint (print
+	 * and capture) does not: it is about to be photographed, and its
+	 * readers time out and retry rather than capture an unsettled page.
+	 */
+	publishUnsettled: boolean;
+}
+
 /**
  * Starts waiting for the slide in `payload` to settle, and publishes
  * `payload` when it has. Clears the signal at once. Starting another
  * cycle, or calling the returned function, cancels this one, so an older
  * slide never reports ready over a newer one.
  */
-export function startReadyCycle(payload: ReadyPayload, probes: ReadyProbes): () => void {
+export function startReadyCycle(
+	payload: ReadyPayload,
+	probes: ReadyProbes,
+	options: ReadyCycleOptions = { publishUnsettled: false }
+): () => void {
 	currentCycle += 1;
 	const cycle = currentCycle;
 	let cancelled = false;
@@ -262,6 +293,8 @@ export function startReadyCycle(payload: ReadyPayload, probes: ReadyProbes): () 
 	void waitUntilSettled(probes, isCancelled, record).then((settled) => {
 		if (settled && !isCancelled()) {
 			publishReady(payload);
+		} else if (!isCancelled() && options.publishUnsettled) {
+			publishReady({ ...payload, settled: false });
 		} else if (isNewest()) {
 			enterPhase(cancelled ? 'cancelled' : 'gave-up');
 		}
