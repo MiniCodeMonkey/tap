@@ -81,15 +81,30 @@ class BenchmarkCase: XCTestCase {
     }
 }
 
-/// Times each key event from the event's timestamp to the run loop pass
-/// that follows the Core Animation commit.
+/// Times each key event from the event's timestamp to the run loop pass,
+/// after the Core Animation commit, in which the keystroke is in the
+/// editor's text: that commit is the frame that shows it. A sample opens
+/// when the key is sent and closes in the first such pass, so nothing the
+/// benchmark does after sending the key, such as waiting to check the text,
+/// is inside it. A pass in which the keystroke has not landed yet leaves
+/// its sample open for a later one.
 @MainActor
 final class KeyLatencyRecorder {
-    private var pending: [TimeInterval] = []
+    private struct Sample {
+        let eventTimestamp: TimeInterval
+        let hasLanded: () -> Bool
+    }
+
+    private var pending: [Sample] = []
     private var observer: CFRunLoopObserver?
     private(set) var milliseconds: [Double] = []
 
+    /// Samples opened and not yet closed by a frame commit.
+    var openSampleCount: Int { pending.count }
+
     func install() {
+        // The highest order runs this after Core Animation's own
+        // before-waiting observer, which commits the frame.
         observer = CFRunLoopObserverCreateWithHandler(nil, CFRunLoopActivity.beforeWaiting.rawValue, true, CFIndex.max) { [weak self] _, _ in
             MainActor.assumeIsolated { self?.flush() }
         }
@@ -101,14 +116,25 @@ final class KeyLatencyRecorder {
         observer = nil
     }
 
-    func record(eventTimestamp: TimeInterval) {
-        pending.append(eventTimestamp)
+    /// Opens a sample for a key event sent at `eventTimestamp`. `hasLanded`
+    /// says whether the keystroke is in the editor's text yet.
+    func record(eventTimestamp: TimeInterval, hasLanded: @escaping () -> Bool) {
+        pending.append(Sample(eventTimestamp: eventTimestamp, hasLanded: hasLanded))
     }
 
     private func flush() {
         guard !pending.isEmpty else { return }
+        // The time is read before hasLanded runs, so checking the text is
+        // never part of a sample.
         let now = ProcessInfo.processInfo.systemUptime
-        milliseconds.append(contentsOf: pending.map { (now - $0) * 1000 })
-        pending.removeAll()
+        var stillOpen: [Sample] = []
+        for sample in pending {
+            if sample.hasLanded() {
+                milliseconds.append((now - sample.eventTimestamp) * 1000)
+            } else {
+                stillOpen.append(sample)
+            }
+        }
+        pending = stillOpen
     }
 }

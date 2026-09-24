@@ -28,30 +28,40 @@ final class TypingBenchmark: BenchmarkCase {
 
         let summary = summarize(recorder.milliseconds)
         write(["slides": controller.editor.boxes.count, "keyEventToFrameCommitted": summary], to: "typing")
-        XCTAssertGreaterThan(summary["count"] ?? 0, 200)
+        XCTAssertEqual(recorder.milliseconds.count, 280, "every key event has a sample")
         XCTAssertLessThan(summary["p95"] ?? .greatestFiniteMagnitude, 16, "typing latency stays under 16 ms: \(summary)")
     }
 
-    /// Sends one key event and only counts it toward the latency sample once the
-    /// editor's text has actually changed by the expected amount. A key event
-    /// swallowed before it reaches the responder chain leaves the editor's text
-    /// unchanged, so this fails loudly instead of quietly reporting an empty,
-    /// fast-looking sample: the run loop keeps committing frames on its own even
-    /// when nothing was typed, so timing alone cannot tell the two cases apart.
+    /// Sends one key event and times it with `recorder`, then checks that the
+    /// editor's text changed by the expected amount. The sample opens at
+    /// the send and closes at the first frame commit after the keystroke
+    /// is in the text, so the 35 ms wait before the check is never part of
+    /// it. A key event swallowed before it reaches the responder chain
+    /// leaves the text unchanged and its sample open, and this fails
+    /// loudly instead of reporting nothing for it: the run loop keeps
+    /// committing frames on its own even when nothing was typed, so timing
+    /// alone cannot tell the two cases apart.
     private func sendAndVerify(_ characters: String, code: UInt16, to window: NSWindow,
                                 controller: DeckSessionController, expectedLengthDelta: Int,
                                 recorder: KeyLatencyRecorder) async throws {
-        let before = controller.editor.string
+        let editor = controller.editor
+        let lengthBefore = editor.textStorage?.length ?? 0
+        let expectedLength = lengthBefore + expectedLengthDelta
         let timestamp = send(key: characters, code: code, to: window)
+        recorder.record(eventTimestamp: timestamp) { editor.textStorage?.length == expectedLength }
         try await Task.sleep(nanoseconds: 35_000_000)
-        let after = controller.editor.string
-        guard after.count == before.count + expectedLengthDelta else {
+        let lengthAfter = editor.textStorage?.length ?? 0
+        guard lengthAfter == expectedLength else {
             XCTFail("key event for \(characters.debugDescription) did not reach the editor: "
                      + "expected the text to change by \(expectedLengthDelta) character(s), "
-                     + "went from \(before.count) to \(after.count). Key events may not be "
+                     + "went from \(lengthBefore) to \(lengthAfter). Key events may not be "
                      + "reaching the responder chain.")
             throw CancellationError()
         }
-        recorder.record(eventTimestamp: timestamp)
+        guard recorder.openSampleCount == 0 else {
+            XCTFail("key event for \(characters.debugDescription) reached the editor, but no frame "
+                     + "was committed after it within 35 ms, so its sample never closed.")
+            throw CancellationError()
+        }
     }
 }
