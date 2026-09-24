@@ -2064,8 +2064,6 @@ final class ThumbnailRendererTests: HostedTestCase {
         XCTAssertEqual(renderer.navigationCount, 0, "no client, no loads: a failing load would otherwise be retried without end")
         XCTAssertTrue(renderer.isQueued(1), "the work waits for the next client")
     }
-}        XCTAssertEqual(renderer.pendingCount, 1, "the slide is requeued rather than dropped")
-    }
 }
 ```
 
@@ -2424,7 +2422,7 @@ git commit -m "feat(desktop): render thumbnails in a hidden print-mode web view 
   - `final class SlidePanelViewController: NSViewController` with `weak var delegate`, `let collectionView: SlidePanelCollectionView`, `private(set) var slides: [Slide]`, `func setSlides(_:)`, `func setImage(_:forSlide:)`, `func image(forSlide:) -> NSImage?`, `func setUpdating(_ numbers: Set<Int>)`, `func remapImages(sourceNumbers: [Int?])` (moves the images with the slides after an operation), `func select(numbers:scroll:)`, `var selectedNumbers: [Int]`, `var visibleNumbers: [Int]`, `func item(forSlide:) -> ThumbnailItem?`, `func click(slide:extendingSelection:)` (the one path a click takes, used by the real mouse and by tests; a Shift-click extends from the slide last clicked without Shift), `var onVisibleRangeChanged: (() -> Void)?`, `static let width: CGFloat = 200`
   - `final class SidebarHostViewController: NSViewController` with `func host(_ panel: NSView)`
   - `MainSplitViewController.init(sidebar:editor:inspector:)`, `let sidebarItem: NSSplitViewItem`, `var isSidebarCollapsed: Bool`, `func setSidebarCollapsed(_:)`
-  - `DeckSessionController.slidePanel: SlidePanelViewController`, `var currentSlideNumber: Int?`, `var selectedSlideNumbers: [Int]`
+  - `DeckSessionController.slidePanel: SlidePanelViewController`, `var currentSlideNumber: Int?`, `var selectedSlideNumbers: [Int]`, `func withPanelDrivingTheCursor(_ body: () -> Void)` (internal, because Task 10's `SlideOperations.swift` moves the caret on the panel's behalf; the flag it sets, `isSelectingFromPanel`, stays `private` to `DeckSessionController.swift`, and this helper is its only writer outside the declaration)
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -2943,6 +2941,16 @@ Add:
         guard !isSelectingFromPanel, let number = currentSlideNumber else { return }
         slidePanel.select(numbers: [number], scroll: true)
     }
+
+    /// Runs `body` with the panel marked as driving the cursor, so a caret
+    /// move inside it leaves the panel's selection alone. Internal so the
+    /// slide operations in `SlideOperations.swift` can use it; the flag
+    /// itself stays private to this file.
+    func withPanelDrivingTheCursor(_ body: () -> Void) {
+        isSelectingFromPanel = true
+        defer { isSelectingFromPanel = false }
+        body()
+    }
 ```
 
 In `editor(_:currentSlideDidChange:)`, add `syncPanelSelectionToCursor()` after the preview message.
@@ -2953,9 +2961,7 @@ Conformance:
 extension DeckSessionController: SlidePanelDelegate {
     func slidePanel(_ panel: SlidePanelViewController, didClickSlide number: Int, selection: [Int]) {
         guard let index = editor.boxes.firstIndex(where: { $0.slide.number == number }) else { return }
-        isSelectingFromPanel = true
-        editor.moveCursor(toSlide: index)
-        isSelectingFromPanel = false
+        withPanelDrivingTheCursor { editor.moveCursor(toSlide: index) }
     }
 
     func slidePanelSelectionDidChange(_ panel: SlidePanelViewController) {}
@@ -3010,7 +3016,7 @@ git commit -m "feat(desktop): the slide panel, linked to the cursor both ways"
   - `final class SlidePanelPeek` (`@MainActor`) with `var showDelay`, `var hideDelay`, `var isEnabled`, `private(set) var isShowing`, `var onShow`, `var onHide`, `func pointerEnteredButton()`, `pointerLeftButton()`, `pointerEnteredPanel()`, `pointerLeftPanel()`, `hideNow()`.
   - `final class HoverButton: NSButton` with `var onPointerEntered`, `var onPointerLeft`.
   - `final class DeckContentViewController: NSViewController`: the window's content view controller, holding the split view controller as a child and the overlay as its sibling, so the overlay is never a pane of the split view.
-  - `DeckWindowController`: `static let slidesItemIdentifier`, `let contentViewController: DeckContentViewController`, `let panelPeek: SlidePanelPeek`, `let panelOverlay: SlidePanelOverlay`, `private(set) var isPanelPinned: Bool`, `func setPanelPinned(_:)`, `@objc func toggleSlidePanel(_:)`. When the peek hides while the first responder is inside the overlay, the editor becomes first responder, so typing and Delete never go to a hidden panel.
+  - `DeckWindowController`: `static let slidesItemIdentifier`, `let deckContentViewController: DeckContentViewController` (named apart from `NSWindowController.contentViewController`, which it cannot override), `let panelPeek: SlidePanelPeek`, `let panelOverlay: SlidePanelOverlay`, `private(set) var isPanelPinned: Bool`, `func setPanelPinned(_:)`, `@objc func toggleSlidePanel(_:)`. When the peek hides while the first responder is inside the overlay, the editor becomes first responder, so typing and Delete never go to a hidden panel.
   - `AppEnvironment.shared.panelState: SlidePanelState` (tests replace it with one on a fresh `UserDefaults` suite).
   - View menu: "Unpin Slide Panel" / "Pin Slide Panel", Control+Command+S.
 
@@ -3039,6 +3045,16 @@ final class SlidePanelLayoutTests: HostedTestCase {
                        "the editor and the preview each take half of what is left")
 
         controller.setPanelPinned(false)
+        // Decision 4: the state is per deck. A second deck opened while the
+        // first is unpinned is pinned, and stays pinned when it reopens; one
+        // key shared by every deck would open it unpinned.
+        let other = try Fixtures.copyDeck("seven-slides.md")
+        let otherDocument = try await openDeck(other)
+        XCTAssertTrue(try windowController(for: otherDocument).isPanelPinned, "unpinning one deck leaves another pinned")
+        XCTAssertTrue(controller.splitViewController.sidebarItem.isCollapsed, "and the first deck's window is still unpinned")
+        otherDocument.close()
+        try await waitUntil(timeout: 10, "the other window to close") { otherDocument.windowControllers.first?.window?.isVisible != true }
+
         let renamed = deck.deletingLastPathComponent().appendingPathComponent("renamed.md")
         try await document.move(to: renamed)
         document.close()
@@ -3047,6 +3063,9 @@ final class SlidePanelLayoutTests: HostedTestCase {
         let again = try windowController(for: reopened)
         XCTAssertFalse(again.isPanelPinned, "each deck remembers its state")
         XCTAssertTrue(again.splitViewController.sidebarItem.isCollapsed)
+        let otherAgain = try windowController(for: try await openDeck(other))
+        XCTAssertTrue(otherAgain.isPanelPinned, "the other deck reopens pinned, beside a deck that reopened unpinned")
+        XCTAssertFalse(otherAgain.splitViewController.sidebarItem.isCollapsed)
     }
 
     func testPeekAtTheSlidePanel() async throws {
@@ -3368,14 +3387,14 @@ In `DeckWindowController`:
 ```swift
     static let slidesItemIdentifier = NSToolbarItem.Identifier("slides")
     let sidebarHost = SidebarHostViewController()
-    let contentViewController: DeckContentViewController
+    let deckContentViewController: DeckContentViewController
     let panelOverlay = SlidePanelOverlay(frame: .zero)
     let panelPeek = SlidePanelPeek()
     private(set) var isPanelPinned = true
     private let slidesButton = HoverButton()
 ```
 
-In `init`, use `sidebarHost` for the split (replacing the previous task's local), build the content controller and make it the window's content: `contentViewController = DeckContentViewController(splitViewController: splitViewController, overlay: panelOverlay)` before `super.init`, and `window.contentViewController = contentViewController` in place of D2's `window.contentViewController = splitViewController`. After the toolbar is set:
+In `init`, use `sidebarHost` for the split (replacing the previous task's local), build the content controller and make it the window's content: `deckContentViewController = DeckContentViewController(splitViewController: splitViewController, overlay: panelOverlay)` before `super.init`, and `window.contentViewController = deckContentViewController` in place of D2's `window.contentViewController = splitViewController`. After the toolbar is set:
 
 ```swift
         panelOverlay.onPointerEntered = { [weak self] in self?.panelPeek.pointerEnteredPanel() }
@@ -3460,7 +3479,7 @@ In `MainMenu.viewMenu()`, before Hide Preview: `menu.addItem(item("Unpin Slide P
 
 In `AppEnvironment`: `var panelState = SlidePanelState()`.
 
-In `DeckSessionController.deckMoved(to:)`, before `session.changeDeck(to: url)`, the state follows the deck: `if let old = previousDeckURL { AppEnvironment.shared.panelState.moveState(from: old, to: url) }`, where `previousDeckURL` is a private property the controller sets from `document.fileURL` in `init` and at the end of `deckMoved`. `testSplitLayout` covers the rename: after unpinning, `document.move(to:)` the deck to a new name in the same folder (a coordinated move, as D2's `DeletedDeckTests` does it), close, reopen the new name, and assert it is still unpinned.
+In `DeckSessionController.deckMoved(to:)`, before `session.changeDeck(to: url)`, the state follows the deck: `if let old = previousDeckURL { AppEnvironment.shared.panelState.moveState(from: old, to: url) }`, where `previousDeckURL` is a private property the controller sets from `document.fileURL` in `init` and at the end of `deckMoved`. `testSplitLayout` covers the rename: after unpinning, `document.move(to:)` the deck to a new name in the same folder (a coordinated move, as D2's `DeletedDeckTests` does it), close, reopen the new name, and assert it is still unpinned. The same test opens a second deck while the first is unpinned and asserts that it opens pinned, then and on reopen, which is what tells a per-deck key from one global key.
 
 - [ ] **Step 5: Run the tests one at a time**
 
@@ -3475,7 +3494,7 @@ Expected: all pass. If `sidebarItem.isCollapsed = true` animates and the frame a
 
 - [ ] **Step 6: Mutate and commit**
 
-Mutations, each reverted: in `setPanelPinned`, drop the `panelState.setPinned` call (expected: `testSplitLayout` fails on reopen); in `SlidePanelPeek.scheduleHide`'s closure, drop the `!self.overPanel` re-check (expected: `testPeekAtTheSlidePanel` fails, the overlay hides while the pointer is over the panel); in the show closure, drop the `overButton || overPanel` re-check (expected: it fails on "a pointer that only crossed the button"); drop the first-responder move in `onHide` (expected: it fails on its last assertion); use `.preferResizingSplitViewWithFixedSiblings` (expected: `testPinTheSlidePanel` fails on the window frame); add the overlay to the split view's view instead of the container (expected: the descendant assertion fails).
+Mutations, each reverted: in `setPanelPinned`, drop the `panelState.setPinned` call (expected: `testSplitLayout` fails on reopen); in `SlidePanelState`, store every deck under one fixed key (expected: `testSplitLayout` fails on "unpinning one deck leaves another pinned", while the rename assertions still pass); in `SlidePanelPeek.scheduleHide`'s closure, drop the `!self.overPanel` re-check (expected: `testPeekAtTheSlidePanel` fails, the overlay hides while the pointer is over the panel); in the show closure, drop the `overButton || overPanel` re-check (expected: it fails on "a pointer that only crossed the button"); drop the first-responder move in `onHide` (expected: it fails on its last assertion); use `.preferResizingSplitViewWithFixedSiblings` (expected: `testPinTheSlidePanel` fails on the window frame); add the overlay to the split view's view instead of the container (expected: the descendant assertion fails).
 
 ```bash
 git add desktop/Tap desktop/TapTests
@@ -3826,7 +3845,7 @@ git commit -m "feat(desktop): thumbnails in the panel from the cache and the hid
 - Consumes: `SlideEditing`, `SlideOperation`, `SlideEditResult` (Task 1), `SlideRangeTracker.adopt` (Task 3), `EditorTextView.replaceText(in:with:actionName:)`, `TextDiff.replacement(from:to:)`, `SourceSync.sendNow()`, D2's `undoOrRedoDidChangeText` (commit 6f8d3ca: undo and redo already refresh the edited flag and `sendNow` the text; this task builds on it and adds no second resend path), `SlideList.decodeResponse` (D2), the bundled tap's `slide list <deck> --json`.
 - Produces:
   - `EditorTextView.adoptBoxes(_ boxes: [SlideBox])`
-  - `DeckSessionController.lastAppliedText: String?` (the text tap last answered for and the editor applied), `func whenTextIsConfirmed(_ action: @escaping () -> Void)` (runs now when the editor's text is `lastAppliedText`, otherwise sends the text and runs after tap's answer), `func perform(_ operation: SlideOperation) -> Bool` (`@discardableResult`; true when applied or queued behind a confirmation), `func moveSelectedSlides(by offset: Int) -> Bool` (-1 up, +1 down), `func moveSelectedSlides(toTop: Bool) -> Bool`, `func markdown(forSlides numbers: [Int]) -> [String]`, `func insertSlides(markdowns: [String], beforeNumber: Int?) -> Bool`, `var pendingBoxAdoption: [SlideBox]?`
+  - `DeckSessionController.lastAppliedText: String?` (the text tap last answered for and the editor applied), `var confirmationTimeout: TimeInterval` (3 s; tests shorten it), `func whenTextIsConfirmed(_ action: @escaping () -> Void, abandoned: (() -> Void)? = nil)` (runs `action` now when the editor's text is `lastAppliedText`, otherwise sends the text and runs it after tap's answer, or runs `abandoned` when no answer comes within `confirmationTimeout`), `enum SlideOperationOutcome { case applied, queued, refused }` with `isAccepted`, `func perform(_ operation: SlideOperation, completion: ((SlideEditResult?) -> Void)? = nil) -> SlideOperationOutcome` (`@discardableResult`; the completion runs exactly once, with the result once the text has changed, or nil when the operation is refused or its confirmation is abandoned; `.queued` never means done, so work that depends on the new slides goes in the completion), `func moveSelectedSlides(by offset: Int) -> Bool` (-1 up, +1 down), `func moveSelectedSlides(toTop: Bool) -> Bool`, `func markdown(forSlides numbers: [Int]) -> [String]`, `func insertSlides(markdowns: [String], beforeNumber: Int?, completion:) -> SlideOperationOutcome`, `var pendingBoxAdoption: [SlideBox]?`
   - `TapSlideList.list(text:) async throws -> SlideList`, `TapSlideList.assertOneSeparatorBetweenSlides(_:list:file:line:)`, which counts `---` lines outside tap's slide ranges
   - The rule every operation follows: it runs only on boxes tap has confirmed (the editor's text equals `lastAppliedText`); `SlideEditing.apply` gives the text; `TextDiff` gives one replacement; `replaceText` applies it as one undo step; the boxes the operation built are adopted at once, which makes every answer to an earlier send stale (Task 3), and tap is sent the text right away; after an undo or redo the matching boxes are adopted before D2's resend goes out.
 
@@ -4004,7 +4023,7 @@ final class SlideOperationTests: HostedTestCase {
     func testDuplicateAndDelete() async throws {
         let (document, controller) = try await openOps()
         controller.editor.moveCursor(toSlide: 2)
-        XCTAssertTrue(controller.perform(.duplicate(numbers: [3])))
+        XCTAssertEqual(controller.perform(.duplicate(numbers: [3])), .applied)
         XCTAssertEqual(try await roundTrip(controller).slides.map(\.title), ["One", "Two", "Three", "Three", "Four", "Five", "Six", "Seven"])
         XCTAssertEqual(controller.slidePanel.selectedNumbers, [4], "the copy is selected")
         XCTAssertEqual(controller.editor.currentBoxIndex, 3)
@@ -4012,7 +4031,7 @@ final class SlideOperationTests: HostedTestCase {
 
         controller.slidePanel.select(numbers: [6, 7], scroll: false)
         XCTAssertEqual(controller.selectedSlideNumbers, [6, 7])
-        XCTAssertTrue(controller.perform(.delete(numbers: controller.selectedSlideNumbers)))
+        XCTAssertEqual(controller.perform(.delete(numbers: controller.selectedSlideNumbers)), .applied)
         XCTAssertEqual(try await roundTrip(controller).slides.map(\.title), ["One", "Two", "Three", "Three", "Four", "Seven"])
         XCTAssertEqual(document.undoManager?.undoActionName, "Delete 2 Slides")
         try await waitForConfirmation(controller)
@@ -4024,7 +4043,7 @@ final class SlideOperationTests: HostedTestCase {
 
     func testSkipASlide() async throws {
         let (document, controller) = try await openOps()
-        XCTAssertTrue(controller.perform(.setSkip(numbers: [4], skipped: true)))
+        XCTAssertEqual(controller.perform(.setSkip(numbers: [4], skipped: true)), .applied)
         let text = controller.editor.string as NSString
         XCTAssertTrue(text.substring(with: controller.editor.boxes[3].range).hasPrefix("<!--\nskip: true\n-->\n\n# Four"), "skip: true in slide 4's directive comment")
         let list = try await roundTrip(controller)
@@ -4035,7 +4054,7 @@ final class SlideOperationTests: HostedTestCase {
         XCTAssertTrue(controller.editor.header(forBoxAt: 3).badges.contains("skipped"), "the box is marked in the editor")
         XCTAssertEqual(controller.slidePanel.item(forSlide: 4)?.thumbnailImageView.alphaValue, 0.45, "and dimmed in the sidebar")
 
-        XCTAssertTrue(controller.perform(.setSkip(numbers: [4], skipped: false)))
+        XCTAssertEqual(controller.perform(.setSkip(numbers: [4], skipped: false)), .applied)
         XCTAssertFalse(try await roundTrip(controller).slides[3].skip)
         XCTAssertFalse(controller.editor.string.contains("skip:"))
         _ = document
@@ -4044,7 +4063,7 @@ final class SlideOperationTests: HostedTestCase {
     func testUndoRestoresBoxesAndResyncsTap() async throws {
         let (document, controller) = try await openOps()
         let original = controller.editor.string
-        XCTAssertTrue(controller.perform(.move(numbers: [5], beforeNumber: 3)))
+        XCTAssertEqual(controller.perform(.move(numbers: [5], beforeNumber: 3)), .applied)
         let moved = controller.editor.string
         try await waitForConfirmation(controller)
         XCTAssertEqual(controller.lastAppliedText, moved)
@@ -4076,7 +4095,7 @@ final class SlideOperationTests: HostedTestCase {
         // A send of the unchanged text goes out, and the move lands while it is in flight.
         Task { await controller.sourceSync.sendNow() }
         try await Task.sleep(nanoseconds: 5_000_000)
-        XCTAssertTrue(controller.perform(.move(numbers: [5], beforeNumber: 3)))
+        XCTAssertEqual(controller.perform(.move(numbers: [5], beforeNumber: 3)), .applied)
         try await waitForConfirmation(controller)
         try await Task.sleep(nanoseconds: 300_000_000)
         XCTAssertFalse(ordersSeen.isEmpty)
@@ -4113,7 +4132,7 @@ Add to `ThumbnailTests.swift` the test held back from Task 9:
         let controller = try XCTUnwrap(document.sessionController)
         try await waitForThumbnails(document, count: 7)
         let renders = controller.thumbnails.renderer.renderCount
-        XCTAssertTrue(controller.perform(.duplicate(numbers: [3])))
+        XCTAssertEqual(controller.perform(.duplicate(numbers: [3])), .applied)
         try await waitForBoxes(document, count: 8)
         try await waitForThumbnails(document, count: 8)
         XCTAssertEqual(controller.thumbnails.key(forSlide: 3), controller.thumbnails.key(forSlide: 4))
@@ -4147,10 +4166,27 @@ In `EditorTextView`, after `apply(_:sentText:sentGeneration:)`:
 
 - [ ] **Step 5: Write `SlideOperations.swift`**
 
-First, in `DeckSessionController` (D2's file): add `private(set) var lastAppliedText: String?` and `var pendingBoxAdoption: [SlideBox]?`, and in `applySlideList`, right after `guard editor.apply(list, sentText: sentText, sentGeneration: generation) else { return }`, add `lastAppliedText = sentText`.
+First, in `DeckSessionController` (D2's file): add `private(set) var lastAppliedText: String?`, `var pendingBoxAdoption: [SlideBox]?` and `var confirmationTimeout: TimeInterval = 3` (how long a queued operation waits for tap's answer; tests shorten it), and in `applySlideList`, right after `guard editor.apply(list, sentText: sentText, sentGeneration: generation) else { return }`, add `lastAppliedText = sentText`.
 
 ```swift
 import AppKit
+
+/// What `perform` did with an operation at the moment it was called.
+/// Only `.applied` means the text has changed; a caller that acts on the
+/// new slides (selects them, deletes their originals elsewhere, records a
+/// layout) does so in the completion, never on `.queued`.
+enum SlideOperationOutcome: Equatable {
+    /// Applied now. The completion has already run with the result.
+    case applied
+    /// Waiting for tap to confirm typed text. The completion runs once:
+    /// with the result when the operation lands, or with nil when it is
+    /// refused then or abandoned (no answer within `confirmationTimeout`).
+    case queued
+    /// Refused now. The completion has already run with nil.
+    case refused
+
+    var isAccepted: Bool { self != .refused }
+}
 
 /// Every structural edit on the deck's slides. Each one is one undo step
 /// on the buffer, cut along the ranges tap reported: the operation runs
@@ -4163,45 +4199,62 @@ extension DeckSessionController {
     /// for. Boxes shifted by typing tap has not parsed yet are not tap's
     /// ranges: a "---" typed a moment ago still sits inside the box above
     /// it. If the text is not confirmed, it is sent now and `action` runs
-    /// after the answer; if no answer comes in time, nothing happens but a beep.
-    func whenTextIsConfirmed(_ action: @escaping () -> Void) {
+    /// after the answer. If no answer comes within `confirmationTimeout`
+    /// (tap restarting, say), `action` never runs: there is a beep and
+    /// `abandoned` runs instead, so a caller waiting on the action learns
+    /// that it will not happen.
+    func whenTextIsConfirmed(_ action: @escaping () -> Void, abandoned: (() -> Void)? = nil) {
         if editor.string == lastAppliedText {
             action()
             return
         }
         Task { @MainActor [weak self] in
-            guard let self else { return }
+            guard let self else {
+                abandoned?()
+                return
+            }
             await self.sourceSync.sendNow()
-            let deadline = Date().addingTimeInterval(3)
+            let deadline = Date().addingTimeInterval(self.confirmationTimeout)
             while self.editor.string != self.lastAppliedText, Date() < deadline {
                 try? await Task.sleep(nanoseconds: 20_000_000)
             }
             guard self.editor.string == self.lastAppliedText else {
                 NSSound.beep()
+                abandoned?()
                 return
             }
             action()
         }
     }
 
+    /// Applies `operation` now when tap has confirmed the text, or queues it
+    /// behind the confirmation. `completion` runs exactly once, with the
+    /// result when the text has changed and nil when it has not and will
+    /// not. Anything that must follow the edit belongs in `completion`.
     @discardableResult
-    func perform(_ operation: SlideOperation) -> Bool {
+    func perform(_ operation: SlideOperation, completion: ((SlideEditResult?) -> Void)? = nil) -> SlideOperationOutcome {
         guard editor.string == lastAppliedText else {
-            whenTextIsConfirmed { [weak self] in self?.performNow(operation) }
-            return true
+            whenTextIsConfirmed({ [weak self] in
+                completion?(self?.performNow(operation))
+            }, abandoned: {
+                completion?(nil)
+            })
+            return .queued
         }
-        return performNow(operation)
+        let result = performNow(operation)
+        completion?(result)
+        return result == nil ? .refused : .applied
     }
 
     @discardableResult
-    private func performNow(_ operation: SlideOperation) -> Bool {
+    private func performNow(_ operation: SlideOperation) -> SlideEditResult? {
         let text = editor.string
         let boxes = editor.boxes
         guard let result = SlideEditing.apply(operation, to: text, boxes: boxes, caretOffsetInSlide: caretOffset(for: operation)) else {
             NSSound.beep()
-            return false
+            return nil
         }
-        guard let replacement = TextDiff.replacement(from: text, to: result.text), let undoManager = document?.undoManager else { return false }
+        guard let replacement = TextDiff.replacement(from: text, to: result.text), let undoManager = document?.undoManager else { return nil }
         // One group holds the box adoption and the text change. AppKit's
         // event group would hold both on its own; the explicit group makes
         // that a property of this code rather than of the run loop.
@@ -4212,10 +4265,10 @@ extension DeckSessionController {
         // The cursor's own selection sync would collapse a multi-slide
         // selection to the caret's slide; the panel selects the operated
         // slides itself, last.
-        isSelectingFromPanel = true
-        editor.adoptBoxes(result.boxes)
-        editor.setSelectedRange(NSRange(location: result.caret, length: 0))
-        isSelectingFromPanel = false
+        withPanelDrivingTheCursor {
+            editor.adoptBoxes(result.boxes)
+            editor.setSelectedRange(NSRange(location: result.caret, length: 0))
+        }
         slidePanel.remapImages(sourceNumbers: result.sourceNumbers)
         slidePanel.setSlides(editor.boxes.map(\.slide))
         slidePanel.select(numbers: result.selectedNumbers, scroll: true)
@@ -4223,7 +4276,7 @@ extension DeckSessionController {
             editor.scrollRangeToVisible(editor.boxes[first - 1].range)
         }
         Task { await sourceSync.sendNow() }
-        return true
+        return result
     }
 
     /// The caret's offset inside the first slide the operation acts on,
@@ -4278,10 +4331,10 @@ extension DeckSessionController {
         let count = editor.boxes.count
         if offset < 0 {
             guard first > 1 else { return false }
-            return performNow(.move(numbers: numbers, beforeNumber: first - 1))
+            return performNow(.move(numbers: numbers, beforeNumber: first - 1)) != nil
         }
         guard last < count else { return false }
-        return performNow(.move(numbers: numbers, beforeNumber: last + 2 <= count ? last + 2 : nil))
+        return performNow(.move(numbers: numbers, beforeNumber: last + 2 <= count ? last + 2 : nil)) != nil
     }
 
     @discardableResult
@@ -4292,7 +4345,7 @@ extension DeckSessionController {
         }
         let numbers = selectedSlideNumbers
         guard !numbers.isEmpty else { return false }
-        return performNow(.move(numbers: numbers, beforeNumber: toTop ? 1 : nil))
+        return performNow(.move(numbers: numbers, beforeNumber: toTop ? 1 : nil)) != nil
     }
 
     /// The text of each slide, from tap's ranges.
@@ -4304,8 +4357,8 @@ extension DeckSessionController {
     }
 
     @discardableResult
-    func insertSlides(markdowns: [String], beforeNumber: Int?) -> Bool {
-        perform(.insert(markdowns: markdowns, beforeNumber: beforeNumber))
+    func insertSlides(markdowns: [String], beforeNumber: Int?, completion: ((SlideEditResult?) -> Void)? = nil) -> SlideOperationOutcome {
+        perform(.insert(markdowns: markdowns, beforeNumber: beforeNumber), completion: completion)
     }
 }
 ```
@@ -4347,7 +4400,7 @@ Expected: all pass. If `testUndoRestoresBoxesAndResyncsTap` shows the text rever
 
 - [ ] **Step 8: Mutate and commit**
 
-Mutations, each reverted: in `undoOrRedoDidChangeText`, make D2's `sendNow` run only on undo (add a flag set by the undo observer) (expected: `testUndoRestoresBoxesAndResyncsTap` times out after redo waiting for `lastAppliedText == moved`); run it only on redo (expected: it times out after undo); remove the `adoptPendingBoxes` call (expected: the same test fails on the boxes right after undo); in `SlideRangeTracker.adopt`, keep the edit log and the old `earliestLiveGeneration` (expected: `testAStaleAnswerNeverDisturbsAnOperation` records an order with a title twice); make `perform` skip the confirmation and call `performNow` at once (expected: `testAnOperationWaitsForTapToConfirmTypedText` fails, slide 7 and the typed slide move together); drop the `isSelectingFromPanel` guard around the caret move (expected: the next task's `testMoveSeveralSlides` fails on `[3, 4]`); in `SlideEditing.apply`'s `.setSkip` branch, pass `"false"` instead of nil for unskip (expected: `testSkipASlide` fails on `contains("skip:")`).
+Mutations, each reverted: in `undoOrRedoDidChangeText`, make D2's `sendNow` run only on undo (add a flag set by the undo observer) (expected: `testUndoRestoresBoxesAndResyncsTap` times out after redo waiting for `lastAppliedText == moved`); run it only on redo (expected: it times out after undo); remove the `adoptPendingBoxes` call (expected: the same test fails on the boxes right after undo); in `SlideRangeTracker.adopt`, keep the edit log and the old `earliestLiveGeneration` (expected: `testAStaleAnswerNeverDisturbsAnOperation` records an order with a title twice); make `perform` skip the confirmation and call `performNow` at once (expected: `testAnOperationWaitsForTapToConfirmTypedText` fails, slide 7 and the typed slide move together); drop the `withPanelDrivingTheCursor` wrapper around the caret move (expected: the next task's `testMoveSeveralSlides` fails on `[3, 4]`); in `SlideEditing.apply`'s `.setSkip` branch, pass `"false"` instead of nil for unskip (expected: `testSkipASlide` fails on `contains("skip:")`).
 
 ```bash
 git add desktop/Tap desktop/TapTests
@@ -4368,9 +4421,9 @@ git commit -m "feat(desktop): move, duplicate, delete and skip slides as single 
 - Produces:
   - `SlidePanelDelegate` gains `func slidePanel(_:payloadForSlides:) -> SlideDragPayload?` and `func slidePanel(_:acceptDrop:beforeNumber:isMove:) -> Bool`
   - `SlidePanelViewController.dropDecision(proposedIndex: Int, payload: SlideDragPayload, deck: URL?, optionHeld: Bool) -> (beforeNumber: Int?, operation: NSDragOperation)` (pure, tested), `func performDrop(payload:beforeNumber:isMove:) -> Bool`, `var optionHeld: () -> Bool` (reads `NSEvent.modifierFlags`; a test replaces it)
-  - `DeckSessionController.dragPayload(forSlides:) -> SlideDragPayload?`, `func dropSlides(payload:beforeNumber:isMove:) -> Bool`, `static func document(forDeckPath:) -> DeckDocument?`
+  - `DeckSessionController.dragPayload(forSlides:) -> SlideDragPayload?`, `func dropSlides(payload:beforeNumber:isMove:) -> Bool` (true when the drop is taken; the source's delete runs in the insert's completion, never before the insert lands), `func removeMovedSlides(_:)`, `static func document(forDeckPath:) -> DeckDocument?`
   - `FakeDraggingInfo: NSObject, NSDraggingInfo` (test support): a real pasteboard, a location, a source and a window, so the real `validateDrop`, `acceptDrop`, `draggingUpdated` and `performDragOperation` run in hosted tests.
-  - The pasteboard type `io.geocod.tap.slides`; the drag image is the first slide's thumbnail with a count badge when more than one slide moves; a drop into another deck moves the slides (the source deletes them as its own undo step), or copies them when Option is held.
+  - The pasteboard type `io.geocod.tap.slides`; the drag image is the first slide's thumbnail with a count badge when more than one slide moves; a drop into another deck moves the slides (the source deletes them as its own undo step, once the target's insert has landed), or copies them when Option is held.
 
 - [ ] **Step 1: Write the fake dragging info**
 
@@ -4554,6 +4607,57 @@ final class DragAndDropTests: HostedTestCase {
         XCTAssertEqual(try await roundTrip(targetController), ["One", "App Mode Fixture", "Live Code", "Fragments", "Counter", "Five", "Six"])
         XCTAssertEqual(try await roundTrip(sourceController).count, 7, "a copy leaves the source alone")
     }
+
+    /// A move into a deck whose typing tap has not confirmed queues the
+    /// insert there. The source keeps its slides until the insert lands,
+    /// and keeps them for good when the insert is abandoned (no answer
+    /// from tap in time, as while it restarts): otherwise the slides would
+    /// survive only in the source's undo stack.
+    func testAMoveWaitsForTheTargetsInsert() async throws {
+        let (_, sourceController) = try await openOps()
+        let target = try await openDeck(try Fixtures.copyAppFixture())
+        try await waitForBoxes(target, count: 4)
+        let targetController = try XCTUnwrap(target.sessionController)
+        try await waitUntil(timeout: 5, "the target's answer") { targetController.lastAppliedText == targetController.editor.string }
+        let targetWindow = target.windowControllers.first?.window
+        func typeInTarget(_ text: String) {
+            let end = (targetController.editor.string as NSString).length
+            targetController.editor.setSelectedRange(NSRange(location: end, length: 0))
+            targetController.editor.insertText(text, replacementRange: NSRange(location: NSNotFound, length: 0))
+            XCTAssertNotEqual(targetController.editor.string, targetController.lastAppliedText, "tap has not answered for the typing yet")
+        }
+
+        // The insert lands: only then does the source give the slides up.
+        typeInTarget("\n\nMore.")
+        let sourceText = sourceController.editor.string
+        let pasteboard = try dragPasteboard(from: sourceController.slidePanel, numbers: [5, 6])
+        let (operation, accepted) = drop(pasteboard, into: targetController.slidePanel, beforeIndex: 4, source: sourceController.slidePanel.collectionView, window: targetWindow)
+        XCTAssertEqual(operation, .move)
+        XCTAssertTrue(accepted, "the drop is taken, queued behind the target's confirmation")
+        XCTAssertEqual(sourceController.editor.string, sourceText, "the source keeps its slides while the target's insert waits")
+        try await waitUntil(timeout: 10, "the target's insert to land") { targetController.editor.boxes.count == 6 }
+        try await waitUntil(timeout: 10, "the source's delete") { sourceController.editor.boxes.count == 5 }
+        XCTAssertEqual(try await roundTrip(targetController), ["App Mode Fixture", "Live Code", "Fragments", "Counter", "Five", "Six"])
+        XCTAssertEqual(try await roundTrip(sourceController), ["One", "Two", "Three", "Four", "Seven"])
+        try await waitUntil(timeout: 10, "both answers") {
+            targetController.lastAppliedText == targetController.editor.string && sourceController.lastAppliedText == sourceController.editor.string
+        }
+
+        // The insert is abandoned: tap stops answering for the target.
+        targetController.sourceSync.sender = nil
+        targetController.confirmationTimeout = 0.3
+        typeInTarget("\n\nMore again.")
+        let sourceBefore = sourceController.editor.string
+        let targetBefore = targetController.editor.string
+        let again = try dragPasteboard(from: sourceController.slidePanel, numbers: [1])
+        let (_, acceptedAgain) = drop(again, into: targetController.slidePanel, beforeIndex: 0, source: sourceController.slidePanel.collectionView, window: targetWindow)
+        XCTAssertTrue(acceptedAgain)
+        XCTAssertEqual(sourceController.editor.string, sourceBefore, "nothing leaves the source while the insert waits")
+        try await Task.sleep(nanoseconds: 1_000_000_000)
+        XCTAssertEqual(targetController.editor.string, targetBefore, "the target's insert was abandoned")
+        XCTAssertEqual(sourceController.editor.string, sourceBefore, "an abandoned insert deletes nothing from the source")
+        XCTAssertEqual(try await roundTrip(sourceController), ["One", "Two", "Three", "Four", "Seven"])
+    }
 }
 ```
 
@@ -4699,17 +4803,37 @@ extension DeckSessionController {
 
     /// A drop of slides: a move within this deck; from another deck, an
     /// insert here and, unless the drop is a copy, a delete there. Each
-    /// deck registers its own undo step (decision 2).
+    /// deck registers its own undo step (decision 2). The source gives the
+    /// slides up only in the insert's completion, once they are in this
+    /// deck's text: an insert that waits for tap's confirmation and is then
+    /// abandoned (no answer while tap restarts) leaves the source as it was,
+    /// so the slides are never only in an undo stack. The return value says
+    /// whether the drop was taken, applied or queued.
     @discardableResult
     func dropSlides(payload: SlideDragPayload, beforeNumber: Int?, isMove: Bool) -> Bool {
         if let deck = document?.fileURL, payload.comesFrom(deck: deck) {
-            return perform(.move(numbers: payload.slideNumbers, beforeNumber: beforeNumber))
+            return perform(.move(numbers: payload.slideNumbers, beforeNumber: beforeNumber)).isAccepted
         }
-        guard perform(.insert(markdowns: payload.markdowns, beforeNumber: beforeNumber)) else { return false }
-        if isMove, let source = Self.document(forDeckPath: payload.deckPath)?.sessionController, source !== self {
-            source.perform(.delete(numbers: payload.slideNumbers))
+        let source = isMove ? Self.document(forDeckPath: payload.deckPath)?.sessionController : nil
+        return perform(.insert(markdowns: payload.markdowns, beforeNumber: beforeNumber)) { [weak self, weak source] result in
+            guard result != nil, let source, source !== self else { return }
+            source.removeMovedSlides(payload)
+        }.isAccepted
+    }
+
+    /// Deletes the slides a drop moved out of this deck, once this deck's
+    /// own text is confirmed, and only while those slides still hold the
+    /// text that was dragged. Slides edited or shifted in the meantime stay,
+    /// with a beep: at worst a move becomes a copy, never a loss.
+    func removeMovedSlides(_ payload: SlideDragPayload) {
+        whenTextIsConfirmed { [weak self] in
+            guard let self else { return }
+            guard self.markdown(forSlides: payload.slideNumbers) == payload.markdowns else {
+                NSSound.beep()
+                return
+            }
+            self.performNow(.delete(numbers: payload.slideNumbers))
         }
-        return true
     }
 
     static func document(forDeckPath path: String) -> DeckDocument? {
@@ -4741,13 +4865,14 @@ make -C desktop test ONLY=TapTests/DragAndDropTests/testMoveOneSlideByDraggingIn
 make -C desktop test ONLY=TapTests/DragAndDropTests/testMoveSeveralSlides
 make -C desktop test ONLY=TapTests/DragAndDropTests/testFrontmatterNeverMoves
 make -C desktop test ONLY=TapTests/DragAndDropTests/testDragSlidesToAnotherDeck
+make -C desktop test ONLY=TapTests/DragAndDropTests/testAMoveWaitsForTheTargetsInsert
 ```
 
 Expected: all pass. `testDragSlidesToAnotherDeck` opens two decks in one window as tabs; `openDeck` orders each front, which is fine.
 
 - [ ] **Step 7: Mutate and commit**
 
-Mutations, each reverted: in `dropDecision`, return `.move` for a drop inside the block (expected: the first test fails on `[]`); return `.copy` by default for another deck (expected: `testDragSlidesToAnotherDeck` fails on `.move` and on the source's titles); in `dropSlides`, skip the source delete (expected: the same test fails on the source's titles); make `pasteboardWriterForItemAt` return nil (expected: every test fails in `dragPasteboard`); make `acceptDrop` return false without performing (expected: every test fails on `accepted`).
+Mutations, each reverted: in `dropDecision`, return `.move` for a drop inside the block (expected: the first test fails on `[]`); return `.copy` by default for another deck (expected: `testDragSlidesToAnotherDeck` fails on `.move` and on the source's titles); in `dropSlides`, skip the source delete (expected: the same test fails on the source's titles); in `dropSlides`, call `source.removeMovedSlides(payload)` right after `perform` returns `.queued` instead of in the completion (expected: `testAMoveWaitsForTheTargetsInsert` fails on "the source keeps its slides while the target's insert waits", and again after the abandoned insert); make `pasteboardWriterForItemAt` return nil (expected: every test fails in `dragPasteboard`); make `acceptDrop` return false without performing (expected: every test fails on `accepted`).
 
 ```bash
 git add desktop/Tap desktop/TapTests
@@ -5238,7 +5363,7 @@ git commit -m "feat(desktop): drag a box header in the editor to move its slide"
   - `final class NewSlideButton: NSButton` with `var onClick`, `var onHold`, `var holdDelay`; its `target` and `action` are the window controller's `newSlide(_:)`, so VoiceOver and Full Keyboard Access reach it
   - `final class LayoutGalleryController` with `private(set) var templates`, `let footerLabel: NSTextField`, `var onPick: ((String) -> Void)?`, `func show(templates:relativeTo:of:afterSlide:)`, `func pick(_ name: String)`, `private(set) var isShown: Bool` (the controller's own state, not the popover's), `func close()`
   - `DeckWindowController`: `static let newSlideItemIdentifier`, `let newSlideButton: NewSlideButton`, `private(set) var layoutGallery: LayoutGalleryController`, `@objc func newSlide(_:)`, `@objc func newSlideFromLayout(_:)` (the menu item's `representedObject` is the layout name), `@objc func showLayoutGallery(_:)`, `func insertSlide(layout: String, after number: Int?)`
-  - `DeckSessionController.insertNewSlide(markdown: String, after number: Int?) -> Bool`: inserts, then selects the first slot.
+  - `DeckSessionController.insertNewSlide(markdown: String, after number: Int?, completion: ((Bool) -> Void)? = nil) -> SlideOperationOutcome`: inserts, then, once the insert has landed, selects the first slot and calls `completion(true)`; a refused or abandoned insert selects nothing and calls `completion(false)`. `insertSlide(layout:after:)` records the last layout only in that completion.
   - `TapTemplate.print(layout:) async throws -> String` (test support: runs the bundled `tap slide add --layout <x> --print`)
   - Entry points: a click on the toolbar button inserts the last layout; holding it opens the gallery; Slide > New Slide inserts the last layout (the mockup's Option+Command+N) and Slide > New Slide from Layout > Show Layout Gallery opens the gallery. Feature 03 says "choose Slide > New Slide" opens the gallery, which the mockup contradicts: open question 4.
 
@@ -5362,6 +5487,34 @@ final class NewSlideTests: HostedTestCase {
         XCTAssertEqual(controller.editor.boxes.count, 9)
         XCTAssertEqual((controller.editor.string as NSString).substring(with: controller.editor.boxes[4].range), template.trimmingCharacters(in: .whitespacesAndNewlines),
                        "New Slide now inserts big-stat")
+    }
+
+    /// A New Slide queued behind typing tap has not confirmed selects
+    /// nothing and records nothing until its slide exists, and an insert
+    /// that is abandoned (no answer from tap in time) never becomes the
+    /// last layout.
+    func testAnAbandonedNewSlideRecordsNoLastLayout() async throws {
+        let (_, controller, windowController) = try await openOps()
+        XCTAssertNotNil(AppEnvironment.shared.layoutCatalog.template(named: "quote"), "the catalog is loaded, so a refusal cannot pass this test for the wrong reason")
+        AppEnvironment.shared.lastLayout.name = "two-column"
+        controller.sourceSync.sender = nil
+        controller.confirmationTimeout = 0.3
+        controller.editor.moveCursor(toSlide: 2)
+        controller.editor.insertText(" typed", replacementRange: NSRange(location: NSNotFound, length: 0))
+        XCTAssertNotEqual(controller.editor.string, controller.lastAppliedText, "tap has not answered for the typing")
+        let typed = controller.editor.string
+        let selection = controller.editor.selectedRange()
+
+        let item = NSMenuItem(title: "Quote", action: #selector(DeckWindowController.newSlideFromLayout(_:)), keyEquivalent: "")
+        item.representedObject = "quote"
+        windowController.newSlideFromLayout(item)
+        XCTAssertEqual(AppEnvironment.shared.lastLayout.name, "two-column", "no quote slide exists yet")
+        XCTAssertEqual(controller.editor.selectedRange(), selection, "no slot is selected in boxes the insert has not reached")
+
+        try await Task.sleep(nanoseconds: 1_000_000_000)
+        XCTAssertEqual(controller.editor.string, typed, "the insert was abandoned")
+        XCTAssertEqual(AppEnvironment.shared.lastLayout.name, "two-column", "an abandoned insert records no last layout")
+        XCTAssertEqual(controller.editor.selectedRange(), selection)
     }
 }
 ```
@@ -5749,8 +5902,11 @@ Actions:
             NSSound.beep()
             return
         }
-        if sessionController.insertNewSlide(markdown: template.markdown, after: number) {
-            AppEnvironment.shared.lastLayout.name = layout
+        // The layout becomes the last one only once its slide exists: an
+        // insert queued behind tap's confirmation and then abandoned leaves
+        // the last layout as it was.
+        sessionController.insertNewSlide(markdown: template.markdown, after: number) { inserted in
+            if inserted { AppEnvironment.shared.lastLayout.name = layout }
         }
     }
 ```
@@ -5760,18 +5916,28 @@ In `SlideOperations.swift`:
 ```swift
     /// Inserts one slide after `number` (nil or the last slide: at the
     /// end) and selects its first slot, so typing replaces the placeholder.
+    /// The selection and the focus wait for the insert to land: before
+    /// then, slide `newNumber` is still an old slide. `completion` gets
+    /// true once the slide exists, false when the insert is refused or
+    /// abandoned.
     @discardableResult
-    func insertNewSlide(markdown: String, after number: Int?) -> Bool {
+    func insertNewSlide(markdown: String, after number: Int?, completion: ((Bool) -> Void)? = nil) -> SlideOperationOutcome {
         let count = editor.boxes.count
         let beforeNumber = number.flatMap { $0 + 1 <= count ? $0 + 1 : nil }
-        guard perform(.insert(markdowns: [markdown], beforeNumber: beforeNumber)) else { return false }
-        let newNumber = beforeNumber ?? editor.boxes.count
-        guard editor.boxes.indices.contains(newNumber - 1) else { return true }
-        let box = editor.boxes[newNumber - 1]
-        let slot = SlideEditing.firstSlotRange(inSlideText: (editor.string as NSString).substring(with: box.range))
-        editor.setSelectedRange(NSRange(location: box.range.location + slot.location, length: slot.length))
-        editor.window?.makeFirstResponder(editor)
-        return true
+        return perform(.insert(markdowns: [markdown], beforeNumber: beforeNumber)) { [weak self] result in
+            guard let self, result != nil else {
+                completion?(false)
+                return
+            }
+            let newNumber = beforeNumber ?? self.editor.boxes.count
+            if self.editor.boxes.indices.contains(newNumber - 1) {
+                let box = self.editor.boxes[newNumber - 1]
+                let slot = SlideEditing.firstSlotRange(inSlideText: (self.editor.string as NSString).substring(with: box.range))
+                self.editor.setSelectedRange(NSRange(location: box.range.location + slot.location, length: slot.length))
+                self.editor.window?.makeFirstResponder(self.editor)
+            }
+            completion?(true)
+        }
     }
 ```
 
@@ -5780,13 +5946,14 @@ In `SlideOperations.swift`:
 ```bash
 make -C desktop test ONLY=TapTests/NewSlideTests/testInsertASlideWithTheLastLayout
 make -C desktop test ONLY=TapTests/NewSlideTests/testPickALayoutFromTheGallery
+make -C desktop test ONLY=TapTests/NewSlideTests/testAnAbandonedNewSlideRecordsNoLastLayout
 ```
 
 Expected: green. The gallery's popover shows over the deck window without activating the app; `popover.show` inside a non-active app is allowed and does not steal focus from another app. If a synthesized `mouseDown` on the toolbar button cannot find the button in a window on the CI runner, the toolbar has not laid out yet: call `window.toolbar?.validateVisibleItems()` and `window.layoutIfNeeded()` in `pressNewSlideButton` before reading `button.window`.
 
 - [ ] **Step 6: Mutate and commit**
 
-Mutations, each reverted: in `insertSlide`, drop the `lastLayout.name = layout` line (expected: `testPickALayoutFromTheGallery` fails on the last layout); in `insertNewSlide`, skip the `setSelectedRange` (expected: `testInsertASlideWithTheLastLayout` fails on "Left content"); remove `onClick?()` from `NewSlideButton.mouseUp` (expected: `testInsertASlideWithTheLastLayout` fails on the box count); remove the hold timer (expected: `testPickALayoutFromTheGallery` fails on `isShown`); in `newSlideFromLayout`, ignore the `representedObject` and insert the last layout (expected: the quote assertion fails).
+Mutations, each reverted: in `insertSlide`, drop the `lastLayout.name = layout` line (expected: `testPickALayoutFromTheGallery` fails on the last layout); in `insertSlide`, record the layout when `insertNewSlide` returns `.queued` rather than in its completion (expected: `testAnAbandonedNewSlideRecordsNoLastLayout` fails on "no quote slide exists yet"); in `whenTextIsConfirmed`, run `action` after the deadline even when tap has not answered (expected: the same test fails on "the insert was abandoned" and on the last layout); in `insertNewSlide`, select the slot right after `perform` returns rather than in the completion (expected: the same test fails on "no slot is selected"); in `insertNewSlide`, skip the `setSelectedRange` (expected: `testInsertASlideWithTheLastLayout` fails on "Left content"); remove `onClick?()` from `NewSlideButton.mouseUp` (expected: `testInsertASlideWithTheLastLayout` fails on the box count); remove the hold timer (expected: `testPickALayoutFromTheGallery` fails on `isShown`); in `newSlideFromLayout`, ignore the `representedObject` and insert the last layout (expected: the quote assertion fails).
 
 ```bash
 git add desktop/Tap desktop/TapTests
@@ -6282,10 +6449,10 @@ In `SlideOperations.swift`:
     func pasteSlides(from pasteboard: NSPasteboard, after number: Int?) -> Bool {
         let beforeNumber = number.flatMap { $0 + 1 <= editor.boxes.count ? $0 + 1 : nil }
         if let data = pasteboard.data(forType: NSPasteboard.PasteboardType(SlideDragPayload.pasteboardType)), let payload = SlideDragPayload(data: data) {
-            return perform(.insert(markdowns: payload.markdowns, beforeNumber: beforeNumber))
+            return perform(.insert(markdowns: payload.markdowns, beforeNumber: beforeNumber)).isAccepted
         }
         if let text = pasteboard.string(forType: .string), !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            return perform(.insert(markdowns: [text], beforeNumber: beforeNumber))
+            return perform(.insert(markdowns: [text], beforeNumber: beforeNumber)).isAccepted
         }
         return false
     }
@@ -6641,7 +6808,7 @@ The person's four decisions (2026-09-24) are settled and implemented: 1, focus s
 10. **Where the hidden web view lives.** The spec and the prototype put it behind the preview pane. D2 made the preview hideable and detachable, both of which hide or move that pane. Ruling: behind the editor's opaque scroll view, which is always in the deck window. Cost if wrong: if WebKit treats a view under an opaque sibling differently from the prototype's arrangement, `testRendersPaintedThumbnailsThroughTheReadySignal` fails on the first run and the host moves to the inspector's root view with an opaque cover, as the prototype did.
 11. **The print page and the session cookie.** `audienceRoutes` in `internal/server/app_auth.go` lists `/`, `/api/presentation`, `/assets/`, `/components/` and `/ws` as reachable with no token. Ruling: the renderer loads `?print=true` with no cookie and no launch code. Cost if wrong: if a later tap change gates `/api/presentation` in app mode, thumbnails stop loading and the renderer test fails at once; the fix is a non-persistent data store with the cookie set from the token (its value is the token, `AppSessionCookieName(port)`).
 12. **A blank slide and the flat-image check.** A capture of one flat colour is what an unpainted page gives, but a `blank` or `cover` slide with only a background really is one colour. Ruling: a flat capture is retried with a back-off; after three flat captures in a row, each following a paint-proven ready for that slide and revision, the slide is accepted as blank and cached. The check reads every pixel of a 64 by 36 downsample, so a thin stroke anywhere counts. Cost if wrong: a slide that painted late three times in a row is cached blank until its text changes; the "updating" mark never shows for it.
-13. **Operations on unconfirmed text.** The spec says every range comes from tap's last answer, and typing shifts the boxes locally until it does. Ruling: an operation on text tap has not answered for waits for that answer (the text is sent at once), then runs on tap's ranges; after three seconds with no answer it beeps and does nothing. Cost if wrong: a keyboard move pressed within about 100 ms of a keystroke lands a moment later rather than at once.
+13. **Operations on unconfirmed text.** The spec says every range comes from tap's last answer, and typing shifts the boxes locally until it does. Ruling: an operation on text tap has not answered for waits for that answer (the text is sent at once), then runs on tap's ranges; after three seconds with no answer it beeps and does nothing. `perform` reports that as `.queued` with a completion, never as done, so work that depends on the edit waits for it: a move between decks deletes from the source only once the target's insert has landed, and New Slide selects its slot and records the layout only once the slide exists. Cost if wrong: a keyboard move pressed within about 100 ms of a keystroke lands a moment later rather than at once.
 14. **A stale answer after an operation.** An answer to a send begun before the operation would be replayed with the operation's whole-region edit and collapse the boxes. Ruling: adopting boxes refuses every earlier send, as `reset` does; the operation's own send is the next answer applied. Cost if wrong: none beyond one extra PUT when an operation lands during a typing pause's send.
 15. **Undo and redo of an operation.** D2 (6f8d3ca) resends the buffer after every undo and redo. Ruling: the operation's undo closure only notes which boxes belong to the reverted text; D2's `undoOrRedoDidChangeText` adopts them before its send, so there is one resend path and its answer is the one applied. Cost if wrong: the boxes are shifted for one round trip after Cmd+Z.
 16. **The explicit undo group around an operation.** Removing `beginUndoGrouping` and `endUndoGrouping` leaves every test green, because AppKit's event group already holds the box registration and the text change. The group stays as a written property of the code, not a tested one; a review should not count that mutation.
