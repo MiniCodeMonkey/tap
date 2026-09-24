@@ -11,6 +11,7 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
     let inspectorViewController = InspectorViewController()
     let previewViewController = PreviewViewController()
     let slidePanel = SlidePanelViewController()
+    private(set) lazy var thumbnails = ThumbnailController(cache: AppEnvironment.shared.thumbnailCache, panel: slidePanel)
     /// True while a panel click moves the cursor, so the cursor's own
     /// selection sync does not collapse a Shift-click's range.
     private var isSelectingFromPanel = false
@@ -142,6 +143,16 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
         session.onStateChange = { [weak self] state in self?.sessionStateChanged(state) }
         editor.editorDelegate = self
         slidePanel.delegate = self
+        editorViewController.hostHiddenView(thumbnails.renderer.webView)
+        thumbnails.currentSlideNumber = { [weak self] in self?.currentSlideNumber }
+        thumbnails.renderer.isPaused = { [weak self] in
+            guard let last = self?.sourceSync.lastEditDate else { return false }
+            return Date().timeIntervalSince(last) < 0.5
+        }
+        thumbnails.renderer.canPaint = { [weak self] in
+            guard let webView = self?.thumbnails.renderer.webView, let window = webView.window else { return false }
+            return !webView.isHiddenOrHasHiddenAncestor && window.occlusionState.contains(.visible)
+        }
         inspectorViewController.embed(previewViewController)
         previewViewController.onStepBackward = { [weak self] in self?.sendPreviewMessage(self?.navigator.stepBackward()) }
         previewViewController.onStepForward = { [weak self] in self?.sendPreviewMessage(self?.navigator.stepForward()) }
@@ -639,6 +650,7 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
         // so none of what follows runs on it.
         guard editor.apply(list, sentText: sentText, sentGeneration: generation) else { return }
         slidePanel.setSlides(editor.boxes.map(\.slide))
+        thumbnails.deckChanged()
         if let first = list.errors.first {
             if editorViewController.bar(.deckErrors)?.message != "The deck settings have a problem: \(first)" {
                 editorViewController.showBar(DocumentBarView(kind: .deckErrors, message: "The deck settings have a problem: \(first)",
@@ -671,12 +683,14 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
         guard case .running(let ready) = state else {
             client = nil
             sourceSync.sender = nil
+            thumbnails.client = nil
             return
         }
         let newClient = TapClient(ready: ready)
         client = newClient
         sourceSync.sender = { source in try await newClient.putSource(source) }
         previewViewController.load(client: newClient)
+        thumbnails.client = newClient
         // The presenter secret comes first: a socket opened without the
         // cookie it buys is relayed to nobody, so the preview would never
         // move. A refusal is logged and the socket is opened anyway, because

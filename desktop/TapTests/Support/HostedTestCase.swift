@@ -13,6 +13,7 @@ class HostedTestCase: XCTestCase {
         AppEnvironment.shared.extraEnvironment["XDG_CONFIG_HOME"] = configHome.path
         AppEnvironment.shared.recentThumbnailStore = RecentThumbnailStore(directory: try Fixtures.temporaryFolder())
         AppEnvironment.shared.panelState = SlidePanelState(defaults: try XCTUnwrap(UserDefaults(suiteName: "TapTests.\(UUID().uuidString)")))
+        AppEnvironment.shared.thumbnailCache = ThumbnailCache(directory: try Fixtures.temporaryFolder())
     }
 
     override func tearDown() async throws {

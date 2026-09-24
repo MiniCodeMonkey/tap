@@ -19,6 +19,9 @@ final class AppEnvironment {
     /// Whether each deck's slide panel is pinned as a sidebar or peeks on
     /// hover. A test replaces this with one on a fresh UserDefaults suite.
     var panelState = SlidePanelState()
+    /// Where slide thumbnails are cached on disk. A test replaces this with
+    /// a cache rooted in its own temporary folder.
+    var thumbnailCache = ThumbnailCache()
     private(set) var environmentNotice: String?
     private(set) var bundledTapVersion: String?
     private let loginShellLoader: LoginShellEnvironmentLoader
