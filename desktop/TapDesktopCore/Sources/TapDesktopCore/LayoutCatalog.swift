@@ -31,6 +31,15 @@ public enum LayoutCatalog {
     public static func displayName(_ name: String) -> String {
         name.split(separator: "-").map { $0.prefix(1).uppercased() + $0.dropFirst() }.joined(separator: " ")
     }
+
+    /// The name to insert for `requested`: itself when `templates` still
+    /// offers it, or the catalog's first when tap has dropped it since it
+    /// was last used. An empty catalog (not yet loaded) returns `requested`
+    /// unchanged, since there is nothing to fall back to yet.
+    public static func resolvedName(_ requested: String, in templates: [LayoutTemplate]) -> String {
+        if templates.contains(where: { $0.name == requested }) { return requested }
+        return templates.first?.name ?? requested
+    }
 }
 
 /// The little picture a gallery cell draws for a layout, read off the

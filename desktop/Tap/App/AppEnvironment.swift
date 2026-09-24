@@ -22,6 +22,10 @@ final class AppEnvironment {
     /// Where slide thumbnails are cached on disk. A test replaces this with
     /// a cache rooted in its own temporary folder.
     var thumbnailCache = ThumbnailCache()
+    /// Every layout tap offers, loaded once from the bundled tap.
+    lazy var layoutCatalog = LayoutCatalogLoader(executable: { [weak self] in self?.tapExecutableURL ?? URL(fileURLWithPath: "/usr/bin/false") })
+    /// The layout New Slide inserts: the one used last.
+    var lastLayout = LastLayout()
     private(set) var environmentNotice: String?
     private(set) var bundledTapVersion: String?
     private let loginShellLoader: LoginShellEnvironmentLoader
@@ -43,6 +47,7 @@ final class AppEnvironment {
             bundledTapVersion = await Self.readVersion(of: tapExecutableURL)
             NotificationCenter.default.post(name: Self.didLoadNotification, object: self)
         }
+        Task { await layoutCatalog.load() }
     }
 
     func tapEnvironment() async -> [String: String] {

@@ -4,6 +4,7 @@ import AppKit
 /// under a unified toolbar. Deck windows open as tabs of each other.
 final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolbarDelegate, NSMenuItemValidation {
     static let slidesItemIdentifier = NSToolbarItem.Identifier("slides")
+    static let newSlideItemIdentifier = NSToolbarItem.Identifier("newSlide")
     let sessionController: DeckSessionController
     let splitViewController: MainSplitViewController
     let sidebarHost = SidebarHostViewController()
@@ -13,6 +14,13 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
     private(set) var isPanelPinned = true
     /// The toolbar's Slides button: on while the panel is pinned.
     let slidesButton = HoverButton()
+    /// The toolbar's New Slide button: a click inserts the last layout, a hold opens the gallery.
+    let newSlideButton = NewSlideButton()
+    private(set) lazy var layoutGallery: LayoutGalleryController = {
+        let gallery = LayoutGalleryController()
+        gallery.onPick = { [weak self] name in self?.insertSlide(layout: name, after: self?.sessionController.currentSlideNumber) }
+        return gallery
+    }()
     private var sidebarCollapseObservation: NSKeyValueObservation?
     private var isReconcilingSidebarCollapse = false
 
@@ -224,6 +232,39 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
         setPanelPinned(!isPanelPinned)
     }
 
+    @objc func newSlide(_ sender: Any?) {
+        let catalog = AppEnvironment.shared.layoutCatalog
+        let layout = LayoutCatalog.resolvedName(AppEnvironment.shared.lastLayout.name, in: catalog.templates)
+        insertSlide(layout: layout, after: sessionController.currentSlideNumber)
+    }
+
+    @objc func newSlideFromLayout(_ sender: Any?) {
+        guard let name = (sender as? NSMenuItem)?.representedObject as? String else { return }
+        insertSlide(layout: name, after: sessionController.currentSlideNumber)
+    }
+
+    @objc func showLayoutGallery(_ sender: Any?) {
+        let anchor: NSView = newSlideButton.window == nil ? (window?.contentView ?? newSlideButton) : newSlideButton
+        layoutGallery.show(templates: AppEnvironment.shared.layoutCatalog.templates, relativeTo: anchor.bounds, of: anchor,
+                           afterSlide: sessionController.currentSlideNumber)
+    }
+
+    /// Inserts a slide of the layout after `number` (or at the end), and
+    /// remembers the layout for the next New Slide.
+    func insertSlide(layout: String, after number: Int?) {
+        guard let template = AppEnvironment.shared.layoutCatalog.template(named: layout) else {
+            sessionController.session.log.append("no template for layout \(layout): the layout catalog has not loaded", source: .app)
+            NSSound.beep()
+            return
+        }
+        // The layout becomes the last one only once its slide exists: an
+        // insert queued behind tap's confirmation and then abandoned leaves
+        // the last layout as it was.
+        sessionController.insertNewSlide(markdown: template.markdown, after: number) { inserted in
+            if inserted { AppEnvironment.shared.lastLayout.name = layout }
+        }
+    }
+
     func windowWillClose(_ notification: Notification) {
         sidebarCollapseObservation?.invalidate()
         sidebarCollapseObservation = nil
@@ -248,7 +289,7 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
     }
 
     func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
-        [Self.slidesItemIdentifier, .flexibleSpace, Self.previewItemIdentifier]
+        [Self.slidesItemIdentifier, .flexibleSpace, Self.newSlideItemIdentifier, Self.previewItemIdentifier]
     }
 
     func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
@@ -270,6 +311,21 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
             slidesButton.onPointerEntered = { [weak self] in self?.panelPeek.pointerEnteredButton() }
             slidesButton.onPointerLeft = { [weak self] in self?.panelPeek.pointerLeftButton() }
             item.view = slidesButton
+            return item
+        }
+        if identifier == Self.newSlideItemIdentifier {
+            let item = NSToolbarItem(itemIdentifier: identifier)
+            item.label = "New Slide"
+            item.toolTip = "New slide with the last layout. Hold for the layout gallery."
+            newSlideButton.image = NSImage(systemSymbolName: "plus.rectangle.on.rectangle", accessibilityDescription: "New Slide")
+            newSlideButton.bezelStyle = .toolbar
+            newSlideButton.setAccessibilityIdentifier("new-slide-button")
+            // VoiceOver's press and Full Keyboard Access go through target and action; the mouse through onClick and onHold.
+            newSlideButton.target = self
+            newSlideButton.action = #selector(newSlide(_:))
+            newSlideButton.onClick = { [weak self] in self?.newSlide(nil) }
+            newSlideButton.onHold = { [weak self] in self?.showLayoutGallery(nil) }
+            item.view = newSlideButton
             return item
         }
         guard identifier == Self.previewItemIdentifier else { return nil }

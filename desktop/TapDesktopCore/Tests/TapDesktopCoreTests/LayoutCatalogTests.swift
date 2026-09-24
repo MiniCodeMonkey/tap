@@ -36,4 +36,15 @@ final class LayoutCatalogTests: XCTestCase {
         last.name = "two-column"
         XCTAssertEqual(LastLayout(defaults: defaults).name, "two-column")
     }
+
+    /// A stored layout tap still offers is used as is; one tap has dropped
+    /// falls back to the catalog's first, never silently to nothing.
+    func testResolvedNameFallsBackWhenTapNoLongerOffersTheStoredLayout() {
+        let templates = [LayoutTemplate(name: "title", markdown: "# Title\n"),
+                          LayoutTemplate(name: "quote", markdown: "> Q\n"),
+                          LayoutTemplate(name: "big-stat", markdown: "# 100%\n")]
+        XCTAssertEqual(LayoutCatalog.resolvedName("quote", in: templates), "quote")
+        XCTAssertEqual(LayoutCatalog.resolvedName("retired-layout", in: templates), "title")
+        XCTAssertEqual(LayoutCatalog.resolvedName("retired-layout", in: []), "retired-layout")
+    }
 }

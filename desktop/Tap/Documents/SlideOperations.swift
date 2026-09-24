@@ -204,6 +204,32 @@ extension DeckSessionController {
         perform(.insert(markdowns: markdowns, beforeNumber: beforeNumber), completion: completion)
     }
 
+    /// Inserts one slide after `number` (nil or the last slide: at the
+    /// end) and selects its first slot, so typing replaces the placeholder.
+    /// The selection and the focus wait for the insert to land: before
+    /// then, slide `newNumber` is still an old slide. `completion` gets
+    /// true once the slide exists, false when the insert is refused or
+    /// abandoned.
+    @discardableResult
+    func insertNewSlide(markdown: String, after number: Int?, completion: ((Bool) -> Void)? = nil) -> SlideOperationOutcome {
+        let count = editor.boxes.count
+        let beforeNumber = number.flatMap { $0 + 1 <= count ? $0 + 1 : nil }
+        return perform(.insert(markdowns: [markdown], beforeNumber: beforeNumber)) { [weak self] result in
+            guard let self, result != nil else {
+                completion?(false)
+                return
+            }
+            let newNumber = beforeNumber ?? self.editor.boxes.count
+            if self.editor.boxes.indices.contains(newNumber - 1) {
+                let box = self.editor.boxes[newNumber - 1]
+                let slot = SlideEditing.firstSlotRange(inSlideText: (self.editor.string as NSString).substring(with: box.range))
+                self.editor.setSelectedRange(NSRange(location: box.range.location + slot.location, length: slot.length))
+                self.editor.window?.makeFirstResponder(self.editor)
+            }
+            completion?(true)
+        }
+    }
+
     func dragPayload(forSlides numbers: [Int]) -> SlideDragPayload? {
         guard let deck = document?.fileURL, !numbers.isEmpty else { return nil }
         let sorted = numbers.sorted()
