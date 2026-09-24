@@ -218,6 +218,15 @@ extension DeckSessionController {
     @discardableResult
     func dropSlides(payload: SlideDragPayload, beforeNumber: Int?, isMove: Bool) -> Bool {
         if let deck = document?.fileURL, payload.comesFrom(deck: deck) {
+            // The same staleness the cross-deck move guards against: the
+            // numbers were taken at drag start, and typing since then may
+            // have renumbered the slides they now name. Refuse rather than
+            // move whatever now holds those numbers; one Cmd+Z is not
+            // needed because nothing changed.
+            guard markdown(forSlides: payload.slideNumbers) == payload.markdowns else {
+                NSSound.beep()
+                return false
+            }
             return perform(.move(numbers: payload.slideNumbers, beforeNumber: beforeNumber)).isAccepted
         }
         let source = isMove ? Self.document(forDeckPath: payload.deckPath)?.sessionController : nil

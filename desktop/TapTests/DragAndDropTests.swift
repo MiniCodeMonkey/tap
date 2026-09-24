@@ -249,4 +249,23 @@ final class DragAndDropTests: HostedTestCase {
         XCTAssertEqual(sourceAfterDrop, ["One", "One", "Two", "Three", "Four", "Five", "Six", "Seven"])
     }
 
+    /// The same staleness check, for a drop that stays within one deck: a
+    /// move by numbers taken at drag start must refuse rather than move
+    /// whatever those numbers now name.
+    func testAStaleSameDeckMoveIsRefused() async throws {
+        let (_, controller) = try await openOps()
+        let panel = controller.slidePanel
+        let payload = try XCTUnwrap(controller.dragPayload(forSlides: [5, 6]))
+
+        XCTAssertEqual(controller.perform(.duplicate(numbers: [1])), .applied)
+        try await waitUntil(timeout: 10, "tap's answer for the duplicate") { controller.lastAppliedText == controller.editor.string }
+        let beforeDrop = try await roundTrip(controller)
+
+        let pasteboard = try rawPasteboard(payload, name: "stale-same-deck")
+        let (operation, accepted) = drop(pasteboard, into: panel, beforeIndex: 0, source: panel.collectionView, window: nil)
+        XCTAssertEqual(operation, .move, "the geometry alone does not refuse this drop")
+        XCTAssertFalse(accepted, "the stale numbers refuse the move")
+        let afterDrop = try await roundTrip(controller)
+        XCTAssertEqual(afterDrop, beforeDrop, "nothing moved")
+    }
 }
