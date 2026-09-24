@@ -3,7 +3,7 @@ DERIVED_DATA = build/DerivedData
 XCODEBUILD = xcodebuild -project Tap.xcodeproj -derivedDataPath $(DERIVED_DATA) CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO
 ONLY ?= TapTests
 
-.PHONY: project core-test build test uitest bench app-path
+.PHONY: project core-test build test uitest bench app-path check-scenarios
 project:
 	xcodegen generate --spec project.yml --quiet
 
@@ -25,3 +25,7 @@ bench: project
 
 app-path:
 	@echo $(DERIVED_DATA)/Build/Products/Debug/Tap.app
+
+check-scenarios:
+	./scripts/check-scenarios-test.sh
+	./scripts/check-scenarios.sh

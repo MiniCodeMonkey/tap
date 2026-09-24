@@ -330,3 +330,15 @@ tap/
 - Go: Follow standard Go conventions, run `golangci-lint`
 - TypeScript/React: Prettier formatting
 - Markdown: One sentence per line in documentation
+
+## The desktop app
+
+`desktop/` holds Tap Desktop, the native macOS app. It bundles the `tap`
+binary built from the same commit. See `desktop/README.md` for the build and
+test commands. The Xcode project is generated from `desktop/project.yml` with
+XcodeGen, so add new files to the folder and run `make -C desktop project`.
+
+Every scenario in `docs/superpowers/specs/tap-desktop-features/` that the app
+claims in `desktop/scenarios.txt` must have a test named after it. CI runs
+`make -C desktop check-scenarios`, the package tests and the hosted tests. The
+UI tests and the benchmarks run locally.
