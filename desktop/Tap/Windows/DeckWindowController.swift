@@ -11,7 +11,8 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
     let panelOverlay = SlidePanelOverlay(frame: .zero)
     let panelPeek = SlidePanelPeek()
     private(set) var isPanelPinned = true
-    private let slidesButton = HoverButton()
+    /// The toolbar's Slides button: on while the panel is pinned.
+    let slidesButton = HoverButton()
     private var sidebarCollapseObservation: NSKeyValueObservation?
     private var isReconcilingSidebarCollapse = false
 
@@ -60,22 +61,35 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
         }
         let deckURL = sessionController.document?.fileURL
         setPanelPinned(deckURL.map { AppEnvironment.shared.panelState.isPinned(deck: $0) } ?? true)
-        // On every tab swap, AppKit's own window tab stack copies the prior
-        // tab's split-view divider positions into the new tab
+        // Two things change whether the sidebar is collapsed besides
+        // setPanelPinned. A person can drag the sidebar's divider: that is
+        // the same as the pin button, so dragging it closed unpins this
+        // deck and dragging it open pins it, and the state is stored per
+        // deck. And on every tab swap, AppKit's own window tab stack copies
+        // the prior tab's split-view divider positions into the new tab
         // (NSWindowStackController _syncWindowFrameStateForSwapWithNewWindow,
         // called from NSDocument.showWindows through makeKeyAndOrderFront),
         // which can collapse or uncollapse this deck's sidebar to match
-        // whichever deck was the prior tab. This runs on every swap, not
-        // only the first show, so it is watched for the life of the window
-        // rather than disarmed after one correction. A change that leaves
-        // isCollapsed agreeing with isPanelPinned (both true, or both
-        // false, since the correct state is always the opposite of the
-        // other) is AppKit's own copy misfiring; it is corrected a turn
-        // later, after AppKit's swap has finished, which also avoids
-        // fighting the very re-assertion this triggers.
+        // whichever deck was the prior tab. That runs on every swap, so it
+        // is watched for the life of the window. A change that leaves
+        // isCollapsed agreeing with isPanelPinned (the correct state is
+        // always the opposite) and that no person's drag made is AppKit's
+        // copy misfiring, and it is undone. Both are applied a turn later,
+        // after AppKit's own change has finished.
         sidebarCollapseObservation = splitViewController.sidebarItem.observe(\.isCollapsed, options: [.new]) { [weak self] _, change in
             MainActor.assumeIsolated {
-                guard let self, let isCollapsed = change.newValue, isCollapsed == self.isPanelPinned, !self.isReconcilingSidebarCollapse else { return }
+                guard let self, let isCollapsed = change.newValue else { return }
+                if self.splitViewController.isPersonDraggingADivider {
+                    DispatchQueue.main.async { [weak self] in
+                        MainActor.assumeIsolated {
+                            guard let self else { return }
+                            let pinned = !self.splitViewController.sidebarItem.isCollapsed
+                            if pinned != self.isPanelPinned { self.setPanelPinned(pinned) }
+                        }
+                    }
+                    return
+                }
+                guard isCollapsed == self.isPanelPinned, !self.isReconcilingSidebarCollapse else { return }
                 self.isReconcilingSidebarCollapse = true
                 DispatchQueue.main.async { [weak self] in
                     MainActor.assumeIsolated {

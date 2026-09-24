@@ -10,6 +10,9 @@ final class MainSplitViewController: NSSplitViewController {
     private var isBalancing = false
     private var isPersonDraggingTheDivider = false
     private var dividerMouseMonitor: Any?
+    /// Whether the left mouse button is physically down. Replaceable so a
+    /// test can stand in for the person's hand during a simulated drag.
+    var isLeftMouseButtonDown: () -> Bool = { NSEvent.pressedMouseButtons & 1 != 0 }
     /// The sidebar's width: the panel plus the stock sidebar's inset.
     static let sidebarWidth = SlidePanelViewController.width + 24
 
@@ -72,7 +75,16 @@ final class MainSplitViewController: NSSplitViewController {
         }
     }
 
-    private func noteDividerMouseEvent(_ event: NSEvent) {
+    /// Whether a person is dragging one of the dividers right now: the last
+    /// mouseDown in this window landed on a divider and the button is still
+    /// held. The split view's own drag loop swallows the mouseUp, so the
+    /// mouseDown alone can be stale; a tab swap or a layout pass with the
+    /// button up is AppKit moving the divider, never the person.
+    var isPersonDraggingADivider: Bool { isPersonDraggingTheDivider && isLeftMouseButtonDown() }
+
+    /// Notes a mouse event in this window: the local event monitor's
+    /// handler, and the seam a test drives a person's drag through.
+    func noteDividerMouseEvent(_ event: NSEvent) {
         guard event.window === view.window else { return }
         if event.type == .leftMouseUp {
             isPersonDraggingTheDivider = false

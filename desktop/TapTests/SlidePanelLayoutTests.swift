@@ -153,6 +153,14 @@ final class SlidePanelLayoutTests: HostedTestCase {
         let pinnedWindow = try XCTUnwrap(pinned.window)
         let unpinnedWindow = try XCTUnwrap(unpinned.window)
         XCTAssertEqual(pinnedWindow.tabbedWindows?.count, 2, "both decks share one tab group")
+        // A person clicked each sidebar divider earlier, and the split
+        // view's own drag loop swallowed the mouseUp, so the last mouseDown
+        // still reads as on a divider. With the button up, a tab swap is
+        // AppKit's, never the person's.
+        for split in [pinned.splitViewController, unpinned.splitViewController] {
+            split.isLeftMouseButtonDown = { false }
+            split.noteDividerMouseEvent(try sidebarDividerMouseEvent(.leftMouseDown, in: split))
+        }
 
         for round in 1...2 {
             pinnedWindow.tabGroup?.selectedWindow = pinnedWindow
@@ -166,5 +174,59 @@ final class SlidePanelLayoutTests: HostedTestCase {
             XCTAssertTrue(unpinned.splitViewController.sidebarItem.isCollapsed)
             XCTAssertTrue(unpinned.sidebarHost.view.subviews.isEmpty, "round \(round): the unpinned deck's sidebar column stays empty, not a column with nothing pushed into it")
         }
+    }
+
+    /// A mouse event on the sidebar's divider, in the split view's window.
+    func sidebarDividerMouseEvent(_ type: NSEvent.EventType, in split: MainSplitViewController) throws -> NSEvent {
+        let window = try XCTUnwrap(split.view.window)
+        let splitView = split.splitView
+        let sidebarColumn = try XCTUnwrap(splitView.arrangedSubviews.first)
+        let dividerCenter = NSPoint(x: sidebarColumn.frame.maxX + splitView.dividerThickness / 2, y: splitView.bounds.midY)
+        return try XCTUnwrap(NSEvent.mouseEvent(with: type, location: splitView.convert(dividerCenter, to: nil), modifierFlags: [],
+                                                timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
+                                                context: nil, eventNumber: 0, clickCount: 1, pressure: 1))
+    }
+
+    /// Drags the sidebar's divider the way a person does: a mouseDown on the
+    /// divider goes through the same handler the split view's local event
+    /// monitor calls, which hit-tests it against the split view; the button
+    /// stays down while the divider moves; the mouseUp releases it.
+    func dragSidebarDivider(of split: MainSplitViewController, to position: CGFloat) throws {
+        split.isLeftMouseButtonDown = { true }
+        split.noteDividerMouseEvent(try sidebarDividerMouseEvent(.leftMouseDown, in: split))
+        XCTAssertTrue(split.isPersonDraggingADivider, "the mouseDown lands on the sidebar's divider")
+        split.splitView.setPosition(position, ofDividerAt: 0)
+        split.isLeftMouseButtonDown = { false }
+        split.noteDividerMouseEvent(try sidebarDividerMouseEvent(.leftMouseUp, in: split))
+    }
+
+    /// Dragging a pinned sidebar closed unpins that deck, as the pin button
+    /// does, and hovering the edge then peeks at the panel. The reconciler
+    /// that undoes AppKit's tab-swap divider copy must not reopen it.
+    func testDraggingThePinnedSidebarClosedUnpinsTheDeck() async throws {
+        let deck = try Fixtures.copyDeck("plain.md")
+        let document = try await openDeck(deck)
+        let controller = try windowController(for: document)
+        let split = controller.splitViewController
+        split.view.layoutSubtreeIfNeeded()
+        XCTAssertTrue(controller.isPanelPinned)
+        XCTAssertFalse(split.sidebarItem.isCollapsed)
+
+        try dragSidebarDivider(of: split, to: 0)
+        try await waitUntil(timeout: 2, "the drag to unpin the deck") { !controller.isPanelPinned }
+        // Well past the turn the reconciler would take to reopen it.
+        try await Task.sleep(nanoseconds: 600_000_000)
+        split.view.layoutSubtreeIfNeeded()
+        XCTAssertTrue(split.sidebarItem.isCollapsed, "the sidebar stays closed where the person dragged it")
+        XCTAssertFalse(controller.isPanelPinned)
+        XCTAssertFalse(AppEnvironment.shared.panelState.isPinned(deck: deck), "the deck's stored state is unpinned")
+        XCTAssertEqual(controller.slidesButton.state, .off, "the pin button shows unpinned")
+        XCTAssertTrue(controller.panelPeek.isEnabled, "hovering peeks at the panel again")
+
+        document.close()
+        try await waitUntil(timeout: 10, "the window to close") { document.windowControllers.first?.window?.isVisible != true }
+        let again = try windowController(for: try await openDeck(deck))
+        XCTAssertFalse(again.isPanelPinned, "the deck reopens unpinned")
+        XCTAssertTrue(again.splitViewController.sidebarItem.isCollapsed)
     }
 }
