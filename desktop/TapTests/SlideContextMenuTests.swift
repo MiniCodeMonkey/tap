@@ -102,8 +102,11 @@ final class SlideContextMenuTests: HostedTestCase {
         typeASplitSlide(atTheEndOfSlide: 1, controller)
         panel.select(numbers: [3, 4], scroll: false)
         panel.collectionView.keyDown(with: try keyDown(51, characters: "\u{7f}", in: panel.collectionView))
-        try await waitForConfirmedSlides(controller, count: 8, "tap's answer for the typing")
-        // The queued delete runs within one 20 ms poll of the answer.
+        // tap's answer adds Split; the queued delete, refused or not, runs
+        // within one 20 ms poll of it.
+        try await waitUntil(timeout: 10, "tap's answer for the typing") {
+            controller.lastAppliedText == controller.editor.string && controller.editor.boxes.count != 7
+        }
         try await Task.sleep(nanoseconds: 500_000_000)
         let titles = try await titles(controller)
         XCTAssertEqual(titles, ["One", "Split", "Two", "Three", "Four", "Five", "Six", "Seven"],
