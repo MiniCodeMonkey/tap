@@ -88,18 +88,22 @@ final class WelcomeTests: HostedTestCase {
         let window = try XCTUnwrap(document.windowControllers.first?.window)
 
         let cover = try await coverWindow(window)
-        defer {
-            cover.orderOut(nil)
-            cover.close()
-        }
+        defer { cover.remove() }
 
         _ = try await waitForRunningTap(document)
         // Long enough for a ready signal to have arrived while covered, on a
         // deck this small.
         try await Task.sleep(nanoseconds: 1_000_000_000)
+        // A visible report while covered lets the page paint and makes the
+        // assertion below say nothing about the product, whichever way it
+        // comes out, so the run fails naming the report instead.
+        guard cover.visibleReportsWhileCovered == 0 else {
+            XCTFail("the window server reported the covered deck window visible \(cover.visibleReportsWhileCovered) time(s) while the cover was up, so this run cannot tell whether an occluded window is captured")
+            return
+        }
         XCTAssertNil(AppEnvironment.shared.recentThumbnailStore.imageData(for: deck), "an occluded window must not be captured")
 
-        cover.orderOut(nil)
+        cover.window.orderOut(nil)
         try await waitUntil(timeout: 5, "the deck window to report visible again") { window.occlusionState.contains(.visible) }
         let controller = try XCTUnwrap(document.sessionController)
         controller.previewViewController.onReady?(ReadyPayload(revision: "visible-again", slide: 1, step: 0))
@@ -115,14 +119,26 @@ final class WelcomeTests: HostedTestCase {
         let document = try await openDeck(deck)
         let window = try XCTUnwrap(document.windowControllers.first?.window)
         let cover = try await coverWindow(window)
-        defer {
-            cover.orderOut(nil)
-            cover.close()
-        }
+        defer { cover.remove() }
 
         let controller = try XCTUnwrap(document.sessionController)
         let preview = controller.previewViewController
-        try await waitUntil(timeout: 30, "slide 1 ready behind the cover") { preview.lastReady?.slide == 1 }
+        let deadline = Date().addingTimeInterval(30)
+        while preview.lastReady?.slide != 1 {
+            if Date() > deadline {
+                // Records whether the page ever saw itself hidden behind the
+                // cover, which separates a page whose paint wait never ended
+                // from one that never received the deck.
+                let inThePage = await preview.pageValue(Self.pageStateScript)
+                XCTFail("timed out waiting for slide 1 ready behind the cover. "
+                        + "lastReady=\(String(describing: preview.lastReady)) page=\(inThePage) "
+                        + "occlusion=\(window.occlusionState.rawValue) "
+                        + "visibleReportsWhileCovered=\(cover.visibleReportsWhileCovered) "
+                        + "socket=\(controller.socket == nil ? "none" : "open")")
+                return
+            }
+            try await Task.sleep(nanoseconds: 20_000_000)
+        }
         // Long enough for a capture to have finished, had one started.
         try await Task.sleep(nanoseconds: 1_000_000_000)
         XCTAssertNil(AppEnvironment.shared.recentThumbnailStore.imageData(for: deck), "a covered window must not be captured")
@@ -134,37 +150,98 @@ final class WelcomeTests: HostedTestCase {
             readiesAfterUncovering += 1
             onReady?(payload)
         }
-        cover.orderOut(nil)
+        cover.window.orderOut(nil)
         try await waitUntil(timeout: 10, "the recent thumbnail") { AppEnvironment.shared.recentThumbnailStore.imageData(for: deck) != nil }
         XCTAssertEqual(readiesAfterUncovering, 0, "the thumbnail comes from the ready already received")
         XCTAssertEqual(preview.lastReady, readyWhileCovered)
         try assertRecordedThumbnailIsNotBlank(for: deck)
     }
 
-    /// Places a borderless, opaque window exactly over `window` and waits
-    /// until the window server reports `window` occluded while it stays on
-    /// screen.
-    private func coverWindow(_ window: NSWindow) async throws -> NSWindow {
-        let cover = NSWindow(contentRect: window.frame, styleMask: [.borderless], backing: .buffered, defer: false)
-        cover.isOpaque = true
-        cover.backgroundColor = .black
-        cover.level = .floating
-        cover.hasShadow = false
+    /// A borderless, opaque window over the deck window, and a count of the
+    /// window server's reports of the deck window as visible since the
+    /// cover took effect.
+    @MainActor
+    final class Cover {
+        let window: NSWindow
+        private(set) var visibleReportsWhileCovered = 0
+        private var observer: NSObjectProtocol?
+
+        init(window: NSWindow) { self.window = window }
+
+        func startCounting(_ covered: NSWindow) {
+            observer = NotificationCenter.default.addObserver(forName: NSWindow.didChangeOcclusionStateNotification, object: covered, queue: nil) { [weak self] _ in
+                MainActor.assumeIsolated {
+                    guard let self, self.window.isVisible, covered.occlusionState.contains(.visible) else { return }
+                    self.visibleReportsWhileCovered += 1
+                }
+            }
+        }
+
+        func remove() {
+            if let observer { NotificationCenter.default.removeObserver(observer) }
+            observer = nil
+            window.orderOut(nil)
+            window.close()
+        }
+    }
+
+    /// Places a borderless, opaque window exactly over `window` once the
+    /// window server has made its first report on `window`, and returns
+    /// only after `window` has read occluded continuously for half a
+    /// second while it stays on screen. A freshly opened window reads no
+    /// visible bit before that first report, and the window server reports
+    /// a covered window visible for about 0.1 s within its first 0.3 s on
+    /// screen, so neither a single occluded reading nor an early one proves
+    /// the cover has taken effect.
+    private func coverWindow(_ window: NSWindow) async throws -> Cover {
+        try await waitUntil(timeout: 5, "the window server's first report of the deck window") { window.occlusionState.contains(.visible) }
+        let coverWindow = NSWindow(contentRect: window.frame, styleMask: [.borderless], backing: .buffered, defer: false)
+        coverWindow.isOpaque = true
+        coverWindow.backgroundColor = .black
+        coverWindow.level = .floating
+        coverWindow.hasShadow = false
+        coverWindow.animationBehavior = .none
         // Without this, closing the window also releases it (AppKit's
         // default for a window with no window controller), and the caller
         // still holding it then double-releases it when the test scope
         // ends, which crashes in objc_release during XCTest's post-test
         // deallocation check.
-        cover.isReleasedWhenClosed = false
-        cover.setFrame(window.frame, display: true)
-        cover.orderFrontRegardless()
+        coverWindow.isReleasedWhenClosed = false
+        coverWindow.setFrame(window.frame, display: true)
+        let cover = Cover(window: coverWindow)
+        coverWindow.orderFrontRegardless()
         do {
-            try await waitUntil(timeout: 5, "the deck window to report occluded") { !window.occlusionState.contains(.visible) }
+            // Any report restarts the half second, so a visible report too
+            // brief for a poll to read still counts against the cover.
+            var reportCount = 0
+            let recorder = NotificationCenter.default.addObserver(forName: NSWindow.didChangeOcclusionStateNotification, object: window, queue: nil) { _ in
+                MainActor.assumeIsolated { reportCount += 1 }
+            }
+            defer { NotificationCenter.default.removeObserver(recorder) }
+            var reportsSeen = 0
+            var occludedSince: Date?
+            let deadline = Date().addingTimeInterval(5)
+            while true {
+                let now = Date()
+                if window.occlusionState.contains(.visible) || reportCount != reportsSeen {
+                    reportsSeen = reportCount
+                    occludedSince = nil
+                }
+                if occludedSince == nil, !window.occlusionState.contains(.visible) {
+                    occludedSince = now
+                }
+                if let occludedSince, now.timeIntervalSince(occludedSince) >= 0.5 { break }
+                guard now < deadline else {
+                    XCTFail("the deck window never read occluded for half a second under the cover. occlusion=\(window.occlusionState.rawValue)")
+                    throw CancellationError()
+                }
+                try await Task.sleep(nanoseconds: 20_000_000)
+            }
         } catch {
-            cover.orderOut(nil)
-            cover.close()
+            cover.remove()
             throw error
         }
+        cover.startCounting(window)
         XCTAssertTrue(window.isVisible, "the deck window is still on screen, only covered")
         return cover
     }
