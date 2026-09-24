@@ -895,10 +895,10 @@ extension DeckSessionController: SlidePanelDelegate {
         return SlideContextMenu.build(for: selectedSlideNumbers, target: windowController)
     }
 
+    /// The core refuses to delete every slide, with a beep, so a deck
+    /// keeps at least one.
     func slidePanelDeleteSelection(_ panel: SlidePanelViewController) {
-        let numbers = selectedSlideNumbers
-        guard numbers.count < editor.boxes.count else { return NSSound.beep() }
-        perform(.delete(numbers: numbers))
+        perform(on: captureSelection()) { .delete(numbers: $0) }
     }
 
     func slidePanelCopySelection(_ panel: SlidePanelViewController) {
@@ -906,6 +906,6 @@ extension DeckSessionController: SlidePanelDelegate {
     }
 
     func slidePanelPaste(_ panel: SlidePanelViewController) {
-        pasteSlides(from: AppEnvironment.shared.slidePasteboard, after: selectedSlideNumbers.max())
+        pasteSlides(from: AppEnvironment.shared.slidePasteboard, after: captureSelection())
     }
 }

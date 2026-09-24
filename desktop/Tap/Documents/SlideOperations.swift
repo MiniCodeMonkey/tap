@@ -17,6 +17,27 @@ enum SlideOperationOutcome: Equatable {
     var isAccepted: Bool { self != .refused }
 }
 
+/// The slides a command from a menu, a key or a paste acts on. It is
+/// named when the command is invoked and resolved when the command runs,
+/// which is after tap's answer when typing is still unconfirmed, and that
+/// answer may renumber every slide after the typing. A selection that is
+/// the caret's slide follows the caret, which is anchored in the text, so
+/// it resolves to the slide the caret is in by then. Any other selection
+/// resolves to its numbers only while those slides still hold the text
+/// they held when the command was invoked; otherwise the command is
+/// refused with a beep, never run on whatever now holds those numbers.
+struct SlideSelection {
+    fileprivate enum Target {
+        case caret
+        case slides([Int], markdowns: [String])
+    }
+
+    fileprivate let target: Target
+
+    /// The slide the caret is in when the command runs, or none.
+    static let caret = SlideSelection(target: .caret)
+}
+
 /// Every structural edit on the deck's slides. Each one is one undo step
 /// on the buffer, cut along the ranges tap reported: the operation runs
 /// only on boxes tap has confirmed; it gives the new text and the boxes
@@ -76,6 +97,67 @@ extension DeckSessionController {
         let result = performNow(operation)
         completion?(result)
         return result == nil ? .refused : .applied
+    }
+
+    /// Names the selection as it stands, for a command that runs now or
+    /// once tap confirms the text. See `SlideSelection`.
+    func captureSelection() -> SlideSelection {
+        let numbers = selectedSlideNumbers
+        if let current = currentSlideNumber, numbers == [current] { return .caret }
+        return SlideSelection(target: .slides(numbers, markdowns: markdown(forSlides: numbers)))
+    }
+
+    /// The numbers `selection` names now, on tap's ranges, or nil when its
+    /// slides no longer hold the text they held when it was named.
+    func resolve(_ selection: SlideSelection) -> [Int]? {
+        switch selection.target {
+        case .caret:
+            return currentSlideNumber.map { [$0] } ?? []
+        case .slides(let numbers, let markdowns):
+            return markdown(forSlides: numbers) == markdowns ? numbers : nil
+        }
+    }
+
+    /// `perform` for a command on a selection: the operation is built from
+    /// the selection's numbers only when it runs, after they are resolved.
+    /// A stale selection, or a builder that returns nil, is refused with a
+    /// beep, and `completion` gets nil.
+    @discardableResult
+    func perform(on selection: SlideSelection, _ operation: @escaping ([Int]) -> SlideOperation?,
+                 completion: ((SlideEditResult?) -> Void)? = nil) -> SlideOperationOutcome {
+        guard editor.string == lastAppliedText else {
+            whenTextIsConfirmed({ [weak self] in
+                let result = self?.performNow(on: selection, operation)
+                completion?(result)
+            }, abandoned: {
+                completion?(nil)
+            })
+            return .queued
+        }
+        let result = performNow(on: selection, operation)
+        completion?(result)
+        return result == nil ? .refused : .applied
+    }
+
+    private func performNow(on selection: SlideSelection, _ operation: ([Int]) -> SlideOperation?) -> SlideEditResult? {
+        guard let numbers = resolve(selection), let resolved = operation(numbers) else {
+            NSSound.beep()
+            return nil
+        }
+        return performNow(resolved)
+    }
+
+    /// The number a slide inserted after `numbers` gets: after the last of
+    /// them, or at the end (nil) when they are empty or end the deck.
+    func insertionNumber(after numbers: [Int]) -> Int? {
+        numbers.max().flatMap { $0 + 1 <= editor.boxes.count ? $0 + 1 : nil }
+    }
+
+    /// True when every one of `numbers` is a skipped slide.
+    func slidesAreSkipped(_ numbers: [Int]) -> Bool {
+        let wanted = Set(numbers)
+        let slides = editor.boxes.map(\.slide).filter { wanted.contains($0.number) }
+        return !slides.isEmpty && slides.allSatisfy(\.skip)
     }
 
     @discardableResult
@@ -204,22 +286,21 @@ extension DeckSessionController {
         perform(.insert(markdowns: markdowns, beforeNumber: beforeNumber), completion: completion)
     }
 
-    /// Inserts one slide after `number` (nil or the last slide: at the
-    /// end) and selects its first slot, so typing replaces the placeholder.
-    /// The selection and the focus wait for the insert to land: before
-    /// then, slide `newNumber` is still an old slide. `completion` gets
-    /// true once the slide exists, false when the insert is refused or
-    /// abandoned.
+    /// Inserts one slide after `selection` (none, or the last slide: at
+    /// the end) and selects its first slot, so typing replaces the
+    /// placeholder. The selection and the focus wait for the insert to
+    /// land: before then, the new slide's number is still an old slide's.
+    /// `completion` gets true once the slide exists, false when the insert
+    /// is refused or abandoned.
     @discardableResult
-    func insertNewSlide(markdown: String, after number: Int?, completion: ((Bool) -> Void)? = nil) -> SlideOperationOutcome {
-        let count = editor.boxes.count
-        let beforeNumber = number.flatMap { $0 + 1 <= count ? $0 + 1 : nil }
-        return perform(.insert(markdowns: [markdown], beforeNumber: beforeNumber)) { [weak self] result in
-            guard let self, result != nil else {
+    func insertNewSlide(markdown: String, after selection: SlideSelection, completion: ((Bool) -> Void)? = nil) -> SlideOperationOutcome {
+        perform(on: selection, { [weak self] numbers in
+            .insert(markdowns: [markdown], beforeNumber: self?.insertionNumber(after: numbers))
+        }, completion: { [weak self] result in
+            guard let self, let newNumber = result?.selectedNumbers.first else {
                 completion?(false)
                 return
             }
-            let newNumber = beforeNumber ?? self.editor.boxes.count
             if self.editor.boxes.indices.contains(newNumber - 1) {
                 let box = self.editor.boxes[newNumber - 1]
                 let slot = SlideEditing.firstSlotRange(inSlideText: (self.editor.string as NSString).substring(with: box.range))
@@ -227,7 +308,7 @@ extension DeckSessionController {
                 self.editor.window?.makeFirstResponder(self.editor)
             }
             completion?(true)
-        }
+        })
     }
 
     /// Copies slides as the app's own type and as plain markdown.
@@ -240,18 +321,22 @@ extension DeckSessionController {
         pasteboard.writeObjects([item])
     }
 
-    /// Pastes slides after `number`: the app's own type when present,
-    /// otherwise plain text as one slide.
+    /// Pastes slides after `selection`: the app's own type when present,
+    /// otherwise plain text as one slide. The pasteboard is read now; the
+    /// place is resolved when the insert runs.
     @discardableResult
-    func pasteSlides(from pasteboard: NSPasteboard, after number: Int?) -> Bool {
-        let beforeNumber = number.flatMap { $0 + 1 <= editor.boxes.count ? $0 + 1 : nil }
+    func pasteSlides(from pasteboard: NSPasteboard, after selection: SlideSelection) -> Bool {
+        let markdowns: [String]
         if let data = pasteboard.data(forType: NSPasteboard.PasteboardType(SlideDragPayload.pasteboardType)), let payload = SlideDragPayload(data: data) {
-            return perform(.insert(markdowns: payload.markdowns, beforeNumber: beforeNumber)).isAccepted
+            markdowns = payload.markdowns
+        } else if let text = pasteboard.string(forType: .string), !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            markdowns = [text]
+        } else {
+            return false
         }
-        if let text = pasteboard.string(forType: .string), !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            return perform(.insert(markdowns: [text], beforeNumber: beforeNumber)).isAccepted
-        }
-        return false
+        return perform(on: selection) { [weak self] numbers in
+            .insert(markdowns: markdowns, beforeNumber: self?.insertionNumber(after: numbers))
+        }.isAccepted
     }
 
     func dragPayload(forSlides numbers: [Int]) -> SlideDragPayload? {

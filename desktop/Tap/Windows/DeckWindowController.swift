@@ -18,7 +18,7 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
     let newSlideButton = NewSlideButton()
     private(set) lazy var layoutGallery: LayoutGalleryController = {
         let gallery = LayoutGalleryController()
-        gallery.onPick = { [weak self] name in self?.insertSlide(layout: name, after: self?.sessionController.currentSlideNumber) }
+        gallery.onPick = { [weak self] name in self?.insertSlide(layout: name, after: .caret) }
         return gallery
     }()
     private var sidebarCollapseObservation: NSKeyValueObservation?
@@ -235,12 +235,12 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
     @objc func newSlide(_ sender: Any?) {
         let catalog = AppEnvironment.shared.layoutCatalog
         let layout = LayoutCatalog.resolvedName(AppEnvironment.shared.lastLayout.name, in: catalog.templates)
-        insertSlide(layout: layout, after: sessionController.currentSlideNumber)
+        insertSlide(layout: layout, after: .caret)
     }
 
     @objc func newSlideFromLayout(_ sender: Any?) {
         guard let name = (sender as? NSMenuItem)?.representedObject as? String else { return }
-        insertSlide(layout: name, after: sessionController.currentSlideNumber)
+        insertSlide(layout: name, after: .caret)
     }
 
     @objc func showLayoutGallery(_ sender: Any?) {
@@ -249,9 +249,9 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
                            afterSlide: sessionController.currentSlideNumber)
     }
 
-    /// Inserts a slide of the layout after `number` (or at the end), and
-    /// remembers the layout for the next New Slide.
-    func insertSlide(layout: String, after number: Int?) {
+    /// Inserts a slide of the layout after `selection` (or at the end),
+    /// and remembers the layout for the next New Slide.
+    func insertSlide(layout: String, after selection: SlideSelection) {
         guard let template = AppEnvironment.shared.layoutCatalog.template(named: layout) else {
             sessionController.session.log.append("no template for layout \(layout): the layout catalog has not loaded", source: .app)
             NSSound.beep()
@@ -260,31 +260,35 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
         // The layout becomes the last one only once its slide exists: an
         // insert queued behind tap's confirmation and then abandoned leaves
         // the last layout as it was.
-        sessionController.insertNewSlide(markdown: template.markdown, after: number) { inserted in
+        sessionController.insertNewSlide(markdown: template.markdown, after: selection) { inserted in
             if inserted { AppEnvironment.shared.lastLayout.name = layout }
         }
     }
 
+    // The slide commands name the selection now and resolve it when they
+    // run, which may be after tap's answer renumbers the slides. See
+    // `SlideSelection`.
+
     @objc func duplicateSlides(_ sender: Any?) {
-        sessionController.perform(.duplicate(numbers: sessionController.selectedSlideNumbers))
+        sessionController.perform(on: sessionController.captureSelection()) { .duplicate(numbers: $0) }
     }
 
+    /// The core refuses to delete every slide, so a deck keeps at least one.
     @objc func deleteSlides(_ sender: Any?) {
-        let numbers = sessionController.selectedSlideNumbers
-        guard numbers.count < sessionController.editor.boxes.count else { return }
-        sessionController.perform(.delete(numbers: numbers))
+        sessionController.perform(on: sessionController.captureSelection()) { .delete(numbers: $0) }
     }
 
+    /// Skips the slides, or unskips them when every one is skipped, judged
+    /// on the slides the command resolves to.
     @objc func toggleSkipSlides(_ sender: Any?) {
-        let numbers = sessionController.selectedSlideNumbers
-        sessionController.perform(.setSkip(numbers: numbers, skipped: !selectionIsSkipped))
+        sessionController.perform(on: sessionController.captureSelection()) { [weak sessionController] numbers in
+            .setSkip(numbers: numbers, skipped: !(sessionController?.slidesAreSkipped(numbers) ?? false))
+        }
     }
 
     /// True when every selected slide is skipped, so the menu offers Unskip.
     private var selectionIsSkipped: Bool {
-        let numbers = Set(sessionController.selectedSlideNumbers)
-        let selected = sessionController.editor.boxes.filter { numbers.contains($0.slide.number) }
-        return !selected.isEmpty && selected.allSatisfy(\.slide.skip)
+        sessionController.slidesAreSkipped(sessionController.selectedSlideNumbers)
     }
 
     @objc func moveSlidesUp(_ sender: Any?) { sessionController.moveSelectedSlides(by: -1) }
@@ -293,7 +297,7 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
     @objc func moveSlidesToBottom(_ sender: Any?) { sessionController.moveSelectedSlides(toTop: false) }
 
     @objc func newSlideAfter(_ sender: Any?) {
-        insertSlide(layout: AppEnvironment.shared.lastLayout.name, after: sessionController.selectedSlideNumbers.max())
+        insertSlide(layout: AppEnvironment.shared.lastLayout.name, after: sessionController.captureSelection())
     }
 
     @objc func copySlides(_ sender: Any?) {
@@ -301,7 +305,7 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
     }
 
     @objc func pasteSlides(_ sender: Any?) {
-        sessionController.pasteSlides(from: AppEnvironment.shared.slidePasteboard, after: sessionController.selectedSlideNumbers.max())
+        sessionController.pasteSlides(from: AppEnvironment.shared.slidePasteboard, after: sessionController.captureSelection())
     }
 
     func windowWillClose(_ notification: Notification) {
