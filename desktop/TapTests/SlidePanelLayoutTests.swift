@@ -163,6 +163,20 @@ final class SlidePanelLayoutTests: HostedTestCase {
         }
 
         for round in 1...2 {
+            if round == 2 {
+                // The button is held, but the last mouseDown landed in the
+                // editor, not on a divider: AppKit's swap is still not a
+                // person's drag.
+                for split in [pinned.splitViewController, unpinned.splitViewController] {
+                    let window = try XCTUnwrap(split.view.window)
+                    let editorArranged = split.splitView.arrangedSubviews[1]
+                    let inEditor = split.splitView.convert(NSPoint(x: editorArranged.frame.midX, y: split.splitView.bounds.midY), to: nil)
+                    split.noteDividerMouseEvent(try XCTUnwrap(NSEvent.mouseEvent(with: .leftMouseDown, location: inEditor, modifierFlags: [],
+                                                                                timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
+                                                                                context: nil, eventNumber: 0, clickCount: 1, pressure: 1)))
+                    split.isLeftMouseButtonDown = { true }
+                }
+            }
             pinnedWindow.tabGroup?.selectedWindow = pinnedWindow
             try await waitUntil(timeout: 2, "the pinned deck to stay pinned after round \(round)") { !pinned.splitViewController.sidebarItem.isCollapsed }
             XCTAssertTrue(pinned.isPanelPinned, "round \(round): switching to the pinned deck leaves it pinned")
@@ -228,5 +242,55 @@ final class SlidePanelLayoutTests: HostedTestCase {
         let again = try windowController(for: try await openDeck(deck))
         XCTAssertFalse(again.isPanelPinned, "the deck reopens unpinned")
         XCTAssertTrue(again.splitViewController.sidebarItem.isCollapsed)
+    }
+
+    /// Drags a divider as a person does: the mouseDown at `x` goes through
+    /// the event monitor's handler with the button held, the divider moves,
+    /// and the split view controller gets the resize reports a real drag in
+    /// the split view's tracking loop produces, one per divider index it
+    /// names. A drag of the sidebar's divider reports index 0 and also
+    /// index 1, since collapsing the sidebar resizes the editor and the
+    /// right pane.
+    func dragDivider(of split: MainSplitViewController, atX x: CGFloat, dividerIndex: Int, to position: CGFloat, reportingIndices: [Int]) throws {
+        let window = try XCTUnwrap(split.view.window)
+        let splitView = split.splitView
+        func event(_ type: NSEvent.EventType) throws -> NSEvent {
+            let location = splitView.convert(NSPoint(x: x, y: splitView.bounds.midY), to: nil)
+            return try XCTUnwrap(NSEvent.mouseEvent(with: type, location: location, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                                                    windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1))
+        }
+        split.isLeftMouseButtonDown = { true }
+        split.noteDividerMouseEvent(try event(.leftMouseDown))
+        XCTAssertTrue(split.isPersonDraggingADivider, "the mouseDown lands on a divider")
+        splitView.setPosition(position, ofDividerAt: dividerIndex)
+        for index in reportingIndices {
+            split.splitViewDidResizeSubviews(Notification(name: NSSplitView.didResizeSubviewsNotification, object: splitView,
+                                                          userInfo: ["NSSplitViewDividerIndex": index, "NSSplitViewUserResizeKey": 1]))
+        }
+        split.isLeftMouseButtonDown = { false }
+        split.noteDividerMouseEvent(try event(.leftMouseUp))
+    }
+
+    /// A person's drag of the sidebar's divider pins or unpins the panel; it
+    /// is not a drag of the editor's divider, so the editor and the right
+    /// pane still return to the middle. A drag of the editor's own divider
+    /// is still recorded.
+    func testASidebarDragIsNotAnEditorDividerDrag() async throws {
+        let document = try await openDeck(try Fixtures.copyDeck("plain.md"))
+        let controller = try windowController(for: document)
+        let split = controller.splitViewController
+        split.view.layoutSubtreeIfNeeded()
+        XCTAssertTrue(controller.isPanelPinned)
+
+        let sidebarDividerX = split.splitView.arrangedSubviews[0].frame.maxX + split.splitView.dividerThickness / 2
+        try dragDivider(of: split, atX: sidebarDividerX, dividerIndex: 0, to: 0, reportingIndices: [0, 1])
+        try await waitUntil(timeout: 2, "the sidebar drag to unpin the deck") { !controller.isPanelPinned }
+        XCTAssertTrue(split.sidebarItem.isCollapsed)
+        XCTAssertFalse(split.dividerPolicy.userMovedDivider, "a drag of the sidebar's divider is not a drag of the editor's")
+
+        split.view.layoutSubtreeIfNeeded()
+        let editorDividerX = split.splitView.arrangedSubviews[1].frame.maxX + split.splitView.dividerThickness / 2
+        try dragDivider(of: split, atX: editorDividerX, dividerIndex: 1, to: editorDividerX - 100, reportingIndices: [1])
+        XCTAssertTrue(split.dividerPolicy.userMovedDivider, "a drag of the editor's own divider is recorded")
     }
 }

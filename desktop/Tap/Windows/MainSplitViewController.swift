@@ -9,6 +9,12 @@ final class MainSplitViewController: NSSplitViewController {
     private(set) var dividerPolicy = DividerPolicy()
     private var isBalancing = false
     private var isPersonDraggingTheDivider = false
+    /// Whether that divider is the editor's own, between the editor and the
+    /// right pane, rather than the sidebar's. Only this one holds the
+    /// person's chosen split: a drag of the sidebar's divider pins or
+    /// unpins the panel, and it also resizes the editor and the right pane,
+    /// so the resize notification alone cannot tell the two apart.
+    private var isPersonDraggingTheEditorDivider = false
     private var dividerMouseMonitor: Any?
     /// Whether the left mouse button is physically down. Replaceable so a
     /// test can stand in for the person's hand during a simulated drag.
@@ -88,13 +94,21 @@ final class MainSplitViewController: NSSplitViewController {
         guard event.window === view.window else { return }
         if event.type == .leftMouseUp {
             isPersonDraggingTheDivider = false
+            isPersonDraggingTheEditorDivider = false
             return
         }
         guard let pointInSuperview = splitView.superview?.convert(event.locationInWindow, from: nil) else {
             isPersonDraggingTheDivider = false
+            isPersonDraggingTheEditorDivider = false
             return
         }
         isPersonDraggingTheDivider = splitView.hitTest(pointInSuperview) === splitView
+        // The editor's divider lies on the far side of the editor's middle;
+        // the sidebar's lies on the near side.
+        let arrangedSubviews = splitView.arrangedSubviews
+        let pointInSplitView = splitView.convert(event.locationInWindow, from: nil)
+        isPersonDraggingTheEditorDivider = isPersonDraggingTheDivider && arrangedSubviews.count > editorDividerIndex
+            && pointInSplitView.x > arrangedSubviews[editorDividerIndex].frame.midX
     }
 
     var isPreviewHidden: Bool { inspectorItem.isCollapsed }
@@ -149,7 +163,7 @@ final class MainSplitViewController: NSSplitViewController {
 
     override func splitViewDidResizeSubviews(_ notification: Notification) {
         super.splitViewDidResizeSubviews(notification)
-        if !isBalancing, isPersonDraggingTheDivider, notification.userInfo?["NSSplitViewDividerIndex"] != nil {
+        if !isBalancing, isPersonDraggingTheEditorDivider, notification.userInfo?["NSSplitViewDividerIndex"] != nil {
             userDidDragDivider()
         }
     }
