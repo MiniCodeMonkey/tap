@@ -125,6 +125,14 @@ final class EditorHeaderDragTests: HostedTestCase {
         pasteboard.writeObjects([item])
         let info = FakeDraggingInfo(pasteboard: pasteboard, location: editor.convert(NSPoint(x: header5.midX, y: header5.midY), to: nil), source: editor, window: window)
         XCTAssertEqual(editor.draggingUpdated(info), [], "a drop onto its own place offers no operation")
+
+        // The lower half of the dragged box is the gap before slide 6, which
+        // is the same place.
+        let box5 = try XCTUnwrap(editor.boxRect(forBoxAt: 4))
+        let lowerHalf = NSPoint(x: box5.midX, y: box5.maxY - 1)
+        XCTAssertEqual(editor.dropBoundary(at: lowerHalf), 6, "the lower half of slide 5 is the gap before slide 6")
+        let lowerHalfInfo = FakeDraggingInfo(pasteboard: pasteboard, location: editor.convert(lowerHalf, to: nil), source: editor, window: window)
+        XCTAssertEqual(editor.draggingUpdated(lowerHalfInfo), [], "a drop just after the dragged slide offers no operation either")
     }
 
     func testTheDropIndicatorHasALabel() async throws {
