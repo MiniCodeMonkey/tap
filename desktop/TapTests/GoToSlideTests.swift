@@ -92,6 +92,13 @@ final class GoToSlideTests: HostedTestCase {
     /// not always the deck's own window. Confirming a jump then brings the
     /// deck window to the front, since that is where the visible effect (the
     /// cursor move) actually happens; cancelling leaves window order alone.
+    /// The bring-forward step is observed through `bringDeckWindowForward`,
+    /// a replaceable recorder here, rather than `NSApp.orderedWindows`: this
+    /// hosted test host does not reflect `makeKeyAndOrderFront` in that list
+    /// reliably enough to tell a confirmed jump apart from one where the
+    /// step never ran (confirmed directly: an earlier version of this test
+    /// asserted on `orderedWindows` and passed whether or not the production
+    /// call was present).
     func testGoToSlideOpensOverTheInvokingWindowAndBringsTheDeckWindowFrontOnConfirm() async throws {
         let document = try await openDeckAndWaitForPreview(try Fixtures.copyAppFixture())
         try await waitForBoxes(document, count: 4)
@@ -100,7 +107,9 @@ final class GoToSlideTests: HostedTestCase {
         let previewWindow = try XCTUnwrap(deckWindowController.previewWindowController?.window)
         let deckWindow = try XCTUnwrap(deckWindowController.window)
 
-        previewWindow.makeKeyAndOrderFront(nil)
+        var broughtForward: [NSWindow] = []
+        deckWindowController.bringDeckWindowForward = { broughtForward.append($0) }
+
         deckWindowController.showGoToSlide(over: previewWindow)
         let outline = try XCTUnwrap(deckWindowController.goToSlideController)
         XCTAssertTrue(outline.panel.isVisible)
@@ -110,11 +119,13 @@ final class GoToSlideTests: HostedTestCase {
         outline.setQuery("")
         outline.confirm()
         XCTAssertFalse(outline.panel.isVisible)
-        let orderedWindows = NSApp.orderedWindows
-        let deckIndex = try XCTUnwrap(orderedWindows.firstIndex(of: deckWindow))
-        let previewIndex = try XCTUnwrap(orderedWindows.firstIndex(of: previewWindow))
-        XCTAssertLessThan(deckIndex, previewIndex,
-                          "the deck window is ordered in front of the preview window after a confirmed jump")
+        XCTAssertEqual(broughtForward.count, 1, "confirm brings the deck window forward exactly once")
+        XCTAssertTrue(broughtForward.first === deckWindow, "confirm brings the deck window forward, not some other window")
+
+        broughtForward.removeAll()
+        deckWindowController.showGoToSlide(over: previewWindow)
+        deckWindowController.goToSlideController?.cancel()
+        XCTAssertTrue(broughtForward.isEmpty, "cancel leaves window order alone")
 
         deckWindowController.dockPreview()
     }

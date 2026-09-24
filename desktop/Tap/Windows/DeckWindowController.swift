@@ -90,6 +90,15 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
 
     private(set) var goToSlideController: GoToSlideController?
 
+    /// Brings the deck's own window forward after a confirmed jump. A
+    /// separate, replaceable step rather than an inline `makeKeyAndOrderFront`
+    /// call so a test can observe that it ran, and ran on exactly the deck
+    /// window, without relying on `NSApp.orderedWindows`: this hosted test
+    /// host does not reflect `makeKeyAndOrderFront` there reliably enough to
+    /// tell a confirmed jump apart from one with this step removed
+    /// (confirmed directly while fixing that gap).
+    var bringDeckWindowForward: (NSWindow) -> Void = { $0.makeKeyAndOrderFront(nil) }
+
     /// Shows the Go to Slide panel over this deck's own window.
     @objc func goToSlide(_ sender: Any?) {
         showGoToSlide(over: window)
@@ -110,7 +119,9 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
         let controller = goToSlideController ?? GoToSlideController(
             slides: { [weak self] in self?.sessionController.editor.boxes.map(\.slide) ?? [] },
             jump: { [weak self] number in
-                self?.window?.makeKeyAndOrderFront(nil)
+                if let self, let deckWindow = self.window {
+                    self.bringDeckWindowForward(deckWindow)
+                }
                 self?.sessionController.jumpToSlide(number: number)
             })
         goToSlideController = controller
