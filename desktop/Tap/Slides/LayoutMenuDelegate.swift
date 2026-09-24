@@ -11,6 +11,7 @@ final class LayoutMenuDelegate: NSObject, NSMenuDelegate {
         let templates = AppEnvironment.shared.layoutCatalog.templates
         if templates.isEmpty {
             menu.addItem(MainMenu.item("Loading layouts from tap…", action: nil))
+            Task { await AppEnvironment.shared.layoutCatalog.load() }
         }
         for template in templates {
             let item = MainMenu.item(LayoutCatalog.displayName(template.name), action: #selector(DeckWindowController.newSlideFromLayout(_:)))

@@ -258,6 +258,7 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
         guard let template = catalog.template(named: layout) else {
             sessionController.session.log.append("no template for layout \(layout): the layout catalog has not loaded", source: .app)
             NSSound.beep()
+            Task { await catalog.load() }
             return
         }
         // The layout becomes the last one only once its slide exists: an
