@@ -69,15 +69,9 @@ final class ThumbnailRendererTests: HostedTestCase {
         try await waitForBoxes(document, count: 7)
         let (renderer, _, summary) = try await makeRenderer(for: document)
         let deckWindow = try XCTUnwrap(document.windowControllers.first?.window)
-        // An opaque window over the whole deck window: the window server reports the deck window as not visible.
-        let cover = NSWindow(contentRect: deckWindow.frame.insetBy(dx: -50, dy: -50), styleMask: [.titled], backing: .buffered, defer: false)
-        cover.isOpaque = true
-        cover.backgroundColor = .black
-        cover.level = .floating
-        cover.orderFrontRegardless()
+        let cover = try await coverWindow(deckWindow)
         // A failed run must not leave the cover over every later test's window.
-        defer { cover.orderOut(nil) }
-        try await waitUntil(timeout: 5, "the deck window to be covered") { !deckWindow.occlusionState.contains(.visible) }
+        defer { cover.remove() }
 
         var images: [Int] = []
         renderer.onImage = { job, _, _ in images.append(job.slideNumber) }
@@ -87,7 +81,7 @@ final class ThumbnailRendererTests: HostedTestCase {
         XCTAssertEqual(renderer.renderCount, 0)
         XCTAssertTrue(images.isEmpty)
 
-        cover.orderOut(nil)
+        cover.window.orderOut(nil)
         try await waitUntil(timeout: 10, "the deck window to be visible again") { deckWindow.occlusionState.contains(.visible) }
         try await waitUntil(timeout: 30, "thumbnails after the cover is gone") { images.count == 7 }
         XCTAssertGreaterThan(renderer.navigationCount, 0)
