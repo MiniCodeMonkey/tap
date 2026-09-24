@@ -14,6 +14,9 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
     /// True while a panel click moves the cursor, so the cursor's own
     /// selection sync does not collapse a Shift-click's range.
     private var isSelectingFromPanel = false
+    /// The deck's path as of the last move, so the slide panel's pinned
+    /// state can follow it from the old path to the new one.
+    private var previousDeckURL: URL?
     private(set) var navigator = PreviewNavigator()
     private(set) var client: TapClient?
     private(set) var socket: TapSocket?
@@ -124,6 +127,7 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
 
     init(document: DeckDocument) {
         self.document = document
+        previousDeckURL = document.fileURL
         let deckURL = document.fileURL ?? FileManager.default.temporaryDirectory.appendingPathComponent("Untitled.md")
         session = TapSession(deckURL: deckURL, configuration: AppEnvironment.shared.sessionConfiguration())
         super.init()
@@ -268,11 +272,15 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
         if hasDiskConflict || hadDiskConflictWhenDeleted { showDiskConflict(name: url.lastPathComponent) }
         hadDiskConflictWhenDeleted = false
         fileWatcher.watch(url)
+        if let old = previousDeckURL {
+            AppEnvironment.shared.panelState.moveState(from: old, to: url)
+        }
         session.changeDeck(to: url)
         switch session.state {
         case .stopped, .failed: session.start()
         default: break
         }
+        previousDeckURL = url
     }
 
     /// The deck file changed on disk.

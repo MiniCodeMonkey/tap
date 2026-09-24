@@ -3,15 +3,23 @@ import AppKit
 /// A deck's window: the editor on the left and the Preview pane on the right,
 /// under a unified toolbar. Deck windows open as tabs of each other.
 final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolbarDelegate, NSMenuItemValidation {
+    static let slidesItemIdentifier = NSToolbarItem.Identifier("slides")
     let sessionController: DeckSessionController
     let splitViewController: MainSplitViewController
+    let sidebarHost = SidebarHostViewController()
+    let deckContentViewController: DeckContentViewController
+    let panelOverlay = SlidePanelOverlay(frame: .zero)
+    let panelPeek = SlidePanelPeek()
+    private(set) var isPanelPinned = true
+    private let slidesButton = HoverButton()
+    private var visibilityObserver: NSObjectProtocol?
 
     init(sessionController: DeckSessionController) {
         self.sessionController = sessionController
-        let sidebarHost = SidebarHostViewController()
         sidebarHost.host(sessionController.slidePanel.view)
         splitViewController = MainSplitViewController(sidebar: sidebarHost, editor: sessionController.editorViewController,
                                                       inspector: sessionController.inspectorViewController)
+        deckContentViewController = DeckContentViewController(splitViewController: splitViewController, overlay: panelOverlay)
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1440, height: 900),
                               styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
                               backing: .buffered, defer: false)
@@ -19,7 +27,7 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
         window.tabbingMode = .preferred
         window.tabbingIdentifier = "TapDeck"
         window.isReleasedWhenClosed = false
-        window.contentViewController = splitViewController
+        window.contentViewController = deckContentViewController
         window.setContentSize(NSSize(width: 1440, height: 900))
         window.center()
         super.init(window: window)
@@ -30,9 +38,54 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
         toolbar.delegate = self
         toolbar.displayMode = .iconOnly
         window.toolbar = toolbar
+
+        panelOverlay.onPointerEntered = { [weak self] in self?.panelPeek.pointerEnteredPanel() }
+        panelOverlay.onPointerLeft = { [weak self] in self?.panelPeek.pointerLeftPanel() }
+        panelPeek.onShow = { [weak self] in
+            guard let self else { return }
+            self.panelOverlay.host(self.sessionController.slidePanel.view)
+            self.panelOverlay.isHidden = false
+        }
+        panelPeek.onHide = { [weak self] in
+            guard let self else { return }
+            // Focus must not stay in a panel nobody can see: a click in the peeked
+            // panel left it in the collection view (decision 1), and a Delete there
+            // would delete slides out of sight. The editor is inside this same
+            // window, and the person's own pointer closed the peek.
+            if let responder = self.window?.firstResponder as? NSView, responder.isDescendant(of: self.panelOverlay) {
+                self.window?.makeFirstResponder(self.sessionController.editor)
+            }
+            self.panelOverlay.isHidden = true
+        }
+        let deckURL = sessionController.document?.fileURL
+        setPanelPinned(deckURL.map { AppEnvironment.shared.panelState.isPinned(deck: $0) } ?? true)
+        // AppKit's own space negotiation for a sidebar-style split item runs
+        // its first real pass only once the window actually appears on
+        // screen, joining any existing tab group, which can silently
+        // collapse a panel that was set pinned above before the window had
+        // a real frame to lay out against. This reasserts it the first
+        // time the window becomes visible, then stops watching: a later
+        // pin or unpin the person makes must not be undone by a stray
+        // occlusion change.
+        visibilityObserver = NotificationCenter.default.addObserver(forName: NSWindow.didChangeOcclusionStateNotification, object: window, queue: nil) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self, window.occlusionState.contains(.visible) else { return }
+                self.setPanelPinned(self.isPanelPinned)
+                if let observer = self.visibilityObserver {
+                    NotificationCenter.default.removeObserver(observer)
+                    self.visibilityObserver = nil
+                }
+            }
+        }
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
+
+    deinit {
+        if let visibilityObserver {
+            NotificationCenter.default.removeObserver(visibilityObserver)
+        }
+    }
 
     override func windowDidLoad() {
         super.windowDidLoad()
@@ -130,6 +183,30 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
         controller.show(over: window)
     }
 
+    /// Pins the panel as a sidebar that pushes the editor and the right
+    /// pane over, or unpins it so hovering the toolbar button peeks at it.
+    func setPanelPinned(_ pinned: Bool) {
+        isPanelPinned = pinned
+        panelPeek.isEnabled = !pinned
+        if pinned {
+            panelOverlay.isHidden = true
+            sidebarHost.host(sessionController.slidePanel.view)
+            splitViewController.setSidebarCollapsed(false)
+        } else {
+            splitViewController.setSidebarCollapsed(true)
+            panelOverlay.host(sessionController.slidePanel.view)
+            panelOverlay.isHidden = true
+        }
+        slidesButton.state = pinned ? .on : .off
+        if let deck = sessionController.document?.fileURL {
+            AppEnvironment.shared.panelState.setPinned(pinned, deck: deck)
+        }
+    }
+
+    @objc func toggleSlidePanel(_ sender: Any?) {
+        setPanelPinned(!isPanelPinned)
+    }
+
     func windowWillClose(_ notification: Notification) {
         if let controller = previewWindowController {
             controller.onClose = nil
@@ -145,11 +222,14 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
         if menuItem.action == #selector(togglePreviewPin(_:)) {
             menuItem.title = sessionController.navigator.isPinned ? "Unpin Preview" : "Pin Preview"
         }
+        if menuItem.action == #selector(toggleSlidePanel(_:)) {
+            menuItem.title = isPanelPinned ? "Unpin Slide Panel" : "Pin Slide Panel"
+        }
         return true
     }
 
     func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
-        [.flexibleSpace, Self.previewItemIdentifier]
+        [Self.slidesItemIdentifier, .flexibleSpace, Self.previewItemIdentifier]
     }
 
     func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
@@ -158,6 +238,21 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
 
     func toolbar(_ toolbar: NSToolbar, itemForItemIdentifier identifier: NSToolbarItem.Identifier,
                  willBeInsertedIntoToolbar flag: Bool) -> NSToolbarItem? {
+        if identifier == Self.slidesItemIdentifier {
+            let item = NSToolbarItem(itemIdentifier: identifier)
+            item.label = "Slides"
+            item.toolTip = "Hover to peek at the slides, click to pin them"
+            slidesButton.image = NSImage(systemSymbolName: "sidebar.left", accessibilityDescription: "Slides")
+            slidesButton.bezelStyle = .toolbar
+            slidesButton.setButtonType(.pushOnPushOff)
+            slidesButton.target = self
+            slidesButton.action = #selector(toggleSlidePanel(_:))
+            slidesButton.setAccessibilityIdentifier("slides-button")
+            slidesButton.onPointerEntered = { [weak self] in self?.panelPeek.pointerEnteredButton() }
+            slidesButton.onPointerLeft = { [weak self] in self?.panelPeek.pointerLeftButton() }
+            item.view = slidesButton
+            return item
+        }
         guard identifier == Self.previewItemIdentifier else { return nil }
         let item = NSToolbarItem(itemIdentifier: identifier)
         item.label = "Preview"

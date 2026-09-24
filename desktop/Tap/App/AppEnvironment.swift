@@ -16,6 +16,9 @@ final class AppEnvironment {
     /// Where a deck's slide-1 thumbnail is saved for the welcome window. A
     /// test replaces this with a store rooted in its own temporary folder.
     var recentThumbnailStore = RecentThumbnailStore()
+    /// Whether each deck's slide panel is pinned as a sidebar or peeks on
+    /// hover. A test replaces this with one on a fresh UserDefaults suite.
+    var panelState = SlidePanelState()
     private(set) var environmentNotice: String?
     private(set) var bundledTapVersion: String?
     private let loginShellLoader: LoginShellEnvironmentLoader

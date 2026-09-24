@@ -102,6 +102,7 @@ enum MainMenu {
 
     static func viewMenu() -> NSMenu {
         let menu = NSMenu(title: "View")
+        menu.addItem(item("Unpin Slide Panel", action: #selector(DeckWindowController.toggleSlidePanel(_:)), key: "s", modifiers: [.command, .control]))
         menu.addItem(item("Hide Preview", action: #selector(DeckWindowController.togglePreview(_:)), key: "0", modifiers: [.command, .option]))
         menu.addItem(item("Pin Preview", action: #selector(DeckWindowController.togglePreviewPin(_:)), key: "p", modifiers: [.command, .shift]))
         menu.addItem(item("Preview in Window", action: #selector(DeckWindowController.showPreviewInWindow(_:))))

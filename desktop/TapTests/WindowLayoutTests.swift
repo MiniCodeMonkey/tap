@@ -10,7 +10,7 @@ final class WindowLayoutTests: HostedTestCase {
         let document = try await openDeck(try Fixtures.copyDeck("plain.md"))
         let controller = try windowController(for: document)
         let split = controller.splitViewController
-        split.setSidebarCollapsed(true)
+        controller.setPanelPinned(false)
         controller.togglePreview(nil)
         split.view.layoutSubtreeIfNeeded()
         XCTAssertTrue(split.isPreviewHidden)
