@@ -209,4 +209,38 @@ final class ThumbnailRendererTests: HostedTestCase {
         XCTAssertEqual(renderer.renderCount, 0)
         XCTAssertEqual(reportedRevisions.first, summary.revision)
     }
+
+    /// The failure count belongs to the job it was counted for, the same
+    /// rule as the flat-capture count: a slide edited after two failed
+    /// attempts starts its new content's first attempt at the first-attempt
+    /// timeout, not the old content's already-grown one.
+    func testAFailureCountResetsWhenTheJobChanges() async throws {
+        let document = try await openDeck(try Fixtures.copyDeck("plain.md"))
+        try await waitForBoxes(document, count: 1)
+        let (renderer, _, summary) = try await makeRenderer(for: document)
+        var attemptsSeen: [Int] = []
+        var switchedToB = false
+        renderer.readyTimeoutForAttempt = { attempt in
+            attemptsSeen.append(attempt)
+            // Two short windows fail key A's job on purpose, growing its
+            // attempt count; once the test swaps in key B, a generous
+            // window lets the real ready land normally. 0.05 s is the
+            // value proven too short for this fixture's real ready in the
+            // growing-timeout test above.
+            return switchedToB ? 5 : 0.05
+        }
+        let keyA = ThumbnailKey(slideHash: "hash-a", themeSignature: summary.themeSignature)
+        renderer.setWork([ThumbnailRenderer.Job(slideNumber: 1, key: keyA)], revision: summary.revision, visible: [1], current: 1)
+        try await waitUntil(timeout: 15, "key A to fail twice") { attemptsSeen.count >= 2 }
+        XCTAssertEqual(Array(attemptsSeen.prefix(2)), [0, 1], "key A's own two failures climbed past the first-attempt window")
+
+        // The content changes before key A's third, 20 s-windowed attempt
+        // ever happens.
+        let keyB = ThumbnailKey(slideHash: "hash-b", themeSignature: summary.themeSignature)
+        switchedToB = true
+        let attemptsBeforeB = attemptsSeen.count
+        renderer.setWork([ThumbnailRenderer.Job(slideNumber: 1, key: keyB)], revision: summary.revision, visible: [1], current: 1)
+        try await waitUntil(timeout: 15, "key B's first attempt") { attemptsSeen.count > attemptsBeforeB }
+        XCTAssertEqual(attemptsSeen.last, 0, "an edited slide's first attempt must use the first-attempt timeout, not the old content's inherited failure count")
+    }
 }

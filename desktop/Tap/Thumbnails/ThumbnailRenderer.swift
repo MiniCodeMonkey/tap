@@ -68,11 +68,14 @@ final class ThumbnailRenderer: NSObject, WKScriptMessageHandler, WKNavigationDel
     private var waitingForSlide: Int?
     private var readyWaiter: CheckedContinuation<ReadyPayload?, Never>?
     private var timeoutWork: DispatchWorkItem?
-    /// Per slide: failed attempts in a row, when it may be tried again, and
-    /// flat captures in a row for the job currently counted (a job with a
-    /// different `ThumbnailKey`, such as edited content, starts its own
-    /// count rather than inheriting one left over from the old content).
-    private var failures: [Int: Int] = [:]
+    /// Per slide: failed attempts in a row for the job currently counted,
+    /// when it may be tried again, and flat captures in a row for the job
+    /// currently counted. A job with a different `ThumbnailKey`, such as
+    /// edited content, starts its own counts rather than inheriting ones
+    /// left over from the old content: `failures` feeds `readyTimeoutForAttempt`,
+    /// so a stale count would otherwise hand an edited slide's very first
+    /// attempt the old content's already-grown wait.
+    private var failures: [Int: (job: Job, count: Int)] = [:]
     private var notBefore: [Int: Date] = [:]
     private var flatCaptures: [Int: (job: Job, count: Int)] = [:]
 
@@ -95,6 +98,14 @@ final class ThumbnailRenderer: NSObject, WKScriptMessageHandler, WKNavigationDel
     var pendingCount: Int { queue.pending.count + (running ? 1 : 0) }
 
     func isQueued(_ number: Int) -> Bool { queue.pending.contains(number) }
+
+    /// Failed attempts in a row for this exact job. A stored count for a
+    /// different job at the same slide number, left over from content
+    /// since replaced, does not count.
+    private func failureCount(for job: Job) -> Int {
+        guard let existing = failures[job.slideNumber], existing.job == job else { return 0 }
+        return existing.count
+    }
 
     /// Points the renderer at a running tap, or at nothing while tap is
     /// down: with no base URL the loop stops, and the work waits.
@@ -148,8 +159,8 @@ final class ThumbnailRenderer: NSObject, WKScriptMessageHandler, WKNavigationDel
                     self.notBefore[number] = nil
                 case .retry:
                     guard self.jobs[number] == job else { continue }
-                    let count = (self.failures[number] ?? 0) + 1
-                    self.failures[number] = count
+                    let count = self.failureCount(for: job) + 1
+                    self.failures[number] = (job: job, count: count)
                     // 0.5 s, 1 s, 2 s, then 5 s: a job that keeps failing never spins the page.
                     self.notBefore[number] = Date().addingTimeInterval(min(5, 0.5 * pow(2, Double(count - 1))))
                     self.queue.requeue(number)
@@ -192,7 +203,7 @@ final class ThumbnailRenderer: NSObject, WKScriptMessageHandler, WKNavigationDel
             navigationCount += 1
             webView.load(URLRequest(url: url))
         }
-        let attempt = failures[number] ?? 0
+        let attempt = failureCount(for: job)
         guard let ready = await waitForReady(slide: number, timeout: readyTimeoutForAttempt(attempt)) else {
             loadedRevision = nil
             return .retry
