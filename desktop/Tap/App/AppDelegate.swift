@@ -15,6 +15,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         AppEnvironment.shared.warmUp()
         NSDocumentController.shared.autosavingDelay = 1
         NotificationCenter.default.addObserver(self, selector: #selector(deckWindowWillClose(_:)), name: NSWindow.willCloseNotification, object: nil)
+        // UI tests pass -TapOpenOnLaunch <path>. The completion-handler form
+        // never presents an error panel, so a missing or unreadable path
+        // fails quietly rather than blocking launch with a modal alert.
+        if let path = UserDefaults.standard.string(forKey: "TapOpenOnLaunch") {
+            NSDocumentController.shared.openDocument(withContentsOf: URL(fileURLWithPath: path), display: true) { _, _, _ in }
+        }
         // Decks opened from Finder at launch arrive first.
         DispatchQueue.main.async { MainActor.assumeIsolated { self.showWelcomeIfNoDecks() } }
     }

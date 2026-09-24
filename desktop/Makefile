@@ -3,7 +3,7 @@ DERIVED_DATA = build/DerivedData
 XCODEBUILD = xcodebuild -project Tap.xcodeproj -derivedDataPath $(DERIVED_DATA) CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO
 ONLY ?= TapTests
 
-.PHONY: project core-test build test app-path
+.PHONY: project core-test build test uitest app-path
 project:
 	xcodegen generate --spec project.yml --quiet
 
@@ -16,6 +16,9 @@ build: project
 # make test ONLY=TapTests/VersionTests/testVersionMatch runs one test.
 test: project
 	$(XCODEBUILD) -scheme Tap -destination 'platform=macOS' -only-testing:$(ONLY) test
+
+uitest: project
+	$(XCODEBUILD) -scheme Tap -destination 'platform=macOS' -only-testing:TapUITests test
 
 app-path:
 	@echo $(DERIVED_DATA)/Build/Products/Debug/Tap.app
