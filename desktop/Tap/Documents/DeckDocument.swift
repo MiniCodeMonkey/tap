@@ -286,7 +286,7 @@ final class DeckDocument: NSDocument {
             if self.savingOwnFile {
                 if error == nil, let fileURL = self.fileURL, FilePaths.same(fileURL, url) {
                     self.adoptSavedSnapshotIfCurrent()
-                    self.sessionController?.documentDidSave()
+                    self.sessionController?.documentDidSave(saveOperation)
                 }
                 // The snapshot only stands for a save of this document's own
                 // file while that save is in flight: whatever this save

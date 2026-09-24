@@ -41,6 +41,16 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
     /// True while the bar offering Load Disk Version and Keep Mine is
     /// showing, between `showDiskConflict` and whichever button resolves it.
     private(set) var hasDiskConflict = false
+    /// True when a conflict was showing at the moment the deck's file went
+    /// missing from its path, until the conflict is resolved or the deck
+    /// has a path again. Another program's coordinated rename or move
+    /// first reaches the app as the old path going missing (the raw file
+    /// watcher and tap's own `file-changed` event both see it before
+    /// NSDocument reports the new path), so a deletion that turns out to be
+    /// a move brings the conflict back in `deckMoved(to:)` rather than
+    /// letting autosave write the person's text over the other program's
+    /// change at the new path.
+    private var hadDiskConflictWhenDeleted = false
     /// True once a slide-1 snapshot has been saved as this deck's recent
     /// thumbnail. Set only on a successful capture (see `captureThumbnail`),
     /// so a capture skipped because the preview was hidden or unpainted
@@ -194,8 +204,11 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
         // The deletion is the more urgent fact: a disk conflict bar showing
         // for a file that no longer exists no longer describes anything
         // real, and both bars competing for the same space would be worse
-        // than either alone.
+        // than either alone. The conflict is remembered in case the
+        // deletion turns out to be a move.
+        let conflictWasShowing = hasDiskConflict
         clearDiskConflict()
+        hadDiskConflictWhenDeleted = conflictWasShowing
         editorViewController.showBar(DocumentBarView(
             kind: .deleted, message: "\(name) was deleted.", detail: "Your text is still here, unsaved.",
             buttons: [("Save As…", { [weak self] in self?.document?.saveAs(nil) })]))
@@ -204,15 +217,19 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
     }
 
     /// The deck has a new path: renamed, moved, saved after a deletion, or
-    /// saved with Save As. A shown conflict described the old path, so it
-    /// is cleared: a Save As has just written the person's text to the new
-    /// file, and a rename keeps the file's modification date, which
-    /// `checkAutosavingSafety` still compares before the next autosave.
+    /// saved with Save As. A shown conflict, or one that was showing when
+    /// the old path went missing on the way to this one, stays shown and
+    /// keeps blocking autosave, with its bar now naming the new file: a
+    /// rename or move by another program carries that program's change
+    /// along to the new path, so only Keep Mine, Load Disk Version, or the
+    /// person's own completed Save As (`documentDidSave(_:)`) may resolve
+    /// it.
     func deckMoved(to url: URL) {
         session.restartsWhenExited = true
         pausedMessage = nil
         editorViewController.hideBar(.deleted)
-        clearDiskConflict()
+        if hasDiskConflict || hadDiskConflictWhenDeleted { showDiskConflict(name: url.lastPathComponent) }
+        hadDiskConflictWhenDeleted = false
         fileWatcher.watch(url)
         session.changeDeck(to: url)
         switch session.state {
@@ -266,6 +283,7 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
     /// Takes down the changed on disk bar and the conflict it stands for.
     private func clearDiskConflict() {
         hasDiskConflict = false
+        hadDiskConflictWhenDeleted = false
         editorViewController.hideBar(.changedOnDisk)
     }
 
@@ -361,8 +379,11 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
     /// The buffer is on disk. tap drops the buffer it renders and reads the
     /// file. `document.text` already holds the exact text the save wrote, so
     /// the edited flag is recomputed against it right away rather than
-    /// waiting for the next keystroke.
-    func documentDidSave() {
+    /// waiting for the next keystroke. A completed Save As is the person
+    /// choosing to write their version to a new file, leaving the other
+    /// program's change in the old one, so it resolves a shown conflict.
+    func documentDidSave(_ saveOperation: NSDocument.SaveOperationType) {
+        if saveOperation == .saveAsOperation { clearDiskConflict() }
         session.send(.saved)
         session.log.append("saved the deck", source: .app)
         refreshEditedState()

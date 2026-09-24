@@ -351,6 +351,41 @@ final class ExternalChangeTests: HostedTestCase {
         XCTAssertTrue(mayClose, "the window can close")
     }
 
+    /// Another program renaming the deck while a conflict is showing is not
+    /// the person choosing their version: the conflict stays, the bar names
+    /// the new file, and the periodic autosave still does not write the
+    /// person's text over the other program's change at the new path.
+    func testRenameByAnotherProgramDuringAConflictKeepsIt() async throws {
+        let originalDelay = NSDocumentController.shared.autosavingDelay
+        NSDocumentController.shared.autosavingDelay = 0.3
+        defer { NSDocumentController.shared.autosavingDelay = originalDelay }
+        let (deck, document, mine, theirs) = try await openDeckWithAShownConflict()
+        let controller = try XCTUnwrap(document.sessionController)
+        let renamed = deck.deletingLastPathComponent().appendingPathComponent("renamed.md")
+
+        // One coordinator instance for the whole move, as in
+        // DeletedDeckTests.testDeckDeletedOrMovedWhileOpen.
+        let coordinator = NSFileCoordinator(filePresenter: nil)
+        var coordinationError: NSError?
+        coordinator.coordinate(writingItemAt: deck, options: .forMoving,
+                               writingItemAt: renamed, options: .forReplacing,
+                               error: &coordinationError) { source, destination in
+            coordinator.item(at: source, willMoveTo: destination)
+            try? FileManager.default.moveItem(at: source, to: destination)
+            coordinator.item(at: source, didMoveTo: destination)
+        }
+        XCTAssertNil(coordinationError)
+        try await waitUntil(timeout: 10, "the document to follow") { document.fileURL.map { FilePaths.same($0, renamed) } ?? false }
+
+        // Long enough for several periodic autosaves at the delay above.
+        try await Task.sleep(nanoseconds: 2_000_000_000)
+        XCTAssertEqual(try String(contentsOf: renamed, encoding: .utf8), theirs, "the other program's text is still on disk at the new path")
+        XCTAssertTrue(controller.hasDiskConflict, "only Keep Mine, Load Disk Version or the person's own Save As resolves the conflict")
+        XCTAssertEqual(controller.editorViewController.bar(.changedOnDisk)?.message, "renamed.md changed on disk.", "the bar names the new file")
+        XCTAssertEqual(controller.editor.string, mine, "the person's text is still in the editor")
+        XCTAssertTrue(document.isDocumentEdited)
+    }
+
     /// Revert To Last Saved while a conflict is showing loads the file into
     /// the editor, which resolves the conflict the same way Load Disk
     /// Version does. A Versions restore reads the file through the same
