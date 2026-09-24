@@ -38,11 +38,17 @@ final class DeletedDeckTests: HostedTestCase {
         let renamed = deck.deletingLastPathComponent().appendingPathComponent("renamed.md")
 
         // Finder renames with file coordination, as other programs should.
+        // item(at:willMoveTo:)/item(at:didMoveTo:) must be called on the same
+        // NSFileCoordinator instance that opened this coordination: calling
+        // them on a second, unrelated instance throws "may only be invoked
+        // from within a block passed to a -coordinate... method", and that
+        // exception unwinding through this async test's Swift concurrency
+        // task frame corrupts the task allocator and aborts the process.
+        let coordinator = NSFileCoordinator(filePresenter: nil)
         var coordinationError: NSError?
-        NSFileCoordinator(filePresenter: nil).coordinate(writingItemAt: deck, options: .forMoving,
-                                                         writingItemAt: renamed, options: .forReplacing,
-                                                         error: &coordinationError) { source, destination in
-            let coordinator = NSFileCoordinator(filePresenter: nil)
+        coordinator.coordinate(writingItemAt: deck, options: .forMoving,
+                               writingItemAt: renamed, options: .forReplacing,
+                               error: &coordinationError) { source, destination in
             coordinator.item(at: source, willMoveTo: destination)
             try? FileManager.default.moveItem(at: source, to: destination)
             coordinator.item(at: source, didMoveTo: destination)
@@ -118,7 +124,17 @@ final class DeletedDeckTests: HostedTestCase {
     /// the deck's own file, which the raw DispatchSource watcher sees as a
     /// delete or a rename on every autosave. That must never be mistaken for
     /// a real deletion, and the watcher must still be following the file
-    /// afterward, so a later, genuine deletion is still caught.
+    /// afterward, so a later, genuine deletion is still caught. No further
+    /// edit happens after the two autosaves, so the document is not edited
+    /// and nothing schedules another autosave. The final deletion is a raw
+    /// `unlink`, bypassing NSFileManager's own file coordination (a real
+    /// `rm` in a terminal bypasses it the same way, which is the whole
+    /// reason the raw watcher exists); confirmed directly that this does not
+    /// reach `presentedItemDidChange` either. With tap still running, its
+    /// own `file-changed` event also independently reports a deletion
+    /// through `diskChanged()`, so `session.onEvent` is cut here to isolate
+    /// what this test is actually about: whether the raw watcher's own
+    /// rearm, on its own, still catches the deletion.
     func testAutosaveIsNotMistakenForADeletion() async throws {
         let originalDelay = NSDocumentController.shared.autosavingDelay
         NSDocumentController.shared.autosavingDelay = 0.3
@@ -140,10 +156,57 @@ final class DeletedDeckTests: HostedTestCase {
         try await waitUntil(timeout: 6, "the second autosave") { !document.isDocumentEdited }
         XCTAssertNil(controller.editorViewController.bar(.deleted), "a second safe save must not look like a deletion either")
         XCTAssertTrue(FileManager.default.fileExists(atPath: deck.path))
+        XCTAssertFalse(document.isDocumentEdited, "nothing left unsaved: no further autosave can run")
 
-        // The watcher must still be following the file after two safe saves
-        // rewrote it out from under the original descriptor.
+        controller.session.onEvent = nil
+        XCTAssertEqual(unlink(deck.path), 0, "the raw unlink itself succeeded")
+        try await waitUntil(timeout: 10, "the deleted bar") { controller.editorViewController.bar(.deleted) != nil }
+    }
+
+    /// An empty, freshly opened deck is not edited, but a deletion must
+    /// still mark it edited: the "no file" state is a distinct fact from
+    /// whatever the buffer's text happens to be, not something inferred by
+    /// comparing text that could coincidentally already match.
+    func testEmptyDeckDeletedWhileUneditedStillReadsEdited() async throws {
+        let folder = try Fixtures.temporaryFolder()
+        let deck = folder.appendingPathComponent("empty.md")
+        try "".write(to: deck, atomically: true, encoding: .utf8)
+        let document = try await openDeck(deck)
+        _ = try await waitForRunningTap(document)
+        let controller = try XCTUnwrap(document.sessionController)
+        XCTAssertEqual(controller.editor.string, "")
+        XCTAssertFalse(document.isDocumentEdited, "an empty, freshly opened deck is not edited")
+
         try FileManager.default.removeItem(at: deck)
         try await waitUntil(timeout: 10, "the deleted bar") { controller.editorViewController.bar(.deleted) != nil }
+        XCTAssertTrue(document.isDocumentEdited, "a deleted document reads as edited even when its content was empty and unedited")
+    }
+
+    /// Once the deck's file is deleted, tap is not restarted if it exits,
+    /// and the preview shows a paused message instead of trying to
+    /// reconnect.
+    func testDeletedDeckPausesTapAndShowsAPausedPreview() async throws {
+        let deck = try Fixtures.copyDeck("plain.md")
+        let document = try await openDeck(deck)
+        _ = try await waitForRunningTap(document)
+        let controller = try XCTUnwrap(document.sessionController)
+        let pid = try XCTUnwrap(controller.session.processIdentifier)
+
+        try FileManager.default.removeItem(at: deck)
+        try await waitUntil(timeout: 10, "the deleted bar") { controller.editorViewController.bar(.deleted) != nil }
+        XCTAssertFalse(controller.session.restartsWhenExited, "tap is not restarted once the deck's file is gone")
+
+        kill(pid, SIGKILL)
+        try await waitUntil(timeout: 10, "tap to stop without restarting") {
+            if case .stopped = controller.session.state { return true } else { return false }
+        }
+        // A real restart would happen well within this if it were going to;
+        // give it every chance before proving it did not.
+        try await Task.sleep(nanoseconds: 500_000_000)
+        if case .running = controller.session.state { XCTFail("tap must not restart while the deck's file is deleted") }
+
+        try await waitUntil(timeout: 5, "the paused preview overlay") { !controller.previewViewController.overlay.isHidden }
+        XCTAssertEqual(controller.previewViewController.overlay.titleLabel.stringValue, "The preview is paused")
+        XCTAssertEqual(controller.previewViewController.overlay.detailLabel.stringValue, "Save the deck to see the preview.")
     }
 }

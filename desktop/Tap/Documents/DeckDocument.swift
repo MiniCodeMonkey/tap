@@ -160,17 +160,18 @@ final class DeckDocument: NSDocument {
         sessionController?.deckWasDeleted(name: url.lastPathComponent)
     }
 
-    /// Records that the deck's file no longer exists. There is nothing on
-    /// disk left for `text` to describe, so it is cleared: the editor's
-    /// buffer, which still holds the deck's last known content, then
-    /// differs from it, and the content comparison that drives
-    /// `isDocumentEdited` reports the document as edited on its own, with
-    /// no direct call to `updateChangeCount`. Assigning `text` also bumps
-    /// `textRevision`, the same as any other change to it, which
-    /// invalidates a save snapshot already captured for a write still in
-    /// flight when the deletion is noticed.
+    /// Records that the deck's file no longer exists, distinctly from
+    /// `text`'s own value: comparing `text` against the editor's buffer
+    /// cannot by itself tell "no file" apart from "file whose content
+    /// happens to be empty and unedited". `deletedName` (set by the caller
+    /// just before this runs) is what `DeckSessionController.
+    /// isContentEdited` checks first, so a deleted document always reads
+    /// as edited, whatever `text` holds. `textRevision` is still bumped
+    /// here, the same as any assignment to `text`, so a save snapshot
+    /// already captured for a write still in flight when the deletion is
+    /// noticed is invalidated.
     private func markFileGone() {
-        text = ""
+        textRevision += 1
     }
 
     override func checkAutosavingSafety() throws {

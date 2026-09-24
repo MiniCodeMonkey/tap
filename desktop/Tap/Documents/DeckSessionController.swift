@@ -115,14 +115,19 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
     /// The document is edited exactly when the editor's text differs from
     /// the deck file's content, as last read from disk (open, revert) or as
     /// last written by a save that wrote the deck's own file
-    /// (`DeckDocument.text`). This is what `DeckDocument.isDocumentEdited`
-    /// reads, computed fresh on every call rather than cached, so an
+    /// (`DeckDocument.text`), or when the deck's file has been deleted:
+    /// `deletedName` is checked first, ahead of comparing text, so a
+    /// deleted document always reads as edited whatever its text happens to
+    /// be, including a deck that was empty and unedited at the moment its
+    /// file vanished. This is what `DeckDocument.isDocumentEdited` reads,
+    /// computed fresh on every call rather than cached, so an
     /// AppKit-internal side effect that clears its own bookkeeping (as a
     /// refused close does) can never leave the document reading as clean
     /// while the buffer still disagrees with the file. Lengths are compared
     /// first so most keystrokes cost almost nothing.
     var isContentEdited: Bool {
         guard let document else { return false }
+        if document.deletedName != nil { return true }
         let editorText = editor.string
         let fileText = document.text
         return editorText.utf16.count != fileText.utf16.count || editorText != fileText
