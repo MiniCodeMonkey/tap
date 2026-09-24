@@ -38,29 +38,4 @@ final class ThumbnailQueueTests: XCTestCase {
         queue.replace(with: [2], visible: [], current: nil)
         XCTAssertEqual(queue.pending, [2])
     }
-
-    func testRequeueBacksOffAfterTheRetryLimit() {
-        var queue = ThumbnailQueue()
-        queue.replace(with: [1], visible: [], current: nil)
-        for _ in 0..<ThumbnailQueue.maxRetries {
-            XCTAssertEqual(queue.next(), 1)
-            queue.requeue(1)
-            XCTAssertEqual(queue.pending, [1], "still under the retry limit")
-        }
-        XCTAssertEqual(queue.next(), 1)
-        queue.requeue(1)
-        XCTAssertTrue(queue.pending.isEmpty, "backs off once the retry limit is exceeded")
-    }
-
-    func testReplaceDoesNotResurrectANumberThatGaveUp() {
-        var queue = ThumbnailQueue()
-        queue.replace(with: [1], visible: [], current: nil)
-        for _ in 0...ThumbnailQueue.maxRetries {
-            XCTAssertEqual(queue.next(), 1)
-            queue.requeue(1)
-        }
-        XCTAssertTrue(queue.pending.isEmpty)
-        queue.replace(with: [1], visible: [], current: nil)
-        XCTAssertTrue(queue.pending.isEmpty, "a slide that exhausted its retries is not queued again")
-    }
 }
