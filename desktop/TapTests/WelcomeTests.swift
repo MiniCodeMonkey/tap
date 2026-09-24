@@ -157,6 +157,92 @@ final class WelcomeTests: HostedTestCase {
         try assertRecordedThumbnailIsNotBlank(for: deck)
     }
 
+    /// The window server reports its own occlusion changes, and cannot be
+    /// made to report a covered window visible for a moment on demand. These
+    /// two tests leave the deck window really on screen, so the page paints
+    /// and a snapshot is a real image, and drive what the controller reads
+    /// through `occlusionStateOfPreviewWindow`, posting the occlusion
+    /// notification the window server would.
+    func testAVisibleReportShorterThanTheSettleIntervalRecordsNoThumbnail() async throws {
+        let deck = try Fixtures.copyAppFixture()
+        let document = try await openDeck(deck)
+        let controller = try XCTUnwrap(document.sessionController)
+        let reported = ReportedOcclusion(controller: controller)
+        var snapshotsStarted = 0
+        let realSnapshot = controller.takePreviewSnapshot
+        controller.takePreviewSnapshot = { configuration, completion in
+            snapshotsStarted += 1
+            realSnapshot(configuration, completion)
+        }
+        try await waitForPreview(document, slide: 1, timeout: 30)
+        let window = try XCTUnwrap(controller.previewViewController.webView.window)
+        XCTAssertTrue(window.occlusionState.contains(.visible), "the page paints on a window really on screen")
+
+        reported.report(visible: true, for: window)
+        try await Task.sleep(nanoseconds: 100_000_000)
+        reported.report(visible: false, for: window)
+        // Well past the settle interval and any snapshot it could have
+        // started.
+        try await Task.sleep(nanoseconds: 800_000_000)
+        XCTAssertEqual(snapshotsStarted, 0, "a visible report shorter than the settle interval must not start a capture")
+        XCTAssertNil(AppEnvironment.shared.recentThumbnailStore.imageData(for: deck), "a visible report shorter than the settle interval must not be captured")
+
+        reported.report(visible: true, for: window)
+        try await waitUntil(timeout: 10, "the recent thumbnail once visible for the settle interval") { AppEnvironment.shared.recentThumbnailStore.imageData(for: deck) != nil }
+        try assertRecordedThumbnailIsNotBlank(for: deck)
+    }
+
+    /// See the test above for why the occlusion state is driven directly.
+    /// The window is reported covered the moment the snapshot starts, so the
+    /// snapshot completes on a real, painted image of a window the
+    /// controller must treat as covered.
+    func testASnapshotOfAWindowCoveredDuringTheCaptureIsDiscarded() async throws {
+        let deck = try Fixtures.copyAppFixture()
+        let document = try await openDeck(deck)
+        let controller = try XCTUnwrap(document.sessionController)
+        let reported = ReportedOcclusion(controller: controller)
+        var snapshotsStarted = 0
+        var coverDuringSnapshot = true
+        let realSnapshot = controller.takePreviewSnapshot
+        controller.takePreviewSnapshot = { configuration, completion in
+            snapshotsStarted += 1
+            if coverDuringSnapshot, let window = controller.previewViewController.webView.window {
+                reported.report(visible: false, for: window)
+            }
+            realSnapshot(configuration, completion)
+        }
+        try await waitForPreview(document, slide: 1, timeout: 30)
+        let window = try XCTUnwrap(controller.previewViewController.webView.window)
+
+        reported.report(visible: true, for: window)
+        try await waitUntil(timeout: 5, "a capture to start") { snapshotsStarted == 1 }
+        // Long enough for the snapshot to have completed and been saved,
+        // had it been kept.
+        try await Task.sleep(nanoseconds: 1_000_000_000)
+        XCTAssertNil(AppEnvironment.shared.recentThumbnailStore.imageData(for: deck), "a snapshot of a window covered while it was taken must be discarded")
+
+        coverDuringSnapshot = false
+        reported.report(visible: true, for: window)
+        try await waitUntil(timeout: 10, "the recent thumbnail once visible again") { AppEnvironment.shared.recentThumbnailStore.imageData(for: deck) != nil }
+        try assertRecordedThumbnailIsNotBlank(for: deck)
+    }
+
+    /// What the controller reads as the preview window's occlusion state,
+    /// starting covered, and the notification that tells it to read again.
+    @MainActor
+    private final class ReportedOcclusion {
+        private var state: NSWindow.OcclusionState = []
+
+        init(controller: DeckSessionController) {
+            controller.occlusionStateOfPreviewWindow = { _ in self.state }
+        }
+
+        func report(visible: Bool, for window: NSWindow) {
+            state = visible ? .visible : []
+            NotificationCenter.default.post(name: NSWindow.didChangeOcclusionStateNotification, object: window)
+        }
+    }
+
     /// A borderless, opaque window over the deck window, and a count of the
     /// window server's reports of the deck window as visible since the
     /// cover took effect.

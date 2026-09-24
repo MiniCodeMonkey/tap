@@ -60,6 +60,36 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
     /// True while a snapshot is in flight, so two ready signals close
     /// together do not start two overlapping snapshots.
     private var isCapturingRecentThumbnail = false
+    /// How long the preview's window must have read visible, with no
+    /// report of it becoming covered in between, before slide 1 is
+    /// captured. The window server reports a freshly shown window that is
+    /// already covered as visible for about 0.1 s within its first 0.3 s
+    /// on screen, and the page paints during that report; a capture must
+    /// outlast such a report to prove the window is really on screen.
+    static let recentThumbnailSettleInterval: TimeInterval = 0.25
+    /// The window that held the preview when it was last seen visible, and
+    /// the moment from which it has read visible continuously. Set from the
+    /// occlusion notifications of that window, or from a check that finds
+    /// it visible with no start recorded, and cleared the moment either
+    /// finds the preview covered, hidden or in another window. A capture
+    /// keeps the start it began under and is discarded if the start has
+    /// changed by the time its snapshot completes.
+    private weak var previewVisibilityWindow: NSWindow?
+    private var previewVisibleSince: Date?
+    /// The one check scheduled for the end of the settle interval, replaced
+    /// by each newer one and cancelled whenever the preview stops being
+    /// visible or the session stops.
+    private var pendingRecentThumbnailCheck: DispatchWorkItem?
+    /// Reads the occlusion state of the preview's window. The window
+    /// server's own reports cannot be produced on demand, so tests replace
+    /// this and post the occlusion notification themselves.
+    var occlusionStateOfPreviewWindow: (NSWindow) -> NSWindow.OcclusionState = { $0.occlusionState }
+    /// Snapshots the preview's web view. Tests wrap it to change the
+    /// preview's visibility while a snapshot is in flight.
+    lazy var takePreviewSnapshot: (WKSnapshotConfiguration, @escaping @MainActor (NSImage?, Error?) -> Void) -> Void = { [weak self] configuration, completion in
+        guard let self else { return completion(nil, nil) }
+        self.previewViewController.webView.takeSnapshot(with: configuration, completionHandler: completion)
+    }
     /// The slide number the cursor was on when `loadDiskVersion` ran, the
     /// generation that load's own text will be sent as (or the first later
     /// one, if tap is down or busy when it happens), and the text that was
@@ -120,7 +150,8 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
         occlusionObserver = NotificationCenter.default.addObserver(forName: NSWindow.didChangeOcclusionStateNotification, object: nil, queue: nil) { [weak self] notification in
             let changedWindow = notification.object as AnyObject?
             MainActor.assumeIsolated {
-                guard let self, let changedWindow, changedWindow === self.previewViewController.webView.window else { return }
+                guard let self, !self.stopped, let changedWindow, changedWindow === self.previewViewController.webView.window else { return }
+                self.refreshPreviewVisibility()
                 self.previewWindowOcclusionChanged()
             }
         }
@@ -358,6 +389,8 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
         if let redoObserver { NotificationCenter.default.removeObserver(redoObserver) }
         if let occlusionObserver { NotificationCenter.default.removeObserver(occlusionObserver) }
         occlusionObserver = nil
+        pendingRecentThumbnailCheck?.cancel()
+        pendingRecentThumbnailCheck = nil
         socket?.close()
         socket = nil
         sourceSync.sender = nil
@@ -414,21 +447,52 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
     /// test's outcome). Failing either of these does not mark this deck as
     /// recorded, so a later ready for slide 1, or the preview's window
     /// becoming visible while the last ready was for slide 1
-    /// (`previewWindowOcclusionChanged`), gets another chance.
+    /// (`previewWindowOcclusionChanged`), gets another chance. A single
+    /// visible reading is not enough: the window server briefly reports a
+    /// freshly shown, already covered window as visible, and the page
+    /// paints then. So a capture waits until the preview has read visible
+    /// continuously for `recentThumbnailSettleInterval`, and the snapshot
+    /// is kept only if the preview still reads visible, under the same
+    /// start, when it completes.
     private func previewDidRender(_ payload: ReadyPayload) {
-        guard payload.slide == 1, !recordedRecentThumbnail, !isCapturingRecentThumbnail,
-              let deck = document?.fileURL else { return }
-        guard isPreviewVisible else { return }
-        isCapturingRecentThumbnail = true
-        captureThumbnail(for: deck)
+        latestReadySlide = payload.slide
+        guard payload.slide == 1 else {
+            pendingRecentThumbnailCheck?.cancel()
+            pendingRecentThumbnailCheck = nil
+            return
+        }
+        captureRecentThumbnailOnceSettled()
     }
+
+    /// The slide of the latest ready this controller acted on, so a check
+    /// that fires at the end of the settle interval captures only while the
+    /// preview still shows slide 1.
+    private var latestReadySlide: Int?
 
     /// Whether the preview's web view is shown in a window that is at least
     /// partly on screen, by the native facts described above.
     private var isPreviewVisible: Bool {
         let webView = previewViewController.webView
         guard !webView.isHiddenOrHasHiddenAncestor, let previewWindow = webView.window else { return false }
-        return previewWindow.occlusionState.contains(.visible)
+        return occlusionStateOfPreviewWindow(previewWindow).contains(.visible)
+    }
+
+    /// Brings the continuous-visibility start up to date with what the
+    /// preview reads now: cleared, with any scheduled check cancelled, when
+    /// the preview is covered, hidden or out of a window, and started now
+    /// when it is visible with no start recorded for its current window.
+    private func refreshPreviewVisibility() {
+        guard isPreviewVisible, let previewWindow = previewViewController.webView.window else {
+            previewVisibleSince = nil
+            previewVisibilityWindow = nil
+            pendingRecentThumbnailCheck?.cancel()
+            pendingRecentThumbnailCheck = nil
+            return
+        }
+        if previewVisibleSince == nil || previewVisibilityWindow !== previewWindow {
+            previewVisibleSince = Date()
+            previewVisibilityWindow = previewWindow
+        }
     }
 
     /// A deck whose slide 1 became ready while its window was covered, or
@@ -441,27 +505,63 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
         previewDidRender(lastReady)
     }
 
+    /// Captures slide 1 if the preview has read visible for the whole
+    /// settle interval, or schedules one check for the moment it will have.
+    /// An occlusion report of the window becoming covered cancels that
+    /// check, so a visible report shorter than the interval captures
+    /// nothing.
+    private func captureRecentThumbnailOnceSettled() {
+        pendingRecentThumbnailCheck?.cancel()
+        pendingRecentThumbnailCheck = nil
+        guard !stopped, latestReadySlide == 1, !recordedRecentThumbnail, !isCapturingRecentThumbnail,
+              let deck = document?.fileURL else { return }
+        refreshPreviewVisibility()
+        guard let visibleSince = previewVisibleSince else { return }
+        let remaining = Self.recentThumbnailSettleInterval - Date().timeIntervalSince(visibleSince)
+        guard remaining <= 0 else {
+            let check = DispatchWorkItem { [weak self] in
+                MainActor.assumeIsolated { self?.captureRecentThumbnailOnceSettled() }
+            }
+            pendingRecentThumbnailCheck = check
+            DispatchQueue.main.asyncAfter(deadline: .now() + remaining, execute: check)
+            return
+        }
+        isCapturingRecentThumbnail = true
+        captureThumbnail(for: deck, visibleSince: visibleSince)
+    }
+
     /// Snapshots the preview's web view and, on success only, saves it as
     /// this deck's recent thumbnail and marks the deck recorded. A snapshot
-    /// of one flat colour is a page that has not painted yet: it is never
-    /// saved, and the capture is tried again shortly while attempts remain
-    /// and the preview is still visible.
-    private func captureThumbnail(for deck: URL, remainingAttempts: Int = 3) {
+    /// that completes after the preview was covered or hidden at any point
+    /// since `visibleSince` (its start has been cleared or replaced) may
+    /// show a covered window, so it is discarded, and a preview visible
+    /// again by then starts a fresh settle interval. A snapshot of one flat
+    /// colour is a page that has not painted yet: it is never saved, and
+    /// the capture is tried again shortly while attempts remain and the
+    /// preview has stayed visible.
+    private func captureThumbnail(for deck: URL, visibleSince: Date, remainingAttempts: Int = 3) {
         let configuration = WKSnapshotConfiguration()
         configuration.snapshotWidth = 320
-        previewViewController.webView.takeSnapshot(with: configuration) { [weak self] image, _ in
+        takePreviewSnapshot(configuration) { [weak self] image, _ in
             guard let self else { return }
             self.isCapturingRecentThumbnail = false
+            guard !self.stopped else { return }
+            self.refreshPreviewVisibility()
+            guard self.previewVisibleSince == visibleSince else {
+                if self.previewVisibleSince != nil { self.captureRecentThumbnailOnceSettled() }
+                return
+            }
             guard let image, let tiff = image.tiffRepresentation, let bitmap = NSBitmapImageRep(data: tiff) else { return }
             guard !bitmap.isSingleColor else {
                 guard remainingAttempts > 1 else { return }
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in
                     MainActor.assumeIsolated {
                         guard let self, !self.stopped, !self.recordedRecentThumbnail, !self.isCapturingRecentThumbnail,
-                              let lastReady = self.previewViewController.lastReady, lastReady.slide == 1,
-                              self.isPreviewVisible else { return }
+                              self.latestReadySlide == 1 else { return }
+                        self.refreshPreviewVisibility()
+                        guard self.previewVisibleSince == visibleSince else { return }
                         self.isCapturingRecentThumbnail = true
-                        self.captureThumbnail(for: deck, remainingAttempts: remainingAttempts - 1)
+                        self.captureThumbnail(for: deck, visibleSince: visibleSince, remainingAttempts: remainingAttempts - 1)
                     }
                 }
                 return
