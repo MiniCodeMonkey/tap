@@ -87,25 +87,11 @@ final class WelcomeTests: HostedTestCase {
         let document = try await openDeck(deck)
         let window = try XCTUnwrap(document.windowControllers.first?.window)
 
-        let cover = NSWindow(contentRect: window.frame, styleMask: [.borderless], backing: .buffered, defer: false)
-        cover.isOpaque = true
-        cover.backgroundColor = .black
-        cover.level = .floating
-        cover.hasShadow = false
-        // Without this, closing the window also releases it (AppKit's
-        // default for a window with no window controller), and this local
-        // still holding it then double-releases it when the test scope
-        // ends: confirmed by a crash (EXC_BAD_ACCESS in objc_release during
-        // XCTest's post-test deallocation check) with this line absent.
-        cover.isReleasedWhenClosed = false
+        let cover = try await coverWindow(window)
         defer {
             cover.orderOut(nil)
             cover.close()
         }
-        cover.setFrame(window.frame, display: true)
-        cover.orderFrontRegardless()
-        try await waitUntil(timeout: 5, "the deck window to report occluded") { !window.occlusionState.contains(.visible) }
-        XCTAssertTrue(window.isVisible, "the deck window is still on screen, only covered")
 
         _ = try await waitForRunningTap(document)
         // Long enough for a ready signal to have arrived while covered, on a
@@ -119,6 +105,68 @@ final class WelcomeTests: HostedTestCase {
         controller.previewViewController.onReady?(ReadyPayload(revision: "visible-again", slide: 1, step: 0))
         try await waitUntil(timeout: 10, "the recent thumbnail") { AppEnvironment.shared.recentThumbnailStore.imageData(for: deck) != nil }
         try assertRecordedThumbnailIsNotBlank(for: deck)
+    }
+
+    /// A deck opened behind another window renders slide 1 with no
+    /// thumbnail. Uncovering the window records one from the ready the
+    /// page already sent: tap renders nothing new and no ready arrives.
+    func testCoveredDeckRecordsItsThumbnailOnceUncovered() async throws {
+        let deck = try Fixtures.copyAppFixture()
+        let document = try await openDeck(deck)
+        let window = try XCTUnwrap(document.windowControllers.first?.window)
+        let cover = try await coverWindow(window)
+        defer {
+            cover.orderOut(nil)
+            cover.close()
+        }
+
+        let controller = try XCTUnwrap(document.sessionController)
+        let preview = controller.previewViewController
+        try await waitUntil(timeout: 30, "slide 1 ready behind the cover") { preview.lastReady?.slide == 1 }
+        // Long enough for a capture to have finished, had one started.
+        try await Task.sleep(nanoseconds: 1_000_000_000)
+        XCTAssertNil(AppEnvironment.shared.recentThumbnailStore.imageData(for: deck), "a covered window must not be captured")
+        let readyWhileCovered = preview.lastReady
+
+        var readiesAfterUncovering = 0
+        let onReady = preview.onReady
+        preview.onReady = { payload in
+            readiesAfterUncovering += 1
+            onReady?(payload)
+        }
+        cover.orderOut(nil)
+        try await waitUntil(timeout: 10, "the recent thumbnail") { AppEnvironment.shared.recentThumbnailStore.imageData(for: deck) != nil }
+        XCTAssertEqual(readiesAfterUncovering, 0, "the thumbnail comes from the ready already received")
+        XCTAssertEqual(preview.lastReady, readyWhileCovered)
+        try assertRecordedThumbnailIsNotBlank(for: deck)
+    }
+
+    /// Places a borderless, opaque window exactly over `window` and waits
+    /// until the window server reports `window` occluded while it stays on
+    /// screen.
+    private func coverWindow(_ window: NSWindow) async throws -> NSWindow {
+        let cover = NSWindow(contentRect: window.frame, styleMask: [.borderless], backing: .buffered, defer: false)
+        cover.isOpaque = true
+        cover.backgroundColor = .black
+        cover.level = .floating
+        cover.hasShadow = false
+        // Without this, closing the window also releases it (AppKit's
+        // default for a window with no window controller), and the caller
+        // still holding it then double-releases it when the test scope
+        // ends, which crashes in objc_release during XCTest's post-test
+        // deallocation check.
+        cover.isReleasedWhenClosed = false
+        cover.setFrame(window.frame, display: true)
+        cover.orderFrontRegardless()
+        do {
+            try await waitUntil(timeout: 5, "the deck window to report occluded") { !window.occlusionState.contains(.visible) }
+        } catch {
+            cover.orderOut(nil)
+            cover.close()
+            throw error
+        }
+        XCTAssertTrue(window.isVisible, "the deck window is still on screen, only covered")
+        return cover
     }
 
     /// Samples the corners and the center of a recorded thumbnail and fails

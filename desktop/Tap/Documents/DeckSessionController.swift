@@ -30,6 +30,10 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
     /// moves by one per notification falls out of step with the text itself.
     private var undoObserver: NSObjectProtocol?
     private var redoObserver: NSObjectProtocol?
+    /// Hears occlusion changes of every window and acts only on the window
+    /// that holds the preview's web view at that moment, so it follows the
+    /// preview between the deck window and its own window.
+    private var occlusionObserver: NSObjectProtocol?
     private let fileWatcher = DeckFileWatcher()
     /// Shown by the preview in place of tap's own state while the deck's
     /// file is deleted: there is nothing for tap to run against.
@@ -100,6 +104,13 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
             }
             redoObserver = NotificationCenter.default.addObserver(forName: .NSUndoManagerDidRedoChange, object: documentUndoManager, queue: nil) { [weak self] _ in
                 MainActor.assumeIsolated { self?.refreshEditedState() }
+            }
+        }
+        occlusionObserver = NotificationCenter.default.addObserver(forName: NSWindow.didChangeOcclusionStateNotification, object: nil, queue: nil) { [weak self] notification in
+            let changedWindow = notification.object as AnyObject?
+            MainActor.assumeIsolated {
+                guard let self, let changedWindow, changedWindow === self.previewViewController.webView.window else { return }
+                self.previewWindowOcclusionChanged()
             }
         }
         session.onEvent = { [weak self] event in self?.handle(event) }
@@ -326,6 +337,8 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
         fileWatcher.watch(nil)
         if let undoObserver { NotificationCenter.default.removeObserver(undoObserver) }
         if let redoObserver { NotificationCenter.default.removeObserver(redoObserver) }
+        if let occlusionObserver { NotificationCenter.default.removeObserver(occlusionObserver) }
+        occlusionObserver = nil
         socket?.close()
         socket = nil
         sourceSync.sender = nil
@@ -377,29 +390,61 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
     /// bit either, so an additional `isVisible` check adds no coverage a
     /// mutation could kill (confirmed directly: dropping it changed no
     /// test's outcome). Failing either of these does not mark this deck as
-    /// recorded, so a later ready for slide 1, once the window or pane is
-    /// actually shown, gets another chance.
+    /// recorded, so a later ready for slide 1, or the preview's window
+    /// becoming visible while the last ready was for slide 1
+    /// (`previewWindowOcclusionChanged`), gets another chance.
     private func previewDidRender(_ payload: ReadyPayload) {
         guard payload.slide == 1, !recordedRecentThumbnail, !isCapturingRecentThumbnail,
               let deck = document?.fileURL else { return }
-        let webView = previewViewController.webView
-        guard !webView.isHiddenOrHasHiddenAncestor,
-              let previewWindow = webView.window,
-              previewWindow.occlusionState.contains(.visible) else { return }
+        guard isPreviewVisible else { return }
         isCapturingRecentThumbnail = true
         captureThumbnail(for: deck)
     }
 
+    /// Whether the preview's web view is shown in a window that is at least
+    /// partly on screen, by the native facts described above.
+    private var isPreviewVisible: Bool {
+        let webView = previewViewController.webView
+        guard !webView.isHiddenOrHasHiddenAncestor, let previewWindow = webView.window else { return false }
+        return previewWindow.occlusionState.contains(.visible)
+    }
+
+    /// A deck whose slide 1 became ready while its window was covered, or
+    /// before the window server reported the window visible, gets its
+    /// thumbnail once the preview's window is visible. The page has already
+    /// rendered slide 1, so this reuses that ready rather than waiting for
+    /// tap to render it again, which only an edit to slide 1 would cause.
+    private func previewWindowOcclusionChanged() {
+        guard let lastReady = previewViewController.lastReady, lastReady.slide == 1 else { return }
+        previewDidRender(lastReady)
+    }
+
     /// Snapshots the preview's web view and, on success only, saves it as
-    /// this deck's recent thumbnail and marks the deck recorded.
-    private func captureThumbnail(for deck: URL) {
+    /// this deck's recent thumbnail and marks the deck recorded. A snapshot
+    /// of one flat colour is a page that has not painted yet: it is never
+    /// saved, and the capture is tried again shortly while attempts remain
+    /// and the preview is still visible.
+    private func captureThumbnail(for deck: URL, remainingAttempts: Int = 3) {
         let configuration = WKSnapshotConfiguration()
         configuration.snapshotWidth = 320
         previewViewController.webView.takeSnapshot(with: configuration) { [weak self] image, _ in
             guard let self else { return }
             self.isCapturingRecentThumbnail = false
-            guard let image, let tiff = image.tiffRepresentation,
-                  let png = NSBitmapImageRep(data: tiff)?.representation(using: .png, properties: [:]) else { return }
+            guard let image, let tiff = image.tiffRepresentation, let bitmap = NSBitmapImageRep(data: tiff) else { return }
+            guard !bitmap.isSingleColor else {
+                guard remainingAttempts > 1 else { return }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in
+                    MainActor.assumeIsolated {
+                        guard let self, !self.stopped, !self.recordedRecentThumbnail, !self.isCapturingRecentThumbnail,
+                              let lastReady = self.previewViewController.lastReady, lastReady.slide == 1,
+                              self.isPreviewVisible else { return }
+                        self.isCapturingRecentThumbnail = true
+                        self.captureThumbnail(for: deck, remainingAttempts: remainingAttempts - 1)
+                    }
+                }
+                return
+            }
+            guard let png = bitmap.representation(using: .png, properties: [:]) else { return }
             self.recordedRecentThumbnail = true
             try? AppEnvironment.shared.recentThumbnailStore.save(png, for: deck)
         }
@@ -504,5 +549,26 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
     func editor(_ editor: EditorTextView, currentSlideDidChange index: Int?) {
         guard let index, editor.boxes.indices.contains(index) else { return }
         sendPreviewMessage(navigator.cursorMoved(to: editor.boxes[index].slide))
+    }
+}
+
+private extension NSBitmapImageRep {
+    /// True when a grid of samples across the image all read the same
+    /// colour, the signature of a snapshot taken before the page painted.
+    var isSingleColor: Bool {
+        let columns = 16
+        let rows = 16
+        var first: [Int]?
+        for row in 0..<rows {
+            for column in 0..<columns {
+                let x = min(pixelsWide - 1, column * pixelsWide / (columns - 1))
+                let y = min(pixelsHigh - 1, row * pixelsHigh / (rows - 1))
+                guard let color = colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB) else { continue }
+                let sample = [Int(color.redComponent * 255), Int(color.greenComponent * 255), Int(color.blueComponent * 255)]
+                if let first, first != sample { return false }
+                first = first ?? sample
+            }
+        }
+        return true
     }
 }
