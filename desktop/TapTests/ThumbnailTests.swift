@@ -157,12 +157,19 @@ final class ThumbnailTests: HostedTestCase {
         // thing that can change which slide renders next.
         var pausedAfterFirst = false
         let originalOnImage = controller.thumbnails.renderer.onImage
-        controller.thumbnails.renderer.onImage = { job, image, png in
+        // Weakly captured, and restored below: a strong `controller` here,
+        // plus a `canPaint` left at `{ true }`, would keep this renderer
+        // alive and painting slides during later tests.
+        controller.thumbnails.renderer.onImage = { [weak controller] job, image, png in
             if !pausedAfterFirst {
                 pausedAfterFirst = true
-                controller.thumbnails.renderer.canPaint = { false }
+                controller?.thumbnails.renderer.canPaint = { false }
             }
             originalOnImage?(job, image, png)
+        }
+        defer {
+            controller.thumbnails.renderer.onImage = originalOnImage
+            controller.thumbnails.renderer.canPaint = { false }
         }
         controller.thumbnails.renderer.canPaint = { true }
         try await waitUntil(timeout: 20, "the current slide to render first") { controller.thumbnails.renderer.renderCount == 1 }

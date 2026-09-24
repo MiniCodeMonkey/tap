@@ -157,6 +157,15 @@ final class ThumbnailRenderer: NSObject, WKScriptMessageHandler, WKNavigationDel
                 case .rendered:
                     self.failures[number] = nil
                     self.notBefore[number] = nil
+                    // The job just rendered is still the one setWork last set for this
+                    // slide: leave it out of the renderer's own work so a hand-off that
+                    // arrives during this capture, reporting the same job, does not
+                    // requeue and render it again. A changed job for this slide, whose
+                    // key no longer equals `job`, is left untouched and renders again.
+                    if self.jobs[number] == job {
+                        self.jobs[number] = nil
+                        self.queue.remove(number)
+                    }
                 case .retry:
                     guard self.jobs[number] == job else { continue }
                     let count = self.failureCount(for: job) + 1

@@ -170,6 +170,54 @@ final class ThumbnailRendererTests: HostedTestCase {
         XCTAssertEqual(renderer.renderCount, 0)
     }
 
+    /// The same job, unchanged, arriving while its slide is mid-capture must
+    /// not requeue and render it a second time: `setWork` rebuilds its queue
+    /// from every slide still in `jobs`, and until a finished capture clears
+    /// its own entry, a hand-off during that capture would otherwise put the
+    /// in-flight slide back in the queue for the pump loop to pick up again
+    /// right after it delivers.
+    func testASameJobArrivingDuringACaptureDoesNotRenderTwice() async throws {
+        let document = try await openDeck(try Fixtures.copyDeck("plain.md"))
+        try await waitForBoxes(document, count: 1)
+        let (renderer, _, summary) = try await makeRenderer(for: document)
+        var images: [Int] = []
+        renderer.onImage = { job, _, _ in images.append(job.slideNumber) }
+        let job = jobs(for: summary)
+        renderer.setWork(job, revision: summary.revision, visible: [1], current: 1)
+        try await waitUntil(timeout: 10, "the capture to start") { renderer.navigationCount >= 1 }
+        // The same job, unchanged, arrives again while slide 1 is mid-capture.
+        renderer.setWork(job, revision: summary.revision, visible: [1], current: 1)
+        // A wrongly requeued slide renders again almost immediately, back to
+        // back with the first delivery on the same loaded page, so the count
+        // can skip straight from 0 to 2 between two polls: waiting for it to
+        // equal 1 would miss that and time out instead of failing cleanly.
+        try await waitUntil(timeout: 20, "the thumbnail") { !images.isEmpty }
+        try await Task.sleep(nanoseconds: 500_000_000)
+        XCTAssertEqual(images, [1], "the in-flight job was not requeued, so it renders exactly once")
+        XCTAssertEqual(renderer.renderCount, 1)
+        XCTAssertFalse(renderer.isQueued(1))
+    }
+
+    /// A changed job for the same slide, arriving mid-capture, must still
+    /// render again: the in-flight job's key no longer matches, so it is
+    /// left in the renderer's work rather than cleared when the old capture
+    /// finishes.
+    func testAChangedJobArrivingDuringACaptureRendersAgain() async throws {
+        let document = try await openDeck(try Fixtures.copyDeck("plain.md"))
+        try await waitForBoxes(document, count: 1)
+        let (renderer, _, summary) = try await makeRenderer(for: document)
+        var deliveredKeys: [ThumbnailKey] = []
+        renderer.onImage = { job, _, _ in deliveredKeys.append(job.key) }
+        let originalJob = try XCTUnwrap(jobs(for: summary).first)
+        renderer.setWork([originalJob], revision: summary.revision, visible: [1], current: 1)
+        try await waitUntil(timeout: 10, "the capture to start") { renderer.navigationCount >= 1 }
+        let changedKey = ThumbnailKey(slideHash: "changed-while-capturing", themeSignature: summary.themeSignature)
+        let changedJob = ThumbnailRenderer.Job(slideNumber: 1, key: changedKey)
+        renderer.setWork([changedJob], revision: summary.revision, visible: [1], current: 1)
+        try await waitUntil(timeout: 20, "the changed job to render") { deliveredKeys.contains(changedKey) }
+        XCTAssertGreaterThanOrEqual(renderer.renderCount, 1)
+    }
+
     /// A slide whose real ready takes longer than the first attempt's
     /// window still renders, because the window grows on each retry rather
     /// than staying fixed at `readyTimeout` for as long as the deck is
