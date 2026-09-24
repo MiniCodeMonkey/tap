@@ -259,6 +259,58 @@ class HostedTestCase: XCTestCase {
         return cover
     }
 
+    /// What a timed out render wait records: the renderer's loop state
+    /// (`ThumbnailRenderer.stateDescription`, including the phase it is
+    /// stuck in), its window's occlusion, and the renderer page's own
+    /// ready state. The page's state is read with a 3 s limit, so a page
+    /// that no longer answers cannot hang the failure itself.
+    func rendererDiagnostics(_ renderer: ThumbnailRenderer) async -> String {
+        let loop = renderer.stateDescription
+        let window = renderer.webView.window
+        let windowState = "window=\(window == nil ? "none" : "present") windowVisible=\(window?.isVisible ?? false) "
+            + "occlusion=\(window?.occlusionState.rawValue ?? 0) hiddenView=\(renderer.webView.isHiddenOrHasHiddenAncestor)"
+        let page: String = await withCheckedContinuation { continuation in
+            var answered = false
+            renderer.webView.evaluateJavaScript(Self.pageStateScript) { value, error in
+                guard !answered else { return }
+                answered = true
+                continuation.resume(returning: error.map { "script failed: \($0)" } ?? String(describing: value))
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                guard !answered else { return }
+                answered = true
+                continuation.resume(returning: "no answer in 3 s")
+            }
+        }
+        return "renderer: \(loop) \(windowState) page=\(page)"
+    }
+
+    /// What a deck's thumbnail controller last handed on, for a render wait
+    /// that times out: whether tap's newest summary ever reached the
+    /// renderer, as against the renderer stalling on work it has.
+    func thumbnailControllerState(_ controller: DeckSessionController) -> String {
+        let summary = controller.thumbnails.lastSummary
+        return "controller: summaryRevision=\(summary?.revision ?? "none") summarySlides=\(summary?.slides.count ?? 0) "
+            + "previewReady=\(controller.previewViewController.lastReady.map { "slide \($0.slide) revision \($0.revision)" } ?? "none") "
+            + "current=\(controller.currentSlideNumber.map(String.init) ?? "none") visible=\(controller.slidePanel.visibleNumbers)"
+    }
+
+    /// `waitUntil` for a renderer's progress: a timeout fails with
+    /// `rendererDiagnostics`, plus the deck's controller state when a
+    /// controller is given, so a stall explains itself.
+    func waitForRenderer(_ renderer: ThumbnailRenderer, of controller: DeckSessionController? = nil, timeout: TimeInterval,
+                         _ message: String, _ condition: @escaping () -> Bool) async throws {
+        let deadline = Date().addingTimeInterval(timeout)
+        while !condition() {
+            if Date() > deadline {
+                let controllerState = controller.map { " " + thumbnailControllerState($0) } ?? ""
+                XCTFail("timed out waiting for \(message). \(await rendererDiagnostics(renderer))\(controllerState)")
+                throw CancellationError()
+            }
+            try await Task.sleep(nanoseconds: 20_000_000)
+        }
+    }
+
     /// Polls `condition` until it is true.
     //
     // condition is called across await points inside the loop below, which

@@ -4,8 +4,9 @@ import XCTest
 
 final class ThumbnailTests: HostedTestCase {
     func waitForThumbnails(_ document: DeckDocument, count: Int, timeout: TimeInterval = 40) async throws {
-        let panel = try XCTUnwrap(document.sessionController?.slidePanel)
-        try await waitUntil(timeout: timeout, "\(count) thumbnails") {
+        let controller = try XCTUnwrap(document.sessionController)
+        let panel = controller.slidePanel
+        try await waitForRenderer(controller.thumbnails.renderer, of: controller, timeout: timeout, "\(count) thumbnails") {
             panel.slides.count == count && (1...count).allSatisfy { panel.image(forSlide: $0) != nil }
         }
     }
@@ -73,10 +74,10 @@ final class ThumbnailTests: HostedTestCase {
         try await waitUntil(timeout: 10, "the preview to re-render slide 3") {
             controller.previewViewController.lastReady.map { $0.slide == 3 && $0.revision != revisionBefore } ?? false
         }
-        try await waitUntil(timeout: 20, "the first new render") { controller.thumbnails.renderer.renderCount == rendersBefore + 1 }
+        try await waitForRenderer(controller.thumbnails.renderer, of: controller, timeout: 20, "the first new render") { controller.thumbnails.renderer.renderCount == rendersBefore + 1 }
         XCTAssertEqual(controller.thumbnails.renderer.lastRenderedSlide, 3, "the current slide renders before the other changed one")
-        try await waitUntil(timeout: 20, "thumbnail 3 to change") { controller.slidePanel.image(forSlide: 3)?.tiffRepresentation != before }
-        try await waitUntil(timeout: 20, "the second render") { controller.thumbnails.renderer.renderCount == rendersBefore + 2 }
+        try await waitForRenderer(controller.thumbnails.renderer, of: controller, timeout: 20, "thumbnail 3 to change") { controller.slidePanel.image(forSlide: 3)?.tiffRepresentation != before }
+        try await waitForRenderer(controller.thumbnails.renderer, of: controller, timeout: 20, "the second render") { controller.thumbnails.renderer.renderCount == rendersBefore + 2 }
         XCTAssertEqual(controller.thumbnails.renderer.lastRenderedSlide, 1)
         XCTAssertEqual(controller.thumbnails.renderer.renderCount, rendersBefore + 2, "only the changed slides rendered again")
         XCTAssertTrue(controller.slidePanel.item(forSlide: 3)?.isUpdating == false)
@@ -129,7 +130,7 @@ final class ThumbnailTests: HostedTestCase {
         controller.editor.moveCursor(toSlide: 2)
         try await waitUntil(timeout: 5, "the cursor to reach slide 3") { controller.currentSlideNumber == 3 }
         controller.thumbnails.renderer.canPaint = { true }
-        try await waitUntil(timeout: 20, "the first render") { controller.thumbnails.renderer.renderCount == 1 }
+        try await waitForRenderer(controller.thumbnails.renderer, of: controller, timeout: 20, "the first render") { controller.thumbnails.renderer.renderCount == 1 }
         XCTAssertEqual(controller.thumbnails.renderer.lastRenderedSlide, 3, "the new cursor slide renders first")
     }
 
@@ -172,7 +173,7 @@ final class ThumbnailTests: HostedTestCase {
             controller.thumbnails.renderer.canPaint = { false }
         }
         controller.thumbnails.renderer.canPaint = { true }
-        try await waitUntil(timeout: 20, "the current slide to render first") { controller.thumbnails.renderer.renderCount == 1 }
+        try await waitForRenderer(controller.thumbnails.renderer, of: controller, timeout: 20, "the current slide to render first") { controller.thumbnails.renderer.renderCount == 1 }
         XCTAssertEqual(controller.thumbnails.renderer.lastRenderedSlide, 1, "deck order with no edits starts on slide 1")
 
         // Scroll the panel to the last slide by moving the clip view, the
@@ -196,7 +197,7 @@ final class ThumbnailTests: HostedTestCase {
         NotificationCenter.default.post(name: NSView.boundsDidChangeNotification, object: clipView)
 
         controller.thumbnails.renderer.canPaint = { true }
-        try await waitUntil(timeout: 20, "the second render") { controller.thumbnails.renderer.renderCount == 2 }
+        try await waitForRenderer(controller.thumbnails.renderer, of: controller, timeout: 20, "the second render") { controller.thumbnails.renderer.renderCount == 2 }
         XCTAssertNotEqual(controller.thumbnails.renderer.lastRenderedSlide, 2, "deck order alone would render slide 2 next")
         XCTAssertGreaterThan(controller.thumbnails.renderer.lastRenderedSlide ?? 0, 20,
                               "scrolling to the last slide should move it, or a near neighbour, to the front of the queue")
@@ -221,7 +222,7 @@ final class ThumbnailTests: HostedTestCase {
         controller.thumbnails.renderer.canPaint = { true }
         try await Task.sleep(nanoseconds: 300_000_000)
         XCTAssertEqual(controller.thumbnails.renderer.renderCount, 0, "still within the 0.5 s pause window, nothing should have rendered despite a full queue")
-        try await waitUntil(timeout: 20, "a render once the pause window passes") { controller.thumbnails.renderer.renderCount > 0 }
+        try await waitForRenderer(controller.thumbnails.renderer, of: controller, timeout: 20, "a render once the pause window passes") { controller.thumbnails.renderer.renderCount > 0 }
     }
 
     func testDuplicatedSlidesShareOneThumbnail() async throws {

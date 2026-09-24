@@ -19,6 +19,23 @@ final class ThumbnailRenderer: NSObject, WKScriptMessageHandler, WKNavigationDel
         let key: ThumbnailKey
     }
 
+    /// What the render loop is doing right now, kept for diagnostics: a
+    /// stalled renderer is told apart by where it stopped.
+    enum Phase: Equatable {
+        /// No loop is running.
+        case idle
+        /// The person is typing.
+        case paused
+        /// The window cannot paint.
+        case waitingToPaint
+        /// Every queued job is backing off.
+        case backingOff
+        /// A page for this slide was requested or is already showing it, and
+        /// the loop waits for its ready signal.
+        case waitingForReady(slide: Int, attempt: Int)
+        case snapshotting(slide: Int)
+    }
+
     static let viewSize = NSSize(width: 960, height: 540)
     /// How long a slide's first attempt may take to report ready before it is requeued.
     static let readyTimeout: TimeInterval = 5
@@ -53,6 +70,9 @@ final class ThumbnailRenderer: NSObject, WKScriptMessageHandler, WKNavigationDel
     /// Loads this renderer asked the web view for.
     private(set) var navigationCount = 0
     private(set) var lastRenderedSlide: Int?
+    private(set) var phase: Phase = .idle
+    /// The slide whose render is under way, if any.
+    private(set) var inFlightSlide: Int?
     /// After this many flat captures in a row, each following a paint-proven ready, a slide counts as blank.
     static let blankAcceptAttempts = 3
 
@@ -137,23 +157,30 @@ final class ThumbnailRenderer: NSObject, WKScriptMessageHandler, WKNavigationDel
             while true {
                 guard let self, self.baseURL != nil else {
                     self?.running = false
+                    self?.phase = .idle
                     return
                 }
                 if self.isPaused() || !self.canPaint() {
+                    self.phase = self.isPaused() ? .paused : .waitingToPaint
                     try? await Task.sleep(nanoseconds: 150_000_000)
                     continue
                 }
                 guard let number = self.nextDueSlide() else {
                     if self.queue.isEmpty {
                         self.running = false
+                        self.phase = .idle
                         return
                     }
                     // Every queued job is backing off.
+                    self.phase = .backingOff
                     try? await Task.sleep(nanoseconds: 100_000_000)
                     continue
                 }
                 guard let job = self.jobs[number] else { continue }
-                switch await self.render(job) {
+                self.inFlightSlide = number
+                let outcome = await self.render(job)
+                self.inFlightSlide = nil
+                switch outcome {
                 case .rendered:
                     self.failures[number] = nil
                     self.notBefore[number] = nil
@@ -213,6 +240,7 @@ final class ThumbnailRenderer: NSObject, WKScriptMessageHandler, WKNavigationDel
             webView.load(URLRequest(url: url))
         }
         let attempt = failureCount(for: job)
+        phase = .waitingForReady(slide: number, attempt: attempt)
         guard let ready = await waitForReady(slide: number, timeout: readyTimeoutForAttempt(attempt)) else {
             loadedRevision = nil
             return .retry
@@ -224,6 +252,7 @@ final class ThumbnailRenderer: NSObject, WKScriptMessageHandler, WKNavigationDel
         }
         let configuration = WKSnapshotConfiguration()
         configuration.snapshotWidth = NSNumber(value: job.key.width)
+        phase = .snapshotting(slide: number)
         guard let image = try? await snapshot(webView, configuration) else { return .retry }
         if FlatImageCheck.isFlat(image) {
             // The page reported ready after a paint, for this slide and revision, and the
@@ -300,5 +329,24 @@ final class ThumbnailRenderer: NSObject, WKScriptMessageHandler, WKNavigationDel
 
     func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
         resumeWaiter(with: nil)
+    }
+
+    // MARK: Diagnostics
+
+    /// The loop's state in one line, for a test that timed out waiting for a render.
+    var stateDescription: String {
+        let now = Date()
+        let failureCounts = failures.keys.sorted().map { "\($0):\(failures[$0]!.count)" }
+        let backOff = notBefore.keys.sorted().map { "\($0):\(String(format: "%.1f", notBefore[$0]!.timeIntervalSince(now)))s" }
+        let flat = flatCaptures.keys.sorted().map { "\($0):\(flatCaptures[$0]!.count)" }
+        return "running=\(running) phase=\(phase) inFlight=\(inFlightSlide.map(String.init) ?? "none") "
+            + "queue=\(queue.pending) jobs=\(jobs.keys.sorted()) "
+            + "navigationCount=\(navigationCount) renderCount=\(renderCount) "
+            + "failures=\(failureCounts) backOff=\(backOff) flatCaptures=\(flat) "
+            + "wantedRevision=\(wantedRevision ?? "none") loadedRevision=\(loadedRevision ?? "none") "
+            + "lastReady=\(lastReady.map { "slide \($0.slide) revision \($0.revision)" } ?? "none") "
+            + "waitingForSlide=\(waitingForSlide.map(String.init) ?? "none") "
+            + "client=\(baseURL == nil ? "none" : "set") canPaint=\(canPaint()) isPaused=\(isPaused()) "
+            + "webViewLoading=\(webView.isLoading) url=\(webView.url?.absoluteString ?? "none")"
     }
 }
