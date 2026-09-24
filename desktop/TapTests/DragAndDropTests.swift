@@ -132,6 +132,14 @@ final class DragAndDropTests: HostedTestCase {
         let sourceAfterUndo = try await roundTrip(sourceController)
         XCTAssertEqual(sourceAfterUndo.count, 7)
 
+        // The move's insert sent the target's text to tap without waiting for
+        // the answer. A drop before that answer is queued behind it and lands
+        // later, so the copy below waits for it and then takes effect at once,
+        // before the target is read. The queued path has its own test,
+        // testAMoveWaitsForTheTargetsInsert.
+        try await waitUntil(timeout: 10, "the target's answer for the moved slides") {
+            targetController.lastAppliedText == targetController.editor.string
+        }
         targetPanel.optionHeld = { true }
         let copied = try dragPasteboard(from: sourcePanel, numbers: [1])
         let (copyOperation, copyAccepted) = drop(copied, into: targetPanel, beforeIndex: 0, source: sourcePanel.collectionView, window: target.windowControllers.first?.window)
