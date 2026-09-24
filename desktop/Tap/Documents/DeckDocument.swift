@@ -24,8 +24,29 @@ final class DeckDocument: NSDocument {
     /// `textRevision` as of the moment `savedSnapshot` was taken.
     private var savedSnapshotRevision = 0
     private(set) var sessionController: DeckSessionController?
+    /// The file name of a deck whose file was deleted, until it is saved
+    /// again.
+    private(set) var deletedName: String?
 
     override class var autosavesInPlace: Bool { true }
+
+    override nonisolated var fileURL: URL? {
+        didSet {
+            MainActor.assumeIsolated {
+                guard let url = self.fileURL, oldValue.map({ !FilePaths.same($0, url) }) ?? true else { return }
+                self.deletedName = nil
+                self.sessionController?.deckMoved(to: url)
+            }
+        }
+    }
+
+    /// Keeps the deleted file's name showing until the document is saved
+    /// again, in place of NSDocument's own fallback for a document with no
+    /// file.
+    override var displayName: String! {
+        get { deletedName.map { ($0 as NSString).deletingPathExtension } ?? super.displayName }
+        set { super.displayName = newValue }
+    }
 
     override func makeWindowControllers() {
         let controller = DeckSessionController(document: self)
@@ -114,8 +135,43 @@ final class DeckDocument: NSDocument {
     }
 
     /// tap reports content changes with its `file-changed` event, and the
-    /// app loads them as an undoable edit, so NSDocument does not reload.
-    override func presentedItemDidChange() {}
+    /// app loads them as an undoable edit through `diskChanged()`, so this
+    /// does not reload the document itself. A change can also be a
+    /// deletion, which is checked for directly here, since a deletion is
+    /// not something tap's own `file-changed` event reports.
+    override func presentedItemDidChange() {
+        DispatchQueue.main.async { [weak self] in self?.sessionController?.checkFileStillExists() }
+    }
+
+    override func accommodatePresentedItemDeletion(completionHandler: @escaping (Error?) -> Void) {
+        DispatchQueue.main.async { [weak self] in
+            self?.fileWasDeleted()
+            completionHandler(nil)
+        }
+    }
+
+    /// Keeps the buffer as an unsaved document with no file, so autosave
+    /// does not write the deleted file back.
+    func fileWasDeleted() {
+        guard deletedName == nil, let url = fileURL else { return }
+        deletedName = url.lastPathComponent
+        markFileGone()
+        fileURL = nil
+        sessionController?.deckWasDeleted(name: url.lastPathComponent)
+    }
+
+    /// Records that the deck's file no longer exists. There is nothing on
+    /// disk left for `text` to describe, so it is cleared: the editor's
+    /// buffer, which still holds the deck's last known content, then
+    /// differs from it, and the content comparison that drives
+    /// `isDocumentEdited` reports the document as edited on its own, with
+    /// no direct call to `updateChangeCount`. Assigning `text` also bumps
+    /// `textRevision`, the same as any other change to it, which
+    /// invalidates a save snapshot already captured for a write still in
+    /// flight when the deletion is noticed.
+    private func markFileGone() {
+        text = ""
+    }
 
     override func checkAutosavingSafety() throws {
         if let known = fileModificationDate, let onDisk = diskModificationDate, onDisk.timeIntervalSince(known) > 0.001 {

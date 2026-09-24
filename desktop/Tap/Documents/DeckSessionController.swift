@@ -29,6 +29,10 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
     /// moves by one per notification falls out of step with the text itself.
     private var undoObserver: NSObjectProtocol?
     private var redoObserver: NSObjectProtocol?
+    private let fileWatcher = DeckFileWatcher()
+    /// Shown by the preview in place of tap's own state while the deck's
+    /// file is deleted: there is nothing for tap to run against.
+    private var pausedMessage: String?
     /// True while the bar offering Load Disk Version and Keep Mine is
     /// showing, between `showDiskConflict` and whichever button resolves it.
     private(set) var hasDiskConflict = false
@@ -89,6 +93,23 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
             }
         }
         session.onEvent = { [weak self] event in self?.handle(event) }
+        // A change fires on the deletion or rename itself, which for the
+        // app's own safe save is the moment it renames a temporary file
+        // over the deck's own path: the file exists again, under the same
+        // descriptor's old path, within a moment. Waiting briefly before
+        // checking, rather than reacting the instant the event fires,
+        // lets that rename land first, so the app's own save is never
+        // mistaken for someone deleting the file out from under it.
+        fileWatcher.onChange = { [weak self] in
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                MainActor.assumeIsolated {
+                    guard let self else { return }
+                    self.checkFileStillExists()
+                    self.fileWatcher.watch(self.document?.fileURL)
+                }
+            }
+        }
+        fileWatcher.watch(document.fileURL)
     }
 
     /// The document is edited exactly when the editor's text differs from
@@ -129,10 +150,57 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
         }
     }
 
+    /// Checks whether the deck's file is still there, and records a
+    /// deletion when it is not. Called after the raw file watcher fires and
+    /// after `presentedItemDidChange`, neither of which says on its own
+    /// whether what happened was a deletion.
+    func checkFileStillExists() {
+        guard let url = document?.fileURL else { return }
+        if !FileManager.default.fileExists(atPath: url.path) { document?.fileWasDeleted() }
+    }
+
+    /// The deck's file was deleted: tap is paused, the buffer stays as an
+    /// unsaved document, and a bar offers Save As.
+    func deckWasDeleted(name: String) {
+        session.restartsWhenExited = false
+        pausedMessage = "Save the deck to see the preview."
+        fileWatcher.watch(nil)
+        // The deletion is the more urgent fact: a disk conflict bar showing
+        // for a file that no longer exists no longer describes anything
+        // real, and both bars competing for the same space would be worse
+        // than either alone.
+        if hasDiskConflict {
+            hasDiskConflict = false
+            editorViewController.hideBar(.changedOnDisk)
+        }
+        editorViewController.showBar(DocumentBarView(
+            kind: .deleted, message: "\(name) was deleted.", detail: "Your text is still here, unsaved.",
+            buttons: [("Save As…", { [weak self] in self?.document?.saveAs(nil) })]))
+        session.log.append("\(name) was deleted", source: .app)
+        refreshEditedState()
+    }
+
+    /// The deck has a new path: renamed, moved, or saved after a deletion.
+    func deckMoved(to url: URL) {
+        session.restartsWhenExited = true
+        pausedMessage = nil
+        editorViewController.hideBar(.deleted)
+        fileWatcher.watch(url)
+        session.changeDeck(to: url)
+        switch session.state {
+        case .stopped, .failed: session.start()
+        default: break
+        }
+    }
+
     /// The deck file changed on disk.
     func diskChanged() {
-        guard let document, let url = document.fileURL,
-              let disk = try? String(contentsOf: url, encoding: .utf8) else { return }
+        guard let document, let url = document.fileURL else { return }
+        guard FileManager.default.fileExists(atPath: url.path) else {
+            document.fileWasDeleted()
+            return
+        }
+        guard let disk = try? String(contentsOf: url, encoding: .utf8) else { return }
         guard disk != editor.string else {
             document.adopt(diskText: disk)
             document.acceptDiskState()
@@ -213,6 +281,7 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
 
     func stop() {
         stopped = true
+        fileWatcher.watch(nil)
         if let undoObserver { NotificationCenter.default.removeObserver(undoObserver) }
         if let redoObserver { NotificationCenter.default.removeObserver(redoObserver) }
         socket?.close()
@@ -289,7 +358,7 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
     }
 
     private func sessionStateChanged(_ state: TapSession.State) {
-        previewViewController.showSessionState(state, restartPolicy: session.restartPolicy)
+        previewViewController.showSessionState(state, restartPolicy: session.restartPolicy, pausedMessage: pausedMessage)
         socket?.close()
         socket = nil
         guard case .running(let ready) = state else {
