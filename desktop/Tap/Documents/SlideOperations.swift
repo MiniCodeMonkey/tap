@@ -242,35 +242,31 @@ extension DeckSessionController {
         syncPanelSelectionToCursor()
     }
 
-    /// Moves the selection up (-1) or down (+1) by one slide. The selection
-    /// is read once the text is confirmed, so the slides that move are the
-    /// ones tap counts, not the ones a shifted box suggests.
+    /// Moves the selection named now up (-1) or down (+1) by one slide. The
+    /// selection is resolved when the move runs, through `perform(on:)`, so
+    /// a hand-made selection is checked against tap's ranges rather than
+    /// read fresh off the panel, which keeps its selection by number across
+    /// a renumbering answer.
     @discardableResult
     func moveSelectedSlides(by offset: Int) -> Bool {
-        guard editor.string == lastAppliedText else {
-            whenTextIsConfirmed { [weak self] in _ = self?.moveSelectedSlides(by: offset) }
-            return true
-        }
-        let numbers = selectedSlideNumbers
-        guard let first = numbers.min(), let last = numbers.max() else { return false }
-        let count = editor.boxes.count
-        if offset < 0 {
-            guard first > 1 else { return false }
-            return performNow(.move(numbers: numbers, beforeNumber: first - 1)) != nil
-        }
-        guard last < count else { return false }
-        return performNow(.move(numbers: numbers, beforeNumber: last + 2 <= count ? last + 2 : nil)) != nil
+        perform(on: captureSelection()) { [weak self] numbers in
+            guard let self, let first = numbers.min(), let last = numbers.max() else { return nil }
+            let count = self.editor.boxes.count
+            if offset < 0 {
+                guard first > 1 else { return nil }
+                return .move(numbers: numbers, beforeNumber: first - 1)
+            }
+            guard last < count else { return nil }
+            return .move(numbers: numbers, beforeNumber: last + 2 <= count ? last + 2 : nil)
+        }.isAccepted
     }
 
     @discardableResult
     func moveSelectedSlides(toTop: Bool) -> Bool {
-        guard editor.string == lastAppliedText else {
-            whenTextIsConfirmed { [weak self] in _ = self?.moveSelectedSlides(toTop: toTop) }
-            return true
-        }
-        let numbers = selectedSlideNumbers
-        guard !numbers.isEmpty else { return false }
-        return performNow(.move(numbers: numbers, beforeNumber: toTop ? 1 : nil)) != nil
+        perform(on: captureSelection()) { numbers in
+            guard !numbers.isEmpty else { return nil }
+            return .move(numbers: numbers, beforeNumber: toTop ? 1 : nil)
+        }.isAccepted
     }
 
     /// The text of each slide, from tap's ranges.
