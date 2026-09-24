@@ -68,7 +68,7 @@ extension DeckSessionController {
             while self.editor.string != self.lastAppliedText, Date() < deadline {
                 try? await Task.sleep(nanoseconds: 20_000_000)
             }
-            guard self.editor.string == self.lastAppliedText else {
+            guard !self.stopped, self.editor.string == self.lastAppliedText else {
                 NSSound.beep()
                 abandoned?()
                 return

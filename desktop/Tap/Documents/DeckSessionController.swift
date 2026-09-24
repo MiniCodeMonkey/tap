@@ -26,7 +26,7 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
     /// still resolve after: its answer belongs to a state that no longer
     /// exists and must not reach the editor, the same as a stale render
     /// must not publish over a newer one.
-    private var stopped = false
+    var stopped = false
     /// NSTextView replays undo and redo directly against the text storage,
     /// never through didChangeText, so editorTextDidChange never fires for
     /// them (confirmed directly: it fires once for a typed edit and not at
