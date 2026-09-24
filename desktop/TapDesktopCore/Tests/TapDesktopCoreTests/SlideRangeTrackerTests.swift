@@ -198,4 +198,39 @@ final class SlideRangeTrackerTests: XCTestCase {
         XCTAssertEqual(tracker.boxes.map(\.range), [NSRange(location: 0, length: 9), NSRange(location: 10, length: 4)],
                        "replaying the log out of order would give slide 1 a different length")
     }
+
+    func testAdoptRefusesAnswersToEarlierSends() {
+        var tracker = SlideRangeTracker()
+        let text = "# A\n\n---\n\n# B"
+        _ = tracker.beginSend()
+        _ = tracker.apply(SlideList(slides: [Slide(number: 1, startLine: 1, endLine: 1, title: "A"), Slide(number: 2, startLine: 5, endLine: 5, title: "B")], errors: ["x"]),
+                          sentText: text, sentGeneration: tracker.generation, currentLength: (text as NSString).length)
+        // A PUT of the old text is in flight when the operation permutes the boxes.
+        let inFlight = tracker.beginSend()
+        tracker.recordEdit(location: 0, oldLength: 13, newLength: 13)
+        tracker.adopt([SlideBox(range: NSRange(location: 0, length: 3), slide: Slide(number: 1, startLine: 1, endLine: 1, title: "B")),
+                       SlideBox(range: NSRange(location: 10, length: 3), slide: Slide(number: 2, startLine: 5, endLine: 5, title: "A"))])
+        XCTAssertEqual(tracker.boxes.map(\.slide.title), ["B", "A"])
+        XCTAssertEqual(tracker.deckErrors, ["x"], "adopting boxes says nothing about the deck's errors")
+
+        let stale = tracker.apply(SlideList(slides: [Slide(number: 1, startLine: 1, endLine: 1, title: "A"), Slide(number: 2, startLine: 5, endLine: 5, title: "B")], errors: []),
+                                  sentText: text, sentGeneration: inFlight, currentLength: 13)
+        XCTAssertNil(stale, "the answer to a send begun before the adoption describes text the operation replaced")
+        XCTAssertEqual(tracker.boxes.map(\.slide.title), ["B", "A"], "the adopted order survives it")
+
+        // The operation's own send, begun after, is applied.
+        let own = tracker.beginSend()
+        let applied = tracker.apply(SlideList(slides: [Slide(number: 1, startLine: 1, endLine: 1, title: "B"), Slide(number: 2, startLine: 5, endLine: 5, title: "A")], errors: []),
+                                    sentText: "# B\n\n---\n\n# A", sentGeneration: own, currentLength: 13)
+        XCTAssertNotNil(applied)
+        XCTAssertEqual(tracker.boxes.map(\.slide.title), ["B", "A"])
+        XCTAssertEqual(tracker.boxes[1].range, NSRange(location: 10, length: 3))
+    }
+
+    func testAdoptSeparatesOverlappingBoxes() {
+        var tracker = SlideRangeTracker()
+        tracker.adopt([SlideBox(range: NSRange(location: 0, length: 10), slide: Slide(number: 1, startLine: 1, endLine: 1)),
+                       SlideBox(range: NSRange(location: 8, length: 10), slide: Slide(number: 2, startLine: 2, endLine: 2))])
+        XCTAssertEqual(tracker.boxes[1].range.location, 11)
+    }
 }
