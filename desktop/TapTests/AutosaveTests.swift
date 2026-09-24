@@ -31,6 +31,15 @@ final class AutosaveTests: HostedTestCase {
         // session.send(.saved) were removed, the buffer would stay live
         // forever and tap would never render this write, so this warning
         // would never appear.
+        //
+        // The write below is an outside change to a deck with no unsaved
+        // edits, so the app loads it into the editor and sends it to tap as
+        // a buffer about 100 ms later. That buffer supersedes tap's render
+        // of the file whenever the render takes longer, and tap prints no
+        // warning for a buffer, so the proof would then rest on how fast tap
+        // renders. The app sends nothing from here on: tap's own render of
+        // the file is the only thing that can print the warning.
+        controller.sourceSync.sender = nil
         let saved = try XCTUnwrap(try? String(contentsOf: deck, encoding: .utf8))
         let withUndeclaredDriver = saved + "\n\n---\n\n# Query\n\n```sql {driver: sqlite}\nSELECT 1;\n```\n"
         try withUndeclaredDriver.write(to: deck, atomically: true, encoding: .utf8)
