@@ -12,6 +12,7 @@ import { resolveLayout } from '../layouts/registry';
 import { usePresentationStore } from '../stores/presentation';
 import { useConnectionStore } from '../stores/websocket';
 import { useRichBlocks, type DeckComponentPortal, type LiveCodeBlockPortal } from '../hooks/useRichBlocks';
+import { useSettleOnLiveUpdate } from '../hooks/useSettleOnLiveUpdate';
 import type { MermaidThemeOverrides } from '../utils/mermaid';
 import { parseMapConfig } from '../utils/map';
 import { isSkipped, presentedSlideNumber } from '../utils/skip';
@@ -133,6 +134,7 @@ function SlideView({
 			? []
 			: slide.slotOrder.filter((name) => !declaredSlots.has(name) && slide.slots[name] !== undefined);
 	const scrollEnabled = slide.scroll === true;
+	const rootRef = useRef<HTMLDivElement>(null);
 	const contentRef = useRef<HTMLDivElement>(null);
 	const [livePortals, setLivePortals] = useState<LiveCodeBlockPortal[]>([]);
 	const [deckComponentPortals, setDeckComponentPortals] = useState<DeckComponentPortal[]>([]);
@@ -145,6 +147,9 @@ function SlideView({
 		onDeckComponentsChange: setDeckComponentPortals,
 		mermaidOverrides
 	});
+
+	// A live update to this slide never replays its entrance animations.
+	useSettleOnLiveUpdate(rootRef, slide, fragmentIndex, step);
 
 	// A preview skips useRichBlocks, so the map code fence is never swapped
 	// for a <MapSlide>. Strip it directly instead of running the full rich
@@ -183,6 +188,7 @@ function SlideView({
 	return (
 		<SlideContext.Provider value={{ fragmentIndex, printMode }}>
 			<div
+				ref={rootRef}
 				className={`slide${mapConfig ? ' has-map' : ''}`}
 				data-layout={slide.layout}
 				data-index={presentedNumber ?? slide.index + 1}
