@@ -37,6 +37,7 @@ folder instead.
 
 One behavior no automated test reaches: drag a slide's header in the
 editor while some text elsewhere in the editor is selected. The drag must
-move the slide and leave that selection untouched. `efdb0da` skips
+move the slide and leave that selection untouched.
+`EditorTextView.draggingSession(_:endedAt:operation:)` skips
 `NSTextView`'s own end-of-move deletion for slide drags; check it by hand
 after any change near `EditorTextView`'s drag handling.
