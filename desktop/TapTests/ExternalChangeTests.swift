@@ -338,6 +338,48 @@ final class ExternalChangeTests: HostedTestCase {
         XCTAssertEqual(controller.editor.currentBoxIndex, 0, "the crash and restart did not hijack the cursor back to the load's slide")
     }
 
+    /// Reproduces the app mistaking its own in-flight autosave for an
+    /// outside change: the app writes the file, then keeps typing before
+    /// "saved" is processed. A `file-changed` report can arrive in that
+    /// window, and comparing the disk text against the live editor text
+    /// alone (which has since moved past the save) cannot tell this apart
+    /// from a real outside change, wrongly raising the conflict bar for the
+    /// app's own save. Drives `diskChanged()` directly, past the save's own
+    /// snapshot-taking step (`data(ofType:)`) and the write it stands in
+    /// for, rather than depending on tap's watcher and the app's autosave
+    /// timer landing in this order by luck.
+    func testDiskChangedDoesNotMistakeAnInFlightAutosaveForAConflict() async throws {
+        let deck = try Fixtures.copyDeck("seven-slides.md")
+        let document = try await openDeck(deck)
+        try await waitForBoxes(document, count: 7)
+        _ = try await waitForRunningTap(document)
+        let controller = try XCTUnwrap(document.sessionController)
+        controller.editor.moveCursor(toSlide: 5)
+        controller.editor.insertText(" mine", replacementRange: NSRange(location: NSNotFound, length: 0))
+
+        // Stands in for a save taking its snapshot of the buffer, the moment
+        // before it writes to disk. `document.savedSnapshot` now holds this
+        // text, as it would while the write and the "saved" message are
+        // still in flight.
+        _ = try document.data(ofType: "net.daringfireball.markdown")
+        let snapshot = controller.editor.string
+
+        // The person keeps typing before "saved" is processed.
+        controller.editor.insertText(" more", replacementRange: NSRange(location: NSNotFound, length: 0))
+        let withMore = controller.editor.string
+        XCTAssertNotEqual(snapshot, withMore, "the editor has moved on past the snapshot")
+
+        // Stands in for tap's watcher reporting the app's own write: the
+        // disk holds exactly the snapshot the save is still writing.
+        try writeOutside(snapshot, to: deck)
+        controller.diskChanged()
+
+        XCTAssertNil(controller.editorViewController.bar(.changedOnDisk), "the app's own save must not raise a conflict bar")
+        XCTAssertFalse(controller.hasDiskConflict)
+        XCTAssertEqual(controller.editor.string, withMore, "nothing was loaded over what the person kept typing")
+        XCTAssertTrue(document.isDocumentEdited, "the editor is still ahead of the snapshot the disk now holds")
+    }
+
     /// A save records the text it hands to the file and the revision that
     /// was current at that moment. If a newer `adopt(diskText:)` runs before
     /// that save's completion fires, the completion's own snapshot is now

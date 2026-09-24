@@ -199,6 +199,21 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
     }
 
     /// The deck file changed on disk.
+    ///
+    /// A disk text matching the live editor text is a write that has already
+    /// converged on what is open, whoever made it: the existing convergence
+    /// check. A `file-changed` report can also be tap noticing the app's own
+    /// autosave write while a person keeps typing past it: the app writes
+    /// the file before it sends "saved", so the report can arrive while
+    /// that save is still in flight and the editor has since moved on, which
+    /// the convergence check alone cannot catch. For that, this also
+    /// compares against `document.text` (the file's text as the app last
+    /// read or wrote it) and against `document.savedSnapshot` (the text of a
+    /// save of this file still in flight). A disk text matching any of the
+    /// three is the app's own write, known or in progress: it is recorded as
+    /// the file's text if it is not already, the edited state is refreshed,
+    /// and nothing else happens, no load and no bar. Only a disk text
+    /// matching none of the three is a real outside change.
     func diskChanged() {
         guard let document, let url = document.fileURL else { return }
         guard FileManager.default.fileExists(atPath: url.path) else {
@@ -206,13 +221,15 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
             return
         }
         guard let disk = try? String(contentsOf: url, encoding: .utf8) else { return }
-        guard disk != editor.string else {
-            document.adopt(diskText: disk)
+        guard disk != editor.string, disk != document.text, disk != document.savedSnapshot else {
+            if disk != document.text {
+                document.adopt(diskText: disk)
+            }
             document.acceptDiskState()
             refreshEditedState()
-            // The disk has converged on the editor's own text: whatever
-            // conflict was showing no longer describes reality, and must not
-            // survive to block a later autosave.
+            // The disk has converged on text the app already knows about:
+            // whatever conflict was showing no longer describes reality, and
+            // must not survive to block a later autosave.
             if hasDiskConflict {
                 hasDiskConflict = false
                 editorViewController.hideBar(.changedOnDisk)

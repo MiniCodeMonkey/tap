@@ -19,8 +19,12 @@ final class DeckDocument: NSDocument {
     /// taken at the moment the data was produced. A person may keep typing
     /// while the save writes to disk, so this, not the editor's text when
     /// the save finishes, is what `text` becomes on success: it is what
-    /// actually reached the file.
-    private var savedSnapshot: String?
+    /// actually reached the file. Also read by `DeckSessionController.
+    /// diskChanged()` to recognize the app's own autosave write before
+    /// "saved" is processed: the write reaches disk before that message
+    /// does, so a `file-changed` report can arrive while this is still the
+    /// save in flight.
+    private(set) var savedSnapshot: String?
     /// `textRevision` as of the moment `savedSnapshot` was taken.
     private var savedSnapshotRevision = 0
     private(set) var sessionController: DeckSessionController?
