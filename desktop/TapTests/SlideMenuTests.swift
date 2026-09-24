@@ -57,6 +57,20 @@ final class SlideMenuTests: HostedTestCase {
         XCTAssertEqual(controller.editor.boxes.count, 7)
     }
 
+    func testCommandDeleteDeletesTheSlideTheCaretIsInBeforeTapRenumbers() async throws {
+        let (_, controller, windowController) = try await openOps()
+        let end = NSMaxRange(controller.editor.boxes[2].range)
+        controller.editor.setSelectedRange(NSRange(location: end, length: 0))
+        controller.editor.insertText("\n\n---\n\n# Split", replacementRange: NSRange(location: NSNotFound, length: 0))
+        XCTAssertNotEqual(controller.editor.string, controller.lastAppliedText, "tap has not answered for the typing")
+        windowController.deleteSlides(nil)
+        try await waitUntil(timeout: 10, "the queued delete to land and tap to answer") {
+            controller.lastAppliedText == controller.editor.string && controller.editor.boxes.count == 7
+        }
+        let titles = try await TapSlideList.list(text: controller.editor.string).slides.map(\.title)
+        XCTAssertEqual(titles, ["One", "Two", "Three", "Four", "Five", "Six", "Seven"], "the caret was in Split, so Split goes")
+    }
+
     func testMoveToTopAndBottomAndSkipFromTheMenu() async throws {
         let (_, controller, windowController) = try await openOps()
         controller.editor.moveCursor(toSlide: 2)

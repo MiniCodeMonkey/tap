@@ -15,6 +15,8 @@ class HostedTestCase: XCTestCase {
         AppEnvironment.shared.panelState = SlidePanelState(defaults: try XCTUnwrap(UserDefaults(suiteName: "TapTests.\(UUID().uuidString)")))
         AppEnvironment.shared.thumbnailCache = ThumbnailCache(directory: try Fixtures.temporaryFolder())
         AppEnvironment.shared.lastLayout = LastLayout(defaults: try XCTUnwrap(UserDefaults(suiteName: "TapTests.layout.\(UUID().uuidString)")))
+        // Copy and paste go to a pasteboard of the test's own, never the person's clipboard.
+        AppEnvironment.shared.slidePasteboard = NSPasteboard(name: NSPasteboard.Name("TapTests.copy.\(UUID().uuidString)"))
     }
 
     override func tearDown() async throws {

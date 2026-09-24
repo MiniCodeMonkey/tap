@@ -54,8 +54,7 @@ final class SlideContextMenuTests: HostedTestCase {
         XCTAssertEqual(afterMove, ["One", "Two", "Four", "Five", "Six", "Seven", "Three"])
         try await waitUntil(timeout: 10, "tap's answer") { controller.lastAppliedText == controller.editor.string }
 
-        let pasteboard = NSPasteboard(name: NSPasteboard.Name("TapTests.copy.\(UUID().uuidString)"))
-        AppEnvironment.shared.slidePasteboard = pasteboard
+        let pasteboard = AppEnvironment.shared.slidePasteboard
         windowController.copySlides(nil)
         XCTAssertNotNil(pasteboard.data(forType: NSPasteboard.PasteboardType(SlideDragPayload.pasteboardType)))
         XCTAssertEqual(pasteboard.string(forType: .string), "<!-- layout: section -->\n# Three")
@@ -65,6 +64,65 @@ final class SlideContextMenuTests: HostedTestCase {
         windowController.pasteSlides(nil)
         let afterPaste = try await titles(controller)
         XCTAssertEqual(afterPaste, ["One", "Three", "Two", "Four", "Five", "Six", "Seven", "Three"], "pasted after the current slide")
+    }
+
+    /// Types a new slide, "Split", at the end of slide `number`, and says
+    /// tap has not answered for it: until the answer, the boxes and the
+    /// thumbnails still count seven slides, and the answer renumbers every
+    /// slide after `number`.
+    func typeASplitSlide(atTheEndOfSlide number: Int, _ controller: DeckSessionController) {
+        let end = NSMaxRange(controller.editor.boxes[number - 1].range)
+        controller.editor.setSelectedRange(NSRange(location: end, length: 0))
+        controller.editor.insertText("\n\n---\n\n# Split", replacementRange: NSRange(location: NSNotFound, length: 0))
+        XCTAssertNotEqual(controller.editor.string, controller.lastAppliedText, "tap has not answered for the typing")
+        XCTAssertEqual(controller.slidePanel.slides.map(\.title), ["One", "Two", "Three", "Four", "Five", "Six", "Seven"], "the thumbnails are the old ones")
+    }
+
+    /// Waits until tap has answered for the text and the deck has `count` slides.
+    func waitForConfirmedSlides(_ controller: DeckSessionController, count: Int, _ message: String) async throws {
+        try await waitUntil(timeout: 10, message) { controller.lastAppliedText == controller.editor.string && controller.editor.boxes.count == count }
+    }
+
+    func testTheDeleteKeyDeletesTheThumbnailClickedBeforeTapRenumbers() async throws {
+        let (_, controller, _) = try await openOps()
+        let panel = controller.slidePanel
+        panel.collectionView.window?.makeFirstResponder(panel.collectionView)
+        typeASplitSlide(atTheEndOfSlide: 1, controller)
+        panel.click(slide: 3, extendingSelection: false)
+        panel.collectionView.keyDown(with: try keyDown(51, characters: "\u{7f}", in: panel.collectionView))
+        try await waitForConfirmedSlides(controller, count: 7, "the queued delete to land and tap to answer")
+        let titles = try await titles(controller)
+        XCTAssertEqual(titles, ["One", "Split", "Two", "Four", "Five", "Six", "Seven"], "the thumbnail showed Three, so Three goes")
+    }
+
+    func testADeleteOfASelectionThatTapRenumbersIsRefused() async throws {
+        let (_, controller, _) = try await openOps()
+        let panel = controller.slidePanel
+        panel.collectionView.window?.makeFirstResponder(panel.collectionView)
+        typeASplitSlide(atTheEndOfSlide: 1, controller)
+        panel.select(numbers: [3, 4], scroll: false)
+        panel.collectionView.keyDown(with: try keyDown(51, characters: "\u{7f}", in: panel.collectionView))
+        try await waitForConfirmedSlides(controller, count: 8, "tap's answer for the typing")
+        // The queued delete runs within one 20 ms poll of the answer.
+        try await Task.sleep(nanoseconds: 500_000_000)
+        let titles = try await titles(controller)
+        XCTAssertEqual(titles, ["One", "Split", "Two", "Three", "Four", "Five", "Six", "Seven"],
+                       "slides 3 and 4 no longer hold Three and Four, so nothing is deleted")
+    }
+
+    func testPasteAfterAThumbnailBeforeTapRenumbers() async throws {
+        let (_, controller, windowController) = try await openOps()
+        let panel = controller.slidePanel
+        panel.click(slide: 7, extendingSelection: false)
+        windowController.copySlides(nil)
+        typeASplitSlide(atTheEndOfSlide: 1, controller)
+        let item3 = try XCTUnwrap(panel.item(forSlide: 3))
+        let frame = item3.view.convert(item3.view.bounds, to: panel.collectionView)
+        _ = try XCTUnwrap(panel.collectionView.menu(for: try rightClick(at: NSPoint(x: frame.midX, y: frame.midY), in: panel.collectionView)))
+        windowController.pasteSlides(nil)
+        try await waitForConfirmedSlides(controller, count: 9, "the queued paste to land and tap to answer")
+        let titles = try await titles(controller)
+        XCTAssertEqual(titles, ["One", "Split", "Two", "Three", "Seven", "Four", "Five", "Six", "Seven"], "pasted after the thumbnail that showed Three")
     }
 
     func testTheDeleteKeyInTheSidebarDeletesTheSelection() async throws {

@@ -87,6 +87,32 @@ final class NewSlideTests: HostedTestCase {
                        "New Slide now inserts big-stat")
     }
 
+    /// A stored last layout that tap no longer offers falls back to one it
+    /// does, from every New Slide entry point.
+    func testNewSlideFallsBackFromARetiredLastLayout() async throws {
+        let (_, controller, windowController) = try await openOps()
+        let catalog = AppEnvironment.shared.layoutCatalog
+        XCTAssertNil(catalog.template(named: "retired-layout"))
+        let fallback = LayoutCatalog.resolvedName("retired-layout", in: catalog.templates)
+        XCTAssertNotNil(catalog.template(named: fallback))
+        let template = try await TapTemplate.print(layout: fallback).trimmingCharacters(in: .whitespacesAndNewlines)
+
+        AppEnvironment.shared.lastLayout.name = "retired-layout"
+        controller.editor.moveCursor(toSlide: 2)
+        windowController.newSlide(nil)
+        XCTAssertEqual(controller.editor.boxes.count, 8, "New Slide inserts a layout tap offers")
+        XCTAssertEqual((controller.editor.string as NSString).substring(with: controller.editor.boxes[3].range), template)
+        XCTAssertEqual(AppEnvironment.shared.lastLayout.name, fallback)
+
+        try await waitUntil(timeout: 10, "tap's answer") { controller.lastAppliedText == controller.editor.string }
+        AppEnvironment.shared.lastLayout.name = "retired-layout"
+        controller.editor.moveCursor(toSlide: 0)
+        windowController.newSlideAfter(nil)
+        XCTAssertEqual(controller.editor.boxes.count, 9, "New Slide After, the context menu's first item, too")
+        XCTAssertEqual((controller.editor.string as NSString).substring(with: controller.editor.boxes[1].range), template)
+        XCTAssertEqual(AppEnvironment.shared.lastLayout.name, fallback)
+    }
+
     /// A New Slide queued behind typing tap has not confirmed selects
     /// nothing and records nothing until its slide exists, and an insert
     /// that is abandoned (no answer from tap in time) never becomes the
