@@ -453,7 +453,7 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
             guard let self else { return }
             self.isCapturingRecentThumbnail = false
             guard let image, let tiff = image.tiffRepresentation, let bitmap = NSBitmapImageRep(data: tiff) else { return }
-            guard !bitmap.isSingleColor else {
+            guard !FlatImageCheck.isFlat(image) else {
                 guard remainingAttempts > 1 else { return }
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in
                     MainActor.assumeIsolated {
@@ -581,26 +581,5 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
     func editor(_ editor: EditorTextView, currentSlideDidChange index: Int?) {
         guard let index, editor.boxes.indices.contains(index) else { return }
         sendPreviewMessage(navigator.cursorMoved(to: editor.boxes[index].slide))
-    }
-}
-
-private extension NSBitmapImageRep {
-    /// True when a grid of samples across the image all read the same
-    /// colour, the signature of a snapshot taken before the page painted.
-    var isSingleColor: Bool {
-        let columns = 16
-        let rows = 16
-        var first: [Int]?
-        for row in 0..<rows {
-            for column in 0..<columns {
-                let x = min(pixelsWide - 1, column * pixelsWide / (columns - 1))
-                let y = min(pixelsHigh - 1, row * pixelsHigh / (rows - 1))
-                guard let color = colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB) else { continue }
-                let sample = [Int(color.redComponent * 255), Int(color.greenComponent * 255), Int(color.blueComponent * 255)]
-                if let first, first != sample { return false }
-                first = first ?? sample
-            }
-        }
-        return true
     }
 }

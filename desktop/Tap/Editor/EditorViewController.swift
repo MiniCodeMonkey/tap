@@ -46,4 +46,19 @@ final class EditorViewController: NSViewController {
             scrollView.contentInsets = NSEdgeInsets(top: top, left: 0, bottom: 0, right: 0)
         }
     }
+
+    /// Hosts a view behind the editor, inside the visible window, where
+    /// WebKit treats it as visible and paints it. The scroll view draws an
+    /// opaque background over it, so nobody sees it. An off-screen window
+    /// would not do: WebKit suspends a page there and it never paints.
+    func hostHiddenView(_ hidden: NSView) {
+        hidden.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(hidden, positioned: .below, relativeTo: scrollView)
+        NSLayoutConstraint.activate([
+            hidden.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            hidden.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+            hidden.widthAnchor.constraint(equalToConstant: ThumbnailRenderer.viewSize.width),
+            hidden.heightAnchor.constraint(equalToConstant: ThumbnailRenderer.viewSize.height),
+        ])
+    }
 }
