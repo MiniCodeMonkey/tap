@@ -8,9 +8,10 @@ final class PreviewKeyTests: UITestCase {
         XCTAssertTrue(preview.waitForExistence(timeout: 30))
         Thread.sleep(forTimeInterval: 3)
 
-        let before = preview.screenshot().pngRepresentation
         let fileBefore = try String(contentsOf: deck, encoding: .utf8)
         preview.click()
+        Thread.sleep(forTimeInterval: 1)
+        let before = preview.screenshot().pngRepresentation
         application.typeKey("t", modifierFlags: [])
         Thread.sleep(forTimeInterval: 2)
 
