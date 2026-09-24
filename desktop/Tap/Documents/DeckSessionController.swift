@@ -22,8 +22,9 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
     /// NSTextView replays undo and redo directly against the text storage,
     /// never through didChangeText, so editorTextDidChange never fires for
     /// them (confirmed directly: it fires once for a typed edit and not at
-    /// all for the undo that reverts it). The document's edited flag is kept
-    /// current by observing the undo manager for undo and redo, and
+    /// all for the undo that reverts it). The document's edited flag and
+    /// tap's copy of the text are kept current by observing the undo
+    /// manager for undo and redo (`undoOrRedoDidChangeText`), and
     /// recomputing the flag from the editor's text on every one of those
     /// notifications and on every forward edit, rather than by counting
     /// changes: one undo can revert many keystrokes at once, so a count that
@@ -110,10 +111,10 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
         previewViewController.onReady = { [weak self] payload in self?.previewDidRender(payload) }
         if let documentUndoManager = document.undoManager {
             undoObserver = NotificationCenter.default.addObserver(forName: .NSUndoManagerDidUndoChange, object: documentUndoManager, queue: nil) { [weak self] _ in
-                MainActor.assumeIsolated { self?.refreshEditedState() }
+                MainActor.assumeIsolated { self?.undoOrRedoDidChangeText() }
             }
             redoObserver = NotificationCenter.default.addObserver(forName: .NSUndoManagerDidRedoChange, object: documentUndoManager, queue: nil) { [weak self] _ in
-                MainActor.assumeIsolated { self?.refreshEditedState() }
+                MainActor.assumeIsolated { self?.undoOrRedoDidChangeText() }
             }
         }
         occlusionObserver = NotificationCenter.default.addObserver(forName: NSWindow.didChangeOcclusionStateNotification, object: nil, queue: nil) { [weak self] notification in
@@ -558,6 +559,16 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
         newSocket.resume()
         socket = newSocket
         if let message = navigator.message { newSocket.send(message) }
+    }
+
+    /// Undo and redo change the editor's text without reaching
+    /// `editorTextDidChange`, so they refresh the edited state and send the
+    /// text to tap here. The send goes out at once rather than after a
+    /// typing pause: an undo or redo is one discrete action, with no
+    /// further keystrokes to wait for.
+    private func undoOrRedoDidChangeText() {
+        refreshEditedState()
+        Task { await sourceSync.sendNow() }
     }
 
     // MARK: EditorTextViewDelegate

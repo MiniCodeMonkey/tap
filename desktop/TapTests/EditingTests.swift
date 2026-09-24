@@ -16,6 +16,29 @@ final class EditingTests: HostedTestCase {
         XCTAssertEqual(editor.hiddenLength, text.range(of: "<!-- layout: title -->").location, "slide 1 is the first box")
     }
 
+    /// Undo and redo send the editor's text to tap on their own, with no
+    /// further typing, so tap's answer (here a slide title) follows them.
+    func testUndoAndRedoResendTheTextToTap() async throws {
+        let document = try await openDeck(try Fixtures.copyDeck("seven-slides.md"))
+        try await waitForBoxes(document, count: 7)
+        let editor = try XCTUnwrap(document.sessionController?.editor)
+        let original = editor.string
+        XCTAssertEqual(editor.boxes[1].slide.title, "The Page")
+
+        let titleEnd = (editor.string as NSString).range(of: "# The Page").upperBound
+        editor.setSelectedRange(NSRange(location: titleEnd, length: 0))
+        editor.insertText(" Renamed", replacementRange: NSRange(location: NSNotFound, length: 0))
+        try await waitUntil(timeout: 10, "tap's answer for the typed title") { editor.boxes[1].slide.title == "The Page Renamed" }
+
+        editor.undoManager?.undo()
+        XCTAssertEqual(editor.string, original, "one undo reverts the typing")
+        try await waitUntil(timeout: 5, "tap's answer for the undone title") { editor.boxes[1].slide.title == "The Page" }
+
+        editor.undoManager?.redo()
+        XCTAssertNotEqual(editor.string, original, "redo brings the typing back")
+        try await waitUntil(timeout: 5, "tap's answer for the redone title") { editor.boxes[1].slide.title == "The Page Renamed" }
+    }
+
     func testOpenAFileThatIsNotADeck() async throws {
         let document = try await openDeck(try Fixtures.copyDeck("plain.md"))
         try await waitForBoxes(document, count: 1)
