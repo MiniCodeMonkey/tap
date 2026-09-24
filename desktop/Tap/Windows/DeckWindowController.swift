@@ -233,9 +233,7 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
     }
 
     @objc func newSlide(_ sender: Any?) {
-        let catalog = AppEnvironment.shared.layoutCatalog
-        let layout = LayoutCatalog.resolvedName(AppEnvironment.shared.lastLayout.name, in: catalog.templates)
-        insertSlide(layout: layout, after: .caret)
+        insertSlide(layout: AppEnvironment.shared.lastLayout.name, after: .caret)
     }
 
     @objc func newSlideFromLayout(_ sender: Any?) {
@@ -249,10 +247,15 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
                            afterSlide: sessionController.currentSlideNumber)
     }
 
-    /// Inserts a slide of the layout after `selection` (or at the end),
-    /// and remembers the layout for the next New Slide.
-    func insertSlide(layout: String, after selection: SlideSelection) {
-        guard let template = AppEnvironment.shared.layoutCatalog.template(named: layout) else {
+    /// Every New Slide comes here: the toolbar button, the Slide menu, the
+    /// context menu and the gallery. It inserts a slide of the layout after
+    /// `selection` (or at the end), and remembers the layout for the next
+    /// New Slide. The name is resolved against tap's catalog first, so a
+    /// stored last layout that tap no longer offers becomes one it does.
+    func insertSlide(layout requested: String, after selection: SlideSelection) {
+        let catalog = AppEnvironment.shared.layoutCatalog
+        let layout = LayoutCatalog.resolvedName(requested, in: catalog.templates)
+        guard let template = catalog.template(named: layout) else {
             sessionController.session.log.append("no template for layout \(layout): the layout catalog has not loaded", source: .app)
             NSSound.beep()
             return
