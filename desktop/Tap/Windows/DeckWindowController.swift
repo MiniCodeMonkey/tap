@@ -265,6 +265,37 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
         }
     }
 
+    @objc func duplicateSlides(_ sender: Any?) {
+        sessionController.perform(.duplicate(numbers: sessionController.selectedSlideNumbers))
+    }
+
+    @objc func deleteSlides(_ sender: Any?) {
+        let numbers = sessionController.selectedSlideNumbers
+        guard numbers.count < sessionController.editor.boxes.count else { return }
+        sessionController.perform(.delete(numbers: numbers))
+    }
+
+    @objc func toggleSkipSlides(_ sender: Any?) {
+        let numbers = sessionController.selectedSlideNumbers
+        sessionController.perform(.setSkip(numbers: numbers, skipped: !selectionIsSkipped))
+    }
+
+    /// True when every selected slide is skipped, so the menu offers Unskip.
+    private var selectionIsSkipped: Bool {
+        let numbers = Set(sessionController.selectedSlideNumbers)
+        let selected = sessionController.editor.boxes.filter { numbers.contains($0.slide.number) }
+        return !selected.isEmpty && selected.allSatisfy(\.slide.skip)
+    }
+
+    @objc func moveSlidesUp(_ sender: Any?) { sessionController.moveSelectedSlides(by: -1) }
+    @objc func moveSlidesDown(_ sender: Any?) { sessionController.moveSelectedSlides(by: 1) }
+    @objc func moveSlidesToTop(_ sender: Any?) { sessionController.moveSelectedSlides(toTop: true) }
+    @objc func moveSlidesToBottom(_ sender: Any?) { sessionController.moveSelectedSlides(toTop: false) }
+
+    @objc func newSlideAfter(_ sender: Any?) {
+        insertSlide(layout: AppEnvironment.shared.lastLayout.name, after: sessionController.selectedSlideNumbers.max())
+    }
+
     func windowWillClose(_ notification: Notification) {
         sidebarCollapseObservation?.invalidate()
         sidebarCollapseObservation = nil
@@ -284,6 +315,19 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
         }
         if menuItem.action == #selector(toggleSlidePanel(_:)) {
             menuItem.title = isPanelPinned ? "Unpin Slide Panel" : "Pin Slide Panel"
+        }
+        let count = sessionController.selectedSlideNumbers.count
+        if menuItem.action == #selector(deleteSlides(_:)) {
+            menuItem.title = count > 1 ? "Delete \(count) Slides" : "Delete Slide"
+            return count > 0 && count < sessionController.editor.boxes.count
+        }
+        if menuItem.action == #selector(toggleSkipSlides(_:)) {
+            menuItem.title = (selectionIsSkipped ? "Unskip" : "Skip") + (count > 1 ? " Slides" : " Slide")
+            return count > 0
+        }
+        if [#selector(duplicateSlides(_:)), #selector(moveSlidesUp(_:)), #selector(moveSlidesDown(_:)), #selector(moveSlidesToTop(_:)),
+            #selector(moveSlidesToBottom(_:)), #selector(newSlideAfter(_:))].contains(menuItem.action) {
+            return count > 0
         }
         return true
     }
