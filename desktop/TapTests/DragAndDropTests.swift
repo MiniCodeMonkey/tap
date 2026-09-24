@@ -196,4 +196,57 @@ final class DragAndDropTests: HostedTestCase {
         let sourceAfterAbandoned = try await roundTrip(sourceController)
         XCTAssertEqual(sourceAfterAbandoned, ["One", "Two", "Three", "Four", "Seven"])
     }
+
+    /// A pasteboard built with a payload's raw data, bypassing the panel's
+    /// own writer: the tests that pin the staleness guards need a payload
+    /// whose slide numbers no longer match what tap now counts, which the
+    /// real writer would never produce (it always asks for the current text).
+    func rawPasteboard(_ payload: SlideDragPayload, name: String) throws -> NSPasteboard {
+        let pasteboard = NSPasteboard(name: NSPasteboard.Name("TapTests.\(name).\(UUID().uuidString)"))
+        pasteboard.clearContents()
+        let item = NSPasteboardItem()
+        item.setData(try payload.data(), forType: NSPasteboard.PasteboardType(SlideDragPayload.pasteboardType))
+        pasteboard.writeObjects([item])
+        return pasteboard
+    }
+
+    /// The data-loss guard `removeMovedSlides` relies on: a drag's payload
+    /// is built from the numbers and text at drag start, but typing since
+    /// then, once tap answers, can renumber the slides those numbers now
+    /// name. Dropping the stale payload into another deck must still leave
+    /// the source with everything it had, never delete whatever now holds
+    /// the old numbers.
+    func testAStaleCrossDeckMoveKeepsAllOfTheSourcesSlides() async throws {
+        let (_, sourceController) = try await openOps()
+        let target = try await openDeck(try Fixtures.copyAppFixture())
+        try await waitForBoxes(target, count: 4)
+        let targetController = try XCTUnwrap(target.sessionController)
+        try await waitUntil(timeout: 5, "the target's answer") { targetController.lastAppliedText == targetController.editor.string }
+
+        let payload = try XCTUnwrap(sourceController.dragPayload(forSlides: [5, 6]))
+        XCTAssertEqual(payload.markdowns.count, 2)
+
+        // Renumber the source: slide 1 duplicated pushes every later slide
+        // up by one, so the numbers [5, 6] the payload was built from now
+        // name different slides ("Four", "Five").
+        XCTAssertEqual(sourceController.perform(.duplicate(numbers: [1])), .applied)
+        try await waitUntil(timeout: 10, "tap's answer for the duplicate") { sourceController.lastAppliedText == sourceController.editor.string }
+        XCTAssertNotEqual(sourceController.markdown(forSlides: [5, 6]), payload.markdowns, "the numbers now name different slides")
+
+        let pasteboard = try rawPasteboard(payload, name: "stale-cross-deck")
+        let (operation, accepted) = drop(pasteboard, into: targetController.slidePanel, beforeIndex: 4, source: sourceController.slidePanel.collectionView, window: target.windowControllers.first?.window)
+        XCTAssertEqual(operation, .move)
+        XCTAssertTrue(accepted, "the insert into the target still lands, with the text the payload carried")
+        try await waitUntil(timeout: 10, "the target's insert to land") { targetController.editor.boxes.count == 6 }
+        let targetAfterInsert = try await roundTrip(targetController)
+        XCTAssertEqual(targetAfterInsert, ["App Mode Fixture", "Live Code", "Fragments", "Counter", "Five", "Six"])
+
+        // The source's delete never runs: the numbers no longer hold the
+        // dragged text, so the drop acted as a copy, not a move.
+        try await Task.sleep(nanoseconds: 500_000_000)
+        let sourceAfterDrop = try await roundTrip(sourceController)
+        XCTAssertEqual(sourceAfterDrop.count, 8, "the source keeps all its slides")
+        XCTAssertEqual(sourceAfterDrop, ["One", "One", "Two", "Three", "Four", "Five", "Six", "Seven"])
+    }
+
 }
