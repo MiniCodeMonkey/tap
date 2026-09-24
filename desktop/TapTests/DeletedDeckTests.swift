@@ -25,6 +25,9 @@ final class DeletedDeckTests: HostedTestCase {
         try await document.save(to: saved, ofType: "net.daringfireball.markdown", for: .saveAsOperation)
         XCTAssertEqual(document.fileURL.map(FilePaths.canonical), FilePaths.canonical(saved))
         XCTAssertNil(controller.editorViewController.bar(.deleted))
+        XCTAssertNil(document.deletedName, "the deck has a file again")
+        XCTAssertFalse(document.isDocumentEdited, "the new file holds the editor's text")
+        XCTAssertEqual(document.displayName, FileManager.default.displayName(atPath: saved.path), "the title names the new file")
         try await waitUntil(timeout: 30, "tap on the new path") {
             if case .running = controller.session.state { return FilePaths.same(controller.session.deckURL, saved) } else { return false }
         }
