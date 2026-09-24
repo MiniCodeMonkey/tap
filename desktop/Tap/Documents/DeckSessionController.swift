@@ -852,6 +852,15 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
         dropSlides(payload: payload, beforeNumber: beforeNumber, isMove: isMove)
     }
 
+    func editor(_ editor: EditorTextView, contextMenuForBoxAt index: Int) -> NSMenu? {
+        guard let windowController = editor.window?.windowController as? DeckWindowController, editor.boxes.indices.contains(index) else { return nil }
+        let number = editor.boxes[index].slide.number
+        if !slidePanel.selectedNumbers.contains(number) {
+            slidePanel.click(slide: number, extendingSelection: false)
+        }
+        return SlideContextMenu.build(for: selectedSlideNumbers, target: windowController)
+    }
+
     func editor(_ editor: EditorTextView, currentSlideDidChange index: Int?) {
         guard let index, editor.boxes.indices.contains(index) else { return }
         sendPreviewMessage(navigator.cursorMoved(to: editor.boxes[index].slide))
@@ -879,5 +888,24 @@ extension DeckSessionController: SlidePanelDelegate {
 
     func slidePanel(_ panel: SlidePanelViewController, acceptDrop payload: SlideDragPayload, beforeNumber: Int?, isMove: Bool) -> Bool {
         dropSlides(payload: payload, beforeNumber: beforeNumber, isMove: isMove)
+    }
+
+    func slidePanelContextMenu(_ panel: SlidePanelViewController) -> NSMenu? {
+        guard let windowController = editor.window?.windowController as? DeckWindowController else { return nil }
+        return SlideContextMenu.build(for: selectedSlideNumbers, target: windowController)
+    }
+
+    func slidePanelDeleteSelection(_ panel: SlidePanelViewController) {
+        let numbers = selectedSlideNumbers
+        guard numbers.count < editor.boxes.count else { return NSSound.beep() }
+        perform(.delete(numbers: numbers))
+    }
+
+    func slidePanelCopySelection(_ panel: SlidePanelViewController) {
+        copySlides(selectedSlideNumbers, to: AppEnvironment.shared.slidePasteboard)
+    }
+
+    func slidePanelPaste(_ panel: SlidePanelViewController) {
+        pasteSlides(from: AppEnvironment.shared.slidePasteboard, after: selectedSlideNumbers.max())
     }
 }

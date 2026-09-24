@@ -6,12 +6,20 @@ protocol SlidePanelDelegate: AnyObject {
     func slidePanelSelectionDidChange(_ panel: SlidePanelViewController)
     func slidePanel(_ panel: SlidePanelViewController, payloadForSlides numbers: [Int]) -> SlideDragPayload?
     func slidePanel(_ panel: SlidePanelViewController, acceptDrop payload: SlideDragPayload, beforeNumber: Int?, isMove: Bool) -> Bool
+    func slidePanelContextMenu(_ panel: SlidePanelViewController) -> NSMenu?
+    func slidePanelDeleteSelection(_ panel: SlidePanelViewController)
+    func slidePanelCopySelection(_ panel: SlidePanelViewController)
+    func slidePanelPaste(_ panel: SlidePanelViewController)
 }
 
 /// The collection view, which remembers which item a click landed on, so
 /// a Shift-click reports the slide clicked last rather than the range's end.
 final class SlidePanelCollectionView: NSCollectionView {
     private(set) var clickedIndexPath: IndexPath?
+    var onDelete: (() -> Void)?
+    var onCopy: (() -> Void)?
+    var onPaste: (() -> Void)?
+    var contextMenuProvider: ((Int?) -> NSMenu?)?
 
     override func mouseDown(with event: NSEvent) {
         clickedIndexPath = indexPathForItem(at: convert(event.locationInWindow, from: nil))
@@ -19,6 +27,24 @@ final class SlidePanelCollectionView: NSCollectionView {
     }
 
     override var acceptsFirstResponder: Bool { true }
+
+    @objc func copy(_ sender: Any?) { onCopy?() }
+    @objc func paste(_ sender: Any?) { onPaste?() }
+
+    /// Delete (51) and Forward Delete (117) delete the selected slides. Only
+    /// here, with the sidebar focused: in the editor these keys edit text.
+    override func keyDown(with event: NSEvent) {
+        if event.keyCode == 51 || event.keyCode == 117 {
+            onDelete?()
+        } else {
+            super.keyDown(with: event)
+        }
+    }
+
+    override func menu(for event: NSEvent) -> NSMenu? {
+        let number = indexPathForItem(at: convert(event.locationInWindow, from: nil)).map { $0.item + 1 }
+        return contextMenuProvider?(number)
+    }
 }
 
 /// The thumbnails, in a virtualized collection view. The panel is linked
@@ -68,6 +94,10 @@ final class SlidePanelViewController: NSViewController, NSCollectionViewDataSour
         collectionView.registerForDraggedTypes([NSPasteboard.PasteboardType(SlideDragPayload.pasteboardType)])
         collectionView.setDraggingSourceOperationMask([.move, .copy], forLocal: true)
         collectionView.setDraggingSourceOperationMask([.move, .copy], forLocal: false)
+        collectionView.onDelete = { [weak self] in self.map { $0.delegate?.slidePanelDeleteSelection($0) } }
+        collectionView.onCopy = { [weak self] in self.map { $0.delegate?.slidePanelCopySelection($0) } }
+        collectionView.onPaste = { [weak self] in self.map { $0.delegate?.slidePanelPaste($0) } }
+        collectionView.contextMenuProvider = { [weak self] number in number.flatMap { self?.contextMenu(forSlide: $0) } }
         scrollView.documentView = collectionView
         scrollView.drawsBackground = false
         scrollView.hasVerticalScroller = true
@@ -159,6 +189,16 @@ final class SlidePanelViewController: NSViewController, NSCollectionViewDataSour
     func item(forSlide number: Int) -> ThumbnailItem? {
         guard number >= 1, number <= slides.count else { return nil }
         return collectionView.item(at: IndexPath(item: number - 1, section: 0)) as? ThumbnailItem
+    }
+
+    /// The context menu for a thumbnail. A right-click on a thumbnail
+    /// outside the selection selects it alone first, as Finder does.
+    func contextMenu(forSlide number: Int) -> NSMenu? {
+        if !selectedNumbers.contains(number) {
+            select(numbers: [number], scroll: false)
+            delegate?.slidePanel(self, didClickSlide: number, selection: [number])
+        }
+        return delegate?.slidePanelContextMenu(self)
     }
 
     // MARK: Selection

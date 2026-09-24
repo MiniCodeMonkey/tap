@@ -5,11 +5,13 @@ protocol EditorTextViewDelegate: AnyObject {
     func editor(_ editor: EditorTextView, currentSlideDidChange index: Int?)
     func editor(_ editor: EditorTextView, payloadForHeaderDragOfBoxAt index: Int) -> SlideDragPayload?
     func editor(_ editor: EditorTextView, dropSlides payload: SlideDragPayload, beforeNumber: Int?, isMove: Bool) -> Bool
+    func editor(_ editor: EditorTextView, contextMenuForBoxAt index: Int) -> NSMenu?
 }
 
 extension EditorTextViewDelegate {
     func editor(_ editor: EditorTextView, payloadForHeaderDragOfBoxAt index: Int) -> SlideDragPayload? { nil }
     func editor(_ editor: EditorTextView, dropSlides payload: SlideDragPayload, beforeNumber: Int?, isMove: Bool) -> Bool { false }
+    func editor(_ editor: EditorTextView, contextMenuForBoxAt index: Int) -> NSMenu? { nil }
 }
 
 /// A TextKit 2 text view that draws a rounded box behind each slide's lines.
@@ -376,6 +378,13 @@ final class EditorTextView: NSTextView {
             return index
         }
         return nil
+    }
+
+    override func menu(for event: NSEvent) -> NSMenu? {
+        if let index = boxIndex(forHeaderAt: convert(event.locationInWindow, from: nil)) {
+            return editorDelegate?.editor(self, contextMenuForBoxAt: index)
+        }
+        return super.menu(for: event)
     }
 
     /// The slide number a drop at `point` lands above: the box under the

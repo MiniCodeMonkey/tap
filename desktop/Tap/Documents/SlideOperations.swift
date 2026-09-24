@@ -230,6 +230,30 @@ extension DeckSessionController {
         }
     }
 
+    /// Copies slides as the app's own type and as plain markdown.
+    func copySlides(_ numbers: [Int], to pasteboard: NSPasteboard) {
+        guard let payload = dragPayload(forSlides: numbers), let data = try? payload.data() else { return }
+        pasteboard.clearContents()
+        let item = NSPasteboardItem()
+        item.setData(data, forType: NSPasteboard.PasteboardType(SlideDragPayload.pasteboardType))
+        item.setString(payload.markdowns.joined(separator: SlideDocument.separator), forType: .string)
+        pasteboard.writeObjects([item])
+    }
+
+    /// Pastes slides after `number`: the app's own type when present,
+    /// otherwise plain text as one slide.
+    @discardableResult
+    func pasteSlides(from pasteboard: NSPasteboard, after number: Int?) -> Bool {
+        let beforeNumber = number.flatMap { $0 + 1 <= editor.boxes.count ? $0 + 1 : nil }
+        if let data = pasteboard.data(forType: NSPasteboard.PasteboardType(SlideDragPayload.pasteboardType)), let payload = SlideDragPayload(data: data) {
+            return perform(.insert(markdowns: payload.markdowns, beforeNumber: beforeNumber)).isAccepted
+        }
+        if let text = pasteboard.string(forType: .string), !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return perform(.insert(markdowns: [text], beforeNumber: beforeNumber)).isAccepted
+        }
+        return false
+    }
+
     func dragPayload(forSlides numbers: [Int]) -> SlideDragPayload? {
         guard let deck = document?.fileURL, !numbers.isEmpty else { return nil }
         let sorted = numbers.sorted()

@@ -296,6 +296,14 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
         insertSlide(layout: AppEnvironment.shared.lastLayout.name, after: sessionController.selectedSlideNumbers.max())
     }
 
+    @objc func copySlides(_ sender: Any?) {
+        sessionController.copySlides(sessionController.selectedSlideNumbers, to: AppEnvironment.shared.slidePasteboard)
+    }
+
+    @objc func pasteSlides(_ sender: Any?) {
+        sessionController.pasteSlides(from: AppEnvironment.shared.slidePasteboard, after: sessionController.selectedSlideNumbers.max())
+    }
+
     func windowWillClose(_ notification: Notification) {
         sidebarCollapseObservation?.invalidate()
         sidebarCollapseObservation = nil
@@ -328,6 +336,11 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
         if [#selector(duplicateSlides(_:)), #selector(moveSlidesUp(_:)), #selector(moveSlidesDown(_:)), #selector(moveSlidesToTop(_:)),
             #selector(moveSlidesToBottom(_:)), #selector(newSlideAfter(_:))].contains(menuItem.action) {
             return count > 0
+        }
+        if menuItem.action == #selector(copySlides(_:)) { return count > 0 }
+        if menuItem.action == #selector(pasteSlides(_:)) {
+            let pasteboard = AppEnvironment.shared.slidePasteboard
+            return pasteboard.data(forType: NSPasteboard.PasteboardType(SlideDragPayload.pasteboardType)) != nil || pasteboard.string(forType: .string) != nil
         }
         return true
     }

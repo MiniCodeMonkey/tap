@@ -26,6 +26,10 @@ final class AppEnvironment {
     lazy var layoutCatalog = LayoutCatalogLoader(executable: { [weak self] in self?.tapExecutableURL ?? URL(fileURLWithPath: "/usr/bin/false") })
     /// The layout New Slide inserts: the one used last.
     var lastLayout = LastLayout()
+    /// Where copied slides go and paste reads from: the general pasteboard,
+    /// unless a test replaces it with a named one so a run never touches
+    /// the person's real clipboard.
+    var slidePasteboard: NSPasteboard = .general
     private(set) var environmentNotice: String?
     private(set) var bundledTapVersion: String?
     private let loginShellLoader: LoginShellEnvironmentLoader
