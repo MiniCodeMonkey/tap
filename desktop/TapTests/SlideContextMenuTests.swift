@@ -95,6 +95,24 @@ final class SlideContextMenuTests: HostedTestCase {
         XCTAssertEqual(titles, ["One", "Split", "Two", "Four", "Five", "Six", "Seven"], "the thumbnail showed Three, so Three goes")
     }
 
+    /// Move Up/Down and Move to Top/Bottom go through the same
+    /// `perform(on: captureSelection())` rule as every other command: a
+    /// hand-made selection is checked against tap's ranges when the move
+    /// runs, and a queued move refuses rather than moving whatever now
+    /// holds the selected numbers.
+    func testAQueuedMoveOnASelectionThatTapRenumbersIsRefused() async throws {
+        let (_, controller, windowController) = try await openOps()
+        let panel = controller.slidePanel
+        panel.select(numbers: [3, 4], scroll: false)
+        typeASplitSlide(atTheEndOfSlide: 1, controller)
+        windowController.moveSlidesDown(nil)
+        try await waitForConfirmedSlides(controller, count: 8, "the queued move to land and tap to answer")
+        try await Task.sleep(nanoseconds: 500_000_000)
+        let titles = try await titles(controller)
+        XCTAssertEqual(titles, ["One", "Split", "Two", "Three", "Four", "Five", "Six", "Seven"],
+                       "slides 3 and 4 no longer hold Three and Four, so the move is refused")
+    }
+
     func testADeleteOfASelectionThatTapRenumbersIsRefused() async throws {
         let (_, controller, _) = try await openOps()
         let panel = controller.slidePanel
