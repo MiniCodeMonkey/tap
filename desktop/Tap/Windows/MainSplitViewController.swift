@@ -3,23 +3,48 @@ import AppKit
 /// The editor and the right pane, split 50/50. The app owns the divider: it
 /// returns to the middle after every layout change until the user drags it.
 final class MainSplitViewController: NSSplitViewController {
+    let sidebarItem: NSSplitViewItem
     let editorItem: NSSplitViewItem
     let inspectorItem: NSSplitViewItem
     private(set) var dividerPolicy = DividerPolicy()
     private var isBalancing = false
     private var isPersonDraggingTheDivider = false
     private var dividerMouseMonitor: Any?
+    /// The sidebar's width: the panel plus the stock sidebar's inset.
+    static let sidebarWidth = SlidePanelViewController.width + 24
 
-    init(editor: NSViewController, inspector: NSViewController) {
+    init(sidebar: NSViewController, editor: NSViewController, inspector: NSViewController) {
+        sidebarItem = NSSplitViewItem(sidebarWithViewController: sidebar)
+        sidebarItem.minimumThickness = Self.sidebarWidth
+        sidebarItem.maximumThickness = Self.sidebarWidth
+        sidebarItem.canCollapse = true
+        // Collapsing or expanding the sidebar moves the editor and the right
+        // pane, never the window: the pinned panel pushes them to the right.
+        sidebarItem.collapseBehavior = .preferResizingSiblingsWithFixedSplitView
         editorItem = NSSplitViewItem(viewController: editor)
         editorItem.minimumThickness = 320
         inspectorItem = NSSplitViewItem(viewController: inspector)
         inspectorItem.minimumThickness = 320
         inspectorItem.canCollapse = true
         super.init(nibName: nil, bundle: nil)
+        addSplitViewItem(sidebarItem)
         addSplitViewItem(editorItem)
         addSplitViewItem(inspectorItem)
     }
+
+    var isSidebarCollapsed: Bool { sidebarItem.isCollapsed }
+
+    func setSidebarCollapsed(_ collapsed: Bool) {
+        guard sidebarItem.isCollapsed != collapsed else { return }
+        sidebarItem.isCollapsed = collapsed
+        view.needsLayout = true
+        view.layoutSubtreeIfNeeded()
+        balance()
+    }
+
+    /// The divider between the editor and the right pane, which sits after
+    /// the sidebar's own divider.
+    private var editorDividerIndex: Int { 1 }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
 
@@ -64,11 +89,18 @@ final class MainSplitViewController: NSSplitViewController {
     }
 
     func balance() {
-        guard !inspectorItem.isCollapsed,
-              let position = dividerPolicy.balancedPosition(totalWidth: splitView.bounds.width, dividerThickness: splitView.dividerThickness),
-              abs(editorItem.viewController.view.frame.width - position) > 0.5 else { return }
+        guard !inspectorItem.isCollapsed else { return }
+        // A sidebar-style split item's own column, as arranged by the split
+        // view, can be a few points wider than its view controller's own
+        // view (AppKit adds a fixed margin around a sidebar's content); the
+        // arranged subview's width is what actually crowds the editor, so
+        // that is what is read here rather than the view controller's view.
+        let leadingWidth = sidebarItem.isCollapsed ? 0 : (splitView.arrangedSubviews.first?.frame.width ?? sidebarItem.viewController.view.frame.width)
+        guard let position = dividerPolicy.balancedPosition(totalWidth: splitView.bounds.width, dividerThickness: splitView.dividerThickness,
+                                                            leadingWidth: leadingWidth),
+              abs(editorItem.viewController.view.frame.maxX - position) > 0.5 else { return }
         isBalancing = true
-        splitView.setPosition(position, ofDividerAt: 0)
+        splitView.setPosition(position, ofDividerAt: editorDividerIndex)
         isBalancing = false
     }
 

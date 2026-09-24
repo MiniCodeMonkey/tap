@@ -10,6 +10,7 @@ final class WindowLayoutTests: HostedTestCase {
         let document = try await openDeck(try Fixtures.copyDeck("plain.md"))
         let controller = try windowController(for: document)
         let split = controller.splitViewController
+        split.setSidebarCollapsed(true)
         controller.togglePreview(nil)
         split.view.layoutSubtreeIfNeeded()
         XCTAssertTrue(split.isPreviewHidden)
@@ -35,7 +36,7 @@ final class WindowLayoutTests: HostedTestCase {
         split.view.layoutSubtreeIfNeeded()
         XCTAssertEqual(split.editorItem.viewController.view.frame.width, split.inspectorItem.viewController.view.frame.width, accuracy: 2, "the divider splits whatever width the window actually has")
 
-        split.splitView.setPosition(400, ofDividerAt: 0)
+        split.splitView.setPosition(split.sidebarItem.viewController.view.frame.width + 1 + 100, ofDividerAt: 1)
         split.userDidDragDivider()
         controller.window?.setContentSize(NSSize(width: 1000, height: 800))
         split.view.layoutSubtreeIfNeeded()

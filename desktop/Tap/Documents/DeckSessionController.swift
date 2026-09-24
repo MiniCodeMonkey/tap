@@ -10,6 +10,10 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
     let editorViewController = EditorViewController()
     let inspectorViewController = InspectorViewController()
     let previewViewController = PreviewViewController()
+    let slidePanel = SlidePanelViewController()
+    /// True while a panel click moves the cursor, so the cursor's own
+    /// selection sync does not collapse a Shift-click's range.
+    private var isSelectingFromPanel = false
     private(set) var navigator = PreviewNavigator()
     private(set) var client: TapClient?
     private(set) var socket: TapSocket?
@@ -103,6 +107,7 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
         }
         session.onStateChange = { [weak self] state in self?.sessionStateChanged(state) }
         editor.editorDelegate = self
+        slidePanel.delegate = self
         inspectorViewController.embed(previewViewController)
         previewViewController.onStepBackward = { [weak self] in self?.sendPreviewMessage(self?.navigator.stepBackward()) }
         previewViewController.onStepForward = { [weak self] in self?.sendPreviewMessage(self?.navigator.stepForward()) }
@@ -346,6 +351,35 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
         }
     }
 
+    /// The number of the slide under the cursor.
+    var currentSlideNumber: Int? {
+        editor.currentBoxIndex.map { editor.boxes[$0].slide.number }
+    }
+
+    /// The slides an operation acts on: the panel's selection, which
+    /// follows the cursor when nothing was selected by hand.
+    var selectedSlideNumbers: [Int] {
+        let selected = slidePanel.selectedNumbers
+        if !selected.isEmpty { return selected }
+        return currentSlideNumber.map { [$0] } ?? []
+    }
+
+    /// Selects the cursor's slide alone, unless the panel is driving the cursor.
+    func syncPanelSelectionToCursor() {
+        guard !isSelectingFromPanel, let number = currentSlideNumber else { return }
+        slidePanel.select(numbers: [number], scroll: true)
+    }
+
+    /// Runs `body` with the panel marked as driving the cursor, so a caret
+    /// move inside it leaves the panel's selection alone. Internal so the
+    /// slide operations in `SlideOperations.swift` can use it; the flag
+    /// itself stays private to this file.
+    func withPanelDrivingTheCursor(_ body: () -> Void) {
+        isSelectingFromPanel = true
+        defer { isSelectingFromPanel = false }
+        body()
+    }
+
     func start() {
         editor.load(text: document?.text ?? "")
         session.start()
@@ -496,6 +530,7 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
         // longer holds. Nothing it says about this deck is true any more,
         // so none of what follows runs on it.
         guard editor.apply(list, sentText: sentText, sentGeneration: generation) else { return }
+        slidePanel.setSlides(editor.boxes.map(\.slide))
         if let first = list.errors.first {
             if editorViewController.bar(.deckErrors)?.message != "The deck settings have a problem: \(first)" {
                 editorViewController.showBar(DocumentBarView(kind: .deckErrors, message: "The deck settings have a problem: \(first)",
@@ -581,5 +616,15 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
     func editor(_ editor: EditorTextView, currentSlideDidChange index: Int?) {
         guard let index, editor.boxes.indices.contains(index) else { return }
         sendPreviewMessage(navigator.cursorMoved(to: editor.boxes[index].slide))
+        syncPanelSelectionToCursor()
     }
+}
+
+extension DeckSessionController: SlidePanelDelegate {
+    func slidePanel(_ panel: SlidePanelViewController, didClickSlide number: Int, selection: [Int]) {
+        guard let index = editor.boxes.firstIndex(where: { $0.slide.number == number }) else { return }
+        withPanelDrivingTheCursor { editor.moveCursor(toSlide: index) }
+    }
+
+    func slidePanelSelectionDidChange(_ panel: SlidePanelViewController) {}
 }

@@ -8,7 +8,9 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
 
     init(sessionController: DeckSessionController) {
         self.sessionController = sessionController
-        splitViewController = MainSplitViewController(editor: sessionController.editorViewController,
+        let sidebarHost = SidebarHostViewController()
+        sidebarHost.host(sessionController.slidePanel.view)
+        splitViewController = MainSplitViewController(sidebar: sidebarHost, editor: sessionController.editorViewController,
                                                       inspector: sessionController.inspectorViewController)
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1440, height: 900),
                               styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
