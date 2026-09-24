@@ -62,6 +62,42 @@ class HostedTestCase: XCTestCase {
         try await waitUntil(timeout: 30, "\(count) boxes") { editor.boxes.count == count }
     }
 
+    /// What a timed out wait records about the page. `ready` is the page's
+    /// own signal (window.__tapReady), null while a slide settles and
+    /// "unset" before any cycle has run. `state`
+    /// is window.__tapReadyState, which the page's ready logic keeps itself:
+    /// the step it is in (`phase`) and for how many milliseconds
+    /// (`phaseMs`), the settle round, how many cycles it started and how
+    /// many it published, the blockers held and for how long, and why the
+    /// last round did not settle. It is null on a page built before the
+    /// page kept it. `pageMs` is how long ago this document started
+    /// loading, and `navigation` whether it was a reload. `slides` and
+    /// `text` say whether the deck ever loaded and drew, and `animations`,
+    /// `fonts` and `stylesheets` (link elements with no sheet yet) are what
+    /// a settle round's probes look at.
+    static let pageStateScript = """
+        JSON.stringify({ready: window.__tapReady === undefined ? 'unset' : window.__tapReady, state: window.__tapReadyState ?? null, \
+        pageMs: Math.round(performance.now()), \
+        navigation: (performance.getEntriesByType('navigation')[0] || {}).type || null, \
+        hidden: document.hidden, \
+        slides: document.querySelectorAll('.slide').length, \
+        text: document.body ? document.body.innerText.slice(0, 80) : null, \
+        animations: document.getAnimations().map((animation) => animation.playState), \
+        fonts: document.fonts.status, \
+        stylesheets: Array.from(document.querySelectorAll('link[rel="stylesheet"]')).filter((link) => link.sheet === null).length})
+        """
+
+    /// What a timed out wait records about the app's side of the preview:
+    /// how long ago it asked for the page, how many pages it has loaded,
+    /// whether WebKit is still loading one, and how many ready messages its
+    /// handler has received at all.
+    func appSideDiagnostics(_ preview: PreviewViewController) -> String {
+        let sinceLoad = preview.lastLoadDate.map { String(format: "%.1fs", Date().timeIntervalSince($0)) } ?? "never"
+        return "sinceLoad=\(sinceLoad) pageLoads=\(preview.pageLoadCount) "
+            + "webViewLoading=\(preview.webView.isLoading) "
+            + "readyMessagesReceived=\(preview.readyMessagesReceived)"
+    }
+
     func openDeckAndWaitForPreview(_ url: URL) async throws -> DeckDocument {
         let document = try await openDeck(url)
         _ = try await waitForRunningTap(document)
@@ -76,8 +112,7 @@ class HostedTestCase: XCTestCase {
                 // anything to paint. This records both sides so a future
                 // occurrence does not need a fresh CI run to tell them
                 // apart.
-                let script = "JSON.stringify({ready: window.__tapReady, hidden: document.hidden})"
-                let inThePage = await preview.pageValue(script)
+                let inThePage = await preview.pageValue(Self.pageStateScript)
                 let window = document.windowControllers.first?.window
                 let isVisible: Bool = window?.isVisible ?? false
                 let isOnScreen: Bool = window?.occlusionState.contains(.visible) ?? false
@@ -88,12 +123,19 @@ class HostedTestCase: XCTestCase {
                 message += "windowVisible=\(isVisible) "
                 message += "windowOnScreen=\(isOnScreen) "
                 message += "appActive=\(isAppActive) "
-                message += "socket=\(hasSocket ? "open" : "none")"
+                message += "socket=\(hasSocket ? "open" : "none") "
+                message += appSideDiagnostics(preview)
                 XCTFail(message)
                 throw CancellationError()
             }
             try await Task.sleep(nanoseconds: 20_000_000)
         }
+        // Every first ready is logged with the page's own record of how it
+        // got there, so a CI log holds the normal timings to set a stalled
+        // one against.
+        let readyAfter = Date().timeIntervalSince(deadline.addingTimeInterval(-30))
+        let settled = await preview.pageValue("JSON.stringify(window.__tapReadyState ?? null)")
+        print("first ready after \(String(format: "%.2f", readyAfter))s: state=\(settled) \(appSideDiagnostics(preview))")
         return document
     }
 
@@ -110,12 +152,12 @@ class HostedTestCase: XCTestCase {
                 // own signal is window.__tapReady, null while a slide is
                 // settling, and the caret and the boxes say whether the
                 // cursor is where the test put it.
-                let script = "JSON.stringify({ready: window.__tapReady, hidden: document.hidden})"
-                let inThePage = await preview.pageValue(script)
+                let inThePage = await preview.pageValue(Self.pageStateScript)
                 let intent = String(describing: controller.navigator.message)
                 XCTFail("timed out waiting for the preview on slide \(slide). "
                         + "lastReady=\(String(describing: preview.lastReady)) intent=\(intent) "
                         + "socket=\(controller.socket == nil ? "none" : "open") page=\(inThePage) "
+                        + "\(appSideDiagnostics(preview)) "
                         + "caret=\(controller.editor.selectedRange()) "
                         + "box=\(String(describing: controller.editor.currentBoxIndex)) "
                         + "boxes=\(controller.editor.boxes.map(\.slide.number))")

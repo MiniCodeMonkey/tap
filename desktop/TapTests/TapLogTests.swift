@@ -29,8 +29,26 @@ final class TapLogWindowTests: HostedTestCase {
         // failure to a different line ("error: saved: ...") and leaves this
         // wait needing a PUT that has not gone out yet.
         await document.sessionController?.sourceSync.sendNow()
-        try await waitUntil(timeout: 10, "a line appended after the window was already open") {
-            logWindow.textView.string.contains("Not showing the buffer:")
+        let sessionController = try XCTUnwrap(document.sessionController)
+        let deadline = Date().addingTimeInterval(10)
+        while !logWindow.textView.string.contains("Not showing the buffer:") {
+            if Date() > deadline {
+                // Which link broke is the question when this times out: the
+                // broken text never going to tap, tap never logging the
+                // line, or the line reaching the deck's log but not the
+                // window. The deck's own log, the text last sent and the
+                // window's selection answer each in turn.
+                let log = sessionController.session.log
+                let sent = sessionController.sourceSync.lastSentText ?? "nothing"
+                XCTFail("timed out waiting for a line appended after the window was already open. "
+                        + "lastSentIsBroken=\(sent.hasPrefix("---\ntitle: [unclosed")) "
+                        + "lastSentGeneration=\(sessionController.sourceSync.lastSentGeneration) "
+                        + "windowShowsThisLog=\(logWindow.selectedLog === log) "
+                        + "logHasTheLine=\(log.text.contains("Not showing the buffer:")) "
+                        + "logTail=\(log.lines.suffix(12).map(\.formatted))")
+                throw CancellationError()
+            }
+            try await Task.sleep(nanoseconds: 20_000_000)
         }
 
         // Each open deck has its own log.
