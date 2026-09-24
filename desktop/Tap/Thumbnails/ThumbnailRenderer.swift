@@ -39,6 +39,11 @@ final class ThumbnailRenderer: NSObject, WKScriptMessageHandler, WKNavigationDel
     static let viewSize = NSSize(width: 960, height: 540)
     /// How long a slide's first attempt may take to report ready before it is requeued.
     static let readyTimeout: TimeInterval = 5
+    /// How long a snapshot may take before the attempt counts as failed.
+    /// WebKit completes a snapshot only after the web view's next
+    /// presentation update, which a web view that stops painting, or whose
+    /// content process is gone, may never make.
+    static let snapshotTimeout: TimeInterval = 10
 
     let webView: WKWebView
     /// True while the person is typing: the loop waits.
@@ -53,6 +58,8 @@ final class ThumbnailRenderer: NSObject, WKScriptMessageHandler, WKNavigationDel
     var snapshot: (WKWebView, WKSnapshotConfiguration) async throws -> NSImage = { webView, configuration in
         try await webView.takeSnapshot(configuration: configuration)
     }
+    /// `snapshotTimeout`, as a seam a test shortens.
+    var snapshotTimeoutInterval: TimeInterval = ThumbnailRenderer.snapshotTimeout
     /// The ready wait for a job's attempt, 0 on the first try: a seam a
     /// test shortens so it does not wait the real number of seconds the
     /// growing timeout implies. Production doubles `readyTimeout` on each
@@ -70,6 +77,8 @@ final class ThumbnailRenderer: NSObject, WKScriptMessageHandler, WKNavigationDel
     /// Loads this renderer asked the web view for.
     private(set) var navigationCount = 0
     private(set) var lastRenderedSlide: Int?
+    /// Snapshots given up on because they did not complete in time.
+    private(set) var snapshotTimeoutCount = 0
     private(set) var phase: Phase = .idle
     /// The slide whose render is under way, if any.
     private(set) var inFlightSlide: Int?
@@ -253,7 +262,7 @@ final class ThumbnailRenderer: NSObject, WKScriptMessageHandler, WKNavigationDel
         let configuration = WKSnapshotConfiguration()
         configuration.snapshotWidth = NSNumber(value: job.key.width)
         phase = .snapshotting(slide: number)
-        guard let image = try? await snapshot(webView, configuration) else { return .retry }
+        guard let image = await boundedSnapshot(configuration) else { return .retry }
         if FlatImageCheck.isFlat(image) {
             // The page reported ready after a paint, for this slide and revision, and the
             // pixels are still one colour: either the paint came late, or the slide is blank.
@@ -277,6 +286,33 @@ final class ThumbnailRenderer: NSObject, WKScriptMessageHandler, WKNavigationDel
         readyBySlide[number] = ready
         onImage?(job, image, png)
         return .rendered
+    }
+
+    /// The snapshot, or nil when it failed or did not complete within
+    /// `snapshotTimeoutInterval`. A snapshot left waiting would hold the loop
+    /// inside this render, with `running` set, for as long as the deck stays
+    /// open; giving up turns it into an ordinary failed attempt that backs
+    /// off and retries on a freshly loaded page. A snapshot that completes
+    /// after that is dropped.
+    private func boundedSnapshot(_ configuration: WKSnapshotConfiguration) async -> NSImage? {
+        let snapshot = self.snapshot
+        let webView = self.webView
+        let timeout = snapshotTimeoutInterval
+        let image: NSImage?? = await withCheckedContinuation { continuation in
+            let result = FirstResult(continuation)
+            Task { @MainActor in
+                result.deliver(.some(try? await snapshot(webView, configuration)))
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + timeout) {
+                MainActor.assumeIsolated { result.deliver(.none) }
+            }
+        }
+        guard let image else {
+            snapshotTimeoutCount += 1
+            loadedRevision = nil
+            return nil
+        }
+        return image
     }
 
     /// `render(_:)`, the only caller, never reaches this with a `lastReady`
@@ -342,11 +378,26 @@ final class ThumbnailRenderer: NSObject, WKScriptMessageHandler, WKNavigationDel
         return "running=\(running) phase=\(phase) inFlight=\(inFlightSlide.map(String.init) ?? "none") "
             + "queue=\(queue.pending) jobs=\(jobs.keys.sorted()) "
             + "navigationCount=\(navigationCount) renderCount=\(renderCount) "
-            + "failures=\(failureCounts) backOff=\(backOff) flatCaptures=\(flat) "
+            + "failures=\(failureCounts) backOff=\(backOff) flatCaptures=\(flat) snapshotTimeouts=\(snapshotTimeoutCount) "
             + "wantedRevision=\(wantedRevision ?? "none") loadedRevision=\(loadedRevision ?? "none") "
             + "lastReady=\(lastReady.map { "slide \($0.slide) revision \($0.revision)" } ?? "none") "
             + "waitingForSlide=\(waitingForSlide.map(String.init) ?? "none") "
             + "client=\(baseURL == nil ? "none" : "set") canPaint=\(canPaint()) isPaused=\(isPaused()) "
             + "webViewLoading=\(webView.isLoading) url=\(webView.url?.absoluteString ?? "none")"
+    }
+}
+
+/// Resumes a continuation with the first value delivered and drops the rest.
+@MainActor
+private final class FirstResult<Value> {
+    private var continuation: CheckedContinuation<Value, Never>?
+
+    init(_ continuation: CheckedContinuation<Value, Never>) {
+        self.continuation = continuation
+    }
+
+    func deliver(_ value: Value) {
+        continuation?.resume(returning: value)
+        continuation = nil
     }
 }

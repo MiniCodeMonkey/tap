@@ -252,6 +252,41 @@ final class ThumbnailRendererTests: HostedTestCase {
         XCTAssertEqual(reportedRevisions.first, summary.revision)
     }
 
+    /// A snapshot that never completes gives up after `snapshotTimeoutInterval`
+    /// and counts as a failed attempt: the loop moves on to the other
+    /// slides and tries the stuck one again, rather than waiting inside that
+    /// render, with `running` set, for as long as the deck is open. The
+    /// stuck snapshot completing late delivers nothing.
+    func testASnapshotThatNeverCompletesIsGivenUpAndRetried() async throws {
+        let document = try await openDeck(try Fixtures.copyDeck("seven-slides.md"))
+        try await waitForBoxes(document, count: 7)
+        let (renderer, _, summary) = try await makeRenderer(for: document)
+        renderer.snapshotTimeoutInterval = 1
+        let realSnapshot = renderer.snapshot
+        var stuck: CheckedContinuation<NSImage, Error>?
+        var snapshots = 0
+        renderer.snapshot = { webView, configuration in
+            snapshots += 1
+            if snapshots == 1 {
+                return try await withCheckedThrowingContinuation { stuck = $0 }
+            }
+            return try await realSnapshot(webView, configuration)
+        }
+        var images: [Int] = []
+        renderer.onImage = { job, _, _ in images.append(job.slideNumber) }
+        renderer.setWork(jobs(for: summary), revision: summary.revision, visible: [1], current: 1)
+        try await waitForRenderer(renderer, timeout: 30, "seven thumbnails around the stuck snapshot") { images.count == 7 }
+        XCTAssertNotEqual(images.first, 1, "the other slides render while slide 1's snapshot is given up on")
+        XCTAssertEqual(images.sorted(), Array(1...7), "slide 1 renders on a later attempt")
+        XCTAssertEqual(renderer.snapshotTimeoutCount, 1)
+
+        stuck?.resume(returning: NSImage(size: NSSize(width: 320, height: 180)))
+        stuck = nil
+        try await Task.sleep(nanoseconds: 300_000_000)
+        XCTAssertEqual(renderer.renderCount, 7, "a snapshot completing after its attempt was given up delivers nothing")
+        XCTAssertEqual(renderer.phase, .idle, "the loop finished its work and stopped")
+    }
+
     /// The failure count belongs to the job it was counted for, the same
     /// rule as the flat-capture count: a slide edited after two failed
     /// attempts starts its new content's first attempt at the first-attempt
