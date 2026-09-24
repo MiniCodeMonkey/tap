@@ -34,7 +34,7 @@ Feature: Slide operations
     And the cursor moves into the new slide's first slot
 
   Scenario: Pick a layout from the gallery
-    When I hold New Slide, or choose Slide > New Slide
+    When I hold New Slide, or choose Slide > New Slide from Layout > Show Layout Gallery…
     Then the app shows a gallery with a preview of each layout
     And the layouts and their templates come from tap                        # NEW tap slide add --layout <x> --print
     When I pick "Big Stat"

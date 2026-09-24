@@ -6655,6 +6655,8 @@ The person's four decisions (2026-09-24) are settled and implemented: 1, focus s
 24. **D2's hidden-page rule and the thumbnail renderer.** Pull request 27 made a live page report ready while hidden; a print page does not (it waits for a paint). The renderer relies on that difference: a covered window stalls the queue and loads nothing. Cost if wrong: if the frontend ever drops `requirePaint` for print mode, the flat-image check and its three-attempt rule are the last defence.
 25. **Two review minors declined.** Minor 13 (Command+Backspace) is recorded in item 5 rather than changed. Minor 19 is item 23. Every other review finding is addressed in the tasks.
 
+Decided by the person, 2026-09-24: Slide > New Slide (the menu item) inserts a new slide at once using the last layout picked. The layout gallery opens from Slide > New Slide from Layout (or the menu's layout submenu) and from holding the toolbar's New Slide button. A plain click of the toolbar button inserts at once, like the menu item.
+
 ## Open questions
 
 Each has the default this plan implements. Change the plan before running it if an answer differs.
@@ -6662,8 +6664,7 @@ Each has the default this plan implements. Change the plan before running it if 
 1. **Recent-deck thumbnails on the welcome window.** D2 snapshots the preview on the first ready for slide 1 (`RecentThumbnailStore`), and D2's open question 11 said D3 may replace that with the thumbnail cache. Default: leave D2's store alone in D3; a later task can read slide 1's cached PNG instead.
 2. **Custom theme CSS and the cache key.** `PublicConfig.customTheme` is a boolean, so editing a custom theme's CSS file does not change any thumbnail key. Default: accepted for D3. The clean fix is a small tap change (a content hash of the custom CSS in the public config), which would go on its own branch.
 3. **Gallery previews.** Schematics drawn from the template text (default), or real renders of a generated twelve-slide deck through the thumbnail renderer, cached like the theme renders D6 adds.
-4. **Slide > New Slide.** Insert the last layout at once, as the mockup shows, with the gallery under New Slide from Layout > Show Layout Gallery… (default), or open the gallery, as 03-slide-operations and the spec say. Whichever is chosen, the feature file or the mockup gets a one-line edit.
-5. **The person's runs.** `make -C desktop uitest` (four new UI tests, real drags and hover) and `make -C desktop bench` (the typing and preview benchmarks, and the new thumbnail cold pass and reopen) are compiled by the agents and run by the person, as in D2.
+4. **The person's runs.** `make -C desktop uitest` (four new UI tests, real drags and hover) and `make -C desktop bench` (the typing and preview benchmarks, and the new thumbnail cold pass and reopen) are compiled by the agents and run by the person, as in D2.
 
 ## Execution handoff
 

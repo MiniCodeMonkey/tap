@@ -124,7 +124,7 @@ When a tap process exits unexpectedly, the app restarts it with backoff, and the
 - Moving works by dragging thumbnails or box headers, with Cmd+Option+Up and Down, or from the menus. Moves, duplicates, deletes, and skips act on the whole selection as one undo step, and the selected slides keep their order. The drop indicators are AppKit's blue line with a ring, and the drag image carries a count badge.
 - A dropped slide never goes above the frontmatter.
 - Dragging to another deck's sidebar moves the slides, one undo step in each deck, and holding Option copies them.
-- New Slide inserts the last layout used. Holding the button, or using Slide > New Slide, opens a gallery of tap's 12 layouts. The templates come from `tap slide add --layout <x> --print`.
+- New Slide inserts the last layout used at once, from the toolbar button or Slide > New Slide. Holding the toolbar button, or using Slide > New Slide from Layout, opens a gallery of tap's 12 layouts. The templates come from `tap slide add --layout <x> --print`.
 - Skip Slide writes the new `skip: true` directive, and the slide appears dimmed.
 
 ## Preview and Deck pane
