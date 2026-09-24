@@ -6,13 +6,23 @@ final class DeckDocument: NSDocument {
     /// last written by a save that wrote the deck's own file. This is what
     /// the session controller compares the editor's text against to decide
     /// whether the document is edited.
-    private(set) var text = ""
+    private(set) var text = "" { didSet { textRevision += 1 } }
+    /// Bumped by every assignment to `text`, whatever the source: opening
+    /// the file, a revert, an outside change adopted through
+    /// `adopt(diskText:)`, or a save's own completion below. A save's
+    /// completion only adopts its snapshot when this still reads the value
+    /// it captured when the snapshot was taken, so a save that started
+    /// before a newer `adopt(diskText:)` cannot overwrite that newer text
+    /// with its own, older, still in-flight snapshot once it completes.
+    private(set) var textRevision = 0
     /// The exact text handed to `data(ofType:)` for the save now in flight,
     /// taken at the moment the data was produced. A person may keep typing
     /// while the save writes to disk, so this, not the editor's text when
     /// the save finishes, is what `text` becomes on success: it is what
     /// actually reached the file.
     private var savedSnapshot: String?
+    /// `textRevision` as of the moment `savedSnapshot` was taken.
+    private var savedSnapshotRevision = 0
     private(set) var sessionController: DeckSessionController?
 
     override class var autosavesInPlace: Bool { true }
@@ -48,6 +58,7 @@ final class DeckDocument: NSDocument {
         MainActor.assumeIsolated {
             let snapshot = self.sessionController?.editor.string ?? self.text
             self.savedSnapshot = snapshot
+            self.savedSnapshotRevision = self.textRevision
             return Data(snapshot.utf8)
         }
     }
@@ -115,19 +126,53 @@ final class DeckDocument: NSDocument {
     }
 
     // `checkAutosavingSafety()` only runs for the periodic, cancellable
-    // autosave (`autosavingIsImplicitlyCancellable == true`); closing a
-    // window or quitting with unsaved changes calls this method with
-    // `false` directly, since `autosavesInPlace` is true, and never goes
-    // through `checkAutosavingSafety()` at all. This guard is that path's
-    // only defense against writing over a conflict still on screen, so it
-    // must report the cancellation as a failure to save, not as a
-    // no-op success: `.userCancelled` is the one error NSDocument treats
-    // as a silent refusal, so closing or quitting cancels instead of
-    // discarding the person's edits, with no alert shown.
+    // autosave (`autosavingIsImplicitlyCancellable == true`); a window close
+    // or quit's own final autosave, `canClose` below now refuses before it
+    // ever reaches here. This guard stays as this method's own defense for
+    // any other caller, direct or future, that drives it with unsaved
+    // changes during a shown conflict: `.userCancelled` is the one error
+    // NSDocument treats as a silent refusal, so a close or quit driven this
+    // way still cancels instead of writing, with no alert shown.
     override func autosave(withImplicitCancellability autosavingIsImplicitlyCancellable: Bool,
                            completionHandler: @escaping (Error?) -> Void) {
         if sessionController?.hasDiskConflict == true { return completionHandler(CocoaError(.userCancelled)) }
         super.autosave(withImplicitCancellability: autosavingIsImplicitlyCancellable, completionHandler: completionHandler)
+    }
+
+    // Reads the edited state straight from content on every call, rather
+    // than from whatever AppKit's own bookkeeping last landed on, so it can
+    // never disagree with the buffer no matter what a refused close does to
+    // that bookkeeping behind the scenes.
+    override var isDocumentEdited: Bool {
+        sessionController?.isContentEdited ?? super.isDocumentEdited
+    }
+
+    // Driving the real `canClose(withDelegate:shouldClose:contextInfo:)`
+    // during a shown conflict showed NSDocument's default implementation
+    // doing more than refuse to close: after the guard above reports the
+    // final autosave cancelled, it also silently calls `undo()` on the
+    // document's own undo manager, discarding whatever edit was still
+    // pending as an uncommitted "Typing" group, even though nothing was
+    // ever written to disk. That is real data loss, not just a bookkeeping
+    // flag reading wrong, and it happens inside NSDocument's own
+    // implementation of this method, so nothing this diff can do to
+    // `autosave` or to `isDocumentEdited` reaches it. Refusing here instead,
+    // before calling into any of that machinery, avoids it entirely: the
+    // delegate's own callback is invoked directly, with the fixed
+    // `document:shouldClose:contextInfo:` signature every caller of this
+    // method is documented to use, so the file and the buffer are both left
+    // exactly as they were.
+    override func canClose(withDelegate delegate: Any, shouldClose shouldCloseSelector: Selector?, contextInfo: UnsafeMutableRawPointer?) {
+        guard sessionController?.hasDiskConflict == true else {
+            super.canClose(withDelegate: delegate, shouldClose: shouldCloseSelector, contextInfo: contextInfo)
+            return
+        }
+        guard let shouldCloseSelector,
+              let target = delegate as AnyObject?,
+              let implementation = target.method(for: shouldCloseSelector) else { return }
+        typealias ShouldCloseFunction = @convention(c) (AnyObject, Selector, NSDocument, Bool, UnsafeMutableRawPointer?) -> Void
+        let shouldClose = unsafeBitCast(implementation, to: ShouldCloseFunction.self)
+        shouldClose(target, shouldCloseSelector, self, false, contextInfo)
     }
 
     // A save that lands somewhere other than this document's own file, such
@@ -151,12 +196,20 @@ final class DeckDocument: NSDocument {
         }
         super.save(to: url, ofType: typeName, for: saveOperation) { [weak self] error in
             if error == nil, let self, let fileURL = self.fileURL, FilePaths.same(fileURL, url) {
-                if let snapshot = self.savedSnapshot {
-                    self.text = snapshot
-                }
+                self.adoptSavedSnapshotIfCurrent()
                 self.sessionController?.documentDidSave()
             }
             completionHandler(error)
         }
+    }
+
+    /// Adopts a completed save's snapshot as the deck's known text, unless a
+    /// newer change already replaced it while the save was writing to disk.
+    /// Exposed at internal visibility, not private, so a test can drive it
+    /// directly around a manufactured race rather than depend on real save
+    /// timing.
+    func adoptSavedSnapshotIfCurrent() {
+        guard let snapshot = savedSnapshot, textRevision == savedSnapshotRevision else { return }
+        text = snapshot
     }
 }

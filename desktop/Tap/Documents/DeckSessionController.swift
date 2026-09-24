@@ -32,9 +32,24 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
     /// True while the bar offering Load Disk Version and Keep Mine is
     /// showing, between `showDiskConflict` and whichever button resolves it.
     private(set) var hasDiskConflict = false
-    /// The slide number the cursor was on when `loadDiskVersion` ran, kept
-    /// until the next slide list arrives so the cursor can return to it.
-    private var pendingCursorSlideNumber: Int?
+    /// The slide number the cursor was on when `loadDiskVersion` ran, the
+    /// generation that load's own text will be sent as (or the first later
+    /// one, if tap is down or busy when it happens), and the text that was
+    /// loaded. An answer only restores the cursor to this slide when it
+    /// answers that generation or a later one whose text still equals what
+    /// was loaded unchanged; any other answer, including one for a later
+    /// generation whose text has since moved on (an edit landed while tap
+    /// was down, for instance), discards it without moving the cursor. Tied
+    /// to the generation and text, not just consumed by whichever
+    /// `applySlideList` call happens to run next, so a crash and restart
+    /// between the load and tap's answer for it cannot hijack a later,
+    /// unrelated cursor move onto the load's slide.
+    private struct PendingCursorLoad {
+        let slideNumber: Int
+        let generation: Int
+        let text: String
+    }
+    private var pendingCursorLoad: PendingCursorLoad?
     /// Runs after each slide list is applied to the editor.
     var onSlideListApplied: ((SlideList) -> Void)?
     var onHubMessage: ((HubMessage) -> Void)?
@@ -79,16 +94,29 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
     /// The document is edited exactly when the editor's text differs from
     /// the deck file's content, as last read from disk (open, revert) or as
     /// last written by a save that wrote the deck's own file
-    /// (`DeckDocument.text`). Called on every forward edit and on every undo
-    /// and redo, in place of counting changes, so the flag always agrees
-    /// with the text regardless of how many keystrokes one undo reverts.
-    /// Lengths are compared first so most keystrokes cost almost nothing.
-    private func refreshEditedState() {
-        guard let document else { return }
+    /// (`DeckDocument.text`). This is what `DeckDocument.isDocumentEdited`
+    /// reads, computed fresh on every call rather than cached, so an
+    /// AppKit-internal side effect that clears its own bookkeeping (as a
+    /// refused close does) can never leave the document reading as clean
+    /// while the buffer still disagrees with the file. Lengths are compared
+    /// first so most keystrokes cost almost nothing.
+    var isContentEdited: Bool {
+        guard let document else { return false }
         let editorText = editor.string
         let fileText = document.text
-        let isEdited = editorText.utf16.count != fileText.utf16.count || editorText != fileText
-        document.updateChangeCount(isEdited ? .changeDone : .changeCleared)
+        return editorText.utf16.count != fileText.utf16.count || editorText != fileText
+    }
+
+    /// Recomputes the edited state and tells NSDocument. Called on every
+    /// forward edit and on every undo and redo, in place of counting
+    /// changes, so `updateChangeCount` always agrees with the text
+    /// regardless of how many keystrokes one undo reverts.
+    /// `DeckDocument.isDocumentEdited` no longer depends on this having run
+    /// recently; this call is for the rest of NSDocument's own bookkeeping
+    /// (window state, the versions browser) that reads the change count
+    /// directly rather than through the overridden getter.
+    private func refreshEditedState() {
+        document?.updateChangeCount(isContentEdited ? .changeDone : .changeCleared)
     }
 
     private func handle(_ event: TapEvent) {
@@ -143,10 +171,15 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
         editorViewController.hideBar(.changedOnDisk)
         guard let document, let url = document.fileURL,
               let disk = try? String(contentsOf: url, encoding: .utf8) else { return }
-        pendingCursorSlideNumber = editor.currentBoxIndex.map { editor.boxes[$0].slide.number }
+        let slideNumber = editor.currentBoxIndex.map { editor.boxes[$0].slide.number }
         document.adopt(diskText: disk)
         if let replacement = TextDiff.replacement(from: editor.string, to: disk) {
             editor.replaceText(in: replacement.range, with: replacement.replacement, actionName: "Load Disk Version")
+        }
+        if let slideNumber {
+            // The next send tap answers for this text, whichever generation
+            // it lands on, is the one whose answer this load owns.
+            pendingCursorLoad = PendingCursorLoad(slideNumber: slideNumber, generation: editor.tracker.generation + 1, text: disk)
         }
         refreshEditedState()
         document.acceptDiskState()
@@ -207,15 +240,25 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
     }
 
     // internal, not private, so a test can hand it a deliberately stale or
-    // refused answer to prove pendingCursorSlideNumber does not outlive it.
+    // refused answer to prove pendingCursorLoad does not outlive it.
     func applySlideList(_ list: SlideList, sentText: String, generation: Int) {
         guard !stopped else { return }
-        // Consumed by this answer whether or not the editor accepts it: a
-        // slide number left over from a load must not wait indefinitely for
-        // the one answer that matches it and then land on some later,
-        // unrelated slide list instead.
-        let pendingNumber = pendingCursorSlideNumber
-        pendingCursorSlideNumber = nil
+        // Resolved by the first answer that reaches or passes the load's own
+        // generation, whether or not its text still matches: reaching that
+        // point at all settles the question, so a slide number left over
+        // from a load cannot wait indefinitely and then land on some later,
+        // unrelated slide list instead. Only restored when the text this
+        // answer was computed from still equals what was loaded, unchanged;
+        // an edit that landed in between (tap down for a load, for
+        // instance) means the answer says nothing true about that slide any
+        // more, so the cursor is left where it actually is.
+        var pendingNumber: Int?
+        if let pendingLoad = pendingCursorLoad, generation >= pendingLoad.generation {
+            pendingCursorLoad = nil
+            if sentText == pendingLoad.text {
+                pendingNumber = pendingLoad.slideNumber
+            }
+        }
         // An answer the editor refuses was computed from text the editor no
         // longer holds. Nothing it says about this deck is true any more,
         // so none of what follows runs on it.

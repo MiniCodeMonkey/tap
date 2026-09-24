@@ -1,6 +1,17 @@
 import XCTest
 @testable import Tap
 
+/// The delegate object `canClose(withDelegate:shouldClose:contextInfo:)`
+/// expects: it calls back on this selector, not with a return value or a
+/// completion handler.
+private final class CanCloseSpy: NSObject {
+    private(set) var results: [Bool] = []
+
+    @objc func document(_ document: NSDocument, shouldClose: Bool, contextInfo: UnsafeMutableRawPointer?) {
+        results.append(shouldClose)
+    }
+}
+
 final class ExternalChangeTests: HostedTestCase {
     func writeOutside(_ text: String, to url: URL) throws {
         try text.write(to: url, atomically: false, encoding: .utf8)
@@ -244,5 +255,105 @@ final class ExternalChangeTests: HostedTestCase {
         XCTAssertNotNil(controller.editorViewController.bar(.changedOnDisk), "the bar is still showing")
         XCTAssertTrue(document.isDocumentEdited, "still edited: nothing was saved")
         XCTAssertNil(document.windowControllers.first?.window?.attachedSheet, "no alert")
+    }
+
+    /// Drives the real close/quit entry point twice in a row while a
+    /// conflict is showing. The first refusal used to leave
+    /// `isDocumentEdited` false as an undocumented AppKit side effect of
+    /// refusing the close (confirmed in the re-review by instrumenting this
+    /// exact call), even though nothing was written; the second attempt
+    /// would then see a clean document and close right over the person's
+    /// edits with no guard and no bar. Both attempts here must refuse to
+    /// close, leave the file untouched, and read as edited afterward.
+    func testCanCloseDuringAConflictDoesNotDiscardEditsOnASecondAttempt() async throws {
+        let deck = try Fixtures.copyDeck("seven-slides.md")
+        let document = try await openDeck(deck)
+        try await waitForBoxes(document, count: 7)
+        _ = try await waitForRunningTap(document)
+        let controller = try XCTUnwrap(document.sessionController)
+        controller.editor.moveCursor(toSlide: 5)
+        controller.editor.insertText(" mine", replacementRange: NSRange(location: NSNotFound, length: 0))
+        let mine = controller.editor.string
+        let theirs = mine.replacingOccurrences(of: " mine", with: " theirs")
+        try writeOutside(theirs, to: deck)
+        try await waitUntil(timeout: 10, "the changed on disk bar") { controller.editorViewController.bar(.changedOnDisk) != nil }
+
+        let spy = CanCloseSpy()
+        let selector = #selector(CanCloseSpy.document(_:shouldClose:contextInfo:))
+
+        document.canClose(withDelegate: spy, shouldClose: selector, contextInfo: nil)
+        try await waitUntil(timeout: 5, "the first refusal") { spy.results.count == 1 }
+        XCTAssertEqual(spy.results[0], false, "canClose refuses while the conflict is showing")
+        XCTAssertEqual(try String(contentsOf: deck, encoding: .utf8), theirs, "the other program's text is untouched")
+        XCTAssertNotNil(controller.editorViewController.bar(.changedOnDisk), "the bar is still showing")
+        XCTAssertTrue(document.isDocumentEdited, "still edited after the first refused close")
+        XCTAssertNil(document.windowControllers.first?.window?.attachedSheet, "no alert")
+
+        document.canClose(withDelegate: spy, shouldClose: selector, contextInfo: nil)
+        try await waitUntil(timeout: 5, "the second refusal") { spy.results.count == 2 }
+        XCTAssertEqual(spy.results[1], false, "a second close attempt is refused the same way")
+        XCTAssertEqual(try String(contentsOf: deck, encoding: .utf8), theirs, "still untouched")
+        XCTAssertNotNil(controller.editorViewController.bar(.changedOnDisk), "the bar is still showing")
+        XCTAssertTrue(document.isDocumentEdited, "still edited after the second refused close: nothing was silently discarded")
+        XCTAssertNil(document.windowControllers.first?.window?.attachedSheet, "no alert")
+    }
+
+    /// The re-review's repro: tap crashes, the disk version loads while it
+    /// is down (so nothing can answer it yet), an unrelated edit lands, and
+    /// only then does tap restart and answer. The one answer that finally
+    /// arrives describes the combined text, not the load alone, so it must
+    /// not move the cursor back to the load's slide.
+    func testPendingCursorLoadDoesNotOutliveACrashAndRestart() async throws {
+        let deck = try Fixtures.copyDeck("seven-slides.md")
+        let document = try await openDeck(deck)
+        try await waitForBoxes(document, count: 7)
+        _ = try await waitForRunningTap(document)
+        let controller = try XCTUnwrap(document.sessionController)
+        let first = try XCTUnwrap(controller.session.processIdentifier)
+        controller.editor.moveCursor(toSlide: 5)
+
+        let before = controller.editor.string
+        let changed = before.replacingOccurrences(of: "# The Page", with: "# The Pages, renamed")
+
+        kill(first, SIGKILL)
+        try await waitUntil(timeout: 5, "tap to go down") {
+            if case .running = controller.session.state { return false } else { return true }
+        }
+
+        try writeOutside(changed, to: deck)
+        controller.diskChanged()
+        XCTAssertEqual(controller.editor.string, changed, "the load landed while tap was still down")
+
+        controller.editor.moveCursor(toSlide: 0)
+        controller.editor.insertText("x", replacementRange: NSRange(location: NSNotFound, length: 0))
+
+        _ = try await waitForRunningTap(document)
+        try await waitUntil(timeout: 20, "tap's answer for the combined text") { controller.editor.boxes.count == 7 }
+        XCTAssertEqual(controller.editor.currentBoxIndex, 0, "the crash and restart did not hijack the cursor back to the load's slide")
+    }
+
+    /// A save records the text it hands to the file and the revision that
+    /// was current at that moment. If a newer `adopt(diskText:)` runs before
+    /// that save's completion fires, the completion's own snapshot is now
+    /// stale and must not overwrite the newer text. Driven directly against
+    /// `data(ofType:)` and the completion's own logic, rather than by racing
+    /// real file I/O against a real disk change, which is not deterministic.
+    func testSaveCompletionDoesNotOverwriteANewerAdoptedText() async throws {
+        let deck = try Fixtures.copyDeck("seven-slides.md")
+        let document = try await openDeck(deck)
+
+        // Stands in for a save taking its snapshot: it captures the text and
+        // the revision current at that moment, the same way `save(to:...)`
+        // does before its completion handler runs later.
+        _ = try document.data(ofType: "net.daringfireball.markdown")
+
+        // A newer change lands before that save's completion fires.
+        document.adopt(diskText: "changed from outside while the save was in flight")
+
+        // The save "completes" now, well after the newer text landed.
+        document.adoptSavedSnapshotIfCurrent()
+
+        XCTAssertEqual(document.text, "changed from outside while the save was in flight",
+                       "the in-flight save's older snapshot did not overwrite the newer text")
     }
 }
