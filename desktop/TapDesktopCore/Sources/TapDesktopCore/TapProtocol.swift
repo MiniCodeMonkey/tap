@@ -109,13 +109,83 @@ public struct TapErrorPayload: Codable, Equatable, Sendable, Error {
         self.code = code
         self.message = message
     }
+
+    /// The codes tap reports while it keeps running in --app mode
+    /// (internal/cli/app_events.go). Any other code is a fatal error,
+    /// which carries the command's own code: the reason tap stopped.
+    public static let reportedWhileRunning: Set<String> = [
+        "invalid_command", "unknown_command", "unknown_question", "invalid_answer", "busy",
+        "not_presenting", "not_editing", "reload_failed", "tunnel_unavailable", "tunnel_failed",
+        "recording_failed", "recording_blocked", "command_stuck", "startup_stuck", "reporter_stuck",
+        "shutdown_stuck",
+    ]
+
+    /// True when this error says the command failed, rather than one
+    /// request or one part of a command that is still running.
+    public var meansTheCommandFailed: Bool { !Self.reportedWhileRunning.contains(code) }
+}
+
+/// One JSON line from tap's standard output.
+/// What a `question` event carries. Each kind uses a few of the fields:
+/// `approval` the deck (and its drivers, which D5 reads), `record-consent`
+/// the settings file the answer is saved to, `keep-recording` the run's
+/// folder and how many segments it has. See internal/cli/app_questions.go
+/// and app_session.go.
+public struct QuestionPayload: Codable, Equatable, Sendable {
+    public let deck: String?
+    public let settingsPath: String?
+    public let directory: String?
+    public let segments: Int?
+
+    public init(deck: String? = nil, settingsPath: String? = nil, directory: String? = nil, segments: Int? = nil) {
+        self.deck = deck
+        self.settingsPath = settingsPath
+        self.directory = directory
+        self.segments = segments
+    }
+}
+
+/// The recording state of a tap present run, as internal/cli/app_recording.go
+/// reports it: `state` is "recording", "paused" or "stopped", `segment` the
+/// current or last segment from 1 (0 before the first), `elapsed` the
+/// current segment's whole seconds, `disk` "ok", "low" or "full".
+public struct RecordingEvent: Equatable, Sendable {
+    public let state: String
+    public let segment: Int
+    public let elapsed: Int
+    public let disk: String
+
+    public init(state: String, segment: Int, elapsed: Int, disk: String) {
+        self.state = state
+        self.segment = segment
+        self.elapsed = elapsed
+        self.disk = disk
+    }
+}
+
+/// The tunnel state: "starting", "running" with the public URL and a QR
+/// code of the presenter view (PNG, base64), or "stopped".
+public struct TunnelEvent: Equatable, Sendable {
+    public let state: String
+    public let url: String?
+    public let qr: String?
+
+    public init(state: String, url: String?, qr: String?) {
+        self.state = state
+        self.url = url
+        self.qr = qr
+    }
 }
 
 /// One JSON line from tap's standard output.
 public enum TapEvent: Equatable, Sendable {
     case ready(TapReady)
     case fileChanged(path: String, slideList: SlideList?)
-    case question(id: String, kind: String)
+    case question(id: String, kind: String, payload: QuestionPayload)
+    case recording(RecordingEvent)
+    case tunnel(TunnelEvent)
+    /// The audience position: a 1-based slide and its step.
+    case slide(slide: Int, step: Int)
     case error(TapErrorPayload)
     case other(type: String)
 
@@ -130,6 +200,15 @@ public enum TapEvent: Equatable, Sendable {
         let errors: [String]?
         let id: String?
         let kind: String?
+        let payload: QuestionPayload?
+        let state: String?
+        let segment: Int?
+        let elapsed: Int?
+        let disk: String?
+        let url: String?
+        let qr: String?
+        let slide: Int?
+        let step: Int?
         let code: String?
         let message: String?
     }
@@ -150,7 +229,15 @@ public enum TapEvent: Equatable, Sendable {
             return .fileChanged(path: path, slideList: list)
         case "question":
             guard let id = envelope.id, let kind = envelope.kind else { return nil }
-            return .question(id: id, kind: kind)
+            return .question(id: id, kind: kind, payload: envelope.payload ?? QuestionPayload())
+        case "recording":
+            return .recording(RecordingEvent(state: envelope.state ?? "stopped", segment: envelope.segment ?? 0,
+                                             elapsed: envelope.elapsed ?? 0, disk: envelope.disk ?? "ok"))
+        case "tunnel":
+            return .tunnel(TunnelEvent(state: envelope.state ?? "stopped", url: envelope.url, qr: envelope.qr))
+        case "slide":
+            guard let slide = envelope.slide else { return nil }
+            return .slide(slide: slide, step: envelope.step ?? 0)
         case "error":
             return .error(TapErrorPayload(code: envelope.code ?? "unknown", message: envelope.message ?? ""))
         default:
@@ -159,14 +246,26 @@ public enum TapEvent: Equatable, Sendable {
     }
 }
 
+/// The recording command's action, as `c` does in tap present.
+public enum RecordingAction: String, Sendable {
+    case newSegment = "new-segment"
+    case stop
+}
+
 /// A command the app writes to tap's standard input, one JSON line each.
 public enum TapCommand: Equatable, Sendable {
-    /// The app saved its buffer to the deck file.
+    /// The app saved its buffer to the deck file (tap dev only).
     case saved
     /// Render the deck again and reload every page.
     case reload
-    /// Shut down.
+    /// Shut down. tap present asks keep-recording first when the run recorded.
     case quit
+    /// The answer to a question event with this id.
+    case answer(id: String, value: Bool)
+    /// Start or stop the tunnel, as `u` does.
+    case tunnel(start: Bool)
+    /// Start a new segment or stop recording, as `c` does.
+    case recording(action: RecordingAction)
 
     /// The command as one JSON line, without the newline.
     public var line: String {
@@ -174,7 +273,18 @@ public enum TapCommand: Equatable, Sendable {
         case .saved: return #"{"type":"saved"}"#
         case .reload: return #"{"type":"reload"}"#
         case .quit: return #"{"type":"quit"}"#
+        case .answer(let id, let value):
+            return #"{"type":"answer","id":"# + Self.jsonString(id) + #","value":"# + (value ? "true" : "false") + "}"
+        case .tunnel(let start): return #"{"type":"tunnel","start":"# + (start ? "true" : "false") + "}"
+        case .recording(let action): return #"{"type":"recording","action":""# + action.rawValue + #""}"#
         }
+    }
+
+    /// `text` as a JSON string literal, quotes included.
+    private static func jsonString(_ text: String) -> String {
+        let data = (try? JSONEncoder().encode([text])) ?? Data("[\"\"]".utf8)
+        let array = String(decoding: data, as: UTF8.self)
+        return String(array.dropFirst().dropLast())
     }
 }
 

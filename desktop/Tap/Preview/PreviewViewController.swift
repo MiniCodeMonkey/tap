@@ -157,18 +157,24 @@ final class PreviewViewController: NSViewController, WKNavigationDelegate, WKUID
         stepControl.setEnabled(navigator.positionIndex < navigator.revealCount, forSegment: 1)
     }
 
-    /// The page's visible text. Tests read it; the app never runs script in the page.
-    func pageText() async -> String {
-        (try? await webView.evaluateJavaScript("document.body.innerText") as? String) ?? ""
+    /// The page's visible text, or "" when the page does not answer
+    /// within `timeout`. Tests read it; the app never runs script in the page.
+    func pageText(timeout: TimeInterval = 5) async -> String {
+        if case .value(let value) = await webView.evaluate("document.body.innerText", timeout: timeout) {
+            return value as? String ?? ""
+        }
+        return ""
     }
 
     /// Evaluates `script` in the page and describes what came back. Tests
-    /// read it when they need to say which side of the hub a stall is on.
-    func pageValue(_ script: String) async -> String {
-        do {
-            return String(describing: try await webView.evaluateJavaScript(script))
-        } catch {
-            return "script failed: \(error)"
+    /// read it when they need to say which side of the hub a stall is on,
+    /// often after a wait has already timed out on a page that may no
+    /// longer answer, so it gives the page `timeout` seconds.
+    func pageValue(_ script: String, timeout: TimeInterval = 3) async -> String {
+        switch await webView.evaluate(script, timeout: timeout) {
+        case .value(let value): return String(describing: value)
+        case .failed(let error): return "script failed: \(error)"
+        case .noAnswer(let seconds): return "no answer in \(Int(seconds)) s"
         }
     }
 

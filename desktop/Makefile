@@ -2,8 +2,12 @@
 DERIVED_DATA = build/DerivedData
 XCODEBUILD = xcodebuild -project Tap.xcodeproj -derivedDataPath $(DERIVED_DATA) CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO
 ONLY ?= TapTests
+# Every hosted test, UI test and benchmark has five minutes, so a hang
+# fails that one test with a timeout instead of the whole job. A test
+# that needs longer sets its own executionTimeAllowance, up to ten.
+TEST_TIMEOUTS = -test-timeouts-enabled YES -default-test-execution-time-allowance 300 -maximum-test-execution-time-allowance 600
 
-.PHONY: project core-test build test uitest bench app-path check-scenarios
+.PHONY: project core-test build test test-build uitest bench bench-build app-path check-scenarios
 project:
 	xcodegen generate --spec project.yml --quiet
 
@@ -15,13 +19,20 @@ build: project
 
 # make test ONLY=TapTests/VersionTests/testVersionMatch runs one test.
 test: project
-	$(XCODEBUILD) -scheme Tap -destination 'platform=macOS' -only-testing:$(ONLY) test
+	$(XCODEBUILD) -scheme Tap -destination 'platform=macOS' -only-testing:$(ONLY) $(TEST_TIMEOUTS) test
 
 uitest: project
-	$(XCODEBUILD) -scheme Tap -destination 'platform=macOS' -only-testing:TapUITests test
+	$(XCODEBUILD) -scheme Tap -destination 'platform=macOS' -only-testing:TapUITests $(TEST_TIMEOUTS) test
 
 bench: project
-	$(XCODEBUILD) -scheme TapBenchmarks -destination 'platform=macOS' test
+	$(XCODEBUILD) -scheme TapBenchmarks -destination 'platform=macOS' $(TEST_TIMEOUTS) test
+
+# Compiles the hosted and UI tests without running them; uitest, which runs them, is CI's job.
+test-build: project
+	$(XCODEBUILD) -scheme Tap -destination 'platform=macOS' build-for-testing
+
+bench-build: project
+	$(XCODEBUILD) -scheme TapBenchmarks -destination 'platform=macOS' build-for-testing
 
 app-path:
 	@echo $(DERIVED_DATA)/Build/Products/Debug/Tap.app

@@ -66,3 +66,22 @@ D3 | 12-menus-and-shortcuts.feature | VoiceOver
 D3 | 13-performance.feature | The current thumbnail follows the preview
 D3 | 13-performance.feature | Thumbnails
 D3 | 13-performance.feature | Reopen
+D4 | 05-presenting.feature | Start presenting with two displays
+D4 | 05-presenting.feature | Save before presenting
+D4 | 05-presenting.feature | Nothing interrupts the talk
+D4 | 05-presenting.feature | Start from the first slide
+D4 | 05-presenting.feature | One display
+D4 | 05-presenting.feature | Rehearse
+D4 | 05-presenting.feature | Swap displays
+D4 | 05-presenting.feature | Every tap dev presenter feature works
+D4 | 05-presenting.feature | Stop presenting
+D4 | 05-presenting.feature | Presenter controls
+D4 | 05-presenting.feature | The Mac stays awake
+D4 | 05-presenting.feature | Phone remote
+D4 | 05-presenting.feature | Advanced remote options
+D4 | 05-presenting.feature | First talk asks about recording
+D4 | 05-presenting.feature | Recording follows tap present
+D4 | 05-presenting.feature | Keep the recording
+D4 | 05-presenting.feature | Edit while presenting
+D4 | 05-presenting.feature | Remember the display assignment
+D4 | 12-menus-and-shortcuts.feature | Presenting shortcuts

@@ -1,4 +1,5 @@
 import XCTest
+import WebKit
 @testable import Tap
 
 /// A test that runs inside Tap.app, driving the real `tap dev --app` the
@@ -17,6 +18,14 @@ class HostedTestCase: XCTestCase {
         AppEnvironment.shared.lastLayout = LastLayout(defaults: try XCTUnwrap(UserDefaults(suiteName: "TapTests.layout.\(UUID().uuidString)")))
         // Copy and paste go to a pasteboard of the test's own, never the person's clipboard.
         AppEnvironment.shared.slidePasteboard = NSPasteboard(name: NSPasteboard.Name("TapTests.copy.\(UUID().uuidString)"))
+        AppEnvironment.shared.presentationDataStore = WKWebsiteDataStore(forIdentifier: UUID())
+        AppEnvironment.shared.displayAssignments = DisplayAssignmentStore(defaults: try XCTUnwrap(UserDefaults(suiteName: "TapTests.displays.\(UUID().uuidString)")))
+        AppEnvironment.shared.deckPorts = DeckPortStore(defaults: try XCTUnwrap(UserDefaults(suiteName: "TapTests.ports.\(UUID().uuidString)")))
+        AppEnvironment.shared.presentationSettings = PresentationSettingsStore(defaults: try XCTUnwrap(UserDefaults(suiteName: "TapTests.present.\(UUID().uuidString)")))
+        AppEnvironment.shared.presentExecutableURL = nil
+        // The Focus hint shows before the first talk on a Mac; every test but the hint's own has seen it.
+        AppEnvironment.shared.focusHint = FocusHintState(defaults: try XCTUnwrap(UserDefaults(suiteName: "TapTests.focus.\(UUID().uuidString)")))
+        AppEnvironment.shared.focusHint.markShown()
     }
 
     override func tearDown() async throws {
@@ -43,9 +52,27 @@ class HostedTestCase: XCTestCase {
         }
     }
 
-    func openDeck(_ url: URL) async throws -> DeckDocument {
-        let (document, _) = try await NSDocumentController.shared.openDocument(withContentsOf: url, display: true)
-        let deck = try XCTUnwrap(document as? DeckDocument)
+    func openDeck(_ url: URL, timeout: TimeInterval = 30) async throws -> DeckDocument {
+        // AppKit's completion is given `timeout` seconds, so an open that
+        // never completes fails this test rather than hanging the bundle.
+        let opened: Result<NSDocument, Error>? = await withCheckedContinuation { continuation in
+            var answered = false
+            NSDocumentController.shared.openDocument(withContentsOf: url, display: true) { document, _, error in
+                guard !answered else { return }
+                answered = true
+                continuation.resume(returning: document.map { .success($0) } ?? .failure(error ?? CocoaError(.fileReadUnknown)))
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + timeout) {
+                guard !answered else { return }
+                answered = true
+                continuation.resume(returning: nil)
+            }
+        }
+        guard let opened else {
+            XCTFail("timed out opening \(url.lastPathComponent) after \(Int(timeout)) s")
+            throw CancellationError()
+        }
+        let deck = try XCTUnwrap(try opened.get() as? DeckDocument)
         // The audience page reports a slide ready only once it has painted,
         // and a window the window server treats as off screen never paints.
         // A test runner is not a person clicking on the app, so the window
@@ -314,18 +341,19 @@ class HostedTestCase: XCTestCase {
         }
     }
 
-    /// Polls `condition` until it is true.
+    /// Polls `condition` until it is true. `message` is read when the wait
+    /// times out, so a state it names is the state at the timeout.
     //
     // condition is called across await points inside the loop below, which
     // this toolchain only allows a closure parameter to do when it is
     // escaping; a non-escaping parameter fails to build here with "escaping
     // local function captures non-escaping value". Every call site already
     // passes a closure literal, so escaping changes nothing for callers.
-    func waitUntil(timeout: TimeInterval = 10, _ message: String = "condition", _ condition: @escaping () -> Bool) async throws {
+    func waitUntil(timeout: TimeInterval = 10, _ message: @autoclosure @escaping () -> String = "condition", _ condition: @escaping () -> Bool) async throws {
         let deadline = Date().addingTimeInterval(timeout)
         while !condition() {
             if Date() > deadline {
-                XCTFail("timed out waiting for \(message)")
+                XCTFail("timed out waiting for \(message())")
                 throw CancellationError()
             }
             try await Task.sleep(nanoseconds: 20_000_000)

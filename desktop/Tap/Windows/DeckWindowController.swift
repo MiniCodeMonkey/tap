@@ -5,6 +5,7 @@ import AppKit
 final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolbarDelegate, NSMenuItemValidation {
     static let slidesItemIdentifier = NSToolbarItem.Identifier("slides")
     static let newSlideItemIdentifier = NSToolbarItem.Identifier("newSlide")
+    static let playItemIdentifier = NSToolbarItem.Identifier("play")
     let sessionController: DeckSessionController
     let splitViewController: MainSplitViewController
     let sidebarHost = SidebarHostViewController()
@@ -16,12 +17,45 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
     let slidesButton = HoverButton()
     /// The toolbar's New Slide button: a click inserts the last layout, a hold opens the gallery.
     let newSlideButton = NewSlideButton()
+    /// The toolbar's Play button: a click opens the Present popover, a Shift-click starts from slide 1.
+    let playButton = NSButton()
+    /// The popover, whose controls are the last settings: reloaded from the
+    /// environment every time the popover is freshened, and saved only by
+    /// its own Start and Rehearse.
+    private(set) lazy var presentPopover: PresentPopoverController = {
+        let popover = PresentPopoverController()
+        popover.loadSettings(AppEnvironment.shared.presentationSettings.settings)
+        popover.onSwap = { [weak self] in
+            guard let self else { return }
+            self.sessionController.presentation.swapDisplays()
+            self.presentPopover.update(context: self.popoverContext())
+        }
+        popover.onStart = { [weak self] options in self?.startPresenting(options, savingSettings: true) }
+        popover.onRehearse = { [weak self] options in self?.startPresenting(options, savingSettings: true) }
+        return popover
+    }()
+    /// The sheet for tap's question, while it is up.
+    private(set) var questionSheet: QuestionSheet?
+    /// Reveals a kept recording. Production opens Finder on it; a test records the URL.
+    var revealInFinder: (URL) -> Void = { url in NSWorkspace.shared.activateFileViewerSelecting([url]) }
+    /// The phone remote panel, made with the window (a panel that is never
+    /// shown costs nothing) and closed with it, so none outlives its deck.
+    let remotePanel = RemotePanel()
+    /// The Focus hint's sheet, while it is up.
+    private(set) var focusHintSheet: QuestionSheet?
+    /// The Focus pane of System Settings: the bundle identifier of
+    /// FocusSettingsExtension.appex, which System Settings opens by.
+    static let focusSettingsURL = URL(string: "x-apple.systempreferences:com.apple.Focus-Settings.extension")!
+    /// Opens a System Settings pane. A test replaces it and reads the URL.
+    var openSystemSettings: (URL) -> Void = { NSWorkspace.shared.open($0) }
     private(set) lazy var layoutGallery: LayoutGalleryController = {
         let gallery = LayoutGalleryController()
         gallery.onPick = { [weak self] name in self?.insertSlide(layout: name, after: .caret) }
         return gallery
     }()
     private var sidebarCollapseObservation: NSKeyValueObservation?
+    /// Hears every deck's talks start and end, so the Play button follows them.
+    private var presentingObserver: NSObjectProtocol?
     private var isReconcilingSidebarCollapse = false
 
     init(sessionController: DeckSessionController) {
@@ -43,6 +77,26 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
         super.init(window: window)
         window.delegate = self
         shouldCascadeWindows = true
+        sessionController.presentation.deckWindowController = self
+        sessionController.presentation.onStateChange = { [weak self] state in
+            self?.refreshPresentingControls()
+            switch state {
+            case .idle: self?.talkEnded(failed: false)
+            case .failed: self?.talkEnded(failed: true)
+            case .starting:
+                self?.sessionController.editorViewController.hideBar(.recordingKept)
+                self?.sessionController.editorViewController.hideBar(.talkFailed)
+                self?.sessionController.editorViewController.hideBar(.talkNotStarted)
+            case .presenting, .stopping: break
+            }
+        }
+        sessionController.presentation.onQuestion = { [weak self] question in self?.presentQuestion(question) }
+        sessionController.presentation.onFailed = { [weak self] message in self?.showTalkFailed(message) }
+        remotePanel.onTurnOff = { [weak self] in self?.sessionController.presentation.setTunnel(on: false) }
+        sessionController.presentation.onTunnelChange = { [weak self] in self?.refreshRemotePanel() }
+        presentingObserver = NotificationCenter.default.addObserver(forName: AppEnvironment.presentingDidChangeNotification, object: nil, queue: nil) { [weak self] _ in
+            MainActor.assumeIsolated { self?.refreshPresentingControls() }
+        }
 
         let toolbar = NSToolbar(identifier: "TapDeckToolbar")
         toolbar.delegate = self
@@ -269,6 +323,330 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
         }
     }
 
+    // MARK: Presenting
+
+    /// Present > Play, Cmd+Option+P: the talk starts at once with the last
+    /// settings (the popover's controls), from the cursor's slide unless
+    /// those settings say slide 1.
+    @objc func play(_ sender: Any?) {
+        guard sessionController.presentation.canStart else { return }
+        startPresenting(freshPopover().options(mode: .play))
+    }
+
+    /// Present > Play with Options: the popover, anchored on the Play button.
+    @objc func playWithOptions(_ sender: Any?) {
+        guard sessionController.presentation.canStart else { return }
+        let anchor: NSView = playButton.window == nil ? (window?.contentView ?? playButton) : playButton
+        freshPopover().show(context: popoverContext(), relativeTo: anchor.bounds, of: anchor)
+    }
+
+    /// The toolbar's Play button: the popover, or with Shift a start from slide 1 at once.
+    @objc func playButtonPressed(_ sender: Any?) {
+        playButtonClicked(modifiers: NSApp.currentEvent?.modifierFlags ?? [])
+    }
+
+    func playButtonClicked(modifiers: NSEvent.ModifierFlags) {
+        guard sessionController.presentation.canStart else { return }
+        if modifiers.contains(.shift) {
+            var options = freshPopover().options(mode: .play)
+            options.startSlide = 1
+            startPresenting(options)
+            return
+        }
+        playWithOptions(nil)
+    }
+
+    /// The popover with the settings as they are now and the cursor and
+    /// displays as they are now: the settings are app-wide and another
+    /// deck may have saved newer ones, and the cursor moved since the
+    /// popover was last shown. The password field is left alone.
+    private func freshPopover() -> PresentPopoverController {
+        presentPopover.loadSettings(AppEnvironment.shared.presentationSettings.settings)
+        presentPopover.update(context: popoverContext())
+        return presentPopover
+    }
+
+    /// Present > Rehearse: the presenter view alone, from the cursor's slide.
+    @objc func rehearse(_ sender: Any?) {
+        guard sessionController.presentation.canStart else { return }
+        startPresenting(PresentationOptions(mode: .rehearse, startSlide: sessionController.currentSlideNumber ?? 1))
+    }
+
+    /// Every start comes here: the popover's buttons, Play, the Shift-click
+    /// and Rehearse. A start from the popover saves its settings, so the
+    /// next Cmd+Option+P and the next launch start the same way; the other
+    /// starts read the saved settings and leave them as they are. The first
+    /// time on this Mac, the Focus hint comes first: Not Now starts the
+    /// talk, Open Focus Settings opens the setting and leaves the person to
+    /// press Play again once the Focus is on, since a talk would cover
+    /// System Settings.
+    func startPresenting(_ options: PresentationOptions, savingSettings: Bool = false) {
+        if savingSettings { AppEnvironment.shared.presentationSettings.settings = presentPopover.settings }
+        // Play with the popover open starts at once; the popover goes, so a later click on its Start cannot save settings for a talk it did not start.
+        if presentPopover.isShown { presentPopover.close() }
+        let hint = AppEnvironment.shared.focusHint
+        guard hint.hasBeenShown, focusHintSheet == nil else {
+            guard focusHintSheet == nil else { return }
+            hint.markShown()
+            guard let window else {
+                // No window to hang a sheet on: the hint is skipped, never a reason not to present.
+                sessionController.presentation.start(options)
+                return
+            }
+            let sheet = QuestionSheet.focusHint()
+            focusHintSheet = sheet
+            window.beginSheet(sheet) { [weak self] response in
+                guard let self else { return }
+                self.focusHintSheet = nil
+                switch response {
+                case .OK: self.openFocusSettings()
+                case .cancel: self.startAfterTheHint(options)
+                default: break // the sheet ended some other way, as its window went: no talk
+                }
+            }
+            return
+        }
+        sessionController.presentation.start(options)
+        refreshPresentingControls()
+    }
+
+    func openFocusSettings() {
+        openSystemSettings(Self.focusSettingsURL)
+    }
+
+    /// Not Now on the Focus hint. The talk may no longer start: another
+    /// deck's talk began while the hint was up (it had been marked shown),
+    /// or the file went. A bar says why instead of nothing happening.
+    private func startAfterTheHint(_ options: PresentationOptions) {
+        let presentation = sessionController.presentation
+        guard presentation.canStart else {
+            let reason = if AppEnvironment.shared.isPresenting {
+                "Another deck is presenting. Press Play again when its talk ends."
+            } else if presentation.deckURL() == nil {
+                "The deck has no file for tap present to read. Save it, then press Play again."
+            } else {
+                "The last talk's windows are still closing. Press Play again in a moment."
+            }
+            let bar = DocumentBarView(kind: .talkNotStarted, message: "The talk did not start.", detail: reason,
+                                      buttons: [("Dismiss", { [weak self] in
+                                          self?.sessionController.editorViewController.hideBar(.talkNotStarted)
+                                      })])
+            sessionController.editorViewController.showBar(bar)
+            refreshPresentingControls()
+            return
+        }
+        presentation.start(options)
+        refreshPresentingControls()
+    }
+
+    func popoverContext() -> PresentPopoverController.Context {
+        let presentation = sessionController.presentation
+        return PresentPopoverController.Context(arrangement: presentation.currentArrangement,
+                                                cursorSlide: sessionController.currentSlideNumber ?? 1,
+                                                usesFullScreen: presentation.usesFullScreen)
+    }
+
+    /// The toolbar's Play button follows the talk: off while one runs.
+    func refreshPresentingControls() {
+        playButton.isEnabled = sessionController.presentation.canStart
+    }
+
+    /// Present > Stop, the toolbar's Stop, and Escape in the audience window.
+    @objc func stopPresenting(_ sender: Any?) {
+        sessionController.presentation.stop()
+    }
+
+    /// Present > Swap Displays and the toolbar's: during the talk the
+    /// windows change places; before it the popover's arrangement does.
+    @objc func swapDisplays(_ sender: Any?) {
+        sessionController.presentation.swapDisplays()
+        if presentPopover.isShown { presentPopover.update(context: popoverContext()) }
+    }
+
+    /// Present > Reload Slides and the toolbar's.
+    @objc func reloadSlides(_ sender: Any?) {
+        sessionController.presentation.reloadSlides()
+    }
+
+    /// The talk is idle or failed: no sheet of its outlives it, and the
+    /// remote panel goes. A keep-recording sheet still up when tap quit on
+    /// its own means its 60 s wait ran out (or the app's stdin closed) and
+    /// it kept the recording: the sheet ends as a yes, and the "Recording
+    /// kept" bar offers Reveal in Finder, since nobody clicked. A talk
+    /// that failed says nothing about the recording, so its sheet, like
+    /// any other, ends answering nothing.
+    func talkEnded(failed: Bool) {
+        remotePanel.hide()
+        guard let sheet = questionSheet else { return }
+        // The talk's own log, which outlives its session; never tap dev's.
+        let log = sessionController.presentationIfCreated?.lastTalkLog
+        if sheet.kind == "keep-recording", !failed {
+            log?.append("tap kept the recording before an answer came", source: .app)
+            endQuestionSheet(as: .OK)
+        } else {
+            if sheet.kind == "keep-recording" { log?.append("tap stopped before the keep-recording question was answered", source: .app) }
+            endQuestionSheet(as: .abort)
+        }
+    }
+
+    /// The bar that says tap kept a recording on its own, with Reveal in
+    /// Finder. It takes no focus and covers nothing; the next talk clears it.
+    func showRecordingKept(_ folder: URL) {
+        sessionController.editorViewController.showBar(DocumentBarView(
+            kind: .recordingKept, message: "Recording kept", detail: folder.path,
+            buttons: [("Reveal in Finder", { [weak self] in
+                self?.revealInFinder(folder)
+                self?.sessionController.editorViewController.hideBar(.recordingKept)
+            })]))
+    }
+
+    // MARK: The phone remote
+
+    /// Present > Phone Remote: the tunnel on or off.
+    @objc func togglePhoneRemote(_ sender: Any?) {
+        sessionController.presentation.togglePhoneRemote()
+    }
+
+    /// The panel follows tap's tunnel: shown with the QR code while the
+    /// tunnel runs or starts, shown with the reason when tap could not
+    /// start it, gone when it stops or the talk ends, and out of the way
+    /// while a question's sheet is up.
+    func refreshRemotePanel() {
+        let presentation = sessionController.presentation
+        let talkIsUp = presentation.state == .starting || presentation.state == .presenting
+        guard talkIsUp, questionSheet == nil, presentation.remoteIsOn || presentation.tunnelError != nil else {
+            remotePanel.hide()
+            return
+        }
+        let screenFrame = presentation.presenterWindow?.targetFrame ?? window?.screen?.frame ?? NSScreen.screens[0].frame
+        remotePanel.show(tunnel: presentation.tunnel, error: presentation.tunnelError,
+                         ownPassword: presentation.options?.presenterPassword != nil, on: screenFrame)
+    }
+
+    /// The talk could not start, or tap present stopped restarting. A bar
+    /// on the deck window says why, with the talk's log a click away.
+    func showTalkFailed(_ message: String) {
+        let stopped = sessionController.presentation.failedAfterShowing
+        let bar = DocumentBarView(
+            kind: .talkFailed,
+            message: stopped ? "The talk stopped." : "The talk could not run.",
+            detail: message,
+            buttons: [("Show Tap Log", { [weak self] in
+                guard let self else { return }
+                let presentation = self.sessionController.presentation
+                TapLogWindowController.shared.show(log: presentation.session?.log ?? presentation.lastTalkLog ?? self.sessionController.session.log)
+            }), ("Dismiss", { [weak self] in
+                self?.sessionController.editorViewController.hideBar(.talkFailed)
+            })])
+        sessionController.editorViewController.showBar(bar)
+    }
+
+    // MARK: tap's questions
+
+    /// tap asked something. Consent and keep-recording become sheets on
+    /// this window; the live code approval is D5's and is declined until
+    /// then, which runs no code.
+    func presentQuestion(_ question: PresentationController.PendingQuestion) {
+        let presentation = sessionController.presentation
+        switch question.kind {
+        case "record-consent":
+            showQuestionSheet(QuestionSheet.consent(settingsPath: question.payload.settingsPath)) { record in
+                presentation.answer(id: question.id, value: record)
+            }
+        case "keep-recording":
+            let directory = question.payload.directory ?? ""
+            let sheet = QuestionSheet.keepRecording(directory: directory, segments: question.payload.segments ?? 0,
+                                                    size: Self.folderSize(at: URL(fileURLWithPath: directory)))
+            showQuestionSheet(sheet) { [weak self] keep in
+                // tap keeps the recording on a yes and on no answer at all; the app
+                // never touches the folder itself. A question tap still waits on
+                // is the person's click, which reveals the run; one tap has
+                // already dropped kept the run on its own, which only says so.
+                let personAnswered = presentation.pendingQuestions.contains { $0.id == question.id }
+                presentation.answer(id: question.id, value: keep)
+                guard keep, !directory.isEmpty else { return }
+                let folder = URL(fileURLWithPath: directory)
+                if personAnswered {
+                    self?.revealInFinder(folder)
+                } else {
+                    self?.showRecordingKept(folder)
+                }
+            }
+        default:
+            presentation.session?.log.append("the \(question.kind) question is not answered by this version of the app; declined", source: .app)
+            presentation.answer(id: question.id, value: false)
+        }
+    }
+
+    /// Puts `sheet` on this window and calls back with the answer. This
+    /// window comes forward, which switches to its Space and leaves the
+    /// talk's Spaces where they are: the sheet is the one thing the person
+    /// must answer, so this is the one focus move outside the talk windows.
+    /// The move is kept while the sheet is up (`keepForward`), since a
+    /// Space switch asked for during another is dropped. After the answer
+    /// the talk's front window is made key again, which switches back
+    /// (`PresentationController.returnToTalk`, kept the same way).
+    func showQuestionSheet(_ sheet: QuestionSheet, completion: @escaping (Bool) -> Void) {
+        guard let window else {
+            completion(sheet.kind == "keep-recording")
+            return
+        }
+        let presentation = sessionController.presentation
+        questionSheet = sheet
+        window.makeKeyAndOrderFront(nil)
+        keepForward(window, while: sheet)
+        window.beginSheet(sheet) { [weak self] response in
+            // Only the sheet that completed clears the slot: a stale sheet
+            // ended late must not clear a newer one.
+            if self?.questionSheet === sheet { self?.questionSheet = nil }
+            completion(response == .OK)
+            presentation.returnToTalk()
+            self?.refreshRemotePanel()
+        }
+    }
+
+    /// How long a Space switch is given to finish before the window it was
+    /// for is checked, and how many times it is asked for again.
+    static let spaceSwitchSettleDelay: TimeInterval = 0.7
+    static let spaceSwitchRetries = 3
+
+    /// A Space switch asked for while another is still animating is
+    /// dropped, so a question that arrives just after the talk came back
+    /// would leave its sheet behind the talk, where the person cannot
+    /// answer it. While `sheet` is still the question sheet up, a deck
+    /// window that is not on the active Space once the switch has had time
+    /// to finish is brought forward again, a few times at most. It is the
+    /// same window the sheet already brought forward; nothing activates
+    /// the app, and `isOnActiveSpace` does not depend on a key window.
+    private func keepForward(_ window: NSWindow, while sheet: QuestionSheet, attempts: Int = DeckWindowController.spaceSwitchRetries) {
+        guard attempts > 0 else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.spaceSwitchSettleDelay) { [weak self, weak window] in
+            MainActor.assumeIsolated {
+                guard let self, let window, self.questionSheet === sheet else { return }
+                if !window.isOnActiveSpace { window.makeKeyAndOrderFront(nil) }
+                self.keepForward(window, while: sheet, attempts: attempts - 1)
+            }
+        }
+    }
+
+    /// The size of every file under `folder`, formatted for a person.
+    static func folderSize(at folder: URL) -> String {
+        var bytes: Int64 = 0
+        if let files = FileManager.default.enumerator(at: folder, includingPropertiesForKeys: [.fileSizeKey]) {
+            for case let file as URL in files {
+                bytes += Int64((try? file.resourceValues(forKeys: [.fileSizeKey]))?.fileSize ?? 0)
+            }
+        }
+        return ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
+    }
+
+    /// Ends the sheet that is up, if any, as `response`. The talk ending
+    /// calls this so no sheet outlives the talk that asked.
+    func endQuestionSheet(as response: NSApplication.ModalResponse) {
+        guard let sheet = questionSheet, let window else { return }
+        window.endSheet(sheet, returnCode: response)
+    }
+
     // The slide commands name the selection now and resolve it when they
     // run, which may be after tap's answer renumbers the slides. See
     // `SlideSelection`.
@@ -315,11 +693,15 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
     func windowWillClose(_ notification: Notification) {
         sidebarCollapseObservation?.invalidate()
         sidebarCollapseObservation = nil
+        if let presentingObserver { NotificationCenter.default.removeObserver(presentingObserver) }
+        presentingObserver = nil
         if let controller = previewWindowController {
             controller.onClose = nil
             previewWindowController = nil
             controller.close()
         }
+        remotePanel.orderOut(nil)
+        remotePanel.close()
     }
 
     func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
@@ -331,6 +713,18 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
         }
         if menuItem.action == #selector(toggleSlidePanel(_:)) {
             menuItem.title = isPanelPinned ? "Unpin Slide Panel" : "Pin Slide Panel"
+        }
+        let presentation = sessionController.presentation
+        if [#selector(play(_:)), #selector(playWithOptions(_:)), #selector(rehearse(_:))].contains(menuItem.action) { return presentation.canStart }
+        if menuItem.action == #selector(stopPresenting(_:)) { return presentation.isActive }
+        if menuItem.action == #selector(togglePhoneRemote(_:)) {
+            menuItem.state = presentation.remoteIsOn ? .on : .off
+            return presentation.canTogglePhoneRemote
+        }
+        if menuItem.action == #selector(reloadSlides(_:)) { return presentation.state == .presenting }
+        if menuItem.action == #selector(swapDisplays(_:)) {
+            // While another deck presents, a swap here would change the remembered pair under its running talk.
+            return presentation.currentArrangement?.isSingleDisplay == false && (presentation.isActive || !AppEnvironment.shared.isPresenting)
         }
         let count = sessionController.selectedSlideNumbers.count
         if menuItem.action == #selector(deleteSlides(_:)) {
@@ -359,7 +753,7 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
     }
 
     func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
-        [Self.slidesItemIdentifier, .flexibleSpace, Self.newSlideItemIdentifier, Self.previewItemIdentifier]
+        [Self.slidesItemIdentifier, .flexibleSpace, Self.newSlideItemIdentifier, Self.playItemIdentifier, Self.previewItemIdentifier]
     }
 
     func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
@@ -396,6 +790,19 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
             newSlideButton.onClick = { [weak self] in self?.newSlide(nil) }
             newSlideButton.onHold = { [weak self] in self?.showLayoutGallery(nil) }
             item.view = newSlideButton
+            return item
+        }
+        if identifier == Self.playItemIdentifier {
+            let item = NSToolbarItem(itemIdentifier: identifier)
+            item.label = "Play"
+            item.toolTip = "Present: choose displays and options. Shift-click to start from slide 1. Cmd+Option+P starts at once."
+            playButton.image = NSImage(systemSymbolName: "play.fill", accessibilityDescription: "Play")
+            playButton.bezelStyle = .toolbar
+            playButton.setAccessibilityIdentifier("play-button")
+            playButton.target = self
+            playButton.action = #selector(playButtonPressed(_:))
+            playButton.isEnabled = sessionController.presentation.canStart
+            item.view = playButton
             return item
         }
         guard identifier == Self.previewItemIdentifier else { return nil }
