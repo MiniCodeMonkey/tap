@@ -23,5 +23,7 @@ final class ThumbnailCacheTests: XCTestCase {
         XCTAssertEqual(cache.url(for: key).lastPathComponent, key.fileName)
         XCTAssertTrue(ThumbnailCache.defaultDirectory.path.hasSuffix("Application Support/Tap/Thumbnails"))
         try FileManager.default.removeItem(at: directory)
+        XCTAssertNil(cache.data(for: key), "a cache folder removed underneath the app is a miss, not an error")
+        XCTAssertFalse(cache.contains(key))
     }
 }

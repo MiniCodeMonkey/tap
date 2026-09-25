@@ -727,9 +727,13 @@ func runDevServer(options serverOptions) (err error) {
 				return renderCurrentForApp(ctx, false)
 			}
 
-			emitFileChanged := func(path string, list *slidelist.Result) {
+			// emitFileChanged tells the app, and when reloadPages is true
+			// also every open page, which reloads on it.
+			emitFileChanged := func(path string, list *slidelist.Result, reloadPages bool) {
 				appEvents.emit(appFileChangedEvent{Type: appEventFileChanged, Path: path, Result: list})
-				_ = hub.BroadcastFileChanged(path)
+				if reloadPages {
+					_ = hub.BroadcastFileChanged(path)
+				}
 			}
 			watcher.SetOnChange(func(path string) {
 				if filepath.Clean(path) == absFile {
@@ -738,7 +742,8 @@ func runDevServer(options serverOptions) (err error) {
 						fmt.Fprintf(appLog, "Error reading %s: %v\n", absFile, readErr)
 						return
 					}
-					if readErr == nil && suppressFileChanged(changed, deckSource.buffering()) {
+					buffering := deckSource.buffering()
+					if readErr == nil && suppressFileChanged(changed, buffering) {
 						// The app's own save: it dropped the buffer and
 						// rendered the file before this fired, so disk
 						// already matches what tap remembers and the app
@@ -751,7 +756,9 @@ func runDevServer(options serverOptions) (err error) {
 					// the file and the buffer now agree, which is the app's
 					// own signal to clear its edited flag, and tap staying
 					// buffered gives it nothing else to learn that from.
-					emitFileChanged(absFile, nil)
+					// The pages are told only when the file differs from
+					// what they show (see reloadPagesOnDeckWrite).
+					emitFileChanged(absFile, nil, readErr != nil || reloadPagesOnDeckWrite(changed, buffering))
 					if readErr != nil || deckSource.buffering() || !changed {
 						// The buffer wins until the app says it saved, a
 						// deleted deck leaves the last render on screen,
@@ -777,7 +784,7 @@ func runDevServer(options serverOptions) (err error) {
 				if renderErr != nil {
 					fmt.Fprintf(appLog, "Error reloading presentation: %v\n", renderErr)
 				}
-				emitFileChanged(path, list)
+				emitFileChanged(path, list, true)
 			})
 		}
 

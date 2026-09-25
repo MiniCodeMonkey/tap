@@ -24,7 +24,9 @@ Feature: Menus and shortcuts
     Then those keys type text
 
   Scenario: Presenting shortcuts
-    Then Cmd+Option+P starts presenting and Cmd+Option+Shift+P starts rehearsing
+    Then Cmd+Option+P starts presenting at once with the last settings from the Present popover
+    And Cmd+Option+Shift+P starts rehearsing
+    And clicking the Play button opens the Present popover, which Present > Play with Options also opens
 
 
   Scenario: VoiceOver

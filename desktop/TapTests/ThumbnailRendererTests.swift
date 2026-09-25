@@ -22,6 +22,41 @@ final class ThumbnailRendererTests: HostedTestCase {
         return (renderer, client, summary)
     }
 
+    /// Holds the renderer's first snapshot until `release()`, then takes
+    /// the real one. A test that hands the renderer new work "during a
+    /// capture" waits for `isHolding` first: a real capture can finish
+    /// between two polls, so starting the capture is no proof that it is
+    /// still under way.
+    @MainActor
+    final class SnapshotGate {
+        private(set) var isHolding = false
+        private var waiter: CheckedContinuation<Void, Never>?
+        private var released = false
+
+        func hold() async {
+            guard !released else { return }
+            isHolding = true
+            await withCheckedContinuation { waiter = $0 }
+        }
+
+        func release() {
+            released = true
+            isHolding = false
+            waiter?.resume()
+            waiter = nil
+        }
+    }
+
+    func holdTheFirstSnapshot(of renderer: ThumbnailRenderer) -> SnapshotGate {
+        let gate = SnapshotGate()
+        let realSnapshot = renderer.snapshot
+        renderer.snapshot = { webView, configuration in
+            await gate.hold()
+            return try await realSnapshot(webView, configuration)
+        }
+        return gate
+    }
+
     func jobs(for summary: PresentationSummary) -> [ThumbnailRenderer.Job] {
         summary.slides.enumerated().map { index, slide in
             ThumbnailRenderer.Job(slideNumber: index + 1, key: ThumbnailKey(slideHash: slide.hash, themeSignature: summary.themeSignature))
@@ -174,13 +209,15 @@ final class ThumbnailRendererTests: HostedTestCase {
         let document = try await openDeck(try Fixtures.copyDeck("plain.md"))
         try await waitForBoxes(document, count: 1)
         let (renderer, _, summary) = try await makeRenderer(for: document)
+        let release = holdTheFirstSnapshot(of: renderer)
         var images: [Int] = []
         renderer.onImage = { job, _, _ in images.append(job.slideNumber) }
         let job = jobs(for: summary)
         renderer.setWork(job, revision: summary.revision, visible: [1], current: 1)
-        try await waitUntil(timeout: 10, "the capture to start") { renderer.navigationCount >= 1 }
+        try await waitUntil(timeout: 20, "the capture to reach its snapshot") { release.isHolding }
         // The same job, unchanged, arrives again while slide 1 is mid-capture.
         renderer.setWork(job, revision: summary.revision, visible: [1], current: 1)
+        release.release()
         // A wrongly requeued slide renders again almost immediately, back to
         // back with the first delivery on the same loaded page, so the count
         // can skip straight from 0 to 2 between two polls: waiting for it to
@@ -200,14 +237,16 @@ final class ThumbnailRendererTests: HostedTestCase {
         let document = try await openDeck(try Fixtures.copyDeck("plain.md"))
         try await waitForBoxes(document, count: 1)
         let (renderer, _, summary) = try await makeRenderer(for: document)
+        let release = holdTheFirstSnapshot(of: renderer)
         var deliveredKeys: [ThumbnailKey] = []
         renderer.onImage = { job, _, _ in deliveredKeys.append(job.key) }
         let originalJob = try XCTUnwrap(jobs(for: summary).first)
         renderer.setWork([originalJob], revision: summary.revision, visible: [1], current: 1)
-        try await waitUntil(timeout: 10, "the capture to start") { renderer.navigationCount >= 1 }
+        try await waitUntil(timeout: 20, "the capture to reach its snapshot") { release.isHolding }
         let changedKey = ThumbnailKey(slideHash: "changed-while-capturing", themeSignature: summary.themeSignature)
         let changedJob = ThumbnailRenderer.Job(slideNumber: 1, key: changedKey)
         renderer.setWork([changedJob], revision: summary.revision, visible: [1], current: 1)
+        release.release()
         try await waitUntil(timeout: 20, "the changed job to render") { deliveredKeys.contains(changedKey) }
         XCTAssertGreaterThanOrEqual(renderer.renderCount, 1)
     }
