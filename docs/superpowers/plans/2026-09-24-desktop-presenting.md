@@ -2984,15 +2984,15 @@ git commit -m "feat(desktop): start and stop a talk with tap present on the deck
 
 ---
 
-### Task 5: Two displays: the arrangement, Swap Displays, the memory, Rehearse and an unplugged projector
+### Task 5: Two displays: the arrangement, Swap Displays, the memory, Rehearse, an unplugged projector, and displays without separate Spaces
 
 **Files:**
-- Modify: `desktop/Tap/Presenting/PresentationController.swift` (`swapDisplays`, `screensChanged`, the screen observer)
+- Modify: `desktop/Tap/Presenting/PresentationController.swift` (`swapDisplays`, `screensChanged`, the screen observer, `screensHaveSeparateSpaces`, `presenterEntersFullScreen`)
 - Test: `desktop/TapTests/PresentingDisplayTests.swift`
 
 **Interfaces:**
-- Consumes: Task 4's controller, `PresentingTestCase.halfScreens()`, `oneScreen()`; Task 2's `DisplayArrangement.swapped()`, `DisplayAssignmentStore`.
-- Produces: `PresentationController.swapDisplays()`, `screensChanged()`; `NSApplication.didChangeScreenParametersNotification` observed while a talk is active.
+- Consumes: Task 4's controller (`place`, `arrangement`, `frontWindow`, `windowsAreSettled`), `PresentingTestCase.halfScreens()`, `oneScreen()`; Task 3's `PresentationWindow.present(on:fullScreen:completion:)`, `targetFrame`, `fullScreenState`; Task 2's `DisplayArrangement.swapped()`, `DisplayAssignmentStore`.
+- Produces: `PresentationController.swapDisplays()`, `screensChanged()`, `screensHaveSeparateSpaces` (a seam over `NSScreen.screensHaveSeparateSpaces`), `usesFullScreen`; `NSApplication.didChangeScreenParametersNotification` observed while a talk's windows exist.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -3003,7 +3003,11 @@ import XCTest
 @testable import Tap
 
 /// Two displays on one screen: the left half is the laptop, the right half
-/// the projector. The window server sees every window either way.
+/// the projector. A full screen window fills the whole display it is on,
+/// so on one screen both windows end up as two Spaces of that display;
+/// what these tests check is the frame each window was asked for and the
+/// full screen state the window server reports, which is what a real
+/// projector would also show.
 final class PresentingDisplayTests: PresentingTestCase {
     func testStartPresentingWithTwoDisplays() async throws {
         let (_, controller) = try await openDeckForPresenting()
@@ -3015,20 +3019,19 @@ final class PresentingDisplayTests: PresentingTestCase {
         try await startPresenting(controller, PresentationOptions(mode: .play, startSlide: 3))
 
         let talk = try XCTUnwrap(presentation.session)
-        XCTAssertEqual(talk.command, .present(record: true, presenterPassword: nil))
+        XCTAssertEqual(talk.command, .present(record: true, presenterPassword: nil, port: nil))
         XCTAssertTrue(talk.log.text.contains("tap present --app ops.md"))
         XCTAssertNotEqual(talk.processIdentifier, controller.session.processIdentifier, "a second process")
         if case .running = controller.session.state {} else { XCTFail("the preview keeps running from tap dev") }
 
         let audience = try XCTUnwrap(presentation.audienceWindow)
         let presenter = try XCTUnwrap(presentation.presenterWindow)
-        XCTAssertEqual(audience.frame, screens[1].frame, "the audience covers the projector")
-        XCTAssertEqual(presenter.frame, screens[0].frame, "the presenter view is on the built-in display")
+        XCTAssertEqual(audience.targetFrame, screens[1].frame, "the audience goes to the projector")
+        XCTAssertEqual(presenter.targetFrame, screens[0].frame, "the presenter view goes to the built-in display")
+        XCTAssertEqual(audience.fullScreenState, .fullScreen)
+        XCTAssertEqual(presenter.fullScreenState, .fullScreen)
         XCTAssertTrue(presentation.frontWindow === presenter, "the speaker's keys go to the presenter window")
-        try await waitUntil(timeout: 5, "both windows on screen") {
-            let order = onScreenWindowNumbers()
-            return order.contains(audience.windowNumber) && order.contains(presenter.windowNumber)
-        }
+        try await waitUntil(timeout: 5, "the presenter's Space active") { onScreenWindowNumbers().contains(presenter.windowNumber) }
         try await waitUntil(timeout: 20, "the audience page on slide 3") { audience.page.lastReady?.slide == 3 }
         try await waitUntil(timeout: 20, "the presenter page on slide 3") { presenter.page.lastReady?.slide == 3 }
     }
@@ -3045,16 +3048,37 @@ final class PresentingDisplayTests: PresentingTestCase {
         try await startPresenting(controller, PresentationOptions(mode: .play, startSlide: 1))
         let audience = try XCTUnwrap(presentation.audienceWindow)
         let presenter = try XCTUnwrap(presentation.presenterWindow)
-        XCTAssertEqual(audience.frame, screens[0].frame, "the presenter and audience displays swapped before the start")
-        XCTAssertEqual(presenter.frame, screens[1].frame)
-        // During the talk: the toolbar's Swap Displays.
+        XCTAssertEqual(audience.targetFrame, screens[0].frame, "the presenter and audience displays swapped before the start")
+        XCTAssertEqual(presenter.targetFrame, screens[1].frame)
+        // During the talk: the toolbar's Swap Displays. Each window leaves its Space, moves and enters again.
         presentation.swapDisplays()
-        XCTAssertEqual(audience.frame, screens[1].frame)
-        XCTAssertEqual(presenter.frame, screens[0].frame)
-        try await waitUntil(timeout: 5, "both windows still on screen") {
-            let order = onScreenWindowNumbers()
-            return order.contains(audience.windowNumber) && order.contains(presenter.windowNumber)
+        XCTAssertEqual(audience.targetFrame, screens[1].frame)
+        XCTAssertEqual(presenter.targetFrame, screens[0].frame)
+        XCTAssertFalse(presentation.windowsAreSettled)
+        try await waitUntil(timeout: 30, "the windows back in full screen on their new displays") {
+            presentation.windowsAreSettled && audience.fullScreenState == .fullScreen && presenter.fullScreenState == .fullScreen
         }
+        XCTAssertTrue(presentation.sleepAssertion.isHeld, "a swap is not an ending")
+        XCTAssertEqual(fullScreenPresentationWindows().count, 2)
+    }
+
+    func testSwapDisplaysAfterATalkReadsTheDisplaysConnectedNow() async throws {
+        let (_, controller) = try await openDeckForPresenting()
+        let presentation = controller.presentation
+        let screens = halfScreens()
+        presentation.screens = { screens }
+        try await startPresenting(controller, PresentationOptions(mode: .play, startSlide: 1))
+        try await stopPresenting(controller)
+        XCTAssertNil(presentation.arrangement, "a finished talk's arrangement is not kept")
+        // The projector is gone, another is plugged in: the popover shows what is connected now, and Swap swaps that.
+        let other = [screens[0], ScreenInfo(name: "Epson", frame: screens[1].frame, isBuiltIn: false)]
+        presentation.screens = { other }
+        XCTAssertEqual(presentation.currentArrangement?.audience.name, "Epson")
+        presentation.swapDisplays()
+        XCTAssertEqual(presentation.currentArrangement?.audience.name, "Built-in Display")
+        XCTAssertEqual(AppEnvironment.shared.displayAssignments.audienceName(for: other), "Built-in Display")
+        try await startPresenting(controller, PresentationOptions(mode: .play, startSlide: 1))
+        XCTAssertEqual(presentation.audienceWindow?.targetFrame, other[0].frame, "the next talk uses the swapped displays")
     }
 
     func testRememberTheDisplayAssignment() async throws {
@@ -3063,7 +3087,7 @@ final class PresentingDisplayTests: PresentingTestCase {
         first.presentation.screens = { screens }
         first.presentation.swapDisplays()
         try await startPresenting(first, PresentationOptions(mode: .play, startSlide: 1))
-        XCTAssertEqual(first.presentation.audienceWindow?.frame, screens[0].frame)
+        XCTAssertEqual(first.presentation.audienceWindow?.targetFrame, screens[0].frame)
         try await stopPresenting(first)
         XCTAssertEqual(AppEnvironment.shared.displayAssignments.audienceName(for: screens), "Built-in Display")
 
@@ -3071,8 +3095,8 @@ final class PresentingDisplayTests: PresentingTestCase {
         let (_, second) = try await openDeckForPresenting()
         second.presentation.screens = { screens.reversed() }
         try await startPresenting(second, PresentationOptions(mode: .play, startSlide: 1))
-        XCTAssertEqual(second.presentation.audienceWindow?.frame, screens[0].frame, "the same assignment, for every deck")
-        XCTAssertEqual(second.presentation.presenterWindow?.frame, screens[1].frame)
+        XCTAssertEqual(second.presentation.audienceWindow?.targetFrame, screens[0].frame, "the same assignment, for every deck")
+        XCTAssertEqual(second.presentation.presenterWindow?.targetFrame, screens[1].frame)
     }
 
     func testRehearse() async throws {
@@ -3082,11 +3106,12 @@ final class PresentingDisplayTests: PresentingTestCase {
         presentation.screens = { screens }
         try await startPresenting(controller, PresentationOptions(mode: .rehearse, startSlide: 4))
         let talk = try XCTUnwrap(presentation.session)
-        XCTAssertEqual(talk.command, .present(record: false, presenterPassword: nil))
+        XCTAssertEqual(talk.command, .present(record: false, presenterPassword: nil, port: nil))
         XCTAssertTrue(talk.log.text.contains("tap present --app --no-record ops.md"))
         XCTAssertNil(presentation.audienceWindow, "only the presenter view")
         let presenter = try XCTUnwrap(presentation.presenterWindow)
-        XCTAssertEqual(presenter.frame, screens[0].frame, "full screen on the laptop")
+        XCTAssertEqual(presenter.targetFrame, screens[0].frame, "full screen on the laptop")
+        XCTAssertEqual(presenter.fullScreenState, .fullScreen)
         XCTAssertTrue(presentation.frontWindow === presenter)
         try await waitUntil(timeout: 20, "the presenter page, with its timer, on slide 4") { presenter.page.lastReady?.slide == 4 }
         XCTAssertFalse(presentation.recording.isRecording)
@@ -3102,24 +3127,68 @@ final class PresentingDisplayTests: PresentingTestCase {
         let audience = try XCTUnwrap(presentation.audienceWindow)
         let presenter = try XCTUnwrap(presentation.presenterWindow)
 
+        // The projector is unplugged: macOS has moved its Space to the remaining
+        // display already; the app puts the speaker in front of the presenter view.
         presentation.screens = { one }
-        NotificationCenter.default.post(name: NSApplication.didChangeScreenParametersNotification, object: NSApp)
-        XCTAssertEqual(audience.frame, one[0].frame, "the audience lands on the remaining screen")
-        XCTAssertEqual(presenter.frame, one[0].frame)
+        presentation.screensChanged()
         XCTAssertEqual(presentation.arrangement?.isSingleDisplay, true)
-        try await waitUntil(timeout: 5, "the presenter window over the audience") {
-            let order = onScreenWindowNumbers()
-            guard let a = order.firstIndex(of: audience.windowNumber), let p = order.firstIndex(of: presenter.windowNumber) else { return false }
-            return p < a
-        }
+        XCTAssertEqual(audience.targetFrame, one[0].frame, "the audience is asked for the remaining screen")
+        XCTAssertEqual(presenter.targetFrame, one[0].frame)
         XCTAssertTrue(presentation.frontWindow === presenter)
+        try await waitUntil(timeout: 30, "the windows settled") { presentation.windowsAreSettled }
+        try await waitUntil(timeout: 5, "the presenter's Space active, the audience's not") {
+            let order = onScreenWindowNumbers()
+            return order.contains(presenter.windowNumber) && !order.contains(audience.windowNumber)
+        }
         XCTAssertTrue(presentation.sleepAssertion.isHeld)
+        XCTAssertEqual(fullScreenPresentationWindows().count, 2, "both windows stay in full screen")
 
-        // The projector is back.
+        // The projector is back: the audience goes to it again.
         presentation.screens = { two }
+        presentation.screensChanged()
+        XCTAssertEqual(audience.targetFrame, two[1].frame)
+        XCTAssertEqual(presenter.targetFrame, two[0].frame)
+        try await waitUntil(timeout: 30, "the windows back on their displays") {
+            presentation.windowsAreSettled && audience.fullScreenState == .fullScreen && presenter.fullScreenState == .fullScreen
+        }
+    }
+
+    func testTheScreenObserverReachesTheTalkOnlyWhileItsWindowsExist() async throws {
+        let (_, controller) = try await openDeckForPresenting()
+        let presentation = controller.presentation
+        var changes = 0
+        presentation.onScreensChanged = { changes += 1 }
         NotificationCenter.default.post(name: NSApplication.didChangeScreenParametersNotification, object: NSApp)
-        XCTAssertEqual(audience.frame, two[1].frame)
-        XCTAssertEqual(presenter.frame, two[0].frame)
+        XCTAssertEqual(changes, 0, "no talk, no observer")
+        try await startPresenting(controller, PresentationOptions(mode: .rehearse, startSlide: 1))
+        NotificationCenter.default.post(name: NSApplication.didChangeScreenParametersNotification, object: NSApp)
+        XCTAssertEqual(changes, 1, "AppKit's notification reaches the talk")
+        try await stopPresenting(controller)
+        NotificationCenter.default.post(name: NSApplication.didChangeScreenParametersNotification, object: NSApp)
+        XCTAssertEqual(changes, 1, "the observer went with the windows")
+    }
+
+    func testWithoutSeparateSpacesTheTalkWindowsStayPlainWindows() async throws {
+        let (_, controller) = try await openDeckForPresenting()
+        let screens = halfScreens()
+        let presentation = controller.presentation
+        presentation.screens = { screens }
+        // "Displays have separate Spaces" is off: one full screen Space would black out the other display.
+        presentation.screensHaveSeparateSpaces = { false }
+        XCTAssertFalse(presentation.usesFullScreen)
+        try await startPresenting(controller, PresentationOptions(mode: .play, startSlide: 1))
+        let audience = try XCTUnwrap(presentation.audienceWindow)
+        let presenter = try XCTUnwrap(presentation.presenterWindow)
+        XCTAssertEqual(audience.fullScreenState, .windowed)
+        XCTAssertEqual(presenter.fullScreenState, .windowed)
+        XCTAssertTrue(audience.isVisible)
+        XCTAssertTrue(presenter.isVisible)
+        XCTAssertEqual(audience.targetFrame, screens[1].frame)
+        XCTAssertTrue(fullScreenPresentationWindows().isEmpty)
+        XCTAssertTrue(presentation.session?.log.text.contains("Displays have separate Spaces") == true, "the talk's log says why")
+        // One display never needs the setting.
+        presentation.screens = { oneScreen() }
+        XCTAssertTrue(presentation.usesFullScreen)
     }
 }
 ```
@@ -3129,20 +3198,72 @@ final class PresentingDisplayTests: PresentingTestCase {
 Run: `make -C desktop test ONLY=TapTests/PresentingDisplayTests/testSwapDisplays`
 Expected: the test target does not compile (`swapDisplays` is undefined).
 
-- [ ] **Step 3: Swap, remember and follow the screens**
+- [ ] **Step 3: Swap, remember, follow the screens, and honour the Spaces setting**
 
-In `PresentationController.swift`, add a stored property after `showWindowsFallback`:
+In `PresentationController.swift`, add stored properties after `placementCompletion`:
 
 ```swift
+    /// Installed while the talk's windows exist, removed with them, so a
+    /// finished talk never hears about displays and nothing is read in deinit.
     private var screenObserver: NSObjectProtocol?
+    /// Whether each display has its own Spaces (System Settings > Desktop &
+    /// Dock). Without it, one full screen Space blacks out every other
+    /// display, so a two-display talk cannot use full screen at all.
+    var screensHaveSeparateSpaces: () -> Bool = { NSScreen.screensHaveSeparateSpaces }
+    /// The screens changed while the windows exist. A test counts the calls.
+    var onScreensChanged: (() -> Void)?
 ```
 
-At the end of `init`, add:
+Add after `windowsAreSettled`:
 
 ```swift
-        screenObserver = NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: nil) { [weak self] _ in
-            MainActor.assumeIsolated { self?.screensChanged() }
+    /// Whether this talk's windows go to full screen: always on one
+    /// display; on two, only when each display has its own Spaces.
+    var usesFullScreen: Bool {
+        (currentArrangement?.isSingleDisplay ?? true) || screensHaveSeparateSpaces()
+    }
+```
+
+In `showWindows()`, replace the `place(order) { ... }` call with:
+
+```swift
+        let fullScreen = usesFullScreen
+        if !fullScreen {
+            session?.log.append("\"Displays have separate Spaces\" is off in System Settings > Desktop & Dock, so the talk windows are plain windows over their displays rather than full screen Spaces", source: .app)
         }
+        place(order.map { (window: $0.0, frame: $0.1, fullScreen: fullScreen) }) { [weak self, weak front] in
+            guard let self, let front, front === self.frontWindow, self.windowsShown else { return }
+            front.makeKeyAndOrderFront(nil)
+        }
+```
+
+and change `placements`, `place` and `placeNext` to carry the flag:
+
+```swift
+    private var placements: [(window: PresentationWindow, frame: CGRect, fullScreen: Bool)] = []
+
+    private func place(_ windows: [(window: PresentationWindow, frame: CGRect, fullScreen: Bool)], completion: @escaping () -> Void = {}) {
+        placements += windows
+        placementCompletion = completion
+        placeNext()
+    }
+```
+
+and in `placeNext`, call `next.window.present(on: next.frame, fullScreen: next.fullScreen)` and log the refused entry only `if next.fullScreen`. In `openWindows`, add after `sleepAssertion.acquire()`:
+
+```swift
+        if screenObserver == nil {
+            screenObserver = NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: nil) { [weak self] _ in
+                MainActor.assumeIsolated { self?.screensChanged() }
+            }
+        }
+```
+
+In `takeDownWindows`, add as its first lines:
+
+```swift
+        if let screenObserver { NotificationCenter.default.removeObserver(screenObserver) }
+        screenObserver = nil
 ```
 
 Add after `bringPresenterWindowForward()`:
@@ -3152,65 +3273,69 @@ Add after `bringPresenterWindowForward()`:
 
     /// Exchanges the audience and presenter displays, before the talk (the
     /// popover's Swap Displays) or during it (the toolbar's), and remembers
-    /// the choice for this pair of displays, across decks. Nothing to swap
-    /// on one display.
+    /// the choice for this pair of displays, across decks. During a talk
+    /// each window leaves its Space, moves and enters the other display's.
+    /// Nothing to swap on one display.
     func swapDisplays() {
         let screens = self.screens()
         guard let current = arrangement ?? DisplayArrangement.resolve(screens: screens, store: displayAssignments),
               !current.isSingleDisplay else { return }
         let swapped = current.swapped()
         displayAssignments.setAudienceName(swapped.audience.name, for: screens)
-        guard isActive else { return }
+        guard isActive, windowsShown else { return }
         arrangement = swapped
-        audienceWindow?.cover(swapped.audience.frame)
-        presenterWindow?.cover(swapped.presenter.frame)
+        moveWindows(to: swapped)
     }
 
     /// The displays changed while a talk runs: a projector unplugged or
-    /// plugged back in. The windows follow the new arrangement; with one
-    /// display left, the audience goes behind the presenter window, since
-    /// the speaker is at the laptop.
+    /// plugged back in. macOS has already moved a vanished display's Space
+    /// to a remaining one; the windows are asked for the new arrangement
+    /// (a window already on its display does nothing), and with one
+    /// display left the presenter window comes in front, since the
+    /// speaker is at the laptop.
     func screensChanged() {
-        guard isActive, let resolved = DisplayArrangement.resolve(screens: screens(), store: displayAssignments) else { return }
+        onScreensChanged?()
+        guard isActive, windowsShown, let resolved = DisplayArrangement.resolve(screens: screens(), store: displayAssignments) else { return }
         arrangement = resolved
-        audienceWindow?.cover(resolved.audience.frame)
-        presenterWindow?.cover(resolved.presenter.frame)
-        if resolved.isSingleDisplay, let audienceWindow, let presenterWindow, windowsShown {
-            presenterWindow.makeKeyAndOrderFront(nil)
-            presenterWindow.orderFrontRegardless()
-            audienceWindow.order(.below, relativeTo: presenterWindow.windowNumber)
+        moveWindows(to: resolved)
+        if resolved.isSingleDisplay, let presenterWindow, audienceWindow != nil {
             frontWindow = presenterWindow
+            presenterWindow.makeKeyAndOrderFront(nil)
+        }
+    }
+
+    private func moveWindows(to arrangement: DisplayArrangement) {
+        let fullScreen = usesFullScreen
+        var moves: [(window: PresentationWindow, frame: CGRect, fullScreen: Bool)] = []
+        if let audienceWindow { moves.append((audienceWindow, arrangement.audience.frame, fullScreen)) }
+        if let presenterWindow { moves.append((presenterWindow, arrangement.presenter.frame, fullScreen)) }
+        place(moves) { [weak self] in
+            guard let self, let frontWindow = self.frontWindow, self.windowsShown else { return }
+            frontWindow.makeKeyAndOrderFront(nil)
         }
     }
 ```
 
-The observer is removed in a `deinit`:
+- [ ] **Step 4: Run the tests**
 
-```swift
-    deinit {
-        if let screenObserver { NotificationCenter.default.removeObserver(screenObserver) }
-    }
-```
-
-- [ ] **Step 4: Run the tests one at a time**
+Required:
 
 ```bash
-make -C desktop test ONLY=TapTests/PresentingDisplayTests/testStartPresentingWithTwoDisplays
 make -C desktop test ONLY=TapTests/PresentingDisplayTests/testSwapDisplays
-make -C desktop test ONLY=TapTests/PresentingDisplayTests/testRememberTheDisplayAssignment
-make -C desktop test ONLY=TapTests/PresentingDisplayTests/testRehearse
 make -C desktop test ONLY=TapTests/PresentingDisplayTests/testTheAudienceWindowFallsBackWhenTheProjectorGoes
+make -C desktop test ONLY=TapTests/PresentingDisplayTests/testWithoutSeparateSpacesTheTalkWindowsStayPlainWindows
+make -C desktop test ONLY=TapTests/PresentingDisplayTests/testTheScreenObserverReachesTheTalkOnlyWhileItsWindowsExist
 ```
 
-Expected: all five pass.
+Optional: `testStartPresentingWithTwoDisplays`, `testSwapDisplaysAfterATalkReadsTheDisplaysConnectedNow`, `testRememberTheDisplayAssignment`, `testRehearse`. Expected: all pass. A swap on one screen takes both windows out of full screen and back in, about four seconds of animation.
 
 - [ ] **Step 5: Mutate and commit**
 
-Mutations, each reverted, the one that can leave a window off screen first: in `screensChanged`, drop the `cover` calls (expected: the fallback test fails on the frames); in `swapDisplays`, drop `setAudienceName` (expected: `testRememberTheDisplayAssignment` fails on the second deck); in `swapDisplays`, drop the `isActive` guard's early return so windows are covered while idle (survives, it is harmless; no claim); in `openWindows`, use `arrangement.presenter.frame` for the audience (expected: `testStartPresentingWithTwoDisplays` fails); in `PresentationOptions.command`, hard-code `record: true` (expected: `testRehearse` fails on the command).
+Mutations, each reverted, the ones that can leave a window off its display or in full screen first: in `moveWindows`, drop the `place` call (expected: `testSwapDisplays` fails on `windowsAreSettled`, which never becomes false, and the fallback test on `targetFrame`); in `takeDownWindows`, drop the observer removal (expected: `testTheScreenObserverReachesTheTalkOnlyWhileItsWindowsExist` fails on the third count); in `swapDisplays`, drop `setAudienceName` (expected: `testRememberTheDisplayAssignment` fails on the second deck); in `finishStopping`, keep `arrangement` (expected: `testSwapDisplaysAfterATalkReadsTheDisplaysConnectedNow` fails on "Epson"); in `screensChanged`, drop the `frontWindow = presenterWindow` line (expected: the fallback test fails on `frontWindow`); in `openWindows`, use `arrangement.presenter.frame` for the audience (expected: `testStartPresentingWithTwoDisplays` fails on `targetFrame`); in `usesFullScreen`, ignore `screensHaveSeparateSpaces` (expected: the separate Spaces test fails on `fullScreenState`); in `PresentationOptions.command(port:)`, hard-code `record: true` (expected: `testRehearse` fails on the command).
 
 ```bash
 git add desktop/Tap desktop/TapTests
-git commit -m "feat(desktop): arrange a talk over two displays, swap them, remember the pair, and rehearse on one"
+git commit -m "feat(desktop): arrange a talk over two displays, swap them, remember the pair, rehearse on one, and follow an unplugged projector"
 ```
 
 ---
@@ -3220,12 +3345,14 @@ git commit -m "feat(desktop): arrange a talk over two displays, swap them, remem
 **Files:**
 - Create: `desktop/Tap/Presenting/DisplayArrangementView.swift`
 - Create: `desktop/Tap/Presenting/PresentPopoverController.swift`
-- Modify: `desktop/Tap/Windows/DeckWindowController.swift` (the Play toolbar item, `play`, `playClicked(modifiers:)`, `rehearse`, `startPresenting(_:)`, `refreshPresentingControls`, `presentPopover`)
+- Modify: `desktop/Tap/Windows/DeckWindowController.swift` (the Play toolbar item, `play`, `playWithOptions`, `playButtonClicked(modifiers:)`, `rehearse`, `startPresenting(_:)`, `refreshPresentingControls`, `presentPopover`)
 - Test: `desktop/TapTests/PresentPopoverTests.swift`
 
 **Interfaces:**
-- Consumes: Task 4's `PresentationController` (`currentArrangement`, `start`, `canStart`, `onStateChange`, `swapDisplays`), Task 2's `PresentationOptions`, `DisplayArrangement`; D3's `HoverButton` pattern and `LayoutGalleryController`'s popover pattern.
-- Produces: `DisplayArrangementView` with `presenterBox`, `audienceBox` (each a `ScreenBox` with `roleLabel`, `nameLabel`), `update(arrangement:)`; `PresentPopoverController` with `Context(arrangement:cursorSlide:)`, `isShown`, `arrangementView`, `singleDisplayLabel`, `swapButton`, `startFromControl`, `recordCheckbox`, `phoneRemoteCheckbox`, `advancedButton`, `advancedStack`, `passwordField`, `tunnelCheckbox`, `rehearseButton`, `startButton`, `onSwap`, `onStart`, `onRehearse`, `show(context:relativeTo:of:)`, `update(context:)`, `close()`, `options(mode:)`; `DeckWindowController.playItemIdentifier`, `playButton`, `presentPopover`, `play(_:)`, `playClicked(modifiers:)`, `rehearse(_:)`, `startPresenting(_:)`, `refreshPresentingControls()`, `popoverContext()`.
+- Consumes: Task 4's `PresentationController` (`currentArrangement`, `start`, `canStart`, `onStateChange`, `swapDisplays`), Task 5's `usesFullScreen`, Task 2's `PresentationOptions`, `PresentationSettings`, `PresentationSettingsStore`, `DisplayArrangement`; D3's `HoverButton` pattern and `LayoutGalleryController`'s popover pattern.
+- Produces: `DisplayArrangementView` with `presenterBox`, `audienceBox` (each a `ScreenBox` with `roleLabel`, `nameLabel`), `update(arrangement:)`; `PresentPopoverController` with `Context(arrangement:cursorSlide:usesFullScreen:)`, `isShown`, `arrangementView`, `singleDisplayLabel`, `separateSpacesLabel`, `swapButton`, `startFromControl`, `recordCheckbox`, `phoneRemoteCheckbox`, `advancedButton`, `advancedStack`, `passwordField`, `tunnelCheckbox`, `rehearseButton`, `startButton`, `onSwap`, `onStart`, `onRehearse`, `show(context:relativeTo:of:)`, `update(context:)`, `close()`, `options(mode:)`, `settings`, `loadSettings(_:)`; `DeckWindowController.playItemIdentifier`, `playButton`, `presentPopover`, `play(_:)` (Cmd+Option+P: starts at once with the last settings), `playWithOptions(_:)` (the popover), `playButtonClicked(modifiers:)`, `rehearse(_:)`, `startPresenting(_:)`, `refreshPresentingControls()`, `popoverContext()`.
+
+The person's decision (2026-09-24): Cmd+Option+P starts the talk at once with the last settings; clicking the Play button opens the popover; Shift-click starts from slide 1. The last settings are the popover's controls, loaded from `AppEnvironment.presentationSettings` when the popover is made and saved on every start, so they survive a relaunch; the presenter password stays in the field for one launch and is never saved.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -3244,7 +3371,7 @@ final class PresentPopoverTests: PresentingTestCase {
         let (_, controller) = try await openDeckForPresenting()
         let deckWindow = try windowController(controller)
         controller.jumpToSlide(number: 3)
-        deckWindow.playClicked(modifiers: [.shift])
+        deckWindow.playButtonClicked(modifiers: [.shift])
         XCTAssertFalse(deckWindow.presentPopover.isShown, "Shift-click starts at once")
         XCTAssertEqual(controller.presentation.options?.mode, .play)
         XCTAssertEqual(controller.presentation.options?.startSlide, 1)
@@ -3260,9 +3387,10 @@ final class PresentPopoverTests: PresentingTestCase {
         let screens = halfScreens()
         controller.presentation.screens = { screens }
         controller.jumpToSlide(number: 3)
-        deckWindow.playClicked(modifiers: [])
+        deckWindow.playButtonClicked(modifiers: [])
         let popover = deckWindow.presentPopover
-        XCTAssertTrue(popover.isShown)
+        XCTAssertTrue(popover.isShown, "a click on Play opens the popover")
+        XCTAssertTrue(popover.separateSpacesLabel.isHidden)
         XCTAssertEqual(popover.startFromControl.label(forSegment: 0), "Slide 3")
         XCTAssertEqual(popover.startFromControl.label(forSegment: 1), "Slide 1")
         XCTAssertEqual(popover.startFromControl.selectedSegment, 0)
@@ -3301,25 +3429,65 @@ final class PresentPopoverTests: PresentingTestCase {
         popover.startButton.performClick(nil)
         XCTAssertFalse(popover.isShown)
         XCTAssertEqual(controller.presentation.options, PresentationOptions(mode: .play, startSlide: 1, record: false))
+        XCTAssertEqual(AppEnvironment.shared.presentationSettings.settings,
+                       PresentationSettings(startFromSlideOne: true, record: false, phoneRemote: false, tunnel: false),
+                       "a start saves its settings for Cmd+Option+P and the next launch")
         try await waitUntil(timeout: 40, "the talk") { controller.presentation.state == .presenting }
-        XCTAssertEqual(controller.presentation.session?.command, .present(record: false, presenterPassword: nil))
-        XCTAssertEqual(controller.presentation.audienceWindow?.frame, screens[0].frame, "the swap held")
+        XCTAssertEqual(controller.presentation.session?.command, .present(record: false, presenterPassword: nil, port: nil))
+        XCTAssertEqual(controller.presentation.audienceWindow?.targetFrame, screens[0].frame, "the swap held")
+    }
+
+    func testCmdOptionPStartsAtOnceWithTheLastSettings() async throws {
+        AppEnvironment.shared.presentationSettings.settings = PresentationSettings(startFromSlideOne: false, record: false, phoneRemote: false, tunnel: true)
+        let (_, controller) = try await openDeckForPresenting()
+        let deckWindow = try windowController(controller)
+        controller.jumpToSlide(number: 4)
+        deckWindow.presentPopover.passwordField.stringValue = "secret"
+        // Present > Play, Cmd+Option+P: no popover, the last settings, the cursor's slide.
+        deckWindow.play(nil)
+        XCTAssertFalse(deckWindow.presentPopover.isShown)
+        XCTAssertEqual(controller.presentation.options,
+                       PresentationOptions(mode: .play, startSlide: 4, record: false, phoneRemote: false, tunnel: true, presenterPassword: "secret"))
+        try await waitUntil(timeout: 40, "the talk") { controller.presentation.state == .presenting }
+        XCTAssertEqual(controller.presentation.session?.command, .present(record: false, presenterPassword: "secret", port: nil))
+        try await stopPresenting(controller)
+        // Present > Play with Options opens the popover, with the same settings showing.
+        deckWindow.playWithOptions(nil)
+        XCTAssertTrue(deckWindow.presentPopover.isShown)
+        XCTAssertEqual(deckWindow.presentPopover.recordCheckbox.state, .off)
+        XCTAssertEqual(deckWindow.presentPopover.tunnelCheckbox.state, .on)
+        deckWindow.presentPopover.close()
     }
 
     func testThePopoverWithOneDisplaySaysSo() async throws {
         let (_, controller) = try await openDeckForPresenting()
         let deckWindow = try windowController(controller)
-        deckWindow.playClicked(modifiers: [])
+        deckWindow.playButtonClicked(modifiers: [])
         let popover = deckWindow.presentPopover
         XCTAssertTrue(popover.isShown)
         XCTAssertTrue(popover.arrangementView.isHidden)
         XCTAssertFalse(popover.singleDisplayLabel.isHidden)
+        XCTAssertTrue(popover.separateSpacesLabel.isHidden, "one display never needs the setting")
         XCTAssertFalse(popover.swapButton.isEnabled)
         popover.rehearseButton.performClick(nil)
         XCTAssertFalse(popover.isShown)
         XCTAssertEqual(controller.presentation.options?.mode, .rehearse)
         XCTAssertEqual(controller.presentation.options?.startSlide, 1)
         try await waitUntil(timeout: 40, "the rehearsal") { controller.presentation.state == .presenting }
+    }
+
+    func testThePopoverSaysWhenDisplaysShareOneSpace() async throws {
+        let (_, controller) = try await openDeckForPresenting()
+        let deckWindow = try windowController(controller)
+        let screens = halfScreens()
+        controller.presentation.screens = { screens }
+        controller.presentation.screensHaveSeparateSpaces = { false }
+        deckWindow.playButtonClicked(modifiers: [])
+        let popover = deckWindow.presentPopover
+        XCTAssertFalse(popover.separateSpacesLabel.isHidden)
+        XCTAssertTrue(popover.separateSpacesLabel.stringValue.contains("Displays have separate Spaces"))
+        XCTAssertTrue(popover.startButton.isEnabled, "the talk still runs, as plain windows")
+        popover.close()
     }
 
     func testThePlayButtonFollowsTheTalk() async throws {
@@ -3439,6 +3607,8 @@ final class PresentPopoverController: NSObject, NSPopoverDelegate {
     struct Context {
         let arrangement: DisplayArrangement?
         let cursorSlide: Int
+        /// False when two displays share one Space, so the talk windows cannot be full screen.
+        let usesFullScreen: Bool
     }
 
     /// Kept here rather than read from the popover, whose `isShown` can
@@ -3446,6 +3616,7 @@ final class PresentPopoverController: NSObject, NSPopoverDelegate {
     private(set) var isShown = false
     let arrangementView = DisplayArrangementView(frame: .zero)
     let singleDisplayLabel = NSTextField(wrappingLabelWithString: "One display: the audience fills the screen, and Option-Tab shows the presenter view.")
+    let separateSpacesLabel = NSTextField(wrappingLabelWithString: "Turn on \"Displays have separate Spaces\" in System Settings > Desktop & Dock so each display gets its own full screen window. Until then the talk windows are plain windows over their displays.")
     let swapButton = NSButton(title: "Swap Displays", target: nil, action: nil)
     let startFromControl = NSSegmentedControl(labels: ["Slide 1", "Slide 1"], trackingMode: .selectOne, target: nil, action: nil)
     let recordCheckbox = NSButton(checkboxWithTitle: "Record the talk", target: nil, action: nil)
@@ -3462,12 +3633,15 @@ final class PresentPopoverController: NSObject, NSPopoverDelegate {
     var onStart: ((PresentationOptions) -> Void)?
     var onRehearse: ((PresentationOptions) -> Void)?
     private let popover = NSPopover()
-    private var context = Context(arrangement: nil, cursorSlide: 1)
+    private var context = Context(arrangement: nil, cursorSlide: 1, usesFullScreen: true)
 
     override init() {
         super.init()
         singleDisplayLabel.font = .systemFont(ofSize: 12)
         singleDisplayLabel.textColor = .secondaryLabelColor
+        separateSpacesLabel.font = .systemFont(ofSize: 12)
+        separateSpacesLabel.textColor = .systemOrange
+        separateSpacesLabel.isHidden = true
         swapButton.bezelStyle = .rounded
         swapButton.target = self
         swapButton.action = #selector(swapPressed(_:))
@@ -3516,7 +3690,7 @@ final class PresentPopoverController: NSObject, NSPopoverDelegate {
         startRow.orientation = .horizontal
         let buttons = NSStackView(views: [NSView(), rehearseButton, startButton])
         buttons.orientation = .horizontal
-        let stack = NSStackView(views: [arrangementView, singleDisplayLabel, swapButton, startRow, recordCheckbox, recordHint,
+        let stack = NSStackView(views: [arrangementView, singleDisplayLabel, separateSpacesLabel, swapButton, startRow, recordCheckbox, recordHint,
                                         phoneRemoteCheckbox, advancedRow, advancedStack, buttons])
         stack.orientation = .vertical
         stack.alignment = .leading
@@ -3525,6 +3699,7 @@ final class PresentPopoverController: NSObject, NSPopoverDelegate {
         stack.widthAnchor.constraint(equalToConstant: 360).isActive = true
         buttons.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -32).isActive = true
         singleDisplayLabel.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -32).isActive = true
+        separateSpacesLabel.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -32).isActive = true
         recordHint.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -32).isActive = true
         let content = NSViewController()
         content.view = stack
@@ -3549,10 +3724,12 @@ final class PresentPopoverController: NSObject, NSPopoverDelegate {
             arrangementView.update(arrangement: arrangement)
             arrangementView.isHidden = false
             singleDisplayLabel.isHidden = true
+            separateSpacesLabel.isHidden = context.usesFullScreen
             swapButton.isEnabled = true
         } else {
             arrangementView.isHidden = true
             singleDisplayLabel.isHidden = false
+            separateSpacesLabel.isHidden = true
             swapButton.isEnabled = false
         }
     }
@@ -3568,13 +3745,30 @@ final class PresentPopoverController: NSObject, NSPopoverDelegate {
 
     /// What the controls say now.
     func options(mode: PresentationMode) -> PresentationOptions {
+        settings.options(mode: mode, cursorSlide: context.cursorSlide, presenterPassword: presenterPassword)
+    }
+
+    /// The controls as settings: what a start saves, and what Cmd+Option+P starts with.
+    var settings: PresentationSettings {
+        PresentationSettings(startFromSlideOne: startFromControl.selectedSegment == 1,
+                             record: recordCheckbox.state == .on,
+                             phoneRemote: phoneRemoteCheckbox.state == .on,
+                             tunnel: tunnelCheckbox.state == .on)
+    }
+
+    /// The field's password, nil when empty. It is never saved.
+    var presenterPassword: String? {
         let password = passwordField.stringValue.trimmingCharacters(in: .whitespaces)
-        return PresentationOptions(mode: mode,
-                                   startSlide: startFromControl.selectedSegment == 1 ? 1 : context.cursorSlide,
-                                   record: recordCheckbox.state == .on,
-                                   phoneRemote: phoneRemoteCheckbox.state == .on,
-                                   tunnel: tunnelCheckbox.state == .on,
-                                   presenterPassword: password.isEmpty ? nil : password)
+        return password.isEmpty ? nil : password
+    }
+
+    /// Puts saved settings into the controls, once, when the popover is made.
+    func loadSettings(_ settings: PresentationSettings) {
+        startFromControl.selectedSegment = settings.startFromSlideOne ? 1 : 0
+        recordCheckbox.state = settings.record ? .on : .off
+        phoneRemoteCheckbox.state = settings.phoneRemote ? .on : .off
+        tunnelCheckbox.state = settings.tunnel || settings.phoneRemote ? .on : .off
+        tunnelCheckbox.isEnabled = !settings.phoneRemote
     }
 
     @objc private func swapPressed(_ sender: Any?) {
@@ -3619,8 +3813,11 @@ After `let newSlideButton = NewSlideButton()`:
 ```swift
     /// The toolbar's Play button: a click opens the Present popover, a Shift-click starts from slide 1.
     let playButton = NSButton()
+    /// The popover, whose controls are the last settings: loaded once from
+    /// the environment, saved on every start.
     private(set) lazy var presentPopover: PresentPopoverController = {
         let popover = PresentPopoverController()
+        popover.loadSettings(AppEnvironment.shared.presentationSettings.settings)
         popover.onSwap = { [weak self] in
             guard let self else { return }
             self.sessionController.presentation.swapDisplays()
@@ -3643,19 +3840,35 @@ Add after `showLayoutGallery(_:)`:
 ```swift
     // MARK: Presenting
 
-    /// The Play button and Present > Play. A Shift-click starts from slide 1 at once.
+    /// Present > Play, Cmd+Option+P: the talk starts at once with the last
+    /// settings (the popover's controls), from the cursor's slide unless
+    /// those settings say slide 1.
     @objc func play(_ sender: Any?) {
-        playClicked(modifiers: NSApp.currentEvent?.modifierFlags ?? [])
+        guard sessionController.presentation.canStart else { return }
+        startPresenting(presentPopover.options(mode: .play))
     }
 
-    func playClicked(modifiers: NSEvent.ModifierFlags) {
+    /// Present > Play with Options: the popover, anchored on the Play button.
+    @objc func playWithOptions(_ sender: Any?) {
         guard sessionController.presentation.canStart else { return }
-        if modifiers.contains(.shift) {
-            startPresenting(PresentationOptions(mode: .play, startSlide: 1))
-            return
-        }
         let anchor: NSView = playButton.window == nil ? (window?.contentView ?? playButton) : playButton
         presentPopover.show(context: popoverContext(), relativeTo: anchor.bounds, of: anchor)
+    }
+
+    /// The toolbar's Play button: the popover, or with Shift a start from slide 1 at once.
+    @objc func playButtonPressed(_ sender: Any?) {
+        playButtonClicked(modifiers: NSApp.currentEvent?.modifierFlags ?? [])
+    }
+
+    func playButtonClicked(modifiers: NSEvent.ModifierFlags) {
+        guard sessionController.presentation.canStart else { return }
+        if modifiers.contains(.shift) {
+            var options = presentPopover.options(mode: .play)
+            options.startSlide = 1
+            startPresenting(options)
+            return
+        }
+        playWithOptions(nil)
     }
 
     /// Present > Rehearse: the presenter view alone, from the cursor's slide.
@@ -3664,15 +3877,20 @@ Add after `showLayoutGallery(_:)`:
         startPresenting(PresentationOptions(mode: .rehearse, startSlide: sessionController.currentSlideNumber ?? 1))
     }
 
-    /// Every start comes here: the popover's buttons, the Shift-click and Rehearse.
+    /// Every start comes here: the popover's buttons, Play, the Shift-click
+    /// and Rehearse. The popover's settings are saved, so the next
+    /// Cmd+Option+P and the next launch start the same way.
     func startPresenting(_ options: PresentationOptions) {
+        AppEnvironment.shared.presentationSettings.settings = presentPopover.settings
         sessionController.presentation.start(options)
         refreshPresentingControls()
     }
 
     func popoverContext() -> PresentPopoverController.Context {
-        PresentPopoverController.Context(arrangement: sessionController.presentation.currentArrangement,
-                                         cursorSlide: sessionController.currentSlideNumber ?? 1)
+        let presentation = sessionController.presentation
+        return PresentPopoverController.Context(arrangement: presentation.currentArrangement,
+                                                cursorSlide: sessionController.currentSlideNumber ?? 1,
+                                                usesFullScreen: presentation.usesFullScreen)
     }
 
     /// The toolbar's Play button follows the talk: off while one runs.
@@ -3687,12 +3905,12 @@ In `toolbarDefaultItemIdentifiers`, return `[Self.slidesItemIdentifier, .flexibl
         if identifier == Self.playItemIdentifier {
             let item = NSToolbarItem(itemIdentifier: identifier)
             item.label = "Play"
-            item.toolTip = "Present from this slide. Shift-click to start from slide 1."
+            item.toolTip = "Present: choose displays and options. Shift-click to start from slide 1. Cmd+Option+P starts at once."
             playButton.image = NSImage(systemSymbolName: "play.fill", accessibilityDescription: "Play")
             playButton.bezelStyle = .toolbar
             playButton.setAccessibilityIdentifier("play-button")
             playButton.target = self
-            playButton.action = #selector(play(_:))
+            playButton.action = #selector(playButtonPressed(_:))
             playButton.isEnabled = sessionController.presentation.canStart
             item.view = playButton
             return item
@@ -3701,18 +3919,20 @@ In `toolbarDefaultItemIdentifiers`, return `[Self.slidesItemIdentifier, .flexibl
 
 - [ ] **Step 6: Run the tests one at a time**
 
+Required:
+
 ```bash
-make -C desktop test ONLY=TapTests/PresentPopoverTests/testStartFromTheFirstSlide
 make -C desktop test ONLY=TapTests/PresentPopoverTests/testThePopoverCollectsTheOptions
-make -C desktop test ONLY=TapTests/PresentPopoverTests/testThePopoverWithOneDisplaySaysSo
-make -C desktop test ONLY=TapTests/PresentPopoverTests/testThePlayButtonFollowsTheTalk
+make -C desktop test ONLY=TapTests/PresentPopoverTests/testCmdOptionPStartsAtOnceWithTheLastSettings
+make -C desktop test ONLY=TapTests/PresentPopoverTests/testThePopoverSaysWhenDisplaysShareOneSpace
+make -C desktop test ONLY=TapTests/MenuTests
 ```
 
-Expected: all four pass. Also run `make -C desktop test ONLY=TapTests/MenuTests` and `ONLY=TapTests/WindowLayoutTests`: the toolbar gained an item and the menu is unchanged so far.
+Optional: `testStartFromTheFirstSlide`, `testThePopoverWithOneDisplaySaysSo`, `testThePlayButtonFollowsTheTalk`, `ONLY=TapTests/WindowLayoutTests` (the toolbar gained an item; the menu is unchanged until Task 7). Expected: all pass.
 
 - [ ] **Step 7: Mutate and commit**
 
-Mutations, each reverted: in `playClicked`, drop the `.shift` branch (expected: `testStartFromTheFirstSlide` fails, the popover shows); in `options(mode:)`, ignore `startFromControl` (expected: `testThePopoverCollectsTheOptions` fails on `startSlide: 1`); in `phoneRemoteChanged`, drop `tunnelCheckbox.state = .on` (expected: it fails on the tunnel state); in `update(context:)`, never hide `arrangementView` (expected: `testThePopoverWithOneDisplaySaysSo` fails); in `refreshPresentingControls`, always enable the button (expected: `testThePlayButtonFollowsTheTalk` fails); in `onSwap`, drop `swapDisplays()` (expected: the options test fails on `currentArrangement`).
+Mutations, each reverted: in `playButtonClicked`, drop the `.shift` branch (expected: `testStartFromTheFirstSlide` fails, the popover shows); in `play(_:)`, show the popover instead of starting (expected: `testCmdOptionPStartsAtOnceWithTheLastSettings` fails on `isShown`); in `startPresenting`, drop the settings save (expected: `testThePopoverCollectsTheOptions` fails on the saved settings); in `presentPopover`'s init, drop `loadSettings` (expected: the Cmd+Option+P test fails on `record: false`); in `options(mode:)`, ignore `startFromSlideOne` (expected: `testThePopoverCollectsTheOptions` fails on `startSlide: 1`); in `phoneRemoteChanged`, drop `tunnelCheckbox.state = .on` (expected: it fails on the tunnel state); in `update(context:)`, never hide `arrangementView` (expected: `testThePopoverWithOneDisplaySaysSo` fails); in `update(context:)`, always hide `separateSpacesLabel` (expected: `testThePopoverSaysWhenDisplaysShareOneSpace` fails); in `refreshPresentingControls`, always enable the button (expected: `testThePlayButtonFollowsTheTalk` fails); in `onSwap`, drop `swapDisplays()` (expected: the options test fails on `currentArrangement`).
 
 ```bash
 git add desktop/Tap desktop/TapTests
@@ -3730,8 +3950,8 @@ git commit -m "feat(desktop): the Play button and the Present popover with displ
 - Test: `desktop/TapTests/PresentMenuTests.swift`
 
 **Interfaces:**
-- Consumes: Task 4's controller (`stop`, `toggleFrontWindow`, `bringPresenterWindowForward`, `isActive`, `canStart`, `currentArrangement`), Task 6's `play`, `rehearse`; Task 3's `PresentationWindow.role`, `page.popupRequested`.
-- Produces: Present menu items Play (Cmd+Option+P), Rehearse (Cmd+Option+Shift+P), Stop (Cmd+.), Swap Displays; `DeckWindowController.stopPresenting(_:)`, `swapDisplays(_:)`, validation for the five; `PresentationController.handleKey(_:)` and the local monitor installed while the windows show.
+- Consumes: Task 4's controller (`stop`, `toggleFrontWindow`, `bringPresenterWindowForward`, `isActive`, `canStart`, `currentArrangement`, `arrangement`), Task 6's `play`, `playWithOptions`, `rehearse`; Task 3's `PresentationWindow.role`, `page.popupRequested`, `page.pressKey`.
+- Produces: Present menu items Play (Cmd+Option+P, starts at once), Play with Options… (no shortcut, the popover), Rehearse (Cmd+Option+Shift+P), Stop (Cmd+.), Swap Displays; `DeckWindowController.stopPresenting(_:)`, `swapDisplays(_:)`, validation for the six; `PresentationController.handleKey(_:)` and the local monitor installed while the windows show.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -3765,6 +3985,9 @@ final class PresentMenuTests: PresentingTestCase {
         XCTAssertEqual(play.title, "Play")
         XCTAssertEqual(play.keyEquivalent, "p")
         XCTAssertEqual(play.keyEquivalentModifierMask, [.command, .option])
+        let withOptions = try item(menu, action: #selector(DeckWindowController.playWithOptions(_:)))
+        XCTAssertEqual(withOptions.title, "Play with Options…")
+        XCTAssertEqual(withOptions.keyEquivalent, "", "the popover has no shortcut; the Play button opens it")
         let rehearse = try item(menu, action: #selector(DeckWindowController.rehearse(_:)))
         XCTAssertEqual(rehearse.keyEquivalent, "p")
         XCTAssertEqual(rehearse.keyEquivalentModifierMask, [.command, .option, .shift])
@@ -3774,22 +3997,29 @@ final class PresentMenuTests: PresentingTestCase {
         let swap = try item(menu, action: #selector(DeckWindowController.swapDisplays(_:)))
 
         XCTAssertTrue(deckWindow.validateMenuItem(play))
+        XCTAssertTrue(deckWindow.validateMenuItem(withOptions))
         XCTAssertTrue(deckWindow.validateMenuItem(rehearse))
         XCTAssertFalse(deckWindow.validateMenuItem(stop))
         XCTAssertFalse(deckWindow.validateMenuItem(swap), "one display: nothing to swap")
 
-        // Cmd+Option+Shift+P starts rehearsing; Cmd+Option+P opens the popover to start presenting.
+        // Cmd+Option+Shift+P starts rehearsing at once.
         deckWindow.rehearse(nil)
         XCTAssertEqual(controller.presentation.options?.mode, .rehearse)
         XCTAssertFalse(deckWindow.validateMenuItem(play))
+        XCTAssertFalse(deckWindow.validateMenuItem(withOptions))
         XCTAssertFalse(deckWindow.validateMenuItem(rehearse))
         XCTAssertTrue(deckWindow.validateMenuItem(stop))
         try await waitUntil(timeout: 40, "the rehearsal") { controller.presentation.state == .presenting }
         deckWindow.stopPresenting(nil)
         try await waitUntil(timeout: 30, "the end") { controller.presentation.state == .idle }
+
+        // Cmd+Option+P starts presenting at once, with the last settings and no popover.
+        controller.jumpToSlide(number: 2)
         deckWindow.play(nil)
-        XCTAssertTrue(deckWindow.presentPopover.isShown)
-        deckWindow.presentPopover.close()
+        XCTAssertFalse(deckWindow.presentPopover.isShown)
+        XCTAssertEqual(controller.presentation.options?.mode, .play)
+        XCTAssertEqual(controller.presentation.options?.startSlide, 2)
+        try await waitUntil(timeout: 40, "the talk") { controller.presentation.state == .presenting }
     }
 
     func testOneDisplay() async throws {
@@ -3798,23 +4028,36 @@ final class PresentMenuTests: PresentingTestCase {
         try await startPresenting(controller, PresentationOptions(mode: .play, startSlide: 1))
         let audience = try XCTUnwrap(presentation.audienceWindow)
         let presenter = try XCTUnwrap(presentation.presenterWindow)
-        XCTAssertEqual(audience.frame, NSScreen.screens[0].frame, "the audience page fills the screen")
+        XCTAssertEqual(audience.fullScreenState, .fullScreen, "the audience page fills the screen")
         XCTAssertTrue(presentation.frontWindow === audience)
+        try await waitUntil(timeout: 5, "the audience's Space active") { onScreenWindowNumbers().contains(audience.windowNumber) }
         let optionTab = try keyEvent(.keyDown, characters: "\t", keyCode: 48, modifiers: [.option], in: audience)
         XCTAssertNil(presentation.handleKey(optionTab), "the app takes Option-Tab")
         XCTAssertTrue(presentation.frontWindow === presenter)
-        try await waitUntil(timeout: 5, "the presenter window in front") {
+        try await waitUntil(timeout: 5, "the presenter's Space active, the audience's not") {
             let order = onScreenWindowNumbers()
-            guard let a = order.firstIndex(of: audience.windowNumber), let p = order.firstIndex(of: presenter.windowNumber) else { return false }
-            return p < a
+            return order.contains(presenter.windowNumber) && !order.contains(audience.windowNumber)
         }
         let again = try keyEvent(.keyDown, characters: "\t", keyCode: 48, modifiers: [.option], in: presenter)
         XCTAssertNil(presentation.handleKey(again))
         XCTAssertTrue(presentation.frontWindow === audience)
+        try await waitUntil(timeout: 5, "the audience's Space active again") { onScreenWindowNumbers().contains(audience.windowNumber) }
         let plainTab = try keyEvent(.keyDown, characters: "\t", keyCode: 48, in: audience)
         XCTAssertNotNil(presentation.handleKey(plainTab), "a plain Tab goes to the page")
         let elsewhere = try keyEvent(.keyDown, characters: "\t", keyCode: 48, modifiers: [.option], in: try XCTUnwrap(controller.editor.window))
         XCTAssertNotNil(presentation.handleKey(elsewhere), "Option-Tab in the deck window is not the app's")
+    }
+
+    func testOptionTabIsThePagesOnTwoDisplays() async throws {
+        let (_, controller) = try await openDeckForPresenting()
+        let presentation = controller.presentation
+        let screens = halfScreens()
+        presentation.screens = { screens }
+        try await startPresenting(controller, PresentationOptions(mode: .play, startSlide: 1))
+        let presenter = try XCTUnwrap(presentation.presenterWindow)
+        let optionTab = try keyEvent(.keyDown, characters: "\t", keyCode: 48, modifiers: [.option], in: presenter)
+        XCTAssertNotNil(presentation.handleKey(optionTab), "with a display each there is nothing to switch, so the page gets the key")
+        XCTAssertTrue(presentation.frontWindow === presenter)
     }
 
     func testEscapeInTheAudienceWindowStopsTheTalk() async throws {
@@ -3829,13 +4072,47 @@ final class PresentMenuTests: PresentingTestCase {
         let escape = try keyEvent(.keyDown, characters: "\u{1b}", keyCode: 53, in: audience)
         XCTAssertNil(presentation.handleKey(escape))
         XCTAssertEqual(presentation.state, .stopping)
+        XCTAssertFalse(presentation.sleepAssertion.isHeld)
         try await waitUntil(timeout: 30, "the end") { presentation.state == .idle }
+        try await waitUntil(timeout: 10, "nothing left in full screen") { fullScreenPresentationWindows().isEmpty && presentation.windowsGoingDown.isEmpty }
 
         // A rehearsal has no audience window: Escape in the presenter window stops it.
         try await startPresenting(controller, PresentationOptions(mode: .rehearse, startSlide: 1))
         let rehearsal = try XCTUnwrap(presentation.presenterWindow)
         XCTAssertNil(presentation.handleKey(try keyEvent(.keyDown, characters: "\u{1b}", keyCode: 53, in: rehearsal)))
         XCTAssertEqual(presentation.state, .stopping)
+        try await waitUntil(timeout: 30, "the end") { presentation.state == .idle }
+        try await waitUntil(timeout: 10, "nothing left in full screen") { fullScreenPresentationWindows().isEmpty }
+    }
+
+    /// Every key the scenario lists, as the page's handler would see it.
+    static let pageKeys: [(characters: String, keyCode: UInt16)] = [
+        (String(Character(Unicode.Scalar(UInt16(NSLeftArrowFunctionKey))!)), 123),
+        (String(Character(Unicode.Scalar(UInt16(NSRightArrowFunctionKey))!)), 124),
+        (String(Character(Unicode.Scalar(UInt16(NSDownArrowFunctionKey))!)), 125),
+        (String(Character(Unicode.Scalar(UInt16(NSUpArrowFunctionKey))!)), 126),
+        (" ", 49),
+        (String(Character(Unicode.Scalar(UInt16(NSHomeFunctionKey))!)), 115),
+        (String(Character(Unicode.Scalar(UInt16(NSEndFunctionKey))!)), 119),
+        ("o", 31), ("t", 17), ("f", 3), ("?", 44), ("r", 15), ("v", 9),
+        ("1", 18), ("2", 19), ("3", 20), ("4", 21), ("5", 23), ("-", 27), ("=", 24),
+    ]
+
+    func testEveryTapDevKeyGoesToThePageUnchanged() async throws {
+        let (_, controller) = try await openDeckForPresenting()
+        let presentation = controller.presentation
+        try await startPresenting(controller, PresentationOptions(mode: .play, startSlide: 1))
+        let audience = try XCTUnwrap(presentation.audienceWindow)
+        let presenter = try XCTUnwrap(presentation.presenterWindow)
+        for window in [audience, presenter] {
+            for key in Self.pageKeys {
+                for modifiers in [[], [.shift]] as [NSEvent.ModifierFlags] {
+                    let event = try keyEvent(.keyDown, characters: key.characters, keyCode: key.keyCode, modifiers: modifiers, in: window)
+                    XCTAssertTrue(presentation.handleKey(event) === event, "\(key.characters) with \(modifiers) in the \(window.role) window is the page's")
+                }
+            }
+        }
+        XCTAssertEqual(presentation.state, .presenting, "none of them ended the talk")
     }
 
     func testEveryTapDevPresenterFeatureWorks() async throws {
@@ -3846,17 +4123,19 @@ final class PresentMenuTests: PresentingTestCase {
         let presenter = try XCTUnwrap(presentation.presenterWindow)
         for page in [audience.page, presenter.page] {
             XCTAssertTrue(page.webView.configuration.preferences.isElementFullscreenEnabled, "F goes full screen")
-            XCTAssertTrue(page.webView.configuration.websiteDataStore.isPersistent, "the presenter layout and notes size persist between launches")
+            XCTAssertTrue(page.webView.configuration.websiteDataStore.isPersistent, "the page's localStorage outlives the process")
         }
+        XCTAssertEqual(presenter.page.lastLoadedURL?.port, AppEnvironment.shared.deckPorts.port(for: try XCTUnwrap(controller.document?.fileURL)),
+                       "the deck's port: the presenter layout and notes size persist between launches (Task 4 proves the port is reused)")
         try await waitUntil(timeout: 20, "the audience page on slide 2") { audience.page.lastReady?.slide == 2 }
         try await waitUntil(timeout: 20, "the presenter page on slide 2") { presenter.page.lastReady?.slide == 2 }
 
-        // The arrow keys, and every other key, go to tap's page unchanged: the
-        // page moves, the hub relays it (the page holds the presenter cookie),
-        // and tap reports the new position.
-        let rightArrow = String(Character(Unicode.Scalar(UInt16(NSRightArrowFunctionKey))!))
-        audience.page.webView.keyDown(with: try keyEvent(.keyDown, characters: rightArrow, keyCode: 124, in: audience))
-        audience.page.webView.keyUp(with: try keyEvent(.keyUp, characters: rightArrow, keyCode: 124, in: audience))
+        // The arrow keys, and every other key, go to tap's page unchanged
+        // (testEveryTapDevKeyGoesToThePageUnchanged): the page moves, the
+        // hub relays it (the page holds the presenter cookie), and tap
+        // reports the new position. The key is pressed in the page itself,
+        // so the proof does not depend on which window the host has as key.
+        await audience.page.pressKey("ArrowRight")
         try await waitUntil(timeout: 10, "tap's slide event for slide 3") { presentation.lastSlide == 3 }
         try await waitUntil(timeout: 10, "the presenter page following") { presenter.page.lastReady?.slide == 3 }
 
@@ -3864,10 +4143,9 @@ final class PresentMenuTests: PresentingTestCase {
         let port = try XCTUnwrap(presentation.client).ready.port
         audience.page.popupRequested(for: URL(string: "http://127.0.0.1:\(port)/presenter#3"), navigationType: .other)
         XCTAssertTrue(presentation.frontWindow === presenter)
-        try await waitUntil(timeout: 5, "the presenter window in front") {
+        try await waitUntil(timeout: 5, "the presenter's Space active") {
             let order = onScreenWindowNumbers()
-            guard let a = order.firstIndex(of: audience.windowNumber), let p = order.firstIndex(of: presenter.windowNumber) else { return false }
-            return p < a
+            return order.contains(presenter.windowNumber) && !order.contains(audience.windowNumber)
         }
     }
 }
@@ -3886,6 +4164,7 @@ In `MainMenu.swift`, replace `presentMenu()` with:
     static func presentMenu() -> NSMenu {
         let menu = NSMenu(title: "Present")
         menu.addItem(item("Play", action: #selector(DeckWindowController.play(_:)), key: "p", modifiers: [.command, .option]))
+        menu.addItem(item("Play with Options…", action: #selector(DeckWindowController.playWithOptions(_:))))
         menu.addItem(item("Rehearse", action: #selector(DeckWindowController.rehearse(_:)), key: "p", modifiers: [.command, .option, .shift]))
         menu.addItem(.separator())
         menu.addItem(item("Stop", action: #selector(DeckWindowController.stopPresenting(_:)), key: "."))
@@ -3914,7 +4193,7 @@ In `validateMenuItem(_:)`, add before `let count = ...`:
 
 ```swift
         let presentation = sessionController.presentation
-        if [#selector(play(_:)), #selector(rehearse(_:))].contains(menuItem.action) { return presentation.canStart }
+        if [#selector(play(_:)), #selector(playWithOptions(_:)), #selector(rehearse(_:))].contains(menuItem.action) { return presentation.canStart }
         if menuItem.action == #selector(stopPresenting(_:)) { return presentation.isActive }
         if menuItem.action == #selector(swapDisplays(_:)) { return presentation.currentArrangement?.isSingleDisplay == false }
 ```
@@ -3933,11 +4212,12 @@ Add after `bringPresenterWindowForward()`:
     // MARK: Keys
 
     /// Escape in the audience window ends the talk (in the presenter window
-    /// too, when there is no audience window: a rehearsal), and Option-Tab
-    /// brings the other window over this one. Every other key goes to
-    /// tap's page unchanged. Internal so a test can drive it with an event
-    /// of its own; the monitor calls it for every key down while the
-    /// windows show.
+    /// too, when there is no audience window: a rehearsal), and on one
+    /// display Option-Tab switches to the other window's Space. Every
+    /// other key goes to tap's page unchanged, and so does Option-Tab when
+    /// each window has a display of its own. Internal so a test can drive
+    /// it with an event of its own; the monitor calls it for every key
+    /// down while the windows show.
     func handleKey(_ event: NSEvent) -> NSEvent? {
         guard isActive, let window = event.window as? PresentationWindow,
               window === audienceWindow || window === presenterWindow else { return event }
@@ -3945,7 +4225,7 @@ Add after `bringPresenterWindowForward()`:
             stop()
             return nil
         }
-        if event.keyCode == 48, event.modifierFlags.contains(.option) {
+        if event.keyCode == 48, event.modifierFlags.contains(.option), arrangement?.isSingleDisplay == true, audienceWindow != nil {
             toggleFrontWindow()
             return nil
         }
@@ -3970,19 +4250,20 @@ In `showWindows()`, add `installKeyMonitor()` right after `windowsShown = true`.
 
 - [ ] **Step 5: Run the tests one at a time**
 
+Required:
+
 ```bash
 make -C desktop test ONLY=TapTests/PresentMenuTests/testPresentingShortcuts
-make -C desktop test ONLY=TapTests/PresentMenuTests/testOneDisplay
 make -C desktop test ONLY=TapTests/PresentMenuTests/testEscapeInTheAudienceWindowStopsTheTalk
 make -C desktop test ONLY=TapTests/PresentMenuTests/testEveryTapDevPresenterFeatureWorks
-make -C desktop test ONLY=TapTests/MenuTests
+make -C desktop test ONLY=TapTests/PresentMenuTests/testEveryTapDevKeyGoesToThePageUnchanged
 ```
 
-Expected: all pass. If `testEveryTapDevPresenterFeatureWorks` never sees `lastSlide == 3`: first check the presenter cookie is in the store (`presenterCookieInTheSharedStore()`); if it is, the key did not reach the web content. Then make the audience window's first responder the web view (`audience.makeFirstResponder(audience.page.webView)`) and send the events through `audience.sendEvent(_:)` instead of `keyDown(with:)`. If neither moves the page, the UI test in Task 14 is what proves the keys, and this test keeps the cookie, the configuration and the S key assertions and drives the position through the app's socket as `testStopPresenting` does; record it in the ledger.
+Optional: `testOneDisplay`, `testOptionTabIsThePagesOnTwoDisplays`, `ONLY=TapTests/MenuTests`. Expected: all pass. If `testEveryTapDevPresenterFeatureWorks` never sees `lastSlide == 3`: first check the presenter cookie is in the store (`presenterCookieInTheSharedStore()`); if it is, read the audience page's `window.__tapReadyState` through `HostedTestCase.pageStateScript` to see whether the page's key handler is installed (`keyboard.ts` listens on `window` for `keydown` and reads `event.key`), and check the dispatched event's `key` is exactly `"ArrowRight"`. The key press is the page's own event, so which window the host has as key does not matter.
 
 - [ ] **Step 6: Mutate and commit**
 
-Mutations, each reverted, the ones that can leave a screen covered first: in `handleKey`, drop the Escape branch (expected: `testEscapeInTheAudienceWindowStopsTheTalk` fails); in `handleKey`, stop on Escape in any presentation window (expected: it fails on the presenter window's Escape); in `takeDownWindows`, drop `removeKeyMonitor()` (survives here: the guard on `isActive` makes a stale monitor inert; note it, not a claim); in `handleKey`, drop the `.option` check (expected: `testOneDisplay` fails on the plain Tab); in `validateMenuItem`, return true for Stop always (expected: `testPresentingShortcuts` fails); in `presentMenu`, give Stop the key `"s"` (expected: it fails on the key equivalent).
+Mutations, each reverted, the ones that can leave a window in full screen first: in `handleKey`, drop the Escape branch (expected: `testEscapeInTheAudienceWindowStopsTheTalk` fails); in `handleKey`, stop on Escape in any presentation window (expected: it fails on the presenter window's Escape, and `testEveryTapDevKeyGoesToThePageUnchanged` is unaffected since Escape is not in its list); in `takeDownWindows`, drop `removeKeyMonitor()` (survives here: the guard on `isActive` makes a stale monitor inert; note it, not a claim); in `handleKey`, drop the `.option` check (expected: `testOneDisplay` fails on the plain Tab); in `handleKey`, drop the `isSingleDisplay` check (expected: `testOptionTabIsThePagesOnTwoDisplays` fails); in `handleKey`, take "o" as the app's (expected: `testEveryTapDevKeyGoesToThePageUnchanged` fails); in `validateMenuItem`, return true for Stop always (expected: `testPresentingShortcuts` fails); in `presentMenu`, give Stop the key `"s"` (expected: it fails on the key equivalent); in `presentMenu`, give Play with Options the Cmd+Option+P key (expected: it fails on the empty key equivalent).
 
 ```bash
 git add desktop/Tap desktop/TapTests
