@@ -2834,16 +2834,19 @@ git commit -m "test(desktop): running a block, the page's limits, revoking, a mo
 
 ---
 
-### Task 8: The approval during a talk, and no talk while a question waits
+### Task 8: The approval during a talk, the talk's own process guard, and no talk while a question waits
 
 **Files:**
 - Modify: `desktop/Tap/Windows/DeckWindowController.swift` (`presentQuestion`'s `approval` case; `play`, `playWithOptions`, `playButtonClicked`, `rehearse`, `refreshPresentingControls`, `validateMenuItem`, `showQuestionSheet`)
-- Modify: `desktop/TapTests/Support/FakeTapScripts.swift` (`exitsOnAnswer`)
+- Modify: `desktop/Tap/Presenting/PresentationController.swift` (`onQuestionsDropped`, the drop in `sessionStateChanged`)
+- Modify: `desktop/Tap/Documents/DeckSessionController.swift` (`reloadAfterTalkApproval`)
+- Modify: `desktop/TapTests/Support/FakeTapScripts.swift` (`exitsOnAnswer`, `exitsOnceAfterEvents`)
+- Modify: `desktop/TapTests/RecordingTests.swift` (the second question now has a sheet)
 - Test: `desktop/TapTests/TalkApprovalTests.swift`
 
 **Interfaces:**
-- Consumes: D4's `PresentationController.answer(id:value:)`, `pendingQuestion`, `state`, `windowsShown`, `canStart`, `start(_:)`; `PresentingTestCase.openDeckForPresenting(_:slides:)`, `startPresenting`, `stopPresenting`, `writeRecordingConsent`; `FakeTapScripts.presenting(events:quit:tunnelFailed:tunnelUnavailable:recordingTo:)`.
-- Produces: the `approval` case in `presentQuestion`; `DeckWindowController.canStartATalk` (Play, Play with Options, Rehearse and the toolbar button all read it); `FakeTapScripts.presenting(... exitsOnAnswer: Bool = true ...)`.
+- Consumes: D4's `PresentationController.answer(id:value:)`, `pendingQuestions`, `pendingQuestion`, `state`, `windowsShown`, `canStart`, `isActive`, `start(_:)`, `sessionStateChanged(_:)`; `PresentingTestCase.openDeckForPresenting(_:slides:)`, `startPresenting`, `stopPresenting`, `writeRecordingConsent`, `oneScreen()`, `fullScreenAvailable`; `FakeTapScripts.presenting(events:quit:tunnelFailed:tunnelUnavailable:recordingTo:)`; Task 6's `deckQuestions`, `showNextDeckQuestionIfIdle`, `waitForRunButtons`.
+- Produces: the `approval` case in `presentQuestion`; `DeckWindowController.canStartATalk`; `PresentationController.onQuestionsDropped`; `DeckSessionController.reloadAfterTalkApproval()`; `FakeTapScripts.presenting(... exitsOnAnswer: Bool = true, exitsOnceAfterEvents: Bool = false ...)`.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -2855,8 +2858,9 @@ import XCTest
 
 /// tap present asks the same approval question when the deck is still
 /// unapproved at Play; the sheet is the same, on the deck window, before
-/// any talk window shows. And no talk starts while the deck's own
-/// question waits for an answer.
+/// any talk window shows. Its answer reaches only the process that asked.
+/// And no talk starts while the deck's own question waits, and no deck
+/// question shows while a talk runs.
 final class TalkApprovalTests: PresentingTestCase {
     static let approvalQuestion = #"{"type":"question","id":"q1","kind":"approval","payload":{"deck":"/private/tmp/t/ops.md","drivers":[{"name":"shell","slides":[2],"blocks":1}],"blocks":[{"driver":"shell","code":"echo hi","slide":2,"block":1}]}}"#
 
@@ -2883,6 +2887,34 @@ final class TalkApprovalTests: PresentingTestCase {
         try await stopPresenting(controller)
     }
 
+    /// tap present dies under its approval sheet; D2's policy restarts it,
+    /// and the new process asks q1 again. The old sheet must be gone, its
+    /// Allow must reach nothing, and the new question gets a fresh sheet.
+    func testATalkRestartDropsItsApprovalSheet() async throws {
+        let record = try Fixtures.temporaryFolder().appendingPathComponent("record")
+        AppEnvironment.shared.presentExecutableURL = try FakeTapScripts.presenting(events: [Self.approvalQuestion], exitsOnAnswer: false, exitsOnceAfterEvents: true, recordingTo: record)
+        let (_, controller) = try await openDeckForPresenting()
+        let deckWindow = try XCTUnwrap(controller.editor.window?.windowController as? DeckWindowController)
+        let presentation = controller.presentation
+        presentation.start(PresentationOptions(mode: .play, startSlide: 1))
+        try await waitUntil(timeout: 30, "the first process's question") { presentation.pendingQuestion?.id == "q1" }
+        let sheet = try XCTUnwrap(deckWindow.questionSheet as? ApprovalSheet)
+        // The fake exits right after asking, once; the session restarts it.
+        try await waitUntil(timeout: 10, "the question gone with its process") { presentation.pendingQuestion == nil }
+        XCTAssertNil(deckWindow.questionSheet, "the sheet went with the process that asked")
+        XCTAssertNil(deckWindow.window?.attachedSheet)
+        try await waitUntil(timeout: 30, "the restarted process's question") { presentation.pendingQuestion?.id == "q1" }
+        try await waitUntil(timeout: 5, "a fresh sheet") { deckWindow.questionSheet is ApprovalSheet && deckWindow.questionSheet !== sheet }
+        sheet.acceptButton.performClick(nil)
+        try await Task.sleep(nanoseconds: 500_000_000)
+        let recorded = try String(contentsOf: record, encoding: .utf8)
+        XCTAssertFalse(recorded.contains(#""value":true"#), "the old sheet's Allow reached nothing: \(recorded)")
+        try XCTUnwrap(deckWindow.questionSheet?.button(titled: "Don't Allow")).performClick(nil)
+        try await waitUntil(timeout: 5, "the current question's answer") { (try? String(contentsOf: record, encoding: .utf8))?.contains(#""value":false"#) == true }
+        try await waitUntil(timeout: 40, "the talk") { presentation.state == .presenting }
+        try await stopPresenting(controller)
+    }
+
     func testATalkAsksAboutAnUnapprovedDeck() async throws {
         // The deck's own question first: declined, so the deck stays unapproved.
         let (document, controller, deckWindow, deckSheet) = try await openUnapprovedAndWaitForTheQuestion("live-code.md")
@@ -2901,9 +2933,12 @@ final class TalkApprovalTests: PresentingTestCase {
         XCTAssertEqual(deckWindow.questionSheetSource, .talk)
         XCTAssertEqual(sheet.summaryLabel.stringValue, "2 shell, 1 sqlite")
         XCTAssertFalse(presentation.windowsShown, "nothing covers the sheet")
-        try XCTUnwrap(sheet.button(titled: "Don't Allow")).performClick(nil)
-        try await waitUntil(timeout: 40, "the talk goes on without live code") { presentation.state == .presenting }
-        XCTAssertFalse(storedApprovals().contains("approvals"))
+        try XCTUnwrap(sheet.button(titled: "Allow")).performClick(nil)
+        try await waitUntil(timeout: 10, "the talk's yes stored") { self.storedApprovals().contains("drivers: [shell, sqlite]") }
+        try await waitUntil(timeout: 40, "the talk") { presentation.state == .presenting }
+        // The deck's own tap dev learns of the yes through a reload: its preview's blocks offer Run without a second sheet.
+        try await waitForRunButtons(#"["Run"]"#, in: controller, document: document, slide: 2, timeout: 30)
+        XCTAssertNil(controller.pendingQuestion, "already approved: tap dev asks nothing on that reload")
         try await stopPresenting(controller)
     }
 
@@ -2925,23 +2960,58 @@ final class TalkApprovalTests: PresentingTestCase {
         XCTAssertTrue(deckWindow.playButton.isEnabled)
         XCTAssertTrue(deckWindow.validateMenuItem(play))
     }
+
+    /// A deck question that arrives mid-talk (here: tap dev restarts and asks
+    /// again) waits, behind the talk's own sheet and then behind the talk,
+    /// and shows when the talk ends.
+    func testADeckQuestionWaitsForTheTalkToEnd() async throws {
+        let (document, controller, deckWindow, deckSheet) = try await openUnapprovedAndWaitForTheQuestion("live-code.md")
+        try XCTUnwrap(deckSheet.button(titled: "Don't Allow")).performClick(nil)
+        try await waitForPreview(document, slide: 1)
+        try await waitForBoxes(document, count: 5)
+        let screens = oneScreen()
+        let presentation = controller.presentation
+        presentation.screens = { screens }
+        let available = fullScreenAvailable
+        presentation.fullScreenAllowed = { available }
+        presentation.start(PresentationOptions(mode: .play, startSlide: 1))
+        try await waitUntil(timeout: 30, "tap present's approval question") { presentation.pendingQuestion?.kind == "approval" }
+        let talkSheet = try XCTUnwrap(deckWindow.questionSheet)
+        // tap dev dies and comes back asking, while the talk's sheet is up.
+        let devPid = try XCTUnwrap(controller.session.processIdentifier)
+        kill(devPid, SIGKILL)
+        try await waitUntil(timeout: 30, "tap dev's question again") {
+            controller.pendingQuestion?.kind == "approval" && controller.session.processIdentifier != nil && controller.session.processIdentifier != devPid
+        }
+        XCTAssertEqual(deckWindow.deckQuestions.count, 1, "queued")
+        XCTAssertTrue(deckWindow.questionSheet === talkSheet, "the talk's sheet is still the one up")
+        try XCTUnwrap(talkSheet.button(titled: "Don't Allow")).performClick(nil)
+        try await waitUntil(timeout: 40, "the talk") { presentation.state == .presenting }
+        try await Task.sleep(nanoseconds: 1_000_000_000)
+        XCTAssertNil(deckWindow.questionSheet, "still waiting: a talk runs")
+        XCTAssertEqual(deckWindow.deckQuestions.count, 1)
+        try await stopPresenting(controller)
+        try await waitUntil(timeout: 5, "the deck's question once the talk has ended") { deckWindow.questionSheet is ApprovalSheet }
+        XCTAssertEqual(deckWindow.questionSheetSource, .deck)
+        XCTAssertTrue(deckWindow.deckQuestions.isEmpty)
+        try XCTUnwrap(deckWindow.questionSheet?.button(titled: "Don't Allow")).performClick(nil)
+    }
 }
 ```
 
 - [ ] **Step 2: Build to verify it fails**
 
 Run: `make -C desktop test-build`
-Expected: the test target does not compile (`exitsOnAnswer`, `canStartATalk` are undefined).
+Expected: the test target does not compile (`exitsOnAnswer`, `exitsOnceAfterEvents`, `canStartATalk` are undefined).
 
-- [ ] **Step 3: The fake's answer**
+- [ ] **Step 3: The fake's answer and its one exit**
 
-In `FakeTapScripts.presenting`, add the parameter `exitsOnAnswer: Bool = true` after `tunnelUnavailable`, document it in the comment ("an answer ends the fake, as tap present's keep-recording answer does, unless `exitsOnAnswer` is false: a startup question's answer leaves tap running"), and change the `answer` case line to:
+In `FakeTapScripts.presenting`, add the parameters `exitsOnAnswer: Bool = true` and `exitsOnceAfterEvents: Bool = false` after `tunnelUnavailable`, document them in the comment ("an answer ends the fake, as tap present's keep-recording answer does, unless `exitsOnAnswer` is false: a startup question's answer leaves tap running; with `exitsOnceAfterEvents`, the first run exits with status 3 right after its events, as a crash would, and the runs after it stay up"), and:
 
-```sh
-            *'"type":"answer"'*) \(exitsOnAnswer ? "exit 0" : ":") ;;
-```
+- after `\(eventLines)`, add the line `\(exitsOnceAfterEvents ? "[ -f \"\(record.path).exited\" ] || { touch \"\(record.path).exited\"; exit 3; }" : ":")`;
+- change the `answer` case line to `*'"type":"answer"'*) \(exitsOnAnswer ? "exit 0" : ":") ;;`.
 
-- [ ] **Step 4: The talk's approval, and Play behind a question**
+- [ ] **Step 4: The talk's approval, its process guard, and Play behind a question**
 
 In `DeckWindowController.presentQuestion(_:)`, replace the `default` case with:
 
@@ -2949,13 +3019,49 @@ In `DeckWindowController.presentQuestion(_:)`, replace the `default` case with:
         case "approval":
             // The same sheet as the deck's own question. tap present asks it at
             // startup, before the windows show, and D4's step-aside path
-            // covers one that arrives mid-talk.
-            showQuestionSheet(approvalSheet(for: question), source: .talk) { allow in
+            // covers one that arrives mid-talk. A yes is stored by tap present;
+            // the deck's tap dev learns of it through a reload.
+            showQuestionSheet(approvalSheet(for: question), source: .talk) { [weak self] allow in
                 presentation.answer(id: question.id, value: allow)
+                if allow { self?.sessionController.reloadAfterTalkApproval() }
             }
         default:
             presentation.session?.log.append("the \(question.kind) question is not answered by this version of the app; declined", source: .app)
             presentation.answer(id: question.id, value: false)
+```
+
+In `DeckSessionController`, add after `answer(id:value:generation:)`:
+
+```swift
+    /// The talk's Allow stored the approval; tap dev's own policy is what
+    /// it computed at its start or last reload. A reload makes tap check
+    /// the deck's drivers against the settings again (the tap change this
+    /// plan depends on), which finds them approved and turns the preview's
+    /// blocks on without a question.
+    func reloadAfterTalkApproval() {
+        session.send(.reload)
+        session.log.append("reloading after the talk's approval, so the preview's blocks can run", source: .app)
+    }
+```
+
+In `PresentationController`, add the closure `var onQuestionsDropped: (() -> Void)?` next to `onQuestion`, and in `sessionStateChanged(_:)`, at the top of both the `.stopped` and `.restarting` cases:
+
+```swift
+            // tap present is gone or going: its questions die with it, and
+            // a sheet still up for one must not answer the next process, whose ids start at q1 again.
+            if state == .starting || state == .presenting, !pendingQuestions.isEmpty {
+                pendingQuestions = []
+                onQuestionsDropped?()
+            }
+```
+
+(the `.stopped` case's `finishStopping` path is a stop, where `state == .stopping`, so this leaves D4's stop untouched). In `DeckWindowController.init`, after `sessionController.presentation.onQuestion = ...`:
+
+```swift
+        sessionController.presentation.onQuestionsDropped = { [weak self] in
+            guard let self, self.questionSheetSource == .talk else { return }
+            self.endQuestionSheet(as: .abort)
+        }
 ```
 
 Add after `refreshPresentingControls`:
@@ -2979,20 +3085,20 @@ In D4's `RecordingTests.testAQuestionDuringTheTalkBringsTheDeckWindowForward`, t
 
 and keep the `pendingQuestions.isEmpty` wait that follows it.
 
-Change `refreshPresentingControls` to `playButton.isEnabled = canStartATalk`. Change the guards in `play(_:)`, `playWithOptions(_:)`, `playButtonClicked(modifiers:)` and `rehearse(_:)` from `guard sessionController.presentation.canStart else { return }` to `guard canStartATalk else { return }`. In `validateMenuItem`, change the Play line to `if [...].contains(menuItem.action) { return canStartATalk }`. In `showQuestionSheet`, add `refreshPresentingControls()` after `questionSheetSource = source`, and inside the completion after the slot is cleared, so the Play button follows the sheet.
+Change `refreshPresentingControls` to `playButton.isEnabled = canStartATalk`. Change the guards in `play(_:)`, `playWithOptions(_:)`, `playButtonClicked(modifiers:)` and `rehearse(_:)` from `guard sessionController.presentation.canStart else { return }` to `guard canStartATalk else { return }`. In `validateMenuItem`, change the Play line to `if [...].contains(menuItem.action) { return canStartATalk }`. In `showQuestionSheet`, add `refreshPresentingControls()` after `questionSheetSource = source`, and inside the completion right after the slot is cleared (before `completion(response == .OK)`), so the Play button follows the sheet.
 
 - [ ] **Step 5: Build**
 
 Run: `make -C desktop build` and `make -C desktop test-build`
-Expected: both succeed; nothing runs. The controller's CI run confirms the three tests, and D4's `RecordingTests.testAQuestionDuringTheTalkBringsTheDeckWindowForward`, whose second question is an approval: it now gets a sheet after the consent's answer instead of a log line, so that test's assertion "no second sheet" is changed in this task to expect the `ApprovalSheet` and to press its Don't Allow before the `pendingQuestions.isEmpty` wait.
+Expected: both succeed; nothing runs. The controller's CI run confirms the five tests and the edited D4 test. `testATalkAsksAboutAnUnapprovedDeck`'s last wait needs the tap change: with a tap whose reload does not re-check approvals, the preview stays at "Not approved" and that wait fails, which is the signal that the dependency is not on the branch.
 
 - [ ] **Step 6: Mutate and commit**
 
-Mutations, each a patch in `mutations-b/`, the one that could grant execution first: in the talk's `approval` case, answer `true` regardless (`Test: TapTests/TalkApprovalTests/testATalkAsksAboutAnUnapprovedDeck`; expected: fails on `storedApprovals()`); in `presentQuestion`, keep D4's `default` for `approval` (expected: `testAnApprovalDuringATalkIsASheetOnTheDeckWindow` fails on the sheet); in `canStartATalk`, drop `questionSheet == nil` (expected: `testPlayWaitsForTheDecksApprovalAnswer` fails on `.idle`); in `play(_:)`, keep the old guard (expected: the same test fails on `state`); in `showQuestionSheet`, drop the `refreshPresentingControls()` calls (expected: it fails on `playButton.isEnabled`); in `FakeTapScripts.presenting`, ignore `exitsOnAnswer` (expected: the fake exits on the answer and the first test never reaches `.presenting`).
+Mutations, each a patch in `mutations-b/`, the ones that could grant execution first: in the talk's `approval` case, answer `true` regardless (`Test: TapTests/TalkApprovalTests/testADeckQuestionWaitsForTheTalkToEnd`; expected: fails on `storedApprovals()` being empty, which `testATalkAsksAboutAnUnapprovedDeck` also reads); in `PresentationController.sessionStateChanged`, keep `pendingQuestions` on `.restarting` (`Test: .../testATalkRestartDropsItsApprovalSheet`; expected: fails on "the question gone with its process", and the old sheet's Allow records `"value":true`); in `DeckWindowController.init`, drop the `onQuestionsDropped` wiring (expected: fails on `questionSheet` nil); in `presentQuestion`, keep D4's `default` for `approval` (`Test: .../testAnApprovalDuringATalkIsASheetOnTheDeckWindow`; expected: fails on the sheet); in the `approval` case, drop `reloadAfterTalkApproval` (`Test: .../testATalkAsksAboutAnUnapprovedDeck`; expected: the preview stays at "Not approved"); in `canStartATalk`, drop `questionSheet == nil` (`Test: .../testPlayWaitsForTheDecksApprovalAnswer`; expected: fails on `.idle`); in `showNextDeckQuestionIfIdle`, drop the `!isActive` guard (`Test: .../testADeckQuestionWaitsForTheTalkToEnd`; expected: fails on "still waiting: a talk runs"); in `showQuestionSheet`, drop the `refreshPresentingControls()` calls (expected: `testPlayWaitsForTheDecksApprovalAnswer` fails on `playButton.isEnabled`); in `FakeTapScripts.presenting`, ignore `exitsOnAnswer` (expected: the fake exits on the answer and the first test never reaches `.presenting`).
 
 ```bash
 git add desktop/Tap desktop/TapTests
-git commit -m "feat(desktop): the live code approval during a talk, and no talk while a question waits"
+git commit -m "feat(desktop): the live code approval during a talk, its process guard, and no talk while a question waits"
 ```
 
 ---
@@ -3164,7 +3270,7 @@ final class FixItTests: HostedTestCase {
         XCTAssertEqual(editor.deckErrors, [], "tap parses what the fix-it wrote")
         let deck = try XCTUnwrap(document.fileURL)
         try await waitUntil(timeout: 10, "the fix-it's save") { (try? String(contentsOf: deck, encoding: .utf8))?.contains("  shell: {}\n") == true }
-        // After Task 10 the save restarts tap, which then asks about shell; this test leaves that sheet alone.
+        // tap's reload of the saved file asks about shell (Task 10); this test leaves that sheet alone.
         editor.undoManager?.undo()
         XCTAssertEqual(editor.string, original, "one undo step")
         try await waitUntil(timeout: 15, "the problem back after the undo") { editor.boxes[5].slide.codeBlocks.first?.problem != nil }
@@ -3208,12 +3314,6 @@ final class FixItTests: HostedTestCase {
         XCTAssertEqual(menu.items.last?.title, "Allow sqlite in This Deck")
         XCTAssertEqual(menu.items.last?.representedObject as? String, "sqlite")
 
-        // tap new writes the drivers key when its starter has live code: the implication, on the bundled tap.
-        let folder = try Fixtures.temporaryFolder()
-        let output = folder.appendingPathComponent("starter.md")
-        _ = try await TapApproval.run(["new", "--yes", "--title", "Starter", "--output", output.path], configHome: configHome)
-        let starter = (try? String(contentsOf: output, encoding: .utf8)) ?? ""
-        if starter.contains("{driver:") { XCTAssertTrue(starter.contains("drivers:"), "a starter with live code declares its drivers") }
     }
 }
 ```
@@ -3235,15 +3335,28 @@ Add near `header(forBoxAt:)`:
         BoxHeader(slide: slide).errors.count
     }
 
+    /// The drivers the frontmatter declares, read once per change of the
+    /// text rather than on every draw: `didChangeText` and `load` refresh
+    /// it. It decides only whether a box offers its fix-it.
+    private(set) var declaredDrivers: [String] = []
+
+    private func refreshDeclaredDrivers() {
+        declaredDrivers = Frontmatter(text: string).declaredDrivers
+    }
+
+    override func didChangeText() {
+        super.didChangeText()
+        refreshDeclaredDrivers()
+    }
+
     func header(forBoxAt index: Int) -> BoxHeader {
-        BoxHeader(slide: boxes[index].slide, declaredDrivers: Frontmatter(text: string).declaredDrivers)
+        BoxHeader(slide: boxes[index].slide, declaredDrivers: declaredDrivers)
     }
 ```
 
-(replacing the one-line `header(forBoxAt:)`). Replace every `box.slide.errors.count` and `$0.slide.errors.count` in the file (`role(for:)`, `boxRect(forBoxAt:)`, `apply`) with `Self.errorLineCount(for: box.slide)` and `Self.errorLineCount(for: $0.slide)`, so the room under the header counts the problems too. In `drawBoxes`, compute the declared drivers once before the loop and build the header with them:
+(replacing the one-line `header(forBoxAt:)`), and call `refreshDeclaredDrivers()` at the end of `load(text:)`. `Frontmatter.init` reads lines only up to the closing `---`, so the refresh costs the frontmatter, not the deck. Replace every `box.slide.errors.count` and `$0.slide.errors.count` in the file (`role(for:)`, `boxRect(forBoxAt:)`, `apply`) with `Self.errorLineCount(for: box.slide)` and `Self.errorLineCount(for: $0.slide)`, so the room under the header counts the problems too. In `drawBoxes`, build the header with the cached drivers:
 
 ```swift
-        let declaredDrivers = Frontmatter(text: string).declaredDrivers
         for index in visibleBoxIndices() {
             guard let boxRect = boxRect(forBoxAt: index) else { continue }
             if boxRect.intersects(rect) {
@@ -3319,8 +3432,8 @@ In `DeckSessionController`, add after `saveForPresenting`:
     /// the box header's pill, the box's context menu or the Slide menu: it
     /// adds "<name>: {}" under drivers in the frontmatter through the
     /// editor (one undo step named after itself) and saves at once, since
-    /// tap reads the file when it starts and only a fresh start asks about
-    /// the new driver.
+    /// tap reads the deck's drivers from the file, and its reload of the
+    /// saved file is what asks about the new driver.
     func allowDriver(_ name: String) {
         guard let replacement = Frontmatter(text: editor.string).addingDriver(name) else { return }
         editor.replaceText(in: replacement.range, with: replacement.replacement, actionName: "Allow \(name) in This Deck")
@@ -3402,7 +3515,7 @@ Expected: all succeed; nothing hosted runs. The controller's CI run confirms the
 
 - [ ] **Step 8: Mutate and commit**
 
-Mutations, each a patch in `mutations-c/`, the ones that could lose an edit first: in `allowDriver`, write through `editor.textStorage?.replaceCharacters` instead of `replaceText` (`Test: TapTests/FixItTests/testABlockUsesAnUndeclaredDriver`; expected: fails on `undoActionName`, no undo step was registered); in `allowDriver`, skip `saveNow()` (expected: fails on "the fix-it's save"); in `BoxHeader.init`, offer the fix-it whether or not the driver is declared (expected: fails on `fixIt` nil after the declaration); in `BoxHeader.init`, leave the problems out of `errors` (expected: fails on `header.errors`); in `fixItRect(title:badgesLeftEdge:headerTop:)`, return a rect at x 0 (expected: the click misses and the string keeps its old prefix); in `mouseDown`, drop the pill hit test (expected: the same); in `validateMenuItem`, return `true` for the item always (`Test: .../testADeckWithLiveCodeMustListItsDrivers`; expected: fails on slide 1's `false`); in the context menu, drop `representedObject` (expected: fails on the last item's object); in `errorLineCount`, return `slide.errors.count` (survives: no test measures the room under a header with a problem; noted).
+Mutations, each a patch in `mutations-c/`, the ones that could lose an edit first: in `allowDriver`, write through `editor.textStorage?.replaceCharacters` instead of `replaceText` (`Test: TapTests/FixItTests/testABlockUsesAnUndeclaredDriver`; expected: fails on `undoActionName`, no undo step was registered); in `allowDriver`, skip `saveNow()` (expected: fails on "the fix-it's save"); in `BoxHeader.init`, offer the fix-it whether or not the driver is declared (expected: fails on `fixIt` nil after the declaration); in `BoxHeader.init`, leave the problems out of `errors` (expected: fails on `header.errors`); in `fixItRect(title:badgesLeftEdge:headerTop:)`, return a rect at x 0 (expected: the click misses and the string keeps its old prefix); in `mouseDown`, drop the pill hit test (expected: the same); in `validateMenuItem`, return `true` for the item always (`Test: .../testADeckWithLiveCodeMustListItsDrivers`; expected: fails on slide 1's `false`); in the context menu, drop `representedObject` (expected: fails on the last item's object); in `errorLineCount`, return `slide.errors.count` (survives: no test measures the room under a header with a problem; noted); in `didChangeText`, drop the refresh (expected: `testABlockUsesAnUndeclaredDriver` fails on `fixIt` still offered after the fix-it, since the cached drivers never learn of shell).
 
 ```bash
 git add desktop/TapDesktopCore desktop/Tap desktop/TapTests
@@ -3411,17 +3524,16 @@ git commit -m "feat(desktop): a block's problem on its box, with the Allow Drive
 
 ---
 
-### Task 10: A new driver asks again: tap restarts when the file gains one
+### Task 10: A new driver asks again: tap's re-ask, from a disk change, the fix-it and a changed command
 
 **Files:**
-- Modify: `desktop/Tap/Documents/DeckSessionController.swift` (`driversTapStartedWith`, `fileTextChanged`, the calls)
 - Test: `desktop/TapTests/NewDriverTests.swift`
 
 **Interfaces:**
-- Consumes: Task 2's `TapSession.restart(reason:)`, Task 3's `Frontmatter.declaredDrivers`, Task 6's queue and generation, Task 9's `allowDriver`; D2's `documentDidSave`, `loadDiskVersion`, `diskChanged`, `documentDidRead`, `keepMine`, `DeckDocument.text`.
-- Produces: `DeckSessionController.fileTextChanged()`.
+- Consumes: the tap change this plan depends on (`feat/approval-asks-again`: a reload that brings a driver tap has not approved, by name and by command, asks the `approval` question again over app mode); Task 6's queue, sheet and helpers; Task 9's `allowDriver`, `saveNow`; D2's `loadDiskVersion` path (a disk change with no unsaved edits loads silently and tap reloads from the file).
+- Produces: nothing in the app. This task is the proof that the app needs no code of its own for "a new driver asks again": tap asks, the app shows the question as it shows every other, and the answer goes to the process that asked.
 
-- [ ] **Step 1: Write the failing tests**
+- [ ] **Step 1: Write the tests**
 
 `desktop/TapTests/NewDriverTests.swift`:
 
@@ -3429,9 +3541,12 @@ git commit -m "feat(desktop): a block's problem on its box, with the Allow Drive
 import XCTest
 @testable import Tap
 
-/// tap's live code policy is fixed for its process, so a driver the deck
-/// gains is asked about only by a fresh tap: the app restarts tap dev
-/// when the file on disk declares a driver tap did not start with.
+/// tap asks again when a reload brings a driver it has not approved, by
+/// name or by command; the app shows the question whenever it comes.
+/// These run the real bundled tap and need the re-ask it gained on
+/// feat/approval-asks-again: on a tap without it, every test here times
+/// out on "tap asking about shell", which is the signal the dependency
+/// is missing from the branch.
 final class NewDriverTests: HostedTestCase {
     func testANewDriverAsksAgain() async throws {
         let (document, controller, deckWindow, sheet) = try await openUnapprovedAndWaitForTheQuestion("undeclared-driver.md")
@@ -3440,34 +3555,34 @@ final class NewDriverTests: HostedTestCase {
         try XCTUnwrap(sheet.button(titled: "Allow")).performClick(nil)
         try await waitUntil(timeout: 10, "the approval") { self.storedApprovals().contains("drivers: [sqlite]") }
         try await waitForPreview(document, slide: 1)
-        let firstPid = try XCTUnwrap(controller.session.processIdentifier)
+        let pid = try XCTUnwrap(controller.session.processIdentifier)
 
-        // A git pull: the file gains shell with no unsaved edits here, so the app loads it silently.
+        // A git pull: the file gains shell with no unsaved edits here, so the app loads it silently and tap reloads it.
         let pulled = try String(contentsOf: deck, encoding: .utf8).replacingOccurrences(of: "  sqlite: {}\n", with: "  sqlite: {}\n  shell: {}\n")
         try pulled.write(to: deck, atomically: true, encoding: .utf8)
         try await waitUntil(timeout: 15, "the disk version loaded") { controller.editor.string.contains("  shell: {}") }
         XCTAssertFalse(controller.isContentEdited, "loaded, not edited")
-        try await waitUntil(timeout: 30, "a fresh tap asking about shell") { controller.pendingQuestion?.payload.drivers?.map(\.name) == ["shell"] }
-        XCTAssertNotEqual(controller.session.processIdentifier, firstPid, "only a fresh tap asks")
-        XCTAssertTrue(controller.session.log.text.contains("restarting tap: the deck now declares shell"))
+        try await waitUntil(timeout: 30, "tap asking about shell") { controller.pendingQuestion?.payload.drivers?.map(\.name) == ["shell"] }
+        XCTAssertEqual(controller.session.processIdentifier, pid, "the same tap asks again: nothing restarted")
         XCTAssertEqual(controller.pendingQuestion?.payload.approvedBefore, ["sqlite"])
         try await waitUntil(timeout: 5, "the sheet") { deckWindow.questionSheet is ApprovalSheet }
         let again = try XCTUnwrap(deckWindow.questionSheet as? ApprovalSheet)
         XCTAssertEqual(again.titleLabel.stringValue, "This deck now also wants to run shell")
+        XCTAssertEqual(deckWindow.questionSheetSource, .deck)
         try XCTUnwrap(again.button(titled: "Allow shell")).performClick(nil)
         try await waitUntil(timeout: 10, "both drivers stored") { self.storedApprovals().contains("drivers: [shell, sqlite]") }
+        try await waitForRunButtons(#"["Run"]"#, in: controller, document: document, slide: 6)
 
-        // Edits to an existing sqlite block never ask again: a code edit, saved, restarts nothing.
-        let pidAfterShell = try XCTUnwrap(controller.session.processIdentifier)
+        // Edits to an existing sqlite block never ask again: a code edit, saved, asks nothing.
         let editor = controller.editor
         let query = (editor.string as NSString).range(of: "SELECT 1 AS one;")
         editor.setSelectedRange(NSRange(location: NSMaxRange(query), length: 0))
         editor.insertText(" -- edited", replacementRange: NSRange(location: NSNotFound, length: 0))
         controller.saveNow()
         try await waitUntil(timeout: 10, "the save") { (try? String(contentsOf: deck, encoding: .utf8))?.contains("-- edited") == true }
-        try await Task.sleep(nanoseconds: 2_000_000_000)
-        XCTAssertEqual(controller.session.processIdentifier, pidAfterShell, "no restart for a code edit")
-        XCTAssertNil(controller.pendingQuestion)
+        try await Task.sleep(nanoseconds: 3_000_000_000)
+        XCTAssertNil(controller.pendingQuestion, "no question for a code edit")
+        XCTAssertTrue(deckWindow.deckQuestions.isEmpty)
     }
 
     func testTheFixItAsksAboutTheNewDriver() async throws {
@@ -3475,22 +3590,36 @@ final class NewDriverTests: HostedTestCase {
         let controller = try XCTUnwrap(document.sessionController)
         try await waitForBoxes(document, count: 6)
         try await waitUntil(timeout: 10, "tap's problem") { controller.editor.boxes[5].slide.codeBlocks.first?.problem != nil }
-        let firstPid = try XCTUnwrap(controller.session.processIdentifier)
         controller.allowDriver("shell")
-        try await waitUntil(timeout: 30, "a fresh tap asking about shell") { controller.pendingQuestion?.payload.drivers?.map(\.name) == ["shell"] }
-        XCTAssertNotEqual(controller.session.processIdentifier, firstPid)
+        try await waitUntil(timeout: 30, "tap asking about shell after the fix-it's save") { controller.pendingQuestion?.payload.drivers?.map(\.name) == ["shell"] }
         XCTAssertEqual(controller.pendingQuestion?.payload.approvedBefore, ["sqlite"], "the test's own approval of the fixture")
         let deckWindow = try XCTUnwrap(document.windowControllers.first as? DeckWindowController)
         try await waitUntil(timeout: 5, "the sheet") { deckWindow.questionSheet is ApprovalSheet }
-        let preview = controller.previewViewController
-        let readyBefore = preview.readyMessagesReceived
         try XCTUnwrap(deckWindow.questionSheet?.button(titled: "Allow shell")).performClick(nil)
         try await waitUntil(timeout: 10, "stored") { self.storedApprovals().contains("drivers: [shell, sqlite]") }
-        try await waitUntil(timeout: 20, "the page to reload") { preview.readyMessagesReceived > readyBefore }
-        controller.jumpToSlide(number: 6)
-        try await waitForPreview(document, slide: 6)
-        let labels = await preview.runButtonLabels()
-        XCTAssertEqual(labels, #"["Run"]"#, "the block runs now")
+        try await waitForRunButtons(#"["Run"]"#, in: controller, document: document, slide: 6)
+    }
+
+    /// A custom driver's approval covers its command: a changed command
+    /// asks again, and the sheet shows what would run now.
+    func testAChangedCustomCommandAsksAgain() async throws {
+        let document = try await openDeckAndWaitForPreview(try Fixtures.copyDeck("custom-driver.md"))
+        let controller = try XCTUnwrap(document.sessionController)
+        let editor = controller.editor
+        try await waitForBoxes(document, count: 4)
+        let deck = try XCTUnwrap(document.fileURL)
+        // The frontmatter is hidden; the edit goes through the editor's programmatic path, as the Deck tab's does.
+        let range = (editor.string as NSString).range(of: "command: /bin/cat")
+        editor.replaceText(in: range, with: "command: /usr/bin/true", actionName: "Change Command")
+        controller.saveNow()
+        try await waitUntil(timeout: 10, "the save") { (try? String(contentsOf: deck, encoding: .utf8))?.contains("/usr/bin/true") == true }
+        try await waitUntil(timeout: 30, "tap asking about fortune again") { controller.pendingQuestion?.payload.drivers?.map(\.name) == ["fortune"] }
+        XCTAssertEqual(controller.pendingQuestion?.payload.drivers?.first?.command, "/usr/bin/true", "what would run now")
+        let deckWindow = try XCTUnwrap(document.windowControllers.first as? DeckWindowController)
+        try await waitUntil(timeout: 5, "the sheet") { deckWindow.questionSheet is ApprovalSheet }
+        XCTAssertTrue(deckWindow.questionSheet?.titleLabel.stringValue.contains("fortune") == true)
+        try XCTUnwrap(deckWindow.questionSheet?.button(titled: "Don't Allow")).performClick(nil)
+        try await waitForRunButtons(#"["Not approved"]"#, in: controller, document: document, slide: 3)
     }
 
     func testATapRestartRenewsTheApprovalQuestion() async throws {
@@ -3507,66 +3636,26 @@ final class NewDriverTests: HostedTestCase {
             controller.pendingQuestion?.kind == "approval" && controller.session.processIdentifier != nil && controller.session.processIdentifier != firstPid
         }
         try await waitUntil(timeout: 5, "a fresh sheet") { deckWindow.questionSheet is ApprovalSheet && deckWindow.questionSheet !== sheet }
-        // The old sheet is off the window; its Allow reaches nothing.
         sheet.acceptButton.performClick(nil)
         XCTAssertFalse(storedApprovals().contains("approvals"), "nothing was granted by the old process's sheet")
-        XCTAssertEqual(controller.pendingQuestion?.id, "q1", "ids start again per process, which is why the old sheet must not answer")
+        XCTAssertEqual(controller.pendingQuestion?.id, "q1", "ids start again per process")
         try XCTUnwrap(deckWindow.questionSheet?.button(titled: "Don't Allow")).performClick(nil)
     }
 }
 ```
 
-- [ ] **Step 2: Build to verify it fails**
+- [ ] **Step 2: Build**
 
 Run: `make -C desktop test-build`
-Expected: compiles (every name exists), so this step's failure is CI's: `testANewDriverAsksAgain` and `testTheFixItAsksAboutTheNewDriver` time out waiting for a fresh tap, because nothing restarts it yet. The controller's first CI run on this task shows exactly those two red.
+Expected: compiles (every name exists after Tasks 6 and 9); nothing runs. The controller's CI run confirms the four tests. If the first three time out on "tap asking about ...", the branch's tap lacks the re-ask: the tap pull request has not merged into the base, and nothing in the app is to blame.
 
-- [ ] **Step 3: The restart rule**
+- [ ] **Step 3: Mutate and commit**
 
-In `DeckSessionController`, add after `lastAppliedText`:
-
-```swift
-    /// The drivers the deck file declared when tap last started, so a save
-    /// or a disk change that adds one can restart tap: tap's live code
-    /// policy is fixed at startup, and only a fresh start asks about a new
-    /// driver (internal/cli/dev.go, "The policy stays the same for the
-    /// whole run"). nil until the first ready.
-    private var driversTapStartedWith: Set<String>?
-```
-
-Add after `documentDidSave`:
-
-```swift
-    /// The deck file's text is current again: a save landed, a disk
-    /// version was loaded, or a write converged on the buffer. A driver the
-    /// file now declares that tap did not start with means tap must start
-    /// again to ask about it; a driver removed changes nothing tap has to
-    /// be asked. The new set is recorded before the restart, so one change
-    /// makes one restart however many saves follow.
-    func fileTextChanged() {
-        guard let started = driversTapStartedWith, let text = document?.text else { return }
-        let declared = Set(Frontmatter(text: text).declaredDrivers)
-        let gained = declared.subtracting(started).sorted()
-        guard !gained.isEmpty else { return }
-        driversTapStartedWith = declared
-        session.restart(reason: "the deck now declares \(gained.joined(separator: ", ")); tap asks about a new driver only when it starts")
-    }
-```
-
-Call `fileTextChanged()`: at the end of `documentDidSave(_:)`; at the end of `loadDiskVersion()`; in `diskChanged()`'s converged branch, after `clearDiskConflict()` and before its `return`; at the end of `documentDidRead(_:)`; in `keepMine()`'s completion when `error == nil`. In `sessionStateChanged(_:)`, inside the running branch after `client = newClient`, add `driversTapStartedWith = Set(Frontmatter(text: document?.text ?? "").declaredDrivers)`.
-
-- [ ] **Step 4: Build**
-
-Run: `make -C desktop build` and `make -C desktop test-build`
-Expected: both succeed. The controller's CI run confirms the three tests, and that `FixItTests.testABlockUsesAnUndeclaredDriver` still passes with the restart now happening under its undo (its waits are bounded at 15 s for the answer after the restart).
-
-- [ ] **Step 5: Mutate and commit**
-
-Mutations, each a patch in `mutations-c/`, the one that could answer the wrong process first: in `sessionStateChanged`, keep `pendingQuestions` when the state leaves running (`Test: TapTests/NewDriverTests/testATapRestartRenewsTheApprovalQuestion`; expected: fails on `pendingQuestion == nil` and the old sheet stays); in `presentDeckQuestion`, drop the generation guard (survives: the dead sheet's completion runs at the drop, when no question is pending; kept, noted); in `fileTextChanged`, drop the `!gained.isEmpty` guard (`Test: .../testANewDriverAsksAgain`; expected: fails on "no restart for a code edit"); drop the `documentDidSave` call (`Test: .../testTheFixItAsksAboutTheNewDriver`; expected: times out); drop the `loadDiskVersion` call (`Test: .../testANewDriverAsksAgain`; expected: times out on the fresh tap); in `sessionStateChanged`, never record `driversTapStartedWith` (expected: both time out); in `fileTextChanged`, compare against the buffer (`editor.string`) instead of the file (survives here; kept as written, the file is what tap reads).
+Mutations, each a patch in `mutations-c/`: in `showNextDeckQuestionIfIdle`, drop the `questionSheet == nil` guard (survives here; noted, a second sheet would queue on the window under the first); in `allowDriver`, skip `saveNow()` (`Test: TapTests/NewDriverTests/testTheFixItAsksAboutTheNewDriver`; expected: times out, tap reloads the buffer's render but reads the file for its drivers only on a save); in `DeckSessionController.answer`, send for any generation (`Test: TapTests/LiveCodeApprovalTests/testAnAnswerForTheOldProcessNeverReachesTheNewOne`, filed with batch B); in `sessionStateChanged`, keep `pendingQuestions` (`Test: .../testATapRestartRenewsTheApprovalQuestion`; expected: fails on `pendingQuestion == nil` and the old sheet stays).
 
 ```bash
-git add desktop/Tap desktop/TapTests
-git commit -m "feat(desktop): restart tap dev when the deck file gains a declared driver, so tap asks about it"
+git add desktop/TapTests
+git commit -m "test(desktop): tap asks again for a new driver, a fix-it and a changed command; a restart renews the question"
 ```
 
 ---
