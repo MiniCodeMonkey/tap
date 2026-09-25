@@ -2761,3 +2761,577 @@ git commit -m "feat(desktop): the live code approval during a talk, and no talk 
 ```
 
 ---
+
+### Task 9: The block's problem on its box, and the fix-it
+
+**Files:**
+- Modify: `desktop/TapDesktopCore/Sources/TapDesktopCore/BoxHeader.swift`
+- Modify: `desktop/Tap/Editor/EditorTextView.swift` (the error line count, the pill, `fixItRect(forBoxAt:)`, `mouseDown`, the delegate)
+- Modify: `desktop/Tap/Documents/DeckSessionController.swift` (`allowDriver`, `saveNow`, the delegate method, the context menu item)
+- Modify: `desktop/Tap/Windows/DeckWindowController.swift` (`currentFixIt`, `allowDriverInThisDeck`, validation)
+- Modify: `desktop/Tap/App/MainMenu.swift` (Slide > Allow Driver in This Deck)
+- Test: `desktop/TapDesktopCore/Tests/TapDesktopCoreTests/BoxHeaderTests.swift`, `desktop/TapTests/FixItTests.swift`
+
+**Interfaces:**
+- Consumes: Task 2's `CodeBlock.problem`, Task 3's `Frontmatter.declaredDrivers`, Task 4's `addingDriver`; D2's `EditorTextView.replaceText(in:with:actionName:)`, `header(forBoxAt:)`, `headerRect(forBoxAt:)`, `boxIndex(forHeaderAt:)`, `currentBoxIndex`; `DeckDocument.save(to:ofType:for:completionHandler:)`; `SlideContextMenu.build`; Task 7's `TapApproval.run`.
+- Produces: `BoxHeader.FixIt(driver:)` with `title`; `BoxHeader.init(slide:declaredDrivers:)` (`declaredDrivers` defaults to nil, so every D2 call compiles) with block problems in `errors`; `EditorTextView.fixItRect(forBoxAt:)`, `EditorTextView.errorLineCount(for:)`; `EditorTextViewDelegate.editor(_:applyFixItForBoxAt:)` (a default no-op); `DeckSessionController.allowDriver(_:)`, `saveNow()`; `DeckWindowController.currentFixIt`, `allowDriverInThisDeck(_:)`.
+
+- [ ] **Step 1: Write the failing core test**
+
+Add to `BoxHeaderTests.swift`:
+
+```swift
+    func testABlocksProblemIsAnErrorLineWithAFixIt() {
+        let problem = #"This deck does not declare the shell driver. Add "shell: {}" under drivers in the frontmatter."#
+        let slide = Slide(number: 6, startLine: 31, endLine: 35, title: "Shell",
+                          codeBlocks: [CodeBlock(block: 1, language: "bash", driver: "shell", live: true, line: 33, problem: problem)])
+        let header = BoxHeader(slide: slide, declaredDrivers: ["sqlite"])
+        XCTAssertEqual(header.errors, ["Line 33: " + problem])
+        XCTAssertEqual(header.fixIt, BoxHeader.FixIt(driver: "shell"))
+        XCTAssertEqual(header.fixIt?.title, "Allow shell in This Deck")
+        XCTAssertEqual(header.badges, ["shell"])
+        XCTAssertNil(BoxHeader(slide: slide, declaredDrivers: ["shell"]).fixIt, "declared since tap answered: nothing left to fix")
+        XCTAssertNotNil(BoxHeader(slide: slide).fixIt, "with no frontmatter to check, the problem alone offers it")
+        XCTAssertNil(BoxHeader(slide: Slide(number: 1, startLine: 1, endLine: 2)).fixIt)
+        let multiLine = Slide(number: 4, startLine: 17, endLine: 21, codeBlocks: [
+            CodeBlock(block: 1, language: "sql", driver: "sqlite", live: true, line: 19,
+                      problem: "This deck does not declare the sqlite driver. Add this to the frontmatter:\n\ndrivers:\n  sqlite: {}")])
+        XCTAssertEqual(BoxHeader(slide: multiLine).errors, ["Line 19: This deck does not declare the sqlite driver. Add this to the frontmatter: drivers: sqlite: {}"])
+        let both = Slide(number: 2, startLine: 1, endLine: 2, errors: [#"Unknown layout "sectoin""#], codeBlocks: slide.codeBlocks)
+        XCTAssertEqual(BoxHeader(slide: both).errors.count, 2)
+        XCTAssertEqual(BoxHeader(slide: both).errors[0], #"Unknown layout "sectoin""#, "the slide's own errors first")
+    }
+```
+
+Run: `make -C desktop core-test`
+Expected: does not compile (`FixIt`, `declaredDrivers:` undefined).
+
+- [ ] **Step 2: Extend `BoxHeader`**
+
+Replace `BoxHeader` with:
+
+```swift
+/// What a slide box's header shows: the number, a meta line with the
+/// layout, title and live code blocks, badges for the reveal count, a
+/// skipped slide and each live-code driver, the error lines under the
+/// header (the slide's own, then each live block's problem with its line),
+/// and the one fix-it the app offers.
+public struct BoxHeader: Equatable, Sendable {
+    /// Declaring a block's driver, the one problem the app can fix. Offered
+    /// when a live block has a problem and the frontmatter the caller holds
+    /// does not declare its driver (or the caller holds none).
+    public struct FixIt: Equatable, Sendable {
+        public let driver: String
+        public var title: String { "Allow \(driver) in This Deck" }
+        public init(driver: String) { self.driver = driver }
+    }
+
+    public let number: String
+    public let meta: String
+    public let badges: [String]
+    public let errors: [String]
+    public let fixIt: FixIt?
+
+    public init(slide: Slide, declaredDrivers: [String]? = nil) {
+        number = "\(slide.number)"
+        var parts: [String] = []
+        if !slide.layout.isEmpty { parts.append(slide.layout) }
+        if !slide.title.isEmpty { parts.append(slide.title) }
+        let liveBlocks = slide.codeBlocks.filter(\.live)
+        if !liveBlocks.isEmpty {
+            parts.append(liveBlocks.map { "\($0.language.isEmpty ? "code" : $0.language), live" }.joined(separator: "; "))
+        }
+        meta = parts.joined(separator: " · ")
+
+        var badges: [String] = []
+        let reveals = Self.revealCount(for: slide)
+        if reveals > 0 { badges.append(reveals == 1 ? "1 step" : "\(reveals) steps") }
+        if slide.skip { badges.append("skipped") }
+        var drivers: [String] = []
+        for block in liveBlocks where !block.driver.isEmpty && !drivers.contains(block.driver) {
+            drivers.append(block.driver)
+        }
+        badges.append(contentsOf: drivers)
+        self.badges = badges
+
+        var errors = slide.errors
+        var fixIt: FixIt?
+        for block in slide.codeBlocks {
+            guard let problem = block.problem, !problem.isEmpty else { continue }
+            // tap's message on one line: the no-drivers form spans several.
+            let oneLine = problem.components(separatedBy: .newlines).map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }.joined(separator: " ")
+            errors.append(block.line > 0 ? "Line \(block.line): \(oneLine)" : oneLine)
+            if fixIt == nil, block.live, !block.driver.isEmpty, !(declaredDrivers?.contains(block.driver) ?? false) {
+                fixIt = FixIt(driver: block.driver)
+            }
+        }
+        self.errors = errors
+        self.fixIt = fixIt
+    }
+
+    /// The number of forward presses the slide takes: its steps, then its fragments.
+    public static func revealCount(for slide: Slide) -> Int {
+        slide.steps + slide.fragments
+    }
+}
+```
+
+Run: `make -C desktop core-test`
+Expected: PASS.
+
+- [ ] **Step 3: Write the failing hosted tests**
+
+`desktop/TapTests/FixItTests.swift`:
+
+```swift
+import XCTest
+@testable import Tap
+
+/// A block whose driver the deck does not declare: tap's message on the
+/// box, and the fix-it that declares the driver as one undo step.
+final class FixItTests: HostedTestCase {
+    func mouseDown(at point: NSPoint, in editor: EditorTextView) throws -> NSEvent {
+        let window = try XCTUnwrap(editor.window)
+        let inWindow = editor.convert(point, to: nil)
+        return try XCTUnwrap(NSEvent.mouseEvent(with: .leftMouseDown, location: inWindow, modifierFlags: [], timestamp: 0,
+                                                windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1))
+    }
+
+    func testABlockUsesAnUndeclaredDriver() async throws {
+        let document = try await openDeckAndWaitForPreview(try Fixtures.copyDeck("undeclared-driver.md"))
+        let controller = try XCTUnwrap(document.sessionController)
+        let editor = controller.editor
+        try await waitForBoxes(document, count: 6)
+        try await waitUntil(timeout: 10, "tap's problem on the shell block") { editor.boxes[5].slide.codeBlocks.first?.problem != nil }
+        let header = editor.header(forBoxAt: 5)
+        XCTAssertEqual(header.errors, [#"Line 33: This deck does not declare the shell driver. Add "shell: {}" under drivers in the frontmatter."#],
+                       "the block shows tap's message, with the line; the message says exactly what to add")
+        XCTAssertEqual(header.fixIt?.title, "Allow shell in This Deck")
+        XCTAssertNil(editor.header(forBoxAt: 3).fixIt, "the sqlite block is declared")
+        // tap dev's own output says the same, with the file and line.
+        try await waitUntil(timeout: 10, "tap's warning in the log") {
+            controller.session.log.text.contains("undeclared-driver.md:33: This deck does not declare the shell driver")
+        }
+        controller.jumpToSlide(number: 6)
+        try await waitForPreview(document, slide: 6)
+        let problem = await controller.previewViewController.blockProblemText()
+        XCTAssertTrue(problem.hasPrefix("This deck does not declare the shell driver"), "the page shows it in the block: \(problem)")
+
+        // The fix-it, clicked on the box header the way a person clicks it.
+        editor.layoutSubtreeIfNeeded()
+        let pill = try XCTUnwrap(editor.fixItRect(forBoxAt: 5), "the pill is on the box")
+        let original = editor.string
+        editor.mouseDown(with: try mouseDown(at: NSPoint(x: pill.midX, y: pill.midY), in: editor))
+        XCTAssertTrue(editor.string.hasPrefix("---\ntitle: Undeclared Driver\ndrivers:\n  sqlite: {}\n  shell: {}\n---\n"), "shell: {} under drivers, one edit: \(editor.string.prefix(80))")
+        XCTAssertEqual(editor.undoManager?.undoActionName, "Allow shell in This Deck")
+        try await waitUntil(timeout: 10, "tap to accept the declaration") { editor.boxes[5].slide.codeBlocks.first?.problem == nil }
+        XCTAssertNil(editor.header(forBoxAt: 5).fixIt)
+        XCTAssertEqual(editor.deckErrors, [], "tap parses what the fix-it wrote")
+        let deck = try XCTUnwrap(document.fileURL)
+        try await waitUntil(timeout: 10, "the fix-it's save") { (try? String(contentsOf: deck, encoding: .utf8))?.contains("  shell: {}\n") == true }
+        // After Task 10 the save restarts tap, which then asks about shell; this test leaves that sheet alone.
+        editor.undoManager?.undo()
+        XCTAssertEqual(editor.string, original, "one undo step")
+        try await waitUntil(timeout: 15, "the problem back after the undo") { editor.boxes[5].slide.codeBlocks.first?.problem != nil }
+    }
+
+    func testADeckWithLiveCodeMustListItsDrivers() async throws {
+        let document = try await openDeckAndWaitForPreview(try Fixtures.copyDeck("no-drivers.md"))
+        let controller = try XCTUnwrap(document.sessionController)
+        let editor = controller.editor
+        try await waitForBoxes(document, count: 4)
+        try await waitUntil(timeout: 10, "tap's problem") { editor.boxes[3].slide.codeBlocks.first?.problem != nil }
+        XCTAssertEqual(editor.header(forBoxAt: 3).errors,
+                       ["Line 19: This deck does not declare the sqlite driver. Add this to the frontmatter: drivers: sqlite: {}"],
+                       "tap's words: the whole block to paste, on one line here")
+        XCTAssertEqual(editor.header(forBoxAt: 3).fixIt?.title, "Allow sqlite in This Deck")
+        try await waitUntil(timeout: 10, "tap's warning") { controller.session.log.text.contains("no-drivers.md:19: This deck does not declare the sqlite driver") }
+        XCTAssertNil(controller.pendingQuestion, "no block runs, and nothing asks: there is no declared driver to approve")
+        controller.jumpToSlide(number: 4)
+        try await waitForPreview(document, slide: 4)
+        let labels = await controller.previewViewController.runButtonLabels()
+        XCTAssertEqual(labels, "[]", "no block runs")
+
+        // The Slide menu's item, for the cursor's slide.
+        let deckWindow = try XCTUnwrap(document.windowControllers.first as? DeckWindowController)
+        let item = NSMenuItem(title: "Allow Driver in This Deck", action: #selector(DeckWindowController.allowDriverInThisDeck(_:)), keyEquivalent: "")
+        XCTAssertTrue(deckWindow.validateMenuItem(item))
+        XCTAssertEqual(item.title, "Allow sqlite in This Deck")
+        controller.jumpToSlide(number: 1)
+        XCTAssertFalse(deckWindow.validateMenuItem(item), "slide 1 has nothing to fix")
+        controller.jumpToSlide(number: 4)
+        deckWindow.allowDriverInThisDeck(item)
+        XCTAssertTrue(editor.string.hasPrefix("---\ntitle: No Drivers\ndrivers:\n  sqlite: {}\n---\n"), "the list, as one undo step: \(editor.string.prefix(60))")
+        XCTAssertEqual(editor.undoManager?.undoActionName, "Allow sqlite in This Deck")
+        try await waitUntil(timeout: 10, "tap to accept it") { editor.boxes[3].slide.codeBlocks.first?.problem == nil }
+        XCTAssertEqual(editor.deckErrors, [])
+
+        // The box's context menu carries the same item while the problem is there.
+        editor.undoManager?.undo()
+        try await waitUntil(timeout: 15, "the problem back") { editor.boxes[3].slide.codeBlocks.first?.problem != nil }
+        let menu = try XCTUnwrap(controller.editor(editor, contextMenuForBoxAt: 3))
+        XCTAssertEqual(menu.items.last?.title, "Allow sqlite in This Deck")
+        XCTAssertEqual(menu.items.last?.representedObject as? String, "sqlite")
+
+        // tap new writes the drivers key when its starter has live code: the implication, on the bundled tap.
+        let folder = try Fixtures.temporaryFolder()
+        let output = folder.appendingPathComponent("starter.md")
+        _ = try await TapApproval.run(["new", "--yes", "--title", "Starter", "--output", output.path], configHome: configHome)
+        let starter = (try? String(contentsOf: output, encoding: .utf8)) ?? ""
+        if starter.contains("{driver:") { XCTAssertTrue(starter.contains("drivers:"), "a starter with live code declares its drivers") }
+    }
+}
+```
+
+- [ ] **Step 4: Build to verify it fails**
+
+Run: `make -C desktop test-build`
+Expected: does not compile (`fixItRect(forBoxAt:)`, `allowDriverInThisDeck` undefined).
+
+- [ ] **Step 5: The pill in the editor**
+
+In `EditorTextView.swift`, add to the protocol `EditorTextViewDelegate`: `func editor(_ editor: EditorTextView, applyFixItForBoxAt index: Int)`, and to its extension a default `func editor(_ editor: EditorTextView, applyFixItForBoxAt index: Int) {}`.
+
+Add near `header(forBoxAt:)`:
+
+```swift
+    /// The error lines a box makes room for: the slide's own and its blocks' problems.
+    static func errorLineCount(for slide: Slide) -> Int {
+        BoxHeader(slide: slide).errors.count
+    }
+
+    func header(forBoxAt index: Int) -> BoxHeader {
+        BoxHeader(slide: boxes[index].slide, declaredDrivers: Frontmatter(text: string).declaredDrivers)
+    }
+```
+
+(replacing the one-line `header(forBoxAt:)`). Replace every `box.slide.errors.count` and `$0.slide.errors.count` in the file (`role(for:)`, `boxRect(forBoxAt:)`, `apply`) with `Self.errorLineCount(for: box.slide)` and `Self.errorLineCount(for: $0.slide)`, so the room under the header counts the problems too. In `drawBoxes`, compute the declared drivers once before the loop and build the header with them:
+
+```swift
+        let declaredDrivers = Frontmatter(text: string).declaredDrivers
+        for index in visibleBoxIndices() {
+            guard let boxRect = boxRect(forBoxAt: index) else { continue }
+            if boxRect.intersects(rect) {
+                let box = boxes[index]
+                draw(header: BoxHeader(slide: box.slide, declaredDrivers: declaredDrivers), skipped: box.slide.skip, in: boxRect, isCurrent: index == currentBoxIndex)
+            }
+        }
+```
+
+Add the shared geometry, next to `metaAttributes`:
+
+```swift
+    private static let badgeAttributes: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 10.5), .foregroundColor: NSColor.secondaryLabelColor]
+    private static let fixItAttributes: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 10.5, weight: .semibold), .foregroundColor: NSColor.white]
+
+    /// Where the badges end on the left, as `draw(header:)` lays them out from the right.
+    static func badgesLeftEdge(for badges: [String], headerMaxX: CGFloat) -> CGFloat {
+        var badgeX = headerMaxX - 10
+        for badge in badges.reversed() {
+            badgeX -= NSAttributedString(string: badge, attributes: badgeAttributes).size().width + 14
+            badgeX -= 6
+        }
+        return badgeX
+    }
+
+    /// The fix-it pill: left of the badges, 18 points tall, as wide as its
+    /// title. Drawing and the hit test both come here, so a click lands
+    /// where the pill was drawn.
+    static func fixItRect(title: String, badgesLeftEdge: CGFloat, headerTop: CGFloat) -> NSRect {
+        let width = NSAttributedString(string: title, attributes: fixItAttributes).size().width + 16
+        return NSRect(x: badgesLeftEdge - width, y: headerTop + 5, width: width, height: 18)
+    }
+
+    /// The fix-it pill of a box's header, in view coordinates; nil for a box with none, or off screen.
+    func fixItRect(forBoxAt index: Int) -> NSRect? {
+        guard boxes.indices.contains(index), let headerRect = headerRect(forBoxAt: index) else { return nil }
+        let header = self.header(forBoxAt: index)
+        guard let fixIt = header.fixIt else { return nil }
+        return Self.fixItRect(title: fixIt.title, badgesLeftEdge: Self.badgesLeftEdge(for: header.badges, headerMaxX: headerRect.maxX), headerTop: headerRect.minY)
+    }
+```
+
+In `draw(header:skipped:in:isCurrent:)`, replace the badge loop's inline attribute dictionary with `Self.badgeAttributes`, and between the loop and the meta line insert:
+
+```swift
+        var metaLimit = badgeX
+        if let fixIt = header.fixIt {
+            let pill = Self.fixItRect(title: fixIt.title, badgesLeftEdge: badgeX, headerTop: rect.minY)
+            NSColor.controlAccentColor.setFill()
+            NSBezierPath(roundedRect: pill, xRadius: 9, yRadius: 9).fill()
+            NSAttributedString(string: fixIt.title, attributes: Self.fixItAttributes).draw(at: NSPoint(x: pill.minX + 8, y: pill.minY + 2))
+            metaLimit = pill.minX
+        }
+```
+
+and change the meta's width to `max(0, metaLimit - x - 8)`. In `mouseDown(with:)`, right after `let point = convert(event.locationInWindow, from: nil)`, insert:
+
+```swift
+        if let index = boxIndex(forHeaderAt: point), let pill = fixItRect(forBoxAt: index), pill.contains(point) {
+            editorDelegate?.editor(self, applyFixItForBoxAt: index)
+            return
+        }
+```
+
+- [ ] **Step 6: The fix-it in the controllers and the menus**
+
+In `DeckSessionController`, add after `saveForPresenting`:
+
+```swift
+    // MARK: Fix-its
+
+    /// The fix-it for a block whose driver the deck does not declare, from
+    /// the box header's pill, the box's context menu or the Slide menu: it
+    /// adds "<name>: {}" under drivers in the frontmatter through the
+    /// editor (one undo step named after itself) and saves at once, since
+    /// tap reads the file when it starts and only a fresh start asks about
+    /// the new driver.
+    func allowDriver(_ name: String) {
+        guard let replacement = Frontmatter(text: editor.string).addingDriver(name) else { return }
+        editor.replaceText(in: replacement.range, with: replacement.replacement, actionName: "Allow \(name) in This Deck")
+        session.log.append("declared the \(name) driver in the frontmatter", source: .app)
+        saveNow()
+    }
+
+    /// Writes the buffer to the deck file now, ahead of the autosave. A
+    /// save the document refuses (a disk conflict is showing) leaves the
+    /// edit in the buffer for the next save, with a log line.
+    func saveNow() {
+        guard let document, let url = document.fileURL, isContentEdited else { return }
+        document.save(to: url, ofType: document.fileType ?? "net.daringfireball.markdown", for: .saveOperation) { [weak self] error in
+            if let error { self?.session.log.append("the save after the fix-it was refused: \(error.localizedDescription)", source: .app) }
+        }
+    }
+```
+
+Add to the `EditorTextViewDelegate` section:
+
+```swift
+    func editor(_ editor: EditorTextView, applyFixItForBoxAt index: Int) {
+        guard editor.boxes.indices.contains(index), let fixIt = editor.header(forBoxAt: index).fixIt else { return }
+        allowDriver(fixIt.driver)
+    }
+```
+
+In `editor(_:contextMenuForBoxAt:)`, replace `return SlideContextMenu.build(...)` with:
+
+```swift
+        let menu = SlideContextMenu.build(for: selectedSlideNumbers, target: windowController, showsTextShortcuts: false)
+        if let fixIt = editor.header(forBoxAt: index).fixIt {
+            menu.addItem(.separator())
+            let item = NSMenuItem(title: fixIt.title, action: #selector(DeckWindowController.allowDriverInThisDeck(_:)), keyEquivalent: "")
+            item.target = windowController
+            item.representedObject = fixIt.driver
+            menu.addItem(item)
+        }
+        return menu
+```
+
+In `DeckWindowController`, add after `insertSlide(layout:after:)`:
+
+```swift
+    /// The fix-it the cursor's slide offers, if its box has one.
+    var currentFixIt: BoxHeader.FixIt? {
+        let editor = sessionController.editor
+        guard let index = editor.currentBoxIndex, editor.boxes.indices.contains(index) else { return nil }
+        return editor.header(forBoxAt: index).fixIt
+    }
+
+    /// Slide > Allow Driver in This Deck, and the box's context menu item,
+    /// which carries the driver; the menu item takes the cursor's slide.
+    @objc func allowDriverInThisDeck(_ sender: Any?) {
+        guard let driver = ((sender as? NSMenuItem)?.representedObject as? String) ?? currentFixIt?.driver else { return }
+        sessionController.allowDriver(driver)
+    }
+```
+
+In `validateMenuItem`, before `let count = ...`:
+
+```swift
+        if menuItem.action == #selector(allowDriverInThisDeck(_:)) {
+            if let driver = menuItem.representedObject as? String {
+                menuItem.title = "Allow \(driver) in This Deck"
+                return true
+            }
+            menuItem.title = currentFixIt?.title ?? "Allow Driver in This Deck"
+            return currentFixIt != nil
+        }
+```
+
+In `MainMenu.slideMenu()`, after the "Skip Slide" item: `menu.addItem(item("Allow Driver in This Deck", action: #selector(DeckWindowController.allowDriverInThisDeck(_:))))`.
+
+- [ ] **Step 7: Build**
+
+Run: `make -C desktop core-test`, `make -C desktop build`, `make -C desktop test-build`
+Expected: all succeed; nothing hosted runs. The controller's CI run confirms the two `FixItTests` and that D2's `EditorTextViewTests.testAnErrorMarksTheBoxAndMakesRoomForTheMessage` still passes (the room now comes from `errorLineCount`, which counts the same slide errors).
+
+- [ ] **Step 8: Mutate and commit**
+
+Mutations, each a patch in `mutations-c/`, the ones that could lose an edit first: in `allowDriver`, write through `editor.textStorage?.replaceCharacters` instead of `replaceText` (`Test: TapTests/FixItTests/testABlockUsesAnUndeclaredDriver`; expected: fails on `undoActionName`, no undo step was registered); in `allowDriver`, skip `saveNow()` (expected: fails on "the fix-it's save"); in `BoxHeader.init`, offer the fix-it whether or not the driver is declared (expected: fails on `fixIt` nil after the declaration); in `BoxHeader.init`, leave the problems out of `errors` (expected: fails on `header.errors`); in `fixItRect(title:badgesLeftEdge:headerTop:)`, return a rect at x 0 (expected: the click misses and the string keeps its old prefix); in `mouseDown`, drop the pill hit test (expected: the same); in `validateMenuItem`, return `true` for the item always (`Test: .../testADeckWithLiveCodeMustListItsDrivers`; expected: fails on slide 1's `false`); in the context menu, drop `representedObject` (expected: fails on the last item's object); in `errorLineCount`, return `slide.errors.count` (survives: no test measures the room under a header with a problem; noted).
+
+```bash
+git add desktop/TapDesktopCore desktop/Tap desktop/TapTests
+git commit -m "feat(desktop): a block's problem on its box, with the Allow Driver in This Deck fix-it"
+```
+
+---
+
+### Task 10: A new driver asks again: tap restarts when the file gains one
+
+**Files:**
+- Modify: `desktop/Tap/Documents/DeckSessionController.swift` (`driversTapStartedWith`, `fileTextChanged`, the calls)
+- Test: `desktop/TapTests/NewDriverTests.swift`
+
+**Interfaces:**
+- Consumes: Task 2's `TapSession.restart(reason:)`, Task 3's `Frontmatter.declaredDrivers`, Task 6's queue and generation, Task 9's `allowDriver`; D2's `documentDidSave`, `loadDiskVersion`, `diskChanged`, `documentDidRead`, `keepMine`, `DeckDocument.text`.
+- Produces: `DeckSessionController.fileTextChanged()`.
+
+- [ ] **Step 1: Write the failing tests**
+
+`desktop/TapTests/NewDriverTests.swift`:
+
+```swift
+import XCTest
+@testable import Tap
+
+/// tap's live code policy is fixed for its process, so a driver the deck
+/// gains is asked about only by a fresh tap: the app restarts tap dev
+/// when the file on disk declares a driver tap did not start with.
+final class NewDriverTests: HostedTestCase {
+    func testANewDriverAsksAgain() async throws {
+        let (document, controller, deckWindow, sheet) = try await openUnapprovedAndWaitForTheQuestion("undeclared-driver.md")
+        let deck = try XCTUnwrap(document.fileURL)
+        XCTAssertEqual(sheet.summaryLabel.stringValue, "1 sqlite")
+        try XCTUnwrap(sheet.button(titled: "Allow")).performClick(nil)
+        try await waitUntil(timeout: 10, "the approval") { self.storedApprovals().contains("drivers: [sqlite]") }
+        try await waitForPreview(document, slide: 1)
+        let firstPid = try XCTUnwrap(controller.session.processIdentifier)
+
+        // A git pull: the file gains shell with no unsaved edits here, so the app loads it silently.
+        let pulled = try String(contentsOf: deck, encoding: .utf8).replacingOccurrences(of: "  sqlite: {}\n", with: "  sqlite: {}\n  shell: {}\n")
+        try pulled.write(to: deck, atomically: true, encoding: .utf8)
+        try await waitUntil(timeout: 15, "the disk version loaded") { controller.editor.string.contains("  shell: {}") }
+        XCTAssertFalse(controller.isContentEdited, "loaded, not edited")
+        try await waitUntil(timeout: 30, "a fresh tap asking about shell") { controller.pendingQuestion?.payload.drivers?.map(\.name) == ["shell"] }
+        XCTAssertNotEqual(controller.session.processIdentifier, firstPid, "only a fresh tap asks")
+        XCTAssertTrue(controller.session.log.text.contains("restarting tap: the deck now declares shell"))
+        XCTAssertEqual(controller.pendingQuestion?.payload.approvedBefore, ["sqlite"])
+        try await waitUntil(timeout: 5, "the sheet") { deckWindow.questionSheet is ApprovalSheet }
+        let again = try XCTUnwrap(deckWindow.questionSheet as? ApprovalSheet)
+        XCTAssertEqual(again.titleLabel.stringValue, "This deck now also wants to run shell")
+        try XCTUnwrap(again.button(titled: "Allow shell")).performClick(nil)
+        try await waitUntil(timeout: 10, "both drivers stored") { self.storedApprovals().contains("drivers: [shell, sqlite]") }
+
+        // Edits to an existing sqlite block never ask again: a code edit, saved, restarts nothing.
+        let pidAfterShell = try XCTUnwrap(controller.session.processIdentifier)
+        let editor = controller.editor
+        let query = (editor.string as NSString).range(of: "SELECT 1 AS one;")
+        editor.setSelectedRange(NSRange(location: NSMaxRange(query), length: 0))
+        editor.insertText(" -- edited", replacementRange: NSRange(location: NSNotFound, length: 0))
+        controller.saveNow()
+        try await waitUntil(timeout: 10, "the save") { (try? String(contentsOf: deck, encoding: .utf8))?.contains("-- edited") == true }
+        try await Task.sleep(nanoseconds: 2_000_000_000)
+        XCTAssertEqual(controller.session.processIdentifier, pidAfterShell, "no restart for a code edit")
+        XCTAssertNil(controller.pendingQuestion)
+    }
+
+    func testTheFixItAsksAboutTheNewDriver() async throws {
+        let document = try await openDeckAndWaitForPreview(try Fixtures.copyDeck("undeclared-driver.md"))
+        let controller = try XCTUnwrap(document.sessionController)
+        try await waitForBoxes(document, count: 6)
+        try await waitUntil(timeout: 10, "tap's problem") { controller.editor.boxes[5].slide.codeBlocks.first?.problem != nil }
+        let firstPid = try XCTUnwrap(controller.session.processIdentifier)
+        controller.allowDriver("shell")
+        try await waitUntil(timeout: 30, "a fresh tap asking about shell") { controller.pendingQuestion?.payload.drivers?.map(\.name) == ["shell"] }
+        XCTAssertNotEqual(controller.session.processIdentifier, firstPid)
+        XCTAssertEqual(controller.pendingQuestion?.payload.approvedBefore, ["sqlite"], "the test's own approval of the fixture")
+        let deckWindow = try XCTUnwrap(document.windowControllers.first as? DeckWindowController)
+        try await waitUntil(timeout: 5, "the sheet") { deckWindow.questionSheet is ApprovalSheet }
+        let preview = controller.previewViewController
+        let readyBefore = preview.readyMessagesReceived
+        try XCTUnwrap(deckWindow.questionSheet?.button(titled: "Allow shell")).performClick(nil)
+        try await waitUntil(timeout: 10, "stored") { self.storedApprovals().contains("drivers: [shell, sqlite]") }
+        try await waitUntil(timeout: 20, "the page to reload") { preview.readyMessagesReceived > readyBefore }
+        controller.jumpToSlide(number: 6)
+        try await waitForPreview(document, slide: 6)
+        let labels = await preview.runButtonLabels()
+        XCTAssertEqual(labels, #"["Run"]"#, "the block runs now")
+    }
+
+    func testATapRestartRenewsTheApprovalQuestion() async throws {
+        let (_, controller, deckWindow, sheet) = try await openUnapprovedAndWaitForTheQuestion("live-code.md")
+        let firstPid = try XCTUnwrap(controller.session.processIdentifier)
+        let firstGeneration = controller.questionGeneration
+        // tap dies under the sheet; D2's policy restarts it.
+        kill(firstPid, SIGKILL)
+        try await waitUntil(timeout: 10, "the dead process's question gone") { controller.pendingQuestion == nil }
+        XCTAssertNil(deckWindow.questionSheet, "the sheet went with the process that asked")
+        XCTAssertNil(deckWindow.window?.attachedSheet)
+        XCTAssertGreaterThan(controller.questionGeneration, firstGeneration)
+        try await waitUntil(timeout: 30, "the restarted tap's question") {
+            controller.pendingQuestion?.kind == "approval" && controller.session.processIdentifier != nil && controller.session.processIdentifier != firstPid
+        }
+        try await waitUntil(timeout: 5, "a fresh sheet") { deckWindow.questionSheet is ApprovalSheet && deckWindow.questionSheet !== sheet }
+        // The old sheet is off the window; its Allow reaches nothing.
+        sheet.acceptButton.performClick(nil)
+        XCTAssertFalse(storedApprovals().contains("approvals"), "nothing was granted by the old process's sheet")
+        XCTAssertEqual(controller.pendingQuestion?.id, "q1", "ids start again per process, which is why the old sheet must not answer")
+        try XCTUnwrap(deckWindow.questionSheet?.button(titled: "Don't Allow")).performClick(nil)
+    }
+}
+```
+
+- [ ] **Step 2: Build to verify it fails**
+
+Run: `make -C desktop test-build`
+Expected: compiles (every name exists), so this step's failure is CI's: `testANewDriverAsksAgain` and `testTheFixItAsksAboutTheNewDriver` time out waiting for a fresh tap, because nothing restarts it yet. The controller's first CI run on this task shows exactly those two red.
+
+- [ ] **Step 3: The restart rule**
+
+In `DeckSessionController`, add after `lastAppliedText`:
+
+```swift
+    /// The drivers the deck file declared when tap last started, so a save
+    /// or a disk change that adds one can restart tap: tap's live code
+    /// policy is fixed at startup, and only a fresh start asks about a new
+    /// driver (internal/cli/dev.go, "The policy stays the same for the
+    /// whole run"). nil until the first ready.
+    private var driversTapStartedWith: Set<String>?
+```
+
+Add after `documentDidSave`:
+
+```swift
+    /// The deck file's text is current again: a save landed, a disk
+    /// version was loaded, or a write converged on the buffer. A driver the
+    /// file now declares that tap did not start with means tap must start
+    /// again to ask about it; a driver removed changes nothing tap has to
+    /// be asked. The new set is recorded before the restart, so one change
+    /// makes one restart however many saves follow.
+    func fileTextChanged() {
+        guard let started = driversTapStartedWith, let text = document?.text else { return }
+        let declared = Set(Frontmatter(text: text).declaredDrivers)
+        let gained = declared.subtracting(started).sorted()
+        guard !gained.isEmpty else { return }
+        driversTapStartedWith = declared
+        session.restart(reason: "the deck now declares \(gained.joined(separator: ", ")); tap asks about a new driver only when it starts")
+    }
+```
+
+Call `fileTextChanged()`: at the end of `documentDidSave(_:)`; at the end of `loadDiskVersion()`; in `diskChanged()`'s converged branch, after `clearDiskConflict()` and before its `return`; at the end of `documentDidRead(_:)`; in `keepMine()`'s completion when `error == nil`. In `sessionStateChanged(_:)`, inside the running branch after `client = newClient`, add `driversTapStartedWith = Set(Frontmatter(text: document?.text ?? "").declaredDrivers)`.
+
+- [ ] **Step 4: Build**
+
+Run: `make -C desktop build` and `make -C desktop test-build`
+Expected: both succeed. The controller's CI run confirms the three tests, and that `FixItTests.testABlockUsesAnUndeclaredDriver` still passes with the restart now happening under its undo (its waits are bounded at 15 s for the answer after the restart).
+
+- [ ] **Step 5: Mutate and commit**
+
+Mutations, each a patch in `mutations-c/`, the one that could answer the wrong process first: in `sessionStateChanged`, keep `pendingQuestions` when the state leaves running (`Test: TapTests/NewDriverTests/testATapRestartRenewsTheApprovalQuestion`; expected: fails on `pendingQuestion == nil` and the old sheet stays); in `presentDeckQuestion`, drop the generation guard (survives: the dead sheet's completion runs at the drop, when no question is pending; kept, noted); in `fileTextChanged`, drop the `!gained.isEmpty` guard (`Test: .../testANewDriverAsksAgain`; expected: fails on "no restart for a code edit"); drop the `documentDidSave` call (`Test: .../testTheFixItAsksAboutTheNewDriver`; expected: times out); drop the `loadDiskVersion` call (`Test: .../testANewDriverAsksAgain`; expected: times out on the fresh tap); in `sessionStateChanged`, never record `driversTapStartedWith` (expected: both time out); in `fileTextChanged`, compare against the buffer (`editor.string`) instead of the file (survives here; kept as written, the file is what tap reads).
+
+```bash
+git add desktop/Tap desktop/TapTests
+git commit -m "feat(desktop): restart tap dev when the deck file gains a declared driver, so tap asks about it"
+```
+
+---
