@@ -84,4 +84,20 @@ final class QuestionSheet: NSWindow {
                       decline: "Don't Record",
                       accept: "Record Automatically")
     }
+
+    /// tap's keep-recording question, asked when Stop ends a run that
+    /// recorded. `size` is the run folder's size, formatted. Delete is
+    /// destructive: no key reaches it, and a stray Escape after the talk
+    /// does nothing here.
+    static func keepRecording(directory: String, segments: Int, size: String) -> QuestionSheet {
+        let sheet = QuestionSheet(kind: "keep-recording",
+                                  title: "Keep this recording?",
+                                  body: "\(segments) segment\(segments == 1 ? "" : "s"), \(size) on disk.",
+                                  path: directory,
+                                  decline: "Delete",
+                                  accept: "Keep and Show in Finder",
+                                  escape: .nothing)
+        sheet.declineButton.hasDestructiveAction = true
+        return sheet
+    }
 }

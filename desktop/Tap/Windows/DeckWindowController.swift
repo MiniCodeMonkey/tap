@@ -35,6 +35,8 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
     }()
     /// The sheet for tap's question, while it is up.
     private(set) var questionSheet: QuestionSheet?
+    /// Reveals a kept recording. Production opens Finder on it; a test records the URL.
+    var revealInFinder: (URL) -> Void = { url in NSWorkspace.shared.activateFileViewerSelecting([url]) }
     private(set) lazy var layoutGallery: LayoutGalleryController = {
         let gallery = LayoutGalleryController()
         gallery.onPick = { [weak self] name in self?.insertSlide(layout: name, after: .caret) }
@@ -392,11 +394,20 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
         sessionController.presentation.reloadSlides()
     }
 
-    /// The talk is idle or failed: no sheet of its outlives it. A sheet
-    /// ended this way answers nothing (the talk's questions are gone with
-    /// it); Task 10 gives the keep-recording sheet its own ending.
+    /// The talk is idle or failed: no sheet of its outlives it. A
+    /// keep-recording sheet still up means tap exited before an answer
+    /// came: its 60 s wait ran out (or the app's stdin closed) and it kept
+    /// the recording, so the sheet ends as a yes and the run is revealed
+    /// like any kept run. Any other sheet ends answering nothing.
     func talkEnded() {
-        endQuestionSheet(as: .abort)
+        guard let sheet = questionSheet else { return }
+        if sheet.kind == "keep-recording" {
+            // The talk's own log, which outlives its session; never tap dev's.
+            sessionController.presentationIfCreated?.lastTalkLog?.append("tap kept the recording before an answer came", source: .app)
+            endQuestionSheet(as: .OK)
+        } else {
+            endQuestionSheet(as: .abort)
+        }
     }
 
     // MARK: tap's questions
@@ -410,6 +421,16 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
         case "record-consent":
             showQuestionSheet(QuestionSheet.consent(settingsPath: question.payload.settingsPath)) { record in
                 presentation.answer(id: question.id, value: record)
+            }
+        case "keep-recording":
+            let directory = question.payload.directory ?? ""
+            let sheet = QuestionSheet.keepRecording(directory: directory, segments: question.payload.segments ?? 0,
+                                                    size: Self.folderSize(at: URL(fileURLWithPath: directory)))
+            showQuestionSheet(sheet) { [weak self] keep in
+                // tap keeps the recording on a yes and on no answer at all; the app
+                // never touches the folder itself.
+                presentation.answer(id: question.id, value: keep)
+                if keep, !directory.isEmpty { self?.revealInFinder(URL(fileURLWithPath: directory)) }
             }
         default:
             presentation.session?.log.append("the \(question.kind) question is not answered by this version of the app; declined", source: .app)
@@ -438,6 +459,17 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
             completion(response == .OK)
             presentation.returnToTalk()
         }
+    }
+
+    /// The size of every file under `folder`, formatted for a person.
+    static func folderSize(at folder: URL) -> String {
+        var bytes: Int64 = 0
+        if let files = FileManager.default.enumerator(at: folder, includingPropertiesForKeys: [.fileSizeKey]) {
+            for case let file as URL in files {
+                bytes += Int64((try? file.resourceValues(forKeys: [.fileSizeKey]))?.fileSize ?? 0)
+            }
+        }
+        return ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
     }
 
     /// Ends the sheet that is up, if any, as `response`. The talk ending
