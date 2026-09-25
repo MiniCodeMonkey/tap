@@ -40,6 +40,12 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
     /// The phone remote panel, made with the window (a panel that is never
     /// shown costs nothing) and closed with it, so none outlives its deck.
     let remotePanel = RemotePanel()
+    /// The Focus hint's sheet, while it is up.
+    private(set) var focusHintSheet: QuestionSheet?
+    /// Opens the Focus pane of System Settings. A test replaces it.
+    var openFocusSettings: () -> Void = {
+        if let url = URL(string: "x-apple.systempreferences:com.apple.Focus-Settings-extension") { NSWorkspace.shared.open(url) }
+    }
     private(set) lazy var layoutGallery: LayoutGalleryController = {
         let gallery = LayoutGalleryController()
         gallery.onPick = { [weak self] name in self?.insertSlide(layout: name, after: .caret) }
@@ -363,11 +369,38 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
     /// Every start comes here: the popover's buttons, Play, the Shift-click
     /// and Rehearse. A start from the popover saves its settings, so the
     /// next Cmd+Option+P and the next launch start the same way; the other
-    /// starts read the saved settings and leave them as they are.
+    /// starts read the saved settings and leave them as they are. The first
+    /// time on this Mac, the Focus hint comes first: Not Now starts the
+    /// talk, Open Focus Settings opens the setting and leaves the person to
+    /// press Play again once the Focus is on, since a talk would cover
+    /// System Settings.
     func startPresenting(_ options: PresentationOptions, savingSettings: Bool = false) {
         if savingSettings { AppEnvironment.shared.presentationSettings.settings = presentPopover.settings }
         // Play with the popover open starts at once; the popover goes, so a later click on its Start cannot save settings for a talk it did not start.
         if presentPopover.isShown { presentPopover.close() }
+        let hint = AppEnvironment.shared.focusHint
+        guard hint.hasBeenShown, focusHintSheet == nil else {
+            guard focusHintSheet == nil else { return }
+            hint.markShown()
+            guard let window else {
+                // No window to hang a sheet on: the hint is skipped, never a reason not to present.
+                sessionController.presentation.start(options)
+                return
+            }
+            let sheet = QuestionSheet.focusHint()
+            focusHintSheet = sheet
+            window.beginSheet(sheet) { [weak self] response in
+                guard let self else { return }
+                self.focusHintSheet = nil
+                if response == .OK {
+                    self.openFocusSettings()
+                } else {
+                    self.sessionController.presentation.start(options)
+                    self.refreshPresentingControls()
+                }
+            }
+            return
+        }
         sessionController.presentation.start(options)
         refreshPresentingControls()
     }

@@ -104,4 +104,14 @@ final class QuestionSheet: NSWindow {
         sheet.initialFirstResponder = sheet.acceptButton
         return sheet
     }
+
+    /// The hint before the first talk. Its accept button opens the setting.
+    static func focusHint() -> QuestionSheet {
+        QuestionSheet(kind: "focus-hint",
+                      title: "Turn on a Focus before your talk?",
+                      body: "Notifications can appear on the projector. macOS does not let apps turn on a Focus for you.",
+                      path: nil,
+                      decline: "Not Now",
+                      accept: "Open Focus Settings")
+    }
 }

@@ -23,6 +23,9 @@ class HostedTestCase: XCTestCase {
         AppEnvironment.shared.deckPorts = DeckPortStore(defaults: try XCTUnwrap(UserDefaults(suiteName: "TapTests.ports.\(UUID().uuidString)")))
         AppEnvironment.shared.presentationSettings = PresentationSettingsStore(defaults: try XCTUnwrap(UserDefaults(suiteName: "TapTests.present.\(UUID().uuidString)")))
         AppEnvironment.shared.presentExecutableURL = nil
+        // The Focus hint shows before the first talk on a Mac; every test but the hint's own has seen it.
+        AppEnvironment.shared.focusHint = FocusHintState(defaults: try XCTUnwrap(UserDefaults(suiteName: "TapTests.focus.\(UUID().uuidString)")))
+        AppEnvironment.shared.focusHint.markShown()
     }
 
     override func tearDown() async throws {

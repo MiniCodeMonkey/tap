@@ -46,6 +46,8 @@ final class AppEnvironment {
     /// A tap for talks alone, for tests that script tap present while the
     /// deck's real tap dev keeps running. nil runs the bundled tap.
     var presentExecutableURL: URL?
+    /// Whether the Focus hint has been shown on this Mac. A test replaces it.
+    var focusHint = FocusHintState()
     /// How many talks are running across every deck, from Play to idle or
     /// failed. Play is off while one runs, and D7's updater reads
     /// `updatesMayInterrupt` before any prompt or restart.
