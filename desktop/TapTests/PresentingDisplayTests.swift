@@ -207,11 +207,109 @@ final class PresentingDisplayTests: PresentingTestCase {
         NotificationCenter.default.post(name: NSApplication.didChangeScreenParametersNotification, object: NSApp)
         XCTAssertEqual(changes, 0, "no talk, no observer")
         try await startPresenting(controller, PresentationOptions(mode: .rehearse, startSlide: 1))
+        // AppKit posts the notification itself while the window enters full screen: counted from here on.
+        try await Task.sleep(nanoseconds: 1_000_000_000)
+        let settled = changes
         NotificationCenter.default.post(name: NSApplication.didChangeScreenParametersNotification, object: NSApp)
-        XCTAssertEqual(changes, 1, "AppKit's notification reaches the talk")
+        XCTAssertEqual(changes, settled + 1, "AppKit's notification reaches the talk")
         try await stopPresenting(controller)
+        let stopped = changes
         NotificationCenter.default.post(name: NSApplication.didChangeScreenParametersNotification, object: NSApp)
-        XCTAssertEqual(changes, 1, "the observer went with the windows")
+        XCTAssertEqual(changes, stopped, "the observer went with the windows")
+    }
+
+    func testOneDisplayScreenNotificationsLeaveTheAudienceInFront() async throws {
+        let (_, controller) = try await openDeckForPresenting()
+        let presentation = controller.presentation
+        try await startPresenting(controller, PresentationOptions(mode: .play, startSlide: 1))
+        let audience = try XCTUnwrap(presentation.audienceWindow)
+        let presenter = try XCTUnwrap(presentation.presenterWindow)
+        if fullScreenAvailable {
+            // AppKit posts didChangeScreenParametersNotification while the audience window enters full screen.
+            try await waitUntil(timeout: 10, "the audience in full screen") { audience.styleMask.contains(.fullScreen) }
+            try await Task.sleep(nanoseconds: 1_500_000_000)
+        }
+        XCTAssertTrue(presentation.frontWindow === audience, "the talk starts on the audience view")
+        XCTAssertFalse(presenter.isAttached, "the notes stay off the audience's screen until Option-Tab or the S key")
+        XCTAssertFalse(presenter.isVisible)
+
+        // A notification with the same displays: nothing moves, nothing shows.
+        NotificationCenter.default.post(name: NSApplication.didChangeScreenParametersNotification, object: NSApp)
+        XCTAssertTrue(presentation.windowsAreSettled, "no window was asked to move")
+        XCTAssertTrue(presentation.frontWindow === audience)
+        XCTAssertFalse(presenter.isAttached)
+        XCTAssertFalse(presenter.isVisible)
+        try await Task.sleep(nanoseconds: 500_000_000)
+        XCTAssertFalse(presentation.presenterIsShownOverAudience)
+        XCTAssertFalse(onScreenWindowNumbers().contains(presenter.windowNumber), "the window server has no notes on screen")
+    }
+
+    /// Two displays on one screen, with AppKit's full screen toggle
+    /// replaced by a recorder and each transition's end driven by hand, so
+    /// the order holds on every host and no Space is made: the entries go
+    /// one at a time, a swap moves each window in turn, and a take-down
+    /// takes the front window down before it starts on the other.
+    func testTwoDisplayOrderAndSwapThroughTheSeams() async throws {
+        let (_, controller) = try await openDeckForPresenting()
+        let presentation = controller.presentation
+        let screens = halfScreens()
+        presentation.screens = { screens }
+        presentation.fullScreenAllowed = { true }
+        presentation.screensHaveSeparateSpaces = { true }
+        var toggles: [String] = []
+        presentation.windowCreated = { window in
+            let name = window.role == .audience ? "audience" : "presenter"
+            window.requestFullScreenToggle = { toggles.append("\(name) toggle") }
+        }
+        let entered = Notification(name: NSWindow.didEnterFullScreenNotification)
+        let exited = Notification(name: NSWindow.didExitFullScreenNotification)
+
+        // The start: the audience enters first, and the presenter only once it is in.
+        presentation.start(PresentationOptions(mode: .play, startSlide: 1))
+        try await waitUntil(timeout: 40, "the audience's entry (state \(presentation.state), toggles \(toggles))") { toggles == ["audience toggle"] }
+        let audience = try XCTUnwrap(presentation.audienceWindow)
+        let presenter = try XCTUnwrap(presentation.presenterWindow)
+        XCTAssertFalse(presentation.windowsAreSettled)
+        audience.windowDidEnterFullScreen(entered)
+        XCTAssertEqual(toggles, ["audience toggle", "presenter toggle"])
+        presenter.windowDidEnterFullScreen(entered)
+        XCTAssertTrue(presentation.windowsAreSettled)
+        XCTAssertTrue(presentation.frontWindow === presenter)
+        XCTAssertEqual(audience.targetFrame, screens[1].frame)
+        XCTAssertEqual(presenter.targetFrame, screens[0].frame)
+
+        // The swap: the audience leaves its Space, moves and enters again; only then the presenter.
+        toggles = []
+        presentation.swapDisplays()
+        XCTAssertEqual(toggles, ["audience toggle"], "the audience's exit, and nothing for the presenter yet")
+        audience.windowDidExitFullScreen(exited)
+        XCTAssertEqual(toggles, ["audience toggle", "audience toggle"], "the audience's entry on its new display")
+        audience.windowDidEnterFullScreen(entered)
+        XCTAssertEqual(audience.targetFrame, screens[0].frame)
+        XCTAssertEqual(audience.settledFrame, screens[0].frame)
+        XCTAssertEqual(toggles, ["audience toggle", "audience toggle", "presenter toggle"], "the presenter's exit, once the audience is in")
+        presenter.windowDidExitFullScreen(exited)
+        XCTAssertEqual(toggles.count, 4)
+        presenter.windowDidEnterFullScreen(entered)
+        XCTAssertEqual(presenter.targetFrame, screens[1].frame)
+        XCTAssertEqual(presenter.settledFrame, screens[1].frame)
+        XCTAssertTrue(presentation.windowsAreSettled)
+        XCTAssertFalse(presenter.isAttached)
+        XCTAssertTrue(presentation.frontWindow === presenter)
+        XCTAssertTrue(presentation.sleepAssertion.isHeld, "a swap is not an ending")
+
+        // The take-down: the front window leaves and closes before the other starts.
+        toggles = []
+        presentation.stop()
+        XCTAssertEqual(toggles, ["presenter toggle"], "only the front window leaves first")
+        presenter.windowDidExitFullScreen(exited)
+        XCTAssertTrue(presenter.isClosed)
+        XCTAssertFalse(audience.isClosed)
+        XCTAssertEqual(toggles, ["presenter toggle", "audience toggle"], "the audience leaves once the presenter has closed")
+        audience.windowDidExitFullScreen(exited)
+        XCTAssertTrue(audience.isClosed)
+        XCTAssertTrue(presentation.windowsGoingDown.isEmpty)
+        try await waitUntil(timeout: 30, "the talk to end") { presentation.state == .idle }
     }
 
     func testWithoutSeparateSpacesTheTalkWindowsStayPlainWindows() async throws {

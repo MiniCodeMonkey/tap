@@ -103,6 +103,12 @@ final class PresentationController {
     /// finished talk never hears about displays and nothing is read in deinit.
     private var screenObserver: NSObjectProtocol?
     private var keyMonitor: Any?
+    /// True while the talk's windows are up: Escape and Option-Tab reach
+    /// `handleKey` only through the monitor.
+    var isKeyMonitorInstalled: Bool { keyMonitor != nil }
+    /// Each talk window as it is made, before it is placed. A test sets
+    /// its full screen toggle here to drive the transitions through the seams.
+    var windowCreated: ((PresentationWindow) -> Void)?
     /// The screens changed while the windows exist. A test counts the calls.
     var onScreensChanged: (() -> Void)?
     /// The remembered port tap said is taken; the next attempt asks for none.
@@ -411,6 +417,7 @@ final class PresentationController {
             toolbar.onSwap = { [weak self] in self?.swapDisplays() }
             toolbar.onStop = { [weak self] in self?.stop() }
         }
+        windowCreated?(window)
         return window
     }
 
