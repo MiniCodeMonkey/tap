@@ -94,6 +94,11 @@ final class PresentationController {
     private var placements: [(window: PresentationWindow, frame: CGRect, fullScreen: Bool)] = []
     private var placing = false
     private var placementCompletion: (() -> Void)?
+    /// True while the first placement waits for other talk windows to be quiet.
+    private var waitingForQuiet = false
+    /// How long the first placement waits for quiet, and how long after it.
+    static let quietTimeout: TimeInterval = 10
+    static let quietPeriod: TimeInterval = 0.5
     /// Installed while the talk's windows exist, removed with them, so a
     /// finished talk never hears about displays and nothing is read in deinit.
     private var screenObserver: NSObjectProtocol?
@@ -186,10 +191,14 @@ final class PresentationController {
         }
     }
 
-    /// Play and Rehearse need a deck file and no talk in progress, in this
-    /// deck or any other.
+    /// Play and Rehearse need a deck file, no talk in progress, in this
+    /// deck or any other, and the last talk's windows gone and out of
+    /// full screen: an entry asked for during another window's exit is
+    /// dropped by AppKit, and that window then never closes. The Play
+    /// button hears `presentingDidChangeNotification` when this turns true.
     var canStart: Bool {
         deckURL() != nil && !isActive && !AppEnvironment.shared.isPresenting
+            && windowsGoingDown.isEmpty && !PresentationWindow.anyIsBusyWithFullScreen
     }
 
     /// The arrangement the next talk would use, for the popover; the
@@ -209,7 +218,7 @@ final class PresentationController {
     }
 
     /// True once every window is where it was asked to be.
-    var windowsAreSettled: Bool { placements.isEmpty && !placing }
+    var windowsAreSettled: Bool { placements.isEmpty && !placing && !waitingForQuiet }
 
     /// On one display: the presenter view is over the audience view.
     var presenterIsShownOverAudience: Bool {
@@ -431,11 +440,12 @@ final class PresentationController {
     /// presenter last so its Space is active and it is key, since that is
     /// where the speaker's keys go. On one display only the audience
     /// window goes up (to full screen); the presenter window waits as its
-    /// child-to-be, shown by Option-Tab or the S key.
+    /// child-to-be, shown by Option-Tab or the S key. The first entry
+    /// waits until the last talk's windows are quiet.
     private func showWindows() {
         showWindowsFallback?.cancel()
         showWindowsFallback = nil
-        guard let arrangement, let presenterWindow else { return }
+        guard arrangement != nil, presenterWindow != nil else { return }
         windowsShown = true
         installKeyMonitor()
         windowsWereShown = true
@@ -446,6 +456,14 @@ final class PresentationController {
         } else if !fullScreen {
             session?.log.append("\"Displays have separate Spaces\" is off in System Settings > Desktop & Dock, so the talk windows are plain windows over their displays rather than full screen Spaces", source: .app)
         }
+        whenFullScreenIsQuiet { [weak self] in self?.placeShownWindows() }
+    }
+
+    /// The first placement of the talk's windows, on the arrangement as it
+    /// is now.
+    private func placeShownWindows() {
+        guard let arrangement, let presenterWindow, windowsShown else { return }
+        let fullScreen = usesFullScreen
         var order: [(window: PresentationWindow, frame: CGRect, fullScreen: Bool)] = []
         let front: PresentationWindow
         if let audienceWindow, arrangement.isSingleDisplay {
@@ -461,6 +479,35 @@ final class PresentationController {
             guard let self, let front, front === self.frontWindow, self.windowsShown else { return }
             front.makeKeyAndOrderFront(nil)
         }
+    }
+
+    /// Runs `work` once no talk window, of this deck or another, is busy
+    /// with full screen (`PresentationWindow.isBusyWithFullScreen`), and
+    /// a moment later if one was, for the Space animation to finish: an
+    /// entry asked for before then is dropped. At once when nothing is
+    /// busy. A host that stays busy past `quietTimeout` gets `work` anyway.
+    /// A take-down cancels the wait.
+    private func whenFullScreenIsQuiet(_ work: @escaping () -> Void) {
+        guard PresentationWindow.anyIsBusyWithFullScreen else { return work() }
+        waitingForQuiet = true
+        let deadline = Date().addingTimeInterval(Self.quietTimeout)
+        let generation = startGeneration
+        func poll() {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+                MainActor.assumeIsolated {
+                    guard let self, self.waitingForQuiet, self.startGeneration == generation, self.windowsShown else { return }
+                    if PresentationWindow.anyIsBusyWithFullScreen, Date() < deadline { return poll() }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + Self.quietPeriod) { [weak self] in
+                        MainActor.assumeIsolated {
+                            guard let self, self.waitingForQuiet, self.startGeneration == generation, self.windowsShown else { return }
+                            self.waitingForQuiet = false
+                            work()
+                        }
+                    }
+                }
+            }
+        }
+        poll()
     }
 
     /// Puts each window on its display in turn, then calls `completion`.
@@ -763,6 +810,7 @@ final class PresentationController {
         placements = []
         placing = false
         placementCompletion = nil
+        waitingForQuiet = false
         var order: [PresentationWindow] = []
         if let frontWindow, !frontWindow.isAttached { order.append(frontWindow) }
         for window in [audienceWindow, presenterWindow].compactMap({ $0 }) where !order.contains(where: { $0 === window }) && !window.isAttached {
@@ -782,6 +830,8 @@ final class PresentationController {
     private func takeDownNext() {
         guard !takingDown, let window = windowsGoingDown.first(where: { !$0.isClosed }) else {
             windowsGoingDown.removeAll { $0.isClosed }
+            // The last window is down: Play may be able to start again.
+            if windowsGoingDown.isEmpty { AppEnvironment.shared.noteTalkWindowsWentDown() }
             return
         }
         takingDown = true

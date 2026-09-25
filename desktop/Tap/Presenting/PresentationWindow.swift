@@ -49,6 +49,22 @@ final class PresentationWindow: NSWindow, NSWindowDelegate {
     /// tell a half-screen "display" from the display itself.
     private(set) var settledFrame: CGRect?
     private(set) var isClosed = false
+    /// True from `takeDown` until the window has closed.
+    var isTakingDown: Bool { closeWhenSettled && !isClosed }
+    /// True while this window is not closed and is going down, in a full
+    /// screen transition or in full screen by its style mask. A full
+    /// screen entry asked for while another window is like this is
+    /// dropped by AppKit with no notification, and that window never
+    /// closes, so a new talk waits for every talk window to be quiet.
+    var isBusyWithFullScreen: Bool {
+        !isClosed && (isTakingDown || fullScreenState != .windowed || styleMask.contains(.fullScreen))
+    }
+
+    /// Whether any talk window, of any deck, is busy with full screen.
+    @MainActor
+    static var anyIsBusyWithFullScreen: Bool {
+        NSApp.windows.contains { ($0 as? PresentationWindow)?.isBusyWithFullScreen == true }
+    }
     /// True while this window is a child of another (the presenter view over the audience on one display).
     private(set) var isAttached = false
     var onFullScreenChange: ((FullScreenState) -> Void)?

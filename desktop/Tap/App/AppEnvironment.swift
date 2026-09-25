@@ -68,6 +68,11 @@ final class AppEnvironment {
         NotificationCenter.default.post(name: Self.presentingDidChangeNotification, object: self)
     }
 
+    /// A talk's windows have all closed, which a new talk waits for.
+    func noteTalkWindowsWentDown() {
+        NotificationCenter.default.post(name: Self.presentingDidChangeNotification, object: self)
+    }
+
     func retainEndingTalk(_ talk: PresentationController) {
         guard !endingTalks.contains(where: { $0 === talk }) else { return }
         endingTalks.append(talk)
