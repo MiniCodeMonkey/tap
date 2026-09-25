@@ -30,13 +30,59 @@ public struct CodeBlock: Codable, Equatable, Sendable {
     public let driver: String
     public let live: Bool
     public let line: Int
+    /// Why a live block cannot run, in tap's words (today: the deck does
+    /// not declare its driver, config.UndeclaredDriverMessage). nil for a
+    /// block that can run. The page shows the same text in the block.
+    public let problem: String?
 
-    public init(block: Int, language: String, driver: String, live: Bool, line: Int) {
+    public init(block: Int, language: String, driver: String, live: Bool, line: Int, problem: String? = nil) {
         self.block = block
         self.language = language
         self.driver = driver
         self.live = live
         self.line = line
+        self.problem = problem
+    }
+}
+
+/// One driver of tap's approval request (internal/cli/approval.go,
+/// approvalDriver): what a yes would allow. `command` is what a custom
+/// driver runs, with its arguments and variables expanded; nil for a
+/// built-in driver. `previousCommand` is the command line the deck was
+/// approved with before, when the name was approved and only its command
+/// changed (the tap change's optional field; nil for a driver never approved,
+/// and from a tap without the field). `slides` are the slides with a block that
+/// uses it, `blocks` how many.
+public struct ApprovalDriver: Codable, Equatable, Sendable {
+    public let name: String
+    public let command: String?
+    public let previousCommand: String?
+    public let slides: [Int]
+    public let blocks: Int
+
+    public init(name: String, command: String? = nil, previousCommand: String? = nil, slides: [Int] = [], blocks: Int = 0) {
+        self.name = name
+        self.command = command
+        self.previousCommand = previousCommand
+        self.slides = slides
+        self.blocks = blocks
+    }
+}
+
+/// One live code block of an approval request, so the sheet can show its
+/// code before the person allows it. `slide` and `block` are 1-based,
+/// `block` counting the slide's live blocks, as /api/execute names them.
+public struct ApprovalBlock: Codable, Equatable, Sendable {
+    public let driver: String
+    public let code: String
+    public let slide: Int
+    public let block: Int
+
+    public init(driver: String, code: String, slide: Int, block: Int) {
+        self.driver = driver
+        self.code = code
+        self.slide = slide
+        self.block = block
     }
 }
 
@@ -125,23 +171,42 @@ public struct TapErrorPayload: Codable, Equatable, Sendable, Error {
     public var meansTheCommandFailed: Bool { !Self.reportedWhileRunning.contains(code) }
 }
 
-/// One JSON line from tap's standard output.
 /// What a `question` event carries. Each kind uses a few of the fields:
-/// `approval` the deck (and its drivers, which D5 reads), `record-consent`
-/// the settings file the answer is saved to, `keep-recording` the run's
-/// folder and how many segments it has. See internal/cli/app_questions.go
-/// and app_session.go.
+/// `approval` the deck, the drivers a yes would allow, the ones an earlier
+/// yes allowed, and the blocks to read; `record-consent` the settings file
+/// the answer is saved to; `keep-recording` the run's folder and how many
+/// segments it has. See internal/cli/approval.go, app_questions.go and
+/// app_session.go.
 public struct QuestionPayload: Codable, Equatable, Sendable {
     public let deck: String?
     public let settingsPath: String?
     public let directory: String?
     public let segments: Int?
+    public let drivers: [ApprovalDriver]?
+    public let approvedBefore: [String]?
+    public let blocks: [ApprovalBlock]?
 
-    public init(deck: String? = nil, settingsPath: String? = nil, directory: String? = nil, segments: Int? = nil) {
+    public init(deck: String? = nil, settingsPath: String? = nil, directory: String? = nil, segments: Int? = nil,
+                drivers: [ApprovalDriver]? = nil, approvedBefore: [String]? = nil, blocks: [ApprovalBlock]? = nil) {
         self.deck = deck
         self.settingsPath = settingsPath
         self.directory = directory
         self.segments = segments
+        self.drivers = drivers
+        self.approvedBefore = approvedBefore
+        self.blocks = blocks
+    }
+
+    /// True when the deck was approved before and tap asks only about
+    /// the drivers it has since gained ("This deck now also wants to run shell").
+    public var isForNewDrivers: Bool { !(approvedBefore ?? []).isEmpty }
+
+    /// The drivers whose name was approved before with another command.
+    public var changedCommands: [ApprovalDriver] { (drivers ?? []).filter { $0.previousCommand != nil } }
+
+    /// "2 shell, 1 sqlite": the block counts by driver, in tap's order.
+    public var approvalSummary: String {
+        (drivers ?? []).map { "\($0.blocks) \($0.name)" }.joined(separator: ", ")
     }
 }
 
@@ -182,6 +247,9 @@ public enum TapEvent: Equatable, Sendable {
     case ready(TapReady)
     case fileChanged(path: String, slideList: SlideList?)
     case question(id: String, kind: String, payload: QuestionPayload)
+    /// tap no longer needs the question with this id answered (a reload
+    /// made it stale); an answer to it is refused as unknown_question.
+    case questionClosed(id: String)
     case recording(RecordingEvent)
     case tunnel(TunnelEvent)
     /// The audience position: a 1-based slide and its step.
@@ -230,6 +298,9 @@ public enum TapEvent: Equatable, Sendable {
         case "question":
             guard let id = envelope.id, let kind = envelope.kind else { return nil }
             return .question(id: id, kind: kind, payload: envelope.payload ?? QuestionPayload())
+        case "question-closed":
+            guard let id = envelope.id else { return nil }
+            return .questionClosed(id: id)
         case "recording":
             return .recording(RecordingEvent(state: envelope.state ?? "stopped", segment: envelope.segment ?? 0,
                                              elapsed: envelope.elapsed ?? 0, disk: envelope.disk ?? "ok"))

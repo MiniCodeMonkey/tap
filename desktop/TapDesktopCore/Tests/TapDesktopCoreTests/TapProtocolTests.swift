@@ -62,6 +62,39 @@ final class TapProtocolTests: XCTestCase {
                                              codeBlocks: [CodeBlock(block: 1, language: "sql", driver: "sqlite", live: true, line: 7)]))
     }
 
+    func testDecodesTheApprovalRequest() {
+        let line = #"{"type":"question","id":"q1","kind":"approval","payload":{"deck":"/private/tmp/t/talk.md","drivers":[{"name":"fortune","command":"/bin/cat","slides":[3],"blocks":1},{"name":"shell","slides":[2,5],"blocks":2}],"approvedBefore":["sqlite"],"blocks":[{"driver":"shell","code":"echo hi","slide":2,"block":1},{"driver":"fortune","code":"hello","slide":3,"block":1}]}}"#
+        let expected = QuestionPayload(
+            deck: "/private/tmp/t/talk.md",
+            drivers: [ApprovalDriver(name: "fortune", command: "/bin/cat", slides: [3], blocks: 1),
+                      ApprovalDriver(name: "shell", command: nil, slides: [2, 5], blocks: 2)],
+            approvedBefore: ["sqlite"],
+            blocks: [ApprovalBlock(driver: "shell", code: "echo hi", slide: 2, block: 1),
+                     ApprovalBlock(driver: "fortune", code: "hello", slide: 3, block: 1)])
+        XCTAssertEqual(TapEvent.decode(line: line), .question(id: "q1", kind: "approval", payload: expected))
+        XCTAssertTrue(expected.isForNewDrivers)
+        XCTAssertEqual(expected.changedCommands, [], "no driver names a command it ran before")
+        let changed = #"{"type":"question","id":"q3","kind":"approval","payload":{"deck":"/t/talk.md","drivers":[{"name":"fortune","command":"/usr/bin/true","previousCommand":"/bin/cat","slides":[3],"blocks":1}],"approvedBefore":["sqlite"],"blocks":[]}}"#
+        guard case .question(_, _, let payload)? = TapEvent.decode(line: changed) else { return XCTFail("not a question") }
+        XCTAssertEqual(payload.drivers?.first?.previousCommand, "/bin/cat")
+        XCTAssertEqual(payload.changedCommands.map(\.name), ["fortune"])
+        XCTAssertEqual(TapEvent.decode(line: #"{"type":"question-closed","id":"q1"}"#), .questionClosed(id: "q1"), "tap withdrew a question a reload made stale")
+        XCTAssertNil(TapEvent.decode(line: #"{"type":"question-closed"}"#), "a withdrawal without its id is not an event")
+        XCTAssertEqual(expected.approvalSummary, "1 fortune, 2 shell")
+        let first = QuestionPayload(deck: "/a.md", drivers: [ApprovalDriver(name: "shell", slides: [2, 5], blocks: 2), ApprovalDriver(name: "sqlite", slides: [4], blocks: 1)])
+        XCTAssertFalse(first.isForNewDrivers, "no approvedBefore means the first time")
+        XCTAssertEqual(first.approvalSummary, "2 shell, 1 sqlite")
+        XCTAssertEqual(QuestionPayload().approvalSummary, "")
+    }
+
+    func testDecodesABlocksProblem() throws {
+        let data = Data(#"{"ok":true,"slides":[{"number":1,"startLine":1,"endLine":3,"layout":"default","title":"","fragments":0,"steps":0,"skip":false,"errors":[],"codeBlocks":[{"block":1,"language":"bash","driver":"shell","live":true,"line":2,"problem":"This deck does not declare the shell driver. Add \"shell: {}\" under drivers in the frontmatter."},{"block":2,"language":"sql","driver":"sqlite","live":true,"line":3}]}],"errors":[]}"#.utf8)
+        let list = try SlideList.decodeResponse(data)
+        XCTAssertEqual(list.slides[0].codeBlocks[0].problem, #"This deck does not declare the shell driver. Add "shell: {}" under drivers in the frontmatter."#)
+        XCTAssertNil(list.slides[0].codeBlocks[1].problem, "a block that can run has none")
+        XCTAssertEqual(list.slides[0].codeBlocks[1], CodeBlock(block: 2, language: "sql", driver: "sqlite", live: true, line: 3))
+    }
+
     func testAnErrorResponseThrowsItsCodeAndMessage() {
         let json = #"{"ok": false, "error": {"code": "invalid_request", "message": "send {\"source\": ...}"}}"#
         XCTAssertThrowsError(try SlideList.decodeResponse(Data(json.utf8))) { error in

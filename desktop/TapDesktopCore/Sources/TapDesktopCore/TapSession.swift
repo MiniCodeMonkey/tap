@@ -258,6 +258,8 @@ public final class TapSession {
             log.append("file changed on disk: \((path as NSString).lastPathComponent)", source: .event)
         case .question(_, let kind, _):
             log.append("tap asks a \(kind) question", source: .event)
+        case .questionClosed(let id):
+            log.append("tap withdrew the \(id) question", source: .event)
         case .recording(let recording):
             log.append("recording \(recording.state), segment \(recording.segment), disk \(recording.disk)", source: .event)
         case .tunnel(let tunnel):
