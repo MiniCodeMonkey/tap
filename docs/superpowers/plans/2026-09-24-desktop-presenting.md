@@ -2,17 +2,19 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Play and Rehearse run `tap present --app` as a second process beside the deck's `tap dev --app`, put tap's audience and presenter pages in native windows that cover the chosen displays, hold a display sleep assertion for exactly as long as the talk runs, show tap's recording consent and keep-recording questions as sheets on the deck window, and put the editor's cursor on the last slide presented when the talk ends.
+**Goal:** Play and Rehearse run `tap present --app` as a second process beside the deck's `tap dev --app`, put tap's audience and presenter pages in native windows that each enter their own macOS full screen Space on the chosen display, hold a display sleep assertion for exactly as long as the talk runs, show tap's recording consent and keep-recording questions as sheets on the deck window, and put the editor's cursor on the last slide presented when the talk ends.
 
-**Architecture:** `TapDesktopCore` learns the rest of P6's protocol (the `recording`, `tunnel` and `slide` events, question payloads, the `answer`, `tunnel` and `recording` commands) and lets `TapSession` run `present` as well as `dev`, with a `quit` that asks tap to shut down cleanly instead of closing its stdin. A pure `DisplayArrangement` decides which screen is the audience and which the presenter, remembered per pair of displays. In the app target, one `PresentationController` per deck owns the present session, two borderless `PresentationWindow`s that each cover a screen (each holds a `WKWebView` with tap's page, full screen enabled, on the persistent data store), the `SleepAssertion`, the position from tap's `slide` events and the recording state from its `recording` events. The deck window gets a Play toolbar button with the Present popover, the Present menu, and the sheets. The presenter window gets the toolbar that slides in at the top edge (REC, Reload Slides, Swap Displays, Stop) and the REC dot. tap does all the presenting, recording and tunnelling; the app only opens windows, forwards answers, and edits text.
+**Architecture:** `TapDesktopCore` learns the rest of P6's protocol (the `recording`, `tunnel` and `slide` events, question payloads, the `answer`, `tunnel` and `recording` commands) and lets `TapSession` run `present` as well as `dev`, with a `quit` that asks tap to shut down cleanly instead of closing its stdin, and a per-deck port so the talk pages keep one origin across launches. A pure `DisplayArrangement` decides which screen is the audience and which the presenter, remembered per pair of displays. In the app target, one `PresentationController` per deck owns the present session, two `PresentationWindow`s that each go to system full screen on one display (each holds a `WKWebView` with tap's page, element full screen enabled, on the persistent data store), the `SleepAssertion`, the position from tap's `slide` events and the recording state from its `recording` events. A talk that is stopping stays alive in `AppEnvironment` until its process exits, whatever happens to its deck window. The deck window gets a Play toolbar button with the Present popover, the Present menu, and the sheets. The presenter window gets the toolbar that slides in at the top edge (REC, Reload Slides, Swap Displays, Stop) and the REC dot. tap does all the presenting, recording and tunnelling; the app only opens windows, forwards answers, and edits text.
 
-**Tech Stack:** Swift 6.3 compiler in Swift 5 language mode, AppKit (`NSWindow` borderless at a level above the menu bar, `NSPopover`, `NSWindow.beginSheet`, `NSTrackingArea`, `NSEvent.addLocalMonitorForEvents`), WebKit (`WKWebView`, `WKPreferences.isElementFullscreenEnabled`, `WKHTTPCookieStore`), IOKit (`IOPMAssertionCreateWithName`), CoreGraphics (`CGWindowListCopyWindowInfo` in tests, `CGDisplayIsBuiltin`), XCTest and XCUITest, XcodeGen, the bundled `tap` (`tap present --app [--no-record] [--presenter-password x] <deck>`).
+**Tech Stack:** Swift 6.3 compiler in Swift 5 language mode, AppKit (`NSWindow.toggleFullScreen` with `.fullScreenPrimary`, the full screen delegate notifications, `NSPopover`, `NSWindow.beginSheet`, `NSTrackingArea`, `NSEvent.addLocalMonitorForEvents`), WebKit (`WKWebView`, `WKPreferences.isElementFullscreenEnabled`, `WKHTTPCookieStore`), IOKit (`IOPMAssertionCreateWithName`), CoreGraphics (`CGWindowListCopyWindowInfo` in tests, `CGDisplayIsBuiltin`), XCTest and XCUITest, XcodeGen, the bundled `tap` (`tap present --app [--no-record] [--presenter-password x] [--port n] <deck>`).
+
+**Depends on:** tap's keep-recording wait, pull request 35 (`fix/app-keep-recording-wait`), **merged to `main` as a569901 on 2026-09-25**: `appKeepRecordingTimeout` is 60 seconds, so `tap present --app` waits for the keep-recording answer while the app's stdin is open, up to 60 seconds, and a closed stdin still resolves at once. This plan is written against that behaviour; the D4 branch is cut from a `main` at or after a569901. The roadmap's D4 row names the dependency.
 
 **Spec:** `docs/superpowers/specs/2026-09-22-tap-desktop-design.md` (milestone 4; the sections "Processes", "The protocol between the app and tap", "Presenting", "Menus and accessibility" and "Testing"), `docs/superpowers/specs/2026-09-22-tap-desktop-prerequisites-design.md` part 6 as checked against `internal/cli` on `main` (see "P6 as built" below; the code wins), the D4 outline and "Decisions for the desktop app" in `docs/superpowers/plans/2026-09-22-tap-desktop-roadmap.md`, and the feature files in `docs/superpowers/specs/tap-desktop-features/` (`05-presenting.feature` whole, plus "Presenting shortcuts" from `12-menus-and-shortcuts.feature`; `13-performance.feature` has no D4 scenario). The mockups are the "Tap Desktop Mockups" canvas (Present, Consent, FocusHint, PresenterWindow, PresenterIdle, Rehearse, PhoneRemote, KeepRecording). Where the mockups and the spec differ, the spec wins.
 
 **Branch:** `feat/desktop-presenting`, branched from `main` after D3 (`feat/desktop-sidebar`, pull request 31) has merged, in a worktree at `/Users/codemonkey/projects/tap-d4`. If D3 has not merged when this plan starts, branch from `feat/desktop-sidebar` at d46a213 or later and rebase onto `main` once it has. One pull request. The starting code is D3's `desktop/`: `TapDesktopCore` (`TapProtocol`, `TapProcess`, `TapSession`, `TapClient`, `RestartPolicy`, `TapLog`), `DeckSessionController`, `DeckWindowController`, `MainMenu`, `AppEnvironment`, `PreviewViewController`, `WeakScriptMessageHandler`, `DocumentBarView`, `TapLogWindowController`, `HostedTestCase`, `Fixtures`, `FakeTapScripts`, `FakeTap`, `TestScripts`, `UITestCase`.
 
-**Prerequisites on `main`, checked 2026-09-24 (`internal/cli`, `internal/server`, `frontend/src`):** `tap present --app` (`present.go`, P6) with the ready line, the events and the commands listed below; the audience page takes its start slide from the URL hash (`frontend/src/lib/stores/presentation.ts`, `#<1-based slide>`), and so does the presenter page (`keyboard.ts` copies the hash when the S key opens `/presenter`); the hub relays a client's `slide` messages only when its WebSocket upgrade carried the presenter cookie (`internal/server/websocket.go`, `checkPresenterAuth`), and emits a `slide` event on every relay (`dev.go`, `hub.SetOnSlideChange`); the presenter route accepts the cookie or `?key=` (`routes.go`, `handlePresenter`). No tap prerequisite task is needed.
+**Prerequisites on `main`, checked 2026-09-24 (`internal/cli`, `internal/server`, `frontend/src`):** `tap present --app` (`present.go`, P6) with the ready line, the events and the commands listed below; `--port <n>` (`present.go` line 101), which in app mode binds exactly that port and fails with an `error` event (code `failed`, message "port <n> is already in use (another tap present may be running); pass --port <other>") and a non-zero exit when the port is taken (`port.go`, `startOnAvailablePort` with `explicit`), while no `--port` binds a free port that the ready line reports (`dev.go` line 186); the audience page takes its start slide from the URL hash (`frontend/src/lib/stores/presentation.ts`, `#<1-based slide>`), and so does the presenter page (`keyboard.ts` copies the hash when the S key opens `/presenter`); the hub relays a client's `slide` messages only when its WebSocket upgrade carried the presenter cookie (`internal/server/websocket.go`, `checkPresenterAuth`), and emits a `slide` event on every relay (`dev.go`, `hub.SetOnSlideChange`); the presenter route accepts the cookie or `?key=` and redirects without the key, which keeps the URL fragment (`routes.go`, `handlePresenter`, line 137); the page's key handler listens on `window` (`keyboard.ts` line 323). The one tap prerequisite is the keep-recording wait named under "Depends on".
 
 ## P6 as built, checked against `main` (the code wins)
 
@@ -24,7 +26,7 @@ The prerequisites document (part 6) and the code differ in these places. Every t
 | `--tunnel` for `tap present` | "the app passes them as `--presenter-password` and `--tunnel`" (05, Advanced remote options) | `present.go` has `--presenter-password`, `--no-record`, `--port`, `--lan`, `--allow-code` and `--app`, and **no `--tunnel`**. Only `tap dev` has `--tunnel`. The app starts the tunnel with the stdin command `{"type":"tunnel","start":true}` after the ready line (`app_session.go`, `tunnel(start)`). |
 | Question payloads | `question` has `id`, `kind`, `payload` | `record-consent` carries `{"settingsPath": "..."}` (`app_questions.go`, `recordConsentPayload`); `keep-recording` carries `{"directory": "...", "segments": n}` (`app_session.go`, `keepRecordingPayload`); `approval` carries the approval request (D5). |
 | Answer values | `{"type": "answer", "id", "value": true}` | `value` must be the JSON literal `true` or `false`; anything else is an `invalid_answer` error event, an unknown id is `unknown_question` (`app_questions.go`, `answer`). |
-| The keep-recording question | "asks `keep-recording` first when a run has a recording" | Only when the run recorded and left slide 1 (`present.Started() && present.LeftFirstSlide()`), and tap waits **3 seconds** for the answer (`appKeepRecordingTimeout`), then keeps the recording and exits. Silence keeps. Closing stdin also keeps, with no question. See open question 1. |
+| The keep-recording question | "asks `keep-recording` first when a run has a recording" | Only when the run recorded and left slide 1 (`present.Started() && present.LeftFirstSlide()`). Since pull request 35 (a569901) tap waits **while the app's stdin stays open, up to 60 seconds** (`appKeepRecordingTimeout`), then keeps the recording and exits. Silence past the ceiling keeps. Closing stdin also keeps, with no question. The app's quit deadline (Task 4, `quitTimeoutWithRecording`) is longer than the ceiling, and a tap that keeps and exits before an answer still ends the sheet as Keep (Task 10). |
 | Recording events | `state` is `recording`, `paused`, `stopped`; `segment`, `elapsed`, `disk` | As documented. `elapsed` is the current segment's whole seconds; an event goes out only when the state, segment or disk changes, plus one at start, so the app counts seconds up itself between events (`app_recording.go`). `disk` is `ok`, `low` or `full`. A blocked recording (no Screen Recording permission, for example) is an `error` event with code `recording_blocked`, and the state stays `stopped`. |
 | Tunnel events | `state`, `url`, `qr` (PNG, base64) | `state` is `starting`, then `running` with `url` and `qr` (a 512 px PNG), or `stopped`. No cloudflared is an `error` event with code `tunnel_unavailable` and the install hint as the message; a failed start is `tunnel_failed` (`app_session.go`, `tunnel`). |
 | The `slide` event | `slide`, `step` | `slide` is 1-based (the hub's index plus one), `step` as the hub has it (`app_session.go`, `slideReporter`). It fires only for a relayed slide message, which needs the sending page to hold the presenter cookie. |
@@ -37,15 +39,17 @@ The prerequisites document (part 6) and the code differ in these places. Every t
 ## Global Constraints
 
 - Everything in D2's and D3's Global Constraints still holds: macOS 14 or later, AppKit core, ad-hoc signing, the bundled `tap`, P6's protocol exactly as built, spelled-out identifiers, present-tense comments, no em dashes anywhere (`--`, a comma or a new sentence instead), `make frontend` before the first Xcode build, never modify the prototype repository.
-- **The app never injects script into a page.** No `evaluateJavaScript` or `callAsyncJavaScript` in production code. `PreviewViewController.pageText` and `pageValue` stay test-only, and this plan adds one more test-only surface, `PresentationPageController.pageText()`, documented the same way. The app drives a talk's pages through the URL hash they load with and through tap's hub; it learns about them through the `tapReady` handler and tap's stdout events.
-- **Sheets, never modal alerts.** Every question tap asks (`record-consent`, `keep-recording`) and the Focus hint are sheets on the deck window (`NSWindow.beginSheet`), never `NSAlert.runModal` and never app-modal. A refused action does nothing or beeps.
-- **No production code steals focus, except where presenting must.** The three places, each in answer to the person's own click in this app: `PresentationController.showWindows` orders the audience and presenter windows front (`orderFrontRegardless`, and `makeKeyAndOrderFront` on the window the speaker's keys go to), because covering the projector is what Play means; `PresentationController.toggleFrontWindow` and `bringPresenterWindowForward` do the same for Option-Tab and the S key; and `DeckWindowController.presentQuestion` brings the deck window forward while a sheet is on it, because the sheet is the one thing the person must answer. No `NSApp.activate` anywhere. (D2 ledger, Task 21.)
-- **The sleep assertion is held for exactly the talk.** `SleepAssertion.acquire` runs once tap present is ready and the windows exist; `release` runs in `takeDownWindows`, which every ending goes through: Stop, a failed start, tap present giving up, the deck window closing (`DeckSessionController.stop`) and the app quitting (`AppDelegate.applicationWillTerminate`). Each has a test that reaches it.
-- **`tap present` is a second process.** The deck's `tap dev --app` keeps running the preview and the thumbnails through the whole talk; nothing in this plan stops, restarts or talks to it differently. The present process gets its own `TapSession`, its own `TapLog` (listed in Window > Tap Log as "<deck>, talk") and its own restart policy.
+- **The app never injects script into a page.** No `evaluateJavaScript` or `callAsyncJavaScript` in production code. `PreviewViewController.pageText` and `pageValue` stay test-only, and this plan adds two more test-only surfaces, `PresentationPageController.pageText()` and `pressKey(_:)`, documented the same way. The app drives a talk's pages through the URL they load with (the start slide in the hash, the presenter key in the query) and through tap's hub; it learns about them through the `tapReady` handler and tap's stdout events.
+- **Sheets, never modal alerts.** Every question tap asks (`record-consent`, `keep-recording`) and the Focus hint are sheets on the deck window (`NSWindow.beginSheet`), never `NSAlert.runModal` and never app-modal. A refused action does nothing or beeps. Escape on a sheet never chooses a destructive answer: the keep-recording sheet's Delete has no key equivalent (C2 in the review).
+- **No production code steals focus, except where presenting must.** This is the one list; the final check's grep is checked against it. Each entry answers the person's own click in this app. (1) `PresentationWindow.present(on:)` orders the window front and enters full screen, and `PresentationController.showWindows` makes the front window key, because taking the projector is what Play means. (2) `PresentationController.toggleFrontWindow` (Option-Tab on one display), `bringPresenterWindowForward` (the S key) and `returnToTalk` (after a sheet) make a talk window key, which macOS answers by switching to its Space. (3) `PresentationController.screensChanged` makes the presenter window key when the projector goes, so the speaker is not left looking at the audience page. (4) `DeckWindowController.showQuestionSheet` brings the deck window forward while a sheet is on it, because the sheet is the one thing the person must answer. (5) `RemotePanel.show` orders the phone remote panel front over the presenter window. (6) `DeckWindowController.revealInFinder` activates Finder on a kept run, and `openFocusSettings` opens System Settings, both on a button the person pressed. No `NSApp.activate` anywhere. (D2 ledger, Task 21.)
+- **System full screen, and nothing left in it.** Each talk window enters its own macOS full screen Space with `toggleFullScreen` (`.fullScreenPrimary`), never a borderless window at a level above the menu bar: Cmd-Tab to a demo app, the menu bar at the top edge and the page's F key (WebKit's element full screen) then work as they do in a browser. Every way a talk ends goes through `PresentationController.takeDownWindows`, which asks each window to leave full screen and close (`PresentationWindow.takeDown`, which closes anyway after `exitTimeout` if the exit never completes) and releases the sleep assertion at once: Stop, Escape, a failed start, tap present giving up, a taken port, the deck window closing (`DeckSessionController.stop`) and the app quitting (`AppDelegate.applicationWillTerminate`). Each has a test that reaches it and asserts that no `PresentationWindow` is left with `.fullScreen` in its `styleMask`, and every task's mutation list runs the mutations that could leave a window in full screen or the assertion held first.
+- **A stopping talk outlives its deck window.** `DeckSessionController.stop` hands a talk that is still stopping to `AppEnvironment.endingTalks`, and the talk removes itself when its process has exited or the talk has failed. Closing a deck mid-talk therefore still quits tap present with the app's deadline and escalation, still counts the talk out, and still frees Play in every other deck (C1 in the review).
+- **`tap present` is a second process, on the deck's own port.** The deck's `tap dev --app` keeps running the preview and the thumbnails through the whole talk; nothing in this plan stops, restarts or talks to it differently. The present process gets its own `TapSession`, its own `TapLog` (listed in Window > Tap Log as "<deck>, talk") and its own restart policy. The app remembers one port per deck (`DeckPortStore`) and passes it with `--port`, so the talk pages keep one origin across launches and the presenter layout and notes size, which the page keeps in `localStorage`, survive a relaunch. A taken port falls back to a fresh one; that talk's presenter layout starts from the defaults, with a line in the talk's log and nothing on screen.
 - **The edited flag is derived from content.** `refreshEditedState` stays the only caller of `updateChangeCount`. Play and Rehearse save through `NSDocument.save(to:ofType:for:completionHandler:)`, which already reports back to the session controller.
 - `weak self` in every closure that outlives a call, no `unowned`. Never put work with side effects inside `completion?(...)`: an optional call skips its arguments when the closure is nil (D3 ledger lesson). Every completion in this plan is non-optional or the work sits outside the call.
-- **XCTest rules.** No `await` inside an `XCTAssert` autoclosure: hoist the value into a `let`. No test depends on a key window: tests drive actions and seams directly (`windowController.playClicked(modifiers:)`, `presentation.handleKey(_:)`, `toolbar.pointerReachedTopEdge()`), set the first responder themselves, and never read `NSApp.keyWindow`. A window check filters on `isVisible` or reads the window server (`CGWindowListCopyWindowInfo` with `kCGWindowIsOnscreen`). Hosted tests run locally one at a time (`make -C desktop test ONLY=TapTests/<Class>/<test>`), the bundle runs on CI. `make -C desktop uitest` is the person's; agents compile it with `build-for-testing`. `make -C desktop bench` gains nothing in D4 (no 13-performance scenario is D4's); the person's bench run is unchanged.
-- **One display is what the tests have.** CI and most local runs have a single screen. Every hosted test either uses that one screen as both displays, or hands the controller two "screens" that are the left and right halves of the real screen (`PresentingTestCase.halfScreens()`), so the arrangement, swap and memory logic runs against real windows the window server can see. A real second display, the WebKit element full screen the page's F key asks for, real screen recording and a real Cloudflare tunnel are the person's manual pass (Task 14's README list) and the UI tests; no automated test records the person's screen or starts a tunnel.
+- **XCTest rules.** No `await` inside an `XCTAssert` autoclosure: hoist the value into a `let`. No test depends on a key window: tests drive actions and seams directly (`windowController.playButtonClicked(modifiers:)`, `presentation.handleKey(_:)`, `container.mouseMoved(with:)`), set the first responder themselves, and never read `NSApp.keyWindow`. A window check reads observable state: `PresentationWindow.fullScreenState`, `styleMask.contains(.fullScreen)`, `isVisible`, `isClosed`, or the window server (`CGWindowListCopyWindowInfo` with `kCGWindowIsOnscreen`, which lists the windows of the active Space only, so a Space switch is visible to it). Hosted tests run locally one at a time (`make -C desktop test ONLY=TapTests/<Class>/<test>`), the bundle runs on CI; the one exception is Task 4's whole-class run, which exists to catch a talk count that leaks between tests. **Hosted run budget:** at most four `make -C desktop test` runs per task are required, and each task's run step marks which; the rest are optional and are skipped when the branch is behind. Never run a hosted test while the person's `make -C desktop uitest` or `bench` runs: every presenting test takes the screen.
+- **Every build step goes through `make`.** `make -C desktop test`, `uitest`, `bench` and the new `test-build` (Task 14) all depend on `project`, which runs xcodegen, because `Tap.xcodeproj` is git-ignored and a stale project silently lacks new files (D3's Critical came from exactly this). No task runs `xcodebuild` by hand. `make -C desktop uitest` and `bench` are the person's runs; agents compile the UI tests with `make -C desktop test-build`. `make -C desktop bench` gains nothing in D4 (no 13-performance scenario is D4's).
+- **One display is what the tests have.** CI and most local runs have a single screen. Every hosted test either uses that one screen as both displays, or hands the controller two "screens" that are the left and right halves of the real screen (`PresentingTestCase.halfScreens()`). With system full screen a window fills the whole display it is on whatever frame it was given, so on one display the two windows of a "two display" test become two full screen Spaces of the one display, exactly as a one-display talk does. The tests therefore assert what the controller asked for (`PresentationWindow.targetFrame`) and what the window server reports (`fullScreenState`, `styleMask`, the active Space's windows), never a window's frame. What only the person can check, on a Mac with a projector: the audience Space on the projector and the presenter Space on the laptop, Swap Displays moving them across displays, the projector unplugged and plugged back in, the page's F key, Cmd-Tab to a demo app and back, "Displays have separate Spaces" turned off, real screen recording and a real Cloudflare tunnel (Task 14's README list and the UI tests). No automated test records the person's screen or starts a tunnel. If the CI runner cannot enter full screen at all (the enter notification never arrives), the tests in Task 3 fail on `fullScreenState`, and the implementer records that in the ledger for the person rather than weakening the assertion.
 - **Mutation testing is how this branch finds tests that cannot fail.** Every task lists the mutations its review runs, the ones that can leave a talk stuck, a window covering a screen, or the sleep assertion held first. A test that survives its mutation is not done.
 - Every scenario this plan claims has a test named `test` plus the scenario name in UpperCamelCase: "Start presenting with two displays" is `testStartPresentingWithTwoDisplays`. The claims go into `desktop/scenarios.txt` as `D4 | <file> | <scenario>` rows, and `make -C desktop check-scenarios` must pass.
 - The fixture for presenting tests is D3's `desktop/TapTests/Fixtures/ops.md`: seven titled slides (One to Seven), no drivers, so `tap present --app` asks no live code approval question. `seven-slides.md` declares a `sqlite` driver and would, which is D5's business.
@@ -54,11 +58,11 @@ The prerequisites document (part 6) and the code differ in these places. Every t
 
 Five conditions the spec implies that no scenario names, most likely to bite first. Each has its test pinned to the task that owns the code.
 
-1. **Play while the deck has a disk conflict, or no file.** The save is refused (`DeckDocument.save(to:...)` answers `.userCancelled` during a conflict) and a deleted deck has no path for `tap present` to read. The talk must not start, no window may open, and the deck window says why. Task 13, `testATalkThatCannotBeSavedDoesNotStart`; Task 13, `testPlayIsDisabledWhileADeckIsPresentingOrHasNoFile`.
-2. **The deck window closes mid-talk.** The windows must go, tap present must exit and the sleep assertion must be released, with nothing left covering a screen. Task 4, `testTheSleepAssertionIsReleasedWhenTheDeckWindowCloses`.
-3. **The projector is unplugged mid-talk.** The audience window's screen is gone; it must land on the remaining screen behind the presenter window rather than stay off screen, and Swap must keep working. Task 5, `testTheAudienceWindowFallsBackWhenTheProjectorGoes`.
-4. **Stop before tap present is ready.** The person clicks Play and Stop at once, or tap is slow. No window may open later, the process must be quit, and the state must return to idle. Task 4, `testStopWhileStartingOpensNoWindow`.
-5. **tap present dies mid-talk.** The audience must not be left on a dead page: the app restarts tap (D2's policy), reloads both pages at the last slide, keeps the assertion, and if tap keeps dying, ends the talk and says so. Task 13, `testATalkSurvivesATapPresentRestart` and `testATalkEndsWhenTapPresentKeepsDying`.
+1. **Play while the deck has a disk conflict, or no file.** The save is refused (`DeckDocument.save(to:...)` answers `.userCancelled` during a conflict) and a deleted deck has no path for `tap present` to read. The talk must not start, no window may open, and the deck window says why. Task 13, `testATalkThatCannotBeSavedDoesNotStart`; Task 13, `testPlayIsDisabledWhileADeckHasNoFile` and `testPlayIsDisabledWhileAnotherDeckPresents`.
+2. **The deck window closes mid-talk.** The windows must leave full screen and close, tap present must exit within the app's deadline, the sleep assertion must be released, and the talk must be counted out so another deck can present. Task 4, `testClosingTheDeckMidTalkStillEndsTheProcessAndFreesPlay`.
+3. **The projector is unplugged mid-talk.** macOS moves the audience Space to the remaining display; the speaker must end up looking at the presenter window, the assertion must stay held, and plugging the projector back in must put the audience back on it. Task 5, `testTheAudienceWindowFallsBackWhenTheProjectorGoes`.
+4. **Stop while the presenter exchange is in flight.** The person clicks Play and Stop at once. `authorizePresenter` is awaiting; when it returns, no window may be created or enter full screen, the process must be quit, the assertion must not be held, and the state must return to idle. Task 4, `testStopWhileTheExchangeIsInFlightOpensNoWindow` (the exchange is a closure seam the test holds open).
+5. **tap present dies mid-talk.** The audience must not be left on a dead page: the app restarts tap (D2's policy), reloads both pages at the last slide, keeps the assertion, and if tap keeps dying, ends the talk with nothing left in full screen and says so. Task 13, `testATalkSurvivesATapPresentRestart` and `testATalkEndsWhenTapPresentKeepsDying`.
 
 ## Scenarios this plan claims
 
@@ -92,14 +96,15 @@ The whole plan hangs on this state machine, in `PresentationController` (Task 4)
 
 | Step | What happens | Where |
 |---|---|---|
-| Play or Rehearse | `state = .starting`. The buffer is saved to the deck file if it differs from it (`DeckSessionController.saveForPresenting`), because `tap present` reads the file. A refused save (disk conflict) or a deck with no file ends here as `.failed(message)` with a bar on the deck window; no window opens. | Task 4, Task 13 |
-| Start | A new `TapSession(deckURL:configuration:command: .present(record:presenterPassword:))` starts `tap present --app [--no-record] [--presenter-password x] <deck>` with the login shell environment. Its `TapLog` is "<deck>, talk". The deck's `tap dev` session is untouched. | Task 1, Task 4 |
-| Ready | The ready line arrives (D2's 20 s `readyTimeout` still kills a silent tap). The app trades `ready.presenter` for the hub's presenter cookie (`TapClient.authorizePresenter`), sets that cookie into the shared `WKWebsiteDataStore`, acquires the sleep assertion, creates the windows on the arranged screens and loads `/?launch=<code>#<startSlide>` in the audience window and `/presenter#<startSlide>` in the presenter window (Rehearse: the presenter window only). If wanted, it sends `{"type":"tunnel","start":true}`. | Task 4, Task 11 |
-| Shown | The windows are ordered front when the first page reports `tapReady`, or after 3 s if no page ever does (a fake tap with no server, a page that cannot load), and only once no question is pending. `state = .presenting`. Until then, a `record-consent` question (which arrives within milliseconds of ready on the first talk) shows its sheet on the deck window with nothing covering it. | Task 4, Task 9 |
-| Presenting | tap's `slide` events keep `lastSlide`; `recording` events keep the toolbar's REC state; `tunnel` events drive the phone remote panel; `question` events become sheets (the presentation windows on the deck window's screen are hidden while a sheet is up, and come back after the answer). Typing in the editor goes to `tap dev` only; the toolbar counts the edits `tap present` has not read. Reload Slides saves the file and sends `{"type":"reload"}`. | Tasks 8, 9, 10, 11 |
-| tap present exits unexpectedly | D2's `RestartPolicy`: `.restarting` keeps the windows (the audience keeps the last render), the next ready reloads both pages at `lastSlide` on the new port, the assertion stays held. At the third exit in 30 s the session is `.failed`: the windows close, the assertion is released, `state = .failed(message)` and the deck window shows "The talk stopped" with Show Tap Log. tap's recording, if any, is finished by tap's own exit path. | Task 13 |
-| Stop | Escape in the audience window, Present > Stop, the toolbar's Stop, or the deck window closing: `state = .stopping`, the windows close and the assertion is released at once, then `session.quit()` sends `{"type":"quit"}`. tap may answer with a `keep-recording` question (sheet on the deck window; tap waits 3 s, then keeps). When the process exits, `state = .idle` and the editor cursor moves to `lastSlide`. A tap that ignores `quit` for 15 s (2 s if it never got ready) gets its stdin closed, then SIGTERM, then SIGKILL (D2's `TapProcess.stop`). | Task 4, Task 10 |
-| App quit | `AppDelegate.applicationWillTerminate` stops every deck's presentation: windows down, assertion released, `quit` sent. The app does not wait for keep-recording on quit; tap keeps the recording (its rule for a closed stdin). | Task 4 |
+| Play or Rehearse | `state = .starting`, and the talk is counted in `AppEnvironment.presentingCount` from here, so no other deck can start while the save runs. The buffer is saved to the deck file if it differs from it (`DeckSessionController.saveForPresenting`), because `tap present` reads the file. A refused save (disk conflict) or a deck with no file ends here as `.failed(message)` with a bar on the deck window; no window opens and the cursor does not move. | Task 4, Task 12, Task 13 |
+| Start | A new `TapSession(deckURL:configuration:command: .present(record:presenterPassword:port:))` starts `tap present --app [--no-record] [--presenter-password x] [--port n] <deck>` with the login shell environment, `n` being the port `DeckPortStore` remembers for this deck, or no `--port` for the deck's first talk. Its `TapLog` is "<deck>, talk"; the log line hides the password. The deck's `tap dev` session is untouched. | Task 1, Task 2, Task 4 |
+| Port taken | tap reports `{"type":"error","code":"failed","message":"port n is already in use ..."}` and exits. The controller stops that session before D2's policy can restart it with the same port, logs "port n is taken; this talk runs on a new port, and the presenter layout starts fresh", and starts again with no `--port`. The person sees the presenter view's default layout and notes size for that one talk, and nothing else; the next talk remembers the new port. | Task 4 |
+| Ready | The ready line arrives (D2's 20 s `readyTimeout` still kills a silent tap); the reported port is remembered for the deck. The app trades `ready.presenter` for the hub's presenter cookie through a closure seam (`authorizePresenter`), sets that cookie into the shared `WKWebsiteDataStore` for the audience page, and, if the talk is still starting, acquires the sleep assertion, creates the windows off screen and loads `/?launch=<code>#<startSlide>` in the audience window and `/presenter?key=<presenter secret>#<startSlide>` in the presenter window (the server sets the cookie and redirects, keeping the hash, so the presenter page never depends on the injected cookie). Rehearse: the presenter window only. If wanted, it sends `{"type":"tunnel","start":true}`. | Task 4, Task 11 |
+| Shown | The windows go to full screen when the first page reports `tapReady`, or after 3 s if no page ever does (a fake tap with no server, a page that cannot load), and only once no question is pending: each window is ordered front on its display and enters its own Space, one window at a time (AppKit runs one transition at a time), the front window last so its Space is the active one and it is key. `state = .presenting` as the first window is asked to enter; `windowsAreSettled` becomes true once every window is in full screen (or has failed to enter and stays a plain window over the screen, with a log line). Until then, a `record-consent` question (which arrives within milliseconds of ready on the first talk) shows its sheet on the deck window with nothing covering it. After the consent answer tap's startup ends with a `reload` broadcast, so both pages reload once just as they appear; that flash is tap's, not a bug. | Task 3, Task 4, Task 9 |
+| Presenting | tap's `slide` events keep `lastSlide`; `recording` events keep the toolbar's REC state; `tunnel` events drive the phone remote panel; `question` events queue up and become sheets one at a time (the deck window comes forward, which switches to its Space; after the answer the front talk window is made key, which switches back). Typing in the editor goes to `tap dev` only; the toolbar counts the edits `tap present` has not read. Reload Slides saves the file and sends `{"type":"reload"}`. | Tasks 8, 9, 10, 11 |
+| tap present exits unexpectedly | D2's `RestartPolicy`: `.restarting` keeps the windows in full screen (the audience keeps the last render), the next ready reloads both pages at `lastSlide` on the new port, the assertion stays held. At the third exit in 30 s the session is `.failed`: the windows leave full screen and close, the assertion is released, `state = .failed(message)`, the talk is counted out and the deck window shows "The talk stopped" with Show Tap Log. tap's recording, if any, is finished by tap's own exit path. | Task 13 |
+| Stop | Escape in the audience window, Present > Stop, the toolbar's Stop, or the deck window closing: `state = .stopping`, the windows leave full screen and close (each closes anyway after `PresentationWindow.exitTimeout` if its exit never completes) and the assertion is released at once, then `session.quit()` sends `{"type":"quit"}`. tap may answer with a `keep-recording` question (a sheet on the deck window; tap waits while stdin is open, up to 60 s, then keeps). When the process exits, `state = .idle`, the talk is counted out and the editor cursor moves to `lastSlide`. A tap that ignores `quit` gets its stdin closed, then SIGTERM, then SIGKILL (D2's `TapProcess.stop`) after 15 s (2 s if it never got ready); a keep-recording question extends that deadline to 75 s, past tap's 60 s ceiling. A deck window that closes during any of this hands the talk to `AppEnvironment.endingTalks`, which keeps it alive until the process is gone. | Task 4, Task 10 |
+| App quit | `AppDelegate.applicationWillTerminate` stops every deck's presentation: windows down, assertion released, `quit` sent. The app does not wait for keep-recording on quit; tap keeps the recording (its rule for a closed stdin, unchanged by the wait). | Task 4 |
 | Play or Rehearse while tap dev is down | Allowed. The present process is independent; the preview overlay keeps showing tap dev's state. Play while a talk is running (this deck or another) is disabled; Stop, Reload Slides, Swap Displays and Phone Remote are enabled only while this deck presents. | Task 7, Task 12, Task 13 |
 
 ## File structure
@@ -107,32 +112,33 @@ The whole plan hangs on this state machine, in `PresentationController` (Task 4)
 | Path | Responsibility |
 |---|---|
 | `desktop/TapDesktopCore/Sources/TapDesktopCore/TapProtocol.swift` | Modify: `QuestionPayload`, `RecordingEvent`, `TunnelEvent`; `TapEvent.question(id:kind:payload:)`, `.recording`, `.tunnel`, `.slide`; `TapCommand.answer`, `.tunnel`, `.recording`; `RecordingAction` |
-| `.../TapDesktopCore/TapSession.swift` | Modify: `Command` (`.dev`, `.present`), `quit(timeout:)`, the log title and line for a talk |
-| `.../TapDesktopCore/TapClient.swift` | Modify: `audienceLaunchURL(slide:)`, `presenterURL(slide:)` |
-| `.../TapDesktopCore/Presenting.swift` | `ScreenInfo`, `DisplayAssignmentStore`, `DisplayArrangement`, `PresentationMode`, `PresentationOptions`, `RecordingStatus`, `FocusHintState` |
+| `.../TapDesktopCore/TapSession.swift` | Modify: `Command` (`.dev`, `.present(record:presenterPassword:port:)`), `quit(timeout:)`, `extendQuit(timeout:)`, the log title and line for a talk (the password hidden) |
+| `.../TapDesktopCore/TapClient.swift` | Modify: `audienceLaunchURL(slide:)`, `presenterURL(slide:)` (with the presenter key) |
+| `.../TapDesktopCore/Presenting.swift` | `ScreenInfo`, `DisplayAssignmentStore`, `DisplayArrangement`, `DeckPortStore`, `PresentationMode`, `PresentationOptions`, `PresentationSettings`, `PresentationSettingsStore`, `RecordingStatus`, `FocusHintState` |
 | `desktop/Tap/Presenting/SleepAssertion.swift` | The IOKit display sleep assertion, acquired and released by the controller |
-| `desktop/Tap/Presenting/PresentationPageController.swift` | One of tap's pages in a `WKWebView`: full screen enabled, persistent store, the `tapReady` handler, navigation policy, the S key's popup |
-| `desktop/Tap/Presenting/PresentationWindow.swift` | A borderless window that covers one screen, above the menu bar; the presenter one also holds the toolbar and the REC dot |
-| `desktop/Tap/Presenting/PresentationController.swift` | The talk: the present session, the windows, the arrangement, the assertion, `lastSlide`, questions, recording, the tunnel, the key monitor, the edits counter |
-| `desktop/Tap/Presenting/PresentPopoverController.swift` | The Present popover: display arrangement, Swap Displays, start from, record, phone remote, Advanced, Rehearse, Start Presenting |
+| `desktop/Tap/Presenting/PresentationPageController.swift` | One of tap's pages in a `WKWebView`: element full screen enabled, persistent store, the `tapReady` handler, navigation policy, the S key's popup, the test-only `pageText()` and `pressKey(_:)` |
+| `desktop/Tap/Presenting/PresentationWindow.swift` | A window that enters its own system full screen Space on one display, with the windowed, entering, fullScreen and exiting states, `present(on:completion:)`, `takeDown()` and the exit deadline; the presenter one also holds the toolbar and the REC dot |
+| `desktop/Tap/Presenting/PresentationController.swift` | The talk: the present session, the deck's port and the fallback, the windows and their placement one at a time, the arrangement, the assertion, `lastSlide`, the question queue, recording, the tunnel, the key monitor, the edits counter, the talk count |
+| `desktop/Tap/Presenting/PresentPopoverController.swift` | The Present popover: display arrangement, Swap Displays, start from, record, phone remote, Advanced, Rehearse, Start Presenting; its controls are the last settings, saved to `PresentationSettingsStore` on every start |
 | `desktop/Tap/Presenting/DisplayArrangementView.swift` | The two labelled screen boxes the popover draws |
 | `desktop/Tap/Presenting/PresenterToolbar.swift` | REC, edits label, Reload Slides, Swap Displays, Stop; slides in at the top edge; the REC dot |
 | `desktop/Tap/Presenting/QuestionSheet.swift` | The sheet for consent, keep-recording and the Focus hint |
 | `desktop/Tap/Presenting/RemotePanel.swift` | The phone remote panel with tap's QR code and URL |
 | `desktop/Tap/Preview/WeakScriptMessageHandler.swift` | Unchanged; shared with the presentation pages |
-| `desktop/Tap/Windows/DeckWindowController.swift` | Modify: the Play toolbar item, `play`, `rehearse`, `stopPresenting`, `reloadSlides`, `swapDisplays`, `togglePhoneRemote`, the sheets, validation, the failure bar |
-| `desktop/Tap/Documents/DeckSessionController.swift` | Modify: `presentation`, `saveForPresenting`, the stop path, the edits counter hook |
+| `desktop/Tap/Windows/DeckWindowController.swift` | Modify: the Play toolbar item (opens the popover), `play` (Cmd+Option+P starts with the last settings), `playWithOptions`, `rehearse`, `stopPresenting`, `reloadSlides`, `swapDisplays`, `togglePhoneRemote`, the sheets, validation, the failure bar, the remote panel closed with the window |
+| `desktop/Tap/Documents/DeckSessionController.swift` | Modify: `presentation`, `saveForPresenting`, the stop path (hands a stopping talk to `AppEnvironment.endingTalks`), the edits counter hook |
 | `desktop/Tap/Documents/DocumentBar.swift` | Modify: the `talkFailed` bar kind |
 | `desktop/Tap/App/MainMenu.swift` | Modify: the Present menu |
 | `desktop/Tap/App/AppDelegate.swift` | Modify: `deck(owning:)` for presentation windows, `applicationWillTerminate`, `stopAllPresentations` |
-| `desktop/Tap/App/AppEnvironment.swift` | Modify: `displayAssignments`, `presentExecutableURL`, `presentSessionConfiguration()`, `focusHint`, `presentingCount`, `isPresenting`, `updatesMayInterrupt` |
+| `desktop/Tap/App/AppEnvironment.swift` | Modify: `displayAssignments`, `deckPorts`, `presentationSettings`, `presentExecutableURL`, `presentSessionConfiguration()`, `endingTalks`, `focusHint`, `presentingCount`, `isPresenting`, `updatesMayInterrupt`, `-TapConfigHome` |
 | `desktop/Tap/TapLog/TapLogWindowController.swift` | Modify: lists the talk's log beside the deck's |
-| `desktop/TapTests/Support/PresentingTestCase.swift` | The consent file, the half screens, the window server order, start and stop helpers, the sleep assertion check |
+| `desktop/TapTests/Support/PresentingTestCase.swift` | The consent file, the half screens, the window server order, start and stop helpers, the sleep assertion check, the full screen check |
 | `desktop/TapTests/Support/FakeTapScripts.swift` | Modify: `presenting(...)`, a scripted `tap present --app` |
-| `desktop/TapTests/Support/HostedTestCase.swift` | Modify: fresh `displayAssignments`, `focusHint`, `presentExecutableURL` per test |
+| `desktop/TapTests/Support/HostedTestCase.swift` | Modify: fresh `displayAssignments`, `deckPorts`, `presentationSettings`, `focusHint`, `presentExecutableURL` per test |
 | `desktop/TapTests/*.swift` | The hosted tests: `PresentingTests`, `PresentingDisplayTests`, `PresentPopoverTests`, `PresentMenuTests`, `PresenterToolbarTests`, `RecordingTests`, `KeepRecordingTests`, `PhoneRemoteTests`, `FocusHintTests`, `PresentingFailureTests` |
 | `desktop/TapUITests/PresentingUITests.swift` | Play through the popover, Escape stops; Rehearse by shortcut; local only |
 | `desktop/scenarios.txt`, `desktop/README.md` | Modify: the 19 D4 rows; the presenting tests and the manual pass |
+| `desktop/Makefile` | Modify: `test-build` and `bench-build`, the `build-for-testing` targets that depend on `project` |
 
 ---
 
@@ -146,7 +152,7 @@ The whole plan hangs on this state machine, in `PresentationController` (Task 4)
 
 **Interfaces:**
 - Consumes: D2's `TapEvent`, `TapCommand`, `TapReady`, `TapSession`, `TapProcess.send(_:)`, `TapProcess.stop(graceSeconds:)`, `RestartPolicy`, `FakeTap.ready(recordingTo:)`, `TestScripts.make(_:)`, `waitUntil`.
-- Produces: `QuestionPayload(deck:settingsPath:directory:segments:)`; `RecordingEvent(state:segment:elapsed:disk:)`; `TunnelEvent(state:url:qr:)`; `TapEvent.question(id:kind:payload:)`, `.recording(RecordingEvent)`, `.tunnel(TunnelEvent)`, `.slide(slide:step:)`; `RecordingAction` (`.newSegment`, `.stop`); `TapCommand.answer(id:value:)`, `.tunnel(start:)`, `.recording(action:)`; `TapSession.Command` (`.dev`, `.present(record:presenterPassword:)`) with `arguments(deck:)`, `logLine(deck:)`, `logTitle(deck:)`; `TapSession.init(deckURL:configuration:command:)`, `let command`, `quit(timeout:)`, `private(set) var quitRequested`; `TapClient.audienceLaunchURL(slide:)`, `presenterURL(slide:)`.
+- Produces: `QuestionPayload(deck:settingsPath:directory:segments:)`; `RecordingEvent(state:segment:elapsed:disk:)`; `TunnelEvent(state:url:qr:)`; `TapEvent.question(id:kind:payload:)`, `.recording(RecordingEvent)`, `.tunnel(TunnelEvent)`, `.slide(slide:step:)`; `RecordingAction` (`.newSegment`, `.stop`); `TapCommand.answer(id:value:)`, `.tunnel(start:)`, `.recording(action:)`; `TapSession.Command` (`.dev`, `.present(record:presenterPassword:port:)`) with `arguments(deck:)`, `logLine(deck:)`, `logTitle(deck:)`, `port`; `TapSession.init(deckURL:configuration:command:)`, `let command`, `quit(timeout:)`, `extendQuit(timeout:)`, `private(set) var quitRequested`; `TapClient.audienceLaunchURL(slide:)`, `presenterURL(slide:)`.
 
 - [ ] **Step 1: Write the failing protocol tests**
 
@@ -199,17 +205,20 @@ Add to `TapSessionTests.swift`:
         let record = try TestScripts.temporaryFolder().appendingPathComponent("record")
         let tap = TapSession(deckURL: deckURL, configuration: TapSession.Configuration(
             executableURL: try FakeTap.ready(recordingTo: record), environment: { ["PATH": "/usr/bin:/bin"] }),
-            command: .present(record: false, presenterPassword: "secret"))
-        XCTAssertEqual(tap.command.arguments(deck: deckURL), ["present", "--app", "--no-record", "--presenter-password", "secret", deckURL.path])
-        XCTAssertEqual(TapSession.Command.present(record: true, presenterPassword: nil).arguments(deck: deckURL), ["present", "--app", deckURL.path])
-        XCTAssertEqual(TapSession.Command.present(record: true, presenterPassword: "").arguments(deck: deckURL), ["present", "--app", deckURL.path], "an empty password is no password")
+            command: .present(record: false, presenterPassword: "secret", port: 4242))
+        XCTAssertEqual(tap.command.arguments(deck: deckURL), ["present", "--app", "--no-record", "--presenter-password", "secret", "--port", "4242", deckURL.path])
+        XCTAssertEqual(tap.command.port, 4242)
+        XCTAssertEqual(TapSession.Command.present(record: true, presenterPassword: nil, port: nil).arguments(deck: deckURL), ["present", "--app", deckURL.path])
+        XCTAssertEqual(TapSession.Command.present(record: true, presenterPassword: "", port: nil).arguments(deck: deckURL), ["present", "--app", deckURL.path], "an empty password is no password")
         XCTAssertEqual(TapSession.Command.dev.arguments(deck: deckURL), ["dev", "--app", deckURL.path])
+        XCTAssertNil(TapSession.Command.dev.port)
         XCTAssertEqual(tap.log.title, "talk, talk")
         tap.start()
         try await waitUntil { if case .running = tap.state { return true } else { return false } }
         let recorded = try String(contentsOf: record, encoding: .utf8)
-        XCTAssertTrue(recorded.contains("arguments: present --app --no-record --presenter-password secret \(deckURL.path)"))
-        XCTAssertTrue(tap.log.text.contains("tap present --app --no-record --presenter-password secret talk.md"))
+        XCTAssertTrue(recorded.contains("arguments: present --app --no-record --presenter-password secret --port 4242 \(deckURL.path)"))
+        XCTAssertTrue(tap.log.text.contains("tap present --app --no-record --presenter-password *** --port 4242 talk.md"), "the log hides the password")
+        XCTAssertFalse(tap.log.text.contains("secret"))
         tap.stop()
         try await waitUntil { tap.state == .stopped }
     }
@@ -250,10 +259,35 @@ Add to `TapSessionTests.swift`:
         XCTAssertTrue(tap.log.text.contains("did not quit within 0.3 seconds"))
     }
 
-    func testQuitBeforeTheProcessExistsStopsAtOnce() {
-        let tap = session(URL(fileURLWithPath: "/usr/bin/false"))
+    func testExtendQuitMovesTheDeadline() async throws {
+        let record = try TestScripts.temporaryFolder().appendingPathComponent("record")
+        let tap = session(try FakeTap.ready(recordingTo: record))
+        tap.start()
+        try await waitUntil { if case .running = tap.state { return true } else { return false } }
+        tap.quit(timeout: 0.3)
+        // A keep-recording question would move the deadline past tap's wait; here the test moves it.
+        tap.extendQuit(timeout: 1.5)
+        try await Task.sleep(nanoseconds: 800_000_000)
+        if case .running = tap.state {} else { XCTFail("the first deadline no longer applies") }
+        try await waitUntil(timeout: 5) { tap.state == .stopped }
+        XCTAssertTrue(tap.log.text.contains("did not quit within 1.5 seconds"))
+        XCTAssertFalse(tap.log.text.contains("within 0.3 seconds"))
+    }
+
+    func testQuitBeforeTheProcessExistsStopsAtOnce() async throws {
+        // The environment closure is still running when quit arrives: no process is ever launched.
+        let record = try TestScripts.temporaryFolder().appendingPathComponent("record")
+        let tap = TapSession(deckURL: deckURL, configuration: TapSession.Configuration(
+            executableURL: try FakeTap.ready(recordingTo: record),
+            environment: { try? await Task.sleep(nanoseconds: 500_000_000); return ["PATH": "/usr/bin:/bin"] }))
+        tap.start()
+        XCTAssertEqual(tap.state, .starting)
         tap.quit()
         XCTAssertEqual(tap.state, .stopped)
+        try await Task.sleep(nanoseconds: 800_000_000)
+        XCTAssertEqual(tap.state, .stopped, "the environment arriving after quit launches nothing")
+        XCTAssertNil(tap.processIdentifier)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: record.path), "the fake never ran")
     }
 ```
 
@@ -263,8 +297,10 @@ Add to `TapClientTests.swift` (it already has a `stubbedClient()` helper from D2
     func testTheTalkPagesCarryTheStartSlideInTheirHash() {
         let client = TapClient(ready: TapReady(port: 4242, token: "t", launch: "launch-code", presenter: "p"))
         XCTAssertEqual(client.audienceLaunchURL(slide: 3).absoluteString, "http://127.0.0.1:4242/?launch=launch-code#3")
-        XCTAssertEqual(client.presenterURL(slide: 3).absoluteString, "http://127.0.0.1:4242/presenter#3")
+        XCTAssertEqual(client.presenterURL(slide: 3).absoluteString, "http://127.0.0.1:4242/presenter?key=p#3",
+                       "the presenter page carries its key: the server sets the cookie and redirects, keeping the hash")
         XCTAssertEqual(client.audienceLaunchURL(slide: 1).fragment, "1")
+        XCTAssertEqual(client.presenterURL(slide: 1).fragment, "1")
     }
 ```
 
@@ -462,28 +498,42 @@ In `TapSession.swift`, add inside the class, after `State`:
         case dev
         /// `record` false adds `--no-record` (Rehearse, or Play with the
         /// record checkbox off); `presenterPassword` is the person's own,
-        /// otherwise tap generates one and prints it on the ready line.
-        case present(record: Bool, presenterPassword: String?)
+        /// otherwise tap generates one and prints it on the ready line;
+        /// `port` is the deck's remembered port, which tap binds exactly
+        /// (or fails), and nil lets tap pick a free one.
+        case present(record: Bool, presenterPassword: String?, port: Int?)
 
         public func arguments(deck: URL) -> [String] {
             switch self {
             case .dev:
                 return ["dev", "--app", deck.path]
-            case .present(let record, let presenterPassword):
+            case .present(let record, let presenterPassword, let port):
                 var arguments = ["present", "--app"]
                 if !record { arguments.append("--no-record") }
                 if let presenterPassword, !presenterPassword.isEmpty {
                     arguments += ["--presenter-password", presenterPassword]
                 }
+                if let port { arguments += ["--port", String(port)] }
                 arguments.append(deck.path)
                 return arguments
             }
         }
 
+        /// The port a present command asks for, nil for none and for dev.
+        public var port: Int? {
+            if case .present(_, _, let port) = self { return port }
+            return nil
+        }
+
         /// The log line for a start: the arguments with the deck's name in
-        /// place of its path.
+        /// place of its path and the presenter password hidden, since the
+        /// Tap Log is copied into bug reports.
         public func logLine(deck: URL) -> String {
-            "tap " + (arguments(deck: deck).dropLast() + [deck.lastPathComponent]).joined(separator: " ")
+            var shown = arguments(deck: deck).dropLast() + [deck.lastPathComponent]
+            if let index = shown.firstIndex(of: "--presenter-password"), shown.indices.contains(index + 1) {
+                shown[index + 1] = "***"
+            }
+            return "tap " + shown.joined(separator: " ")
         }
 
         /// The Tap Log title: the deck's name, and ", talk" for a talk.
@@ -537,6 +587,24 @@ In `start()`, add `quitRequested = false` and `quitWork?.cancel()` as the first 
             return
         }
         process.send(.quit)
+        let deadline = DispatchWorkItem { [weak self, weak process] in
+            MainActor.assumeIsolated {
+                guard let self, let process, self.process === process else { return }
+                self.log.append("tap did not quit within \(String(format: "%.1f", timeout)) seconds", source: .app)
+                process.stop()
+            }
+        }
+        quitWork = deadline
+        DispatchQueue.main.asyncAfter(deadline: .now() + timeout, execute: deadline)
+    }
+
+    /// Moves the quit deadline to `timeout` from now, for a tap that has
+    /// asked keep-recording and is waiting for a person: the deadline
+    /// must outlast tap's own wait for the answer. Nothing happens unless
+    /// a quit is in progress.
+    public func extendQuit(timeout: TimeInterval) {
+        guard quitRequested, let process else { return }
+        quitWork?.cancel()
         let deadline = DispatchWorkItem { [weak self, weak process] in
             MainActor.assumeIsolated {
                 guard let self, let process, self.process === process else { return }
@@ -607,20 +675,22 @@ After `presenterLaunchURL` in `TapClient.swift`:
     /// tap's redirect, which names no fragment of its own.
     public func audienceLaunchURL(slide: Int) -> URL { url(path: "/?launch=\(ready.launch)#\(slide)") }
 
-    /// The presenter page for a talk, starting on `slide`. It carries no
-    /// key: the presenter cookie is in the web views' data store by the
-    /// time this loads (see `PresentationController.installPresenterCookie`).
-    public func presenterURL(slide: Int) -> URL { url(path: "/presenter#\(slide)") }
+    /// The presenter page for a talk, starting on `slide`. It carries the
+    /// presenter secret as `key`: the server sets the presenter cookie and
+    /// redirects to /presenter without the key, and the redirect keeps the
+    /// fragment (internal/server/routes.go, handlePresenter). The page
+    /// therefore never depends on a cookie the app injected first.
+    public func presenterURL(slide: Int) -> URL { url(path: "/presenter?key=\(ready.presenter)#\(slide)") }
 ```
 
 - [ ] **Step 7: Run the tests**
 
 Run: `make -C desktop core-test`
-Expected: every test passes, including D2's `testStartsTapDevAppAndReadsTheReadyLine` (its log line is unchanged: `tap dev --app talk.md`) and the six new ones.
+Expected: every test passes, including D2's `testStartsTapDevAppAndReadsTheReadyLine` (its log line is unchanged: `tap dev --app talk.md`) and the seven new ones.
 
 - [ ] **Step 8: Mutate and commit**
 
-Mutations, each reverted: in `quit`, drop `quitRequested = true` (expected: `testQuitSendsTheQuitCommandAndNeverRestarts` fails, the exit restarts); in `quit`, drop `process.send(.quit)` (expected: the same test fails on the record file); in `quit`, drop the deadline work item (expected: `testQuitClosesStdinWhenTapIgnoresTheCommand` times out); in `Command.arguments`, always append `--no-record` (expected: `testATalkRunsTapPresentWithItsFlagsAndHasItsOwnLogTitle` fails on the `record: true` case); in `decode`, return `.other(type: "slide")` for a slide event (expected: `testDecodesTheTalkEvents` fails).
+Mutations, each reverted: in `quit`, drop `quitRequested = true` (expected: `testQuitSendsTheQuitCommandAndNeverRestarts` fails, the exit restarts); in `quit`, drop `process.send(.quit)` (expected: the same test fails on the record file); in `quit`, drop the deadline work item (expected: `testQuitClosesStdinWhenTapIgnoresTheCommand` times out); in `extendQuit`, drop `quitWork?.cancel()` (expected: `testExtendQuitMovesTheDeadline` fails on the 0.3 s log line); in `start`, drop the `state == .starting` guard after the environment (expected: `testQuitBeforeTheProcessExistsStopsAtOnce` fails, the fake runs); in `Command.arguments`, always append `--no-record` (expected: `testATalkRunsTapPresentWithItsFlagsAndHasItsOwnLogTitle` fails on the `record: true` case); in `Command.arguments`, drop the `--port` pair (expected: the same test fails on the arguments); in `logLine`, drop the redaction (expected: it fails on "secret"); in `presenterURL`, drop the key (expected: `testTheTalkPagesCarryTheStartSlideInTheirHash` fails); in `decode`, return `.other(type: "slide")` for a slide event (expected: `testDecodesTheTalkEvents` fails).
 
 ```bash
 git add desktop/TapDesktopCore
@@ -637,7 +707,7 @@ git commit -m "feat(desktop): decode the talk events, encode the answers, run ta
 
 **Interfaces:**
 - Consumes: `TapSession.Command` (Task 1), `RecordingEvent` (Task 1), `UserDefaults`.
-- Produces: `ScreenInfo(name:frame:isBuiltIn:)`; `DisplayAssignmentStore(defaults:)` with `audienceName(for:)`, `setAudienceName(_:for:)`, `static key(for:)`; `DisplayArrangement(audience:presenter:)` with `isSingleDisplay`, `static resolve(screens:store:)`, `swapped()`; `PresentationMode` (`.play`, `.rehearse`); `PresentationOptions(mode:startSlide:record:phoneRemote:tunnel:presenterPassword:)` with `command`, `wantsTunnel`; `RecordingStatus` with `state`, `segment`, `elapsed`, `disk`, `blockedReason`, `label`, `isRecording`, `apply(_:)`, `tick()`, `static clock(_:)`; `FocusHintState(defaults:)` with `hasBeenShown`, `markShown()`.
+- Produces: `ScreenInfo(name:frame:isBuiltIn:)`; `DisplayAssignmentStore(defaults:)` with `audienceName(for:)`, `setAudienceName(_:for:)`, `static key(for:)`; `DisplayArrangement(audience:presenter:)` with `isSingleDisplay`, `static resolve(screens:store:)`, `swapped()`; `DeckPortStore(defaults:)` with `port(for:)`, `setPort(_:for:)`, `static key(for:)`; `PresentationMode` (`.play`, `.rehearse`); `PresentationOptions(mode:startSlide:record:phoneRemote:tunnel:presenterPassword:)` with `command(port:)`, `wantsTunnel`; `PresentationSettings(startFromSlideOne:record:phoneRemote:tunnel:)` with `options(mode:cursorSlide:presenterPassword:)`; `PresentationSettingsStore(defaults:)` with `settings`, `defaults`; `RecordingStatus` with `state`, `segment`, `elapsed`, `disk`, `blockedReason`, `label`, `isRecording`, `apply(_:)`, `tick()`, `static clock(_:)`; `FocusHintState(defaults:)` with `hasBeenShown`, `markShown()`.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -701,14 +771,40 @@ final class PresentingCoreTests: XCTestCase {
 
     func testOptionsBecomeTheTapPresentCommand() {
         let play = PresentationOptions(mode: .play, startSlide: 3)
-        XCTAssertEqual(play.command, .present(record: true, presenterPassword: nil))
+        XCTAssertEqual(play.command(port: nil), .present(record: true, presenterPassword: nil, port: nil))
+        XCTAssertEqual(play.command(port: 4242), .present(record: true, presenterPassword: nil, port: 4242), "the deck's remembered port travels with the command")
         XCTAssertFalse(play.wantsTunnel)
         let quiet = PresentationOptions(mode: .play, startSlide: 1, record: false, phoneRemote: true)
-        XCTAssertEqual(quiet.command, .present(record: false, presenterPassword: nil))
+        XCTAssertEqual(quiet.command(port: nil), .present(record: false, presenterPassword: nil, port: nil))
         XCTAssertTrue(quiet.wantsTunnel)
         let rehearse = PresentationOptions(mode: .rehearse, startSlide: 5, record: true, tunnel: true, presenterPassword: "secret")
-        XCTAssertEqual(rehearse.command, .present(record: false, presenterPassword: "secret"), "a rehearsal never records")
+        XCTAssertEqual(rehearse.command(port: nil), .present(record: false, presenterPassword: "secret", port: nil), "a rehearsal never records")
         XCTAssertTrue(rehearse.wantsTunnel)
+    }
+
+    func testThePortIsRememberedPerDeck() throws {
+        let store = DeckPortStore(defaults: try freshDefaults())
+        let deck = URL(fileURLWithPath: "/talks/ops.md")
+        XCTAssertNil(store.port(for: deck))
+        store.setPort(4242, for: deck)
+        XCTAssertEqual(store.port(for: deck), 4242)
+        XCTAssertEqual(store.port(for: URL(fileURLWithPath: "/talks/../talks/ops.md")), 4242, "the same file, however spelled")
+        XCTAssertNil(store.port(for: URL(fileURLWithPath: "/talks/other.md")), "another deck has its own")
+        store.setPort(4243, for: deck)
+        XCTAssertEqual(store.port(for: deck), 4243, "a fallback port replaces the taken one")
+    }
+
+    func testTheLastSettingsBecomeTheNextOptions() throws {
+        let store = PresentationSettingsStore(defaults: try freshDefaults())
+        XCTAssertEqual(store.settings, PresentationSettings(), "the defaults: from the cursor, recording on, no remote, no tunnel")
+        let chosen = PresentationSettings(startFromSlideOne: true, record: false, phoneRemote: true, tunnel: true)
+        store.settings = chosen
+        XCTAssertEqual(PresentationSettingsStore(defaults: store.defaults).settings, chosen, "kept across launches")
+        XCTAssertEqual(chosen.options(mode: .play, cursorSlide: 4, presenterPassword: nil),
+                       PresentationOptions(mode: .play, startSlide: 1, record: false, phoneRemote: true, tunnel: true, presenterPassword: nil))
+        XCTAssertEqual(PresentationSettings().options(mode: .play, cursorSlide: 4, presenterPassword: "secret"),
+                       PresentationOptions(mode: .play, startSlide: 4, record: true, presenterPassword: "secret"),
+                       "the password comes from the popover's field for this launch; it is never kept")
     }
 
     func testTheRecordingLabelFollowsTapAndCountsUpBetweenEvents() {
@@ -859,11 +955,87 @@ public struct PresentationOptions: Equatable, Sendable {
         self.presenterPassword = presenterPassword
     }
 
-    public var command: TapSession.Command {
-        .present(record: mode == .play && record, presenterPassword: presenterPassword)
+    /// The tap present command for these options, on `port` (the deck's
+    /// remembered port, or nil for a free one).
+    public func command(port: Int?) -> TapSession.Command {
+        .present(record: mode == .play && record, presenterPassword: presenterPassword, port: port)
     }
 
     public var wantsTunnel: Bool { phoneRemote || tunnel }
+}
+
+/// The Present popover's settings, the ones Cmd+Option+P starts with: kept
+/// across launches. The presenter password is not among them; it lives in
+/// the popover's field for one launch of the app.
+public struct PresentationSettings: Equatable, Sendable {
+    public var startFromSlideOne = false
+    public var record = true
+    public var phoneRemote = false
+    public var tunnel = false
+
+    public init(startFromSlideOne: Bool = false, record: Bool = true, phoneRemote: Bool = false, tunnel: Bool = false) {
+        self.startFromSlideOne = startFromSlideOne
+        self.record = record
+        self.phoneRemote = phoneRemote
+        self.tunnel = tunnel
+    }
+
+    /// The options for a start with these settings, from `cursorSlide`
+    /// unless the settings say slide 1.
+    public func options(mode: PresentationMode, cursorSlide: Int, presenterPassword: String?) -> PresentationOptions {
+        PresentationOptions(mode: mode, startSlide: startFromSlideOne ? 1 : cursorSlide, record: record,
+                            phoneRemote: phoneRemote, tunnel: tunnel, presenterPassword: presenterPassword)
+    }
+}
+
+// UserDefaults is thread-safe, so a struct that only holds a reference to it is safe to share.
+public struct PresentationSettingsStore: @unchecked Sendable {
+    public let defaults: UserDefaults
+    static let key = "PresentationSettings"
+
+    public init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+    }
+
+    public var settings: PresentationSettings {
+        get {
+            guard let stored = defaults.dictionary(forKey: Self.key) else { return PresentationSettings() }
+            return PresentationSettings(startFromSlideOne: stored["startFromSlideOne"] as? Bool ?? false,
+                                        record: stored["record"] as? Bool ?? true,
+                                        phoneRemote: stored["phoneRemote"] as? Bool ?? false,
+                                        tunnel: stored["tunnel"] as? Bool ?? false)
+        }
+        nonmutating set {
+            defaults.set(["startFromSlideOne": newValue.startFromSlideOne, "record": newValue.record,
+                          "phoneRemote": newValue.phoneRemote, "tunnel": newValue.tunnel], forKey: Self.key)
+        }
+    }
+}
+
+/// The port each deck's talks run on. WebKit keys a page's localStorage,
+/// where the presenter page keeps its layout and notes size, by origin,
+/// and the origin includes the port; one port per deck keeps that state
+/// across launches. Keyed by the deck's standardized path.
+// UserDefaults is thread-safe, so a struct that only holds a reference to it is safe to share.
+public struct DeckPortStore: @unchecked Sendable {
+    private let defaults: UserDefaults
+
+    public init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+    }
+
+    public static func key(for deck: URL) -> String {
+        "PresentPort:" + deck.standardizedFileURL.path
+    }
+
+    public func port(for deck: URL) -> Int? {
+        let port = defaults.integer(forKey: Self.key(for: deck))
+        return port > 0 ? port : nil
+    }
+
+    public func setPort(_ port: Int, for deck: URL) {
+        defaults.set(port, forKey: Self.key(for: deck))
+    }
 }
 
 /// The recording state the presenter toolbar shows, kept from tap's
@@ -932,20 +1104,20 @@ public struct FocusHintState: @unchecked Sendable {
 - [ ] **Step 4: Run the tests**
 
 Run: `make -C desktop core-test`
-Expected: the seven new tests pass; the package is green.
+Expected: the nine new tests pass; the package is green.
 
 - [ ] **Step 5: Mutate and commit**
 
-Mutations, each reverted: in `resolve`, ignore the store (expected: `testASwapIsRememberedForThePairOfDisplaysWhicheverOrderTheyComeIn` fails on the swapped audience); in `resolve`, honour a remembered name that is not connected (expected: the same test fails on "Gone"); in `key(for:)`, drop `.sorted()` (expected: the key equality assertion fails); in `PresentationOptions.command`, drop `mode == .play &&` (expected: `testOptionsBecomeTheTapPresentCommand` fails on the rehearsal); in `tick`, drop the `isRecording` guard (expected: the paused count fails); in `label`, return "REC" for paused (expected: `testTheRecordingLabelFollowsTapAndCountsUpBetweenEvents` fails).
+Mutations, each reverted: in `resolve`, ignore the store (expected: `testASwapIsRememberedForThePairOfDisplaysWhicheverOrderTheyComeIn` fails on the swapped audience); in `resolve`, honour a remembered name that is not connected (expected: the same test fails on "Gone"); in `key(for:)`, drop `.sorted()` (expected: the key equality assertion fails); in `PresentationOptions.command(port:)`, drop `mode == .play &&` (expected: `testOptionsBecomeTheTapPresentCommand` fails on the rehearsal); in `command(port:)`, pass `port: nil` always (expected: it fails on 4242); in `DeckPortStore.key(for:)`, drop `standardizedFileURL` (expected: `testThePortIsRememberedPerDeck` fails on the respelled path); in `PresentationSettings.options`, ignore `startFromSlideOne` (expected: `testTheLastSettingsBecomeTheNextOptions` fails on `startSlide: 1`); in `tick`, drop the `isRecording` guard (expected: the paused count fails); in `label`, return "REC" for paused (expected: `testTheRecordingLabelFollowsTapAndCountsUpBetweenEvents` fails).
 
 ```bash
 git add desktop/TapDesktopCore
-git commit -m "feat(desktop): display arrangement, presentation options, recording status and the Focus hint state"
+git commit -m "feat(desktop): display arrangement, the deck's port, presentation options and settings, recording status and the Focus hint state"
 ```
 
 ---
 
-### Task 3: The sleep assertion, a page of tap's in a web view, and a window that covers a screen
+### Task 3: The sleep assertion, a page of tap's in a web view, and a window that enters its own full screen Space
 
 **Files:**
 - Create: `desktop/Tap/Presenting/SleepAssertion.swift`
@@ -956,7 +1128,7 @@ git commit -m "feat(desktop): display arrangement, presentation options, recordi
 
 **Interfaces:**
 - Consumes: D2's `ReadyPayload`, `WeakScriptMessageHandler`, `PreviewViewController.isExternalWebLink(url:navigationType:)`; D3's `DeckWindowController` (only as a weak reference type).
-- Produces: `SleepAssertion` with `static let reason`, `isHeld`, `acquire()`, `release()`; `PresentationPageController(accessibilityIdentifier:)` with `webView`, `onReady`, `onLoadFailed`, `onPresenterPopup`, `openExternally`, `lastReady`, `pageLoadCount`, `lastLoadedURL`, `load(_:allowedPort:)`, `popupRequested(for:navigationType:)`, `pageReportedReady(_:)`, `pageText()` (test-only); `PresentationWindow(role:screenFrame:)` with `Role` (`.audience`, `.presenter`), `page`, `container`, `deckWindowController`, `static coveringLevel`, `cover(_:)`; the test helper `onScreenWindowNumbers()`.
+- Produces: `SleepAssertion` with `static let reason`, `isHeld`, `acquire()`, `release()`; `PresentationPageController(accessibilityIdentifier:)` with `webView`, `onReady`, `onLoadFailed`, `onPresenterPopup`, `openExternally`, `lastReady`, `pageLoadCount`, `lastLoadedURL`, `load(_:allowedPort:)`, `popupRequested(for:navigationType:)`, `pageReportedReady(_:)`, `pageText()` and `pressKey(_:)` (test-only); `PresentationWindow(role:screenFrame:)` with `Role` (`.audience`, `.presenter`), `FullScreenState` (`.windowed`, `.entering`, `.fullScreen`, `.exiting`), `page`, `container`, `deckWindowController`, `fullScreenState`, `targetFrame`, `isClosed`, `onFullScreenChange`, `onClosed`, `requestFullScreenToggle` (test seam), `present(on:completion:)`, `takeDown()`, `static enterTimeout`, `static exitTimeout`; the test helpers `onScreenWindowNumbers()`, `powerAssertionIsListed(named:)`, `fullScreenPresentationWindows()`.
 
 - [ ] **Step 1: Write the window server helper and the failing tests**
 
@@ -964,11 +1136,13 @@ git commit -m "feat(desktop): display arrangement, presentation options, recordi
 
 ```swift
 import AppKit
+@testable import Tap
 
 /// The window numbers of this process's windows that the window server
 /// has on screen, front to back. This is the window server's own truth,
 /// not AppKit's bookkeeping, so it holds in a host with no key window and
-/// on the CI runner alike.
+/// on the CI runner alike. A window in a full screen Space that is not
+/// the active one is not on screen, so a Space switch shows up here.
 func onScreenWindowNumbers() -> [Int] {
     let pid = Int(ProcessInfo.processInfo.processIdentifier)
     let windows = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] ?? []
@@ -979,8 +1153,10 @@ func onScreenWindowNumbers() -> [Int] {
     }
 }
 
-/// Runs `pmset -g assertions` and reports whether an assertion with `name`
-/// is listed: the kernel's own view of what the app holds.
+/// Runs `pmset -g assertions` and reports whether this process holds an
+/// assertion with `name`: the kernel's own view. The line is matched on
+/// this process's pid, so the person's own Tap presenting, or their
+/// `make uitest`, cannot make the check pass or fail.
 func powerAssertionIsListed(named name: String) -> Bool {
     let process = Process()
     process.executableURL = URL(fileURLWithPath: "/usr/bin/pmset")
@@ -991,7 +1167,15 @@ func powerAssertionIsListed(named name: String) -> Bool {
     guard (try? process.run()) != nil else { return false }
     let data = output.fileHandleForReading.readDataToEndOfFile()
     process.waitUntilExit()
-    return String(decoding: data, as: UTF8.self).contains(name)
+    let ownPid = "pid \(ProcessInfo.processInfo.processIdentifier)("
+    return String(decoding: data, as: UTF8.self).split(separator: "\n").contains { $0.contains(ownPid) && $0.contains(name) }
+}
+
+/// Every talk window that still exists and is in full screen. Empty is
+/// what every ending must leave behind.
+@MainActor
+func fullScreenPresentationWindows() -> [PresentationWindow] {
+    NSApp.windows.compactMap { $0 as? PresentationWindow }.filter { !$0.isClosed && $0.styleMask.contains(.fullScreen) }
 }
 ```
 
@@ -1003,13 +1187,19 @@ import WebKit
 @testable import Tap
 
 final class PresentationWindowTests: HostedTestCase {
+    override func tearDown() async throws {
+        for window in NSApp.windows.compactMap({ $0 as? PresentationWindow }) where !window.isClosed { window.takeDown() }
+        try await waitUntil(timeout: 10, "every talk window closed") { fullScreenPresentationWindows().isEmpty }
+        try await super.tearDown()
+    }
+
     func testTheSleepAssertionIsHeldOnlyBetweenAcquireAndRelease() {
         let assertion = SleepAssertion()
         XCTAssertFalse(assertion.isHeld)
         XCTAssertFalse(powerAssertionIsListed(named: SleepAssertion.reason))
         assertion.acquire()
         XCTAssertTrue(assertion.isHeld)
-        XCTAssertTrue(powerAssertionIsListed(named: SleepAssertion.reason), "the kernel lists the assertion")
+        XCTAssertTrue(powerAssertionIsListed(named: SleepAssertion.reason), "the kernel lists the assertion for this process")
         assertion.acquire()
         XCTAssertTrue(assertion.isHeld, "a second acquire changes nothing")
         assertion.release()
@@ -1019,33 +1209,83 @@ final class PresentationWindowTests: HostedTestCase {
         XCTAssertFalse(assertion.isHeld)
     }
 
-    func testAWindowCoversItsScreenAboveTheMenuBar() async throws {
+    func testAWindowEntersItsOwnFullScreenSpaceAndLeavesItOnTakeDown() async throws {
         let screen = NSScreen.screens[0].frame
         let window = PresentationWindow(role: .audience, screenFrame: screen)
-        defer { window.close() }
-        XCTAssertEqual(window.frame, screen)
-        XCTAssertEqual(window.level, PresentationWindow.coveringLevel)
-        XCTAssertGreaterThan(window.level.rawValue, NSWindow.Level.mainMenu.rawValue)
-        XCTAssertTrue(window.styleMask.contains(.borderless))
+        var states: [PresentationWindow.FullScreenState] = []
+        window.onFullScreenChange = { states.append($0) }
+        XCTAssertEqual(window.fullScreenState, .windowed)
+        XCTAssertEqual(window.level, .normal, "no covering level: a full screen Space is what covers the display")
+        XCTAssertTrue(window.collectionBehavior.contains(.fullScreenPrimary))
+        XCTAssertFalse(window.collectionBehavior.contains(.canJoinAllSpaces), "the window lives in its own Space, so Cmd-Tab to another app leaves it")
         XCTAssertTrue(window.canBecomeKey)
-        XCTAssertTrue(window.collectionBehavior.contains(.canJoinAllSpaces))
         XCTAssertFalse(window.isVisible)
-        window.orderFrontRegardless()
-        XCTAssertTrue(window.isVisible)
+
+        var settled = 0
+        window.present(on: screen) { settled += 1 }
+        XCTAssertEqual(window.targetFrame, screen)
+        try await waitUntil(timeout: 10, "the window in full screen (state \(window.fullScreenState))") { window.fullScreenState == .fullScreen }
+        XCTAssertTrue(window.styleMask.contains(.fullScreen), "AppKit's own flag, after the enter notification")
+        XCTAssertEqual(settled, 1)
+        XCTAssertEqual(states, [.entering, .fullScreen])
+        XCTAssertEqual(window.page.webView.frame.size, window.contentView?.bounds.size, "the page fills the window")
         try await waitUntil(timeout: 5, "the window server to show the window") { onScreenWindowNumbers().contains(window.windowNumber) }
-        let half = CGRect(x: screen.minX, y: screen.minY, width: screen.width / 2, height: screen.height)
-        window.cover(half)
-        XCTAssertEqual(window.frame, half)
-        XCTAssertEqual(window.page.webView.frame.size, half.size, "the page fills the window")
-        window.orderOut(nil)
+
+        window.takeDown()
+        try await waitUntil(timeout: 10, "the window closed (state \(window.fullScreenState))") { window.isClosed }
+        XCTAssertEqual(states, [.entering, .fullScreen, .exiting, .windowed], "it left full screen before it closed")
+        XCTAssertTrue(fullScreenPresentationWindows().isEmpty)
         try await waitUntil(timeout: 5, "the window to leave the screen") { !onScreenWindowNumbers().contains(window.windowNumber) }
+    }
+
+    func testATakeDownDuringTheEntryStillCloses() async throws {
+        let window = PresentationWindow(role: .presenter, screenFrame: NSScreen.screens[0].frame)
+        window.present(on: NSScreen.screens[0].frame)
+        XCTAssertEqual(window.fullScreenState, .entering)
+        window.takeDown()
+        try await waitUntil(timeout: 15, "the window closed (state \(window.fullScreenState))") { window.isClosed }
+        XCTAssertTrue(fullScreenPresentationWindows().isEmpty, "nothing is left in full screen")
+    }
+
+    func testATakeDownClosesEvenWhenTheExitNeverCompletes() async throws {
+        let window = PresentationWindow(role: .audience, screenFrame: NSScreen.screens[0].frame)
+        window.present(on: NSScreen.screens[0].frame)
+        try await waitUntil(timeout: 10, "full screen") { window.fullScreenState == .fullScreen }
+        // An AppKit that never answers the exit request: the deadline closes the window anyway.
+        window.requestFullScreenToggle = {}
+        let asked = Date()
+        window.takeDown()
+        try await waitUntil(timeout: PresentationWindow.exitTimeout + 5, "the deadline to close the window") { window.isClosed }
+        XCTAssertGreaterThanOrEqual(Date().timeIntervalSince(asked), PresentationWindow.exitTimeout - 0.5)
+        XCTAssertTrue(fullScreenPresentationWindows().isEmpty)
+        try await waitUntil(timeout: 5, "the window off the screen") { !onScreenWindowNumbers().contains(window.windowNumber) }
+    }
+
+    func testAMoveToAnotherFrameLeavesAndReentersFullScreen() async throws {
+        let screen = NSScreen.screens[0].frame
+        let half = CGRect(x: screen.minX, y: screen.minY, width: screen.width / 2, height: screen.height)
+        let window = PresentationWindow(role: .audience, screenFrame: screen)
+        var states: [PresentationWindow.FullScreenState] = []
+        window.onFullScreenChange = { states.append($0) }
+        window.present(on: screen)
+        try await waitUntil(timeout: 10, "full screen") { window.fullScreenState == .fullScreen }
+        var moved = false
+        // On one display the half frame is on the same display, but the frame differs, so the window goes out and in again.
+        window.present(on: half) { moved = true }
+        XCTAssertEqual(window.targetFrame, half)
+        try await waitUntil(timeout: 15, "the move to settle (state \(window.fullScreenState))") { moved }
+        XCTAssertEqual(window.fullScreenState, .fullScreen)
+        XCTAssertEqual(states, [.entering, .fullScreen, .exiting, .windowed, .entering, .fullScreen])
+        var again = false
+        window.present(on: half) { again = true }
+        XCTAssertTrue(again, "already there: nothing to do")
     }
 
     func testThePageHasEverythingTapDevsBrowserWouldGiveIt() {
         let page = PresentationPageController(accessibilityIdentifier: "audience-page")
         _ = page.view
         XCTAssertTrue(page.webView.configuration.preferences.isElementFullscreenEnabled, "the F key's full screen works")
-        XCTAssertTrue(page.webView.configuration.websiteDataStore.isPersistent, "the presenter layout and notes size persist")
+        XCTAssertTrue(page.webView.configuration.websiteDataStore.isPersistent, "localStorage survives the process")
         XCTAssertTrue(page.webView.configuration.websiteDataStore === WKWebsiteDataStore.default(), "the one store every talk shares")
         XCTAssertEqual(page.webView.accessibilityIdentifier(), "audience-page")
     }
@@ -1127,11 +1367,12 @@ import WebKit
 /// One of tap's own pages for a talk, the audience page or the presenter
 /// page, in a `WKWebView` with what tap dev's browser gives it: element
 /// full screen for the F key, the persistent data store so the presenter
-/// layout and notes size survive between launches, and the window the S
-/// key opens answered by bringing the presenter window forward. The app
-/// drives the page only through the URL it loads (its start slide is in
-/// the fragment) and through tap's hub, and reads it only through the
-/// tapReady handler.
+/// layout and notes size (the page's localStorage, keyed by origin, which
+/// is why the deck keeps one port) survive between launches, and the
+/// window the S key opens answered by bringing the presenter window
+/// forward. The app drives the page only through the URL it loads (its
+/// start slide is in the fragment, the presenter key in the query) and
+/// through tap's hub, and reads it only through the tapReady handler.
 final class PresentationPageController: NSViewController, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler {
     let webView: WKWebView
     var onReady: ((ReadyPayload) -> Void)?
@@ -1177,6 +1418,16 @@ final class PresentationPageController: NSViewController, WKNavigationDelegate, 
     /// The page's visible text. Tests read it; the app never runs script in the page.
     func pageText() async -> String {
         (try? await webView.evaluateJavaScript("document.body.innerText") as? String) ?? ""
+    }
+
+    /// Presses `key` (a KeyboardEvent key name, "ArrowRight" or "o") in
+    /// the page, the way the page's own handler on `window` sees it.
+    /// Tests only, for a deterministic key that does not depend on which
+    /// window the host has as key; the app never runs script in the page.
+    func pressKey(_ key: String) async {
+        let encoded = String(decoding: (try? JSONEncoder().encode([key])) ?? Data("[\"\"]".utf8), as: UTF8.self)
+        let script = "window.dispatchEvent(new KeyboardEvent('keydown', {key: \(encoded)[0], bubbles: true, cancelable: true})); true"
+        _ = try? await webView.evaluateJavaScript(script)
     }
 
     // MARK: WebKit
@@ -1238,16 +1489,25 @@ final class PresentationPageController: NSViewController, WKNavigationDelegate, 
 ```swift
 import AppKit
 
-/// A window that covers one whole screen for a talk: borderless, above the
-/// menu bar and the Dock, with no system full screen Space. It appears at
-/// once on whichever display it is given, two of them can share one
-/// display (the audience with the presenter behind it on a single screen),
-/// and a swap is a frame change. Escape and Option-Tab are the
-/// controller's key monitor's.
-final class PresentationWindow: NSWindow {
+/// A window for one of a talk's pages. It enters its own macOS full screen
+/// Space on the display it is given (system full screen, as a browser's
+/// is), so Cmd-Tab to another app, the menu bar at the top edge and the
+/// page's own F key work as they do in a browser. It is windowed,
+/// entering, in full screen or exiting. A move to another display goes
+/// exit, move, enter. A take-down goes exit, close, and closes anyway
+/// after `exitTimeout`, so no ending can leave a window in full screen.
+/// Escape and Option-Tab are the controller's key monitor's.
+final class PresentationWindow: NSWindow, NSWindowDelegate {
     enum Role: Equatable {
         case audience
         case presenter
+    }
+
+    enum FullScreenState: Equatable {
+        case windowed
+        case entering
+        case fullScreen
+        case exiting
     }
 
     let role: Role
@@ -1256,15 +1516,45 @@ final class PresentationWindow: NSWindow {
     let container = NSView()
     /// The deck this window presents, for menu actions that reach this window first.
     weak var deckWindowController: DeckWindowController?
-    /// One above the menu bar, which is above the Dock.
-    static let coveringLevel = NSWindow.Level(rawValue: NSWindow.Level.mainMenu.rawValue + 1)
+    private(set) var fullScreenState: FullScreenState = .windowed
+    /// The screen frame this window is meant to fill: what the controller
+    /// asked for, set before any transition, so a test can read it while
+    /// the window server is still animating.
+    private(set) var targetFrame: CGRect
+    private(set) var isClosed = false
+    var onFullScreenChange: ((FullScreenState) -> Void)?
+    var onClosed: (() -> Void)?
+    /// Asks AppKit to toggle full screen. A test replaces it with a no-op
+    /// to stand for a transition that never completes.
+    var requestFullScreenToggle: (() -> Void)?
+    /// How long an entry may take before the window is treated as
+    /// windowed, and how long an exit may take before a take-down closes
+    /// the window regardless.
+    static let enterTimeout: TimeInterval = 5
+    static let exitTimeout: TimeInterval = 3
+
+    private var settled: (() -> Void)?
+    private var pendingFrame: CGRect?
+    private var wantsFullScreen = true
+    private var closeWhenSettled = false
+    private var transitionDeadline: DispatchWorkItem?
 
     init(role: Role, screenFrame: CGRect) {
         self.role = role
+        targetFrame = screenFrame
         page = PresentationPageController(accessibilityIdentifier: role == .audience ? "audience-page" : "presenter-page")
-        super.init(contentRect: screenFrame, styleMask: [.borderless], backing: .buffered, defer: false)
-        level = Self.coveringLevel
-        collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .ignoresCycle, .stationary]
+        // A titled window with its chrome hidden: AppKit puts a titled
+        // window in a full screen Space and hides the title bar there.
+        super.init(contentRect: screenFrame, styleMask: [.titled, .fullSizeContentView], backing: .buffered, defer: false)
+        delegate = self
+        titleVisibility = .hidden
+        titlebarAppearsTransparent = true
+        for kind in [.closeButton, .miniaturizeButton, .zoomButton] as [NSWindow.ButtonType] {
+            standardWindowButton(kind)?.isHidden = true
+        }
+        isMovable = false
+        level = .normal
+        collectionBehavior = [.fullScreenPrimary, .fullScreenDisallowsTiling, .ignoresCycle]
         isReleasedWhenClosed = false
         hasShadow = false
         animationBehavior = .none
@@ -1284,14 +1574,202 @@ final class PresentationWindow: NSWindow {
         container.layoutSubtreeIfNeeded()
     }
 
-    // A borderless window takes keys and becomes main only when it says so.
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { true }
 
-    /// Puts the window over `frame`, a screen's frame.
-    func cover(_ frame: CGRect) {
-        setFrame(frame, display: true)
-        container.layoutSubtreeIfNeeded()
+    // MARK: Full screen
+
+    /// Fills `frame`, a screen's frame, in that screen's own full screen
+    /// Space, and calls `completion` once the window is settled there (or
+    /// has failed to enter and stays a plain window over the frame). From
+    /// full screen on another display the window exits, moves and enters
+    /// again. During a transition the frame waits for it to end. With
+    /// `fullScreen` false the window is a plain window over the frame:
+    /// what a two-display talk gets while "Displays have separate Spaces"
+    /// is off, since one full screen Space would black out the other display.
+    func present(on frame: CGRect, fullScreen: Bool = true, completion: @escaping () -> Void = {}) {
+        guard !isClosed else { return completion() }
+        targetFrame = frame
+        wantsFullScreen = fullScreen
+        settled = completion
+        switch fullScreenState {
+        case .windowed:
+            setFrame(frame, display: true)
+            orderFrontRegardless()
+            if wantsFullScreen {
+                enterFullScreen()
+            } else {
+                settle()
+            }
+        case .fullScreen:
+            if wantsFullScreen, screen?.frame == frame {
+                settle()
+            } else {
+                pendingFrame = frame
+                exitFullScreen()
+            }
+        case .entering, .exiting:
+            pendingFrame = frame
+        }
+    }
+
+    /// Leaves full screen and closes. A transition in flight finishes
+    /// first; one that never finishes is cut short by the deadline, and
+    /// the window is closed in whatever state it is in, which drops its
+    /// Space.
+    func takeDown() {
+        guard !isClosed else { return }
+        settled = nil
+        pendingFrame = nil
+        closeWhenSettled = true
+        switch fullScreenState {
+        case .windowed:
+            finishClose()
+        case .fullScreen:
+            exitFullScreen()
+        case .entering, .exiting:
+            armDeadline(Self.exitTimeout)
+        }
+    }
+
+    private func enterFullScreen() {
+        fullScreenState = .entering
+        onFullScreenChange?(.entering)
+        armDeadline(Self.enterTimeout)
+        toggle()
+    }
+
+    private func exitFullScreen() {
+        fullScreenState = .exiting
+        onFullScreenChange?(.exiting)
+        armDeadline(Self.exitTimeout)
+        toggle()
+    }
+
+    private func toggle() {
+        if let requestFullScreenToggle {
+            requestFullScreenToggle()
+        } else {
+            toggleFullScreen(nil)
+        }
+    }
+
+    private func armDeadline(_ seconds: TimeInterval) {
+        transitionDeadline?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            MainActor.assumeIsolated { self?.transitionTimedOut() }
+        }
+        transitionDeadline = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + seconds, execute: work)
+    }
+
+    private func clearDeadline() {
+        transitionDeadline?.cancel()
+        transitionDeadline = nil
+    }
+
+    /// AppKit never finished the transition. The state follows the style
+    /// mask, a take-down closes the window as it is, and a presentation
+    /// goes on with the window as it is.
+    private func transitionTimedOut() {
+        transitionDeadline = nil
+        fullScreenState = styleMask.contains(.fullScreen) ? .fullScreen : .windowed
+        onFullScreenChange?(fullScreenState)
+        if closeWhenSettled {
+            finishClose()
+            return
+        }
+        pendingFrame = nil
+        let completion = settled
+        settled = nil
+        completion?()
+    }
+
+    /// A transition finished. A queued close runs, then a queued move,
+    /// then the caller's completion.
+    private func settle() {
+        if closeWhenSettled {
+            if fullScreenState == .fullScreen {
+                exitFullScreen()
+            } else {
+                finishClose()
+            }
+            return
+        }
+        if let frame = pendingFrame {
+            pendingFrame = nil
+            if fullScreenState == .fullScreen, !wantsFullScreen || screen?.frame != frame {
+                targetFrame = frame
+                pendingFrame = frame
+                exitFullScreen()
+                return
+            }
+            if fullScreenState == .windowed {
+                targetFrame = frame
+                setFrame(frame, display: true)
+                orderFrontRegardless()
+                if wantsFullScreen {
+                    enterFullScreen()
+                    return
+                }
+            }
+        }
+        let completion = settled
+        settled = nil
+        completion?()
+    }
+
+    private func finishClose() {
+        clearDeadline()
+        close()
+    }
+
+    // MARK: NSWindowDelegate
+
+    func windowDidEnterFullScreen(_ notification: Notification) {
+        clearDeadline()
+        fullScreenState = .fullScreen
+        onFullScreenChange?(.fullScreen)
+        settle()
+    }
+
+    func windowDidFailToEnterFullScreen(_ window: NSWindow) {
+        clearDeadline()
+        fullScreenState = .windowed
+        onFullScreenChange?(.windowed)
+        pendingFrame = nil
+        settle()
+    }
+
+    func windowDidExitFullScreen(_ notification: Notification) {
+        clearDeadline()
+        fullScreenState = .windowed
+        onFullScreenChange?(.windowed)
+        settle()
+    }
+
+    func windowDidFailToExitFullScreen(_ window: NSWindow) {
+        clearDeadline()
+        fullScreenState = .fullScreen
+        onFullScreenChange?(.fullScreen)
+        pendingFrame = nil
+        if closeWhenSettled {
+            finishClose()
+            return
+        }
+        settle()
+    }
+
+    /// In full screen the menu bar and the Dock stay out of the way until
+    /// the pointer asks for them, as in a browser's full screen.
+    func window(_ window: NSWindow, willUseFullScreenPresentationOptions proposedOptions: NSApplication.PresentationOptions) -> NSApplication.PresentationOptions {
+        [.fullScreen, .autoHideMenuBar, .autoHideDock]
+    }
+
+    func windowWillClose(_ notification: Notification) {
+        isClosed = true
+        clearDeadline()
+        onClosed?()
     }
 
     /// Menu actions this window cannot answer go to the deck's window
@@ -1304,37 +1782,39 @@ final class PresentationWindow: NSWindow {
 }
 ```
 
+`windowWillEnterFullScreen` and `windowWillExitFullScreen` are not needed: the state is set when the toggle is asked for, so a `takeDown` that arrives between the request and AppKit's notification already sees `.entering`.
+
 - [ ] **Step 6: Run the tests one at a time**
 
-Run: `make -C desktop project` (the new folder must enter the generated project), then:
+Run: `make -C desktop project` (the new folder must enter the generated project), then the required runs:
 
 ```bash
 make -C desktop test ONLY=TapTests/PresentationWindowTests/testTheSleepAssertionIsHeldOnlyBetweenAcquireAndRelease
-make -C desktop test ONLY=TapTests/PresentationWindowTests/testAWindowCoversItsScreenAboveTheMenuBar
-make -C desktop test ONLY=TapTests/PresentationWindowTests/testThePageHasEverythingTapDevsBrowserWouldGiveIt
-make -C desktop test ONLY=TapTests/PresentationWindowTests/testTheSKeysPopupBringsThePresenterWindowForwardAndLinksGoToTheBrowser
+make -C desktop test ONLY=TapTests/PresentationWindowTests/testAWindowEntersItsOwnFullScreenSpaceAndLeavesItOnTakeDown
+make -C desktop test ONLY=TapTests/PresentationWindowTests/testATakeDownClosesEvenWhenTheExitNeverCompletes
+make -C desktop test ONLY=TapTests/PresentationWindowTests/testAMoveToAnotherFrameLeavesAndReentersFullScreen
 ```
 
-Expected: all four pass. The window test covers the screen for under a second.
+Optional, when the branch is ahead: `testATakeDownDuringTheEntryStillCloses`, `testThePageHasEverythingTapDevsBrowserWouldGiveIt`, `testTheSKeysPopupBringsThePresenterWindowForwardAndLinksGoToTheBrowser`. Expected: every run passes. Each full screen test takes the screen for a few seconds, with AppKit's own animation. If `testAWindowEntersItsOwnFullScreenSpaceAndLeavesItOnTakeDown` times out on `.fullScreen` with `states == [.entering, .windowed]`, AppKit refused full screen for this host (`windowDidFailToEnterFullScreen`): note the machine and its macOS version in the ledger for the person, and do not weaken the assertion. If it times out with `states == [.entering]`, the enter notification never came: check that `delegate = self` is set before the toggle and that the test host is the frontmost app (`HostedTestCase.openDeck` activates it; this test creates no deck, so add `NSApp.activate(ignoringOtherApps: true)` at the top of the test if that is the cause, and note it).
 
 - [ ] **Step 7: Mutate and commit**
 
-Mutations, each reverted, the assertion ones first: in `release`, drop `IOPMAssertionRelease(identifier)` (expected: `testTheSleepAssertionIsHeldOnlyBetweenAcquireAndRelease` fails on the second `pmset` check); in `acquire`, never set `isHeld` (expected: it fails on `isHeld`); in `PresentationWindow.init`, use `NSWindow.Level.normal` (expected: the level assertions fail); drop `canBecomeKey` (expected: `canBecomeKey` fails); in `popupRequested`, drop the port check (expected: the popup count is 2); in the page's init, drop `isElementFullscreenEnabled = true` (expected: the page test fails).
+Mutations, each reverted, the ones that can leave a window in full screen or the assertion held first: in `takeDown`, close at once from `.fullScreen` without exiting (expected: `testAWindowEntersItsOwnFullScreenSpaceAndLeavesItOnTakeDown` fails on `states`); in `armDeadline`, never schedule the work item (expected: `testATakeDownClosesEvenWhenTheExitNeverCompletes` times out); in `transitionTimedOut`, skip `finishClose` (expected: the same test times out); in `release`, drop `IOPMAssertionRelease(identifier)` (expected: `testTheSleepAssertionIsHeldOnlyBetweenAcquireAndRelease` fails on the second `pmset` check); in `acquire`, never set `isHeld` (expected: it fails on `isHeld`); in `present(on:)`, from `.fullScreen` always call `settle()` (expected: `testAMoveToAnotherFrameLeavesAndReentersFullScreen` fails on `states`); in `init`, drop `.fullScreenPrimary` (expected: the entry test fails on `collectionBehavior`, and on `.fullScreen`); in `popupRequested`, drop the port check (expected: the popup count is 2); in the page's init, drop `isElementFullscreenEnabled = true` (expected: the page test fails).
 
 ```bash
 git add desktop/Tap/Presenting desktop/TapTests
-git commit -m "feat(desktop): the sleep assertion, a talk page in a web view and a window that covers a screen"
+git commit -m "feat(desktop): the sleep assertion, a talk page in a web view and a window that enters its own full screen Space"
 ```
 
 ---
 
-### Task 4: The talk: start, ready, windows, stop, and every way the sleep assertion is released
+### Task 4: The talk: start, the deck's port, ready, full screen windows, stop, and every way the sleep assertion is released
 
 **Files:**
 - Create: `desktop/Tap/Presenting/PresentationController.swift`
 - Modify: `desktop/Tap/Documents/DeckSessionController.swift` (`presentation`, `saveForPresenting`, `stop`)
 - Modify: `desktop/Tap/Windows/DeckWindowController.swift` (`init`: hand the controller its deck window controller)
-- Modify: `desktop/Tap/App/AppEnvironment.swift` (`displayAssignments`, `presentExecutableURL`, `presentSessionConfiguration()`)
+- Modify: `desktop/Tap/App/AppEnvironment.swift` (`displayAssignments`, `deckPorts`, `presentationSettings`, `presentExecutableURL`, `presentSessionConfiguration()`, the talk count, `endingTalks`)
 - Modify: `desktop/Tap/App/AppDelegate.swift` (`deck(owning:)`, `applicationWillTerminate`, `stopAllPresentations`)
 - Modify: `desktop/Tap/TapLog/TapLogWindowController.swift` (`reload` lists the talk's log)
 - Modify: `desktop/TapTests/Support/HostedTestCase.swift` (fresh seams per test)
@@ -1343,8 +1823,8 @@ git commit -m "feat(desktop): the sleep assertion, a talk page in a web view and
 - Test: `desktop/TapTests/PresentingTests.swift`
 
 **Interfaces:**
-- Consumes: Task 1's `TapSession(deckURL:configuration:command:)`, `quit(timeout:)`, `TapEvent` cases; Task 2's `DisplayArrangement`, `DisplayAssignmentStore`, `PresentationOptions`, `RecordingStatus`, `ScreenInfo`; Task 3's `SleepAssertion`, `PresentationWindow`, `PresentationPageController`; D2's `TapClient.authorizePresenter()`, `presenterCookie`, `presenterCookieName`, `openSocket()`; D3's `DeckSessionController.jumpToSlide(number:)`, `isContentEdited`, `DeckDocument.save(to:ofType:for:completionHandler:)`.
-- Produces: `PresentationController` with `State` (`.idle`, `.starting`, `.presenting`, `.stopping`, `.failed(String)`), `state`, `options`, `session`, `client`, `audienceWindow`, `presenterWindow`, `frontWindow`, `arrangement`, `currentArrangement`, `sleepAssertion`, `lastSlide`, `recording`, `windowsShown`, `pendingQuestion`, `isActive`, `canStart`, `screens`, `displayAssignments`, `deckWindowController`, `onStateChange`, `onEvent`, `onStopped`, `onRecordingChange`, `onQuestion`, `onFailed`, `start(_:)`, `stop()`, `answer(id:value:)`, `toggleFrontWindow()`, `bringPresenterWindowForward()`, `handle(_:)`, `static installPresenterCookie(_:)`, `static showWindowsFallbackInterval`; `DeckSessionController.presentation`, `saveForPresenting(completion:)`; `AppEnvironment.displayAssignments`, `presentExecutableURL`, `presentSessionConfiguration()`; `AppDelegate.stopAllPresentations()`; `PresentingTestCase` with `writeRecordingConsent(_:)`, `removeRecordingConsent()`, `settingsFile`, `oneScreen()`, `halfScreens()`, `openDeckForPresenting(_:)`, `startPresenting(_:_:)`, `stopPresenting(_:)`, `presenterCookieInTheSharedStore()`; `FakeTapScripts.readyAndWaiting()`, `silent()`.
+- Consumes: Task 1's `TapSession(deckURL:configuration:command:)`, `quit(timeout:)`, `extendQuit(timeout:)`, `command.port`, `TapEvent` cases; Task 2's `DisplayArrangement`, `DisplayAssignmentStore`, `DeckPortStore`, `PresentationOptions.command(port:)`, `PresentationSettingsStore`, `RecordingStatus`, `ScreenInfo`; Task 3's `SleepAssertion`, `PresentationWindow` (`present(on:completion:)`, `takeDown()`, `fullScreenState`, `onClosed`), `PresentationPageController`, `fullScreenPresentationWindows()`; D2's `TapClient.authorizePresenter()`, `presenterCookie`, `presenterCookieName`, `openSocket()`; D3's `DeckSessionController.jumpToSlide(number:)`, `isContentEdited`, `DeckDocument.save(to:ofType:for:completionHandler:)`.
+- Produces: `PresentationController` with `State` (`.idle`, `.starting`, `.presenting`, `.stopping`, `.failed(String)`), `PendingQuestion`, `state`, `options`, `session`, `client`, `audienceWindow`, `presenterWindow`, `frontWindow`, `arrangement`, `currentArrangement`, `sleepAssertion`, `lastSlide`, `recording`, `windowsShown`, `windowsAreSettled`, `windowsGoingDown`, `pendingQuestions`, `pendingQuestion`, `isActive`, `canStart`, `screens`, `authorizePresenter`, `displayAssignments`, `deckPorts`, `deckWindowController`, `onStateChange`, `onEvent`, `onStopped`, `onRecordingChange`, `onQuestion`, `onFailed`, `start(_:)`, `stop()`, `answer(id:value:)`, `toggleFrontWindow()`, `bringPresenterWindowForward()`, `handle(_:)`, `static installPresenterCookie(_:)`, `static saveFailureMessage(for:)`, `static showWindowsFallbackInterval`, `static quitTimeout`, `static quitTimeoutBeforeReady`, `static quitTimeoutWithRecording`; `DeckSessionController.presentation`, `presentationIfCreated`, `saveForPresenting(completion:)`; `AppEnvironment.displayAssignments`, `deckPorts`, `presentationSettings`, `presentExecutableURL`, `presentSessionConfiguration()`, `presentingCount`, `isPresenting`, `updatesMayInterrupt`, `noteTalkStarted()`, `noteTalkEnded()`, `endingTalks`, `retainEndingTalk(_:)`, `releaseEndingTalk(_:)`, `static presentingDidChangeNotification`; `AppDelegate.stopAllPresentations()`; `PresentingTestCase` with `writeRecordingConsent(_:)`, `removeRecordingConsent()`, `settingsFile`, `oneScreen()`, `halfScreens()`, `openDeckForPresenting(_:slides:)`, `startPresenting(_:_:)`, `stopPresenting(_:)`, `presenterCookieInTheSharedStore()`, `isRunning(_:)`, `WeakTalk`; `FakeTapScripts.readyAndWaiting()`, `silent()`.
 
 - [ ] **Step 1: Write the test support**
 
@@ -1379,6 +1859,8 @@ In `desktop/TapTests/Support/HostedTestCase.swift`, add to `setUp` after the `sl
 
 ```swift
         AppEnvironment.shared.displayAssignments = DisplayAssignmentStore(defaults: try XCTUnwrap(UserDefaults(suiteName: "TapTests.displays.\(UUID().uuidString)")))
+        AppEnvironment.shared.deckPorts = DeckPortStore(defaults: try XCTUnwrap(UserDefaults(suiteName: "TapTests.ports.\(UUID().uuidString)")))
+        AppEnvironment.shared.presentationSettings = PresentationSettingsStore(defaults: try XCTUnwrap(UserDefaults(suiteName: "TapTests.present.\(UUID().uuidString)")))
         AppEnvironment.shared.presentExecutableURL = nil
 ```
 
@@ -1388,6 +1870,13 @@ In `desktop/TapTests/Support/HostedTestCase.swift`, add to `setUp` after the `sl
 import XCTest
 import WebKit
 @testable import Tap
+
+/// A weak handle on a talk, for a test that lets go of the deck that
+/// owned it and wants to see who keeps it alive.
+final class WeakTalk {
+    weak var presentation: PresentationController?
+    init(_ presentation: PresentationController) { self.presentation = presentation }
+}
 
 /// A hosted test that runs a talk with the bundled tap present, on the one
 /// screen the machine has. The consent question is answered ahead of time
@@ -1402,11 +1891,17 @@ class PresentingTestCase: HostedTestCase {
 
     override func tearDown() async throws {
         for document in NSDocumentController.shared.documents {
-            (document as? DeckDocument)?.sessionController?.presentation.stop()
+            (document as? DeckDocument)?.sessionController?.presentationIfCreated?.stop()
         }
         try await super.tearDown()
+        // A talk that is stopping outlives its deck; the next test starts
+        // once its process is gone, its count is out and no window is left
+        // in full screen.
+        try await waitUntil(timeout: 40, "every talk to end (\(AppEnvironment.shared.presentingCount) counted, \(AppEnvironment.shared.endingTalks.count) ending)") {
+            !AppEnvironment.shared.isPresenting && AppEnvironment.shared.endingTalks.isEmpty
+        }
         try await waitUntil(timeout: 20, "every talk window to go away") {
-            !NSApp.windows.contains { $0.isVisible && $0 is PresentationWindow }
+            fullScreenPresentationWindows().isEmpty && !NSApp.windows.contains { ($0 as? PresentationWindow).map { !$0.isClosed } ?? false }
         }
     }
 
@@ -1428,8 +1923,10 @@ class PresentingTestCase: HostedTestCase {
     }
 
     /// The real screen split in two: the left half stands for the laptop,
-    /// the right half for the projector. Both halves are on screen, so the
-    /// window server sees every window the arrangement places.
+    /// the right half for the projector. A full screen window fills the
+    /// whole display whichever half it was given, so what a test checks
+    /// is the frame the controller asked for (`targetFrame`), never the
+    /// window's own frame.
     func halfScreens() -> [ScreenInfo] {
         let frame = NSScreen.screens[0].frame
         let left = CGRect(x: frame.minX, y: frame.minY, width: (frame.width / 2).rounded(.down), height: frame.height)
@@ -1449,16 +1946,21 @@ class PresentingTestCase: HostedTestCase {
         return (document, controller)
     }
 
+    /// Starts a talk and waits until it is presenting and every window is
+    /// where it was asked to be (in full screen, or a plain window after a
+    /// refused entry, which the talk's log says).
     func startPresenting(_ controller: DeckSessionController, _ options: PresentationOptions, timeout: TimeInterval = 40) async throws {
         controller.presentation.start(options)
         try await waitUntil(timeout: timeout, "the talk to be presenting (state \(controller.presentation.state))") {
             controller.presentation.state == .presenting
         }
+        try await waitUntil(timeout: 20, "the talk windows to settle") { controller.presentation.windowsAreSettled }
     }
 
     func stopPresenting(_ controller: DeckSessionController) async throws {
         controller.presentation.stop()
         try await waitUntil(timeout: 30, "the talk to end") { controller.presentation.state == .idle }
+        try await waitUntil(timeout: 10, "the talk windows to close") { controller.presentation.windowsGoingDown.isEmpty }
     }
 
     /// The presenter cookie in the web views' shared store, if any.
@@ -1494,6 +1996,7 @@ final class PresentingTests: PresentingTestCase {
 
         controller.presentation.start(PresentationOptions(mode: .rehearse, startSlide: 1))
         XCTAssertEqual(controller.presentation.state, .starting)
+        XCTAssertTrue(AppEnvironment.shared.isPresenting, "counted from the start, so no other deck can start during the save")
         // The process exists only once the save has completed.
         try await waitUntil(timeout: 10, "tap present to be started") { controller.presentation.session != nil }
         let onDisk = try String(contentsOf: deck, encoding: .utf8)
@@ -1502,46 +2005,47 @@ final class PresentingTests: PresentingTestCase {
         try await waitUntil(timeout: 40, "the talk") { controller.presentation.state == .presenting }
     }
 
-    func testWindowsCoverTheScreenAndTheAudienceIsInFront() async throws {
+    func testWindowsEnterFullScreenAndTheAudienceIsInFront() async throws {
         let (_, controller) = try await openDeckForPresenting()
         let presentation = controller.presentation
         try await startPresenting(controller, PresentationOptions(mode: .play, startSlide: 2))
         let audience = try XCTUnwrap(presentation.audienceWindow)
         let presenter = try XCTUnwrap(presentation.presenterWindow)
         let screen = NSScreen.screens[0].frame
-        XCTAssertEqual(audience.frame, screen)
-        XCTAssertEqual(presenter.frame, screen)
-        XCTAssertTrue(audience.isVisible)
-        XCTAssertTrue(presenter.isVisible)
+        XCTAssertEqual(audience.targetFrame, screen)
+        XCTAssertEqual(presenter.targetFrame, screen)
+        XCTAssertEqual(audience.fullScreenState, .fullScreen, "each window is in its own full screen Space")
+        XCTAssertEqual(presenter.fullScreenState, .fullScreen)
+        XCTAssertTrue(audience.styleMask.contains(.fullScreen))
+        XCTAssertTrue(presenter.styleMask.contains(.fullScreen))
+        XCTAssertEqual(fullScreenPresentationWindows().count, 2)
         XCTAssertTrue(audience.deckWindowController === controller.editor.window?.windowController as? DeckWindowController)
-        try await waitUntil(timeout: 5, "both windows on screen") {
+        XCTAssertTrue(presentation.frontWindow === audience, "on one display the audience is in front")
+        try await waitUntil(timeout: 5, "the audience Space active, the presenter's not") {
             let order = onScreenWindowNumbers()
-            return order.contains(audience.windowNumber) && order.contains(presenter.windowNumber)
+            return order.contains(audience.windowNumber) && !order.contains(presenter.windowNumber)
         }
-        let order = onScreenWindowNumbers()
-        let audienceIndex = try XCTUnwrap(order.firstIndex(of: audience.windowNumber))
-        let presenterIndex = try XCTUnwrap(order.firstIndex(of: presenter.windowNumber))
-        XCTAssertLessThan(audienceIndex, presenterIndex, "on one display the audience is in front")
-        XCTAssertTrue(presentation.frontWindow === audience)
 
         XCTAssertEqual(audience.page.lastLoadedURL?.fragment, "2")
         XCTAssertEqual(presenter.page.lastLoadedURL?.fragment, "2")
-        XCTAssertEqual(audience.page.lastLoadedURL?.query, "launch=\(try XCTUnwrap(presentation.client).ready.launch)")
+        let client = try XCTUnwrap(presentation.client)
+        XCTAssertEqual(audience.page.lastLoadedURL?.query, "launch=\(client.ready.launch)")
+        XCTAssertEqual(presenter.page.lastLoadedURL?.query, "key=\(client.ready.presenter)", "the presenter page brings its own key")
         try await waitUntil(timeout: 20, "the audience page on slide 2") { audience.page.lastReady?.slide == 2 }
         try await waitUntil(timeout: 20, "the presenter page ready") { presenter.page.lastReady != nil }
         let cookie = await presenterCookieInTheSharedStore()
         XCTAssertNotNil(cookie)
-        XCTAssertEqual(cookie, presentation.client?.presenterCookie, "both pages hold the hub's presenter cookie")
+        XCTAssertEqual(cookie, client.presenterCookie, "the audience page holds the hub's presenter cookie too")
 
         presentation.toggleFrontWindow()
-        try await waitUntil(timeout: 5, "the presenter window in front") {
-            let now = onScreenWindowNumbers()
-            guard let a = now.firstIndex(of: audience.windowNumber), let p = now.firstIndex(of: presenter.windowNumber) else { return false }
-            return p < a
-        }
         XCTAssertTrue(presentation.frontWindow === presenter)
+        try await waitUntil(timeout: 5, "the presenter's Space active") {
+            let now = onScreenWindowNumbers()
+            return now.contains(presenter.windowNumber) && !now.contains(audience.windowNumber)
+        }
         presentation.toggleFrontWindow()
         XCTAssertTrue(presentation.frontWindow === audience)
+        try await waitUntil(timeout: 5, "the audience's Space active again") { onScreenWindowNumbers().contains(audience.windowNumber) }
     }
 
     func testTheMacStaysAwake() async throws {
@@ -1550,24 +2054,41 @@ final class PresentingTests: PresentingTestCase {
         XCTAssertFalse(presentation.sleepAssertion.isHeld)
         try await startPresenting(controller, PresentationOptions(mode: .play, startSlide: 1))
         XCTAssertTrue(presentation.sleepAssertion.isHeld)
-        XCTAssertTrue(powerAssertionIsListed(named: SleepAssertion.reason), "the kernel holds the display awake")
+        XCTAssertTrue(powerAssertionIsListed(named: SleepAssertion.reason), "the kernel holds the display awake for this process")
         try await stopPresenting(controller)
         XCTAssertFalse(presentation.sleepAssertion.isHeld)
         XCTAssertFalse(powerAssertionIsListed(named: SleepAssertion.reason))
     }
 
-    func testTheSleepAssertionIsReleasedWhenTheDeckWindowCloses() async throws {
+    /// Starts a talk and closes its deck, letting go of every reference of
+    /// its own, so what keeps the talk alive afterwards is the app's doing.
+    func startTalkAndCloseTheDeck() async throws -> (talk: WeakTalk, pid: Int32) {
         let (document, controller) = try await openDeckForPresenting()
-        let presentation = controller.presentation
         try await startPresenting(controller, PresentationOptions(mode: .play, startSlide: 1))
-        let pid = try XCTUnwrap(presentation.session?.processIdentifier)
-        let audience = try XCTUnwrap(presentation.audienceWindow)
+        let pid = try XCTUnwrap(controller.presentation.session?.processIdentifier)
+        let talk = WeakTalk(controller.presentation)
         document.close()
+        return (talk, pid)
+    }
+
+    func testClosingTheDeckMidTalkStillEndsTheProcessAndFreesPlay() async throws {
+        let (talk, pid) = try await startTalkAndCloseTheDeck()
+        let presentation = try XCTUnwrap(talk.presentation, "the ending talk is kept alive until its process exits")
+        XCTAssertEqual(presentation.state, .stopping)
+        XCTAssertEqual(AppEnvironment.shared.endingTalks.count, 1)
         XCTAssertFalse(presentation.sleepAssertion.isHeld)
         XCTAssertFalse(powerAssertionIsListed(named: SleepAssertion.reason))
-        XCTAssertFalse(audience.isVisible)
+        XCTAssertNil(presentation.audienceWindow)
+        XCTAssertTrue(AppEnvironment.shared.isPresenting, "still counted while tap present runs")
         try await waitUntil(timeout: 20, "tap present to exit") { !self.isRunning(pid) }
-        try await waitUntil(timeout: 5, "no talk window on screen") { !onScreenWindowNumbers().contains(audience.windowNumber) }
+        try await waitUntil(timeout: 10, "the talk to be counted out") { !AppEnvironment.shared.isPresenting }
+        XCTAssertTrue(AppEnvironment.shared.endingTalks.isEmpty, "the talk let go of itself once its process was gone")
+        try await waitUntil(timeout: 10, "no talk window left") { fullScreenPresentationWindows().isEmpty }
+
+        // Another deck can present at once.
+        let (_, other) = try await openDeckForPresenting()
+        XCTAssertTrue(other.presentation.canStart)
+        XCTAssertTrue(AppEnvironment.shared.updatesMayInterrupt)
     }
 
     func testTheSleepAssertionIsReleasedWhenTapPresentDies() async throws {
@@ -1592,6 +2113,8 @@ final class PresentingTests: PresentingTestCase {
         XCTAssertFalse(powerAssertionIsListed(named: SleepAssertion.reason))
         XCTAssertNil(presentation.audienceWindow)
         XCTAssertNil(presentation.presenterWindow)
+        XCTAssertFalse(AppEnvironment.shared.isPresenting)
+        try await waitUntil(timeout: 10, "no window left in full screen") { fullScreenPresentationWindows().isEmpty && presentation.windowsGoingDown.isEmpty }
     }
 
     func testTheSleepAssertionIsReleasedWhenTheAppQuits() async throws {
@@ -1606,6 +2129,7 @@ final class PresentingTests: PresentingTestCase {
         XCTAssertEqual(presentation.state, .stopping)
         try await waitUntil(timeout: 20, "tap present to exit") { !self.isRunning(pid) }
         try await waitUntil(timeout: 5, "the talk to be idle") { presentation.state == .idle }
+        try await waitUntil(timeout: 10, "no window left in full screen") { fullScreenPresentationWindows().isEmpty && presentation.windowsGoingDown.isEmpty }
     }
 
     func testStopPresenting() async throws {
@@ -1625,35 +2149,87 @@ final class PresentingTests: PresentingTestCase {
         socket.close()
         let pid = try XCTUnwrap(presentation.session?.processIdentifier)
         let devPid = controller.session.processIdentifier
+        let audience = try XCTUnwrap(presentation.audienceWindow)
 
         presentation.stop()
         XCTAssertEqual(presentation.state, .stopping)
         XCTAssertNil(presentation.audienceWindow)
         XCTAssertNil(presentation.presenterWindow)
+        XCTAssertEqual(presentation.windowsGoingDown.count, 2, "both windows are leaving full screen")
         XCTAssertFalse(presentation.sleepAssertion.isHeld)
         try await waitUntil(timeout: 30, "the talk to end") { presentation.state == .idle }
         XCTAssertEqual(controller.currentSlideNumber, 4, "the cursor is on the last slide presented")
         try await waitUntil(timeout: 10, "tap present to exit") { !self.isRunning(pid) }
-        XCTAssertFalse(NSApp.windows.contains { $0.isVisible && $0 is PresentationWindow })
+        try await waitUntil(timeout: 10, "the windows closed") { presentation.windowsGoingDown.isEmpty && audience.isClosed }
+        XCTAssertTrue(fullScreenPresentationWindows().isEmpty, "nothing is left in full screen")
         XCTAssertEqual(controller.session.processIdentifier, devPid, "tap dev is untouched")
         if case .running = controller.session.state {} else { XCTFail("tap dev keeps running the preview") }
     }
 
-    func testStopWhileStartingOpensNoWindow() async throws {
-        AppEnvironment.shared.presentExecutableURL = try FakeTapScripts.silent()
+    func testStopWhileTheExchangeIsInFlightOpensNoWindow() async throws {
         let (_, controller) = try await openDeckForPresenting()
         let presentation = controller.presentation
+        var exchangeStarted = false
+        var gate: CheckedContinuation<Void, Never>?
+        // The exchange waits for the test to let it through, then runs for real.
+        presentation.authorizePresenter = { client in
+            exchangeStarted = true
+            await withCheckedContinuation { gate = $0 }
+            return try await client.authorizePresenter()
+        }
         presentation.start(PresentationOptions(mode: .play, startSlide: 1))
-        try await waitUntil(timeout: 10, "the process") { presentation.session?.processIdentifier != nil }
+        try await waitUntil(timeout: 30, "the exchange to begin") { exchangeStarted }
         let pid = try XCTUnwrap(presentation.session?.processIdentifier)
         presentation.stop()
+        XCTAssertEqual(presentation.state, .stopping)
+        gate?.resume()
         try await waitUntil(timeout: 20, "the talk to be idle") { presentation.state == .idle }
-        XCTAssertNil(presentation.audienceWindow)
-        XCTAssertFalse(presentation.sleepAssertion.isHeld)
         try await Task.sleep(nanoseconds: 3_500_000_000)
-        XCTAssertNil(presentation.audienceWindow, "no window opens after the fallback either")
+        XCTAssertNil(presentation.audienceWindow, "no window opens after the exchange returns, nor after the fallback")
+        XCTAssertNil(presentation.presenterWindow)
+        XCTAssertTrue(fullScreenPresentationWindows().isEmpty)
+        XCTAssertFalse(presentation.sleepAssertion.isHeld)
         XCTAssertEqual(presentation.state, .idle)
         XCTAssertFalse(isRunning(pid))
+    }
+
+    func testTheTalkKeepsItsPortAcrossTalks() async throws {
+        let (document, controller) = try await openDeckForPresenting()
+        let deck = try XCTUnwrap(document.fileURL)
+        let presentation = controller.presentation
+        XCTAssertNil(AppEnvironment.shared.deckPorts.port(for: deck), "the first talk lets tap pick a port")
+        try await startPresenting(controller, PresentationOptions(mode: .rehearse, startSlide: 1))
+        let first = try XCTUnwrap(presentation.session)
+        XCTAssertNil(first.command.port)
+        let port = try XCTUnwrap(presentation.client).ready.port
+        XCTAssertEqual(AppEnvironment.shared.deckPorts.port(for: deck), port, "the port tap picked is remembered for the deck")
+        try await stopPresenting(controller)
+
+        // The next talk asks for the same port, so the presenter page keeps its origin, and with it its layout and notes size.
+        try await startPresenting(controller, PresentationOptions(mode: .rehearse, startSlide: 1))
+        let second = try XCTUnwrap(presentation.session)
+        XCTAssertEqual(second.command.port, port)
+        XCTAssertTrue(second.log.text.contains("--port \(port)"))
+        XCTAssertEqual(presentation.client?.ready.port, port)
+        XCTAssertEqual(presentation.presenterWindow?.page.lastLoadedURL?.port, port)
+    }
+
+    func testATakenPortFallsBackToANewOne() async throws {
+        let (document, controller) = try await openDeckForPresenting()
+        let deck = try XCTUnwrap(document.fileURL)
+        let presentation = controller.presentation
+        // The deck's own tap dev holds a port; remember that one for the talk.
+        let taken = try await waitForRunningTap(document).port
+        AppEnvironment.shared.deckPorts.setPort(taken, for: deck)
+        try await startPresenting(controller, PresentationOptions(mode: .rehearse, startSlide: 1), timeout: 60)
+        let talk = try XCTUnwrap(presentation.session)
+        XCTAssertNil(talk.command.port, "the second attempt asks for no port")
+        let port = try XCTUnwrap(presentation.client).ready.port
+        XCTAssertNotEqual(port, taken)
+        XCTAssertEqual(AppEnvironment.shared.deckPorts.port(for: deck), port, "the new port replaces the taken one")
+        XCTAssertTrue(talk.log.text.contains("port \(taken) was taken"), "the talk's log says why the layout starts fresh")
+        XCTAssertFalse(talk.log.text.contains("restart"), "D2's policy never restarted the failed attempt on the same port")
+        XCTAssertTrue(presentation.sleepAssertion.isHeld)
     }
 
     func testTheTalksLogIsListedInTheTapLogWindow() async throws {
@@ -1682,15 +2258,19 @@ import AppKit
 import WebKit
 
 /// One deck's talk: the `tap present --app` process beside the deck's own
-/// `tap dev --app`, the audience and presenter windows, the display sleep
-/// assertion, and the slide the audience is on. tap dev keeps running the
-/// preview the whole time; nothing here touches it.
+/// `tap dev --app`, the audience and presenter windows in their full
+/// screen Spaces, the display sleep assertion, and the slide the audience
+/// is on. tap dev keeps running the preview the whole time; nothing here
+/// touches it.
 ///
 /// The state moves idle, starting (the save, the process, the ready line,
-/// the windows loading), presenting (the windows are on screen), stopping
-/// (the windows are down and tap is quitting, which may take a
+/// the windows loading), presenting (the windows are in full screen),
+/// stopping (the windows are down and tap is quitting, which may take a
 /// keep-recording answer), and back to idle; or to failed, with a message
-/// for the person, when tap present cannot start or stops restarting.
+/// for the person, when tap present cannot start or stops restarting. A
+/// talk is counted in `AppEnvironment.presentingCount` from start to idle
+/// or failed, and a stopping talk whose deck has closed is kept alive by
+/// `AppEnvironment.endingTalks` until its process has exited.
 @MainActor
 final class PresentationController {
     enum State: Equatable {
@@ -1715,29 +2295,49 @@ final class PresentationController {
     private(set) var client: TapClient?
     private(set) var audienceWindow: PresentationWindow?
     private(set) var presenterWindow: PresentationWindow?
-    /// The window last ordered in front of the other. On one display that
-    /// is what Option-Tab switches.
+    /// The window whose Space is the active one and whose page the
+    /// speaker's keys go to. On one display that is what Option-Tab switches.
     private(set) weak var frontWindow: PresentationWindow?
+    /// The displays this talk runs on; nil between talks, so the popover
+    /// always reads the displays that are connected now.
     private(set) var arrangement: DisplayArrangement?
     let sleepAssertion = SleepAssertion()
     /// The slide the audience is on, 1-based: the start slide until tap's
     /// first slide event, then the last event's slide.
     private(set) var lastSlide = 1
     private(set) var recording = RecordingStatus()
-    /// True once the windows have been ordered front for this talk.
+    /// True once the windows have been asked to enter full screen for this talk.
     private(set) var windowsShown = false
-    /// A question tap asked that has not been answered. The windows are not
-    /// shown while one is open at startup, so the sheet on the deck window
-    /// has nothing over it.
-    private(set) var pendingQuestion: PendingQuestion?
+    /// True once this talk's windows were shown at all, so an ending moves
+    /// the editor's cursor only for a talk the person actually saw.
+    private var windowsWereShown = false
+    /// tap's questions in the order they came; the first is the one on
+    /// screen. tap asks one at a time at startup, but a later question can
+    /// arrive on top of a sheet that is still up (D5's approval).
+    private(set) var pendingQuestions: [PendingQuestion] = []
+    var pendingQuestion: PendingQuestion? { pendingQuestions.first }
     /// Set once a page reported ready or failed to load, or the fallback
     /// fired: the windows may be shown as soon as no question is pending.
     private var pagesReported = false
     private var showWindowsFallback: DispatchWorkItem?
+    /// Windows taking themselves down, kept until each has closed so none
+    /// is freed in the middle of leaving full screen.
+    private(set) var windowsGoingDown: [PresentationWindow] = []
+    /// The windows still to be put on their displays, one at a time.
+    private var placements: [(window: PresentationWindow, frame: CGRect)] = []
+    private var placing = false
+    private var placementCompletion: (() -> Void)?
+    /// The remembered port tap said is taken; the next attempt asks for none.
+    private var takenPort: Int?
+    private var portFallbackPending = false
+    /// True while this talk is counted in `AppEnvironment.presentingCount`.
+    /// Read in deinit, which is not on the main actor, as a last guard.
+    nonisolated(unsafe) private var countedAsPresenting = false
 
     var onStateChange: ((State) -> Void)?
     var onEvent: ((TapEvent) -> Void)?
-    /// The talk ended, by Stop or a failure; this is the last slide the audience saw.
+    /// The talk ended, by Stop or a failure, after its windows had shown;
+    /// this is the last slide the audience saw.
     var onStopped: ((_ lastSlide: Int) -> Void)?
     var onRecordingChange: ((RecordingStatus) -> Void)?
     var onQuestion: ((PendingQuestion) -> Void)?
@@ -1752,27 +2352,46 @@ final class PresentationController {
     var saveDeck: (@escaping (Error?) -> Void) -> Void
     let sessionConfiguration: () -> TapSession.Configuration
     var displayAssignments: DisplayAssignmentStore
+    var deckPorts: DeckPortStore
     /// The displays. Production reads NSScreen; tests hand in frames of their own.
     var screens: () -> [ScreenInfo] = { NSScreen.screens.map(ScreenInfo.init(screen:)) }
+    /// Trades the presenter secret for the hub's cookie. A test replaces it
+    /// to hold the exchange open while it presses Stop.
+    var authorizePresenter: (TapClient) async throws -> String = { try await $0.authorizePresenter() }
     /// The deck's window controller, which the talk's windows forward menu actions to.
     weak var deckWindowController: DeckWindowController?
     /// How long the windows wait for the first page to report before they
     /// are shown anyway: a page that never reports (no server, a load
     /// failure) must not keep the talk from starting.
     static let showWindowsFallbackInterval: TimeInterval = 3
-    /// How long quit waits for tap that got ready (its own quit deadline is
-    /// 8 s, plus 3 s for a keep-recording answer), and for one that never did.
+    /// How long quit waits for a tap that got ready (its own quit deadline
+    /// is 8 s), and for one that never did.
     static let quitTimeout: TimeInterval = 15
     static let quitTimeoutBeforeReady: TimeInterval = 2
+    /// Once tap has asked keep-recording it waits for the answer while
+    /// stdin is open, up to 60 s. The deadline must outlast that wait, or
+    /// closing stdin would answer the person's question for them.
+    static let quitTimeoutWithRecording: TimeInterval = 75
 
     init(deckURL: @escaping () -> URL?,
          saveDeck: @escaping (@escaping (Error?) -> Void) -> Void,
          sessionConfiguration: @escaping () -> TapSession.Configuration,
-         displayAssignments: DisplayAssignmentStore) {
+         displayAssignments: DisplayAssignmentStore,
+         deckPorts: DeckPortStore) {
         self.deckURL = deckURL
         self.saveDeck = saveDeck
         self.sessionConfiguration = sessionConfiguration
         self.displayAssignments = displayAssignments
+        self.deckPorts = deckPorts
+    }
+
+    deinit {
+        // A talk that is freed while counted (which retainEndingTalk is
+        // there to prevent) must not keep Play off in every deck forever.
+        if countedAsPresenting {
+            countedAsPresenting = false
+            MainActor.assumeIsolated { AppEnvironment.shared.noteTalkEnded() }
+        }
     }
 
     /// True from Play until the talk is idle or failed again.
@@ -1783,15 +2402,20 @@ final class PresentationController {
         }
     }
 
-    /// Play and Rehearse need a deck file and no talk in progress.
+    /// Play and Rehearse need a deck file and no talk in progress, in this
+    /// deck or any other.
     var canStart: Bool {
-        deckURL() != nil && !isActive
+        deckURL() != nil && !isActive && !AppEnvironment.shared.isPresenting
     }
 
-    /// The arrangement the next talk would use, for the popover.
+    /// The arrangement the next talk would use, for the popover; the
+    /// running talk's while one runs.
     var currentArrangement: DisplayArrangement? {
         arrangement ?? DisplayArrangement.resolve(screens: screens(), store: displayAssignments)
     }
+
+    /// True once every window is where it was asked to be.
+    var windowsAreSettled: Bool { placements.isEmpty && !placing }
 
     // MARK: Start
 
@@ -1800,24 +2424,45 @@ final class PresentationController {
         self.options = options
         lastSlide = options.startSlide
         recording = RecordingStatus()
-        pendingQuestion = nil
+        pendingQuestions = []
         pagesReported = false
         windowsShown = false
+        windowsWereShown = false
+        takenPort = nil
+        portFallbackPending = false
         state = .starting
+        countIn()
         saveDeck { [weak self] error in
             guard let self, self.state == .starting else { return }
             if let error {
-                self.fail("The deck could not be saved: \(error.localizedDescription)")
+                self.fail(Self.saveFailureMessage(for: error))
                 return
             }
-            self.launch(deck: deck, options: options)
+            self.launch(deck: deck, options: options, port: self.deckPorts.port(for: deck))
         }
     }
 
-    private func launch(deck: URL, options: PresentationOptions) {
-        let session = TapSession(deckURL: deck, configuration: sessionConfiguration(), command: options.command)
-        session.onStateChange = { [weak self] sessionState in self?.sessionStateChanged(sessionState) }
-        session.onEvent = { [weak self] event in self?.handle(event) }
+    /// What a refused save means to the person. The document answers
+    /// userCancelled while a disk conflict is showing, which says nothing
+    /// on its own.
+    static func saveFailureMessage(for error: Error) -> String {
+        if (error as? CocoaError)?.code == .userCancelled {
+            return "The deck could not be saved: resolve the change on disk first."
+        }
+        return "The deck could not be saved: \(error.localizedDescription)"
+    }
+
+    private func launch(deck: URL, options: PresentationOptions, port: Int?) {
+        let session = TapSession(deckURL: deck, configuration: sessionConfiguration(), command: options.command(port: port))
+        // A replaced session (the port fallback) may still report; only the current one is heard.
+        session.onStateChange = { [weak self, weak session] sessionState in
+            guard let self, let session, session === self.session else { return }
+            self.sessionStateChanged(sessionState)
+        }
+        session.onEvent = { [weak self, weak session] event in
+            guard let self, let session, session === self.session else { return }
+            self.handle(event)
+        }
         self.session = session
         session.start()
     }
@@ -1829,25 +2474,57 @@ final class PresentationController {
         case .failed(let lastOutput):
             endBecauseTapFailed(lastOutput: lastOutput)
         case .stopped:
-            if state == .stopping { finishStopping() }
-        case .starting, .restarting:
+            if state == .stopping {
+                finishStopping()
+            } else if portFallbackPending {
+                relaunchOnAFreePort()
+            }
+        case .restarting:
+            // The port attempt exited before its error line was read: stop
+            // the restart, which lands in .stopped and relaunches.
+            if portFallbackPending { session?.stop() }
+        case .starting:
             break
         }
     }
 
+    /// tap said the remembered port is taken: its error event, code
+    /// "failed", "port n is already in use (another tap present may be
+    /// running); pass --port <other>". The session is stopped before D2's
+    /// policy can restart it on the same port, and a new one starts with
+    /// no port. That talk's presenter layout starts fresh, since the page's
+    /// origin changed; the next talk remembers the new port.
+    private func portIsTaken() {
+        guard state == .starting, let session, let port = session.command.port, !portFallbackPending else { return }
+        portFallbackPending = true
+        takenPort = port
+        session.stop()
+    }
+
+    private func relaunchOnAFreePort() {
+        portFallbackPending = false
+        guard state == .starting, let options, let deck = deckURL() else { return }
+        launch(deck: deck, options: options, port: nil)
+        if let takenPort {
+            session?.log.append("port \(takenPort) was taken; this talk runs on a new port, and the presenter layout starts fresh", source: .app)
+        }
+    }
+
     /// tap present printed its ready line, at the start or after a restart.
-    /// The presenter secret is traded for the hub's cookie first, so both
-    /// pages' own WebSocket connections are relayed: the speaker's keys in
-    /// either window move the other, and tap hears every position for its
-    /// slide events and chapters.
+    /// The port is remembered for the deck. The presenter secret is traded
+    /// for the hub's cookie first, so the audience page's own WebSocket
+    /// connection is relayed: the speaker's keys in the audience window
+    /// move the presenter view, and tap hears every position for its
+    /// slide events and chapters. The presenter page brings its own key.
     private func tapIsReady(_ ready: TapReady) {
-        guard state == .starting || state == .presenting else { return }
+        guard state == .starting || state == .presenting, let session else { return }
+        deckPorts.setPort(ready.port, for: session.deckURL)
         let client = TapClient(ready: ready)
         self.client = client
         Task { @MainActor [weak self] in
             var cookie: String?
             do {
-                cookie = try await client.authorizePresenter()
+                cookie = try await self?.authorizePresenter(client)
             } catch {
                 self?.session?.log.append("tap refused the presenter secret: \(error)", source: .app)
             }
@@ -1870,9 +2547,9 @@ final class PresentationController {
         }
     }
 
-    /// Creates the windows on the arranged screens, or reuses them after a
-    /// restart, and loads the pages at `lastSlide`. The assertion is held
-    /// from here: tap is up and the windows exist.
+    /// Creates the windows off screen, or reuses them after a restart, and
+    /// loads the pages at `lastSlide`. The assertion is held from here:
+    /// tap is up and the windows exist.
     private func openWindows(client: TapClient) {
         guard let options else { return }
         guard let arrangement = DisplayArrangement.resolve(screens: screens(), store: displayAssignments) else {
@@ -1884,12 +2561,10 @@ final class PresentationController {
         if options.mode == .play {
             let audience = audienceWindow ?? makeWindow(role: .audience, frame: arrangement.audience.frame)
             audienceWindow = audience
-            audience.cover(arrangement.audience.frame)
             audience.page.load(client.audienceLaunchURL(slide: lastSlide), allowedPort: client.ready.port)
         }
         let presenter = presenterWindow ?? makeWindow(role: .presenter, frame: arrangement.presenter.frame)
         presenterWindow = presenter
-        presenter.cover(arrangement.presenter.frame)
         presenter.page.load(client.presenterURL(slide: lastSlide), allowedPort: client.ready.port)
         if !windowsShown { armShowWindowsFallback() }
     }
@@ -1919,49 +2594,84 @@ final class PresentationController {
     }
 
     private func showWindowsIfReady() {
-        guard state == .starting, !windowsShown, pagesReported, pendingQuestion == nil else { return }
+        guard state == .starting, !windowsShown, pagesReported, pendingQuestions.isEmpty else { return }
         showWindows()
     }
 
-    /// Orders the talk's windows front. This is the one place presenting
-    /// takes the screen: the person clicked Play in this app, and a window
-    /// covering the projector is what the click means. On two displays each
-    /// window is alone on its screen and the presenter window is key, since
-    /// that is where the speaker's keys go. On one display the audience
-    /// covers the screen and Option-Tab brings the presenter window over it.
+    /// Puts the talk's windows in full screen, one at a time (AppKit runs
+    /// one transition at a time), the front window last so its Space is
+    /// the active one, and makes it key. This is the one place presenting
+    /// takes the screen: the person clicked Play, and taking the projector
+    /// is what the click means. On one display the audience is in front
+    /// and Option-Tab switches to the presenter's Space; on two the
+    /// presenter is key, since that is where the speaker's keys go.
     private func showWindows() {
         showWindowsFallback?.cancel()
         showWindowsFallback = nil
-        guard let arrangement else { return }
+        guard let arrangement, let presenterWindow else { return }
         windowsShown = true
-        if let audienceWindow, let presenterWindow, arrangement.isSingleDisplay {
-            presenterWindow.orderFrontRegardless()
-            audienceWindow.makeKeyAndOrderFront(nil)
-            audienceWindow.orderFrontRegardless()
-            frontWindow = audienceWindow
-        } else {
-            audienceWindow?.orderFrontRegardless()
-            presenterWindow?.makeKeyAndOrderFront(nil)
-            presenterWindow?.orderFrontRegardless()
-            frontWindow = presenterWindow
-        }
+        windowsWereShown = true
         state = .presenting
+        var order: [(PresentationWindow, CGRect)] = []
+        let front: PresentationWindow
+        if let audienceWindow, arrangement.isSingleDisplay {
+            order = [(presenterWindow, arrangement.presenter.frame), (audienceWindow, arrangement.audience.frame)]
+            front = audienceWindow
+        } else {
+            if let audienceWindow { order.append((audienceWindow, arrangement.audience.frame)) }
+            order.append((presenterWindow, arrangement.presenter.frame))
+            front = presenterWindow
+        }
+        frontWindow = front
+        place(order) { [weak self, weak front] in
+            guard let self, let front, front === self.frontWindow, self.windowsShown else { return }
+            front.makeKeyAndOrderFront(nil)
+        }
     }
 
-    /// Option-Tab on one display: the other window comes over this one.
+    /// Puts each window on its display in turn, then calls `completion`.
+    /// A second window asked to enter full screen while another is still
+    /// animating fails to, so the queue waits for each to settle.
+    private func place(_ windows: [(PresentationWindow, CGRect)], completion: @escaping () -> Void = {}) {
+        placements += windows.map { (window: $0.0, frame: $0.1) }
+        placementCompletion = completion
+        placeNext()
+    }
+
+    private func placeNext() {
+        guard !placing else { return }
+        guard let next = placements.first else {
+            let completion = placementCompletion
+            placementCompletion = nil
+            completion?()
+            return
+        }
+        placements.removeFirst()
+        placing = true
+        next.window.present(on: next.frame) { [weak self] in
+            guard let self else { return }
+            self.placing = false
+            if next.window.fullScreenState != .fullScreen, !next.window.isClosed {
+                let name = next.window.role == .audience ? "audience" : "presenter"
+                self.session?.log.append("the \(name) window could not enter full screen and stays a plain window over its display", source: .app)
+            }
+            self.placeNext()
+        }
+    }
+
+    /// Option-Tab on one display: the other window's Space becomes the
+    /// active one, which is what making its window key does.
     func toggleFrontWindow() {
-        guard let audienceWindow, let presenterWindow else { return }
+        guard let audienceWindow, let presenterWindow, windowsShown else { return }
         let next = frontWindow === audienceWindow ? presenterWindow : audienceWindow
         next.makeKeyAndOrderFront(nil)
-        next.orderFrontRegardless()
         frontWindow = next
     }
 
     /// The S key in the audience page.
     func bringPresenterWindowForward() {
-        guard let presenterWindow else { return }
+        guard let presenterWindow, windowsShown else { return }
         presenterWindow.makeKeyAndOrderFront(nil)
-        presenterWindow.orderFrontRegardless()
         frontWindow = presenterWindow
     }
 
@@ -1979,30 +2689,36 @@ final class PresentationController {
         case .error(let payload) where payload.code == "recording_blocked":
             recording.blockedReason = payload.message
             onRecordingChange?(recording)
+        case .error(let payload) where payload.code == "failed" && payload.message.hasPrefix("port ") && payload.message.contains("already in use"):
+            portIsTaken()
         case .question(let id, let kind, let payload):
             let question = PendingQuestion(id: id, kind: kind, payload: payload)
-            pendingQuestion = question
-            onQuestion?(question)
+            pendingQuestions.append(question)
+            if kind == "keep-recording", state == .stopping {
+                session?.extendQuit(timeout: Self.quitTimeoutWithRecording)
+            }
+            if pendingQuestions.count == 1 { onQuestion?(question) }
         default:
             break
         }
         onEvent?(event)
     }
 
-    /// Answers the pending question with `id`, and lets the windows show
-    /// if they were waiting on it.
+    /// Answers the question with `id`, puts up the next queued one, and
+    /// lets the windows show if they were waiting on it.
     func answer(id: String, value: Bool) {
-        guard pendingQuestion?.id == id else { return }
-        pendingQuestion = nil
+        guard let index = pendingQuestions.firstIndex(where: { $0.id == id }) else { return }
+        pendingQuestions.remove(at: index)
         session?.send(.answer(id: id, value: value))
+        if index == 0, let next = pendingQuestions.first { onQuestion?(next) }
         showWindowsIfReady()
     }
 
     // MARK: Stop
 
-    /// Ends the talk: the windows go and the assertion is released at once,
-    /// then tap is asked to quit, which may bring a keep-recording question
-    /// before it exits.
+    /// Ends the talk: the windows leave full screen and close and the
+    /// assertion is released at once, then tap is asked to quit, which may
+    /// bring a keep-recording question before it exits.
     func stop() {
         guard state == .starting || state == .presenting else { return }
         state = .stopping
@@ -2016,13 +2732,21 @@ final class PresentationController {
     }
 
     /// Every ending goes through here: Stop, a failed start, tap giving up,
-    /// the deck window closing and the app quitting.
+    /// the deck window closing and the app quitting. Each window leaves
+    /// full screen and closes on its own clock; the assertion goes now.
     private func takeDownWindows() {
         showWindowsFallback?.cancel()
         showWindowsFallback = nil
+        placements = []
+        placing = false
+        placementCompletion = nil
         for window in [audienceWindow, presenterWindow].compactMap({ $0 }) {
-            window.orderOut(nil)
-            window.close()
+            windowsGoingDown.append(window)
+            window.onClosed = { [weak self, weak window] in
+                guard let self, let window else { return }
+                self.windowsGoingDown.removeAll { $0 === window }
+            }
+            window.takeDown()
         }
         audienceWindow = nil
         presenterWindow = nil
@@ -2034,17 +2758,21 @@ final class PresentationController {
     private func finishStopping() {
         session = nil
         client = nil
-        pendingQuestion = nil
+        pendingQuestions = []
+        arrangement = nil
         state = .idle
-        onStopped?(lastSlide)
+        countOut()
+        AppEnvironment.shared.releaseEndingTalk(self)
+        if windowsWereShown { onStopped?(lastSlide) }
     }
 
     /// tap present exited three times in thirty seconds, or never got ready.
     private func endBecauseTapFailed(lastOutput: [String]) {
         let summary = session?.restartPolicy.exitSummary ?? "tap present exited"
         let detail = lastOutput.last.map { "\(summary). Last output: \($0)" } ?? summary
+        let showed = windowsWereShown
         fail(detail)
-        onStopped?(lastSlide)
+        if showed { onStopped?(lastSlide) }
     }
 
     private func fail(_ message: String) {
@@ -2052,9 +2780,24 @@ final class PresentationController {
         session?.stop()
         session = nil
         client = nil
-        pendingQuestion = nil
+        pendingQuestions = []
+        arrangement = nil
         state = .failed(message)
+        countOut()
+        AppEnvironment.shared.releaseEndingTalk(self)
         onFailed?(message)
+    }
+
+    private func countIn() {
+        guard !countedAsPresenting else { return }
+        countedAsPresenting = true
+        AppEnvironment.shared.noteTalkStarted()
+    }
+
+    private func countOut() {
+        guard countedAsPresenting else { return }
+        countedAsPresenting = false
+        AppEnvironment.shared.noteTalkEnded()
     }
 }
 
@@ -2069,13 +2812,16 @@ extension ScreenInfo {
 }
 ```
 
-- [ ] **Step 5: Wire the controller into the deck**
+- [ ] **Step 5: Wire the controller into the deck and the environment**
 
 In `DeckSessionController.swift`, add after `var exchangePresenterSecret`:
 
 ```swift
-    /// The deck's talk. Created on first use; `stop()` ends it with the deck.
-    private(set) lazy var presentation: PresentationController = {
+    /// The deck's talk, created on first use. `stop()` ends it with the
+    /// deck, and hands it to the environment if it is still stopping.
+    private var createdPresentation: PresentationController?
+    var presentation: PresentationController {
+        if let createdPresentation { return createdPresentation }
         let controller = PresentationController(
             deckURL: { [weak self] in self?.document?.fileURL },
             saveDeck: { [weak self] completion in
@@ -2083,10 +2829,14 @@ In `DeckSessionController.swift`, add after `var exchangePresenterSecret`:
                 self.saveForPresenting(completion: completion)
             },
             sessionConfiguration: { AppEnvironment.shared.presentSessionConfiguration() },
-            displayAssignments: AppEnvironment.shared.displayAssignments)
+            displayAssignments: AppEnvironment.shared.displayAssignments,
+            deckPorts: AppEnvironment.shared.deckPorts)
         controller.onStopped = { [weak self] lastSlide in self?.jumpToSlide(number: lastSlide) }
+        createdPresentation = controller
         return controller
-    }()
+    }
+    /// The talk, if this deck ever started one; nil costs nothing to check.
+    var presentationIfCreated: PresentationController? { createdPresentation }
 
     /// Writes the buffer to the deck file before a talk, because tap
     /// present reads the file. A buffer that already equals the file needs
@@ -2099,7 +2849,17 @@ In `DeckSessionController.swift`, add after `var exchangePresenterSecret`:
     }
 ```
 
-In `stop()`, add `presentation.stop()` right after `stopped = true`.
+In `stop()`, add right after `stopped = true`:
+
+```swift
+        if let presentation = createdPresentation {
+            presentation.stop()
+            // The deck is going, but the talk's process is not gone yet:
+            // the environment keeps the talk until it is, so the quit
+            // deadline, the escalation and the talk count all still run.
+            if presentation.isActive { AppEnvironment.shared.retainEndingTalk(presentation) }
+        }
+```
 
 In `DeckWindowController.init`, after `shouldCascadeWindows = true`, add:
 
@@ -2113,9 +2873,43 @@ In `AppEnvironment.swift`, add after `slidePasteboard`:
     /// Which display is the audience for each pair of displays, across
     /// decks. A test replaces this with a store on a fresh UserDefaults suite.
     var displayAssignments = DisplayAssignmentStore()
+    /// The port each deck's talks run on, so the talk pages keep one origin.
+    var deckPorts = DeckPortStore()
+    /// The Present popover's last settings, which Cmd+Option+P starts with.
+    var presentationSettings = PresentationSettingsStore()
     /// A tap for talks alone, for tests that script tap present while the
     /// deck's real tap dev keeps running. nil runs the bundled tap.
     var presentExecutableURL: URL?
+    /// How many talks are running across every deck, from Play to idle or
+    /// failed. Play is off while one runs, and D7's updater reads
+    /// `updatesMayInterrupt` before any prompt or restart.
+    private(set) var presentingCount = 0
+    static let presentingDidChangeNotification = Notification.Name("TapPresentingDidChange")
+    /// Talks whose deck closed while they were still stopping, kept alive
+    /// until their process has exited or the talk has failed.
+    private(set) var endingTalks: [PresentationController] = []
+
+    var isPresenting: Bool { presentingCount > 0 }
+    var updatesMayInterrupt: Bool { !isPresenting }
+
+    func noteTalkStarted() {
+        presentingCount += 1
+        NotificationCenter.default.post(name: Self.presentingDidChangeNotification, object: self)
+    }
+
+    func noteTalkEnded() {
+        presentingCount = max(0, presentingCount - 1)
+        NotificationCenter.default.post(name: Self.presentingDidChangeNotification, object: self)
+    }
+
+    func retainEndingTalk(_ talk: PresentationController) {
+        guard !endingTalks.contains(where: { $0 === talk }) else { return }
+        endingTalks.append(talk)
+    }
+
+    func releaseEndingTalk(_ talk: PresentationController) {
+        endingTalks.removeAll { $0 === talk }
+    }
 ```
 
 and after `sessionConfiguration()`:
@@ -2152,7 +2946,7 @@ and add after `applicationShouldHandleReopen`:
     /// without an answer, so quitting the app never loses one.
     static func stopAllPresentations() {
         for document in NSDocumentController.shared.documents {
-            (document as? DeckDocument)?.sessionController?.presentation.stop()
+            (document as? DeckDocument)?.sessionController?.presentationIfCreated?.stop()
         }
     }
 ```
@@ -2162,37 +2956,30 @@ In `TapLogWindowController.reload()`, replace the `logs = ...` line with:
 ```swift
         logs = NSDocumentController.shared.documents.flatMap { document -> [TapLog] in
             guard let controller = (document as? DeckDocument)?.sessionController else { return [] }
-            return [controller.session.log] + (controller.presentation.session.map { [$0.log] } ?? [])
+            return [controller.session.log] + (controller.presentationIfCreated?.session.map { [$0.log] } ?? [])
         }
 ```
 
-- [ ] **Step 6: Run the tests one at a time**
+- [ ] **Step 6: Run the tests**
 
-Run: `make -C desktop project`, then:
+Run: `make -C desktop project`, then the required runs:
 
 ```bash
-make -C desktop test ONLY=TapTests/PresentingTests/testSaveBeforePresenting
-make -C desktop test ONLY=TapTests/PresentingTests/testWindowsCoverTheScreenAndTheAudienceIsInFront
 make -C desktop test ONLY=TapTests/PresentingTests/testTheMacStaysAwake
-make -C desktop test ONLY=TapTests/PresentingTests/testTheSleepAssertionIsReleasedWhenTheDeckWindowCloses
-make -C desktop test ONLY=TapTests/PresentingTests/testTheSleepAssertionIsReleasedWhenTapPresentDies
-make -C desktop test ONLY=TapTests/PresentingTests/testTheSleepAssertionIsReleasedWhenTheAppQuits
-make -C desktop test ONLY=TapTests/PresentingTests/testStopPresenting
-make -C desktop test ONLY=TapTests/PresentingTests/testStopWhileStartingOpensNoWindow
-make -C desktop test ONLY=TapTests/PresentingTests/testTheTalksLogIsListedInTheTapLogWindow
+make -C desktop test ONLY=TapTests/PresentingTests
 ```
 
-Expected: all nine pass. Each covers the screen for a few seconds. D2's and D3's suites are unchanged; run `make -C desktop test ONLY=TapTests/RestartTests` and `ONLY=TapTests/TapLogTests` to confirm the session and log changes broke nothing.
+The second run is the whole class in one process, the one exception to running hosted tests one at a time: a talk count that leaks from one test to the next (a stopping talk freed before its process exits) shows up only when a second test starts a talk in the same process, and CI would otherwise be the first to see it. Expected: every test in the class passes; each covers the screen for a few seconds with AppKit's full screen animation. Optional: `make -C desktop test ONLY=TapTests/RestartTests` and `ONLY=TapTests/TapLogTests`, to confirm the session and log changes broke nothing.
 
-If `testStopPresenting` never sees `lastSlide == 4`: the hub relays only from a connection that carried the presenter cookie, so check `client.presenterCookie` is non-nil and that `TapClient.socketRequest()` still sets the `Cookie` header (D2). If the audience page never reports ready in `testWindowsCoverTheScreenAndTheAudienceIsInFront`, read `HostedTestCase.pageStateScript` through `audience.page.webView` the way `waitForPreview` does before changing anything.
+If `testStopPresenting` never sees `lastSlide == 4`: the hub relays only from a connection that carried the presenter cookie, so check `client.presenterCookie` is non-nil and that `TapClient.socketRequest()` still sets the `Cookie` header (D2). If the audience page never reports ready in `testWindowsEnterFullScreenAndTheAudienceIsInFront`, read `HostedTestCase.pageStateScript` through `audience.page.webView` the way `waitForPreview` does before changing anything. If `testATakenPortFallsBackToANewOne` times out on `.presenting`, read the talk's log: tap's error line must say "port <n> is already in use"; if tap instead started on the port (the probe found it free), tap dev's port was released between the two starts, which does not happen while the deck is open.
 
 - [ ] **Step 7: Mutate and commit**
 
-Mutations, each reverted, the ones that can leave a screen covered or the assertion held first: in `takeDownWindows`, drop `sleepAssertion.release()` (expected: `testTheMacStaysAwake`, both close and quit tests and the crash test fail on `isHeld`); in `DeckSessionController.stop`, drop `presentation.stop()` (expected: the close test fails, the window stays visible); in `AppDelegate.applicationWillTerminate`, drop the call (expected: the quit test fails); in `endBecauseTapFailed`, skip `fail` (expected: the crash test times out on `.failed` with the assertion held); in `stop`, drop `takeDownWindows()` (expected: `testStopPresenting` fails on `audienceWindow`); in `start`, skip `saveDeck` and call `launch` directly (expected: `testSaveBeforePresenting` fails on the file); in `handle`, drop the `.slide` case (expected: `testStopPresenting` times out on `lastSlide`); in `showWindows`, order the presenter front on one display (expected: the window-order assertion fails); in `tapIsReady`, skip `installPresenterCookie` (expected: the cookie assertion fails); in `showWindowsIfReady`, drop `pendingQuestion == nil` (survives here; Task 9's consent test kills it).
+Mutations, each reverted, the ones that can leave a window in full screen, the assertion held, or Play off everywhere first: in `takeDownWindows`, drop `sleepAssertion.release()` (expected: `testTheMacStaysAwake`, the close, quit and dying tests fail on `isHeld`); in `takeDownWindows`, drop the `window.takeDown()` loop (expected: `testStopPresenting` fails on `fullScreenPresentationWindows().isEmpty`); in `DeckSessionController.stop`, drop `retainEndingTalk` (expected: `testClosingTheDeckMidTalkStillEndsTheProcessAndFreesPlay` fails on `endingTalks.count`, and with the locals gone the talk is never counted out); in `finishStopping`, drop `countOut()` (expected: the same test times out on `isPresenting`, and the class run fails on every later test's `canStart`); in `DeckSessionController.stop`, drop `presentation.stop()` (expected: the close test fails on `state`); in `AppDelegate.applicationWillTerminate`, drop the call (expected: the quit test fails); in `endBecauseTapFailed`, skip `fail` (expected: the dying test times out on `.failed` with the assertion held); in `tapIsReady`'s task, drop the `state == .starting || .presenting` guard (expected: `testStopWhileTheExchangeIsInFlightOpensNoWindow` fails on `audienceWindow`); in `start`, skip `saveDeck` and call `launch` directly (expected: `testSaveBeforePresenting` fails on the file); in `start`, move `countIn()` into `launch` (expected: `testSaveBeforePresenting` fails on `isPresenting`); in `handle`, drop the `.slide` case (expected: `testStopPresenting` times out on `lastSlide`); in `showWindows`, put the audience first on one display (expected: the window-order wait in `testWindowsEnterFullScreenAndTheAudienceIsInFront` times out); in `tapIsReady`, drop `deckPorts.setPort` (expected: `testTheTalkKeepsItsPortAcrossTalks` fails on the remembered port); in `handle`, drop the port-taken case (expected: `testATakenPortFallsBackToANewOne` times out, tap restarting on the same port); in `tapIsReady`, skip `installPresenterCookie` (expected: the cookie assertion fails); in `presenterURL`, drop the key (expected: the presenter page's query assertion fails); in `showWindowsIfReady`, drop `pendingQuestions.isEmpty` (survives here; Task 9's consent test kills it).
 
 ```bash
 git add desktop/Tap desktop/TapTests
-git commit -m "feat(desktop): start and stop a talk with tap present, its windows and the sleep assertion"
+git commit -m "feat(desktop): start and stop a talk with tap present on the deck's port, its full screen windows and the sleep assertion"
 ```
 
 ---
