@@ -171,4 +171,37 @@ final class PresentPopoverTests: PresentingTestCase {
         try await stopPresenting(controller)
         XCTAssertTrue(deckWindow.playButton.isEnabled)
     }
+
+    func testThePlayButtonFollowsATalkInAnotherDeck() async throws {
+        let (_, first) = try await openDeckForPresenting()
+        let firstWindow = try windowController(first)
+        try await startPresenting(first, PresentationOptions(mode: .rehearse, startSlide: 1))
+        // A deck opened during another deck's talk.
+        let (_, second) = try await openDeckForPresenting()
+        let secondWindow = try windowController(second)
+        XCTAssertFalse(secondWindow.playButton.isEnabled, "no second talk while one runs")
+        try await stopPresenting(first)
+        XCTAssertTrue(secondWindow.playButton.isEnabled, "the other deck's Play comes back when the talk ends")
+        XCTAssertTrue(firstWindow.playButton.isEnabled)
+        // And the other way: a deck open before the talk turns its Play off.
+        try await startPresenting(second, PresentationOptions(mode: .rehearse, startSlide: 1))
+        XCTAssertFalse(firstWindow.playButton.isEnabled, "a deck open before the talk follows it too")
+        try await stopPresenting(second)
+        XCTAssertTrue(firstWindow.playButton.isEnabled)
+    }
+
+    func testRehearseFromTheMenuLeavesTheSavedSettings() async throws {
+        let saved = PresentationSettings(startFromSlideOne: false, record: true, phoneRemote: false, tunnel: false)
+        AppEnvironment.shared.presentationSettings.settings = saved
+        let (_, controller) = try await openDeckForPresenting()
+        let deckWindow = try windowController(controller)
+        // This deck's popover was last shown with recording off, and never started from.
+        deckWindow.playWithOptions(nil)
+        deckWindow.presentPopover.recordCheckbox.state = .off
+        deckWindow.presentPopover.close()
+        deckWindow.rehearse(nil)
+        XCTAssertEqual(controller.presentation.options?.mode, .rehearse)
+        XCTAssertEqual(AppEnvironment.shared.presentationSettings.settings, saved, "Rehearse from the menu saves no settings: the next Cmd+Option+P still records")
+        try await waitUntil(timeout: 40, "the rehearsal") { controller.presentation.state == .presenting }
+    }
 }
