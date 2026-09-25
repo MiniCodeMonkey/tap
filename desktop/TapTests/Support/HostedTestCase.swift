@@ -19,6 +19,10 @@ class HostedTestCase: XCTestCase {
         // Copy and paste go to a pasteboard of the test's own, never the person's clipboard.
         AppEnvironment.shared.slidePasteboard = NSPasteboard(name: NSPasteboard.Name("TapTests.copy.\(UUID().uuidString)"))
         AppEnvironment.shared.presentationDataStore = WKWebsiteDataStore(forIdentifier: UUID())
+        AppEnvironment.shared.displayAssignments = DisplayAssignmentStore(defaults: try XCTUnwrap(UserDefaults(suiteName: "TapTests.displays.\(UUID().uuidString)")))
+        AppEnvironment.shared.deckPorts = DeckPortStore(defaults: try XCTUnwrap(UserDefaults(suiteName: "TapTests.ports.\(UUID().uuidString)")))
+        AppEnvironment.shared.presentationSettings = PresentationSettingsStore(defaults: try XCTUnwrap(UserDefaults(suiteName: "TapTests.present.\(UUID().uuidString)")))
+        AppEnvironment.shared.presentExecutableURL = nil
     }
 
     override func tearDown() async throws {

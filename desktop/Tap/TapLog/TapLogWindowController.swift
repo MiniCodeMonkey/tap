@@ -56,7 +56,11 @@ final class TapLogWindowController: NSWindowController {
 
     /// Lists the logs of the decks that are open now.
     func reload() {
-        logs = NSDocumentController.shared.documents.compactMap { ($0 as? DeckDocument)?.sessionController?.session.log }
+        logs = NSDocumentController.shared.documents.flatMap { document -> [TapLog] in
+            guard let controller = (document as? DeckDocument)?.sessionController else { return [] }
+            let talk = controller.presentationIfCreated
+            return [controller.session.log] + ((talk?.session?.log ?? (talk?.isActive == true ? talk?.lastTalkLog : nil)).map { [$0] } ?? [])
+        }
         picker.segmentCount = logs.count
         for (index, log) in logs.enumerated() {
             picker.setLabel(log.title, forSegment: index)

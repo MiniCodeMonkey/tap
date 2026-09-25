@@ -36,6 +36,47 @@ final class AppEnvironment {
     /// A test replaces it with a store of its own, so a run never touches
     /// the person's.
     var presentationDataStore: WKWebsiteDataStore = .default()
+    /// Which display is the audience for each pair of displays, across
+    /// decks. A test replaces this with a store on a fresh UserDefaults suite.
+    var displayAssignments = DisplayAssignmentStore()
+    /// The port each deck's talks run on, so the talk pages keep one origin.
+    var deckPorts = DeckPortStore()
+    /// The Present popover's last settings, which Cmd+Option+P starts with.
+    var presentationSettings = PresentationSettingsStore()
+    /// A tap for talks alone, for tests that script tap present while the
+    /// deck's real tap dev keeps running. nil runs the bundled tap.
+    var presentExecutableURL: URL?
+    /// How many talks are running across every deck, from Play to idle or
+    /// failed. Play is off while one runs, and D7's updater reads
+    /// `updatesMayInterrupt` before any prompt or restart.
+    private(set) var presentingCount = 0
+    static let presentingDidChangeNotification = Notification.Name("TapPresentingDidChange")
+    /// Talks whose deck closed while they were still stopping, kept alive
+    /// until their process has exited or the talk has failed.
+    private(set) var endingTalks: [PresentationController] = []
+
+    var isPresenting: Bool { presentingCount > 0 }
+    var updatesMayInterrupt: Bool { !isPresenting }
+
+    func noteTalkStarted() {
+        presentingCount += 1
+        NotificationCenter.default.post(name: Self.presentingDidChangeNotification, object: self)
+    }
+
+    func noteTalkEnded() {
+        presentingCount = max(0, presentingCount - 1)
+        NotificationCenter.default.post(name: Self.presentingDidChangeNotification, object: self)
+    }
+
+    func retainEndingTalk(_ talk: PresentationController) {
+        guard !endingTalks.contains(where: { $0 === talk }) else { return }
+        endingTalks.append(talk)
+    }
+
+    func releaseEndingTalk(_ talk: PresentationController) {
+        endingTalks.removeAll { $0 === talk }
+    }
+
     private(set) var environmentNotice: String?
     private(set) var bundledTapVersion: String?
     private let loginShellLoader: LoginShellEnvironmentLoader
@@ -71,6 +112,14 @@ final class AppEnvironment {
     /// from the app anyway.
     func sessionConfiguration() -> TapSession.Configuration {
         TapSession.Configuration(executableURL: tapExecutableURL, environment: { [weak self] in
+            await self?.tapEnvironment() ?? ProcessInfo.processInfo.environment
+        })
+    }
+
+    /// The session configuration for a talk: the same tap and environment as
+    /// tap dev, unless a test named another executable for talks.
+    func presentSessionConfiguration() -> TapSession.Configuration {
+        TapSession.Configuration(executableURL: presentExecutableURL ?? tapExecutableURL, environment: { [weak self] in
             await self?.tapEnvironment() ?? ProcessInfo.processInfo.environment
         })
     }

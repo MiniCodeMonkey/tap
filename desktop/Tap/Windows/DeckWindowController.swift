@@ -43,6 +43,7 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
         super.init(window: window)
         window.delegate = self
         shouldCascadeWindows = true
+        sessionController.presentation.deckWindowController = self
 
         let toolbar = NSToolbar(identifier: "TapDeckToolbar")
         toolbar.delegate = self

@@ -53,6 +53,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         return false
     }
 
+    func applicationWillTerminate(_ notification: Notification) {
+        Self.stopAllPresentations()
+    }
+
+    /// Ends every deck's talk: windows down, sleep assertions released, tap
+    /// present told to quit. tap keeps a recording when its stdin closes
+    /// without an answer, so quitting the app never loses one. The process
+    /// ends before the windows' exits complete; the Spaces go with it.
+    static func stopAllPresentations() {
+        for document in NSDocumentController.shared.documents {
+            (document as? DeckDocument)?.sessionController?.presentationIfCreated?.stop()
+        }
+    }
+
     /// Shows the welcome window, unless a deck is already open. Safe to call
     /// whenever the set of open decks might have changed: at launch, after a
     /// deck window closes, and on a Dock reopen with no visible windows.
@@ -86,6 +100,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     /// `NSApp.keyWindow`.
     static func deck(owning window: NSWindow?) -> DeckWindowController? {
         if let deck = window?.windowController as? DeckWindowController { return deck }
+        if let presentation = window as? PresentationWindow { return presentation.deckWindowController }
         return (window?.windowController as? PreviewWindowController)?.deckWindowController
     }
 
