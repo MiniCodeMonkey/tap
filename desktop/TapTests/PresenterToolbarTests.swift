@@ -21,6 +21,7 @@ final class PresenterToolbarTests: PresentingTestCase {
         XCTAssertTrue(dot.isHidden, "no REC dot while nothing records")
         XCTAssertTrue(presenter.container.trackingAreas.contains { $0.options.contains(.mouseMoved) && $0.options.contains(.activeAlways) },
                       "the content view tracks the pointer everywhere in the window")
+        XCTAssertTrue(presenter.container.trackingAreas.contains { $0.options.contains(.mouseEnteredAndExited) }, "and hears it leave")
 
         // The pointer reaches the bottom edge: the toolbar slides up, and the idle cursor timer is armed.
         let height = presenter.container.bounds.height
@@ -54,6 +55,26 @@ final class PresenterToolbarTests: PresentingTestCase {
         toolbar.pointerReachedBottomEdge()
         try await Task.sleep(nanoseconds: 300_000_000)
         XCTAssertFalse(toolbar.isHidden, "coming back cancels the hide")
+        // The pointer leaves the window from the toolbar (onto the other display, or the mouse is put down): the toolbar goes too.
+        let exit = try XCTUnwrap(NSEvent.enterExitEvent(with: .mouseExited, location: NSPoint(x: 400, y: -1), modifierFlags: [],
+                                                        timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: presenter.windowNumber,
+                                                        context: nil, eventNumber: 0, trackingNumber: 0, userData: nil))
+        presenter.container.mouseExited(with: exit)
+        try await waitUntil(timeout: 2, "the toolbar away once the pointer left the window") { toolbar.isHidden }
+
+        // The toolbar's own buttons: Reload Slides saves, then tap reads the file again; Swap has nothing to swap on one display.
+        var saves = 0
+        let realSave = presentation.saveDeck
+        presentation.saveDeck = { completion in
+            saves += 1
+            realSave(completion)
+        }
+        toolbar.pointerReachedBottomEdge()
+        toolbar.reloadButton.performClick(nil)
+        XCTAssertEqual(saves, 1, "the toolbar's Reload Slides saves first")
+        presentation.saveDeck = realSave
+        toolbar.swapButton.performClick(nil)
+        XCTAssertEqual(presentation.state, .presenting)
 
         // The REC dot stays visible in a corner at all times while recording.
         presentation.handle(.recording(RecordingEvent(state: "recording", segment: 1, elapsed: 5, disk: "ok")))
@@ -137,5 +158,12 @@ final class PresenterToolbarTests: PresentingTestCase {
         XCTAssertTrue(toolbar.editsLabel.isHidden)
         XCTAssertTrue(try String(contentsOf: deck, encoding: .utf8).contains("# One edited!"), "Reload Slides saved the buffer first")
         XCTAssertFalse(document.isDocumentEdited)
+
+        // An edit, then the text back to what tap present read: nothing is unshown.
+        let presented = try XCTUnwrap(presentation.presentedText)
+        presentation.deckTextChanged(presented + "\nmore")
+        XCTAssertEqual(presentation.editsNotShown, 1)
+        presentation.deckTextChanged(presented)
+        XCTAssertEqual(presentation.editsNotShown, 0, "typing back to the presented text leaves no edit unshown")
     }
 }
