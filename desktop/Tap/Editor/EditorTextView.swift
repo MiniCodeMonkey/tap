@@ -686,26 +686,55 @@ final class EditorTextView: NSTextView {
 
     // MARK: Accessibility
 
+    /// The box elements handed out by the latest `accessibilityChildren`,
+    /// by slide number, and the drop indicator's. AppKit's accessibility
+    /// does not retain the elements a view returns: an element nothing
+    /// else holds is freed as soon as the call returns, and every later
+    /// query of it, its role, frame, identifier or parent, fails. So the
+    /// view holds each one, and hands out the same object for the same
+    /// slide on the next call, until the box leaves the visible range.
+    private var boxAccessibilityElements: [Int: NSAccessibilityElement] = [:]
+    private var dropIndicatorAccessibilityElement: NSAccessibilityElement?
+
     /// The text view's own children, plus one element per visible box and
     /// one for the drop indicator while a drag is over the editor.
     override func accessibilityChildren() -> [Any]? {
         var children = super.accessibilityChildren() ?? []
+        var visibleElements: [Int: NSAccessibilityElement] = [:]
         for index in visibleBoxIndices() {
             guard let rect = boxRect(forBoxAt: index) else { continue }
-            let element = NSAccessibilityElement.element(withRole: .group, frame: convertToScreen(rect), label: SlideAccessibility.label(for: boxes[index].slide), parent: self) as! NSAccessibilityElement
-            element.setAccessibilityIdentifier("box-\(boxes[index].slide.number)")
+            let number = boxes[index].slide.number
+            let element = boxAccessibilityElements[number] ?? {
+                let element = NSAccessibilityElement()
+                element.setAccessibilityRole(.group)
+                element.setAccessibilityParent(self)
+                element.setAccessibilityIdentifier("box-\(number)")
+                return element
+            }()
+            element.setAccessibilityFrame(convertToScreen(rect))
+            element.setAccessibilityLabel(SlideAccessibility.label(for: boxes[index].slide))
+            visibleElements[number] = element
             children.append(element)
         }
+        boxAccessibilityElements = visibleElements
         // A drag is over the editor exactly while the count is set: both
         // update paths set it and clearDropIndicator zeroes it.
         if dropIndicatorCount > 0 {
             let y = dropIndicatorY(beforeNumber: dropIndicatorBeforeNumber) ?? 0
             let rect = NSRect(x: textContainerOrigin.x - Self.boxOutset, y: y - 4, width: bounds.width, height: 8)
-            let element = NSAccessibilityElement.element(withRole: .splitter, frame: convertToScreen(rect),
-                                                         label: SlideAccessibility.dropLabel(beforeNumber: dropIndicatorBeforeNumber, count: dropIndicatorCount),
-                                                         parent: self) as! NSAccessibilityElement
-            element.setAccessibilityIdentifier("drop-indicator")
+            let element = dropIndicatorAccessibilityElement ?? {
+                let element = NSAccessibilityElement()
+                element.setAccessibilityRole(.splitter)
+                element.setAccessibilityParent(self)
+                element.setAccessibilityIdentifier("drop-indicator")
+                return element
+            }()
+            element.setAccessibilityFrame(convertToScreen(rect))
+            element.setAccessibilityLabel(SlideAccessibility.dropLabel(beforeNumber: dropIndicatorBeforeNumber, count: dropIndicatorCount))
+            dropIndicatorAccessibilityElement = element
             children.append(element)
+        } else {
+            dropIndicatorAccessibilityElement = nil
         }
         return children
     }

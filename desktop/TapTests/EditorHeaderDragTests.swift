@@ -145,4 +145,22 @@ final class EditorHeaderDragTests: HostedTestCase {
         editor.clearDropIndicator()
         XCTAssertNil(editor.dropIndicatorBeforeNumber)
     }
+
+    /// Accessibility clients, VoiceOver and UI tests among them, query a
+    /// box element after the call that listed it has returned: its role,
+    /// frame, identifier and parent. The element must still be alive then,
+    /// and the same box must keep the same element.
+    func testABoxElementOutlivesTheCallThatListsIt() async throws {
+        let (_, _, editor) = try await openOpsLaidOut()
+        weak var listed: NSAccessibilityElement?
+        autoreleasepool {
+            listed = editor.accessibilityChildren()?.compactMap { $0 as? NSAccessibilityElement }.first { $0.accessibilityIdentifier() == "box-1" }
+        }
+        let box = try XCTUnwrap(listed, "the box element is still alive once the call that listed it has returned")
+        XCTAssertEqual(box.accessibilityRole(), .group)
+        XCTAssertTrue(box.accessibilityParent() as? NSView === editor, "the box's parent is the editor")
+        XCTAssertFalse(box.accessibilityFrame().isEmpty, "the box has a frame on screen")
+        let again = editor.accessibilityChildren()?.compactMap { $0 as? NSAccessibilityElement }.first { $0.accessibilityIdentifier() == "box-1" }
+        XCTAssertTrue(again === box, "the same box keeps the same element")
+    }
 }
