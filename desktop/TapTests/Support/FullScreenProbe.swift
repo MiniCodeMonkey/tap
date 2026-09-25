@@ -191,4 +191,15 @@ extension XCTestCase {
         }
         await waitForFullScreenQuiet()
     }
+
+    /// `requireSecondSpace()`'s verdict without the skip, for a test whose
+    /// first part runs on every host and whose full screen part skips
+    /// (`XCTSkipUnless`) once it gets there. Probe before the talk: the
+    /// probe's own windows enter full screen.
+    @MainActor
+    func hostHasSecondSpace() async -> Bool {
+        guard await FullScreenProbe.run().available, await FullScreenProbe.runSecondSpace().works else { return false }
+        await waitForFullScreenQuiet()
+        return true
+    }
 }

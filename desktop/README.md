@@ -61,10 +61,20 @@ them.
 
 What only a person can check, with a projector plugged in as a second
 display (two displays are otherwise covered only by seam tests): the
-audience Space on the projector, Swap Displays moving the windows across
-displays, Cmd-Tab to a demo app during a talk, the page's own F-key full
-screen, a real recording made with Screen Recording permission, the
-phone remote with cloudflared installed, and the "Displays have separate
-Spaces" setting turned off. The UI tests and benchmarks run on CI (the
-Desktop UI Tests and Desktop Benchmarks jobs), never on the person's own
-machine, since they take over the screen.
+audience Space on the projector and the presenter Space on the laptop,
+Swap Displays moving them across displays, the projector unplugged
+mid-talk (the presenter view comes over the audience view) and plugged
+back in (the audience goes back to the projector, the presenter view gets
+its Space again), Cmd-Tab to a demo app and back during a talk, the
+page's own F-key full screen in either page, the toolbar sliding up from
+the bottom edge and the menu bar dropping over the top edge without
+covering it, the "Displays have separate Spaces" setting turned off (the
+popover's note, plain windows instead of Spaces), a real recording made
+with Screen Recording permission (REC in the toolbar, the keep-recording
+sheet at Stop, Delete still deleting after a 20 s pause, the run in
+Finder), a second talk on the same deck keeping the presenter layout and
+notes size (the deck's port), and the phone remote with cloudflared
+installed (the QR code from tap, a phone driving the deck). The UI tests
+and benchmarks run on CI (the Desktop UI Tests and Desktop Benchmarks
+jobs), never on the person's own machine, since they take over the
+screen.

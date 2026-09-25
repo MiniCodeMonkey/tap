@@ -122,6 +122,17 @@ final class AppEnvironment {
         if let configHome = UserDefaults.standard.string(forKey: "TapConfigHome") {
             extraEnvironment["XDG_CONFIG_HOME"] = configHome
         }
+        // They pass -TapDefaultsSuite <name> too, so the app's own settings
+        // (the Present popover's, the deck ports, the display assignments,
+        // the panel and the last layout) go to a suite of their own.
+        if let suiteName = UserDefaults.standard.string(forKey: "TapDefaultsSuite"), let defaults = UserDefaults(suiteName: suiteName) {
+            panelState = SlidePanelState(defaults: defaults)
+            lastLayout = LastLayout(defaults: defaults)
+            displayAssignments = DisplayAssignmentStore(defaults: defaults)
+            deckPorts = DeckPortStore(defaults: defaults)
+            presentationSettings = PresentationSettingsStore(defaults: defaults)
+            focusHint = FocusHintState(defaults: defaults)
+        }
     }
 
     /// Starts reading the login shell environment and the tap version.

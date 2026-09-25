@@ -1,8 +1,9 @@
 import XCTest
 
 /// A real talk on the real screen, driven with the real keyboard and
-/// pointer. Local only: it covers the screen, and it needs Xcode's
-/// permission to control the computer.
+/// pointer. It runs on CI (the Desktop UI Tests job), never on a person's
+/// machine: it covers the screen. tap's settings and the app's own go to
+/// folders and suites of the test's own.
 final class PresentingUITests: UITestCase {
     /// A settings folder with the recording question answered no, so the
     /// talk asks nothing and records nothing.
@@ -16,8 +17,11 @@ final class PresentingUITests: UITestCase {
     func launchForPresenting() throws -> XCUIApplication {
         let deck = try copyFixture("ops.md")
         let application = XCUIApplication()
+        let defaultsSuite = "TapUITests.presenting.\(UUID().uuidString)"
+        addTeardownBlock { UserDefaults.standard.removePersistentDomain(forName: defaultsSuite) }
         application.launchArguments = ["-TapOpenOnLaunch", deck.path, "-ApplePersistenceIgnoreState", "YES",
-                                       "-TapConfigHome", try configHome().path, "-FocusHintShown", "YES"]
+                                       "-TapConfigHome", try configHome().path, "-TapDefaultsSuite", defaultsSuite,
+                                       "-FocusHintShown", "YES"]
         application.launch()
         return application
     }
@@ -62,7 +66,7 @@ final class PresentingUITests: UITestCase {
         XCTAssertFalse(application.windows["audience-window"].exists)
         Thread.sleep(forTimeInterval: 2)
         // The toolbar slides up when the pointer reaches the bottom edge.
-        presenter.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 1.0)).hover()
+        presenter.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.995)).hover()
         let stop = application.buttons["stop-button"]
         XCTAssertTrue(stop.waitForExistence(timeout: 5))
         stop.click()

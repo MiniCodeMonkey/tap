@@ -67,7 +67,7 @@ final class PresentingDisplayTests: PresentingTestCase {
     }
 
     func testSwapDisplays() async throws {
-        try await requireSecondSpace()
+        let secondSpace = await hostHasSecondSpace()
         let (_, controller) = try await openDeckForPresenting()
         let screens = halfScreens()
         let presentation = controller.presentation
@@ -85,6 +85,9 @@ final class PresentingDisplayTests: PresentingTestCase {
         presentation.swapDisplays()
         XCTAssertEqual(audience.targetFrame, screens[1].frame)
         XCTAssertEqual(presenter.targetFrame, screens[0].frame)
+        XCTAssertTrue(presentation.sleepAssertion.isHeld, "a swap is not an ending")
+        // Without a second Space the talk runs as plain windows over the two halves; the rest is full screen's.
+        try XCTSkipUnless(secondSpace, "this host gives one full screen Space per screen; the swap's frames passed, the windows' return to full screen is the person's manual pass")
         XCTAssertFalse(presentation.windowsAreSettled)
         try await waitUntil(timeout: 30, "the windows back in full screen on their new displays") {
             presentation.windowsAreSettled && audience.fullScreenState == .fullScreen && presenter.fullScreenState == .fullScreen
