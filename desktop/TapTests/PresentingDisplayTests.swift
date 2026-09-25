@@ -242,6 +242,31 @@ final class PresentingDisplayTests: PresentingTestCase {
         try await Task.sleep(nanoseconds: 500_000_000)
         XCTAssertFalse(presentation.presenterIsShownOverAudience)
         XCTAssertFalse(onScreenWindowNumbers().contains(presenter.windowNumber), "the window server has no notes on screen")
+
+        // The one display changes mode: the audience moves to the new frame, and the notes stay hidden.
+        let full = oneScreen()[0]
+        let resized = [ScreenInfo(name: full.name, frame: full.frame.insetBy(dx: 100, dy: 100), isBuiltIn: true)]
+        presentation.screens = { resized }
+        presentation.screensChanged()
+        var notesSeen = false
+        try await waitUntil(timeout: 30, "the audience on the new frame") {
+            if onScreenWindowNumbers().contains(presenter.windowNumber) { notesSeen = true }
+            return presentation.windowsAreSettled && audience.settledFrame == resized[0].frame
+        }
+        XCTAssertFalse(notesSeen, "the notes never came on screen while the audience window moved")
+        XCTAssertTrue(presentation.frontWindow === audience)
+        XCTAssertFalse(presenter.isAttached, "a change of mode on one display does not bring the notes over the audience")
+        XCTAssertFalse(presenter.isVisible)
+
+        // With the notes over the audience, a change of mode keeps them there.
+        presentation.toggleFrontWindow()
+        XCTAssertTrue(presentation.presenterIsShownOverAudience)
+        presentation.screens = { [full] }
+        presentation.screensChanged()
+        try await waitUntil(timeout: 30, "the windows back on the full frame, the notes over the audience") {
+            presentation.windowsAreSettled && audience.settledFrame == full.frame && presentation.presenterIsShownOverAudience
+        }
+        XCTAssertTrue(presentation.frontWindow === presenter)
     }
 
     /// Two displays on one screen, with AppKit's full screen toggle
