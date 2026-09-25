@@ -80,7 +80,7 @@ func TestTheFencesFixture(t *testing.T) {
 		{Block: 1, Language: "markdown", Line: 15},
 		{Block: 1, Language: "markdown", Line: 22},
 		{Block: 1, Language: "yaml", Line: 32},
-		{Block: 1, Language: "sql", Driver: "sqlite", Live: true, Line: 42},
+		{Block: 1, Language: "sql", Driver: "sqlite", Live: true, Line: 42, Problem: "This deck does not declare the sqlite driver. Add this to the frontmatter:\n\ndrivers:\n  sqlite: {}"},
 	}
 	if len(result.Slides) != len(wantRanges) {
 		t.Fatalf("got %d slides, want %d: a --- inside a fence must not split a slide", len(result.Slides), len(wantRanges))

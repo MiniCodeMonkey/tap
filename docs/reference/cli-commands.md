@@ -625,7 +625,7 @@ tap slide list talk.md --json  # For editors and scripts
 {"ok": true, "slides": [...], "errors": []}
 ```
 
-Each slide has `number`, `startLine`, `endLine`, `layout`, `title`, `fragments`, `steps`, `skip`, `errors`, and `codeBlocks` (each with `block`, `language`, `driver`, `live`, `line`). There is also a top-level `errors` list for problems with the deck as a whole.
+Each slide has `number`, `startLine`, `endLine`, `layout`, `title`, `fragments`, `steps`, `skip`, `errors`, and `codeBlocks` (each with `block`, `language`, `driver`, `live`, `line`, and `problem`, present only for a live block that cannot run, with tap's message). There is also a top-level `errors` list for problems with the deck as a whole.
 
 For example, slide 4 of the conference talk example, which has a live SQL block:
 
@@ -651,6 +651,8 @@ For example, slide 4 of the conference talk example, which has a live SQL block:
   ]
 }
 ```
+
+A block whose driver the deck does not declare carries a `"problem"` field too, with tap's message, for example `"problem": "This deck does not declare the shell driver. Add \"shell: {}\" under drivers in the frontmatter."`.
 
 ---
 

@@ -96,7 +96,8 @@
           "language": "sql",
           "driver": "sqlite",
           "live": true,
-          "line": 42
+          "line": 42,
+          "problem": "This deck does not declare the sqlite driver. Add this to the frontmatter:\n\ndrivers:\n  sqlite: {}"
         }
       ]
     }

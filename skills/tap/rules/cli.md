@@ -248,6 +248,8 @@ tap slide list slides.md
 {"ok": true, "slides": [{"number": 4, "startLine": 41, "endLine": 51, "layout": "code-focus", "title": "", "fragments": 0, "steps": 0, "skip": false, "errors": [], "codeBlocks": [{"block": 1, "language": "sql", "driver": "sqlite", "live": true, "line": 45}]}], "errors": []}
 ```
 
+A code block also carries a `"problem"` string, present only when the block's driver is not declared in the frontmatter, with tap's message.
+
 ## tap component new
 
 Scaffold a deck-supplied React component. See
