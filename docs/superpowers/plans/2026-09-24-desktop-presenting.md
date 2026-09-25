@@ -1128,7 +1128,7 @@ git commit -m "feat(desktop): display arrangement, the deck's port, presentation
 
 **Interfaces:**
 - Consumes: D2's `ReadyPayload`, `WeakScriptMessageHandler`, `PreviewViewController.isExternalWebLink(url:navigationType:)`; D3's `DeckWindowController` (only as a weak reference type).
-- Produces: `SleepAssertion` with `static let reason`, `isHeld`, `acquire()`, `release()`; `PresentationPageController(accessibilityIdentifier:)` with `webView`, `onReady`, `onLoadFailed`, `onPresenterPopup`, `openExternally`, `lastReady`, `pageLoadCount`, `lastLoadedURL`, `load(_:allowedPort:)`, `popupRequested(for:navigationType:)`, `pageReportedReady(_:)`, `pageText()` and `pressKey(_:)` (test-only); `PresentationWindow(role:screenFrame:)` with `Role` (`.audience`, `.presenter`), `FullScreenState` (`.windowed`, `.entering`, `.fullScreen`, `.exiting`), `page`, `container`, `deckWindowController`, `fullScreenState`, `targetFrame`, `isClosed`, `onFullScreenChange`, `onClosed`, `requestFullScreenToggle` (test seam), `present(on:completion:)`, `takeDown()`, `static enterTimeout`, `static exitTimeout`; the test helpers `onScreenWindowNumbers()`, `powerAssertionIsListed(named:)`, `fullScreenPresentationWindows()`.
+- Produces: `SleepAssertion` with `static let reason`, `isHeld`, `acquire()`, `release()`; `PresentationPageController(accessibilityIdentifier:)` with `webView`, `onReady`, `onLoadFailed`, `onPresenterPopup`, `openExternally`, `lastReady`, `pageLoadCount`, `lastLoadedURL`, `load(_:allowedPort:)`, `popupRequested(for:navigationType:)`, `pageReportedReady(_:)`, `pageText()` and `pressKey(_:)` (test-only); `PresentationWindow(role:screenFrame:)` with `Role` (`.audience`, `.presenter`), `FullScreenState` (`.windowed`, `.entering`, `.fullScreen`, `.exiting`), `page`, `container`, `deckWindowController`, `fullScreenState`, `targetFrame`, `isClosed`, `onFullScreenChange`, `onClosed`, `requestFullScreenToggle` (test seam), `present(on:fullScreen:completion:)`, `takeDown()`, `static enterTimeout`, `static exitTimeout`; the test helpers `onScreenWindowNumbers()`, `powerAssertionIsListed(named:)`, `fullScreenPresentationWindows()`.
 
 - [ ] **Step 1: Write the window server helper and the failing tests**
 
@@ -5584,7 +5584,7 @@ final class PhoneRemoteTests: PresentingTestCase {
         let deckWindow = try XCTUnwrap(controller.editor.window?.windowController as? DeckWindowController)
         let presentation = controller.presentation
         try await startPresenting(controller, PresentationOptions(mode: .play, startSlide: 1, tunnel: true, presenterPassword: "secret"))
-        XCTAssertEqual(presentation.session?.command, .present(record: true, presenterPassword: "secret"))
+        XCTAssertEqual(presentation.session?.command, .present(record: true, presenterPassword: "secret", port: nil))
         try await waitUntil(timeout: 5, "the arguments") { self.recorded(record).contains("--presenter-password secret") }
         XCTAssertFalse(recorded(record).contains("--tunnel"), "tap present has no --tunnel flag; the tunnel is a command")
         try await waitUntil(timeout: 5, "the tunnel command") { self.recorded(record).contains(#"stdin: {"type":"tunnel","start":true}"#) }
@@ -5776,7 +5776,7 @@ In `handle(_:)`, add cases before `default`:
     }
 ```
 
-In `takeDownWindows`, add `tunnel = nil` and `tunnelError = nil` after `windowsHiddenForQuestion = []`, and call `onTunnelChange?()` at the end of the method.
+In `takeDownWindows`, add `tunnel = nil` and `tunnelError = nil` after the recording timer lines, and call `onTunnelChange?()` at the end of the method.
 
 In `DeckWindowController.swift`, add after `revealInFinder`:
 
@@ -5821,7 +5821,7 @@ Add after `talkEnded()`:
             remotePanel.hide()
             return
         }
-        let screenFrame = presentation.presenterWindow?.frame ?? window?.screen?.frame ?? NSScreen.screens[0].frame
+        let screenFrame = presentation.presenterWindow?.targetFrame ?? window?.screen?.frame ?? NSScreen.screens[0].frame
         remotePanel.show(tunnel: presentation.tunnel, error: presentation.tunnelError,
                          ownPassword: presentation.options?.presenterPassword != nil, on: screenFrame)
     }
