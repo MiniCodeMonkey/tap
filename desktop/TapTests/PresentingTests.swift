@@ -261,11 +261,13 @@ final class PresentingTests: PresentingTestCase {
         let (_, controller) = try await openDeckForPresenting()
         let presentation = controller.presentation
         var gate: CheckedContinuation<Void, Never>?
-        // The exchange waits for the test to let it through, then runs for real.
+        // The exchange waits for the test to let it through, then returns a
+        // cookie whatever tap does while it quits, so the only thing that
+        // can keep the cookie out of the store is the talk having ended.
         // The gate is set inside the continuation's closure, so a resume can never miss it.
-        presentation.authorizePresenter = { client in
+        presentation.authorizePresenter = { _ in
             await withCheckedContinuation { continuation in gate = continuation }
-            return try await client.authorizePresenter()
+            return "late-cookie"
         }
         presentation.start(PresentationOptions(mode: .play, startSlide: 1))
         try await waitUntil(timeout: 30, "the exchange to begin") { gate != nil }
@@ -319,14 +321,31 @@ final class PresentingTests: PresentingTestCase {
         // The deck's own tap dev holds a port; remember that one for the talk.
         let taken = try await waitForRunningTap(document).port
         AppEnvironment.shared.deckPorts.setPort(taken, for: deck)
+        // The first attempt's session, taken the moment the save's
+        // completion has launched it, before the fallback replaces it.
+        let realSave = presentation.saveDeck
+        var firstAttempt: TapSession?
+        presentation.saveDeck = { completion in
+            realSave { error in
+                completion(error)
+                firstAttempt = presentation.session
+            }
+        }
         try await startPresenting(controller, PresentationOptions(mode: .rehearse, startSlide: 1), timeout: 60)
+        let first = try XCTUnwrap(firstAttempt)
         let talk = try XCTUnwrap(presentation.session)
+        XCTAssertFalse(first === talk)
+        XCTAssertEqual(first.command.port, taken)
+        XCTAssertEqual(first.state, .stopped)
         XCTAssertNil(talk.command.port, "the second attempt asks for no port")
         let port = try XCTUnwrap(presentation.client).ready.port
         XCTAssertNotEqual(port, taken)
         XCTAssertEqual(AppEnvironment.shared.deckPorts.port(for: deck), port, "the new port replaces the taken one")
         XCTAssertTrue(talk.log.text.contains("port \(taken) was taken"), "the talk's log says why the layout starts fresh")
-        XCTAssertFalse(talk.log.text.contains("restart"), "D2's policy never restarted the failed attempt on the same port")
+        XCTAssertTrue(first.log.text.contains("already in use"), "the first attempt heard tap's port error")
+        let launchLine = first.command.logLine(deck: deck)
+        XCTAssertEqual(first.log.text.components(separatedBy: launchLine).count - 1, 1,
+                       "D2's policy never restarted the failed attempt on the same port: one launch in its log")
         XCTAssertTrue(presentation.sleepAssertion.isHeld)
     }
 
@@ -340,6 +359,8 @@ final class PresentingTests: PresentingTestCase {
         // Something else grabs the deck's port the moment tap present dies: a listener of the test's own.
         kill(firstPid, SIGKILL)
         try await waitUntil(timeout: 10, "the process gone") { !self.isRunning(firstPid) }
+        // A race the test must win: the squatter binds within D2's first
+        // restart delay (0.5 s), and the wait above polls every 20 ms.
         let squatter = try TestListener(port: port)
         defer { squatter.close() }
         try await waitUntil(timeout: 40, "tap present back on another port") {
@@ -426,6 +447,32 @@ final class PresentingTests: PresentingTestCase {
         try await waitUntil(timeout: 5, "the session to be let go") { AppEnvironment.shared.stoppingSessions.isEmpty }
     }
 
+    /// Pages that never report (a server that takes the connection and
+    /// never answers) still let the talk start, after the fallback. The
+    /// presenter cookie is in the store before any page has loaded, so it
+    /// can only be the talk's own install.
+    func testTheWindowsShowAfterTheFallbackWhenNoPageReports() async throws {
+        let silent = try TestListener()
+        defer { silent.close() }
+        AppEnvironment.shared.presentExecutableURL = try FakeTapScripts.readyAndWaiting(port: silent.port)
+        let (_, controller) = try await openDeckForPresenting()
+        let presentation = controller.presentation
+        presentation.authorizePresenter = { _ in "installed-cookie" }
+        presentation.start(PresentationOptions(mode: .play, startSlide: 1))
+        try await waitUntil(timeout: 20, "the talk windows to exist") { presentation.audienceWindow != nil }
+        let opened = Date()
+        let audience = try XCTUnwrap(presentation.audienceWindow)
+        let cookie = await presenterCookieInTheTalkStore()
+        XCTAssertEqual(cookie, "installed-cookie", "installed before the pages load")
+        XCTAssertEqual(presentation.state, .starting, "no page has reported yet")
+        try await waitUntil(timeout: PresentationController.showWindowsFallbackInterval + 5, "the fallback to show the windows") {
+            presentation.state == .presenting
+        }
+        XCTAssertGreaterThanOrEqual(Date().timeIntervalSince(opened), PresentationController.showWindowsFallbackInterval - 1)
+        XCTAssertNil(audience.page.lastReady, "no page reported: the fallback showed them")
+        XCTAssertTrue(presentation.windowsShown)
+    }
+
     func testTheTalksLogIsListedInTheTapLogWindow() async throws {
         let (_, controller) = try await openDeckForPresenting()
         try await startPresenting(controller, PresentationOptions(mode: .rehearse, startSlide: 1))
@@ -439,11 +486,16 @@ final class PresentingTests: PresentingTestCase {
     }
 }
 
-/// A TCP listener on one port, so a test can make a port taken.
+/// A TCP listener on one port of 127.0.0.1, so a test can make a port
+/// taken. It never accepts, so a page that connects waits for an answer
+/// that never comes.
 final class TestListener {
     private let socket: Int32
+    /// The port it listens on: the one asked for, or the one the system
+    /// picked for port 0.
+    private(set) var port = 0
 
-    init(port: Int) throws {
+    init(port: Int = 0) throws {
         socket = Darwin.socket(AF_INET, SOCK_STREAM, 0)
         var yes: Int32 = 1
         setsockopt(socket, SOL_SOCKET, SO_REUSEADDR, &yes, socklen_t(MemoryLayout<Int32>.size))
@@ -451,14 +503,24 @@ final class TestListener {
         address.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
         address.sin_family = sa_family_t(AF_INET)
         address.sin_port = in_port_t(port).bigEndian
-        address.sin_addr.s_addr = INADDR_ANY
+        // 127.0.0.1, the address tap's server binds. A wildcard listener
+        // does not take the port from tap on macOS: tap's bind to
+        // 127.0.0.1 succeeds beside it. SO_REUSEADDR gets past TIME_WAIT
+        // from a killed tap's connections.
+        address.sin_addr.s_addr = in_addr_t(INADDR_LOOPBACK).bigEndian
         let bound = withUnsafePointer(to: &address) { pointer in
             pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) { bind(socket, $0, socklen_t(MemoryLayout<sockaddr_in>.size)) }
         }
-        guard bound == 0, listen(socket, 1) == 0 else {
+        guard bound == 0, listen(socket, 16) == 0 else {
             Darwin.close(socket)
             throw CocoaError(.fileWriteUnknown)
         }
+        var boundAddress = sockaddr_in()
+        var length = socklen_t(MemoryLayout<sockaddr_in>.size)
+        _ = withUnsafeMutablePointer(to: &boundAddress) { pointer in
+            pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) { getsockname(socket, $0, &length) }
+        }
+        self.port = Int(in_port_t(bigEndian: boundAddress.sin_port))
     }
 
     func close() {
