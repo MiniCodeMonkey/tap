@@ -19,8 +19,9 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
     let newSlideButton = NewSlideButton()
     /// The toolbar's Play button: a click opens the Present popover, a Shift-click starts from slide 1.
     let playButton = NSButton()
-    /// The popover, whose controls are the last settings: loaded once from
-    /// the environment, saved on every start.
+    /// The popover, whose controls are the last settings: reloaded from the
+    /// environment every time the popover is freshened, and saved only by
+    /// its own Start and Rehearse.
     private(set) lazy var presentPopover: PresentPopoverController = {
         let popover = PresentPopoverController()
         popover.loadSettings(AppEnvironment.shared.presentationSettings.settings)

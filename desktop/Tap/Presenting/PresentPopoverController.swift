@@ -164,7 +164,7 @@ final class PresentPopoverController: NSObject, NSPopoverDelegate {
         return password.isEmpty ? nil : password
     }
 
-    /// Puts saved settings into the controls, once, when the popover is made.
+    /// Puts saved settings into the controls. Called every time the popover is freshened, not only when it is made.
     func loadSettings(_ settings: PresentationSettings) {
         startFromControl.selectedSegment = settings.startFromSlideOne ? 1 : 0
         recordCheckbox.state = settings.record ? .on : .off

@@ -146,11 +146,9 @@ final class PresentationController {
     private(set) var failedAfterShowing = false
 
     var onStateChange: ((State) -> Void)?
-    var onEvent: ((TapEvent) -> Void)?
     /// The talk ended, by Stop or a failure, after its windows had shown;
     /// this is the last slide the audience saw.
     var onStopped: ((_ lastSlide: Int) -> Void)?
-    var onRecordingChange: ((RecordingStatus) -> Void)?
     var onQuestion: ((PendingQuestion) -> Void)?
     /// tap present could not start or stopped restarting.
     var onFailed: ((String) -> Void)?
@@ -841,11 +839,9 @@ final class PresentationController {
             lastSlide = slide
         case .recording(let recordingEvent):
             recording.apply(recordingEvent)
-            onRecordingChange?(recording)
             refreshPresenterToolbar()
         case .error(let payload) where payload.code == "recording_blocked":
             recording.blockedReason = payload.message
-            onRecordingChange?(recording)
             refreshPresenterToolbar()
         case .error(let payload) where payload.code == "failed" && payload.message.hasPrefix("port ") && payload.message.contains("already in use"):
             portIsTaken()
@@ -865,7 +861,6 @@ final class PresentationController {
         default:
             break
         }
-        onEvent?(event)
     }
 
     /// tap's tunnel events and errors, heard only while the talk is up:
