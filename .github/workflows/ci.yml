@@ -364,3 +364,88 @@ jobs:
       - name: Run hosted Tap.app tests
         if: steps.check-desktop.outputs.exists == 'true'
         run: make -C desktop test
+
+  # The XCUITests drive the real app with the real pointer, so they run
+  # here rather than on a person's Mac, where they take over the screen.
+  # XCUITest needs automation mode; the runner has passwordless sudo, so
+  # it is enabled without a prompt before the tests start.
+  test-desktop-ui:
+    name: Desktop UI Tests
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Select Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: '26'
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install xcodegen
+        run: brew install xcodegen
+
+      - name: Install frontend dependencies
+        run: cd frontend && npm ci
+
+      - name: Build frontend
+        run: make frontend
+
+      - name: Enable automation mode
+        run: sudo automationmodetool enable-automationmode-without-authentication
+
+      - name: Run UI tests
+        run: make -C desktop uitest
+
+  # The benchmarks measure typing, preview and thumbnail times against
+  # bounds set on a developer Mac. A shared runner's speed varies, so a
+  # slow run reports its numbers here without failing the workflow.
+  bench-desktop:
+    name: Desktop Benchmarks
+    runs-on: macos-15
+    timeout-minutes: 30
+    continue-on-error: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Select Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: '26'
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install xcodegen
+        run: brew install xcodegen
+
+      - name: Install frontend dependencies
+        run: cd frontend && npm ci
+
+      - name: Build frontend
+        run: make frontend
+
+      - name: Run benchmarks
+        run: make -C desktop bench
