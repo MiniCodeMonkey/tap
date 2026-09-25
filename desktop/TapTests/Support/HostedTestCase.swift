@@ -320,18 +320,19 @@ class HostedTestCase: XCTestCase {
         }
     }
 
-    /// Polls `condition` until it is true.
+    /// Polls `condition` until it is true. `message` is read when the wait
+    /// times out, so a state it names is the state at the timeout.
     //
     // condition is called across await points inside the loop below, which
     // this toolchain only allows a closure parameter to do when it is
     // escaping; a non-escaping parameter fails to build here with "escaping
     // local function captures non-escaping value". Every call site already
     // passes a closure literal, so escaping changes nothing for callers.
-    func waitUntil(timeout: TimeInterval = 10, _ message: String = "condition", _ condition: @escaping () -> Bool) async throws {
+    func waitUntil(timeout: TimeInterval = 10, _ message: @autoclosure @escaping () -> String = "condition", _ condition: @escaping () -> Bool) async throws {
         let deadline = Date().addingTimeInterval(timeout)
         while !condition() {
             if Date() > deadline {
-                XCTFail("timed out waiting for \(message)")
+                XCTFail("timed out waiting for \(message())")
                 throw CancellationError()
             }
             try await Task.sleep(nanoseconds: 20_000_000)

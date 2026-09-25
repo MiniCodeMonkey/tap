@@ -41,6 +41,7 @@ class PresentingTestCase: HostedTestCase {
         try await waitUntil(timeout: 20, "every talk window to go away") {
             fullScreenPresentationWindows().isEmpty && !NSApp.windows.contains { ($0 as? PresentationWindow).map { !$0.isClosed } ?? false }
         }
+        await waitForFullScreenQuiet()
     }
 
     var settingsFile: URL { configHome.appendingPathComponent("tap/settings.yaml") }

@@ -6,6 +6,7 @@ final class PresentationWindowTests: HostedTestCase {
     override func tearDown() async throws {
         for window in NSApp.windows.compactMap({ $0 as? PresentationWindow }) where !window.isClosed { window.takeDown() }
         try await waitUntil(timeout: 10, "every talk window closed") { fullScreenPresentationWindows().isEmpty }
+        await waitForFullScreenQuiet()
         try await super.tearDown()
     }
 
@@ -66,6 +67,9 @@ final class PresentationWindowTests: HostedTestCase {
         window.takeDown()
         try await waitUntil(timeout: 15, "the window closed (state \(window.fullScreenState))") { window.isClosed }
         XCTAssertTrue(fullScreenPresentationWindows().isEmpty, "nothing is left in full screen")
+        // Closed mid-entry: the Space goes on being torn down after the
+        // close, and the next test's entry must not land inside that.
+        await waitForFullScreenQuiet()
     }
 
     func testATakeDownClosesEvenWhenTheExitNeverCompletes() async throws {
@@ -81,6 +85,30 @@ final class PresentationWindowTests: HostedTestCase {
         XCTAssertGreaterThanOrEqual(Date().timeIntervalSince(asked), PresentationWindow.exitTimeout - 0.5)
         XCTAssertTrue(fullScreenPresentationWindows().isEmpty)
         try await waitUntil(timeout: 5, "the window off the screen") { !onScreenWindowNumbers().contains(window.windowNumber) }
+        // Closed in full screen: the Space goes on being torn down after
+        // the close, and the next test's entry must not land inside that.
+        await waitForFullScreenQuiet()
+    }
+
+    /// The take-down deadline without AppKit, so it is tested on every
+    /// host: a window in full screen whose exit is never answered closes
+    /// once `exitTimeout` has passed, and not before.
+    func testATakeDownClosesAtTheDeadlineWhenTheExitIsNeverAnswered() async throws {
+        let window = PresentationWindow(role: .audience, screenFrame: NSScreen.screens[0].frame)
+        var toggles = 0
+        window.requestFullScreenToggle = { toggles += 1 }
+        window.present(on: NSScreen.screens[0].frame)
+        window.windowDidEnterFullScreen(Notification(name: NSWindow.didEnterFullScreenNotification, object: window))
+        XCTAssertEqual(window.fullScreenState, .fullScreen)
+        var closed = false
+        let asked = Date()
+        window.takeDown { closed = true }
+        XCTAssertEqual(window.fullScreenState, .exiting)
+        XCTAssertEqual(toggles, 2, "in, then the exit that is never answered")
+        XCTAssertFalse(window.isClosed, "the exit is given its time")
+        try await waitUntil(timeout: PresentationWindow.exitTimeout + 1, "the deadline to close the window") { window.isClosed }
+        XCTAssertTrue(closed)
+        XCTAssertGreaterThanOrEqual(Date().timeIntervalSince(asked), PresentationWindow.exitTimeout - 0.5)
     }
 
     func testAMoveToAnotherFrameLeavesAndReentersFullScreen() async throws {

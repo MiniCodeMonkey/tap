@@ -11,8 +11,15 @@ import XCTest
 /// helper calls `XCTFail` on a timeout, which would turn a slow or stuck
 /// host into a red run. A timeout here is itself a recorded event, never
 /// a failure, because CI runs this test on every pull request.
-/// `onScreenWindowNumbers()` now comes from `Support/WindowServer.swift`
-/// (Step 1); this file no longer defines its own copy.
+///
+/// It runs only when asked for: its second window's transition never
+/// completes, and in the bundle that stuck transition ran right before
+/// the window tests and made AppKit drop their entries. Its results are
+/// in the ledger. To run it again:
+/// `TEST_RUNNER_TAP_RUN_SPIKE=1 make -C desktop test ONLY=TapTests/FullScreenSpikeTests`
+/// (xcodebuild hands `TEST_RUNNER_`-prefixed variables to the tests
+/// without the prefix). This decides whether the test runs, never what
+/// the host can do: that is `FullScreenProbe`'s, from what it observes.
 
 final class FullScreenSpikeTests: HostedTestCase {
     func spikeWindow(_ title: String) -> NSWindow {
@@ -25,6 +32,9 @@ final class FullScreenSpikeTests: HostedTestCase {
     }
 
     func testFullScreenSpike() async throws {
+        guard ProcessInfo.processInfo.environment["TAP_RUN_SPIKE"] == "1" else {
+            throw XCTSkip("the full screen spike runs only when asked for (TAP_RUN_SPIKE=1); its results are in the ledger")
+        }
         var events: [String] = []
         let names: [Notification.Name] = [NSWindow.willEnterFullScreenNotification, NSWindow.didEnterFullScreenNotification,
                                           NSWindow.willExitFullScreenNotification, NSWindow.didExitFullScreenNotification]
@@ -93,6 +103,8 @@ final class FullScreenSpikeTests: HostedTestCase {
         b.close()
         _ = await wait(4, "the spike windows gone") { !onScreenWindowNumbers().contains(a.windowNumber) && !onScreenWindowNumbers().contains(b.windowNumber) }
         note("closed; any spike window still on screen: \(onScreenWindowNumbers().contains(a.windowNumber) || onScreenWindowNumbers().contains(b.windowNumber))")
+
+        await waitForFullScreenQuiet()
 
         // Never a failure: the record is the result.
         let report = events.joined(separator: "\n")
