@@ -111,7 +111,7 @@ When a tap process exits unexpectedly, the app restarts it with backoff, and the
 
 - The main area is a 50/50 split: the editor on the left, and on the right a large pane with Preview and Deck tabs. The split divider can be dragged.
 - The slide panel (thumbnails) has two states. **Peek:** hovering the toolbar's sidebar button shows the panel as a glass overlay. It stays while the pointer is over the button or the panel, so you can click a slide to jump to it, and it hides when the pointer leaves. Nothing sits over the text while you write. **Pinned:** clicking the button pins the panel as a normal `NSSplitViewController` sidebar that pushes the editor and the right pane to the right, so nothing overlaps. Clicking again unpins it.
-- On first launch the panel is pinned, so people find it. Each window then remembers its own state.
+- On first launch the panel is pinned, so people find it. Each deck then remembers its own state.
 - The app owns the divider. It restores 50/50 after the panel is pinned, unpinned, or collapsed, and after the window resizes, unless the user dragged the divider.
 - The editor's content scrolls under the unified toolbar with the standard macOS 26 scroll edge effect.
 - The pinned state is a stock sidebar. The peek state is a small custom overlay driven by a tracking area on the button, because AppKit has no stock "peek on hover" sidebar.
@@ -123,8 +123,8 @@ When a tap process exits unexpectedly, the app restarts it with backoff, and the
 - A slide's text holds its own directives, slots, and notes, so a slide moves as one line range. A move cuts the range, inserts it at the target boundary, and fixes the separators so exactly one `---` sits between slides. A `---` inside a fenced block is never a separator, because the ranges come from tap's parser.
 - Moving works by dragging thumbnails or box headers, with Cmd+Option+Up and Down, or from the menus. Moves, duplicates, deletes, and skips act on the whole selection as one undo step, and the selected slides keep their order. The drop indicators are AppKit's blue line with a ring, and the drag image carries a count badge.
 - A dropped slide never goes above the frontmatter.
-- Dragging to another deck's sidebar copies the slides, and holding Cmd moves them.
-- New Slide inserts the last layout used. Holding the button, or using Slide > New Slide, opens a gallery of tap's 12 layouts. The templates come from `tap slide add --layout <x> --print`.
+- Dragging to another deck's sidebar moves the slides, one undo step in each deck, and holding Option copies them.
+- New Slide inserts the last layout used at once, from the toolbar button or Slide > New Slide. Holding the toolbar button, or using Slide > New Slide from Layout, opens a gallery of tap's 12 layouts. The templates come from `tap slide add --layout <x> --print`.
 - Skip Slide writes the new `skip: true` directive, and the slide appears dimmed.
 
 ## Preview and Deck pane

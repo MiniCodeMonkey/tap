@@ -10,8 +10,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         super.init()
     }
 
-    func applicationDidFinishLaunching(_ notification: Notification) {
+    /// The menu bar is in place before launch finishes: NSDocumentController
+    /// installs its Revert To menu (with Browse All Versions) and its Share
+    /// menu into the File menu as launch finishes. A menu bar set any later
+    /// keeps only the plain Revert to Saved item, which AppKit then hides for
+    /// a document that autosaves in place.
+    func applicationWillFinishLaunching(_ notification: Notification) {
         NSApp.mainMenu = MainMenu.build()
+    }
+
+    func applicationDidFinishLaunching(_ notification: Notification) {
         AppEnvironment.shared.warmUp()
         NSDocumentController.shared.autosavingDelay = 1
         NotificationCenter.default.addObserver(self, selector: #selector(deckWindowWillClose(_:)), name: NSWindow.willCloseNotification, object: nil)

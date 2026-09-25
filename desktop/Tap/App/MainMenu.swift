@@ -59,8 +59,8 @@ enum MainMenu {
         menu.addItem(item("Duplicate", action: #selector(NSDocument.duplicate(_:)), key: "s", modifiers: [.command, .shift]))
         menu.addItem(item("Rename…", action: #selector(NSDocument.rename(_:))))
         menu.addItem(item("Move To…", action: #selector(NSDocument.move(_:))))
-        // With autosave in place, AppKit turns this item into the Revert To
-        // menu, with Browse All Versions.
+        // With autosave in place, AppKit hides this item and adds the Revert
+        // To menu, with Browse All Versions, after it, as launch finishes.
         menu.addItem(item("Revert to Saved", action: #selector(NSDocument.revertToSaved(_:))))
         return menu
     }
