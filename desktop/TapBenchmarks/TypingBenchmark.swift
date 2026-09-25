@@ -40,7 +40,11 @@ final class TypingBenchmark: BenchmarkCase {
     /// leaves the text unchanged and its sample open, and this fails
     /// loudly instead of reporting nothing for it: the run loop keeps
     /// committing frames on its own even when nothing was typed, so timing
-    /// alone cannot tell the two cases apart.
+    /// alone cannot tell the two cases apart. A keystroke that landed but
+    /// whose frame commits after the 35 ms wait is a slow sample, not a
+    /// lost one: the check waits up to `frameCommitDeadline` for its
+    /// sample to close, so a single late frame counts in the latency
+    /// summary, where the p95 bound judges it, rather than ending the run.
     private func sendAndVerify(_ characters: String, code: UInt16, to window: NSWindow,
                                 controller: DeckSessionController, expectedLengthDelta: Int,
                                 recorder: KeyLatencyRecorder) async throws {
@@ -58,10 +62,18 @@ final class TypingBenchmark: BenchmarkCase {
                      + "reaching the responder chain.")
             throw CancellationError()
         }
+        let frameDeadline = Date().addingTimeInterval(Self.frameCommitDeadline)
+        while recorder.openSampleCount > 0 && Date() < frameDeadline {
+            try await Task.sleep(nanoseconds: 5_000_000)
+        }
         guard recorder.openSampleCount == 0 else {
             XCTFail("key event for \(characters.debugDescription) reached the editor, but no frame "
-                     + "was committed after it within 35 ms, so its sample never closed.")
+                     + "was committed after it within \(Self.frameCommitDeadline) s, so its sample never closed.")
             throw CancellationError()
         }
     }
+
+    /// How long a keystroke already in the text may wait for the frame
+    /// that shows it before its sample counts as never closing.
+    private static let frameCommitDeadline: TimeInterval = 1
 }

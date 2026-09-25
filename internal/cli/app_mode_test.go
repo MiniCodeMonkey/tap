@@ -724,6 +724,49 @@ func TestAppDevReportsAChangeMadeElsewhere(t *testing.T) {
 	waitUntil(t, "the second change shows", func() bool { return strings.Contains(process.presentation(), "Changed Again") })
 }
 
+// The app's autosave writes the buffer to the deck file and then sends
+// "saved", and tap's watcher can fire in between, while tap still renders
+// the buffer. The app hears about the write; the pages, which already show
+// exactly that text, are not reloaded.
+func TestAppDevDoesNotReloadThePagesForTheAppsOwnSaveBeforeSaved(t *testing.T) {
+	deck := copyAppFixture(t)
+	process := startAppProcess(t, t.TempDir(), "dev", "--app", deck)
+	onDisk, err := os.ReadFile(deck)
+	if err != nil {
+		t.Fatal(err)
+	}
+	conn, ctx := process.dialWebSocket()
+
+	edited := strings.Replace(string(onDisk), "# App Mode Fixture", "# Autosaved By The App", 1)
+	if status, body := process.putSource(edited); status != http.StatusOK {
+		t.Fatalf("PUT: status %d: %s", status, body)
+	}
+	if change := readDeckChange(t, ctx, conn); change != "update" {
+		t.Fatalf("the edit sent %q, want update", change)
+	}
+	if err := os.WriteFile(deck, []byte(edited), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if event := process.next(appEventFileChanged); event["path"] != deck {
+		t.Errorf("file-changed path = %v, want %s", event["path"], deck)
+	}
+	quiet, cancel := context.WithTimeout(ctx, time.Second)
+	defer cancel()
+	for {
+		_, data, err := conn.Read(quiet)
+		if err != nil {
+			break
+		}
+		var message map[string]any
+		if json.Unmarshal(data, &message) == nil && message["type"] == "file-changed" {
+			t.Fatalf("the pages were sent %v for a write of the text they already show", message)
+		}
+	}
+	if !strings.Contains(process.presentation(), "Autosaved By The App") {
+		t.Error("the buffer stopped showing")
+	}
+}
+
 func TestAppDevSendsTheSlideListWhenAComponentChanges(t *testing.T) {
 	deck := copyAppFixture(t)
 	process := startAppProcess(t, t.TempDir(), "dev", "--app", deck)
