@@ -59,7 +59,7 @@ final class TapLogWindowController: NSWindowController {
         logs = NSDocumentController.shared.documents.flatMap { document -> [TapLog] in
             guard let controller = (document as? DeckDocument)?.sessionController else { return [] }
             let talk = controller.presentationIfCreated
-            return [controller.session.log] + ((talk?.session?.log ?? (talk?.isActive == true ? talk?.lastTalkLog : nil)).map { [$0] } ?? [])
+            return [controller.session.log] + ((talk?.session?.log ?? (talk?.isActive == true ? talk?.lastTalkLog : talk?.lastTalkLogAfterFailure)).map { [$0] } ?? [])
         }
         picker.segmentCount = logs.count
         for (index, log) in logs.enumerated() {

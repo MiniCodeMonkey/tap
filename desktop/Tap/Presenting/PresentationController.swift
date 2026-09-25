@@ -57,6 +57,12 @@ final class PresentationController {
     /// The log of the last talk, kept after its session is gone, so Window
     /// > Tap Log still shows it and the deck window can append to it.
     private(set) var lastTalkLog: TapLog?
+    /// A failed talk's log, for Window > Tap Log: the reason is in it. A
+    /// talk that ended well is not listed, so the picker goes back to the deck's log.
+    var lastTalkLogAfterFailure: TapLog? {
+        if case .failed = state { return lastTalkLog }
+        return nil
+    }
     private(set) var recording = RecordingStatus()
     /// True once the windows have been asked to show for this talk.
     private(set) var windowsShown = false
@@ -130,6 +136,11 @@ final class PresentationController {
     /// True while this talk is counted in `AppEnvironment.presentingCount`.
     /// Read in deinit, which is not on the main actor, as a last guard.
     nonisolated(unsafe) private var countedAsPresenting = false
+    /// tap's last error event, which names why it could not start.
+    private(set) var lastErrorMessage: String?
+    /// True when the failure came after the windows had been shown: the
+    /// talk stopped, rather than never ran.
+    private(set) var failedAfterShowing = false
 
     var onStateChange: ((State) -> Void)?
     var onEvent: ((TapEvent) -> Void)?
@@ -256,6 +267,8 @@ final class PresentationController {
         editsNotShown = 0
         tunnel = nil
         tunnelError = nil
+        lastErrorMessage = nil
+        failedAfterShowing = false
         wantsRemote = options.wantsTunnel
         lastCountedText = nil
         pendingQuestions = []
@@ -843,6 +856,8 @@ final class PresentationController {
             handleTunnel(event)
         case .error(let payload) where payload.code == "tunnel_unavailable" || payload.code == "tunnel_failed":
             handleTunnel(event)
+        case .error(let payload):
+            lastErrorMessage = payload.message
         default:
             break
         }
@@ -992,12 +1007,15 @@ final class PresentationController {
         if windowsWereShown { onStopped?(lastSlide) }
     }
 
-    /// tap present exited three times in thirty seconds, or never got ready.
+    /// tap present exited three times in thirty seconds, or never got
+    /// ready. Its own error event is the reason when it sent one; its last
+    /// stderr line otherwise.
     private func endBecauseTapFailed(lastOutput: [String]) {
         let summary = session?.restartPolicy.exitSummary ?? "tap present exited"
-        let detail = lastOutput.last.map { "\(summary). Last output: \($0)" } ?? summary
+        let reason = lastErrorMessage ?? lastOutput.last
         let showed = windowsWereShown
-        fail(detail)
+        failedAfterShowing = showed
+        fail(reason.map { "\(summary). \($0)" } ?? summary)
         if showed { onStopped?(lastSlide) }
     }
 

@@ -81,11 +81,14 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
             switch state {
             case .idle: self?.talkEnded(failed: false)
             case .failed: self?.talkEnded(failed: true)
-            case .starting: self?.sessionController.editorViewController.hideBar(.recordingKept)
+            case .starting:
+                self?.sessionController.editorViewController.hideBar(.recordingKept)
+                self?.sessionController.editorViewController.hideBar(.talkFailed)
             case .presenting, .stopping: break
             }
         }
         sessionController.presentation.onQuestion = { [weak self] question in self?.presentQuestion(question) }
+        sessionController.presentation.onFailed = { [weak self] message in self?.showTalkFailed(message) }
         remotePanel.onTurnOff = { [weak self] in self?.sessionController.presentation.setTunnel(on: false) }
         sessionController.presentation.onTunnelChange = { [weak self] in self?.refreshRemotePanel() }
         presentingObserver = NotificationCenter.default.addObserver(forName: AppEnvironment.presentingDidChangeNotification, object: nil, queue: nil) { [weak self] _ in
@@ -487,6 +490,24 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
         let screenFrame = presentation.presenterWindow?.targetFrame ?? window?.screen?.frame ?? NSScreen.screens[0].frame
         remotePanel.show(tunnel: presentation.tunnel, error: presentation.tunnelError,
                          ownPassword: presentation.options?.presenterPassword != nil, on: screenFrame)
+    }
+
+    /// The talk could not start, or tap present stopped restarting. A bar
+    /// on the deck window says why, with the talk's log a click away.
+    func showTalkFailed(_ message: String) {
+        let stopped = sessionController.presentation.failedAfterShowing
+        let bar = DocumentBarView(
+            kind: .talkFailed,
+            message: stopped ? "The talk stopped." : "The talk could not run.",
+            detail: message,
+            buttons: [("Show Tap Log", { [weak self] in
+                guard let self else { return }
+                let presentation = self.sessionController.presentation
+                TapLogWindowController.shared.show(log: presentation.session?.log ?? presentation.lastTalkLog ?? self.sessionController.session.log)
+            }), ("Dismiss", { [weak self] in
+                self?.sessionController.editorViewController.hideBar(.talkFailed)
+            })])
+        sessionController.editorViewController.showBar(bar)
     }
 
     // MARK: tap's questions
