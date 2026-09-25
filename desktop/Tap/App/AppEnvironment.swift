@@ -117,6 +117,11 @@ final class AppEnvironment {
             tapExecutableURL = Bundle.main.url(forResource: "tap", withExtension: nil) ?? URL(fileURLWithPath: "/usr/bin/false")
         }
         loginShellLoader = LoginShellEnvironmentLoader(shellPath: ProcessInfo.processInfo.environment["SHELL"] ?? "/bin/zsh")
+        // UI tests pass -TapConfigHome <folder>, so the tap they drive reads
+        // and writes a settings file of their own, never the person's.
+        if let configHome = UserDefaults.standard.string(forKey: "TapConfigHome") {
+            extraEnvironment["XDG_CONFIG_HOME"] = configHome
+        }
     }
 
     /// Starts reading the login shell environment and the tap version.

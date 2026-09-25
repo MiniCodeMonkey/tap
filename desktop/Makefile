@@ -7,7 +7,7 @@ ONLY ?= TapTests
 # that needs longer sets its own executionTimeAllowance, up to ten.
 TEST_TIMEOUTS = -test-timeouts-enabled YES -default-test-execution-time-allowance 300 -maximum-test-execution-time-allowance 600
 
-.PHONY: project core-test build test uitest bench app-path check-scenarios
+.PHONY: project core-test build test test-build uitest bench bench-build app-path check-scenarios
 project:
 	xcodegen generate --spec project.yml --quiet
 
@@ -26,6 +26,13 @@ uitest: project
 
 bench: project
 	$(XCODEBUILD) -scheme TapBenchmarks -destination 'platform=macOS' $(TEST_TIMEOUTS) test
+
+# Compiles the hosted and UI tests without running them; uitest, which runs them, is CI's job.
+test-build: project
+	$(XCODEBUILD) -scheme Tap -destination 'platform=macOS' build-for-testing
+
+bench-build: project
+	$(XCODEBUILD) -scheme TapBenchmarks -destination 'platform=macOS' build-for-testing
 
 app-path:
 	@echo $(DERIVED_DATA)/Build/Products/Debug/Tap.app
