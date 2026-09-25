@@ -3425,7 +3425,7 @@ final class DeckTabTests: HostedTestCase {
         editor.undoManager?.undo()
         XCTAssertEqual(editor.string, original)
         XCTAssertEqual(theme.titleOfSelectedItem, themeKey.defaultValue)
-        XCTAssertFalse(controller.isContentEdited)
+        // Not `isContentEdited` here: the autosave may have written the file in between, and the flag is against the file.
         deckWindow.showPreviewTab(nil)
         XCTAssertEqual(inspector.selectedTab, .preview)
         XCTAssertFalse(controller.previewViewController.view.isHidden)
