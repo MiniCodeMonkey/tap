@@ -51,8 +51,9 @@ final class AppEnvironment {
     /// `updatesMayInterrupt` before any prompt or restart.
     private(set) var presentingCount = 0
     static let presentingDidChangeNotification = Notification.Name("TapPresentingDidChange")
-    /// Talks whose deck closed while they were still stopping, kept alive
-    /// until their process has exited or the talk has failed.
+    /// Talks whose deck closed while they were still ending, kept alive
+    /// until their process has exited (or the talk has failed) and their
+    /// windows are down.
     private(set) var endingTalks: [PresentationController] = []
 
     var isPresenting: Bool { presentingCount > 0 }

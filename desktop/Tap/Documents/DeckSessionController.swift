@@ -520,8 +520,11 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
                     presentation?.session?.log.append("the deck window has closed; the \(question.kind) question is answered \(keep ? "keep" : "no") for it", source: .app)
                     presentation?.answer(id: question.id, value: keep)
                 }
-                AppEnvironment.shared.retainEndingTalk(presentation)
             }
+            // A talk keeps itself until its process has exited and its
+            // windows are down, even one already idle whose last window is
+            // still leaving full screen.
+            if presentation.isEnding { AppEnvironment.shared.retainEndingTalk(presentation) }
         }
         fileWatcher.watch(nil)
         if let undoObserver { NotificationCenter.default.removeObserver(undoObserver) }

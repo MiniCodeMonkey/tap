@@ -17,8 +17,9 @@ import WebKit
 /// answer), and back to idle; or to failed, with a message for the
 /// person, when tap present cannot start or stops restarting. A talk is
 /// counted in `AppEnvironment.presentingCount` from start to idle or
-/// failed, and a stopping talk whose deck has closed is kept alive by
-/// `AppEnvironment.endingTalks` until its process has exited.
+/// failed, and a talk whose deck has closed is kept alive by
+/// `AppEnvironment.endingTalks` until its process has exited and its
+/// windows are down.
 @MainActor
 final class PresentationController {
     enum State: Equatable {
@@ -201,6 +202,10 @@ final class PresentationController {
         case .idle, .failed: return false
         }
     }
+
+    /// True while the talk still has work of its own: a process to quit,
+    /// or windows going down.
+    var isEnding: Bool { isActive || !windowsGoingDown.isEmpty }
 
     /// Play and Rehearse need a deck file, no talk in progress, in this
     /// deck or any other, and the last talk's windows gone and out of
@@ -908,7 +913,10 @@ final class PresentationController {
         guard !takingDown, let window = windowsGoingDown.first(where: { !$0.isClosed }) else {
             windowsGoingDown.removeAll { $0.isClosed }
             // The last window is down: Play may be able to start again.
-            if windowsGoingDown.isEmpty { AppEnvironment.shared.noteTalkWindowsWentDown() }
+            if windowsGoingDown.isEmpty {
+                AppEnvironment.shared.noteTalkWindowsWentDown()
+                releaseIfDone()
+            }
             return
         }
         takingDown = true
@@ -927,7 +935,7 @@ final class PresentationController {
         arrangement = nil
         state = .idle
         countOut()
-        AppEnvironment.shared.releaseEndingTalk(self)
+        releaseIfDone()
         if windowsWereShown { onStopped?(lastSlide) }
     }
 
@@ -949,8 +957,17 @@ final class PresentationController {
         arrangement = nil
         state = .failed(message)
         countOut()
-        AppEnvironment.shared.releaseEndingTalk(self)
+        releaseIfDone()
         onFailed?(message)
+    }
+
+    /// A talk whose deck has closed lets go of itself once nothing of it is
+    /// left: its process has exited and its last window has closed. A take
+    /// down's completion holds the talk weakly, so a talk freed earlier
+    /// would leave its remaining windows open.
+    private func releaseIfDone() {
+        guard !isEnding else { return }
+        AppEnvironment.shared.releaseEndingTalk(self)
     }
 
     private func countIn() {

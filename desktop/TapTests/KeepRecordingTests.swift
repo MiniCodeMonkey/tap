@@ -97,15 +97,16 @@ final class KeepRecordingTests: PresentingTestCase {
         AppEnvironment.shared.presentExecutableURL = try FakeTapScripts.presenting(events: [], quit: .askToKeep(directory: folder, segments: 2), recordingTo: record)
         let (document, controller) = try await openDeckForPresenting()
         try await startPresenting(controller, PresentationOptions(mode: .play, startSlide: 1))
-        let talk = WeakTalk(controller.presentation)
+        // Held strongly, so the last assertion reads the log whether or not the talk is gone.
+        let log = try XCTUnwrap(controller.presentation.lastTalkLog)
         // The deck closes mid-talk: nobody is left to answer, so the app answers for tap's own default at once.
         document.close()
         try await waitUntil(timeout: 2, "the keep answer to reach tap") {
             (try? String(contentsOf: record, encoding: .utf8))?.contains(#"stdin: {"type":"answer","id":"q1","value":true}"#) == true
         }
         try await waitUntil(timeout: 5, "the talk counted out") { !AppEnvironment.shared.isPresenting }
-        XCTAssertTrue(AppEnvironment.shared.endingTalks.isEmpty)
+        try await waitUntil(timeout: 15, "the talk to let go of itself once its windows are down") { AppEnvironment.shared.endingTalks.isEmpty }
         XCTAssertEqual(revealed, [], "no window to reveal from")
-        XCTAssertTrue(talk.presentation?.lastTalkLog?.text.contains("the deck window has closed; the keep-recording question is answered keep") ?? true)
+        XCTAssertTrue(log.text.contains("the deck window has closed; the keep-recording question is answered keep"))
     }
 }

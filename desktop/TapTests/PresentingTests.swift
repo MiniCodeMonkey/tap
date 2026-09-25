@@ -167,13 +167,81 @@ final class PresentingTests: PresentingTestCase {
         XCTAssertTrue(AppEnvironment.shared.isPresenting, "still counted while tap present runs")
         try await waitUntil(timeout: 20, "tap present to exit") { !self.isRunning(pid) }
         try await waitUntil(timeout: 10, "the talk to be counted out") { !AppEnvironment.shared.isPresenting }
-        XCTAssertTrue(AppEnvironment.shared.endingTalks.isEmpty, "the talk let go of itself once its process was gone")
-        try await waitUntil(timeout: 10, "no talk window left") { fullScreenPresentationWindows().isEmpty }
+        try await waitUntil(timeout: 15, "the talk let go of itself once its process was gone and its windows were down") {
+            AppEnvironment.shared.endingTalks.isEmpty
+        }
+        try await waitUntil(timeout: 10, "no talk window left; left: \(Self.describeTalkWindows())") {
+            fullScreenPresentationWindows().isEmpty && !NSApp.windows.contains { ($0 as? PresentationWindow).map { !$0.isClosed } ?? false }
+        }
 
         // Another deck can present at once.
         let (_, other) = try await openDeckForPresenting()
         XCTAssertTrue(other.presentation.canStart)
         XCTAssertTrue(AppEnvironment.shared.updatesMayInterrupt)
+    }
+
+    /// Every talk window made, held by the test so it can check each one closed.
+    @MainActor final class MadeWindows {
+        var windows: [PresentationWindow] = []
+        var allClosed: Bool { windows.allSatisfy(\.isClosed) }
+    }
+
+    /// Starts a talk on one display with AppKit's full screen toggle
+    /// replaced by a recorder that never completes, drives the audience's
+    /// entry by hand, then closes the deck, letting go of every reference
+    /// of its own to the talk.
+    func startTalkWithAnExitThatNeverCompletesAndCloseTheDeck(_ made: MadeWindows) async throws -> WeakTalk {
+        let record = try Fixtures.temporaryFolder().appendingPathComponent("record")
+        AppEnvironment.shared.presentExecutableURL = try FakeTapScripts.presenting(events: [], recordingTo: record)
+        let (document, controller) = try await openDeckForPresenting()
+        let presentation = controller.presentation
+        presentation.fullScreenAllowed = { true }
+        var toggles = 0
+        presentation.windowCreated = { window in
+            made.windows.append(window)
+            window.requestFullScreenToggle = { toggles += 1 }
+        }
+        presentation.start(PresentationOptions(mode: .play, startSlide: 1))
+        try await waitUntil(timeout: 40, "the audience's entry (state \(presentation.state), toggles \(toggles))") { toggles == 1 }
+        let audience = try XCTUnwrap(presentation.audienceWindow)
+        audience.windowDidEnterFullScreen(Notification(name: NSWindow.didEnterFullScreenNotification))
+        XCTAssertEqual(audience.fullScreenState, .fullScreen)
+        XCTAssertEqual(made.windows.count, 2, "the audience and the hidden presenter")
+        XCTAssertTrue(presentation.windowsAreSettled)
+        let talk = WeakTalk(presentation)
+        document.close()
+        return talk
+    }
+
+    /// The scripted tap exits at once on quit while the audience's exit
+    /// waits out its deadline, on every host. The talk has no process left
+    /// and windows still going down: it keeps itself until every window
+    /// has closed, and Play in other decks hears when they have.
+    func testAClosedDeckTakesDownEveryWindow() async throws {
+        let made = MadeWindows()
+        var postsWithEveryWindowClosed = 0
+        let observer = NotificationCenter.default.addObserver(forName: AppEnvironment.presentingDidChangeNotification, object: nil, queue: nil) { _ in
+            MainActor.assumeIsolated {
+                if !made.windows.isEmpty, made.allClosed { postsWithEveryWindowClosed += 1 }
+            }
+        }
+        defer { NotificationCenter.default.removeObserver(observer) }
+        let talk = try await startTalkWithAnExitThatNeverCompletesAndCloseTheDeck(made)
+        XCTAssertNotNil(talk.presentation, "the ending talk is kept alive")
+        XCTAssertEqual(AppEnvironment.shared.endingTalks.count, 1)
+        XCTAssertFalse(made.allClosed, "the audience is still leaving full screen")
+        try await waitUntil(timeout: 15, "every talk window closed; left: \(Self.describeTalkWindows())") {
+            if AppEnvironment.shared.endingTalks.isEmpty {
+                XCTAssertTrue(made.allClosed, "the talk let go of itself before its windows were down: \(Self.describeTalkWindows())")
+                return true
+            }
+            return made.allClosed
+        }
+        XCTAssertTrue(made.allClosed)
+        try await waitUntil(timeout: 20, "the talk to let go of itself") { AppEnvironment.shared.endingTalks.isEmpty }
+        XCTAssertFalse(AppEnvironment.shared.isPresenting)
+        XCTAssertNil(talk.presentation, "nothing keeps the talk once it is over")
+        XCTAssertGreaterThan(postsWithEveryWindowClosed, 0, "Play in other decks heard that the last window went down")
     }
 
     func testTheSleepAssertionIsReleasedWhenTapPresentDies() async throws {
