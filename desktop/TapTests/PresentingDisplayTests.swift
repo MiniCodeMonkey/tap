@@ -337,6 +337,63 @@ final class PresentingDisplayTests: PresentingTestCase {
         try await waitUntil(timeout: 30, "the talk to end") { presentation.state == .idle }
     }
 
+    /// One display with the presenter view over the audience view as its
+    /// child, then the projector comes back: the presenter is taken out
+    /// from over the audience before either window is placed, so it can
+    /// have a Space of its own. AppKit's full screen toggle is a recorder
+    /// and each transition's end is driven by hand, so this runs on every host.
+    func testTheProjectorComingBackTakesThePresenterFromOverTheAudience() async throws {
+        let (_, controller) = try await openDeckForPresenting()
+        let presentation = controller.presentation
+        let one = oneScreen()
+        let two = halfScreens()
+        presentation.screens = { one }
+        presentation.fullScreenAllowed = { true }
+        presentation.screensHaveSeparateSpaces = { true }
+        var toggles: [String] = []
+        presentation.windowCreated = { window in
+            let name = window.role == .audience ? "audience" : "presenter"
+            window.requestFullScreenToggle = { toggles.append("\(name) toggle") }
+        }
+        let entered = Notification(name: NSWindow.didEnterFullScreenNotification)
+        let exited = Notification(name: NSWindow.didExitFullScreenNotification)
+        presentation.start(PresentationOptions(mode: .play, startSlide: 1))
+        try await waitUntil(timeout: 40, "the audience's entry (state \(presentation.state), toggles \(toggles))") { toggles == ["audience toggle"] }
+        let audience = try XCTUnwrap(presentation.audienceWindow)
+        let presenter = try XCTUnwrap(presentation.presenterWindow)
+        audience.windowDidEnterFullScreen(entered)
+        XCTAssertTrue(presentation.windowsAreSettled)
+        presentation.toggleFrontWindow()
+        XCTAssertTrue(presenter.isAttached, "the presenter view over the audience view")
+        XCTAssertTrue(presenter.parent === audience)
+
+        // The projector is plugged in: the presenter leaves the audience before anything moves.
+        toggles = []
+        presentation.screens = { two }
+        presentation.screensChanged()
+        XCTAssertFalse(presenter.isAttached, "taken out from over the audience")
+        XCTAssertNil(presenter.parent)
+        XCTAssertFalse(audience.childWindows?.contains { $0 === presenter } ?? false)
+        XCTAssertEqual(toggles, ["audience toggle"], "the audience leaves its Space first, to move")
+        audience.windowDidExitFullScreen(exited)
+        audience.windowDidEnterFullScreen(entered)
+        XCTAssertEqual(toggles, ["audience toggle", "audience toggle", "presenter toggle"], "then the presenter enters a Space of its own")
+        presenter.windowDidEnterFullScreen(entered)
+        XCTAssertTrue(presentation.windowsAreSettled)
+        XCTAssertEqual(presenter.fullScreenState, .fullScreen)
+        XCTAssertEqual(presenter.targetFrame, two[0].frame)
+        XCTAssertEqual(audience.targetFrame, two[1].frame)
+        XCTAssertTrue(presentation.frontWindow === presenter)
+
+        // The take-down, driven the same way.
+        presentation.stop()
+        presenter.windowDidExitFullScreen(exited)
+        audience.windowDidExitFullScreen(exited)
+        XCTAssertTrue(presenter.isClosed)
+        XCTAssertTrue(audience.isClosed)
+        try await waitUntil(timeout: 30, "the talk to end") { presentation.state == .idle }
+    }
+
     func testWithoutSeparateSpacesTheTalkWindowsStayPlainWindows() async throws {
         let (_, controller) = try await openDeckForPresenting()
         let screens = halfScreens()

@@ -28,6 +28,11 @@ final class PresentMenuTests: PresentingTestCase {
         let withOptions = try item(menu, action: #selector(DeckWindowController.playWithOptions(_:)))
         XCTAssertEqual(withOptions.title, "Play with Options…")
         XCTAssertEqual(withOptions.keyEquivalent, "", "the popover has no shortcut; the Play button opens it")
+        // AppKit may read a key equivalent another item already has as "", so the mask is checked too: the item's default, no Option.
+        XCTAssertEqual(withOptions.keyEquivalentModifierMask, [.command], "Play with Options has no shortcut of its own")
+        let shortcuts = menu.items.filter { !$0.isSeparatorItem && !$0.keyEquivalent.isEmpty }
+            .map { "\($0.keyEquivalent) \($0.keyEquivalentModifierMask.rawValue)" }
+        XCTAssertEqual(Set(shortcuts).count, shortcuts.count, "no two Present items share a shortcut: \(shortcuts)")
         let rehearse = try item(menu, action: #selector(DeckWindowController.rehearse(_:)))
         XCTAssertEqual(rehearse.keyEquivalent, "p")
         XCTAssertEqual(rehearse.keyEquivalentModifierMask, [.command, .option, .shift])
