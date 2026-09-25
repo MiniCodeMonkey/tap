@@ -84,6 +84,11 @@ final class PhoneRemoteTests: PresentingTestCase {
         try await waitUntil(timeout: 5, "the panel gone") { !panel.isVisible }
         XCTAssertEqual(button.state, .off)
 
+        // Turned on from the menu, the button shows it too, with no click of its own.
+        deckWindow.togglePhoneRemote(nil)
+        try await waitUntil(timeout: 5, "the tunnel from the menu") { presentation.tunnel?.state == "running" && panel.isVisible }
+        XCTAssertEqual(button.state, .on)
+
         try await stopPresenting(controller)
         XCTAssertFalse(presentation.canTogglePhoneRemote)
         XCTAssertFalse(deckWindow.validateMenuItem(menuItem))
