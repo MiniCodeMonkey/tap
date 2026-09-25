@@ -1,0 +1,5 @@
+Tap.xcodeproj/
+build/
+TapDesktopCore/.build/
+TapDesktopCore/.swiftpm/
+Tap/Info.plist

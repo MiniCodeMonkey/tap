@@ -204,6 +204,17 @@ func (source *appDeckSource) remember(text []byte) {
 	source.remembered = text
 }
 
+// suppressFileChanged reports whether the app's file watcher should stay
+// silent for a write that matches the deck source's own diskChanged result:
+// true only once the app's own save has actually landed, meaning nothing
+// changed and tap is no longer buffering an unsaved edit (dropBuffer has
+// run). While still buffering, a write that lands on the buffer still needs
+// telling, so the app can learn the disk has caught up and clear its edited
+// flag; tap staying buffered gives it nothing else to learn that from.
+func suppressFileChanged(changed, buffering bool) bool {
+	return !changed && !buffering
+}
+
 // diskChanged reports whether the deck file differs from what tap renders:
 // the buffer while there is one, and otherwise the last text tap was
 // given.

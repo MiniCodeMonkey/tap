@@ -14,16 +14,19 @@ import (
 // Watcher watches files and directories for changes and triggers callbacks.
 type Watcher struct {
 	// Fields ordered by size for better memory alignment
-	watcher      *fsnotify.Watcher
-	onChange     func(path string)
-	stopCh       chan struct{}
-	doneCh       chan struct{}
-	mdFile       string
-	mdDir        string
+	watcher  *fsnotify.Watcher
+	onChange func(path string)
+	stopCh   chan struct{}
+	doneCh   chan struct{}
+	mdFile   string
+	mdDir    string
+	// backupFile is the sibling path the desktop app's own autosave-in-place
+	// briefly writes and renames away on every save (see NewWatcher).
+	backupFile string
 	// ignoredDirs holds absolute directories whose contents never trigger
 	// onChange (see IgnoreDir).
-	ignoredDirs  []string
-	mu           sync.Mutex
+	ignoredDirs []string
+	mu          sync.Mutex
 	// callbackMu serializes onChange invocations, so a rebuild slower than
 	// the debounce window can never run concurrently with the next one and
 	// have its (now stale) result land after it; see triggerOnChange.
@@ -56,6 +59,7 @@ func NewWatcher(mdFile string) (*Watcher, error) {
 		debounceTime: 100 * time.Millisecond,
 		mdFile:       absFile,
 		mdDir:        mdDir,
+		backupFile:   autosaveBackupPath(absFile),
 	}
 
 	return w, nil
@@ -114,6 +118,19 @@ func (w *Watcher) isIgnored(path string) bool {
 // isWithin reports whether path lies strictly under dir.
 func isWithin(path string, dir string) bool {
 	return strings.HasPrefix(path, dir+string(filepath.Separator))
+}
+
+// autosaveBackupPath is the sibling path macOS's NSDocument autosave-in-place
+// briefly writes and renames away on every save of file: the base name with
+// a tilde inserted before the extension, confirmed by direct observation of
+// the desktop app's own autosave ("talk.md" produces "talk~.md" for the
+// moment the save is in flight, then it is gone). It never holds deck
+// content of its own, so a write to it is never deck input.
+func autosaveBackupPath(file string) string {
+	dir := filepath.Dir(file)
+	ext := filepath.Ext(file)
+	base := strings.TrimSuffix(filepath.Base(file), ext)
+	return filepath.Join(dir, base+"~"+ext)
 }
 
 // Start starts watching for file changes.
@@ -272,10 +289,12 @@ func (w *Watcher) run() {
 			}
 
 			// Events from the parent directory still name an ignored
-			// directory itself (it being created, say), and Finder writes
-			// .DS_Store whenever someone browses the deck folder. Neither
-			// is deck input, so neither may rebuild and reload the deck.
-			if w.isIgnored(event.Name) || filepath.Base(event.Name) == ".DS_Store" {
+			// directory itself (it being created, say), Finder writes
+			// .DS_Store whenever someone browses the deck folder, and the
+			// desktop app's own autosave briefly writes and renames away
+			// w.backupFile on every save. None of these is deck input, so
+			// none may rebuild and reload the deck.
+			if w.isIgnored(event.Name) || filepath.Base(event.Name) == ".DS_Store" || event.Name == w.backupFile {
 				continue
 			}
 

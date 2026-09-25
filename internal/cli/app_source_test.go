@@ -73,6 +73,67 @@ func TestAppDeckSourceTellsTheAppsOwnSaveFromAnOutsideChange(t *testing.T) {
 	}
 }
 
+// dev.go's watcher callback suppresses `file-changed` through
+// suppressFileChanged, so it can tell the app's own save, once it has
+// actually landed, from a disk write it still needs to hear about. These
+// two tests force each order directly against the deck source's own
+// methods and that same function, rather than depending on the file
+// watcher's debounce to land one way or the other.
+func TestAppDeckSourceStillBufferingIsNotSuppressed(t *testing.T) {
+	deckPath := writeAppTestDeck(t, "# One\n")
+	source := newAppDeckSource(deckPath)
+	source.setBuffer([]byte("# Two\n"))
+
+	// A write that lands on the buffer while tap is still showing it, before
+	// "saved" has dropped the buffer.
+	if err := os.WriteFile(deckPath, []byte("# Two\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	changed, err := source.diskChanged()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if changed {
+		t.Fatal("disk equals the buffer, want changed = false")
+	}
+	if !source.buffering() {
+		t.Fatal("the buffer has not been dropped, want buffering = true")
+	}
+	if suppressFileChanged(changed, source.buffering()) {
+		t.Error("still buffering: dev.go's rule must not suppress, so file-changed is emitted")
+	}
+}
+
+func TestAppDeckSourceNoLongerBufferingIsSuppressed(t *testing.T) {
+	deckPath := writeAppTestDeck(t, "# One\n")
+	source := newAppDeckSource(deckPath)
+	source.setBuffer([]byte("# Two\n"))
+
+	// "saved" has been processed: the buffer is dropped and the save's text
+	// is what tap now remembers rendering.
+	source.dropBuffer()
+	source.remember([]byte("# Two\n"))
+
+	// The file watcher fires for the app's own write, now that it has
+	// landed and tap is no longer buffering.
+	if err := os.WriteFile(deckPath, []byte("# Two\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	changed, err := source.diskChanged()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if changed {
+		t.Fatal("disk equals what tap remembers, want changed = false")
+	}
+	if source.buffering() {
+		t.Fatal("the buffer was dropped, want buffering = false")
+	}
+	if !suppressFileChanged(changed, source.buffering()) {
+		t.Error("no longer buffering: dev.go's rule must suppress the app's own already-landed save")
+	}
+}
+
 func putAppSource(handler http.HandlerFunc, body string) *httptest.ResponseRecorder {
 	recorder := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodPut, "http://127.0.0.1:3000/api/app/source", strings.NewReader(body))
