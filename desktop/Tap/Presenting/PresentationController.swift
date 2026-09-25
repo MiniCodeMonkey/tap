@@ -733,9 +733,15 @@ final class PresentationController {
         }
         if arrangement.isSingleDisplay {
             let showPresenter = !previous.isSingleDisplay || presenterIsShownOverAudience
-            // The presenter window leaves its own Space first (a child may not have one), then rides over the audience.
             presenterWindow.detach()
-            place([(presenterWindow, arrangement.presenter.frame, false), (audienceWindow, arrangement.audience.frame, fullScreen)]) { [weak self] in
+            // A presenter window with a Space of its own leaves it first (a
+            // child may not have one), then rides over the audience. One
+            // without is not placed: placing orders it front, which would
+            // show the notes while the audience window moves.
+            var order: [(window: PresentationWindow, frame: CGRect, fullScreen: Bool)] = []
+            if presenterWindow.fullScreenState != .windowed { order.append((presenterWindow, arrangement.presenter.frame, false)) }
+            order.append((audienceWindow, arrangement.audience.frame, fullScreen))
+            place(order) { [weak self] in
                 guard let self, self.windowsShown, let presenterWindow = self.presenterWindow else { return }
                 presenterWindow.orderOut(nil)
                 self.frontWindow = self.audienceWindow

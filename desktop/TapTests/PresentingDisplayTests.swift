@@ -172,7 +172,7 @@ final class PresentingDisplayTests: PresentingTestCase {
             presentation.windowsAreSettled && presentation.presenterIsShownOverAudience
         }
         XCTAssertEqual(audience.targetFrame, one[0].frame, "the audience is asked for the remaining screen")
-        XCTAssertEqual(presenter.targetFrame, one[0].frame)
+        XCTAssertEqual(presenter.frame, audience.frame, "the presenter view covers the audience view")
         XCTAssertTrue(presenter.isAttached)
         XCTAssertEqual(presenter.fullScreenState, .windowed, "a child has no Space of its own")
         XCTAssertTrue(presentation.frontWindow === presenter)
