@@ -210,10 +210,20 @@ In `Build`, inside the `for blockIndex, block := range parsed.CodeBlocks` loop, 
 			}
 ```
 
-- [ ] **Step 4: Run the slide list tests**
+- [ ] **Step 4: Run the slide list tests, and refresh the golden file the field changes**
 
 Run: `go test ./internal/slidelist`
-Expected: PASS, the new test included. Then `go test ./internal/cli -run 'TestSlideList|TestAppSource'` to see the JSON round trips still pass (the field is `omitempty`, so decks without a problem print exactly what they did).
+Expected: `TestBuildCarriesEachBlocksProblem` passes and `TestGoldenSlideLists` fails on `fences`: `testdata/fences.md` has a `{driver: sqlite}` block and no `drivers` map, so its slide list now carries a `problem`. Then:
+
+```bash
+go test ./internal/slidelist -run TestGoldenSlideLists -update
+git diff --stat internal/slidelist/testdata/golden
+git diff internal/slidelist/testdata/golden | grep '^[+-] ' 
+```
+
+Expected: one golden file changed, and the only added lines are the one `"problem": "This deck does not declare the sqlite driver. Add this to the frontmatter:\n\ndrivers:\n  sqlite: {}"` entry (with its comma on the line before it); no line removed. Anything else in the diff is a real change to look at, not to update over. Then `go test ./internal/slidelist ./internal/cli` passes.
+
+Document the field where the slide list's fields are listed: in `docs/reference/cli-commands.md` (line 628, "each with `block`, `language`, `driver`, `live`, `line`") add "and `problem`, present only for a live block that cannot run, with tap's message" and a `"problem"` line in the JSON example below it; in `skills/tap/rules/cli.md` (line 248) add the same field to the example's code block, or a sentence after it.
 
 - [ ] **Step 5: Write the two scenario tests**
 
@@ -313,10 +323,11 @@ go_tests=$(find "$root/internal" -name '*_test.go' 2>/dev/null)
 
 # A scenario is covered by a Swift test named testName, or by a Go test
 # named TestName, in the tap packages: the CLI-only scenarios of a feature
-# file are tap's to prove.
+# file are tap's to prove. An empty file list would make grep read stdin,
+# which inside the loop is the manifest, so each list is checked first.
 has_test() {
-	grep -q "func test$1(" $swift_tests 2>/dev/null && return 0
-	[ -n "$go_tests" ] && grep -q "func Test$1(" $go_tests 2>/dev/null && return 0
+	[ -n "$swift_tests" ] && grep -q "func test$1(" $swift_tests </dev/null 2>/dev/null && return 0
+	[ -n "$go_tests" ] && grep -q "func Test$1(" $go_tests </dev/null 2>/dev/null && return 0
 	return 1
 }
 ```
@@ -347,25 +358,24 @@ Expected: `every claimed scenario has a test` (the self-test first, then the che
 
 - [ ] **Step 8: Mutate and commit**
 
-Mutations, each applied and run locally, then reverted exactly: in `Build`, drop the `codeBlock.Problem = ...` line (expected: `TestBuildCarriesEachBlocksProblem` fails on the shell block); in `Build`, copy `Problem` from `rendered.CodeBlocks[0]` for every block (expected: it fails on the sqlite block, which gains a problem); in `has_test`, drop the Go grep (expected: `check-scenarios-test.sh` fails on "a Go test should satisfy"); in `terminalAsker.askApproval`, return `true` for `"n"` (expected: `TestFirstOpenOfADeckWithLiveCodeInTheCLI` fails on the policy); in `liveCodeApproval`, skip the `!input.Interactive` branch (expected: `TestNonInteractiveRuns` fails on `asker.requests`).
+Mutations, each applied and run locally, then reverted exactly: in `Build`, drop the `codeBlock.Problem = ...` line (expected: `TestBuildCarriesEachBlocksProblem` fails on the shell block); in `Build`, copy `Problem` from `rendered.CodeBlocks[0]` for every block (expected: it fails on the sqlite block, which gains a problem); in `has_test`, drop the Go grep (expected: `check-scenarios-test.sh` fails on "a Go test should satisfy"); in `Build`, keep the golden file as it was (expected: `TestGoldenSlideLists` fails on `fences`, which is the check that the refresh was reviewed); in `terminalAsker.askApproval`, return `true` for `"n"` (expected: `TestFirstOpenOfADeckWithLiveCodeInTheCLI` fails on the policy); in `liveCodeApproval`, skip the `!input.Interactive` branch (expected: `TestNonInteractiveRuns` fails on `asker.requests`).
 
 ```bash
-git add internal/slidelist internal/cli/approval_scenarios_test.go desktop/scripts
+git add internal/slidelist internal/cli/approval_scenarios_test.go desktop/scripts docs/reference/cli-commands.md skills/tap/rules/cli.md
 git commit -m "feat(slidelist): carry each live block's problem, and name the CLI live code scenarios as Go tests"
 ```
 
 ---
 
-### Task 2: The approval payload, the block's problem, and a session restart
+### Task 2: The approval payload and the block's problem
 
 **Files:**
 - Modify: `desktop/TapDesktopCore/Sources/TapDesktopCore/TapProtocol.swift`
-- Modify: `desktop/TapDesktopCore/Sources/TapDesktopCore/TapSession.swift`
-- Test: `desktop/TapDesktopCore/Tests/TapDesktopCoreTests/TapProtocolTests.swift`, `TapSessionTests.swift`
+- Test: `desktop/TapDesktopCore/Tests/TapDesktopCoreTests/TapProtocolTests.swift`
 
 **Interfaces:**
-- Consumes: D4's `QuestionPayload(deck:settingsPath:directory:segments:)`, `CodeBlock(block:language:driver:live:line:)`, `TapSession.start()`, `changeDeck(to:)` (its `startsAfterStop` pattern), `FakeTap.ready(recordingTo:)`, `waitUntil`.
-- Produces: `ApprovalDriver(name:command:slides:blocks:)`, `ApprovalBlock(driver:code:slide:block:)`; `QuestionPayload.drivers: [ApprovalDriver]?`, `.approvedBefore: [String]?`, `.blocks: [ApprovalBlock]?`, `.isForNewDrivers: Bool`, `.approvalSummary: String` ("2 shell, 1 sqlite"); `CodeBlock.problem: String?` (`init` gains `problem: String? = nil`); `TapSession.restart(reason:)`.
+- Consumes: D4's `QuestionPayload(deck:settingsPath:directory:segments:)`, `CodeBlock(block:language:driver:live:line:)`.
+- Produces: `ApprovalDriver(name:command:slides:blocks:)`, `ApprovalBlock(driver:code:slide:block:)`; `QuestionPayload.drivers: [ApprovalDriver]?`, `.approvedBefore: [String]?`, `.blocks: [ApprovalBlock]?`, `.isForNewDrivers: Bool`, `.approvalSummary: String` ("2 shell, 1 sqlite"); `CodeBlock.problem: String?` (`init` gains `problem: String? = nil`). A field the tap change may add to the payload (to tell a re-ask from the first ask) is not decoded here; `Codable` ignores it, and the sheet reads the same either way.
 
 - [ ] **Step 1: Write the failing protocol tests**
 
@@ -399,48 +409,12 @@ In `TapProtocolTests.swift`, add:
     }
 ```
 
-- [ ] **Step 2: Write the failing session test**
-
-In `TapSessionTests.swift`, add:
-
-```swift
-    func testRestartStopsAndStartsAgainWithoutCountingACrash() async throws {
-        let record = try TestScripts.temporaryFolder().appendingPathComponent("record")
-        let tap = session(try FakeTap.ready(recordingTo: record))
-        var states: [TapSession.State] = []
-        tap.onStateChange = { states.append($0) }
-        tap.start()
-        try await waitUntil { if case .running = tap.state { return true } else { return false } }
-        tap.restart(reason: "the deck now declares shell")
-        try await waitUntil(timeout: 10, "a second running state") {
-            states.filter { if case .running = $0 { return true } else { return false } }.count == 2
-        }
-        XCTAssertFalse(states.contains { if case .restarting = $0 { return true } else { return false } }, "a requested exit is not a crash")
-        XCTAssertTrue(states.contains(.stopped), "the first tap stopped before the second started")
-        let recorded = try String(contentsOf: record, encoding: .utf8)
-        XCTAssertEqual(recorded.components(separatedBy: "arguments: dev --app").count - 1, 2, "tap ran twice")
-        XCTAssertTrue(tap.log.text.contains("restarting tap: the deck now declares shell"))
-        tap.stop()
-        try await waitUntil { tap.state == .stopped }
-    }
-
-    func testRestartWithNoProcessIsAStart() async throws {
-        let record = try TestScripts.temporaryFolder().appendingPathComponent("record")
-        let tap = session(try FakeTap.ready(recordingTo: record))
-        XCTAssertEqual(tap.state, .stopped)
-        tap.restart(reason: "a start in disguise")
-        try await waitUntil { if case .running = tap.state { return true } else { return false } }
-        tap.stop()
-        try await waitUntil { tap.state == .stopped }
-    }
-```
-
-- [ ] **Step 3: Run the core tests to verify they fail**
+- [ ] **Step 2: Run the core tests to verify they fail**
 
 Run: `make -C desktop core-test`
-Expected: the package does not compile (`ApprovalDriver`, `problem`, `restart(reason:)` are undefined). That is the failure for this step.
+Expected: the package does not compile (`ApprovalDriver`, `problem` are undefined). That is the failure for this step.
 
-- [ ] **Step 4: Extend `TapProtocol.swift`**
+- [ ] **Step 3: Extend `TapProtocol.swift`**
 
 Add `problem` to `CodeBlock`:
 
@@ -542,41 +516,18 @@ public struct QuestionPayload: Codable, Equatable, Sendable {
 
 Every D4 call site (`QuestionPayload(deck:)`, `QuestionPayload(settingsPath:)`, `QuestionPayload(directory:segments:)`, `QuestionPayload()`) still compiles: the new parameters default to nil, and `Codable` synthesis decodes an absent key as nil.
 
-- [ ] **Step 5: Add `restart(reason:)` to `TapSession`**
-
-After `changeDeck(to:)`:
-
-```swift
-    /// Stops tap and starts it again on the same deck, for a change only a
-    /// fresh start reads: the deck now declares a driver, and tap's live
-    /// code policy is fixed at startup (internal/cli/dev.go), so only a new
-    /// process asks about it. The exit is a requested one, never counted by
-    /// the restart policy. With no process running it is a plain start.
-    public func restart(reason: String) {
-        log.append("restarting tap: \(reason)", source: .app)
-        guard let process else {
-            start()
-            return
-        }
-        startsAfterStop = true
-        process.stop()
-    }
-```
-
-`processExited(status:requested:)` already starts again when `startsAfterStop` is set, exactly as `changeDeck` relies on.
-
-- [ ] **Step 6: Run the core tests**
+- [ ] **Step 4: Run the core tests**
 
 Run: `make -C desktop core-test`
-Expected: every test passes, the four new ones included. `FakeTap.ready` reads stdin until it closes, so `process.stop()` (which closes stdin) ends it, and the record file holds two `arguments:` lines.
+Expected: every test passes, the two new ones included.
 
-- [ ] **Step 7: Mutate and commit**
+- [ ] **Step 5: Mutate and commit**
 
-Mutations, each applied and run with `make -C desktop core-test`, then reverted exactly: in `restart`, drop `startsAfterStop = true` (expected: `testRestartStopsAndStartsAgainWithoutCountingACrash` times out on the second running state); in `restart`, call `unexpectedExit()` instead of `process.stop()` (expected: it fails on `.restarting`); in `restart`, drop the `guard let process` branch's `start()` (expected: `testRestartWithNoProcessIsAStart` times out); in `approvalSummary`, join with `"; "` (expected: `testDecodesTheApprovalRequest` fails on "2 shell, 1 sqlite"); in `isForNewDrivers`, return `drivers != nil` (expected: it fails on `first.isForNewDrivers`); in `CodeBlock`, name the coding key `"reason"` (expected: `testDecodesABlocksProblem` fails on nil).
+Mutations, each applied and run with `make -C desktop core-test`, then reverted exactly: in `approvalSummary`, join with `"; "` (expected: `testDecodesTheApprovalRequest` fails on "2 shell, 1 sqlite"); in `isForNewDrivers`, return `drivers != nil` (expected: it fails on `first.isForNewDrivers`); in `CodeBlock`, name the coding key `"reason"` (expected: `testDecodesABlocksProblem` fails on nil).
 
 ```bash
 git add desktop/TapDesktopCore
-git commit -m "feat(desktop): decode the approval request and each block's problem, and restart a session on request"
+git commit -m "feat(desktop): decode the approval request and each block's problem"
 ```
 
 ---
