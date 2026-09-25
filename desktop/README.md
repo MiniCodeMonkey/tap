@@ -35,9 +35,8 @@ paints while the window is visible. Thumbnails are cached under
 `~/Library/Application Support/Tap/Thumbnails`; the tests use a temporary
 folder instead.
 
-One behavior no automated test reaches: drag a slide's header in the
-editor while some text elsewhere in the editor is selected. The drag must
-move the slide and leave that selection untouched.
-`EditorTextView.draggingSession(_:endedAt:operation:)` skips
-`NSTextView`'s own end-of-move deletion for slide drags; check it by hand
-after any change near `EditorTextView`'s drag handling.
+A header drag in the editor leaves a text selection elsewhere untouched:
+`SlideDragUITests.testDraggingABoxHeaderLeavesTheSelectedTextInPlace`
+checks it with a real drag. `NSTextView`'s end-of-move handling deletes
+only the ranges of a text drag it started itself, and a header drag
+starts none, so no override is needed.

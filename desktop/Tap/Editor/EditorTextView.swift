@@ -677,21 +677,6 @@ final class EditorTextView: NSTextView {
         super.draggingEnded(sender)
     }
 
-    /// NSTextView, as a drag's own source, deletes the current text
-    /// selection when a text drag it built itself ends as a move: the
-    /// drop by convention takes the text out of its old place. A header
-    /// drag is not that: it is built by hand in `headerDragStarter`, and
-    /// the move it performs is `dropSlides`'s replacement of the slide's
-    /// own range, never a deletion of whatever the editor happens to have
-    /// selected right now. Skipping `super` here keeps that selection
-    /// alone; a real text drag still gets NSTextView's own handling.
-    override func draggingSession(_ session: NSDraggingSession, endedAt screenPoint: NSPoint, operation: NSDragOperation) {
-        guard session.draggingPasteboard.data(forType: Self.slideType) != nil else {
-            super.draggingSession(session, endedAt: screenPoint, operation: operation)
-            return
-        }
-    }
-
     /// The drop itself, shared with `performDragOperation` so a test can
     /// drive it without a real drag.
     @discardableResult
