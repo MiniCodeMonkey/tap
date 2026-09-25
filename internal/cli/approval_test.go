@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"os"
 	"path/filepath"
@@ -24,7 +25,7 @@ type fakeAsker struct {
 	err      error
 }
 
-func (asker *fakeAsker) askApproval(request approvalRequest) (bool, error) {
+func (asker *fakeAsker) askApproval(_ context.Context, request approvalRequest) (bool, error) {
 	asker.requests = append(asker.requests, request)
 	return asker.answer, asker.err
 }
@@ -109,8 +110,9 @@ func TestApprovalAsksOnceAndRemembersTheAnswer(t *testing.T) {
 		t.Errorf("policy = %+v, want python and shell", policy)
 	}
 	settings, _ := usersettings.Load(input.SettingsPath)
-	if !settings.Approved(resolveKey(t, input.Deck), []string{"python", "shell"}) {
-		t.Errorf("the approval was not saved: %+v", settings)
+	key := resolveKey(t, input.Deck)
+	if !settings.Covers(key, usersettings.Driver{Name: "python", Command: []string{"python3", "-c"}}) || !settings.Covers(key, usersettings.Driver{Name: "shell"}) {
+		t.Errorf("the approval was not saved with python's command: %+v", settings)
 	}
 
 	if _, err := liveCodeApproval(input); err != nil {
@@ -544,7 +546,7 @@ func terminalRequest() approvalRequest {
 
 func TestTerminalAskerListsTheDriversAndShowsTheCode(t *testing.T) {
 	out := &bytes.Buffer{}
-	approved, err := terminalAsker{in: strings.NewReader("s\ny\n"), out: out}.askApproval(terminalRequest())
+	approved, err := terminalAsker{in: strings.NewReader("s\ny\n"), out: out}.askApproval(context.Background(), terminalRequest())
 	if err != nil || !approved {
 		t.Fatalf("approved = %v, %v; want true", approved, err)
 	}
@@ -566,7 +568,7 @@ func TestTerminalAskerListsTheDriversAndShowsTheCode(t *testing.T) {
 
 func TestTerminalAskerDefaultsToNo(t *testing.T) {
 	for _, typed := range []string{"\n", "", "n\n", "no\n", "maybe\n"} {
-		approved, err := terminalAsker{in: strings.NewReader(typed), out: &bytes.Buffer{}}.askApproval(terminalRequest())
+		approved, err := terminalAsker{in: strings.NewReader(typed), out: &bytes.Buffer{}}.askApproval(context.Background(), terminalRequest())
 		if err != nil || approved {
 			t.Errorf("typed %q: approved = %v, %v; want false", typed, approved, err)
 		}
@@ -575,7 +577,7 @@ func TestTerminalAskerDefaultsToNo(t *testing.T) {
 
 func TestTerminalAskerAsksAgainAfterAnUnclearAnswer(t *testing.T) {
 	out := &bytes.Buffer{}
-	approved, _ := terminalAsker{in: strings.NewReader("maybe\ny\n"), out: out}.askApproval(terminalRequest())
+	approved, _ := terminalAsker{in: strings.NewReader("maybe\ny\n"), out: out}.askApproval(context.Background(), terminalRequest())
 	if !approved || strings.Count(out.String(), "[y/N/s]") != 2 {
 		t.Errorf("approved = %v, output:\n%s", approved, out.String())
 	}
@@ -589,7 +591,7 @@ func TestTerminalAskerNamesOnlyTheNewDriver(t *testing.T) {
 		Blocks:         []approvalBlock{{Driver: "shell", Code: "ls", Slide: 6, Block: 1}},
 	}
 	out := &bytes.Buffer{}
-	_, _ = terminalAsker{in: strings.NewReader("n\n"), out: out}.askApproval(request)
+	_, _ = terminalAsker{in: strings.NewReader("n\n"), out: out}.askApproval(context.Background(), request)
 	if !strings.Contains(out.String(), "This deck now also wants to run shell:\n") {
 		t.Errorf("output:\n%s", out.String())
 	}

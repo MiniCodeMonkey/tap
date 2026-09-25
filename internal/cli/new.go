@@ -167,7 +167,11 @@ func approveNewDeck(deck string, now time.Time) error {
 		if err != nil {
 			return err
 		}
-		settings.Approve(key, cfg.DeclaredDrivers(), now)
+		drivers := make([]usersettings.Driver, 0, len(cfg.Drivers))
+		for _, name := range cfg.DeclaredDrivers() {
+			drivers = append(drivers, usersettings.Driver{Name: name, Command: approvalCommand(name, cfg.Drivers[name])})
+		}
+		settings.ApproveDrivers(key, drivers, now)
 		return usersettings.Save(settingsPath, settings)
 	})
 }

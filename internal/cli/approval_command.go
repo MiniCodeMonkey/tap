@@ -23,7 +23,9 @@ var approvalCmd = &cobra.Command{
 	Long: `A deck with live code runs nothing until you approve it. tap dev and
 tap present ask once, in the terminal, and remember the answer in
 ~/.config/tap/settings.yaml, keyed by the deck's path and the drivers you
-allowed. A moved deck, or a new driver, asks again.`,
+allowed, each with the command it runs. A moved deck, a new driver, or a
+driver whose command changed asks again, also when the deck reloads while
+tap runs.`,
 }
 
 var approvalListCmd = &cobra.Command{
@@ -98,7 +100,14 @@ func runApprovalList(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 	for _, approval := range approvals {
-		drivers := strings.Join(approval.Drivers, ", ")
+		described := make([]string, len(approval.Drivers))
+		for index, name := range approval.Drivers {
+			described[index] = name
+			if command := approval.Commands[name]; len(command) > 0 {
+				described[index] += " (runs: " + strings.Join(command, " ") + ")"
+			}
+		}
+		drivers := strings.Join(described, ", ")
 		if drivers == "" {
 			drivers = "none"
 		}

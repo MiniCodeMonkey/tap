@@ -12,13 +12,14 @@ import (
 
 // Event types on standard output in --app mode.
 const (
-	appEventReady       = "ready"
-	appEventFileChanged = "file-changed"
-	appEventQuestion    = "question"
-	appEventRecording   = "recording"
-	appEventTunnel      = "tunnel"
-	appEventSlide       = "slide"
-	appEventError       = "error"
+	appEventReady          = "ready"
+	appEventFileChanged    = "file-changed"
+	appEventQuestion       = "question"
+	appEventQuestionClosed = "question-closed"
+	appEventRecording      = "recording"
+	appEventTunnel         = "tunnel"
+	appEventSlide          = "slide"
+	appEventError          = "error"
 )
 
 // Codes of the error events tap sends while it runs in --app mode. A fatal
@@ -80,6 +81,15 @@ type appQuestionEvent struct {
 	ID      string `json:"id"`
 	Kind    string `json:"kind"`
 	Payload any    `json:"payload"`
+}
+
+// appQuestionClosedEvent withdraws an open question that tap no longer
+// needs answered, such as an approval question a reload made stale. The
+// app closes the question with this id, and an answer to it is refused as
+// an unknown question.
+type appQuestionClosedEvent struct {
+	Type string `json:"type"`
+	ID   string `json:"id"`
 }
 
 // appRecordingEvent is the recording state of a tap present run. Elapsed
