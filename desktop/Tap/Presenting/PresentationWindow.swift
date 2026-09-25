@@ -26,7 +26,16 @@ final class PresentationWindow: NSWindow, NSWindowDelegate {
     let role: Role
     let page: PresentationPageController
     /// Holds the page and, in the presenter window, the toolbar and the REC dot over it.
-    let container = NSView()
+    let container = PresentationContentView()
+    /// The presenter window's toolbar; nil in the audience window. Named
+    /// `presenterToolbar`, not `toolbar`: `NSWindow` already declares a
+    /// `toolbar: NSToolbar?` property, and a same-named property of a
+    /// different type cannot coexist with it.
+    private(set) var presenterToolbar: PresenterToolbar?
+    /// The presenter window's REC dot; nil in the audience window.
+    private(set) var recordingDot: RecordingDot?
+    /// The pointer moved over this window.
+    var onMouseMoved: (() -> Void)?
     /// The deck this window presents, for menu actions that reach this window first.
     weak var deckWindowController: DeckWindowController?
     private(set) var fullScreenState: FullScreenState = .windowed
@@ -93,6 +102,35 @@ final class PresentationWindow: NSWindow, NSWindowDelegate {
             page.view.bottomAnchor.constraint(equalTo: container.bottomAnchor),
         ])
         contentView = container
+        if role == .presenter {
+            let toolbar = PresenterToolbar(frame: .zero)
+            let dot = RecordingDot(frame: .zero)
+            for view in [toolbar, dot] as [NSView] {
+                view.translatesAutoresizingMaskIntoConstraints = false
+                container.addSubview(view)
+            }
+            NSLayoutConstraint.activate([
+                toolbar.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+                toolbar.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+                toolbar.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+                toolbar.heightAnchor.constraint(equalToConstant: PresenterToolbar.height),
+                dot.topAnchor.constraint(equalTo: container.topAnchor, constant: 16),
+                dot.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -18),
+            ])
+            self.presenterToolbar = toolbar
+            recordingDot = dot
+        }
+        // The bottom edge: the top is where full screen drops the menu bar.
+        container.onMouseMoved = { [weak self] point in
+            guard let self else { return }
+            self.onMouseMoved?()
+            guard let toolbar = self.presenterToolbar else { return }
+            if point.y <= 2 {
+                toolbar.pointerReachedBottomEdge()
+            } else if point.y > PresenterToolbar.height {
+                toolbar.pointerLeft()
+            }
+        }
         container.layoutSubtreeIfNeeded()
     }
 
@@ -347,5 +385,25 @@ final class PresentationWindow: NSWindow, NSWindowDelegate {
     override func supplementalTarget(forAction action: Selector, sender: Any?) -> Any? {
         if let deckWindowController, deckWindowController.responds(to: action) { return deckWindowController }
         return super.supplementalTarget(forAction: action, sender: sender)
+    }
+}
+
+/// The talk window's content view: it tracks the pointer everywhere in the
+/// window, so the toolbar can slide up at the bottom edge and the cursor can
+/// hide when idle.
+final class PresentationContentView: NSView {
+    var onMouseMoved: ((NSPoint) -> Void)?
+    private var trackingArea: NSTrackingArea?
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let trackingArea { removeTrackingArea(trackingArea) }
+        let area = NSTrackingArea(rect: bounds, options: [.mouseMoved, .activeAlways, .inVisibleRect], owner: self, userInfo: nil)
+        addTrackingArea(area)
+        trackingArea = area
+    }
+
+    override func mouseMoved(with event: NSEvent) {
+        onMouseMoved?(convert(event.locationInWindow, from: nil))
     }
 }

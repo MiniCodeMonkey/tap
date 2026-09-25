@@ -370,6 +370,11 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
         if presentPopover.isShown { presentPopover.update(context: popoverContext()) }
     }
 
+    /// Present > Reload Slides and the toolbar's.
+    @objc func reloadSlides(_ sender: Any?) {
+        sessionController.presentation.reloadSlides()
+    }
+
     // The slide commands name the selection now and resolve it when they
     // run, which may be after tap's answer renumbers the slides. See
     // `SlideSelection`.
@@ -436,6 +441,7 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
         let presentation = sessionController.presentation
         if [#selector(play(_:)), #selector(playWithOptions(_:)), #selector(rehearse(_:))].contains(menuItem.action) { return presentation.canStart }
         if menuItem.action == #selector(stopPresenting(_:)) { return presentation.isActive }
+        if menuItem.action == #selector(reloadSlides(_:)) { return presentation.state == .presenting }
         if menuItem.action == #selector(swapDisplays(_:)) { return presentation.currentArrangement?.isSingleDisplay == false }
         let count = sessionController.selectedSlideNumbers.count
         if menuItem.action == #selector(deleteSlides(_:)) {

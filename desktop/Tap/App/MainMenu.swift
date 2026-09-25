@@ -142,6 +142,7 @@ enum MainMenu {
         menu.addItem(item("Rehearse", action: #selector(DeckWindowController.rehearse(_:)), key: "p", modifiers: [.command, .option, .shift]))
         menu.addItem(.separator())
         menu.addItem(item("Stop", action: #selector(DeckWindowController.stopPresenting(_:)), key: "."))
+        menu.addItem(item("Reload Slides", action: #selector(DeckWindowController.reloadSlides(_:)), key: "r"))
         menu.addItem(item("Swap Displays", action: #selector(DeckWindowController.swapDisplays(_:))))
         return menu
     }

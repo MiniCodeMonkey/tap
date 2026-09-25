@@ -178,8 +178,16 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
     /// comes back as its error, and the talk does not start.
     func saveForPresenting(completion: @escaping (Error?) -> Void) {
         guard let document, let url = document.fileURL else { return completion(CocoaError(.fileNoSuchFile)) }
-        guard isContentEdited else { return completion(nil) }
-        document.save(to: url, ofType: document.fileType ?? "net.daringfireball.markdown", for: .saveOperation, completionHandler: completion)
+        let text = editor.string
+        guard isContentEdited else {
+            presentation.presentedText = text
+            return completion(nil)
+        }
+        // The text counts as presented only once it is on disk: a refused save leaves the old value.
+        document.save(to: url, ofType: document.fileType ?? "net.daringfireball.markdown", for: .saveOperation) { [weak self] error in
+            if error == nil { self?.presentation.presentedText = text }
+            completion(error)
+        }
     }
 
     var editor: EditorTextView { editorViewController.textView }
@@ -796,6 +804,7 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
         // so none of what follows runs on it.
         guard editor.apply(list, sentText: sentText, sentGeneration: generation) else { return }
         lastAppliedText = sentText
+        presentation.deckTextChanged(sentText)
         slidePanel.setSlides(editor.boxes.map(\.slide))
         thumbnails.deckChanged()
         if let first = list.errors.first {

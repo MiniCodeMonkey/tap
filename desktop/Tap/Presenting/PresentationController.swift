@@ -70,6 +70,20 @@ final class PresentationController {
     /// Set once a page reported ready or failed to load, or the fallback
     /// fired: the windows may be shown as soon as no question is pending.
     private var pagesReported = false
+    /// How many typing pauses tap dev has answered for since tap present
+    /// last read the file, so the toolbar can say what the audience has not
+    /// seen. Zero again when the text equals what was presented.
+    private(set) var editsNotShown = 0
+    /// The deck text tap present last read: at the start and after Reload Slides.
+    var presentedText: String?
+    /// The text tap dev last answered for, so an answer for the same text is not counted twice.
+    private var lastCountedText: String?
+    /// How long the pointer rests on a talk window before the cursor hides.
+    var cursorHideDelay: TimeInterval = 3
+    /// Hides the cursor until the mouse moves. A test replaces it.
+    var hideCursor: () -> Void = { NSCursor.setHiddenUntilMouseMoves(true) }
+    private var cursorHideWork: DispatchWorkItem?
+    var isCursorHideArmed: Bool { cursorHideWork != nil }
     private var showWindowsFallback: DispatchWorkItem?
     /// Windows taking themselves down, one at a time, the front one first:
     /// two exits at once fail the same way two entries do. Each is kept
@@ -210,6 +224,7 @@ final class PresentationController {
         self.options = options
         lastSlide = options.startSlide
         recording = RecordingStatus()
+        editsNotShown = 0
         pendingQuestions = []
         pagesReported = false
         windowsShown = false
@@ -370,6 +385,7 @@ final class PresentationController {
         presenterWindow = presenter
         presenter.page.load(client.presenterURL(slide: lastSlide), allowedPort: client.ready.port)
         if !windowsShown { armShowWindowsFallback() }
+        refreshPresenterToolbar()
     }
 
     private func makeWindow(role: PresentationWindow.Role, frame: CGRect) -> PresentationWindow {
@@ -378,6 +394,13 @@ final class PresentationController {
         window.page.onReady = { [weak self] _ in self?.pageReported() }
         window.page.onLoadFailed = { [weak self] _ in self?.pageReported() }
         window.page.onPresenterPopup = { [weak self] in self?.bringPresenterWindowForward() }
+        window.onMouseMoved = { [weak self] in self?.noteMouseMoved() }
+        if let toolbar = window.presenterToolbar {
+            toolbar.onRecord = { [weak self] in self?.toggleRecording() }
+            toolbar.onReload = { [weak self] in self?.reloadSlides() }
+            toolbar.onSwap = { [weak self] in self?.swapDisplays() }
+            toolbar.onStop = { [weak self] in self?.stop() }
+        }
         return window
     }
 
@@ -533,6 +556,66 @@ final class PresentationController {
         keyMonitor = nil
     }
 
+    // MARK: The presenter toolbar
+
+    func refreshPresenterToolbar() {
+        guard let presenterWindow, let options else { return }
+        presenterWindow.presenterToolbar?.update(recording: recording, editsNotShown: editsNotShown, mode: options.mode)
+        presenterWindow.recordingDot?.isHidden = !recording.isRecording
+    }
+
+    /// tap dev answered for `text`: an edit the audience has not seen, unless
+    /// the text is back to what tap present read. tap dev also answers
+    /// after a restart and after a component change with the text
+    /// unchanged; those are not edits, so a text counts once.
+    func deckTextChanged(_ text: String) {
+        guard isActive else { return }
+        if text == presentedText {
+            editsNotShown = 0
+        } else if text != lastCountedText {
+            editsNotShown += 1
+        }
+        lastCountedText = text
+        refreshPresenterToolbar()
+    }
+
+    /// Reload Slides: the buffer goes to the file, then tap present reads
+    /// it again, as r does.
+    func reloadSlides() {
+        guard state == .presenting else { return }
+        saveDeck { [weak self] error in
+            guard let self, self.state == .presenting else { return }
+            if let error {
+                self.session?.log.append("Reload Slides could not save the deck: \(error.localizedDescription)", source: .app)
+                return
+            }
+            self.session?.send(.reload)
+            self.editsNotShown = 0
+            self.refreshPresenterToolbar()
+        }
+    }
+
+    /// REC: stop a recording, or start a new segment, as c does.
+    func toggleRecording() {
+        guard isActive else { return }
+        session?.send(.recording(action: recording.isRecording ? .stop : .newSegment))
+    }
+
+    /// The pointer moved over a talk window: the cursor hides again after it rests.
+    func noteMouseMoved() {
+        guard isActive else { return }
+        cursorHideWork?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                self.cursorHideWork = nil
+                self.hideCursor()
+            }
+        }
+        cursorHideWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + cursorHideDelay, execute: work)
+    }
+
     // MARK: Displays
 
     /// Exchanges the audience and presenter displays, before the talk (the
@@ -617,9 +700,11 @@ final class PresentationController {
         case .recording(let recordingEvent):
             recording.apply(recordingEvent)
             onRecordingChange?(recording)
+            refreshPresenterToolbar()
         case .error(let payload) where payload.code == "recording_blocked":
             recording.blockedReason = payload.message
             onRecordingChange?(recording)
+            refreshPresenterToolbar()
         case .error(let payload) where payload.code == "failed" && payload.message.hasPrefix("port ") && payload.message.contains("already in use"):
             portIsTaken()
         case .question(let id, let kind, let payload):
@@ -688,6 +773,8 @@ final class PresentationController {
         presenterWindow = nil
         frontWindow = nil
         windowsShown = false
+        cursorHideWork?.cancel()
+        cursorHideWork = nil
         sleepAssertion.release()
         takeDownNext()
     }

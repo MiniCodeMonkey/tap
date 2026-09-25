@@ -125,6 +125,21 @@ final class PresentingTests: PresentingTestCase {
         try await startPresenting(controller, PresentationOptions(mode: .play, startSlide: 1))
         XCTAssertTrue(presentation.sleepAssertion.isHeld)
         XCTAssertTrue(powerAssertionIsListed(named: SleepAssertion.reason), "the kernel holds the display awake for this process")
+
+        // The cursor hides once the pointer has rested on a talk window.
+        presentation.cursorHideDelay = 0.1
+        var hides = 0
+        presentation.hideCursor = { hides += 1 }
+        presentation.noteMouseMoved()
+        XCTAssertTrue(presentation.isCursorHideArmed)
+        try await waitUntil(timeout: 2, "the cursor to hide") { hides == 1 }
+        XCTAssertFalse(presentation.isCursorHideArmed)
+        presentation.noteMouseMoved()
+        presentation.noteMouseMoved()
+        try await waitUntil(timeout: 2, "the cursor to hide once more") { hides == 2 }
+        // Two moves, one hide: the first move's work item was cancelled, not merely outrun.
+        try await Task.sleep(nanoseconds: 300_000_000)
+        XCTAssertEqual(hides, 2)
         try await stopPresenting(controller)
         XCTAssertFalse(presentation.sleepAssertion.isHeld)
         XCTAssertFalse(powerAssertionIsListed(named: SleepAssertion.reason))
