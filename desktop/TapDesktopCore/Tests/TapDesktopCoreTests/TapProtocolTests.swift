@@ -98,4 +98,14 @@ final class TapProtocolTests: XCTestCase {
         XCTAssertEqual(HubMessage.decode(#"{"type":"connected","version":"1.0.0"}"#), .other(type: "connected"))
         XCTAssertNil(HubMessage.decode("not json"))
     }
+
+    func testOnlyAFatalErrorSaysTheCommandFailed() {
+        XCTAssertTrue(TapErrorPayload(code: "deck_not_found", message: "").meansTheCommandFailed)
+        XCTAssertTrue(TapErrorPayload(code: "failed", message: "").meansTheCommandFailed)
+        XCTAssertTrue(TapErrorPayload(code: "internal", message: "").meansTheCommandFailed)
+        for code in ["recording_failed", "recording_blocked", "tunnel_failed", "tunnel_unavailable", "reload_failed",
+                     "invalid_command", "busy", "shutdown_stuck"] {
+            XCTAssertFalse(TapErrorPayload(code: code, message: "").meansTheCommandFailed, code)
+        }
+    }
 }

@@ -29,6 +29,41 @@ final class PresentingFailureTests: PresentingTestCase {
         XCTAssertEqual(TapLogWindowController.shared.picker.segmentCount, 2, "the failed talk's log stays readable")
         try XCTUnwrap(bar.button(titled: "Dismiss")).performClick(nil)
         XCTAssertNil(controller.editorViewController.bar(.talkFailed))
+
+        // A second failure, whose tap sends no error event: the reason is its own, never the last talk's.
+        AppEnvironment.shared.presentExecutableURL = try FakeTapScripts.failingWithoutAnEvent(stderr: "the second tap had nothing to say")
+        presentation.start(PresentationOptions(mode: .play, startSlide: 3))
+        try await waitUntil(timeout: 30, "the second failure") { if case .failed = presentation.state { return true } else { return false } }
+        guard case .failed(let secondMessage) = presentation.state else { return XCTFail() }
+        XCTAssertFalse(secondMessage.contains("deck not found"), "the first talk's error is not this one's reason: \(secondMessage)")
+        XCTAssertNotNil(controller.editorViewController.bar(.talkFailed))
+
+        // Play again, with a tap that starts: the old bar goes as the new talk starts.
+        AppEnvironment.shared.presentExecutableURL = try FakeTapScripts.readyAndWaiting()
+        deckWindow.startPresenting(PresentationOptions(mode: .play, startSlide: 1))
+        XCTAssertEqual(presentation.state, .starting)
+        XCTAssertNil(controller.editorViewController.bar(.talkFailed), "a new start clears the failed talk's bar")
+    }
+
+    func testATalkThatFailsOnARestartSaysItStopped() async throws {
+        AppEnvironment.shared.presentExecutableURL = try FakeTapScripts.readyAndWaiting()
+        let (_, controller) = try await openDeckForPresenting()
+        let presentation = controller.presentation
+        controller.jumpToSlide(number: 1)
+        try await startPresenting(controller, PresentationOptions(mode: .play, startSlide: 3))
+        // The display goes, then tap present dies: the restart finds nowhere to show the talk.
+        presentation.screens = { [] }
+        let pid = try XCTUnwrap(presentation.session?.processIdentifier)
+        kill(pid, SIGKILL)
+        try await waitUntil(timeout: 30, "the talk to fail") { if case .failed = presentation.state { return true } else { return false } }
+        guard case .failed(let message) = presentation.state else { return XCTFail() }
+        XCTAssertEqual(message, "No display is connected.")
+        XCTAssertTrue(presentation.failedAfterShowing, "the talk ran, then stopped")
+        let bar = try XCTUnwrap(controller.editorViewController.bar(.talkFailed))
+        XCTAssertEqual(bar.message, "The talk stopped.")
+        XCTAssertEqual(controller.currentSlideNumber, 3, "the cursor is on the last slide presented")
+        XCTAssertNil(presentation.audienceWindow)
+        XCTAssertFalse(presentation.sleepAssertion.isHeld)
     }
 
     func testATalkThatCannotBeSavedDoesNotStart() async throws {
@@ -122,10 +157,16 @@ final class PresentingFailureTests: PresentingTestCase {
         controller.jumpToSlide(number: 1)
         // The talk is on (the windows show after the fallback, since the fake has no pages) when tap starts dying.
         try await startPresenting(controller, PresentationOptions(mode: .play, startSlide: 3))
+        // Errors from the first process: one that is not a failure is not kept, and a fatal one is forgotten once a new process is ready.
+        presentation.handle(.error(TapErrorPayload(code: "recording_failed", message: "the disk filled up")))
+        XCTAssertNil(presentation.lastErrorMessage, "a recording error does not end the command")
+        presentation.handle(.error(TapErrorPayload(code: "internal", message: "an earlier process's trouble")))
+        XCTAssertEqual(presentation.lastErrorMessage, "an earlier process's trouble")
         for _ in 0..<3 {
-            try await waitUntil(timeout: 10, "a running tap present or the end") {
+            try await waitUntil(timeout: 10, "a ready tap present or the end") {
                 if case .failed = presentation.state { return true }
-                return presentation.session?.processIdentifier != nil
+                if case .running = presentation.session?.state { return presentation.session?.processIdentifier != nil }
+                return false
             }
             guard let pid = presentation.session?.processIdentifier else { break }
             kill(pid, SIGKILL)
@@ -134,6 +175,7 @@ final class PresentingFailureTests: PresentingTestCase {
         try await waitUntil(timeout: 30, "the talk to fail") { if case .failed = presentation.state { return true } else { return false } }
         guard case .failed(let message) = presentation.state else { return XCTFail() }
         XCTAssertTrue(message.contains("tap exited 3 times in 30 seconds"), message)
+        XCTAssertFalse(message.contains("an earlier process"), "a restarted process is not blamed with the first one's error: \(message)")
         XCTAssertTrue(presentation.failedAfterShowing)
         XCTAssertNil(presentation.audienceWindow)
         XCTAssertNil(presentation.presenterWindow)

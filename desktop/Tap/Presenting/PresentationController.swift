@@ -136,7 +136,10 @@ final class PresentationController {
     /// True while this talk is counted in `AppEnvironment.presentingCount`.
     /// Read in deinit, which is not on the main actor, as a last guard.
     nonisolated(unsafe) private var countedAsPresenting = false
-    /// tap's last error event, which names why it could not start.
+    /// The last error event from the latest tap present process that says
+    /// the command failed, which names why it could not start or why it
+    /// stopped. A new ready clears it, so a restarted process is never
+    /// blamed with an earlier one's error.
     private(set) var lastErrorMessage: String?
     /// True when the failure came after the windows had been shown: the
     /// talk stopped, rather than never ran.
@@ -377,6 +380,7 @@ final class PresentationController {
     /// A late exchange for a talk that has ended installs nothing.
     private func tapIsReady(_ ready: TapReady) {
         guard state == .starting || state == .presenting, let session else { return }
+        lastErrorMessage = nil
         deckPorts.setPort(ready.port, for: session.deckURL)
         let client = TapClient(ready: ready)
         self.client = client
@@ -856,7 +860,7 @@ final class PresentationController {
             handleTunnel(event)
         case .error(let payload) where payload.code == "tunnel_unavailable" || payload.code == "tunnel_failed":
             handleTunnel(event)
-        case .error(let payload):
+        case .error(let payload) where payload.meansTheCommandFailed:
             lastErrorMessage = payload.message
         default:
             break
@@ -1030,13 +1034,14 @@ final class PresentationController {
     private func endBecauseTapFailed(lastOutput: [String]) {
         let summary = session?.restartPolicy.exitSummary ?? "tap present exited"
         let reason = lastErrorMessage ?? lastOutput.last
-        let showed = windowsWereShown
-        failedAfterShowing = showed
         fail(reason.map { "\(summary). \($0)" } ?? summary)
-        if showed { onStopped?(lastSlide) }
     }
 
+    /// Every failure ends here. One that comes after the windows showed is
+    /// a talk that stopped: the bar says so and the cursor moves to the
+    /// last slide the audience saw, whatever made it fail.
     private func fail(_ message: String) {
+        failedAfterShowing = windowsWereShown
         takeDownWindows()
         if let session { AppEnvironment.shared.stopAndRetain(session) }
         session = nil
@@ -1047,6 +1052,7 @@ final class PresentationController {
         countOut()
         releaseIfDone()
         onFailed?(message)
+        if failedAfterShowing { onStopped?(lastSlide) }
     }
 
     /// A talk whose deck has closed lets go of itself once nothing of it is

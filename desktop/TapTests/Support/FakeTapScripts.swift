@@ -43,6 +43,18 @@ enum FakeTapScripts {
         return url
     }
 
+    /// Prints one stderr line and exits with status 1, sending no error event.
+    static func failingWithoutAnEvent(stderr: String) throws -> URL {
+        let url = try Fixtures.temporaryFolder().appendingPathComponent("tap")
+        try """
+        #!/bin/sh
+        echo "\(stderr)" >&2
+        exit 1
+        """.write(to: url, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: url.path)
+        return url
+    }
+
     /// Prints a ready line, then ignores both its closed stdin and
     /// SIGTERM: only the SIGKILL at the end of a stop's escalation ends it.
     static func readyAndDeafToQuit() throws -> URL {

@@ -109,6 +109,20 @@ public struct TapErrorPayload: Codable, Equatable, Sendable, Error {
         self.code = code
         self.message = message
     }
+
+    /// The codes tap reports while it keeps running in --app mode
+    /// (internal/cli/app_events.go). Any other code is a fatal error,
+    /// which carries the command's own code: the reason tap stopped.
+    public static let reportedWhileRunning: Set<String> = [
+        "invalid_command", "unknown_command", "unknown_question", "invalid_answer", "busy",
+        "not_presenting", "not_editing", "reload_failed", "tunnel_unavailable", "tunnel_failed",
+        "recording_failed", "recording_blocked", "command_stuck", "startup_stuck", "reporter_stuck",
+        "shutdown_stuck",
+    ]
+
+    /// True when this error says the command failed, rather than one
+    /// request or one part of a command that is still running.
+    public var meansTheCommandFailed: Bool { !Self.reportedWhileRunning.contains(code) }
 }
 
 /// One JSON line from tap's standard output.
