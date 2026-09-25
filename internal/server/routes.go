@@ -209,7 +209,8 @@ type liveCodeStatus struct {
 
 // liveCodeStatusFor returns the live code status for pres, or nil when the
 // server has no driver registry and so runs no code at all. A driver is
-// listed only when it is declared, approved, and actually registered: a
+// listed only when it is declared, approved with the command it runs now,
+// and actually registered: a
 // custom driver declared with no command is skipped when the registry is
 // built, and listing it anyway would show a Run button that /api/execute
 // then refuses with "driver not found".
@@ -221,7 +222,7 @@ func (s *Server) liveCodeStatusFor(pres *transformer.TransformedPresentation) *l
 	policy := s.LiveCodePolicy()
 	allowed := []string{}
 	for _, name := range pres.Config.DeclaredDrivers() {
-		if policy.Allows(name) && registry.Has(name) {
+		if policy.Allows(name, registry.CommandLine(name)) && registry.Has(name) {
 			allowed = append(allowed, name)
 		}
 	}

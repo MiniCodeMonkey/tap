@@ -63,6 +63,11 @@ func (d *CustomDriver) Name() string {
 	return d.name
 }
 
+// CommandLine returns the command and its arguments, as they run.
+func (d *CustomDriver) CommandLine() []string {
+	return append([]string{d.Command}, d.Args...)
+}
+
 // Execute runs the provided code using the custom command and returns the result.
 // The code is passed to the command via stdin.
 // The config map supports the following keys:
