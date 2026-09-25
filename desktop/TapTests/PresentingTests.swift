@@ -190,7 +190,7 @@ final class PresentingTests: PresentingTestCase {
     /// replaced by a recorder that never completes, drives the audience's
     /// entry by hand, then closes the deck, letting go of every reference
     /// of its own to the talk.
-    func startTalkWithAnExitThatNeverCompletesAndCloseTheDeck(_ made: MadeWindows) async throws -> WeakTalk {
+    func startTalkWithAnExitThatNeverCompletesAndCloseTheDeck(_ made: MadeWindows, stopFirst: Bool = false) async throws -> WeakTalk {
         let record = try Fixtures.temporaryFolder().appendingPathComponent("record")
         AppEnvironment.shared.presentExecutableURL = try FakeTapScripts.presenting(events: [], recordingTo: record)
         let (document, controller) = try await openDeckForPresenting()
@@ -208,6 +208,12 @@ final class PresentingTests: PresentingTestCase {
         XCTAssertEqual(audience.fullScreenState, .fullScreen)
         XCTAssertEqual(made.windows.count, 2, "the audience and the hidden presenter")
         XCTAssertTrue(presentation.windowsAreSettled)
+        if stopFirst {
+            // tap exits at once on quit while the audience is still leaving full screen.
+            presentation.stop()
+            try await waitUntil(timeout: 10, "the talk idle (state \(presentation.state))") { presentation.state == .idle }
+            XCTAssertFalse(presentation.windowsGoingDown.isEmpty, "idle, with its windows still going down")
+        }
         let talk = WeakTalk(presentation)
         document.close()
         return talk
@@ -242,6 +248,18 @@ final class PresentingTests: PresentingTestCase {
         XCTAssertFalse(AppEnvironment.shared.isPresenting)
         XCTAssertNil(talk.presentation, "nothing keeps the talk once it is over")
         XCTAssertGreaterThan(postsWithEveryWindowClosed, 0, "Play in other decks heard that the last window went down")
+    }
+
+    /// The same, with the talk already stopped and idle when the deck
+    /// closes: its process is gone, but its windows are not.
+    func testADeckClosedRightAfterItsTalkStillTakesDownEveryWindow() async throws {
+        let made = MadeWindows()
+        let talk = try await startTalkWithAnExitThatNeverCompletesAndCloseTheDeck(made, stopFirst: true)
+        XCTAssertNotNil(talk.presentation, "the idle talk is kept while its windows go down")
+        XCTAssertEqual(AppEnvironment.shared.endingTalks.count, 1)
+        try await waitUntil(timeout: 15, "every talk window closed; left: \(Self.describeTalkWindows())") { made.allClosed }
+        try await waitUntil(timeout: 5, "the talk to let go of itself") { AppEnvironment.shared.endingTalks.isEmpty }
+        XCTAssertNil(talk.presentation)
     }
 
     func testTheSleepAssertionIsReleasedWhenTapPresentDies() async throws {
