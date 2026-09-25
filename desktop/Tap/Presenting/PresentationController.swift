@@ -899,10 +899,27 @@ final class PresentationController {
     /// key again, which brings its Space back. Not while another question
     /// waits, whose sheet the talk would cover, and not while the windows
     /// are still being placed, whose placement makes the front window key
-    /// when it is done.
+    /// when it is done. A switch asked for while the deck window's own is
+    /// still animating is dropped, so the front window is checked again
+    /// once the switch has had time to finish and brought forward again if
+    /// it is not on the active Space, a few times at most and only while
+    /// nothing else has claimed the screen.
     func returnToTalk() {
         guard isActive, windowsShown, pendingQuestions.isEmpty, windowsAreSettled, let frontWindow else { return }
         frontWindow.makeKeyAndOrderFront(nil)
+        keepTalkForward(frontWindow, attempts: DeckWindowController.spaceSwitchRetries)
+    }
+
+    private func keepTalkForward(_ window: PresentationWindow, attempts: Int) {
+        guard attempts > 0 else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + DeckWindowController.spaceSwitchSettleDelay) { [weak self, weak window] in
+            MainActor.assumeIsolated {
+                guard let self, let window, window === self.frontWindow, self.isActive, self.windowsShown,
+                      self.pendingQuestions.isEmpty, self.windowsAreSettled else { return }
+                if !window.isOnActiveSpace { window.makeKeyAndOrderFront(nil) }
+                self.keepTalkForward(window, attempts: attempts - 1)
+            }
+        }
     }
 
     /// Counts the recording's seconds up between tap's events.

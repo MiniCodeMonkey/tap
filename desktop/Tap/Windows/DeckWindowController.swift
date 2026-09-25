@@ -551,8 +551,10 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
     /// window comes forward, which switches to its Space and leaves the
     /// talk's Spaces where they are: the sheet is the one thing the person
     /// must answer, so this is the one focus move outside the talk windows.
-    /// After the answer the talk's front window is made key again, which
-    /// switches back.
+    /// The move is kept while the sheet is up (`keepForward`), since a
+    /// Space switch asked for during another is dropped. After the answer
+    /// the talk's front window is made key again, which switches back
+    /// (`PresentationController.returnToTalk`, kept the same way).
     func showQuestionSheet(_ sheet: QuestionSheet, completion: @escaping (Bool) -> Void) {
         guard let window else {
             completion(sheet.kind == "keep-recording")
@@ -561,6 +563,7 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
         let presentation = sessionController.presentation
         questionSheet = sheet
         window.makeKeyAndOrderFront(nil)
+        keepForward(window, while: sheet)
         window.beginSheet(sheet) { [weak self] response in
             // Only the sheet that completed clears the slot: a stale sheet
             // ended late must not clear a newer one.
@@ -568,6 +571,30 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
             completion(response == .OK)
             presentation.returnToTalk()
             self?.refreshRemotePanel()
+        }
+    }
+
+    /// How long a Space switch is given to finish before the window it was
+    /// for is checked, and how many times it is asked for again.
+    static let spaceSwitchSettleDelay: TimeInterval = 0.7
+    static let spaceSwitchRetries = 3
+
+    /// A Space switch asked for while another is still animating is
+    /// dropped, so a question that arrives just after the talk came back
+    /// would leave its sheet behind the talk, where the person cannot
+    /// answer it. While `sheet` is still the question sheet up, a deck
+    /// window that is not on the active Space once the switch has had time
+    /// to finish is brought forward again, a few times at most. It is the
+    /// same window the sheet already brought forward; nothing activates
+    /// the app, and `isOnActiveSpace` does not depend on a key window.
+    private func keepForward(_ window: NSWindow, while sheet: QuestionSheet, attempts: Int = DeckWindowController.spaceSwitchRetries) {
+        guard attempts > 0 else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.spaceSwitchSettleDelay) { [weak self, weak window] in
+            MainActor.assumeIsolated {
+                guard let self, let window, self.questionSheet === sheet else { return }
+                if !window.isOnActiveSpace { window.makeKeyAndOrderFront(nil) }
+                self.keepForward(window, while: sheet, attempts: attempts - 1)
+            }
         }
     }
 
