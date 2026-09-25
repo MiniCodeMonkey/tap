@@ -145,9 +145,19 @@ final class ThumbnailTests: HostedTestCase {
         // reopens is the production one: a load the renderer starts is one
         // it would start for a person, on a window already painting.
         try await waitForPreview(document, slide: 3, timeout: 30)
+        // Once the gate reopens, the renderer can finish every slide between
+        // two polls, so the order is recorded as each image arrives rather
+        // than read from `renderCount` and `lastRenderedSlide` afterwards.
+        var renderedSlides: [Int] = []
+        let originalOnImage = controller.thumbnails.renderer.onImage
+        controller.thumbnails.renderer.onImage = { job, image, png in
+            renderedSlides.append(job.slideNumber)
+            originalOnImage?(job, image, png)
+        }
+        defer { controller.thumbnails.renderer.onImage = originalOnImage }
         controller.thumbnails.renderer.canPaint = productionCanPaint
-        try await waitForRenderer(controller.thumbnails.renderer, of: controller, timeout: 20, "the first render") { controller.thumbnails.renderer.renderCount == 1 }
-        XCTAssertEqual(controller.thumbnails.renderer.lastRenderedSlide, 3, "the new cursor slide renders first")
+        try await waitForRenderer(controller.thumbnails.renderer, of: controller, timeout: 20, "the first render") { !renderedSlides.isEmpty }
+        XCTAssertEqual(renderedSlides.first, 3, "the new cursor slide renders first")
     }
 
     func testScrollReprioritizesTheQueue() async throws {
@@ -172,15 +182,19 @@ final class ThumbnailTests: HostedTestCase {
         XCTAssertFalse(controller.slidePanel.visibleNumbers.contains(30), "the last slide should not already be visible, or the scroll below proves nothing")
         // Paused again the instant the current slide finishes, before the
         // loop can start a second job, so the scroll below is the only
-        // thing that can change which slide renders next.
-        var pausedAfterFirst = false
+        // thing that can change which slide renders next. Every render is
+        // recorded as its image arrives: once the gate reopens after the
+        // scroll, the renderer can finish the whole queue between two
+        // polls, so `renderCount` and `lastRenderedSlide` read afterwards
+        // may already be past the second render.
+        var renderedSlides: [Int] = []
         let originalOnImage = controller.thumbnails.renderer.onImage
         // Weakly captured, and restored below: a strong `controller` here,
         // plus a `canPaint` left open, would keep this renderer alive and
         // painting slides during later tests.
         controller.thumbnails.renderer.onImage = { [weak controller] job, image, png in
-            if !pausedAfterFirst {
-                pausedAfterFirst = true
+            renderedSlides.append(job.slideNumber)
+            if renderedSlides.count == 1 {
                 controller?.thumbnails.renderer.canPaint = { false }
             }
             originalOnImage?(job, image, png)
@@ -192,8 +206,8 @@ final class ThumbnailTests: HostedTestCase {
         // The gate reopens to the production one once the window paints.
         try await waitForPreview(document, slide: 1, timeout: 30)
         controller.thumbnails.renderer.canPaint = productionCanPaint
-        try await waitForRenderer(controller.thumbnails.renderer, of: controller, timeout: 20, "the current slide to render first") { controller.thumbnails.renderer.renderCount == 1 }
-        XCTAssertEqual(controller.thumbnails.renderer.lastRenderedSlide, 1, "deck order with no edits starts on slide 1")
+        try await waitForRenderer(controller.thumbnails.renderer, of: controller, timeout: 20, "the current slide to render first") { !renderedSlides.isEmpty }
+        XCTAssertEqual(renderedSlides, [1], "deck order with no edits starts on slide 1, and the renderer pauses after it")
 
         // Scroll the panel to the last slide by moving the clip view, the
         // same underlying call a real scroll makes. A hosted, unfocused
@@ -216,9 +230,10 @@ final class ThumbnailTests: HostedTestCase {
         NotificationCenter.default.post(name: NSView.boundsDidChangeNotification, object: clipView)
 
         controller.thumbnails.renderer.canPaint = productionCanPaint
-        try await waitForRenderer(controller.thumbnails.renderer, of: controller, timeout: 20, "the second render") { controller.thumbnails.renderer.renderCount == 2 }
-        XCTAssertNotEqual(controller.thumbnails.renderer.lastRenderedSlide, 2, "deck order alone would render slide 2 next")
-        XCTAssertGreaterThan(controller.thumbnails.renderer.lastRenderedSlide ?? 0, 20,
+        try await waitForRenderer(controller.thumbnails.renderer, of: controller, timeout: 20, "the second render") { renderedSlides.count >= 2 }
+        let secondRendered = renderedSlides[1]
+        XCTAssertNotEqual(secondRendered, 2, "deck order alone would render slide 2 next")
+        XCTAssertGreaterThan(secondRendered, 20,
                               "scrolling to the last slide should move it, or a near neighbour, to the front of the queue")
     }
 
