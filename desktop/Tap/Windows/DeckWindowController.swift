@@ -29,8 +29,8 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
             self.sessionController.presentation.swapDisplays()
             self.presentPopover.update(context: self.popoverContext())
         }
-        popover.onStart = { [weak self] options in self?.startPresenting(options) }
-        popover.onRehearse = { [weak self] options in self?.startPresenting(options) }
+        popover.onStart = { [weak self] options in self?.startPresenting(options, savingSettings: true) }
+        popover.onRehearse = { [weak self] options in self?.startPresenting(options, savingSettings: true) }
         return popover
     }()
     private(set) lazy var layoutGallery: LayoutGalleryController = {
@@ -343,10 +343,13 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
     }
 
     /// Every start comes here: the popover's buttons, Play, the Shift-click
-    /// and Rehearse. The popover's settings are saved, so the next
-    /// Cmd+Option+P and the next launch start the same way.
-    func startPresenting(_ options: PresentationOptions) {
-        AppEnvironment.shared.presentationSettings.settings = presentPopover.settings
+    /// and Rehearse. A start from the popover saves its settings, so the
+    /// next Cmd+Option+P and the next launch start the same way; the other
+    /// starts read the saved settings and leave them as they are.
+    func startPresenting(_ options: PresentationOptions, savingSettings: Bool = false) {
+        if savingSettings { AppEnvironment.shared.presentationSettings.settings = presentPopover.settings }
+        // Play with the popover open starts at once; the popover goes, so a later click on its Start cannot save settings for a talk it did not start.
+        if presentPopover.isShown { presentPopover.close() }
         sessionController.presentation.start(options)
         refreshPresentingControls()
     }
