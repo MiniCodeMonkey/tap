@@ -151,6 +151,44 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
     /// closure so a test can hold the exchange open across a restart, which
     /// is the race the guard after it turns away.
     var exchangePresenterSecret: (TapClient) async throws -> Void = { try await $0.authorizePresenter() }
+    /// The deck's talk, created on first use. `stop()` ends it with the
+    /// deck, and hands it to the environment if it is still stopping.
+    private var createdPresentation: PresentationController?
+    var presentation: PresentationController {
+        if let createdPresentation { return createdPresentation }
+        let controller = PresentationController(
+            deckURL: { [weak self] in self?.document?.fileURL },
+            saveDeck: { [weak self] completion in
+                guard let self else { return completion(nil) }
+                self.saveForPresenting(completion: completion)
+            },
+            sessionConfiguration: { AppEnvironment.shared.presentSessionConfiguration() },
+            displayAssignments: AppEnvironment.shared.displayAssignments,
+            deckPorts: AppEnvironment.shared.deckPorts)
+        controller.onStopped = { [weak self] lastSlide in self?.jumpToSlide(number: lastSlide) }
+        createdPresentation = controller
+        return controller
+    }
+    /// The talk, if this deck ever started one; nil costs nothing to check.
+    var presentationIfCreated: PresentationController? { createdPresentation }
+
+    /// Writes the buffer to the deck file before a talk, because tap
+    /// present reads the file. A buffer that already equals the file needs
+    /// no write. A save the document refuses (a disk conflict is showing)
+    /// comes back as its error, and the talk does not start.
+    func saveForPresenting(completion: @escaping (Error?) -> Void) {
+        guard let document, let url = document.fileURL else { return completion(CocoaError(.fileNoSuchFile)) }
+        let text = editor.string
+        guard isContentEdited else {
+            presentation.presentedText = text
+            return completion(nil)
+        }
+        // The text counts as presented only once it is on disk: a refused save leaves the old value.
+        document.save(to: url, ofType: document.fileType ?? "net.daringfireball.markdown", for: .saveOperation) { [weak self] error in
+            if error == nil { self?.presentation.presentedText = text }
+            completion(error)
+        }
+    }
 
     var editor: EditorTextView { editorViewController.textView }
 
@@ -469,6 +507,29 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
 
     func stop() {
         stopped = true
+        if let presentation = createdPresentation {
+            presentation.stop()
+            if presentation.isActive {
+                // The deck is going, but the talk's process is not gone yet:
+                // the environment keeps the talk until it is, so the quit
+                // deadline, the escalation and the talk count all still run.
+                // Nobody is left to answer a question, so tap's own defaults
+                // answer it: a recording is kept, anything else declined.
+                presentation.onQuestion = { [weak presentation] question in
+                    let keep = question.kind == "keep-recording"
+                    presentation?.session?.log.append("the deck window has closed; the \(question.kind) question is answered \(keep ? "keep" : "no") for it", source: .app)
+                    presentation?.answer(id: question.id, value: keep)
+                }
+                // A question already up had its sheet on this window, which
+                // is going: it is answered the same way now, so tap is not
+                // left waiting out its own 60 s.
+                if let pending = presentation.pendingQuestion { presentation.onQuestion?(pending) }
+            }
+            // A talk keeps itself until its process has exited and its
+            // windows are down, even one already idle whose last window is
+            // still leaving full screen.
+            if presentation.isEnding { AppEnvironment.shared.retainEndingTalk(presentation) }
+        }
         fileWatcher.watch(nil)
         if let undoObserver { NotificationCenter.default.removeObserver(undoObserver) }
         if let redoObserver { NotificationCenter.default.removeObserver(redoObserver) }
@@ -750,6 +811,7 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
         // so none of what follows runs on it.
         guard editor.apply(list, sentText: sentText, sentGeneration: generation) else { return }
         lastAppliedText = sentText
+        presentation.deckTextChanged(sentText)
         slidePanel.setSlides(editor.boxes.map(\.slide))
         thumbnails.deckChanged()
         if let first = list.errors.first {

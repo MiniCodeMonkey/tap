@@ -20,10 +20,26 @@ final class TapProtocolTests: XCTestCase {
 
     func testDecodesQuestionsErrorsAndOtherEvents() {
         XCTAssertEqual(TapEvent.decode(line: #"{"type":"question","id":"q1","kind":"approval","payload":{"deck":"/a.md"}}"#),
-                       .question(id: "q1", kind: "approval"))
+                       .question(id: "q1", kind: "approval", payload: QuestionPayload(deck: "/a.md")))
+        XCTAssertEqual(TapEvent.decode(line: #"{"type":"question","id":"q2","kind":"record-consent","payload":{"settingsPath":"/c/tap/settings.yaml"}}"#),
+                       .question(id: "q2", kind: "record-consent", payload: QuestionPayload(settingsPath: "/c/tap/settings.yaml")))
+        XCTAssertEqual(TapEvent.decode(line: #"{"type":"question","id":"q3","kind":"keep-recording","payload":{"directory":"/r/talk-1","segments":2}}"#),
+                       .question(id: "q3", kind: "keep-recording", payload: QuestionPayload(directory: "/r/talk-1", segments: 2)))
+        XCTAssertEqual(TapEvent.decode(line: #"{"type":"question","id":"q4","kind":"approval"}"#),
+                       .question(id: "q4", kind: "approval", payload: QuestionPayload()), "a missing payload decodes as an empty one")
         XCTAssertEqual(TapEvent.decode(line: #"{"type":"error","code":"deck_not_found","message":"deck not found: a.md"}"#),
                        .error(TapErrorPayload(code: "deck_not_found", message: "deck not found: a.md")))
-        XCTAssertEqual(TapEvent.decode(line: #"{"type":"tunnel","state":"running","url":"https://x","qr":""}"#), .other(type: "tunnel"))
+        XCTAssertEqual(TapEvent.decode(line: #"{"type":"connected"}"#), .other(type: "connected"))
+    }
+
+    func testDecodesTheTalkEvents() {
+        XCTAssertEqual(TapEvent.decode(line: #"{"type":"recording","state":"recording","segment":2,"elapsed":75,"disk":"ok"}"#),
+                       .recording(RecordingEvent(state: "recording", segment: 2, elapsed: 75, disk: "ok")))
+        XCTAssertEqual(TapEvent.decode(line: #"{"type":"tunnel","state":"running","url":"https://x.trycloudflare.com","qr":"aGk="}"#),
+                       .tunnel(TunnelEvent(state: "running", url: "https://x.trycloudflare.com", qr: "aGk=")))
+        XCTAssertEqual(TapEvent.decode(line: #"{"type":"tunnel","state":"stopped"}"#), .tunnel(TunnelEvent(state: "stopped", url: nil, qr: nil)))
+        XCTAssertEqual(TapEvent.decode(line: #"{"type":"slide","slide":3,"step":1}"#), .slide(slide: 3, step: 1))
+        XCTAssertNil(TapEvent.decode(line: #"{"type":"slide","step":1}"#), "a slide event without its slide is not an event")
     }
 
     func testIgnoresALineThatIsNotAnEvent() {
@@ -57,6 +73,12 @@ final class TapProtocolTests: XCTestCase {
         XCTAssertEqual(TapCommand.saved.line, #"{"type":"saved"}"#)
         XCTAssertEqual(TapCommand.reload.line, #"{"type":"reload"}"#)
         XCTAssertEqual(TapCommand.quit.line, #"{"type":"quit"}"#)
+        XCTAssertEqual(TapCommand.answer(id: "q1", value: true).line, #"{"type":"answer","id":"q1","value":true}"#)
+        XCTAssertEqual(TapCommand.answer(id: "q\"2", value: false).line, #"{"type":"answer","id":"q\"2","value":false}"#, "the id is JSON-escaped")
+        XCTAssertEqual(TapCommand.tunnel(start: true).line, #"{"type":"tunnel","start":true}"#)
+        XCTAssertEqual(TapCommand.tunnel(start: false).line, #"{"type":"tunnel","start":false}"#)
+        XCTAssertEqual(TapCommand.recording(action: .newSegment).line, #"{"type":"recording","action":"new-segment"}"#)
+        XCTAssertEqual(TapCommand.recording(action: .stop).line, #"{"type":"recording","action":"stop"}"#)
     }
 
     func testEncodesTheSlideMessage() throws {
@@ -75,5 +97,15 @@ final class TapProtocolTests: XCTestCase {
         XCTAssertEqual(HubMessage.decode(#"{"type":"slide","slideIndex":4,"step":1}"#), .slide(slideIndex: 4))
         XCTAssertEqual(HubMessage.decode(#"{"type":"connected","version":"1.0.0"}"#), .other(type: "connected"))
         XCTAssertNil(HubMessage.decode("not json"))
+    }
+
+    func testOnlyAFatalErrorSaysTheCommandFailed() {
+        XCTAssertTrue(TapErrorPayload(code: "deck_not_found", message: "").meansTheCommandFailed)
+        XCTAssertTrue(TapErrorPayload(code: "failed", message: "").meansTheCommandFailed)
+        XCTAssertTrue(TapErrorPayload(code: "internal", message: "").meansTheCommandFailed)
+        for code in ["recording_failed", "recording_blocked", "tunnel_failed", "tunnel_unavailable", "reload_failed",
+                     "invalid_command", "busy", "shutdown_stuck"] {
+            XCTAssertFalse(TapErrorPayload(code: code, message: "").meansTheCommandFailed, code)
+        }
     }
 }

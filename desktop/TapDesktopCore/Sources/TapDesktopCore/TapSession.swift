@@ -13,6 +13,58 @@ public final class TapSession {
         case failed(lastOutput: [String])
     }
 
+    /// Which tap process this session runs. `dev` is the deck's writing
+    /// process; `present` is a talk, started beside it.
+    public enum Command: Equatable, Sendable {
+        case dev
+        /// `record` false adds `--no-record` (Rehearse, or Play with the
+        /// record checkbox off); `presenterPassword` is the person's own,
+        /// otherwise tap generates one and prints it on the ready line;
+        /// `port` is the deck's remembered port, which tap binds exactly
+        /// (or fails), and nil lets tap pick a free one.
+        case present(record: Bool, presenterPassword: String?, port: Int?)
+
+        public func arguments(deck: URL) -> [String] {
+            switch self {
+            case .dev:
+                return ["dev", "--app", deck.path]
+            case .present(let record, let presenterPassword, let port):
+                var arguments = ["present", "--app"]
+                if !record { arguments.append("--no-record") }
+                if let presenterPassword, !presenterPassword.isEmpty {
+                    arguments += ["--presenter-password", presenterPassword]
+                }
+                if let port { arguments += ["--port", String(port)] }
+                arguments.append(deck.path)
+                return arguments
+            }
+        }
+
+        /// The port a present command asks for, nil for none and for dev.
+        public var port: Int? {
+            if case .present(_, _, let port) = self { return port }
+            return nil
+        }
+
+        /// The log line for a start: the arguments with the deck's name in
+        /// place of its path and the presenter password hidden, since the
+        /// Tap Log is copied into bug reports.
+        public func logLine(deck: URL) -> String {
+            var shown = arguments(deck: deck).dropLast() + [deck.lastPathComponent]
+            if let index = shown.firstIndex(of: "--presenter-password"), shown.indices.contains(index + 1) {
+                shown[index + 1] = "***"
+            }
+            return "tap " + shown.joined(separator: " ")
+        }
+
+        /// The Tap Log title: the deck's name, and ", talk" for a talk.
+        public func logTitle(deck: URL) -> String {
+            let name = deck.deletingPathExtension().lastPathComponent
+            if case .present = self { return name + ", talk" }
+            return name
+        }
+    }
+
     public struct Configuration {
         public var executableURL: URL
         public var environment: () async -> [String: String]
@@ -45,6 +97,12 @@ public final class TapSession {
     /// exit count and window the session itself logs on giving up.
     public var restartPolicy: RestartPolicy { policy }
 
+    public let command: Command
+    /// True from `quit()` until the next `start()`: the exit that follows
+    /// is tap answering the quit command, never a crash.
+    public private(set) var quitRequested = false
+    private var quitWork: DispatchWorkItem?
+
     private let configuration: Configuration
     private var policy: RestartPolicy
     private var process: TapProcess?
@@ -53,14 +111,17 @@ public final class TapSession {
     private var readyWork: DispatchWorkItem?
     private var startsAfterStop = false
 
-    public init(deckURL: URL, configuration: Configuration) {
+    public init(deckURL: URL, configuration: Configuration, command: Command = .dev) {
         self.deckURL = deckURL
         self.configuration = configuration
+        self.command = command
         policy = configuration.policy
-        log = TapLog(title: deckURL.deletingPathExtension().lastPathComponent)
+        log = TapLog(title: command.logTitle(deck: deckURL))
     }
 
     public func start() {
+        quitRequested = false
+        quitWork?.cancel()
         restartWork?.cancel()
         guard process == nil else { return }
         state = .starting
@@ -76,6 +137,7 @@ public final class TapSession {
     public func stop() {
         restartWork?.cancel()
         readyWork?.cancel()
+        quitWork?.cancel()
         startsAfterStop = false
         launchGeneration += 1
         if let process {
@@ -89,6 +151,51 @@ public final class TapSession {
         policy.reset()
         log.append("Try Again", source: .app)
         start()
+    }
+
+    /// Asks tap to shut down with the `quit` command, which lets tap present
+    /// ask keep-recording and finish its recording, and closes standard
+    /// input after `timeout` if tap is still running then (D2's stop, with
+    /// its SIGTERM and SIGKILL escalation). The exit that follows counts as
+    /// requested: nothing restarts.
+    public func quit(timeout: TimeInterval = 15) {
+        restartWork?.cancel()
+        readyWork?.cancel()
+        quitWork?.cancel()
+        startsAfterStop = false
+        launchGeneration += 1
+        quitRequested = true
+        guard let process else {
+            state = .stopped
+            return
+        }
+        process.send(.quit)
+        armQuitDeadline(timeout, for: process)
+    }
+
+    /// Moves the quit deadline to `timeout` from now, for a tap that has
+    /// asked keep-recording and is waiting for a person: the deadline
+    /// must outlast tap's own wait for the answer. Nothing happens unless
+    /// a quit is in progress.
+    public func extendQuit(timeout: TimeInterval) {
+        guard quitRequested, let process else { return }
+        quitWork?.cancel()
+        armQuitDeadline(timeout, for: process)
+    }
+
+    /// Closes standard input of `process` after `timeout`, with D2's
+    /// SIGTERM and SIGKILL escalation, unless it has exited or been
+    /// replaced by then.
+    private func armQuitDeadline(_ timeout: TimeInterval, for process: TapProcess) {
+        let deadline = DispatchWorkItem { [weak self, weak process] in
+            MainActor.assumeIsolated {
+                guard let self, let process, self.process === process else { return }
+                self.log.append("tap did not quit within \(String(format: "%.1f", timeout)) seconds", source: .app)
+                process.stop()
+            }
+        }
+        quitWork = deadline
+        DispatchQueue.main.asyncAfter(deadline: .now() + timeout, execute: deadline)
     }
 
     /// Follows a renamed or newly saved deck: tap restarts on the new path.
@@ -110,14 +217,14 @@ public final class TapSession {
     private func launch(environment: [String: String]) {
         let tapProcess = TapProcess(configuration: TapProcess.Configuration(
             executableURL: configuration.executableURL,
-            arguments: ["dev", "--app", deckURL.path],
+            arguments: command.arguments(deck: deckURL),
             environment: environment,
             currentDirectoryURL: deckURL.deletingLastPathComponent()))
         tapProcess.onOutputLine = { [weak self] line in self?.receive(line) }
         tapProcess.onStandardErrorLine = { [weak self] line in self?.log.append(line, source: .standardError) }
         tapProcess.onExit = { [weak self] status, requested in self?.processExited(status: status, requested: requested) }
         process = tapProcess
-        log.append("tap dev --app \(deckURL.lastPathComponent)", source: .app)
+        log.append(command.logLine(deck: deckURL), source: .app)
         do {
             try tapProcess.start()
         } catch {
@@ -149,8 +256,14 @@ public final class TapSession {
             if state == .starting { state = .running(ready) }
         case .fileChanged(let path, _):
             log.append("file changed on disk: \((path as NSString).lastPathComponent)", source: .event)
-        case .question(_, let kind):
-            log.append("tap asks a \(kind) question; this version of the app does not answer it", source: .event)
+        case .question(_, let kind, _):
+            log.append("tap asks a \(kind) question", source: .event)
+        case .recording(let recording):
+            log.append("recording \(recording.state), segment \(recording.segment), disk \(recording.disk)", source: .event)
+        case .tunnel(let tunnel):
+            log.append("tunnel \(tunnel.state)" + (tunnel.url.map { " \($0)" } ?? ""), source: .event)
+        case .slide(let slide, let step):
+            log.append("audience on slide \(slide), step \(step)", source: .event)
         case .error(let payload):
             log.append("error \(payload.code): \(payload.message)", source: .event)
         case .other(let type):
@@ -162,8 +275,10 @@ public final class TapSession {
     private func processExited(status: Int32, requested: Bool) {
         readyWork?.cancel()
         process = nil
-        if requested {
-            log.append("tap stopped", source: .app)
+        if requested || quitRequested {
+            quitWork?.cancel()
+            log.append(quitRequested ? "tap quit" : "tap stopped", source: .app)
+            quitRequested = false
             state = .stopped
             if startsAfterStop {
                 startsAfterStop = false
