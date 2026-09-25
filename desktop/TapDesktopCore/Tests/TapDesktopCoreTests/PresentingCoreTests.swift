@@ -81,6 +81,7 @@ final class PresentingCoreTests: XCTestCase {
         XCTAssertTrue((20000...29999).contains(suggested))
         XCTAssertEqual(DeckPortStore.suggestedPort(for: URL(fileURLWithPath: "/talks/../talks/ops.md")), suggested, "the same file, the same port, in every launch")
         XCTAssertNotEqual(DeckPortStore.suggestedPort(for: URL(fileURLWithPath: "/talks/other.md")), suggested)
+        XCTAssertEqual(suggested, 22933, "FNV-1a of the path, the same in every launch")
     }
 
     func testTheLastSettingsBecomeTheNextOptions() throws {
