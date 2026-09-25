@@ -120,13 +120,20 @@ No production code calls `Server.SetRegistry`, so `/api/execute` returns 500 "Dr
   ```yaml
   approvals:
     - deck: /Users/me/talks/3am/conference-talk.md
-      drivers: [shell, sqlite]
+      drivers: [python, shell, sqlite]
+      commands:
+        python: [python3, -u]
       approvedAt: 2026-09-22T19:32:00Z
   ```
 
-- A deck needs approval when it has at least one live code block. It is approved when its absolute path is listed and every declared driver is in the approved list.
+- An approval covers a driver's name and its command together. `commands` holds the command line each approved custom driver runs, with `${NAME}` expanded, as its registry entry runs it. A built-in driver has no entry. A record written before `commands` existed covers built-in drivers only, so its custom drivers are asked about once more.
+- A deck needs approval when it has at least one live code block. It is approved when its absolute path is listed and every declared driver is in the approved list with the command it runs now.
 - **When tap asks:** at startup of `tap dev` and `tap present`, before the TUI starts, when stdin is a TTY and the deck needs approval. The prompt lists the declared drivers, the command of any custom driver, and the number of blocks and their slides. It offers to print each block. The answer is `y` or `n`, and `n` is the default.
 - **A new driver:** when an approved deck declares a driver that is not in its approved list, tap asks again and names only the new driver.
+- **A changed command:** when a custom driver's command or arguments differ from the approved ones (for example `python3` to `bash`), that is a new approval, and tap asks again the same way.
+- **On reload:** `tap dev` and `tap present` decide again whenever the deck reloads: a file change, the `r` key or `reload` command, or the app's edited buffer in `--app` mode. A reload reads the stored approvals first, so an approval another tap process stored (such as `tap present --app` during a talk) is picked up without a question. For a driver still not approved, tap asks the same question as at startup: a `question` event in `--app` mode, or the terminal prompt, with the TUI suspended while it asks, in an interactive `tap dev` or `tap present`. Until the answer, `/api/execute` refuses that driver's blocks with the same 403 as an unapproved deck, and approved drivers keep running. `/api/execute` checks the command the driver would run against the approved command, so no reload can pair a new command with an old approval.
+- **One question at a time:** a reload that leaves the drivers in question unchanged asks nothing new. One that changes them withdraws the open question (`question-closed` in `--app` mode) and asks about the new set; the terminal prompt cannot be withdrawn, so it is answered first and tap then asks about whatever is still not approved. A reload that no longer needs the question withdraws it.
+- **Declined in this run:** a no holds for the rest of the run, so a later reload does not ask about that driver again unless its command changes. The next start asks again.
 - **Declined or not asked:** live code is off. Run buttons show "Not approved", and `/api/execute` answers 403 with that reason. Nothing is stored for a "no", so the next start asks again.
 - **Non-interactive runs** (no TTY, `--headless`, `tap export`) never ask. Live code is off unless `--allow-code` is given. `--allow-code` allows it for that run and stores nothing.
 - `tap new` records an approval for the deck it creates.
@@ -288,12 +295,15 @@ The stdio pipes are the control channel. Only the parent process can read or wri
 | `ready` | startup | `port`, `token`, `launch` |
 | `file-changed` | the watcher sees a change that tap did not make (dev only) | `path` |
 | `question` | tap needs an answer | `id`, `kind` (`approval`, `record-consent`, `keep-recording`), `payload` |
+| `question-closed` | tap withdraws an open question it no longer needs answered, such as an approval question a reload made stale | `id` |
 | `recording` | the recording state changes (present only) | `state` (`recording`, `paused`, `stopped`), `segment`, `elapsed`, `disk` |
 | `tunnel` | the tunnel state changes | `state`, `url`, `qr` (PNG, base64) |
 | `slide` | the audience position changes (present only) | `slide`, `step` |
 | `error` | a fatal or reportable error | `code`, `message` |
 
 The same message also goes on the WebSocket as `file-changed`, because the preview page reloads from it.
+
+An `approval` question has the same payload at startup and on a reload: `deck`, `drivers` (each with `name`, `command` for a custom driver, `slides`, `blocks`), `approvedBefore`, and `blocks` (each with `driver`, `code`, `slide`, `block`). A driver whose command changed is listed in `drivers` with its new command. An answer to a question tap has closed gets an `unknown_question` error event and changes nothing.
 
 ### Commands on stdin
 

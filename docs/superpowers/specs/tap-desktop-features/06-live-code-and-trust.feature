@@ -99,6 +99,23 @@ Feature: Live code approval
     Then tap asks again: "This deck now also wants to run shell"
     And edits to existing sqlite blocks never ask again
 
+  Scenario: A reload adds a driver
+    Given the deck is approved with the shell driver and is open in tap dev or tap present
+    When the deck reloads and now declares a python driver
+    Then tap asks the approval question again, naming only python
+    And python's blocks are refused until the answer, while shell blocks keep running
+    And a no holds for the rest of the run, unless python's command changes
+
+  Scenario: A custom driver's command changes
+    Given the deck is approved with a python driver that runs "python3"
+    When its command changes to "bash"
+    Then tap asks again, because an approval covers a driver's name and its command
+
+  Scenario: Another tap approved the driver
+    Given tap present --app stored an approval during a talk
+    When the app sends reload to tap dev --app for the same deck
+    Then tap dev runs the driver without asking
+
   Scenario: Secrets in driver settings
     Given the drivers map has "password: ${DB_PASSWORD}"
     Then tap expands ${...} from the environment when it runs the driver    # NEW env expansion in driver settings
