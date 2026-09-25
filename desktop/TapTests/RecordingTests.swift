@@ -84,6 +84,35 @@ final class RecordingTests: PresentingTestCase {
             return order.firstIndex(of: deck.windowNumber).map { audienceIndex < $0 } ?? true
         }
         XCTAssertEqual(presentation.state, .presenting)
+
+        // Two sheets queued: answering the first puts the second up, and the talk stays behind it until it is answered too.
+        presentation.handle(.question(id: "q11", kind: "record-consent", payload: QuestionPayload(settingsPath: "/tmp/settings.yaml")))
+        let first = try XCTUnwrap(deckWindow.questionSheet)
+        presentation.handle(.question(id: "q12", kind: "record-consent", payload: QuestionPayload(settingsPath: "/tmp/settings.yaml")))
+        XCTAssertTrue(deckWindow.questionSheet === first)
+        try await waitUntil(timeout: 5, "the deck window in front of the talk again") {
+            let order = onScreenWindowNumbers()
+            guard let deckIndex = order.firstIndex(of: deck.windowNumber) else { return false }
+            return order.firstIndex(of: audience.windowNumber).map { deckIndex < $0 } ?? true
+        }
+        try XCTUnwrap(first.button(titled: "Don't Record")).performClick(nil)
+        let second = try XCTUnwrap(deckWindow.questionSheet, "the second question's sheet")
+        XCTAssertFalse(second === first)
+        try await waitUntil(timeout: 5, "the second sheet on the deck window") { deck.attachedSheet === second }
+        // Long enough for a return to the talk to have taken the screen.
+        try await Task.sleep(nanoseconds: 1_000_000_000)
+        let order = onScreenWindowNumbers()
+        let deckIndex = try XCTUnwrap(order.firstIndex(of: deck.windowNumber), "the deck window is still on screen, with the second sheet")
+        if let audienceIndex = order.firstIndex(of: audience.windowNumber) {
+            XCTAssertLessThan(deckIndex, audienceIndex, "the talk does not cover the second sheet")
+        }
+        try XCTUnwrap(second.button(titled: "Don't Record")).performClick(nil)
+        XCTAssertTrue(presentation.pendingQuestions.isEmpty)
+        try await waitUntil(timeout: 5, "the talk in front once every question is answered") {
+            let order = onScreenWindowNumbers()
+            guard let audienceIndex = order.firstIndex(of: audience.windowNumber) else { return false }
+            return order.firstIndex(of: deck.windowNumber).map { audienceIndex < $0 } ?? true
+        }
     }
 
     func testStopDuringTheConsentSheetEndsTheSheetToo() async throws {

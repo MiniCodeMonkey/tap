@@ -64,6 +64,10 @@ final class PresentationController {
     /// tap's last tunnel event, and the last tunnel error, for the remote panel.
     private(set) var tunnel: TunnelEvent?
     private(set) var tunnelError: String?
+    /// Whether the person wants the phone remote now: the Present option
+    /// at the start, then Present > Phone Remote and Turn Off Remote. A
+    /// restarted tap has no tunnel, and is asked again from this.
+    private(set) var wantsRemote = false
     var onTunnelChange: (() -> Void)?
     /// True once this talk's windows were shown at all, so an ending moves
     /// the editor's cursor only for a talk the person actually saw.
@@ -252,6 +256,7 @@ final class PresentationController {
         editsNotShown = 0
         tunnel = nil
         tunnelError = nil
+        wantsRemote = options.wantsTunnel
         lastCountedText = nil
         pendingQuestions = []
         pagesReported = false
@@ -415,8 +420,12 @@ final class PresentationController {
         presenter.page.load(client.presenterURL(slide: lastSlide), allowedPort: client.ready.port)
         if !windowsShown { armShowWindowsFallback() }
         refreshPresenterToolbar()
-        // A restart's tap has no tunnel; ask again whenever one is wanted.
-        if options.wantsTunnel { setTunnel(on: true) }
+        // A new ready is a new process: the last one's tunnel, URL and QR
+        // code went with it, and a remote the person wants is asked for again.
+        tunnel = nil
+        tunnelError = nil
+        if wantsRemote { session?.send(.tunnel(start: true)) }
+        onTunnelChange?()
     }
 
     private func makeWindow(role: PresentationWindow.Role, frame: CGRect) -> PresentationWindow {
@@ -671,10 +680,26 @@ final class PresentationController {
         session?.send(.recording(action: recording.isRecording ? .stop : .newSegment))
     }
 
-    /// Starts or stops tap's tunnel, as u does.
+    /// Starts or stops tap's tunnel, as u does, while the talk is up.
     func setTunnel(on: Bool) {
-        guard isActive else { return }
+        guard state == .starting || state == .presenting else { return }
+        wantsRemote = on
         session?.send(.tunnel(start: on))
+    }
+
+    /// True while tap's tunnel runs or is starting.
+    var remoteIsOn: Bool { tunnel?.state == "running" || tunnel?.state == "starting" }
+
+    /// Present > Phone Remote works only
+    /// while the talk is up: a stopping tap is quitting, and a starting
+    /// one asks for the remote itself once it is ready.
+    var canTogglePhoneRemote: Bool { state == .presenting }
+
+    /// Present > Phone Remote: the remote off while it
+    /// runs or starts, on otherwise.
+    func togglePhoneRemote() {
+        guard canTogglePhoneRemote else { return }
+        setTunnel(on: !remoteIsOn)
     }
 
     /// The pointer moved over a talk window: the cursor hides again after it rests.
@@ -810,19 +835,34 @@ final class PresentationController {
                 session?.extendQuit(timeout: Self.quitTimeoutWithRecording)
             }
             if pendingQuestions.count == 1 { onQuestion?(question) }
+        case .tunnel:
+            handleTunnel(event)
+        case .error(let payload) where payload.code == "tunnel_unavailable" || payload.code == "tunnel_failed":
+            handleTunnel(event)
+        default:
+            break
+        }
+        onEvent?(event)
+    }
+
+    /// tap's tunnel events and errors, heard only while the talk is up:
+    /// tap's quit stops the tunnel and may report tunnel_failed while the
+    /// talk is stopping, which is no reason to show the remote again.
+    private func handleTunnel(_ event: TapEvent) {
+        guard state == .starting || state == .presenting else { return }
+        switch event {
         case .tunnel(let tunnelEvent):
             tunnel = tunnelEvent
             // A failed start is tunnel_failed followed by a stopped event
             // (app_session.go, tunnel); only a new start clears the reason.
             if tunnelEvent.state == "starting" || tunnelEvent.state == "running" { tunnelError = nil }
             onTunnelChange?()
-        case .error(let payload) where payload.code == "tunnel_unavailable" || payload.code == "tunnel_failed":
+        case .error(let payload):
             tunnelError = payload.message
             onTunnelChange?()
         default:
             break
         }
-        onEvent?(event)
     }
 
     /// Answers the question with `id`, puts up the next queued one, and
@@ -836,22 +876,30 @@ final class PresentationController {
     }
 
     /// A sheet on the deck window is gone: the talk's front window is made
-    /// key again, which brings its Space back.
+    /// key again, which brings its Space back. Not while another question
+    /// waits, whose sheet the talk would cover, and not while the windows
+    /// are still being placed, whose placement makes the front window key
+    /// when it is done.
     func returnToTalk() {
-        guard isActive, windowsShown, let frontWindow else { return }
+        guard isActive, windowsShown, pendingQuestions.isEmpty, windowsAreSettled, let frontWindow else { return }
         frontWindow.makeKeyAndOrderFront(nil)
     }
 
     /// Counts the recording's seconds up between tap's events.
     private func startRecordingTimer() {
         recordingTimer?.invalidate()
-        recordingTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+        let timer = Timer(timeInterval: 1, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated {
                 guard let self, self.recording.isRecording else { return }
                 self.recording.tick()
                 self.refreshPresenterToolbar()
             }
         }
+        // The common modes: a menu open over the talk (the menu bar drops
+        // into full screen) runs the loop in tracking mode, and a timer in
+        // the default mode alone would lose those seconds.
+        RunLoop.main.add(timer, forMode: .common)
+        recordingTimer = timer
     }
 
     // MARK: Stop

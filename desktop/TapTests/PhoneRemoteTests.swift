@@ -23,6 +23,7 @@ final class PhoneRemoteTests: PresentingTestCase {
         XCTAssertTrue(panel.noteLabel.stringValue.contains("tap made a presenter password for this talk"))
         XCTAssertTrue(panel.messageLabel.isHidden)
         XCTAssertEqual(panel.level, .floating)
+        XCTAssertTrue(panel.styleMask.contains(.nonactivatingPanel), "the panel never takes focus from the talk")
         XCTAssertTrue(panel.collectionBehavior.contains(.fullScreenAuxiliary), "shows over the presenter window's full screen Space")
         try await waitUntil(timeout: 5, "the panel on screen") { onScreenWindowNumbers().contains(panel.windowNumber) }
 
@@ -31,11 +32,91 @@ final class PhoneRemoteTests: PresentingTestCase {
         try await waitUntil(timeout: 5, "tap's stopped tunnel") { presentation.tunnel?.state == "stopped" }
         XCTAssertFalse(panel.isVisible)
 
-        // Present > Phone Remote turns it back on.
+        // Present > Phone Remote turns it back on, and off again while it runs.
         deckWindow.togglePhoneRemote(nil)
         try await waitUntil(timeout: 5, "the tunnel again") { presentation.tunnel?.state == "running" && panel.isVisible }
+        deckWindow.togglePhoneRemote(nil)
+        try await waitUntil(timeout: 5, "a second tunnel stop") {
+            self.recorded(record).components(separatedBy: #"stdin: {"type":"tunnel","start":false}"#).count == 3
+        }
+        try await waitUntil(timeout: 5, "the panel gone") { !panel.isVisible }
+        deckWindow.togglePhoneRemote(nil)
+        try await waitUntil(timeout: 5, "the tunnel once more") { presentation.tunnel?.state == "running" && panel.isVisible }
         try await stopPresenting(controller)
         XCTAssertFalse(panel.isVisible, "the panel goes with the talk")
+    }
+
+    /// tap's quit stops the tunnel and may report tunnel_failed while the
+    /// talk is stopping; the remote panel stays away.
+    func testTheRemoteStaysAwayOnceTheTalkStops() async throws {
+        let record = try Fixtures.temporaryFolder().appendingPathComponent("record")
+        let folder = try Fixtures.temporaryFolder().appendingPathComponent("run")
+        // tap asks keep-recording at quit, which holds the talk in stopping while the test sends its events.
+        AppEnvironment.shared.presentExecutableURL = try FakeTapScripts.presenting(events: [], quit: .askToKeep(directory: folder, segments: 1), recordingTo: record)
+        let (_, controller) = try await openDeckForPresenting()
+        let deckWindow = try XCTUnwrap(controller.editor.window?.windowController as? DeckWindowController)
+        deckWindow.revealInFinder = { _ in }
+        let presentation = controller.presentation
+        try await startPresenting(controller, PresentationOptions(mode: .play, startSlide: 1, phoneRemote: true))
+        let panel = deckWindow.remotePanel
+        try await waitUntil(timeout: 5, "the panel") { panel.isVisible }
+        deckWindow.stopPresenting(nil)
+        XCTAssertEqual(presentation.state, .stopping)
+        XCTAssertFalse(panel.isVisible)
+        presentation.handle(.error(TapErrorPayload(code: "tunnel_failed", message: "stopping the tunnel at quit: signal: killed")))
+        presentation.handle(.tunnel(TunnelEvent(state: "stopped", url: nil, qr: nil)))
+        XCTAssertNil(presentation.tunnelError, "a stopping talk hears no tunnel news")
+        XCTAssertFalse(panel.isVisible, "the panel does not come back after Stop")
+        try await waitUntil(timeout: 10, "the keep-recording question") { deckWindow.questionSheet?.kind == "keep-recording" }
+        try XCTUnwrap(deckWindow.questionSheet?.button(titled: "Delete")).performClick(nil)
+        try await waitUntil(timeout: 10, "the talk to end") { presentation.state == .idle }
+        XCTAssertFalse(panel.isVisible)
+    }
+
+    /// A tap that restarts mid-talk has no tunnel: the dead process's URL
+    /// and QR code go, and a remote the person turned on is asked for again.
+    func testARestartedTapIsAskedForTheRemoteAgain() async throws {
+        let record = try Fixtures.temporaryFolder().appendingPathComponent("record")
+        AppEnvironment.shared.presentExecutableURL = try FakeTapScripts.presenting(events: [], recordingTo: record)
+        let (_, controller) = try await openDeckForPresenting()
+        let deckWindow = try XCTUnwrap(controller.editor.window?.windowController as? DeckWindowController)
+        let presentation = controller.presentation
+        try await startPresenting(controller, PresentationOptions(mode: .play, startSlide: 1))
+        deckWindow.togglePhoneRemote(nil)
+        try await waitUntil(timeout: 5, "the running tunnel") { presentation.tunnel?.state == "running" }
+        var tunnelStates: [String?] = []
+        let deckWindowHears = presentation.onTunnelChange
+        presentation.onTunnelChange = {
+            tunnelStates.append(presentation.tunnel?.state)
+            deckWindowHears?()
+        }
+        let pid = try XCTUnwrap(presentation.session?.processIdentifier)
+        kill(pid, SIGKILL)
+        try await waitUntil(timeout: 20, "tap present back") {
+            if let next = presentation.session?.processIdentifier, next != pid, case .running = presentation.session?.state { return true }
+            return false
+        }
+        try await waitUntil(timeout: 5, "the remote asked for again") {
+            self.recorded(record).components(separatedBy: #"stdin: {"type":"tunnel","start":true}"#).count == 3
+        }
+        try await waitUntil(timeout: 5, "the new process's tunnel") { presentation.tunnel?.state == "running" }
+        XCTAssertEqual(tunnelStates.first, .some(nil), "the dead process's tunnel went first: \(tunnelStates)")
+        XCTAssertTrue(deckWindow.remotePanel.isVisible)
+        XCTAssertEqual(presentation.state, .presenting)
+
+        // Turned off from the menu, the remote stays off across the next restart.
+        deckWindow.togglePhoneRemote(nil)
+        try await waitUntil(timeout: 5, "the tunnel stopped") { presentation.tunnel?.state == "stopped" }
+        let second = try XCTUnwrap(presentation.session?.processIdentifier)
+        kill(second, SIGKILL)
+        try await waitUntil(timeout: 20, "tap present back again") {
+            if let next = presentation.session?.processIdentifier, next != second, case .running = presentation.session?.state { return true }
+            return false
+        }
+        try await Task.sleep(nanoseconds: 500_000_000)
+        XCTAssertEqual(self.recorded(record).components(separatedBy: #"stdin: {"type":"tunnel","start":true}"#).count, 3, "no remote nobody wants")
+        XCTAssertFalse(deckWindow.remotePanel.isVisible)
+        presentation.onTunnelChange = deckWindowHears
     }
 
     func testAdvancedRemoteOptions() async throws {

@@ -520,6 +520,10 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
                     presentation?.session?.log.append("the deck window has closed; the \(question.kind) question is answered \(keep ? "keep" : "no") for it", source: .app)
                     presentation?.answer(id: question.id, value: keep)
                 }
+                // A question already up had its sheet on this window, which
+                // is going: it is answered the same way now, so tap is not
+                // left waiting out its own 60 s.
+                if let pending = presentation.pendingQuestion { presentation.onQuestion?(pending) }
             }
             // A talk keeps itself until its process has exited and its
             // windows are down, even one already idle whose last window is

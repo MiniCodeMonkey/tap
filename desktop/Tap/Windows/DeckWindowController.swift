@@ -73,7 +73,8 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
         sessionController.presentation.onStateChange = { [weak self] state in
             self?.refreshPresentingControls()
             switch state {
-            case .idle, .failed: self?.talkEnded()
+            case .idle: self?.talkEnded(failed: false)
+            case .failed: self?.talkEnded(failed: true)
             case .starting, .presenting, .stopping: break
             }
         }
@@ -399,37 +400,43 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
         sessionController.presentation.reloadSlides()
     }
 
-    /// The talk is idle or failed: no sheet of its outlives it. A
-    /// keep-recording sheet still up means tap exited before an answer
-    /// came: its 60 s wait ran out (or the app's stdin closed) and it kept
-    /// the recording, so the sheet ends as a yes and the run is revealed
-    /// like any kept run. Any other sheet ends answering nothing.
-    func talkEnded() {
+    /// The talk is idle or failed: no sheet of its outlives it, and the
+    /// remote panel goes. A keep-recording sheet still up when tap quit on
+    /// its own means its 60 s wait ran out (or the app's stdin closed) and
+    /// it kept the recording: the sheet ends as a yes and the run is
+    /// revealed like any kept run. A talk that
+    /// failed says nothing about the recording, so its sheet, like any
+    /// other, ends answering nothing.
+    func talkEnded(failed: Bool) {
+        remotePanel.hide()
         guard let sheet = questionSheet else { return }
-        if sheet.kind == "keep-recording" {
-            // The talk's own log, which outlives its session; never tap dev's.
-            sessionController.presentationIfCreated?.lastTalkLog?.append("tap kept the recording before an answer came", source: .app)
+        // The talk's own log, which outlives its session; never tap dev's.
+        let log = sessionController.presentationIfCreated?.lastTalkLog
+        if sheet.kind == "keep-recording", !failed {
+            log?.append("tap kept the recording before an answer came", source: .app)
             endQuestionSheet(as: .OK)
         } else {
+            if sheet.kind == "keep-recording" { log?.append("tap stopped before the keep-recording question was answered", source: .app) }
             endQuestionSheet(as: .abort)
         }
     }
+
 
     // MARK: The phone remote
 
     /// Present > Phone Remote: the tunnel on or off.
     @objc func togglePhoneRemote(_ sender: Any?) {
-        let presentation = sessionController.presentation
-        presentation.setTunnel(on: presentation.tunnel?.state != "running")
+        sessionController.presentation.togglePhoneRemote()
     }
 
     /// The panel follows tap's tunnel: shown with the QR code while the
     /// tunnel runs or starts, shown with the reason when tap could not
-    /// start it, gone when it stops or the talk ends.
+    /// start it, gone when it stops or the talk ends, and out of the way
+    /// while a question's sheet is up.
     func refreshRemotePanel() {
         let presentation = sessionController.presentation
-        let running = presentation.tunnel?.state == "running" || presentation.tunnel?.state == "starting"
-        guard presentation.isActive, running || presentation.tunnelError != nil else {
+        let talkIsUp = presentation.state == .starting || presentation.state == .presenting
+        guard talkIsUp, questionSheet == nil, presentation.remoteIsOn || presentation.tunnelError != nil else {
             remotePanel.hide()
             return
         }
@@ -486,6 +493,7 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
             if self?.questionSheet === sheet { self?.questionSheet = nil }
             completion(response == .OK)
             presentation.returnToTalk()
+            self?.refreshRemotePanel()
         }
     }
 
@@ -578,8 +586,8 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
         if [#selector(play(_:)), #selector(playWithOptions(_:)), #selector(rehearse(_:))].contains(menuItem.action) { return presentation.canStart }
         if menuItem.action == #selector(stopPresenting(_:)) { return presentation.isActive }
         if menuItem.action == #selector(togglePhoneRemote(_:)) {
-            menuItem.state = presentation.tunnel?.state == "running" ? .on : .off
-            return presentation.isActive
+            menuItem.state = presentation.remoteIsOn ? .on : .off
+            return presentation.canTogglePhoneRemote
         }
         if menuItem.action == #selector(reloadSlides(_:)) { return presentation.state == .presenting }
         if menuItem.action == #selector(swapDisplays(_:)) {

@@ -42,6 +42,9 @@ final class KeepRecordingTests: PresentingTestCase {
         XCTAssertEqual(sheet.declineButton.keyEquivalent, "", "no key can delete")
         XCTAssertTrue(sheet.declineButton.hasDestructiveAction)
         XCTAssertEqual(sheet.acceptButton.title, "Keep and Show in Finder")
+        // With keyboard navigation on, Space presses the focused button: the focus starts on Keep and never reaches Delete.
+        XCTAssertTrue(sheet.initialFirstResponder === sheet.acceptButton)
+        XCTAssertTrue(sheet.declineButton.refusesFirstResponder)
         XCTAssertTrue(presentation.session?.log.text.contains("tap asks a keep-recording question") == true)
 
         // A second Escape, the one that ended the talk a moment ago, lands on the sheet and does nothing.
@@ -49,6 +52,8 @@ final class KeepRecordingTests: PresentingTestCase {
                                                     windowNumber: sheet.windowNumber, context: nil, characters: "\u{1b}",
                                                     charactersIgnoringModifiers: "\u{1b}", isARepeat: false, keyCode: 53))
         XCTAssertFalse(sheet.performKeyEquivalent(with: escape))
+        // And through AppKit's own path for a key down: the first responder, then cancelOperation.
+        sheet.sendEvent(escape)
         XCTAssertTrue(deckWindow.window?.attachedSheet === sheet, "the sheet is still up")
         try await Task.sleep(nanoseconds: 500_000_000)
         XCTAssertFalse((try? String(contentsOf: record, encoding: .utf8))?.contains(#""value":false"#) ?? false, "nothing was deleted")
@@ -87,8 +92,28 @@ final class KeepRecordingTests: PresentingTestCase {
         try await waitUntil(timeout: 10, "the talk to end") { controller.presentation.state == .idle }
         XCTAssertNil(deckWindow.questionSheet, "the sheet goes with the process that asked")
         XCTAssertNil(deckWindow.window?.attachedSheet)
-        XCTAssertEqual(revealed, [folder], "kept, so shown")
+        XCTAssertEqual(revealed.map(\.path), [folder.path], "kept, so shown")
         XCTAssertTrue(controller.presentation.lastTalkLog?.text.contains("tap kept the recording") == true, "in the talk's log, not tap dev's")
+    }
+
+    /// A keep-recording sheet already up when the deck closes is answered
+    /// keep at once, so tap does not wait out its own 60 s.
+    func testClosingTheDeckAnswersTheKeepSheetThatIsUp() async throws {
+        let folder = try recordingFolder()
+        let record = try Fixtures.temporaryFolder().appendingPathComponent("record")
+        AppEnvironment.shared.presentExecutableURL = try FakeTapScripts.presenting(events: [], quit: .askToKeep(directory: folder, segments: 2), recordingTo: record)
+        let (document, controller) = try await openDeckForPresenting()
+        let deckWindow = try XCTUnwrap(controller.editor.window?.windowController as? DeckWindowController)
+        deckWindow.revealInFinder = { [weak self] url in self?.revealed.append(url) }
+        try await startPresenting(controller, PresentationOptions(mode: .play, startSlide: 1))
+        deckWindow.stopPresenting(nil)
+        try await waitUntil(timeout: 10, "the question") { deckWindow.questionSheet?.kind == "keep-recording" }
+        document.close()
+        try await waitUntil(timeout: 2, "the keep answer to reach tap") {
+            (try? String(contentsOf: record, encoding: .utf8))?.contains(#"stdin: {"type":"answer","id":"q1","value":true}"#) == true
+        }
+        XCTAssertFalse((try? String(contentsOf: record, encoding: .utf8))?.contains(#""value":false"#) ?? false, "nothing was deleted")
+        try await waitUntil(timeout: 10, "the talk counted out") { !AppEnvironment.shared.isPresenting }
     }
 
     func testAClosedDeckKeepsItsRecordingWithoutAsking() async throws {

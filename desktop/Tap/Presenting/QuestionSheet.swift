@@ -87,8 +87,8 @@ final class QuestionSheet: NSWindow {
 
     /// tap's keep-recording question, asked when Stop ends a run that
     /// recorded. `size` is the run folder's size, formatted. Delete is
-    /// destructive: no key reaches it, and a stray Escape after the talk
-    /// does nothing here.
+    /// destructive: no key reaches it, not even Space with keyboard
+    /// navigation on, and a stray Escape after the talk does nothing here.
     static func keepRecording(directory: String, segments: Int, size: String) -> QuestionSheet {
         let sheet = QuestionSheet(kind: "keep-recording",
                                   title: "Keep this recording?",
@@ -98,6 +98,10 @@ final class QuestionSheet: NSWindow {
                                   accept: "Keep and Show in Finder",
                                   escape: .nothing)
         sheet.declineButton.hasDestructiveAction = true
+        // With keyboard navigation on, Space presses the focused button:
+        // the focus starts on Keep and never reaches Delete.
+        sheet.declineButton.refusesFirstResponder = true
+        sheet.initialFirstResponder = sheet.acceptButton
         return sheet
     }
 }
