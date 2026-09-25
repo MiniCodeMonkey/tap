@@ -83,6 +83,7 @@ final class PresentationController {
     /// Installed while the talk's windows exist, removed with them, so a
     /// finished talk never hears about displays and nothing is read in deinit.
     private var screenObserver: NSObjectProtocol?
+    private var keyMonitor: Any?
     /// The screens changed while the windows exist. A test counts the calls.
     var onScreensChanged: (() -> Void)?
     /// The remembered port tap said is taken; the next attempt asks for none.
@@ -413,6 +414,7 @@ final class PresentationController {
         showWindowsFallback = nil
         guard let arrangement, let presenterWindow else { return }
         windowsShown = true
+        installKeyMonitor()
         windowsWereShown = true
         state = .presenting
         let fullScreen = usesFullScreen
@@ -493,6 +495,42 @@ final class PresentationController {
             presenterWindow.makeKeyAndOrderFront(nil)
             frontWindow = presenterWindow
         }
+    }
+
+    // MARK: Keys
+
+    /// Escape in the audience window ends the talk (in the presenter window
+    /// too, when there is no audience window: a rehearsal), and on one
+    /// display Option-Tab switches to the other window's Space. Every
+    /// other key goes to tap's page unchanged, and so does Option-Tab when
+    /// each window has a display of its own. Internal so a test can drive
+    /// it with an event of its own; the monitor calls it for every key
+    /// down while the windows show.
+    func handleKey(_ event: NSEvent) -> NSEvent? {
+        guard isActive, let window = event.window as? PresentationWindow,
+              window === audienceWindow || window === presenterWindow else { return event }
+        if event.keyCode == 53, window.role == .audience || audienceWindow == nil {
+            stop()
+            return nil
+        }
+        if event.keyCode == 48, event.modifierFlags.contains(.option), arrangement?.isSingleDisplay == true, audienceWindow != nil {
+            toggleFrontWindow()
+            return nil
+        }
+        return event
+    }
+
+    private func installKeyMonitor() {
+        guard keyMonitor == nil else { return }
+        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard let self else { return event }
+            return self.handleKey(event)
+        }
+    }
+
+    private func removeKeyMonitor() {
+        if let keyMonitor { NSEvent.removeMonitor(keyMonitor) }
+        keyMonitor = nil
     }
 
     // MARK: Displays
@@ -632,6 +670,7 @@ final class PresentationController {
     /// closes at once as its parent's child); each leaves full screen and
     /// closes on its own clock. The assertion goes now.
     private func takeDownWindows() {
+        removeKeyMonitor()
         if let screenObserver { NotificationCenter.default.removeObserver(screenObserver) }
         screenObserver = nil
         showWindowsFallback?.cancel()

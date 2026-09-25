@@ -358,6 +358,18 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
         playButton.isEnabled = sessionController.presentation.canStart
     }
 
+    /// Present > Stop, the toolbar's Stop, and Escape in the audience window.
+    @objc func stopPresenting(_ sender: Any?) {
+        sessionController.presentation.stop()
+    }
+
+    /// Present > Swap Displays and the toolbar's: during the talk the
+    /// windows change places; before it the popover's arrangement does.
+    @objc func swapDisplays(_ sender: Any?) {
+        sessionController.presentation.swapDisplays()
+        if presentPopover.isShown { presentPopover.update(context: popoverContext()) }
+    }
+
     // The slide commands name the selection now and resolve it when they
     // run, which may be after tap's answer renumbers the slides. See
     // `SlideSelection`.
@@ -421,6 +433,10 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
         if menuItem.action == #selector(toggleSlidePanel(_:)) {
             menuItem.title = isPanelPinned ? "Unpin Slide Panel" : "Pin Slide Panel"
         }
+        let presentation = sessionController.presentation
+        if [#selector(play(_:)), #selector(playWithOptions(_:)), #selector(rehearse(_:))].contains(menuItem.action) { return presentation.canStart }
+        if menuItem.action == #selector(stopPresenting(_:)) { return presentation.isActive }
+        if menuItem.action == #selector(swapDisplays(_:)) { return presentation.currentArrangement?.isSingleDisplay == false }
         let count = sessionController.selectedSlideNumbers.count
         if menuItem.action == #selector(deleteSlides(_:)) {
             menuItem.title = count > 1 ? "Delete \(count) Slides" : "Delete Slide"

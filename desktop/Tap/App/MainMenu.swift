@@ -137,9 +137,12 @@ enum MainMenu {
 
     static func presentMenu() -> NSMenu {
         let menu = NSMenu(title: "Present")
-        // Presenting arrives with tap present --app.
-        menu.addItem(item("Play", action: nil, key: "p", modifiers: [.command, .option]))
-        menu.addItem(item("Rehearse", action: nil, key: "p", modifiers: [.command, .option, .shift]))
+        menu.addItem(item("Play", action: #selector(DeckWindowController.play(_:)), key: "p", modifiers: [.command, .option]))
+        menu.addItem(item("Play with Options…", action: #selector(DeckWindowController.playWithOptions(_:))))
+        menu.addItem(item("Rehearse", action: #selector(DeckWindowController.rehearse(_:)), key: "p", modifiers: [.command, .option, .shift]))
+        menu.addItem(.separator())
+        menu.addItem(item("Stop", action: #selector(DeckWindowController.stopPresenting(_:)), key: "."))
+        menu.addItem(item("Swap Displays", action: #selector(DeckWindowController.swapDisplays(_:))))
         return menu
     }
 
