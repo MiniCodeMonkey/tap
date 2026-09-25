@@ -25,11 +25,27 @@ type Settings struct {
 // they allowed. Deck is an absolute path, so a moved deck is a new deck
 // and is asked about again.
 //
+// Commands holds the command line each approved custom driver runs, by
+// driver name. An approval covers a custom driver only with exactly that
+// command, so a changed command is asked about again. A driver with no
+// entry, a built-in driver or any driver in a record written before
+// commands were stored, is covered only while it runs no command of its
+// own.
+//
 //nolint:govet // fieldalignment: field order is the settings file order
 type Approval struct {
-	Deck       string    `yaml:"deck" json:"deck"`
-	Drivers    []string  `yaml:"drivers,flow" json:"drivers"`
-	ApprovedAt time.Time `yaml:"approvedAt" json:"approvedAt"`
+	Deck       string              `yaml:"deck" json:"deck"`
+	Drivers    []string            `yaml:"drivers,flow" json:"drivers"`
+	Commands   map[string][]string `yaml:"commands,omitempty" json:"commands,omitempty"`
+	ApprovedAt time.Time           `yaml:"approvedAt" json:"approvedAt"`
+}
+
+// Driver is a driver as an approval covers it: its name, and the command
+// line it runs. Command is nil for a driver that runs no command of its
+// own, such as a built-in driver.
+type Driver struct {
+	Name    string
+	Command []string
 }
 
 // Present holds tap present settings. A nil Record means the speaker has
@@ -200,31 +216,68 @@ func (s Settings) ApprovalFor(deck DeckKey) (Approval, bool) {
 	return Approval{}, false
 }
 
-// Approved reports whether deck is approved for every driver in drivers.
+// Approved reports whether deck is approved for every driver in drivers,
+// each as a driver that runs no command of its own.
 func (s Settings) Approved(deck DeckKey, drivers []string) bool {
-	approval, found := s.ApprovalFor(deck)
-	if !found {
-		return false
-	}
 	for _, name := range drivers {
-		if !slices.Contains(approval.Drivers, name) {
+		if !s.Covers(deck, Driver{Name: name}) {
 			return false
 		}
 	}
-	return true
+	_, found := s.ApprovalFor(deck)
+	return found
 }
 
-// Approve records that deck may run drivers. An approval already stored
-// for the deck keeps its drivers and gains the new ones.
+// Covers reports whether deck is approved to run driver: its name is
+// approved, and the command stored for it is exactly driver.Command. A
+// driver approved with one command is not covered with another, and one
+// approved with no command is not covered once it has one.
+func (s Settings) Covers(deck DeckKey, driver Driver) bool {
+	approval, found := s.ApprovalFor(deck)
+	if !found || !slices.Contains(approval.Drivers, driver.Name) {
+		return false
+	}
+	return slices.Equal(approval.Commands[driver.Name], driver.Command)
+}
+
+// Approve records that deck may run drivers, each as a driver that runs
+// no command of its own. See ApproveDrivers.
 func (s *Settings) Approve(deck DeckKey, drivers []string, at time.Time) {
-	merged := append([]string{}, drivers...)
+	approved := make([]Driver, len(drivers))
+	for index, name := range drivers {
+		approved[index] = Driver{Name: name}
+	}
+	s.ApproveDrivers(deck, approved, at)
+}
+
+// ApproveDrivers records that deck may run drivers, each with its
+// command. An approval already stored for the deck keeps its other
+// drivers and their commands. A driver approved again takes its new
+// command, so the command approved before is no longer covered.
+func (s *Settings) ApproveDrivers(deck DeckKey, drivers []Driver, at time.Time) {
+	var names []string
+	commands := map[string][]string{}
 	if existing, found := s.ApprovalFor(deck); found {
-		merged = append(merged, existing.Drivers...)
+		names = append(names, existing.Drivers...)
+		for name, command := range existing.Commands {
+			commands[name] = command
+		}
+	}
+	for _, driver := range drivers {
+		names = append(names, driver.Name)
+		delete(commands, driver.Name)
+		if driver.Command != nil {
+			commands[driver.Name] = append([]string{}, driver.Command...)
+		}
+	}
+	if len(commands) == 0 {
+		commands = nil
 	}
 	s.Revoke(deck)
 	s.Approvals = append(s.Approvals, Approval{
 		Deck:       deck.path,
-		Drivers:    uniqueSorted(merged),
+		Drivers:    uniqueSorted(names),
+		Commands:   commands,
 		ApprovedAt: at.UTC().Truncate(time.Second),
 	})
 }

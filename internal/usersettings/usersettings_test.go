@@ -738,3 +738,74 @@ func TestResolveDeckFailsForADeckThatDoesNotExist(t *testing.T) {
 		t.Error("ResolveDeck() succeeded for a deck that does not exist, want an error")
 	}
 }
+
+func TestCoversADriverOnlyWithTheCommandItWasApprovedWith(t *testing.T) {
+	deck := deckFile(t, "talk.md")
+	var settings Settings
+	settings.ApproveDrivers(deck, []Driver{
+		{Name: "python", Command: []string{"python3", "-c"}},
+		{Name: "shell"},
+	}, approvalTime)
+
+	if !settings.Covers(deck, Driver{Name: "python", Command: []string{"python3", "-c"}}) {
+		t.Error("python with the approved command should be covered")
+	}
+	if settings.Covers(deck, Driver{Name: "python", Command: []string{"bash", "-c"}}) {
+		t.Error("python with a changed command should not be covered")
+	}
+	if settings.Covers(deck, Driver{Name: "python", Command: []string{"python3", "-c", "import os"}}) {
+		t.Error("python with an added argument should not be covered")
+	}
+	if settings.Covers(deck, Driver{Name: "python"}) {
+		t.Error("python with no command should not be covered by an approval of a command")
+	}
+	if !settings.Covers(deck, Driver{Name: "shell"}) {
+		t.Error("the built-in shell driver should be covered")
+	}
+	if settings.Covers(deck, Driver{Name: "shell", Command: []string{"sh"}}) {
+		t.Error("shell with a command should not be covered by an approval without one")
+	}
+}
+
+func TestAnApprovalWithoutCommandsCoversNoCustomCommand(t *testing.T) {
+	deck := deckFile(t, "talk.md")
+	path := filepath.Join(t.TempDir(), "settings.yaml")
+	record := fmt.Sprintf("approvals:\n  - deck: %s\n    drivers: [python, shell]\n    approvedAt: 2026-09-22T19:32:00Z\n", deck.String())
+	if err := os.WriteFile(path, []byte(record), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	settings, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if settings.Covers(deck, Driver{Name: "python", Command: []string{"python3", "-c"}}) {
+		t.Error("a record written before commands were stored covered a custom command")
+	}
+	if !settings.Covers(deck, Driver{Name: "shell"}) {
+		t.Error("a record written before commands were stored should still cover a built-in driver")
+	}
+}
+
+func TestApproveDriversReplacesTheCommandOfAReapprovedDriver(t *testing.T) {
+	deck := deckFile(t, "talk.md")
+	path := filepath.Join(t.TempDir(), "settings.yaml")
+	var settings Settings
+	settings.ApproveDrivers(deck, []Driver{{Name: "python", Command: []string{"python3", "-c"}}, {Name: "ruby", Command: []string{"ruby"}}}, approvalTime)
+	settings.ApproveDrivers(deck, []Driver{{Name: "python", Command: []string{"bash", "-c"}}}, approvalTime)
+	if err := Save(path, settings); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !loaded.Covers(deck, Driver{Name: "python", Command: []string{"bash", "-c"}}) {
+		t.Error("the new command was not stored")
+	}
+	if loaded.Covers(deck, Driver{Name: "python", Command: []string{"python3", "-c"}}) {
+		t.Error("the replaced command is still covered")
+	}
+	if !loaded.Covers(deck, Driver{Name: "ruby", Command: []string{"ruby"}}) {
+		t.Error("a driver approved before lost its command")
+	}
+}
