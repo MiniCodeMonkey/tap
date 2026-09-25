@@ -5,6 +5,7 @@ import AppKit
 final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolbarDelegate, NSMenuItemValidation {
     static let slidesItemIdentifier = NSToolbarItem.Identifier("slides")
     static let newSlideItemIdentifier = NSToolbarItem.Identifier("newSlide")
+    static let playItemIdentifier = NSToolbarItem.Identifier("play")
     let sessionController: DeckSessionController
     let splitViewController: MainSplitViewController
     let sidebarHost = SidebarHostViewController()
@@ -16,6 +17,22 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
     let slidesButton = HoverButton()
     /// The toolbar's New Slide button: a click inserts the last layout, a hold opens the gallery.
     let newSlideButton = NewSlideButton()
+    /// The toolbar's Play button: a click opens the Present popover, a Shift-click starts from slide 1.
+    let playButton = NSButton()
+    /// The popover, whose controls are the last settings: loaded once from
+    /// the environment, saved on every start.
+    private(set) lazy var presentPopover: PresentPopoverController = {
+        let popover = PresentPopoverController()
+        popover.loadSettings(AppEnvironment.shared.presentationSettings.settings)
+        popover.onSwap = { [weak self] in
+            guard let self else { return }
+            self.sessionController.presentation.swapDisplays()
+            self.presentPopover.update(context: self.popoverContext())
+        }
+        popover.onStart = { [weak self] options in self?.startPresenting(options) }
+        popover.onRehearse = { [weak self] options in self?.startPresenting(options) }
+        return popover
+    }()
     private(set) lazy var layoutGallery: LayoutGalleryController = {
         let gallery = LayoutGalleryController()
         gallery.onPick = { [weak self] name in self?.insertSlide(layout: name, after: .caret) }
@@ -44,6 +61,7 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
         window.delegate = self
         shouldCascadeWindows = true
         sessionController.presentation.deckWindowController = self
+        sessionController.presentation.onStateChange = { [weak self] _ in self?.refreshPresentingControls() }
 
         let toolbar = NSToolbar(identifier: "TapDeckToolbar")
         toolbar.delegate = self
@@ -270,6 +288,76 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
         }
     }
 
+    // MARK: Presenting
+
+    /// Present > Play, Cmd+Option+P: the talk starts at once with the last
+    /// settings (the popover's controls), from the cursor's slide unless
+    /// those settings say slide 1.
+    @objc func play(_ sender: Any?) {
+        guard sessionController.presentation.canStart else { return }
+        startPresenting(freshPopover().options(mode: .play))
+    }
+
+    /// Present > Play with Options: the popover, anchored on the Play button.
+    @objc func playWithOptions(_ sender: Any?) {
+        guard sessionController.presentation.canStart else { return }
+        let anchor: NSView = playButton.window == nil ? (window?.contentView ?? playButton) : playButton
+        freshPopover().show(context: popoverContext(), relativeTo: anchor.bounds, of: anchor)
+    }
+
+    /// The toolbar's Play button: the popover, or with Shift a start from slide 1 at once.
+    @objc func playButtonPressed(_ sender: Any?) {
+        playButtonClicked(modifiers: NSApp.currentEvent?.modifierFlags ?? [])
+    }
+
+    func playButtonClicked(modifiers: NSEvent.ModifierFlags) {
+        guard sessionController.presentation.canStart else { return }
+        if modifiers.contains(.shift) {
+            var options = freshPopover().options(mode: .play)
+            options.startSlide = 1
+            startPresenting(options)
+            return
+        }
+        playWithOptions(nil)
+    }
+
+    /// The popover with the settings as they are now and the cursor and
+    /// displays as they are now: the settings are app-wide and another
+    /// deck may have saved newer ones, and the cursor moved since the
+    /// popover was last shown. The password field is left alone.
+    private func freshPopover() -> PresentPopoverController {
+        presentPopover.loadSettings(AppEnvironment.shared.presentationSettings.settings)
+        presentPopover.update(context: popoverContext())
+        return presentPopover
+    }
+
+    /// Present > Rehearse: the presenter view alone, from the cursor's slide.
+    @objc func rehearse(_ sender: Any?) {
+        guard sessionController.presentation.canStart else { return }
+        startPresenting(PresentationOptions(mode: .rehearse, startSlide: sessionController.currentSlideNumber ?? 1))
+    }
+
+    /// Every start comes here: the popover's buttons, Play, the Shift-click
+    /// and Rehearse. The popover's settings are saved, so the next
+    /// Cmd+Option+P and the next launch start the same way.
+    func startPresenting(_ options: PresentationOptions) {
+        AppEnvironment.shared.presentationSettings.settings = presentPopover.settings
+        sessionController.presentation.start(options)
+        refreshPresentingControls()
+    }
+
+    func popoverContext() -> PresentPopoverController.Context {
+        let presentation = sessionController.presentation
+        return PresentPopoverController.Context(arrangement: presentation.currentArrangement,
+                                                cursorSlide: sessionController.currentSlideNumber ?? 1,
+                                                usesFullScreen: presentation.usesFullScreen)
+    }
+
+    /// The toolbar's Play button follows the talk: off while one runs.
+    func refreshPresentingControls() {
+        playButton.isEnabled = sessionController.presentation.canStart
+    }
+
     // The slide commands name the selection now and resolve it when they
     // run, which may be after tap's answer renumbers the slides. See
     // `SlideSelection`.
@@ -360,7 +448,7 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
     }
 
     func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
-        [Self.slidesItemIdentifier, .flexibleSpace, Self.newSlideItemIdentifier, Self.previewItemIdentifier]
+        [Self.slidesItemIdentifier, .flexibleSpace, Self.newSlideItemIdentifier, Self.playItemIdentifier, Self.previewItemIdentifier]
     }
 
     func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
@@ -397,6 +485,19 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
             newSlideButton.onClick = { [weak self] in self?.newSlide(nil) }
             newSlideButton.onHold = { [weak self] in self?.showLayoutGallery(nil) }
             item.view = newSlideButton
+            return item
+        }
+        if identifier == Self.playItemIdentifier {
+            let item = NSToolbarItem(itemIdentifier: identifier)
+            item.label = "Play"
+            item.toolTip = "Present: choose displays and options. Shift-click to start from slide 1. Cmd+Option+P starts at once."
+            playButton.image = NSImage(systemSymbolName: "play.fill", accessibilityDescription: "Play")
+            playButton.bezelStyle = .toolbar
+            playButton.setAccessibilityIdentifier("play-button")
+            playButton.target = self
+            playButton.action = #selector(playButtonPressed(_:))
+            playButton.isEnabled = sessionController.presentation.canStart
+            item.view = playButton
             return item
         }
         guard identifier == Self.previewItemIdentifier else { return nil }
