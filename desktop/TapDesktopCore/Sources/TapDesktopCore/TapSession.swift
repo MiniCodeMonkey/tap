@@ -170,15 +170,7 @@ public final class TapSession {
             return
         }
         process.send(.quit)
-        let deadline = DispatchWorkItem { [weak self, weak process] in
-            MainActor.assumeIsolated {
-                guard let self, let process, self.process === process else { return }
-                self.log.append("tap did not quit within \(String(format: "%.1f", timeout)) seconds", source: .app)
-                process.stop()
-            }
-        }
-        quitWork = deadline
-        DispatchQueue.main.asyncAfter(deadline: .now() + timeout, execute: deadline)
+        armQuitDeadline(timeout, for: process)
     }
 
     /// Moves the quit deadline to `timeout` from now, for a tap that has
@@ -188,6 +180,13 @@ public final class TapSession {
     public func extendQuit(timeout: TimeInterval) {
         guard quitRequested, let process else { return }
         quitWork?.cancel()
+        armQuitDeadline(timeout, for: process)
+    }
+
+    /// Closes standard input of `process` after `timeout`, with D2's
+    /// SIGTERM and SIGKILL escalation, unless it has exited or been
+    /// replaced by then.
+    private func armQuitDeadline(_ timeout: TimeInterval, for process: TapProcess) {
         let deadline = DispatchWorkItem { [weak self, weak process] in
             MainActor.assumeIsolated {
                 guard let self, let process, self.process === process else { return }
