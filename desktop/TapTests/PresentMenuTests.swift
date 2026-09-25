@@ -78,10 +78,16 @@ final class PresentMenuTests: PresentingTestCase {
         XCTAssertEqual(first.count, 2)
         deckWindow.stopPresenting(nil)
         XCTAssertFalse(deckWindow.validateMenuItem(play), "no Play while the talk is stopping")
-        try await waitUntil(timeout: 40, "Play to start the next talk") {
-            if deckWindow.validateMenuItem(play) { deckWindow.play(nil) }
-            return presentation.isActive
+        // The talk is still active while it stops, so the wait ends on the press itself.
+        var pressed = false
+        try await waitUntil(timeout: 40, "Play to start the next talk (state \(presentation.state))") {
+            if !pressed, deckWindow.validateMenuItem(play) {
+                deckWindow.play(nil)
+                pressed = true
+            }
+            return pressed
         }
+        XCTAssertEqual(presentation.state, .starting, "Play started the next talk")
         XCTAssertTrue(first.allSatisfy(\.isClosed), "the last talk's windows had all closed when Play was allowed")
         try await waitUntil(timeout: 40, "the next talk (state \(presentation.state))") { presentation.state == .presenting }
         try await waitUntil(timeout: 20, "the next talk's windows to settle") { presentation.windowsAreSettled }

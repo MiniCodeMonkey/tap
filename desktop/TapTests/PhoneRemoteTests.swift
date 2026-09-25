@@ -44,8 +44,11 @@ final class PhoneRemoteTests: PresentingTestCase {
         let (_, controller) = try await openDeckForPresenting()
         let deckWindow = try XCTUnwrap(controller.editor.window?.windowController as? DeckWindowController)
         let presentation = controller.presentation
+        let deck = try XCTUnwrap(controller.document?.fileURL)
+        // A first talk asks for the deck's own port.
+        let port = presentation.deckPorts.port(for: deck) ?? DeckPortStore.suggestedPort(for: deck)
         try await startPresenting(controller, PresentationOptions(mode: .play, startSlide: 1, tunnel: true, presenterPassword: "secret"))
-        XCTAssertEqual(presentation.session?.command, .present(record: true, presenterPassword: "secret", port: nil))
+        XCTAssertEqual(presentation.session?.command, .present(record: true, presenterPassword: "secret", port: port))
         try await waitUntil(timeout: 5, "the arguments") { self.recorded(record).contains("--presenter-password secret") }
         XCTAssertFalse(recorded(record).contains("--tunnel"), "tap present has no --tunnel flag; the tunnel is a command")
         try await waitUntil(timeout: 5, "the tunnel command") { self.recorded(record).contains(#"stdin: {"type":"tunnel","start":true}"#) }

@@ -55,7 +55,7 @@ final class KeepRecordingTests: PresentingTestCase {
         XCTAssertEqual(presentation.state, .stopping, "tap is still waiting for the answer")
 
         try XCTUnwrap(sheet.button(titled: "Keep and Show in Finder")).performClick(nil)
-        XCTAssertEqual(revealed, [folder], "a kept run is revealed in Finder")
+        XCTAssertEqual(revealed.map(\.path), [folder.path], "a kept run is revealed in Finder")
         try await waitUntil(timeout: 5, "the answer to reach tap") {
             (try? String(contentsOf: record, encoding: .utf8))?.contains(#"stdin: {"type":"answer","id":"q1","value":true}"#) == true
         }
