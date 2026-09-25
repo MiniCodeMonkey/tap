@@ -3,7 +3,8 @@ import XCTest
 final class SlidePanelUITests: UITestCase {
     func testHoveringTheSlidesButtonPeeksAtThePanel() throws {
         let application = launch(withDeck: try copyFixture("seven-slides.md"))
-        let button = application.buttons["slides-button"]
+        // The Slides button toggles, so accessibility reports it as a check box.
+        let button = application.checkBoxes["slides-button"]
         XCTAssertTrue(button.waitForExistence(timeout: 30))
         // Unpin first: a fresh install starts pinned.
         button.click()

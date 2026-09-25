@@ -28,7 +28,14 @@ final class SlideDragUITests: UITestCase {
         XCTAssertTrue(box5.waitForExistence(timeout: 30))
         box5.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.08))
             .click(forDuration: 0.4, thenDragTo: box3.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.1)))
-        let text = try XCTUnwrap(editor.value as? String)
-        XCTAssertLessThan(try XCTUnwrap(text.range(of: "# Five")?.lowerBound), try XCTUnwrap(text.range(of: "# Three")?.lowerBound))
+        // AppKit delivers the drop after the mouse goes up, so the move
+        // lands a moment after the drag call returns.
+        let fiveBeforeThree = NSPredicate { _, _ in
+            guard let text = editor.value as? String, let five = text.range(of: "# Five"), let three = text.range(of: "# Three") else { return false }
+            return five.lowerBound < three.lowerBound
+        }
+        let reordered = XCTNSPredicateExpectation(predicate: fiveBeforeThree, object: nil)
+        XCTAssertEqual(XCTWaiter().wait(for: [reordered], timeout: 5), .completed,
+                       "Five now comes before Three; the editor holds: \(String(describing: editor.value))")
     }
 }
