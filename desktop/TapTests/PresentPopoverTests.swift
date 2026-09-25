@@ -25,6 +25,9 @@ final class PresentPopoverTests: PresentingTestCase {
         let deckWindow = try windowController(controller)
         let screens = halfScreens()
         controller.presentation.screens = { screens }
+        // The popover reads whether the talk would use full screen; the talk itself runs as the test case decides for two displays on one screen.
+        let fullScreenPolicy = controller.presentation.fullScreenAllowed
+        controller.presentation.fullScreenAllowed = { true }
         controller.jumpToSlide(number: 3)
         deckWindow.playButtonClicked(modifiers: [])
         let popover = deckWindow.presentPopover
@@ -65,6 +68,7 @@ final class PresentPopoverTests: PresentingTestCase {
         popover.startFromControl.selectedSegment = 1
         XCTAssertEqual(popover.options(mode: .play), PresentationOptions(mode: .play, startSlide: 1, record: false))
 
+        controller.presentation.fullScreenAllowed = fullScreenPolicy
         popover.startButton.performClick(nil)
         XCTAssertFalse(popover.isShown)
         XCTAssertEqual(controller.presentation.options, PresentationOptions(mode: .play, startSlide: 1, record: false))

@@ -26,6 +26,10 @@ enum FullScreenProbe {
     private static var cached: Result?
     private static var cachedSecondSpace: SecondSpaceResult?
 
+    /// True once `requireSecondSpace()` has found that a second window on
+    /// the same screen gets a Space of its own; false before it has run.
+    static var secondSpaceWorks: Bool { cachedSecondSpace?.works == true }
+
     private static func probeWindow() -> NSWindow {
         let window = NSWindow(contentRect: NSScreen.screens[0].frame, styleMask: [.titled, .fullSizeContentView], backing: .buffered, defer: false)
         window.collectionBehavior = [.fullScreenPrimary, .fullScreenDisallowsTiling]

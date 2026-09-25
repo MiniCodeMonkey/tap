@@ -217,6 +217,8 @@ final class PresentingDisplayTests: PresentingTestCase {
         let presentation = controller.presentation
         presentation.screens = { screens }
         // "Displays have separate Spaces" is off: one full screen Space would black out the other display.
+        // The host allows full screen here, so the setting is the only reason for plain windows.
+        presentation.fullScreenAllowed = { true }
         presentation.screensHaveSeparateSpaces = { false }
         XCTAssertFalse(presentation.usesFullScreen)
         try await startPresenting(controller, PresentationOptions(mode: .play, startSlide: 1))
@@ -232,6 +234,6 @@ final class PresentingDisplayTests: PresentingTestCase {
         try await stopPresenting(controller)
         // One display never needs the setting. usesFullScreen reads the displays connected now, not a talk's.
         presentation.screens = { self.oneScreen() }
-        XCTAssertEqual(presentation.usesFullScreen, fullScreenAvailable, "true wherever the host allows full screen at all")
+        XCTAssertTrue(presentation.usesFullScreen, "true wherever the host allows full screen at all")
     }
 }

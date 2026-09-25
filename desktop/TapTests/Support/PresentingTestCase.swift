@@ -38,10 +38,24 @@ class PresentingTestCase: HostedTestCase {
         try await waitUntil(timeout: 40, "every talk to end (\(AppEnvironment.shared.presentingCount) counted, \(AppEnvironment.shared.endingTalks.count) ending)") {
             !AppEnvironment.shared.isPresenting && AppEnvironment.shared.endingTalks.isEmpty
         }
-        try await waitUntil(timeout: 20, "every talk window to go away") {
+        try await waitUntil(timeout: 20, "every talk window to go away; left: \(Self.describeTalkWindows())") {
             fullScreenPresentationWindows().isEmpty && !NSApp.windows.contains { ($0 as? PresentationWindow).map { !$0.isClosed } ?? false }
         }
         await waitForFullScreenQuiet()
+    }
+
+    /// Every talk window this process still has, for a failure message:
+    /// its title, role, full screen state, style mask, and whether it is
+    /// closed, visible and on screen.
+    static func describeTalkWindows() -> String {
+        let onScreen = onScreenWindowNumbers()
+        let windows = NSApp.windows.compactMap { $0 as? PresentationWindow }
+        guard !windows.isEmpty else { return "none" }
+        return windows.map { window in
+            "[\"\(window.title)\" \(window.role) \(window.fullScreenState) styleMask \(window.styleMask.rawValue)"
+                + (window.styleMask.contains(.fullScreen) ? " (fullScreen)" : "")
+                + " closed \(window.isClosed) takingDown \(window.isTakingDown) visible \(window.isVisible) onScreen \(onScreen.contains(window.windowNumber))]"
+        }.joined(separator: ", ")
     }
 
     var settingsFile: URL { configHome.appendingPathComponent("tap/settings.yaml") }
@@ -77,15 +91,23 @@ class PresentingTestCase: HostedTestCase {
 
     /// Opens a copy of the deck, waits for its preview and boxes, points
     /// its talk at the one real screen, and lets the talk use full screen
-    /// only where the probe found it works.
+    /// only where the probe found it works. Two displays on one screen
+    /// (`halfScreens()`) ask for two full screen entries on one screen,
+    /// and the second is dropped and its window never closes; so a talk
+    /// on two displays runs as plain windows over their frames unless the
+    /// test has found a second Space (`requireSecondSpace()`). Frames,
+    /// attachment and focus are checked the same either way.
     func openDeckForPresenting(_ name: String = "ops.md", slides: Int = 7) async throws -> (DeckDocument, DeckSessionController) {
         let document = try await openDeckAndWaitForPreview(try Fixtures.copyDeck(name))
         let controller = try XCTUnwrap(document.sessionController)
         try await waitForBoxes(document, count: slides)
         let screens = oneScreen()
-        controller.presentation.screens = { screens }
+        let presentation = controller.presentation
+        presentation.screens = { screens }
         let available = fullScreenAvailable
-        controller.presentation.fullScreenAllowed = { available }
+        presentation.fullScreenAllowed = { [weak presentation] in
+            available && ((presentation?.screens().count ?? 1) < 2 || FullScreenProbe.secondSpaceWorks)
+        }
         return (document, controller)
     }
 
