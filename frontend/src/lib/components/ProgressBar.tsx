@@ -9,9 +9,17 @@ import { presentedSlidesThrough } from '$lib/utils/skip';
 export interface ProgressBarProps {
 	/** Whether to show the progress bar (can be disabled via config). */
 	show?: boolean;
+	/**
+	 * A print or settled capture page: the fill jumps to its width with no
+	 * transition. The bar sits outside the slide frame that turns a
+	 * settled page's transitions off, and the ready signal waits for every
+	 * running transition, so a moving fill would hold each slide's ready
+	 * for the transition's 300 ms.
+	 */
+	settled?: boolean;
 }
 
-export function ProgressBar({ show = true }: ProgressBarProps) {
+export function ProgressBar({ show = true, settled = false }: ProgressBarProps) {
 	const position = usePresentationStore((state) =>
 		presentedSlidesThrough(state.presentation?.slides ?? [], state.currentSlideIndex)
 	);
@@ -40,7 +48,7 @@ export function ProgressBar({ show = true }: ProgressBarProps) {
 			aria-valuemax={total}
 			aria-label={`Presentation progress: slide ${position} of ${total}`}
 		>
-			<div className="progress-bar-fill" style={{ width: `${progressPercent}%` }} />
+			<div className="progress-bar-fill" style={{ width: `${progressPercent}%`, ...(settled ? { transition: 'none' } : {}) }} />
 		</div>
 	);
 }

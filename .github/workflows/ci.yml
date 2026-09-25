@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
   pull_request:
-    branches: [main]
+    branches: [main, 'feat/**']
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
@@ -274,6 +274,14 @@ jobs:
             echo "exists=false" >> "$GITHUB_OUTPUT"
             echo "desktop/ is absent on this branch; skipping desktop tests."
           fi
+
+      # check-scenarios.sh is plain sh over text files (the manifest, the
+      # feature files, the Swift test sources), with no Xcode or frontend
+      # build dependency, so it runs first and fails fast, before the
+      # slower steps below spend time on a build.
+      - name: Check that every claimed scenario has a test
+        if: steps.check-desktop.outputs.exists == 'true'
+        run: make -C desktop check-scenarios
 
       - name: Select Xcode
         if: steps.check-desktop.outputs.exists == 'true'

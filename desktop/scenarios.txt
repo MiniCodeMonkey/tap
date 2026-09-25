@@ -1,0 +1,68 @@
+# The feature scenarios each milestone claims, and that its tests cover.
+# Format: milestone | feature file | scenario name, exactly as the .feature file writes it.
+# The test is named "test" plus the scenario name in UpperCamelCase.
+D2 | 01-documents.feature | Welcome window
+D2 | 01-documents.feature | Open a deck
+D2 | 01-documents.feature | Open a file that is not a deck
+D2 | 01-documents.feature | Open the same deck twice
+D2 | 01-documents.feature | Autosave in place
+D2 | 01-documents.feature | Browse versions
+D2 | 01-documents.feature | External change with no unsaved edits
+D2 | 01-documents.feature | External change with unsaved edits
+D2 | 01-documents.feature | Keep mine
+D2 | 01-documents.feature | Deck deleted or moved while open
+D2 | 01-documents.feature | Close a window
+D2 | 01-documents.feature | Deck deleted while open
+D2 | 01-documents.feature | Last window closed
+D2 | 02-slide-structure.feature | Boxes come from tap
+D2 | 02-slide-structure.feature | Typing never makes boxes jump
+D2 | 02-slide-structure.feature | Typing a separator splits a slide
+D2 | 02-slide-structure.feature | Parse error in one slide
+D2 | 02-slide-structure.feature | Speaker notes
+D2 | 02-slide-structure.feature | Code blocks with a live driver
+D2 | 02-slide-structure.feature | Box badges
+D2 | 02-slide-structure.feature | The editor never folds
+D2 | 04-preview.feature | The preview follows the cursor
+D2 | 04-preview.feature | The preview updates while I type
+D2 | 04-preview.feature | Step through fragments
+D2 | 04-preview.feature | Pin a slide
+D2 | 04-preview.feature | The preview shows the audience-safe error form
+D2 | 04-preview.feature | Preview in its own window
+D2 | 04-preview.feature | Hide the preview
+D2 | 04-preview.feature | The preview is the audience view
+D2 | 04-preview.feature | Try a theme in the preview
+D2 | 07-tap-process.feature | Start
+D2 | 07-tap-process.feature | Login shell environment
+D2 | 07-tap-process.feature | Crash and restart
+D2 | 07-tap-process.feature | tap keeps failing
+D2 | 07-tap-process.feature | Requests are protected
+D2 | 07-tap-process.feature | Version match
+D2 | 07-tap-process.feature | Logs and version
+D2 | 12-menus-and-shortcuts.feature | Menu bar
+D2 | 12-menus-and-shortcuts.feature | Go to slide
+D2 | 12-menus-and-shortcuts.feature | Shortcuts do not clash with the presentation keys
+D2 | 13-performance.feature | Typing
+D2 | 13-performance.feature | Preview update
+D2 | 13-performance.feature | The preview updates in place
+D3 | 02-slide-structure.feature | The current slide
+D3 | 02-slide-structure.feature | Sidebar and cursor are linked
+D3 | 03-slide-operations.feature | Move one slide by dragging in the sidebar
+D3 | 03-slide-operations.feature | Move with the keyboard
+D3 | 03-slide-operations.feature | Move several slides
+D3 | 03-slide-operations.feature | Move by dragging a box header in the editor
+D3 | 03-slide-operations.feature | Insert a slide with the last layout
+D3 | 03-slide-operations.feature | Pick a layout from the gallery
+D3 | 03-slide-operations.feature | Duplicate and delete
+D3 | 03-slide-operations.feature | Skip a slide
+D3 | 03-slide-operations.feature | Frontmatter never moves
+D3 | 03-slide-operations.feature | Drag slides to another deck
+D3 | 04-preview.feature | Split layout
+D3 | 04-preview.feature | Peek at the slide panel
+D3 | 04-preview.feature | Pin the slide panel
+D3 | 04-preview.feature | Step through a custom component
+D3 | 12-menus-and-shortcuts.feature | Slide menu
+D3 | 12-menus-and-shortcuts.feature | Context menu on a slide
+D3 | 12-menus-and-shortcuts.feature | VoiceOver
+D3 | 13-performance.feature | The current thumbnail follows the preview
+D3 | 13-performance.feature | Thumbnails
+D3 | 13-performance.feature | Reopen

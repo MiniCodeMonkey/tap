@@ -1,0 +1,134 @@
+name: Tap
+options:
+  bundleIdPrefix: io.geocod.tap
+  deploymentTarget:
+    macOS: "14.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    SWIFT_STRICT_CONCURRENCY: minimal
+    MACOSX_DEPLOYMENT_TARGET: "14.0"
+    CODE_SIGN_IDENTITY: "-"
+    CODE_SIGN_STYLE: Manual
+    DEVELOPMENT_TEAM: ""
+    ENABLE_HARDENED_RUNTIME: NO
+    ENABLE_USER_SCRIPT_SANDBOXING: NO
+    TAP_VERSION: "0.0.0"
+    MARKETING_VERSION: "$(TAP_VERSION)"
+    CURRENT_PROJECT_VERSION: "1"
+  configs:
+    Benchmark:
+      ENABLE_TESTABILITY: YES
+configs:
+  Debug: debug
+  Release: release
+  Benchmark: release
+packages:
+  TapDesktopCore:
+    path: TapDesktopCore
+targets:
+  Tap:
+    type: application
+    platform: macOS
+    sources:
+      - path: Tap
+        excludes:
+          - Info.plist
+    dependencies:
+      - package: TapDesktopCore
+    info:
+      path: Tap/Info.plist
+      properties:
+        CFBundleName: Tap
+        CFBundleDisplayName: Tap
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        LSMinimumSystemVersion: "$(MACOSX_DEPLOYMENT_TARGET)"
+        NSPrincipalClass: NSApplication
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
+        CFBundleDocumentTypes:
+          - CFBundleTypeName: Markdown Deck
+            CFBundleTypeRole: Editor
+            LSHandlerRank: Alternate
+            LSItemContentTypes:
+              - net.daringfireball.markdown
+            NSDocumentClass: "$(PRODUCT_MODULE_NAME).DeckDocument"
+        UTImportedTypeDeclarations:
+          - UTTypeIdentifier: net.daringfireball.markdown
+            UTTypeDescription: Markdown Document
+            UTTypeConformsTo:
+              - public.plain-text
+            UTTypeTagSpecification:
+              public.filename-extension:
+                - md
+                - markdown
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: io.geocod.tap.desktop
+        PRODUCT_NAME: Tap
+    postCompileScripts:
+      - name: Bundle tap
+        path: scripts/build-tap.sh
+        basedOnDependencyAnalysis: false
+        outputFiles:
+          - $(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/tap
+  TapTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: TapTests
+        excludes:
+          - Fixtures/**
+    dependencies:
+      - target: Tap
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: io.geocod.tap.desktop.tests
+  TapUITests:
+    type: bundle.ui-testing
+    platform: macOS
+    sources:
+      - path: TapUITests
+    dependencies:
+      - target: Tap
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: io.geocod.tap.desktop.uitests
+  TapBenchmarks:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: TapBenchmarks
+        excludes:
+          - Decks/**
+    dependencies:
+      - target: Tap
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: io.geocod.tap.desktop.benchmarks
+schemes:
+  Tap:
+    build:
+      targets:
+        Tap: all
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - TapTests
+        - TapUITests
+  TapBenchmarks:
+    build:
+      targets:
+        Tap: all
+        TapBenchmarks: [test]
+    test:
+      config: Benchmark
+      targets:
+        - TapBenchmarks
