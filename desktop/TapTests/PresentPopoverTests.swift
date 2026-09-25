@@ -21,7 +21,7 @@ final class PresentPopoverTests: PresentingTestCase {
     }
 
     func testThePopoverCollectsTheOptions() async throws {
-        let (_, controller) = try await openDeckForPresenting()
+        let (document, controller) = try await openDeckForPresenting()
         let deckWindow = try windowController(controller)
         let screens = halfScreens()
         controller.presentation.screens = { screens }
@@ -76,13 +76,15 @@ final class PresentPopoverTests: PresentingTestCase {
                        PresentationSettings(startFromSlideOne: true, record: false, phoneRemote: false, tunnel: false),
                        "a start saves its settings for Cmd+Option+P and the next launch")
         try await waitUntil(timeout: 40, "the talk") { controller.presentation.state == .presenting }
-        XCTAssertEqual(controller.presentation.session?.command, .present(record: false, presenterPassword: nil, port: nil))
+        let port = DeckPortStore.suggestedPort(for: try XCTUnwrap(document.fileURL))
+        XCTAssertEqual(controller.presentation.session?.command, .present(record: false, presenterPassword: nil, port: port), "the deck's own port")
+        try await waitUntil(timeout: 20, "the talk windows to settle") { controller.presentation.windowsAreSettled }
         XCTAssertEqual(controller.presentation.audienceWindow?.targetFrame, screens[0].frame, "the swap held")
     }
 
     func testCmdOptionPStartsAtOnceWithTheLastSettings() async throws {
         AppEnvironment.shared.presentationSettings.settings = PresentationSettings(startFromSlideOne: false, record: false, phoneRemote: false, tunnel: true)
-        let (_, controller) = try await openDeckForPresenting()
+        let (document, controller) = try await openDeckForPresenting()
         let deckWindow = try windowController(controller)
         controller.jumpToSlide(number: 4)
         deckWindow.presentPopover.passwordField.stringValue = "secret"
@@ -92,7 +94,8 @@ final class PresentPopoverTests: PresentingTestCase {
         XCTAssertEqual(controller.presentation.options,
                        PresentationOptions(mode: .play, startSlide: 4, record: false, phoneRemote: false, tunnel: true, presenterPassword: "secret"))
         try await waitUntil(timeout: 40, "the talk") { controller.presentation.state == .presenting }
-        XCTAssertEqual(controller.presentation.session?.command, .present(record: false, presenterPassword: "secret", port: nil))
+        let port = DeckPortStore.suggestedPort(for: try XCTUnwrap(document.fileURL))
+        XCTAssertEqual(controller.presentation.session?.command, .present(record: false, presenterPassword: "secret", port: port))
         try await stopPresenting(controller)
         // Present > Play with Options opens the popover, with the same settings showing.
         deckWindow.playWithOptions(nil)
@@ -107,11 +110,14 @@ final class PresentPopoverTests: PresentingTestCase {
         otherWindow.playWithOptions(nil)
         otherWindow.presentPopover.recordCheckbox.state = .on
         otherWindow.presentPopover.close()
+        // The first deck starts from its popover, which saves its controls.
+        deckWindow.playWithOptions(nil)
         deckWindow.presentPopover.recordCheckbox.state = .off
         deckWindow.presentPopover.tunnelCheckbox.state = .off
-        deckWindow.play(nil)
+        deckWindow.presentPopover.startButton.performClick(nil)
         XCTAssertEqual(controller.presentation.options?.record, false)
         XCTAssertEqual(controller.presentation.options?.tunnel, false, "the first deck saved its own controls")
+        XCTAssertEqual(AppEnvironment.shared.presentationSettings.settings.tunnel, false)
         try await waitUntil(timeout: 40, "the talk") { controller.presentation.state == .presenting }
         try await stopPresenting(controller)
         other.jumpToSlide(number: 3)

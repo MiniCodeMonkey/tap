@@ -131,14 +131,16 @@ final class PresentingDisplayTests: PresentingTestCase {
     }
 
     func testRehearse() async throws {
-        let (_, controller) = try await openDeckForPresenting()
+        let (document, controller) = try await openDeckForPresenting()
         let screens = halfScreens()
         let presentation = controller.presentation
         presentation.screens = { screens }
         try await startPresenting(controller, PresentationOptions(mode: .rehearse, startSlide: 4))
         let talk = try XCTUnwrap(presentation.session)
-        XCTAssertEqual(talk.command, .present(record: false, presenterPassword: nil, port: nil))
-        XCTAssertTrue(talk.log.text.contains("tap present --app --no-record ops.md"))
+        // The deck's own port, as for a talk: the presenter page keeps its origin, and with it the presenter layout and notes size.
+        let port = DeckPortStore.suggestedPort(for: try XCTUnwrap(document.fileURL))
+        XCTAssertEqual(talk.command, .present(record: false, presenterPassword: nil, port: port))
+        XCTAssertTrue(talk.log.text.contains("tap present --app --no-record --port \(port) ops.md"))
         XCTAssertNil(presentation.audienceWindow, "only the presenter view")
         let presenter = try XCTUnwrap(presentation.presenterWindow)
         XCTAssertEqual(presenter.targetFrame, screens[0].frame, "on the laptop's display")
@@ -165,11 +167,12 @@ final class PresentingDisplayTests: PresentingTestCase {
         presentation.screens = { one }
         presentation.screensChanged()
         XCTAssertEqual(presentation.arrangement?.isSingleDisplay, true)
-        XCTAssertEqual(audience.targetFrame, one[0].frame, "the audience is asked for the remaining screen")
-        XCTAssertEqual(presenter.targetFrame, one[0].frame)
+        // The windows are placed one at a time, so each frame is read once both are settled.
         try await waitUntil(timeout: 30, "the windows settled and the presenter over the audience") {
             presentation.windowsAreSettled && presentation.presenterIsShownOverAudience
         }
+        XCTAssertEqual(audience.targetFrame, one[0].frame, "the audience is asked for the remaining screen")
+        XCTAssertEqual(presenter.targetFrame, one[0].frame)
         XCTAssertTrue(presenter.isAttached)
         XCTAssertEqual(presenter.fullScreenState, .windowed, "a child has no Space of its own")
         XCTAssertTrue(presentation.frontWindow === presenter)
@@ -186,11 +189,11 @@ final class PresentingDisplayTests: PresentingTestCase {
         // The projector is back: the presenter view gets its own display and Space again, the audience goes to the projector.
         presentation.screens = { two }
         presentation.screensChanged()
-        XCTAssertEqual(audience.targetFrame, two[1].frame)
-        XCTAssertEqual(presenter.targetFrame, two[0].frame)
         try await waitUntil(timeout: 30, "the windows back on their displays") {
             presentation.windowsAreSettled && !presenter.isAttached && presenter.isVisible
         }
+        XCTAssertEqual(audience.targetFrame, two[1].frame)
+        XCTAssertEqual(presenter.targetFrame, two[0].frame)
         XCTAssertTrue(presentation.frontWindow === presenter)
         presentation.toggleFrontWindow()
         XCTAssertFalse(presenter.isAttached, "nothing to toggle with a display each")
