@@ -80,6 +80,11 @@ final class PresentationController {
     private var placements: [(window: PresentationWindow, frame: CGRect, fullScreen: Bool)] = []
     private var placing = false
     private var placementCompletion: (() -> Void)?
+    /// Installed while the talk's windows exist, removed with them, so a
+    /// finished talk never hears about displays and nothing is read in deinit.
+    private var screenObserver: NSObjectProtocol?
+    /// The screens changed while the windows exist. A test counts the calls.
+    var onScreensChanged: (() -> Void)?
     /// The remembered port tap said is taken; the next attempt asks for none.
     private var takenPort: Int?
     private var portFallbackPending = false
@@ -350,6 +355,11 @@ final class PresentationController {
         }
         self.arrangement = arrangement
         sleepAssertion.acquire()
+        if screenObserver == nil {
+            screenObserver = NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: nil) { [weak self] _ in
+                MainActor.assumeIsolated { self?.screensChanged() }
+            }
+        }
         if options.mode == .play {
             let audience = audienceWindow ?? makeWindow(role: .audience, frame: arrangement.audience.frame)
             audienceWindow = audience
@@ -485,6 +495,72 @@ final class PresentationController {
         }
     }
 
+    // MARK: Displays
+
+    /// Exchanges the audience and presenter displays, before the talk (the
+    /// popover's Swap Displays) or during it (the toolbar's), and remembers
+    /// the choice for this pair of displays, across decks. During a talk
+    /// each window leaves its Space, moves and enters the other display's.
+    /// Nothing to swap on one display.
+    func swapDisplays() {
+        let screens = self.screens()
+        guard let current = arrangement ?? DisplayArrangement.resolve(screens: screens, store: displayAssignments),
+              !current.isSingleDisplay else { return }
+        let swapped = current.swapped()
+        displayAssignments.setAudienceName(swapped.audience.name, for: screens)
+        guard isActive, windowsShown else { return }
+        arrangement = swapped
+        moveWindows(to: swapped)
+    }
+
+    /// The displays changed while a talk runs: a projector unplugged or
+    /// plugged back in. macOS has already moved a vanished display's Space
+    /// to a remaining one; the windows are asked for the new arrangement
+    /// (a window already on its frame does nothing). With one display
+    /// left, the presenter window leaves its Space and becomes the
+    /// audience window's child, shown, since the speaker is at the laptop;
+    /// with the projector back it detaches and gets its Space again.
+    func screensChanged() {
+        onScreensChanged?()
+        guard isActive, windowsShown, let resolved = DisplayArrangement.resolve(screens: screens(), store: displayAssignments) else { return }
+        arrangement = resolved
+        moveWindows(to: resolved)
+    }
+
+    /// Puts the windows on `arrangement`'s displays. A rehearsal has only
+    /// the presenter window, which goes where the arrangement puts it. A
+    /// talk on one display places the audience window and shows the
+    /// presenter window over it as its child; on two, each window gets
+    /// its display, the presenter last so its Space is the active one.
+    private func moveWindows(to arrangement: DisplayArrangement) {
+        let fullScreen = usesFullScreen
+        guard let presenterWindow else { return }
+        guard let audienceWindow else {
+            place([(presenterWindow, arrangement.presenter.frame, fullScreen)]) { [weak self, weak presenterWindow] in
+                guard let self, let presenterWindow, self.windowsShown else { return }
+                presenterWindow.makeKeyAndOrderFront(nil)
+            }
+            return
+        }
+        if arrangement.isSingleDisplay {
+            // The presenter window leaves its own Space first (a child may not have one), then rides over the audience.
+            presenterWindow.detach()
+            place([(presenterWindow, arrangement.presenter.frame, false), (audienceWindow, arrangement.audience.frame, fullScreen)]) { [weak self] in
+                guard let self, self.windowsShown, let presenterWindow = self.presenterWindow else { return }
+                presenterWindow.orderOut(nil)
+                self.frontWindow = self.audienceWindow
+                self.showPresenterOverAudience()
+            }
+        } else {
+            presenterWindow.detach()
+            place([(audienceWindow, arrangement.audience.frame, fullScreen), (presenterWindow, arrangement.presenter.frame, fullScreen)]) { [weak self] in
+                guard let self, self.windowsShown, let presenterWindow = self.presenterWindow else { return }
+                self.frontWindow = presenterWindow
+                presenterWindow.makeKeyAndOrderFront(nil)
+            }
+        }
+    }
+
     private func showPresenterOverAudience() {
         guard let audienceWindow, let presenterWindow, !presenterIsShownOverAudience else { return }
         presenterWindow.attach(to: audienceWindow)
@@ -556,6 +632,8 @@ final class PresentationController {
     /// closes at once as its parent's child); each leaves full screen and
     /// closes on its own clock. The assertion goes now.
     private func takeDownWindows() {
+        if let screenObserver { NotificationCenter.default.removeObserver(screenObserver) }
+        screenObserver = nil
         showWindowsFallback?.cancel()
         showWindowsFallback = nil
         placements = []
