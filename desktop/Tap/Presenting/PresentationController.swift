@@ -234,6 +234,7 @@ final class PresentationController {
         lastSlide = options.startSlide
         recording = RecordingStatus()
         editsNotShown = 0
+        lastCountedText = nil
         pendingQuestions = []
         pagesReported = false
         windowsShown = false

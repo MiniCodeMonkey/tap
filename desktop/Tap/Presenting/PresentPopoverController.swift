@@ -26,7 +26,7 @@ final class PresentPopoverController: NSObject, NSPopoverDelegate {
     let phoneRemoteCheckbox = NSButton(checkboxWithTitle: "Phone remote", target: nil, action: nil)
     let advancedButton = NSButton(title: "Advanced", target: nil, action: nil)
     let advancedStack = NSStackView()
-    let passwordField = NSTextField()
+    let passwordField = NSSecureTextField()
     let tunnelCheckbox = NSButton(checkboxWithTitle: "Public tunnel", target: nil, action: nil)
     let tunnelHint = NSTextField(labelWithString: "Needs cloudflared.")
     let rehearseButton = NSButton(title: "Rehearse", target: nil, action: nil)

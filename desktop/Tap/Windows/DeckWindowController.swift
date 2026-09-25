@@ -452,7 +452,10 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
         if [#selector(play(_:)), #selector(playWithOptions(_:)), #selector(rehearse(_:))].contains(menuItem.action) { return presentation.canStart }
         if menuItem.action == #selector(stopPresenting(_:)) { return presentation.isActive }
         if menuItem.action == #selector(reloadSlides(_:)) { return presentation.state == .presenting }
-        if menuItem.action == #selector(swapDisplays(_:)) { return presentation.currentArrangement?.isSingleDisplay == false }
+        if menuItem.action == #selector(swapDisplays(_:)) {
+            // While another deck presents, a swap here would change the remembered pair under its running talk.
+            return presentation.currentArrangement?.isSingleDisplay == false && (presentation.isActive || !AppEnvironment.shared.isPresenting)
+        }
         let count = sessionController.selectedSlideNumbers.count
         if menuItem.action == #selector(deleteSlides(_:)) {
             menuItem.title = count > 1 ? "Delete \(count) Slides" : "Delete Slide"
