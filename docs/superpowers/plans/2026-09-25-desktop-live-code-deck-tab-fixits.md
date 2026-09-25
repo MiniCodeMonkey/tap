@@ -540,7 +540,7 @@ git commit -m "feat(desktop): decode the approval request and each block's probl
 
 **Interfaces:**
 - Consumes: nothing beyond Foundation.
-- Produces: `Frontmatter(text:)`; `Frontmatter.Entry` (`key`, `value: String?`, `valueRange: NSRange?`, `children: [Entry]`, `range: NSRange`, `indent: Int`, `unquotedValue`); `Frontmatter.range: NSRange?`, `.entries`, `.lineEnding`, `.hasFrontmatter`, `.closingLocation: Int?`, `entry(at:)`, `value(at:)`, `declaredDrivers`, `declares(driver:)`, `text(of:)`; `Frontmatter.unquoted(_:)`. Task 4 adds the edits on top of these.
+- Produces: `Frontmatter(text:)`; `Frontmatter.Entry` (`key`, `value: String?`, `valueRange: NSRange?`, `children: [Entry]`, `range: NSRange`, `indent: Int`, `unquotedValue`, `isMultiLine`); `Frontmatter.range: NSRange?`, `.entries`, `.lineEnding`, `.hasFrontmatter`, `.closingLocation: Int?`, `entry(at:)`, `value(at:)`, `declaredDrivers`, `declares(driver:)`, `text(of:)`; `Frontmatter.unquoted(_:)`. Task 4 adds the edits on top of these.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -637,6 +637,31 @@ final class FrontmatterTests: XCTestCase {
         XCTAssertNil(frontmatter.value(at: ["list"]), "a list opener has no scalar")
         XCTAssertEqual(frontmatter.entry(at: ["list"])?.children, [], "list items are not entries")
         XCTAssertEqual(frontmatter.text(of: frontmatter.entry(at: ["list"])!), "list:\n  - one\n  - two\n")
+        XCTAssertTrue(frontmatter.entry(at: ["list"])!.isMultiLine, "a value on more than one line is never edited as a scalar")
+        XCTAssertFalse(frontmatter.entry(at: ["title"])!.isMultiLine)
+    }
+
+    func testATrailingCommentIsNotPartOfTheValue() throws {
+        let text = "---\ntheme: base # dark later\ntitle: \"a # b\"\nquoted: 'x # y' # z\ncommented: # nothing\ndrivers: {shell: {}} # x\n---\n"
+        let frontmatter = Frontmatter(text: text)
+        XCTAssertEqual(frontmatter.value(at: ["theme"]), "base")
+        XCTAssertEqual((text as NSString).substring(with: try XCTUnwrap(frontmatter.entry(at: ["theme"])?.valueRange)), "base", "a write keeps the comment")
+        XCTAssertEqual(frontmatter.value(at: ["title"]), "\"a # b\"", "a hash inside quotes is text")
+        XCTAssertEqual(frontmatter.value(at: ["quoted"]), "'x # y'")
+        XCTAssertNil(frontmatter.value(at: ["commented"]), "a value that is only a comment is none")
+        XCTAssertEqual(frontmatter.declaredDrivers, ["shell"], "the comment does not hide the flow map")
+    }
+
+    func testABlockScalarIsNotAScalar() {
+        let text = "---\ntitle: >-\n  Debugging Production\n  at 3am\nauthor: |\n  Me\ntheme: base\n---\n"
+        let frontmatter = Frontmatter(text: text)
+        XCTAssertEqual(frontmatter.entries.map(\.key), ["title", "author", "theme"])
+        let title = frontmatter.entry(at: ["title"])!
+        XCTAssertEqual(title.value, ">-")
+        XCTAssertTrue(title.isMultiLine)
+        XCTAssertEqual(frontmatter.text(of: title), "title: >-\n  Debugging Production\n  at 3am\n")
+        XCTAssertTrue(frontmatter.entry(at: ["author"])!.isMultiLine)
+        XCTAssertFalse(frontmatter.entry(at: ["theme"])!.isMultiLine)
     }
 
     func testUnquoting() {
@@ -690,18 +715,29 @@ public struct Frontmatter: Equatable, Sendable {
         /// The indent of the entry's own line, in spaces.
         public let indent: Int
 
-        public init(key: String, value: String?, valueRange: NSRange?, children: [Entry], range: NSRange, indent: Int) {
+        public init(key: String, value: String?, valueRange: NSRange?, children: [Entry], range: NSRange, indent: Int, lineCount: Int = 1) {
             self.key = key
             self.value = value
             self.valueRange = valueRange
             self.children = children
             self.range = range
             self.indent = indent
+            self.lineCount = lineCount
         }
 
         /// The value with YAML's quotes removed.
         public var unquotedValue: String? { value.map(Frontmatter.unquoted) }
-    }
+
+        /// True for a value that is not one line: a block scalar ("|" or
+        /// ">"), a list, or a plain scalar continued on indented lines.
+        /// Such an entry is never edited as a scalar: the form shows its
+        /// lines as text, and `setting` replaces the whole entry.
+        public var isMultiLine: Bool {
+            children.isEmpty && lineCount > 1
+        }
+
+        /// How many lines the entry's range holds, children included.
+        public let lineCount: Int
 
     /// The whole block from location 0 through the closing line's ending;
     /// nil when the deck has no frontmatter.
@@ -770,14 +806,34 @@ public struct Frontmatter: Equatable, Sendable {
         var valueRange: NSRange?
         let valueMatch = match.range(at: 3)
         if valueMatch.location != NSNotFound, valueMatch.length > 0 {
-            let text = content.substring(with: valueMatch)
-            // A trailing comment is not a value; a value that starts one is nothing.
-            if !text.hasPrefix("#") {
+            // A " #" outside quotes starts a comment, which is not part of
+            // the value and is kept where it is by a write; a value that is
+            // only a comment is none.
+            let text = Self.withoutTrailingComment(content.substring(with: valueMatch))
+            if !text.isEmpty {
                 value = text
-                valueRange = NSRange(location: line.range.location + valueMatch.location, length: valueMatch.length)
+                valueRange = NSRange(location: line.range.location + valueMatch.location, length: (text as NSString).length)
             }
         }
         return KeyLine(indent: indent, key: key, value: value, valueRange: valueRange)
+    }
+
+    /// `text` up to a "#" that starts a comment: one at the start, or one
+    /// after a space, outside single and double quotes. Trailing
+    /// whitespace before it goes too.
+    static func withoutTrailingComment(_ text: String) -> String {
+        var inSingle = false
+        var inDouble = false
+        var previous: Character = " "
+        var kept = ""
+        for character in text {
+            if character == "\"", !inSingle { inDouble.toggle() }
+            if character == "'", !inDouble { inSingle.toggle() }
+            if character == "#", !inSingle, !inDouble, previous == " " || kept.isEmpty { break }
+            kept.append(character)
+            previous = character
+        }
+        return kept.trimmingCharacters(in: .whitespaces)
     }
 
     private static func isBlankOrComment(_ line: Line) -> Bool {
@@ -805,7 +861,8 @@ public struct Frontmatter: Equatable, Sendable {
             while last > index, isBlankOrComment(lines[last]) { last -= 1 }
             let children = last > index ? parse(lines: Array(lines[(index + 1)...last])) : []
             let range = NSRange(location: lines[index].range.location, length: NSMaxRange(lines[last].range) - lines[index].range.location)
-            entries.append(Entry(key: opener.key, value: opener.value, valueRange: opener.valueRange, children: children, range: range, indent: opener.indent))
+            entries.append(Entry(key: opener.key, value: opener.value, valueRange: opener.valueRange, children: children, range: range,
+                                 indent: opener.indent, lineCount: last - index + 1))
             index = end
         }
         return entries
@@ -911,7 +968,7 @@ Expected: every test passes, the six new ones included. If `testReadsTheBlockAnd
 
 - [ ] **Step 5: Mutate and commit**
 
-Mutations, each applied and run with `make -C desktop core-test`, then reverted exactly: in `init`, drop the `lines.count > 1` condition on the closing check (expected: `testReadsTheBlockAndItsEntries` fails, the opener closes itself); in `parse`, use `next.indent < opener.indent` (expected: it fails on `drivers.children`, `recording` becomes a child of `drivers`); in `parse`, drop the trailing-blank trim (survives here: no gap follows an entry in this task's decks; Task 4's `testAddsAChildAtTheEndOfItsParentsBlock` kills it, since the new child would land after the blank line and the comment); in `declaredDrivers`, ignore the flow case (expected: `testTheDeclaredDriversComeFromTheDriversMap` fails on the flow map); in `flowMapKeys`, split on every comma (expected: the nested `connections` case yields a wrong key); in `keyLine`, keep a value that starts with `#` (expected: `testCommentsBlankLinesAndOddSpacingAreNotEntries` is unaffected; `testReadsTheBlockAndItsEntries` is unaffected too: add `commented: # nothing` to that test's deck if this mutation must be killed, expecting `value(at: ["commented"]) == nil`); in `init`, detect `"\r\n"` as `"\n"` (expected: `testKeepsCarriageReturnLineEndings` fails).
+Mutations, each applied and run with `make -C desktop core-test`, then reverted exactly: in `init`, drop the `lines.count > 1` condition on the closing check (expected: `testReadsTheBlockAndItsEntries` fails, the opener closes itself); in `parse`, use `next.indent < opener.indent` (expected: it fails on `drivers.children`, `recording` becomes a child of `drivers`); in `parse`, drop the trailing-blank trim (survives here: no gap follows an entry in this task's decks; Task 4's `testAddsAChildAtTheEndOfItsParentsBlock` kills it, since the new child would land after the blank line and the comment); in `declaredDrivers`, ignore the flow case (expected: `testTheDeclaredDriversComeFromTheDriversMap` fails on the flow map); in `flowMapKeys`, split on every comma (expected: the nested `connections` case yields a wrong key); in `keyLine`, keep the whole text as the value (expected: `testATrailingCommentIsNotPartOfTheValue` fails on "base"); in `withoutTrailingComment`, ignore quotes (expected: it fails on `"a # b"`); in `withoutTrailingComment`, cut at any `#` (expected: it fails on the same, and on a plain value holding `#hash` if one is added); in `parse`, pass `lineCount: 1` always (expected: `testABlockScalarIsNotAScalar` fails on `isMultiLine`); in `init`, detect `"\r\n"` as `"\n"` (expected: `testKeepsCarriageReturnLineEndings` fails).
 
 ```bash
 git add desktop/TapDesktopCore
@@ -981,6 +1038,15 @@ Add to `FrontmatterTests.swift`:
                        "---\ntitle: T\ndrivers:\n  shell: {}\ntheme: base\n---\n")
         XCTAssertEqual(try applied(Frontmatter(text: text).setting(path: ["drivers"], to: nil), to: text), "---\ntitle: T\ntheme: base\n---\n")
         XCTAssertNil(Frontmatter(text: text).setting(path: ["author"], to: nil))
+    }
+
+    func testAMultiLineValueIsReplacedWhole() throws {
+        let text = "---\ntitle: >-\n  Debugging Production\n  at 3am\ntheme: base\n---\n"
+        XCTAssertEqual(try applied(Frontmatter(text: text).setting(path: ["title"], to: "Short"), to: text), "---\ntitle: Short\ntheme: base\n---\n",
+                       "the continuation lines go with the value, never left behind for tap to choke on")
+        let commented = "---\ntheme: base # dark later\n---\n"
+        XCTAssertEqual(try applied(Frontmatter(text: commented).setting(path: ["theme"], to: "midnight"), to: commented), "---\ntheme: midnight # dark later\n---\n",
+                       "a trailing comment stays")
     }
 
     func testABlockBecomesAScalarAndBack() throws {
@@ -1145,9 +1211,10 @@ Inside `Frontmatter`, after `text(of:)`:
         while let name = remaining.first, let found = siblings.first(where: { $0.key == name }) {
             if remaining.count == 1 {
                 guard let value else { return TextReplacement(range: found.range, replacement: "") }
-                if let valueRange = found.valueRange, found.children.isEmpty {
+                if let valueRange = found.valueRange, found.children.isEmpty, !found.isMultiLine {
                     return TextReplacement(range: valueRange, replacement: value)
                 }
+                // A block, a bare "key:", or a value on several lines becomes one scalar line.
                 return TextReplacement(range: found.range, replacement: Self.spaces(found.indent) + key + ": " + value + lineEnding)
             }
             parent = found
@@ -1360,7 +1427,7 @@ Expected: every test passes. `testABlockBecomesAScalarAndBack`'s "bare key opens
 
 - [ ] **Step 6: Mutate and commit**
 
-Mutations, each applied and run with `make -C desktop core-test`, then reverted exactly, the ones that could lose or corrupt text first: in `setting`, for a removal return the value's range instead of the entry's (expected: `testRemovesAKeyWithEverythingUnderIt` fails, the children stay); in `setting`, insert a missing child at `parent.range.location` (expected: `testAddsAChildAtTheEndOfItsParentsBlock` fails); in `setting`, use `"\n"` instead of `lineEnding` (expected: `testCommentsAndBlankLinesStayWhereTheyAre` fails); in `setting`, drop the `remaining.count == 1` guard for flow maps (expected: `testAFlowMapGainsAPair` fails on the two-level case); in `scalar(forString:)`, drop the `yamlWords` check (expected: `testScalarsAreQuotedOnlyWhenYAMLWouldReadThemOtherwise` fails on "true"); in `scalar(forString:)`, drop the `\"` escape (expected: it fails on `say "hi"`); in `addingDriver`, drop the `declares` guard (expected: `testAddingADriver` fails on "already declared"); in `DeckSchema.key(at:in:)`, drop the map skip (expected: `testFindsAKeyByPathThroughMaps` fails on `timeout`); in `Default`, decode a Bool as `"yes"` (expected: `testDecodesTheSchema` fails on `"true"`); in `label`, drop the space (expected: `testLabelsReadAsWords` fails).
+Mutations, each applied and run with `make -C desktop core-test`, then reverted exactly, the ones that could lose or corrupt text first: in `setting`, for a removal return the value's range instead of the entry's (expected: `testRemovesAKeyWithEverythingUnderIt` fails, the children stay); in `setting`, insert a missing child at `parent.range.location` (expected: `testAddsAChildAtTheEndOfItsParentsBlock` fails); in `setting`, use `"\n"` instead of `lineEnding` (expected: `testCommentsAndBlankLinesStayWhereTheyAre` fails); in `setting`, drop the `remaining.count == 1` guard for flow maps (expected: `testAFlowMapGainsAPair` fails on the two-level case); in `setting`, drop `!found.isMultiLine` (expected: `testAMultiLineValueIsReplacedWhole` fails, the continuation lines stay); in `scalar(forString:)`, drop the `yamlWords` check (expected: `testScalarsAreQuotedOnlyWhenYAMLWouldReadThemOtherwise` fails on "true"); in `scalar(forString:)`, drop the `\"` escape (expected: it fails on `say "hi"`); in `addingDriver`, drop the `declares` guard (expected: `testAddingADriver` fails on "already declared"); in `DeckSchema.key(at:in:)`, drop the map skip (expected: `testFindsAKeyByPathThroughMaps` fails on `timeout`); in `Default`, decode a Bool as `"yes"` (expected: `testDecodesTheSchema` fails on `"true"`); in `label`, drop the space (expected: `testLabelsReadAsWords` fails).
 
 ```bash
 git add desktop/TapDesktopCore
@@ -1377,7 +1444,7 @@ git commit -m "feat(desktop): one-line frontmatter edits, the fix-it's edit, and
 
 **Interfaces:**
 - Consumes: D4's `QuestionSheet` (`kind`, `titleLabel`, `bodyLabel`, `pathLabel`, `declineButton`, `acceptButton`, `button(titled:)`, `EscapeAnswer`, `consent`, `keepRecording`, `focusHint`), Task 2's `QuestionPayload`, `ApprovalDriver`, `ApprovalBlock`.
-- Produces: `QuestionSheet.ReturnAnswer` (`.accept`, `.decline`); `QuestionSheet.init(kind:title:body:path:decline:accept:escape:returnAnswer:detail:)` (the two new parameters default so D4's three factories compile unchanged); `QuestionSheet.keyDown(with:)` for Escape when Return is the decline; `ApprovalSheet(payload:deckName:)` with `summaryLabel`, `driverLabels`, `blockRows`; `ApprovalBlockRow` (`block`, `toggle`, `codeLabel`, `isExpanded`, `setExpanded(_:)`); `ApprovalSheet.joined(_:)`.
+- Produces: `QuestionSheet.ReturnAnswer` (`.accept`, `.decline`); `QuestionSheet.init(kind:title:body:path:decline:accept:escape:returnAnswer:detail:)` (the two new parameters default so D4's three factories compile unchanged); `QuestionSheet.keyDown(with:)` and `cancelOperation(_:)` for Escape when Return is the decline; `QuestionSheet.fitToContent()`; `ApprovalSheet(payload:deckName:)` with `summaryLabel`, `driverLabels`, `blockRows`, `detailScrollView`, `ApprovalSheet.detailMaximumHeight`; `ApprovalBlockRow` (`block`, `toggle`, `codeLabel`, `isExpanded`, `setExpanded(_:)`); `ApprovalSheet.joined(_:)`.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -1454,6 +1521,7 @@ final class ApprovalSheetTests: HostedTestCase {
         XCTAssertEqual(sheet.accessibilityIdentifier(), "question-approval")
         XCTAssertEqual(sheet.titleLabel.stringValue, "This deck can run code on your Mac", "the spec's words (06-live-code-and-trust)")
         XCTAssertTrue(sheet.bodyLabel.stringValue.contains("\u{201C}talk.md\u{201D} declares 2 drivers and has 3 live code blocks"))
+        XCTAssertTrue(sheet.bodyLabel.stringValue.contains("tap runs only the code written in this deck"), "no promise the app cannot keep")
         XCTAssertEqual(sheet.summaryLabel.stringValue, "2 shell, 1 sqlite")
         XCTAssertEqual(sheet.pathLabel.stringValue, "/private/tmp/t/talk.md")
         XCTAssertEqual(sheet.driverLabels.map(\.stringValue), ["shell: 2 blocks on slides 2, 5", "sqlite: 1 block on slide 4"])
@@ -1491,6 +1559,37 @@ final class ApprovalSheetTests: HostedTestCase {
         XCTAssertEqual(sheet.driverLabels.map(\.stringValue), ["fortune: 1 block on slide 3, runs: /bin/cat", "sqlite: 1 block on slide 2"])
         XCTAssertEqual(ApprovalSheet.joined(["shell", "sqlite", "mysql"]), "shell, sqlite and mysql")
         XCTAssertEqual(ApprovalSheet.joined(["shell"]), "shell")
+    }
+
+    func testALongSheetScrollsAndKeepsItsButtonsOnScreen() throws {
+        var blocks: [ApprovalBlock] = []
+        for slide in 1...40 { blocks.append(ApprovalBlock(driver: "shell", code: String(repeating: "echo line \(slide)\n", count: 8), slide: slide, block: 1)) }
+        let sheet = ApprovalSheet(payload: QuestionPayload(deck: "/t/talk.md", drivers: [ApprovalDriver(name: "shell", slides: Array(1...40), blocks: 40)], blocks: blocks),
+                                  deckName: "talk.md")
+        host.beginSheet(sheet) { _ in }
+        for row in sheet.blockRows.prefix(10) { row.setExpanded(true) }
+        let screen = try XCTUnwrap(host.screen ?? NSScreen.screens.first)
+        XCTAssertLessThanOrEqual(sheet.frame.height, screen.visibleFrame.height, "the rows scroll; the sheet does not grow past the display")
+        XCTAssertLessThanOrEqual(sheet.detailScrollView.frame.height, ApprovalSheet.detailMaximumHeight + 1)
+        for button in [sheet.declineButton, sheet.acceptButton] {
+            let inWindow = button.convert(button.bounds, to: nil)
+            XCTAssertTrue(sheet.contentView!.bounds.contains(inWindow), "\(button.title) is inside the sheet, not scrolled away")
+        }
+        XCTAssertEqual(sheet.summaryLabel.stringValue, "40 shell")
+    }
+
+    func testEscapeReachesTheSheetFromAFocusedLabel() throws {
+        // A selectable code label can hold focus; Escape from it still declines, through cancelOperation.
+        let sheet = ApprovalSheet(payload: payload(), deckName: "talk.md")
+        var answers: [NSApplication.ModalResponse] = []
+        host.beginSheet(sheet) { answers.append($0) }
+        sheet.cancelOperation(nil)
+        XCTAssertEqual(answers, [.cancel])
+    }
+
+    func testADriverWithNoBlocksSaysSo() {
+        let sheet = ApprovalSheet(payload: QuestionPayload(deck: "/t/talk.md", drivers: [ApprovalDriver(name: "mysql", slides: [], blocks: 0)], blocks: []), deckName: "talk.md")
+        XCTAssertEqual(sheet.driverLabels.map(\.stringValue), ["mysql: no blocks yet"], "tap's own words for a declared driver nothing uses")
     }
 
     func testTheOtherSheetsKeepReturnAsTheirYes() {
@@ -1589,13 +1688,23 @@ Replace the `init` with:
 
     /// Escape when the decline button already holds Return: a button has
     /// one key equivalent, so the second key arrives here, once no view in
-    /// the sheet has taken it (labels and buttons take none).
+    /// the sheet has taken it (labels and buttons take none), or as
+    /// `cancelOperation` when a selectable label holds focus and its field
+    /// editor turns Escape into that action.
     override func keyDown(with event: NSEvent) {
         if event.keyCode == 53, returnAnswer == .decline, escape == .decline {
             declineButton.performClick(nil)
             return
         }
         super.keyDown(with: event)
+    }
+
+    override func cancelOperation(_ sender: Any?) {
+        if returnAnswer == .decline, escape == .decline {
+            declineButton.performClick(nil)
+            return
+        }
+        super.cancelOperation(sender)
     }
 
     /// The sheet grew or shrank (a block's code shown or hidden): its
@@ -1673,9 +1782,13 @@ final class ApprovalBlockRow: NSView {
 /// it names only the new ones (internal/cli/approval.go builds the
 /// request that way).
 final class ApprovalSheet: QuestionSheet {
+    /// The rows scroll past this height, so a deck with dozens of blocks,
+    /// or one long block expanded, never pushes the buttons off the display.
+    static let detailMaximumHeight: CGFloat = 320
     let summaryLabel: NSTextField
     let driverLabels: [NSTextField]
     let blockRows: [ApprovalBlockRow]
+    let detailScrollView: NSScrollView
 
     init(payload: QuestionPayload, deckName: String) {
         let drivers = payload.drivers ?? []
@@ -1687,19 +1800,41 @@ final class ApprovalSheet: QuestionSheet {
         let accept: String
         if payload.isForNewDrivers {
             title = "This deck now also wants to run \(names)"
-            body = "You allowed \(Self.joined(payload.approvedBefore ?? [])) for \(quotedName) before. The deck now declares \(names) too, for example after a git pull. Blocks run only when someone clicks Run; read them before you allow it."
+            body = "You allowed \(Self.joined(payload.approvedBefore ?? [])) for \(quotedName) before. The deck now declares \(names) too, for example after a git pull. tap runs only the code written in this deck; read it before you allow it."
             accept = "Allow \(names)"
         } else {
             title = "This deck can run code on your Mac"
-            body = "\(quotedName) declares \(drivers.count) driver\(drivers.count == 1 ? "" : "s") and has \(blocks.count) live code block\(blocks.count == 1 ? "" : "s"). Blocks run only when someone clicks Run; read them before you allow this deck. A yes is remembered for this file; tap approval revoke undoes it."
+            body = "\(quotedName) declares \(drivers.count) driver\(drivers.count == 1 ? "" : "s") and has \(blocks.count) live code block\(blocks.count == 1 ? "" : "s"). tap runs only the code written in this deck; read it before you allow this deck. A yes is remembered for this file; tap approval revoke undoes it."
             accept = "Allow"
         }
         let (detail, summary, driverLabels, blockRows) = Self.makeDetail(drivers: drivers, blocks: blocks, summary: payload.approvalSummary)
         summaryLabel = summary
         self.driverLabels = driverLabels
         self.blockRows = blockRows
+        // The rows live in a scroll view that is as tall as they are, up to the maximum; the buttons stay outside it.
+        let scroll = NSScrollView()
+        scroll.contentView = FlippedClipView()
+        scroll.documentView = detail
+        scroll.hasVerticalScroller = true
+        scroll.drawsBackground = false
+        detail.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            detail.leadingAnchor.constraint(equalTo: scroll.contentView.leadingAnchor),
+            detail.trailingAnchor.constraint(equalTo: scroll.contentView.trailingAnchor),
+            detail.topAnchor.constraint(equalTo: scroll.contentView.topAnchor),
+        ])
+        let fits = scroll.heightAnchor.constraint(equalTo: detail.heightAnchor)
+        fits.priority = .defaultHigh
+        fits.isActive = true
+        scroll.heightAnchor.constraint(lessThanOrEqualToConstant: Self.detailMaximumHeight).isActive = true
+        detailScrollView = scroll
         super.init(kind: "approval", title: title, body: body, path: payload.deck, decline: "Don't Allow", accept: accept,
-                   escape: .decline, returnAnswer: .decline, detail: detail)
+                   escape: .decline, returnAnswer: .decline, detail: scroll)
+    }
+
+    /// A clip view that starts its content at the top.
+    final class FlippedClipView: NSClipView {
+        override var isFlipped: Bool { true }
     }
 
     private static func makeDetail(drivers: [ApprovalDriver], blocks: [ApprovalBlock], summary: String)
@@ -1715,7 +1850,8 @@ final class ApprovalSheet: QuestionSheet {
         var driverLabels: [NSTextField] = []
         var blockRows: [ApprovalBlockRow] = []
         for driver in drivers {
-            var line = "\(driver.name): \(driver.blocks) block\(driver.blocks == 1 ? "" : "s")"
+            // tap's own wording (internal/cli/approval.go, describeDriverBlocks).
+            var line = driver.blocks == 0 ? "\(driver.name): no blocks yet" : "\(driver.name): \(driver.blocks) block\(driver.blocks == 1 ? "" : "s")"
             if !driver.slides.isEmpty {
                 line += " on slide\(driver.slides.count == 1 ? "" : "s") " + driver.slides.map(String.init).joined(separator: ", ")
             }
@@ -1749,11 +1885,11 @@ final class ApprovalSheet: QuestionSheet {
 - [ ] **Step 5: Build**
 
 Run: `make -C desktop build` and `make -C desktop test-build`
-Expected: `** BUILD SUCCEEDED **` and `** TEST BUILD SUCCEEDED **`; nothing runs. The controller's CI run confirms the five `ApprovalSheetTests` pass, including that `performKeyEquivalent` on the content view finds the decline button and that `keyDown` with Escape ends the sheet as `.cancel`.
+Expected: `** BUILD SUCCEEDED **` and `** TEST BUILD SUCCEEDED **`; nothing runs. The controller's CI run confirms the eight `ApprovalSheetTests` pass, including that `performKeyEquivalent` on the content view finds the decline button, that `keyDown` with Escape and `cancelOperation` both end the sheet as `.cancel`, and that a 40-block sheet stays inside the runner's display.
 
 - [ ] **Step 6: Mutate and commit**
 
-Mutations, each a patch in `mutations-b/`, the ones that could grant execution from a key first: in `init`'s `.decline` case, give `acceptButton` the `"\r"` key (`Test: TapTests/ApprovalSheetTests/testTheSafeButtonIsTheDefault`; expected: fails on the key equivalent and on `answers == [.cancel]`, which becomes `.OK`); in `keyDown`, press `acceptButton` (expected: the same test fails on the Escape answer); in `ApprovalSheet.init`, pass `returnAnswer: .accept` (expected: fails on `declineButton.keyEquivalent`); in `init`, skip `defaultButtonCell` (expected: fails on `defaultButtonCell ===`); in `makeDetail`, add every block under every driver (expected: `testTheSheetListsTheDriversAndTheirBlocks` fails on the row titles); in `ApprovalBlockRow.setExpanded`, never unhide the label (expected: it fails on `isExpanded`); in `ApprovalSheet.init`, use the mockup's title (`"\(quotedName) can run code on this Mac"`) (expected: the spec's words fail); in `init`, swap the new-driver title for the first-time one (expected: `testANewDriverAsksOnlyForItself` fails); in `joined`, drop the " and " (expected: `testACustomDriverShowsItsCommand` fails).
+Mutations, each a patch in `mutations-b/`, the ones that could grant execution from a key first: in `init`'s `.decline` case, give `acceptButton` the `"\r"` key (`Test: TapTests/ApprovalSheetTests/testTheSafeButtonIsTheDefault`; expected: fails on the key equivalent and on `answers == [.cancel]`, which becomes `.OK`); in `keyDown`, press `acceptButton` (expected: the same test fails on the Escape answer); in `ApprovalSheet.init`, pass `returnAnswer: .accept` (expected: fails on `declineButton.keyEquivalent`); in `init`, skip `defaultButtonCell` (likely survives: AppKit may make the one `"\r"` button the default cell itself; if the assertion still passes, the line is kept as drawn and the claim dropped); in `cancelOperation`, call `super` only (`Test: TapTests/ApprovalSheetTests/testEscapeReachesTheSheetFromAFocusedLabel`; expected: fails on `answers`); in `ApprovalSheet.init`, drop the `lessThanOrEqualToConstant` height (`Test: .../testALongSheetScrollsAndKeepsItsButtonsOnScreen`; expected: fails on the scroll view's height); in `makeDetail`, say "0 blocks" (`Test: .../testADriverWithNoBlocksSaysSo`; expected: fails); in `makeDetail`, add every block under every driver (expected: `testTheSheetListsTheDriversAndTheirBlocks` fails on the row titles); in `ApprovalBlockRow.setExpanded`, never unhide the label (expected: it fails on `isExpanded`); in `ApprovalSheet.init`, use the mockup's title (`"\(quotedName) can run code on this Mac"`) (expected: the spec's words fail); in `init`, swap the new-driver title for the first-time one (expected: `testANewDriverAsksOnlyForItself` fails); in `joined`, drop the " and " (expected: `testACustomDriverShowsItsCommand` fails).
 
 ```bash
 git add desktop/Tap/Presenting/QuestionSheet.swift desktop/TapTests/ApprovalSheetTests.swift
