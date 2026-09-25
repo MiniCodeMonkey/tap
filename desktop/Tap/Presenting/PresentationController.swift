@@ -676,9 +676,10 @@ final class PresentationController {
               !current.isSingleDisplay else { return }
         let swapped = current.swapped()
         displayAssignments.setAudienceName(swapped.audience.name, for: screens)
-        guard isActive, windowsShown else { return }
+        guard isActive, arrangement != nil else { return }
         arrangement = swapped
-        moveWindows(to: swapped)
+        guard windowsShown else { return }
+        moveWindows(to: swapped, from: current)
     }
 
     /// The displays changed while a talk runs: a projector unplugged or
@@ -688,19 +689,31 @@ final class PresentationController {
     /// left, the presenter window leaves its Space and becomes the
     /// audience window's child, shown, since the speaker is at the laptop;
     /// with the projector back it detaches and gets its Space again.
+    /// AppKit also posts the notification when a talk window enters or
+    /// leaves full screen, and for Dock and menu bar changes; with the
+    /// displays unchanged nothing moves. Before the windows show, the
+    /// arrangement is updated and `showWindows` reads it.
     func screensChanged() {
         onScreensChanged?()
-        guard isActive, windowsShown, let resolved = DisplayArrangement.resolve(screens: screens(), store: displayAssignments) else { return }
+        guard isActive, let current = arrangement,
+              let resolved = DisplayArrangement.resolve(screens: screens(), store: displayAssignments),
+              resolved != current else { return }
         arrangement = resolved
-        moveWindows(to: resolved)
+        guard windowsShown else { return }
+        moveWindows(to: resolved, from: current)
     }
 
-    /// Puts the windows on `arrangement`'s displays. A rehearsal has only
-    /// the presenter window, which goes where the arrangement puts it. A
-    /// talk on one display places the audience window and shows the
-    /// presenter window over it as its child; on two, each window gets
-    /// its display, the presenter last so its Space is the active one.
-    private func moveWindows(to arrangement: DisplayArrangement) {
+    /// Puts the windows on `arrangement`'s displays, coming from
+    /// `previous`. A rehearsal has only the presenter window, which goes
+    /// where the arrangement puts it. A talk on one display places the
+    /// audience window; the presenter window comes over it as its child
+    /// when the talk has just lost its second display (the speaker is at
+    /// the laptop) or was over it already, and otherwise stays hidden
+    /// until Option-Tab or the S key. On two, each window gets its
+    /// display, the presenter last so its Space is the active one.
+    private func moveWindows(to arrangement: DisplayArrangement, from previous: DisplayArrangement) {
+        // The first placement has not run yet; it reads the new arrangement.
+        guard !waitingForQuiet else { return }
         let fullScreen = usesFullScreen
         guard let presenterWindow else { return }
         guard let audienceWindow else {
@@ -711,13 +724,14 @@ final class PresentationController {
             return
         }
         if arrangement.isSingleDisplay {
+            let showPresenter = !previous.isSingleDisplay || presenterIsShownOverAudience
             // The presenter window leaves its own Space first (a child may not have one), then rides over the audience.
             presenterWindow.detach()
             place([(presenterWindow, arrangement.presenter.frame, false), (audienceWindow, arrangement.audience.frame, fullScreen)]) { [weak self] in
                 guard let self, self.windowsShown, let presenterWindow = self.presenterWindow else { return }
                 presenterWindow.orderOut(nil)
                 self.frontWindow = self.audienceWindow
-                self.showPresenterOverAudience()
+                if showPresenter { self.showPresenterOverAudience() }
             }
         } else {
             presenterWindow.detach()
