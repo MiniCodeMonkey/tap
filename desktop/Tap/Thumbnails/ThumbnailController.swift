@@ -129,7 +129,7 @@ final class ThumbnailController {
         }
         jobs = pending
         panel?.setUpdating(updating)
-        handToRenderer(jobs, revision: summary.revision, visible: panel?.visibleNumbers ?? [], current: currentSlideNumber())
+        handToRenderer(jobs, revision: summary.revision, visible: panel?.visibleNumbers ?? [], current: nil)
     }
 
     private func rendered(_ job: ThumbnailRenderer.Job, image: NSImage, png: Data) {
