@@ -45,6 +45,10 @@ type approvalDriver struct {
 	// Command is what a custom driver runs, with its arguments, as the
 	// frontmatter writes it. Empty for a built-in driver.
 	Command string `json:"command,omitempty"`
+	// PreviousCommand is the command an earlier approval of this driver
+	// covered, when the question asks because the command changed. Empty
+	// for a driver never approved.
+	PreviousCommand string `json:"previousCommand,omitempty"`
 	// Slides are the numbers of the slides with a block that uses it.
 	Slides []int `json:"slides"`
 	Blocks int   `json:"blocks"`
@@ -177,8 +181,11 @@ type approvalDecision struct {
 	refused []usersettings.Driver
 	// approvedBefore names the declared drivers already approved.
 	approvedBefore []string
-	blocks         []approvalBlock
-	deck           string
+	// previousCommands holds, for each wanted driver approved before with
+	// another command, that command.
+	previousCommands map[string]string
+	blocks           []approvalBlock
+	deck             string
 }
 
 func newLiveCodeGate(input approvalInput) *liveCodeGate {
@@ -312,6 +319,9 @@ func (gate *liveCodeGate) askUntilSettled() error {
 		question := &openApprovalQuestion{withdraw: withdraw, drivers: decision.wanted}
 		gate.open = question
 		request := newApprovalRequest(decision.deck, gate.config, decision.blocks, driverNamesOf(decision.wanted), decision.approvedBefore)
+		for index := range request.Drivers {
+			request.Drivers[index].PreviousCommand = decision.previousCommands[request.Drivers[index].Name]
+		}
 		names := joinWithAnd(driverNamesOf(decision.wanted))
 
 		gate.mu.Unlock()
@@ -442,9 +452,31 @@ func (gate *liveCodeGate) decide(cfg *config.Config, presentation *transformer.T
 		default:
 			decision.refused = append(decision.refused, driver)
 			decision.wanted = append(decision.wanted, driver)
+			if previous := gate.previousCommand(settings, deckKey, name); previous != nil && !slices.Equal(previous, driver.Command) {
+				if decision.previousCommands == nil {
+					decision.previousCommands = map[string]string{}
+				}
+				decision.previousCommands[name] = strings.Join(previous, " ")
+			}
 		}
 	}
 	return decision
+}
+
+// previousCommand returns the command an earlier approval of the driver
+// name covered: the stored approval's, or else the one approved in this
+// run. It is nil when neither approved it with a command. The caller
+// holds gate.mu.
+func (gate *liveCodeGate) previousCommand(settings usersettings.Settings, deckKey usersettings.DeckKey, name string) []string {
+	if approval, found := settings.ApprovalFor(deckKey); found && slices.Contains(approval.Drivers, name) && approval.Commands[name] != nil {
+		return approval.Commands[name]
+	}
+	for index := len(gate.approved) - 1; index >= 0; index-- {
+		if gate.approved[index].Name == name && gate.approved[index].Command != nil {
+			return gate.approved[index].Command
+		}
+	}
+	return nil
 }
 
 // approvalCommand returns the command line an approval of a driver
@@ -588,6 +620,9 @@ func printApprovalRequest(out io.Writer, request approvalRequest) {
 		line := fmt.Sprintf("  %-10s %s", entry.Name, describeDriverBlocks(entry))
 		if entry.Command != "" {
 			line += ", runs: " + entry.Command
+		}
+		if entry.PreviousCommand != "" {
+			line += " (was: " + entry.PreviousCommand + ")"
 		}
 		fmt.Fprintln(out, line)
 	}

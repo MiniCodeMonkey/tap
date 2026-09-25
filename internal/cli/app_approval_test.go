@@ -52,6 +52,17 @@ func executeOnceRendered(t *testing.T, process *appProcess, slide, block int) (i
 	return status, body
 }
 
+// questionDriver returns the first driver of an approval question.
+func questionDriver(question map[string]any) map[string]any {
+	payload, _ := question["payload"].(map[string]any)
+	drivers, _ := payload["drivers"].([]any)
+	if len(drivers) == 0 {
+		return nil
+	}
+	driver, _ := drivers[0].(map[string]any)
+	return driver
+}
+
 func answerApproval(process *appProcess, question map[string]any, approved bool) {
 	process.send(fmt.Sprintf(`{"type":"answer","id":%q,"value":%t}`, question["id"], approved))
 }
@@ -73,6 +84,9 @@ func TestAppDevAsksAgainWhenTheDeckFileGainsADriver(t *testing.T) {
 	payload, _ := question["payload"].(map[string]any)
 	if before, _ := payload["approvedBefore"].([]any); len(before) != 1 || before[0] != "shell" {
 		t.Errorf("approvedBefore = %v, want shell", payload["approvedBefore"])
+	}
+	if driver := questionDriver(question); driver == nil || driver["previousCommand"] != nil {
+		t.Errorf("driver = %v, want no previousCommand for a new driver", driver)
 	}
 
 	// Until the answer, the new driver's block is refused and shell runs.
@@ -125,6 +139,9 @@ func TestAppDevAsksAgainWhenTheBufferChangesACommand(t *testing.T) {
 		t.Fatalf("PUT source: %d %s", status, body)
 	}
 	first := approvalQuestionFor(process, "bash")
+	if driver := questionDriver(first); driver["previousCommand"] != "sh" {
+		t.Errorf("driver = %v, want previousCommand sh", driver)
+	}
 	if status, body := process.execute(5, 1); status != http.StatusForbidden || !strings.Contains(body, "Not approved") {
 		t.Errorf("the runner block with a changed command: status %d, %s; want the refusal", status, body)
 	}
@@ -137,6 +154,9 @@ func TestAppDevAsksAgainWhenTheBufferChangesACommand(t *testing.T) {
 		t.Errorf("question-closed = %v, want %v closed", closed, first["id"])
 	}
 	second := approvalQuestionFor(process, "/bin/sh")
+	if driver := questionDriver(second); driver["previousCommand"] != "sh" {
+		t.Errorf("driver = %v, want previousCommand sh", driver)
+	}
 
 	// The approved command again needs no question at all.
 	if status, body := process.putSource(fixtureWithRunner(t, "sh")); status != http.StatusOK {

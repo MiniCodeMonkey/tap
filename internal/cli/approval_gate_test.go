@@ -268,6 +268,9 @@ func TestGateReloadAsksAboutANewDriverAndKeepsTheApprovedOnesRunning(t *testing.
 	if len(request.Blocks) != 1 || request.Blocks[0].Code != "run python" {
 		t.Errorf("blocks = %+v, want the python block", request.Blocks)
 	}
+	if request.Drivers[0].PreviousCommand != "" {
+		t.Errorf("previousCommand = %q, want none for a driver never approved", request.Drivers[0].PreviousCommand)
+	}
 	if !harness.allows("shell", shellDriver) {
 		t.Error("shell stopped running while python waits for an answer")
 	}
@@ -350,8 +353,26 @@ func TestGateDeclineKeepsTheNewDriverRefusedForTheRun(t *testing.T) {
 	}
 
 	harness.reload(map[string]config.DriverConfig{"shell": shellDriver, "python": bashDriver})
-	if request := harness.asker.nextRequest(t); driverNames(request) != "python=bash -c" {
+	request := harness.asker.nextRequest(t)
+	if driverNames(request) != "python=bash -c" {
 		t.Errorf("request = %s, want python asked again with its new command", driverNames(request))
+	}
+	if request.Drivers[0].PreviousCommand != "" {
+		t.Errorf("previousCommand = %q, want none: python3 was declined, never approved", request.Drivers[0].PreviousCommand)
+	}
+}
+
+func TestGateNamesTheCommandApprovedInThisRunWhenItChanges(t *testing.T) {
+	harness := newGateHarness(t, approvedShell)
+	harness.start(t, map[string]config.DriverConfig{"shell": shellDriver})
+	harness.reload(map[string]config.DriverConfig{"shell": shellDriver, "python": python3Driver})
+	harness.asker.nextRequest(t)
+	harness.asker.answer(t, true)
+	waitUntil(t, "python runs", func() bool { return harness.allows("python", python3Driver) })
+
+	harness.reload(map[string]config.DriverConfig{"shell": shellDriver, "python": bashDriver})
+	if request := harness.asker.nextRequest(t); request.Drivers[0].PreviousCommand != "python3 -c" {
+		t.Errorf("previousCommand = %q, want python3 -c", request.Drivers[0].PreviousCommand)
 	}
 }
 
@@ -382,6 +403,9 @@ func TestGateAsksAgainWhenAnApprovedCommandChanges(t *testing.T) {
 	request := harness.asker.nextRequest(t)
 	if driverNames(request) != "python=bash -c" || strings.Join(request.ApprovedBefore, ",") != "shell" {
 		t.Errorf("request = %+v, want python with its new command", request)
+	}
+	if request.Drivers[0].PreviousCommand != "python3 -c" {
+		t.Errorf("previousCommand = %q, want the approved python3 -c", request.Drivers[0].PreviousCommand)
 	}
 	if harness.allows("python", bashDriver) || harness.allows("python", python3Driver) {
 		t.Errorf("policy = %+v, want python refused until the new command is approved", harness.currentPolicy())

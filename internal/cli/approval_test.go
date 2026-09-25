@@ -583,6 +583,20 @@ func TestTerminalAskerAsksAgainAfterAnUnclearAnswer(t *testing.T) {
 	}
 }
 
+func TestTerminalAskerShowsTheCommandAChangedDriverRanBefore(t *testing.T) {
+	request := approvalRequest{
+		Deck:           "/talks/talk.md",
+		Drivers:        []approvalDriver{{Name: "python", Command: "bash -c", PreviousCommand: "python3 -c", Slides: []int{3}, Blocks: 1}},
+		ApprovedBefore: []string{"shell"},
+		Blocks:         []approvalBlock{{Driver: "python", Code: "print(3)", Slide: 3, Block: 1}},
+	}
+	out := &bytes.Buffer{}
+	_, _ = terminalAsker{in: strings.NewReader("n\n"), out: out}.askApproval(context.Background(), request)
+	if !strings.Contains(out.String(), "runs: bash -c (was: python3 -c)") {
+		t.Errorf("output = %q, want the old command next to the new one", out.String())
+	}
+}
+
 func TestTerminalAskerNamesOnlyTheNewDriver(t *testing.T) {
 	request := approvalRequest{
 		Deck:           "/talks/talk.md",
