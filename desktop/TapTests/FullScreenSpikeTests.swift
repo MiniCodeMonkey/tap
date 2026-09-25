@@ -11,18 +11,8 @@ import XCTest
 /// helper calls `XCTFail` on a timeout, which would turn a slow or stuck
 /// host into a red run. A timeout here is itself a recorded event, never
 /// a failure, because CI runs this test on every pull request.
-/// The window numbers the window server has on screen for this process,
-/// front to back. Local to this file because `Support/WindowServer.swift`
-/// (the shared helper of the same name) does not exist until Step 1.
-private func onScreenWindowNumbers() -> [Int] {
-    let pid = Int(ProcessInfo.processInfo.processIdentifier)
-    let windows = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] ?? []
-    return windows.compactMap { window in
-        guard window[kCGWindowOwnerPID as String] as? Int == pid,
-              window[kCGWindowIsOnscreen as String] as? Bool == true else { return nil }
-        return window[kCGWindowNumber as String] as? Int
-    }
-}
+/// `onScreenWindowNumbers()` now comes from `Support/WindowServer.swift`
+/// (Step 1); this file no longer defines its own copy.
 
 final class FullScreenSpikeTests: HostedTestCase {
     func spikeWindow(_ title: String) -> NSWindow {

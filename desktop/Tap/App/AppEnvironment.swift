@@ -1,4 +1,5 @@
 import AppKit
+import WebKit
 
 /// What every deck shares: the bundled tap, the login shell environment
 /// read once at launch, and the bundled tap's version.
@@ -30,6 +31,11 @@ final class AppEnvironment {
     /// unless a test replaces it with a named one so a run never touches
     /// the person's real clipboard.
     var slidePasteboard: NSPasteboard = .general
+    /// The data store every talk page uses: persistent, so the presenter
+    /// layout and notes size (the page's localStorage) survive the process.
+    /// A test replaces it with a store of its own, so a run never touches
+    /// the person's.
+    var presentationDataStore: WKWebsiteDataStore = .default()
     private(set) var environmentNotice: String?
     private(set) var bundledTapVersion: String?
     private let loginShellLoader: LoginShellEnvironmentLoader

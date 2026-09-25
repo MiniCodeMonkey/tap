@@ -1,4 +1,5 @@
 import XCTest
+import WebKit
 @testable import Tap
 
 /// A test that runs inside Tap.app, driving the real `tap dev --app` the
@@ -17,6 +18,7 @@ class HostedTestCase: XCTestCase {
         AppEnvironment.shared.lastLayout = LastLayout(defaults: try XCTUnwrap(UserDefaults(suiteName: "TapTests.layout.\(UUID().uuidString)")))
         // Copy and paste go to a pasteboard of the test's own, never the person's clipboard.
         AppEnvironment.shared.slidePasteboard = NSPasteboard(name: NSPasteboard.Name("TapTests.copy.\(UUID().uuidString)"))
+        AppEnvironment.shared.presentationDataStore = WKWebsiteDataStore(forIdentifier: UUID())
     }
 
     override func tearDown() async throws {
