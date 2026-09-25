@@ -10,7 +10,7 @@
 
 **Spec:** `docs/superpowers/specs/2026-09-22-tap-desktop-design.md` (milestone 5; the sections "The protocol between the app and tap", "Editor", "Preview and Deck pane", "Live code approval", "Security summary", "Menus and accessibility" and "Testing"), `docs/superpowers/specs/2026-09-22-tap-desktop-prerequisites-design.md` parts 2, 3.2 and 6 as checked against `internal/` on `main` (see "P2, P3 and P6 as built" below; the code wins), the D5 outline and the contracts in `docs/superpowers/plans/2026-09-22-tap-desktop-roadmap.md`, and the feature files in `docs/superpowers/specs/tap-desktop-features/` (`06-live-code-and-trust.feature` whole, plus "Deck settings live in the inspector" from `02-slide-structure.feature`; `04`, `11`, `12` and `13` have no D5 scenario: `11-settings-and-cli.feature`'s Live Code tab is D6's Settings window). The mockups are the "Tap Desktop Mockups" canvas (Approval, ApprovalNewDriver, DeckSettings, DriverError). Where the mockups and the spec differ, the spec wins.
 
-**Depends on:** tap's re-ask of the approval question in app mode, branch `feat/approval-asks-again` (worktree `/Users/codemonkey/projects/tap-approval`), its own pull request: when a deck reloads with a driver tap has not approved, by name and by command (a custom driver whose command changed counts), tap asks the `approval` question again as an event, in `tap dev --app` and `tap present --app` alike (the person's decisions A and B, 2026-09-25). This plan is written against that behaviour; the D5 branch is cut from a `main` at or after that pull request's merge, and Task 10's tests are the ones that need it. What the app relies on: the re-ask is the same `question` event with the same payload shape (Task 2 decodes it; an added field, such as one that tells a re-ask from the first ask, is ignored by `Codable` and the sheet reads the same either way); a re-ask after a store by another process (the talk's Allow) resolves without a question when `settings.yaml` already approves the drivers, so the app sends `reload` to `tap dev` after a talk's Allow and the preview's Run buttons come alive without a second sheet (Task 8, and a note for the tap change). The app never parses the frontmatter to decide when tap should ask.
+**Depends on:** tap's re-ask of the approval question in app mode, branch `feat/approval-asks-again` (worktree `/Users/codemonkey/projects/tap-approval`), its own pull request: when a deck reloads with a driver tap has not approved, by name and by command (a custom driver whose command changed counts), tap asks the `approval` question again as an event, in `tap dev --app` and `tap present --app` alike (the person's decisions A and B, 2026-09-25). This plan is written against that behaviour; the D5 branch is cut from a `main` at or after that pull request's merge, and Task 10's tests are the ones that need it. What the branch does, read from its worktree on 2026-09-25 (uncommitted, `internal/cli/approval.go` `liveCodeGate`, `app_questions.go`, `app_events.go`, `internal/usersettings`): the gate decides again on every render of the app's buffer or the file (`renderApp` calls `liveCode.reload`), so an edit that declares a driver asks before any save; a driver declined in this run is not asked about again until its command changes; an approval covers a custom driver only with the exact expanded command line (`Approval.Commands`, `Settings.Covers`), and `settings.yaml` is read at every decision, so an approval another process stored (the talk's Allow) is honoured on the next reload, which the app sends after a talk's Allow (Task 8); and a reload that changes what is wanted withdraws the open question with a new stdout event, `{"type":"question-closed","id":"qN"}`, after which an answer to that id is `unknown_question`. What the app relies on: the `question` event and payload as Task 2 decodes them (an added field is ignored by `Codable`); `question-closed`, which Task 2 decodes and Tasks 6 and 8 act on, dropping the closed question from the queue or ending its sheet; and one field this plan asks the tap change to add, `previousCommand` on an `approvalDriver` whose name was approved with another command line, so the sheet can say that the command changed rather than that the deck gained a driver (Task 5; until the field exists the sheet uses the new-driver wording and the plan says so). The app never parses the frontmatter to decide when tap should ask.
 
 **Branch:** `feat/desktop-live-code`, branched from `main` at or after ba39c13 (D4 merged as pull request 37; its last commit 64c6073 holds `keepForward` and the UI tests' own defaults suite) and after the tap pull request above has merged, in a worktree at `/Users/codemonkey/projects/tap-d5`. One pull request. The starting code is D4's `desktop/` as merged: `TapDesktopCore` (`TapProtocol`, `TapSession`, `TapClient`, `SlideDocument`, `TextDiff`, `BoxHeader`, `LayoutCatalog`), `DeckSessionController`, `DeckWindowController`, `PresentationController`, `QuestionSheet`, `InspectorViewController`, `EditorTextView`, `EditorViewController`, `DocumentBarView`, `MainMenu`, `AppEnvironment`, `LayoutCatalogLoader`, `HostedTestCase`, `PresentingTestCase`, `Fixtures`, `FakeTapScripts`, `TapSlideList`, `UITestCase`, `scenarios.txt`, `check-scenarios.sh`, `run-mutations.sh`.
 
@@ -37,16 +37,17 @@
 ## Global Constraints
 
 - Everything in D2's, D3's and D4's Global Constraints still holds: macOS 14 or later, AppKit core, ad-hoc signing, the bundled `tap`, P6's protocol exactly as built, spelled-out identifiers, present-tense comments with no ticket references, no em dashes anywhere (`--`, a comma or a new sentence instead), `make frontend` before the first Xcode build, never modify the prototype repository, every build through `make`.
-- **THE PERSON'S RULE (2026-09-25): nothing runs locally that opens windows on their screen.** An implementer builds (`make -C desktop project`, `make -C desktop build`, `make -C desktop test-build`) and runs `make -C desktop core-test` (`swift test` in `TapDesktopCore`) and `go test ./internal/...`. Hosted tests, UI tests and benchmarks run on CI: every "Run" step below that names a hosted test says what the controller's CI run confirms, never `make -C desktop test ONLY=...`. Mutations are patch files for the mutation runner (`desktop/scripts/run-mutations.sh` on a branch `mutations/<name>`): each file's first line is `Test: TapTests/<Class>/<test>`, the rest a `git diff`. The implementer writes the patches into `.superpowers/sdd/<plan>/mutations-<batch>/NN-<name>.patch` and lists them in the report; the controller pushes them. A core or Go mutation is applied and run locally instead (`make -C desktop core-test`, `go test`), then reverted exactly.
-- **Every wait in a test is bounded.** Every hosted wait goes through `waitUntil(timeout:)`, `waitForPreview`, `waitForBoxes` or a `pageValue` read with its own limit; no bare `await` on a page, a cookie store, a document open or a process. A test that needs longer than the Makefile's 300 s allowance does not exist in this plan.
+- **THE PERSON'S RULE (2026-09-25): nothing runs locally that opens windows on their screen.** An implementer builds (`make -C desktop project`, `make -C desktop build`, `make -C desktop test-build`), runs `make -C desktop core-test` (`swift test` in `TapDesktopCore`), `go test ./internal/...` and `make -C desktop check-scenarios` (a shell script that opens nothing). Hosted tests, UI tests and benchmarks run on CI: every "Run" step below that names a hosted test says what the controller's CI run confirms, never `make -C desktop test ONLY=...`. Mutations are patch files for the mutation runner (`desktop/scripts/run-mutations.sh` on a branch `mutations/<name>`): each file's first line is `Test: TapTests/<Class>/<test>`, the rest a `git diff` that edits production code only (a change to a test or a fixture proves nothing about the app). Only a mutation with a named killing test goes into `.superpowers/sdd/<plan>/mutations-<batch>/NN-<name>.patch`; one the task expects to survive goes into `survivors-<batch>/` with the reason in its first lines, so the runner stays green and the review still sees it. The implementer lists both in the report; the controller pushes them. A core or Go mutation is applied and run locally instead (`make -C desktop core-test`, `go test`), then reverted exactly.
+- **THE PERSON'S RULE ON UI: a mockup and sign-off before UI code.** Where the "Tap Desktop Mockups" canvas has a board, the plan follows it exactly: the Approval board (the code of each block inline under its driver, no toggles), the DeckSettings board (the Deck, Look, Presenting and Live code sections and their controls), the DriverError board (the pill in the box header), the MenusSlide board (View > Preview and View > Deck). A step that builds something with no drawing is marked "waits for the person's mockup sign-off (the controller records it in the ledger)", as D4's Task 8 Step 0 was, and its task is ordered so the logic and the tests that need no new UI come first. The list of those steps is in "Steps that wait for a mockup" at the end.
+- **Every wait in a test is bounded.** Every hosted wait goes through `waitUntil(timeout:)`, `waitForPreview`, `waitForBoxes`, `waitForRunButtons` or a `pageValue` read with its own limit; no bare `await` on a page, a cookie store, a document open, a save or a process: a process run in a test or a loader has a terminate-after timeout and no stdin of its own, and a load is kicked off in a `Task` and waited for with `waitUntil`. A test that needs longer than the Makefile's 300 s allowance does not exist in this plan.
 - **Sheets, never modal alerts.** The approval question, from `tap dev` and from `tap present`, is `ApprovalSheet` on the deck window through D4's `showQuestionSheet`, never `NSAlert`, never app-modal, never inside the slide page. Its Return key is Don't Allow (`returnAnswer: .decline`), Escape is Don't Allow, and Allow has no key at all.
-- **No production code steals focus beyond D4's list, and the deck's own question moves nothing.** D4's `showQuestionSheet` brings the deck window forward and keeps it forward (`keepForward`, dff1e4c) because a talk's sheet must reach the person over the talk's Space; that body stays byte for byte. The deck's own question (`tap dev`'s approval, at open and at every re-ask or restart) is queued in `DeckWindowController.deckQuestions` and shown only when no sheet is up and no talk runs, with `beginSheet` alone: no `makeKeyAndOrderFront`, no `keepForward`, so a question arriving in a background tab or another deck's window changes neither the selected tab nor the active Space. The final check's grep expects D4's list unchanged.
+- **No production code steals focus beyond D4's list, and the deck's own question moves nothing.** D4's `showQuestionSheet` brings the deck window forward and keeps it forward (`keepForward`, dff1e4c) because a talk's sheet must reach the person over the talk's Space; that body stays as D4 wrote it, its two forward-moving lines wrapped in the `source == .talk` branch and nothing else changed. The deck's own question (`tap dev`'s approval, at open and at every re-ask or restart) is queued in `DeckWindowController.deckQuestions` and shown only when no sheet is up and no talk runs, with `beginSheet` alone: no `makeKeyAndOrderFront`, no `keepForward`, so a question arriving in a background tab or another deck's window changes neither the selected tab nor the active Space. The final check's grep expects D4's list unchanged.
 - **The app never injects script into a page.** No `evaluateJavaScript` or `callAsyncJavaScript` in `desktop/Tap` beyond D2's two (`PreviewViewController.pageText` and `pageValue`). This plan's page reads and the Run click live in `desktop/TapTests/Support/PreviewViewController+LiveCode.swift`, a `TapTests` extension that never ships. The app learns what the page shows only through the `tapReady` handler and tap's answers.
 - **The edited flag is derived from content.** `refreshEditedState` stays the only caller of `updateChangeCount`. Every frontmatter edit (the fix-it, the Deck tab) goes through `EditorTextView.replaceText(in:with:actionName:)`, which fires `didChangeText` and so `editorTextDidChange`.
 - **The Deck tab and the fix-it edit the frontmatter through the frontmatter clamp, never the text storage.** `replaceText` is the one entry: it sets `isApplyingProgrammaticEdit` so `shouldChangeText` lets an edit inside the hidden range through, and makes it one undo step. No `textStorage?.replaceCharacters` and no `insertText` for the frontmatter anywhere in this plan.
 - **Only a declared, approved block of the deck runs, and only when a person clicks Run.** The app sends `{"type":"answer","value":true}` only from the Allow button's completion; nothing else in the app answers `true` to an approval. The app never calls `/api/execute` in production code. Every task lists its mutations with the ones that could run code the person did not approve, or lose an edit, first.
 - `weak self` in every closure that outlives a call, no `unowned`. No work with side effects inside `completion?(...)`; every completion in this plan is non-optional or the work sits outside the call.
-- **XCTest rules.** No `await` inside an `XCTAssert` autoclosure: hoist into a `let`. No test depends on a key window: a sheet's buttons are pressed with `performClick(nil)`, Return with `contentView?.performKeyEquivalent(with:)` on a synthesized event, Escape with the sheet's own `keyDown(with:)`; a window check reads `attachedSheet`, `isVisible`, `sheetParent`. Every test that must see the approval question sets `approvesLiveCodeOnOpen = false` before `openDeck`; every other test opens its fixture pre-approved (Task 6), so no D2, D3 or D4 test changes its behaviour.
+- **XCTest rules.** No `await` inside an `XCTAssert` autoclosure: hoist into a `let`. No test depends on a key window: a sheet's buttons are pressed with `performClick(nil)`, Return with `contentView?.performKeyEquivalent(with:)` on a synthesized event, Escape with the sheet's own `keyDown(with:)`; a window check reads `attachedSheet`, `isVisible`, `sheetParent`. Every test that must see the approval question sets `approvesLiveCodeOnOpen = false` before `openDeck`; every other test opens its fixture pre-approved (Task 6), so the D2, D3 and D4 tests keep their behaviour, except the three D2 tests that rename `seven-slides.md` and one D4 test whose second question becomes a sheet, each changed where its task says.
 - **An answer reaches only the process that asked.** tap's question ids start at `q1` in every process. `DeckSessionController.answer(id:value:generation:)` sends nothing unless `generation` is the one the question was queued under (`questionGeneration` rises every time the session leaves `.running`, and the queue is dropped then), and `PresentationController` drops its queue and ends a talk sheet when tap present leaves `.running` mid-talk. Both guards have a test that answers the old process's `q1` after a restart and reads the new process's stdin (Task 6, Task 8).
 - Every scenario this plan claims has a test named `test` plus the scenario name in UpperCamelCase as `check-scenarios.sh` builds it (`tr -c '[:alnum:]' ' '` then capitalize each word), so "Don't allow" is `testDonTAllow`. The two CLI-only scenarios are Go tests named the same way with `Test` (Task 1 teaches the check to read `internal/**/*_test.go`). The claims go into `desktop/scenarios.txt` as `D5 | <file> | <scenario>` rows, and `make -C desktop check-scenarios` must pass.
 - The fixtures for live code tests are new, under `desktop/TapTests/Fixtures/`: `live-code.md` (shell and sqlite declared; two shell blocks and one sqlite block), `undeclared-driver.md` (sqlite declared; a shell block on slide 6), `no-drivers.md` (no `drivers` key; a sqlite block on slide 4), `custom-driver.md` (sqlite and a custom `fortune` driver running `/bin/cat`; an undeclared shell block on slide 4), `env-driver.md` (a custom `echoer` driver whose `command` is `${TAP_TEST_COMMAND}`, so tap's own expansion of a driver setting is what runs). D3's `ops.md` has no live code and asks nothing. Every sqlite block runs on sqlite's in-memory default (`internal/driver/sqlite.go`), so no database file is needed.
@@ -94,7 +95,7 @@ Five conditions the spec implies that no scenario names, most likely to bite fir
 | Don't Allow | The answer is `false`; tap stores nothing, live code stays off, the deck previews and presents normally, and the next open asks again. | Task 6 |
 | Play | `tap present --app` asks the same question after the consent when the deck is still unapproved; the sheet is the same, from `presentQuestion`'s `approval` case, before any talk window shows. A question arriving mid-talk uses D4's step-aside path. | Task 8 |
 | A block with an undeclared driver | tap's answer to `PUT /api/app/source` now carries the block's `problem`; the editor draws it on the box as an error line with a fix-it pill "Allow shell in This Deck", also in the box's context menu and the Slide menu. The fix-it adds `shell: {}` under `drivers` through `Frontmatter.addingDriver` and `replaceText` (one undo step), then saves. | Task 1, Task 9 |
-| A new driver | The save (or a silent disk load after a git pull) reloads the deck in tap, which now declares a driver tap has not approved; tap asks again over app mode (the tap change this plan depends on), naming only the new driver ("This deck now also wants to run shell"), and the app shows the same sheet. A custom driver whose command changed asks the same way. A tap that exits on its own while a sheet is up ends the sheet, and the restarted one asks afresh. | Task 10 |
+| A new driver | tap decides again on every render of the edited text (the buffer after a typing pause, or the file after a disk load): a driver the deck now declares that tap has not approved is asked about over app mode (the tap change this plan depends on), naming only the new driver ("This deck now also wants to run shell"), and the app shows the same sheet. A custom driver whose command changed asks the same way. An edit that changes what is wanted again withdraws the open question (`question-closed`), and the app drops that sheet. A tap that exits on its own while a sheet is up ends the sheet, and the restarted one asks afresh. | Task 10 |
 | The Deck tab | `tap deck schema --json` is loaded once per app; the Deck segment enables when it has. The form reads the buffer's frontmatter (`Frontmatter`) and writes each change as one `replaceText` with the frontmatter's own line endings; the drivers group lists the declared drivers with the `${NAME}` hint; keys tap does not know are listed under Other keys. | Task 11, Task 12 |
 
 ## File structure
@@ -104,14 +105,15 @@ Five conditions the spec implies that no scenario names, most likely to bite fir
 | `internal/slidelist/slidelist.go` | Modify: `CodeBlock.Problem` (`json:"problem,omitempty"`), copied from the transformed block |
 | `internal/cli/approval_scenarios_test.go` | Create: the two CLI-only scenarios of `06-live-code-and-trust.feature`, named as the manifest claims them |
 | `desktop/scripts/check-scenarios.sh`, `check-scenarios-test.sh` | Modify: a claimed scenario is also satisfied by `func Test<Name>(` in `internal/**/*_test.go` |
-| `desktop/TapDesktopCore/Sources/TapDesktopCore/TapProtocol.swift` | Modify: `ApprovalDriver`, `ApprovalBlock`; `QuestionPayload.drivers`, `.approvedBefore`, `.blocks`; `CodeBlock.problem` |
+| `desktop/TapDesktopCore/Sources/TapDesktopCore/TapProtocol.swift` | Modify: `ApprovalDriver` (with `previousCommand`), `ApprovalBlock`; `QuestionPayload.drivers`, `.approvedBefore`, `.blocks`; `TapEvent.questionClosed(id:)`; `CodeBlock.problem` |
+| `.../TapDesktopCore/DeckFormLayout.swift` | The DeckSettings board's sections and controls, keyed by the schema's names |
 | `.../TapDesktopCore/Frontmatter.swift` | The frontmatter as lines: `Entry`, `range`, `entries`, `lineEnding`, `entry(at:)`, `value(at:)`, `declaredDrivers`, `setting(path:to:)`, `addingDriver`, `rawBlock(at:)`, `settingRawBlock(at:to:)`, `scalar(forString:)`, `unquoted` |
 | `.../TapDesktopCore/DeckSchema.swift` | `SchemaKey` and `DeckSchema.decode` for `tap deck schema --json` |
 | `.../TapDesktopCore/BoxHeader.swift` | Modify: block problems in `errors`, `FixIt`, `init(slide:declaredDrivers:)` |
 | `desktop/Tap/Presenting/QuestionSheet.swift` | Modify: `ReturnAnswer`, `detail:`, `keyDown` for Escape; `ApprovalSheet`, `ApprovalBlockRow` |
 | `desktop/Tap/Documents/DeckSessionController.swift` | Modify: the `tap dev` question queue (`pendingQuestions`, `onQuestion`, `answer(id:value:generation:)`, `questionGeneration`, `onQuestionsDropped`), `allowDriver`, `saveNow`, the Deck form wiring and its `commitEditing`, the context menu's fix-it, the `reload` to tap dev after a talk's Allow |
 | `desktop/Tap/Windows/DeckWindowController.swift` | Modify: `deckQuestions` (the queue that waits for no sheet and no talk), `presentDeckQuestion`, `QuestionSource` and `questionSheetSource`, `showQuestionSheet(_:source:completion:)` around D4's body, the `approval` case for talks, `allowDriverInThisDeck`, `showPreviewTab`, `showDeckTab`, Play refused while a question sheet is up |
-| `desktop/Tap/Presenting/PresentationController.swift` | Modify: the queue dropped and `onQuestionsDropped` when tap present leaves `.running` mid-talk |
+| `desktop/Tap/Presenting/PresentationController.swift` | Modify: the queue dropped and `onQuestionsDropped` when tap present leaves `.running` mid-talk; `onQuestionClosed` for a withdrawn question |
 | `desktop/Tap/Editor/EditorTextView.swift` | Modify: the fix-it pill drawn in the header, `fixItRect(forBoxAt:)`, the hit test in `mouseDown`, `applyFixItForBoxAt` in the delegate |
 | `desktop/Tap/Preview/InspectorViewController.swift` | Modify: `Tab`, `showTab`, `embedDeck`, `setDeckTabAvailable`, the segmented control's action |
 | `desktop/Tap/Preview/DeckFormViewController.swift` | The Deck tab form |
@@ -221,7 +223,7 @@ git diff --stat internal/slidelist/testdata/golden
 git diff internal/slidelist/testdata/golden | grep '^[+-] ' 
 ```
 
-Expected: one golden file changed, and the only added lines are the one `"problem": "This deck does not declare the sqlite driver. Add this to the frontmatter:\n\ndrivers:\n  sqlite: {}"` entry (with its comma on the line before it); no line removed. Anything else in the diff is a real change to look at, not to update over. Then `go test ./internal/slidelist ./internal/cli` passes.
+Expected: one golden file changed: the `"line": 45`-style line before the new field is removed and added back with a comma, and one line is added, the `"problem": "This deck does not declare the sqlite driver. Add this to the frontmatter:\n\ndrivers:\n  sqlite: {}"` entry; nothing else. Anything else in the diff is a real change to look at, not to update over. Then `go test ./internal/slidelist ./internal/cli` passes.
 
 Document the field where the slide list's fields are listed: in `docs/reference/cli-commands.md` (line 628, "each with `block`, `language`, `driver`, `live`, `line`") add "and `problem`, present only for a live block that cannot run, with tap's message" and a `"problem"` line in the JSON example below it; in `skills/tap/rules/cli.md` (line 248) add the same field to the example's code block, or a sentence after it.
 
@@ -375,7 +377,7 @@ git commit -m "feat(slidelist): carry each live block's problem, and name the CL
 
 **Interfaces:**
 - Consumes: D4's `QuestionPayload(deck:settingsPath:directory:segments:)`, `CodeBlock(block:language:driver:live:line:)`.
-- Produces: `ApprovalDriver(name:command:slides:blocks:)`, `ApprovalBlock(driver:code:slide:block:)`; `QuestionPayload.drivers: [ApprovalDriver]?`, `.approvedBefore: [String]?`, `.blocks: [ApprovalBlock]?`, `.isForNewDrivers: Bool`, `.approvalSummary: String` ("2 shell, 1 sqlite"); `CodeBlock.problem: String?` (`init` gains `problem: String? = nil`). A field the tap change may add to the payload (to tell a re-ask from the first ask) is not decoded here; `Codable` ignores it, and the sheet reads the same either way.
+- Produces: `ApprovalDriver(name:command:previousCommand:slides:blocks:)`, `ApprovalBlock(driver:code:slide:block:)`; `QuestionPayload.drivers: [ApprovalDriver]?`, `.approvedBefore: [String]?`, `.blocks: [ApprovalBlock]?`, `.isForNewDrivers: Bool`, `.changedCommands: [ApprovalDriver]`, `.approvalSummary: String` ("2 shell, 1 sqlite"); `TapEvent.questionClosed(id:)`; `CodeBlock.problem: String?` (`init` gains `problem: String? = nil`). `previousCommand` is the field this plan asks the tap change for; absent, it decodes as nil and nothing reads it. Any other field the tap change adds is ignored by `Codable`.
 
 - [ ] **Step 1: Write the failing protocol tests**
 
@@ -393,6 +395,13 @@ In `TapProtocolTests.swift`, add:
                      ApprovalBlock(driver: "fortune", code: "hello", slide: 3, block: 1)])
         XCTAssertEqual(TapEvent.decode(line: line), .question(id: "q1", kind: "approval", payload: expected))
         XCTAssertTrue(expected.isForNewDrivers)
+        XCTAssertEqual(expected.changedCommands, [], "no driver names a command it ran before")
+        let changed = #"{"type":"question","id":"q3","kind":"approval","payload":{"deck":"/t/talk.md","drivers":[{"name":"fortune","command":"/usr/bin/true","previousCommand":"/bin/cat","slides":[3],"blocks":1}],"approvedBefore":["sqlite"],"blocks":[]}}"#
+        guard case .question(_, _, let payload)? = TapEvent.decode(line: changed) else { return XCTFail("not a question") }
+        XCTAssertEqual(payload.drivers?.first?.previousCommand, "/bin/cat")
+        XCTAssertEqual(payload.changedCommands.map(\.name), ["fortune"])
+        XCTAssertEqual(TapEvent.decode(line: #"{"type":"question-closed","id":"q1"}"#), .questionClosed(id: "q1"), "tap withdrew a question a reload made stale")
+        XCTAssertNil(TapEvent.decode(line: #"{"type":"question-closed"}"#), "a withdrawal without its id is not an event")
         XCTAssertEqual(expected.approvalSummary, "1 fortune, 2 shell")
         let first = QuestionPayload(deck: "/a.md", drivers: [ApprovalDriver(name: "shell", slides: [2, 5], blocks: 2), ApprovalDriver(name: "sqlite", slides: [4], blocks: 1)])
         XCTAssertFalse(first.isForNewDrivers, "no approvedBefore means the first time")
@@ -440,17 +449,22 @@ Add `problem` to `CodeBlock`:
 /// One driver of tap's approval request (internal/cli/approval.go,
 /// approvalDriver): what a yes would allow. `command` is what a custom
 /// driver runs, with its arguments and variables expanded; nil for a
-/// built-in driver. `slides` are the slides with a block that uses it,
-/// `blocks` how many.
+/// built-in driver. `previousCommand` is the command line the deck was
+/// approved with before, when the name was approved and only its command
+/// changed (the field this plan asks tap's re-ask for; nil until then and
+/// for a driver that is new). `slides` are the slides with a block that
+/// uses it, `blocks` how many.
 public struct ApprovalDriver: Codable, Equatable, Sendable {
     public let name: String
     public let command: String?
+    public let previousCommand: String?
     public let slides: [Int]
     public let blocks: Int
 
-    public init(name: String, command: String? = nil, slides: [Int] = [], blocks: Int = 0) {
+    public init(name: String, command: String? = nil, previousCommand: String? = nil, slides: [Int] = [], blocks: Int = 0) {
         self.name = name
         self.command = command
+        self.previousCommand = previousCommand
         self.slides = slides
         self.blocks = blocks
     }
@@ -507,6 +521,9 @@ public struct QuestionPayload: Codable, Equatable, Sendable {
     /// the drivers it has since gained ("This deck now also wants to run shell").
     public var isForNewDrivers: Bool { !(approvedBefore ?? []).isEmpty }
 
+    /// The drivers whose name was approved before with another command.
+    public var changedCommands: [ApprovalDriver] { (drivers ?? []).filter { $0.previousCommand != nil } }
+
     /// "2 shell, 1 sqlite": the block counts by driver, in tap's order.
     public var approvalSummary: String {
         (drivers ?? []).map { "\($0.blocks) \($0.name)" }.joined(separator: ", ")
@@ -514,7 +531,23 @@ public struct QuestionPayload: Codable, Equatable, Sendable {
 }
 ```
 
-Every D4 call site (`QuestionPayload(deck:)`, `QuestionPayload(settingsPath:)`, `QuestionPayload(directory:segments:)`, `QuestionPayload()`) still compiles: the new parameters default to nil, and `Codable` synthesis decodes an absent key as nil.
+Every D4 call site (`QuestionPayload(deck:)`, `QuestionPayload(settingsPath:)`, `QuestionPayload(directory:segments:)`, `QuestionPayload()`) still compiles: the new parameters default to nil, and `Codable` synthesis decodes an absent key as nil. In D4's `TapEvent`, add a case after `question`:
+
+```swift
+    /// tap no longer needs the question with this id answered (a reload
+    /// made it stale); an answer to it is refused as unknown_question.
+    case questionClosed(id: String)
+```
+
+and in `decode(line:)` a case before `"recording"`:
+
+```swift
+        case "question-closed":
+            guard let id = envelope.id else { return nil }
+            return .questionClosed(id: id)
+```
+
+D4's `TapSession.receive` switches over every case; add `case .questionClosed(let id): log.append("tap withdrew the \(id) question", source: .event)` there, and `PresentationController.handle` and `DeckSessionController.handle` get their cases in Tasks 8 and 6.
 
 - [ ] **Step 4: Run the core tests**
 
@@ -523,7 +556,7 @@ Expected: every test passes, the two new ones included.
 
 - [ ] **Step 5: Mutate and commit**
 
-Mutations, each applied and run with `make -C desktop core-test`, then reverted exactly: in `approvalSummary`, join with `"; "` (expected: `testDecodesTheApprovalRequest` fails on "2 shell, 1 sqlite"); in `isForNewDrivers`, return `drivers != nil` (expected: it fails on `first.isForNewDrivers`); in `CodeBlock`, name the coding key `"reason"` (expected: `testDecodesABlocksProblem` fails on nil).
+Mutations, each applied and run with `make -C desktop core-test`, then reverted exactly: in `approvalSummary`, join with `"; "` (expected: `testDecodesTheApprovalRequest` fails on "2 shell, 1 sqlite"); in `isForNewDrivers`, return `drivers != nil` (expected: it fails on `first.isForNewDrivers`); in `CodeBlock`, name the coding key `"reason"` (expected: `testDecodesABlocksProblem` fails on nil); in `decode`, return `.other(type:)` for `question-closed` (expected: `testDecodesTheApprovalRequest` fails on `.questionClosed`); in `changedCommands`, filter on `command != nil` (expected: it fails on `[]` for the first payload).
 
 ```bash
 git add desktop/TapDesktopCore
@@ -738,6 +771,7 @@ public struct Frontmatter: Equatable, Sendable {
 
         /// How many lines the entry's range holds, children included.
         public let lineCount: Int
+    }
 
     /// The whole block from location 0 through the closing line's ending;
     /// nil when the deck has no frontmatter.
@@ -758,8 +792,11 @@ public struct Frontmatter: Equatable, Sendable {
 
     public init(text: String) {
         source = text
-        lineEnding = text.contains("\r\n") ? "\r\n" : "\n"
         let nsText = text as NSString
+        // The first line's own terminator, not a scan of the whole deck on every change.
+        var firstStart = 0, firstLineEnd = 0, firstContentsEnd = 0
+        nsText.getLineStart(&firstStart, end: &firstLineEnd, contentsEnd: &firstContentsEnd, for: NSRange(location: 0, length: 0))
+        lineEnding = firstLineEnd - firstContentsEnd == 2 ? "\r\n" : "\n"
         var lines: [Line] = []
         var location = 0
         var closingIndex: Int?
@@ -968,7 +1005,7 @@ Expected: every test passes, the six new ones included. If `testReadsTheBlockAnd
 
 - [ ] **Step 5: Mutate and commit**
 
-Mutations, each applied and run with `make -C desktop core-test`, then reverted exactly: in `init`, drop the `lines.count > 1` condition on the closing check (expected: `testReadsTheBlockAndItsEntries` fails, the opener closes itself); in `parse`, use `next.indent < opener.indent` (expected: it fails on `drivers.children`, `recording` becomes a child of `drivers`); in `parse`, drop the trailing-blank trim (survives here: no gap follows an entry in this task's decks; Task 4's `testAddsAChildAtTheEndOfItsParentsBlock` kills it, since the new child would land after the blank line and the comment); in `declaredDrivers`, ignore the flow case (expected: `testTheDeclaredDriversComeFromTheDriversMap` fails on the flow map); in `flowMapKeys`, split on every comma (expected: the nested `connections` case yields a wrong key); in `keyLine`, keep the whole text as the value (expected: `testATrailingCommentIsNotPartOfTheValue` fails on "base"); in `withoutTrailingComment`, ignore quotes (expected: it fails on `"a # b"`); in `withoutTrailingComment`, cut at any `#` (expected: it fails on the same, and on a plain value holding `#hash` if one is added); in `parse`, pass `lineCount: 1` always (expected: `testABlockScalarIsNotAScalar` fails on `isMultiLine`); in `init`, detect `"\r\n"` as `"\n"` (expected: `testKeepsCarriageReturnLineEndings` fails).
+Mutations, each applied and run with `make -C desktop core-test`, then reverted exactly: in `init`, drop the `lines.count > 1` condition on the closing check (expected: `testReadsTheBlockAndItsEntries` fails, the opener closes itself); in `parse`, use `next.indent < opener.indent` (expected: it fails on `drivers.children`, `recording` becomes a child of `drivers`); in `parse`, drop the trailing-blank trim (survives here: no gap follows an entry in this task's decks; Task 4's `testAddsAChildAtTheEndOfItsParentsBlock` kills it, since the new child would land after the blank line and the comment); in `declaredDrivers`, ignore the flow case (expected: `testTheDeclaredDriversComeFromTheDriversMap` fails on the flow map); in `flowMapKeys`, split on every comma (expected: the nested `connections` case yields a wrong key); in `keyLine`, keep the whole text as the value (expected: `testATrailingCommentIsNotPartOfTheValue` fails on "base"); in `withoutTrailingComment`, ignore quotes (expected: it fails on `"a # b"`); in `withoutTrailingComment`, cut at any `#` (expected: it fails on the same, and on a plain value holding `#hash` if one is added); in `parse`, pass `lineCount: 1` always (expected: `testABlockScalarIsNotAScalar` fails on `isMultiLine`); in `init`, take the line ending as `"\n"` always (expected: `testKeepsCarriageReturnLineEndings` fails).
 
 ```bash
 git add desktop/TapDesktopCore
