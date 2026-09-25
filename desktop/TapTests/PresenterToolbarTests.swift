@@ -32,6 +32,7 @@ final class PresenterToolbarTests: PresentingTestCase {
         XCTAssertEqual(toolbar.recordButton.title, "NOT RECORDING")
         XCTAssertEqual(toolbar.reloadButton.title, "Reload Slides")
         XCTAssertEqual(toolbar.swapButton.title, "Swap Displays")
+        XCTAssertEqual(toolbar.phoneRemoteButton.title, "Phone Remote")
         XCTAssertEqual(toolbar.stopButton.title, "Stop")
         XCTAssertTrue(toolbar.editsLabel.isHidden)
         XCTAssertEqual(toolbar.frame.minY, 0, "it sits along the bottom edge, away from the menu bar full screen drops over the top")

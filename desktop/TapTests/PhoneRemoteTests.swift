@@ -46,6 +46,49 @@ final class PhoneRemoteTests: PresentingTestCase {
         XCTAssertFalse(panel.isVisible, "the panel goes with the talk")
     }
 
+    /// The presenter toolbar's Phone Remote, between Swap Displays and
+    /// Stop, toggles the same remote as Present > Phone Remote.
+    func testThePresenterToolbarTogglesTheRemote() async throws {
+        let record = try Fixtures.temporaryFolder().appendingPathComponent("record")
+        AppEnvironment.shared.presentExecutableURL = try FakeTapScripts.presenting(events: [], recordingTo: record)
+        let (_, controller) = try await openDeckForPresenting()
+        let deckWindow = try XCTUnwrap(controller.editor.window?.windowController as? DeckWindowController)
+        let presentation = controller.presentation
+        let menuItem = try XCTUnwrap(NSApp.mainMenu?.items.first { $0.submenu?.title == "Present" }?.submenu?.items.first {
+            $0.action == #selector(DeckWindowController.togglePhoneRemote(_:))
+        })
+        try await startPresenting(controller, PresentationOptions(mode: .play, startSlide: 1))
+        let toolbar = try XCTUnwrap(presentation.presenterWindow?.presenterToolbar)
+        let button = toolbar.phoneRemoteButton
+        XCTAssertEqual(button.title, "Phone Remote")
+        let row = try XCTUnwrap(button.superview as? NSStackView)
+        let swapIndex = try XCTUnwrap(row.arrangedSubviews.firstIndex { $0 === toolbar.swapButton })
+        XCTAssertEqual(row.arrangedSubviews.firstIndex { $0 === button }, swapIndex + 1, "right after Swap Displays")
+        XCTAssertEqual(row.arrangedSubviews.firstIndex { $0 === toolbar.stopButton }, swapIndex + 2, "right before Stop")
+        XCTAssertTrue(button.isEnabled)
+        XCTAssertTrue(deckWindow.validateMenuItem(menuItem), "the same validation as the menu item")
+        XCTAssertEqual(button.state, .off)
+        let panel = deckWindow.remotePanel
+        XCTAssertFalse(panel.isVisible)
+
+        toolbar.pointerReachedBottomEdge()
+        button.performClick(nil)
+        try await waitUntil(timeout: 5, "the tunnel command") { self.recorded(record).contains(#"stdin: {"type":"tunnel","start":true}"#) }
+        try await waitUntil(timeout: 5, "the running tunnel and its panel") { presentation.tunnel?.state == "running" && panel.isVisible }
+        XCTAssertEqual(button.state, .on)
+        _ = deckWindow.validateMenuItem(menuItem)
+        XCTAssertEqual(menuItem.state, .on, "the menu item shows the same remote")
+
+        button.performClick(nil)
+        try await waitUntil(timeout: 5, "the tunnel stop") { self.recorded(record).contains(#"stdin: {"type":"tunnel","start":false}"#) }
+        try await waitUntil(timeout: 5, "the panel gone") { !panel.isVisible }
+        XCTAssertEqual(button.state, .off)
+
+        try await stopPresenting(controller)
+        XCTAssertFalse(presentation.canTogglePhoneRemote)
+        XCTAssertFalse(deckWindow.validateMenuItem(menuItem))
+    }
+
     /// tap's quit stops the tunnel and may report tunnel_failed while the
     /// talk is stopping; the remote panel stays away.
     func testTheRemoteStaysAwayOnceTheTalkStops() async throws {

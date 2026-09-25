@@ -1,7 +1,7 @@
 import AppKit
 
 /// The app's toolbar over the presenter page: REC, the edits the audience
-/// has not seen, Reload Slides, Swap Displays and Stop. It is out of sight
+/// has not seen, Reload Slides, Swap Displays, Phone Remote and Stop. It is out of sight
 /// while the speaker talks and slides up when the pointer reaches the
 /// bottom edge, then slides away once the pointer has left it. The bottom,
 /// not the top: in system full screen the menu bar drops over the top
@@ -14,6 +14,7 @@ final class PresenterToolbar: NSView {
     let editsLabel = NSTextField(labelWithString: "")
     let reloadButton = NSButton(title: "Reload Slides", target: nil, action: nil)
     let swapButton = NSButton(title: "Swap Displays", target: nil, action: nil)
+    let phoneRemoteButton = NSButton(title: "Phone Remote", target: nil, action: nil)
     let stopButton = NSButton(title: "Stop", target: nil, action: nil)
     /// How long the pointer must be away before the toolbar slides off. Tests shorten it.
     var hideDelay: TimeInterval = 1.5
@@ -21,6 +22,7 @@ final class PresenterToolbar: NSView {
     var onRecord: (() -> Void)?
     var onReload: (() -> Void)?
     var onSwap: (() -> Void)?
+    var onPhoneRemote: (() -> Void)?
     var onStop: (() -> Void)?
     private var hideWork: DispatchWorkItem?
 
@@ -33,20 +35,23 @@ final class PresenterToolbar: NSView {
         titleLabel.textColor = .white
         editsLabel.font = .systemFont(ofSize: 12)
         editsLabel.textColor = .secondaryLabelColor
-        for button in [recordButton, reloadButton, swapButton, stopButton] {
+        for button in [recordButton, reloadButton, swapButton, phoneRemoteButton, stopButton] {
             button.bezelStyle = .rounded
             button.target = self
         }
         recordButton.action = #selector(recordPressed(_:))
         reloadButton.action = #selector(reloadPressed(_:))
         swapButton.action = #selector(swapPressed(_:))
+        phoneRemoteButton.action = #selector(phoneRemotePressed(_:))
+        phoneRemoteButton.setButtonType(.pushOnPushOff)
         stopButton.action = #selector(stopPressed(_:))
         stopButton.hasDestructiveAction = true
         recordButton.setAccessibilityIdentifier("record-button")
         reloadButton.setAccessibilityIdentifier("reload-slides-button")
         swapButton.setAccessibilityIdentifier("swap-displays-button")
+        phoneRemoteButton.setAccessibilityIdentifier("phone-remote-button")
         stopButton.setAccessibilityIdentifier("stop-button")
-        let row = NSStackView(views: [titleLabel, recordButton, NSView(), editsLabel, reloadButton, swapButton, stopButton])
+        let row = NSStackView(views: [titleLabel, recordButton, NSView(), editsLabel, reloadButton, swapButton, phoneRemoteButton, stopButton])
         row.orientation = .horizontal
         row.spacing = 10
         row.edgeInsets = NSEdgeInsets(top: 0, left: 16, bottom: 0, right: 16)
@@ -96,9 +101,18 @@ final class PresenterToolbar: NSView {
         editsLabel.stringValue = editsNotShown == 1 ? "1 edit not shown" : "\(editsNotShown) edits not shown"
     }
 
+    /// The phone remote's state, drawn as the button's on state, and
+    /// whether it can be toggled now (Present > Phone Remote's validation).
+    func updateRemote(isOn: Bool, isEnabled: Bool) {
+        phoneRemoteButton.state = isOn ? .on : .off
+        phoneRemoteButton.isEnabled = isEnabled
+    }
+
     @objc private func recordPressed(_ sender: Any?) { onRecord?() }
     @objc private func reloadPressed(_ sender: Any?) { onReload?() }
     @objc private func swapPressed(_ sender: Any?) { onSwap?() }
+    /// The click flips the on state at once; tap's tunnel events set it back to what is true.
+    @objc private func phoneRemotePressed(_ sender: Any?) { onPhoneRemote?() }
     @objc private func stopPressed(_ sender: Any?) { onStop?() }
 }
 

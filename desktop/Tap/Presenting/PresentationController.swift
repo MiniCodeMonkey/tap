@@ -439,6 +439,7 @@ final class PresentationController {
             toolbar.onRecord = { [weak self] in self?.toggleRecording() }
             toolbar.onReload = { [weak self] in self?.reloadSlides() }
             toolbar.onSwap = { [weak self] in self?.swapDisplays() }
+            toolbar.onPhoneRemote = { [weak self] in self?.togglePhoneRemote() }
             toolbar.onStop = { [weak self] in self?.stop() }
         }
         windowCreated?(window)
@@ -482,6 +483,7 @@ final class PresentationController {
         installKeyMonitor()
         windowsWereShown = true
         state = .presenting
+        refreshPresenterToolbar()
         let fullScreen = usesFullScreen
         if !fullScreen, !fullScreenAllowed() {
             session?.log.append("this host does not allow system full screen; the talk windows are plain windows over their displays", source: .app)
@@ -640,6 +642,7 @@ final class PresentationController {
     func refreshPresenterToolbar() {
         guard let presenterWindow, let options else { return }
         presenterWindow.presenterToolbar?.update(recording: recording, editsNotShown: editsNotShown, mode: options.mode)
+        presenterWindow.presenterToolbar?.updateRemote(isOn: remoteIsOn, isEnabled: canTogglePhoneRemote)
         presenterWindow.recordingDot?.isHidden = !recording.isRecording
     }
 
@@ -690,14 +693,15 @@ final class PresentationController {
     /// True while tap's tunnel runs or is starting.
     var remoteIsOn: Bool { tunnel?.state == "running" || tunnel?.state == "starting" }
 
-    /// Present > Phone Remote works only
+    /// Present > Phone Remote and the toolbar's Phone Remote work only
     /// while the talk is up: a stopping tap is quitting, and a starting
     /// one asks for the remote itself once it is ready.
     var canTogglePhoneRemote: Bool { state == .presenting }
 
-    /// Present > Phone Remote: the remote off while it
+    /// Present > Phone Remote and the toolbar's: the remote off while it
     /// runs or starts, on otherwise.
     func togglePhoneRemote() {
+        defer { refreshPresenterToolbar() }
         guard canTogglePhoneRemote else { return }
         setTunnel(on: !remoteIsOn)
     }
@@ -863,6 +867,7 @@ final class PresentationController {
         default:
             break
         }
+        refreshPresenterToolbar()
     }
 
     /// Answers the question with `id`, puts up the next queued one, and
