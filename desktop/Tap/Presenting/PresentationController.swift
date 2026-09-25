@@ -59,6 +59,7 @@ final class PresentationController {
     private(set) var recording = RecordingStatus()
     /// True once the windows have been asked to show for this talk.
     private(set) var windowsShown = false
+    private var recordingTimer: Timer?
     /// True once this talk's windows were shown at all, so an ending moves
     /// the editor's cursor only for a talk the person actually saw.
     private var windowsWereShown = false
@@ -387,6 +388,7 @@ final class PresentationController {
         }
         self.arrangement = arrangement
         sleepAssertion.acquire()
+        startRecordingTimer()
         if screenObserver == nil {
             screenObserver = NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: nil) { [weak self] _ in
                 MainActor.assumeIsolated { self?.screensChanged() }
@@ -805,6 +807,25 @@ final class PresentationController {
         showWindowsIfReady()
     }
 
+    /// A sheet on the deck window is gone: the talk's front window is made
+    /// key again, which brings its Space back.
+    func returnToTalk() {
+        guard isActive, windowsShown, let frontWindow else { return }
+        frontWindow.makeKeyAndOrderFront(nil)
+    }
+
+    /// Counts the recording's seconds up between tap's events.
+    private func startRecordingTimer() {
+        recordingTimer?.invalidate()
+        recordingTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self, self.recording.isRecording else { return }
+                self.recording.tick()
+                self.refreshPresenterToolbar()
+            }
+        }
+    }
+
     // MARK: Stop
 
     /// Ends the talk: the windows leave full screen and close and the
@@ -833,6 +854,8 @@ final class PresentationController {
         removeKeyMonitor()
         if let screenObserver { NotificationCenter.default.removeObserver(screenObserver) }
         screenObserver = nil
+        recordingTimer?.invalidate()
+        recordingTimer = nil
         showWindowsFallback?.cancel()
         showWindowsFallback = nil
         placements = []

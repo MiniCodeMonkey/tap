@@ -33,6 +33,8 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
         popover.onRehearse = { [weak self] options in self?.startPresenting(options, savingSettings: true) }
         return popover
     }()
+    /// The sheet for tap's question, while it is up.
+    private(set) var questionSheet: QuestionSheet?
     private(set) lazy var layoutGallery: LayoutGalleryController = {
         let gallery = LayoutGalleryController()
         gallery.onPick = { [weak self] name in self?.insertSlide(layout: name, after: .caret) }
@@ -63,7 +65,14 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
         window.delegate = self
         shouldCascadeWindows = true
         sessionController.presentation.deckWindowController = self
-        sessionController.presentation.onStateChange = { [weak self] _ in self?.refreshPresentingControls() }
+        sessionController.presentation.onStateChange = { [weak self] state in
+            self?.refreshPresentingControls()
+            switch state {
+            case .idle, .failed: self?.talkEnded()
+            case .starting, .presenting, .stopping: break
+            }
+        }
+        sessionController.presentation.onQuestion = { [weak self] question in self?.presentQuestion(question) }
         presentingObserver = NotificationCenter.default.addObserver(forName: AppEnvironment.presentingDidChangeNotification, object: nil, queue: nil) { [weak self] _ in
             MainActor.assumeIsolated { self?.refreshPresentingControls() }
         }
@@ -381,6 +390,61 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
     /// Present > Reload Slides and the toolbar's.
     @objc func reloadSlides(_ sender: Any?) {
         sessionController.presentation.reloadSlides()
+    }
+
+    /// The talk is idle or failed: no sheet of its outlives it. A sheet
+    /// ended this way answers nothing (the talk's questions are gone with
+    /// it); Task 10 gives the keep-recording sheet its own ending.
+    func talkEnded() {
+        endQuestionSheet(as: .abort)
+    }
+
+    // MARK: tap's questions
+
+    /// tap asked something. Consent and keep-recording become sheets on
+    /// this window; the live code approval is D5's and is declined until
+    /// then, which runs no code.
+    func presentQuestion(_ question: PresentationController.PendingQuestion) {
+        let presentation = sessionController.presentation
+        switch question.kind {
+        case "record-consent":
+            showQuestionSheet(QuestionSheet.consent(settingsPath: question.payload.settingsPath)) { record in
+                presentation.answer(id: question.id, value: record)
+            }
+        default:
+            presentation.session?.log.append("the \(question.kind) question is not answered by this version of the app; declined", source: .app)
+            presentation.answer(id: question.id, value: false)
+        }
+    }
+
+    /// Puts `sheet` on this window and calls back with the answer. This
+    /// window comes forward, which switches to its Space and leaves the
+    /// talk's Spaces where they are: the sheet is the one thing the person
+    /// must answer, so this is the one focus move outside the talk windows.
+    /// After the answer the talk's front window is made key again, which
+    /// switches back.
+    func showQuestionSheet(_ sheet: QuestionSheet, completion: @escaping (Bool) -> Void) {
+        guard let window else {
+            completion(sheet.kind == "keep-recording")
+            return
+        }
+        let presentation = sessionController.presentation
+        questionSheet = sheet
+        window.makeKeyAndOrderFront(nil)
+        window.beginSheet(sheet) { [weak self] response in
+            // Only the sheet that completed clears the slot: a stale sheet
+            // ended late must not clear a newer one.
+            if self?.questionSheet === sheet { self?.questionSheet = nil }
+            completion(response == .OK)
+            presentation.returnToTalk()
+        }
+    }
+
+    /// Ends the sheet that is up, if any, as `response`. The talk ending
+    /// calls this so no sheet outlives the talk that asked.
+    func endQuestionSheet(as response: NSApplication.ModalResponse) {
+        guard let sheet = questionSheet, let window else { return }
+        window.endSheet(sheet, returnCode: response)
     }
 
     // The slide commands name the selection now and resolve it when they
