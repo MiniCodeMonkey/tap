@@ -49,9 +49,27 @@ class HostedTestCase: XCTestCase {
         }
     }
 
-    func openDeck(_ url: URL) async throws -> DeckDocument {
-        let (document, _) = try await NSDocumentController.shared.openDocument(withContentsOf: url, display: true)
-        let deck = try XCTUnwrap(document as? DeckDocument)
+    func openDeck(_ url: URL, timeout: TimeInterval = 30) async throws -> DeckDocument {
+        // AppKit's completion is given `timeout` seconds, so an open that
+        // never completes fails this test rather than hanging the bundle.
+        let opened: Result<NSDocument, Error>? = await withCheckedContinuation { continuation in
+            var answered = false
+            NSDocumentController.shared.openDocument(withContentsOf: url, display: true) { document, _, error in
+                guard !answered else { return }
+                answered = true
+                continuation.resume(returning: document.map { .success($0) } ?? .failure(error ?? CocoaError(.fileReadUnknown)))
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + timeout) {
+                guard !answered else { return }
+                answered = true
+                continuation.resume(returning: nil)
+            }
+        }
+        guard let opened else {
+            XCTFail("timed out opening \(url.lastPathComponent) after \(Int(timeout)) s")
+            throw CancellationError()
+        }
+        let deck = try XCTUnwrap(try opened.get() as? DeckDocument)
         // The audience page reports a slide ready only once it has painted,
         // and a window the window server treats as off screen never paints.
         // A test runner is not a person clicking on the app, so the window

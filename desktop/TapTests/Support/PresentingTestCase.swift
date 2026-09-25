@@ -106,10 +106,26 @@ class PresentingTestCase: HostedTestCase {
         try await waitUntil(timeout: 10, "the talk windows to close") { controller.presentation.windowsGoingDown.isEmpty }
     }
 
-    /// The presenter cookie in the talk pages' data store, if any.
+    /// The presenter cookie in the talk pages' data store, if any. The
+    /// store is given 5 s to answer; past that the test fails here rather
+    /// than hang the bundle.
     func presenterCookieInTheTalkStore() async -> String? {
-        let cookies: [HTTPCookie] = await withCheckedContinuation { continuation in
-            AppEnvironment.shared.presentationDataStore.httpCookieStore.getAllCookies { continuation.resume(returning: $0) }
+        let cookies: [HTTPCookie]? = await withCheckedContinuation { continuation in
+            var answered = false
+            AppEnvironment.shared.presentationDataStore.httpCookieStore.getAllCookies { cookies in
+                guard !answered else { return }
+                answered = true
+                continuation.resume(returning: cookies)
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
+                guard !answered else { return }
+                answered = true
+                continuation.resume(returning: nil)
+            }
+        }
+        guard let cookies else {
+            XCTFail("the talk's cookie store did not answer in 5 s")
+            return nil
         }
         return cookies.first { $0.name == TapClient.presenterCookieName && $0.domain == "127.0.0.1" }?.value
     }
