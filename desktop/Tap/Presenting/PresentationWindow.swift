@@ -147,6 +147,8 @@ final class PresentationWindow: NSWindow, NSWindowDelegate {
                 toolbar.pointerLeft()
             }
         }
+        // The pointer left the window (onto the other display, or the mouse was put down for a clicker): the toolbar goes too.
+        container.onMouseExited = { [weak self] in self?.presenterToolbar?.pointerLeft() }
         container.layoutSubtreeIfNeeded()
     }
 
@@ -409,17 +411,22 @@ final class PresentationWindow: NSWindow, NSWindowDelegate {
 /// hide when idle.
 final class PresentationContentView: NSView {
     var onMouseMoved: ((NSPoint) -> Void)?
+    var onMouseExited: (() -> Void)?
     private var trackingArea: NSTrackingArea?
 
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
         if let trackingArea { removeTrackingArea(trackingArea) }
-        let area = NSTrackingArea(rect: bounds, options: [.mouseMoved, .activeAlways, .inVisibleRect], owner: self, userInfo: nil)
+        let area = NSTrackingArea(rect: bounds, options: [.mouseMoved, .mouseEnteredAndExited, .activeAlways, .inVisibleRect], owner: self, userInfo: nil)
         addTrackingArea(area)
         trackingArea = area
     }
 
     override func mouseMoved(with event: NSEvent) {
         onMouseMoved?(convert(event.locationInWindow, from: nil))
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        onMouseExited?()
     }
 }
