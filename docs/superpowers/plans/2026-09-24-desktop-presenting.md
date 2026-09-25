@@ -4297,6 +4297,12 @@ import XCTest
 @testable import Tap
 
 final class PresenterToolbarTests: PresentingTestCase {
+    /// A pointer move to `point`, in window coordinates, as AppKit's tracking area would deliver it.
+    func mouseMove(to point: NSPoint, in window: NSWindow) throws -> NSEvent {
+        try XCTUnwrap(NSEvent.mouseEvent(with: .mouseMoved, location: point, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                                         windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 0, pressure: 0))
+    }
+
     func testPresenterControls() async throws {
         let (_, controller) = try await openDeckForPresenting()
         let presentation = controller.presentation
@@ -4308,10 +4314,15 @@ final class PresenterToolbarTests: PresentingTestCase {
         XCTAssertTrue(toolbar.isHidden, "the toolbar is out of sight until the pointer reaches the top edge")
         XCTAssertFalse(toolbar.isShown)
         XCTAssertTrue(dot.isHidden, "no REC dot while nothing records")
+        XCTAssertTrue(presenter.container.trackingAreas.contains { $0.options.contains(.mouseMoved) && $0.options.contains(.activeAlways) },
+                      "the content view tracks the pointer everywhere in the window")
 
-        toolbar.pointerReachedTopEdge()
+        // The pointer reaches the top edge: the toolbar slides in, and the idle cursor timer is armed.
+        let height = presenter.container.bounds.height
+        presenter.container.mouseMoved(with: try mouseMove(to: NSPoint(x: 400, y: height - 1), in: presenter))
         XCTAssertTrue(toolbar.isShown)
         XCTAssertFalse(toolbar.isHidden)
+        XCTAssertTrue(presentation.isCursorHideArmed, "a move over a talk window arms the cursor hide")
         XCTAssertEqual(toolbar.recordButton.title, "NOT RECORDING")
         XCTAssertEqual(toolbar.reloadButton.title, "Reload Slides")
         XCTAssertEqual(toolbar.swapButton.title, "Swap Displays")
@@ -4319,9 +4330,17 @@ final class PresenterToolbarTests: PresentingTestCase {
         XCTAssertTrue(toolbar.editsLabel.isHidden)
         XCTAssertEqual(toolbar.frame.maxY, presenter.container.bounds.maxY, "it sits along the top edge")
 
+        // The pointer moves down into the page: the toolbar slides away after its delay.
         toolbar.hideDelay = 0.1
-        toolbar.pointerLeft()
+        presenter.container.mouseMoved(with: try mouseMove(to: NSPoint(x: 400, y: height / 2), in: presenter))
         try await waitUntil(timeout: 2, "the toolbar to slide away") { toolbar.isHidden }
+        // A move within the toolbar's own band keeps it.
+        presenter.container.mouseMoved(with: try mouseMove(to: NSPoint(x: 400, y: height - 1), in: presenter))
+        presenter.container.mouseMoved(with: try mouseMove(to: NSPoint(x: 400, y: height - PresenterToolbar.height / 2), in: presenter))
+        try await Task.sleep(nanoseconds: 300_000_000)
+        XCTAssertFalse(toolbar.isHidden, "the pointer on the toolbar itself does not send it away")
+        presenter.container.mouseMoved(with: try mouseMove(to: NSPoint(x: 400, y: height / 2), in: presenter))
+        try await waitUntil(timeout: 2, "the toolbar away") { toolbar.isHidden }
         toolbar.pointerReachedTopEdge()
         toolbar.pointerLeft()
         toolbar.pointerReachedTopEdge()
@@ -4425,6 +4444,9 @@ In `desktop/TapTests/PresentingTests.swift`, inside `testTheMacStaysAwake`, add 
         presentation.noteMouseMoved()
         presentation.noteMouseMoved()
         try await waitUntil(timeout: 2, "the cursor to hide once more") { hides == 2 }
+        // Two moves, one hide: the first move's work item was cancelled, not merely outrun.
+        try await Task.sleep(nanoseconds: 300_000_000)
+        XCTAssertEqual(hides, 2)
 ```
 
 - [ ] **Step 2: Run one test to verify it fails**
@@ -4658,6 +4680,8 @@ In `PresentationController.swift`, add stored properties after `pagesReported`:
     private(set) var editsNotShown = 0
     /// The deck text tap present last read: at the start and after Reload Slides.
     var presentedText: String?
+    /// The text tap dev last answered for, so an answer for the same text is not counted twice.
+    private var lastCountedText: String?
     /// How long the pointer rests on a talk window before the cursor hides.
     var cursorHideDelay: TimeInterval = 3
     /// Hides the cursor until the mouse moves. A test replaces it.
@@ -4690,14 +4714,17 @@ In `openWindows`, add `refreshPresenterToolbar()` as the last line. In `handle(_
     }
 
     /// tap dev answered for `text`: an edit the audience has not seen, unless
-    /// the text is back to what tap present read.
+    /// the text is back to what tap present read. tap dev also answers
+    /// after a restart and after a component change with the text
+    /// unchanged; those are not edits, so a text counts once.
     func deckTextChanged(_ text: String) {
         guard isActive else { return }
         if text == presentedText {
             editsNotShown = 0
-        } else {
+        } else if text != lastCountedText {
             editsNotShown += 1
         }
+        lastCountedText = text
         refreshPresenterToolbar()
     }
 
@@ -4773,19 +4800,19 @@ and in `validateMenuItem`, add `if menuItem.action == #selector(reloadSlides(_:)
 
 - [ ] **Step 6: Run the tests one at a time**
 
+Required:
+
 ```bash
 make -C desktop test ONLY=TapTests/PresenterToolbarTests/testPresenterControls
-make -C desktop test ONLY=TapTests/PresenterToolbarTests/testARehearsalHasNoRecordingOrSwapControls
 make -C desktop test ONLY=TapTests/PresenterToolbarTests/testEditWhilePresenting
 make -C desktop test ONLY=TapTests/PresentingTests/testTheMacStaysAwake
-make -C desktop test ONLY=TapTests/PresentMenuTests/testPresentingShortcuts
 ```
 
-Expected: all pass. If `testEditWhilePresenting` never shows the edit after Reload Slides, check `tap present --app` logged `reload` in the talk's log (`presentation.session?.log.text`) and that the file holds the edit; a `reload_failed` error event names tap's reason.
+Optional: `testARehearsalHasNoRecordingOrSwapControls`, `ONLY=TapTests/PresentMenuTests/testPresentingShortcuts`. Expected: all pass. In system full screen the macOS menu bar also drops down when the pointer rests at the very top of the screen; the app's toolbar sits in the same band and shows first, since it answers the first move. That is the person's manual check, not a test. If `testEditWhilePresenting` never shows the edit after Reload Slides, check `tap present --app` logged `reload` in the talk's log (`presentation.session?.log.text`) and that the file holds the edit; a `reload_failed` error event names tap's reason.
 
 - [ ] **Step 7: Mutate and commit**
 
-Mutations, each reverted: in `reloadSlides`, skip `saveDeck` and send `.reload` at once (expected: `testEditWhilePresenting` fails: the file lacks the edit, so the audience never shows it); in `deckTextChanged`, drop the `text == presentedText` branch (survives: the test never undoes; add an undo step to the test if wanted, or leave as a written property); in `update(recording:editsNotShown:mode:)`, never hide `recordButton` (expected: the rehearsal test fails); in `pointerLeft`, drop the delayed hide (expected: `testPresenterControls` times out); in `refreshPresenterToolbar`, drop the dot line (expected: it fails on `dot.isHidden`); in `noteMouseMoved`, drop `cursorHideWork?.cancel()` (expected: `testTheMacStaysAwake` counts 3 hides, not 2).
+Mutations, each reverted: in `PresentationWindow.init`, invert the `point.y >=` comparison (expected: `testPresenterControls` fails on `toolbar.isShown` after the top-edge move); in `PresentationWindow.init`, drop the `container.onMouseMoved = ...` wiring (expected: it fails on `isShown` and on `isCursorHideArmed`); in `PresentationContentView.updateTrackingAreas`, drop `addTrackingArea` (expected: it fails on `trackingAreas`); in `PresentationWindow.init`, call `pointerLeft()` for every move below the top edge (expected: it fails on "the pointer on the toolbar itself"); in `reloadSlides`, skip `saveDeck` and send `.reload` at once (expected: `testEditWhilePresenting` fails: the file lacks the edit, so the audience never shows it); in `deckTextChanged`, drop the `text != lastCountedText` check (expected: `testEditWhilePresenting` can count a restart's answer; to make it fail deterministically, deliver `controller.applySlideList` twice with the same `sentText` in the test and assert the count is still 1); in `deckTextChanged`, drop the `text == presentedText` branch (survives: the test never undoes; leave as a written property); in `update(recording:editsNotShown:mode:)`, never hide `recordButton` (expected: the rehearsal test fails); in `pointerLeft`, drop the delayed hide (expected: `testPresenterControls` times out); in `refreshPresenterToolbar`, drop the dot line (expected: it fails on `dot.isHidden`); in `noteMouseMoved`, drop `cursorHideWork?.cancel()` (expected: `testTheMacStaysAwake` counts 3 hides, not 2, at the 0.3 s check).
 
 ```bash
 git add desktop/Tap desktop/TapTests
@@ -4804,8 +4831,10 @@ git commit -m "feat(desktop): the presenter toolbar, the REC dot, the edits coun
 - Test: `desktop/TapTests/RecordingTests.swift`
 
 **Interfaces:**
-- Consumes: Task 4's `PendingQuestion`, `onQuestion`, `answer(id:value:)`, `windowsShown`, `frontWindow`; Task 8's `refreshPresenterToolbar`, `PresenterToolbar.recordButton`, `RecordingDot`; Task 1's `QuestionPayload`, `RecordingEvent`.
-- Produces: `QuestionSheet(kind:title:body:path:decline:accept:)` with `kind`, `titleLabel`, `bodyLabel`, `pathLabel`, `declineButton`, `acceptButton`, `button(titled:)`, `static consent(settingsPath:)`; `PresentationController.hideWindowsSharingScreen(with:)`, `restoreHiddenWindows()`, `windowsHiddenForQuestion`; `DeckWindowController.questionSheet`, `presentQuestion(_:)`, `showQuestionSheet(_:completion:)`; `FakeTapScripts.presenting(events:quit:recordingTo:)`, `QuitBehavior` (`.exit`, `.askToKeep(directory:segments:)`, `.askToKeepThenExit(after:directory:segments:)`), `tunnelUnavailable`, `onePixelPNG`.
+- Consumes: Task 4's `PendingQuestion`, `pendingQuestions`, `onQuestion`, `answer(id:value:)`, `windowsShown`, `frontWindow`; Task 8's `refreshPresenterToolbar`, `PresenterToolbar.recordButton`, `RecordingDot`; Task 1's `QuestionPayload`, `RecordingEvent`.
+- Produces: `QuestionSheet(kind:title:body:path:decline:accept:escape:)` with `EscapeAnswer` (`.decline`, `.nothing`), `kind`, `titleLabel`, `bodyLabel`, `pathLabel`, `declineButton`, `acceptButton`, `button(titled:)`, `static consent(settingsPath:)`; `PresentationController.returnToTalk()`; `DeckWindowController.questionSheet`, `presentQuestion(_:)`, `showQuestionSheet(_:completion:)`, `endQuestionSheet(as:)`; `FakeTapScripts.presenting(events:quit:tunnelFailed:tunnelUnavailable:recordingTo:)`, `QuitBehavior` (`.exit`, `.askToKeep(directory:segments:)`, `.askToKeepThenExit(after:directory:segments:)`), `onePixelPNG`.
+
+With system full screen a sheet needs no window juggling: the deck window lives on the desktop Space, so bringing it forward for the sheet switches Spaces away from the talk, and making the front talk window key afterwards switches back. On two displays the audience Space on the projector is untouched either way.
 
 - [ ] **Step 1: The scripted tap present**
 
@@ -4819,7 +4848,8 @@ Add to `desktop/TapTests/Support/FakeTapScripts.swift`, inside the enum:
         /// Asks keep-recording and exits on the answer.
         case askToKeep(directory: URL, segments: Int)
         /// Asks keep-recording and exits after `seconds` whatever comes, as
-        /// tap does once its three-second wait is over.
+        /// tap does once its 60 s wait is over (and at once when its stdin
+        /// closes). The fake's wait is short so the test is not.
         case askToKeepThenExit(after: TimeInterval, directory: URL, segments: Int)
     }
 
@@ -4830,16 +4860,23 @@ Add to `desktop/TapTests/Support/FakeTapScripts.swift`, inside the enum:
     /// stdin line in `record`, prints a ready line (with no server behind
     /// it), then `events` one per line, and answers commands the way tap
     /// does: a tunnel start with a running tunnel (or, with
-    /// `tunnelUnavailable`, the error tap sends without cloudflared), a
-    /// tunnel stop with a stopped tunnel, a recording stop with a stopped
-    /// recording, a new segment with segment 2 recording, and quit as
-    /// `quit` says.
-    static func presenting(events: [String], quit: QuitBehavior = .exit, tunnelUnavailable: Bool = false, recordingTo record: URL) throws -> URL {
+    /// `tunnelUnavailable`, the error tap sends without cloudflared; or,
+    /// with `tunnelFailed`, the `tunnel_failed` error followed by the
+    /// stopped tunnel event tap sends after a failed start), a tunnel stop
+    /// with a stopped tunnel, a recording stop with a stopped recording, a
+    /// new segment with segment 2 recording, and quit as `quit` says.
+    static func presenting(events: [String], quit: QuitBehavior = .exit, tunnelFailed: Bool = false, tunnelUnavailable: Bool = false,
+                           recordingTo record: URL) throws -> URL {
         let url = try Fixtures.temporaryFolder().appendingPathComponent("tap")
         let eventLines = events.map { "echo '\($0)'" }.joined(separator: "\n")
-        let tunnelRunning = tunnelUnavailable
-            ? #"echo '{"type":"error","code":"tunnel_unavailable","message":"the tunnel needs cloudflared: brew install cloudflared"}'"#
-            : #"echo '{"type":"tunnel","state":"starting"}'; echo '{"type":"tunnel","state":"running","url":"https://stark-lake-1234.trycloudflare.com","qr":"\#(onePixelPNG)"}'"#
+        let tunnelRunning: String
+        if tunnelUnavailable {
+            tunnelRunning = #"echo '{"type":"error","code":"tunnel_unavailable","message":"the tunnel needs cloudflared: brew install cloudflared"}'"#
+        } else if tunnelFailed {
+            tunnelRunning = #"echo '{"type":"tunnel","state":"starting"}'; echo '{"type":"error","code":"tunnel_failed","message":"cloudflared exited: connection refused"}'; echo '{"type":"tunnel","state":"stopped"}'"#
+        } else {
+            tunnelRunning = #"echo '{"type":"tunnel","state":"starting"}'; echo '{"type":"tunnel","state":"running","url":"https://stark-lake-1234.trycloudflare.com","qr":"\#(onePixelPNG)"}'"#
+        }
         let onQuit: String
         switch quit {
         case .exit:
@@ -4897,14 +4934,21 @@ final class RecordingTests: PresentingTestCase {
         let sheet = try XCTUnwrap(deckWindow.questionSheet)
         XCTAssertEqual(sheet.kind, "record-consent")
         XCTAssertTrue(deckWindow.window?.attachedSheet === sheet, "a sheet on the deck window")
-        XCTAssertEqual(sheet.titleLabel.stringValue, "Record every talk automatically?")
+        XCTAssertEqual(sheet.titleLabel.stringValue, "Record automatically every time you present?", "the spec's words (05-presenting)")
         XCTAssertTrue(sheet.bodyLabel.stringValue.contains("follows the projector"))
         XCTAssertEqual(sheet.pathLabel.stringValue, settingsFile.path, "tap says where the answer is saved")
         XCTAssertEqual(sheet.declineButton.title, "Don't Record")
         XCTAssertEqual(sheet.acceptButton.title, "Record Automatically")
         XCTAssertEqual(presentation.state, .starting, "the talk waits for the answer")
+        // Past the page load and the show-windows fallback: the sheet still has nothing over it.
+        try await Task.sleep(nanoseconds: UInt64((PresentationController.showWindowsFallbackInterval + 0.5) * 1_000_000_000))
+        XCTAssertEqual(presentation.state, .starting)
         XCTAssertFalse(presentation.windowsShown, "nothing covers the sheet")
         XCTAssertFalse(presentation.audienceWindow?.isVisible ?? false)
+        XCTAssertTrue(fullScreenPresentationWindows().isEmpty)
+        if let audience = presentation.audienceWindow {
+            XCTAssertFalse(onScreenWindowNumbers().contains(audience.windowNumber))
+        }
 
         try XCTUnwrap(sheet.button(titled: "Don't Record")).performClick(nil)
         XCTAssertNil(deckWindow.questionSheet)
@@ -4923,33 +4967,59 @@ final class RecordingTests: PresentingTestCase {
         XCTAssertNil(deckWindow.questionSheet)
     }
 
-    func testAQuestionDuringTheTalkHidesTheWindowsOnItsScreen() async throws {
+    func testAQuestionDuringTheTalkBringsTheDeckWindowForward() async throws {
         let (_, controller) = try await openDeckForPresenting()
         let deckWindow = try windowController(controller)
+        let deck = try XCTUnwrap(deckWindow.window)
         let presentation = controller.presentation
         try await startPresenting(controller, PresentationOptions(mode: .play, startSlide: 1))
         let audience = try XCTUnwrap(presentation.audienceWindow)
-        let presenter = try XCTUnwrap(presentation.presenterWindow)
         presentation.handle(.question(id: "q9", kind: "record-consent", payload: QuestionPayload(settingsPath: "/tmp/settings.yaml")))
         let sheet = try XCTUnwrap(deckWindow.questionSheet)
-        XCTAssertTrue(deckWindow.window?.attachedSheet === sheet)
-        XCTAssertFalse(audience.isVisible, "the talk windows on the deck window's screen step aside")
-        XCTAssertFalse(presenter.isVisible)
-        XCTAssertEqual(presentation.windowsHiddenForQuestion.count, 2)
-        try await waitUntil(timeout: 5, "the talk windows off screen") {
+        XCTAssertTrue(deck.attachedSheet === sheet)
+        XCTAssertEqual(audience.fullScreenState, .fullScreen, "the talk windows stay where they are")
+        try await waitUntil(timeout: 5, "the deck window's Space active, the talk's not") {
             let order = onScreenWindowNumbers()
-            return !order.contains(audience.windowNumber) && !order.contains(presenter.windowNumber)
+            return order.contains(deck.windowNumber) && !order.contains(audience.windowNumber)
         }
+
+        // A second question arriving on top waits its turn.
+        presentation.handle(.question(id: "q10", kind: "approval", payload: QuestionPayload(deck: "/tmp/ops.md")))
+        XCTAssertEqual(presentation.pendingQuestions.count, 2)
+        XCTAssertTrue(deckWindow.questionSheet === sheet, "the first sheet is still the one up")
+
         try XCTUnwrap(sheet.button(titled: "Record Automatically")).performClick(nil)
-        XCTAssertNil(presentation.pendingQuestion)
-        XCTAssertTrue(audience.isVisible)
-        XCTAssertTrue(presenter.isVisible)
+        XCTAssertNil(presentation.pendingQuestions.first { $0.id == "q9" })
+        XCTAssertNil(deckWindow.questionSheet, "the approval is declined with a log line until D5, so no second sheet")
+        try await waitUntil(timeout: 5, "the approval answered") { presentation.pendingQuestions.isEmpty }
         XCTAssertTrue(presentation.frontWindow === audience)
-        try await waitUntil(timeout: 5, "the talk windows back") {
-            let order = onScreenWindowNumbers()
-            return order.contains(audience.windowNumber) && order.contains(presenter.windowNumber)
-        }
+        try await waitUntil(timeout: 5, "the talk's Space active again") { onScreenWindowNumbers().contains(audience.windowNumber) }
         XCTAssertEqual(presentation.state, .presenting)
+    }
+
+    func testStopDuringTheConsentSheetEndsTheSheetToo() async throws {
+        try removeRecordingConsent()
+        let (_, controller) = try await openDeckForPresenting()
+        let deckWindow = try windowController(controller)
+        let presentation = controller.presentation
+        presentation.start(PresentationOptions(mode: .play, startSlide: 1))
+        try await waitUntil(timeout: 30, "tap's consent question") { deckWindow.questionSheet?.kind == "record-consent" }
+        let stale = try XCTUnwrap(deckWindow.questionSheet)
+        // Present > Stop is enabled while the talk is starting.
+        deckWindow.stopPresenting(nil)
+        try await waitUntil(timeout: 30, "the talk to end") { presentation.state == .idle }
+        XCTAssertNil(deckWindow.questionSheet, "a talk's sheets end with it")
+        XCTAssertNil(deckWindow.window?.attachedSheet)
+        XCTAssertTrue(presentation.pendingQuestions.isEmpty)
+        XCTAssertTrue(fullScreenPresentationWindows().isEmpty)
+
+        // The next talk asks again, with a sheet of its own, and nothing stale clears it.
+        presentation.start(PresentationOptions(mode: .play, startSlide: 1))
+        try await waitUntil(timeout: 30, "the new consent question") { deckWindow.questionSheet != nil && deckWindow.questionSheet !== stale }
+        let sheet = try XCTUnwrap(deckWindow.questionSheet)
+        try XCTUnwrap(sheet.button(titled: "Don't Record")).performClick(nil)
+        XCTAssertNil(deckWindow.questionSheet)
+        try await waitUntil(timeout: 40, "the talk") { presentation.state == .presenting }
     }
 
     func testRecordingFollowsTapPresent() async throws {
@@ -4979,7 +5049,7 @@ final class RecordingTests: PresentingTestCase {
         XCTAssertTrue(dot.isHidden)
         toolbar.recordButton.performClick(nil)
         try await waitUntil(timeout: 5, "the new segment") { presentation.recording.segment == 2 && presentation.recording.isRecording }
-        XCTAssertEqual(toolbar.recordButton.title, "REC 0:00")
+        XCTAssertTrue(toolbar.recordButton.title.hasPrefix("REC 0:0"), "a fresh segment; the 1 s timer may already have ticked: \(toolbar.recordButton.title)")
 
         // A blocked recording stays NOT RECORDING, with tap's reason kept.
         presentation.handle(.recording(RecordingEvent(state: "stopped", segment: 2, elapsed: 0, disk: "ok")))
@@ -5003,8 +5073,18 @@ import AppKit
 /// A question tap asked, or the Focus hint, as a sheet on the deck window:
 /// a title, a body, an optional path line and two buttons. A sheet belongs
 /// to its window; the rest of the app keeps running and nothing is
-/// app-modal.
+/// app-modal. Return is the accept button. Escape is the decline button
+/// only where declining is harmless; a destructive decline has no key,
+/// so a stray Escape after a talk (Escape is how a talk ends) can never
+/// choose it.
 final class QuestionSheet: NSWindow {
+    enum EscapeAnswer {
+        /// Escape presses the decline button.
+        case decline
+        /// Escape does nothing; the person clicks.
+        case nothing
+    }
+
     let kind: String
     let titleLabel = NSTextField(labelWithString: "")
     let bodyLabel = NSTextField(wrappingLabelWithString: "")
@@ -5012,7 +5092,7 @@ final class QuestionSheet: NSWindow {
     let declineButton = NSButton(title: "", target: nil, action: nil)
     let acceptButton = NSButton(title: "", target: nil, action: nil)
 
-    init(kind: String, title: String, body: String, path: String?, decline: String, accept: String) {
+    init(kind: String, title: String, body: String, path: String?, decline: String, accept: String, escape: EscapeAnswer = .decline) {
         self.kind = kind
         super.init(contentRect: NSRect(x: 0, y: 0, width: 460, height: 200), styleMask: [.titled], backing: .buffered, defer: false)
         titleLabel.stringValue = title
@@ -5027,7 +5107,7 @@ final class QuestionSheet: NSWindow {
         pathLabel.setAccessibilityIdentifier("question-path")
         declineButton.title = decline
         declineButton.bezelStyle = .rounded
-        declineButton.keyEquivalent = "\u{1b}"
+        declineButton.keyEquivalent = escape == .decline ? "\u{1b}" : ""
         declineButton.target = self
         declineButton.action = #selector(declinePressed(_:))
         acceptButton.title = accept
@@ -5068,7 +5148,7 @@ final class QuestionSheet: NSWindow {
     /// tap's record-consent question. `settingsPath` is where tap saves the answer.
     static func consent(settingsPath: String?) -> QuestionSheet {
         QuestionSheet(kind: "record-consent",
-                      title: "Record every talk automatically?",
+                      title: "Record automatically every time you present?",
                       body: "Tap records the projector screen and your microphone from the start of each talk until you stop, and follows the projector if the cable is swapped. You choose whether to keep each recording at the end. The answer is saved for you, not the deck; tap present in Terminal uses it too.",
                       path: settingsPath,
                       decline: "Don't Record",
@@ -5086,13 +5166,31 @@ In `DeckWindowController.swift`, add after `presentPopover`:
     private(set) var questionSheet: QuestionSheet?
 ```
 
-In `init`, after the `onStateChange` line (Task 6), add:
+In `init`, replace the `onStateChange` line (Task 6) with these two:
 
 ```swift
+        sessionController.presentation.onStateChange = { [weak self] state in
+            self?.refreshPresentingControls()
+            switch state {
+            case .idle, .failed: self?.talkEnded()
+            case .starting, .presenting, .stopping: break
+            }
+        }
         sessionController.presentation.onQuestion = { [weak self] question in self?.presentQuestion(question) }
 ```
 
 Add after `reloadSlides(_:)`:
+
+```swift
+    /// The talk is idle or failed: no sheet of its outlives it. A sheet
+    /// ended this way answers nothing (the talk's questions are gone with
+    /// it); Task 10 gives the keep-recording sheet its own ending.
+    func talkEnded() {
+        endQuestionSheet(as: .abort)
+    }
+```
+
+and then:
 
 ```swift
     // MARK: tap's questions
@@ -5113,10 +5211,12 @@ Add after `reloadSlides(_:)`:
         }
     }
 
-    /// Puts `sheet` on this window and calls back with the answer. The talk's
-    /// windows on this window's screen step aside until then, and this
-    /// window comes forward: the sheet is the one thing the person must
-    /// answer, so this is the one focus move outside the talk windows.
+    /// Puts `sheet` on this window and calls back with the answer. This
+    /// window comes forward, which switches to its Space and leaves the
+    /// talk's Spaces where they are: the sheet is the one thing the person
+    /// must answer, so this is the one focus move outside the talk windows.
+    /// After the answer the talk's front window is made key again, which
+    /// switches back.
     func showQuestionSheet(_ sheet: QuestionSheet, completion: @escaping (Bool) -> Void) {
         guard let window else {
             completion(sheet.kind == "keep-recording")
@@ -5124,50 +5224,38 @@ Add after `reloadSlides(_:)`:
         }
         let presentation = sessionController.presentation
         questionSheet = sheet
-        presentation.hideWindowsSharingScreen(with: window)
         window.makeKeyAndOrderFront(nil)
         window.beginSheet(sheet) { [weak self] response in
-            self?.questionSheet = nil
+            // Only the sheet that completed clears the slot: a stale sheet
+            // ended late must not clear a newer one.
+            if self?.questionSheet === sheet { self?.questionSheet = nil }
             completion(response == .OK)
-            presentation.restoreHiddenWindows()
+            presentation.returnToTalk()
         }
+    }
+
+    /// Ends the sheet that is up, if any, as `response`. The talk ending
+    /// calls this so no sheet outlives the talk that asked.
+    func endQuestionSheet(as response: NSApplication.ModalResponse) {
+        guard let sheet = questionSheet, let window else { return }
+        window.endSheet(sheet, returnCode: response)
     }
 ```
 
 In `PresentationController.swift`, add a stored property after `windowsShown`:
 
 ```swift
-    /// The talk windows a question sheet sent off screen, to come back after the answer.
-    private(set) var windowsHiddenForQuestion: [PresentationWindow] = []
     private var recordingTimer: Timer?
 ```
 
 Add after `answer(id:value:)`:
 
 ```swift
-    /// A sheet is going on `other`: the talk windows on its screen go off
-    /// screen so the sheet has nothing over it. Nothing happens before the
-    /// windows have been shown; then they simply wait.
-    func hideWindowsSharingScreen(with other: NSWindow) {
-        guard windowsShown, let screenFrame = other.screen?.frame else { return }
-        for window in [audienceWindow, presenterWindow].compactMap({ $0 }) where window.isVisible && window.frame.intersects(screenFrame) {
-            window.orderOut(nil)
-            windowsHiddenForQuestion.append(window)
-        }
-    }
-
-    /// The sheet is gone: the windows it sent away come back, the front one in front.
-    func restoreHiddenWindows() {
-        let hidden = windowsHiddenForQuestion
-        windowsHiddenForQuestion = []
-        guard isActive else { return }
-        for window in hidden where window === audienceWindow || window === presenterWindow {
-            window.orderFrontRegardless()
-        }
-        if let frontWindow, hidden.contains(where: { $0 === frontWindow }) {
-            frontWindow.makeKeyAndOrderFront(nil)
-            frontWindow.orderFrontRegardless()
-        }
+    /// A sheet on the deck window is gone: the talk's front window is made
+    /// key again, which brings its Space back.
+    func returnToTalk() {
+        guard isActive, windowsShown, let frontWindow else { return }
+        frontWindow.makeKeyAndOrderFront(nil)
     }
 
     /// Counts the recording's seconds up between tap's events.
@@ -5183,27 +5271,29 @@ Add after `answer(id:value:)`:
     }
 ```
 
-In `openWindows`, add `startRecordingTimer()` after `sleepAssertion.acquire()`. In `takeDownWindows`, add as its first lines:
+In `openWindows`, add `startRecordingTimer()` after `sleepAssertion.acquire()`. In `takeDownWindows`, add after the screen observer lines:
 
 ```swift
         recordingTimer?.invalidate()
         recordingTimer = nil
-        windowsHiddenForQuestion = []
 ```
 
 - [ ] **Step 6: Run the tests one at a time**
 
+Required:
+
 ```bash
 make -C desktop test ONLY=TapTests/RecordingTests/testFirstTalkAsksAboutRecording
-make -C desktop test ONLY=TapTests/RecordingTests/testAQuestionDuringTheTalkHidesTheWindowsOnItsScreen
+make -C desktop test ONLY=TapTests/RecordingTests/testAQuestionDuringTheTalkBringsTheDeckWindowForward
+make -C desktop test ONLY=TapTests/RecordingTests/testStopDuringTheConsentSheetEndsTheSheetToo
 make -C desktop test ONLY=TapTests/RecordingTests/testRecordingFollowsTapPresent
 ```
 
-Expected: all three pass. `testFirstTalkAsksAboutRecording` runs the real tap: with no `settings.yaml`, tap asks within milliseconds of ready, before any page has loaded, so the windows are never shown before the sheet. tap saves `present: record: false` under the test's `XDG_CONFIG_HOME`; the person's own settings are never touched.
+Expected: all four pass. `testFirstTalkAsksAboutRecording` runs the real tap: with no `settings.yaml`, tap asks within milliseconds of ready, before any page has loaded, so the windows are never shown before the sheet; the 3.5 s wait proves they stay unshown past the fallback. After the answer tap's startup ends with `hub.BroadcastReload()`, so both pages reload once just as the windows enter full screen: a brief flash that is tap's own, not a bug to chase. tap saves `present: record: false` under the test's `XDG_CONFIG_HOME`; the person's own settings are never touched. In `testStopDuringTheConsentSheetEndsTheSheetToo`, tap's consent question is cancelled by its own quit path (`app_session.go`, `end` cancels the startup context, and `appQuestions.ask` returns unanswered), so tap exits cleanly without an answer.
 
 - [ ] **Step 7: Mutate and commit**
 
-Mutations, each reverted, the one that can leave a screen covered first: in `showWindowsIfReady`, drop `pendingQuestion == nil` (expected: `testFirstTalkAsksAboutRecording` fails on `windowsShown`, the windows cover the sheet); in `restoreHiddenWindows`, drop the `orderFrontRegardless` loop (expected: the mid-talk test fails on `isVisible`); in `hideWindowsSharingScreen`, drop `orderOut` (expected: it fails on `isVisible` being true); in `presentQuestion`, answer consent `true` regardless (expected: the consent test fails on `record: false`); in `startRecordingTimer`, never tick (expected: `testRecordingFollowsTapPresent` fails on the count); in `toggleRecording`, always send `.stop` (expected: it fails on segment 2); in `showQuestionSheet`, answer without a sheet (expected: the consent test fails on `attachedSheet`).
+Mutations, each reverted, the one that can leave a window over the sheet first: in `showWindowsIfReady`, drop `pendingQuestions.isEmpty` (expected: `testFirstTalkAsksAboutRecording` fails on `windowsShown` after the 3.5 s wait); in `returnToTalk`, drop `makeKeyAndOrderFront` (expected: the mid-talk test times out on "the talk's Space active again"); in `showQuestionSheet`, drop `window.makeKeyAndOrderFront(nil)` (expected: it times out on "the deck window's Space active"); in `handle`, call `onQuestion` for every question rather than the first (expected: it fails on `questionSheet === sheet`); in `showQuestionSheet`'s completion, clear `questionSheet` unconditionally (survives here; Task 10's stop-during-consent path is where a stale sheet ends late, and `testStopDuringTheConsentSheetEndsTheSheetToo` fails on `questionSheet !== stale` if a newer sheet is cleared); in `presentQuestion`, answer consent `true` regardless (expected: the consent test fails on `record: false`); in `QuestionSheet.consent`, use the mockup's title (expected: the consent test fails on the spec's words); in `startRecordingTimer`, never tick (expected: `testRecordingFollowsTapPresent` fails on the count); in `toggleRecording`, always send `.stop` (expected: it fails on segment 2); in `showQuestionSheet`, answer without a sheet (expected: the consent test fails on `attachedSheet`).
 
 ```bash
 git add desktop/Tap desktop/TapTests
@@ -5220,8 +5310,10 @@ git commit -m "feat(desktop): tap's questions as sheets on the deck window, the 
 - Test: `desktop/TapTests/KeepRecordingTests.swift`
 
 **Interfaces:**
-- Consumes: Task 9's `QuestionSheet`, `showQuestionSheet`, `presentQuestion`, `FakeTapScripts.presenting(events:quit:recordingTo:)`; Task 4's `stop`, `state`, `onStateChange`.
-- Produces: `QuestionSheet.keepRecording(directory:segments:size:)`; `DeckWindowController.revealInFinder`, `static folderSize(at:)`.
+- Consumes: Task 9's `QuestionSheet` (with `escape: .nothing`), `showQuestionSheet`, `endQuestionSheet(as:)`, `talkEnded`, `presentQuestion`, `FakeTapScripts.presenting(events:quit:recordingTo:)`; Task 4's `stop`, `state`, `onStateChange`, `quitTimeoutWithRecording`.
+- Produces: `QuestionSheet.keepRecording(directory:segments:size:)` whose Delete has no key equivalent and `hasDestructiveAction`; `DeckWindowController.revealInFinder`, `static folderSize(at:)`, `talkEnded()` ending a keep-recording sheet as Keep.
+
+A second Escape after a talk is common (Escape ended it), and tap's own wait makes that second press land on this sheet. Escape here does nothing; only a click can delete (C2 in the review). tap waits for the answer while stdin is open, up to 60 s (pull request 35); the app's quit deadline is extended to 75 s when the question arrives (Task 4), so closing stdin never answers for the person.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -5265,10 +5357,24 @@ final class KeepRecordingTests: PresentingTestCase {
         let sheet = try XCTUnwrap(deckWindow.questionSheet)
         XCTAssertTrue(deckWindow.window?.attachedSheet === sheet)
         XCTAssertEqual(sheet.titleLabel.stringValue, "Keep this recording?")
-        XCTAssertEqual(sheet.bodyLabel.stringValue, "2 segments, 3 KB on disk.")
+        let size = ByteCountFormatter.string(fromByteCount: 3072, countStyle: .file)
+        XCTAssertEqual(sheet.bodyLabel.stringValue, "2 segments, \(size) on disk.")
         XCTAssertEqual(sheet.pathLabel.stringValue, folder.path)
         XCTAssertEqual(sheet.declineButton.title, "Delete")
+        XCTAssertEqual(sheet.declineButton.keyEquivalent, "", "no key can delete")
+        XCTAssertTrue(sheet.declineButton.hasDestructiveAction)
         XCTAssertEqual(sheet.acceptButton.title, "Keep and Show in Finder")
+        XCTAssertTrue(presentation.session?.log.text.contains("tap asks a keep-recording question") == true)
+
+        // A second Escape, the one that ended the talk a moment ago, lands on the sheet and does nothing.
+        let escape = try XCTUnwrap(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                                                    windowNumber: sheet.windowNumber, context: nil, characters: "\u{1b}",
+                                                    charactersIgnoringModifiers: "\u{1b}", isARepeat: false, keyCode: 53))
+        XCTAssertFalse(sheet.performKeyEquivalent(with: escape))
+        XCTAssertTrue(deckWindow.window?.attachedSheet === sheet, "the sheet is still up")
+        try await Task.sleep(nanoseconds: 500_000_000)
+        XCTAssertFalse((try? String(contentsOf: record, encoding: .utf8))?.contains(#""value":false"#) ?? false, "nothing was deleted")
+        XCTAssertEqual(presentation.state, .stopping, "tap is still waiting for the answer")
 
         try XCTUnwrap(sheet.button(titled: "Keep and Show in Finder")).performClick(nil)
         XCTAssertEqual(revealed, [folder], "a kept run is revealed in Finder")
@@ -5299,7 +5405,7 @@ final class KeepRecordingTests: PresentingTestCase {
         let (controller, deckWindow) = try await startTalk(quit: .askToKeepThenExit(after: 0.5, directory: folder, segments: 1), record: record)
         deckWindow.stopPresenting(nil)
         try await waitUntil(timeout: 10, "the question") { deckWindow.questionSheet?.kind == "keep-recording" }
-        // tap's own three-second wait is over: it kept the recording and exited.
+        // tap's own wait (60 s in tap, 0.5 s in the fake) is over: it kept the recording and exited.
         try await waitUntil(timeout: 10, "the talk to end") { controller.presentation.state == .idle }
         XCTAssertNil(deckWindow.questionSheet, "the sheet goes with the process that asked")
         XCTAssertNil(deckWindow.window?.attachedSheet)
@@ -5320,14 +5426,19 @@ In `QuestionSheet.swift`, add after `consent(settingsPath:)`:
 
 ```swift
     /// tap's keep-recording question, asked when Stop ends a run that
-    /// recorded. `size` is the run folder's size, formatted.
+    /// recorded. `size` is the run folder's size, formatted. Delete is
+    /// destructive: no key reaches it, and a stray Escape after the talk
+    /// does nothing here.
     static func keepRecording(directory: String, segments: Int, size: String) -> QuestionSheet {
-        QuestionSheet(kind: "keep-recording",
-                      title: "Keep this recording?",
-                      body: "\(segments) segment\(segments == 1 ? "" : "s"), \(size) on disk.",
-                      path: directory,
-                      decline: "Delete",
-                      accept: "Keep and Show in Finder")
+        let sheet = QuestionSheet(kind: "keep-recording",
+                                  title: "Keep this recording?",
+                                  body: "\(segments) segment\(segments == 1 ? "" : "s"), \(size) on disk.",
+                                  path: directory,
+                                  decline: "Delete",
+                                  accept: "Keep and Show in Finder",
+                                  escape: .nothing)
+        sheet.declineButton.hasDestructiveAction = true
+        return sheet
     }
 ```
 
@@ -5367,24 +5478,23 @@ Add after `showQuestionSheet`:
         return ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
     }
 
-    /// tap exited while its keep-recording sheet was still up: its
-    /// three-second wait ran out and it kept the recording. The sheet ends
-    /// as a yes, so the run is revealed like any kept run.
+    /// The talk is idle or failed: no sheet of its outlives it. A
+    /// keep-recording sheet still up means tap exited before an answer
+    /// came: its 60 s wait ran out (or the app's stdin closed) and it kept
+    /// the recording, so the sheet ends as a yes and the run is revealed
+    /// like any kept run. Any other sheet ends answering nothing.
     func talkEnded() {
-        guard let sheet = questionSheet, sheet.kind == "keep-recording", let window else { return }
-        sessionController.session.log.append("tap kept the recording before an answer came", source: .app)
-        window.endSheet(sheet, returnCode: .OK)
+        guard let sheet = questionSheet else { return }
+        if sheet.kind == "keep-recording" {
+            sessionController.session.log.append("tap kept the recording before an answer came", source: .app)
+            endQuestionSheet(as: .OK)
+        } else {
+            endQuestionSheet(as: .abort)
+        }
     }
 ```
 
-In `init`, replace the `onStateChange` line (Task 6) with:
-
-```swift
-        sessionController.presentation.onStateChange = { [weak self] state in
-            self?.refreshPresentingControls()
-            if state == .idle { self?.talkEnded() }
-        }
-```
+This replaces Task 9's `talkEnded()`; the `onStateChange` closure that calls it is unchanged.
 
 - [ ] **Step 4: Run the tests one at a time**
 
@@ -5398,7 +5508,7 @@ Expected: all three pass. `ByteCountFormatter` prints 3,072 bytes as "3 KB".
 
 - [ ] **Step 5: Mutate and commit**
 
-Mutations, each reverted: in the keep-recording case, reveal on `false` too (expected: `testDeletingTheRecordingAnswersNo` fails); answer `true` regardless (expected: it fails on the record file); in `talkEnded`, drop `endSheet` (expected: the no-wait test fails on `questionSheet`); in `keepRecording`, drop the segments count from the body (expected: `testKeepTheRecording` fails on the body).
+Mutations, each reverted, the one that can delete a recording first: in `keepRecording`, pass `escape: .decline` (expected: `testKeepTheRecording` fails on the key equivalent, and on `"value":false` reaching tap); in `keepRecording`, drop `hasDestructiveAction` (expected: it fails on that assertion); in the keep-recording case, reveal on `false` too (expected: `testDeletingTheRecordingAnswersNo` fails); answer `true` regardless (expected: it fails on the record file); in `talkEnded`, end every sheet as `.abort` (expected: the no-wait test fails on `revealed`); in `talkEnded`, drop the call for keep-recording (expected: the no-wait test fails on `questionSheet`); in `handle`, drop `extendQuit` on the keep-recording question (survives here, since the fakes answer within 15 s; it is the person's manual check with a real recording, timed: Stop, wait 20 s, then Delete must still delete); in `keepRecording`, drop the segments count from the body (expected: `testKeepTheRecording` fails on the body).
 
 ```bash
 git add desktop/Tap desktop/TapTests
@@ -5417,8 +5527,10 @@ git commit -m "feat(desktop): the keep-recording sheet, revealing a kept run, an
 - Test: `desktop/TapTests/PhoneRemoteTests.swift`
 
 **Interfaces:**
-- Consumes: Task 1's `TunnelEvent`, `TapCommand.tunnel(start:)`; Task 2's `PresentationOptions.wantsTunnel`; Task 9's `FakeTapScripts.presenting`; Task 3's `PresentationWindow.coveringLevel`.
-- Produces: `RemotePanel` with `qrImageView`, `urlLabel`, `noteLabel`, `messageLabel`, `turnOffButton`, `onTurnOff`, `show(tunnel:error:ownPassword:on:)`, `hide()`; `PresentationController.tunnel`, `tunnelError`, `onTunnelChange`, `setTunnel(on:)`; `DeckWindowController.remotePanel`, `togglePhoneRemote(_:)`, `refreshRemotePanel()`; the Present menu item Phone Remote.
+- Consumes: Task 1's `TunnelEvent`, `TapCommand.tunnel(start:)`; Task 2's `PresentationOptions.wantsTunnel`; Task 9's `FakeTapScripts.presenting(events:quit:tunnelFailed:tunnelUnavailable:recordingTo:)`; Task 3's `PresentationWindow`.
+- Produces: `RemotePanel` with `qrImageView`, `urlLabel`, `noteLabel`, `messageLabel`, `turnOffButton`, `onTurnOff`, `show(tunnel:error:ownPassword:on:)`, `hide()`; `PresentationController.tunnel`, `tunnelError`, `onTunnelChange`, `setTunnel(on:)`; `DeckWindowController.remotePanel` (made with the window, closed with it), `togglePhoneRemote(_:)`, `refreshRemotePanel()`; the Present menu item Phone Remote.
+
+The panel is a floating panel with `.fullScreenAuxiliary`, so it shows over the presenter window's full screen Space.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -5449,7 +5561,8 @@ final class PhoneRemoteTests: PresentingTestCase {
         XCTAssertEqual(panel.qrImageView.image?.size, NSSize(width: 1, height: 1), "tap's PNG, decoded")
         XCTAssertTrue(panel.noteLabel.stringValue.contains("tap made a presenter password for this talk"))
         XCTAssertTrue(panel.messageLabel.isHidden)
-        XCTAssertGreaterThan(panel.level.rawValue, PresentationWindow.coveringLevel.rawValue, "over the presenter window")
+        XCTAssertEqual(panel.level, .floating)
+        XCTAssertTrue(panel.collectionBehavior.contains(.fullScreenAuxiliary), "shows over the presenter window's full screen Space")
         try await waitUntil(timeout: 5, "the panel on screen") { onScreenWindowNumbers().contains(panel.windowNumber) }
 
         panel.turnOffButton.performClick(nil)
@@ -5495,6 +5608,40 @@ final class PhoneRemoteTests: PresentingTestCase {
         XCTAssertNil(panel.qrImageView.image)
         try await stopPresenting(controller)
     }
+
+    func testAFailedTunnelStartKeepsItsReason() async throws {
+        let record = try Fixtures.temporaryFolder().appendingPathComponent("record")
+        AppEnvironment.shared.presentExecutableURL = try FakeTapScripts.presenting(events: [], tunnelFailed: true, recordingTo: record)
+        let (_, controller) = try await openDeckForPresenting()
+        let deckWindow = try XCTUnwrap(controller.editor.window?.windowController as? DeckWindowController)
+        let presentation = controller.presentation
+        try await startPresenting(controller, PresentationOptions(mode: .play, startSlide: 1, phoneRemote: true))
+        // tap sends tunnel_failed and then a stopped tunnel event; the reason must survive the second.
+        try await waitUntil(timeout: 5, "tap's stopped tunnel") { presentation.tunnel?.state == "stopped" }
+        XCTAssertEqual(presentation.tunnelError, "cloudflared exited: connection refused")
+        let panel = deckWindow.remotePanel
+        XCTAssertTrue(panel.isVisible, "the panel stays with the reason")
+        XCTAssertFalse(panel.messageLabel.isHidden)
+        XCTAssertTrue(panel.messageLabel.stringValue.contains("connection refused"))
+        // Trying again clears the old reason as the new start begins.
+        deckWindow.togglePhoneRemote(nil)
+        try await waitUntil(timeout: 5, "a new start") { presentation.tunnelError == nil || presentation.tunnel?.state == "starting" }
+        try await stopPresenting(controller)
+        XCTAssertFalse(panel.isVisible)
+    }
+
+    func testThePanelClosesWithTheDeckWindow() async throws {
+        let record = try Fixtures.temporaryFolder().appendingPathComponent("record")
+        AppEnvironment.shared.presentExecutableURL = try FakeTapScripts.presenting(events: [], recordingTo: record)
+        let (document, controller) = try await openDeckForPresenting()
+        let deckWindow = try XCTUnwrap(controller.editor.window?.windowController as? DeckWindowController)
+        try await startPresenting(controller, PresentationOptions(mode: .play, startSlide: 1, phoneRemote: true))
+        let panel = deckWindow.remotePanel
+        try await waitUntil(timeout: 5, "the panel") { panel.isVisible }
+        document.close()
+        XCTAssertFalse(panel.isVisible, "no panel outlives its deck window")
+        try await waitUntil(timeout: 5, "the panel off screen") { !onScreenWindowNumbers().contains(panel.windowNumber) }
+    }
 }
 ```
 
@@ -5521,8 +5668,10 @@ final class RemotePanel: NSPanel {
     init() {
         super.init(contentRect: NSRect(x: 0, y: 0, width: 360, height: 460), styleMask: [.titled, .nonactivatingPanel], backing: .buffered, defer: false)
         title = "Phone remote"
-        level = NSWindow.Level(rawValue: PresentationWindow.coveringLevel.rawValue + 1)
-        collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        // A floating panel that may show over a full screen Space, and moves
+        // to whichever Space is active when it is ordered front.
+        level = .floating
+        collectionBehavior = [.fullScreenAuxiliary, .moveToActiveSpace]
         isReleasedWhenClosed = false
         isFloatingPanel = true
         setAccessibilityIdentifier("remote-panel")
@@ -5608,7 +5757,9 @@ In `handle(_:)`, add cases before `default`:
 ```swift
         case .tunnel(let tunnelEvent):
             tunnel = tunnelEvent
-            tunnelError = nil
+            // A failed start is tunnel_failed followed by a stopped event
+            // (app_session.go, tunnel); only a new start clears the reason.
+            if tunnelEvent.state == "starting" || tunnelEvent.state == "running" { tunnelError = nil }
             onTunnelChange?()
         case .error(let payload) where payload.code == "tunnel_unavailable" || payload.code == "tunnel_failed":
             tunnelError = payload.message
@@ -5630,17 +5781,23 @@ In `takeDownWindows`, add `tunnel = nil` and `tunnelError = nil` after `windowsH
 In `DeckWindowController.swift`, add after `revealInFinder`:
 
 ```swift
-    private(set) lazy var remotePanel: RemotePanel = {
-        let panel = RemotePanel()
-        panel.onTurnOff = { [weak self] in self?.sessionController.presentation.setTunnel(on: false) }
-        return panel
-    }()
+    /// The phone remote panel, made with the window (a panel that is never
+    /// shown costs nothing) and closed with it, so none outlives its deck.
+    let remotePanel = RemotePanel()
 ```
 
 In `init`, after the `onQuestion` line, add:
 
 ```swift
+        remotePanel.onTurnOff = { [weak self] in self?.sessionController.presentation.setTunnel(on: false) }
         sessionController.presentation.onTunnelChange = { [weak self] in self?.refreshRemotePanel() }
+```
+
+In `windowWillClose`, add after the preview window lines:
+
+```swift
+        remotePanel.orderOut(nil)
+        remotePanel.close()
 ```
 
 Add after `talkEnded()`:
@@ -5687,18 +5844,20 @@ In `MainMenu.presentMenu()`, add after Swap Displays:
 
 - [ ] **Step 5: Run the tests one at a time**
 
+Required:
+
 ```bash
 make -C desktop test ONLY=TapTests/PhoneRemoteTests/testPhoneRemote
-make -C desktop test ONLY=TapTests/PhoneRemoteTests/testAdvancedRemoteOptions
+make -C desktop test ONLY=TapTests/PhoneRemoteTests/testAFailedTunnelStartKeepsItsReason
+make -C desktop test ONLY=TapTests/PhoneRemoteTests/testThePanelClosesWithTheDeckWindow
 make -C desktop test ONLY=TapTests/PhoneRemoteTests/testWithoutCloudflaredThePanelSaysSo
-make -C desktop test ONLY=TapTests/PresentMenuTests/testPresentingShortcuts
 ```
 
-Expected: all pass. Every tunnel test uses the scripted tap; no real tunnel is ever started.
+Optional: `testAdvancedRemoteOptions`, `ONLY=TapTests/PresentMenuTests/testPresentingShortcuts`. Expected: all pass. Every tunnel test uses the scripted tap; no real tunnel is ever started.
 
 - [ ] **Step 6: Mutate and commit**
 
-Mutations, each reverted: in `openWindows`, drop the `wantsTunnel` line (expected: `testPhoneRemote` times out on the tunnel command); in `refreshRemotePanel`, never hide the panel (expected: it fails after Turn Off); in `handle`, drop the tunnel error case (expected: `testWithoutCloudflaredThePanelSaysSo` times out); in `RemotePanel.show`, drop the base64 decode (expected: the image size assertion fails); in `togglePhoneRemote`, always start (expected: `testPhoneRemote` fails on the second toggle's expectation only if extended; leave as noted); in `takeDownWindows`, drop `onTunnelChange?()` (expected: `testPhoneRemote` fails on the panel after the stop).
+Mutations, each reverted: in `openWindows`, drop the `wantsTunnel` line (expected: `testPhoneRemote` times out on the tunnel command); in `refreshRemotePanel`, never hide the panel (expected: it fails after Turn Off); in `handle`, clear `tunnelError` on every tunnel event (expected: `testAFailedTunnelStartKeepsItsReason` fails on `tunnelError`); in `handle`, drop the tunnel error case (expected: `testWithoutCloudflaredThePanelSaysSo` times out); in `windowWillClose`, drop the panel lines (expected: `testThePanelClosesWithTheDeckWindow` fails on `isVisible`); in `RemotePanel.show`, drop the base64 decode (expected: the image size assertion fails); in `togglePhoneRemote`, always start (expected: `testPhoneRemote` fails on the second toggle's expectation only if extended; leave as noted); in `takeDownWindows`, drop `onTunnelChange?()` (expected: `testPhoneRemote` fails on the panel after the stop).
 
 ```bash
 git add desktop/Tap desktop/TapTests
@@ -5710,16 +5869,15 @@ git commit -m "feat(desktop): the phone remote panel with tap's QR code, the tun
 ### Task 12: Nothing interrupts the talk: the Focus hint, one talk at a time, and no updates during it
 
 **Files:**
-- Modify: `desktop/Tap/App/AppEnvironment.swift` (`focusHint`, `presentingCount`, `isPresenting`, `updatesMayInterrupt`, `presentingDidChangeNotification`)
-- Modify: `desktop/Tap/Presenting/PresentationController.swift` (counts itself in and out)
+- Modify: `desktop/Tap/App/AppEnvironment.swift` (`focusHint`)
 - Modify: `desktop/Tap/Presenting/QuestionSheet.swift` (`focusHint`)
-- Modify: `desktop/Tap/Windows/DeckWindowController.swift` (the hint before the first talk, `openFocusSettings`, validation across decks)
+- Modify: `desktop/Tap/Windows/DeckWindowController.swift` (the hint before the first talk, `openFocusSettings`, the Play button following every deck's talk)
 - Modify: `desktop/TapTests/Support/HostedTestCase.swift` (a fresh, already-shown hint per test)
 - Test: `desktop/TapTests/FocusHintTests.swift`
 
 **Interfaces:**
-- Consumes: Task 2's `FocusHintState`; Task 9's `QuestionSheet`, `showQuestionSheet`; Task 6's `startPresenting`, `refreshPresentingControls`.
-- Produces: `AppEnvironment.focusHint`, `presentingCount`, `isPresenting`, `updatesMayInterrupt`, `noteTalkStarted()`, `noteTalkEnded()`, `static presentingDidChangeNotification`; `QuestionSheet.focusHint()`; `DeckWindowController.openFocusSettings`, `focusHintSheet`.
+- Consumes: Task 2's `FocusHintState`; Task 4's `AppEnvironment.presentingCount`, `isPresenting`, `updatesMayInterrupt`, `presentingDidChangeNotification` and the count from `start` to idle or failed; Task 9's `QuestionSheet`, `showQuestionSheet`; Task 6's `startPresenting`, `refreshPresentingControls`.
+- Produces: `AppEnvironment.focusHint`; `QuestionSheet.focusHint()`; `DeckWindowController.openFocusSettings`, `focusHintSheet`, the `presentingDidChangeNotification` observer that refreshes Play in every deck.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -5767,6 +5925,11 @@ final class FocusHintTests: PresentingTestCase {
         // While I am presenting, nothing else may interrupt: no update prompt, no second talk.
         XCTAssertTrue(AppEnvironment.shared.isPresenting)
         XCTAssertFalse(AppEnvironment.shared.updatesMayInterrupt, "D7's Sparkle checks this before any prompt or restart")
+        // The second deck opens on the desktop Space, under nothing; its
+        // window is ordered front by openDeck, which switches Spaces away
+        // from the talk. Its preview's ready still relies on pull request
+        // 27 (a hidden page reports ready) if the window server has not
+        // switched yet when the page paints.
         let (_, other) = try await openDeckForPresenting()
         let otherWindow = try XCTUnwrap(other.editor.window?.windowController as? DeckWindowController)
         let play = try XCTUnwrap(NSApp.mainMenu?.items.first { $0.submenu?.title == "Present" }?.submenu?.items.first { $0.action == #selector(DeckWindowController.play(_:)) })
@@ -5799,58 +5962,16 @@ final class FocusHintTests: PresentingTestCase {
 Run: `make -C desktop test ONLY=TapTests/FocusHintTests/testNotNowStartsTheTalk`
 Expected: the test target does not compile (`focusHint`, `focusHintSheet` are undefined).
 
-- [ ] **Step 3: The environment's count, the hint and the validation**
+- [ ] **Step 3: The hint, and Play following every deck's talk**
+
+The talk count itself is Task 4's (`AppEnvironment.presentingCount`, counted in `PresentationController.start` and out in `finishStopping`, `fail` and, as a last guard, `deinit`; `canStart` already reads `isPresenting`). This task adds the hint and the observer that refreshes Play in every deck window when the count changes.
 
 In `AppEnvironment.swift`, add after `presentExecutableURL`:
 
 ```swift
     /// Whether the Focus hint has been shown on this Mac. A test replaces it.
     var focusHint = FocusHintState()
-    /// How many talks are running across every deck. Play is off while one
-    /// runs, and D7's updater reads `updatesMayInterrupt` before any prompt
-    /// or restart.
-    private(set) var presentingCount = 0
-    static let presentingDidChangeNotification = Notification.Name("TapPresentingDidChange")
-
-    var isPresenting: Bool { presentingCount > 0 }
-    var updatesMayInterrupt: Bool { !isPresenting }
-
-    func noteTalkStarted() {
-        presentingCount += 1
-        NotificationCenter.default.post(name: Self.presentingDidChangeNotification, object: self)
-    }
-
-    func noteTalkEnded() {
-        presentingCount = max(0, presentingCount - 1)
-        NotificationCenter.default.post(name: Self.presentingDidChangeNotification, object: self)
-    }
 ```
-
-In `PresentationController.swift`, add a stored property after `tunnelError`:
-
-```swift
-    /// True while this talk is counted in `AppEnvironment.presentingCount`.
-    private var countedAsPresenting = false
-```
-
-In `launch(deck:options:)`, add before `session.start()`:
-
-```swift
-        countedAsPresenting = true
-        AppEnvironment.shared.noteTalkStarted()
-```
-
-Add a private method and call it as the first line of both `finishStopping()` and `fail(_:)`:
-
-```swift
-    private func uncount() {
-        guard countedAsPresenting else { return }
-        countedAsPresenting = false
-        AppEnvironment.shared.noteTalkEnded()
-    }
-```
-
-In `canStart`, use `deckURL() != nil && !isActive && !AppEnvironment.shared.isPresenting`.
 
 In `QuestionSheet.swift`, add after `keepRecording`:
 
@@ -5936,11 +6057,13 @@ Expected: all pass.
 
 - [ ] **Step 5: Mutate and commit**
 
-Mutations, each reverted: in `startPresenting`, start the talk on `.OK` too (expected: `testNothingInterruptsTheTalk` fails on `.idle` after Open Focus Settings); drop `hint.markShown()` (expected: it fails on the second start showing a sheet); in `canStart`, drop the `isPresenting` check (expected: it fails on the other deck's Play); in `uncount`, never call `noteTalkEnded` (expected: it fails on `isPresenting` after the stop); in `launch`, drop `noteTalkStarted` (expected: it fails on `isPresenting`).
+Mutations, each reverted: in `startPresenting`, start the talk on `.OK` too (expected: `testNothingInterruptsTheTalk` fails on `.idle` after Open Focus Settings); drop `hint.markShown()` (expected: it fails on the second start showing a sheet); in `canStart`, drop the `isPresenting` check (expected: it fails on the other deck's Play); in `countOut`, never call `noteTalkEnded` (expected: it fails on `isPresenting` after the stop, and Task 4's class run fails on every later test); in `init`, drop the `presentingDidChangeNotification` observer (expected: it fails on the other deck's `playButton.isEnabled`, since only the notification refreshes a deck that did not start the talk).
+
+Add to the branch ledger: "`AppEnvironment.updatesMayInterrupt` is a flag until D7 wires Sparkle. D7 must read it before any update prompt or restart; `testNothingInterruptsTheTalk` pins the flag, not Sparkle."
 
 ```bash
 git add desktop/Tap desktop/TapTests
-git commit -m "feat(desktop): the Focus hint before the first talk, one talk at a time, and no updates while presenting"
+git commit -m "feat(desktop): the Focus hint before the first talk, and Play following every deck's talk"
 ```
 
 ---
@@ -6022,17 +6145,20 @@ final class PresentingFailureTests: PresentingTestCase {
         try "# Theirs\n".write(to: deck, atomically: true, encoding: .utf8)
         controller.diskChanged()
         XCTAssertTrue(controller.hasDiskConflict)
-        presentation.start(PresentationOptions(mode: .play, startSlide: 1))
+        controller.jumpToSlide(number: 4)
+        presentation.start(PresentationOptions(mode: .play, startSlide: 4))
         try await waitUntil(timeout: 10, "the refusal") { if case .failed = presentation.state { return true } else { return false } }
         guard case .failed(let message) = presentation.state else { return XCTFail() }
-        XCTAssertTrue(message.hasPrefix("The deck could not be saved"), message)
+        XCTAssertEqual(message, "The deck could not be saved: resolve the change on disk first.", "what to do, not CocoaError's text")
         XCTAssertNil(presentation.session, "tap present never started")
         XCTAssertNil(presentation.audienceWindow)
+        XCTAssertFalse(AppEnvironment.shared.isPresenting, "counted out again")
         XCTAssertNotNil(controller.editorViewController.bar(.talkFailed))
+        XCTAssertEqual(controller.currentSlideNumber, 4, "no talk ran, so the cursor did not move")
         XCTAssertEqual(try String(contentsOf: deck, encoding: .utf8), "# Theirs\n", "the other program's file is untouched")
     }
 
-    func testPlayIsDisabledWhileADeckIsPresentingOrHasNoFile() async throws {
+    func testPlayIsDisabledWhileADeckHasNoFile() async throws {
         let (document, controller) = try await openDeckForPresenting()
         let deckWindow = try windowController(controller)
         XCTAssertTrue(controller.presentation.canStart)
@@ -6040,8 +6166,23 @@ final class PresentingFailureTests: PresentingTestCase {
         XCTAssertFalse(controller.presentation.canStart, "tap present needs a file to read")
         deckWindow.refreshPresentingControls()
         XCTAssertFalse(deckWindow.playButton.isEnabled)
-        deckWindow.playClicked(modifiers: [.shift])
+        deckWindow.playButtonClicked(modifiers: [.shift])
+        deckWindow.play(nil)
         XCTAssertEqual(controller.presentation.state, .idle)
+    }
+
+    func testPlayIsDisabledWhileAnotherDeckPresents() async throws {
+        let (_, first) = try await openDeckForPresenting()
+        try await startPresenting(first, PresentationOptions(mode: .rehearse, startSlide: 1))
+        let (_, second) = try await openDeckForPresenting()
+        let secondWindow = try windowController(second)
+        XCTAssertFalse(second.presentation.canStart, "one talk at a time, app-wide")
+        XCTAssertFalse(secondWindow.playButton.isEnabled)
+        secondWindow.play(nil)
+        XCTAssertEqual(second.presentation.state, .idle)
+        try await stopPresenting(first)
+        XCTAssertTrue(second.presentation.canStart)
+        XCTAssertTrue(secondWindow.playButton.isEnabled, "the notification reached the other deck")
     }
 
     func testATalkSurvivesATapPresentRestart() async throws {
@@ -6081,8 +6222,9 @@ final class PresentingFailureTests: PresentingTestCase {
         AppEnvironment.shared.presentExecutableURL = try FakeTapScripts.readyAndWaiting()
         let (_, controller) = try await openDeckForPresenting()
         let presentation = controller.presentation
+        controller.jumpToSlide(number: 1)
         // The talk is on (the windows show after the fallback, since the fake has no pages) when tap starts dying.
-        try await startPresenting(controller, PresentationOptions(mode: .play, startSlide: 1))
+        try await startPresenting(controller, PresentationOptions(mode: .play, startSlide: 3))
         for _ in 0..<3 {
             try await waitUntil(timeout: 10, "a running tap present or the end") {
                 if case .failed = presentation.state { return true }
@@ -6099,10 +6241,11 @@ final class PresentingFailureTests: PresentingTestCase {
         XCTAssertNil(presentation.audienceWindow)
         XCTAssertNil(presentation.presenterWindow)
         XCTAssertFalse(presentation.sleepAssertion.isHeld)
-        XCTAssertFalse(NSApp.windows.contains { $0.isVisible && $0 is PresentationWindow })
+        XCTAssertFalse(AppEnvironment.shared.isPresenting)
+        try await waitUntil(timeout: 10, "nothing left in full screen") { fullScreenPresentationWindows().isEmpty && presentation.windowsGoingDown.isEmpty }
         let bar = try XCTUnwrap(controller.editorViewController.bar(.talkFailed))
         XCTAssertTrue(bar.message.contains("The talk stopped"))
-        XCTAssertEqual(controller.currentSlideNumber, 1, "the cursor is on the last slide presented")
+        XCTAssertEqual(controller.currentSlideNumber, 3, "the cursor is on the last slide presented, not where it was")
     }
 }
 ```
@@ -6148,9 +6291,10 @@ In `start(_:)`, add `lastErrorMessage = nil`, `lastTalkLog = nil` and `failedAft
     private func endBecauseTapFailed(lastOutput: [String]) {
         let summary = session?.restartPolicy.exitSummary ?? "tap present exited"
         let reason = lastErrorMessage ?? lastOutput.last
-        failedAfterShowing = windowsShown
+        let showed = windowsWereShown
+        failedAfterShowing = showed
         fail(reason.map { "\(summary). \($0)" } ?? summary)
-        onStopped?(lastSlide)
+        if showed { onStopped?(lastSlide) }
     }
 ```
 
@@ -6188,20 +6332,20 @@ and in the `onStateChange` closure (Task 10), add `if state == .starting { self?
 
 - [ ] **Step 4: Run the tests one at a time**
 
+Required:
+
 ```bash
 make -C desktop test ONLY=TapTests/PresentingFailureTests/testATalkThatCannotStartShowsABar
 make -C desktop test ONLY=TapTests/PresentingFailureTests/testATalkThatCannotBeSavedDoesNotStart
-make -C desktop test ONLY=TapTests/PresentingFailureTests/testPlayIsDisabledWhileADeckIsPresentingOrHasNoFile
 make -C desktop test ONLY=TapTests/PresentingFailureTests/testATalkSurvivesATapPresentRestart
 make -C desktop test ONLY=TapTests/PresentingFailureTests/testATalkEndsWhenTapPresentKeepsDying
-make -C desktop test ONLY=TapTests/PresentingTests/testTheTalksLogIsListedInTheTapLogWindow
 ```
 
-Expected: all pass. `testATalkSurvivesATapPresentRestart` takes a few seconds: D2's policy waits 0.5 s before the first restart, and tap present needs its ready line again.
+Optional: `testPlayIsDisabledWhileADeckHasNoFile`, `testPlayIsDisabledWhileAnotherDeckPresents`, `ONLY=TapTests/PresentingTests/testTheTalksLogIsListedInTheTapLogWindow`. Expected: all pass. `testATalkSurvivesATapPresentRestart` takes a few seconds: D2's policy waits 0.5 s before the first restart, and tap present needs its ready line again; the restarted tap asks for the deck's remembered port, which the dead process has freed.
 
 - [ ] **Step 5: Mutate and commit**
 
-Mutations, each reverted, the ones that can leave a screen covered or the assertion held first: in `endBecauseTapFailed`, skip `fail` (expected: `testATalkEndsWhenTapPresentKeepsDying` times out with the assertion held); in `openWindows`, create fresh windows on every ready instead of reusing (expected: the restart test fails on `===`); in `tapIsReady`, refuse `.presenting` (expected: the restart test never reloads); in `fail`, drop `takeDownWindows()` (expected: the dying test fails on `audienceWindow`); in `handle`, drop the `.error` case (expected: `testATalkThatCannotStartShowsABar` fails on the message); in `showTalkFailed`, drop the Dismiss button (expected: it fails on the unwrap); in `canStart`, drop the `deckURL() != nil` check (expected: `testPlayIsDisabledWhileADeckIsPresentingOrHasNoFile` fails).
+Mutations, each reverted, the ones that can leave a window in full screen or the assertion held first: in `endBecauseTapFailed`, skip `fail` (expected: `testATalkEndsWhenTapPresentKeepsDying` times out with the assertion held); in `fail`, drop `takeDownWindows()` (expected: the dying test fails on `audienceWindow` and on `fullScreenPresentationWindows()`); in `openWindows`, create fresh windows on every ready instead of reusing (expected: the restart test fails on `===`); in `tapIsReady`, refuse `.presenting` (expected: the restart test never reloads); in `endBecauseTapFailed`, call `onStopped` whether or not the windows showed (expected: `testATalkThatCannotBeSavedDoesNotStart` is unaffected, since a refused save goes through `fail` directly; add `controller.jumpToSlide(number: 1)` and a `startSlide: 3` to `testATalkThatCannotStartShowsABar` and assert the cursor stays on 1 to kill it); in `saveFailureMessage`, return the localized description for `.userCancelled` (expected: the save test fails on the message); in `handle`, drop the `.error` case (expected: `testATalkThatCannotStartShowsABar` fails on the message); in `showTalkFailed`, drop the Dismiss button (expected: it fails on the unwrap); in `canStart`, drop the `deckURL() != nil` check (expected: `testPlayIsDisabledWhileADeckHasNoFile` fails); in `canStart`, drop the `isPresenting` check (expected: `testPlayIsDisabledWhileAnotherDeckPresents` fails).
 
 ```bash
 git add desktop/Tap desktop/TapTests
@@ -6214,6 +6358,7 @@ git commit -m "feat(desktop): a talk that cannot start or stops restarting says 
 
 **Files:**
 - Modify: `desktop/scenarios.txt`, `desktop/README.md`
+- Modify: `desktop/Makefile` (`test-build`, `bench-build`)
 - Modify: `desktop/Tap/App/AppEnvironment.swift` (`-TapConfigHome`)
 - Create: `desktop/TapUITests/PresentingUITests.swift`
 
@@ -6250,9 +6395,22 @@ D4 | 12-menus-and-shortcuts.feature | Presenting shortcuts
 Run: `make -C desktop check-scenarios`
 Expected: `every claimed scenario has a test`.
 
-- [ ] **Step 2: The config seam**
+- [ ] **Step 2: The build targets and the config seam**
 
-In `AppEnvironment.init`, add after the `tapExecutableURL` assignment:
+In `desktop/Makefile`, add `test-build` and `bench-build` to `.PHONY` and these targets after `bench`:
+
+```make
+# Compiles the hosted and UI tests without running them; the person runs uitest.
+test-build: project
+	$(XCODEBUILD) -scheme Tap -destination 'platform=macOS' build-for-testing
+
+bench-build: project
+	$(XCODEBUILD) -scheme TapBenchmarks -destination 'platform=macOS' build-for-testing
+```
+
+Both depend on `project`, so xcodegen runs first and a new test file cannot be left out of a stale `Tap.xcodeproj`.
+
+In `AppEnvironment.init`, add after the `loginShellLoader = ...` line (the `tapExecutableURL` assignment sits in two branches; this line has one place):
 
 ```swift
         // UI tests pass -TapConfigHome <folder>, so the tap they drive reads
@@ -6342,8 +6500,8 @@ final class PresentingUITests: UITestCase {
 
 `-FocusHintShown YES` sets the `FocusHintShown` default in the launched app's standard defaults, which `FocusHintState()` reads, so the hint does not stand between the test and the talk.
 
-Run: `cd desktop && xcodebuild -project Tap.xcodeproj -derivedDataPath build/DerivedData -scheme Tap -destination 'platform=macOS' CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO build-for-testing`
-Expected: `** TEST BUILD SUCCEEDED **`, nothing launched. The XCUI element types (`windows`, `buttons`) follow the accessibility roles the views expose; the person's first run settles them, and any that need changing go in the ledger.
+Run: `make -C desktop test-build 2>&1 | tee /tmp/tap-test-build.log | tail -3`, then `grep -c "PresentingUITests.swift" /tmp/tap-test-build.log`
+Expected: `** TEST BUILD SUCCEEDED **`, nothing launched, and the grep count is at least 1: the generated project compiled the new file (D3's Critical was a stale project that built "successfully" without one). The XCUI element types (`windows`, `buttons`) follow the accessibility roles the views expose; a full screen window is still a window to XCUI, and the person's first run settles them, with any that need changing going in the ledger.
 
 - [ ] **Step 4: The README**
 
@@ -6351,27 +6509,37 @@ Add to `desktop/README.md` under Test, after the thumbnail paragraph:
 
 ```markdown
 The presenting tests run a real `tap present --app` beside the deck's
-`tap dev --app` and cover the screen with the talk's windows for a few
-seconds each. They answer tap's recording question ahead of time in the
-test's own settings folder, so nothing is ever recorded, and every tunnel
-test drives a scripted tap, so no tunnel is ever started. Two displays are
-stood in for by the two halves of the one screen
-(`PresentingTestCase.halfScreens()`).
+`tap dev --app` and put the talk's windows into system full screen for a
+few seconds each, with AppKit's own animation. They answer tap's
+recording question ahead of time in the test's own settings folder, so
+nothing is ever recorded, and every tunnel test drives a scripted tap, so
+no tunnel is ever started. Two displays are stood in for by the two halves
+of the one screen (`PresentingTestCase.halfScreens()`); on one screen the
+two windows become two full screen Spaces of that screen, and the tests
+check the frame each window was asked for and its full screen state, never
+its frame. `make -C desktop test-build` compiles the UI tests without
+running them.
 
 What only a person can check, with a projector plugged in: the audience
-window on the projector and the presenter window on the laptop, Swap
-Displays moving them, the F key's element full screen in either page, a
-real recording with Screen Recording permission (REC in the toolbar, the
-keep-recording sheet at Stop, the run in Finder), and Phone remote with
-cloudflared installed (the QR code from tap, a phone driving the deck).
-`make -C desktop uitest` runs the two presenting UI tests on the real screen.
+Space on the projector and the presenter Space on the laptop, Swap
+Displays moving them across displays, the projector unplugged mid-talk
+(the presenter view comes in front) and plugged back in (the audience goes
+back to it), Cmd-Tab to another app and back, the F key's element full
+screen in either page, "Displays have separate Spaces" turned off (the
+popover's note, plain windows instead of Spaces), a real recording with
+Screen Recording permission (REC in the toolbar, the keep-recording sheet
+at Stop, Delete still deleting after a 20 s pause, the run in Finder), a
+second talk on the same deck keeping the presenter layout and notes size
+(the deck's port), and Phone remote with cloudflared installed (the QR
+code from tap, a phone driving the deck). `make -C desktop uitest` runs
+the two presenting UI tests on the real screen.
 ```
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add desktop/scenarios.txt desktop/README.md desktop/Tap/App/AppEnvironment.swift desktop/TapUITests
-git commit -m "test(desktop): claim the D4 scenarios, add the presenting UI tests and the README's manual pass"
+git add desktop/scenarios.txt desktop/README.md desktop/Makefile desktop/Tap/App/AppEnvironment.swift desktop/TapUITests
+git commit -m "test(desktop): claim the D4 scenarios, add the presenting UI tests, the test-build target and the README's manual pass"
 ```
 
 ---
@@ -6383,18 +6551,20 @@ git commit -m "test(desktop): claim the D4 scenarios, add the presenting UI test
 - [ ] Run: `make -C desktop check-scenarios`
   Expected: `every claimed scenario has a test`.
 - [ ] Push the branch and read CI's `Desktop Tests` job: every hosted test green on the runner, the D2 and D3 tests included. The hosted bundle is not run locally in full (branch rule). The presenting tests cover the runner's screen; nothing there minds.
-- [ ] Run: `cd desktop && xcodebuild -project Tap.xcodeproj -derivedDataPath build/DerivedData -scheme Tap -destination 'platform=macOS' CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO build-for-testing`, and the same with `-scheme TapBenchmarks`
-  Expected: the UI tests compile and the benchmarks still do. `make -C desktop uitest` and `make -C desktop bench` are the person's runs.
+- [ ] Run: `make -C desktop test-build 2>&1 | tee /tmp/tap-test-build.log | tail -3 && grep -c PresentingUITests.swift /tmp/tap-test-build.log`, then `make -C desktop bench-build | tail -3`
+  Expected: `** TEST BUILD SUCCEEDED **` twice, the grep count at least 1 (the regenerated project compiled the UI test file), nothing launched. `make -C desktop uitest` and `make -C desktop bench` are the person's runs. No step on this branch runs `xcodebuild` by hand.
+- [ ] Run: `grep -rn "toggleFullScreen\|canJoinAllSpaces\|NSWindow.Level.mainMenu" desktop/Tap`
+  Expected: `toggleFullScreen` only in `PresentationWindow.toggle()`; no `canJoinAllSpaces` in `desktop/Tap/Presenting` (the remote panel is `.fullScreenAuxiliary` only); no covering level anywhere. System full screen is the one way a talk window takes a display.
 - [ ] Run: `grep -rn "$(printf '\342\200\224')" desktop/ docs/superpowers/plans/2026-09-24-desktop-presenting.md --include=*.swift --include=*.md --include=*.yml --include=*.sh --include=*.txt`
   Expected: no output.
 - [ ] Run: `grep -rn "evaluateJavaScript\|callAsyncJavaScript" desktop/Tap`
-  Expected: only `PreviewViewController.pageText`, `pageValue` and `PresentationPageController.pageText`, the test-only surfaces this plan and D2 document.
+  Expected: only `PreviewViewController.pageText`, `pageValue`, `PresentationPageController.pageText` and `pressKey`, the test-only surfaces this plan and D2 document.
 - [ ] Run: `grep -rn "runModal\|NSAlert" desktop/Tap`
   Expected: no output. Every question is a sheet.
 - [ ] Run: `grep -rn "NSApp.activate\|activate(ignoringOtherApps" desktop/Tap`
   Expected: no output.
 - [ ] Run: `grep -rn "orderFrontRegardless\|makeKeyAndOrderFront" desktop/Tap`
-  Expected: only `PresentationController.showWindows`, `toggleFrontWindow`, `bringPresenterWindowForward`, `restoreHiddenWindows`, `screensChanged`, `RemotePanel.show`, `DeckWindowController.showQuestionSheet`, and D2's and D3's own lines (`showPreviewInWindow`, `bringDeckWindowForward`). Each is in answer to the person's own click in this app.
+  Expected: exactly the Global Constraints list ("No production code steals focus"): `PresentationWindow.present(on:)` and `settle()` (`orderFrontRegardless` before an entry), `PresentationController.showWindows`, `placeNext`'s completion, `toggleFrontWindow`, `bringPresenterWindowForward`, `returnToTalk`, `screensChanged`, `moveWindows`, `RemotePanel.show`, `DeckWindowController.showQuestionSheet`, and D2's and D3's own lines (`showPreviewInWindow`, `bringDeckWindowForward`). `activateFileViewerSelecting` (`revealInFinder`) and the Focus Settings URL (`openFocusSettings`) are the two that leave the app, both on a button the person pressed. Anything else is a defect.
 - [ ] Run: `grep -rn "sleepAssertion.release\|sleepAssertion.acquire" desktop/Tap`
   Expected: `acquire` only in `openWindows`; `release` only in `takeDownWindows`.
 - [ ] Run: `grep -rn "completion?(" desktop/Tap`
@@ -6405,7 +6575,7 @@ git commit -m "test(desktop): claim the D4 scenarios, add the presenting UI test
   Expected: only `DeckSessionController.refreshEditedState`.
 - [ ] Run: `pgrep -fl "tap present"` after the hosted tests
   Expected: no output; every talk's process is gone.
-- [ ] Open the app by hand: `open "desktop/$(make -s -C desktop app-path)"`, then open `examples/basic.md`. Check: Play opens the popover; Start Presenting covers the screen with the audience page on the cursor's slide; Option-Tab shows the presenter view with the timer; the pointer at the top edge slides the toolbar in; Escape ends the talk and the cursor is on the last slide; Cmd+Option+Shift+P rehearses; Window > Tap Log lists "basic, talk" during a talk; `pgrep -fl "tap present"` prints nothing afterwards.
+- [ ] Open the app by hand: `open "desktop/$(make -s -C desktop app-path)"`, then open `examples/basic.md`. Check: the Play button opens the popover; Start Presenting puts the audience page in its own full screen Space on the cursor's slide, with the menu bar and Dock out of the way; Option-Tab switches to the presenter view's Space, with the timer; Cmd-Tab to Terminal and back leaves the talk where it was; the pointer at the top edge slides the toolbar in; Escape ends the talk, no window is left in full screen and the cursor is on the last slide; Cmd+Option+P starts again at once with the same settings; Cmd+Option+Shift+P rehearses; Window > Tap Log lists "basic, talk" during a talk and, on the second talk, `--port <n>` with the same `n`; `pgrep -fl "tap present"` prints nothing afterwards; `pmset -g assertions | grep "Tap is presenting"` prints nothing afterwards.
 - [ ] Every part of the D4 outline maps to a task:
 
   | D4 outline item | Task |
@@ -6413,7 +6583,7 @@ git commit -m "test(desktop): claim the D4 scenarios, add the presenting UI test
   | Play and Rehearse through `tap present --app` | 1, 4, 5 |
   | The popover | 6 |
   | Display arrangement and swap | 2, 5 |
-  | Full screen audience window, presenter window | 3, 4, 7 |
+  | Full screen audience window, presenter window (system full screen Spaces) | 3, 4, 5, 7 |
   | The presenter toolbar | 8 |
   | The consent and keep-recording sheets from stdout questions | 9, 10 |
   | The sleep assertion | 3, 4 |
@@ -6424,47 +6594,68 @@ git commit -m "test(desktop): claim the D4 scenarios, add the presenting UI test
 
 ## Pre-flight: conflicts found, rulings and what each costs if wrong
 
+The person's decisions of 2026-09-24 settle four of these (marked); the rest are the plan's own rulings, collected again as product decisions under "Open questions".
+
 1. **`--tunnel` for `tap present` (05, Advanced remote options) does not exist.** Ruling: the code wins; the app sends `{"type":"tunnel","start":true}` after the ready line, on Play with Phone remote or Public tunnel on, and again after a restart. `testAdvancedRemoteOptions` asserts no `--tunnel` in the arguments. Cost if wrong: if P6 later adds the flag, one line in `Command.arguments` and the `setTunnel` call go.
-2. **Full screen: cover windows, not system full screen Spaces.** The spec says the audience page "goes full screen on the projector" and the presenter view is "full screen". `toggleFullScreen` would make a Space per window, take about a second of animation, put two full screen windows of one app on one display into two Spaces that Option-Tab cannot switch, and be untestable on the runner. Ruling: a borderless window at `NSWindow.Level.mainMenu + 1` covering the screen's frame, with `.canJoinAllSpaces`; a swap is a frame change; Option-Tab is a window order change. The page's F key still asks WebKit for element full screen, which WebKit shows in its own full screen window; that is tap's page's business and the person's manual check. Cost if wrong: `PresentationWindow.cover` becomes `setFrame` plus `toggleFullScreen`, and `toggleFrontWindow` becomes a Space switch. Open question 2.
-3. **Cmd+Option+P opens the popover (the spec's Play) rather than starting at once (12's "starts presenting").** The spec wins: the popover's default button is Start Presenting, so Cmd+Option+P then Return starts; Cmd+Option+Shift+P rehearses at once, since a rehearsal has no options to collect; Shift-click Play starts at once from slide 1 (the spec). Cost if wrong: one line in `playClicked`. Open question 3.
-4. **Sheets on the deck window while the talk windows cover its screen.** The requirement is the deck window. Ruling: the windows are not shown until any startup question is answered (the consent arrives within milliseconds of ready, before a page can load, so no flicker), and a question during the talk sends the talk windows on the deck window's screen off screen until the answer, then brings them back with the front window in front; the deck window comes forward for the sheet, the one focus move outside the talk windows. On two displays the audience on the projector stays. Cost if wrong: `hideWindowsSharingScreen` and `restoreHiddenWindows` go, and `showQuestionSheet` takes the presenter window as the sheet's parent. Open question 4.
-5. **The keep-recording answer has three seconds.** tap keeps the recording and exits when no answer comes in `appKeepRecordingTimeout`; the sheet stays up until the person answers or tap exits. Ruling: when tap exits first, the sheet ends as a yes and the run is revealed, since tap kept it; Delete after that does nothing, and the deck's log says tap kept it. The app never deletes a folder itself. Cost if wrong: the person who takes more than three seconds to press Delete keeps a run they wanted gone, and finds it in Finder. Open question 1 asks for the tap change that removes the race.
-6. **Escape in the audience window ends the talk, whatever the page does with Escape.** The page uses Escape to close its help overlay and leave overview; the spec makes Escape Stop. Ruling: Escape in the audience window stops, in the presenter window it goes to the page unless there is no audience window (a rehearsal), where it stops. Cost if wrong: one branch in `handleKey`. Open question 5.
-7. **Both pages hold the presenter cookie.** With a presenter password set (app mode always has one), the hub relays only from connections that carry the cookie; without it, the speaker's arrow keys in the audience window would move that page alone, the presenter view would not follow, and tap would emit no `slide` events or chapters. Ruling: the app trades the secret for the cookie and sets it into the shared `WKWebsiteDataStore` before loading either page; cookies ignore ports, so it stands for the present process while the talk runs and the preview, driven by the app's own socket, is unaffected. Cost if wrong: none that the tests would not show at once (`testEveryTapDevPresenterFeatureWorks`, `testStopPresenting`).
-8. **"Record the talk" in the popover.** tap decides whether to record from `present.record` in `settings.yaml`, and the app decides nothing about recording. Ruling: the checkbox on (the default) passes no flag and leaves the decision to tap; off passes `--no-record` for this run, which is tap's own way to skip one talk. Cost if wrong: one checkbox.
-9. **What "how many edits are not shown yet" counts.** Ruling: typing pauses tap dev has answered for since tap present last read the file, and zero again when the text is back to what was presented. Reload Slides saves and sends `reload`. Cost if wrong: a label's number.
-10. **The Focus hint's Open Focus Settings does not start the talk.** A talk would cover System Settings. Ruling: the hint is marked shown either way; Not Now starts, Open Focus Settings opens the pane and leaves the person to press Play again. Cost if wrong: one branch in `startPresenting`. Open question 6.
-11. **The live code approval question during a talk (D5).** tap asks it after the consent when the deck declares drivers. Ruling: declined with a log line until D5, which runs no code. Cost if wrong: none; D5 replaces the `default` case in `presentQuestion`.
-12. **tap present dies mid-talk.** The spec's restart rule is written for tap dev. Ruling: the same policy; the windows stay up with the last render, the next ready reloads both pages at the last slide on the new port, the assertion stays held, and after three exits in thirty seconds the talk ends with a bar. tap's recording, if any, is a new run after the restart; the old one is whatever tap's exit path left. Cost if wrong: a speaker sees a reload instead of a frozen page; if a frozen page is preferred, `openWindows` skips the reload on a restart.
-13. **App quit during a talk keeps the recording without asking.** `applicationWillTerminate` stops every talk, and tap keeps a recording when its stdin closes with no answer. Ruling: no sheet on quit. Cost if wrong: a run the person wanted deleted is on disk.
-14. **One talk at a time, app-wide.** Two talks would fight over the displays. Ruling: `canStart` reads `AppEnvironment.isPresenting`. Cost if wrong: one check.
-15. **The consent sheet's body and the Focus hint's body.** The mockups' copy, with the settings path from tap's payload in place of the mockup's fixed line. The keep-recording body has the segments and the folder's size; the mockup's minutes and start time are not in tap's payload. Cost if wrong: copy.
-16. **`-FocusHintShown` and `-TapConfigHome` for UI tests.** The hint and the person's real settings would otherwise stand between a UI test and the talk. Cost if wrong: two lines.
-17. **Window > Tap Log lists the talk's log** ("<deck>, talk") beside the deck's, and keeps a failed talk's log until the next talk. The spec says the log shows each process's output. Cost if wrong: one `flatMap`.
-18. **The recording clock counts up in the app between events.** tap sends a recording event only on a change, with `elapsed` as of that moment. Cost if wrong: a label a second out.
+2. **System full screen, not cover windows (the person's decision 1).** Each talk window enters its own macOS full screen Space with `toggleFullScreen`, so Cmd-Tab to a demo app, the menu bar at the top edge and the page's F key work as in a browser. What it costs: about a second of animation on entry and exit, a swap or an unplugged-then-replugged projector going exit, move, enter, and one display's Play being two Spaces that Option-Tab switches between. Every ending exits full screen before closing and closes anyway after `PresentationWindow.exitTimeout`. With "Displays have separate Spaces" off, a two-display talk cannot use full screen at all (one Space blacks out the other display), so it runs as plain windows with a note in the popover (open question 3).
+3. **Cmd+Option+P starts at once with the last settings; the Play button opens the popover (the person's decision 4).** The spec's design section said Play (Cmd+Option+P) opens the popover and feature 12 said it starts presenting; both are edited on this branch to say what is built. Present > Play with Options… is the menu item for the popover, so every toolbar action still has a menu item. Cost if wrong: one line in `play(_:)`.
+4. **Sheets on the deck window while the talk windows are in their Spaces.** The requirement is the deck window. Ruling: the windows do not enter full screen until any startup question is answered (the consent arrives within milliseconds of ready, before a page can load); a question during the talk brings the deck window forward, which switches to its Space, and the answer makes the talk's front window key, which switches back. On two displays the audience Space on the projector stays. Cost if wrong: `returnToTalk` goes, and `showQuestionSheet` takes the presenter window as the sheet's parent.
+5. **The keep-recording answer has 60 seconds (the person's decision 3, tap pull request 35).** tap waits while stdin is open, up to 60 s, then keeps and exits; a closed stdin keeps at once. The app extends its quit deadline to 75 s when the question arrives, so it never closes stdin under the person; a tap that keeps and exits first ends the sheet as Keep and reveals the run. Escape on the sheet does nothing (Critical 2 in the review). Cost if wrong: a person who takes more than a minute keeps a run they wanted gone, and finds it in Finder.
+6. **Escape in the audience window ends the talk, whatever the page does with Escape.** The page uses Escape to close its help overlay and leave overview; the spec makes Escape Stop. Ruling: Escape in the audience window stops, in the presenter window it goes to the page unless there is no audience window (a rehearsal), where it stops. Cost if wrong: one branch in `handleKey`.
+7. **Both pages hold the presenter cookie, and the presenter page brings its own key.** With a presenter password set (app mode always has one), the hub relays only from connections that carry the cookie; without it, the speaker's arrow keys in the audience window would move that page alone, the presenter view would not follow, and tap would emit no `slide` events or chapters. Ruling: the app trades the secret for the cookie and sets it into the shared `WKWebsiteDataStore` for the audience page, and loads the presenter page as `/presenter?key=<secret>#<slide>`, which the server answers by setting the cookie and redirecting with the hash kept, so a 403 never lands in a full screen window. Cost if wrong: none that the tests would not show at once (`testEveryTapDevPresenterFeatureWorks`, `testStopPresenting`).
+8. **One port per deck (the person's decision 2).** `tap present --app` without `--port` binds a new free port every run, and WebKit keys the presenter page's `localStorage` (its layout and notes size) by origin, port included, so the spec's "persist between launches" needs one origin per deck. Ruling: `DeckPortStore` remembers the port tap reported and passes it with `--port`; a taken port (tap's `failed` error, "port n is already in use") makes the app stop that attempt before D2's policy restarts it and start again with no port, remembering the new one. How the fallback shows: the presenter view's default layout and notes size for that one talk, a line in the talk's log, nothing on screen. Cost if wrong: if the person would rather be told, one bar on the deck window.
+9. **"Record the talk" in the popover.** tap decides whether to record from `present.record` in `settings.yaml`, and the app decides nothing about recording. Ruling: the checkbox on (the default) passes no flag and leaves the decision to tap; off passes `--no-record` for this run, which is tap's own way to skip one talk. Cost if wrong: one checkbox.
+10. **What "how many edits are not shown yet" counts.** Ruling: distinct texts tap dev has answered for since tap present last read the file (an answer for the same text again, after a tap dev restart or a component change, counts nothing), and zero again when the text is back to what was presented. Reload Slides saves and sends `reload`. Cost if wrong: a label's number.
+11. **The Focus hint's Open Focus Settings does not start the talk.** A talk would cover System Settings. Ruling: the hint is marked shown either way; Not Now starts, Open Focus Settings opens the pane and leaves the person to press Play again. Cost if wrong: one branch in `startPresenting`.
+12. **The live code approval question during a talk (D5).** tap asks it after the consent when the deck declares drivers. Ruling: declined with a log line until D5, which runs no code; questions queue, so an approval arriving over a consent sheet waits its turn. Cost if wrong: none; D5 replaces the `default` case in `presentQuestion`.
+13. **tap present dies mid-talk.** The spec's restart rule is written for tap dev. Ruling: the same policy; the windows stay in their Spaces with the last render, the next ready reloads both pages at the last slide on the deck's port, the assertion stays held, and after three exits in thirty seconds the talk ends with a bar. tap's recording, if any, is a new run after the restart; the old one is whatever tap's exit path left. Cost if wrong: a speaker sees a reload instead of a frozen page; if a frozen page is preferred, `openWindows` skips the reload on a restart.
+14. **App quit during a talk keeps the recording without asking.** `applicationWillTerminate` stops every talk, and tap keeps a recording when its stdin closes with no answer (unchanged by pull request 35). Ruling: no sheet on quit. Cost if wrong: a run the person wanted deleted is on disk.
+15. **One talk at a time, app-wide, and a stopping talk outlives its deck.** Two talks would fight over the displays. Ruling: `canStart` reads `AppEnvironment.isPresenting`, counted from `start` (so a second deck cannot slip in during the save) to idle or failed; a deck that closes mid-talk hands the talk to `AppEnvironment.endingTalks` until its process has exited (Critical 1 in the review). Cost if wrong: one check and one array.
+16. **The sheet copy.** The consent title is the spec's, "Record automatically every time you present?" (Important 4); the bodies follow the mockups, with the settings path from tap's payload in place of the mockup's fixed line. The keep-recording body has the segments and the folder's size; the mockup's minutes and start time are not in tap's payload. Cost if wrong: copy.
+17. **`-FocusHintShown` and `-TapConfigHome` for UI tests.** The hint and the person's real settings would otherwise stand between a UI test and the talk. Cost if wrong: two lines.
+18. **Window > Tap Log lists the talk's log** ("<deck>, talk") beside the deck's, and keeps a failed talk's log until the next talk. The log line hides the presenter password. Cost if wrong: one `flatMap`.
+19. **The recording clock counts up in the app between events.** tap sends a recording event only on a change, with `elapsed` as of that moment. Cost if wrong: a label a second out.
 
 ## Open questions
 
-Each has the default this plan implements. Change the plan before running it if an answer differs.
+The four decisions of 2026-09-24 are closed: system full screen (1), a fixed port per deck (2), the 60 s keep-recording wait in tap, merged as pull request 35 (3), and Cmd+Option+P starting at once (4). What remains open is the list below: product decisions this plan makes that the spec leaves open. Each line is the default the plan implements and what it costs if the person wants it otherwise, so the list can be scanned and any line changed before the plan runs.
 
-1. **The keep-recording timeout in tap (3 s).** `appKeepRecordingTimeout` in `internal/cli/app_session.go` assumes an app answers within seconds; a person reading a sheet does not. Default: the plan lives with it (pre-flight 5). Recommended: a small P6 follow-up on its own branch that waits for the answer while stdin stays open, with a long ceiling (60 s), since `quit` is only sent by the app and closing stdin already means "keep". Cost if wrong: the Delete button silently loses the race after three seconds, and the person finds a run they wanted gone.
-2. **Cover windows versus system full screen.** Default: cover windows (pre-flight 2). Cost if wrong: a Space per window, an animated entry, and Option-Tab replaced by Space switching; about a day of rework in `PresentationWindow` and `PresentationController`, and the window-order tests change shape.
-3. **Cmd+Option+P: the popover or an immediate start.** Default: the popover (pre-flight 3). Cost if wrong: one line, and the 12 scenario's wording.
-4. **Where a mid-talk question's sheet goes.** Default: the deck window, with the talk windows on its screen stepping aside (pre-flight 4). Alternative: the presenter window as the sheet's parent. Cost if wrong: the hide and restore code goes, and one parent changes.
-5. **Escape ends the talk at once.** Default: yes, in the audience window (pre-flight 6). Alternative: Escape twice, or Cmd+. only, to survive a stray key on stage. Cost if wrong: a stray Escape ends a talk; the keep-recording sheet and Play bring it back in seconds.
-6. **The Focus hint and Open Focus Settings.** Default: opening the setting does not start the talk (pre-flight 10). Cost if wrong: one branch.
-7. **The consent sheet before the windows show, versus a talk that starts under it.** Default: the windows wait for the answer. Cost if wrong: the `pendingQuestion == nil` guard in `showWindowsIfReady` goes.
-8. **The person's runs.** `make -C desktop uitest` (two presenting UI tests on the real screen) and the manual pass in the README (a projector, the F key, a real recording, cloudflared) are compiled and written by the agents and run by the person, as in D2 and D3. `make -C desktop bench` gains nothing in D4.
+1. **The last settings persist across launches, app-wide, minus the password.** Default: `PresentationSettingsStore` in `UserDefaults`; the presenter password lives in the popover's field for one launch. Cost if wrong: per-deck settings are one key change; a kept password is D6's Keychain.
+2. **Play with Options… is the popover's menu item, with no shortcut.** Default: as named. Cost if wrong: a title, or a key.
+3. **Two displays without "Displays have separate Spaces" run as plain windows, with a note in the popover.** Default: the talk still starts; the note names the setting. Alternative: refuse to start until the setting is on. Cost if wrong: one guard in `startPresenting` and the note's wording.
+4. **On one display, Play is two full screen Spaces and Option-Tab switches between them.** Default: as the spec's "Option-Tab switches to the presenter window", with a Space switch's animation. Alternative: the presenter view as a plain window over the audience Space (no animation, but the audience page shows through around it). Cost if wrong: `showWindows` on one display places the presenter with `fullScreen: false`.
+5. **A mid-talk question brings the deck window's Space forward and the answer brings the talk's back.** Default: as pre-flight 4. Alternative: the presenter window as the sheet's parent. Cost if wrong: one parent change.
+6. **Escape in the presenter window goes to the page, except in a rehearsal.** Default: as pre-flight 6. Cost if wrong: one branch.
+7. **Escape on the keep-recording sheet does nothing.** Default: no key reaches Delete, and Escape is not Keep either, so a stray key neither deletes nor opens Finder. Alternative: Escape as Keep. Cost if wrong: `escape: .decline` becomes a third case.
+8. **"Record the talk" on leaves recording to tap's consent; off passes `--no-record`.** With `present.record: false` saved, the box still reads on while nothing records. Default: as pre-flight 9. Cost if wrong: the box reads tap's setting, which the app would have to parse from `settings.yaml`.
+9. **The edits counter counts distinct texts since the last reload.** Default: as pre-flight 10. Cost if wrong: a number.
+10. **Open Focus Settings does not start the talk, and the hint shows before a first Rehearse too.** The spec says "the first time I present". Default: before the first talk of either kind. Cost if wrong: one `mode` check.
+11. **Live code approval is declined until D5, so live code stays off in D4 talks.** Default: as pre-flight 12. Cost if wrong: none.
+12. **tap present dying mid-talk restarts and reloads at the last slide, and ends the talk after three exits.** Default: as pre-flight 13. Cost if wrong: a frozen page instead of a reload is one skipped call.
+13. **App quit keeps any recording without asking.** Default: as pre-flight 14. Cost if wrong: a sheet on quit, and `applicationShouldTerminate` waiting for it.
+14. **One talk at a time, app-wide.** Default: as pre-flight 15. Cost if wrong: two talks fighting over the displays; the count becomes per deck.
+15. **The sheet copy follows the mockups, with the spec's consent title, and the keep sheet's buttons are "Delete" and "Keep and Show in Finder".** Default: as pre-flight 16. Cost if wrong: copy.
+16. **A tap that keeps and exits before an answer ends the sheet as Keep and opens Finder.** Default: as pre-flight 5. Alternative: the sheet stays with "tap kept the recording" and one OK button. Cost if wrong: one branch in `talkEnded`.
+17. **The shortcuts and timings: Stop Cmd+., Reload Slides Cmd+R, a Phone Remote menu item, Option-Tab, a 3 s cursor hide, a 1.5 s toolbar hide.** Default: as named. Cost if wrong: constants.
+18. **Rehearse from the menu starts at the cursor's slide; the popover offers the cursor's slide or slide 1.** Default: as named. Cost if wrong: one argument.
+19. **The display memory is keyed by display names, so two monitors of the same model share one key.** Default: names, since that is what the person sees in the popover. Cost if wrong: the key takes the display ID as well.
+20. **A taken port falls back silently, with a log line.** Default: as pre-flight 8. Alternative: a bar on the deck window saying the presenter layout starts fresh. Cost if wrong: one bar.
+21. **There is no "starting" indicator: a slow or hung tap present shows nothing for up to about 60 s (3 ready timeouts).** Default: the Play button is off and nothing else. Cost if wrong: a spinner in the toolbar item.
+22. **AppKit sheets rather than SwiftUI.** The spec allows SwiftUI "only for sheets and settings" but does not require it. Default: AppKit stack views, so the hosted tests can drive their buttons. Cost if wrong: three views rewritten; D6's Settings window can still be SwiftUI.
+23. **Presenting keeps the persistent `.default()` data store, shared with the preview.** In hosted tests it is the real app's store, since the tests run inside Tap.app. Default: shared. Cost if wrong: a store per deck, keyed like the port.
+24. **The person's runs.** `make -C desktop uitest` (two presenting UI tests on the real screen) and the manual pass in the README (a projector, the F key, Cmd-Tab, the Spaces setting, a real recording, the port across talks, cloudflared) are compiled and written by the agents and run by the person, as in D2 and D3. `make -C desktop bench` gains nothing in D4. This is process, not a spec question.
 
 ## What this plan found missing in the spec and in P6
 
 - P6 has no `--tunnel` for `tap present`; the app uses the stdin command (pre-flight 1).
-- P6's keep-recording wait is three seconds, sized for a machine, not a person (open question 1).
-- No event says "the startup questions are done"; the app infers it from the first page's ready and a pending question. D5's approval question, which comes after the consent, will arrive with the windows already up and use the stepping-aside path.
-- The prerequisites document does not say that the pages need the presenter cookie to be relayed, or that cookies ignore ports (pre-flight 7); the code's comments do (`app_events.go`, `app_auth.go`).
-- The spec does not say what happens when tap present dies mid-talk, when the projector is unplugged, when two decks try to present, or what Escape does in the presenter window; pre-flight 12, the Review Focus item 3, pre-flight 14 and pre-flight 6 decide.
+- P6's keep-recording wait was three seconds, sized for a machine, not a person; tap pull request 35 (a569901) made it 60 seconds while the app is connected, which this plan depends on (pre-flight 5).
+- P6 binds a new port per run, and the spec's "the presenter layout and notes size persist between launches" needs one origin per deck; the app's remembered `--port` supplies it (pre-flight 8).
+- No event says "the startup questions are done"; the app infers it from the first page's ready and the question queue. D5's approval question, which comes after the consent, queues behind it.
+- The prerequisites document does not say that the pages need the presenter cookie to be relayed, or that cookies ignore ports, or that `/presenter?key=` keeps the fragment (pre-flight 7); the code's comments do (`app_events.go`, `app_auth.go`, `routes.go`).
+- The spec says "goes full screen" without saying system full screen; the person's decision 1 makes it so, and the design spec's Presenting section on this branch now says it. The spec does not mention "Displays have separate Spaces", which system full screen needs on two displays (open question 3).
+- The spec does not say what happens when tap present dies mid-talk, when the projector is unplugged, when two decks try to present, what Escape does in the presenter window, or what a second Escape does at the keep-recording sheet; pre-flight 13, the Review Focus item 3, pre-flight 15, pre-flight 6 and pre-flight 5 decide.
 - The design's "SwiftUI is used only for sheets and settings" is not taken up here: the sheets are AppKit stack views, as every D2 and D3 view is, so the hosted tests can drive their buttons directly. D6's Settings window can still be SwiftUI.
 
 ## Execution handoff
 
-Plan complete and saved to `docs/superpowers/plans/2026-09-24-desktop-presenting.md`. Execute with superpowers:subagent-driven-development, one fresh subagent per task, as the roadmap requires. Tasks 1 and 2 are the core package and need no Xcode project; Task 3 onward touch the app target and its hosted tests, one at a time locally, the bundle on CI. Every task's review runs the mutations its last step lists, the ones that can leave a talk stuck, a window covering a screen or the sleep assertion held first.
+Plan complete and saved to `docs/superpowers/plans/2026-09-24-desktop-presenting.md`, revised on 2026-09-25 after its review (`d4-plan-review.md`, untracked) and the person's four decisions. Execute with superpowers:subagent-driven-development, one fresh subagent per task, as the roadmap requires, on a branch cut from `main` at or after a569901 (tap pull request 35). Tasks 1 and 2 are the core package and need no Xcode project; Task 3 onward touch the app target and its hosted tests, one at a time locally (Task 4's class run excepted), the bundle on CI. Every task's review runs the mutations its last step lists, the ones that can leave a window in full screen, a talk stuck or the sleep assertion held first.
