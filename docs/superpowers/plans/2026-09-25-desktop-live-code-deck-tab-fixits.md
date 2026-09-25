@@ -3335,3 +3335,635 @@ git commit -m "feat(desktop): restart tap dev when the deck file gains a declare
 ```
 
 ---
+
+### Task 11: The Deck tab: the schema, the tabs, and the scalar fields
+
+**Files:**
+- Create: `desktop/Tap/Preview/DeckSchemaLoader.swift`, `desktop/Tap/Preview/DeckFormViewController.swift`
+- Modify: `desktop/Tap/Preview/InspectorViewController.swift`, `desktop/Tap/App/AppEnvironment.swift`, `desktop/Tap/Documents/DeckSessionController.swift`, `desktop/Tap/Windows/DeckWindowController.swift`, `desktop/Tap/App/MainMenu.swift`
+- Test: `desktop/TapTests/DeckTabTests.swift`
+
+**Interfaces:**
+- Consumes: Task 4's `SchemaKey`, `DeckSchema.decode`, `DeckSchema.key(at:in:)`, `Frontmatter.setting(path:to:)`, `scalar(forString:)`, `unquoted`; D3's `LayoutCatalogLoader.run(_:arguments:)`; D2's `InspectorViewController.embed`, `EditorPalette.error`, `replaceText`; `DeckSessionController.lastAppliedText`, `isContentEdited`.
+- Produces: `DeckSchemaLoader` (`keys`, `isLoaded`, `load()`, `didLoadNotification`); `AppEnvironment.deckSchema`; `InspectorViewController.Tab`, `selectedTab`, `showTab(_:)`, `embedDeck(_:)`, `setDeckTabAvailable(_:)`, `onTabChange`; `DeckFormViewController` (`text`, `applyEdit`, `keys`, `deckErrors`, `setSchema`, `setDeckErrors`, `refresh()`, `field(_:)`, `errorLabel`, `stack`, `bindings`); `DeckSessionController.deckForm`; `DeckWindowController.showPreviewTab(_:)`, `showDeckTab(_:)`.
+
+- [ ] **Step 1: Write the failing tests**
+
+`desktop/TapTests/DeckTabTests.swift`:
+
+```swift
+import XCTest
+@testable import Tap
+
+/// The Deck tab: a form from tap's schema over the frontmatter, each
+/// change one undo step through the editor.
+final class DeckTabTests: HostedTestCase {
+    func loadedSchema() async throws -> [SchemaKey] {
+        await AppEnvironment.shared.deckSchema.load()
+        try await waitUntil(timeout: 30, "tap deck schema --json") { AppEnvironment.shared.deckSchema.isLoaded }
+        return AppEnvironment.shared.deckSchema.keys
+    }
+
+    func testDeckSettingsLiveInTheInspector() async throws {
+        let keys = try await loadedSchema()
+        let document = try await openDeckAndWaitForPreview(try Fixtures.copyDeck("seven-slides.md"))
+        let controller = try XCTUnwrap(document.sessionController)
+        let editor = controller.editor
+        try await waitForBoxes(document, count: 7)
+        XCTAssertGreaterThan(editor.hiddenLength, 0, "the frontmatter text is hidden from the editor")
+        XCTAssertEqual(editor.boxes[0].range.location, editor.hiddenLength, "slide 1 is the first box")
+        let deckWindow = try XCTUnwrap(document.windowControllers.first as? DeckWindowController)
+        let inspector = controller.inspectorViewController
+        XCTAssertTrue(inspector.tabs.isEnabled(forSegment: 1), "the Deck tab enables once the schema has loaded")
+        deckWindow.showDeckTab(nil)
+        XCTAssertEqual(inspector.selectedTab, .deck)
+        let form = controller.deckForm
+        XCTAssertFalse(form.view.isHiddenOrHasHiddenAncestor)
+        XCTAssertTrue(controller.previewViewController.view.isHidden)
+
+        // One field per frontmatter key tap knows; the fields, types and allowed values come from tap deck schema --json.
+        for key in keys where key.isScalar { XCTAssertNotNil(form.field(key.name), "a field for \(key.name)") }
+        for key in keys where key.type == "object" {
+            for child in key.keys where child.isScalar { XCTAssertNotNil(form.field("\(key.name).\(child.name)"), "a field for \(key.name).\(child.name)") }
+        }
+        XCTAssertTrue(form.field("slideNumbers") is NSButton, "a boolean is a checkbox")
+        let title = try XCTUnwrap(form.field("title") as? NSTextField)
+        XCTAssertEqual(title.stringValue, "Seven Slides")
+        let theme = try XCTUnwrap(form.field("theme") as? NSPopUpButton, "a string with allowed values is a popup")
+        let themeKey = try XCTUnwrap(keys.first { $0.name == "theme" })
+        XCTAssertEqual(theme.itemTitles, themeKey.values, "the allowed values come from tap")
+        XCTAssertEqual(theme.titleOfSelectedItem, themeKey.defaultValue, "the deck sets no theme, so tap's default shows")
+
+        // Changing a field rewrites that key in the frontmatter as one undo step.
+        let original = editor.string
+        let chosen = try XCTUnwrap(themeKey.values.last)
+        theme.selectItem(withTitle: chosen)
+        theme.sendAction(theme.action, to: theme.target)
+        XCTAssertTrue(editor.string.hasPrefix("---\ntitle: Seven Slides\ndrivers:\n  sqlite: {}\ntheme: \(chosen)\n---\n"), String(editor.string.prefix(80)))
+        XCTAssertEqual(editor.undoManager?.undoActionName, "Change Theme")
+        XCTAssertTrue(controller.isContentEdited, "the edited flag follows the content")
+        try await waitUntil(timeout: 10, "tap's answer for the new frontmatter") { controller.lastAppliedText == editor.string }
+        XCTAssertEqual(editor.deckErrors, [], "tap accepts what the form wrote")
+        XCTAssertGreaterThan(editor.hiddenLength, (original as NSString).range(of: "# Debugging").location, "the frontmatter stays hidden, one line longer")
+
+        title.stringValue = "Deck: renamed"
+        title.sendAction(title.action, to: title.target)
+        XCTAssertTrue(editor.string.contains("title: \"Deck: renamed\"\n"), "a value YAML would misread is quoted")
+        XCTAssertEqual(editor.undoManager?.undoActionName, "Change Title")
+        let numbers = try XCTUnwrap(form.field("slideNumbers") as? NSButton)
+        XCTAssertEqual(numbers.state, .on, "absent, so tap's default")
+        numbers.state = .off
+        numbers.sendAction(numbers.action, to: numbers.target)
+        XCTAssertTrue(editor.string.contains("slideNumbers: false\n"))
+
+        // Undo, one change at a time; the form follows the text.
+        editor.undoManager?.undo()
+        XCTAssertFalse(editor.string.contains("slideNumbers"))
+        XCTAssertEqual(numbers.state, .on)
+        editor.undoManager?.undo()
+        XCTAssertEqual(title.stringValue, "Seven Slides")
+        editor.undoManager?.undo()
+        XCTAssertEqual(editor.string, original)
+        XCTAssertEqual(theme.titleOfSelectedItem, themeKey.defaultValue)
+        XCTAssertFalse(controller.isContentEdited)
+        deckWindow.showPreviewTab(nil)
+        XCTAssertEqual(inspector.selectedTab, .preview)
+        XCTAssertFalse(controller.previewViewController.view.isHidden)
+    }
+
+    func testTheDeckTabRefusesWhileTheFrontmatterIsBroken() async throws {
+        _ = try await loadedSchema()
+        let document = try await openDeck(try Fixtures.copyDeck("broken-frontmatter.md"))
+        let controller = try XCTUnwrap(document.sessionController)
+        try await waitForBoxes(document, count: 2)
+        try await waitUntil(timeout: 10, "tap's deck error") { !controller.editor.deckErrors.isEmpty }
+        let deckWindow = try XCTUnwrap(document.windowControllers.first as? DeckWindowController)
+        deckWindow.showDeckTab(nil)
+        let form = controller.deckForm
+        XCTAssertNil(form.field("title"), "no field to edit a frontmatter tap cannot read")
+        XCTAssertTrue(form.stack.arrangedSubviews.contains(form.errorLabel))
+        XCTAssertTrue(form.errorLabel.stringValue.hasPrefix("The deck settings have a problem: frontmatter:"))
+    }
+
+    func testARefreshNeverClobbersTheFieldBeingEdited() async throws {
+        _ = try await loadedSchema()
+        let document = try await openDeckAndWaitForPreview(try Fixtures.copyDeck("seven-slides.md"))
+        let controller = try XCTUnwrap(document.sessionController)
+        let editor = controller.editor
+        try await waitForBoxes(document, count: 7)
+        let deckWindow = try XCTUnwrap(document.windowControllers.first as? DeckWindowController)
+        deckWindow.showDeckTab(nil)
+        let title = try XCTUnwrap(controller.deckForm.field("title") as? NSTextField)
+        let window = try XCTUnwrap(title.window)
+        XCTAssertTrue(window.makeFirstResponder(title))
+        let fieldEditor = try XCTUnwrap(title.currentEditor())
+        fieldEditor.string = "Draft"
+        // A change to the text elsewhere (a disk load, an undo, a component's answer) refreshes the form.
+        let range = (editor.string as NSString).range(of: "# The Page")
+        editor.replaceText(in: range, with: "# The Page, edited", actionName: "Edit")
+        XCTAssertEqual(fieldEditor.string, "Draft", "the field being typed in keeps what was typed")
+        window.makeFirstResponder(nil)
+        XCTAssertTrue(editor.string.contains("title: Draft\n"), "ending the edit writes it")
+    }
+}
+```
+
+- [ ] **Step 2: Build to verify it fails**
+
+Run: `make -C desktop test-build`
+Expected: does not compile (`deckSchema`, `deckForm`, `showDeckTab`, `selectedTab` undefined).
+
+- [ ] **Step 3: The schema loader**
+
+`desktop/Tap/Preview/DeckSchemaLoader.swift`:
+
+```swift
+import Foundation
+
+/// Runs the bundled tap once for `tap deck schema --json`: every
+/// frontmatter key tap understands, which the Deck tab builds its form
+/// from, so Swift hard-codes no key. Loaded at launch; a load that fails
+/// is tried again when a deck asks, up to `maximumAttempts` runs.
+@MainActor
+final class DeckSchemaLoader {
+    static let didLoadNotification = Notification.Name("TapDeckSchemaDidLoad")
+    private(set) var keys: [SchemaKey] = []
+    var isLoaded: Bool { !keys.isEmpty }
+    private var loading: Task<Void, Never>?
+    static let maximumAttempts = 3
+    private(set) var attempts = 0
+    private let executable: () -> URL
+
+    init(executable: @escaping () -> URL) {
+        self.executable = executable
+    }
+
+    func load() async {
+        if isLoaded { return }
+        if let loading { return await loading.value }
+        guard attempts < Self.maximumAttempts else { return }
+        attempts += 1
+        let task = Task { @MainActor [weak self] in
+            guard let self else { return }
+            let data = await LayoutCatalogLoader.run(self.executable(), arguments: ["deck", "schema", "--json"])
+            if let data, let keys = try? DeckSchema.decode(data) {
+                self.keys = keys
+                NotificationCenter.default.post(name: Self.didLoadNotification, object: self)
+            }
+        }
+        loading = task
+        await task.value
+        loading = nil
+    }
+}
+```
+
+In `AppEnvironment`, after `layoutCatalog`:
+
+```swift
+    /// Every frontmatter key tap understands, loaded once from the bundled tap.
+    lazy var deckSchema = DeckSchemaLoader(executable: { [weak self] in self?.tapExecutableURL ?? URL(fileURLWithPath: "/usr/bin/false") })
+```
+
+and in `warmUp()`, after the layout catalog's task: `Task { await deckSchema.load() }`.
+
+- [ ] **Step 4: The tabs**
+
+Replace `InspectorViewController` with:
+
+```swift
+import AppKit
+
+/// The right pane, with Preview and Deck tabs. The Deck tab arrives with
+/// `tap deck schema`; until then its segment is disabled. One child is
+/// shown at a time; the other is hidden, not removed, so the preview's
+/// page keeps its state.
+final class InspectorViewController: NSViewController {
+    enum Tab: Int {
+        case preview = 0
+        case deck = 1
+    }
+
+    let tabs = NSSegmentedControl(labels: ["Preview", "Deck"], trackingMode: .selectOne, target: nil, action: nil)
+    let contentView = NSView()
+    private(set) var selectedTab: Tab = .preview
+    private var previewChild: NSViewController?
+    private var deckChild: NSViewController?
+    /// Runs after the tab changes, whichever way.
+    var onTabChange: ((Tab) -> Void)?
+
+    override func loadView() {
+        let root = NSView()
+        root.wantsLayer = true
+        root.layer?.backgroundColor = EditorPalette.dynamic(light: NSColor(red: 0.969, green: 0.969, blue: 0.973, alpha: 1),
+                                                            dark: NSColor(white: 0.13, alpha: 1)).cgColor
+        tabs.selectedSegment = 0
+        tabs.setEnabled(false, forSegment: 1)
+        tabs.setWidth(90, forSegment: 0)
+        tabs.setWidth(90, forSegment: 1)
+        tabs.target = self
+        tabs.action = #selector(tabChanged(_:))
+        tabs.setAccessibilityIdentifier("inspector-tabs")
+        for view in [tabs, contentView] as [NSView] {
+            view.translatesAutoresizingMaskIntoConstraints = false
+            root.addSubview(view)
+        }
+        NSLayoutConstraint.activate([
+            tabs.topAnchor.constraint(equalTo: root.safeAreaLayoutGuide.topAnchor, constant: 12),
+            tabs.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 20),
+            contentView.topAnchor.constraint(equalTo: tabs.bottomAnchor, constant: 12),
+            contentView.leadingAnchor.constraint(equalTo: root.leadingAnchor),
+            contentView.trailingAnchor.constraint(equalTo: root.trailingAnchor),
+            contentView.bottomAnchor.constraint(equalTo: root.bottomAnchor),
+        ])
+        view = root
+    }
+
+    /// Shows `child` as the Preview tab's content.
+    func embed(_ child: NSViewController) {
+        previewChild = child
+        place(child)
+        child.view.isHidden = selectedTab != .preview
+    }
+
+    /// Shows `child` as the Deck tab's content.
+    func embedDeck(_ child: NSViewController) {
+        deckChild = child
+        place(child)
+        child.view.isHidden = selectedTab != .deck
+    }
+
+    private func place(_ child: NSViewController) {
+        addChild(child)
+        child.view.translatesAutoresizingMaskIntoConstraints = false
+        contentView.addSubview(child.view)
+        NSLayoutConstraint.activate([
+            child.view.topAnchor.constraint(equalTo: contentView.topAnchor),
+            child.view.leadingAnchor.constraint(equalTo: contentView.leadingAnchor),
+            child.view.trailingAnchor.constraint(equalTo: contentView.trailingAnchor),
+            child.view.bottomAnchor.constraint(equalTo: contentView.bottomAnchor),
+        ])
+    }
+
+    /// The Deck segment is disabled until tap's schema has loaded.
+    func setDeckTabAvailable(_ available: Bool) {
+        tabs.setEnabled(available, forSegment: Tab.deck.rawValue)
+        if !available, selectedTab == .deck { showTab(.preview) }
+    }
+
+    func showTab(_ tab: Tab) {
+        selectedTab = tab
+        tabs.selectedSegment = tab.rawValue
+        previewChild?.view.isHidden = tab != .preview
+        deckChild?.view.isHidden = tab != .deck
+        onTabChange?(tab)
+    }
+
+    @objc private func tabChanged(_ sender: NSSegmentedControl) {
+        showTab(Tab(rawValue: sender.selectedSegment) ?? .preview)
+    }
+}
+```
+
+- [ ] **Step 5: The form**
+
+`desktop/Tap/Preview/DeckFormViewController.swift`:
+
+```swift
+import AppKit
+
+/// The Deck tab: a form over the frontmatter, one field per key that
+/// tap's schema lists (`tap deck schema --json`), so Swift hard-codes no
+/// key. Every change is one edit of the frontmatter through the editor,
+/// one undo step named after the field; the form re-reads the text after
+/// every change to it, so an undo, a typed edit or a disk load shows here
+/// too. A key with fixed nested keys (an object) is a group of fields; a
+/// map of named entries (the drivers) is a group per entry, with the hint
+/// to keep secrets out of the deck; keys the schema does not list are
+/// read-only rows under Other keys.
+final class DeckFormViewController: NSViewController, NSTextFieldDelegate {
+    /// The deck's text now. The session controller sets it.
+    var text: () -> String = { "" }
+    /// Applies one edit to the frontmatter as one undo step with the name given.
+    var applyEdit: (TextReplacement, String) -> Void = { _, _ in }
+    private(set) var keys: [SchemaKey] = []
+    private(set) var deckErrors: [String] = []
+    /// Every field, by its key path joined with ".", such as "theme",
+    /// "recording.output" or "drivers.sqlite.timeout".
+    private(set) var fields: [String: NSControl] = [:]
+    private(set) var bindings: [(path: [String], control: NSControl)] = []
+    let stack = NSStackView()
+    let errorLabel = NSTextField(wrappingLabelWithString: "")
+    let scrollView = NSScrollView()
+    /// The declared entries of each map key the form was last built for; a change rebuilds.
+    private(set) var builtForEntries: [String: [String]] = [:]
+    private var isRefreshing = false
+
+    final class FlippedClipView: NSClipView {
+        override var isFlipped: Bool { true }
+    }
+
+    override func loadView() {
+        stack.orientation = .vertical
+        stack.alignment = .leading
+        stack.spacing = 14
+        stack.edgeInsets = NSEdgeInsets(top: 4, left: 20, bottom: 20, right: 20)
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        errorLabel.font = .systemFont(ofSize: 12)
+        errorLabel.textColor = EditorPalette.error
+        errorLabel.setAccessibilityIdentifier("deck-form-error")
+        let clip = FlippedClipView()
+        scrollView.contentView = clip
+        scrollView.documentView = stack
+        scrollView.hasVerticalScroller = true
+        scrollView.drawsBackground = false
+        NSLayoutConstraint.activate([
+            stack.leadingAnchor.constraint(equalTo: clip.leadingAnchor),
+            stack.trailingAnchor.constraint(equalTo: clip.trailingAnchor),
+            stack.topAnchor.constraint(equalTo: clip.topAnchor),
+        ])
+        scrollView.setAccessibilityIdentifier("deck-form")
+        view = scrollView
+    }
+
+    func setSchema(_ keys: [SchemaKey]) {
+        self.keys = keys
+        rebuild()
+    }
+
+    func setDeckErrors(_ errors: [String]) {
+        guard errors != deckErrors else { return }
+        deckErrors = errors
+        rebuild()
+    }
+
+    func field(_ path: String) -> NSControl? {
+        fields[path]
+    }
+
+    /// Reads the text again: the fields' values follow it, and the groups
+    /// are rebuilt when a map gained or lost an entry. Nothing runs while
+    /// the view is hidden (the Preview tab is up); `showTab` calls it when
+    /// the Deck tab comes up. The field being typed in keeps what was typed.
+    func refresh() {
+        guard isViewLoaded, !view.isHiddenOrHasHiddenAncestor, deckErrors.isEmpty else { return }
+        let frontmatter = Frontmatter(text: text())
+        guard entries(in: frontmatter) == builtForEntries else {
+            rebuild()
+            return
+        }
+        refreshValues(from: frontmatter)
+    }
+
+    private func refreshValues(from frontmatter: Frontmatter) {
+        isRefreshing = true
+        defer { isRefreshing = false }
+        let editing = view.window?.firstResponder as? NSText
+        for binding in bindings {
+            if let editing, editing.delegate === binding.control { continue }
+            guard let key = DeckSchema.key(at: binding.path, in: keys) else { continue }
+            show(frontmatter.value(at: binding.path), in: binding.control, for: key)
+        }
+    }
+
+    private func show(_ value: String?, in control: NSControl, for key: SchemaKey) {
+        switch control {
+        case let box as NSButton:
+            let text = value ?? key.defaultValue ?? "false"
+            box.state = ["true", "yes", "on"].contains(text.lowercased()) ? .on : .off
+        case let popup as NSPopUpButton:
+            let text = value.map(Frontmatter.unquoted) ?? key.defaultValue ?? ""
+            if popup.itemTitles.contains(text) { popup.selectItem(withTitle: text) } else { popup.selectItem(at: -1) }
+        case let field as NSTextField:
+            field.stringValue = value.map(Frontmatter.unquoted) ?? ""
+            field.placeholderString = key.defaultValue
+        default:
+            break
+        }
+    }
+
+    /// The entries under each map key, block or flow style, and every key
+    /// the schema does not list: what the form's shape depends on.
+    func entries(in frontmatter: Frontmatter) -> [String: [String]] {
+        var result: [String: [String]] = [:]
+        for key in keys where key.type == "map" { result[key.name] = frontmatter.entryNames(at: [key.name]) }
+        result["*"] = frontmatter.entries.map(\.key).filter { name in !keys.contains { $0.name == name } }
+        return result
+    }
+
+    func rebuild() {
+        for view in stack.arrangedSubviews {
+            stack.removeArrangedSubview(view)
+            view.removeFromSuperview()
+        }
+        fields = [:]
+        bindings = []
+        guard deckErrors.isEmpty else {
+            errorLabel.stringValue = "The deck settings have a problem: \(deckErrors[0])\nThe frontmatter is shown in the editor until it parses."
+            stack.addArrangedSubview(errorLabel)
+            errorLabel.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -40).isActive = true
+            return
+        }
+        let frontmatter = Frontmatter(text: text())
+        builtForEntries = entries(in: frontmatter)
+        let scalars = keys.filter(\.isScalar)
+        if !scalars.isEmpty {
+            addSection(title: "Deck", rows: scalars.map { row(for: $0, path: [$0.name]) })
+        }
+        for key in keys where key.type == "object" {
+            addSection(title: key.label, rows: key.keys.filter(\.isScalar).map { row(for: $0, path: [key.name, $0.name]) })
+        }
+        for key in keys where key.type == "map" {
+            addMapSection(for: key, in: frontmatter)
+        }
+        addOtherKeysSection(frontmatter)
+        refreshValues(from: frontmatter)
+    }
+
+    /// A map's group and the Other keys rows arrive in Task 12.
+    func addMapSection(for key: SchemaKey, in frontmatter: Frontmatter) {}
+    func addOtherKeysSection(_ frontmatter: Frontmatter) {}
+
+    func addSection(title: String, rows: [NSView]) {
+        let box = NSBox()
+        box.title = title
+        box.titlePosition = .atTop
+        box.titleFont = .systemFont(ofSize: 12, weight: .semibold)
+        let column = NSStackView(views: rows)
+        column.orientation = .vertical
+        column.alignment = .leading
+        column.spacing = 8
+        column.edgeInsets = NSEdgeInsets(top: 8, left: 8, bottom: 8, right: 8)
+        box.contentView = column
+        box.setAccessibilityIdentifier("deck-section-\(title)")
+        stack.addArrangedSubview(box)
+        box.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -40).isActive = true
+    }
+
+    func row(for key: SchemaKey, path: [String]) -> NSView {
+        let label = NSTextField(labelWithString: key.label)
+        label.alignment = .right
+        label.textColor = .secondaryLabelColor
+        label.font = .systemFont(ofSize: 12)
+        label.widthAnchor.constraint(equalToConstant: 130).isActive = true
+        let control = makeControl(for: key, path: path)
+        let row = NSStackView(views: [label, control])
+        row.orientation = .horizontal
+        row.alignment = .firstBaseline
+        row.spacing = 10
+        control.widthAnchor.constraint(greaterThanOrEqualToConstant: 200).isActive = true
+        return row
+    }
+
+    private func makeControl(for key: SchemaKey, path: [String]) -> NSControl {
+        let control: NSControl
+        switch key.type {
+        case "boolean":
+            control = NSButton(checkboxWithTitle: "", target: self, action: #selector(controlChanged(_:)))
+        case "string" where !key.values.isEmpty:
+            let popup = NSPopUpButton(frame: .zero, pullsDown: false)
+            popup.addItems(withTitles: key.values)
+            popup.target = self
+            popup.action = #selector(controlChanged(_:))
+            control = popup
+        default:
+            let field = NSTextField(string: "")
+            field.delegate = self
+            field.target = self
+            field.action = #selector(controlChanged(_:))
+            field.font = key.type == "list" ? .monospacedSystemFont(ofSize: 12, weight: .regular) : .systemFont(ofSize: 13)
+            control = field
+        }
+        let identifier = path.joined(separator: ".")
+        control.setAccessibilityIdentifier("deck-field-\(identifier)")
+        control.toolTip = key.description
+        fields[identifier] = control
+        bindings.append((path, control))
+        return control
+    }
+
+    /// A field changed: the key gets the value as YAML would read it back,
+    /// or goes when the field is emptied. A value the form cannot write
+    /// (a pair inside a flow map) beeps and the field reads the text again.
+    @objc func controlChanged(_ sender: NSControl) {
+        guard !isRefreshing, let path = bindings.first(where: { $0.control === sender })?.path, let key = DeckSchema.key(at: path, in: keys) else { return }
+        let frontmatter = Frontmatter(text: text())
+        let raw: String?
+        switch sender {
+        case let box as NSButton where key.type == "boolean":
+            raw = box.state == .on ? "true" : "false"
+        case let popup as NSPopUpButton:
+            raw = popup.titleOfSelectedItem
+        default:
+            let typed = sender.stringValue.trimmingCharacters(in: .whitespaces)
+            if typed.isEmpty {
+                raw = nil
+            } else if key.type == "integer" {
+                guard Int(typed) != nil else {
+                    NSSound.beep()
+                    refresh()
+                    return
+                }
+                raw = typed
+            } else if key.type == "list" {
+                raw = typed
+            } else {
+                raw = Frontmatter.scalar(forString: typed)
+            }
+        }
+        guard raw != frontmatter.value(at: path) else { return }
+        guard let replacement = frontmatter.setting(path: path, to: raw) else {
+            NSSound.beep()
+            refresh()
+            return
+        }
+        applyEdit(replacement, "Change \(key.label)")
+        refresh()
+    }
+
+    func controlTextDidEndEditing(_ notification: Notification) {
+        guard let field = notification.object as? NSTextField else { return }
+        controlChanged(field)
+    }
+}
+```
+
+Add to `Frontmatter` (in `TapDesktopCore`, with a core test in `FrontmatterTests`):
+
+```swift
+    /// The names under a map entry, block or flow style; [] for none.
+    public func entryNames(at path: [String]) -> [String] {
+        guard let entry = entry(at: path) else { return [] }
+        if !entry.children.isEmpty { return entry.children.map(\.key) }
+        if let value = entry.value { return Self.flowMapKeys(value) }
+        return []
+    }
+```
+
+and make `declaredDrivers` read `entryNames(at: ["drivers"])`. The core test: `XCTAssertEqual(Frontmatter(text: deck).entryNames(at: ["drivers"]), ["sqlite", "shell"])` and `XCTAssertEqual(Frontmatter(text: deck).entryNames(at: ["recording"]), ["output"])` in `testTheDeclaredDriversComeFromTheDriversMap`.
+
+- [ ] **Step 6: The wiring**
+
+In `DeckSessionController`, add the properties `let deckForm = DeckFormViewController()` and `private var schemaObserver: NSObjectProtocol?`. In `init`, after `inspectorViewController.embed(previewViewController)`:
+
+```swift
+        deckForm.text = { [weak self] in self?.editor.string ?? "" }
+        deckForm.applyEdit = { [weak self] replacement, actionName in
+            self?.editor.replaceText(in: replacement.range, with: replacement.replacement, actionName: actionName)
+        }
+        inspectorViewController.embedDeck(deckForm)
+        inspectorViewController.onTabChange = { [weak self] tab in
+            if tab == .deck { self?.deckForm.refresh() }
+        }
+        applyDeckSchema()
+        schemaObserver = NotificationCenter.default.addObserver(forName: DeckSchemaLoader.didLoadNotification, object: nil, queue: nil) { [weak self] _ in
+            MainActor.assumeIsolated { self?.applyDeckSchema() }
+        }
+        Task { await AppEnvironment.shared.deckSchema.load() }
+```
+
+Add:
+
+```swift
+    /// The Deck tab needs tap's schema; until it has loaded the tab is disabled.
+    private func applyDeckSchema() {
+        let schema = AppEnvironment.shared.deckSchema
+        guard schema.isLoaded else { return }
+        deckForm.setSchema(schema.keys)
+        inspectorViewController.setDeckTabAvailable(true)
+    }
+```
+
+In `stop()`, after the occlusion observer's removal: `if let schemaObserver { NotificationCenter.default.removeObserver(schemaObserver) }` and `schemaObserver = nil`. In `applySlideList`, after `thumbnails.deckChanged()`: `deckForm.setDeckErrors(list.errors)` and `deckForm.refresh()`. At the end of `editorTextDidChange(_:)` and of `undoOrRedoDidChangeText()`: `deckForm.refresh()`.
+
+In `DeckWindowController`, after `dockPreview()`:
+
+```swift
+    @objc func showPreviewTab(_ sender: Any?) {
+        sessionController.inspectorViewController.showTab(.preview)
+    }
+
+    /// View > Show Deck Tab: the frontmatter's form. Disabled until tap's schema has loaded.
+    @objc func showDeckTab(_ sender: Any?) {
+        guard AppEnvironment.shared.deckSchema.isLoaded else { return }
+        sessionController.inspectorViewController.showTab(.deck)
+    }
+```
+
+and in `validateMenuItem`: `if menuItem.action == #selector(showDeckTab(_:)) { return AppEnvironment.shared.deckSchema.isLoaded }`. In `MainMenu.viewMenu()`, after "Preview in Window": `menu.addItem(item("Show Preview Tab", action: #selector(DeckWindowController.showPreviewTab(_:)), key: "1", modifiers: [.command, .option]))` and `menu.addItem(item("Show Deck Tab", action: #selector(DeckWindowController.showDeckTab(_:)), key: "2", modifiers: [.command, .option]))`.
+
+- [ ] **Step 7: Build**
+
+Run: `make -C desktop core-test`, `make -C desktop build`, `make -C desktop test-build`
+Expected: all succeed. The controller's CI run confirms the three `DeckTabTests`. `dockPreview` still calls `embed(previewViewController)`, which now records the preview child again and hides it if the Deck tab is up.
+
+- [ ] **Step 8: Mutate and commit**
+
+Mutations, each a patch in `mutations-c/`, the ones that could lose an edit first: in `refreshValues`, drop the `editing.delegate === binding.control` skip (`Test: TapTests/DeckTabTests/testARefreshNeverClobbersTheFieldBeingEdited`; expected: fails on "Draft"); in `deckForm.applyEdit`'s wiring, write through `editor.textStorage?.replaceCharacters` (`Test: .../testDeckSettingsLiveInTheInspector`; expected: fails on `undoActionName`); in `controlChanged`, write `typed` raw instead of `scalar(forString:)` (expected: fails on the quoted title); in `controlChanged`, drop the `raw != value` guard (survives: a second write of the same value is a no-op edit that `setting` still produces; `replaceText` then registers an undo step for nothing; add `XCTAssertEqual(editor.undoManager?.undoActionName, "Change Theme")` after a second `sendAction` on the same theme to kill it); in `rebuild`, skip the object sections (expected: fails on a `recording.*` field); in `showTab`, never hide the preview (expected: fails on `previewViewController.view.isHidden`); in `applyDeckSchema`, skip `setDeckTabAvailable` (expected: fails on `isEnabled(forSegment: 1)`); in `DeckSchemaLoader.load`, run `["deck", "schema"]` without `--json` (expected: `loadedSchema` times out); in `rebuild`, skip the `deckErrors` branch (`Test: .../testTheDeckTabRefusesWhileTheFrontmatterIsBroken`; expected: fails on `field("title")`).
+
+```bash
+git add desktop/TapDesktopCore desktop/Tap desktop/TapTests
+git commit -m "feat(desktop): the Deck tab, a form from tap deck schema over the frontmatter"
+```
+
+---
