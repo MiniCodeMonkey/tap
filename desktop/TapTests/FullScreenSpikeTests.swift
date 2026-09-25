@@ -28,6 +28,8 @@ final class FullScreenSpikeTests: HostedTestCase {
         window.collectionBehavior = [.fullScreenPrimary, .fullScreenDisallowsTiling]
         window.isReleasedWhenClosed = false
         window.backgroundColor = .black
+        // Matches PresentationWindow, so the spike measures Spaces and not tabs.
+        window.tabbingMode = .disallowed
         return window
     }
 

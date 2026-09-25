@@ -66,7 +66,9 @@ final class PresentingUITests: UITestCase {
         XCTAssertFalse(application.windows["audience-window"].exists)
         Thread.sleep(forTimeInterval: 2)
         // The toolbar slides up when the pointer reaches the bottom edge.
-        presenter.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.995)).hover()
+        // XCUICoordinate's normalized offset is measured from the top, so
+        // dy: 1.0 is the bottom edge itself, inside the reveal band (y <= 2).
+        presenter.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 1.0)).hover()
         let stop = application.buttons["stop-button"]
         XCTAssertTrue(stop.waitForExistence(timeout: 5))
         stop.click()

@@ -35,6 +35,8 @@ enum FullScreenProbe {
         window.collectionBehavior = [.fullScreenPrimary, .fullScreenDisallowsTiling]
         window.isReleasedWhenClosed = false
         window.backgroundColor = .black
+        // Matches PresentationWindow, so the probe measures Spaces and not tabs.
+        window.tabbingMode = .disallowed
         return window
     }
 

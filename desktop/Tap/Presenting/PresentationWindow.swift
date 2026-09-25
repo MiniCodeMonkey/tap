@@ -101,6 +101,10 @@ final class PresentationWindow: NSWindow, NSWindowDelegate {
         }
         isMovable = false
         level = .normal
+        // macOS's "Prefer tabs: In Full Screen" would otherwise make the
+        // presenter window a tab of the full screen audience window when
+        // it is ordered front, so it never opts in to tabbing.
+        tabbingMode = .disallowed
         collectionBehavior = [.fullScreenPrimary, .fullScreenDisallowsTiling, .ignoresCycle]
         isReleasedWhenClosed = false
         hasShadow = false
