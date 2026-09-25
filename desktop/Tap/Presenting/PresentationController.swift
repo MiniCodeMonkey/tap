@@ -288,7 +288,13 @@ final class PresentationController {
 
     private func relaunchOnAFreePort() {
         portFallbackPending = false
-        guard state == .starting || state == .presenting, let options, let deck = deckURL() else { return }
+        guard state == .starting || state == .presenting, let options else { return }
+        guard let deck = deckURL() else {
+            // The session is stopped and nothing would start another: the
+            // talk would stay up with no process until Stop.
+            fail("The deck file is gone, so the talk cannot restart.")
+            return
+        }
         launch(deck: deck, options: options, port: nil)
         if let takenPort {
             session?.log.append("port \(takenPort) was taken; this talk runs on a new port, and the presenter layout starts fresh", source: .app)
@@ -534,7 +540,9 @@ final class PresentationController {
         guard state == .starting || state == .presenting else { return }
         state = .stopping
         takeDownWindows()
-        guard let session else {
+        // A session that is already stopped reports no further change, so
+        // waiting for one would leave the talk stopping for good.
+        guard let session, session.state != .stopped else {
             finishStopping()
             return
         }

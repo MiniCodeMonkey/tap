@@ -352,6 +352,53 @@ final class PresentingTests: PresentingTestCase {
         XCTAssertTrue(presentation.session?.log.text.contains("port \(port) was taken") == true)
     }
 
+    /// A session that has already stopped reports no further change, so
+    /// Stop must not wait for one.
+    func testStopFinishesAtOnceWhenTapHasAlreadyStopped() async throws {
+        let (_, controller) = try await openDeckForPresenting()
+        let presentation = controller.presentation
+        try await startPresenting(controller, PresentationOptions(mode: .rehearse, startSlide: 1))
+        let session = try XCTUnwrap(presentation.session)
+        let pid = try XCTUnwrap(session.processIdentifier)
+        // The session stops under the talk, the way a relaunch that never
+        // came would leave it: the talk is up with no process.
+        session.stop()
+        try await waitUntil(timeout: 10, "the session stopped") { session.state == .stopped }
+        try await waitUntil(timeout: 10, "tap present to exit") { !self.isRunning(pid) }
+        XCTAssertEqual(presentation.state, .presenting)
+        presentation.stop()
+        XCTAssertEqual(presentation.state, .idle, "nothing left to wait for")
+        XCTAssertFalse(AppEnvironment.shared.isPresenting, "Play is on again in every deck")
+        XCTAssertFalse(presentation.sleepAssertion.isHeld)
+    }
+
+    /// The deck file is deleted while the talk starts on a taken port: the
+    /// fallback has no file to launch, so the talk fails rather than stay
+    /// up with no process.
+    func testAPortFallbackWithTheDeckFileGoneFailsTheTalk() async throws {
+        let (document, controller) = try await openDeckForPresenting()
+        let deck = try XCTUnwrap(document.fileURL)
+        let presentation = controller.presentation
+        let taken = try await waitForRunningTap(document).port
+        AppEnvironment.shared.deckPorts.setPort(taken, for: deck)
+        let realSave = presentation.saveDeck
+        presentation.saveDeck = { completion in
+            realSave { error in
+                completion(error)
+                // tap present is launched on the taken port; the file goes before it answers.
+                document.fileWasDeleted()
+            }
+        }
+        presentation.start(PresentationOptions(mode: .rehearse, startSlide: 1))
+        try await waitUntil(timeout: 30, "the talk to fail (state \(presentation.state))") {
+            if case .failed = presentation.state { return true } else { return false }
+        }
+        XCTAssertEqual(presentation.state, .failed("The deck file is gone, so the talk cannot restart."))
+        XCTAssertNil(presentation.session)
+        XCTAssertFalse(AppEnvironment.shared.isPresenting)
+        XCTAssertFalse(presentation.sleepAssertion.isHeld)
+    }
+
     func testTheTalksLogIsListedInTheTapLogWindow() async throws {
         let (_, controller) = try await openDeckForPresenting()
         try await startPresenting(controller, PresentationOptions(mode: .rehearse, startSlide: 1))
