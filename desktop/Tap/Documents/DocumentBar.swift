@@ -3,7 +3,7 @@ import AppKit
 /// A bar at the top of the editor: a message, a detail line and buttons.
 final class DocumentBarView: NSView {
     enum Kind: Equatable {
-        case changedOnDisk, deleted, deckErrors, environmentNotice, recordingKept, talkFailed
+        case changedOnDisk, deleted, deckErrors, environmentNotice, recordingKept, talkFailed, talkNotStarted
     }
 
     let kind: Kind

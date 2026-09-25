@@ -42,10 +42,11 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
     let remotePanel = RemotePanel()
     /// The Focus hint's sheet, while it is up.
     private(set) var focusHintSheet: QuestionSheet?
-    /// Opens the Focus pane of System Settings. A test replaces it.
-    var openFocusSettings: () -> Void = {
-        if let url = URL(string: "x-apple.systempreferences:com.apple.Focus-Settings-extension") { NSWorkspace.shared.open(url) }
-    }
+    /// The Focus pane of System Settings: the bundle identifier of
+    /// FocusSettingsExtension.appex, which System Settings opens by.
+    static let focusSettingsURL = URL(string: "x-apple.systempreferences:com.apple.Focus-Settings.extension")!
+    /// Opens a System Settings pane. A test replaces it and reads the URL.
+    var openSystemSettings: (URL) -> Void = { NSWorkspace.shared.open($0) }
     private(set) lazy var layoutGallery: LayoutGalleryController = {
         let gallery = LayoutGalleryController()
         gallery.onPick = { [weak self] name in self?.insertSlide(layout: name, after: .caret) }
@@ -84,6 +85,7 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
             case .starting:
                 self?.sessionController.editorViewController.hideBar(.recordingKept)
                 self?.sessionController.editorViewController.hideBar(.talkFailed)
+                self?.sessionController.editorViewController.hideBar(.talkNotStarted)
             case .presenting, .stopping: break
             }
         }
@@ -395,16 +397,44 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
             window.beginSheet(sheet) { [weak self] response in
                 guard let self else { return }
                 self.focusHintSheet = nil
-                if response == .OK {
-                    self.openFocusSettings()
-                } else {
-                    self.sessionController.presentation.start(options)
-                    self.refreshPresentingControls()
+                switch response {
+                case .OK: self.openFocusSettings()
+                case .cancel: self.startAfterTheHint(options)
+                default: break // the sheet ended some other way, as its window went: no talk
                 }
             }
             return
         }
         sessionController.presentation.start(options)
+        refreshPresentingControls()
+    }
+
+    func openFocusSettings() {
+        openSystemSettings(Self.focusSettingsURL)
+    }
+
+    /// Not Now on the Focus hint. The talk may no longer start: another
+    /// deck's talk began while the hint was up (it had been marked shown),
+    /// or the file went. A bar says why instead of nothing happening.
+    private func startAfterTheHint(_ options: PresentationOptions) {
+        let presentation = sessionController.presentation
+        guard presentation.canStart else {
+            let reason = if AppEnvironment.shared.isPresenting {
+                "Another deck is presenting. Press Play again when its talk ends."
+            } else if presentation.deckURL() == nil {
+                "The deck has no file for tap present to read. Save it, then press Play again."
+            } else {
+                "The last talk's windows are still closing. Press Play again in a moment."
+            }
+            let bar = DocumentBarView(kind: .talkNotStarted, message: "The talk did not start.", detail: reason,
+                                      buttons: [("Dismiss", { [weak self] in
+                                          self?.sessionController.editorViewController.hideBar(.talkNotStarted)
+                                      })])
+            sessionController.editorViewController.showBar(bar)
+            refreshPresentingControls()
+            return
+        }
+        presentation.start(options)
         refreshPresentingControls()
     }
 
