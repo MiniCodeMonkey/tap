@@ -3669,7 +3669,7 @@ git commit -m "test(desktop): tap asks again for a new driver, a fix-it and a ch
 
 **Interfaces:**
 - Consumes: Task 4's `SchemaKey`, `DeckSchema.decode`, `DeckSchema.key(at:in:)`, `Frontmatter.setting(path:to:)`, `scalar(forString:)`, `unquoted`; D3's `LayoutCatalogLoader.run(_:arguments:)`; D2's `InspectorViewController.embed`, `EditorPalette.error`, `replaceText`; `DeckSessionController.lastAppliedText`, `isContentEdited`.
-- Produces: `DeckSchemaLoader` (`keys`, `isLoaded`, `load()`, `didLoadNotification`); `AppEnvironment.deckSchema`; `InspectorViewController.Tab`, `selectedTab`, `showTab(_:)`, `embedDeck(_:)`, `setDeckTabAvailable(_:)`, `onTabChange`; `DeckFormViewController` (`text`, `applyEdit`, `keys`, `deckErrors`, `setSchema`, `setDeckErrors`, `refresh()`, `field(_:)`, `errorLabel`, `stack`, `bindings`); `DeckSessionController.deckForm`; `DeckWindowController.showPreviewTab(_:)`, `showDeckTab(_:)`.
+- Produces: `DeckSchemaLoader` (`keys`, `isLoaded`, `load()`, `didLoadNotification`); `AppEnvironment.deckSchema`; `InspectorViewController.Tab`, `selectedTab`, `showTab(_:)`, `embedDeck(_:)`, `previewDetached()`, `setDeckTabAvailable(_:)`, `onTabChange`; `DeckFormViewController` (`text`, `applyEdit`, `keys`, `deckErrors`, `setSchema`, `setDeckErrors`, `refresh()`, `rebuild()`, `commitEditing()`, `field(_:)`, `errorLabel`, `stack`, `bindings`, `defaultItemTitle(for:)`); `DeckSessionController.deckForm`; `DeckDocument.save(to:ofType:for:completionHandler:)` commits the form first; `DeckWindowController.showPreviewTab(_:)`, `showDeckTab(_:)`.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -3715,8 +3715,10 @@ final class DeckTabTests: HostedTestCase {
         XCTAssertEqual(title.stringValue, "Seven Slides")
         let theme = try XCTUnwrap(form.field("theme") as? NSPopUpButton, "a string with allowed values is a popup")
         let themeKey = try XCTUnwrap(keys.first { $0.name == "theme" })
-        XCTAssertEqual(theme.itemTitles, themeKey.values, "the allowed values come from tap")
-        XCTAssertEqual(theme.titleOfSelectedItem, themeKey.defaultValue, "the deck sets no theme, so tap's default shows")
+        let defaultItem = form.defaultItemTitle(for: themeKey)
+        XCTAssertEqual(defaultItem, "Default (\(themeKey.defaultValue ?? ""))")
+        XCTAssertEqual(theme.itemTitles, [defaultItem] + themeKey.values, "the allowed values come from tap, behind the way back to tap's default")
+        XCTAssertEqual(theme.titleOfSelectedItem, defaultItem, "the deck sets no theme")
 
         // Changing a field rewrites that key in the frontmatter as one undo step.
         let original = editor.string
@@ -3748,7 +3750,15 @@ final class DeckTabTests: HostedTestCase {
         XCTAssertEqual(title.stringValue, "Seven Slides")
         editor.undoManager?.undo()
         XCTAssertEqual(editor.string, original)
-        XCTAssertEqual(theme.titleOfSelectedItem, themeKey.defaultValue)
+        XCTAssertEqual(theme.titleOfSelectedItem, defaultItem, "the popup follows an undo")
+        // Choosing the default item removes the key.
+        theme.selectItem(withTitle: chosen)
+        theme.sendAction(theme.action, to: theme.target)
+        XCTAssertTrue(editor.string.contains("theme: \(chosen)\n"))
+        theme.selectItem(withTitle: defaultItem)
+        theme.sendAction(theme.action, to: theme.target)
+        XCTAssertFalse(editor.string.contains("theme:"), "back to tap's default: the key goes")
+        XCTAssertEqual(editor.undoManager?.undoActionName, "Change Theme")
         // Not `isContentEdited` here: the autosave may have written the file in between, and the flag is against the file.
         deckWindow.showPreviewTab(nil)
         XCTAssertEqual(inspector.selectedTab, .preview)
@@ -3788,6 +3798,52 @@ final class DeckTabTests: HostedTestCase {
         XCTAssertEqual(fieldEditor.string, "Draft", "the field being typed in keeps what was typed")
         window.makeFirstResponder(nil)
         XCTAssertTrue(editor.string.contains("title: Draft\n"), "ending the edit writes it")
+    }
+
+    /// The form rebuilds when the frontmatter's shape changes (a disk load
+    /// that adds a driver, here); what was typed and not yet committed
+    /// lands in the frontmatter first, never in the bin.
+    func testARebuildCommitsTheFieldBeingEdited() async throws {
+        _ = try await loadedSchema()
+        let document = try await openDeckAndWaitForPreview(try Fixtures.copyDeck("seven-slides.md"))
+        let controller = try XCTUnwrap(document.sessionController)
+        let editor = controller.editor
+        let deck = try XCTUnwrap(document.fileURL)
+        try await waitForBoxes(document, count: 7)
+        let deckWindow = try XCTUnwrap(document.windowControllers.first as? DeckWindowController)
+        deckWindow.showDeckTab(nil)
+        let title = try XCTUnwrap(controller.deckForm.field("title") as? NSTextField)
+        let window = try XCTUnwrap(title.window)
+        XCTAssertTrue(window.makeFirstResponder(title))
+        try XCTUnwrap(title.currentEditor()).string = "Draft"
+        // The file gains a driver on disk; the buffer has no edits, so it loads silently and the drivers group rebuilds.
+        try approveLiveCode(for: deck, drivers: ["sqlite", "shell"])
+        let pulled = try String(contentsOf: deck, encoding: .utf8).replacingOccurrences(of: "  sqlite: {}\n", with: "  sqlite: {}\n  shell: {}\n")
+        try pulled.write(to: deck, atomically: true, encoding: .utf8)
+        try await waitUntil(timeout: 15, "the disk version loaded and the form rebuilt") { controller.deckForm.builtForEntries["drivers"] == ["sqlite", "shell"] }
+        XCTAssertTrue(editor.string.contains("title: Draft\n"), "the typed title was committed before the rows went: \(editor.string.prefix(80))")
+        XCTAssertTrue(editor.string.contains("  shell: {}\n"))
+        XCTAssertEqual((controller.deckForm.field("title") as? NSTextField)?.stringValue, "Draft")
+        XCTAssertNil(window.firstResponder as? NSText, "the edit ended; nothing half typed is left")
+    }
+
+    /// Play saves the file; a Deck tab field still being typed in goes into that save.
+    func testPlayCommitsTheDeckTabsEdit() async throws {
+        _ = try await loadedSchema()
+        let document = try await openDeckAndWaitForPreview(try Fixtures.copyDeck("seven-slides.md"))
+        let controller = try XCTUnwrap(document.sessionController)
+        let deck = try XCTUnwrap(document.fileURL)
+        try await waitForBoxes(document, count: 7)
+        let deckWindow = try XCTUnwrap(document.windowControllers.first as? DeckWindowController)
+        deckWindow.showDeckTab(nil)
+        let title = try XCTUnwrap(controller.deckForm.field("title") as? NSTextField)
+        XCTAssertTrue(try XCTUnwrap(title.window).makeFirstResponder(title))
+        try XCTUnwrap(title.currentEditor()).string = "Draft"
+        // The save Play makes, without the talk.
+        let saved: Error? = await withCheckedContinuation { continuation in controller.saveForPresenting { continuation.resume(returning: $0) } }
+        XCTAssertNil(saved)
+        let onDisk = try String(contentsOf: deck, encoding: .utf8)
+        XCTAssertTrue(onDisk.contains("title: Draft\n"), "the file Play reads has the typed title: \(onDisk.prefix(60))")
     }
 }
 ```
@@ -3917,6 +3973,14 @@ final class InspectorViewController: NSViewController {
         child.view.isHidden = selectedTab != .deck
     }
 
+    /// The preview moved to its own window (View > Preview in Window): it
+    /// is nobody's tab until it docks back, and it shows there whatever
+    /// tab is selected here.
+    func previewDetached() {
+        previewChild?.view.isHidden = false
+        previewChild = nil
+    }
+
     private func place(_ child: NSViewController) {
         addChild(child)
         child.view.translatesAutoresizingMaskIntoConstraints = false
@@ -3938,8 +4002,9 @@ final class InspectorViewController: NSViewController {
     func showTab(_ tab: Tab) {
         selectedTab = tab
         tabs.selectedSegment = tab.rawValue
-        previewChild?.view.isHidden = tab != .preview
-        deckChild?.view.isHidden = tab != .deck
+        // Only a child that is still in this pane follows the tab.
+        if let previewChild, previewChild.parent === self { previewChild.view.isHidden = tab != .preview }
+        if let deckChild, deckChild.parent === self { deckChild.view.isHidden = tab != .deck }
         onTabChange?(tab)
     }
 
@@ -3982,6 +4047,10 @@ final class DeckFormViewController: NSViewController, NSTextFieldDelegate {
     /// The declared entries of each map key the form was last built for; a change rebuilds.
     private(set) var builtForEntries: [String: [String]] = [:]
     private var isRefreshing = false
+    /// True while `rebuild` runs, so the commit of an edit in progress
+    /// (which ends editing, which fires `controlChanged`) applies its edit
+    /// once and does not refresh or rebuild from inside the rebuild.
+    private var isRebuilding = false
 
     final class FlippedClipView: NSClipView {
         override var isFlipped: Bool { true }
@@ -4050,14 +4119,24 @@ final class DeckFormViewController: NSViewController, NSTextFieldDelegate {
         }
     }
 
+    /// The popup item that stands for "no key": tap's own default.
+    func defaultItemTitle(for key: SchemaKey) -> String {
+        key.defaultValue.map { "Default (\($0))" } ?? "Default"
+    }
+
     private func show(_ value: String?, in control: NSControl, for key: SchemaKey) {
         switch control {
+        // NSPopUpButton is an NSButton: its case comes first, or the checkbox case takes it.
+        case let popup as NSPopUpButton:
+            guard let value else {
+                popup.selectItem(withTitle: defaultItemTitle(for: key))
+                return
+            }
+            let text = Frontmatter.unquoted(value)
+            if popup.itemTitles.contains(text) { popup.selectItem(withTitle: text) } else { popup.selectItem(at: -1) }
         case let box as NSButton:
             let text = value ?? key.defaultValue ?? "false"
             box.state = ["true", "yes", "on"].contains(text.lowercased()) ? .on : .off
-        case let popup as NSPopUpButton:
-            let text = value.map(Frontmatter.unquoted) ?? key.defaultValue ?? ""
-            if popup.itemTitles.contains(text) { popup.selectItem(withTitle: text) } else { popup.selectItem(at: -1) }
         case let field as NSTextField:
             field.stringValue = value.map(Frontmatter.unquoted) ?? ""
             field.placeholderString = key.defaultValue
@@ -4075,7 +4154,21 @@ final class DeckFormViewController: NSViewController, NSTextFieldDelegate {
         return result
     }
 
+    /// Ends an edit in progress in one of the form's fields, so its text
+    /// reaches the frontmatter before the rows are torn down or the file
+    /// is written. `NSViewController` is an `NSEditor`; the document's save
+    /// and `saveForPresenting` call this first.
+    override func commitEditing() -> Bool {
+        guard isViewLoaded, let window = view.window, let editing = window.firstResponder as? NSText,
+              let editingView = editing as? NSView, editingView.isDescendant(of: view) else { return true }
+        return window.makeFirstResponder(nil)
+    }
+
     func rebuild() {
+        guard !isRebuilding else { return }
+        isRebuilding = true
+        defer { isRebuilding = false }
+        _ = commitEditing()
         for view in stack.arrangedSubviews {
             stack.removeArrangedSubview(view)
             view.removeFromSuperview()
@@ -4146,7 +4239,9 @@ final class DeckFormViewController: NSViewController, NSTextFieldDelegate {
             control = NSButton(checkboxWithTitle: "", target: self, action: #selector(controlChanged(_:)))
         case "string" where !key.values.isEmpty:
             let popup = NSPopUpButton(frame: .zero, pullsDown: false)
-            popup.addItems(withTitles: key.values)
+            popup.addItems(withTitles: [defaultItemTitle(for: key)] + key.values)
+            popup.menu?.item(at: 0).map { item in item.title = defaultItemTitle(for: key) }
+            if popup.numberOfItems > 1 { popup.menu?.insertItem(.separator(), at: 1) }
             popup.target = self
             popup.action = #selector(controlChanged(_:))
             control = popup
@@ -4177,7 +4272,8 @@ final class DeckFormViewController: NSViewController, NSTextFieldDelegate {
         case let box as NSButton where key.type == "boolean":
             raw = box.state == .on ? "true" : "false"
         case let popup as NSPopUpButton:
-            raw = popup.titleOfSelectedItem
+            // The default item removes the key; a value is written as YAML reads it back.
+            raw = popup.titleOfSelectedItem.flatMap { $0 == defaultItemTitle(for: key) ? nil : Frontmatter.scalar(forString: $0) }
         default:
             let typed = sender.stringValue.trimmingCharacters(in: .whitespaces)
             if typed.isEmpty {
@@ -4202,7 +4298,7 @@ final class DeckFormViewController: NSViewController, NSTextFieldDelegate {
             return
         }
         applyEdit(replacement, "Change \(key.label)")
-        refresh()
+        if !isRebuilding { refresh() }
     }
 
     func controlTextDidEndEditing(_ notification: Notification) {
@@ -4263,27 +4359,54 @@ In `stop()`, after the occlusion observer's removal: `if let schemaObserver { No
 In `DeckWindowController`, after `dockPreview()`:
 
 ```swift
+    /// View > Show Preview Tab. A hidden pane (Cmd+Option+0) comes back, or the tab would change out of sight.
     @objc func showPreviewTab(_ sender: Any?) {
+        if previewWindowController == nil, splitViewController.isPreviewHidden { splitViewController.setPreviewHidden(false) }
         sessionController.inspectorViewController.showTab(.preview)
     }
 
     /// View > Show Deck Tab: the frontmatter's form. Disabled until tap's schema has loaded.
     @objc func showDeckTab(_ sender: Any?) {
         guard AppEnvironment.shared.deckSchema.isLoaded else { return }
+        if splitViewController.isPreviewHidden { splitViewController.setPreviewHidden(false) }
         sessionController.inspectorViewController.showTab(.deck)
     }
 ```
+
+In `showPreviewInWindow(_:)`, after `preview.removeFromParent()`, add `sessionController.inspectorViewController.previewDetached()`, so the detached preview is never hidden by the Deck tab; `dockPreview` already calls `embed`, which adopts it again under the selected tab. In `PreviewWindowTests`, add:
+
+```swift
+    func testTheDeckTabLeavesADetachedPreviewAlone() async throws {
+        await AppEnvironment.shared.deckSchema.load()
+        try await waitUntil(timeout: 30, "the schema") { AppEnvironment.shared.deckSchema.isLoaded }
+        let document = try await openDeckAndWaitForPreview(try Fixtures.copyDeck("seven-slides.md"))
+        let controller = try XCTUnwrap(document.sessionController)
+        let deckWindow = try XCTUnwrap(document.windowControllers.first as? DeckWindowController)
+        deckWindow.showDeckTab(nil)
+        deckWindow.showPreviewInWindow(nil)
+        XCTAssertFalse(controller.previewViewController.view.isHidden, "detached while Deck was selected: shown in its window")
+        deckWindow.showPreviewTab(nil)
+        deckWindow.showDeckTab(nil)
+        XCTAssertFalse(controller.previewViewController.view.isHidden, "the Deck tab does not reach a preview in its own window")
+        deckWindow.dockPreview()
+        XCTAssertTrue(controller.previewViewController.view.isHidden, "docked back under the Deck tab")
+        deckWindow.showPreviewTab(nil)
+        XCTAssertFalse(controller.previewViewController.view.isHidden)
+    }
+```
+
+In `DeckSessionController.saveForPresenting(completion:)`, add `_ = deckForm.commitEditing()` as the first line, before `editor.string` is read. In D4's `DeckDocument.save(to:ofType:for:completionHandler:)`, add `_ = sessionController?.deckForm.commitEditing()` as the first line, so a save, an autosave (`.autosaveInPlaceOperation` comes through the same override) and Save As all take a half-typed field with them.
 
 and in `validateMenuItem`: `if menuItem.action == #selector(showDeckTab(_:)) { return AppEnvironment.shared.deckSchema.isLoaded }`. In `MainMenu.viewMenu()`, after "Preview in Window": `menu.addItem(item("Show Preview Tab", action: #selector(DeckWindowController.showPreviewTab(_:)), key: "1", modifiers: [.command, .option]))` and `menu.addItem(item("Show Deck Tab", action: #selector(DeckWindowController.showDeckTab(_:)), key: "2", modifiers: [.command, .option]))`.
 
 - [ ] **Step 7: Build**
 
 Run: `make -C desktop core-test`, `make -C desktop build`, `make -C desktop test-build`
-Expected: all succeed. The controller's CI run confirms the three `DeckTabTests`. `dockPreview` still calls `embed(previewViewController)`, which now records the preview child again and hides it if the Deck tab is up.
+Expected: all succeed. The controller's CI run confirms the five `DeckTabTests` and the new `PreviewWindowTests` case. `dockPreview` still calls `embed(previewViewController)`, which now records the preview child again and hides it if the Deck tab is up.
 
 - [ ] **Step 8: Mutate and commit**
 
-Mutations, each a patch in `mutations-c/`, the ones that could lose an edit first: in `refreshValues`, drop the `editing.delegate === binding.control` skip (`Test: TapTests/DeckTabTests/testARefreshNeverClobbersTheFieldBeingEdited`; expected: fails on "Draft"); in `deckForm.applyEdit`'s wiring, write through `editor.textStorage?.replaceCharacters` (`Test: .../testDeckSettingsLiveInTheInspector`; expected: fails on `undoActionName`); in `controlChanged`, write `typed` raw instead of `scalar(forString:)` (expected: fails on the quoted title); in `controlChanged`, drop the `raw != value` guard (survives: a second write of the same value is a no-op edit that `setting` still produces; `replaceText` then registers an undo step for nothing; add `XCTAssertEqual(editor.undoManager?.undoActionName, "Change Theme")` after a second `sendAction` on the same theme to kill it); in `rebuild`, skip the object sections (expected: fails on a `recording.*` field); in `showTab`, never hide the preview (expected: fails on `previewViewController.view.isHidden`); in `applyDeckSchema`, skip `setDeckTabAvailable` (expected: fails on `isEnabled(forSegment: 1)`); in `DeckSchemaLoader.load`, run `["deck", "schema"]` without `--json` (expected: `loadedSchema` times out); in `rebuild`, skip the `deckErrors` branch (`Test: .../testTheDeckTabRefusesWhileTheFrontmatterIsBroken`; expected: fails on `field("title")`).
+Mutations, each a patch in `mutations-c/`, the ones that could lose an edit first: in `refreshValues`, drop the `editing.delegate === binding.control` skip (`Test: TapTests/DeckTabTests/testARefreshNeverClobbersTheFieldBeingEdited`; expected: fails on "Draft"); in `rebuild`, drop `commitEditing()` (`Test: .../testARebuildCommitsTheFieldBeingEdited`; expected: fails on "title: Draft"); in `DeckDocument.save`, drop the commit (`Test: .../testPlayCommitsTheDeckTabsEdit`; expected: fails on the file); in `show`, put the `NSButton` case first (`Test: .../testDeckSettingsLiveInTheInspector`; expected: fails on the popup after the undo); in `controlChanged`, write the popup's title raw (survives: no theme slug needs quotes; noted); in `showTab`, hide a child whose parent is not the pane (`Test: TapTests/PreviewWindowTests/testTheDeckTabLeavesADetachedPreviewAlone`; expected: fails); in `deckForm.applyEdit`'s wiring, write through `editor.textStorage?.replaceCharacters` (`Test: .../testDeckSettingsLiveInTheInspector`; expected: fails on `undoActionName`); in `controlChanged`, write `typed` raw instead of `scalar(forString:)` (expected: fails on the quoted title); in `controlChanged`, drop the `raw != value` guard (survives: a second write of the same value is a no-op edit that `setting` still produces; `replaceText` then registers an undo step for nothing; add `XCTAssertEqual(editor.undoManager?.undoActionName, "Change Theme")` after a second `sendAction` on the same theme to kill it); in `rebuild`, skip the object sections (expected: fails on a `recording.*` field); in `showTab`, never hide the preview (expected: fails on `previewViewController.view.isHidden`); in `applyDeckSchema`, skip `setDeckTabAvailable` (expected: fails on `isEnabled(forSegment: 1)`); in `DeckSchemaLoader.load`, run `["deck", "schema"]` without `--json` (expected: `loadedSchema` times out); in `rebuild`, skip the `deckErrors` branch (`Test: .../testTheDeckTabRefusesWhileTheFrontmatterIsBroken`; expected: fails on `field("title")`).
 
 ```bash
 git add desktop/TapDesktopCore desktop/Tap desktop/TapTests
@@ -4360,9 +4483,9 @@ final class DeckTabDriversTests: HostedTestCase {
         XCTAssertNotNil(form.field("drivers.shell.timeout"), "the form rebuilt for the new entry")
         XCTAssertEqual(addField.stringValue, "", "ready for the next name")
 
-        // Remove it again; the box goes.
+        // Remove it again; the box goes. (The deck's body still holds a shell block, so the check is on the drivers.)
         try XCTUnwrap(form.removeButton(for: "drivers.shell")).performClick(nil)
-        XCTAssertFalse(editor.string.contains("shell"))
+        XCTAssertEqual(Frontmatter(text: editor.string).declaredDrivers, ["sqlite", "fortune"])
         XCTAssertEqual(editor.undoManager?.undoActionName, "Remove shell")
         XCTAssertNil(form.field("drivers.shell.timeout"))
         editor.undoManager?.undo()
@@ -4398,6 +4521,17 @@ final class DeckTabDriversTests: HostedTestCase {
         XCTAssertEqual(editor.undoManager?.undoActionName, "Change Connections")
         try await waitUntil(timeout: 10, "tap's answer") { controller.lastAppliedText == editor.string }
         XCTAssertEqual(editor.deckErrors, [], "tap reads the block as written")
+        // Text that would end the frontmatter early, or step out of the entry's indent, is refused.
+        let accepted = editor.string
+        raw.string = "    connections:\n---\n"
+        form.textDidEndEditing(Notification(name: NSText.didEndEditingNotification, object: raw))
+        XCTAssertEqual(editor.string, accepted, "a --- line would close the frontmatter on the wrong line")
+        raw.string = "connections:\n  b:\n    path: y.db\n"
+        form.textDidEndEditing(Notification(name: NSText.didEndEditingNotification, object: raw))
+        XCTAssertEqual(editor.string, accepted, "a block that lost its indent would leave its driver")
+        XCTAssertEqual(raw.string, "    connections:\n      incident:\n        path: ${INCIDENT_DB}\n", "the editor reads the text again")
+        editor.undoManager?.undo()
+        XCTAssertEqual(raw.string, "    connections:\n      incident:\n        path: ./incident.db\n", "and follows an undo")
     }
 
     func testUnknownKeysAreListedUnderOtherKeys() async throws {
@@ -4594,7 +4728,18 @@ and, at the top of `rebuild()`'s clearing, `hintLabels = [:]; addFields = [:]; a
         let frontmatter = Frontmatter(text: text())
         var raw = textView.string.replacingOccurrences(of: "\r\n", with: "\n").replacingOccurrences(of: "\n", with: frontmatter.lineEnding)
         if !raw.hasSuffix(frontmatter.lineEnding) { raw += frontmatter.lineEnding }
-        guard raw != frontmatter.rawBlock(at: binding.path), let replacement = frontmatter.settingRawBlock(at: binding.path, to: raw) else { return }
+        guard raw != frontmatter.rawBlock(at: binding.path), let entry = frontmatter.entry(at: binding.path) else { return }
+        // A line that is "---" would close the frontmatter there, and a first
+        // line shallower than the entry's indent would leave its parent: both
+        // are refused, and the text view reads the block again.
+        let lines = raw.components(separatedBy: frontmatter.lineEnding)
+        let firstIndent = lines.first.map { $0.prefix { $0 == " " }.count } ?? 0
+        guard !lines.contains(where: { $0.trimmingCharacters(in: .whitespaces) == "---" }), firstIndent >= entry.indent,
+              let replacement = frontmatter.settingRawBlock(at: binding.path, to: raw) else {
+            NSSound.beep()
+            textView.string = frontmatter.rawBlock(at: binding.path) ?? ""
+            return
+        }
         applyEdit(replacement, "Change \(key.label)")
         refresh()
     }
@@ -4611,7 +4756,7 @@ Expected: both succeed. The controller's CI run confirms the three `DeckTabDrive
 
 - [ ] **Step 5: Mutate and commit**
 
-Mutations, each a patch in `mutations-d/`, the ones that could lose text first: in `textDidEndEditing`, replace the entry's range with the text and no line ending (`Test: TapTests/DeckTabDriversTests/testRawSettingsAreEditedAsText`; expected: tap's answer holds a deck error, since the closing `---` joins the last line); in `removePressed`, pass `to: "{}"` instead of nil (`Test: .../testTheDriversGroupListsEachDriverWithItsSettings`; expected: fails on "shell" still in the text); in `addPressed`, skip the name check (survives: the test types a plain name; noted); in `addMapSection`, drop the hint (`Test: TapTests/RunBlockTests/testSecretsInDriverSettings`; expected: fails on the unwrap); in `controlChanged`, accept a non-integer for an integer key (expected: fails on "refused"); in `entries(in:)`, drop the raw blocks (expected: the undo in the raw test is not asserted; add `editor.undoManager?.undo()` and `XCTAssertEqual(raw.string, ...original...)` to the raw test to kill it); in `addOtherKeysSection`, list every key (expected: `otherKeyLabels` counts the title too).
+Mutations, each a patch in `mutations-d/`, the ones that could lose text first: in `textDidEndEditing`, replace the entry's range with the text and no line ending (`Test: TapTests/DeckTabDriversTests/testRawSettingsAreEditedAsText`; expected: tap's answer holds a deck error, since the closing `---` joins the last line); in `removePressed`, pass `to: "{}"` instead of nil (`Test: .../testTheDriversGroupListsEachDriverWithItsSettings`; expected: fails on "shell" still in the text); in `addPressed`, skip the name check (survives: the test types a plain name; noted); in `addMapSection`, drop the hint (`Test: TapTests/RunBlockTests/testSecretsInDriverSettings`; expected: fails on the unwrap); in `controlChanged`, accept a non-integer for an integer key (expected: fails on "refused"); in `entries(in:)`, drop the raw blocks (`Test: .../testRawSettingsAreEditedAsText`; expected: fails on "and follows an undo"); in `textDidEndEditing`, drop the `---` check (expected: fails on "would close the frontmatter"); drop the indent check (expected: fails on "lost its indent"); in `addOtherKeysSection`, list every key (expected: `otherKeyLabels` counts the title too).
 
 ```bash
 git add desktop/Tap desktop/TapTests
@@ -4726,13 +4871,17 @@ and change `launch(withDeck:)` to:
     @discardableResult
     func launch(withDeck deck: URL) -> XCUIApplication {
         let application = XCUIApplication()
-        var arguments = ["-TapOpenOnLaunch", deck.path, "-ApplePersistenceIgnoreState", "YES", "-FocusHintShown", "YES"]
+        let defaultsSuite = "TapUITests.\(UUID().uuidString)"
+        addTeardownBlock { UserDefaults.standard.removePersistentDomain(forName: defaultsSuite) }
+        var arguments = ["-TapOpenOnLaunch", deck.path, "-ApplePersistenceIgnoreState", "YES", "-FocusHintShown", "YES", "-TapDefaultsSuite", defaultsSuite]
         if let home = configHome(approving: deck) { arguments += ["-TapConfigHome", home.path] }
         application.launchArguments = arguments
         application.launch()
         return application
     }
 ```
+
+(D4's `PresentingUITests.launchForPresenting` already passes its own suite and config home; the D2 and D3 UI tests get theirs here, as 7a9c15b intended for every UI test.)
 
 `PresentingUITests` keeps its own `configHome()` and arguments (ops.md declares nothing).
 
@@ -4749,9 +4898,11 @@ final class LiveCodeUITests: UITestCase {
     func testReturnOnTheApprovalSheetIsDontAllow() throws {
         let deck = try copyFixture("live-code.md")
         let home = try XCTUnwrap(configHome(approving: nil))
+        let defaultsSuite = "TapUITests.livecode.\(UUID().uuidString)"
+        addTeardownBlock { UserDefaults.standard.removePersistentDomain(forName: defaultsSuite) }
         let application = XCUIApplication()
         application.launchArguments = ["-TapOpenOnLaunch", deck.path, "-ApplePersistenceIgnoreState", "YES",
-                                       "-TapConfigHome", home.path, "-FocusHintShown", "YES"]
+                                       "-TapConfigHome", home.path, "-TapDefaultsSuite", defaultsSuite, "-FocusHintShown", "YES"]
         application.launch()
         let sheet = application.sheets.firstMatch
         XCTAssertTrue(sheet.waitForExistence(timeout: 30), "the approval sheet")
@@ -4761,14 +4912,19 @@ final class LiveCodeUITests: UITestCase {
         let gone = NSPredicate(format: "exists == false")
         expectation(for: gone, evaluatedWith: sheet)
         waitForExpectations(timeout: 10)
-        let settings = (try? String(contentsOf: home.appendingPathComponent("tap/settings.yaml"), encoding: .utf8)) ?? ""
-        XCTAssertFalse(settings.contains("approvals"), "Return granted nothing")
+        // tap writes a yes within a moment of the answer; three seconds of no approvals is the proof that Return granted nothing.
+        let settingsFile = home.appendingPathComponent("tap/settings.yaml")
+        for _ in 0..<15 {
+            let settings = (try? String(contentsOf: settingsFile, encoding: .utf8)) ?? ""
+            XCTAssertFalse(settings.contains("approvals"), "Return granted nothing")
+            Thread.sleep(forTimeInterval: 0.2)
+        }
         XCTAssertTrue(application.textViews["editor"].waitForExistence(timeout: 10), "the deck is open and usable")
     }
 }
 ```
 
-Run: `make -C desktop test-build 2>&1 | tee /tmp/tap-test-build.log | tail -3 && grep -c LiveCodeUITests.swift /tmp/tap-test-build.log`
+Run: `make -C desktop test-build 2>&1 | tee "$SCRATCHPAD/tap-test-build.log" | tail -3 && grep -c LiveCodeUITests.swift "$SCRATCHPAD/tap-test-build.log"` (with `SCRATCHPAD` the session's scratchpad folder, never `/tmp`)
 Expected: `** TEST BUILD SUCCEEDED **` and a count of at least 1 (the regenerated project compiled the file). `make -C desktop uitest` is CI's run.
 
 - [ ] **Step 4: The README**
