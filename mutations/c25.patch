@@ -1,0 +1,13 @@
+Test: TapTests/PhoneRemoteTests/testPhoneRemote
+diff --git i/desktop/Tap/Presenting/PresentationController.swift w/desktop/Tap/Presenting/PresentationController.swift
+index 3adf6b1..6d4836b 100644
+--- i/desktop/Tap/Presenting/PresentationController.swift
++++ w/desktop/Tap/Presenting/PresentationController.swift
+@@ -901,7 +901,6 @@ final class PresentationController {
+         cursorHideWork = nil
+         sleepAssertion.release()
+         takeDownNext()
+-        onTunnelChange?()
+     }
+ 
+     private func takeDownNext() {

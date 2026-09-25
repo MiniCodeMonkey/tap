@@ -1,0 +1,14 @@
+Test: TapTests/PhoneRemoteTests/testThePanelClosesWithTheDeckWindow
+diff --git i/desktop/Tap/Windows/DeckWindowController.swift w/desktop/Tap/Windows/DeckWindowController.swift
+index a0c780e..af29d83 100644
+--- i/desktop/Tap/Windows/DeckWindowController.swift
++++ w/desktop/Tap/Windows/DeckWindowController.swift
+@@ -560,8 +560,6 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
+             previewWindowController = nil
+             controller.close()
+         }
+-        remotePanel.orderOut(nil)
+-        remotePanel.close()
+     }
+ 
+     func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {

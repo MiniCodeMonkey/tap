@@ -1,0 +1,14 @@
+Test: TapTests/FocusHintTests/testNotNowWhileAnotherDeckPresentsSaysWhy
+diff --git i/desktop/Tap/Windows/DeckWindowController.swift w/desktop/Tap/Windows/DeckWindowController.swift
+index 8838492..6001ef6 100644
+--- i/desktop/Tap/Windows/DeckWindowController.swift
++++ w/desktop/Tap/Windows/DeckWindowController.swift
+@@ -430,7 +430,7 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
+                                       buttons: [("Dismiss", { [weak self] in
+                                           self?.sessionController.editorViewController.hideBar(.talkNotStarted)
+                                       })])
+-            sessionController.editorViewController.showBar(bar)
++            _ = bar
+             refreshPresentingControls()
+             return
+         }

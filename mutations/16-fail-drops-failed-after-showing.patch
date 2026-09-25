@@ -1,0 +1,13 @@
+Test: TapTests/PresentingFailureTests/testATalkEndsWhenTapPresentKeepsDying
+diff --git i/desktop/Tap/Presenting/PresentationController.swift w/desktop/Tap/Presenting/PresentationController.swift
+index 462c962..3d2d55f 100644
+--- i/desktop/Tap/Presenting/PresentationController.swift
++++ w/desktop/Tap/Presenting/PresentationController.swift
+@@ -1041,7 +1041,6 @@ final class PresentationController {
+     /// a talk that stopped: the bar says so and the cursor moves to the
+     /// last slide the audience saw, whatever made it fail.
+     private func fail(_ message: String) {
+-        failedAfterShowing = windowsWereShown
+         takeDownWindows()
+         if let session { AppEnvironment.shared.stopAndRetain(session) }
+         session = nil

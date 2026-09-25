@@ -1,0 +1,14 @@
+Test: TapTests/FocusHintTests/testNotNowStartsTheTalk
+diff --git i/desktop/Tap/Windows/DeckWindowController.swift w/desktop/Tap/Windows/DeckWindowController.swift
+index 8838492..a137011 100644
+--- i/desktop/Tap/Windows/DeckWindowController.swift
++++ w/desktop/Tap/Windows/DeckWindowController.swift
+@@ -399,7 +399,7 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
+                 self.focusHintSheet = nil
+                 switch response {
+                 case .OK: self.openFocusSettings()
+-                case .cancel: self.startAfterTheHint(options)
++                case .cancel: break
+                 default: break // the sheet ended some other way, as its window went: no talk
+                 }
+             }

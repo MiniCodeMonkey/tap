@@ -1,0 +1,14 @@
+Test: TapTests/RecordingTests/testAQuestionDuringTheTalkBringsTheDeckWindowForward
+diff --git i/desktop/Tap/Windows/DeckWindowController.swift w/desktop/Tap/Windows/DeckWindowController.swift
+index 8838492..8206fab 100644
+--- i/desktop/Tap/Windows/DeckWindowController.swift
++++ w/desktop/Tap/Windows/DeckWindowController.swift
+@@ -592,8 +592,6 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
+         }
+         let presentation = sessionController.presentation
+         questionSheet = sheet
+-        window.makeKeyAndOrderFront(nil)
+-        keepForward(window, while: sheet)
+         window.beginSheet(sheet) { [weak self] response in
+             // Only the sheet that completed clears the slot: a stale sheet
+             // ended late must not clear a newer one.

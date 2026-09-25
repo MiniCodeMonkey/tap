@@ -1,0 +1,14 @@
+Test: TapTests/PresentingFailureTests/testATalkThatCannotBeSavedDoesNotStart
+diff --git i/desktop/Tap/Presenting/PresentationController.swift w/desktop/Tap/Presenting/PresentationController.swift
+index 6238343..40026f2 100644
+--- i/desktop/Tap/Presenting/PresentationController.swift
++++ w/desktop/Tap/Presenting/PresentationController.swift
+@@ -296,7 +296,7 @@ final class PresentationController {
+     /// on its own.
+     static func saveFailureMessage(for error: Error) -> String {
+         if (error as? CocoaError)?.code == .userCancelled {
+-            return "The deck could not be saved: resolve the change on disk first."
++            return "The deck could not be saved: \(error.localizedDescription)"
+         }
+         return "The deck could not be saved: \(error.localizedDescription)"
+     }

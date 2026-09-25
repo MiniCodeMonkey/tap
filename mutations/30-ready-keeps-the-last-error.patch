@@ -1,0 +1,13 @@
+Test: TapTests/PresentingFailureTests/testATalkEndsWhenTapPresentKeepsDying
+diff --git i/desktop/Tap/Presenting/PresentationController.swift w/desktop/Tap/Presenting/PresentationController.swift
+index 462c962..aad76b6 100644
+--- i/desktop/Tap/Presenting/PresentationController.swift
++++ w/desktop/Tap/Presenting/PresentationController.swift
+@@ -380,7 +380,6 @@ final class PresentationController {
+     /// A late exchange for a talk that has ended installs nothing.
+     private func tapIsReady(_ ready: TapReady) {
+         guard state == .starting || state == .presenting, let session else { return }
+-        lastErrorMessage = nil
+         deckPorts.setPort(ready.port, for: session.deckURL)
+         let client = TapClient(ready: ready)
+         self.client = client

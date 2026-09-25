@@ -1,0 +1,14 @@
+Test: TapTests/PresentingFailureTests/testATalkThatCannotStartShowsABar
+diff --git i/desktop/Tap/TapLog/TapLogWindowController.swift w/desktop/Tap/TapLog/TapLogWindowController.swift
+index 32de8a7..c9a98a8 100644
+--- i/desktop/Tap/TapLog/TapLogWindowController.swift
++++ w/desktop/Tap/TapLog/TapLogWindowController.swift
+@@ -59,7 +59,7 @@ final class TapLogWindowController: NSWindowController {
+         logs = NSDocumentController.shared.documents.flatMap { document -> [TapLog] in
+             guard let controller = (document as? DeckDocument)?.sessionController else { return [] }
+             let talk = controller.presentationIfCreated
+-            return [controller.session.log] + ((talk?.session?.log ?? (talk?.isActive == true ? talk?.lastTalkLog : talk?.lastTalkLogAfterFailure)).map { [$0] } ?? [])
++            return [controller.session.log] + ((talk?.session?.log ?? (talk?.isActive == true ? talk?.lastTalkLog : nil)).map { [$0] } ?? [])
+         }
+         picker.segmentCount = logs.count
+         for (index, log) in logs.enumerated() {

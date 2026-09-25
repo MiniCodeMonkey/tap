@@ -1,0 +1,14 @@
+Test: TapTests/PresentMenuTests/testPresentingShortcuts
+diff --git i/desktop/Tap/App/MainMenu.swift w/desktop/Tap/App/MainMenu.swift
+index f49fc06..df41963 100644
+--- i/desktop/Tap/App/MainMenu.swift
++++ w/desktop/Tap/App/MainMenu.swift
+@@ -138,7 +138,7 @@ enum MainMenu {
+     static func presentMenu() -> NSMenu {
+         let menu = NSMenu(title: "Present")
+         menu.addItem(item("Play", action: #selector(DeckWindowController.play(_:)), key: "p", modifiers: [.command, .option]))
+-        menu.addItem(item("Play with Options…", action: #selector(DeckWindowController.playWithOptions(_:))))
++        menu.addItem(item("Play with Options…", action: #selector(DeckWindowController.playWithOptions(_:)), key: "p", modifiers: [.command, .option]))
+         menu.addItem(item("Rehearse", action: #selector(DeckWindowController.rehearse(_:)), key: "p", modifiers: [.command, .option, .shift]))
+         menu.addItem(.separator())
+         menu.addItem(item("Stop", action: #selector(DeckWindowController.stopPresenting(_:)), key: "."))

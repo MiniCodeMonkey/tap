@@ -1,0 +1,14 @@
+Test: TapTests/RecordingTests/testAQuestionDuringTheTalkBringsTheDeckWindowForward
+diff --git i/desktop/Tap/Presenting/PresentationController.swift w/desktop/Tap/Presenting/PresentationController.swift
+index 462c962..bb7722a 100644
+--- i/desktop/Tap/Presenting/PresentationController.swift
++++ w/desktop/Tap/Presenting/PresentationController.swift
+@@ -909,7 +909,7 @@ final class PresentationController {
+     /// it is not on the active Space, a few times at most and only while
+     /// nothing else has claimed the screen.
+     func returnToTalk() {
+-        guard isActive, windowsShown, pendingQuestions.isEmpty, windowsAreSettled, let frontWindow else { return }
++        guard isActive, windowsShown, windowsAreSettled, let frontWindow else { return }
+         frontWindow.makeKeyAndOrderFront(nil)
+         keepTalkForward(frontWindow, attempts: DeckWindowController.spaceSwitchRetries)
+     }

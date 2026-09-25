@@ -1,0 +1,14 @@
+Test: TapTests/PresentingFailureTests/testATalkThatCannotStartShowsABar
+diff --git i/desktop/Tap/Windows/DeckWindowController.swift w/desktop/Tap/Windows/DeckWindowController.swift
+index 88e3c72..26f0f11 100644
+--- i/desktop/Tap/Windows/DeckWindowController.swift
++++ w/desktop/Tap/Windows/DeckWindowController.swift
+@@ -504,8 +504,6 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
+                 guard let self else { return }
+                 let presentation = self.sessionController.presentation
+                 TapLogWindowController.shared.show(log: presentation.session?.log ?? presentation.lastTalkLog ?? self.sessionController.session.log)
+-            }), ("Dismiss", { [weak self] in
+-                self?.sessionController.editorViewController.hideBar(.talkFailed)
+             })])
+         sessionController.editorViewController.showBar(bar)
+     }

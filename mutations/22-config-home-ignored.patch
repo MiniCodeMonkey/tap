@@ -1,0 +1,14 @@
+Test: TapUITests/PresentingUITests/testPlayThroughThePopoverAndEscapeStops
+diff --git i/desktop/Tap/App/AppEnvironment.swift w/desktop/Tap/App/AppEnvironment.swift
+index c4644f7..ba24d00 100644
+--- i/desktop/Tap/App/AppEnvironment.swift
++++ w/desktop/Tap/App/AppEnvironment.swift
+@@ -119,7 +119,7 @@ final class AppEnvironment {
+         loginShellLoader = LoginShellEnvironmentLoader(shellPath: ProcessInfo.processInfo.environment["SHELL"] ?? "/bin/zsh")
+         // UI tests pass -TapConfigHome <folder>, so the tap they drive reads
+         // and writes a settings file of their own, never the person's.
+-        if let configHome = UserDefaults.standard.string(forKey: "TapConfigHome") {
++        if let configHome = UserDefaults.standard.string(forKey: "TapConfigHomeIgnored") {
+             extraEnvironment["XDG_CONFIG_HOME"] = configHome
+         }
+         // They pass -TapDefaultsSuite <name> too, so the app's own settings

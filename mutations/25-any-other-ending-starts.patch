@@ -1,0 +1,14 @@
+Test: TapTests/FocusHintTests/testTheHintEndedAnyOtherWayStartsNothing
+diff --git i/desktop/Tap/Windows/DeckWindowController.swift w/desktop/Tap/Windows/DeckWindowController.swift
+index 8838492..8caedeb 100644
+--- i/desktop/Tap/Windows/DeckWindowController.swift
++++ w/desktop/Tap/Windows/DeckWindowController.swift
+@@ -400,7 +400,7 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
+                 switch response {
+                 case .OK: self.openFocusSettings()
+                 case .cancel: self.startAfterTheHint(options)
+-                default: break // the sheet ended some other way, as its window went: no talk
++                default: self.startAfterTheHint(options)
+                 }
+             }
+             return

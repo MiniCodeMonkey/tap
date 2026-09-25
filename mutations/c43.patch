@@ -1,0 +1,14 @@
+Test: TapTests/PhoneRemoteTests/testPhoneRemote
+diff --git i/desktop/Tap/Presenting/PresentationController.swift w/desktop/Tap/Presenting/PresentationController.swift
+index 5546fbc..412cc2b 100644
+--- i/desktop/Tap/Presenting/PresentationController.swift
++++ w/desktop/Tap/Presenting/PresentationController.swift
+@@ -703,7 +703,7 @@ final class PresentationController {
+     func togglePhoneRemote() {
+         defer { refreshPresenterToolbar() }
+         guard canTogglePhoneRemote else { return }
+-        setTunnel(on: !remoteIsOn)
++        setTunnel(on: true)
+     }
+ 
+     /// The pointer moved over a talk window: the cursor hides again after it rests.

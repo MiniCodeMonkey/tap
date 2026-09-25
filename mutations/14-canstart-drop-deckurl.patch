@@ -1,0 +1,14 @@
+Test: TapTests/PresentingFailureTests/testPlayIsDisabledWhileADeckHasNoFile
+diff --git i/desktop/Tap/Presenting/PresentationController.swift w/desktop/Tap/Presenting/PresentationController.swift
+index 6238343..37c2135 100644
+--- i/desktop/Tap/Presenting/PresentationController.swift
++++ w/desktop/Tap/Presenting/PresentationController.swift
+@@ -228,7 +228,7 @@ final class PresentationController {
+     /// dropped by AppKit, and that window then never closes. The Play
+     /// button hears `presentingDidChangeNotification` when this turns true.
+     var canStart: Bool {
+-        deckURL() != nil && !isActive && !AppEnvironment.shared.isPresenting
++        !isActive && !AppEnvironment.shared.isPresenting
+             && windowsGoingDown.isEmpty && !PresentationWindow.anyIsBusyWithFullScreen
+     }
+ 

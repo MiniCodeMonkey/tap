@@ -1,0 +1,19 @@
+Test: TapTests/PresentingFailureTests/testATalkSurvivesATapPresentRestart
+diff --git i/desktop/Tap/Presenting/PresentationController.swift w/desktop/Tap/Presenting/PresentationController.swift
+index 6238343..350c67b 100644
+--- i/desktop/Tap/Presenting/PresentationController.swift
++++ w/desktop/Tap/Presenting/PresentationController.swift
+@@ -424,11 +424,11 @@ final class PresentationController {
+             }
+         }
+         if options.mode == .play {
+-            let audience = audienceWindow ?? makeWindow(role: .audience, frame: arrangement.audience.frame)
++            let audience = makeWindow(role: .audience, frame: arrangement.audience.frame)
+             audienceWindow = audience
+             audience.page.load(client.audienceLaunchURL(slide: lastSlide), allowedPort: client.ready.port)
+         }
+-        let presenter = presenterWindow ?? makeWindow(role: .presenter, frame: arrangement.presenter.frame)
++        let presenter = makeWindow(role: .presenter, frame: arrangement.presenter.frame)
+         presenterWindow = presenter
+         presenter.page.load(client.presenterURL(slide: lastSlide), allowedPort: client.ready.port)
+         if !windowsShown { armShowWindowsFallback() }

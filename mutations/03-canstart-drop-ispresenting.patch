@@ -1,0 +1,14 @@
+Test: TapTests/FocusHintTests/testNothingInterruptsTheTalk
+diff --git i/desktop/Tap/Presenting/PresentationController.swift w/desktop/Tap/Presenting/PresentationController.swift
+index 5546fbc..c551b44 100644
+--- i/desktop/Tap/Presenting/PresentationController.swift
++++ w/desktop/Tap/Presenting/PresentationController.swift
+@@ -217,7 +217,7 @@ final class PresentationController {
+     /// dropped by AppKit, and that window then never closes. The Play
+     /// button hears `presentingDidChangeNotification` when this turns true.
+     var canStart: Bool {
+-        deckURL() != nil && !isActive && !AppEnvironment.shared.isPresenting
++        deckURL() != nil && !isActive
+             && windowsGoingDown.isEmpty && !PresentationWindow.anyIsBusyWithFullScreen
+     }
+ 

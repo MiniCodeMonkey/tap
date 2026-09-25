@@ -1,0 +1,14 @@
+Test: TapTests/PresentingFailureTests/testATalkThatCannotStartShowsABar
+diff --git i/desktop/Tap/Presenting/PresentationController.swift w/desktop/Tap/Presenting/PresentationController.swift
+index 462c962..68a0566 100644
+--- i/desktop/Tap/Presenting/PresentationController.swift
++++ w/desktop/Tap/Presenting/PresentationController.swift
+@@ -860,8 +860,6 @@ final class PresentationController {
+             handleTunnel(event)
+         case .error(let payload) where payload.code == "tunnel_unavailable" || payload.code == "tunnel_failed":
+             handleTunnel(event)
+-        case .error(let payload) where payload.meansTheCommandFailed:
+-            lastErrorMessage = payload.message
+         default:
+             break
+         }

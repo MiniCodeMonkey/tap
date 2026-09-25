@@ -1,0 +1,13 @@
+Test: TapTests/FocusHintTests/testNothingInterruptsTheTalk
+diff --git i/desktop/Tap/Windows/DeckWindowController.swift w/desktop/Tap/Windows/DeckWindowController.swift
+index d915017..e428295 100644
+--- i/desktop/Tap/Windows/DeckWindowController.swift
++++ w/desktop/Tap/Windows/DeckWindowController.swift
+@@ -381,7 +381,6 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
+         let hint = AppEnvironment.shared.focusHint
+         guard hint.hasBeenShown, focusHintSheet == nil else {
+             guard focusHintSheet == nil else { return }
+-            hint.markShown()
+             guard let window else {
+                 // No window to hang a sheet on: the hint is skipped, never a reason not to present.
+                 sessionController.presentation.start(options)

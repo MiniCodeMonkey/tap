@@ -1,0 +1,13 @@
+Test: TapTests/FocusHintTests/testNothingInterruptsTheTalk
+diff --git i/desktop/Tap/Presenting/PresentationController.swift w/desktop/Tap/Presenting/PresentationController.swift
+index 5546fbc..69774d0 100644
+--- i/desktop/Tap/Presenting/PresentationController.swift
++++ w/desktop/Tap/Presenting/PresentationController.swift
+@@ -1032,7 +1032,6 @@ final class PresentationController {
+     private func countOut() {
+         guard countedAsPresenting else { return }
+         countedAsPresenting = false
+-        AppEnvironment.shared.noteTalkEnded()
+     }
+ }
+ 

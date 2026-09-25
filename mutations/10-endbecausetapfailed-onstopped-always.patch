@@ -1,0 +1,14 @@
+Test: TapTests/PresentingFailureTests/testATalkThatCannotStartShowsABar
+diff --git i/desktop/Tap/Presenting/PresentationController.swift w/desktop/Tap/Presenting/PresentationController.swift
+index 462c962..fe9a647 100644
+--- i/desktop/Tap/Presenting/PresentationController.swift
++++ w/desktop/Tap/Presenting/PresentationController.swift
+@@ -1052,7 +1052,7 @@ final class PresentationController {
+         countOut()
+         releaseIfDone()
+         onFailed?(message)
+-        if failedAfterShowing { onStopped?(lastSlide) }
++        onStopped?(lastSlide)
+     }
+ 
+     /// A talk whose deck has closed lets go of itself once nothing of it is

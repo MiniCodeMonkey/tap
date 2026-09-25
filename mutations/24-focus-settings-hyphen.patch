@@ -1,0 +1,14 @@
+Test: TapTests/FocusHintTests/testNothingInterruptsTheTalk
+diff --git i/desktop/Tap/Windows/DeckWindowController.swift w/desktop/Tap/Windows/DeckWindowController.swift
+index 8838492..3a26246 100644
+--- i/desktop/Tap/Windows/DeckWindowController.swift
++++ w/desktop/Tap/Windows/DeckWindowController.swift
+@@ -44,7 +44,7 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
+     private(set) var focusHintSheet: QuestionSheet?
+     /// The Focus pane of System Settings: the bundle identifier of
+     /// FocusSettingsExtension.appex, which System Settings opens by.
+-    static let focusSettingsURL = URL(string: "x-apple.systempreferences:com.apple.Focus-Settings.extension")!
++    static let focusSettingsURL = URL(string: "x-apple.systempreferences:com.apple.Focus-Settings-extension")!
+     /// Opens a System Settings pane. A test replaces it and reads the URL.
+     var openSystemSettings: (URL) -> Void = { NSWorkspace.shared.open($0) }
+     private(set) lazy var layoutGallery: LayoutGalleryController = {

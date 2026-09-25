@@ -1,0 +1,15 @@
+Test: TapTests/FocusHintTests/testNothingInterruptsTheTalk
+diff --git i/desktop/Tap/Windows/DeckWindowController.swift w/desktop/Tap/Windows/DeckWindowController.swift
+index 88e3c72..ba00ba7 100644
+--- i/desktop/Tap/Windows/DeckWindowController.swift
++++ w/desktop/Tap/Windows/DeckWindowController.swift
+@@ -91,9 +91,6 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
+         sessionController.presentation.onFailed = { [weak self] message in self?.showTalkFailed(message) }
+         remotePanel.onTurnOff = { [weak self] in self?.sessionController.presentation.setTunnel(on: false) }
+         sessionController.presentation.onTunnelChange = { [weak self] in self?.refreshRemotePanel() }
+-        presentingObserver = NotificationCenter.default.addObserver(forName: AppEnvironment.presentingDidChangeNotification, object: nil, queue: nil) { [weak self] _ in
+-            MainActor.assumeIsolated { self?.refreshPresentingControls() }
+-        }
+ 
+         let toolbar = NSToolbar(identifier: "TapDeckToolbar")
+         toolbar.delegate = self

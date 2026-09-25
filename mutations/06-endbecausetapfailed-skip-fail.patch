@@ -1,0 +1,13 @@
+Test: TapTests/PresentingFailureTests/testATalkEndsWhenTapPresentKeepsDying
+diff --git i/desktop/Tap/Presenting/PresentationController.swift w/desktop/Tap/Presenting/PresentationController.swift
+index 462c962..8b970e4 100644
+--- i/desktop/Tap/Presenting/PresentationController.swift
++++ w/desktop/Tap/Presenting/PresentationController.swift
+@@ -1034,7 +1034,6 @@ final class PresentationController {
+     private func endBecauseTapFailed(lastOutput: [String]) {
+         let summary = session?.restartPolicy.exitSummary ?? "tap present exited"
+         let reason = lastErrorMessage ?? lastOutput.last
+-        fail(reason.map { "\(summary). \($0)" } ?? summary)
+     }
+ 
+     /// Every failure ends here. One that comes after the windows showed is

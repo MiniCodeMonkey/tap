@@ -1,0 +1,14 @@
+Test: TapTests/RecordingTests/testAQuestionDuringTheTalkBringsTheDeckWindowForward
+diff --git i/desktop/Tap/Windows/DeckWindowController.swift w/desktop/Tap/Windows/DeckWindowController.swift
+index 8838492..496e9b4 100644
+--- i/desktop/Tap/Windows/DeckWindowController.swift
++++ w/desktop/Tap/Windows/DeckWindowController.swift
+@@ -618,7 +618,7 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
+     /// same window the sheet already brought forward; nothing activates
+     /// the app, and `isOnActiveSpace` does not depend on a key window.
+     private func keepForward(_ window: NSWindow, while sheet: QuestionSheet, attempts: Int = DeckWindowController.spaceSwitchRetries) {
+-        guard attempts > 0 else { return }
++        return
+         DispatchQueue.main.asyncAfter(deadline: .now() + Self.spaceSwitchSettleDelay) { [weak self, weak window] in
+             MainActor.assumeIsolated {
+                 guard let self, let window, self.questionSheet === sheet else { return }

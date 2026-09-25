@@ -1,0 +1,13 @@
+Test: TapTests/PresentingFailureTests/testATalkThatCannotStartShowsABar
+diff --git i/desktop/Tap/Presenting/PresentationController.swift w/desktop/Tap/Presenting/PresentationController.swift
+index 6238343..6f88fb5 100644
+--- i/desktop/Tap/Presenting/PresentationController.swift
++++ w/desktop/Tap/Presenting/PresentationController.swift
+@@ -267,7 +267,6 @@ final class PresentationController {
+         editsNotShown = 0
+         tunnel = nil
+         tunnelError = nil
+-        lastErrorMessage = nil
+         failedAfterShowing = false
+         wantsRemote = options.wantsTunnel
+         lastCountedText = nil

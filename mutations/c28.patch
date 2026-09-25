@@ -1,0 +1,14 @@
+Test: TapTests/PhoneRemoteTests/testPhoneRemote
+diff --git i/desktop/Tap/Presenting/PresentationController.swift w/desktop/Tap/Presenting/PresentationController.swift
+index 3adf6b1..10e334b 100644
+--- i/desktop/Tap/Presenting/PresentationController.swift
++++ w/desktop/Tap/Presenting/PresentationController.swift
+@@ -879,8 +879,6 @@ final class PresentationController {
+         screenObserver = nil
+         recordingTimer?.invalidate()
+         recordingTimer = nil
+-        tunnel = nil
+-        tunnelError = nil
+         showWindowsFallback?.cancel()
+         showWindowsFallback = nil
+         placements = []

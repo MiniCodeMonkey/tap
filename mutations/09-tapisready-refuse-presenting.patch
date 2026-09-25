@@ -1,0 +1,14 @@
+Test: TapTests/PresentingFailureTests/testATalkSurvivesATapPresentRestart
+diff --git i/desktop/Tap/Presenting/PresentationController.swift w/desktop/Tap/Presenting/PresentationController.swift
+index 462c962..a321adc 100644
+--- i/desktop/Tap/Presenting/PresentationController.swift
++++ w/desktop/Tap/Presenting/PresentationController.swift
+@@ -379,7 +379,7 @@ final class PresentationController {
+     /// slide events and chapters. The presenter page brings its own key.
+     /// A late exchange for a talk that has ended installs nothing.
+     private func tapIsReady(_ ready: TapReady) {
+-        guard state == .starting || state == .presenting, let session else { return }
++        guard state == .starting, let session else { return }
+         lastErrorMessage = nil
+         deckPorts.setPort(ready.port, for: session.deckURL)
+         let client = TapClient(ready: ready)
