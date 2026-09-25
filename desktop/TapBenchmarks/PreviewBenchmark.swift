@@ -102,12 +102,18 @@ final class PreviewBenchmark: BenchmarkCase {
             if shownAt >= 0 { return shownAt / 1000 }
             try await Task.sleep(nanoseconds: 10_000_000)
         }
+        // probeInstalled false, or a young pageMs, means the page was
+        // loaded again after the probe went in, so it saw no mutation.
         let state = try? await webView.evaluateJavaScript("""
             JSON.stringify({hidden: document.hidden, ready: window.__tapReady,
-                            hasText: (document.body.textContent || '').includes(\(Self.javaScriptString(expected)))})
+                            hasText: (document.body.textContent || '').includes(\(Self.javaScriptString(expected))),
+                            probeInstalled: !!window.__benchmarkObserver, pageMs: Math.round(performance.now()),
+                            readyState: window.__tapReadyState})
             """)
         XCTFail("the preview never showed \(expected.debugDescription) within 5 s. page=\(String(describing: state)) "
-                + "lastReady=\(String(describing: controller.previewViewController.lastReady))")
+                + "lastReady=\(String(describing: controller.previewViewController.lastReady)) "
+                + "previewPageLoads=\(controller.previewViewController.pageLoadCount) "
+                + "renderer: \(controller.thumbnails.renderer.stateDescription)")
         throw CancellationError()
     }
 }

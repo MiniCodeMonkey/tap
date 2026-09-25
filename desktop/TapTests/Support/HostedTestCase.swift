@@ -12,6 +12,11 @@ class HostedTestCase: XCTestCase {
         configHome = try Fixtures.temporaryFolder()
         AppEnvironment.shared.extraEnvironment["XDG_CONFIG_HOME"] = configHome.path
         AppEnvironment.shared.recentThumbnailStore = RecentThumbnailStore(directory: try Fixtures.temporaryFolder())
+        AppEnvironment.shared.panelState = SlidePanelState(defaults: try XCTUnwrap(UserDefaults(suiteName: "TapTests.\(UUID().uuidString)")))
+        AppEnvironment.shared.thumbnailCache = ThumbnailCache(directory: try Fixtures.temporaryFolder())
+        AppEnvironment.shared.lastLayout = LastLayout(defaults: try XCTUnwrap(UserDefaults(suiteName: "TapTests.layout.\(UUID().uuidString)")))
+        // Copy and paste go to a pasteboard of the test's own, never the person's clipboard.
+        AppEnvironment.shared.slidePasteboard = NSPasteboard(name: NSPasteboard.Name("TapTests.copy.\(UUID().uuidString)"))
     }
 
     override func tearDown() async throws {
@@ -166,6 +171,147 @@ class HostedTestCase: XCTestCase {
             try await Task.sleep(nanoseconds: 20_000_000)
         }
         return try XCTUnwrap(preview.lastReady)
+    }
+
+    /// A borderless, opaque window over another window, and a count of the
+    /// window server's reports of that window as visible since the cover
+    /// took effect.
+    @MainActor
+    final class Cover {
+        let window: NSWindow
+        private(set) var visibleReportsWhileCovered = 0
+        private var observer: NSObjectProtocol?
+
+        init(window: NSWindow) { self.window = window }
+
+        func startCounting(_ covered: NSWindow) {
+            observer = NotificationCenter.default.addObserver(forName: NSWindow.didChangeOcclusionStateNotification, object: covered, queue: nil) { [weak self] _ in
+                MainActor.assumeIsolated {
+                    guard let self, self.window.isVisible, covered.occlusionState.contains(.visible) else { return }
+                    self.visibleReportsWhileCovered += 1
+                }
+            }
+        }
+
+        func remove() {
+            if let observer { NotificationCenter.default.removeObserver(observer) }
+            observer = nil
+            window.orderOut(nil)
+            window.close()
+        }
+    }
+
+    /// Places a borderless, opaque window exactly over `window` once the
+    /// window server has made its first report on `window`, and returns
+    /// only after `window` has read occluded continuously for half a
+    /// second while it stays on screen. A freshly opened window reads no
+    /// visible bit before that first report, and the window server reports
+    /// a covered window visible for about 0.1 s within its first 0.3 s on
+    /// screen, so neither a single occluded reading nor an early one proves
+    /// the cover has taken effect.
+    func coverWindow(_ window: NSWindow) async throws -> Cover {
+        try await waitUntil(timeout: 5, "the window server's first report of the deck window") { window.occlusionState.contains(.visible) }
+        let coverWindow = NSWindow(contentRect: window.frame, styleMask: [.borderless], backing: .buffered, defer: false)
+        coverWindow.isOpaque = true
+        coverWindow.backgroundColor = .black
+        coverWindow.level = .floating
+        coverWindow.hasShadow = false
+        coverWindow.animationBehavior = .none
+        // Without this, closing the window also releases it (AppKit's
+        // default for a window with no window controller), and the caller
+        // still holding it then double-releases it when the test scope
+        // ends, which crashes in objc_release during XCTest's post-test
+        // deallocation check.
+        coverWindow.isReleasedWhenClosed = false
+        coverWindow.setFrame(window.frame, display: true)
+        let cover = Cover(window: coverWindow)
+        coverWindow.orderFrontRegardless()
+        do {
+            // Any report restarts the half second, so a visible report too
+            // brief for a poll to read still counts against the cover.
+            var reportCount = 0
+            let recorder = NotificationCenter.default.addObserver(forName: NSWindow.didChangeOcclusionStateNotification, object: window, queue: nil) { _ in
+                MainActor.assumeIsolated { reportCount += 1 }
+            }
+            defer { NotificationCenter.default.removeObserver(recorder) }
+            var reportsSeen = 0
+            var occludedSince: Date?
+            let deadline = Date().addingTimeInterval(5)
+            while true {
+                let now = Date()
+                if window.occlusionState.contains(.visible) || reportCount != reportsSeen {
+                    reportsSeen = reportCount
+                    occludedSince = nil
+                }
+                if occludedSince == nil, !window.occlusionState.contains(.visible) {
+                    occludedSince = now
+                }
+                if let occludedSince, now.timeIntervalSince(occludedSince) >= 0.5 { break }
+                guard now < deadline else {
+                    XCTFail("the deck window never read occluded for half a second under the cover. occlusion=\(window.occlusionState.rawValue)")
+                    throw CancellationError()
+                }
+                try await Task.sleep(nanoseconds: 20_000_000)
+            }
+        } catch {
+            cover.remove()
+            throw error
+        }
+        cover.startCounting(window)
+        XCTAssertTrue(window.isVisible, "the deck window is still on screen, only covered")
+        return cover
+    }
+
+    /// What a timed out render wait records: the renderer's loop state
+    /// (`ThumbnailRenderer.stateDescription`, including the phase it is
+    /// stuck in), its window's occlusion, and the renderer page's own
+    /// ready state. The page's state is read with a 3 s limit, so a page
+    /// that no longer answers cannot hang the failure itself.
+    func rendererDiagnostics(_ renderer: ThumbnailRenderer) async -> String {
+        let loop = renderer.stateDescription
+        let window = renderer.webView.window
+        let windowState = "window=\(window == nil ? "none" : "present") windowVisible=\(window?.isVisible ?? false) "
+            + "occlusion=\(window?.occlusionState.rawValue ?? 0) hiddenView=\(renderer.webView.isHiddenOrHasHiddenAncestor)"
+        let page: String = await withCheckedContinuation { continuation in
+            var answered = false
+            renderer.webView.evaluateJavaScript(Self.pageStateScript) { value, error in
+                guard !answered else { return }
+                answered = true
+                continuation.resume(returning: error.map { "script failed: \($0)" } ?? String(describing: value))
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                guard !answered else { return }
+                answered = true
+                continuation.resume(returning: "no answer in 3 s")
+            }
+        }
+        return "renderer: \(loop) \(windowState) page=\(page)"
+    }
+
+    /// What a deck's thumbnail controller last handed on, for a render wait
+    /// that times out: whether tap's newest summary ever reached the
+    /// renderer, as against the renderer stalling on work it has.
+    func thumbnailControllerState(_ controller: DeckSessionController) -> String {
+        let summary = controller.thumbnails.lastSummary
+        return "controller: summaryRevision=\(summary?.revision ?? "none") summarySlides=\(summary?.slides.count ?? 0) "
+            + "previewReady=\(controller.previewViewController.lastReady.map { "slide \($0.slide) revision \($0.revision)" } ?? "none") "
+            + "current=\(controller.currentSlideNumber.map(String.init) ?? "none") visible=\(controller.slidePanel.visibleNumbers)"
+    }
+
+    /// `waitUntil` for a renderer's progress: a timeout fails with
+    /// `rendererDiagnostics`, plus the deck's controller state when a
+    /// controller is given, so a stall explains itself.
+    func waitForRenderer(_ renderer: ThumbnailRenderer, of controller: DeckSessionController? = nil, timeout: TimeInterval,
+                         _ message: String, _ condition: @escaping () -> Bool) async throws {
+        let deadline = Date().addingTimeInterval(timeout)
+        while !condition() {
+            if Date() > deadline {
+                let controllerState = controller.map { " " + thumbnailControllerState($0) } ?? ""
+                XCTFail("timed out waiting for \(message). \(await rendererDiagnostics(renderer))\(controllerState)")
+                throw CancellationError()
+            }
+            try await Task.sleep(nanoseconds: 20_000_000)
+        }
     }
 
     /// Polls `condition` until it is true.

@@ -10,9 +10,15 @@ public struct DividerPolicy: Equatable, Sendable {
     public mutating func userDragged() { userMovedDivider = true }
     public mutating func reset() { userMovedDivider = false }
 
-    /// The divider position that splits `totalWidth` in half, or nil once the user moved it.
-    public func balancedPosition(totalWidth: CGFloat, dividerThickness: CGFloat) -> CGFloat? {
+    /// The position of the divider between the editor and the right pane
+    /// that splits them evenly, measured from the split view's left edge,
+    /// or nil once the user moved it. `leadingWidth` is the width of a
+    /// pinned sidebar in front of the editor, 0 when there is none; its own
+    /// divider takes `dividerThickness` too.
+    public func balancedPosition(totalWidth: CGFloat, dividerThickness: CGFloat, leadingWidth: CGFloat = 0) -> CGFloat? {
         guard !userMovedDivider else { return nil }
-        return ((totalWidth - dividerThickness) / 2).rounded(.down)
+        let leading = leadingWidth > 0 ? leadingWidth + dividerThickness : 0
+        let remaining = totalWidth - leading - dividerThickness
+        return leading + (remaining / 2).rounded(.down)
     }
 }

@@ -80,6 +80,25 @@ public struct SlideRangeTracker: Sendable {
         return dirty
     }
 
+    /// Replaces the boxes with ranges the app built from tap's own ranges,
+    /// as a slide operation does when it permutes the slides it was given.
+    /// The deck errors stay. Every answer to a send begun before this is
+    /// refused, as after `reset`: such an answer describes the text the
+    /// operation replaced, and replaying the operation's whole-region edit
+    /// onto it would stretch and collapse the boxes. The operation sends
+    /// the new text right after, and that answer is the next one applied.
+    /// Raising `earliestLiveGeneration` here already keeps every edit
+    /// logged before this call out of every future replay: `generation`
+    /// only rises, so no send begun from here on can ever name a
+    /// generation that old edit was logged at. It is dropped by `apply`'s
+    /// own cleanup the next time a send succeeds, so there is nothing left
+    /// for this call to clear.
+    public mutating func adopt(_ newBoxes: [SlideBox]) {
+        boxes = Self.separated(newBoxes)
+        generation += 1
+        earliestLiveGeneration = generation
+    }
+
     /// The length of the hidden text before slide 1, the frontmatter. It is 0
     /// while the deck has deck-level errors, so the frontmatter can be fixed.
     public var hiddenPrefixLength: Int {

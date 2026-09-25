@@ -18,20 +18,6 @@ struct ReadyPayload: Equatable {
     }
 }
 
-/// Forwards script messages without the user content controller keeping
-/// the preview alive.
-private final class WeakScriptMessageHandler: NSObject, WKScriptMessageHandler {
-    weak var target: WKScriptMessageHandler?
-
-    init(_ target: WKScriptMessageHandler) {
-        self.target = target
-    }
-
-    func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
-        target?.userContentController(userContentController, didReceive: message)
-    }
-}
-
 /// tap's audience page for the slide under the cursor, a status line, the
 /// step controls and the pin.
 final class PreviewViewController: NSViewController, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler {

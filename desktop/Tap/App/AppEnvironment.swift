@@ -16,6 +16,20 @@ final class AppEnvironment {
     /// Where a deck's slide-1 thumbnail is saved for the welcome window. A
     /// test replaces this with a store rooted in its own temporary folder.
     var recentThumbnailStore = RecentThumbnailStore()
+    /// Whether each deck's slide panel is pinned as a sidebar or peeks on
+    /// hover. A test replaces this with one on a fresh UserDefaults suite.
+    var panelState = SlidePanelState()
+    /// Where slide thumbnails are cached on disk. A test replaces this with
+    /// a cache rooted in its own temporary folder.
+    var thumbnailCache = ThumbnailCache()
+    /// Every layout tap offers, loaded once from the bundled tap.
+    lazy var layoutCatalog = LayoutCatalogLoader(executable: { [weak self] in self?.tapExecutableURL ?? URL(fileURLWithPath: "/usr/bin/false") })
+    /// The layout New Slide inserts: the one used last.
+    var lastLayout = LastLayout()
+    /// Where copied slides go and paste reads from: the general pasteboard,
+    /// unless a test replaces it with a named one so a run never touches
+    /// the person's real clipboard.
+    var slidePasteboard: NSPasteboard = .general
     private(set) var environmentNotice: String?
     private(set) var bundledTapVersion: String?
     private let loginShellLoader: LoginShellEnvironmentLoader
@@ -37,6 +51,7 @@ final class AppEnvironment {
             bundledTapVersion = await Self.readVersion(of: tapExecutableURL)
             NotificationCenter.default.post(name: Self.didLoadNotification, object: self)
         }
+        Task { await layoutCatalog.load() }
     }
 
     func tapEnvironment() async -> [String: String] {

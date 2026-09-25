@@ -303,7 +303,7 @@ export default function App() {
 					</SlideTransition>
 				</SlideCanvas>
 
-				<ProgressBar show={showProgressBar} />
+				<ProgressBar show={showProgressBar} settled={SETTLE} />
 
 				{!PRINT_MODE && !CAPTURE_MODE ? (
 					<>

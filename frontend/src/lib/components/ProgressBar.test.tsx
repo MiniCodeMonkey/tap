@@ -92,4 +92,18 @@ describe('ProgressBar', () => {
 		expect(bar).toHaveAttribute('aria-valuemin', '0');
 		expect(bar).toHaveAttribute('aria-valuemax', '2');
 	});
+
+	it('moves its fill with a transition on a live page', () => {
+		usePresentationStore.setState({ presentation: makePresentation(5), currentSlideIndex: 1 });
+		const { container } = render(<ProgressBar />);
+		const fill = container.querySelector('.progress-bar-fill') as HTMLElement;
+		expect(fill.style.transition).toBe('');
+	});
+
+	it('jumps its fill with no transition on a settled page, so a print or capture never waits for it', () => {
+		usePresentationStore.setState({ presentation: makePresentation(5), currentSlideIndex: 1 });
+		const { container } = render(<ProgressBar settled />);
+		const fill = container.querySelector('.progress-bar-fill') as HTMLElement;
+		expect(fill.style.transition).toBe('none');
+	});
 });

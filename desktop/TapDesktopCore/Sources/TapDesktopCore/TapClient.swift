@@ -94,6 +94,18 @@ public final class TapClient: @unchecked Sendable {
         }
     }
 
+    /// The rendered deck's summary, from the render tap shows now: the
+    /// buffer while there is one, and the file otherwise.
+    public func presentation() async throws -> PresentationSummary {
+        let request = authorizedRequest(path: "/api/presentation")
+        let (data, response) = try await session.data(for: request)
+        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+        guard status == 200 else {
+            throw TapErrorPayload(code: "http_\(status)", message: String(decoding: data, as: UTF8.self))
+        }
+        return try PresentationSummary.decode(data)
+    }
+
     @MainActor
     public func openSocket() -> TapSocket {
         TapSocket(task: session.webSocketTask(with: socketRequest()))

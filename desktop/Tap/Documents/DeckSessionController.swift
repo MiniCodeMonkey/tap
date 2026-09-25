@@ -10,6 +10,14 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
     let editorViewController = EditorViewController()
     let inspectorViewController = InspectorViewController()
     let previewViewController = PreviewViewController()
+    let slidePanel = SlidePanelViewController()
+    private(set) lazy var thumbnails = ThumbnailController(cache: AppEnvironment.shared.thumbnailCache, panel: slidePanel)
+    /// True while a panel click moves the cursor, so the cursor's own
+    /// selection sync does not collapse a Shift-click's range.
+    private var isSelectingFromPanel = false
+    /// The deck's path as of the last move, so the slide panel's pinned
+    /// state can follow it from the old path to the new one.
+    private var previousDeckURL: URL?
     private(set) var navigator = PreviewNavigator()
     private(set) var client: TapClient?
     private(set) var socket: TapSocket?
@@ -18,7 +26,7 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
     /// still resolve after: its answer belongs to a state that no longer
     /// exists and must not reach the editor, the same as a stale render
     /// must not publish over a newer one.
-    private var stopped = false
+    var stopped = false
     /// NSTextView replays undo and redo directly against the text storage,
     /// never through didChangeText, so editorTextDidChange never fires for
     /// them (confirmed directly: it fires once for a typed edit and not at
@@ -126,6 +134,16 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
         let text: String
     }
     private var pendingCursorLoad: PendingCursorLoad?
+    /// The text tap last answered for and the editor applied. A slide
+    /// operation runs only when the editor's text equals this.
+    private(set) var lastAppliedText: String?
+    /// The boxes an undo or redo's text belongs to, left by
+    /// `registerBoxAdoption` for `undoOrRedoDidChangeText` to adopt once the
+    /// whole undo group has run.
+    var pendingBoxAdoption: [SlideBox]?
+    /// How long a queued operation waits for tap to confirm the text before
+    /// giving up. Tests shorten it.
+    var confirmationTimeout: TimeInterval = 3
     /// Runs after each slide list is applied to the editor.
     var onSlideListApplied: ((SlideList) -> Void)?
     var onHubMessage: ((HubMessage) -> Void)?
@@ -138,6 +156,7 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
 
     init(document: DeckDocument) {
         self.document = document
+        previousDeckURL = document.fileURL
         let deckURL = document.fileURL ?? FileManager.default.temporaryDirectory.appendingPathComponent("Untitled.md")
         session = TapSession(deckURL: deckURL, configuration: AppEnvironment.shared.sessionConfiguration())
         super.init()
@@ -151,6 +170,19 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
         }
         session.onStateChange = { [weak self] state in self?.sessionStateChanged(state) }
         editor.editorDelegate = self
+        slidePanel.delegate = self
+        slidePanel.deckURL = document.fileURL
+        editor.deckURL = document.fileURL
+        editorViewController.hostHiddenView(thumbnails.renderer.webView)
+        thumbnails.currentSlideNumber = { [weak self] in self?.currentSlideNumber }
+        thumbnails.renderer.isPaused = { [weak self] in
+            guard let last = self?.sourceSync.lastEditDate else { return false }
+            return Date().timeIntervalSince(last) < 0.5
+        }
+        thumbnails.renderer.canPaint = { [weak self] in
+            guard let webView = self?.thumbnails.renderer.webView, let window = webView.window else { return false }
+            return !webView.isHiddenOrHasHiddenAncestor && window.occlusionState.contains(.visible)
+        }
         inspectorViewController.embed(previewViewController)
         previewViewController.onStepBackward = { [weak self] in self?.sendPreviewMessage(self?.navigator.stepBackward()) }
         previewViewController.onStepForward = { [weak self] in self?.sendPreviewMessage(self?.navigator.stepForward()) }
@@ -281,11 +313,17 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
         if hasDiskConflict || hadDiskConflictWhenDeleted { showDiskConflict(name: url.lastPathComponent) }
         hadDiskConflictWhenDeleted = false
         fileWatcher.watch(url)
+        slidePanel.deckURL = url
+        editor.deckURL = url
+        if let old = previousDeckURL {
+            AppEnvironment.shared.panelState.moveState(from: old, to: url)
+        }
         session.changeDeck(to: url)
         switch session.state {
         case .stopped, .failed: session.start()
         default: break
         }
+        previousDeckURL = url
     }
 
     /// The deck file changed on disk.
@@ -393,6 +431,35 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
             navigator.pin()
             sendPreviewMessage(nil)
         }
+    }
+
+    /// The number of the slide under the cursor.
+    var currentSlideNumber: Int? {
+        editor.currentBoxIndex.map { editor.boxes[$0].slide.number }
+    }
+
+    /// The slides an operation acts on: the panel's selection, which
+    /// follows the cursor when nothing was selected by hand.
+    var selectedSlideNumbers: [Int] {
+        let selected = slidePanel.selectedNumbers
+        if !selected.isEmpty { return selected }
+        return currentSlideNumber.map { [$0] } ?? []
+    }
+
+    /// Selects the cursor's slide alone, unless the panel is driving the cursor.
+    func syncPanelSelectionToCursor() {
+        guard !isSelectingFromPanel, let number = currentSlideNumber else { return }
+        slidePanel.select(numbers: [number], scroll: true)
+    }
+
+    /// Runs `body` with the panel marked as driving the cursor, so a caret
+    /// move inside it leaves the panel's selection alone. Internal so the
+    /// slide operations in `SlideOperations.swift` can use it; the flag
+    /// itself stays private to this file.
+    func withPanelDrivingTheCursor(_ body: () -> Void) {
+        isSelectingFromPanel = true
+        defer { isSelectingFromPanel = false }
+        body()
     }
 
     func start() {
@@ -627,7 +694,7 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
                 return
             }
             guard let image, let tiff = image.tiffRepresentation, let bitmap = NSBitmapImageRep(data: tiff) else { return }
-            guard !bitmap.isSingleColor else {
+            guard !FlatImageCheck.isFlat(image) else {
                 self.retryFlatCapture(for: deck, visibleSince: visibleSince, deadline: deadline, attempt: attempt)
                 return
             }
@@ -682,6 +749,9 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
         // longer holds. Nothing it says about this deck is true any more,
         // so none of what follows runs on it.
         guard editor.apply(list, sentText: sentText, sentGeneration: generation) else { return }
+        lastAppliedText = sentText
+        slidePanel.setSlides(editor.boxes.map(\.slide))
+        thumbnails.deckChanged()
         if let first = list.errors.first {
             if editorViewController.bar(.deckErrors)?.message != "The deck settings have a problem: \(first)" {
                 editorViewController.showBar(DocumentBarView(kind: .deckErrors, message: "The deck settings have a problem: \(first)",
@@ -714,12 +784,14 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
         guard case .running(let ready) = state else {
             client = nil
             sourceSync.sender = nil
+            thumbnails.client = nil
             return
         }
         let newClient = TapClient(ready: ready)
         client = newClient
         sourceSync.sender = { source in try await newClient.putSource(source) }
         previewViewController.load(client: newClient)
+        thumbnails.client = newClient
         // The presenter secret comes first: a socket opened without the
         // cookie it buys is relayed to nobody, so the preview would never
         // move. A refusal is logged and the socket is opened anyway, because
@@ -753,6 +825,12 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
     /// typing pause: an undo or redo is one discrete action, with no
     /// further keystrokes to wait for.
     private func undoOrRedoDidChangeText() {
+        // A slide operation's undo or redo leaves the boxes it belongs to
+        // here; adopting them first makes the send below the next answer applied.
+        if let boxes = pendingBoxAdoption {
+            pendingBoxAdoption = nil
+            adoptPendingBoxes(boxes)
+        }
         refreshEditedState()
         Task { await sourceSync.sendNow() }
     }
@@ -764,29 +842,68 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
         sourceSync.textDidChange()
     }
 
+    func editor(_ editor: EditorTextView, payloadForHeaderDragOfBoxAt index: Int) -> SlideDragPayload? {
+        let number = editor.boxes[index].slide.number
+        let numbers = slidePanel.selectedNumbers.contains(number) ? slidePanel.selectedNumbers : [number]
+        return dragPayload(forSlides: numbers)
+    }
+
+    func editor(_ editor: EditorTextView, dropSlides payload: SlideDragPayload, beforeNumber: Int?, isMove: Bool) -> Bool {
+        dropSlides(payload: payload, beforeNumber: beforeNumber, isMove: isMove)
+    }
+
+    func editor(_ editor: EditorTextView, contextMenuForBoxAt index: Int) -> NSMenu? {
+        guard let windowController = editor.window?.windowController as? DeckWindowController, editor.boxes.indices.contains(index) else { return nil }
+        let number = editor.boxes[index].slide.number
+        if !slidePanel.selectedNumbers.contains(number) {
+            slidePanel.click(slide: number, extendingSelection: false)
+        }
+        return SlideContextMenu.build(for: selectedSlideNumbers, target: windowController, showsTextShortcuts: false)
+    }
+
     func editor(_ editor: EditorTextView, currentSlideDidChange index: Int?) {
         guard let index, editor.boxes.indices.contains(index) else { return }
         sendPreviewMessage(navigator.cursorMoved(to: editor.boxes[index].slide))
+        syncPanelSelectionToCursor()
+        // A cursor move to a slide already on screen selects it without
+        // scrolling, which fires no bounds-change notification, so the
+        // render queue's priority is stuck at whatever it was computed as
+        // during the last content change unless this reaches the renderer
+        // directly.
+        thumbnails.reprioritize()
     }
 }
 
-private extension NSBitmapImageRep {
-    /// True when a grid of samples across the image all read the same
-    /// colour, the signature of a snapshot taken before the page painted.
-    var isSingleColor: Bool {
-        let columns = 16
-        let rows = 16
-        var first: [Int]?
-        for row in 0..<rows {
-            for column in 0..<columns {
-                let x = min(pixelsWide - 1, column * pixelsWide / (columns - 1))
-                let y = min(pixelsHigh - 1, row * pixelsHigh / (rows - 1))
-                guard let color = colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB) else { continue }
-                let sample = [Int(color.redComponent * 255), Int(color.greenComponent * 255), Int(color.blueComponent * 255)]
-                if let first, first != sample { return false }
-                first = first ?? sample
-            }
-        }
-        return true
+extension DeckSessionController: SlidePanelDelegate {
+    func slidePanel(_ panel: SlidePanelViewController, didClickSlide number: Int, selection: [Int]) {
+        guard let index = editor.boxes.firstIndex(where: { $0.slide.number == number }) else { return }
+        withPanelDrivingTheCursor { editor.moveCursor(toSlide: index) }
+    }
+
+    func slidePanel(_ panel: SlidePanelViewController, payloadForSlides numbers: [Int]) -> SlideDragPayload? {
+        dragPayload(forSlides: numbers)
+    }
+
+    func slidePanel(_ panel: SlidePanelViewController, acceptDrop payload: SlideDragPayload, beforeNumber: Int?, isMove: Bool) -> Bool {
+        dropSlides(payload: payload, beforeNumber: beforeNumber, isMove: isMove)
+    }
+
+    func slidePanelContextMenu(_ panel: SlidePanelViewController) -> NSMenu? {
+        guard let windowController = editor.window?.windowController as? DeckWindowController else { return nil }
+        return SlideContextMenu.build(for: selectedSlideNumbers, target: windowController)
+    }
+
+    /// The core refuses to delete every slide, with a beep, so a deck
+    /// keeps at least one.
+    func slidePanelDeleteSelection(_ panel: SlidePanelViewController) {
+        perform(on: captureSelection()) { .delete(numbers: $0) }
+    }
+
+    func slidePanelCopySelection(_ panel: SlidePanelViewController) {
+        copySlides(selectedSlideNumbers, to: AppEnvironment.shared.slidePasteboard)
+    }
+
+    func slidePanelPaste(_ panel: SlidePanelViewController) {
+        pasteSlides(from: AppEnvironment.shared.slidePasteboard, after: captureSelection())
     }
 }

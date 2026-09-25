@@ -96,12 +96,37 @@ enum MainMenu {
 
     static func slideMenu() -> NSMenu {
         let menu = NSMenu(title: "Slide")
+        menu.addItem(item("New Slide", action: #selector(DeckWindowController.newSlide(_:)), key: "n", modifiers: [.command, .option]))
+        let fromLayout = item("New Slide from Layout", action: nil)
+        let layouts = NSMenu(title: "New Slide from Layout")
+        layouts.delegate = LayoutMenuDelegate.shared
+        fromLayout.submenu = layouts
+        menu.addItem(fromLayout)
+        menu.addItem(.separator())
+        menu.addItem(item("Duplicate", action: #selector(DeckWindowController.duplicateSlides(_:)), key: "d"))
+        menu.addItem(item("Skip Slide", action: #selector(DeckWindowController.toggleSkipSlides(_:))))
+        // Command-Delete, not Delete alone: a bare Delete key equivalent would take Backspace away from the editor.
+        menu.addItem(item("Delete", action: #selector(DeckWindowController.deleteSlides(_:)), key: "\u{8}"))
+        menu.addItem(.separator())
+        let upArrow = String(Character(Unicode.Scalar(UInt16(NSUpArrowFunctionKey))!))
+        let downArrow = String(Character(Unicode.Scalar(UInt16(NSDownArrowFunctionKey))!))
+        menu.addItem(item("Move Up", action: #selector(DeckWindowController.moveSlidesUp(_:)), key: upArrow, modifiers: [.command, .option]))
+        menu.addItem(item("Move Down", action: #selector(DeckWindowController.moveSlidesDown(_:)), key: downArrow, modifiers: [.command, .option]))
+        menu.addItem(item("Move to Top", action: #selector(DeckWindowController.moveSlidesToTop(_:))))
+        menu.addItem(item("Move to Bottom", action: #selector(DeckWindowController.moveSlidesToBottom(_:))))
+        menu.addItem(.separator())
+        // The image and component commands arrive with tap image and tap component new.
+        menu.addItem(item("Insert Image…", action: nil, key: "i", modifiers: [.command, .shift]))
+        menu.addItem(item("Generate Image…", action: nil))
+        menu.addItem(item("New Component…", action: nil))
+        menu.addItem(.separator())
         menu.addItem(item("Go to Slide…", action: #selector(DeckWindowController.goToSlide(_:)), key: "o", modifiers: [.command, .shift]))
         return menu
     }
 
     static func viewMenu() -> NSMenu {
         let menu = NSMenu(title: "View")
+        menu.addItem(item("Unpin Slide Panel", action: #selector(DeckWindowController.toggleSlidePanel(_:)), key: "s", modifiers: [.command, .control]))
         menu.addItem(item("Hide Preview", action: #selector(DeckWindowController.togglePreview(_:)), key: "0", modifiers: [.command, .option]))
         menu.addItem(item("Pin Preview", action: #selector(DeckWindowController.togglePreviewPin(_:)), key: "p", modifiers: [.command, .shift]))
         menu.addItem(item("Preview in Window", action: #selector(DeckWindowController.showPreviewInWindow(_:))))
