@@ -75,7 +75,8 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
             switch state {
             case .idle: self?.talkEnded(failed: false)
             case .failed: self?.talkEnded(failed: true)
-            case .starting, .presenting, .stopping: break
+            case .starting: self?.sessionController.editorViewController.hideBar(.recordingKept)
+            case .presenting, .stopping: break
             }
         }
         sessionController.presentation.onQuestion = { [weak self] question in self?.presentQuestion(question) }
@@ -403,10 +404,10 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
     /// The talk is idle or failed: no sheet of its outlives it, and the
     /// remote panel goes. A keep-recording sheet still up when tap quit on
     /// its own means its 60 s wait ran out (or the app's stdin closed) and
-    /// it kept the recording: the sheet ends as a yes and the run is
-    /// revealed like any kept run. A talk that
-    /// failed says nothing about the recording, so its sheet, like any
-    /// other, ends answering nothing.
+    /// it kept the recording: the sheet ends as a yes, and the "Recording
+    /// kept" bar offers Reveal in Finder, since nobody clicked. A talk
+    /// that failed says nothing about the recording, so its sheet, like
+    /// any other, ends answering nothing.
     func talkEnded(failed: Bool) {
         remotePanel.hide()
         guard let sheet = questionSheet else { return }
@@ -421,6 +422,16 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
         }
     }
 
+    /// The bar that says tap kept a recording on its own, with Reveal in
+    /// Finder. It takes no focus and covers nothing; the next talk clears it.
+    func showRecordingKept(_ folder: URL) {
+        sessionController.editorViewController.showBar(DocumentBarView(
+            kind: .recordingKept, message: "Recording kept", detail: folder.path,
+            buttons: [("Reveal in Finder", { [weak self] in
+                self?.revealInFinder(folder)
+                self?.sessionController.editorViewController.hideBar(.recordingKept)
+            })]))
+    }
 
     // MARK: The phone remote
 
@@ -463,9 +474,18 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
                                                     size: Self.folderSize(at: URL(fileURLWithPath: directory)))
             showQuestionSheet(sheet) { [weak self] keep in
                 // tap keeps the recording on a yes and on no answer at all; the app
-                // never touches the folder itself.
+                // never touches the folder itself. A question tap still waits on
+                // is the person's click, which reveals the run; one tap has
+                // already dropped kept the run on its own, which only says so.
+                let personAnswered = presentation.pendingQuestions.contains { $0.id == question.id }
                 presentation.answer(id: question.id, value: keep)
-                if keep, !directory.isEmpty { self?.revealInFinder(URL(fileURLWithPath: directory)) }
+                guard keep, !directory.isEmpty else { return }
+                let folder = URL(fileURLWithPath: directory)
+                if personAnswered {
+                    self?.revealInFinder(folder)
+                } else {
+                    self?.showRecordingKept(folder)
+                }
             }
         default:
             presentation.session?.log.append("the \(question.kind) question is not answered by this version of the app; declined", source: .app)

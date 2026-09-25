@@ -82,7 +82,10 @@ final class KeepRecordingTests: PresentingTestCase {
         try await waitUntil(timeout: 10, "the talk to end") { controller.presentation.state == .idle }
     }
 
-    func testATapThatKeepsWithoutWaitingRevealsTheRun() async throws {
+    /// tap's own wait ran out and it kept the run: nobody clicked, so
+    /// nothing opens Finder; a bar on the deck window says so and offers
+    /// Reveal in Finder.
+    func testATapThatKeepsWithoutWaitingShowsTheKeptBar() async throws {
         let folder = try recordingFolder()
         let record = try Fixtures.temporaryFolder().appendingPathComponent("record")
         let (controller, deckWindow) = try await startTalk(quit: .askToKeepThenExit(after: 0.5, directory: folder, segments: 1), record: record)
@@ -92,8 +95,14 @@ final class KeepRecordingTests: PresentingTestCase {
         try await waitUntil(timeout: 10, "the talk to end") { controller.presentation.state == .idle }
         XCTAssertNil(deckWindow.questionSheet, "the sheet goes with the process that asked")
         XCTAssertNil(deckWindow.window?.attachedSheet)
-        XCTAssertEqual(revealed.map(\.path), [folder.path], "kept, so shown")
+        XCTAssertEqual(revealed, [], "nobody clicked, so Finder is not opened")
         XCTAssertTrue(controller.presentation.lastTalkLog?.text.contains("tap kept the recording") == true, "in the talk's log, not tap dev's")
+        let bar = try XCTUnwrap(controller.editorViewController.bar(.recordingKept), "the Recording kept bar")
+        XCTAssertEqual(bar.message, "Recording kept")
+        XCTAssertNil(deckWindow.window?.attachedSheet, "a bar, not a sheet")
+        try XCTUnwrap(bar.button(titled: "Reveal in Finder")).performClick(nil)
+        XCTAssertEqual(revealed.map(\.path), [folder.path], "the person's click reveals the run")
+        XCTAssertNil(controller.editorViewController.bar(.recordingKept), "the bar goes once it is used")
     }
 
     /// A keep-recording sheet already up when the deck closes is answered
