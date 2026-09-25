@@ -160,4 +160,28 @@ final class TapClientTests: XCTestCase {
             XCTAssertEqual((error as? TapErrorPayload)?.code, "http_404")
         }
     }
+
+    func testTheTalkPagesCarryTheStartSlideInTheirHash() {
+        let client = TapClient(ready: TapReady(port: 4242, token: "t", launch: "launch-code", presenter: "p"))
+        XCTAssertEqual(client.audienceLaunchURL(slide: 3).absoluteString, "http://127.0.0.1:4242/?launch=launch-code#3")
+        XCTAssertEqual(client.presenterURL(slide: 3).absoluteString, "http://127.0.0.1:4242/presenter?key=p#3",
+                       "the presenter page carries its key: the server sets the cookie and redirects, keeping the hash")
+        XCTAssertEqual(client.audienceLaunchURL(slide: 1).fragment, "1")
+        XCTAssertEqual(client.presenterURL(slide: 1).fragment, "1")
+    }
+
+    func testThePresenterKeyIsPercentEncoded() throws {
+        // The person's own password can hold anything; each of these would cut, split or space the key if it went in raw.
+        let password = "a b#c&d+e%"
+        let client = TapClient(ready: TapReady(port: 4242, token: "t", launch: "launch-code", presenter: password))
+        for url in [client.presenterLaunchURL, client.presenterURL(slide: 2)] {
+            let components = try XCTUnwrap(URLComponents(url: url, resolvingAgainstBaseURL: false))
+            XCTAssertEqual(components.path, "/presenter")
+            XCTAssertEqual(components.queryItems?.count, 1)
+            XCTAssertEqual(components.queryItems?.first?.name, "key")
+            XCTAssertEqual(components.queryItems?.first?.value, password, "decodes back to the same string: \(url)")
+            XCTAssertFalse(components.percentEncodedQuery?.contains("+") ?? true, "a plus is encoded, or Go reads it as a space")
+        }
+        XCTAssertEqual(client.presenterURL(slide: 2).fragment, "2", "the hash survives the encoding")
+    }
 }
