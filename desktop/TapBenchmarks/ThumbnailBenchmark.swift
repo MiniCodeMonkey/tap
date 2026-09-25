@@ -12,6 +12,7 @@ final class ThumbnailBenchmark: BenchmarkCase {
         try await waitUntil(timeout: 180, "200 thumbnails") { (1...200).allSatisfy { controller.slidePanel.image(forSlide: $0) != nil } }
         let seconds = Date().timeIntervalSince(started)
         XCTAssertEqual(controller.thumbnails.renderer.renderCount, 200)
+        write(["slides": 200, "coldPassSeconds": seconds, "secondsPerSlide": seconds / 200], to: "thumbnails")
         XCTAssertLessThan(seconds / 200, 0.1, "under 100 ms per slide; the prototype measured about 24 ms")
         let deckURL = try XCTUnwrap(deck.fileURL)
         deck.close()
