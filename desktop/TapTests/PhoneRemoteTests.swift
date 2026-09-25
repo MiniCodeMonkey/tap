@@ -36,13 +36,24 @@ final class PhoneRemoteTests: PresentingTestCase {
         deckWindow.togglePhoneRemote(nil)
         try await waitUntil(timeout: 5, "the tunnel again") { presentation.tunnel?.state == "running" && panel.isVisible }
         deckWindow.togglePhoneRemote(nil)
+        XCTAssertFalse(presentation.wantsRemote, "the toggle turns a running remote off")
         try await waitUntil(timeout: 5, "a second tunnel stop") {
             self.recorded(record).components(separatedBy: #"stdin: {"type":"tunnel","start":false}"#).count == 3
         }
         try await waitUntil(timeout: 5, "the panel gone") { !panel.isVisible }
         deckWindow.togglePhoneRemote(nil)
         try await waitUntil(timeout: 5, "the tunnel once more") { presentation.tunnel?.state == "running" && panel.isVisible }
+        // Stop forgets the tunnel and says so, so nothing shows a remote of a talk that has ended.
+        var tunnelGoneAtEachChange: [Bool] = []
+        let refreshRemotePanel = presentation.onTunnelChange
+        presentation.onTunnelChange = { [weak presentation] in
+            tunnelGoneAtEachChange.append(presentation?.tunnel == nil && presentation?.tunnelError == nil)
+            refreshRemotePanel?()
+        }
         try await stopPresenting(controller)
+        XCTAssertNil(presentation.tunnel)
+        XCTAssertNil(presentation.tunnelError)
+        XCTAssertEqual(tunnelGoneAtEachChange.last, true, "the stop reported the tunnel gone: \(tunnelGoneAtEachChange)")
         XCTAssertFalse(panel.isVisible, "the panel goes with the talk")
     }
 
@@ -237,7 +248,9 @@ final class PhoneRemoteTests: PresentingTestCase {
         try await startPresenting(controller, PresentationOptions(mode: .play, startSlide: 1, phoneRemote: true))
         let panel = deckWindow.remotePanel
         try await waitUntil(timeout: 5, "the panel") { panel.isVisible }
+        let closing = expectation(forNotification: NSWindow.willCloseNotification, object: panel)
         document.close()
+        await fulfillment(of: [closing], timeout: 1)
         XCTAssertFalse(panel.isVisible, "no panel outlives its deck window")
         try await waitUntil(timeout: 5, "the panel off screen") { !onScreenWindowNumbers().contains(panel.windowNumber) }
     }
