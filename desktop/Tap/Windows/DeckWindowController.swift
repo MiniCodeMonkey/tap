@@ -39,6 +39,8 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
         return gallery
     }()
     private var sidebarCollapseObservation: NSKeyValueObservation?
+    /// Hears every deck's talks start and end, so the Play button follows them.
+    private var presentingObserver: NSObjectProtocol?
     private var isReconcilingSidebarCollapse = false
 
     init(sessionController: DeckSessionController) {
@@ -62,6 +64,9 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
         shouldCascadeWindows = true
         sessionController.presentation.deckWindowController = self
         sessionController.presentation.onStateChange = { [weak self] _ in self?.refreshPresentingControls() }
+        presentingObserver = NotificationCenter.default.addObserver(forName: AppEnvironment.presentingDidChangeNotification, object: nil, queue: nil) { [weak self] _ in
+            MainActor.assumeIsolated { self?.refreshPresentingControls() }
+        }
 
         let toolbar = NSToolbar(identifier: "TapDeckToolbar")
         toolbar.delegate = self
@@ -421,6 +426,8 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
     func windowWillClose(_ notification: Notification) {
         sidebarCollapseObservation?.invalidate()
         sidebarCollapseObservation = nil
+        if let presentingObserver { NotificationCenter.default.removeObserver(presentingObserver) }
+        presentingObserver = nil
         if let controller = previewWindowController {
             controller.onClose = nil
             previewWindowController = nil
