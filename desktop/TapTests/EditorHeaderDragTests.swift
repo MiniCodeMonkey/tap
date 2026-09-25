@@ -163,4 +163,28 @@ final class EditorHeaderDragTests: HostedTestCase {
         let again = editor.accessibilityChildren()?.compactMap { $0 as? NSAccessibilityElement }.first { $0.accessibilityIdentifier() == "box-1" }
         XCTAssertTrue(again === box, "the same box keeps the same element")
     }
+
+    /// AppKit drives a real drop through every destination method in turn:
+    /// entered, updated, prepare, perform, conclude, ended. A header drop
+    /// must survive the whole sequence, not only the perform step.
+    func testAHeaderDropSurvivesAppKitsWholeDropSequence() async throws {
+        let (document, controller, editor) = try await openOpsLaidOut()
+        let window = try XCTUnwrap(document.windowControllers.first?.window)
+        let box3 = try XCTUnwrap(editor.boxRect(forBoxAt: 2))
+        let payload = try XCTUnwrap(controller.dragPayload(forSlides: [5]))
+        let pasteboard = NSPasteboard(name: NSPasteboard.Name("TapTests.headerdrag.sequence.\(UUID().uuidString)"))
+        pasteboard.clearContents()
+        let item = NSPasteboardItem()
+        item.setData(try payload.data(), forType: NSPasteboard.PasteboardType(SlideDragPayload.pasteboardType))
+        pasteboard.writeObjects([item])
+        let info = FakeDraggingInfo(pasteboard: pasteboard, location: editor.convert(NSPoint(x: box3.midX, y: box3.minY + 4), to: nil), source: editor, window: window)
+        XCTAssertEqual(editor.draggingEntered(info), .move)
+        XCTAssertEqual(editor.draggingUpdated(info), .move)
+        XCTAssertTrue(editor.prepareForDragOperation(info), "the editor accepts the drop it offered a move for")
+        XCTAssertTrue(editor.performDragOperation(info))
+        editor.concludeDragOperation(info)
+        editor.draggingEnded(info)
+        let list = try await TapSlideList.list(text: editor.string)
+        XCTAssertEqual(list.slides.map(\.title), ["One", "Two", "Five", "Three", "Four", "Six", "Seven"])
+    }
 }

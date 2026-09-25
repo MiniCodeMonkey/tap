@@ -649,6 +649,22 @@ final class EditorTextView: NSTextView {
         if sender.flatMap(slidePayload) != nil { clearDropIndicator() } else { super.draggingExited(sender) }
     }
 
+    /// NSTextView accepts a drop only when the pasteboard holds text it can
+    /// read, and a slide payload holds none, so its answer would refuse
+    /// every slide drop before `performDragOperation` ran. A slide drop is
+    /// accepted here exactly when `draggingUpdated` offered an operation for it.
+    override func prepareForDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        guard let payload = slidePayload(sender) else { return super.prepareForDragOperation(sender) }
+        return slideDropOperation(payload: payload, at: convert(sender.draggingLocation, from: nil)) != []
+    }
+
+    /// A slide drop is finished by `performDragOperation`; NSTextView's
+    /// conclusion is for the text drop it would have made.
+    override func concludeDragOperation(_ sender: NSDraggingInfo?) {
+        guard sender.flatMap(slidePayload) == nil else { return }
+        super.concludeDragOperation(sender)
+    }
+
     override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
         guard let payload = slidePayload(sender) else { return super.performDragOperation(sender) }
         let point = convert(sender.draggingLocation, from: nil)
