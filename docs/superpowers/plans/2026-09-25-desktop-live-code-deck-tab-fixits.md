@@ -3967,3 +3967,614 @@ git commit -m "feat(desktop): the Deck tab, a form from tap deck schema over the
 ```
 
 ---
+
+### Task 12: The drivers group, the secrets hint, raw settings, and Other keys
+
+**Files:**
+- Modify: `desktop/Tap/Preview/DeckFormViewController.swift` (`addMapSection`, `addOtherKeysSection`, the raw editors, Add and Remove)
+- Modify: `desktop/TapTests/RunBlockTests.swift` (the hint in `testSecretsInDriverSettings`)
+- Test: `desktop/TapTests/DeckTabDriversTests.swift`
+
+**Interfaces:**
+- Consumes: Task 11's form, Task 4's `rawBlock(at:)`, `settingRawBlock(at:to:)`, `setting(path:to:)`, `text(of:)`, `lineEnding`; Task 11's `entryNames(at:)`.
+- Produces: `DeckFormViewController.hintLabel(for:)`, `addEntryField(for:)`, `addEntryButton(for:)`, `removeButton(for:)`, `rawEditor(_:)`, `otherKeyLabels`; `NSTextViewDelegate` conformance (`textDidEndEditing`).
+
+- [ ] **Step 1: Write the failing tests**
+
+`desktop/TapTests/DeckTabDriversTests.swift`:
+
+```swift
+import XCTest
+@testable import Tap
+
+/// The Deck tab's drivers group: one box per declared driver with its
+/// settings, the hint about secrets, Add and Remove, raw text for the
+/// settings the form has no field for, and Other keys for what tap does
+/// not know.
+final class DeckTabDriversTests: HostedTestCase {
+    func openOnTheDeckTab(_ deck: URL) async throws -> (DeckDocument, DeckSessionController, DeckFormViewController) {
+        await AppEnvironment.shared.deckSchema.load()
+        try await waitUntil(timeout: 30, "the schema") { AppEnvironment.shared.deckSchema.isLoaded }
+        let document = try await openDeckAndWaitForPreview(deck)
+        let controller = try XCTUnwrap(document.sessionController)
+        try await waitUntil(timeout: 10, "tap's first answer") { controller.lastAppliedText != nil }
+        let deckWindow = try XCTUnwrap(document.windowControllers.first as? DeckWindowController)
+        deckWindow.showDeckTab(nil)
+        return (document, controller, controller.deckForm)
+    }
+
+    func testTheDriversGroupListsEachDriverWithItsSettings() async throws {
+        let (_, controller, form) = try await openOnTheDeckTab(try Fixtures.copyDeck("custom-driver.md"))
+        let editor = controller.editor
+        XCTAssertEqual(form.builtForEntries["drivers"], ["sqlite", "fortune"])
+        let command = try XCTUnwrap(form.field("drivers.fortune.command") as? NSTextField)
+        XCTAssertEqual(command.stringValue, "/bin/cat")
+        let timeout = try XCTUnwrap(form.field("drivers.sqlite.timeout") as? NSTextField)
+        XCTAssertEqual(timeout.stringValue, "")
+        XCTAssertNotNil(timeout.placeholderString, "tap's default, from the schema")
+        let hint = try XCTUnwrap(form.hintLabel(for: "drivers"))
+        XCTAssertTrue(hint.stringValue.contains("${NAME}"), "the hint to keep secrets out of the deck")
+
+        // A driver's setting, as one undo step.
+        timeout.stringValue = "5"
+        timeout.sendAction(timeout.action, to: timeout.target)
+        XCTAssertTrue(editor.string.hasPrefix("---\ntitle: Custom Driver\ndrivers:\n  sqlite:\n    timeout: 5\n  fortune:\n    command: /bin/cat\n---\n"), String(editor.string.prefix(90)))
+        XCTAssertEqual(editor.undoManager?.undoActionName, "Change Timeout")
+        timeout.stringValue = "x"
+        timeout.sendAction(timeout.action, to: timeout.target)
+        XCTAssertTrue(editor.string.contains("    timeout: 5\n"), "a value that is not an integer is refused")
+        XCTAssertEqual(timeout.stringValue, "5", "and the field reads the text again")
+        try await waitUntil(timeout: 10, "tap's answer") { controller.lastAppliedText == editor.string }
+        XCTAssertEqual(editor.deckErrors, [])
+
+        // Add a driver by name; the group gains its box.
+        let addField = try XCTUnwrap(form.addEntryField(for: "drivers"))
+        addField.stringValue = "shell"
+        try XCTUnwrap(form.addEntryButton(for: "drivers")).performClick(nil)
+        XCTAssertTrue(editor.string.contains("    command: /bin/cat\n  shell: {}\n---\n"), String(editor.string.prefix(120)))
+        XCTAssertEqual(editor.undoManager?.undoActionName, "Add shell")
+        XCTAssertNotNil(form.field("drivers.shell.timeout"), "the form rebuilt for the new entry")
+        XCTAssertEqual(addField.stringValue, "", "ready for the next name")
+
+        // Remove it again; the box goes.
+        try XCTUnwrap(form.removeButton(for: "drivers.shell")).performClick(nil)
+        XCTAssertFalse(editor.string.contains("shell"))
+        XCTAssertEqual(editor.undoManager?.undoActionName, "Remove shell")
+        XCTAssertNil(form.field("drivers.shell.timeout"))
+        editor.undoManager?.undo()
+        XCTAssertNotNil(form.field("drivers.shell.timeout"), "undo brings the entry and its box back")
+    }
+
+    func testRawSettingsAreEditedAsText() async throws {
+        let folder = try Fixtures.temporaryFolder()
+        let deck = folder.appendingPathComponent("connections.md")
+        try """
+        ---
+        title: Connections
+        drivers:
+          sqlite:
+            connections:
+              incident:
+                path: ./incident.db
+        ---
+
+        # One
+
+        ```sql {driver: sqlite, connection: incident}
+        SELECT 1;
+        ```
+        """.write(to: deck, atomically: true, encoding: .utf8)
+        let (_, controller, form) = try await openOnTheDeckTab(deck)
+        let editor = controller.editor
+        let raw = try XCTUnwrap(form.rawEditor("drivers.sqlite.connections"), "a map inside a driver is edited as its own lines")
+        XCTAssertEqual(raw.string, "    connections:\n      incident:\n        path: ./incident.db\n")
+        raw.string = "    connections:\n      incident:\n        path: ${INCIDENT_DB}\n"
+        form.textDidEndEditing(Notification(name: NSText.didEndEditingNotification, object: raw))
+        XCTAssertTrue(editor.string.contains("        path: ${INCIDENT_DB}\n"))
+        XCTAssertEqual(editor.undoManager?.undoActionName, "Change Connections")
+        try await waitUntil(timeout: 10, "tap's answer") { controller.lastAppliedText == editor.string }
+        XCTAssertEqual(editor.deckErrors, [], "tap reads the block as written")
+    }
+
+    func testUnknownKeysAreListedUnderOtherKeys() async throws {
+        let folder = try Fixtures.temporaryFolder()
+        let deck = folder.appendingPathComponent("other.md")
+        try "---\ntitle: Other\nspeakerNotesFont: 18\nlegacy:\n  a: 1\n---\n\n# One\n".write(to: deck, atomically: true, encoding: .utf8)
+        let (_, controller, form) = try await openOnTheDeckTab(deck)
+        XCTAssertEqual(form.otherKeyLabels.map(\.stringValue), ["speakerNotesFont: 18", "legacy:\n  a: 1"], "as written, read-only")
+        XCTAssertNil(form.field("speakerNotesFont"))
+        // A key tap learns later shows as a field, not here: the list comes from the schema, so nothing to do in Swift.
+        controller.editor.replaceText(in: NSRange(location: 0, length: 0), with: "", actionName: "Nothing")
+        XCTAssertEqual(form.otherKeyLabels.count, 2)
+    }
+}
+```
+
+In `RunBlockTests.testSecretsInDriverSettings`, replace the trailing comment with:
+
+```swift
+        // The Deck tab shows a hint to use ${NAME} instead of a literal password.
+        await AppEnvironment.shared.deckSchema.load()
+        try await waitUntil(timeout: 30, "the schema") { AppEnvironment.shared.deckSchema.isLoaded }
+        let deckWindow = try XCTUnwrap(document.windowControllers.first as? DeckWindowController)
+        deckWindow.showDeckTab(nil)
+        let hint = try XCTUnwrap(controller.deckForm.hintLabel(for: "drivers"))
+        XCTAssertTrue(hint.stringValue.contains("${NAME}"))
+        XCTAssertTrue(hint.stringValue.lowercased().contains("password"))
+```
+
+- [ ] **Step 2: Build to verify it fails**
+
+Run: `make -C desktop test-build`
+Expected: does not compile (`hintLabel(for:)`, `rawEditor`, `otherKeyLabels` undefined).
+
+- [ ] **Step 3: The map group, the raw editors and Other keys**
+
+In `DeckFormViewController`, add the conformance `NSTextViewDelegate` to the class line, these properties:
+
+```swift
+    private var hintLabels: [String: NSTextField] = [:]
+    private var addFields: [String: NSTextField] = [:]
+    private var addButtons: [String: NSButton] = [:]
+    private var removeButtons: [String: NSButton] = [:]
+    private var rawEditors: [(path: [String], textView: NSTextView)] = []
+    private(set) var otherKeyLabels: [NSTextField] = []
+
+    func hintLabel(for map: String) -> NSTextField? { hintLabels[map] }
+    func addEntryField(for map: String) -> NSTextField? { addFields[map] }
+    func addEntryButton(for map: String) -> NSButton? { addButtons[map] }
+    func removeButton(for path: String) -> NSButton? { removeButtons[path] }
+    func rawEditor(_ path: String) -> NSTextView? { rawEditors.first { $0.path.joined(separator: ".") == path }?.textView }
+```
+
+and, at the top of `rebuild()`'s clearing, `hintLabels = [:]; addFields = [:]; addButtons = [:]; removeButtons = [:]; rawEditors = []; otherKeyLabels = []`. Replace the two stubs with:
+
+```swift
+    /// A map key (the drivers): a box per entry the frontmatter declares,
+    /// with the entry's scalar settings as fields, its deeper structure
+    /// (connections, args) as its own lines of text, a Remove button, a
+    /// name field with Add for a new entry, and the hint that keeps
+    /// secrets out of the deck. The entry names come from the text, the
+    /// settings from the schema; the built-in driver names are tap's and
+    /// the person types one, so Swift lists none.
+    func addMapSection(for key: SchemaKey, in frontmatter: Frontmatter) {
+        var rows: [NSView] = []
+        for name in frontmatter.entryNames(at: [key.name]) {
+            let entryPath = [key.name, name]
+            var entryRows: [NSView] = []
+            for child in key.keys {
+                let path = entryPath + [child.name]
+                if child.isScalar {
+                    entryRows.append(row(for: child, path: path))
+                } else if frontmatter.entry(at: path) != nil {
+                    entryRows.append(rawRow(for: child, path: path, in: frontmatter))
+                }
+            }
+            let remove = NSButton(title: "Remove", target: self, action: #selector(removePressed(_:)))
+            remove.bezelStyle = .rounded
+            remove.controlSize = .small
+            remove.setAccessibilityIdentifier("deck-remove-\(entryPath.joined(separator: "."))")
+            removeButtons[entryPath.joined(separator: ".")] = remove
+            entryRows.append(remove)
+            let box = NSBox()
+            box.title = name
+            box.titlePosition = .atTop
+            let column = NSStackView(views: entryRows)
+            column.orientation = .vertical
+            column.alignment = .leading
+            column.spacing = 8
+            column.edgeInsets = NSEdgeInsets(top: 6, left: 6, bottom: 6, right: 6)
+            box.contentView = column
+            rows.append(box)
+        }
+        let nameField = NSTextField(string: "")
+        nameField.placeholderString = "shell, sqlite, mysql, postgres, or a custom name"
+        nameField.setAccessibilityIdentifier("deck-add-\(key.name)")
+        nameField.widthAnchor.constraint(greaterThanOrEqualToConstant: 260).isActive = true
+        let add = NSButton(title: "Add", target: self, action: #selector(addPressed(_:)))
+        add.bezelStyle = .rounded
+        add.setAccessibilityIdentifier("deck-add-button-\(key.name)")
+        addFields[key.name] = nameField
+        addButtons[key.name] = add
+        let addRow = NSStackView(views: [nameField, add])
+        addRow.orientation = .horizontal
+        addRow.spacing = 8
+        rows.append(addRow)
+        let hint = NSTextField(wrappingLabelWithString: "Use ${NAME} for passwords and other secrets: tap reads NAME from your login shell's environment when it runs the driver, so the deck is safe to share.")
+        hint.font = .systemFont(ofSize: 11)
+        hint.textColor = .secondaryLabelColor
+        hint.setAccessibilityIdentifier("deck-hint-\(key.name)")
+        hintLabels[key.name] = hint
+        rows.append(hint)
+        addSection(title: key.label, rows: rows)
+        for box in rows.compactMap({ $0 as? NSBox }) { box.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -60).isActive = true }
+        hint.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -60).isActive = true
+    }
+
+    /// A setting the form has no field for, as its own lines: the entry's
+    /// text as written, indented as it is, put back where it was.
+    private func rawRow(for key: SchemaKey, path: [String], in frontmatter: Frontmatter) -> NSView {
+        let label = NSTextField(labelWithString: key.label)
+        label.alignment = .right
+        label.textColor = .secondaryLabelColor
+        label.font = .systemFont(ofSize: 12)
+        label.widthAnchor.constraint(equalToConstant: 130).isActive = true
+        let textView = NSTextView(frame: NSRect(x: 0, y: 0, width: 300, height: 72))
+        textView.font = .monospacedSystemFont(ofSize: 12, weight: .regular)
+        textView.isRichText = false
+        textView.isAutomaticQuoteSubstitutionEnabled = false
+        textView.string = frontmatter.rawBlock(at: path) ?? ""
+        textView.delegate = self
+        textView.setAccessibilityIdentifier("deck-raw-\(path.joined(separator: "."))")
+        let scroll = NSScrollView()
+        scroll.documentView = textView
+        scroll.hasVerticalScroller = true
+        scroll.borderType = .bezelBorder
+        scroll.heightAnchor.constraint(equalToConstant: 72).isActive = true
+        scroll.widthAnchor.constraint(greaterThanOrEqualToConstant: 300).isActive = true
+        textView.autoresizingMask = [.width]
+        rawEditors.append((path, textView))
+        let row = NSStackView(views: [label, scroll])
+        row.orientation = .horizontal
+        row.alignment = .top
+        row.spacing = 10
+        return row
+    }
+
+    /// Keys the schema does not list, as written and read-only.
+    func addOtherKeysSection(_ frontmatter: Frontmatter) {
+        let unknown = frontmatter.entries.filter { entry in !keys.contains { $0.name == entry.key } }
+        guard !unknown.isEmpty else { return }
+        var rows: [NSView] = []
+        for entry in unknown {
+            let label = NSTextField(wrappingLabelWithString: frontmatter.text(of: entry).trimmingCharacters(in: .newlines))
+            label.font = .monospacedSystemFont(ofSize: 12, weight: .regular)
+            label.isSelectable = true
+            label.setAccessibilityIdentifier("deck-other-\(entry.key)")
+            otherKeyLabels.append(label)
+            rows.append(label)
+        }
+        addSection(title: "Other keys", rows: rows)
+    }
+
+    @objc private func addPressed(_ sender: NSButton) {
+        guard let map = addButtons.first(where: { $0.value === sender })?.key, let field = addFields[map] else { return }
+        let name = field.stringValue.trimmingCharacters(in: .whitespaces)
+        guard !name.isEmpty, name.range(of: "^[A-Za-z0-9_-]+$", options: .regularExpression) != nil else {
+            NSSound.beep()
+            return
+        }
+        let frontmatter = Frontmatter(text: text())
+        guard !frontmatter.entryNames(at: [map]).contains(name), let replacement = frontmatter.setting(path: [map, name], to: "{}") else {
+            NSSound.beep()
+            return
+        }
+        field.stringValue = ""
+        applyEdit(replacement, "Add \(name)")
+        refresh()
+    }
+
+    @objc private func removePressed(_ sender: NSButton) {
+        guard let joined = removeButtons.first(where: { $0.value === sender })?.key else { return }
+        let path = joined.split(separator: ".").map(String.init)
+        guard let name = path.last, let replacement = Frontmatter(text: text()).setting(path: path, to: nil) else { return }
+        applyEdit(replacement, "Remove \(name)")
+        refresh()
+    }
+
+    /// A raw editor lost focus: its lines replace the entry's, with the
+    /// file's own line endings and one at the end.
+    func textDidEndEditing(_ notification: Notification) {
+        guard let textView = notification.object as? NSTextView, let binding = rawEditors.first(where: { $0.textView === textView }),
+              let key = DeckSchema.key(at: binding.path, in: keys) else { return }
+        let frontmatter = Frontmatter(text: text())
+        var raw = textView.string.replacingOccurrences(of: "\r\n", with: "\n").replacingOccurrences(of: "\n", with: frontmatter.lineEnding)
+        if !raw.hasSuffix(frontmatter.lineEnding) { raw += frontmatter.lineEnding }
+        guard raw != frontmatter.rawBlock(at: binding.path), let replacement = frontmatter.settingRawBlock(at: binding.path, to: raw) else { return }
+        applyEdit(replacement, "Change \(key.label)")
+        refresh()
+    }
+```
+
+`refreshValues` leaves the raw editors alone while one is the first responder (`editing.delegate === binding.control` covers text fields; add a matching check: `if let editing, rawEditors.contains(where: { $0.textView === editing }) { }` does nothing, since raw editors are not in `bindings`); a raw editor's text is refreshed only by a rebuild, which a change to the entry names or an undo through `refresh()` causes when `entries(in:)` differs. To make an undo of a raw edit show, `entries(in:)` also includes each raw block's text: add `for binding in rawEditors { result["raw:" + binding.path.joined(separator: ".")] = [frontmatter.rawBlock(at: binding.path) ?? ""] }` to `entries(in:)`, so a raw block that changed under the form rebuilds it.
+
+Every driver name in a path is split on ".", so a driver named with a dot is not supported by the Remove button; the raw text and the editor still hold it.
+
+- [ ] **Step 4: Build**
+
+Run: `make -C desktop build` and `make -C desktop test-build`
+Expected: both succeed. The controller's CI run confirms the three `DeckTabDriversTests` and the extended `testSecretsInDriverSettings`.
+
+- [ ] **Step 5: Mutate and commit**
+
+Mutations, each a patch in `mutations-d/`, the ones that could lose text first: in `textDidEndEditing`, replace the entry's range with the text and no line ending (`Test: TapTests/DeckTabDriversTests/testRawSettingsAreEditedAsText`; expected: tap's answer holds a deck error, since the closing `---` joins the last line); in `removePressed`, pass `to: "{}"` instead of nil (`Test: .../testTheDriversGroupListsEachDriverWithItsSettings`; expected: fails on "shell" still in the text); in `addPressed`, skip the name check (survives: the test types a plain name; noted); in `addMapSection`, drop the hint (`Test: TapTests/RunBlockTests/testSecretsInDriverSettings`; expected: fails on the unwrap); in `controlChanged`, accept a non-integer for an integer key (expected: fails on "refused"); in `entries(in:)`, drop the raw blocks (expected: the undo in the raw test is not asserted; add `editor.undoManager?.undo()` and `XCTAssertEqual(raw.string, ...original...)` to the raw test to kill it); in `addOtherKeysSection`, list every key (expected: `otherKeyLabels` counts the title too).
+
+```bash
+git add desktop/Tap desktop/TapTests
+git commit -m "feat(desktop): the Deck tab's drivers group, the secrets hint, raw settings and Other keys"
+```
+
+---
+
+### Task 13: The scenario manifest, the UI test, the pre-approved UI fixtures, and the README
+
+**Files:**
+- Modify: `desktop/scenarios.txt`, `desktop/README.md`, `desktop/TapUITests/Support/UITestCase.swift`
+- Create: `desktop/TapUITests/LiveCodeUITests.swift`
+
+**Interfaces:**
+- Consumes: `check-scenarios.sh` (Task 1), the accessibility identifiers this plan set: `question-approval`, `approval-summary`, `approval-block-<slide>-<block>`, `deck-form`, `deck-field-<path>`, `deck-hint-drivers`, `inspector-tabs`; D4's `-TapConfigHome`, `-FocusHintShown`, `-TapOpenOnLaunch`.
+- Produces: the 17 `D5` rows; `UITestCase.configHome(approving:recordingConsent:)`, `declaredDrivers(in:)`, `realPath(of:)`; a UI test the controller runs on CI.
+
+- [ ] **Step 1: Claim the scenarios**
+
+Append to `desktop/scenarios.txt`:
+
+```text
+D5 | 06-live-code-and-trust.feature | A deck without live code
+D5 | 06-live-code-and-trust.feature | First open of a deck with live code, in the app
+D5 | 06-live-code-and-trust.feature | Allow
+D5 | 06-live-code-and-trust.feature | Don't allow
+D5 | 06-live-code-and-trust.feature | First open of a deck with live code, in the CLI
+D5 | 06-live-code-and-trust.feature | Run a block
+D5 | 06-live-code-and-trust.feature | A page cannot run code the deck does not show
+D5 | 06-live-code-and-trust.feature | Approve or revoke later
+D5 | 06-live-code-and-trust.feature | A moved deck
+D5 | 06-live-code-and-trust.feature | Non-interactive runs
+D5 | 06-live-code-and-trust.feature | A deck declares its drivers
+D5 | 06-live-code-and-trust.feature | A block uses an undeclared driver
+D5 | 06-live-code-and-trust.feature | A deck with live code must list its drivers
+D5 | 06-live-code-and-trust.feature | A new driver asks again
+D5 | 06-live-code-and-trust.feature | Secrets in driver settings
+D5 | 06-live-code-and-trust.feature | The safe button is the default
+D5 | 02-slide-structure.feature | Deck settings live in the inspector
+```
+
+Run: `make -C desktop check-scenarios`
+Expected: `every claimed scenario has a test`. The two CLI rows are satisfied by Task 1's Go tests.
+
+- [ ] **Step 2: Pre-approve the UI tests' fixtures**
+
+In `desktop/TapUITests/Support/UITestCase.swift`, add:
+
+```swift
+    /// The path with every symlink resolved, as tap keys a deck's approval.
+    func realPath(of url: URL) -> String {
+        var buffer = [Int8](repeating: 0, count: Int(PATH_MAX))
+        guard let resolved = realpath(url.path, &buffer) else { return url.path }
+        return String(cString: resolved)
+    }
+
+    /// The names under `drivers:` in the deck's frontmatter, read as
+    /// lines: the UI test target has no core package.
+    func declaredDrivers(in deck: URL) -> [String] {
+        guard let text = try? String(contentsOf: deck, encoding: .utf8) else { return [] }
+        var names: [String] = []
+        var inDrivers = false
+        var separators = 0
+        for line in text.components(separatedBy: "\n") {
+            if line.trimmingCharacters(in: .whitespaces) == "---" {
+                separators += 1
+                if separators == 2 { break }
+                continue
+            }
+            if line.hasPrefix("drivers:") {
+                inDrivers = true
+                continue
+            }
+            guard inDrivers else { continue }
+            if line.hasPrefix("  "), !line.hasPrefix("   "), let name = line.trimmingCharacters(in: .whitespaces).split(separator: ":").first {
+                names.append(String(name))
+            } else if !line.hasPrefix(" "), !line.isEmpty {
+                inDrivers = false
+            }
+        }
+        return names
+    }
+
+    /// A settings folder for the launched app's tap: the recording question
+    /// answered, and the deck's declared drivers approved, so no sheet sits
+    /// over the window in a test that is not about it (HostedTestCase does
+    /// the same for the hosted tests). Pass `approving: nil` to see the sheet.
+    func configHome(approving deck: URL?, recordingConsent: Bool? = false) -> URL? {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("tap-ui-config-\(UUID().uuidString)")
+        var settings = ""
+        if let recordingConsent { settings += "present:\n  record: \(recordingConsent)\n" }
+        if let deck {
+            let drivers = declaredDrivers(in: deck)
+            if !drivers.isEmpty {
+                settings += "approvals:\n  - deck: \(realPath(of: deck))\n    drivers: [\(drivers.joined(separator: ", "))]\n    approvedAt: 2026-09-25T00:00:00Z\n"
+            }
+        }
+        do {
+            try FileManager.default.createDirectory(at: folder.appendingPathComponent("tap"), withIntermediateDirectories: true)
+            try settings.write(to: folder.appendingPathComponent("tap/settings.yaml"), atomically: true, encoding: .utf8)
+        } catch {
+            return nil
+        }
+        return folder
+    }
+```
+
+and change `launch(withDeck:)` to:
+
+```swift
+    @discardableResult
+    func launch(withDeck deck: URL) -> XCUIApplication {
+        let application = XCUIApplication()
+        var arguments = ["-TapOpenOnLaunch", deck.path, "-ApplePersistenceIgnoreState", "YES", "-FocusHintShown", "YES"]
+        if let home = configHome(approving: deck) { arguments += ["-TapConfigHome", home.path] }
+        application.launchArguments = arguments
+        application.launch()
+        return application
+    }
+```
+
+`PresentingUITests` keeps its own `configHome()` and arguments (ops.md declares nothing).
+
+- [ ] **Step 3: Write the UI test (compile only)**
+
+`desktop/TapUITests/LiveCodeUITests.swift`:
+
+```swift
+import XCTest
+
+/// The real approval sheet on the real screen, with the real keyboard.
+/// Runs on CI; locally it would open a window (the person's rule).
+final class LiveCodeUITests: UITestCase {
+    func testReturnOnTheApprovalSheetIsDontAllow() throws {
+        let deck = try copyFixture("live-code.md")
+        let home = try XCTUnwrap(configHome(approving: nil))
+        let application = XCUIApplication()
+        application.launchArguments = ["-TapOpenOnLaunch", deck.path, "-ApplePersistenceIgnoreState", "YES",
+                                       "-TapConfigHome", home.path, "-FocusHintShown", "YES"]
+        application.launch()
+        let sheet = application.sheets.firstMatch
+        XCTAssertTrue(sheet.waitForExistence(timeout: 30), "the approval sheet")
+        XCTAssertTrue(sheet.staticTexts["This deck can run code on your Mac"].waitForExistence(timeout: 5))
+        Thread.sleep(forTimeInterval: 1)
+        application.typeKey(.return, modifierFlags: [])
+        let gone = NSPredicate(format: "exists == false")
+        expectation(for: gone, evaluatedWith: sheet)
+        waitForExpectations(timeout: 10)
+        let settings = (try? String(contentsOf: home.appendingPathComponent("tap/settings.yaml"), encoding: .utf8)) ?? ""
+        XCTAssertFalse(settings.contains("approvals"), "Return granted nothing")
+        XCTAssertTrue(application.textViews["editor"].waitForExistence(timeout: 10), "the deck is open and usable")
+    }
+}
+```
+
+Run: `make -C desktop test-build 2>&1 | tee /tmp/tap-test-build.log | tail -3 && grep -c LiveCodeUITests.swift /tmp/tap-test-build.log`
+Expected: `** TEST BUILD SUCCEEDED **` and a count of at least 1 (the regenerated project compiled the file). `make -C desktop uitest` is CI's run.
+
+- [ ] **Step 4: The README**
+
+In `desktop/README.md`, after the presenting paragraph in the Test section, add:
+
+```markdown
+The live code tests run the real bundled tap on fixtures with live code
+(`TapTests/Fixtures/live-code.md` and its neighbours). tap asks its
+approval question at every open of an unapproved deck, so
+`HostedTestCase.openDeck` writes tap's own approval record for the
+fixture's declared drivers into the test's settings folder first, and
+`UITestCase.launch` does the same for a UI test; only the approval tests
+(`approvesLiveCodeOnOpen = false`) see the sheet. Nothing a test runs
+comes from anywhere but the fixture: a shell block echoes a line, the
+sqlite block queries the in-memory default, and the custom driver is
+`/bin/cat`. The fix-it and the Deck tab edit the frontmatter through the
+editor's `replaceText`, so every change is one undo step and the hidden
+range stays clamped.
+
+What only a person can check: the approval sheet's look with the code
+expanded on a real deck of theirs, `tap approval revoke` from a terminal
+while the deck is open (the next open asks again), a `git pull` that adds
+a driver while the deck is open (tap restarts and asks about the new
+driver only), the Deck tab against their own frontmatter (Other keys shows
+what tap does not know), and a `${NAME}` in a driver's connection read
+from their `~/.zshrc`.
+```
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add desktop/scenarios.txt desktop/README.md desktop/TapUITests
+git commit -m "test(desktop): claim the D5 scenarios, pre-approve the UI fixtures, and press Return on the real approval sheet"
+```
+
+---
+
+## Final check
+
+- [ ] Run: `go test ./internal/slidelist ./internal/cli -run 'TestBuildCarriesEachBlocksProblem|TestFirstOpenOfADeckWithLiveCodeInTheCLI|TestNonInteractiveRuns' -v`
+  Expected: three passes, and `go vet ./...` clean.
+- [ ] Run: `make -C desktop core-test`
+  Expected: every `TapDesktopCore` test passes, the new `FrontmatterTests`, `DeckSchemaTests` and the extended `TapProtocolTests`, `TapSessionTests`, `BoxHeaderTests` included.
+- [ ] Run: `make -C desktop check-scenarios`
+  Expected: `every claimed scenario has a test`, the two Go rows included.
+- [ ] Run: `make -C desktop build`, `make -C desktop test-build 2>&1 | tail -3 && grep -c LiveCodeUITests.swift`, `make -C desktop bench-build | tail -3`
+  Expected: `** BUILD SUCCEEDED **`, `** TEST BUILD SUCCEEDED **` twice, the grep count at least 1, nothing launched.
+- [ ] The controller pushes and reads CI's Desktop Tests, Desktop UI Tests and Go Tests jobs: every hosted test green, the D2 to D4 tests included (they open their fixtures pre-approved now), `LiveCodeUITests` green on the runner. The mutation branches `mutations/d5-batch-a` to `d` run on the mutation runner; a mutation that survives where its task said it would be killed is a review finding.
+- [ ] Run: `grep -rn "evaluateJavaScript\|callAsyncJavaScript" desktop/Tap`
+  Expected: only D2's two (`PreviewViewController.pageText` and `pageValue`). This plan's `PreviewViewController+LiveCode.swift` and `TapClient+Tests.swift` live under `desktop/TapTests/Support` and never reach the binary.
+- [ ] Run: `grep -rn "runModal\|NSAlert" desktop/Tap`
+  Expected: no output.
+- [ ] Run: `grep -rn "NSApp.activate\|activate(ignoringOtherApps" desktop/Tap`
+  Expected: no output.
+- [ ] Run: `grep -rn "orderFrontRegardless\|makeKeyAndOrderFront\|makeKey\b" desktop/Tap`
+  Expected: exactly D4's list, unchanged; this plan adds no line to it.
+- [ ] Run: `grep -rn "api/execute" desktop/Tap`
+  Expected: no output. The app never runs a block; the page and the tests do.
+- [ ] Run: `grep -rn '"value":true\|value: true' desktop/Tap`
+  Expected: no output. `true` reaches `TapCommand.answer` only from a sheet's completion (`showQuestionSheet`'s `response == .OK`).
+- [ ] Run: `grep -rn "textStorage?.replaceCharacters\|textStorage!.replaceCharacters" desktop/Tap`
+  Expected: only D2's own lines in `EditorTextView.swift` (`replaceText`, `shouldChangeText(inRanges:)`, `load`); nothing in `DeckSessionController`, `DeckFormViewController` or `DeckWindowController`.
+- [ ] Run: `grep -rn "updateChangeCount" desktop/Tap`
+  Expected: only `DeckSessionController.refreshEditedState`.
+- [ ] Run: `grep -rnE "completion\?\([^)]" desktop/Tap` and `grep -rn "unowned" desktop/Tap desktop/TapDesktopCore/Sources`
+  Expected: no output for both.
+- [ ] Run: `grep -rn "$(printf '\342\200\224')" desktop/ internal/slidelist internal/cli/approval_scenarios_test.go docs/superpowers/plans/2026-09-25-desktop-live-code-deck-tab-fixits.md --include=*.swift --include=*.go --include=*.md --include=*.sh --include=*.txt`
+  Expected: no output.
+- [ ] Every part of the D5 outline maps to a task:
+
+  | D5 outline item | Task |
+  |---|---|
+  | The approval sheet from the stdout `question` event | 2, 5, 6 (tap dev), 8 (tap present) |
+  | Run buttons that send `{slide, block}` | 7 (the page's own; proven against the bundled tap) |
+  | The fix-its | 1, 9, 10 |
+  | The Deck tab form from `tap deck schema --json` | 3, 4, 11, 12 |
+  | Every scenario of 06, and 02's Deck settings | 1, 13 |
+
+## Pre-flight: conflicts found, rulings and what each costs if wrong
+
+1. **The approval question comes from `tap dev --app` too, not only from `tap present`.** The D4 plan's table and the roadmap outline speak of the question at Play; the code asks at every start of either command. Ruling: the deck's own `tap dev` session gets a question queue like the talk's, and both use one sheet; every hosted test that opens a fixture with drivers pre-approves it, since today's silent unanswered question would become a sheet over every D2 and D3 test. Cost if wrong: none; the code decides.
+2. **The slide list has no block problem.** The editor cannot mark a box from what tap answers today. Ruling: a one-field tap change (`problem`, `omitempty`) on this branch, Task 1, rather than the app recomputing tap's rule from the frontmatter. Cost if wrong: a Go review of nine lines.
+3. **tap's live code policy is fixed per process, so "a new driver asks again" needs a fresh tap.** Ruling: the app restarts `tap dev` when the file on disk gains a declared driver (a save, a disk load, a converged write), which is exactly the CLI's own "the next start asks"; the fix-it saves at once so the question comes at once. The alternative, tap re-running the approval on a reload in app mode, is a tap change of its own (open question 1). Cost if wrong: one call in `fileTextChanged` becomes a stdin command, and the restart goes.
+4. **The feature file's message text differs from tap's.** "Add sqlite under drivers in the deck settings to run this block" against `This deck does not declare the sqlite driver. Add this to the frontmatter: ...`. Ruling: tap's words, on the box and in the page, since the spec says tap owns the rule and the CLI and the app say the same thing. Cost if wrong: a tap change to the message.
+5. **The mockup's title against the spec's.** "conference-talk.md can run code on this Mac" against "This deck can run code on your Mac". Ruling: the spec's title; the mockup's body, with the deck's name in it. The new-driver sheet's "on Sep 18" is not in tap's payload (`approvedBefore` has names only), so the body says "before". Cost if wrong: copy.
+6. **Where the fix-it lives.** The spec says "on the line, like Xcode issues"; the mockup puts the pill in the box header. Ruling: the message is an error line under the header, as D2 draws slide errors, with the block's line number; the pill is in the header, left of the badges, as the mockup draws it; the same action is in the box's context menu and the Slide menu, so it works from the keyboard. Cost if wrong: the pill's rectangle.
+7. **Play while a question sheet is up.** Two sheets on one window queue and the one slot would clobber. Ruling: Play, Play with Options, Rehearse and the toolbar button are off until the sheet is answered (`canStartATalk`). Cost if wrong: one condition.
+8. **The Deck tab's theme field.** The spec's grid from `tap theme show --image` and `tap theme set` are D6's. Ruling: a popup of the schema's values now, writing `theme:` like any other key; D6 replaces the control and keeps the row. Cost if wrong: D6 replaces it anyway.
+9. **What the Deck tab does with structures it has no field for.** `drivers.<name>.connections` and `args` are maps and lists. Ruling: the entry's own lines in a text box, put back as written with the file's line endings; a pair inside a flow map (`drivers: {shell: {timeout: 5}}`) is refused with a beep, and the person edits it as text. Cost if wrong: a field type.
+10. **Hard-coded names.** "Swift hard-codes no keys": the form's keys, types, values and nesting all come from the schema; the Add field's placeholder names the built-in drivers as a hint and takes any name, since tap lists them in no command. Cost if wrong: a `tap driver list` later feeds the placeholder.
+11. **Removing the last entry of a map** leaves `drivers:` alone (YAML null, which tap reads as no drivers) rather than deleting the parent. Cost if wrong: one branch in `setting`.
+12. **Escape on the approval sheet is Don't Allow**, the harmless answer, through the sheet's own `keyDown` since Return holds the one key equivalent. Cost if wrong: one condition.
+13. **The CLI-only scenarios are Go tests named after them**, and `check-scenarios.sh` reads `internal/**/*_test.go` for `func Test<Name>(`. The design spec's Testing section allows "one XCUITest or Go test with the same name". Cost if wrong: two Swift tests that drive `tap dev --headless` instead.
+14. **The hosted tests pre-approve fixtures through tap's own file**, written by the test with the deck's real path (`realpath(3)`, since `/var` is a symlink), never through an app seam. Cost if wrong: nothing in the app.
+15. **View > Show Preview Tab (Cmd+Option+1) and Show Deck Tab (Cmd+Option+2)** so the tabs have menu items, as every toolbar action does. Cost if wrong: two keys.
+16. **The approval sheet's blocks are grouped under their driver**, in the drivers' order, as the mockup draws them, not in slide order across drivers. Cost if wrong: one sort.
+
+## Open questions
+
+Product decisions this plan makes that the spec leaves open. Each line is the default the plan implements and what it costs if the person wants it otherwise.
+
+1. **A new driver: the app restarts `tap dev`, or tap re-asks on reload.** Default: the restart (pre-flight 3), no tap change, the preview reloads once. Alternative: tap runs the approval again in app mode when a reload's declared drivers gained one, and the app only shows the sheet. Cost if wrong: a tap change in `renderCurrentForApp` with its own tests, and `fileTextChanged` goes.
+2. **The fix-it saves at once.** Default: yes, so tap's question follows the click; a refused save (a disk conflict) leaves the edit for the next save. Alternative: wait for the autosave (1 s), one restart either way. Cost if wrong: the `saveNow()` call.
+3. **Play is refused while a question sheet is up.** Default: as pre-flight 7. Alternative: let the talk's sheet queue behind the deck's. Cost if wrong: one condition and a queue of sources.
+4. **The sheet copy.** Default: the spec's title; the body names the deck, the counts, "Blocks run only when someone clicks Run", and that `tap approval revoke` undoes a yes; the new-driver title is tap's own CLI wording, "This deck now also wants to run shell", with "Allow shell" as the button. Cost if wrong: copy.
+5. **The Deck tab's theme is a popup until D6's grid.** Default: as pre-flight 8. Cost if wrong: none.
+6. **Where the fix-it shows.** Default: the header pill plus the context and Slide menus (pre-flight 6). Alternative: a bar at the top of the editor for every undeclared driver in the deck. Cost if wrong: the pill's drawing and hit test go; the menus stay.
+7. **Raw text for nested driver settings.** Default: as pre-flight 9. Alternative: a connections table with one row per connection and fields from the schema. Cost if wrong: a table.
+8. **The Add field takes any driver name.** Default: as pre-flight 10. Alternative: a popup of the four built-ins plus Custom. Cost if wrong: one control.
+9. **Escape on the approval sheet declines.** Default: as pre-flight 12. Alternative: Escape does nothing, as on the keep-recording sheet. Cost if wrong: one condition.
+10. **Removing the last driver leaves `drivers:`.** Default: as pre-flight 11. Cost if wrong: one branch.
+11. **The Deck tab's shortcuts.** Default: Cmd+Option+1 and Cmd+Option+2. Cost if wrong: two keys.
+12. **Approve or revoke later is claimed through the CLI now.** Default: `tap approval list --json` and `revoke` in the test; D6's Settings > Live Code extends it. Cost if wrong: none.
+13. **The approval sheet lists blocks under their driver.** Default: as pre-flight 16. Cost if wrong: one sort.
+14. **The person's runs.** `make -C desktop uitest` (`LiveCodeUITests` on the runner's screen) and the README's manual pass (a real deck of theirs, `tap approval revoke` from a terminal, a `git pull` that adds a driver, the Deck tab on their frontmatter, a `${NAME}` from `~/.zshrc`) are CI's and the person's, never an agent's local run.
+
+## What this plan found missing in the spec and in tap
+
+- The slide list (P3, 3.3) carries no block problem; the editor needs it to mark a box. Task 1 adds `problem`.
+- P2 says a new driver asks again, and the CLI does so at the next start; in the app the deck stays open, so something must start tap again. The prerequisites document says nothing about re-asking within a run (pre-flight 3, open question 1).
+- P6's part 6 lists the `approval` question without its payload; the code's `approvalRequest` has `deck`, `drivers` (with `command`, `slides`, `blocks`), `approvedBefore` and `blocks` (with `code`). No `approvedAt` for the mockup's "on Sep 18".
+- The prerequisites document says the question is asked "when stdin is a TTY"; in app mode both `tap dev --app` and `tap present --app` always ask, and the D4 plan expected only the latter (pre-flight 1).
+- The feature file's undeclared-driver message ("Add sqlite under drivers in the deck settings") is not tap's; the code's message names the frontmatter and the exact entry (pre-flight 4).
+- The spec's "Deck tab ... same grid" for the theme belongs to D6; nothing in D5 runs `tap theme set`.
+- `tap new`'s starter having live code is tap's own concern; the test checks only that a starter with a live block declares its drivers.
+- Whether the audience page's own `fetch('/api/execute')` carries the app token cookie has not been exercised end to end before this plan; `testRunABlock` is the first, and a 401 there is a tap gap to record (Task 7, Step 3).
+- No tap command lists the built-in driver names, so the Deck tab's Add field cannot offer them from tap (pre-flight 10).
+- The spec says the fix-it appears "on the line"; the mockup draws it in the header (pre-flight 6).
+
+## Execution handoff
+
+Plan complete and saved to `docs/superpowers/plans/2026-09-25-desktop-live-code-deck-tab-fixits.md`. Execute with superpowers:subagent-driven-development, one fresh subagent per task, as the roadmap requires, on a branch cut from `main` after D4 (`feat/desktop-presenting`) has merged. Batches for the batch-and-trust-CI pace: A = Tasks 1 to 4 (Go and the core package, no Xcode project needed); B = 5 to 8 (the sheet and both questions); C = 9 to 11 (the fix-it, the restart, the Deck tab's first half); D = 12 and 13 (the drivers group, the manifest and the UI test). Every task's steps build locally and hand the hosted runs to the controller's CI; every task's review runs the mutations its last step lists, the ones that could run code the person did not approve or lose an edit first.
