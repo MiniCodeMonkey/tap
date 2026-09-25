@@ -52,6 +52,9 @@ final class PresentMenuTests: PresentingTestCase {
         try await waitUntil(timeout: 40, "the rehearsal") { controller.presentation.state == .presenting }
         deckWindow.stopPresenting(nil)
         try await waitUntil(timeout: 30, "the end") { controller.presentation.state == .idle }
+        // Play comes back once the rehearsal's windows are down, not before.
+        try await waitUntil(timeout: 20, "Play to be allowed again") { deckWindow.validateMenuItem(play) }
+        XCTAssertTrue(controller.presentation.windowsGoingDown.isEmpty)
 
         // Cmd+Option+P starts presenting at once, with the last settings and no popover.
         controller.jumpToSlide(number: 2)
@@ -60,6 +63,45 @@ final class PresentMenuTests: PresentingTestCase {
         XCTAssertEqual(controller.presentation.options?.mode, .play)
         XCTAssertEqual(controller.presentation.options?.startSlide, 2)
         try await waitUntil(timeout: 40, "the talk") { controller.presentation.state == .presenting }
+    }
+
+    /// Cmd+Option+P pressed again as soon as the menu allows it after a
+    /// Stop: the new talk's entry never lands on the last talk's exit, so
+    /// the new windows enter full screen and the old ones all close.
+    func testPlayRightAfterStop() async throws {
+        let (_, controller) = try await openDeckForPresenting()
+        let deckWindow = try XCTUnwrap(controller.editor.window?.windowController as? DeckWindowController)
+        let play = try item(try presentMenu(), action: #selector(DeckWindowController.play(_:)))
+        let presentation = controller.presentation
+        try await startPresenting(controller, PresentationOptions(mode: .play, startSlide: 1))
+        let first = [presentation.audienceWindow, presentation.presenterWindow].compactMap { $0 }
+        XCTAssertEqual(first.count, 2)
+        deckWindow.stopPresenting(nil)
+        XCTAssertFalse(deckWindow.validateMenuItem(play), "no Play while the talk is stopping")
+        try await waitUntil(timeout: 40, "Play to start the next talk") {
+            if deckWindow.validateMenuItem(play) { deckWindow.play(nil) }
+            return presentation.isActive
+        }
+        XCTAssertTrue(first.allSatisfy(\.isClosed), "the last talk's windows had all closed when Play was allowed")
+        try await waitUntil(timeout: 40, "the next talk (state \(presentation.state))") { presentation.state == .presenting }
+        try await waitUntil(timeout: 20, "the next talk's windows to settle") { presentation.windowsAreSettled }
+        let audience = try XCTUnwrap(presentation.audienceWindow)
+        XCTAssertFalse(first.contains { $0 === audience })
+        if fullScreenAvailable {
+            XCTAssertTrue(audience.styleMask.contains(.fullScreen), "the next talk's entry was not dropped")
+            try await waitUntil(timeout: 5, "the audience on screen") { onScreenWindowNumbers().contains(audience.windowNumber) }
+        }
+        XCTAssertTrue(first.allSatisfy(\.isClosed), "the last talk's windows are all closed; left: \(Self.describeTalkWindows())")
+    }
+
+    func testTheKeyMonitorLivesWithTheWindows() async throws {
+        let (_, controller) = try await openDeckForPresenting()
+        let presentation = controller.presentation
+        XCTAssertFalse(presentation.isKeyMonitorInstalled)
+        try await startPresenting(controller, PresentationOptions(mode: .play, startSlide: 1))
+        XCTAssertTrue(presentation.isKeyMonitorInstalled, "Escape and Option-Tab reach the talk only through the monitor")
+        try await stopPresenting(controller)
+        XCTAssertFalse(presentation.isKeyMonitorInstalled, "the monitor goes with the windows")
     }
 
     func testOneDisplay() async throws {
