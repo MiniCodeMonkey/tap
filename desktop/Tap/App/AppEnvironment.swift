@@ -77,6 +77,27 @@ final class AppEnvironment {
         endingTalks.removeAll { $0 === talk }
     }
 
+    /// The tap sessions of talks that failed while their process still
+    /// ran, kept until the process has exited: the SIGTERM and SIGKILL
+    /// escalation of a stop holds its process weakly, so a session freed
+    /// at once would leave a tap that ignores its closed stdin running.
+    private(set) var stoppingSessions: [TapSession] = []
+
+    /// Stops `session` and keeps it alive until it reports stopped.
+    func stopAndRetain(_ session: TapSession) {
+        guard session.processIdentifier != nil else {
+            session.stop()
+            return
+        }
+        stoppingSessions.append(session)
+        session.onEvent = nil
+        session.onStateChange = { [weak self, weak session] state in
+            guard let self, let session, state == .stopped else { return }
+            self.stoppingSessions.removeAll { $0 === session }
+        }
+        session.stop()
+    }
+
     private(set) var environmentNotice: String?
     private(set) var bundledTapVersion: String?
     private let loginShellLoader: LoginShellEnvironmentLoader

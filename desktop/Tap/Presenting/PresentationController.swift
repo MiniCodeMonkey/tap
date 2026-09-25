@@ -611,7 +611,7 @@ final class PresentationController {
 
     private func fail(_ message: String) {
         takeDownWindows()
-        session?.stop()
+        if let session { AppEnvironment.shared.stopAndRetain(session) }
         session = nil
         client = nil
         pendingQuestions = []

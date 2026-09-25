@@ -399,6 +399,33 @@ final class PresentingTests: PresentingTestCase {
         XCTAssertFalse(presentation.sleepAssertion.isHeld)
     }
 
+    /// A talk that fails while tap present still runs keeps the session
+    /// until its process has exited, so the stop's SIGTERM and SIGKILL
+    /// escalation still reaches a tap that ignores its closed stdin.
+    func testAFailedTalkStillEndsATapThatIgnoresItsClosedInput() async throws {
+        AppEnvironment.shared.presentExecutableURL = try FakeTapScripts.readyAndDeafToQuit()
+        let (_, controller) = try await openDeckForPresenting()
+        let presentation = controller.presentation
+        presentation.authorizePresenter = { _ in "cookie" }
+        presentation.screens = { [] }
+        var pid: Int32?
+        presentation.start(PresentationOptions(mode: .play, startSlide: 1))
+        try await waitUntil(timeout: 20, "tap present to be running") {
+            pid = pid ?? presentation.session?.processIdentifier
+            return pid != nil
+        }
+        let running = try XCTUnwrap(pid)
+        defer { kill(running, SIGKILL) }
+        try await waitUntil(timeout: 10, "the talk to fail") { if case .failed = presentation.state { return true } else { return false } }
+        XCTAssertEqual(presentation.state, .failed("No display is connected."))
+        XCTAssertNil(presentation.session)
+        XCTAssertTrue(isRunning(running), "tap ignores its closed stdin and SIGTERM")
+        XCTAssertEqual(AppEnvironment.shared.stoppingSessions.count, 1, "the session outlives the talk")
+        // Two seconds of grace, SIGTERM, two more, SIGKILL.
+        try await waitUntil(timeout: 10, "the escalation to end tap present") { !self.isRunning(running) }
+        try await waitUntil(timeout: 5, "the session to be let go") { AppEnvironment.shared.stoppingSessions.isEmpty }
+    }
+
     func testTheTalksLogIsListedInTheTapLogWindow() async throws {
         let (_, controller) = try await openDeckForPresenting()
         try await startPresenting(controller, PresentationOptions(mode: .rehearse, startSlide: 1))
