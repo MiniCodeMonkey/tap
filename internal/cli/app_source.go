@@ -215,6 +215,16 @@ func suppressFileChanged(changed, buffering bool) bool {
 	return !changed && !buffering
 }
 
+// reloadPagesOnDeckWrite reports whether a deck file write the app is told
+// about also goes to the open pages, which reload on it. A write whose text
+// equals the buffer tap is still rendering is, in practice, the app's own
+// save (an autosave) landing before its "saved" does: the pages already
+// show exactly that text, so a reload would only throw away where each page
+// is and what its slides are holding.
+func reloadPagesOnDeckWrite(changed, buffering bool) bool {
+	return changed || !buffering
+}
+
 // diskChanged reports whether the deck file differs from what tap renders:
 // the buffer while there is one, and otherwise the last text tap was
 // given.
