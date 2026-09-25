@@ -60,6 +60,10 @@ final class PresentationController {
     /// True once the windows have been asked to show for this talk.
     private(set) var windowsShown = false
     private var recordingTimer: Timer?
+    /// tap's last tunnel event, and the last tunnel error, for the remote panel.
+    private(set) var tunnel: TunnelEvent?
+    private(set) var tunnelError: String?
+    var onTunnelChange: (() -> Void)?
     /// True once this talk's windows were shown at all, so an ending moves
     /// the editor's cursor only for a talk the person actually saw.
     private var windowsWereShown = false
@@ -241,6 +245,8 @@ final class PresentationController {
         lastSlide = options.startSlide
         recording = RecordingStatus()
         editsNotShown = 0
+        tunnel = nil
+        tunnelError = nil
         lastCountedText = nil
         pendingQuestions = []
         pagesReported = false
@@ -404,6 +410,8 @@ final class PresentationController {
         presenter.page.load(client.presenterURL(slide: lastSlide), allowedPort: client.ready.port)
         if !windowsShown { armShowWindowsFallback() }
         refreshPresenterToolbar()
+        // A restart's tap has no tunnel; ask again whenever one is wanted.
+        if options.wantsTunnel { setTunnel(on: true) }
     }
 
     private func makeWindow(role: PresentationWindow.Role, frame: CGRect) -> PresentationWindow {
@@ -658,6 +666,12 @@ final class PresentationController {
         session?.send(.recording(action: recording.isRecording ? .stop : .newSegment))
     }
 
+    /// Starts or stops tap's tunnel, as u does.
+    func setTunnel(on: Bool) {
+        guard isActive else { return }
+        session?.send(.tunnel(start: on))
+    }
+
     /// The pointer moved over a talk window: the cursor hides again after it rests.
     func noteMouseMoved() {
         guard isActive else { return }
@@ -791,6 +805,15 @@ final class PresentationController {
                 session?.extendQuit(timeout: Self.quitTimeoutWithRecording)
             }
             if pendingQuestions.count == 1 { onQuestion?(question) }
+        case .tunnel(let tunnelEvent):
+            tunnel = tunnelEvent
+            // A failed start is tunnel_failed followed by a stopped event
+            // (app_session.go, tunnel); only a new start clears the reason.
+            if tunnelEvent.state == "starting" || tunnelEvent.state == "running" { tunnelError = nil }
+            onTunnelChange?()
+        case .error(let payload) where payload.code == "tunnel_unavailable" || payload.code == "tunnel_failed":
+            tunnelError = payload.message
+            onTunnelChange?()
         default:
             break
         }
@@ -856,6 +879,8 @@ final class PresentationController {
         screenObserver = nil
         recordingTimer?.invalidate()
         recordingTimer = nil
+        tunnel = nil
+        tunnelError = nil
         showWindowsFallback?.cancel()
         showWindowsFallback = nil
         placements = []
@@ -876,6 +901,7 @@ final class PresentationController {
         cursorHideWork = nil
         sleepAssertion.release()
         takeDownNext()
+        onTunnelChange?()
     }
 
     private func takeDownNext() {

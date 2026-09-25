@@ -37,6 +37,9 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
     private(set) var questionSheet: QuestionSheet?
     /// Reveals a kept recording. Production opens Finder on it; a test records the URL.
     var revealInFinder: (URL) -> Void = { url in NSWorkspace.shared.activateFileViewerSelecting([url]) }
+    /// The phone remote panel, made with the window (a panel that is never
+    /// shown costs nothing) and closed with it, so none outlives its deck.
+    let remotePanel = RemotePanel()
     private(set) lazy var layoutGallery: LayoutGalleryController = {
         let gallery = LayoutGalleryController()
         gallery.onPick = { [weak self] name in self?.insertSlide(layout: name, after: .caret) }
@@ -75,6 +78,8 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
             }
         }
         sessionController.presentation.onQuestion = { [weak self] question in self?.presentQuestion(question) }
+        remotePanel.onTurnOff = { [weak self] in self?.sessionController.presentation.setTunnel(on: false) }
+        sessionController.presentation.onTunnelChange = { [weak self] in self?.refreshRemotePanel() }
         presentingObserver = NotificationCenter.default.addObserver(forName: AppEnvironment.presentingDidChangeNotification, object: nil, queue: nil) { [weak self] _ in
             MainActor.assumeIsolated { self?.refreshPresentingControls() }
         }
@@ -410,6 +415,29 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
         }
     }
 
+    // MARK: The phone remote
+
+    /// Present > Phone Remote: the tunnel on or off.
+    @objc func togglePhoneRemote(_ sender: Any?) {
+        let presentation = sessionController.presentation
+        presentation.setTunnel(on: presentation.tunnel?.state != "running")
+    }
+
+    /// The panel follows tap's tunnel: shown with the QR code while the
+    /// tunnel runs or starts, shown with the reason when tap could not
+    /// start it, gone when it stops or the talk ends.
+    func refreshRemotePanel() {
+        let presentation = sessionController.presentation
+        let running = presentation.tunnel?.state == "running" || presentation.tunnel?.state == "starting"
+        guard presentation.isActive, running || presentation.tunnelError != nil else {
+            remotePanel.hide()
+            return
+        }
+        let screenFrame = presentation.presenterWindow?.targetFrame ?? window?.screen?.frame ?? NSScreen.screens[0].frame
+        remotePanel.show(tunnel: presentation.tunnel, error: presentation.tunnelError,
+                         ownPassword: presentation.options?.presenterPassword != nil, on: screenFrame)
+    }
+
     // MARK: tap's questions
 
     /// tap asked something. Consent and keep-recording become sheets on
@@ -532,6 +560,8 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
             previewWindowController = nil
             controller.close()
         }
+        remotePanel.orderOut(nil)
+        remotePanel.close()
     }
 
     func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
@@ -547,6 +577,10 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
         let presentation = sessionController.presentation
         if [#selector(play(_:)), #selector(playWithOptions(_:)), #selector(rehearse(_:))].contains(menuItem.action) { return presentation.canStart }
         if menuItem.action == #selector(stopPresenting(_:)) { return presentation.isActive }
+        if menuItem.action == #selector(togglePhoneRemote(_:)) {
+            menuItem.state = presentation.tunnel?.state == "running" ? .on : .off
+            return presentation.isActive
+        }
         if menuItem.action == #selector(reloadSlides(_:)) { return presentation.state == .presenting }
         if menuItem.action == #selector(swapDisplays(_:)) {
             // While another deck presents, a swap here would change the remembered pair under its running talk.
