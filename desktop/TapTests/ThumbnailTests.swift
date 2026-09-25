@@ -62,6 +62,18 @@ final class ThumbnailTests: HostedTestCase {
         let before = try XCTUnwrap(controller.slidePanel.image(forSlide: 3)?.tiffRepresentation)
         let rendersBefore = controller.thumbnails.renderer.renderCount
         let revisionBefore = try XCTUnwrap(controller.previewViewController.lastReady?.revision)
+        // The renderer does not wait for the preview: both new renders can
+        // land before the preview reports its own re-render, so the order is
+        // recorded as each image arrives rather than read from `renderCount`
+        // and `lastRenderedSlide` afterwards, which by then may already show
+        // the second render.
+        var renderedSlides: [Int] = []
+        let originalOnImage = controller.thumbnails.renderer.onImage
+        controller.thumbnails.renderer.onImage = { job, image, png in
+            renderedSlides.append(job.slideNumber)
+            originalOnImage?(job, image, png)
+        }
+        defer { controller.thumbnails.renderer.onImage = originalOnImage }
 
         // Two slides change in one pause, slide 1 and slide 3, and the cursor ends in slide 3.
         let text = controller.editor.string as NSString
@@ -74,11 +86,10 @@ final class ThumbnailTests: HostedTestCase {
         try await waitUntil(timeout: 10, "the preview to re-render slide 3") {
             controller.previewViewController.lastReady.map { $0.slide == 3 && $0.revision != revisionBefore } ?? false
         }
-        try await waitForRenderer(controller.thumbnails.renderer, of: controller, timeout: 20, "the first new render") { controller.thumbnails.renderer.renderCount == rendersBefore + 1 }
-        XCTAssertEqual(controller.thumbnails.renderer.lastRenderedSlide, 3, "the current slide renders before the other changed one")
+        try await waitForRenderer(controller.thumbnails.renderer, of: controller, timeout: 20, "the two new renders") { renderedSlides.count >= 2 }
+        XCTAssertEqual(renderedSlides.first, 3, "the current slide renders before the other changed one")
+        XCTAssertEqual(renderedSlides, [3, 1])
         try await waitForRenderer(controller.thumbnails.renderer, of: controller, timeout: 20, "thumbnail 3 to change") { controller.slidePanel.image(forSlide: 3)?.tiffRepresentation != before }
-        try await waitForRenderer(controller.thumbnails.renderer, of: controller, timeout: 20, "the second render") { controller.thumbnails.renderer.renderCount == rendersBefore + 2 }
-        XCTAssertEqual(controller.thumbnails.renderer.lastRenderedSlide, 1)
         XCTAssertEqual(controller.thumbnails.renderer.renderCount, rendersBefore + 2, "only the changed slides rendered again")
         XCTAssertTrue(controller.slidePanel.item(forSlide: 3)?.isUpdating == false)
     }
