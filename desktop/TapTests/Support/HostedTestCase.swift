@@ -219,9 +219,13 @@ class HostedTestCase: XCTestCase {
     /// independent of how many times the page reported ready on the way:
     /// tap's reload after an answer can put the page back on another slide
     /// between polls, so every poll that finds the preview elsewhere moves
-    /// the cursor to `slide` again before it reads.
+    /// the cursor to `slide` again before it reads. The jump waits for tap's
+    /// slide list to name `slide`: before it, a jump has no box to move to
+    /// and moves nothing.
     func waitForRunButtons(_ expected: String, in controller: DeckSessionController, document: DeckDocument, slide: Int, timeout: TimeInterval = 20) async throws {
+        try await waitUntil(timeout: 30, "slide \(slide) in the editor") { controller.editor.boxes.contains { $0.slide.number == slide } }
         controller.jumpToSlide(number: slide)
+        XCTAssertEqual(controller.currentSlideNumber, slide, "the cursor moved to slide \(slide)")
         try await waitForPreview(document, slide: slide)
         let preview = controller.previewViewController
         let deadline = Date().addingTimeInterval(timeout)
