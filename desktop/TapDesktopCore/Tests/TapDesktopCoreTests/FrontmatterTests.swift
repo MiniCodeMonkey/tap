@@ -116,6 +116,7 @@ final class FrontmatterTests: XCTestCase {
         XCTAssertEqual(frontmatter.text(of: title), "title: >-\n  Debugging Production\n  at 3am\n")
         XCTAssertTrue(frontmatter.entry(at: ["author"])!.isMultiLine)
         XCTAssertFalse(frontmatter.entry(at: ["theme"])!.isMultiLine)
+        XCTAssertNil(Frontmatter(text: "---\nnotes: |\n  name: x\n---\n").value(at: ["notes", "name"]), "a block scalar's text holds no keys")
     }
 
     func testUnquoting() {
@@ -245,5 +246,234 @@ final class FrontmatterTests: XCTestCase {
         XCTAssertEqual(Frontmatter.scalar(forString: "null"), "\"null\"")
         XCTAssertEqual(Frontmatter.scalar(forString: "no"), "\"no\"")
         XCTAssertEqual(Frontmatter.unquoted(Frontmatter.scalar(forString: "round \\ trip: \"x\"")), "round \\ trip: \"x\"")
+    }
+    // MARK: - Lines the key pattern does not know stay out of every entry
+
+    func testKeysOutsideThePlainPatternAreTheirOwnEntries() throws {
+        let text = "---\ntitle: T\nårstal: 2026\n\"author\": Me\nog:image: x\ntitle2 : Spaced\ntheme: base\n---\n"
+        let frontmatter = Frontmatter(text: text)
+        XCTAssertEqual(frontmatter.entries.map(\.key), ["title", "årstal", "author", "og:image", "title2", "theme"])
+        XCTAssertFalse(try XCTUnwrap(frontmatter.entry(at: ["title"])).isMultiLine, "the line below is not a continuation")
+        XCTAssertEqual(try applied(frontmatter.setting(path: ["title"], to: "New"), to: text),
+                       "---\ntitle: New\nårstal: 2026\n\"author\": Me\nog:image: x\ntitle2 : Spaced\ntheme: base\n---\n")
+        XCTAssertEqual(frontmatter.value(at: ["author"]), "Me")
+    }
+
+    func testSettingTheLineAboveAnUnknownKeyKeepsIt() throws {
+        for (text, path, expected) in [
+            ("---\ntitle: T\nårstal: 2026\ntheme: base\n---\n", ["title"], "---\ntitle: New\nårstal: 2026\ntheme: base\n---\n"),
+            ("---\ntitle: T\n\"author\": Me\n---\n", ["title"], "---\ntitle: New\n\"author\": Me\n---\n"),
+            ("---\ntheme: base\nog:image: x.png\n---\n", ["theme"], "---\ntheme: New\nog:image: x.png\n---\n"),
+            ("---\ntheme: base\ntitle : Spaced\n---\n", ["theme"], "---\ntheme: New\ntitle : Spaced\n---\n"),
+        ] {
+            XCTAssertEqual(try applied(Frontmatter(text: text).setting(path: path, to: "New"), to: text), expected)
+        }
+    }
+
+    func testAnUnrecognisedLineIsNeverAbsorbed() throws {
+        // A line no key reading accepts, at the entry's own indent, ends the entry and is left alone.
+        let text = "---\ntitle: T\n[odd]\ntheme: base\n---\n"
+        let frontmatter = Frontmatter(text: text)
+        XCTAssertFalse(try XCTUnwrap(frontmatter.entry(at: ["title"])).isMultiLine)
+        XCTAssertEqual(try applied(frontmatter.setting(path: ["title"], to: nil), to: text), "---\n[odd]\ntheme: base\n---\n")
+    }
+
+    func testRemovingADriverKeepsAQuotedSibling() throws {
+        let text = "---\ndrivers:\n  sqlite: {}\n  \"my-db\": {}\n---\n"
+        XCTAssertEqual(try applied(Frontmatter(text: text).setting(path: ["drivers", "sqlite"], to: nil), to: text),
+                       "---\ndrivers:\n  \"my-db\": {}\n---\n")
+        XCTAssertEqual(Frontmatter(text: text).declaredDrivers, ["sqlite", "my-db"])
+    }
+
+    func testTheFixItOnAnEmptyFlowMapKeepsTheLineBelow() throws {
+        let text = "---\ndrivers: {}\nog:image: x.png\n---\n"
+        XCTAssertEqual(try applied(Frontmatter(text: text).addingDriver("shell"), to: text), "---\ndrivers:\n  shell: {}\nog:image: x.png\n---\n")
+        let theme = "---\ntheme: base\nog:image: x.png\n---\n"
+        XCTAssertEqual(try applied(Frontmatter(text: theme).addingDriver("shell"), to: theme), "---\ntheme: base\nog:image: x.png\ndrivers:\n  shell: {}\n---\n")
+        XCTAssertEqual(try applied(Frontmatter(text: theme).setting(path: ["theme"], to: nil), to: theme), "---\nog:image: x.png\n---\n")
+    }
+
+    func testAListUnderAKeyAtTheKeysOwnIndentBelongsToIt() throws {
+        let text = "---\nlist:\n- one\n- two\ntheme: base\n---\n"
+        let frontmatter = Frontmatter(text: text)
+        XCTAssertEqual(frontmatter.text(of: try XCTUnwrap(frontmatter.entry(at: ["list"]))), "list:\n- one\n- two\n")
+        XCTAssertEqual(try applied(frontmatter.setting(path: ["list"], to: nil), to: text), "---\ntheme: base\n---\n")
+        XCTAssertNil(frontmatter.setting(path: ["list", "key"], to: "x"), "a list has no map to add a key to")
+    }
+
+    /// Every line of the frontmatter outside the edited entry is in the
+    /// result, byte for byte and in order, for a spread of edits on a deck
+    /// that mixes every kind of line.
+    func testAnEditChangesOnlyItsOwnEntry() throws {
+        let lines = [
+            "---",                                   // 0
+            "# who wrote this",                      // 1
+            "title: Let's go # draft",               // 2
+            "årstal: 2026",                          // 3
+            "\"author\": Me",                        // 4
+            "og:image: x.png",                       // 5
+            "theme : base",                          // 6
+            "notes: >-",                             // 7
+            "  first",                               // 8
+            "  second",                              // 9
+            "list:",                                 // 10
+            "- one",                                 // 11
+            "  - nested",                            // 12
+            "",                                      // 13
+            "drivers:",                              // 14
+            "  # the database",                      // 15
+            "  sqlite:",                             // 16
+            "    timeout: 5",                        // 17
+            "  \"my-db\": {}",                       // 18
+            "  shell: {} # built in",                // 19
+            "[odd]",                                 // 20
+            "recording:",                            // 21
+            "  output: out",                         // 22
+            "flow: {a: 1,",                          // 23
+            "  b: 2}",                               // 24
+            "tabbed:\tvalue\t# note",                // 25
+            "---",                                   // 26
+        ]
+        let text = lines.joined(separator: "\n") + "\n\n# One\n"
+        let edits: [(path: [String], value: String?, owned: Set<Int>)] = [
+            (["title"], "New", [2]),
+            (["title"], nil, [2]),
+            (["årstal"], "2027", [3]),
+            (["author"], "You", [4]),
+            (["author"], nil, [4]),
+            (["og:image"], nil, [5]),
+            (["theme"], "midnight", [6]),
+            (["notes"], "short", [7, 8, 9]),
+            (["notes"], nil, [7, 8, 9]),
+            (["list"], nil, [10, 11, 12]),
+            (["drivers", "sqlite"], nil, [16, 17]),
+            (["drivers", "sqlite", "timeout"], "9", [17]),
+            (["drivers", "my-db"], nil, [18]),
+            (["drivers", "shell"], nil, [19]),
+            (["drivers", "mysql"], "{}", []),
+            (["drivers"], nil, [14, 15, 16, 17, 18, 19]),
+            (["recording", "output"], "elsewhere", [22]),
+            (["recording", "audio"], "none", []),
+            (["recording"], nil, [21, 22]),
+            (["flow"], nil, [23, 24]),
+            (["tabbed"], "other", [25]),
+            (["author2"], "new", []),
+        ]
+        for edit in edits {
+            let frontmatter = Frontmatter(text: text)
+            let replacement = try XCTUnwrap(frontmatter.setting(path: edit.path, to: edit.value), "\(edit.path)")
+            let result = Frontmatter.applying(replacement, to: text)
+            let resultLines = result.components(separatedBy: "\n")
+            var position = 0
+            for (index, line) in lines.enumerated() where !edit.owned.contains(index) {
+                guard let found = resultLines[position...].firstIndex(of: line) else {
+                    XCTFail("\(edit.path) = \(edit.value ?? "nil") lost line \(index): \(line)")
+                    continue
+                }
+                position = found + 1
+            }
+            XCTAssertTrue(result.hasSuffix("---\n\n# One\n"), "\(edit.path): the body is untouched")
+        }
+    }
+    // MARK: - Comments
+
+    func testAnApostropheInAPlainValueOpensNoQuote() throws {
+        let text = "---\ntitle: Let's go # draft title\ntheme: base\n---\n"
+        let frontmatter = Frontmatter(text: text)
+        XCTAssertEqual(frontmatter.value(at: ["title"]), "Let's go")
+        XCTAssertEqual(try applied(frontmatter.setting(path: ["title"], to: "New"), to: text), "---\ntitle: New # draft title\ntheme: base\n---\n")
+        XCTAssertEqual(Frontmatter(text: "---\ntitle: it's \"x\" # c\n---\n").value(at: ["title"]), "it's \"x\"")
+    }
+
+    func testATabBeforeTheHashStartsAComment() throws {
+        let text = "---\ntheme: base\t# dark later\n---\n"
+        let frontmatter = Frontmatter(text: text)
+        XCTAssertEqual(frontmatter.value(at: ["theme"]), "base")
+        XCTAssertEqual(try applied(frontmatter.setting(path: ["theme"], to: "midnight"), to: text), "---\ntheme: midnight\t# dark later\n---\n")
+    }
+
+    func testAnEscapedQuoteDoesNotCloseTheValue() throws {
+        let text = "---\ntitle: \"a \\\" # b\" # c\n---\n"
+        let frontmatter = Frontmatter(text: text)
+        XCTAssertEqual(frontmatter.value(at: ["title"]), "\"a \\\" # b\"")
+        XCTAssertEqual(frontmatter.entry(at: ["title"])?.unquotedValue, "a \" # b")
+        XCTAssertEqual(try applied(frontmatter.setting(path: ["title"], to: "New"), to: text), "---\ntitle: New # c\n---\n")
+        XCTAssertEqual(Frontmatter(text: "---\ntitle: 'it''s # x' # y\n---\n").value(at: ["title"]), "'it''s # x'", "'' is a quote inside single quotes")
+    }
+
+    // MARK: - Edits that must not corrupt
+
+    func testAFlowMapOverSeveralLinesIsOneEntry() throws {
+        let text = "---\ndrivers: {\n  shell: {}\n}\ntheme: base\n---\n"
+        let frontmatter = Frontmatter(text: text)
+        XCTAssertEqual(frontmatter.entries.map(\.key), ["drivers", "theme"])
+        XCTAssertEqual(frontmatter.declaredDrivers, ["shell"])
+        XCTAssertNil(frontmatter.setting(path: ["drivers", "shell"], to: nil), "nothing is removed from inside a flow map")
+        XCTAssertNil(frontmatter.addingDriver("sqlite"), "nor added to it")
+        XCTAssertNil(frontmatter.addingDriver("shell"), "already declared")
+        XCTAssertEqual(try applied(frontmatter.setting(path: ["drivers"], to: nil), to: text), "---\ntheme: base\n---\n", "the whole map goes, closing brace too")
+    }
+
+    func testANullDriversValueOpensIntoABlock() throws {
+        for null in ["~", "null", "Null"] {
+            let text = "---\ndrivers: \(null)\ntheme: base\n---\n"
+            XCTAssertEqual(Frontmatter(text: text).declaredDrivers, [])
+            XCTAssertEqual(try applied(Frontmatter(text: text).addingDriver("shell"), to: text), "---\ndrivers:\n  shell: {}\ntheme: base\n---\n")
+        }
+    }
+
+    func testTheFixItKeepsTheCommentOnAnEmptyFlowMap() throws {
+        let text = "---\ndrivers: {} # none yet\n---\n"
+        XCTAssertEqual(try applied(Frontmatter(text: text).addingDriver("shell"), to: text), "---\ndrivers: # none yet\n  shell: {}\n---\n")
+        let null = "---\r\ndrivers: ~\t# later\r\n---\r\n"
+        XCTAssertEqual(try applied(Frontmatter(text: null).addingDriver("shell"), to: null), "---\r\ndrivers:\t# later\r\n  shell: {}\r\n---\r\n")
+    }
+
+    func testLineEndingsFollowTheLinesAnEditLandsBeside() throws {
+        let mixed = "---\ntitle: T\r\ndrivers:\r\n  sqlite: {}\r\n---\r\n"
+        XCTAssertEqual(Frontmatter(text: mixed).lineEnding, "\r\n", "most lines end in CRLF")
+        XCTAssertEqual(try applied(Frontmatter(text: mixed).addingDriver("shell"), to: mixed), "---\ntitle: T\r\ndrivers:\r\n  sqlite: {}\r\n  shell: {}\r\n---\r\n")
+        let lastLF = "---\r\ntitle: T\r\nnotes: >-\r\n  a\n---\r\n"
+        XCTAssertEqual(try applied(Frontmatter(text: lastLF).setting(path: ["notes"], to: "b"), to: lastLF), "---\r\ntitle: T\r\nnotes: b\n---\r\n",
+                       "a replaced entry keeps its own last ending")
+        let beforeClosing = "---\r\ntitle: T\n---\r\n"
+        XCTAssertEqual(try applied(Frontmatter(text: beforeClosing).setting(path: ["theme"], to: "x"), to: beforeClosing), "---\r\ntitle: T\ntheme: x\n---\r\n",
+                       "a new line ends like the line above it, not like most lines")
+    }
+
+    func testAValueStartingWithANonBreakingSpaceKeepsItsRange() throws {
+        let text = "---\ntitle: \u{00A0}x\n---\n"
+        let frontmatter = Frontmatter(text: text)
+        XCTAssertEqual(frontmatter.value(at: ["title"]), "\u{00A0}x", "YAML does not count a no-break space as white space")
+        XCTAssertEqual(try applied(frontmatter.setting(path: ["title"], to: "New"), to: text), "---\ntitle: New\n---\n")
+    }
+
+    func testAnUnterminatedFrontmatterIsNotEdited() {
+        let text = "---\ntitle: x\n\n# One\n"
+        let frontmatter = Frontmatter(text: text)
+        XCTAssertTrue(frontmatter.isUnterminated)
+        XCTAssertNil(frontmatter.addingDriver("shell"))
+        XCTAssertNil(frontmatter.setting(path: ["title"], to: "y"))
+        XCTAssertFalse(Frontmatter(text: "# One\n").isUnterminated)
+        XCTAssertFalse(Frontmatter(text: "").isUnterminated)
+        XCTAssertFalse(Frontmatter(text: "---\n---\n").isUnterminated)
+    }
+
+    func testAQuotedFlowMapKeyIsDeclared() {
+        let text = "---\ndrivers: {\"shell\": {}, 'sqlite': {}}\n---\n"
+        XCTAssertEqual(Frontmatter(text: text).declaredDrivers, ["shell", "sqlite"])
+        XCTAssertNil(Frontmatter(text: text).addingDriver("shell"), "no duplicate key")
+    }
+
+    func testLineBreaksOfEveryKindAreQuoted() {
+        XCTAssertEqual(Frontmatter.scalar(forString: "a\r\nb"), "\"a\\r\\nb\"", "\"\\r\\n\" is one Character in Swift")
+        XCTAssertEqual(Frontmatter.scalar(forString: "a\rb"), "\"a\\rb\"")
+        XCTAssertEqual(Frontmatter.scalar(forString: "a\nb"), "\"a\\nb\"")
+        XCTAssertEqual(Frontmatter.scalar(forString: "a\u{2028}b"), "\"a\\Lb\"")
+        XCTAssertEqual(Frontmatter.scalar(forString: "a\u{2029}b"), "\"a\\Pb\"")
+        XCTAssertEqual(Frontmatter.scalar(forString: "a\u{85}b"), "\"a\\Nb\"")
+        for string in ["a\r\nb", "a\rb", "a\u{2028}b", "x\u{2029}\ny"] {
+            XCTAssertEqual(Frontmatter.unquoted(Frontmatter.scalar(forString: string)), string)
+        }
     }
 }
