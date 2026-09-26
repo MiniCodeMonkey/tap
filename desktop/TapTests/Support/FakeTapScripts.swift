@@ -56,14 +56,16 @@ enum FakeTapScripts {
     }
 
     /// Prints a ready line, then ignores both its closed stdin and
-    /// SIGTERM: only the SIGKILL at the end of a stop's escalation ends it.
+    /// SIGTERM: only the SIGKILL at the end of a stop's escalation ends it,
+    /// or ten minutes, so a test that never stops it leaves nothing running.
     static func readyAndDeafToQuit() throws -> URL {
         let url = try Fixtures.temporaryFolder().appendingPathComponent("tap")
         try """
         #!/bin/sh
         trap '' TERM
         echo '{"type":"ready","port":1,"token":"token","launch":"launch","presenter":"presenter"}'
-        while :; do sleep 1; done
+        tries=0
+        while [ $tries -lt 600 ]; do sleep 1; tries=$((tries + 1)); done
         """.write(to: url, atomically: true, encoding: .utf8)
         try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: url.path)
         return url
@@ -124,7 +126,7 @@ enum FakeTapScripts {
         echo "arguments: $@" >> "\(record.path)"
         echo '{"type":"ready","port":1,"token":"token","launch":"launch","presenter":"presenter"}'
         \(eventLines)
-        \(crashFile.map { #"(while [ ! -f "\#($0.path)" ]; do sleep 0.1; done; rm -f "\#($0.path)"; kill -9 $$) &"# } ?? ":")
+        \(crashFile.map(crashWatcher) ?? ":")
         while IFS= read -r line; do
           echo "stdin: $line" >> "\(record.path)"
           case "$line" in
@@ -140,6 +142,18 @@ enum FakeTapScripts {
         """.write(to: url, atomically: true, encoding: .utf8)
         try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: url.path)
         return url
+    }
+
+    /// The background watcher of `presenting(crashFile:)`: it kills the
+    /// fake with SIGKILL the moment `file` appears, once (the file is
+    /// removed first, so the run after it stays up). It ends with the fake
+    /// (`kill -0 $$` fails once the fake is gone) and after five minutes at
+    /// most, and holds none of the fake's output: the app reads the fake's
+    /// stdout and stderr to their end, which a watcher still holding them
+    /// would never let come.
+    static func crashWatcher(_ file: URL) -> String {
+        #"(tries=0; while [ ! -f "\#(file.path)" ] && [ $tries -lt 3000 ] && kill -0 $$ 2>/dev/null; do sleep 0.1; tries=$((tries + 1)); done; "#
+            + #"if [ -f "\#(file.path)" ]; then rm -f "\#(file.path)"; kill -9 $$; fi) </dev/null >/dev/null 2>&1 &"#
     }
 
     /// A scripted `tap dev --app` that prints a ready line and then asks
