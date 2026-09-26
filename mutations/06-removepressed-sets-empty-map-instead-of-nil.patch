@@ -1,0 +1,14 @@
+Test: TapTests/DeckTabDriversTests/testTheDriversCardsListEachDriverWithItsSettings
+diff --git i/desktop/Tap/Preview/DeckFormViewController.swift w/desktop/Tap/Preview/DeckFormViewController.swift
+index 2eeaa31..729b6de 100644
+--- i/desktop/Tap/Preview/DeckFormViewController.swift
++++ w/desktop/Tap/Preview/DeckFormViewController.swift
+@@ -378,7 +378,7 @@ final class DeckFormViewController: NSViewController, NSTextFieldDelegate, NSTex
+         guard let joined = removeButtons.first(where: { $0.value === sender })?.key else { return }
+         _ = commitEditing()
+         let path = joined.split(separator: ".").map(String.init)
+-        guard let name = path.last, let replacement = Frontmatter(text: text()).setting(path: path, to: nil) else {
++        guard let name = path.last, let replacement = Frontmatter(text: text()).setting(path: path, to: "{}") else {
+             // A pair inside a flow map is not rewritten: said, not swallowed.
+             NSSound.beep()
+             return

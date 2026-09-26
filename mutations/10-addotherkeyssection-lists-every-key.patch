@@ -1,0 +1,14 @@
+Test: TapTests/DeckTabDriversTests/testUnknownKeysAreListedUnderOtherKeys
+diff --git i/desktop/Tap/Preview/DeckFormViewController.swift w/desktop/Tap/Preview/DeckFormViewController.swift
+index 2eeaa31..ad02c34 100644
+--- i/desktop/Tap/Preview/DeckFormViewController.swift
++++ w/desktop/Tap/Preview/DeckFormViewController.swift
+@@ -342,7 +342,7 @@ final class DeckFormViewController: NSViewController, NSTextFieldDelegate, NSTex
+ 
+     /// Keys the schema does not list, as written and read-only.
+     func addOtherKeysSection(_ frontmatter: Frontmatter) {
+-        let unknown = frontmatter.entries.filter { entry in !keys.contains { $0.name == entry.key } }
++        let unknown = frontmatter.entries
+         guard !unknown.isEmpty else { return }
+         var rows: [NSView] = []
+         for entry in unknown {

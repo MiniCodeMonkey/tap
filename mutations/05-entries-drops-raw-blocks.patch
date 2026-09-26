@@ -1,0 +1,18 @@
+Test: TapTests/DeckTabDriversTests/testRawSettingsAreEditedAsText
+diff --git i/desktop/Tap/Preview/DeckFormViewController.swift w/desktop/Tap/Preview/DeckFormViewController.swift
+index 2eeaa31..4f67f34 100644
+--- i/desktop/Tap/Preview/DeckFormViewController.swift
++++ w/desktop/Tap/Preview/DeckFormViewController.swift
+@@ -162,12 +162,6 @@ final class DeckFormViewController: NSViewController, NSTextFieldDelegate, NSTex
+         for key in keys where key.type == "map" {
+             let names = frontmatter.entryNames(at: [key.name])
+             result[key.name] = names
+-            for name in names {
+-                for child in key.keys where !child.isScalar {
+-                    let path = [key.name, name, child.name]
+-                    if let raw = frontmatter.rawBlock(at: path) { result["raw:" + path.joined(separator: ".")] = [raw] }
+-                }
+-            }
+         }
+         result["*"] = frontmatter.entries.map(\.key).filter { name in !keys.contains { $0.name == name } }
+         return result

@@ -1,0 +1,17 @@
+Test: TapTests/DeckTabDriversTests/testTheDriversCardsListEachDriverWithItsSettings
+diff --git i/desktop/Tap/Preview/DeckFormViewController.swift w/desktop/Tap/Preview/DeckFormViewController.swift
+index 2eeaa31..1cb9c22 100644
+--- i/desktop/Tap/Preview/DeckFormViewController.swift
++++ w/desktop/Tap/Preview/DeckFormViewController.swift
+@@ -495,11 +495,6 @@ final class DeckFormViewController: NSViewController, NSTextFieldDelegate, NSTex
+             if typed.isEmpty {
+                 raw = nil
+             } else if key.type == "integer" {
+-                guard Int(typed) != nil else {
+-                    NSSound.beep()
+-                    refresh()
+-                    return
+-                }
+                 raw = typed
+             } else if key.type == "list" {
+                 raw = typed

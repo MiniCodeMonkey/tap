@@ -1,0 +1,21 @@
+Test: TapTests/RunBlockTests/testSecretsInDriverSettings
+diff --git i/desktop/Tap/Preview/DeckFormViewController.swift w/desktop/Tap/Preview/DeckFormViewController.swift
+index 2eeaa31..88a768d 100644
+--- i/desktop/Tap/Preview/DeckFormViewController.swift
++++ w/desktop/Tap/Preview/DeckFormViewController.swift
+@@ -292,15 +292,8 @@ final class DeckFormViewController: NSViewController, NSTextFieldDelegate, NSTex
+         addRow.orientation = .horizontal
+         addRow.spacing = 8
+         rows.append(addRow)
+-        let hint = NSTextField(wrappingLabelWithString: "Use ${NAME} for passwords and other secrets: tap reads NAME from your login shell's environment when it runs the driver, so the deck is safe to share.")
+-        hint.font = .systemFont(ofSize: 11)
+-        hint.textColor = .secondaryLabelColor
+-        hint.setAccessibilityIdentifier("deck-hint-\(key.name)")
+-        hintLabels[key.name] = hint
+-        rows.append(hint)
+         addSection(title: key.label, rows: rows)
+         for card in rows.compactMap({ $0 as? NSBox }) { card.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -60).isActive = true }
+-        hint.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -60).isActive = true
+     }
+ 
+     /// A setting the form has no field for, as its own lines: the entry's

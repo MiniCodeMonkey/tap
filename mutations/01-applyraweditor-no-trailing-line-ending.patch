@@ -1,0 +1,15 @@
+Test: TapTests/DeckTabDriversTests/testRawSettingsAreEditedAsText
+diff --git i/desktop/Tap/Preview/DeckFormViewController.swift w/desktop/Tap/Preview/DeckFormViewController.swift
+index 1f475da..b7b1b66 100644
+--- i/desktop/Tap/Preview/DeckFormViewController.swift
++++ w/desktop/Tap/Preview/DeckFormViewController.swift
+@@ -412,8 +412,7 @@ final class DeckFormViewController: NSViewController, NSTextFieldDelegate, NSTex
+     func applyRawEditor(_ textView: NSTextView) {
+         guard !isDiscarding, let binding = rawEditors.first(where: { $0.textView === textView }), let key = DeckSchema.key(at: binding.path, in: keys) else { return }
+         let frontmatter = Frontmatter(text: text())
+-        var raw = textView.string.replacingOccurrences(of: "\r\n", with: "\n").replacingOccurrences(of: "\n", with: frontmatter.lineEnding)
+-        if !raw.hasSuffix(frontmatter.lineEnding) { raw += frontmatter.lineEnding }
++        let raw = textView.string.replacingOccurrences(of: "\r\n", with: "\n").replacingOccurrences(of: "\n", with: frontmatter.lineEnding)
+         guard raw != frontmatter.rawBlock(at: binding.path), let entry = frontmatter.entry(at: binding.path) else { return }
+         let lines = raw.components(separatedBy: frontmatter.lineEnding)
+         let firstIndent = lines.first.map { $0.prefix { $0 == " " }.count } ?? 0

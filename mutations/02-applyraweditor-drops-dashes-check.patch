@@ -1,0 +1,14 @@
+Test: TapTests/DeckTabDriversTests/testRawSettingsAreEditedAsText
+diff --git i/desktop/Tap/Preview/DeckFormViewController.swift w/desktop/Tap/Preview/DeckFormViewController.swift
+index 2eeaa31..277d672 100644
+--- i/desktop/Tap/Preview/DeckFormViewController.swift
++++ w/desktop/Tap/Preview/DeckFormViewController.swift
+@@ -401,7 +401,7 @@ final class DeckFormViewController: NSViewController, NSTextFieldDelegate, NSTex
+         guard raw != frontmatter.rawBlock(at: binding.path), let entry = frontmatter.entry(at: binding.path) else { return }
+         let lines = raw.components(separatedBy: frontmatter.lineEnding)
+         let firstIndent = lines.first.map { $0.prefix { $0 == " " }.count } ?? 0
+-        guard !lines.contains(where: { $0.trimmingCharacters(in: .whitespaces) == "---" }), firstIndent >= entry.indent,
++        guard firstIndent >= entry.indent,
+               let replacement = frontmatter.settingRawBlock(at: binding.path, to: raw) else {
+             NSSound.beep()
+             textView.string = frontmatter.rawBlock(at: binding.path) ?? ""

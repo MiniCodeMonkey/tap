@@ -1,0 +1,22 @@
+Test: TapTests/DeckTabDriversTests/testRawSettingsAreEditedAsText
+diff --git i/desktop/Tap/Preview/DeckFormViewController.swift w/desktop/Tap/Preview/DeckFormViewController.swift
+index 2eeaa31..e27ef4b 100644
+--- i/desktop/Tap/Preview/DeckFormViewController.swift
++++ w/desktop/Tap/Preview/DeckFormViewController.swift
+@@ -215,6 +215,7 @@ final class DeckFormViewController: NSViewController, NSTextFieldDelegate, NSTex
+             return
+         }
+         let frontmatter = Frontmatter(text: text())
++        builtForEntries = entries(in: frontmatter)
+         let scalars = keys.filter(\.isScalar)
+         if !scalars.isEmpty {
+             addSection(title: "Deck", rows: scalars.map { row(for: $0, path: [$0.name]) })
+@@ -227,8 +228,6 @@ final class DeckFormViewController: NSViewController, NSTextFieldDelegate, NSTex
+         }
+         addOtherKeysSection(frontmatter)
+         refreshValues(from: frontmatter)
+-        // Set last: the rows above are what this shape was built for.
+-        builtForEntries = entries(in: frontmatter)
+     }
+ 
+     func clearMapRows() {
