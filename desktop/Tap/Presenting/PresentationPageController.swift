@@ -24,11 +24,16 @@ final class PresentationPageController: NSViewController, WKNavigationDelegate, 
     /// How many times the page was loaded again because its web content
     /// process ended.
     private(set) var processTerminationCount = 0
-    /// Loads again after a process ended with no ready in between. A page
-    /// whose process ends every time is given up on after
-    /// `maximumReloadsAfterTermination`.
-    private var reloadsAfterTermination = 0
-    static let maximumReloadsAfterTermination = 2
+    /// How many times the page was loaded again after its process ended.
+    private(set) var reloadAfterTerminationCount = 0
+    /// Loads again after a process ended within `terminationWindow`,
+    /// readies or not, before the page is given up on and reported as a
+    /// failed load: a page whose process ends after every load would
+    /// otherwise reload on the projector for as long as the talk runs.
+    /// Seams: a test lowers the count.
+    var maximumReloadsInWindow = 3
+    var terminationWindow: TimeInterval = 60
+    private var recentReloadDates: [Date] = []
     private var allowedPort: Int?
 
     init(accessibilityIdentifier: String, dataStore: WKWebsiteDataStore) {
@@ -57,7 +62,6 @@ final class PresentationPageController: NSViewController, WKNavigationDelegate, 
         pageLoadCount += 1
         lastLoadedURL = url
         lastReady = nil
-        reloadsAfterTermination = 0
         webView.load(URLRequest(url: url))
     }
 
@@ -101,15 +105,19 @@ final class PresentationPageController: NSViewController, WKNavigationDelegate, 
     /// blank. Loading it again starts a new process. The page it reloads
     /// is the one tap redirected to, which the cookies from the first load
     /// still open. A page whose process keeps ending is reported as a
-    /// failed load instead.
+    /// failed load instead, and left alone. A process that is stuck
+    /// rather than ended is not detected here.
     func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
         processTerminationCount += 1
-        guard reloadsAfterTermination < Self.maximumReloadsAfterTermination else {
+        lastReady = nil
+        let now = Date()
+        recentReloadDates = recentReloadDates.filter { now.timeIntervalSince($0) < terminationWindow }
+        guard recentReloadDates.count < maximumReloadsInWindow else {
             onLoadFailed?(CocoaError(.fileReadUnknown, userInfo: [NSLocalizedDescriptionKey: "the page's web content process ended repeatedly"]))
             return
         }
-        reloadsAfterTermination += 1
-        lastReady = nil
+        recentReloadDates.append(now)
+        reloadAfterTerminationCount += 1
         if webView.url != nil {
             webView.reload()
         } else if let lastLoadedURL {
@@ -129,7 +137,6 @@ final class PresentationPageController: NSViewController, WKNavigationDelegate, 
     /// Records a ready the page reported and passes it on. Internal so a
     /// test can deliver one through the same path the handler uses.
     func pageReportedReady(_ payload: ReadyPayload) {
-        reloadsAfterTermination = 0
         lastReady = payload
         onReady?(payload)
     }

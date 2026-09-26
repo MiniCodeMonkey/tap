@@ -71,6 +71,29 @@ final class PreviewViewController: NSViewController, WKNavigationDelegate, WKUID
     /// New web views in a row, with no load finishing in between, before
     /// the preview stops trying and shows that it stopped.
     static let maximumRecoveriesInARow = 2
+    /// New web views within `recoveryWindow`, finished loads or not, before
+    /// the preview stops trying: a page whose process ends after every
+    /// load would otherwise be started again for as long as the deck is
+    /// open. Seams: a test lowers the count.
+    var maximumRecoveriesInWindow = 3
+    var recoveryWindow: TimeInterval = 60
+    /// True once the preview stopped trying and shows that it stopped. Try
+    /// Again, or a new tap, starts over in a new web view.
+    private(set) var hasGivenUp = false
+    /// Navigation callbacks WebKit made for a load other than the current
+    /// one, such as a load that a newer one replaced. They are ignored.
+    private(set) var ignoredNavigationCallbackCount = 0
+    /// Whether `webView`'s page answers a no-op script within the time
+    /// given. Evaluating "1" here, in the preview and in the thumbnail
+    /// renderer, is the single exception to the rule that the app runs no
+    /// script in a page, and the person allowed it: the script reads and
+    /// changes nothing, and it is the only way to tell a content process
+    /// that stopped running from a page that is waiting on tap. A seam: a
+    /// test replaces it to stand for a process that does not answer.
+    var pageAnswers: (WKWebView, TimeInterval) async -> Bool = { webView, timeout in
+        if case .noAnswer = await webView.evaluate("1", timeout: timeout) { return false }
+        return true
+    }
     /// Asked to restart tap, for a recovery that needs a new launch code.
     var onRestartSession: (() -> Void)?
     /// Writes a line to the deck's Tap Log.
@@ -82,7 +105,11 @@ final class PreviewViewController: NSViewController, WKNavigationDelegate, WKUID
     private var launchCodeSpent = false
     private var loadFinished = false
     private var recoveriesInARow = 0
+    private var recentRecoveryDates: [Date] = []
     private var isShowingRecovery = false
+    /// The load `load`, `reload` or a recovery started. WebKit's callbacks
+    /// for any other navigation say nothing about the page shown now.
+    private var currentNavigation: WKNavigation?
     private var watchdog: DispatchWorkItem?
     /// Opens a URL outside the app. Production hands this to `NSWorkspace`;
     /// a test replaces it to see what the app tried to open without
@@ -178,8 +205,12 @@ final class PreviewViewController: NSViewController, WKNavigationDelegate, WKUID
         self.client = client
         allowedPort = client.ready.port
         launchCodeSpent = false
+        if hasGivenUp {
+            hasGivenUp = false
+            replaceWebView()
+        }
         beginLoad()
-        webView.load(URLRequest(url: client.previewLaunchURL))
+        currentNavigation = webView.load(URLRequest(url: client.previewLaunchURL))
     }
 
     /// Loads the page the preview already shows again, from scratch. The
@@ -188,7 +219,7 @@ final class PreviewViewController: NSViewController, WKNavigationDelegate, WKUID
     /// page runs its ready cycle again and reports a fresh ready.
     func reload() {
         beginLoad()
-        webView.reload()
+        currentNavigation = webView.reload()
     }
 
     /// Resets what the app knows about the page for a load about to start,
@@ -199,6 +230,7 @@ final class PreviewViewController: NSViewController, WKNavigationDelegate, WKUID
         lastReady = nil
         loadFinished = false
         navigationMilestones = []
+        currentNavigation = nil
         armWatchdog()
     }
 
@@ -225,17 +257,18 @@ final class PreviewViewController: NSViewController, WKNavigationDelegate, WKUID
     /// answer within `pageAnswerTimeout` means the process is stuck. A
     /// reload would go to that same process, so the page gets a new web
     /// view instead. A page that answers is waiting on tap and is checked
-    /// again later. A web view out of any window may be suspended by
-    /// WebKit on purpose, so it is only checked again later too.
+    /// again later. WebKit may throttle or suspend a web view nobody can
+    /// see (out of any window, hidden, or in a covered window) on purpose,
+    /// so such a view is only checked again later too.
     private func checkLoad(of watched: WKWebView) async {
         guard watched === webView, !loadFinished else { return }
-        guard watched.window != nil else {
+        guard let window = watched.window, !watched.isHiddenOrHasHiddenAncestor, window.occlusionState.contains(.visible) else {
             armWatchdog()
             return
         }
-        let answer = await watched.evaluate("1", timeout: Self.pageAnswerTimeout)
+        let answers = await pageAnswers(watched, Self.pageAnswerTimeout)
         guard watched === webView, !loadFinished else { return }
-        if case .noAnswer = answer {
+        if !answers {
             recoverPage("the preview's page did not finish loading in \(Int(loadWatchdogInterval)) s "
                         + "and did not answer in \(Int(Self.pageAnswerTimeout)) s")
         } else {
@@ -249,28 +282,31 @@ final class PreviewViewController: NSViewController, WKNavigationDelegate, WKUID
     /// the cookie it set is in the shared data store and the base URL
     /// opens the page; otherwise tap is restarted for a new code, and the
     /// running state that follows loads the page. After
-    /// `maximumRecoveriesInARow` new web views with no load finishing, the
-    /// preview shows that it stopped, with Try Again, as it does for a tap
-    /// that stopped.
+    /// `maximumRecoveriesInARow` new web views with no load finishing, or
+    /// `maximumRecoveriesInWindow` within `recoveryWindow`, the preview
+    /// shows that it stopped, with Try Again, as it does for a tap that
+    /// stopped.
     private func recoverPage(_ reason: String) {
         watchdog?.cancel()
         watchdog = nil
+        guard !hasGivenUp else { return }
         // With tap down there is no page to bring back: the next running
         // state loads one, in a new web view.
         guard client != nil else {
             replaceWebView()
             return
         }
+        let now = Date()
+        recentRecoveryDates = recentRecoveryDates.filter { now.timeIntervalSince($0) < recoveryWindow }
         guard recoveriesInARow < Self.maximumRecoveriesInARow else {
-            onLog?("\(reason); the preview gave up after \(recoveriesInARow) new web views in a row")
-            isShowingRecovery = false
-            // Try Again then starts on a new process too.
-            replaceWebView()
-            overlay.show(title: "The preview stopped",
-                         detail: "Its page stopped responding \(recoveriesInARow + 1) times in a row.",
-                         output: [], opaque: true, buttons: true)
+            giveUp("\(reason); the preview gave up after \(recoveriesInARow) new web views in a row")
             return
         }
+        guard recentRecoveryDates.count < maximumRecoveriesInWindow else {
+            giveUp("\(reason); the preview gave up after \(recentRecoveryDates.count) new web views in \(Int(recoveryWindow)) s")
+            return
+        }
+        recentRecoveryDates.append(now)
         recoveriesInARow += 1
         pageRecoveryCount += 1
         onLog?("\(reason) (milestones: \(navigationMilestoneDescription)); "
@@ -280,10 +316,41 @@ final class PreviewViewController: NSViewController, WKNavigationDelegate, WKUID
         replaceWebView()
         if launchCodeSpent, let client {
             beginLoad()
-            webView.load(URLRequest(url: client.baseURL))
+            currentNavigation = webView.load(URLRequest(url: client.baseURL))
         } else {
             onRestartSession?()
         }
+    }
+
+    /// Stops recovering and shows that the preview stopped, with Try Again.
+    /// The web view is left as it is; Try Again, or the next tap, starts
+    /// over in a new one.
+    private func giveUp(_ line: String) {
+        watchdog?.cancel()
+        watchdog = nil
+        onLog?(line)
+        hasGivenUp = true
+        isShowingRecovery = false
+        overlay.show(title: "The preview stopped", detail: "Its page stopped responding.", output: [], opaque: true, buttons: true)
+    }
+
+    /// A load failed. One that was bringing the page back after a recovery
+    /// leaves nothing to show, so the preview shows that it stopped.
+    private func currentLoadFailed(_ error: Error) {
+        loadFinished = true
+        watchdog?.cancel()
+        if isShowingRecovery {
+            giveUp("the preview's page did not load after a recovery: \(error.localizedDescription)")
+        }
+    }
+
+    /// True for the current load's navigation; any other is counted and ignored.
+    private func isCurrent(_ navigation: WKNavigation?) -> Bool {
+        guard navigation === currentNavigation else {
+            ignoredNavigationCallbackCount += 1
+            return false
+        }
+        return true
     }
 
     private func replaceWebView() {
@@ -382,6 +449,11 @@ final class PreviewViewController: NSViewController, WKNavigationDelegate, WKUID
 
     @objc private func tryAgainPressed(_ sender: NSButton) {
         recoveriesInARow = 0
+        recentRecoveryDates = []
+        if hasGivenUp {
+            hasGivenUp = false
+            replaceWebView()
+        }
         onTryAgain?()
     }
 
@@ -425,22 +497,26 @@ final class PreviewViewController: NSViewController, WKNavigationDelegate, WKUID
     }
 
     func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
+        guard isCurrent(navigation) else { return }
         recordMilestone("start")
     }
 
     /// tap answers the launch URL with its cookie and a redirect, so a
     /// redirect means the launch code is spent.
     func webView(_ webView: WKWebView, didReceiveServerRedirectForProvisionalNavigation navigation: WKNavigation!) {
+        guard isCurrent(navigation) else { return }
         recordMilestone("redirect")
         launchCodeSpent = true
     }
 
     func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
+        guard isCurrent(navigation) else { return }
         recordMilestone("commit")
         launchCodeSpent = true
     }
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        guard isCurrent(navigation) else { return }
         recordMilestone("finish")
         loadFinished = true
         watchdog?.cancel()
@@ -448,15 +524,15 @@ final class PreviewViewController: NSViewController, WKNavigationDelegate, WKUID
     }
 
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+        guard isCurrent(navigation) else { return }
         recordMilestone("failProvisional")
-        loadFinished = true
-        watchdog?.cancel()
+        currentLoadFailed(error)
     }
 
     func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+        guard isCurrent(navigation) else { return }
         recordMilestone("fail")
-        loadFinished = true
-        watchdog?.cancel()
+        currentLoadFailed(error)
     }
 
     /// The page's content process exited or crashed. The web view stays
