@@ -62,6 +62,20 @@ final class FrontmatterTests: XCTestCase {
                        "a comma nested inside a driver's own map is not a top-level split")
     }
 
+    func testEntryNamesReadABlockOrAFlowMapAtAnyDepth() {
+        let frontmatter = Frontmatter(text: deck)
+        XCTAssertEqual(frontmatter.entryNames(at: ["drivers"]), ["sqlite", "shell"], "a block map, in the file's order")
+        XCTAssertEqual(frontmatter.entryNames(at: ["drivers", "sqlite", "connections"]), ["incident"], "a nested block map")
+        XCTAssertEqual(frontmatter.entryNames(at: ["drivers", "shell"]), [], "an empty flow map has no names")
+        XCTAssertEqual(frontmatter.entryNames(at: ["title"]), [], "a scalar has no names")
+        XCTAssertEqual(frontmatter.entryNames(at: ["author"]), [], "a missing key has no names")
+        XCTAssertEqual(frontmatter.entryNames(at: ["drivers", "mysql"]), [], "a missing child has no names")
+        let flow = Frontmatter(text: "---\ndrivers: {shell: {}, sqlite: {connections: {a: {path: x}, b: {path: y}}}}\n---\n")
+        XCTAssertEqual(flow.entryNames(at: ["drivers"]), ["shell", "sqlite"], "a flow map's top-level keys, nested commas ignored")
+        XCTAssertEqual(Frontmatter(text: "---\ndrivers:\n---\n").entryNames(at: ["drivers"]), [], "a key with nothing under it")
+        XCTAssertEqual(Frontmatter(text: "# One\n").entryNames(at: ["drivers"]), [], "no frontmatter")
+    }
+
     func testADeckWithoutFrontmatter() {
         let frontmatter = Frontmatter(text: "# One\n\n---\n\n# Two\n")
         XCTAssertNil(frontmatter.range, "a separator later in the deck is not a frontmatter")

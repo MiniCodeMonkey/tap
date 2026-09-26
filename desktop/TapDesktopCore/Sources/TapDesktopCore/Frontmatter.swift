@@ -549,10 +549,7 @@ public struct Frontmatter: Equatable, Sendable {
     /// The names under `drivers`, in the file's order: what tap's
     /// `Config.DeclaredDrivers()` holds for this text, block or flow style.
     public var declaredDrivers: [String] {
-        guard let drivers = entry(at: ["drivers"]) else { return [] }
-        if !drivers.children.isEmpty { return drivers.children.map(\.key) }
-        if let value = drivers.value { return Self.flowMapKeys(value) }
-        return []
+        entryNames(at: ["drivers"])
     }
 
     public func declares(driver name: String) -> Bool {
