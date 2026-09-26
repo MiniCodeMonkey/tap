@@ -92,9 +92,10 @@ final class DeckTabDriversTests: HostedTestCase {
         // The editor is fetched again after every edit, so the checks hold whether or not the rows were rebuilt.
         var raw = try XCTUnwrap(form.rawEditor("drivers.sqlite.connections"), "a map inside a driver is edited as its own lines")
         XCTAssertEqual(raw.string, original)
-        raw.string = "    connections:\n      incident:\n        path: ${INCIDENT_DB}\n"
+        // Typed text seldom ends in a line break: the entry gets one, so the closing --- keeps its own line.
+        raw.string = "    connections:\n      incident:\n        path: ${INCIDENT_DB}"
         form.textDidEndEditing(Notification(name: NSText.didEndEditingNotification, object: raw))
-        XCTAssertTrue(editor.string.contains("        path: ${INCIDENT_DB}\n"))
+        XCTAssertTrue(editor.string.contains("        path: ${INCIDENT_DB}\n---\n"), String(editor.string.prefix(120)))
         XCTAssertEqual(editor.undoManager?.undoActionName, "Change Connections")
         try await waitUntil(timeout: 10, "tap's answer") { controller.lastAppliedText == editor.string }
         XCTAssertEqual(editor.deckErrors, [], "tap reads the block as written")
