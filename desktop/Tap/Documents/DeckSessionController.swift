@@ -199,7 +199,7 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
     /// person read.
     func answer(id: String, value: Bool, generation: Int) {
         guard generation == questionGeneration, let index = pendingQuestions.firstIndex(where: { $0.id == id }) else {
-            session.log.append("an answer to the \(id) question of an earlier tap was dropped", source: .app)
+            session.log.append("no answer sent for the \(id) question: tap withdrew it or it belongs to an earlier tap", source: .app)
             return
         }
         let question = pendingQuestions.remove(at: index)
