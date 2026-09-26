@@ -598,26 +598,49 @@ func TestGateApprovesOnlyWhatTheTerminalShowed(t *testing.T) {
 	}
 }
 
-func TestGateNeverStoresOrShowsTheValueOfAVariable(t *testing.T) {
+func TestDisplayedCommandShowsValuesButKeepsSecretsAsWritten(t *testing.T) {
+	values := map[string]string{
+		"RUNNER": "bash", "DB_HOST": "db.internal",
+		"DB_PASSWORD": "leak", "PGPASS": "leak", "MY_PASSWD": "leak", "GH_TOKEN": "leak", "API_KEY": "leak",
+		"CLIENT_SECRET": "leak", "AWS_CREDENTIALS": "leak", "AUTH_HEADER": "leak", "api_key": "leak",
+	}
+	lookup := func(name string) (string, bool) { value, found := values[name]; return value, found }
+	settings := config.DriverConfig{Command: "${RUNNER}", Args: []string{
+		"-c", "psql://${DB_HOST}", "${DB_PASSWORD}", "${PGPASS}", "${MY_PASSWD}", "${GH_TOKEN}", "${API_KEY}",
+		"${CLIENT_SECRET}", "${AWS_CREDENTIALS}", "${AUTH_HEADER}", "${api_key}", "${UNSET_NAME}",
+	}}
+	want := "bash -c psql://db.internal ${DB_PASSWORD} ${PGPASS} ${MY_PASSWD} ${GH_TOKEN} ${API_KEY} ${CLIENT_SECRET} ${AWS_CREDENTIALS} ${AUTH_HEADER} ${api_key} ${UNSET_NAME}"
+	if got := maskedCommand(append([]string{settings.Command}, settings.Args...), lookup); got != want {
+		t.Errorf("maskedCommand() = %q\nwant %q", got, want)
+	}
+}
+
+func TestGateNeverStoresOrShowsTheValueOfASecret(t *testing.T) {
 	const secret = "s3cret-value-never-shown"
+	const host = "db-host-shown.internal"
 	t.Setenv("TAP_TEST_DB_PASSWORD", secret)
-	database := config.DriverConfig{Command: "sh", Args: []string{"-c", "cat", "postgres://app:${TAP_TEST_DB_PASSWORD}@db/app"}}
+	t.Setenv("TAP_TEST_DB_HOST", host)
+	database := config.DriverConfig{Command: "sh", Args: []string{"-c", "cat", "postgres://app:${TAP_TEST_DB_PASSWORD}@${TAP_TEST_DB_HOST}/app"}}
 	harness := newGateHarness(t, approvedShell)
 	harness.start(t, map[string]config.DriverConfig{"shell": shellDriver})
 
 	harness.reload(map[string]config.DriverConfig{"shell": shellDriver, "database": database})
 	request := harness.asker.nextRequest(t)
+	shown := "sh -c cat postgres://app:${TAP_TEST_DB_PASSWORD}@" + host + "/app"
+	if request.Drivers[0].Command != shown {
+		t.Errorf("command = %q, want %q: the host shown, the password as written", request.Drivers[0].Command, shown)
+	}
 	payload, err := json.Marshal(request)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(string(payload), secret) || !strings.Contains(string(payload), "${TAP_TEST_DB_PASSWORD}") {
-		t.Errorf("payload = %s, want the variable as written and never its value", payload)
+	if strings.Contains(string(payload), secret) {
+		t.Errorf("payload = %s, want no secret", payload)
 	}
 	prompt := &bytes.Buffer{}
 	printApprovalRequest(prompt, request)
-	if strings.Contains(prompt.String(), secret) || !strings.Contains(prompt.String(), "${TAP_TEST_DB_PASSWORD}") {
-		t.Errorf("prompt = %q, want the variable as written and never its value", prompt.String())
+	if strings.Contains(prompt.String(), secret) || !strings.Contains(prompt.String(), shown) {
+		t.Errorf("prompt = %q, want %q and no secret", prompt.String(), shown)
 	}
 
 	harness.asker.answer(t, true)
@@ -626,8 +649,8 @@ func TestGateNeverStoresOrShowsTheValueOfAVariable(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(string(raw), secret) || !strings.Contains(string(raw), "${TAP_TEST_DB_PASSWORD}") {
-		t.Errorf("settings.yaml = %s, want the template and no secret", raw)
+	if strings.Contains(string(raw), secret) || strings.Contains(string(raw), host) || !strings.Contains(string(raw), "${TAP_TEST_DB_PASSWORD}@${TAP_TEST_DB_HOST}") {
+		t.Errorf("settings.yaml = %s, want the template and no value at all", raw)
 	}
 
 	listed := useSettings(t)
@@ -639,41 +662,60 @@ func TestGateNeverStoresOrShowsTheValueOfAVariable(t *testing.T) {
 	}
 	for _, args := range [][]string{{"approval", "list"}, {"approval", "list", "--json"}} {
 		_, stdout, _ := runTap(t, args...)
-		if strings.Contains(stdout, secret) || !strings.Contains(stdout, "TAP_TEST_DB_PASSWORD") {
-			t.Errorf("tap %s = %s, want the template and no secret", strings.Join(args, " "), stdout)
+		if strings.Contains(stdout, secret) || !strings.Contains(stdout, "${TAP_TEST_DB_PASSWORD}@"+host) {
+			t.Errorf("tap %s = %s, want the host shown and the password as written", strings.Join(args, " "), stdout)
 		}
 	}
 }
 
-func TestGateAsksAgainWhenAVariableInTheCommandChanges(t *testing.T) {
+func TestGateSaysWhenOnlyAValueInTheCommandChanged(t *testing.T) {
 	t.Setenv("TAP_TEST_INTERPRETER", "python3")
-	interpreter := config.DriverConfig{Command: "${TAP_TEST_INTERPRETER}", Args: []string{"-c"}}
+	t.Setenv("TAP_TEST_RUN_TOKEN", "first")
+	interpreter := config.DriverConfig{Command: "${TAP_TEST_INTERPRETER}", Args: []string{"-c", "${TAP_TEST_RUN_TOKEN}"}}
 	harness := newGateHarness(t, approvedShell)
 	harness.start(t, map[string]config.DriverConfig{"shell": shellDriver})
 	harness.reload(map[string]config.DriverConfig{"shell": shellDriver, "python": interpreter})
-	harness.asker.nextRequest(t)
+	if request := harness.asker.nextRequest(t); request.Drivers[0].ValueChanged || request.Drivers[0].PreviousCommand != "" {
+		t.Errorf("driver = %+v, want a first ask with nothing changed", request.Drivers[0])
+	}
 	harness.asker.answer(t, true)
 	waitUntil(t, "python runs", func() bool { return harness.allows("python", interpreter) })
 
-	t.Setenv("TAP_TEST_INTERPRETER", "bash")
-	harness.reload(map[string]config.DriverConfig{"shell": shellDriver, "python": interpreter})
-	request := harness.asker.nextRequest(t)
-	if driverNames(request) != "python=${TAP_TEST_INTERPRETER} -c" || request.Drivers[0].PreviousCommand != "${TAP_TEST_INTERPRETER} -c" {
-		t.Errorf("request = %+v, want python asked again with the same template", request)
-	}
-	if harness.allows("python", interpreter) {
-		t.Error("python runs bash on an approval given while it ran python3")
+	for _, change := range []struct {
+		name, value, shown string
+	}{
+		{name: "TAP_TEST_INTERPRETER", value: "bash", shown: "bash -c ${TAP_TEST_RUN_TOKEN}"},
+		{name: "TAP_TEST_RUN_TOKEN", value: "second", shown: "bash -c ${TAP_TEST_RUN_TOKEN}"},
+	} {
+		t.Setenv(change.name, change.value)
+		harness.reload(map[string]config.DriverConfig{"shell": shellDriver, "python": interpreter})
+		request := harness.asker.nextRequest(t)
+		driver := request.Drivers[0]
+		if driver.Command != change.shown || !driver.ValueChanged || driver.PreviousCommand != "" {
+			t.Errorf("after %s changed: driver = %+v, want %q with valueChanged and no previousCommand", change.name, driver, change.shown)
+		}
+		prompt := &bytes.Buffer{}
+		printApprovalRequest(prompt, request)
+		if !strings.Contains(prompt.String(), "a value in this command changed since it was approved") || strings.Contains(prompt.String(), "was:") {
+			t.Errorf("prompt = %q, want the value change said plainly", prompt.String())
+		}
+		if harness.allows("python", interpreter) {
+			t.Errorf("python runs after %s changed", change.name)
+		}
+		harness.asker.answer(t, true)
+		waitUntil(t, "python runs again", func() bool { return harness.allows("python", interpreter) })
 	}
 }
 
 func TestStartupAsksAgainWithoutTheApprovalKey(t *testing.T) {
 	for _, keyChange := range []struct {
-		apply  func(path string) error
-		name   string
-		python usersettings.Driver
+		apply        func(path string) error
+		name         string
+		python       usersettings.Driver
+		valueChanged bool
 	}{
-		{name: "missing", apply: os.Remove, python: approvedPython3},
-		{name: "another key", apply: func(path string) error { return os.WriteFile(path, []byte(strings.Repeat("x", 32)), 0o600) }, python: approvedPython3},
+		{name: "missing", apply: os.Remove, python: approvedPython3, valueChanged: true},
+		{name: "another key", apply: func(path string) error { return os.WriteFile(path, []byte(strings.Repeat("x", 32)), 0o600) }, python: approvedPython3, valueChanged: true},
 		// A record from before commands were stored has no digest, and
 		// no key must not make an empty digest that matches it.
 		{name: "missing, with a record without a command", apply: os.Remove, python: usersettings.Driver{Name: "python"}},
@@ -689,8 +731,9 @@ func TestStartupAsksAgainWithoutTheApprovalKey(t *testing.T) {
 				policy, _ := harness.gate.startup(cfg, pres)
 				started <- policy
 			}()
-			if request := harness.asker.nextRequest(t); driverNames(request) != "python=python3 -c" {
-				t.Errorf("request = %s, want python asked again", driverNames(request))
+			request := harness.asker.nextRequest(t)
+			if driverNames(request) != "python=python3 -c" || request.Drivers[0].ValueChanged != keyChange.valueChanged {
+				t.Errorf("request = %+v, want python asked again, valueChanged %t", request, keyChange.valueChanged)
 			}
 			harness.asker.answer(t, false)
 			if policy := <-started; policy.Allows("python", []string{"python3", "-c"}) || !policy.Allows("shell", nil) {

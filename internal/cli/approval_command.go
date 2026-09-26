@@ -86,6 +86,15 @@ func runApprovalList(cmd *cobra.Command, args []string) error {
 		if approval.Drivers == nil {
 			approval.Drivers = []string{}
 		}
+		// Shown with non-secret variables expanded and secret ones as
+		// written, the same as the approval question.
+		if approval.Commands != nil {
+			shown := make(map[string][]string, len(approval.Commands))
+			for name, command := range approval.Commands {
+				shown[name] = maskedParts(command, os.LookupEnv)
+			}
+			approval.Commands = shown
+		}
 		approvals = append(approvals, approval)
 	}
 

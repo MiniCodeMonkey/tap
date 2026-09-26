@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"regexp"
 	"slices"
 	"sort"
 	"strconv"
@@ -49,6 +50,11 @@ type approvalDriver struct {
 	// covered, when the question asks because the command changed. Empty
 	// for a driver never approved.
 	PreviousCommand string `json:"previousCommand,omitempty"`
+	// ValueChanged is true when the question asks because a value in an
+	// approved command changed, or the approval can no longer be checked
+	// (approval.key was lost), while the command as written is the same.
+	// PreviousCommand is empty then.
+	ValueChanged bool `json:"valueChanged,omitempty"`
 	// Slides are the numbers of the slides with a block that uses it.
 	Slides []int `json:"slides"`
 	Blocks int   `json:"blocks"`
@@ -185,8 +191,8 @@ type approvalDecision struct {
 	// approvedBefore names the declared drivers already approved.
 	approvedBefore []string
 	// previousCommands holds, for each wanted driver approved before with
-	// another command, that command.
-	previousCommands map[string]string
+	// a command, the command template that approval covered.
+	previousCommands map[string][]string
 	blocks           []approvalBlock
 	deck             string
 }
@@ -322,8 +328,15 @@ func (gate *liveCodeGate) askUntilSettled() error {
 		question := &openApprovalQuestion{withdraw: withdraw, drivers: decision.wanted}
 		gate.open = question
 		request := newApprovalRequest(decision.deck, gate.config, decision.blocks, driverNamesOf(decision.wanted), decision.approvedBefore)
-		for index := range request.Drivers {
-			request.Drivers[index].PreviousCommand = decision.previousCommands[request.Drivers[index].Name]
+		for index, driver := range decision.wanted {
+			previous := decision.previousCommands[driver.name]
+			switch {
+			case previous == nil:
+			case slices.Equal(previous, driver.template):
+				request.Drivers[index].ValueChanged = true
+			default:
+				request.Drivers[index].PreviousCommand = maskedCommand(previous, os.LookupEnv)
+			}
 		}
 		names := joinWithAnd(driverNamesOf(decision.wanted))
 
@@ -368,14 +381,6 @@ func (gate *liveCodeGate) save(drivers []liveDriver) error {
 	if err != nil {
 		return err
 	}
-	key, err := usersettings.EnsureApprovalKey(gate.input.SettingsPath)
-	if err != nil {
-		return err
-	}
-	stored := make([]usersettings.Driver, len(drivers))
-	for index, driver := range drivers {
-		stored[index] = driver.stored(key)
-	}
 	// Reload under the lock rather than reusing an earlier read: the
 	// person may have taken a while to answer, and another tap process
 	// could have saved its own approval for a different deck in the
@@ -385,6 +390,15 @@ func (gate *liveCodeGate) save(drivers []liveDriver) error {
 		fresh, err := usersettings.Load(gate.input.SettingsPath)
 		if err != nil {
 			fresh = usersettings.Settings{}
+		}
+		// The key is made under the same lock, as tap new does.
+		key, err := usersettings.EnsureApprovalKey(gate.input.SettingsPath)
+		if err != nil {
+			return err
+		}
+		stored := make([]usersettings.Driver, len(drivers))
+		for index, driver := range drivers {
+			stored[index] = driver.stored(key)
 		}
 		fresh.ApproveDrivers(deckKey, stored, gate.input.Now())
 		return usersettings.Save(gate.input.SettingsPath, fresh)
@@ -477,9 +491,9 @@ func (gate *liveCodeGate) decide(cfg *config.Config, presentation *transformer.T
 			decision.wanted = append(decision.wanted, driver)
 			if previous := gate.previousCommand(settings, deckKey, name); previous != nil {
 				if decision.previousCommands == nil {
-					decision.previousCommands = map[string]string{}
+					decision.previousCommands = map[string][]string{}
 				}
-				decision.previousCommands[name] = strings.Join(previous, " ")
+				decision.previousCommands[name] = previous
 			}
 		}
 	}
@@ -628,13 +642,47 @@ func newApprovalRequest(deck string, cfg *config.Config, blocks []approvalBlock,
 	return request
 }
 
-// displayedCommand returns a custom driver's command and arguments as the
-// frontmatter writes them, with every ${NAME} left as written and never
-// expanded, so the question never shows a secret a variable holds. A
-// change in a variable's value still asks again, since the approval
-// matches the expanded command line by its digest.
+// displayedCommand returns a custom driver's command and arguments for
+// the question: see maskedCommand.
 func displayedCommand(settings config.DriverConfig) string {
-	return strings.Join(append([]string{settings.Command}, settings.Args...), " ")
+	return maskedCommand(append([]string{settings.Command}, settings.Args...), os.LookupEnv)
+}
+
+// secretNamePattern matches a variable name that looks like it holds a
+// secret.
+var secretNamePattern = regexp.MustCompile(`(?i)PASS|TOKEN|KEY|SECRET|CREDENTIAL|AUTH`)
+
+// maskedCommand joins a command template, its command and arguments as
+// the frontmatter writes them, for showing to the person. A ${NAME} whose
+// name does not look secret shows its value from lookup, so the person
+// sees what runs. One whose name looks secret (it contains PASS, which
+// covers PASSWORD and PASSWD, TOKEN, KEY, SECRET, CREDENTIAL or AUTH, in
+// any case) stays ${NAME}, as does a variable that is not set. Nothing
+// shown this way is ever stored: the settings keep the template and a
+// digest.
+func maskedCommand(template []string, lookup func(string) (string, bool)) string {
+	return strings.Join(maskedParts(template, lookup), " ")
+}
+
+// maskedParts is maskedCommand for each part of template, unjoined.
+func maskedParts(template []string, lookup func(string) (string, bool)) []string {
+	masked := func(name string) (string, bool) {
+		if !secretNamePattern.MatchString(name) {
+			if value, found := lookup(name); found {
+				return value, true
+			}
+		}
+		return "${" + name + "}", true
+	}
+	parts := make([]string, len(template))
+	for index, part := range template {
+		shown, err := config.ExpandEnv(part, "", masked)
+		if err != nil {
+			shown = part
+		}
+		parts[index] = shown
+	}
+	return parts
 }
 
 // terminalAsker asks on the terminal, before the TUI starts.
@@ -685,6 +733,9 @@ func printApprovalRequest(out io.Writer, request approvalRequest) {
 		}
 		if entry.PreviousCommand != "" {
 			line += " (was: " + entry.PreviousCommand + ")"
+		}
+		if entry.ValueChanged {
+			line += " (a value in this command changed since it was approved)"
 		}
 		fmt.Fprintln(out, line)
 	}
