@@ -134,6 +134,22 @@ final class DeckTabDriversTests: HostedTestCase {
         XCTAssertTrue(form.rawEditor("drivers.sqlite.connections") === raw)
     }
 
+    /// A --- line still ends tap's frontmatter even when it sits deeper than
+    /// the entry's own indent, inside a connections block: it is refused
+    /// like any other line that would close the frontmatter early.
+    func testRawSettingsRefuseADashesLineDeeperThanTheEntry() async throws {
+        let (_, controller, form) = try await openOnTheDeckTab(try connectionsDeck())
+        let editor = controller.editor
+        let original = "    connections:\n      incident:\n        path: ./incident.db\n"
+        let unedited = editor.string
+        var raw = try XCTUnwrap(form.rawEditor("drivers.sqlite.connections"))
+        raw.string = "    connections:\n      incident:\n        ---\n"
+        form.textDidEndEditing(Notification(name: NSText.didEndEditingNotification, object: raw))
+        XCTAssertEqual(editor.string, unedited, "a --- line deeper than the entry's indent would still close the frontmatter there")
+        raw = try XCTUnwrap(form.rawEditor("drivers.sqlite.connections"))
+        XCTAssertEqual(raw.string, original, "the row goes back to the file's text")
+    }
+
     /// An args list written as a block is its own lines of text, as the
     /// DeckTabDrivers board draws it; the row follows the text (an undo, a
     /// disk load) and never writes stale lines back.
