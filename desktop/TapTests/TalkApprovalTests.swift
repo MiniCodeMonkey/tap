@@ -66,6 +66,64 @@ final class TalkApprovalTests: PresentingTestCase {
         try await stopPresenting(controller)
     }
 
+    /// tap present is replaced under its approval sheet by the port
+    /// fallback (tap said the remembered port is taken; the session is
+    /// stopped, not restarted, and a new one starts on no port). The new
+    /// process asks q1 again: the old sheet must be gone, and its Allow
+    /// must reach nothing.
+    func testAPortFallbackDropsTheTalksApprovalSheet() async throws {
+        let record = try Fixtures.temporaryFolder().appendingPathComponent("record")
+        AppEnvironment.shared.presentExecutableURL = try FakeTapScripts.presenting(events: [Self.approvalQuestion], exitsOnAnswer: false, recordingTo: record)
+        let (_, controller) = try await openDeckForPresenting()
+        let deckWindow = try XCTUnwrap(controller.editor.window?.windowController as? DeckWindowController)
+        let presentation = controller.presentation
+        presentation.start(PresentationOptions(mode: .play, startSlide: 1))
+        try await waitUntil(timeout: 30, "the first process's question") { presentation.pendingQuestion?.id == "q1" }
+        try await waitUntil(timeout: 5, "its sheet") { deckWindow.questionSheetQuestionID == "q1" }
+        let sheet = try XCTUnwrap(deckWindow.questionSheet as? ApprovalSheet)
+        let firstPid = try XCTUnwrap(presentation.session?.processIdentifier)
+        // tap's own words for a taken port, delivered the way the session delivers its events.
+        presentation.handle(.error(TapErrorPayload(code: "failed", message: "port 4321 is already in use (another tap dev may be running); pass --port <other>")))
+        try await waitUntil(timeout: 10, "the question gone with its process") { presentation.pendingQuestion == nil }
+        XCTAssertNil(deckWindow.questionSheet, "the sheet went with the process that asked")
+        XCTAssertNil(deckWindow.window?.attachedSheet)
+        try await waitUntil(timeout: 30, "the new process's question") {
+            presentation.pendingQuestion?.id == "q1" && presentation.session?.processIdentifier != nil && presentation.session?.processIdentifier != firstPid
+        }
+        try await waitUntil(timeout: 5, "a fresh sheet") { deckWindow.questionSheet is ApprovalSheet && deckWindow.questionSheet !== sheet }
+        sheet.acceptButton.performClick(nil)
+        try await Task.sleep(nanoseconds: 500_000_000)
+        let recorded = try String(contentsOf: record, encoding: .utf8)
+        XCTAssertFalse(recorded.contains(#""value":true"#), "the old sheet's Allow reached nothing: \(recorded)")
+        XCTAssertEqual(recorded.components(separatedBy: "arguments:").count - 1, 2, "a second tap present, the fallback's")
+        try XCTUnwrap(deckWindow.questionSheet?.button(titled: "Don't Allow")).performClick(nil)
+        try await waitUntil(timeout: 5, "the current question's answer") { (try? String(contentsOf: record, encoding: .utf8))?.contains(#""value":false"#) == true }
+        try await waitUntil(timeout: 40, "the talk") { presentation.state == .presenting }
+        try await stopPresenting(controller)
+    }
+
+    /// tap present asks a question this version of the app does not know:
+    /// it is declined with a log line, and no sheet shows.
+    func testAnUnknownTalkQuestionIsDeclined() async throws {
+        let record = try Fixtures.temporaryFolder().appendingPathComponent("record")
+        let mystery = #"{"type":"question","id":"q1","kind":"mystery","payload":{"deck":"/private/tmp/t/ops.md"}}"#
+        AppEnvironment.shared.presentExecutableURL = try FakeTapScripts.presenting(events: [mystery], exitsOnAnswer: false, recordingTo: record)
+        let (_, controller) = try await openDeckForPresenting()
+        let deckWindow = try XCTUnwrap(controller.editor.window?.windowController as? DeckWindowController)
+        let presentation = controller.presentation
+        presentation.start(PresentationOptions(mode: .play, startSlide: 1))
+        try await waitUntil(timeout: 30, "the answer to the unknown question") {
+            (try? String(contentsOf: record, encoding: .utf8))?.contains(#""id":"q1""#) == true
+        }
+        let recorded = try String(contentsOf: record, encoding: .utf8)
+        XCTAssertTrue(recorded.contains(#"stdin: {"type":"answer","id":"q1","value":false}"#), recorded)
+        XCTAssertFalse(recorded.contains(#""value":true"#), recorded)
+        XCTAssertNil(deckWindow.questionSheet)
+        XCTAssertTrue(presentation.lastTalkLog?.text.contains("the mystery question is not answered by this version of the app; declined") == true)
+        try await waitUntil(timeout: 40, "the talk") { presentation.state == .presenting }
+        try await stopPresenting(controller)
+    }
+
     /// tap present withdraws a startup question (a reload changed the
     /// deck) and asks another: the first sheet goes, the second shows, and
     /// the windows wait only for the live one.
@@ -163,6 +221,7 @@ final class TalkApprovalTests: PresentingTestCase {
         XCTAssertTrue(deckWindow.questionSheet === talkSheet, "the talk's sheet is still the one up")
         try XCTUnwrap(talkSheet.button(titled: "Don't Allow")).performClick(nil)
         try await waitUntil(timeout: 40, "the talk") { presentation.state == .presenting }
+        XCTAssertFalse(storedApprovals().contains("approvals"), "the real tap present stored nothing for the talk's no")
         try await Task.sleep(nanoseconds: 1_000_000_000)
         XCTAssertNil(deckWindow.questionSheet, "still waiting: a talk runs")
         XCTAssertEqual(deckWindow.deckQuestions.count, 1)

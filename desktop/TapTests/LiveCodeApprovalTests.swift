@@ -141,6 +141,28 @@ final class LiveCodeApprovalTests: HostedTestCase {
         XCTAssertEqual(behindWindow.questionSheetSource, .deck)
     }
 
+    /// tap dev asks a question this version of the app does not know: it
+    /// is declined with a log line, no sheet shows, and never answered yes.
+    func testAnUnknownDeckQuestionIsDeclined() async throws {
+        let record = try Fixtures.temporaryFolder().appendingPathComponent("record")
+        let bundled = AppEnvironment.shared.tapExecutableURL
+        AppEnvironment.shared.tapExecutableURL = try FakeTapScripts.askingApproval(recordingTo: record, kind: "mystery")
+        defer { AppEnvironment.shared.tapExecutableURL = bundled }
+        approvesLiveCodeOnOpen = false
+        let document = try await openDeck(try Fixtures.copyDeck("live-code.md"))
+        let controller = try XCTUnwrap(document.sessionController)
+        let deckWindow = try XCTUnwrap(document.windowControllers.first as? DeckWindowController)
+        try await waitUntil(timeout: 30, "the answer to the unknown question") {
+            (try? String(contentsOf: record, encoding: .utf8))?.contains(#""id":"q1""#) == true
+        }
+        let recorded = try String(contentsOf: record, encoding: .utf8)
+        XCTAssertTrue(recorded.contains(#"stdin: {"type":"answer","id":"q1","value":false}"#), recorded)
+        XCTAssertFalse(recorded.contains(#""value":true"#), recorded)
+        XCTAssertNil(deckWindow.questionSheet)
+        XCTAssertTrue(deckWindow.deckQuestions.isEmpty)
+        XCTAssertTrue(controller.session.log.text.contains("the mystery question is not one this version of the app answers; declined"))
+    }
+
     /// The test hook answers Allow for a deck a test approved ahead of time,
     /// through the path a click takes: no sheet ever shows, and tap writes
     /// its own full record of the custom driver, its digest included.
