@@ -57,23 +57,55 @@ public enum DeckSchema {
         }
     }
 
-    /// `default` is null, a string, a boolean or a number.
+    /// `default` is null, a string, a boolean or a number today. A list
+    /// or an object decodes as its YAML flow text ("[a, b]", "{k: v}"),
+    /// so a future default of that kind never fails the whole schema.
     private enum Default: Decodable {
+        /// A string.
         case text(String)
+        /// A boolean, a number, a list or an object, written as YAML reads it.
+        case literal(String)
 
         var text: String {
             switch self {
-            case .text(let value): return value
+            case .text(let value), .literal(let value): return value
             }
         }
 
         init(from decoder: Decoder) throws {
-            let container = try decoder.singleValueContainer()
-            if let value = try? container.decode(Bool.self) { self = .text(value ? "true" : "false"); return }
-            if let value = try? container.decode(Int.self) { self = .text(String(value)); return }
-            if let value = try? container.decode(Double.self) { self = .text(String(value)); return }
-            self = .text(try container.decode(String.self))
+            if let container = try? decoder.singleValueContainer() {
+                if let value = try? container.decode(Bool.self) { self = .literal(value ? "true" : "false"); return }
+                if let value = try? container.decode(Int.self) { self = .literal(String(value)); return }
+                if let value = try? container.decode(Double.self) { self = .literal(String(value)); return }
+                if let value = try? container.decode(String.self) { self = .text(value); return }
+            }
+            if var list = try? decoder.unkeyedContainer() {
+                var items: [String] = []
+                while !list.isAtEnd { items.append(try list.decodeNil() ? "null" : try list.decode(Default.self).flowText) }
+                self = .literal("[" + items.joined(separator: ", ") + "]")
+                return
+            }
+            let object = try decoder.container(keyedBy: AnyKey.self)
+            let pairs = try object.allKeys.sorted { $0.stringValue < $1.stringValue }.map { key in
+                Frontmatter.scalar(forString: key.stringValue) + ": " + (try object.decodeNil(forKey: key) ? "null" : try object.decode(Default.self, forKey: key).flowText)
+            }
+            self = .literal("{" + pairs.joined(separator: ", ") + "}")
         }
+
+        /// The value as it reads inside a flow collection: a string quoted when YAML needs it.
+        private var flowText: String {
+            switch self {
+            case .text(let value): return Frontmatter.scalar(forString: value)
+            case .literal(let value): return value
+            }
+        }
+    }
+
+    private struct AnyKey: CodingKey {
+        let stringValue: String
+        var intValue: Int? { nil }
+        init(stringValue: String) { self.stringValue = stringValue }
+        init?(intValue: Int) { nil }
     }
 
     public static func decode(_ data: Data) throws -> [SchemaKey] {

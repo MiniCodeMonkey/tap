@@ -32,6 +32,13 @@ final class DeckSchemaTests: XCTestCase {
         XCTAssertFalse(keys[4].isScalar)
     }
 
+    func testAListOrObjectDefaultDecodesAsItsFlowText() throws {
+        let json = #"{"ok":true,"keys":[{"name":"a","type":"list","default":["x","y: z",null,2]},{"name":"b","type":"object","default":{"k":"v","j":[true]}},{"name":"c","type":"string","default":"plain"}]}"#
+        let keys = try DeckSchema.decode(Data(json.utf8))
+        XCTAssertEqual(keys.map(\.defaultValue), ["[x, \"y: z\", null, 2]", "{j: [true], k: v}", "plain"],
+                       "a default that is not a scalar never fails the whole schema")
+    }
+
     func testLabelsReadAsWords() {
         XCTAssertEqual(SchemaKey(name: "aspectRatio", type: "string").label, "Aspect ratio")
         XCTAssertEqual(SchemaKey(name: "title", type: "string").label, "Title")
