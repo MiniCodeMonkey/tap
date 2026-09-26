@@ -110,6 +110,14 @@ final class DeckTabDriversTests: HostedTestCase {
         form.textDidEndEditing(Notification(name: NSText.didEndEditingNotification, object: raw))
         XCTAssertEqual(editor.string, accepted, "a block that lost its indent would leave its driver")
         raw = try XCTUnwrap(form.rawEditor("drivers.sqlite.connections"))
+        raw.string = "    connections:\n  shell: {}\n"
+        form.textDidEndEditing(Notification(name: NSText.didEndEditingNotification, object: raw))
+        XCTAssertEqual(editor.string, accepted, "a later line at the drivers' indent would declare a driver from the Connections box")
+        raw = try XCTUnwrap(form.rawEditor("drivers.sqlite.connections"))
+        raw.string = "    connections:\n      incident:\n        path: x.db\ntitle: Twice\n"
+        form.textDidEndEditing(Notification(name: NSText.didEndEditingNotification, object: raw))
+        XCTAssertEqual(editor.string, accepted, "a later line at the top level would repeat a key of the frontmatter")
+        raw = try XCTUnwrap(form.rawEditor("drivers.sqlite.connections"))
         XCTAssertEqual(raw.string, "    connections:\n      incident:\n        path: ${INCIDENT_DB}\n", "the editor reads the text again")
         editor.undoManager?.undo()
         raw = try XCTUnwrap(form.rawEditor("drivers.sqlite.connections"))

@@ -419,9 +419,11 @@ final class DeckFormViewController: NSViewController, NSTextFieldDelegate, NSTex
 
     /// A raw editor lost focus, or an autosave took its text: its lines
     /// replace the entry's, with the file's own line endings and one at
-    /// the end. A line that is "---" would close the frontmatter there,
-    /// and a first line shallower than the entry's indent would leave its
-    /// parent: both are refused with a beep, and the text view reads the
+    /// the end. A line that is "---" would close the frontmatter there; a
+    /// first line shallower than the entry's indent, or a later line not
+    /// deeper than it (other than a "- " item at the entry's own indent,
+    /// a blank line or a comment, which the entry keeps), would leave its
+    /// parent: each is refused with a beep, and the text view reads the
     /// block again.
     func applyRawEditor(_ textView: NSTextView) {
         guard !isDiscarding, let binding = rawEditors.first(where: { $0.textView === textView }), let key = DeckSchema.key(at: binding.path, in: keys) else { return }
@@ -431,7 +433,13 @@ final class DeckFormViewController: NSViewController, NSTextFieldDelegate, NSTex
         guard raw != frontmatter.rawBlock(at: binding.path), let entry = frontmatter.entry(at: binding.path) else { return }
         let lines = raw.components(separatedBy: frontmatter.lineEnding)
         let firstIndent = lines.first.map { $0.prefix { $0 == " " }.count } ?? 0
-        guard !lines.contains(where: { $0.trimmingCharacters(in: .whitespaces) == "---" }), firstIndent >= entry.indent,
+        let leavesTheEntry = lines.dropFirst().contains { line in
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            guard !trimmed.isEmpty, !trimmed.hasPrefix("#") else { return false }
+            let indent = line.prefix { $0 == " " }.count
+            return indent < entry.indent || (indent == entry.indent && !trimmed.hasPrefix("- "))
+        }
+        guard !lines.contains(where: { $0.trimmingCharacters(in: .whitespaces) == "---" }), firstIndent >= entry.indent, !leavesTheEntry,
               let replacement = frontmatter.settingRawBlock(at: binding.path, to: raw) else {
             NSSound.beep()
             textView.string = frontmatter.rawBlock(at: binding.path) ?? ""
