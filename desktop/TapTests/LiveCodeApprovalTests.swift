@@ -197,6 +197,10 @@ final class LiveCodeApprovalTests: HostedTestCase {
         XCTAssertNil(hook(QuestionPayload(deck: deck, drivers: [ApprovalDriver(name: "fortune")])), "a driver the test did not approve")
         XCTAssertNil(hook(QuestionPayload(deck: deck, drivers: [ApprovalDriver(name: "sqlite"), ApprovalDriver(name: "fortune")])))
         XCTAssertEqual(hook(QuestionPayload(deck: deck, drivers: [ApprovalDriver(name: "sqlite")])), true)
+        XCTAssertNil(hook(QuestionPayload(deck: deck, drivers: [ApprovalDriver(name: "sqlite", command: "/usr/bin/true", previousCommand: "sqlite3")])),
+                     "a driver whose command changed since it was approved")
+        XCTAssertNil(hook(QuestionPayload(deck: deck, drivers: [ApprovalDriver(name: "sqlite", valueChanged: true)])),
+                     "a driver with a value in its command that changed since it was approved")
         XCTAssertNil(hook(QuestionPayload(deck: "/private/tmp/elsewhere.md", drivers: [ApprovalDriver(name: "sqlite")])), "another deck")
         XCTAssertNil(hook(QuestionPayload(deck: deck, drivers: [])), "a question with no drivers")
         XCTAssertNil(hook(QuestionPayload(drivers: [ApprovalDriver(name: "sqlite")])), "a question with no deck")
