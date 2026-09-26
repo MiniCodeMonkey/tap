@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -150,7 +151,7 @@ func newGateHarness(t *testing.T, approved ...usersettings.Driver) *gateHarness 
 	harness.settings = filepath.Join(t.TempDir(), "settings.yaml")
 	if len(approved) > 0 {
 		var settings usersettings.Settings
-		settings.ApproveDrivers(harness.deckKey, approved, approvalNow)
+		settings.ApproveDrivers(harness.deckKey, withDigests(t, harness.settings, approved...), approvalNow)
 		if err := usersettings.Save(harness.settings, settings); err != nil {
 			t.Fatal(err)
 		}
@@ -189,6 +190,45 @@ func (harness *gateHarness) allows(name string, settings config.DriverConfig) bo
 	cfg := config.DefaultConfig()
 	cfg.Drivers[name] = settings
 	return harness.currentPolicy().Allows(name, buildDriverRegistry(cfg, "").CommandLine(name))
+}
+
+// withDigests returns drivers with each command digested under the
+// approval key next to settingsPath, making the key when there is none.
+// Command stands for the command line the driver runs, since these tests
+// write no ${NAME}.
+func withDigests(t *testing.T, settingsPath string, drivers ...usersettings.Driver) []usersettings.Driver {
+	t.Helper()
+	key, err := usersettings.EnsureApprovalKey(settingsPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	digested := make([]usersettings.Driver, len(drivers))
+	for index, driver := range drivers {
+		driver.Digest = usersettings.CommandDigest(key, driver.Command)
+		digested[index] = driver
+	}
+	return digested
+}
+
+// coversDriver reports whether the settings at settingsPath approve deck
+// to run driver, whose Command is the command line it runs.
+func coversDriver(t *testing.T, settingsPath string, deck usersettings.DeckKey, driver usersettings.Driver) bool {
+	t.Helper()
+	settings, err := usersettings.Load(settingsPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	key, err := usersettings.LoadApprovalKey(settingsPath)
+	if err != nil {
+		return false
+	}
+	driver.Digest = usersettings.CommandDigest(key, driver.Command)
+	return settings.Covers(deck, driver)
+}
+
+func (harness *gateHarness) covers(t *testing.T, driver usersettings.Driver) bool {
+	t.Helper()
+	return coversDriver(t, harness.settings, harness.deckKey, driver)
 }
 
 func (harness *gateHarness) stored() usersettings.Settings {
@@ -280,10 +320,10 @@ func TestGateReloadAsksAboutANewDriverAndKeepsTheApprovedOnesRunning(t *testing.
 
 	harness.asker.answer(t, true)
 	waitUntil(t, "python runs", func() bool { return harness.allows("python", python3Driver) })
-	if !harness.stored().Covers(harness.deckKey, approvedPython3) {
+	if !harness.covers(t, approvedPython3) {
 		t.Errorf("the approval was not stored: %+v", harness.stored())
 	}
-	if !harness.stored().Covers(harness.deckKey, approvedShell) {
+	if !harness.covers(t, approvedShell) {
 		t.Errorf("storing python lost shell: %+v", harness.stored())
 	}
 	harness.mu.Lock()
@@ -348,7 +388,7 @@ func TestGateDeclineKeepsTheNewDriverRefusedForTheRun(t *testing.T) {
 
 	harness.reload(map[string]config.DriverConfig{"shell": shellDriver, "python": python3Driver})
 	harness.asker.noRequest(t)
-	if harness.stored().Covers(harness.deckKey, approvedPython3) {
+	if harness.covers(t, approvedPython3) {
 		t.Error("a no stored an approval")
 	}
 
@@ -413,9 +453,8 @@ func TestGateAsksAgainWhenAnApprovedCommandChanges(t *testing.T) {
 
 	harness.asker.answer(t, true)
 	waitUntil(t, "python runs bash", func() bool { return harness.allows("python", bashDriver) })
-	stored := harness.stored()
-	if !stored.Covers(harness.deckKey, usersettings.Driver{Name: "python", Command: []string{"bash", "-c"}}) || stored.Covers(harness.deckKey, approvedPython3) {
-		t.Errorf("stored = %+v, want the bash command in place of python3", stored)
+	if !harness.covers(t, usersettings.Driver{Name: "python", Command: []string{"bash", "-c"}}) || harness.covers(t, approvedPython3) {
+		t.Errorf("stored = %+v, want the bash command in place of python3", harness.stored())
 	}
 }
 
@@ -489,7 +528,7 @@ func TestStartupAsksAgainForARecordStoredWithoutACommand(t *testing.T) {
 	if !policy.Allows("python", []string{"python3", "-c"}) {
 		t.Errorf("policy = %+v, want python allowed after a yes", policy)
 	}
-	if !harness.stored().Covers(harness.deckKey, approvedPython3) {
+	if !harness.covers(t, approvedPython3) {
 		t.Errorf("stored = %+v, want python stored with its command", harness.stored())
 	}
 }
@@ -516,5 +555,162 @@ func TestAppApprovalAskerWithdrawsAQuestionWhenItsContextIsWithdrawn(t *testing.
 	}
 	if err := questions.answer(fmt.Sprint(question["id"]), json.RawMessage("true")); !errors.Is(err, errUnknownQuestion) {
 		t.Errorf("answering a withdrawn question: %v, want errUnknownQuestion", err)
+	}
+}
+
+// unwithdrawableAsker is a blockingAsker that, like the terminal, cannot
+// take a question back: it waits for the answer even after tap withdraws
+// the question.
+type unwithdrawableAsker struct {
+	*blockingAsker
+}
+
+func (asker unwithdrawableAsker) askApproval(_ context.Context, request approvalRequest) (bool, error) {
+	return asker.blockingAsker.askApproval(context.Background(), request)
+}
+
+func TestGateApprovesOnlyWhatTheTerminalShowed(t *testing.T) {
+	harness := newGateHarness(t, approvedShell)
+	harness.gate.setAsker(unwithdrawableAsker{harness.asker})
+	harness.start(t, map[string]config.DriverConfig{"shell": shellDriver})
+
+	harness.reload(map[string]config.DriverConfig{"shell": shellDriver, "python": python3Driver})
+	if request := harness.asker.nextRequest(t); driverNames(request) != "python=python3 -c" {
+		t.Fatalf("request = %s, want python3", driverNames(request))
+	}
+	// The deck changes while the terminal still shows python3, and the
+	// person answers yes to what they saw.
+	harness.reload(map[string]config.DriverConfig{"shell": shellDriver, "python": bashDriver})
+	harness.asker.answer(t, true)
+
+	request := harness.asker.nextRequest(t)
+	if driverNames(request) != "python=bash -c" || request.Drivers[0].PreviousCommand != "python3 -c" {
+		t.Errorf("request = %+v, want bash asked about next, after python3", request)
+	}
+	if !harness.covers(t, approvedPython3) {
+		t.Error("the yes to python3 was not stored")
+	}
+	if harness.covers(t, usersettings.Driver{Name: "python", Command: []string{"bash", "-c"}}) {
+		t.Error("a yes to python3 approved bash, which the person never saw")
+	}
+	if harness.allows("python", bashDriver) {
+		t.Error("bash runs on a yes given to python3")
+	}
+}
+
+func TestGateNeverStoresOrShowsTheValueOfAVariable(t *testing.T) {
+	const secret = "s3cret-value-never-shown"
+	t.Setenv("TAP_TEST_DB_PASSWORD", secret)
+	database := config.DriverConfig{Command: "sh", Args: []string{"-c", "cat", "postgres://app:${TAP_TEST_DB_PASSWORD}@db/app"}}
+	harness := newGateHarness(t, approvedShell)
+	harness.start(t, map[string]config.DriverConfig{"shell": shellDriver})
+
+	harness.reload(map[string]config.DriverConfig{"shell": shellDriver, "database": database})
+	request := harness.asker.nextRequest(t)
+	payload, err := json.Marshal(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(payload), secret) || !strings.Contains(string(payload), "${TAP_TEST_DB_PASSWORD}") {
+		t.Errorf("payload = %s, want the variable as written and never its value", payload)
+	}
+	prompt := &bytes.Buffer{}
+	printApprovalRequest(prompt, request)
+	if strings.Contains(prompt.String(), secret) || !strings.Contains(prompt.String(), "${TAP_TEST_DB_PASSWORD}") {
+		t.Errorf("prompt = %q, want the variable as written and never its value", prompt.String())
+	}
+
+	harness.asker.answer(t, true)
+	waitUntil(t, "the database driver runs", func() bool { return harness.allows("database", database) })
+	raw, err := os.ReadFile(harness.settings)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(raw), secret) || !strings.Contains(string(raw), "${TAP_TEST_DB_PASSWORD}") {
+		t.Errorf("settings.yaml = %s, want the template and no secret", raw)
+	}
+
+	listed := useSettings(t)
+	if err := os.MkdirAll(filepath.Dir(listed), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(listed, raw, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for _, args := range [][]string{{"approval", "list"}, {"approval", "list", "--json"}} {
+		_, stdout, _ := runTap(t, args...)
+		if strings.Contains(stdout, secret) || !strings.Contains(stdout, "TAP_TEST_DB_PASSWORD") {
+			t.Errorf("tap %s = %s, want the template and no secret", strings.Join(args, " "), stdout)
+		}
+	}
+}
+
+func TestGateAsksAgainWhenAVariableInTheCommandChanges(t *testing.T) {
+	t.Setenv("TAP_TEST_INTERPRETER", "python3")
+	interpreter := config.DriverConfig{Command: "${TAP_TEST_INTERPRETER}", Args: []string{"-c"}}
+	harness := newGateHarness(t, approvedShell)
+	harness.start(t, map[string]config.DriverConfig{"shell": shellDriver})
+	harness.reload(map[string]config.DriverConfig{"shell": shellDriver, "python": interpreter})
+	harness.asker.nextRequest(t)
+	harness.asker.answer(t, true)
+	waitUntil(t, "python runs", func() bool { return harness.allows("python", interpreter) })
+
+	t.Setenv("TAP_TEST_INTERPRETER", "bash")
+	harness.reload(map[string]config.DriverConfig{"shell": shellDriver, "python": interpreter})
+	request := harness.asker.nextRequest(t)
+	if driverNames(request) != "python=${TAP_TEST_INTERPRETER} -c" || request.Drivers[0].PreviousCommand != "${TAP_TEST_INTERPRETER} -c" {
+		t.Errorf("request = %+v, want python asked again with the same template", request)
+	}
+	if harness.allows("python", interpreter) {
+		t.Error("python runs bash on an approval given while it ran python3")
+	}
+}
+
+func TestStartupAsksAgainWithoutTheApprovalKey(t *testing.T) {
+	for _, keyChange := range []struct {
+		apply  func(path string) error
+		name   string
+		python usersettings.Driver
+	}{
+		{name: "missing", apply: os.Remove, python: approvedPython3},
+		{name: "another key", apply: func(path string) error { return os.WriteFile(path, []byte(strings.Repeat("x", 32)), 0o600) }, python: approvedPython3},
+		// A record from before commands were stored has no digest, and
+		// no key must not make an empty digest that matches it.
+		{name: "missing, with a record without a command", apply: os.Remove, python: usersettings.Driver{Name: "python"}},
+	} {
+		t.Run(keyChange.name, func(t *testing.T) {
+			harness := newGateHarness(t, approvedShell, keyChange.python)
+			if err := keyChange.apply(usersettings.ApprovalKeyPath(harness.settings)); err != nil {
+				t.Fatal(err)
+			}
+			cfg, pres := gateDeck(map[string]config.DriverConfig{"shell": shellDriver, "python": python3Driver})
+			started := make(chan server.LiveCodePolicy, 1)
+			go func() {
+				policy, _ := harness.gate.startup(cfg, pres)
+				started <- policy
+			}()
+			if request := harness.asker.nextRequest(t); driverNames(request) != "python=python3 -c" {
+				t.Errorf("request = %s, want python asked again", driverNames(request))
+			}
+			harness.asker.answer(t, false)
+			if policy := <-started; policy.Allows("python", []string{"python3", "-c"}) || !policy.Allows("shell", nil) {
+				t.Errorf("policy = %+v, want shell only", policy)
+			}
+		})
+	}
+}
+
+func TestGateReportsAnUnreadableSettingsFileOnce(t *testing.T) {
+	harness := newGateHarness(t)
+	if err := os.WriteFile(harness.settings, []byte("approvals: [unclosed"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	harness.input.Interactive = false
+	harness.gate = newLiveCodeGate(harness.input)
+	harness.start(t, map[string]config.DriverConfig{"shell": shellDriver})
+	harness.reload(map[string]config.DriverConfig{"shell": shellDriver})
+	harness.reload(map[string]config.DriverConfig{"shell": shellDriver})
+	if count := strings.Count(harness.out.String(), "Ignoring "); count != 1 {
+		t.Errorf("output = %q, want the unreadable file named once", harness.out.String())
 	}
 }

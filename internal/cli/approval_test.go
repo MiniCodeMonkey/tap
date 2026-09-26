@@ -111,7 +111,7 @@ func TestApprovalAsksOnceAndRemembersTheAnswer(t *testing.T) {
 	}
 	settings, _ := usersettings.Load(input.SettingsPath)
 	key := resolveKey(t, input.Deck)
-	if !settings.Covers(key, usersettings.Driver{Name: "python", Command: []string{"python3", "-c"}}) || !settings.Covers(key, usersettings.Driver{Name: "shell"}) {
+	if !coversDriver(t, input.SettingsPath, key, usersettings.Driver{Name: "python", Command: []string{"python3", "-c"}}) || !settings.Covers(key, usersettings.Driver{Name: "shell"}) {
 		t.Errorf("the approval was not saved with python's command: %+v", settings)
 	}
 

@@ -106,9 +106,10 @@ func TestAppDevAsksAgainWhenTheDeckFileGainsADriver(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	settings, err := usersettings.Load(filepath.Join(configHome, "tap", "settings.yaml"))
-	if err != nil || !settings.Covers(deckKey, usersettings.Driver{Name: "runner", Command: []string{"sh"}}) {
-		t.Errorf("settings = %+v, %v; want runner stored with its command", settings, err)
+	settingsPath := filepath.Join(configHome, "tap", "settings.yaml")
+	if !coversDriver(t, settingsPath, deckKey, usersettings.Driver{Name: "runner", Command: []string{"sh"}}) {
+		settings, _ := usersettings.Load(settingsPath)
+		t.Errorf("settings = %+v; want runner stored with its command", settings)
 	}
 }
 
@@ -123,7 +124,7 @@ func TestAppDevAsksAgainWhenTheBufferChangesACommand(t *testing.T) {
 		t.Fatal(err)
 	}
 	var settings usersettings.Settings
-	settings.ApproveDrivers(deckKey, []usersettings.Driver{{Name: "shell"}, {Name: "runner", Command: []string{"sh"}}}, time.Now())
+	settings.ApproveDrivers(deckKey, withDigests(t, filepath.Join(configHome, "tap", "settings.yaml"), usersettings.Driver{Name: "shell"}, usersettings.Driver{Name: "runner", Command: []string{"sh"}}), time.Now())
 	if err := usersettings.Save(filepath.Join(configHome, "tap", "settings.yaml"), settings); err != nil {
 		t.Fatal(err)
 	}

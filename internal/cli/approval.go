@@ -145,8 +145,8 @@ type liveCodeGate struct {
 	// open is the question being asked, nil when none is.
 	open *openApprovalQuestion
 	// approved and declined are the answers given in this run.
-	approved []usersettings.Driver
-	declined []usersettings.Driver
+	approved []liveDriver
+	declined []liveDriver
 	// refusedNotice is the drivers the last notice that live code is off
 	// named, so a run that cannot ask names each set once.
 	refusedNotice string
@@ -162,12 +162,15 @@ type liveCodeGate struct {
 	// unresolvedNoticed is true once the gate said the deck cannot be
 	// resolved.
 	unresolvedNoticed bool
+	// settingsNotice is the settings read error the gate last reported,
+	// so each one is said once.
+	settingsNotice string
 }
 
 // openApprovalQuestion is the question the gate is waiting on.
 type openApprovalQuestion struct {
 	withdraw context.CancelCauseFunc
-	drivers  []usersettings.Driver
+	drivers  []liveDriver
 }
 
 // approvalDecision is what the gate decides for one version of the deck.
@@ -175,10 +178,10 @@ type approvalDecision struct {
 	policy server.LiveCodePolicy
 	// wanted are the declared drivers that are neither approved nor
 	// declined in this run: the ones a question asks about.
-	wanted []usersettings.Driver
+	wanted []liveDriver
 	// refused are the declared drivers that are not approved, declined
 	// ones included.
-	refused []usersettings.Driver
+	refused []liveDriver
 	// approvedBefore names the declared drivers already approved.
 	approvedBefore []string
 	// previousCommands holds, for each wanted driver approved before with
@@ -360,10 +363,18 @@ func (gate *liveCodeGate) askUntilSettled() error {
 }
 
 // save stores a yes for drivers in the user settings.
-func (gate *liveCodeGate) save(drivers []usersettings.Driver) error {
+func (gate *liveCodeGate) save(drivers []liveDriver) error {
 	deckKey, err := usersettings.ResolveDeck(gate.input.Deck)
 	if err != nil {
 		return err
+	}
+	key, err := usersettings.EnsureApprovalKey(gate.input.SettingsPath)
+	if err != nil {
+		return err
+	}
+	stored := make([]usersettings.Driver, len(drivers))
+	for index, driver := range drivers {
+		stored[index] = driver.stored(key)
 	}
 	// Reload under the lock rather than reusing an earlier read: the
 	// person may have taken a while to answer, and another tap process
@@ -375,7 +386,7 @@ func (gate *liveCodeGate) save(drivers []usersettings.Driver) error {
 		if err != nil {
 			fresh = usersettings.Settings{}
 		}
-		fresh.ApproveDrivers(deckKey, drivers, gate.input.Now())
+		fresh.ApproveDrivers(deckKey, stored, gate.input.Now())
 		return usersettings.Save(gate.input.SettingsPath, fresh)
 	})
 }
@@ -428,31 +439,43 @@ func (gate *liveCodeGate) decide(cfg *config.Config, presentation *transformer.T
 	}
 	settings, err := usersettings.Load(gate.input.SettingsPath)
 	if err != nil {
-		// A malformed settings file must not stop the talk. A yes
-		// overwrites it with a well-formed one.
-		fmt.Fprintf(gate.input.Out, "Ignoring %s, it could not be read: %v\n", gate.input.SettingsPath, err)
+		// A settings file that cannot be read must not stop the talk. It
+		// fails closed: no stored approval counts, and a yes overwrites
+		// it with a well-formed one. Said once for each error.
+		if notice := err.Error(); notice != gate.settingsNotice {
+			gate.settingsNotice = notice
+			fmt.Fprintf(gate.input.Out, "Ignoring %s, it could not be read: %v\n", gate.input.SettingsPath, err)
+		}
 		settings = usersettings.Settings{}
+	} else {
+		gate.settingsNotice = ""
+	}
+	// Without the key no stored digest can match, so every custom driver
+	// is asked about again, and a yes makes the key.
+	key, keyErr := usersettings.LoadApprovalKey(gate.input.SettingsPath)
+	if keyErr != nil {
+		key = nil
 	}
 
 	decision := approvalDecision{blocks: blocks, deck: deckKey.String(), policy: server.LiveCodePolicy{Drivers: []string{}}}
 	for _, name := range cfg.DeclaredDrivers() {
-		driver := usersettings.Driver{Name: name, Command: approvalCommand(name, cfg.Drivers[name])}
+		driver := newLiveDriver(name, cfg.Drivers[name])
 		switch {
-		case settings.Covers(deckKey, driver) || containsDriver(gate.approved, driver):
+		case settings.Covers(deckKey, driver.stored(key)) || containsDriver(gate.approved, driver):
 			decision.approvedBefore = append(decision.approvedBefore, name)
 			decision.policy.Drivers = append(decision.policy.Drivers, name)
-			if driver.Command != nil {
+			if driver.expanded != nil {
 				if decision.policy.Commands == nil {
 					decision.policy.Commands = map[string][]string{}
 				}
-				decision.policy.Commands[name] = driver.Command
+				decision.policy.Commands[name] = driver.expanded
 			}
 		case containsDriver(gate.declined, driver):
 			decision.refused = append(decision.refused, driver)
 		default:
 			decision.refused = append(decision.refused, driver)
 			decision.wanted = append(decision.wanted, driver)
-			if previous := gate.previousCommand(settings, deckKey, name); previous != nil && !slices.Equal(previous, driver.Command) {
+			if previous := gate.previousCommand(settings, deckKey, name); previous != nil {
 				if decision.previousCommands == nil {
 					decision.previousCommands = map[string]string{}
 				}
@@ -463,20 +486,62 @@ func (gate *liveCodeGate) decide(cfg *config.Config, presentation *transformer.T
 	return decision
 }
 
-// previousCommand returns the command an earlier approval of the driver
-// name covered: the stored approval's, or else the one approved in this
-// run. It is nil when neither approved it with a command. The caller
-// holds gate.mu.
+// previousCommand returns the command template an earlier approval of
+// the driver name covered: the one approved in this run, or else the
+// stored approval's. It is nil when neither approved it with a command.
+// It can equal the template asked about now, when the command is the same
+// but a ${NAME} in it has a different value. The caller holds gate.mu.
 func (gate *liveCodeGate) previousCommand(settings usersettings.Settings, deckKey usersettings.DeckKey, name string) []string {
-	if approval, found := settings.ApprovalFor(deckKey); found && slices.Contains(approval.Drivers, name) && approval.Commands[name] != nil {
-		return approval.Commands[name]
-	}
 	for index := len(gate.approved) - 1; index >= 0; index-- {
-		if gate.approved[index].Name == name && gate.approved[index].Command != nil {
-			return gate.approved[index].Command
+		if gate.approved[index].name == name && gate.approved[index].expanded != nil {
+			return gate.approved[index].template
 		}
 	}
+	if approval, found := settings.ApprovalFor(deckKey); found && slices.Contains(approval.Drivers, name) && approval.CommandDigests[name] != "" {
+		return approval.Commands[name]
+	}
 	return nil
+}
+
+// liveDriver is a declared driver as the gate compares it. template is
+// its command and arguments as the frontmatter writes them, which is all
+// tap ever shows or stores of a command, so no expanded secret is shown
+// or written. expanded is the command line it runs, with every ${NAME}
+// expanded, kept in memory only and stored as a keyed digest. Both are
+// nil for a driver that runs no command of its own, and expanded is nil
+// for one whose command cannot be expanded, which runs nothing but an
+// error.
+type liveDriver struct {
+	name     string
+	template []string
+	expanded []string
+}
+
+func newLiveDriver(name string, settings config.DriverConfig) liveDriver {
+	driver := liveDriver{name: name, expanded: approvalCommand(name, settings)}
+	if settings.Command != "" && !slices.Contains(builtInDriverNames, name) {
+		driver.template = append([]string{settings.Command}, settings.Args...)
+	}
+	return driver
+}
+
+// unavailableDigest stands for a command's digest when there is no
+// approval key. It never matches a stored digest.
+const unavailableDigest = "unavailable"
+
+// stored returns the driver as the settings store and match it, with
+// its command line digested with key. A nil key digests nothing, so no
+// stored approval of a command can match.
+func (driver liveDriver) stored(key []byte) usersettings.Driver {
+	stored := usersettings.Driver{Name: driver.name, Command: driver.template}
+	switch {
+	case driver.expanded == nil:
+	case key == nil:
+		stored.Digest = unavailableDigest
+	default:
+		stored.Digest = usersettings.CommandDigest(key, driver.expanded)
+	}
+	return stored
 }
 
 // approvalCommand returns the command line an approval of a driver
@@ -496,23 +561,25 @@ func approvalCommand(name string, settings config.DriverConfig) []string {
 	return append([]string{command}, args...)
 }
 
-func containsDriver(drivers []usersettings.Driver, driver usersettings.Driver) bool {
-	return slices.ContainsFunc(drivers, func(candidate usersettings.Driver) bool {
-		return candidate.Name == driver.Name && slices.Equal(candidate.Command, driver.Command)
-	})
+// sameDriver reports whether two drivers run the same: the same name
+// and the same expanded command line.
+func sameDriver(a, b liveDriver) bool {
+	return a.name == b.name && slices.Equal(a.expanded, b.expanded)
+}
+
+func containsDriver(drivers []liveDriver, driver liveDriver) bool {
+	return slices.ContainsFunc(drivers, func(candidate liveDriver) bool { return sameDriver(candidate, driver) })
 }
 
 // sameDrivers reports whether a and b hold the same drivers, in order.
-func sameDrivers(a, b []usersettings.Driver) bool {
-	return slices.EqualFunc(a, b, func(x, y usersettings.Driver) bool {
-		return x.Name == y.Name && slices.Equal(x.Command, y.Command)
-	})
+func sameDrivers(a, b []liveDriver) bool {
+	return slices.EqualFunc(a, b, sameDriver)
 }
 
-func driverNamesOf(drivers []usersettings.Driver) []string {
+func driverNamesOf(drivers []liveDriver) []string {
 	names := make([]string, len(drivers))
 	for index, driver := range drivers {
-		names[index] = driver.Name
+		names[index] = driver.name
 	}
 	return names
 }
@@ -538,7 +605,7 @@ func newApprovalRequest(deck string, cfg *config.Config, blocks []approvalBlock,
 	for _, name := range wanted {
 		entry := approvalDriver{Name: name, Slides: []int{}}
 		if settings := cfg.Drivers[name]; settings.Command != "" && !slices.Contains(builtInDriverNames, name) {
-			entry.Command = displayedCommand(name, settings)
+			entry.Command = displayedCommand(settings)
 		}
 		for _, block := range blocks {
 			if block.Driver != name {
@@ -561,18 +628,13 @@ func newApprovalRequest(deck string, cfg *config.Config, blocks []approvalBlock,
 	return request
 }
 
-// displayedCommand returns what a custom driver's command will actually
-// run, with its ${NAME} variables expanded, so the prompt shows the same
-// thing the driver runs rather than the literal frontmatter text. A
-// variable that is not set falls back to the literal, unexpanded text:
-// the prompt's job is to inform, not to fail the question over a problem
-// the block itself will report when it runs.
-func displayedCommand(name string, settings config.DriverConfig) string {
-	command, args, err := settings.ExpandedCommand(name, os.LookupEnv)
-	if err != nil {
-		return strings.Join(append([]string{settings.Command}, settings.Args...), " ")
-	}
-	return strings.Join(append([]string{command}, args...), " ")
+// displayedCommand returns a custom driver's command and arguments as the
+// frontmatter writes them, with every ${NAME} left as written and never
+// expanded, so the question never shows a secret a variable holds. A
+// change in a variable's value still asks again, since the approval
+// matches the expanded command line by its digest.
+func displayedCommand(settings config.DriverConfig) string {
+	return strings.Join(append([]string{settings.Command}, settings.Args...), " ")
 }
 
 // terminalAsker asks on the terminal, before the TUI starts.
