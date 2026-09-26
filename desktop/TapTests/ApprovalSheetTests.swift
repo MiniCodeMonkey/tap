@@ -95,16 +95,87 @@ final class ApprovalSheetTests: HostedTestCase {
         XCTAssertEqual(sheet.wording, .newDrivers)
     }
 
-    /// Waits for the person's mockup sign-off with Step 5; a payload with
-    /// previousCommand reads as .newDrivers until then (which is what a
-    /// tap without the previousCommand field sends anyway).
-    func testAChangedCommandReadsAsANewDriverUntilStep5SignOff() {
+    /// The ApprovalCommandChanged board: the badge on the row, the command
+    /// before (struck out) and now, the code inline, and what stays allowed.
+    func testAChangedCommandSaysSo() throws {
         let sheet = ApprovalSheet(payload: QuestionPayload(
             deck: "/private/tmp/t/talk.md",
             drivers: [ApprovalDriver(name: "fortune", command: "/usr/bin/true", previousCommand: "/bin/cat", slides: [3], blocks: 1)],
             approvedBefore: ["sqlite"],
             blocks: [ApprovalBlock(driver: "fortune", code: "hello", slide: 3, block: 1)]), deckName: "talk.md")
+        XCTAssertEqual(sheet.wording, .changedCommands)
+        XCTAssertEqual(sheet.titleLabel.stringValue, "The command for fortune changed")
+        XCTAssertEqual(sheet.bodyLabel.stringValue, "You allowed fortune for \u{201C}talk.md\u{201D} when it ran a different command. "
+                       + "The deck now runs the command below, for example after a git pull. Read it before you allow it.")
+        XCTAssertEqual(sheet.acceptButton.title, "Allow fortune")
+        XCTAssertEqual(sheet.declineButton.title, "Don't Allow")
+        XCTAssertEqual(sheet.driverLabels.map(\.stringValue), ["fortune: 1 block on slide 3, command changed"])
+        XCTAssertEqual(sheet.commandChangeLabels.map(\.stringValue), ["Before: /bin/cat", "Now: /usr/bin/true"])
+        let before = sheet.commandChangeLabels[0].attributedStringValue
+        XCTAssertEqual(before.attribute(.strikethroughStyle, at: 0, effectiveRange: nil) as? Int, NSUnderlineStyle.single.rawValue,
+                       "the command approved before is struck out")
+        XCTAssertNil(sheet.commandChangeLabels[1].attributedStringValue.attribute(.strikethroughStyle, at: 0, effectiveRange: nil))
+        XCTAssertEqual(sheet.blockRows.map(\.codeLabel.stringValue), ["hello"], "the code inline under the row")
+        XCTAssertEqual(sheet.footerLabel?.stringValue, "The code goes to the command on its standard input. sqlite stays allowed.")
+        XCTAssertEqual(sheet.declineButton.keyEquivalent, "\r", "Return is still Don't Allow")
+        XCTAssertEqual(sheet.acceptButton.keyEquivalent, "")
+
+        // A deck whose only driver changed: nothing else was approved, so the footer names nothing that stays.
+        let only = ApprovalSheet(payload: QuestionPayload(
+            deck: "/t/talk.md", drivers: [ApprovalDriver(name: "fortune", command: "/usr/bin/true", previousCommand: "/bin/cat", slides: [3], blocks: 1)],
+            blocks: []), deckName: "talk.md")
+        XCTAssertEqual(only.wording, .changedCommands, "not the first-time wording: the deck was approved before")
+        XCTAssertEqual(only.footerLabel?.stringValue, "The code goes to the command on its standard input.")
+
+        // Without the field (a tap that does not send it), the new-driver wording stands.
+        let without = ApprovalSheet(payload: QuestionPayload(deck: "/t/talk.md", drivers: [ApprovalDriver(name: "fortune", command: "/usr/bin/true", slides: [3], blocks: 1)],
+                                                             approvedBefore: ["sqlite"], blocks: []), deckName: "talk.md")
+        XCTAssertEqual(without.wording, .newDrivers)
+        XCTAssertEqual(without.commandChangeLabels, [])
+        XCTAssertNil(without.footerLabel)
+        XCTAssertEqual(without.driverLabels.map(\.stringValue), ["fortune: 1 block on slide 3, runs: /usr/bin/true"])
+    }
+
+    /// tap's valueChanged: the command as written is the same, a value in
+    /// it changed (or tap lost its approval key). The board's layout, tap's
+    /// words, and no struck-out line, since there is no other command.
+    func testAChangedValueSaysSo() {
+        let sheet = ApprovalSheet(payload: QuestionPayload(
+            deck: "/private/tmp/t/env.md",
+            drivers: [ApprovalDriver(name: "echoer", command: "/bin/sh -c cat; : ${TAP_TEST_TOKEN}", valueChanged: true, slides: [2], blocks: 1)],
+            approvedBefore: ["sqlite", "shell"],
+            blocks: [ApprovalBlock(driver: "echoer", code: "hello via env", slide: 2, block: 1)]), deckName: "env.md")
+        XCTAssertEqual(sheet.wording, .valueChanged)
+        XCTAssertEqual(sheet.titleLabel.stringValue, "A value in the command for echoer changed since it was approved")
+        XCTAssertTrue(sheet.bodyLabel.stringValue.hasPrefix("You allowed echoer for \u{201C}env.md\u{201D} with the command below."), sheet.bodyLabel.stringValue)
+        XCTAssertTrue(sheet.bodyLabel.stringValue.hasSuffix("Read it before you allow it."))
+        XCTAssertEqual(sheet.acceptButton.title, "Allow echoer")
+        XCTAssertEqual(sheet.declineButton.title, "Don't Allow")
+        XCTAssertEqual(sheet.driverLabels.map(\.stringValue), ["echoer: 1 block on slide 2, value changed"])
+        XCTAssertEqual(sheet.commandChangeLabels.map(\.stringValue), ["Now: /bin/sh -c cat; : ${TAP_TEST_TOKEN}"], "no Before line")
+        XCTAssertNil(sheet.commandChangeLabels[0].attributedStringValue.attribute(.strikethroughStyle, at: 0, effectiveRange: nil))
+        XCTAssertEqual(sheet.blockRows.map(\.codeLabel.stringValue), ["hello via env"])
+        XCTAssertEqual(sheet.footerLabel?.stringValue, "The code goes to the command on its standard input. sqlite and shell stay allowed.")
+    }
+
+    /// The board's note: a request with a new driver and a changed one
+    /// keeps the new-driver title, with the badge on the changed row.
+    func testANewDriverAndAChangedCommandTogether() {
+        let sheet = ApprovalSheet(payload: QuestionPayload(
+            deck: "/private/tmp/t/talk.md",
+            drivers: [ApprovalDriver(name: "fortune", command: "/usr/bin/true", previousCommand: "/bin/cat", slides: [3], blocks: 1),
+                      ApprovalDriver(name: "shell", slides: [7], blocks: 1)],
+            approvedBefore: ["sqlite"],
+            blocks: [ApprovalBlock(driver: "fortune", code: "hello", slide: 3, block: 1),
+                     ApprovalBlock(driver: "shell", code: "tail -n 20 errors.log", slide: 7, block: 1)]), deckName: "talk.md")
         XCTAssertEqual(sheet.wording, .newDrivers)
+        XCTAssertEqual(sheet.titleLabel.stringValue, "This deck now also wants to run shell", "the title names only the new driver")
+        XCTAssertTrue(sheet.bodyLabel.stringValue.hasPrefix("You allowed sqlite and fortune for \u{201C}talk.md\u{201D} before. The deck now declares shell too"),
+                      sheet.bodyLabel.stringValue)
+        XCTAssertEqual(sheet.acceptButton.title, "Allow fortune and shell", "a yes allows both")
+        XCTAssertEqual(sheet.driverLabels.map(\.stringValue), ["fortune: 1 block on slide 3, command changed", "shell: 1 block on slide 7"])
+        XCTAssertEqual(sheet.commandChangeLabels.map(\.stringValue), ["Before: /bin/cat", "Now: /usr/bin/true"])
+        XCTAssertEqual(sheet.footerLabel?.stringValue, "The code goes to the command on its standard input. sqlite stays allowed.")
     }
 
     func testACustomDriverShowsItsCommand() {

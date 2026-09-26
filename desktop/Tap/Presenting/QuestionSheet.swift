@@ -206,20 +206,25 @@ final class ApprovalBlockRow: NSView {
 /// as the default button. The title is the spec's; the second time, when
 /// the deck gained a driver, it names only the new ones
 /// (internal/cli/approval.go builds the request that way). A driver
-/// approved before that comes back with another command is still read as
-/// a new driver until Step 5's mockup sign-off gives the changed-command
-/// wording its copy.
+/// approved before that tap asks about again, because its command changed
+/// or a value in it did, reads as the ApprovalCommandChanged board draws
+/// it: a badge on its row, the command before (struck out) and now, and a
+/// footer saying where the code goes and what stays allowed.
 final class ApprovalSheet: QuestionSheet {
-    /// Which of the three requests the sheet is for.
+    /// Which request the sheet is for.
     enum Wording: Equatable {
         /// The deck was never approved.
         case first
-        /// The deck was approved; these drivers are new to it.
+        /// The deck was approved; these drivers are new to it. A request
+        /// that also holds a changed driver reads this way, with the badge
+        /// on the changed driver's row.
         case newDrivers
-        /// A driver was approved with another command line (`previousCommand`).
-        /// Waits for the person's mockup sign-off (Step 5); nothing produces
-        /// this case yet.
+        /// Every driver asked about was approved with another command
+        /// line (`previousCommand`); some may have only a changed value.
         case changedCommands
+        /// Every driver asked about was approved with the same command as
+        /// written, and a value in it changed (`valueChanged`).
+        case valueChanged
     }
 
     /// The rows scroll past this height, so a deck with dozens of blocks
@@ -228,6 +233,12 @@ final class ApprovalSheet: QuestionSheet {
     let wording: Wording
     let summaryLabel: NSTextField
     let driverLabels: [NSTextField]
+    /// For each changed driver, in order: "Before: <command>", struck out,
+    /// when its command changed, and "Now: <command>".
+    let commandChangeLabels: [NSTextField]
+    /// Where the code goes and which drivers stay allowed, under the rows
+    /// of a request with a changed driver; nil otherwise.
+    let footerLabel: NSTextField?
     let blockRows: [ApprovalBlockRow]
     let detailScrollView: NSScrollView
 
@@ -236,13 +247,29 @@ final class ApprovalSheet: QuestionSheet {
         let blocks = payload.blocks ?? []
         let names = Self.joined(drivers.map(\.name))
         let quotedName = "\u{201C}\(deckName)\u{201D}"
+        let changed = drivers.filter(Self.isChanged)
+        let fresh = drivers.filter { !Self.isChanged($0) }
+        let changedNames = Self.joined(changed.map(\.name))
         let title: String
         let body: String
         let accept: String
-        if payload.isForNewDrivers {
+        if !changed.isEmpty, fresh.isEmpty, changed.allSatisfy({ $0.previousCommand == nil }) {
+            wording = .valueChanged
+            title = "A value in the command for \(changedNames) changed since it was approved"
+            body = "You allowed \(changedNames) for \(quotedName) with the command below. It reads the same, but a value in it changed since, or tap can no longer check that approval. Read it before you allow it."
+            accept = "Allow \(changedNames)"
+        } else if !changed.isEmpty, fresh.isEmpty {
+            wording = .changedCommands
+            let plural = changed.count > 1
+            title = "The command\(plural ? "s" : "") for \(changedNames) changed"
+            body = "You allowed \(changedNames) for \(quotedName) when \(plural ? "they" : "it") ran \(plural ? "different commands" : "a different command"). The deck now runs the command\(plural ? "s" : "") below, for example after a git pull. Read \(plural ? "them" : "it") before you allow \(plural ? "them" : "it")."
+            accept = "Allow \(changedNames)"
+        } else if payload.isForNewDrivers || !changed.isEmpty {
             wording = .newDrivers
-            title = "This deck now also wants to run \(names)"
-            body = "You allowed \(Self.joined(payload.approvedBefore ?? [])) for \(quotedName) before. The deck now declares \(names) too, for example after a git pull. tap runs only the code written in this deck; read it before you allow it."
+            let freshNames = Self.joined(fresh.map(\.name))
+            let allowedBefore = Self.joined((payload.approvedBefore ?? []) + changed.map(\.name))
+            title = "This deck now also wants to run \(freshNames)"
+            body = "You allowed \(allowedBefore) for \(quotedName) before. The deck now declares \(freshNames) too, for example after a git pull. tap runs only the code written in this deck; read it before you allow it."
             accept = "Allow \(names)"
         } else {
             wording = .first
@@ -250,23 +277,31 @@ final class ApprovalSheet: QuestionSheet {
             body = "\(quotedName) declares \(drivers.count) driver\(drivers.count == 1 ? "" : "s") and has \(blocks.count) live code block\(blocks.count == 1 ? "" : "s"). tap runs only the code written in this deck; read it before you allow this deck. A yes is remembered for this file; tap approval revoke undoes it."
             accept = "Allow"
         }
-        let (detail, summary, driverLabels, blockRows) = Self.makeDetail(drivers: drivers, blocks: blocks, summary: payload.approvalSummary)
-        summaryLabel = summary
-        self.driverLabels = driverLabels
-        self.blockRows = blockRows
+        var footer: String?
+        if !changed.isEmpty {
+            let approvedBefore = payload.approvedBefore ?? []
+            let staysAllowed = approvedBefore.isEmpty ? "" : " \(Self.joined(approvedBefore)) \(approvedBefore.count == 1 ? "stays" : "stay") allowed."
+            footer = "The code goes to the command on its standard input." + staysAllowed
+        }
+        let detail = Self.makeDetail(drivers: drivers, blocks: blocks, summary: payload.approvalSummary, footer: footer)
+        summaryLabel = detail.summaryLabel
+        driverLabels = detail.driverLabels
+        commandChangeLabels = detail.commandChangeLabels
+        footerLabel = detail.footerLabel
+        blockRows = detail.blockRows
         // The rows live in a scroll view that is as tall as they are, up to the maximum; the buttons stay outside it.
         let scroll = NSScrollView()
         scroll.contentView = FlippedClipView()
-        scroll.documentView = detail
+        scroll.documentView = detail.stack
         scroll.hasVerticalScroller = true
         scroll.drawsBackground = false
-        detail.translatesAutoresizingMaskIntoConstraints = false
+        detail.stack.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([
-            detail.leadingAnchor.constraint(equalTo: scroll.contentView.leadingAnchor),
-            detail.trailingAnchor.constraint(equalTo: scroll.contentView.trailingAnchor),
-            detail.topAnchor.constraint(equalTo: scroll.contentView.topAnchor),
+            detail.stack.leadingAnchor.constraint(equalTo: scroll.contentView.leadingAnchor),
+            detail.stack.trailingAnchor.constraint(equalTo: scroll.contentView.trailingAnchor),
+            detail.stack.topAnchor.constraint(equalTo: scroll.contentView.topAnchor),
         ])
-        let fits = scroll.heightAnchor.constraint(equalTo: detail.heightAnchor)
+        let fits = scroll.heightAnchor.constraint(equalTo: detail.stack.heightAnchor)
         fits.priority = .defaultHigh
         fits.isActive = true
         scroll.heightAnchor.constraint(lessThanOrEqualToConstant: Self.detailMaximumHeight).isActive = true
@@ -280,8 +315,23 @@ final class ApprovalSheet: QuestionSheet {
         override var isFlipped: Bool { true }
     }
 
-    private static func makeDetail(drivers: [ApprovalDriver], blocks: [ApprovalBlock], summary: String)
-        -> (NSStackView, NSTextField, [NSTextField], [ApprovalBlockRow]) {
+    /// Whether tap asks about the driver again although it was approved:
+    /// its command changed, or a value in it did.
+    static func isChanged(_ driver: ApprovalDriver) -> Bool {
+        driver.previousCommand != nil || driver.valueChanged
+    }
+
+    /// The views inside the sheet's scroll view.
+    struct Detail {
+        let stack: NSStackView
+        let summaryLabel: NSTextField
+        let driverLabels: [NSTextField]
+        let commandChangeLabels: [NSTextField]
+        let footerLabel: NSTextField?
+        let blockRows: [ApprovalBlockRow]
+    }
+
+    private static func makeDetail(drivers: [ApprovalDriver], blocks: [ApprovalBlock], summary: String, footer: String?) -> Detail {
         let detail = NSStackView()
         detail.orientation = .vertical
         detail.alignment = .leading
@@ -291,6 +341,7 @@ final class ApprovalSheet: QuestionSheet {
         summaryLabel.setAccessibilityIdentifier("approval-summary")
         detail.addArrangedSubview(summaryLabel)
         var driverLabels: [NSTextField] = []
+        var commandChangeLabels: [NSTextField] = []
         var blockRows: [ApprovalBlockRow] = []
         for driver in drivers {
             // tap's own wording (internal/cli/approval.go, describeDriverBlocks).
@@ -298,12 +349,33 @@ final class ApprovalSheet: QuestionSheet {
             if !driver.slides.isEmpty {
                 line += " on slide\(driver.slides.count == 1 ? "" : "s") " + driver.slides.map(String.init).joined(separator: ", ")
             }
-            if let command = driver.command { line += ", runs: \(command)" }
+            if driver.previousCommand != nil {
+                line += ", command changed"
+            } else if driver.valueChanged {
+                line += ", value changed"
+            } else if let command = driver.command {
+                line += ", runs: \(command)"
+            }
             let label = NSTextField(labelWithString: line)
             label.font = .systemFont(ofSize: 12)
             label.setAccessibilityIdentifier("approval-driver-\(driver.name)")
             driverLabels.append(label)
             detail.addArrangedSubview(label)
+            if isChanged(driver) {
+                // The board's two lines: the command approved before, struck
+                // out, and the one the deck runs now. A changed value has no
+                // other command to show, so only the one it runs now.
+                if let previous = driver.previousCommand {
+                    let before = commandLine("Before: \(previous)", struckOut: true)
+                    before.setAccessibilityIdentifier("approval-before-\(driver.name)")
+                    commandChangeLabels.append(before)
+                    detail.addArrangedSubview(before)
+                }
+                let now = commandLine("Now: \(driver.command ?? "")", struckOut: false)
+                now.setAccessibilityIdentifier("approval-now-\(driver.name)")
+                commandChangeLabels.append(now)
+                detail.addArrangedSubview(now)
+            }
             for block in blocks where block.driver == driver.name {
                 let row = ApprovalBlockRow(block: block)
                 blockRows.append(row)
@@ -311,7 +383,35 @@ final class ApprovalSheet: QuestionSheet {
                 row.widthAnchor.constraint(equalTo: detail.widthAnchor).isActive = true
             }
         }
-        return (detail, summaryLabel, driverLabels, blockRows)
+        var footerLabel: NSTextField?
+        if let footer {
+            let label = NSTextField(wrappingLabelWithString: footer)
+            label.font = .systemFont(ofSize: 11.5)
+            label.textColor = .secondaryLabelColor
+            label.setAccessibilityIdentifier("approval-footer")
+            detail.addArrangedSubview(label)
+            label.widthAnchor.constraint(equalTo: detail.widthAnchor).isActive = true
+            footerLabel = label
+        }
+        return Detail(stack: detail, summaryLabel: summaryLabel, driverLabels: driverLabels,
+                      commandChangeLabels: commandChangeLabels, footerLabel: footerLabel, blockRows: blockRows)
+    }
+
+    /// A command line of a changed driver's row, monospaced and selectable,
+    /// struck out for the command approved before.
+    private static func commandLine(_ text: String, struckOut: Bool) -> NSTextField {
+        let label = NSTextField(labelWithString: text)
+        label.font = .monospacedSystemFont(ofSize: 11.5, weight: .regular)
+        label.isSelectable = true
+        if struckOut {
+            label.textColor = .secondaryLabelColor
+            label.attributedStringValue = NSAttributedString(string: text, attributes: [
+                .font: NSFont.monospacedSystemFont(ofSize: 11.5, weight: .regular),
+                .foregroundColor: NSColor.secondaryLabelColor,
+                .strikethroughStyle: NSUnderlineStyle.single.rawValue,
+            ])
+        }
+        return label
     }
 
     /// "shell", "shell and sqlite", "shell, sqlite and mysql".
