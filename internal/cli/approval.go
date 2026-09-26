@@ -268,7 +268,10 @@ func (gate *liveCodeGate) startup(cfg *config.Config, presentation *transformer.
 
 // reload decides for the deck a reload loaded, sets the policy at once,
 // and asks in the background about any driver still waiting for a
-// question. Until the answer, the new driver is refused.
+// question. Until the answer, the new driver is refused. When the policy
+// changes (a driver's command changed, so its approval no longer
+// covers it), open pages are told, so a refused block drops its Run
+// button.
 func (gate *liveCodeGate) reload(cfg *config.Config, presentation *transformer.TransformedPresentation) {
 	gate.mu.Lock()
 	gate.config, gate.presentation = cfg, presentation
@@ -277,8 +280,11 @@ func (gate *liveCodeGate) reload(cfg *config.Config, presentation *transformer.T
 		gate.mu.Unlock()
 		return
 	}
-	start := gate.redecide()
+	notify, start := gate.redecideAndNotify()
 	gate.mu.Unlock()
+	if notify != nil {
+		notify()
+	}
 	if start {
 		go gate.askInBackground()
 	}
@@ -296,17 +302,27 @@ func (gate *liveCodeGate) settingsChanged() {
 		gate.mu.Unlock()
 		return
 	}
-	before := gate.policy
-	start := gate.redecide()
-	changed := !samePolicy(before, gate.policy)
-	change := gate.change
+	notify, start := gate.redecideAndNotify()
 	gate.mu.Unlock()
-	if changed && change != nil {
-		change()
+	if notify != nil {
+		notify()
 	}
 	if start {
 		go gate.askInBackground()
 	}
+}
+
+// redecideAndNotify decides again, as redecide does, and returns what
+// the caller runs once it has released gate.mu: the change hook when the
+// policy moved, so open pages fetch it again, and whether a new asking
+// goroutine should start. The caller holds gate.mu.
+func (gate *liveCodeGate) redecideAndNotify() (notify func(), start bool) {
+	before := gate.policy
+	start = gate.redecide()
+	if !samePolicy(before, gate.policy) {
+		notify = gate.change
+	}
+	return notify, start
 }
 
 // redecide decides for the deck the gate holds, sets the policy, and
