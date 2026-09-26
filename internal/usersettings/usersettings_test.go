@@ -873,3 +873,70 @@ func TestEnsureApprovalKeyReplacesAKeyOfTheWrongLength(t *testing.T) {
 		t.Fatalf("EnsureApprovalKey() = %d bytes, %v", len(key), err)
 	}
 }
+
+// ensureKeyConcurrently runs EnsureApprovalKey from workers goroutines at
+// once through call, and checks that each got the one key on disk and
+// that nothing else is left in the folder.
+func ensureKeyConcurrently(t *testing.T, settingsPath string, workers int, call func() ([]byte, error)) {
+	t.Helper()
+	keys := make([][]byte, workers)
+	errs := make([]error, workers)
+	var ready, done sync.WaitGroup
+	start := make(chan struct{})
+	for worker := 0; worker < workers; worker++ {
+		ready.Add(1)
+		done.Add(1)
+		go func(worker int) {
+			defer done.Done()
+			ready.Done()
+			<-start
+			keys[worker], errs[worker] = call()
+		}(worker)
+	}
+	ready.Wait()
+	close(start)
+	done.Wait()
+	onDisk, err := os.ReadFile(ApprovalKeyPath(settingsPath))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for worker := range keys {
+		if errs[worker] != nil || string(keys[worker]) != string(onDisk) {
+			t.Fatalf("worker %d got %d bytes, %v; want the key on disk", worker, len(keys[worker]), errs[worker])
+		}
+	}
+	entries, err := os.ReadDir(filepath.Dir(settingsPath))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, entry := range entries {
+		if entry.Name() != "approval.key" && entry.Name() != "settings.yaml.lock" {
+			t.Fatalf("%s is left next to the key", entry.Name())
+		}
+	}
+}
+
+func TestEnsureApprovalKeyGivesRacingCallersTheSameKey(t *testing.T) {
+	for round := 0; round < 200; round++ {
+		settingsPath := filepath.Join(t.TempDir(), "settings.yaml")
+		ensureKeyConcurrently(t, settingsPath, 16, func() ([]byte, error) { return EnsureApprovalKey(settingsPath) })
+	}
+}
+
+func TestEnsureApprovalKeyUnderTheLockReplacesAShortKeyOnce(t *testing.T) {
+	for round := 0; round < 50; round++ {
+		settingsPath := filepath.Join(t.TempDir(), "settings.yaml")
+		if err := os.WriteFile(ApprovalKeyPath(settingsPath), []byte("short"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		ensureKeyConcurrently(t, settingsPath, 16, func() ([]byte, error) {
+			var key []byte
+			err := WithLock(settingsPath, func() error {
+				var ensureErr error
+				key, ensureErr = EnsureApprovalKey(settingsPath)
+				return ensureErr
+			})
+			return key, err
+		})
+	}
+}

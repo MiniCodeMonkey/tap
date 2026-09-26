@@ -20,9 +20,12 @@ const approvalKeySize = 32
 var errInvalidApprovalKey = errors.New("the approval key has the wrong length")
 
 // ApprovalKeyPath is approval.key next to the settings file at
-// settingsPath. It holds the random key CommandDigest is keyed with, kept
-// apart from settings.yaml so a copy of the settings, in a dotfiles
-// repository or a backup, reveals nothing about the commands approved.
+// settingsPath. It holds the random key CommandDigest is keyed with, in a
+// file of its own so that a copy of settings.yaml alone, in a dotfiles
+// repository or a backup, reveals nothing about the values in the
+// commands approved. A copy that includes approval.key allows guessing a
+// weak secret offline, so approval.key must not be synced with the
+// settings. Losing it only asks again.
 func ApprovalKeyPath(settingsPath string) string {
 	return filepath.Join(filepath.Dir(settingsPath), "approval.key")
 }
@@ -43,8 +46,13 @@ func LoadApprovalKey(settingsPath string) ([]byte, error) {
 
 // EnsureApprovalKey returns the approval key, making a random one, with
 // mode 0600, when there is none or the one there has the wrong length. A
-// key that exists but cannot be read is an error: replacing it would
-// only hide the problem.
+// key that exists but cannot be read is not replaced: EnsureApprovalKey
+// returns the error, the yes that needed the key holds for that run only,
+// tap reports the save error, and it asks again on every run until the
+// file can be read. Call it with the settings lock held (WithLock), so
+// two tap processes replacing a key of the wrong length replace it once.
+// A missing key is safe even without the lock: it is linked into place,
+// so a key another process made first is kept.
 func EnsureApprovalKey(settingsPath string) ([]byte, error) {
 	key, err := LoadApprovalKey(settingsPath)
 	if err == nil {
