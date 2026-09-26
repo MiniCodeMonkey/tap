@@ -769,7 +769,11 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
                 self?.questionSheet = nil
                 self?.questionSheetSource = nil
                 self?.questionSheetQuestionID = nil
-                self?.refreshPresentingControls()
+                // AppKit disables a window's toolbar items while a sheet is
+                // up and, after this handler returns, gives them back the
+                // enabled state they had when the sheet began, which is off:
+                // the Play button is set once that is done.
+                DispatchQueue.main.async { [weak self] in self?.refreshPresentingControls() }
             }
             completion(response == .OK)
             presentation.returnToTalk()

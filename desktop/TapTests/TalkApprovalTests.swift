@@ -191,8 +191,9 @@ final class TalkApprovalTests: PresentingTestCase {
         XCTAssertEqual(presentation.state, .idle, "nothing started")
         try XCTUnwrap(sheet.button(titled: "Don't Allow")).performClick(nil)
         XCTAssertTrue(deckWindow.canStartATalk)
-        XCTAssertTrue(deckWindow.playButton.isEnabled)
         XCTAssertTrue(deckWindow.validateMenuItem(play))
+        // AppKit gives the toolbar back its state from before the sheet once the sheet has ended; Play comes on after that.
+        try await waitUntil(timeout: 2, "the Play button on again") { deckWindow.playButton.isEnabled }
     }
 
     /// A deck question that arrives mid-talk (here: tap dev restarts and asks
