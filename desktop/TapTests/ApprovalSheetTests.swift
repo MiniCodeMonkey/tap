@@ -30,9 +30,22 @@ final class ApprovalSheetTests: HostedTestCase {
                                  ApprovalBlock(driver: "shell", code: "echo five", slide: 5, block: 1)])
     }
 
-    func key(_ characters: String, code: UInt16) throws -> NSEvent {
+    func key(_ characters: String, code: UInt16, isARepeat: Bool = false) throws -> NSEvent {
         try XCTUnwrap(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0, windowNumber: host.windowNumber,
-                                       context: nil, characters: characters, charactersIgnoringModifiers: characters, isARepeat: false, keyCode: code))
+                                       context: nil, characters: characters, charactersIgnoringModifiers: characters, isARepeat: isARepeat, keyCode: code))
+    }
+
+    /// A held Escape that ended a talk repeats into the deck's question the
+    /// moment it shows; the repeat answers nothing, a fresh press declines.
+    func testAHeldEscapeAnswersNothing() throws {
+        let sheet = ApprovalSheet(payload: payload(), deckName: "talk.md")
+        var answers: [NSApplication.ModalResponse] = []
+        host.beginSheet(sheet) { answers.append($0) }
+        sheet.keyDown(with: try key("\u{1b}", code: 53, isARepeat: true))
+        XCTAssertEqual(answers, [])
+        XCTAssertTrue(host.attachedSheet === sheet, "the question is still up")
+        sheet.keyDown(with: try key("\u{1b}", code: 53))
+        XCTAssertEqual(answers, [.cancel])
     }
 
     func testTheSafeButtonIsTheDefault() throws {

@@ -94,10 +94,11 @@ class QuestionSheet: NSWindow {
     /// one key equivalent, so the second key arrives here, once no view in
     /// the sheet has taken it (labels and buttons take none), or as
     /// `cancelOperation` when a selectable label holds focus and its field
-    /// editor turns Escape into that action.
+    /// editor turns Escape into that action. A repeat of a held Escape
+    /// (one that ended a talk just as this sheet came up) answers nothing.
     override func keyDown(with event: NSEvent) {
         if event.keyCode == 53, returnAnswer == .decline, escape == .decline {
-            declineButton.performClick(nil)
+            if !event.isARepeat { declineButton.performClick(nil) }
             return
         }
         super.keyDown(with: event)
