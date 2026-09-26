@@ -1,0 +1,13 @@
+Test: TapTests/TalkApprovalTests/testATalksWithdrawnQuestionGoes
+diff --git i/desktop/Tap/Windows/DeckWindowController.swift w/desktop/Tap/Windows/DeckWindowController.swift
+index 0fa6a3b..46f207b 100644
+--- i/desktop/Tap/Windows/DeckWindowController.swift
++++ w/desktop/Tap/Windows/DeckWindowController.swift
+@@ -116,7 +116,6 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
+         }
+         sessionController.presentation.onQuestionClosed = { [weak self] id in
+             guard let self, self.questionSheetSource == .talk, self.questionSheetQuestionID == id else { return }
+-            self.endQuestionSheet(as: .abort)
+         }
+         sessionController.presentation.onFailed = { [weak self] message in self?.showTalkFailed(message) }
+         remotePanel.onTurnOff = { [weak self] in self?.sessionController.presentation.setTunnel(on: false) }

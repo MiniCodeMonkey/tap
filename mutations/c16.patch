@@ -1,0 +1,13 @@
+Test: TapTests/TalkApprovalTests/testPlayWaitsForTheDecksApprovalAnswer
+diff --git i/desktop/Tap/Windows/DeckWindowController.swift w/desktop/Tap/Windows/DeckWindowController.swift
+index 57f64c5..c440719 100644
+--- i/desktop/Tap/Windows/DeckWindowController.swift
++++ w/desktop/Tap/Windows/DeckWindowController.swift
+@@ -773,7 +773,6 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
+                 // up and, after this handler returns, gives them back the
+                 // enabled state they had when the sheet began, which is off:
+                 // the Play button is set once that is done.
+-                DispatchQueue.main.async { [weak self] in self?.refreshPresentingControls() }
+             }
+             completion(response == .OK)
+             presentation.returnToTalk()

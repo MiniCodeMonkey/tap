@@ -1,0 +1,14 @@
+Test: TapTests/ApprovalSheetTests/testNoKeyAllows
+diff --git i/desktop/Tap/Presenting/QuestionSheet.swift w/desktop/Tap/Presenting/QuestionSheet.swift
+index 79978a4..8e46f20 100644
+--- i/desktop/Tap/Presenting/QuestionSheet.swift
++++ w/desktop/Tap/Presenting/QuestionSheet.swift
+@@ -106,7 +106,7 @@ class QuestionSheet: NSWindow {
+ 
+     override func cancelOperation(_ sender: Any?) {
+         if returnAnswer == .decline, escape == .decline {
+-            declineButton.performClick(nil)
++            acceptButton.performClick(nil)
+             return
+         }
+         super.cancelOperation(sender)

@@ -1,0 +1,14 @@
+Test: TapTests/ApprovalSheetTests/testANewDriverAsksOnlyForItself
+diff --git i/desktop/Tap/Presenting/QuestionSheet.swift w/desktop/Tap/Presenting/QuestionSheet.swift
+index 59976af..306f818 100644
+--- i/desktop/Tap/Presenting/QuestionSheet.swift
++++ w/desktop/Tap/Presenting/QuestionSheet.swift
+@@ -269,7 +269,7 @@ final class ApprovalSheet: QuestionSheet {
+             wording = .newDrivers
+             let freshNames = Self.joined(fresh.map(\.name))
+             let allowedBefore = Self.joined((payload.approvedBefore ?? []) + changed.map(\.name))
+-            title = "This deck now also wants to run \(freshNames)"
++            title = "This deck can run code on your Mac"
+             body = "You allowed \(allowedBefore) for \(quotedName) before. The deck now declares \(freshNames) too, for example after a git pull. tap runs only the code written in this deck; read it before you allow it."
+             accept = "Allow \(names)"
+         } else {

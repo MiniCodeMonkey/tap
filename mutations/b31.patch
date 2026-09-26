@@ -1,0 +1,13 @@
+Test: TapTests/TalkApprovalTests/testATalkAsksAboutAnUnapprovedDeck
+diff --git i/desktop/Tap/Windows/DeckWindowController.swift w/desktop/Tap/Windows/DeckWindowController.swift
+index 0fa6a3b..90369e1 100644
+--- i/desktop/Tap/Windows/DeckWindowController.swift
++++ w/desktop/Tap/Windows/DeckWindowController.swift
+@@ -672,7 +672,6 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
+             // the deck's tap dev learns of it through a reload.
+             showQuestionSheet(approvalSheet(for: question), source: .talk, questionID: question.id) { [weak self] allow in
+                 presentation.answer(id: question.id, value: allow)
+-                if allow { self?.sessionController.reloadAfterTalkApproval() }
+             }
+         default:
+             presentation.session?.log.append("the \(question.kind) question is not answered by this version of the app; declined", source: .app)

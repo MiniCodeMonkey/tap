@@ -1,0 +1,13 @@
+Test: TapTests/ApprovalSheetTests/testNoKeyAllows
+diff --git i/desktop/Tap/Presenting/QuestionSheet.swift w/desktop/Tap/Presenting/QuestionSheet.swift
+index 59976af..9d5d139 100644
+--- i/desktop/Tap/Presenting/QuestionSheet.swift
++++ w/desktop/Tap/Presenting/QuestionSheet.swift
+@@ -311,7 +311,6 @@ final class ApprovalSheet: QuestionSheet {
+                    escape: .decline, returnAnswer: .decline, detail: scroll)
+         // Only a click allows: with keyboard navigation on, Tab never lands
+         // on Allow, so Space never presses it. VoiceOver's press still does.
+-        acceptButton.refusesFirstResponder = true
+     }
+ 
+     /// A clip view that starts its content at the top.

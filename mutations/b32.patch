@@ -1,0 +1,14 @@
+Test: TapTests/TalkApprovalTests/testPlayWaitsForTheDecksApprovalAnswer
+diff --git i/desktop/Tap/Windows/DeckWindowController.swift w/desktop/Tap/Windows/DeckWindowController.swift
+index 0fa6a3b..d98538c 100644
+--- i/desktop/Tap/Windows/DeckWindowController.swift
++++ w/desktop/Tap/Windows/DeckWindowController.swift
+@@ -494,7 +494,7 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
+     /// and no question sheet up. A sheet is one question the person has to
+     /// answer first; a second sheet would queue behind it on this window.
+     var canStartATalk: Bool {
+-        sessionController.presentation.canStart && questionSheet == nil
++        sessionController.presentation.canStart
+     }
+ 
+     /// Present > Stop, the toolbar's Stop, and Escape in the audience window.

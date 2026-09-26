@@ -1,0 +1,21 @@
+Test: TapTests/RunBlockTests/testSecretsInDriverSettings
+diff --git i/desktop/TapTests/RunBlockTests.swift w/desktop/TapTests/RunBlockTests.swift
+index f701eea..736aad3 100644
+--- i/desktop/TapTests/RunBlockTests.swift
++++ w/desktop/TapTests/RunBlockTests.swift
+@@ -115,13 +115,13 @@ final class RunBlockTests: HostedTestCase {
+         // A driver setting reads ${NAME} from the environment tap runs in, which the app fills from
+         // the login shell: the command itself is a variable, so tap's own expansion is what runs, and
+         // an argument names a variable that looks like a secret, which tap never shows or stores.
+-        AppEnvironment.shared.extraEnvironment["TAP_TEST_COMMAND"] = "/bin/sh"
+-        AppEnvironment.shared.extraEnvironment["TAP_TEST_TOKEN"] = "s3cret-value"
+         addTeardownBlock { @MainActor in
+             AppEnvironment.shared.extraEnvironment["TAP_TEST_COMMAND"] = nil
+             AppEnvironment.shared.extraEnvironment["TAP_TEST_TOKEN"] = nil
+         }
+         let (document, controller, _, sheet) = try await openUnapprovedAndWaitForTheQuestion("env-driver.md")
++        AppEnvironment.shared.extraEnvironment["TAP_TEST_COMMAND"] = "/bin/sh"
++        AppEnvironment.shared.extraEnvironment["TAP_TEST_TOKEN"] = "s3cret-value"
+         XCTAssertEqual(sheet.driverLabels.map(\.stringValue), ["echoer: 1 block on slide 2, runs: /bin/sh -c cat; : ${TAP_TEST_TOKEN}"],
+                        "the sheet shows the command as tap will run it: a plain variable expanded, a secret-looking one masked")
+         XCTAssertFalse(sheet.driverLabels.contains { $0.stringValue.contains("s3cret-value") })
