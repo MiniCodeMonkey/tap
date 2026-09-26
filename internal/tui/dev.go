@@ -129,6 +129,7 @@ type DevModel struct { //nolint:govet // embedded structs prevent optimal alignm
 	eventsCh           chan DevEvent
 	recordEndedCh      chan error
 	diskLevelCh        chan recorder.DiskLevel
+	promptCh           chan terminalPromptMsg
 	closeCh            chan struct{}
 	themeBroadcaster   ThemeBroadcaster
 	tunnels            TunnelController
@@ -204,6 +205,7 @@ func NewDevModel(cfg DevConfig) *DevModel {
 		eventsCh:         make(chan DevEvent, 100),
 		recordEndedCh:    make(chan error, 1),
 		diskLevelCh:      make(chan recorder.DiskLevel, 4),
+		promptCh:         make(chan terminalPromptMsg),
 		closeCh:          make(chan struct{}),
 		currentTheme:     currentTheme,
 		themePickerIndex: themeIndex,
@@ -234,6 +236,8 @@ func (m *DevModel) listenForEvents() tea.Cmd {
 			return recordEndedMsg{err: err}
 		case level := <-m.diskLevelCh:
 			return diskLevelMsg{level: level}
+		case prompt := <-m.promptCh:
+			return prompt
 		case <-m.closeCh:
 			return nil
 		}
@@ -249,6 +253,15 @@ func tickCmd() tea.Cmd {
 
 // Update implements tea.Model.
 func (m *DevModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	// A terminal prompt is handled before anything open on screen can
+	// take the message, since a question is waiting on it.
+	switch msg := msg.(type) {
+	case terminalPromptMsg:
+		return m, m.runTerminalPrompt(msg)
+	case terminalPromptDoneMsg:
+		return m, nil
+	}
+
 	// Forward non-key messages to image generator when active (for spinner animation, API results, etc.)
 	if m.showImageGenerator && m.imageGenModel != nil {
 		// Only forward certain message types to the image generator

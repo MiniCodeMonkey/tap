@@ -3,6 +3,7 @@ package driver
 import (
 	"context"
 	"sort"
+	"strings"
 	"testing"
 )
 
@@ -226,4 +227,20 @@ func TestRegistry_ConcurrentAccess(t *testing.T) {
 
 	<-done
 	<-done
+}
+
+func TestRegistryCommandLineReportsWhatACustomDriverRuns(t *testing.T) {
+	registry := NewRegistry()
+	registry.Register(NewShellDriver(t.TempDir()))
+	RegisterCustomDrivers(registry, map[string]DriverConfigInput{"python": {Command: "python3", Args: []string{"-c"}}})
+
+	if got := registry.CommandLine("python"); strings.Join(got, " ") != "python3 -c" || len(got) != 2 {
+		t.Errorf("CommandLine(python) = %q, want [python3 -c]", got)
+	}
+	if got := registry.CommandLine("shell"); got != nil {
+		t.Errorf("CommandLine(shell) = %q, want nil for a built-in driver", got)
+	}
+	if got := registry.CommandLine("missing"); got != nil {
+		t.Errorf("CommandLine(missing) = %q, want nil", got)
+	}
 }

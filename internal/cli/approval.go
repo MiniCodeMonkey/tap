@@ -2,18 +2,23 @@ package cli
 
 import (
 	"bufio"
+	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
+	"regexp"
 	"slices"
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/MiniCodeMonkey/tap/internal/config"
 	"github.com/MiniCodeMonkey/tap/internal/server"
 	"github.com/MiniCodeMonkey/tap/internal/transformer"
+	"github.com/MiniCodeMonkey/tap/internal/tui"
 	"github.com/MiniCodeMonkey/tap/internal/usersettings"
 )
 
@@ -41,6 +46,15 @@ type approvalDriver struct {
 	// Command is what a custom driver runs, with its arguments, as the
 	// frontmatter writes it. Empty for a built-in driver.
 	Command string `json:"command,omitempty"`
+	// PreviousCommand is the command an earlier approval of this driver
+	// covered, when the question asks because the command changed. Empty
+	// for a driver never approved.
+	PreviousCommand string `json:"previousCommand,omitempty"`
+	// ValueChanged is true when the question asks because a value in an
+	// approved command changed, or the approval can no longer be checked
+	// (approval.key was lost), while the command as written is the same.
+	// PreviousCommand is empty then.
+	ValueChanged bool `json:"valueChanged,omitempty"`
 	// Slides are the numbers of the slides with a block that uses it.
 	Slides []int `json:"slides"`
 	Blocks int   `json:"blocks"`
@@ -57,11 +71,14 @@ type approvalBlock struct {
 }
 
 // approvalAsker puts an approval request to the person and returns the
-// answer. The only implementation, terminalAsker, asks on standard
-// input, before the TUI starts. Never the slide page, where page script
-// could answer.
+// answer: terminalAsker on standard input before the TUI starts, the
+// TUI's own terminal prompt while it runs, and appApprovalAsker as a
+// question event in --app mode. Never the slide page, where page script
+// could answer. An error means no answer came, which is not a no. ctx
+// ends when tap no longer needs the answer; an asker that cannot take a
+// question back, such as the terminal, may ignore it.
 type approvalAsker interface {
-	askApproval(request approvalRequest) (bool, error)
+	askApproval(ctx context.Context, request approvalRequest) (bool, error)
 }
 
 // approvalInput is everything the approval check reads.
@@ -71,108 +88,514 @@ type approvalInput struct {
 	Presentation *transformer.TransformedPresentation
 	Asker        approvalAsker
 	Out          io.Writer
+	// Context ends every question the gate asks. Nil is
+	// context.Background.
+	Context      context.Context
 	SettingsPath string
 	// Deck is the deck file: an absolute or relative path, possibly
-	// through a symlink. liveCodeApproval resolves it before it compares
-	// or stores anything, so it never has to already be canonical.
+	// through a symlink. The gate resolves it before it compares or
+	// stores anything, so it never has to already be canonical.
 	Deck string
 	// AllowCode is --allow-code: live code runs for this run, and nothing
 	// is asked or stored.
 	AllowCode bool
 	// Interactive is true when tap may ask: a terminal on standard input
-	// and no --headless.
+	// and no --headless, or --app mode.
 	Interactive bool
 }
 
-// liveCodeApproval decides which drivers this run of tap dev or tap
-// present may run. A deck needs approval when a live code block uses a
-// declared driver. An approved deck runs. Otherwise tap asks, when it may,
-// and a yes is stored in the user settings. A no, or a run that may not
-// ask, stores nothing and keeps the drivers approved before.
+// liveCodeApproval decides which drivers tap dev or tap present may run
+// at startup, asking when it may. See liveCodeGate.
+func liveCodeApproval(input approvalInput) (server.LiveCodePolicy, error) {
+	return newLiveCodeGate(input).startup(input.Config, input.Presentation)
+}
+
+// liveCodeGate decides which drivers one run of tap dev or tap present may
+// run, for the deck as it is now, and asks the person about any driver
+// that is not approved. It decides at startup and again on every reload,
+// so a deck that gains a driver, or whose custom driver's command
+// changes, asks again instead of running it.
+//
+// A driver is approved as its name and its command line together (see
+// usersettings.Driver): a yes stored in the settings, or a yes given in
+// this run. A driver the person declined in this run is not asked about
+// again until its command changes. The policy the gate sets lists only
+// approved drivers, each with its approved command, and /api/execute
+// checks the command the registry would run against it, so until the
+// person answers, a new or changed driver is refused while every
+// approved one keeps running.
+//
+// One question is open at a time. A reload that leaves the drivers in
+// question unchanged asks nothing new; one that changes them withdraws
+// the open question and asks about the new set instead. An asker that
+// cannot withdraw its question, the terminal, is answered first, and the
+// gate then asks about whatever is still not approved.
 //
 // Approval is matched by usersettings.DeckKey, which usersettings.
-// ResolveDeck alone can produce: it resolves Deck to its absolute path,
-// with symlinks resolved and, on a case-insensitive filesystem, its
-// on-disk case restored. Without this, the same deck reached through a
-// symlink, a relative path, a path with a ".." segment, or a different
+// ResolveDeck alone can produce: it resolves the deck to its absolute
+// path, with symlinks resolved and, on a case-insensitive filesystem,
+// its on-disk case restored. Without this, the same deck reached through
+// a symlink, a relative path, a path with a ".." segment, or a different
 // spelling of its name would not match its own approval, and worse, an
-// unrelated file could be made to match one by spelling alone. Because
-// Approved, Approve and ApprovalFor take only a DeckKey, this function
-// cannot compare or store an unresolved path even by accident. A deck
+// unrelated file could be made to match one by spelling alone. A deck
 // that cannot be resolved, most often because it no longer exists, fails
-// closed: liveCodeApproval never asks and never stores an approval for
-// it.
-func liveCodeApproval(input approvalInput) (server.LiveCodePolicy, error) {
-	blocks := runnableBlocks(input.Presentation)
-	if len(blocks) == 0 {
-		return server.LiveCodePolicy{}, nil
-	}
-	if input.AllowCode {
-		fmt.Fprintln(input.Out, "Live code is on for this run (--allow-code). No approval is saved.")
-		return server.LiveCodePolicy{AllowAll: true}, nil
-	}
+// closed: the gate never asks and never stores an approval for it.
+type liveCodeGate struct {
+	input  approvalInput
+	asker  approvalAsker
+	apply  func(server.LiveCodePolicy)
+	change func()
+	// config and presentation are the deck as the latest reload left it.
+	config       *config.Config
+	presentation *transformer.TransformedPresentation
+	// open is the question being asked, nil when none is.
+	open *openApprovalQuestion
+	// approved and declined are the answers given in this run.
+	approved []liveDriver
+	declined []liveDriver
+	// refusedNotice is the drivers the last notice that live code is off
+	// named, so a run that cannot ask names each set once.
+	refusedNotice string
+	policy        server.LiveCodePolicy
+	mu            sync.Mutex
+	// asking is true while a goroutine runs askUntilSettled.
+	asking bool
+	// active is true once startup ran. Until then a reload only records
+	// the deck, and startup decides for the latest one.
+	active bool
+	// reloaded is true once a reload recorded a deck.
+	reloaded bool
+	// unresolvedNoticed is true once the gate said the deck cannot be
+	// resolved.
+	unresolvedNoticed bool
+	// settingsNotice is the settings read error the gate last reported,
+	// so each one is said once.
+	settingsNotice string
+}
 
-	deckKey, err := usersettings.ResolveDeck(input.Deck)
-	if err != nil {
-		fmt.Fprintf(input.Out, "Live code is off: %s could not be resolved: %v\n", input.Deck, err)
-		return server.LiveCodePolicy{}, nil
-	}
-	deck := deckKey.String()
+// openApprovalQuestion is the question the gate is waiting on.
+type openApprovalQuestion struct {
+	withdraw context.CancelCauseFunc
+	drivers  []liveDriver
+}
 
-	declared := input.Config.DeclaredDrivers()
-	settings, err := usersettings.Load(input.SettingsPath)
-	if err != nil {
-		// A malformed settings file must not stop the talk. A yes below
-		// overwrites it with a well-formed one.
-		fmt.Fprintf(input.Out, "Ignoring %s, it could not be read: %v\n", input.SettingsPath, err)
-		settings = usersettings.Settings{}
-	}
-	if settings.Approved(deckKey, declared) {
-		return server.LiveCodePolicy{Drivers: declared}, nil
-	}
+// approvalDecision is what the gate decides for one version of the deck.
+type approvalDecision struct {
+	policy server.LiveCodePolicy
+	// wanted are the declared drivers that are neither approved nor
+	// declined in this run: the ones a question asks about.
+	wanted []liveDriver
+	// refused are the declared drivers that are not approved, declined
+	// ones included.
+	refused []liveDriver
+	// approvedBefore names the declared drivers already approved.
+	approvedBefore []string
+	// previousCommands holds, for each wanted driver approved before with
+	// a command, the command template that approval covered.
+	previousCommands map[string][]string
+	blocks           []approvalBlock
+	deck             string
+}
 
-	previous, _ := settings.ApprovalFor(deckKey)
-	var approvedBefore, wanted []string
-	for _, name := range declared {
-		if slices.Contains(previous.Drivers, name) {
-			approvedBefore = append(approvedBefore, name)
-		} else {
-			wanted = append(wanted, name)
+func newLiveCodeGate(input approvalInput) *liveCodeGate {
+	if input.Context == nil {
+		input.Context = context.Background()
+	}
+	return &liveCodeGate{input: input, asker: input.Asker, config: input.Config, presentation: input.Presentation}
+}
+
+// setOut changes where the gate writes its notices, for when the TUI
+// takes over the terminal.
+func (gate *liveCodeGate) setOut(out io.Writer) {
+	gate.mu.Lock()
+	defer gate.mu.Unlock()
+	gate.input.Out = out
+}
+
+// attach gives the gate the server: apply sets the policy /api/execute
+// checks, and change runs after an answer changed it, so open pages
+// fetch which drivers may run again.
+func (gate *liveCodeGate) attach(apply func(server.LiveCodePolicy), change func()) {
+	gate.mu.Lock()
+	defer gate.mu.Unlock()
+	gate.apply = apply
+	gate.change = change
+}
+
+// setAsker changes who the gate asks. A nil asker asks nothing, for the
+// moments when nobody can be asked, such as between startup and the TUI
+// taking over the terminal. Setting one asks about anything still
+// waiting for a question.
+func (gate *liveCodeGate) setAsker(asker approvalAsker) {
+	gate.mu.Lock()
+	gate.asker = asker
+	start := gate.shouldStartAsking(gate.decide(gate.config, gate.presentation))
+	gate.mu.Unlock()
+	if start {
+		go gate.askInBackground()
+	}
+}
+
+// startup decides for the deck at startup, asks when it may, and returns
+// the policy. It returns once there is nothing left to ask. A yes that
+// cannot be saved is an error.
+func (gate *liveCodeGate) startup(cfg *config.Config, presentation *transformer.TransformedPresentation) (server.LiveCodePolicy, error) {
+	gate.mu.Lock()
+	if !gate.reloaded {
+		// A reload that came before startup is newer than cfg.
+		gate.config, gate.presentation = cfg, presentation
+	}
+	gate.active = true
+	decision := gate.decide(gate.config, gate.presentation)
+	gate.setPolicy(decision.policy)
+	if decision.policy.AllowAll {
+		fmt.Fprintln(gate.input.Out, "Live code is on for this run (--allow-code). No approval is saved.")
+	}
+	gate.noticeRefused(decision)
+	start := gate.shouldStartAsking(decision)
+	gate.mu.Unlock()
+
+	if start {
+		if err := gate.askUntilSettled(); err != nil {
+			return server.LiveCodePolicy{}, err
 		}
 	}
+	gate.mu.Lock()
+	defer gate.mu.Unlock()
+	return gate.policy, nil
+}
 
-	if !input.Interactive {
-		fmt.Fprintf(input.Out, "Live code is off: this deck is not approved to run %s. Run tap dev or tap present in a terminal to approve it, or pass --allow-code for this run.\n", joinWithAnd(wanted))
-		return server.LiveCodePolicy{Drivers: approvedBefore}, nil
+// reload decides for the deck a reload loaded, sets the policy at once,
+// and asks in the background about any driver still waiting for a
+// question. Until the answer, the new driver is refused.
+func (gate *liveCodeGate) reload(cfg *config.Config, presentation *transformer.TransformedPresentation) {
+	gate.mu.Lock()
+	gate.config, gate.presentation = cfg, presentation
+	gate.reloaded = true
+	if !gate.active {
+		gate.mu.Unlock()
+		return
 	}
+	decision := gate.decide(cfg, presentation)
+	gate.setPolicy(decision.policy)
+	gate.noticeRefused(decision)
+	if gate.open != nil && !sameDrivers(gate.open.drivers, decision.wanted) {
+		gate.open.withdraw(errQuestionWithdrawn)
+	}
+	start := gate.shouldStartAsking(decision)
+	gate.mu.Unlock()
+	if start {
+		go gate.askInBackground()
+	}
+}
 
-	approved, askErr := input.Asker.askApproval(newApprovalRequest(deck, input.Config, blocks, wanted, approvedBefore))
-	if askErr != nil {
-		fmt.Fprintf(input.Out, "Live code is off for %s in this run: %v\n", joinWithAnd(wanted), askErr)
-		return server.LiveCodePolicy{Drivers: approvedBefore}, nil
+// askInBackground asks until settled on its own goroutine, and reports a
+// yes that could not be saved: the yes still holds for this run.
+func (gate *liveCodeGate) askInBackground() {
+	if err := gate.askUntilSettled(); err != nil {
+		fmt.Fprintln(gate.input.Out, err)
 	}
-	if !approved {
-		fmt.Fprintf(input.Out, "Live code is off for %s in this run. tap asks again next time.\n", joinWithAnd(wanted))
-		return server.LiveCodePolicy{Drivers: approvedBefore}, nil
-	}
+}
 
-	// Reload under the lock rather than reusing the settings read above:
-	// the person may have taken a while to answer the prompt, and another
-	// tap process could have saved its own approval for a different deck
-	// in the meantime. Merging into a fresh read keeps that approval
-	// instead of overwriting it.
-	saveErr := usersettings.WithLock(input.SettingsPath, func() error {
-		fresh, err := usersettings.Load(input.SettingsPath)
+// shouldStartAsking reports whether a new asking goroutine should start
+// for decision, and marks one as started. The caller holds gate.mu.
+func (gate *liveCodeGate) shouldStartAsking(decision approvalDecision) bool {
+	if !gate.active || gate.asking || gate.asker == nil || !gate.input.Interactive || len(decision.wanted) == 0 {
+		return false
+	}
+	gate.asking = true
+	return true
+}
+
+// askUntilSettled asks about the latest deck until nothing is left to
+// ask, the question goes unanswered, or the run ends. It returns an
+// error when a yes cannot be saved. Only one runs at a time.
+func (gate *liveCodeGate) askUntilSettled() error {
+	gate.mu.Lock()
+	defer func() {
+		gate.asking = false
+		gate.open = nil
+		gate.mu.Unlock()
+	}()
+	for {
+		decision := gate.decide(gate.config, gate.presentation)
+		gate.setPolicy(decision.policy)
+		asker := gate.asker
+		if len(decision.wanted) == 0 || asker == nil || gate.input.Context.Err() != nil {
+			return nil
+		}
+		ctx, withdraw := context.WithCancelCause(gate.input.Context)
+		question := &openApprovalQuestion{withdraw: withdraw, drivers: decision.wanted}
+		gate.open = question
+		request := newApprovalRequest(decision.deck, gate.config, decision.blocks, driverNamesOf(decision.wanted), decision.approvedBefore)
+		for index, driver := range decision.wanted {
+			previous := decision.previousCommands[driver.name]
+			switch {
+			case previous == nil:
+			case slices.Equal(previous, driver.template):
+				request.Drivers[index].ValueChanged = true
+			default:
+				request.Drivers[index].PreviousCommand = maskedCommand(previous, os.LookupEnv)
+			}
+		}
+		names := joinWithAnd(driverNamesOf(decision.wanted))
+
+		gate.mu.Unlock()
+		approved, askErr := asker.askApproval(ctx, request)
+		withdrawn := errors.Is(context.Cause(ctx), errQuestionWithdrawn)
+		withdraw(nil)
+		gate.mu.Lock()
+		gate.open = nil
+
+		switch {
+		case askErr != nil && withdrawn:
+			// A reload changed what to ask. Ask about the latest deck.
+			continue
+		case askErr != nil:
+			if gate.input.Context.Err() == nil {
+				fmt.Fprintf(gate.input.Out, "Live code is off for %s in this run: %v\n", names, askErr)
+			}
+			return nil
+		case !approved:
+			fmt.Fprintf(gate.input.Out, "Live code is off for %s in this run. tap asks again next time.\n", names)
+			gate.declined = append(gate.declined, question.drivers...)
+			continue
+		}
+
+		// The yes holds for this run even when it cannot be saved.
+		gate.approved = append(gate.approved, question.drivers...)
+		saveErr := gate.save(question.drivers)
+		gate.setPolicy(gate.decide(gate.config, gate.presentation).policy)
+		if gate.change != nil {
+			gate.change()
+		}
+		if saveErr != nil {
+			return fmt.Errorf("saving the live code approval: %w", saveErr)
+		}
+	}
+}
+
+// save stores a yes for drivers in the user settings.
+func (gate *liveCodeGate) save(drivers []liveDriver) error {
+	deckKey, err := usersettings.ResolveDeck(gate.input.Deck)
+	if err != nil {
+		return err
+	}
+	// Reload under the lock rather than reusing an earlier read: the
+	// person may have taken a while to answer, and another tap process
+	// could have saved its own approval for a different deck in the
+	// meantime. Merging into a fresh read keeps that approval instead of
+	// overwriting it.
+	return usersettings.WithLock(gate.input.SettingsPath, func() error {
+		fresh, err := usersettings.Load(gate.input.SettingsPath)
 		if err != nil {
 			fresh = usersettings.Settings{}
 		}
-		fresh.Approve(deckKey, declared, input.Now())
-		return usersettings.Save(input.SettingsPath, fresh)
+		// The key is made under the same lock, as tap new does.
+		key, err := usersettings.EnsureApprovalKey(gate.input.SettingsPath)
+		if err != nil {
+			return err
+		}
+		stored := make([]usersettings.Driver, len(drivers))
+		for index, driver := range drivers {
+			stored[index] = driver.stored(key)
+		}
+		fresh.ApproveDrivers(deckKey, stored, gate.input.Now())
+		return usersettings.Save(gate.input.SettingsPath, fresh)
 	})
-	if saveErr != nil {
-		return server.LiveCodePolicy{}, fmt.Errorf("saving the live code approval: %w", saveErr)
+}
+
+// setPolicy records policy and hands it to the server. The caller holds
+// gate.mu.
+func (gate *liveCodeGate) setPolicy(policy server.LiveCodePolicy) {
+	gate.policy = policy
+	if gate.apply != nil {
+		gate.apply(policy)
 	}
-	return server.LiveCodePolicy{Drivers: declared}, nil
+}
+
+// noticeRefused says live code is off for the refused drivers when the
+// gate cannot ask, once for each set of them. The caller holds gate.mu.
+func (gate *liveCodeGate) noticeRefused(decision approvalDecision) {
+	if gate.input.Interactive || gate.input.AllowCode || len(decision.refused) == 0 {
+		gate.refusedNotice = ""
+		return
+	}
+	names := joinWithAnd(driverNamesOf(decision.refused))
+	if names == gate.refusedNotice {
+		return
+	}
+	gate.refusedNotice = names
+	fmt.Fprintf(gate.input.Out, "Live code is off: this deck is not approved to run %s. Run tap dev or tap present in a terminal to approve it, or pass --allow-code for this run.\n", names)
+}
+
+// decide works out the policy and the drivers to ask about for one
+// version of the deck. The caller holds gate.mu.
+func (gate *liveCodeGate) decide(cfg *config.Config, presentation *transformer.TransformedPresentation) approvalDecision {
+	if cfg == nil || presentation == nil {
+		return approvalDecision{}
+	}
+	blocks := runnableBlocks(presentation)
+	if len(blocks) == 0 {
+		return approvalDecision{}
+	}
+	if gate.input.AllowCode {
+		return approvalDecision{policy: server.LiveCodePolicy{AllowAll: true}}
+	}
+
+	deckKey, err := usersettings.ResolveDeck(gate.input.Deck)
+	if err != nil {
+		if !gate.unresolvedNoticed {
+			gate.unresolvedNoticed = true
+			fmt.Fprintf(gate.input.Out, "Live code is off: %s could not be resolved: %v\n", gate.input.Deck, err)
+		}
+		return approvalDecision{}
+	}
+	settings, err := usersettings.Load(gate.input.SettingsPath)
+	if err != nil {
+		// A settings file that cannot be read must not stop the talk. It
+		// fails closed: no stored approval counts, and a yes overwrites
+		// it with a well-formed one. Said once for each error.
+		if notice := err.Error(); notice != gate.settingsNotice {
+			gate.settingsNotice = notice
+			fmt.Fprintf(gate.input.Out, "Ignoring %s, it could not be read: %v\n", gate.input.SettingsPath, err)
+		}
+		settings = usersettings.Settings{}
+	} else {
+		gate.settingsNotice = ""
+	}
+	// Without the key no stored digest can match, so every custom driver
+	// is asked about again, and a yes makes the key.
+	key, keyErr := usersettings.LoadApprovalKey(gate.input.SettingsPath)
+	if keyErr != nil {
+		key = nil
+	}
+
+	decision := approvalDecision{blocks: blocks, deck: deckKey.String(), policy: server.LiveCodePolicy{Drivers: []string{}}}
+	for _, name := range cfg.DeclaredDrivers() {
+		driver := newLiveDriver(name, cfg.Drivers[name])
+		switch {
+		case settings.Covers(deckKey, driver.stored(key)) || containsDriver(gate.approved, driver):
+			decision.approvedBefore = append(decision.approvedBefore, name)
+			decision.policy.Drivers = append(decision.policy.Drivers, name)
+			if driver.expanded != nil {
+				if decision.policy.Commands == nil {
+					decision.policy.Commands = map[string][]string{}
+				}
+				decision.policy.Commands[name] = driver.expanded
+			}
+		case containsDriver(gate.declined, driver):
+			decision.refused = append(decision.refused, driver)
+		default:
+			decision.refused = append(decision.refused, driver)
+			decision.wanted = append(decision.wanted, driver)
+			if previous := gate.previousCommand(settings, deckKey, name); previous != nil {
+				if decision.previousCommands == nil {
+					decision.previousCommands = map[string][]string{}
+				}
+				decision.previousCommands[name] = previous
+			}
+		}
+	}
+	return decision
+}
+
+// previousCommand returns the command template an earlier approval of
+// the driver name covered: the one approved in this run, or else the
+// stored approval's. It is nil when neither approved it with a command.
+// It can equal the template asked about now, when the command is the same
+// but a ${NAME} in it has a different value. The caller holds gate.mu.
+func (gate *liveCodeGate) previousCommand(settings usersettings.Settings, deckKey usersettings.DeckKey, name string) []string {
+	for index := len(gate.approved) - 1; index >= 0; index-- {
+		if gate.approved[index].name == name && gate.approved[index].expanded != nil {
+			return gate.approved[index].template
+		}
+	}
+	if approval, found := settings.ApprovalFor(deckKey); found && slices.Contains(approval.Drivers, name) && approval.CommandDigests[name] != "" {
+		return approval.Commands[name]
+	}
+	return nil
+}
+
+// liveDriver is a declared driver as the gate compares it. template is
+// its command and arguments as the frontmatter writes them, which is all
+// tap ever shows or stores of a command, so no expanded secret is shown
+// or written. expanded is the command line it runs, with every ${NAME}
+// expanded, kept in memory only and stored as a keyed digest. Both are
+// nil for a driver that runs no command of its own, and expanded is nil
+// for one whose command cannot be expanded, which runs nothing but an
+// error.
+type liveDriver struct {
+	name     string
+	template []string
+	expanded []string
+}
+
+func newLiveDriver(name string, settings config.DriverConfig) liveDriver {
+	driver := liveDriver{name: name, expanded: approvalCommand(name, settings)}
+	if settings.Command != "" && !slices.Contains(builtInDriverNames, name) {
+		driver.template = append([]string{settings.Command}, settings.Args...)
+	}
+	return driver
+}
+
+// unavailableDigest stands for a command's digest when there is no
+// approval key. It never matches a stored digest.
+const unavailableDigest = "unavailable"
+
+// stored returns the driver as the settings store and match it, with
+// its command line digested with key. A nil key digests nothing, so no
+// stored approval of a command can match.
+func (driver liveDriver) stored(key []byte) usersettings.Driver {
+	stored := usersettings.Driver{Name: driver.name, Command: driver.template}
+	switch {
+	case driver.expanded == nil:
+	case key == nil:
+		stored.Digest = unavailableDigest
+	default:
+		stored.Digest = usersettings.CommandDigest(key, driver.expanded)
+	}
+	return stored
+}
+
+// approvalCommand returns the command line an approval of a driver
+// covers: what buildDriverRegistry has the driver run, with its ${NAME}
+// variables expanded, so the approval matches the registry's CommandLine.
+// It is nil for a driver that runs no command of its own: a built-in
+// driver, a custom one with no command, and one whose command cannot be
+// expanded, which runs nothing but an error.
+func approvalCommand(name string, settings config.DriverConfig) []string {
+	if settings.Command == "" || slices.Contains(builtInDriverNames, name) {
+		return nil
+	}
+	command, args, err := settings.ExpandedCommand(name, os.LookupEnv)
+	if err != nil {
+		return nil
+	}
+	return append([]string{command}, args...)
+}
+
+// sameDriver reports whether two drivers run the same: the same name
+// and the same expanded command line.
+func sameDriver(a, b liveDriver) bool {
+	return a.name == b.name && slices.Equal(a.expanded, b.expanded)
+}
+
+func containsDriver(drivers []liveDriver, driver liveDriver) bool {
+	return slices.ContainsFunc(drivers, func(candidate liveDriver) bool { return sameDriver(candidate, driver) })
+}
+
+// sameDrivers reports whether a and b hold the same drivers, in order.
+func sameDrivers(a, b []liveDriver) bool {
+	return slices.EqualFunc(a, b, sameDriver)
+}
+
+func driverNamesOf(drivers []liveDriver) []string {
+	names := make([]string, len(drivers))
+	for index, driver := range drivers {
+		names[index] = driver.name
+	}
+	return names
 }
 
 // runnableBlocks returns the live code blocks that use a declared driver,
@@ -196,7 +619,7 @@ func newApprovalRequest(deck string, cfg *config.Config, blocks []approvalBlock,
 	for _, name := range wanted {
 		entry := approvalDriver{Name: name, Slides: []int{}}
 		if settings := cfg.Drivers[name]; settings.Command != "" && !slices.Contains(builtInDriverNames, name) {
-			entry.Command = displayedCommand(name, settings)
+			entry.Command = displayedCommand(settings)
 		}
 		for _, block := range blocks {
 			if block.Driver != name {
@@ -219,18 +642,47 @@ func newApprovalRequest(deck string, cfg *config.Config, blocks []approvalBlock,
 	return request
 }
 
-// displayedCommand returns what a custom driver's command will actually
-// run, with its ${NAME} variables expanded, so the prompt shows the same
-// thing the driver runs rather than the literal frontmatter text. A
-// variable that is not set falls back to the literal, unexpanded text:
-// the prompt's job is to inform, not to fail the question over a problem
-// the block itself will report when it runs.
-func displayedCommand(name string, settings config.DriverConfig) string {
-	command, args, err := settings.ExpandedCommand(name, os.LookupEnv)
-	if err != nil {
-		return strings.Join(append([]string{settings.Command}, settings.Args...), " ")
+// displayedCommand returns a custom driver's command and arguments for
+// the question: see maskedCommand.
+func displayedCommand(settings config.DriverConfig) string {
+	return maskedCommand(append([]string{settings.Command}, settings.Args...), os.LookupEnv)
+}
+
+// secretNamePattern matches a variable name that looks like it holds a
+// secret.
+var secretNamePattern = regexp.MustCompile(`(?i)PASS|TOKEN|KEY|SECRET|CREDENTIAL|AUTH`)
+
+// maskedCommand joins a command template, its command and arguments as
+// the frontmatter writes them, for showing to the person. A ${NAME} whose
+// name does not look secret shows its value from lookup, so the person
+// sees what runs. One whose name looks secret (it contains PASS, which
+// covers PASSWORD and PASSWD, TOKEN, KEY, SECRET, CREDENTIAL or AUTH, in
+// any case) stays ${NAME}, as does a variable that is not set. Nothing
+// shown this way is ever stored: the settings keep the template and a
+// digest.
+func maskedCommand(template []string, lookup func(string) (string, bool)) string {
+	return strings.Join(maskedParts(template, lookup), " ")
+}
+
+// maskedParts is maskedCommand for each part of template, unjoined.
+func maskedParts(template []string, lookup func(string) (string, bool)) []string {
+	masked := func(name string) (string, bool) {
+		if !secretNamePattern.MatchString(name) {
+			if value, found := lookup(name); found {
+				return value, true
+			}
+		}
+		return "${" + name + "}", true
 	}
-	return strings.Join(append([]string{command}, args...), " ")
+	parts := make([]string, len(template))
+	for index, part := range template {
+		shown, err := config.ExpandEnv(part, "", masked)
+		if err != nil {
+			shown = part
+		}
+		parts[index] = shown
+	}
+	return parts
 }
 
 // terminalAsker asks on the terminal, before the TUI starts.
@@ -241,7 +693,7 @@ type terminalAsker struct {
 
 // askApproval prints the request and reads y, n, or s to show the code
 // first. An empty answer, or the end of input, is no.
-func (asker terminalAsker) askApproval(request approvalRequest) (bool, error) {
+func (asker terminalAsker) askApproval(_ context.Context, request approvalRequest) (bool, error) {
 	printApprovalRequest(asker.out, request)
 	reader := bufio.NewReader(asker.in)
 	for {
@@ -278,6 +730,12 @@ func printApprovalRequest(out io.Writer, request approvalRequest) {
 		line := fmt.Sprintf("  %-10s %s", entry.Name, describeDriverBlocks(entry))
 		if entry.Command != "" {
 			line += ", runs: " + entry.Command
+		}
+		if entry.PreviousCommand != "" {
+			line += " (was: " + entry.PreviousCommand + ")"
+		}
+		if entry.ValueChanged {
+			line += " (a value in this command changed since it was approved)"
 		}
 		fmt.Fprintln(out, line)
 	}
@@ -329,4 +787,37 @@ func joinWithAnd(names []string) string {
 		return names[0]
 	}
 	return strings.Join(names[:len(names)-1], ", ") + " and " + names[len(names)-1]
+}
+
+// tuiApprovalAsker asks on the terminal while the TUI runs: it suspends
+// the TUI and puts the same question startup asks.
+type tuiApprovalAsker struct {
+	model *tui.DevModel
+}
+
+func (asker tuiApprovalAsker) askApproval(ctx context.Context, request approvalRequest) (bool, error) {
+	var approved bool
+	var askErr error
+	err := asker.model.AskOnTerminal(ctx, func(in io.Reader, out io.Writer) {
+		approved, askErr = terminalAsker{in: in, out: out}.askApproval(ctx, request)
+	})
+	if err != nil {
+		return false, err
+	}
+	return approved, askErr
+}
+
+// tuiEventWriter shows each line written to it as a TUI event, for output
+// that would otherwise go to the terminal the TUI owns.
+type tuiEventWriter struct {
+	model *tui.DevModel
+}
+
+func (writer tuiEventWriter) Write(data []byte) (int, error) {
+	for _, line := range strings.Split(strings.TrimSpace(string(data)), "\n") {
+		if line = strings.TrimSpace(line); line != "" {
+			writer.model.SendEvent("action", line)
+		}
+	}
+	return len(data), nil
 }

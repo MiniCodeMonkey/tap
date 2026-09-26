@@ -55,6 +55,23 @@ func (r *Registry) List() []string {
 	return names
 }
 
+// commandLiner is a driver that runs a command of its own, such as a
+// custom driver.
+type commandLiner interface {
+	CommandLine() []string
+}
+
+// CommandLine returns the command and arguments the driver name runs, or
+// nil for a driver that runs no command of its own and for a name with no
+// driver. Live code approval covers a custom driver with this command
+// line, so a changed command is not covered by an older approval.
+func (r *Registry) CommandLine(name string) []string {
+	if liner, ok := r.Get(name).(commandLiner); ok {
+		return liner.CommandLine()
+	}
+	return nil
+}
+
 // Execute runs code using the specified driver.
 // Returns an error result if the driver is not found.
 func (r *Registry) Execute(ctx context.Context, driverName, code string, config map[string]string) Result {

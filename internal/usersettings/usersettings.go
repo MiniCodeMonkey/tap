@@ -25,11 +25,36 @@ type Settings struct {
 // they allowed. Deck is an absolute path, so a moved deck is a new deck
 // and is asked about again.
 //
+// Commands holds, by driver name, each approved custom driver's command
+// and arguments as the frontmatter writes them, with every ${NAME} left
+// unexpanded. It is for display only, so no expanded secret is stored.
+// CommandDigests holds, by driver name, the digest of the command line
+// the driver ran when it was approved, with every ${NAME} expanded (see
+// CommandDigest). An approval covers a custom driver only while its
+// command line has exactly that digest, so a changed command, or a
+// changed value of a variable in it, is asked about again. A driver with
+// no digest, a built-in driver or any driver in a record written before
+// digests were stored, is covered only while it runs no command of its
+// own.
+//
 //nolint:govet // fieldalignment: field order is the settings file order
 type Approval struct {
-	Deck       string    `yaml:"deck" json:"deck"`
-	Drivers    []string  `yaml:"drivers,flow" json:"drivers"`
-	ApprovedAt time.Time `yaml:"approvedAt" json:"approvedAt"`
+	Deck           string              `yaml:"deck" json:"deck"`
+	Drivers        []string            `yaml:"drivers,flow" json:"drivers"`
+	Commands       map[string][]string `yaml:"commands,omitempty" json:"commands,omitempty"`
+	CommandDigests map[string]string   `yaml:"commandDigests,omitempty" json:"-"`
+	ApprovedAt     time.Time           `yaml:"approvedAt" json:"approvedAt"`
+}
+
+// Driver is a driver as an approval covers it. Command is its command
+// and arguments as the frontmatter writes them, for display. Digest is
+// CommandDigest of the command line it runs, for matching. Both are
+// empty for a driver that runs no command of its own, such as a built-in
+// driver.
+type Driver struct {
+	Name    string
+	Command []string
+	Digest  string
 }
 
 // Present holds tap present settings. A nil Record means the speaker has
@@ -200,32 +225,81 @@ func (s Settings) ApprovalFor(deck DeckKey) (Approval, bool) {
 	return Approval{}, false
 }
 
-// Approved reports whether deck is approved for every driver in drivers.
+// Approved reports whether deck is approved for every driver in drivers,
+// each as a driver that runs no command of its own.
 func (s Settings) Approved(deck DeckKey, drivers []string) bool {
-	approval, found := s.ApprovalFor(deck)
-	if !found {
-		return false
-	}
 	for _, name := range drivers {
-		if !slices.Contains(approval.Drivers, name) {
+		if !s.Covers(deck, Driver{Name: name}) {
 			return false
 		}
 	}
-	return true
+	_, found := s.ApprovalFor(deck)
+	return found
 }
 
-// Approve records that deck may run drivers. An approval already stored
-// for the deck keeps its drivers and gains the new ones.
+// Covers reports whether deck is approved to run driver: its name is
+// approved, and the digest stored for it is exactly driver.Digest. A
+// driver approved with one command line is not covered with another, and
+// one approved with no command is not covered once it has one.
+func (s Settings) Covers(deck DeckKey, driver Driver) bool {
+	approval, found := s.ApprovalFor(deck)
+	if !found || !slices.Contains(approval.Drivers, driver.Name) {
+		return false
+	}
+	return approval.CommandDigests[driver.Name] == driver.Digest
+}
+
+// Approve records that deck may run drivers, each as a driver that runs
+// no command of its own. See ApproveDrivers.
 func (s *Settings) Approve(deck DeckKey, drivers []string, at time.Time) {
-	merged := append([]string{}, drivers...)
+	approved := make([]Driver, len(drivers))
+	for index, name := range drivers {
+		approved[index] = Driver{Name: name}
+	}
+	s.ApproveDrivers(deck, approved, at)
+}
+
+// ApproveDrivers records that deck may run drivers, each with its
+// command. An approval already stored for the deck keeps its other
+// drivers and their commands. A driver approved again takes its new
+// command, so the command approved before is no longer covered.
+func (s *Settings) ApproveDrivers(deck DeckKey, drivers []Driver, at time.Time) {
+	var names []string
+	commands := map[string][]string{}
+	digests := map[string]string{}
 	if existing, found := s.ApprovalFor(deck); found {
-		merged = append(merged, existing.Drivers...)
+		names = append(names, existing.Drivers...)
+		for name, command := range existing.Commands {
+			commands[name] = command
+		}
+		for name, digest := range existing.CommandDigests {
+			digests[name] = digest
+		}
+	}
+	for _, driver := range drivers {
+		names = append(names, driver.Name)
+		delete(commands, driver.Name)
+		delete(digests, driver.Name)
+		if driver.Command != nil {
+			commands[driver.Name] = append([]string{}, driver.Command...)
+		}
+		if driver.Digest != "" {
+			digests[driver.Name] = driver.Digest
+		}
+	}
+	if len(commands) == 0 {
+		commands = nil
+	}
+	if len(digests) == 0 {
+		digests = nil
 	}
 	s.Revoke(deck)
 	s.Approvals = append(s.Approvals, Approval{
-		Deck:       deck.path,
-		Drivers:    uniqueSorted(merged),
-		ApprovedAt: at.UTC().Truncate(time.Second),
+		Deck:           deck.path,
+		Drivers:        uniqueSorted(names),
+		Commands:       commands,
+		CommandDigests: digests,
+		ApprovedAt:     at.UTC().Truncate(time.Second),
 	})
 }
 

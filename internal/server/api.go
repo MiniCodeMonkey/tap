@@ -46,17 +46,29 @@ type ExecuteResponse struct {
 const DefaultExecuteTimeout = time.Duration(config.DefaultDriverTimeoutSeconds) * time.Second
 
 // LiveCodePolicy is which drivers a run of tap dev or tap present lets
-// /api/execute use. It comes from the approval check at startup.
+// /api/execute use. It comes from the approval check at startup, and
+// again on every reload and every answer to an approval question.
 type LiveCodePolicy struct {
+	// Commands holds the approved command line of each driver in Drivers
+	// that runs a command of its own, by driver name. A driver with no
+	// entry is allowed only while it runs no command of its own.
+	Commands map[string][]string
 	// Drivers are the drivers the person approved for this deck.
 	Drivers []string
 	// AllowAll lets every declared driver run, for --allow-code.
 	AllowAll bool
 }
 
-// Allows reports whether the policy lets a block with driverName run.
-func (p LiveCodePolicy) Allows(driverName string) bool {
-	return p.AllowAll || slices.Contains(p.Drivers, driverName)
+// Allows reports whether the policy lets a block with driverName run,
+// when that driver runs command, its command line as the registry holds
+// it. An approved driver whose command differs from the approved one is
+// not allowed: the person approved what it ran then, not what it runs
+// now.
+func (p LiveCodePolicy) Allows(driverName string, command []string) bool {
+	if p.AllowAll {
+		return true
+	}
+	return slices.Contains(p.Drivers, driverName) && slices.Equal(p.Commands[driverName], command)
 }
 
 // codeInBodyMessage answers a request that sends code instead of a block
@@ -151,7 +163,10 @@ func (s *Server) handleAPIExecute(w http.ResponseWriter, r *http.Request) {
 		writeExecuteError(w, http.StatusUnprocessableEntity, block.Problem)
 		return
 	}
-	if !s.LiveCodePolicy().Allows(block.Driver) {
+	// The command line comes from the same registry snapshot that runs
+	// the block below, so a reload that changes a driver's command can
+	// never pair the new command with the approval of the old one.
+	if !s.LiveCodePolicy().Allows(block.Driver, registry.CommandLine(block.Driver)) {
 		writeExecuteError(w, http.StatusForbidden, notApprovedMessage)
 		return
 	}

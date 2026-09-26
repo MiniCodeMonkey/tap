@@ -19,6 +19,13 @@ const (
 var (
 	errUnknownQuestion = errors.New("no open question has this id")
 	errInvalidAnswer   = errors.New("an answer must be true or false")
+	// errQuestionWithdrawn is the cause a question's context ends with
+	// when tap no longer needs its answer. ask then tells the app the
+	// question is closed.
+	errQuestionWithdrawn = errors.New("the question was withdrawn")
+	// errQuestionUnanswered is what the approval asker returns when no
+	// answer came, so an unanswered question is never taken for a no.
+	errQuestionUnanswered = errors.New("no answer came")
 )
 
 // appQuestions puts questions to the app as events and hands each answer
@@ -38,7 +45,9 @@ func newAppQuestions(events *appEventWriter) *appQuestions {
 }
 
 // ask sends a question event and waits for its answer. answered is false
-// when ctx ends, or standard input closes, before an answer comes.
+// when ctx ends, or standard input closes, before an answer comes. A ctx
+// that ends with errQuestionWithdrawn as its cause also sends a
+// question-closed event, so the app stops showing the question.
 func (questions *appQuestions) ask(ctx context.Context, kind string, payload any) (answer, answered bool) {
 	if ctx.Err() != nil {
 		return false, false
@@ -60,8 +69,12 @@ func (questions *appQuestions) ask(ctx context.Context, kind string, payload any
 		return answer, answered
 	case <-ctx.Done():
 		questions.mu.Lock()
+		_, open := questions.pending[id]
 		delete(questions.pending, id)
 		questions.mu.Unlock()
+		if open && errors.Is(context.Cause(ctx), errQuestionWithdrawn) {
+			questions.events.emit(appQuestionClosedEvent{Type: appEventQuestionClosed, ID: id})
+		}
 		return false, false
 	}
 }
@@ -103,14 +116,20 @@ func (questions *appQuestions) close() {
 }
 
 // appApprovalAsker asks the live code approval question as an event. An
-// unanswered question is a no, so nothing is stored.
+// unanswered question returns an error, so it stores nothing and is not
+// taken for a no: the person never said no.
 type appApprovalAsker struct {
-	ctx       context.Context
 	questions *appQuestions
 }
 
-func (asker appApprovalAsker) askApproval(request approvalRequest) (bool, error) {
-	approved, _ := asker.questions.ask(asker.ctx, appQuestionApproval, request)
+func (asker appApprovalAsker) askApproval(ctx context.Context, request approvalRequest) (bool, error) {
+	approved, answered := asker.questions.ask(ctx, appQuestionApproval, request)
+	if !answered {
+		if cause := context.Cause(ctx); cause != nil {
+			return false, cause
+		}
+		return false, errQuestionUnanswered
+	}
 	return approved, nil
 }
 

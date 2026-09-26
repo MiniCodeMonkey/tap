@@ -380,14 +380,71 @@ func TestExecuteNamesADeclaredDriverWithNoCommand(t *testing.T) {
 }
 
 func TestLiveCodePolicyAllows(t *testing.T) {
-	if (LiveCodePolicy{}).Allows("shell") {
+	if (LiveCodePolicy{}).Allows("shell", nil) {
 		t.Error("an empty policy allows shell")
 	}
-	if !(LiveCodePolicy{Drivers: []string{"shell"}}).Allows("shell") {
+	if !(LiveCodePolicy{Drivers: []string{"shell"}}).Allows("shell", nil) {
 		t.Error("an approved driver is not allowed")
 	}
-	if !(LiveCodePolicy{AllowAll: true}).Allows("anything") {
+	if !(LiveCodePolicy{AllowAll: true}).Allows("anything", []string{"bash"}) {
 		t.Error("--allow-code does not allow a driver")
+	}
+	python := LiveCodePolicy{Drivers: []string{"python"}, Commands: map[string][]string{"python": {"python3", "-c"}}}
+	if !python.Allows("python", []string{"python3", "-c"}) {
+		t.Error("a driver with its approved command is not allowed")
+	}
+	if python.Allows("python", []string{"bash", "-c"}) {
+		t.Error("a driver whose command changed is allowed")
+	}
+	if python.Allows("python", nil) {
+		t.Error("a driver that lost its approved command is allowed")
+	}
+	if (LiveCodePolicy{Drivers: []string{"shell"}}).Allows("shell", []string{"sh"}) {
+		t.Error("a driver approved with no command is allowed to run one")
+	}
+}
+
+// commandDriver is a recordingDriver that reports the command line it
+// runs, the way a custom driver does.
+type commandDriver struct {
+	recordingDriver
+	command []string
+}
+
+func (d *commandDriver) CommandLine() []string { return d.command }
+
+// commandServer returns a server with liveDeck loaded, the test driver
+// registered as one that runs command, and policy set.
+func commandServer(t *testing.T, command []string, policy LiveCodePolicy) (*Server, *commandDriver) {
+	t.Helper()
+	s := New(0)
+	test := &commandDriver{recordingDriver: recordingDriver{name: "test"}, command: command}
+	registry := driver.NewRegistry()
+	registry.Register(test)
+	s.SetRegistry(registry)
+	s.SetPresentation(liveDeck())
+	s.SetLiveCodePolicy(policy)
+	return s, test
+}
+
+func TestExecuteRefusesAnApprovedDriverWhoseCommandChanged(t *testing.T) {
+	policy := LiveCodePolicy{Drivers: []string{"test"}, Commands: map[string][]string{"test": {"python3", "-c"}}}
+	s, test := commandServer(t, []string{"bash", "-c"}, policy)
+	status, response := postExecute(t, s, `{"slide": 2, "block": 1}`)
+	if status != http.StatusForbidden || response.Error != notApprovedMessage {
+		t.Errorf("status %d, error %q, want the refusal", status, response.Error)
+	}
+	if test.ranCode != "" {
+		t.Errorf("ran %q with a command nobody approved", test.ranCode)
+	}
+}
+
+func TestExecuteRunsAnApprovedDriverWithItsApprovedCommand(t *testing.T) {
+	policy := LiveCodePolicy{Drivers: []string{"test"}, Commands: map[string][]string{"test": {"python3", "-c"}}}
+	s, test := commandServer(t, []string{"python3", "-c"}, policy)
+	status, response := postExecute(t, s, `{"slide": 2, "block": 1}`)
+	if status != http.StatusOK || !response.Success || test.ranCode != "echo one" {
+		t.Errorf("status %d, response %+v, ran %q", status, response, test.ranCode)
 	}
 }
 

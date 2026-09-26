@@ -113,7 +113,7 @@ func TestAppQuestionsCloseEndsEveryQuestion(t *testing.T) {
 func TestAppApprovalAskerAsksAnApprovalQuestion(t *testing.T) {
 	events, log := newTestEvents(t)
 	questions := newAppQuestions(events)
-	asker := appApprovalAsker{ctx: context.Background(), questions: questions}
+	asker := appApprovalAsker{questions: questions}
 	request := approvalRequest{
 		Deck:    "/talks/talk.md",
 		Drivers: []approvalDriver{{Name: "shell", Slides: []int{2}, Blocks: 1}},
@@ -121,7 +121,7 @@ func TestAppApprovalAskerAsksAnApprovalQuestion(t *testing.T) {
 	}
 	approved := make(chan bool, 1)
 	go func() {
-		answer, _ := asker.askApproval(request)
+		answer, _ := asker.askApproval(context.Background(), request)
 		approved <- answer
 	}()
 
