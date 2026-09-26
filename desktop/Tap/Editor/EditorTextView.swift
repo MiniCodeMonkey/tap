@@ -174,8 +174,10 @@ final class EditorTextView: NSTextView {
         declaredDrivers = Frontmatter(text: string).declaredDrivers
     }
 
+    /// The header of a box as drawn, hit tested and offered in menus. While
+    /// tap reports a problem with the frontmatter it offers no fix-it.
     func header(forBoxAt index: Int) -> BoxHeader {
-        BoxHeader(slide: boxes[index].slide, declaredDrivers: declaredDrivers)
+        BoxHeader(slide: boxes[index].slide, declaredDrivers: declaredDrivers, frontmatterIsBroken: !deckErrors.isEmpty)
     }
 
     /// An edit the app makes, such as loading the disk version. It may change
@@ -449,8 +451,7 @@ final class EditorTextView: NSTextView {
         for index in visibleBoxIndices() {
             guard let boxRect = boxRect(forBoxAt: index) else { continue }
             if boxRect.intersects(rect) {
-                let box = boxes[index]
-                draw(header: BoxHeader(slide: box.slide, declaredDrivers: declaredDrivers), skipped: box.slide.skip, in: boxRect, isCurrent: index == currentBoxIndex)
+                draw(header: header(forBoxAt: index), skipped: boxes[index].slide.skip, in: boxRect, isCurrent: index == currentBoxIndex)
             }
         }
         if let before = dropIndicatorBeforeNumber, let y = dropIndicatorY(beforeNumber: before) {
@@ -483,14 +484,20 @@ final class EditorTextView: NSTextView {
     private static let badgeAttributes: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 10.5), .foregroundColor: NSColor.secondaryLabelColor]
     private static let fixItAttributes: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 10.5, weight: .semibold), .foregroundColor: EditorPalette.error]
 
-    /// Where the badges end on the left, as `draw(header:)` lays them out from the right.
-    static func badgesLeftEdge(for badges: [String], headerMaxX: CGFloat) -> CGFloat {
+    /// The badges' pills in the badges' order, laid out right to left from
+    /// the header's right edge, and where they end on the left. Drawing and
+    /// the fix-it's hit test both come here, so the pill left of them sits
+    /// where it was drawn.
+    static func badgeLayout(for badges: [String], headerMaxX: CGFloat, headerTop: CGFloat) -> (pills: [NSRect], leftEdge: CGFloat) {
         var badgeX = headerMaxX - 10
+        var pills: [NSRect] = []
         for badge in badges.reversed() {
-            badgeX -= NSAttributedString(string: badge, attributes: badgeAttributes).size().width + 14
+            let width = NSAttributedString(string: badge, attributes: badgeAttributes).size().width + 14
+            badgeX -= width
+            pills.insert(NSRect(x: badgeX, y: headerTop + 6, width: width, height: 16), at: 0)
             badgeX -= 6
         }
-        return badgeX
+        return (pills, badgeX)
     }
 
     /// The fix-it pill: left of the badges, 18 points tall, as wide as its
@@ -506,7 +513,8 @@ final class EditorTextView: NSTextView {
         guard boxes.indices.contains(index), let headerRect = headerRect(forBoxAt: index) else { return nil }
         let header = self.header(forBoxAt: index)
         guard let fixIt = header.fixIt else { return nil }
-        return Self.fixItRect(title: fixIt.title, badgesLeftEdge: Self.badgesLeftEdge(for: header.badges, headerMaxX: headerRect.maxX), headerTop: headerRect.minY)
+        let badgesLeftEdge = Self.badgeLayout(for: header.badges, headerMaxX: headerRect.maxX, headerTop: headerRect.minY).leftEdge
+        return Self.fixItRect(title: fixIt.title, badgesLeftEdge: badgesLeftEdge, headerTop: headerRect.minY)
     }
 
     private func draw(header: BoxHeader, skipped: Bool, in rect: NSRect, isCurrent: Bool) {
@@ -538,20 +546,15 @@ final class EditorTextView: NSTextView {
         number.draw(at: NSPoint(x: x, y: baseline))
         x += number.size().width + 7
 
-        var badgeX = rect.maxX - 10
-        for badge in header.badges.reversed() {
-            let string = NSAttributedString(string: badge, attributes: Self.badgeAttributes)
-            let size = string.size()
-            badgeX -= size.width + 14
-            let pill = NSRect(x: badgeX, y: rect.minY + 6, width: size.width + 14, height: 16)
+        let badgeLayout = Self.badgeLayout(for: header.badges, headerMaxX: rect.maxX, headerTop: rect.minY)
+        for (badge, pill) in zip(header.badges, badgeLayout.pills) {
             NSColor.labelColor.withAlphaComponent(0.06).setFill()
             NSBezierPath(roundedRect: pill, xRadius: 8, yRadius: 8).fill()
-            string.draw(at: NSPoint(x: pill.minX + 7, y: pill.minY + 1))
-            badgeX -= 6
+            NSAttributedString(string: badge, attributes: Self.badgeAttributes).draw(at: NSPoint(x: pill.minX + 7, y: pill.minY + 1))
         }
-        var metaLimit = badgeX
+        var metaLimit = badgeLayout.leftEdge
         if let fixIt = header.fixIt {
-            let pill = Self.fixItRect(title: fixIt.title, badgesLeftEdge: badgeX, headerTop: rect.minY)
+            let pill = Self.fixItRect(title: fixIt.title, badgesLeftEdge: badgeLayout.leftEdge, headerTop: rect.minY)
             EditorPalette.boxFill.setFill()
             let path = NSBezierPath(roundedRect: pill, xRadius: 9, yRadius: 9)
             path.fill()
@@ -600,7 +603,8 @@ final class EditorTextView: NSTextView {
     /// click, handled as any click in the text.
     override func mouseDown(with event: NSEvent) {
         let point = convert(event.locationInWindow, from: nil)
-        if let index = boxIndex(forHeaderAt: point), let pill = fixItRect(forBoxAt: index), pill.contains(point) {
+        // A Control-click on the pill is a context menu click, as anywhere on the header.
+        if !event.modifierFlags.contains(.control), let index = boxIndex(forHeaderAt: point), let pill = fixItRect(forBoxAt: index), pill.contains(point) {
             editorDelegate?.editor(self, applyFixItForBoxAt: index)
             return
         }

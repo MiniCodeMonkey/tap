@@ -249,8 +249,10 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
     /// text, so the question about the new driver follows the edit; the
     /// save is what the CLI and a later open read.
     func allowDriver(_ name: String) {
-        guard let replacement = Frontmatter(text: editor.string).addingDriver(name) else {
-            // Declared already, or a drivers value the edit cannot rewrite (`drivers: ~`): nothing to do, and not silently.
+        // While tap reports a broken frontmatter, every live block reads as
+        // undeclared: the frontmatter's problem is the one to fix.
+        guard editor.deckErrors.isEmpty, let replacement = Frontmatter(text: editor.string).addingDriver(name) else {
+            // Declared already, a drivers value the edit cannot rewrite (`drivers: ~`), or a broken frontmatter: nothing to do, and not silently.
             NSSound.beep()
             return
         }

@@ -8,7 +8,10 @@ import Foundation
 public struct BoxHeader: Equatable, Sendable {
     /// Declaring a block's driver, the one problem the app can fix. Offered
     /// when a live block has a problem and the frontmatter the caller holds
-    /// does not declare its driver (or the caller holds none).
+    /// does not declare its driver (or the caller holds none), unless the
+    /// caller says the frontmatter is broken: tap then renders with its
+    /// defaults, every live block reports its driver undeclared, and the
+    /// fix is the frontmatter's own problem, not a declaration.
     public struct FixIt: Equatable, Sendable {
         public let driver: String
         public var title: String { "Allow \(driver) in This Deck" }
@@ -21,7 +24,7 @@ public struct BoxHeader: Equatable, Sendable {
     public let errors: [String]
     public let fixIt: FixIt?
 
-    public init(slide: Slide, declaredDrivers: [String]? = nil) {
+    public init(slide: Slide, declaredDrivers: [String]? = nil, frontmatterIsBroken: Bool = false) {
         number = "\(slide.number)"
         var parts: [String] = []
         if !slide.layout.isEmpty { parts.append(slide.layout) }
@@ -50,7 +53,7 @@ public struct BoxHeader: Equatable, Sendable {
             // tap's message on one line: the no-drivers form spans several.
             let oneLine = problem.components(separatedBy: .newlines).map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }.joined(separator: " ")
             errors.append(block.line > 0 ? "Line \(block.line): \(oneLine)" : oneLine)
-            if fixIt == nil, block.live, !block.driver.isEmpty, !(declaredDrivers?.contains(block.driver) ?? false) {
+            if fixIt == nil, !frontmatterIsBroken, block.live, !block.driver.isEmpty, !(declaredDrivers?.contains(block.driver) ?? false) {
                 fixIt = FixIt(driver: block.driver)
             }
         }

@@ -4,10 +4,10 @@ import XCTest
 /// A block whose driver the deck does not declare: tap's message on the
 /// box, and the fix-it that declares the driver as one undo step.
 final class FixItTests: HostedTestCase {
-    func mouseDown(at point: NSPoint, in editor: EditorTextView) throws -> NSEvent {
+    func mouseDown(at point: NSPoint, in editor: EditorTextView, type: NSEvent.EventType = .leftMouseDown, modifierFlags: NSEvent.ModifierFlags = []) throws -> NSEvent {
         let window = try XCTUnwrap(editor.window)
         let inWindow = editor.convert(point, to: nil)
-        return try XCTUnwrap(NSEvent.mouseEvent(with: .leftMouseDown, location: inWindow, modifierFlags: [], timestamp: 0,
+        return try XCTUnwrap(NSEvent.mouseEvent(with: type, location: inWindow, modifierFlags: modifierFlags, timestamp: 0,
                                                 windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1))
     }
 
@@ -35,7 +35,16 @@ final class FixItTests: HostedTestCase {
         editor.layoutSubtreeIfNeeded()
         let pill = try XCTUnwrap(editor.fixItRect(forBoxAt: 5), "the pill is on the box")
         let original = editor.string
-        editor.mouseDown(with: try mouseDown(at: NSPoint(x: pill.midX, y: pill.midY), in: editor))
+        // A Control-click on the pill is a context menu click: the box's menu, and no edit.
+        let center = NSPoint(x: pill.midX, y: pill.midY)
+        let controlClick = try mouseDown(at: center, in: editor, modifierFlags: .control)
+        XCTAssertEqual(editor.menu(for: controlClick)?.items.last?.title, "Allow shell in This Deck", "the box's context menu")
+        NSApp.postEvent(try mouseDown(at: center, in: editor, type: .leftMouseUp, modifierFlags: .control), atStart: false)
+        editor.mouseDown(with: controlClick)
+        NSApp.discardEvents(matching: [.leftMouseDragged, .leftMouseUp], before: nil)
+        XCTAssertEqual(editor.string, original, "a Control-click on the pill edits nothing")
+        XCTAssertNotNil(editor.header(forBoxAt: 5).fixIt)
+        editor.mouseDown(with: try mouseDown(at: center, in: editor))
         XCTAssertTrue(editor.string.hasPrefix("---\ntitle: Undeclared Driver\ndrivers:\n  sqlite: {}\n  shell: {}\n---\n"), "shell: {} under drivers, one edit: \(editor.string.prefix(80))")
         XCTAssertEqual(editor.undoManager?.undoActionName, "Allow shell in This Deck")
         XCTAssertNil(editor.header(forBoxAt: 5).fixIt, "declared in the buffer: the pill goes before tap answers")
@@ -88,6 +97,32 @@ final class FixItTests: HostedTestCase {
         let menu = try XCTUnwrap(controller.editor(editor, contextMenuForBoxAt: 3))
         XCTAssertEqual(menu.items.last?.title, "Allow sqlite in This Deck")
         XCTAssertEqual(menu.items.last?.representedObject as? String, "sqlite")
+    }
 
+    /// With a frontmatter tap cannot read, tap renders with its defaults and
+    /// every live block reads as undeclared: the frontmatter is the problem,
+    /// so no box offers the fix-it and the fix-it edits nothing.
+    func testNoFixItWhileTheFrontmatterIsBroken() async throws {
+        let document = try await openDeckAndWaitForPreview(try Fixtures.copyDeck("undeclared-driver.md"))
+        let controller = try XCTUnwrap(document.sessionController)
+        let editor = controller.editor
+        try await waitForBoxes(document, count: 6)
+        try await waitUntil(timeout: 10, "tap's problem on the shell block") { editor.boxes[5].slide.codeBlocks.first?.problem != nil }
+        XCTAssertNotNil(editor.header(forBoxAt: 5).fixIt)
+        let range = (editor.string as NSString).range(of: "title: Undeclared Driver")
+        editor.replaceText(in: range, with: "title: [unclosed", actionName: "Edit")
+        try await waitUntil(timeout: 15, "tap's deck error") { !editor.deckErrors.isEmpty }
+        XCTAssertNil(editor.header(forBoxAt: 5).fixIt, "the shell block offers nothing")
+        XCTAssertNil(editor.header(forBoxAt: 3).fixIt, "nor the declared sqlite block, which tap now reads as undeclared")
+        editor.layoutSubtreeIfNeeded()
+        XCTAssertNil(editor.fixItRect(forBoxAt: 5), "no pill")
+        XCTAssertNotEqual(controller.editor(editor, contextMenuForBoxAt: 5)?.items.last?.title, "Allow shell in This Deck")
+        let deckWindow = try XCTUnwrap(document.windowControllers.first as? DeckWindowController)
+        controller.jumpToSlide(number: 6)
+        let item = NSMenuItem(title: "Allow Driver in This Deck", action: #selector(DeckWindowController.allowDriverInThisDeck(_:)), keyEquivalent: "")
+        XCTAssertFalse(deckWindow.validateMenuItem(item), "the Slide menu's item is off")
+        let text = editor.string
+        controller.allowDriver("shell")
+        XCTAssertEqual(editor.string, text, "the fix-it edits nothing while the frontmatter is broken")
     }
 }

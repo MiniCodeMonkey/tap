@@ -40,6 +40,9 @@ final class BoxHeaderTests: XCTestCase {
         XCTAssertEqual(header.badges, ["shell"])
         XCTAssertNil(BoxHeader(slide: slide, declaredDrivers: ["shell"]).fixIt, "declared since tap answered: nothing left to fix")
         XCTAssertNotNil(BoxHeader(slide: slide).fixIt, "with no frontmatter to check, the problem alone offers it")
+        let broken = BoxHeader(slide: slide, declaredDrivers: [], frontmatterIsBroken: true)
+        XCTAssertNil(broken.fixIt, "a broken frontmatter is the problem to fix, not a missing declaration")
+        XCTAssertEqual(broken.errors, header.errors, "the block's problem still shows")
         XCTAssertNil(BoxHeader(slide: Slide(number: 1, startLine: 1, endLine: 2)).fixIt)
         let multiLine = Slide(number: 4, startLine: 17, endLine: 21, codeBlocks: [
             CodeBlock(block: 1, language: "sql", driver: "sqlite", live: true, line: 19,
