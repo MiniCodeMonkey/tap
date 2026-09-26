@@ -176,17 +176,26 @@ extension PreviewRecoveryTests {
 
     /// A load that replaces one still in flight: WebKit reports the old
     /// navigation as cancelled, and that says nothing about the new load.
+    /// tap is stopped so the first load stays in flight, waiting on it,
+    /// until the second replaces it.
     func testCallbacksForAReplacedLoadAreIgnored() async throws {
         let document = try await openDeckAndWaitForPreview(try Fixtures.copyAppFixture())
         let controller = try XCTUnwrap(document.sessionController)
         let preview = controller.previewViewController
+        let tap = try XCTUnwrap(controller.session.processIdentifier)
+        kill(tap, SIGSTOP)
+        var resumed = false
+        defer { if !resumed { kill(tap, SIGCONT) } }
         let ignoredBefore = preview.ignoredNavigationCallbackCount
 
         preview.reload()
+        try await waitUntil(timeout: 5, "the first load to start") { preview.navigationMilestoneDescription.contains("start") }
         preview.reload()
+        try await waitUntil(timeout: 5, "WebKit's callback for the replaced load") { preview.ignoredNavigationCallbackCount > ignoredBefore }
+        kill(tap, SIGCONT)
+        resumed = true
 
         try await waitUntil(timeout: 20, "the second load's ready") { preview.lastReady != nil }
-        try await waitUntil(timeout: 5, "WebKit's callback for the replaced load") { preview.ignoredNavigationCallbackCount > ignoredBefore }
         XCTAssertFalse(preview.navigationMilestoneDescription.contains("fail"), preview.navigationMilestoneDescription)
         XCTAssertTrue(preview.navigationMilestoneDescription.contains("finish"), preview.navigationMilestoneDescription)
     }
