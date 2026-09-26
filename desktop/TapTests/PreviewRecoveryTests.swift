@@ -84,7 +84,7 @@ final class PreviewRecoveryTests: HostedTestCase {
 final class TalkPageRecoveryTests: PresentingTestCase {
     func testATalkPageWhoseWebProcessEndsComesBack() async throws {
         let (_, controller) = try await openDeckForPresenting()
-        try await startPresenting(controller, PresentationOptions(mode: .rehearse, startSlide: 1))
+        try await startPresenting(controller, PresentationOptions(mode: .play, startSlide: 1))
         let page = try XCTUnwrap(controller.presentation.audienceWindow?.page)
         try await waitUntil(timeout: 20, "the audience page's first ready") { page.lastReady != nil }
         let process = try XCTUnwrap(page.webView.contentProcessIdentifier, "the audience page's content process identifier")
