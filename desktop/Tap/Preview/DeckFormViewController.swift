@@ -33,6 +33,9 @@ final class DeckFormViewController: NSViewController, NSTextFieldDelegate, NSTex
     /// (which ends editing, which fires `controlChanged`) applies its edit
     /// once and does not refresh or rebuild from inside the rebuild.
     private var isRebuilding = false
+    /// True while `discardEditing` ends an edit: the field's text goes, and
+    /// nothing is written.
+    private var isDiscarding = false
     private var hintLabels: [String: NSTextField] = [:]
     private var addFields: [String: NSTextField] = [:]
     private var addButtons: [String: NSButton] = [:]
@@ -132,7 +135,7 @@ final class DeckFormViewController: NSViewController, NSTextFieldDelegate, NSTex
 
     private func show(_ value: String?, in control: NSControl, for key: SchemaKey) {
         switch control {
-        // NSPopUpButton is an NSButton: its case comes first, or a button case would take it.
+        // Each control class takes one case: none of these is a subclass of another.
         case let popup as NSPopUpButton:
             guard let value else {
                 popup.selectItem(withTitle: defaultItemTitle(for: key))
@@ -182,6 +185,17 @@ final class DeckFormViewController: NSViewController, NSTextFieldDelegate, NSTex
         return window.makeFirstResponder(nil)
     }
 
+    /// Ends an edit in progress without writing it: for a rebuild while tap
+    /// reports the frontmatter broken, where a typed value would be written
+    /// into a frontmatter nobody can read. The frontmatter shows in the
+    /// editor, where the person fixes it.
+    override func discardEditing() {
+        guard isViewLoaded, let window = view.window, editingText != nil else { return }
+        isDiscarding = true
+        defer { isDiscarding = false }
+        window.makeFirstResponder(nil)
+    }
+
     /// Writes what is typed so far without ending the edit, for an
     /// autosave: the person keeps typing, and the file has the text so far.
     func commitEditingKeepingFocus() {
@@ -197,7 +211,9 @@ final class DeckFormViewController: NSViewController, NSTextFieldDelegate, NSTex
         guard isViewLoaded, !isRebuilding else { return }
         isRebuilding = true
         defer { isRebuilding = false }
-        _ = commitEditing()
+        // An edit in progress reaches the frontmatter before its row goes,
+        // unless tap reports the frontmatter broken.
+        if deckErrors.isEmpty { _ = commitEditing() } else { discardEditing() }
         for view in stack.arrangedSubviews {
             stack.removeArrangedSubview(view)
             view.removeFromSuperview()
@@ -394,7 +410,7 @@ final class DeckFormViewController: NSViewController, NSTextFieldDelegate, NSTex
     /// parent: both are refused with a beep, and the text view reads the
     /// block again.
     func applyRawEditor(_ textView: NSTextView) {
-        guard let binding = rawEditors.first(where: { $0.textView === textView }), let key = DeckSchema.key(at: binding.path, in: keys) else { return }
+        guard !isDiscarding, let binding = rawEditors.first(where: { $0.textView === textView }), let key = DeckSchema.key(at: binding.path, in: keys) else { return }
         let frontmatter = Frontmatter(text: text())
         var raw = textView.string.replacingOccurrences(of: "\r\n", with: "\n").replacingOccurrences(of: "\n", with: frontmatter.lineEnding)
         if !raw.hasSuffix(frontmatter.lineEnding) { raw += frontmatter.lineEnding }
@@ -482,7 +498,7 @@ final class DeckFormViewController: NSViewController, NSTextFieldDelegate, NSTex
     /// A value the form cannot write (a pair inside a flow map) beeps and
     /// the field reads the text again.
     @objc func controlChanged(_ sender: NSControl) {
-        guard !isRefreshing, let path = bindings.first(where: { $0.control === sender })?.path, let key = DeckSchema.key(at: path, in: keys) else { return }
+        guard !isRefreshing, !isDiscarding, let path = bindings.first(where: { $0.control === sender })?.path, let key = DeckSchema.key(at: path, in: keys) else { return }
         let frontmatter = Frontmatter(text: text())
         let raw: String?
         switch sender {

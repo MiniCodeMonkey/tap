@@ -272,10 +272,11 @@ final class DeckDocument: NSDocument {
     // write somewhere other than the conflicting file and are untouched.
     override func save(to url: URL, ofType typeName: String, for saveOperation: NSDocument.SaveOperationType,
                        completionHandler: @escaping (Error?) -> Void) {
-        // A Deck tab field still being typed in goes into the file: an autosave
-        // takes its text and leaves the person typing; a save the person asked
-        // for, Save As or Play's save ends the edit first.
-        if saveOperation == .autosaveInPlaceOperation {
+        // A Deck tab field still being typed in goes into the file: an autosave,
+        // in place or elsewhere (an untitled deck's), takes its text and leaves
+        // the person typing; a save the person asked for, Save As or Play's
+        // save ends the edit first.
+        if saveOperation == .autosaveInPlaceOperation || saveOperation == .autosaveElsewhereOperation {
             sessionController?.deckForm.commitEditingKeepingFocus()
         } else {
             _ = sessionController?.deckForm.commitEditing()

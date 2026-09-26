@@ -221,4 +221,61 @@ final class DeckTabTests: HostedTestCase {
         window.makeFirstResponder(nil)
         XCTAssertTrue(controller.editor.string.contains("title: Half typed\n"))
     }
+
+    /// Cmd-S, a save the person asks for, ends a Deck tab edit and writes it.
+    func testASaveThePersonAsksForCommitsTheDeckField() async throws {
+        _ = try await loadedSchema()
+        let (document, controller, _) = try await openOnTheDeckTab()
+        let deck = try XCTUnwrap(document.fileURL)
+        let title = try XCTUnwrap(controller.deckForm.field("title") as? NSTextField)
+        let window = try XCTUnwrap(title.window)
+        XCTAssertTrue(window.makeFirstResponder(title))
+        try XCTUnwrap(title.currentEditor()).string = "Draft"
+        var saved: Error?? = nil
+        document.save(to: deck, ofType: document.fileType ?? "net.daringfireball.markdown", for: .saveOperation) { saved = .some($0) }
+        try await waitUntil(timeout: 10, "the save") { saved != nil }
+        XCTAssertNil(saved ?? nil)
+        let onDisk = try String(contentsOf: deck, encoding: .utf8)
+        XCTAssertTrue(onDisk.contains("title: Draft\n"), "the file has the typed title: \(onDisk.prefix(60))")
+        XCTAssertNil(window.firstResponder as? NSText, "the edit ended")
+    }
+
+    /// An autosave elsewhere (an untitled deck's) writes what is typed so far and leaves the person typing, as one in place does.
+    func testAnAutosaveElsewhereKeepsTheFieldsFocus() async throws {
+        _ = try await loadedSchema()
+        let (document, controller, _) = try await openOnTheDeckTab()
+        let title = try XCTUnwrap(controller.deckForm.field("title") as? NSTextField)
+        let window = try XCTUnwrap(title.window)
+        XCTAssertTrue(window.makeFirstResponder(title))
+        let fieldEditor = try XCTUnwrap(title.currentEditor())
+        fieldEditor.string = "Half typ"
+        let elsewhere = try Fixtures.temporaryFolder().appendingPathComponent("autosave.md")
+        var saved: Error?? = nil
+        document.save(to: elsewhere, ofType: document.fileType ?? "net.daringfireball.markdown", for: .autosaveElsewhereOperation) { saved = .some($0) }
+        try await waitUntil(timeout: 10, "the autosave") { saved != nil }
+        XCTAssertTrue(controller.editor.string.contains("title: Half typ\n"), "the text so far is in the buffer the autosave wrote")
+        XCTAssertTrue(window.firstResponder === fieldEditor, "still typing")
+        fieldEditor.string = "Half typed"
+        window.makeFirstResponder(nil)
+        XCTAssertTrue(controller.editor.string.contains("title: Half typed\n"))
+    }
+
+    /// When tap reports the frontmatter broken, the form's rebuild ends the
+    /// edit in progress without writing it into a frontmatter nobody can read.
+    func testARebuildNeverWritesIntoABrokenFrontmatter() async throws {
+        _ = try await loadedSchema()
+        let (_, controller, _) = try await openOnTheDeckTab()
+        let editor = controller.editor
+        let title = try XCTUnwrap(controller.deckForm.field("title") as? NSTextField)
+        let window = try XCTUnwrap(title.window)
+        XCTAssertTrue(window.makeFirstResponder(title))
+        try XCTUnwrap(title.currentEditor()).string = "Draft"
+        let range = (editor.string as NSString).range(of: "  sqlite: {}")
+        editor.replaceText(in: range, with: "  sqlite: [unclosed", actionName: "Edit")
+        try await waitUntil(timeout: 15, "tap's deck error") { !editor.deckErrors.isEmpty }
+        try await waitUntil(timeout: 5, "the form's error state") { controller.deckForm.stack.arrangedSubviews.contains(controller.deckForm.errorTitleLabel) }
+        XCTAssertFalse(editor.string.contains("Draft"), "nothing typed went into the broken frontmatter: \(editor.string.prefix(80))")
+        XCTAssertTrue(editor.string.hasPrefix("---\ntitle: Seven Slides\n"))
+        XCTAssertNil(window.firstResponder as? NSText, "the edit ended")
+    }
 }
