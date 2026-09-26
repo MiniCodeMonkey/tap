@@ -21,6 +21,14 @@ final class PresentationPageController: NSViewController, WKNavigationDelegate, 
     private(set) var lastReady: ReadyPayload?
     private(set) var pageLoadCount = 0
     private(set) var lastLoadedURL: URL?
+    /// How many times the page was loaded again because its web content
+    /// process ended.
+    private(set) var processTerminationCount = 0
+    /// Loads again after a process ended with no ready in between. A page
+    /// whose process ends every time is given up on after
+    /// `maximumReloadsAfterTermination`.
+    private var reloadsAfterTermination = 0
+    static let maximumReloadsAfterTermination = 2
     private var allowedPort: Int?
 
     init(accessibilityIdentifier: String, dataStore: WKWebsiteDataStore) {
@@ -49,6 +57,7 @@ final class PresentationPageController: NSViewController, WKNavigationDelegate, 
         pageLoadCount += 1
         lastLoadedURL = url
         lastReady = nil
+        reloadsAfterTermination = 0
         webView.load(URLRequest(url: url))
     }
 
@@ -88,6 +97,26 @@ final class PresentationPageController: NSViewController, WKNavigationDelegate, 
         onLoadFailed?(error)
     }
 
+    /// The page's content process exited or crashed, which leaves the page
+    /// blank. Loading it again starts a new process. The page it reloads
+    /// is the one tap redirected to, which the cookies from the first load
+    /// still open. A page whose process keeps ending is reported as a
+    /// failed load instead.
+    func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+        processTerminationCount += 1
+        guard reloadsAfterTermination < Self.maximumReloadsAfterTermination else {
+            onLoadFailed?(CocoaError(.fileReadUnknown, userInfo: [NSLocalizedDescriptionKey: "the page's web content process ended repeatedly"]))
+            return
+        }
+        reloadsAfterTermination += 1
+        lastReady = nil
+        if webView.url != nil {
+            webView.reload()
+        } else if let lastLoadedURL {
+            webView.load(URLRequest(url: lastLoadedURL))
+        }
+    }
+
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
         guard message.name == "tapReady", let body = message.body as? [String: Any],
               let slide = (body["slide"] as? NSNumber)?.intValue else { return }
@@ -100,6 +129,7 @@ final class PresentationPageController: NSViewController, WKNavigationDelegate, 
     /// Records a ready the page reported and passes it on. Internal so a
     /// test can deliver one through the same path the handler uses.
     func pageReportedReady(_ payload: ReadyPayload) {
+        reloadsAfterTermination = 0
         lastReady = payload
         onReady?(payload)
     }
