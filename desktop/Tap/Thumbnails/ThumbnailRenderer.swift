@@ -174,6 +174,11 @@ final class ThumbnailRenderer: NSObject, WKScriptMessageHandler, WKNavigationDel
     private func replaceWebViewIfStuck() async {
         guard replacementsForThisClient < Self.maximumWebViewReplacements else { return }
         let checked = webView
+        // Evaluating "1" here, and in the preview's load watchdog, is the
+        // single exception to the rule that the app runs no script in a
+        // page, and the person allowed it: the script reads and changes
+        // nothing, and it is the only way to tell a content process that
+        // stopped running from a page that is still settling.
         guard case .noAnswer = await checked.evaluate("1", timeout: Self.pageAnswerTimeout), checked === webView else { return }
         replacementsForThisClient += 1
         replaceWebView()
