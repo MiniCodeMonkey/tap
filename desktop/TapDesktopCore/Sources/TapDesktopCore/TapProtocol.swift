@@ -47,23 +47,31 @@ public struct CodeBlock: Codable, Equatable, Sendable {
 
 /// One driver of tap's approval request (internal/cli/approval.go,
 /// approvalDriver): what a yes would allow. `command` is a custom
-/// driver's command as tap shows it: the command template, with
-/// secret-looking variables masked; nil for a built-in driver. `previousCommand` is the command line the deck was
-/// approved with before, when the name was approved and only its command
-/// changed (the tap change's optional field; nil for a driver never approved,
-/// and from a tap without the field). `slides` are the slides with a block that
-/// uses it, `blocks` how many.
+/// driver's command as tap shows it: the command template, its command
+/// and arguments as the frontmatter writes them, with every variable whose
+/// name looks secret left as `${NAME}`; nil for a built-in driver.
+/// `previousCommand` is the command template an earlier approval of this
+/// driver covered, masked the same way, when tap asks because the command
+/// as written changed; nil for a driver never approved, and from a tap
+/// without the field. `valueChanged` is true when tap asks because a
+/// value in the command changed, or the approval can no longer be checked
+/// (tap lost its approval key), while the command as written is the same;
+/// `previousCommand` is nil then. `slides` are the slides with a block
+/// that uses it, `blocks` how many.
 public struct ApprovalDriver: Codable, Equatable, Sendable {
     public let name: String
     public let command: String?
     public let previousCommand: String?
+    public let valueChanged: Bool
     public let slides: [Int]
     public let blocks: Int
 
-    public init(name: String, command: String? = nil, previousCommand: String? = nil, slides: [Int] = [], blocks: Int = 0) {
+    public init(name: String, command: String? = nil, previousCommand: String? = nil, valueChanged: Bool = false,
+                slides: [Int] = [], blocks: Int = 0) {
         self.name = name
         self.command = command
         self.previousCommand = previousCommand
+        self.valueChanged = valueChanged
         self.slides = slides
         self.blocks = blocks
     }
@@ -74,6 +82,7 @@ public struct ApprovalDriver: Codable, Equatable, Sendable {
         name = try container.decodeIfPresent(String.self, forKey: .name) ?? ""
         command = try container.decodeIfPresent(String.self, forKey: .command)
         previousCommand = try container.decodeIfPresent(String.self, forKey: .previousCommand)
+        valueChanged = try container.decodeIfPresent(Bool.self, forKey: .valueChanged) ?? false
         slides = try container.decodeIfPresent([Int].self, forKey: .slides) ?? []
         blocks = try container.decodeIfPresent(Int.self, forKey: .blocks) ?? 0
     }
@@ -222,6 +231,11 @@ public struct QuestionPayload: Codable, Equatable, Sendable {
 
     /// The drivers whose name was approved before with another command.
     public var changedCommands: [ApprovalDriver] { (drivers ?? []).filter { $0.previousCommand != nil } }
+
+    /// The drivers approved before with the same command as written, asked
+    /// about again because a value in it changed or the approval can no
+    /// longer be checked.
+    public var valueChangedDrivers: [ApprovalDriver] { (drivers ?? []).filter { $0.valueChanged && $0.previousCommand == nil } }
 
     /// "2 shell, 1 sqlite": the block counts by driver, in tap's order.
     public var approvalSummary: String {

@@ -93,6 +93,31 @@ final class TapProtocolTests: XCTestCase {
         XCTAssertEqual(QuestionPayload().approvalSummary, "")
     }
 
+    /// tap asks again about a custom driver whose command reads the same
+    /// but runs with another value (internal/cli/approval.go,
+    /// approvalDriver.ValueChanged): the field is there, previousCommand is
+    /// not, and the command is the masked template.
+    func testDecodesAValueChangedDriver() throws {
+        let line = #"{"type":"question","id":"q1","kind":"approval","payload":{"deck":"/private/tmp/t/env.md","drivers":[{"name":"echoer","command":"/bin/sh -c cat; : ${TAP_TEST_TOKEN}","valueChanged":true,"slides":[2],"blocks":1}],"blocks":[{"driver":"echoer","code":"hello via env","slide":2,"block":1}]}}"#
+        guard case .question(_, _, let payload)? = TapEvent.decode(line: line) else { return XCTFail("not a question") }
+        let driver = try XCTUnwrap(payload.drivers?.first)
+        XCTAssertTrue(driver.valueChanged)
+        XCTAssertNil(driver.previousCommand)
+        XCTAssertEqual(driver.command, "/bin/sh -c cat; : ${TAP_TEST_TOKEN}", "the template, the secret-looking variable masked")
+        XCTAssertEqual(payload.valueChangedDrivers.map(\.name), ["echoer"])
+        XCTAssertEqual(payload.changedCommands, [], "the command as written did not change")
+        XCTAssertFalse(payload.isForNewDrivers)
+
+        let without = #"{"type":"question","id":"q2","kind":"approval","payload":{"deck":"/t/talk.md","drivers":[{"name":"fortune","command":"/bin/cat","slides":[3],"blocks":1}],"blocks":[]}}"#
+        guard case .question(_, _, let plain)? = TapEvent.decode(line: without) else { return XCTFail("not a question") }
+        XCTAssertEqual(plain.drivers?.first?.valueChanged, false, "tap leaves the field out when it is false")
+        XCTAssertEqual(plain.valueChangedDrivers, [])
+
+        let both = QuestionPayload(drivers: [ApprovalDriver(name: "a", previousCommand: "/bin/cat", valueChanged: true)])
+        XCTAssertEqual(both.valueChangedDrivers, [], "a changed command is the command change, whatever else tap says")
+        XCTAssertEqual(both.changedCommands.map(\.name), ["a"])
+    }
+
     func testDecodesABlocksProblem() throws {
         let data = Data(#"{"ok":true,"slides":[{"number":1,"startLine":1,"endLine":3,"layout":"default","title":"","fragments":0,"steps":0,"skip":false,"errors":[],"codeBlocks":[{"block":1,"language":"bash","driver":"shell","live":true,"line":2,"problem":"This deck does not declare the shell driver. Add \"shell: {}\" under drivers in the frontmatter."},{"block":2,"language":"sql","driver":"sqlite","live":true,"line":3}]}],"errors":[]}"#.utf8)
         let list = try SlideList.decodeResponse(data)
