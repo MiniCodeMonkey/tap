@@ -9,6 +9,20 @@ import XCTest
 final class TalkApprovalTests: PresentingTestCase {
     static let approvalQuestion = #"{"type":"question","id":"q1","kind":"approval","payload":{"deck":"/private/tmp/t/ops.md","drivers":[{"name":"shell","slides":[2],"blocks":1}],"blocks":[{"driver":"shell","code":"echo hi","slide":2,"block":1}]}}"#
 
+    /// Whether the window server has `sheet` on screen and in front of every
+    /// talk window it has on screen. A talk window in a full screen Space
+    /// the person is not looking at is not on screen, and covers nothing.
+    @MainActor
+    static func isInFrontOfTheTalk(_ sheet: NSWindow, _ presentation: PresentationController) -> Bool {
+        let frontToBack = onScreenWindowNumbers()
+        guard let sheetPlace = frontToBack.firstIndex(of: sheet.windowNumber) else { return false }
+        let talkWindows = [presentation.audienceWindow, presentation.presenterWindow].compactMap { $0 }
+        return talkWindows.allSatisfy { talkWindow in
+            guard let talkPlace = frontToBack.firstIndex(of: talkWindow.windowNumber) else { return true }
+            return talkPlace > sheetPlace
+        }
+    }
+
     func testAnApprovalDuringATalkIsASheetOnTheDeckWindow() async throws {
         let record = try Fixtures.temporaryFolder().appendingPathComponent("record")
         AppEnvironment.shared.presentExecutableURL = try FakeTapScripts.presenting(events: [Self.approvalQuestion], exitsOnAnswer: false, recordingTo: record)
@@ -139,9 +153,14 @@ final class TalkApprovalTests: PresentingTestCase {
         try await waitUntil(timeout: 30, "q2's sheet") { deckWindow.questionSheetQuestionID == "q2" }
         XCTAssertEqual(presentation.pendingQuestions.map(\.id), ["q2"], "q1 was withdrawn before or after its sheet showed; either way it is gone")
         XCTAssertEqual((deckWindow.questionSheet as? ApprovalSheet)?.summaryLabel.stringValue, "1 sqlite")
+        // q1's sheet, if it showed, is off the window: q2's is the one attached, not one queued behind it.
+        try await waitUntil(timeout: 5, "q2's sheet on the window") {
+            deckWindow.questionSheet != nil && deckWindow.window?.attachedSheet === deckWindow.questionSheet
+        }
         try XCTUnwrap(deckWindow.questionSheet?.button(titled: "Allow")).performClick(nil)
         try await waitUntil(timeout: 5, "q2's answer") { (try? String(contentsOf: record, encoding: .utf8))?.contains(#""id":"q2","value":true"#) == true }
         XCTAssertFalse(try String(contentsOf: record, encoding: .utf8).contains(#""id":"q1""#))
+        try await waitUntil(timeout: 5, "no sheet left on the window") { deckWindow.window?.attachedSheet == nil }
         try await waitUntil(timeout: 40, "the talk") { presentation.state == .presenting }
         try await stopPresenting(controller)
     }
@@ -163,7 +182,12 @@ final class TalkApprovalTests: PresentingTestCase {
         let sheet = try XCTUnwrap(deckWindow.questionSheet as? ApprovalSheet)
         XCTAssertEqual(deckWindow.questionSheetSource, .talk)
         XCTAssertEqual(sheet.summaryLabel.stringValue, "2 shell, 1 sqlite")
-        XCTAssertFalse(presentation.windowsShown, "nothing covers the sheet")
+        // tap present asks after its ready line, so its pages may already
+        // have put the talk's windows up; the sheet's window then comes
+        // forward over them (the step-aside path). Either way nothing covers it.
+        try await waitUntil(timeout: 5, "the sheet in front of every talk window on screen") {
+            Self.isInFrontOfTheTalk(sheet, presentation)
+        }
         try XCTUnwrap(sheet.button(titled: "Allow")).performClick(nil)
         try await waitUntil(timeout: 10, "the talk's yes stored") { self.storedApprovals().contains("drivers: [shell, sqlite]") }
         try await waitUntil(timeout: 40, "the talk") { presentation.state == .presenting }
