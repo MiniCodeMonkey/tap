@@ -4,7 +4,7 @@
  */
 
 import { create } from 'zustand';
-import type { WebSocketMessage } from '$lib/types';
+import type { Presentation, WebSocketMessage } from '$lib/types';
 import {
 	applyRemoteState,
 	usePresentationStore,
@@ -238,6 +238,17 @@ export function resetPendingInitialState(): void {
 	hasResolvedInitialHubState = false;
 }
 
+/**
+ * Whether a fetched deck differs from the one the page shows in what the
+ * page draws from: its revision, or which drivers may run live code.
+ */
+function differsFromShown(shown: Presentation, fetched: Presentation): boolean {
+	return (
+		shown.revision !== fetched.revision ||
+		JSON.stringify(shown.liveCode ?? null) !== JSON.stringify(fetched.liveCode ?? null)
+	);
+}
+
 // ============================================================================
 // WebSocket Client Class
 // ============================================================================
@@ -450,6 +461,7 @@ export class WebSocketClient {
 			this.hasSeenFirstConnected = true;
 			this.knownRevision = revision;
 			this.firstVersion = version;
+			this.catchUp();
 			return;
 		}
 		const revisionChanged = revision !== undefined && revision !== this.knownRevision;
@@ -457,7 +469,48 @@ export class WebSocketClient {
 			version !== undefined && this.firstVersion !== undefined && version !== this.firstVersion;
 		if (revisionChanged || versionChanged) {
 			this.handleReload();
+			return;
 		}
+		this.catchUp();
+	}
+
+	/**
+	 * Fetch the deck once the hub has registered this socket, and apply it
+	 * in place when it differs from the one the page shows. The page
+	 * fetches the deck before its socket opens, and a message the hub
+	 * sends in between reaches no socket of this page: an "update", or the
+	 * "reload" that follows a live code answer, which changes which drivers
+	 * may run without changing the revision. The hub sends every later
+	 * change to this socket, so this one fetch closes the gap. A fetch that
+	 * fails changes nothing. A newer "update" wins over it. When the deck
+	 * has not loaded yet, the fetched copy applies once it does.
+	 */
+	private catchUp(): void {
+		this.updateSequence += 1;
+		const sequence = this.updateSequence;
+		fetchPresentation()
+			.then((data) => {
+				if (sequence !== this.updateSequence) return;
+				const apply = (): void => {
+					if (sequence !== this.updateSequence) return;
+					const shown = usePresentationStore.getState().presentation;
+					if (shown === null || !differsFromShown(shown, data)) return;
+					updatePresentationInPlace(data);
+					this.knownRevision = data.revision ?? this.knownRevision;
+				};
+				if (usePresentationStore.getState().presentation !== null) {
+					apply();
+					return;
+				}
+				const unsubscribe = usePresentationStore.subscribe((state) => {
+					if (state.presentation === null) return;
+					unsubscribe();
+					apply();
+				});
+			})
+			.catch(() => {
+				// Nothing to catch up on that a later message will not bring.
+			});
 	}
 
 	/**
