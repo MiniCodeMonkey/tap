@@ -555,8 +555,8 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
     func talkEnded(failed: Bool) {
         remotePanel.hide()
         // By construction a deck sheet is never up during a talk
-        // (`showNextDeckQuestionIfIdle` waits, and Task 8 keeps Play off
-        // under a sheet), so this condition is a written property rather
+        // (`showNextDeckQuestionIfIdle` waits, and `canStartATalk` keeps
+        // Play off under a sheet), so this condition is a written property rather
         // than a tested branch.
         guard let sheet = questionSheet, questionSheetSource == .talk else { return }
         // The talk's own log, which outlives its session; never tap dev's.
@@ -695,9 +695,9 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
         return ApprovalSheet(payload: question.payload, deckName: name)
     }
 
-    /// tap asked something. Consent and keep-recording become sheets on
-    /// this window; the live code approval is D5's and is declined until
-    /// then, which runs no code.
+    /// tap asked something. Consent, keep-recording and the live code
+    /// approval become sheets on this window; any other kind is declined,
+    /// which runs no code.
     func presentQuestion(_ question: PresentationController.PendingQuestion) {
         let presentation = sessionController.presentation
         switch question.kind {
@@ -735,8 +735,9 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
             }
             #endif
             // The same sheet as the deck's own question. tap present asks it at
-            // startup, before the windows show, and D4's step-aside path
-            // covers one that arrives mid-talk. A yes is stored by tap present;
+            // startup, before the windows show; one that arrives mid-talk
+            // brings this window forward over the talk (`showQuestionSheet`)
+            // and returns to it after the answer. A yes is stored by tap present;
             // the deck's tap dev learns of it through a reload.
             showQuestionSheet(approvalSheet(for: question), source: .talk, questionID: question.id) { [weak self] allow in
                 presentation.answer(id: question.id, value: allow)

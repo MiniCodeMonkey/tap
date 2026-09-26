@@ -6,8 +6,8 @@ import AppKit
 /// one undo step named after the field; the form re-reads the text after
 /// every change to it, so an undo, a typed edit or a disk load shows here
 /// too. A key with fixed nested keys (an object) is a card of fields; a
-/// map of named entries (the drivers) is a card per entry (Task 12); keys
-/// the schema does not list are read-only rows under Other keys (Task 12).
+/// map of named entries (the drivers) is a card per entry; keys the
+/// schema does not list are read-only rows under Other keys.
 final class DeckFormViewController: NSViewController, NSTextFieldDelegate, NSTextViewDelegate {
     /// The deck's text now. The session controller sets it.
     var text: () -> String = { "" }

@@ -46,7 +46,7 @@ final class TalkApprovalTests: PresentingTestCase {
         try await stopPresenting(controller)
     }
 
-    /// tap present dies under its approval sheet; D2's policy restarts it,
+    /// tap present dies under its approval sheet; the restart policy restarts it,
     /// and the new process asks q1 again. The old sheet must be gone, its
     /// Allow must reach nothing, and the new question gets a fresh sheet.
     func testATalkRestartDropsItsApprovalSheet() async throws {

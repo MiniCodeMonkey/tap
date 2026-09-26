@@ -100,7 +100,7 @@ final class NewDriverTests: HostedTestCase {
         let (_, controller, deckWindow, sheet) = try await openUnapprovedAndWaitForTheQuestion("live-code.md")
         let firstPid = try XCTUnwrap(controller.session.processIdentifier)
         let firstGeneration = controller.questionGeneration
-        // tap dies under the sheet; D2's policy restarts it.
+        // tap dies under the sheet; the restart policy starts it again.
         kill(firstPid, SIGKILL)
         try await waitUntil(timeout: 10, "the dead process's question gone") { controller.pendingQuestion == nil }
         XCTAssertNil(deckWindow.questionSheet, "the sheet went with the process that asked")
