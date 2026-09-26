@@ -10,6 +10,8 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
     let editorViewController = EditorViewController()
     let inspectorViewController = InspectorViewController()
     let previewViewController = PreviewViewController()
+    let deckForm = DeckFormViewController()
+    private var schemaObserver: NSObjectProtocol?
     let slidePanel = SlidePanelViewController()
     private(set) lazy var thumbnails = ThumbnailController(cache: AppEnvironment.shared.thumbnailCache, panel: slidePanel)
     /// True while a panel click moves the cursor, so the cursor's own
@@ -172,11 +174,58 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
     /// The talk, if this deck ever started one; nil costs nothing to check.
     var presentationIfCreated: PresentationController? { createdPresentation }
 
+    // MARK: tap dev's questions
+
+    typealias PendingQuestion = PresentationController.PendingQuestion
+    /// tap dev's questions in the order they came: the live code approval
+    /// at the deck's open, and again whenever tap asks (a reload that
+    /// brings a driver it has not approved, a restart). The first is the
+    /// one the window shows.
+    private(set) var pendingQuestions: [PendingQuestion] = []
+    var pendingQuestion: PendingQuestion? { pendingQuestions.first }
+    /// Rises every time the session leaves `.running`. The questions of
+    /// the process that was running are gone with it, and an answer for
+    /// one of them must not reach the next process, whose ids start at q1
+    /// again: `answer(id:value:generation:)` sends only for the current one.
+    private(set) var questionGeneration = 0
+    var onQuestion: ((PendingQuestion) -> Void)?
+    /// tap withdrew the question with this id; a sheet up for it ends, answering nothing.
+    var onQuestionClosed: ((String) -> Void)?
+    /// The questions on screen belong to a process that is gone.
+    var onQuestionsDropped: (() -> Void)?
+
+    /// Answers tap dev's question `id`, queued under `generation`, and puts
+    /// up the next one. An answer for another generation, or for an id no
+    /// pending question has, sends nothing: tap would only report
+    /// unknown_question, and the new process's q1 is not the question the
+    /// person read.
+    func answer(id: String, value: Bool, generation: Int) {
+        guard generation == questionGeneration, let index = pendingQuestions.firstIndex(where: { $0.id == id }) else {
+            session.log.append("no answer sent for the \(id) question: tap withdrew it or it belongs to an earlier tap", source: .app)
+            return
+        }
+        let question = pendingQuestions.remove(at: index)
+        session.send(.answer(id: id, value: value))
+        session.log.append("answered the \(question.kind) question: \(value ? "allow" : "don't allow")", source: .app)
+        if index == 0, let next = pendingQuestions.first { onQuestion?(next) }
+    }
+
+    /// The talk's Allow stored the approval; tap dev's own policy is what
+    /// it computed at its start or last reload. A reload makes tap check
+    /// the deck's drivers against the settings again (the tap change this
+    /// plan depends on), which finds them approved and turns the preview's
+    /// blocks on without a question.
+    func reloadAfterTalkApproval() {
+        session.send(.reload)
+        session.log.append("reloading after the talk's approval, so the preview's blocks can run", source: .app)
+    }
+
     /// Writes the buffer to the deck file before a talk, because tap
     /// present reads the file. A buffer that already equals the file needs
     /// no write. A save the document refuses (a disk conflict is showing)
     /// comes back as its error, and the talk does not start.
     func saveForPresenting(completion: @escaping (Error?) -> Void) {
+        _ = deckForm.commitEditing()
         guard let document, let url = document.fileURL else { return completion(CocoaError(.fileNoSuchFile)) }
         let text = editor.string
         guard isContentEdited else {
@@ -187,6 +236,38 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
         document.save(to: url, ofType: document.fileType ?? "net.daringfireball.markdown", for: .saveOperation) { [weak self] error in
             if error == nil { self?.presentation.presentedText = text }
             completion(error)
+        }
+    }
+
+    // MARK: Fix-its
+
+    /// The fix-it for a block whose driver the deck does not declare, from
+    /// the box header's pill, the box's context menu or the Slide menu: it
+    /// adds "<name>: {}" under drivers in the frontmatter through the
+    /// editor (one undo step named after itself) and saves at once, the
+    /// person's choice. tap decides again on its render of the edited
+    /// text, so the question about the new driver follows the edit; the
+    /// save is what the CLI and a later open read.
+    func allowDriver(_ name: String) {
+        // While tap reports a broken frontmatter, every live block reads as
+        // undeclared: the frontmatter's problem is the one to fix.
+        guard editor.deckErrors.isEmpty, let replacement = Frontmatter(text: editor.string).addingDriver(name) else {
+            // Declared already, a drivers value the edit cannot rewrite (`drivers: ~`), or a broken frontmatter: nothing to do, and not silently.
+            NSSound.beep()
+            return
+        }
+        editor.replaceText(in: replacement.range, with: replacement.replacement, actionName: "Allow \(name) in This Deck")
+        session.log.append("declared the \(name) driver in the frontmatter", source: .app)
+        saveNow()
+    }
+
+    /// Writes the buffer to the deck file now, ahead of the autosave. A
+    /// save the document refuses (a disk conflict is showing) leaves the
+    /// edit in the buffer for the next save, with a log line.
+    func saveNow() {
+        guard let document, let url = document.fileURL, isContentEdited else { return }
+        document.save(to: url, ofType: document.fileType ?? "net.daringfireball.markdown", for: .saveOperation) { [weak self] error in
+            if let error { self?.session.log.append("the save after the fix-it was refused: \(error.localizedDescription)", source: .app) }
         }
     }
 
@@ -222,6 +303,19 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
             return !webView.isHiddenOrHasHiddenAncestor && window.occlusionState.contains(.visible)
         }
         inspectorViewController.embed(previewViewController)
+        deckForm.text = { [weak self] in self?.editor.string ?? "" }
+        deckForm.applyEdit = { [weak self] replacement, actionName in
+            self?.editor.replaceText(in: replacement.range, with: replacement.replacement, actionName: actionName)
+        }
+        inspectorViewController.embedDeck(deckForm)
+        inspectorViewController.onTabChange = { [weak self] tab in
+            if tab == .deck { self?.deckForm.refresh() }
+        }
+        applyDeckSchema()
+        schemaObserver = NotificationCenter.default.addObserver(forName: DeckSchemaLoader.didLoadNotification, object: nil, queue: nil) { [weak self] _ in
+            MainActor.assumeIsolated { self?.applyDeckSchema() }
+        }
+        Task { await AppEnvironment.shared.deckSchema.load() }
         previewViewController.onStepBackward = { [weak self] in self?.sendPreviewMessage(self?.navigator.stepBackward()) }
         previewViewController.onStepForward = { [weak self] in self?.sendPreviewMessage(self?.navigator.stepForward()) }
         previewViewController.onPinToggled = { [weak self] in self?.togglePin() }
@@ -231,7 +325,10 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
             self.session.restart()
         }
         previewViewController.onLog = { [weak self] line in self?.session.log.append(line, source: .app) }
-        previewViewController.onReady = { [weak self] payload in self?.previewDidRender(payload) }
+        previewViewController.onReady = { [weak self] payload in
+            self?.previewDidRender(payload)
+            self?.returnThePreviewToItsSlide(after: payload)
+        }
         if let documentUndoManager = document.undoManager {
             undoObserver = NotificationCenter.default.addObserver(forName: .NSUndoManagerDidUndoChange, object: documentUndoManager, queue: nil) { [weak self] _ in
                 MainActor.assumeIsolated { self?.undoOrRedoDidChangeText() }
@@ -268,6 +365,14 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
         fileWatcher.watch(document.fileURL)
     }
 
+    /// The Deck tab needs tap's schema; until it has loaded the tab is disabled.
+    private func applyDeckSchema() {
+        let schema = AppEnvironment.shared.deckSchema
+        guard schema.isLoaded else { return }
+        deckForm.setSchema(schema.keys)
+        inspectorViewController.setDeckTabAvailable(true)
+    }
+
     /// The document is edited exactly when the editor's text differs from
     /// the deck file's content, as last read from disk (open, revert) or as
     /// last written by a save that wrote the deck's own file
@@ -302,12 +407,28 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
     }
 
     private func handle(_ event: TapEvent) {
-        guard case .fileChanged(let path, let list) = event, let fileURL = document?.fileURL else { return }
-        if FilePaths.same(URL(fileURLWithPath: path), fileURL) {
-            diskChanged()
-        } else if let list, let sentText = sourceSync.lastSentText {
-            // A component changed, and with it a slide's step count.
-            applySlideList(list, sentText: sentText, generation: sourceSync.lastSentGeneration)
+        switch event {
+        case .fileChanged(let path, let list):
+            guard let fileURL = document?.fileURL else { return }
+            if FilePaths.same(URL(fileURLWithPath: path), fileURL) {
+                diskChanged()
+            } else if let list, let sentText = sourceSync.lastSentText {
+                // A component changed, and with it a slide's step count.
+                applySlideList(list, sentText: sentText, generation: sourceSync.lastSentGeneration)
+            }
+        case .question(let id, let kind, let payload):
+            let question = PendingQuestion(id: id, kind: kind, payload: payload)
+            pendingQuestions.append(question)
+            if pendingQuestions.count == 1 { onQuestion?(question) }
+        case .questionClosed(let id):
+            // tap withdrew it (a reload made it stale): out of the queue, and
+            // off the screen if it was up; the next one, if any, comes up.
+            guard let index = pendingQuestions.firstIndex(where: { $0.id == id }) else { return }
+            pendingQuestions.remove(at: index)
+            onQuestionClosed?(id)
+            if index == 0, let next = pendingQuestions.first { onQuestion?(next) }
+        default:
+            break
         }
     }
 
@@ -540,6 +661,8 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
         if let redoObserver { NotificationCenter.default.removeObserver(redoObserver) }
         if let occlusionObserver { NotificationCenter.default.removeObserver(occlusionObserver) }
         occlusionObserver = nil
+        if let schemaObserver { NotificationCenter.default.removeObserver(schemaObserver) }
+        schemaObserver = nil
         pendingRecentThumbnailCheck?.cancel()
         pendingRecentThumbnailCheck = nil
         socket?.close()
@@ -819,6 +942,8 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
         presentation.deckTextChanged(sentText)
         slidePanel.setSlides(editor.boxes.map(\.slide))
         thumbnails.deckChanged()
+        deckForm.setDeckErrors(list.errors)
+        deckForm.refresh()
         if let first = list.errors.first {
             if editorViewController.bar(.deckErrors)?.message != "The deck settings have a problem: \(first)" {
                 editorViewController.showBar(DocumentBarView(kind: .deckErrors, message: "The deck settings have a problem: \(first)",
@@ -838,6 +963,43 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
         onSlideListApplied?(list)
     }
 
+    /// The ready, and the slide it was for, after which the preview's
+    /// slide was last sent again.
+    private struct SlideResend: Equatable {
+        let revision: String
+        let reportedSlide: Int
+        let intendedSlide: Int
+    }
+    private var lastSlideResend: SlideResend?
+    /// How long after sending the slide again it is checked once more.
+    static let slideResendCheckDelay: TimeInterval = 1
+
+    /// The page can report a slide other than the one the app asked for:
+    /// a reload the app did not start (tap reloads every page after an
+    /// approval answer) opens the page on the slide in its own address,
+    /// which wins over the hub's slide, so a cursor move that reached the
+    /// hub while the page was between documents is lost. A ready on
+    /// another slide sends the navigator's slide again, once for each
+    /// revision, reported slide and intended slide, so a page that cannot
+    /// reach the slide is not asked forever. The slide is checked once
+    /// more a moment later, since a page that had not joined the hub yet
+    /// receives the resend as the hub's state on joining, where its
+    /// address wins again.
+    private func returnThePreviewToItsSlide(after payload: ReadyPayload) {
+        guard let intended = navigator.slideNumber, payload.slide != intended else { return }
+        let resend = SlideResend(revision: payload.revision, reportedSlide: payload.slide, intendedSlide: intended)
+        guard resend != lastSlideResend else { return }
+        lastSlideResend = resend
+        sendPreviewMessage(navigator.message)
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.slideResendCheckDelay) { [weak self] in
+            MainActor.assumeIsolated {
+                guard let self, !self.stopped, self.navigator.slideNumber == intended,
+                      let ready = self.previewViewController.lastReady, ready.slide != intended else { return }
+                self.sendPreviewMessage(self.navigator.message)
+            }
+        }
+    }
+
     /// Moves the preview through the hub, and updates its labels.
     func sendPreviewMessage(_ message: SlideMessage?) {
         if let message { socket?.send(message) }
@@ -845,6 +1007,14 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
     }
 
     private func sessionStateChanged(_ state: TapSession.State) {
+        // The questions of a process that stopped, crashed or is restarting die with it.
+        if case .running = state {} else {
+            questionGeneration += 1
+            if !pendingQuestions.isEmpty {
+                pendingQuestions = []
+                onQuestionsDropped?()
+            }
+        }
         previewViewController.showSessionState(state, restartPolicy: session.restartPolicy, pausedMessage: pausedMessage)
         socket?.close()
         socket = nil
@@ -900,6 +1070,7 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
         }
         refreshEditedState()
         Task { await sourceSync.sendNow() }
+        deckForm.refresh()
     }
 
     // MARK: EditorTextViewDelegate
@@ -907,6 +1078,7 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
     func editorTextDidChange(_ editor: EditorTextView) {
         refreshEditedState()
         sourceSync.textDidChange()
+        deckForm.refresh()
     }
 
     func editor(_ editor: EditorTextView, payloadForHeaderDragOfBoxAt index: Int) -> SlideDragPayload? {
@@ -925,7 +1097,20 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
         if !slidePanel.selectedNumbers.contains(number) {
             slidePanel.click(slide: number, extendingSelection: false)
         }
-        return SlideContextMenu.build(for: selectedSlideNumbers, target: windowController, showsTextShortcuts: false)
+        let menu = SlideContextMenu.build(for: selectedSlideNumbers, target: windowController, showsTextShortcuts: false)
+        if let fixIt = editor.header(forBoxAt: index).fixIt {
+            menu.addItem(.separator())
+            let item = NSMenuItem(title: fixIt.title, action: #selector(DeckWindowController.allowDriverInThisDeck(_:)), keyEquivalent: "")
+            item.target = windowController
+            item.representedObject = fixIt.driver
+            menu.addItem(item)
+        }
+        return menu
+    }
+
+    func editor(_ editor: EditorTextView, applyFixItForBoxAt index: Int) {
+        guard editor.boxes.indices.contains(index), let fixIt = editor.header(forBoxAt: index).fixIt else { return }
+        allowDriver(fixIt.driver)
     }
 
     func editor(_ editor: EditorTextView, currentSlideDidChange index: Int?) {

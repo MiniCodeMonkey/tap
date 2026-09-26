@@ -6,7 +6,19 @@ set -eu
 root="${1:-$(cd "$(dirname "$0")/../.." && pwd)}"
 manifest="$root/desktop/scenarios.txt"
 features="$root/docs/superpowers/specs/tap-desktop-features"
-tests=$(find "$root/desktop" -name '*.swift' -path '*Tests*' -o -name '*.swift' -path '*Benchmarks*')
+swift_tests=$(find "$root/desktop" -name '*.swift' -path '*Tests*' -o -name '*.swift' -path '*Benchmarks*')
+go_tests=$(find "$root/internal" -name '*_test.go' 2>/dev/null || true)
+
+# A scenario is covered by a Swift test named testName, or by a Go test
+# named TestName, in the tap packages: the CLI-only scenarios of a feature
+# file are tap's to prove. An empty file list would make grep read stdin,
+# which inside the loop is the manifest, so each list is checked first.
+has_test() {
+	[ -n "$swift_tests" ] && grep -q "func test$1(" $swift_tests </dev/null 2>/dev/null && return 0
+	[ -n "$go_tests" ] && grep -q "func Test$1(" $go_tests </dev/null 2>/dev/null && return 0
+	return 1
+}
+
 status=0
 seen=""
 
@@ -33,8 +45,8 @@ while IFS='|' read -r milestone file scenario; do
 	esac
 	seen="$seen $name"
 
-	if ! grep -lq "func test$name(" $tests >/dev/null 2>&1 && ! grep -q "func test$name(" $tests; then
-		echo "$milestone claims \"$scenario\" ($file), but no test is named test$name"
+	if ! has_test "$name"; then
+		echo "$milestone claims \"$scenario\" ($file), but no test is named test$name or Test$name"
 		status=1
 	fi
 done < "$manifest"

@@ -205,8 +205,10 @@ func TestAppPresentAsksAgainOnReloadAndRemembersANo(t *testing.T) {
 
 // TestAppDevPicksUpAnApprovalAnotherTapStored covers tap present --app
 // and tap dev --app open on the same deck: an Allow given to the talk is
-// stored, and tap dev's next reload finds it rather than asking again,
-// whether tap dev was declined or still waiting for its own answer.
+// stored, and tap dev honours it rather than asking again, whether tap
+// dev was declined or still waiting for its own answer. tap dev watches
+// its settings file, so it needs no reload for that; a reload that comes
+// after the store finds the approval too.
 func TestAppDevPicksUpAnApprovalAnotherTapStored(t *testing.T) {
 	for _, dev := range []struct {
 		name   string
@@ -215,38 +217,46 @@ func TestAppDevPicksUpAnApprovalAnotherTapStored(t *testing.T) {
 		{name: "declined", answer: func(process *appProcess, question map[string]any) { answerApproval(process, question, false) }},
 		{name: "unanswered", answer: func(*appProcess, map[string]any) {}},
 	} {
-		t.Run(dev.name, func(t *testing.T) {
-			configHome := t.TempDir()
-			deck := copyAppFixture(t)
-			if err := os.WriteFile(deck, []byte(fixtureWithRunner(t, "sh")), 0o644); err != nil {
-				t.Fatal(err)
+		for _, reload := range []bool{true, false} {
+			name := dev.name + "/without a reload"
+			if reload {
+				name = dev.name + "/after a reload"
 			}
-
-			editor := startAppProcess(t, configHome, "dev", "--app", deck)
-			editorQuestion := editor.next(appEventQuestion)
-			dev.answer(editor, editorQuestion)
-			if status, _ := executeOnceRendered(t, editor, 5, 1); status != http.StatusForbidden {
-				t.Fatalf("the runner block before any approval: status %d, want 403", status)
-			}
-
-			talk := startAppProcess(t, configHome, "present", "--app", "--no-record", deck)
-			answerApproval(talk, talk.next(appEventQuestion), true)
-			waitUntil(t, "the talk runs the runner block", func() bool {
-				status, _ := talk.execute(5, 1)
-				return status == http.StatusOK
-			})
-
-			editor.send(`{"type":"reload"}`)
-			waitUntil(t, "tap dev runs the runner block", func() bool {
-				status, body := editor.execute(5, 1)
-				return status == http.StatusOK && strings.Contains(body, "hello from the runner")
-			})
-			if dev.name == "unanswered" {
-				if closed := editor.next(appEventQuestionClosed); closed["id"] != editorQuestion["id"] {
-					t.Errorf("question-closed = %v, want tap dev's own question closed", closed)
+			t.Run(name, func(t *testing.T) {
+				configHome := t.TempDir()
+				deck := copyAppFixture(t)
+				if err := os.WriteFile(deck, []byte(fixtureWithRunner(t, "sh")), 0o644); err != nil {
+					t.Fatal(err)
 				}
-			}
-			editor.noEvent(appEventQuestion, 500*time.Millisecond)
-		})
+
+				editor := startAppProcess(t, configHome, "dev", "--app", deck)
+				editorQuestion := editor.next(appEventQuestion)
+				dev.answer(editor, editorQuestion)
+				if status, _ := executeOnceRendered(t, editor, 5, 1); status != http.StatusForbidden {
+					t.Fatalf("the runner block before any approval: status %d, want 403", status)
+				}
+
+				talk := startAppProcess(t, configHome, "present", "--app", "--no-record", deck)
+				answerApproval(talk, talk.next(appEventQuestion), true)
+				waitUntil(t, "the talk runs the runner block", func() bool {
+					status, _ := talk.execute(5, 1)
+					return status == http.StatusOK
+				})
+
+				if reload {
+					editor.send(`{"type":"reload"}`)
+				}
+				waitUntil(t, "tap dev runs the runner block", func() bool {
+					status, body := editor.execute(5, 1)
+					return status == http.StatusOK && strings.Contains(body, "hello from the runner")
+				})
+				if dev.name == "unanswered" {
+					if closed := editor.next(appEventQuestionClosed); closed["id"] != editorQuestion["id"] {
+						t.Errorf("question-closed = %v, want tap dev's own question closed", closed)
+					}
+				}
+				editor.noEvent(appEventQuestion, 500*time.Millisecond)
+			})
+		}
 	}
 }

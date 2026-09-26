@@ -4,7 +4,7 @@ import XCTest
 /// screen and need Xcode's permission to control the computer.
 final class SlideDragUITests: UITestCase {
     func testDraggingThumbnailFiveAboveThreeReordersTheDeck() throws {
-        let application = launch(withDeck: try copyFixture("ops.md"))
+        let application = try launch(withDeck: try copyFixture("ops.md"))
         let panel = application.collectionViews["slide-panel"]
         XCTAssertTrue(panel.waitForExistence(timeout: 30))
         // A thumbnail is an accessibility element with the button role.
@@ -20,7 +20,7 @@ final class SlideDragUITests: UITestCase {
     }
 
     func testDraggingABoxHeaderReordersTheDeck() throws {
-        let application = launch(withDeck: try copyFixture("ops.md"))
+        let application = try launch(withDeck: try copyFixture("ops.md"))
         let editor = application.textViews["editor"]
         XCTAssertTrue(editor.waitForExistence(timeout: 30))
         let box5 = application.groups["box-5"].firstMatch
@@ -42,7 +42,7 @@ final class SlideDragUITests: UITestCase {
     /// A header drag is the editor's own drag session, so the text view's
     /// end-of-move handling must leave a text selection elsewhere alone.
     func testDraggingABoxHeaderLeavesTheSelectedTextInPlace() throws {
-        let application = launch(withDeck: try copyFixture("ops.md"))
+        let application = try launch(withDeck: try copyFixture("ops.md"))
         let editor = application.textViews["editor"]
         XCTAssertTrue(editor.waitForExistence(timeout: 30))
         let box1 = application.groups["box-1"].firstMatch

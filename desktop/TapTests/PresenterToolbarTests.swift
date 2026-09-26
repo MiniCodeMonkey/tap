@@ -116,8 +116,14 @@ final class PresenterToolbarTests: PresentingTestCase {
         let audience = try XCTUnwrap(presentation.audienceWindow)
         let toolbar = try XCTUnwrap(presentation.presenterWindow?.presenterToolbar)
         try await waitUntil(timeout: 20, "the audience page on slide 1") { audience.page.lastReady?.slide == 1 }
+        // tap reports ready before the page's text is always readable: read it until it is there.
         var text = await audience.page.pageText()
-        XCTAssertTrue(text.contains("One"))
+        let textDeadline = Date().addingTimeInterval(10)
+        while !text.contains("One"), Date() < textDeadline {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            text = await audience.page.pageText()
+        }
+        XCTAssertTrue(text.contains("One"), "the audience page's text: \(text)")
         XCTAssertEqual(presentation.editsNotShown, 0)
 
         // An edit reaches tap dev, never tap present.

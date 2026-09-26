@@ -14,6 +14,21 @@ class HostedTestCase: XCTestCase {
     /// next.
     private static var dataStoresToRemove: [UUID] = []
 
+    /// Whether `openDeck` approves the deck's declared drivers ahead of
+    /// time, as tap new does for a deck the person made: on by default, so
+    /// a fixture with live code opens with no approval sheet over its
+    /// window. The approval tests turn it off to see the sheet.
+    var approvesLiveCodeOnOpen = true
+
+    /// The decks this test approved ahead of time, by their real path, as
+    /// tap names a deck in its question, and the drivers approved for each.
+    /// `AppEnvironment.approvalAnswerForTests` answers Allow for a question
+    /// about one of them that asks about those drivers only.
+    private(set) var preApprovedDecks: [String: Set<String>] = [:]
+
+    /// tap's settings file under this test's config folder.
+    var settingsFile: URL { configHome.appendingPathComponent("tap/settings.yaml") }
+
     override func setUp() async throws {
         configHome = try Fixtures.temporaryFolder()
         AppEnvironment.shared.extraEnvironment["XDG_CONFIG_HOME"] = configHome.path
@@ -33,9 +48,29 @@ class HostedTestCase: XCTestCase {
         // The Focus hint shows before the first talk on a Mac; every test but the hint's own has seen it.
         AppEnvironment.shared.focusHint = FocusHintState(defaults: try XCTUnwrap(UserDefaults(suiteName: "TapTests.focus.\(UUID().uuidString)")))
         AppEnvironment.shared.focusHint.markShown()
+        preApprovedDecks = [:]
+        AppEnvironment.shared.approvalAnswerForTests = { [weak self] payload in
+            guard let self else { return nil }
+            return Self.preApprovedAnswer(for: payload, preApprovedDecks: self.preApprovedDecks)
+        }
+    }
+
+    /// Allow (true) when `payload` asks about a deck in `preApprovedDecks`
+    /// and every driver it names was approved for that deck; otherwise nil,
+    /// and the sheet shows. Never false. A pre-approval covers the drivers
+    /// as the fixture declares them, so a question about a changed command
+    /// or a changed value in one (tap names the command it replaces, or
+    /// says a value changed) is never answered here: the sheet shows.
+    static func preApprovedAnswer(for payload: QuestionPayload, preApprovedDecks: [String: Set<String>]) -> Bool? {
+        guard let deck = payload.deck, let approved = preApprovedDecks[deck],
+              let drivers = payload.drivers, !drivers.isEmpty,
+              drivers.allSatisfy({ approved.contains($0.name) }),
+              !drivers.contains(where: { $0.previousCommand != nil || $0.valueChanged }) else { return nil }
+        return true
     }
 
     override func tearDown() async throws {
+        AppEnvironment.shared.approvalAnswerForTests = nil
         // WelcomeWindowController.shared is one singleton for the whole
         // hosted process, not a window this test created, so it is ordered
         // out (never closed) here rather than left to whichever test last
@@ -89,6 +124,7 @@ class HostedTestCase: XCTestCase {
     }
 
     func openDeck(_ url: URL, timeout: TimeInterval = 30) async throws -> DeckDocument {
+        if approvesLiveCodeOnOpen { try approveLiveCode(for: url) }
         // AppKit's completion is given `timeout` seconds, so an open that
         // never completes fails this test rather than hanging the bundle.
         let opened: Result<NSDocument, Error>? = await withCheckedContinuation { continuation in
@@ -128,6 +164,86 @@ class HostedTestCase: XCTestCase {
     func waitForBoxes(_ document: DeckDocument, count: Int) async throws {
         let editor = try XCTUnwrap(document.sessionController?.editor)
         try await waitUntil(timeout: 30, "\(count) boxes") { editor.boxes.count == count }
+    }
+
+    /// Approves `deck` ahead of time for `drivers` (the deck's declared
+    /// ones when nil), as tap new approves a deck the person made. It
+    /// writes tap's own approval record, name only: the deck's real path,
+    /// as usersettings.ResolveDeck keys it, and the driver names, which is
+    /// all a built-in driver's approval holds, so tap asks nothing about
+    /// those. A custom driver's approval also needs its command's digest,
+    /// keyed by tap's approval key, which only tap computes: tap asks about
+    /// it, and `approvalAnswerForTests` answers Allow through the path a
+    /// click takes, so tap writes the full record itself. The
+    /// `approvals:` block is written whole, after whatever else the file
+    /// holds (the recording consent), in the shape yaml.v3 writes, so a
+    /// file tap has written since is still one tap reads; earlier
+    /// approvals in it are kept.
+    func approveLiveCode(for deck: URL, drivers: [String]? = nil) throws {
+        let text = (try? String(contentsOf: deck, encoding: .utf8)) ?? ""
+        let names = drivers ?? Frontmatter(text: text).declaredDrivers
+        guard !names.isEmpty else { return }
+        let realPath = Fixtures.realPath(of: deck)
+        preApprovedDecks[realPath, default: []].formUnion(names)
+        try FileManager.default.createDirectory(at: settingsFile.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let existing = (try? String(contentsOf: settingsFile, encoding: .utf8)) ?? ""
+        var before = existing
+        var entries: [String] = []
+        if let start = existing.range(of: "approvals:") {
+            before = String(existing[..<start.lowerBound])
+            entries = existing[start.upperBound...].components(separatedBy: "    - deck: ").dropFirst().map { "    - deck: " + $0 }
+        }
+        entries.removeAll { $0.contains("- deck: \(realPath)\n") }
+        entries.append("    - deck: \(realPath)\n      drivers: [\(names.joined(separator: ", "))]\n      approvedAt: 2026-09-25T00:00:00Z\n")
+        if !before.isEmpty, !before.hasSuffix("\n") { before += "\n" }
+        try (before + "approvals:\n" + entries.joined()).write(to: settingsFile, atomically: true, encoding: .utf8)
+    }
+
+    /// The settings file as tap has written it, "" when there is none.
+    func storedApprovals() -> String {
+        (try? String(contentsOf: settingsFile, encoding: .utf8)) ?? ""
+    }
+
+    /// Opens a copy of `fixture` unapproved and waits for tap's approval
+    /// question and the sheet the deck window shows for it.
+    func openUnapprovedAndWaitForTheQuestion(_ fixture: String) async throws -> (DeckDocument, DeckSessionController, DeckWindowController, ApprovalSheet) {
+        approvesLiveCodeOnOpen = false
+        let document = try await openDeck(try Fixtures.copyDeck(fixture))
+        let controller = try XCTUnwrap(document.sessionController)
+        _ = try await waitForRunningTap(document)
+        try await waitUntil(timeout: 30, "tap's approval question") { controller.pendingQuestion?.kind == "approval" }
+        let deckWindow = try XCTUnwrap(document.windowControllers.first as? DeckWindowController)
+        try await waitUntil(timeout: 5, "the approval sheet") { deckWindow.questionSheet is ApprovalSheet }
+        let sheet = try XCTUnwrap(deckWindow.questionSheet as? ApprovalSheet)
+        return (document, controller, deckWindow, sheet)
+    }
+
+    /// Moves the cursor to `slide` and polls the page until its Run buttons
+    /// read `expected` (a JSON list, see `runButtonLabels`). Bounded, and
+    /// independent of how many times the page reported ready on the way:
+    /// tap's reload after an answer can put the page back on another slide
+    /// between polls, so every poll that finds the preview elsewhere moves
+    /// the cursor to `slide` again before it reads. The jump waits for tap's
+    /// slide list to name `slide`: before it, a jump has no box to move to
+    /// and moves nothing.
+    func waitForRunButtons(_ expected: String, in controller: DeckSessionController, document: DeckDocument, slide: Int, timeout: TimeInterval = 20) async throws {
+        try await waitUntil(timeout: 30, "slide \(slide) in the editor") { controller.editor.boxes.contains { $0.slide.number == slide } }
+        controller.jumpToSlide(number: slide)
+        XCTAssertEqual(controller.currentSlideNumber, slide, "the cursor moved to slide \(slide)")
+        try await waitForPreview(document, slide: slide)
+        let preview = controller.previewViewController
+        let deadline = Date().addingTimeInterval(timeout)
+        var labels = await preview.runButtonLabels()
+        while labels != expected {
+            if Date() > deadline {
+                XCTFail("the page's Run buttons on slide \(slide) read \(labels), not \(expected), after \(Int(timeout)) s; "
+                        + "lastReady=\(String(describing: preview.lastReady))")
+                throw CancellationError()
+            }
+            try await Task.sleep(nanoseconds: 200_000_000)
+            if preview.lastReady?.slide != slide { controller.jumpToSlide(number: slide) }
+            labels = await preview.runButtonLabels()
+        }
     }
 
     /// What a timed out wait records about the page. `ready` is the page's

@@ -56,14 +56,16 @@ enum FakeTapScripts {
     }
 
     /// Prints a ready line, then ignores both its closed stdin and
-    /// SIGTERM: only the SIGKILL at the end of a stop's escalation ends it.
+    /// SIGTERM: only the SIGKILL at the end of a stop's escalation ends it,
+    /// or ten minutes, so a test that never stops it leaves nothing running.
     static func readyAndDeafToQuit() throws -> URL {
         let url = try Fixtures.temporaryFolder().appendingPathComponent("tap")
         try """
         #!/bin/sh
         trap '' TERM
         echo '{"type":"ready","port":1,"token":"token","launch":"launch","presenter":"presenter"}'
-        while :; do sleep 1; done
+        tries=0
+        while [ $tries -lt 600 ]; do sleep 1; tries=$((tries + 1)); done
         """.write(to: url, atomically: true, encoding: .utf8)
         try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: url.path)
         return url
@@ -92,9 +94,14 @@ enum FakeTapScripts {
     /// with `tunnelFailed`, the `tunnel_failed` error followed by the
     /// stopped tunnel event tap sends after a failed start), a tunnel stop
     /// with a stopped tunnel, a recording stop with a stopped recording, a
-    /// new segment with segment 2 recording, and quit as `quit` says.
+    /// new segment with segment 2 recording, and quit as `quit` says. An
+    /// answer ends the fake, as tap present's keep-recording answer does,
+    /// unless `exitsOnAnswer` is false: a startup question's answer leaves
+    /// tap running; with `crashFile`, the fake dies with SIGKILL the moment
+    /// that file appears, once, as a crash the test times would: the file
+    /// is removed first, so the run after it stays up.
     static func presenting(events: [String], quit: QuitBehavior = .exit, tunnelFailed: Bool = false, tunnelUnavailable: Bool = false,
-                           recordingTo record: URL) throws -> URL {
+                           exitsOnAnswer: Bool = true, crashFile: URL? = nil, recordingTo record: URL) throws -> URL {
         let url = try Fixtures.temporaryFolder().appendingPathComponent("tap")
         let eventLines = events.map { "echo '\($0)'" }.joined(separator: "\n")
         let tunnelRunning: String
@@ -119,17 +126,53 @@ enum FakeTapScripts {
         echo "arguments: $@" >> "\(record.path)"
         echo '{"type":"ready","port":1,"token":"token","launch":"launch","presenter":"presenter"}'
         \(eventLines)
+        \(crashFile.map(crashWatcher) ?? ":")
         while IFS= read -r line; do
           echo "stdin: $line" >> "\(record.path)"
           case "$line" in
             *'"type":"quit"'*) \(onQuit) ;;
-            *'"type":"answer"'*) exit 0 ;;
+            *'"type":"answer"'*) \(exitsOnAnswer ? "exit 0" : ":") ;;
             *'"type":"tunnel","start":true'*) \(tunnelRunning) ;;
             *'"type":"tunnel","start":false'*) echo '{"type":"tunnel","state":"stopped"}' ;;
             *'"action":"stop"'*) echo '{"type":"recording","state":"stopped","segment":1,"elapsed":0,"disk":"ok"}' ;;
             *'"action":"new-segment"'*) echo '{"type":"recording","state":"recording","segment":2,"elapsed":0,"disk":"ok"}' ;;
           esac
         done
+        exit 0
+        """.write(to: url, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: url.path)
+        return url
+    }
+
+    /// The background watcher of `presenting(crashFile:)`: it kills the
+    /// fake with SIGKILL the moment `file` appears, once (the file is
+    /// removed first, so the run after it stays up). It ends with the fake
+    /// (`kill -0 $$` fails once the fake is gone) and after five minutes at
+    /// most, and holds none of the fake's output: the app reads the fake's
+    /// stdout and stderr to their end, which a watcher still holding them
+    /// would never let come.
+    static func crashWatcher(_ file: URL) -> String {
+        #"(tries=0; while [ ! -f "\#(file.path)" ] && [ $tries -lt 3000 ] && kill -0 $$ 2>/dev/null; do sleep 0.1; tries=$((tries + 1)); done; "#
+            + #"if [ -f "\#(file.path)" ]; then rm -f "\#(file.path)"; kill -9 $$; fi) </dev/null >/dev/null 2>&1 &"#
+    }
+
+    /// A scripted `tap dev --app` that prints a ready line and then asks
+    /// the live code approval as q1 (shell), records every stdin line in
+    /// `record`, and exits when stdin closes. Killed and restarted, it
+    /// asks q1 again, which is what tap does. With `withdrawingAfter`, it
+    /// withdraws q1 that many seconds later (`question-closed`, as a
+    /// reload that changed the deck does) and asks q2 about sqlite. With
+    /// `kind`, q1 is a question of that kind instead, with the same payload.
+    static func askingApproval(recordingTo record: URL, withdrawingAfter seconds: TimeInterval? = nil, kind: String = "approval") throws -> URL {
+        let url = try Fixtures.temporaryFolder().appendingPathComponent("tap")
+        let withdrawal = seconds.map { #"(sleep \#($0); echo '{"type":"question-closed","id":"q1"}'; echo '{"type":"question","id":"q2","kind":"approval","payload":{"deck":"/private/tmp/t/talk.md","drivers":[{"name":"sqlite","slides":[4],"blocks":1}],"blocks":[{"driver":"sqlite","code":"SELECT 1;","slide":4,"block":1}]}}') &"# } ?? ":"
+        try """
+        #!/bin/sh
+        echo "arguments: $@" >> "\(record.path)"
+        echo '{"type":"ready","port":1,"token":"token","launch":"launch","presenter":"presenter"}'
+        echo '{"type":"question","id":"q1","kind":"\(kind)","payload":{"deck":"/private/tmp/t/talk.md","drivers":[{"name":"shell","slides":[2],"blocks":1}],"blocks":[{"driver":"shell","code":"echo hi","slide":2,"block":1}]}}'
+        \(withdrawal)
+        while IFS= read -r line; do echo "stdin: $line" >> "\(record.path)"; done
         exit 0
         """.write(to: url, atomically: true, encoding: .utf8)
         try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: url.path)

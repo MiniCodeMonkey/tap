@@ -2,7 +2,7 @@ import XCTest
 
 final class SlidePanelUITests: UITestCase {
     func testHoveringTheSlidesButtonPeeksAtThePanel() throws {
-        let application = launch(withDeck: try copyFixture("seven-slides.md"))
+        let application = try launch(withDeck: try copyFixture("seven-slides.md"))
         // The Slides button toggles, so accessibility reports it as a check box.
         let button = application.checkBoxes["slides-button"]
         XCTAssertTrue(button.waitForExistence(timeout: 30))
@@ -24,7 +24,7 @@ final class SlidePanelUITests: UITestCase {
     }
 
     func testHoldingNewSlideOpensTheGallery() throws {
-        let application = launch(withDeck: try copyFixture("ops.md"))
+        let application = try launch(withDeck: try copyFixture("ops.md"))
         let button = application.buttons["new-slide-button"]
         XCTAssertTrue(button.waitForExistence(timeout: 30))
         button.press(forDuration: 0.6)

@@ -25,6 +25,8 @@ final class AppEnvironment {
     var thumbnailCache = ThumbnailCache()
     /// Every layout tap offers, loaded once from the bundled tap.
     lazy var layoutCatalog = LayoutCatalogLoader(executable: { [weak self] in self?.tapExecutableURL ?? URL(fileURLWithPath: "/usr/bin/false") })
+    /// Every frontmatter key tap understands, loaded once from the bundled tap.
+    lazy var deckSchema = DeckSchemaLoader(executable: { [weak self] in self?.tapExecutableURL ?? URL(fileURLWithPath: "/usr/bin/false") })
     /// The layout New Slide inserts: the one used last.
     var lastLayout = LastLayout()
     /// Where copied slides go and paste reads from: the general pasteboard,
@@ -48,6 +50,15 @@ final class AppEnvironment {
     var presentExecutableURL: URL?
     /// Whether the Focus hint has been shown on this Mac. A test replaces it.
     var focusHint = FocusHintState()
+    #if DEBUG
+    /// Test only, and compiled only into a Debug build: answers a live
+    /// code approval before any sheet shows, for a deck a test approved
+    /// ahead of time. It returns true (allow) or nil (show the sheet as
+    /// usual), never false, so it cannot hide a question a test expects.
+    /// Nil unless a test sets it; nothing reads it from defaults, launch
+    /// arguments or the environment.
+    var approvalAnswerForTests: (@MainActor (QuestionPayload) -> Bool?)?
+    #endif
     /// How many talks are running across every deck, from Play to idle or
     /// failed. Play is off while one runs, and D7's updater reads
     /// `updatesMayInterrupt` before any prompt or restart.
@@ -144,6 +155,7 @@ final class AppEnvironment {
             NotificationCenter.default.post(name: Self.didLoadNotification, object: self)
         }
         Task { await layoutCatalog.load() }
+        Task { await deckSchema.load() }
     }
 
     func tapEnvironment() async -> [String: String] {

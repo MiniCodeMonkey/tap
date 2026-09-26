@@ -8,10 +8,7 @@ final class PresentingUITests: UITestCase {
     /// A settings folder with the recording question answered no, so the
     /// talk asks nothing and records nothing.
     func configHome() throws -> URL {
-        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("tap-ui-config-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: folder.appendingPathComponent("tap"), withIntermediateDirectories: true)
-        try "present:\n  record: false\n".write(to: folder.appendingPathComponent("tap/settings.yaml"), atomically: true, encoding: .utf8)
-        return folder
+        try isolatedConfigHome(settings: "present:\n  record: false\n")
     }
 
     func launchForPresenting() throws -> XCUIApplication {
