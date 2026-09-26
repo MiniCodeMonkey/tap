@@ -301,6 +301,9 @@ final class DeckFormViewController: NSViewController, NSTextFieldDelegate, NSTex
             rows.append(card)
         }
         let nameField = NSTextField(string: "")
+        nameField.target = self
+        nameField.action = #selector(addPressed(_:))
+        nameField.cell?.sendsActionOnEndEditing = false
         nameField.placeholderString = "shell, sqlite, mysql, postgres, or a custom name"
         nameField.setAccessibilityIdentifier("deck-add-\(key.name)")
         nameField.widthAnchor.constraint(greaterThanOrEqualToConstant: 260).isActive = true
@@ -386,8 +389,10 @@ final class DeckFormViewController: NSViewController, NSTextFieldDelegate, NSTex
         addSection(title: "Other keys", rows: rows)
     }
 
-    @objc private func addPressed(_ sender: NSButton) {
-        guard let map = addButtons.first(where: { $0.value === sender })?.key, let field = addFields[map] else { return }
+    /// Add, or Return in the name field.
+    @objc private func addPressed(_ sender: NSControl) {
+        guard let map = addButtons.first(where: { $0.value === sender })?.key ?? addFields.first(where: { $0.value === sender })?.key,
+              let field = addFields[map] else { return }
         _ = commitEditing()
         let name = field.stringValue.trimmingCharacters(in: .whitespaces)
         guard !name.isEmpty, name.range(of: "^[A-Za-z0-9_-]+$", options: .regularExpression) != nil else {

@@ -205,6 +205,16 @@ final class DeckTabDriversTests: HostedTestCase {
         XCTAssertEqual(controller.editor.undoManager?.undoActionName, "Remove my.db")
     }
 
+    /// Return in the name field adds the driver, as Add does.
+    func testReturnInTheNameFieldAddsTheDriver() async throws {
+        let (_, controller, form) = try await openOnTheDeckTab(try Fixtures.copyDeck("custom-driver.md"))
+        let addField = try XCTUnwrap(form.addEntryField(for: "drivers"))
+        addField.stringValue = "shell"
+        addField.sendAction(addField.action, to: addField.target)
+        XCTAssertEqual(Frontmatter(text: controller.editor.string).declaredDrivers, ["sqlite", "fortune", "shell"])
+        XCTAssertEqual(controller.editor.undoManager?.undoActionName, "Add shell")
+    }
+
     func testUnknownKeysAreListedUnderOtherKeys() async throws {
         let folder = try Fixtures.temporaryFolder()
         let deck = folder.appendingPathComponent("other.md")
