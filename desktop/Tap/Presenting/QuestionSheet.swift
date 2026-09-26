@@ -7,12 +7,22 @@ import AppKit
 /// only where declining is harmless; a destructive decline has no key,
 /// so a stray Escape after a talk (Escape is how a talk ends) can never
 /// choose it.
-final class QuestionSheet: NSWindow {
+class QuestionSheet: NSWindow {
     enum EscapeAnswer {
         /// Escape presses the decline button.
         case decline
         /// Escape does nothing; the person clicks.
         case nothing
+    }
+
+    /// Which button Return presses. Accept for a question whose yes is
+    /// harmless (record consent, keep a recording); decline for the live
+    /// code approval, where the safe answer is the default one and Return
+    /// must never grant execution (06-live-code-and-trust, "The safe
+    /// button is the default").
+    enum ReturnAnswer {
+        case accept
+        case decline
     }
 
     let kind: String
@@ -21,9 +31,14 @@ final class QuestionSheet: NSWindow {
     let pathLabel = NSTextField(labelWithString: "")
     let declineButton = NSButton(title: "", target: nil, action: nil)
     let acceptButton = NSButton(title: "", target: nil, action: nil)
+    let escape: EscapeAnswer
+    let returnAnswer: ReturnAnswer
 
-    init(kind: String, title: String, body: String, path: String?, decline: String, accept: String, escape: EscapeAnswer = .decline) {
+    init(kind: String, title: String, body: String, path: String?, decline: String, accept: String,
+         escape: EscapeAnswer = .decline, returnAnswer: ReturnAnswer = .accept, detail: NSView? = nil) {
         self.kind = kind
+        self.escape = escape
+        self.returnAnswer = returnAnswer
         super.init(contentRect: NSRect(x: 0, y: 0, width: 460, height: 200), styleMask: [.titled], backing: .buffered, defer: false)
         titleLabel.stringValue = title
         titleLabel.font = .systemFont(ofSize: 15, weight: .bold)
@@ -37,30 +52,63 @@ final class QuestionSheet: NSWindow {
         pathLabel.setAccessibilityIdentifier("question-path")
         declineButton.title = decline
         declineButton.bezelStyle = .rounded
-        declineButton.keyEquivalent = escape == .decline ? "\u{1b}" : ""
         declineButton.target = self
         declineButton.action = #selector(declinePressed(_:))
         acceptButton.title = accept
         acceptButton.bezelStyle = .rounded
-        acceptButton.keyEquivalent = "\r"
         acceptButton.target = self
         acceptButton.action = #selector(acceptPressed(_:))
+        switch returnAnswer {
+        case .accept:
+            acceptButton.keyEquivalent = "\r"
+            declineButton.keyEquivalent = escape == .decline ? "\u{1b}" : ""
+        case .decline:
+            // The safe answer holds Return; Escape, when it declines too, comes through keyDown.
+            declineButton.keyEquivalent = "\r"
+            acceptButton.keyEquivalent = ""
+        }
         let buttons = NSStackView(views: [NSView(), declineButton, acceptButton])
         buttons.orientation = .horizontal
         buttons.spacing = 8
-        let stack = NSStackView(views: [titleLabel, bodyLabel, pathLabel, buttons])
+        var views: [NSView] = [titleLabel, bodyLabel]
+        if let detail { views.append(detail) }
+        views += [pathLabel, buttons]
+        let stack = NSStackView(views: views)
         stack.orientation = .vertical
         stack.alignment = .leading
         stack.spacing = 12
         stack.edgeInsets = NSEdgeInsets(top: 24, left: 24, bottom: 24, right: 24)
-        stack.widthAnchor.constraint(equalToConstant: 460).isActive = true
+        stack.widthAnchor.constraint(equalToConstant: 520).isActive = true
         bodyLabel.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -48).isActive = true
+        detail?.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -48).isActive = true
         pathLabel.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -48).isActive = true
         buttons.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -48).isActive = true
         contentView = stack
         setContentSize(stack.fittingSize)
         isReleasedWhenClosed = false
+        if returnAnswer == .decline { defaultButtonCell = declineButton.cell as? NSButtonCell }
         setAccessibilityIdentifier("question-\(kind)")
+    }
+
+    /// Escape when the decline button already holds Return: a button has
+    /// one key equivalent, so the second key arrives here, once no view in
+    /// the sheet has taken it (labels and buttons take none), or as
+    /// `cancelOperation` when a selectable label holds focus and its field
+    /// editor turns Escape into that action.
+    override func keyDown(with event: NSEvent) {
+        if event.keyCode == 53, returnAnswer == .decline, escape == .decline {
+            declineButton.performClick(nil)
+            return
+        }
+        super.keyDown(with: event)
+    }
+
+    override func cancelOperation(_ sender: Any?) {
+        if returnAnswer == .decline, escape == .decline {
+            declineButton.performClick(nil)
+            return
+        }
+        super.cancelOperation(sender)
     }
 
     func button(titled title: String) -> NSButton? {
@@ -113,5 +161,165 @@ final class QuestionSheet: NSWindow {
                       path: nil,
                       decline: "Not Now",
                       accept: "Open Focus Settings")
+    }
+}
+
+/// One block of the approval sheet, as the Approval board draws it: the
+/// block's place, and its code right under it, always shown, in a
+/// monospaced label the person can select.
+final class ApprovalBlockRow: NSView {
+    let block: ApprovalBlock
+    let placeLabel: NSTextField
+    let codeLabel: NSTextField
+
+    init(block: ApprovalBlock) {
+        self.block = block
+        placeLabel = NSTextField(labelWithString: "Slide \(block.slide), block \(block.block)")
+        codeLabel = NSTextField(wrappingLabelWithString: block.code)
+        super.init(frame: .zero)
+        placeLabel.font = .systemFont(ofSize: 11)
+        placeLabel.textColor = .secondaryLabelColor
+        codeLabel.font = .monospacedSystemFont(ofSize: 11, weight: .regular)
+        codeLabel.isSelectable = true
+        codeLabel.setAccessibilityIdentifier("approval-block-\(block.slide)-\(block.block)")
+        let stack = NSStackView(views: [placeLabel, codeLabel])
+        stack.orientation = .vertical
+        stack.alignment = .leading
+        stack.spacing = 2
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(stack)
+        NSLayoutConstraint.activate([
+            stack.topAnchor.constraint(equalTo: topAnchor),
+            stack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
+            stack.trailingAnchor.constraint(equalTo: trailingAnchor),
+            stack.bottomAnchor.constraint(equalTo: bottomAnchor),
+            codeLabel.widthAnchor.constraint(equalTo: stack.widthAnchor),
+        ])
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
+}
+
+/// The live code approval: the drivers a yes allows, each with its
+/// blocks and slides (and a custom driver's command), every block's code
+/// inline under it as the Approval board draws it, and the safe answer
+/// as the default button. The title is the spec's; the second time, when
+/// the deck gained a driver, it names only the new ones
+/// (internal/cli/approval.go builds the request that way). A driver
+/// approved before that comes back with another command is still read as
+/// a new driver until Step 5's mockup sign-off gives the changed-command
+/// wording its copy.
+final class ApprovalSheet: QuestionSheet {
+    /// Which of the three requests the sheet is for.
+    enum Wording: Equatable {
+        /// The deck was never approved.
+        case first
+        /// The deck was approved; these drivers are new to it.
+        case newDrivers
+        /// A driver was approved with another command line (`previousCommand`).
+        /// Waits for the person's mockup sign-off (Step 5); nothing produces
+        /// this case yet.
+        case changedCommands
+    }
+
+    /// The rows scroll past this height, so a deck with dozens of blocks
+    /// never pushes the buttons off the display.
+    static let detailMaximumHeight: CGFloat = 320
+    let wording: Wording
+    let summaryLabel: NSTextField
+    let driverLabels: [NSTextField]
+    let blockRows: [ApprovalBlockRow]
+    let detailScrollView: NSScrollView
+
+    init(payload: QuestionPayload, deckName: String) {
+        let drivers = payload.drivers ?? []
+        let blocks = payload.blocks ?? []
+        let names = Self.joined(drivers.map(\.name))
+        let quotedName = "\u{201C}\(deckName)\u{201D}"
+        let title: String
+        let body: String
+        let accept: String
+        if payload.isForNewDrivers {
+            wording = .newDrivers
+            title = "This deck now also wants to run \(names)"
+            body = "You allowed \(Self.joined(payload.approvedBefore ?? [])) for \(quotedName) before. The deck now declares \(names) too, for example after a git pull. tap runs only the code written in this deck; read it before you allow it."
+            accept = "Allow \(names)"
+        } else {
+            wording = .first
+            title = "This deck can run code on your Mac"
+            body = "\(quotedName) declares \(drivers.count) driver\(drivers.count == 1 ? "" : "s") and has \(blocks.count) live code block\(blocks.count == 1 ? "" : "s"). tap runs only the code written in this deck; read it before you allow this deck. A yes is remembered for this file; tap approval revoke undoes it."
+            accept = "Allow"
+        }
+        let (detail, summary, driverLabels, blockRows) = Self.makeDetail(drivers: drivers, blocks: blocks, summary: payload.approvalSummary)
+        summaryLabel = summary
+        self.driverLabels = driverLabels
+        self.blockRows = blockRows
+        // The rows live in a scroll view that is as tall as they are, up to the maximum; the buttons stay outside it.
+        let scroll = NSScrollView()
+        scroll.contentView = FlippedClipView()
+        scroll.documentView = detail
+        scroll.hasVerticalScroller = true
+        scroll.drawsBackground = false
+        detail.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            detail.leadingAnchor.constraint(equalTo: scroll.contentView.leadingAnchor),
+            detail.trailingAnchor.constraint(equalTo: scroll.contentView.trailingAnchor),
+            detail.topAnchor.constraint(equalTo: scroll.contentView.topAnchor),
+        ])
+        let fits = scroll.heightAnchor.constraint(equalTo: detail.heightAnchor)
+        fits.priority = .defaultHigh
+        fits.isActive = true
+        scroll.heightAnchor.constraint(lessThanOrEqualToConstant: Self.detailMaximumHeight).isActive = true
+        detailScrollView = scroll
+        super.init(kind: "approval", title: title, body: body, path: payload.deck, decline: "Don't Allow", accept: accept,
+                   escape: .decline, returnAnswer: .decline, detail: scroll)
+    }
+
+    /// A clip view that starts its content at the top.
+    final class FlippedClipView: NSClipView {
+        override var isFlipped: Bool { true }
+    }
+
+    private static func makeDetail(drivers: [ApprovalDriver], blocks: [ApprovalBlock], summary: String)
+        -> (NSStackView, NSTextField, [NSTextField], [ApprovalBlockRow]) {
+        let detail = NSStackView()
+        detail.orientation = .vertical
+        detail.alignment = .leading
+        detail.spacing = 6
+        let summaryLabel = NSTextField(labelWithString: summary)
+        summaryLabel.font = .systemFont(ofSize: 12.5, weight: .semibold)
+        summaryLabel.setAccessibilityIdentifier("approval-summary")
+        detail.addArrangedSubview(summaryLabel)
+        var driverLabels: [NSTextField] = []
+        var blockRows: [ApprovalBlockRow] = []
+        for driver in drivers {
+            // tap's own wording (internal/cli/approval.go, describeDriverBlocks).
+            var line = driver.blocks == 0 ? "\(driver.name): no blocks yet" : "\(driver.name): \(driver.blocks) block\(driver.blocks == 1 ? "" : "s")"
+            if !driver.slides.isEmpty {
+                line += " on slide\(driver.slides.count == 1 ? "" : "s") " + driver.slides.map(String.init).joined(separator: ", ")
+            }
+            if let command = driver.command { line += ", runs: \(command)" }
+            let label = NSTextField(labelWithString: line)
+            label.font = .systemFont(ofSize: 12)
+            label.setAccessibilityIdentifier("approval-driver-\(driver.name)")
+            driverLabels.append(label)
+            detail.addArrangedSubview(label)
+            for block in blocks where block.driver == driver.name {
+                let row = ApprovalBlockRow(block: block)
+                blockRows.append(row)
+                detail.addArrangedSubview(row)
+                row.widthAnchor.constraint(equalTo: detail.widthAnchor).isActive = true
+            }
+        }
+        return (detail, summaryLabel, driverLabels, blockRows)
+    }
+
+    /// "shell", "shell and sqlite", "shell, sqlite and mysql".
+    static func joined(_ names: [String]) -> String {
+        switch names.count {
+        case 0: return ""
+        case 1: return names[0]
+        default: return names.dropLast().joined(separator: ", ") + " and " + names[names.count - 1]
+        }
     }
 }
