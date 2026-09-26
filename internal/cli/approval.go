@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"regexp"
 	"slices"
@@ -276,17 +277,56 @@ func (gate *liveCodeGate) reload(cfg *config.Config, presentation *transformer.T
 		gate.mu.Unlock()
 		return
 	}
-	decision := gate.decide(cfg, presentation)
+	start := gate.redecide()
+	gate.mu.Unlock()
+	if start {
+		go gate.askInBackground()
+	}
+}
+
+// settingsChanged decides again for the deck as the latest reload left
+// it, after the settings file changed. An approval another tap process
+// stored (tap present during a talk, or tap dev in another terminal)
+// then counts at once, even for a driver declined or still being asked
+// about in this run, without waiting for the deck's next reload. When
+// the policy changes, open pages are told, as after an answer.
+func (gate *liveCodeGate) settingsChanged() {
+	gate.mu.Lock()
+	if !gate.active {
+		gate.mu.Unlock()
+		return
+	}
+	before := gate.policy
+	start := gate.redecide()
+	changed := !samePolicy(before, gate.policy)
+	change := gate.change
+	gate.mu.Unlock()
+	if changed && change != nil {
+		change()
+	}
+	if start {
+		go gate.askInBackground()
+	}
+}
+
+// redecide decides for the deck the gate holds, sets the policy, and
+// withdraws an open question the decision no longer needs. It reports
+// whether a new asking goroutine should start. The caller holds gate.mu.
+func (gate *liveCodeGate) redecide() bool {
+	decision := gate.decide(gate.config, gate.presentation)
 	gate.setPolicy(decision.policy)
 	gate.noticeRefused(decision)
 	if gate.open != nil && !sameDrivers(gate.open.drivers, decision.wanted) {
 		gate.open.withdraw(errQuestionWithdrawn)
 	}
-	start := gate.shouldStartAsking(decision)
-	gate.mu.Unlock()
-	if start {
-		go gate.askInBackground()
-	}
+	return gate.shouldStartAsking(decision)
+}
+
+// samePolicy reports whether two policies allow the same drivers with
+// the same commands.
+func samePolicy(first, second server.LiveCodePolicy) bool {
+	return first.AllowAll == second.AllowAll && slices.Equal(first.Drivers, second.Drivers) &&
+		maps.EqualFunc(first.Commands, second.Commands, slices.Equal[[]string])
 }
 
 // askInBackground asks until settled on its own goroutine, and reports a
@@ -317,9 +357,16 @@ func (gate *liveCodeGate) askUntilSettled() error {
 		gate.open = nil
 		gate.mu.Unlock()
 	}()
-	for {
+	for asked := false; ; asked = true {
+		before := gate.policy
 		decision := gate.decide(gate.config, gate.presentation)
 		gate.setPolicy(decision.policy)
+		// Between one question and the next, only a settings change can
+		// change the policy: another tap process stored an approval while
+		// this one was being answered. Open pages are told, as after a yes.
+		if asked && !samePolicy(before, decision.policy) && gate.change != nil {
+			gate.change()
+		}
 		asker := gate.asker
 		if len(decision.wanted) == 0 || asker == nil || gate.input.Context.Err() != nil {
 			return nil
