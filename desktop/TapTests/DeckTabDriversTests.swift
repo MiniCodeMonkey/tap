@@ -195,6 +195,23 @@ final class DeckTabDriversTests: HostedTestCase {
         XCTAssertTrue(controller.editor.string.contains("        path: ./other.dbx\n"))
     }
 
+    /// A rebuild (here, a driver added under the form) writes what is typed
+    /// in a raw row before the row goes, as it does for a field.
+    func testARebuildCommitsTheRawRowBeingEdited() async throws {
+        let (_, controller, form) = try await openOnTheDeckTab(try connectionsDeck())
+        let editor = controller.editor
+        let raw = try XCTUnwrap(form.rawEditor("drivers.sqlite.connections"))
+        let window = try XCTUnwrap(raw.window)
+        XCTAssertTrue(window.makeFirstResponder(raw))
+        raw.string = "    connections:\n      incident:\n        path: ./draft.db"
+        let range = (editor.string as NSString).range(of: "        path: ./incident.db\n")
+        editor.replaceText(in: NSRange(location: NSMaxRange(range), length: 0), with: "  shell: {}\n", actionName: "Edit")
+        XCTAssertEqual(form.builtForEntries["drivers"], ["sqlite", "shell"], "the rows were rebuilt for the new driver")
+        XCTAssertTrue(editor.string.contains("        path: ./draft.db\n  shell: {}\n---\n"), "what was typed reached the frontmatter: \(editor.string.prefix(140))")
+        XCTAssertNil(window.firstResponder as? NSText, "the edit ended")
+        XCTAssertEqual(form.rawEditor("drivers.sqlite.connections")?.string, "    connections:\n      incident:\n        path: ./draft.db\n")
+    }
+
     /// A driver name with a dot in it is one name: its card's Remove removes it.
     func testADriverWhoseNameHasADotIsRemoved() async throws {
         let deck = try Fixtures.temporaryFolder().appendingPathComponent("dotted.md")
