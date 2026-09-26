@@ -207,6 +207,9 @@ class HostedTestCase: XCTestCase {
         let readyAfter = Date().timeIntervalSince(deadline.addingTimeInterval(-30))
         let settled = await preview.pageValue("JSON.stringify(window.__tapReadyState ?? null)")
         print("first ready after \(String(format: "%.2f", readyAfter))s: state=\(settled) \(appSideDiagnostics(preview))")
+        for line in controller.session.log.text.split(separator: "\n") where line.contains("in a new web view") {
+            print("preview recovery: \(line)")
+        }
         // A recovery shows up here even in a green run. One is the preview
         // doing its job; more than one for a single open is a defect.
         XCTAssertLessThanOrEqual(preview.pageRecoveryCount, 1, "the preview replaced its web view more than once before its first ready")

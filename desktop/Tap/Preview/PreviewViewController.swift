@@ -273,7 +273,8 @@ final class PreviewViewController: NSViewController, WKNavigationDelegate, WKUID
         }
         recoveriesInARow += 1
         pageRecoveryCount += 1
-        onLog?("\(reason); starting it again in a new web view (recovery \(pageRecoveryCount))")
+        onLog?("\(reason) (milestones: \(navigationMilestoneDescription)); "
+               + "starting it again in a new web view (recovery \(pageRecoveryCount))")
         isShowingRecovery = true
         overlay.show(title: "Restarting preview.", detail: "The page stopped responding.", output: [], opaque: false, buttons: false)
         replaceWebView()
