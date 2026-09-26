@@ -3,7 +3,7 @@ import XCTest
 final class DocumentUITests: UITestCase {
     func testBrowseVersions() throws {
         let deck = try copyFixture("seven-slides.md")
-        let application = launch(withDeck: deck)
+        let application = try launch(withDeck: deck)
         let editor = application.textViews["editor"]
         XCTAssertTrue(editor.waitForExistence(timeout: 30))
 
