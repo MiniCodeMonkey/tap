@@ -14,6 +14,35 @@ final class PreviewTests: HostedTestCase {
         XCTAssertEqual(controller.previewViewController.statusLabel.stringValue, "Slide 3, follows the cursor")
     }
 
+    /// tap reloads every page after an approval answer, and a reloaded page
+    /// opens on the slide in its own address, not on the one the cursor
+    /// moved to while it reloaded. The page here reloads itself with slide 1
+    /// in its address while the cursor is on slide 3; the preview must come
+    /// back to slide 3 with no further cursor move.
+    func testThePreviewReturnsToTheCursorsSlideAfterAReloadTheAppDidNotStart() async throws {
+        let document = try await openDeckAndWaitForPreview(try Fixtures.copyAppFixture())
+        let controller = try XCTUnwrap(document.sessionController)
+        try await waitForBoxes(document, count: 4)
+        controller.editor.moveCursor(toSlide: 2)
+        try await waitForPreview(document, slide: 3)
+        let preview = controller.previewViewController
+        let loadsBefore = preview.pageLoadCount
+        let readiesBefore = preview.readyMessagesReceived
+        _ = await preview.liveCodeValue("history.replaceState(null, '', '#1'); setTimeout(() => location.reload(), 0); 'reloading'")
+        // The new document, and a ready from it.
+        let deadline = Date().addingTimeInterval(15)
+        var navigation = ""
+        repeat {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            navigation = await preview.liveCodeValue("(performance.getEntriesByType('navigation')[0] || {}).type || 'none'")
+        } while (navigation != "reload" || preview.readyMessagesReceived == readiesBefore) && Date() < deadline
+        XCTAssertEqual(navigation, "reload", "the page reloaded itself")
+        XCTAssertGreaterThan(preview.readyMessagesReceived, readiesBefore, "the reloaded page reported ready")
+        XCTAssertEqual(preview.pageLoadCount, loadsBefore, "the app did not load the page")
+        try await waitForPreview(document, slide: 3)
+        XCTAssertEqual(controller.currentSlideNumber, 3, "the cursor stayed where it was")
+    }
+
     func testThePreviewUpdatesWhileIType() async throws {
         let deck = try Fixtures.copyAppFixture()
         let document = try await openDeckAndWaitForPreview(deck)

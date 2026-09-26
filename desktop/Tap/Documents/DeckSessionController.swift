@@ -307,7 +307,10 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
             self.session.restart()
         }
         previewViewController.onLog = { [weak self] line in self?.session.log.append(line, source: .app) }
-        previewViewController.onReady = { [weak self] payload in self?.previewDidRender(payload) }
+        previewViewController.onReady = { [weak self] payload in
+            self?.previewDidRender(payload)
+            self?.returnThePreviewToItsSlide(after: payload)
+        }
         if let documentUndoManager = document.undoManager {
             undoObserver = NotificationCenter.default.addObserver(forName: .NSUndoManagerDidUndoChange, object: documentUndoManager, queue: nil) { [weak self] _ in
                 MainActor.assumeIsolated { self?.undoOrRedoDidChangeText() }
@@ -928,6 +931,43 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
             sendPreviewMessage(navigator.cursorMoved(to: editor.boxes[index].slide))
         }
         onSlideListApplied?(list)
+    }
+
+    /// The ready, and the slide it was for, after which the preview's
+    /// slide was last sent again.
+    private struct SlideResend: Equatable {
+        let revision: String
+        let reportedSlide: Int
+        let intendedSlide: Int
+    }
+    private var lastSlideResend: SlideResend?
+    /// How long after sending the slide again it is checked once more.
+    static let slideResendCheckDelay: TimeInterval = 1
+
+    /// The page can report a slide other than the one the app asked for:
+    /// a reload the app did not start (tap reloads every page after an
+    /// approval answer) opens the page on the slide in its own address,
+    /// which wins over the hub's slide, so a cursor move that reached the
+    /// hub while the page was between documents is lost. A ready on
+    /// another slide sends the navigator's slide again, once for each
+    /// revision, reported slide and intended slide, so a page that cannot
+    /// reach the slide is not asked forever. The slide is checked once
+    /// more a moment later, since a page that had not joined the hub yet
+    /// receives the resend as the hub's state on joining, where its
+    /// address wins again.
+    private func returnThePreviewToItsSlide(after payload: ReadyPayload) {
+        guard let intended = navigator.slideNumber, payload.slide != intended else { return }
+        let resend = SlideResend(revision: payload.revision, reportedSlide: payload.slide, intendedSlide: intended)
+        guard resend != lastSlideResend else { return }
+        lastSlideResend = resend
+        sendPreviewMessage(navigator.message)
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.slideResendCheckDelay) { [weak self] in
+            MainActor.assumeIsolated {
+                guard let self, !self.stopped, self.navigator.slideNumber == intended,
+                      let ready = self.previewViewController.lastReady, ready.slide != intended else { return }
+                self.sendPreviewMessage(self.navigator.message)
+            }
+        }
     }
 
     /// Moves the preview through the hub, and updates its labels.
