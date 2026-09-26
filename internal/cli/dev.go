@@ -296,25 +296,37 @@ func runDevServer(options serverOptions) (err error) {
 	if err != nil {
 		return internalError(codeInternal, err)
 	}
-	// In --app mode the question goes to the app after the ready line (see
-	// the --app branch below), and live code stays off until it is
-	// answered.
+	// liveCode decides again on every reload below, and asks about a
+	// driver a reload adds, or whose command a reload changes. In --app
+	// mode the question goes to the app after the ready line (see the
+	// --app branch below), and live code stays off until it is answered.
+	liveCodeContext, endLiveCode := context.WithCancel(context.Background())
+	defer endLiveCode()
+	liveCodeOut := io.Writer(os.Stdout)
+	if options.app {
+		liveCodeOut = appLog
+	}
+	liveCode := newLiveCodeGate(approvalInput{
+		Now:          time.Now,
+		Config:       cfg,
+		Presentation: pres,
+		Out:          liveCodeOut,
+		Context:      liveCodeContext,
+		SettingsPath: settingsPath,
+		Deck:         absFile,
+		AllowCode:    options.allowCode,
+		Interactive:  options.app || stdinIsTerminal() && !headless,
+	})
 	var liveCodePolicy server.LiveCodePolicy
 	if !options.app {
-		liveCodePolicy, err = liveCodeApproval(approvalInput{
-			Now:          time.Now,
-			Config:       cfg,
-			Presentation: pres,
-			Asker:        terminalAsker{in: os.Stdin, out: os.Stdout},
-			Out:          os.Stdout,
-			SettingsPath: settingsPath,
-			Deck:         absFile,
-			AllowCode:    options.allowCode,
-			Interactive:  stdinIsTerminal() && !headless,
-		})
+		liveCode.setAsker(terminalAsker{in: os.Stdin, out: os.Stdout})
+		liveCodePolicy, err = liveCode.startup(cfg, pres)
 		if err != nil {
 			return internalError(codeInternal, err)
 		}
+		// Nobody can answer on the terminal again until the TUI runs and
+		// can hand it over (see tuiApprovalAsker).
+		liveCode.setAsker(nil)
 	}
 
 	// Resolve custom theme path if configured
@@ -387,13 +399,10 @@ func runDevServer(options serverOptions) (err error) {
 		candidate.SetAllowedOrigins(allowOrigins)
 		candidate.SetBaseDir(baseDir) // Enable serving local files (images, etc.)
 		candidate.SetRegistry(buildDriverRegistry(cfg, baseDir))
-		// The policy stays the same for the whole run. A driver added by a
-		// reload is not in it, so its blocks show "Not approved" until the
-		// next start asks. This also means an approved custom driver whose
-		// command changes mid-run (a git pull, an edited frontmatter) has
-		// its new command run without asking again: approval is keyed by
-		// driver name, not by command, and the registry below is rebuilt on
-		// every reload while this policy is not.
+		// The startup policy. liveCode sets it again on every reload and
+		// every answer, and /api/execute checks each driver's command as
+		// the registry holds it against the approved one, so a driver a
+		// reload adds or changes is refused until it is approved.
 		candidate.SetLiveCodePolicy(liveCodePolicy)
 		candidate.SetComponentBundles(componentBundleFiles(resolvedComponents))
 		if customThemePath != "" {
@@ -409,6 +418,9 @@ func runDevServer(options serverOptions) (err error) {
 		return err
 	}
 	port = srv.Port()
+	// Pages read which drivers may run from /api/presentation, so an
+	// answer that changes it reloads them.
+	liveCode.attach(srv.SetLiveCodePolicy, func() { _ = hub.BroadcastReload() })
 
 	// Every reload below goes through publisher, which decides whether
 	// open pages update in place or reload.
@@ -473,6 +485,7 @@ func runDevServer(options serverOptions) (err error) {
 
 		setRawSlides(newRawSlides)
 		watcher.AddExtraDirs(externalInputDirs(newResolvedComponents, baseDir))
+		liveCode.reload(newCfg, newPres)
 		srv.SetRegistry(buildDriverRegistry(newCfg, baseDir))
 		publisher.publish(newPres, componentBundleFiles(newResolvedComponents), customThemePath, false)
 	})
@@ -638,6 +651,9 @@ func runDevServer(options serverOptions) (err error) {
 		// likely to be in flight when the run ends.
 		appCtx, endAppRun := context.WithCancel(context.Background())
 		defer endAppRun()
+		// A quit ends every approval question with the run.
+		stopEndingLiveCode := context.AfterFunc(appCtx, endLiveCode)
+		defer stopEndingLiveCode()
 
 		deckSource := newAppDeckSource(absFile)
 		if initialSource, readErr := os.ReadFile(absFile); readErr == nil {
@@ -698,6 +714,7 @@ func runDevServer(options serverOptions) (err error) {
 					}
 				}
 				srv.SetCustomThemePath(newCustomThemePath)
+				liveCode.reload(newCfg, newPres)
 				srv.SetRegistry(buildDriverRegistry(newCfg, baseDir))
 				setRawSlides(newRawSlides)
 				watcher.AddExtraDirs(externalInputDirs(newResolvedComponents, baseDir))
@@ -837,22 +854,13 @@ func runDevServer(options serverOptions) (err error) {
 
 			// The live code approval is its own question, never answered by
 			// the recording consent above: one yes must not turn on both.
-			policy, approvalErr := liveCodeApproval(approvalInput{
-				Now:          time.Now,
-				Config:       cfg,
-				Presentation: pres,
-				Asker:        appApprovalAsker{ctx: ctx, questions: questions},
-				Out:          appLog,
-				SettingsPath: settingsPath,
-				Deck:         absFile,
-				AllowCode:    options.allowCode,
-				Interactive:  true,
-			})
-			if approvalErr != nil {
+			// startup decides for the deck as the latest render left it,
+			// and sets the policy on the server itself.
+			liveCode.setAsker(appApprovalAsker{questions: questions})
+			if _, approvalErr := liveCode.startup(cfg, pres); approvalErr != nil {
 				appEvents.emit(appErrorEvent{Type: appEventError, Code: codeInternal, Message: approvalErr.Error()})
 				return
 			}
-			srv.SetLiveCodePolicy(policy)
 			// Pages read which drivers may run from /api/presentation.
 			_ = hub.BroadcastReload()
 		}
@@ -884,7 +892,9 @@ func runDevServer(options serverOptions) (err error) {
 			StartTunnel:       wantTunnel,
 		})
 	} else if headless {
-		// Headless mode - no TUI, just log and wait for signal
+		// Headless mode - no TUI, just log and wait for signal. Nobody can
+		// be asked, so a driver a reload adds stays off, said in the log.
+		liveCode.setOut(appLog)
 		fmt.Println()
 		Success("  Dev server running (headless mode)\n")
 		fmt.Println()
@@ -928,6 +938,7 @@ func runDevServer(options serverOptions) (err error) {
 
 			setRawSlides(newRawSlides)
 			watcher.AddExtraDirs(externalInputDirs(newResolvedComponents, baseDir))
+			liveCode.reload(newCfg, newPres)
 			srv.SetRegistry(buildDriverRegistry(newCfg, baseDir))
 			publisher.publish(newPres, componentBundleFiles(newResolvedComponents), newCustomThemePath, false)
 			Info("Reloaded: %s\n", path)
@@ -963,6 +974,11 @@ func runDevServer(options serverOptions) (err error) {
 		model.SetTunnelController(tunnels)
 		model.SetRecorderController(recordings)
 		devModel = model
+		// The TUI owns the terminal from here: live code notices become
+		// TUI events, and an approval question a reload needs suspends
+		// the TUI and asks on the terminal as startup did.
+		liveCode.setOut(tuiEventWriter{model: model})
+		liveCode.setAsker(tuiApprovalAsker{model: model})
 
 		// The terminal lines above scroll away when the TUI starts, so the
 		// TUI shows them too.
@@ -1065,6 +1081,7 @@ func runDevServer(options serverOptions) (err error) {
 			model.SetWarnings(append(componentWarningLines(componentWarnings(newResolvedComponents)), undeclaredDriverWarnings(absFile, newPres)...))
 			setRawSlides(newRawSlides)
 			watcher.AddExtraDirs(externalInputDirs(newResolvedComponents, baseDir))
+			liveCode.reload(newCfg, newPres)
 			srv.SetRegistry(buildDriverRegistry(newCfg, baseDir))
 			// r forces a full reload, so a person can always get a fresh
 			// page. A file change updates open pages in place.

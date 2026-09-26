@@ -137,3 +137,22 @@ func TestApprovalRevokeAnUnapprovedDeck(t *testing.T) {
 		t.Errorf("exit %d, stdout %q", exitCode, stdout)
 	}
 }
+
+func TestApprovalListShowsTheApprovedCommands(t *testing.T) {
+	useSettings(t, usersettings.Approval{
+		Deck:       "/talks/a.md",
+		Drivers:    []string{"python", "shell"},
+		Commands:   map[string][]string{"python": {"python3", "-u"}},
+		ApprovedAt: listedAt,
+	})
+	exitCode, stdout, _ := runTap(t, "approval", "list")
+	want := "/talks/a.md\n  drivers:  python (runs: python3 -u), shell\n  approved: 2026-09-22T19:32:00Z\n"
+	if exitCode != exitOK || stdout != want {
+		t.Errorf("exit %d, stdout:\n%s\nwant:\n%s", exitCode, stdout, want)
+	}
+
+	_, stdout, _ = runTap(t, "approval", "list", "--json")
+	if !strings.Contains(stdout, `"commands": {`) || !strings.Contains(stdout, `"python3"`) {
+		t.Errorf("the JSON lacks the commands:\n%s", stdout)
+	}
+}

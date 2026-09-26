@@ -738,3 +738,205 @@ func TestResolveDeckFailsForADeckThatDoesNotExist(t *testing.T) {
 		t.Error("ResolveDeck() succeeded for a deck that does not exist, want an error")
 	}
 }
+
+func TestCoversADriverOnlyWithTheDigestItWasApprovedWith(t *testing.T) {
+	deck := deckFile(t, "talk.md")
+	key := []byte(strings.Repeat("k", 32))
+	python3 := CommandDigest(key, []string{"python3", "-c"})
+	var settings Settings
+	settings.ApproveDrivers(deck, []Driver{
+		{Name: "python", Command: []string{"${PYTHON}", "-c"}, Digest: python3},
+		{Name: "shell"},
+	}, approvalTime)
+
+	if !settings.Covers(deck, Driver{Name: "python", Digest: python3}) {
+		t.Error("python with the approved digest should be covered")
+	}
+	if settings.Covers(deck, Driver{Name: "python", Digest: CommandDigest(key, []string{"bash", "-c"})}) {
+		t.Error("python with a changed command should not be covered")
+	}
+	if settings.Covers(deck, Driver{Name: "python", Digest: CommandDigest(key, []string{"python3", "-c", "import os"})}) {
+		t.Error("python with an added argument should not be covered")
+	}
+	if settings.Covers(deck, Driver{Name: "python", Digest: CommandDigest([]byte(strings.Repeat("o", 32)), []string{"python3", "-c"})}) {
+		t.Error("python digested with another key should not be covered")
+	}
+	if settings.Covers(deck, Driver{Name: "python"}) {
+		t.Error("python with no command should not be covered by an approval of a command")
+	}
+	if !settings.Covers(deck, Driver{Name: "shell"}) {
+		t.Error("the built-in shell driver should be covered")
+	}
+	if settings.Covers(deck, Driver{Name: "shell", Digest: CommandDigest(key, []string{"sh"})}) {
+		t.Error("shell with a command should not be covered by an approval without one")
+	}
+}
+
+func TestCommandDigestKeepsArgumentBoundaries(t *testing.T) {
+	key := []byte(strings.Repeat("k", 32))
+	if CommandDigest(key, []string{"sh", "-c", "a b"}) == CommandDigest(key, []string{"sh", "-c", "a", "b"}) {
+		t.Error("two different argument lists have the same digest")
+	}
+	if CommandDigest(key, nil) != "" {
+		t.Error("no command should have no digest")
+	}
+	if !strings.HasPrefix(CommandDigest(key, []string{"sh"}), "hmac-sha256:") {
+		t.Errorf("digest = %q, want the hmac-sha256: prefix", CommandDigest(key, []string{"sh"}))
+	}
+}
+
+func TestAnApprovalWithoutDigestsCoversNoCustomCommand(t *testing.T) {
+	deck := deckFile(t, "talk.md")
+	path := filepath.Join(t.TempDir(), "settings.yaml")
+	record := fmt.Sprintf("approvals:\n  - deck: %s\n    drivers: [python, shell]\n    approvedAt: 2026-09-22T19:32:00Z\n", deck.String())
+	if err := os.WriteFile(path, []byte(record), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	settings, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	key := []byte(strings.Repeat("k", 32))
+	if settings.Covers(deck, Driver{Name: "python", Digest: CommandDigest(key, []string{"python3", "-c"})}) {
+		t.Error("a record written before commands were stored covered a custom command")
+	}
+	if !settings.Covers(deck, Driver{Name: "shell"}) {
+		t.Error("a record written before commands were stored should still cover a built-in driver")
+	}
+}
+
+func TestApproveDriversReplacesTheCommandOfAReapprovedDriver(t *testing.T) {
+	deck := deckFile(t, "talk.md")
+	path := filepath.Join(t.TempDir(), "settings.yaml")
+	key := []byte(strings.Repeat("k", 32))
+	python3 := CommandDigest(key, []string{"python3", "-c"})
+	bash := CommandDigest(key, []string{"bash", "-c"})
+	ruby := CommandDigest(key, []string{"ruby"})
+	var settings Settings
+	settings.ApproveDrivers(deck, []Driver{{Name: "python", Command: []string{"python3", "-c"}, Digest: python3}, {Name: "ruby", Command: []string{"ruby"}, Digest: ruby}}, approvalTime)
+	settings.ApproveDrivers(deck, []Driver{{Name: "python", Command: []string{"bash", "-c"}, Digest: bash}}, approvalTime)
+	if err := Save(path, settings); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !loaded.Covers(deck, Driver{Name: "python", Digest: bash}) {
+		t.Error("the new command was not stored")
+	}
+	if loaded.Covers(deck, Driver{Name: "python", Digest: python3}) {
+		t.Error("the replaced command is still covered")
+	}
+	if !loaded.Covers(deck, Driver{Name: "ruby", Digest: ruby}) {
+		t.Error("a driver approved before lost its command")
+	}
+	approval, _ := loaded.ApprovalFor(deck)
+	if strings.Join(approval.Commands["python"], " ") != "bash -c" {
+		t.Errorf("commands = %v, want the bash template for display", approval.Commands)
+	}
+}
+
+func TestEnsureApprovalKeyCreatesAPrivateKeyOnce(t *testing.T) {
+	settingsPath := filepath.Join(t.TempDir(), "tap", "settings.yaml")
+	if _, err := LoadApprovalKey(settingsPath); err == nil {
+		t.Fatal("LoadApprovalKey() found a key that was never made")
+	}
+	key, err := EnsureApprovalKey(settingsPath)
+	if err != nil || len(key) != 32 {
+		t.Fatalf("EnsureApprovalKey() = %d bytes, %v", len(key), err)
+	}
+	info, err := os.Stat(filepath.Join(filepath.Dir(settingsPath), "approval.key"))
+	if err != nil || info.Mode().Perm() != 0o600 {
+		t.Fatalf("key file = %v, %v; want mode 0600", info, err)
+	}
+	again, err := EnsureApprovalKey(settingsPath)
+	if err != nil || string(again) != string(key) {
+		t.Error("a second EnsureApprovalKey() changed the key")
+	}
+	loaded, err := LoadApprovalKey(settingsPath)
+	if err != nil || string(loaded) != string(key) {
+		t.Errorf("LoadApprovalKey() = %v, want the key made before", err)
+	}
+}
+
+func TestEnsureApprovalKeyReplacesAKeyOfTheWrongLength(t *testing.T) {
+	settingsPath := filepath.Join(t.TempDir(), "settings.yaml")
+	if err := os.WriteFile(ApprovalKeyPath(settingsPath), []byte("short"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := LoadApprovalKey(settingsPath); err == nil {
+		t.Error("LoadApprovalKey() accepted a key of the wrong length")
+	}
+	key, err := EnsureApprovalKey(settingsPath)
+	if err != nil || len(key) != 32 {
+		t.Fatalf("EnsureApprovalKey() = %d bytes, %v", len(key), err)
+	}
+}
+
+// ensureKeyConcurrently runs EnsureApprovalKey from workers goroutines at
+// once through call, and checks that each got the one key on disk and
+// that nothing else is left in the folder.
+func ensureKeyConcurrently(t *testing.T, settingsPath string, workers int, call func() ([]byte, error)) {
+	t.Helper()
+	keys := make([][]byte, workers)
+	errs := make([]error, workers)
+	var ready, done sync.WaitGroup
+	start := make(chan struct{})
+	for worker := 0; worker < workers; worker++ {
+		ready.Add(1)
+		done.Add(1)
+		go func(worker int) {
+			defer done.Done()
+			ready.Done()
+			<-start
+			keys[worker], errs[worker] = call()
+		}(worker)
+	}
+	ready.Wait()
+	close(start)
+	done.Wait()
+	onDisk, err := os.ReadFile(ApprovalKeyPath(settingsPath))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for worker := range keys {
+		if errs[worker] != nil || string(keys[worker]) != string(onDisk) {
+			t.Fatalf("worker %d got %d bytes, %v; want the key on disk", worker, len(keys[worker]), errs[worker])
+		}
+	}
+	entries, err := os.ReadDir(filepath.Dir(settingsPath))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, entry := range entries {
+		if entry.Name() != "approval.key" && entry.Name() != "settings.yaml.lock" {
+			t.Fatalf("%s is left next to the key", entry.Name())
+		}
+	}
+}
+
+func TestEnsureApprovalKeyGivesRacingCallersTheSameKey(t *testing.T) {
+	for round := 0; round < 200; round++ {
+		settingsPath := filepath.Join(t.TempDir(), "settings.yaml")
+		ensureKeyConcurrently(t, settingsPath, 16, func() ([]byte, error) { return EnsureApprovalKey(settingsPath) })
+	}
+}
+
+func TestEnsureApprovalKeyUnderTheLockReplacesAShortKeyOnce(t *testing.T) {
+	for round := 0; round < 50; round++ {
+		settingsPath := filepath.Join(t.TempDir(), "settings.yaml")
+		if err := os.WriteFile(ApprovalKeyPath(settingsPath), []byte("short"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		ensureKeyConcurrently(t, settingsPath, 16, func() ([]byte, error) {
+			var key []byte
+			err := WithLock(settingsPath, func() error {
+				var ensureErr error
+				key, ensureErr = EnsureApprovalKey(settingsPath)
+				return ensureErr
+			})
+			return key, err
+		})
+	}
+}

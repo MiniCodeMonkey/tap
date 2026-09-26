@@ -1004,6 +1004,24 @@ func TestPresentationOmitsADeclaredDriverTheRegistryNeverBuilt(t *testing.T) {
 	}
 }
 
+func TestPresentationLeavesOutADriverWhoseCommandChanged(t *testing.T) {
+	s := NewWithHost(0, "127.0.0.1")
+	registry := driver.NewRegistry()
+	registry.Register(&mockDriver{name: "sqlite"})
+	registry.Register(&commandDriver{recordingDriver: recordingDriver{name: "python"}, command: []string{"bash", "-c"}})
+	s.SetRegistry(registry)
+	s.SetPresentation(&transformer.TransformedPresentation{
+		Config: config.Config{Drivers: map[string]config.DriverConfig{"sqlite": {}, "python": {Command: "bash", Args: []string{"-c"}}}},
+		Slides: []transformer.TransformedSlide{{Index: 0}},
+	})
+	s.SetLiveCodePolicy(LiveCodePolicy{Drivers: []string{"python", "sqlite"}, Commands: map[string][]string{"python": {"python3", "-c"}}})
+
+	body := getPresentationJSON(t, s)
+	if string(body["liveCode"]) != `{"drivers":["sqlite"]}` {
+		t.Errorf("liveCode = %s, want python left out: its command is not the approved one", body["liveCode"])
+	}
+}
+
 func TestPresentationListsNoDriverForAnUnapprovedDeck(t *testing.T) {
 	s := NewWithHost(0, "127.0.0.1")
 	s.SetRegistry(driver.NewRegistry())
