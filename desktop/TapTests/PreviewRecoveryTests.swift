@@ -174,6 +174,40 @@ extension PreviewRecoveryTests {
         XCTAssertFalse(preview.overlay.tryAgainButton.isHidden, "Try Again is offered")
     }
 
+    /// A page whose load stays in flight, waiting on a tap that does not
+    /// answer, while its process runs and answers every check: the
+    /// watchdog asks again and again and never replaces it, and the load
+    /// finishes once tap answers.
+    func testALivePageWhoseLoadWaitsOnTapIsNeverReplaced() async throws {
+        let document = try await openDeckAndWaitForPreview(try Fixtures.copyAppFixture())
+        let controller = try XCTUnwrap(document.sessionController)
+        let preview = controller.previewViewController
+        let tap = try XCTUnwrap(controller.session.processIdentifier)
+        let webView = preview.webView
+        preview.loadWatchdogInterval = 0.3
+        kill(tap, SIGSTOP)
+        var resumed = false
+        defer { if !resumed { kill(tap, SIGCONT) } }
+        let checksBefore = preview.pageAnswerCheckCount
+
+        preview.reload()
+
+        try await waitUntil(timeout: 10, "three checks of the waiting page (checks \(preview.pageAnswerCheckCount - checksBefore))") {
+            preview.pageAnswerCheckCount - checksBefore >= 3
+        }
+        XCTAssertTrue(preview.webView.isLoading, "the load is still in flight: \(preview.navigationMilestoneDescription)")
+        XCTAssertTrue(preview.webView === webView, "a page that answers keeps its web view")
+        XCTAssertEqual(preview.pageRecoveryCount, 0)
+        kill(tap, SIGCONT)
+        resumed = true
+
+        try await waitUntil(timeout: 20, "the load to finish and the page to report ready") { preview.lastReady != nil }
+        XCTAssertTrue(preview.navigationMilestoneDescription.contains("finish"), preview.navigationMilestoneDescription)
+        XCTAssertTrue(preview.webView === webView)
+        XCTAssertEqual(preview.pageRecoveryCount, 0)
+        XCTAssertTrue(preview.overlay.isHidden)
+    }
+
     /// A load that replaces one still in flight: WebKit reports the old
     /// navigation as cancelled, and that says nothing about the new load.
     /// tap is stopped so the first load stays in flight, waiting on it,

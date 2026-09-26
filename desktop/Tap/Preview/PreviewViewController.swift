@@ -83,6 +83,9 @@ final class PreviewViewController: NSViewController, WKNavigationDelegate, WKUID
     /// Navigation callbacks WebKit made for a load other than the current
     /// one, such as a load that a newer one replaced. They are ignored.
     private(set) var ignoredNavigationCallbackCount = 0
+    /// How many times the watchdog asked an unfinished load's page to
+    /// answer. A test reads it to know the check ran on a live page.
+    private(set) var pageAnswerCheckCount = 0
     /// Whether `webView`'s page answers a no-op script within the time
     /// given. Evaluating "1" here, in the preview and in the thumbnail
     /// renderer, is the single exception to the rule that the app runs no
@@ -266,6 +269,7 @@ final class PreviewViewController: NSViewController, WKNavigationDelegate, WKUID
             armWatchdog()
             return
         }
+        pageAnswerCheckCount += 1
         let answers = await pageAnswers(watched, Self.pageAnswerTimeout)
         guard watched === webView, !loadFinished else { return }
         if !answers {
