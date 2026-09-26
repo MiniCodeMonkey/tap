@@ -352,6 +352,12 @@ jobs:
         if: steps.check-desktop.outputs.exists == 'true'
         run: make -C desktop core-test
 
+      # Test-only hooks are compiled out of release builds; this fails if
+      # one reaches the release app.
+      - name: Check that test hooks stay out of the release build
+        if: steps.check-desktop.outputs.exists == 'true'
+        run: make -C desktop check-release-hooks
+
       # ~47 tests hosted inside the real Tap.app, driving a real `tap dev
       # --app`. These open real windows (see TapTests/Support/
       # HostedTestCase.swift), so they need a window server. GitHub-hosted
