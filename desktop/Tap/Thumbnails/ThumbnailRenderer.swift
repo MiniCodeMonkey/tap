@@ -45,7 +45,19 @@ final class ThumbnailRenderer: NSObject, WKScriptMessageHandler, WKNavigationDel
     /// content process is gone, may never make.
     static let snapshotTimeout: TimeInterval = 10
 
-    let webView: WKWebView
+    /// The renderer's web view. One whose content process stops answering
+    /// is replaced by a new one, so this is read afresh rather than kept.
+    private(set) var webView: WKWebView
+    /// How long the page has to answer a no-op script after a ready wait
+    /// timed out, before its content process counts as stuck.
+    static let pageAnswerTimeout: TimeInterval = 2
+    /// New web views per tap the renderer is pointed at.
+    static let maximumWebViewReplacements = 2
+    /// Web views replaced because their content process stopped answering.
+    private(set) var webViewReplacementCount = 0
+    /// Content processes that ended under the renderer.
+    private(set) var processTerminationCount = 0
+    private var replacementsForThisClient = 0
     /// True while the person is typing: the loop waits.
     var isPaused: () -> Bool = { false }
     /// True while the web view can paint: its window is on screen and it is not hidden.
@@ -116,17 +128,60 @@ final class ThumbnailRenderer: NSObject, WKScriptMessageHandler, WKNavigationDel
     private enum Outcome { case rendered, retry }
 
     override init() {
+        webView = Self.makeWebView()
+        super.init()
+        adopt(webView)
+    }
+
+    private static func makeWebView() -> WKWebView {
         let configuration = WKWebViewConfiguration()
         configuration.userContentController = WKUserContentController()
         configuration.websiteDataStore = .nonPersistent()
-        webView = WKWebView(frame: NSRect(origin: .zero, size: Self.viewSize), configuration: configuration)
-        super.init()
-        configuration.userContentController.add(WeakScriptMessageHandler(self), name: "tapReady")
+        return WKWebView(frame: NSRect(origin: .zero, size: Self.viewSize), configuration: configuration)
+    }
+
+    private func adopt(_ webView: WKWebView) {
+        webView.configuration.userContentController.add(WeakScriptMessageHandler(self), name: "tapReady")
         // Print mode lays a slide out at 1920 by 1080 CSS pixels; half zoom fits it in the view.
         webView.pageZoom = 0.5
         webView.navigationDelegate = self
         webView.setAccessibilityElement(false)
         webView.setAccessibilityIdentifier("thumbnail-renderer")
+    }
+
+    /// Puts a new web view, with a new content process, where the old one
+    /// is. The next render loads its page there.
+    private func replaceWebView() {
+        let old = webView
+        old.navigationDelegate = nil
+        old.configuration.userContentController.removeScriptMessageHandler(forName: "tapReady")
+        old.stopLoading()
+        let replacement = Self.makeWebView()
+        adopt(replacement)
+        webView = replacement
+        old.replaceInSuperview(with: replacement)
+        currentNavigation = nil
+        loadedRevision = nil
+        lastReady = nil
+        webViewReplacementCount += 1
+    }
+
+    /// After a ready wait timed out: a page still loading or settling
+    /// answers a no-op script at once, so no answer means its content
+    /// process is stuck, and a reload would go to that same process. Such
+    /// a web view is replaced, at most `maximumWebViewReplacements` times
+    /// per tap.
+    private func replaceWebViewIfStuck() async {
+        guard replacementsForThisClient < Self.maximumWebViewReplacements else { return }
+        let checked = webView
+        // Evaluating "1" here, and in the preview's load watchdog, is the
+        // single exception to the rule that the app runs no script in a
+        // page, and the person allowed it: the script reads and changes
+        // nothing, and it is the only way to tell a content process that
+        // stopped running from a page that is still settling.
+        guard case .noAnswer = await checked.evaluate("1", timeout: Self.pageAnswerTimeout), checked === webView else { return }
+        replacementsForThisClient += 1
+        replaceWebView()
     }
 
     var pendingCount: Int { queue.pending.count + (running ? 1 : 0) }
@@ -148,6 +203,7 @@ final class ThumbnailRenderer: NSObject, WKScriptMessageHandler, WKNavigationDel
         allowedPort = client?.ready.port
         loadedRevision = nil
         lastReady = nil
+        replacementsForThisClient = 0
         failures = [:]
         notBefore = [:]
         flatCaptures = [:]
@@ -257,6 +313,7 @@ final class ThumbnailRenderer: NSObject, WKScriptMessageHandler, WKNavigationDel
         phase = .waitingForReady(slide: number, attempt: attempt)
         guard let ready = await waitForReady(slide: number, timeout: readyTimeoutForAttempt(attempt)) else {
             loadedRevision = nil
+            await replaceWebViewIfStuck()
             return .retry
         }
         loadedRevision = ready.revision
@@ -372,6 +429,17 @@ final class ThumbnailRenderer: NSObject, WKScriptMessageHandler, WKNavigationDel
         navigationFailed(navigation)
     }
 
+    /// The page's content process exited or crashed. The attempt under way
+    /// fails at once, and the next load starts a new process in the same
+    /// web view.
+    func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+        guard webView === self.webView else { return }
+        processTerminationCount += 1
+        loadedRevision = nil
+        lastReady = nil
+        resumeWaiter(with: nil)
+    }
+
     /// Only a failure of the load the waiter belongs to ends its wait.
     private func navigationFailed(_ navigation: WKNavigation?) {
         guard let navigation, navigation === currentNavigation else { return }
@@ -394,6 +462,7 @@ final class ThumbnailRenderer: NSObject, WKScriptMessageHandler, WKNavigationDel
             + "lastReady=\(lastReady.map { "slide \($0.slide) revision \($0.revision)" } ?? "none") "
             + "waitingForSlide=\(waitingForSlide.map(String.init) ?? "none") "
             + "client=\(baseURL == nil ? "none" : "set") canPaint=\(canPaint()) isPaused=\(isPaused()) "
+            + "webViewReplacements=\(webViewReplacementCount) processTerminations=\(processTerminationCount) "
             + "webViewLoading=\(webView.isLoading) url=\(webView.url?.absoluteString ?? "none")"
     }
 }
