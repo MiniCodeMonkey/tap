@@ -50,14 +50,17 @@ final class DeckTabDriversTests: HostedTestCase {
         XCTAssertEqual(editor.undoManager?.undoActionName, "Add shell")
         XCTAssertNotNil(form.field("drivers.shell.timeout"), "the form rebuilt for the new entry")
         XCTAssertEqual(form.addEntryField(for: "drivers")?.stringValue, "", "ready for the next name")
+        try await waitForTheUndoStepToClose(editor.undoManager)
 
         // Remove it again from its card's header; the card goes. (The deck's body still holds a shell block, so the check is on the drivers.)
         try XCTUnwrap(form.removeButton(for: "drivers.shell")).performClick(nil)
         XCTAssertEqual(Frontmatter(text: editor.string).declaredDrivers, ["sqlite", "fortune"])
         XCTAssertEqual(editor.undoManager?.undoActionName, "Remove shell")
         XCTAssertNil(form.field("drivers.shell.timeout"))
+        try await waitForTheUndoStepToClose(editor.undoManager)
         editor.undoManager?.undo()
         XCTAssertNotNil(form.field("drivers.shell.timeout"), "undo brings the entry and its card back")
+        XCTAssertTrue(editor.string.contains("    command: /bin/cat\n  shell: {}\n---\n"), "only the Remove was undone")
     }
 
     func testRawSettingsAreEditedAsText() async throws {
