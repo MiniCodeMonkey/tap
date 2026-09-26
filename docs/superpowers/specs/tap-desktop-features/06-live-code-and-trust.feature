@@ -111,10 +111,12 @@ Feature: Live code approval
     When its command changes to "bash", or a ${NAME} in it now holds another value
     Then tap asks again, because an approval covers a driver's name and its command
     And the sheet shows the old command struck out above the new one
+    When only a value in the command changed
+    Then the sheet says "A value in this command changed since it was approved"
 
   Scenario: A command never shows or stores a secret
-    Given a custom driver's arguments hold "${DB_PASSWORD}"
-    Then the approval sheet, the terminal prompt and tap approval list show "${DB_PASSWORD}" as written, never its value
+    Given a custom driver's arguments hold "${DB_HOST}" and "${DB_PASSWORD}"
+    Then the approval sheet, the terminal prompt and tap approval list show the value of DB_HOST and "${DB_PASSWORD}" as written, never its value
     And settings.yaml stores the command as written, with a keyed digest of the expanded command for matching
 
   Scenario: Another tap approved the driver
