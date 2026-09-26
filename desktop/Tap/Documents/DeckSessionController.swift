@@ -267,13 +267,18 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
         saveNow()
     }
 
-    /// Writes the buffer to the deck file now, ahead of the autosave. A
-    /// save the document refuses (a disk conflict is showing) leaves the
-    /// edit in the buffer for the next save, with a log line.
+    /// Writes the buffer to the deck file now, ahead of the autosave, and
+    /// says so in the log. A save the document refuses (a disk conflict is
+    /// showing) leaves the edit in the buffer for the next save, with a
+    /// log line.
     func saveNow() {
         guard let document, let url = document.fileURL, isContentEdited else { return }
         document.save(to: url, ofType: document.fileType ?? "net.daringfireball.markdown", for: .saveOperation) { [weak self] error in
-            if let error { self?.session.log.append("the save after the fix-it was refused: \(error.localizedDescription)", source: .app) }
+            if let error {
+                self?.session.log.append("the save after the fix-it was refused: \(error.localizedDescription)", source: .app)
+            } else {
+                self?.session.log.append("saved the deck after the fix-it", source: .app)
+            }
         }
     }
 

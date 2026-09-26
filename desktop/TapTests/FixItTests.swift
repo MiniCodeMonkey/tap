@@ -52,7 +52,8 @@ final class FixItTests: HostedTestCase {
         XCTAssertNil(editor.header(forBoxAt: 5).fixIt)
         XCTAssertEqual(editor.deckErrors, [], "tap parses what the fix-it wrote")
         let deck = try XCTUnwrap(document.fileURL)
-        try await waitUntil(timeout: 10, "the fix-it's save") { (try? String(contentsOf: deck, encoding: .utf8))?.contains("  shell: {}\n") == true }
+        try await waitUntil(timeout: 10, "the fix-it's own save, not the autosave") { controller.session.log.text.contains("saved the deck after the fix-it") }
+        XCTAssertTrue(try String(contentsOf: deck, encoding: .utf8).contains("  shell: {}\n"), "the file has the declaration")
         // tap's render of the edited text asks about shell (Task 10); this test leaves that sheet alone.
         editor.undoManager?.undo()
         XCTAssertEqual(editor.string, original, "one undo step")
