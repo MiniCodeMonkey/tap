@@ -191,8 +191,16 @@ final class TalkApprovalTests: PresentingTestCase {
         try XCTUnwrap(sheet.button(titled: "Allow")).performClick(nil)
         try await waitUntil(timeout: 10, "the talk's yes stored") { self.storedApprovals().contains("drivers: [shell, sqlite]") }
         try await waitUntil(timeout: 40, "the talk") { presentation.state == .presenting }
-        // The deck's own tap dev learns of the yes through a reload: its preview's blocks offer Run without a second sheet.
-        try await waitForRunButtons(#"["Run"]"#, in: controller, document: document, slide: 2, timeout: 30)
+        // The deck's own tap dev learns of the yes from its settings file (and the reload the app sends after the Allow):
+        // its preview's blocks offer Run without a second sheet.
+        do {
+            try await waitForRunButtons(#"["Run"]"#, in: controller, document: document, slide: 2, timeout: 30)
+        } catch {
+            let modified = (try? FileManager.default.attributesOfItem(atPath: settingsFile.path)[.modificationDate]).map { "\($0)" } ?? "none"
+            XCTFail("settings.yaml modified \(modified); the talk's log ends: \(presentation.session?.log.text.suffix(800) ?? "no talk session"); "
+                    + "tap dev's log ends: \(controller.session.log.text.suffix(1500))")
+            throw error
+        }
         XCTAssertNil(controller.pendingQuestion, "already approved: tap dev asks nothing on that reload")
         try await stopPresenting(controller)
     }
