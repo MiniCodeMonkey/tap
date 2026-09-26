@@ -604,6 +604,14 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
             sessionController.answer(id: question.id, value: false, generation: sessionController.questionGeneration)
             return
         }
+        #if DEBUG
+        if AppEnvironment.shared.approvalAnswerForTests?(question.payload) == true {
+            // A deck the test approved ahead of time: the answer a click on Allow sends, through the same generation guard and log.
+            sessionController.session.log.append("the approval question was approved ahead of time by the test", source: .app)
+            sessionController.answer(id: question.id, value: true, generation: sessionController.questionGeneration)
+            return
+        }
+        #endif
         deckQuestions.append((question, sessionController.questionGeneration))
         showNextDeckQuestionIfIdle()
     }
@@ -666,6 +674,15 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
                 }
             }
         case "approval":
+            #if DEBUG
+            if AppEnvironment.shared.approvalAnswerForTests?(question.payload) == true {
+                // A deck the test approved ahead of time: what Allow on the sheet does.
+                presentation.session?.log.append("the approval question was approved ahead of time by the test", source: .app)
+                presentation.answer(id: question.id, value: true)
+                sessionController.reloadAfterTalkApproval()
+                return
+            }
+            #endif
             // The same sheet as the deck's own question. tap present asks it at
             // startup, before the windows show, and D4's step-aside path
             // covers one that arrives mid-talk. A yes is stored by tap present;

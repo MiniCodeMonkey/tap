@@ -15,6 +15,12 @@ class HostedTestCase: XCTestCase {
     /// window. The approval tests turn it off to see the sheet.
     var approvesLiveCodeOnOpen = true
 
+    /// The decks this test approved ahead of time, by their real path, as
+    /// tap names a deck in its question, and the drivers approved for each.
+    /// `AppEnvironment.approvalAnswerForTests` answers Allow for a question
+    /// about one of them that asks about those drivers only.
+    private(set) var preApprovedDecks: [String: Set<String>] = [:]
+
     /// tap's settings file under this test's config folder.
     var settingsFile: URL { configHome.appendingPathComponent("tap/settings.yaml") }
 
@@ -35,9 +41,25 @@ class HostedTestCase: XCTestCase {
         // The Focus hint shows before the first talk on a Mac; every test but the hint's own has seen it.
         AppEnvironment.shared.focusHint = FocusHintState(defaults: try XCTUnwrap(UserDefaults(suiteName: "TapTests.focus.\(UUID().uuidString)")))
         AppEnvironment.shared.focusHint.markShown()
+        preApprovedDecks = [:]
+        AppEnvironment.shared.approvalAnswerForTests = { [weak self] payload in
+            guard let self else { return nil }
+            return Self.preApprovedAnswer(for: payload, preApprovedDecks: self.preApprovedDecks)
+        }
+    }
+
+    /// Allow (true) when `payload` asks about a deck in `preApprovedDecks`
+    /// and every driver it names was approved for that deck; otherwise nil,
+    /// and the sheet shows. Never false.
+    static func preApprovedAnswer(for payload: QuestionPayload, preApprovedDecks: [String: Set<String>]) -> Bool? {
+        guard let deck = payload.deck, let approved = preApprovedDecks[deck],
+              let drivers = payload.drivers, !drivers.isEmpty,
+              drivers.allSatisfy({ approved.contains($0.name) }) else { return nil }
+        return true
     }
 
     override func tearDown() async throws {
+        AppEnvironment.shared.approvalAnswerForTests = nil
         // WelcomeWindowController.shared is one singleton for the whole
         // hosted process, not a window this test created, so it is ordered
         // out (never closed) here rather than left to whichever test last
@@ -104,21 +126,25 @@ class HostedTestCase: XCTestCase {
         try await waitUntil(timeout: 30, "\(count) boxes") { editor.boxes.count == count }
     }
 
-    /// Writes tap's own approval record for `deck` (internal/usersettings):
-    /// its real path, as usersettings.ResolveDeck keys it, `drivers`, the
-    /// deck's declared ones when nil, and under `commands:` the command
-    /// line of every custom driver among them (its `command` and `args`
-    /// with `${NAME}` expanded from the environment the test gives tap),
-    /// since an approval covers a custom driver only with that exact line.
-    /// The `approvals:` block is written whole, after whatever else the
-    /// file holds (the recording consent), in the shape yaml.v3 writes, so
-    /// a file tap has written since is still one tap reads; earlier
+    /// Approves `deck` ahead of time for `drivers` (the deck's declared
+    /// ones when nil), as tap new approves a deck the person made. It
+    /// writes tap's own approval record, name only: the deck's real path,
+    /// as usersettings.ResolveDeck keys it, and the driver names, which is
+    /// all a built-in driver's approval holds, so tap asks nothing about
+    /// those. A custom driver's approval also needs its command's digest,
+    /// keyed by tap's approval key, which only tap computes: tap asks about
+    /// it, and `approvalAnswerForTests` answers Allow through the path a
+    /// click takes, so tap writes the full record itself. The
+    /// `approvals:` block is written whole, after whatever else the file
+    /// holds (the recording consent), in the shape yaml.v3 writes, so a
+    /// file tap has written since is still one tap reads; earlier
     /// approvals in it are kept.
     func approveLiveCode(for deck: URL, drivers: [String]? = nil) throws {
         let text = (try? String(contentsOf: deck, encoding: .utf8)) ?? ""
-        let frontmatter = Frontmatter(text: text)
-        let names = drivers ?? frontmatter.declaredDrivers
+        let names = drivers ?? Frontmatter(text: text).declaredDrivers
         guard !names.isEmpty else { return }
+        let realPath = Fixtures.realPath(of: deck)
+        preApprovedDecks[realPath, default: []].formUnion(names)
         try FileManager.default.createDirectory(at: settingsFile.deletingLastPathComponent(), withIntermediateDirectories: true)
         let existing = (try? String(contentsOf: settingsFile, encoding: .utf8)) ?? ""
         var before = existing
@@ -127,36 +153,10 @@ class HostedTestCase: XCTestCase {
             before = String(existing[..<start.lowerBound])
             entries = existing[start.upperBound...].components(separatedBy: "    - deck: ").dropFirst().map { "    - deck: " + $0 }
         }
-        entries.removeAll { $0.contains("- deck: \(Fixtures.realPath(of: deck))\n") }
-        var record = "    - deck: \(Fixtures.realPath(of: deck))\n      drivers: [\(names.joined(separator: ", "))]\n"
-        var commands = ""
-        for name in names {
-            guard let command = frontmatter.value(at: ["drivers", name, "command"]).map(Frontmatter.unquoted), !command.isEmpty else { continue }
-            var line = [Self.expandingVariables(command)]
-            if let args = frontmatter.value(at: ["drivers", name, "args"]) {
-                // A flow list, "[a, b]"; the fixtures use no block lists.
-                line += args.trimmingCharacters(in: CharacterSet(charactersIn: "[] ")).split(separator: ",").map { Self.expandingVariables(Frontmatter.unquoted($0.trimmingCharacters(in: .whitespaces))) }
-            }
-            commands += "        \(name):\n" + line.map { "          - \($0)\n" }.joined()
-        }
-        if !commands.isEmpty { record += "      commands:\n" + commands }
-        record += "      approvedAt: 2026-09-25T00:00:00Z\n"
-        entries.append(record)
+        entries.removeAll { $0.contains("- deck: \(realPath)\n") }
+        entries.append("    - deck: \(realPath)\n      drivers: [\(names.joined(separator: ", "))]\n      approvedAt: 2026-09-25T00:00:00Z\n")
         if !before.isEmpty, !before.hasSuffix("\n") { before += "\n" }
         try (before + "approvals:\n" + entries.joined()).write(to: settingsFile, atomically: true, encoding: .utf8)
-    }
-
-    /// `${NAME}` replaced from the environment tap gets: the test's extra
-    /// variables first, then the host's, as tap's own expansion reads them.
-    static func expandingVariables(_ text: String) -> String {
-        var result = text
-        let pattern = try! NSRegularExpression(pattern: #"\$\{([A-Za-z_][A-Za-z0-9_]*)\}"#)
-        for match in pattern.matches(in: text, range: NSRange(location: 0, length: (text as NSString).length)).reversed() {
-            let name = (text as NSString).substring(with: match.range(at: 1))
-            let value = AppEnvironment.shared.extraEnvironment[name] ?? ProcessInfo.processInfo.environment[name] ?? ""
-            result = (result as NSString).replacingCharacters(in: match.range, with: value)
-        }
-        return result
     }
 
     /// The settings file as tap has written it, "" when there is none.

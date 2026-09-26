@@ -134,6 +134,50 @@ final class LiveCodeApprovalTests: HostedTestCase {
         XCTAssertTrue(behindWindow.deckQuestions.isEmpty)
     }
 
+    /// The test hook answers Allow for a deck a test approved ahead of time,
+    /// through the path a click takes: no sheet ever shows, and tap writes
+    /// its own full record of the custom driver, its digest included.
+    func testAPreApprovedCustomDriverAsksNothing() async throws {
+        let document = try await openDeckAndWaitForPreview(try Fixtures.copyDeck("custom-driver.md"))
+        let controller = try XCTUnwrap(document.sessionController)
+        let deckWindow = try XCTUnwrap(document.windowControllers.first as? DeckWindowController)
+        var sheetsSeen = 0
+        let deadline = Date().addingTimeInterval(10)
+        while Date() < deadline, !storedApprovals().contains("commandDigests:") {
+            if deckWindow.questionSheet != nil || deckWindow.window?.attachedSheet != nil { sheetsSeen += 1 }
+            try await Task.sleep(nanoseconds: 20_000_000)
+        }
+        XCTAssertEqual(sheetsSeen, 0, "no sheet ever showed")
+        let stored = storedApprovals()
+        XCTAssertTrue(stored.contains("commandDigests:"), "tap stored the command's digest: \(stored)")
+        XCTAssertTrue(stored.contains("fortune:") && stored.contains("- /bin/cat"), "and the command as written: \(stored)")
+        XCTAssertTrue(controller.session.log.text.contains("the approval question was approved ahead of time by the test"))
+        XCTAssertTrue(controller.session.log.text.contains("answered the approval question: allow"), "the click's own path and log")
+        XCTAssertNil(controller.pendingQuestion)
+        try await waitForRunButtons(#"["Run"]"#, in: controller, document: document, slide: 3)
+    }
+
+    /// The hook leaves every other deck to the sheet: one the test did not
+    /// approve, and one approved for other drivers than tap asks about.
+    func testTheTestHookAnswersOnlyForPreApprovedDecksAndDrivers() async throws {
+        XCTAssertNotNil(AppEnvironment.shared.approvalAnswerForTests, "set for every hosted test")
+        let listed = try Fixtures.copyDeck("custom-driver.md")
+        try approveLiveCode(for: listed, drivers: ["sqlite"])
+        let deck = Fixtures.realPath(of: listed)
+        let hook = try XCTUnwrap(AppEnvironment.shared.approvalAnswerForTests)
+        XCTAssertNil(hook(QuestionPayload(deck: deck, drivers: [ApprovalDriver(name: "fortune")])), "a driver the test did not approve")
+        XCTAssertNil(hook(QuestionPayload(deck: deck, drivers: [ApprovalDriver(name: "sqlite"), ApprovalDriver(name: "fortune")])))
+        XCTAssertEqual(hook(QuestionPayload(deck: deck, drivers: [ApprovalDriver(name: "sqlite")])), true)
+        XCTAssertNil(hook(QuestionPayload(deck: "/private/tmp/elsewhere.md", drivers: [ApprovalDriver(name: "sqlite")])), "another deck")
+        XCTAssertNil(hook(QuestionPayload(deck: deck, drivers: [])), "a question with no drivers")
+        XCTAssertNil(hook(QuestionPayload(drivers: [ApprovalDriver(name: "sqlite")])), "a question with no deck")
+
+        // A deck opened unapproved still shows its sheet with the hook set.
+        let (_, _, deckWindow, sheet) = try await openUnapprovedAndWaitForTheQuestion("custom-driver.md")
+        XCTAssertTrue(deckWindow.window?.attachedSheet === sheet)
+        try XCTUnwrap(sheet.button(titled: "Don't Allow")).performClick(nil)
+    }
+
     /// tap withdraws a question a reload made stale (question-closed) and
     /// asks a new one; the stale sheet goes, the new one shows, and nothing
     /// is ever sent for the withdrawn id.
