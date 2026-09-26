@@ -147,10 +147,35 @@ public final class TapSession {
         }
     }
 
+    /// Starts over with a fresh exit count. A tap that is still running is
+    /// restarted, so Try Again always ends with a new tap and a new ready
+    /// line.
     public func tryAgain() {
         policy.reset()
         log.append("Try Again", source: .app)
-        start()
+        if process != nil {
+            restart()
+        } else {
+            start()
+        }
+    }
+
+    /// Stops tap and starts it again. The new tap prints a new ready line
+    /// with a new launch code, so a page whose launch code may be spent
+    /// can be opened again. The exit this asks for never counts toward
+    /// the restart policy.
+    public func restart() {
+        guard let process else {
+            start()
+            return
+        }
+        restartWork?.cancel()
+        readyWork?.cancel()
+        quitWork?.cancel()
+        launchGeneration += 1
+        startsAfterStop = true
+        log.append("restarting tap", source: .app)
+        process.stop()
     }
 
     /// Asks tap to shut down with the `quit` command, which lets tap present

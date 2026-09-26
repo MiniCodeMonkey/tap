@@ -8,6 +8,11 @@ import WebKit
 @MainActor
 class HostedTestCase: XCTestCase {
     private(set) var configHome: URL!
+    /// The talk pages' data stores made for earlier tests and not yet
+    /// removed. WebKit refuses to remove a store a web view still uses, so
+    /// a store that is still in use at one teardown is tried again at the
+    /// next.
+    private static var dataStoresToRemove: [UUID] = []
 
     /// Whether `openDeck` approves the deck's declared drivers ahead of
     /// time, as tap new does for a deck the person made: on by default, so
@@ -33,7 +38,9 @@ class HostedTestCase: XCTestCase {
         AppEnvironment.shared.lastLayout = LastLayout(defaults: try XCTUnwrap(UserDefaults(suiteName: "TapTests.layout.\(UUID().uuidString)")))
         // Copy and paste go to a pasteboard of the test's own, never the person's clipboard.
         AppEnvironment.shared.slidePasteboard = NSPasteboard(name: NSPasteboard.Name("TapTests.copy.\(UUID().uuidString)"))
-        AppEnvironment.shared.presentationDataStore = WKWebsiteDataStore(forIdentifier: UUID())
+        let dataStoreIdentifier = UUID()
+        Self.dataStoresToRemove.append(dataStoreIdentifier)
+        AppEnvironment.shared.presentationDataStore = WKWebsiteDataStore(forIdentifier: dataStoreIdentifier)
         AppEnvironment.shared.displayAssignments = DisplayAssignmentStore(defaults: try XCTUnwrap(UserDefaults(suiteName: "TapTests.displays.\(UUID().uuidString)")))
         AppEnvironment.shared.deckPorts = DeckPortStore(defaults: try XCTUnwrap(UserDefaults(suiteName: "TapTests.ports.\(UUID().uuidString)")))
         AppEnvironment.shared.presentationSettings = PresentationSettingsStore(defaults: try XCTUnwrap(UserDefaults(suiteName: "TapTests.present.\(UUID().uuidString)")))
@@ -81,6 +88,35 @@ class HostedTestCase: XCTestCase {
             NSDocumentController.shared.documents.isEmpty
                 && !NSApp.windows.contains { $0.isVisible && $0.windowController is DeckWindowController }
         }
+        await removeDataStores()
+    }
+
+    /// Removes the talk pages' data stores of this test and earlier ones,
+    /// so the bundle does not leave one on disk, and a session in the
+    /// network process, per test. Each removal has 5 s.
+    private func removeDataStores() async {
+        AppEnvironment.shared.presentationDataStore = .nonPersistent()
+        var stillInUse: [UUID] = []
+        for identifier in Self.dataStoresToRemove {
+            let removed: String = await withCheckedContinuation { continuation in
+                var answered = false
+                WKWebsiteDataStore.remove(forIdentifier: identifier) { error in
+                    MainActor.assumeIsolated {
+                        guard !answered else { return }
+                        answered = true
+                        continuation.resume(returning: error.map { "\($0.localizedDescription)" } ?? "")
+                    }
+                }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
+                    guard !answered else { return }
+                    answered = true
+                    continuation.resume(returning: "no answer in 5 s")
+                }
+            }
+            if !removed.isEmpty { stillInUse.append(identifier) }
+        }
+        Self.dataStoresToRemove = stillInUse
+        if !stillInUse.isEmpty { print("data stores not removed yet: \(stillInUse.count)") }
     }
 
     func openDeck(_ url: URL, timeout: TimeInterval = 30) async throws -> DeckDocument {
@@ -235,7 +271,9 @@ class HostedTestCase: XCTestCase {
         let sinceLoad = preview.lastLoadDate.map { String(format: "%.1fs", Date().timeIntervalSince($0)) } ?? "never"
         return "sinceLoad=\(sinceLoad) pageLoads=\(preview.pageLoadCount) "
             + "webViewLoading=\(preview.webView.isLoading) "
-            + "readyMessagesReceived=\(preview.readyMessagesReceived)"
+            + "readyMessagesReceived=\(preview.readyMessagesReceived) "
+            + "recoveries=\(preview.pageRecoveryCount) "
+            + "milestones=[\(preview.navigationMilestoneDescription)]"
     }
 
     func openDeckAndWaitForPreview(_ url: URL) async throws -> DeckDocument {
@@ -264,7 +302,8 @@ class HostedTestCase: XCTestCase {
                 message += "windowOnScreen=\(isOnScreen) "
                 message += "appActive=\(isAppActive) "
                 message += "socket=\(hasSocket ? "open" : "none") "
-                message += appSideDiagnostics(preview)
+                message += appSideDiagnostics(preview) + " "
+                message += await webProcessDiagnostics(controller)
                 XCTFail(message)
                 throw CancellationError()
             }
@@ -276,6 +315,12 @@ class HostedTestCase: XCTestCase {
         let readyAfter = Date().timeIntervalSince(deadline.addingTimeInterval(-30))
         let settled = await preview.pageValue("JSON.stringify(window.__tapReadyState ?? null)")
         print("first ready after \(String(format: "%.2f", readyAfter))s: state=\(settled) \(appSideDiagnostics(preview))")
+        for line in controller.session.log.text.split(separator: "\n") where line.contains("in a new web view") {
+            print("preview recovery: \(line)")
+        }
+        // A recovery shows up here even in a green run. One is the preview
+        // doing its job; more than one for a single open is a defect.
+        XCTAssertLessThanOrEqual(preview.pageRecoveryCount, 1, "the preview replaced its web view more than once before its first ready")
         return document
     }
 
@@ -294,10 +339,12 @@ class HostedTestCase: XCTestCase {
                 // cursor is where the test put it.
                 let inThePage = await preview.pageValue(Self.pageStateScript)
                 let intent = String(describing: controller.navigator.message)
+                let webProcess = await webProcessDiagnostics(controller)
                 XCTFail("timed out waiting for the preview on slide \(slide). "
                         + "lastReady=\(String(describing: preview.lastReady)) intent=\(intent) "
                         + "socket=\(controller.socket == nil ? "none" : "open") page=\(inThePage) "
                         + "\(appSideDiagnostics(preview)) "
+                        + "\(webProcess) "
                         + "caret=\(controller.editor.selectedRange()) "
                         + "box=\(String(describing: controller.editor.currentBoxIndex)) "
                         + "boxes=\(controller.editor.boxes.map(\.slide.number))")

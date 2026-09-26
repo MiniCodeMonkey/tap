@@ -272,6 +272,11 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
         previewViewController.onStepForward = { [weak self] in self?.sendPreviewMessage(self?.navigator.stepForward()) }
         previewViewController.onPinToggled = { [weak self] in self?.togglePin() }
         previewViewController.onTryAgain = { [weak self] in self?.session.tryAgain() }
+        previewViewController.onRestartSession = { [weak self] in
+            guard let self, !self.stopped, case .running = self.session.state else { return }
+            self.session.restart()
+        }
+        previewViewController.onLog = { [weak self] line in self?.session.log.append(line, source: .app) }
         previewViewController.onReady = { [weak self] payload in self?.previewDidRender(payload) }
         if let documentUndoManager = document.undoManager {
             undoObserver = NotificationCenter.default.addObserver(forName: .NSUndoManagerDidUndoChange, object: documentUndoManager, queue: nil) { [weak self] _ in

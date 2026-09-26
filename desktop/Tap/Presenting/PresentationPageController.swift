@@ -21,6 +21,19 @@ final class PresentationPageController: NSViewController, WKNavigationDelegate, 
     private(set) var lastReady: ReadyPayload?
     private(set) var pageLoadCount = 0
     private(set) var lastLoadedURL: URL?
+    /// How many times the page was loaded again because its web content
+    /// process ended.
+    private(set) var processTerminationCount = 0
+    /// How many times the page was loaded again after its process ended.
+    private(set) var reloadAfterTerminationCount = 0
+    /// Loads again after a process ended within `terminationWindow`,
+    /// readies or not, before the page is given up on and reported as a
+    /// failed load: a page whose process ends after every load would
+    /// otherwise reload on the projector for as long as the talk runs.
+    /// Seams: a test lowers the count.
+    var maximumReloadsInWindow = 3
+    var terminationWindow: TimeInterval = 60
+    private var recentReloadDates: [Date] = []
     private var allowedPort: Int?
 
     init(accessibilityIdentifier: String, dataStore: WKWebsiteDataStore) {
@@ -86,6 +99,30 @@ final class PresentationPageController: NSViewController, WKNavigationDelegate, 
 
     func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
         onLoadFailed?(error)
+    }
+
+    /// The page's content process exited or crashed, which leaves the page
+    /// blank. Loading it again starts a new process. The page it reloads
+    /// is the one tap redirected to, which the cookies from the first load
+    /// still open. A page whose process keeps ending is reported as a
+    /// failed load instead, and left alone. A process that is stuck
+    /// rather than ended is not detected here.
+    func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+        processTerminationCount += 1
+        lastReady = nil
+        let now = Date()
+        recentReloadDates = recentReloadDates.filter { now.timeIntervalSince($0) < terminationWindow }
+        guard recentReloadDates.count < maximumReloadsInWindow else {
+            onLoadFailed?(CocoaError(.fileReadUnknown, userInfo: [NSLocalizedDescriptionKey: "the page's web content process ended repeatedly"]))
+            return
+        }
+        recentReloadDates.append(now)
+        reloadAfterTerminationCount += 1
+        if webView.url != nil {
+            webView.reload()
+        } else if let lastLoadedURL {
+            webView.load(URLRequest(url: lastLoadedURL))
+        }
     }
 
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {

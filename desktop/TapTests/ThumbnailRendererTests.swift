@@ -63,6 +63,54 @@ final class ThumbnailRendererTests: HostedTestCase {
         }
     }
 
+    /// A renderer whose content process stops answering in the middle of a
+    /// load gets a new web view and renders there. The process is stopped
+    /// for real; the one seam is the ready wait, shortened.
+    func testARendererWhoseProcessStopsAnsweringGetsANewWebView() async throws {
+        let document = try await openDeck(try Fixtures.copyAppFixture())
+        try await waitForBoxes(document, count: 4)
+        let (renderer, _, summary) = try await makeRenderer(for: document)
+        var rendered: [Int] = []
+        renderer.onImage = { job, _, _ in rendered.append(job.slideNumber) }
+        let all = jobs(for: summary)
+        renderer.setWork([all[0]], revision: summary.revision, visible: [1], current: 1)
+        try await waitForRenderer(renderer, timeout: 30, "slide 1") { rendered.contains(1) }
+        let stuck = renderer.webView
+        let process = try XCTUnwrap(stuck.contentProcessIdentifier, "the renderer's content process identifier")
+        kill(process, SIGSTOP)
+        defer { kill(process, SIGKILL) }
+        renderer.readyTimeoutForAttempt = { _ in 1 }
+
+        renderer.setWork([all[1]], revision: summary.revision, visible: [2], current: 2)
+
+        try await waitForRenderer(renderer, timeout: 30, "slide 2 in a new web view") { rendered.contains(2) }
+        XCTAssertEqual(renderer.webViewReplacementCount, 1)
+        XCTAssertTrue(renderer.webView !== stuck)
+        XCTAssertNil(stuck.superview, "the old web view is gone from behind the editor")
+        XCTAssertNotNil(renderer.webView.window, "the new web view is where the old one was")
+    }
+
+    /// A renderer whose content process ends renders the next slide in a
+    /// new process, in the same web view.
+    func testARendererWhoseProcessEndsRendersAgain() async throws {
+        let document = try await openDeck(try Fixtures.copyAppFixture())
+        try await waitForBoxes(document, count: 4)
+        let (renderer, _, summary) = try await makeRenderer(for: document)
+        var rendered: [Int] = []
+        renderer.onImage = { job, _, _ in rendered.append(job.slideNumber) }
+        let all = jobs(for: summary)
+        renderer.setWork([all[0]], revision: summary.revision, visible: [1], current: 1)
+        try await waitForRenderer(renderer, timeout: 30, "slide 1") { rendered.contains(1) }
+        let process = try XCTUnwrap(renderer.webView.contentProcessIdentifier, "the renderer's content process identifier")
+
+        kill(process, SIGKILL)
+
+        try await waitForRenderer(renderer, timeout: 10, "WebKit to report the ended process") { renderer.processTerminationCount == 1 }
+        renderer.setWork([all[1]], revision: summary.revision, visible: [2], current: 2)
+        try await waitForRenderer(renderer, timeout: 30, "slide 2 after the process ended") { rendered.contains(2) }
+        XCTAssertEqual(renderer.webViewReplacementCount, 0)
+    }
+
     func testRendersPaintedThumbnailsThroughTheReadySignal() async throws {
         let document = try await openDeck(try Fixtures.copyAppFixture())
         try await waitForBoxes(document, count: 4)

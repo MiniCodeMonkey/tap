@@ -112,6 +112,33 @@ final class TapSessionTests: XCTestCase {
         tap.stop()
     }
 
+    func testRestartStartsANewTapWithoutCountingAnExit() async throws {
+        let record = try TestScripts.temporaryFolder().appendingPathComponent("record")
+        let tap = session(try FakeTap.ready(recordingTo: record))
+        tap.start()
+        try await waitUntil { if case .running = tap.state { return true } else { return false } }
+        let first = try XCTUnwrap(tap.processIdentifier)
+        var states: [TapSession.State] = []
+        tap.onStateChange = { states.append($0) }
+        tap.restart()
+        try await waitUntil { states.contains { if case .running = $0 { return true } else { return false } } }
+        XCTAssertNotEqual(tap.processIdentifier, first)
+        XCTAssertFalse(states.contains { if case .restarting = $0 { return true } else { return false } }, "a restart asked for is not an unexpected exit")
+        XCTAssertTrue(tap.log.text.contains("restarting tap"))
+        tap.stop()
+    }
+
+    func testTryAgainRestartsARunningTap() async throws {
+        let record = try TestScripts.temporaryFolder().appendingPathComponent("record")
+        let tap = session(try FakeTap.ready(recordingTo: record))
+        tap.start()
+        try await waitUntil { if case .running = tap.state { return true } else { return false } }
+        let first = try XCTUnwrap(tap.processIdentifier)
+        tap.tryAgain()
+        try await waitUntil { if case .running = tap.state, tap.processIdentifier != first { return true } else { return false } }
+        tap.stop()
+    }
+
     func testATapThatNeverGetsReadyIsKilledAndRetried() async throws {
         let tap = session(try FakeTap.silent(), readyTimeout: 0.2)
         tap.start()
