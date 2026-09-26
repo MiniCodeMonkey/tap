@@ -207,6 +207,129 @@ public struct Frontmatter: Equatable, Sendable {
         (source as NSString).substring(with: entry.range)
     }
 
+    /// The one edit that gives the key at `path` the raw scalar `value`
+    /// (nil removes the key with everything under it), making the
+    /// frontmatter, the key's parents and the key as needed: a missing
+    /// top-level key goes before the closing line, a missing child right
+    /// below its parent's last child at that child's indent (or two spaces
+    /// deeper than the parent), a "key:" with nothing under it opens into
+    /// a block, "key: {}" too, and a flow map with pairs gains one more.
+    /// nil when the edit changes nothing (removing what is not there), or
+    /// when it would need to rewrite inside a flow map, which this type
+    /// does not do (the Deck tab then offers the raw text).
+    public func setting(path: [String], to value: String?) -> TextReplacement? {
+        guard let key = path.last else { return nil }
+        guard range != nil, let closingLocation else {
+            guard let value else { return nil }
+            var lines = ["---"]
+            for (depth, name) in path.dropLast().enumerated() { lines.append(Self.spaces(depth * 2) + name + ":") }
+            lines.append(Self.spaces((path.count - 1) * 2) + key + ": " + value)
+            lines.append("---")
+            lines.append("")
+            return TextReplacement(range: NSRange(location: 0, length: 0), replacement: lines.joined(separator: lineEnding) + lineEnding)
+        }
+        var parent: Entry?
+        var siblings = entries
+        var remaining = path[...]
+        while let name = remaining.first, let found = siblings.first(where: { $0.key == name }) {
+            if remaining.count == 1 {
+                guard let value else { return TextReplacement(range: found.range, replacement: "") }
+                if let valueRange = found.valueRange, found.children.isEmpty, !found.isMultiLine {
+                    return TextReplacement(range: valueRange, replacement: value)
+                }
+                // A block, a bare "key:", or a value on several lines becomes one scalar line.
+                return TextReplacement(range: found.range, replacement: Self.spaces(found.indent) + key + ": " + value + lineEnding)
+            }
+            parent = found
+            siblings = found.children
+            remaining = remaining.dropFirst()
+        }
+        guard let value else { return nil }
+        let baseIndent: Int
+        let insertion: Int
+        if let parent {
+            if let flow = parent.value {
+                let trimmed = flow.trimmingCharacters(in: .whitespaces)
+                guard trimmed.hasPrefix("{"), trimmed.hasSuffix("}"), let valueRange = parent.valueRange, remaining.count == 1,
+                      !value.trimmingCharacters(in: .whitespaces).hasPrefix("{") || value.trimmingCharacters(in: .whitespaces) == "{}" else { return nil }
+                let inner = trimmed.dropFirst().dropLast().trimmingCharacters(in: .whitespaces)
+                guard !inner.isEmpty else {
+                    let block = Self.spaces(parent.indent) + parent.key + ":" + lineEnding + Self.spaces(parent.indent + 2) + key + ": " + value + lineEnding
+                    return TextReplacement(range: parent.range, replacement: block)
+                }
+                return TextReplacement(range: valueRange, replacement: "{" + inner + ", " + key + ": " + value + "}")
+            }
+            baseIndent = parent.children.first?.indent ?? parent.indent + 2
+            insertion = NSMaxRange(parent.range)
+        } else {
+            baseIndent = 0
+            insertion = closingLocation
+        }
+        var lines: [String] = []
+        let newParents = remaining.dropLast()
+        for (depth, name) in newParents.enumerated() { lines.append(Self.spaces(baseIndent + depth * 2) + name + ":") }
+        lines.append(Self.spaces(baseIndent + newParents.count * 2) + key + ": " + value)
+        return TextReplacement(range: NSRange(location: insertion, length: 0), replacement: lines.joined(separator: lineEnding) + lineEnding)
+    }
+
+    /// The fix-it: "<name>: {}" under drivers. nil when it is declared already.
+    public func addingDriver(_ name: String) -> TextReplacement? {
+        guard !declares(driver: name) else { return nil }
+        return setting(path: ["drivers", name], to: "{}")
+    }
+
+    /// An entry's lines as written, for the Deck tab's raw text field.
+    public func rawBlock(at path: [String]) -> String? {
+        entry(at: path).map(text(of:))
+    }
+
+    /// Replaces an entry's lines with `raw`, which the caller has already
+    /// indented and terminated. nil when there is no such entry.
+    public func settingRawBlock(at path: [String], to raw: String) -> TextReplacement? {
+        entry(at: path).map { TextReplacement(range: $0.range, replacement: raw) }
+    }
+
+    /// `replacement` applied to `text`.
+    public static func applying(_ replacement: TextReplacement, to text: String) -> String {
+        (text as NSString).replacingCharacters(in: replacement.range, with: replacement.replacement)
+    }
+
+    private static func spaces(_ count: Int) -> String { String(repeating: " ", count: count) }
+
+    private static let yamlWords: Set<String> = ["true", "false", "null", "~", "yes", "no", "on", "off"]
+    private static let numberPattern = try! NSRegularExpression(pattern: #"^[-+]?(\d[\d_]*(\.\d*)?|\.\d+)([eE][-+]?\d+)?$"#)
+    private static let unsafeLeading: Set<Character> = ["-", "?", ":", ",", "[", "]", "{", "}", "#", "&", "*", "!", "|", ">", "'", "\"", "%", "@", "`"]
+
+    /// `string` as a YAML scalar: as it is when YAML reads it back as the
+    /// same string, double-quoted with escapes otherwise (a number, a
+    /// boolean or null in any case, a leading character YAML gives a
+    /// meaning to, a `"` anywhere, ": " or " #" inside, leading or
+    /// trailing whitespace, a line break, or nothing at all).
+    public static func scalar(forString string: String) -> String {
+        let needsQuotes = string.isEmpty
+            || string != string.trimmingCharacters(in: .whitespacesAndNewlines)
+            || string.contains("\n")
+            || yamlWords.contains(string.lowercased())
+            || numberPattern.firstMatch(in: string, range: NSRange(location: 0, length: (string as NSString).length)) != nil
+            || string.first.map { unsafeLeading.contains($0) } == true
+            || string.contains(": ")
+            || string.contains(" #")
+            || string.hasSuffix(":")
+            || string.contains("\"")
+        guard needsQuotes else { return string }
+        var quoted = "\""
+        for character in string {
+            switch character {
+            case "\\": quoted += "\\\\"
+            case "\"": quoted += "\\\""
+            case "\n": quoted += "\\n"
+            case "\t": quoted += "\\t"
+            default: quoted.append(character)
+            }
+        }
+        return quoted + "\""
+    }
+
     /// The names under `drivers`, in the file's order: what tap's
     /// `Config.DeclaredDrivers()` holds for this text, block or flow style.
     public var declaredDrivers: [String] {
