@@ -85,3 +85,20 @@ D4 | 05-presenting.feature | Keep the recording
 D4 | 05-presenting.feature | Edit while presenting
 D4 | 05-presenting.feature | Remember the display assignment
 D4 | 12-menus-and-shortcuts.feature | Presenting shortcuts
+D5 | 06-live-code-and-trust.feature | A deck without live code
+D5 | 06-live-code-and-trust.feature | First open of a deck with live code, in the app
+D5 | 06-live-code-and-trust.feature | Allow
+D5 | 06-live-code-and-trust.feature | Don't allow
+D5 | 06-live-code-and-trust.feature | First open of a deck with live code, in the CLI
+D5 | 06-live-code-and-trust.feature | Run a block
+D5 | 06-live-code-and-trust.feature | A page cannot run code the deck does not show
+D5 | 06-live-code-and-trust.feature | Approve or revoke later
+D5 | 06-live-code-and-trust.feature | A moved deck
+D5 | 06-live-code-and-trust.feature | Non-interactive runs
+D5 | 06-live-code-and-trust.feature | A deck declares its drivers
+D5 | 06-live-code-and-trust.feature | A block uses an undeclared driver
+D5 | 06-live-code-and-trust.feature | A deck with live code must list its drivers
+D5 | 06-live-code-and-trust.feature | A new driver asks again
+D5 | 06-live-code-and-trust.feature | Secrets in driver settings
+D5 | 06-live-code-and-trust.feature | The safe button is the default
+D5 | 02-slide-structure.feature | Deck settings live in the inspector
