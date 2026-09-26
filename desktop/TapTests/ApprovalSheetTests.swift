@@ -30,9 +30,59 @@ final class ApprovalSheetTests: HostedTestCase {
                                  ApprovalBlock(driver: "shell", code: "echo five", slide: 5, block: 1)])
     }
 
-    func key(_ characters: String, code: UInt16, isARepeat: Bool = false) throws -> NSEvent {
-        try XCTUnwrap(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0, windowNumber: host.windowNumber,
+    func key(_ characters: String, code: UInt16, isARepeat: Bool = false, modifiers: NSEvent.ModifierFlags = []) throws -> NSEvent {
+        try XCTUnwrap(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: modifiers, timestamp: 0, windowNumber: host.windowNumber,
                                        context: nil, characters: characters, charactersIgnoringModifiers: characters, isARepeat: isARepeat, keyCode: code))
+    }
+
+    /// A key press routed the way AppKit routes one to a window: its key
+    /// equivalents first, then the first responder's keyDown, which passes
+    /// what it does not handle up to the window.
+    func press(_ event: NSEvent, in sheet: NSWindow) {
+        if sheet.performKeyEquivalent(with: event) { return }
+        (sheet.firstResponder ?? sheet).keyDown(with: event)
+    }
+
+    /// Only a click on Allow answers yes. No key a person might press at
+    /// the sheet does: each answers Don't Allow or nothing.
+    func testNoKeyAllows() throws {
+        XCTAssertTrue(ApprovalSheet(payload: payload(), deckName: "talk.md").acceptButton.refusesFirstResponder,
+                      "Tab never lands on Allow, with keyboard navigation on or off, so Space never presses it")
+        let tab = try key("\t", code: 48)
+        let space = try key(" ", code: 49)
+        var presses: [(name: String, events: [NSEvent])] = [
+            ("Return", [try key("\r", code: 36)]),
+            ("Enter on the keypad", [try key("\u{3}", code: 76)]),
+            ("Space", [space]),
+            ("Escape", [try key("\u{1b}", code: 53)]),
+            ("a held Return", [try key("\r", code: 36, isARepeat: true)]),
+            ("a held Space", [try key(" ", code: 49, isARepeat: true)]),
+            ("Command-Return", [try key("\r", code: 36, modifiers: .command)]),
+            ("Option-Return", [try key("\r", code: 36, modifiers: .option)]),
+            ("Command-period", [try key(".", code: 47, modifiers: .command)]),
+            ("the letter a", [try key("a", code: 0)]),
+        ]
+        for tabs in 1...6 {
+            presses.append(("\(tabs) Tab\(tabs == 1 ? "" : "s") and then Space", Array(repeating: tab, count: tabs) + [space]))
+        }
+        for (name, events) in presses {
+            let sheet = ApprovalSheet(payload: payload(), deckName: "talk.md")
+            var answers: [NSApplication.ModalResponse] = []
+            host.beginSheet(sheet) { answers.append($0) }
+            for event in events where host.attachedSheet === sheet { press(event, in: sheet) }
+            XCTAssertFalse(answers.contains(.OK), "\(name) allowed")
+            if host.attachedSheet === sheet { host.endSheet(sheet, returnCode: .abort) }
+        }
+
+        // A code label holding focus: Escape goes through its field editor,
+        // and the field editor sends cancelOperation up to the sheet.
+        let focused = ApprovalSheet(payload: payload(), deckName: "talk.md")
+        var answers: [NSApplication.ModalResponse] = []
+        host.beginSheet(focused) { answers.append($0) }
+        focused.makeFirstResponder(focused.blockRows[0].codeLabel)
+        press(try key("\u{1b}", code: 53), in: focused)
+        if host.attachedSheet === focused { focused.cancelOperation(nil) }
+        XCTAssertEqual(answers, [.cancel], "Escape from a focused label is Don't Allow")
     }
 
     /// A held Escape that ended a talk repeats into the deck's question the

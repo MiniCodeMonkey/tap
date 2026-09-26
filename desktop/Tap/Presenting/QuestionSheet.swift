@@ -309,6 +309,9 @@ final class ApprovalSheet: QuestionSheet {
         detailScrollView = scroll
         super.init(kind: "approval", title: title, body: body, path: payload.deck, decline: "Don't Allow", accept: accept,
                    escape: .decline, returnAnswer: .decline, detail: scroll)
+        // Only a click allows: with keyboard navigation on, Tab never lands
+        // on Allow, so Space never presses it. VoiceOver's press still does.
+        acceptButton.refusesFirstResponder = true
     }
 
     /// A clip view that starts its content at the top.
