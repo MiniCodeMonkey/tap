@@ -1,0 +1,14 @@
+Test: TapTests/PreviewWindowTests/testTheDeckTabLeavesADetachedPreviewAlone
+diff --git i/desktop/Tap/Preview/InspectorViewController.swift w/desktop/Tap/Preview/InspectorViewController.swift
+index 89cb895..045508f 100644
+--- i/desktop/Tap/Preview/InspectorViewController.swift
++++ w/desktop/Tap/Preview/InspectorViewController.swift
+@@ -93,7 +93,7 @@ final class InspectorViewController: NSViewController {
+         selectedTab = tab
+         if isViewLoaded { tabs.selectedSegment = tab.rawValue }
+         // Only a child that is still in this pane follows the tab.
+-        if let previewChild, previewChild.parent === self { previewChild.view.isHidden = tab != .preview }
++        previewChild?.view.isHidden = tab != .preview
+         if let deckChild, deckChild.parent === self { deckChild.view.isHidden = tab != .deck }
+         onTabChange?(tab)
+     }

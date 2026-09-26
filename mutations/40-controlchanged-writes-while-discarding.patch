@@ -1,0 +1,14 @@
+Test: TapTests/DeckTabTests/testARebuildNeverWritesIntoABrokenFrontmatter
+diff --git i/desktop/Tap/Preview/DeckFormViewController.swift w/desktop/Tap/Preview/DeckFormViewController.swift
+index 1f475da..532dd5c 100644
+--- i/desktop/Tap/Preview/DeckFormViewController.swift
++++ w/desktop/Tap/Preview/DeckFormViewController.swift
+@@ -498,7 +498,7 @@ final class DeckFormViewController: NSViewController, NSTextFieldDelegate, NSTex
+     /// A value the form cannot write (a pair inside a flow map) beeps and
+     /// the field reads the text again.
+     @objc func controlChanged(_ sender: NSControl) {
+-        guard !isRefreshing, !isDiscarding, let path = bindings.first(where: { $0.control === sender })?.path, let key = DeckSchema.key(at: path, in: keys) else { return }
++        guard !isRefreshing, let path = bindings.first(where: { $0.control === sender })?.path, let key = DeckSchema.key(at: path, in: keys) else { return }
+         let frontmatter = Frontmatter(text: text())
+         let raw: String?
+         switch sender {

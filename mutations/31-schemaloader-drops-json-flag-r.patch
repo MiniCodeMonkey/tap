@@ -1,0 +1,14 @@
+Test: TapTests/DeckTabTests/testTheDeckTabEnablesOnceTheSchemaHasLoaded
+diff --git i/desktop/Tap/Preview/DeckSchemaLoader.swift w/desktop/Tap/Preview/DeckSchemaLoader.swift
+index 0ed41fd..4f690d5 100644
+--- i/desktop/Tap/Preview/DeckSchemaLoader.swift
++++ w/desktop/Tap/Preview/DeckSchemaLoader.swift
+@@ -28,7 +28,7 @@ final class DeckSchemaLoader {
+         attempts += 1
+         let task = Task { @MainActor [weak self] in
+             guard let self else { return }
+-            let data = await Self.run(self.executable(), arguments: ["deck", "schema", "--json"], timeout: Self.runTimeout)
++            let data = await Self.run(self.executable(), arguments: ["deck", "schema"], timeout: Self.runTimeout)
+             if let data, let keys = try? DeckSchema.decode(data) {
+                 self.keys = keys
+                 NotificationCenter.default.post(name: Self.didLoadNotification, object: self)

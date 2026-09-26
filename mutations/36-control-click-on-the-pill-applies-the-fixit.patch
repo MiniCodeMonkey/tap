@@ -1,0 +1,14 @@
+Test: TapTests/FixItTests/testABlockUsesAnUndeclaredDriver
+diff --git i/desktop/Tap/Editor/EditorTextView.swift w/desktop/Tap/Editor/EditorTextView.swift
+index 058ab59..f3a69db 100644
+--- i/desktop/Tap/Editor/EditorTextView.swift
++++ w/desktop/Tap/Editor/EditorTextView.swift
+@@ -604,7 +604,7 @@ final class EditorTextView: NSTextView {
+     override func mouseDown(with event: NSEvent) {
+         let point = convert(event.locationInWindow, from: nil)
+         // A Control-click on the pill is a context menu click, as anywhere on the header.
+-        if !event.modifierFlags.contains(.control), let index = boxIndex(forHeaderAt: point), let pill = fixItRect(forBoxAt: index), pill.contains(point) {
++        if let index = boxIndex(forHeaderAt: point), let pill = fixItRect(forBoxAt: index), pill.contains(point) {
+             editorDelegate?.editor(self, applyFixItForBoxAt: index)
+             return
+         }

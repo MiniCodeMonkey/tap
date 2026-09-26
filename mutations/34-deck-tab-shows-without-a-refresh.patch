@@ -1,0 +1,13 @@
+Test: TapTests/DeckTabTests/testDeckSettingsLiveInTheInspector
+diff --git a/desktop/Tap/Documents/DeckSessionController.swift b/desktop/Tap/Documents/DeckSessionController.swift
+--- a/desktop/Tap/Documents/DeckSessionController.swift
++++ b/desktop/Tap/Documents/DeckSessionController.swift
+@@ -307,7 +307,7 @@
+         }
+         inspectorViewController.embedDeck(deckForm)
+         inspectorViewController.onTabChange = { [weak self] tab in
+-            if tab == .deck { self?.deckForm.refresh() }
++            _ = tab
+         }
+         applyDeckSchema()
+         schemaObserver = NotificationCenter.default.addObserver(forName: DeckSchemaLoader.didLoadNotification, object: nil, queue: nil) { [weak self] _ in

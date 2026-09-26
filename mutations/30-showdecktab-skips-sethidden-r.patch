@@ -1,0 +1,13 @@
+Test: TapTests/DeckTabTests/testTheDeckTabEnablesOnceTheSchemaHasLoaded
+diff --git i/desktop/Tap/Windows/DeckWindowController.swift w/desktop/Tap/Windows/DeckWindowController.swift
+index 5c3c904..b0d63b4 100644
+--- i/desktop/Tap/Windows/DeckWindowController.swift
++++ w/desktop/Tap/Windows/DeckWindowController.swift
+@@ -260,7 +260,6 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
+     /// View > Deck (Cmd+Option+2): the frontmatter's form. Disabled until tap's schema has loaded.
+     @objc func showDeckTab(_ sender: Any?) {
+         guard AppEnvironment.shared.deckSchema.isLoaded else { return }
+-        if splitViewController.isPreviewHidden { splitViewController.setPreviewHidden(false) }
+         sessionController.inspectorViewController.showTab(.deck)
+     }
+ 

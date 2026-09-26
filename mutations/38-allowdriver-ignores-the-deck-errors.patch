@@ -1,0 +1,14 @@
+Test: TapTests/FixItTests/testNoFixItWhileTheFrontmatterIsBroken
+diff --git i/desktop/Tap/Documents/DeckSessionController.swift w/desktop/Tap/Documents/DeckSessionController.swift
+index 83f6b8a..1ee07b7 100644
+--- i/desktop/Tap/Documents/DeckSessionController.swift
++++ w/desktop/Tap/Documents/DeckSessionController.swift
+@@ -251,7 +251,7 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
+     func allowDriver(_ name: String) {
+         // While tap reports a broken frontmatter, every live block reads as
+         // undeclared: the frontmatter's problem is the one to fix.
+-        guard editor.deckErrors.isEmpty, let replacement = Frontmatter(text: editor.string).addingDriver(name) else {
++        guard let replacement = Frontmatter(text: editor.string).addingDriver(name) else {
+             // Declared already, a drivers value the edit cannot rewrite (`drivers: ~`), or a broken frontmatter: nothing to do, and not silently.
+             NSSound.beep()
+             return

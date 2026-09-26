@@ -1,0 +1,14 @@
+Test: TapTests/DeckTabTests/testASaveThePersonAsksForCommitsTheDeckField
+diff --git i/desktop/Tap/Documents/DeckDocument.swift w/desktop/Tap/Documents/DeckDocument.swift
+index 72daf36..138a838 100644
+--- i/desktop/Tap/Documents/DeckDocument.swift
++++ w/desktop/Tap/Documents/DeckDocument.swift
+@@ -278,8 +278,6 @@ final class DeckDocument: NSDocument {
+         // save ends the edit first.
+         if saveOperation == .autosaveInPlaceOperation || saveOperation == .autosaveElsewhereOperation {
+             sessionController?.deckForm.commitEditingKeepingFocus()
+-        } else {
+-            _ = sessionController?.deckForm.commitEditing()
+         }
+         if saveOperation == .saveOperation, sessionController?.hasDiskConflict == true {
+             return completionHandler(CocoaError(.userCancelled))

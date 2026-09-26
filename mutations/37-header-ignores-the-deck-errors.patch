@@ -1,0 +1,14 @@
+Test: TapTests/FixItTests/testNoFixItWhileTheFrontmatterIsBroken
+diff --git i/desktop/Tap/Editor/EditorTextView.swift w/desktop/Tap/Editor/EditorTextView.swift
+index 058ab59..14fdf67 100644
+--- i/desktop/Tap/Editor/EditorTextView.swift
++++ w/desktop/Tap/Editor/EditorTextView.swift
+@@ -177,7 +177,7 @@ final class EditorTextView: NSTextView {
+     /// The header of a box as drawn, hit tested and offered in menus. While
+     /// tap reports a problem with the frontmatter it offers no fix-it.
+     func header(forBoxAt index: Int) -> BoxHeader {
+-        BoxHeader(slide: boxes[index].slide, declaredDrivers: declaredDrivers, frontmatterIsBroken: !deckErrors.isEmpty)
++        BoxHeader(slide: boxes[index].slide, declaredDrivers: declaredDrivers, frontmatterIsBroken: false)
+     }
+ 
+     /// An edit the app makes, such as loading the disk version. It may change

@@ -1,0 +1,15 @@
+Test: TapTests/NewDriverTests/testAChangedCustomCommandAsksAgain
+diff --git i/desktop/TapTests/Support/HostedTestCase.swift w/desktop/TapTests/Support/HostedTestCase.swift
+index 22c5a28..d4ae572 100644
+--- i/desktop/TapTests/Support/HostedTestCase.swift
++++ w/desktop/TapTests/Support/HostedTestCase.swift
+@@ -64,8 +64,7 @@ class HostedTestCase: XCTestCase {
+     static func preApprovedAnswer(for payload: QuestionPayload, preApprovedDecks: [String: Set<String>]) -> Bool? {
+         guard let deck = payload.deck, let approved = preApprovedDecks[deck],
+               let drivers = payload.drivers, !drivers.isEmpty,
+-              drivers.allSatisfy({ approved.contains($0.name) }),
+-              !drivers.contains(where: { $0.previousCommand != nil || $0.valueChanged }) else { return nil }
++              drivers.allSatisfy({ approved.contains($0.name) }) else { return nil }
+         return true
+     }
+ 

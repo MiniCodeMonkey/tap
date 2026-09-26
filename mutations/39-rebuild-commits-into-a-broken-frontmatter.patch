@@ -1,0 +1,14 @@
+Test: TapTests/DeckTabTests/testARebuildNeverWritesIntoABrokenFrontmatter
+diff --git i/desktop/Tap/Preview/DeckFormViewController.swift w/desktop/Tap/Preview/DeckFormViewController.swift
+index 1f475da..b1548aa 100644
+--- i/desktop/Tap/Preview/DeckFormViewController.swift
++++ w/desktop/Tap/Preview/DeckFormViewController.swift
+@@ -213,7 +213,7 @@ final class DeckFormViewController: NSViewController, NSTextFieldDelegate, NSTex
+         defer { isRebuilding = false }
+         // An edit in progress reaches the frontmatter before its row goes,
+         // unless tap reports the frontmatter broken.
+-        if deckErrors.isEmpty { _ = commitEditing() } else { discardEditing() }
++        _ = commitEditing()
+         for view in stack.arrangedSubviews {
+             stack.removeArrangedSubview(view)
+             view.removeFromSuperview()

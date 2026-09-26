@@ -1,0 +1,14 @@
+Test: TapTests/DeckTabTests/testTheDeckTabEnablesOnceTheSchemaHasLoaded
+diff --git i/desktop/Tap/Preview/InspectorViewController.swift w/desktop/Tap/Preview/InspectorViewController.swift
+index 89cb895..d48ac0e 100644
+--- i/desktop/Tap/Preview/InspectorViewController.swift
++++ w/desktop/Tap/Preview/InspectorViewController.swift
+@@ -27,7 +27,7 @@ final class InspectorViewController: NSViewController {
+         root.layer?.backgroundColor = EditorPalette.dynamic(light: NSColor(red: 0.969, green: 0.969, blue: 0.973, alpha: 1),
+                                                             dark: NSColor(white: 0.13, alpha: 1)).cgColor
+         tabs.selectedSegment = selectedTab.rawValue
+-        tabs.setEnabled(isDeckTabAvailable, forSegment: Tab.deck.rawValue)
++        tabs.setEnabled(false, forSegment: Tab.deck.rawValue)
+         tabs.setWidth(90, forSegment: 0)
+         tabs.setWidth(90, forSegment: 1)
+         tabs.target = self
