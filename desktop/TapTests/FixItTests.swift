@@ -34,6 +34,11 @@ final class FixItTests: HostedTestCase {
         // The fix-it, clicked on the box header the way a person clicks it.
         editor.layoutSubtreeIfNeeded()
         let pill = try XCTUnwrap(editor.fixItRect(forBoxAt: 5), "the pill is on the box")
+        // Drawing and the hit test share this rect, so where it is, is where the pill is drawn: left of the badges, right of the slide number.
+        let headerRect = try XCTUnwrap(editor.headerRect(forBoxAt: 5))
+        let badges = EditorTextView.badgeLayout(for: editor.header(forBoxAt: 5).badges, headerMaxX: headerRect.maxX, headerTop: headerRect.minY)
+        XCTAssertEqual(pill.maxX, badges.leftEdge, accuracy: 0.5, "the pill ends where the badges begin")
+        XCTAssertGreaterThan(pill.minX, headerRect.minX + 40, "the pill starts right of the slide number: \(pill) in \(headerRect)")
         let original = editor.string
         // A Control-click on the pill is a context menu click: the box's menu, and no edit.
         let center = NSPoint(x: pill.midX, y: pill.midY)
