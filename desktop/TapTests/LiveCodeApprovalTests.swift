@@ -236,6 +236,33 @@ final class LiveCodeApprovalTests: HostedTestCase {
         XCTAssertTrue(controller.session.log.text.contains("tap withdrew the q1 question"))
     }
 
+    /// A question that waits its turn (here: behind a talk) and is then
+    /// withdrawn leaves the queue: only the question tap still asks shows
+    /// once the talk ends, and nothing is ever sent for the withdrawn one.
+    func testAWithdrawnQuestionLeavesTheQueue() async throws {
+        let record = try Fixtures.temporaryFolder().appendingPathComponent("record")
+        let bundled = AppEnvironment.shared.tapExecutableURL
+        AppEnvironment.shared.tapExecutableURL = try FakeTapScripts.askingApproval(recordingTo: record, withdrawingAfter: 1.5)
+        defer { AppEnvironment.shared.tapExecutableURL = bundled }
+        // A talk counts as running in some deck, so the deck's questions queue.
+        AppEnvironment.shared.noteTalkStarted()
+        var talkEnded = false
+        addTeardownBlock { @MainActor in if !talkEnded { AppEnvironment.shared.noteTalkEnded() } }
+        approvesLiveCodeOnOpen = false
+        let document = try await openDeck(try Fixtures.copyDeck("live-code.md"))
+        let deckWindow = try XCTUnwrap(document.windowControllers.first as? DeckWindowController)
+        try await waitUntil(timeout: 30, "q1 in the queue") { deckWindow.deckQuestions.map(\.question.id) == ["q1"] }
+        try await waitUntil(timeout: 10, "q2 in place of the withdrawn q1") { deckWindow.deckQuestions.map(\.question.id) == ["q2"] }
+        XCTAssertNil(deckWindow.questionSheet, "still waiting: a talk runs")
+        AppEnvironment.shared.noteTalkEnded()
+        talkEnded = true
+        try await waitUntil(timeout: 5, "q2's sheet once the talk has ended") { deckWindow.questionSheetQuestionID == "q2" }
+        XCTAssertTrue(deckWindow.deckQuestions.isEmpty)
+        try XCTUnwrap(deckWindow.questionSheet?.button(titled: "Allow")).performClick(nil)
+        try await waitUntil(timeout: 5, "q2's answer") { (try? String(contentsOf: record, encoding: .utf8))?.contains(#""id":"q2","value":true"#) == true }
+        XCTAssertFalse(try String(contentsOf: record, encoding: .utf8).contains(#""id":"q1""#), "nothing was sent for the withdrawn question")
+    }
+
     /// tap's ids start at q1 in every process; an answer for the old
     /// process's q1 must never reach the new one. Checked straight on the
     /// controller, with a scripted tap that records its stdin.
