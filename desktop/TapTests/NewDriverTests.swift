@@ -82,8 +82,11 @@ final class NewDriverTests: HostedTestCase {
         let deckWindow = try XCTUnwrap(document.windowControllers.first as? DeckWindowController)
         try await waitUntil(timeout: 5, "the sheet") { deckWindow.questionSheet is ApprovalSheet }
         let sheet = try XCTUnwrap(deckWindow.questionSheet as? ApprovalSheet)
-        XCTAssertTrue(sheet.driverLabels.first?.stringValue.contains("runs: /usr/bin/true") == true, "what would run now")
-        // Once Task 5's Step 5 is in (the ApprovalCommandChanged board signed off): XCTAssertEqual(sheet.wording, .changedCommands) and the board's title.
+        // The ApprovalCommandChanged board: the row carries the badge, and the new command is on the Now line.
+        XCTAssertEqual(sheet.wording, .changedCommands)
+        XCTAssertEqual(sheet.titleLabel.stringValue, "The command for fortune changed")
+        XCTAssertEqual(sheet.driverLabels.map(\.stringValue), ["fortune: 1 block on slide 3, command changed"])
+        XCTAssertEqual(sheet.commandChangeLabels.map(\.stringValue), ["Before: /bin/cat", "Now: /usr/bin/true"], "what would run now")
         try XCTUnwrap(deckWindow.questionSheet?.button(titled: "Don't Allow")).performClick(nil)
         try await waitForRunButtons(#"["Not approved"]"#, in: controller, document: document, slide: 3)
     }
