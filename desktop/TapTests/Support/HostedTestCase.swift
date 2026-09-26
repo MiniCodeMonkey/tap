@@ -512,6 +512,15 @@ class HostedTestCase: XCTestCase {
     // escaping; a non-escaping parameter fails to build here with "escaping
     // local function captures non-escaping value". Every call site already
     // passes a closure literal, so escaping changes nothing for callers.
+    /// Lets the run loop close the undo group the last change opened, as
+    /// it does between two of a person's clicks, so the next change is an
+    /// undo step of its own. A change a test makes without an await joins
+    /// the one before it.
+    func waitForTheUndoStepToClose(_ undoManager: UndoManager?) async throws {
+        try await Task.sleep(nanoseconds: 20_000_000)
+        try await waitUntil(timeout: 5, "the run loop to close the undo group") { (undoManager?.groupingLevel ?? 0) == 0 }
+    }
+
     func waitUntil(timeout: TimeInterval = 10, _ message: @autoclosure @escaping () -> String = "condition", _ condition: @escaping () -> Bool) async throws {
         let deadline = Date().addingTimeInterval(timeout)
         while !condition() {

@@ -69,36 +69,45 @@ final class DeckTabTests: HostedTestCase {
 
         // Changing a field rewrites that key in the frontmatter as one undo step.
         let original = editor.string
+        let hiddenBefore = editor.hiddenLength
         let chosen = try XCTUnwrap(themeKey.values.last)
         theme.selectItem(withTitle: chosen)
         theme.sendAction(theme.action, to: theme.target)
         XCTAssertTrue(editor.string.hasPrefix("---\ntitle: Seven Slides\ndrivers:\n  sqlite: {}\ntheme: \(chosen)\n---\n"), String(editor.string.prefix(80)))
         XCTAssertEqual(editor.undoManager?.undoActionName, "Change Theme")
         XCTAssertTrue(controller.isContentEdited, "the edited flag follows the content")
-        theme.sendAction(theme.action, to: theme.target)
-        XCTAssertEqual(editor.undoManager?.undoActionName, "Change Theme", "the same value again registers no second step")
         try await waitUntil(timeout: 10, "tap's answer for the new frontmatter") { controller.lastAppliedText == editor.string }
         XCTAssertEqual(editor.deckErrors, [], "tap accepts what the form wrote")
-        XCTAssertGreaterThan(editor.hiddenLength, (original as NSString).range(of: "# Debugging").location, "the frontmatter stays hidden, one line longer")
+        XCTAssertEqual(editor.hiddenLength, hiddenBefore + ("theme: \(chosen)\n" as NSString).length, "the frontmatter stays hidden, one line longer")
+        XCTAssertEqual(editor.boxes[0].range.location, editor.hiddenLength, "slide 1 starts where the hidden frontmatter ends")
+        try await waitForTheUndoStepToClose(editor.undoManager)
+        // The same value again changes nothing, so it is no undo step: the third undo below finds the theme change.
+        theme.sendAction(theme.action, to: theme.target)
+        XCTAssertEqual(editor.undoManager?.undoActionName, "Change Theme")
+        try await waitForTheUndoStepToClose(editor.undoManager)
 
         title.stringValue = "Deck: renamed"
         title.sendAction(title.action, to: title.target)
         XCTAssertTrue(editor.string.contains("title: \"Deck: renamed\"\n"), "a value YAML would misread is quoted")
         XCTAssertEqual(editor.undoManager?.undoActionName, "Change Title")
+        try await waitForTheUndoStepToClose(editor.undoManager)
         let numbers = try XCTUnwrap(form.field("slideNumbers") as? NSSwitch)
         XCTAssertEqual(numbers.state, .on, "absent, so tap's default")
         numbers.state = .off
         numbers.sendAction(numbers.action, to: numbers.target)
         XCTAssertTrue(editor.string.contains("slideNumbers: false\n"))
+        try await waitForTheUndoStepToClose(editor.undoManager)
 
         // Undo, one change at a time; the form follows the text.
         editor.undoManager?.undo()
         XCTAssertFalse(editor.string.contains("slideNumbers"))
         XCTAssertEqual(numbers.state, .on)
+        XCTAssertTrue(editor.string.contains("title: \"Deck: renamed\"\n"), "the first undo takes back the switch alone")
         editor.undoManager?.undo()
         XCTAssertEqual(title.stringValue, "Seven Slides")
+        XCTAssertTrue(editor.string.contains("theme: \(chosen)\n"), "the second undo takes back the title alone")
         editor.undoManager?.undo()
-        XCTAssertEqual(editor.string, original)
+        XCTAssertEqual(editor.string, original, "the third undo takes back the theme")
         XCTAssertEqual(theme.titleOfSelectedItem, defaultItem, "the popup follows an undo")
         // Choosing the default item removes the key.
         theme.selectItem(withTitle: chosen)
