@@ -110,6 +110,14 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
             }
         }
         sessionController.presentation.onQuestion = { [weak self] question in self?.presentQuestion(question) }
+        sessionController.presentation.onQuestionsDropped = { [weak self] in
+            guard let self, self.questionSheetSource == .talk else { return }
+            self.endQuestionSheet(as: .abort)
+        }
+        sessionController.presentation.onQuestionClosed = { [weak self] id in
+            guard let self, self.questionSheetSource == .talk, self.questionSheetQuestionID == id else { return }
+            self.endQuestionSheet(as: .abort)
+        }
         sessionController.presentation.onFailed = { [weak self] message in self?.showTalkFailed(message) }
         remotePanel.onTurnOff = { [weak self] in self?.sessionController.presentation.setTunnel(on: false) }
         sessionController.presentation.onTunnelChange = { [weak self] in self?.refreshRemotePanel() }
@@ -358,13 +366,13 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
     /// settings (the popover's controls), from the cursor's slide unless
     /// those settings say slide 1.
     @objc func play(_ sender: Any?) {
-        guard sessionController.presentation.canStart else { return }
+        guard canStartATalk else { return }
         startPresenting(freshPopover().options(mode: .play))
     }
 
     /// Present > Play with Options: the popover, anchored on the Play button.
     @objc func playWithOptions(_ sender: Any?) {
-        guard sessionController.presentation.canStart else { return }
+        guard canStartATalk else { return }
         let anchor: NSView = playButton.window == nil ? (window?.contentView ?? playButton) : playButton
         freshPopover().show(context: popoverContext(), relativeTo: anchor.bounds, of: anchor)
     }
@@ -375,7 +383,7 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
     }
 
     func playButtonClicked(modifiers: NSEvent.ModifierFlags) {
-        guard sessionController.presentation.canStart else { return }
+        guard canStartATalk else { return }
         if modifiers.contains(.shift) {
             var options = freshPopover().options(mode: .play)
             options.startSlide = 1
@@ -397,7 +405,7 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
 
     /// Present > Rehearse: the presenter view alone, from the cursor's slide.
     @objc func rehearse(_ sender: Any?) {
-        guard sessionController.presentation.canStart else { return }
+        guard canStartATalk else { return }
         startPresenting(PresentationOptions(mode: .rehearse, startSlide: sessionController.currentSlideNumber ?? 1))
     }
 
@@ -479,7 +487,14 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
 
     /// The toolbar's Play button follows the talk: off while one runs.
     func refreshPresentingControls() {
-        playButton.isEnabled = sessionController.presentation.canStart
+        playButton.isEnabled = canStartATalk
+    }
+
+    /// Whether a talk may start from this window now: the talk's own rule,
+    /// and no question sheet up. A sheet is one question the person has to
+    /// answer first; a second sheet would queue behind it on this window.
+    var canStartATalk: Bool {
+        sessionController.presentation.canStart && questionSheet == nil
     }
 
     /// Present > Stop, the toolbar's Stop, and Escape in the audience window.
@@ -628,14 +643,14 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
         let presentation = sessionController.presentation
         switch question.kind {
         case "record-consent":
-            showQuestionSheet(QuestionSheet.consent(settingsPath: question.payload.settingsPath)) { record in
+            showQuestionSheet(QuestionSheet.consent(settingsPath: question.payload.settingsPath), questionID: question.id) { record in
                 presentation.answer(id: question.id, value: record)
             }
         case "keep-recording":
             let directory = question.payload.directory ?? ""
             let sheet = QuestionSheet.keepRecording(directory: directory, segments: question.payload.segments ?? 0,
                                                     size: Self.folderSize(at: URL(fileURLWithPath: directory)))
-            showQuestionSheet(sheet) { [weak self] keep in
+            showQuestionSheet(sheet, questionID: question.id) { [weak self] keep in
                 // tap keeps the recording on a yes and on no answer at all; the app
                 // never touches the folder itself. A question tap still waits on
                 // is the person's click, which reveals the run; one tap has
@@ -649,6 +664,15 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
                 } else {
                     self?.showRecordingKept(folder)
                 }
+            }
+        case "approval":
+            // The same sheet as the deck's own question. tap present asks it at
+            // startup, before the windows show, and D4's step-aside path
+            // covers one that arrives mid-talk. A yes is stored by tap present;
+            // the deck's tap dev learns of it through a reload.
+            showQuestionSheet(approvalSheet(for: question), source: .talk, questionID: question.id) { [weak self] allow in
+                presentation.answer(id: question.id, value: allow)
+                if allow { self?.sessionController.reloadAfterTalkApproval() }
             }
         default:
             presentation.session?.log.append("the \(question.kind) question is not answered by this version of the app; declined", source: .app)
@@ -675,6 +699,7 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
         questionSheet = sheet
         questionSheetSource = source
         questionSheetQuestionID = questionID
+        refreshPresentingControls()
         if source == .talk {
             // A talk's sheet must reach the person over the talk's Space; the
             // deck's own question moves nothing and waits for its window's turn.
@@ -688,6 +713,7 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
                 self?.questionSheet = nil
                 self?.questionSheetSource = nil
                 self?.questionSheetQuestionID = nil
+                self?.refreshPresentingControls()
             }
             completion(response == .OK)
             presentation.returnToTalk()
@@ -806,7 +832,7 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
             menuItem.title = isPanelPinned ? "Unpin Slide Panel" : "Pin Slide Panel"
         }
         let presentation = sessionController.presentation
-        if [#selector(play(_:)), #selector(playWithOptions(_:)), #selector(rehearse(_:))].contains(menuItem.action) { return presentation.canStart }
+        if [#selector(play(_:)), #selector(playWithOptions(_:)), #selector(rehearse(_:))].contains(menuItem.action) { return canStartATalk }
         if menuItem.action == #selector(stopPresenting(_:)) { return presentation.isActive }
         if menuItem.action == #selector(togglePhoneRemote(_:)) {
             menuItem.state = presentation.remoteIsOn ? .on : .off

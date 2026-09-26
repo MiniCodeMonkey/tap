@@ -208,6 +208,16 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
         if index == 0, let next = pendingQuestions.first { onQuestion?(next) }
     }
 
+    /// The talk's Allow stored the approval; tap dev's own policy is what
+    /// it computed at its start or last reload. A reload makes tap check
+    /// the deck's drivers against the settings again (the tap change this
+    /// plan depends on), which finds them approved and turns the preview's
+    /// blocks on without a question.
+    func reloadAfterTalkApproval() {
+        session.send(.reload)
+        session.log.append("reloading after the talk's approval, so the preview's blocks can run", source: .app)
+    }
+
     /// Writes the buffer to the deck file before a talk, because tap
     /// present reads the file. A buffer that already equals the file needs
     /// no write. A save the document refuses (a disk conflict is showing)

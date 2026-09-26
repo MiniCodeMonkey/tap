@@ -92,9 +92,14 @@ enum FakeTapScripts {
     /// with `tunnelFailed`, the `tunnel_failed` error followed by the
     /// stopped tunnel event tap sends after a failed start), a tunnel stop
     /// with a stopped tunnel, a recording stop with a stopped recording, a
-    /// new segment with segment 2 recording, and quit as `quit` says.
+    /// new segment with segment 2 recording, and quit as `quit` says. An
+    /// answer ends the fake, as tap present's keep-recording answer does,
+    /// unless `exitsOnAnswer` is false: a startup question's answer leaves
+    /// tap running; with `crashFile`, the fake dies with SIGKILL the moment
+    /// that file appears, once, as a crash the test times would: the file
+    /// is removed first, so the run after it stays up.
     static func presenting(events: [String], quit: QuitBehavior = .exit, tunnelFailed: Bool = false, tunnelUnavailable: Bool = false,
-                           recordingTo record: URL) throws -> URL {
+                           exitsOnAnswer: Bool = true, crashFile: URL? = nil, recordingTo record: URL) throws -> URL {
         let url = try Fixtures.temporaryFolder().appendingPathComponent("tap")
         let eventLines = events.map { "echo '\($0)'" }.joined(separator: "\n")
         let tunnelRunning: String
@@ -119,11 +124,12 @@ enum FakeTapScripts {
         echo "arguments: $@" >> "\(record.path)"
         echo '{"type":"ready","port":1,"token":"token","launch":"launch","presenter":"presenter"}'
         \(eventLines)
+        \(crashFile.map { #"(while [ ! -f "\#($0.path)" ]; do sleep 0.1; done; rm -f "\#($0.path)"; kill -9 $$) &"# } ?? ":")
         while IFS= read -r line; do
           echo "stdin: $line" >> "\(record.path)"
           case "$line" in
             *'"type":"quit"'*) \(onQuit) ;;
-            *'"type":"answer"'*) exit 0 ;;
+            *'"type":"answer"'*) \(exitsOnAnswer ? "exit 0" : ":") ;;
             *'"type":"tunnel","start":true'*) \(tunnelRunning) ;;
             *'"type":"tunnel","start":false'*) echo '{"type":"tunnel","state":"stopped"}' ;;
             *'"action":"stop"'*) echo '{"type":"recording","state":"stopped","segment":1,"elapsed":0,"disk":"ok"}' ;;
