@@ -617,16 +617,36 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
     }
 
     /// Shows the next waiting deck question, if no sheet is up on the
-    /// window (a question's or the Focus hint's) and no talk runs in any
-    /// deck. Called when a question arrives, when a sheet ends, when the
-    /// hint ends, and when a talk ends anywhere.
+    /// window (a question's or the Focus hint's), no talk runs in any
+    /// deck, and the window is its tab group's chosen tab: AppKit selects
+    /// a background tab to show a sheet on it, which would take the tab
+    /// from the deck the person is working in. Called when a question
+    /// arrives, when a sheet ends, when the hint ends, when a talk ends
+    /// anywhere, and when the window becomes main or comes on screen (its
+    /// tab was chosen).
     func showNextDeckQuestionIfIdle() {
         guard questionSheet == nil, window?.attachedSheet == nil, !sessionController.presentation.isActive,
-              !AppEnvironment.shared.isPresenting, !deckQuestions.isEmpty else { return }
+              !AppEnvironment.shared.isPresenting, isTheChosenTab, !deckQuestions.isEmpty else { return }
         let (question, generation) = deckQuestions.removeFirst()
         showQuestionSheet(approvalSheet(for: question), source: .deck, questionID: question.id) { [weak self] allow in
             self?.sessionController.answer(id: question.id, value: allow, generation: generation)
         }
+    }
+
+    /// Whether the window is the tab the person sees: alone, or the
+    /// selected tab of its group.
+    var isTheChosenTab: Bool {
+        guard let window, let group = window.tabGroup, group.windows.count > 1 else { return true }
+        return group.selectedWindow === window
+    }
+
+    func windowDidBecomeMain(_ notification: Notification) {
+        showNextDeckQuestionIfIdle()
+    }
+
+    func windowDidChangeOcclusionState(_ notification: Notification) {
+        guard window?.occlusionState.contains(.visible) == true else { return }
+        showNextDeckQuestionIfIdle()
     }
 
     /// tap withdrew a deck question: out of the queue, or off the window

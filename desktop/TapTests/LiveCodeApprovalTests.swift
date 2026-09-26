@@ -109,8 +109,8 @@ final class LiveCodeApprovalTests: HostedTestCase {
     }
 
     /// The deck's question moves no window and takes no tab: a question for
-    /// a deck behind another deck's tab waits there, and the front deck
-    /// keeps its tab.
+    /// a deck behind another deck's tab waits until its tab is chosen, and
+    /// the front deck keeps its tab.
     func testADeckQuestionInABackgroundTabTakesNothing() async throws {
         approvesLiveCodeOnOpen = false
         let behind = try await openDeck(try Fixtures.copyDeck("live-code.md"))
@@ -130,8 +130,15 @@ final class LiveCodeApprovalTests: HostedTestCase {
         }
         try await Task.sleep(nanoseconds: UInt64(DeckWindowController.spaceSwitchSettleDelay * 2 * 1_000_000_000))
         XCTAssertTrue(frontWindow.tabGroup?.selectedWindow === frontWindow, "still the front deck's tab")
-        XCTAssertTrue(behindWindow.questionSheet is ApprovalSheet, "the question waits on its own window")
+        XCTAssertNil(behindWindow.questionSheet, "no sheet on a tab the person is not looking at")
+        XCTAssertNil(behindWindow.window?.attachedSheet)
+        XCTAssertEqual(behindWindow.deckQuestions.count, 1, "the question waits for its tab")
+        // The person chooses the tab: the question shows there.
+        let behindNSWindow = try XCTUnwrap(behindWindow.window)
+        behindNSWindow.tabGroup?.selectedWindow = behindNSWindow
+        try await waitUntil(timeout: 5, "the question once its tab is chosen") { behindWindow.questionSheet is ApprovalSheet }
         XCTAssertTrue(behindWindow.deckQuestions.isEmpty)
+        XCTAssertEqual(behindWindow.questionSheetSource, .deck)
     }
 
     /// The test hook answers Allow for a deck a test approved ahead of time,
