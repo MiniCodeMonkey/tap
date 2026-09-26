@@ -9,6 +9,15 @@ import WebKit
 class HostedTestCase: XCTestCase {
     private(set) var configHome: URL!
 
+    /// Whether `openDeck` approves the deck's declared drivers ahead of
+    /// time, as tap new does for a deck the person made: on by default, so
+    /// a fixture with live code opens with no approval sheet over its
+    /// window. The approval tests turn it off to see the sheet.
+    var approvesLiveCodeOnOpen = true
+
+    /// tap's settings file under this test's config folder.
+    var settingsFile: URL { configHome.appendingPathComponent("tap/settings.yaml") }
+
     override func setUp() async throws {
         configHome = try Fixtures.temporaryFolder()
         AppEnvironment.shared.extraEnvironment["XDG_CONFIG_HOME"] = configHome.path
@@ -53,6 +62,7 @@ class HostedTestCase: XCTestCase {
     }
 
     func openDeck(_ url: URL, timeout: TimeInterval = 30) async throws -> DeckDocument {
+        if approvesLiveCodeOnOpen { try approveLiveCode(for: url) }
         // AppKit's completion is given `timeout` seconds, so an open that
         // never completes fails this test rather than hanging the bundle.
         let opened: Result<NSDocument, Error>? = await withCheckedContinuation { continuation in
@@ -92,6 +102,99 @@ class HostedTestCase: XCTestCase {
     func waitForBoxes(_ document: DeckDocument, count: Int) async throws {
         let editor = try XCTUnwrap(document.sessionController?.editor)
         try await waitUntil(timeout: 30, "\(count) boxes") { editor.boxes.count == count }
+    }
+
+    /// Writes tap's own approval record for `deck` (internal/usersettings):
+    /// its real path, as usersettings.ResolveDeck keys it, `drivers`, the
+    /// deck's declared ones when nil, and under `commands:` the command
+    /// line of every custom driver among them (its `command` and `args`
+    /// with `${NAME}` expanded from the environment the test gives tap),
+    /// since an approval covers a custom driver only with that exact line.
+    /// The `approvals:` block is written whole, after whatever else the
+    /// file holds (the recording consent), in the shape yaml.v3 writes, so
+    /// a file tap has written since is still one tap reads; earlier
+    /// approvals in it are kept.
+    func approveLiveCode(for deck: URL, drivers: [String]? = nil) throws {
+        let text = (try? String(contentsOf: deck, encoding: .utf8)) ?? ""
+        let frontmatter = Frontmatter(text: text)
+        let names = drivers ?? frontmatter.declaredDrivers
+        guard !names.isEmpty else { return }
+        try FileManager.default.createDirectory(at: settingsFile.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let existing = (try? String(contentsOf: settingsFile, encoding: .utf8)) ?? ""
+        var before = existing
+        var entries: [String] = []
+        if let start = existing.range(of: "approvals:") {
+            before = String(existing[..<start.lowerBound])
+            entries = existing[start.upperBound...].components(separatedBy: "    - deck: ").dropFirst().map { "    - deck: " + $0 }
+        }
+        entries.removeAll { $0.contains("- deck: \(Fixtures.realPath(of: deck))\n") }
+        var record = "    - deck: \(Fixtures.realPath(of: deck))\n      drivers: [\(names.joined(separator: ", "))]\n"
+        var commands = ""
+        for name in names {
+            guard let command = frontmatter.value(at: ["drivers", name, "command"]).map(Frontmatter.unquoted), !command.isEmpty else { continue }
+            var line = [Self.expandingVariables(command)]
+            if let args = frontmatter.value(at: ["drivers", name, "args"]) {
+                // A flow list, "[a, b]"; the fixtures use no block lists.
+                line += args.trimmingCharacters(in: CharacterSet(charactersIn: "[] ")).split(separator: ",").map { Self.expandingVariables(Frontmatter.unquoted($0.trimmingCharacters(in: .whitespaces))) }
+            }
+            commands += "        \(name):\n" + line.map { "          - \($0)\n" }.joined()
+        }
+        if !commands.isEmpty { record += "      commands:\n" + commands }
+        record += "      approvedAt: 2026-09-25T00:00:00Z\n"
+        entries.append(record)
+        if !before.isEmpty, !before.hasSuffix("\n") { before += "\n" }
+        try (before + "approvals:\n" + entries.joined()).write(to: settingsFile, atomically: true, encoding: .utf8)
+    }
+
+    /// `${NAME}` replaced from the environment tap gets: the test's extra
+    /// variables first, then the host's, as tap's own expansion reads them.
+    static func expandingVariables(_ text: String) -> String {
+        var result = text
+        let pattern = try! NSRegularExpression(pattern: #"\$\{([A-Za-z_][A-Za-z0-9_]*)\}"#)
+        for match in pattern.matches(in: text, range: NSRange(location: 0, length: (text as NSString).length)).reversed() {
+            let name = (text as NSString).substring(with: match.range(at: 1))
+            let value = AppEnvironment.shared.extraEnvironment[name] ?? ProcessInfo.processInfo.environment[name] ?? ""
+            result = (result as NSString).replacingCharacters(in: match.range, with: value)
+        }
+        return result
+    }
+
+    /// The settings file as tap has written it, "" when there is none.
+    func storedApprovals() -> String {
+        (try? String(contentsOf: settingsFile, encoding: .utf8)) ?? ""
+    }
+
+    /// Opens a copy of `fixture` unapproved and waits for tap's approval
+    /// question and the sheet the deck window shows for it.
+    func openUnapprovedAndWaitForTheQuestion(_ fixture: String) async throws -> (DeckDocument, DeckSessionController, DeckWindowController, ApprovalSheet) {
+        approvesLiveCodeOnOpen = false
+        let document = try await openDeck(try Fixtures.copyDeck(fixture))
+        let controller = try XCTUnwrap(document.sessionController)
+        _ = try await waitForRunningTap(document)
+        try await waitUntil(timeout: 30, "tap's approval question") { controller.pendingQuestion?.kind == "approval" }
+        let deckWindow = try XCTUnwrap(document.windowControllers.first as? DeckWindowController)
+        try await waitUntil(timeout: 5, "the approval sheet") { deckWindow.questionSheet is ApprovalSheet }
+        let sheet = try XCTUnwrap(deckWindow.questionSheet as? ApprovalSheet)
+        return (document, controller, deckWindow, sheet)
+    }
+
+    /// Moves the cursor to `slide` and polls the page until its Run buttons
+    /// read `expected` (a JSON list, see `runButtonLabels`). Bounded, and
+    /// independent of how many times the page reported ready on the way:
+    /// tap's reload after an answer, or any settle, is not what is waited for.
+    func waitForRunButtons(_ expected: String, in controller: DeckSessionController, document: DeckDocument, slide: Int, timeout: TimeInterval = 20) async throws {
+        controller.jumpToSlide(number: slide)
+        try await waitForPreview(document, slide: slide)
+        let deadline = Date().addingTimeInterval(timeout)
+        var labels = await controller.previewViewController.runButtonLabels()
+        while labels != expected {
+            if Date() > deadline {
+                XCTFail("the page's Run buttons on slide \(slide) read \(labels), not \(expected), after \(Int(timeout)) s")
+                throw CancellationError()
+            }
+            try await Task.sleep(nanoseconds: 200_000_000)
+            labels = await controller.previewViewController.runButtonLabels()
+        }
     }
 
     /// What a timed out wait records about the page. `ready` is the page's

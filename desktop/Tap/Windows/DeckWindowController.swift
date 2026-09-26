@@ -36,6 +36,21 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
     }()
     /// The sheet for tap's question, while it is up.
     private(set) var questionSheet: QuestionSheet?
+    /// Whose sheet `questionSheet` is: the deck's own tap dev, or its talk.
+    enum QuestionSource: Equatable {
+        case deck
+        case talk
+    }
+    private(set) var questionSheetSource: QuestionSource?
+    /// tap's id of the question `questionSheet` is up for, so a withdrawal
+    /// (`question-closed`) ends the right sheet and no other.
+    private(set) var questionSheetQuestionID: String?
+    /// tap dev's questions waiting for their turn: shown one at a time,
+    /// only while no sheet of any kind is up on this window (a question's,
+    /// the Focus hint's) and no talk runs in any deck, so a question that
+    /// arrives mid-talk (a reload, a restart) waits until the talk ends,
+    /// and never queues a second sheet on the window under the talk's.
+    private(set) var deckQuestions: [(question: DeckSessionController.PendingQuestion, generation: Int)] = []
     /// Reveals a kept recording. Production opens Finder on it; a test records the URL.
     var revealInFinder: (URL) -> Void = { url in NSWorkspace.shared.activateFileViewerSelecting([url]) }
     /// The phone remote panel, made with the window (a panel that is never
@@ -81,8 +96,12 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
         sessionController.presentation.onStateChange = { [weak self] state in
             self?.refreshPresentingControls()
             switch state {
-            case .idle: self?.talkEnded(failed: false)
-            case .failed: self?.talkEnded(failed: true)
+            case .idle:
+                self?.talkEnded(failed: false)
+                self?.showNextDeckQuestionIfIdle()
+            case .failed:
+                self?.talkEnded(failed: true)
+                self?.showNextDeckQuestionIfIdle()
             case .starting:
                 self?.sessionController.editorViewController.hideBar(.recordingKept)
                 self?.sessionController.editorViewController.hideBar(.talkFailed)
@@ -94,8 +113,18 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
         sessionController.presentation.onFailed = { [weak self] message in self?.showTalkFailed(message) }
         remotePanel.onTurnOff = { [weak self] in self?.sessionController.presentation.setTunnel(on: false) }
         sessionController.presentation.onTunnelChange = { [weak self] in self?.refreshRemotePanel() }
+        sessionController.onQuestion = { [weak self] question in self?.presentDeckQuestion(question) }
+        sessionController.onQuestionClosed = { [weak self] id in self?.deckQuestionClosed(id) }
+        sessionController.onQuestionsDropped = { [weak self] in
+            guard let self else { return }
+            self.deckQuestions = []
+            if self.questionSheetSource == .deck { self.endQuestionSheet(as: .abort) }
+        }
         presentingObserver = NotificationCenter.default.addObserver(forName: AppEnvironment.presentingDidChangeNotification, object: nil, queue: nil) { [weak self] _ in
-            MainActor.assumeIsolated { self?.refreshPresentingControls() }
+            MainActor.assumeIsolated {
+                self?.refreshPresentingControls()
+                self?.showNextDeckQuestionIfIdle()
+            }
         }
 
         let toolbar = NSToolbar(identifier: "TapDeckToolbar")
@@ -399,7 +428,9 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
                 guard let self else { return }
                 self.focusHintSheet = nil
                 switch response {
-                case .OK: self.openFocusSettings()
+                case .OK:
+                    self.openFocusSettings()
+                    self.showNextDeckQuestionIfIdle()
                 case .cancel: self.startAfterTheHint(options)
                 default: break // the sheet ended some other way, as its window went: no talk
                 }
@@ -477,7 +508,11 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
     /// any other, ends answering nothing.
     func talkEnded(failed: Bool) {
         remotePanel.hide()
-        guard let sheet = questionSheet else { return }
+        // By construction a deck sheet is never up during a talk
+        // (`showNextDeckQuestionIfIdle` waits, and Task 8 keeps Play off
+        // under a sheet), so this condition is a written property rather
+        // than a tested branch.
+        guard let sheet = questionSheet, questionSheetSource == .talk else { return }
         // The talk's own log, which outlives its session; never tap dev's.
         let log = sessionController.presentationIfCreated?.lastTalkLog
         if sheet.kind == "keep-recording", !failed {
@@ -543,6 +578,49 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
 
     // MARK: tap's questions
 
+    /// tap dev asked something: the live code approval, at the deck's open
+    /// and whenever tap asks again. Anything else is declined with a log
+    /// line. The question is queued under the session's current
+    /// generation and shown when the window is free of sheets and talks;
+    /// its answer goes to the process that asked, and to no later one.
+    func presentDeckQuestion(_ question: DeckSessionController.PendingQuestion) {
+        guard question.kind == "approval" else {
+            sessionController.session.log.append("the \(question.kind) question is not one this version of the app answers; declined", source: .app)
+            sessionController.answer(id: question.id, value: false, generation: sessionController.questionGeneration)
+            return
+        }
+        deckQuestions.append((question, sessionController.questionGeneration))
+        showNextDeckQuestionIfIdle()
+    }
+
+    /// Shows the next waiting deck question, if no sheet is up on the
+    /// window (a question's or the Focus hint's) and no talk runs in any
+    /// deck. Called when a question arrives, when a sheet ends, when the
+    /// hint ends, and when a talk ends anywhere.
+    func showNextDeckQuestionIfIdle() {
+        guard questionSheet == nil, window?.attachedSheet == nil, !sessionController.presentation.isActive,
+              !AppEnvironment.shared.isPresenting, !deckQuestions.isEmpty else { return }
+        let (question, generation) = deckQuestions.removeFirst()
+        showQuestionSheet(approvalSheet(for: question), source: .deck, questionID: question.id) { [weak self] allow in
+            self?.sessionController.answer(id: question.id, value: allow, generation: generation)
+        }
+    }
+
+    /// tap withdrew a deck question: out of the queue, or off the window
+    /// if its sheet is up (the completion's answer then finds no pending
+    /// question and sends nothing).
+    func deckQuestionClosed(_ id: String) {
+        deckQuestions.removeAll { $0.question.id == id }
+        if questionSheetSource == .deck, questionSheetQuestionID == id { endQuestionSheet(as: .abort) }
+    }
+
+    /// The sheet for an approval request, named after the deck as tap
+    /// resolved it (the file may have been opened through a symlink).
+    func approvalSheet(for question: PresentationController.PendingQuestion) -> ApprovalSheet {
+        let name = question.payload.deck.map { ($0 as NSString).lastPathComponent } ?? sessionController.document?.fileURL?.lastPathComponent ?? "This deck"
+        return ApprovalSheet(payload: question.payload, deckName: name)
+    }
+
     /// tap asked something. Consent and keep-recording become sheets on
     /// this window; the live code approval is D5's and is declined until
     /// then, which runs no code.
@@ -586,22 +664,35 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
     /// Space switch asked for during another is dropped. After the answer
     /// the talk's front window is made key again, which switches back
     /// (`PresentationController.returnToTalk`, kept the same way).
-    func showQuestionSheet(_ sheet: QuestionSheet, completion: @escaping (Bool) -> Void) {
+    /// A deck question (`source: .deck`) is shown with `beginSheet` alone:
+    /// no focus move, no retry.
+    func showQuestionSheet(_ sheet: QuestionSheet, source: QuestionSource = .talk, questionID: String? = nil, completion: @escaping (Bool) -> Void) {
         guard let window else {
             completion(sheet.kind == "keep-recording")
             return
         }
         let presentation = sessionController.presentation
         questionSheet = sheet
-        window.makeKeyAndOrderFront(nil)
-        keepForward(window, while: sheet)
+        questionSheetSource = source
+        questionSheetQuestionID = questionID
+        if source == .talk {
+            // A talk's sheet must reach the person over the talk's Space; the
+            // deck's own question moves nothing and waits for its window's turn.
+            window.makeKeyAndOrderFront(nil)
+            keepForward(window, while: sheet)
+        }
         window.beginSheet(sheet) { [weak self] response in
             // Only the sheet that completed clears the slot: a stale sheet
             // ended late must not clear a newer one.
-            if self?.questionSheet === sheet { self?.questionSheet = nil }
+            if self?.questionSheet === sheet {
+                self?.questionSheet = nil
+                self?.questionSheetSource = nil
+                self?.questionSheetQuestionID = nil
+            }
             completion(response == .OK)
             presentation.returnToTalk()
             self?.refreshRemotePanel()
+            self?.showNextDeckQuestionIfIdle()
         }
     }
 

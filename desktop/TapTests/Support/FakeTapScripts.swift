@@ -135,4 +135,26 @@ enum FakeTapScripts {
         try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: url.path)
         return url
     }
+
+    /// A scripted `tap dev --app` that prints a ready line and then asks
+    /// the live code approval as q1 (shell), records every stdin line in
+    /// `record`, and exits when stdin closes. Killed and restarted, it
+    /// asks q1 again, which is what tap does. With `withdrawingAfter`, it
+    /// withdraws q1 that many seconds later (`question-closed`, as a
+    /// reload that changed the deck does) and asks q2 about sqlite.
+    static func askingApproval(recordingTo record: URL, withdrawingAfter seconds: TimeInterval? = nil) throws -> URL {
+        let url = try Fixtures.temporaryFolder().appendingPathComponent("tap")
+        let withdrawal = seconds.map { #"(sleep \#($0); echo '{"type":"question-closed","id":"q1"}'; echo '{"type":"question","id":"q2","kind":"approval","payload":{"deck":"/private/tmp/t/talk.md","drivers":[{"name":"sqlite","slides":[4],"blocks":1}],"blocks":[{"driver":"sqlite","code":"SELECT 1;","slide":4,"block":1}]}}') &"# } ?? ":"
+        try """
+        #!/bin/sh
+        echo "arguments: $@" >> "\(record.path)"
+        echo '{"type":"ready","port":1,"token":"token","launch":"launch","presenter":"presenter"}'
+        echo '{"type":"question","id":"q1","kind":"approval","payload":{"deck":"/private/tmp/t/talk.md","drivers":[{"name":"shell","slides":[2],"blocks":1}],"blocks":[{"driver":"shell","code":"echo hi","slide":2,"block":1}]}}'
+        \(withdrawal)
+        while IFS= read -r line; do echo "stdin: $line" >> "\(record.path)"; done
+        exit 0
+        """.write(to: url, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: url.path)
+        return url
+    }
 }

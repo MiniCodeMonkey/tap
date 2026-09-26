@@ -172,6 +172,42 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
     /// The talk, if this deck ever started one; nil costs nothing to check.
     var presentationIfCreated: PresentationController? { createdPresentation }
 
+    // MARK: tap dev's questions
+
+    typealias PendingQuestion = PresentationController.PendingQuestion
+    /// tap dev's questions in the order they came: the live code approval
+    /// at the deck's open, and again whenever tap asks (a reload that
+    /// brings a driver it has not approved, a restart). The first is the
+    /// one the window shows.
+    private(set) var pendingQuestions: [PendingQuestion] = []
+    var pendingQuestion: PendingQuestion? { pendingQuestions.first }
+    /// Rises every time the session leaves `.running`. The questions of
+    /// the process that was running are gone with it, and an answer for
+    /// one of them must not reach the next process, whose ids start at q1
+    /// again: `answer(id:value:generation:)` sends only for the current one.
+    private(set) var questionGeneration = 0
+    var onQuestion: ((PendingQuestion) -> Void)?
+    /// tap withdrew the question with this id; a sheet up for it ends, answering nothing.
+    var onQuestionClosed: ((String) -> Void)?
+    /// The questions on screen belong to a process that is gone.
+    var onQuestionsDropped: (() -> Void)?
+
+    /// Answers tap dev's question `id`, queued under `generation`, and puts
+    /// up the next one. An answer for another generation, or for an id no
+    /// pending question has, sends nothing: tap would only report
+    /// unknown_question, and the new process's q1 is not the question the
+    /// person read.
+    func answer(id: String, value: Bool, generation: Int) {
+        guard generation == questionGeneration, let index = pendingQuestions.firstIndex(where: { $0.id == id }) else {
+            session.log.append("an answer to the \(id) question of an earlier tap was dropped", source: .app)
+            return
+        }
+        let question = pendingQuestions.remove(at: index)
+        session.send(.answer(id: id, value: value))
+        session.log.append("answered the \(question.kind) question: \(value ? "allow" : "don't allow")", source: .app)
+        if index == 0, let next = pendingQuestions.first { onQuestion?(next) }
+    }
+
     /// Writes the buffer to the deck file before a talk, because tap
     /// present reads the file. A buffer that already equals the file needs
     /// no write. A save the document refuses (a disk conflict is showing)
@@ -297,12 +333,28 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
     }
 
     private func handle(_ event: TapEvent) {
-        guard case .fileChanged(let path, let list) = event, let fileURL = document?.fileURL else { return }
-        if FilePaths.same(URL(fileURLWithPath: path), fileURL) {
-            diskChanged()
-        } else if let list, let sentText = sourceSync.lastSentText {
-            // A component changed, and with it a slide's step count.
-            applySlideList(list, sentText: sentText, generation: sourceSync.lastSentGeneration)
+        switch event {
+        case .fileChanged(let path, let list):
+            guard let fileURL = document?.fileURL else { return }
+            if FilePaths.same(URL(fileURLWithPath: path), fileURL) {
+                diskChanged()
+            } else if let list, let sentText = sourceSync.lastSentText {
+                // A component changed, and with it a slide's step count.
+                applySlideList(list, sentText: sentText, generation: sourceSync.lastSentGeneration)
+            }
+        case .question(let id, let kind, let payload):
+            let question = PendingQuestion(id: id, kind: kind, payload: payload)
+            pendingQuestions.append(question)
+            if pendingQuestions.count == 1 { onQuestion?(question) }
+        case .questionClosed(let id):
+            // tap withdrew it (a reload made it stale): out of the queue, and
+            // off the screen if it was up; the next one, if any, comes up.
+            guard let index = pendingQuestions.firstIndex(where: { $0.id == id }) else { return }
+            pendingQuestions.remove(at: index)
+            onQuestionClosed?(id)
+            if index == 0, let next = pendingQuestions.first { onQuestion?(next) }
+        default:
+            break
         }
     }
 
@@ -840,6 +892,14 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
     }
 
     private func sessionStateChanged(_ state: TapSession.State) {
+        // The questions of a process that stopped, crashed or is restarting die with it.
+        if case .running = state {} else {
+            questionGeneration += 1
+            if !pendingQuestions.isEmpty {
+                pendingQuestions = []
+                onQuestionsDropped?()
+            }
+        }
         previewViewController.showSessionState(state, restartPolicy: session.restartPolicy, pausedMessage: pausedMessage)
         socket?.close()
         socket = nil

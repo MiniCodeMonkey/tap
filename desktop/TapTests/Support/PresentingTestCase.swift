@@ -58,8 +58,6 @@ class PresentingTestCase: HostedTestCase {
         }.joined(separator: ", ")
     }
 
-    var settingsFile: URL { configHome.appendingPathComponent("tap/settings.yaml") }
-
     /// The CLI's own answer to the consent question, at present.record.
     func writeRecordingConsent(_ record: Bool) throws {
         try FileManager.default.createDirectory(at: settingsFile.deletingLastPathComponent(), withIntermediateDirectories: true)

@@ -340,6 +340,9 @@ final class ExternalChangeTests: HostedTestCase {
         let controller = try XCTUnwrap(document.sessionController)
 
         let moved = deck.deletingLastPathComponent().appendingPathComponent("moved.md")
+        // The approval is keyed by path: tap would otherwise restart on this
+        // new, unapproved path and ask, raising a sheet mid-test.
+        try approveLiveCode(for: moved, drivers: ["sqlite"])
         try await document.save(to: moved, ofType: "net.daringfireball.markdown", for: .saveAsOperation)
         XCTAssertEqual(document.fileURL.map(FilePaths.canonical), FilePaths.canonical(moved))
         XCTAssertEqual(try String(contentsOf: deck, encoding: .utf8), theirs, "the other program's text stays in the old file")
@@ -362,6 +365,9 @@ final class ExternalChangeTests: HostedTestCase {
         let (deck, document, mine, theirs) = try await openDeckWithAShownConflict()
         let controller = try XCTUnwrap(document.sessionController)
         let renamed = deck.deletingLastPathComponent().appendingPathComponent("renamed.md")
+        // The approval is keyed by path: tap would otherwise restart on this
+        // new, unapproved path and ask, raising a sheet mid-test.
+        try approveLiveCode(for: renamed, drivers: ["sqlite"])
 
         // One coordinator instance for the whole move, as in
         // DeletedDeckTests.testDeckDeletedOrMovedWhileOpen.
