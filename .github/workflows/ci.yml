@@ -365,6 +365,30 @@ jobs:
         if: steps.check-desktop.outputs.exists == 'true'
         run: make -C desktop test
 
+      # A failed hosted run keeps what classifies a web content process
+      # that stopped answering: WebKit's and RunningBoard's log of the last
+      # 30 minutes (process launch, suspend and resume, which the test
+      # output does not carry), any WebContent crash or hang report, and
+      # the spindumps the tests saved on a first ready that never came.
+      - name: Collect WebKit diagnostics
+        if: failure() && steps.check-desktop.outputs.exists == 'true'
+        run: |
+          mkdir -p webkit-diagnostics
+          log show --last 30m --style compact --predicate 'subsystem == "com.apple.WebKit" OR process == "runningboardd"' > webkit-diagnostics/webkit-and-runningboard.log 2>&1 || true
+          for folder in "$HOME/Library/Logs/DiagnosticReports" /Library/Logs/DiagnosticReports; do
+            find "$folder" -iname '*WebContent*' -exec cp {} webkit-diagnostics/ \; 2>/dev/null || true
+          done
+          cp -R "$HOME/Library/Logs/TapTests" webkit-diagnostics/ 2>/dev/null || true
+          ls -la webkit-diagnostics
+
+      - name: Upload WebKit diagnostics
+        if: failure() && steps.check-desktop.outputs.exists == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: desktop-webkit-diagnostics
+          path: webkit-diagnostics/
+          retention-days: 14
+
   # The XCUITests drive the real app with the real pointer, so they run
   # here rather than on a person's Mac, where they take over the screen.
   # XCUITest needs automation mode; the runner has passwordless sudo, so
