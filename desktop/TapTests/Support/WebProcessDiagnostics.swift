@@ -116,6 +116,8 @@ extension HostedTestCase {
     private func spindump(_ processIdentifier: pid_t) async -> String {
         let file = TestDiagnosticsFolder.url.appendingPathComponent("spindump-\(processIdentifier)-\(Int(Date().timeIntervalSince1970)).txt")
         let result = await runBounded("/usr/bin/sudo", ["-n", "/usr/sbin/spindump", String(processIdentifier), "3", "-file", file.path], timeout: 60)
+        // spindump runs as root, so its file may be readable by root only.
+        _ = await runBounded("/usr/bin/sudo", ["-n", "/bin/chmod", "a+r", file.path], timeout: 5)
         guard let text = try? String(contentsOf: file, encoding: .utf8) else {
             return "none (\(result.split(separator: "\n").first.map(String.init) ?? "no output"))"
         }
