@@ -25,8 +25,8 @@ final class DeckFormViewController: NSViewController, NSTextFieldDelegate, NSTex
     let errorHintLabel = NSTextField(labelWithString: "The frontmatter is shown in the editor until it parses.")
     let scrollView = NSScrollView()
     /// What the form's shape was last built from (the entries of each map
-    /// key, the raw blocks, the unknown keys), set once the rows exist; a
-    /// difference on refresh rebuilds.
+    /// key, which settings are raw rows, the unknown keys), set once the
+    /// rows exist; a difference on refresh rebuilds.
     private(set) var builtForEntries: [String: [String]] = [:]
     private var isRefreshing = false
     /// True while `rebuild` runs, so the commit of an edit in progress
@@ -100,12 +100,13 @@ final class DeckFormViewController: NSViewController, NSTextFieldDelegate, NSTex
         key.defaultValue.map { "Default (\($0))" } ?? "Default"
     }
 
-    /// Reads the text again: the fields' values follow it, and the rows
-    /// are rebuilt when the frontmatter's shape changed (an entry added
-    /// to a map, a raw block changed, a key tap does not know). Nothing
-    /// runs while the view is hidden (the Preview tab is up); `showTab`
-    /// calls it when the Deck tab comes up. The field being typed in keeps
-    /// what was typed.
+    /// Reads the text again: the fields' and raw rows' values follow it,
+    /// and the rows are rebuilt when the frontmatter's shape changed (an
+    /// entry added to a map, a setting that became or stopped being a raw
+    /// row, a key tap does not know). Nothing runs while the view is
+    /// hidden (the Preview tab is up); `showTab` calls it when the Deck
+    /// tab comes up. The field or raw row being typed in keeps what was
+    /// typed, and its focus.
     func refresh() {
         guard isViewLoaded, !view.isHiddenOrHasHiddenAncestor, deckErrors.isEmpty else { return }
         let frontmatter = Frontmatter(text: text())
@@ -116,7 +117,8 @@ final class DeckFormViewController: NSViewController, NSTextFieldDelegate, NSTex
         refreshValues(from: frontmatter)
     }
 
-    /// The field editor of the form's control being typed in, if any.
+    /// The field editor of the form's control being typed in, or the raw
+    /// row's text view being typed in, if any.
     private var editingText: NSText? {
         guard let editing = view.window?.firstResponder as? NSText, let editingView = editing as? NSView, editingView.isDescendant(of: view) else { return nil }
         return editing
@@ -130,6 +132,10 @@ final class DeckFormViewController: NSViewController, NSTextFieldDelegate, NSTex
             if let editing, editing.delegate === binding.control { continue }
             guard let key = DeckSchema.key(at: binding.path, in: keys) else { continue }
             show(frontmatter.value(at: binding.path), in: binding.control, for: key)
+        }
+        for binding in rawEditors where binding.textView !== editing {
+            let raw = frontmatter.rawBlock(at: binding.path) ?? ""
+            if binding.textView.string != raw { binding.textView.string = raw }
         }
     }
 
@@ -155,21 +161,20 @@ final class DeckFormViewController: NSViewController, NSTextFieldDelegate, NSTex
     }
 
     /// What the form's shape depends on: the entries under each map key
-    /// (block or flow style), the text of every raw block a map entry has
-    /// (a non-scalar setting that exists, from the schema), and every key
-    /// the schema does not list. Read from the frontmatter and the schema
-    /// alone, never from the rows, so a build and a refresh compare the
-    /// same thing.
+    /// (block or flow style), which of their settings are raw rows, and
+    /// every key the schema does not list. A raw row's text is not part of
+    /// the shape: `refreshValues` puts it in the row, as it does a field's
+    /// value, so a change to it neither rebuilds the rows nor takes the
+    /// focus of the row being typed in. Read from the frontmatter and the
+    /// schema alone, never from the rows, so a build and a refresh compare
+    /// the same thing.
     func entries(in frontmatter: Frontmatter) -> [String: [String]] {
         var result: [String: [String]] = [:]
         for key in keys where key.type == "map" {
             let names = frontmatter.entryNames(at: [key.name])
             result[key.name] = names
             for name in names {
-                for child in key.keys where !child.isScalar {
-                    let path = [key.name, name, child.name]
-                    if let raw = frontmatter.rawBlock(at: path) { result["raw:" + path.joined(separator: ".")] = [raw] }
-                }
+                result["raw:" + ([key.name, name].joined(separator: "."))] = key.keys.filter { isRawRow($0, at: [key.name, name, $0.name], in: frontmatter) }.map(\.name)
             }
         }
         result["*"] = frontmatter.entries.map(\.key).filter { name in !keys.contains { $0.name == name } }
@@ -278,10 +283,10 @@ final class DeckFormViewController: NSViewController, NSTextFieldDelegate, NSTex
             var entryRows: [NSView] = [header]
             for child in key.keys {
                 let path = entryPath + [child.name]
-                if child.isScalar, frontmatter.entry(at: path)?.isMultiLine != true {
-                    entryRows.append(row(for: child, path: path))
-                } else if frontmatter.entry(at: path) != nil {
+                if isRawRow(child, at: path, in: frontmatter) {
                     entryRows.append(rawRow(for: child, path: path, in: frontmatter))
+                } else if child.isScalar {
+                    entryRows.append(row(for: child, path: path))
                 }
             }
             let card = NSBox()
@@ -317,6 +322,15 @@ final class DeckFormViewController: NSViewController, NSTextFieldDelegate, NSTex
         addSection(title: key.label, rows: rows)
         for card in rows.compactMap({ $0 as? NSBox }) { card.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -60).isActive = true }
         hint.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -60).isActive = true
+    }
+
+    /// Whether a map entry's setting is shown as its own lines of text
+    /// rather than a field: one the deck sets with deeper structure
+    /// (connections), or a scalar written over several lines (a
+    /// block-style args list). A scalar the deck does not set is a field.
+    func isRawRow(_ key: SchemaKey, at path: [String], in frontmatter: Frontmatter) -> Bool {
+        guard let entry = frontmatter.entry(at: path) else { return false }
+        return !key.isScalar || entry.isMultiLine
     }
 
     /// A setting the form has no field for, as its own lines: the entry's

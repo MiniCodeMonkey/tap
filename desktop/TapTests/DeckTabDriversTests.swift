@@ -63,9 +63,9 @@ final class DeckTabDriversTests: HostedTestCase {
         XCTAssertTrue(editor.string.contains("    command: /bin/cat\n  shell: {}\n---\n"), "only the Remove was undone")
     }
 
-    func testRawSettingsAreEditedAsText() async throws {
-        let folder = try Fixtures.temporaryFolder()
-        let deck = folder.appendingPathComponent("connections.md")
+    /// A deck whose sqlite driver has a connections map, in a folder of its own.
+    func connectionsDeck() throws -> URL {
+        let deck = try Fixtures.temporaryFolder().appendingPathComponent("connections.md")
         try """
         ---
         title: Connections
@@ -82,10 +82,14 @@ final class DeckTabDriversTests: HostedTestCase {
         SELECT 1;
         ```
         """.write(to: deck, atomically: true, encoding: .utf8)
-        let (_, controller, form) = try await openOnTheDeckTab(deck)
+        return deck
+    }
+
+    func testRawSettingsAreEditedAsText() async throws {
+        let (_, controller, form) = try await openOnTheDeckTab(try connectionsDeck())
         let editor = controller.editor
         let original = "    connections:\n      incident:\n        path: ./incident.db\n"
-        // The rows rebuild whenever a raw block changes, so the editor is fetched again after every edit.
+        // The editor is fetched again after every edit, so the checks hold whether or not the rows were rebuilt.
         var raw = try XCTUnwrap(form.rawEditor("drivers.sqlite.connections"), "a map inside a driver is edited as its own lines")
         XCTAssertEqual(raw.string, original)
         raw.string = "    connections:\n      incident:\n        path: ${INCIDENT_DB}\n"
@@ -115,6 +119,71 @@ final class DeckTabDriversTests: HostedTestCase {
         title.stringValue = "Renamed"
         title.sendAction(title.action, to: title.target)
         XCTAssertTrue(form.rawEditor("drivers.sqlite.connections") === raw)
+    }
+
+    /// An args list written as a block is its own lines of text, as the
+    /// DeckTabDrivers board draws it; the row follows the text (an undo, a
+    /// disk load) and never writes stale lines back.
+    func testABlockStyleListIsEditedAsTextAndFollowsTheText() async throws {
+        let deck = try Fixtures.temporaryFolder().appendingPathComponent("args.md")
+        try "---\ntitle: Args\ndrivers:\n  incidents:\n    command: /bin/echo\n    args:\n    - one\n    - two\n---\n\n# One\n".write(to: deck, atomically: true, encoding: .utf8)
+        let (_, controller, form) = try await openOnTheDeckTab(deck)
+        let editor = controller.editor
+        XCTAssertEqual((form.field("drivers.incidents.command") as? NSTextField)?.stringValue, "/bin/echo")
+        XCTAssertNil(form.field("drivers.incidents.args"), "no one-line field for a list on several lines")
+        let original = "    args:\n    - one\n    - two\n"
+        var raw = try XCTUnwrap(form.rawEditor("drivers.incidents.args"))
+        XCTAssertEqual(raw.string, original)
+
+        // An item at the entry's own indent stays in the entry.
+        raw.string = "    args:\n    - one\n    - three"
+        form.textDidEndEditing(Notification(name: NSText.didEndEditingNotification, object: raw))
+        XCTAssertTrue(editor.string.contains("    - one\n    - three\n---\n"), String(editor.string.prefix(120)))
+        XCTAssertEqual(editor.undoManager?.undoActionName, "Change Args")
+        try await waitForTheUndoStepToClose(editor.undoManager)
+
+        // An undo: the row shows the lines back, and leaving it writes nothing.
+        editor.undoManager?.undo()
+        XCTAssertTrue(editor.string.contains(original))
+        raw = try XCTUnwrap(form.rawEditor("drivers.incidents.args"))
+        XCTAssertEqual(raw.string, original, "the row follows an undo")
+        let undone = editor.string
+        form.textDidEndEditing(Notification(name: NSText.didEndEditingNotification, object: raw))
+        XCTAssertEqual(editor.string, undone, "a focus in and out writes no stale lines back")
+
+        // A change from outside the form (a disk load goes through the same edit) that keeps the list on several lines.
+        var range = (editor.string as NSString).range(of: "    - two\n")
+        editor.replaceText(in: range, with: "    - pulled\n", actionName: "Edit")
+        raw = try XCTUnwrap(form.rawEditor("drivers.incidents.args"))
+        XCTAssertEqual(raw.string, "    args:\n    - one\n    - pulled\n", "the row shows the pulled lines")
+
+        // One that puts the list on one line: the row becomes a field.
+        range = (editor.string as NSString).range(of: "args:\n    - one\n    - pulled")
+        editor.replaceText(in: range, with: "args: [one]", actionName: "Edit")
+        XCTAssertNil(form.rawEditor("drivers.incidents.args"))
+        XCTAssertEqual((form.field("drivers.incidents.args") as? NSTextField)?.stringValue, "[one]")
+    }
+
+    /// An autosave writes what is typed in a raw row so far and leaves the
+    /// person typing in it, as it does for a field.
+    func testAnAutosaveWritesARawRowWithoutTakingItsFocus() async throws {
+        let (document, controller, form) = try await openOnTheDeckTab(try connectionsDeck())
+        let deck = try XCTUnwrap(document.fileURL)
+        let raw = try XCTUnwrap(form.rawEditor("drivers.sqlite.connections"))
+        let window = try XCTUnwrap(raw.window)
+        XCTAssertTrue(window.makeFirstResponder(raw))
+        let typed = "    connections:\n      incident:\n        path: ./other.db"
+        raw.string = typed
+        var saved: Error?? = nil
+        document.save(to: deck, ofType: document.fileType ?? "net.daringfireball.markdown", for: .autosaveInPlaceOperation) { saved = .some($0) }
+        try await waitUntil(timeout: 10, "the autosave") { saved != nil }
+        XCTAssertTrue(try String(contentsOf: deck, encoding: .utf8).contains("        path: ./other.db\n---\n"))
+        XCTAssertTrue(form.rawEditor("drivers.sqlite.connections") === raw, "the rows were not rebuilt")
+        XCTAssertTrue(window.firstResponder === raw, "still typing")
+        XCTAssertEqual(raw.string, typed, "what is typed stays as typed")
+        raw.string = typed + "x"
+        window.makeFirstResponder(nil)
+        XCTAssertTrue(controller.editor.string.contains("        path: ./other.dbx\n"))
     }
 
     func testUnknownKeysAreListedUnderOtherKeys() async throws {
