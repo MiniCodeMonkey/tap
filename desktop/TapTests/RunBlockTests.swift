@@ -135,6 +135,13 @@ final class RunBlockTests: HostedTestCase {
         let clicked = await preview.clickRunButton()
         XCTAssertEqual(clicked, "clicked")
         _ = try await waitForResult(containing: "hello via env", in: preview)
-        // Task 12 adds the Deck tab's hint here.
+        // The Deck tab shows a hint to use ${NAME} instead of a literal password.
+        Task { await AppEnvironment.shared.deckSchema.load() }
+        try await waitUntil(timeout: 30, "the schema") { AppEnvironment.shared.deckSchema.isLoaded }
+        let deckWindow = try XCTUnwrap(document.windowControllers.first as? DeckWindowController)
+        deckWindow.showDeckTab(nil)
+        let hint = try XCTUnwrap(controller.deckForm.hintLabel(for: "drivers"))
+        XCTAssertTrue(hint.stringValue.contains("${NAME}"))
+        XCTAssertTrue(hint.stringValue.lowercased().contains("password"))
     }
 }

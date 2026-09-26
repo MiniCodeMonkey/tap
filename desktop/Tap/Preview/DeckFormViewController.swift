@@ -8,7 +8,7 @@ import AppKit
 /// too. A key with fixed nested keys (an object) is a card of fields; a
 /// map of named entries (the drivers) is a card per entry (Task 12); keys
 /// the schema does not list are read-only rows under Other keys (Task 12).
-final class DeckFormViewController: NSViewController, NSTextFieldDelegate {
+final class DeckFormViewController: NSViewController, NSTextFieldDelegate, NSTextViewDelegate {
     /// The deck's text now. The session controller sets it.
     var text: () -> String = { "" }
     /// Applies one edit to the frontmatter as one undo step with the name given.
@@ -33,6 +33,18 @@ final class DeckFormViewController: NSViewController, NSTextFieldDelegate {
     /// (which ends editing, which fires `controlChanged`) applies its edit
     /// once and does not refresh or rebuild from inside the rebuild.
     private var isRebuilding = false
+    private var hintLabels: [String: NSTextField] = [:]
+    private var addFields: [String: NSTextField] = [:]
+    private var addButtons: [String: NSButton] = [:]
+    private var removeButtons: [String: NSButton] = [:]
+    private var rawEditors: [(path: [String], textView: NSTextView)] = []
+    private(set) var otherKeyLabels: [NSTextField] = []
+
+    func hintLabel(for map: String) -> NSTextField? { hintLabels[map] }
+    func addEntryField(for map: String) -> NSTextField? { addFields[map] }
+    func addEntryButton(for map: String) -> NSButton? { addButtons[map] }
+    func removeButton(for path: String) -> NSButton? { removeButtons[path] }
+    func rawEditor(_ path: String) -> NSTextView? { rawEditors.first { $0.path.joined(separator: ".") == path }?.textView }
 
     final class FlippedClipView: NSClipView {
         override var isFlipped: Bool { true }
@@ -219,11 +231,190 @@ final class DeckFormViewController: NSViewController, NSTextFieldDelegate {
         builtForEntries = entries(in: frontmatter)
     }
 
-    /// A map's card per entry, the raw editors and the Other keys rows arrive in Task 12.
-    func addMapSection(for key: SchemaKey, in frontmatter: Frontmatter) {}
-    func addOtherKeysSection(_ frontmatter: Frontmatter) {}
-    func clearMapRows() {}
-    func applyRawEditor(_ textView: NSTextView) {}
+    func clearMapRows() {
+        hintLabels = [:]
+        addFields = [:]
+        addButtons = [:]
+        removeButtons = [:]
+        rawEditors = []
+        otherKeyLabels = []
+    }
+
+    /// A map key (the drivers): a card per entry the frontmatter declares,
+    /// its name and Remove in the header, the entry's scalar settings as
+    /// fields, its deeper structure (connections, a block-style args list)
+    /// as its own lines of text; under the cards a name field with Add for
+    /// a new entry, and the hint that keeps secrets out of the deck. The
+    /// entry names come from the text, the settings from the schema; the
+    /// built-in driver names are tap's and the person types one, so Swift
+    /// lists none.
+    func addMapSection(for key: SchemaKey, in frontmatter: Frontmatter) {
+        var rows: [NSView] = []
+        for name in frontmatter.entryNames(at: [key.name]) {
+            let entryPath = [key.name, name]
+            let remove = NSButton(title: "Remove", target: self, action: #selector(removePressed(_:)))
+            remove.bezelStyle = .rounded
+            remove.controlSize = .small
+            remove.setAccessibilityIdentifier("deck-remove-\(entryPath.joined(separator: "."))")
+            removeButtons[entryPath.joined(separator: ".")] = remove
+            let header = NSStackView(views: [NSTextField(labelWithString: name), NSView(), remove])
+            header.orientation = .horizontal
+            var entryRows: [NSView] = [header]
+            for child in key.keys {
+                let path = entryPath + [child.name]
+                if child.isScalar, frontmatter.entry(at: path)?.isMultiLine != true {
+                    entryRows.append(row(for: child, path: path))
+                } else if frontmatter.entry(at: path) != nil {
+                    entryRows.append(rawRow(for: child, path: path, in: frontmatter))
+                }
+            }
+            let card = NSBox()
+            card.titlePosition = .noTitle
+            let column = NSStackView(views: entryRows)
+            column.orientation = .vertical
+            column.alignment = .leading
+            column.spacing = 8
+            column.edgeInsets = NSEdgeInsets(top: 6, left: 6, bottom: 6, right: 6)
+            card.contentView = column
+            header.widthAnchor.constraint(equalTo: column.widthAnchor, constant: -12).isActive = true
+            rows.append(card)
+        }
+        let nameField = NSTextField(string: "")
+        nameField.placeholderString = "shell, sqlite, mysql, postgres, or a custom name"
+        nameField.setAccessibilityIdentifier("deck-add-\(key.name)")
+        nameField.widthAnchor.constraint(greaterThanOrEqualToConstant: 260).isActive = true
+        let add = NSButton(title: "Add", target: self, action: #selector(addPressed(_:)))
+        add.bezelStyle = .rounded
+        add.setAccessibilityIdentifier("deck-add-button-\(key.name)")
+        addFields[key.name] = nameField
+        addButtons[key.name] = add
+        let addRow = NSStackView(views: [nameField, add])
+        addRow.orientation = .horizontal
+        addRow.spacing = 8
+        rows.append(addRow)
+        let hint = NSTextField(wrappingLabelWithString: "Use ${NAME} for passwords and other secrets: tap reads NAME from your login shell's environment when it runs the driver, so the deck is safe to share.")
+        hint.font = .systemFont(ofSize: 11)
+        hint.textColor = .secondaryLabelColor
+        hint.setAccessibilityIdentifier("deck-hint-\(key.name)")
+        hintLabels[key.name] = hint
+        rows.append(hint)
+        addSection(title: key.label, rows: rows)
+        for card in rows.compactMap({ $0 as? NSBox }) { card.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -60).isActive = true }
+        hint.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -60).isActive = true
+    }
+
+    /// A setting the form has no field for, as its own lines: the entry's
+    /// text as written, indented as it is, put back where it was.
+    private func rawRow(for key: SchemaKey, path: [String], in frontmatter: Frontmatter) -> NSView {
+        let label = NSTextField(labelWithString: key.label)
+        label.alignment = .right
+        label.textColor = .secondaryLabelColor
+        label.font = .systemFont(ofSize: 12)
+        label.widthAnchor.constraint(equalToConstant: 130).isActive = true
+        let caption = NSTextField(labelWithString: "YAML, as written in the frontmatter")
+        caption.font = .systemFont(ofSize: 10)
+        caption.textColor = .tertiaryLabelColor
+        let textView = NSTextView(frame: NSRect(x: 0, y: 0, width: 300, height: 72))
+        textView.font = .monospacedSystemFont(ofSize: 12, weight: .regular)
+        textView.isRichText = false
+        textView.isAutomaticQuoteSubstitutionEnabled = false
+        textView.string = frontmatter.rawBlock(at: path) ?? ""
+        textView.delegate = self
+        textView.setAccessibilityIdentifier("deck-raw-\(path.joined(separator: "."))")
+        let scroll = NSScrollView()
+        scroll.documentView = textView
+        scroll.hasVerticalScroller = true
+        scroll.borderType = .bezelBorder
+        scroll.heightAnchor.constraint(equalToConstant: 72).isActive = true
+        scroll.widthAnchor.constraint(greaterThanOrEqualToConstant: 300).isActive = true
+        textView.autoresizingMask = [.width]
+        rawEditors.append((path, textView))
+        let column = NSStackView(views: [caption, scroll])
+        column.orientation = .vertical
+        column.alignment = .leading
+        column.spacing = 2
+        let row = NSStackView(views: [label, column])
+        row.orientation = .horizontal
+        row.alignment = .top
+        row.spacing = 10
+        return row
+    }
+
+    /// Keys the schema does not list, as written and read-only.
+    func addOtherKeysSection(_ frontmatter: Frontmatter) {
+        let unknown = frontmatter.entries.filter { entry in !keys.contains { $0.name == entry.key } }
+        guard !unknown.isEmpty else { return }
+        var rows: [NSView] = []
+        for entry in unknown {
+            let label = NSTextField(wrappingLabelWithString: frontmatter.text(of: entry).trimmingCharacters(in: .newlines))
+            label.font = .monospacedSystemFont(ofSize: 12, weight: .regular)
+            label.isSelectable = true
+            label.setAccessibilityIdentifier("deck-other-\(entry.key)")
+            otherKeyLabels.append(label)
+            rows.append(label)
+        }
+        addSection(title: "Other keys", rows: rows)
+    }
+
+    @objc private func addPressed(_ sender: NSButton) {
+        guard let map = addButtons.first(where: { $0.value === sender })?.key, let field = addFields[map] else { return }
+        _ = commitEditing()
+        let name = field.stringValue.trimmingCharacters(in: .whitespaces)
+        guard !name.isEmpty, name.range(of: "^[A-Za-z0-9_-]+$", options: .regularExpression) != nil else {
+            NSSound.beep()
+            return
+        }
+        let frontmatter = Frontmatter(text: text())
+        guard !frontmatter.entryNames(at: [map]).contains(name), let replacement = frontmatter.setting(path: [map, name], to: "{}") else {
+            NSSound.beep()
+            return
+        }
+        field.stringValue = ""
+        applyEdit(replacement, "Add \(name)")
+        refresh()
+    }
+
+    @objc private func removePressed(_ sender: NSButton) {
+        guard let joined = removeButtons.first(where: { $0.value === sender })?.key else { return }
+        _ = commitEditing()
+        let path = joined.split(separator: ".").map(String.init)
+        guard let name = path.last, let replacement = Frontmatter(text: text()).setting(path: path, to: nil) else {
+            // A pair inside a flow map is not rewritten: said, not swallowed.
+            NSSound.beep()
+            return
+        }
+        applyEdit(replacement, "Remove \(name)")
+        refresh()
+    }
+
+    /// A raw editor lost focus, or an autosave took its text: its lines
+    /// replace the entry's, with the file's own line endings and one at
+    /// the end. A line that is "---" would close the frontmatter there,
+    /// and a first line shallower than the entry's indent would leave its
+    /// parent: both are refused with a beep, and the text view reads the
+    /// block again.
+    func applyRawEditor(_ textView: NSTextView) {
+        guard let binding = rawEditors.first(where: { $0.textView === textView }), let key = DeckSchema.key(at: binding.path, in: keys) else { return }
+        let frontmatter = Frontmatter(text: text())
+        var raw = textView.string.replacingOccurrences(of: "\r\n", with: "\n").replacingOccurrences(of: "\n", with: frontmatter.lineEnding)
+        if !raw.hasSuffix(frontmatter.lineEnding) { raw += frontmatter.lineEnding }
+        guard raw != frontmatter.rawBlock(at: binding.path), let entry = frontmatter.entry(at: binding.path) else { return }
+        let lines = raw.components(separatedBy: frontmatter.lineEnding)
+        let firstIndent = lines.first.map { $0.prefix { $0 == " " }.count } ?? 0
+        guard !lines.contains(where: { $0.trimmingCharacters(in: .whitespaces) == "---" }), firstIndent >= entry.indent,
+              let replacement = frontmatter.settingRawBlock(at: binding.path, to: raw) else {
+            NSSound.beep()
+            textView.string = frontmatter.rawBlock(at: binding.path) ?? ""
+            return
+        }
+        applyEdit(replacement, "Change \(key.label)")
+        if !isRebuilding { refresh() }
+    }
+
+    func textDidEndEditing(_ notification: Notification) {
+        guard let textView = notification.object as? NSTextView else { return }
+        applyRawEditor(textView)
+    }
 
     func addSection(title: String, rows: [NSView]) {
         let box = NSBox()
