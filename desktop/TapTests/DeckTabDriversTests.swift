@@ -111,6 +111,10 @@ final class DeckTabDriversTests: HostedTestCase {
         form.textDidEndEditing(Notification(name: NSText.didEndEditingNotification, object: raw))
         XCTAssertEqual(editor.string, accepted, "a block that lost its indent would leave its driver")
         raw = try XCTUnwrap(form.rawEditor("drivers.sqlite.connections"))
+        raw.string = "  connections:\n      incident:\n        path: y.db\n"
+        form.textDidEndEditing(Notification(name: NSText.didEndEditingNotification, object: raw))
+        XCTAssertEqual(editor.string, accepted, "a first line at the drivers' indent would make connections a driver")
+        raw = try XCTUnwrap(form.rawEditor("drivers.sqlite.connections"))
         raw.string = "    connections:\n  shell: {}\n"
         form.textDidEndEditing(Notification(name: NSText.didEndEditingNotification, object: raw))
         XCTAssertEqual(editor.string, accepted, "a later line at the drivers' indent would declare a driver from the Connections box")
