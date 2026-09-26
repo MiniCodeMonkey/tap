@@ -113,14 +113,23 @@ final class RunBlockTests: HostedTestCase {
 
     func testSecretsInDriverSettings() async throws {
         // A driver setting reads ${NAME} from the environment tap runs in, which the app fills from
-        // the login shell: the command itself is the variable, so tap's own expansion is what runs.
-        AppEnvironment.shared.extraEnvironment["TAP_TEST_COMMAND"] = "/bin/cat"
-        addTeardownBlock { @MainActor in AppEnvironment.shared.extraEnvironment["TAP_TEST_COMMAND"] = nil }
+        // the login shell: the command itself is a variable, so tap's own expansion is what runs, and
+        // an argument names a variable that looks like a secret, which tap never shows or stores.
+        AppEnvironment.shared.extraEnvironment["TAP_TEST_COMMAND"] = "/bin/sh"
+        AppEnvironment.shared.extraEnvironment["TAP_TEST_TOKEN"] = "s3cret-value"
+        addTeardownBlock { @MainActor in
+            AppEnvironment.shared.extraEnvironment["TAP_TEST_COMMAND"] = nil
+            AppEnvironment.shared.extraEnvironment["TAP_TEST_TOKEN"] = nil
+        }
         let (document, controller, _, sheet) = try await openUnapprovedAndWaitForTheQuestion("env-driver.md")
-        XCTAssertEqual(sheet.driverLabels.map(\.stringValue), ["echoer: 1 block on slide 2, runs: /bin/cat"],
-                       "the sheet shows the command as tap will run it, the variable expanded")
+        XCTAssertEqual(sheet.driverLabels.map(\.stringValue), ["echoer: 1 block on slide 2, runs: /bin/sh -c cat; : ${TAP_TEST_TOKEN}"],
+                       "the sheet shows the command as tap will run it: a plain variable expanded, a secret-looking one masked")
+        XCTAssertFalse(sheet.driverLabels.contains { $0.stringValue.contains("s3cret-value") })
         try XCTUnwrap(sheet.button(titled: "Allow")).performClick(nil)
-        try await waitUntil(timeout: 10, "the approval") { self.storedApprovals().contains("drivers: [echoer]") }
+        try await waitUntil(timeout: 10, "the approval") { self.storedApprovals().contains("drivers: [echoer]") && self.storedApprovals().contains("commandDigests:") }
+        let stored = storedApprovals()
+        XCTAssertFalse(stored.contains("s3cret-value"), "the settings never hold the secret's value: \(stored)")
+        XCTAssertTrue(stored.contains("${TAP_TEST_TOKEN}"), "they hold the command as written: \(stored)")
         try await waitForRunButtons(#"["Run"]"#, in: controller, document: document, slide: 2)
         let preview = controller.previewViewController
         let clicked = await preview.clickRunButton()
