@@ -31,7 +31,7 @@ final class RunBlockTests: HostedTestCase {
         // The page sends {slide: 4, block: 1, revision}; tap runs the block through the sqlite driver's in-memory default.
         let result = try await waitForResult(containing: "two", in: preview)
         XCTAssertTrue(result.contains("one"), "the columns: \(result)")
-        let table = await preview.pageValue("document.querySelector('.result-container table.result-table') ? 'table' : 'no table'")
+        let table = await preview.liveCodeValue("document.querySelector('.result-container table.result-table') ? 'table' : 'no table'")
         XCTAssertEqual(table, "table", "the block shows the output table")
     }
 

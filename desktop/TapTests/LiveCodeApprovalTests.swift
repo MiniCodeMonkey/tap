@@ -101,6 +101,10 @@ final class LiveCodeApprovalTests: HostedTestCase {
         try await Task.sleep(nanoseconds: 1_000_000_000)
         XCTAssertNil(controller.pendingQuestion)
         XCTAssertTrue(storedApprovals().contains("drivers: [shell, sqlite]"), "the test wrote tap's record itself")
+        // The page read itself, not a description of WebKit's optional: slide 1 has no block.
+        try await waitForPreview(document, slide: 1)
+        let none = await controller.previewViewController.runButtonLabels()
+        XCTAssertEqual(none, "[]")
         try await waitForRunButtons(#"["Run"]"#, in: controller, document: document, slide: 4)
     }
 

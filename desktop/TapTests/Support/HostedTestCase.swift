@@ -181,19 +181,24 @@ class HostedTestCase: XCTestCase {
     /// Moves the cursor to `slide` and polls the page until its Run buttons
     /// read `expected` (a JSON list, see `runButtonLabels`). Bounded, and
     /// independent of how many times the page reported ready on the way:
-    /// tap's reload after an answer, or any settle, is not what is waited for.
+    /// tap's reload after an answer can put the page back on another slide
+    /// between polls, so every poll that finds the preview elsewhere moves
+    /// the cursor to `slide` again before it reads.
     func waitForRunButtons(_ expected: String, in controller: DeckSessionController, document: DeckDocument, slide: Int, timeout: TimeInterval = 20) async throws {
         controller.jumpToSlide(number: slide)
         try await waitForPreview(document, slide: slide)
+        let preview = controller.previewViewController
         let deadline = Date().addingTimeInterval(timeout)
-        var labels = await controller.previewViewController.runButtonLabels()
+        var labels = await preview.runButtonLabels()
         while labels != expected {
             if Date() > deadline {
-                XCTFail("the page's Run buttons on slide \(slide) read \(labels), not \(expected), after \(Int(timeout)) s")
+                XCTFail("the page's Run buttons on slide \(slide) read \(labels), not \(expected), after \(Int(timeout)) s; "
+                        + "lastReady=\(String(describing: preview.lastReady))")
                 throw CancellationError()
             }
             try await Task.sleep(nanoseconds: 200_000_000)
-            labels = await controller.previewViewController.runButtonLabels()
+            if preview.lastReady?.slide != slide { controller.jumpToSlide(number: slide) }
+            labels = await preview.runButtonLabels()
         }
     }
 
