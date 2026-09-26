@@ -57,11 +57,15 @@ class HostedTestCase: XCTestCase {
 
     /// Allow (true) when `payload` asks about a deck in `preApprovedDecks`
     /// and every driver it names was approved for that deck; otherwise nil,
-    /// and the sheet shows. Never false.
+    /// and the sheet shows. Never false. A pre-approval covers the drivers
+    /// as the fixture declares them, so a question about a changed command
+    /// or a changed value in one (tap names the command it replaces, or
+    /// says a value changed) is never answered here: the sheet shows.
     static func preApprovedAnswer(for payload: QuestionPayload, preApprovedDecks: [String: Set<String>]) -> Bool? {
         guard let deck = payload.deck, let approved = preApprovedDecks[deck],
               let drivers = payload.drivers, !drivers.isEmpty,
-              drivers.allSatisfy({ approved.contains($0.name) }) else { return nil }
+              drivers.allSatisfy({ approved.contains($0.name) }),
+              !drivers.contains(where: { $0.previousCommand != nil || $0.valueChanged }) else { return nil }
         return true
     }
 

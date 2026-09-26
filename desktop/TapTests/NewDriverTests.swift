@@ -69,6 +69,11 @@ final class NewDriverTests: HostedTestCase {
         let editor = controller.editor
         try await waitForBoxes(document, count: 4)
         let deck = try XCTUnwrap(document.fileURL)
+        // The open-time question about fortune is answered by the test's
+        // pre-approval, and tap stores its command. An edit before that
+        // store would withdraw the open-time question, and tap's next one
+        // would name no command it replaces.
+        try await waitUntil(timeout: 30, "the open-time approval of fortune's command stored") { self.storedApprovals().contains("/bin/cat") }
         // The frontmatter is hidden; the edit goes through the editor's programmatic path, as the Deck tab's does.
         let range = (editor.string as NSString).range(of: "command: /bin/cat")
         editor.replaceText(in: range, with: "command: /usr/bin/true", actionName: "Change Command")
