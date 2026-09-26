@@ -251,8 +251,14 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
     func allowDriver(_ name: String) {
         // While tap reports a broken frontmatter, every live block reads as
         // undeclared: the frontmatter's problem is the one to fix.
-        guard editor.deckErrors.isEmpty, let replacement = Frontmatter(text: editor.string).addingDriver(name) else {
-            // Declared already, a drivers value the edit cannot rewrite (`drivers: ~`), or a broken frontmatter: nothing to do, and not silently.
+        guard editor.deckErrors.isEmpty else {
+            session.log.append("the fix-it for \(name) did nothing: tap reports a problem with the frontmatter, which is the one to fix", source: .app)
+            NSSound.beep()
+            return
+        }
+        guard let replacement = Frontmatter(text: editor.string).addingDriver(name) else {
+            // Declared already, or a drivers value the edit cannot rewrite (`drivers: ~`): nothing to do, and not silently.
+            session.log.append("the fix-it for \(name) did nothing: the deck declares it already, or its drivers value is not one the fix-it can add to", source: .app)
             NSSound.beep()
             return
         }

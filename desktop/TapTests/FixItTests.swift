@@ -124,5 +124,6 @@ final class FixItTests: HostedTestCase {
         let text = editor.string
         controller.allowDriver("shell")
         XCTAssertEqual(editor.string, text, "the fix-it edits nothing while the frontmatter is broken")
+        XCTAssertTrue(controller.session.log.text.contains("the fix-it for shell did nothing: tap reports a problem with the frontmatter"), "and says why")
     }
 }
