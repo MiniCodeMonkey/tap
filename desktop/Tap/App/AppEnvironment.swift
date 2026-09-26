@@ -25,6 +25,8 @@ final class AppEnvironment {
     var thumbnailCache = ThumbnailCache()
     /// Every layout tap offers, loaded once from the bundled tap.
     lazy var layoutCatalog = LayoutCatalogLoader(executable: { [weak self] in self?.tapExecutableURL ?? URL(fileURLWithPath: "/usr/bin/false") })
+    /// Every frontmatter key tap understands, loaded once from the bundled tap.
+    lazy var deckSchema = DeckSchemaLoader(executable: { [weak self] in self?.tapExecutableURL ?? URL(fileURLWithPath: "/usr/bin/false") })
     /// The layout New Slide inserts: the one used last.
     var lastLayout = LastLayout()
     /// Where copied slides go and paste reads from: the general pasteboard,
@@ -153,6 +155,7 @@ final class AppEnvironment {
             NotificationCenter.default.post(name: Self.didLoadNotification, object: self)
         }
         Task { await layoutCatalog.load() }
+        Task { await deckSchema.load() }
     }
 
     func tapEnvironment() async -> [String: String] {

@@ -240,6 +240,7 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
         let preview = sessionController.previewViewController
         preview.view.removeFromSuperview()
         preview.removeFromParent()
+        sessionController.inspectorViewController.previewDetached()
         let controller = PreviewWindowController(title: "\(window?.title ?? "Deck"): Preview")
         controller.deckWindowController = self
         controller.window?.contentViewController = preview
@@ -248,6 +249,19 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
         previewWindowController = controller
         splitViewController.setPreviewHidden(true)
         controller.window?.makeKeyAndOrderFront(nil)
+    }
+
+    /// View > Preview (Cmd+Option+1). A hidden pane (Cmd+Option+0) comes back, or the tab would change out of sight.
+    @objc func showPreviewTab(_ sender: Any?) {
+        if previewWindowController == nil, splitViewController.isPreviewHidden { splitViewController.setPreviewHidden(false) }
+        sessionController.inspectorViewController.showTab(.preview)
+    }
+
+    /// View > Deck (Cmd+Option+2): the frontmatter's form. Disabled until tap's schema has loaded.
+    @objc func showDeckTab(_ sender: Any?) {
+        guard AppEnvironment.shared.deckSchema.isLoaded else { return }
+        if splitViewController.isPreviewHidden { splitViewController.setPreviewHidden(false) }
+        sessionController.inspectorViewController.showTab(.deck)
     }
 
     /// Puts the preview back next to the editor.
@@ -885,6 +899,7 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
         if menuItem.action == #selector(togglePreview(_:)) {
             menuItem.title = splitViewController.isPreviewHidden ? "Show Preview" : "Hide Preview"
         }
+        if menuItem.action == #selector(showDeckTab(_:)) { return AppEnvironment.shared.deckSchema.isLoaded }
         if menuItem.action == #selector(togglePreviewPin(_:)) {
             menuItem.title = sessionController.navigator.isPinned ? "Unpin Preview" : "Pin Preview"
         }

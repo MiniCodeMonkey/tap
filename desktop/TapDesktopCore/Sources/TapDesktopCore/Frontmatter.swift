@@ -354,6 +354,16 @@ public struct Frontmatter: Equatable, Sendable {
         entry(at: path)?.value
     }
 
+    /// The names of the entries at `path` (a map's keys, block or flow
+    /// style), in the file's order; empty for a path with no entry, no
+    /// children and no flow value.
+    public func entryNames(at path: [String]) -> [String] {
+        guard let found = entry(at: path) else { return [] }
+        if !found.children.isEmpty { return found.children.map(\.key) }
+        if let value = found.value { return Self.flowMapKeys(value) }
+        return []
+    }
+
     /// An entry's lines, as written.
     public func text(of entry: Entry) -> String {
         (source as NSString).substring(with: entry.range)

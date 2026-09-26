@@ -10,6 +10,8 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
     let editorViewController = EditorViewController()
     let inspectorViewController = InspectorViewController()
     let previewViewController = PreviewViewController()
+    let deckForm = DeckFormViewController()
+    private var schemaObserver: NSObjectProtocol?
     let slidePanel = SlidePanelViewController()
     private(set) lazy var thumbnails = ThumbnailController(cache: AppEnvironment.shared.thumbnailCache, panel: slidePanel)
     /// True while a panel click moves the cursor, so the cursor's own
@@ -223,6 +225,7 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
     /// no write. A save the document refuses (a disk conflict is showing)
     /// comes back as its error, and the talk does not start.
     func saveForPresenting(completion: @escaping (Error?) -> Void) {
+        _ = deckForm.commitEditing()
         guard let document, let url = document.fileURL else { return completion(CocoaError(.fileNoSuchFile)) }
         let text = editor.string
         guard isContentEdited else {
@@ -298,6 +301,19 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
             return !webView.isHiddenOrHasHiddenAncestor && window.occlusionState.contains(.visible)
         }
         inspectorViewController.embed(previewViewController)
+        deckForm.text = { [weak self] in self?.editor.string ?? "" }
+        deckForm.applyEdit = { [weak self] replacement, actionName in
+            self?.editor.replaceText(in: replacement.range, with: replacement.replacement, actionName: actionName)
+        }
+        inspectorViewController.embedDeck(deckForm)
+        inspectorViewController.onTabChange = { [weak self] tab in
+            if tab == .deck { self?.deckForm.refresh() }
+        }
+        applyDeckSchema()
+        schemaObserver = NotificationCenter.default.addObserver(forName: DeckSchemaLoader.didLoadNotification, object: nil, queue: nil) { [weak self] _ in
+            MainActor.assumeIsolated { self?.applyDeckSchema() }
+        }
+        Task { await AppEnvironment.shared.deckSchema.load() }
         previewViewController.onStepBackward = { [weak self] in self?.sendPreviewMessage(self?.navigator.stepBackward()) }
         previewViewController.onStepForward = { [weak self] in self?.sendPreviewMessage(self?.navigator.stepForward()) }
         previewViewController.onPinToggled = { [weak self] in self?.togglePin() }
@@ -345,6 +361,14 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
             }
         }
         fileWatcher.watch(document.fileURL)
+    }
+
+    /// The Deck tab needs tap's schema; until it has loaded the tab is disabled.
+    private func applyDeckSchema() {
+        let schema = AppEnvironment.shared.deckSchema
+        guard schema.isLoaded else { return }
+        deckForm.setSchema(schema.keys)
+        inspectorViewController.setDeckTabAvailable(true)
     }
 
     /// The document is edited exactly when the editor's text differs from
@@ -635,6 +659,8 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
         if let redoObserver { NotificationCenter.default.removeObserver(redoObserver) }
         if let occlusionObserver { NotificationCenter.default.removeObserver(occlusionObserver) }
         occlusionObserver = nil
+        if let schemaObserver { NotificationCenter.default.removeObserver(schemaObserver) }
+        schemaObserver = nil
         pendingRecentThumbnailCheck?.cancel()
         pendingRecentThumbnailCheck = nil
         socket?.close()
@@ -914,6 +940,8 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
         presentation.deckTextChanged(sentText)
         slidePanel.setSlides(editor.boxes.map(\.slide))
         thumbnails.deckChanged()
+        deckForm.setDeckErrors(list.errors)
+        deckForm.refresh()
         if let first = list.errors.first {
             if editorViewController.bar(.deckErrors)?.message != "The deck settings have a problem: \(first)" {
                 editorViewController.showBar(DocumentBarView(kind: .deckErrors, message: "The deck settings have a problem: \(first)",
@@ -1040,6 +1068,7 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
         }
         refreshEditedState()
         Task { await sourceSync.sendNow() }
+        deckForm.refresh()
     }
 
     // MARK: EditorTextViewDelegate
@@ -1047,6 +1076,7 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
     func editorTextDidChange(_ editor: EditorTextView) {
         refreshEditedState()
         sourceSync.textDidChange()
+        deckForm.refresh()
     }
 
     func editor(_ editor: EditorTextView, payloadForHeaderDragOfBoxAt index: Int) -> SlideDragPayload? {
