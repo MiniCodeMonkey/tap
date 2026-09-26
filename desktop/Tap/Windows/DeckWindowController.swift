@@ -410,14 +410,17 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
     }
 
     /// Every start comes here: the popover's buttons, Play, the Shift-click
-    /// and Rehearse. A start from the popover saves its settings, so the
-    /// next Cmd+Option+P and the next launch start the same way; the other
+    /// and Rehearse, and none starts while a question sheet is up
+    /// (`canStartATalk`): the popover can still be open when one attaches.
+    /// A start from the popover saves its settings, so the next
+    /// Cmd+Option+P and the next launch start the same way; the other
     /// starts read the saved settings and leave them as they are. The first
     /// time on this Mac, the Focus hint comes first: Not Now starts the
     /// talk, Open Focus Settings opens the setting and leaves the person to
     /// press Play again once the Focus is on, since a talk would cover
     /// System Settings.
     func startPresenting(_ options: PresentationOptions, savingSettings: Bool = false) {
+        guard canStartATalk else { return }
         if savingSettings { AppEnvironment.shared.presentationSettings.settings = presentPopover.settings }
         // Play with the popover open starts at once; the popover goes, so a later click on its Start cannot save settings for a talk it did not start.
         if presentPopover.isShown { presentPopover.close() }
@@ -736,6 +739,8 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
         questionSheet = sheet
         questionSheetSource = source
         questionSheetQuestionID = questionID
+        // The Present popover goes: its Start would begin a talk over the question.
+        if presentPopover.isShown { presentPopover.close() }
         refreshPresentingControls()
         if source == .talk {
             // A talk's sheet must reach the person over the talk's Space; the
@@ -955,7 +960,7 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
             playButton.setAccessibilityIdentifier("play-button")
             playButton.target = self
             playButton.action = #selector(playButtonPressed(_:))
-            playButton.isEnabled = sessionController.presentation.canStart
+            playButton.isEnabled = canStartATalk
             item.view = playButton
             return item
         }

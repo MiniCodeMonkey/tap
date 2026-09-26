@@ -127,6 +127,9 @@ final class TalkApprovalTests: PresentingTestCase {
         deckWindow.play(nil)
         deckWindow.rehearse(nil)
         deckWindow.playButtonClicked(modifiers: [.shift])
+        // The Present popover's Start and Rehearse, which can still be open when the sheet attaches.
+        deckWindow.startPresenting(PresentationOptions(mode: .play, startSlide: 1), savingSettings: true)
+        deckWindow.startPresenting(PresentationOptions(mode: .rehearse, startSlide: 1), savingSettings: true)
         XCTAssertEqual(presentation.state, .idle, "nothing started")
         try XCTUnwrap(sheet.button(titled: "Don't Allow")).performClick(nil)
         XCTAssertTrue(deckWindow.canStartATalk)
