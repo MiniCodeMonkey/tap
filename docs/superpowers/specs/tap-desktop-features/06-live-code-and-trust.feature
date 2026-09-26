@@ -108,8 +108,14 @@ Feature: Live code approval
 
   Scenario: A custom driver's command changes
     Given the deck is approved with a python driver that runs "python3"
-    When its command changes to "bash"
+    When its command changes to "bash", or a ${NAME} in it now holds another value
     Then tap asks again, because an approval covers a driver's name and its command
+    And the sheet shows the old command struck out above the new one
+
+  Scenario: A command never shows or stores a secret
+    Given a custom driver's arguments hold "${DB_PASSWORD}"
+    Then the approval sheet, the terminal prompt and tap approval list show "${DB_PASSWORD}" as written, never its value
+    And settings.yaml stores the command as written, with a keyed digest of the expanded command for matching
 
   Scenario: Another tap approved the driver
     Given tap present --app stored an approval during a talk
