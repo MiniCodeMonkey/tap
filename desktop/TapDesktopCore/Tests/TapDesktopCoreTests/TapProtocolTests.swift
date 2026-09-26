@@ -72,6 +72,12 @@ final class TapProtocolTests: XCTestCase {
             blocks: [ApprovalBlock(driver: "shell", code: "echo hi", slide: 2, block: 1),
                      ApprovalBlock(driver: "fortune", code: "hello", slide: 3, block: 1)])
         XCTAssertEqual(TapEvent.decode(line: line), .question(id: "q1", kind: "approval", payload: expected))
+
+        let sparse = #"{"type":"question","id":"q2","kind":"approval","payload":{"drivers":[{"name":"x","blocks":1},{"name":"y","slides":null}],"blocks":[{"driver":"x","slide":1,"block":1},{}]}}"#
+        XCTAssertEqual(TapEvent.decode(line: sparse), .question(id: "q2", kind: "approval", payload: QuestionPayload(
+            drivers: [ApprovalDriver(name: "x", slides: [], blocks: 1), ApprovalDriver(name: "y")],
+            blocks: [ApprovalBlock(driver: "x", code: "", slide: 1, block: 1), ApprovalBlock(driver: "", code: "", slide: 0, block: 0)])),
+            "a driver without slides or a block without code still asks the question")
         XCTAssertTrue(expected.isForNewDrivers)
         XCTAssertEqual(expected.changedCommands, [], "no driver names a command it ran before")
         let changed = #"{"type":"question","id":"q3","kind":"approval","payload":{"deck":"/t/talk.md","drivers":[{"name":"fortune","command":"/usr/bin/true","previousCommand":"/bin/cat","slides":[3],"blocks":1}],"approvedBefore":["sqlite"],"blocks":[]}}"#

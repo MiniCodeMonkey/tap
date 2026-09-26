@@ -46,9 +46,9 @@ public struct CodeBlock: Codable, Equatable, Sendable {
 }
 
 /// One driver of tap's approval request (internal/cli/approval.go,
-/// approvalDriver): what a yes would allow. `command` is what a custom
-/// driver runs, with its arguments and variables expanded; nil for a
-/// built-in driver. `previousCommand` is the command line the deck was
+/// approvalDriver): what a yes would allow. `command` is a custom
+/// driver's command as tap shows it: the command template, with
+/// secret-looking variables masked; nil for a built-in driver. `previousCommand` is the command line the deck was
 /// approved with before, when the name was approved and only its command
 /// changed (the tap change's optional field; nil for a driver never approved,
 /// and from a tap without the field). `slides` are the slides with a block that
@@ -67,6 +67,16 @@ public struct ApprovalDriver: Codable, Equatable, Sendable {
         self.slides = slides
         self.blocks = blocks
     }
+
+    /// Fields a tap leaves out decode as empty, so one odd driver never drops the whole question.
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        name = try container.decodeIfPresent(String.self, forKey: .name) ?? ""
+        command = try container.decodeIfPresent(String.self, forKey: .command)
+        previousCommand = try container.decodeIfPresent(String.self, forKey: .previousCommand)
+        slides = try container.decodeIfPresent([Int].self, forKey: .slides) ?? []
+        blocks = try container.decodeIfPresent(Int.self, forKey: .blocks) ?? 0
+    }
 }
 
 /// One live code block of an approval request, so the sheet can show its
@@ -83,6 +93,15 @@ public struct ApprovalBlock: Codable, Equatable, Sendable {
         self.code = code
         self.slide = slide
         self.block = block
+    }
+
+    /// Fields a tap leaves out decode as empty, so one odd block never drops the whole question.
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        driver = try container.decodeIfPresent(String.self, forKey: .driver) ?? ""
+        code = try container.decodeIfPresent(String.self, forKey: .code) ?? ""
+        slide = try container.decodeIfPresent(Int.self, forKey: .slide) ?? 0
+        block = try container.decodeIfPresent(Int.self, forKey: .block) ?? 0
     }
 }
 
