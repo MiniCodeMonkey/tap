@@ -1,0 +1,13 @@
+Test: TapTests/FixItTests/testABlockUsesAnUndeclaredDriver
+diff --git i/desktop/Tap/Documents/DeckSessionController.swift w/desktop/Tap/Documents/DeckSessionController.swift
+index babd2df..8521297 100644
+--- i/desktop/Tap/Documents/DeckSessionController.swift
++++ w/desktop/Tap/Documents/DeckSessionController.swift
+@@ -253,7 +253,6 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
+         }
+         editor.replaceText(in: replacement.range, with: replacement.replacement, actionName: "Allow \(name) in This Deck")
+         session.log.append("declared the \(name) driver in the frontmatter", source: .app)
+-        saveNow()
+     }
+ 
+     /// Writes the buffer to the deck file now, ahead of the autosave. A

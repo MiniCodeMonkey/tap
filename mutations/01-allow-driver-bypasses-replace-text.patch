@@ -1,0 +1,14 @@
+Test: TapTests/FixItTests/testABlockUsesAnUndeclaredDriver
+diff --git i/desktop/Tap/Documents/DeckSessionController.swift w/desktop/Tap/Documents/DeckSessionController.swift
+index babd2df..a4256d6 100644
+--- i/desktop/Tap/Documents/DeckSessionController.swift
++++ w/desktop/Tap/Documents/DeckSessionController.swift
+@@ -251,7 +251,7 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
+             NSSound.beep()
+             return
+         }
+-        editor.replaceText(in: replacement.range, with: replacement.replacement, actionName: "Allow \(name) in This Deck")
++        editor.textStorage?.replaceCharacters(in: replacement.range, with: replacement.replacement)
+         session.log.append("declared the \(name) driver in the frontmatter", source: .app)
+         saveNow()
+     }

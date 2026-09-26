@@ -1,0 +1,16 @@
+Test: TapTests/NewDriverTests/testATapRestartRenewsTheApprovalQuestion
+diff --git i/desktop/Tap/Documents/DeckSessionController.swift w/desktop/Tap/Documents/DeckSessionController.swift
+index babd2df..d7599d7 100644
+--- i/desktop/Tap/Documents/DeckSessionController.swift
++++ w/desktop/Tap/Documents/DeckSessionController.swift
+@@ -940,10 +940,6 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
+         // The questions of a process that stopped, crashed or is restarting die with it.
+         if case .running = state {} else {
+             questionGeneration += 1
+-            if !pendingQuestions.isEmpty {
+-                pendingQuestions = []
+-                onQuestionsDropped?()
+-            }
+         }
+         previewViewController.showSessionState(state, restartPolicy: session.restartPolicy, pausedMessage: pausedMessage)
+         socket?.close()

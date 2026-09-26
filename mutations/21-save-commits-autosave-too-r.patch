@@ -1,0 +1,18 @@
+Test: TapTests/DeckTabTests/testAnAutosaveWritesTheFieldWithoutTakingItsFocus
+diff --git i/desktop/Tap/Documents/DeckDocument.swift w/desktop/Tap/Documents/DeckDocument.swift
+index 72daf36..da43aac 100644
+--- i/desktop/Tap/Documents/DeckDocument.swift
++++ w/desktop/Tap/Documents/DeckDocument.swift
+@@ -276,11 +276,7 @@ final class DeckDocument: NSDocument {
+         // in place or elsewhere (an untitled deck's), takes its text and leaves
+         // the person typing; a save the person asked for, Save As or Play's
+         // save ends the edit first.
+-        if saveOperation == .autosaveInPlaceOperation || saveOperation == .autosaveElsewhereOperation {
+-            sessionController?.deckForm.commitEditingKeepingFocus()
+-        } else {
+-            _ = sessionController?.deckForm.commitEditing()
+-        }
++        _ = sessionController?.deckForm.commitEditing()
+         if saveOperation == .saveOperation, sessionController?.hasDiskConflict == true {
+             return completionHandler(CocoaError(.userCancelled))
+         }

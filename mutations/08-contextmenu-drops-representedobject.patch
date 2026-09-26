@@ -1,0 +1,13 @@
+Test: TapTests/FixItTests/testADeckWithLiveCodeMustListItsDrivers
+diff --git i/desktop/Tap/Documents/DeckSessionController.swift w/desktop/Tap/Documents/DeckSessionController.swift
+index babd2df..057f98a 100644
+--- i/desktop/Tap/Documents/DeckSessionController.swift
++++ w/desktop/Tap/Documents/DeckSessionController.swift
+@@ -1030,7 +1030,6 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
+             menu.addItem(.separator())
+             let item = NSMenuItem(title: fixIt.title, action: #selector(DeckWindowController.allowDriverInThisDeck(_:)), keyEquivalent: "")
+             item.target = windowController
+-            item.representedObject = fixIt.driver
+             menu.addItem(item)
+         }
+         return menu

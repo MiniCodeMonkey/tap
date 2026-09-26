@@ -1,0 +1,13 @@
+Test: TapTests/DeckTabTests/testARefreshNeverClobbersTheFieldBeingEdited
+diff --git i/desktop/Tap/Preview/DeckFormViewController.swift w/desktop/Tap/Preview/DeckFormViewController.swift
+index 4ea877d..3a817ed 100644
+--- i/desktop/Tap/Preview/DeckFormViewController.swift
++++ w/desktop/Tap/Preview/DeckFormViewController.swift
+@@ -112,7 +112,6 @@ final class DeckFormViewController: NSViewController, NSTextFieldDelegate {
+         defer { isRefreshing = false }
+         let editing = editingText
+         for binding in bindings {
+-            if let editing, editing.delegate === binding.control { continue }
+             guard let key = DeckSchema.key(at: binding.path, in: keys) else { continue }
+             show(frontmatter.value(at: binding.path), in: binding.control, for: key)
+         }

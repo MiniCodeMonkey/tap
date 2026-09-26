@@ -1,0 +1,14 @@
+Test: TapTests/FixItTests/testADeckWithLiveCodeMustListItsDrivers
+diff --git i/desktop/Tap/Windows/DeckWindowController.swift w/desktop/Tap/Windows/DeckWindowController.swift
+index 7707161..636faaa 100644
+--- i/desktop/Tap/Windows/DeckWindowController.swift
++++ w/desktop/Tap/Windows/DeckWindowController.swift
+@@ -905,7 +905,7 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
+                 return true
+             }
+             menuItem.title = currentFixIt?.title ?? "Allow Driver in This Deck"
+-            return currentFixIt != nil
++            return true
+         }
+         let count = sessionController.selectedSlideNumbers.count
+         if menuItem.action == #selector(deleteSlides(_:)) {

@@ -1,0 +1,14 @@
+Test: TapTests/DeckTabTests/testDeckSettingsLiveInTheInspector
+diff --git i/desktop/Tap/Preview/DeckFormViewController.swift w/desktop/Tap/Preview/DeckFormViewController.swift
+index 4ea877d..6cbfec9 100644
+--- i/desktop/Tap/Preview/DeckFormViewController.swift
++++ w/desktop/Tap/Preview/DeckFormViewController.swift
+@@ -313,7 +313,7 @@ final class DeckFormViewController: NSViewController, NSTextFieldDelegate {
+             } else if key.type == "list" {
+                 raw = typed
+             } else {
+-                raw = Frontmatter.scalar(forString: typed)
++                raw = typed
+             }
+         }
+         guard raw != frontmatter.value(at: path) else { return }

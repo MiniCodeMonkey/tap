@@ -1,0 +1,13 @@
+Test: TapTests/FixItTests/testABlockUsesAnUndeclaredDriver
+diff --git i/desktop/Tap/Editor/EditorTextView.swift w/desktop/Tap/Editor/EditorTextView.swift
+index 058ab59..a1add9b 100644
+--- i/desktop/Tap/Editor/EditorTextView.swift
++++ w/desktop/Tap/Editor/EditorTextView.swift
+@@ -826,7 +826,6 @@ extension EditorTextView: NSTextStorageDelegate {
+         guard editedMask.contains(.editedCharacters) else { return }
+         tracker.recordEdit(location: editedRange.location, oldLength: editedRange.length - delta, newLength: editedRange.length)
+         restyle(editedRange)
+-        refreshDeclaredDrivers()
+         needsDisplay = true
+         if tracker.hiddenPrefixLength != layoutHiddenLength {
+             // Layout cannot change while the text storage is processing an edit.

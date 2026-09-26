@@ -1,0 +1,14 @@
+Test: TapTests/FixItTests/testABlockUsesAnUndeclaredDriver
+diff --git i/desktop/Tap/Editor/EditorTextView.swift w/desktop/Tap/Editor/EditorTextView.swift
+index dfd7705..508f8e6 100644
+--- i/desktop/Tap/Editor/EditorTextView.swift
++++ w/desktop/Tap/Editor/EditorTextView.swift
+@@ -498,7 +498,7 @@ final class EditorTextView: NSTextView {
+     /// where the pill was drawn.
+     static func fixItRect(title: String, badgesLeftEdge: CGFloat, headerTop: CGFloat) -> NSRect {
+         let width = NSAttributedString(string: title, attributes: fixItAttributes).size().width + 16
+-        return NSRect(x: badgesLeftEdge - width, y: headerTop + 5, width: width, height: 18)
++        return NSRect(x: 0, y: headerTop + 5, width: width, height: 18)
+     }
+ 
+     /// The fix-it pill of a box's header, in view coordinates; nil for a box with none, or off screen.
