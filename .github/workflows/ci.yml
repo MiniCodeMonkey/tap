@@ -368,13 +368,14 @@ jobs:
       # A failed hosted run keeps what classifies a web content process
       # that stopped answering: WebKit's and RunningBoard's log of the last
       # 30 minutes (process launch, suspend and resume, which the test
-      # output does not carry), any WebContent crash or hang report, and
-      # the spindumps the tests saved on a first ready that never came.
+      # output does not carry) with the memorystatus (jetsam) lines, any
+      # WebContent crash or hang report, and the spindumps the tests saved
+      # on a first ready that never came.
       - name: Collect WebKit diagnostics
         if: failure() && steps.check-desktop.outputs.exists == 'true'
         run: |
           mkdir -p webkit-diagnostics
-          log show --last 30m --style compact --predicate 'subsystem == "com.apple.WebKit" OR process == "runningboardd"' > webkit-diagnostics/webkit-and-runningboard.log 2>&1 || true
+          log show --last 30m --style compact --predicate 'subsystem == "com.apple.WebKit" OR process == "runningboardd" OR eventMessage CONTAINS "memorystatus"' > webkit-diagnostics/webkit-and-runningboard.log 2>&1 || true
           for folder in "$HOME/Library/Logs/DiagnosticReports" /Library/Logs/DiagnosticReports; do
             find "$folder" -iname '*WebContent*' -exec cp {} webkit-diagnostics/ \; 2>/dev/null || true
           done
