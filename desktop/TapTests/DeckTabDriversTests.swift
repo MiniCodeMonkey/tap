@@ -194,6 +194,17 @@ final class DeckTabDriversTests: HostedTestCase {
         XCTAssertTrue(controller.editor.string.contains("        path: ./other.dbx\n"))
     }
 
+    /// A driver name with a dot in it is one name: its card's Remove removes it.
+    func testADriverWhoseNameHasADotIsRemoved() async throws {
+        let deck = try Fixtures.temporaryFolder().appendingPathComponent("dotted.md")
+        try "---\ntitle: Dotted\ndrivers:\n  sqlite: {}\n  my.db:\n    command: /bin/cat\n---\n\n# One\n".write(to: deck, atomically: true, encoding: .utf8)
+        let (_, controller, form) = try await openOnTheDeckTab(deck)
+        XCTAssertEqual(form.builtForEntries["drivers"], ["sqlite", "my.db"])
+        try XCTUnwrap(form.removeButton(for: "drivers.my.db")).performClick(nil)
+        XCTAssertEqual(Frontmatter(text: controller.editor.string).declaredDrivers, ["sqlite"])
+        XCTAssertEqual(controller.editor.undoManager?.undoActionName, "Remove my.db")
+    }
+
     func testUnknownKeysAreListedUnderOtherKeys() async throws {
         let folder = try Fixtures.temporaryFolder()
         let deck = folder.appendingPathComponent("other.md")

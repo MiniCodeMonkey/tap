@@ -39,14 +39,14 @@ final class DeckFormViewController: NSViewController, NSTextFieldDelegate, NSTex
     private var hintLabels: [String: NSTextField] = [:]
     private var addFields: [String: NSTextField] = [:]
     private var addButtons: [String: NSButton] = [:]
-    private var removeButtons: [String: NSButton] = [:]
+    private var removeButtons: [(path: [String], button: NSButton)] = []
     private var rawEditors: [(path: [String], textView: NSTextView)] = []
     private(set) var otherKeyLabels: [NSTextField] = []
 
     func hintLabel(for map: String) -> NSTextField? { hintLabels[map] }
     func addEntryField(for map: String) -> NSTextField? { addFields[map] }
     func addEntryButton(for map: String) -> NSButton? { addButtons[map] }
-    func removeButton(for path: String) -> NSButton? { removeButtons[path] }
+    func removeButton(for path: String) -> NSButton? { removeButtons.first { $0.path.joined(separator: ".") == path }?.button }
     func rawEditor(_ path: String) -> NSTextView? { rawEditors.first { $0.path.joined(separator: ".") == path }?.textView }
 
     final class FlippedClipView: NSClipView {
@@ -256,7 +256,7 @@ final class DeckFormViewController: NSViewController, NSTextFieldDelegate, NSTex
         hintLabels = [:]
         addFields = [:]
         addButtons = [:]
-        removeButtons = [:]
+        removeButtons = []
         rawEditors = []
         otherKeyLabels = []
     }
@@ -277,7 +277,7 @@ final class DeckFormViewController: NSViewController, NSTextFieldDelegate, NSTex
             remove.bezelStyle = .rounded
             remove.controlSize = .small
             remove.setAccessibilityIdentifier("deck-remove-\(entryPath.joined(separator: "."))")
-            removeButtons[entryPath.joined(separator: ".")] = remove
+            removeButtons.append((entryPath, remove))
             let header = NSStackView(views: [NSTextField(labelWithString: name), NSView(), remove])
             header.orientation = .horizontal
             var entryRows: [NSView] = [header]
@@ -405,9 +405,8 @@ final class DeckFormViewController: NSViewController, NSTextFieldDelegate, NSTex
     }
 
     @objc private func removePressed(_ sender: NSButton) {
-        guard let joined = removeButtons.first(where: { $0.value === sender })?.key else { return }
+        guard let path = removeButtons.first(where: { $0.button === sender })?.path else { return }
         _ = commitEditing()
-        let path = joined.split(separator: ".").map(String.init)
         guard let name = path.last, let replacement = Frontmatter(text: text()).setting(path: path, to: nil) else {
             // A pair inside a flow map is not rewritten: said, not swallowed.
             NSSound.beep()
