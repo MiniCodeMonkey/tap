@@ -6,12 +6,14 @@ protocol EditorTextViewDelegate: AnyObject {
     func editor(_ editor: EditorTextView, payloadForHeaderDragOfBoxAt index: Int) -> SlideDragPayload?
     func editor(_ editor: EditorTextView, dropSlides payload: SlideDragPayload, beforeNumber: Int?, isMove: Bool) -> Bool
     func editor(_ editor: EditorTextView, contextMenuForBoxAt index: Int) -> NSMenu?
+    func editor(_ editor: EditorTextView, applyFixItForBoxAt index: Int)
 }
 
 extension EditorTextViewDelegate {
     func editor(_ editor: EditorTextView, payloadForHeaderDragOfBoxAt index: Int) -> SlideDragPayload? { nil }
     func editor(_ editor: EditorTextView, dropSlides payload: SlideDragPayload, beforeNumber: Int?, isMove: Bool) -> Bool { false }
     func editor(_ editor: EditorTextView, contextMenuForBoxAt index: Int) -> NSMenu? { nil }
+    func editor(_ editor: EditorTextView, applyFixItForBoxAt index: Int) {}
 }
 
 /// A TextKit 2 text view that draws a rounded box behind each slide's lines.
@@ -116,6 +118,7 @@ final class EditorTextView: NSTextView {
         setSelectedRange(NSRange(location: 0, length: 0))
         restyle(NSRange(location: 0, length: (text as NSString).length))
         updateHiddenLayout()
+        refreshDeclaredDrivers()
     }
 
     /// Records that the text as of now goes to tap, and returns its generation.
@@ -126,10 +129,10 @@ final class EditorTextView: NSTextView {
     /// text was replaced is refused: it describes a document that is gone.
     @discardableResult
     func apply(_ list: SlideList, sentText: String, sentGeneration: Int) -> Bool {
-        let oldErrors = Dictionary(boxes.map { ("\($0.range.location):\($0.range.length)", $0.slide.errors.count) }) { first, _ in first }
+        let oldErrors = Dictionary(boxes.map { ("\($0.range.location):\($0.range.length)", Self.errorLineCount(for: $0.slide)) }) { first, _ in first }
         guard var dirty = tracker.apply(list, sentText: sentText, sentGeneration: sentGeneration,
                                         currentLength: (string as NSString).length) else { return false }
-        for box in boxes where oldErrors["\(box.range.location):\(box.range.length)"].map({ $0 != box.slide.errors.count }) ?? false {
+        for box in boxes where oldErrors["\(box.range.location):\(box.range.length)"].map({ $0 != Self.errorLineCount(for: box.slide) }) ?? false {
             dirty.append(box.range)
         }
         if !dirty.isEmpty {
@@ -156,8 +159,22 @@ final class EditorTextView: NSTextView {
         needsDisplay = true
     }
 
+    /// The error lines a box makes room for: the slide's own and its blocks' problems.
+    static func errorLineCount(for slide: Slide) -> Int {
+        BoxHeader(slide: slide).errors.count
+    }
+
+    /// The drivers the frontmatter declares, read once per change of the
+    /// text rather than on every draw: `didChangeText` and `load` refresh
+    /// it. It decides only whether a box offers its fix-it.
+    private(set) var declaredDrivers: [String] = []
+
+    private func refreshDeclaredDrivers() {
+        declaredDrivers = Frontmatter(text: string).declaredDrivers
+    }
+
     func header(forBoxAt index: Int) -> BoxHeader {
-        BoxHeader(slide: boxes[index].slide)
+        BoxHeader(slide: boxes[index].slide, declaredDrivers: declaredDrivers)
     }
 
     /// An edit the app makes, such as loading the disk version. It may change
@@ -227,7 +244,7 @@ final class EditorTextView: NSTextView {
     private func role(for paragraph: NSRange, line: String) -> Role {
         if let index = tracker.boxIndex(containing: paragraph.location) {
             let box = boxes[index]
-            let errors = box.slide.errors.count
+            let errors = Self.errorLineCount(for: box.slide)
             let isFirst = paragraph.location == box.range.location
             let isLast = NSMaxRange(paragraph) >= box.end
             switch (isFirst, isLast) {
@@ -324,6 +341,7 @@ final class EditorTextView: NSTextView {
     override func didChangeText() {
         super.didChangeText()
         needsDisplay = true
+        refreshDeclaredDrivers()
         editorDelegate?.editorTextDidChange(self)
     }
 
@@ -350,7 +368,7 @@ final class EditorTextView: NSTextView {
         let origin = textContainerOrigin
         let left = origin.x - Self.boxOutset
         let right = bounds.width - origin.x + Self.boxOutset
-        let errorSpace = CGFloat(box.slide.errors.count) * Self.errorLineHeight
+        let errorSpace = CGFloat(Self.errorLineCount(for: box.slide)) * Self.errorLineHeight
         var top = visibleRect.minY - 40
         var bottom = visibleRect.maxY + 40
         if box.range.location >= viewportStart,
@@ -432,7 +450,7 @@ final class EditorTextView: NSTextView {
             guard let boxRect = boxRect(forBoxAt: index) else { continue }
             if boxRect.intersects(rect) {
                 let box = boxes[index]
-                draw(header: BoxHeader(slide: box.slide), skipped: box.slide.skip, in: boxRect, isCurrent: index == currentBoxIndex)
+                draw(header: BoxHeader(slide: box.slide, declaredDrivers: declaredDrivers), skipped: box.slide.skip, in: boxRect, isCurrent: index == currentBoxIndex)
             }
         }
         if let before = dropIndicatorBeforeNumber, let y = dropIndicatorY(beforeNumber: before) {
@@ -462,6 +480,34 @@ final class EditorTextView: NSTextView {
 
     private static let metaAttributes: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 11), .foregroundColor: NSColor.secondaryLabelColor]
     private static let errorAttributes: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 11, weight: .medium), .foregroundColor: EditorPalette.error]
+    private static let badgeAttributes: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 10.5), .foregroundColor: NSColor.secondaryLabelColor]
+    private static let fixItAttributes: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 10.5, weight: .semibold), .foregroundColor: EditorPalette.error]
+
+    /// Where the badges end on the left, as `draw(header:)` lays them out from the right.
+    static func badgesLeftEdge(for badges: [String], headerMaxX: CGFloat) -> CGFloat {
+        var badgeX = headerMaxX - 10
+        for badge in badges.reversed() {
+            badgeX -= NSAttributedString(string: badge, attributes: badgeAttributes).size().width + 14
+            badgeX -= 6
+        }
+        return badgeX
+    }
+
+    /// The fix-it pill: left of the badges, 18 points tall, as wide as its
+    /// title. Drawing and the hit test both come here, so a click lands
+    /// where the pill was drawn.
+    static func fixItRect(title: String, badgesLeftEdge: CGFloat, headerTop: CGFloat) -> NSRect {
+        let width = NSAttributedString(string: title, attributes: fixItAttributes).size().width + 16
+        return NSRect(x: badgesLeftEdge - width, y: headerTop + 5, width: width, height: 18)
+    }
+
+    /// The fix-it pill of a box's header, in view coordinates; nil for a box with none, or off screen.
+    func fixItRect(forBoxAt index: Int) -> NSRect? {
+        guard boxes.indices.contains(index), let headerRect = headerRect(forBoxAt: index) else { return nil }
+        let header = self.header(forBoxAt: index)
+        guard let fixIt = header.fixIt else { return nil }
+        return Self.fixItRect(title: fixIt.title, badgesLeftEdge: Self.badgesLeftEdge(for: header.badges, headerMaxX: headerRect.maxX), headerTop: headerRect.minY)
+    }
 
     private func draw(header: BoxHeader, skipped: Bool, in rect: NSRect, isCurrent: Bool) {
         let hasErrors = !header.errors.isEmpty
@@ -494,7 +540,7 @@ final class EditorTextView: NSTextView {
 
         var badgeX = rect.maxX - 10
         for badge in header.badges.reversed() {
-            let string = NSAttributedString(string: badge, attributes: [.font: NSFont.systemFont(ofSize: 10.5), .foregroundColor: NSColor.secondaryLabelColor])
+            let string = NSAttributedString(string: badge, attributes: Self.badgeAttributes)
             let size = string.size()
             badgeX -= size.width + 14
             let pill = NSRect(x: badgeX, y: rect.minY + 6, width: size.width + 14, height: 16)
@@ -503,8 +549,20 @@ final class EditorTextView: NSTextView {
             string.draw(at: NSPoint(x: pill.minX + 7, y: pill.minY + 1))
             badgeX -= 6
         }
+        var metaLimit = badgeX
+        if let fixIt = header.fixIt {
+            let pill = Self.fixItRect(title: fixIt.title, badgesLeftEdge: badgeX, headerTop: rect.minY)
+            EditorPalette.boxFill.setFill()
+            let path = NSBezierPath(roundedRect: pill, xRadius: 9, yRadius: 9)
+            path.fill()
+            EditorPalette.error.setStroke()
+            path.lineWidth = 1
+            path.stroke()
+            NSAttributedString(string: fixIt.title, attributes: Self.fixItAttributes).draw(at: NSPoint(x: pill.minX + 8, y: pill.minY + 2))
+            metaLimit = pill.minX
+        }
         NSAttributedString(string: header.meta, attributes: Self.metaAttributes)
-            .draw(with: NSRect(x: x, y: baseline, width: max(0, badgeX - x - 8), height: 16), options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
+            .draw(with: NSRect(x: x, y: baseline, width: max(0, metaLimit - x - 8), height: 16), options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
 
         for (line, message) in header.errors.enumerated() {
             let y = headerBottom + 4 + CGFloat(line) * Self.errorLineHeight
@@ -542,6 +600,10 @@ final class EditorTextView: NSTextView {
     /// click, handled as any click in the text.
     override func mouseDown(with event: NSEvent) {
         let point = convert(event.locationInWindow, from: nil)
+        if let index = boxIndex(forHeaderAt: point), let pill = fixItRect(forBoxAt: index), pill.contains(point) {
+            editorDelegate?.editor(self, applyFixItForBoxAt: index)
+            return
+        }
         // A Control-click is a context menu click, and a
         // Shift-click extends the selection; neither starts a header drag.
         guard !event.modifierFlags.contains(.control), !event.modifierFlags.contains(.shift),

@@ -360,6 +360,20 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
         }
     }
 
+    /// The fix-it the cursor's slide offers, if its box has one.
+    var currentFixIt: BoxHeader.FixIt? {
+        let editor = sessionController.editor
+        guard let index = editor.currentBoxIndex, editor.boxes.indices.contains(index) else { return nil }
+        return editor.header(forBoxAt: index).fixIt
+    }
+
+    /// Slide > Allow Driver in This Deck, and the box's context menu item,
+    /// which carries the driver; the menu item takes the cursor's slide.
+    @objc func allowDriverInThisDeck(_ sender: Any?) {
+        guard let driver = ((sender as? NSMenuItem)?.representedObject as? String) ?? currentFixIt?.driver else { return }
+        sessionController.allowDriver(driver)
+    }
+
     // MARK: Presenting
 
     /// Present > Play, Cmd+Option+P: the talk starts at once with the last
@@ -884,6 +898,14 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
         if menuItem.action == #selector(swapDisplays(_:)) {
             // While another deck presents, a swap here would change the remembered pair under its running talk.
             return presentation.currentArrangement?.isSingleDisplay == false && (presentation.isActive || !AppEnvironment.shared.isPresenting)
+        }
+        if menuItem.action == #selector(allowDriverInThisDeck(_:)) {
+            if let driver = menuItem.representedObject as? String {
+                menuItem.title = "Allow \(driver) in This Deck"
+                return true
+            }
+            menuItem.title = currentFixIt?.title ?? "Allow Driver in This Deck"
+            return currentFixIt != nil
         }
         let count = sessionController.selectedSlideNumbers.count
         if menuItem.action == #selector(deleteSlides(_:)) {

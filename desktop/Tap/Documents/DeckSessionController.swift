@@ -236,6 +236,36 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
         }
     }
 
+    // MARK: Fix-its
+
+    /// The fix-it for a block whose driver the deck does not declare, from
+    /// the box header's pill, the box's context menu or the Slide menu: it
+    /// adds "<name>: {}" under drivers in the frontmatter through the
+    /// editor (one undo step named after itself) and saves at once, the
+    /// person's choice. tap decides again on its render of the edited
+    /// text, so the question about the new driver follows the edit; the
+    /// save is what the CLI and a later open read.
+    func allowDriver(_ name: String) {
+        guard let replacement = Frontmatter(text: editor.string).addingDriver(name) else {
+            // Declared already, or a drivers value the edit cannot rewrite (`drivers: ~`): nothing to do, and not silently.
+            NSSound.beep()
+            return
+        }
+        editor.replaceText(in: replacement.range, with: replacement.replacement, actionName: "Allow \(name) in This Deck")
+        session.log.append("declared the \(name) driver in the frontmatter", source: .app)
+        saveNow()
+    }
+
+    /// Writes the buffer to the deck file now, ahead of the autosave. A
+    /// save the document refuses (a disk conflict is showing) leaves the
+    /// edit in the buffer for the next save, with a log line.
+    func saveNow() {
+        guard let document, let url = document.fileURL, isContentEdited else { return }
+        document.save(to: url, ofType: document.fileType ?? "net.daringfireball.markdown", for: .saveOperation) { [weak self] error in
+            if let error { self?.session.log.append("the save after the fix-it was refused: \(error.localizedDescription)", source: .app) }
+        }
+    }
+
     var editor: EditorTextView { editorViewController.textView }
 
     init(document: DeckDocument) {
@@ -995,7 +1025,20 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
         if !slidePanel.selectedNumbers.contains(number) {
             slidePanel.click(slide: number, extendingSelection: false)
         }
-        return SlideContextMenu.build(for: selectedSlideNumbers, target: windowController, showsTextShortcuts: false)
+        let menu = SlideContextMenu.build(for: selectedSlideNumbers, target: windowController, showsTextShortcuts: false)
+        if let fixIt = editor.header(forBoxAt: index).fixIt {
+            menu.addItem(.separator())
+            let item = NSMenuItem(title: fixIt.title, action: #selector(DeckWindowController.allowDriverInThisDeck(_:)), keyEquivalent: "")
+            item.target = windowController
+            item.representedObject = fixIt.driver
+            menu.addItem(item)
+        }
+        return menu
+    }
+
+    func editor(_ editor: EditorTextView, applyFixItForBoxAt index: Int) {
+        guard editor.boxes.indices.contains(index), let fixIt = editor.header(forBoxAt: index).fixIt else { return }
+        allowDriver(fixIt.driver)
     }
 
     func editor(_ editor: EditorTextView, currentSlideDidChange index: Int?) {
