@@ -38,6 +38,7 @@ final class FixItTests: HostedTestCase {
         editor.mouseDown(with: try mouseDown(at: NSPoint(x: pill.midX, y: pill.midY), in: editor))
         XCTAssertTrue(editor.string.hasPrefix("---\ntitle: Undeclared Driver\ndrivers:\n  sqlite: {}\n  shell: {}\n---\n"), "shell: {} under drivers, one edit: \(editor.string.prefix(80))")
         XCTAssertEqual(editor.undoManager?.undoActionName, "Allow shell in This Deck")
+        XCTAssertNil(editor.header(forBoxAt: 5).fixIt, "declared in the buffer: the pill goes before tap answers")
         try await waitUntil(timeout: 10, "tap to accept the declaration") { editor.boxes[5].slide.codeBlocks.first?.problem == nil }
         XCTAssertNil(editor.header(forBoxAt: 5).fixIt)
         XCTAssertEqual(editor.deckErrors, [], "tap parses what the fix-it wrote")
@@ -47,6 +48,7 @@ final class FixItTests: HostedTestCase {
         editor.undoManager?.undo()
         XCTAssertEqual(editor.string, original, "one undo step")
         try await waitUntil(timeout: 15, "the problem back after the undo") { editor.boxes[5].slide.codeBlocks.first?.problem != nil }
+        XCTAssertEqual(editor.header(forBoxAt: 5).fixIt?.title, "Allow shell in This Deck", "the undo took the declaration away, so the pill is back")
     }
 
     func testADeckWithLiveCodeMustListItsDrivers() async throws {

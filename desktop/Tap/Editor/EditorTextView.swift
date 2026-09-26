@@ -118,7 +118,6 @@ final class EditorTextView: NSTextView {
         setSelectedRange(NSRange(location: 0, length: 0))
         restyle(NSRange(location: 0, length: (text as NSString).length))
         updateHiddenLayout()
-        refreshDeclaredDrivers()
     }
 
     /// Records that the text as of now goes to tap, and returns its generation.
@@ -165,8 +164,10 @@ final class EditorTextView: NSTextView {
     }
 
     /// The drivers the frontmatter declares, read once per change of the
-    /// text rather than on every draw: `didChangeText` and `load` refresh
-    /// it. It decides only whether a box offers its fix-it.
+    /// text rather than on every draw. The text storage's delegate
+    /// refreshes it after every character edit, so typing, `load`,
+    /// `replaceText`, undo and redo all keep it current. It decides only
+    /// whether a box offers its fix-it.
     private(set) var declaredDrivers: [String] = []
 
     private func refreshDeclaredDrivers() {
@@ -341,7 +342,6 @@ final class EditorTextView: NSTextView {
     override func didChangeText() {
         super.didChangeText()
         needsDisplay = true
-        refreshDeclaredDrivers()
         editorDelegate?.editorTextDidChange(self)
     }
 
@@ -822,6 +822,8 @@ extension EditorTextView: NSTextStorageDelegate {
         guard editedMask.contains(.editedCharacters) else { return }
         tracker.recordEdit(location: editedRange.location, oldLength: editedRange.length - delta, newLength: editedRange.length)
         restyle(editedRange)
+        refreshDeclaredDrivers()
+        needsDisplay = true
         if tracker.hiddenPrefixLength != layoutHiddenLength {
             // Layout cannot change while the text storage is processing an edit.
             DispatchQueue.main.async { [weak self] in self?.updateHiddenLayout() }
