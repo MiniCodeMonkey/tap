@@ -64,6 +64,11 @@ func TestServeJSONPrintsOneReadyLine(t *testing.T) {
 	if !strings.Contains(string(body), "built") {
 		t.Errorf("served %q", body)
 	}
+	// Shutdown returns once every handler has returned, so a request log
+	// written after the response would be in out by now.
+	if err := server.Shutdown(shutdown); err != nil {
+		t.Fatal(err)
+	}
 	if out.String() != lines[0]+"\n" {
 		t.Errorf("a request was logged to stdout in --json mode: %q", out.String())
 	}
