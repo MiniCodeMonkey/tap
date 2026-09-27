@@ -24,10 +24,13 @@ final class ImageInsertTests: HostedTestCase {
     func testPasteAnImage() async throws {
         let (document, controller, deck) = try await openOps()
         controller.jumpToSlide(number: 3)
+        // The caret sits at the end of "# Three"; three selected characters from there survive.
         let caret = controller.editor.selectedRange().location
-        // Three selected characters survive: the insert goes at the caret, replacing nothing.
         controller.editor.setSelectedRange(NSRange(location: caret, length: 3))
-        let selected = (controller.editor.string as NSString).substring(with: NSRange(location: caret, length: 3))
+        let beforePaste = controller.editor.string
+        let headingLine = (beforePaste as NSString).lineRange(for: NSRange(location: caret, length: 0))
+        let heading = (beforePaste as NSString).substring(with: headingLine)
+        XCTAssertTrue(heading.hasPrefix("# "), heading)
         let pasteboard = privatePasteboard(controller)
         pasteboard.writeObjects([diagram as NSURL])
 
@@ -37,8 +40,9 @@ final class ImageInsertTests: HostedTestCase {
         XCTAssertTrue(FileManager.default.fileExists(atPath: imagesFolder.appendingPathComponent("diagram.png").path), "tap copied it next to the deck")
         let text = controller.editor.string as NSString
         let inserted = "![diagram](images/diagram.png)\n"
-        XCTAssertEqual(text.range(of: inserted).location, caret, "inserted at the caret, tap's markdown as printed")
-        XCTAssertEqual(text.substring(with: NSRange(location: caret + (inserted as NSString).length, length: 3)), selected, "the selection was not replaced")
+        XCTAssertEqual(text.range(of: inserted).location, NSMaxRange(headingLine), "on a line of its own after the caret's line, tap's markdown as printed")
+        XCTAssertEqual(text.substring(with: headingLine), heading, "the heading is not split")
+        XCTAssertEqual(text.replacingOccurrences(of: inserted, with: ""), beforePaste, "the selection was not replaced; nothing but the markdown changed")
         XCTAssertEqual(controller.currentSlideNumber, 3)
         XCTAssertEqual(controller.editor.undoManager?.undoActionName, "Insert Image")
         XCTAssertTrue(document.isDocumentEdited, "the buffer changed; tap did not touch the deck file")

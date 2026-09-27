@@ -373,15 +373,19 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
 
     /// Pasted or dropped image files: tap image add copies each into
     /// images/ next to the deck (its own name rules, -2 on a clash) and
-    /// prints the markdown, which goes in at the caret, one undo step per
-    /// image. tap does not touch the deck file, so nothing is saved or
-    /// reloaded. A deck with no file yet has no images/ to copy into.
+    /// prints the markdown, which goes in where the paste or drop happened
+    /// (the caret then), on a line of its own, one undo step per image.
+    /// Text that changed while tap ran moves the insert to the caret. tap
+    /// does not touch the deck file, so nothing is saved or reloaded. A
+    /// deck with no file yet has no images/ to copy into.
     func insertImages(_ files: [URL]) {
         guard let deck = document?.fileURL, FileManager.default.fileExists(atPath: deck.path) else {
             session.log.append("Insert Image needs a saved deck: tap image add copies next to the deck file", source: .app)
             NSSound.beep()
             return
         }
+        var location = editor.selectedRange().location
+        var textAsItWas = editor.string
         Task { @MainActor [weak self] in
             for file in files {
                 guard let self else { return }
@@ -389,7 +393,9 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
                 switch exit.outcome {
                 case .ok?:
                     guard let added = try? exit.outcome?.result(AddedImageResult.self) else { continue }
-                    self.insertAtCaret(added.markdown + "\n", actionName: "Insert Image")
+                    if self.editor.string != textAsItWas { location = self.editor.selectedRange().location }
+                    location = self.insertOnItsOwnLine(added.markdown, at: location, actionName: "Insert Image")
+                    textAsItWas = self.editor.string
                 case .failed(_, let message)?:
                     self.showToolError(actionName: "Insert Image", message: message)
                 case nil:
@@ -397,6 +403,28 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
                 }
             }
         }
+    }
+
+    /// `text` as a line of its own at `location`: there when it is a line's
+    /// start, else at the start of the next line, so a heading or a
+    /// sentence is never split. One undo step; the caret goes after it.
+    /// Returns the location after the insert.
+    @discardableResult
+    func insertOnItsOwnLine(_ text: String, at location: Int, actionName: String) -> Int {
+        let whole = editor.string as NSString
+        let clamped = min(max(location, 0), whole.length)
+        let line = whole.lineRange(for: NSRange(location: clamped, length: 0))
+        var at = clamped
+        var insert = text + "\n"
+        if clamped != line.location {
+            at = NSMaxRange(line)
+            // The last line has no newline of its own to follow.
+            if at == whole.length, !whole.substring(with: line).hasSuffix("\n") { insert = "\n" + insert }
+        }
+        editor.replaceText(in: NSRange(location: at, length: 0), with: insert, actionName: actionName)
+        let after = at + (insert as NSString).length
+        editor.setSelectedRange(NSRange(location: after, length: 0))
+        return after
     }
 
     func editor(_ editor: EditorTextView, insertImages files: [URL]) {
