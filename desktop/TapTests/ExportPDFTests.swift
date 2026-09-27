@@ -224,6 +224,41 @@ final class ExportPDFTests: HostedTestCase {
         XCTAssertEqual(exportRuns(record), [], "tap never ran for a closed deck")
     }
 
+    /// A PDF already where the default output points is not replaced
+    /// silently: Export opens the save panel, whose own prompt asks before
+    /// replacing. Cancel there runs nothing; a confirmed name runs tap.
+    func testAnExistingPDFIsNotReplacedWithoutAsking() async throws {
+        let (_, window, deck) = try await openSevenSlides()
+        let record = try Fixtures.temporaryFolder().appendingPathComponent("record.txt")
+        AppEnvironment.shared.toolExecutableURL = try FakeToolScripts.exportPDF(slides: 2, recordingTo: record)
+        window.revealInFinder = { _ in }
+        let existing = deck.deletingPathExtension().appendingPathExtension("pdf")
+        try "a hand-made pdf".write(to: existing, atomically: true, encoding: .utf8)
+        window.exportPDF(nil)
+        let sheet = try await exportSheet(window)
+        var asked: [String] = []
+        var answer: String?
+        sheet.chooseOutput = { _, current, completion in
+            asked.append(current)
+            completion(answer)
+        }
+
+        sheet.exportButton.performClick(nil)
+        XCTAssertEqual(asked, [existing.path], "the save panel asks about the existing file")
+        XCTAssertTrue(sheet.exportButton.isEnabled, "cancelled in the panel: Export is on again")
+        try await Task.sleep(nanoseconds: 500_000_000)
+        XCTAssertEqual(exportRuns(record), [], "nothing ran")
+        XCTAssertEqual(try String(contentsOf: existing, encoding: .utf8), "a hand-made pdf")
+
+        let other = existing.deletingLastPathComponent().appendingPathComponent("talk-export.pdf").path
+        answer = other
+        sheet.exportButton.performClick(nil)
+        try await waitUntil(timeout: 20, "the sheet to finish") { window.window?.attachedSheet == nil }
+        XCTAssertEqual(exportRuns(record).count, 1)
+        XCTAssertTrue(exportRuns(record)[0].contains("--output \(other)"), "tap wrote the name the panel returned")
+        XCTAssertEqual(try String(contentsOf: existing, encoding: .utf8), "a hand-made pdf", "the hand-made file is untouched")
+    }
+
     /// Two starts in a row, before the first has reached tap: one run.
     func testStartingTwiceRunsOnce() async throws {
         let (_, window, deck) = try await openSevenSlides()

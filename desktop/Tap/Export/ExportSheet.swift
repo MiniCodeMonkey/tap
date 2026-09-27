@@ -24,6 +24,10 @@ final class ExportSheet: NSWindow {
     let doneButton = NSButton(title: "Done", target: nil, action: nil)
     private(set) var state: State = .idle
     private(set) var output: String
+    /// Whether the person picked `output` in the save or folder panel,
+    /// which asks before it replaces a file. The default path next to the
+    /// deck was picked by nobody.
+    private(set) var outputWasChosen = false
     private let optionsStack = NSStackView()
     let progressBox = NSStackView()
     private let doneIcon = NSImageView()
@@ -287,7 +291,27 @@ final class ExportSheet: NSWindow {
     @objc private func exportPressed(_ sender: Any?) {
         // Off at once: a second press (Return twice) must not start a second run.
         exportButton.isEnabled = false
+        // A PDF already at the default path is a file the person may have
+        // made: the save panel asks before replacing it.
+        if kind.isPDF, !outputWasChosen, FileManager.default.fileExists(atPath: output) {
+            chooseOutput(kind, output) { [weak self] chosen in
+                guard let self else { return }
+                guard let chosen else {
+                    self.exportButton.isEnabled = true
+                    return
+                }
+                self.choose(chosen)
+                self.onExport?(self.request)
+            }
+            return
+        }
         onExport?(request)
+    }
+
+    private func choose(_ chosen: String) {
+        output = chosen
+        outputWasChosen = true
+        refreshOutputButton()
     }
     @objc private func cancelPressed(_ sender: Any?) {
         if case .running = state { onCancel?() } else { sheetParent?.endSheet(self, returnCode: .cancel) }
@@ -298,8 +322,7 @@ final class ExportSheet: NSWindow {
     @objc private func choosePressed(_ sender: Any?) {
         chooseOutput(kind, output) { [weak self] chosen in
             guard let self, let chosen else { return }
-            self.output = chosen
-            self.refreshOutputButton()
+            self.choose(chosen)
         }
     }
 }
