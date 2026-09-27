@@ -708,3 +708,22 @@ func TestAIPromptChoicesAreExactTokens(t *testing.T) {
 		t.Error("PromptReadsAsChoices reads only exact choices")
 	}
 }
+
+// A comment edited by hand (choices reordered, spacing of its own) is
+// still found for a replace: the match is on the text the deck has.
+func TestReplaceAIImageFindsAHandEditedComment(t *testing.T) {
+	for _, comment := range []string{
+		"<!-- ai-prompt: a fox | match-theme | aspect: 1:1 -->",
+		"<!--ai-prompt:a fox | match-theme-->",
+	} {
+		content := "# Slide\n\n" + comment + "\n![](images/old.png)\n"
+		old := ParseAIImages(content)[0]
+		got, err := ReplaceAIImage(content, old, "a fox", "images/new.png", "1:1", true)
+		if err != nil {
+			t.Fatalf("%s: %v", comment, err)
+		}
+		if want := "# Slide\n\n<!-- ai-prompt: a fox | aspect: 1:1 | match-theme -->\n![](images/new.png)\n"; got != want {
+			t.Errorf("%s: got %q, want %q", comment, got, want)
+		}
+	}
+}

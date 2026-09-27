@@ -22,6 +22,9 @@ type AIImage struct {
 	ImagePath  string
 	Aspect     string
 	MatchTheme bool
+	// comment is the comment's text as the deck has it, so a replace finds
+	// the comment however it was written (choices reordered by hand).
+	comment string
 }
 
 // AIImageAspectRatios are the aspect ratios Gemini's image config accepts,
@@ -41,7 +44,7 @@ func ParseAIImages(content string) []AIImage {
 	images := make([]AIImage, 0, len(matches))
 	for _, match := range matches {
 		prompt, aspect, matchTheme := splitAIPromptOptions(match[1])
-		images = append(images, AIImage{Prompt: prompt, ImagePath: match[2], Aspect: aspect, MatchTheme: matchTheme})
+		images = append(images, AIImage{Prompt: prompt, ImagePath: match[2], Aspect: aspect, MatchTheme: matchTheme, comment: match[1]})
 	}
 	return images
 }
@@ -101,13 +104,18 @@ func InsertAIImage(content string, slideIndex int, prompt, imagePath, aspect str
 	return InsertIntoSlide(content, slideIndex, AIImageMarkdown(prompt, imagePath, aspect, matchTheme))
 }
 
-// ReplaceAIImage returns content with the AI-generated image that has
-// old's prompt, image path and recorded choices replaced in place by one
-// with newPrompt, newImagePath, aspect and matchTheme. It fails when
-// content has no such image.
+// ReplaceAIImage returns content with the AI-generated image old replaced
+// in place by one with newPrompt, newImagePath, aspect and matchTheme. An
+// old image from ParseAIImages is found by its comment's text as the deck
+// has it; one built by hand, by the comment its fields would write. It
+// fails when content has no such image.
 func ReplaceAIImage(content string, old AIImage, newPrompt, newImagePath, aspect string, matchTheme bool) (string, error) {
+	comment := old.comment
+	if comment == "" {
+		comment = aiPromptComment(old.Prompt, old.Aspect, old.MatchTheme)
+	}
 	pattern, err := regexp.Compile(fmt.Sprintf(`<!--\s*ai-prompt:\s*%s\s*-->\n[ \t]*!\[\]\(%s\)`,
-		regexp.QuoteMeta(aiPromptComment(old.Prompt, old.Aspect, old.MatchTheme)), regexp.QuoteMeta(old.ImagePath)))
+		regexp.QuoteMeta(comment), regexp.QuoteMeta(old.ImagePath)))
 	if err != nil {
 		return "", fmt.Errorf("failed to compile replacement pattern: %w", err)
 	}
