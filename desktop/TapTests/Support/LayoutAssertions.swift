@@ -45,16 +45,22 @@ extension XCTestCase {
         }
     }
 
-    /// Every one of `views` lies inside `card`'s bounds, and the card is
-    /// as tall as the views it holds.
+    /// Every one of `views` lies inside `card`'s bounds less `insets` (a
+    /// stack view's edge insets, say), and the card is as tall as the
+    /// views it holds.
     @MainActor
-    func assertCard(_ card: NSView, holds views: [NSView], in content: NSView, file: StaticString = #filePath, line: UInt = #line) {
+    func assertCard(_ card: NSView, holds views: [NSView], insets: NSEdgeInsets = NSEdgeInsets(), in content: NSView, file: StaticString = #filePath, line: UInt = #line) {
         content.layoutSubtreeIfNeeded()
         let cardRect = card.convert(card.bounds, to: content)
+        // Whether `content` is flipped decides which edge is the top, so the
+        // smaller of the top and bottom insets holds on both.
+        let vertical = min(insets.top, insets.bottom)
+        let inner = NSRect(x: cardRect.minX + insets.left, y: cardRect.minY + vertical,
+                           width: cardRect.width - insets.left - insets.right, height: cardRect.height - 2 * vertical)
         for view in views {
             let rect = alignmentRect(of: view, in: content)
             XCTAssertGreaterThan(rect.width, 0, "\(view) has a real width", file: file, line: line)
-            XCTAssertTrue(cardRect.insetBy(dx: -0.5, dy: -0.5).contains(rect), "\(view) at \(rect) lies inside its card \(cardRect)", file: file, line: line)
+            XCTAssertTrue(inner.insetBy(dx: -0.5, dy: -0.5).contains(rect), "\(view) at \(rect) lies inside its card \(cardRect), within its insets", file: file, line: line)
         }
         let rects = views.map { alignmentRect(of: $0, in: content) }
         if let first = rects.first {

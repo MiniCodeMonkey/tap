@@ -25,9 +25,9 @@ final class ExportSheet: NSWindow {
     private(set) var state: State = .idle
     private(set) var output: String
     private let optionsStack = NSStackView()
-    private let progressBox = NSStackView()
+    let progressBox = NSStackView()
     private let doneIcon = NSImageView()
-    private let warningsBox = NSStackView()
+    let warningsBox = NSStackView()
     private let warningsList = NSStackView()
     var onExport: ((ExportRequest) -> Void)?
     var onCancel: (() -> Void)?
@@ -119,6 +119,9 @@ final class ExportSheet: NSWindow {
         warningsList.edgeInsets = NSEdgeInsets(top: 0, left: 22, bottom: 0, right: 0)
         warningsBox.addArrangedSubview(warningsHead)
         warningsBox.addArrangedSubview(warningsList)
+        // Inside the box's insets: the list is the box's width less 12 on each side.
+        warningsList.widthAnchor.constraint(equalTo: warningsBox.widthAnchor, constant: -24).isActive = true
+        warningsHead.widthAnchor.constraint(lessThanOrEqualTo: warningsBox.widthAnchor, constant: -24).isActive = true
         warningsBox.setAccessibilityIdentifier("export-warnings")
 
         let outputRow = NSStackView(views: [NSTextField(labelWithString: kind.isPDF ? "Save as" : "Export to"), NSView(), outputButton])
@@ -149,9 +152,14 @@ final class ExportSheet: NSWindow {
         stack.spacing = 12
         stack.edgeInsets = NSEdgeInsets(top: 22, left: 22, bottom: 22, right: 22)
         stack.widthAnchor.constraint(equalToConstant: 504).isActive = true
-        for view in [optionsStack, progressBox, warningsBox, buttons, detailLabel, progressBar, pathLabel] as [NSView] {
+        for view in [optionsStack, progressBox, warningsBox, buttons, pathLabel] as [NSView] {
             view.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -44).isActive = true
         }
+        // The bar and the line under it fill the tinted block inside its 12 pt insets.
+        for view in [progressBar, detailLabel] as [NSView] {
+            view.widthAnchor.constraint(equalTo: progressBox.widthAnchor, constant: -24).isActive = true
+        }
+        bytesLabel.widthAnchor.constraint(lessThanOrEqualTo: progressBox.widthAnchor, constant: -24).isActive = true
         for row in [outputRow] + (kind.isPDF ? [options[0]] : []) { row.widthAnchor.constraint(equalTo: optionsStack.widthAnchor).isActive = true }
         contentView = stack
         isReleasedWhenClosed = false
@@ -217,7 +225,11 @@ final class ExportSheet: NSWindow {
         case .done(let summary):
             statusLabel.stringValue = kind.doneTitle(warnings: summary.warnings.count)
             statusLabel.font = .systemFont(ofSize: 15, weight: .bold)
-            progressBar.isHidden = true
+            // The ExportWarnings board keeps the bar, full, above the summary.
+            progressBar.isHidden = false
+            progressBar.stopAnimation(nil)
+            progressBar.isIndeterminate = false
+            progressBar.doubleValue = progressBar.maxValue
             detailLabel.stringValue = summary.summary
             bytesLabel.stringValue = ""
             pathLabel.stringValue = (summary.output.path as NSString).abbreviatingWithTildeInPath + (kind.isPDF ? "" : "/")
@@ -245,8 +257,13 @@ final class ExportSheet: NSWindow {
             text.append(NSAttributedString(string: warning.message, attributes: [.font: NSFont.monospacedSystemFont(ofSize: 11.5, weight: .regular), .foregroundColor: NSColor.secondaryLabelColor]))
             let row = NSTextField(labelWithAttributedString: text)
             row.lineBreakMode = .byTruncatingTail
+            row.maximumNumberOfLines = 1
+            row.usesSingleLineMode = true
+            row.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
             warningRows.append(row)
             warningsList.addArrangedSubview(row)
+            // A long message truncates inside the box instead of widening the sheet.
+            row.widthAnchor.constraint(lessThanOrEqualTo: warningsList.widthAnchor, constant: -22).isActive = true
         }
         warningsBox.isHidden = false
     }
