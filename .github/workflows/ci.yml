@@ -367,8 +367,12 @@ jobs:
       # That said, this has not been exercised against the real desktop
       # app yet: this job cannot prove it works until feat/desktop-app-
       # shell merges and this step actually runs instead of being skipped.
+      # xcodebuild passes TEST_RUNNER_ variables to the test host without
+      # the prefix, so a crash in Tap.app prints every thread's backtrace.
       - name: Run hosted Tap.app tests
         if: steps.check-desktop.outputs.exists == 'true'
+        env:
+          TEST_RUNNER_SWIFT_BACKTRACE: threads=all
         run: make -C desktop test
 
       # A failed hosted run keeps what classifies a web content process
