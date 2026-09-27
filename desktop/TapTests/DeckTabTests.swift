@@ -60,7 +60,7 @@ final class DeckTabTests: HostedTestCase {
         XCTAssertTrue(form.field("slideNumbers") is NSSwitch, "a boolean is a switch, as the DeckTabFields board draws it")
         let title = try XCTUnwrap(form.field("title") as? NSTextField)
         XCTAssertEqual(title.stringValue, "Seven Slides")
-        // The Theme row is a button, D5's popup is gone; it reads "Default"
+        // The Theme row is one button, not a popup; it reads "Default"
         // for a deck that names no theme.
         let themeRow = try XCTUnwrap(form.themeRowButton, "the Theme row is a button, not a popup")
         XCTAssertEqual(themeRow.nameLabel.stringValue, "Default", "the deck sets no theme")

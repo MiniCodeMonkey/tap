@@ -286,7 +286,7 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
         document.save(to: url, ofType: document.fileType ?? "net.daringfireball.markdown", for: .saveOperation, completionHandler: completion)
     }
 
-    /// D5's fix-it save, unchanged in what it logs: FixItTests waits for the success line.
+    /// The fix-it's save. FixItTests waits for its success line.
     func saveNow() {
         saveNow { [weak self] error in
             if let error {

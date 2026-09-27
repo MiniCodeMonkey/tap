@@ -16,7 +16,7 @@ final class DeckTabThemeRowTests: HostedTestCase {
         let form = controller.deckForm
         try await waitUntil(timeout: 20, "the catalog") { AppEnvironment.shared.themeImages.catalog != nil }
         let row = try XCTUnwrap(form.themeRowButton, "the Theme row is a button, not a popup")
-        XCTAssertNil(form.fields["theme"] as? NSPopUpButton, "D5's popup is gone")
+        XCTAssertNil(form.fields["theme"] as? NSPopUpButton, "the theme is picked in the grid, not a popup")
         try await waitUntil(timeout: 5, "the row's name") { row.nameLabel.stringValue == "Terminal" }
         try await waitUntil(timeout: 60, "the row's render") { row.swatchView.image != nil }
 

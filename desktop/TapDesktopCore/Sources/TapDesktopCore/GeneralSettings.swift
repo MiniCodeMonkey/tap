@@ -12,7 +12,7 @@ public final class GeneralSettings {
     public enum LineSpacing: String, CaseIterable, Sendable {
         case tight, normal, roomy
 
-        /// The editor's line height: D2's 21 points at 13 points normal.
+        /// The editor's line height: 21 points at 13 points normal.
         public func lineHeight(forFontSize fontSize: CGFloat) -> CGFloat {
             let factor: CGFloat
             switch self {
