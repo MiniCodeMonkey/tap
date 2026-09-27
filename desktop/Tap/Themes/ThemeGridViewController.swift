@@ -210,7 +210,13 @@ final class ThemeGridViewController: NSViewController {
                     cells.append(cell)
                     return cell
                 }
-                grid.addRow(with: rowCells + Array(repeating: NSView(), count: Self.columns - rowCells.count))
+                // Each empty slot gets a view of its own: NSGridView raises
+                // NSInvalidArgumentException for one view in two cells, and
+                // an exception raised inside a Swift task's job (the loader's
+                // catalog notification, a test's popover) leaves that task
+                // current on the main thread and crashes the process later.
+                let fillers = (rowCells.count..<Self.columns).map { _ in NSView() }
+                grid.addRow(with: rowCells + fillers)
             }
             content.addArrangedSubview(grid)
         }
