@@ -147,6 +147,7 @@ final class ThemeSetTests: HostedTestCase {
         XCTAssertEqual(bar.message, "Change Theme failed.")
         XCTAssertTrue(bar.detail.hasPrefix("unknown theme \"nope\""), "tap's own message: \(bar.detail)")
         XCTAssertEqual(controller.editor.string, textBefore, "nothing changed")
+        XCTAssertFalse(controller.session.log.text.contains("loaded the disk version"), "a failed run loads nothing")
         bar.button(titled: "OK")?.performClick(nil)
         XCTAssertNil(controller.editorViewController.bar(.toolFailed))
     }
