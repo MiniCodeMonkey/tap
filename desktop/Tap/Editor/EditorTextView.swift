@@ -396,15 +396,23 @@ final class EditorTextView: NSTextView {
         boxRect(forBoxAt: index).map { NSRect(x: $0.minX, y: $0.minY, width: $0.width, height: Self.headerHeight) }
     }
 
-    /// The center of the character's line fragment, in the view's
-    /// coordinates, through TextKit 2 (never `layoutManager`, whose read
-    /// would turn the editor into a TextKit 1 view).
+    /// A point on the character itself, in the view's coordinates: a
+    /// quarter of the way into the glyph and halfway down its line, so
+    /// `characterIndexForInsertion(at:)` there is `index`. Through TextKit 2
+    /// (never `layoutManager`, whose read would turn the editor into a
+    /// TextKit 1 view).
     func pointForCharacter(at index: Int) -> NSPoint {
         guard let contentManager = textContentStorage, let layoutManager = textLayoutManager,
               let location = contentManager.location(contentManager.documentRange.location, offsetBy: index),
               let fragment = layoutManager.textLayoutFragment(for: location) else { return .zero }
         let frame = fragment.layoutFragmentFrame
-        return NSPoint(x: frame.midX + textContainerOrigin.x, y: frame.midY + textContainerOrigin.y)
+        let offset = contentManager.offset(from: fragment.rangeInElement.location, to: location)
+        let lines = fragment.textLineFragments
+        guard let line = lines.first(where: { NSLocationInRange(offset, $0.characterRange) }) ?? lines.last else { return .zero }
+        let leading = line.locationForCharacter(at: offset).x
+        let trailing = NSLocationInRange(offset + 1, line.characterRange) ? line.locationForCharacter(at: offset + 1).x : line.typographicBounds.width
+        return NSPoint(x: frame.minX + line.typographicBounds.minX + leading + max(0, trailing - leading) / 4 + textContainerOrigin.x,
+                       y: frame.minY + line.typographicBounds.midY + textContainerOrigin.y)
     }
 
     /// The box whose header is under `point`, in view coordinates.
