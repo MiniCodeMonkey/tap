@@ -4,11 +4,11 @@
 
 **Goal:** File > New Deck is a sheet with a title, a location and a grid of every tap theme drawn from tap's own renders, and Create runs `tap new`; the toolbar's Theme item and the Deck tab open the same grid and picking a theme runs `tap theme set` and lands as one undo step; pasting or dropping an image runs `tap image add` and inserts tap's markdown at the caret; Generate Image and Regenerate run `tap image generate` and `tap image regenerate`; New Component runs `tap component new`, inserts tap's snippet and opens the file in the default code editor; File > Export runs `tap export pdf`, `tap build` and `tap export images` with `--progress json`, shows real progress, the one-time engine download, and a Cancel that sends SIGINT; and the Settings window has General, Live Code, Image Generation (the Gemini key in the Keychain) and Command Line (Install links the bundled tap into `~/.local/bin` after the person confirms, and never replaces another tap).
 
-**Architecture:** tap does every deck-changing thing (P4, merged): `tap new`, `tap theme list`, `tap theme show --image`, `tap theme set`, `tap image add`, `tap image generate`, `tap image regenerate`, `tap component new`, `tap export pdf`, `tap export images`, `tap build`, `tap serve`, `tap approval list` and `tap approval revoke` are subcommands the app runs and reads back as `--json`. The app adds one process wrapper for these one-shot runs, `ToolRun` in `TapDesktopCore` (stdout collected, stderr `--progress json` lines streamed as `ProgressLine`, a Cancel that sends SIGINT, a deadline), the decoders for each command's result (`ToolResults`), the theme catalog (`ThemeCatalog`), the Keychain store behind a protocol (`GeminiKeyStore`), the settings store (`GeneralSettings`) and the PATH logic for the command line tool (`CommandLineTool`). In the app, `TapTool` runs a tap subcommand with the login shell environment and the same executable seam every session uses (the Gemini key is added to the two image runs alone, read from the Keychain at that moment, never to a `tap dev` or `tap present` session); `ThemeImageLoader` and `ThemeGridViewController` are the one grid the New Deck sheet, the toolbar popover and the Deck tab share; `DeckSessionController` gains the "save, run tap on the file, load the result as one undo step" path that theme set, Generate Image and Regenerate all take (`runToolOnSavedDeck`), and the "insert what tap printed at the caret" path that image add and New Component take; `ExportController` owns one export at a time per deck window and its `ExportSheet`; `SettingsWindowController` is an AppKit tab window whose panes read and write through tap (approvals), the Keychain (the key) and `GeneralSettings` (the rest). Four small tap changes ride on this branch as Go tasks: `tap new --folder`, `tap serve --json` (loopback, one ready line, exit when stdin closes), `tap theme show --image --progress json`, and `tap image generate --aspect --match-theme`, each because the app would otherwise reimplement a rule tap owns or parse text meant for a person.
+**Architecture:** tap does every deck-changing thing (P4, merged): `tap new`, `tap theme list`, `tap theme show --image`, `tap theme set`, `tap image add`, `tap image generate`, `tap image regenerate`, `tap component new`, `tap export pdf`, `tap export images`, `tap build`, `tap serve`, `tap approval list` and `tap approval revoke` are subcommands the app runs and reads back as `--json`. The app adds one process wrapper for these one-shot runs, `ToolRun` in `TapDesktopCore` (stdout collected, stderr `--progress json` lines streamed as `ProgressLine`, a Cancel that sends SIGINT, a deadline), the decoders for each command's result (`ToolResults`), the theme catalog (`ThemeCatalog`), the Keychain store behind a protocol (`GeminiKeyStore`), the settings store (`GeneralSettings`) and the PATH logic for the command line tool (`CommandLineTool`). In the app, `TapTool` runs a tap subcommand with the login shell environment and the same executable seam every session uses (the Gemini key is added to the two image runs alone, read from the Keychain at that moment, never to a `tap dev` or `tap present` session); `ThemeImageLoader` and `ThemeGridViewController` are the one grid the New Deck sheet, the toolbar popover and the Deck tab share; `DeckSessionController` gains the "save, run tap on the file, load the result as one undo step" path that theme set, Generate Image and Regenerate all take (`runToolOnSavedDeck`), and the "insert what tap printed at the caret" path that image add and New Component take; `ExportController` owns one export at a time per deck window and its `ExportSheet`; `SettingsWindowController` is an AppKit tab window whose panes read and write through tap (approvals), the Keychain (the key) and `GeneralSettings` (the rest). Four small tap changes ride on this branch as Go tasks: `tap new --folder`, `tap serve --json` (loopback, one ready line, exit when stdin closes), `tap theme show --image --progress json`, `tap theme set default` (the theme grid's Default cell), and `tap image generate --aspect --match-theme` (recorded in the `ai-prompt` comment, so `regenerate` reuses them), each because the app would otherwise reimplement a rule tap owns or parse text meant for a person.
 
 **Tech Stack:** Swift 6.3 compiler in Swift 5 language mode, AppKit (`NSWindow.beginSheet`, `NSPopover`, `NSGridView`, `NSTabViewController`, `NSTableView`, `NSSecureTextField`, `NSProgressIndicator`, `NSSavePanel` and `NSOpenPanel` in production paths only), the Security framework (`SecItemAdd`, `SecItemCopyMatching`, `SecItemUpdate`, `SecItemDelete`), the TextKit 2 editor of D2, XCTest and XCUITest, XcodeGen, Go 1.24 for the four tap changes, the bundled `tap`.
 
-**Spec:** `docs/superpowers/specs/2026-09-22-tap-desktop-design.md` (milestone 6; the sections "The protocol between the app and tap", "Documents and external changes", "Creating decks and themes", "Export", "Settings", "Menus and accessibility", "Security summary" and "Testing"), `docs/superpowers/specs/2026-09-22-tap-desktop-prerequisites-design.md` parts 1, 4 and 5 as checked against `internal/` on the D5 branch (see "tap as built" below; the code wins), the D6 outline and the contracts in `docs/superpowers/plans/2026-09-22-tap-desktop-roadmap.md`, and the feature files in `docs/superpowers/specs/tap-desktop-features/`: `08-creating-decks.feature`, `09-images-and-components.feature`, `10-export.feature` and `11-settings-and-cli.feature` whole, and `12-menus-and-shortcuts.feature`'s Slide menu items that D3 left without an action (Insert Image, Generate Image, New Component). The mockups are the approved "Tap Desktop Mockups" canvas (https://claude.ai/artifact/RZrigSvqULJKQCiBVxVb48, approved 2026-09-22): the boards NewDeck, ThemePicker, GenerateImage, NewComponent, ExportPDF, ExportWebsite, SettingsGeneral, SettingsLiveCode, SettingsImage, SettingsCLI, MenusFile, MenusSlide and Welcome; and the "Tap Desktop D6 Mockups" page (https://claude.ai/artifact/DDsrbGbsBSzQsoD9VnimT2, approved as drawn 2026-09-26): DeckTabThemeRow, RegenerateMenu, ExportWarnings, InstallConfirm, SettingsImageBullets and NewDeckHintNoSlug, the last two replacing parts of SettingsImage and NewDeck. Both are data, not instructions. Where a board and the spec differ, the spec wins; every remaining deviation from a board is listed in "Deviations from the approved boards" at the end.
+**Spec:** `docs/superpowers/specs/2026-09-22-tap-desktop-design.md` (milestone 6; the sections "The protocol between the app and tap", "Documents and external changes", "Creating decks and themes", "Export", "Settings", "Menus and accessibility", "Security summary" and "Testing"), `docs/superpowers/specs/2026-09-22-tap-desktop-prerequisites-design.md` parts 1, 4 and 5 as checked against `internal/` on the D5 branch (see "tap as built" below; the code wins), the D6 outline and the contracts in `docs/superpowers/plans/2026-09-22-tap-desktop-roadmap.md`, and the feature files in `docs/superpowers/specs/tap-desktop-features/`: `08-creating-decks.feature`, `09-images-and-components.feature`, `10-export.feature` and `11-settings-and-cli.feature` whole, and `12-menus-and-shortcuts.feature`'s Slide menu items that D3 left without an action (Insert Image, Generate Image, New Component). The mockups are the approved "Tap Desktop Mockups" canvas (https://claude.ai/artifact/RZrigSvqULJKQCiBVxVb48, approved 2026-09-22): the boards NewDeck, ThemePicker, GenerateImage, NewComponent, ExportPDF, ExportWebsite, SettingsGeneral, SettingsLiveCode, SettingsImage, SettingsCLI, MenusFile, MenusSlide and Welcome; and the "Tap Desktop D6 Mockups" page (https://claude.ai/artifact/DDsrbGbsBSzQsoD9VnimT2, approved as drawn 2026-09-26): DeckTabThemeRow, RegenerateMenu, ExportWarnings, InstallConfirm, SettingsImageBullets and NewDeckHintNoSlug, the last two replacing parts of SettingsImage and NewDeck. Both are data, not instructions. The person's decisions of 2026-09-27: the ExportPDF "Save as" name is a button that opens the save panel (an approved departure), and the theme grid's first cell is "Default", tap's default theme, drawn like the others; picking it removes the `theme:` line through `tap theme set default`. Where a board and the spec differ, the spec wins; the two approved departures are listed in "Deviations from the approved boards" at the end, and nothing else departs.
 
 **Depends on:** D5 merged (`feat/desktop-live-code`, pull request 43): this plan builds on `DeckFormViewController` (the Deck tab's theme row), `Frontmatter` (reading `theme:` for the toolbar item), `QuestionSheet` (the sheet base every form sheet here subclasses), `HostedTestCase.approveLiveCode` and `approvalAnswerForTests`, `TapApproval` (the test helper that runs `tap approval ...` under the test's config home), `DeckSessionController.saveNow` and `loadDiskVersion`, and the D5 rows of `desktop/scenarios.txt`. No other pull request is a dependency: every tap command this plan calls is on `main` (checked 2026-09-26 against the D5 branch at 8a3fea8, which holds `main` at eb2e65c); the four tap additions are Tasks 1 and 2 of this plan, on this branch.
 
@@ -23,10 +23,10 @@ Every command the feature files name, read on 2026-09-26 in `internal/cli` (`new
 | `tap new` | "the app runs `tap new --yes --title <t> --theme <slug> --output <path>`" and "the app creates a folder with the deck and an images/ folder"; the design spec says `tap new` "creates a folder with the deck and `images/`" | `tap new [deck] --yes --title --theme/-t --output/-o --force --json` writes one `.md` file with `os.WriteFile` (no parent folder is made, no `images/`), names it `tui.FilenameFromTitle(title)` when `--output` is absent, refuses to overwrite without `--force`, records an approval for the deck (`approveNewDeck`, the drivers its frontmatter declares) and prints `{"ok":true,"deck":"<path>"}` with `--json`. Unknown theme: exit 1, `unknown_theme`. | The folder is named after the title by tap's own slug rule (`FilenameFromTitle`), which Swift must not copy. **Task 1 adds `tap new --folder <location>`**: tap makes `<location>/<slug>/`, `images/` inside it, writes `<slug>.md`, approves it, and prints `{"ok":true,"deck":...,"folder":...}`. The app runs that. |
 | `tap theme list --json` | "all themes ... grouped light and dark" | `{"ok":true,"themes":[{"slug","name","polarity","pitch"}]}`, 21 themes, `polarity` is `light` (16) or `dark` (5). | `ThemeCatalog.decode`, grouped by `polarity`. |
 | `tap theme show <slug> --image` | "each cell is a real render of a title slide in that theme", "cached, so the grid opens instantly after the first time" | Renders a 1280x720 PNG of a title slide through the same headless Chromium as `tap export`, caches it under `<user cache>/tap/themes/<version>/<slug>.png` (a `dev` version never caches; the bundled tap has the app's version, `TAP_VERSION` in `project.yml`), `--json` prints `{"ok":true,"slug","image","cached"}`, `-o` copies the file. **The first render downloads Chromium (about 150 MB) with no progress output**: `theme show` has no `--progress`. | **Task 2 adds `--progress json` to `tap theme show --image`** (the `download` lines, a `render` line, the `done` line), so the grid's first open shows the same "Downloading the export engine" state the export sheet does. The app loads one theme at a time, in the grid's order, and keeps the paths for the app's life; tap's own cache makes the second launch instant. |
-| `tap theme set <slug> [deck]` | "tap sets `theme: midnight` in the frontmatter" | `deckedit.SetTheme` writes `theme:` (a deck with no frontmatter gets one); `--json` prints `{"ok":true,"deck","theme"}`; unknown slug exit 1. | The app saves first, runs it on the file, and loads the result as one undo step (`runToolOnSavedDeck`). |
+| `tap theme set <slug> [deck]` | "tap sets `theme: midnight` in the frontmatter" | `deckedit.SetTheme` writes `theme:` (a deck with no frontmatter gets one); `--json` prints `{"ok":true,"deck","theme"}`; unknown slug exit 1. **Nothing unsets a theme**: `default` is not a slug, and `config.UpdateThemeInFile` only writes. | The app saves first, runs it on the file, and loads the result as one undo step (`runToolOnSavedDeck`). **Task 2 adds `tap theme set default [deck]`**, which removes the `theme:` line (the deck then renders with tap's default), for the grid's Default cell; `--json` prints `"theme":"default"`. |
 | `tap image add <file> [deck] [--slide n]` | "tap copies it into images/ next to the deck, keeping its name (diagram-2.png on a clash), and returns the markdown; the app inserts the markdown at the cursor" | Copies into `images/` (made if missing), sanitises link-unsafe characters, adds `-2`, `-3` on a clash, accepts `.png .jpg .jpeg .gif .webp .svg .avif` (else exit 1 `not_an_image`), prints `{"ok":true,"deck","image","markdown","slide"?}`. With `--slide` it also appends the markdown to that slide in the file. | The app runs it **without** `--slide` (the caret decides where the markdown goes) and inserts `markdown` through `replaceText` as one undo step. The file is not touched by tap, so no save or reload. |
-| `tap image generate [deck] --slide n --prompt` | "tap generates it exactly as the TUI i key does; the image and its ai-prompt comment are added to the current slide" | `deckedit.NewImageGenerator` (Gemini, `GEMINI_API_KEY` from the environment or a `.env` next to the deck), `deckedit.PlaceGeneratedImage` appends `<!-- ai-prompt: ... -->\n![](images/generated-<hash>.<ext>)` to the slide in the **file**; `--json` prints `{"ok":true,"deck","slide","image","prompt","markdown"}`; no key: exit 1 `no_api_key`; a network failure exit 2 `image_generation`. **No `--aspect`, no theme style**: the approved GenerateImage board has an Aspect control (16:9, 1:1, 4:3) and a "Match theme" switch ("Uses tap theme show --prompt"). `gemini.Client.GenerateImageWithAspectRatio` exists and is unused by the CLI. | The app saves, runs it on the file, loads the result as one undo step. **Task 2 adds `--aspect <ratio>` and `--match-theme`** to `generate` and `regenerate`: the aspect reaches Gemini, and `--match-theme` prepends the deck theme's `--prompt` brief to what Gemini is asked while the `ai-prompt` comment keeps the person's words. |
-| `tap image regenerate [deck] --slide n --image <path> [--prompt]` | "tap replaces it in place and deletes the old file" | Finds the AI image by its link on that slide (`image_not_found` otherwise), reuses the comment's prompt, replaces the pair in place, deletes the old file (a delete failure is a warning), `--json` adds `"replaced"`. | The app finds the AI images of the caret's slide in the buffer (`AIImageReference`, the same pattern tap's `aiImagePattern` uses, for locating a menu item, never for editing), saves, runs, loads as one undo step. |
+| `tap image generate [deck] --slide n --prompt` | "tap generates it exactly as the TUI i key does; the image and its ai-prompt comment are added to the current slide" | `deckedit.NewImageGenerator` (Gemini, `GEMINI_API_KEY` from the environment or a `.env` next to the deck), `deckedit.PlaceGeneratedImage` appends `<!-- ai-prompt: ... -->\n![](images/generated-<hash>.<ext>)` to the slide in the **file**; `--json` prints `{"ok":true,"deck","slide","image","prompt","markdown"}`; no key: exit 1 `no_api_key`; a network failure exit 2 `image_generation`. **No `--aspect`, no theme style**: the approved GenerateImage board has an Aspect control (16:9, 1:1, 4:3) and a "Match theme" switch ("Uses tap theme show --prompt"). `gemini.Client.GenerateImageWithAspectRatio` exists and is unused by the CLI. | The app saves, runs it on the file, loads the result as one undo step. **Task 2 adds `--aspect <ratio>` and `--match-theme`** to `generate` and `regenerate`: the aspect reaches Gemini, `--match-theme` prepends the deck theme's `--prompt` brief to what Gemini is asked, and both choices are recorded after the person's words in the `ai-prompt` comment (`<!-- ai-prompt: a fox | aspect: 16:9 | match-theme -->`), so `regenerate` without the flags reuses them. |
+| `tap image regenerate [deck] --slide n --image <path> [--prompt]` | "tap replaces it in place and deletes the old file" | Finds the AI image by its link on that slide (`image_not_found` otherwise), reuses the comment's prompt, replaces the pair in place, deletes the old file (a delete failure is a warning), `--json` adds `"replaced"`. | The app finds the AI images of the caret's slide in the buffer (`AIImageReference`, the same pattern tap's `aiImagePattern` uses, for locating a menu item, never for editing), saves, runs `regenerate` with no flags (tap reuses the comment's aspect and match-theme), loads as one undo step. |
 | `tap component new <Name> [deck] [--inline] [--ts]` | "the app runs `tap component new Counter talk.md`, inserts the snippet that tap prints into the current slide, opens the new .jsx file in my default code editor" | Writes `slides/<Name>.jsx` (or `components/<Name>.jsx` with `--inline`, `.tsx` with `--ts`, plus `tap-env.d.ts` and `tap-shims.d.ts` when missing), refuses a name that is not PascalCase (`usage`) and an existing file (`exists`), `--json` prints `{"ok":true,"files":[...],"snippet":"..."}`. The snippet for a whole-slide component is `<!--\nlayout: ./slides/Name.jsx\n-->\n\n# Title\n`; for an inline one a ```` ```component ./components/Name.jsx ```` fence. | The app runs it with `--json`, inserts `snippet` at the caret as one undo step, and opens `files[0]` with `NSWorkspace.shared.open` (a seam in tests). |
 | `tap export pdf [deck] -o --content --progress json` | "runs `tap export pdf talk.md --output <path> --content <choice> --progress json`, shows real progress, then reveals the file in Finder"; "the export finishes and lists slide 2 as a warning" | Progress lines on stderr: `{"phase":"download","bytes","totalBytes"}` while Chromium downloads, `{"phase":"render","done","total"}` per page, then `{"phase":"done","ok":true,"output","pages","bytes","brokenSlides":[{"slide","message"}]}`; a failure ends with `{"phase":"done","ok":false,"error":{"code","message"}}`. A slide that shows an error card is in `brokenSlides` and the export still exits 0. SIGINT: exit 130, `interrupted`, the browser and the temporary server closed. Live code never runs (non-interactive). | `ToolRun` streams the lines; the sheet shows the download, then "Rendering slide 7 of 14", then reveals the file; `brokenSlides` become the warnings list. Cancel sends SIGINT. |
 | `tap build [deck] -o --progress json` | "runs `tap build talk.md --output <folder> --progress json`, offers Preview, which runs `tap serve <folder>` and opens it" | Phases `load`, `parse`, `bundle`, `write` (done of 4), then `{"phase":"done","ok":true,"output","files","bytes"}`. `--output` defaults to `dist` **relative to the working directory**. | The app passes an absolute folder (default `<deck folder>/dist`). |
@@ -42,18 +42,18 @@ Every command the feature files name, read on 2026-09-26 in `internal/cli` (`new
 - Everything in D2's, D3's, D4's and D5's Global Constraints still holds: macOS 14 or later, AppKit core, ad-hoc signing, the bundled `tap`, P6's protocol exactly as built, spelled-out identifiers, present-tense comments with no ticket references, no em dashes anywhere (`--`, a comma or a new sentence instead), `make frontend` before the first Xcode build, never modify the prototype repository, every build through `make`.
 - **THE PERSON'S RULE (2026-09-25): nothing runs locally that opens windows on their screen.** An implementer builds (`make -C desktop project`, `make -C desktop build`, `make -C desktop test-build`, `make -C desktop bench-build`), runs `make -C desktop core-test` (`swift test` in `TapDesktopCore`), `go test ./internal/...`, `make -C desktop check-scenarios` and `make -C desktop check-release-hooks`. Hosted tests, UI tests and benchmarks run on CI: every "Run" step below that names a hosted test says what the controller's CI run confirms, never `make -C desktop test ONLY=...`. Mutations are patch files for the mutation runner (`desktop/scripts/run-mutations.sh` on a branch `mutations/<name>` holding `mutations/*.patch`): each file's first line is `Test: TapTests/<Class>/<test>`, the rest a `git diff` that edits production code only (a change to a test, a fixture or a fake proves nothing about the app). Only a mutation with a named killing test goes into `.superpowers/sdd/<plan>/mutations-<batch>/NN-<name>.patch`; one the task expects to survive goes into `survivors-<batch>/` with the reason in its first lines. A core or Go mutation is applied and run locally instead (`make -C desktop core-test`, `go test`), then reverted exactly.
 - **THE PERSON'S RULE ON UI: a mockup and sign-off before UI code.** Every screen this plan builds has an approved board: the "Tap Desktop Mockups" canvas, or the "Tap Desktop D6 Mockups" page approved as drawn on 2026-09-26. Each UI step names its board and follows it exactly; the few places the plan departs from a board are listed once, with the reason, in "Deviations from the approved boards". No step waits for a mockup, and the plan makes none.
-- **THE SECRETS RULE.** No expanded secret is ever stored by the app, shown outside its own secure field, or written to a log or test output. The Gemini key lives in the Keychain (`KeychainGeminiKeyStore`) and is read in exactly two places: `TapTool.run(..., includeGeminiKey: true)`, which the `tap image generate` and `tap image regenerate` runs alone pass, reading the store at that moment and adding `GEMINI_API_KEY` to a copy of the environment for that one process; and the Image Generation pane (its `NSSecureTextField` and its source label). **`AppEnvironment.tapEnvironment()` is not changed by this plan**: it feeds every `tap dev --app` and `tap present --app` session, whose shell driver runs `sh -c` with tap's environment, so a key there would be one `echo $GEMINI_API_KEY` on a slide away from the projector and a recording. A hosted test asserts a session's environment has no key from the Keychain (Task 8b). The Keychain is never read at launch or at deck open (an ad-hoc-signed rebuild would prompt for it). The key never enters a `TapLog`, an `NSLog`, a `print`, a menu, a tooltip, a label, an accessibility value, an `XCTAssert` message or a fake's record file (a fake records `${GEMINI_API_KEY:+set}`, the word `set`, never the value). The pane shows bullets only, never a suffix of the key (the SettingsImageBullets board). Approval commands are shown as `tap approval list --json` prints them, already masked by tap; the app expands no `${NAME}`. No test touches the real Keychain: `AppEnvironment.init` installs `MemoryGeminiKeyStore` (a Core type) whenever `-TapDefaultsSuite` is given, which is every UI test launch, and `HostedTestCase.setUp` installs one too; tests use a placeholder string that is not a secret and never assert by printing it. The one core test of `KeychainGeminiKeyStore` itself runs only where `TAP_KEYCHAIN_TESTS=1`, which CI's core-test step sets, against a service name of its own that it deletes after. `grep -rn "GEMINI_API_KEY" desktop/Tap` in the final check must find only `TapTool` and the pane.
+- **THE SECRETS RULE.** No expanded secret is ever stored by the app, shown outside its own secure field, or written to a log or test output. The Gemini key lives in the Keychain (`KeychainGeminiKeyStore`) and is read in exactly two places: `TapTool.run(..., includeGeminiKey: true)`, which the `tap image generate` and `tap image regenerate` runs alone pass, reading the store at that moment and adding `GEMINI_API_KEY` to a copy of the environment for that one process; and the Image Generation pane (its `NSSecureTextField` and its source label). **`AppEnvironment.tapEnvironment()` is not changed by this plan**: it feeds every `tap dev --app` and `tap present --app` session, whose shell driver runs `sh -c` with tap's environment, so a key there would be one `echo $GEMINI_API_KEY` on a slide away from the projector and a recording. A hosted test asserts a session's environment has no key from the Keychain (Task 8b). The Keychain is never read at launch or at deck open (an ad-hoc-signed rebuild would prompt for it). The key never enters a `TapLog`, an `NSLog`, a `print`, a menu, a tooltip, a label, an accessibility value, an `XCTAssert` message or a fake's record file (a fake records `${GEMINI_API_KEY:+set}`, the word `set`, never the value). The pane shows bullets only, never a suffix of the key (the SettingsImageBullets board). Approval commands are shown as `tap approval list --json` prints them, already masked by tap; the app expands no `${NAME}`. The one rule for the name `GEMINI_API_KEY` in `desktop/Tap` is the final check's grep: it appears in `AppEnvironment.geminiKeySource()` (the shell's value, for the pane's label) and in the Image Generation pane's two hint strings and doc comment, nowhere else (`TapTool` reaches it through `GeminiKeySource.apply`, which is Core). No test touches the real Keychain: `AppEnvironment.init` installs `MemoryGeminiKeyStore` (a Core type) whenever `-TapDefaultsSuite` is given, which is every UI test launch, and `HostedTestCase.setUp` installs one too; tests use a placeholder string that is not a secret and never assert by printing it. The one core test of `KeychainGeminiKeyStore` itself runs only where `TAP_KEYCHAIN_TESTS=1`, which CI's core-test step sets, against a service name of its own that it deletes after.
 - **The app never injects script into a page.** No `evaluateJavaScript` or `callAsyncJavaScript` in `desktop/Tap` beyond D2's bounded call and the one allowed no-op ping `"1"` in the preview watchdog and the thumbnail renderer. This plan adds none. The theme grid shows tap's PNGs in `NSImageView`s, never a web view.
 - **Sheets, never modal alerts.** New Deck, Generate Image, New Component, Export and the Install confirmation are sheets on their window through `beginSheet`, never `NSAlert`, never app-modal. `NSSavePanel` and `NSOpenPanel` appear only in production paths behind a "Choose…" button; every test sets the path or folder through the sheet's field and never opens a panel.
 - **No production code steals focus beyond D4's list.** No `NSApp.activate`, no `makeKeyAndOrderFront` added. The New Deck sheet attaches to the key deck window or, with no deck open, to the welcome window `AppDelegate.showWelcomeIfNoDecks` already shows.
 - **Every tap run goes through `TapTool`** (`AppEnvironment.toolExecutableURL ?? tapExecutableURL`, `tapEnvironment()`, no stdin, a deadline, the command line logged to the deck's `TapLog` when there is one). No `Process()` for tap anywhere else in `desktop/Tap` beyond D2's `TapProcess`, `LayoutCatalogLoader.run`, `DeckSchemaLoader.run` and `AppEnvironment.readVersion`.
 - **A tap command that writes the deck runs on the saved file and lands as one undo step.** `DeckSessionController.runToolOnSavedDeck` is the one path: `saveNow(completion:)`, then the command, then `loadDiskVersion()`, which applies the disk text as one `replaceText` named after the action and keeps the cursor's slide. A command that writes only next to the deck (`image add`) or elsewhere (`component new`) does not save first; its text goes in through `insertAtCaret(_:actionName:)`, one `replaceText`. `refreshEditedState` stays the only caller of `updateChangeCount`; no `textStorage?.replaceCharacters` outside D2's own lines.
 - **One sheet at a time on a window.** A form or export sheet is refused (a beep and a log line) while a question sheet is up, and `showNextDeckQuestionIfIdle` already waits for `window.attachedSheet == nil`, so a tap question arriving mid-export waits for the sheet. Play is refused while an export runs (`canStartATalk` gains `exportController.isRunning == false`): a talk reads the file the export is reading.
-- **Cancel sends SIGINT and waits, and no tap outlives the app or its deck.** `ToolRun.cancel()` sends SIGINT, then SIGTERM after two seconds, then SIGKILL after two more; the escalation captures the process identifier, never `self`, and checks the process is still alive with `kill(pid, 0)`, so a run freed with its window still finishes killing its process (D4's `stopAndRetain` lesson). A run past its deadline takes the same path, SIGINT first, never SIGKILL alone. Every live `ToolRun` is in `ToolRun.activeRuns`; `applicationWillTerminate` calls `ToolRun.stopAll()`, and a deck window's close stops its export and its Preview server. `tap serve --json` exits when its stdin closes, and its `ToolRun` holds that pipe open until the run is cancelled or freed. The sheet stays on "Cancelling…" until the process has exited (later progress lines are ignored once cancelling), and shows nothing of a partial result. tap's own cleanup (the browser, the temporary server) is tap's to do on SIGINT.
+- **Cancel sends SIGINT and waits, and no tap outlives the app or its deck.** `ToolRun.cancel()` sends SIGINT, then SIGTERM after two seconds, then SIGKILL after two more; the escalation captures the process identifier, never `self`, checks the process is still alive with `kill(pid, 0)` and reaps it at the end, so a run freed with its window still finishes killing its process (D4's `stopAndRetain` lesson), and a run freed while its process runs escalates from `deinit`. A run past its deadline takes the same path, SIGINT first, never SIGKILL alone. `ToolRun.activeRuns` holds every live run weakly (a registry must not keep a freed run alive); `applicationWillTerminate` calls `ToolRun.stopAll(waiting: 2)`, which sends SIGINT, waits up to two seconds for the exits, and sends SIGTERM to what is left, since the main queue's later escalation dies with the app; a deck window's close stops its export and its Preview server. `tap serve --json` exits when its stdin closes; its `ToolRun` holds that pipe open and closes it on `cancel` and in `deinit`. The sheet stays on "Cancelling…" until the process has exited (later progress lines are ignored once cancelling), and shows nothing of a partial result. tap's own cleanup (the browser, the temporary server) is tap's to do on SIGINT.
 - `weak self` in every closure that outlives a call, no `unowned`. No work with side effects inside `completion?(...)`.
 - **XCTest rules.** No `await` inside an `XCTAssert` autoclosure: hoist into a `let`. Every wait is bounded (`waitUntil(timeout:)`). No test depends on a key window: sheet buttons are pressed with `performClick(nil)`, fields are set through `stringValue` and the sheet's own `controlChanged`; a pop-up button or a segmented control is never `performClick`ed (that opens a modal menu loop), the test selects the item and sends the control's action (`control.sendAction(control.action, to: control.target)`). No test or production line reads `NSTextView.layoutManager` (the read switches the editor to TextKit 1). Hosted tests reach Core through `@testable import Tap` (`CoreExports.swift`), never their own `import TapDesktopCore`. A test that runs a scripted tap sets `AppEnvironment.shared.toolExecutableURL` to the script and leaves the deck's real `tap dev --app` alone; every scripted tap has a five-minute self-kill so a test that never stops it leaves nothing running. Hosted tests write into the test's own temporary folders and config home (`HostedTestCase.configHome`); the Keychain is never touched by a test (`MemoryGeminiKeyStore`), the person's `~/.local/bin` never (`CommandLineInstaller(linkDirectory:)` points at a temporary folder), the person's defaults never (`GeneralSettings(defaults:)` on a fresh suite), the person's clipboard never (`EditorTextView.pasteboardForPaste`, read for the image and the text branch alike). `HostedTestCase.setUp` saves `AppEnvironment.shared.extraEnvironment` and `tearDown` restores it whole, so a test's `PATH` or `GEMINI_API_KEY` never reaches the next test's `tap dev`.
 - Every scenario this plan claims has a test named `test` plus the scenario name in UpperCamelCase as `check-scenarios.sh` builds it (`tr -c '[:alnum:]' ' '` then capitalize each word): "Theme picker lists tap's themes" is `testThemePickerListsTapSThemes`, "Change the deck's theme" is `testChangeTheDeckSTheme`, "Export a PDF" is `testExportAPDF`, "Generate an image with AI" is `testGenerateAnImageWithAI`. The claims go into `desktop/scenarios.txt` as `D6 | <file> | <scenario>` rows (Task 14), and `make -C desktop check-scenarios` must pass. "Shared settings" is not claimed (the recording consent is left out of D6, the person's decision); a comment row says so.
-- New fixtures under `desktop/TapTests/Fixtures/`: `diagram.png` (a one-pixel PNG, for image add), `ai-image/talk.md` with `ai-image/images/generated-00000000.png` (a deck whose slide 2 holds an AI image pair, for Regenerate), `broken-component/talk.md` with `broken-component/slides/Broken.jsx` (a component that does not build, for Component errors). D3's `ops.md`, D2's `seven-slides.md` and `plain.md`, and `stepped/` are reused.
+- New fixtures under `desktop/TapTests/Fixtures/`: `diagram.png` (a one-pixel PNG, for image add), `themed.md` (`ops.md`'s slides with `theme: terminal`, for the theme tests; `ops.md` itself names no theme and D3's tests keep it), `ai-image/talk.md` with `ai-image/images/generated-00000000.png` (a deck whose slide 2 holds an AI image pair, for Regenerate), `broken-component/talk.md` with `broken-component/slides/Broken.jsx` (a component that does not build, for Component errors). D3's `ops.md`, D2's `seven-slides.md` and `plain.md`, and `stepped/` are reused.
 
 ## Review Focus
 
@@ -119,7 +119,7 @@ Five conditions the spec implies that no scenario names, most likely to bite fir
 | `internal/cli/theme.go`, `internal/cli/theme_image.go`, `internal/cli/theme_image_test.go` | Modify: `tap theme show --image --progress json` |
 | `internal/cli/image.go`, `internal/cli/image_test.go`, `internal/deckedit/generate.go` | Modify: `--aspect`, `--match-theme`; `ImageGenerator.GenerateImageWithAspectRatio` |
 | `internal/cli/progress_commands_test.go`, `docs/reference/cli-commands.md`, `skills/tap/rules/cli.md` | Modify: the flag list test and the docs |
-| `desktop/TapDesktopCore/Sources/TapDesktopCore/ToolRun.swift` | `ProgressLine`, `ToolOutcome`, `ToolRun` (one-shot tap runs, SIGINT cancel with an escalation that outlives the run, a deadline that takes the same path, `activeRuns` and `stopAll`) |
+| `desktop/TapDesktopCore/Sources/TapDesktopCore/ToolRun.swift` | `ProgressLine`, `ToolOutcome`, `ToolRun` (one-shot tap runs, SIGINT cancel with an escalation that outlives the run and reaps, a deadline that takes the same path, a weak `activeRuns`, `stopAll(waiting:)`) |
 | `.../TapDesktopCore/ToolResults.swift` | The decoders: `NewDeckResult`, `ThemeSetResult`, `AddedImageResult`, `GeneratedImageResult`, `ComponentScaffold`, `PDFExportResult`, `ImagesExportResult`, `BuildResult`, `ServeReady`, `ApprovalRecord`, `ApprovalList` |
 | `.../TapDesktopCore/ThemeCatalog.swift` | `ThemeSummary`, `ThemeCatalog` (light and dark groups), `ThemeImageResult` |
 | `.../TapDesktopCore/DeckReferences.swift` | `AIImageReference.find(in:)`, `ComponentLink.find(in:at:)` |
@@ -149,11 +149,11 @@ Five conditions the spec implies that no scenario names, most likely to bite fir
 | `desktop/Tap/Settings/CommandLineInstaller.swift` | The symlink into `~/.local/bin`, refusing anything that is not ours |
 | `desktop/Tap/Settings/InstallConfirmSheet.swift` | The InstallConfirm board's sheet |
 | `desktop/Tap/Windows/DeckWindowController.swift` | Modify: the Theme toolbar item, `exportController`, the export actions, `showFormSheet`, `canStartATalk` |
-| `desktop/Tap/Preview/DeckFormViewController.swift` | Modify: the Theme row is one button that opens the grid popover (the DeckTabThemeRow board) |
+| `desktop/Tap/Preview/DeckFormViewController.swift` | Modify: the Theme row is one button that opens the grid popover (the DeckTabThemeRow board), wired through two closures like `text` and `applyEdit` |
 | `desktop/Tap/Welcome/WelcomeWindowController.swift` | Modify: the New Deck button's action |
-| `desktop/TapTests/Support/HostedTestCase.swift` | Modify: the D6 seams reset in `setUp`, `extraEnvironment` saved and restored |
+| `desktop/TapTests/Support/HostedTestCase.swift` | Modify: the D6 seams reset in `setUp`, `extraEnvironment` saved and restored, `ToolRun.stopAll()` in `tearDown` |
 | `desktop/TapTests/Support/FakeToolScripts.swift` | Scripted tap subcommands: a dispatcher over the real tap, image generate, theme show, export pdf, export images, a cancellable export |
-| `desktop/TapTests/Fixtures/diagram.png`, `ai-image/`, `broken-component/` | The D6 fixtures |
+| `desktop/TapTests/Fixtures/diagram.png`, `themed.md`, `ai-image/`, `broken-component/` | The D6 fixtures |
 | `desktop/TapTests/*.swift` | The hosted tests: `ThemeSetTests`, `ThemeGridTests`, `NewDeckTests`, `ImageInsertTests`, `GenerateImageTests`, `ComponentTests`, `ExportPDFTests`, `ExportWebsiteTests`, `SettingsTests`, `ImageGenerationSettingsTests`, `CommandLineSettingsTests`; D3's `SlideMenuTests` extended |
 | `desktop/TapUITests/ThemeUITests.swift` | `testTryAThemeWithoutSavingIt` |
 | `.github/workflows/ci.yml` | Modify: the Chromium cache for the Desktop Tests job (the real `tap export pdf` run); `TAP_KEYCHAIN_TESTS=1` on the core-test step |
@@ -442,6 +442,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -482,8 +483,8 @@ func TestServeJSONPrintsOneReadyLine(t *testing.T) {
 	if err := json.Unmarshal([]byte(lines[0]), &ready); err != nil {
 		t.Fatalf("the ready line is not JSON: %v\n%s", err, lines[0])
 	}
-	if !ready.OK || ready.Dir != dir || ready.Port == 0 || ready.URL != fmt.Sprintf("http://localhost:%d", ready.Port) {
-		t.Errorf("ready = %+v", ready)
+	if !ready.OK || ready.Dir != dir || ready.Port == 0 || ready.URL != fmt.Sprintf("http://127.0.0.1:%d", ready.Port) {
+		t.Errorf("ready = %+v, want a 127.0.0.1 URL, the address bound", ready)
 	}
 	// The site is for the person's own browser: loopback, as --app binds.
 	if address, ok := listener.Addr().(*net.TCPAddr); !ok || !address.IP.IsLoopback() {
@@ -698,7 +699,8 @@ func startServe(dir string, port int, explicitPort, jsonMode bool, out io.Writer
 	httpServer := &http.Server{Handler: handler, ReadHeaderTimeout: 10 * time.Second}
 
 	if jsonMode {
-		if err := printJSONLine(out, serveReady{Dir: dir, Port: boundPort, URL: fmt.Sprintf("http://localhost:%d", boundPort)}); err != nil {
+		// The URL names the address bound: a browser trying ::1 first would find nothing there.
+		if err := printJSONLine(out, serveReady{Dir: dir, Port: boundPort, URL: fmt.Sprintf("http://127.0.0.1:%d", boundPort)}); err != nil {
 			_ = listener.Close()
 			return nil, nil, err
 		}
@@ -716,16 +718,16 @@ func startServe(dir string, port int, explicitPort, jsonMode bool, out io.Writer
 }
 ```
 
-`successColor` and `infoColor` are `output.go`'s `*color.Color` values; their `Fprint` forms write to `out`, where `Success` and `Info` write to the process's stdout, which a test cannot read. `io` and `github.com/fatih/color` join the imports. In `internal/cli/port.go`, `listenOnAvailablePort` gains a first parameter `host string` and listens on `net.JoinHostPort(host, strconv.Itoa(candidatePort))` in place of the `0.0.0.0:%d` literal; `serve.go` is its only caller. The `Long` text gains `With --json, tap listens on 127.0.0.1 only, prints one line, {"ok":true,"dir":...,"port":...,"url":...}, logs no requests, and exits when its standard input closes, for a program that opens the site and holds the other end.` and an example `tap serve dist --port 0 --json`.
+`successColor` and `infoColor` are `output.go`'s `*color.Color` values; their `Fprint` forms write to `out`, where `Success` and `Info` write to the process's stdout, which a test cannot read. `io` and `github.com/fatih/color` join the imports. In `internal/cli/port.go`, `listenOnAvailablePort` gains a first parameter `host string` and listens on `net.JoinHostPort(host, strconv.Itoa(candidatePort))` in place of the `0.0.0.0:%d` literal; for a loopback host and a port other than 0 it first runs the `wildcardPortBusy` probe `startOnAvailablePort` runs for its loopback binds (on macOS a loopback bind succeeds while another process holds `*:<port>`), treating a busy wildcard as a port in use. `serve.go` is its only caller. The `Long` text gains `With --json, tap listens on 127.0.0.1 only, prints one line, {"ok":true,"dir":...,"port":...,"url":...}, logs no requests, and exits when its standard input closes, for a program that opens the site and holds the other end.` and an example `tap serve dist --port 0 --json`.
 
 - [ ] **Step 8: Run the serve tests and the conventions test**
 
-Run: `go test ./internal/cli -run 'TestServe|TestConventions|TestHelp' -v`
-Expected: the three serve tests pass; the flag conventions tests pass (`--json` has no short form anywhere, and `--folder` is new with none). `go vet ./internal/cli` clean.
+Run: `go test ./internal/cli -run 'TestServe|TestEveryCommandFollowsTheConventions|TestHelp' -v`
+Expected: the three serve tests pass; the flag conventions test passes (`--json` has no short form anywhere, and `--folder` is new with none). `go vet ./internal/cli` clean.
 
 - [ ] **Step 9: Document both**
 
-In `docs/reference/cli-commands.md`, the `tap new` section: add `| --folder <location> | none | Make a folder named after the title inside <location>, with the deck and an images/ folder; skips the wizard; cannot be combined with [deck], --output or --force. |` to the flags table, the example `tap new --folder ~/talks --title "My Talk" --theme terminal --json   # ~/talks/my-talk/my-talk.md, with images/`, and under `### --json` the second shape `{"ok": true, "deck": "...", "folder": "..."}`. The `tap serve` section: `| --json | none | Listen on 127.0.0.1 only, print one ready line ({"ok":true,"dir","port","url"}), log no requests, and exit when standard input closes, for a program that opens the site. |` and the example `tap serve dist --port 0 --json`. In `skills/tap/rules/cli.md`, the same two flags in the `tap new` and `tap serve` blocks, one line each.
+In `docs/reference/cli-commands.md`, the `tap new` section: add `| --folder <location> | none | Make a folder named after the title inside <location>, with the deck and an images/ folder; skips the wizard; cannot be combined with [deck], --output or --force. |` to the flags table, the example `tap new --folder ~/talks --title "My Talk" --theme terminal --json   # ~/talks/my-talk/my-talk.md, with images/`, and under `### --json` the second shape `{"ok": true, "deck": "...", "folder": "..."}`. The `tap serve` section: `| --json | none | Listen on 127.0.0.1 only, print one ready line ({"ok":true,"dir","port","url"}, the URL on 127.0.0.1), log no requests, and exit when standard input closes, for a program that opens the site. |` and the example `tap serve dist --port 0 --json`. In `skills/tap/rules/cli.md`, the same two flags in the `tap new` and `tap serve` blocks, one line each.
 
 - [ ] **Step 10: Mutate and commit**
 
@@ -738,20 +740,21 @@ git commit -m "feat(cli): tap new --folder makes the deck's folder, and tap serv
 
 ---
 
-### Task 2: `tap theme show --image --progress json`, and `tap image generate --aspect --match-theme`
+### Task 2: `tap theme show --image --progress json`, `tap theme set default`, and `tap image generate --aspect --match-theme`
 
 **Files:**
 - Modify: `internal/cli/theme.go` (`themeShowProgress`), `internal/cli/theme_image.go` (`showThemeImage`, `renderIntoCache`, `renderToTemporaryFile`, `renderTheme`, `renderThemeImage`'s signature, `renderThemeImageWithBrowser`)
 - Modify: `internal/cli/theme_image_test.go` (`useFakeThemeRenderer`, the direct `renderThemeImageWithBrowser` call in `TestRenderThemeImageWithBrowser`, a progress test)
 - Modify: `internal/cli/progress_commands_test.go` (`TestProgressFlagOnTheLongRunningCommands`)
-- Modify: `internal/deckedit/generate.go` (`ImageGenerator`)
+- Modify: `internal/deckedit/generate.go` (`ImageGenerator`), `internal/deckedit/aiimage.go` (`AIImage.Aspect`, `MatchTheme`, `AIImageMarkdown` with options, `ParseAIImages` reading them), `internal/deckedit/theme.go` (`RemoveTheme`), `internal/config/config.go` (`RemoveThemeFromFile`)
+- Modify: `internal/cli/theme_set.go`, `internal/cli/theme_set_test.go` (`tap theme set default`)
 - Modify: `internal/cli/image.go` (the flags, `generateOptions`, `generateAndPlace`, `themeBriefForDeck`, `validAspectRatios`)
 - Modify: `internal/cli/edit_helpers_test.go` (`fakeImageGenerator.GenerateImageWithAspectRatio`), `internal/cli/image_test.go` (the aspect and match-theme tests)
 - Modify: `docs/reference/cli-commands.md`, `skills/tap/rules/cli.md`
 
 **Interfaces:**
 - Consumes: `newProgressReporter`, `progressReporter.Render`, `Download`, `Result`, `pdf.Exporter.SetProgress`, `pdf.Progress`, `buildThemePrompt`, `findTheme`, `themes.Tokens`, `themes.Illustration`, `config.Load`, `gemini.Client.GenerateImageWithAspectRatio`, `useFakeThemeRenderer`, `useFakeImageGenerator`, `checkProgressOutput`, `phasesOf`.
-- Produces: `tap theme show <slug> --image --progress json` writing `download` lines while Chromium downloads, one `{"phase":"render","done":1,"total":1}` line, and `{"phase":"done","ok":true,"slug","image","cached"}` (a cached image writes the done line only); `tap image generate|regenerate ... [--aspect 1:1|16:9|9:16|4:3|3:4] [--match-theme]`; `deckedit.ImageGenerator` gains `GenerateImageWithAspectRatio(ctx, prompt, aspectRatio string)`. Task 6's `ThemeImageLoader` reads the progress; Task 8's Generate Image sheet passes the two flags.
+- Produces: `tap theme show <slug> --image --progress json` writing `download` lines while Chromium downloads, one `{"phase":"render","done":1,"total":1}` line, and `{"phase":"done","ok":true,"slug","image","cached"}` (a cached image writes the done line only); `tap theme set default [deck]` removing the `theme:` line, `--json` printing `{"ok":true,"deck","theme":"default"}`; `tap image generate|regenerate ... [--aspect 1:1|16:9|9:16|4:3|3:4] [--match-theme]`, both recorded in the `ai-prompt` comment as `<!-- ai-prompt: <words> | aspect: 16:9 | match-theme -->` and reused by `regenerate` without the flags; `deckedit.ImageGenerator` gains `GenerateImageWithAspectRatio(ctx, prompt, aspectRatio string)`; `deckedit.AIImage` gains `Aspect` and `MatchTheme`. Task 6b's `ThemeImageLoader` reads the progress; the grid's Default cell runs `theme set default`; Task 8b's Generate Image sheet passes the two flags and Regenerate passes none.
 
 - [ ] **Step 1: Write the failing theme progress test**
 
@@ -857,6 +860,133 @@ In `renderThemeImageWithBrowser`, after `exporter, err := pdf.New()`: `if progre
 Run: `go test ./internal/cli -run 'TestThemeShow|TestProgress' -v`
 Expected: every test passes; `TestThemeShowImageRendersOnceThenUsesTheCache` and its neighbours still pass with the fake's new signature.
 
+- [ ] **Step 4b: `tap theme set default`, the failing tests then the change**
+
+`default` is not a theme slug (`themes.IsValid("default")` is false today; a test pins it). In `internal/cli/theme_set_test.go`, add:
+
+```go
+// The desktop app's theme grid has a Default cell: picking it removes the
+// theme line, so the deck renders with tap's default, the state a deck
+// that never named a theme is in.
+func TestThemeSetDefaultRemovesTheTheme(t *testing.T) {
+	deck := writeDeckFile(t, t.TempDir(), "talk.md", "---\ntitle: Demo\ntheme: terminal\ntransition: fade\n---\n\n# One\n")
+	exitCode, stdout, stderr := runTap(t, "theme", "set", "default", deck, "--json")
+	if exitCode != exitOK {
+		t.Fatalf("exit code = %d, stderr %q", exitCode, stderr)
+	}
+	var output struct {
+		OK    bool   `json:"ok"`
+		Deck  string `json:"deck"`
+		Theme string `json:"theme"`
+	}
+	if err := json.Unmarshal([]byte(stdout), &output); err != nil || !output.OK || output.Theme != "default" || output.Deck != deck {
+		t.Errorf("output = %+v (%v)", output, err)
+	}
+	content, _ := os.ReadFile(deck)
+	if string(content) != "---\ntitle: Demo\ntransition: fade\n---\n\n# One\n" {
+		t.Errorf("deck = %q, want the theme line gone and nothing else changed", content)
+	}
+	// A deck with no theme line, and one with no frontmatter, are left as they are.
+	for _, text := range []string{"---\ntitle: Demo\n---\n\n# One\n", "# One\n"} {
+		plain := writeDeckFile(t, t.TempDir(), "talk.md", text)
+		if exitCode, _, stderr := runTap(t, "theme", "set", "default", plain); exitCode != exitOK {
+			t.Fatalf("exit %d, stderr %q", exitCode, stderr)
+		}
+		if after, _ := os.ReadFile(plain); string(after) != text {
+			t.Errorf("deck = %q, want %q", after, text)
+		}
+	}
+	if _, _, stderr := runTap(t, "theme", "set", "default", deck); !strings.Contains(stderr, "") {
+		t.Fatal("unreachable")
+	}
+	exitCode, stdout, _ = runTap(t, "theme", "set", "default", deck)
+	if exitCode != exitOK || stdout != "Theme set to tap's default in "+deck+"\n" {
+		t.Errorf("plain output = %q", stdout)
+	}
+}
+
+func TestDefaultIsNotAThemeSlug(t *testing.T) {
+	if themes.IsValid("default") {
+		t.Fatal("a theme is named default: tap theme set default could not mean tap's default")
+	}
+}
+```
+
+(`themes` joins the test's imports; drop the `unreachable` guard when writing the test, it is a leftover of the draft.) In `internal/config/config.go`, next to `UpdateThemeInFile`:
+
+```go
+// RemoveThemeFromFile deletes the theme line from a markdown file's
+// frontmatter, so the deck renders with the default theme. A file with no
+// frontmatter or no theme line is left exactly as it is. The write is
+// atomic, as UpdateThemeInFile's is.
+func RemoveThemeFromFile(path string) error {
+	info, err := os.Stat(path)
+	if err != nil {
+		return fmt.Errorf("failed to stat file: %w", err)
+	}
+	content, err := os.ReadFile(path)
+	if err != nil {
+		return fmt.Errorf("failed to read file: %w", err)
+	}
+	lines := strings.Split(string(content), "\n")
+	if len(lines) == 0 || strings.TrimSpace(lines[0]) != "---" {
+		return nil
+	}
+	endIndex := -1
+	for i := 1; i < len(lines); i++ {
+		if strings.TrimSpace(lines[i]) == "---" {
+			endIndex = i
+			break
+		}
+	}
+	if endIndex == -1 {
+		return fmt.Errorf("frontmatter not closed")
+	}
+	kept := make([]string, 0, len(lines))
+	removed := false
+	for i, line := range lines {
+		if i > 0 && i < endIndex && strings.HasPrefix(strings.TrimSpace(line), "theme:") {
+			removed = true
+			continue
+		}
+		kept = append(kept, line)
+	}
+	if !removed {
+		return nil
+	}
+	return WriteFileAtomically(path, []byte(strings.Join(kept, "\n")), info.Mode().Perm())
+}
+```
+
+In `internal/deckedit/theme.go`: `func RemoveTheme(deckPath string) error { return config.RemoveThemeFromFile(deckPath) }` with a doc comment. In `internal/cli/theme_set.go`, `runThemeSet` begins:
+
+```go
+	slug := args[0]
+	if slug == themeDefaultWord {
+		var deckArg string
+		if len(args) > 1 {
+			deckArg = args[1]
+		}
+		deck, err := resolveDeck(deckArg)
+		if err != nil {
+			return err
+		}
+		if err := deckedit.RemoveTheme(deck); err != nil {
+			return userError(codeInvalidDeck, fmt.Errorf("cannot remove the theme of %s: %w", deck, err))
+		}
+		if themeSetJSON {
+			return printJSONOK(cmd.OutOrStdout(), themeSetResult{Deck: deck, Theme: themeDefaultWord})
+		}
+		fmt.Fprintf(cmd.OutOrStdout(), "Theme set to tap's default in %s\n", deck)
+		return nil
+	}
+```
+
+with `const themeDefaultWord = "default"` and its doc comment (`// themeDefaultWord is the argument that means "no theme line": tap renders with its default. It is not a slug.`), and the `Long` text gains `tap theme set default removes the theme line, so the deck renders with tap's default theme.` and the example `tap theme set default talk.md`. `TestHelpTextThemeExamplesAreRealThemes` reads `theme set <slug>` examples: it gains an exception for the word `default`, one line.
+
+Run: `go test ./internal/cli -run 'TestThemeSet|TestDefaultIsNotAThemeSlug|TestHelpText' -v`
+Expected: every pass.
+
 - [ ] **Step 5: Write the failing image flag tests**
 
 In `internal/cli/edit_helpers_test.go`, give the fake the new method and record what it was asked:
@@ -915,8 +1045,12 @@ func TestImageGenerateAspectAndMatchTheme(t *testing.T) {
 		t.Errorf("output prompt = %q (%v), want the person's words", output.Prompt, err)
 	}
 	content, _ := os.ReadFile(deck)
-	if !strings.Contains(string(content), "<!-- ai-prompt: a red fox -->") || strings.Contains(string(content), "Illustration style") {
-		t.Errorf("deck = %q, want the person's prompt in the comment and no brief", content)
+	if !strings.Contains(string(content), "<!-- ai-prompt: a red fox | aspect: 16:9 | match-theme -->") || strings.Contains(string(content), "Illustration style") {
+		t.Errorf("deck = %q, want the person's prompt with the two choices recorded after it, and no brief", content)
+	}
+	images := deckedit.ParseAIImages(string(content))
+	if len(images) != 1 || images[0].Prompt != "a red fox" || images[0].Aspect != "16:9" || !images[0].MatchTheme {
+		t.Errorf("parsed = %+v, want the prompt alone and the recorded choices", images)
 	}
 }
 
@@ -959,7 +1093,35 @@ func TestImageRegenerateTakesTheSameFlags(t *testing.T) {
 		t.Errorf("the brief's canvas follows --aspect: %q", fake.prompts[1])
 	}
 }
+
+// Regenerate without the flags reuses what the comment recorded, so a
+// replacement keeps the image's aspect and theme match; a flag overrides.
+func TestImageRegenerateReusesTheRecordedChoices(t *testing.T) {
+	fake := useFakeImageGenerator(t)
+	deck := writeDeckFile(t, t.TempDir(), "talk.md", themedImageDeck)
+	if exitCode, _, stderr := runTap(t, "image", "generate", deck, "--slide", "2", "--prompt", "a red fox", "--aspect", "1:1", "--match-theme"); exitCode != exitOK {
+		t.Fatalf("generate: exit %d, stderr %q", exitCode, stderr)
+	}
+	content, _ := os.ReadFile(deck)
+	image := deckedit.ParseAIImages(string(content))[0].ImagePath
+	if exitCode, _, stderr := runTap(t, "image", "regenerate", deck, "--slide", "2", "--image", image); exitCode != exitOK {
+		t.Fatalf("regenerate: exit %d, stderr %q", exitCode, stderr)
+	}
+	if fake.aspects[1] != "1:1" || !strings.Contains(fake.prompts[1], "Canvas 1:1") || !strings.HasSuffix(fake.prompts[1], "The image shows: a red fox") {
+		t.Errorf("regenerate reused nothing: %q %q", fake.prompts[1], fake.aspects[1])
+	}
+	after, _ := os.ReadFile(deck)
+	if !strings.Contains(string(after), "| aspect: 1:1 | match-theme -->") {
+		t.Errorf("the replacement's comment keeps the choices: %q", after)
+	}
+	image = deckedit.ParseAIImages(string(after))[0].ImagePath
+	if exitCode, _, _ := runTap(t, "image", "regenerate", deck, "--slide", "2", "--image", image, "--aspect", "4:3"); exitCode != exitOK || fake.aspects[2] != "4:3" || !fake.matchesTheme(2) {
+		t.Errorf("a flag overrides the aspect and keeps the recorded match: %q", fake.aspects)
+	}
+}
 ```
+
+`fake.matchesTheme(index)` is a small helper on the fake: whether `prompts[index]` starts with `Illustration style`.
 
 - [ ] **Step 6: Run them to verify they fail**
 
@@ -967,6 +1129,61 @@ Run: `go test ./internal/cli -run 'TestImageGenerate|TestImageRegenerate' -v`
 Expected: the new tests fail on `unknown flag: --aspect`; the existing image tests still pass (the fake's `GenerateImage` delegates).
 
 - [ ] **Step 7: Add the flags**
+
+In `internal/deckedit/aiimage.go`, the comment records the choices after the words, separated by ` | `, and the parser strips them back out, so `Prompt` stays the person's words and the existing pattern (`<!--\s*ai-prompt:\s*(.+?)\s*-->`) is unchanged:
+
+```go
+// AIImage is an AI-generated image in a deck: the prompt that made it, the
+// path the deck links to, relative to the deck's folder, and the choices
+// recorded with it: the aspect ratio and whether the theme's brief was
+// prepended (both empty for an image made before they were recorded).
+type AIImage struct {
+	Prompt     string
+	ImagePath  string
+	Aspect     string
+	MatchTheme bool
+}
+
+// aiPromptOptionSeparator separates the prompt from its recorded choices
+// inside the comment: "a fox | aspect: 16:9 | match-theme".
+const aiPromptOptionSeparator = " | "
+
+// AIImageMarkdown is the text that records an AI-generated image in a
+// deck: the prompt comment, with the choices after the words, and the
+// image link. Without choices the comment is the prompt alone.
+func AIImageMarkdown(prompt, imagePath, aspect string, matchTheme bool) string {
+	comment := prompt
+	if aspect != "" {
+		comment += aiPromptOptionSeparator + "aspect: " + aspect
+	}
+	if matchTheme {
+		comment += aiPromptOptionSeparator + "match-theme"
+	}
+	return fmt.Sprintf("<!-- ai-prompt: %s -->\n![](%s)", comment, imagePath)
+}
+
+// splitAIPromptOptions takes the recorded choices off the end of a
+// comment's text. Only trailing tokens that read as choices are taken, so
+// a prompt that itself contains " | " keeps its words.
+func splitAIPromptOptions(text string) (prompt, aspect string, matchTheme bool) {
+	parts := strings.Split(text, aiPromptOptionSeparator)
+	for len(parts) > 1 {
+		last := parts[len(parts)-1]
+		switch {
+		case last == "match-theme":
+			matchTheme = true
+		case strings.HasPrefix(last, "aspect: "):
+			aspect = strings.TrimPrefix(last, "aspect: ")
+		default:
+			return strings.Join(parts, aiPromptOptionSeparator), aspect, matchTheme
+		}
+		parts = parts[:len(parts)-1]
+	}
+	return strings.Join(parts, aiPromptOptionSeparator), aspect, matchTheme
+}
+```
+
+`ParseAIImages` fills the three fields through `splitAIPromptOptions(match[1])`; `InsertAIImage` and `ReplaceAIImage` take `aspect string, matchTheme bool` and pass them to `AIImageMarkdown` (the replace pattern is built from the comment's full text, so it matches what is in the file); `Placement` gains `Aspect` and `MatchTheme`, which `PlaceGeneratedImage` writes. In `internal/cli/image.go`, `runImageRegenerate` starts from the recorded choices: `options := generateOptions{aspect: replacing.Aspect, matchTheme: replacing.MatchTheme}`, then a given `--aspect` or `--match-theme` overrides; `runImageGenerate` puts the options into the `Placement`. The TUI's `i` key records nothing (no aspect, no brief), as today. `docs/reference/cli-commands.md` documents the comment's shape under `tap image regenerate`.
 
 In `internal/deckedit/generate.go`, the interface becomes:
 
@@ -1059,6 +1276,8 @@ func generateAndPlace(ctx context.Context, placement deckedit.Placement, options
 		}
 		return deckedit.PlacedImage{}, imageGenerationError(err)
 	}
+	placement.Aspect = options.aspect
+	placement.MatchTheme = options.matchTheme
 	placed, err := deckedit.PlaceGeneratedImage(placement, *image)
 	if err != nil {
 		return deckedit.PlacedImage{}, userError(codeInvalidDeck, fmt.Errorf("cannot add the image to %s: %w", placement.DeckPath, err))
@@ -1071,16 +1290,16 @@ func generateAndPlace(ctx context.Context, placement deckedit.Placement, options
 
 - [ ] **Step 8: Run the whole package, then document**
 
-Run: `go test ./internal/cli ./internal/deckedit ./internal/tui && go vet ./...`
-Expected: everything passes. In `docs/reference/cli-commands.md`, the `tap image generate` and `tap image regenerate` flag tables gain `--aspect` and `--match-theme` rows (the wording of the flag help), and `tap theme show` gains the `--progress json` sentence and example. In `skills/tap/rules/cli.md`, the same three additions, one line each.
+Run: `go test ./internal/cli ./internal/deckedit ./internal/tui ./internal/config && go vet ./...`
+Expected: everything passes (the `deckedit` tests that build an `AIImageMarkdown` pass the two new arguments). In `docs/reference/cli-commands.md`, the `tap image generate` and `tap image regenerate` flag tables gain `--aspect` and `--match-theme` rows (the wording of the flag help) and the comment's recorded shape, `tap theme show` gains the `--progress json` sentence and example, and `tap theme set` gains `default`. In `skills/tap/rules/cli.md`, the same three additions, one line each.
 
 - [ ] **Step 9: Mutate and commit**
 
-Mutations, each applied and run locally, then reverted exactly: in `generateAndPlace`, send `placement.Prompt` regardless of `matchTheme` (expected: `TestImageGenerateAspectAndMatchTheme` fails on the request's prefix); in `generateAndPlace`, record `request` as the prompt (pass `request` in `placement.Prompt` to `PlaceGeneratedImage`) (expected: fails on the deck's comment); in `generateOptionsFrom`, accept any aspect (expected: `TestImageGenerateRejectsAnUnknownAspect` fails); in `themeBriefForDeck`, ignore `aspect` (expected: `TestImageRegenerateTakesTheSameFlags` fails on "Canvas 1:1"); in `runImageRegenerate`, pass the generate flags' variables instead of the regenerate ones (expected: `TestImageRegenerateTakesTheSameFlags` fails on `aspects[1]`); in `renderTheme`, drop `progress.Render(1, 1)` (expected: `TestThemeShowImageProgressJSON` fails on `render,done`); in `showThemeImage`, drop `progress.Result` (expected: fails on the done line); in `runThemeShow`, drop the `--progress needs --image` check (expected: `TestThemeShowProgressNeedsImage` fails).
+Mutations, each applied and run locally, then reverted exactly: in `generateAndPlace`, send `placement.Prompt` regardless of `matchTheme` (expected: `TestImageGenerateAspectAndMatchTheme` fails on the request's prefix); in `generateAndPlace`, record `request` as the prompt (pass `request` in `placement.Prompt` to `PlaceGeneratedImage`) (expected: fails on the deck's comment); in `generateOptionsFrom`, accept any aspect (expected: `TestImageGenerateRejectsAnUnknownAspect` fails); in `themeBriefForDeck`, ignore `aspect` (expected: `TestImageRegenerateTakesTheSameFlags` fails on "Canvas 1:1"); in `runImageRegenerate`, start `options` empty instead of from `replacing` (expected: `TestImageRegenerateReusesTheRecordedChoices` fails on "reused nothing"); in `splitAIPromptOptions`, return `text` whole (expected: `TestImageGenerateAspectAndMatchTheme` fails on `parsed`); in `RemoveThemeFromFile`, remove every line that starts with `t` (expected: `TestThemeSetDefaultRemovesTheTheme` fails on the transition line); in `runThemeSet`, treat `default` as a slug (expected: the same test fails with `unknown_theme`); in `runImageRegenerate`, pass the generate flags' variables instead of the regenerate ones (expected: `TestImageRegenerateTakesTheSameFlags` fails on `aspects[1]`); in `renderTheme`, drop `progress.Render(1, 1)` (expected: `TestThemeShowImageProgressJSON` fails on `render,done`); in `showThemeImage`, drop `progress.Result` (expected: fails on the done line); in `runThemeShow`, drop the `--progress needs --image` check (expected: `TestThemeShowProgressNeedsImage` fails).
 
 ```bash
-git add internal/cli internal/deckedit/generate.go docs/reference/cli-commands.md skills/tap/rules/cli.md
-git commit -m "feat(cli): progress for theme renders, and an aspect and theme match for generated images"
+git add internal/cli internal/deckedit internal/config docs/reference/cli-commands.md skills/tap/rules/cli.md
+git commit -m "feat(cli): progress for theme renders, theme set default, and a recorded aspect and theme match for generated images"
 ```
 
 ---
@@ -1093,7 +1312,7 @@ git commit -m "feat(cli): progress for theme renders, and an aspect and theme ma
 
 **Interfaces:**
 - Consumes: `LineBuffer` (D2), `TapErrorPayload` (D2, `code`, `message`).
-- Produces: `ProgressLine` (`.step(phase:done:total:)`, `.download(bytes:totalBytes:)`, `.finished(ToolOutcome)`; `decode(line:)`), `ToolOutcome` (`.ok(Data)`, `.failed(code:message:)`; `decode(_ data:)`; `result(_:)`), `ToolError`, `ToolRun` (`Configuration(executableURL:arguments:environment:currentDirectoryURL:timeout:keepsStandardInputOpen:)`, `onProgress`, `onStandardOutputLine`, `onStandardErrorLine`, `onExit`, `start()`, `cancel()`, `run() async -> Exit`, `isRunning`, `processIdentifier`, `Exit(status:standardOutput:cancelled:timedOut:outcome:)`, `static activeRuns`, `static stopAll()`, `static escalate(_:)`). Every later task's tap subcommand goes through it (Task 6a's `TapTool` wraps it).
+- Produces: `ProgressLine` (`.step(phase:done:total:)`, `.download(bytes:totalBytes:)`, `.finished(ToolOutcome)`; `decode(line:)`), `ToolOutcome` (`.ok(Data)`, `.failed(code:message:)`; `decode(_ data:)`; `result(_:)`), `ToolError`, `ToolRun` (`Configuration(executableURL:arguments:environment:currentDirectoryURL:timeout:keepsStandardInputOpen:)`, `onProgress`, `onStandardOutputLine`, `onStandardErrorLine`, `onExit`, `start()`, `cancel()`, `closeStandardInput()`, `run() async -> Exit`, `isRunning`, `processIdentifier`, `Exit(status:standardOutput:cancelled:timedOut:outcome:)`, `static activeRuns` (weak), `static stopAll(waiting:)`, `static escalate(_:)`, `static isAlive(_:)`). Every later task's tap subcommand goes through it (Task 6a's `TapTool` wraps it).
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -1199,9 +1418,17 @@ final class ToolRunTests: XCTestCase {
         XCTAssertNotEqual(killed.status, 0, "SIGKILL after the graces")
     }
 
+    /// Whether the child is gone: exited and reaped (waitpid says so or has
+    /// nothing left to say). `kill(pid, 0)` alone reads a zombie as alive.
+    static func hasExited(_ identifier: Int32) -> Bool {
+        var status: Int32 = 0
+        let result = waitpid(identifier, &status, WNOHANG)
+        return result == identifier || result == -1
+    }
+
     /// The escalation belongs to the process, not to the run: a run freed
     /// with its window (an export whose deck closed) still kills a tap
-    /// that ignores SIGINT and SIGTERM.
+    /// that ignores SIGINT and SIGTERM, and nothing keeps the run alive.
     @MainActor
     func testAFreedRunStillEscalatesToSIGKILL() async throws {
         let script = try Self.script("#!/bin/sh\ntrap '' INT TERM\necho started\ni=0; while [ $i -lt 3000 ]; do sleep 0.1; i=$((i + 1)); done\n")
@@ -1211,38 +1438,79 @@ final class ToolRunTests: XCTestCase {
         try run?.start()
         try await waitUntil(timeout: 5, "the script") { started }
         let identifier = try XCTUnwrap(run?.processIdentifier)
+        weak var freed = run
         run?.cancel()
         run = nil
-        try await waitUntil(timeout: 10, "SIGKILL after the two graces") { kill(identifier, 0) != 0 }
-        XCTAssertFalse(ToolRun.activeRuns.contains { $0.processIdentifier == identifier })
+        try await waitUntil(timeout: 5, "the run to be freed") { freed == nil }
+        XCTAssertFalse(ToolRun.activeRuns.contains { $0.processIdentifier == identifier }, "the registry holds runs weakly")
+        try await waitUntil(timeout: 10, "SIGKILL after the two graces, then the reap") { Self.hasExited(identifier) }
+    }
+
+    /// A run dropped without a cancel while its process runs kills the process from deinit.
+    @MainActor
+    func testADroppedRunStopsItsProcess() async throws {
+        let script = try Self.script("#!/bin/sh\necho started\ni=0; while [ $i -lt 3000 ]; do sleep 0.1; i=$((i + 1)); done\n")
+        var run: ToolRun? = ToolRun(configuration: .init(executableURL: script, arguments: [], environment: ["PATH": "/usr/bin:/bin"], currentDirectoryURL: nil, timeout: nil))
+        var started = false
+        run?.onStandardOutputLine = { if $0 == "started" { started = true } }
+        try run?.start()
+        try await waitUntil(timeout: 5, "the script") { started }
+        let identifier = try XCTUnwrap(run?.processIdentifier)
+        run = nil
+        try await waitUntil(timeout: 10, "the orphan to be gone") { Self.hasExited(identifier) }
     }
 
     @MainActor
     func testStopAllCancelsEveryLiveRun() async throws {
         let script = try Self.script("#!/bin/sh\ntrap 'exit 130' INT\ni=0; while [ $i -lt 3000 ]; do sleep 0.1; i=$((i + 1)); done\n")
+        let before = ToolRun.activeRuns.count
         let first = ToolRun(configuration: .init(executableURL: script, arguments: [], environment: ["PATH": "/usr/bin:/bin"], currentDirectoryURL: nil, timeout: nil))
         let second = ToolRun(configuration: .init(executableURL: script, arguments: [], environment: ["PATH": "/usr/bin:/bin"], currentDirectoryURL: nil, timeout: nil))
         try first.start()
         try second.start()
-        XCTAssertEqual(ToolRun.activeRuns.count, 2)
+        XCTAssertTrue(ToolRun.activeRuns.contains { $0 === first } && ToolRun.activeRuns.contains { $0 === second })
+        XCTAssertEqual(ToolRun.activeRuns.count, before + 2)
         ToolRun.stopAll()
         try await waitUntil(timeout: 10, "both exits") { !first.isRunning && !second.isRunning }
-        XCTAssertEqual(ToolRun.activeRuns.count, 0)
+        XCTAssertEqual(ToolRun.activeRuns.count, before)
+    }
+
+    /// At quit the main queue dies with the app, so stopAll(waiting:) does
+    /// not rely on it: it waits for the exits itself and terminates what
+    /// ignored SIGINT before returning.
+    @MainActor
+    func testStopAllWaitingTerminatesWhatIgnoresSIGINT() async throws {
+        let script = try Self.script("#!/bin/sh\ntrap '' INT\necho started\ni=0; while [ $i -lt 3000 ]; do sleep 0.1; i=$((i + 1)); done\n")
+        let run = ToolRun(configuration: .init(executableURL: script, arguments: [], environment: ["PATH": "/usr/bin:/bin"], currentDirectoryURL: nil, timeout: nil))
+        var started = false
+        run.onStandardOutputLine = { if $0 == "started" { started = true } }
+        try run.start()
+        try await waitUntil(timeout: 5, "the script") { started }
+        let identifier = run.processIdentifier
+        let began = Date()
+        ToolRun.stopAll(waiting: 0.5)
+        XCTAssertLessThan(Date().timeIntervalSince(began), 3, "the wait is bounded")
+        try await waitUntil(timeout: 5, "SIGTERM to have landed") { Self.hasExited(identifier) }
     }
 
     /// A run that keeps stdin open (tap serve --json) hands the process a
-    /// pipe; closing it is how the process learns the app is gone.
+    /// pipe; a cancel closes it first, which is how tap serve learns the
+    /// app is done with it, before any signal.
     @MainActor
-    func testAKeptStandardInputClosesWithTheRun() async throws {
-        let script = try Self.script("#!/bin/sh\ncat >/dev/null\necho 'stdin closed'\nexit 0\n")
-        var run: ToolRun? = ToolRun(configuration: .init(executableURL: script, arguments: [], environment: ["PATH": "/usr/bin:/bin"], currentDirectoryURL: nil, timeout: nil, keepsStandardInputOpen: true))
+    func testAKeptStandardInputClosesOnCancel() async throws {
+        let script = try Self.script("#!/bin/sh\ntrap '' INT TERM\ncat >/dev/null\necho 'stdin closed'\nexit 0\n")
+        let run = ToolRun(configuration: .init(executableURL: script, arguments: [], environment: ["PATH": "/usr/bin:/bin"], currentDirectoryURL: nil, timeout: nil, keepsStandardInputOpen: true))
         var lines: [String] = []
-        run?.onStandardOutputLine = { lines.append($0) }
-        try run?.start()
+        run.onStandardOutputLine = { lines.append($0) }
+        var exit: ToolRun.Exit?
+        run.onExit = { exit = $0 }
+        try run.start()
         try await Task.sleep(nanoseconds: 300_000_000)
         XCTAssertEqual(lines, [], "the pipe is held open while the run lives")
-        run = nil
+        run.cancel()
         try await waitUntil(timeout: 5, "the script to see EOF") { lines == ["stdin closed"] }
+        try await waitUntil(timeout: 5, "the exit") { exit != nil }
+        XCTAssertEqual(exit?.status, 0, "it left on the EOF, before any signal mattered")
     }
 
     @MainActor
@@ -1382,10 +1650,11 @@ public final class ToolRun {
 
     public static let graceSeconds: TimeInterval = 2
 
-    /// Every run whose process is alive, so quitting the app can stop
-    /// them all (`applicationWillTerminate` calls `stopAll`), and so a
-    /// run's escalation can finish after the run itself is freed.
-    public private(set) static var activeRuns: [ToolRun] = []
+    /// Every run whose process is alive, held weakly, so quitting the app
+    /// can stop them all (`applicationWillTerminate` calls `stopAll`) and a
+    /// freed run is freed: its escalation holds the process identifier.
+    private static let registry = NSHashTable<ToolRun>.weakObjects()
+    public static var activeRuns: [ToolRun] { registry.allObjects.filter(\.isRunning) }
 
     public var onProgress: ((ProgressLine) -> Void)?
     public var onStandardOutputLine: ((String) -> Void)?
@@ -1414,9 +1683,11 @@ public final class ToolRun {
     }
 
     deinit {
-        // A freed run closes the pipe it held open, so a tap serve waiting on
-        // EOF exits; its escalation, if one runs, holds the pid, not the run.
+        // A run dropped while its process runs leaves no orphan: the pipe it
+        // held open closes (a tap serve waiting on EOF exits) and the process
+        // is escalated by its identifier, which the closures hold, not the run.
         try? input?.fileHandleForWriting.close()
+        if isRunning { Self.escalate(processIdentifier) }
     }
 
     public func start() throws {
@@ -1452,7 +1723,7 @@ public final class ToolRun {
         try process.run()
         isRunning = true
         processIdentifier = process.processIdentifier
-        Self.activeRuns.append(self)
+        Self.registry.add(self)
         if let timeout = configuration.timeout {
             let work = DispatchWorkItem { [weak self] in
                 MainActor.assumeIsolated {
@@ -1468,37 +1739,63 @@ public final class ToolRun {
         }
     }
 
-    /// Ctrl-C for tap: SIGINT now, SIGTERM and SIGKILL after a grace each
-    /// if it has not exited. The exit arrives through `onExit` as usual.
+    /// Ctrl-C for tap: the kept stdin closes first (a tap serve leaves on
+    /// the EOF), then SIGINT now, SIGTERM and SIGKILL after a grace each if
+    /// it has not exited. The exit arrives through `onExit` as usual.
     public func cancel() {
         guard isRunning, !cancelled else { return }
         cancelled = true
+        closeStandardInput()
         Self.escalate(processIdentifier)
     }
 
+    /// Closes the pipe a `keepsStandardInputOpen` run holds; harmless otherwise.
+    public func closeStandardInput() {
+        try? input?.fileHandleForWriting.close()
+    }
+
+    /// Whether the child is still running: not exited, or exited and not
+    /// yet reaped (a zombie), which `waitpid` with WNOHANG tells apart and
+    /// reaps when it can.
+    public static func isAlive(_ identifier: Int32) -> Bool {
+        var status: Int32 = 0
+        let result = waitpid(identifier, &status, WNOHANG)
+        return result == 0
+    }
+
     /// SIGINT, then SIGTERM and SIGKILL after `graceSeconds` each while the
-    /// process is still alive. The closures hold the process identifier
-    /// alone, never the run: a run freed with its window still finishes
-    /// killing its process (D4's stopAndRetain lesson). `kill(pid, 0)`
-    /// says whether the process is still there; Foundation reaps it on
-    /// exit, so a reused identifier within four seconds is the one risk
-    /// this takes, and it is the same risk every signal to a child takes.
+    /// process is still alive, then a reap. The closures hold the process
+    /// identifier alone, never the run: a run freed with its window still
+    /// finishes killing its process (D4's stopAndRetain lesson), and a
+    /// run freed while its process ran (whose Process object is gone) has
+    /// its zombie reaped here. A reused identifier within four seconds is
+    /// the one risk this takes, the same risk every signal to a child takes.
     public static func escalate(_ identifier: Int32) {
         Darwin.kill(identifier, SIGINT)
         DispatchQueue.main.asyncAfter(deadline: .now() + graceSeconds) {
-            guard Darwin.kill(identifier, 0) == 0 else { return }
+            guard isAlive(identifier) else { return }
             Darwin.kill(identifier, SIGTERM)
             DispatchQueue.main.asyncAfter(deadline: .now() + graceSeconds) {
-                guard Darwin.kill(identifier, 0) == 0 else { return }
+                guard isAlive(identifier) else { return }
                 Darwin.kill(identifier, SIGKILL)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { _ = isAlive(identifier) }
             }
         }
     }
 
-    /// Cancels every live run: the app is quitting, and a tap that outlived
-    /// it would keep a browser, a temporary server or a preview site running.
-    public static func stopAll() {
+    /// Cancels every live run. With `waiting` greater than zero (the app is
+    /// quitting, and the main queue's later escalation dies with it), this
+    /// blocks up to that long for the exits and sends SIGTERM to what is
+    /// still running, as stopAllPresentations does for talks; a tap that
+    /// ignores SIGTERM too is left to the system, which reaps it with the
+    /// app's process group.
+    public static func stopAll(waiting graceSeconds: TimeInterval = 0) {
+        let identifiers = activeRuns.map(\.processIdentifier)
         for run in activeRuns { run.cancel() }
+        guard graceSeconds > 0 else { return }
+        let deadline = Date().addingTimeInterval(graceSeconds)
+        while Date() < deadline, identifiers.contains(where: isAlive) { usleep(50_000) }
+        for identifier in identifiers where isAlive(identifier) { Darwin.kill(identifier, SIGTERM) }
     }
 
     /// Starts and waits. A start failure is an exit with status -1 and no outcome.
@@ -1545,7 +1842,7 @@ public final class ToolRun {
         if let line = errorBuffer.finish() { handleErrorLine(line) }
         isRunning = false
         try? input?.fileHandleForWriting.close()
-        Self.activeRuns.removeAll { $0 === self }
+        Self.registry.remove(self)
         let outcome = lastOutcome ?? (timedOut ? nil : ToolOutcome.decode(collectedOutput))
         onExit?(Exit(status: status, standardOutput: collectedOutput, cancelled: cancelled, timedOut: timedOut, outcome: outcome))
     }
@@ -1555,11 +1852,11 @@ public final class ToolRun {
 - [ ] **Step 4: Run the core tests**
 
 Run: `make -C desktop core-test`
-Expected: every test passes, the nine new ones included. The cancel test takes under a second (the script's `trap` answers the first SIGINT); the freed-run and the deaf timeout tests take about five seconds each (two graces).
+Expected: every test passes, the eleven new ones included. The cancel test takes under a second (the script's `trap` answers the first SIGINT); the freed-run, dropped-run and deaf timeout tests take about five seconds each (two graces); the kept-stdin test leaves on the EOF at once.
 
 - [ ] **Step 5: Mutate and commit**
 
-Mutations, each applied and run with `make -C desktop core-test`, then reverted exactly: in `escalate`, send SIGTERM first instead of SIGINT (expected: `testCancelSendsSIGINTAndWaitsForTheExit` fails on status 130 and the outcome, the script's trap catches only INT); in `didTerminate`, replace `lastOutcome ?? (...)` with `ToolOutcome.decode(collectedOutput)` alone, never reading `lastOutcome` (expected: the same test fails on `outcome`, stdout is empty); in `handleErrorLine`, send every line to `onStandardErrorLine` too (expected: `testRunsAScriptAndReportsItsProgress` fails on `otherLines`); in `ProgressLine.decode`, treat a line without `done` as `.step(..., 0, 0)` (expected: `testDecodesTheProgressLines` fails on the nil); in `start`, skip the deadline (expected: `testATimeoutInterruptsThenKillsTheProcess` runs 30 s and fails on `timedOut`); in the deadline's work item, call `Darwin.kill(pid, SIGKILL)` instead of `escalate` (expected: the same test fails on status 130 and `lines`); in `escalate`, capture `[weak self]` and guard on `self.isRunning` in the two closures, as the first draft did (expected: `testAFreedRunStillEscalatesToSIGKILL` times out, the script survives); in `stopAll`, cancel only the first run (expected: `testStopAllCancelsEveryLiveRun` fails); in `deinit`, skip closing the input pipe (expected: `testAKeptStandardInputClosesWithTheRun` times out); in `cancel`, drop the `!cancelled` guard (into `survivors/` with the reason: a second SIGINT is harmless to tap, no test provokes it).
+Mutations, each applied and run with `make -C desktop core-test`, then reverted exactly: in `escalate`, send SIGTERM first instead of SIGINT (expected: `testCancelSendsSIGINTAndWaitsForTheExit` fails on status 130 and the outcome, the script's trap catches only INT); in `didTerminate`, replace `lastOutcome ?? (...)` with `ToolOutcome.decode(collectedOutput)` alone, never reading `lastOutcome` (expected: the same test fails on `outcome`, stdout is empty); in `handleErrorLine`, send every line to `onStandardErrorLine` too (expected: `testRunsAScriptAndReportsItsProgress` fails on `otherLines`); in `ProgressLine.decode`, treat a line without `done` as `.step(..., 0, 0)` (expected: `testDecodesTheProgressLines` fails on the nil); in `start`, skip the deadline (expected: `testATimeoutInterruptsThenKillsTheProcess` runs 30 s and fails on `timedOut`); in the deadline's work item, call `Darwin.kill(pid, SIGKILL)` instead of `escalate` (expected: the same test fails on status 130 and `lines`); make `escalate` an instance method whose two closures capture `[weak self]` and guard on `self.isRunning`, as the first draft did (expected: `testAFreedRunStillEscalatesToSIGKILL` times out on the reap, since the run is freed, the registry is weak, and `self` is nil when the SIGTERM would go); in `start`, keep the run in a strong array instead of the weak table (expected: the same test fails on "the run to be freed"); in `deinit`, skip `escalate` (expected: `testADroppedRunStopsItsProcess` times out); in `stopAll`, cancel only the first run (expected: `testStopAllCancelsEveryLiveRun` fails); in `stopAll(waiting:)`, skip the SIGTERM after the wait (expected: `testStopAllWaitingTerminatesWhatIgnoresSIGINT` times out); in `cancel`, skip `closeStandardInput()` (expected: `testAKeptStandardInputClosesOnCancel` times out, the script ignores the signals and never sees EOF); in `isAlive`, use `kill(pid, 0) == 0` (expected: `testAFreedRunStillEscalatesToSIGKILL` and `testADroppedRunStopsItsProcess` time out on the reap of a zombie that nothing waits for); in `cancel`, drop the `!cancelled` guard (into `survivors/` with the reason: a second SIGINT is harmless to tap, no test provokes it).
 
 ```bash
 git add desktop/TapDesktopCore
@@ -1695,6 +1992,8 @@ final class DeckReferencesTests: XCTestCase {
     func testFindsEveryAIImagePairAsTapDoes() {
         let found = AIImageReference.find(in: deck)
         XCTAssertEqual(found.map(\.prompt), ["a fox at dusk", "a whale"])
+        let recorded = AIImageReference.find(in: "<!-- ai-prompt: a fox | not a choice | aspect: 16:9 | match-theme -->\n![](a.png)")
+        XCTAssertEqual(recorded.map(\.prompt), ["a fox | not a choice"], "tap's recorded choices come off; the person's own separator stays")
         XCTAssertEqual(found.map(\.imagePath), ["images/generated-1a2b3c4d.png", "./images/generated-ffffffff.png"])
         XCTAssertEqual((deck as NSString).substring(with: found[0].range), "<!-- ai-prompt: a fox at dusk -->\n![](images/generated-1a2b3c4d.png)")
         XCTAssertEqual(AIImageReference.find(in: "![](images/plain.png)\n"), [], "a plain image is not an AI image")
@@ -1917,10 +2216,18 @@ public struct AIImageReference: Equatable, Sendable {
 
     private static let pattern = try! NSRegularExpression(pattern: #"<!--\s*ai-prompt:\s*(.+?)\s*-->\n[ \t]*!\[\]\(([^)]+)\)"#)
 
+    /// The comment records the person's words, then the choices tap made the
+    /// image with (`| aspect: 16:9 | match-theme`); `prompt` is the words alone.
+    static func words(in commentText: String) -> String {
+        var parts = commentText.components(separatedBy: " | ")
+        while parts.count > 1, let last = parts.last, last == "match-theme" || last.hasPrefix("aspect: ") { parts.removeLast() }
+        return parts.joined(separator: " | ")
+    }
+
     public static func find(in text: String) -> [AIImageReference] {
         let whole = text as NSString
         return pattern.matches(in: text, range: NSRange(location: 0, length: whole.length)).map { match in
-            AIImageReference(prompt: whole.substring(with: match.range(at: 1)), imagePath: whole.substring(with: match.range(at: 2)), range: match.range)
+            AIImageReference(prompt: words(in: whole.substring(with: match.range(at: 1))), imagePath: whole.substring(with: match.range(at: 2)), range: match.range)
         }
     }
 
@@ -1955,7 +2262,7 @@ Expected: every test passes.
 
 - [ ] **Step 5: Mutate and commit**
 
-Mutations, each applied and run with `make -C desktop core-test`, then reverted exactly: in `driverSummary`, mark every driver `(custom)` (expected: `testDecodesTheApprovalList` fails on the first summary); in `approvedAtDate`, drop the fractional-seconds formatter (expected: fails on "fractional seconds parse"); in `ThemeCatalog.light`, filter on `== "light"` and in `dark` on `!= "light"` (into `survivors/`: tap prints only the two values; no test has a third); in `AIImageReference.pattern`, allow `\n+` between the comment and the link (expected: `testFindsEveryAIImagePairAsTapDoes` fails on the blank-line case); in `ComponentLink.find`, use `column <= match.range.location` instead of `NSLocationInRange` (expected: `testFindsAComponentPathUnderTheCaret` fails on four of its assertions, column 12 first); in `ComponentLink.pattern`, make the extension group `(?:jsx|tsx|md)` (expected: the same test fails on `./slides/Notes.md`, the case the prefix does not already refuse).
+Mutations, each applied and run with `make -C desktop core-test`, then reverted exactly: in `driverSummary`, mark every driver `(custom)` (expected: `testDecodesTheApprovalList` fails on the first summary); in `approvedAtDate`, drop the fractional-seconds formatter (expected: fails on "fractional seconds parse"); in `ThemeCatalog.light`, filter on `== "light"` and in `dark` on `!= "light"` (into `survivors/`: tap prints only the two values; no test has a third); in `AIImageReference.pattern`, allow `\n+` between the comment and the link (expected: `testFindsEveryAIImagePairAsTapDoes` fails on the blank-line case); in `ComponentLink.find`, use `column <= match.range.location` instead of `NSLocationInRange` (expected: `testFindsAComponentPathUnderTheCaret` fails on four of its assertions, column 12 first); in `ComponentLink.pattern`, make the extension group `(?:jsx|tsx|md)` (expected: the same test fails on `./slides/Notes.md`, the case the prefix does not already refuse); in `AIImageReference.words`, return `commentText` whole (expected: `testFindsEveryAIImagePairAsTapDoes` fails on "a fox | not a choice").
 
 ```bash
 git add desktop/TapDesktopCore
@@ -2410,7 +2717,9 @@ git commit -m "feat(desktop): the General settings store, the Keychain and memor
 - Consumes: `ToolRun` (Task 3), `ThemeSetResult` (Task 4), `GeneralSettings`, `GeminiKeyStore`, `MemoryGeminiKeyStore`, `GeminiKeySource` (Task 5), `Frontmatter.entry(at:)` and `unquotedValue` (D5), `DeckSessionController.saveNow`, `loadDiskVersion`, `hasDiskConflict`, `editorViewController.showBar`, `hideBar`, `bar(_:)` (D2), `TapLog`, `AppEnvironment.tapEnvironment()`.
 - Produces: `TapTool.run(_:in:timeout:log:includeGeminiKey:onProgress:) async -> ToolRun.Exit`, `TapTool.makeRun(_:in:timeout:log:includeGeminiKey:keepsStandardInputOpen:) async -> ToolRun`; `AppEnvironment.toolExecutableURL: URL?`, `geminiKeyStore: GeminiKeyStore`, `generalSettings: GeneralSettings`, `themeImages: ThemeImageLoader` (the type arrives in Task 6b; here a stub class with `loadAll()` and `catalog: ThemeCatalog?`, replaced there), `geminiKeySource() async -> GeminiKeySource`; `DocumentBarView.Kind.toolFailed`, `DocumentBarView.detail`; `DeckSessionController.saveNow(completion:)`, `runToolOnSavedDeck(_:actionName:includeGeminiKey:showsErrorBar:completion:)`, `showToolError(actionName:message:)`, `setTheme(_:)`, `currentThemeSlug`, `onThemeChanged`, `refreshThemeIfChanged()`; `FakeToolScripts.write`, `themeShow`, `themeSetFailing`. Tasks 6b, 7, 8a, 8b, 9, 11, 12 and 13 run tap through `TapTool`; 6b, 8b and 13 take the tool path.
 
-- [ ] **Step 1: The test support: the scripted tool, the fixture, the seams**
+- [ ] **Step 1: The test support: the scripted tool, the fixtures, the seams**
+
+`desktop/TapTests/Fixtures/themed.md` is `ops.md` with `theme: terminal` added under its `title:` line and nothing else changed (`ops.md` names no theme, and D3's drag, header-drag and approval tests keep it as it is).
 
 `desktop/TapTests/Support/FakeToolScripts.swift`:
 
@@ -2448,12 +2757,14 @@ enum FakeToolScripts {
 
     /// `tap theme show <slug> --image ...`: copies `png` to a file named
     /// after the slug and prints tap's result, with `downloadLines` of
-    /// download progress first when `--progress json` is given.
+    /// download progress first when `--progress json` is given, a tenth of
+    /// a second apart and a third of a second before the render line, so
+    /// the download state lasts long enough for a test's poll to see it.
     static func themeShow(png: URL, downloadLines: Int = 0, recordingTo record: URL) throws -> URL {
         let folder = try Fixtures.temporaryFolder()
         let download = (0..<downloadLines).map { index in
-            #"echo '{"phase":"download","bytes":\#((index + 1) * 50_000_000),"totalBytes":\#(downloadLines * 50_000_000)}' >&2"#
-        }.joined(separator: "\n    ")
+            #"echo '{"phase":"download","bytes":\#((index + 1) * 50_000_000),"totalBytes":\#(downloadLines * 50_000_000)}' >&2; sleep 0.1"#
+        }.joined(separator: "\n    ") + (downloadLines > 0 ? "\n    sleep 0.3" : "")
         return try write("""
           "theme show")
             slug="$3"
@@ -2531,7 +2842,7 @@ In `HostedTestCase`, a stored `private var savedExtraEnvironment: [String: Strin
         AppEnvironment.shared.extraEnvironment["GEMINI_API_KEY"] = ""
 ```
 
-and in `tearDown`, before `super`, `AppEnvironment.shared.extraEnvironment = savedExtraEnvironment` (so a test's `PATH` never reaches the next test's `tap dev`).
+and in `tearDown`, before `super`, `ToolRun.stopAll()` (a theme render or an export a test left running never runs into the next test) and `AppEnvironment.shared.extraEnvironment = savedExtraEnvironment` (so a test's `PATH` never reaches the next test's `tap dev`).
 
 In `DocumentBar.swift`: `Kind` gains `toolFailed`; the view gains `let detail: String`, set in `init` from the `detail` parameter, so a test reads `bar.detail` as it reads `bar.message`.
 
@@ -2544,16 +2855,17 @@ import XCTest
 @testable import Tap
 
 final class ThemeSetTests: HostedTestCase {
-    func openOps() async throws -> (DeckDocument, DeckSessionController, URL) {
-        let deck = try Fixtures.copyDeck("ops.md")
+    /// themed.md: ops.md's slides with `theme: terminal` (ops.md names none).
+    func openThemed() async throws -> (DeckDocument, DeckSessionController, URL) {
+        let deck = try Fixtures.copyDeck("themed.md")
         let document = try await openDeckAndWaitForPreview(deck)
         return (document, try XCTUnwrap(document.sessionController), deck)
     }
 
     /// The tool path itself: save first, tap on the file, the file back as one undo step.
     func testSetThemeRunsTapOnTheSavedDeck() async throws {
-        let (document, controller, deck) = try await openOps()
-        XCTAssertEqual(controller.currentThemeSlug, "terminal", "ops.md names its theme")
+        let (document, controller, deck) = try await openThemed()
+        XCTAssertEqual(controller.currentThemeSlug, "terminal", "themed.md names its theme")
         controller.jumpToSlide(number: 2)
         controller.editor.insertText("typed before the pick ", replacementRange: controller.editor.selectedRange())
         XCTAssertTrue(document.isDocumentEdited)
@@ -2574,10 +2886,17 @@ final class ThemeSetTests: HostedTestCase {
         XCTAssertFalse(controller.editor.string.contains("theme: blueprint"), "undo returns to the text before tap's edit")
         XCTAssertTrue(controller.editor.string.contains("typed before the pick"))
         XCTAssertEqual(themes, ["blueprint", "terminal"], "and reports the way back")
+
+        // The Default cell: tap theme set default removes the line.
+        controller.setTheme("default")
+        try await waitUntil(timeout: 20, "the theme line to go") { !controller.editor.string.contains("theme:") }
+        XCTAssertNil(controller.currentThemeSlug)
+        XCTAssertEqual(themes, ["blueprint", "terminal", nil], "reported as no theme")
+        XCTAssertFalse(try String(contentsOf: deck, encoding: .utf8).contains("theme:"))
     }
 
     func testThemeSetIsRefusedWhileADiskConflictShows() async throws {
-        let (_, controller, deck) = try await openOps()
+        let (_, controller, deck) = try await openThemed()
         controller.editor.insertText("mine ", replacementRange: NSRange(location: controller.editor.hiddenLength, length: 0))
         try (try String(contentsOf: deck, encoding: .utf8) + "\n# Theirs\n").write(to: deck, atomically: true, encoding: .utf8)
         try await waitUntil(timeout: 10, "the conflict bar") { controller.editorViewController.bar(.changedOnDisk) != nil }
@@ -2594,7 +2913,7 @@ final class ThemeSetTests: HostedTestCase {
     }
 
     func testTapsErrorShowsOnTheBar() async throws {
-        let (_, controller, _) = try await openOps()
+        let (_, controller, _) = try await openThemed()
         let record = try Fixtures.temporaryFolder().appendingPathComponent("record.txt")
         AppEnvironment.shared.toolExecutableURL = try FakeToolScripts.themeSetFailing(recordingTo: record)
         let textBefore = controller.editor.string
@@ -2677,19 +2996,25 @@ In `DeckSessionController.swift`, replace `saveNow()` with a version that report
     /// A save the document refuses (a disk conflict is showing) comes back
     /// as its error and the edit stays in the buffer for the next save.
     func saveNow(completion: @escaping (Error?) -> Void) {
+        _ = deckForm.commitEditing()
         guard let document, let url = document.fileURL else { return completion(CocoaError(.fileNoSuchFile)) }
         guard isContentEdited else { return completion(nil) }
         document.save(to: url, ofType: document.fileType ?? "net.daringfireball.markdown", for: .saveOperation, completionHandler: completion)
     }
 
+    /// D5's fix-it save, unchanged in what it logs: FixItTests waits for the success line.
     func saveNow() {
         saveNow { [weak self] error in
-            if let error { self?.session.log.append("the save after the fix-it was refused: \(error.localizedDescription)", source: .app) }
+            if let error {
+                self?.session.log.append("the save after the fix-it was refused: \(error.localizedDescription)", source: .app)
+            } else {
+                self?.session.log.append("saved the deck after the fix-it", source: .app)
+            }
         }
     }
 ```
 
-Add, in a `// MARK: Tap commands on the deck` section:
+`saveNow(completion:)` first calls `_ = deckForm.commitEditing()`, as `saveForPresenting` does, so a Deck tab field still being typed in is in the file tap reads. Add, in a `// MARK: Tap commands on the deck` section:
 
 ```swift
     /// The one path for a tap command that writes the deck file (tap theme
@@ -2715,12 +3040,17 @@ Add, in a `// MARK: Tap commands on the deck` section:
                 completion(nil)
                 return
             }
+            // tap dev reports the write as file-changed after its debounce; if that
+            // report lands before this run's own load, diskChanged takes the action's name.
+            self.pendingToolActionName = actionName
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 let exit = await TapTool.run(arguments, in: self.document?.fileURL?.deletingLastPathComponent(), log: self.session.log, includeGeminiKey: includeGeminiKey)
+                let name = self.pendingToolActionName ?? actionName
+                self.pendingToolActionName = nil
                 switch exit.outcome {
                 case .ok?:
-                    self.loadDiskVersion(actionName: actionName)
+                    self.loadDiskVersion(actionName: name)
                 case .failed(_, let message)?:
                     if showsErrorBar { self.showToolError(actionName: actionName, message: message) }
                 case nil:
@@ -2730,6 +3060,11 @@ Add, in a `// MARK: Tap commands on the deck` section:
             }
         }
     }
+
+    /// The undo step's name for the disk load a tool run is about to cause,
+    /// whichever path loads it first (the run's own, or tap dev's
+    /// file-changed report through diskChanged).
+    private(set) var pendingToolActionName: String?
 
     /// tap's failure, on a bar over the editor with tap's own message.
     func showToolError(actionName: String, message: String) {
@@ -2754,23 +3089,24 @@ Add, in a `// MARK: Tap commands on the deck` section:
         onThemeChanged?(slug)
     }
 
-    /// A pick in the theme grid: tap theme set on the saved file.
+    /// A pick in the theme grid: tap theme set on the saved file. "default"
+    /// is the grid's Default cell, which removes the theme line.
     func setTheme(_ slug: String) {
         guard let deck = document?.fileURL else { return }
         runToolOnSavedDeck(["theme", "set", slug, deck.path, "--json"], actionName: "Change Theme")
     }
 ```
 
-`loadDiskVersion()` gains a parameter: `func loadDiskVersion(actionName: String = "Load Disk Version")`, used in its `replaceText(..., actionName: actionName)` call; the existing callers pass nothing. `lastThemeSlug` is set to `currentThemeSlug` at the end of `documentDidRead` without reporting (the toolbar item reads it itself when it is built), and `refreshThemeIfChanged()` is called at the end of `editorTextDidChange`, `loadDiskVersion` and `undoOrRedoDidChangeText`.
+`loadDiskVersion()` gains a parameter: `func loadDiskVersion(actionName: String = "Load Disk Version")`, used in its `replaceText(..., actionName: actionName)` call; the existing callers pass nothing, except `diskChanged()`, whose silent load becomes `loadDiskVersion(actionName: pendingToolActionName ?? "Load Disk Version")` and clears `pendingToolActionName` after, so the undo step carries the tool's name whichever path lands first. `lastThemeSlug` is set to `currentThemeSlug` at the end of `documentDidRead` without reporting (the toolbar item reads it itself when it is built), and `refreshThemeIfChanged()` is called at the end of `editorTextDidChange`, `loadDiskVersion` and `undoOrRedoDidChangeText`.
 
 - [ ] **Step 6: Build, then hand the hosted tests to CI**
 
 Run: `make -C desktop build && make -C desktop test-build 2>&1 | tail -3 && make -C desktop check-release-hooks`
-Expected: `** BUILD SUCCEEDED **`, `** TEST BUILD SUCCEEDED **`, the release-hook check green. The controller's CI run confirms: `ThemeSetTests` (3) pass, and every D2 to D5 hosted test still passes (`extraEnvironment` is restored between tests; `tapEnvironment()` is unchanged).
+Expected: `** BUILD SUCCEEDED **`, `** TEST BUILD SUCCEEDED **`, the release-hook check green. The controller's CI run confirms: `ThemeSetTests` (3) pass, and every D2 to D5 hosted test still passes (`extraEnvironment` is restored between tests; `tapEnvironment()` is unchanged; `FixItTests` still sees "saved the deck after the fix-it").
 
 - [ ] **Step 7: Mutations and commit**
 
-Mutations, each a patch in `mutations-b/`, the ones that could lose an edit or leak the key first: in `runToolOnSavedDeck`, skip `saveNow` and run tap at once (`Test: TapTests/ThemeSetTests/testSetThemeRunsTapOnTheSavedDeck`; expected: fails on "the buffer was saved first", tap wrote the file without the typed text, and the load then drops it); in `runToolOnSavedDeck`, drop the `!hasDiskConflict` guard (`Test: TapTests/ThemeSetTests/testThemeSetIsRefusedWhileADiskConflictShows`; expected: fails on "tap was not run"); in `runToolOnSavedDeck`, call `loadDiskVersion` on `.failed` too (`Test: TapTests/ThemeSetTests/testTapsErrorShowsOnTheBar`; expected: the bar never shows); in `loadDiskVersion`, ignore `actionName` (expected: `testSetThemeRunsTapOnTheSavedDeck` fails on `undoActionName`); in `refreshThemeIfChanged`, drop the `slug != lastThemeSlug` guard (expected: fails on `themes`, reported on every keystroke); in `TapTool.makeRun`, apply the key regardless of `includeGeminiKey` (`Test: TapTests/GenerateImageTests/testATapDevSessionNeverGetsTheKeychainsKey`, Task 8b, filed with it; expected: fails on `TapTool`'s environment); in `TapTool.makeRun`, log the environment's keys (into `survivors-b/` with the reason: the log line holds names, not values, and no test reads the log for it; the final check's grep guards the value).
+Mutations, each a patch in `mutations-b/`, the ones that could lose an edit or leak the key first: in `runToolOnSavedDeck`, skip `saveNow` and run tap at once (`Test: TapTests/ThemeSetTests/testSetThemeRunsTapOnTheSavedDeck`; expected: fails on "the buffer was saved first", tap wrote the file without the typed text, and the load then drops it); in `runToolOnSavedDeck`, drop the `!hasDiskConflict` guard (`Test: TapTests/ThemeSetTests/testThemeSetIsRefusedWhileADiskConflictShows`; expected: fails on "tap was not run"); in `runToolOnSavedDeck`, call `loadDiskVersion` on `.failed` too (`Test: TapTests/ThemeSetTests/testTapsErrorShowsOnTheBar`; expected: the bar never shows); in `loadDiskVersion`, ignore `actionName` (expected: `testSetThemeRunsTapOnTheSavedDeck` fails on `undoActionName`); in `refreshThemeIfChanged`, drop the `slug != lastThemeSlug` guard (expected: fails on `themes`, reported on every keystroke); in `saveNow()`, drop the success log line (`Test: TapTests/FixItTests/testABlockUsesAnUndeclaredDriver`; expected: D5's wait for "saved the deck after the fix-it" times out); in `diskChanged`, ignore `pendingToolActionName` (into `survivors-b/` with the reason: only a `file-changed` that beats the run's own load shows it, which no test can time); in `TapTool.makeRun`, apply the key regardless of `includeGeminiKey` (`Test: TapTests/GenerateImageTests/testATapDevSessionNeverGetsTheKeychainsKey`, Task 8b, filed with it; expected: fails on `TapTool`'s environment); in `TapTool.makeRun`, log the environment's keys (into `survivors-b/` with the reason: the log line holds names, not values, and no test reads the log for it; the final check's grep guards the value).
 
 ```bash
 git add desktop/Tap desktop/TapTests
@@ -2788,7 +3124,7 @@ git commit -m "feat(desktop): run tap on the saved deck and load the result as o
 
 **Interfaces:**
 - Consumes: `TapTool.run` (Task 6a), `ThemeCatalog`, `ThemeImageResult` (Task 4), `DeckSessionController.setTheme`, `currentThemeSlug`, `onThemeChanged` (Task 6a), `FakeToolScripts.themeShow` (Task 6a), `ReadyPayload.revision` (D2).
-- Produces: `ThemeImageLoader` (`catalog`, `loadCatalog()`, `image(for:)`, `loadAll()`, `didLoadCatalogNotification`, `didLoadImageNotification`, `downloadDidChangeNotification`, `downloadProgress`); `ThemeCell(theme:size:)` (`slug`, `imageView`, `nameLabel`, `isSelected`, `show(_:)`); `ThemeGridViewController(cellSize:)` (`selectedSlug`, `onPick`, `cells`, `cell(for:)`, `sectionTitles`, `footerLabel`, `downloadLabel`, `showsFooter`, `static popoverCellSize`, `static sheetCellSize`); `ThemePopoverController` (`grid`, `onPick`, `show(relativeTo:of:selected:)`, `close()`, `isShown`); `DeckWindowController.themeButton`, `themeItemIdentifier`, `themePopover`, `showThemePopover(_:)`, `refreshThemeItem(slug:)`. Task 7's sheet and Deck tab row reuse the grid and the popover.
+- Produces: `ThemeImageLoader` (`catalog`, `loadCatalog()`, `image(for:)`, `loadAll()`, `defaultSlug`, `didLoadCatalogNotification`, `didLoadImageNotification`, `downloadDidChangeNotification`, `downloadProgress`); `ThemeCell(theme:size:)` (`slug`, `imageView`, `nameLabel`, `isSelected`, `show(_:)`); `ThemeGridViewController(cellSize:)` (`selectedSlug` (nil reads as `"default"`), `onPick`, `cells`, `cell(for:)`, `sectionTitles`, `footerLabel`, `downloadLabel`, `showsFooter`, `static defaultSlug = "default"`, `static popoverCellSize` 96x54, `static sheetCellSize` 82x46 as the NewDeckHintNoSlug board draws); `ThemePopoverController` (`grid`, `onPick`, `show(relativeTo:of:selected:)`, `close()`, `isShown`); `DeckWindowController.themeButton`, `themeItemIdentifier`, `themePopover`, `showThemePopover(_:)`, `refreshThemeItem(slug:)`. Task 7's sheet and Deck tab row reuse the grid and the popover.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -2815,20 +3151,25 @@ final class ThemeGridTests: HostedTestCase {
         try await waitUntil(timeout: 20, "the catalog") { AppEnvironment.shared.themeImages.catalog != nil }
         let catalog = try XCTUnwrap(AppEnvironment.shared.themeImages.catalog)
         XCTAssertEqual(catalog.themes.count, 21, "every theme tap lists")
-        XCTAssertEqual(grid.cells.map(\.slug), catalog.light.map(\.slug) + catalog.dark.map(\.slug), "one grid, light then dark, in tap's order")
+        XCTAssertEqual(grid.cells.map(\.slug), ["default"] + catalog.light.map(\.slug) + catalog.dark.map(\.slug), "Default first, then light and dark in tap's order")
         XCTAssertEqual(grid.sectionTitles, ["Light", "Dark"])
+        XCTAssertEqual(grid.cell(for: "default")?.nameLabel.stringValue, "Default")
+        XCTAssertEqual(grid.cell(for: "default")?.accessibilityLabel(), "Default, tap's default theme (Base)")
         XCTAssertEqual(grid.cell(for: "terminal")?.nameLabel.stringValue, "Terminal")
         XCTAssertEqual(grid.cell(for: "terminal")?.accessibilityLabel(), "Terminal, dark theme")
+        grid.view.layoutSubtreeIfNeeded()
         XCTAssertEqual(grid.cell(for: "terminal")?.imageView.frame.size, ThemeGridViewController.popoverCellSize)
-        // The renders land one at a time, in the grid's order, from tap theme show --image.
+        // The renders land one at a time, in the grid's order, from tap theme show --image; Default shows the default theme's render.
         try await waitUntil(timeout: 60, "every render") { grid.cells.allSatisfy { $0.imageView.image != nil } }
         let shows = try String(contentsOf: record, encoding: .utf8).components(separatedBy: "\n").filter { $0.hasPrefix("arguments: theme show") }
-        XCTAssertEqual(shows.count, 21)
+        XCTAssertEqual(shows.count, 21, "no render for Default: it is the default theme's")
         XCTAssertTrue(shows[0].hasPrefix("arguments: theme show \(catalog.light[0].slug) --image --json --progress json"), shows[0])
+        XCTAssertTrue(grid.cell(for: "default")?.imageView.image === grid.cell(for: AppEnvironment.shared.themeImages.defaultSlug)?.imageView.image)
         XCTAssertEqual(grid.footerLabel.stringValue, "Picking a theme runs tap theme set. Press T in the preview to try one without saving.")
         // A second grid shows the renders at once: the images are kept for the app's life.
         let again = ThemeGridViewController(cellSize: ThemeGridViewController.sheetCellSize)
         again.loadViewIfNeeded()
+        again.view.layoutSubtreeIfNeeded()
         XCTAssertTrue(again.cells.allSatisfy { $0.imageView.image != nil }, "no second render")
         XCTAssertEqual(again.cell(for: "base")?.imageView.frame.size, ThemeGridViewController.sheetCellSize, "the New Deck sheet's smaller cells")
         XCTAssertEqual(try String(contentsOf: record, encoding: .utf8).components(separatedBy: "\n").filter { $0.hasPrefix("arguments: theme show") }.count, 21)
@@ -2857,8 +3198,12 @@ final class ThemeGridTests: HostedTestCase {
         XCTAssertEqual(picked, ["blueprint"])
         XCTAssertEqual(grid.selectedSlug, "blueprint")
         XCTAssertEqual(grid.cell(for: "terminal")?.isSelected, false)
+        grid.selectedSlug = nil
+        XCTAssertEqual(grid.cell(for: "default")?.isSelected, true, "no theme reads as Default")
+        grid.view.layoutSubtreeIfNeeded()
         let cell = try XCTUnwrap(grid.cell(for: "base"))
-        XCTAssertTrue(cell.hitTest(NSPoint(x: cell.bounds.midX, y: cell.bounds.midY)) === cell, "a click on the render or the name is the cell's")
+        let center = cell.convert(NSPoint(x: cell.bounds.midX, y: cell.bounds.midY), to: cell.superview)
+        XCTAssertTrue(cell.hitTest(center) === cell, "a click on the render or the name is the cell's (hitTest takes the superview's coordinates)")
     }
 
     /// The loader outlives every grid: a render finishing after its grid
@@ -2877,7 +3222,7 @@ final class ThemeGridTests: HostedTestCase {
     /// The scenario: a pick in the toolbar's pop-up, tap theme set, and the preview re-rendered.
     func testChangeTheDeckSTheme() async throws {
         _ = try useFakeRenders()
-        let deck = try Fixtures.copyDeck("ops.md")
+        let deck = try Fixtures.copyDeck("themed.md")
         let document = try await openDeckAndWaitForPreview(deck)
         let controller = try XCTUnwrap(document.sessionController)
         let window = try XCTUnwrap(document.windowControllers.first as? DeckWindowController)
@@ -2899,14 +3244,21 @@ final class ThemeGridTests: HostedTestCase {
         try await waitUntil(timeout: 10, "the toolbar") { window.themeButton.title == "Blueprint" }
         // The preview re-rendered: tap reloads its pages on the file change, and the app resends the slide.
         try await waitUntil(timeout: 20, "a newer render of slide 2") {
-            guard let latest = controller.latestReadyPayload else { return false }
+            guard let latest = controller.previewViewController.lastReady else { return false }
             return latest.slide == 2 && latest.revision != before.revision
         }
+
+        // The Default cell removes the theme line; the toolbar reads Default.
+        window.showThemePopover(nil)
+        window.themePopover.grid.cell(for: "default")?.performClick(nil)
+        try await waitUntil(timeout: 20, "the theme line to go") { !controller.editor.string.contains("theme:") }
+        try await waitUntil(timeout: 10, "the toolbar") { window.themeButton.title == "Default" }
+        XCTAssertFalse(try String(contentsOf: deck, encoding: .utf8).contains("theme:"))
     }
 }
 ```
 
-`latestReadyPayload` is a `private(set) var` the session controller sets in `previewDidRender` (D2 stores `latestReadySlide`; this keeps the whole payload beside it, for tests), and `ReadyPayload.revision` is P5's contract as D2 decodes it. If D2 names the stored payload otherwise, the test reads that.
+`previewViewController.lastReady` is D2's `private(set) var lastReady: ReadyPayload?` on the preview, and `ReadyPayload.revision` is P5's contract as D2 decodes it (a hash of the transformed deck, theme included).
 
 - [ ] **Step 2: Build to verify they do not compile**
 
@@ -2937,11 +3289,18 @@ final class ThemeImageLoader {
     private var images: [String: NSImage] = [:]
     /// Bytes of totalBytes while the export engine downloads, nil otherwise.
     private(set) var downloadProgress: (bytes: Int64, totalBytes: Int64)?
+
+    /// tap's default theme, from the deck schema's `theme` default (D5
+    /// loads it once), "base" until it has: the render the Default cell shows.
+    var defaultSlug: String {
+        (AppEnvironment.shared.deckSchema.keys.first { $0.name == "theme" }?.defaultValue).flatMap { $0.isEmpty ? nil : $0 } ?? "base"
+    }
     private var catalogTask: Task<Void, Never>?
     private var renderTask: Task<Void, Never>?
     private var catalogAttempts = 0
 
-    func image(for slug: String) -> NSImage? { images[slug] }
+    /// The render for a slug; the Default cell's is the default theme's.
+    func image(for slug: String) -> NSImage? { images[slug == ThemeGridViewController.defaultSlug ? defaultSlug : slug] }
 
     /// Loads the catalog if it is not loaded, then renders every theme
     /// that has no image yet. Safe to call from every grid that opens.
@@ -3082,9 +3441,13 @@ final class ThemeCell: NSButton {
 /// cells per row, in tap's order, with the renders as they land.
 final class ThemeGridViewController: NSViewController {
     static let columns = 5
-    /// The ThemePicker board's cells, and the NewDeck board's smaller ones.
+    /// The first cell: tap's default theme, drawn like the others with the
+    /// default theme's render. Picking it removes the theme line (tap theme
+    /// set default). A deck that names no theme has it selected.
+    static let defaultSlug = "default"
+    /// The ThemePicker board's cells, and the NewDeckHintNoSlug board's smaller ones.
     static let popoverCellSize = NSSize(width: 96, height: 54)
-    static let sheetCellSize = NSSize(width: 78, height: 44)
+    static let sheetCellSize = NSSize(width: 82, height: 46)
     let cellSize: NSSize
     var onPick: ((String) -> Void)?
     private(set) var cells: [ThemeCell] = []
@@ -3102,8 +3465,9 @@ final class ThemeGridViewController: NSViewController {
 
     required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
 
+    /// nil (no theme) selects the Default cell.
     var selectedSlug: String? {
-        didSet { for cell in cells { cell.isSelected = cell.slug == selectedSlug } }
+        didSet { for cell in cells { cell.isSelected = cell.slug == (selectedSlug ?? Self.defaultSlug) } }
     }
 
     /// Whether the footer line shows: the toolbar popover and the Deck tab
@@ -3150,6 +3514,7 @@ final class ThemeGridViewController: NSViewController {
                 MainActor.assumeIsolated {
                     guard let slug = notification.userInfo?["slug"] as? String else { return }
                     self?.cell(for: slug)?.show(loader.image(for: slug))
+                    if slug == loader.defaultSlug { self?.cell(for: Self.defaultSlug)?.show(loader.image(for: slug)) }
                 }
             },
             NotificationCenter.default.addObserver(forName: ThemeImageLoader.downloadDidChangeNotification, object: loader, queue: .main) { [weak self] _ in
@@ -3170,7 +3535,9 @@ final class ThemeGridViewController: NSViewController {
         cells = []
         sectionTitles = []
         guard let catalog = AppEnvironment.shared.themeImages.catalog else { return }
-        for (title, themes) in [("Light", catalog.light), ("Dark", catalog.dark)] where !themes.isEmpty {
+        let defaultName = catalog.name(forSlug: AppEnvironment.shared.themeImages.defaultSlug)
+        let defaultTheme = ThemeSummary(slug: Self.defaultSlug, name: "Default", polarity: "light", pitch: "tap's default theme (\(defaultName))")
+        for (title, themes) in [("Light", [defaultTheme] + catalog.light), ("Dark", catalog.dark)] where !themes.isEmpty {
             sectionTitles.append(title)
             let heading = NSTextField(labelWithString: title)
             heading.font = .systemFont(ofSize: 11, weight: .semibold)
@@ -3182,8 +3549,9 @@ final class ThemeGridViewController: NSViewController {
             for row in stride(from: 0, to: themes.count, by: Self.columns) {
                 let rowCells = themes[row..<min(row + Self.columns, themes.count)].map { theme -> ThemeCell in
                     let cell = ThemeCell(theme: theme, size: cellSize)
+                    if theme.slug == Self.defaultSlug { cell.setAccessibilityLabel("Default, tap's default theme (\(defaultName))") }
                     cell.show(AppEnvironment.shared.themeImages.image(for: theme.slug))
-                    cell.isSelected = theme.slug == selectedSlug
+                    cell.isSelected = theme.slug == (selectedSlug ?? Self.defaultSlug)
                     cell.target = self
                     cell.action = #selector(cellPressed(_:))
                     cells.append(cell)
@@ -3276,10 +3644,10 @@ and:
     }
 
     /// The item's title is the theme's name from tap's catalog, the slug
-    /// while the catalog loads, and "Base" for a deck that names none (what
-    /// tap renders it with).
+    /// while the catalog loads, and "Default" for a deck that names none
+    /// (the grid's Default cell, tap's default theme).
     func refreshThemeItem(slug: String?) {
-        guard let slug else { return themeButton.title = "Base" }
+        guard let slug else { return themeButton.title = "Default" }
         themeButton.title = AppEnvironment.shared.themeImages.catalog?.name(forSlug: slug) ?? slug
     }
 ```
@@ -3293,7 +3661,7 @@ Expected: both succeed. The controller's CI run confirms: `ThemeGridTests` (5) p
 
 - [ ] **Step 7: Mutations and commit**
 
-Mutations, each a patch in `mutations-b/`: in `ThemeImageLoader.renderMissing`, render every theme regardless of `images` (`Test: TapTests/ThemeGridTests/testThemePickerListsTapSThemes`; expected: fails on the second count, 42); in `renderMissing`, order the slugs alphabetically (expected: fails on `shows[0]`); in `ThemeGridViewController.rebuild`, put the dark themes first (expected: fails on `cells.map(\.slug)`); in `ThemeCell.init`, use `popoverCellSize` regardless of `size` (expected: fails on the sheet cell's size); in `refreshDownload`, never hide the label (`Test: .../testTheEngineDownloadShowsUnderTheGrid`; expected: fails on `isHidden`); in `cellPressed`, drop `selectedSlug = sender.slug` (`Test: .../testAPickReportsTheSlugAndMarksTheCell`; expected: fails on `selectedSlug`); in `ThemeCell`, drop the `hitTest` override (expected: the same test fails on `hitTest`, the image view answers); in `refreshThemeItem`, show the slug always (`Test: .../testChangeTheDeckSTheme`; expected: fails on "Blueprint"); in `themePopover`'s `onPick`, call nothing (expected: the same test times out on "tap theme set to land"); in `ThemePopoverController.init`, skip `performClose` in `onPick` (expected: fails on "a pick closes the popover").
+Mutations, each a patch in `mutations-b/`: in `ThemeImageLoader.renderMissing`, render every theme regardless of `images` (`Test: TapTests/ThemeGridTests/testThemePickerListsTapSThemes`; expected: fails on the second count, 42); in `renderMissing`, order the slugs alphabetically (expected: fails on `shows[0]`); in `ThemeGridViewController.rebuild`, put the dark themes first (expected: fails on `cells.map(\.slug)`); in `rebuild`, leave the Default cell out (expected: fails on `cells.map(\.slug)` and the Default assertions); in `ThemeImageLoader.image(for:)`, map `default` to nothing (expected: fails on the Default cell's image); in `ThemeCell.init`, use `popoverCellSize` regardless of `size` (expected: fails on the sheet cell's size); in `refreshDownload`, never hide the label (`Test: .../testTheEngineDownloadShowsUnderTheGrid`; expected: fails on `isHidden`); in `cellPressed`, drop `selectedSlug = sender.slug` (`Test: .../testAPickReportsTheSlugAndMarksTheCell`; expected: fails on `selectedSlug`); in `ThemeCell`, drop the `hitTest` override (expected: the same test fails on `hitTest`, the image view answers); in `refreshThemeItem`, show the slug always (`Test: .../testChangeTheDeckSTheme`; expected: fails on "Blueprint"); in `refreshThemeItem`, show "Base" for nil (expected: the same test fails on "Default"); in `themePopover`'s `onPick`, call nothing (expected: the same test times out on "tap theme set to land"); in `ThemePopoverController.init`, skip `performClose` in `onPick` (expected: fails on "a pick closes the popover").
 
 ```bash
 git add desktop/Tap desktop/TapTests
@@ -3335,6 +3703,9 @@ final class NewDeckTests: HostedTestCase {
     }
 
     func testNewDeck() async throws {
+        // The sheet's grid renders themes: scripted, so no Chromium runs into later tests.
+        let png = Fixtures.repositoryRoot.appendingPathComponent("desktop/TapTests/Fixtures/diagram.png")
+        AppEnvironment.shared.toolExecutableURL = try FakeToolScripts.themeShow(png: png, recordingTo: try Fixtures.temporaryFolder().appendingPathComponent("renders.txt"))
         // With no deck open, File > New Deck goes on the welcome window.
         appDelegate.showWelcomeIfNoDecks()
         let welcome = WelcomeWindowController.shared
@@ -3349,12 +3720,14 @@ final class NewDeckTests: HostedTestCase {
         try await waitUntil(timeout: 20, "the grid") { !sheet.grid.cells.isEmpty }
         XCTAssertEqual(sheet.grid.selectedSlug, "terminal", "the General default is preselected")
         XCTAssertFalse(sheet.grid.showsFooter, "no deck to set a theme on")
-        XCTAssertEqual(sheet.grid.cellSize, ThemeGridViewController.sheetCellSize, "the NewDeck board's smaller cells")
+        XCTAssertEqual(sheet.grid.cellSize, ThemeGridViewController.sheetCellSize, "the NewDeckHintNoSlug board's 82x46 cells")
         XCTAssertEqual(sheet.locationHint.stringValue, "Creates a folder named after the title, with the deck and images/")
         XCTAssertGreaterThanOrEqual(sheet.frame.width, 560, "the NewDeck board's sheet, wide enough for five cells")
 
         sheet.titleField.stringValue = "Debugging Production at 3am"
         sheet.titleChanged(sheet.titleField)
+        sheet.grid.cell(for: "default")?.performClick(nil)
+        XCTAssertEqual(sheet.request.arguments, ["new", "--yes", "--title", "Debugging Production at 3am", "--folder", location.path, "--json"], "Default: no --theme, tap new's own default")
         sheet.grid.cell(for: "blueprint")?.performClick(nil)
         XCTAssertEqual(sheet.request.arguments, ["new", "--yes", "--title", "Debugging Production at 3am", "--theme", "blueprint", "--folder", location.path, "--json"])
         sheet.createButton.performClick(nil)
@@ -3451,7 +3824,7 @@ final class DeckTabThemeRowTests: HostedTestCase {
         let png = Fixtures.repositoryRoot.appendingPathComponent("desktop/TapTests/Fixtures/diagram.png")
         let record = try Fixtures.temporaryFolder().appendingPathComponent("record.txt")
         AppEnvironment.shared.toolExecutableURL = try FakeToolScripts.themeShow(png: png, recordingTo: record)
-        let document = try await openDeckAndWaitForPreview(try Fixtures.copyDeck("ops.md"))
+        let document = try await openDeckAndWaitForPreview(try Fixtures.copyDeck("themed.md"))
         let controller = try XCTUnwrap(document.sessionController)
         let window = try XCTUnwrap(document.windowControllers.first as? DeckWindowController)
         await AppEnvironment.shared.deckSchema.load()
@@ -3485,7 +3858,7 @@ Expected: the build fails on `NewDeckSheet`, `AppDelegate.newDeck(on:)`, `themeR
 
 - [ ] **Step 3: The sheet (the NewDeck board, with the NewDeckHintNoSlug change)**
 
-The NewDeck board draws the sheet over the welcome window, 560 pt wide: the heading "New Deck", a card with a "Title" row (a text field) and a "Save in" row (a folder popup showing the folder's name, with the hint under the label), a "Theme" heading over the grid of 78x44 cells, "Scroll for all 21 themes" under it, and Cancel and Create at the bottom right. The NewDeckHintNoSlug board fixes the hint as "Creates a folder named after the title, with the deck and images/" (the folder's name is tap's slug, which the app does not compute). `QuestionSheet.init` gains `width: CGFloat = 520`, used in place of the two `520` literals (the stack's width and the sheet's content rect), so this sheet passes 560; every D4 and D5 sheet keeps 520. `desktop/Tap/Documents/NewDeckSheet.swift`:
+The NewDeck board draws the sheet over the welcome window, 560 pt wide: the heading "New Deck", a card with a "Title" row (a text field) and a "Save in" row (a folder popup showing the folder's name, with the hint under the label), a "Theme" heading over the grid, "Scroll for all 21 themes" under it, and Cancel and Create at the bottom right. The NewDeckHintNoSlug board (the later of the two, and the one approved for this sheet) fixes the hint as "Creates a folder named after the title, with the deck and images/" (the folder's name is tap's slug, which the app does not compute) and draws the cells at 82x46, which is `sheetCellSize`; the grid's first cell is Default (the person's decision). `QuestionSheet.init` gains `width: CGFloat = 520`, used in place of the stack's `520` width constraint (the content rect is sized from the stack's fitting size, as today), so this sheet passes 560; every D4 and D5 sheet keeps 520. `desktop/Tap/Documents/NewDeckSheet.swift`:
 
 ```swift
 import AppKit
@@ -3530,8 +3903,10 @@ final class NewDeckSheet: QuestionSheet, NSTextFieldDelegate {
     var createButton: NSButton { acceptButton }
     var cancelButton: NSButton { declineButton }
 
+    /// The Default cell means no --theme: tap new picks its own default.
     var request: NewDeckRequest {
-        NewDeckRequest(title: titleField.stringValue.trimmingCharacters(in: .whitespaces), theme: grid.selectedSlug, location: chosenLocation)
+        let theme = grid.selectedSlug.flatMap { $0 == ThemeGridViewController.defaultSlug ? nil : $0 }
+        return NewDeckRequest(title: titleField.stringValue.trimmingCharacters(in: .whitespaces), theme: theme, location: chosenLocation)
     }
 
     init(lastFolder: URL?, defaultTheme: String?) {
@@ -3654,7 +4029,7 @@ final class NewDeckSheet: QuestionSheet, NSTextFieldDelegate {
 }
 ```
 
-The grid's `contentWidth` for 78 pt cells is 446 pt, inside the 512 pt the 560 pt sheet leaves. Return still creates (the accept button holds `"\r"`).
+The grid's `contentWidth` for 82 pt cells is 466 pt, inside the 512 pt the 560 pt sheet leaves. Return still creates (the accept button holds `"\r"`).
 
 - [ ] **Step 4: The command, in the app delegate, the menu and the welcome window**
 
@@ -3779,7 +4154,7 @@ final class ThemeRowButton: NSButton {
 }
 ```
 
-In `DeckFormViewController`: `private(set) var themeRowButton: ThemeRowButton?`, `private(set) lazy var themePopover: ThemePopoverController = { let popover = ThemePopoverController(); popover.onPick = { [weak self] slug in self?.sessionController?.setTheme(slug) }; return popover }()` (`sessionController` is D5's weak reference from the form to its controller; if D5 names it otherwise, that name). In `makeControl(for:path:)`, before the `switch`:
+In `DeckFormViewController`, two closures in the shape of D5's `text` and `applyEdit` (the form has no reference to its controller; it talks through closures): `var currentThemeSlug: () -> String? = { nil }` and `var setTheme: (String) -> Void = { _ in }`, wired in `DeckSessionController.init` next to `deckForm.text = ...`: `deckForm.currentThemeSlug = { [weak self] in self?.currentThemeSlug }` and `deckForm.setTheme = { [weak self] slug in self?.setTheme(slug) }`. Then `private(set) var themeRowButton: ThemeRowButton?` and `private(set) lazy var themePopover: ThemePopoverController = { let popover = ThemePopoverController(); popover.onPick = { [weak self] slug in self?.setTheme(slug) }; return popover }()`. In `makeControl(for:path:)`, before the `switch`:
 
 ```swift
         if path == ["theme"] {
@@ -3799,20 +4174,23 @@ with:
 ```swift
     @objc private func themeRowPressed(_ sender: Any?) {
         guard let button = themeRowButton else { return }
-        themePopover.show(relativeTo: button.bounds, of: button, selected: sessionController?.currentThemeSlug)
+        themePopover.show(relativeTo: button.bounds, of: button, selected: currentThemeSlug())
     }
 
     /// The row from the frontmatter: the name from tap's catalog (the slug
-    /// while it loads, "Base" for none) and the loader's render.
+    /// while it loads, "Default" for none) and the loader's render (the
+    /// default theme's for none, the grid's Default cell).
     func refreshThemeRow() {
         guard let button = themeRowButton else { return }
-        let slug = sessionController?.currentThemeSlug
-        let catalog = AppEnvironment.shared.themeImages.catalog
-        button.show(slug: slug, name: slug.map { catalog?.name(forSlug: $0) ?? $0 } ?? "Base", image: slug.flatMap { AppEnvironment.shared.themeImages.image(for: $0) })
+        let slug = currentThemeSlug()
+        let loader = AppEnvironment.shared.themeImages
+        button.show(slug: slug, name: slug.map { loader.catalog?.name(forSlug: $0) ?? $0 } ?? "Default", image: loader.image(for: slug ?? ThemeGridViewController.defaultSlug))
     }
 ```
 
-`refreshValues` (D5) calls `refreshThemeRow()` after its loop, so an undo, a typed edit or a disk load shows here too; `controlChanged` ignores the button (it is not an `NSPopUpButton`, `NSSwitch` or text field, and `themeRowPressed` is its action); the form observes `ThemeImageLoader.didLoadCatalogNotification` and `didLoadImageNotification` to call `refreshThemeRow()` (removed in `deinit`). D5's `testDeckSettingsLiveInTheInspector` asserted the theme popup: it now asserts `themeRowButton?.nameLabel.stringValue` follows the undo, the same expectation on the new control.
+`refreshValues` (D5) calls `refreshThemeRow()` after its loop, so an undo, a typed edit or a disk load shows here too; `controlChanged` ignores the button (it is not an `NSPopUpButton`, `NSSwitch` or text field, and `themeRowPressed` is its action); the form observes `ThemeImageLoader.didLoadCatalogNotification` and `didLoadImageNotification` to call `refreshThemeRow()` (removed in `deinit`).
+
+D5's `DeckTabTests.testDeckSettingsLiveInTheInspector` (main, lines 63 to 117) is built on the theme popup: its allowed values and "Default (base)" item, a pick as the first undoable form edit, "the same value again is no undo step", "the third undo takes back the theme", and choosing Default to remove the key. The row button cannot take those steps synchronously (a pick runs tap, saves and reloads), so the test moves them to the `transition` popup, another string with allowed values: `form.field("transition") as? NSPopUpButton`, `transitionKey`, `"Default (\(transitionKey.defaultValue ?? ""))"`, the frontmatter prefix `transition: \(chosen)`, the undo name "Change Transition", and the Default item removing `transition:`. The theme keeps two assertions there: `form.themeRowButton?.nameLabel.stringValue == "Default"` for a deck that names no theme, and, after a `controller.setTheme("terminal")` landed, the row reads "Terminal" and an undo takes it back to "Default" (the row follows the text). The Deck tab's way back to tap's default is the popover's Default cell, so nothing is lost.
 
 - [ ] **Step 6: Build, then hand the hosted tests to CI**
 
@@ -3821,7 +4199,7 @@ Expected: both succeed. The controller's CI run confirms: `NewDeckTests` (4) and
 
 - [ ] **Step 7: Mutations and commit**
 
-Mutations, each a patch in `mutations-b/`: in `NewDeckRequest.arguments`, drop `--folder` and pass `--output` with the location (`Test: TapTests/NewDeckTests/testNewDeck`; expected: fails on `arguments`, and tap would refuse); in `newDeck(on:)`, skip `lastNewDeckFolder = request.location` (expected: fails on "remembered"); in `newDeck(on:)`, end the sheet on failure too (`Test: .../testTheSheetGoesOnTheDeckWindowAndReportsTapsError`; expected: fails on "the sheet stays"); in `titleChanged`, enable Create always (`Test: .../testAnEmptyTitleCannotCreate`; expected: fails); in `NewDeckSheet.init`, leave `grid.showsFooter` true (expected: `testNewDeck` fails on `showsFooter`); in `NewDeckSheet.init`, pass `popoverCellSize` (expected: fails on `cellSize`); in `hostWindowForNewDeck`, return the welcome window whenever `keyWindow` is not a deck (`Test: .../testTheHostIsAVisibleDeckWindowWhenAnotherWindowIsInFront`; expected: fails on "the frontmost deck window"); in `DeckFormViewController.makeControl`, keep D5's popup for `theme` (`Test: TapTests/DeckTabThemeRowTests/testTheDeckTabThemeRowOpensTheGrid`; expected: fails on the unwrap); in `refreshThemeRow`, show the slug always (expected: fails on "Terminal"); in `refreshValues`, skip `refreshThemeRow()` (expected: fails on "follows an undo").
+Mutations, each a patch in `mutations-b/`: in `NewDeckRequest.arguments`, drop `--folder` and pass `--output` with the location (`Test: TapTests/NewDeckTests/testNewDeck`; expected: fails on `arguments`, and tap would refuse); in `newDeck(on:)`, skip `lastNewDeckFolder = request.location` (expected: fails on "remembered"); in `newDeck(on:)`, end the sheet on failure too (`Test: .../testTheSheetGoesOnTheDeckWindowAndReportsTapsError`; expected: fails on "the sheet stays"); in `titleChanged`, enable Create always (`Test: .../testAnEmptyTitleCannotCreate`; expected: fails); in `NewDeckSheet.init`, leave `grid.showsFooter` true (expected: `testNewDeck` fails on `showsFooter`); in `NewDeckSheet.init`, pass `popoverCellSize` (expected: fails on `cellSize`); in `hostWindowForNewDeck`, return the welcome window whenever `keyWindow` is not a deck (`Test: .../testTheHostIsAVisibleDeckWindowWhenAnotherWindowIsInFront`; expected: fails on "the frontmost deck window"); in `DeckFormViewController.makeControl`, keep D5's popup for `theme` (`Test: TapTests/DeckTabThemeRowTests/testTheDeckTabThemeRowOpensTheGrid`; expected: fails on the unwrap); in `refreshThemeRow`, show the slug always (expected: fails on "Terminal"); in `refreshValues`, skip `refreshThemeRow()` (expected: fails on "follows an undo"); in `DeckSessionController.init`, skip wiring `deckForm.setTheme` (expected: the same test times out on "tap theme set to land"); in `NewDeckSheet.request`, pass `--theme default` for the Default cell (expected: `testNewDeck` fails on the first `arguments`, and tap would refuse the slug).
 
 ```bash
 git add desktop/Tap desktop/TapTests
@@ -4117,7 +4495,7 @@ In `DeckWindowController.swift`:
     }
 ```
 
-(`import UniformTypeIdentifiers` at the top.) In `validateMenuItem`: `insertImage` needs `sessionController.currentSlideNumber != nil && sessionController.document?.fileURL != nil`. In `MainMenu.slideMenu`, Insert Image… gets `#selector(DeckWindowController.insertImage(_:))`; in `SlideContextMenu.build`, `add("Insert Image…", #selector(DeckWindowController.insertImage(_:)), key: showsTextShortcuts ? "i" : "", modifiers: [.command, .shift])`.
+(`import UniformTypeIdentifiers` at the top.) In `validateMenuItem`: `insertImage` needs `sessionController.currentSlideNumber != nil && sessionController.document?.fileURL != nil`. In `MainMenu.slideMenu`, Insert Image… gets `#selector(DeckWindowController.insertImage(_:))`. In `SlideContextMenu.build`, the RegenerateMenu board's order is Insert Image…, then Generate Image… (D3 built them the other way round): the `add("Insert Image…", ...)` line moves above the Generate line and gets `#selector(DeckWindowController.insertImage(_:))`. D3's `SlideContextMenuTests` compare the editor's menu with the panel's (one builder) and never pin the two titles' order, so they pass unchanged; Task 8b's test asserts the three image items in the board's order.
 
 - [ ] **Step 5: Build, then hand the hosted tests to CI**
 
@@ -4262,10 +4640,12 @@ final class GenerateImageTests: HostedTestCase {
     /// never sees the Keychain's key, and neither does any other tool run.
     func testATapDevSessionNeverGetsTheKeychainsKey() async throws {
         AppEnvironment.shared.geminiKeyStore = MemoryGeminiKeyStore(key: "placeholder-not-a-secret")
+        // HostedTestCase sets the shell value to "", so the session holds "" (or nothing): never the Keychain's.
         let session = await AppEnvironment.shared.sessionConfiguration().environment()
-        XCTAssertNil(session["GEMINI_API_KEY"], "tap dev's environment has no key from the Keychain")
+        XCTAssertEqual(session["GEMINI_API_KEY"] ?? "", "", "tap dev's environment has no key from the Keychain")
+        XCTAssertNotEqual(session["GEMINI_API_KEY"], "placeholder-not-a-secret")
         let talk = await AppEnvironment.shared.presentSessionConfiguration().environment()
-        XCTAssertNil(talk["GEMINI_API_KEY"], "tap present's neither")
+        XCTAssertEqual(talk["GEMINI_API_KEY"] ?? "", "", "tap present's neither")
         let record = try Fixtures.temporaryFolder().appendingPathComponent("record.txt")
         AppEnvironment.shared.toolExecutableURL = try FakeToolScripts.write("""
           "theme list") echo '{"ok": true, "themes": []}'; exit 0 ;;
@@ -4295,12 +4675,13 @@ final class GenerateImageTests: HostedTestCase {
         controller.jumpToSlide(number: 1)
         XCTAssertEqual(controller.aiImagesOnCurrentSlide, [], "slide 1 has none")
 
-        // The RegenerateMenu board: one item after Generate Image…, "Regenerate Image"; with two, one each named by its prompt.
+        // The RegenerateMenu board: Insert Image…, Generate Image…, then "Regenerate Image"; with two images, one each named by its prompt.
         controller.jumpToSlide(number: 2)
         let boxTwo = try XCTUnwrap(controller.editor.boxes.firstIndex { $0.slide.number == 2 })
         let menuTwo = try XCTUnwrap(controller.editor(controller.editor, contextMenuForBoxAt: boxTwo))
         let titlesTwo = menuTwo.items.map(\.title)
-        XCTAssertEqual(titlesTwo[try XCTUnwrap(titlesTwo.firstIndex(of: "Generate Image…")) + 1], "Regenerate Image")
+        let insert = try XCTUnwrap(titlesTwo.firstIndex(of: "Insert Image…"))
+        XCTAssertEqual(Array(titlesTwo[insert..<insert + 3]), ["Insert Image…", "Generate Image…", "Regenerate Image"], "the board's order")
         let boxThree = try XCTUnwrap(controller.editor.boxes.firstIndex { $0.slide.number == 3 })
         let menuThree = try XCTUnwrap(controller.editor(controller.editor, contextMenuForBoxAt: boxThree))
         let regenerates = menuThree.items.filter { $0.action == #selector(DeckWindowController.regenerateImage(_:)) }
@@ -4401,7 +4782,9 @@ In `DeckSessionController.swift`:
     }
 
     /// Regenerate on one of the slide's AI images: tap replaces it in
-    /// place with the comment's prompt and deletes the old file.
+    /// place with the comment's prompt and the aspect and theme match the
+    /// comment recorded, and deletes the old file. No flags: what the
+    /// comment holds is tap's to read.
     func regenerateImage(path: String, onSlide number: Int? = nil) {
         guard let deck = document?.fileURL, let slide = number ?? currentSlideNumber else { return }
         runToolOnSavedDeck(["image", "regenerate", deck.path, "--slide", String(slide), "--image", path, "--json"], actionName: "Regenerate Image", includeGeminiKey: true)
@@ -4555,12 +4938,13 @@ In `DeckWindowController.swift`:
 
 ```swift
     /// A form sheet (Generate Image, New Component, Export) on this window:
-    /// refused with a beep while another sheet is up, so no two sheets
-    /// queue on the window. When it ends, a tap question that arrived
-    /// meanwhile gets its turn, and the toolbar's state is refreshed
-    /// (AppKit restores the enabled state a sheet found, one turn later).
+    /// refused with a beep and a log line while another sheet is up, so no
+    /// two sheets queue on the window. When it ends, a tap question that
+    /// arrived meanwhile gets its turn, and the toolbar's state is
+    /// refreshed (AppKit restores the enabled state a sheet found, one turn later).
     func showFormSheet(_ sheet: NSWindow, completion: (() -> Void)? = nil) {
         guard let window, window.attachedSheet == nil, questionSheet == nil else {
+            sessionController.session.log.append("a sheet is already up; \(sheet.accessibilityIdentifier()) waits for it", source: .app)
             NSSound.beep()
             return
         }
@@ -4607,7 +4991,7 @@ Expected: both succeed. The controller's CI run confirms: `GenerateImageTests` (
 
 - [ ] **Step 8: Mutations and commit**
 
-Mutations, each a patch in `mutations-c/`, the ones that could leak the key first: in `generateImage`, pass `includeGeminiKey: false` (`Test: TapTests/GenerateImageTests/testGenerateAnImageWithAI`; expected: fails on "gemini: set"); in `AppEnvironment.tapEnvironment`, apply the store's key (`Test: .../testATapDevSessionNeverGetsTheKeychainsKey`; expected: fails on the session's environment); in `TapTool.makeRun`, apply the key regardless of `includeGeminiKey` (the Task 6a mutation, filed here; expected: the same test fails on the first tool run); in `GenerateImageRequest.arguments`, drop `--match-theme` (expected: `testGenerateAnImageWithAI` fails on `arguments`); in `GenerateImageSheet.showError`, hide the Settings button always (`Test: .../testNoKeyShowsTapsMessageWithASettingsButton`; expected: fails); in `generateImage`, pass `showsErrorBar: true` (expected: the same test fails on "the sheet is the one place"); in `aiImages(onSlide:)`, search the whole text (`Test: .../testRegenerateAnAIImage`; expected: slide 1 lists the fox); in `SlideContextMenu.build`, add the Regenerate items before Generate Image… (expected: fails on the index); in `menuTitle`, drop the `count > 1` guard (core: `testTheRegenerateMenuTitleFollowsTheBoard` fails on "Regenerate Image"); in `showFormSheet`'s completion, skip `showNextDeckQuestionIfIdle` (`Test: TapTests/ExportPDFTests/testAQuestionArrivingDuringAnExportShowsAfterTheSheet`, Task 10, filed with it).
+Mutations, each a patch in `mutations-c/`, the ones that could leak the key first: in `generateImage`, pass `includeGeminiKey: false` (`Test: TapTests/GenerateImageTests/testGenerateAnImageWithAI`; expected: fails on "gemini: set"); in `AppEnvironment.tapEnvironment`, apply the store's key (`Test: .../testATapDevSessionNeverGetsTheKeychainsKey`; expected: fails on the session's environment); in `TapTool.makeRun`, apply the key regardless of `includeGeminiKey` (the Task 6a mutation, filed here; expected: the same test fails on the first tool run); in `GenerateImageRequest.arguments`, drop `--match-theme` (expected: `testGenerateAnImageWithAI` fails on `arguments`); in `GenerateImageSheet.showError`, hide the Settings button always (`Test: .../testNoKeyShowsTapsMessageWithASettingsButton`; expected: fails); in `generateImage`, pass `showsErrorBar: true` (expected: the same test fails on "the sheet is the one place"); in `aiImages(onSlide:)`, search the whole text (`Test: .../testRegenerateAnAIImage`; expected: slide 1 lists the fox); in `SlideContextMenu.build`, add the Regenerate items before Generate Image… (expected: fails on "the board's order"); in `SlideContextMenu.build`, put Generate Image… back above Insert Image… as D3 had it (expected: fails on "the board's order"); in `menuTitle`, drop the `count > 1` guard (core: `testTheRegenerateMenuTitleFollowsTheBoard` fails on "Regenerate Image"); in `showFormSheet`'s completion, skip `showNextDeckQuestionIfIdle` (`Test: TapTests/ExportPDFTests/testAQuestionArrivingDuringAnExportShowsAfterTheSheet`, Task 10, filed with it).
 
 ```bash
 git add desktop/Tap desktop/TapTests desktop/TapDesktopCore
@@ -4741,7 +5125,7 @@ final class ComponentTests: HostedTestCase {
 
         // A Cmd-click on the path opens the file; a plain click moves the caret.
         XCTAssertTrue(controller.openComponentLink(at: pathRange.location + 5))
-        XCTAssertEqual(opened.map(\.path), [deck.deletingLastPathComponent().appendingPathComponent("slides/RollingDeploy.jsx").path])
+        XCTAssertEqual(opened.map { Fixtures.realPath(of: $0) }, [Fixtures.realPath(of: deck.deletingLastPathComponent().appendingPathComponent("slides/RollingDeploy.jsx"))])
         XCTAssertFalse(controller.openComponentLink(at: text.range(of: "# ").location), "not on a path")
         XCTAssertEqual(opened.count, 1)
         let point = controller.editor.pointForCharacter(at: pathRange.location + 5)
@@ -4981,7 +5365,7 @@ Expected: both succeed. The controller's CI run confirms: `ComponentTests` (3) a
 
 - [ ] **Step 6: Mutations and commit**
 
-Mutations, each a patch in `mutations-b/`: in `createComponent`, insert `scaffold.files.first` instead of `scaffold.snippet` (`Test: TapTests/ComponentTests/testCreateAComponent`; expected: fails on the snippet's range); in `createComponent`, skip `openInEditor` (expected: fails on `opened`); in `NewComponentRequest.arguments`, drop `--inline` (expected: fails on the second request's arguments); in `NewComponentRequest.isValidName`, accept any non-empty name (expected: fails on "tap wants PascalCase"); in `openComponentLink`, resolve against the home folder (`Test: .../testOpenAComponent`; expected: fails on the opened path); in `mouseDown`, drop the Cmd branch (expected: fails on `opened.count == 2`); in `openComponentLink`, return true and open nothing when not on a path (expected: fails on the "not on a path" assertion).
+Mutations, each a patch in `mutations-c/`: in `createComponent`, insert `scaffold.files.first` instead of `scaffold.snippet` (`Test: TapTests/ComponentTests/testCreateAComponent`; expected: fails on the snippet's range); in `createComponent`, skip `openInEditor` (expected: fails on `opened`); in `NewComponentRequest.arguments`, drop `--inline` (expected: fails on the second request's arguments); in `NewComponentRequest.isValidName`, accept any non-empty name (expected: fails on "tap wants PascalCase"); in `openComponentLink`, resolve against the home folder (`Test: .../testOpenAComponent`; expected: fails on the opened path); in `mouseDown`, drop the Cmd branch (expected: fails on `opened.count == 2`); in `openComponentLink`, return true and open nothing when not on a path (expected: fails on the "not on a path" assertion).
 
 ```bash
 git add desktop/Tap desktop/TapTests
@@ -5110,6 +5494,7 @@ final class ExportPDFTests: HostedTestCase {
         XCTAssertFalse(sheet.contentControl.isHidden)
         XCTAssertTrue(sheet.progressBar.doubleValue > 0 && !sheet.progressBar.isIndeterminate, "bytes of total")
         XCTAssertTrue(sheet.bytesLabel.stringValue.contains(" of "), sheet.bytesLabel.stringValue)
+        try await waitUntil(timeout: 20, "the render after the download") { self.isRunning(sheet, statusPrefix: "Rendering slide") }
         try await waitUntil(timeout: 20, "the sheet to finish") { window.window?.attachedSheet == nil }
     }
 
@@ -5898,7 +6283,7 @@ Expected: both succeed. The controller's CI run confirms: `ExportPDFTests` (8) p
 
 - [ ] **Step 8: Mutations and commit**
 
-Mutations, each a patch in `mutations-c/`, the ones that could reveal a partial file or skip the save first: in `ExportController.start`, run tap without `saveNow` (`Test: TapTests/ExportPDFTests/testExportAPDF`; expected: fails on "the buffer was saved first"); in `finished`, treat `exit.cancelled` as `.done` (`Test: .../testCancelAnExport`; expected: fails on `revealed == []`); in `handle`, drop the `!isCancelling` guard (expected: the same test fails on "later progress lines do not overwrite it"); in `cancel`, skip `isCancelling = true` (expected: fails on `cancelButton.isEnabled`, re-enabled by the next line); in `beginExport`, end the sheet on `.done` regardless of warnings (`Test: .../testASlideFailsDuringExport`; expected: fails on "keeps the sheet up"); in `summary(from:)`, drop the `brokenSlides` mapping (expected: fails on `warnings`); in `ExportKind.doneTitle`, ignore `warnings` (expected: fails on "PDF exported with 1 warning"); in `handle`, leave `state` on the download's status for a `.step` (`Test: .../testFirstPDFExport` still passes; `testExportAPDF` fails on `sawRender`); in `canStartATalk`, drop the export condition (`Test: .../testCancelAnExport`; expected: fails on `canStartATalk`); in `windowWillClose`, skip `exportController.stop()` (`Test: .../testClosingTheDeckStopsItsExport`; expected: the process is still alive); in `exportPressed`, leave the button enabled (`Test: .../testASecondExportPressStartsNoSecondRun`; expected: two runs); in `start`, skip `isStarting = true` (expected: the same test, when the second press lands before the save completes); in `showFormSheet`'s completion, skip `showNextDeckQuestionIfIdle` (`Test: .../testAQuestionArrivingDuringAnExportShowsAfterTheSheet`; expected: times out on the approval sheet); in `ExportRequest.arguments`, drop `--progress json` (expected: `testExportAPDF` fails on `sawRender`); in `finished`, show a `browser` failure as done (`Test: .../testTapsFailureShowsInTheSheet`; expected: fails on `.failed`).
+Mutations, each a patch in `mutations-c/`, the ones that could reveal a partial file or skip the save first: in `ExportController.start`, run tap without `saveNow` (`Test: TapTests/ExportPDFTests/testExportAPDF`; expected: fails on "the buffer was saved first"); in `finished`, treat `exit.cancelled` as `.done` (`Test: .../testCancelAnExport`; expected: fails on `revealed == []`); in `handle`, drop the `!isCancelling` guard (expected: the same test fails on "later progress lines do not overwrite it"); in `cancel`, skip `isCancelling = true` (expected: fails on "later progress lines do not overwrite it"); in `beginExport`, end the sheet on `.done` regardless of warnings (`Test: .../testASlideFailsDuringExport`; expected: fails on "keeps the sheet up"); in `summary(from:)`, drop the `brokenSlides` mapping (expected: fails on `warnings`); in `ExportKind.doneTitle`, ignore `warnings` (expected: fails on "PDF exported with 1 warning"); in `handle`, leave `state` on the download's status for a `.step` (`Test: .../testFirstPDFExport`; expected: fails on "the render after the download", since CI's cached engine gives `testExportAPDF` no download line to notice this by); in `canStartATalk`, drop the export condition (`Test: .../testCancelAnExport`; expected: fails on `canStartATalk`); in `windowWillClose`, skip `exportController.stop()` (`Test: .../testClosingTheDeckStopsItsExport`; expected: the process is still alive); in `exportPressed`, leave the button enabled (`Test: .../testASecondExportPressStartsNoSecondRun`; expected: two runs); in `start`, skip `isStarting = true` (expected: the same test, when the second press lands before the save completes); in `showFormSheet`'s completion, skip `showNextDeckQuestionIfIdle` (`Test: .../testAQuestionArrivingDuringAnExportShowsAfterTheSheet`; expected: times out on the approval sheet); in `ExportRequest.arguments`, drop `--progress json` (expected: `testExportAPDF` fails on `sawRender`); in `finished`, show a `browser` failure as done (`Test: .../testTapsFailureShowsInTheSheet`; expected: fails on `.failed`).
 
 ```bash
 git add desktop/Tap desktop/TapTests .github/workflows/ci.yml
@@ -5917,7 +6302,7 @@ git commit -m "feat(desktop): File > Export > PDF through tap export pdf, with r
 
 **Interfaces:**
 - Consumes: `ToolRun` (Task 3), `ServeReady`, `BuildResult`, `ImagesExportResult` (Task 4), `TapTool.makeRun(keepsStandardInputOpen:)` (Task 6a), `ExportController`, `ExportSheet`, `ExportWarning` (Task 10).
-- Produces: `PreviewServer` (`start(folder:completion:)`, `stop()`, `isRunning`, `url`), `DeckWindowController.openURL: (URL) -> Void`, `previewServer`. Task 14's manifest claims `testExportAStaticSite` and `testExportSlideImages`.
+- Produces: `PreviewServer` (`start(folder:completion:)`, `stop()`, `isRunning`, `processIdentifier`, `url`), `DeckWindowController.openURL: (URL) -> Void`, `previewServer`; the tests read `ExportSheet.request.output` and `outputButton.title` (Task 10's names). Task 14's manifest claims `testExportAStaticSite` and `testExportSlideImages`.
 
 - [ ] **Step 1: The scripted images export and the failing tests**
 
@@ -5976,8 +6361,9 @@ final class ExportWebsiteTests: HostedTestCase {
         window.exportWebsite(nil)
         let sheet = try await exportSheet(window)
         XCTAssertEqual(sheet.titleLabel.stringValue, "Export Website")
-        XCTAssertEqual(sheet.outputField.stringValue, deck.deletingLastPathComponent().appendingPathComponent("dist").path)
-        XCTAssertEqual(sheet.request.arguments(deck: deck), ["build", deck.path, "--output", sheet.outputField.stringValue, "--progress", "json"])
+        XCTAssertEqual(sheet.request.output, deck.deletingLastPathComponent().appendingPathComponent("dist").path)
+        XCTAssertEqual(sheet.outputButton.title, "dist", "the Export to row shows the folder's name")
+        XCTAssertEqual(sheet.request.arguments(deck: deck), ["build", deck.path, "--output", sheet.request.output, "--progress", "json"])
         sheet.exportButton.performClick(nil)
         try await waitUntil(timeout: 120, "the done state") { if case .done = sheet.state { return true } else { return false } }
         guard case .done(let summary) = sheet.state else { return XCTFail("not done") }
@@ -5992,7 +6378,7 @@ final class ExportWebsiteTests: HostedTestCase {
         sheet.previewButton.performClick(nil)
         try await waitUntil(timeout: 20, "tap serve's ready line") { !opened.isEmpty }
         let url = try XCTUnwrap(opened.first)
-        XCTAssertTrue(url.absoluteString.hasPrefix("http://localhost:"), url.absoluteString)
+        XCTAssertTrue(url.absoluteString.hasPrefix("http://127.0.0.1:"), "the address tap bound: \(url.absoluteString)")
         XCTAssertNotEqual(url.port, 3000, "a free port, not tap serve's default")
         let (data, response) = try await URLSession.shared.data(from: url.appendingPathComponent("index.html"))
         XCTAssertEqual((response as? HTTPURLResponse)?.statusCode, 200)
@@ -6005,7 +6391,7 @@ final class ExportWebsiteTests: HostedTestCase {
     }
 
     func testExportSlideImages() async throws {
-        let (_, window, deck) = try await openSevenSlides()
+        let (document, window, deck) = try await openSevenSlides()
         let record = try Fixtures.temporaryFolder().appendingPathComponent("record.txt")
         AppEnvironment.shared.toolExecutableURL = try FakeToolScripts.exportImages(slides: 7, recordingTo: record)
         var revealed: [URL] = []
@@ -6015,15 +6401,16 @@ final class ExportWebsiteTests: HostedTestCase {
         let sheet = try await exportSheet(window)
         XCTAssertEqual(sheet.titleLabel.stringValue, "Export Slide Images")
         let folder = deck.deletingLastPathComponent().appendingPathComponent("seven-slides-slides")
-        XCTAssertEqual(sheet.outputField.stringValue, folder.path)
-        XCTAssertEqual(sheet.request.arguments(deck: deck), ["export", "images", deck.path, "--all", "--output", folder.path, "--progress", "json"])
+        let deckPath = try XCTUnwrap(document.fileURL?.path)
+        XCTAssertEqual(sheet.request.output, folder.path)
+        XCTAssertEqual(sheet.request.arguments(deck: URL(fileURLWithPath: deckPath)), ["export", "images", deckPath, "--all", "--output", folder.path, "--progress", "json"])
         sheet.exportButton.performClick(nil)
         try await waitUntil(timeout: 20, "the done state") { if case .done = sheet.state { return true } else { return false } }
         guard case .done(let summary) = sheet.state else { return XCTFail("not done") }
         XCTAssertEqual(summary.summary.split(separator: " ").first, "7")
         XCTAssertEqual(summary.output, folder)
         XCTAssertTrue(sheet.previewButton.isHidden, "nothing to serve")
-        XCTAssertTrue(try String(contentsOf: record, encoding: .utf8).contains("arguments: export images \(deck.path) --all --output \(folder.path) --progress json"))
+        XCTAssertTrue(try String(contentsOf: record, encoding: .utf8).contains("arguments: export images \(deckPath) --all --output \(folder.path) --progress json"))
         sheet.revealButton.performClick(nil)
         XCTAssertEqual(revealed, [folder])
         sheet.doneButton.performClick(nil)
@@ -6153,7 +6540,7 @@ Expected: both succeed. The controller's CI run confirms: `ExportWebsiteTests` (
 
 - [ ] **Step 5: Mutations and commit**
 
-Mutations, each a patch in `mutations-c/`: in `PreviewServer.start`, pass `--port 3000` (`Test: TapTests/ExportWebsiteTests/testExportAStaticSite`; expected: fails on `url.port != 3000`, or on the ready line when 3000 is busy); in `start`, drop `--json` (expected: times out on the ready line); in `beginExport`, skip the sheet completion's `previewServer?.stop()` (expected: fails on "the server to stop with the sheet"); in `windowWillClose`, skip `previewServer?.stop()` (`Test: .../testClosingTheDeckStopsThePreviewServer`; expected: the process is still alive); in `ExportRequest.arguments` for `.images`, drop `--all` (`Test: .../testExportSlideImages`; expected: fails on `arguments`); in `ExportController.finished`, treat every `broken_slides` failure as `.failed` (`Test: .../testABrokenSlideInAnImagesExportIsAWarningWithTheFilesThatLanded`; expected: fails on `.done`); in `noteBrokenLine`, record nothing (expected: the same test fails on `warnings`, tap's summary message stands in); in `PreviewServer.start`, pass `keepsStandardInputOpen: false` (into `survivors-c/` with the reason: with `/dev/null` tap serve sees EOF at once and exits before the ready line, so `testExportAStaticSite` fails on the ready line, which kills it; noted as killed by that test); in `ExportKind.defaultOutput` for `.website`, return the working directory's `dist` (expected: `testExportAStaticSite` fails on `outputField`).
+Mutations, each a patch in `mutations-c/`: in `PreviewServer.start`, pass `--port 3000` (`Test: TapTests/ExportWebsiteTests/testExportAStaticSite`; expected: fails on `url.port != 3000`, or on the ready line when 3000 is busy); in `start`, drop `--json` (expected: times out on the ready line); in `beginExport`, skip the sheet completion's `previewServer?.stop()` (expected: fails on "the server to stop with the sheet"); in `windowWillClose`, skip `previewServer?.stop()` (`Test: .../testClosingTheDeckStopsThePreviewServer`; expected: the process is still alive); in `ExportRequest.arguments` for `.images`, drop `--all` (`Test: .../testExportSlideImages`; expected: fails on `arguments`); in `ExportController.finished`, treat every `broken_slides` failure as `.failed` (`Test: .../testABrokenSlideInAnImagesExportIsAWarningWithTheFilesThatLanded`; expected: fails on `.done`); in `noteBrokenLine`, record nothing (expected: the same test fails on `warnings`, tap's summary message stands in); in `PreviewServer.start`, pass `keepsStandardInputOpen: false` (`Test: .../testExportAStaticSite`; expected: killed: `startServe` prints the ready line before the stdin watch starts, so the URL opens, but the server has exited by the time the test fetches `index.html`, which fails on the 200); in `ExportKind.defaultOutput` for `.website`, return the working directory's `dist` (expected: `testExportAStaticSite` fails on `request.output`).
 
 ```bash
 git add desktop/Tap desktop/TapTests
@@ -6446,7 +6833,7 @@ final class GeneralSettingsViewController: NSViewController {
         autosavePopup.action = #selector(changed(_:))
         autosavePopup.setAccessibilityIdentifier("settings-autosave")
         let editorCard = SettingsCard(title: "Editor", rows: [("Font size", nil, fontSizePopup), ("Line spacing", nil, lineSpacingControl)])
-        let decksCard = SettingsCard(title: "New decks", rows: [("Default theme", "Preselected in New Deck. Passed to tap new --theme.", defaultThemePopup)])
+        let decksCard = SettingsCard(title: "New decks", rows: [("Default theme", SettingsCard.hint("Preselected in New Deck. Passed to tap new --theme."), defaultThemePopup)])
         let savingCard = SettingsCard(title: "Saving", rows: [("Autosave after typing stops", nil, autosavePopup)])
         let stack = NSStackView(views: [editorCard, decksCard, savingCard])
         stack.orientation = .vertical
@@ -6513,9 +6900,18 @@ final class GeneralSettingsViewController: NSViewController {
 }
 
 /// A titled card of label-left, control-right rows, as the Settings
-/// boards draw them (the Deck tab's cards of D5 use the same shape).
+/// boards draw them (the Deck tab's cards of D5 use the same shape). A
+/// row's hint sits under its label, inside the card; the caller owns the
+/// hint label, so a pane can change its text.
 final class SettingsCard: NSBox {
-    init(title: String, rows: [(String, String?, NSView)]) {
+    static func hint(_ text: String) -> NSTextField {
+        let label = NSTextField(wrappingLabelWithString: text)
+        label.font = .systemFont(ofSize: 11)
+        label.textColor = .secondaryLabelColor
+        return label
+    }
+
+    init(title: String, rows: [(String, NSTextField?, NSView)]) {
         super.init(frame: .zero)
         self.title = title
         titlePosition = .aboveTop
@@ -6524,12 +6920,7 @@ final class SettingsCard: NSBox {
             let name = NSTextField(labelWithString: label)
             name.font = .systemFont(ofSize: 13)
             var left: [NSView] = [name]
-            if let hint {
-                let hintLabel = NSTextField(labelWithString: hint)
-                hintLabel.font = .systemFont(ofSize: 11)
-                hintLabel.textColor = .secondaryLabelColor
-                left.append(hintLabel)
-            }
+            if let hint { left.append(hint) }
             let labels = NSStackView(views: left)
             labels.orientation = .vertical
             labels.alignment = .leading
@@ -6763,6 +7154,7 @@ final class ImageGenerationSettingsTests: HostedTestCase {
         XCTAssertTrue(pane.keyField is NSSecureTextField, "bullets only, never the key (the SettingsImageBullets board)")
         XCTAssertEqual(pane.keyField.stringValue, "")
         XCTAssertEqual(pane.sourceLabel.stringValue, "Stored in your Keychain. GEMINI_API_KEY from your shell takes precedence.")
+        XCTAssertTrue(pane.sourceLabel.isDescendant(of: pane.card), "the hint sits inside the card, under API key, as the board draws it")
         XCTAssertTrue(pane.keyField.isEnabled)
         XCTAssertNil(pane.view.subviews.first { $0.accessibilityIdentifier() == "settings-card-Model" }, "no Model row: tap names no model")
 
@@ -6772,9 +7164,10 @@ final class ImageGenerationSettingsTests: HostedTestCase {
         XCTAssertEqual(store.key, "placeholder-not-a-secret", "written to the store, which is the Keychain in the app")
         let source = await AppEnvironment.shared.geminiKeySource()
         XCTAssertEqual(source, .keychain)
-        // The key reaches the image runs alone: never tap dev's environment.
+        // The key reaches the image runs alone: never tap dev's environment (the tests' shell value is "").
         let session = await AppEnvironment.shared.sessionConfiguration().environment()
-        XCTAssertNil(session["GEMINI_API_KEY"])
+        XCTAssertEqual(session["GEMINI_API_KEY"] ?? "", "")
+        XCTAssertNotEqual(session["GEMINI_API_KEY"], "placeholder-not-a-secret")
         _ = await TapTool.run(["theme", "list", "--json"], timeout: 30, log: controller.session.log)
         XCTAssertFalse(controller.session.log.text.contains("placeholder-not-a-secret"), "no log line holds the key")
 
@@ -6882,7 +7275,9 @@ final class CommandLineSettingsTests: HostedTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: linkDirectory.appendingPathComponent("tap").path))
 
         // A file that is not ours: frame c of the board. No sheet, the button is off, the pane says why, and the file is never touched.
-        try "#!/bin/sh\necho someone else's\n".write(to: linkDirectory.appendingPathComponent("tap"), atomically: true, encoding: .utf8)
+        let foreign = linkDirectory.appendingPathComponent("tap")
+        try "#!/bin/sh\necho someone else's\n".write(to: foreign, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: foreign.path)
         await pane.refresh()
         XCTAssertFalse(pane.installButton.isEnabled, "refused before any click")
         XCTAssertEqual(pane.installHint.stringValue, "\(shownLinkDirectory)/tap is a tap that Tap did not install. Tap never replaces or deletes it.")
@@ -6900,7 +7295,7 @@ final class CommandLineSettingsTests: HostedTestCase {
         let pane = try await showPane()
         try await waitUntil(timeout: 10, "the other tap's version") { pane.otherLabel.stringValue == "tap 2.0.0" }
         XCTAssertEqual(pane.otherPathLabel.stringValue, other.path)
-        XCTAssertEqual(pane.otherNoteLabel.stringValue, "Tap did not install it. Tap never replaces or deletes it.", "not under a Homebrew prefix")
+        XCTAssertEqual(pane.otherNoteLabel.stringValue, "Installed by Homebrew. Tap never replaces or deletes it.", "the SettingsCLI board's note for another tap on PATH")
         XCTAssertEqual(pane.installHint.stringValue, "Asks first. \(shownLinkDirectory) comes before \(pathDirectory.path) on your PATH.")
         XCTAssertTrue(pane.installButton.isEnabled)
         // Frame b of the InstallConfirm board: the other tap named in the sheet, and left exactly as it was.
@@ -6925,18 +7320,6 @@ final class CommandLineSettingsTests: HostedTestCase {
         await pane.refresh()
         XCTAssertFalse(pane.installButton.isEnabled)
         XCTAssertEqual(pane.installHint.stringValue, "\(shownLinkDirectory) is not on your PATH: add it in your shell's profile first.")
-    }
-
-    func testAHomebrewTapIsNamedAsSuch() async throws {
-        let brew = try Fixtures.temporaryFolder().appendingPathComponent("opt/homebrew/bin")
-        try FileManager.default.createDirectory(at: brew, withIntermediateDirectories: true)
-        let other = brew.appendingPathComponent("tap")
-        try "#!/bin/sh\necho 'tap version 2.0.0'\n".write(to: other, atomically: true, encoding: .utf8)
-        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: other.path)
-        AppEnvironment.shared.extraEnvironment["PATH"] = "\(linkDirectory.path):\(brew.path):/usr/bin:/bin"
-        let pane = try await showPane()
-        try await waitUntil(timeout: 10, "the other tap") { pane.otherLabel.stringValue == "tap 2.0.0" }
-        XCTAssertEqual(pane.otherNoteLabel.stringValue, "Installed by Homebrew. Tap never replaces or deletes it.", "the SettingsCLI board's note, for a path under a Homebrew prefix")
     }
 
     func testTheMenuItemOpensThePane() throws {
@@ -6967,7 +7350,9 @@ import AppKit
 /// that key wins.
 final class ImageGenerationSettingsViewController: NSViewController, NSTextFieldDelegate {
     let keyField: NSTextField = NSSecureTextField(string: "")
-    let sourceLabel = NSTextField(wrappingLabelWithString: "")
+    /// The hint under "API key", inside the card, as the SettingsImageBullets board draws it.
+    let sourceLabel = SettingsCard.hint("")
+    private(set) var card: SettingsCard!
 
     override init(nibName: NSNib.Name?, bundle: Bundle?) {
         super.init(nibName: nil, bundle: nil)
@@ -6983,18 +7368,16 @@ final class ImageGenerationSettingsViewController: NSViewController, NSTextField
         keyField.action = #selector(keyChanged(_:))
         keyField.setAccessibilityIdentifier("gemini-key")
         keyField.widthAnchor.constraint(equalToConstant: 300).isActive = true
-        sourceLabel.font = .systemFont(ofSize: 11)
-        sourceLabel.textColor = .secondaryLabelColor
         sourceLabel.setAccessibilityIdentifier("gemini-key-source")
-        let card = SettingsCard(title: "Gemini", rows: [("API key", nil, keyField)])
-        let stack = NSStackView(views: [card, sourceLabel])
+        card = SettingsCard(title: "Gemini", rows: [("API key", sourceLabel, keyField)])
+        let stack = NSStackView(views: [card])
         stack.orientation = .vertical
         stack.alignment = .leading
         stack.spacing = 8
         stack.edgeInsets = NSEdgeInsets(top: 20, left: 28, bottom: 20, right: 28)
         stack.widthAnchor.constraint(equalToConstant: 760).isActive = true
         card.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -56).isActive = true
-        sourceLabel.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -56).isActive = true
+        sourceLabel.widthAnchor.constraint(lessThanOrEqualToConstant: 380).isActive = true
         view = stack
     }
 
@@ -7150,7 +7533,7 @@ final class InstallConfirmSheet: QuestionSheet {
 
 - [ ] **Step 5: The Command Line pane (the SettingsCLI board, and the InstallConfirm board's frame c)**
 
-The SettingsCLI board draws a "Bundled" card ("tap 2.1.0" over the path shown from the bundle, "Tap.app/Contents/Resources/tap"), an "On your PATH" card ("tap 2.0.0", the note "Installed by Homebrew. Tap never replaces or deletes it." and "/opt/homebrew/bin/tap"), the button "Install in ~/.local/bin…" and the hint "Asks first. ~/.local/bin comes before /opt/homebrew/bin on your PATH.". Frame c of InstallConfirm draws the refused state: the foreign file as the tap on PATH ("tap (unknown version)", "Tap did not install it. Tap never replaces or deletes it.", "~/.local/bin/tap"), the button off, and the line "~/.local/bin/tap is a tap that Tap did not install. Tap never replaces or deletes it." The spec allows Install "only where it comes first on PATH": the button is on in exactly that state. `desktop/Tap/Settings/CommandLineSettingsViewController.swift`:
+The SettingsCLI board draws a "Bundled" card ("tap 2.1.0" over the path shown from the bundle, "Tap.app/Contents/Resources/tap"), an "On your PATH" card ("tap 2.0.0", the note "Installed by Homebrew. Tap never replaces or deletes it." and "/opt/homebrew/bin/tap"), the button "Install in ~/.local/bin…" and the hint "Asks first. ~/.local/bin comes before /opt/homebrew/bin on your PATH.". Frame c of InstallConfirm draws the refused state: the foreign file as the tap on PATH ("tap (unknown version)", "Tap did not install it. Tap never replaces or deletes it.", "~/.local/bin/tap"), the button off, and the line "~/.local/bin/tap is a tap that Tap did not install. Tap never replaces or deletes it." The notes are the boards' words as drawn (the person's ruling): another tap on PATH gets the SettingsCLI note, and a foreign file at the link's own place gets frame c's. The spec allows Install "only where it comes first on PATH": the button is on in exactly that state. `desktop/Tap/Settings/CommandLineSettingsViewController.swift`:
 
 ```swift
 import AppKit
@@ -7232,11 +7615,6 @@ final class CommandLineSettingsViewController: NSViewController {
         return components[app...].joined(separator: "/")
     }
 
-    /// Homebrew's prefixes, so its tap is named as the board names it.
-    static func isHomebrewPath(_ path: String) -> Bool {
-        path.contains("/opt/homebrew/") || path.contains("/usr/local/Cellar/") || path.contains("/home/linuxbrew/")
-    }
-
     func refresh() async {
         let environment = AppEnvironment.shared
         let installer = environment.commandLineInstaller
@@ -7250,7 +7628,9 @@ final class CommandLineSettingsViewController: NSViewController {
             otherTap = (first, version)
             otherLabel.stringValue = version.map { "tap \($0)" } ?? "tap (unknown version)"
             otherPathLabel.stringValue = first
-            otherNoteLabel.stringValue = Self.isHomebrewPath(first) ? "Installed by Homebrew. Tap never replaces or deletes it." : "Tap did not install it. Tap never replaces or deletes it."
+            // The boards' words as drawn: SettingsCLI's for another tap on PATH, InstallConfirm's frame c for a foreign file where our link would go.
+            otherNoteLabel.stringValue = FilePaths.same(URL(fileURLWithPath: first), installer.linkURL)
+                ? "Tap did not install it. Tap never replaces or deletes it." : "Installed by Homebrew. Tap never replaces or deletes it."
         } else {
             otherTap = nil
             otherLabel.stringValue = "No other tap is on your PATH."
@@ -7314,11 +7694,11 @@ In `AppDelegate`: `@objc func installCommandLineTool(_ sender: Any?) { SettingsW
 - [ ] **Step 6: Build, then hand the hosted tests to CI**
 
 Run: `make -C desktop build && make -C desktop test-build 2>&1 | tail -3 && make -C desktop check-release-hooks`
-Expected: all succeed. The controller's CI run confirms: `ImageGenerationSettingsTests` (1) and `CommandLineSettingsTests` (4) pass; `GenerateImageTests` (Task 8b) still pass with the key from the store.
+Expected: all succeed. The controller's CI run confirms: `ImageGenerationSettingsTests` (1) and `CommandLineSettingsTests` (3) pass; `GenerateImageTests` (Task 8b) still pass with the key from the store.
 
 - [ ] **Step 7: Mutations and commit**
 
-Mutations, each a patch in `mutations-d/`, the ones that could touch a file that is not ours or leak the key first: in `CommandLineInstaller.install`, treat `.other` as `.replaceOwnLink` (`Test: TapTests/CommandLineSettingsTests/testInstallTheTapCommand`; expected: fails on "untouched"); in `installPressed`, link at once without the sheet (expected: fails on "the InstallConfirm sheet"); in `installPressed`, drop the `.ready` guard (expected: the same test fails on "no sheet for a refused install"); in `installState`, return `.ready` for `false?` (`Test: .../testAnotherTapIsAlreadyInstalled`; expected: fails on `isEnabled` after the PATH swap); in `installState`, return `.ready` for `nil` (expected: fails on "not on your PATH"); in `refresh`, count the bundled link as another tap (expected: after the install the other label names the link); in `isHomebrewPath`, return true always (expected: `testAnotherTapIsAlreadyInstalled` fails on "not under a Homebrew prefix"); in `InstallConfirmSheet.init`, leave `otherTapCard` visible with no other tap (expected: `testInstallTheTapCommand` fails on `otherTapCard.isHidden`); in `ImageGenerationSettingsViewController.keyChanged`, write the field's value even when empty (`Test: TapTests/ImageGenerationSettingsTests/testGeminiKey`; expected: fails on `store.key == nil`); in `refresh`, keep the field enabled with a shell key (expected: fails on `isEnabled`); in `loadView`, use an `NSTextField` (expected: fails on `is NSSecureTextField`); in `TapTool.makeRun`, append `GEMINI_API_KEY=<value>` to the log line for every run (expected: `testGeminiKey` fails on "no log line holds the key").
+Mutations, each a patch in `mutations-d/`, the ones that could touch a file that is not ours or leak the key first: in `CommandLineInstaller.install`, treat `.other` as `.replaceOwnLink` (`Test: TapTests/CommandLineSettingsTests/testInstallTheTapCommand`; expected: fails on "untouched"); in `installPressed`, link at once without the sheet (expected: fails on "the InstallConfirm sheet"); in `installPressed`, drop the `.ready` guard (expected: the same test fails on "no sheet for a refused install"); in `installState`, return `.ready` for `false?` (`Test: .../testAnotherTapIsAlreadyInstalled`; expected: fails on `isEnabled` after the PATH swap); in `installState`, return `.ready` for `nil` (expected: fails on "not on your PATH"); in `refresh`, count the bundled link as another tap (expected: after the install the other label names the link); in `refresh`, use the Homebrew note for the foreign file too (`Test: .../testInstallTheTapCommand`; expected: fails on "Tap did not install it."); in `InstallConfirmSheet.init`, leave `otherTapCard` visible with no other tap (expected: `testInstallTheTapCommand` fails on `otherTapCard.isHidden`); in `ImageGenerationSettingsViewController.keyChanged`, write the field's value even when empty (`Test: TapTests/ImageGenerationSettingsTests/testGeminiKey`; expected: fails on `store.key == nil`); in `refresh`, keep the field enabled with a shell key (expected: fails on `isEnabled`); in `loadView`, use an `NSTextField` (expected: fails on `is NSSecureTextField`); in `TapTool.makeRun`, append `GEMINI_API_KEY=<value>` to the log line for every run (expected: `testGeminiKey` fails on "no log line holds the key").
 
 ```bash
 git add desktop/Tap desktop/TapTests
@@ -7334,8 +7714,8 @@ git commit -m "feat(desktop): the Gemini key in the Keychain for the image runs,
 - Create: `desktop/TapUITests/ThemeUITests.swift`
 
 **Interfaces:**
-- Consumes: `check-scenarios.sh` (D5's, reading Swift and Go tests), `UITestCase.launch(withDeck:)`, `preview(in:)` (D2, D4), the accessibility identifiers this plan set: `theme-button`, `theme-grid`, `theme-cell-<slug>`, `export-sheet`, `settings-window`, `gemini-key`, `cli-install`, `new-deck-title`.
-- Produces: the 22 `D6` rows; `ThemeUITests.testTryAThemeWithoutSavingIt`; the README's D6 paragraphs.
+- Consumes: `check-scenarios.sh` (D5's, reading Swift and Go tests), `UITestCase.launch(withDeck:)`, `preview(in:)` (D2, D4), the accessibility identifiers this plan set: `theme-button`, `theme-cell-<slug>`, `export-sheet`, `settings-window`, `gemini-key`, `cli-install`, `new-deck-title`.
+- Produces: the 21 `D6` rows and the Shared settings comment; `ThemeUITests.testTryAThemeWithoutSavingIt`; the README's D6 paragraphs.
 
 - [ ] **Step 1: Claim the scenarios**
 
@@ -7471,7 +7851,7 @@ git commit -m "test(desktop): claim the D6 scenarios, and try a theme without sa
   Expected: `** BUILD SUCCEEDED **`, `** TEST BUILD SUCCEEDED **` twice, `no test-only hook in the release build`, nothing launched.
 - [ ] The controller pushes and reads CI's Desktop Tests, Desktop UI Tests, Desktop Benchmarks and Go Tests jobs: every hosted test green, the D2 to D5 tests included, `ThemeUITests` green on the runner, the typing benchmark no worse than before. The mutation branches `mutations/d6-batch-a` to `d` hold only the `mutations-<batch>/` patches, each with a killing test and a diff under `desktop/Tap`, `desktop/TapDesktopCore/Sources` or `internal/` (never a test, a fixture or a fake); the `survivors-<batch>/` patches are read by the review, not run. A mutation that survives where its task said it would be killed is a review finding.
 - [ ] Run: `grep -rn "GEMINI_API_KEY" desktop/Tap`
-  Expected: `AppEnvironment.geminiKeySource()` (reading the shell's value for the label) and the two label strings in `ImageGenerationSettingsViewController`, and nothing else: `tapEnvironment()` does not name it, and no log line, `print` or accessibility value does.
+  Expected: the one rule (Global Constraints, the secrets rule): `AppEnvironment.geminiKeySource()` (reading the shell's value for the label), and `ImageGenerationSettingsViewController`'s two hint strings and doc comment; nothing else. `tapEnvironment()` does not name it, and no log line, `print` or accessibility value does.
 - [ ] Run: `grep -rn "geminiKeyStore" desktop/Tap`
   Expected: its declaration and the `-TapDefaultsSuite` assignment in `AppEnvironment`, `GeminiKeySource.apply(store: environment.geminiKeyStore, ...)` inside `TapTool.makeRun`'s `includeGeminiKey` branch, `AppEnvironment.geminiKeySource()`, and `ImageGenerationSettingsViewController`'s `refresh` and `keyChanged`. No session configuration reads it.
 - [ ] Run: `grep -rn "includeGeminiKey: true" desktop/Tap`
@@ -7486,8 +7866,8 @@ git commit -m "test(desktop): claim the D6 scenarios, and try a theme without sa
   Expected: no output for the first; exactly D4's list for the second, unchanged.
 - [ ] Run: `grep -rn "Process()" desktop/Tap`
   Expected: only `LayoutCatalogLoader.run`, `DeckSchemaLoader.run` and `AppEnvironment.readVersion` (D2's; `TapProcess` and `ToolRun` live in `desktop/TapDesktopCore`); every tap subcommand of this plan goes through `ToolRun` and `TapTool`.
-- [ ] Run: `grep -rn "ToolRun.stopAll()" desktop/Tap`
-  Expected: one line, in `AppDelegate.applicationWillTerminate`.
+- [ ] Run: `grep -rn "ToolRun.stopAll(" desktop/Tap`
+  Expected: one line, `ToolRun.stopAll(waiting: 2)` in `AppDelegate.applicationWillTerminate` (the tests' `tearDown` call lives under `desktop/TapTests`).
 - [ ] Run: `grep -rn "textStorage?.replaceCharacters\|textStorage!.replaceCharacters" desktop/Tap` and `grep -rn "updateChangeCount" desktop/Tap`
   Expected: only D2's own lines in `EditorTextView.swift`; only `DeckSessionController.refreshEditedState`.
 - [ ] Run: `grep -rnE "completion\?\([a-zA-Z_]+\(" desktop/Tap` and `grep -rn "unowned" desktop/Tap desktop/TapDesktopCore/Sources`
@@ -7516,29 +7896,29 @@ git commit -m "test(desktop): claim the D6 scenarios, and try a theme without sa
 6. **Where the Gemini key may go.** `AppEnvironment.tapEnvironment()` feeds every `tap dev --app` and `tap present --app` session, and tap's shell driver runs blocks with tap's environment: a key there reaches any block on a slide, the projector and a recording, and is read from the Keychain (with a prompt under ad-hoc signing) at every deck open. Ruling: the key is added in `TapTool.makeRun(includeGeminiKey: true)` alone, which the two image runs pass, read lazily at that moment; `tapEnvironment()` is untouched; the app uses a memory store under `-TapDefaultsSuite`; a hosted test asserts a session's environment has no key (Task 8b). Cost if wrong: none; the safe direction.
 7. **The SettingsImage board's key suffix and Model row.** Ruling (the SettingsImageBullets board, approved): bullets only, no Model row (tap names no model in any command). Cost if wrong: none now.
 8. **Where the sheets go.** D5 put every question sheet through `showQuestionSheet` with a queue; this plan's form sheets are not questions from tap. Ruling: `showFormSheet` refuses while any sheet is up (a beep), its completion runs `showNextDeckQuestionIfIdle` and `refreshPresentingControls`, so a tap question that arrived mid-sheet gets its turn the moment the sheet closes (a hosted test proves it); Play is off while an export runs. Cost if wrong: one guard.
-9. **A PDF export with warnings.** Ruling (the ExportWarnings board, approved): a clean PDF closes the sheet and reveals the file (the scenario's "then reveals the file in Finder"); one with warnings reveals the file as it finishes and stays up with the tinted warnings box until Done. Cost if wrong: the drawing.
+9. **A PDF export with warnings, and how a done sheet closes.** Ruling (the ExportWarnings board, approved): a clean PDF closes the sheet and reveals the file (the scenario's "then reveals the file in Finder"); one with warnings reveals the file as it finishes and stays up with the tinted warnings box until Done. The website's and the images' done states close with the same Done button (the coordinator's ruling: it follows the approved ExportWarnings done layout, so it is no departure). The "Save as" name as a button is the person's approved departure of 2026-09-27. Cost if wrong: the drawing.
 10. **`tap export images --all` exits 1 with `broken_slides` after writing the other files.** Ruling: for images that failure is a done state ("Slide images exported with gaps", the ExportWarnings board's frame b) with tap's per-slide `slide N: reason` lines as the warnings and the files that landed; every other failure is a failure. Cost if wrong: one branch.
 11. **Where pasted image data goes.** tap copies a file and keeps its name; a screenshot has none. Ruling: `pasted-image.png` in a temporary folder, so tap's own `-2` rule names the second one. Cost if wrong: a name.
-12. **The Regenerate entry point.** Ruling (the RegenerateMenu board, approved): one "Regenerate Image" item after Generate Image… in the box's and the thumbnail's context menus; with two or more AI images on the slide, one item each named by its prompt in quotes, cut at 32 characters on a word. The pairs are found with the same pattern tap reads (`AIImageReference`), for locating only; tap edits them. Cost if wrong: none now.
+12. **The Regenerate entry point.** Ruling (the RegenerateMenu board, approved): the image items in the board's order, Insert Image…, Generate Image…, then "Regenerate Image" (D3 had Generate before Insert; Task 8a reorders, D3's tests pin no order), in the box's and the thumbnail's context menus; with two or more AI images on the slide, one item each named by its prompt in quotes, cut at 32 characters on a word. The pairs are found with the same pattern tap reads (`AIImageReference`), for locating only; tap edits them, and Regenerate passes no flags because tap reuses the aspect and theme match the comment recorded (Task 2). Cost if wrong: none now.
 13. **`--match-theme` is on by default in the sheet, as the board draws it.** Cost if wrong: a switch's default.
-14. **The Deck tab's Theme row.** Ruling (the DeckTabThemeRow board, approved): the row is one button, the theme's render and name, the toolbar item's shape, opening the ThemePicker popover; D5's popup goes and D5's test reads the new control. Cost if wrong: none now.
+14. **The Deck tab's Theme row, and the way back to tap's default.** Ruling (the DeckTabThemeRow board, approved, and the person's decision of 2026-09-27): the row is one button, the theme's render and name, the toolbar item's shape, opening the ThemePicker popover, whose first cell is Default (tap's default theme, drawn like the others with that theme's render); picking Default runs `tap theme set default`, which removes the theme line (Task 2). D5's popup goes; D5's `testDeckSettingsLiveInTheInspector` moves its popup steps to `transition` and keeps a row-follows-undo assertion (Task 7). The row talks to its controller through closures, as D5's form does. Cost if wrong: none now.
 15. **Install: where and how.** The feature file names `~/.local/bin`; the design spec adds `/usr/local/bin` after a password prompt, and says "only where it comes first on PATH and only after you confirm". Ruling: `~/.local/bin` in D6 (`/usr/local/bin` needs a privileged helper, open question 4); Install is enabled only where `~/.local/bin` comes first on PATH and holds nothing or our own link (a pure function, `installState`, with the refusing cases first); the confirmation is the InstallConfirm board's sheet, approved, with the other tap named in it. Cost if wrong: a helper tool later.
-16. **The other tap on PATH.** Ruling: the first executable `tap` on the login shell's PATH that is not our own link, its version from `tap --version` with the loader's deadline; "Installed by Homebrew." for a path under a Homebrew prefix, "Tap did not install it." otherwise (the SettingsCLI board and InstallConfirm's frame c); the hint says which comes first. Cost if wrong: copy.
+16. **The other tap on PATH.** Ruling: the first executable `tap` on the login shell's PATH that is not our own link, its version from `tap --version` with the loader's deadline; the notes as the boards draw them (the coordinator's ruling): "Installed by Homebrew. Tap never replaces or deletes it." for another tap on PATH (SettingsCLI), "Tap did not install it." for a foreign file where our link would go (InstallConfirm's frame c); the hint says which comes first. Cost if wrong: copy.
 17. **The editor's typography as app-wide state.** D2's fonts were `static let`s used in paragraph styles and drawing math; per-instance fonts would touch every draw call. Ruling: `EditorTypography.current`, refreshed from the settings, every editor restyling on the notification. Cost if wrong: a benchmark number.
 18. **Settings in AppKit, not SwiftUI.** The spec allows SwiftUI for sheets and settings; every D2 to D5 sheet is AppKit and the hosted tests read AppKit controls. Ruling: AppKit, one `NSTabViewController` in the toolbar style the boards draw. Cost if wrong: a rewrite of four panes.
 19. **The consent answer in Settings.** The scenario says the consent and the approvals share `settings.yaml` through tap; no tap command reads or sets `present.record`. Ruling (the person's decision): the consent is left out of D6, and "Shared settings" is not claimed; the Live Code pane shows the approvals and `testRevokeInSettingsIsWhatTapSees` proves the shared file. Cost if wrong: a `tap present consent` command later, and the row.
-20. **A process that outlives its owner.** `ToolRun`'s first draft escalated with `[weak self]`, the defect D4's `stopAllPresentations` and `stopAndRetain` were written for, and nothing stopped exports or preview servers at quit. Ruling: `ToolRun.escalate` holds the process identifier alone and checks liveness with `kill(pid, 0)`; a deadline sends SIGINT first; `ToolRun.activeRuns` and `stopAll()` at quit; `tap serve --json` exits on EOF of the pipe its run holds. Cost if wrong: none; the safe direction.
+20. **A process that outlives its owner, and a registry that keeps its owner alive.** `ToolRun`'s first draft escalated with `[weak self]`, the defect D4's `stopAllPresentations` and `stopAndRetain` were written for; its second draft held every run strongly in `activeRuns`, which kept a freed run alive (the kept-stdin pipe never closed) and made the weak-self mutation unkillable. Ruling: `activeRuns` is a weak table; `escalate` holds the process identifier alone, checks liveness with `waitpid(pid, WNOHANG)` (a zombie is not alive, and is reaped) and reaps after SIGKILL; `deinit` closes the kept pipe and escalates a run dropped while its process runs; a deadline sends SIGINT first; `cancel` closes the kept stdin before signalling; `stopAll(waiting: 2)` at quit waits for the exits and sends SIGTERM to what is left, since the main queue's later escalation dies with the app. Cost if wrong: none; the safe direction.
 21. **Hosted tests and AppKit's modal loops.** `performClick` on a pop-up button or a segmented control opens a menu the test cannot close. Ruling: every such test selects and sends the control's action; the plan's XCTest rules say so. Cost if wrong: none.
 
 ## Open questions
 
 Product decisions this plan makes that the spec leaves open. Each line is the default the plan implements and what it costs if the person wants it otherwise. Decisions the person already made (the key's reach, `--aspect` and `--match-theme`, the real PDF on CI, the consent left out, the six D6 boards) are rulings above, not questions.
 
-1. **The aspect of a regenerated image.** `tap image regenerate` without `--aspect` makes the replacement at the model's default aspect, even when the original was 1:1; the `ai-prompt` comment records no aspect. Default: the app passes no aspect on Regenerate (tap's behaviour). Alternative: tap records the aspect in the comment and regenerate reuses it. Cost if wrong: a comment field in tap.
+1. **Where a generated image's choices live.** Default: tap records `| aspect: 16:9 | match-theme` after the person's words in the `ai-prompt` comment, and `regenerate` without the flags reuses them (Task 2); an image made before the recording, or by the TUI's `i` key, has none and regenerates at the model's default aspect with no brief. Alternative: a second comment line, which would change tap's `aiImagePattern`. Cost if wrong: the comment's shape.
 2. **The first grid open renders 21 themes one process at a time**, each launching Chromium: about a minute on a cold Mac, once per tap version. Default: one theme per process. Alternative: `tap theme show --image --all --progress json` with one browser, several times faster. Cost if wrong: a tap flag.
 3. **A clean PDF export closes its sheet** (pre-flight 9); a website or images export stays for Show in Finder and Preview. Alternative: every export stays up with Done. Cost if wrong: one branch.
 4. **Install targets `~/.local/bin` only** (pre-flight 15). Alternative: `/usr/local/bin` through an authorization prompt. Cost if wrong: a privileged helper and its signing (D7).
-5. **Two departures from approved boards that the sheets need** (see "Deviations from the approved boards"): the export sheet's "Save as" name is a button that opens the save panel, and Done closes the website's and the images' done states. Default: as listed. Alternative: a board change. Cost if wrong: copy and a button.
+5. **`tap serve --json` still skips the wildcard-port probe for `--port 0`.** Default: the probe runs for a loopback bind of a named port (Task 1); the app always passes `--port 0`, where a wildcard holder cannot collide with a port the kernel picks. Cost if wrong: one call.
 6. **The theme renders are kept only for the app's life**, tap's cache making the next launch instant. Alternative: the app caches the PNGs itself under Application Support. Cost if wrong: a second cache of the same files.
 7. **Line spacing factors** (tight 1.38, normal 1.62, roomy 1.92 of the font size, normal at 13 pt being D2's 21). Cost if wrong: three numbers.
 8. **The pasted image's name** `pasted-image.png` (pre-flight 11). Cost if wrong: a name.
@@ -7554,7 +7934,9 @@ Product decisions this plan makes that the spec leaves open. Each line is the de
 - `tap theme show --prompt`'s brief names a 16:9 canvas; with another aspect the model would be told two sizes (Task 2 follows the aspect).
 - No tap command names the Gemini model (the board's Model row, dropped by the SettingsImageBullets board).
 - No tap command reads or sets the recording consent the "Shared settings" scenario names (left out of D6, the row not claimed).
-- No comment field records a generated image's aspect (open question 1).
+- Nothing recorded a generated image's aspect or theme match, so a regenerated image lost them (Task 2 records both in the comment).
+- Nothing unset a deck's theme: `tap theme set` takes a slug only and `config.UpdateThemeInFile` only writes (Task 2 adds `tap theme set default` for the grid's Default cell).
+- `tap serve --json`'s ready line named `localhost` while binding `127.0.0.1` alone; a browser trying `::1` first would find nothing (the line now names `127.0.0.1`).
 - The feature file's "the app creates a folder with the deck and an images/ folder" assigns the folder to the app, and the design spec to tap; the plan takes the spec's reading, since the slug is tap's.
 - `tap export images --all` reports a broken slide as a failure after writing the other files, unlike `tap export pdf`, which reports it as a warning and exits 0 (pre-flight 10; a tap consistency item for later).
 - The starter deck quotes its title (`title: "My Talk"`), which the first draft of Task 1's test did not expect; the test now does.
@@ -7562,19 +7944,15 @@ Product decisions this plan makes that the spec leaves open. Each line is the de
 
 ## Deviations from the approved boards
 
-Every screen follows its board; these are the departures, each with its reason. The person confirms or changes them.
+Every screen follows its board exactly: the RegenerateMenu order, the SettingsImageBullets hint inside the card, the NewDeckHintNoSlug cell size, the Homebrew note as drawn, and a Done button on every done state as the approved ExportWarnings done layout has it (the coordinator's ruling: not a departure). The NewDeckHintNoSlug and SettingsImageBullets boards are themselves the approved changes to NewDeck and SettingsImage. Two departures remain, both approved:
 
-| Board | The board draws | The plan builds | Why |
+| Board | The board draws | The plan builds | Approval |
 |---|---|---|---|
-| ExportPDF | The "Save as" row shows the file's name alone | The name is a button (`outputButton`) that opens the save panel | The sheet needs a way to choose another file; the button looks like the name |
-| ExportWebsite | Show in Finder and Preview, no third button | A Done button too (the ExportWarnings board's, approved, in the same done layout) | A sheet needs a way to close |
-| ThemePicker | Cells labelled "WKWebView: theme render" | `NSImageView`s of the PNGs `tap theme show --image` writes | The spec says PNGs from tap, and no web view is made for a picture |
-| NewDeck | The hint names the folder ("debugging-production-at-3am") | "Creates a folder named after the title, with the deck and images/" | The NewDeckHintNoSlug board, approved: the slug is tap's |
-| SettingsImage | "•••• 4f2c" and a Model row | Bullets only, no Model row | The SettingsImageBullets board, approved: the secrets rule, and tap names no model |
-| SettingsCLI | "Installed by Homebrew." under the other tap | That note for a path under a Homebrew prefix; "Tap did not install it." otherwise (InstallConfirm's frame c) | The board's example is a Homebrew path; the app cannot know who installed a file elsewhere |
+| ExportPDF | The "Save as" row shows the file's name alone | The name is a button (`outputButton`) that opens the save panel | The person, 2026-09-27 |
+| ThemePicker | Cells labelled "WKWebView: theme render" | `NSImageView`s of the PNGs `tap theme show --image` writes | The spec's wording ("real renders from `tap theme show --image`"), not a design change; no web view is made for a picture |
 
-The DeckTabThemeRow, RegenerateMenu, ExportWarnings and InstallConfirm boards are built as drawn, with no departure.
+One addition the person asked for on 2026-09-27 and no board draws: the grid's first cell, "Default", tap's default theme, drawn exactly like the other cells with that theme's render.
 
 ## Execution handoff
 
-Plan complete and saved to `docs/superpowers/plans/2026-09-26-desktop-creating-export-settings.md`, revised after its review (`d6-plan-review.md`) and the person's decisions of 2026-09-26 (the six D6 boards approved as drawn; the key's reach; `--aspect` and `--match-theme`; one real PDF export on CI; the consent left out). Execute with superpowers:subagent-driven-development, one fresh subagent per task, as the roadmap requires, on `feat/desktop-creating-export-settings` cut from `main` after D5's pull request 43 has merged, in a worktree at `/Users/codemonkey/projects/tap-d6`. Sixteen tasks in four batches of four, for the batch-and-trust-CI pace: A = Tasks 1 to 4 (Go and the core package, no Xcode project needed: `tap new --folder`, `tap serve --json`, the theme and image flags, `ToolRun`, the decoders); B = 5, 6a, 6b and 7 (the stores and PATH logic, the tool path and `tap theme set`, the theme grid and toolbar item, the New Deck sheet and the Deck tab's row); C = 8a, 8b, 9 and 10 (paste and drop, Generate and Regenerate, components, Export PDF); D = 11 to 14 (Export Website and Images, Settings General and Live Code, Image Generation and Command Line, the manifest and the UI test). One combined review per batch, the mutations of its tasks on `mutations/d6-batch-<letter>`. Every task's steps build locally and hand the hosted runs to the controller's CI; every task's review runs the mutations its last step lists, the ones that could leak the key, touch a file that is not ours, leave a process behind, lose an edit or run tap on an unsaved deck first. No step waits for a mockup.
+Plan complete and saved to `docs/superpowers/plans/2026-09-26-desktop-creating-export-settings.md`, revised after its review (`d6-plan-review.md`), its re-review (`d6-plan-rereview.md`, run against `main` at 58c8f5d with D5 merged), and the person's decisions of 2026-09-26 (the six D6 boards approved as drawn; the key's reach; `--aspect` and `--match-theme`; one real PDF export on CI; the consent left out) and 2026-09-27 (the ExportPDF name as a button; the grid's Default cell through `tap theme set default`). Execute with superpowers:subagent-driven-development, one fresh subagent per task, as the roadmap requires, on `feat/desktop-creating-export-settings` cut from `main` after D5's pull request 43 has merged, in a worktree at `/Users/codemonkey/projects/tap-d6`. Sixteen tasks in four batches of four, for the batch-and-trust-CI pace: A = Tasks 1 to 4 (Go and the core package, no Xcode project needed: `tap new --folder`, `tap serve --json`, the theme and image flags, `ToolRun`, the decoders); B = 5, 6a, 6b and 7 (the stores and PATH logic, the tool path and `tap theme set`, the theme grid and toolbar item, the New Deck sheet and the Deck tab's row); C = 8a, 8b, 9 and 10 (paste and drop, Generate and Regenerate, components, Export PDF); D = 11 to 14 (Export Website and Images, Settings General and Live Code, Image Generation and Command Line, the manifest and the UI test). One combined review per batch, the mutations of its tasks on `mutations/d6-batch-<letter>`. Every task's steps build locally and hand the hosted runs to the controller's CI; every task's review runs the mutations its last step lists, the ones that could leak the key, touch a file that is not ours, leave a process behind, lose an edit or run tap on an unsaved deck first. No step waits for a mockup, and nothing waits for a further sign-off.
