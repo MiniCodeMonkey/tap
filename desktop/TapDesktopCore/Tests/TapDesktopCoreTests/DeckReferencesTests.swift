@@ -49,5 +49,11 @@ final class DeckReferencesTests: XCTestCase {
         XCTAssertNil(ComponentLink.find(in: "See ./notes/plan.md", at: 6), "only component files")
         XCTAssertNil(ComponentLink.find(in: "layout: ./slides/Notes.md", at: 12), "the extension alone decides inside slides/")
         XCTAssertNil(ComponentLink.find(in: "", at: 0))
+        XCTAssertEqual(ComponentLink.find(in: "layout: ./slides/charts/Bar.v2.jsx", at: 20), "./slides/charts/Bar.v2.jsx", "a subfolder and dots inside a name")
+        XCTAssertNil(ComponentLink.find(in: "layout: ./slides/../../x.jsx", at: 12), "a path that leaves slides/ is not a link")
+        XCTAssertNil(ComponentLink.find(in: "layout: ./slides/../../x.jsx", at: 26), "nor is its tail")
+        XCTAssertNil(ComponentLink.find(in: "layout: ./slides/a/../../../x.jsx", at: 30))
+        XCTAssertNil(ComponentLink.find(in: "see myslides/X.jsx", at: 14), "slides/ inside another folder's name is not slides/")
+        XCTAssertNil(ComponentLink.find(in: "see ../slides/X.jsx", at: 14), "a path from above the deck's folder")
     }
 }

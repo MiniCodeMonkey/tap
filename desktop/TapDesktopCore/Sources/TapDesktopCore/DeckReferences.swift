@@ -44,9 +44,12 @@ public struct AIImageReference: Equatable, Sendable {
 
 /// A deck-supplied component's path in a line of the deck, as tap's
 /// snippets write it (`layout: ./slides/Name.jsx`, a
-/// ```component ./components/Name.jsx fence).
+/// ```component ./components/Name.jsx fence). A path always stays inside
+/// slides/ or components/: it starts at a word boundary (so
+/// `myslides/X.jsx` is not one), and no segment starts with a dot (so
+/// `./slides/../../x.jsx` is not one either).
 public enum ComponentLink {
-    private static let pattern = try! NSRegularExpression(pattern: #"(?:\./)?(?:slides|components)/[A-Za-z0-9_./-]+\.(?:jsx|tsx)"#)
+    private static let pattern = try! NSRegularExpression(pattern: #"(?<![A-Za-z0-9_./-])(?:\./)?(?:slides|components)(?:/[A-Za-z0-9_-][A-Za-z0-9_.-]*)*/[A-Za-z0-9_-][A-Za-z0-9_.-]*\.(?:jsx|tsx)(?![A-Za-z0-9_])"#)
 
     /// The path under `column` in `line`, or nil when the column is not on one.
     public static func find(in line: String, at column: Int) -> String? {
