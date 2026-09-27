@@ -393,17 +393,45 @@ func (m *ImageGenModel) submitPrompt() (tea.Model, tea.Cmd) {
 	return m, tea.Batch(m.spinner.Tick, m.generateImageCmd())
 }
 
-// generateImageCmd returns a command that generates an image using the Gemini API.
+// ThemeBriefForDeck returns the style brief of a deck's theme for an
+// image at an aspect ratio ("" for the model's choice), the brief tap
+// image generate --match-theme prepends. The cli package, which builds the
+// brief from the theme catalog, sets it.
+var ThemeBriefForDeck func(deckPath, aspect string) (string, error)
+
+// recordedChoices are the aspect and theme match a regenerate keeps: the
+// ones the image being regenerated recorded, none for a new image.
+func (m *ImageGenModel) recordedChoices() (aspect string, matchTheme bool) {
+	if m.SelectedImage == nil {
+		return "", false
+	}
+	return m.SelectedImage.Aspect, m.SelectedImage.MatchTheme
+}
+
+// generateImageCmd returns a command that generates an image using the
+// Gemini API, with the recorded choices of the image it regenerates.
 func (m *ImageGenModel) generateImageCmd() tea.Cmd {
 	prompt := m.Prompt
 	deckPath := m.MarkdownFile
+	aspect, matchTheme := m.recordedChoices()
 	return func() tea.Msg {
 		client, err := deckedit.NewImageGenerator(deckPath)
 		if err != nil {
 			return imageGenerateMsg{result: ImageGenerateResult{Error: err}}
 		}
 
-		result, err := client.GenerateImage(context.Background(), prompt)
+		request := prompt
+		if matchTheme {
+			if ThemeBriefForDeck == nil {
+				return imageGenerateMsg{result: ImageGenerateResult{Error: fmt.Errorf("cannot match the theme: no theme brief is available")}}
+			}
+			brief, err := ThemeBriefForDeck(deckPath, aspect)
+			if err != nil {
+				return imageGenerateMsg{result: ImageGenerateResult{Error: err}}
+			}
+			request = deckedit.ThemedImageRequest(brief, prompt)
+		}
+		result, err := client.GenerateImageWithAspectRatio(context.Background(), request, aspect)
 		if err != nil {
 			return imageGenerateMsg{result: ImageGenerateResult{Error: err}}
 		}
@@ -928,10 +956,13 @@ func (m *ImageGenModel) PlaceImage() (deckedit.PlacedImage, error) {
 	if m.GeneratedImage == nil {
 		return deckedit.PlacedImage{}, fmt.Errorf("no generated image to save")
 	}
+	aspect, matchTheme := m.recordedChoices()
 	return deckedit.PlaceGeneratedImage(deckedit.Placement{
 		DeckPath:   m.MarkdownFile,
 		SlideIndex: m.SelectedIndex,
 		Prompt:     m.Prompt,
 		Replacing:  m.SelectedImage,
+		Aspect:     aspect,
+		MatchTheme: matchTheme,
 	}, gemini.ImageResult{Data: m.GeneratedImage.ImageData, ContentType: m.GeneratedImage.ContentType})
 }

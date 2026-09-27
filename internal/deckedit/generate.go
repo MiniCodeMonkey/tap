@@ -36,6 +36,13 @@ var NewImageGenerator = func(deckPath string) (ImageGenerator, error) {
 	return client, nil
 }
 
+// ThemedImageRequest is what the model is asked for an image that
+// matches the deck's theme: the theme's style brief, then the person's
+// words. The deck records the words alone.
+func ThemedImageRequest(brief, prompt string) string {
+	return brief + "\n\nThe image shows: " + prompt
+}
+
 // Placement says where a generated image goes: at the end of the slide at
 // SlideIndex, or, when Replacing is set, in place of that AI image.
 // Aspect and MatchTheme are the choices to record with it.

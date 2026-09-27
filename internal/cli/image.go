@@ -18,6 +18,7 @@ import (
 	"github.com/MiniCodeMonkey/tap/internal/deckedit"
 	"github.com/MiniCodeMonkey/tap/internal/gemini"
 	"github.com/MiniCodeMonkey/tap/internal/themes"
+	"github.com/MiniCodeMonkey/tap/internal/tui"
 )
 
 // Flags for tap image add.
@@ -123,6 +124,9 @@ Examples:
 }
 
 func init() {
+	// The TUI's regenerate keeps a recorded --match-theme with the same brief.
+	tui.ThemeBriefForDeck = themeBriefForDeck
+
 	rootCmd.AddCommand(imageCmd)
 	imageCmd.AddCommand(imageAddCmd)
 	imageCmd.AddCommand(imageGenerateCmd)
@@ -426,7 +430,7 @@ func generateAndPlace(ctx context.Context, placement deckedit.Placement, options
 		if err != nil {
 			return deckedit.PlacedImage{}, err
 		}
-		request = brief + "\n\nThe image shows: " + placement.Prompt
+		request = deckedit.ThemedImageRequest(brief, placement.Prompt)
 	}
 	image, err := generator.GenerateImageWithAspectRatio(ctx, request, options.aspect)
 	if err != nil {

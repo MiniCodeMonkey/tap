@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -8,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/MiniCodeMonkey/tap/internal/deckedit"
 	"github.com/MiniCodeMonkey/tap/internal/gemini"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
@@ -2403,5 +2405,62 @@ func TestImageGenModel_PlaceImage(t *testing.T) {
 	content, _ := os.ReadFile(mdFile)
 	if !strings.Contains(string(content), placed.Markdown) {
 		t.Errorf("deck = %q, want it to contain %q", content, placed.Markdown)
+	}
+}
+
+// recordingImageGenerator stands in for Gemini and records each request.
+type recordingImageGenerator struct {
+	prompts []string
+	aspects []string
+}
+
+func (g *recordingImageGenerator) GenerateImage(ctx context.Context, prompt string) (*gemini.ImageResult, error) {
+	return g.GenerateImageWithAspectRatio(ctx, prompt, "")
+}
+
+func (g *recordingImageGenerator) GenerateImageWithAspectRatio(_ context.Context, prompt string, aspect string) (*gemini.ImageResult, error) {
+	g.prompts = append(g.prompts, prompt)
+	g.aspects = append(g.aspects, aspect)
+	return &gemini.ImageResult{Data: []byte("png bytes for " + prompt), ContentType: "image/png"}, nil
+}
+
+// The i key's regenerate keeps what the image recorded: the same aspect,
+// the theme's brief ahead of the words, and both choices in the comment.
+func TestImageGenModel_RegenerateKeepsTheRecordedChoices(t *testing.T) {
+	deckDir := t.TempDir()
+	deck := filepath.Join(deckDir, "talk.md")
+	content := "# Slide\n\n<!-- ai-prompt: a red fox | aspect: 1:1 | match-theme -->\n![](images/old.png)\n"
+	if err := os.WriteFile(deck, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	fake := &recordingImageGenerator{}
+	previousGenerator, previousBrief := deckedit.NewImageGenerator, ThemeBriefForDeck
+	deckedit.NewImageGenerator = func(string) (deckedit.ImageGenerator, error) { return fake, nil }
+	ThemeBriefForDeck = func(_, aspect string) (string, error) { return "BRIEF canvas " + aspect, nil }
+	t.Cleanup(func() { deckedit.NewImageGenerator, ThemeBriefForDeck = previousGenerator, previousBrief })
+
+	model, err := NewImageGenModel(deck)
+	if err != nil {
+		t.Fatal(err)
+	}
+	images := deckedit.ParseAIImages(content)
+	model.SelectedIndex = 0
+	model.SelectedImage = &images[0]
+	model.Prompt = images[0].Prompt
+
+	message, ok := model.generateImageCmd()().(imageGenerateMsg)
+	if !ok || message.result.Error != nil {
+		t.Fatalf("generate: %#v", message)
+	}
+	if len(fake.prompts) != 1 || fake.aspects[0] != "1:1" || fake.prompts[0] != deckedit.ThemedImageRequest("BRIEF canvas 1:1", "a red fox") {
+		t.Fatalf("asked %q at %q", fake.prompts, fake.aspects)
+	}
+	model.GeneratedImage = &message.result
+	if _, err := model.PlaceImage(); err != nil {
+		t.Fatal(err)
+	}
+	after, _ := os.ReadFile(deck)
+	if !strings.Contains(string(after), "<!-- ai-prompt: a red fox | aspect: 1:1 | match-theme -->") {
+		t.Errorf("the replacement's comment keeps the choices:\n%s", after)
 	}
 }
