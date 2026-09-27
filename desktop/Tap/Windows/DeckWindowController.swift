@@ -382,6 +382,50 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
         }
     }
 
+    /// A form sheet (Generate Image, New Component, Export) on this window:
+    /// refused with a beep and a log line while another sheet is up, so no
+    /// two sheets queue on the window. When it ends, a tap question that
+    /// arrived meanwhile gets its turn, and the toolbar's state is
+    /// refreshed (AppKit restores the enabled state a sheet found, one turn later).
+    func showFormSheet(_ sheet: NSWindow, completion: (() -> Void)? = nil) {
+        guard let window, window.attachedSheet == nil, questionSheet == nil else {
+            sessionController.session.log.append("a sheet is already up; \(sheet.accessibilityIdentifier()) waits for it", source: .app)
+            NSSound.beep()
+            return
+        }
+        window.beginSheet(sheet) { [weak self] _ in
+            completion?()
+            DispatchQueue.main.async { [weak self] in
+                self?.refreshPresentingControls()
+                self?.showNextDeckQuestionIfIdle()
+            }
+        }
+    }
+
+    @objc func generateImage(_ sender: Any?) {
+        guard let slide = sessionController.currentSlideNumber, sessionController.document?.fileURL != nil else { return NSSound.beep() }
+        let themeName = sessionController.currentThemeSlug.map { AppEnvironment.shared.themeImages.catalog?.name(forSlug: $0) ?? $0 } ?? "Base"
+        let sheet = GenerateImageSheet(slide: slide, themeName: themeName)
+        sheet.onGenerate = { [weak self, weak sheet] request in
+            guard let self, let sheet else { return }
+            self.sessionController.generateImage(prompt: request.prompt, aspect: request.aspect, matchTheme: request.matchTheme) { [weak self, weak sheet] outcome in
+                guard let sheet else { return }
+                switch outcome {
+                case .ok?: self?.window?.endSheet(sheet, returnCode: .OK)
+                case .failed(let code, let message)?: sheet.showError(message, code: code)
+                case nil: sheet.showError("tap did not answer; see the Tap Log", code: "failed")
+                }
+            }
+        }
+        showFormSheet(sheet)
+    }
+
+    /// The context menu's Regenerate items name the image in `representedObject`.
+    @objc func regenerateImage(_ sender: Any?) {
+        guard let path = (sender as? NSMenuItem)?.representedObject as? String else { return NSSound.beep() }
+        sessionController.regenerateImage(path: path)
+    }
+
     @objc func showThemePopover(_ sender: Any?) {
         guard questionSheet == nil, window?.attachedSheet == nil else { return }
         // A button in the toolbar's overflow, or a hidden toolbar, has no window to anchor on.
@@ -982,6 +1026,12 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
         }
         if menuItem.action == #selector(insertImage(_:)) {
             return sessionController.currentSlideNumber != nil && sessionController.document?.fileURL != nil
+        }
+        if menuItem.action == #selector(generateImage(_:)) {
+            return sessionController.currentSlideNumber != nil && sessionController.document?.fileURL != nil
+        }
+        if menuItem.action == #selector(regenerateImage(_:)) {
+            return menuItem.representedObject is String
         }
         let count = sessionController.selectedSlideNumbers.count
         if menuItem.action == #selector(deleteSlides(_:)) {

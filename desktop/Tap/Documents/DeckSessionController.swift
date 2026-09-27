@@ -431,6 +431,35 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
         runToolOnSavedDeck(["theme", "set", slug, deck.path, "--json"], actionName: "Change Theme")
     }
 
+    /// Slide > Generate Image: tap image generate on the saved file adds
+    /// the image and its ai-prompt comment to the caret's slide. This run
+    /// and regenerate's are the two that get the Gemini key.
+    func generateImage(prompt: String, aspect: String?, matchTheme: Bool, completion: @escaping (ToolOutcome?) -> Void = { _ in }) {
+        guard let deck = document?.fileURL, let slide = currentSlideNumber else { return completion(nil) }
+        runToolOnSavedDeck(GenerateImageRequest(prompt: prompt, aspect: aspect, matchTheme: matchTheme).arguments(deck: deck, slide: slide),
+                           actionName: "Generate Image", includeGeminiKey: true, showsErrorBar: false, completion: completion)
+    }
+
+    /// The AI images of a slide, from the buffer's text within tap's range
+    /// for that slide, for the Regenerate menu items.
+    func aiImages(onSlide number: Int) -> [AIImageReference] {
+        guard let box = editor.boxes.first(where: { $0.slide.number == number }) else { return [] }
+        return AIImageReference.find(in: editor.string, slideRange: box.range)
+    }
+
+    var aiImagesOnCurrentSlide: [AIImageReference] {
+        currentSlideNumber.map(aiImages(onSlide:)) ?? []
+    }
+
+    /// Regenerate on one of the slide's AI images: tap replaces it in
+    /// place with the comment's prompt and the aspect and theme match the
+    /// comment recorded, and deletes the old file. No flags: what the
+    /// comment holds is tap's to read.
+    func regenerateImage(path: String, onSlide number: Int? = nil) {
+        guard let deck = document?.fileURL, let slide = number ?? currentSlideNumber else { return }
+        runToolOnSavedDeck(["image", "regenerate", deck.path, "--slide", String(slide), "--image", path, "--json"], actionName: "Regenerate Image", includeGeminiKey: true)
+    }
+
     var editor: EditorTextView { editorViewController.textView }
 
     init(document: DeckDocument) {
@@ -1283,7 +1312,7 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
         if !slidePanel.selectedNumbers.contains(number) {
             slidePanel.click(slide: number, extendingSelection: false)
         }
-        let menu = SlideContextMenu.build(for: selectedSlideNumbers, target: windowController, showsTextShortcuts: false)
+        let menu = SlideContextMenu.build(for: selectedSlideNumbers, target: windowController, showsTextShortcuts: false, aiImages: aiImages(onSlide: number))
         if let fixIt = editor.header(forBoxAt: index).fixIt {
             menu.addItem(.separator())
             let item = NSMenuItem(title: fixIt.title, action: #selector(DeckWindowController.allowDriverInThisDeck(_:)), keyEquivalent: "")
@@ -1328,7 +1357,9 @@ extension DeckSessionController: SlidePanelDelegate {
 
     func slidePanelContextMenu(_ panel: SlidePanelViewController) -> NSMenu? {
         guard let windowController = editor.window?.windowController as? DeckWindowController else { return nil }
-        return SlideContextMenu.build(for: selectedSlideNumbers, target: windowController)
+        let numbers = selectedSlideNumbers
+        let images = numbers.count == 1 ? aiImages(onSlide: numbers[0]) : []
+        return SlideContextMenu.build(for: numbers, target: windowController, aiImages: images)
     }
 
     /// The core refuses to delete every slide, with a beep, so a deck

@@ -56,4 +56,13 @@ final class DeckReferencesTests: XCTestCase {
         XCTAssertNil(ComponentLink.find(in: "see myslides/X.jsx", at: 14), "slides/ inside another folder's name is not slides/")
         XCTAssertNil(ComponentLink.find(in: "see ../slides/X.jsx", at: 14), "a path from above the deck's folder")
     }
+
+    func testTheRegenerateMenuTitleFollowsTheBoard() {
+        let one = [AIImageReference(prompt: "a fox at dusk", imagePath: "a.png", range: NSRange(location: 0, length: 1))]
+        XCTAssertEqual(one[0].menuTitle(among: one), "Regenerate Image", "one image: no prompt, no ellipsis")
+        let two = [AIImageReference(prompt: "a lighthouse in thick fog", imagePath: "b.png", range: NSRange(location: 0, length: 1)),
+                   AIImageReference(prompt: "an isometric server room at night, racks glowing amber", imagePath: "c.png", range: NSRange(location: 2, length: 1))]
+        XCTAssertEqual(two[0].menuTitle(among: two), "Regenerate \u{201C}a lighthouse in thick fog\u{201D}")
+        XCTAssertEqual(two[1].menuTitle(among: two), "Regenerate \u{201C}an isometric server room at\u{2026}\u{201D}", "cut at 32 characters, on a word, as the board draws")
+    }
 }

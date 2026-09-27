@@ -40,6 +40,21 @@ public struct AIImageReference: Equatable, Sendable {
     public static func find(in text: String, slideRange: NSRange) -> [AIImageReference] {
         find(in: text).filter { NSLocationInRange($0.range.location, slideRange) }
     }
+
+    /// The Regenerate item's title, as the RegenerateMenu board draws it:
+    /// "Regenerate Image" when the slide has one AI image; with more, each
+    /// item names its prompt in quotes, cut at 32 characters on a word
+    /// with an ellipsis, so two prompts can be told apart.
+    public func menuTitle(among all: [AIImageReference]) -> String {
+        guard all.count > 1 else { return "Regenerate Image" }
+        var shown = prompt
+        if shown.count > 32 {
+            let cut = String(shown.prefix(32))
+            let onWord = cut.lastIndex(of: " ").map { String(cut[..<$0]) } ?? cut
+            shown = onWord.trimmingCharacters(in: CharacterSet(charactersIn: " ,;:")) + "\u{2026}"
+        }
+        return "Regenerate \u{201C}\(shown)\u{201D}"
+    }
 }
 
 /// A deck-supplied component's path in a line of the deck, as tap's

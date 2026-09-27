@@ -7,7 +7,7 @@ enum SlideContextMenu {
     /// with the editor focused, the Command+C and Command+V shown next to
     /// Copy and Paste are the keys that copy and paste the editor's text,
     /// not these slide commands.
-    static func build(for numbers: [Int], target: AnyObject, showsTextShortcuts: Bool = true) -> NSMenu {
+    static func build(for numbers: [Int], target: AnyObject, showsTextShortcuts: Bool = true, aiImages: [AIImageReference] = []) -> NSMenu {
         let menu = NSMenu(title: "Slide")
         func add(_ title: String, _ action: Selector?, key: String = "", modifiers: NSEvent.ModifierFlags = [.command]) {
             let item = NSMenuItem(title: title, action: action, keyEquivalent: key)
@@ -27,7 +27,13 @@ enum SlideContextMenu {
         add("Paste", #selector(DeckWindowController.pasteSlides(_:)), key: showsTextShortcuts ? "v" : "")
         menu.addItem(.separator())
         add("Insert Image…", #selector(DeckWindowController.insertImage(_:)), key: "i", modifiers: [.command, .shift])
-        add("Generate Image…", nil)
+        add("Generate Image…", #selector(DeckWindowController.generateImage(_:)))
+        for image in aiImages {
+            let item = NSMenuItem(title: image.menuTitle(among: aiImages), action: #selector(DeckWindowController.regenerateImage(_:)), keyEquivalent: "")
+            item.target = target
+            item.representedObject = image.imagePath
+            menu.addItem(item)
+        }
         menu.addItem(.separator())
         add(several ? "Delete Slides" : "Delete Slide", #selector(DeckWindowController.deleteSlides(_:)), key: "\u{8}")
         return menu
