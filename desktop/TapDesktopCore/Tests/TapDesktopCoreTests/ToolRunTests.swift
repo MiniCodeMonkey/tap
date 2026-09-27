@@ -97,12 +97,11 @@ final class ToolRunTests: XCTestCase {
         XCTAssertNotEqual(killed.status, 0, "SIGKILL after the graces")
     }
 
-    /// Whether the child is gone: exited and reaped (waitpid says so or has
-    /// nothing left to say). `kill(pid, 0)` alone reads a zombie as alive.
+    /// Whether the child of a freed run is gone. Foundation's `Process`
+    /// reaps it on its own queue, so a signal-0 probe (which reaps nothing)
+    /// turns to ESRCH moments after the exit.
     static func hasExited(_ identifier: Int32) -> Bool {
-        var status: Int32 = 0
-        let result = waitpid(identifier, &status, WNOHANG)
-        return result == identifier || result == -1
+        Darwin.kill(identifier, 0) != 0
     }
 
     /// The escalation belongs to the process, not to the run: a run freed
@@ -169,7 +168,80 @@ final class ToolRunTests: XCTestCase {
         let began = Date()
         ToolRun.stopAll(waiting: 0.5)
         XCTAssertLessThan(Date().timeIntervalSince(began), 3, "the wait is bounded")
-        try await waitUntil(timeout: 5, "SIGTERM to have landed") { Self.hasExited(identifier) }
+        try await waitUntil(timeout: 5, "SIGTERM to have landed") { !run.process.isRunning }
+        XCTAssertNotEqual(identifier, 0)
+    }
+
+    /// The wait at quit ends as soon as every process has exited, even
+    /// though the main queue (where the run learns of its exit) is blocked.
+    @MainActor
+    func testStopAllWaitingReturnsWhenEverythingExited() async throws {
+        let script = try Self.script("#!/bin/sh\ntrap 'exit 130' INT\necho started\ni=0; while [ $i -lt 3000 ]; do sleep 0.1; i=$((i + 1)); done\n")
+        let run = ToolRun(configuration: .init(executableURL: script, arguments: [], environment: ["PATH": "/usr/bin:/bin"], currentDirectoryURL: nil, timeout: nil))
+        var started = false
+        run.onStandardOutputLine = { if $0 == "started" { started = true } }
+        try run.start()
+        try await waitUntil(timeout: 5, "the script") { started }
+        let began = Date()
+        ToolRun.stopAll(waiting: 2)
+        XCTAssertLessThan(Date().timeIntervalSince(began), 1, "stopAll returns once every run has exited")
+        XCTAssertFalse(run.process.isRunning)
+    }
+
+    /// At a real quit the main queue never runs again once stopAll returns,
+    /// so only stopAll's own SIGTERM can end a tap that ignores SIGINT.
+    @MainActor
+    func testStopAllWaitingTerminatesWithoutTheMainQueue() async throws {
+        let script = try Self.script("#!/bin/sh\ntrap '' INT\necho started\ni=0; while [ $i -lt 3000 ]; do sleep 0.1; i=$((i + 1)); done\n")
+        let run = ToolRun(configuration: .init(executableURL: script, arguments: [], environment: ["PATH": "/usr/bin:/bin"], currentDirectoryURL: nil, timeout: nil))
+        var started = false
+        run.onStandardOutputLine = { if $0 == "started" { started = true } }
+        try run.start()
+        try await waitUntil(timeout: 5, "the script") { started }
+        ToolRun.stopAll(waiting: 0.5)
+        // No await from here: the main queue stays blocked, as at a real quit.
+        let deadline = Date().addingTimeInterval(1.0)
+        while Date() < deadline, run.process.isRunning { usleep(20_000) }
+        XCTAssertFalse(run.process.isRunning, "stopAll's own SIGTERM ended it")
+    }
+
+    /// tap takes a second SIGINT as "die now" and skips its cleanup, so a
+    /// second cancel (Cancel, then closing the window, then quitting) sends none.
+    @MainActor
+    func testASecondCancelSendsNoSecondSIGINT() async throws {
+        let script = try Self.script("#!/bin/sh\nn=0\ntrap 'n=$((n + 1)); echo \"int $n\"' INT\necho started\ni=0; while [ $i -lt 3000 ]; do sleep 0.1; i=$((i + 1)); done\n")
+        let run = ToolRun(configuration: .init(executableURL: script, arguments: [], environment: ["PATH": "/usr/bin:/bin"], currentDirectoryURL: nil, timeout: nil))
+        var lines: [String] = []
+        run.onStandardOutputLine = { lines.append($0) }
+        try run.start()
+        try await waitUntil(timeout: 5, "the script") { lines == ["started"] }
+        run.cancel()
+        try await waitUntil(timeout: 1.5, "the first interrupt") { lines.contains("int 1") }
+        run.cancel()
+        try await Task.sleep(nanoseconds: 400_000_000)
+        XCTAssertEqual(lines, ["started", "int 1"], "one SIGINT for two cancels")
+        try await waitUntil(timeout: 10, "the escalation") { !run.isRunning }
+    }
+
+    /// The last reference to a running run may drop off the main thread
+    /// (a detached task that held it); the process is still stopped.
+    @MainActor
+    func testARunReleasedOffTheMainThreadStopsItsProcess() async throws {
+        final class Holder: @unchecked Sendable { var run: ToolRun? }
+        let script = try Self.script("#!/bin/sh\necho started\ni=0; while [ $i -lt 3000 ]; do sleep 0.1; i=$((i + 1)); done\n")
+        let holder = Holder()
+        holder.run = ToolRun(configuration: .init(executableURL: script, arguments: [], environment: ["PATH": "/usr/bin:/bin"], currentDirectoryURL: nil, timeout: nil))
+        var started = false
+        holder.run?.onStandardOutputLine = { if $0 == "started" { started = true } }
+        try holder.run?.start()
+        try await waitUntil(timeout: 5, "the script") { started }
+        let identifier = try XCTUnwrap(holder.run?.processIdentifier)
+        let releasedOnMainThread = await Task.detached {
+            holder.run = nil
+            return pthread_main_np() != 0
+        }.value
+        XCTAssertFalse(releasedOnMainThread, "the last reference dropped off the main thread")
+        try await waitUntil(timeout: 10, "the process to be stopped") { Self.hasExited(identifier) }
     }
 
     /// A run that keeps stdin open (tap serve --json) hands the process a
