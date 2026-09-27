@@ -76,6 +76,9 @@ final class DeletedDeckTests: HostedTestCase {
         let controller = try XCTUnwrap(document.sessionController)
 
         let moved = deck.deletingLastPathComponent().appendingPathComponent("moved.md")
+        // The approval is keyed by path: tap would otherwise restart on this
+        // new, unapproved path and ask, raising a sheet mid-test.
+        try approveLiveCode(for: moved, drivers: ["sqlite"])
         try await document.save(to: moved, ofType: "net.daringfireball.markdown", for: .saveAsOperation)
         XCTAssertEqual(document.fileURL.map(FilePaths.canonical), FilePaths.canonical(moved))
         try await waitUntil(timeout: 30, "tap on the new path") {

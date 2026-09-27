@@ -334,6 +334,40 @@ func TestGateReloadAsksAboutANewDriverAndKeepsTheApprovedOnesRunning(t *testing.
 	}
 }
 
+func TestGateReloadThatRefusesAChangedCommandTellsThePages(t *testing.T) {
+	harness := newGateHarness(t, approvedShell, approvedPython3)
+	harness.start(t, map[string]config.DriverConfig{"shell": shellDriver, "python": python3Driver})
+	harness.mu.Lock()
+	before := harness.changes
+	harness.mu.Unlock()
+
+	// A reload that changes nothing the policy holds tells no page.
+	harness.reload(map[string]config.DriverConfig{"shell": shellDriver, "python": python3Driver})
+	harness.mu.Lock()
+	unchanged := harness.changes
+	harness.mu.Unlock()
+	if unchanged != before {
+		t.Errorf("changes = %d after a reload with the same drivers, want %d", unchanged, before)
+	}
+
+	// The deck's python now runs bash: the approval of python3 no longer
+	// covers it, so the policy narrows and the pages must drop its Run
+	// button without waiting for the answer.
+	harness.reload(map[string]config.DriverConfig{"shell": shellDriver, "python": bashDriver})
+	harness.mu.Lock()
+	after := harness.changes
+	harness.mu.Unlock()
+	if after != before+1 {
+		t.Errorf("changes = %d after a reload that refuses python, want %d: open pages keep a Run button the server refuses", after, before+1)
+	}
+	if harness.allows("python", bashDriver) {
+		t.Error("python runs bash before anyone answered")
+	}
+	if request := harness.asker.nextRequest(t); driverNames(request) != "python=bash -c" || request.Drivers[0].PreviousCommand != "python3 -c" {
+		t.Errorf("request = %+v, want bash asked about, after python3", request)
+	}
+}
+
 func TestGateAsksOneQuestionAtATime(t *testing.T) {
 	harness := newGateHarness(t, approvedShell)
 	harness.start(t, map[string]config.DriverConfig{"shell": shellDriver})

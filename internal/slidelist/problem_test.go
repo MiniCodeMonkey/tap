@@ -1,0 +1,50 @@
+package slidelist
+
+import (
+	"strings"
+	"testing"
+)
+
+// The problem the page shows in a live block and /api/execute refuses it
+// with rides along in the slide list, so the app can mark the block's
+// box; a block that can run has none.
+func TestBuildCarriesEachBlocksProblem(t *testing.T) {
+	source := "---\ndrivers:\n  sqlite: {}\n---\n\n# Query\n\n```sql {driver: sqlite}\nSELECT 1;\n```\n\n---\n\n# Shell\n\n```bash {driver: shell}\necho six\n```\n"
+	result, err := Build([]byte(source), t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := result.Slides[0].CodeBlocks[0].Problem; got != "" {
+		t.Errorf("a declared driver's block has a problem: %q", got)
+	}
+	want := `This deck does not declare the shell driver. Add "shell: {}" under drivers in the frontmatter.`
+	if got := result.Slides[1].CodeBlocks[0].Problem; got != want {
+		t.Errorf("problem = %q, want %q", got, want)
+	}
+
+	noDrivers := "# Query\n\n```sql {driver: sqlite}\nSELECT 1;\n```\n"
+	result, err = Build([]byte(noDrivers), t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := result.Slides[0].CodeBlocks[0].Problem
+	if !strings.HasPrefix(got, "This deck does not declare the sqlite driver. Add this to the frontmatter:") || !strings.Contains(got, "\n  sqlite: {}") {
+		t.Errorf("problem without a drivers map = %q", got)
+	}
+}
+
+// Two blocks on one slide keep their own problems.
+func TestBuildGivesEachBlockOnASlideItsOwnProblem(t *testing.T) {
+	source := "---\ndrivers:\n  sqlite: {}\n---\n\n# Both\n\n```bash {driver: shell}\necho six\n```\n\n```sql {driver: sqlite}\nSELECT 1;\n```\n"
+	result, err := Build([]byte(source), t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	blocks := result.Slides[0].CodeBlocks
+	if len(blocks) != 2 || blocks[0].Problem == "" {
+		t.Fatalf("the undeclared shell block has no problem: %+v", blocks)
+	}
+	if blocks[1].Problem != "" {
+		t.Errorf("the declared sqlite block, second on its slide, has a problem: %q", blocks[1].Problem)
+	}
+}

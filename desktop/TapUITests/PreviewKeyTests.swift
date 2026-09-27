@@ -3,7 +3,7 @@ import XCTest
 final class PreviewKeyTests: UITestCase {
     func testTryAThemeInThePreview() throws {
         let deck = try copyFixture("seven-slides.md")
-        let application = launch(withDeck: deck)
+        let application = try launch(withDeck: deck)
         let preview = self.preview(in: application)
         XCTAssertTrue(preview.waitForExistence(timeout: 30), "the preview (a Group with the identifier \"preview\") exists")
         Thread.sleep(forTimeInterval: 3)
@@ -28,7 +28,7 @@ final class PreviewKeyTests: UITestCase {
 
     func testShortcutsDoNotClashWithThePresentationKeys() throws {
         let deck = try copyFixture("seven-slides.md")
-        let application = launch(withDeck: deck)
+        let application = try launch(withDeck: deck)
         let editor = application.textViews["editor"]
         let preview = self.preview(in: application)
         XCTAssertTrue(editor.waitForExistence(timeout: 30))

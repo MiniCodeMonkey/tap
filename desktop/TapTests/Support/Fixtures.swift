@@ -34,4 +34,13 @@ enum Fixtures {
         FileManager.default.fileExists(atPath: copy.path, isDirectory: &isFolder)
         return isFolder.boolValue ? copy.appendingPathComponent("talk.md") : copy
     }
+
+    /// The path with every symlink resolved, as usersettings.ResolveDeck
+    /// keys a deck: /var/folders is /private/var/folders here, which
+    /// URL.resolvingSymlinksInPath() leaves alone.
+    static func realPath(of url: URL) -> String {
+        var buffer = [Int8](repeating: 0, count: Int(PATH_MAX))
+        guard let resolved = realpath(url.path, &buffer) else { return url.path }
+        return String(cString: resolved)
+    }
 }

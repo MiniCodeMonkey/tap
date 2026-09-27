@@ -7,7 +7,7 @@ ONLY ?= TapTests
 # that needs longer sets its own executionTimeAllowance, up to ten.
 TEST_TIMEOUTS = -test-timeouts-enabled YES -default-test-execution-time-allowance 300 -maximum-test-execution-time-allowance 600
 
-.PHONY: project core-test build test test-build uitest bench bench-build app-path check-scenarios
+.PHONY: project core-test build test test-build uitest bench bench-build app-path check-scenarios check-release-hooks
 project:
 	xcodegen generate --spec project.yml --quiet
 
@@ -40,3 +40,12 @@ app-path:
 check-scenarios:
 	./scripts/check-scenarios-test.sh
 	./scripts/check-scenarios.sh
+
+# The test-only hooks are compiled into Debug alone: the Benchmark build, a
+# release build, holds no symbol of approvalAnswerForTests, while it does
+# hold presentExecutableURL, so a stripped or renamed binary cannot pass.
+RELEASE_TAP = $(DERIVED_DATA)/Build/Products/Benchmark/Tap.app/Contents/MacOS/Tap
+check-release-hooks: bench-build
+	@nm $(RELEASE_TAP) | grep -q presentExecutableURL || { echo "no symbols to check in $(RELEASE_TAP)"; exit 1; }
+	@! nm $(RELEASE_TAP) | grep -q approvalAnswerForTests || { echo "approvalAnswerForTests is in a release build"; exit 1; }
+	@echo "no test-only hook in the release build"

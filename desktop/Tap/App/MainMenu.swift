@@ -105,6 +105,7 @@ enum MainMenu {
         menu.addItem(.separator())
         menu.addItem(item("Duplicate", action: #selector(DeckWindowController.duplicateSlides(_:)), key: "d"))
         menu.addItem(item("Skip Slide", action: #selector(DeckWindowController.toggleSkipSlides(_:))))
+        menu.addItem(item("Allow Driver in This Deck", action: #selector(DeckWindowController.allowDriverInThisDeck(_:))))
         // Command-Delete, not Delete alone: a bare Delete key equivalent would take Backspace away from the editor.
         menu.addItem(item("Delete", action: #selector(DeckWindowController.deleteSlides(_:)), key: "\u{8}"))
         menu.addItem(.separator())
@@ -130,6 +131,8 @@ enum MainMenu {
         menu.addItem(item("Hide Preview", action: #selector(DeckWindowController.togglePreview(_:)), key: "0", modifiers: [.command, .option]))
         menu.addItem(item("Pin Preview", action: #selector(DeckWindowController.togglePreviewPin(_:)), key: "p", modifiers: [.command, .shift]))
         menu.addItem(item("Preview in Window", action: #selector(DeckWindowController.showPreviewInWindow(_:))))
+        menu.addItem(item("Preview", action: #selector(DeckWindowController.showPreviewTab(_:)), key: "1", modifiers: [.command, .option]))
+        menu.addItem(item("Deck", action: #selector(DeckWindowController.showDeckTab(_:)), key: "2", modifiers: [.command, .option]))
         menu.addItem(.separator())
         menu.addItem(item("Enter Full Screen", action: #selector(NSWindow.toggleFullScreen(_:)), key: "f", modifiers: [.command, .control]))
         return menu

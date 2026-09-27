@@ -75,7 +75,9 @@ final class RecordingTests: PresentingTestCase {
 
         try XCTUnwrap(sheet.button(titled: "Record Automatically")).performClick(nil)
         XCTAssertNil(presentation.pendingQuestions.first { $0.id == "q9" })
-        XCTAssertNil(deckWindow.questionSheet, "the approval is declined with a log line until D5, so no second sheet")
+        try await waitUntil(timeout: 5, "the approval's own sheet, queued behind the consent's") { deckWindow.questionSheet is ApprovalSheet }
+        XCTAssertEqual(deckWindow.questionSheetSource, .talk)
+        try XCTUnwrap(deckWindow.questionSheet?.button(titled: "Don't Allow")).performClick(nil)
         try await waitUntil(timeout: 5, "the approval answered") { presentation.pendingQuestions.isEmpty }
         XCTAssertTrue(presentation.frontWindow === audience)
         try await waitUntil(timeout: 5, "the talk in front again") {

@@ -494,6 +494,10 @@ func runDevServer(options serverOptions) (err error) {
 		if err := watcher.Start(); err != nil {
 			return fmt.Errorf("failed to start file watcher: %w", err)
 		}
+		// An approval another tap process stores (tap present during a
+		// talk, or another terminal) counts here as soon as it is saved,
+		// not on the deck's next reload. It ends with the run.
+		go liveCode.followSettings(liveCodeContext, settingsPollInterval)
 		defer func() {
 			joinQuit(appQuit, "stopping the file watcher", appErrorShutdownStuck, func() { _ = watcher.Stop() })
 		}()

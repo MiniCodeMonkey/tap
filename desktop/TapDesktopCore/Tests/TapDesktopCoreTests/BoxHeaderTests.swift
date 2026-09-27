@@ -28,4 +28,28 @@ final class BoxHeaderTests: XCTestCase {
         XCTAssertEqual(header.badges, ["skipped"])
         XCTAssertEqual(header.errors, [#"Unknown layout "sectoin""#])
     }
+
+    func testABlocksProblemIsAnErrorLineWithAFixIt() {
+        let problem = #"This deck does not declare the shell driver. Add "shell: {}" under drivers in the frontmatter."#
+        let slide = Slide(number: 6, startLine: 31, endLine: 35, title: "Shell",
+                          codeBlocks: [CodeBlock(block: 1, language: "bash", driver: "shell", live: true, line: 33, problem: problem)])
+        let header = BoxHeader(slide: slide, declaredDrivers: ["sqlite"])
+        XCTAssertEqual(header.errors, ["Line 33: " + problem])
+        XCTAssertEqual(header.fixIt, BoxHeader.FixIt(driver: "shell"))
+        XCTAssertEqual(header.fixIt?.title, "Allow shell in This Deck")
+        XCTAssertEqual(header.badges, ["shell"])
+        XCTAssertNil(BoxHeader(slide: slide, declaredDrivers: ["shell"]).fixIt, "declared since tap answered: nothing left to fix")
+        XCTAssertNotNil(BoxHeader(slide: slide).fixIt, "with no frontmatter to check, the problem alone offers it")
+        let broken = BoxHeader(slide: slide, declaredDrivers: [], frontmatterIsBroken: true)
+        XCTAssertNil(broken.fixIt, "a broken frontmatter is the problem to fix, not a missing declaration")
+        XCTAssertEqual(broken.errors, header.errors, "the block's problem still shows")
+        XCTAssertNil(BoxHeader(slide: Slide(number: 1, startLine: 1, endLine: 2)).fixIt)
+        let multiLine = Slide(number: 4, startLine: 17, endLine: 21, codeBlocks: [
+            CodeBlock(block: 1, language: "sql", driver: "sqlite", live: true, line: 19,
+                      problem: "This deck does not declare the sqlite driver. Add this to the frontmatter:\n\ndrivers:\n  sqlite: {}")])
+        XCTAssertEqual(BoxHeader(slide: multiLine).errors, ["Line 19: This deck does not declare the sqlite driver. Add this to the frontmatter: drivers: sqlite: {}"])
+        let both = Slide(number: 2, startLine: 1, endLine: 2, errors: [#"Unknown layout "sectoin""#], codeBlocks: slide.codeBlocks)
+        XCTAssertEqual(BoxHeader(slide: both).errors.count, 2)
+        XCTAssertEqual(BoxHeader(slide: both).errors[0], #"Unknown layout "sectoin""#, "the slide's own errors first")
+    }
 }

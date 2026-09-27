@@ -150,6 +150,10 @@ final class PresentationController {
     /// this is the last slide the audience saw.
     var onStopped: ((_ lastSlide: Int) -> Void)?
     var onQuestion: ((PendingQuestion) -> Void)?
+    /// The questions on screen belong to a process that is gone (a crash, a stop).
+    var onQuestionsDropped: (() -> Void)?
+    /// tap withdrew the question with this id; a sheet up for it ends, answering nothing.
+    var onQuestionClosed: ((String) -> Void)?
     /// tap present could not start or stopped restarting.
     var onFailed: ((String) -> Void)?
 
@@ -325,12 +329,24 @@ final class PresentationController {
         case .failed(let lastOutput):
             endBecauseTapFailed(lastOutput: lastOutput)
         case .stopped:
+            // tap present is gone or going: its questions die with it, and
+            // a sheet still up for one must not answer the next process, whose ids start at q1 again.
+            if state == .starting || state == .presenting, !pendingQuestions.isEmpty {
+                pendingQuestions = []
+                onQuestionsDropped?()
+            }
             if state == .stopping {
                 finishStopping()
             } else if portFallbackPending {
                 relaunchOnAFreePort()
             }
         case .restarting:
+            // tap present is gone or going: its questions die with it, and
+            // a sheet still up for one must not answer the next process, whose ids start at q1 again.
+            if state == .starting || state == .presenting, !pendingQuestions.isEmpty {
+                pendingQuestions = []
+                onQuestionsDropped?()
+            }
             // The port attempt exited before its error line was read: stop
             // the restart, which lands in .stopped and relaunches.
             if portFallbackPending { session?.stop() }
@@ -852,6 +868,14 @@ final class PresentationController {
                 session?.extendQuit(timeout: Self.quitTimeoutWithRecording)
             }
             if pendingQuestions.count == 1 { onQuestion?(question) }
+        case .questionClosed(let id):
+            // tap withdrew it: out of the queue, off the screen if it was up,
+            // and the windows may show if it was the last thing they waited for.
+            guard let index = pendingQuestions.firstIndex(where: { $0.id == id }) else { break }
+            pendingQuestions.remove(at: index)
+            onQuestionClosed?(id)
+            if index == 0, let next = pendingQuestions.first { onQuestion?(next) }
+            showWindowsIfReady()
         case .tunnel:
             handleTunnel(event)
         case .error(let payload) where payload.code == "tunnel_unavailable" || payload.code == "tunnel_failed":

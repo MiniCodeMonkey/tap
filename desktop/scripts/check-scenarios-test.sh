@@ -29,6 +29,14 @@ if "$script" "$root" >/dev/null 2>&1; then
 	exit 1
 fi
 
+# A Go test named after the scenario satisfies it too.
+mkdir -p "$root/internal/cli"
+cat > "$root/internal/cli/scenario_test.go" <<'GO'
+func TestOpenADeck(t *testing.T) {}
+GO
+"$script" "$root" >/dev/null || { echo "a Go test should satisfy a claimed scenario"; exit 1; }
+rm "$root/internal/cli/scenario_test.go"
+
 cat > "$root/desktop/TapTests/DocumentTests.swift" <<'SWIFT'
 func testOpenADeck() {}
 SWIFT

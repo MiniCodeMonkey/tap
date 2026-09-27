@@ -62,6 +62,70 @@ final class TapProtocolTests: XCTestCase {
                                              codeBlocks: [CodeBlock(block: 1, language: "sql", driver: "sqlite", live: true, line: 7)]))
     }
 
+    func testDecodesTheApprovalRequest() {
+        let line = #"{"type":"question","id":"q1","kind":"approval","payload":{"deck":"/private/tmp/t/talk.md","drivers":[{"name":"fortune","command":"/bin/cat","slides":[3],"blocks":1},{"name":"shell","slides":[2,5],"blocks":2}],"approvedBefore":["sqlite"],"blocks":[{"driver":"shell","code":"echo hi","slide":2,"block":1},{"driver":"fortune","code":"hello","slide":3,"block":1}]}}"#
+        let expected = QuestionPayload(
+            deck: "/private/tmp/t/talk.md",
+            drivers: [ApprovalDriver(name: "fortune", command: "/bin/cat", slides: [3], blocks: 1),
+                      ApprovalDriver(name: "shell", command: nil, slides: [2, 5], blocks: 2)],
+            approvedBefore: ["sqlite"],
+            blocks: [ApprovalBlock(driver: "shell", code: "echo hi", slide: 2, block: 1),
+                     ApprovalBlock(driver: "fortune", code: "hello", slide: 3, block: 1)])
+        XCTAssertEqual(TapEvent.decode(line: line), .question(id: "q1", kind: "approval", payload: expected))
+
+        let sparse = #"{"type":"question","id":"q2","kind":"approval","payload":{"drivers":[{"name":"x","blocks":1},{"name":"y","slides":null}],"blocks":[{"driver":"x","slide":1,"block":1},{}]}}"#
+        XCTAssertEqual(TapEvent.decode(line: sparse), .question(id: "q2", kind: "approval", payload: QuestionPayload(
+            drivers: [ApprovalDriver(name: "x", slides: [], blocks: 1), ApprovalDriver(name: "y")],
+            blocks: [ApprovalBlock(driver: "x", code: "", slide: 1, block: 1), ApprovalBlock(driver: "", code: "", slide: 0, block: 0)])),
+            "a driver without slides or a block without code still asks the question")
+        XCTAssertTrue(expected.isForNewDrivers)
+        XCTAssertEqual(expected.changedCommands, [], "no driver names a command it ran before")
+        let changed = #"{"type":"question","id":"q3","kind":"approval","payload":{"deck":"/t/talk.md","drivers":[{"name":"fortune","command":"/usr/bin/true","previousCommand":"/bin/cat","slides":[3],"blocks":1}],"approvedBefore":["sqlite"],"blocks":[]}}"#
+        guard case .question(_, _, let payload)? = TapEvent.decode(line: changed) else { return XCTFail("not a question") }
+        XCTAssertEqual(payload.drivers?.first?.previousCommand, "/bin/cat")
+        XCTAssertEqual(payload.changedCommands.map(\.name), ["fortune"])
+        XCTAssertEqual(TapEvent.decode(line: #"{"type":"question-closed","id":"q1"}"#), .questionClosed(id: "q1"), "tap withdrew a question a reload made stale")
+        XCTAssertNil(TapEvent.decode(line: #"{"type":"question-closed"}"#), "a withdrawal without its id is not an event")
+        XCTAssertEqual(expected.approvalSummary, "1 fortune, 2 shell")
+        let first = QuestionPayload(deck: "/a.md", drivers: [ApprovalDriver(name: "shell", slides: [2, 5], blocks: 2), ApprovalDriver(name: "sqlite", slides: [4], blocks: 1)])
+        XCTAssertFalse(first.isForNewDrivers, "no approvedBefore means the first time")
+        XCTAssertEqual(first.approvalSummary, "2 shell, 1 sqlite")
+        XCTAssertEqual(QuestionPayload().approvalSummary, "")
+    }
+
+    /// tap asks again about a custom driver whose command reads the same
+    /// but runs with another value (internal/cli/approval.go,
+    /// approvalDriver.ValueChanged): the field is there, previousCommand is
+    /// not, and the command is the masked template.
+    func testDecodesAValueChangedDriver() throws {
+        let line = #"{"type":"question","id":"q1","kind":"approval","payload":{"deck":"/private/tmp/t/env.md","drivers":[{"name":"echoer","command":"/bin/sh -c cat; : ${TAP_TEST_TOKEN}","valueChanged":true,"slides":[2],"blocks":1}],"blocks":[{"driver":"echoer","code":"hello via env","slide":2,"block":1}]}}"#
+        guard case .question(_, _, let payload)? = TapEvent.decode(line: line) else { return XCTFail("not a question") }
+        let driver = try XCTUnwrap(payload.drivers?.first)
+        XCTAssertTrue(driver.valueChanged)
+        XCTAssertNil(driver.previousCommand)
+        XCTAssertEqual(driver.command, "/bin/sh -c cat; : ${TAP_TEST_TOKEN}", "the template, the secret-looking variable masked")
+        XCTAssertEqual(payload.valueChangedDrivers.map(\.name), ["echoer"])
+        XCTAssertEqual(payload.changedCommands, [], "the command as written did not change")
+        XCTAssertFalse(payload.isForNewDrivers)
+
+        let without = #"{"type":"question","id":"q2","kind":"approval","payload":{"deck":"/t/talk.md","drivers":[{"name":"fortune","command":"/bin/cat","slides":[3],"blocks":1}],"blocks":[]}}"#
+        guard case .question(_, _, let plain)? = TapEvent.decode(line: without) else { return XCTFail("not a question") }
+        XCTAssertEqual(plain.drivers?.first?.valueChanged, false, "tap leaves the field out when it is false")
+        XCTAssertEqual(plain.valueChangedDrivers, [])
+
+        let both = QuestionPayload(drivers: [ApprovalDriver(name: "a", previousCommand: "/bin/cat", valueChanged: true)])
+        XCTAssertEqual(both.valueChangedDrivers, [], "a changed command is the command change, whatever else tap says")
+        XCTAssertEqual(both.changedCommands.map(\.name), ["a"])
+    }
+
+    func testDecodesABlocksProblem() throws {
+        let data = Data(#"{"ok":true,"slides":[{"number":1,"startLine":1,"endLine":3,"layout":"default","title":"","fragments":0,"steps":0,"skip":false,"errors":[],"codeBlocks":[{"block":1,"language":"bash","driver":"shell","live":true,"line":2,"problem":"This deck does not declare the shell driver. Add \"shell: {}\" under drivers in the frontmatter."},{"block":2,"language":"sql","driver":"sqlite","live":true,"line":3}]}],"errors":[]}"#.utf8)
+        let list = try SlideList.decodeResponse(data)
+        XCTAssertEqual(list.slides[0].codeBlocks[0].problem, #"This deck does not declare the shell driver. Add "shell: {}" under drivers in the frontmatter."#)
+        XCTAssertNil(list.slides[0].codeBlocks[1].problem, "a block that can run has none")
+        XCTAssertEqual(list.slides[0].codeBlocks[1], CodeBlock(block: 2, language: "sql", driver: "sqlite", live: true, line: 3))
+    }
+
     func testAnErrorResponseThrowsItsCodeAndMessage() {
         let json = #"{"ok": false, "error": {"code": "invalid_request", "message": "send {\"source\": ...}"}}"#
         XCTAssertThrowsError(try SlideList.decodeResponse(Data(json.utf8))) { error in

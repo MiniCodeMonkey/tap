@@ -59,6 +59,27 @@ frame each window was asked for and its full screen state, never its
 frame. `make -C desktop test-build` compiles the UI tests without running
 them.
 
+The live code tests run the real bundled tap on fixtures with live code
+(`TapTests/Fixtures/live-code.md` and its neighbours). tap asks its
+approval question at every open of an unapproved deck, so
+`HostedTestCase.openDeck` writes tap's own approval record for the
+fixture's declared drivers into the test's settings folder first, and
+`UITestCase.launch` does the same for a UI test; only the approval tests
+(`approvesLiveCodeOnOpen = false`) see the sheet. Nothing a test runs
+comes from anywhere but the fixture: a shell block echoes a line, the
+sqlite block queries the in-memory default, and the custom driver is
+`/bin/cat`. The fix-it and the Deck tab edit the frontmatter through the
+editor's `replaceText`, so every change is one undo step and the hidden
+range stays clamped.
+
+What only a person can check: the approval sheet's look with the code
+of a real deck of theirs, `tap approval revoke` from a terminal while the
+deck is open (the next open asks again), a `git pull` that adds a driver
+or changes a custom driver's command while the deck is open (tap asks
+again, about that alone, with no restart), the Deck tab against their own
+frontmatter (Other keys shows what tap does not know), and a `${NAME}` in
+a driver's connection read from their `~/.zshrc`.
+
 What only a person can check, with a projector plugged in as a second
 display (two displays are otherwise covered only by seam tests): the
 audience Space on the projector and the presenter Space on the laptop,

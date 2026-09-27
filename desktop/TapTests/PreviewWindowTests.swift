@@ -33,4 +33,22 @@ final class PreviewWindowTests: HostedTestCase {
         XCTAssertFalse(windowController.splitViewController.isPreviewHidden)
         XCTAssertNil(windowController.previewWindowController)
     }
+
+    func testTheDeckTabLeavesADetachedPreviewAlone() async throws {
+        Task { await AppEnvironment.shared.deckSchema.load() }
+        try await waitUntil(timeout: 30, "the schema") { AppEnvironment.shared.deckSchema.isLoaded }
+        let document = try await openDeckAndWaitForPreview(try Fixtures.copyDeck("seven-slides.md"))
+        let controller = try XCTUnwrap(document.sessionController)
+        let deckWindow = try XCTUnwrap(document.windowControllers.first as? DeckWindowController)
+        deckWindow.showDeckTab(nil)
+        deckWindow.showPreviewInWindow(nil)
+        XCTAssertFalse(controller.previewViewController.view.isHidden, "detached while Deck was selected: shown in its window")
+        deckWindow.showPreviewTab(nil)
+        deckWindow.showDeckTab(nil)
+        XCTAssertFalse(controller.previewViewController.view.isHidden, "the Deck tab does not reach a preview in its own window")
+        deckWindow.dockPreview()
+        XCTAssertTrue(controller.previewViewController.view.isHidden, "docked back under the Deck tab")
+        deckWindow.showPreviewTab(nil)
+        XCTAssertFalse(controller.previewViewController.view.isHidden)
+    }
 }

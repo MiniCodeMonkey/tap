@@ -478,11 +478,103 @@ describe('WebSocketClient', () => {
 				expect(usePresentationStore.getState().presentation?.revision).toBe('r3');
 			});
 
+			it('catches up on a live code answer broadcast before the socket registered', async () => {
+				// The page fetched the deck while tap still refused shell. tap
+				// then allowed it and sent "reload" before this page's socket
+				// registered, so the page never received it, and the answer
+				// leaves the revision as it was.
+				const reloadSpy = vi.fn();
+				stubWindow(reloadSpy);
+				loadPresentation({ ...deck('r1', 0), liveCode: { drivers: ['sqlite'] } });
+				const fetchMock = respondWith({ ...deck('r1', 0), liveCode: { drivers: ['shell', 'sqlite'] } });
+
+				client.connect();
+				mockWs?.simulateOpen();
+				mockWs?.simulateMessage({ type: 'connected', revision: 'r1' });
+
+				await vi.waitFor(() => {
+					expect(usePresentationStore.getState().presentation?.liveCode?.drivers).toEqual(['shell', 'sqlite']);
+				});
+				expect(fetchMock).toHaveBeenCalledWith('/api/presentation');
+				expect(reloadSpy).not.toHaveBeenCalled();
+			});
+
+			it('catches up on a deck update broadcast before the socket registered', async () => {
+				stubWindow(vi.fn());
+				loadPresentation(deck('r1', 0));
+				respondWith(deck('r2', 0));
+
+				client.connect();
+				mockWs?.simulateOpen();
+				mockWs?.simulateMessage({ type: 'connected', revision: 'r2' });
+
+				await vi.waitFor(() => {
+					expect(usePresentationStore.getState().presentation?.revision).toBe('r2');
+				});
+			});
+
+			it('catches up once the deck loads when the socket registered first', async () => {
+				stubWindow(vi.fn());
+				respondWith({ ...deck('r1', 0), liveCode: { drivers: ['shell'] } });
+
+				client.connect();
+				mockWs?.simulateOpen();
+				mockWs?.simulateMessage({ type: 'connected', revision: 'r1' });
+				await new Promise((resolve) => setTimeout(resolve, 0));
+				loadPresentation({ ...deck('r1', 0), liveCode: { drivers: [] } });
+
+				await vi.waitFor(() => {
+					expect(usePresentationStore.getState().presentation?.liveCode?.drivers).toEqual(['shell']);
+				});
+			});
+
+			it('catches up on a live code answer broadcast while the socket was down', async () => {
+				const reloadSpy = vi.fn();
+				stubWindow(reloadSpy);
+				loadPresentation({ ...deck('r1', 0), liveCode: { drivers: [] } });
+				respondWith(
+					{ ...deck('r1', 0), liveCode: { drivers: [] } },
+					{ ...deck('r1', 0), liveCode: { drivers: ['shell'] } }
+				);
+
+				client.connect();
+				mockWs?.simulateOpen();
+				mockWs?.simulateMessage({ type: 'connected', revision: 'r1' });
+				await new Promise((resolve) => setTimeout(resolve, 0));
+				if (mockWs) mockWs.readyState = MockWebSocket.CLOSED;
+				client.connect();
+				mockWs?.simulateOpen();
+				mockWs?.simulateMessage({ type: 'connected', revision: 'r1' });
+
+				await vi.waitFor(() => {
+					expect(usePresentationStore.getState().presentation?.liveCode?.drivers).toEqual(['shell']);
+				});
+				expect(reloadSpy).not.toHaveBeenCalled();
+			});
+
+			it('leaves the deck untouched when nothing changed before the socket registered', async () => {
+				stubWindow(vi.fn());
+				loadPresentation({ ...deck('r1', 0), liveCode: { drivers: ['sqlite'] } });
+				const loaded = usePresentationStore.getState().presentation;
+				const fetchMock = respondWith({ ...deck('r1', 0), liveCode: { drivers: ['sqlite'] } });
+
+				client.connect();
+				mockWs?.simulateOpen();
+				mockWs?.simulateMessage({ type: 'connected', revision: 'r1' });
+
+				await vi.waitFor(() => {
+					expect(fetchMock).toHaveBeenCalledTimes(1);
+				});
+				await new Promise((resolve) => setTimeout(resolve, 0));
+				expect(usePresentationStore.getState().presentation).toBe(loaded);
+			});
+
 			it('does not reload on a reconnect to the revision an update already applied', async () => {
 				const reloadSpy = vi.fn();
 				stubWindow(reloadSpy);
 				loadPresentation(deck('r1', 0));
-				respondWith(deck('r2', 0));
+				// Each "connected" fetches the deck once to catch up, and the update fetches it too.
+				respondWith(deck('r1', 0), deck('r2', 0), deck('r2', 0));
 
 				client.connect();
 				mockWs?.simulateOpen();

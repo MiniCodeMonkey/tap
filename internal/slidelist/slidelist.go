@@ -76,6 +76,11 @@ type CodeBlock struct {
 	// Line is the 1-based deck file line of the block's opening fence. It
 	// is 0 only for an empty fence with no info string.
 	Line int `json:"line"`
+	// Problem says why a live block cannot run, in the words the page shows
+	// in the block and /api/execute refuses it with: today, a driver the
+	// deck does not declare (config.UndeclaredDriverMessage). Empty for a
+	// block that can run, and for a block with no driver.
+	Problem string `json:"problem,omitempty"`
 }
 
 // Build returns the slide list of a deck. source is the deck's markdown,
@@ -148,6 +153,10 @@ func Build(source []byte, baseDir string) (Result, error) {
 			}
 			if blockIndex < len(fenceLines) && fenceLines[blockIndex] > 0 {
 				codeBlock.Line = parsed.StartLine + fenceLines[blockIndex] - 1
+			}
+			// The transformer makes one transformed block per parsed block, in order.
+			if blockIndex < len(rendered.CodeBlocks) {
+				codeBlock.Problem = rendered.CodeBlocks[blockIndex].Problem
 			}
 			slide.CodeBlocks = append(slide.CodeBlocks, codeBlock)
 		}
