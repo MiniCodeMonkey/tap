@@ -77,11 +77,25 @@ final class GenerateImageTests: HostedTestCase {
         XCTAssertTrue(try String(contentsOf: record, encoding: .utf8).contains("gemini: \n"), "a tool run without includeGeminiKey has no key")
         _ = await TapTool.run(["theme", "list", "--json"], timeout: 10, includeGeminiKey: true)
         XCTAssertTrue(try String(contentsOf: record, encoding: .utf8).contains("gemini: set\n"), "only a run that asks for it")
-        // The deck's real tap dev, once open, runs blocks without the key.
+        // The deck's tap dev, as it starts: a wrapper records whether the
+        // live process has the key (never its value), then runs the real tap.
+        let realTap = AppEnvironment.shared.tapExecutableURL
+        addTeardownBlock { @MainActor in AppEnvironment.shared.tapExecutableURL = realTap }
+        let devRecord = try Fixtures.temporaryFolder().appendingPathComponent("dev.txt")
+        let wrapper = try Fixtures.temporaryFolder().appendingPathComponent("tap")
+        try """
+        #!/bin/sh
+        echo "$1 gemini: ${GEMINI_API_KEY:+set}" >> \(FakeToolScripts.shellQuoted(devRecord.path))
+        exec \(FakeToolScripts.shellQuoted(realTap.path)) "$@"
+        """.write(to: wrapper, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: wrapper.path)
+        AppEnvironment.shared.tapExecutableURL = wrapper
         let document = try await openDeck(try Fixtures.copyDeck("plain.md"))
         let ready = try await waitForRunningTap(document)
         XCTAssertGreaterThan(ready.port, 0)
-        XCTAssertFalse(try XCTUnwrap(document.sessionController).session.log.text.contains("placeholder-not-a-secret"))
+        let devLines = try String(contentsOf: devRecord, encoding: .utf8).components(separatedBy: "\n").filter { $0.hasPrefix("dev ") }
+        XCTAssertFalse(devLines.isEmpty, "the wrapper ran tap dev")
+        XCTAssertEqual(Set(devLines), ["dev gemini: "], "the running tap dev has no key")
     }
 
     func testRegenerateAnAIImage() async throws {
