@@ -36,7 +36,8 @@ The serve command is intended for previewing static builds. For live
 development with hot reload and code execution, use 'tap dev' instead.
 
 With --json, tap listens on 127.0.0.1 only, prints one line,
-{"ok":true,"dir":...,"port":...,"url":...}, logs no requests, and exits
+{"ok":true,"dir":...,"port":...,"url":...} (or, on a failure, one line
+{"ok":false,"error":{...}}), logs no requests, and exits
 when its standard input closes, for a program that opens the site and
 holds the other end.
 
@@ -46,8 +47,9 @@ Examples:
   tap serve --port 8080        # Use custom port
   tap serve ./build -p 8080    # Both options together
   tap serve dist --port 0 --json`,
-	Args: cobra.MaximumNArgs(1),
-	RunE: runServe,
+	Args:        cobra.MaximumNArgs(1),
+	RunE:        runServe,
+	Annotations: map[string]string{oneLineJSONAnnotation: "true"},
 }
 
 func runServe(cmd *cobra.Command, args []string) error {

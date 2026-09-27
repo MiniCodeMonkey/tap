@@ -47,7 +47,7 @@ func TestPrintJSONOKRejectsANonObject(t *testing.T) {
 
 func TestPrintJSONError(t *testing.T) {
 	var out bytes.Buffer
-	if err := printJSONError(&out, codeNoDeck, "no deck found"); err != nil {
+	if err := printJSONError(&out, codeNoDeck, "no deck found", false); err != nil {
 		t.Fatalf("printJSONError() error = %v", err)
 	}
 	var decoded struct {

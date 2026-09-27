@@ -88,6 +88,18 @@ func TestServeWithoutJSONPrintsTheBanner(t *testing.T) {
 	}
 }
 
+// A failure with --json is one line too, so a program reads the outcome,
+// ready or not, from the first line of stdout.
+func TestServeJSONFailureIsOneLine(t *testing.T) {
+	exitCode, stdout, _ := runTap(t, "serve", filepath.Join(t.TempDir(), "missing"), "--port", "0", "--json")
+	if exitCode != exitUserError {
+		t.Fatalf("exit %d, want 1", exitCode)
+	}
+	if strings.Count(stdout, "\n") != 1 || !strings.HasPrefix(stdout, `{"ok":false,"error":{"code":"`+codeDeckNotFound+`"`) {
+		t.Errorf("stdout = %q, want one compact error line", stdout)
+	}
+}
+
 // A program that starts tap serve --json hands it a pipe; when the program
 // goes, the pipe closes and the server exits, the contract --app has, so a
 // preview server never outlives the app that opened it.

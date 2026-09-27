@@ -341,7 +341,7 @@ tap serve [dir]
 | Flag | Short | Description |
 |------|-------|-------------|
 | `--port <number>` | `-p` | Port to serve on (default: `3000`) |
-| `--json` | none | Listen on 127.0.0.1 only, print one ready line (`{"ok":true,"dir","port","url"}`, the URL on 127.0.0.1), log no requests, and exit when standard input closes, for a program that opens the site. |
+| `--json` | none | Listen on 127.0.0.1 only, print one ready line (`{"ok":true,"dir","port","url"}`, the URL on 127.0.0.1) or one error line (`{"ok":false,"error":{"code","message"}}`), log no requests, and exit when standard input closes, for a program that opens the site. |
 
 If the default port is already taken, `tap serve` tries the next ports in turn (up to 20 above it) and prints the URL of whichever one it actually bound. Passing `--port` explicitly instead fails outright when that exact port is busy:
 
