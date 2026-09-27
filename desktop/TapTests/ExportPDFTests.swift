@@ -62,10 +62,24 @@ final class ExportPDFTests: HostedTestCase {
         XCTAssertFalse(window.exportController.isRunning)
     }
 
+    /// Every state the controller hands the sheet, in order, from now on.
+    func recordStates(_ window: DeckWindowController) -> () -> [ExportController.State] {
+        var states: [ExportController.State] = []
+        let shown = window.exportController.onStateChange
+        window.exportController.onStateChange = { state in
+            states.append(state)
+            shown?(state)
+        }
+        return { states }
+    }
+
     func testFirstPDFExport() async throws {
         let (_, window, _) = try await openSevenSlides()
-        let record = try Fixtures.temporaryFolder().appendingPathComponent("record.txt")
-        AppEnvironment.shared.toolExecutableURL = try FakeToolScripts.exportPDF(slides: 3, downloadLines: 4, recordingTo: record)
+        let folder = try Fixtures.temporaryFolder()
+        let record = folder.appendingPathComponent("record.txt")
+        // The fake holds its first render line until the test has seen it.
+        let gate = folder.appendingPathComponent("gate")
+        AppEnvironment.shared.toolExecutableURL = try FakeToolScripts.exportPDF(slides: 3, downloadLines: 4, gate: gate, recordingTo: record)
         window.revealInFinder = { _ in }
         window.exportPDF(nil)
         let sheet = try await exportSheet(window)
@@ -77,8 +91,33 @@ final class ExportPDFTests: HostedTestCase {
         XCTAssertFalse(sheet.contentControl.isHidden)
         XCTAssertTrue(sheet.progressBar.doubleValue > 0 && !sheet.progressBar.isIndeterminate, "bytes of total")
         XCTAssertTrue(sheet.bytesLabel.stringValue.contains(" of "), sheet.bytesLabel.stringValue)
-        try await waitUntil(timeout: 20, "the render after the download") { self.isRunning(sheet, statusPrefix: "Rendering slide") }
+        // The first render line ends the download state and shows at once.
+        try await waitUntil(timeout: 20, "the render after the download") { self.isRunning(sheet, statusPrefix: "Rendering slide 1 of 3") }
+        XCTAssertEqual(sheet.statusLabel.stringValue, "Rendering slide 1 of 3")
+        XCTAssertEqual(sheet.bytesLabel.stringValue, "", "the download's bytes are gone")
+        try Data().write(to: gate)
         try await waitUntil(timeout: 20, "the sheet to finish") { window.window?.attachedSheet == nil }
+    }
+
+    /// The buffer is saved before tap reads the file: the fake copies the
+    /// deck as it starts. Autosave waits long enough that only Export's
+    /// own save can have written the edit.
+    func testTheBufferIsSavedBeforeTapStarts() async throws {
+        let savedDelay = NSDocumentController.shared.autosavingDelay
+        NSDocumentController.shared.autosavingDelay = 300
+        addTeardownBlock { @MainActor in NSDocumentController.shared.autosavingDelay = savedDelay }
+        let (document, window, _) = try await openSevenSlides()
+        let controller = try XCTUnwrap(document.sessionController)
+        let record = try Fixtures.temporaryFolder().appendingPathComponent("record.txt")
+        AppEnvironment.shared.toolExecutableURL = try FakeToolScripts.exportPDF(slides: 3, recordingTo: record)
+        window.revealInFinder = { _ in }
+        controller.editor.insertText("edited before the export ", replacementRange: NSRange(location: controller.editor.hiddenLength, length: 0))
+        window.exportPDF(nil)
+        let sheet = try await exportSheet(window)
+        sheet.exportButton.performClick(nil)
+        try await waitUntil(timeout: 20, "the sheet to finish") { window.window?.attachedSheet == nil }
+        let read = try String(contentsOf: URL(fileURLWithPath: record.path + ".deck"), encoding: .utf8)
+        XCTAssertTrue(read.contains("edited before the export"), "tap read the saved buffer")
     }
 
     func testASlideFailsDuringExport() async throws {
@@ -112,21 +151,22 @@ final class ExportPDFTests: HostedTestCase {
     func testCancelAnExport() async throws {
         let (_, window, _) = try await openSevenSlides()
         let record = try Fixtures.temporaryFolder().appendingPathComponent("record.txt")
-        AppEnvironment.shared.toolExecutableURL = try FakeToolScripts.exportPDF(slides: 40, secondsPerSlide: 0.5, recordingTo: record)
+        // After SIGINT the fake prints two more render lines, as tap finishes the slide in flight.
+        AppEnvironment.shared.toolExecutableURL = try FakeToolScripts.exportPDF(slides: 40, secondsPerSlide: 0.5, renderLinesAfterInterrupt: 2, recordingTo: record)
         var revealed: [URL] = []
         window.revealInFinder = { revealed.append($0) }
         window.exportPDF(nil)
         let sheet = try await exportSheet(window)
+        let states = recordStates(window)
         sheet.exportButton.performClick(nil)
         try await waitUntil(timeout: 10, "rendering") { self.isRunning(sheet, statusPrefix: "Rendering slide") }
         XCTAssertFalse(window.canStartATalk, "no talk while the export reads the file")
+        let beforeCancel = states().count
         sheet.cancelButton.performClick(nil)
         XCTAssertEqual(sheet.statusLabel.stringValue, "Cancelling…")
         XCTAssertFalse(sheet.cancelButton.isEnabled)
-        // The fake prints a render line every half second and acts on SIGINT after its sleep: the label holds.
-        try await Task.sleep(nanoseconds: 700_000_000)
-        XCTAssertEqual(sheet.statusLabel.stringValue, "Cancelling…", "later progress lines do not overwrite it")
         try await waitUntil(timeout: 10, "the sheet to close") { window.window?.attachedSheet == nil }
+        XCTAssertEqual(Array(states()[beforeCancel...]), [.running("Cancelling…"), .idle], "the render lines tap prints after SIGINT change nothing")
         let recorded = try String(contentsOf: record, encoding: .utf8)
         XCTAssertTrue(recorded.contains("arguments: export pdf"))
         XCTAssertEqual(revealed, [], "nothing is revealed for a cancelled export")
@@ -182,6 +222,20 @@ final class ExportPDFTests: HostedTestCase {
         try await waitUntil(timeout: 10, "the start to end") { !exportController.isRunning }
         try await Task.sleep(nanoseconds: 1_000_000_000)
         XCTAssertEqual(exportRuns(record), [], "tap never ran for a closed deck")
+    }
+
+    /// Two starts in a row, before the first has reached tap: one run.
+    func testStartingTwiceRunsOnce() async throws {
+        let (_, window, deck) = try await openSevenSlides()
+        let record = try Fixtures.temporaryFolder().appendingPathComponent("record.txt")
+        AppEnvironment.shared.toolExecutableURL = try FakeToolScripts.exportPDF(slides: 2, recordingTo: record)
+        let request = ExportRequest(kind: .pdf(content: "slides"), output: deck.deletingPathExtension().appendingPathExtension("pdf").path)
+        window.exportController.start(request)
+        window.exportController.start(request)
+        try await waitUntil(timeout: 20, "the export to finish") {
+            if case .done = window.exportController.state { return true } else { return false }
+        }
+        XCTAssertEqual(exportRuns(record).count, 1, "the second start found the first still starting")
     }
 
     func testASecondExportPressStartsNoSecondRun() async throws {

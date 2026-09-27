@@ -106,22 +106,43 @@ enum FakeToolScripts {
 
     /// `tap export pdf`: `download` lines first when `downloadLines` is set,
     /// a render line per slide with `secondsPerSlide` between them, the
-    /// warnings for `broken`, then the done line and the file. On SIGINT it
-    /// prints tap's interrupted done line and exits 130, as tap does.
-    static func exportPDF(slides: Int, secondsPerSlide: Double = 0, downloadLines: Int = 0, broken: [(slide: Int, message: String)] = [], recordingTo record: URL) throws -> URL {
+    /// warnings for `broken`, then the done line and the file. It copies
+    /// the deck file as it starts to `record` + ".deck", for what tap read.
+    /// With `gate`, it waits after the first render line until that file
+    /// exists, so a test sees the render state for as long as it needs.
+    /// On SIGINT (which sh acts on once the current sleep ends) it prints
+    /// `renderLinesAfterInterrupt` more render lines a tenth of a second
+    /// apart, as tap finishes the slide in flight, then tap's interrupted
+    /// done line, and exits 130, as tap does.
+    static func exportPDF(slides: Int, secondsPerSlide: Double = 0, downloadLines: Int = 0, broken: [(slide: Int, message: String)] = [],
+                          gate: URL? = nil, renderLinesAfterInterrupt: Int = 0, recordingTo record: URL) throws -> URL {
         let download = (0..<downloadLines).map { index in
             #"echo '{"phase":"download","bytes":\#((index + 1) * 50_000_000),"totalBytes":\#(downloadLines * 50_000_000)}' >&2; sleep 0.2"#
         }.joined(separator: "; ")
         let brokenJSON = jsonText(broken.map { ["slide": $0.slide, "message": $0.message] as [String: Any] })
         let warnings = broken.map { "printf '%s\\n' \(shellQuoted("warning: slide \($0.slide) shows an error card: \($0.message)")) >&2" }.joined(separator: "; ")
+        let interruptRender = renderLinesAfterInterrupt == 0 ? ":" : (1...renderLinesAfterInterrupt).map { index in
+            #"echo "{\"phase\":\"render\",\"done\":$((i + \#(index))),\"total\":\#(slides)}" >&2; sleep 0.1"#
+        }.joined(separator: "; ")
+        let gateWait = gate.map { "[ $i -eq 1 ] && while [ ! -e \(shellQuoted($0.path)) ]; do sleep 0.05; done" } ?? ":"
         // The done line goes out through printf's %s, so no character of the payload is the shell's to read.
         let doneLine = "printf '%s%s%s\\n' \(shellQuoted(#"{"phase":"done","ok":true,"output":"#)) \"$(json_string \"$out\")\" \(shellQuoted(#","pages":\#(slides),"bytes":14,"brokenSlides":\#(brokenJSON)}"#)) >&2"
         return try write("""
           "export pdf")
-            trap 'echo "{\\"phase\\":\\"done\\",\\"ok\\":false,\\"error\\":{\\"code\\":\\"interrupted\\",\\"message\\":\\"interrupted\\"}}" >&2; exit 130' INT
+            interrupted() {
+              \(interruptRender)
+              echo '{"phase":"done","ok":false,"error":{"code":"interrupted","message":"interrupted"}}' >&2
+              exit 130
+            }
+            trap interrupted INT
+            cp "$3" "\(record.path).deck"
             out=""; while [ $# -gt 0 ]; do case "$1" in --output|-o) out="$2"; shift ;; esac; shift; done
             \(download.isEmpty ? ":" : download)
-            i=1; while [ $i -le \(slides) ]; do echo "{\\"phase\\":\\"render\\",\\"done\\":$i,\\"total\\":\(slides)}" >&2; sleep \(secondsPerSlide); i=$((i + 1)); done
+            i=1; while [ $i -le \(slides) ]; do
+              echo "{\\"phase\\":\\"render\\",\\"done\\":$i,\\"total\\":\(slides)}" >&2
+              \(gateWait)
+              sleep \(secondsPerSlide); i=$((i + 1))
+            done
             \(warnings.isEmpty ? ":" : warnings)
             printf 'not a real pdf' > "$out"
             \(doneLine)
