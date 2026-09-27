@@ -270,11 +270,19 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
     /// Writes the buffer to the deck file now, ahead of the autosave, and
     /// reports the outcome. A buffer that equals the file needs no write.
     /// A save the document refuses (a disk conflict is showing) comes back
-    /// as its error and the edit stays in the buffer for the next save.
+    /// as its error and the edit stays in the buffer for the next save. A
+    /// file changed on disk that nobody has reported yet is reported first,
+    /// as an autosave would: an edited buffer gets the conflict bar, and the
+    /// save is refused rather than written over the other program's change.
     func saveNow(completion: @escaping (Error?) -> Void) {
         _ = deckForm.commitEditing()
         guard let document, let url = document.fileURL else { return completion(CocoaError(.fileNoSuchFile)) }
         guard isContentEdited else { return completion(nil) }
+        if document.diskIsNewerThanKnown {
+            diskChanged()
+            if hasDiskConflict { return completion(CocoaError(.userCancelled)) }
+            guard isContentEdited else { return completion(nil) }
+        }
         document.save(to: url, ofType: document.fileType ?? "net.daringfireball.markdown", for: .saveOperation, completionHandler: completion)
     }
 
@@ -323,6 +331,13 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
                 let name = self.pendingToolActionName ?? actionName
                 self.pendingToolActionName = nil
                 switch exit.outcome {
+                case .ok? where self.hasDiskConflict || self.isContentEdited:
+                    // Typing landed while tap ran, or the conflict bar is up: the
+                    // load is the person's choice (Load Disk Version or Keep Mine),
+                    // and Load Disk Version takes the action's name.
+                    self.pendingToolActionName = name
+                    self.diskChanged()
+                    if !self.hasDiskConflict { self.pendingToolActionName = nil }
                 case .ok?:
                     self.loadDiskVersion(actionName: name)
                 case .failed(_, let message)?:
@@ -366,7 +381,11 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
     /// A pick in the theme grid: tap theme set on the saved file. "default"
     /// is the grid's Default cell, which removes the theme line.
     func setTheme(_ slug: String) {
-        guard let deck = document?.fileURL else { return }
+        guard let deck = document?.fileURL else {
+            session.log.append("Change Theme was not run: the deck has no file yet; save it first", source: .app)
+            NSSound.beep()
+            return
+        }
         runToolOnSavedDeck(["theme", "set", slug, deck.path, "--json"], actionName: "Change Theme")
     }
 
@@ -646,7 +665,7 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
         hasDiskConflict = true
         editorViewController.showBar(DocumentBarView(
             kind: .changedOnDisk, message: "\(name) changed on disk.", detail: "You have unsaved edits.",
-            buttons: [("Load Disk Version", { [weak self] in self?.loadDiskVersion() }),
+            buttons: [("Load Disk Version", { [weak self] in self?.loadDiskVersion(actionName: self?.pendingToolActionName ?? "Load Disk Version") }),
                       ("Keep Mine", { [weak self] in self?.keepMine() })]))
     }
 
@@ -656,6 +675,7 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
     /// the moment the replacement lands, rather than staying edited until
     /// the next autosave.
     func loadDiskVersion(actionName: String = "Load Disk Version") {
+        pendingToolActionName = nil
         clearDiskConflict()
         guard let document, let url = document.fileURL,
               let disk = try? String(contentsOf: url, encoding: .utf8) else { return }
@@ -677,6 +697,7 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
 
     /// Writes the buffer over the changed file.
     func keepMine() {
+        pendingToolActionName = nil
         clearDiskConflict()
         document?.overwriteDisk { [weak self] error in
             if let error { self?.session.log.append("Keep Mine could not save: \(error.localizedDescription)", source: .app) }
