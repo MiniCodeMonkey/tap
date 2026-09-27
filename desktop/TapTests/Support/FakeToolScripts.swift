@@ -13,7 +13,12 @@ import Foundation
 /// variable: `${GEMINI_API_KEY:+set}` records the word set.
 @MainActor
 enum FakeToolScripts {
-    static let selfKill = "(sleep 300; kill -9 $$) </dev/null >/dev/null 2>&1 &"
+    /// The five-minute watchdog: it checks each second that the script (or
+    /// the tap it became through exec) is still running, and ends with it,
+    /// so no watchdog outlives its run and none can reach a process that
+    /// took the pid later. After five minutes it kills the run, if the pid
+    /// still names a tap.
+    static let selfKill = #"(i=0; while [ $i -lt 300 ] && kill -0 $$ 2>/dev/null; do sleep 1; i=$((i + 1)); done; [ $i -ge 300 ] && ps -p $$ -o command= | grep -q tap && kill -9 $$) </dev/null >/dev/null 2>&1 &"#
 
     static func write(_ body: String, recordingTo record: URL) throws -> URL {
         let url = try Fixtures.temporaryFolder().appendingPathComponent("tap")
