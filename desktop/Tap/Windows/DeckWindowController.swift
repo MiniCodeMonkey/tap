@@ -413,11 +413,23 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
         sheet.onGenerate = { [weak self, weak sheet] request in
             guard let self, let sheet else { return }
             self.sessionController.generateImage(prompt: request.prompt, aspect: request.aspect, matchTheme: request.matchTheme) { [weak self, weak sheet] outcome in
-                guard let sheet else { return }
+                // No answer is a refused save (nothing ran) or a tap that did not answer; the Tap Log says which.
+                let message: String
+                switch outcome {
+                case .ok?: message = ""
+                case .failed(_, let tapsMessage)?: message = tapsMessage
+                case nil: message = "Generate Image did not finish; see the Tap Log"
+                }
+                guard let sheet, sheet.sheetParent != nil else {
+                    // The sheet was cancelled while tap ran: a failure shows on the bar.
+                    if case .ok? = outcome { return }
+                    self?.sessionController.showToolError(actionName: "Generate Image", message: message)
+                    return
+                }
                 switch outcome {
                 case .ok?: self?.window?.endSheet(sheet, returnCode: .OK)
-                case .failed(let code, let message)?: sheet.showError(message, code: code)
-                case nil: sheet.showError("tap did not answer; see the Tap Log", code: "failed")
+                case .failed(let code, _)?: sheet.showError(message, code: code)
+                case nil: sheet.showError(message, code: "failed")
                 }
             }
         }

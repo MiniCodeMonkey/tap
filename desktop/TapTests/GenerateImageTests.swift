@@ -164,4 +164,30 @@ final class GenerateImageTests: HostedTestCase {
         XCTAssertTrue(try String(contentsOf: record, encoding: .utf8).contains("gemini: \n"), "no key was set")
         sheet.cancelButton.performClick(nil)
     }
+
+    /// Cancel on the sheet while tap runs closes the sheet; tap's failure
+    /// then shows on the bar, since the sheet is gone.
+    func testAFailureAfterTheSheetIsCancelledShowsOnTheBar() async throws {
+        let record = try Fixtures.temporaryFolder().appendingPathComponent("record.txt")
+        AppEnvironment.shared.toolExecutableURL = try FakeToolScripts.write("""
+          "image generate")
+            sleep 1
+            printf '{"ok": false, "error": {"code": "generation_failed", "message": "the model refused the prompt"}}\\n'
+            exit 1 ;;
+        """, recordingTo: record)
+        let document = try await openDeck(try Fixtures.copyDeck("seven-slides.md"))
+        try await waitForBoxes(document, count: 7)
+        let controller = try XCTUnwrap(document.sessionController)
+        let window = try XCTUnwrap(document.windowControllers.first as? DeckWindowController)
+        window.generateImage(nil)
+        try await waitUntil(timeout: 5, "the sheet") { window.window?.attachedSheet is GenerateImageSheet }
+        let sheet = try XCTUnwrap(window.window?.attachedSheet as? GenerateImageSheet)
+        sheet.promptView.insertText("a fox", replacementRange: sheet.promptView.selectedRange())
+        sheet.generateButton.performClick(nil)
+        sheet.cancelButton.performClick(nil)
+        try await waitUntil(timeout: 5, "the sheet to close") { window.window?.attachedSheet == nil }
+        try await waitUntil(timeout: 20, "tap's failure on the bar") { controller.editorViewController.bar(.toolFailed) != nil }
+        XCTAssertEqual(controller.editorViewController.bar(.toolFailed)?.message, "Generate Image failed.")
+        XCTAssertEqual(controller.editorViewController.bar(.toolFailed)?.detail, "the model refused the prompt")
+    }
 }
