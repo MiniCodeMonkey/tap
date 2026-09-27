@@ -21,7 +21,7 @@
 - Everything in D2's to D6's Global Constraints still holds: macOS 14 or later, AppKit core, the bundled `tap` from `build-tap.sh`, spelled-out identifiers, present-tense comments with no ticket references, no em dashes anywhere (`--`, a comma or a new sentence instead), `make frontend` before the first Xcode build, every Xcode build through `make`.
 - **THE PERSON'S RULE (2026-09-25): nothing runs locally that opens windows on their screen.** Allowed locally: `make -C desktop project`, `build`, `test-build`, `bench-build`, `core-test`, `check-scenarios`, `check-release-hooks`, `go test`, every `desktop/scripts/*-test.sh`, `make -C desktop release-tests`, `make -C desktop release-build`, `make -C desktop check-release-app-hooks` and `make -C desktop release VERSION=0.0.0-dev` (builds, signs ad-hoc, writes the DMG and the appcast, launches nothing; `hdiutil attach -nobrowse` mounts without a Finder window; the bundled `tap --version` is a command line run). Never: `make -C desktop test`, `ONLY=...`, `uitest`, `bench`, `open Tap.app`, `open Tap.dmg`, `spctl --assess` on a launch, or `stapler` outside the release script. Hosted tests (`UpdaterTests`, `SettingsUpdatesTests`) run on CI: every "Run" step that names one says what the controller's CI run confirms.
 - **THE SECRETS RULE.** No secret is written into the repository, a log, a workflow summary, a test, a fixture or a release artifact. Every script that takes a secret reads it from the environment (`APPLE_DEVELOPER_ID_APPLICATION_P12`, `APPLE_DEVELOPER_ID_APPLICATION_PASSWORD`, `APPLE_NOTARY_KEY`, `APPLE_NOTARY_KEY_ID`, `APPLE_NOTARY_ISSUER_ID`, `SPARKLE_PRIVATE_KEY`, `HOMEBREW_TAP_TOKEN`) or through a pipe into standard input; a secret that must be a file (the `.p8` key, the `.p12`) is written with `umask 077` into a `mktemp -d` folder that an `EXIT` trap removes; the temporary keychain is deleted by a trap set before the import starts, and again by a workflow step that runs `if: always()`. No script uses `set -x`; no script echoes a variable that holds a secret; `security`, `notarytool` and `git` are run with their output filtered to what is not secret (the identity's name, the submission id and status, the commit hash). The workflow passes secrets only through `env:`, only to the one step that runs `release.sh`, and never in `run:` text; the build step before it has none. A step that finds its secret empty prints exactly one line, `skipped: <what> (<SECRET_NAME> is not set)`, appends it to `release-summary.md`, and exits 0; nothing else about that step happens. Two exposures are accepted and named: the `.p12` password is an argument of `security import -P` and the Homebrew token is a git config value for the length of one clone, on a single-tenant runner.
-- **NOTHING UN-NOTARIZED OR UNSIGNED IS OFFERED TO A PERSON (the person, 2026-09-27).** `release.sh` records `notarized=yes|no` and `feed_signed=yes|no` in `release-state.env`. A DMG that was not notarized is named `Tap-<version>-unnotarized.dmg`, never `Tap-<version>.dmg`, wherever it goes. The appcast is written as `appcast.xml` only when the DMG, the notes and the feed itself carry EdDSA signatures; otherwise it is `appcast-unsigned.xml` and stays out of the release. The cask is pushed only for a notarized final. A release becomes GitHub's `latest` only once its signed feed is uploaded (or when no earlier release ever carried a feed), so `SUFeedURL` never answers 404 between the CLI and the desktop jobs. The app requires a signed feed (`SURequireSignedFeed`, `SUVerifyUpdateBeforeExtraction`), so a feed that slips through unsigned is refused before anything is shown.
+- **NOTHING UN-NOTARIZED OR UNSIGNED IS OFFERED TO A PERSON (the person, 2026-09-27).** `release.sh` records `notarized=yes|no` and `feed_signed=yes|no` in `release-state.env`. A DMG that was not notarized is named `Tap-<version>-unnotarized.dmg`, never `Tap-<version>.dmg`, and never becomes a release asset: the job keeps it as a workflow artifact (the same seven days as the dry run's) and the summary says where it is (the controller's ruling on open question 9, 2026-09-27). The appcast is written as `appcast.xml` only when the DMG, the notes and the feed itself carry EdDSA signatures; otherwise it is `appcast-unsigned.xml` and stays out of the release. The cask is pushed only for a notarized final. A release becomes GitHub's `latest` only once its signed feed is uploaded (or when no earlier release ever carried a feed), so `SUFeedURL` never answers 404 between the CLI and the desktop jobs. The app requires a signed feed (`SURequireSignedFeed`, `SUVerifyUpdateBeforeExtraction`), so a feed that slips through unsigned is refused before anything is shown.
 - **Ad-hoc is the default everywhere.** `codesign --sign -` when no identity is found; `sign-app.sh` is the one place that signs, and a dry run and a real run take the same path through it with a different identity. The release build must still pass the hook check: `make -C desktop check-release-app-hooks` proves `approvalAnswerForTests` is in neither the symbol table nor the strings of the Release binary and a known string (`TapExecutablePath`) is, so a stripped or renamed binary cannot pass by being empty. (`TapDefaultsSuite`, `TapConfigHome`, `TapOpenOnLaunch` and `TapExecutablePath` are launch arguments the UI tests pass and are in every build by design; they read nothing a person did not put on the command line.) `verify-release.sh` fails when a Release product carries `Contents/PlugIns`, an `XCTest*` framework or `libXCTest*`.
 - **Apple silicon only.** `ARCHS: arm64` in the Release configuration; `build-tap.sh` builds tap for `GOARCH=arm64` when `ARCHS` names one architecture; the cask says `depends_on arch: :arm64`; the appcast item carries `<sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>` (Sparkle 2.9 or later refuses to offer it on an Intel Mac); `verify-release.sh` checks `lipo -archs` gives exactly `arm64` for `Contents/MacOS/Tap` and `Contents/Resources/tap`, and that `Contents/Resources/tap --version` prints `tap version <version>`.
 - **The hardened runtime needs the microphone entitlement.** `desktop/Tap/Tap.entitlements` holds `com.apple.security.device.audio-input`; `project.yml` sets `CODE_SIGN_ENTITLEMENTS` and `NSMicrophoneUsageDescription`; `sign-app.sh` signs the app with the entitlements (nested code gets none of its own); `verify-release.sh` reads them back. CI cannot prove a recording under the hardened runtime (the hosted tests use a fake recorder and Debug has no hardened runtime), so the README's manual pass gains one real recording with sound from the first notarized DMG.
@@ -36,7 +36,7 @@
 
 Five conditions the spec implies that no scenario names, most likely to bite first. Each has its test pinned to the task that owns the code.
 
-1. **A release with some secrets but not others.** The certificate without the notary key, the notary key without the Sparkle key, the token without any of them. Each missing secret must skip its own step and nothing else, the un-notarized DMG must be named so, no feed may go out unsigned, and no cask may point at an un-notarized DMG. Task 7b, `release-test.sh` (the no-secrets run: five files, the `-unnotarized` name, `appcast-unsigned.xml`, seven `skipped:` lines) and `verify-release-test.sh` (signed but not notarized passes; "notarized" without a ticket fails); Task 6, `publish-cask-test.sh` (the token alone does not push); Task 8's `release-dry-run` CI job against the real app.
+1. **A release with some secrets but not others.** The certificate without the notary key, the notary key without the Sparkle key, the token without any of them. Each missing secret must skip its own step and nothing else, the un-notarized DMG must be named so and stay off the release, no feed may go out unsigned, no cask may point at an un-notarized DMG, and a rejected notarization must stop everything. Task 7b, `release-test.sh` (the no-secrets run: five files, the `-unnotarized` name, `appcast-unsigned.xml`, seven `skipped:` lines; the certificate-only run: the skip line names `APPLE_NOTARY_KEY`, the state sources under `bash -e`; the all-secrets run; the rejected run stops with no state) and `verify-release-test.sh` (signed but not notarized passes; "notarized" without a ticket fails); Task 6, `publish-cask-test.sh` (the token alone does not push); Task 8's `release-dry-run` CI job against the real app.
 2. **An update found before a talk that would prompt during it, and an install begun before Play.** A background check that starts a minute before Play finishes during the talk; a download the person started finishes during it. Task 3, `UpdaterTests.testAnUpdateFoundDuringATalkIsDropped` (the delegate's `shouldProceedWithUpdate` throws while presenting), `testPlayWaitsForAnUpdateInProgress` (Play shows the bar and starts nothing while a session is in progress) and `UpdateGateTests.testAFoundUpdateIsDroppedWhilePresenting`.
 3. **A relaunch postponed by a talk.** It must run when the talk has ended and its windows are down, exactly once, never mid-transition, and a second talk before it ran must not run it twice or lose it. Task 3, `UpdateGateTests.testAPostponedRelaunchRunsOnceWhenTheTalkEnds` and `UpdaterTests.testAPostponedRelaunchRunsWhenTheTalkWindowsAreDown`.
 4. **A pre-release build number.** `2.0.0-beta.7` must sort below `2.0.0-rc.1`, which must sort below `2.0.0` (the repository's own tag history), and above `1.9.9`; a version the regex refuses must fail the build, not produce `0`. Task 1, `build-number-test.sh`.
@@ -60,7 +60,7 @@ Five conditions the spec implies that no scenario names, most likely to bite fir
 | Cask | `Casks/tap-desktop.rb` rendered into the output folder | the same, pushed to `Casks/tap-desktop.rb` in the tap only for a notarized final | `render-cask.sh`, `publish-cask.sh` |
 | Verify | archs, `tap --version`, entitlements, plist keys, no test code, `codesign --verify --deep --strict`, `hdiutil verify`, `xmllint`, the feed names the same build | the same plus, when notarized, `spctl --assess` on the DMG and `stapler validate` on both, and the feed's signature block | `verify-release.sh` |
 | State | `release-state.env`: `notarized=no`, `feed_signed=no`, the file names | `notarized=yes`, `feed_signed=yes` | `release.sh` |
-| Publish | nothing | notarized: `gh release upload` the DMG and its checksum, then the notes, then the feed (signed only); not notarized: the `-unnotarized` DMG alone | `release.yml` |
+| Publish | nothing | notarized: `gh release upload` the DMG and its checksum, then the notes, then the feed (signed only); not notarized: nothing reaches the release, the `-unnotarized` DMG is a workflow artifact | `release.yml` |
 | Latest | nothing | a final becomes `latest` once its feed is up, or when no earlier release ever had one | `mark-latest.sh` |
 | Summary | `release-summary.md` lists every step as done or skipped | the same, into `$GITHUB_STEP_SUMMARY`, on success and on failure | `release.sh` |
 
@@ -588,12 +588,13 @@ Mutations, applied locally and reverted: drop `--options runtime` from the ad-ho
 - Create: `desktop/Tap/App/UpdateController.swift`
 - Modify: `desktop/Tap/App/AppDelegate.swift` (`updateController`, `applicationWillFinishLaunching`, `applicationDidFinishLaunching`, `checkForUpdates(_:)`, `validateMenuItem`)
 - Modify: `desktop/Tap/App/MainMenu.swift` (`tapMenu`: Check for Updates… gets its action)
-- Modify: `desktop/Tap/Windows/DeckWindowController.swift` (`startPresenting`: refused while an update session is in progress; `showTalkNotStarted(reason:)` factored out of `startAfterTheHint`)
+- Modify: `desktop/Tap/Windows/DeckWindowController.swift` (`startPresenting` and `startAfterTheHint`: refused while an update session is in progress; `showTalkNotStarted(reason:)` factored out of `startAfterTheHint`)
+- Modify: `desktop/Tap/Documents/DocumentBar.swift` (`DocumentBarView.detail` is kept, as `message` is, so a test can read the reason)
 - Create: `desktop/TapTests/UpdaterTests.swift`
 
 **Interfaces:**
 - Consumes: `AppEnvironment.shared.updatesMayInterrupt`, `isPresenting`, `presentingDidChangeNotification` (posted by `noteTalkStarted`, `noteTalkEnded` and `noteTalkWindowsWentDown`), `endingTalks` (D4); `PresentationController.isEnding`, `windowsGoingDown`, `PresentationWindow.anyIsBusyWithFullScreen` (D4); `DeckDocument.sessionController?.presentationIfCreated` (D4); `DocumentBarView(kind: .talkNotStarted, ...)`, `editorViewController.showBar`, `bar(_:)` (D4); `PresentingTestCase.openDeckForPresenting`, `startPresenting`, `stopPresenting` (D4); D6's `menu.addItem(item("Check for Updates…", action: nil))` in `MainMenu.tapMenu`; Sparkle 2.10.0's `SPUStandardUpdaterController(startingUpdater:updaterDelegate:userDriverDelegate:)`, `startUpdater()`, `checkForUpdates(_:)`, `updater`, `SPUUpdater.canCheckForUpdates`, `sessionInProgress`, `automaticallyChecksForUpdates`, `SPUUpdaterDelegate.updater(_:mayPerform:) throws`, `updater(_:shouldProceedWithUpdate:updateCheck:) throws`, `updater(_:shouldPostponeRelaunchForUpdate:untilInvokingBlock:) -> Bool`, `SUAppcastItem.empty()`.
-- Produces: `UpdateGate` (`mayCheck(mayInterrupt:) -> Bool`, `mayProceed(mayInterrupt:) -> Bool`, `shouldPostponeRelaunch(mayInterrupt:resume:) -> Bool`, `resumePostponedRelaunch()`, `postponedRelaunch: (() -> Void)?`, `static updaterMayStart(bundleVersion:isHostedByTests:hasTestDefaultsSuite:) -> Bool`, `static let presentingMessage`, `static let updateInProgressMessage`, `UpdateGate.PresentingError`); `UpdateController` (`gate`, `controller`, `updater`, `isStarted`, `startIfAllowed()`, `checkForUpdates(_:)`, `canCheckForUpdates`, `isUpdateSessionInProgress: () -> Bool` (a seam), `talkWindowsAreDown`, `static isHostedByTests`, `static hasTestDefaultsSuite`, `static runsUnderTests`, `static bundleVersion`); `AppDelegate.updateController`, `AppDelegate.checkForUpdates(_:)`; `DeckWindowController.showTalkNotStarted(reason:)`. Task 10's checkbox reads `updateController.updater.automaticallyChecksForUpdates`.
+- Produces: `UpdateGate` (`mayCheck(mayInterrupt:) -> Bool`, `mayProceed(mayInterrupt:) -> Bool`, `shouldPostponeRelaunch(mayInterrupt:resume:) -> Bool`, `resumePostponedRelaunch()`, `postponedRelaunch: (() -> Void)?`, `static updaterMayStart(bundleVersion:isHostedByTests:hasTestDefaultsSuite:) -> Bool`, `static let presentingMessage`, `static let updateInProgressMessage`, `UpdateGate.PresentingError`); `UpdateController` (`gate`, `controller`, `updater`, `isStarted`, `startIfAllowed()`, `checkForUpdates(_:)`, `canCheckForUpdates`, `isUpdateSessionInProgress: () -> Bool` (a seam), `talkWindowsAreDown`, `static isHostedByTests`, `static hasTestDefaultsSuite`, `static runsUnderTests`, `static bundleVersion`); `AppDelegate.updateController`, `AppDelegate.checkForUpdates(_:)`; `DeckWindowController.showTalkNotStarted(reason:)`; `DocumentBarView.detail: String`. Task 10's checkbox reads `updateController.updater.automaticallyChecksForUpdates`.
 
 - [ ] **Step 1: Write the failing Core tests**
 
@@ -673,7 +674,7 @@ import Foundation
 /// when the last talk is down.
 public final class UpdateGate {
     public static let presentingMessage = "Tap does not check for updates during a talk."
-    public static let updateInProgressMessage = "An update is installing. Let it finish, or quit the update, then press Play again."
+    public static let updateInProgressMessage = "Sparkle is checking for or installing an update. Let it finish, or close its window, then press Play again."
 
     /// What Sparkle's delegate throws to refuse a check or a found update
     /// while a talk runs. Sparkle shows the message in its own alert for a
@@ -839,7 +840,7 @@ final class UpdaterTests: PresentingTestCase {
 }
 ```
 
-Note: `SUAppcastItem.empty()` is Sparkle's `+emptyAppcastItem`, which the review typechecked against 2.10.0. `DocumentBarView.detail` is D4's (the reason line); if it is named otherwise on `main`, read that property. TapTests finds the `Sparkle` module through `BUILT_PRODUCTS_DIR` (the review's typecheck used an explicit `-F`); if CI's build of `TapTests` cannot find it, add `- package: Sparkle` with `link: false` to the `TapTests` target's dependencies in `project.yml` and never embed a second copy.
+Note: `SUAppcastItem.empty()` is Sparkle's `+emptyAppcastItem`, which the review typechecked against 2.10.0. `DocumentBarView` on `main` keeps `kind` and `message` and takes `detail` only as an `init` parameter; Step 7 stores it. TapTests finds the `Sparkle` module through `BUILT_PRODUCTS_DIR` (the review's typecheck used an explicit `-F`); if CI's build of `TapTests` cannot find it, add `- package: Sparkle` with `link: false` to the `TapTests` target's dependencies in `project.yml` and never embed a second copy.
 
 - [ ] **Step 6: Build to verify they fail**
 
@@ -946,9 +947,17 @@ final class UpdateController: NSObject, SPUUpdaterDelegate {
 
     /// Talks change in three steps (started, ended, windows down), each
     /// posting the same notification; the postponed relaunch waits for the
-    /// last one.
+    /// last one. A talk whose deck closed during its ending leaves
+    /// `endingTalks` one run-loop turn after its windows-down notification,
+    /// so the check runs again on the next turn.
     private func presentingChanged() {
-        if talkWindowsAreDown { gate.resumePostponedRelaunch() }
+        if talkWindowsAreDown { gate.resumePostponedRelaunch(); return }
+        DispatchQueue.main.async { [weak self] in
+            MainActor.assumeIsolated {
+                guard let self, self.talkWindowsAreDown else { return }
+                self.gate.resumePostponedRelaunch()
+            }
+        }
     }
 
     // MARK: SPUUpdaterDelegate
@@ -988,6 +997,8 @@ and in `validateMenuItem`, before the final `return true`:
 
 In `MainMenu.tapMenu`, D6's `menu.addItem(item("Check for Updates…", action: nil))` becomes `menu.addItem(item("Check for Updates…", action: #selector(AppDelegate.checkForUpdates(_:))))`. If D6 has not merged, add the item after `About Tap` and a separator, as D6's Task 12 does.
 
+In `desktop/Tap/Documents/DocumentBar.swift`, `DocumentBarView` gains `let detail: String`, assigned from the `init` parameter beside `message` (the label it feeds is unchanged), so a test can read the reason a bar gives.
+
 In `DeckWindowController.swift`, factor the bar out of `startAfterTheHint` into a method the guard at Play uses too:
 
 ```swift
@@ -1002,16 +1013,20 @@ In `DeckWindowController.swift`, factor the bar out of `startAfterTheHint` into 
     }
 ```
 
-`startAfterTheHint`'s `guard presentation.canStart else { ... }` body becomes `showTalkNotStarted(reason: reason); return` after computing `reason` as today. At the top of `startPresenting(_:savingSettings:)`, before anything else:
+`startAfterTheHint`'s `guard presentation.canStart else { ... }` body becomes `showTalkNotStarted(reason: reason); return` after computing `reason` as today. One guard, in a method both entry points call first: at the top of `startPresenting(_:savingSettings:)` and at the top of `startAfterTheHint(_:)` (the Focus hint's Not Now path reaches `presentation.start` through it, and an update session can begin while the hint is up):
 
 ```swift
-        // An update Sparkle is downloading or ready to install would put its
-        // windows over the talk; the person finishes or quits it first.
-        if (NSApp.delegate as? AppDelegate)?.updateController.isUpdateSessionInProgress() == true {
-            showTalkNotStarted(reason: UpdateGate.updateInProgressMessage)
-            return
-        }
+    /// An update Sparkle is checking for, downloading or ready to install
+    /// would put its windows over the talk; the person lets it finish or
+    /// quits it first. True when the talk was refused and the bar shown.
+    private func refusedForAnUpdateSession() -> Bool {
+        guard (NSApp.delegate as? AppDelegate)?.updateController.isUpdateSessionInProgress() == true else { return false }
+        showTalkNotStarted(reason: UpdateGate.updateInProgressMessage)
+        return true
+    }
 ```
+
+with `if refusedForAnUpdateSession() { return }` as the first line of each. `sessionInProgress` is also true for the second or two a scheduled check fetches the feed and while an unanswered update alert is open, so the message names all three states; a downloaded update deferred to quit is not a session, so Play is never blocked for good.
 
 - [ ] **Step 8: Build, sign with Sparkle present, and hand the hosted tests to CI**
 
@@ -1021,11 +1036,11 @@ Expected: everything compiles; `no test-only hook` twice; `signed ... ad-hoc` wi
 - [ ] **Step 9: Commit**
 
 ```bash
-git add desktop/project.yml desktop/TapDesktopCore/Sources/TapDesktopCore/UpdateGate.swift desktop/TapDesktopCore/Tests/TapDesktopCoreTests/UpdateGateTests.swift desktop/Tap/App/UpdateController.swift desktop/Tap/App/AppDelegate.swift desktop/Tap/App/MainMenu.swift desktop/Tap/Windows/DeckWindowController.swift desktop/TapTests/UpdaterTests.swift
+git add desktop/project.yml desktop/TapDesktopCore/Sources/TapDesktopCore/UpdateGate.swift desktop/TapDesktopCore/Tests/TapDesktopCoreTests/UpdateGateTests.swift desktop/Tap/App/UpdateController.swift desktop/Tap/App/AppDelegate.swift desktop/Tap/App/MainMenu.swift desktop/Tap/Windows/DeckWindowController.swift desktop/Tap/Documents/DocumentBar.swift desktop/TapTests/UpdaterTests.swift
 git commit -m "feat(desktop): Sparkle updates through the standard UI, held back by every talk"
 ```
 
-Mutations, each a patch in `mutations-a/`, the ones that could interrupt a talk first: in `updater(_:mayPerform:)`, drop the guard (`Test: TapTests/UpdaterTests/testNoCheckDuringATalk`; expected: fails on `XCTAssertThrowsError`); in `updater(_:shouldProceedWithUpdate:updateCheck:)`, drop the guard (`Test: .../testAnUpdateFoundDuringATalkIsDropped`; expected: fails on the throw); in `updater(_:shouldPostponeRelaunchForUpdate:untilInvokingBlock:)`, return `false` always (`Test: .../testAPostponedRelaunchRunsWhenTheTalkWindowsAreDown`; expected: fails on `XCTAssertTrue`); in `presentingChanged`, drop the call (expected: the same test times out on "the postponed relaunch"); in `talkWindowsAreDown`, drop the `isEnding` scan (into `survivors-a/` when the windows are already down by the time the state turns `.idle` on the runner; the test's conditional assertion says which); in `DeckWindowController.startPresenting`, drop the update-session guard (`Test: .../testPlayWaitsForAnUpdateInProgress`; expected: fails on `.idle`); in `startIfAllowed`, drop the `updaterMayStart` guard (`Test: .../testTheUpdaterNeverStartsUnderTests`; expected: fails on `isStarted`; on the runner Sparkle may also show its permission alert, which the test does not need); in `AppDelegate.validateMenuItem`, return `true` for the item (`Test: .../testCheckForUpdatesIsInTheTapMenu`; expected: fails). Core mutations, run locally and reverted: in `UpdateGate.resumePostponedRelaunch`, keep `postponedRelaunch` (`testAPostponedRelaunchRunsOnceWhenTheTalkEnds` fails on "run once"); in `updaterMayStart`, drop the `0.0.0` check (`testTheUpdaterStartsOnlyInAReleaseOutsideTests` fails).
+Mutations, each a patch in `mutations-a/`, the ones that could interrupt a talk first: in `updater(_:mayPerform:)`, drop the guard (`Test: TapTests/UpdaterTests/testNoCheckDuringATalk`; expected: fails on `XCTAssertThrowsError`); in `updater(_:shouldProceedWithUpdate:updateCheck:)`, drop the guard (`Test: .../testAnUpdateFoundDuringATalkIsDropped`; expected: fails on the throw); in `updater(_:shouldPostponeRelaunchForUpdate:untilInvokingBlock:)`, return `false` always (`Test: .../testAPostponedRelaunchRunsWhenTheTalkWindowsAreDown`; expected: fails on `XCTAssertTrue`); in `presentingChanged`, drop both calls (expected: the same test times out on "the postponed relaunch"); in `presentingChanged`, drop the deferred check (into `survivors-a/`: only a deck closed during its talk's ending reaches it, which no hosted test stages); in `talkWindowsAreDown`, drop the `isEnding` scan (into `survivors-a/` when the windows are already down by the time the state turns `.idle` on the runner; the test's conditional assertion says which); in `DeckWindowController.startPresenting`, drop the update-session guard (`Test: .../testPlayWaitsForAnUpdateInProgress`; expected: fails on `.idle`); in `startAfterTheHint`, drop it (into `survivors-a/`: the hosted tests open with the Focus hint marked shown, so Not Now is not on their path; D4's `FocusHintTests.testNotNowStartsTheTalk` keeps the path itself working); in `startIfAllowed`, drop the `updaterMayStart` guard (`Test: .../testTheUpdaterNeverStartsUnderTests`; expected: fails on `isStarted`; on the runner Sparkle may also show its permission alert, which the test does not need); in `AppDelegate.validateMenuItem`, return `true` for the item (`Test: .../testCheckForUpdatesIsInTheTapMenu`; expected: fails). Core mutations, run locally and reverted: in `UpdateGate.resumePostponedRelaunch`, keep `postponedRelaunch` (`testAPostponedRelaunchRunsOnceWhenTheTalkEnds` fails on "run once"); in `updaterMayStart`, drop the `0.0.0` check (`testTheUpdaterStartsOnlyInAReleaseOutsideTests` fails).
 
 ---
 
@@ -1414,6 +1429,17 @@ out=$("$script" notes "$root/Tap.md" 2>"$root/err") || { echo "notes should succ
 [ ! -s "$root/out" ] || { echo "feed should print nothing, got '$(cat "$root/out")'"; exit 1; }
 grep -q 'sparkle-signatures:' "$root/appcast.xml" || { echo "feed should be signed in place"; exit 1; }
 
+# A sign_update that says it signed the feed but left no signature block
+# fails the feed mode.
+cat > "$root/tools-2.10.0/bin/sign_update" <<'FAKE'
+#!/bin/sh
+cat > /dev/null
+exit 0
+FAKE
+printf '<?xml version="1.0"?><rss/>\n' > "$root/silent.xml"
+if "$script" feed "$root/silent.xml" >/dev/null 2>"$root/err"; then echo "a feed left without its block should fail"; exit 1; fi
+grep -q 'carries no signature block' "$root/err" || { echo "the feed failure should say why: $(cat "$root/err")"; exit 1; }
+
 # A sign_update that fails fails the script, without the key in the output.
 cat > "$root/tools-2.10.0/bin/sign_update" <<'FAKE'
 #!/bin/sh
@@ -1532,7 +1558,7 @@ git add desktop/scripts/fetch-sparkle-tools.sh desktop/scripts/sparkle-sign.sh d
 git commit -m "build(desktop): the Sparkle appcast from the app's own plist, with the DMG, the notes and the feed signed when the key is present"
 ```
 
-Mutations, applied locally and reverted: in `write-appcast.sh`, always write the signature attribute (`write-appcast-test.sh` fails on "must carry no signature attribute"); drop the `hardwareRequirements` line (fails on the arm64 line); read the version from `$2`'s name instead of the plist (fails on `shortVersionString`); in `sparkle-sign.sh`, print the skip line to stdout (`sparkle-sign-test.sh` fails on "should print nothing"); pass the key with `-s` instead of stdin (fails on "the key reached ... the command line"); in `feed`, skip the `sparkle-signatures` check with a stand-in that appends nothing (a survivor with the current stand-in, which always appends; noted).
+Mutations, applied locally and reverted: in `write-appcast.sh`, always write the signature attribute (`write-appcast-test.sh` fails on "must carry no signature attribute"); drop the `hardwareRequirements` line (fails on the arm64 line); read the version from `$2`'s name instead of the plist (fails on `shortVersionString`); in `sparkle-sign.sh`, print the skip line to stdout (`sparkle-sign-test.sh` fails on "should print nothing"); pass the key with `-s` instead of stdin (fails on "the key reached ... the command line"); in `feed`, drop the `sparkle-signatures` check (fails on "a feed left without its block should fail").
 
 ---
 
@@ -2021,8 +2047,8 @@ Mutations, applied locally and reverted: in `signing-identity.sh`, set `imported
 - Modify: `desktop/Makefile` (`RELEASE_DIR`, `release-tests`, `release`, `.PHONY`)
 
 **Interfaces:**
-- Consumes: every script of Tasks 1 to 7a; `scripts/prepare-changelog.sh <version> <changelog> <notes>` (the repository's; reuses a version's existing section, fails when there is none); `TAP_ENTITLEMENTS` (the entitlements `sign-app.sh` gets; default `desktop/Tap/Tap.entitlements`; the tests set their own).
-- Produces: `verify-release.sh <app> <dmg> <appcast> <identity> <version> <notarized yes|no> <feed_signed yes|no>`; `release.sh <version> <app> <output-dir>` writing `Tap-<version>.dmg` or `Tap-<version>-unnotarized.dmg` with its `.sha256`, `Tap-<version>.md` when the changelog has the version's section, `appcast.xml` (signed) or `appcast-unsigned.xml`, `Casks/tap-desktop.rb`, `release-summary.md` and `release-state.env` (`version`, `identity`, `notarized`, `feed_signed`, `dmg`, `checksum`, `notes`, `appcast`, `cask`); `make -C desktop release VERSION=<v>` (output in `build/release`), `make -C desktop release-tests`. Task 8's workflows call `release`, `release-tests` and read the state file.
+- Consumes: every script of Tasks 1 to 7a; `scripts/prepare-changelog.sh <version> <changelog> <notes>` (the repository's; reuses a version's existing section, fails when there is none); `TAP_ENTITLEMENTS` (the entitlements `sign-app.sh` gets; default `desktop/Tap/Tap.entitlements`; the tests set their own); `TAP_RELEASE_IDENTITY` (an identity already in a keychain, used instead of importing one; the tests give a stand-in name with `codesign`, `xcrun` and `spctl` shims on `PATH`, and a person may sign with their own keychain's identity locally).
+- Produces: `verify-release.sh <app> <dmg> <appcast> <identity> <version> <notarized yes|no> <feed_signed yes|no>`; `release.sh <version> <app> <output-dir>` writing `Tap-<version>.dmg` or `Tap-<version>-unnotarized.dmg` with its `.sha256`, `Tap-<version>.md` when the changelog has the version's section, `appcast.xml` (signed) or `appcast-unsigned.xml`, `Casks/tap-desktop.rb`, `release-summary.md` and `release-state.env` (`version`, `notarized`, `feed_signed`, `dmg`, `checksum`, `notes`, `appcast`, `cask`: plain words only, no identity, so `bash -eo pipefail -c 'source release-state.env'` always works); a failed notarization stops `release.sh` with exit 1 and `notarized` never says `yes` before the DMG's own submission was accepted; `make -C desktop release VERSION=<v>` (output in `build/release`), `make -C desktop release-tests`. Task 8's workflows call `release`, `release-tests` and read the state file.
 
 - [ ] **Step 1: Write the failing verifier test**
 
@@ -2208,12 +2234,13 @@ Expected: `verify-release.sh is right`.
 
 ```sh
 #!/bin/sh
-# Checks release.sh with no secret at all against a bundle of its own: the
+# Checks release.sh against a bundle of its own. With no secret at all: the
 # DMG under its -unnotarized name, its checksum, the unsigned appcast under
 # its own name, the cask, the summary and the state file are written; every
 # secret-bearing step is skipped by name; nothing was notarized, signed for
-# Sparkle or pushed; the state says so. This is the dry run, the same path
-# CI takes without secrets.
+# Sparkle or pushed; the state says so (the dry run, the same path CI takes
+# without secrets). Then, with a stand-in identity and shims: the
+# certificate alone, every secret, and a rejected notarization.
 set -eu
 
 here="$(cd "$(dirname "$0")" && pwd)"
@@ -2286,7 +2313,7 @@ for line in \
 	'done: verified the app, the DMG and the appcast'; do
 	grep -Fq "$line" "$root/out/release-summary.md" || { echo "the summary lacks: $line"; cat "$root/out/release-summary.md"; exit 1; }
 done
-for pair in 'version=0.0.0-test' 'identity=-' 'notarized=no' 'feed_signed=no' 'dmg=Tap-0.0.0-test-unnotarized.dmg' 'checksum=Tap-0.0.0-test-unnotarized.dmg.sha256' 'notes=' 'appcast=appcast-unsigned.xml' 'cask=Casks/tap-desktop.rb'; do
+for pair in 'version=0.0.0-test' 'notarized=no' 'feed_signed=no' 'dmg=Tap-0.0.0-test-unnotarized.dmg' 'checksum=Tap-0.0.0-test-unnotarized.dmg.sha256' 'notes=' 'appcast=appcast-unsigned.xml' 'cask=Casks/tap-desktop.rb'; do
 	grep -Fxq "$pair" "$root/out/release-state.env" || { echo "the state lacks: $pair"; cat "$root/out/release-state.env"; exit 1; }
 done
 [ ! -f "$TAP_SIGNING_KEYCHAIN_FILE" ] || { echo "the keychain should be gone"; exit 1; }
@@ -2297,6 +2324,89 @@ env -u APPLE_DEVELOPER_ID_APPLICATION_P12 -u APPLE_NOTARY_KEY -u SPARKLE_PRIVATE
 
 # The version must match the app's own.
 if "$script" 9.9.9 "$app" "$root/out2" >/dev/null 2>&1; then echo "a version the app does not carry should fail"; exit 1; fi
+
+# With a stand-in identity: codesign turns the named identity into ad-hoc
+# and drops the timestamp, xcrun answers notarytool and stapler, spctl
+# accepts, and a stand-in sign_update signs. Three runs: the certificate
+# alone (the state right after enrolment), every secret, and every secret
+# with the notary service rejecting the submission.
+mkdir -p "$root/shims" "$root/tools-2.10.0/bin"
+cat > "$root/shims/codesign" <<'SHIM'
+#!/bin/sh
+next_is_identity=no
+for argument; do
+	if [ "$next_is_identity" = yes ]; then set -- "$@" -; next_is_identity=no; continue; fi
+	case "$argument" in
+		--sign) set -- "$@" --sign; next_is_identity=yes ;;
+		--timestamp) set -- "$@" --timestamp=none ;;
+		*) set -- "$@" "$argument" ;;
+	esac
+	shift
+done
+exec /usr/bin/codesign "$@"
+SHIM
+cat > "$root/shims/xcrun" <<SHIM
+#!/bin/sh
+case "\$1 \$2" in
+	"notarytool submit") printf '{"status":"%s","id":"sub-1"}\n' "\$(cat "$root/notary-status")" ;;
+	"notarytool log") echo "log for sub-1" ;;
+	"stapler staple"|"stapler validate") echo "\$3: stapled (stand-in)" ;;
+	*) exec /usr/bin/xcrun "\$@" ;;
+esac
+SHIM
+printf '#!/bin/sh\necho "accepted (stand-in)"\n' > "$root/shims/spctl"
+cat > "$root/tools-2.10.0/bin/sign_update" <<'FAKE'
+#!/bin/sh
+cat > /dev/null
+for file; do :; done
+case "$*" in
+	*--verify*) exit 0 ;;
+	*" -p "*) echo "QVJDSElWRQ==" ;;
+	*.xml) printf '<!-- sparkle-signatures:\nedSignature: RkVFRA==\nlength: 1\n-->' >> "$file" ;;
+	*) printf 'sparkle:edSignature="Tk9URVM=" sparkle:length="42"\n' ;;
+esac
+FAKE
+chmod +x "$root/shims"/* "$root/tools-2.10.0/bin/sign_update"
+export TAP_RELEASE_IDENTITY="Developer ID Application: Test Person (TEAM123456)"
+export SPARKLE_TOOLS="$root/tools-2.10.0"
+sources() { bash -eo pipefail -c "source '$1/release-state.env' && printf '%s %s %s\n' \"\$notarized\" \"\$feed_signed\" \"\$dmg\""; }
+
+# A: the certificate alone.
+PATH="$root/shims:$PATH" env -u APPLE_NOTARY_KEY -u APPLE_NOTARY_KEY_ID -u APPLE_NOTARY_ISSUER_ID -u SPARKLE_PRIVATE_KEY \
+	"$script" 0.0.0-test "$app" "$root/a" > "$root/log" 2>&1 || { echo "the certificate-only run should succeed"; cat "$root/log"; exit 1; }
+grep -Fq 'done: using the identity Developer ID Application: Test Person (TEAM123456)' "$root/a/release-summary.md" || { echo "A: the identity line"; exit 1; }
+grep -Fq 'skipped: notarization of Tap-0.0.0-test.zip (APPLE_NOTARY_KEY is not set)' "$root/a/release-summary.md" || { echo "A: the app's notarization skip line names the secret"; cat "$root/a/release-summary.md"; exit 1; }
+grep -Fq 'skipped: notarization of Tap-0.0.0-test-unnotarized.dmg (APPLE_NOTARY_KEY is not set)' "$root/a/release-summary.md" || { echo "A: the DMG's notarization skip line names the secret"; exit 1; }
+grep -Fq 'done: signed Tap-0.0.0-test-unnotarized.dmg' "$root/a/release-summary.md" || { echo "A: the DMG is signed"; exit 1; }
+if grep -q '^- $' "$root/a/release-summary.md"; then echo "A: an empty summary line"; exit 1; fi
+[ "$(sources "$root/a")" = "no no Tap-0.0.0-test-unnotarized.dmg" ] || { echo "A: the state does not source: $(sources "$root/a" 2>&1)"; exit 1; }
+if grep -q 'identity=' "$root/a/release-state.env"; then echo "the identity stays out of the state file"; exit 1; fi
+
+# B: every secret, the notary service accepting.
+echo Accepted > "$root/notary-status"
+PATH="$root/shims:$PATH" APPLE_NOTARY_KEY=key APPLE_NOTARY_KEY_ID=id APPLE_NOTARY_ISSUER_ID=issuer SPARKLE_PRIVATE_KEY=bm90LWEta2V5 \
+	"$script" 0.0.0-test "$app" "$root/b" > "$root/log" 2>&1 || { echo "the all-secrets run should succeed"; cat "$root/log"; exit 1; }
+for file in Tap-0.0.0-test.dmg Tap-0.0.0-test.dmg.sha256 appcast.xml Casks/tap-desktop.rb; do
+	[ -f "$root/b/$file" ] || { echo "B: missing $file"; cat "$root/log"; exit 1; }
+done
+[ ! -e "$root/b/appcast-unsigned.xml" ] || { echo "B: no unsigned appcast"; exit 1; }
+grep -Fq 'notarized Tap-0.0.0-test.zip (submission sub-1) and stapled Tap.app' "$root/b/release-summary.md" || { echo "B: the app's notarization line"; exit 1; }
+grep -Fq 'notarized Tap-0.0.0-test.dmg (submission sub-1) and stapled Tap-0.0.0-test.dmg' "$root/b/release-summary.md" || { echo "B: the DMG's notarization line"; exit 1; }
+grep -Fq 'done: wrote appcast.xml (signed)' "$root/b/release-summary.md" || { echo "B: the signed appcast line"; exit 1; }
+grep -q 'sparkle-signatures:' "$root/b/appcast.xml" || { echo "B: the feed is signed"; exit 1; }
+[ "$(sources "$root/b")" = "yes yes Tap-0.0.0-test.dmg" ] || { echo "B: the state does not source: $(sources "$root/b" 2>&1)"; exit 1; }
+
+# C: every secret, the notary service rejecting: the release stops, and
+# nothing says notarized.
+echo Invalid > "$root/notary-status"
+if PATH="$root/shims:$PATH" APPLE_NOTARY_KEY=key APPLE_NOTARY_KEY_ID=id APPLE_NOTARY_ISSUER_ID=issuer SPARKLE_PRIVATE_KEY=bm90LWEta2V5 \
+	"$script" 0.0.0-test "$app" "$root/c" > "$root/log" 2>&1; then echo "a rejected notarization should fail the release"; exit 1; fi
+grep -q "was not accepted (status: Invalid" "$root/log" || { echo "C: the rejection is reported: $(cat "$root/log")"; exit 1; }
+grep -q "nothing is published" "$root/log" || { echo "C: release.sh says it stopped"; exit 1; }
+[ ! -e "$root/c/release-state.env" ] || { echo "C: no state file after a failure"; exit 1; }
+[ ! -e "$root/c/appcast.xml" ] || { echo "C: no appcast after a failure"; exit 1; }
+if grep -q 'notarized' "$root/c/release-summary.md" 2>/dev/null; then echo "C: the summary must not claim notarization"; exit 1; fi
+unset TAP_RELEASE_IDENTITY SPARKLE_TOOLS
 
 echo "release.sh is right"
 ```
@@ -2336,36 +2446,47 @@ state="$out/release-state.env"
 note() { echo "$1"; echo "- $1" >> "$summary"; }
 
 # The keychain goes whatever happens from here on, even before the import
-# has returned.
+# has returned. TAP_RELEASE_IDENTITY names an identity already in a
+# keychain (a person's own, or a test's stand-in) and skips the import.
 trap '"$here/signing-identity.sh" remove; rm -f "$out/identity.log" "$out/sparkle.log"' EXIT
-identity=$("$here/signing-identity.sh" import 2>"$out/identity.log") || { cat "$out/identity.log" >&2; exit 1; }
-if [ "$identity" = "-" ]; then
-	note "$(cat "$out/identity.log")"
+if [ -n "${TAP_RELEASE_IDENTITY:-}" ]; then
+	identity="$TAP_RELEASE_IDENTITY"
+	note "done: using the identity $identity"
 else
-	note "done: found the identity $identity"
+	identity=$("$here/signing-identity.sh" import 2>"$out/identity.log") || { cat "$out/identity.log" >&2; exit 1; }
+	if [ "$identity" = "-" ]; then
+		note "$(cat "$out/identity.log")"
+	else
+		note "done: found the identity $identity"
+	fi
 fi
 
 "$here/sign-app.sh" "$app" "$identity" "$entitlements" >/dev/null
 if [ "$identity" = "-" ]; then note "done: signed $(basename "$app") ad-hoc"; else note "done: signed $(basename "$app") with $identity"; fi
 
 # Notarization needs an identity and the three notary secrets; a DMG
-# without it carries the fact in its name.
+# without it carries the fact in its name. A submission the notary service
+# rejects stops the release here: nothing after this point may pretend.
 notarized=no
+missing_notary_secret=""
+for secret in APPLE_NOTARY_KEY APPLE_NOTARY_KEY_ID APPLE_NOTARY_ISSUER_ID; do
+	eval "value=\${$secret:-}"
+	if [ -z "$value" ] && [ -z "$missing_notary_secret" ]; then missing_notary_secret="$secret"; fi
+done
 will_notarize=no
-if [ "$identity" != "-" ] && [ -n "${APPLE_NOTARY_KEY:-}" ] && [ -n "${APPLE_NOTARY_KEY_ID:-}" ] && [ -n "${APPLE_NOTARY_ISSUER_ID:-}" ]; then
-	will_notarize=yes
-fi
+if [ "$identity" != "-" ] && [ -z "$missing_notary_secret" ]; then will_notarize=yes; fi
 if [ "$will_notarize" = yes ]; then dmg_name="Tap-$version.dmg"; else dmg_name="Tap-$version-unnotarized.dmg"; fi
 dmg="$out/$dmg_name"
 zip="$out/Tap-$version.zip"
 if [ "$identity" = "-" ]; then
 	note "skipped: notarization of $(basename "$zip") (no Developer ID identity)"
 elif [ "$will_notarize" = no ]; then
-	note "$("$here/notarize.sh" "$app" "$app" | sed "s/ of Tap.app / of $(basename "$zip") /")"
+	note "skipped: notarization of $(basename "$zip") ($missing_notary_secret is not set)"
 else
 	rm -f "$zip"
 	ditto -c -k --keepParent "$app" "$zip"
-	note "$("$here/notarize.sh" "$zip" "$app")"
+	result=$("$here/notarize.sh" "$zip" "$app") || { echo "release.sh: the app's notarization failed; nothing is published" >&2; exit 1; }
+	note "$result"
 	rm -f "$zip"
 fi
 
@@ -2379,10 +2500,11 @@ else
 	codesign --force --sign "$identity" --timestamp "$dmg"
 	note "done: signed $dmg_name"
 	if [ "$will_notarize" = yes ]; then
-		note "$("$here/notarize.sh" "$dmg" "$dmg")"
+		result=$("$here/notarize.sh" "$dmg" "$dmg") || { echo "release.sh: the DMG's notarization failed; nothing is published" >&2; exit 1; }
+		note "$result"
 		notarized=yes
 	else
-		note "$("$here/notarize.sh" "$dmg" "$dmg")"
+		note "skipped: notarization of $dmg_name ($missing_notary_secret is not set)"
 	fi
 fi
 ( cd "$out" && shasum -a 256 "$dmg_name" > "$dmg_name.sha256" )
@@ -2445,9 +2567,10 @@ note "done: rendered Casks/tap-desktop.rb (not pushed by this script)"
 if [ "$notarized" = yes ]; then note "done: Gatekeeper accepts $dmg_name"; else note "skipped: Gatekeeper assessment (not notarized)"; fi
 note "done: verified the app, the DMG and the appcast"
 
+# Plain words only, so the release job can source this under bash -e: the
+# identity's name (with its spaces and parentheses) stays out of it.
 cat > "$state" <<STATE
 version=$version
-identity=$identity
 notarized=$notarized
 feed_signed=$feed_signed
 dmg=$dmg_name
@@ -2462,7 +2585,7 @@ echo "release $version in $out:"
 cat "$summary"
 ```
 
-The "identity but no notary key" branch runs `notarize.sh` on the app itself so its own skip line (naming the first missing secret) lands in the summary, with the zip's name the real path would use. The `identity` variable holds a certificate's common name, never a secret; the state file is safe to upload.
+The "identity but no notary key" branch writes the skip line itself, naming the first missing secret as `notarize.sh` would, since `notarize.sh` only takes a file. A `notarize.sh` failure is read from its exit status into `result=... || exit 1`, never inside a `note "$(...)"` argument, where `set -e` would not see it. The `identity` variable holds a certificate's common name, never a secret, and stays out of the state file only because its spaces and parentheses would break `source`.
 
 In `desktop/Makefile`, add `RELEASE_DIR = build/release` after `RELEASE_BINARY`, `release-tests release` to `.PHONY`, and after `check-release-app-hooks`:
 
@@ -2487,7 +2610,7 @@ release: check-release-app-hooks
 - [ ] **Step 7: Run the tests and the local dry run**
 
 Run: `chmod +x desktop/scripts/release.sh desktop/scripts/release-test.sh && desktop/scripts/release-test.sh && for test in desktop/scripts/*-test.sh; do sh "$test" || exit 1; done`
-Expected: `release.sh is right`, and every other test script's `... is right` line. Then the real dry run:
+Expected: `release.sh is right` (four runs of `release.sh` inside: no secrets, the certificate alone, every secret, a rejected notarization), and every other test script's `... is right` line. Then the real dry run:
 
 Run: `make -C desktop release VERSION=0.0.0-dev`
 Expected: the build, `no test-only hook in the Release build`, then `release 0.0.0-dev in build/release:` with the summary: the identity skipped, `signed Tap.app ad-hoc`, the app's notarization skipped, `wrote Tap-0.0.0-dev-unnotarized.dmg`, DMG signature and notarization skipped, the checksum, the notes skipped (no changelog section for `0.0.0-dev`), the Sparkle signature skipped, `wrote appcast-unsigned.xml (unsigned; never uploaded)`, `rendered Casks/tap-desktop.rb (not pushed by this script)`, Gatekeeper skipped, verified. `ls desktop/build/release` shows the DMG, its checksum, `appcast-unsigned.xml`, `Casks/`, `release-summary.md` and `release-state.env` with `notarized=no`. Nothing was launched or mounted with a window.
@@ -2499,7 +2622,7 @@ git add desktop/scripts/verify-release.sh desktop/scripts/verify-release-test.sh
 git commit -m "build(desktop): release.sh runs the release end to end, names what is not notarized, and never writes an unsigned appcast.xml"
 ```
 
-Mutations, applied locally and reverted: in `release.sh`, name the DMG `Tap-$version.dmg` regardless (`release-test.sh` fails on the missing `-unnotarized` file); write `appcast.xml` when the signature is empty (fails on "appcast.xml must not exist"); drop the `built = version` guard (fails on "a version the app does not carry"); set the trap after the import (`release-test.sh` still passes: into the survivor notes, since no test can make the import fail after creating the keychain without a certificate); in `verify-release.sh`, gate `spctl` on the identity instead of `notarized` (`verify-release-test.sh` fails on "signed but not notarized should verify"); drop the `lipo` check (fails on "is not arm64 alone"); drop the `tap --version` check (fails on "tap version 0.0.0-other"); drop the stray check (fails on "test code").
+Mutations, applied locally and reverted: in `release.sh`, name the DMG `Tap-$version.dmg` regardless (`release-test.sh` fails on the missing `-unnotarized` file); write `appcast.xml` when the signature is empty (fails on "appcast.xml must not exist"); wrap the DMG's `notarize.sh` call back into `note "$(...)"` (fails on "a rejected notarization should fail the release"); set `notarized=yes` before the DMG's submission (the same); write `identity=$identity` into the state file (fails on "the state does not source"); call `notarize.sh "$app" "$app"` in the no-notary-key branch (fails on "the app's notarization skip line names the secret"); drop the `built = version` guard (fails on "a version the app does not carry"); set the trap after the import (`release-test.sh` still passes: into the survivor notes, since no test can make the import fail after creating the keychain without a certificate); in `verify-release.sh`, gate `spctl` on the identity instead of `notarized` (`verify-release-test.sh` fails on "signed but not notarized should verify"); drop the `lipo` check (fails on "is not arm64 alone"); drop the `tap --version` check (fails on "tap version 0.0.0-other"); drop the stray check (fails on "test code").
 
 ---
 
@@ -2511,8 +2634,8 @@ Mutations, applied locally and reverted: in `release.sh`, name the DMG `Tap-$ver
 - Modify: `.github/workflows/ci.yml` (the `release-dry-run` job)
 
 **Interfaces:**
-- Consumes: `make -C desktop check-release-app-hooks`, `desktop/scripts/release.sh`, `release-state.env`, `desktop/scripts/publish-cask.sh`, `desktop/scripts/signing-identity.sh remove`, `make -C desktop release-tests` (Tasks 1 to 7b); the `release` job's tag `v${version}` and its GitHub release; the secrets by name; `vars.HOMEBREW_TAP_REPO`; `gh release upload`, `gh release view --json tagName,assets`, `gh release edit --latest`.
-- Produces: `mark-latest.sh <version> <feed-uploaded yes|no>` (`GH` names the `gh` binary, for the test's stand-in); on a release: the DMG under its state's name with its checksum, the notes and the signed feed when the state allows, the cask pushed for a notarized final, the release marked `latest` when its feed is up or no earlier feed exists, the summary in the job's step summary whether the job passed or failed; on every pull request: a `desktop-release-dry-run` artifact with the DMG, the unsigned appcast, the cask, the summary and the state.
+- Consumes: `make -C desktop check-release-app-hooks`, `desktop/scripts/release.sh`, `release-state.env`, `desktop/scripts/publish-cask.sh`, `desktop/scripts/signing-identity.sh remove`, `make -C desktop release-tests` (Tasks 1 to 7b); the `release` job's tag `v${version}` and its GitHub release; the secrets by name; `vars.HOMEBREW_TAP_REPO`; `gh release upload`, `gh api repos/{owner}/{repo}/releases/latest` (HTTP 404 when no release exists), `gh release edit --latest`, `actions/upload-artifact`.
+- Produces: `mark-latest.sh <version> <feed-uploaded yes|no>` (`GH` names the `gh` binary, for the test's stand-in; exit 1 on any `gh` failure but 404); on a release: for a notarized DMG, the DMG with its checksum, then the notes and the signed feed when the state allows, the cask pushed for a notarized final, the release marked `latest` when its feed is up or no earlier feed exists (otherwise the summary names the command for later); for a DMG that was not notarized, nothing on the release and the workflow artifact `desktop-release-unnotarized` (seven days); the summary in the job's step summary whether the job passed or failed; on every pull request: a `desktop-release-dry-run` artifact with the DMG, the unsigned appcast, the cask, the summary and the state.
 
 - [ ] **Step 1: Write the failing test for marking latest**
 
@@ -2521,10 +2644,11 @@ Mutations, applied locally and reverted: in `release.sh`, name the DMG `Tap-$ver
 ```sh
 #!/bin/sh
 # Checks mark-latest.sh against a stand-in gh that records its calls and
-# answers "release view" from a file the test writes: a pre-release is
-# never marked; a final with its feed uploaded is; a final without one is
+# answers the latest-release API from a file the test writes: a pre-release
+# is never marked; a final with its feed uploaded is; a final without one is
 # marked only when the current latest release carries no appcast.xml (so
-# there is no working feed to take away).
+# there is no working feed to take away) or there is no release at all; any
+# other gh failure marks nothing and fails the step.
 set -eu
 
 script="$(cd "$(dirname "$0")" && pwd)/mark-latest.sh"
@@ -2534,7 +2658,14 @@ cat > "$root/gh" <<FAKE
 #!/bin/sh
 printf '%s\n' "\$*" >> "$root/calls"
 case "\$*" in
-	"release view --json tagName,assets"*) cat "$root/latest.json" ;;
+	"api repos/{owner}/{repo}/releases/latest")
+		# The file holds the JSON gh api would print, or a word for a failure.
+		case "\$(cat "$root/latest.json")" in
+			404) echo "gh: Not Found (HTTP 404)" >&2; exit 1 ;;
+			ERROR) echo "gh: error connecting to api.github.com" >&2; exit 1 ;;
+			*) cat "$root/latest.json" ;;
+		esac
+		;;
 esac
 FAKE
 chmod +x "$root/gh"
@@ -2549,19 +2680,27 @@ out=$("$script" 2.1.0 yes)
 [ "$out" = "marked v2.1.0 latest (its feed is up)" ] || { echo "wrong marked line: $out"; exit 1; }
 [ "$(calls)" = "release edit v2.1.0 --latest" ] || { echo "the feed-up case should edit the release alone"; exit 1; }
 
-printf '{"tagName":"v2.0.0","assets":[{"name":"tap-darwin-arm64"},{"name":"appcast.xml"}]}\n' > "$root/latest.json"
+printf '{"tag_name":"v2.0.0","assets":[{"name":"tap-darwin-arm64"},{"name":"appcast.xml"}]}\n' > "$root/latest.json"
 out=$("$script" 2.1.0 no)
-[ "$out" = "skipped: marking v2.1.0 latest (v2.0.0 carries the working feed; this release has none)" ] || { echo "wrong protected line: $out"; exit 1; }
+[ "$out" = "skipped: marking v2.1.0 latest (v2.0.0 carries the working feed; this release has none). Once v2.1.0 has a signed feed, run: gh release edit v2.1.0 --latest" ] || { echo "wrong protected line: $out"; exit 1; }
 if calls | grep -q 'release edit'; then echo "a protected feed must not be replaced"; exit 1; fi
 
-printf '{"tagName":"v2.0.0","assets":[{"name":"tap-darwin-arm64"}]}\n' > "$root/latest.json"
+printf '{"tag_name":"v2.0.0","assets":[{"name":"tap-darwin-arm64"}]}\n' > "$root/latest.json"
 out=$("$script" 2.1.0 no)
 [ "$out" = "marked v2.1.0 latest (no earlier release carries a feed)" ] || { echo "wrong no-feed line: $out"; exit 1; }
 calls | grep -q '^release edit v2.1.0 --latest$' || { echo "no earlier feed: the release should be marked"; exit 1; }
 
-: > "$root/latest.json"
+# No release at all: gh api answers 404, and there is nothing to protect.
+echo 404 > "$root/latest.json"
 out=$("$script" 2.1.0 no)
 [ "$out" = "marked v2.1.0 latest (no earlier release carries a feed)" ] || { echo "no releases at all: $out"; exit 1; }
+calls | grep -q '^release edit v2.1.0 --latest$' || { echo "no releases at all: the release should be marked"; exit 1; }
+
+# Any other gh failure (auth, network, a rate limit) fails closed: nothing is marked.
+echo ERROR > "$root/latest.json"
+if out=$("$script" 2.1.0 no 2>"$root/err"); then echo "a gh error must not mark anything: $out"; exit 1; fi
+grep -q 'could not read the latest release' "$root/err" || { echo "the gh error should be named: $(cat "$root/err")"; exit 1; }
+if calls | grep -q 'release edit'; then echo "a gh error must not lead to an edit"; exit 1; fi
 
 if "$script" 2.1.0 >/dev/null 2>&1; then echo "the feed state is required"; exit 1; fi
 
@@ -2578,8 +2717,9 @@ echo "mark-latest.sh is right"
 # only once that would not break the feed: when this release's signed
 # appcast is uploaded, or when no earlier release carries one (nothing to
 # take away). The CLI job publishes with make_latest false, so the tag
-# exists and the desktop job decides. A pre-release is never latest. GH
-# names the gh binary; the test gives a stand-in.
+# exists and the desktop job decides. A pre-release is never latest. When
+# an earlier feed is protected, the line says which command marks this
+# release later. GH names the gh binary; the test gives a stand-in.
 set -eu
 
 version="${1:-}"; feed_uploaded="${2:-}"
@@ -2597,11 +2737,23 @@ if [ "$feed_uploaded" = yes ]; then
 	exit 0
 fi
 
-latest=$("$gh" release view --json tagName,assets 2>/dev/null || true)
-latest_tag=$(printf '%s' "$latest" | sed -n 's/.*"tagName":"\([^"]*\)".*/\1/p')
+# Fail closed: only "no release exists" (HTTP 404) means there is nothing
+# to protect; any other failure (auth, network, a rate limit) marks nothing.
+if latest=$("$gh" api 'repos/{owner}/{repo}/releases/latest' 2>"${TMPDIR:-/tmp}/mark-latest.$$"); then
+	rm -f "${TMPDIR:-/tmp}/mark-latest.$$"
+elif grep -q 'HTTP 404' "${TMPDIR:-/tmp}/mark-latest.$$"; then
+	rm -f "${TMPDIR:-/tmp}/mark-latest.$$"
+	latest=""
+else
+	cat "${TMPDIR:-/tmp}/mark-latest.$$" >&2
+	rm -f "${TMPDIR:-/tmp}/mark-latest.$$"
+	echo "mark-latest.sh: could not read the latest release; $tag is left as it is" >&2
+	exit 1
+fi
+latest_tag=$(printf '%s' "$latest" | sed -n 's/.*"tag_name":"\([^"]*\)".*/\1/p')
 case "$latest" in
 	*'"name":"appcast.xml"'*)
-		echo "skipped: marking $tag latest ($latest_tag carries the working feed; this release has none)"
+		echo "skipped: marking $tag latest ($latest_tag carries the working feed; this release has none). Once $tag has a signed feed, run: gh release edit $tag --latest"
 		exit 0
 		;;
 esac
@@ -2613,6 +2765,15 @@ Run: `chmod +x desktop/scripts/mark-latest.sh desktop/scripts/mark-latest-test.s
 Expected: `mark-latest.sh is right`; every test in the Makefile's list passes.
 
 - [ ] **Step 3: The `desktop` job in `release.yml`**
+
+In the `release` job's `Validate version format` step, after the regex check and before the `echo "VERSION=..."` lines, add:
+
+```yaml
+          # The desktop build refuses versions the regex accepts (an unknown
+          # label, a label with no number, beta.08), and a tag pushed before
+          # that failure blocks a re-run; so the same check runs here first.
+          desktop/scripts/build-number.sh "$VERSION" >/dev/null
+```
 
 In the `release` job's `Create GitHub Release` step, add `make_latest: false` under `with:` (after `prerelease:`), with the comment:
 
@@ -2716,33 +2877,47 @@ After the `release` job (same indentation as `release:`), add:
 
       # What the state allows, in an order where a feed never names a file
       # that is not up yet: the DMG and its checksum, then the notes, then
-      # the feed.
+      # the feed. A DMG that was not notarized never reaches the release; the
+      # next step keeps it as a workflow artifact.
       - name: Upload to the release
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          set -o pipefail
           source desktop/build/release/release-state.env
-          cd desktop/build/release
-          gh release upload "v$VERSION" "$dmg" "$checksum" --clobber
-          echo "uploaded $dmg and $checksum" | tee -a "$GITHUB_STEP_SUMMARY"
-          if [ "$notarized" != yes ]; then
-            echo "- the DMG is not notarized: it is up under its -unnotarized name, and no appcast or cask follows" | tee -a "$GITHUB_STEP_SUMMARY"
-          fi
-          if [ -n "$notes" ] && [ "$feed_signed" = yes ]; then
-            gh release upload "v$VERSION" "$notes" --clobber
-            echo "uploaded $notes" | tee -a "$GITHUB_STEP_SUMMARY"
-          fi
+          echo "notarized=$notarized" >> "$GITHUB_ENV"
           feed_uploaded=no
-          if [ "$feed_signed" = yes ]; then
-            gh release upload "v$VERSION" appcast.xml --clobber
-            feed_uploaded=yes
-            echo "uploaded appcast.xml (signed)" | tee -a "$GITHUB_STEP_SUMMARY"
+          if [ "$notarized" != yes ]; then
+            echo "- the DMG is not notarized: nothing was added to the release; $dmg is the workflow artifact desktop-release-unnotarized (seven days)" | tee -a "$GITHUB_STEP_SUMMARY"
           else
-            echo "- skipped: appcast upload (the feed is not signed)" | tee -a "$GITHUB_STEP_SUMMARY"
+            cd desktop/build/release
+            gh release upload "v$VERSION" "$dmg" "$checksum" --clobber
+            echo "uploaded $dmg and $checksum" | tee -a "$GITHUB_STEP_SUMMARY"
+            if [ -n "$notes" ] && [ "$feed_signed" = yes ]; then
+              gh release upload "v$VERSION" "$notes" --clobber
+              echo "uploaded $notes" | tee -a "$GITHUB_STEP_SUMMARY"
+            fi
+            if [ "$feed_signed" = yes ]; then
+              gh release upload "v$VERSION" appcast.xml --clobber
+              feed_uploaded=yes
+              echo "uploaded appcast.xml (signed)" | tee -a "$GITHUB_STEP_SUMMARY"
+            else
+              echo "- skipped: appcast upload (the feed is not signed)" | tee -a "$GITHUB_STEP_SUMMARY"
+            fi
           fi
           echo "feed_uploaded=$feed_uploaded" >> "$GITHUB_ENV"
+
+      - name: Keep the un-notarized DMG as an artifact
+        if: env.notarized != 'yes'
+        uses: actions/upload-artifact@v7
+        with:
+          name: desktop-release-unnotarized
+          path: |
+            desktop/build/release/*-unnotarized.dmg
+            desktop/build/release/*-unnotarized.dmg.sha256
+            desktop/build/release/release-summary.md
+            desktop/build/release/release-state.env
+          retention-days: 7
 
       - name: Mark the release latest
         shell: bash
@@ -2762,7 +2937,7 @@ After the `release` job (same indentation as `release:`), add:
           cat cask-result.txt | tee -a "$GITHUB_STEP_SUMMARY"
 ```
 
-`shell: bash` on GitHub Actions is `bash --noprofile --norc -eo pipefail {0}`, so a failed `publish-cask.sh` or `mark-latest.sh` fails its step even through `tee`. `permissions: contents: write` at the top of the file already covers `gh release upload` and `gh release edit`. `needs: release` means the tag and the release exist before the checkout. `${{ github.event.inputs.version }}` appears in `with:` values only; every `run:` reads `$VERSION`.
+`shell: bash` on GitHub Actions is `bash --noprofile --norc -eo pipefail {0}`, so a failed `publish-cask.sh` or `mark-latest.sh` fails its step even through `tee`, and `source` of the state file runs under `-e` (its values are plain words; the identity is not in it). `permissions: contents: write` at the top of the file already covers `gh release upload` and `gh release edit`. `needs: release` means the tag and the release exist before the checkout. `${{ github.event.inputs.version }}` appears in `with:` values only; every `run:` reads `$VERSION`.
 
 - [ ] **Step 4: The `release-dry-run` job in `ci.yml`**
 
@@ -2859,9 +3034,9 @@ git add desktop/scripts/mark-latest.sh desktop/scripts/mark-latest-test.sh .gith
 git commit -m "ci: a desktop release job that publishes by the release's state, and a no-secrets dry run on every pull request"
 ```
 
-The controller pushes and reads CI: the Desktop Release Dry Run job is green, its summary lists seven `skipped:` lines and the `done:` lines, `brew style` passes, and the artifact holds the six files. The release job itself is exercised by the person's first release after merge, or by a `workflow_dispatch` of a pre-release such as `2.0.0-rc.2` from `main`, which uploads `Tap-2.0.0-rc.2-unnotarized.dmg`, no appcast, no cask, and leaves `latest` alone.
+The controller pushes and reads CI: the Desktop Release Dry Run job is green, its summary lists seven `skipped:` lines and the `done:` lines, `brew style` passes, and the artifact holds the six files. The release job itself is exercised by the person's first release after merge, or by a `workflow_dispatch` of a pre-release such as `2.0.0-rc.2` from `main`, which (before the secrets exist) adds nothing to the release, keeps `Tap-2.0.0-rc.2-unnotarized.dmg` as the `desktop-release-unnotarized` artifact, pushes no cask, and leaves `latest` alone.
 
-Mutations, applied locally and reverted: in `mark-latest.sh`, drop the `appcast.xml` case (`mark-latest-test.sh` fails on "a protected feed must not be replaced"); mark a pre-release (fails on the pre-release line).
+Mutations, applied locally and reverted: in `mark-latest.sh`, drop the `appcast.xml` case (`mark-latest-test.sh` fails on "a protected feed must not be replaced"); treat every `gh` failure as 404 (fails on "a gh error must not mark anything"); mark a pre-release (fails on the pre-release line).
 
 ---
 
@@ -2898,16 +3073,21 @@ entitlements, no test code, the signatures) and records every step in
 `build/release/release-state.env`. Each step that needs a secret is
 skipped, by name, when the secret is absent, so the dry run needs none
 and launches nothing. What is not notarized is named so
-(`Tap-<version>-unnotarized.dmg`); an appcast that is not signed is
-`appcast-unsigned.xml`; neither is ever offered to a person.
+(`Tap-<version>-unnotarized.dmg`) and never becomes a release asset (the
+job keeps it as a workflow artifact for seven days); an appcast that is
+not signed is `appcast-unsigned.xml`; neither is ever offered to a person.
+A rejected notarization stops the release.
 
 The release job (`.github/workflows/release.yml`, job `desktop`) runs the
 same target on a macOS runner after the CLI release, then publishes by the
-state file: the DMG and its checksum under the state's name; the notes and
-the signed feed only when the DMG was notarized and the feed is signed;
-the cask to the Homebrew tap only for a notarized final; and the release
-becomes GitHub's "latest" (where the app's feed URL points) only once its
-feed is up, or when no earlier release ever carried one. CI's Desktop
+state file: for a notarized DMG, the DMG and its checksum, then the notes
+and the signed feed when the feed is signed; the cask to the Homebrew tap
+only for a notarized final; and the release becomes GitHub's "latest"
+(where the app's feed URL points) only once its feed is up, or when no
+earlier release ever carried one (otherwise the summary names the
+`gh release edit v<version> --latest` to run once the feed is fixed). A DMG
+that was not notarized reaches the release page never; it is the workflow
+artifact `desktop-release-unnotarized`. CI's Desktop
 Release Dry Run job runs the dry run on every pull request and keeps the
 DMG as an artifact.
 
@@ -2933,7 +3113,7 @@ gh secret set APPLE_DEVELOPER_ID_APPLICATION_PASSWORD                          #
 gh secret set APPLE_NOTARY_KEY < AuthKey_XXXXXXXXXX.p8                         # an App Store Connect API key, Developer role or higher
 gh secret set APPLE_NOTARY_KEY_ID                                              # prompts; the XXXXXXXXXX of the file name
 gh secret set APPLE_NOTARY_ISSUER_ID                                           # prompts; the issuer UUID
-op read "op://<vault>/<item>/<field>" | gh secret set SPARKLE_PRIVATE_KEY      # the EdDSA key from 1Password (account tap-desktop in the login keychain)
+op read "op://<vault>/<item>/<field>" | gh secret set SPARKLE_PRIVATE_KEY      # the EdDSA key, from its 1Password item (the only route: nothing on disk)
 ```
 
 `HOMEBREW_TAP_TOKEN` exists already. A pre-release never reaches the feed
@@ -2976,9 +3156,9 @@ on a macOS runner from the tag, signs and notarizes it, and adds
 the `tap-desktop` cask in the Homebrew tap and marks the release "latest"
 (the CLI job publishes with `make_latest: false`, since the app's feed URL
 points at "latest"). Each signing step is skipped, by name, when its secret
-is absent, a DMG that was not notarized is uploaded as
-`Tap-<version>-unnotarized.dmg` alone, and the job's summary says which
-steps ran. `desktop/README.md` lists the secrets, how to set them, and how
+is absent, a DMG that was not notarized never reaches the release (it is
+kept as a workflow artifact for seven days), and the job's summary says
+which steps ran. `desktop/README.md` lists the secrets, how to set them, and how
 to run the same pipeline locally with none of them.
 ```
 
@@ -3100,7 +3280,7 @@ Mutations, each a patch in `mutations-c/`: in `changed(_:)`, drop the checkbox c
 - [ ] `grep -n 'isPresenting' desktop/Tap/App/UpdateController.swift` finds nothing: every decision reads `updatesMayInterrupt`; `FocusHintTests.testNothingInterruptsTheTalk` is unchanged.
 - [ ] `grep -n 'exactVersion: 2.10.0' desktop/project.yml`, `grep -n 'version="2.10.0"' desktop/scripts/fetch-sparkle-tools.sh` and `grep -n 'sparkle-tools-2.10.0' desktop/scripts/sparkle-sign.sh` agree. `grep -n 'ARCHS: arm64' desktop/project.yml`, `grep -n 'arch: :arm64' desktop/release/tap-desktop.rb.template` and `grep -n 'hardwareRequirements>arm64' desktop/scripts/write-appcast.sh` all hit.
 - [ ] No em dash in any file this plan touched: `git diff main --name-only | xargs grep -ln "$(printf '\342\200\224')"` prints no file.
-- [ ] The controller pushes and reads CI: Go Tests, Frontend Tests, E2E, Theme Checks, Desktop Tests (`UpdaterTests` eight green, `SettingsUpdatesTests` one green, D4's `FocusHintTests` green), Desktop UI Tests, Desktop Benchmarks (no Sparkle window in a recording), Desktop Release Dry Run (artifact present with six files, `brew style` green). The mutation branches `mutations/d7-batch-a` and `d7-batch-c` hold the patches; every one with a named killing test is killed.
+- [ ] The controller pushes and reads CI: Go Tests, Frontend Tests, E2E, Theme Checks, Desktop Tests (`UpdaterTests` eight green, `SettingsUpdatesTests` one green, D4's `FocusHintTests` green), Desktop UI Tests, Desktop Benchmarks (no Sparkle window in a recording), Desktop Release Dry Run (artifact present with six files, `brew style` green). `grep -n 'identity=' desktop/scripts/release.sh` shows the state file's heredoc has no such line. The mutation branches `mutations/d7-batch-a` and `d7-batch-c` hold the patches; every one with a named killing test is killed.
 - [ ] The final review reads `release-summary.md` and `release-state.env` from the dry-run artifact and the `desktop` job's design against "The release, end to end" above.
 
 ## Steps that wait for a mockup
@@ -3122,9 +3302,9 @@ Product decisions this plan makes that the spec leaves open. Each line is the de
 5. **The build-number ranges.** `alpha` 1 to 19, `beta` 20 to 49 (thirty betas), `rc` 50 to 89 (forty candidates), final 99, `dev`/`ci` 1. Alternative: other widths, while nothing has shipped. Cost if wrong: three numbers and the test, before the first release only.
 6. **A plain DMG.** Default: the app and an Applications link, no art. Alternative: a background image and icon layout after a mockup. Cost if wrong: a mockup and Finder scripting on the runner.
 7. **Check for Updates… during a talk.** Default: the item is disabled by validation, and the delegate refuses anyway with "Tap does not check for updates during a talk." in Sparkle's own alert if a check slips through. Alternative: disabled only. Cost if wrong: one guard.
-8. **Play during an update session.** Default: refused, with D4's talk-not-started bar saying "An update is installing. Let it finish, or quit the update, then press Play again." Alternative: let Play start and accept that Sparkle's download or "Install and Relaunch" window can appear over the talk (no delegate hook stops them). Cost if wrong: one guard and one sentence.
-9. **An un-notarized DMG is still uploaded**, under `Tap-<version>-unnotarized.dmg`, with no appcast and no cask. Alternative: keep it as a workflow artifact only. Cost if wrong: one branch in the upload step.
-10. **`make_latest: false` for the CLI job.** A final whose desktop job fails (or runs before the Sparkle key exists while an earlier release already has a feed) is not marked `latest` until the job is re-run or the person runs `gh release edit vX --latest`; the formula's versioned URLs are unaffected. Alternative: mark latest at once and accept a feed that 404s for up to an hour and for good after a failed job. Cost if wrong: one input and one step.
+8. **Play during an update session.** Default: refused, with D4's talk-not-started bar saying "Sparkle is checking for or installing an update. Let it finish, or close its window, then press Play again." (the same sentence covers a check in flight, an open update alert and an install). Alternative: let Play start and accept that Sparkle's download or "Install and Relaunch" window can appear over the talk (no delegate hook stops them). Cost if wrong: one guard and one sentence.
+9. **Decided (the controller, 2026-09-27):** an un-notarized DMG is never a release asset. It stays a workflow artifact (`desktop-release-unnotarized`, seven days) and the summary says so. Closed.
+10. **Decided (the controller, 2026-09-27): `make_latest: false` for the CLI job stays.** A final whose desktop job fails, or runs before the Sparkle key exists while an earlier release already has a feed, is not marked `latest`; the summary then prints the one command to run once the feed is fixed (`gh release edit vX --latest`); the formula's versioned URLs are unaffected. Closed.
 11. **The dry run on every pull request.** Default: `release-dry-run` runs with the other desktop jobs (about ten minutes of a macOS runner). Alternative: only on `main` and `workflow_dispatch`. Cost if wrong: a `paths` filter or an `if`.
 12. **Hardened runtime in Release only.** Default: Debug and Benchmark stay off, since the hosted tests inject into them. Cost if wrong: two lines in `project.yml`.
 13. **Sparkle pinned at 2.10.0** in the package and the tools, bumped by hand. Cost if wrong: two lines.
@@ -3142,7 +3322,7 @@ The job runs today with none of these; each one turns on its step. Every command
 | `APPLE_NOTARY_KEY` | repository secret | An App Store Connect API key (`.p8`), as text, with the Developer role or higher | App Store Connect > Users and Access > Integrations > App Store Connect API > Team Keys; `gh secret set APPLE_NOTARY_KEY < AuthKey_XXXXXXXXXX.p8` |
 | `APPLE_NOTARY_KEY_ID` | repository secret | The key's ID (the `XXXXXXXXXX` in the file name) | `gh secret set APPLE_NOTARY_KEY_ID` (prompts) |
 | `APPLE_NOTARY_ISSUER_ID` | repository secret | The issuer UUID | `gh secret set APPLE_NOTARY_ISSUER_ID` (prompts) |
-| `SPARKLE_PRIVATE_KEY` | repository secret | The EdDSA private key whose public half is `Pc0PbtYL9fkyK3XnqULlpKLlH94TE4OWx4Q3n74EftU=` | `op read "op://<vault>/<item>/<field>" \| gh secret set SPARKLE_PRIVATE_KEY` from 1Password; or, from the login keychain, `desktop/build/sparkle-tools-2.10.0/bin/generate_keys --account tap-desktop -x /dev/stdout \| gh secret set SPARKLE_PRIVATE_KEY` after `desktop/scripts/fetch-sparkle-tools.sh desktop/build/sparkle-tools-2.10.0` (never `-x` to a file in the repository) |
+| `SPARKLE_PRIVATE_KEY` | repository secret | The EdDSA private key whose public half is `Pc0PbtYL9fkyK3XnqULlpKLlH94TE4OWx4Q3n74EftU=` | `op read "op://<vault>/<item>/<field>" \| gh secret set SPARKLE_PRIVATE_KEY`, from the 1Password item that holds the key (the login keychain holds the same key under the account `tap-desktop`; `generate_keys -x` refuses an existing path such as `/dev/stdout` and would write a file, so it is not the route) |
 | `HOMEBREW_TAP_TOKEN` | repository secret | exists | already set; the cask push waits for a notarized final regardless |
 | `HOMEBREW_TAP_REPO` | repository variable, optional | The tap, default `MiniCodeMonkey/homebrew-tap` | only if the cask should live elsewhere |
 | The cask repository | `MiniCodeMonkey/homebrew-tap` | `Casks/tap-desktop.rb`, created by the first notarized final's job | nothing to do; the token has write access already |
