@@ -45,7 +45,20 @@ read_summary() {
 # Markdown table cell.
 first_failure() {
     [ -s "$summary" ] || return 0
-    plutil -extract testFailures.0.failureText raw -o - "$summary" 2>/dev/null | tr '\n|' ' /' | cut -c 1-300
+    # plutil prints its own error on stdout when the key path is missing, so
+    # only its output on success is a failure message.
+    text=$(plutil -extract testFailures.0.failureText raw -o - "$summary" 2>/dev/null) || return 0
+    printf '%s' "$text" | tr '\n|' ' /' | cut -c 1-300
+}
+
+# Ends what a run left behind: the test host, and tap or the fake tools it
+# started from the tests' temporary folders. A mutation that starts
+# processes without end otherwise leaves the runner unable to spawn the
+# next build's compiler.
+end_leftover_processes() {
+    pkill -9 -f "$repository_root/desktop/build/DerivedData" 2>/dev/null
+    pkill -9 -f 'tap-desktop-' 2>/dev/null
+    return 0
 }
 
 # Whether any failure in $summary is a test running past its allowance.
@@ -91,6 +104,7 @@ for patch in mutations/*.patch; do
         fi
     fi
     echo "::endgroup::"
+    end_leftover_processes
     git checkout -- desktop
     printf '| %s | %s | %s | %s |\n' "$name" "$test_name" "$result" "$failure" >> "$report"
 done
