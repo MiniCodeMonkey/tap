@@ -451,6 +451,43 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
         currentSlideNumber.map(aiImages(onSlide:)) ?? []
     }
 
+    /// Opens a file in whatever the person's default is for it (their code
+    /// editor for a .jsx). A test records the URL instead.
+    var openInEditor: (URL) -> Void = { url in NSWorkspace.shared.open(url) }
+
+    /// New Component: tap component new writes the file (never the deck);
+    /// its snippet goes in at the caret as one undo step, and the file
+    /// opens in the default code editor.
+    func createComponent(_ request: NewComponentRequest, completion: @escaping (ToolOutcome?) -> Void) {
+        guard let deck = document?.fileURL else { return completion(nil) }
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            let exit = await TapTool.run(request.arguments(deck: deck), in: deck.deletingLastPathComponent(), log: self.session.log)
+            if case .ok? = exit.outcome, let scaffold = try? exit.outcome?.result(ComponentScaffold.self) {
+                self.insertAtCaret(scaffold.snippet, actionName: "New Component")
+                if let first = scaffold.files.first { self.openInEditor(URL(fileURLWithPath: first)) }
+            }
+            completion(exit.outcome)
+        }
+    }
+
+    /// A Cmd-click on a component's path in the editor: the file, resolved
+    /// against the deck's folder, opens in the default code editor. False
+    /// when the character is not on a path.
+    func openComponentLink(at characterIndex: Int) -> Bool {
+        let text = editor.string as NSString
+        guard characterIndex < text.length else { return false }
+        let lineRange = text.lineRange(for: NSRange(location: characterIndex, length: 0))
+        let line = text.substring(with: lineRange).trimmingCharacters(in: .newlines)
+        guard let path = ComponentLink.find(in: line, at: characterIndex - lineRange.location), let deck = document?.fileURL else { return false }
+        openInEditor(deck.deletingLastPathComponent().appendingPathComponent(path).standardizedFileURL)
+        return true
+    }
+
+    func editor(_ editor: EditorTextView, openComponentLinkAt characterIndex: Int) -> Bool {
+        openComponentLink(at: characterIndex)
+    }
+
     /// Regenerate on one of the slide's AI images: tap replaces it in
     /// place with the comment's prompt and the aspect and theme match the
     /// comment recorded, and deletes the old file. No flags: what the

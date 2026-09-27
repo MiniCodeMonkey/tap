@@ -420,6 +420,23 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
         showFormSheet(sheet)
     }
 
+    @objc func newComponent(_ sender: Any?) {
+        guard let slide = sessionController.currentSlideNumber, sessionController.document?.fileURL != nil else { return NSSound.beep() }
+        let sheet = NewComponentSheet(slide: slide)
+        sheet.onCreate = { [weak self, weak sheet] request in
+            guard let self, let sheet else { return }
+            self.sessionController.createComponent(request) { [weak self, weak sheet] outcome in
+                guard let sheet else { return }
+                switch outcome {
+                case .ok?: self?.window?.endSheet(sheet, returnCode: .OK)
+                case .failed(_, let message)?: sheet.showError(message)
+                case nil: sheet.showError("tap did not answer; see the Tap Log")
+                }
+            }
+        }
+        showFormSheet(sheet)
+    }
+
     /// The context menu's Regenerate items name the image in `representedObject`.
     @objc func regenerateImage(_ sender: Any?) {
         guard let path = (sender as? NSMenuItem)?.representedObject as? String else { return NSSound.beep() }
@@ -1028,6 +1045,9 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
             return sessionController.currentSlideNumber != nil && sessionController.document?.fileURL != nil
         }
         if menuItem.action == #selector(generateImage(_:)) {
+            return sessionController.currentSlideNumber != nil && sessionController.document?.fileURL != nil
+        }
+        if menuItem.action == #selector(newComponent(_:)) {
             return sessionController.currentSlideNumber != nil && sessionController.document?.fileURL != nil
         }
         if menuItem.action == #selector(regenerateImage(_:)) {

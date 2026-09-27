@@ -8,6 +8,7 @@ protocol EditorTextViewDelegate: AnyObject {
     func editor(_ editor: EditorTextView, contextMenuForBoxAt index: Int) -> NSMenu?
     func editor(_ editor: EditorTextView, applyFixItForBoxAt index: Int)
     func editor(_ editor: EditorTextView, insertImages files: [URL])
+    func editor(_ editor: EditorTextView, openComponentLinkAt characterIndex: Int) -> Bool
 }
 
 extension EditorTextViewDelegate {
@@ -16,6 +17,7 @@ extension EditorTextViewDelegate {
     func editor(_ editor: EditorTextView, contextMenuForBoxAt index: Int) -> NSMenu? { nil }
     func editor(_ editor: EditorTextView, applyFixItForBoxAt index: Int) {}
     func editor(_ editor: EditorTextView, insertImages files: [URL]) {}
+    func editor(_ editor: EditorTextView, openComponentLinkAt characterIndex: Int) -> Bool { false }
 }
 
 /// A TextKit 2 text view that draws a rounded box behind each slide's lines.
@@ -665,6 +667,11 @@ final class EditorTextView: NSTextView {
     /// click, handled as any click in the text.
     override func mouseDown(with event: NSEvent) {
         let point = convert(event.locationInWindow, from: nil)
+        // A Cmd-click on a component's path opens the file; anywhere else it is a plain click.
+        if event.modifierFlags.contains(.command), !event.modifierFlags.contains(.control) {
+            let index = characterIndexForInsertion(at: point)
+            if index < (string as NSString).length, editorDelegate?.editor(self, openComponentLinkAt: index) == true { return }
+        }
         // A Control-click on the pill is a context menu click, as anywhere on the header.
         if !event.modifierFlags.contains(.control), let index = boxIndex(forHeaderAt: point), let pill = fixItRect(forBoxAt: index), pill.contains(point) {
             editorDelegate?.editor(self, applyFixItForBoxAt: index)

@@ -115,10 +115,9 @@ enum MainMenu {
         menu.addItem(item("Move to Top", action: #selector(DeckWindowController.moveSlidesToTop(_:))))
         menu.addItem(item("Move to Bottom", action: #selector(DeckWindowController.moveSlidesToBottom(_:))))
         menu.addItem(.separator())
-        // The image and component commands arrive with tap image and tap component new.
         menu.addItem(item("Insert Image…", action: #selector(DeckWindowController.insertImage(_:)), key: "i", modifiers: [.command, .shift]))
         menu.addItem(item("Generate Image…", action: #selector(DeckWindowController.generateImage(_:))))
-        menu.addItem(item("New Component…", action: nil))
+        menu.addItem(item("New Component…", action: #selector(DeckWindowController.newComponent(_:))))
         menu.addItem(.separator())
         menu.addItem(item("Go to Slide…", action: #selector(DeckWindowController.goToSlide(_:)), key: "o", modifiers: [.command, .shift]))
         return menu

@@ -41,8 +41,11 @@ final class SlideMenuTests: HostedTestCase {
         let delete = try item(menu, #selector(DeckWindowController.deleteSlides(_:)))
         XCTAssertEqual(delete.keyEquivalent, "\u{8}")
         XCTAssertEqual(delete.keyEquivalentModifierMask, [.command], "Command+Delete, so Backspace stays the editor's")
-        XCTAssertNil(menu.items.first { $0.title == "Generate Image…" }?.action, "disabled until the image commands arrive")
-        XCTAssertNil(menu.items.first { $0.title == "New Component…" }?.action)
+        XCTAssertEqual(menu.items.first { $0.title == "Generate Image…" }?.action, #selector(DeckWindowController.generateImage(_:)))
+        XCTAssertEqual(menu.items.first { $0.title == "New Component…" }?.action, #selector(DeckWindowController.newComponent(_:)))
+        let insert = try item(menu, #selector(DeckWindowController.insertImage(_:)))
+        XCTAssertEqual(insert.keyEquivalent, "i")
+        XCTAssertEqual(insert.keyEquivalentModifierMask, [.command, .shift])
     }
 
     func testDeleteIsDisabledWhenEverySlideIsSelected() async throws {
