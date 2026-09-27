@@ -61,6 +61,14 @@ enum MainMenu {
         // With autosave in place, AppKit hides this item and adds the Revert
         // To menu, with Browse All Versions, after it, as launch finishes.
         menu.addItem(item("Revert to Saved", action: #selector(NSDocument.revertToSaved(_:))))
+        menu.addItem(.separator())
+        let export = item("Export", action: nil)
+        let exportMenu = NSMenu(title: "Export")
+        exportMenu.addItem(item("PDF…", action: #selector(DeckWindowController.exportPDF(_:)), key: "e", modifiers: [.command, .option]))
+        exportMenu.addItem(item("Slide Images…", action: #selector(DeckWindowController.exportImages(_:))))
+        exportMenu.addItem(item("Website…", action: #selector(DeckWindowController.exportWebsite(_:))))
+        export.submenu = exportMenu
+        menu.addItem(export)
         return menu
     }
 

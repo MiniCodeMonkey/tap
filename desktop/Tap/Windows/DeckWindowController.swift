@@ -83,6 +83,10 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
     /// Hears every deck's talks start and end, so the Play button follows them.
     private var presentingObserver: NSObjectProtocol?
     private var isReconcilingSidebarCollapse = false
+    /// File > Export's one run at a time for this window's deck.
+    private(set) lazy var exportController = ExportController(sessionController: sessionController)
+    /// `tap serve` for a previewed website export; Task 11 fills this in.
+    private(set) var previewServer: PreviewServer?
 
     init(sessionController: DeckSessionController) {
         self.sessionController = sessionController
@@ -443,6 +447,47 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
         sessionController.regenerateImage(path: path)
     }
 
+    @objc func exportPDF(_ sender: Any?) { beginExport(.pdf(content: "slides")) }
+    @objc func exportWebsite(_ sender: Any?) { beginExport(.website) }
+    @objc func exportImages(_ sender: Any?) { beginExport(.images) }
+
+    /// File > Export: the sheet for `kind`; its Export button starts the
+    /// run, and the sheet follows the controller's states. A PDF with no
+    /// warnings closes the sheet and reveals the file; a PDF with warnings
+    /// reveals the file and stays for the warnings; a website or images
+    /// export stays for Show in Finder and Preview.
+    func beginExport(_ kind: ExportKind) {
+        guard let deck = sessionController.document?.fileURL, !exportController.isRunning else { return NSSound.beep() }
+        let sheet = ExportSheet(kind: kind, deck: deck)
+        sheet.onExport = { [weak self] request in self?.exportController.start(request) }
+        sheet.onCancel = { [weak self] in self?.exportController.cancel() }
+        sheet.onReveal = { [weak self] url in self?.revealInFinder(url) }
+        sheet.onPreview = { [weak self] folder in self?.previewWebsite(at: folder) }
+        exportController.onStateChange = { [weak self, weak sheet] state in
+            guard let self, let sheet else { return }
+            sheet.apply(state)
+            self.refreshPresentingControls()
+            switch state {
+            case .done(let summary) where kind.isPDF && summary.warnings.isEmpty:
+                self.revealInFinder(summary.output)
+                self.window?.endSheet(sheet, returnCode: .OK)
+            case .done(let summary) where kind.isPDF:
+                self.revealInFinder(summary.output)
+            case .idle where sheet.sheetParent != nil:
+                // A cancelled run: the sheet goes, nothing is shown of the partial file.
+                self.window?.endSheet(sheet, returnCode: .cancel)
+            default:
+                break
+            }
+        }
+        exportController.onDownload = { [weak sheet] download in sheet?.showDownload(download) }
+        showFormSheet(sheet) { [weak self] in self?.previewServer?.stop() }
+    }
+
+    func previewWebsite(at folder: URL) {
+        // Task 11 starts tap serve here.
+    }
+
     @objc func showThemePopover(_ sender: Any?) {
         guard questionSheet == nil, window?.attachedSheet == nil else { return }
         // A button in the toolbar's overflow, or a hidden toolbar, has no window to anchor on.
@@ -637,7 +682,7 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
     /// and no question sheet up. A sheet is one question the person has to
     /// answer first; a second sheet would queue behind it on this window.
     var canStartATalk: Bool {
-        sessionController.presentation.canStart && questionSheet == nil
+        sessionController.presentation.canStart && questionSheet == nil && !exportController.isRunning
     }
 
     /// Present > Stop, the toolbar's Stop, and Escape in the audience window.
@@ -1008,6 +1053,8 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
         }
         remotePanel.orderOut(nil)
         remotePanel.close()
+        exportController.stop()
+        previewServer?.stop()
     }
 
     func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
@@ -1049,6 +1096,9 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
         }
         if menuItem.action == #selector(newComponent(_:)) {
             return sessionController.currentSlideNumber != nil && sessionController.document?.fileURL != nil
+        }
+        if [#selector(exportPDF(_:)), #selector(exportImages(_:)), #selector(exportWebsite(_:))].contains(menuItem.action) {
+            return sessionController.document?.fileURL != nil && !exportController.isRunning
         }
         if menuItem.action == #selector(regenerateImage(_:)) {
             return menuItem.representedObject is String

@@ -85,4 +85,27 @@ enum FakeToolScripts {
             exit 1 ;;
         """, recordingTo: record)
     }
+
+    /// `tap export pdf`: `download` lines first when `downloadLines` is set,
+    /// a render line per slide with `secondsPerSlide` between them, the
+    /// warnings for `broken`, then the done line and the file. On SIGINT it
+    /// prints tap's interrupted done line and exits 130, as tap does.
+    static func exportPDF(slides: Int, secondsPerSlide: Double = 0, downloadLines: Int = 0, broken: [(slide: Int, message: String)] = [], recordingTo record: URL) throws -> URL {
+        let download = (0..<downloadLines).map { index in
+            #"echo '{"phase":"download","bytes":\#((index + 1) * 50_000_000),"totalBytes":\#(downloadLines * 50_000_000)}' >&2; sleep 0.2"#
+        }.joined(separator: "; ")
+        let brokenJSON = broken.map { #"{"slide":\#($0.slide),"message":"\#($0.message)"}"# }.joined(separator: ",")
+        let warnings = broken.map { #"echo 'warning: slide \#($0.slide) shows an error card: \#($0.message)' >&2"# }.joined(separator: "; ")
+        return try write("""
+          "export pdf")
+            trap 'echo "{\\"phase\\":\\"done\\",\\"ok\\":false,\\"error\\":{\\"code\\":\\"interrupted\\",\\"message\\":\\"interrupted\\"}}" >&2; exit 130' INT
+            out=""; while [ $# -gt 0 ]; do case "$1" in --output|-o) out="$2"; shift ;; esac; shift; done
+            \(download.isEmpty ? ":" : download)
+            i=1; while [ $i -le \(slides) ]; do echo "{\\"phase\\":\\"render\\",\\"done\\":$i,\\"total\\":\(slides)}" >&2; sleep \(secondsPerSlide); i=$((i + 1)); done
+            \(warnings.isEmpty ? ":" : warnings)
+            printf 'not a real pdf' > "$out"
+            echo "{\\"phase\\":\\"done\\",\\"ok\\":true,\\"output\\":\\"$out\\",\\"pages\\":\(slides),\\"bytes\\":14,\\"brokenSlides\\":[\(brokenJSON)]}" >&2
+            exit 0 ;;
+        """, recordingTo: record)
+    }
 }

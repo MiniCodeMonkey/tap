@@ -350,6 +350,8 @@ jobs:
       # package, run directly with `swift test`.
       - name: Run TapDesktopCore tests
         if: steps.check-desktop.outputs.exists == 'true'
+        env:
+          TAP_KEYCHAIN_TESTS: "1"
         run: make -C desktop core-test
 
       # Test-only hooks are compiled out of release builds; this fails if
@@ -369,6 +371,25 @@ jobs:
       # shell merges and this step actually runs instead of being skipped.
       # xcodebuild passes TEST_RUNNER_ variables to the test host without
       # the prefix, so a crash in Tap.app prints every thread's backtrace.
+      # The hosted export test drives the bundled tap's real tap export pdf,
+      # which fetches Chromium through playwright-go on a fresh runner: cache
+      # its driver and browser, keyed on the playwright-go version in go.mod.
+      - name: Determine playwright-go version
+        if: steps.check-desktop.outputs.exists == 'true'
+        id: playwright-go
+        run: |
+          version=$(grep -m1 'github.com/mxschmitt/playwright-go ' go.mod | awk '{print $2}')
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Playwright driver and browser
+        if: steps.check-desktop.outputs.exists == 'true'
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/Library/Caches/ms-playwright-go
+            ~/Library/Caches/ms-playwright
+          key: playwright-go-${{ runner.os }}-${{ steps.playwright-go.outputs.version }}
+
       - name: Run hosted Tap.app tests
         if: steps.check-desktop.outputs.exists == 'true'
         env:
