@@ -322,6 +322,28 @@ final class ExportPDFTests: HostedTestCase {
         window.endQuestionSheet(as: .cancel)
     }
 
+    /// An export while the deck changed on disk under unsaved edits: the
+    /// save is refused, nothing runs, and the sheet says what to do.
+    func testAnExportDuringADiskConflictSaysWhatToDo() async throws {
+        let (document, window, deck) = try await openSevenSlides()
+        _ = try await waitForRunningTap(document)
+        let controller = try XCTUnwrap(document.sessionController)
+        let record = try Fixtures.temporaryFolder().appendingPathComponent("record.txt")
+        AppEnvironment.shared.toolExecutableURL = try FakeToolScripts.exportPDF(slides: 2, recordingTo: record)
+        controller.editor.moveCursor(toSlide: 5)
+        controller.editor.insertText(" mine", replacementRange: NSRange(location: NSNotFound, length: 0))
+        try controller.editor.string.replacingOccurrences(of: " mine", with: " theirs").write(to: deck, atomically: false, encoding: .utf8)
+        controller.diskChanged()
+        XCTAssertTrue(controller.hasDiskConflict)
+        window.exportPDF(nil)
+        let sheet = try await exportSheet(window)
+        sheet.exportButton.performClick(nil)
+        try await waitUntil(timeout: 10, "the failure") { if case .failed = sheet.state { return true } else { return false } }
+        XCTAssertEqual(sheet.detailLabel.stringValue, "The deck changed on disk while you have unsaved edits. Choose Load Disk Version or Keep Mine on the bar over the editor, then export again.")
+        XCTAssertEqual(exportRuns(record), [], "nothing ran")
+        sheet.cancelButton.performClick(nil)
+    }
+
     func testTapsFailureShowsInTheSheet() async throws {
         let (_, window, _) = try await openSevenSlides()
         let record = try Fixtures.temporaryFolder().appendingPathComponent("record.txt")

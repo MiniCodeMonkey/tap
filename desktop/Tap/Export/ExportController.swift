@@ -135,7 +135,7 @@ final class ExportController {
             guard let self, !self.endStartIfCancelled() else { return }
             if let error {
                 self.isStarting = false
-                self.state = .failed("The deck could not be saved: \(error.localizedDescription)")
+                self.state = .failed(Self.saveFailure(error))
                 return
             }
             Task { @MainActor [weak self] in
@@ -165,6 +165,16 @@ final class ExportController {
                 }
             }
         }
+    }
+
+    /// Why the save before an export was refused, in words: the save
+    /// refuses with userCancelled while the deck changed on disk under
+    /// unsaved edits, and the bar over the editor is the way out.
+    static func saveFailure(_ error: Error) -> String {
+        if (error as? CocoaError)?.code == .userCancelled {
+            return "The deck changed on disk while you have unsaved edits. Choose Load Disk Version or Keep Mine on the bar over the editor, then export again."
+        }
+        return "The deck could not be saved: \(error.localizedDescription)"
     }
 
     /// Cancel: SIGINT to a running tap, or, while the start is still
