@@ -158,7 +158,7 @@ final class ThemeGridViewController: NSViewController {
         ]
         rebuild()
         refreshDownload()
-        loader.loadAll()
+        loader.loadAll(retryingFailures: true)
     }
 
     deinit {

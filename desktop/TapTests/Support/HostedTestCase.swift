@@ -50,7 +50,8 @@ class HostedTestCase: XCTestCase {
         AppEnvironment.shared.deckPorts = DeckPortStore(defaults: try XCTUnwrap(UserDefaults(suiteName: "TapTests.ports.\(UUID().uuidString)")))
         AppEnvironment.shared.presentationSettings = PresentationSettingsStore(defaults: try XCTUnwrap(UserDefaults(suiteName: "TapTests.present.\(UUID().uuidString)")))
         AppEnvironment.shared.presentExecutableURL = nil
-        AppEnvironment.shared.toolExecutableURL = nil
+        // tap's subcommands run through a script whose theme renders are the fixture PNG: no test starts Chromium for one.
+        AppEnvironment.shared.toolExecutableURL = try FakeToolScripts.themeShow(recordingTo: try Fixtures.temporaryFolder().appendingPathComponent("renders.txt"))
         AppEnvironment.shared.geminiKeyStore = MemoryGeminiKeyStore()
         AppEnvironment.shared.generalSettings = GeneralSettings(defaults: try XCTUnwrap(UserDefaults(suiteName: "TapTests.general.\(UUID().uuidString)")))
         AppEnvironment.shared.themeImages = ThemeImageLoader()
@@ -81,7 +82,9 @@ class HostedTestCase: XCTestCase {
     }
 
     override func tearDown() async throws {
-        // A theme render or an export a test left running never runs into the next test.
+        // A theme render or an export a test left running never runs into the next test:
+        // the loader's task is cancelled first, so no render starts after the stop.
+        AppEnvironment.shared.themeImages.stop()
         ToolRun.stopAll()
         AppEnvironment.shared.extraEnvironment = savedExtraEnvironment
         AppEnvironment.shared.approvalAnswerForTests = nil

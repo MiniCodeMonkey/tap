@@ -103,6 +103,9 @@ public final class ToolRun {
         public let timedOut: Bool
         /// The done line's outcome, else the standard output's `--json` object, else nil.
         public let outcome: ToolOutcome?
+
+        /// A run cancelled before its process started: status -1, no output.
+        public static let cancelledBeforeStart = Exit(status: -1, standardOutput: Data(), cancelled: true, timedOut: false, outcome: nil)
     }
 
     public nonisolated static let graceSeconds: TimeInterval = 2

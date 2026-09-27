@@ -608,11 +608,13 @@ final class DeckFormViewController: NSViewController, NSTextFieldDelegate, NSTex
 
     /// The row from the frontmatter: the name from tap's catalog (the slug
     /// while it loads, "Default" for none) and the loader's render (the
-    /// default theme's for none, the grid's Default cell).
+    /// default theme's for none, the grid's Default cell). The renders
+    /// start once the row shows: the Deck tab is up.
     func refreshThemeRow() {
         guard let button = themeRowButton else { return }
         let slug = currentThemeSlug()
         let loader = AppEnvironment.shared.themeImages
+        if !view.isHiddenOrHasHiddenAncestor { loader.loadAll() }
         button.show(slug: slug, name: slug.map { loader.catalog?.name(forSlug: $0) ?? $0 } ?? "Default", image: loader.image(for: slug ?? ThemeGridViewController.defaultSlug))
     }
 }

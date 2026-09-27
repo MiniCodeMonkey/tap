@@ -26,8 +26,12 @@ final class ThemeGridTests: HostedTestCase {
         XCTAssertEqual(grid.cell(for: "terminal")?.accessibilityLabel(), "Terminal, dark theme")
         grid.view.layoutSubtreeIfNeeded()
         XCTAssertEqual(grid.cell(for: "terminal")?.imageView.frame.size, ThemeGridViewController.popoverCellSize)
+        XCTAssertEqual(ThemeGridViewController.popoverCellSize, NSSize(width: 104, height: 58), "the ThemePicker and DeckTabThemeRow boards' cells")
+        XCTAssertEqual(grid.cell(for: "terminal")?.nameLabel.font?.pointSize, 11.5, "the boards' names in the popover")
         // The renders land one at a time, in the grid's order, from tap theme show --image; Default shows the default theme's render.
         try await waitUntil(timeout: 60, "every render") { grid.cells.allSatisfy { $0.imageView.image != nil } }
+        let loader = AppEnvironment.shared.themeImages
+        try await waitUntil(timeout: 10, "the loader to finish") { !loader.isWorking }
         let shows = try String(contentsOf: record, encoding: .utf8).components(separatedBy: "\n").filter { $0.hasPrefix("arguments: theme show") }
         XCTAssertEqual(shows.count, 21, "no render for Default: it is the default theme's")
         XCTAssertTrue(shows[0].hasPrefix("arguments: theme show \(catalog.light[0].slug) --image --json --progress json"), shows[0])
@@ -37,9 +41,12 @@ final class ThemeGridTests: HostedTestCase {
         let again = ThemeGridViewController(cellSize: ThemeGridViewController.sheetCellSize)
         again.loadViewIfNeeded()
         again.view.layoutSubtreeIfNeeded()
-        XCTAssertTrue(again.cells.allSatisfy { $0.imageView.image != nil }, "no second render")
+        XCTAssertTrue(again.cells.allSatisfy { $0.imageView.image != nil }, "the renders show at once")
         XCTAssertEqual(again.cell(for: "base")?.imageView.frame.size, ThemeGridViewController.sheetCellSize, "the New Deck sheet's smaller cells")
-        XCTAssertEqual(try String(contentsOf: record, encoding: .utf8).components(separatedBy: "\n").filter { $0.hasPrefix("arguments: theme show") }.count, 21)
+        // Anything the second grid started would have run by now.
+        try await Task.sleep(nanoseconds: 500_000_000)
+        try await waitUntil(timeout: 10, "the loader to finish") { !loader.isWorking }
+        XCTAssertEqual(try String(contentsOf: record, encoding: .utf8).components(separatedBy: "\n").filter { $0.hasPrefix("arguments: theme show") }.count, 21, "no second render")
     }
 
     func testTheEngineDownloadShowsUnderTheGrid() async throws {
@@ -84,6 +91,26 @@ final class ThemeGridTests: HostedTestCase {
         grid = nil
         try await waitUntil(timeout: 5, "the grid to be freed") { gone == nil }
         try await waitUntil(timeout: 60, "the renders") { AppEnvironment.shared.themeImages.image(for: "blueprint") != nil }
+    }
+
+    /// `stop` (every test's teardown, the app's quit) ends the renders:
+    /// the run in flight is cancelled and no later render starts.
+    func testStopEndsTheRenders() async throws {
+        // Each scripted render takes most of a second, so the stop lands mid-run.
+        let record = try useFakeRenders(downloadLines: 3)
+        let loader = AppEnvironment.shared.themeImages
+        let grid = ThemeGridViewController(cellSize: ThemeGridViewController.popoverCellSize)
+        grid.loadViewIfNeeded()
+        try await waitUntil(timeout: 20, "a render to start") { !grid.downloadLabel.isHidden }
+        loader.stop()
+        XCTAssertFalse(loader.isWorking)
+        XCTAssertTrue(grid.downloadLabel.isHidden, "the download state goes with the stop")
+        let started = try String(contentsOf: record, encoding: .utf8).components(separatedBy: "\n").filter { $0.hasPrefix("arguments: theme show") }.count
+        try await Task.sleep(nanoseconds: 2_000_000_000)
+        let later = try String(contentsOf: record, encoding: .utf8).components(separatedBy: "\n").filter { $0.hasPrefix("arguments: theme show") }.count
+        XCTAssertEqual(later, started, "no render starts after the stop")
+        XCTAssertLessThan(started, 21)
+        try await waitUntil(timeout: 6, "the cancelled run to end") { ToolRun.activeRuns.isEmpty }
     }
 
     /// The scenario: a pick in the toolbar's pop-up, tap theme set, and the preview re-rendered.

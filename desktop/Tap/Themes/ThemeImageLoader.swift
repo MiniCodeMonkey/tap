@@ -6,71 +6,123 @@ import AppKit
 /// PNGs by its version, so the next launch renders nothing. The first
 /// render on a Mac downloads the export engine; its progress lines are
 /// published for the grid to show.
+///
+/// All of it runs in one task at a time, which `stop` cancels: the tap run
+/// in flight gets its SIGINT, and no later render starts. The task is
+/// detached and made on a main-queue turn of its own, so it inherits
+/// nothing from whoever asked (a caller's task-local values, its
+/// priority) and is never created inside a caller's task.
 @MainActor
 final class ThemeImageLoader {
     static let didLoadCatalogNotification = Notification.Name("TapThemeCatalogDidLoad")
     static let didLoadImageNotification = Notification.Name("TapThemeImageDidLoad")
     static let downloadDidChangeNotification = Notification.Name("TapThemeDownloadDidChange")
     static let maximumAttempts = 3
+    /// tap's error code for an export engine that could not be downloaded or started.
+    static let engineFailureCode = "browser"
 
     private(set) var catalog: ThemeCatalog?
     private var images: [String: NSImage] = [:]
     /// Bytes of totalBytes while the export engine downloads, nil otherwise.
     private(set) var downloadProgress: (bytes: Int64, totalBytes: Int64)?
 
-    /// tap's default theme, from the deck schema's `theme` default (D5
-    /// loads it once), "base" until it has: the render the Default cell shows.
+    /// tap's default theme, from the deck schema's `theme` default, "base"
+    /// until the schema has loaded: the render the Default cell shows.
     var defaultSlug: String {
         (AppEnvironment.shared.deckSchema.keys.first { $0.name == "theme" }?.defaultValue).flatMap { $0.isEmpty ? nil : $0 } ?? "base"
     }
-    private var catalogTask: Task<Void, Never>?
-    private var renderTask: Task<Void, Never>?
+
+    /// True from a load's request until the catalog has loaded and no render is left to run.
+    var isWorking: Bool { work != nil || startIsScheduled }
+
+    private var work: Task<Void, Never>?
+    private var workGeneration = 0
+    private var startIsScheduled = false
+    private var wantsRenders = false
     private var catalogAttempts = 0
+    /// Themes whose render failed; a grid that opens tries them again.
+    private var failedSlugs: Set<String> = []
+    private var currentRun: ToolRun?
 
     /// The render for a slug; the Default cell's is the default theme's.
     func image(for slug: String) -> NSImage? { images[slug == ThemeGridViewController.defaultSlug ? defaultSlug : slug] }
 
-    /// Loads the catalog if it is not loaded, then renders every theme
-    /// that has no image yet. Safe to call from every grid that opens.
-    func loadAll() {
-        Task { @MainActor [weak self] in
-            await self?.loadCatalog()
-            self?.renderMissing()
+    /// Loads the catalog if it is not loaded: a deck window's Theme item
+    /// and the Deck tab's row show the theme's name from it.
+    func loadCatalog() {
+        start()
+    }
+
+    /// Loads the catalog, then renders every theme that has no image yet.
+    /// Safe to call from every grid that opens and every time the Deck
+    /// tab's row shows. `retryingFailures` (a grid opening) tries the
+    /// themes whose render failed before too.
+    func loadAll(retryingFailures: Bool = false) {
+        if retryingFailures { failedSlugs = [] }
+        wantsRenders = true
+        start()
+    }
+
+    /// Cancels the work: the tap run in flight gets its SIGINT, and nothing
+    /// more starts until the next load.
+    func stop() {
+        wantsRenders = false
+        startIsScheduled = false
+        work?.cancel()
+        work = nil
+        currentRun?.cancel()
+        currentRun = nil
+        if downloadProgress != nil {
+            downloadProgress = nil
+            NotificationCenter.default.post(name: Self.downloadDidChangeNotification, object: self)
         }
     }
 
-    func loadCatalog() async {
-        if catalog != nil { return }
-        if let catalogTask { return await catalogTask.value }
-        guard catalogAttempts < Self.maximumAttempts else { return }
-        catalogAttempts += 1
-        let task = Task { @MainActor [weak self] in
-            let exit = await TapTool.run(["theme", "list", "--json"], timeout: 30)
-            guard let self, let loaded = try? ThemeCatalog.decode(exit.standardOutput) else { return }
-            self.catalog = loaded
-            NotificationCenter.default.post(name: Self.didLoadCatalogNotification, object: self)
+    private func start() {
+        guard work == nil, !startIsScheduled, catalogIsWanted || nextSlugToRender != nil else { return }
+        startIsScheduled = true
+        DispatchQueue.main.async { [weak self] in
+            MainActor.assumeIsolated { self?.startWork() }
         }
-        catalogTask = task
-        await task.value
-        catalogTask = nil
     }
 
-    private func renderMissing() {
-        guard renderTask == nil, let catalog else { return }
-        let missing = (catalog.light + catalog.dark).map(\.slug).filter { images[$0] == nil }
-        guard !missing.isEmpty else { return }
-        renderTask = Task { @MainActor [weak self] in
-            for slug in missing {
-                guard let self else { return }
-                await self.render(slug)
+    private func startWork() {
+        guard startIsScheduled else { return }
+        startIsScheduled = false
+        guard work == nil, catalogIsWanted || nextSlugToRender != nil else { return }
+        workGeneration += 1
+        let generation = workGeneration
+        work = Task.detached { @MainActor [weak self] in
+            await self?.runWork()
+            guard let self, self.workGeneration == generation else { return }
+            self.work = nil
+        }
+    }
+
+    private var catalogIsWanted: Bool { catalog == nil && catalogAttempts < Self.maximumAttempts }
+
+    private var nextSlugToRender: String? {
+        guard wantsRenders, let catalog else { return nil }
+        return (catalog.light + catalog.dark).map(\.slug).first { images[$0] == nil && !failedSlugs.contains($0) }
+    }
+
+    private func runWork() async {
+        if catalogIsWanted {
+            catalogAttempts += 1
+            let exit = await runTap(["theme", "list", "--json"], timeout: 30)
+            guard !Task.isCancelled else { return }
+            if let loaded = try? ThemeCatalog.decode(exit.standardOutput) {
+                catalog = loaded
+                NotificationCenter.default.post(name: Self.didLoadCatalogNotification, object: self)
             }
-            // A theme whose render failed is tried again by the next loadAll.
-            self?.renderTask = nil
+        }
+        while !Task.isCancelled, let slug = nextSlugToRender {
+            await render(slug)
         }
     }
 
     private func render(_ slug: String) async {
-        let exit = await TapTool.run(["theme", "show", slug, "--image", "--json", "--progress", "json"], timeout: 600) { [weak self] progress in
+        let exit = await runTap(["theme", "show", slug, "--image", "--json", "--progress", "json"], timeout: 600) { [weak self] progress in
             guard let self else { return }
             switch progress {
             case .download(let bytes, let totalBytes):
@@ -83,8 +135,26 @@ final class ThemeImageLoader {
                 }
             }
         }
-        guard let result = try? ThemeImageResult.decode(exit.standardOutput), let image = NSImage(contentsOfFile: result.image) else { return }
+        guard !Task.isCancelled else { return }
+        guard let result = try? ThemeImageResult.decode(exit.standardOutput), let image = NSImage(contentsOfFile: result.image) else {
+            failedSlugs.insert(slug)
+            // Without the export engine no theme renders: the rest wait for the next grid.
+            if case .failed(let code, _)? = exit.outcome, code == Self.engineFailureCode { wantsRenders = false }
+            return
+        }
         images[slug] = image
         NotificationCenter.default.post(name: Self.didLoadImageNotification, object: self, userInfo: ["slug": slug])
+    }
+
+    /// One tap run that `stop` can cancel. A run whose task was cancelled
+    /// while the environment was read never starts.
+    private func runTap(_ arguments: [String], timeout: TimeInterval, onProgress: ((ProgressLine) -> Void)? = nil) async -> ToolRun.Exit {
+        let run = await TapTool.makeRun(arguments, timeout: timeout)
+        guard !Task.isCancelled else { return .cancelledBeforeStart }
+        run.onProgress = onProgress
+        currentRun = run
+        let exit = await run.run()
+        if currentRun === run { currentRun = nil }
+        return exit
     }
 }

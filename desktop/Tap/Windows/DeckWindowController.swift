@@ -137,6 +137,8 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
                 self?.refreshThemeItem(slug: self?.sessionController.currentThemeSlug)
             }
         }
+        // The Theme item shows the theme's name from tap's catalog: one tap theme list, no renders.
+        AppEnvironment.shared.themeImages.loadCatalog()
         sessionController.onQuestion = { [weak self] question in self?.presentDeckQuestion(question) }
         sessionController.onQuestionClosed = { [weak self] id in self?.deckQuestionClosed(id) }
         sessionController.onQuestionsDropped = { [weak self] in
