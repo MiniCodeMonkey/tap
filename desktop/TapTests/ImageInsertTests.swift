@@ -62,14 +62,26 @@ final class ImageInsertTests: HostedTestCase {
         XCTAssertFalse(controller.editor.string.contains("images/diagram"), "two undo steps take both inserts back")
     }
 
+    /// Edit > Paste, the item Command-V presses: the one in the app's main menu.
+    func pasteMenuItem() throws -> NSMenuItem {
+        let items = NSApp.mainMenu?.items.compactMap(\.submenu).flatMap(\.items) ?? []
+        return try XCTUnwrap(items.first { $0.action == #selector(NSText.paste(_:)) }, "Edit > Paste")
+    }
+
+    /// A screenshot (Command-Control-Shift-4) puts PNG data alone on the
+    /// pasteboard, with no string: Edit > Paste is on for it, and AppKit's
+    /// own path from the menu item reaches the editor's paste.
     func testPastedImageDataBecomesAFile() async throws {
         let (_, controller, deck) = try await openOps()
         controller.jumpToSlide(number: 2)
         let pasteboard = privatePasteboard(controller)
-        let image = try XCTUnwrap(NSImage(contentsOf: diagram))
-        pasteboard.writeObjects([image])
+        let pasteItem = try pasteMenuItem()
+        XCTAssertFalse(controller.editor.validateMenuItem(pasteItem), "nothing on the pasteboard: Paste is off")
+        pasteboard.setData(try Data(contentsOf: diagram), forType: .png)
+        XCTAssertNil(pasteboard.availableType(from: [.string]), "image data alone, as a screenshot leaves it")
 
-        controller.editor.paste(nil)
+        XCTAssertTrue(controller.editor.validateMenuItem(pasteItem), "Paste is on for image data, so Command-V is not a beep")
+        XCTAssertTrue(NSApp.sendAction(try XCTUnwrap(pasteItem.action), to: controller.editor, from: pasteItem))
         try await waitUntil(timeout: 20, "the markdown") { controller.editor.string.contains("images/pasted-image.png") }
         XCTAssertTrue(FileManager.default.fileExists(atPath: deck.deletingLastPathComponent().appendingPathComponent("images/pasted-image.png").path))
     }

@@ -613,6 +613,28 @@ final class EditorTextView: NSTextView {
         return urls.filter { imageExtensions.contains($0.pathExtension.lowercased()) }
     }
 
+    /// Whether Paste has something to read on `pasteboardForPaste`: an
+    /// image file, image data (a screenshot, which carries no string), or
+    /// anything NSTextView reads itself. NSTextView's own check reads only
+    /// its text types, which would turn Edit > Paste and Command-V off for
+    /// a screenshot.
+    var canPaste: Bool {
+        guard isEditable else { return false }
+        return !Self.imageFileURLs(on: pasteboardForPaste).isEmpty
+            || pasteboardForPaste.canReadObject(forClasses: [NSImage.self], options: nil)
+            || pasteboardForPaste.availableType(from: readablePasteboardTypes) != nil
+    }
+
+    override func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
+        if menuItem.action == #selector(paste(_:)) { return canPaste }
+        return super.validateMenuItem(menuItem)
+    }
+
+    override func validateUserInterfaceItem(_ item: NSValidatedUserInterfaceItem) -> Bool {
+        if item.action == #selector(paste(_:)) { return canPaste }
+        return super.validateUserInterfaceItem(item)
+    }
+
     /// Paste: image files and image data go to tap image add through the
     /// delegate; everything else is NSTextView's own reading of the same
     /// pasteboard (`readSelection(from:)`, so a test's pasteboard is honoured
