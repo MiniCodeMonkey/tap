@@ -55,8 +55,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
     func applicationWillTerminate(_ notification: Notification) {
         Self.stopAllPresentations()
-        // A running export or a preview server would outlive the app otherwise.
-        ToolRun.stopAll()
+        // A running export, a theme render or a preview server would outlive
+        // the app otherwise. The wait is here because the main queue's later
+        // SIGTERM and SIGKILL die with the app.
+        AppEnvironment.shared.themeImages.stop()
+        ToolRun.stopAll(waiting: 2)
     }
 
     /// Ends every deck's talk: windows down, sleep assertions released, tap
