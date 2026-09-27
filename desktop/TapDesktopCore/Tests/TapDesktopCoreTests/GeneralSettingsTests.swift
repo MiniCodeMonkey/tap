@@ -35,6 +35,7 @@ final class GeneralSettingsTests: XCTestCase {
         XCTAssertEqual(again.defaultTheme, "terminal")
         XCTAssertEqual(again.autosaveDelay, 5)
         XCTAssertEqual(again.lastNewDeckFolder?.path, "/tmp/talks")
+        XCTAssertEqual(again.lastNewDeckFolder?.hasDirectoryPath, true, "read back as a folder, as a panel hands one over")
         settings.defaultTheme = nil
         XCTAssertNil(GeneralSettings(defaults: settings.defaults).defaultTheme)
     }

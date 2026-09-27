@@ -56,8 +56,9 @@ public final class GeneralSettings {
         set { set(newValue, forKey: "TapAutosaveDelay") }
     }
 
+    /// A directory URL (its path ends in "/"), as a folder chosen in a panel is.
     public var lastNewDeckFolder: URL? {
-        get { defaults.string(forKey: "TapLastNewDeckFolder").map { URL(fileURLWithPath: $0) } }
+        get { defaults.string(forKey: "TapLastNewDeckFolder").map { URL(fileURLWithPath: $0, isDirectory: true) } }
         set { set(newValue?.path, forKey: "TapLastNewDeckFolder") }
     }
 

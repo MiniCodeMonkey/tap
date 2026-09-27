@@ -55,7 +55,7 @@ enum FakeToolScripts {
     static func themeSetFailing(recordingTo record: URL) throws -> URL {
         try write("""
           "theme set")
-            printf '{"ok": false, "error": {"code": "unknown_theme", "message": "unknown theme \\"%s\\": valid themes are base, terminal"}}\\n' "$3"
+            printf '{"ok": false, "error": {"code": "unknown_theme", "message": "unknown theme \\\\"%s\\\\": valid themes are base, terminal"}}\\n' "$3"
             exit 1 ;;
         """, recordingTo: record)
     }
