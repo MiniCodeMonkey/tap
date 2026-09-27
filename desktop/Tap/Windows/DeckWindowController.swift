@@ -366,7 +366,9 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
 
     @objc func showThemePopover(_ sender: Any?) {
         guard questionSheet == nil, window?.attachedSheet == nil else { return }
-        themePopover.show(relativeTo: themeButton.bounds, of: themeButton, selected: sessionController.currentThemeSlug)
+        // A button in the toolbar's overflow, or a hidden toolbar, has no window to anchor on.
+        let anchor: NSView = themeButton.window == nil ? (window?.contentView ?? themeButton) : themeButton
+        themePopover.show(relativeTo: anchor.bounds, of: anchor, selected: sessionController.currentThemeSlug)
     }
 
     /// The item's title is the theme's name from tap's catalog, the slug

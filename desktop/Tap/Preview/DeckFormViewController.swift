@@ -601,8 +601,9 @@ final class DeckFormViewController: NSViewController, NSTextFieldDelegate, NSTex
         controlChanged(field)
     }
 
+    /// Refused, as the toolbar's item is, while a sheet is up on the window.
     @objc private func themeRowPressed(_ sender: Any?) {
-        guard let button = themeRowButton else { return }
+        guard let button = themeRowButton, view.window?.attachedSheet == nil else { return NSSound.beep() }
         themePopover.show(relativeTo: button.bounds, of: button, selected: currentThemeSlug())
     }
 
