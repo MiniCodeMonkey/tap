@@ -109,13 +109,16 @@ final class GenerateImageTests: HostedTestCase {
         let menuThree = try XCTUnwrap(controller.editor(controller.editor, contextMenuForBoxAt: boxThree))
         let regenerates = menuThree.items.filter { $0.action == #selector(DeckWindowController.regenerateImage(_:)) }
         XCTAssertEqual(regenerates.map(\.title), ["Regenerate \u{201C}a lighthouse in thick fog\u{201D}", "Regenerate \u{201C}an isometric server room at\u{2026}\u{201D}"])
-        XCTAssertEqual(regenerates.map { $0.representedObject as? String }, ["images/generated-11111111.png", "images/generated-22222222.png"])
+        XCTAssertEqual(regenerates.map { $0.representedObject as? RegenerateTarget }, [RegenerateTarget(slide: 3, imagePath: "images/generated-11111111.png"),
+                                                                                      RegenerateTarget(slide: 3, imagePath: "images/generated-22222222.png")])
         let panelMenu = try XCTUnwrap(controller.slidePanelContextMenu(controller.slidePanel))
         XCTAssertTrue(panelMenu.items.contains { $0.action == #selector(DeckWindowController.regenerateImage(_:)) }, "the thumbnail's menu has the same items")
 
-        controller.jumpToSlide(number: 2)
+        // The caret moves to slide 3; slide 2's item still regenerates slide 2's image.
+        controller.jumpToSlide(number: 3)
+        XCTAssertEqual(controller.currentSlideNumber, 3)
         let item = try XCTUnwrap(menuTwo.items.first { $0.title == "Regenerate Image" })
-        XCTAssertEqual(item.representedObject as? String, "images/generated-00000000.png")
+        XCTAssertEqual(item.representedObject as? RegenerateTarget, RegenerateTarget(slide: 2, imagePath: "images/generated-00000000.png"))
         window.regenerateImage(item)
         try await waitUntil(timeout: 20, "the replacement") { controller.editor.string.contains("generated-ffffffff.png") }
         XCTAssertFalse(controller.editor.string.contains("generated-00000000.png"), "replaced in place")

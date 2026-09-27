@@ -491,10 +491,11 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
     /// Regenerate on one of the slide's AI images: tap replaces it in
     /// place with the comment's prompt and the aspect and theme match the
     /// comment recorded, and deletes the old file. No flags: what the
-    /// comment holds is tap's to read.
-    func regenerateImage(path: String, onSlide number: Int? = nil) {
-        guard let deck = document?.fileURL, let slide = number ?? currentSlideNumber else { return }
-        runToolOnSavedDeck(["image", "regenerate", deck.path, "--slide", String(slide), "--image", path, "--json"], actionName: "Regenerate Image", includeGeminiKey: true)
+    /// comment holds is tap's to read. `number` is the slide whose menu
+    /// listed the image, which need not be the caret's.
+    func regenerateImage(path: String, onSlide number: Int) {
+        guard let deck = document?.fileURL else { return }
+        runToolOnSavedDeck(["image", "regenerate", deck.path, "--slide", String(number), "--image", path, "--json"], actionName: "Regenerate Image", includeGeminiKey: true)
     }
 
     var editor: EditorTextView { editorViewController.textView }
@@ -1349,7 +1350,7 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
         if !slidePanel.selectedNumbers.contains(number) {
             slidePanel.click(slide: number, extendingSelection: false)
         }
-        let menu = SlideContextMenu.build(for: selectedSlideNumbers, target: windowController, showsTextShortcuts: false, aiImages: aiImages(onSlide: number))
+        let menu = SlideContextMenu.build(for: selectedSlideNumbers, target: windowController, showsTextShortcuts: false, aiImages: (number, aiImages(onSlide: number)))
         if let fixIt = editor.header(forBoxAt: index).fixIt {
             menu.addItem(.separator())
             let item = NSMenuItem(title: fixIt.title, action: #selector(DeckWindowController.allowDriverInThisDeck(_:)), keyEquivalent: "")
@@ -1395,7 +1396,7 @@ extension DeckSessionController: SlidePanelDelegate {
     func slidePanelContextMenu(_ panel: SlidePanelViewController) -> NSMenu? {
         guard let windowController = editor.window?.windowController as? DeckWindowController else { return nil }
         let numbers = selectedSlideNumbers
-        let images = numbers.count == 1 ? aiImages(onSlide: numbers[0]) : []
+        let images = numbers.count == 1 ? (numbers[0], aiImages(onSlide: numbers[0])) : nil
         return SlideContextMenu.build(for: numbers, target: windowController, aiImages: images)
     }
 

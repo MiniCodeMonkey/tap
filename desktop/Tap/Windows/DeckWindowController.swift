@@ -441,10 +441,10 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
         showFormSheet(sheet)
     }
 
-    /// The context menu's Regenerate items name the image in `representedObject`.
+    /// The context menu's Regenerate items name the image and its slide in `representedObject`.
     @objc func regenerateImage(_ sender: Any?) {
-        guard let path = (sender as? NSMenuItem)?.representedObject as? String else { return NSSound.beep() }
-        sessionController.regenerateImage(path: path)
+        guard let target = (sender as? NSMenuItem)?.representedObject as? RegenerateTarget else { return NSSound.beep() }
+        sessionController.regenerateImage(path: target.imagePath, onSlide: target.slide)
     }
 
     @objc func exportPDF(_ sender: Any?) { beginExport(.pdf(content: "slides")) }
@@ -1101,7 +1101,7 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
             return sessionController.document?.fileURL != nil && !exportController.isRunning
         }
         if menuItem.action == #selector(regenerateImage(_:)) {
-            return menuItem.representedObject is String
+            return menuItem.representedObject is RegenerateTarget
         }
         let count = sessionController.selectedSlideNumbers.count
         if menuItem.action == #selector(deleteSlides(_:)) {
