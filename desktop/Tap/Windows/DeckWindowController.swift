@@ -5,6 +5,7 @@ import AppKit
 final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolbarDelegate, NSMenuItemValidation {
     static let slidesItemIdentifier = NSToolbarItem.Identifier("slides")
     static let newSlideItemIdentifier = NSToolbarItem.Identifier("newSlide")
+    static let themeItemIdentifier = NSToolbarItem.Identifier("theme")
     static let playItemIdentifier = NSToolbarItem.Identifier("play")
     let sessionController: DeckSessionController
     let splitViewController: MainSplitViewController
@@ -17,8 +18,17 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
     let slidesButton = HoverButton()
     /// The toolbar's New Slide button: a click inserts the last layout, a hold opens the gallery.
     let newSlideButton = NewSlideButton()
+    /// The toolbar's Theme button: shows the deck's theme name, click opens the theme popover.
+    let themeButton = NSButton()
     /// The toolbar's Play button: a click opens the Present popover, a Shift-click starts from slide 1.
     let playButton = NSButton()
+    /// The theme grid in a popover, for the toolbar's Theme item.
+    private(set) lazy var themePopover: ThemePopoverController = {
+        let popover = ThemePopoverController()
+        popover.onPick = { [weak self] slug in self?.sessionController.setTheme(slug) }
+        return popover
+    }()
+    private var themeCatalogObserver: NSObjectProtocol?
     /// The popover, whose controls are the last settings: reloaded from the
     /// environment every time the popover is freshened, and saved only by
     /// its own Start and Rehearse.
@@ -121,6 +131,12 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
         sessionController.presentation.onFailed = { [weak self] message in self?.showTalkFailed(message) }
         remotePanel.onTurnOff = { [weak self] in self?.sessionController.presentation.setTunnel(on: false) }
         sessionController.presentation.onTunnelChange = { [weak self] in self?.refreshRemotePanel() }
+        sessionController.onThemeChanged = { [weak self] slug in self?.refreshThemeItem(slug: slug) }
+        themeCatalogObserver = NotificationCenter.default.addObserver(forName: ThemeImageLoader.didLoadCatalogNotification, object: AppEnvironment.shared.themeImages, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.refreshThemeItem(slug: self?.sessionController.currentThemeSlug)
+            }
+        }
         sessionController.onQuestion = { [weak self] question in self?.presentDeckQuestion(question) }
         sessionController.onQuestionClosed = { [weak self] id in self?.deckQuestionClosed(id) }
         sessionController.onQuestionsDropped = { [weak self] in
@@ -344,6 +360,19 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
     @objc func newSlideFromLayout(_ sender: Any?) {
         guard let name = (sender as? NSMenuItem)?.representedObject as? String else { return }
         insertSlide(layout: name, after: .caret)
+    }
+
+    @objc func showThemePopover(_ sender: Any?) {
+        guard questionSheet == nil, window?.attachedSheet == nil else { return }
+        themePopover.show(relativeTo: themeButton.bounds, of: themeButton, selected: sessionController.currentThemeSlug)
+    }
+
+    /// The item's title is the theme's name from tap's catalog, the slug
+    /// while the catalog loads, and "Default" for a deck that names none
+    /// (the grid's Default cell, tap's default theme).
+    func refreshThemeItem(slug: String?) {
+        guard let slug else { return themeButton.title = "Default" }
+        themeButton.title = AppEnvironment.shared.themeImages.catalog?.name(forSlug: slug) ?? slug
     }
 
     @objc func showLayoutGallery(_ sender: Any?) {
@@ -887,6 +916,8 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
         sidebarCollapseObservation = nil
         if let presentingObserver { NotificationCenter.default.removeObserver(presentingObserver) }
         presentingObserver = nil
+        if let themeCatalogObserver { NotificationCenter.default.removeObserver(themeCatalogObserver) }
+        themeCatalogObserver = nil
         if let controller = previewWindowController {
             controller.onClose = nil
             previewWindowController = nil
@@ -954,7 +985,7 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
     }
 
     func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
-        [Self.slidesItemIdentifier, .flexibleSpace, Self.newSlideItemIdentifier, Self.playItemIdentifier, Self.previewItemIdentifier]
+        [Self.slidesItemIdentifier, .flexibleSpace, Self.newSlideItemIdentifier, Self.themeItemIdentifier, Self.playItemIdentifier, Self.previewItemIdentifier]
     }
 
     func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
@@ -1004,6 +1035,20 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
             playButton.action = #selector(playButtonPressed(_:))
             playButton.isEnabled = canStartATalk
             item.view = playButton
+            return item
+        }
+        if identifier == Self.themeItemIdentifier {
+            let item = NSToolbarItem(itemIdentifier: identifier)
+            item.label = "Theme"
+            item.toolTip = "The deck's theme. Click to pick another; tap theme set writes it."
+            themeButton.bezelStyle = .toolbar
+            themeButton.image = NSImage(systemSymbolName: "paintpalette", accessibilityDescription: "Theme")
+            themeButton.imagePosition = .imageLeading
+            themeButton.setAccessibilityIdentifier("theme-button")
+            themeButton.target = self
+            themeButton.action = #selector(showThemePopover(_:))
+            refreshThemeItem(slug: sessionController.currentThemeSlug)
+            item.view = themeButton
             return item
         }
         guard identifier == Self.previewItemIdentifier else { return nil }
