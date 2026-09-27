@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"regexp"
+	"slices"
 	"strings"
 )
 
@@ -22,6 +23,10 @@ type AIImage struct {
 	Aspect     string
 	MatchTheme bool
 }
+
+// AIImageAspectRatios are the aspect ratios Gemini's image config accepts,
+// and the only aspects a comment records.
+var AIImageAspectRatios = []string{"1:1", "16:9", "9:16", "4:3", "3:4"}
 
 // aiPromptOptionSeparator separates the prompt from its recorded choices
 // inside the comment: "a fox | aspect: 16:9 | match-theme".
@@ -55,8 +60,9 @@ func aiPromptComment(prompt, aspect string, matchTheme bool) string {
 }
 
 // splitAIPromptOptions takes the recorded choices off the end of a
-// comment's text. Only trailing tokens that read as choices are taken, so
-// a prompt that itself contains " | " keeps its words.
+// comment's text. Only trailing tokens that are exactly a choice are taken
+// ("match-theme", or "aspect: " and one of AIImageAspectRatios), so a
+// prompt that itself contains " | " keeps its words.
 func splitAIPromptOptions(text string) (prompt, aspect string, matchTheme bool) {
 	parts := strings.Split(text, aiPromptOptionSeparator)
 	for len(parts) > 1 {
@@ -64,7 +70,7 @@ func splitAIPromptOptions(text string) (prompt, aspect string, matchTheme bool) 
 		switch {
 		case last == "match-theme":
 			matchTheme = true
-		case strings.HasPrefix(last, "aspect: "):
+		case strings.HasPrefix(last, "aspect: ") && slices.Contains(AIImageAspectRatios, strings.TrimPrefix(last, "aspect: ")):
 			aspect = strings.TrimPrefix(last, "aspect: ")
 		default:
 			return strings.Join(parts, aiPromptOptionSeparator), aspect, matchTheme
@@ -72,6 +78,14 @@ func splitAIPromptOptions(text string) (prompt, aspect string, matchTheme bool) 
 		parts = parts[:len(parts)-1]
 	}
 	return strings.Join(parts, aiPromptOptionSeparator), aspect, matchTheme
+}
+
+// PromptReadsAsChoices reports whether a prompt ends in words a comment
+// would read back as a recorded choice (" | match-theme", " | aspect:
+// 16:9"), which would not survive the round trip through the deck.
+func PromptReadsAsChoices(prompt string) bool {
+	_, aspect, matchTheme := splitAIPromptOptions(prompt)
+	return aspect != "" || matchTheme
 }
 
 // AIImageMarkdown is the text that records an AI-generated image in a

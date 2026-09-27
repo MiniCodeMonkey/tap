@@ -677,3 +677,34 @@ Content three`,
 		})
 	}
 }
+
+func TestAIPromptChoicesAreExactTokens(t *testing.T) {
+	tests := []struct {
+		comment    string
+		prompt     string
+		aspect     string
+		matchTheme bool
+	}{
+		{"compare the two | aspect: wide", "compare the two | aspect: wide", "", false},
+		{"a fox | aspect: 16:9", "a fox", "16:9", false},
+		{"a fox | aspect: 2:1", "a fox | aspect: 2:1", "", false},
+		{"a fox | match-theme please", "a fox | match-theme please", "", false},
+		{"a fox | aspect: 1:1 | match-theme", "a fox", "1:1", true},
+		{"a fox | match-theme | aspect: 1:1", "a fox", "1:1", true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.comment, func(t *testing.T) {
+			images := ParseAIImages("<!-- ai-prompt: " + tt.comment + " -->\n![](images/a.png)")
+			if len(images) != 1 {
+				t.Fatalf("parsed %d images", len(images))
+			}
+			got := images[0]
+			if got.Prompt != tt.prompt || got.Aspect != tt.aspect || got.MatchTheme != tt.matchTheme {
+				t.Errorf("parsed (%q, %q, %v), want (%q, %q, %v)", got.Prompt, got.Aspect, got.MatchTheme, tt.prompt, tt.aspect, tt.matchTheme)
+			}
+		})
+	}
+	if !PromptReadsAsChoices("a sign | match-theme") || !PromptReadsAsChoices("a fox | aspect: 4:3") || PromptReadsAsChoices("compare the two | aspect: wide") {
+		t.Error("PromptReadsAsChoices reads only exact choices")
+	}
+}

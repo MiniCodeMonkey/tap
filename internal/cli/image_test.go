@@ -252,6 +252,24 @@ func TestImageRegenerateReusesTheRecordedChoices(t *testing.T) {
 	}
 }
 
+// A person's words that only look like a choice stay words: a plain
+// regenerate asks for them again and is not handed an aspect nobody gave.
+func TestImageRegenerateKeepsWordsThatLookLikeAChoice(t *testing.T) {
+	fake := useFakeImageGenerator(t)
+	deck := writeDeckFile(t, t.TempDir(), "talk.md", imageDeck)
+	if exitCode, _, stderr := runTap(t, "image", "generate", deck, "--slide", "2", "--prompt", "compare the two | aspect: wide"); exitCode != exitOK {
+		t.Fatalf("generate: exit %d, stderr %q", exitCode, stderr)
+	}
+	content, _ := os.ReadFile(deck)
+	image := deckedit.ParseAIImages(string(content))[0].ImagePath
+	if exitCode, _, stderr := runTap(t, "image", "regenerate", deck, "--slide", "2", "--image", image); exitCode != exitOK {
+		t.Fatalf("regenerate: exit %d, stderr %q", exitCode, stderr)
+	}
+	if fake.prompts[1] != "compare the two | aspect: wide" || fake.aspects[1] != "" {
+		t.Errorf("regenerate asked %q at %q", fake.prompts[1], fake.aspects[1])
+	}
+}
+
 func TestImageGenerateUsageErrors(t *testing.T) {
 	useFakeImageGenerator(t)
 	deck := writeDeckFile(t, t.TempDir(), "talk.md", imageDeck)
@@ -263,6 +281,8 @@ func TestImageGenerateUsageErrors(t *testing.T) {
 		{"no slide", []string{"image", "generate", deck, "--prompt", "x", "--json"}, codeUsage},
 		{"no prompt", []string{"image", "generate", deck, "--slide", "1", "--json"}, codeUsage},
 		{"blank prompt", []string{"image", "generate", deck, "--slide", "1", "--prompt", "  ", "--json"}, codeUsage},
+		{"prompt ending in a choice", []string{"image", "generate", deck, "--slide", "1", "--prompt", "a sign that says | match-theme", "--json"}, codeUsage},
+		{"prompt ending in an aspect", []string{"image", "generate", deck, "--slide", "1", "--prompt", "a fox | aspect: 1:1", "--json"}, codeUsage},
 		{"slide out of range", []string{"image", "generate", deck, "--slide", "9", "--prompt", "x", "--json"}, codeOutOfRange},
 	}
 	for _, tt := range tests {

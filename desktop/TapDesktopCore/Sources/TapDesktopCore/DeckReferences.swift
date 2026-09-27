@@ -12,12 +12,21 @@ public struct AIImageReference: Equatable, Sendable {
 
     private static let pattern = try! NSRegularExpression(pattern: #"<!--\s*ai-prompt:\s*(.+?)\s*-->\n[ \t]*!\[\]\(([^)]+)\)"#)
 
+    /// The aspect ratios a comment records, tap's deckedit.AIImageAspectRatios.
+    static let aspectRatios: Set<String> = ["1:1", "16:9", "9:16", "4:3", "3:4"]
+
     /// The comment records the person's words, then the choices tap made the
-    /// image with (`| aspect: 16:9 | match-theme`); `prompt` is the words alone.
+    /// image with (`| aspect: 16:9 | match-theme`); `prompt` is the words
+    /// alone. Only a trailing token that is exactly a choice is one, so
+    /// "compare the two | aspect: wide" stays the person's words.
     static func words(in commentText: String) -> String {
         var parts = commentText.components(separatedBy: " | ")
-        while parts.count > 1, let last = parts.last, last == "match-theme" || last.hasPrefix("aspect: ") { parts.removeLast() }
+        while parts.count > 1, let last = parts.last, isChoice(last) { parts.removeLast() }
         return parts.joined(separator: " | ")
+    }
+
+    private static func isChoice(_ token: String) -> Bool {
+        token == "match-theme" || (token.hasPrefix("aspect: ") && aspectRatios.contains(String(token.dropFirst("aspect: ".count))))
     }
 
     public static func find(in text: String) -> [AIImageReference] {

@@ -235,6 +235,9 @@ func runImageGenerate(cmd *cobra.Command, args []string) error {
 	if prompt == "" {
 		return userError(codeUsage, errors.New("--prompt is required"))
 	}
+	if err := refuseChoiceShapedPrompt(prompt); err != nil {
+		return err
+	}
 	deck, err := resolveDeck(firstArg(args))
 	if err != nil {
 		return err
@@ -292,6 +295,9 @@ func runImageRegenerate(cmd *cobra.Command, args []string) error {
 		prompt = strings.TrimSpace(imageRegeneratePrompt)
 		if prompt == "" {
 			return userError(codeUsage, errors.New("--prompt is empty"))
+		}
+		if err := refuseChoiceShapedPrompt(prompt); err != nil {
+			return err
 		}
 	}
 	options := generateOptions{aspect: replacing.Aspect, matchTheme: replacing.MatchTheme}
@@ -353,8 +359,15 @@ func findAIImage(deck string, slideIndex int, imagePath string) (deckedit.AIImag
 	return deckedit.AIImage{}, userError(codeImageNotFound, fmt.Errorf("slide %d has no AI image %s: %s", slideIndex+1, imagePath, onSlide))
 }
 
-// validAspectRatios are the aspect ratios Gemini's image config accepts.
-var validAspectRatios = []string{"1:1", "16:9", "9:16", "4:3", "3:4"}
+// refuseChoiceShapedPrompt refuses a prompt whose last words the deck's
+// ai-prompt comment would read back as a recorded choice, so the words a
+// person typed are the words a later regenerate asks for.
+func refuseChoiceShapedPrompt(prompt string) error {
+	if deckedit.PromptReadsAsChoices(prompt) {
+		return userError(codeUsage, errors.New(`--prompt must not end in " | match-theme" or " | aspect: <ratio>"; use --match-theme or --aspect`))
+	}
+	return nil
+}
 
 // generateOptions is what the person chose beyond the prompt.
 type generateOptions struct {
@@ -364,8 +377,8 @@ type generateOptions struct {
 
 // generateOptionsFrom validates --aspect.
 func generateOptionsFrom(aspect string, matchTheme bool) (generateOptions, error) {
-	if aspect != "" && !slices.Contains(validAspectRatios, aspect) {
-		return generateOptions{}, userError(codeUsage, fmt.Errorf("--aspect must be one of %s, got %q", strings.Join(validAspectRatios, ", "), aspect))
+	if aspect != "" && !slices.Contains(deckedit.AIImageAspectRatios, aspect) {
+		return generateOptions{}, userError(codeUsage, fmt.Errorf("--aspect must be one of %s, got %q", strings.Join(deckedit.AIImageAspectRatios, ", "), aspect))
 	}
 	return generateOptions{aspect: aspect, matchTheme: matchTheme}, nil
 }
