@@ -38,9 +38,8 @@ final class GeminiKeyStoreTests: XCTestCase {
         XCTAssertEqual(store.writes, [nil])
     }
 
-    /// The SecItem calls themselves, run only where TAP_KEYCHAIN_TESTS=1 (CI's
-    /// core-test step sets it): a person's Mac never sees a Keychain prompt
-    /// from a test. The item lives under a service name of its own and is
+    /// The SecItem calls themselves, run only where TAP_KEYCHAIN_TESTS=1, so
+    /// a person's Mac never sees a Keychain prompt from a test. The item lives under a service name of its own and is
     /// deleted after, whatever the assertions did.
     func testTheKeychainRoundTripsOnCI() throws {
         try XCTSkipUnless(ProcessInfo.processInfo.environment["TAP_KEYCHAIN_TESTS"] == "1", "the real Keychain is exercised on CI alone")

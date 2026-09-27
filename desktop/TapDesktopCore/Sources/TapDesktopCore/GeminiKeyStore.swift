@@ -40,12 +40,20 @@ public final class KeychainGeminiKeyStore: GeminiKeyStore {
         return String(decoding: data, as: UTF8.self)
     }
 
+    /// An empty or nil key removes the item. A new key updates the item in
+    /// place, so a write that fails leaves the old key where it was.
     public func write(_ key: String?) throws {
-        let deleted = SecItemDelete(query as CFDictionary)
-        guard deleted == errSecSuccess || deleted == errSecItemNotFound else { throw KeychainError.status(deleted) }
-        guard let key, !key.isEmpty else { return }
+        guard let key, !key.isEmpty else {
+            let deleted = SecItemDelete(query as CFDictionary)
+            guard deleted == errSecSuccess || deleted == errSecItemNotFound else { throw KeychainError.status(deleted) }
+            return
+        }
+        let data = Data(key.utf8)
+        let updated = SecItemUpdate(query as CFDictionary, [kSecValueData as String: data] as CFDictionary)
+        if updated == errSecSuccess { return }
+        guard updated == errSecItemNotFound else { throw KeychainError.status(updated) }
         var item = query
-        item[kSecValueData as String] = Data(key.utf8)
+        item[kSecValueData as String] = data
         let added = SecItemAdd(item as CFDictionary, nil)
         guard added == errSecSuccess else { throw KeychainError.status(added) }
     }
