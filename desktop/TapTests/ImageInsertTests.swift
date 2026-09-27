@@ -127,5 +127,7 @@ final class ImageInsertTests: HostedTestCase {
         try await Task.sleep(nanoseconds: 500_000_000)
         XCTAssertFalse(controller.editor.string.contains("images/diagram.png"))
         XCTAssertTrue(controller.session.log.text.contains("Insert Image needs a saved deck"), controller.session.log.text)
+        XCTAssertEqual(controller.editorViewController.bar(.toolFailed)?.message, "Insert Image failed.", "the person sees why, not only a beep")
+        XCTAssertEqual(controller.editorViewController.bar(.toolFailed)?.detail, "Save the deck first: tap copies the image into images/ next to the deck file.")
     }
 }

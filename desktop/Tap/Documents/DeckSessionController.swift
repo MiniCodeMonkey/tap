@@ -381,6 +381,7 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
     func insertImages(_ files: [URL]) {
         guard let deck = document?.fileURL, FileManager.default.fileExists(atPath: deck.path) else {
             session.log.append("Insert Image needs a saved deck: tap image add copies next to the deck file", source: .app)
+            showToolError(actionName: "Insert Image", message: "Save the deck first: tap copies the image into images/ next to the deck file.")
             NSSound.beep()
             return
         }
