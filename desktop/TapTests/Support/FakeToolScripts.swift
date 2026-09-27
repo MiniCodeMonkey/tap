@@ -21,6 +21,7 @@ enum FakeToolScripts {
         try """
         #!/bin/sh
         \(selfKill)
+        \(jsonStringFunction)
         echo "arguments: $@" >> "\(record.path)"
         echo "gemini: ${GEMINI_API_KEY:+set}" >> "\(record.path)"
         case "$1 $2" in
@@ -41,6 +42,23 @@ enum FakeToolScripts {
     static func themeShow(png: URL = fixturePNG, downloadLines: Int = 0, recordingTo record: URL) throws -> URL {
         try write(themeShowCase(png: png, downloadLines: downloadLines), recordingTo: record)
     }
+
+    /// `text` in single quotes for sh: every character is literal, and a
+    /// single quote in it closes, escapes and reopens the quoting.
+    nonisolated static func shellQuoted(_ text: String) -> String {
+        "'" + text.replacingOccurrences(of: "'", with: #"'\''"#) + "'"
+    }
+
+    /// `value` as JSON text, keys sorted.
+    nonisolated static func jsonText(_ value: Any) -> String {
+        guard let data = try? JSONSerialization.data(withJSONObject: value, options: [.sortedKeys, .withoutEscapingSlashes]) else { return "null" }
+        return String(decoding: data, as: UTF8.self)
+    }
+
+    /// `json_string "$value"` prints the value as a JSON string, quotes
+    /// included, with its backslashes and double quotes escaped: for a
+    /// path the script only knows when it runs.
+    static let jsonStringFunction = #"json_string() { printf '"%s"' "$(printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g')"; }"#
 
     nonisolated static var fixturePNG: URL { Fixtures.repositoryRoot.appendingPathComponent("desktop/TapTests/Fixtures/diagram.png") }
 
@@ -94,8 +112,10 @@ enum FakeToolScripts {
         let download = (0..<downloadLines).map { index in
             #"echo '{"phase":"download","bytes":\#((index + 1) * 50_000_000),"totalBytes":\#(downloadLines * 50_000_000)}' >&2; sleep 0.2"#
         }.joined(separator: "; ")
-        let brokenJSON = broken.map { #"{"slide":\#($0.slide),"message":"\#($0.message)"}"# }.joined(separator: ",")
-        let warnings = broken.map { #"echo 'warning: slide \#($0.slide) shows an error card: \#($0.message)' >&2"# }.joined(separator: "; ")
+        let brokenJSON = jsonText(broken.map { ["slide": $0.slide, "message": $0.message] as [String: Any] })
+        let warnings = broken.map { "printf '%s\\n' \(shellQuoted("warning: slide \($0.slide) shows an error card: \($0.message)")) >&2" }.joined(separator: "; ")
+        // The done line goes out through printf's %s, so no character of the payload is the shell's to read.
+        let doneLine = "printf '%s%s%s\\n' \(shellQuoted(#"{"phase":"done","ok":true,"output":"#)) \"$(json_string \"$out\")\" \(shellQuoted(#","pages":\#(slides),"bytes":14,"brokenSlides":\#(brokenJSON)}"#)) >&2"
         return try write("""
           "export pdf")
             trap 'echo "{\\"phase\\":\\"done\\",\\"ok\\":false,\\"error\\":{\\"code\\":\\"interrupted\\",\\"message\\":\\"interrupted\\"}}" >&2; exit 130' INT
@@ -104,7 +124,7 @@ enum FakeToolScripts {
             i=1; while [ $i -le \(slides) ]; do echo "{\\"phase\\":\\"render\\",\\"done\\":$i,\\"total\\":\(slides)}" >&2; sleep \(secondsPerSlide); i=$((i + 1)); done
             \(warnings.isEmpty ? ":" : warnings)
             printf 'not a real pdf' > "$out"
-            echo "{\\"phase\\":\\"done\\",\\"ok\\":true,\\"output\\":\\"$out\\",\\"pages\\":\(slides),\\"bytes\\":14,\\"brokenSlides\\":[\(brokenJSON)]}" >&2
+            \(doneLine)
             exit 0 ;;
         """, recordingTo: record)
     }
