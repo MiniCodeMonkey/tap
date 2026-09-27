@@ -133,6 +133,7 @@ final class AppEnvironment {
     private(set) var environmentNotice: String?
     private(set) var bundledTapVersion: String?
     private let loginShellLoader: LoginShellEnvironmentLoader
+    private var generalSettingsObserver: NSObjectProtocol?
 
     init() {
         if let override = UserDefaults.standard.string(forKey: "TapExecutablePath") {
@@ -180,6 +181,15 @@ final class AppEnvironment {
         }
         Task { await layoutCatalog.load() }
         Task { await deckSchema.load() }
+        EditorTypography.refresh(from: generalSettings)
+        if let generalSettingsObserver { NotificationCenter.default.removeObserver(generalSettingsObserver) }
+        generalSettingsObserver = NotificationCenter.default.addObserver(forName: GeneralSettings.didChangeNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                EditorTypography.refresh(from: self.generalSettings)
+                NSDocumentController.shared.autosavingDelay = self.generalSettings.autosaveDelay
+            }
+        }
     }
 
     func tapEnvironment() async -> [String: String] {

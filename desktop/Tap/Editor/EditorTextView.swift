@@ -37,10 +37,10 @@ final class EditorTextView: NSTextView {
     var deckErrors: [String] { tracker.deckErrors }
     var hiddenLength: Int { tracker.hiddenPrefixLength }
 
-    static let font = NSFont.monospacedSystemFont(ofSize: 13, weight: .regular)
-    static let boldFont = NSFont.monospacedSystemFont(ofSize: 13, weight: .bold)
-    static let smallFont = NSFont.monospacedSystemFont(ofSize: 9, weight: .regular)
-    static let lineHeight: CGFloat = 21
+    static var font: NSFont { EditorTypography.current.font }
+    static var boldFont: NSFont { EditorTypography.current.boldFont }
+    static var smallFont: NSFont { EditorTypography.current.smallFont }
+    static var lineHeight: CGFloat { EditorTypography.current.lineHeight }
     static let headerHeight: CGFloat = 28
     static let errorLineHeight: CGFloat = 18
     static let boxPaddingTop: CGFloat = 6
@@ -107,6 +107,7 @@ final class EditorTextView: NSTextView {
         view.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
         view.setAccessibilityIdentifier("editor")
         view.textStorage?.delegate = view
+        NotificationCenter.default.addObserver(view, selector: #selector(applyTypography), name: EditorTypography.didChangeNotification, object: nil)
         view.textContentStorage?.delegate = view
         view.registerForDraggedTypes(view.registeredDraggedTypes + [NSPasteboard.PasteboardType(SlideDragPayload.pasteboardType)])
         return view
@@ -319,6 +320,16 @@ final class EditorTextView: NSTextView {
         for (index, paragraph) in paragraphs.enumerated() where paragraph.length > 0 {
             storage.setAttributes(attributes(style: styles[index], role: role(for: paragraph, line: lines[index])), range: paragraph)
         }
+    }
+
+    /// The settings' font size or line spacing changed: every paragraph is
+    /// styled again with the new font and line height.
+    @objc func applyTypography() {
+        Self.paragraphStyles = [:]
+        font = Self.font
+        typingAttributes = [.font: Self.font, .foregroundColor: NSColor.labelColor, .paragraphStyle: Self.paragraphStyle(for: .boxMiddle)]
+        restyle(NSRange(location: 0, length: (string as NSString).length))
+        needsDisplay = true
     }
 
     // MARK: The current slide

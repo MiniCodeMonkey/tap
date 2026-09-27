@@ -54,6 +54,7 @@ class HostedTestCase: XCTestCase {
         AppEnvironment.shared.toolExecutableURL = try FakeToolScripts.themeShow(recordingTo: try Fixtures.temporaryFolder().appendingPathComponent("renders.txt"))
         AppEnvironment.shared.geminiKeyStore = MemoryGeminiKeyStore()
         AppEnvironment.shared.generalSettings = GeneralSettings(defaults: try XCTUnwrap(UserDefaults(suiteName: "TapTests.general.\(UUID().uuidString)")))
+        EditorTypography.refresh(from: AppEnvironment.shared.generalSettings)
         AppEnvironment.shared.themeImages = ThemeImageLoader()
         // The runner's own shell may set a key; the tests' shell value is empty (resolve reads empty as none).
         AppEnvironment.shared.extraEnvironment["GEMINI_API_KEY"] = ""

@@ -29,6 +29,9 @@ enum MainMenu {
         let menu = NSMenu(title: "Tap")
         menu.addItem(item("About Tap", action: #selector(AppDelegate.showAbout(_:))))
         menu.addItem(.separator())
+        menu.addItem(item("Check for Updates…", action: nil))
+        menu.addItem(item("Settings…", action: #selector(AppDelegate.showSettings(_:)), key: ","))
+        menu.addItem(.separator())
         let services = item("Services", action: nil)
         services.submenu = NSMenu(title: "Services")
         NSApp.servicesMenu = services.submenu

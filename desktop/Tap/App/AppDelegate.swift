@@ -21,7 +21,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         AppEnvironment.shared.warmUp()
-        NSDocumentController.shared.autosavingDelay = 1
+        NSDocumentController.shared.autosavingDelay = AppEnvironment.shared.generalSettings.autosaveDelay
         NotificationCenter.default.addObserver(self, selector: #selector(deckWindowWillClose(_:)), name: NSWindow.willCloseNotification, object: nil)
         // UI tests pass -TapOpenOnLaunch <path>. The completion-handler form
         // never presents an error panel, so a missing or unreadable path
@@ -92,10 +92,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         NSApp.orderFrontStandardAboutPanel(options: aboutPanelOptions())
     }
 
-    /// The Image Generation pane of Settings, the selector the Generate
-    /// Image sheet's Settings… button sends. There is no Settings window
-    /// yet, so it does nothing.
-    @objc func showSettings(_ sender: Any?) {}
+    /// Tap > Settings…, and the selector the Generate Image sheet's
+    /// Settings… button sends.
+    @objc func showSettings(_ sender: Any?) {
+        SettingsWindowController.shared.show(pane: .general)
+    }
 
     /// The About panel names the bundled tap's version.
     func aboutPanelOptions() -> [NSApplication.AboutPanelOptionKey: Any] {
