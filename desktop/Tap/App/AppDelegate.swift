@@ -55,6 +55,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
     func applicationWillTerminate(_ notification: Notification) {
         Self.stopAllPresentations()
+        // A running export or a preview server would outlive the app otherwise.
+        ToolRun.stopAll()
     }
 
     /// Ends every deck's talk: windows down, sleep assertions released, tap

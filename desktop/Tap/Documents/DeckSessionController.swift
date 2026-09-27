@@ -268,18 +268,106 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
     }
 
     /// Writes the buffer to the deck file now, ahead of the autosave, and
-    /// says so in the log. A save the document refuses (a disk conflict is
-    /// showing) leaves the edit in the buffer for the next save, with a
-    /// log line.
+    /// reports the outcome. A buffer that equals the file needs no write.
+    /// A save the document refuses (a disk conflict is showing) comes back
+    /// as its error and the edit stays in the buffer for the next save.
+    func saveNow(completion: @escaping (Error?) -> Void) {
+        _ = deckForm.commitEditing()
+        guard let document, let url = document.fileURL else { return completion(CocoaError(.fileNoSuchFile)) }
+        guard isContentEdited else { return completion(nil) }
+        document.save(to: url, ofType: document.fileType ?? "net.daringfireball.markdown", for: .saveOperation, completionHandler: completion)
+    }
+
+    /// D5's fix-it save, unchanged in what it logs: FixItTests waits for the success line.
     func saveNow() {
-        guard let document, let url = document.fileURL, isContentEdited else { return }
-        document.save(to: url, ofType: document.fileType ?? "net.daringfireball.markdown", for: .saveOperation) { [weak self] error in
+        saveNow { [weak self] error in
             if let error {
                 self?.session.log.append("the save after the fix-it was refused: \(error.localizedDescription)", source: .app)
             } else {
                 self?.session.log.append("saved the deck after the fix-it", source: .app)
             }
         }
+    }
+
+    // MARK: Tap commands on the deck
+
+    /// The one path for a tap command that writes the deck file (tap theme
+    /// set, tap image generate, tap image regenerate): the buffer is saved
+    /// first, tap runs on the file, and the file comes back into the
+    /// buffer as one undo step named after the action, the cursor's slide
+    /// kept, through the same load an external change takes. A refused
+    /// save runs nothing; tap's failure shows on a bar with tap's words,
+    /// unless the caller shows it itself (a sheet). `arguments` name the
+    /// deck by its path already. `includeGeminiKey` is for the image runs.
+    func runToolOnSavedDeck(_ arguments: [String], actionName: String, includeGeminiKey: Bool = false, showsErrorBar: Bool = true,
+                            completion: @escaping (ToolOutcome?) -> Void = { _ in }) {
+        guard !hasDiskConflict else {
+            session.log.append("\(actionName) was not run: the save was refused (the deck changed on disk)", source: .app)
+            NSSound.beep()
+            completion(nil)
+            return
+        }
+        saveNow { [weak self] error in
+            guard let self else { return }
+            if let error {
+                self.session.log.append("\(actionName) was not run: the save was refused: \(error.localizedDescription)", source: .app)
+                completion(nil)
+                return
+            }
+            // tap dev reports the write as file-changed after its debounce; if that
+            // report lands before this run's own load, diskChanged takes the action's name.
+            self.pendingToolActionName = actionName
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                let exit = await TapTool.run(arguments, in: self.document?.fileURL?.deletingLastPathComponent(), log: self.session.log, includeGeminiKey: includeGeminiKey)
+                let name = self.pendingToolActionName ?? actionName
+                self.pendingToolActionName = nil
+                switch exit.outcome {
+                case .ok?:
+                    self.loadDiskVersion(actionName: name)
+                case .failed(_, let message)?:
+                    if showsErrorBar { self.showToolError(actionName: actionName, message: message) }
+                case nil:
+                    if showsErrorBar { self.showToolError(actionName: actionName, message: exit.cancelled ? "cancelled" : "tap did not answer (exit \(exit.status)); see the Tap Log") }
+                }
+                completion(exit.outcome)
+            }
+        }
+    }
+
+    /// The undo step's name for the disk load a tool run is about to cause,
+    /// whichever path loads it first (the run's own, or tap dev's
+    /// file-changed report through diskChanged).
+    private(set) var pendingToolActionName: String?
+
+    /// tap's failure, on a bar over the editor with tap's own message.
+    func showToolError(actionName: String, message: String) {
+        editorViewController.showBar(DocumentBarView(kind: .toolFailed, message: "\(actionName) failed.", detail: message,
+                                                     buttons: [("OK", { [weak self] in self?.editorViewController.hideBar(.toolFailed) })]))
+    }
+
+    /// The deck's theme slug from the frontmatter, nil when it names none.
+    var currentThemeSlug: String? {
+        Frontmatter(text: editor.string).entry(at: ["theme"])?.unquotedValue.flatMap { $0.isEmpty ? nil : $0 }
+    }
+
+    /// Told when the frontmatter's theme changes, for the toolbar item and
+    /// the Deck tab's row.
+    var onThemeChanged: ((String?) -> Void)?
+    private var lastThemeSlug: String?
+
+    func refreshThemeIfChanged() {
+        let slug = currentThemeSlug
+        guard slug != lastThemeSlug else { return }
+        lastThemeSlug = slug
+        onThemeChanged?(slug)
+    }
+
+    /// A pick in the theme grid: tap theme set on the saved file. "default"
+    /// is the grid's Default cell, which removes the theme line.
+    func setTheme(_ slug: String) {
+        guard let deck = document?.fileURL else { return }
+        runToolOnSavedDeck(["theme", "set", slug, deck.path, "--json"], actionName: "Change Theme")
     }
 
     var editor: EditorTextView { editorViewController.textView }
@@ -539,7 +627,9 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
         if document.isDocumentEdited {
             showDiskConflict(name: url.lastPathComponent)
         } else {
-            loadDiskVersion()
+            let name = pendingToolActionName ?? "Load Disk Version"
+            pendingToolActionName = nil
+            loadDiskVersion(actionName: name)
         }
     }
 
@@ -563,14 +653,14 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
     /// the editor's text is replaced, so the document reads as not edited
     /// the moment the replacement lands, rather than staying edited until
     /// the next autosave.
-    func loadDiskVersion() {
+    func loadDiskVersion(actionName: String = "Load Disk Version") {
         clearDiskConflict()
         guard let document, let url = document.fileURL,
               let disk = try? String(contentsOf: url, encoding: .utf8) else { return }
         let slideNumber = editor.currentBoxIndex.map { editor.boxes[$0].slide.number }
         document.adopt(diskText: disk)
         if let replacement = TextDiff.replacement(from: editor.string, to: disk) {
-            editor.replaceText(in: replacement.range, with: replacement.replacement, actionName: "Load Disk Version")
+            editor.replaceText(in: replacement.range, with: replacement.replacement, actionName: actionName)
         }
         if let slideNumber {
             // The next send tap answers for this text, whichever generation
@@ -580,6 +670,7 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
         refreshEditedState()
         document.acceptDiskState()
         session.log.append("loaded the disk version", source: .app)
+        refreshThemeIfChanged()
     }
 
     /// Writes the buffer over the changed file.
@@ -693,6 +784,8 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
             sourceSync.textDidChange()
         }
         refreshEditedState()
+        // Set, not reported: the toolbar item reads currentThemeSlug itself when it is built.
+        lastThemeSlug = currentThemeSlug
     }
 
     /// The buffer is on disk. tap drops the buffer it renders and reads the
@@ -1082,6 +1175,7 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
         refreshEditedState()
         Task { await sourceSync.sendNow() }
         deckForm.refresh()
+        refreshThemeIfChanged()
     }
 
     // MARK: EditorTextViewDelegate
@@ -1090,6 +1184,7 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
         refreshEditedState()
         sourceSync.textDidChange()
         deckForm.refresh()
+        refreshThemeIfChanged()
     }
 
     func editor(_ editor: EditorTextView, payloadForHeaderDragOfBoxAt index: Int) -> SlideDragPayload? {

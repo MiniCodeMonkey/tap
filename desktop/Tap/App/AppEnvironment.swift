@@ -48,6 +48,19 @@ final class AppEnvironment {
     /// A tap for talks alone, for tests that script tap present while the
     /// deck's real tap dev keeps running. nil runs the bundled tap.
     var presentExecutableURL: URL?
+    /// The tap the one-shot commands run (tap new, tap theme show, tap
+    /// export ...), for tests that script a subcommand while the deck's
+    /// real tap dev keeps running. nil runs the bundled tap.
+    var toolExecutableURL: URL?
+    /// Where the Gemini key lives. Read in two places only: TapTool's image
+    /// runs and the Image Generation pane. Under -TapDefaultsSuite (every
+    /// UI test launch) it is a store in memory, so no test reads or writes
+    /// the person's Keychain; every hosted test installs one too.
+    var geminiKeyStore: GeminiKeyStore = KeychainGeminiKeyStore()
+    /// The General pane's settings. A test replaces this with one on a fresh suite.
+    var generalSettings = GeneralSettings()
+    /// The theme catalog and every theme's render, loaded once per app.
+    lazy var themeImages = ThemeImageLoader()
     /// Whether the Focus hint has been shown on this Mac. A test replaces it.
     var focusHint = FocusHintState()
     #if DEBUG
@@ -143,7 +156,18 @@ final class AppEnvironment {
             deckPorts = DeckPortStore(defaults: defaults)
             presentationSettings = PresentationSettingsStore(defaults: defaults)
             focusHint = FocusHintState(defaults: defaults)
+            generalSettings = GeneralSettings(defaults: defaults)
+            geminiKeyStore = MemoryGeminiKeyStore()
         }
+    }
+
+    /// Which key tap's image runs get, for the Image Generation pane's
+    /// label: the login shell's, else the Keychain's, else none. This
+    /// reads the store; nothing else outside TapTool does.
+    func geminiKeySource() async -> GeminiKeySource {
+        var shell = await loginShellLoader.environment().variables
+        shell.merge(extraEnvironment) { _, extra in extra }
+        return GeminiKeySource.resolve(shellValue: shell["GEMINI_API_KEY"], storedKey: try? geminiKeyStore.read())
     }
 
     /// Starts reading the login shell environment and the tap version.
