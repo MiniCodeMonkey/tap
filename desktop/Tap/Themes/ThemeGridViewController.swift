@@ -111,6 +111,14 @@ final class ThemeGridViewController: NSViewController {
         didSet { footerLabel.isHidden = !showsFooter }
     }
 
+    /// Light and Dark headings over their cells (the popover), or one flat
+    /// grid in the same order (the New Deck sheet). Set before the view loads.
+    var showsSections = true
+
+    /// The rows the scroll view shows at once, nil for the popover's 320
+    /// points. The New Deck sheet shows two. Set before the view loads.
+    var visibleRows: Int?
+
     /// The width five cells need, for a sheet that sizes itself to the grid.
     var contentWidth: CGFloat { CGFloat(Self.columns) * cellSize.width + CGFloat(Self.columns - 1) * 12 + 8 }
 
@@ -136,7 +144,7 @@ final class ThemeGridViewController: NSViewController {
         root.orientation = .vertical
         root.alignment = .leading
         root.spacing = 8
-        scrollView.heightAnchor.constraint(equalToConstant: 320).isActive = true
+        scrollView.heightAnchor.constraint(equalToConstant: scrollHeight).isActive = true
         scrollView.widthAnchor.constraint(equalTo: root.widthAnchor).isActive = true
         root.widthAnchor.constraint(equalToConstant: contentWidth).isActive = true
         view = root
@@ -165,6 +173,13 @@ final class ThemeGridViewController: NSViewController {
         for observer in observers { NotificationCenter.default.removeObserver(observer) }
     }
 
+    private var scrollHeight: CGFloat {
+        guard let visibleRows else { return 320 }
+        let font = NSFont.systemFont(ofSize: nameFontSize)
+        let rowHeight = cellSize.height + 4 + ceil(font.ascender - font.descender + font.leading)
+        return CGFloat(visibleRows) * rowHeight + CGFloat(visibleRows - 1) * 12 + 8
+    }
+
     private func rebuild() {
         for view in content.arrangedSubviews { view.removeFromSuperview() }
         cells = []
@@ -172,12 +187,15 @@ final class ThemeGridViewController: NSViewController {
         guard let catalog = AppEnvironment.shared.themeImages.catalog else { return }
         let defaultName = catalog.name(forSlug: AppEnvironment.shared.themeImages.defaultSlug)
         let defaultTheme = ThemeSummary(slug: Self.defaultSlug, name: "Default", polarity: "light", pitch: "tap's default theme (\(defaultName))")
-        for (title, themes) in [("Light", [defaultTheme] + catalog.light), ("Dark", catalog.dark)] where !themes.isEmpty {
-            sectionTitles.append(title)
-            let heading = NSTextField(labelWithString: title)
-            heading.font = .systemFont(ofSize: 11, weight: .semibold)
-            heading.textColor = .secondaryLabelColor
-            content.addArrangedSubview(heading)
+        let sections = showsSections ? [("Light", [defaultTheme] + catalog.light), ("Dark", catalog.dark)] : [("", [defaultTheme] + catalog.light + catalog.dark)]
+        for (title, themes) in sections where !themes.isEmpty {
+            if showsSections {
+                sectionTitles.append(title)
+                let heading = NSTextField(labelWithString: title)
+                heading.font = .systemFont(ofSize: 11, weight: .semibold)
+                heading.textColor = .secondaryLabelColor
+                content.addArrangedSubview(heading)
+            }
             let grid = NSGridView()
             grid.rowSpacing = 12
             grid.columnSpacing = 12

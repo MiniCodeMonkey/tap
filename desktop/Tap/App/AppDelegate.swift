@@ -174,17 +174,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     }
 
     /// The sheet on `host`. Create runs tap new; the deck opens.
+    /// A host with a sheet up already refuses it, with a beep and a line in
+    /// the deck's log when the host is a deck window.
     func newDeck(on host: NSWindow?) {
-        guard let host, host.attachedSheet == nil else { return }
+        guard let host else { return }
+        guard host.attachedSheet == nil else {
+            Self.deck(owning: host)?.sessionController.session.log.append("New Deck was not shown: a sheet is up on this window", source: .app)
+            NSSound.beep()
+            return
+        }
         let settings = AppEnvironment.shared.generalSettings
         let sheet = NewDeckSheet(lastFolder: settings.lastNewDeckFolder, defaultTheme: settings.defaultTheme)
         sheet.onCreate = { [weak self, weak sheet, weak host] request in
             guard let self, let sheet else { return }
             sheet.beginCreating()
             self.createDeck(from: request) { result in
+                // Cancel is disabled while tap runs; a sheet that ended anyway opens nothing.
+                guard let host, host.attachedSheet === sheet else { return }
                 switch result {
                 case .success(let deck):
-                    host?.endSheet(sheet, returnCode: .OK)
+                    host.endSheet(sheet, returnCode: .OK)
                     AppEnvironment.shared.generalSettings.lastNewDeckFolder = request.location
                     NSDocumentController.shared.openDocument(withContentsOf: deck, display: true) { _, _, _ in }
                 case .failure(let error):

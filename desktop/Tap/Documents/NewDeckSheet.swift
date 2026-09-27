@@ -24,6 +24,8 @@ final class NewDeckSheet: QuestionSheet, NSTextFieldDelegate {
     let locationHint = NSTextField(labelWithString: "Creates a folder named after the title, with the deck and images/")
     let grid = ThemeGridViewController(cellSize: ThemeGridViewController.sheetCellSize)
     let errorLabel = NSTextField(wrappingLabelWithString: "")
+    /// "Scroll for all 21 themes", the count from tap's catalog.
+    let scrollHint = NSTextField(labelWithString: "")
     var onCreate: ((NewDeckRequest) -> Void)?
     /// Opens a folder chooser (an NSOpenPanel in production; a test answers at once).
     var chooseFolder: (@escaping (URL?) -> Void) -> Void = { completion in
@@ -36,6 +38,7 @@ final class NewDeckSheet: QuestionSheet, NSTextFieldDelegate {
     }
     private var locations: [URL] = []
     private var chosenLocation: URL
+    private var catalogObserver: NSObjectProtocol?
 
     var createButton: NSButton { acceptButton }
     var cancelButton: NSButton { declineButton }
@@ -63,7 +66,7 @@ final class NewDeckSheet: QuestionSheet, NSTextFieldDelegate {
         titleField.placeholderString = "My Presentation"
         titleField.delegate = self
         titleField.setAccessibilityIdentifier("new-deck-title")
-        for location in locations { locationPopup.addItem(withTitle: location.lastPathComponent) }
+        for location in locations { addLocationItem(location, at: locationPopup.numberOfItems) }
         locationPopup.menu?.addItem(.separator())
         locationPopup.addItem(withTitle: "Other…")
         locationPopup.selectItem(at: locations.firstIndex { FilePaths.same($0, chosenLocation) } ?? 0)
@@ -73,24 +76,40 @@ final class NewDeckSheet: QuestionSheet, NSTextFieldDelegate {
         locationHint.font = .systemFont(ofSize: 11)
         locationHint.textColor = .secondaryLabelColor
         grid.showsFooter = false
+        grid.showsSections = false
+        grid.visibleRows = 2
         grid.selectedSlug = defaultTheme
         errorLabel.textColor = .systemRed
         errorLabel.font = .systemFont(ofSize: 12)
         errorLabel.isHidden = true
         errorLabel.setAccessibilityIdentifier("new-deck-error")
 
+        // The NewDeck board: Title and Save in share one card, a hairline between the rows.
         let titleRow = labeledRow("Title", titleField)
         let locationRow = labeledRow("Save in", locationPopup, hint: locationHint)
-        let card = NSStackView(views: [titleRow, locationRow])
-        card.orientation = .vertical
-        card.alignment = .leading
-        card.spacing = 8
+        let hairline = NSBox()
+        hairline.boxType = .separator
+        let rows = NSStackView(views: [titleRow, hairline, locationRow])
+        rows.orientation = .vertical
+        rows.alignment = .leading
+        rows.spacing = 10
+        rows.edgeInsets = NSEdgeInsets(top: 10, left: 12, bottom: 10, right: 12)
+        rows.translatesAutoresizingMaskIntoConstraints = false
+        let card = NSBox()
+        card.boxType = .custom
+        card.titlePosition = .noTitle
+        card.fillColor = .controlBackgroundColor
+        card.borderColor = .separatorColor
+        card.borderWidth = 0.5
+        card.cornerRadius = 8
+        card.contentViewMargins = .zero
+        card.contentView?.addSubview(rows)
         let themeHeading = NSTextField(labelWithString: "Theme")
         themeHeading.font = .systemFont(ofSize: 11, weight: .semibold)
         themeHeading.textColor = .secondaryLabelColor
-        let scrollHint = NSTextField(labelWithString: "Scroll for all 21 themes")
         scrollHint.font = .systemFont(ofSize: 11.5)
         scrollHint.textColor = .secondaryLabelColor
+        refreshScrollHint()
         let stack = NSStackView(views: [card, themeHeading, grid.view, scrollHint, errorLabel])
         stack.orientation = .vertical
         stack.alignment = .leading
@@ -101,13 +120,37 @@ final class NewDeckSheet: QuestionSheet, NSTextFieldDelegate {
             stack.topAnchor.constraint(equalTo: form.topAnchor), stack.bottomAnchor.constraint(equalTo: form.bottomAnchor),
             stack.leadingAnchor.constraint(equalTo: form.leadingAnchor), stack.trailingAnchor.constraint(equalTo: form.trailingAnchor),
             card.widthAnchor.constraint(equalTo: stack.widthAnchor), titleField.widthAnchor.constraint(equalToConstant: 300),
+            rows.topAnchor.constraint(equalTo: card.topAnchor), rows.bottomAnchor.constraint(equalTo: card.bottomAnchor),
+            rows.leadingAnchor.constraint(equalTo: card.leadingAnchor), rows.trailingAnchor.constraint(equalTo: card.trailingAnchor),
+            titleRow.widthAnchor.constraint(equalTo: rows.widthAnchor, constant: -24), locationRow.widthAnchor.constraint(equalTo: titleRow.widthAnchor),
+            hairline.widthAnchor.constraint(equalTo: titleRow.widthAnchor),
             errorLabel.widthAnchor.constraint(equalTo: stack.widthAnchor),
         ])
         setContentSize(contentView?.fittingSize ?? frame.size)
         titleChanged(titleField)
+        catalogObserver = NotificationCenter.default.addObserver(forName: ThemeImageLoader.didLoadCatalogNotification, object: AppEnvironment.shared.themeImages, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.refreshScrollHint() }
+        }
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
+
+    deinit {
+        if let catalogObserver { NotificationCenter.default.removeObserver(catalogObserver) }
+    }
+
+    private func refreshScrollHint() {
+        let count = AppEnvironment.shared.themeImages.catalog?.themes.count
+        scrollHint.stringValue = count.map { "Scroll for all \($0) themes" } ?? "Scroll for all themes"
+    }
+
+    /// A folder in the Save in popup, with the folder icon the board draws.
+    private func addLocationItem(_ location: URL, at index: Int) {
+        locationPopup.insertItem(withTitle: location.lastPathComponent, at: index)
+        let icon = NSImage(systemSymbolName: "folder", accessibilityDescription: nil)
+        icon?.size = NSSize(width: 14, height: 12)
+        locationPopup.item(at: index)?.image = icon
+    }
 
     private func labeledRow(_ title: String, _ control: NSView, hint: NSTextField? = nil) -> NSView {
         let label = NSTextField(labelWithString: title)
@@ -142,7 +185,7 @@ final class NewDeckSheet: QuestionSheet, NSTextFieldDelegate {
             if let chosen {
                 if !self.locations.contains(where: { FilePaths.same($0, chosen) }) {
                     self.locations.insert(chosen, at: 0)
-                    self.locationPopup.insertItem(withTitle: chosen.lastPathComponent, at: 0)
+                    self.addLocationItem(chosen, at: 0)
                 }
                 self.chosenLocation = chosen
             }
@@ -159,10 +202,14 @@ final class NewDeckSheet: QuestionSheet, NSTextFieldDelegate {
         errorLabel.stringValue = message
         errorLabel.isHidden = false
         createButton.isEnabled = true
+        cancelButton.isEnabled = true
     }
 
+    /// While tap new runs, neither Create nor Cancel can be pressed: the
+    /// deck tap is writing opens when it lands.
     func beginCreating() {
         errorLabel.isHidden = true
         createButton.isEnabled = false
+        cancelButton.isEnabled = false
     }
 }

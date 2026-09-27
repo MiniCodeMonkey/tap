@@ -11,24 +11,33 @@ final class NewDeckTests: HostedTestCase {
     }
 
     func testNewDeck() async throws {
-        // The sheet's grid renders themes: scripted, so no Chromium runs into later tests.
-        let png = Fixtures.repositoryRoot.appendingPathComponent("desktop/TapTests/Fixtures/diagram.png")
-        AppEnvironment.shared.toolExecutableURL = try FakeToolScripts.themeShow(png: png, recordingTo: try Fixtures.temporaryFolder().appendingPathComponent("renders.txt"))
         // With no deck open, File > New Deck goes on the welcome window.
         appDelegate.showWelcomeIfNoDecks()
         let welcome = WelcomeWindowController.shared
         XCTAssertTrue(welcome.newDeckButton.isEnabled)
-        let location = try Fixtures.temporaryFolder()
-        AppEnvironment.shared.generalSettings.lastNewDeckFolder = location
+        let lastUsed = try Fixtures.temporaryFolder()
+        AppEnvironment.shared.generalSettings.lastNewDeckFolder = lastUsed
         AppEnvironment.shared.generalSettings.defaultTheme = "terminal"
         welcome.newDeckButton.performClick(nil)
         let sheet = try await newDeckSheet(on: welcome.window)
-        XCTAssertEqual(sheet.locationPopup.titleOfSelectedItem, location.lastPathComponent, "the last used folder is preselected")
-        XCTAssertEqual(sheet.request.location, location)
+        XCTAssertEqual(sheet.locationPopup.titleOfSelectedItem, lastUsed.lastPathComponent, "the last used folder is preselected")
+        XCTAssertTrue(FilePaths.same(sheet.request.location, lastUsed), "\(sheet.request.location.path) is \(lastUsed.path)")
+        // Another folder, through Other…: Create remembers this one.
+        let location = try Fixtures.temporaryFolder()
+        sheet.chooseFolder = { $0(location) }
+        sheet.locationPopup.selectItem(withTitle: "Other…")
+        sheet.locationChanged(sheet.locationPopup)
+        XCTAssertTrue(FilePaths.same(sheet.request.location, location))
+        XCTAssertNotNil(sheet.locationPopup.selectedItem?.image, "the NewDeck board's folder icon")
         try await waitUntil(timeout: 20, "the grid") { !sheet.grid.cells.isEmpty }
         XCTAssertEqual(sheet.grid.selectedSlug, "terminal", "the General default is preselected")
         XCTAssertFalse(sheet.grid.showsFooter, "no deck to set a theme on")
+        XCTAssertEqual(sheet.grid.sectionTitles, [], "one flat grid, as the NewDeck board draws it")
         XCTAssertEqual(sheet.grid.cellSize, ThemeGridViewController.sheetCellSize, "the NewDeckHintNoSlug board's 82x46 cells")
+        XCTAssertEqual(ThemeGridViewController.sheetCellSize, NSSize(width: 82, height: 46))
+        XCTAssertEqual(sheet.grid.cell(for: "terminal")?.nameLabel.font?.pointSize, 10.5, "the sheet's names")
+        let themeCount = try XCTUnwrap(AppEnvironment.shared.themeImages.catalog?.themes.count)
+        XCTAssertEqual(sheet.scrollHint.stringValue, "Scroll for all \(themeCount) themes", "the count is tap's")
         XCTAssertEqual(sheet.locationHint.stringValue, "Creates a folder named after the title, with the deck and images/")
         XCTAssertGreaterThanOrEqual(sheet.frame.width, 560, "the NewDeck board's sheet, wide enough for five cells")
 
@@ -54,7 +63,8 @@ final class NewDeckTests: HostedTestCase {
         let text = try String(contentsOf: expected, encoding: .utf8)
         XCTAssertTrue(text.contains("theme: blueprint"))
         XCTAssertTrue(text.contains("title: \"Debugging Production at 3am\""))
-        XCTAssertEqual(AppEnvironment.shared.generalSettings.lastNewDeckFolder, location, "remembered")
+        let remembered = try XCTUnwrap(AppEnvironment.shared.generalSettings.lastNewDeckFolder)
+        XCTAssertTrue(FilePaths.same(remembered, location), "the folder Create used is remembered: \(remembered.path)")
         // tap records an approval for the deck it made.
         let listed = try await TapApproval.run(["approval", "list", "--json"], configHome: configHome)
         XCTAssertTrue(listed.contains(Fixtures.realPath(of: expected)), "tap approval list: \(listed)")
@@ -71,14 +81,20 @@ final class NewDeckTests: HostedTestCase {
         sheet.chooseFolder = { $0(location) }
         sheet.locationPopup.selectItem(withTitle: "Other…")
         sheet.locationChanged(sheet.locationPopup)
-        XCTAssertEqual(sheet.request.location, location)
+        XCTAssertTrue(FilePaths.same(sheet.request.location, location))
         XCTAssertEqual(sheet.locationPopup.titleOfSelectedItem, location.lastPathComponent, "the chosen folder joins the list")
+        // A second New Deck on the same window is refused, with a beep and a line in the deck's log.
+        appDelegate.newDeck(on: window)
+        XCTAssertTrue(window.attachedSheet === sheet)
+        XCTAssertTrue(try XCTUnwrap(document.sessionController).session.log.text.contains("New Deck was not shown: a sheet is up on this window"))
         // A location that is gone by the time Create runs: tap's error, in the sheet, the sheet stays.
         try FileManager.default.removeItem(at: location)
         sheet.titleField.stringValue = "Gone"
         sheet.titleChanged(sheet.titleField)
         sheet.createButton.performClick(nil)
+        XCTAssertFalse(sheet.cancelButton.isEnabled, "no Cancel while tap new runs: the deck it writes opens")
         try await waitUntil(timeout: 20, "tap's error") { !sheet.errorLabel.isHidden }
+        XCTAssertTrue(sheet.cancelButton.isEnabled)
         XCTAssertTrue(sheet.errorLabel.stringValue.contains("does not exist"), sheet.errorLabel.stringValue)
         XCTAssertTrue(window.attachedSheet === sheet, "the sheet stays for another try")
         XCTAssertTrue(sheet.createButton.isEnabled)
