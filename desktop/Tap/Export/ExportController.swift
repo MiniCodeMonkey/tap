@@ -108,7 +108,9 @@ final class ExportController {
     var onDownload: (((bytes: Int64, totalBytes: Int64)?) -> Void)?
     /// From Export until tap has started: a second Export starts nothing.
     private(set) var isStarting = false
-    /// From Cancel until tap has exited: later progress lines change nothing.
+    /// From Cancel (or the window's close) until tap has exited, or until
+    /// a start that had not reached tap yet has ended: later progress lines
+    /// change nothing, and a start still saving or preparing runs nothing.
     private(set) var isCancelling = false
     private var run: ToolRun?
     private var brokenLines: [ExportWarning] = []
@@ -130,15 +132,18 @@ final class ExportController {
         brokenLines = []
         state = .running("Saving…")
         sessionController.saveNow { [weak self] error in
-            guard let self else { return }
+            guard let self, !self.endStartIfCancelled() else { return }
             if let error {
                 self.isStarting = false
                 self.state = .failed("The deck could not be saved: \(error.localizedDescription)")
                 return
             }
             Task { @MainActor [weak self] in
-                guard let self, let sessionController = self.sessionController else { return }
+                guard let self, !self.endStartIfCancelled() else { return }
+                guard let sessionController = self.sessionController else { return self.isStarting = false }
                 let run = await TapTool.makeRun(request.arguments(deck: deck), in: deck.deletingLastPathComponent(), timeout: 1800, log: sessionController.session.log)
+                // Cancel or a close may have come while the environment loaded.
+                guard !self.endStartIfCancelled() else { return }
                 self.run = run
                 self.startedAt = Date()
                 let log = sessionController.session.log
@@ -162,16 +167,37 @@ final class ExportController {
         }
     }
 
+    /// Cancel: SIGINT to a running tap, or, while the start is still
+    /// saving or preparing, a start that ends before tap runs.
     func cancel() {
-        guard let run, run.isRunning, !isCancelling else { return }
+        guard !isCancelling else { return }
+        if isStarting {
+            isCancelling = true
+            state = .running("Cancelling…")
+            return
+        }
+        guard let run, run.isRunning else { return }
         isCancelling = true
         state = .running("Cancelling…")
         run.cancel()
     }
 
-    /// The window is closing: no export outlives its deck.
+    /// The window is closing: no export outlives its deck, and a start
+    /// still saving or preparing runs nothing.
     func stop() {
+        if isStarting { isCancelling = true }
         run?.cancel()
+    }
+
+    /// Ends a start that Cancel or a close reached before tap ran: the
+    /// sheet goes back to idle (and closes), and nothing is revealed.
+    private func endStartIfCancelled() -> Bool {
+        guard isCancelling else { return false }
+        isStarting = false
+        isCancelling = false
+        sessionController?.session.log.append("export cancelled before tap started", source: .app)
+        state = .idle
+        return true
     }
 
     private func handle(_ line: ProgressLine, request: ExportRequest) {

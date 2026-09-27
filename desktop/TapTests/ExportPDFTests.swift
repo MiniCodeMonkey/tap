@@ -135,6 +135,55 @@ final class ExportPDFTests: HostedTestCase {
         try await waitUntil(timeout: 5, "tap's exit in the log") { window.sessionController.session.log.text.contains("export cancelled (exit 130)") }
     }
 
+    /// The export lines the fake recorded: one per run of tap export pdf.
+    func exportRuns(_ record: URL) -> [String] {
+        ((try? String(contentsOf: record, encoding: .utf8)) ?? "").components(separatedBy: "\n").filter { $0.hasPrefix("arguments: export pdf") }
+    }
+
+    /// Cancel pressed while the export is still saving or preparing (the
+    /// login shell's environment loads on the first run after launch):
+    /// the sheet closes, tap never runs, and nothing is revealed.
+    func testCancelWhileTheExportStarts() async throws {
+        let (_, window, _) = try await openSevenSlides()
+        let record = try Fixtures.temporaryFolder().appendingPathComponent("record.txt")
+        AppEnvironment.shared.toolExecutableURL = try FakeToolScripts.exportPDF(slides: 3, recordingTo: record)
+        var revealed: [URL] = []
+        window.revealInFinder = { revealed.append($0) }
+        window.exportPDF(nil)
+        let sheet = try await exportSheet(window)
+        sheet.exportButton.performClick(nil)
+        XCTAssertTrue(window.exportController.isStarting, "still saving: tap has not started")
+        XCTAssertTrue(sheet.cancelButton.isEnabled, "Cancel is on while the export starts")
+        sheet.cancelButton.performClick(nil)
+        XCTAssertEqual(sheet.statusLabel.stringValue, "Cancelling…")
+        try await waitUntil(timeout: 10, "the sheet to close") { window.window?.attachedSheet == nil }
+        XCTAssertFalse(window.exportController.isRunning)
+        // Long enough for a start that ignored the cancel to reach tap.
+        try await Task.sleep(nanoseconds: 1_000_000_000)
+        XCTAssertEqual(exportRuns(record), [], "tap never ran")
+        XCTAssertEqual(revealed, [], "nothing is revealed")
+        XCTAssertTrue(window.sessionController.session.log.text.contains("export cancelled before tap started"))
+        XCTAssertTrue(window.canStartATalk)
+    }
+
+    /// The deck's window closes while its export is still saving or
+    /// preparing: tap never runs.
+    func testClosingTheDeckWhileItsExportStartsRunsNothing() async throws {
+        let (document, window, _) = try await openSevenSlides()
+        let record = try Fixtures.temporaryFolder().appendingPathComponent("record.txt")
+        AppEnvironment.shared.toolExecutableURL = try FakeToolScripts.exportPDF(slides: 3, recordingTo: record)
+        window.revealInFinder = { _ in }
+        window.exportPDF(nil)
+        let sheet = try await exportSheet(window)
+        let exportController = window.exportController
+        sheet.exportButton.performClick(nil)
+        XCTAssertTrue(exportController.isStarting, "still saving: tap has not started")
+        document.close()
+        try await waitUntil(timeout: 10, "the start to end") { !exportController.isRunning }
+        try await Task.sleep(nanoseconds: 1_000_000_000)
+        XCTAssertEqual(exportRuns(record), [], "tap never ran for a closed deck")
+    }
+
     func testASecondExportPressStartsNoSecondRun() async throws {
         let (_, window, _) = try await openSevenSlides()
         let record = try Fixtures.temporaryFolder().appendingPathComponent("record.txt")
