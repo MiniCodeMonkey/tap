@@ -1,4 +1,5 @@
 import AppKit
+import UniformTypeIdentifiers
 
 /// A deck's window: the editor on the left and the Preview pane on the right,
 /// under a unified toolbar. Deck windows open as tabs of each other.
@@ -362,6 +363,23 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
     @objc func newSlideFromLayout(_ sender: Any?) {
         guard let name = (sender as? NSMenuItem)?.representedObject as? String else { return }
         insertSlide(layout: name, after: .caret)
+    }
+
+    /// Slide > Insert Image and the context menu's: a file chooser, then tap image add.
+    var openPanelForImages: (@escaping ([URL]) -> Void) -> Void = { completion in
+        let panel = NSOpenPanel()
+        panel.allowsMultipleSelection = true
+        panel.canChooseDirectories = false
+        // The types tap image add accepts, AVIF included.
+        panel.allowedContentTypes = [.png, .jpeg, .gif, .webP, .svg] + [UTType("public.avif")].compactMap { $0 }
+        panel.begin { response in completion(response == .OK ? panel.urls : []) }
+    }
+
+    @objc func insertImage(_ sender: Any?) {
+        openPanelForImages { [weak self] files in
+            guard !files.isEmpty else { return }
+            self?.sessionController.insertImages(files)
+        }
     }
 
     @objc func showThemePopover(_ sender: Any?) {
@@ -961,6 +979,9 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
             }
             menuItem.title = currentFixIt?.title ?? "Allow Driver in This Deck"
             return currentFixIt != nil
+        }
+        if menuItem.action == #selector(insertImage(_:)) {
+            return sessionController.currentSlideNumber != nil && sessionController.document?.fileURL != nil
         }
         let count = sessionController.selectedSlideNumbers.count
         if menuItem.action == #selector(deleteSlides(_:)) {

@@ -26,8 +26,8 @@ enum SlideContextMenu {
         add("Copy", #selector(DeckWindowController.copySlides(_:)), key: showsTextShortcuts ? "c" : "")
         add("Paste", #selector(DeckWindowController.pasteSlides(_:)), key: showsTextShortcuts ? "v" : "")
         menu.addItem(.separator())
+        add("Insert Image…", #selector(DeckWindowController.insertImage(_:)), key: "i", modifiers: [.command, .shift])
         add("Generate Image…", nil)
-        add("Insert Image…", nil, key: "i", modifiers: [.command, .shift])
         menu.addItem(.separator())
         add(several ? "Delete Slides" : "Delete Slide", #selector(DeckWindowController.deleteSlides(_:)), key: "\u{8}")
         return menu

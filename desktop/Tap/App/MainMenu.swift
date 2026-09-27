@@ -116,7 +116,7 @@ enum MainMenu {
         menu.addItem(item("Move to Bottom", action: #selector(DeckWindowController.moveSlidesToBottom(_:))))
         menu.addItem(.separator())
         // The image and component commands arrive with tap image and tap component new.
-        menu.addItem(item("Insert Image…", action: nil, key: "i", modifiers: [.command, .shift]))
+        menu.addItem(item("Insert Image…", action: #selector(DeckWindowController.insertImage(_:)), key: "i", modifiers: [.command, .shift]))
         menu.addItem(item("Generate Image…", action: nil))
         menu.addItem(item("New Component…", action: nil))
         menu.addItem(.separator())

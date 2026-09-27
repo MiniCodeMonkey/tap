@@ -361,6 +361,48 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
                                                      buttons: [("OK", { [weak self] in self?.editorViewController.hideBar(.toolFailed) })]))
     }
 
+    /// Inserts text at the caret as one undo step named `actionName`, the
+    /// path for what tap printed (an image's markdown, a component's
+    /// snippet). The insert replaces nothing: a selection stays, after the
+    /// text. The caret is clamped out of the frontmatter already.
+    func insertAtCaret(_ text: String, actionName: String) {
+        let caret = editor.selectedRange()
+        editor.replaceText(in: NSRange(location: caret.location, length: 0), with: text, actionName: actionName)
+        editor.setSelectedRange(NSRange(location: caret.location + (text as NSString).length, length: 0))
+    }
+
+    /// Pasted or dropped image files: tap image add copies each into
+    /// images/ next to the deck (its own name rules, -2 on a clash) and
+    /// prints the markdown, which goes in at the caret, one undo step per
+    /// image. tap does not touch the deck file, so nothing is saved or
+    /// reloaded. A deck with no file yet has no images/ to copy into.
+    func insertImages(_ files: [URL]) {
+        guard let deck = document?.fileURL, FileManager.default.fileExists(atPath: deck.path) else {
+            session.log.append("Insert Image needs a saved deck: tap image add copies next to the deck file", source: .app)
+            NSSound.beep()
+            return
+        }
+        Task { @MainActor [weak self] in
+            for file in files {
+                guard let self else { return }
+                let exit = await TapTool.run(["image", "add", file.path, deck.path, "--json"], in: deck.deletingLastPathComponent(), log: self.session.log)
+                switch exit.outcome {
+                case .ok?:
+                    guard let added = try? exit.outcome?.result(AddedImageResult.self) else { continue }
+                    self.insertAtCaret(added.markdown + "\n", actionName: "Insert Image")
+                case .failed(_, let message)?:
+                    self.showToolError(actionName: "Insert Image", message: message)
+                case nil:
+                    self.showToolError(actionName: "Insert Image", message: "tap did not answer (exit \(exit.status)); see the Tap Log")
+                }
+            }
+        }
+    }
+
+    func editor(_ editor: EditorTextView, insertImages files: [URL]) {
+        insertImages(files)
+    }
+
     /// The deck's theme slug from the frontmatter, nil when it names none.
     var currentThemeSlug: String? {
         Frontmatter(text: editor.string).entry(at: ["theme"])?.unquotedValue.flatMap { $0.isEmpty ? nil : $0 }
