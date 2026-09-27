@@ -500,16 +500,33 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
     }
 
     /// A Cmd-click on a component's path in the editor: the file, resolved
-    /// against the deck's folder, opens in the default code editor. False
-    /// when the character is not on a path.
+    /// against the deck's folder, opens in the default code editor. Only a
+    /// regular file whose real path (every link followed) lies inside the
+    /// deck's folder opens: a link that leads out of it, a folder or a
+    /// bundle named like a component, from a downloaded deck, does not.
+    /// False when the character is not on such a path.
     func openComponentLink(at characterIndex: Int) -> Bool {
         let text = editor.string as NSString
         guard characterIndex < text.length else { return false }
         let lineRange = text.lineRange(for: NSRange(location: characterIndex, length: 0))
         let line = text.substring(with: lineRange).trimmingCharacters(in: .newlines)
         guard let path = ComponentLink.find(in: line, at: characterIndex - lineRange.location), let deck = document?.fileURL else { return false }
-        openInEditor(deck.deletingLastPathComponent().appendingPathComponent(path).standardizedFileURL)
+        guard let folder = Self.realPath(deck.deletingLastPathComponent()),
+              let file = Self.realPath(deck.deletingLastPathComponent().appendingPathComponent(path)),
+              file.hasPrefix(folder + "/"),
+              (try? FileManager.default.attributesOfItem(atPath: file)[.type] as? FileAttributeType) == .typeRegular else {
+            session.log.append("\(path) was not opened: it is not a file inside the deck's folder", source: .app)
+            return false
+        }
+        openInEditor(URL(fileURLWithPath: file))
         return true
+    }
+
+    /// The path with every link followed, nil when nothing is there.
+    static func realPath(_ url: URL) -> String? {
+        guard let resolved = realpath(url.path, nil) else { return nil }
+        defer { free(resolved) }
+        return String(cString: resolved)
     }
 
     func editor(_ editor: EditorTextView, openComponentLinkAt characterIndex: Int) -> Bool {

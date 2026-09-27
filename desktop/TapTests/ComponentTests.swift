@@ -80,6 +80,19 @@ final class ComponentTests: HostedTestCase {
         XCTAssertEqual(opened.map { Fixtures.realPath(of: $0) }, [Fixtures.realPath(of: deck.deletingLastPathComponent().appendingPathComponent("slides/RollingDeploy.jsx"))])
         XCTAssertFalse(controller.openComponentLink(at: text.range(of: "# ").location), "not on a path")
         XCTAssertEqual(opened.count, 1)
+
+        // From a downloaded deck: a link that leads out of the deck's folder, and a bundle named like a component, open nothing.
+        let slides = deck.deletingLastPathComponent().appendingPathComponent("slides")
+        let outside = try Fixtures.temporaryFolder().appendingPathComponent("Secret.jsx")
+        try "export default 1".write(to: outside, atomically: true, encoding: .utf8)
+        try FileManager.default.createSymbolicLink(at: slides.appendingPathComponent("Linked.jsx"), withDestinationURL: outside)
+        try FileManager.default.createDirectory(at: slides.appendingPathComponent("Bundle.jsx"), withIntermediateDirectories: true)
+        let end = (controller.editor.string as NSString).length
+        controller.editor.replaceText(in: NSRange(location: end, length: 0), with: "\n./slides/Linked.jsx ./slides/Bundle.jsx\n", actionName: "Typing")
+        let edited = controller.editor.string as NSString
+        XCTAssertFalse(controller.openComponentLink(at: edited.range(of: "./slides/Linked.jsx").location + 3), "a link out of the deck's folder")
+        XCTAssertFalse(controller.openComponentLink(at: edited.range(of: "./slides/Bundle.jsx").location + 3), "a folder, not a file")
+        XCTAssertEqual(opened.count, 1, "nothing more opened")
         let point = controller.editor.pointForCharacter(at: pathRange.location + 5)
         let event = try XCTUnwrap(NSEvent.mouseEvent(with: .leftMouseDown, location: controller.editor.convert(point, to: nil), modifierFlags: [.command], timestamp: 0,
                                                      windowNumber: controller.editor.window?.windowNumber ?? 0, context: nil, eventNumber: 0, clickCount: 1, pressure: 1))
