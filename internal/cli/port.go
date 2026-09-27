@@ -112,16 +112,17 @@ func wildcardPortBusy(port int) (bool, error) {
 //
 // On macOS a loopback bind (127.0.0.1:port) succeeds even while another
 // process holds the wildcard address on the same port, so for a loopback
-// host with an explicit, non-zero port, each candidate is first probed
-// with wildcardPortBusy; a port the probe finds busy is treated as busy
-// here too, without ever attempting the real bind on it.
+// host and a non-zero port (the default port with its fallback as much as
+// an explicit one), each candidate is first probed with wildcardPortBusy;
+// a port the probe finds busy is treated as busy here too, without ever
+// attempting the real bind on it.
 func listenOnAvailablePort(host string, requestedPort int, explicit bool, commandName string) (net.Listener, error) {
 	attempts := 1
 	if !explicit {
 		attempts = maxPortFallbackAttempts + 1
 	}
 
-	loopbackProbe := explicit && requestedPort != 0 && net.ParseIP(host) != nil && net.ParseIP(host).IsLoopback()
+	loopbackProbe := requestedPort != 0 && net.ParseIP(host) != nil && net.ParseIP(host).IsLoopback()
 
 	var lastAttemptErr error
 	for i := 0; i < attempts; i++ {
