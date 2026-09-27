@@ -305,9 +305,10 @@ final class DeckFormViewController: NSViewController, NSTextFieldDelegate, NSTex
             remove.controlSize = .small
             remove.setAccessibilityIdentifier("deck-remove-\(entryPath.joined(separator: "."))")
             removeButtons.append((entryPath, remove))
-            let header = NSStackView(views: [NSTextField(labelWithString: name), NSView(), remove])
-            header.orientation = .horizontal
-            var entryRows: [NSView] = [header]
+            let nameLabel = NSTextField(labelWithString: name)
+            nameLabel.font = .monospacedSystemFont(ofSize: 13, weight: .semibold)
+            nameLabel.lineBreakMode = .byTruncatingTail
+            var entryRows: [NSView] = [FormCard.row(leading: [nameLabel], trailing: [remove])]
             for child in key.keys {
                 let path = entryPath + [child.name]
                 if isRawRow(child, at: path, in: frontmatter) {
@@ -316,16 +317,7 @@ final class DeckFormViewController: NSViewController, NSTextFieldDelegate, NSTex
                     entryRows.append(row(for: child, path: path))
                 }
             }
-            let card = NSBox()
-            card.titlePosition = .noTitle
-            let column = NSStackView(views: entryRows)
-            column.orientation = .vertical
-            column.alignment = .leading
-            column.spacing = 8
-            column.edgeInsets = NSEdgeInsets(top: 6, left: 6, bottom: 6, right: 6)
-            card.contentView = column
-            header.widthAnchor.constraint(equalTo: column.widthAnchor, constant: -12).isActive = true
-            rows.append(card)
+            rows.append(FormCard(rows: entryRows))
         }
         let nameField = NSTextField(string: "")
         nameField.target = self
@@ -333,25 +325,29 @@ final class DeckFormViewController: NSViewController, NSTextFieldDelegate, NSTex
         nameField.cell?.sendsActionOnEndEditing = false
         nameField.placeholderString = "shell, sqlite, mysql, postgres, or a custom name"
         nameField.setAccessibilityIdentifier("deck-add-\(key.name)")
-        nameField.widthAnchor.constraint(greaterThanOrEqualToConstant: 260).isActive = true
+        nameField.setContentHuggingPriority(.init(1), for: .horizontal)
         let add = NSButton(title: "Add", target: self, action: #selector(addPressed(_:)))
         add.bezelStyle = .rounded
         add.setAccessibilityIdentifier("deck-add-button-\(key.name)")
         addFields[key.name] = nameField
         addButtons[key.name] = add
+        add.setContentHuggingPriority(.defaultHigh, for: .horizontal)
         let addRow = NSStackView(views: [nameField, add])
         addRow.orientation = .horizontal
+        addRow.distribution = .fill
         addRow.spacing = 8
-        rows.append(addRow)
+        addRow.edgeInsets = NSEdgeInsets(top: 8, left: 12, bottom: 8, right: 12)
+        rows.append(FormCard(rows: [addRow]))
         let hint = NSTextField(wrappingLabelWithString: "Use ${NAME} for passwords and other secrets: tap reads NAME from your login shell's environment when it runs the driver, so the deck is safe to share.")
         hint.font = .systemFont(ofSize: 11)
         hint.textColor = .secondaryLabelColor
         hint.setAccessibilityIdentifier("deck-hint-\(key.name)")
         hintLabels[key.name] = hint
-        rows.append(hint)
-        addSection(title: key.label, rows: rows)
-        for card in rows.compactMap({ $0 as? NSBox }) { card.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -60).isActive = true }
-        hint.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -60).isActive = true
+        let note = NSStackView(views: [hint])
+        note.edgeInsets = NSEdgeInsets(top: 0, left: 4, bottom: 0, right: 4)
+        hint.widthAnchor.constraint(equalTo: note.widthAnchor, constant: -8).isActive = true
+        rows.append(note)
+        addSection(title: key.label, content: rows)
     }
 
     /// Whether a map entry's setting is shown as its own lines of text
@@ -364,16 +360,17 @@ final class DeckFormViewController: NSViewController, NSTextFieldDelegate, NSTex
     }
 
     /// A setting the form has no field for, as its own lines: the entry's
-    /// text as written, indented as it is, put back where it was.
+    /// text as written, indented as it is, put back where it was. Its
+    /// label and caption sit on a line above the text, which takes the
+    /// card's width.
     private func rawRow(for key: SchemaKey, path: [String], in frontmatter: Frontmatter) -> NSView {
         let label = NSTextField(labelWithString: key.label)
-        label.alignment = .right
-        label.textColor = .secondaryLabelColor
-        label.font = .systemFont(ofSize: 12)
-        label.widthAnchor.constraint(equalToConstant: 130).isActive = true
+        label.font = .systemFont(ofSize: 13)
         let caption = NSTextField(labelWithString: "YAML, as written in the frontmatter")
-        caption.font = .systemFont(ofSize: 10)
-        caption.textColor = .tertiaryLabelColor
+        caption.font = .systemFont(ofSize: 11)
+        caption.textColor = .secondaryLabelColor
+        caption.lineBreakMode = .byTruncatingTail
+        caption.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         let textView = NSTextView(frame: NSRect(x: 0, y: 0, width: 300, height: 72))
         textView.font = .monospacedSystemFont(ofSize: 12, weight: .regular)
         textView.isRichText = false
@@ -386,17 +383,19 @@ final class DeckFormViewController: NSViewController, NSTextFieldDelegate, NSTex
         scroll.hasVerticalScroller = true
         scroll.borderType = .bezelBorder
         scroll.heightAnchor.constraint(equalToConstant: 72).isActive = true
-        scroll.widthAnchor.constraint(greaterThanOrEqualToConstant: 300).isActive = true
         textView.autoresizingMask = [.width]
         rawEditors.append((path, textView))
-        let column = NSStackView(views: [caption, scroll])
-        column.orientation = .vertical
-        column.alignment = .leading
-        column.spacing = 2
-        let row = NSStackView(views: [label, column])
-        row.orientation = .horizontal
-        row.alignment = .top
-        row.spacing = 10
+        let header = NSStackView(views: [label, caption])
+        header.orientation = .horizontal
+        header.alignment = .firstBaseline
+        header.spacing = 8
+        let row = NSStackView(views: [header, scroll])
+        row.orientation = .vertical
+        row.alignment = .leading
+        row.spacing = 6
+        row.edgeInsets = NSEdgeInsets(top: 8, left: 12, bottom: 10, right: 12)
+        scroll.widthAnchor.constraint(equalTo: row.widthAnchor, constant: -24).isActive = true
+        header.widthAnchor.constraint(lessThanOrEqualTo: row.widthAnchor, constant: -24).isActive = true
         return row
     }
 
@@ -411,9 +410,12 @@ final class DeckFormViewController: NSViewController, NSTextFieldDelegate, NSTex
             label.isSelectable = true
             label.setAccessibilityIdentifier("deck-other-\(entry.key)")
             otherKeyLabels.append(label)
-            rows.append(label)
+            let row = NSStackView(views: [label])
+            row.edgeInsets = NSEdgeInsets(top: 8, left: 12, bottom: 8, right: 12)
+            label.widthAnchor.constraint(equalTo: row.widthAnchor, constant: -24).isActive = true
+            rows.append(row)
         }
-        addSection(title: "Other keys", rows: rows)
+        addSection(title: "Other keys", content: [FormCard(rows: rows)])
     }
 
     /// Add, or Return in the name field.
@@ -485,35 +487,36 @@ final class DeckFormViewController: NSViewController, NSTextFieldDelegate, NSTex
         applyRawEditor(textView)
     }
 
+    /// A group whose fields are one card: the Deck keys, or an object key's.
     func addSection(title: String, rows: [NSView]) {
-        let box = NSBox()
-        box.title = title
-        box.titlePosition = .atTop
-        box.titleFont = .systemFont(ofSize: 12, weight: .semibold)
-        let column = NSStackView(views: rows)
-        column.orientation = .vertical
-        column.alignment = .leading
-        column.spacing = 8
-        column.edgeInsets = NSEdgeInsets(top: 8, left: 8, bottom: 8, right: 8)
-        box.contentView = column
-        box.setAccessibilityIdentifier("deck-section-\(title)")
-        stack.addArrangedSubview(box)
-        box.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -40).isActive = true
+        addSection(title: title, content: [FormCard(rows: rows)])
     }
 
+    /// A group of the form, as wide as the form less its margins.
+    func addSection(title: String, content: [NSView]) {
+        let section = FormCard.section(title: title, content: content)
+        section.setAccessibilityIdentifier("deck-section-\(title)")
+        stack.addArrangedSubview(section)
+        section.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -40).isActive = true
+    }
+
+    /// Every card of the form, top to bottom.
+    var cards: [FormCard] {
+        func cards(in view: NSView) -> [FormCard] {
+            view.subviews.flatMap { subview in (subview as? FormCard).map { [$0] } ?? cards(in: subview) }
+        }
+        return cards(in: stack)
+    }
+
+    /// A field's row: its label on the left, its control on the right. A
+    /// text field is 200 points wide; a popup or a switch is its own size.
     func row(for key: SchemaKey, path: [String]) -> NSView {
         let label = NSTextField(labelWithString: key.label)
-        label.alignment = .right
-        label.textColor = .secondaryLabelColor
-        label.font = .systemFont(ofSize: 12)
-        label.widthAnchor.constraint(equalToConstant: 130).isActive = true
+        label.font = .systemFont(ofSize: 13)
+        label.lineBreakMode = .byTruncatingTail
         let control = makeControl(for: key, path: path)
-        let row = NSStackView(views: [label, control])
-        row.orientation = .horizontal
-        row.alignment = .firstBaseline
-        row.spacing = 10
-        control.widthAnchor.constraint(greaterThanOrEqualToConstant: 200).isActive = true
-        return row
+        if control is NSTextField { control.widthAnchor.constraint(equalToConstant: 200).isActive = true }
+        return FormCard.row(leading: [label], trailing: [control])
     }
 
     private func makeControl(for key: SchemaKey, path: [String]) -> NSControl {
