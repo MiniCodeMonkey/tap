@@ -85,7 +85,7 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
     private var isReconcilingSidebarCollapse = false
     /// File > Export's one run at a time for this window's deck.
     private(set) lazy var exportController = ExportController(sessionController: sessionController)
-    /// `tap serve` for a previewed website export; Task 11 fills this in.
+    /// `tap serve` for a previewed website export, stopped with the sheet and the window.
     private(set) var previewServer: PreviewServer?
 
     init(sessionController: DeckSessionController) {
@@ -484,9 +484,8 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
         showFormSheet(sheet) { [weak self] in self?.previewServer?.stop() }
     }
 
-    func previewWebsite(at folder: URL) {
-        // Task 11 starts tap serve here.
-    }
+    /// The website done state's Preview. It starts no server yet.
+    func previewWebsite(at folder: URL) {}
 
     @objc func showThemePopover(_ sender: Any?) {
         guard questionSheet == nil, window?.attachedSheet == nil else { return }

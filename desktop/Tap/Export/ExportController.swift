@@ -1,7 +1,7 @@
 import AppKit
 
-/// `tap serve` for a previewed website export. Task 11 fills this in with a
-/// real run; until then it is a stub `previewServer` can hold and stop.
+/// `tap serve` for a previewed website export. It runs nothing yet: it is
+/// what `previewServer` holds and stops.
 final class PreviewServer {
     func stop() {}
 }

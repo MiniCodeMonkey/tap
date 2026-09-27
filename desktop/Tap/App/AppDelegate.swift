@@ -92,9 +92,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         NSApp.orderFrontStandardAboutPanel(options: aboutPanelOptions())
     }
 
-    /// The Image Generation pane of Settings. A stub until Task 12 builds
-    /// the Settings window; the Generate Image sheet's Settings… button
-    /// calls this selector so the wiring is in place ahead of it.
+    /// The Image Generation pane of Settings, the selector the Generate
+    /// Image sheet's Settings… button sends. There is no Settings window
+    /// yet, so it does nothing.
     @objc func showSettings(_ sender: Any?) {}
 
     /// The About panel names the bundled tap's version.
