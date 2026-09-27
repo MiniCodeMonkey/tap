@@ -35,7 +35,7 @@ class QuestionSheet: NSWindow {
     let returnAnswer: ReturnAnswer
 
     init(kind: String, title: String, body: String, path: String?, decline: String, accept: String,
-         escape: EscapeAnswer = .decline, returnAnswer: ReturnAnswer = .accept, detail: NSView? = nil) {
+         escape: EscapeAnswer = .decline, returnAnswer: ReturnAnswer = .accept, detail: NSView? = nil, width: CGFloat = 520) {
         self.kind = kind
         self.escape = escape
         self.returnAnswer = returnAnswer
@@ -78,7 +78,7 @@ class QuestionSheet: NSWindow {
         stack.alignment = .leading
         stack.spacing = 12
         stack.edgeInsets = NSEdgeInsets(top: 24, left: 24, bottom: 24, right: 24)
-        stack.widthAnchor.constraint(equalToConstant: 520).isActive = true
+        stack.widthAnchor.constraint(equalToConstant: width).isActive = true
         bodyLabel.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -48).isActive = true
         detail?.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -48).isActive = true
         pathLabel.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -48).isActive = true

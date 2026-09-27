@@ -152,4 +152,65 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         }
         return true
     }
+
+    /// File > New Deck and the welcome window's button.
+    @objc func newDeck(_ sender: Any?) {
+        newDeck(on: hostWindowForNewDeck(keyWindow: NSApp.keyWindow, mainWindow: NSApp.mainWindow))
+    }
+
+    /// Where the sheet goes: the deck window that is key, else main, else
+    /// the frontmost visible deck window, else the welcome window, shown
+    /// first. Never a hidden window (a sheet there is invisible), and
+    /// never a window of another kind (Settings, the Tap Log).
+    func hostWindowForNewDeck(keyWindow: NSWindow?, mainWindow: NSWindow?) -> NSWindow? {
+        if let deck = Self.deck(owning: keyWindow) ?? Self.deck(owning: mainWindow), deck.window?.isVisible == true { return deck.window }
+        let visibleDecks = NSApp.orderedWindows.compactMap { $0.windowController as? DeckWindowController }.filter { $0.window?.isVisible == true }
+        if let front = visibleDecks.first { return front.window }
+        WelcomeWindowController.shared.showWindow(nil)
+        return WelcomeWindowController.shared.window
+    }
+
+    /// The sheet on `host`. Create runs tap new; the deck opens.
+    func newDeck(on host: NSWindow?) {
+        guard let host, host.attachedSheet == nil else { return }
+        let settings = AppEnvironment.shared.generalSettings
+        let sheet = NewDeckSheet(lastFolder: settings.lastNewDeckFolder, defaultTheme: settings.defaultTheme)
+        sheet.onCreate = { [weak self, weak sheet, weak host] request in
+            guard let self, let sheet else { return }
+            sheet.beginCreating()
+            self.createDeck(from: request) { result in
+                switch result {
+                case .success(let deck):
+                    host?.endSheet(sheet, returnCode: .OK)
+                    AppEnvironment.shared.generalSettings.lastNewDeckFolder = request.location
+                    NSDocumentController.shared.openDocument(withContentsOf: deck, display: true) { _, _, _ in }
+                case .failure(let error):
+                    sheet.showError((error as? ToolError).map(Self.message(for:)) ?? error.localizedDescription)
+                }
+            }
+        }
+        host.beginSheet(sheet) { _ in }
+    }
+
+    /// Runs tap new for the sheet's request and reports the deck it wrote.
+    func createDeck(from request: NewDeckRequest, completion: @escaping (Result<URL, Error>) -> Void) {
+        Task { @MainActor in
+            let exit = await TapTool.run(request.arguments, timeout: 60)
+            guard let outcome = exit.outcome else { return completion(.failure(ToolError.noResult(status: exit.status))) }
+            do {
+                let result = try outcome.result(NewDeckResult.self)
+                completion(.success(URL(fileURLWithPath: result.deck)))
+            } catch {
+                completion(.failure(error))
+            }
+        }
+    }
+
+    static func message(for error: ToolError) -> String {
+        switch error {
+        case .failed(_, let message): return message
+        case .noResult(let status): return "tap did not answer (exit \(status))"
+        case .cancelled: return "cancelled"
+        }
+    }
 }

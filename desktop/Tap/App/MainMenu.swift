@@ -44,8 +44,7 @@ enum MainMenu {
 
     static func fileMenu() -> NSMenu {
         let menu = NSMenu(title: "File")
-        // New Deck arrives with the New Deck sheet, which runs tap new.
-        menu.addItem(item("New Deck…", action: nil, key: "n"))
+        menu.addItem(item("New Deck…", action: #selector(AppDelegate.newDeck(_:)), key: "n"))
         menu.addItem(item("Open…", action: #selector(NSDocumentController.openDocument(_:)), key: "o"))
         let recent = item("Open Recent", action: nil)
         let recentMenu = NSMenu(title: "Open Recent")

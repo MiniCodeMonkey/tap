@@ -406,6 +406,8 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
         deckForm.applyEdit = { [weak self] replacement, actionName in
             self?.editor.replaceText(in: replacement.range, with: replacement.replacement, actionName: actionName)
         }
+        deckForm.currentThemeSlug = { [weak self] in self?.currentThemeSlug }
+        deckForm.setTheme = { [weak self] slug in self?.setTheme(slug) }
         inspectorViewController.embedDeck(deckForm)
         inspectorViewController.onTabChange = { [weak self] tab in
             if tab == .deck { self?.deckForm.refresh() }
