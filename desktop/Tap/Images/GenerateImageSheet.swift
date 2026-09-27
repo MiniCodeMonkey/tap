@@ -17,7 +17,11 @@ struct GenerateImageRequest: Equatable {
 /// tap image generate on the saved deck. tap's error shows in the sheet,
 /// with a way to Settings for a missing key.
 final class GenerateImageSheet: QuestionSheet, NSTextViewDelegate {
-    let promptView = NSTextView()
+    /// The prompt, in the scroll view `NSTextView.scrollableTextView()`
+    /// makes: the text view tracks the scroll view's width, so it has the
+    /// box's size and takes clicks and typing.
+    let promptView: NSTextView
+    private let promptScroll: NSScrollView
     let matchThemeSwitch = NSSwitch()
     let aspectControl = NSSegmentedControl(labels: ["16:9", "1:1", "4:3"], trackingMode: .selectOne, target: nil, action: nil)
     let errorLabel = NSTextField(wrappingLabelWithString: "")
@@ -32,14 +36,14 @@ final class GenerateImageSheet: QuestionSheet, NSTextViewDelegate {
     }
 
     init(slide: Int, themeName: String) {
+        promptScroll = NSTextView.scrollableTextView()
+        promptView = promptScroll.documentView as? NSTextView ?? NSTextView()
         let form = NSView()
         super.init(kind: "generate-image", title: "Generate Image for Slide \(slide)", body: "", path: nil, decline: "Cancel", accept: "Generate", escape: .decline, returnAnswer: .accept, detail: form)
         bodyLabel.isHidden = true
         acceptButton.target = self
         acceptButton.action = #selector(generatePressed(_:))
-        let scroll = NSScrollView()
-        scroll.documentView = promptView
-        scroll.hasVerticalScroller = true
+        let scroll = promptScroll
         scroll.borderType = .bezelBorder
         promptView.isRichText = false
         promptView.font = .systemFont(ofSize: 13)
@@ -77,6 +81,7 @@ final class GenerateImageSheet: QuestionSheet, NSTextViewDelegate {
             errorLabel.widthAnchor.constraint(equalTo: stack.widthAnchor),
         ])
         setContentSize(contentView?.fittingSize ?? frame.size)
+        initialFirstResponder = promptView
         generateButton.isEnabled = false
     }
 
@@ -102,8 +107,12 @@ final class GenerateImageSheet: QuestionSheet, NSTextViewDelegate {
 
     func textDidChange(_ notification: Notification) {
         generateButton.isEnabled = !request.prompt.isEmpty
+        guard !errorLabel.isHidden || !settingsButton.isHidden else { return }
         errorLabel.isHidden = true
         settingsButton.isHidden = true
+        // Hiding a stack view's arranged subview collapses its space; the
+        // sheet shrinks back to its no-error size.
+        setContentSize(contentView?.fittingSize ?? frame.size)
     }
 
     @objc private func generatePressed(_ sender: Any?) {
@@ -111,11 +120,14 @@ final class GenerateImageSheet: QuestionSheet, NSTextViewDelegate {
         onGenerate?(request)
     }
 
-    /// tap's message; the Settings button for a missing key.
+    /// tap's message; the Settings button for a missing key. The sheet
+    /// grows to hold them, since a hidden row's space is collapsed by the
+    /// stack view until now.
     func showError(_ message: String, code: String) {
         errorLabel.stringValue = message
         errorLabel.isHidden = false
         settingsButton.isHidden = code != "no_api_key"
         generateButton.isEnabled = true
+        setContentSize(contentView?.fittingSize ?? frame.size)
     }
 }
