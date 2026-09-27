@@ -20,3 +20,9 @@ func SetTheme(deckPath, slug string) error {
 	}
 	return config.UpdateThemeInFile(deckPath, slug)
 }
+
+// RemoveTheme deletes the theme line from a deck's frontmatter, so it
+// renders with tap's default theme.
+func RemoveTheme(deckPath string) error {
+	return config.RemoveThemeFromFile(deckPath)
+}

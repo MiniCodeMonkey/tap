@@ -297,8 +297,13 @@ comment. Needs `GEMINI_API_KEY`, in the environment or a `.env` file next
 to the deck.
 
 ```bash
-tap image generate [deck] --slide <n> --prompt "..." [--json]
+tap image generate [deck] --slide <n> --prompt "..." [--aspect <ratio>] [--match-theme] [--json]
 ```
+
+`--aspect` (1:1, 16:9, 9:16, 4:3, 3:4) and `--match-theme` (prepends the
+deck theme's style brief to what is sent to the model) are recorded in the
+`ai-prompt` comment and reused by `regenerate`; the comment's prompt text
+stays the person's words.
 
 Errors: `usage`, `out_of_range`, `no_api_key`, `image_generation` (exit 2
 for a network or server failure, 1 otherwise).
@@ -314,8 +319,11 @@ Makes an AI image again in place and replaces it, deleting the old file.
 Without `--prompt`, reuses the image's own prompt.
 
 ```bash
-tap image regenerate [deck] --slide <n> --image <path> [--prompt "..."] [--json]
+tap image regenerate [deck] --slide <n> --image <path> [--prompt "..."] [--aspect <ratio>] [--match-theme] [--json]
 ```
+
+`--aspect` and `--match-theme` default to what the comment recorded for
+that image; either flag overrides it.
 
 Errors: as `tap image generate`, plus `image_not_found`.
 
@@ -345,8 +353,8 @@ tap deck schema --json | head -40
 
 ```bash
 tap theme list [--json]
-tap theme show [slug|deck] [--json | --prompt | --image [-o <file>]]
-tap theme set <slug> [deck] [--json]
+tap theme show [slug|deck] [--json | --prompt | --image [-o <file>] [--progress json]]
+tap theme set <slug|default> [deck] [--json]
 ```
 
 `show` prints a theme's name, polarity, pitch, tokens, and illustration
@@ -358,11 +366,14 @@ the theme of the deck in the current folder.
 prints its path. The image is cached per theme and tap version, in the
 user cache folder under `tap/themes/<version>/<slug>.png`, so a repeat
 call returns at once. `-o`/`--output` copies it to a file instead.
+`--progress json` prints the engine download and the render as JSON
+lines on stderr, as `tap export` does.
 
 `set <slug> [deck]` writes `theme: <slug>` into the deck's frontmatter,
 the same change the `t` key makes in `tap dev`. A deck with no
 frontmatter gets one. An unknown slug exits 1 with code `unknown_theme`
-and the list of themes.
+and the list of themes. `set default [deck]` removes the theme line
+instead, so the deck renders with tap's default theme.
 
 `theme list --json`:
 ```json

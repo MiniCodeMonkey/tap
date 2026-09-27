@@ -456,6 +456,48 @@ func UpdateThemeInFile(path string, newTheme string) error {
 	return WriteFileAtomically(path, []byte(newContent), info.Mode().Perm())
 }
 
+// RemoveThemeFromFile deletes the theme line from a markdown file's
+// frontmatter, so the deck renders with the default theme. A file with no
+// frontmatter or no theme line is left exactly as it is. The write is
+// atomic, as UpdateThemeInFile's is.
+func RemoveThemeFromFile(path string) error {
+	info, err := os.Stat(path)
+	if err != nil {
+		return fmt.Errorf("failed to stat file: %w", err)
+	}
+	content, err := os.ReadFile(path)
+	if err != nil {
+		return fmt.Errorf("failed to read file: %w", err)
+	}
+	lines := strings.Split(string(content), "\n")
+	if len(lines) == 0 || strings.TrimSpace(lines[0]) != "---" {
+		return nil
+	}
+	endIndex := -1
+	for i := 1; i < len(lines); i++ {
+		if strings.TrimSpace(lines[i]) == "---" {
+			endIndex = i
+			break
+		}
+	}
+	if endIndex == -1 {
+		return fmt.Errorf("frontmatter not closed")
+	}
+	kept := make([]string, 0, len(lines))
+	removed := false
+	for i, line := range lines {
+		if i > 0 && i < endIndex && strings.HasPrefix(strings.TrimSpace(line), "theme:") {
+			removed = true
+			continue
+		}
+		kept = append(kept, line)
+	}
+	if !removed {
+		return nil
+	}
+	return WriteFileAtomically(path, []byte(strings.Join(kept, "\n")), info.Mode().Perm())
+}
+
 // ResolveCustomThemePath resolves the customTheme path relative to the given base directory.
 // If the customTheme is already an absolute path or empty, it returns it unchanged.
 // Returns the resolved path and any error encountered while checking the file.

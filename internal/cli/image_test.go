@@ -148,6 +148,110 @@ func TestImageGeneratePrintsTheImagePath(t *testing.T) {
 	}
 }
 
+const themedImageDeck = "---\ntheme: terminal\n---\n\n# One\n\n---\n\n# Two\n"
+
+// The desktop app's Generate Image sheet offers an aspect and "Match
+// theme". Both are tap's: the aspect reaches Gemini, and the theme's own
+// style brief (tap theme show --prompt) goes in front of the person's
+// words, while the ai-prompt comment keeps the person's words alone, so
+// tap image regenerate reads what they wrote.
+func TestImageGenerateAspectAndMatchTheme(t *testing.T) {
+	fake := useFakeImageGenerator(t)
+	deckDir := t.TempDir()
+	deck := writeDeckFile(t, deckDir, "talk.md", themedImageDeck)
+
+	exitCode, stdout, stderr := runTap(t, "image", "generate", deck, "--slide", "2", "--prompt", "a red fox", "--aspect", "16:9", "--match-theme", "--json")
+	if exitCode != exitOK {
+		t.Fatalf("exit code = %d, stderr %q", exitCode, stderr)
+	}
+	if len(fake.aspects) != 1 || fake.aspects[0] != "16:9" {
+		t.Errorf("aspects = %q, want [16:9]", fake.aspects)
+	}
+	if len(fake.prompts) != 1 || !strings.HasPrefix(fake.prompts[0], `Illustration style for the "Terminal" slide theme`) || !strings.HasSuffix(fake.prompts[0], "\n\nThe image shows: a red fox") {
+		t.Errorf("the request = %q, want the Terminal brief then the person's words", fake.prompts)
+	}
+	var output struct {
+		Prompt string `json:"prompt"`
+	}
+	if err := json.Unmarshal([]byte(stdout), &output); err != nil || output.Prompt != "a red fox" {
+		t.Errorf("output prompt = %q (%v), want the person's words", output.Prompt, err)
+	}
+	content, _ := os.ReadFile(deck)
+	if !strings.Contains(string(content), "<!-- ai-prompt: a red fox | aspect: 16:9 | match-theme -->") || strings.Contains(string(content), "Illustration style") {
+		t.Errorf("deck = %q, want the person's prompt with the two choices recorded after it, and no brief", content)
+	}
+	images := deckedit.ParseAIImages(string(content))
+	if len(images) != 1 || images[0].Prompt != "a red fox" || images[0].Aspect != "16:9" || !images[0].MatchTheme {
+		t.Errorf("parsed = %+v, want the prompt alone and the recorded choices", images)
+	}
+}
+
+func TestImageGenerateWithoutTheFlagsAsksPlainly(t *testing.T) {
+	fake := useFakeImageGenerator(t)
+	deck := writeDeckFile(t, t.TempDir(), "talk.md", themedImageDeck)
+	if exitCode, _, stderr := runTap(t, "image", "generate", deck, "--slide", "2", "--prompt", "a red fox"); exitCode != exitOK {
+		t.Fatalf("exit code = %d, stderr %q", exitCode, stderr)
+	}
+	if fake.prompts[0] != "a red fox" || fake.aspects[0] != "" {
+		t.Errorf("request = %q %q, want the words alone and no aspect", fake.prompts[0], fake.aspects[0])
+	}
+}
+
+func TestImageGenerateRejectsAnUnknownAspect(t *testing.T) {
+	useFakeImageGenerator(t)
+	deck := writeDeckFile(t, t.TempDir(), "talk.md", imageDeck)
+	exitCode, _, stderr := runTap(t, "image", "generate", deck, "--slide", "2", "--prompt", "x", "--aspect", "2:1")
+	if exitCode != exitUserError || !strings.Contains(stderr, "--aspect must be one of 1:1, 16:9, 9:16, 4:3, 3:4") {
+		t.Errorf("exit %d, stderr %q", exitCode, stderr)
+	}
+}
+
+func TestImageRegenerateTakesTheSameFlags(t *testing.T) {
+	fake := useFakeImageGenerator(t)
+	deckDir := t.TempDir()
+	deck := writeDeckFile(t, deckDir, "talk.md", themedImageDeck)
+	if exitCode, _, stderr := runTap(t, "image", "generate", deck, "--slide", "2", "--prompt", "a red fox"); exitCode != exitOK {
+		t.Fatalf("generate: exit %d, stderr %q", exitCode, stderr)
+	}
+	image := "images/" + deckedit.GenerateImageFilename([]byte("png bytes for a red fox"), "image/png")
+	exitCode, _, stderr := runTap(t, "image", "regenerate", deck, "--slide", "2", "--image", image, "--aspect", "1:1", "--match-theme")
+	if exitCode != exitOK {
+		t.Fatalf("regenerate: exit %d, stderr %q", exitCode, stderr)
+	}
+	if fake.aspects[1] != "1:1" || !strings.HasSuffix(fake.prompts[1], "The image shows: a red fox") {
+		t.Errorf("regenerate request = %q %q", fake.prompts[1], fake.aspects[1])
+	}
+	if !strings.Contains(fake.prompts[1], "Canvas 1:1") || strings.Contains(fake.prompts[1], "Canvas 16:9") {
+		t.Errorf("the brief's canvas follows --aspect: %q", fake.prompts[1])
+	}
+}
+
+// Regenerate without the flags reuses what the comment recorded, so a
+// replacement keeps the image's aspect and theme match; a flag overrides.
+func TestImageRegenerateReusesTheRecordedChoices(t *testing.T) {
+	fake := useFakeImageGenerator(t)
+	deck := writeDeckFile(t, t.TempDir(), "talk.md", themedImageDeck)
+	if exitCode, _, stderr := runTap(t, "image", "generate", deck, "--slide", "2", "--prompt", "a red fox", "--aspect", "1:1", "--match-theme"); exitCode != exitOK {
+		t.Fatalf("generate: exit %d, stderr %q", exitCode, stderr)
+	}
+	content, _ := os.ReadFile(deck)
+	image := deckedit.ParseAIImages(string(content))[0].ImagePath
+	if exitCode, _, stderr := runTap(t, "image", "regenerate", deck, "--slide", "2", "--image", image); exitCode != exitOK {
+		t.Fatalf("regenerate: exit %d, stderr %q", exitCode, stderr)
+	}
+	if fake.aspects[1] != "1:1" || !strings.Contains(fake.prompts[1], "Canvas 1:1") || !strings.HasSuffix(fake.prompts[1], "The image shows: a red fox") {
+		t.Errorf("regenerate reused nothing: %q %q", fake.prompts[1], fake.aspects[1])
+	}
+	after, _ := os.ReadFile(deck)
+	if !strings.Contains(string(after), "| aspect: 1:1 | match-theme -->") {
+		t.Errorf("the replacement's comment keeps the choices: %q", after)
+	}
+	image = deckedit.ParseAIImages(string(after))[0].ImagePath
+	if exitCode, _, _ := runTap(t, "image", "regenerate", deck, "--slide", "2", "--image", image, "--aspect", "4:3"); exitCode != exitOK || fake.aspects[2] != "4:3" || !fake.matchesTheme(2) {
+		t.Errorf("a flag overrides the aspect and keeps the recorded match: %q", fake.aspects)
+	}
+}
+
 func TestImageGenerateUsageErrors(t *testing.T) {
 	useFakeImageGenerator(t)
 	deck := writeDeckFile(t, t.TempDir(), "talk.md", imageDeck)

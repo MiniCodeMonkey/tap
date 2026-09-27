@@ -108,7 +108,7 @@ func TestHelpTextThemeExamplesAreRealThemes(t *testing.T) {
 				if slug == "" {
 					slug = match[2]
 				}
-				if slug == "" || slug == "<slug>" {
+				if slug == "" || slug == "<slug>" || slug == "default" {
 					continue
 				}
 				if !themes.IsValid(slug) {
@@ -153,7 +153,7 @@ func TestDocsThemeExamplesAreRealThemes(t *testing.T) {
 					if slug == "" {
 						slug = match[2]
 					}
-					if slug == "" || slug == "<slug>" {
+					if slug == "" || slug == "<slug>" || slug == "default" {
 						continue
 					}
 					if !themes.IsValid(slug) {

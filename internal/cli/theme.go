@@ -19,11 +19,12 @@ import (
 
 // Flags for the theme commands.
 var (
-	themeListJSON   bool
-	themeShowJSON   bool
-	themeShowPrompt bool
-	themeShowImage  bool
-	themeShowOutput string
+	themeListJSON     bool
+	themeShowJSON     bool
+	themeShowPrompt   bool
+	themeShowImage    bool
+	themeShowOutput   string
+	themeShowProgress string
 )
 
 // themeCmd is the parent command for theme inspection.
@@ -64,13 +65,17 @@ and prints its path. The image is cached per theme and tap version in the
 user cache folder, under tap/themes/<version>/<slug>.png, so the second
 call returns at once. -o copies it to a file.
 
+--progress json prints the engine download and the render as JSON lines
+on stderr, as tap export does.
+
 Examples:
   tap theme show terminal
   tap theme show terminal --json
   tap theme show terminal --prompt
   tap theme show slides.md --prompt
   tap theme show terminal --image
-  tap theme show terminal --image -o terminal.png`,
+  tap theme show terminal --image -o terminal.png
+  tap theme show terminal --image --progress json`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: runThemeShow,
 }
@@ -86,6 +91,7 @@ func init() {
 	themeShowCmd.Flags().BoolVar(&themeShowPrompt, "prompt", false, "print a style brief for an image model")
 	themeShowCmd.Flags().BoolVar(&themeShowImage, "image", false, "render a title slide in the theme to a PNG and print its path")
 	themeShowCmd.Flags().StringVarP(&themeShowOutput, "output", "o", "", "copy the --image PNG to this file")
+	themeShowCmd.Flags().StringVar(&themeShowProgress, "progress", "", "with --image, print progress to stderr as JSON lines (json)")
 }
 
 // runThemeList implements `tap theme list`.
@@ -116,6 +122,9 @@ func runThemeShow(cmd *cobra.Command, args []string) error {
 	if themeShowOutput != "" && !themeShowImage {
 		return userError(codeUsage, errors.New("--output needs --image"))
 	}
+	if themeShowProgress != "" && !themeShowImage {
+		return userError(codeUsage, errors.New("--progress needs --image"))
+	}
 
 	slug, err := resolveThemeShowSlug(firstArg(args))
 	if err != nil {
@@ -126,7 +135,11 @@ func runThemeShow(cmd *cobra.Command, args []string) error {
 		return userError(codeUnknownTheme, unknownThemeError(slug))
 	}
 	if themeShowImage {
-		return showThemeImage(cmd, theme)
+		progress, err := newProgressReporter(themeShowProgress, cmd.ErrOrStderr())
+		if err != nil {
+			return err
+		}
+		return showThemeImage(cmd, theme, progress)
 	}
 	tokens, ok := themes.Tokens(slug)
 	if !ok {

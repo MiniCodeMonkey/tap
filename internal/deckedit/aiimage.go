@@ -5,18 +5,27 @@ import (
 	"encoding/hex"
 	"fmt"
 	"regexp"
+	"strings"
 )
 
 // aiImagePattern matches an ai-prompt comment followed, on the next line,
 // by the image it produced. Group 1 is the prompt, group 2 the image path.
 var aiImagePattern = regexp.MustCompile(`<!--\s*ai-prompt:\s*(.+?)\s*-->\n[ \t]*!\[\]\(([^)]+)\)`)
 
-// AIImage is an AI-generated image in a deck: the prompt that made it and
-// the path the deck links to, relative to the deck's folder.
+// AIImage is an AI-generated image in a deck: the prompt that made it, the
+// path the deck links to, relative to the deck's folder, and the choices
+// recorded with it: the aspect ratio and whether the theme's brief was
+// prepended (both empty for an image made before they were recorded).
 type AIImage struct {
-	Prompt    string
-	ImagePath string
+	Prompt     string
+	ImagePath  string
+	Aspect     string
+	MatchTheme bool
 }
+
+// aiPromptOptionSeparator separates the prompt from its recorded choices
+// inside the comment: "a fox | aspect: 16:9 | match-theme".
+const aiPromptOptionSeparator = " | "
 
 // ParseAIImages returns the AI-generated images in content, in order.
 func ParseAIImages(content string) []AIImage {
@@ -26,36 +35,72 @@ func ParseAIImages(content string) []AIImage {
 	}
 	images := make([]AIImage, 0, len(matches))
 	for _, match := range matches {
-		images = append(images, AIImage{Prompt: match[1], ImagePath: match[2]})
+		prompt, aspect, matchTheme := splitAIPromptOptions(match[1])
+		images = append(images, AIImage{Prompt: prompt, ImagePath: match[2], Aspect: aspect, MatchTheme: matchTheme})
 	}
 	return images
 }
 
+// aiPromptComment is the comment's text (without the surrounding
+// "<!-- ai-prompt: ... -->"): the prompt, with the choices after the words.
+func aiPromptComment(prompt, aspect string, matchTheme bool) string {
+	comment := prompt
+	if aspect != "" {
+		comment += aiPromptOptionSeparator + "aspect: " + aspect
+	}
+	if matchTheme {
+		comment += aiPromptOptionSeparator + "match-theme"
+	}
+	return comment
+}
+
+// splitAIPromptOptions takes the recorded choices off the end of a
+// comment's text. Only trailing tokens that read as choices are taken, so
+// a prompt that itself contains " | " keeps its words.
+func splitAIPromptOptions(text string) (prompt, aspect string, matchTheme bool) {
+	parts := strings.Split(text, aiPromptOptionSeparator)
+	for len(parts) > 1 {
+		last := parts[len(parts)-1]
+		switch {
+		case last == "match-theme":
+			matchTheme = true
+		case strings.HasPrefix(last, "aspect: "):
+			aspect = strings.TrimPrefix(last, "aspect: ")
+		default:
+			return strings.Join(parts, aiPromptOptionSeparator), aspect, matchTheme
+		}
+		parts = parts[:len(parts)-1]
+	}
+	return strings.Join(parts, aiPromptOptionSeparator), aspect, matchTheme
+}
+
 // AIImageMarkdown is the text that records an AI-generated image in a
-// deck: the prompt comment and the image link.
-func AIImageMarkdown(prompt, imagePath string) string {
-	return fmt.Sprintf("<!-- ai-prompt: %s -->\n![](%s)", prompt, imagePath)
+// deck: the prompt comment, with the choices after the words, and the
+// image link. Without choices the comment is the prompt alone.
+func AIImageMarkdown(prompt, imagePath, aspect string, matchTheme bool) string {
+	return fmt.Sprintf("<!-- ai-prompt: %s -->\n![](%s)", aiPromptComment(prompt, aspect, matchTheme), imagePath)
 }
 
 // InsertAIImage returns content with an AI-generated image added at the
 // end of the slide at slideIndex.
-func InsertAIImage(content string, slideIndex int, prompt, imagePath string) (string, error) {
-	return InsertIntoSlide(content, slideIndex, AIImageMarkdown(prompt, imagePath))
+func InsertAIImage(content string, slideIndex int, prompt, imagePath, aspect string, matchTheme bool) (string, error) {
+	return InsertIntoSlide(content, slideIndex, AIImageMarkdown(prompt, imagePath, aspect, matchTheme))
 }
 
 // ReplaceAIImage returns content with the AI-generated image that has
-// oldPrompt and oldImagePath replaced in place by one with newPrompt and
-// newImagePath. It fails when content has no such image.
-func ReplaceAIImage(content, oldPrompt, oldImagePath, newPrompt, newImagePath string) (string, error) {
+// old's prompt, image path and recorded choices replaced in place by one
+// with newPrompt, newImagePath, aspect and matchTheme. It fails when
+// content has no such image.
+func ReplaceAIImage(content string, old AIImage, newPrompt, newImagePath, aspect string, matchTheme bool) (string, error) {
 	pattern, err := regexp.Compile(fmt.Sprintf(`<!--\s*ai-prompt:\s*%s\s*-->\n[ \t]*!\[\]\(%s\)`,
-		regexp.QuoteMeta(oldPrompt), regexp.QuoteMeta(oldImagePath)))
+		regexp.QuoteMeta(aiPromptComment(old.Prompt, old.Aspect, old.MatchTheme)), regexp.QuoteMeta(old.ImagePath)))
 	if err != nil {
 		return "", fmt.Errorf("failed to compile replacement pattern: %w", err)
 	}
 	if !pattern.MatchString(content) {
 		return "", fmt.Errorf("could not find the existing image reference to replace")
 	}
-	return pattern.ReplaceAllLiteralString(content, AIImageMarkdown(newPrompt, newImagePath)), nil
+	return pattern.ReplaceAllLiteralString(content, AIImageMarkdown(newPrompt, newImagePath, aspect, matchTheme)), nil
 }
 
 // GenerateImageFilename names a generated image by its content:
