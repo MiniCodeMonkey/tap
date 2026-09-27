@@ -20,6 +20,7 @@ tap new [deck] --yes --title <title> --theme <slug> --output <file>
 | `--yes` | `-y` | Skip the wizard and write from flags and defaults |
 | `--force` | | Overwrite `--output` if it already exists |
 | `--json` | | Print the written deck as JSON (skips the wizard) |
+| `--folder <location>` | none | Make a folder named after the title inside `<location>`, with the deck and an `images/` folder; skips the wizard; cannot be combined with `[deck]`, `--output` or `--force` |
 
 With a terminal attached, `tap new` opens an interactive wizard and the
 flags only pre-fill its steps. With `--yes`, or with no terminal attached
@@ -137,6 +138,7 @@ tap serve [dir]
 | Flag | Short | Description |
 |------|-------|-------------|
 | `--port <number>` | `-p` | Port for the server (default: `3000`) |
+| `--json` | none | Listen on 127.0.0.1 only, print one ready line, log no requests, and exit when standard input closes |
 
 ## tap export pdf
 

@@ -37,6 +37,7 @@ tap new [deck] --yes [--title <title>] [--theme <slug>] [--output <file>] [--for
 | `--yes` | `-y` | Skip the wizard and write the file from flags and defaults |
 | `--force` | | Overwrite `--output` if it already exists (non-interactive mode only) |
 | `--json` | | Print the written deck as JSON (skips the wizard) |
+| `--folder <location>` | none | Make a folder named after the title inside `<location>`, with the deck and an `images/` folder; skips the wizard; cannot be combined with `[deck]`, `--output` or `--force`. |
 
 ### Examples
 
@@ -55,6 +56,9 @@ tap new --yes --title "My Talk" --theme terminal --output talk.md
 
 # Overwrite an existing file non-interactively
 tap new --yes --output talk.md --force
+
+# Make a folder named after the title, with the deck and an images/ folder
+tap new --folder ~/talks --title "My Talk" --theme terminal --json   # ~/talks/my-talk/my-talk.md, with images/
 ```
 
 Non-interactive mode refuses to overwrite an existing `--output` file unless `--force` is given. With no terminal attached to standard input, `tap new` behaves as if `--yes` was passed, so it never hangs waiting on the wizard.
@@ -63,6 +67,12 @@ Non-interactive mode refuses to overwrite an existing `--output` file unless `--
 
 ```json
 {"ok": true, "deck": "talk.md"}
+```
+
+With `--folder`:
+
+```json
+{"ok": true, "deck": "...", "folder": "..."}
 ```
 
 ### Output
@@ -331,6 +341,7 @@ tap serve [dir]
 | Flag | Short | Description |
 |------|-------|-------------|
 | `--port <number>` | `-p` | Port to serve on (default: `3000`) |
+| `--json` | none | Listen on 127.0.0.1 only, print one ready line (`{"ok":true,"dir","port","url"}`, the URL on 127.0.0.1), log no requests, and exit when standard input closes, for a program that opens the site. |
 
 If the default port is already taken, `tap serve` tries the next ports in turn (up to 20 above it) and prints the URL of whichever one it actually bound. Passing `--port` explicitly instead fails outright when that exact port is busy:
 
@@ -346,6 +357,7 @@ The port is bound before the startup message prints, so a busy port is reported 
 tap serve
 tap serve ./public
 tap serve dist --port 8080
+tap serve dist --port 0 --json
 ```
 
 ::: tip

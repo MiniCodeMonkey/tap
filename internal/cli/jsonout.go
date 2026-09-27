@@ -22,6 +22,20 @@ func printJSONOK(w io.Writer, payload any) error {
 	return err
 }
 
+// printJSONLine writes a successful command's result as one compact line,
+// {"ok":true,...} with payload's fields, for a command that keeps running
+// after it (tap serve --json): a program reads the line and knows the
+// rest of stdout is quiet.
+func printJSONLine(w io.Writer, payload any) error {
+	body, err := jsonEnvelope("JSON result", `{"ok":true`, payload, false)
+	if err != nil {
+		return err
+	}
+	body = append(body, '\n')
+	_, err = w.Write(body)
+	return err
+}
+
 // jsonEnvelope splices the fields of payload into a JSON object that starts
 // with prefix, such as `{"ok":true` or `{"phase":"done","ok":true`. payload
 // must encode to a JSON object, or be nil for no fields. label names the
