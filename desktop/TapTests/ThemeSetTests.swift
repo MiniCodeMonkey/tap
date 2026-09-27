@@ -86,10 +86,10 @@ final class ThemeSetTests: HostedTestCase {
         // tap dev reports the write while the run still waits: the unedited buffer loads it.
         try await waitUntil(timeout: 20, "tap dev's report of tap's write") { controller.editor.string.contains("theme: blueprint") }
         XCTAssertEqual(controller.editor.undoManager?.undoActionName, "Change Theme")
-        // The load and this poll's wake can share one run loop turn, whose
-        // undo group is still open; a person's keystroke comes a turn later.
-        try await waitForTheUndoStepToClose(controller.editor.undoManager)
-        controller.editor.insertText("typed while tap ran ",replacementRange: NSRange(location: controller.editor.hiddenLength, length: 0))
+        // The load came on a main-queue turn, not an event: its undo step is
+        // already closed, so the typing below cannot join it.
+        XCTAssertEqual(controller.editor.undoManager?.groupingLevel, 0, "the load is an undo step of its own, closed when it lands")
+        controller.editor.insertText("typed while tap ran ", replacementRange: NSRange(location: controller.editor.hiddenLength, length: 0))
         try await waitForTheRunToEnd(record)
         XCTAssertTrue(controller.editor.string.contains("typed while tap ran"), "the run's end loads nothing over the typing")
         XCTAssertTrue(controller.editor.string.contains("theme: blueprint"))

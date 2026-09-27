@@ -682,7 +682,22 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
         let slideNumber = editor.currentBoxIndex.map { editor.boxes[$0].slide.number }
         document.adopt(diskText: disk)
         if let replacement = TextDiff.replacement(from: editor.string, to: disk) {
+            // The load is an undo step of its own, closed before this returns.
+            // It arrives from tap dev's report or a tool run's end, a
+            // main-queue turn and not an event, so an automatic group opened
+            // for it closes only when the run loop or a later event ends it,
+            // and a keystroke handled first joins the load: one undo would
+            // take both. With no group open,
+            // the automatic grouping is paused while this group is open, as
+            // a slide operation does; a group already open belongs to
+            // someone else and the load nests inside it.
+            let undoManager = editor.undoManager
+            let pausesAutomaticGrouping = undoManager.map { $0.groupingLevel == 0 && $0.groupsByEvent } ?? false
+            if pausesAutomaticGrouping { undoManager?.groupsByEvent = false }
+            undoManager?.beginUndoGrouping()
             editor.replaceText(in: replacement.range, with: replacement.replacement, actionName: actionName)
+            undoManager?.endUndoGrouping()
+            if pausesAutomaticGrouping { undoManager?.groupsByEvent = true }
         }
         if let slideNumber {
             // The next send tap answers for this text, whichever generation
