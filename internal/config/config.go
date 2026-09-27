@@ -433,8 +433,7 @@ func UpdateThemeInFile(path string, newTheme string) error {
 	// Look for existing theme line in frontmatter
 	themeLineIndex := -1
 	for i := 1; i < endIndex; i++ {
-		line := strings.TrimSpace(lines[i])
-		if strings.HasPrefix(line, "theme:") {
+		if isTopLevelThemeLine(lines[i]) {
 			themeLineIndex = i
 			break
 		}
@@ -486,7 +485,7 @@ func RemoveThemeFromFile(path string) error {
 	kept := make([]string, 0, len(lines))
 	removed := false
 	for i, line := range lines {
-		if i > 0 && i < endIndex && strings.HasPrefix(strings.TrimSpace(line), "theme:") {
+		if i > 0 && i < endIndex && isTopLevelThemeLine(line) {
 			removed = true
 			continue
 		}
@@ -496,6 +495,13 @@ func RemoveThemeFromFile(path string) error {
 		return nil
 	}
 	return WriteFileAtomically(path, []byte(strings.Join(kept, "\n")), info.Mode().Perm())
+}
+
+// isTopLevelThemeLine reports whether a frontmatter line is the deck's own
+// theme key: `theme:` at column 0. An indented `theme:` is a nested map's
+// key or a line of text inside a block scalar, and is never touched.
+func isTopLevelThemeLine(line string) bool {
+	return strings.HasPrefix(line, "theme:")
 }
 
 // ResolveCustomThemePath resolves the customTheme path relative to the given base directory.
