@@ -244,6 +244,18 @@ final class ToolRunTests: XCTestCase {
         try await waitUntil(timeout: 10, "the process to be stopped") { Self.hasExited(identifier) }
     }
 
+    /// Every chunk of standard output is received before the result is
+    /// decoded, even a chunk read after the process has exited (here, from
+    /// a child that still holds the pipe).
+    @MainActor
+    func testTheWholeStandardOutputReachesTheResult() async throws {
+        let script = try Self.script("#!/bin/sh\n(sleep 0.3; printf '{\"ok\": true}\\n') &\nexit 0\n")
+        let run = ToolRun(configuration: .init(executableURL: script, arguments: [], environment: ["PATH": "/usr/bin:/bin"], currentDirectoryURL: nil, timeout: 10))
+        let exit = await run.run()
+        XCTAssertEqual(exit.status, 0)
+        XCTAssertEqual(exit.outcome, .ok(Data("{\"ok\": true}\n".utf8)), "the late chunk is part of the result")
+    }
+
     /// A run that keeps stdin open (tap serve --json) hands the process a
     /// pipe; a cancel closes it first, which is how tap serve learns the
     /// app is done with it, before any signal.

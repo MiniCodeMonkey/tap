@@ -159,32 +159,29 @@ public final class ToolRun {
         process.standardInput = input ?? FileHandle.nullDevice
         process.standardOutput = output
         process.standardError = errors
-        output.fileHandleForReading.readabilityHandler = { [weak self] handle in
-            let data = handle.availableData
-            guard !data.isEmpty else { return }
-            DispatchQueue.main.async { MainActor.assumeIsolated { self?.receive(data, fromStandardError: false) } }
-        }
-        errors.fileHandleForReading.readabilityHandler = { [weak self] handle in
-            let data = handle.availableData
-            guard !data.isEmpty else { return }
-            DispatchQueue.main.async { MainActor.assumeIsolated { self?.receive(data, fromStandardError: true) } }
-        }
-        let outputHandle = output.fileHandleForReading
-        let errorHandle = errors.fileHandleForReading
-        process.terminationHandler = { [weak self] finished in
-            outputHandle.readabilityHandler = nil
-            errorHandle.readabilityHandler = nil
-            let restOfOutput = (try? outputHandle.readToEnd()) ?? Data()
-            let restOfErrors = (try? errorHandle.readToEnd()) ?? Data()
-            let status = finished.terminationStatus
-            DispatchQueue.main.async {
-                MainActor.assumeIsolated { self?.didTerminate(status: status, output: restOfOutput, errors: restOfErrors) }
-            }
-        }
+        // Each pipe is read to EOF on its own thread, every chunk handed to
+        // the main queue in order. The exit is handed over only once both
+        // pipes reached EOF and the process terminated, so every chunk of
+        // output is received before the result is decoded.
+        let finished = DispatchGroup()
+        finished.enter()
+        process.terminationHandler = { _ in finished.leave() }
         try process.run()
         isRunning = true
         processIdentifier = process.processIdentifier
         Self.registry.add(self)
+        for (handle, fromStandardError) in [(output.fileHandleForReading, false), (errors.fileHandleForReading, true)] {
+            finished.enter()
+            Thread.detachNewThread { [weak self] in
+                while case let data = handle.availableData, !data.isEmpty {
+                    DispatchQueue.main.async { MainActor.assumeIsolated { self?.receive(data, fromStandardError: fromStandardError) } }
+                }
+                finished.leave()
+            }
+        }
+        finished.notify(queue: .main) { [weak self] in
+            MainActor.assumeIsolated { self?.didTerminate() }
+        }
         if let timeout = configuration.timeout {
             let work = DispatchWorkItem { [weak self] in
                 MainActor.assumeIsolated {
@@ -288,10 +285,9 @@ public final class ToolRun {
         }
     }
 
-    private func didTerminate(status: Int32, output restOfOutput: Data, errors restOfErrors: Data) {
+    private func didTerminate() {
+        let status = process.terminationStatus
         deadline?.cancel()
-        receive(restOfOutput, fromStandardError: false)
-        receive(restOfErrors, fromStandardError: true)
         if let line = outputBuffer.finish() { onStandardOutputLine?(line) }
         if let line = errorBuffer.finish() { handleErrorLine(line) }
         isRunning = false
