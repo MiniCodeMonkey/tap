@@ -141,7 +141,7 @@ func startServe(dir string, port int, explicitPort, jsonMode bool, out io.Writer
 	}
 
 	fs := http.FileServer(http.Dir(dir))
-	var handler http.Handler = fs
+	handler := fs
 	if !jsonMode {
 		handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			start := time.Now()
