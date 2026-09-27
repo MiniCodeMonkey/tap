@@ -17,14 +17,14 @@ final class ThemeCell: NSButton {
         }
     }
 
-    init(theme: ThemeSummary, size: NSSize) {
+    init(theme: ThemeSummary, size: NSSize, nameFontSize: CGFloat, cornerRadius: CGFloat) {
         slug = theme.slug
         super.init(frame: .zero)
         title = ""
         isBordered = false
         setButtonType(.momentaryChange)
         imageView.wantsLayer = true
-        imageView.layer?.cornerRadius = 5
+        imageView.layer?.cornerRadius = cornerRadius
         imageView.layer?.masksToBounds = true
         imageView.layer?.backgroundColor = NSColor.quaternaryLabelColor.cgColor
         imageView.imageScaling = .scaleProportionallyUpOrDown
@@ -33,7 +33,7 @@ final class ThemeCell: NSButton {
         placeholder.alignment = .center
         placeholder.textColor = .secondaryLabelColor
         nameLabel.stringValue = theme.name
-        nameLabel.font = .systemFont(ofSize: 10.5)
+        nameLabel.font = .systemFont(ofSize: nameFontSize)
         nameLabel.alignment = .center
         nameLabel.lineBreakMode = .byTruncatingTail
         let stack = NSStackView(views: [imageView, nameLabel])
@@ -76,10 +76,14 @@ final class ThemeGridViewController: NSViewController {
     /// default theme's render. Picking it removes the theme line (tap theme
     /// set default). A deck that names no theme has it selected.
     static let defaultSlug = "default"
-    /// The ThemePicker board's cells, and the NewDeckHintNoSlug board's smaller ones.
-    static let popoverCellSize = NSSize(width: 96, height: 54)
+    /// The ThemePicker and DeckTabThemeRow boards' cells (names at 11.5
+    /// points, corners of 6), and the NewDeckHintNoSlug board's smaller
+    /// ones (names at 10.5 points, corners of 5).
+    static let popoverCellSize = NSSize(width: 104, height: 58)
     static let sheetCellSize = NSSize(width: 82, height: 46)
     let cellSize: NSSize
+    var nameFontSize: CGFloat { cellSize == Self.popoverCellSize ? 11.5 : 10.5 }
+    private var cornerRadius: CGFloat { cellSize == Self.popoverCellSize ? 6 : 5 }
     var onPick: ((String) -> Void)?
     private(set) var cells: [ThemeCell] = []
     private(set) var sectionTitles: [String] = []
@@ -179,7 +183,7 @@ final class ThemeGridViewController: NSViewController {
             grid.columnSpacing = 12
             for row in stride(from: 0, to: themes.count, by: Self.columns) {
                 let rowCells = themes[row..<min(row + Self.columns, themes.count)].map { theme -> ThemeCell in
-                    let cell = ThemeCell(theme: theme, size: cellSize)
+                    let cell = ThemeCell(theme: theme, size: cellSize, nameFontSize: nameFontSize, cornerRadius: cornerRadius)
                     if theme.slug == Self.defaultSlug { cell.setAccessibilityLabel("Default, tap's default theme (\(defaultName))") }
                     cell.show(AppEnvironment.shared.themeImages.image(for: theme.slug))
                     cell.isSelected = theme.slug == (selectedSlug ?? Self.defaultSlug)
