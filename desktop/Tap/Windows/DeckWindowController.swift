@@ -64,6 +64,8 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
     private(set) var deckQuestions: [(question: DeckSessionController.PendingQuestion, generation: Int)] = []
     /// Reveals a kept recording. Production opens Finder on it; a test records the URL.
     var revealInFinder: (URL) -> Void = { url in NSWorkspace.shared.activateFileViewerSelecting([url]) }
+    /// Opens the previewed website. Production opens the default browser; a test records the URL.
+    var openURL: (URL) -> Void = { NSWorkspace.shared.open($0) }
     /// The phone remote panel, made with the window (a panel that is never
     /// shown costs nothing) and closed with it, so none outlives its deck.
     let remotePanel = RemotePanel()
@@ -496,8 +498,16 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
         showFormSheet(sheet) { [weak self] in self?.previewServer?.stop() }
     }
 
-    /// The website done state's Preview. It starts no server yet.
-    func previewWebsite(at folder: URL) {}
+    /// The export sheet's Preview: tap serve on the built folder, the site
+    /// opened in the default browser. The server stops with the sheet.
+    func previewWebsite(at folder: URL) {
+        let server = previewServer ?? PreviewServer(log: sessionController.session.log)
+        previewServer = server
+        server.start(folder: folder) { [weak self] url in
+            guard let url else { return NSSound.beep() }
+            self?.openURL(url)
+        }
+    }
 
     @objc func showThemePopover(_ sender: Any?) {
         guard questionSheet == nil, window?.attachedSheet == nil else { return }

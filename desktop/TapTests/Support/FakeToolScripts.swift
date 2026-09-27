@@ -154,4 +154,33 @@ enum FakeToolScripts {
             exit 0 ;;
         """, recordingTo: record)
     }
+
+    /// `tap export images --all`: a render line per slide, the files, and,
+    /// with `broken`, tap's `slide N: reason` lines and its broken_slides
+    /// failure after the files that did land, as tap does. Every JSON line
+    /// goes out through `printf`, never `echo`, so a message's own
+    /// characters cannot be read as escapes.
+    static func exportImages(slides: Int, broken: [Int] = [], recordingTo record: URL) throws -> URL {
+        let brokenList = broken.map(String.init).joined(separator: " ")
+        return try write("""
+          "export images")
+            out=""; while [ $# -gt 0 ]; do case "$1" in --output|-o) out="$2"; shift ;; esac; shift; done
+            mkdir -p "$out"; files=""
+            i=1; while [ $i -le \(slides) ]; do
+              printf '{"phase":"render","done":%s,"total":%s}\\n' "$i" "\(slides)" >&2
+              case " \(brokenList) " in
+                *" $i "*) printf 'slide %s: %s\\n' "$i" "an error card" >&2 ;;
+                *) f=$(printf '%s/slide-%03d.png' "$out" "$i"); printf 'png' > "$f"; files="$files$(json_string "$f"),"  ;;
+              esac
+              i=$((i + 1))
+            done
+            files="[${files%,}]"
+            if [ -n "\(brokenList)" ]; then
+              printf '{"phase":"done","ok":false,"error":{"code":"broken_slides","message":"%s slide(s) failed to capture"}}\\n' "\(broken.count)" >&2
+              exit 1
+            fi
+            printf '{"phase":"done","ok":true,"files":%s}\\n' "$files" >&2
+            exit 0 ;;
+        """, recordingTo: record)
+    }
 }

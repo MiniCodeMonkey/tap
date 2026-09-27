@@ -1,11 +1,5 @@
 import AppKit
 
-/// `tap serve` for a previewed website export. It runs nothing yet: it is
-/// what `previewServer` holds and stops.
-final class PreviewServer {
-    func stop() {}
-}
-
 enum ExportKind: Equatable {
     /// `content` is slides, notes or both, tap's --content values.
     case pdf(content: String)

@@ -75,4 +75,33 @@ final class ExportSheetLayoutTests: HostedTestCase {
         assertCard(sheet.progressBox, holds: [sheet.detailLabel], insets: sheet.progressBox.edgeInsets, in: content)
         assertSheetWidth(content)
     }
+
+    /// The website done state adds Preview next to Show in Finder and Done.
+    func testTheWebsiteDoneState() throws {
+        let sheet = ExportSheet(kind: .website, deck: deck)
+        let content = try XCTUnwrap(sheet.contentView)
+        let output = URL(fileURLWithPath: "/tmp/talks/3am/dist")
+        sheet.apply(.done(ExportSummary(output: output, summary: "7 slides, 12 files, 340 KB in 1.2 s. Live code does not run in a static site.", warnings: [])))
+        XCTAssertFalse(sheet.previewButton.isHidden, "the website board offers Preview")
+        assertRowsDoNotOverlap([[sheet.statusLabel], [sheet.progressBar], [sheet.detailLabel], [sheet.pathLabel],
+                                [sheet.revealButton, sheet.previewButton, sheet.doneButton]], in: content)
+        assertCard(sheet.progressBox, holds: [sheet.progressBar, sheet.detailLabel], insets: sheet.progressBox.edgeInsets, in: content)
+        assertSheetWidth(content)
+    }
+
+    /// The images done state with gaps: the ExportWarnings board's "These slides have no image".
+    func testTheImagesDoneStateWithWarnings() throws {
+        let sheet = ExportSheet(kind: .images, deck: deck)
+        let content = try XCTUnwrap(sheet.contentView)
+        let output = URL(fileURLWithPath: "/tmp/talks/3am/conference-talk-slides")
+        sheet.apply(.done(ExportSummary(output: output, summary: "Some slides could not be rendered. The others are in the folder.",
+                                        warnings: [ExportWarning(slide: 4, message: "an error card")])))
+        XCTAssertTrue(sheet.previewButton.isHidden, "nothing to serve")
+        XCTAssertEqual(sheet.warningsHeader.stringValue, "These slides have no image")
+        assertRowsDoNotOverlap([[sheet.statusLabel], [sheet.progressBar], [sheet.detailLabel], [sheet.pathLabel], [sheet.warningsHeader]] + sheet.warningRows.map { [$0] }
+                               + [[sheet.revealButton, sheet.doneButton]], in: content)
+        assertCard(sheet.progressBox, holds: [sheet.progressBar, sheet.detailLabel], insets: sheet.progressBox.edgeInsets, in: content)
+        assertCard(sheet.warningsBox, holds: [sheet.warningsHeader] + sheet.warningRows, insets: sheet.warningsBox.edgeInsets, in: content)
+        assertSheetWidth(content)
+    }
 }
