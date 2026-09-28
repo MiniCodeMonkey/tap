@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -818,6 +819,78 @@ func TestAppDevKeepsTheNewerBufferWhenTheAppsSaveOfAnEarlierOneLands(t *testing.
 	}
 	if !strings.Contains(process.presentation(), "Autosaved By The App And Typed Since") {
 		t.Error("the text typed after the save stopped showing")
+	}
+}
+
+// A save can write a keystroke the app has not sent yet: the text is
+// typed as the save begins, and the PUT that carries it follows its
+// typing pause, after tap's watcher has read the write. The app names the
+// text with "saving" before it writes, so the pages are not reloaded for
+// it; the app is still told, and "saved" puts the text on screen as an
+// update. A change made elsewhere after that still reloads them.
+func TestAppDevDoesNotReloadThePagesForTheAppsSaveOfTextItHasNotSent(t *testing.T) {
+	deck := copyAppFixture(t)
+	process := startAppProcess(t, t.TempDir(), "dev", "--app", deck)
+	onDisk, err := os.ReadFile(deck)
+	if err != nil {
+		t.Fatal(err)
+	}
+	conn, ctx := process.dialWebSocket()
+
+	sent := strings.Replace(string(onDisk), "# App Mode Fixture", "# Sent To Tap", 1)
+	if status, body := process.putSource(sent); status != http.StatusOK {
+		t.Fatalf("PUT: status %d: %s", status, body)
+	}
+	if change := readDeckChange(t, ctx, conn); change != "update" {
+		t.Fatalf("the edit sent %q, want update", change)
+	}
+
+	typedAsTheSaveBegan := strings.Replace(string(onDisk), "# App Mode Fixture", "# Sent To Tap And Typed As The Save Began", 1)
+	process.send(fmt.Sprintf(`{"type":"saving","digest":"%x"}`, sha256.Sum256([]byte(typedAsTheSaveBegan))))
+	// The app writes "saving" to standard input before it writes the
+	// file, and the test does the same.
+	if err := os.WriteFile(deck, []byte(typedAsTheSaveBegan), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if event := process.next(appEventFileChanged); event["path"] != deck {
+		t.Errorf("file-changed path = %v, want %s", event["path"], deck)
+	}
+	process.send(`{"type":"saved"}`)
+	pageMessages := func(wait time.Duration) []string {
+		quiet, cancel := context.WithTimeout(ctx, wait)
+		defer cancel()
+		var types []string
+		for {
+			_, data, err := conn.Read(quiet)
+			if err != nil {
+				return types
+			}
+			var message map[string]any
+			if json.Unmarshal(data, &message) == nil {
+				messageType, _ := message["type"].(string)
+				types = append(types, messageType)
+			}
+		}
+	}
+	for _, messageType := range pageMessages(2 * time.Second) {
+		if messageType == "file-changed" || messageType == "reload" {
+			t.Fatalf("the pages were sent %s for the app's own save of text it had not sent yet", messageType)
+		}
+	}
+	if !strings.Contains(process.presentation(), "Typed As The Save Began") {
+		t.Error("the saved text is not on screen after saved")
+	}
+
+	// A read that times out closes the connection, so the pages' side is
+	// read again on a new one.
+	conn, ctx = process.dialWebSocket()
+	outside := strings.Replace(string(onDisk), "# App Mode Fixture", "# Changed In Another Editor", 1)
+	if err := os.WriteFile(deck, []byte(outside), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	process.next(appEventFileChanged)
+	if message := readWebSocketUntil(t, ctx, conn, "file-changed"); message["path"] != deck {
+		t.Errorf("WebSocket file-changed = %v", message)
 	}
 }
 

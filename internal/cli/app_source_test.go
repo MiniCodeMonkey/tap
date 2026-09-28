@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -171,6 +172,72 @@ func TestAppDeckSourceTellsTheAppsSaveOfAnEarlierBufferFromAnOutsideChange(t *te
 	}
 	if !reloadPagesOnDeckWrite(changed, source.buffering(), sentByApp) {
 		t.Error("a change made elsewhere does not reload the pages")
+	}
+}
+
+// A save can write text the app has not sent yet, and the app names it
+// with "saving" before the write. That write is the app's own too; a
+// write of anything else is still a change made elsewhere.
+func TestAppDeckSourceTellsAnAnnouncedSaveOfUnsentTextFromAnOutsideChange(t *testing.T) {
+	deckPath := writeAppTestDeck(t, "# One\n")
+	source := newAppDeckSource(deckPath)
+	source.setBuffer([]byte("# Two\n"))
+	source.noteSaving(sha256.Sum256([]byte("# Two, typed as the save began\n")))
+
+	if err := os.WriteFile(deckPath, []byte("# Two, typed as the save began\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	changed, sentByApp, err := source.diskState()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !changed || !sentByApp {
+		t.Fatalf("an announced save on disk: changed %v, sentByApp %v; want true, true", changed, sentByApp)
+	}
+	if reloadPagesOnDeckWrite(changed, source.buffering(), sentByApp) {
+		t.Error("the app's announced save reloads the pages")
+	}
+
+	if err := os.WriteFile(deckPath, []byte("# Written Elsewhere\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	changed, sentByApp, err = source.diskState()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !changed || sentByApp {
+		t.Fatalf("an outside change after an announced save: changed %v, sentByApp %v; want true, false", changed, sentByApp)
+	}
+	if !reloadPagesOnDeckWrite(changed, source.buffering(), sentByApp) {
+		t.Error("a change made elsewhere after an announced save does not reload the pages")
+	}
+
+	// "saved" for text the app never sent goes back to the file, which
+	// holds the app's newest text.
+	if err := os.WriteFile(deckPath, []byte("# Two, typed as the save began\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	source.dropSavedBuffer()
+	if current, _ := source.current(); source.buffering() || string(current) != "# Two, typed as the save began\n" {
+		t.Errorf("after saved for an announced save: %q, buffering %v; want the file", current, source.buffering())
+	}
+}
+
+// Only the most recent announced saves count as the app's own text.
+func TestAppDeckSourceRemembersOnlyRecentSaves(t *testing.T) {
+	deckPath := writeAppTestDeck(t, "# Save 0\n")
+	source := newAppDeckSource(deckPath)
+	for index := 0; index <= recentSaveCount; index++ {
+		source.noteSaving(sha256.Sum256([]byte("# Save " + strconv.Itoa(index) + "\n")))
+	}
+	if _, sentByApp, _ := source.diskState(); sentByApp {
+		t.Errorf("save 0 of %d still counts as recent", recentSaveCount+1)
+	}
+	if err := os.WriteFile(deckPath, []byte("# Save 1\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, sentByApp, _ := source.diskState(); !sentByApp {
+		t.Errorf("save 1, the oldest of the last %d, does not count", recentSaveCount)
 	}
 }
 

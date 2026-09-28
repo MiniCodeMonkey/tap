@@ -33,6 +33,12 @@ type appDeckSource struct {
 	// sent, oldest first. The app usually saves text it has already sent;
 	// a save of text it never sent is treated as the file.
 	sent [][sha256.Size]byte
+	// saving holds the digests of the last recentSaveCount texts the app
+	// said it was about to write to the deck file ("saving"), oldest
+	// first. A save can write text typed a moment before it, which the
+	// app has not sent yet; the app names that text before the write, so
+	// the watcher still knows the write as the app's own.
+	saving [][sha256.Size]byte
 }
 
 // recentBufferCount is how many of the app's buffers tap remembers. The
@@ -40,6 +46,11 @@ type appDeckSource struct {
 // typing stops, so the text a save writes is at most a few buffers behind
 // by the time tap hears about the write.
 const recentBufferCount = 16
+
+// recentSaveCount is how many of the app's announced saves tap remembers.
+// The watcher reads the file about a tenth of a second after a write, and
+// the app saves at most a few times in that span.
+const recentSaveCount = 4
 
 func newAppDeckSource(file string) *appDeckSource {
 	return &appDeckSource{file: file}
@@ -81,6 +92,35 @@ func (source *appDeckSource) wasSent(text []byte) bool {
 	digest := sha256.Sum256(text)
 	for _, sent := range source.sent {
 		if sent == digest {
+			return true
+		}
+	}
+	return false
+}
+
+// noteSaving records digest, the SHA-256 of the text the app is about to
+// write to the deck file. It is the app's word, sent before the write, so
+// it only ever names bytes the app itself writes: a file holding anything
+// else is still a change made elsewhere.
+func (source *appDeckSource) noteSaving(digest [sha256.Size]byte) {
+	source.mu.Lock()
+	defer source.mu.Unlock()
+	source.saving = append(source.saving, digest)
+	if len(source.saving) > recentSaveCount {
+		source.saving = source.saving[len(source.saving)-recentSaveCount:]
+	}
+}
+
+// isAppsOwnText reports whether text is one of the recent buffers the app
+// sent or one of the recent saves it announced. The caller holds
+// source.mu.
+func (source *appDeckSource) isAppsOwnText(text []byte) bool {
+	if source.wasSent(text) {
+		return true
+	}
+	digest := sha256.Sum256(text)
+	for _, saving := range source.saving {
+		if saving == digest {
 			return true
 		}
 	}
@@ -270,8 +310,11 @@ func suppressFileChanged(changed, buffering bool) bool {
 // save (an autosave) landing before its "saved" does: the pages already
 // show exactly that text, so a reload would only throw away where each page
 // is and what its slides are holding. So is a write of any recent buffer
-// the app sent (sentByApp): an autosave of text the person has typed past
-// since, whose newer text tap already renders and the pages show.
+// the app sent, or of text the app announced it was saving (sentByApp):
+// an autosave of text the person has typed past since, whose newer text
+// tap already renders, or a save of a keystroke the app has not sent yet,
+// whose text reaches the pages as an update. A write of anything else
+// reloads them. The app is told about every write either way.
 func reloadPagesOnDeckWrite(changed, buffering, sentByApp bool) bool {
 	return !sentByApp && (changed || !buffering)
 }
@@ -286,7 +329,8 @@ func (source *appDeckSource) diskChanged() (bool, error) {
 
 // diskState reads the deck file once and reports whether it differs from
 // what tap renders (see diskChanged), and whether it holds one of the
-// recent buffers the app sent, which makes the write the app's own save.
+// recent buffers the app sent or a save the app announced, which makes the
+// write the app's own save.
 func (source *appDeckSource) diskState() (changed, sentByApp bool, err error) {
 	disk, err := os.ReadFile(source.file)
 	if err != nil {
@@ -294,7 +338,7 @@ func (source *appDeckSource) diskState() (changed, sentByApp bool, err error) {
 	}
 	source.mu.Lock()
 	defer source.mu.Unlock()
-	sentByApp = source.wasSent(disk)
+	sentByApp = source.isAppsOwnText(disk)
 	if source.hasBuffer {
 		return !bytes.Equal(disk, source.buffer), sentByApp, nil
 	}

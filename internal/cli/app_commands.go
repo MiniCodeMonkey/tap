@@ -13,6 +13,7 @@ import (
 const (
 	appCommandAnswer    = "answer"
 	appCommandSaved     = "saved"
+	appCommandSaving    = "saving"
 	appCommandReload    = "reload"
 	appCommandTunnel    = "tunnel"
 	appCommandRecording = "recording"
@@ -32,6 +33,9 @@ type appCommand struct {
 	Type   string          `json:"type"`
 	ID     string          `json:"id,omitempty"`
 	Action string          `json:"action,omitempty"`
+	// Digest is the saving command's SHA-256 of the text about to be
+	// written, as 64 hexadecimal digits.
+	Digest string `json:"digest,omitempty"`
 }
 
 // readAppCommands reads one JSON command per line from input until it
