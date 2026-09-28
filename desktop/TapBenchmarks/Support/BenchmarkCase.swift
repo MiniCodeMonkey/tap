@@ -129,15 +129,32 @@ class BenchmarkCase: XCTestCase {
     /// Writes `results` to desktop/build/benchmarks/`name`.json, and prints
     /// them on one line, so a CI log keeps every run's numbers, a passing
     /// run's too, and the bounds can be checked against the runner's
-    /// history.
+    /// history. Every number is rounded to 2 decimals first, so the log
+    /// shows 296.78 rather than a Double's binary tail like
+    /// 296.77999999999997.
     func write(_ results: [String: Any], to name: String) {
         let folder = repositoryRoot.appendingPathComponent("desktop/build/benchmarks")
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-        if let data = try? JSONSerialization.data(withJSONObject: results, options: [.prettyPrinted, .sortedKeys]) {
+        let rounded = roundedForLogging(results)
+        if let data = try? JSONSerialization.data(withJSONObject: rounded, options: [.prettyPrinted, .sortedKeys]) {
             try? data.write(to: folder.appendingPathComponent("\(name).json"))
         }
-        if let line = try? JSONSerialization.data(withJSONObject: results, options: [.sortedKeys]) {
+        if let line = try? JSONSerialization.data(withJSONObject: rounded, options: [.sortedKeys]) {
             print("benchmark results \(name): \(String(decoding: line, as: UTF8.self))")
+        }
+    }
+
+    /// Rounds every Double in `value` to 2 decimals, recursing into nested
+    /// dictionaries, so the JSON `write` emits never carries a rounded
+    /// number's binary imprecision.
+    private func roundedForLogging(_ value: Any) -> Any {
+        switch value {
+        case let number as Double:
+            return (number * 100).rounded() / 100
+        case let dictionary as [String: Any]:
+            return dictionary.mapValues { roundedForLogging($0) }
+        default:
+            return value
         }
     }
 }
