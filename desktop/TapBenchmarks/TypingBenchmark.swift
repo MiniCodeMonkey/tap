@@ -2,8 +2,10 @@ import XCTest
 @testable import Tap
 
 final class TypingBenchmark: BenchmarkCase {
-    /// 13-performance.feature: typing latency stays under 16 ms.
+    /// 13-performance.feature: typing latency stays under 16 ms. A CI run
+    /// is held to its own bounds (see BenchmarkBounds).
     func testTyping() async throws {
+        let bounds = try bounds()
         let document = try await openStressDeck()
         let controller = try XCTUnwrap(document.sessionController)
         let window = try XCTUnwrap(document.windowControllers.first?.window)
@@ -29,7 +31,12 @@ final class TypingBenchmark: BenchmarkCase {
         let summary = summarize(recorder.milliseconds)
         write(["slides": controller.editor.boxes.count, "keyEventToFrameCommitted": summary], to: "typing")
         XCTAssertEqual(recorder.milliseconds.count, 280, "every key event has a sample")
-        XCTAssertLessThan(summary["p95"] ?? .greatestFiniteMagnitude, 16, "typing latency stays under 16 ms: \(summary)")
+        XCTAssertLessThan(summary["p95"] ?? .greatestFiniteMagnitude, bounds.typingP95,
+                          "typing latency stays under \(bounds.typingP95) ms at the 95th percentile (\(bounds.name) bounds): \(summary)")
+        if let typingMedian = bounds.typingMedian {
+            XCTAssertLessThan(summary["median"] ?? .greatestFiniteMagnitude, typingMedian,
+                              "typing latency stays under \(typingMedian) ms at the median (\(bounds.name) bounds): \(summary)")
+        }
     }
 
     /// Sends one key event and times it with `recorder`, then checks that the

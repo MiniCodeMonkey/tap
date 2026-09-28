@@ -477,9 +477,11 @@ jobs:
       - name: Run UI tests
         run: make -C desktop uitest
 
-  # The benchmarks measure typing, preview and thumbnail times against
-  # bounds set on a developer Mac. A shared runner's speed varies, so a
-  # slow run reports its numbers here without failing the workflow.
+  # The benchmarks measure typing, preview and thumbnail times against the
+  # runner's own bounds (BENCH_BOUNDS=ci, see BenchmarkBounds), set from its
+  # history; a developer Mac keeps the product's targets. Every run prints
+  # its numbers. The job does not fail the workflow until the ci bounds
+  # have held over a run of consecutive jobs.
   bench-desktop:
     name: Desktop Benchmarks
     runs-on: macos-15
@@ -516,7 +518,7 @@ jobs:
         run: make frontend
 
       - name: Run benchmarks
-        run: make -C desktop bench
+        run: make -C desktop bench BENCH_BOUNDS=ci
 
   # The release pipeline with no secrets, on every pull request: the arm64
   # Release build with the hardened runtime and the entitlements, the hook

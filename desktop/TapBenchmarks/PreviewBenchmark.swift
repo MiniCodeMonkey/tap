@@ -4,6 +4,7 @@ import WebKit
 
 final class PreviewBenchmark: BenchmarkCase {
     /// 13-performance.feature: the preview shows an edit within 200 ms after I stop typing.
+    /// A CI run is held to its own bound (see BenchmarkBounds).
     ///
     /// Each sample runs from the key event to the second animation frame
     /// after the page's DOM first holds the edited text, the frame that
@@ -13,6 +14,7 @@ final class PreviewBenchmark: BenchmarkCase {
     /// theme's run for up to 1.5 s). That time is written to the results
     /// as keyToPreviewSettled, and is not what the target is about.
     func testPreviewUpdate() async throws {
+        let bounds = try bounds()
         let document = try await openStressDeck()
         let controller = try XCTUnwrap(document.sessionController)
         let window = try XCTUnwrap(document.windowControllers.first?.window)
@@ -61,7 +63,8 @@ final class PreviewBenchmark: BenchmarkCase {
         write(["slides": editor.boxes.count,
                "keyToPreviewShown": summary,
                "keyToPreviewSettled": summarize(settledDurations)], to: "preview-update")
-        XCTAssertLessThan(summary["median"] ?? .greatestFiniteMagnitude, 200, "the preview shows the edit within 200 ms: \(summary)")
+        XCTAssertLessThan(summary["median"] ?? .greatestFiniteMagnitude, bounds.previewShownMedian,
+                          "the preview shows the edit within \(bounds.previewShownMedian) ms (\(bounds.name) bounds): \(summary)")
     }
 
     /// Watches the page's DOM. Once `window.__benchmarkExpected` is set and
