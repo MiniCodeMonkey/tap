@@ -480,8 +480,9 @@ jobs:
   # The benchmarks measure typing, preview and thumbnail times against the
   # runner's own bounds (BENCH_BOUNDS=ci, see BenchmarkBounds), set from its
   # history; a developer Mac keeps the product's targets. Every run prints
-  # its numbers. The job does not fail the workflow until the ci bounds
-  # have held over a run of consecutive jobs.
+  # its numbers. continue-on-error stays true until Desktop Benchmarks has
+  # run green 20 times in a row with no "never showed" failure; only then
+  # does it flip to false, so the ci bounds actually fail the workflow.
   bench-desktop:
     name: Desktop Benchmarks
     runs-on: macos-15
