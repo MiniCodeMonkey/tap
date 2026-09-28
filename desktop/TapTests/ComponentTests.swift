@@ -94,9 +94,22 @@ final class ComponentTests: HostedTestCase {
         XCTAssertFalse(controller.openComponentLink(at: edited.range(of: "./slides/Bundle.jsx").location + 3), "a folder, not a file")
         XCTAssertEqual(opened.count, 1, "nothing more opened")
         let point = controller.editor.pointForCharacter(at: pathRange.location + 5)
-        let event = try XCTUnwrap(NSEvent.mouseEvent(with: .leftMouseDown, location: controller.editor.convert(point, to: nil), modifierFlags: [.command], timestamp: 0,
-                                                     windowNumber: controller.editor.window?.windowNumber ?? 0, context: nil, eventNumber: 0, clickCount: 1, pressure: 1))
-        controller.editor.mouseDown(with: event)
+        let clicked = controller.editor.characterIndexForInsertion(at: point)
+        guard NSLocationInRange(clicked, pathRange) else {
+            return XCTFail("the click's point \(point) reads character \(clicked), not one of the path's \(pathRange)")
+        }
+        // A leftMouseUp is queued behind the click: the Cmd-click branch
+        // returns without reading it, but a click that reached NSTextView's
+        // own mouseDown would otherwise wait forever in its tracking loop for
+        // a mouse up that never comes, hanging the test instead of failing it.
+        let window = try XCTUnwrap(controller.editor.window)
+        func event(_ type: NSEvent.EventType) throws -> NSEvent {
+            try XCTUnwrap(NSEvent.mouseEvent(with: type, location: controller.editor.convert(point, to: nil), modifierFlags: [.command], timestamp: ProcessInfo.processInfo.systemUptime,
+                                             windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1))
+        }
+        NSApp.postEvent(try event(.leftMouseUp), atStart: false)
+        controller.editor.mouseDown(with: try event(.leftMouseDown))
+        NSApp.discardEvents(matching: .leftMouseUp, before: nil)
         XCTAssertEqual(opened.count, 2, "the Cmd-click reached the same path")
     }
 

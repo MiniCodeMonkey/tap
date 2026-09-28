@@ -411,11 +411,18 @@ final class EditorTextView: NSTextView {
     /// quarter of the way into the glyph and halfway down its line, so
     /// `characterIndexForInsertion(at:)` there is `index`. Through TextKit 2
     /// (never `layoutManager`, whose read would turn the editor into a
-    /// TextKit 1 view).
+    /// TextKit 1 view). An edit restyles its whole slide, which leaves those
+    /// paragraphs' fragments without lines until the next layout pass, so
+    /// the text from the start through the character is laid out first: a
+    /// fragment's frame is only true once everything above it is.
     func pointForCharacter(at index: Int) -> NSPoint {
         guard let contentManager = textContentStorage, let layoutManager = textLayoutManager,
-              let location = contentManager.location(contentManager.documentRange.location, offsetBy: index),
-              let fragment = layoutManager.textLayoutFragment(for: location) else { return .zero }
+              let location = contentManager.location(contentManager.documentRange.location, offsetBy: index) else { return .zero }
+        let end = contentManager.location(location, offsetBy: 1) ?? location
+        if let through = NSTextRange(location: contentManager.documentRange.location, end: end) {
+            layoutManager.ensureLayout(for: through)
+        }
+        guard let fragment = layoutManager.textLayoutFragment(for: location) else { return .zero }
         let frame = fragment.layoutFragmentFrame
         let offset = contentManager.offset(from: fragment.rangeInElement.location, to: location)
         let lines = fragment.textLineFragments
