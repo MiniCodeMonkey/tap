@@ -23,7 +23,9 @@ if "$script" archive "$root/missing.dmg" >/dev/null 2>&1; then echo "a missing f
 if "$script" sign "$root/Tap.dmg" >/dev/null 2>&1; then echo "an unknown mode should fail"; exit 1; fi
 
 # The stand-in: records its arguments and its stdin, answers as sign_update
-# does for each kind of file, and never verifies anything but "ok".
+# does for each kind of file, and never verifies anything but "ok". A key
+# that does not come on stdin fails it at once: a terminal on stdin, or
+# nothing within 5 seconds, is an error, never a wait.
 # The tools folder carries the version, as fetch-sparkle-tools.sh requires.
 mkdir -p "$root/tools-2.10.0/bin"
 cat > "$root/tools-2.10.0/bin/sign_update" <<'FAKE'
@@ -33,7 +35,15 @@ printf '%s\n' "$*" >> "$here/args"
 case "$*" in
 	*--verify*) exit 0 ;;
 esac
-cat > "$here/stdin"
+if [ -t 0 ]; then echo "sign_update stand-in: stdin is a terminal, so the key did not come on stdin" >&2; exit 2; fi
+# A background command reads /dev/null unless stdin is handed to it.
+exec 3<&0
+cat <&3 > "$here/stdin" &
+reader=$!
+( sleep 5; kill "$reader" 2>/dev/null ) >/dev/null 2>&1 &
+watchdog=$!
+if ! wait "$reader"; then echo "sign_update stand-in: nothing came on stdin within 5 seconds, so the key did not" >&2; exit 2; fi
+kill "$watchdog" 2>/dev/null || true
 # The file is the last argument.
 for file; do :; done
 case "$*" in
