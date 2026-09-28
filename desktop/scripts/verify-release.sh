@@ -12,7 +12,10 @@ app="${1:-}"; dmg="${2:-}"; appcast="${3:-}"; identity="${4:--}"; version="${5:-
 plist="$app/Contents/Info.plist"
 fail() { echo "verify-release.sh: $1" >&2; exit 1; }
 [ -f "$plist" ] && [ -f "$dmg" ] && [ -f "$appcast" ] && [ -n "$version" ] || fail "usage: verify-release.sh <app> <dmg> <appcast> <identity> <version> <notarized> <feed_signed>"
-read_plist() { /usr/libexec/PlistBuddy -c "Print :$1" "$plist" 2>/dev/null || fail "$1 is missing from the plist"; }
+# Sets value to a plist key, or fails the script naming the key. It runs in
+# the script's own shell, never inside $(...), so its fail ends the script
+# with one line.
+read_plist() { value=$(/usr/libexec/PlistBuddy -c "Print :$1" "$plist" 2>/dev/null) || fail "$1 is missing from the plist"; }
 
 for binary in "$app/Contents/MacOS/Tap" "$app/Contents/Resources/tap"; do
 	[ -f "$binary" ] || fail "$binary is missing"
@@ -22,15 +25,15 @@ done
 printed=$("$app/Contents/Resources/tap" --version)
 [ "$printed" = "tap version $version" ] || fail "the bundled tap prints '$printed', not 'tap version $version'"
 
-[ "$(read_plist CFBundleShortVersionString)" = "$version" ] || fail "the app is $(read_plist CFBundleShortVersionString), not $version"
-build_number=$(read_plist CFBundleVersion)
+read_plist CFBundleShortVersionString; [ "$value" = "$version" ] || fail "the app is $value, not $version"
+read_plist CFBundleVersion; build_number=$value
 [ -n "$build_number" ] || fail "no CFBundleVersion"
-[ "$(read_plist LSMinimumSystemVersion)" = "14.0" ] || fail "LSMinimumSystemVersion is not 14.0"
-[ "$(read_plist SUFeedURL)" = "https://github.com/MiniCodeMonkey/tap/releases/latest/download/appcast.xml" ] || fail "SUFeedURL is wrong"
-[ "$(read_plist SUPublicEDKey)" = "Pc0PbtYL9fkyK3XnqULlpKLlH94TE4OWx4Q3n74EftU=" ] || fail "SUPublicEDKey is wrong"
-[ "$(read_plist SURequireSignedFeed)" = "true" ] || fail "SURequireSignedFeed is not true"
-[ "$(read_plist SUVerifyUpdateBeforeExtraction)" = "true" ] || fail "SUVerifyUpdateBeforeExtraction is not true"
-[ -n "$(read_plist NSMicrophoneUsageDescription)" ] || fail "NSMicrophoneUsageDescription is empty"
+read_plist LSMinimumSystemVersion; [ "$value" = "14.0" ] || fail "LSMinimumSystemVersion is not 14.0"
+read_plist SUFeedURL; [ "$value" = "https://github.com/MiniCodeMonkey/tap/releases/latest/download/appcast.xml" ] || fail "SUFeedURL is wrong"
+read_plist SUPublicEDKey; [ "$value" = "Pc0PbtYL9fkyK3XnqULlpKLlH94TE4OWx4Q3n74EftU=" ] || fail "SUPublicEDKey is wrong"
+read_plist SURequireSignedFeed; [ "$value" = "true" ] || fail "SURequireSignedFeed is not true"
+read_plist SUVerifyUpdateBeforeExtraction; [ "$value" = "true" ] || fail "SUVerifyUpdateBeforeExtraction is not true"
+read_plist NSMicrophoneUsageDescription; [ -n "$value" ] || fail "NSMicrophoneUsageDescription is empty"
 
 for stray in "$app/Contents/PlugIns" "$app"/Contents/Frameworks/XCTest*.framework "$app"/Contents/Frameworks/libXCTest*; do
 	[ -e "$stray" ] && fail "test code in the product: $stray"

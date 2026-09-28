@@ -82,7 +82,8 @@ make_app "$root/Universal.app" 0.0.0-test; cp /usr/bin/true "$root/Universal.app
 fails_with "is not arm64 alone" "$root/Universal.app" "$dmg" "$root/appcast.xml" - 0.0.0-test no no
 # A missing plist key.
 make_app "$root/NoKey.app" 0.0.0-test; /usr/libexec/PlistBuddy -c 'Delete :SURequireSignedFeed' "$root/NoKey.app/Contents/Info.plist"; "$here/sign-app.sh" "$root/NoKey.app" - "$entitlements" >/dev/null
-fails_with "SURequireSignedFeed" "$root/NoKey.app" "$dmg" "$root/appcast.xml" - 0.0.0-test no no
+fails_with "SURequireSignedFeed is missing from the plist" "$root/NoKey.app" "$dmg" "$root/appcast.xml" - 0.0.0-test no no
+[ "$(wc -l < "$root/out" | tr -d ' ')" = 1 ] || { echo "a missing key is one line: $(cat "$root/out")"; exit 1; }
 # No entitlement.
 make_app "$root/NoEntitlement.app" 0.0.0-test; printf '<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n<plist version="1.0"><dict/></plist>\n' > "$root/Empty.entitlements"; "$here/sign-app.sh" "$root/NoEntitlement.app" - "$root/Empty.entitlements" >/dev/null
 fails_with "audio-input" "$root/NoEntitlement.app" "$dmg" "$root/appcast.xml" - 0.0.0-test no no
