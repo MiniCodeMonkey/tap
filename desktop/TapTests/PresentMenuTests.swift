@@ -227,16 +227,40 @@ final class PresentMenuTests: PresentingTestCase {
         XCTAssertEqual(presenter.page.lastLoadedURL?.port, AppEnvironment.shared.deckPorts.port(for: try XCTUnwrap(controller.document?.fileURL)),
                        "the deck's port: the presenter layout and notes size persist between launches (Task 4 proves the port is reused)")
         try await waitUntil(timeout: 20, "the audience page on slide 2") { audience.page.lastReady?.slide == 2 }
-        try await waitUntil(timeout: 20, "the presenter page on slide 2") { presenter.page.lastReady?.slide == 2 }
+        let slideTwoDeadline = Date().addingTimeInterval(20)
+        while presenter.page.lastReady?.slide != 2 {
+            if Date() > slideTwoDeadline {
+                let whereItStopped = await presenter.page.diagnostics()
+                XCTFail("timed out waiting for the presenter page on slide 2: \(whereItStopped)")
+                return
+            }
+            try await Task.sleep(nanoseconds: 20_000_000)
+        }
 
         // The arrow keys, and every other key, go to tap's page unchanged
         // (testEveryTapDevKeyGoesToThePageUnchanged): the page moves, the
         // hub relays it (the page holds the presenter cookie), and tap
         // reports the new position. The key is pressed in the page itself,
         // so the proof does not depend on which window the host has as key.
+        let keyPressed = Date()
         await audience.page.pressKey("ArrowRight")
         try await waitUntil(timeout: 10, "tap's slide event for slide 3") { presentation.lastSlide == 3 }
-        try await waitUntil(timeout: 10, "the presenter page following") { presenter.page.lastReady?.slide == 3 }
+        let slideEventAfter = Date().timeIntervalSince(keyPressed)
+        let followDeadline = Date().addingTimeInterval(10)
+        while presenter.page.lastReady?.slide != 3 {
+            if Date() > followDeadline {
+                let whereItStopped = await presenter.page.diagnostics()
+                let audienceState = await audience.page.diagnostics()
+                // The page's times (pageMs, and each message's `at`) are its own
+                // clock; the key was pressed sinceKey before that pageMs.
+                let sinceKey = String(format: "%.2f", Date().timeIntervalSince(keyPressed))
+                let eventAfter = String(format: "%.2f", slideEventAfter)
+                XCTFail("timed out waiting for the presenter page following: sinceKey=\(sinceKey)s slideEventAfter=\(eventAfter)s "
+                        + "presenter: \(whereItStopped) audience: \(audienceState)")
+                return
+            }
+            try await Task.sleep(nanoseconds: 20_000_000)
+        }
 
         // S opens the presenter view in the presenter window, never a browser popup: on one display it comes over the audience view.
         let port = try XCTUnwrap(presentation.client).ready.port

@@ -16,11 +16,23 @@ final class PresentationPageController: NSViewController, WKNavigationDelegate, 
     var onLoadFailed: ((Error) -> Void)?
     /// The page asked for a window at /presenter: the S key.
     var onPresenterPopup: (() -> Void)?
+    /// The talk's current slide (1-based), which a page reloaded after its
+    /// process ended opens on. Nil when the talk has none.
+    var currentSlide: (() -> Int?)?
     /// Opens a URL outside the app. A test replaces it to see what the app tried to open.
     var openExternally: (URL) -> Void = { url in NSWorkspace.shared.open(url) }
     private(set) var lastReady: ReadyPayload?
     private(set) var pageLoadCount = 0
     private(set) var lastLoadedURL: URL?
+    /// When `load` last ran, which the navigation milestones count from.
+    private(set) var lastLoadDate: Date?
+    /// Every navigation step WebKit reported since the last `load`, the
+    /// page's own included (a reload from its script, a link): its name,
+    /// the path, query and fragment it was for, and when. Newest last,
+    /// at most `maximumMilestones`. Nothing reads it to decide anything;
+    /// a failure message says with it where the page went.
+    private(set) var navigationMilestones: [(name: String, url: String, date: Date)] = []
+    private static let maximumMilestones = 20
     /// How many times the page was loaded again because its web content
     /// process ended.
     private(set) var processTerminationCount = 0
@@ -61,8 +73,31 @@ final class PresentationPageController: NSViewController, WKNavigationDelegate, 
         self.allowedPort = allowedPort
         pageLoadCount += 1
         lastLoadedURL = url
+        lastLoadDate = Date()
+        navigationMilestones = []
         lastReady = nil
         webView.load(URLRequest(url: url))
+    }
+
+    private func recordMilestone(_ name: String) {
+        // The query can hold the presenter key or a launch code, so only its
+        // presence is kept.
+        var url = "none"
+        if let current = webView.url {
+            let query: String = current.query == nil ? "" : "?…"
+            let fragment: String = current.fragment.map { "#" + $0 } ?? ""
+            url = current.path + query + fragment
+        }
+        navigationMilestones.append((name: name, url: url, date: Date()))
+        if navigationMilestones.count > Self.maximumMilestones { navigationMilestones.removeFirst() }
+    }
+
+    /// The milestones since the last load, each as seconds after it began:
+    /// "start /presenter?…#2 +0.02s, redirect /presenter#2 +0.05s, …".
+    var navigationMilestoneDescription: String {
+        guard let start = lastLoadDate, !navigationMilestones.isEmpty else { return "none" }
+        return navigationMilestones.map { "\($0.name) \($0.url) +\(String(format: "%.2f", $0.date.timeIntervalSince(start)))s" }
+            .joined(separator: ", ")
     }
 
     // MARK: WebKit
@@ -93,21 +128,47 @@ final class PresentationPageController: NSViewController, WKNavigationDelegate, 
         }
     }
 
+    func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
+        recordMilestone("start")
+    }
+
+    func webView(_ webView: WKWebView, didReceiveServerRedirectForProvisionalNavigation navigation: WKNavigation!) {
+        recordMilestone("redirect")
+    }
+
+    /// A new document replaced the one on screen, whether the app loaded
+    /// it or the page navigated itself (a reload from its script). The
+    /// last ready was the old document's, so the page is not ready until
+    /// the new one says so.
+    func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
+        recordMilestone("commit")
+        lastReady = nil
+    }
+
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        recordMilestone("finish")
+    }
+
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+        recordMilestone("fail")
         onLoadFailed?(error)
     }
 
     func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+        recordMilestone("fail")
         onLoadFailed?(error)
     }
 
     /// The page's content process exited or crashed, which leaves the page
     /// blank. Loading it again starts a new process. The page it reloads
     /// is the one tap redirected to, which the cookies from the first load
-    /// still open. A page whose process keeps ending is reported as a
-    /// failed load instead, and left alone. A process that is stuck
-    /// rather than ended is not detected here.
+    /// still open, at the talk's current slide rather than the slide in
+    /// its own hash, which is stale when the talk moved while the page was
+    /// dead (see TalkPageReload). A page whose process keeps ending is
+    /// reported as a failed load instead, and left alone. A process that
+    /// is stuck rather than ended is not detected here.
     func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+        recordMilestone("process ended")
         processTerminationCount += 1
         lastReady = nil
         let now = Date()
@@ -118,11 +179,8 @@ final class PresentationPageController: NSViewController, WKNavigationDelegate, 
         }
         recentReloadDates.append(now)
         reloadAfterTerminationCount += 1
-        if webView.url != nil {
-            webView.reload()
-        } else if let lastLoadedURL {
-            webView.load(URLRequest(url: lastLoadedURL))
-        }
+        guard let pageURL = webView.url ?? lastLoadedURL else { return }
+        webView.load(URLRequest(url: TalkPageReload.url(reloading: pageURL, atSlide: currentSlide?())))
     }
 
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
