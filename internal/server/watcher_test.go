@@ -158,14 +158,18 @@ type fakeDebounceClock struct {
 	// overlaps counts timers scheduled while an earlier one was still live:
 	// a debounce that did not restart its window.
 	overlaps int
+	// generation is stamped on each timer as it is scheduled; the test
+	// advances it to tell timers scheduled after a step from those before.
+	generation int
 }
 
 type fakeDebounceTimer struct {
-	clock    *fakeDebounceClock
-	delay    time.Duration
-	callback func()
-	stopped  bool
-	fired    bool
+	clock      *fakeDebounceClock
+	delay      time.Duration
+	callback   func()
+	generation int
+	stopped    bool
+	fired      bool
 }
 
 func (clock *fakeDebounceClock) afterFunc(delay time.Duration, callback func()) stoppableTimer {
@@ -176,7 +180,7 @@ func (clock *fakeDebounceClock) afterFunc(delay time.Duration, callback func()) 
 			clock.overlaps++
 		}
 	}
-	timer := &fakeDebounceTimer{clock: clock, delay: delay, callback: callback}
+	timer := &fakeDebounceTimer{clock: clock, delay: delay, callback: callback, generation: clock.generation}
 	clock.timers = append(clock.timers, timer)
 	return timer
 }
@@ -194,6 +198,47 @@ func (clock *fakeDebounceClock) scheduled() int {
 	clock.mu.Lock()
 	defer clock.mu.Unlock()
 	return len(clock.timers)
+}
+
+// advance starts a new generation and returns it.
+func (clock *fakeDebounceClock) advance() int {
+	clock.mu.Lock()
+	defer clock.mu.Unlock()
+	clock.generation++
+	return clock.generation
+}
+
+// scheduledIn returns how many timers were scheduled in generation.
+func (clock *fakeDebounceClock) scheduledIn(generation int) int {
+	clock.mu.Lock()
+	defer clock.mu.Unlock()
+	count := 0
+	for _, timer := range clock.timers {
+		if timer.generation == generation {
+			count++
+		}
+	}
+	return count
+}
+
+// waitForQuiet waits until the watcher has scheduled no new timer for quiet,
+// so every event of a burst has been handled. It bounds how long fsnotify
+// may take to deliver the burst; no assertion depends on how long it took.
+func waitForQuiet(t *testing.T, clock *fakeDebounceClock, quiet time.Duration) {
+	t.Helper()
+	deadline := time.Now().Add(10 * time.Second)
+	last := clock.scheduled()
+	lastChange := time.Now()
+	for time.Since(lastChange) < quiet {
+		if time.Now().After(deadline) {
+			t.Fatalf("the watcher kept scheduling debounce timers for 10 s")
+		}
+		time.Sleep(5 * time.Millisecond)
+		if now := clock.scheduled(); now != last {
+			last = now
+			lastChange = time.Now()
+		}
+	}
 }
 
 // live returns the timers neither stopped nor fired.
@@ -217,16 +262,16 @@ func (clock *fakeDebounceClock) fire(timer *fakeDebounceTimer) {
 	timer.callback()
 }
 
-// waitForScheduled waits until the watcher has scheduled more than count
-// timers, that is, until it has handled a file event after the first count.
-// The wait only bounds how long fsnotify may take to deliver the event; no
-// assertion depends on how long it took.
-func waitForScheduled(t *testing.T, clock *fakeDebounceClock, count int) {
+// waitForGeneration waits until the watcher has scheduled a timer in
+// generation, that is, until it has handled a file event after the test
+// advanced to it. The wait only bounds how long fsnotify may take to deliver
+// the event; no assertion depends on how long it took.
+func waitForGeneration(t *testing.T, clock *fakeDebounceClock, generation int) {
 	t.Helper()
 	deadline := time.Now().Add(10 * time.Second)
-	for clock.scheduled() <= count {
+	for clock.scheduledIn(generation) == 0 {
 		if time.Now().After(deadline) {
-			t.Fatalf("the watcher scheduled no debounce timer after %d; a file event never arrived", count)
+			t.Fatalf("the watcher scheduled no debounce timer in generation %d; a file event never arrived", generation)
 		}
 		time.Sleep(5 * time.Millisecond)
 	}
@@ -271,21 +316,32 @@ func TestWatcher_Debounce(t *testing.T) {
 	}
 	defer w.Stop()
 
-	// The first burst of writes, then, once the watcher has seen it, a
-	// second write: the second must restart the window the first opened,
-	// however far apart the watcher happens to see them.
+	// The first burst of writes, drained, then a second write: the second
+	// must restart the window the first burst left pending, however long
+	// after it the watcher happens to see it.
 	const writes = 10
 	for i := 0; i < writes; i++ {
 		if err := os.WriteFile(mdFile, []byte("# Update "+string(rune('0'+i))), 0644); err != nil {
 			t.Fatalf("failed to write file: %v", err)
 		}
 	}
-	waitForScheduled(t, clock, 0)
-	afterBurst := clock.scheduled()
+	waitForGeneration(t, clock, 0)
+	waitForQuiet(t, clock, 300*time.Millisecond)
+	pendingAfterBurst := clock.live()
+	if len(pendingAfterBurst) != 1 {
+		t.Fatalf("%d debounce timers are pending after the burst, want exactly 1", len(pendingAfterBurst))
+	}
+	again := clock.advance()
 	if err := os.WriteFile(mdFile, []byte("# Update again"), 0644); err != nil {
 		t.Fatalf("failed to write file: %v", err)
 	}
-	waitForScheduled(t, clock, afterBurst)
+	waitForGeneration(t, clock, again)
+	clock.mu.Lock()
+	restarted := pendingAfterBurst[0].stopped
+	clock.mu.Unlock()
+	if !restarted {
+		t.Fatalf("the burst's pending timer was not stopped when the second write scheduled a new one")
+	}
 
 	if count := callCount(); count != 0 {
 		t.Fatalf("callCount = %d before any debounce window ran out, want 0", count)
