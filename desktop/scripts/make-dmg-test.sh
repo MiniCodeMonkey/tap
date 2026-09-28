@@ -1,7 +1,8 @@
 #!/bin/sh
 # Checks make-dmg.sh on a bundle of its own: the image mounts without a
-# Finder window, holds the app and an Applications link, verifies, and a
-# transient hdiutil failure is retried.
+# Finder window, holds the app (its ad-hoc signature still valid, its files'
+# dates kept) and an Applications link, verifies, and a transient hdiutil
+# failure is retried.
 set -eu
 
 script="$(cd "$(dirname "$0")" && pwd)/make-dmg.sh"
@@ -14,9 +15,15 @@ cleanup() {
 trap cleanup EXIT
 
 app="$root/Fake.app"
-mkdir -p "$app/Contents/MacOS"
+mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
 cp /usr/bin/true "$app/Contents/MacOS/Fake"
-printf 'hello' > "$app/Contents/marker.txt"
+printf 'hello' > "$app/Contents/Resources/marker.txt"
+printf '<?xml version="1.0" encoding="UTF-8"?>\n<plist version="1.0"><dict><key>CFBundleExecutable</key><string>Fake</string><key>CFBundleIdentifier</key><string>test.fake</string></dict></plist>\n' > "$app/Contents/Info.plist"
+# An ad-hoc signature, and a date in the past on one file: the copy in the
+# image must still verify, and keep the date, which ditto does and cp -R
+# (without -p) does not.
+codesign --sign - --force "$app" 2>/dev/null || { echo "the fake app should sign ad hoc"; exit 1; }
+touch -t 200001020304 "$app/Contents/Resources/marker.txt"
 
 "$script" "$app" "$root/Fake-1.0.0.dmg" "Fake" >/dev/null || { echo "the DMG should be made"; exit 1; }
 [ -f "$root/Fake-1.0.0.dmg" ] || { echo "no DMG"; exit 1; }
@@ -25,7 +32,9 @@ hdiutil verify "$root/Fake-1.0.0.dmg" -quiet || { echo "the DMG should verify"; 
 mkdir -p "$mount"
 hdiutil attach "$root/Fake-1.0.0.dmg" -nobrowse -readonly -noverify -quiet -mountpoint "$mount"
 [ -f "$mount/Fake.app/Contents/MacOS/Fake" ] || { echo "the app is not in the image"; exit 1; }
-[ "$(cat "$mount/Fake.app/Contents/marker.txt")" = "hello" ] || { echo "the app's files did not copy"; exit 1; }
+[ "$(cat "$mount/Fake.app/Contents/Resources/marker.txt")" = "hello" ] || { echo "the app's files did not copy"; exit 1; }
+codesign --verify --strict "$mount/Fake.app" 2>/dev/null || { echo "the app's signature did not survive into the image"; exit 1; }
+[ "$(stat -f %Sm -t %Y%m%d%H%M "$mount/Fake.app/Contents/Resources/marker.txt")" = 200001020304 ] || { echo "the app was not copied with its metadata (ditto keeps it; cp -R does not)"; exit 1; }
 [ -L "$mount/Applications" ] && [ "$(readlink "$mount/Applications")" = "/Applications" ] || { echo "no Applications link"; exit 1; }
 entries=0; for entry in "$mount"/*; do [ -e "$entry" ] && entries=$((entries + 1)); done
 [ "$entries" = "2" ] || { echo "the image holds more than the app and the link: $(ls -A "$mount")"; exit 1; }
