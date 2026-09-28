@@ -13,6 +13,19 @@ final class DeckFormViewController: NSViewController, NSTextFieldDelegate, NSTex
     var text: () -> String = { "" }
     /// Applies one edit to the frontmatter as one undo step with the name given.
     var applyEdit: (TextReplacement, String) -> Void = { _, _ in }
+    /// The deck's theme slug now, nil when it names none. The session controller sets it.
+    var currentThemeSlug: () -> String? = { nil }
+    /// A pick in the theme popover: tap theme set on the saved deck.
+    var setTheme: (String) -> Void = { _ in }
+    /// The Deck tab's Theme row: the theme's render and name in one button.
+    private(set) var themeRowButton: ThemeRowButton?
+    /// The theme grid in a popover, opened by the Theme row.
+    private(set) lazy var themePopover: ThemePopoverController = {
+        let popover = ThemePopoverController()
+        popover.onPick = { [weak self] slug in self?.setTheme(slug) }
+        return popover
+    }()
+    private var themeImageObservers: [NSObjectProtocol] = []
     private(set) var keys: [SchemaKey] = []
     private(set) var deckErrors: [String] = []
     /// Every field, by its key path joined with ".", such as "theme",
@@ -77,7 +90,20 @@ final class DeckFormViewController: NSViewController, NSTextFieldDelegate, NSTex
         ])
         scrollView.setAccessibilityIdentifier("deck-form")
         view = scrollView
+        let loader = AppEnvironment.shared.themeImages
+        themeImageObservers = [
+            NotificationCenter.default.addObserver(forName: ThemeImageLoader.didLoadCatalogNotification, object: loader, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.refreshThemeRow() }
+            },
+            NotificationCenter.default.addObserver(forName: ThemeImageLoader.didLoadImageNotification, object: loader, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.refreshThemeRow() }
+            },
+        ]
         rebuild()
+    }
+
+    deinit {
+        for observer in themeImageObservers { NotificationCenter.default.removeObserver(observer) }
     }
 
     func setSchema(_ keys: [SchemaKey]) {
@@ -137,6 +163,7 @@ final class DeckFormViewController: NSViewController, NSTextFieldDelegate, NSTex
             let raw = frontmatter.rawBlock(at: binding.path) ?? ""
             if binding.textView.string != raw { binding.textView.string = raw }
         }
+        refreshThemeRow()
     }
 
     private func show(_ value: String?, in control: NSControl, for key: SchemaKey) {
@@ -493,6 +520,16 @@ final class DeckFormViewController: NSViewController, NSTextFieldDelegate, NSTex
     }
 
     private func makeControl(for key: SchemaKey, path: [String]) -> NSControl {
+        if path == ["theme"] {
+            let button = ThemeRowButton()
+            button.target = self
+            button.action = #selector(themeRowPressed(_:))
+            themeRowButton = button
+            fields["theme"] = button
+            bindings.append((path, button))
+            refreshThemeRow()
+            return button
+        }
         let control: NSControl
         switch key.type {
         case "boolean":
@@ -565,5 +602,23 @@ final class DeckFormViewController: NSViewController, NSTextFieldDelegate, NSTex
     func controlTextDidEndEditing(_ notification: Notification) {
         guard let field = notification.object as? NSTextField else { return }
         controlChanged(field)
+    }
+
+    /// Refused, as the toolbar's item is, while a sheet is up on the window.
+    @objc private func themeRowPressed(_ sender: Any?) {
+        guard let button = themeRowButton, view.window?.attachedSheet == nil else { return NSSound.beep() }
+        themePopover.show(relativeTo: button.bounds, of: button, selected: currentThemeSlug())
+    }
+
+    /// The row from the frontmatter: the name from tap's catalog (the slug
+    /// while it loads, "Default" for none) and the loader's render (the
+    /// default theme's for none, the grid's Default cell). The renders
+    /// start once the row shows: the Deck tab is up.
+    func refreshThemeRow() {
+        guard let button = themeRowButton else { return }
+        let slug = currentThemeSlug()
+        let loader = AppEnvironment.shared.themeImages
+        if !view.isHiddenOrHasHiddenAncestor { loader.loadAll() }
+        button.show(slug: slug, name: slug.map { loader.catalog?.name(forSlug: $0) ?? $0 } ?? "Default", image: loader.image(for: slug ?? ThemeGridViewController.defaultSlug))
     }
 }

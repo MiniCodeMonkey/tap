@@ -28,7 +28,7 @@ func phasesOf(lines []map[string]any) string {
 }
 
 func TestProgressFlagOnTheLongRunningCommands(t *testing.T) {
-	for _, path := range [][]string{{"export", "pdf"}, {"export", "images"}, {"build"}} {
+	for _, path := range [][]string{{"export", "pdf"}, {"export", "images"}, {"build"}, {"theme", "show"}} {
 		command, _, err := rootCmd.Find(path)
 		if err != nil {
 			t.Fatalf("%v not found: %v", path, err)

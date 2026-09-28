@@ -109,3 +109,26 @@ func TestStartOnAvailablePort_LoopbackDefaultPortShadowedByWildcardFallsBack(t *
 		t.Errorf("Port() = %d, want a different port than the shadowed one (%d)", srv.Port(), busyPort)
 	}
 }
+
+// TestListenOnAvailablePort_LoopbackDefaultPortShadowedByWildcardFallsBack
+// is tap serve's default port (3000, with fallback) while another server
+// holds the wildcard address on it: a loopback bind there would succeed on
+// macOS and take that server's 127.0.0.1 traffic, so the fallback moves on.
+func TestListenOnAvailablePort_LoopbackDefaultPortShadowedByWildcardFallsBack(t *testing.T) {
+	wildcard, err := net.Listen("tcp", ":0")
+	if err != nil {
+		t.Fatalf("failed to hold a wildcard port for the test: %v", err)
+	}
+	t.Cleanup(func() { _ = wildcard.Close() })
+	busyPort := wildcard.Addr().(*net.TCPAddr).Port
+
+	listener, err := listenOnAvailablePort("127.0.0.1", busyPort, false, "tap serve")
+	if err != nil {
+		t.Fatalf("expected the default loopback port to fall back instead of failing, got: %v", err)
+	}
+	defer func() { _ = listener.Close() }()
+
+	if port := listener.Addr().(*net.TCPAddr).Port; port == busyPort {
+		t.Errorf("bound port = %d, want a different port than the wildcard-held one", port)
+	}
+}

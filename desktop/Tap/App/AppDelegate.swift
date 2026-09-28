@@ -21,7 +21,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         AppEnvironment.shared.warmUp()
-        NSDocumentController.shared.autosavingDelay = 1
+        NSDocumentController.shared.autosavingDelay = AppEnvironment.shared.generalSettings.autosaveDelay
         NotificationCenter.default.addObserver(self, selector: #selector(deckWindowWillClose(_:)), name: NSWindow.willCloseNotification, object: nil)
         // UI tests pass -TapOpenOnLaunch <path>. The completion-handler form
         // never presents an error panel, so a missing or unreadable path
@@ -55,6 +55,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
     func applicationWillTerminate(_ notification: Notification) {
         Self.stopAllPresentations()
+        // A running export, a theme render or a preview server would outlive
+        // the app otherwise. The wait is here because the main queue's later
+        // SIGTERM and SIGKILL die with the app.
+        AppEnvironment.shared.themeImages.stop()
+        ToolRun.stopAll(waiting: 2)
     }
 
     /// Ends every deck's talk: windows down, sleep assertions released, tap
@@ -85,6 +90,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
     @objc func showAbout(_ sender: Any?) {
         NSApp.orderFrontStandardAboutPanel(options: aboutPanelOptions())
+    }
+
+    /// Tap > Settings…, and the selector the Generate Image sheet's
+    /// Settings… button sends.
+    @objc func showSettings(_ sender: Any?) {
+        SettingsWindowController.shared.show(pane: .general)
+    }
+
+    /// Tap > Install Command Line Tool…, which opens Settings on the
+    /// Command Line pane rather than installing at once: Install always asks first.
+    @objc func installCommandLineTool(_ sender: Any?) {
+        SettingsWindowController.shared.show(pane: .commandLine)
     }
 
     /// The About panel names the bundled tap's version.
@@ -149,5 +166,75 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             return Self.goToSlideIsEnabled(forKeyWindow: NSApp.keyWindow)
         }
         return true
+    }
+
+    /// File > New Deck and the welcome window's button.
+    @objc func newDeck(_ sender: Any?) {
+        newDeck(on: hostWindowForNewDeck(keyWindow: NSApp.keyWindow, mainWindow: NSApp.mainWindow))
+    }
+
+    /// Where the sheet goes: the deck window that is key, else main, else
+    /// the frontmost visible deck window, else the welcome window, shown
+    /// first. Never a hidden window (a sheet there is invisible), and
+    /// never a window of another kind (Settings, the Tap Log).
+    func hostWindowForNewDeck(keyWindow: NSWindow?, mainWindow: NSWindow?) -> NSWindow? {
+        if let deck = Self.deck(owning: keyWindow) ?? Self.deck(owning: mainWindow), deck.window?.isVisible == true { return deck.window }
+        let visibleDecks = NSApp.orderedWindows.compactMap { $0.windowController as? DeckWindowController }.filter { $0.window?.isVisible == true }
+        if let front = visibleDecks.first { return front.window }
+        WelcomeWindowController.shared.showWindow(nil)
+        return WelcomeWindowController.shared.window
+    }
+
+    /// The sheet on `host`. Create runs tap new; the deck opens.
+    /// A host with a sheet up already refuses it, with a beep and a line in
+    /// the deck's log when the host is a deck window.
+    func newDeck(on host: NSWindow?) {
+        guard let host else { return }
+        guard host.attachedSheet == nil else {
+            Self.deck(owning: host)?.sessionController.session.log.append("New Deck was not shown: a sheet is up on this window", source: .app)
+            NSSound.beep()
+            return
+        }
+        let settings = AppEnvironment.shared.generalSettings
+        let sheet = NewDeckSheet(lastFolder: settings.lastNewDeckFolder, defaultTheme: settings.defaultTheme)
+        sheet.onCreate = { [weak self, weak sheet, weak host] request in
+            guard let self, let sheet else { return }
+            sheet.beginCreating()
+            self.createDeck(from: request) { result in
+                // Cancel is disabled while tap runs; a sheet that ended anyway opens nothing.
+                guard let host, host.attachedSheet === sheet else { return }
+                switch result {
+                case .success(let deck):
+                    host.endSheet(sheet, returnCode: .OK)
+                    AppEnvironment.shared.generalSettings.lastNewDeckFolder = request.location
+                    NSDocumentController.shared.openDocument(withContentsOf: deck, display: true) { _, _, _ in }
+                case .failure(let error):
+                    sheet.showError((error as? ToolError).map(Self.message(for:)) ?? error.localizedDescription)
+                }
+            }
+        }
+        host.beginSheet(sheet) { _ in }
+    }
+
+    /// Runs tap new for the sheet's request and reports the deck it wrote.
+    func createDeck(from request: NewDeckRequest, completion: @escaping (Result<URL, Error>) -> Void) {
+        Task { @MainActor in
+            let exit = await TapTool.run(request.arguments, timeout: 60)
+            guard let outcome = exit.outcome else { return completion(.failure(ToolError.noResult(status: exit.status))) }
+            do {
+                let result = try outcome.result(NewDeckResult.self)
+                completion(.success(URL(fileURLWithPath: result.deck)))
+            } catch {
+                completion(.failure(error))
+            }
+        }
+    }
+
+    static func message(for error: ToolError) -> String {
+        switch error {
+        case .failed(_, let message): return message
+        case .noResult(let status): return "tap did not answer (exit \(status))"
+        case .cancelled: return "cancelled"
+        }
     }
 }

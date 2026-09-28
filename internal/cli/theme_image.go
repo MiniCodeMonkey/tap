@@ -34,7 +34,8 @@ const staleThemeImagePartialAge = time.Hour
 // Tests point it at a temporary folder.
 var themeImageCacheRoot = os.UserCacheDir
 
-// renderThemeImage writes a PNG of a title slide in theme to outputPath.
+// renderThemeImage writes a PNG of a title slide in theme to outputPath,
+// reporting the render engine's own downloads to progress (nil for none).
 // Tests replace it, so only one test drives a browser.
 var renderThemeImage = renderThemeImageWithBrowser
 
@@ -60,7 +61,7 @@ func themeImageCachePath(slug string) (string, error) {
 // into the cache first when the cache has none. A dev build always
 // renders, because its version does not change when the frontend does.
 // With --output, the image is copied there and that path is printed.
-func showThemeImage(cmd *cobra.Command, theme themes.Theme) error {
+func showThemeImage(cmd *cobra.Command, theme themes.Theme, progress *progressReporter) error {
 	cachePath, err := themeImageCachePath(theme.Slug)
 	if err != nil {
 		return err
@@ -70,7 +71,7 @@ func showThemeImage(cmd *cobra.Command, theme themes.Theme) error {
 
 	image := cachePath
 	if !cached {
-		renderedPath, err := renderIntoCache(theme, cachePath)
+		renderedPath, err := renderIntoCache(theme, cachePath, progress)
 		if err != nil {
 			return err
 		}
@@ -88,6 +89,10 @@ func showThemeImage(cmd *cobra.Command, theme themes.Theme) error {
 		image = themeShowOutput
 	}
 
+	if err := progress.Result(themeImageResult{Slug: theme.Slug, Image: image, Cached: cached}); err != nil {
+		return err
+	}
+
 	if themeShowJSON {
 		return printJSONOK(cmd.OutOrStdout(), themeImageResult{Slug: theme.Slug, Image: image, Cached: cached})
 	}
@@ -103,21 +108,21 @@ func showThemeImage(cmd *cobra.Command, theme themes.Theme) error {
 // read-only or full disk), the render still happens, just to a plain
 // temporary file outside the cache, so the command still succeeds and
 // still produces its image.
-func renderIntoCache(theme themes.Theme, cachePath string) (string, error) {
+func renderIntoCache(theme themes.Theme, cachePath string, progress *progressReporter) (string, error) {
 	cacheDir := filepath.Dir(cachePath)
 	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
-		return renderToTemporaryFile(theme)
+		return renderToTemporaryFile(theme, progress)
 	}
 	sweepStaleThemeImagePartials(cacheDir)
 
 	temporary, err := os.CreateTemp(cacheDir, theme.Slug+".partial*.png")
 	if err != nil {
-		return renderToTemporaryFile(theme)
+		return renderToTemporaryFile(theme, progress)
 	}
 	temporaryPath := temporary.Name()
 	_ = temporary.Close()
 
-	if err := renderTheme(theme, temporaryPath); err != nil {
+	if err := renderTheme(theme, temporaryPath, progress); err != nil {
 		_ = os.Remove(temporaryPath)
 		return "", err
 	}
@@ -135,7 +140,7 @@ func renderIntoCache(theme themes.Theme, cachePath string) (string, error) {
 // the theme image cache, for when the cache directory itself cannot be
 // used. The command still succeeds and still produces an image; it just
 // gets no persistent cache entry this time.
-func renderToTemporaryFile(theme themes.Theme) (string, error) {
+func renderToTemporaryFile(theme themes.Theme, progress *progressReporter) (string, error) {
 	temporary, err := os.CreateTemp("", theme.Slug+"-*.png")
 	if err != nil {
 		return "", internalError(codeInternal, fmt.Errorf("creating a temporary file for the theme image: %w", err))
@@ -143,7 +148,7 @@ func renderToTemporaryFile(theme themes.Theme) (string, error) {
 	temporaryPath := temporary.Name()
 	_ = temporary.Close()
 
-	if err := renderTheme(theme, temporaryPath); err != nil {
+	if err := renderTheme(theme, temporaryPath, progress); err != nil {
 		_ = os.Remove(temporaryPath)
 		return "", err
 	}
@@ -152,14 +157,26 @@ func renderToTemporaryFile(theme themes.Theme) (string, error) {
 
 // renderTheme renders theme to outputPath, cancelling the render and
 // reporting errInterrupted on SIGINT or SIGTERM.
-func renderTheme(theme themes.Theme, outputPath string) error {
+func renderTheme(theme themes.Theme, outputPath string, progress *progressReporter) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	if err := renderThemeImage(ctx, theme, outputPath); err != nil {
+	if err := renderThemeImage(ctx, theme, outputPath, progressForRender(progress)); err != nil {
 		if ctx.Err() != nil {
 			return errInterrupted
 		}
 		return err
+	}
+	progress.Render(1, 1)
+	return nil
+}
+
+// progressForRender is the pdf.Progress the browser render reports the
+// Chromium download to: the reporter when --progress json is on, nil (no
+// reporting) otherwise, since *progressReporter's methods write nothing
+// when disabled but pdf.Exporter.SetProgress is only called with a real one.
+func progressForRender(progress *progressReporter) pdf.Progress {
+	if progress.enabled() {
+		return progress
 	}
 	return nil
 }
@@ -219,7 +236,7 @@ func themeImageDeck(theme themes.Theme) string {
 // renderThemeImageWithBrowser renders themeImageDeck in the headless
 // browser, through the same temporary server and capture as tap export
 // images, and writes the PNG to outputPath.
-func renderThemeImageWithBrowser(ctx context.Context, theme themes.Theme, outputPath string) error {
+func renderThemeImageWithBrowser(ctx context.Context, theme themes.Theme, outputPath string, progress pdf.Progress) error {
 	folder, err := os.MkdirTemp("", "tap-theme-image-*")
 	if err != nil {
 		return internalError(codeInternal, err)
@@ -252,6 +269,9 @@ func renderThemeImageWithBrowser(ctx context.Context, theme themes.Theme, output
 		return internalError(codeBrowser, fmt.Errorf("failed to create browser exporter: %w", err))
 	}
 	defer func() { _ = exporter.Close() }()
+	if progress != nil {
+		exporter.SetProgress(progress)
+	}
 	if err := exporter.EnsureBrowser(); err != nil {
 		return internalError(codeBrowser, fmt.Errorf("failed to start browser: %w", err))
 	}

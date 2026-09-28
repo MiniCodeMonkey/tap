@@ -102,3 +102,25 @@ D5 | 06-live-code-and-trust.feature | A new driver asks again
 D5 | 06-live-code-and-trust.feature | Secrets in driver settings
 D5 | 06-live-code-and-trust.feature | The safe button is the default
 D5 | 02-slide-structure.feature | Deck settings live in the inspector
+D6 | 08-creating-decks.feature | New deck
+D6 | 08-creating-decks.feature | Theme picker lists tap's themes
+D6 | 08-creating-decks.feature | Change the deck's theme
+D6 | 08-creating-decks.feature | Try a theme without saving it
+D6 | 09-images-and-components.feature | Paste an image
+D6 | 09-images-and-components.feature | Generate an image with AI
+D6 | 09-images-and-components.feature | Regenerate an AI image
+D6 | 09-images-and-components.feature | Create a component
+D6 | 09-images-and-components.feature | Open a component
+D6 | 09-images-and-components.feature | Component errors
+D6 | 10-export.feature | Export a PDF
+D6 | 10-export.feature | First PDF export
+D6 | 10-export.feature | Export a static site
+D6 | 10-export.feature | Export slide images
+D6 | 10-export.feature | A slide fails during export
+D6 | 10-export.feature | Cancel an export
+D6 | 11-settings-and-cli.feature | Settings window
+D6 | 11-settings-and-cli.feature | Gemini key
+D6 | 11-settings-and-cli.feature | Install the tap command
+D6 | 11-settings-and-cli.feature | Another tap is already installed
+# D6 leaves "Shared settings" (11-settings-and-cli.feature) unclaimed: it also needs the recording consent through tap, which no tap command exposes; the person left it out of D6.
+D6 | 11-settings-and-cli.feature | General settings

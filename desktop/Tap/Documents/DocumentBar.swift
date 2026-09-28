@@ -3,17 +3,19 @@ import AppKit
 /// A bar at the top of the editor: a message, a detail line and buttons.
 final class DocumentBarView: NSView {
     enum Kind: Equatable {
-        case changedOnDisk, deleted, deckErrors, environmentNotice, recordingKept, talkFailed, talkNotStarted
+        case changedOnDisk, deleted, deckErrors, environmentNotice, recordingKept, talkFailed, talkNotStarted, toolFailed
     }
 
     let kind: Kind
     let message: String
+    let detail: String
     private var buttons: [NSButton] = []
     private var actions: [() -> Void] = []
 
     init(kind: Kind, message: String, detail: String, buttons buttonSpecifications: [(String, () -> Void)]) {
         self.kind = kind
         self.message = message
+        self.detail = detail
         super.init(frame: .zero)
         wantsLayer = true
         layer?.backgroundColor = NSColor.controlBackgroundColor.withAlphaComponent(0.95).cgColor

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"strconv"
 	"syscall"
 
 	"github.com/MiniCodeMonkey/tap/internal/server"
@@ -102,22 +103,41 @@ func wildcardPortBusy(port int) (bool, error) {
 	return false, nil
 }
 
-// listenOnAvailablePort binds a TCP listener on requestedPort the same way
-// startOnAvailablePort picks a port for the *server.Server-based commands,
-// for a caller (tap serve) that drives a raw *http.Server instead: the
-// listener is handed back already bound, so the caller can Serve on it
-// without a second net.Listen (and the TOCTOU gap that would open between
-// probing a port and actually binding it).
-func listenOnAvailablePort(requestedPort int, explicit bool, commandName string) (net.Listener, error) {
+// listenOnAvailablePort binds a TCP listener on host:requestedPort the same
+// way startOnAvailablePort picks a port for the *server.Server-based
+// commands, for a caller (tap serve) that drives a raw *http.Server
+// instead: the listener is handed back already bound, so the caller can
+// Serve on it without a second net.Listen (and the TOCTOU gap that would
+// open between probing a port and actually binding it).
+//
+// On macOS a loopback bind (127.0.0.1:port) succeeds even while another
+// process holds the wildcard address on the same port, so for a loopback
+// host and a non-zero port (the default port with its fallback as much as
+// an explicit one), each candidate is first probed with wildcardPortBusy;
+// a port the probe finds busy is treated as busy here too, without ever
+// attempting the real bind on it.
+func listenOnAvailablePort(host string, requestedPort int, explicit bool, commandName string) (net.Listener, error) {
 	attempts := 1
 	if !explicit {
 		attempts = maxPortFallbackAttempts + 1
 	}
 
+	loopbackProbe := requestedPort != 0 && net.ParseIP(host) != nil && net.ParseIP(host).IsLoopback()
+
 	var lastAttemptErr error
 	for i := 0; i < attempts; i++ {
 		candidatePort := requestedPort + i
-		listener, err := net.Listen("tcp", fmt.Sprintf("0.0.0.0:%d", candidatePort))
+		if loopbackProbe {
+			busy, probeErr := wildcardPortBusy(candidatePort)
+			if probeErr != nil {
+				return nil, fmt.Errorf("failed to probe port: %w", probeErr)
+			}
+			if busy {
+				lastAttemptErr = fmt.Errorf("port %d: %w", candidatePort, syscall.EADDRINUSE)
+				continue
+			}
+		}
+		listener, err := net.Listen("tcp", net.JoinHostPort(host, strconv.Itoa(candidatePort)))
 		if err == nil {
 			return listener, nil
 		}

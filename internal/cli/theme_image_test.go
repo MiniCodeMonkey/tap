@@ -44,7 +44,7 @@ func useFakeThemeRenderer(t *testing.T) (renders *int, cacheRoot string) {
 	count := 0
 	cacheRoot = t.TempDir()
 	originalRender, originalRoot, originalVersion := renderThemeImage, themeImageCacheRoot, Version
-	renderThemeImage = func(ctx context.Context, theme themes.Theme, outputPath string) error {
+	renderThemeImage = func(ctx context.Context, theme themes.Theme, outputPath string, progress pdf.Progress) error {
 		count++
 		return os.WriteFile(outputPath, fakeThemeImagePNG(), 0o644)
 	}
@@ -281,7 +281,7 @@ func TestRenderThemeImageWithBrowser(t *testing.T) {
 
 	theme, _ := findTheme("terminal")
 	output := filepath.Join(t.TempDir(), "terminal.png")
-	if err := renderThemeImageWithBrowser(context.Background(), theme, output); err != nil {
+	if err := renderThemeImageWithBrowser(context.Background(), theme, output, nil); err != nil {
 		t.Fatalf("renderThemeImageWithBrowser() error = %v", err)
 	}
 	file, err := os.Open(output)
@@ -295,5 +295,49 @@ func TestRenderThemeImageWithBrowser(t *testing.T) {
 	}
 	if config.Width != themeImageWidth || config.Height != themeImageHeight {
 		t.Errorf("size = %dx%d, want %dx%d", config.Width, config.Height, themeImageWidth, themeImageHeight)
+	}
+}
+
+// The desktop app's theme grid renders every theme through this command
+// and shows the one-time Chromium download the first render makes, so the
+// command reports progress the way tap export does.
+func TestThemeShowImageProgressJSON(t *testing.T) {
+	renders, cacheRoot := useFakeThemeRenderer(t)
+	wantPath := filepath.Join(cacheRoot, "tap", "themes", "9.9.9-test", "terminal.png")
+
+	exitCode, stdout, stderr := runTap(t, "theme", "show", "terminal", "--image", "--progress", "json")
+	if exitCode != exitOK {
+		t.Fatalf("exit code = %d, stderr %q", exitCode, stderr)
+	}
+	if stdout != wantPath+"\n" {
+		t.Errorf("stdout = %q, want the path alone", stdout)
+	}
+	lines := checkProgressOutput(t, stderr)
+	if phasesOf(lines) != "render,done" {
+		t.Errorf("phases = %s, want render,done", phasesOf(lines))
+	}
+	done := lines[len(lines)-1]
+	if done["ok"] != true || done["slug"] != "terminal" || done["image"] != wantPath || done["cached"] != false {
+		t.Errorf("done line = %v", done)
+	}
+	if *renders != 1 {
+		t.Errorf("renders = %d, want 1", *renders)
+	}
+
+	// The second call is a cache hit: no render line, cached true.
+	_, _, stderr = runTap(t, "theme", "show", "terminal", "--image", "--progress", "json")
+	lines = checkProgressOutput(t, stderr)
+	if phasesOf(lines) != "done" || lines[0]["cached"] != true {
+		t.Errorf("cached run: %v", lines)
+	}
+	if *renders != 1 {
+		t.Errorf("renders = %d after a cache hit, want 1", *renders)
+	}
+}
+
+func TestThemeShowProgressNeedsImage(t *testing.T) {
+	exitCode, _, stderr := runTap(t, "theme", "show", "terminal", "--progress", "json")
+	if exitCode != exitUserError || !strings.Contains(stderr, "--progress needs --image") {
+		t.Errorf("exit %d, stderr %q", exitCode, stderr)
 	}
 }

@@ -28,8 +28,10 @@ final class WelcomeWindowController: NSWindowController, NSTableViewDataSource, 
         let name = NSTextField(labelWithString: "Tap")
         name.font = .systemFont(ofSize: 28, weight: .semibold)
         versionLabel.textColor = .secondaryLabelColor
-        // New Deck arrives with the New Deck sheet, which runs tap new.
-        newDeckButton.isEnabled = false
+        // nil-targeted, so the responder chain reaches the app delegate.
+        newDeckButton.target = nil
+        newDeckButton.action = #selector(AppDelegate.newDeck(_:))
+        newDeckButton.isEnabled = true
         newDeckButton.setAccessibilityIdentifier("new-deck")
         openButton.setAccessibilityIdentifier("open")
         for button in [newDeckButton, openButton] {

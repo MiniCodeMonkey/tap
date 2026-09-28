@@ -29,6 +29,10 @@ enum MainMenu {
         let menu = NSMenu(title: "Tap")
         menu.addItem(item("About Tap", action: #selector(AppDelegate.showAbout(_:))))
         menu.addItem(.separator())
+        menu.addItem(item("Check for Updates…", action: nil))
+        menu.addItem(item("Settings…", action: #selector(AppDelegate.showSettings(_:)), key: ","))
+        menu.addItem(item("Install Command Line Tool…", action: #selector(AppDelegate.installCommandLineTool(_:))))
+        menu.addItem(.separator())
         let services = item("Services", action: nil)
         services.submenu = NSMenu(title: "Services")
         NSApp.servicesMenu = services.submenu
@@ -44,8 +48,7 @@ enum MainMenu {
 
     static func fileMenu() -> NSMenu {
         let menu = NSMenu(title: "File")
-        // New Deck arrives with the New Deck sheet, which runs tap new.
-        menu.addItem(item("New Deck…", action: nil, key: "n"))
+        menu.addItem(item("New Deck…", action: #selector(AppDelegate.newDeck(_:)), key: "n"))
         menu.addItem(item("Open…", action: #selector(NSDocumentController.openDocument(_:)), key: "o"))
         let recent = item("Open Recent", action: nil)
         let recentMenu = NSMenu(title: "Open Recent")
@@ -62,6 +65,14 @@ enum MainMenu {
         // With autosave in place, AppKit hides this item and adds the Revert
         // To menu, with Browse All Versions, after it, as launch finishes.
         menu.addItem(item("Revert to Saved", action: #selector(NSDocument.revertToSaved(_:))))
+        menu.addItem(.separator())
+        let export = item("Export", action: nil)
+        let exportMenu = NSMenu(title: "Export")
+        exportMenu.addItem(item("PDF…", action: #selector(DeckWindowController.exportPDF(_:)), key: "e", modifiers: [.command, .option]))
+        exportMenu.addItem(item("Slide Images…", action: #selector(DeckWindowController.exportImages(_:))))
+        exportMenu.addItem(item("Website…", action: #selector(DeckWindowController.exportWebsite(_:))))
+        export.submenu = exportMenu
+        menu.addItem(export)
         return menu
     }
 
@@ -116,10 +127,9 @@ enum MainMenu {
         menu.addItem(item("Move to Top", action: #selector(DeckWindowController.moveSlidesToTop(_:))))
         menu.addItem(item("Move to Bottom", action: #selector(DeckWindowController.moveSlidesToBottom(_:))))
         menu.addItem(.separator())
-        // The image and component commands arrive with tap image and tap component new.
-        menu.addItem(item("Insert Image…", action: nil, key: "i", modifiers: [.command, .shift]))
-        menu.addItem(item("Generate Image…", action: nil))
-        menu.addItem(item("New Component…", action: nil))
+        menu.addItem(item("Insert Image…", action: #selector(DeckWindowController.insertImage(_:)), key: "i", modifiers: [.command, .shift]))
+        menu.addItem(item("Generate Image…", action: #selector(DeckWindowController.generateImage(_:))))
+        menu.addItem(item("New Component…", action: #selector(DeckWindowController.newComponent(_:))))
         menu.addItem(.separator())
         menu.addItem(item("Go to Slide…", action: #selector(DeckWindowController.goToSlide(_:)), key: "o", modifiers: [.command, .shift]))
         return menu

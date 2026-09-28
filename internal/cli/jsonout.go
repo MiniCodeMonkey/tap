@@ -22,6 +22,20 @@ func printJSONOK(w io.Writer, payload any) error {
 	return err
 }
 
+// printJSONLine writes a successful command's result as one compact line,
+// {"ok":true,...} with payload's fields, for a command that keeps running
+// after it (tap serve --json): a program reads the line and knows the
+// rest of stdout is quiet.
+func printJSONLine(w io.Writer, payload any) error {
+	body, err := jsonEnvelope("JSON result", `{"ok":true`, payload, false)
+	if err != nil {
+		return err
+	}
+	body = append(body, '\n')
+	_, err = w.Write(body)
+	return err
+}
+
 // jsonEnvelope splices the fields of payload into a JSON object that starts
 // with prefix, such as `{"ok":true` or `{"phase":"done","ok":true`. payload
 // must encode to a JSON object, or be nil for no fields. label names the
@@ -68,10 +82,24 @@ type jsonError struct {
 	Message string `json:"message"`
 }
 
-// printJSONError writes the --json result of a failed command.
-func printJSONError(w io.Writer, code, message string) error {
+// oneLineJSONAnnotation marks a command whose --json output is one compact
+// line (tap serve, whose ready line a program reads and then keeps the
+// process running); its failure is one line too, so the program reads
+// either outcome from the first line.
+const oneLineJSONAnnotation = "tap/json-one-line"
+
+// printsOneLineJSON reports whether command's --json output is one line.
+func printsOneLineJSON(command *cobra.Command) bool {
+	return command != nil && command.Annotations[oneLineJSONAnnotation] == "true"
+}
+
+// printJSONError writes the --json result of a failed command, indented,
+// or on one line when oneLine is set.
+func printJSONError(w io.Writer, code, message string, oneLine bool) error {
 	encoder := json.NewEncoder(w)
-	encoder.SetIndent("", "  ")
+	if !oneLine {
+		encoder.SetIndent("", "  ")
+	}
 	encoder.SetEscapeHTML(false)
 	return encoder.Encode(struct {
 		OK    bool      `json:"ok"`

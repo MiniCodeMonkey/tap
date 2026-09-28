@@ -8,13 +8,17 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"slices"
 	"strings"
 	"syscall"
 
 	"github.com/spf13/cobra"
 
+	"github.com/MiniCodeMonkey/tap/internal/config"
 	"github.com/MiniCodeMonkey/tap/internal/deckedit"
 	"github.com/MiniCodeMonkey/tap/internal/gemini"
+	"github.com/MiniCodeMonkey/tap/internal/themes"
+	"github.com/MiniCodeMonkey/tap/internal/tui"
 )
 
 // Flags for tap image add.
@@ -25,17 +29,21 @@ var (
 
 // Flags for tap image generate.
 var (
-	imageGenerateSlide  int
-	imageGeneratePrompt string
-	imageGenerateJSON   bool
+	imageGenerateSlide      int
+	imageGeneratePrompt     string
+	imageGenerateJSON       bool
+	imageGenerateAspect     string
+	imageGenerateMatchTheme bool
 )
 
 // Flags for tap image regenerate.
 var (
-	imageRegenerateSlide  int
-	imageRegenerateImage  string
-	imageRegeneratePrompt string
-	imageRegenerateJSON   bool
+	imageRegenerateSlide      int
+	imageRegenerateImage      string
+	imageRegeneratePrompt     string
+	imageRegenerateJSON       bool
+	imageRegenerateAspect     string
+	imageRegenerateMatchTheme bool
 )
 
 // imageCmd groups the commands for a deck's images.
@@ -82,9 +90,15 @@ the slide gets an ai-prompt comment with the prompt, so tap image
 regenerate can make it again. GEMINI_API_KEY must be set, in the
 environment or in a .env file next to the deck.
 
+--aspect and --match-theme are recorded in the ai-prompt comment and
+reused by tap image regenerate. --match-theme puts the deck theme's style
+brief (tap theme show --prompt) in front of the prompt sent to the model;
+the comment still keeps your words alone.
+
 Examples:
   tap image generate --slide 3 --prompt "a lighthouse at dusk, flat vector"
-  tap image generate talk.md --slide 3 --prompt "..." --json`,
+  tap image generate talk.md --slide 3 --prompt "..." --json
+  tap image generate talk.md --slide 3 --prompt "..." --aspect 16:9 --match-theme`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: runImageGenerate,
 }
@@ -98,16 +112,21 @@ and replace it where it is. The old image file is deleted.
 
 --image names the image by the path the slide links to, for example
 images/generated-1a2b3c4d.png. Without --prompt, tap reuses the prompt in
-the image's ai-prompt comment.
+the image's ai-prompt comment. --aspect and --match-theme default to what
+the comment recorded for that image; give either flag to override it.
 
 Examples:
   tap image regenerate --slide 3 --image images/generated-1a2b3c4d.png
-  tap image regenerate talk.md --slide 3 --image images/generated-1a2b3c4d.png --prompt "..."`,
+  tap image regenerate talk.md --slide 3 --image images/generated-1a2b3c4d.png --prompt "..."
+  tap image regenerate talk.md --slide 3 --image images/generated-1a2b3c4d.png --aspect 1:1`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: runImageRegenerate,
 }
 
 func init() {
+	// The TUI's regenerate keeps a recorded --match-theme with the same brief.
+	tui.ThemeBriefForDeck = themeBriefForDeck
+
 	rootCmd.AddCommand(imageCmd)
 	imageCmd.AddCommand(imageAddCmd)
 	imageCmd.AddCommand(imageGenerateCmd)
@@ -119,11 +138,15 @@ func init() {
 	imageGenerateCmd.Flags().IntVar(&imageGenerateSlide, "slide", 0, "slide to add the image to, from 1 (required)")
 	imageGenerateCmd.Flags().StringVar(&imageGeneratePrompt, "prompt", "", "what the image shows (required)")
 	imageGenerateCmd.Flags().BoolVar(&imageGenerateJSON, "json", false, "print the result as JSON")
+	imageGenerateCmd.Flags().StringVar(&imageGenerateAspect, "aspect", "", "the image's aspect ratio: 1:1, 16:9, 9:16, 4:3 or 3:4 (default: the model's choice)")
+	imageGenerateCmd.Flags().BoolVar(&imageGenerateMatchTheme, "match-theme", false, "put the deck theme's style brief (tap theme show --prompt) in front of the prompt sent to the model; the ai-prompt comment keeps your words")
 
 	imageRegenerateCmd.Flags().IntVar(&imageRegenerateSlide, "slide", 0, "slide the image is on, from 1 (required)")
 	imageRegenerateCmd.Flags().StringVar(&imageRegenerateImage, "image", "", "path of the AI image to replace, as the slide links to it (required)")
 	imageRegenerateCmd.Flags().StringVar(&imageRegeneratePrompt, "prompt", "", "a new prompt (default: the image's own prompt)")
 	imageRegenerateCmd.Flags().BoolVar(&imageRegenerateJSON, "json", false, "print the result as JSON")
+	imageRegenerateCmd.Flags().StringVar(&imageRegenerateAspect, "aspect", "", "the image's aspect ratio: 1:1, 16:9, 9:16, 4:3 or 3:4 (default: the recorded choice, or the model's choice)")
+	imageRegenerateCmd.Flags().BoolVar(&imageRegenerateMatchTheme, "match-theme", false, "put the deck theme's style brief in front of the prompt (default: the recorded choice)")
 }
 
 // addedImageResult is the --json result of tap image add. Slide is 0 when
@@ -216,6 +239,9 @@ func runImageGenerate(cmd *cobra.Command, args []string) error {
 	if prompt == "" {
 		return userError(codeUsage, errors.New("--prompt is required"))
 	}
+	if err := refuseChoiceShapedPrompt(prompt); err != nil {
+		return err
+	}
 	deck, err := resolveDeck(firstArg(args))
 	if err != nil {
 		return err
@@ -224,10 +250,14 @@ func runImageGenerate(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
+	options, err := generateOptionsFrom(imageGenerateAspect, imageGenerateMatchTheme)
+	if err != nil {
+		return err
+	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	placed, err := generateAndPlace(ctx, deckedit.Placement{DeckPath: deck, SlideIndex: slideIndex, Prompt: prompt})
+	placed, err := generateAndPlace(ctx, deckedit.Placement{DeckPath: deck, SlideIndex: slideIndex, Prompt: prompt}, options)
 	if err != nil {
 		return err
 	}
@@ -270,11 +300,25 @@ func runImageRegenerate(cmd *cobra.Command, args []string) error {
 		if prompt == "" {
 			return userError(codeUsage, errors.New("--prompt is empty"))
 		}
+		if err := refuseChoiceShapedPrompt(prompt); err != nil {
+			return err
+		}
+	}
+	options := generateOptions{aspect: replacing.Aspect, matchTheme: replacing.MatchTheme}
+	if cmd.Flags().Changed("aspect") {
+		options.aspect = imageRegenerateAspect
+	}
+	if cmd.Flags().Changed("match-theme") {
+		options.matchTheme = imageRegenerateMatchTheme
+	}
+	options, err = generateOptionsFrom(options.aspect, options.matchTheme)
+	if err != nil {
+		return err
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	placed, err := generateAndPlace(ctx, deckedit.Placement{DeckPath: deck, SlideIndex: slideIndex, Prompt: prompt, Replacing: &replacing})
+	placed, err := generateAndPlace(ctx, deckedit.Placement{DeckPath: deck, SlideIndex: slideIndex, Prompt: prompt, Replacing: &replacing}, options)
 	if err != nil {
 		return err
 	}
@@ -319,22 +363,84 @@ func findAIImage(deck string, slideIndex int, imagePath string) (deckedit.AIImag
 	return deckedit.AIImage{}, userError(codeImageNotFound, fmt.Errorf("slide %d has no AI image %s: %s", slideIndex+1, imagePath, onSlide))
 }
 
+// refuseChoiceShapedPrompt refuses a prompt whose last words the deck's
+// ai-prompt comment would read back as a recorded choice, so the words a
+// person typed are the words a later regenerate asks for.
+func refuseChoiceShapedPrompt(prompt string) error {
+	if deckedit.PromptReadsAsChoices(prompt) {
+		return userError(codeUsage, errors.New(`--prompt must not end in " | match-theme" or " | aspect: <ratio>"; use --match-theme or --aspect`))
+	}
+	return nil
+}
+
+// generateOptions is what the person chose beyond the prompt.
+type generateOptions struct {
+	aspect     string
+	matchTheme bool
+}
+
+// generateOptionsFrom validates --aspect.
+func generateOptionsFrom(aspect string, matchTheme bool) (generateOptions, error) {
+	if aspect != "" && !slices.Contains(deckedit.AIImageAspectRatios, aspect) {
+		return generateOptions{}, userError(codeUsage, fmt.Errorf("--aspect must be one of %s, got %q", strings.Join(deckedit.AIImageAspectRatios, ", "), aspect))
+	}
+	return generateOptions{aspect: aspect, matchTheme: matchTheme}, nil
+}
+
+// themeBriefForDeck is the deck theme's style brief, the text tap theme
+// show --prompt prints, for --match-theme. A deck that names no theme or
+// an unknown one uses base, as tap renders it. The brief ends with the
+// canvas ("Canvas 16:9, sitting on a ... background"); with --aspect the
+// canvas names that aspect instead, so the model is not told two sizes.
+func themeBriefForDeck(deck, aspect string) (string, error) {
+	slug := "base"
+	if cfg, err := config.Load(deck); err == nil && cfg.Theme != "" && themes.IsValid(cfg.Theme) {
+		slug = cfg.Theme
+	}
+	theme, ok := findTheme(slug)
+	if !ok {
+		return "", internalError(codeInternal, fmt.Errorf("theme %q is not built in", slug))
+	}
+	tokens, ok := themes.Tokens(slug)
+	if !ok {
+		return "", internalError(codeInternal, fmt.Errorf("theme %q has no tokens", slug))
+	}
+	illustration, _ := themes.Illustration(slug)
+	brief := buildThemePrompt(theme, tokens, illustration)
+	if aspect != "" {
+		brief = strings.Replace(brief, "Canvas 16:9", "Canvas "+aspect, 1)
+	}
+	return brief, nil
+}
+
 // generateAndPlace generates an image for placement.Prompt and places it
 // in the deck through deckedit.PlaceGeneratedImage, the function the TUI
 // i key also uses. deckedit.NewImageGenerator reads GEMINI_API_KEY from a
 // .env file next to the deck when the environment has none.
-func generateAndPlace(ctx context.Context, placement deckedit.Placement) (deckedit.PlacedImage, error) {
+func generateAndPlace(ctx context.Context, placement deckedit.Placement, options generateOptions) (deckedit.PlacedImage, error) {
 	generator, err := deckedit.NewImageGenerator(placement.DeckPath)
 	if err != nil {
 		return deckedit.PlacedImage{}, userError(codeNoAPIKey, fmt.Errorf("cannot start image generation: %w", err))
 	}
-	image, err := generator.GenerateImage(ctx, placement.Prompt)
+	// What the model is asked can carry the theme's brief; what the deck
+	// records is the person's words, so regenerate reads what they wrote.
+	request := placement.Prompt
+	if options.matchTheme {
+		brief, err := themeBriefForDeck(placement.DeckPath, options.aspect)
+		if err != nil {
+			return deckedit.PlacedImage{}, err
+		}
+		request = deckedit.ThemedImageRequest(brief, placement.Prompt)
+	}
+	image, err := generator.GenerateImageWithAspectRatio(ctx, request, options.aspect)
 	if err != nil {
 		if ctx.Err() != nil {
 			return deckedit.PlacedImage{}, errInterrupted
 		}
 		return deckedit.PlacedImage{}, imageGenerationError(err)
 	}
+	placement.Aspect = options.aspect
+	placement.MatchTheme = options.matchTheme
 	placed, err := deckedit.PlaceGeneratedImage(placement, *image)
 	if err != nil {
 		// A deck or images folder that cannot be written is a problem the

@@ -72,6 +72,33 @@ sqlite block queries the in-memory default, and the custom driver is
 editor's `replaceText`, so every change is one undo step and the hidden
 range stays clamped.
 
+The D6 tests run the bundled tap's own commands where they need no
+network: `tap theme list`, `tap theme set`, `tap image add`, `tap component
+new`, `tap build` and `tap serve --json` are real; `tap export pdf` is real
+in `testExportAPDF` (CI caches the export engine's download, the same cache
+the Go tests use), and scripted in the tests of the download state, the
+warnings and Cancel; `tap theme show --image` and `tap image generate` are
+scripted (`TapTests/Support/FakeToolScripts.swift`), since the first needs
+the engine per theme and the second the Gemini API. A scripted tap stands
+in for the one-shot commands only (`AppEnvironment.toolExecutableURL`);
+the deck's `tap dev --app` stays real. No test touches the person's
+Keychain (`MemoryGeminiKeyStore`, which the app itself uses under
+`-TapDefaultsSuite`; the one test of the real Keychain runs on CI alone,
+where `TAP_KEYCHAIN_TESTS=1`), `~/.local/bin`
+(`CommandLineInstaller(linkDirectory:)`), clipboard
+(`EditorTextView.pasteboardForPaste`) or defaults. The Gemini key reaches
+the `tap image generate` and `regenerate` runs alone, never a `tap dev` or
+`tap present` session; `GenerateImageTests` proves it.
+
+What only a person can check: the theme grid's first open on a Mac that
+has never exported (the engine download under the grid, then every render
+landing), a real Gemini key in Settings > Image Generation and Generate
+Image on a slide of theirs (with Match theme and each aspect), Regenerate
+on the result, a PDF and a website export of a real deck of theirs with
+Preview in their browser, Install Command Line Tool followed by `tap
+--version` in a new Terminal window, and a Homebrew tap on their PATH
+shown in Settings > Command Line and left alone by Install.
+
 What only a person can check: the approval sheet's look with the code
 of a real deck of theirs, `tap approval revoke` from a terminal while the
 deck is open (the next open asks again), a `git pull` that adds a driver

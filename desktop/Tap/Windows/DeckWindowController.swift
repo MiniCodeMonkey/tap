@@ -1,10 +1,12 @@
 import AppKit
+import UniformTypeIdentifiers
 
 /// A deck's window: the editor on the left and the Preview pane on the right,
 /// under a unified toolbar. Deck windows open as tabs of each other.
 final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolbarDelegate, NSMenuItemValidation {
     static let slidesItemIdentifier = NSToolbarItem.Identifier("slides")
     static let newSlideItemIdentifier = NSToolbarItem.Identifier("newSlide")
+    static let themeItemIdentifier = NSToolbarItem.Identifier("theme")
     static let playItemIdentifier = NSToolbarItem.Identifier("play")
     let sessionController: DeckSessionController
     let splitViewController: MainSplitViewController
@@ -17,8 +19,17 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
     let slidesButton = HoverButton()
     /// The toolbar's New Slide button: a click inserts the last layout, a hold opens the gallery.
     let newSlideButton = NewSlideButton()
+    /// The toolbar's Theme button: shows the deck's theme name, click opens the theme popover.
+    let themeButton = NSButton()
     /// The toolbar's Play button: a click opens the Present popover, a Shift-click starts from slide 1.
     let playButton = NSButton()
+    /// The theme grid in a popover, for the toolbar's Theme item.
+    private(set) lazy var themePopover: ThemePopoverController = {
+        let popover = ThemePopoverController()
+        popover.onPick = { [weak self] slug in self?.sessionController.setTheme(slug) }
+        return popover
+    }()
+    private var themeCatalogObserver: NSObjectProtocol?
     /// The popover, whose controls are the last settings: reloaded from the
     /// environment every time the popover is freshened, and saved only by
     /// its own Start and Rehearse.
@@ -53,6 +64,8 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
     private(set) var deckQuestions: [(question: DeckSessionController.PendingQuestion, generation: Int)] = []
     /// Reveals a kept recording. Production opens Finder on it; a test records the URL.
     var revealInFinder: (URL) -> Void = { url in NSWorkspace.shared.activateFileViewerSelecting([url]) }
+    /// Opens the previewed website. Production opens the default browser; a test records the URL.
+    var openURL: (URL) -> Void = { NSWorkspace.shared.open($0) }
     /// The phone remote panel, made with the window (a panel that is never
     /// shown costs nothing) and closed with it, so none outlives its deck.
     let remotePanel = RemotePanel()
@@ -72,6 +85,10 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
     /// Hears every deck's talks start and end, so the Play button follows them.
     private var presentingObserver: NSObjectProtocol?
     private var isReconcilingSidebarCollapse = false
+    /// File > Export's one run at a time for this window's deck.
+    private(set) lazy var exportController = ExportController(sessionController: sessionController)
+    /// `tap serve` for a previewed website export, stopped with the sheet and the window.
+    private(set) var previewServer: PreviewServer?
 
     init(sessionController: DeckSessionController) {
         self.sessionController = sessionController
@@ -121,6 +138,14 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
         sessionController.presentation.onFailed = { [weak self] message in self?.showTalkFailed(message) }
         remotePanel.onTurnOff = { [weak self] in self?.sessionController.presentation.setTunnel(on: false) }
         sessionController.presentation.onTunnelChange = { [weak self] in self?.refreshRemotePanel() }
+        sessionController.onThemeChanged = { [weak self] slug in self?.refreshThemeItem(slug: slug) }
+        themeCatalogObserver = NotificationCenter.default.addObserver(forName: ThemeImageLoader.didLoadCatalogNotification, object: AppEnvironment.shared.themeImages, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.refreshThemeItem(slug: self?.sessionController.currentThemeSlug)
+            }
+        }
+        // The Theme item shows the theme's name from tap's catalog: one tap theme list, no renders.
+        AppEnvironment.shared.themeImages.loadCatalog()
         sessionController.onQuestion = { [weak self] question in self?.presentDeckQuestion(question) }
         sessionController.onQuestionClosed = { [weak self] id in self?.deckQuestionClosed(id) }
         sessionController.onQuestionsDropped = { [weak self] in
@@ -346,6 +371,159 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
         insertSlide(layout: name, after: .caret)
     }
 
+    /// Slide > Insert Image and the context menu's: a file chooser, then tap image add.
+    var openPanelForImages: (@escaping ([URL]) -> Void) -> Void = { completion in
+        let panel = NSOpenPanel()
+        panel.allowsMultipleSelection = true
+        panel.canChooseDirectories = false
+        // The types tap image add accepts, AVIF included.
+        panel.allowedContentTypes = [.png, .jpeg, .gif, .webP, .svg] + [UTType("public.avif")].compactMap { $0 }
+        panel.begin { response in completion(response == .OK ? panel.urls : []) }
+    }
+
+    @objc func insertImage(_ sender: Any?) {
+        openPanelForImages { [weak self] files in
+            guard !files.isEmpty else { return }
+            self?.sessionController.insertImages(files)
+        }
+    }
+
+    /// A form sheet (Generate Image, New Component, Export) on this window:
+    /// refused with a beep and a log line while another sheet is up, so no
+    /// two sheets queue on the window. When it ends, a tap question that
+    /// arrived meanwhile gets its turn, and the toolbar's state is
+    /// refreshed (AppKit restores the enabled state a sheet found, one turn later).
+    func showFormSheet(_ sheet: NSWindow, completion: (() -> Void)? = nil) {
+        guard let window, window.attachedSheet == nil, questionSheet == nil else {
+            sessionController.session.log.append("a sheet is already up; \(sheet.accessibilityIdentifier()) waits for it", source: .app)
+            NSSound.beep()
+            return
+        }
+        window.beginSheet(sheet) { [weak self] _ in
+            completion?()
+            DispatchQueue.main.async { [weak self] in
+                self?.refreshPresentingControls()
+                self?.showNextDeckQuestionIfIdle()
+            }
+        }
+    }
+
+    @objc func generateImage(_ sender: Any?) {
+        guard let slide = sessionController.currentSlideNumber, sessionController.document?.fileURL != nil else { return NSSound.beep() }
+        let themeName = sessionController.currentThemeSlug.map { AppEnvironment.shared.themeImages.catalog?.name(forSlug: $0) ?? $0 } ?? "Base"
+        let sheet = GenerateImageSheet(slide: slide, themeName: themeName)
+        sheet.onGenerate = { [weak self, weak sheet] request in
+            guard let self, let sheet else { return }
+            self.sessionController.generateImage(prompt: request.prompt, aspect: request.aspect, matchTheme: request.matchTheme) { [weak self, weak sheet] outcome in
+                // No answer is a refused save (nothing ran) or a tap that did not answer; the Tap Log says which.
+                let message: String
+                switch outcome {
+                case .ok?: message = ""
+                case .failed(_, let tapsMessage)?: message = tapsMessage
+                case nil: message = "Generate Image did not finish; see the Tap Log"
+                }
+                guard let sheet, sheet.sheetParent != nil else {
+                    // The sheet was cancelled while tap ran: a failure shows on the bar.
+                    if case .ok? = outcome { return }
+                    self?.sessionController.showToolError(actionName: "Generate Image", message: message)
+                    return
+                }
+                switch outcome {
+                case .ok?: self?.window?.endSheet(sheet, returnCode: .OK)
+                case .failed(let code, _)?: sheet.showError(message, code: code)
+                case nil: sheet.showError(message, code: "failed")
+                }
+            }
+        }
+        showFormSheet(sheet)
+    }
+
+    @objc func newComponent(_ sender: Any?) {
+        guard let slide = sessionController.currentSlideNumber, sessionController.document?.fileURL != nil else { return NSSound.beep() }
+        let sheet = NewComponentSheet(slide: slide)
+        sheet.onCreate = { [weak self, weak sheet] request in
+            guard let self, let sheet else { return }
+            self.sessionController.createComponent(request) { [weak self, weak sheet] outcome in
+                guard let sheet else { return }
+                switch outcome {
+                case .ok?: self?.window?.endSheet(sheet, returnCode: .OK)
+                case .failed(_, let message)?: sheet.showError(message)
+                case nil: sheet.showError("tap did not answer; see the Tap Log")
+                }
+            }
+        }
+        showFormSheet(sheet)
+    }
+
+    /// The context menu's Regenerate items name the image and its slide in `representedObject`.
+    @objc func regenerateImage(_ sender: Any?) {
+        guard let target = (sender as? NSMenuItem)?.representedObject as? RegenerateTarget else { return NSSound.beep() }
+        sessionController.regenerateImage(path: target.imagePath, onSlide: target.slide)
+    }
+
+    @objc func exportPDF(_ sender: Any?) { beginExport(.pdf(content: "slides")) }
+    @objc func exportWebsite(_ sender: Any?) { beginExport(.website) }
+    @objc func exportImages(_ sender: Any?) { beginExport(.images) }
+
+    /// File > Export: the sheet for `kind`; its Export button starts the
+    /// run, and the sheet follows the controller's states. A PDF with no
+    /// warnings closes the sheet and reveals the file; a PDF with warnings
+    /// reveals the file and stays for the warnings; a website or images
+    /// export stays for Show in Finder and Preview.
+    func beginExport(_ kind: ExportKind) {
+        guard let deck = sessionController.document?.fileURL, !exportController.isRunning else { return NSSound.beep() }
+        let sheet = ExportSheet(kind: kind, deck: deck)
+        sheet.onExport = { [weak self] request in self?.exportController.start(request) }
+        sheet.onCancel = { [weak self] in self?.exportController.cancel() }
+        sheet.onReveal = { [weak self] url in self?.revealInFinder(url) }
+        sheet.onPreview = { [weak self] folder in self?.previewWebsite(at: folder) }
+        exportController.onStateChange = { [weak self, weak sheet] state in
+            guard let self, let sheet else { return }
+            sheet.apply(state)
+            self.refreshPresentingControls()
+            switch state {
+            case .done(let summary) where kind.isPDF && summary.warnings.isEmpty:
+                self.revealInFinder(summary.output)
+                self.window?.endSheet(sheet, returnCode: .OK)
+            case .done(let summary) where kind.isPDF:
+                self.revealInFinder(summary.output)
+            case .idle where sheet.sheetParent != nil:
+                // A cancelled run: the sheet goes, nothing is shown of the partial file.
+                self.window?.endSheet(sheet, returnCode: .cancel)
+            default:
+                break
+            }
+        }
+        exportController.onDownload = { [weak sheet] download in sheet?.showDownload(download) }
+        showFormSheet(sheet) { [weak self] in self?.previewServer?.stop() }
+    }
+
+    /// The export sheet's Preview: tap serve on the built folder, the site
+    /// opened in the default browser. The server stops with the sheet.
+    func previewWebsite(at folder: URL) {
+        let server = previewServer ?? PreviewServer(log: sessionController.session.log)
+        previewServer = server
+        server.start(folder: folder) { [weak self] url in
+            guard let url else { return NSSound.beep() }
+            self?.openURL(url)
+        }
+    }
+
+    @objc func showThemePopover(_ sender: Any?) {
+        guard questionSheet == nil, window?.attachedSheet == nil else { return }
+        // A button in the toolbar's overflow, or a hidden toolbar, has no window to anchor on.
+        let anchor: NSView = themeButton.window == nil ? (window?.contentView ?? themeButton) : themeButton
+        themePopover.show(relativeTo: anchor.bounds, of: anchor, selected: sessionController.currentThemeSlug)
+    }
+
+    /// The item's title is the theme's name from tap's catalog, the slug
+    /// while the catalog loads, and "Default" for a deck that names none
+    /// (the grid's Default cell, tap's default theme).
+    func refreshThemeItem(slug: String?) {
+        guard let slug else { return themeButton.title = "Default" }
+        themeButton.title = AppEnvironment.shared.themeImages.catalog?.name(forSlug: slug) ?? slug
+    }
+
     @objc func showLayoutGallery(_ sender: Any?) {
         let anchor: NSView = newSlideButton.window == nil ? (window?.contentView ?? newSlideButton) : newSlideButton
         layoutGallery.show(templates: AppEnvironment.shared.layoutCatalog.templates, relativeTo: anchor.bounds, of: anchor,
@@ -525,7 +703,7 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
     /// and no question sheet up. A sheet is one question the person has to
     /// answer first; a second sheet would queue behind it on this window.
     var canStartATalk: Bool {
-        sessionController.presentation.canStart && questionSheet == nil
+        sessionController.presentation.canStart && questionSheet == nil && !exportController.isRunning
     }
 
     /// Present > Stop, the toolbar's Stop, and Escape in the audience window.
@@ -887,6 +1065,8 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
         sidebarCollapseObservation = nil
         if let presentingObserver { NotificationCenter.default.removeObserver(presentingObserver) }
         presentingObserver = nil
+        if let themeCatalogObserver { NotificationCenter.default.removeObserver(themeCatalogObserver) }
+        themeCatalogObserver = nil
         if let controller = previewWindowController {
             controller.onClose = nil
             previewWindowController = nil
@@ -894,6 +1074,8 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
         }
         remotePanel.orderOut(nil)
         remotePanel.close()
+        exportController.stop()
+        previewServer?.stop()
     }
 
     func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
@@ -927,6 +1109,21 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
             menuItem.title = currentFixIt?.title ?? "Allow Driver in This Deck"
             return currentFixIt != nil
         }
+        if menuItem.action == #selector(insertImage(_:)) {
+            return sessionController.currentSlideNumber != nil && sessionController.document?.fileURL != nil
+        }
+        if menuItem.action == #selector(generateImage(_:)) {
+            return sessionController.currentSlideNumber != nil && sessionController.document?.fileURL != nil
+        }
+        if menuItem.action == #selector(newComponent(_:)) {
+            return sessionController.currentSlideNumber != nil && sessionController.document?.fileURL != nil
+        }
+        if [#selector(exportPDF(_:)), #selector(exportImages(_:)), #selector(exportWebsite(_:))].contains(menuItem.action) {
+            return sessionController.document?.fileURL != nil && !exportController.isRunning
+        }
+        if menuItem.action == #selector(regenerateImage(_:)) {
+            return menuItem.representedObject is RegenerateTarget
+        }
         let count = sessionController.selectedSlideNumbers.count
         if menuItem.action == #selector(deleteSlides(_:)) {
             menuItem.title = count > 1 ? "Delete \(count) Slides" : "Delete Slide"
@@ -954,7 +1151,7 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
     }
 
     func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
-        [Self.slidesItemIdentifier, .flexibleSpace, Self.newSlideItemIdentifier, Self.playItemIdentifier, Self.previewItemIdentifier]
+        [Self.slidesItemIdentifier, .flexibleSpace, Self.newSlideItemIdentifier, Self.themeItemIdentifier, Self.playItemIdentifier, Self.previewItemIdentifier]
     }
 
     func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
@@ -1004,6 +1201,20 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
             playButton.action = #selector(playButtonPressed(_:))
             playButton.isEnabled = canStartATalk
             item.view = playButton
+            return item
+        }
+        if identifier == Self.themeItemIdentifier {
+            let item = NSToolbarItem(itemIdentifier: identifier)
+            item.label = "Theme"
+            item.toolTip = "The deck's theme. Click to pick another; tap theme set writes it."
+            themeButton.bezelStyle = .toolbar
+            themeButton.image = NSImage(systemSymbolName: "paintpalette", accessibilityDescription: "Theme")
+            themeButton.imagePosition = .imageLeading
+            themeButton.setAccessibilityIdentifier("theme-button")
+            themeButton.target = self
+            themeButton.action = #selector(showThemePopover(_:))
+            refreshThemeItem(slug: sessionController.currentThemeSlug)
+            item.view = themeButton
             return item
         }
         guard identifier == Self.previewItemIdentifier else { return nil }

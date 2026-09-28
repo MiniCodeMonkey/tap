@@ -129,6 +129,14 @@ final class DeckDocument: NSDocument {
         text = diskText
     }
 
+    /// Whether the file on disk is newer than the version this document
+    /// last read or wrote: another program wrote it, and tap dev may not
+    /// have reported it yet. `checkAutosavingSafety` reads the same dates.
+    var diskIsNewerThanKnown: Bool {
+        guard let known = fileModificationDate, let onDisk = diskModificationDate else { return false }
+        return onDisk.timeIntervalSince(known) > 0.001
+    }
+
     /// Takes the file on disk as the known version, so the next save does
     /// not report that another program changed it.
     func acceptDiskState() {
@@ -199,7 +207,7 @@ final class DeckDocument: NSDocument {
     }
 
     override func checkAutosavingSafety() throws {
-        if let known = fileModificationDate, let onDisk = diskModificationDate, onDisk.timeIntervalSince(known) > 0.001 {
+        if diskIsNewerThanKnown {
             sessionController?.diskChanged()
             throw CocoaError(.userCancelled)
         }

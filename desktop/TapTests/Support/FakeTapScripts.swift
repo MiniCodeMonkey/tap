@@ -36,7 +36,7 @@ enum FakeTapScripts {
         let url = try Fixtures.temporaryFolder().appendingPathComponent("tap")
         try """
         #!/bin/sh
-        echo '{"type":"error","code":"\(code)","message":"\(message)"}'
+        printf '%s\\n' \(FakeToolScripts.shellQuoted(FakeToolScripts.jsonText(["type": "error", "code": code, "message": message])))
         exit 1
         """.write(to: url, atomically: true, encoding: .utf8)
         try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: url.path)

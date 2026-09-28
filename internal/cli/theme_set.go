@@ -21,10 +21,14 @@ does. A deck with no frontmatter gets one.
 [deck] is a deck file or folder. With no deck, tap uses the deck in the
 current folder. See tap theme list for the slugs.
 
+tap theme set default removes the theme line, so the deck renders with
+tap's default theme.
+
 Examples:
   tap theme set terminal
   tap theme set blueprint talk.md
-  tap theme set blueprint talk.md --json`,
+  tap theme set blueprint talk.md --json
+  tap theme set default talk.md`,
 	Args: cobra.RangeArgs(1, 2),
 	RunE: runThemeSet,
 }
@@ -40,8 +44,30 @@ type themeSetResult struct {
 	Theme string `json:"theme"`
 }
 
+// themeDefaultWord is the argument that means "no theme line": tap renders
+// with its default. It is not a slug.
+const themeDefaultWord = "default"
+
 func runThemeSet(cmd *cobra.Command, args []string) error {
 	slug := args[0]
+	if slug == themeDefaultWord {
+		var deckArg string
+		if len(args) > 1 {
+			deckArg = args[1]
+		}
+		deck, err := resolveDeck(deckArg)
+		if err != nil {
+			return err
+		}
+		if err := deckedit.RemoveTheme(deck); err != nil {
+			return userError(codeInvalidDeck, fmt.Errorf("cannot remove the theme of %s: %w", deck, err))
+		}
+		if themeSetJSON {
+			return printJSONOK(cmd.OutOrStdout(), themeSetResult{Deck: deck, Theme: themeDefaultWord})
+		}
+		fmt.Fprintf(cmd.OutOrStdout(), "Theme set to tap's default in %s\n", deck)
+		return nil
+	}
 	if !themes.IsValid(slug) {
 		return userError(codeUnknownTheme, unknownThemeError(slug))
 	}

@@ -2,6 +2,7 @@ package config
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -719,4 +720,80 @@ func TestConfigJSON_LeavesDriversOut(t *testing.T) {
 	if !strings.Contains(string(data), `"title":"Deck"`) {
 		t.Errorf("config JSON lost the title: %s", data)
 	}
+}
+
+// deckWithIndentedThemeLines holds `theme:` in a block scalar's prose and
+// as a nested map key; only the top-level key is the deck's theme.
+const deckWithIndentedThemeLines = `---
+title: Demo
+notes: |
+  theme: this line is prose in a block scalar
+  second line
+extra:
+  theme: nested
+%s---
+
+# Slide
+`
+
+func writeDeck(t *testing.T, content string) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "talk.md")
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatalf("failed to write the deck: %v", err)
+	}
+	return path
+}
+
+func readDeck(t *testing.T, path string) string {
+	t.Helper()
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("failed to read the deck: %v", err)
+	}
+	return string(content)
+}
+
+func TestRemoveThemeFromFile_LeavesIndentedThemeLines(t *testing.T) {
+	t.Run("prose in a block scalar and a nested key", func(t *testing.T) {
+		path := writeDeck(t, fmt.Sprintf(deckWithIndentedThemeLines, "theme: terminal\n"))
+		if err := RemoveThemeFromFile(path); err != nil {
+			t.Fatalf("RemoveThemeFromFile() returned error: %v", err)
+		}
+		if got, want := readDeck(t, path), fmt.Sprintf(deckWithIndentedThemeLines, ""); got != want {
+			t.Errorf("deck after removal:\n%s\nwant:\n%s", got, want)
+		}
+	})
+	t.Run("no top-level theme leaves the deck unchanged", func(t *testing.T) {
+		original := fmt.Sprintf(deckWithIndentedThemeLines, "")
+		path := writeDeck(t, original)
+		if err := RemoveThemeFromFile(path); err != nil {
+			t.Fatalf("RemoveThemeFromFile() returned error: %v", err)
+		}
+		if got := readDeck(t, path); got != original {
+			t.Errorf("deck changed:\n%s", got)
+		}
+	})
+}
+
+func TestUpdateThemeInFile_LeavesIndentedThemeLines(t *testing.T) {
+	t.Run("replaces only the top-level key", func(t *testing.T) {
+		path := writeDeck(t, fmt.Sprintf(deckWithIndentedThemeLines, "theme: terminal\n"))
+		if err := UpdateThemeInFile(path, "paper"); err != nil {
+			t.Fatalf("UpdateThemeInFile() returned error: %v", err)
+		}
+		if got, want := readDeck(t, path), fmt.Sprintf(deckWithIndentedThemeLines, "theme: paper\n"); got != want {
+			t.Errorf("deck after update:\n%s\nwant:\n%s", got, want)
+		}
+	})
+	t.Run("adds a top-level key when only indented ones exist", func(t *testing.T) {
+		path := writeDeck(t, fmt.Sprintf(deckWithIndentedThemeLines, ""))
+		if err := UpdateThemeInFile(path, "paper"); err != nil {
+			t.Fatalf("UpdateThemeInFile() returned error: %v", err)
+		}
+		want := "---\ntheme: paper\n" + strings.TrimPrefix(fmt.Sprintf(deckWithIndentedThemeLines, ""), "---\n")
+		if got := readDeck(t, path); got != want {
+			t.Errorf("deck after update:\n%s\nwant:\n%s", got, want)
+		}
+	})
 }

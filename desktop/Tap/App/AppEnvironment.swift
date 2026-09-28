@@ -48,6 +48,22 @@ final class AppEnvironment {
     /// A tap for talks alone, for tests that script tap present while the
     /// deck's real tap dev keeps running. nil runs the bundled tap.
     var presentExecutableURL: URL?
+    /// The tap the one-shot commands run (tap new, tap theme show, tap
+    /// export ...), for tests that script a subcommand while the deck's
+    /// real tap dev keeps running. nil runs the bundled tap.
+    var toolExecutableURL: URL?
+    /// Where the Gemini key lives. Read in two places only: TapTool's image
+    /// runs and the Image Generation pane. Under -TapDefaultsSuite (every
+    /// UI test launch) it is a store in memory, so no test reads or writes
+    /// the person's Keychain; every hosted test installs one too.
+    var geminiKeyStore: GeminiKeyStore = KeychainGeminiKeyStore()
+    /// Links the bundled tap into ~/.local/bin for Settings > Command
+    /// Line. A test points this at a folder of its own.
+    lazy var commandLineInstaller = CommandLineInstaller(bundledTap: tapExecutableURL)
+    /// The General pane's settings. A test replaces this with one on a fresh suite.
+    var generalSettings = GeneralSettings()
+    /// The theme catalog and every theme's render, loaded once per app.
+    lazy var themeImages = ThemeImageLoader()
     /// Whether the Focus hint has been shown on this Mac. A test replaces it.
     var focusHint = FocusHintState()
     #if DEBUG
@@ -120,6 +136,7 @@ final class AppEnvironment {
     private(set) var environmentNotice: String?
     private(set) var bundledTapVersion: String?
     private let loginShellLoader: LoginShellEnvironmentLoader
+    private var generalSettingsObserver: NSObjectProtocol?
 
     init() {
         if let override = UserDefaults.standard.string(forKey: "TapExecutablePath") {
@@ -143,7 +160,18 @@ final class AppEnvironment {
             deckPorts = DeckPortStore(defaults: defaults)
             presentationSettings = PresentationSettingsStore(defaults: defaults)
             focusHint = FocusHintState(defaults: defaults)
+            generalSettings = GeneralSettings(defaults: defaults)
+            geminiKeyStore = MemoryGeminiKeyStore()
         }
+    }
+
+    /// Which key tap's image runs get, for the Image Generation pane's
+    /// label: the login shell's, else the Keychain's, else none. This
+    /// reads the store; nothing else outside TapTool does.
+    func geminiKeySource() async -> GeminiKeySource {
+        var shell = await loginShellLoader.environment().variables
+        shell.merge(extraEnvironment) { _, extra in extra }
+        return GeminiKeySource.resolve(shellValue: shell["GEMINI_API_KEY"], storedKey: try? geminiKeyStore.read())
     }
 
     /// Starts reading the login shell environment and the tap version.
@@ -156,6 +184,15 @@ final class AppEnvironment {
         }
         Task { await layoutCatalog.load() }
         Task { await deckSchema.load() }
+        EditorTypography.refresh(from: generalSettings)
+        if let generalSettingsObserver { NotificationCenter.default.removeObserver(generalSettingsObserver) }
+        generalSettingsObserver = NotificationCenter.default.addObserver(forName: GeneralSettings.didChangeNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                EditorTypography.refresh(from: self.generalSettings)
+                NSDocumentController.shared.autosavingDelay = self.generalSettings.autosaveDelay
+            }
+        }
     }
 
     func tapEnvironment() async -> [String: String] {

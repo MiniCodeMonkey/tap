@@ -83,7 +83,7 @@ func execute(root *cobra.Command, args []string, stdout, stderr io.Writer) int {
 		writeProgressFailure(stderr, code, err.Error())
 	}
 	if jsonRequested(command) {
-		_ = printJSONError(stdout, code, err.Error())
+		_ = printJSONError(stdout, code, err.Error(), printsOneLineJSON(command))
 		return exitCode
 	}
 	if progress {

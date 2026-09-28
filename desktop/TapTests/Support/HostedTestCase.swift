@@ -8,6 +8,10 @@ import WebKit
 @MainActor
 class HostedTestCase: XCTestCase {
     private(set) var configHome: URL!
+    /// `AppEnvironment.shared.extraEnvironment` as it was before this test,
+    /// restored in `tearDown` so a test's `PATH` never reaches the next
+    /// test's `tap dev`.
+    private var savedExtraEnvironment: [String: String] = [:]
     /// The talk pages' data stores made for earlier tests and not yet
     /// removed. WebKit refuses to remove a store a web view still uses, so
     /// a store that is still in use at one teardown is tried again at the
@@ -30,6 +34,7 @@ class HostedTestCase: XCTestCase {
     var settingsFile: URL { configHome.appendingPathComponent("tap/settings.yaml") }
 
     override func setUp() async throws {
+        savedExtraEnvironment = AppEnvironment.shared.extraEnvironment
         configHome = try Fixtures.temporaryFolder()
         AppEnvironment.shared.extraEnvironment["XDG_CONFIG_HOME"] = configHome.path
         AppEnvironment.shared.recentThumbnailStore = RecentThumbnailStore(directory: try Fixtures.temporaryFolder())
@@ -45,6 +50,14 @@ class HostedTestCase: XCTestCase {
         AppEnvironment.shared.deckPorts = DeckPortStore(defaults: try XCTUnwrap(UserDefaults(suiteName: "TapTests.ports.\(UUID().uuidString)")))
         AppEnvironment.shared.presentationSettings = PresentationSettingsStore(defaults: try XCTUnwrap(UserDefaults(suiteName: "TapTests.present.\(UUID().uuidString)")))
         AppEnvironment.shared.presentExecutableURL = nil
+        // tap's subcommands run through a script whose theme renders are the fixture PNG: no test starts Chromium for one.
+        AppEnvironment.shared.toolExecutableURL = try FakeToolScripts.themeShow(recordingTo: try Fixtures.temporaryFolder().appendingPathComponent("renders.txt"))
+        AppEnvironment.shared.geminiKeyStore = MemoryGeminiKeyStore()
+        AppEnvironment.shared.generalSettings = GeneralSettings(defaults: try XCTUnwrap(UserDefaults(suiteName: "TapTests.general.\(UUID().uuidString)")))
+        EditorTypography.refresh(from: AppEnvironment.shared.generalSettings)
+        AppEnvironment.shared.themeImages = ThemeImageLoader()
+        // The runner's own shell may set a key; the tests' shell value is empty (resolve reads empty as none).
+        AppEnvironment.shared.extraEnvironment["GEMINI_API_KEY"] = ""
         // The Focus hint shows before the first talk on a Mac; every test but the hint's own has seen it.
         AppEnvironment.shared.focusHint = FocusHintState(defaults: try XCTUnwrap(UserDefaults(suiteName: "TapTests.focus.\(UUID().uuidString)")))
         AppEnvironment.shared.focusHint.markShown()
@@ -70,6 +83,11 @@ class HostedTestCase: XCTestCase {
     }
 
     override func tearDown() async throws {
+        // A theme render or an export a test left running never runs into the next test:
+        // the loader's task is cancelled first, so no render starts after the stop.
+        AppEnvironment.shared.themeImages.stop()
+        ToolRun.stopAll()
+        AppEnvironment.shared.extraEnvironment = savedExtraEnvironment
         AppEnvironment.shared.approvalAnswerForTests = nil
         // WelcomeWindowController.shared is one singleton for the whole
         // hosted process, not a window this test created, so it is ordered

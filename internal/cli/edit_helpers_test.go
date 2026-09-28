@@ -110,17 +110,30 @@ func repeatKey(key tea.KeyMsg, count int) []tea.KeyMsg {
 
 // fakeImageGenerator stands in for the Gemini API. Each image's bytes are
 // derived from its prompt, so the same prompt gives the same file name.
+// aspects records the aspect ratio of each call, "" for GenerateImage.
 type fakeImageGenerator struct {
 	err     error
 	prompts []string
+	aspects []string
 }
 
 func (f *fakeImageGenerator) GenerateImage(ctx context.Context, prompt string) (*gemini.ImageResult, error) {
+	return f.GenerateImageWithAspectRatio(ctx, prompt, "")
+}
+
+func (f *fakeImageGenerator) GenerateImageWithAspectRatio(ctx context.Context, prompt string, aspectRatio string) (*gemini.ImageResult, error) {
 	f.prompts = append(f.prompts, prompt)
+	f.aspects = append(f.aspects, aspectRatio)
 	if f.err != nil {
 		return nil, f.err
 	}
 	return &gemini.ImageResult{Data: []byte("png bytes for " + prompt), ContentType: "image/png"}, nil
+}
+
+// matchesTheme reports whether the request at index carried the theme's
+// style brief in front of the person's words.
+func (f *fakeImageGenerator) matchesTheme(index int) bool {
+	return strings.HasPrefix(f.prompts[index], "Illustration style")
 }
 
 // useFakeImageGenerator makes tap and the TUI use a fake generator for

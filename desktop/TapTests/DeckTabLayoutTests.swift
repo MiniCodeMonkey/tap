@@ -67,6 +67,11 @@ final class DeckTabLayoutTests: HostedTestCase {
                 }
             }
         }
+        // The Theme row's button is a row of the Deck card, at its own width.
+        let themeButton = try XCTUnwrap(form.themeRowButton)
+        let themeFrame = frame(themeButton)
+        XCTAssertGreaterThanOrEqual(themeFrame.width, themeButton.fittingSize.width - 0.5, "the theme button \(themeFrame) is not squeezed")
+        XCTAssertTrue(cardFrames[0].contains(themeFrame), "the theme button \(themeFrame) lies inside the Deck card \(cardFrames[0])")
         for (index, cardFrame) in cardFrames.enumerated() {
             for other in cardFrames[(index + 1)...] {
                 XCTAssertLessThanOrEqual(cardFrame.intersection(other).height, 0.5, "the cards \(cardFrame) and \(other) do not overlap")

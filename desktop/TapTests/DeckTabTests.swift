@@ -60,30 +60,35 @@ final class DeckTabTests: HostedTestCase {
         XCTAssertTrue(form.field("slideNumbers") is NSSwitch, "a boolean is a switch, as the DeckTabFields board draws it")
         let title = try XCTUnwrap(form.field("title") as? NSTextField)
         XCTAssertEqual(title.stringValue, "Seven Slides")
-        let theme = try XCTUnwrap(form.field("theme") as? NSPopUpButton, "a string with allowed values is a popup")
-        let themeKey = try XCTUnwrap(keys.first { $0.name == "theme" })
-        let defaultItem = form.defaultItemTitle(for: themeKey)
-        XCTAssertEqual(defaultItem, "Default (\(themeKey.defaultValue ?? ""))")
-        XCTAssertEqual(theme.itemTitles, [defaultItem] + themeKey.values, "the allowed values come from tap, behind the way back to tap's default")
-        XCTAssertEqual(theme.titleOfSelectedItem, defaultItem, "the deck sets no theme")
+        // The Theme row is one button, not a popup; it reads "Default"
+        // for a deck that names no theme.
+        let themeRow = try XCTUnwrap(form.themeRowButton, "the Theme row is a button, not a popup")
+        XCTAssertEqual(themeRow.nameLabel.stringValue, "Default", "the deck sets no theme")
+
+        let transition = try XCTUnwrap(form.field("transition") as? NSPopUpButton, "a string with allowed values is a popup")
+        let transitionKey = try XCTUnwrap(keys.first { $0.name == "transition" })
+        let defaultItem = form.defaultItemTitle(for: transitionKey)
+        XCTAssertEqual(defaultItem, "Default (\(transitionKey.defaultValue ?? ""))")
+        XCTAssertEqual(transition.itemTitles, [defaultItem] + transitionKey.values, "the allowed values come from tap, behind the way back to tap's default")
+        XCTAssertEqual(transition.titleOfSelectedItem, defaultItem, "the deck sets no transition")
 
         // Changing a field rewrites that key in the frontmatter as one undo step.
         let original = editor.string
         let hiddenBefore = editor.hiddenLength
-        let chosen = try XCTUnwrap(themeKey.values.last)
-        theme.selectItem(withTitle: chosen)
-        theme.sendAction(theme.action, to: theme.target)
-        XCTAssertTrue(editor.string.hasPrefix("---\ntitle: Seven Slides\ndrivers:\n  sqlite: {}\ntheme: \(chosen)\n---\n"), String(editor.string.prefix(80)))
-        XCTAssertEqual(editor.undoManager?.undoActionName, "Change Theme")
+        let chosen = try XCTUnwrap(transitionKey.values.last)
+        transition.selectItem(withTitle: chosen)
+        transition.sendAction(transition.action, to: transition.target)
+        XCTAssertTrue(editor.string.hasPrefix("---\ntitle: Seven Slides\ndrivers:\n  sqlite: {}\ntransition: \(chosen)\n---\n"), String(editor.string.prefix(80)))
+        XCTAssertEqual(editor.undoManager?.undoActionName, "Change Transition")
         XCTAssertTrue(controller.isContentEdited, "the edited flag follows the content")
         try await waitUntil(timeout: 10, "tap's answer for the new frontmatter") { controller.lastAppliedText == editor.string }
         XCTAssertEqual(editor.deckErrors, [], "tap accepts what the form wrote")
-        XCTAssertEqual(editor.hiddenLength, hiddenBefore + ("theme: \(chosen)\n" as NSString).length, "the frontmatter stays hidden, one line longer")
+        XCTAssertEqual(editor.hiddenLength, hiddenBefore + ("transition: \(chosen)\n" as NSString).length, "the frontmatter stays hidden, one line longer")
         XCTAssertEqual(editor.boxes[0].range.location, editor.hiddenLength, "slide 1 starts where the hidden frontmatter ends")
         try await waitForTheUndoStepToClose(editor.undoManager)
-        // The same value again changes nothing, so it is no undo step: the third undo below finds the theme change.
-        theme.sendAction(theme.action, to: theme.target)
-        XCTAssertEqual(editor.undoManager?.undoActionName, "Change Theme")
+        // The same value again changes nothing, so it is no undo step: the third undo below finds the transition change.
+        transition.sendAction(transition.action, to: transition.target)
+        XCTAssertEqual(editor.undoManager?.undoActionName, "Change Transition")
         try await waitForTheUndoStepToClose(editor.undoManager)
 
         title.stringValue = "Deck: renamed"
@@ -105,19 +110,29 @@ final class DeckTabTests: HostedTestCase {
         XCTAssertTrue(editor.string.contains("title: \"Deck: renamed\"\n"), "the first undo takes back the switch alone")
         editor.undoManager?.undo()
         XCTAssertEqual(title.stringValue, "Seven Slides")
-        XCTAssertTrue(editor.string.contains("theme: \(chosen)\n"), "the second undo takes back the title alone")
+        XCTAssertTrue(editor.string.contains("transition: \(chosen)\n"), "the second undo takes back the title alone")
         editor.undoManager?.undo()
-        XCTAssertEqual(editor.string, original, "the third undo takes back the theme")
-        XCTAssertEqual(theme.titleOfSelectedItem, defaultItem, "the popup follows an undo")
+        XCTAssertEqual(editor.string, original, "the third undo takes back the transition")
+        XCTAssertEqual(transition.titleOfSelectedItem, defaultItem, "the popup follows an undo")
         // Choosing the default item removes the key.
-        theme.selectItem(withTitle: chosen)
-        theme.sendAction(theme.action, to: theme.target)
-        XCTAssertTrue(editor.string.contains("theme: \(chosen)\n"))
-        theme.selectItem(withTitle: defaultItem)
-        theme.sendAction(theme.action, to: theme.target)
-        XCTAssertFalse(editor.string.contains("theme:"), "back to tap's default: the key goes")
-        XCTAssertEqual(editor.undoManager?.undoActionName, "Change Theme")
+        transition.selectItem(withTitle: chosen)
+        transition.sendAction(transition.action, to: transition.target)
+        XCTAssertTrue(editor.string.contains("transition: \(chosen)\n"))
+        transition.selectItem(withTitle: defaultItem)
+        transition.sendAction(transition.action, to: transition.target)
+        XCTAssertFalse(editor.string.contains("transition:"), "back to tap's default: the key goes")
+        XCTAssertEqual(editor.undoManager?.undoActionName, "Change Transition")
         // Not `isContentEdited` here: the autosave may have written the file in between, and the flag is against the file.
+
+        // The theme keeps its own way back to tap's default: the popover's
+        // Default cell. The row follows the text, not a popup, once
+        // setTheme lands and once an undo takes it back.
+        try await waitUntil(timeout: 20, "the theme catalog") { AppEnvironment.shared.themeImages.catalog != nil }
+        controller.setTheme("terminal")
+        try await waitUntil(timeout: 20, "tap theme set to land") { themeRow.nameLabel.stringValue == "Terminal" }
+        editor.undoManager?.undo()
+        try await waitUntil(timeout: 5, "the row follows an undo") { themeRow.nameLabel.stringValue == "Default" }
+
         deckWindow.showPreviewTab(nil)
         XCTAssertEqual(controller.inspectorViewController.selectedTab, .preview)
     }

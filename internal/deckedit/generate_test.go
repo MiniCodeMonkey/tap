@@ -23,7 +23,7 @@ func TestPlaceGeneratedImageAddsToTheSlide(t *testing.T) {
 		t.Fatalf("PlaceGeneratedImage() error = %v", err)
 	}
 	wantPath := filepath.Join("images", GenerateImageFilename(image.Data, image.ContentType))
-	if placed.Path != wantPath || placed.Markdown != AIImageMarkdown("a red fox", wantPath) {
+	if placed.Path != wantPath || placed.Markdown != AIImageMarkdown("a red fox", wantPath, "", false) {
 		t.Errorf("placed = %+v", placed)
 	}
 	saved, err := os.ReadFile(filepath.Join(deckDir, wantPath))

@@ -12,8 +12,11 @@ import (
 )
 
 // ImageGenerator makes an image from a text prompt. *gemini.Client is one.
+// GenerateImageWithAspectRatio takes one of Gemini's aspect ratios ("1:1",
+// "16:9", "9:16", "4:3", "3:4"), or "" for the model's own choice.
 type ImageGenerator interface {
 	GenerateImage(ctx context.Context, prompt string) (*gemini.ImageResult, error)
+	GenerateImageWithAspectRatio(ctx context.Context, prompt string, aspectRatio string) (*gemini.ImageResult, error)
 }
 
 // NewImageGenerator returns the generator that tap image generate, tap
@@ -33,13 +36,23 @@ var NewImageGenerator = func(deckPath string) (ImageGenerator, error) {
 	return client, nil
 }
 
+// ThemedImageRequest is what the model is asked for an image that
+// matches the deck's theme: the theme's style brief, then the person's
+// words. The deck records the words alone.
+func ThemedImageRequest(brief, prompt string) string {
+	return brief + "\n\nThe image shows: " + prompt
+}
+
 // Placement says where a generated image goes: at the end of the slide at
 // SlideIndex, or, when Replacing is set, in place of that AI image.
+// Aspect and MatchTheme are the choices to record with it.
 type Placement struct {
 	DeckPath   string
 	SlideIndex int
 	Prompt     string
 	Replacing  *AIImage
+	Aspect     string
+	MatchTheme bool
 }
 
 // PlacedImage is the result of PlaceGeneratedImage. Path is relative to
@@ -81,7 +94,7 @@ func PlaceGeneratedImage(placement Placement, image gemini.ImageResult) (PlacedI
 	if err != nil {
 		return PlacedImage{}, err
 	}
-	placed := PlacedImage{Path: path, Markdown: AIImageMarkdown(placement.Prompt, path)}
+	placed := PlacedImage{Path: path, Markdown: AIImageMarkdown(placement.Prompt, path, placement.Aspect, placement.MatchTheme)}
 
 	info, err := os.Stat(placement.DeckPath)
 	if err != nil {
@@ -93,9 +106,9 @@ func PlaceGeneratedImage(placement Placement, image gemini.ImageResult) (PlacedI
 	}
 	var updated string
 	if placement.Replacing == nil {
-		updated, err = InsertAIImage(string(content), placement.SlideIndex, placement.Prompt, path)
+		updated, err = InsertAIImage(string(content), placement.SlideIndex, placement.Prompt, path, placement.Aspect, placement.MatchTheme)
 	} else {
-		updated, err = ReplaceAIImage(string(content), placement.Replacing.Prompt, placement.Replacing.ImagePath, placement.Prompt, path)
+		updated, err = ReplaceAIImage(string(content), *placement.Replacing, placement.Prompt, path, placement.Aspect, placement.MatchTheme)
 	}
 	if err != nil {
 		return placed, fmt.Errorf("failed to update markdown: %w", err)

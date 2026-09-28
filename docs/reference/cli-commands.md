@@ -37,6 +37,7 @@ tap new [deck] --yes [--title <title>] [--theme <slug>] [--output <file>] [--for
 | `--yes` | `-y` | Skip the wizard and write the file from flags and defaults |
 | `--force` | | Overwrite `--output` if it already exists (non-interactive mode only) |
 | `--json` | | Print the written deck as JSON (skips the wizard) |
+| `--folder <location>` | none | Make a folder named after the title inside `<location>`, with the deck and an `images/` folder; skips the wizard; cannot be combined with `[deck]`, `--output` or `--force`. |
 
 ### Examples
 
@@ -55,6 +56,9 @@ tap new --yes --title "My Talk" --theme terminal --output talk.md
 
 # Overwrite an existing file non-interactively
 tap new --yes --output talk.md --force
+
+# Make a folder named after the title, with the deck and an images/ folder
+tap new --folder ~/talks --title "My Talk" --theme terminal --json   # ~/talks/my-talk/my-talk.md, with images/
 ```
 
 Non-interactive mode refuses to overwrite an existing `--output` file unless `--force` is given. With no terminal attached to standard input, `tap new` behaves as if `--yes` was passed, so it never hangs waiting on the wizard.
@@ -63,6 +67,12 @@ Non-interactive mode refuses to overwrite an existing `--output` file unless `--
 
 ```json
 {"ok": true, "deck": "talk.md"}
+```
+
+With `--folder`:
+
+```json
+{"ok": true, "deck": "...", "folder": "..."}
 ```
 
 ### Output
@@ -331,6 +341,7 @@ tap serve [dir]
 | Flag | Short | Description |
 |------|-------|-------------|
 | `--port <number>` | `-p` | Port to serve on (default: `3000`) |
+| `--json` | none | Listen on 127.0.0.1 only, print one ready line (`{"ok":true,"dir","port","url"}`, the URL on 127.0.0.1) or one error line (`{"ok":false,"error":{"code","message"}}`), log no requests, and exit when standard input closes, for a program that opens the site. |
 
 If the default port is already taken, `tap serve` tries the next ports in turn (up to 20 above it) and prints the URL of whichever one it actually bound. Passing `--port` explicitly instead fails outright when that exact port is busy:
 
@@ -346,6 +357,7 @@ The port is bound before the startup message prints, so a busy port is reported 
 tap serve
 tap serve ./public
 tap serve dist --port 8080
+tap serve dist --port 0 --json
 ```
 
 ::: tip
@@ -773,6 +785,8 @@ tap image generate [deck] --slide <n> --prompt "..."
 | `--slide <n>` | Slide to add the image to, from 1 (required) |
 | `--prompt <text>` | What the image shows (required) |
 | `--json` | Print the result as JSON |
+| `--aspect <ratio>` | The image's aspect ratio: 1:1, 16:9, 9:16, 4:3 or 3:4 (default: the model's choice) |
+| `--match-theme` | Put the deck theme's style brief (`tap theme show --prompt`) in front of the prompt sent to the model; the `ai-prompt` comment keeps your words |
 
 ### Behavior
 
@@ -782,11 +796,18 @@ so `tap image regenerate` can make it again. `GEMINI_API_KEY` must be set,
 in the environment or in a `.env` file next to the deck. On success the
 command prints the image's path.
 
+`--aspect` and `--match-theme`, when given, are recorded after the prompt
+in the comment: `<!-- ai-prompt: a lighthouse at dusk | aspect: 16:9 |
+match-theme -->`. The comment's prompt text is always your words alone;
+the theme brief is only ever sent to the model, never written to the
+deck. `tap image regenerate` reuses both recorded choices by default.
+
 ### Examples
 
 ```bash
 tap image generate --slide 3 --prompt "a lighthouse at dusk, flat vector"
 tap image generate talk.md --slide 3 --prompt "a lighthouse at dusk, flat vector" --json
+tap image generate talk.md --slide 3 --prompt "a lighthouse at dusk" --aspect 16:9 --match-theme
 ```
 
 ### `--json`
@@ -825,19 +846,23 @@ tap image regenerate [deck] --slide <n> --image <path> [--prompt "..."]
 | `--image <path>` | Path of the AI image to replace, as the slide links to it (required) |
 | `--prompt <text>` | A new prompt (default: the image's own prompt) |
 | `--json` | Print the result as JSON |
+| `--aspect <ratio>` | The image's aspect ratio: 1:1, 16:9, 9:16, 4:3 or 3:4 (default: the recorded choice, or the model's choice) |
+| `--match-theme` | Put the deck theme's style brief in front of the prompt (default: the recorded choice) |
 
 ### Behavior
 
 `--image` names the image by the path the slide links to, for example
 `images/generated-1a2b3c4d.png`. Without `--prompt`, tap reuses the
-prompt in the image's `ai-prompt` comment. On success the command prints
-the new image's path.
+prompt in the image's `ai-prompt` comment. `--aspect` and `--match-theme`
+default to what the comment recorded for that image; give either flag to
+override it. On success the command prints the new image's path.
 
 ### Examples
 
 ```bash
 tap image regenerate --slide 3 --image images/generated-1a2b3c4d.png
 tap image regenerate talk.md --slide 3 --image images/generated-1a2b3c4d.png --prompt "a lighthouse at dawn, flat vector"
+tap image regenerate talk.md --slide 3 --image images/generated-1a2b3c4d.png --aspect 1:1
 ```
 
 ### `--json`
@@ -932,6 +957,7 @@ tap theme show [slug|deck] [flags]
 | `--prompt` | | Print a style brief for an image model |
 | `--image` | | Render a title slide in the theme to a 1280x720 PNG and print its path |
 | `--output <file>` | `-o` | With `--image`, copy the PNG to this file and print that path |
+| `--progress <format>` | | With `--image`, print progress to stderr as JSON lines (`json`) |
 
 The argument is a theme slug, or a deck file or folder whose theme to show. With no argument, tap uses the deck in the current folder.
 
@@ -940,6 +966,8 @@ Without a flag, prints the theme's name, polarity, pitch, colors, fonts, motion,
 With `--prompt`, prints a plain-text style brief to paste in front of an image model request: the palette with hex values and roles, how the palette should be used, line and shape language, texture, mood, things to avoid, a type feel hint, and the canvas ratio.
 
 With `--image`, tap renders a title slide in the theme to a 1280x720 PNG and prints its path. The image is cached per theme and tap version, in the user cache folder under `tap/themes/<version>/<slug>.png` (`~/Library/Caches/tap/themes/...` on macOS), so a repeat call returns at once. `-o`/`--output` copies the PNG to a file of your choosing and prints that path instead.
+
+`--progress json` prints the engine download and the render as JSON lines on stderr, as `tap export` does.
 
 ### Examples
 
@@ -952,6 +980,7 @@ tap theme show slides.md --prompt
 tap theme show terminal --image
 tap theme show terminal --image -o terminal.png
 tap theme show terminal --image --json
+tap theme show terminal --image --progress json
 ```
 
 #### `--json`
@@ -988,12 +1017,15 @@ tap theme set <slug> [deck]
 
 `[deck]` is a deck file or folder; with no deck, tap uses the deck in the current folder. A deck with no frontmatter gets one. An unknown slug exits 1 with code `unknown_theme` and prints the list of themes.
 
+`tap theme set default` removes the theme line, so the deck renders with tap's default theme.
+
 ### Examples
 
 ```bash
 tap theme set terminal
 tap theme set blueprint talk.md
 tap theme set blueprint talk.md --json
+tap theme set default talk.md
 ```
 
 ### `--json`

@@ -7,6 +7,8 @@ protocol EditorTextViewDelegate: AnyObject {
     func editor(_ editor: EditorTextView, dropSlides payload: SlideDragPayload, beforeNumber: Int?, isMove: Bool) -> Bool
     func editor(_ editor: EditorTextView, contextMenuForBoxAt index: Int) -> NSMenu?
     func editor(_ editor: EditorTextView, applyFixItForBoxAt index: Int)
+    func editor(_ editor: EditorTextView, insertImages files: [URL])
+    func editor(_ editor: EditorTextView, openComponentLinkAt characterIndex: Int) -> Bool
 }
 
 extension EditorTextViewDelegate {
@@ -14,6 +16,8 @@ extension EditorTextViewDelegate {
     func editor(_ editor: EditorTextView, dropSlides payload: SlideDragPayload, beforeNumber: Int?, isMove: Bool) -> Bool { false }
     func editor(_ editor: EditorTextView, contextMenuForBoxAt index: Int) -> NSMenu? { nil }
     func editor(_ editor: EditorTextView, applyFixItForBoxAt index: Int) {}
+    func editor(_ editor: EditorTextView, insertImages files: [URL]) {}
+    func editor(_ editor: EditorTextView, openComponentLinkAt characterIndex: Int) -> Bool { false }
 }
 
 /// A TextKit 2 text view that draws a rounded box behind each slide's lines.
@@ -33,10 +37,10 @@ final class EditorTextView: NSTextView {
     var deckErrors: [String] { tracker.deckErrors }
     var hiddenLength: Int { tracker.hiddenPrefixLength }
 
-    static let font = NSFont.monospacedSystemFont(ofSize: 13, weight: .regular)
-    static let boldFont = NSFont.monospacedSystemFont(ofSize: 13, weight: .bold)
-    static let smallFont = NSFont.monospacedSystemFont(ofSize: 9, weight: .regular)
-    static let lineHeight: CGFloat = 21
+    static var font: NSFont { EditorTypography.current.font }
+    static var boldFont: NSFont { EditorTypography.current.boldFont }
+    static var smallFont: NSFont { EditorTypography.current.smallFont }
+    static var lineHeight: CGFloat { EditorTypography.current.lineHeight }
     static let headerHeight: CGFloat = 28
     static let errorLineHeight: CGFloat = 18
     static let boxPaddingTop: CGFloat = 6
@@ -103,6 +107,7 @@ final class EditorTextView: NSTextView {
         view.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
         view.setAccessibilityIdentifier("editor")
         view.textStorage?.delegate = view
+        NotificationCenter.default.addObserver(view, selector: #selector(applyTypography), name: EditorTypography.didChangeNotification, object: nil)
         view.textContentStorage?.delegate = view
         view.registerForDraggedTypes(view.registeredDraggedTypes + [NSPasteboard.PasteboardType(SlideDragPayload.pasteboardType)])
         return view
@@ -317,6 +322,16 @@ final class EditorTextView: NSTextView {
         }
     }
 
+    /// The settings' font size or line spacing changed: every paragraph is
+    /// styled again with the new font and line height.
+    @objc func applyTypography() {
+        Self.paragraphStyles = [:]
+        font = Self.font
+        typingAttributes = [.font: Self.font, .foregroundColor: NSColor.labelColor, .paragraphStyle: Self.paragraphStyle(for: .boxMiddle)]
+        restyle(NSRange(location: 0, length: (string as NSString).length))
+        needsDisplay = true
+    }
+
     // MARK: The current slide
 
     private func updateCurrentBox() {
@@ -390,6 +405,32 @@ final class EditorTextView: NSTextView {
 
     func headerRect(forBoxAt index: Int) -> NSRect? {
         boxRect(forBoxAt: index).map { NSRect(x: $0.minX, y: $0.minY, width: $0.width, height: Self.headerHeight) }
+    }
+
+    /// A point on the character itself, in the view's coordinates: a
+    /// quarter of the way into the glyph and halfway down its line, so
+    /// `characterIndexForInsertion(at:)` there is `index`. Through TextKit 2
+    /// (never `layoutManager`, whose read would turn the editor into a
+    /// TextKit 1 view). An edit restyles its whole slide, which leaves those
+    /// paragraphs' fragments without lines until the next layout pass, so
+    /// the text from the start through the character is laid out first: a
+    /// fragment's frame is only true once everything above it is.
+    func pointForCharacter(at index: Int) -> NSPoint {
+        guard let contentManager = textContentStorage, let layoutManager = textLayoutManager,
+              let location = contentManager.location(contentManager.documentRange.location, offsetBy: index) else { return .zero }
+        let end = contentManager.location(location, offsetBy: 1) ?? location
+        if let through = NSTextRange(location: contentManager.documentRange.location, end: end) {
+            layoutManager.ensureLayout(for: through)
+        }
+        guard let fragment = layoutManager.textLayoutFragment(for: location) else { return .zero }
+        let frame = fragment.layoutFragmentFrame
+        let offset = contentManager.offset(from: fragment.rangeInElement.location, to: location)
+        let lines = fragment.textLineFragments
+        guard let line = lines.first(where: { NSLocationInRange(offset, $0.characterRange) }) ?? lines.last else { return .zero }
+        let leading = line.locationForCharacter(at: offset).x
+        let trailing = NSLocationInRange(offset + 1, line.characterRange) ? line.locationForCharacter(at: offset + 1).x : line.typographicBounds.width
+        return NSPoint(x: frame.minX + line.typographicBounds.minX + leading + max(0, trailing - leading) / 4 + textContainerOrigin.x,
+                       y: frame.minY + line.typographicBounds.midY + textContainerOrigin.y)
     }
 
     /// The box whose header is under `point`, in view coordinates.
@@ -575,6 +616,74 @@ final class EditorTextView: NSTextView {
         }
     }
 
+    // MARK: Paste and drop of images
+
+    /// What Paste reads, for images and text alike: the general pasteboard,
+    /// unless a test replaces it so a run never touches the person's clipboard.
+    var pasteboardForPaste: NSPasteboard = .general
+
+    /// The file URLs on `pasteboard` whose extension tap image add accepts,
+    /// in the pasteboard's order. Other files are not images to tap.
+    static let imageExtensions: Set<String> = ["png", "jpg", "jpeg", "gif", "webp", "svg", "avif"]
+
+    static func imageFileURLs(on pasteboard: NSPasteboard) -> [URL] {
+        let urls = pasteboard.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL] ?? []
+        return urls.filter { imageExtensions.contains($0.pathExtension.lowercased()) }
+    }
+
+    /// Whether Paste has something to read on `pasteboardForPaste`: an
+    /// image file, image data (a screenshot, which carries no string), or
+    /// anything NSTextView reads itself. NSTextView's own check reads only
+    /// its text types, which would turn Edit > Paste and Command-V off for
+    /// a screenshot.
+    var canPaste: Bool {
+        guard isEditable else { return false }
+        return !Self.imageFileURLs(on: pasteboardForPaste).isEmpty
+            || pasteboardForPaste.canReadObject(forClasses: [NSImage.self], options: nil)
+            || pasteboardForPaste.availableType(from: readablePasteboardTypes) != nil
+    }
+
+    /// Validates Paste for menu items too: NSTextView's `validateMenuItem`
+    /// asks `validateUserInterfaceItem` and returns its answer.
+    override func validateUserInterfaceItem(_ item: NSValidatedUserInterfaceItem) -> Bool {
+        if item.action == #selector(paste(_:)) { return canPaste }
+        return super.validateUserInterfaceItem(item)
+    }
+
+    /// Paste: image files and image data go to tap image add through the
+    /// delegate; everything else is NSTextView's own reading of the same
+    /// pasteboard (`readSelection(from:)`, so a test's pasteboard is honoured
+    /// on the text branch too).
+    override func paste(_ sender: Any?) {
+        let files = Self.imageFileURLs(on: pasteboardForPaste)
+        if !files.isEmpty {
+            editorDelegate?.editor(self, insertImages: files)
+            return
+        }
+        if pasteboardForPaste.availableType(from: [.string]) == nil,
+           let image = pasteboardForPaste.readObjects(forClasses: [NSImage.self], options: nil)?.first as? NSImage,
+           let file = Self.writePastedImage(image) {
+            editorDelegate?.editor(self, insertImages: [file])
+            return
+        }
+        _ = readSelection(from: pasteboardForPaste)
+    }
+
+    /// Image data (a screenshot) as a PNG file for tap to copy: tap keeps
+    /// the name, so a second paste becomes pasted-image-2.png.
+    static func writePastedImage(_ image: NSImage) -> URL? {
+        guard let tiff = image.tiffRepresentation, let bitmap = NSBitmapImageRep(data: tiff), let png = bitmap.representation(using: .png, properties: [:]) else { return nil }
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("tap-pasted-\(UUID().uuidString)")
+        let file = folder.appendingPathComponent("pasted-image.png")
+        do {
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            try png.write(to: file)
+        } catch {
+            return nil
+        }
+        return file
+    }
+
     // MARK: Dragging a header
 
     private(set) var dropIndicatorBeforeNumber: Int?
@@ -603,6 +712,11 @@ final class EditorTextView: NSTextView {
     /// click, handled as any click in the text.
     override func mouseDown(with event: NSEvent) {
         let point = convert(event.locationInWindow, from: nil)
+        // A Cmd-click on a component's path opens the file; anywhere else it is a plain click.
+        if event.modifierFlags.contains(.command), !event.modifierFlags.contains(.control) {
+            let index = characterIndexForInsertion(at: point)
+            if index < (string as NSString).length, editorDelegate?.editor(self, openComponentLinkAt: index) == true { return }
+        }
         // A Control-click on the pill is a context menu click, as anywhere on the header.
         if !event.modifierFlags.contains(.control), let index = boxIndex(forHeaderAt: point), let pill = fixItRect(forBoxAt: index), pill.contains(point) {
             editorDelegate?.editor(self, applyFixItForBoxAt: index)
@@ -698,6 +812,7 @@ final class EditorTextView: NSTextView {
     }
 
     override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
+        if !Self.imageFileURLs(on: sender.draggingPasteboard).isEmpty { return .copy }
         guard let payload = slidePayload(sender) else { return super.draggingEntered(sender) }
         let point = convert(sender.draggingLocation, from: nil)
         updateDropIndicator(at: point, count: payload.slideNumbers.count)
@@ -705,6 +820,7 @@ final class EditorTextView: NSTextView {
     }
 
     override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation {
+        if !Self.imageFileURLs(on: sender.draggingPasteboard).isEmpty { return .copy }
         guard let payload = slidePayload(sender) else { return super.draggingUpdated(sender) }
         let point = convert(sender.draggingLocation, from: nil)
         updateDropIndicator(at: point, count: payload.slideNumbers.count)
@@ -720,6 +836,7 @@ final class EditorTextView: NSTextView {
     /// every slide drop before `performDragOperation` ran. A slide drop is
     /// accepted here exactly when `draggingUpdated` offered an operation for it.
     override func prepareForDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        if !Self.imageFileURLs(on: sender.draggingPasteboard).isEmpty { return true }
         guard let payload = slidePayload(sender) else { return super.prepareForDragOperation(sender) }
         return slideDropOperation(payload: payload, at: convert(sender.draggingLocation, from: nil)) != []
     }
@@ -732,6 +849,13 @@ final class EditorTextView: NSTextView {
     }
 
     override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        let images = Self.imageFileURLs(on: sender.draggingPasteboard)
+        if !images.isEmpty {
+            let point = convert(sender.draggingLocation, from: nil)
+            setSelectedRange(NSRange(location: min(characterIndexForInsertion(at: point), (string as NSString).length), length: 0))
+            editorDelegate?.editor(self, insertImages: images)
+            return true
+        }
         guard let payload = slidePayload(sender) else { return super.performDragOperation(sender) }
         let point = convert(sender.draggingLocation, from: nil)
         let beforeNumber = dropBoundary(at: point)

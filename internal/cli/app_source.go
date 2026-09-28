@@ -299,5 +299,5 @@ func handleAppSource(source *appDeckSource, build appRenderBuilder, baseDir stri
 func writeAppSourceError(w http.ResponseWriter, status int, code, message string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	_ = printJSONError(w, code, message)
+	_ = printJSONError(w, code, message, false)
 }

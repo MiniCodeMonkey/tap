@@ -268,18 +268,280 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
     }
 
     /// Writes the buffer to the deck file now, ahead of the autosave, and
-    /// says so in the log. A save the document refuses (a disk conflict is
-    /// showing) leaves the edit in the buffer for the next save, with a
-    /// log line.
+    /// reports the outcome. A buffer that equals the file needs no write.
+    /// A save the document refuses (a disk conflict is showing) comes back
+    /// as its error and the edit stays in the buffer for the next save. A
+    /// file changed on disk that nobody has reported yet is reported first,
+    /// as an autosave would: an edited buffer gets the conflict bar, and the
+    /// save is refused rather than written over the other program's change.
+    func saveNow(completion: @escaping (Error?) -> Void) {
+        _ = deckForm.commitEditing()
+        guard let document, let url = document.fileURL else { return completion(CocoaError(.fileNoSuchFile)) }
+        guard isContentEdited else { return completion(nil) }
+        if document.diskIsNewerThanKnown {
+            diskChanged()
+            if hasDiskConflict { return completion(CocoaError(.userCancelled)) }
+            guard isContentEdited else { return completion(nil) }
+        }
+        document.save(to: url, ofType: document.fileType ?? "net.daringfireball.markdown", for: .saveOperation, completionHandler: completion)
+    }
+
+    /// The fix-it's save. FixItTests waits for its success line.
     func saveNow() {
-        guard let document, let url = document.fileURL, isContentEdited else { return }
-        document.save(to: url, ofType: document.fileType ?? "net.daringfireball.markdown", for: .saveOperation) { [weak self] error in
+        saveNow { [weak self] error in
             if let error {
                 self?.session.log.append("the save after the fix-it was refused: \(error.localizedDescription)", source: .app)
             } else {
                 self?.session.log.append("saved the deck after the fix-it", source: .app)
             }
         }
+    }
+
+    // MARK: Tap commands on the deck
+
+    /// The one path for a tap command that writes the deck file (tap theme
+    /// set, tap image generate, tap image regenerate): the buffer is saved
+    /// first, tap runs on the file, and the file comes back into the
+    /// buffer as one undo step named after the action, the cursor's slide
+    /// kept, through the same load an external change takes. A refused
+    /// save runs nothing; tap's failure shows on a bar with tap's words,
+    /// unless the caller shows it itself (a sheet). `arguments` name the
+    /// deck by its path already. `includeGeminiKey` is for the image runs.
+    func runToolOnSavedDeck(_ arguments: [String], actionName: String, includeGeminiKey: Bool = false, showsErrorBar: Bool = true,
+                            completion: @escaping (ToolOutcome?) -> Void = { _ in }) {
+        guard !hasDiskConflict else {
+            session.log.append("\(actionName) was not run: the save was refused (the deck changed on disk)", source: .app)
+            NSSound.beep()
+            completion(nil)
+            return
+        }
+        saveNow { [weak self] error in
+            guard let self else { return }
+            if let error {
+                self.session.log.append("\(actionName) was not run: the save was refused: \(error.localizedDescription)", source: .app)
+                completion(nil)
+                return
+            }
+            // tap dev reports the write as file-changed after its debounce; if that
+            // report lands before this run's own load, diskChanged takes the action's name.
+            self.pendingToolActionName = actionName
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                let exit = await TapTool.run(arguments, in: self.document?.fileURL?.deletingLastPathComponent(), log: self.session.log, includeGeminiKey: includeGeminiKey)
+                let name = self.pendingToolActionName ?? actionName
+                self.pendingToolActionName = nil
+                switch exit.outcome {
+                case .ok? where self.hasDiskConflict || self.isContentEdited:
+                    // Typing landed while tap ran, or the conflict bar is up: the
+                    // load is the person's choice (Load Disk Version or Keep Mine),
+                    // and Load Disk Version takes the action's name.
+                    self.pendingToolActionName = name
+                    self.diskChanged()
+                    if !self.hasDiskConflict { self.pendingToolActionName = nil }
+                case .ok?:
+                    self.loadDiskVersion(actionName: name)
+                case .failed(_, let message)?:
+                    if showsErrorBar { self.showToolError(actionName: actionName, message: message) }
+                case nil:
+                    if showsErrorBar { self.showToolError(actionName: actionName, message: exit.cancelled ? "cancelled" : "tap did not answer (exit \(exit.status)); see the Tap Log") }
+                }
+                completion(exit.outcome)
+            }
+        }
+    }
+
+    /// The undo step's name for the disk load a tool run is about to cause,
+    /// whichever path loads it first (the run's own, or tap dev's
+    /// file-changed report through diskChanged).
+    private(set) var pendingToolActionName: String?
+
+    /// tap's failure, on a bar over the editor with tap's own message.
+    func showToolError(actionName: String, message: String) {
+        editorViewController.showBar(DocumentBarView(kind: .toolFailed, message: "\(actionName) failed.", detail: message,
+                                                     buttons: [("OK", { [weak self] in self?.editorViewController.hideBar(.toolFailed) })]))
+    }
+
+    /// Inserts text at the caret as one undo step named `actionName`, the
+    /// path for what tap printed (an image's markdown, a component's
+    /// snippet). The insert replaces nothing: a selection stays, after the
+    /// text. The caret is clamped out of the frontmatter already.
+    func insertAtCaret(_ text: String, actionName: String) {
+        let caret = editor.selectedRange()
+        editor.replaceText(in: NSRange(location: caret.location, length: 0), with: text, actionName: actionName)
+        editor.setSelectedRange(NSRange(location: caret.location + (text as NSString).length, length: 0))
+    }
+
+    /// Pasted or dropped image files: tap image add copies each into
+    /// images/ next to the deck (its own name rules, -2 on a clash) and
+    /// prints the markdown, which goes in where the paste or drop happened
+    /// (the caret then), on a line of its own, one undo step per image.
+    /// Text that changed while tap ran moves the insert to the caret. tap
+    /// does not touch the deck file, so nothing is saved or reloaded. A
+    /// deck with no file yet has no images/ to copy into.
+    func insertImages(_ files: [URL]) {
+        guard let deck = document?.fileURL, FileManager.default.fileExists(atPath: deck.path) else {
+            session.log.append("Insert Image needs a saved deck: tap image add copies next to the deck file", source: .app)
+            showToolError(actionName: "Insert Image", message: "Save the deck first: tap copies the image into images/ next to the deck file.")
+            NSSound.beep()
+            return
+        }
+        var location = editor.selectedRange().location
+        var textAsItWas = editor.string
+        Task { @MainActor [weak self] in
+            for file in files {
+                guard let self else { return }
+                let exit = await TapTool.run(["image", "add", file.path, deck.path, "--json"], in: deck.deletingLastPathComponent(), log: self.session.log)
+                switch exit.outcome {
+                case .ok?:
+                    guard let added = try? exit.outcome?.result(AddedImageResult.self) else { continue }
+                    if self.editor.string != textAsItWas { location = self.editor.selectedRange().location }
+                    location = self.insertOnItsOwnLine(added.markdown, at: location, actionName: "Insert Image")
+                    textAsItWas = self.editor.string
+                case .failed(_, let message)?:
+                    self.showToolError(actionName: "Insert Image", message: message)
+                case nil:
+                    self.showToolError(actionName: "Insert Image", message: "tap did not answer (exit \(exit.status)); see the Tap Log")
+                }
+            }
+        }
+    }
+
+    /// `text` as a line of its own at `location`: there when it is a line's
+    /// start, else at the start of the next line, so a heading or a
+    /// sentence is never split. One undo step; the caret goes after it.
+    /// Returns the location after the insert.
+    @discardableResult
+    func insertOnItsOwnLine(_ text: String, at location: Int, actionName: String) -> Int {
+        let whole = editor.string as NSString
+        let clamped = min(max(location, 0), whole.length)
+        let line = whole.lineRange(for: NSRange(location: clamped, length: 0))
+        var at = clamped
+        var insert = text + "\n"
+        if clamped != line.location {
+            at = NSMaxRange(line)
+            // The last line has no newline of its own to follow.
+            if at == whole.length, !whole.substring(with: line).hasSuffix("\n") { insert = "\n" + insert }
+        }
+        editor.replaceText(in: NSRange(location: at, length: 0), with: insert, actionName: actionName)
+        let after = at + (insert as NSString).length
+        editor.setSelectedRange(NSRange(location: after, length: 0))
+        return after
+    }
+
+    func editor(_ editor: EditorTextView, insertImages files: [URL]) {
+        insertImages(files)
+    }
+
+    /// The deck's theme slug from the frontmatter, nil when it names none.
+    var currentThemeSlug: String? {
+        Frontmatter(text: editor.string).entry(at: ["theme"])?.unquotedValue.flatMap { $0.isEmpty ? nil : $0 }
+    }
+
+    /// Told when the frontmatter's theme changes, for the toolbar item and
+    /// the Deck tab's row.
+    var onThemeChanged: ((String?) -> Void)?
+    private var lastThemeSlug: String?
+
+    func refreshThemeIfChanged() {
+        let slug = currentThemeSlug
+        guard slug != lastThemeSlug else { return }
+        lastThemeSlug = slug
+        onThemeChanged?(slug)
+    }
+
+    /// A pick in the theme grid: tap theme set on the saved file. "default"
+    /// is the grid's Default cell, which removes the theme line.
+    func setTheme(_ slug: String) {
+        guard let deck = document?.fileURL else {
+            session.log.append("Change Theme was not run: the deck has no file yet; save it first", source: .app)
+            NSSound.beep()
+            return
+        }
+        runToolOnSavedDeck(["theme", "set", slug, deck.path, "--json"], actionName: "Change Theme")
+    }
+
+    /// Slide > Generate Image: tap image generate on the saved file adds
+    /// the image and its ai-prompt comment to the caret's slide. This run
+    /// and regenerate's are the two that get the Gemini key.
+    func generateImage(prompt: String, aspect: String?, matchTheme: Bool, completion: @escaping (ToolOutcome?) -> Void = { _ in }) {
+        guard let deck = document?.fileURL, let slide = currentSlideNumber else { return completion(nil) }
+        runToolOnSavedDeck(GenerateImageRequest(prompt: prompt, aspect: aspect, matchTheme: matchTheme).arguments(deck: deck, slide: slide),
+                           actionName: "Generate Image", includeGeminiKey: true, showsErrorBar: false, completion: completion)
+    }
+
+    /// The AI images of a slide, from the buffer's text within tap's range
+    /// for that slide, for the Regenerate menu items.
+    func aiImages(onSlide number: Int) -> [AIImageReference] {
+        guard let box = editor.boxes.first(where: { $0.slide.number == number }) else { return [] }
+        return AIImageReference.find(in: editor.string, slideRange: box.range)
+    }
+
+    var aiImagesOnCurrentSlide: [AIImageReference] {
+        currentSlideNumber.map(aiImages(onSlide:)) ?? []
+    }
+
+    /// Opens a file in whatever the person's default is for it (their code
+    /// editor for a .jsx). A test records the URL instead.
+    var openInEditor: (URL) -> Void = { url in NSWorkspace.shared.open(url) }
+
+    /// New Component: tap component new writes the file (never the deck);
+    /// its snippet goes in at the caret as one undo step, and the file
+    /// opens in the default code editor.
+    func createComponent(_ request: NewComponentRequest, completion: @escaping (ToolOutcome?) -> Void) {
+        guard let deck = document?.fileURL else { return completion(nil) }
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            let exit = await TapTool.run(request.arguments(deck: deck), in: deck.deletingLastPathComponent(), log: self.session.log)
+            if case .ok? = exit.outcome, let scaffold = try? exit.outcome?.result(ComponentScaffold.self) {
+                self.insertAtCaret(scaffold.snippet, actionName: "New Component")
+                if let first = scaffold.files.first { self.openInEditor(URL(fileURLWithPath: first)) }
+            }
+            completion(exit.outcome)
+        }
+    }
+
+    /// A Cmd-click on a component's path in the editor: the file, resolved
+    /// against the deck's folder, opens in the default code editor. Only a
+    /// regular file whose real path (every link followed) lies inside the
+    /// deck's folder opens: a link that leads out of it, a folder or a
+    /// bundle named like a component, from a downloaded deck, does not.
+    /// False when the character is not on such a path.
+    func openComponentLink(at characterIndex: Int) -> Bool {
+        let text = editor.string as NSString
+        guard characterIndex < text.length else { return false }
+        let lineRange = text.lineRange(for: NSRange(location: characterIndex, length: 0))
+        let line = text.substring(with: lineRange).trimmingCharacters(in: .newlines)
+        guard let path = ComponentLink.find(in: line, at: characterIndex - lineRange.location), let deck = document?.fileURL else { return false }
+        guard let folder = Self.realPath(deck.deletingLastPathComponent()),
+              let file = Self.realPath(deck.deletingLastPathComponent().appendingPathComponent(path)),
+              file.hasPrefix(folder + "/"),
+              (try? FileManager.default.attributesOfItem(atPath: file)[.type] as? FileAttributeType) == .typeRegular else {
+            session.log.append("\(path) was not opened: it is not a file inside the deck's folder", source: .app)
+            return false
+        }
+        openInEditor(URL(fileURLWithPath: file))
+        return true
+    }
+
+    /// The path with every link followed, nil when nothing is there.
+    static func realPath(_ url: URL) -> String? {
+        guard let resolved = realpath(url.path, nil) else { return nil }
+        defer { free(resolved) }
+        return String(cString: resolved)
+    }
+
+    func editor(_ editor: EditorTextView, openComponentLinkAt characterIndex: Int) -> Bool {
+        openComponentLink(at: characterIndex)
+    }
+
+    /// Regenerate on one of the slide's AI images: tap replaces it in
+    /// place with the comment's prompt and the aspect and theme match the
+    /// comment recorded, and deletes the old file. No flags: what the
+    /// comment holds is tap's to read. `number` is the slide whose menu
+    /// listed the image, which need not be the caret's.
+    func regenerateImage(path: String, onSlide number: Int) {
+        guard let deck = document?.fileURL else { return }
+        runToolOnSavedDeck(["image", "regenerate", deck.path, "--slide", String(number), "--image", path, "--json"], actionName: "Regenerate Image", includeGeminiKey: true)
     }
 
     var editor: EditorTextView { editorViewController.textView }
@@ -318,6 +580,8 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
         deckForm.applyEdit = { [weak self] replacement, actionName in
             self?.editor.replaceText(in: replacement.range, with: replacement.replacement, actionName: actionName)
         }
+        deckForm.currentThemeSlug = { [weak self] in self?.currentThemeSlug }
+        deckForm.setTheme = { [weak self] slug in self?.setTheme(slug) }
         inspectorViewController.embedDeck(deckForm)
         inspectorViewController.onTabChange = { [weak self] tab in
             if tab == .deck { self?.deckForm.refresh() }
@@ -539,7 +803,9 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
         if document.isDocumentEdited {
             showDiskConflict(name: url.lastPathComponent)
         } else {
-            loadDiskVersion()
+            let name = pendingToolActionName ?? "Load Disk Version"
+            pendingToolActionName = nil
+            loadDiskVersion(actionName: name)
         }
     }
 
@@ -554,7 +820,7 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
         hasDiskConflict = true
         editorViewController.showBar(DocumentBarView(
             kind: .changedOnDisk, message: "\(name) changed on disk.", detail: "You have unsaved edits.",
-            buttons: [("Load Disk Version", { [weak self] in self?.loadDiskVersion() }),
+            buttons: [("Load Disk Version", { [weak self] in self?.loadDiskVersion(actionName: self?.pendingToolActionName ?? "Load Disk Version") }),
                       ("Keep Mine", { [weak self] in self?.keepMine() })]))
     }
 
@@ -563,14 +829,30 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
     /// the editor's text is replaced, so the document reads as not edited
     /// the moment the replacement lands, rather than staying edited until
     /// the next autosave.
-    func loadDiskVersion() {
+    func loadDiskVersion(actionName: String = "Load Disk Version") {
+        pendingToolActionName = nil
         clearDiskConflict()
         guard let document, let url = document.fileURL,
               let disk = try? String(contentsOf: url, encoding: .utf8) else { return }
         let slideNumber = editor.currentBoxIndex.map { editor.boxes[$0].slide.number }
         document.adopt(diskText: disk)
         if let replacement = TextDiff.replacement(from: editor.string, to: disk) {
-            editor.replaceText(in: replacement.range, with: replacement.replacement, actionName: "Load Disk Version")
+            // The load is an undo step of its own, closed before this returns.
+            // It arrives from tap dev's report or a tool run's end, a
+            // main-queue turn and not an event, so an automatic group opened
+            // for it closes only when the run loop or a later event ends it,
+            // and a keystroke handled first joins the load: one undo would
+            // take both. With no group open,
+            // the automatic grouping is paused while this group is open, as
+            // a slide operation does; a group already open belongs to
+            // someone else and the load nests inside it.
+            let undoManager = editor.undoManager
+            let pausesAutomaticGrouping = undoManager.map { $0.groupingLevel == 0 && $0.groupsByEvent } ?? false
+            if pausesAutomaticGrouping { undoManager?.groupsByEvent = false }
+            undoManager?.beginUndoGrouping()
+            editor.replaceText(in: replacement.range, with: replacement.replacement, actionName: actionName)
+            undoManager?.endUndoGrouping()
+            if pausesAutomaticGrouping { undoManager?.groupsByEvent = true }
         }
         if let slideNumber {
             // The next send tap answers for this text, whichever generation
@@ -580,10 +862,12 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
         refreshEditedState()
         document.acceptDiskState()
         session.log.append("loaded the disk version", source: .app)
+        refreshThemeIfChanged()
     }
 
     /// Writes the buffer over the changed file.
     func keepMine() {
+        pendingToolActionName = nil
         clearDiskConflict()
         document?.overwriteDisk { [weak self] error in
             if let error { self?.session.log.append("Keep Mine could not save: \(error.localizedDescription)", source: .app) }
@@ -693,6 +977,8 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
             sourceSync.textDidChange()
         }
         refreshEditedState()
+        // Set, not reported: the toolbar item reads currentThemeSlug itself when it is built.
+        lastThemeSlug = currentThemeSlug
     }
 
     /// The buffer is on disk. tap drops the buffer it renders and reads the
@@ -1082,6 +1368,7 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
         refreshEditedState()
         Task { await sourceSync.sendNow() }
         deckForm.refresh()
+        refreshThemeIfChanged()
     }
 
     // MARK: EditorTextViewDelegate
@@ -1090,6 +1377,7 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
         refreshEditedState()
         sourceSync.textDidChange()
         deckForm.refresh()
+        refreshThemeIfChanged()
     }
 
     func editor(_ editor: EditorTextView, payloadForHeaderDragOfBoxAt index: Int) -> SlideDragPayload? {
@@ -1108,7 +1396,7 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
         if !slidePanel.selectedNumbers.contains(number) {
             slidePanel.click(slide: number, extendingSelection: false)
         }
-        let menu = SlideContextMenu.build(for: selectedSlideNumbers, target: windowController, showsTextShortcuts: false)
+        let menu = SlideContextMenu.build(for: selectedSlideNumbers, target: windowController, showsTextShortcuts: false, aiImages: (number, aiImages(onSlide: number)))
         if let fixIt = editor.header(forBoxAt: index).fixIt {
             menu.addItem(.separator())
             let item = NSMenuItem(title: fixIt.title, action: #selector(DeckWindowController.allowDriverInThisDeck(_:)), keyEquivalent: "")
@@ -1153,7 +1441,9 @@ extension DeckSessionController: SlidePanelDelegate {
 
     func slidePanelContextMenu(_ panel: SlidePanelViewController) -> NSMenu? {
         guard let windowController = editor.window?.windowController as? DeckWindowController else { return nil }
-        return SlideContextMenu.build(for: selectedSlideNumbers, target: windowController)
+        let numbers = selectedSlideNumbers
+        let images = numbers.count == 1 ? (numbers[0], aiImages(onSlide: numbers[0])) : nil
+        return SlideContextMenu.build(for: numbers, target: windowController, aiImages: images)
     }
 
     /// The core refuses to delete every slide, with a beep, so a deck

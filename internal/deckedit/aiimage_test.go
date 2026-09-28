@@ -247,7 +247,7 @@ func TestInsertImageIntoSlide_SingleSlide(t *testing.T) {
 
 Some content here`
 
-	result, err := InsertAIImage(content, 0, "A test prompt", "images/generated-abc123.png")
+	result, err := InsertAIImage(content, 0, "A test prompt", "images/generated-abc123.png", "", false)
 	if err != nil {
 		t.Fatalf("insertImageIntoSlide failed: %v", err)
 	}
@@ -296,7 +296,7 @@ Content two
 Content three`
 
 	// Insert into second slide
-	result, err := InsertAIImage(content, 1, "Second slide image", "images/second.png")
+	result, err := InsertAIImage(content, 1, "Second slide image", "images/second.png", "", false)
 	if err != nil {
 		t.Fatalf("insertImageIntoSlide failed: %v", err)
 	}
@@ -354,7 +354,7 @@ Content here
 
 More content`
 
-	result, err := InsertAIImage(content, 0, "First slide prompt", "images/first.png")
+	result, err := InsertAIImage(content, 0, "First slide prompt", "images/first.png", "", false)
 	if err != nil {
 		t.Fatalf("insertImageIntoSlide failed: %v", err)
 	}
@@ -382,7 +382,7 @@ func TestInsertImageIntoSlide_InvalidSlideIndex(t *testing.T) {
 Content`
 
 	// Try to insert into non-existent slide
-	_, err := InsertAIImage(content, 5, "prompt", "images/test.png")
+	_, err := InsertAIImage(content, 5, "prompt", "images/test.png", "", false)
 	if err == nil {
 		t.Error("expected error for invalid slide index")
 	}
@@ -391,7 +391,7 @@ Content`
 	}
 
 	// Try negative index
-	_, err = InsertAIImage(content, -1, "prompt", "images/test.png")
+	_, err = InsertAIImage(content, -1, "prompt", "images/test.png", "", false)
 	if err == nil {
 		t.Error("expected error for negative slide index")
 	}
@@ -414,7 +414,7 @@ More content`
 
 	// Empty slide (index 1 would be empty, but it's skipped)
 	// So slide index 1 should be "Third Slide"
-	result, err := InsertAIImage(content, 1, "Third slide image", "images/third.png")
+	result, err := InsertAIImage(content, 1, "Third slide image", "images/third.png", "", false)
 	if err != nil {
 		t.Fatalf("insertImageIntoSlide failed: %v", err)
 	}
@@ -444,7 +444,7 @@ Some text
 
 More text`
 
-	result, err := InsertAIImage(content, 0, "new prompt", "images/new.png")
+	result, err := InsertAIImage(content, 0, "new prompt", "images/new.png", "", false)
 	if err != nil {
 		t.Fatalf("insertImageIntoSlide failed: %v", err)
 	}
@@ -483,7 +483,7 @@ Content
 
 Final content`
 
-	result, err := InsertAIImage(content, 2, "last prompt", "images/last.png")
+	result, err := InsertAIImage(content, 2, "last prompt", "images/last.png", "", false)
 	if err != nil {
 		t.Fatalf("insertImageIntoSlide failed: %v", err)
 	}
@@ -509,7 +509,7 @@ Content`
 
 	// Prompt with special characters
 	prompt := "A beautiful sunset with \"quotes\" and special chars: <>&"
-	result, err := InsertAIImage(content, 0, prompt, "images/special.png")
+	result, err := InsertAIImage(content, 0, prompt, "images/special.png", "", false)
 	if err != nil {
 		t.Fatalf("insertImageIntoSlide failed: %v", err)
 	}
@@ -666,7 +666,7 @@ Content three`,
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := ReplaceAIImage(tt.content, tt.oldPrompt, tt.oldImagePath, tt.newPrompt, tt.newImagePath)
+			result, err := ReplaceAIImage(tt.content, AIImage{Prompt: tt.oldPrompt, ImagePath: tt.oldImagePath}, tt.newPrompt, tt.newImagePath, "", false)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("ReplaceAIImage() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -675,5 +675,55 @@ Content three`,
 				t.Errorf("ReplaceAIImage() got:\n%s\n\nwant:\n%s", result, tt.expected)
 			}
 		})
+	}
+}
+
+func TestAIPromptChoicesAreExactTokens(t *testing.T) {
+	tests := []struct {
+		comment    string
+		prompt     string
+		aspect     string
+		matchTheme bool
+	}{
+		{"compare the two | aspect: wide", "compare the two | aspect: wide", "", false},
+		{"a fox | aspect: 16:9", "a fox", "16:9", false},
+		{"a fox | aspect: 2:1", "a fox | aspect: 2:1", "", false},
+		{"a fox | match-theme please", "a fox | match-theme please", "", false},
+		{"a fox | aspect: 1:1 | match-theme", "a fox", "1:1", true},
+		{"a fox | match-theme | aspect: 1:1", "a fox", "1:1", true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.comment, func(t *testing.T) {
+			images := ParseAIImages("<!-- ai-prompt: " + tt.comment + " -->\n![](images/a.png)")
+			if len(images) != 1 {
+				t.Fatalf("parsed %d images", len(images))
+			}
+			got := images[0]
+			if got.Prompt != tt.prompt || got.Aspect != tt.aspect || got.MatchTheme != tt.matchTheme {
+				t.Errorf("parsed (%q, %q, %v), want (%q, %q, %v)", got.Prompt, got.Aspect, got.MatchTheme, tt.prompt, tt.aspect, tt.matchTheme)
+			}
+		})
+	}
+	if !PromptReadsAsChoices("a sign | match-theme") || !PromptReadsAsChoices("a fox | aspect: 4:3") || PromptReadsAsChoices("compare the two | aspect: wide") {
+		t.Error("PromptReadsAsChoices reads only exact choices")
+	}
+}
+
+// A comment edited by hand (choices reordered, spacing of its own) is
+// still found for a replace: the match is on the text the deck has.
+func TestReplaceAIImageFindsAHandEditedComment(t *testing.T) {
+	for _, comment := range []string{
+		"<!-- ai-prompt: a fox | match-theme | aspect: 1:1 -->",
+		"<!--ai-prompt:a fox | match-theme-->",
+	} {
+		content := "# Slide\n\n" + comment + "\n![](images/old.png)\n"
+		old := ParseAIImages(content)[0]
+		got, err := ReplaceAIImage(content, old, "a fox", "images/new.png", "1:1", true)
+		if err != nil {
+			t.Fatalf("%s: %v", comment, err)
+		}
+		if want := "# Slide\n\n<!-- ai-prompt: a fox | aspect: 1:1 | match-theme -->\n![](images/new.png)\n"; got != want {
+			t.Errorf("%s: got %q, want %q", comment, got, want)
+		}
 	}
 }
