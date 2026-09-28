@@ -37,6 +37,17 @@ final class CommandLineSettingsTests: HostedTestCase {
         return pane
     }
 
+    /// How many sheets the Settings window began while `action` ran.
+    /// NSWindow posts willBeginSheet from inside beginSheet, so a count
+    /// taken right after a synchronous action is final.
+    func sheetsBegun(during action: () -> Void) -> Int {
+        var count = 0
+        let observer = NotificationCenter.default.addObserver(forName: NSWindow.willBeginSheetNotification, object: settings.window, queue: nil) { _ in count += 1 }
+        action()
+        NotificationCenter.default.removeObserver(observer)
+        return count
+    }
+
     func confirmSheet() async throws -> InstallConfirmSheet {
         try await waitUntil(timeout: 5, "the InstallConfirm sheet") { self.settings.window?.attachedSheet is InstallConfirmSheet }
         return try XCTUnwrap(settings.window?.attachedSheet as? InstallConfirmSheet)
@@ -86,11 +97,20 @@ final class CommandLineSettingsTests: HostedTestCase {
         XCTAssertEqual(pane.installHint.stringValue, "\(shownLinkDirectory)/tap is a tap that Tap did not install. Tap never replaces or deletes it.")
         XCTAssertEqual(pane.otherLabel.stringValue, "tap (unknown version)", "the foreign file is the tap on PATH now")
         XCTAssertEqual(pane.otherNoteLabel.stringValue, "Tap did not install it. Tap never replaces or deletes it.")
-        pane.installButton.performClick(nil)
-        try await Task.sleep(nanoseconds: 300_000_000)
-        XCTAssertNil(settings.window?.attachedSheet, "no sheet for a refused install")
+        XCTAssertEqual(sheetsBegun { pane.installButton.performClick(nil); pane.installPressed(pane.installButton) }, 0, "no sheet for a refused install, clicked or sent")
+        XCTAssertNil(settings.window?.attachedSheet)
         XCTAssertThrowsError(try AppEnvironment.shared.commandLineInstaller.install())
         XCTAssertEqual(try String(contentsOf: linkDirectory.appendingPathComponent("tap"), encoding: .utf8), "#!/bin/sh\necho someone else's\n", "untouched")
+
+        // Not on PATH: nothing is in the way, but the state is not ready, so Install does nothing.
+        try FileManager.default.removeItem(at: linkDirectory.appendingPathComponent("tap"))
+        AppEnvironment.shared.extraEnvironment["PATH"] = "\(pathDirectory.path):/usr/bin:/bin"
+        await pane.refresh()
+        XCTAssertEqual(pane.installState, .notOnPath)
+        XCTAssertFalse(pane.installButton.isEnabled)
+        XCTAssertEqual(sheetsBegun { pane.installButton.performClick(nil); pane.installPressed(pane.installButton) }, 0, "no sheet where the state is not ready")
+        XCTAssertNil(settings.window?.attachedSheet)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: linkDirectory.appendingPathComponent("tap").path), "no link")
     }
 
     func testAnotherTapIsAlreadyInstalled() async throws {
