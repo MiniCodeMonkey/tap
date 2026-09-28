@@ -132,6 +132,9 @@ extension PreviewRecoveryTests {
         let controller = try XCTUnwrap(document.sessionController)
         let preview = controller.previewViewController
         let recoveriesWhileOpening = preview.pageRecoveryCount
+        // The window limit stays out of reach, so only the in-a-row limit
+        // can stop the preview here.
+        preview.maximumRecoveriesInWindow = recoveriesWhileOpening + 3
         let tap = try XCTUnwrap(controller.session.processIdentifier)
         preview.loadWatchdogInterval = 1
         preview.pageAnswers = { _, _ in false }
@@ -142,6 +145,7 @@ extension PreviewRecoveryTests {
         preview.reload()
 
         try await waitUntil(timeout: 20, "the preview to give up (recoveries \(preview.pageRecoveryCount))") { preview.hasGivenUp }
+        XCTAssertTrue(controller.session.log.text.contains("new web views in a row"), "the preview gave up on the in-a-row limit")
         XCTAssertEqual(preview.pageRecoveryCount - recoveriesWhileOpening, 2)
         XCTAssertEqual(preview.overlay.titleLabel.stringValue, "The preview stopped")
         XCTAssertFalse(preview.overlay.isHidden)
