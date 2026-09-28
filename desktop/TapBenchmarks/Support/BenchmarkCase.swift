@@ -144,8 +144,9 @@ class BenchmarkCase: XCTestCase {
     /// Double's full binary value, so rounding the Double first changes
     /// nothing it prints; this writes each Double as fixed 2-decimal text
     /// instead. The results are flat maps and maps of maps of numbers, so
-    /// numbers, strings and dictionaries are all it needs. A number JSON
-    /// cannot hold (NaN, infinity) is written as null.
+    /// numbers, strings and dictionaries are all it needs; any other type
+    /// stops a debug build. A number JSON cannot hold (NaN, infinity) is
+    /// written as null.
     static func json(_ value: Any) -> String {
         switch value {
         case let dictionary as [String: Any]:
@@ -159,6 +160,7 @@ class BenchmarkCase: XCTestCase {
             let data = (try? JSONSerialization.data(withJSONObject: [text])) ?? Data("[\"\"]".utf8)
             return String(String(decoding: data, as: UTF8.self).dropFirst().dropLast())
         default:
+            assertionFailure("benchmark results hold numbers, strings and dictionaries, not \(type(of: value))")
             return "null"
         }
     }
