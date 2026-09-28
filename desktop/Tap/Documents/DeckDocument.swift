@@ -226,11 +226,59 @@ final class DeckDocument: NSDocument {
     // completionHandler:)` below also refuses an in-place autosave at write
     // time, for an autosave that starts with no conflict showing and reaches
     // the file after one has come back.
+    //
+    // tap tells its own save apart from a change made elsewhere by the text:
+    // a deck file holding text the app sent it is the app's, and one holding
+    // anything else reloads every open page. The periodic autosave can land
+    // in the moment between a keystroke and the PUT that carries it. So a
+    // periodic autosave that finds text tap has not taken yet does not
+    // write: it starts the send (`SourceSync.flush`), reports itself
+    // cancelled at once, and asks for a new autosave once the send is done.
+    // It never waits inside the autosave: NSDocument holds the document's
+    // activity open until the completion handler runs, and a save, close
+    // or quit that starts meanwhile blocks the main thread waiting for that
+    // activity, which the send would then need to finish. A close or quit's
+    // own autosave writes at once.
     override func autosave(withImplicitCancellability autosavingIsImplicitlyCancellable: Bool,
                            completionHandler: @escaping (Error?) -> Void) {
         if sessionController?.hasDiskConflict == true { return completionHandler(CocoaError(.userCancelled)) }
-        super.autosave(withImplicitCancellability: autosavingIsImplicitlyCancellable, completionHandler: completionHandler)
+        guard autosavingIsImplicitlyCancellable, let sessionController, let sourceSync = sessionController.sourceSync else {
+            return super.autosave(withImplicitCancellability: autosavingIsImplicitlyCancellable, completionHandler: completionHandler)
+        }
+        // A Deck tab field's text goes into the editor before the flush, so
+        // tap is handed what the save writes.
+        sessionController.deckForm.commitEditingKeepingFocus()
+        let writesWithoutHandingOff = writesNextAutosaveAsIs
+        writesNextAutosaveAsIs = false
+        guard sourceSync.hasUnsentText, !writesWithoutHandingOff else {
+            return super.autosave(withImplicitCancellability: true, completionHandler: completionHandler)
+        }
+        completionHandler(CocoaError(.userCancelled))
+        guard !isHandingTextToTap else { return }
+        isHandingTextToTap = true
+        Task { @MainActor [weak self] in
+            await sourceSync.flush(timeout: Self.flushTimeout)
+            guard let self else { return }
+            self.isHandingTextToTap = false
+            // A tap that did not answer in time, or text typed while the
+            // send ran, does not hold the save back a second time.
+            self.writesNextAutosaveAsIs = sourceSync.hasUnsentText
+            self.scheduleAutosaving()
+        }
     }
+
+    /// How long a send started for the periodic autosave may take before
+    /// the autosave is asked for again anyway.
+    static let flushTimeout: TimeInterval = 2
+
+    /// True while a send started for the periodic autosave is running.
+    /// A cancelled periodic autosave is not retried on its own, so the send
+    /// asks for a new one when it is done.
+    private var isHandingTextToTap = false
+    /// Set when that send ended with text tap still has not answered for:
+    /// the next periodic autosave writes without handing off again, so a
+    /// tap that stopped answering never keeps the deck from being saved.
+    private var writesNextAutosaveAsIs = false
 
     // Reads the edited state straight from content on every call, rather
     // than from whatever AppKit's own bookkeeping last landed on, so it can

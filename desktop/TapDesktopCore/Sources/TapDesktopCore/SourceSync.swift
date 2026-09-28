@@ -69,6 +69,29 @@ public final class SourceSync {
         Task { @MainActor in await self.sendNow() }
     }
 
+    /// True while tap is running and the text as it stands is still
+    /// waiting on it: an edit waits for its pause, or a PUT is in flight.
+    /// False once the text was sent and answered, or the send failed.
+    public var hasUnsentText: Bool {
+        sender != nil && (inFlight || text() != lastSentText)
+    }
+
+    /// Sends the text now, unless tap already has it, and returns once tap
+    /// has answered for the text as it stands, or the send failed, or
+    /// `timeout` passed, whichever comes first. tap records a buffer the
+    /// moment its PUT arrives, so after this a file write of the same text
+    /// is one tap knows the app sent. Text typed while this waits goes out
+    /// too, within the same timeout.
+    public func flush(timeout: TimeInterval) async {
+        let deadline = Date().addingTimeInterval(timeout)
+        while hasUnsentText, Date() < deadline {
+            if !inFlight {
+                Task { await self.sendNow() }
+            }
+            try? await Task.sleep(nanoseconds: 10_000_000)
+        }
+    }
+
     public func sendNow() async {
         pause?.cancel()
         pause = nil

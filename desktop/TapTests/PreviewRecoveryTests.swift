@@ -9,13 +9,15 @@ import WebKit
 /// key). The seams are the load watchdog's interval, shortened so a test
 /// does not wait the real ten seconds, the recovery limit per time
 /// window, and the page answer check, which one test replaces to stand
-/// for a process that does not answer.
+/// for a process that does not answer. The deck's first load can itself
+/// need a recovery on a busy runner, which `openDeckAndWaitForPreview`
+/// allows, so each test counts recoveries from the moment the deck is open.
 final class PreviewRecoveryTests: HostedTestCase {
     func testAPreviewWhoseWebProcessEndsComesBackInANewWebView() async throws {
         let document = try await openDeckAndWaitForPreview(try Fixtures.copyAppFixture())
         let controller = try XCTUnwrap(document.sessionController)
         let preview = controller.previewViewController
-        XCTAssertEqual(preview.pageRecoveryCount, 0)
+        let recoveriesWhileOpening = preview.pageRecoveryCount
         let stuck = preview.webView
         let process = try XCTUnwrap(stuck.contentProcessIdentifier, "the preview's content process identifier")
 
@@ -25,7 +27,7 @@ final class PreviewRecoveryTests: HostedTestCase {
         XCTAssertNil(stuck.superview, "the old web view is gone from the preview")
         XCTAssertTrue(preview.webView.superview === preview.pageContainer, "the new web view is where the old one was")
         try await waitUntil(timeout: 20, "the page to report ready again. \(self.appSideDiagnostics(preview))") { preview.lastReady != nil }
-        XCTAssertEqual(preview.pageRecoveryCount, 1)
+        XCTAssertEqual(preview.pageRecoveryCount - recoveriesWhileOpening, 1)
         XCTAssertNotEqual(preview.webView.contentProcessIdentifier, process)
         XCTAssertTrue(preview.overlay.isHidden, "the restarting notice goes once the page is back")
         XCTAssertTrue(controller.session.log.text.contains("web content process ended"), "the recovery is in the Tap Log")
@@ -37,6 +39,7 @@ final class PreviewRecoveryTests: HostedTestCase {
         let document = try await openDeckAndWaitForPreview(try Fixtures.copyAppFixture())
         let controller = try XCTUnwrap(document.sessionController)
         let preview = controller.previewViewController
+        let recoveriesWhileOpening = preview.pageRecoveryCount
         preview.loadWatchdogInterval = 2
         let stuck = preview.webView
         let process = try XCTUnwrap(stuck.contentProcessIdentifier, "the preview's content process identifier")
@@ -58,7 +61,7 @@ final class PreviewRecoveryTests: HostedTestCase {
         XCTAssertNil(stuck.superview, "the old web view is gone from the preview")
         XCTAssertEqual(noticesShown, ["Restarting preview."], "the preview says it is restarting while the new page loads")
         try await waitUntil(timeout: 20, "the page to report ready again. \(self.appSideDiagnostics(preview))") { preview.lastReady != nil }
-        XCTAssertEqual(preview.pageRecoveryCount, 1)
+        XCTAssertEqual(preview.pageRecoveryCount - recoveriesWhileOpening, 1)
         XCTAssertTrue(preview.overlay.isHidden, "the restarting notice goes once the page is back")
         XCTAssertTrue(preview.navigationMilestoneDescription.contains("finish"), preview.navigationMilestoneDescription)
         XCTAssertTrue(controller.session.log.text.contains("did not finish loading"), "the recovery is in the Tap Log")
@@ -69,6 +72,7 @@ final class PreviewRecoveryTests: HostedTestCase {
         let document = try await openDeckAndWaitForPreview(try Fixtures.copyAppFixture())
         let controller = try XCTUnwrap(document.sessionController)
         let preview = controller.previewViewController
+        let recoveriesWhileOpening = preview.pageRecoveryCount
         // The watchdog fires again and again while the load runs, so the
         // page answering is what keeps its web view, not the load finishing
         // first.
@@ -78,7 +82,7 @@ final class PreviewRecoveryTests: HostedTestCase {
         try await waitUntil(timeout: 20, "the reloaded page to report ready") { preview.lastReady != nil }
         try await Task.sleep(nanoseconds: 3_000_000_000)
         XCTAssertTrue(preview.webView === webView)
-        XCTAssertEqual(preview.pageRecoveryCount, 0)
+        XCTAssertEqual(preview.pageRecoveryCount - recoveriesWhileOpening, 0)
     }
 }
 
@@ -91,6 +95,7 @@ extension PreviewRecoveryTests {
         let document = try await openDeckAndWaitForPreview(try Fixtures.copyAppFixture())
         let controller = try XCTUnwrap(document.sessionController)
         let preview = controller.previewViewController
+        let recoveriesWhileOpening = preview.pageRecoveryCount
         let client = try XCTUnwrap(controller.client)
         let firstTap = try XCTUnwrap(controller.session.processIdentifier)
         preview.loadWatchdogInterval = 2
@@ -112,7 +117,7 @@ extension PreviewRecoveryTests {
             controller.session.processIdentifier.map { $0 != firstTap } ?? false
         }
         try await waitUntil(timeout: 30, "the page to report ready again. \(self.appSideDiagnostics(preview))") { preview.lastReady != nil }
-        XCTAssertEqual(preview.pageRecoveryCount, 1)
+        XCTAssertEqual(preview.pageRecoveryCount - recoveriesWhileOpening, 1)
         XCTAssertTrue(preview.webView !== stuck, "the page came back in a new web view")
         XCTAssertTrue(controller.session.log.text.contains("restarting tap"), "tap restarted for a new launch code")
         XCTAssertGreaterThanOrEqual(noticeAtEachState.count, 3, "stopped, starting and running")
@@ -126,6 +131,10 @@ extension PreviewRecoveryTests {
         let document = try await openDeckAndWaitForPreview(try Fixtures.copyAppFixture())
         let controller = try XCTUnwrap(document.sessionController)
         let preview = controller.previewViewController
+        let recoveriesWhileOpening = preview.pageRecoveryCount
+        // The window limit stays out of reach, so only the in-a-row limit
+        // can stop the preview here.
+        preview.maximumRecoveriesInWindow = recoveriesWhileOpening + 3
         let tap = try XCTUnwrap(controller.session.processIdentifier)
         preview.loadWatchdogInterval = 1
         preview.pageAnswers = { _, _ in false }
@@ -136,14 +145,15 @@ extension PreviewRecoveryTests {
         preview.reload()
 
         try await waitUntil(timeout: 20, "the preview to give up (recoveries \(preview.pageRecoveryCount))") { preview.hasGivenUp }
-        XCTAssertEqual(preview.pageRecoveryCount, 2)
+        XCTAssertTrue(controller.session.log.text.contains("new web views in a row"), "the preview gave up on the in-a-row limit")
+        XCTAssertEqual(preview.pageRecoveryCount - recoveriesWhileOpening, 2)
         XCTAssertEqual(preview.overlay.titleLabel.stringValue, "The preview stopped")
         XCTAssertFalse(preview.overlay.isHidden)
         XCTAssertFalse(preview.overlay.tryAgainButton.isHidden, "Try Again is offered")
         let last = preview.webView
         try await Task.sleep(nanoseconds: 3_000_000_000)
         XCTAssertTrue(preview.webView === last, "no third web view")
-        XCTAssertEqual(preview.pageRecoveryCount, 2)
+        XCTAssertEqual(preview.pageRecoveryCount - recoveriesWhileOpening, 2)
     }
 
     /// A page whose process ends after every load is started again only
@@ -153,7 +163,9 @@ extension PreviewRecoveryTests {
         let document = try await openDeckAndWaitForPreview(try Fixtures.copyAppFixture())
         let controller = try XCTUnwrap(document.sessionController)
         let preview = controller.previewViewController
-        preview.maximumRecoveriesInWindow = 2
+        let recoveriesWhileOpening = preview.pageRecoveryCount
+        // A recovery while the deck opened is still inside the window.
+        preview.maximumRecoveriesInWindow = recoveriesWhileOpening + 2
         for round in 1...2 {
             let ended = preview.webView
             let process = try XCTUnwrap(ended.contentProcessIdentifier, "round \(round): the content process identifier")
@@ -161,7 +173,7 @@ extension PreviewRecoveryTests {
             try await waitUntil(timeout: 10, "round \(round): a new web view") { preview.webView !== ended }
             try await waitUntil(timeout: 20, "round \(round): the page ready again") { preview.lastReady != nil }
         }
-        XCTAssertEqual(preview.pageRecoveryCount, 2)
+        XCTAssertEqual(preview.pageRecoveryCount - recoveriesWhileOpening, 2)
         let last = preview.webView
         let process = try XCTUnwrap(last.contentProcessIdentifier)
 
@@ -169,7 +181,7 @@ extension PreviewRecoveryTests {
 
         try await waitUntil(timeout: 10, "the preview to give up") { preview.hasGivenUp }
         XCTAssertTrue(preview.webView === last, "no third recovery")
-        XCTAssertEqual(preview.pageRecoveryCount, 2)
+        XCTAssertEqual(preview.pageRecoveryCount - recoveriesWhileOpening, 2)
         XCTAssertEqual(preview.overlay.titleLabel.stringValue, "The preview stopped")
         XCTAssertFalse(preview.overlay.tryAgainButton.isHidden, "Try Again is offered")
     }
@@ -182,6 +194,7 @@ extension PreviewRecoveryTests {
         let document = try await openDeckAndWaitForPreview(try Fixtures.copyAppFixture())
         let controller = try XCTUnwrap(document.sessionController)
         let preview = controller.previewViewController
+        let recoveriesWhileOpening = preview.pageRecoveryCount
         let tap = try XCTUnwrap(controller.session.processIdentifier)
         let webView = preview.webView
         preview.loadWatchdogInterval = 0.3
@@ -197,14 +210,14 @@ extension PreviewRecoveryTests {
         }
         XCTAssertTrue(preview.webView.isLoading, "the load is still in flight: \(preview.navigationMilestoneDescription)")
         XCTAssertTrue(preview.webView === webView, "a page that answers keeps its web view")
-        XCTAssertEqual(preview.pageRecoveryCount, 0)
+        XCTAssertEqual(preview.pageRecoveryCount - recoveriesWhileOpening, 0)
         kill(tap, SIGCONT)
         resumed = true
 
         try await waitUntil(timeout: 20, "the load to finish and the page to report ready") { preview.lastReady != nil }
         XCTAssertTrue(preview.navigationMilestoneDescription.contains("finish"), preview.navigationMilestoneDescription)
         XCTAssertTrue(preview.webView === webView)
-        XCTAssertEqual(preview.pageRecoveryCount, 0)
+        XCTAssertEqual(preview.pageRecoveryCount - recoveriesWhileOpening, 0)
         XCTAssertTrue(preview.overlay.isHidden)
     }
 
