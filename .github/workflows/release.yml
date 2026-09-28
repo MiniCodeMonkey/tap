@@ -281,6 +281,22 @@ jobs:
             echo "release.sh wrote no summary; the build or an earlier step failed." >> "$GITHUB_STEP_SUMMARY"
           fi
 
+      # As the dry run does: a failed job keeps the build logs, the summary
+      # and the state. The paths name no secret-bearing file: the build step
+      # has no secret in its environment, the summary and the state hold
+      # plain words, and the signing keychain and release.sh's own logs lie
+      # outside these paths (the logs are removed on exit).
+      - name: Upload build logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: desktop-release-logs
+          path: |
+            desktop/build/DerivedData/Logs
+            desktop/build/release/release-summary.md
+            desktop/build/release/release-state.env
+          retention-days: 7
+
       # What the state allows, in an order where a feed never names a file
       # that is not up yet: the DMG and its checksum, then the notes, then
       # the feed. A DMG that was not notarized never reaches the release; the
