@@ -20,12 +20,28 @@ mkdir -p "$(dirname "$keychain")"
 keychain="$(cd "$(dirname "$keychain")" && pwd -P)/$(basename "$keychain")"
 command="${1:-}"
 
+# The user search list, one path per line and each kept whole (a path may
+# hold spaces): security prints every entry indented and in double quotes.
+search_list() {
+	security list-keychains -d user | sed -e 's/^[[:space:]]*"//' -e 's/"[[:space:]]*$//'
+}
+
+# Sets the user search list to the arguments followed by every current
+# entry but ours, in their order, each passed as one argument.
+set_search_list() {
+	current=$(search_list)
+	while IFS= read -r entry; do
+		if [ -n "$entry" ] && [ "$entry" != "$keychain" ]; then set -- "$@" "$entry"; fi
+	done <<LIST
+$current
+LIST
+	security list-keychains -d user -s "$@"
+}
+
 remove_keychain() {
 	# The search list without ours; untouched when ours is not in it.
-	if security list-keychains -d user | grep -Fq "$keychain"; then
-		remaining=$(security list-keychains -d user | tr -d '" ' | grep -Fv "$keychain" || true)
-		# shellcheck disable=SC2086
-		security list-keychains -d user -s $remaining
+	if search_list | grep -Fxq "$keychain"; then
+		set_search_list
 	fi
 	if [ -f "$keychain" ]; then
 		security delete-keychain "$keychain" >/dev/null 2>&1 || rm -f "$keychain"
@@ -58,9 +74,8 @@ case "$command" in
 			exit 1
 		fi
 		security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$keychain_password" "$keychain" >/dev/null
-		existing=$(security list-keychains -d user | tr -d '" ')
-		# shellcheck disable=SC2086
-		security list-keychains -d user -s "$keychain" $existing
+		# Ours first, once (create-keychain may have added it already).
+		set_search_list "$keychain"
 		identity=$(security find-identity -v -p codesigning "$keychain" | sed -n 's/.*"\(Developer ID Application: [^"]*\)".*/\1/p' | head -n 1)
 		if [ -z "$identity" ]; then
 			echo "signing-identity.sh: no Developer ID Application identity in the certificate" >&2
