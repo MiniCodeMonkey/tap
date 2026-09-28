@@ -176,9 +176,9 @@ the notes and of the feed itself, which the app requires
 (`SURequireSignedFeed`). A talk is never interrupted: `UpdateController`
 refuses a check, drops a found update and postpones a relaunch while a talk
 runs (`AppEnvironment.updatesMayInterrupt`), the postponed relaunch runs
-once the last talk's windows are down, and Play is refused, with the
-talk-not-started bar, while an update Sparkle already started is in
-progress. The updater never starts under tests or in a `0.0.0` build.
+once the last talk's windows are down, and Play waits, with the
+talk-not-started bar, only while Sparkle has an update window or its
+permission prompt up; a silent check or download never holds it back. The updater never starts under tests or in a `0.0.0` build.
 
 The secrets the release job reads, all optional, each skipping its step
 when absent, set with `gh secret set` so no secret lands on disk or in the
