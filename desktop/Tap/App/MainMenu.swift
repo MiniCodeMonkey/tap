@@ -29,7 +29,7 @@ enum MainMenu {
         let menu = NSMenu(title: "Tap")
         menu.addItem(item("About Tap", action: #selector(AppDelegate.showAbout(_:))))
         menu.addItem(.separator())
-        menu.addItem(item("Check for Updates…", action: nil))
+        menu.addItem(item("Check for Updates…", action: #selector(AppDelegate.checkForUpdates(_:))))
         menu.addItem(item("Settings…", action: #selector(AppDelegate.showSettings(_:)), key: ","))
         menu.addItem(item("Install Command Line Tool…", action: #selector(AppDelegate.installCommandLineTool(_:))))
         menu.addItem(.separator())

@@ -20,6 +20,14 @@ settings:
   configs:
     Benchmark:
       ENABLE_TESTABILITY: YES
+    Release:
+      # Notarization needs the hardened runtime. Debug and Benchmark keep it
+      # off: a hardened test host refuses the injected test bundles.
+      ENABLE_HARDENED_RUNTIME: YES
+      # Apple silicon only: the bundled tap follows ARCHS in build-tap.sh,
+      # and the cask and the appcast say so.
+      ARCHS: arm64
+      ONLY_ACTIVE_ARCH: NO
 configs:
   Debug: debug
   Release: release
@@ -27,6 +35,9 @@ configs:
 packages:
   TapDesktopCore:
     path: TapDesktopCore
+  Sparkle:
+    url: https://github.com/sparkle-project/Sparkle
+    exactVersion: 2.10.0
 targets:
   Tap:
     type: application
@@ -37,6 +48,7 @@ targets:
           - Info.plist
     dependencies:
       - package: TapDesktopCore
+      - package: Sparkle
     info:
       path: Tap/Info.plist
       properties:
@@ -48,6 +60,16 @@ targets:
         NSPrincipalClass: NSApplication
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true
+        NSMicrophoneUsageDescription: Tap records your voice with the screen when you record a talk.
+        # Sparkle: the feed is the latest GitHub release's appcast, the key
+        # checks every update's, the notes' and the feed's own EdDSA
+        # signature, and the feed must carry one (which needs the update
+        # verified before extraction). The private key never leaves the
+        # person's keychain and CI's secret.
+        SUFeedURL: https://github.com/MiniCodeMonkey/tap/releases/latest/download/appcast.xml
+        SUPublicEDKey: Pc0PbtYL9fkyK3XnqULlpKLlH94TE4OWx4Q3n74EftU=
+        SURequireSignedFeed: true
+        SUVerifyUpdateBeforeExtraction: true
         CFBundleDocumentTypes:
           - CFBundleTypeName: Markdown Deck
             CFBundleTypeRole: Editor
@@ -68,6 +90,7 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: io.geocod.tap.desktop
         PRODUCT_NAME: Tap
+        CODE_SIGN_ENTITLEMENTS: Tap/Tap.entitlements
     postCompileScripts:
       - name: Bundle tap
         path: scripts/build-tap.sh

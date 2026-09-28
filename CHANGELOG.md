@@ -26,6 +26,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - **`--allow-code`** on `tap dev` and `tap present` - Runs live code for that run without an approval, and saves none. Without a terminal, or with `--headless`, tap never asks, and an unapproved deck's live code stays off.
 - **`--app` mode for `tap dev` and `tap present`** - The interface the Tap desktop app runs tap through. tap listens on 127.0.0.1 behind a per-launch token, prints JSON events on standard output, takes commands and answers on standard input, and exits when standard input closes. The live code approval, the recording question and "Keep this recording?" arrive as events instead of terminal prompts. `PUT /api/app/source` renders an unsaved buffer and answers with the slide list. See App mode in the CLI reference.
 - **`tap present --presenter-password`** - Protect the presenter view during a talk, for a phone remote over the tunnel (`u`).
+- **Tap Desktop ships as a macOS app for Apple silicon** - A signed and notarized `Tap-<version>.dmg` on every release, `brew install --cask MiniCodeMonkey/tap/tap-desktop`, and updates through Sparkle from Tap > Check for Updates… An update never interrupts a talk: no check runs and no restart happens while you present, a postponed restart waits for the talk's windows to close, and Play waits for an update that is already installing.
 
 ### Security
 

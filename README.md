@@ -85,6 +85,16 @@ Expand-Archive tap_windows_amd64.zip -DestinationPath C:\tap
 brew install MiniCodeMonkey/tap/tap
 ```
 
+### Tap Desktop (Apple silicon, macOS 14 or later)
+
+The native app, with tap built in:
+
+```bash
+brew install --cask MiniCodeMonkey/tap/tap-desktop
+```
+
+Or download `Tap-<version>.dmg` from the [releases page](https://github.com/MiniCodeMonkey/tap/releases). The app updates itself through Tap > Check for Updates…
+
 ## Basic Usage
 
 ### Create a New Presentation

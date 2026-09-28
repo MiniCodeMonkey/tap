@@ -1,15 +1,20 @@
 import AppKit
 
 /// General: the editor's font size and line spacing, the theme New Deck
-/// preselects, and the autosave delay, in GeneralSettings. Each group
-/// ("Editor", "New decks", "Saving") is a heading over a FormCard, the
-/// Deck tab's own card: its rows are pinned by constraints, not held in
-/// an NSBox's contentView, so a card is exactly as tall as its rows.
+/// preselects, the autosave delay, and Sparkle's automatic checks, in
+/// GeneralSettings. Each group ("Editor", "New decks", "Saving", "Updates")
+/// is a heading over a FormCard, the Deck tab's own card: its rows are
+/// pinned by constraints, not held in an NSBox's contentView, so a card is
+/// exactly as tall as its rows.
 final class GeneralSettingsViewController: NSViewController {
     let fontSizePopup = NSPopUpButton(frame: .zero, pullsDown: false)
     let lineSpacingControl = NSSegmentedControl(labels: ["Tight", "Normal", "Roomy"], trackingMode: .selectOne, target: nil, action: nil)
     let defaultThemePopup = NSPopUpButton(frame: .zero, pullsDown: false)
     let autosavePopup = NSPopUpButton(frame: .zero, pullsDown: false)
+    /// Self-labeled, with no row label or hint: Sparkle's own permission
+    /// prompt already explains it once, and this is only where the answer
+    /// is changed later.
+    let automaticUpdatesCheckbox = NSButton(checkboxWithTitle: "Check for updates automatically", target: nil, action: nil)
     static let noDefaultTheme = "tap's default"
     private var catalogObserver: NSObjectProtocol?
 
@@ -43,6 +48,9 @@ final class GeneralSettingsViewController: NSViewController {
         autosavePopup.target = self
         autosavePopup.action = #selector(changed(_:))
         autosavePopup.setAccessibilityIdentifier("settings-autosave")
+        automaticUpdatesCheckbox.target = self
+        automaticUpdatesCheckbox.action = #selector(changed(_:))
+        automaticUpdatesCheckbox.setAccessibilityIdentifier("settings-automatic-updates")
 
         let editorCard = FormCard(rows: [
             Self.row(label: "Font size", control: fontSizePopup),
@@ -54,9 +62,13 @@ final class GeneralSettingsViewController: NSViewController {
         let savingCard = FormCard(rows: [
             Self.row(label: "Autosave after typing stops", control: autosavePopup),
         ])
+        let updatesCard = FormCard(rows: [
+            FormCard.row(leading: [automaticUpdatesCheckbox], trailing: []),
+        ])
         editorCard.setAccessibilityIdentifier("settings-card-Editor")
         decksCard.setAccessibilityIdentifier("settings-card-New decks")
         savingCard.setAccessibilityIdentifier("settings-card-Saving")
+        updatesCard.setAccessibilityIdentifier("settings-card-Updates")
 
         // A section per group, in order; another card is one more entry
         // in this array.
@@ -64,6 +76,7 @@ final class GeneralSettingsViewController: NSViewController {
             FormCard.section(title: "Editor", content: [editorCard]),
             FormCard.section(title: "New decks", content: [decksCard]),
             FormCard.section(title: "Saving", content: [savingCard]),
+            FormCard.section(title: "Updates", content: [updatesCard]),
         ]
         let stack = NSStackView(views: sections)
         stack.orientation = .vertical
@@ -120,7 +133,11 @@ final class GeneralSettingsViewController: NSViewController {
         refresh()
     }
 
-    /// The controls from the settings.
+    /// The controls from the settings. `automaticUpdatesCheckbox` follows
+    /// `UpdateController.automaticChecks`; with no app delegate to ask
+    /// (never the case in the running app, but never assumed here either)
+    /// it shows off, the sane default before anyone has answered Sparkle's
+    /// own permission prompt.
     func refresh() {
         let settings = AppEnvironment.shared.generalSettings
         fontSizePopup.selectItem(withTitle: "\(Int(settings.fontSize)) pt")
@@ -131,6 +148,7 @@ final class GeneralSettingsViewController: NSViewController {
         } else {
             defaultThemePopup.selectItem(at: 0)
         }
+        automaticUpdatesCheckbox.state = (NSApp.delegate as? AppDelegate)?.updateController?.automaticChecks == true ? .on : .off
     }
 
     @objc func changed(_ sender: Any?) {
@@ -144,6 +162,8 @@ final class GeneralSettingsViewController: NSViewController {
             settings.defaultTheme = popup.selectedItem?.representedObject as? String
         case let popup as NSPopUpButton where popup === autosavePopup:
             settings.autosaveDelay = GeneralSettings.autosaveDelays[max(0, popup.indexOfSelectedItem)]
+        case let button as NSButton where button === automaticUpdatesCheckbox:
+            (NSApp.delegate as? AppDelegate)?.updateController?.automaticChecks = button.state == .on
         default:
             break
         }

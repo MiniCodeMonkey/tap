@@ -16,6 +16,16 @@ Choose your preferred installation method:
 brew install MiniCodeMonkey/tap/tap
 ```
 
+### Tap Desktop (macOS)
+
+The native app, with tap built in:
+
+```bash
+brew install --cask MiniCodeMonkey/tap/tap-desktop
+```
+
+Or download `Tap-<version>.dmg` from the [releases page](https://github.com/MiniCodeMonkey/tap/releases). The app updates itself through Tap > Check for Updates…
+
 ### Go Install
 
 If you have Go installed:

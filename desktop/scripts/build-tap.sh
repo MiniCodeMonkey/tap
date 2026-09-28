@@ -26,6 +26,14 @@ if [ -n "$stale_sources" ]; then
 	exit 1
 fi
 
+# The bundled tap is built for the app's architectures. A Release build
+# names one (arm64); a Debug build names the standard pair and builds the
+# active one, for which the host's own GOARCH is right.
+case "${ARCHS:-}" in
+	arm64) export GOARCH=arm64 ;;
+	x86_64) export GOARCH=amd64 ;;
+esac
+
 # Xcode runs build phases with a short PATH.
 export PATH="/opt/homebrew/bin:/usr/local/go/bin:/usr/local/bin:$HOME/go/bin:$PATH"
 if ! command -v go >/dev/null 2>&1; then

@@ -10,17 +10,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         super.init()
     }
 
+    /// Sparkle's controller, wired to Tap > Check for Updates… and held
+    /// back by every talk. Created before the menu bar so the menu's
+    /// validation always has one to ask.
+    private(set) var updateController: UpdateController!
+
     /// The menu bar is in place before launch finishes: NSDocumentController
     /// installs its Revert To menu (with Browse All Versions) and its Share
     /// menu into the File menu as launch finishes. A menu bar set any later
     /// keeps only the plain Revert to Saved item, which AppKit then hides for
     /// a document that autosaves in place.
     func applicationWillFinishLaunching(_ notification: Notification) {
+        updateController = UpdateController()
         NSApp.mainMenu = MainMenu.build()
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         AppEnvironment.shared.warmUp()
+        updateController.startIfAllowed()
         NSDocumentController.shared.autosavingDelay = AppEnvironment.shared.generalSettings.autosaveDelay
         NotificationCenter.default.addObserver(self, selector: #selector(deckWindowWillClose(_:)), name: NSWindow.willCloseNotification, object: nil)
         // UI tests pass -TapOpenOnLaunch <path>. The completion-handler form
@@ -90,6 +97,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
     @objc func showAbout(_ sender: Any?) {
         NSApp.orderFrontStandardAboutPanel(options: aboutPanelOptions())
+    }
+
+    /// Tap > Check for Updates…, Sparkle's standard check.
+    @objc func checkForUpdates(_ sender: Any?) {
+        updateController.checkForUpdates(sender)
     }
 
     /// Tap > Settings…, and the selector the Generate Image sheet's
@@ -164,6 +176,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
         if menuItem.action == #selector(goToSlide(_:)) {
             return Self.goToSlideIsEnabled(forKeyWindow: NSApp.keyWindow)
+        }
+        if menuItem.action == #selector(checkForUpdates(_:)) {
+            return updateController.canCheckForUpdates
         }
         return true
     }

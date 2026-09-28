@@ -627,6 +627,7 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
     /// System Settings.
     func startPresenting(_ options: PresentationOptions, savingSettings: Bool = false) {
         guard canStartATalk else { return }
+        if refusedForAnUpdateWindow() { return }
         if savingSettings { AppEnvironment.shared.presentationSettings.settings = presentPopover.settings }
         // Play with the popover open starts at once; the popover goes, so a later click on its Start cannot save settings for a talk it did not start.
         if presentPopover.isShown { presentPopover.close() }
@@ -666,6 +667,7 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
     /// deck's talk began while the hint was up (it had been marked shown),
     /// or the file went. A bar says why instead of nothing happening.
     private func startAfterTheHint(_ options: PresentationOptions) {
+        if refusedForAnUpdateWindow() { return }
         let presentation = sessionController.presentation
         guard presentation.canStart else {
             let reason = if AppEnvironment.shared.isPresenting {
@@ -675,16 +677,31 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
             } else {
                 "The last talk's windows are still closing. Press Play again in a moment."
             }
-            let bar = DocumentBarView(kind: .talkNotStarted, message: "The talk did not start.", detail: reason,
-                                      buttons: [("Dismiss", { [weak self] in
-                                          self?.sessionController.editorViewController.hideBar(.talkNotStarted)
-                                      })])
-            sessionController.editorViewController.showBar(bar)
-            refreshPresentingControls()
+            showTalkNotStarted(reason: reason)
             return
         }
         presentation.start(options)
         refreshPresentingControls()
+    }
+
+    /// The talk did not start; the bar says why, since nothing else would.
+    func showTalkNotStarted(reason: String) {
+        let bar = DocumentBarView(kind: .talkNotStarted, message: "The talk did not start.", detail: reason,
+                                  buttons: [("Dismiss", { [weak self] in
+                                      self?.sessionController.editorViewController.hideBar(.talkNotStarted)
+                                  })])
+        sessionController.editorViewController.showBar(bar)
+        refreshPresentingControls()
+    }
+
+    /// A window or the permission prompt Sparkle has up would sit over the
+    /// talk; the person finishes with it first. A session that shows
+    /// nothing never refuses Play. True when the talk was refused and the
+    /// bar shown.
+    private func refusedForAnUpdateWindow() -> Bool {
+        guard let reason = (NSApp.delegate as? AppDelegate)?.updateController.playRefusal() else { return false }
+        showTalkNotStarted(reason: reason)
+        return true
     }
 
     func popoverContext() -> PresentPopoverController.Context {
