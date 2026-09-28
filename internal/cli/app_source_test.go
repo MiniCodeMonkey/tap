@@ -209,6 +209,26 @@ func TestAppDeckSourceSavedKeepsABufferNewerThanTheSave(t *testing.T) {
 	}
 }
 
+// With no buffer held, a save landing for a buffer the app sent earlier
+// still goes back to the deck file and takes a fresh sequence, exactly as
+// any other drop does: dropSavedBuffer's early return only applies while a
+// buffer is held.
+func TestAppDeckSourceDropSavedBufferMovesTheSequenceWithNoBufferHeld(t *testing.T) {
+	deckPath := writeAppTestDeck(t, "# One\n")
+	source := newAppDeckSource(deckPath)
+	source.setBuffer([]byte("# Two\n"))
+	source.dropBuffer()
+
+	before := source.seq
+	if err := os.WriteFile(deckPath, []byte("# Two\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	source.dropSavedBuffer()
+	if source.seq == before {
+		t.Errorf("seq = %d after dropSavedBuffer, want it to move past %d", source.seq, before)
+	}
+}
+
 // Only the most recent buffers count as the app's own text.
 func TestAppDeckSourceRemembersOnlyRecentBuffers(t *testing.T) {
 	deckPath := writeAppTestDeck(t, "# Buffer 0\n")
