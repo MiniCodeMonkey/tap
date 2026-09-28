@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"sync"
+	"time"
 
 	"github.com/MiniCodeMonkey/tap/internal/server"
 	"github.com/MiniCodeMonkey/tap/internal/slidelist"
@@ -33,12 +34,22 @@ type appDeckSource struct {
 	// sent, oldest first. The app usually saves text it has already sent;
 	// a save of text it never sent is treated as the file.
 	sent [][sha256.Size]byte
-	// saving holds the digests of the last recentSaveCount texts the app
-	// said it was about to write to the deck file ("saving"), oldest
-	// first. A save can write text typed a moment before it, which the
-	// app has not sent yet; the app names that text before the write, so
-	// the watcher still knows the write as the app's own.
-	saving [][sha256.Size]byte
+	// saving holds the last recentSaveCount texts the app said it was
+	// about to write to the deck file ("saving"), oldest first, each with
+	// when it was said. A save can write text typed a moment before it,
+	// which the app has not sent yet; the app names that text before the
+	// write, so the watcher still knows the write as the app's own.
+	saving []announcedSave
+	// now is the clock announced saves are timed by: time.Now, except in
+	// a test.
+	now func() time.Time
+}
+
+// announcedSave is one "saving" command: the digest of the text the app
+// is about to write, and when tap was told.
+type announcedSave struct {
+	digest [sha256.Size]byte
+	at     time.Time
 }
 
 // recentBufferCount is how many of the app's buffers tap remembers. The
@@ -52,8 +63,14 @@ const recentBufferCount = 16
 // the app saves at most a few times in that span.
 const recentSaveCount = 4
 
+// announcedSaveLifetime is how long an announced save marks a write of its
+// text as the app's own. The write lands right after the announcement and
+// the watcher reads it about a tenth of a second later, so a save that
+// failed, or was never written, stops standing for anything soon after.
+const announcedSaveLifetime = 2 * time.Second
+
 func newAppDeckSource(file string) *appDeckSource {
-	return &appDeckSource{file: file}
+	return &appDeckSource{file: file, now: time.Now}
 }
 
 // current returns the buffer when there is one, and the deck file
@@ -99,28 +116,43 @@ func (source *appDeckSource) wasSent(text []byte) bool {
 }
 
 // noteSaving records digest, the SHA-256 of the text the app is about to
-// write to the deck file. It is the app's word, sent before the write, so
-// it only ever names bytes the app itself writes: a file holding anything
-// else is still a change made elsewhere.
+// write to the deck file, for announcedSaveLifetime. It is the app's word,
+// sent before the write, so it only ever names bytes the app itself
+// writes: a file holding anything else is still a change made elsewhere.
 func (source *appDeckSource) noteSaving(digest [sha256.Size]byte) {
 	source.mu.Lock()
 	defer source.mu.Unlock()
-	source.saving = append(source.saving, digest)
+	now := source.now()
+	source.dropExpiredSavesLocked(now)
+	source.saving = append(source.saving, announcedSave{digest: digest, at: now})
 	if len(source.saving) > recentSaveCount {
 		source.saving = source.saving[len(source.saving)-recentSaveCount:]
 	}
 }
 
+// dropExpiredSavesLocked forgets the announced saves older than
+// announcedSaveLifetime at now. The caller holds source.mu.
+func (source *appDeckSource) dropExpiredSavesLocked(now time.Time) {
+	kept := source.saving[:0]
+	for _, save := range source.saving {
+		if now.Sub(save.at) < announcedSaveLifetime {
+			kept = append(kept, save)
+		}
+	}
+	source.saving = kept
+}
+
 // isAppsOwnText reports whether text is one of the recent buffers the app
-// sent or one of the recent saves it announced. The caller holds
-// source.mu.
+// sent or one of the saves it announced within announcedSaveLifetime. The
+// caller holds source.mu.
 func (source *appDeckSource) isAppsOwnText(text []byte) bool {
 	if source.wasSent(text) {
 		return true
 	}
+	source.dropExpiredSavesLocked(source.now())
 	digest := sha256.Sum256(text)
-	for _, saving := range source.saving {
-		if saving == digest {
+	for _, save := range source.saving {
+		if save.digest == digest {
 			return true
 		}
 	}

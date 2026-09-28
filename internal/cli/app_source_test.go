@@ -14,6 +14,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/MiniCodeMonkey/tap/internal/config"
 	"github.com/MiniCodeMonkey/tap/internal/slidelist"
@@ -220,6 +221,40 @@ func TestAppDeckSourceTellsAnAnnouncedSaveOfUnsentTextFromAnOutsideChange(t *tes
 	source.dropSavedBuffer()
 	if current, _ := source.current(); source.buffering() || string(current) != "# Two, typed as the save began\n" {
 		t.Errorf("after saved for an announced save: %q, buffering %v; want the file", current, source.buffering())
+	}
+}
+
+// An announced save marks a write of its text as the app's own for
+// announcedSaveLifetime, and no longer: a save that failed, or was never
+// written, stops standing for anything, so a later write of the same
+// bytes by another program reloads the pages.
+func TestAppDeckSourceForgetsAnAnnouncedSaveAfterItsLifetime(t *testing.T) {
+	deckPath := writeAppTestDeck(t, "# One\n")
+	source := newAppDeckSource(deckPath)
+	now := time.Date(2026, 9, 29, 12, 0, 0, 0, time.UTC)
+	source.now = func() time.Time { return now }
+	source.setBuffer([]byte("# Two\n"))
+	source.noteSaving(sha256.Sum256([]byte("# Announced\n")))
+	if err := os.WriteFile(deckPath, []byte("# Announced\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	now = now.Add(announcedSaveLifetime - time.Millisecond)
+	changed, sentByApp, err := source.diskState()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !sentByApp || reloadPagesOnDeckWrite(changed, source.buffering(), sentByApp) {
+		t.Errorf("a write within the lifetime: sentByApp %v; want true and no reload", sentByApp)
+	}
+
+	now = now.Add(time.Millisecond)
+	changed, sentByApp, err = source.diskState()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sentByApp || !reloadPagesOnDeckWrite(changed, source.buffering(), sentByApp) {
+		t.Errorf("a write %v after the announcement: sentByApp %v; want false and a reload", announcedSaveLifetime, sentByApp)
 	}
 }
 
