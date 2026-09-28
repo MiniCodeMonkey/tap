@@ -24,13 +24,14 @@ struct BenchmarkBounds {
     /// 13-performance.feature's targets.
     static let developer = BenchmarkBounds(name: "developer", previewShownMedian: 200, typingP95: 16, typingMedian: nil)
 
-    /// Runs 2026-09-25 to 2026-09-28 on the runner (87 jobs) measured a
-    /// preview median of at most 352.8 ms (typically about 255), a typing
-    /// p95 of at most 25.3 ms (typically about 17) and a typing median of
-    /// at most 12.1 ms. A preview about 1.6 times slower than typical, or
-    /// a keystroke that costs 13 ms more at the tail or 8 ms more at the
-    /// median, fails these in about half of the runs; twice as slow a
-    /// preview, or 16 ms more per keystroke, in nearly all.
+    /// Runs 2026-09-25 to 2026-09-28 on the runner (87 jobs, 54 of which
+    /// measured a median) found a preview median of at most 352.8 ms
+    /// (typically about 255), a typing p95 of at most 25.3 ms (typically
+    /// about 17) and a typing median of at most 12.1 ms. A preview about
+    /// 1.6 times slower than typical, or a keystroke that costs 13 ms more
+    /// at the tail or 8 ms more at the median, fails these in about half of
+    /// the runs; twice as slow a preview, or 16 ms more per keystroke, in
+    /// nearly all.
     static let continuousIntegration = BenchmarkBounds(name: "ci", previewShownMedian: 400, typingP95: 30, typingMedian: 16)
 
     /// The bounds TAP_BENCH_BOUNDS names; the developer bounds when it is
