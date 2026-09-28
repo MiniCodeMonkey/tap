@@ -2,8 +2,10 @@ import XCTest
 @testable import Tap
 
 final class ExportWebsiteTests: HostedTestCase {
-    func openSevenSlides() async throws -> (DeckDocument, DeckWindowController, URL) {
-        let deck = try Fixtures.copyDeck("seven-slides.md")
+    /// seven-slides.md keeps D2's misspelled layout, which tap build refuses;
+    /// the website tests open seven-slides-site.md, the same deck spelled right.
+    func openSevenSlides(_ name: String = "seven-slides.md") async throws -> (DeckDocument, DeckWindowController, URL) {
+        let deck = try Fixtures.copyDeck(name)
         let document = try await openDeck(deck)
         try await waitForBoxes(document, count: 7)
         return (document, try XCTUnwrap(document.windowControllers.first as? DeckWindowController), deck)
@@ -14,9 +16,27 @@ final class ExportWebsiteTests: HostedTestCase {
         return try XCTUnwrap(window.window?.attachedSheet as? ExportSheet)
     }
 
+    /// Waits for the done state and fails at once, with tap's message, on the failed state.
+    func waitForTheDoneState(_ sheet: ExportSheet, timeout: TimeInterval) async throws -> ExportSummary {
+        var failure: String?
+        try await waitUntil(timeout: timeout, "the done state") {
+            switch sheet.state {
+            case .done: return true
+            case .failed(let message): failure = message; return true
+            default: return false
+            }
+        }
+        if let failure {
+            XCTFail("the export failed: \(failure)")
+            throw CancellationError()
+        }
+        guard case .done(let summary) = sheet.state else { throw CancellationError() }
+        return summary
+    }
+
     /// The real bundled tap: tap build needs no browser, and tap serve --json gives the port.
     func testExportAStaticSite() async throws {
-        let (document, window, deck) = try await openSevenSlides()
+        let (document, window, deck) = try await openSevenSlides("seven-slides-site.md")
         var revealed: [URL] = []
         var opened: [URL] = []
         window.revealInFinder = { revealed.append($0) }
@@ -29,8 +49,7 @@ final class ExportWebsiteTests: HostedTestCase {
         XCTAssertEqual(sheet.outputButton.title, "dist", "the Export to row shows the folder's name")
         XCTAssertEqual(sheet.request.arguments(deck: deck), ["build", deck.path, "--output", sheet.request.output, "--progress", "json"])
         sheet.exportButton.performClick(nil)
-        try await waitUntil(timeout: 120, "the done state") { if case .done = sheet.state { return true } else { return false } }
-        guard case .done(let summary) = sheet.state else { return XCTFail("not done") }
+        let summary = try await waitForTheDoneState(sheet, timeout: 120)
         XCTAssertEqual(sheet.statusLabel.stringValue, "Website exported")
         XCTAssertTrue(summary.summary.hasPrefix("7 slides, "), summary.summary)
         XCTAssertTrue(summary.summary.hasSuffix("Live code does not run in a static site."))
@@ -69,8 +88,7 @@ final class ExportWebsiteTests: HostedTestCase {
         XCTAssertEqual(sheet.request.output, folder.path)
         XCTAssertEqual(sheet.request.arguments(deck: URL(fileURLWithPath: deckPath)), ["export", "images", deckPath, "--all", "--output", folder.path, "--progress", "json"])
         sheet.exportButton.performClick(nil)
-        try await waitUntil(timeout: 20, "the done state") { if case .done = sheet.state { return true } else { return false } }
-        guard case .done(let summary) = sheet.state else { return XCTFail("not done") }
+        let summary = try await waitForTheDoneState(sheet, timeout: 20)
         XCTAssertEqual(summary.summary.split(separator: " ").first, "7")
         XCTAssertEqual(summary.output, folder)
         XCTAssertTrue(sheet.previewButton.isHidden, "nothing to serve")
@@ -87,8 +105,7 @@ final class ExportWebsiteTests: HostedTestCase {
         window.exportImages(nil)
         let sheet = try await exportSheet(window)
         sheet.exportButton.performClick(nil)
-        try await waitUntil(timeout: 20, "the done state") { if case .done = sheet.state { return true } else { return false } }
-        guard case .done(let summary) = sheet.state else { return XCTFail("not done") }
+        let summary = try await waitForTheDoneState(sheet, timeout: 20)
         XCTAssertEqual(summary.warnings, [ExportWarning(slide: 2, message: "an error card")], "tap's per-slide line, as the ExportWarnings board lists it")
         XCTAssertEqual(sheet.statusLabel.stringValue, "Slide images exported with gaps")
         XCTAssertEqual(sheet.warningsHeader.stringValue, "These slides have no image")
@@ -98,12 +115,12 @@ final class ExportWebsiteTests: HostedTestCase {
     }
 
     func testClosingTheDeckStopsThePreviewServer() async throws {
-        let (document, window, _) = try await openSevenSlides()
+        let (document, window, _) = try await openSevenSlides("seven-slides-site.md")
         window.openURL = { _ in }
         window.exportWebsite(nil)
         let sheet = try await exportSheet(window)
         sheet.exportButton.performClick(nil)
-        try await waitUntil(timeout: 120, "the done state") { if case .done = sheet.state { return true } else { return false } }
+        _ = try await waitForTheDoneState(sheet, timeout: 120)
         sheet.previewButton.performClick(nil)
         try await waitUntil(timeout: 20, "the server") { window.previewServer?.isRunning == true }
         let identifier = try XCTUnwrap(window.previewServer?.processIdentifier)
