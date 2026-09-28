@@ -129,32 +129,37 @@ class BenchmarkCase: XCTestCase {
     /// Writes `results` to desktop/build/benchmarks/`name`.json, and prints
     /// them on one line, so a CI log keeps every run's numbers, a passing
     /// run's too, and the bounds can be checked against the runner's
-    /// history. Every number is rounded to 2 decimals first, so the log
+    /// history. Every Double is written with exactly 2 decimals, so the log
     /// shows 296.78 rather than a Double's binary tail like
     /// 296.77999999999997.
     func write(_ results: [String: Any], to name: String) {
         let folder = repositoryRoot.appendingPathComponent("desktop/build/benchmarks")
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-        let rounded = roundedForLogging(results)
-        if let data = try? JSONSerialization.data(withJSONObject: rounded, options: [.prettyPrinted, .sortedKeys]) {
-            try? data.write(to: folder.appendingPathComponent("\(name).json"))
-        }
-        if let line = try? JSONSerialization.data(withJSONObject: rounded, options: [.sortedKeys]) {
-            print("benchmark results \(name): \(String(decoding: line, as: UTF8.self))")
-        }
+        let line = Self.json(results)
+        try? Data((line + "\n").utf8).write(to: folder.appendingPathComponent("\(name).json"))
+        print("benchmark results \(name): \(line)")
     }
 
-    /// Rounds every Double in `value` to 2 decimals, recursing into nested
-    /// dictionaries, so the JSON `write` emits never carries a rounded
-    /// number's binary imprecision.
-    private func roundedForLogging(_ value: Any) -> Any {
+    /// `value` as JSON text with sorted keys. JSONSerialization writes a
+    /// Double's full binary value, so rounding the Double first changes
+    /// nothing it prints; this writes each Double as fixed 2-decimal text
+    /// instead. The results are flat maps and maps of maps of numbers, so
+    /// numbers, strings and dictionaries are all it needs. A number JSON
+    /// cannot hold (NaN, infinity) is written as null.
+    static func json(_ value: Any) -> String {
         switch value {
-        case let number as Double:
-            return (number * 100).rounded() / 100
         case let dictionary as [String: Any]:
-            return dictionary.mapValues { roundedForLogging($0) }
+            let members = dictionary.keys.sorted().map { key in "\(json(key)):\(json(dictionary[key]!))" }
+            return "{" + members.joined(separator: ",") + "}"
+        case let integer as Int:
+            return String(integer)
+        case let number as Double:
+            return number.isFinite ? String(format: "%.2f", number) : "null"
+        case let text as String:
+            let data = (try? JSONSerialization.data(withJSONObject: [text])) ?? Data("[\"\"]".utf8)
+            return String(String(decoding: data, as: UTF8.self).dropFirst().dropLast())
         default:
-            return value
+            return "null"
         }
     }
 }
