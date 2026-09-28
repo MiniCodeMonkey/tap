@@ -107,6 +107,42 @@ final class UpdaterTests: PresentingTestCase {
         try await stopPresenting(controller)
     }
 
+    /// Sparkle's alert comes up while the Focus hint is open: Not Now
+    /// waits for it too.
+    func testNotNowWaitsForAWindowSparkleHasUp() async throws {
+        AppEnvironment.shared.focusHint = FocusHintState(defaults: try XCTUnwrap(UserDefaults(suiteName: "TapTests.focus.update.\(UUID().uuidString)")))
+        let (_, controller) = try await openDeckForPresenting()
+        let deckWindow = try XCTUnwrap(controller.editor.window?.windowController as? DeckWindowController)
+        deckWindow.startPresenting(PresentationOptions(mode: .rehearse, startSlide: 1))
+        let sheet = try XCTUnwrap(deckWindow.focusHintSheet)
+        updates.interface.updateWindowShown()
+        try XCTUnwrap(sheet.button(titled: "Not Now")).performClick(nil)
+        XCTAssertNil(deckWindow.focusHintSheet)
+        XCTAssertEqual(controller.presentation.state, .idle, "nothing started")
+        let bar = try XCTUnwrap(controller.editorViewController.bar(.talkNotStarted), "the bar says why")
+        XCTAssertEqual(bar.detail, SparkleInterface.updateWindowMessage)
+    }
+
+    /// A deck closed during its talk: the talk outlives the deck, and its
+    /// windows-down notification comes a run-loop turn before it lets go
+    /// of itself. The relaunch the talk postponed still runs, once.
+    func testARelaunchWaitsForATalkThatOutlivedItsDeck() async throws {
+        let made = MadeWindows()
+        var relaunched = 0
+        do {
+            let (document, controller) = try await startTalkWithAnExitThatNeverCompletes(made)
+            XCTAssertTrue(controller.presentation.isActive)
+            XCTAssertTrue(updates.updater(updates.updater, shouldPostponeRelaunchForUpdate: SUAppcastItem.empty()) { relaunched += 1 }, "the talk runs")
+            document.close()
+        }
+        XCTAssertEqual(AppEnvironment.shared.endingTalks.count, 1, "the talk outlives its deck")
+        XCTAssertEqual(relaunched, 0)
+        try await waitUntil(timeout: 30, "the postponed relaunch, once the talk that outlived its deck is gone") { relaunched == 1 }
+        XCTAssertTrue(made.allClosed)
+        XCTAssertTrue(AppEnvironment.shared.endingTalks.isEmpty)
+        XCTAssertNil(updates.gate.postponedRelaunch)
+    }
+
     /// The app's driver notes what Sparkle's standard interface puts up and
     /// takes down. The inner driver here shows nothing.
     func testTheDriverNotesWhatSparkleShows() {

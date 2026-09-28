@@ -180,45 +180,6 @@ final class PresentingTests: PresentingTestCase {
         XCTAssertTrue(AppEnvironment.shared.updatesMayInterrupt)
     }
 
-    /// Every talk window made, held by the test so it can check each one closed.
-    @MainActor final class MadeWindows {
-        var windows: [PresentationWindow] = []
-        var allClosed: Bool { windows.allSatisfy(\.isClosed) }
-    }
-
-    /// Starts a talk on one display with AppKit's full screen toggle
-    /// replaced by a recorder that never completes, drives the audience's
-    /// entry by hand, then closes the deck, letting go of every reference
-    /// of its own to the talk.
-    func startTalkWithAnExitThatNeverCompletesAndCloseTheDeck(_ made: MadeWindows, stopFirst: Bool = false) async throws -> WeakTalk {
-        let record = try Fixtures.temporaryFolder().appendingPathComponent("record")
-        AppEnvironment.shared.presentExecutableURL = try FakeTapScripts.presenting(events: [], recordingTo: record)
-        let (document, controller) = try await openDeckForPresenting()
-        let presentation = controller.presentation
-        presentation.fullScreenAllowed = { true }
-        var toggles = 0
-        presentation.windowCreated = { window in
-            made.windows.append(window)
-            window.requestFullScreenToggle = { toggles += 1 }
-        }
-        presentation.start(PresentationOptions(mode: .play, startSlide: 1))
-        try await waitUntil(timeout: 40, "the audience's entry (state \(presentation.state), toggles \(toggles))") { toggles == 1 }
-        let audience = try XCTUnwrap(presentation.audienceWindow)
-        audience.windowDidEnterFullScreen(Notification(name: NSWindow.didEnterFullScreenNotification))
-        XCTAssertEqual(audience.fullScreenState, .fullScreen)
-        XCTAssertEqual(made.windows.count, 2, "the audience and the hidden presenter")
-        XCTAssertTrue(presentation.windowsAreSettled)
-        if stopFirst {
-            // tap exits at once on quit while the audience is still leaving full screen.
-            presentation.stop()
-            try await waitUntil(timeout: 10, "the talk idle (state \(presentation.state))") { presentation.state == .idle }
-            XCTAssertFalse(presentation.windowsGoingDown.isEmpty, "idle, with its windows still going down")
-        }
-        let talk = WeakTalk(presentation)
-        document.close()
-        return talk
-    }
-
     /// The scripted tap exits at once on quit while the audience's exit
     /// waits out its deadline, on every host. The talk has no process left
     /// and windows still going down: it keeps itself until every window
