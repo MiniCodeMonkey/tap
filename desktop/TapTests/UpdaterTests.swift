@@ -69,17 +69,21 @@ final class UpdaterTests: PresentingTestCase {
         XCTAssertEqual(relaunched, 0)
 
         try await startPresenting(controller, PresentationOptions(mode: .rehearse, startSlide: 1))
-        XCTAssertTrue(updates.updater(updates.updater, shouldPostponeRelaunchForUpdate: SUAppcastItem.empty()) { relaunched += 1 })
+        // What the relaunch finds when it runs, recorded as it runs: never
+        // a talk window going down or busy with full screen.
+        var windowsWereUpAtRelaunch: [Bool] = []
+        XCTAssertTrue(updates.updater(updates.updater, shouldPostponeRelaunchForUpdate: SUAppcastItem.empty()) {
+            relaunched += 1
+            windowsWereUpAtRelaunch.append(!controller.presentation.windowsGoingDown.isEmpty || PresentationWindow.anyIsBusyWithFullScreen)
+        })
         XCTAssertEqual(relaunched, 0, "the talk runs; the app stays")
 
         // The talk ends (updatesMayInterrupt turns true) before its windows
         // are down; the relaunch waits for the windows, never mid-transition.
         controller.presentation.stop()
         try await waitUntil(timeout: 30, "the talk to end") { controller.presentation.state == .idle }
-        if !controller.presentation.windowsGoingDown.isEmpty {
-            XCTAssertEqual(relaunched, 0, "windows still going down: no relaunch yet")
-        }
         try await waitUntil(timeout: 20, "the postponed relaunch, once the windows are down") { relaunched == 1 }
+        XCTAssertEqual(windowsWereUpAtRelaunch, [false], "the relaunch ran once, with every talk window down")
         XCTAssertTrue(updates.talkWindowsAreDown)
         XCTAssertNil(updates.gate.postponedRelaunch)
     }
@@ -95,9 +99,14 @@ final class UpdaterTests: PresentingTestCase {
         XCTAssertThrowsError(try updates.updater(updates.updater, mayPerform: .updatesInBackground), "no check mid-transition")
         XCTAssertThrowsError(try updates.updater(updates.updater, shouldProceedWithUpdate: SUAppcastItem.empty(), updateCheck: .updatesInBackground), "no update alert over a window leaving full screen")
         var relaunched = 0
-        XCTAssertTrue(updates.updater(updates.updater, shouldPostponeRelaunchForUpdate: SUAppcastItem.empty()) { relaunched += 1 }, "no relaunch mid-transition")
+        var windowsWereUpAtRelaunch: [Bool] = []
+        XCTAssertTrue(updates.updater(updates.updater, shouldPostponeRelaunchForUpdate: SUAppcastItem.empty()) {
+            relaunched += 1
+            windowsWereUpAtRelaunch.append(!made.allClosed || !controller.presentation.windowsGoingDown.isEmpty || PresentationWindow.anyIsBusyWithFullScreen)
+        }, "no relaunch mid-transition")
         try await waitUntil(timeout: 30, "the talk windows to go down") { made.allClosed && controller.presentation.windowsGoingDown.isEmpty }
         try await waitUntil(timeout: 5, "the postponed relaunch") { relaunched == 1 }
+        XCTAssertEqual(windowsWereUpAtRelaunch, [false], "it ran once, with every talk window down")
         XCTAssertNoThrow(try updates.updater(updates.updater, mayPerform: .updatesInBackground))
         XCTAssertNoThrow(try updates.updater(updates.updater, shouldProceedWithUpdate: SUAppcastItem.empty(), updateCheck: .updatesInBackground))
     }
