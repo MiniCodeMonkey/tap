@@ -465,6 +465,7 @@ final class PresentationController {
         window.page.onReady = { [weak self] _ in self?.pageReported() }
         window.page.onLoadFailed = { [weak self] _ in self?.pageReported() }
         window.page.onPresenterPopup = { [weak self] in self?.bringPresenterWindowForward() }
+        window.page.currentSlide = { [weak self] in self?.lastSlide }
         window.onMouseMoved = { [weak self] in self?.noteMouseMoved() }
         if let toolbar = window.presenterToolbar {
             toolbar.onRecord = { [weak self] in self?.toggleRecording() }

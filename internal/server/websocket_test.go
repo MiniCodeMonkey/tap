@@ -895,6 +895,74 @@ func TestWebSocketHubLateJoinerReceivesLastSlideState(t *testing.T) {
 	}
 }
 
+// TestWebSocketHubLateJoinerStateCarriesItsAge verifies that the
+// register-time state says how long ago the hub's state last changed, so a
+// page that loaded before the change (and registered after it) can tell
+// the talk moved past the slide in its URL hash.
+func TestWebSocketHubLateJoinerStateCarriesItsAge(t *testing.T) {
+	hub := NewWebSocketHub()
+	clock := time.Date(2026, 9, 28, 12, 0, 0, 0, time.UTC)
+	var clockMutex sync.Mutex
+	hub.now = func() time.Time {
+		clockMutex.Lock()
+		defer clockMutex.Unlock()
+		return clock
+	}
+	go hub.Run()
+	defer hub.Stop()
+
+	server := httptest.NewServer(http.HandlerFunc(hub.HandleConnection))
+	defer server.Close()
+	wsURL := "ws" + strings.TrimPrefix(server.URL, "http") + "/"
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	slideIndex, fragment := 2, -1
+	if err := hub.Broadcast(Message{Type: MessageSlide, SlideIndex: &slideIndex, Fragment: &fragment}); err != nil {
+		t.Fatalf("Broadcast() error = %v", err)
+	}
+	clockMutex.Lock()
+	clock = clock.Add(1500 * time.Millisecond)
+	clockMutex.Unlock()
+
+	page, _, err := websocket.Dial(ctx, wsURL, nil)
+	if err != nil {
+		t.Fatalf("websocket.Dial() error = %v", err)
+	}
+	defer page.Close(websocket.StatusNormalClosure, "")
+	if _, _, err := page.Read(ctx); err != nil {
+		t.Fatalf("page.Read() connected message error = %v", err)
+	}
+	_, data, err := page.Read(ctx)
+	if err != nil {
+		t.Fatalf("page.Read() late-joiner state error = %v", err)
+	}
+	var state Message
+	if err := json.Unmarshal(data, &state); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v", err)
+	}
+	if !state.Initial || state.SlideIndex == nil || *state.SlideIndex != 2 {
+		t.Fatalf("state = %s, want the register-time state for slide index 2", data)
+	}
+	if state.AgeMs == nil || *state.AgeMs != 1500 {
+		t.Fatalf("state = %s, want ageMs 1500", data)
+	}
+
+	// The age is the register-time state's alone: a client's own ageMs is
+	// never relayed.
+	forged := `{"type":"slide","slideIndex":3,"fragment":-1,"ageMs":99999}`
+	if err := page.Write(ctx, websocket.MessageText, []byte(forged)); err != nil {
+		t.Fatalf("page.Write() error = %v", err)
+	}
+	_, relayed, err := page.Read(ctx)
+	if err != nil {
+		t.Fatalf("page.Read() relayed message error = %v", err)
+	}
+	if strings.Contains(string(relayed), "ageMs") {
+		t.Errorf("relayed JSON %s carries ageMs, want it stripped", relayed)
+	}
+}
+
 // TestWebSocketHubForgetsStateOnceEveryoneDisconnects verifies that once
 // every client has disconnected, the hub's remembered slide state is
 // cleared: a client connecting after that gets no late-joiner state at all

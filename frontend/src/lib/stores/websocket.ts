@@ -140,6 +140,38 @@ interface PendingInitialState {
 	 * presentation fetch, and applies exactly as it always has.
 	 */
 	isHubLateJoinerState: boolean;
+	/** See LateJoinerState.changedSinceLoad. */
+	changedSinceLoad: boolean;
+}
+
+/** The hub's register-time state, as applyHubLateJoinerState weighs it. */
+interface LateJoinerState {
+	slideIndex: number;
+	fragment: number;
+	step: number;
+	scrollRevealed: boolean;
+	/**
+	 * Whether the hub's state changed after this page started loading,
+	 * from the message's `ageMs`: the talk moved while the page loaded, so
+	 * the move never reached this page as a live broadcast and the hash
+	 * names where the talk was, not where it is.
+	 */
+	changedSinceLoad: boolean;
+}
+
+/**
+ * Whether a register-time state `ageMs` old, received now, changed after
+ * this page started loading. Both times are measured on their own clock
+ * (the hub's age, the page's performance.now() since it started loading),
+ * so a phone whose clock differs from the laptop's still compares them
+ * correctly. A message without `ageMs` (an older hub) counts as older
+ * than the page.
+ */
+function changedSincePageLoad(ageMs: number | undefined): boolean {
+	if (typeof ageMs !== 'number' || typeof performance === 'undefined') {
+		return false;
+	}
+	return ageMs < performance.now();
 }
 
 /**
@@ -170,6 +202,11 @@ let hasResolvedInitialHubState = false;
  *   the hub state wins outright, regardless of the hash. A presenter that
  *   reconnects mid-talk must land on wherever the audience is now, not on
  *   the slide named by a hash read once at page load.
+ * - The hub state changed after this page started loading: it wins
+ *   outright. The talk moved while this page loaded, before its socket
+ *   registered, so the hash is where the talk was. Tap Desktop opens the
+ *   presenter window at the talk's slide, and a speaker who advances
+ *   before that page's socket registers must not leave it behind.
  * - No hash: the hub state wins outright (a presenter window opened mid-talk
  *   lands on the live slide, fragment and step).
  * - Hash names the same slide as the hub state: take the hub's fragment,
@@ -179,16 +216,11 @@ let hasResolvedInitialHubState = false;
  *   remembers nothing, so the first real navigation after this load is not
  *   skipped by the send-side broadcast dedupe as a false no-op.
  */
-function applyHubLateJoinerState(incoming: {
-	slideIndex: number;
-	fragment: number;
-	step: number;
-	scrollRevealed: boolean;
-}): void {
+function applyHubLateJoinerState({ changedSinceLoad, ...incoming }: LateJoinerState): void {
 	if (!hasResolvedInitialHubState) {
 		hasResolvedInitialHubState = true;
 		const hashSlideIndex = getHashSlideIndexAtLoad();
-		if (hashSlideIndex !== null) {
+		if (hashSlideIndex !== null && !changedSinceLoad) {
 			const total = usePresentationStore.getState().presentation?.slides.length ?? 0;
 			const clampedHash =
 				total > 0 ? Math.min(Math.max(hashSlideIndex, 0), total - 1) : hashSlideIndex;
@@ -220,9 +252,9 @@ usePresentationStore.subscribe((state, previousState) => {
 	if (pendingInitialState === null) {
 		return;
 	}
-	const initial = pendingInitialState;
+	const { isHubLateJoinerState, ...initial } = pendingInitialState;
 	pendingInitialState = null;
-	if (initial.isHubLateJoinerState) {
+	if (isHubLateJoinerState) {
 		applyHubLateJoinerState(initial);
 	} else {
 		applyRemoteState(initial);
@@ -247,6 +279,66 @@ function differsFromShown(shown: Presentation, fetched: Presentation): boolean {
 		shown.revision !== fetched.revision ||
 		JSON.stringify(shown.liveCode ?? null) !== JSON.stringify(fetched.liveCode ?? null)
 	);
+}
+
+// ============================================================================
+// Socket record (window.__tapSocketState)
+// ============================================================================
+
+/** How many received messages window.__tapSocketState keeps. */
+const RECORDED_MESSAGES = 10;
+
+/**
+ * What window.__tapSocketState holds: whether the page's socket is open,
+ * how often it opened and closed, and the newest messages it received.
+ * Times are milliseconds since the page started loading
+ * (performance.now()). Nothing reads it to decide anything; it is there
+ * so a test that times out waiting for the page to follow the talk can
+ * say whether the page heard it (see window.__tapReadyState in
+ * lib/ready/readySignal.ts, its counterpart for the ready signal).
+ */
+export interface SocketState {
+	connected: boolean;
+	opens: number;
+	closes: number;
+	received: {
+		type: string;
+		at: number;
+		slideIndex?: number;
+		initial?: boolean;
+		ageMs?: number;
+		revision?: string;
+	}[];
+}
+
+interface SocketStateWindow {
+	__tapSocketState?: SocketState;
+}
+
+function pageClock(): number {
+	return typeof performance === 'undefined' ? Date.now() : Math.round(performance.now());
+}
+
+/** The page's socket record, created on first use and kept on window as __tapSocketState. */
+export function socketState(): SocketState | null {
+	if (typeof window === 'undefined') return null;
+	const target = window as unknown as SocketStateWindow;
+	target.__tapSocketState ??= { connected: false, opens: 0, closes: 0, received: [] };
+	return target.__tapSocketState;
+}
+
+function recordReceived(message: WebSocketMessage): void {
+	const state = socketState();
+	if (!state) return;
+	state.received.push({
+		type: message.type,
+		at: pageClock(),
+		slideIndex: message.slideIndex,
+		initial: message.initial,
+		ageMs: message.ageMs,
+		revision: message.revision
+	});
+	if (state.received.length > RECORDED_MESSAGES) state.received.shift();
 }
 
 // ============================================================================
@@ -350,6 +442,11 @@ export class WebSocketClient {
 
 		this.ws.onopen = () => {
 			useConnectionStore.setState({ connected: true, reconnecting: false, reconnectAttempt: 0 });
+			const record = socketState();
+			if (record) {
+				record.connected = true;
+				record.opens += 1;
+			}
 			// Reset reconnect delay on successful connection
 			this.reconnectDelay = INITIAL_RECONNECT_DELAY;
 
@@ -366,6 +463,11 @@ export class WebSocketClient {
 
 		this.ws.onclose = () => {
 			useConnectionStore.setState({ connected: false });
+			const record = socketState();
+			if (record) {
+				record.connected = false;
+				record.closes += 1;
+			}
 			this.ws = null;
 			this.scheduleReconnect();
 		};
@@ -385,6 +487,7 @@ export class WebSocketClient {
 	private handleMessage(data: string): void {
 		try {
 			const message = JSON.parse(data) as WebSocketMessage;
+			recordReceived(message);
 			this.dispatchMessage(message);
 		} catch {
 			// Ignore invalid JSON messages
@@ -564,6 +667,9 @@ export class WebSocketClient {
 		// navigation and applies as such. This is a server-asserted fact,
 		// not something inferred from arrival order or timing.
 		const isHubLateJoinerState = message.initial === true;
+		// Measured on arrival, before any buffering below: the page's clock
+		// keeps running while the deck loads.
+		const changedSinceLoad = isHubLateJoinerState && changedSincePageLoad(message.ageMs);
 
 		const state = usePresentationStore.getState();
 		if (state.presentation === null) {
@@ -572,12 +678,12 @@ export class WebSocketClient {
 			// the store subscription above), which resolves it against the
 			// URL hash the same way it would have been resolved here if the
 			// presentation had already loaded.
-			pendingInitialState = { ...incoming, isHubLateJoinerState };
+			pendingInitialState = { ...incoming, isHubLateJoinerState, changedSinceLoad };
 			return;
 		}
 
 		if (isHubLateJoinerState) {
-			applyHubLateJoinerState(incoming);
+			applyHubLateJoinerState({ ...incoming, changedSinceLoad });
 			return;
 		}
 

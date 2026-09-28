@@ -67,6 +67,15 @@ const (
 // strips it from every message it sends out, so a client-sent "initial"
 // (accidental or otherwise) never survives a relay to other clients.
 //
+// AgeMs rides only on that same register-time state: how many milliseconds
+// before sending it the hub's state last changed. A page compares it with
+// how long ago the page itself started loading, so a talk that moved while
+// the page loaded (before its socket registered, when the move could not
+// reach it as a broadcast) wins over the slide in the page's URL hash (see
+// applyHubLateJoinerState in frontend/src/lib/stores/websocket.ts). A
+// pointer because an age of 0 is the likeliest value in exactly that race.
+// Broadcast strips it too.
+//
 // Revision is set only on the "connected" message Run's register case sends
 // at register time, to the hub's current deck revision (see
 // WebSocketHub.SetPresentationMeta). A client compares it across
@@ -96,6 +105,7 @@ type Message struct {
 	Step           *int   `json:"step,omitempty"`
 	ScrollRevealed *bool  `json:"scrollRevealed,omitempty"`
 	Initial        bool   `json:"initial,omitempty"`
+	AgeMs          *int64 `json:"ageMs,omitempty"`
 }
 
 // UpdateMessage is the "update" message: the deck's new revision, and the
@@ -156,6 +166,11 @@ type WebSocketHub struct {
 	// zero clients before the same window reconnects) should not lose it
 	// either, hence the grace period rather than forgetting immediately.
 	lastSlideState *Message
+	// lastSlideStateAt is when lastSlideState was set, read from now, for
+	// the AgeMs of the register-time state.
+	lastSlideStateAt time.Time
+	// now is the hub's clock. Tests replace it.
+	now func() time.Time
 	// stateRetention is how long lastSlideState survives after the last
 	// client disconnects, before scheduleForgetLocked's timer clears it. A
 	// zero or negative value forgets it immediately, with no retention.
@@ -233,6 +248,7 @@ func NewWebSocketHub() *WebSocketHub {
 		unregister:     make(chan *Client),
 		done:           make(chan struct{}),
 		stateRetention: DefaultStateRetention,
+		now:            time.Now,
 	}
 }
 
@@ -454,6 +470,8 @@ func (h *WebSocketHub) Run() {
 			if h.lastSlideState != nil {
 				initialMsg := *h.lastSlideState
 				initialMsg.Initial = true
+				age := h.now().Sub(h.lastSlideStateAt).Milliseconds()
+				initialMsg.AgeMs = &age
 				initialData, _ = json.Marshal(initialMsg)
 			}
 			revision := h.revision
@@ -602,6 +620,7 @@ func (h *WebSocketHub) CurrentPosition() (slideIndex, step int, known bool) {
 // register", never "a peer happened to send this flag".
 func (h *WebSocketHub) Broadcast(msg Message) error {
 	msg.Initial = false
+	msg.AgeMs = nil
 
 	data, err := json.Marshal(msg)
 	if err != nil {
@@ -616,6 +635,7 @@ func (h *WebSocketHub) Broadcast(msg Message) error {
 		stateCopy.Theme = ""
 		h.mu.Lock()
 		h.lastSlideState = &stateCopy
+		h.lastSlideStateAt = h.now()
 		callback := h.onSlideChange
 		h.mu.Unlock()
 
