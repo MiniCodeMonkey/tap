@@ -38,29 +38,3 @@ final class SettingsWindowController: NSWindowController {
         showWindow(nil)
     }
 }
-
-/// Image Generation is Task 13's; this stub only carries the pane's title
-/// so the window's tab bar and Task 12's tests compile and pass.
-final class ImageGenerationSettingsViewController: NSViewController {
-    override init(nibName: NSNib.Name?, bundle: Bundle?) {
-        super.init(nibName: nil, bundle: nil)
-        title = "Image Generation"
-    }
-
-    required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
-
-    override func loadView() { view = NSView() }
-}
-
-/// Command Line is Task 13's; this stub only carries the pane's title so
-/// the window's tab bar and Task 12's tests compile and pass.
-final class CommandLineSettingsViewController: NSViewController {
-    override init(nibName: NSNib.Name?, bundle: Bundle?) {
-        super.init(nibName: nil, bundle: nil)
-        title = "Command Line"
-    }
-
-    required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
-
-    override func loadView() { view = NSView() }
-}

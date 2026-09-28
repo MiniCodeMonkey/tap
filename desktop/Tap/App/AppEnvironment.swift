@@ -57,6 +57,9 @@ final class AppEnvironment {
     /// UI test launch) it is a store in memory, so no test reads or writes
     /// the person's Keychain; every hosted test installs one too.
     var geminiKeyStore: GeminiKeyStore = KeychainGeminiKeyStore()
+    /// Links the bundled tap into ~/.local/bin for Settings > Command
+    /// Line. A test points this at a folder of its own.
+    lazy var commandLineInstaller = CommandLineInstaller(bundledTap: tapExecutableURL)
     /// The General pane's settings. A test replaces this with one on a fresh suite.
     var generalSettings = GeneralSettings()
     /// The theme catalog and every theme's render, loaded once per app.

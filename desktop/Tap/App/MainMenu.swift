@@ -31,6 +31,7 @@ enum MainMenu {
         menu.addItem(.separator())
         menu.addItem(item("Check for Updates…", action: nil))
         menu.addItem(item("Settings…", action: #selector(AppDelegate.showSettings(_:)), key: ","))
+        menu.addItem(item("Install Command Line Tool…", action: #selector(AppDelegate.installCommandLineTool(_:))))
         menu.addItem(.separator())
         let services = item("Services", action: nil)
         services.submenu = NSMenu(title: "Services")

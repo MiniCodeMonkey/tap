@@ -98,6 +98,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         SettingsWindowController.shared.show(pane: .general)
     }
 
+    /// Tap > Install Command Line Tool…, which opens Settings on the
+    /// Command Line pane rather than installing at once: Install always asks first.
+    @objc func installCommandLineTool(_ sender: Any?) {
+        SettingsWindowController.shared.show(pane: .commandLine)
+    }
+
     /// The About panel names the bundled tap's version.
     func aboutPanelOptions() -> [NSApplication.AboutPanelOptionKey: Any] {
         let version = AppEnvironment.shared.bundledTapVersion ?? "unknown"
