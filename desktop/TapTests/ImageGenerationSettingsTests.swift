@@ -38,6 +38,17 @@ final class ImageGenerationSettingsTests: HostedTestCase {
         XCTAssertNotEqual(session["GEMINI_API_KEY"], "placeholder-not-a-secret")
         _ = await TapTool.run(["theme", "list", "--json"], timeout: 30, log: controller.session.log)
         XCTAssertFalse(controller.session.log.text.contains("placeholder-not-a-secret"), "no log line holds the key")
+        // A run that carries the key, as Generate Image and Regenerate do: the key reaches tap, and no log holds it.
+        // The app has no other log: no os_log, no print; the Tap Log window shows the decks' logs.
+        let record = try Fixtures.temporaryFolder().appendingPathComponent("record.txt")
+        AppEnvironment.shared.toolExecutableURL = try FakeToolScripts.write("", recordingTo: record)
+        _ = await TapTool.run(["theme", "list", "--json"], timeout: 30, log: controller.session.log, includeGeminiKey: true)
+        XCTAssertTrue(try String(contentsOf: record, encoding: .utf8).contains("gemini: set"), "the run had the key")
+        XCTAssertTrue(controller.session.log.text.contains("tap theme list --json"), "the run's line is in the log")
+        for log in NSDocumentController.shared.documents.compactMap({ ($0 as? DeckDocument)?.sessionController?.session.log }) {
+            XCTAssertFalse(log.text.contains("placeholder-not-a-secret"), "no line of \(log.title) holds the key")
+        }
+        XCTAssertFalse(TapLogWindowController.shared.textView.string.contains("placeholder-not-a-secret"), "the Tap Log window shows no key")
 
         // The shell's key wins, and the pane says so instead of editing a key nothing reads.
         AppEnvironment.shared.extraEnvironment["GEMINI_API_KEY"] = "shell-placeholder"
