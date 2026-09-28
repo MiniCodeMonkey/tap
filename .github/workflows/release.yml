@@ -23,10 +23,6 @@ jobs:
             echo "Expected semantic version (e.g., 1.0.0, 1.0.0-beta.1)"
             exit 1
           fi
-          # The desktop build refuses versions the regex accepts (an unknown
-          # label, a label with no number, beta.08), and a tag pushed before
-          # that failure blocks a re-run; so the same check runs here first.
-          desktop/scripts/build-number.sh "$VERSION" >/dev/null
           echo "VERSION=$VERSION" >> $GITHUB_ENV
           echo "TAG=v$VERSION" >> $GITHUB_ENV
 
@@ -35,6 +31,13 @@ jobs:
         with:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
+
+      # The desktop build refuses versions the regex accepts (an unknown
+      # label, a label with no number, beta.08), and a tag pushed before
+      # that failure blocks a re-run; so the same check runs here, before
+      # anything is tagged.
+      - name: Check the desktop build number
+        run: desktop/scripts/build-number.sh "$VERSION" >/dev/null
 
       - name: Check tag doesn't exist
         run: |
