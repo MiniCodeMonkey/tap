@@ -1,25 +1,26 @@
 import AppKit
 import Sparkle
 
-/// Sparkle's standard controller and its delegate, with the app's one rule:
-/// a talk is never interrupted. Every decision reads `updatesMayInterrupt`
-/// through `UpdateGate`, a relaunch a talk postponed runs once the last
-/// talk's windows are down, and Play is refused while an update session is
-/// in progress.
+/// Sparkle's updater with its standard interface, and its delegate, with
+/// the app's one rule: a talk is never interrupted. Every decision reads
+/// `updatesMayInterrupt` through `UpdateGate`, a relaunch a talk postponed
+/// runs once the last talk's windows are down, and Play is refused while
+/// Sparkle has a window or its permission prompt up.
 @MainActor
 final class UpdateController: NSObject, SPUUpdaterDelegate {
     let gate = UpdateGate()
-    private(set) var controller: SPUStandardUpdaterController!
-    /// Whether `startUpdater` has run. Tests and 0.0.0 builds never start it.
+    /// What Sparkle's interface has up, kept by `userDriver`. Read at Play.
+    let interface = SparkleInterface()
+    private(set) var userDriver: WatchedUserDriver!
+    private(set) var updater: SPUUpdater!
+    /// Whether the updater started. Tests and 0.0.0 builds never start it.
     private(set) var isStarted = false
     private var presentingObserver: NSObjectProtocol?
-    /// Whether Sparkle is between a check and its end (an alert up, a
-    /// download, an install waiting). Read at Play. A test replaces it.
-    lazy var isUpdateSessionInProgress: () -> Bool = { [weak self] in self?.isStarted == true && self?.updater.sessionInProgress == true }
 
     override init() {
         super.init()
-        controller = SPUStandardUpdaterController(startingUpdater: false, updaterDelegate: self, userDriverDelegate: nil)
+        userDriver = WatchedUserDriver(inner: SPUStandardUserDriver(hostBundle: .main, delegate: nil), interface: interface)
+        updater = SPUUpdater(hostBundle: .main, applicationBundle: .main, userDriver: userDriver, delegate: self)
         presentingObserver = NotificationCenter.default.addObserver(forName: AppEnvironment.presentingDidChangeNotification, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.presentingChanged() }
         }
@@ -28,8 +29,6 @@ final class UpdateController: NSObject, SPUUpdaterDelegate {
     deinit {
         if let presentingObserver { NotificationCenter.default.removeObserver(presentingObserver) }
     }
-
-    var updater: SPUUpdater { controller.updater }
 
     /// A process that hosts tests: xcodebuild sets the configuration path.
     static var isHostedByTests: Bool { ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil }
@@ -44,13 +43,28 @@ final class UpdateController: NSObject, SPUUpdaterDelegate {
     /// Starts Sparkle where a release runs for a person; nowhere else.
     func startIfAllowed() {
         guard !isStarted, UpdateGate.updaterMayStart(bundleVersion: Self.bundleVersion, isHostedByTests: Self.isHostedByTests, hasTestDefaultsSuite: Self.hasTestDefaultsSuite) else { return }
-        controller.startUpdater()
-        isStarted = true
+        do {
+            try updater.start()
+            isStarted = true
+        } catch {
+            NSLog("Tap: the updater did not start: %@", error.localizedDescription)
+        }
     }
 
     /// Tap > Check for Updates…: Sparkle's own check, with its own windows.
     func checkForUpdates(_ sender: Any?) {
-        controller.checkForUpdates(sender)
+        updater.checkForUpdates()
+    }
+
+    /// Why Play waits for Sparkle, or nil. When a window is the reason, it
+    /// comes to the front, so the words point at something on screen
+    /// (Sparkle may hold an alert a scheduled check found until the app is
+    /// next activated). Only while the app is active: nothing here
+    /// activates it.
+    func playRefusal() -> String? {
+        guard let refusal = interface.playRefusal else { return nil }
+        if NSApp.isActive { userDriver.showUpdateInFocus() }
+        return refusal
     }
 
     /// The menu item's state: a started updater that Sparkle allows to check

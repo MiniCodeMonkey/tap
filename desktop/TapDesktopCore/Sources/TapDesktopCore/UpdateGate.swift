@@ -7,7 +7,6 @@ import Foundation
 /// when the last talk is down.
 public final class UpdateGate {
     public static let presentingMessage = "Tap does not check for updates during a talk."
-    public static let updateInProgressMessage = "Sparkle is checking for or installing an update. Let it finish, or close its window, then press Play again."
 
     /// What Sparkle's delegate throws to refuse a check or a found update
     /// while a talk runs. Sparkle shows the message in its own alert for a

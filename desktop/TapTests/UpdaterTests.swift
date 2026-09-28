@@ -8,7 +8,7 @@ final class UpdaterTests: PresentingTestCase {
     var updates: UpdateController { (NSApp.delegate as! AppDelegate).updateController }
 
     override func tearDown() async throws {
-        updates.isUpdateSessionInProgress = { false }
+        updates.interface.sessionFinished()
         try await super.tearDown()
     }
 
@@ -84,19 +84,86 @@ final class UpdaterTests: PresentingTestCase {
         XCTAssertNil(updates.gate.postponedRelaunch)
     }
 
-    func testPlayWaitsForAnUpdateInProgress() async throws {
+    func testPlayWaitsForAWindowSparkleHasUp() async throws {
         let (_, controller) = try await openDeckForPresenting()
         let deckWindow = try XCTUnwrap(controller.editor.window?.windowController as? DeckWindowController)
-        updates.isUpdateSessionInProgress = { true }
+        updates.interface.updateWindowShown()
         deckWindow.startPresenting(PresentationOptions(mode: .rehearse, startSlide: 1))
         XCTAssertEqual(controller.presentation.state, .idle, "nothing started")
         let bar = try XCTUnwrap(controller.editorViewController.bar(.talkNotStarted), "the bar says why")
-        XCTAssertEqual(bar.detail, UpdateGate.updateInProgressMessage)
+        XCTAssertEqual(bar.detail, SparkleInterface.updateWindowMessage)
         XCTAssertFalse(AppEnvironment.shared.isPresenting)
 
-        updates.isUpdateSessionInProgress = { false }
+        updates.interface.sessionFinished()
+        updates.interface.permissionPromptShown()
+        deckWindow.startPresenting(PresentationOptions(mode: .rehearse, startSlide: 1))
+        XCTAssertEqual(controller.presentation.state, .idle, "the permission prompt holds Play too")
+        let promptBar = try XCTUnwrap(controller.editorViewController.bar(.talkNotStarted))
+        XCTAssertEqual(promptBar.detail, SparkleInterface.permissionPromptMessage, "in the words for the prompt")
+
+        updates.interface.permissionPromptAnswered()
         deckWindow.startPresenting(PresentationOptions(mode: .rehearse, startSlide: 1))
         try await waitUntil(timeout: 40, "the talk") { controller.presentation.state == .presenting }
         try await stopPresenting(controller)
     }
+
+    /// The app's driver notes what Sparkle's standard interface puts up and
+    /// takes down. The inner driver here shows nothing.
+    func testTheDriverNotesWhatSparkleShows() {
+        XCTAssertTrue(updates.userDriver.interface === updates.interface, "the updater's driver keeps the state Play reads")
+        let inner = SilentUserDriver()
+        let interface = SparkleInterface()
+        let driver = WatchedUserDriver(inner: inner, interface: interface)
+
+        var answered = 0
+        driver.show(SPUUpdatePermissionRequest(systemProfile: [])) { _ in answered += 1 }
+        XCTAssertTrue(interface.permissionPromptIsUp)
+        inner.permissionReply?(SUUpdatePermissionResponse(automaticUpdateChecks: false, sendSystemProfile: false))
+        XCTAssertFalse(interface.permissionPromptIsUp, "the answer takes the prompt down")
+        XCTAssertEqual(answered, 1, "and reaches Sparkle")
+
+        driver.showDownloadDidReceiveData(ofLength: 10)
+        XCTAssertFalse(interface.updateWindowIsUp, "progress alone shows no window")
+        let windows: [(String, () -> Void)] = [
+            ("the checking window", { driver.showUserInitiatedUpdateCheck {} }),
+            ("the up-to-date alert", { driver.showUpdateNotFoundWithError(UpdateGate.PresentingError()) {} }),
+            ("an error alert", { driver.showUpdaterError(UpdateGate.PresentingError()) {} }),
+            ("the download window", { driver.showDownloadInitiated {} }),
+            ("the extraction window", { driver.showDownloadDidStartExtractingUpdate() }),
+            ("ready to install", { driver.showReady { _ in } }),
+            ("installing", { driver.showInstallingUpdate(withApplicationTerminated: false) {} }),
+            ("installed", { driver.showUpdateInstalledAndRelaunched(true) {} }),
+        ]
+        for (name, show) in windows {
+            show()
+            XCTAssertTrue(interface.updateWindowIsUp, name)
+            driver.dismissUpdateInstallation()
+            XCTAssertFalse(interface.updateWindowIsUp, "\(name): the end of the session takes it down")
+        }
+        XCTAssertEqual(inner.dismissals, windows.count, "every call reaches Sparkle's own driver")
+        XCTAssertNil(interface.playRefusal)
+    }
+}
+
+/// A user driver that shows nothing and keeps the permission reply.
+private final class SilentUserDriver: NSObject, SPUUserDriver {
+    var permissionReply: ((SUUpdatePermissionResponse) -> Void)?
+    var dismissals = 0
+
+    func show(_ request: SPUUpdatePermissionRequest, reply: @escaping (SUUpdatePermissionResponse) -> Void) { permissionReply = reply }
+    func showUserInitiatedUpdateCheck(cancellation: @escaping () -> Void) {}
+    func showUpdateFound(with appcastItem: SUAppcastItem, state: SPUUserUpdateState, reply: @escaping (SPUUserUpdateChoice) -> Void) {}
+    func showUpdateReleaseNotes(with downloadData: SPUDownloadData) {}
+    func showUpdateReleaseNotesFailedToDownloadWithError(_ error: any Error) {}
+    func showUpdateNotFoundWithError(_ error: any Error, acknowledgement: @escaping () -> Void) {}
+    func showUpdaterError(_ error: any Error, acknowledgement: @escaping () -> Void) {}
+    func showDownloadInitiated(cancellation: @escaping () -> Void) {}
+    func showDownloadDidReceiveExpectedContentLength(_ expectedContentLength: UInt64) {}
+    func showDownloadDidReceiveData(ofLength length: UInt64) {}
+    func showDownloadDidStartExtractingUpdate() {}
+    func showExtractionReceivedProgress(_ progress: Double) {}
+    func showReady(toInstallAndRelaunch reply: @escaping (SPUUserUpdateChoice) -> Void) {}
+    func showInstallingUpdate(withApplicationTerminated applicationTerminated: Bool, retryTerminatingApplication: @escaping () -> Void) {}
+    func showUpdateInstalledAndRelaunched(_ relaunched: Bool, acknowledgement: @escaping () -> Void) {}
+    func dismissUpdateInstallation() { dismissals += 1 }
 }

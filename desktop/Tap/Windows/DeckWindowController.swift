@@ -627,7 +627,7 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
     /// System Settings.
     func startPresenting(_ options: PresentationOptions, savingSettings: Bool = false) {
         guard canStartATalk else { return }
-        if refusedForAnUpdateSession() { return }
+        if refusedForAnUpdateWindow() { return }
         if savingSettings { AppEnvironment.shared.presentationSettings.settings = presentPopover.settings }
         // Play with the popover open starts at once; the popover goes, so a later click on its Start cannot save settings for a talk it did not start.
         if presentPopover.isShown { presentPopover.close() }
@@ -667,7 +667,7 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
     /// deck's talk began while the hint was up (it had been marked shown),
     /// or the file went. A bar says why instead of nothing happening.
     private func startAfterTheHint(_ options: PresentationOptions) {
-        if refusedForAnUpdateSession() { return }
+        if refusedForAnUpdateWindow() { return }
         let presentation = sessionController.presentation
         guard presentation.canStart else {
             let reason = if AppEnvironment.shared.isPresenting {
@@ -694,12 +694,13 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
         refreshPresentingControls()
     }
 
-    /// An update Sparkle is checking for, downloading or ready to install
-    /// would put its windows over the talk; the person lets it finish or
-    /// quits it first. True when the talk was refused and the bar shown.
-    private func refusedForAnUpdateSession() -> Bool {
-        guard (NSApp.delegate as? AppDelegate)?.updateController.isUpdateSessionInProgress() == true else { return false }
-        showTalkNotStarted(reason: UpdateGate.updateInProgressMessage)
+    /// A window or the permission prompt Sparkle has up would sit over the
+    /// talk; the person finishes with it first. A session that shows
+    /// nothing never refuses Play. True when the talk was refused and the
+    /// bar shown.
+    private func refusedForAnUpdateWindow() -> Bool {
+        guard let reason = (NSApp.delegate as? AppDelegate)?.updateController.playRefusal() else { return false }
+        showTalkNotStarted(reason: reason)
         return true
     }
 
