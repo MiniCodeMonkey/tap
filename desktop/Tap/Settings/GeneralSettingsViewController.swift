@@ -77,7 +77,9 @@ final class GeneralSettingsViewController: NSViewController {
         catalogObserver = NotificationCenter.default.addObserver(forName: ThemeImageLoader.didLoadCatalogNotification, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.rebuildThemes() }
         }
-        AppEnvironment.shared.themeImages.loadAll()
+        // The Default theme popup needs the catalog alone; the renders
+        // (and the export engine's download) wait for a grid that shows them.
+        AppEnvironment.shared.themeImages.loadCatalog()
         refresh()
     }
 

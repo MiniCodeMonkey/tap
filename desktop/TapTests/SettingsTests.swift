@@ -72,6 +72,22 @@ final class SettingsTests: HostedTestCase {
         XCTAssertFalse(storedApprovals().contains(Fixtures.realPath(of: deck)), "the file tap dev and tap present read")
     }
 
+    /// The General pane's Default theme popup lists the catalog, and
+    /// opening it renders no theme: the renders, and the export engine's
+    /// download on a Mac that has none, wait for a grid that shows them.
+    func testOpeningSettingsStartsNoThemeRender() async throws {
+        let record = try Fixtures.temporaryFolder().appendingPathComponent("record.txt")
+        AppEnvironment.shared.toolExecutableURL = try FakeToolScripts.themeShow(recordingTo: record)
+        let loader = AppEnvironment.shared.themeImages
+        let general = GeneralSettingsViewController()
+        _ = general.view
+        try await waitUntil(timeout: 30, "the catalog, with the loader idle") { loader.catalog != nil && !loader.isWorking }
+        try await waitUntil(timeout: 5, "the Default theme popup") { general.defaultThemePopup.numberOfItems > 1 }
+        let runs = try String(contentsOf: record, encoding: .utf8)
+        XCTAssertTrue(runs.contains("arguments: theme list"), runs)
+        XCTAssertFalse(runs.contains("arguments: theme show"), "no render: \(runs)")
+    }
+
     func testGeneralSettings() async throws {
         let document = try await openDeck(try Fixtures.copyDeck("plain.md"))
         let editor = try XCTUnwrap(document.sessionController?.editor)
