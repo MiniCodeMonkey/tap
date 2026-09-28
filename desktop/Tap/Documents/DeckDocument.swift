@@ -221,7 +221,11 @@ final class DeckDocument: NSDocument {
     // any other caller, direct or future, that drives it with unsaved
     // changes during a shown conflict: `.userCancelled` is the one error
     // NSDocument treats as a silent refusal, so a close or quit driven this
-    // way still cancels instead of writing, with no alert shown.
+    // way still cancels instead of writing, with no alert shown. This guard
+    // reads the conflict when the autosave starts; `save(to:ofType:for:
+    // completionHandler:)` below also refuses an in-place autosave at write
+    // time, for an autosave that starts with no conflict showing and reaches
+    // the file after one has come back.
     override func autosave(withImplicitCancellability autosavingIsImplicitlyCancellable: Bool,
                            completionHandler: @escaping (Error?) -> Void) {
         if sessionController?.hasDiskConflict == true { return completionHandler(CocoaError(.userCancelled)) }
@@ -275,9 +279,18 @@ final class DeckDocument: NSDocument {
     // goes through (as this app's own tests exercise, and as `overwriteDisk`
     // below does for Keep Mine), so while a conflict is showing,
     // `.saveOperation` is refused here too: `.userCancelled`, no write, no
-    // alert. Keep Mine already clears `hasDiskConflict` before it calls this
-    // method, so it is never blocked by this guard. Save To and Save As
-    // write somewhere other than the conflicting file and are untouched.
+    // alert. An in-place autosave is refused the same way. The guard in
+    // `autosave(withImplicitCancellability:completionHandler:)` reads the
+    // conflict when the autosave starts, but NSDocument picks the file it
+    // writes later, once it has file access: an autosave that starts while
+    // the deck reads as deleted (the conflict set aside, no fileURL) and
+    // gets file access after a rename by another program has set fileURL to
+    // the new path, and brought the conflict back, arrives here as an
+    // in-place autosave of that new path. This check runs at write time, so
+    // it sees the conflict as it stands then. Keep Mine already clears
+    // `hasDiskConflict` before it calls this method, so it is never blocked
+    // by this guard. Save To, Save As and an autosave elsewhere write
+    // somewhere other than the conflicting file and are untouched.
     override func save(to url: URL, ofType typeName: String, for saveOperation: NSDocument.SaveOperationType,
                        completionHandler: @escaping (Error?) -> Void) {
         // A Deck tab field still being typed in goes into the file: an autosave,
@@ -289,7 +302,8 @@ final class DeckDocument: NSDocument {
         } else {
             _ = sessionController?.deckForm.commitEditing()
         }
-        if saveOperation == .saveOperation, sessionController?.hasDiskConflict == true {
+        if saveOperation == .saveOperation || saveOperation == .autosaveInPlaceOperation,
+           sessionController?.hasDiskConflict == true {
             return completionHandler(CocoaError(.userCancelled))
         }
         // Save To, and any other save explicitly told to land somewhere
