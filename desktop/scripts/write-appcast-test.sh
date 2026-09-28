@@ -20,7 +20,9 @@ cat > "$app/Contents/Info.plist" <<'PLIST'
 <key>LSMinimumSystemVersion</key><string>14.0</string>
 </dict></plist>
 PLIST
-dmg="$root/Tap-2.1.0-beta.3.dmg"
+# The DMG's name carries another version: the feed's version comes from
+# the plist alone, never from a file name.
+dmg="$root/Tap-9.9.9.dmg"
 head -c 12345 /dev/zero > "$dmg"
 download="https://github.com/MiniCodeMonkey/tap/releases/download/v2.1.0-beta.3/Tap-2.1.0-beta.3.dmg"
 release="https://github.com/MiniCodeMonkey/tap/releases/tag/v2.1.0-beta.3"
@@ -44,6 +46,7 @@ for expected in \
 	grep -Fq "$expected" "$root/appcast.xml" || { echo "missing: $expected"; cat "$root/appcast.xml"; exit 1; }
 done
 [ "$(grep -c '<item>' "$root/appcast.xml")" = "1" ] || { echo "one item"; exit 1; }
+if grep -Fq '9.9.9' "$root/appcast.xml"; then echo "the version came from the DMG's name, not the plist"; exit 1; fi
 grep -Eq '<pubDate>[A-Z][a-z]{2}, [0-9]{2} [A-Z][a-z]{2} [0-9]{4} [0-9]{2}:[0-9]{2}:[0-9]{2} \+0000</pubDate>' "$root/appcast.xml" || { echo "no RFC 822 pubDate"; exit 1; }
 if grep -q 'unsigned' "$root/appcast.xml"; then echo "a signed appcast carries no unsigned note"; exit 1; fi
 
