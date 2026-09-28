@@ -29,12 +29,13 @@ esac
 
 repository="${HOMEBREW_TAP_REPO:-MiniCodeMonkey/homebrew-tap}"
 url="${HOMEBREW_TAP_URL:-https://github.com/${repository}.git}"
-if [ -z "${HOMEBREW_TAP_URL:-}" ]; then
-	export GIT_CONFIG_COUNT=1
-	export GIT_CONFIG_KEY_0="http.https://github.com/.extraheader"
-	GIT_CONFIG_VALUE_0="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$HOMEBREW_TAP_TOKEN" | base64 | tr -d '\n')"
-	export GIT_CONFIG_VALUE_0
-fi
+# Always set, whatever the URL: the header is keyed to https://github.com/,
+# so it is inert for a repository on disk, and the test exercises the same
+# route the release job takes.
+export GIT_CONFIG_COUNT=1
+export GIT_CONFIG_KEY_0="http.https://github.com/.extraheader"
+GIT_CONFIG_VALUE_0="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$HOMEBREW_TAP_TOKEN" | base64 | tr -d '\n')"
+export GIT_CONFIG_VALUE_0
 clone=$(mktemp -d)
 trap 'rm -rf "$clone"' EXIT
 

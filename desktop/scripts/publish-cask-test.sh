@@ -48,4 +48,44 @@ if echo "$out" | grep -q token; then echo "the token reached stdout"; exit 1; fi
 out=$(HOMEBREW_TAP_TOKEN=token TAP_RELEASE_NOTARIZED=yes "$script" 2.1.0 "$root/tap-desktop.rb") || { echo "a repeat should exit 0"; exit 1; }
 [ "$out" = "the tap already has this cask for 2.1.0" ] || { echo "wrong repeat line: $out"; exit 1; }
 
+# The release job's route: no HOMEBREW_TAP_URL, so the script clones
+# https://github.com/MiniCodeMonkey/homebrew-tap.git, which an insteadOf in
+# the test's own global config sends to the bare repository on disk. A git
+# on PATH logs every call's argv and the header in its environment, and
+# copies the clone's .git/config at the push. The token reaches git only
+# through the environment: never in argv, the remote URL, .git/config or
+# the global config, and never on stdout or stderr.
+token="tap-token-7c41e9"
+encoded=$(printf 'x-access-token:%s' "$token" | base64 | tr -d '\n')
+printf '[url "file://%s/tap.git"]\n\tinsteadOf = https://github.com/MiniCodeMonkey/homebrew-tap.git\n' "$root" > "$GIT_CONFIG_GLOBAL"
+mkdir -p "$root/bin"
+real_git=$(command -v git)
+cat > "$root/bin/git" <<SHIM
+#!/bin/sh
+printf 'argv: %s\\n' "\$*" >> "$root/git-argv"
+printf '%s|%s|%s\\n' "\${GIT_CONFIG_COUNT:-}" "\${GIT_CONFIG_KEY_0:-}" "\${GIT_CONFIG_VALUE_0:-}" >> "$root/git-env"
+[ "\$1" = push ] && cp .git/config "$root/clone-config"
+exec "$real_git" "\$@"
+SHIM
+chmod +x "$root/bin/git"
+printf 'cask "tap-desktop" do\n  version "2.2.0"\nend\n' > "$root/tap-desktop-2.2.0.rb"
+status=0
+out=$(env -u HOMEBREW_TAP_URL PATH="$root/bin:$PATH" HOMEBREW_TAP_TOKEN="$token" TAP_RELEASE_NOTARIZED=yes "$script" 2.2.0 "$root/tap-desktop-2.2.0.rb" 2>"$root/github-err") || status=$?
+[ -s "$root/git-argv" ] || { echo "the logging git never ran"; exit 1; }
+for leak in "$token" "$encoded"; do
+	if grep -Fq "$leak" "$root/git-argv"; then echo "the token reached git's argv"; exit 1; fi
+	if [ -f "$root/clone-config" ] && grep -Fq "$leak" "$root/clone-config"; then echo "the token reached the clone's .git/config"; exit 1; fi
+	if grep -Fq "$leak" "$GIT_CONFIG_GLOBAL"; then echo "the token reached the global git config"; exit 1; fi
+	if printf '%s' "$out" | grep -Fq "$leak" || grep -Fq "$leak" "$root/github-err"; then echo "the token reached the output"; exit 1; fi
+done
+[ "$status" = 0 ] || { echo "the push down the GitHub route should succeed: $out $(cat "$root/github-err")"; exit 1; }
+echo "$out" | grep -q '^pushed Casks/tap-desktop.rb for 2.2.0 (' || { echo "no pushed line down the GitHub route: $out"; exit 1; }
+[ "$(git --git-dir="$root/tap.git" log -1 --format=%s)" = "Update tap-desktop to 2.2.0" ] || { echo "the GitHub route did not reach the tap"; exit 1; }
+grep -Fq 'url = https://github.com/MiniCodeMonkey/homebrew-tap.git' "$root/clone-config" || { echo "the remote is not the bare GitHub URL: $(grep url "$root/clone-config")"; exit 1; }
+while IFS='|' read -r count key value; do
+	[ "$count" = 1 ] && [ "$key" = "http.https://github.com/.extraheader" ] || { echo "a git call ran without the header's key: $count $key"; exit 1; }
+	[ "$value" = "AUTHORIZATION: basic $encoded" ] || { echo "a git call ran without the token's header"; exit 1; }
+	[ "$(printf '%s' "${value#AUTHORIZATION: basic }" | base64 -d)" = "x-access-token:$token" ] || { echo "the header does not decode to the token"; exit 1; }
+done < "$root/git-env"
+
 echo "publish-cask.sh is right"
