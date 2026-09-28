@@ -69,8 +69,9 @@ public final class SourceSync {
         Task { @MainActor in await self.sendNow() }
     }
 
-    /// True while tap is running and has not yet answered for the text as
-    /// it stands: an edit still waits for its pause, or a PUT is in flight.
+    /// True while tap is running and the text as it stands is still
+    /// waiting on it: an edit waits for its pause, or a PUT is in flight.
+    /// False once the text was sent and answered, or the send failed.
     public var hasUnsentText: Bool {
         sender != nil && (inFlight || text() != lastSentText)
     }
