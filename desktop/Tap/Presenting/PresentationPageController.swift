@@ -80,15 +80,20 @@ final class PresentationPageController: NSViewController, WKNavigationDelegate, 
     }
 
     private func recordMilestone(_ name: String) {
-        let url = webView.url.map { url in
-            url.path + (url.query.map { "?" + $0 } ?? "") + (url.fragment.map { "#" + $0 } ?? "")
-        } ?? "none"
+        // The query can hold the presenter key or a launch code, so only its
+        // presence is kept.
+        var url = "none"
+        if let current = webView.url {
+            let query: String = current.query == nil ? "" : "?…"
+            let fragment: String = current.fragment.map { "#" + $0 } ?? ""
+            url = current.path + query + fragment
+        }
         navigationMilestones.append((name: name, url: url, date: Date()))
         if navigationMilestones.count > Self.maximumMilestones { navigationMilestones.removeFirst() }
     }
 
     /// The milestones since the last load, each as seconds after it began:
-    /// "start /presenter?key=…#2 +0.02s, redirect /presenter#2 +0.05s, …".
+    /// "start /presenter?…#2 +0.02s, redirect /presenter#2 +0.05s, …".
     var navigationMilestoneDescription: String {
         guard let start = lastLoadDate, !navigationMilestones.isEmpty else { return "none" }
         return navigationMilestones.map { "\($0.name) \($0.url) +\(String(format: "%.2f", $0.date.timeIntervalSince(start)))s" }
