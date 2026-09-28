@@ -24,8 +24,8 @@ settings:
       # Notarization needs the hardened runtime. Debug and Benchmark keep it
       # off: a hardened test host refuses the injected test bundles.
       ENABLE_HARDENED_RUNTIME: YES
-      # Apple silicon only (the person's decision, 2026-09-27): the bundled
-      # tap follows ARCHS in build-tap.sh, the cask and the appcast say so.
+      # Apple silicon only: the bundled tap follows ARCHS in build-tap.sh,
+      # and the cask and the appcast say so.
       ARCHS: arm64
       ONLY_ACTIVE_ARCH: NO
 configs:
