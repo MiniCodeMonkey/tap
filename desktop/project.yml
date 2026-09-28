@@ -35,6 +35,9 @@ configs:
 packages:
   TapDesktopCore:
     path: TapDesktopCore
+  Sparkle:
+    url: https://github.com/sparkle-project/Sparkle
+    exactVersion: 2.10.0
 targets:
   Tap:
     type: application
@@ -45,6 +48,7 @@ targets:
           - Info.plist
     dependencies:
       - package: TapDesktopCore
+      - package: Sparkle
     info:
       path: Tap/Info.plist
       properties:
@@ -57,6 +61,15 @@ targets:
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true
         NSMicrophoneUsageDescription: Tap records your voice with the screen when you record a talk.
+        # Sparkle: the feed is the latest GitHub release's appcast, the key
+        # checks every update's, the notes' and the feed's own EdDSA
+        # signature, and the feed must carry one (which needs the update
+        # verified before extraction). The private key never leaves the
+        # person's keychain and CI's secret.
+        SUFeedURL: https://github.com/MiniCodeMonkey/tap/releases/latest/download/appcast.xml
+        SUPublicEDKey: Pc0PbtYL9fkyK3XnqULlpKLlH94TE4OWx4Q3n74EftU=
+        SURequireSignedFeed: true
+        SUVerifyUpdateBeforeExtraction: true
         CFBundleDocumentTypes:
           - CFBundleTypeName: Markdown Deck
             CFBundleTypeRole: Editor
