@@ -5,8 +5,7 @@ import AppKit
 /// while the speaker talks and slides up when the pointer reaches the
 /// bottom edge, then slides away once the pointer has left it. The bottom,
 /// not the top: in system full screen the menu bar drops over the top
-/// edge when the pointer rests there, and would cover a toolbar (the
-/// person's decision 7, 2026-09-25).
+/// edge when the pointer rests there, and would cover a toolbar.
 final class PresenterToolbar: NSView {
     static let height: CGFloat = 52
     let titleLabel = NSTextField(labelWithString: "")
