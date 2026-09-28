@@ -1,0 +1,29 @@
+cask "tap-desktop" do
+  version "__VERSION__"
+  sha256 "__SHA256__"
+
+  url "https://github.com/MiniCodeMonkey/tap/releases/download/v#{version}/Tap-#{version}.dmg"
+  name "Tap Desktop"
+  desc "Write and present tap decks, with the tap command-line tool built in"
+  homepage "https://github.com/MiniCodeMonkey/tap"
+
+  livecheck do
+    url :url
+    strategy :github_latest
+  end
+
+  auto_updates true
+  depends_on arch: :arm64
+  depends_on macos: :sonoma
+
+  app "Tap.app"
+
+  zap trash: [
+    "~/Library/Application Support/Tap",
+    "~/Library/Caches/io.geocod.tap.desktop",
+    "~/Library/HTTPStorages/io.geocod.tap.desktop",
+    "~/Library/Preferences/io.geocod.tap.desktop.plist",
+    "~/Library/Saved Application State/io.geocod.tap.desktop.savedState",
+    "~/Library/WebKit/io.geocod.tap.desktop",
+  ]
+end
