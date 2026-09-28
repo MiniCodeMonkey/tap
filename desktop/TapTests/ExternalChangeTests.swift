@@ -392,6 +392,33 @@ final class ExternalChangeTests: HostedTestCase {
         XCTAssertTrue(document.isDocumentEdited)
     }
 
+    /// An in-place autosave that reaches the write while a conflict is
+    /// showing writes nothing, whatever let it start: NSDocument chooses the
+    /// file an autosave writes after the autosave has begun, so a rename by
+    /// another program can turn an autosave begun without a file into an
+    /// in-place write of the renamed file. Driven directly, since racing a
+    /// real rename against the periodic autosave is not deterministic.
+    func testAnInPlaceAutosaveDuringAConflictWritesNothing() async throws {
+        let (deck, document, mine, theirs) = try await openDeckWithAShownConflict()
+        let controller = try XCTUnwrap(document.sessionController)
+        // After a move, NSDocument's known modification date is the moved
+        // file's, so its own check that the file changed on disk passes: only
+        // the conflict guard stands between the autosave and the file.
+        document.acceptDiskState()
+        XCTAssertFalse(document.diskIsNewerThanKnown)
+
+        let saveError = await withCheckedContinuation { (continuation: CheckedContinuation<Error?, Never>) in
+            document.save(to: deck, ofType: "net.daringfireball.markdown", for: .autosaveInPlaceOperation) { error in
+                continuation.resume(returning: error)
+            }
+        }
+        XCTAssertEqual(try String(contentsOf: deck, encoding: .utf8), theirs, "the other program's text is still on disk")
+        XCTAssertEqual((saveError as? CocoaError)?.code, .userCancelled, "refused silently")
+        XCTAssertTrue(controller.hasDiskConflict)
+        XCTAssertEqual(controller.editor.string, mine, "the person's text is still in the editor")
+        XCTAssertTrue(document.isDocumentEdited)
+    }
+
     /// Revert To Last Saved while a conflict is showing loads the file into
     /// the editor, which resolves the conflict the same way Load Disk
     /// Version does. A Versions restore reads the file through the same
