@@ -517,3 +517,100 @@ jobs:
 
       - name: Run benchmarks
         run: make -C desktop bench
+
+  # The release pipeline with no secrets, on every pull request: the arm64
+  # Release build with the hardened runtime and the entitlements, the hook
+  # check, ad-hoc signing, the -unnotarized DMG, the unsigned appcast under
+  # its own name and the rendered cask, then brew style on the cask.
+  # release.sh skips notarization, the Sparkle signatures and everything
+  # that depends on them by name; the summary lists them. The DMG is kept
+  # for a week so a reviewer can inspect it. This is how the pipeline is
+  # proven before the Developer ID certificate, the notary key and the
+  # Sparkle key exist. It references no secret, so a fork's pull request
+  # reaches none. This is also the first job to build the Release
+  # configuration with Sparkle linked in, so a failure here is a build
+  # failure worth diagnosing, not a flaky skip: the step fails without
+  # continue-on-error, and xcodebuild's own logs are uploaded when it does.
+  release-dry-run:
+    name: Desktop Release Dry Run
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Select Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: '26'
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install xcodegen
+        run: brew install xcodegen
+
+      - name: Install frontend dependencies
+        run: cd frontend && npm ci
+
+      - name: Build frontend
+        run: make frontend
+
+      - name: Check the release scripts
+        run: make -C desktop release-tests
+
+      - name: Dry run the release
+        run: make -C desktop release VERSION=0.0.0-ci
+
+      - name: Check the cask's style
+        run: brew style desktop/build/release/Casks/tap-desktop.rb
+
+      - name: Summarize
+        if: always()
+        run: |
+          echo "## Desktop release dry run" >> "$GITHUB_STEP_SUMMARY"
+          if [ -f desktop/build/release/release-summary.md ]; then
+            cat desktop/build/release/release-summary.md >> "$GITHUB_STEP_SUMMARY"
+            grep -c '^- skipped:' desktop/build/release/release-summary.md | xargs -I{} echo "{} steps skipped, as expected with no secrets" >> "$GITHUB_STEP_SUMMARY"
+            grep -q '^notarized=no$' desktop/build/release/release-state.env && echo "state: not notarized, feed unsigned, nothing publishable" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Keep the DMG
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: desktop-release-dry-run
+          path: |
+            desktop/build/release/Tap-0.0.0-ci-unnotarized.dmg
+            desktop/build/release/Tap-0.0.0-ci-unnotarized.dmg.sha256
+            desktop/build/release/appcast-unsigned.xml
+            desktop/build/release/Casks/tap-desktop.rb
+            desktop/build/release/release-summary.md
+            desktop/build/release/release-state.env
+          retention-days: 7
+
+      # xcodebuild's own build log (not just the truncated console output in
+      # the step above), the only place a Sparkle-linked build's actual
+      # compiler or linker failure shows in full, for the first real run of
+      # this job.
+      - name: Upload build logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: desktop-release-dry-run-logs
+          path: |
+            desktop/build/DerivedData/Logs
+            desktop/build/release/release-summary.md
+            desktop/build/release/release-state.env
+          retention-days: 7

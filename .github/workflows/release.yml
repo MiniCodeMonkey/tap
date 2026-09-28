@@ -23,6 +23,10 @@ jobs:
             echo "Expected semantic version (e.g., 1.0.0, 1.0.0-beta.1)"
             exit 1
           fi
+          # The desktop build refuses versions the regex accepts (an unknown
+          # label, a label with no number, beta.08), and a tag pushed before
+          # that failure blocks a re-run; so the same check runs here first.
+          desktop/scripts/build-number.sh "$VERSION" >/dev/null
           echo "VERSION=$VERSION" >> $GITHUB_ENV
           echo "TAG=v$VERSION" >> $GITHUB_ENV
 
@@ -134,6 +138,11 @@ jobs:
             dist/checksums.txt
           draft: false
           prerelease: ${{ contains(github.event.inputs.version, '-') }}
+          # The desktop job marks a final latest once its Sparkle feed is
+          # uploaded (desktop/scripts/mark-latest.sh): "latest" is where the
+          # app's feed URL points, and it must never point at a release with
+          # no feed. The formula uses versioned URLs and is unaffected.
+          make_latest: false
 
       # Update Homebrew tap (skip for pre-releases)
       - name: Update Homebrew formula
@@ -180,3 +189,151 @@ jobs:
           git add Formula/tap.rb
           git commit -m "Update tap to ${{ env.VERSION }}"
           git push
+
+  # Tap Desktop: built on a macOS runner from the tag the release job
+  # pushed, after the GitHub release exists so the DMG, the notes and the
+  # appcast can join it. The build runs with no secret in its environment;
+  # only the release.sh step has them. Every step that needs a secret is
+  # skipped, by name, when the secret is absent (see
+  # desktop/scripts/release.sh), and what gets published follows the
+  # state file: a DMG that was not notarized goes up under its
+  # -unnotarized name alone, an appcast only when signed, the cask only for
+  # a notarized final, and the release becomes "latest" only once its feed
+  # is up.
+  desktop:
+    name: Desktop release
+    needs: release
+    runs-on: macos-15
+    timeout-minutes: 90
+    env:
+      VERSION: ${{ github.event.inputs.version }}
+    steps:
+      - name: Checkout the tag
+        uses: actions/checkout@v7
+        with:
+          ref: v${{ github.event.inputs.version }}
+          persist-credentials: false
+
+      - name: Select Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: '26'
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install xcodegen
+        run: brew install xcodegen
+
+      - name: Install frontend dependencies
+        run: cd frontend && npm ci
+
+      # build-tap.sh refuses a stale embedded/dist, so the frontend is built
+      # before Xcode runs, as every desktop job does.
+      - name: Build frontend
+        run: make frontend
+
+      - name: Check the release scripts
+        run: make -C desktop release-tests
+
+      # No secret is in this step's environment: xcodegen, SwiftPM, xcodebuild
+      # and go build need none.
+      - name: Build the Release app
+        run: make -C desktop check-release-app-hooks VERSION="$VERSION"
+
+      # The secrets reach release.sh through this step's environment alone.
+      # An unset secret is an empty string here, which each script treats as
+      # absent and reports as skipped.
+      - name: Sign, notarize and package
+        env:
+          APPLE_DEVELOPER_ID_APPLICATION_P12: ${{ secrets.APPLE_DEVELOPER_ID_APPLICATION_P12 }}
+          APPLE_DEVELOPER_ID_APPLICATION_PASSWORD: ${{ secrets.APPLE_DEVELOPER_ID_APPLICATION_PASSWORD }}
+          APPLE_NOTARY_KEY: ${{ secrets.APPLE_NOTARY_KEY }}
+          APPLE_NOTARY_KEY_ID: ${{ secrets.APPLE_NOTARY_KEY_ID }}
+          APPLE_NOTARY_ISSUER_ID: ${{ secrets.APPLE_NOTARY_ISSUER_ID }}
+          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+        run: desktop/scripts/release.sh "$VERSION" desktop/build/DerivedData/Build/Products/Release/Tap.app desktop/build/release
+
+      - name: Remove the signing keychain
+        if: always()
+        run: desktop/scripts/signing-identity.sh remove
+
+      - name: Summarize
+        if: always()
+        run: |
+          echo "## Tap Desktop $VERSION" >> "$GITHUB_STEP_SUMMARY"
+          if [ -f desktop/build/release/release-summary.md ]; then
+            cat desktop/build/release/release-summary.md >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "release.sh wrote no summary; the build or an earlier step failed." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      # What the state allows, in an order where a feed never names a file
+      # that is not up yet: the DMG and its checksum, then the notes, then
+      # the feed. A DMG that was not notarized never reaches the release; the
+      # next step keeps it as a workflow artifact.
+      - name: Upload to the release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          source desktop/build/release/release-state.env
+          echo "notarized=$notarized" >> "$GITHUB_ENV"
+          feed_uploaded=no
+          if [ "$notarized" != yes ]; then
+            echo "- the DMG is not notarized: nothing was added to the release; $dmg is the workflow artifact desktop-release-unnotarized (seven days)" | tee -a "$GITHUB_STEP_SUMMARY"
+          else
+            cd desktop/build/release
+            gh release upload "v$VERSION" "$dmg" "$checksum" --clobber
+            echo "uploaded $dmg and $checksum" | tee -a "$GITHUB_STEP_SUMMARY"
+            if [ -n "$notes" ] && [ "$feed_signed" = yes ]; then
+              gh release upload "v$VERSION" "$notes" --clobber
+              echo "uploaded $notes" | tee -a "$GITHUB_STEP_SUMMARY"
+            fi
+            if [ "$feed_signed" = yes ]; then
+              gh release upload "v$VERSION" appcast.xml --clobber
+              feed_uploaded=yes
+              echo "uploaded appcast.xml (signed)" | tee -a "$GITHUB_STEP_SUMMARY"
+            else
+              echo "- skipped: appcast upload (the feed is not signed)" | tee -a "$GITHUB_STEP_SUMMARY"
+            fi
+          fi
+          echo "feed_uploaded=$feed_uploaded" >> "$GITHUB_ENV"
+
+      - name: Keep the un-notarized DMG as an artifact
+        if: env.notarized != 'yes'
+        uses: actions/upload-artifact@v7
+        with:
+          name: desktop-release-unnotarized
+          path: |
+            desktop/build/release/*-unnotarized.dmg
+            desktop/build/release/*-unnotarized.dmg.sha256
+            desktop/build/release/release-summary.md
+            desktop/build/release/release-state.env
+          retention-days: 7
+
+      - name: Mark the release latest
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: desktop/scripts/mark-latest.sh "$VERSION" "$feed_uploaded" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      # A notarized final only, as the formula step above and the state say.
+      - name: Update the Homebrew cask
+        shell: bash
+        env:
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          HOMEBREW_TAP_REPO: ${{ vars.HOMEBREW_TAP_REPO || 'MiniCodeMonkey/homebrew-tap' }}
+        run: |
+          source desktop/build/release/release-state.env
+          TAP_RELEASE_NOTARIZED="$notarized" desktop/scripts/publish-cask.sh "$VERSION" "desktop/build/release/$cask" > cask-result.txt
+          cat cask-result.txt | tee -a "$GITHUB_STEP_SUMMARY"
