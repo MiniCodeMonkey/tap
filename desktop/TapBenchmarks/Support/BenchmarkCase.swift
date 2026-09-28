@@ -72,11 +72,18 @@ class BenchmarkCase: XCTestCase {
                 "min": rounded(sorted.first!), "max": rounded(sorted.last!)]
     }
 
+    /// Writes `results` to desktop/build/benchmarks/`name`.json, and prints
+    /// them on one line, so a CI log keeps every run's numbers, a passing
+    /// run's too, and the bounds can be checked against the runner's
+    /// history.
     func write(_ results: [String: Any], to name: String) {
         let folder = repositoryRoot.appendingPathComponent("desktop/build/benchmarks")
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         if let data = try? JSONSerialization.data(withJSONObject: results, options: [.prettyPrinted, .sortedKeys]) {
             try? data.write(to: folder.appendingPathComponent("\(name).json"))
+        }
+        if let line = try? JSONSerialization.data(withJSONObject: results, options: [.sortedKeys]) {
+            print("benchmark results \(name): \(String(decoding: line, as: UTF8.self))")
         }
     }
 }
