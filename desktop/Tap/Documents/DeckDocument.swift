@@ -103,6 +103,12 @@ final class DeckDocument: NSDocument {
             if self.savingOwnFile {
                 self.savedSnapshot = snapshot
                 self.savedSnapshotRevision = self.textRevision
+                // The snapshot can hold a keystroke tap has not been sent
+                // yet: a key that lands after the autosave checked for
+                // unsent text, or a Save right after typing. tap is told
+                // what is about to be written before the write, so it
+                // knows the write as the app's own.
+                self.sessionController?.documentWillWrite(snapshot)
             }
             return Data(snapshot.utf8)
         }
