@@ -1290,6 +1290,92 @@ describe('hub late-joiner state vs the URL hash', () => {
 		expect(usePresentationStore.getState().currentSlideIndex).toBe(3);
 	});
 
+	it('follows a hub state set after the page loaded, even when it names a different slide than the hash', () => {
+		// The talk's page loads at #2 (index 1) and reports that slide. The
+		// audience moves to index 2 before this page's socket registers, so
+		// the move reaches the hub but not this page; the hub's register-time
+		// state is the only word of it this page ever gets. It is 300 ms old
+		// on a page that loaded 5 s ago: newer than the hash, so it wins.
+		stubWindowWithHash('#2');
+		vi.spyOn(performance, 'now').mockReturnValue(5000);
+
+		vi.stubGlobal(
+			'WebSocket',
+			createMockWebSocketConstructor((ws) => {
+				mockWs = ws;
+			})
+		);
+		loadPresentation(makePresentation(5));
+		expect(usePresentationStore.getState().currentSlideIndex).toBe(1);
+
+		connectWebSocket();
+		mockWs?.simulateOpen();
+		mockWs?.simulateMessage({
+			type: 'slide',
+			slideIndex: 2,
+			fragment: -1,
+			step: 0,
+			scrollRevealed: false,
+			initial: true,
+			ageMs: 300
+		});
+
+		expect(usePresentationStore.getState().currentSlideIndex).toBe(2);
+	});
+
+	it('follows a hub state set after the page loaded when it arrives before the deck does', () => {
+		stubWindowWithHash('#2');
+		vi.spyOn(performance, 'now').mockReturnValue(5000);
+
+		vi.stubGlobal(
+			'WebSocket',
+			createMockWebSocketConstructor((ws) => {
+				mockWs = ws;
+			})
+		);
+		connectWebSocket();
+		mockWs?.simulateOpen();
+		mockWs?.simulateMessage({
+			type: 'slide',
+			slideIndex: 2,
+			fragment: 1,
+			step: 0,
+			scrollRevealed: false,
+			initial: true,
+			ageMs: 300
+		});
+		loadPresentation(makePresentation(5));
+
+		expect(usePresentationStore.getState().currentSlideIndex).toBe(2);
+		expect(usePresentationStore.getState().currentFragmentIndex).toBe(1);
+	});
+
+	it('keeps the hash over a hub state set before the page loaded', () => {
+		stubWindowWithHash('#2');
+		vi.spyOn(performance, 'now').mockReturnValue(5000);
+
+		vi.stubGlobal(
+			'WebSocket',
+			createMockWebSocketConstructor((ws) => {
+				mockWs = ws;
+			})
+		);
+		loadPresentation(makePresentation(5));
+		connectWebSocket();
+		mockWs?.simulateOpen();
+		mockWs?.simulateMessage({
+			type: 'slide',
+			slideIndex: 2,
+			fragment: -1,
+			step: 0,
+			scrollRevealed: false,
+			initial: true,
+			ageMs: 60_000
+		});
+
+		expect(usePresentationStore.getState().currentSlideIndex).toBe(1);
+	});
+
 	it('a reconnect still lets the hub state win outright even when the first connection never received an initial message at all', () => {
 		// Regression test: a presenter loads at #1 onto an empty hub -
 		// nobody has navigated yet, so the hub sends no `initial` message

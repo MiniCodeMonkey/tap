@@ -327,6 +327,13 @@ export interface WebSocketMessage {
 	 */
 	initial?: boolean;
 	/**
+	 * On the hub's register-time state only: how many milliseconds before
+	 * sending it the hub's state last changed. It tells a page whether the
+	 * talk moved after the page loaded (see applyHubLateJoinerState in
+	 * stores/websocket.ts). Absent from a hub that predates it.
+	 */
+	ageMs?: number;
+	/**
 	 * Short content hash of the deck currently served, on a "connected"
 	 * message (see internal/server/websocket.go's register case) and on an
 	 * "update" message. Absent when the hub has never had a presentation set.
