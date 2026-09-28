@@ -10,6 +10,18 @@ extension PresentationPageController {
         return ""
     }
 
+    /// Where the page stands, for a failure message: its last ready, its
+    /// loads and ended processes, and, in the page, its URL hash and ready
+    /// state (window.__tapReadyState).
+    func diagnostics() async -> String {
+        var inThePage = "no answer in 5 s"
+        if case .value(let value) = await webView.evaluate("location.hash + ' ' + JSON.stringify(window.__tapReadyState)", timeout: 5) {
+            inThePage = value as? String ?? String(describing: value)
+        }
+        return "lastReady=\(String(describing: lastReady)) pageLoads=\(pageLoadCount) "
+            + "processEnds=\(processTerminationCount) page=\(inThePage)"
+    }
+
     /// Presses `key` (a KeyboardEvent key name, "ArrowRight" or "o") in
     /// the page, the way the page's own handler on `window` sees it, so a
     /// key test does not depend on which window the host has as key.

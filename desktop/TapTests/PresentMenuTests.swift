@@ -236,7 +236,15 @@ final class PresentMenuTests: PresentingTestCase {
         // so the proof does not depend on which window the host has as key.
         await audience.page.pressKey("ArrowRight")
         try await waitUntil(timeout: 10, "tap's slide event for slide 3") { presentation.lastSlide == 3 }
-        try await waitUntil(timeout: 10, "the presenter page following") { presenter.page.lastReady?.slide == 3 }
+        let followDeadline = Date().addingTimeInterval(10)
+        while presenter.page.lastReady?.slide != 3 {
+            if Date() > followDeadline {
+                let whereItStopped = await presenter.page.diagnostics()
+                XCTFail("timed out waiting for the presenter page following: \(whereItStopped)")
+                return
+            }
+            try await Task.sleep(nanoseconds: 20_000_000)
+        }
 
         // S opens the presenter view in the presenter window, never a browser popup: on one display it comes over the audience view.
         let port = try XCTUnwrap(presentation.client).ready.port
