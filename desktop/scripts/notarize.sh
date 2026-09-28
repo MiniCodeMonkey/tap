@@ -4,6 +4,10 @@
 # ticket to the target (the app the zip holds, or the DMG itself). The key
 # exists on disk only in a private temporary folder for the length of the
 # run. Without the three secrets: one skip line, exit 0, nothing touched.
+# APPLE_NOTARY_KEY_ID and APPLE_NOTARY_ISSUER_ID are arguments of notarytool
+# (an accepted exposure: identifiers, useless without the .p8, and notarytool
+# takes them no other way); the key itself reaches notarytool only as the
+# private file.
 set -eu
 
 file="${1:-}"; target="${2:-}"

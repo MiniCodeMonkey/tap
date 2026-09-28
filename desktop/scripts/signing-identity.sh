@@ -7,11 +7,14 @@
 # any step removes the keychain again before exiting.
 # remove: deletes that keychain and takes it out of the search list.
 # The .p12 exists on disk only inside a private temporary folder for the
-# length of the import; its password is an argument of security import
-# (an accepted exposure on a single-tenant runner). TAP_SIGNING_KEYCHAIN_FILE
-# names the keychain (default build/tap-release.keychain-db next to the
-# scripts' parent); the path is made canonical, since security prints
-# canonical paths (/private/var for /var) in the search list.
+# length of the import. Two values are arguments of security, accepted
+# exposures on a single-tenant runner: the .p12's password (of import) and
+# the temporary keychain's own password, a random value made here for one
+# job (of create-keychain, unlock-keychain and set-key-partition-list).
+# TAP_SIGNING_KEYCHAIN_FILE names the keychain (default
+# build/tap-release.keychain-db next to the scripts' parent); the path is
+# made canonical, since security prints canonical paths (/private/var for
+# /var) in the search list.
 set -eu
 
 here="$(cd "$(dirname "$0")" && pwd)"

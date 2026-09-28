@@ -126,3 +126,27 @@ installed (the QR code from tap, a phone driving the deck). The UI tests
 and benchmarks run on CI (the Desktop UI Tests and Desktop Benchmarks
 jobs), never on the person's own machine, since they take over the
 screen.
+
+## Release secrets
+
+The release scripts in `scripts/` read their secrets from the environment,
+write a secret that must be a file (the `.p12`, the `.p8`) with `umask 077`
+into a private temporary folder that a trap removes, and print none of
+them. A few values still travel as command-line arguments, where another
+process of the same user could read them while the command runs. Each is
+accepted, on a single-tenant runner, and named here:
+
+- the `.p12` password (`APPLE_DEVELOPER_ID_APPLICATION_PASSWORD`), an
+  argument of `security import -P` in `signing-identity.sh`;
+- the temporary keychain's password, a random value made by
+  `signing-identity.sh` for one job, an argument of `security
+  create-keychain`, `unlock-keychain` and `set-key-partition-list`;
+- `APPLE_NOTARY_KEY_ID` and `APPLE_NOTARY_ISSUER_ID`, arguments of
+  `notarytool submit` and `notarytool log` in `notarize.sh`: identifiers,
+  useless without the `.p8`, which reaches notarytool only as a file.
+
+`HOMEBREW_TAP_TOKEN` never is: `publish-cask.sh` hands it to git as an
+Authorization header through git's environment configuration
+(`GIT_CONFIG_COUNT`, `GIT_CONFIG_KEY_0`, `GIT_CONFIG_VALUE_0`) for one
+clone and push, never in the URL, an argument or `.git/config`. The
+Sparkle key reaches `sign_update` on its standard input alone.
