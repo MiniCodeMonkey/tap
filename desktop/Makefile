@@ -13,8 +13,9 @@ VERSION ?= 0.0.0-dev
 BUILD_NUMBER = $(shell ./scripts/build-number.sh $(VERSION))
 RELEASE_APP = $(DERIVED_DATA)/Build/Products/Release/Tap.app
 RELEASE_BINARY = $(RELEASE_APP)/Contents/MacOS/Tap
+RELEASE_DIR = build/release
 
-.PHONY: project core-test build test test-build uitest bench bench-build app-path check-scenarios check-release-hooks release-build check-release-app-hooks
+.PHONY: project core-test build test test-build uitest bench bench-build app-path check-scenarios check-release-hooks release-build check-release-app-hooks release-tests release
 project:
 	xcodegen generate --spec project.yml --quiet
 
@@ -73,3 +74,17 @@ check-release-app-hooks: release-build
 	@strings -a $(RELEASE_BINARY) | grep -q TapExecutablePath || { echo "no strings to check in $(RELEASE_BINARY)"; exit 1; }
 	@! { nm $(RELEASE_BINARY); strings -a $(RELEASE_BINARY); } | grep -q approvalAnswerForTests || { echo "approvalAnswerForTests is in the Release build"; exit 1; }
 	@echo "no test-only hook in the Release build"
+
+# Every release script's own test; none needs a build, a secret, a window
+# or the network.
+release-tests:
+	@for test in scripts/build-number-test.sh scripts/sign-app-test.sh scripts/make-dmg-test.sh scripts/write-appcast-test.sh scripts/sparkle-sign-test.sh scripts/render-cask-test.sh scripts/publish-cask-test.sh scripts/signing-identity-test.sh scripts/notarize-test.sh scripts/verify-release-test.sh scripts/release-test.sh scripts/mark-latest-test.sh; do \
+		echo "== $$test"; sh "$$test" || exit 1; \
+	done
+
+# The release: the Release build, the hook check, then release.sh, which
+# signs, notarizes, writes the DMG, the notes, the appcast and the cask
+# into build/release, skipping what has no secret. The same target is the
+# local dry run (VERSION=0.0.0-dev, no secrets) and the release job's step.
+release: check-release-app-hooks
+	./scripts/release.sh $(VERSION) $(RELEASE_APP) $(RELEASE_DIR)
