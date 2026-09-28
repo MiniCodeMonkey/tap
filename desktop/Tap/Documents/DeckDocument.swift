@@ -221,7 +221,11 @@ final class DeckDocument: NSDocument {
     // any other caller, direct or future, that drives it with unsaved
     // changes during a shown conflict: `.userCancelled` is the one error
     // NSDocument treats as a silent refusal, so a close or quit driven this
-    // way still cancels instead of writing, with no alert shown.
+    // way still cancels instead of writing, with no alert shown. This guard
+    // reads the conflict when the autosave starts; `save(to:ofType:for:
+    // completionHandler:)` below also refuses an in-place autosave at write
+    // time, for an autosave that starts with no conflict showing and reaches
+    // the file after one has come back.
     override func autosave(withImplicitCancellability autosavingIsImplicitlyCancellable: Bool,
                            completionHandler: @escaping (Error?) -> Void) {
         if sessionController?.hasDiskConflict == true { return completionHandler(CocoaError(.userCancelled)) }
