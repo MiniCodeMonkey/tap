@@ -643,11 +643,8 @@ final class EditorTextView: NSTextView {
             || pasteboardForPaste.availableType(from: readablePasteboardTypes) != nil
     }
 
-    override func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
-        if menuItem.action == #selector(paste(_:)) { return canPaste }
-        return super.validateMenuItem(menuItem)
-    }
-
+    /// Validates Paste for menu items too: NSTextView's `validateMenuItem`
+    /// asks `validateUserInterfaceItem` and returns its answer.
     override func validateUserInterfaceItem(_ item: NSValidatedUserInterfaceItem) -> Bool {
         if item.action == #selector(paste(_:)) { return canPaste }
         return super.validateUserInterfaceItem(item)
