@@ -1,6 +1,12 @@
 import XCTest
 @testable import TapDesktopCore
 
+/// Every fake script whose INT trap must run loops on `sleep 0.1 & wait $!`,
+/// never on a foreground `sleep 0.1`. /bin/sh is bash 3.2, which drops a
+/// SIGINT sent to the shell alone while it reaps a foreground child that
+/// then exits normally (it assumes the child handled the Ctrl-C), so the
+/// trap never runs and only the SIGTERM escalation ends the script. A
+/// trapped signal interrupts `wait` at once, so the trap always runs.
 final class ToolRunTests: XCTestCase {
     func testDecodesTheProgressLines() {
         XCTAssertEqual(ProgressLine.decode(line: #"{"phase":"render","done":7,"total":14}"#), .step(phase: "render", done: 7, total: 14))
@@ -61,7 +67,7 @@ final class ToolRunTests: XCTestCase {
         #!/bin/sh
         trap 'echo "{\\"phase\\":\\"done\\",\\"ok\\":false,\\"error\\":{\\"code\\":\\"interrupted\\",\\"message\\":\\"interrupted\\"}}" >&2; exit 130' INT
         echo '{"phase":"render","done":1,"total":30}' >&2
-        i=0; while [ $i -lt 300 ]; do sleep 0.1; i=$((i + 1)); done
+        i=0; while [ $i -lt 300 ]; do sleep 0.1 & wait $!; i=$((i + 1)); done
         exit 0
         """)
         let run = ToolRun(configuration: .init(executableURL: script, arguments: [], environment: ["PATH": "/usr/bin:/bin"], currentDirectoryURL: nil, timeout: 60))
@@ -81,7 +87,7 @@ final class ToolRunTests: XCTestCase {
     /// A deadline is Ctrl-C first, so tap closes its browser, then the escalation.
     @MainActor
     func testATimeoutInterruptsThenKillsTheProcess() async throws {
-        let script = try Self.script("#!/bin/sh\ntrap 'echo interrupted >&2; exit 130' INT\ni=0; while [ $i -lt 300 ]; do sleep 0.1; i=$((i + 1)); done\n")
+        let script = try Self.script("#!/bin/sh\ntrap 'echo interrupted >&2; exit 130' INT\ni=0; while [ $i -lt 300 ]; do sleep 0.1 & wait $!; i=$((i + 1)); done\n")
         let run = ToolRun(configuration: .init(executableURL: script, arguments: [], environment: ["PATH": "/usr/bin:/bin"], currentDirectoryURL: nil, timeout: 1))
         var lines: [String] = []
         run.onStandardErrorLine = { lines.append($0) }
@@ -140,7 +146,7 @@ final class ToolRunTests: XCTestCase {
 
     @MainActor
     func testStopAllCancelsEveryLiveRun() async throws {
-        let script = try Self.script("#!/bin/sh\ntrap 'exit 130' INT\ni=0; while [ $i -lt 3000 ]; do sleep 0.1; i=$((i + 1)); done\n")
+        let script = try Self.script("#!/bin/sh\ntrap 'exit 130' INT\ni=0; while [ $i -lt 3000 ]; do sleep 0.1 & wait $!; i=$((i + 1)); done\n")
         let before = ToolRun.activeRuns.count
         let first = ToolRun(configuration: .init(executableURL: script, arguments: [], environment: ["PATH": "/usr/bin:/bin"], currentDirectoryURL: nil, timeout: nil))
         let second = ToolRun(configuration: .init(executableURL: script, arguments: [], environment: ["PATH": "/usr/bin:/bin"], currentDirectoryURL: nil, timeout: nil))
@@ -176,7 +182,7 @@ final class ToolRunTests: XCTestCase {
     /// though the main queue (where the run learns of its exit) is blocked.
     @MainActor
     func testStopAllWaitingReturnsWhenEverythingExited() async throws {
-        let script = try Self.script("#!/bin/sh\ntrap 'exit 130' INT\necho started\ni=0; while [ $i -lt 3000 ]; do sleep 0.1; i=$((i + 1)); done\n")
+        let script = try Self.script("#!/bin/sh\ntrap 'exit 130' INT\necho started\ni=0; while [ $i -lt 3000 ]; do sleep 0.1 & wait $!; i=$((i + 1)); done\n")
         let run = ToolRun(configuration: .init(executableURL: script, arguments: [], environment: ["PATH": "/usr/bin:/bin"], currentDirectoryURL: nil, timeout: nil))
         var started = false
         run.onStandardOutputLine = { if $0 == "started" { started = true } }
@@ -209,7 +215,7 @@ final class ToolRunTests: XCTestCase {
     /// second cancel (Cancel, then closing the window, then quitting) sends none.
     @MainActor
     func testASecondCancelSendsNoSecondSIGINT() async throws {
-        let script = try Self.script("#!/bin/sh\nn=0\ntrap 'n=$((n + 1)); echo \"int $n\"' INT\necho started\ni=0; while [ $i -lt 3000 ]; do sleep 0.1; i=$((i + 1)); done\n")
+        let script = try Self.script("#!/bin/sh\nn=0\ntrap 'n=$((n + 1)); echo \"int $n\"' INT\necho started\ni=0; while [ $i -lt 3000 ]; do sleep 0.1 & wait $!; i=$((i + 1)); done\n")
         let run = ToolRun(configuration: .init(executableURL: script, arguments: [], environment: ["PATH": "/usr/bin:/bin"], currentDirectoryURL: nil, timeout: nil))
         var lines: [String] = []
         run.onStandardOutputLine = { lines.append($0) }
