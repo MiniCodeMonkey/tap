@@ -193,6 +193,13 @@ gh secret set APPLE_NOTARY_ISSUER_ID                                           #
 op read "op://<vault>/<item>/<field>" | gh secret set SPARKLE_PRIVATE_KEY      # the EdDSA key, from its 1Password item (the only route: nothing on disk)
 ```
 
+The certificate and the notary key start as files you exported or
+downloaded: once their secrets are set, delete `certificate.p12`
+(`rm certificate.p12`) and, after keeping a copy somewhere safe such as
+1Password, the `.p8`. `security export` cannot pipe the certificate
+instead: it has no way to pick one identity, so it would export every
+identity in the keychain.
+
 `HOMEBREW_TAP_TOKEN` exists already, and the optional variable
 `HOMEBREW_TAP_REPO` names the tap when it is not `MiniCodeMonkey/homebrew-tap`.
 A pre-release never reaches the feed or the cask.
