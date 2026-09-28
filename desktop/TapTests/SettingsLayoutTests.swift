@@ -12,16 +12,17 @@ final class SettingsLayoutTests: HostedTestCase {
     func testGeneralPaneLayout() {
         let general = GeneralSettingsViewController()
         let content = general.view
-        content.setFrameSize(NSSize(width: 760, height: 400))
+        content.setFrameSize(NSSize(width: 760, height: 460))
         content.layoutSubtreeIfNeeded()
 
         let cards = general.cards
-        XCTAssertEqual(cards.count, 3, "Editor, New decks, Saving")
+        XCTAssertEqual(cards.count, 4, "Editor, New decks, Saving, Updates")
         assertRowsDoNotOverlap([
             [general.fontSizePopup],
             [general.lineSpacingControl],
             [general.defaultThemePopup],
             [general.autosavePopup],
+            [general.automaticUpdatesCheckbox],
         ], in: content)
         for card in cards {
             assertCard(card, holds: card.rows, in: content)

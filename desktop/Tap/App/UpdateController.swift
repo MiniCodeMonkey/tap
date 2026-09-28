@@ -56,6 +56,23 @@ final class UpdateController: NSObject, SPUUpdaterDelegate {
         updater.checkForUpdates()
     }
 
+    /// Sparkle's "check automatically" answer, which the Settings checkbox
+    /// shows and changes. A test replaces the store so it never writes the
+    /// app's defaults, where Sparkle keeps the real one. Once this
+    /// controller is gone, the weak self reads false and writes nothing,
+    /// so a stray reference into a torn-down controller never crashes.
+    lazy var automaticChecksStore: (read: () -> Bool, write: (Bool) -> Void) = (
+        read: { [weak self] in self?.updater.automaticallyChecksForUpdates ?? false },
+        write: { [weak self] value in self?.updater.automaticallyChecksForUpdates = value }
+    )
+
+    /// Whether Sparkle checks for updates on its own, without the person
+    /// asking. The Updates card in Settings > General shows and changes this.
+    var automaticChecks: Bool {
+        get { automaticChecksStore.read() }
+        set { automaticChecksStore.write(newValue) }
+    }
+
     /// Why Play waits for Sparkle, or nil. When a window is the reason, it
     /// comes to the front, so the words point at something on screen
     /// (Sparkle may hold an alert a scheduled check found until the app is
