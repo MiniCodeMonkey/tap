@@ -45,8 +45,10 @@ umask 077
 printf '%s\n' "$APPLE_NOTARY_KEY" > "$private/AuthKey.p8"
 
 xcrun notarytool submit "$file" --key "$private/AuthKey.p8" --key-id "$APPLE_NOTARY_KEY_ID" --issuer "$APPLE_NOTARY_ISSUER_ID" --wait --timeout 30m --output-format json > "$private/result.json" || true
-status=$(/usr/bin/plutil -extract status raw -o - "$private/result.json" 2>/dev/null || true)
-submission=$(/usr/bin/plutil -extract id raw -o - "$private/result.json" 2>/dev/null || true)
+# Some macOS releases print plutil's own error on stdout when a key is
+# missing, so only the output of a successful extraction is a value.
+status=$(/usr/bin/plutil -extract status raw -o - "$private/result.json" 2>/dev/null) || status=""
+submission=$(/usr/bin/plutil -extract id raw -o - "$private/result.json" 2>/dev/null) || submission=""
 if [ "$status" != "Accepted" ]; then
 	echo "notarize.sh: $name was not accepted (status: ${status:-none}, submission: ${submission:-none})" >&2
 	if [ -n "$submission" ]; then
