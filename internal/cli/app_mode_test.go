@@ -767,6 +767,60 @@ func TestAppDevDoesNotReloadThePagesForTheAppsOwnSaveBeforeSaved(t *testing.T) {
 	}
 }
 
+// The app's autosave writes the text it had when the save began, and the
+// person can type again before tap hears about that write: the app has
+// already sent the newer text, which tap renders. The write is the app's
+// own, of text the pages were shown a moment ago, so they are not
+// reloaded, and "saved" for it leaves the newer text on screen instead of
+// going back to the file, which holds less than the app has sent.
+func TestAppDevKeepsTheNewerBufferWhenTheAppsSaveOfAnEarlierOneLands(t *testing.T) {
+	deck := copyAppFixture(t)
+	process := startAppProcess(t, t.TempDir(), "dev", "--app", deck)
+	onDisk, err := os.ReadFile(deck)
+	if err != nil {
+		t.Fatal(err)
+	}
+	conn, ctx := process.dialWebSocket()
+
+	autosaved := strings.Replace(string(onDisk), "# App Mode Fixture", "# Autosaved By The App", 1)
+	typedSince := strings.Replace(string(onDisk), "# App Mode Fixture", "# Autosaved By The App And Typed Since", 1)
+	for _, text := range []string{autosaved, typedSince} {
+		if status, body := process.putSource(text); status != http.StatusOK {
+			t.Fatalf("PUT: status %d: %s", status, body)
+		}
+		if change := readDeckChange(t, ctx, conn); change != "update" {
+			t.Fatalf("an edit sent %q, want update", change)
+		}
+	}
+	if err := os.WriteFile(deck, []byte(autosaved), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if event := process.next(appEventFileChanged); event["path"] != deck {
+		t.Errorf("file-changed path = %v, want %s", event["path"], deck)
+	}
+	process.send(`{"type":"saved"}`)
+
+	quiet, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	for {
+		_, data, err := conn.Read(quiet)
+		if err != nil {
+			break
+		}
+		var message map[string]any
+		if json.Unmarshal(data, &message) != nil {
+			continue
+		}
+		switch message["type"] {
+		case "file-changed", "reload", "update":
+			t.Fatalf("the pages were sent %v for the app's own save of text they were already shown", message)
+		}
+	}
+	if !strings.Contains(process.presentation(), "Autosaved By The App And Typed Since") {
+		t.Error("the text typed after the save stopped showing")
+	}
+}
+
 func TestAppDevSendsTheSlideListWhenAComponentChanges(t *testing.T) {
 	deck := copyAppFixture(t)
 	process := startAppProcess(t, t.TempDir(), "dev", "--app", deck)

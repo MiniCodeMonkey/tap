@@ -744,7 +744,7 @@ func runDevServer(options serverOptions) (err error) {
 				return renderApp(appCtx, buffer, false)
 			}, baseDir, appLog))
 			saved = func(ctx context.Context) error {
-				deckSource.dropBuffer()
+				deckSource.dropSavedBuffer()
 				return renderCurrentForApp(ctx, false)
 			}
 
@@ -758,7 +758,7 @@ func runDevServer(options serverOptions) (err error) {
 			}
 			watcher.SetOnChange(func(path string) {
 				if filepath.Clean(path) == absFile {
-					changed, readErr := deckSource.diskChanged()
+					changed, sentByApp, readErr := deckSource.diskState()
 					if readErr != nil && !os.IsNotExist(readErr) {
 						fmt.Fprintf(appLog, "Error reading %s: %v\n", absFile, readErr)
 						return
@@ -779,7 +779,7 @@ func runDevServer(options serverOptions) (err error) {
 					// buffered gives it nothing else to learn that from.
 					// The pages are told only when the file differs from
 					// what they show (see reloadPagesOnDeckWrite).
-					emitFileChanged(absFile, nil, readErr != nil || reloadPagesOnDeckWrite(changed, buffering))
+					emitFileChanged(absFile, nil, readErr != nil || reloadPagesOnDeckWrite(changed, buffering, sentByApp))
 					if readErr != nil || deckSource.buffering() || !changed {
 						// The buffer wins until the app says it saved, a
 						// deleted deck leaves the last render on screen,
