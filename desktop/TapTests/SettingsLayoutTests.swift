@@ -38,8 +38,8 @@ final class SettingsLayoutTests: HostedTestCase {
             [liveCode.introLabel],
             [liveCode.table],
             [liveCode.revokeButton, liveCode.revealButton],
-            [liveCode.errorLabel],
         ], in: content)
+        XCTAssertTrue(liveCode.errorLabel.isHidden, "no error label in this state, so it is not a row")
     }
 
     /// The error state: `errorLabel` shows tap's message under the buttons,
