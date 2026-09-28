@@ -253,6 +253,30 @@ final class TalkPageRecoveryTests: PresentingTestCase {
         try await stopPresenting(controller)
     }
 
+    /// A talk that moved while a page's process was dead: the page comes
+    /// back on the talk's slide, not on the stale slide in its own hash.
+    func testATalkPageComesBackOnTheTalksCurrentSlide() async throws {
+        let (_, controller) = try await openDeckForPresenting()
+        let presentation = controller.presentation
+        try await startPresenting(controller, PresentationOptions(mode: .play, startSlide: 1))
+        let page = try XCTUnwrap(presentation.presenterWindow?.page)
+        try await waitUntil(timeout: 20, "the presenter page on slide 1") { page.lastReady?.slide == 1 }
+        let process = try XCTUnwrap(page.webView.contentProcessIdentifier, "the presenter page's content process identifier")
+
+        // tap reports the talk on slide 4. The page, whose hash still names
+        // slide 1, hears nothing of it: the hub relayed no move.
+        presentation.handle(.slide(slide: 4, step: 0))
+        kill(process, SIGKILL)
+
+        try await waitUntil(timeout: 10, "WebKit to report the ended process") { page.processTerminationCount == 1 }
+        try await waitUntil(timeout: 20, "the presenter page back on the talk's slide (\(String(describing: page.lastReady)))") {
+            page.lastReady?.slide == 4
+        }
+        XCTAssertEqual(page.webView.url?.fragment, "4")
+        XCTAssertEqual(page.webView.url?.path, "/presenter", "the page tap redirected to, not the key URL")
+        try await stopPresenting(controller)
+    }
+
     /// A page whose process ends after every load is reloaded only so
     /// many times within the window, then reported as failed and left.
     func testATalkPageWhoseProcessKeepsEndingIsLeftAlone() async throws {

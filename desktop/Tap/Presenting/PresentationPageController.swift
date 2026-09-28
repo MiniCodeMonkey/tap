@@ -16,6 +16,9 @@ final class PresentationPageController: NSViewController, WKNavigationDelegate, 
     var onLoadFailed: ((Error) -> Void)?
     /// The page asked for a window at /presenter: the S key.
     var onPresenterPopup: (() -> Void)?
+    /// The talk's current slide (1-based), which a page reloaded after its
+    /// process ended opens on. Nil when the talk has none.
+    var currentSlide: (() -> Int?)?
     /// Opens a URL outside the app. A test replaces it to see what the app tried to open.
     var openExternally: (URL) -> Void = { url in NSWorkspace.shared.open(url) }
     private(set) var lastReady: ReadyPayload?
@@ -104,9 +107,11 @@ final class PresentationPageController: NSViewController, WKNavigationDelegate, 
     /// The page's content process exited or crashed, which leaves the page
     /// blank. Loading it again starts a new process. The page it reloads
     /// is the one tap redirected to, which the cookies from the first load
-    /// still open. A page whose process keeps ending is reported as a
-    /// failed load instead, and left alone. A process that is stuck
-    /// rather than ended is not detected here.
+    /// still open, at the talk's current slide rather than the slide in
+    /// its own hash, which is stale when the talk moved while the page was
+    /// dead (see TalkPageReload). A page whose process keeps ending is
+    /// reported as a failed load instead, and left alone. A process that
+    /// is stuck rather than ended is not detected here.
     func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
         processTerminationCount += 1
         lastReady = nil
@@ -118,11 +123,8 @@ final class PresentationPageController: NSViewController, WKNavigationDelegate, 
         }
         recentReloadDates.append(now)
         reloadAfterTerminationCount += 1
-        if webView.url != nil {
-            webView.reload()
-        } else if let lastLoadedURL {
-            webView.load(URLRequest(url: lastLoadedURL))
-        }
+        guard let pageURL = webView.url ?? lastLoadedURL else { return }
+        webView.load(URLRequest(url: TalkPageReload.url(reloading: pageURL, atSlide: currentSlide?())))
     }
 
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {

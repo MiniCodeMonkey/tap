@@ -264,3 +264,20 @@ public struct FocusHintState: @unchecked Sendable {
         defaults.set(true, forKey: Self.key)
     }
 }
+
+/// The URL a talk page loads again after its web content process ended.
+/// It is the page's own URL, the one tap redirected to, which the cookies
+/// from the first load still open (the audience page's launch code works
+/// only once), with the fragment set to the talk's current slide. The page
+/// keeps its hash in step as it moves, but a talk that moved while the
+/// page was dead did not move the page, so its own hash is stale; the
+/// fragment is what the page opens on (`initializeFromURL` in
+/// frontend/src/lib/stores/presentation.ts). With no slide known, the page
+/// URL is loaded as it is.
+public enum TalkPageReload {
+    public static func url(reloading pageURL: URL, atSlide slide: Int?) -> URL {
+        guard let slide, var components = URLComponents(url: pageURL, resolvingAgainstBaseURL: false) else { return pageURL }
+        components.fragment = String(slide)
+        return components.url ?? pageURL
+    }
+}
