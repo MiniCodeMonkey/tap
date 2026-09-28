@@ -60,13 +60,17 @@ final class SettingsUpdatesTests: HostedTestCase {
     }
 
     /// `automaticChecksStore`'s default closures capture the controller
-    /// weakly: once the controller they belonged to is gone, calling them
-    /// reads a sane default and writes nothing, rather than crashing.
+    /// weakly: the store alone does not keep the controller alive, and once
+    /// the controller is gone, calling them reads a sane default and writes
+    /// nothing, rather than crashing.
     func testTheStoreNeverCrashesOnceItsControllerIsGone() {
-        var controller: UpdateController? = UpdateController()
-        let store = controller!.automaticChecksStore
-        controller = nil
-        XCTAssertNil(controller)
+        weak var releasedController: UpdateController?
+        let store = autoreleasepool { () -> (read: () -> Bool, write: (Bool) -> Void) in
+            let controller = UpdateController()
+            releasedController = controller
+            return controller.automaticChecksStore
+        }
+        XCTAssertNil(releasedController, "the store's closures must not keep their controller alive")
         XCTAssertFalse(store.read(), "no controller left to ask, so a sane default")
         XCTAssertNoThrow(store.write(true), "no controller left to write to")
     }
