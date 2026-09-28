@@ -27,7 +27,8 @@ short_version=$(read_plist CFBundleShortVersionString)
 build_number=$(read_plist CFBundleVersion)
 minimum_system=$(read_plist LSMinimumSystemVersion)
 length=$(stat -f%z "$dmg")
-published=$(date -u '+%a, %d %b %Y %H:%M:%S +0000')
+# RFC 822 names its days and months in English, whatever the locale.
+published=$(LC_ALL=C date -u '+%a, %d %b %Y %H:%M:%S +0000')
 
 if [ -n "$dmg_signature" ]; then
 	signature_attribute=" sparkle:edSignature=\"$dmg_signature\""

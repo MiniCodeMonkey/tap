@@ -28,7 +28,8 @@ download="https://github.com/MiniCodeMonkey/tap/releases/download/v2.1.0-beta.3/
 release="https://github.com/MiniCodeMonkey/tap/releases/tag/v2.1.0-beta.3"
 notes="https://github.com/MiniCodeMonkey/tap/releases/download/v2.1.0-beta.3/Tap-2.1.0-beta.3.md"
 
-"$script" "$app" "$dmg" "$download" "$release" "$root/appcast.xml" "c2lnbmF0dXJl" "$notes" "bm90ZXM=" 255 >/dev/null || { echo "the appcast should be written"; exit 1; }
+# Under a Danish locale, so a pubDate that follows the locale is caught.
+LC_ALL=da_DK.UTF-8 "$script" "$app" "$dmg" "$download" "$release" "$root/appcast.xml" "c2lnbmF0dXJl" "$notes" "bm90ZXM=" 255 >/dev/null || { echo "the appcast should be written"; exit 1; }
 xmllint --noout "$root/appcast.xml" || { echo "the appcast should be XML"; exit 1; }
 for expected in \
 	'<sparkle:version>2010022</sparkle:version>' \
