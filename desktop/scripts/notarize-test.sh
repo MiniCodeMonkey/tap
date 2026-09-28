@@ -1,9 +1,10 @@
 #!/bin/sh
 # Checks notarize.sh against a stand-in for xcrun (notarytool and stapler),
-# so nothing reaches Apple. Without the three notary secrets it prints one
-# line naming the first missing one, exits 0, writes nothing to stderr and
-# runs no tool. With them: Accepted staples the target once and says so;
-# Invalid, a submission still In Progress at the timeout and a notarytool
+# so nothing reaches Apple. Without any notary secret it prints one line
+# naming the first, exits 0, writes nothing to stderr and runs no tool;
+# with one or two it names every missing one and says so on stderr too.
+# With all three: Accepted staples the target once and says so; Invalid,
+# a submission still In Progress at the timeout and a notarytool
 # that fails with no JSON each exit 1 and staple nothing, with the notary
 # log on stderr when there is a submission. In every submission the .p8
 # notarytool read was the secret, mode 600, in a private folder that is
@@ -65,18 +66,23 @@ key=$(printf -- '-----BEGIN PRIVATE KEY-----\n%s\n-----END PRIVATE KEY-----' "$k
 submission="11111111-2222-3333-4444-555555555555"
 fresh() { rm -f "$fake/key-seen" "$fake/key-mode" "$fake/private" "$fake/stapled"; : > "$fake/argv"; }
 
-# The skip path: stdout is the one line, stderr is empty, no tool runs.
+# The skip path: stdout is the one line, stderr is the expected text (empty
+# with no secret at all), no tool runs, and no secret's value is printed.
 skip() {
-	expected="$1"; shift
+	expected="$1"; expected_error="$2"; shift 2
 	fresh
 	out=$(env "$@" "$script" "$root/Tap.zip" "$root/Tap.app" 2>"$root/err") || { echo "a skip should exit 0: $(cat "$root/err")"; exit 1; }
 	[ "$out" = "$expected" ] || { echo "wrong skip line: $out"; exit 1; }
-	[ ! -s "$root/err" ] || { echo "a skip should write nothing to stderr: $(cat "$root/err")"; exit 1; }
+	[ "$(cat "$root/err")" = "$expected_error" ] || { echo "wrong stderr for '$expected': $(cat "$root/err")"; exit 1; }
 	[ ! -s "$fake/argv" ] || { echo "a skip should run no tool: $(cat "$fake/argv")"; exit 1; }
+	if printf '%s' "$out" | grep -Fq -e "$key_body" -e KEYID12345 -e issuer-0000; then echo "a skip printed a secret's value"; exit 1; fi
 }
-skip "skipped: notarization of Tap.zip (APPLE_NOTARY_KEY is not set)" -u APPLE_NOTARY_KEY -u APPLE_NOTARY_KEY_ID -u APPLE_NOTARY_ISSUER_ID
-skip "skipped: notarization of Tap.zip (APPLE_NOTARY_KEY_ID is not set)" -u APPLE_NOTARY_KEY_ID -u APPLE_NOTARY_ISSUER_ID APPLE_NOTARY_KEY="$key"
-skip "skipped: notarization of Tap.zip (APPLE_NOTARY_ISSUER_ID is not set)" -u APPLE_NOTARY_ISSUER_ID APPLE_NOTARY_KEY="$key" APPLE_NOTARY_KEY_ID=KEYID12345
+half="notarize.sh: only some of the three notary secrets are set; missing"
+skip "skipped: notarization of Tap.zip (APPLE_NOTARY_KEY is not set)" "" -u APPLE_NOTARY_KEY -u APPLE_NOTARY_KEY_ID -u APPLE_NOTARY_ISSUER_ID
+skip "skipped: notarization of Tap.zip (APPLE_NOTARY_KEY_ID and APPLE_NOTARY_ISSUER_ID are not set)" "$half APPLE_NOTARY_KEY_ID and APPLE_NOTARY_ISSUER_ID" -u APPLE_NOTARY_KEY_ID -u APPLE_NOTARY_ISSUER_ID APPLE_NOTARY_KEY="$key"
+skip "skipped: notarization of Tap.zip (APPLE_NOTARY_ISSUER_ID is not set)" "$half APPLE_NOTARY_ISSUER_ID" -u APPLE_NOTARY_ISSUER_ID APPLE_NOTARY_KEY="$key" APPLE_NOTARY_KEY_ID=KEYID12345
+skip "skipped: notarization of Tap.zip (APPLE_NOTARY_KEY and APPLE_NOTARY_ISSUER_ID are not set)" "$half APPLE_NOTARY_KEY and APPLE_NOTARY_ISSUER_ID" -u APPLE_NOTARY_KEY -u APPLE_NOTARY_ISSUER_ID APPLE_NOTARY_KEY_ID=KEYID12345
+skip "skipped: notarization of Tap.zip (APPLE_NOTARY_KEY is not set)" "$half APPLE_NOTARY_KEY" -u APPLE_NOTARY_KEY APPLE_NOTARY_KEY_ID=KEYID12345 APPLE_NOTARY_ISSUER_ID=issuer-0000
 
 if "$script" "$root/missing.zip" "$root/Tap.app" >/dev/null 2>&1; then echo "a missing file should fail"; exit 1; fi
 [ -z "$(ls -A "$root/Tap.app/Contents")" ] || { echo "the skip path touched the target"; exit 1; }
