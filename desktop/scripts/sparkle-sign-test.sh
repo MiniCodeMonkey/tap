@@ -88,7 +88,30 @@ cat > /dev/null
 echo "sign_update: bad key" >&2
 exit 1
 FAKE
-if out=$("$script" archive "$root/Tap.dmg" 2>"$root/err"); then echo "a failing sign_update should fail the script"; exit 1; fi
-if grep -q 'bm90LWEta2V5' "$root/err"; then echo "the key reached stderr"; exit 1; fi
+# It says so on stderr in every mode, even when sign_update itself is silent.
+for mode in archive notes feed; do
+	if out=$("$script" "$mode" "$root/Tap.dmg" 2>"$root/err"); then echo "$mode: a failing sign_update should fail the script"; exit 1; fi
+	grep -Fxq 'sparkle-sign.sh: sign_update failed for Tap.dmg' "$root/err" || { echo "$mode: a failed signature should say so: $(cat "$root/err")"; exit 1; }
+	if grep -q 'bm90LWEta2V5' "$root/err"; then echo "$mode: the key reached stderr"; exit 1; fi
+done
+cat > "$root/tools-2.10.0/bin/sign_update" <<'FAKE'
+#!/bin/sh
+cat > /dev/null
+exit 1
+FAKE
+for mode in archive notes feed; do
+	if "$script" "$mode" "$root/Tap.dmg" >/dev/null 2>"$root/err"; then echo "$mode: a silent failing sign_update should fail the script"; exit 1; fi
+	grep -Fxq 'sparkle-sign.sh: sign_update failed for Tap.dmg' "$root/err" || { echo "$mode: a silent failure should still be named: $(cat "$root/err")"; exit 1; }
+done
+# A verification that fails after a signature is printed fails the archive.
+cat > "$root/tools-2.10.0/bin/sign_update" <<'FAKE'
+#!/bin/sh
+cat > /dev/null
+case "$*" in *--verify*) exit 1 ;; esac
+echo "QVJDSElWRQ=="
+FAKE
+if "$script" archive "$root/Tap.dmg" >"$root/out" 2>"$root/err"; then echo "a signature that does not verify should fail the archive"; exit 1; fi
+[ ! -s "$root/out" ] || { echo "an unverified signature should not be printed"; exit 1; }
+grep -Fxq 'sparkle-sign.sh: sign_update failed for Tap.dmg' "$root/err" || { echo "a failed verification should be named: $(cat "$root/err")"; exit 1; }
 
 echo "sparkle-sign.sh is right"

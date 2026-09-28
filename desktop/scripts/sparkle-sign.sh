@@ -26,23 +26,27 @@ fi
 "$here/fetch-sparkle-tools.sh" "$tools" >&2
 sign_update="$tools/bin/sign_update"
 with_key() { printf '%s\n' "$SPARKLE_PRIVATE_KEY" | "$sign_update" "$@"; }
+# sign_update can exit 1 with nothing on stderr (a malformed key), so every
+# failure gets a line of its own; the key is never part of it.
+failed() { echo "sparkle-sign.sh: sign_update failed for $name" >&2; exit 1; }
 
 case "$mode" in
 	archive)
-		signature=$(with_key --ed-key-file - -p "$file")
+		signature=$(with_key --ed-key-file - -p "$file") || failed
 		[ -n "$signature" ] || { echo "sparkle-sign.sh: sign_update printed no signature for $name" >&2; exit 1; }
-		with_key --ed-key-file - --verify "$file" "$signature" >&2
+		with_key --ed-key-file - --verify "$file" "$signature" >&2 || failed
 		printf '%s\n' "$signature"
 		;;
 	notes)
-		attributes=$(with_key --ed-key-file - "$file" | grep 'sparkle:edSignature=')
+		printed=$(with_key --ed-key-file - "$file") || failed
+		attributes=$(printf '%s\n' "$printed" | grep 'sparkle:edSignature=' || true)
 		signature=$(printf '%s' "$attributes" | sed -n 's/.*sparkle:edSignature="\([^"]*\)".*/\1/p')
 		length=$(printf '%s' "$attributes" | sed -n 's/.*sparkle:length="\([^"]*\)".*/\1/p')
 		[ -n "$signature" ] && [ -n "$length" ] || { echo "sparkle-sign.sh: sign_update printed no signature and length for $name" >&2; exit 1; }
 		printf '%s %s\n' "$signature" "$length"
 		;;
 	feed)
-		with_key --ed-key-file - "$file" >&2
+		with_key --ed-key-file - "$file" >&2 || failed
 		grep -q 'sparkle-signatures:' "$file" || { echo "sparkle-sign.sh: $name carries no signature block after signing" >&2; exit 1; }
 		;;
 esac
