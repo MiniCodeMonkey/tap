@@ -58,8 +58,8 @@ final class GeneralSettingsViewController: NSViewController {
         decksCard.setAccessibilityIdentifier("settings-card-New decks")
         savingCard.setAccessibilityIdentifier("settings-card-Saving")
 
-        // A section per group, in order; Task 13/D7's Updates card only
-        // needs one more entry in this array.
+        // A section per group, in order; another card is one more entry
+        // in this array.
         let sections = [
             FormCard.section(title: "Editor", content: [editorCard]),
             FormCard.section(title: "New decks", content: [decksCard]),

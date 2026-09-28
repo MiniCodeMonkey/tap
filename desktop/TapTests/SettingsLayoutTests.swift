@@ -4,9 +4,9 @@ import XCTest
 /// The Settings window's General and Live Code panes at the window's real
 /// width (760pt), as the SettingsGeneral and SettingsLiveCode boards draw
 /// them: each card as tall as its rows, the rows one under the other
-/// inside it, the cards one under the other, nothing overlapping. This is
-/// the exact defect D5's Deck tab shipped with (an NSBox's contentView
-/// set to a stack collapses the box to its title), so every state here is
+/// inside it, the cards one under the other, nothing overlapping. An
+/// NSBox whose contentView is a stack collapses to its title while its
+/// values still read right, so every state here is
 /// checked on alignment rects, not raw frames.
 final class SettingsLayoutTests: HostedTestCase {
     func testGeneralPaneLayout() {

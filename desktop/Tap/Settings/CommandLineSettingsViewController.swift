@@ -5,7 +5,7 @@ import AppKit
 /// bundled tap into ~/.local/bin, only where that folder comes first on
 /// PATH and holds nothing but our own link. Another tap is never replaced
 /// or deleted. Built on FormCard, not an NSBox whose contentView is a
-/// stack (Task 12's known layout bug: the box collapses to its title).
+/// stack (such a box collapses to its title).
 final class CommandLineSettingsViewController: NSViewController {
     let bundledLabel = NSTextField(labelWithString: "")
     let bundledPathLabel = NSTextField(labelWithString: "")

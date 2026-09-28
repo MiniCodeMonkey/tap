@@ -3,9 +3,9 @@ import XCTest
 
 /// The Image Generation and Command Line panes, and the InstallConfirm
 /// sheet, at the window's real width (760pt), laid out on alignment rects
-/// rather than raw frames (the house rule from D5's Deck tab defect: an
-/// NSBox whose contentView is a stack collapses to its title). Both panes
-/// are built from FormCard, as Task 12's SettingsCard fix requires. Every
+/// rather than raw frames (an NSBox whose contentView is a stack collapses
+/// to its title while its values still read right). Both panes are built
+/// from FormCard. Every
 /// state either board draws gets its own test here. Where another tap is
 /// listed, its name and note are one block and the path is centered
 /// against that block, as the boards draw it, so the block and the path

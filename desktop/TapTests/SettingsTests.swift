@@ -50,7 +50,7 @@ final class SettingsTests: HostedTestCase {
 
     /// A Revoke in Settings is what tap sees: the approvals are tap's file,
     /// which the CLI reads too. (The "Shared settings" scenario also names
-    /// the recording consent, which is left out of D6; that row is not claimed.)
+    /// the recording consent, which Settings does not have; that row is not claimed.)
     func testRevokeInSettingsIsWhatTapSees() async throws {
         let deck = try Fixtures.copyDeck("live-code.md")
         try approveLiveCode(for: deck)

@@ -51,7 +51,7 @@ final class GeneralSettingsTests: XCTestCase {
     }
 
     func testLineHeightsScaleWithTheFont() {
-        XCTAssertEqual(GeneralSettings.LineSpacing.normal.lineHeight(forFontSize: 13), 21, "D2's editor line height at the default")
+        XCTAssertEqual(GeneralSettings.LineSpacing.normal.lineHeight(forFontSize: 13), 21, "the editor's line height at the default")
         XCTAssertEqual(GeneralSettings.LineSpacing.tight.lineHeight(forFontSize: 13), 18)
         XCTAssertEqual(GeneralSettings.LineSpacing.roomy.lineHeight(forFontSize: 13), 25)
         XCTAssertGreaterThan(GeneralSettings.LineSpacing.normal.lineHeight(forFontSize: 16), 21)

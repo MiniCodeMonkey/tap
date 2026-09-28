@@ -2,7 +2,7 @@ import XCTest
 @testable import Tap
 
 final class ExportWebsiteTests: HostedTestCase {
-    /// seven-slides.md keeps D2's misspelled layout, which tap build refuses;
+    /// seven-slides.md has a misspelled layout on purpose, which tap build refuses;
     /// the website tests open seven-slides-site.md, the same deck spelled right.
     func openSevenSlides(_ name: String = "seven-slides.md") async throws -> (DeckDocument, DeckWindowController, URL) {
         let deck = try Fixtures.copyDeck(name)

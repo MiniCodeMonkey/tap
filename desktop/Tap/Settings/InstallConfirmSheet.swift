@@ -2,8 +2,9 @@ import AppKit
 
 /// "Asks first": the sheet before the link is made, as the InstallConfirm
 /// board draws it. Return is Install: the action is harmless and undone by
-/// deleting the link. The other-tap card is a FormCard, matching Task 12's
-/// fix (an NSBox whose contentView is a stack collapses to its title).
+/// deleting the link. The other-tap card is a FormCard, as the Settings
+/// panes' cards are (an NSBox whose contentView is a stack collapses to
+/// its title).
 final class InstallConfirmSheet: QuestionSheet {
     let subLabel = NSTextField(labelWithString: "To remove it later, delete the link.")
     let otherTapCard: NSView

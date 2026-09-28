@@ -4,7 +4,7 @@ import AppKit
 /// image runs as GEMINI_API_KEY. The field is the one place the key is
 /// shown, as bullets. With a key in the login shell the field is off:
 /// that key wins. Built on FormCard, not an NSBox whose contentView is a
-/// stack (Task 12's known layout bug: the box collapses to its title).
+/// stack (such a box collapses to its title).
 final class ImageGenerationSettingsViewController: NSViewController, NSTextFieldDelegate {
     let keyField: NSTextField = NSSecureTextField(string: "")
     /// The hint under "API key", inside the card, as the SettingsImageBullets board draws it.
