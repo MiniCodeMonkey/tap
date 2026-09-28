@@ -282,6 +282,66 @@ function differsFromShown(shown: Presentation, fetched: Presentation): boolean {
 }
 
 // ============================================================================
+// Socket record (window.__tapSocketState)
+// ============================================================================
+
+/** How many received messages window.__tapSocketState keeps. */
+const RECORDED_MESSAGES = 10;
+
+/**
+ * What window.__tapSocketState holds: whether the page's socket is open,
+ * how often it opened and closed, and the newest messages it received.
+ * Times are milliseconds since the page started loading
+ * (performance.now()). Nothing reads it to decide anything; it is there
+ * so a test that times out waiting for the page to follow the talk can
+ * say whether the page heard it (see window.__tapReadyState in
+ * lib/ready/readySignal.ts, its counterpart for the ready signal).
+ */
+export interface SocketState {
+	connected: boolean;
+	opens: number;
+	closes: number;
+	received: {
+		type: string;
+		at: number;
+		slideIndex?: number;
+		initial?: boolean;
+		ageMs?: number;
+		revision?: string;
+	}[];
+}
+
+interface SocketStateWindow {
+	__tapSocketState?: SocketState;
+}
+
+function pageClock(): number {
+	return typeof performance === 'undefined' ? Date.now() : Math.round(performance.now());
+}
+
+/** The page's socket record, created on first use and kept on window as __tapSocketState. */
+export function socketState(): SocketState | null {
+	if (typeof window === 'undefined') return null;
+	const target = window as unknown as SocketStateWindow;
+	target.__tapSocketState ??= { connected: false, opens: 0, closes: 0, received: [] };
+	return target.__tapSocketState;
+}
+
+function recordReceived(message: WebSocketMessage): void {
+	const state = socketState();
+	if (!state) return;
+	state.received.push({
+		type: message.type,
+		at: pageClock(),
+		slideIndex: message.slideIndex,
+		initial: message.initial,
+		ageMs: message.ageMs,
+		revision: message.revision
+	});
+	if (state.received.length > RECORDED_MESSAGES) state.received.shift();
+}
+
+// ============================================================================
 // WebSocket Client Class
 // ============================================================================
 
@@ -382,6 +442,11 @@ export class WebSocketClient {
 
 		this.ws.onopen = () => {
 			useConnectionStore.setState({ connected: true, reconnecting: false, reconnectAttempt: 0 });
+			const record = socketState();
+			if (record) {
+				record.connected = true;
+				record.opens += 1;
+			}
 			// Reset reconnect delay on successful connection
 			this.reconnectDelay = INITIAL_RECONNECT_DELAY;
 
@@ -398,6 +463,11 @@ export class WebSocketClient {
 
 		this.ws.onclose = () => {
 			useConnectionStore.setState({ connected: false });
+			const record = socketState();
+			if (record) {
+				record.connected = false;
+				record.closes += 1;
+			}
 			this.ws = null;
 			this.scheduleReconnect();
 		};
@@ -417,6 +487,7 @@ export class WebSocketClient {
 	private handleMessage(data: string): void {
 		try {
 			const message = JSON.parse(data) as WebSocketMessage;
+			recordReceived(message);
 			this.dispatchMessage(message);
 		} catch {
 			// Ignore invalid JSON messages

@@ -13,7 +13,8 @@ import {
 	broadcastPresentationState,
 	resetBroadcastedState,
 	resetPendingInitialState,
-	detectStaticMode
+	detectStaticMode,
+	socketState
 } from './websocket';
 import { usePresentationStore, resetHashSlideIndexAtLoad, loadPresentation } from './presentation';
 import type { Presentation, WebSocketMessage } from '$lib/types';
@@ -921,6 +922,47 @@ describe('singleton functions', () => {
 		disconnectWebSocket();
 
 		expect(useConnectionStore.getState().connected).toBe(false);
+	});
+});
+
+describe('window.__tapSocketState', () => {
+	let mockWs: MockWebSocket | null = null;
+
+	beforeEach(() => {
+		delete (window as unknown as { __tapSocketState?: unknown }).__tapSocketState;
+		vi.stubGlobal(
+			'WebSocket',
+			createMockWebSocketConstructor((ws) => {
+				mockWs = ws;
+			})
+		);
+	});
+
+	afterEach(() => {
+		disconnectWebSocket();
+		vi.unstubAllGlobals();
+		mockWs = null;
+	});
+
+	it('records opens, closes and the newest messages received', () => {
+		connectWebSocket();
+		mockWs?.simulateOpen();
+		mockWs?.simulateMessage({ type: 'slide', slideIndex: 2, initial: true, ageMs: 40 });
+		const record = socketState();
+		expect(record?.connected).toBe(true);
+		expect(record?.opens).toBe(1);
+		expect(record?.received.at(-1)).toMatchObject({ type: 'slide', slideIndex: 2, initial: true, ageMs: 40 });
+
+		for (let index = 0; index < 12; index += 1) {
+			mockWs?.simulateMessage({ type: 'slide', slideIndex: index });
+		}
+		expect(record?.received).toHaveLength(10);
+		expect(record?.received.at(-1)?.slideIndex).toBe(11);
+
+		mockWs?.simulateClose();
+		expect(record?.connected).toBe(false);
+		expect(record?.closes).toBe(1);
+		expect((window as unknown as { __tapSocketState?: unknown }).__tapSocketState).toBe(record);
 	});
 });
 
