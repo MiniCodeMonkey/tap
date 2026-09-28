@@ -396,7 +396,7 @@ jobs:
       - name: Run hosted Tap.app tests
         if: steps.check-desktop.outputs.exists == 'true'
         env:
-          TEST_RUNNER_SWIFT_BACKTRACE: threads=all
+          TEST_RUNNER_SWIFT_BACKTRACE: threads=all,interactive=no
         run: make -C desktop test
 
       - name: Save Playwright driver and browser
