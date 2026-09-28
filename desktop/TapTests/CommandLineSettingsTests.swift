@@ -78,6 +78,26 @@ final class CommandLineSettingsTests: HostedTestCase {
         XCTAssertEqual(destination, AppEnvironment.shared.tapExecutableURL.path)
         try await waitUntil(timeout: 5, "the pane to notice") { pane.installButton.title == "Installed" }
         XCTAssertFalse(pane.installButton.isEnabled)
+        XCTAssertEqual(pane.otherLabel.stringValue, "No other tap is on your PATH.", "our own link is not another tap")
+        XCTAssertNil(pane.otherTap)
+
+        // Our link to another copy of the app: not another tap, and Install moves it to this app's tap.
+        let copy = try Fixtures.temporaryFolder().appendingPathComponent("Tap 2.app/Contents/Resources/tap")
+        try FileManager.default.createDirectory(at: copy.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try "#!/bin/sh\necho 'tap version 1.9.0'\n".write(to: copy, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: copy.path)
+        try FileManager.default.removeItem(at: linkDirectory.appendingPathComponent("tap"))
+        try FileManager.default.createSymbolicLink(at: linkDirectory.appendingPathComponent("tap"), withDestinationURL: copy)
+        await pane.refresh()
+        XCTAssertEqual(pane.otherLabel.stringValue, "No other tap is on your PATH.", "our link to another copy is ours, not another tap")
+        XCTAssertEqual(pane.installButton.title, "Install in \(shownLinkDirectory)…")
+        XCTAssertTrue(pane.installButton.isEnabled, "our own link is not refused as a foreign file")
+        pane.installButton.performClick(nil)
+        let replace = try await confirmSheet()
+        replace.installButton.performClick(nil)
+        try await waitUntil(timeout: 5, "the pane to notice") { pane.installButton.title == "Installed" }
+        XCTAssertEqual(try FileManager.default.destinationOfSymbolicLink(atPath: linkDirectory.appendingPathComponent("tap").path), AppEnvironment.shared.tapExecutableURL.path, "the link now points at this app's tap")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: copy.path), "only the link was replaced, never what it pointed at")
 
         // Cancel installs nothing.
         try FileManager.default.removeItem(at: linkDirectory.appendingPathComponent("tap"))
