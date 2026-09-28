@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -131,6 +132,118 @@ func TestAppDeckSourceNoLongerBufferingIsSuppressed(t *testing.T) {
 	}
 	if !suppressFileChanged(changed, source.buffering()) {
 		t.Error("no longer buffering: dev.go's rule must suppress the app's own already-landed save")
+	}
+}
+
+// An autosave writes the text the app had when the save began, and the
+// app may have sent newer text by the time tap's watcher reads the file.
+// That write is still the app's own: the pages are not reloaded for it.
+// A write of text the app never sent is a change made elsewhere.
+func TestAppDeckSourceTellsTheAppsSaveOfAnEarlierBufferFromAnOutsideChange(t *testing.T) {
+	deckPath := writeAppTestDeck(t, "# One\n")
+	source := newAppDeckSource(deckPath)
+	source.setBuffer([]byte("# Two\n"))
+	source.setBuffer([]byte("# Two, typed on\n"))
+
+	if err := os.WriteFile(deckPath, []byte("# Two\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	changed, sentByApp, err := source.diskState()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !changed || !sentByApp {
+		t.Fatalf("an earlier buffer on disk: changed %v, sentByApp %v; want true, true", changed, sentByApp)
+	}
+	if reloadPagesOnDeckWrite(changed, source.buffering(), sentByApp) {
+		t.Error("the app's save of an earlier buffer reloads the pages")
+	}
+
+	if err := os.WriteFile(deckPath, []byte("# Written Elsewhere\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	changed, sentByApp, err = source.diskState()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !changed || sentByApp {
+		t.Fatalf("an outside change: changed %v, sentByApp %v; want true, false", changed, sentByApp)
+	}
+	if !reloadPagesOnDeckWrite(changed, source.buffering(), sentByApp) {
+		t.Error("a change made elsewhere does not reload the pages")
+	}
+}
+
+// "saved" goes back to the deck file only once the file holds the buffer
+// tap renders, or text the app never sent. A save of an earlier buffer
+// leaves the newer one on screen.
+func TestAppDeckSourceSavedKeepsABufferNewerThanTheSave(t *testing.T) {
+	deckPath := writeAppTestDeck(t, "# One\n")
+	source := newAppDeckSource(deckPath)
+	source.setBuffer([]byte("# Two\n"))
+	source.setBuffer([]byte("# Two, typed on\n"))
+
+	if err := os.WriteFile(deckPath, []byte("# Two\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	source.dropSavedBuffer()
+	if current, _ := source.current(); !source.buffering() || string(current) != "# Two, typed on\n" {
+		t.Fatalf("after saved for an earlier buffer: %q, buffering %v; want the newer buffer", current, source.buffering())
+	}
+
+	if err := os.WriteFile(deckPath, []byte("# Two, typed on\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	source.dropSavedBuffer()
+	if source.buffering() {
+		t.Error("saved for the buffer tap renders keeps the buffer")
+	}
+
+	source.setBuffer([]byte("# Three\n"))
+	if err := os.WriteFile(deckPath, []byte("# Written Elsewhere\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	source.dropSavedBuffer()
+	if current, _ := source.current(); source.buffering() || string(current) != "# Written Elsewhere\n" {
+		t.Errorf("after saved with a file the app never sent: %q, buffering %v; want the file", current, source.buffering())
+	}
+}
+
+// With no buffer held, a save landing for a buffer the app sent earlier
+// still goes back to the deck file and takes a fresh sequence, exactly as
+// any other drop does: dropSavedBuffer's early return only applies while a
+// buffer is held.
+func TestAppDeckSourceDropSavedBufferMovesTheSequenceWithNoBufferHeld(t *testing.T) {
+	deckPath := writeAppTestDeck(t, "# One\n")
+	source := newAppDeckSource(deckPath)
+	source.setBuffer([]byte("# Two\n"))
+	source.dropBuffer()
+
+	before := source.seq
+	if err := os.WriteFile(deckPath, []byte("# Two\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	source.dropSavedBuffer()
+	if source.seq == before {
+		t.Errorf("seq = %d after dropSavedBuffer, want it to move past %d", source.seq, before)
+	}
+}
+
+// Only the most recent buffers count as the app's own text.
+func TestAppDeckSourceRemembersOnlyRecentBuffers(t *testing.T) {
+	deckPath := writeAppTestDeck(t, "# Buffer 0\n")
+	source := newAppDeckSource(deckPath)
+	for index := 0; index <= recentBufferCount; index++ {
+		source.setBuffer([]byte("# Buffer " + strconv.Itoa(index) + "\n"))
+	}
+	if _, sentByApp, _ := source.diskState(); sentByApp {
+		t.Errorf("buffer 0 of %d still counts as recent", recentBufferCount+1)
+	}
+	if err := os.WriteFile(deckPath, []byte("# Buffer 1\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, sentByApp, _ := source.diskState(); !sentByApp {
+		t.Errorf("buffer 1, the oldest of the last %d, does not count", recentBufferCount)
 	}
 }
 

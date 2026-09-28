@@ -1,9 +1,63 @@
 import XCTest
 @testable import Tap
 
+/// The bounds a benchmark run is held to, chosen by where it runs: the
+/// TAP_BENCH_BOUNDS environment variable, which `make -C desktop bench
+/// BENCH_BOUNDS=ci` hands the test host through xcodebuild's TEST_RUNNER_
+/// prefix. The developer bounds are the product's targets, measured on an
+/// M-series Mac. The CI bounds are for the shared macos-15 runner, which is
+/// slower and noisier; each is the runner's worst result over its recent
+/// history plus a margin, and catches a regression of the size its comment
+/// states rather than any slowdown at all.
+struct BenchmarkBounds {
+    let name: String
+    /// The median, in milliseconds, from a key to the frame that shows it
+    /// in the preview.
+    let previewShownMedian: Double
+    /// The 95th percentile, in milliseconds, from a key to the editor's
+    /// frame that shows it.
+    let typingP95: Double
+    /// The median of the same samples, or nil where the bounds hold no
+    /// median.
+    let typingMedian: Double?
+
+    /// 13-performance.feature's targets.
+    static let developer = BenchmarkBounds(name: "developer", previewShownMedian: 200, typingP95: 16, typingMedian: nil)
+
+    /// Runs 2026-09-25 to 2026-09-28 on the runner (87 jobs, 54 of which
+    /// measured a median) found a preview median of at most 352.8 ms
+    /// (typically about 255), a typing p95 of at most 25.3 ms (typically
+    /// about 17) and a typing median of at most 12.1 ms. A preview about
+    /// 1.6 times slower than typical, or a keystroke that costs 13 ms more
+    /// at the tail or 8 ms more at the median, fails these in about half of
+    /// the runs; twice as slow a preview, or 16 ms more per keystroke, in
+    /// nearly all.
+    static let continuousIntegration = BenchmarkBounds(name: "ci", previewShownMedian: 400, typingP95: 30, typingMedian: 16)
+
+    /// The bounds TAP_BENCH_BOUNDS names; the developer bounds when it is
+    /// not set. A name it does not know is nil, which fails the run rather
+    /// than quietly holding it to other bounds.
+    static func named(_ name: String?) -> BenchmarkBounds? {
+        switch name {
+        case nil, "", "developer": return developer
+        case "ci": return continuousIntegration
+        default: return nil
+        }
+    }
+}
+
 /// A benchmark on the generated 200-slide deck, with a component on every slide.
 @MainActor
 class BenchmarkCase: XCTestCase {
+    /// The bounds this run is held to (see BenchmarkBounds). The name is
+    /// printed, so a CI log shows which bounds judged the numbers.
+    func bounds() throws -> BenchmarkBounds {
+        let name = ProcessInfo.processInfo.environment["TAP_BENCH_BOUNDS"]
+        let bounds = try XCTUnwrap(BenchmarkBounds.named(name), "TAP_BENCH_BOUNDS=\(name ?? "") names no bounds; use developer or ci")
+        print("benchmark bounds: \(bounds.name)")
+        return bounds
+    }
+
     var repositoryRoot: URL {
         URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent() // Support
@@ -72,11 +126,35 @@ class BenchmarkCase: XCTestCase {
                 "min": rounded(sorted.first!), "max": rounded(sorted.last!)]
     }
 
+    /// Writes `results` to desktop/build/benchmarks/`name`.json, and prints
+    /// them on one line, so a CI log keeps every run's numbers, a passing
+    /// run's too, and the bounds can be checked against the runner's
+    /// history. Every number is rounded to 2 decimals first, so the log
+    /// shows 296.78 rather than a Double's binary tail like
+    /// 296.77999999999997.
     func write(_ results: [String: Any], to name: String) {
         let folder = repositoryRoot.appendingPathComponent("desktop/build/benchmarks")
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-        if let data = try? JSONSerialization.data(withJSONObject: results, options: [.prettyPrinted, .sortedKeys]) {
+        let rounded = roundedForLogging(results)
+        if let data = try? JSONSerialization.data(withJSONObject: rounded, options: [.prettyPrinted, .sortedKeys]) {
             try? data.write(to: folder.appendingPathComponent("\(name).json"))
+        }
+        if let line = try? JSONSerialization.data(withJSONObject: rounded, options: [.sortedKeys]) {
+            print("benchmark results \(name): \(String(decoding: line, as: UTF8.self))")
+        }
+    }
+
+    /// Rounds every Double in `value` to 2 decimals, recursing into nested
+    /// dictionaries, so the JSON `write` emits never carries a rounded
+    /// number's binary imprecision.
+    private func roundedForLogging(_ value: Any) -> Any {
+        switch value {
+        case let number as Double:
+            return (number * 100).rounded() / 100
+        case let dictionary as [String: Any]:
+            return dictionary.mapValues { roundedForLogging($0) }
+        default:
+            return value
         }
     }
 }

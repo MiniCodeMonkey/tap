@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -28,7 +29,17 @@ type appDeckSource struct {
 	publishMu sync.Mutex
 	hasBuffer bool
 	seq       uint64
+	// sent holds the digests of the last recentBufferCount buffers the app
+	// sent, oldest first. The app usually saves text it has already sent;
+	// a save of text it never sent is treated as the file.
+	sent [][sha256.Size]byte
 }
+
+// recentBufferCount is how many of the app's buffers tap remembers. The
+// app sends its text within a second of an edit and autosaves only after
+// typing stops, so the text a save writes is at most a few buffers behind
+// by the time tap hears about the write.
+const recentBufferCount = 16
 
 func newAppDeckSource(file string) *appDeckSource {
 	return &appDeckSource{file: file}
@@ -56,8 +67,24 @@ func (source *appDeckSource) setBuffer(buffer []byte) uint64 {
 	defer source.mu.Unlock()
 	source.buffer = buffer
 	source.hasBuffer = true
+	source.sent = append(source.sent, sha256.Sum256(buffer))
+	if len(source.sent) > recentBufferCount {
+		source.sent = source.sent[len(source.sent)-recentBufferCount:]
+	}
 	source.seq++
 	return source.seq
+}
+
+// wasSent reports whether text is one of the recent buffers the app sent.
+// The caller holds source.mu.
+func (source *appDeckSource) wasSent(text []byte) bool {
+	digest := sha256.Sum256(text)
+	for _, sent := range source.sent {
+		if sent == digest {
+			return true
+		}
+	}
+	return false
 }
 
 // isCurrent reports whether seq is still the newest sequence tap has
@@ -92,13 +119,35 @@ func (source *appDeckSource) currentSequence() ([]byte, uint64, error) {
 	return text, seq, nil
 }
 
-// dropBuffer goes back to the deck file. The app sends "saved" after it
-// wrote the buffer to disk. It takes a new sequence, so a render of the
-// buffer still in flight is superseded by the save rather than publishing
-// the buffer over the deck file afterwards.
+// dropSavedBuffer handles "saved", which the app sends after it wrote its
+// text to disk, and goes back to the deck file, unless the file holds an
+// earlier buffer than the one tap renders: the person typed again while
+// the save was writing, the app has sent the newer text, and going back
+// to the file would take that text off the screen until the next edit.
+// The buffer then stays until the save that writes it. A file holding
+// text the app never sent is a change made elsewhere and goes on screen,
+// as before.
+func (source *appDeckSource) dropSavedBuffer() {
+	disk, err := os.ReadFile(source.file)
+	source.mu.Lock()
+	defer source.mu.Unlock()
+	if err == nil && source.hasBuffer && !bytes.Equal(disk, source.buffer) && source.wasSent(disk) {
+		return
+	}
+	source.dropBufferLocked()
+}
+
+// dropBuffer goes back to the deck file. It takes a new sequence, so a
+// render of the buffer still in flight is superseded rather than
+// publishing the buffer over the deck file afterwards.
 func (source *appDeckSource) dropBuffer() {
 	source.mu.Lock()
 	defer source.mu.Unlock()
+	source.dropBufferLocked()
+}
+
+// dropBufferLocked is dropBuffer for a caller that holds source.mu.
+func (source *appDeckSource) dropBufferLocked() {
 	source.buffer = nil
 	source.hasBuffer = false
 	source.seq++
@@ -220,25 +269,36 @@ func suppressFileChanged(changed, buffering bool) bool {
 // equals the buffer tap is still rendering is, in practice, the app's own
 // save (an autosave) landing before its "saved" does: the pages already
 // show exactly that text, so a reload would only throw away where each page
-// is and what its slides are holding.
-func reloadPagesOnDeckWrite(changed, buffering bool) bool {
-	return changed || !buffering
+// is and what its slides are holding. So is a write of any recent buffer
+// the app sent (sentByApp): an autosave of text the person has typed past
+// since, whose newer text tap already renders and the pages show.
+func reloadPagesOnDeckWrite(changed, buffering, sentByApp bool) bool {
+	return !sentByApp && (changed || !buffering)
 }
 
 // diskChanged reports whether the deck file differs from what tap renders:
 // the buffer while there is one, and otherwise the last text tap was
 // given.
 func (source *appDeckSource) diskChanged() (bool, error) {
+	changed, _, err := source.diskState()
+	return changed, err
+}
+
+// diskState reads the deck file once and reports whether it differs from
+// what tap renders (see diskChanged), and whether it holds one of the
+// recent buffers the app sent, which makes the write the app's own save.
+func (source *appDeckSource) diskState() (changed, sentByApp bool, err error) {
 	disk, err := os.ReadFile(source.file)
 	if err != nil {
-		return false, err
+		return false, false, err
 	}
 	source.mu.Lock()
 	defer source.mu.Unlock()
+	sentByApp = source.wasSent(disk)
 	if source.hasBuffer {
-		return !bytes.Equal(disk, source.buffer), nil
+		return !bytes.Equal(disk, source.buffer), sentByApp, nil
 	}
-	return !bytes.Equal(disk, source.remembered), nil
+	return !bytes.Equal(disk, source.remembered), sentByApp, nil
 }
 
 // appSourceRequest is the body of PUT /api/app/source. The buffer travels

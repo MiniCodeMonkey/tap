@@ -32,8 +32,13 @@ test: project
 uitest: project
 	$(XCODEBUILD) -scheme Tap -destination 'platform=macOS' -only-testing:TapUITests $(TEST_TIMEOUTS) test
 
+# The bounds the benchmarks hold a run to: developer (the product's
+# targets, on an M-series Mac) or ci (the shared runner's); see
+# BenchmarkBounds. xcodebuild hands TEST_RUNNER_ variables to the test host
+# without the prefix.
+BENCH_BOUNDS ?= developer
 bench: project
-	$(XCODEBUILD) -scheme TapBenchmarks -destination 'platform=macOS' $(TEST_TIMEOUTS) test
+	TEST_RUNNER_TAP_BENCH_BOUNDS=$(BENCH_BOUNDS) $(XCODEBUILD) -scheme TapBenchmarks -destination 'platform=macOS' $(TEST_TIMEOUTS) test
 
 # Compiles the hosted and UI tests without running them; uitest, which runs them, is CI's job.
 test-build: project
