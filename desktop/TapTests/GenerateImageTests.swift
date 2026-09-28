@@ -15,7 +15,7 @@ final class GenerateImageTests: HostedTestCase {
           "image regenerate")
             deck="$3"
             sed -i '' 's/generated-00000000/generated-ffffffff/' "$deck"
-            # As tap does: the new file in, the old one deleted (deckedit's TestPlaceGeneratedImageReplacesInPlaceAndDeletesTheOldFile checks tap's own).
+            # As tap does: the deck written, then the new file in and the old one deleted (deckedit's TestPlaceGeneratedImageReplacesInPlaceAndDeletesTheOldFile checks tap's own).
             mv "$(dirname "$deck")/images/generated-00000000.png" "$(dirname "$deck")/images/generated-ffffffff.png"
             printf '{"ok": true, "deck": "%s", "slide": 2, "image": "images/generated-ffffffff.png", "prompt": "a fox at dusk", "markdown": "m", "replaced": "images/generated-00000000.png"}\\n' "$deck"
             exit 0 ;;
@@ -138,8 +138,12 @@ final class GenerateImageTests: HostedTestCase {
         window.regenerateImage(item)
         try await waitUntil(timeout: 20, "the replacement") { controller.editor.string.contains("generated-ffffffff.png") }
         XCTAssertFalse(controller.editor.string.contains("generated-00000000.png"), "replaced in place")
+        // tap writes the deck first and deletes the old file after it, and
+        // tap dev's file-changed report can load the new text in between, so
+        // the delete is waited for on its own.
         let images = deck.deletingLastPathComponent().appendingPathComponent("images")
-        XCTAssertFalse(FileManager.default.fileExists(atPath: images.appendingPathComponent("generated-00000000.png").path), "the old file is gone, and the app's save did not bring it back")
+        let old = images.appendingPathComponent("generated-00000000.png").path
+        try await waitUntil(timeout: 20, "tap deletes the old file") { !FileManager.default.fileExists(atPath: old) }
         XCTAssertTrue(FileManager.default.fileExists(atPath: images.appendingPathComponent("generated-ffffffff.png").path))
         XCTAssertTrue(try String(contentsOf: record, encoding: .utf8).contains("arguments: image regenerate \(deckPath) --slide 2 --image images/generated-00000000.png --json"))
         XCTAssertEqual(controller.editor.undoManager?.undoActionName, "Regenerate Image")
