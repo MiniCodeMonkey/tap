@@ -32,14 +32,17 @@ final class PreviewServer {
                 self?.url = ready.flatMap { URL(string: $0.url) }
                 completion(self?.url)
             }
-            run.onExit = { [weak self] exit in
-                self?.run = nil
-                self?.url = nil
+            run.onExit = { [weak self, weak run] exit in
                 if !answered {
                     answered = true
                     self?.log?.append("tap serve did not start (exit \(exit.status))", source: .app)
                     completion(nil)
                 }
+                // A second Preview starts a new run before the old one's exit
+                // arrives; that exit leaves the new run and its address alone.
+                guard let self, self.run === run else { return }
+                self.run = nil
+                self.url = nil
             }
             self.run = run
             do { try run.start() } catch {

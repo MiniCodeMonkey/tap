@@ -115,6 +115,36 @@ final class ExportWebsiteTests: HostedTestCase {
         sheet.doneButton.performClick(nil)
     }
 
+    /// A second Preview (the browser was slow) stops the first server and
+    /// keeps the new one: its address answers, and the server stays up.
+    func testASecondPreviewKeepsTheNewServer() async throws {
+        let (document, window, _) = try await openSevenSlides("seven-slides-site.md")
+        var opened: [URL] = []
+        window.openURL = { opened.append($0) }
+        window.exportWebsite(nil)
+        let sheet = try await exportSheet(window)
+        sheet.exportButton.performClick(nil)
+        _ = try await waitForTheDoneState(sheet, timeout: 120)
+        sheet.previewButton.performClick(nil)
+        try await waitUntil(timeout: 20, "the first server") { opened.count == 1 && window.previewServer?.isRunning == true }
+        let first = try XCTUnwrap(window.previewServer?.processIdentifier)
+
+        sheet.previewButton.performClick(nil)
+        try await waitUntil(timeout: 20, "the second server") { opened.count == 2 }
+        let second = try XCTUnwrap(window.previewServer?.processIdentifier)
+        XCTAssertNotEqual(second, first)
+        try await waitUntil(timeout: 10, "the first server to be gone") { kill(first, 0) != 0 }
+        let (_, response) = try await URLSession.shared.data(from: opened[1].appendingPathComponent("index.html"))
+        XCTAssertEqual((response as? HTTPURLResponse)?.statusCode, 200, "the second address answers")
+        XCTAssertTrue(window.previewServer?.isRunning ?? false, "the new server is still the running one")
+        XCTAssertEqual(window.previewServer?.processIdentifier, second)
+        XCTAssertEqual(window.previewServer?.url, opened[1])
+        XCTAssertEqual(kill(second, 0), 0, "the new server's process is alive")
+        sheet.doneButton.performClick(nil)
+        try await waitUntil(timeout: 10, "the server to stop with the sheet") { window.previewServer?.isRunning == false }
+        _ = document
+    }
+
     func testClosingTheDeckStopsThePreviewServer() async throws {
         let (document, window, _) = try await openSevenSlides("seven-slides-site.md")
         window.openURL = { _ in }
