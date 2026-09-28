@@ -38,6 +38,17 @@ beta7=$("$script" 2.0.0-beta.7); rc1=$("$script" 2.0.0-rc.1); final=$("$script" 
 for bad in 1.0.0-alpha.20 1.0.0-beta.31 1.0.0-rc.41 1.0.0-alpha.0 1.0.0-beta 1.0.0-rc 1.0.0-nightly.3; do
 	if "$script" "$bad" >/dev/null 2>&1; then echo "'$bad' should fail"; exit 1; fi
 done
+# A leading zero would be read as octal and give another version's number:
+# 1.010.0 would be 1.8.0, beta.010 would be beta.8.
+for bad in 1.010.0 010.0.0 1.0.01 00.0.0 2.0.0-beta.010 2.0.0-rc.01 2.0.0-alpha.00; do
+	if "$script" "$bad" >/dev/null 2>&1; then echo "'$bad' should fail"; exit 1; fi
+done
+# Only dev and ci go without a number; any other word would share alpha.1's slot.
+for bad in 2.1.0-preview 2.1.0-nightly 2.1.0-dev.1 2.1.0-ci.2 2.1.0-Alpha.1; do
+	if "$script" "$bad" >/dev/null 2>&1; then echo "'$bad' should fail"; exit 1; fi
+done
+expect 2.1.0-dev 2010001
+expect 0.10.0 100099
 # Versions the release workflow's regex refuses fail here too, before a build.
 for bad in 1.0 v1.0.0 1.0.0.0 1.0.0- "1.0.0 " abc ""; do
 	if "$script" "$bad" >/dev/null 2>&1; then echo "'$bad' should fail"; exit 1; fi
