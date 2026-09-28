@@ -104,7 +104,7 @@ final class CommandLineSettingsViewController: NSViewController {
         bundledPathLabel.stringValue = Self.pathFromBundle(environment.tapExecutableURL.path)
         let path = (await environment.tapEnvironment())["PATH"] ?? ""
         let others = CommandLineTool.locate(named: "tap", onPath: path, fileExists: { FileManager.default.isExecutableFile(atPath: $0) })
-            .filter { !CommandLineTool.isBundledLink(destination: try? FileManager.default.destinationOfSymbolicLink(atPath: $0)) }
+            .filter { !CommandLineTool.isBundledLink(destination: try? FileManager.default.destinationOfSymbolicLink(atPath: $0), ownTap: environment.tapExecutableURL.path) }
         if let first = others.first {
             let version = await AppEnvironment.readVersion(of: URL(fileURLWithPath: first))
             otherTap = (first, version)

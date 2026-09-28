@@ -10,13 +10,26 @@ public enum CommandLineTool {
         path.split(separator: ":", omittingEmptySubsequences: true).map { "\($0)/\(name)" }.filter(fileExists)
     }
 
-    /// A symlink whose destination is a Tap.app's bundled tap is ours to
-    /// replace; anything else was installed by someone else.
-    public static func isBundledLink(destination: String?) -> Bool {
+    /// A symlink is ours to replace when its destination is this app's own
+    /// tap (`ownTap`), or the bundled tap of an app named Tap.app or a
+    /// Finder copy of it ("Tap 2.app"); anything else was installed by
+    /// someone else.
+    public static func isBundledLink(destination: String?, ownTap: String? = nil) -> Bool {
         guard let destination else { return false }
-        return destination.hasSuffix(".app/Contents/Resources/tap") && (destination as NSString).lastPathComponent == "tap"
-            && ((destination as NSString).deletingLastPathComponent as NSString).deletingLastPathComponent.hasSuffix("/Contents")
-            && destination.contains("Tap")
+        if let ownTap, destination == ownTap || (destination as NSString).resolvingSymlinksInPath == (ownTap as NSString).resolvingSymlinksInPath {
+            return true
+        }
+        let components = (destination as NSString).pathComponents
+        guard components.count >= 5, Array(components.suffix(3)) == ["Contents", "Resources", "tap"] else { return false }
+        return isTapBundleName(components[components.count - 4])
+    }
+
+    /// "Tap.app", or "Tap <number>.app" as Finder names a copy.
+    static func isTapBundleName(_ name: String) -> Bool {
+        if name == "Tap.app" { return true }
+        guard name.hasPrefix("Tap "), name.hasSuffix(".app") else { return false }
+        let number = name.dropFirst(4).dropLast(4)
+        return !number.isEmpty && number.allSatisfy { ("0"..."9").contains($0) }
     }
 
     public enum ExistingFile: Equatable, Sendable {

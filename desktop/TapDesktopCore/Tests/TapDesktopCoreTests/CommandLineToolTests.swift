@@ -15,6 +15,14 @@ final class CommandLineToolTests: XCTestCase {
         XCTAssertTrue(CommandLineTool.isBundledLink(destination: "/Users/me/Desktop/Tap 2.app/Contents/Resources/tap"))
         XCTAssertFalse(CommandLineTool.isBundledLink(destination: "/opt/homebrew/Cellar/tap/2.0.0/bin/tap"))
         XCTAssertFalse(CommandLineTool.isBundledLink(destination: nil), "a plain file has no destination")
+        XCTAssertFalse(CommandLineTool.isBundledLink(destination: "/Users/Tapio/Other.app/Contents/Resources/tap"), "another app's tap, under a folder named Tap-something")
+        XCTAssertFalse(CommandLineTool.isBundledLink(destination: "/Applications/NotTap.app/Contents/Resources/tap"))
+        XCTAssertFalse(CommandLineTool.isBundledLink(destination: "/Applications/Tap Tools.app/Contents/Resources/tap"))
+        XCTAssertFalse(CommandLineTool.isBundledLink(destination: "/Applications/Tap.app/Contents/Resources/bin/tap"))
+        XCTAssertFalse(CommandLineTool.isBundledLink(destination: "/Contents/Resources/tap"), "no bundle at all")
+        XCTAssertTrue(CommandLineTool.isBundledLink(destination: "/Applications/Tap Beta.app/Contents/Resources/tap", ownTap: "/Applications/Tap Beta.app/Contents/Resources/tap"),
+                      "this app's own tap, whatever the app is called")
+        XCTAssertFalse(CommandLineTool.isBundledLink(destination: "/Applications/Tap Beta.app/Contents/Resources/tap", ownTap: "/Applications/Tap.app/Contents/Resources/tap"))
     }
 
     func testTheInstallDecisionNeverTouchesWhatIsNotOurs() {

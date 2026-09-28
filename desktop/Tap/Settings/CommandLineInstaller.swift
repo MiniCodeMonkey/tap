@@ -23,7 +23,7 @@ final class CommandLineInstaller {
         let attributes = try? FileManager.default.attributesOfItem(atPath: linkURL.path)
         guard attributes != nil else { return .none }
         let destination = try? FileManager.default.destinationOfSymbolicLink(atPath: linkURL.path)
-        return CommandLineTool.isBundledLink(destination: destination) ? .bundledLink : .other
+        return CommandLineTool.isBundledLink(destination: destination, ownTap: bundledTap.path) ? .bundledLink : .other
     }
 
     /// Whether the link is in place and points at this app's tap.
