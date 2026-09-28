@@ -261,7 +261,8 @@ final class ExportPDFTests: HostedTestCase {
 
     /// Two starts in a row, before the first has reached tap: one run.
     func testStartingTwiceRunsOnce() async throws {
-        let (_, window, deck) = try await openSevenSlides()
+        let (document, window, deck) = try await openSevenSlides()
+        let log = try XCTUnwrap(document.sessionController).session.log
         let record = try Fixtures.temporaryFolder().appendingPathComponent("record.txt")
         AppEnvironment.shared.toolExecutableURL = try FakeToolScripts.exportPDF(slides: 2, recordingTo: record)
         let request = ExportRequest(kind: .pdf(content: "slides"), output: deck.deletingPathExtension().appendingPathExtension("pdf").path)
@@ -271,6 +272,12 @@ final class ExportPDFTests: HostedTestCase {
             if case .done = window.exportController.state { return true } else { return false }
         }
         XCTAssertEqual(exportRuns(record).count, 1, "the second start found the first still starting")
+        // The Tap Log names every run the app makes. A second run would be
+        // started too, and the first one freed (and interrupted) the moment
+        // the second took its place, often before its tap recorded
+        // anything, so the record alone cannot tell one start from two.
+        let made = log.lines.filter { $0.source == .app && $0.text.hasPrefix("tap export pdf") }
+        XCTAssertEqual(made.count, 1, "one run made: \(made.map(\.text))")
     }
 
     func testASecondExportPressStartsNoSecondRun() async throws {
