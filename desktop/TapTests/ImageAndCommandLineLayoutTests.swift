@@ -6,7 +6,10 @@ import XCTest
 /// rather than raw frames (the house rule from D5's Deck tab defect: an
 /// NSBox whose contentView is a stack collapses to its title). Both panes
 /// are built from FormCard, as Task 12's SettingsCard fix requires. Every
-/// state either board draws gets its own test here.
+/// state either board draws gets its own test here. Where another tap is
+/// listed, its name and note are one block and the path is centered
+/// against that block, as the boards draw it, so the block and the path
+/// are one row.
 final class ImageAndCommandLineLayoutTests: HostedTestCase {
     // MARK: Image Generation
 
@@ -53,7 +56,7 @@ final class ImageAndCommandLineLayoutTests: HostedTestCase {
         for card in pane.cards { assertCard(card, holds: card.rows, in: content) }
     }
 
-    func testCommandLinePaneLayoutAnotherTapOnPath() {
+    func testCommandLinePaneLayoutAnotherTapOnPath() throws {
         let pane = CommandLineSettingsViewController()
         let content = pane.view
         content.setFrameSize(NSSize(width: 760, height: 260))
@@ -65,17 +68,17 @@ final class ImageAndCommandLineLayoutTests: HostedTestCase {
         pane.installButton.title = "Install in ~/.local/bin…"
         pane.installHint.stringValue = "Asks first. ~/.local/bin comes before /opt/homebrew/bin on your PATH."
         content.layoutSubtreeIfNeeded()
+        let otherBlock = try XCTUnwrap(pane.otherLabel.superview, "the name with its note under it")
         assertRowsDoNotOverlap([
             [pane.bundledLabel, pane.bundledPathLabel],
-            [pane.otherLabel, pane.otherPathLabel],
-            [pane.otherNoteLabel],
+            [otherBlock, pane.otherPathLabel],
             [pane.installButton],
             [pane.installHint],
         ], in: content)
         for card in pane.cards { assertCard(card, holds: card.rows, in: content) }
     }
 
-    func testCommandLinePaneLayoutForeignFile() {
+    func testCommandLinePaneLayoutForeignFile() throws {
         let pane = CommandLineSettingsViewController()
         let content = pane.view
         content.setFrameSize(NSSize(width: 760, height: 260))
@@ -88,10 +91,10 @@ final class ImageAndCommandLineLayoutTests: HostedTestCase {
         pane.installButton.isEnabled = false
         pane.installHint.stringValue = "~/.local/bin/tap is a tap that Tap did not install. Tap never replaces or deletes it."
         content.layoutSubtreeIfNeeded()
+        let otherBlock = try XCTUnwrap(pane.otherLabel.superview, "the name with its note under it")
         assertRowsDoNotOverlap([
             [pane.bundledLabel, pane.bundledPathLabel],
-            [pane.otherLabel, pane.otherPathLabel],
-            [pane.otherNoteLabel],
+            [otherBlock, pane.otherPathLabel],
             [pane.installButton],
             [pane.installHint],
         ], in: content)
@@ -118,7 +121,7 @@ final class ImageAndCommandLineLayoutTests: HostedTestCase {
         for card in pane.cards { assertCard(card, holds: card.rows, in: content) }
     }
 
-    func testCommandLinePaneLayoutNotFirstOnPath() {
+    func testCommandLinePaneLayoutNotFirstOnPath() throws {
         let pane = CommandLineSettingsViewController()
         let content = pane.view
         content.setFrameSize(NSSize(width: 760, height: 260))
@@ -131,10 +134,10 @@ final class ImageAndCommandLineLayoutTests: HostedTestCase {
         pane.installButton.isEnabled = false
         pane.installHint.stringValue = "/opt/homebrew/bin comes before ~/.local/bin on your PATH, so Terminal would still run tap 2.0.0."
         content.layoutSubtreeIfNeeded()
+        let otherBlock = try XCTUnwrap(pane.otherLabel.superview, "the name with its note under it")
         assertRowsDoNotOverlap([
             [pane.bundledLabel, pane.bundledPathLabel],
-            [pane.otherLabel, pane.otherPathLabel],
-            [pane.otherNoteLabel],
+            [otherBlock, pane.otherPathLabel],
             [pane.installButton],
             [pane.installHint],
         ], in: content)
@@ -177,18 +180,17 @@ final class ImageAndCommandLineLayoutTests: HostedTestCase {
         ], in: content)
     }
 
-    func testInstallConfirmSheetLayoutWithOtherTap() {
+    func testInstallConfirmSheetLayoutWithOtherTap() throws {
         let installer = CommandLineInstaller(linkDirectory: URL(fileURLWithPath: "/tmp/local-bin"), bundledTap: URL(fileURLWithPath: "/Applications/Tap.app/Contents/Resources/tap"))
         let sheet = InstallConfirmSheet(installer: installer, bundledVersion: "2.1.0", otherTap: (path: "/opt/homebrew/bin/tap", version: "2.0.0"))
         guard let content = sheet.contentView else { return XCTFail("no content view") }
         content.layoutSubtreeIfNeeded()
+        let otherBlock = try XCTUnwrap(sheet.otherTapLabel.superview, "the name with its note under it")
         assertRowsDoNotOverlap([
             [sheet.titleLabel],
             [sheet.bodyLabel],
             [sheet.pathLabel],
-            [sheet.otherTapLabel],
-            [sheet.otherTapNote],
-            [sheet.otherTapPath],
+            [otherBlock, sheet.otherTapPath],
             [sheet.declineButton, sheet.acceptButton],
         ], in: content)
         assertCard(sheet.otherTapCard, holds: [sheet.otherTapLabel, sheet.otherTapNote, sheet.otherTapPath], in: content)
