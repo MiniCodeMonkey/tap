@@ -401,14 +401,19 @@ final class ExternalChangeTests: HostedTestCase {
     func testAnInPlaceAutosaveDuringAConflictWritesNothing() async throws {
         let (deck, document, mine, theirs) = try await openDeckWithAShownConflict()
         let controller = try XCTUnwrap(document.sessionController)
+        // After a move, NSDocument's known modification date is the moved
+        // file's, so its own check that the file changed on disk passes: only
+        // the conflict guard stands between the autosave and the file.
+        document.acceptDiskState()
+        XCTAssertFalse(document.diskIsNewerThanKnown)
 
         let saveError = await withCheckedContinuation { (continuation: CheckedContinuation<Error?, Never>) in
             document.save(to: deck, ofType: "net.daringfireball.markdown", for: .autosaveInPlaceOperation) { error in
                 continuation.resume(returning: error)
             }
         }
-        XCTAssertEqual((saveError as? CocoaError)?.code, .userCancelled, "refused silently")
         XCTAssertEqual(try String(contentsOf: deck, encoding: .utf8), theirs, "the other program's text is still on disk")
+        XCTAssertEqual((saveError as? CocoaError)?.code, .userCancelled, "refused silently")
         XCTAssertTrue(controller.hasDiskConflict)
         XCTAssertEqual(controller.editor.string, mine, "the person's text is still in the editor")
         XCTAssertTrue(document.isDocumentEdited)
