@@ -56,6 +56,7 @@ targets:
         NSPrincipalClass: NSApplication
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true
+        NSMicrophoneUsageDescription: Tap records your voice with the screen when you record a talk.
         CFBundleDocumentTypes:
           - CFBundleTypeName: Markdown Deck
             CFBundleTypeRole: Editor
@@ -76,6 +77,7 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: io.geocod.tap.desktop
         PRODUCT_NAME: Tap
+        CODE_SIGN_ENTITLEMENTS: Tap/Tap.entitlements
     postCompileScripts:
       - name: Bundle tap
         path: scripts/build-tap.sh
