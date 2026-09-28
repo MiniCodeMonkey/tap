@@ -64,6 +64,72 @@ final class SourceSyncTests: XCTestCase {
         XCTAssertEqual(failures, 1)
     }
 
+    func testFlushSendsAnEditStillWaitingForItsPauseAndReturnsOnceTapAnswered() async throws {
+        let sync = SourceSync(delay: 10, maxWait: 10, text: { [unowned self] in self.text }, beginSend: { [unowned self] in self.generation += 1; return self.generation })
+        var sent: [String] = []
+        var answered: [String] = []
+        sync.sender = { source in
+            sent.append(source)
+            try await Task.sleep(nanoseconds: 50_000_000)
+            return SlideList(slides: [], errors: [])
+        }
+        sync.onAnswer = { _, sentText, _ in answered.append(sentText) }
+        text = "typed"
+        sync.textDidChange()
+        XCTAssertTrue(sync.hasUnsentText)
+        await sync.flush(timeout: 2)
+        XCTAssertEqual(sent, ["typed"])
+        XCTAssertEqual(answered, ["typed"], "flush returns only after tap answered for the text")
+        XCTAssertFalse(sync.hasUnsentText)
+    }
+
+    func testFlushWaitsForAPutInFlightAndSendsWhatWasTypedDuringIt() async throws {
+        let sync = SourceSync(delay: 10, maxWait: 10, text: { [unowned self] in self.text }, beginSend: { [unowned self] in self.generation += 1; return self.generation })
+        var sent: [String] = []
+        var answered: [String] = []
+        sync.sender = { source in
+            sent.append(source)
+            try await Task.sleep(nanoseconds: 50_000_000)
+            return SlideList(slides: [], errors: [])
+        }
+        sync.onAnswer = { _, sentText, _ in answered.append(sentText) }
+        text = "first"
+        let first = Task { await sync.sendNow() }
+        try await Task.sleep(nanoseconds: 10_000_000)
+        text = "second"
+        await sync.flush(timeout: 2)
+        XCTAssertEqual(answered.last, "second")
+        XCTAssertFalse(sync.hasUnsentText)
+        await first.value
+        XCTAssertEqual(sent.last, "second")
+    }
+
+    func testFlushSendsNothingWhenTapHasTheTextOrIsNotRunning() async throws {
+        let sync = makeSync()
+        text = "no tap"
+        await sync.flush(timeout: 2)
+        XCTAssertFalse(sync.hasUnsentText, "with no sender nothing is waiting on tap")
+
+        var sent: [String] = []
+        sync.sender = { source in sent.append(source); return SlideList(slides: [], errors: []) }
+        await sync.sendNow()
+        await sync.flush(timeout: 2)
+        XCTAssertEqual(sent, ["no tap"], "text tap already has is not sent again")
+    }
+
+    func testFlushGivesUpAfterItsTimeoutWhenTapDoesNotAnswer() async throws {
+        let sync = makeSync()
+        sync.sender = { _ in
+            try await Task.sleep(nanoseconds: 5_000_000_000)
+            return SlideList(slides: [], errors: [])
+        }
+        text = "stuck"
+        let started = Date()
+        await sync.flush(timeout: 0.2)
+        XCTAssertLessThan(Date().timeIntervalSince(started), 2)
+        XCTAssertTrue(sync.hasUnsentText)
+    }
+
     func testContinuousEditsWithoutAPauseStillProduceSendsAtRoughlyTheMaxWaitCadence() async throws {
         let sync = SourceSync(delay: 1.0, maxWait: 0.1, text: { [unowned self] in self.text }, beginSend: { [unowned self] in self.generation += 1; return self.generation })
         var sentCount = 0

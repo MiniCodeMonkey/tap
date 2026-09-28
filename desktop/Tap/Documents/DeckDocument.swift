@@ -222,10 +222,42 @@ final class DeckDocument: NSDocument {
     // changes during a shown conflict: `.userCancelled` is the one error
     // NSDocument treats as a silent refusal, so a close or quit driven this
     // way still cancels instead of writing, with no alert shown.
+    //
+    // tap tells its own save apart from a change made elsewhere by the text:
+    // a deck file holding text the app sent it is the app's, and one holding
+    // anything else reloads every open page. The periodic autosave can land
+    // in the moment between a keystroke and the PUT that carries it, so it
+    // first hands tap the text it is about to write (`SourceSync.flush`),
+    // then writes. Only the periodic autosave waits: nothing is waiting on
+    // it, and a close or quit's autosave goes ahead at once.
     override func autosave(withImplicitCancellability autosavingIsImplicitlyCancellable: Bool,
                            completionHandler: @escaping (Error?) -> Void) {
         if sessionController?.hasDiskConflict == true { return completionHandler(CocoaError(.userCancelled)) }
-        super.autosave(withImplicitCancellability: autosavingIsImplicitlyCancellable, completionHandler: completionHandler)
+        guard autosavingIsImplicitlyCancellable, let sessionController, let sourceSync = sessionController.sourceSync else {
+            return super.autosave(withImplicitCancellability: autosavingIsImplicitlyCancellable, completionHandler: completionHandler)
+        }
+        // A Deck tab field's text goes into the editor before the flush, so
+        // tap is handed what the save writes.
+        sessionController.deckForm.commitEditingKeepingFocus()
+        guard sourceSync.hasUnsentText else {
+            return super.autosave(withImplicitCancellability: true, completionHandler: completionHandler)
+        }
+        Task { @MainActor [weak self] in
+            await sourceSync.flush(timeout: Self.flushTimeout)
+            guard let self else { return completionHandler(CocoaError(.userCancelled)) }
+            self.autosaveAfterFlush(completionHandler: completionHandler)
+        }
+    }
+
+    /// How long the periodic autosave waits for tap to take the text before
+    /// it writes anyway.
+    static let flushTimeout: TimeInterval = 2
+
+    /// The periodic autosave once tap has the text. A conflict that showed
+    /// up while it waited refuses it, as it would have before the wait.
+    private func autosaveAfterFlush(completionHandler: @escaping (Error?) -> Void) {
+        if sessionController?.hasDiskConflict == true { return completionHandler(CocoaError(.userCancelled)) }
+        super.autosave(withImplicitCancellability: true, completionHandler: completionHandler)
     }
 
     // Reads the edited state straight from content on every call, rather
