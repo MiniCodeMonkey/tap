@@ -2,10 +2,10 @@ import AppKit
 import Sparkle
 
 /// Sparkle's updater with its standard interface, and its delegate, with
-/// the app's one rule: a talk is never interrupted. Every decision reads
-/// `updatesMayInterrupt` through `UpdateGate`, a relaunch a talk postponed
-/// runs once the last talk's windows are down, and Play is refused while
-/// Sparkle has a window or its permission prompt up.
+/// the app's one rule: a talk is never interrupted. Every decision waits,
+/// through `UpdateGate`, until every talk and its windows are down (a
+/// relaunch a talk postponed runs then), and Play is refused while Sparkle
+/// has a window or its permission prompt up.
 @MainActor
 final class UpdateController: NSObject, SPUUpdaterDelegate {
     let gate = UpdateGate()
@@ -68,9 +68,9 @@ final class UpdateController: NSObject, SPUUpdaterDelegate {
     }
 
     /// The menu item's state: a started updater that Sparkle allows to check
-    /// and no talk running.
+    /// and every talk down, as `mayPerform` asks.
     var canCheckForUpdates: Bool {
-        isStarted && updater.canCheckForUpdates && gate.mayCheck(mayInterrupt: AppEnvironment.shared.updatesMayInterrupt)
+        isStarted && updater.canCheckForUpdates && gate.mayCheck(mayInterrupt: talkWindowsAreDown)
     }
 
     /// Whether every talk is over and its windows are gone: no deck's talk
@@ -99,16 +99,19 @@ final class UpdateController: NSObject, SPUUpdaterDelegate {
     }
 
     // MARK: SPUUpdaterDelegate
+    // Each decision waits for `talkWindowsAreDown`, not only for the talk
+    // to be counted out, so nothing of Sparkle's comes up over a talk
+    // window still leaving full screen.
 
     func updater(_ updater: SPUUpdater, mayPerform updateCheck: SPUUpdateCheck) throws {
-        guard gate.mayCheck(mayInterrupt: AppEnvironment.shared.updatesMayInterrupt) else { throw UpdateGate.PresentingError() }
+        guard gate.mayCheck(mayInterrupt: talkWindowsAreDown) else { throw UpdateGate.PresentingError() }
     }
 
     func updater(_ updater: SPUUpdater, shouldProceedWithUpdate updateItem: SUAppcastItem, updateCheck: SPUUpdateCheck) throws {
-        guard gate.mayProceed(mayInterrupt: AppEnvironment.shared.updatesMayInterrupt) else { throw UpdateGate.PresentingError() }
+        guard gate.mayProceed(mayInterrupt: talkWindowsAreDown) else { throw UpdateGate.PresentingError() }
     }
 
     func updater(_ updater: SPUUpdater, shouldPostponeRelaunchForUpdate item: SUAppcastItem, untilInvokingBlock installHandler: @escaping () -> Void) -> Bool {
-        gate.shouldPostponeRelaunch(mayInterrupt: AppEnvironment.shared.updatesMayInterrupt, resume: installHandler)
+        gate.shouldPostponeRelaunch(mayInterrupt: talkWindowsAreDown, resume: installHandler)
     }
 }

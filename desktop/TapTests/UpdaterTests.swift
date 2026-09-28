@@ -84,6 +84,24 @@ final class UpdaterTests: PresentingTestCase {
         XCTAssertNil(updates.gate.postponedRelaunch)
     }
 
+    /// A talk stopped while its audience still leaves full screen is
+    /// counted out with its windows up: no check starts, no found update
+    /// shows and no relaunch runs until they are down.
+    func testNothingOfSparklesShowsWhileTheTalkWindowsGoDown() async throws {
+        let made = MadeWindows()
+        let (_, controller) = try await startTalkWithAnExitThatNeverCompletes(made)
+        try await stopWhileTheAudienceLeavesFullScreen(controller.presentation)
+        XCTAssertTrue(AppEnvironment.shared.updatesMayInterrupt, "the talk is counted out")
+        XCTAssertThrowsError(try updates.updater(updates.updater, mayPerform: .updatesInBackground), "no check mid-transition")
+        XCTAssertThrowsError(try updates.updater(updates.updater, shouldProceedWithUpdate: SUAppcastItem.empty(), updateCheck: .updatesInBackground), "no update alert over a window leaving full screen")
+        var relaunched = 0
+        XCTAssertTrue(updates.updater(updates.updater, shouldPostponeRelaunchForUpdate: SUAppcastItem.empty()) { relaunched += 1 }, "no relaunch mid-transition")
+        try await waitUntil(timeout: 30, "the talk windows to go down") { made.allClosed && controller.presentation.windowsGoingDown.isEmpty }
+        try await waitUntil(timeout: 5, "the postponed relaunch") { relaunched == 1 }
+        XCTAssertNoThrow(try updates.updater(updates.updater, mayPerform: .updatesInBackground))
+        XCTAssertNoThrow(try updates.updater(updates.updater, shouldProceedWithUpdate: SUAppcastItem.empty(), updateCheck: .updatesInBackground))
+    }
+
     func testPlayWaitsForAWindowSparkleHasUp() async throws {
         let (_, controller) = try await openDeckForPresenting()
         let deckWindow = try XCTUnwrap(controller.editor.window?.windowController as? DeckWindowController)
