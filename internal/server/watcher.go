@@ -11,6 +11,11 @@ import (
 	"github.com/fsnotify/fsnotify"
 )
 
+// stoppableTimer is the part of *time.Timer the debounce in run uses.
+type stoppableTimer interface {
+	Stop() bool
+}
+
 // Watcher watches files and directories for changes and triggers callbacks.
 type Watcher struct {
 	// Fields ordered by size for better memory alignment
@@ -32,7 +37,11 @@ type Watcher struct {
 	// have its (now stale) result land after it; see triggerOnChange.
 	callbackMu   sync.Mutex
 	debounceTime time.Duration
-	running      bool
+	// afterFunc schedules the debounced callback. It is time.AfterFunc, and
+	// a test replaces it before Start to drive the debounce without a wall
+	// clock.
+	afterFunc func(time.Duration, func()) stoppableTimer
+	running   bool
 }
 
 // NewWatcher creates a new file watcher.
@@ -60,6 +69,9 @@ func NewWatcher(mdFile string) (*Watcher, error) {
 		mdFile:       absFile,
 		mdDir:        mdDir,
 		backupFile:   autosaveBackupPath(absFile),
+		afterFunc: func(delay time.Duration, callback func()) stoppableTimer {
+			return time.AfterFunc(delay, callback)
+		},
 	}
 
 	return w, nil
@@ -265,7 +277,7 @@ func (w *Watcher) run() {
 	defer close(w.doneCh)
 
 	var (
-		debounceTimer *time.Timer
+		debounceTimer stoppableTimer
 		pendingPath   string
 	)
 
@@ -339,7 +351,7 @@ func (w *Watcher) run() {
 			// read and written by this goroutine only; see AfterFunc's own
 			// goroutine, which never touches it.
 			path := pendingPath
-			debounceTimer = time.AfterFunc(debounceTime, func() {
+			debounceTimer = w.afterFunc(debounceTime, func() {
 				w.triggerOnChange(path)
 			})
 

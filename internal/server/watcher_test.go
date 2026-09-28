@@ -149,6 +149,93 @@ func TestWatcher_OnChange(t *testing.T) {
 	mu.Unlock()
 }
 
+// fakeDebounceClock stands in for time.AfterFunc in the watcher: nothing it
+// schedules runs until the test fires it, so the debounce is checked by what
+// the watcher schedules and stops rather than by how fast the machine is.
+type fakeDebounceClock struct {
+	mu     sync.Mutex
+	timers []*fakeDebounceTimer
+	// overlaps counts timers scheduled while an earlier one was still live:
+	// a debounce that did not restart its window.
+	overlaps int
+}
+
+type fakeDebounceTimer struct {
+	clock    *fakeDebounceClock
+	delay    time.Duration
+	callback func()
+	stopped  bool
+	fired    bool
+}
+
+func (clock *fakeDebounceClock) afterFunc(delay time.Duration, callback func()) stoppableTimer {
+	clock.mu.Lock()
+	defer clock.mu.Unlock()
+	for _, timer := range clock.timers {
+		if !timer.stopped && !timer.fired {
+			clock.overlaps++
+		}
+	}
+	timer := &fakeDebounceTimer{clock: clock, delay: delay, callback: callback}
+	clock.timers = append(clock.timers, timer)
+	return timer
+}
+
+func (timer *fakeDebounceTimer) Stop() bool {
+	timer.clock.mu.Lock()
+	defer timer.clock.mu.Unlock()
+	wasLive := !timer.stopped && !timer.fired
+	timer.stopped = true
+	return wasLive
+}
+
+// scheduled returns how many timers the watcher has scheduled so far.
+func (clock *fakeDebounceClock) scheduled() int {
+	clock.mu.Lock()
+	defer clock.mu.Unlock()
+	return len(clock.timers)
+}
+
+// live returns the timers neither stopped nor fired.
+func (clock *fakeDebounceClock) live() []*fakeDebounceTimer {
+	clock.mu.Lock()
+	defer clock.mu.Unlock()
+	var live []*fakeDebounceTimer
+	for _, timer := range clock.timers {
+		if !timer.stopped && !timer.fired {
+			live = append(live, timer)
+		}
+	}
+	return live
+}
+
+// fire runs timer's callback as the real timer would when its delay ran out.
+func (clock *fakeDebounceClock) fire(timer *fakeDebounceTimer) {
+	clock.mu.Lock()
+	timer.fired = true
+	clock.mu.Unlock()
+	timer.callback()
+}
+
+// waitForScheduled waits until the watcher has scheduled more than count
+// timers, that is, until it has handled a file event after the first count.
+// The wait only bounds how long fsnotify may take to deliver the event; no
+// assertion depends on how long it took.
+func waitForScheduled(t *testing.T, clock *fakeDebounceClock, count int) {
+	t.Helper()
+	deadline := time.Now().Add(10 * time.Second)
+	for clock.scheduled() <= count {
+		if time.Now().After(deadline) {
+			t.Fatalf("the watcher scheduled no debounce timer after %d; a file event never arrived", count)
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+}
+
+// TestWatcher_Debounce checks the debounce itself: every file event restarts
+// the window (the pending timer is stopped before the next is scheduled, for
+// the full debounce time), and the callback runs only when the window runs
+// out, once, for the whole burst.
 func TestWatcher_Debounce(t *testing.T) {
 	tmpDir := t.TempDir()
 	mdFile := filepath.Join(tmpDir, "test.md")
@@ -161,46 +248,73 @@ func TestWatcher_Debounce(t *testing.T) {
 		t.Fatalf("NewWatcher() error = %v", err)
 	}
 
-	var callCount atomic.Int32
-
+	var mu sync.Mutex
+	var calls []string
 	w.SetOnChange(func(path string) {
-		callCount.Add(1)
+		mu.Lock()
+		defer mu.Unlock()
+		calls = append(calls, path)
 	})
+	callCount := func() int {
+		mu.Lock()
+		defer mu.Unlock()
+		return len(calls)
+	}
 
-	// Use longer debounce time
-	w.SetDebounceTime(100 * time.Millisecond)
+	const debounceTime = 100 * time.Millisecond
+	w.SetDebounceTime(debounceTime)
+	clock := &fakeDebounceClock{}
+	w.afterFunc = clock.afterFunc
 
 	if err := w.Start(); err != nil {
 		t.Fatalf("Start() error = %v", err)
 	}
 	defer w.Stop()
 
-	// Give watcher time to start
-	time.Sleep(50 * time.Millisecond)
-
-	// Fire a burst of writes back to back, with no sleep between them, so
-	// the whole burst lands well inside one debounce window regardless of
-	// how loaded the machine running the test is. A fixed inter-write sleep
-	// close to the debounce window is what made this test flaky on slow
-	// runners: the writes could spread past the window and split into more
-	// than one debounce cycle even though the debounce logic itself was
-	// fine.
+	// The first burst of writes, then, once the watcher has seen it, a
+	// second write: the second must restart the window the first opened,
+	// however far apart the watcher happens to see them.
 	const writes = 10
 	for i := 0; i < writes; i++ {
 		if err := os.WriteFile(mdFile, []byte("# Update "+string(rune('0'+i))), 0644); err != nil {
 			t.Fatalf("failed to write file: %v", err)
 		}
 	}
+	waitForScheduled(t, clock, 0)
+	afterBurst := clock.scheduled()
+	if err := os.WriteFile(mdFile, []byte("# Update again"), 0644); err != nil {
+		t.Fatalf("failed to write file: %v", err)
+	}
+	waitForScheduled(t, clock, afterBurst)
 
-	// Wait well past the debounce window for it to fire.
-	time.Sleep(300 * time.Millisecond)
+	if count := callCount(); count != 0 {
+		t.Fatalf("callCount = %d before any debounce window ran out, want 0", count)
+	}
+	clock.mu.Lock()
+	overlaps := clock.overlaps
+	for index, timer := range clock.timers {
+		if timer.delay != debounceTime {
+			t.Errorf("timer %d was scheduled for %v, want the debounce time %v", index, timer.delay, debounceTime)
+		}
+	}
+	clock.mu.Unlock()
+	if overlaps != 0 {
+		t.Fatalf("%d debounce timers were scheduled while an earlier one was still pending; each event must restart the window", overlaps)
+	}
 
-	// A burst of writes inside one debounce window should collapse to far
-	// fewer callbacks than writes, not zero (the burst must still trigger a
-	// rebuild) and not one per write (debouncing must have done its job).
-	count := callCount.Load()
-	if count < 1 || count > 3 {
-		t.Errorf("callCount = %d, want between 1 and 3 (debouncing should collapse a %d-write burst into a small number of callbacks)", count, writes)
+	live := clock.live()
+	if len(live) != 1 {
+		t.Fatalf("%d debounce timers are pending, want exactly 1", len(live))
+	}
+	clock.fire(live[0])
+
+	mu.Lock()
+	defer mu.Unlock()
+	if len(calls) != 1 {
+		t.Fatalf("callCount = %d once the window ran out, want 1 for the whole burst", len(calls))
+	}
+	if calls[0] != w.WatchedFile() {
+		t.Errorf("callback path = %q, want %q", calls[0], w.WatchedFile())
 	}
 }
 
