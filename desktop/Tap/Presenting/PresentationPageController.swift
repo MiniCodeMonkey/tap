@@ -24,6 +24,15 @@ final class PresentationPageController: NSViewController, WKNavigationDelegate, 
     private(set) var lastReady: ReadyPayload?
     private(set) var pageLoadCount = 0
     private(set) var lastLoadedURL: URL?
+    /// When `load` last ran, which the navigation milestones count from.
+    private(set) var lastLoadDate: Date?
+    /// Every navigation step WebKit reported since the last `load`, the
+    /// page's own included (a reload from its script, a link): its name,
+    /// the path, query and fragment it was for, and when. Newest last,
+    /// at most `maximumMilestones`. Nothing reads it to decide anything;
+    /// a failure message says with it where the page went.
+    private(set) var navigationMilestones: [(name: String, url: String, date: Date)] = []
+    private static let maximumMilestones = 20
     /// How many times the page was loaded again because its web content
     /// process ended.
     private(set) var processTerminationCount = 0
@@ -64,8 +73,26 @@ final class PresentationPageController: NSViewController, WKNavigationDelegate, 
         self.allowedPort = allowedPort
         pageLoadCount += 1
         lastLoadedURL = url
+        lastLoadDate = Date()
+        navigationMilestones = []
         lastReady = nil
         webView.load(URLRequest(url: url))
+    }
+
+    private func recordMilestone(_ name: String) {
+        let url = webView.url.map { url in
+            url.path + (url.query.map { "?" + $0 } ?? "") + (url.fragment.map { "#" + $0 } ?? "")
+        } ?? "none"
+        navigationMilestones.append((name: name, url: url, date: Date()))
+        if navigationMilestones.count > Self.maximumMilestones { navigationMilestones.removeFirst() }
+    }
+
+    /// The milestones since the last load, each as seconds after it began:
+    /// "start /presenter?key=…#2 +0.02s, redirect /presenter#2 +0.05s, …".
+    var navigationMilestoneDescription: String {
+        guard let start = lastLoadDate, !navigationMilestones.isEmpty else { return "none" }
+        return navigationMilestones.map { "\($0.name) \($0.url) +\(String(format: "%.2f", $0.date.timeIntervalSince(start)))s" }
+            .joined(separator: ", ")
     }
 
     // MARK: WebKit
@@ -96,11 +123,34 @@ final class PresentationPageController: NSViewController, WKNavigationDelegate, 
         }
     }
 
+    func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
+        recordMilestone("start")
+    }
+
+    func webView(_ webView: WKWebView, didReceiveServerRedirectForProvisionalNavigation navigation: WKNavigation!) {
+        recordMilestone("redirect")
+    }
+
+    /// A new document replaced the one on screen, whether the app loaded
+    /// it or the page navigated itself (a reload from its script). The
+    /// last ready was the old document's, so the page is not ready until
+    /// the new one says so.
+    func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
+        recordMilestone("commit")
+        lastReady = nil
+    }
+
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        recordMilestone("finish")
+    }
+
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+        recordMilestone("fail")
         onLoadFailed?(error)
     }
 
     func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+        recordMilestone("fail")
         onLoadFailed?(error)
     }
 
@@ -113,6 +163,7 @@ final class PresentationPageController: NSViewController, WKNavigationDelegate, 
     /// reported as a failed load instead, and left alone. A process that
     /// is stuck rather than ended is not detected here.
     func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+        recordMilestone("process ended")
         processTerminationCount += 1
         lastReady = nil
         let now = Date()
