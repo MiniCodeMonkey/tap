@@ -64,6 +64,12 @@ grep -Fq "<sparkle:releaseNotesLink>$notes</sparkle:releaseNotesLink>" "$root/pl
 
 # A character XML must escape never reaches the feed; the writer refuses rather than corrupting it.
 if "$script" "$app" "$dmg" 'https://example.com/a"b.dmg' "$release" "$root/bad.xml" >/dev/null 2>&1; then echo "a quote in a URL should fail"; exit 1; fi
+# A plist value XML would need escaped is refused too, and no feed is left at the output.
+mkdir -p "$root/Odd.app/Contents"
+sed 's|<string>2.1.0-beta.3</string>|<string>2.1.0\&lt;b</string>|' "$app/Contents/Info.plist" > "$root/Odd.app/Contents/Info.plist"
+if "$script" "$root/Odd.app" "$dmg" "$download" "$release" "$root/odd.xml" >/dev/null 2>"$root/err"; then echo "a plist value with < should fail"; exit 1; fi
+grep -Fq "the app's Info.plist holds '2.1.0<b'" "$root/err" || { echo "the refusal should name the plist value: $(cat "$root/err")"; exit 1; }
+[ ! -e "$root/odd.xml" ] && [ ! -e "$root/odd.xml.draft" ] || { echo "a refused feed should leave no file"; exit 1; }
 if "$script" "$root/none.app" "$dmg" "$download" "$release" "$root/x.xml" >/dev/null 2>&1; then echo "a missing app should fail"; exit 1; fi
 if "$script" "$app" "$dmg" "$download" "$release" "$root/x.xml" "" "$notes" "bm90ZXM=" >/dev/null 2>&1; then echo "a notes signature without a length should fail"; exit 1; fi
 

@@ -26,6 +26,11 @@ read_plist() { /usr/libexec/PlistBuddy -c "Print :$1" "$plist"; }
 short_version=$(read_plist CFBundleShortVersionString)
 build_number=$(read_plist CFBundleVersion)
 minimum_system=$(read_plist LSMinimumSystemVersion)
+for value in "$short_version" "$build_number" "$minimum_system"; do
+	case "$value" in
+		*[\"\<\>\&]*) echo "write-appcast.sh: the app's Info.plist holds '$value', a character XML would need escaped" >&2; exit 1 ;;
+	esac
+done
 length=$(stat -f%z "$dmg")
 # RFC 822 names its days and months in English, whatever the locale.
 published=$(LC_ALL=C date -u '+%a, %d %b %Y %H:%M:%S +0000')
@@ -47,7 +52,11 @@ elif [ -n "$notes_url" ]; then
       <sparkle:releaseNotesLink>$notes_url</sparkle:releaseNotesLink>"
 fi
 
-cat > "$output" <<XML
+# The feed is written beside the output and moved into place only once it
+# parses, so the output path never holds a malformed feed.
+draft="$output.draft"
+trap 'rm -f "$draft"' EXIT
+cat > "$draft" <<XML
 <?xml version="1.0" encoding="utf-8"?>
 <rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
   <channel>
@@ -68,5 +77,6 @@ cat > "$output" <<XML
   </channel>
 </rss>
 XML
-xmllint --noout "$output"
+xmllint --noout "$draft" || { echo "write-appcast.sh: the feed does not parse; nothing was written to $output" >&2; exit 1; }
+mv "$draft" "$output"
 echo "wrote $output"
