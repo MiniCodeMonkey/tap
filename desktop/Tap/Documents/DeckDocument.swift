@@ -360,12 +360,14 @@ final class DeckDocument: NSDocument {
            sessionController?.hasDiskConflict == true {
             return completionHandler(CocoaError(.userCancelled))
         }
-        // Save To, and any other save explicitly told to land somewhere
-        // other than this document's own file, is the one kind of save
-        // `data(ofType:)` below must not treat as taking this document's
-        // save snapshot: nothing it writes changes what tap should be
-        // showing for this deck's own file.
-        savingOwnFile = saveOperation != .saveToOperation
+        // Save To and an autosave elsewhere (an untitled deck's, or one
+        // NSDocument keeps beside a file it cannot write in place) land
+        // somewhere other than this document's own file, so
+        // `data(ofType:)` below neither takes this document's save
+        // snapshot for them nor names their text to tap: nothing they
+        // write changes what tap should be showing for this deck's own
+        // file.
+        savingOwnFile = saveOperation != .saveToOperation && saveOperation != .autosaveElsewhereOperation
         super.save(to: url, ofType: typeName, for: saveOperation) { [weak self] error in
             guard let self else { return completionHandler(error) }
             if self.savingOwnFile {
@@ -395,11 +397,13 @@ final class DeckDocument: NSDocument {
     /// Duplicate (Cmd-Shift-S) never reaches `save(to:ofType:for:
     /// completionHandler:)` above; it seeds the new document's data through
     /// `data(ofType:)` directly, without writing this document's own file at
-    /// all. That call still captures whatever the editor holds into
-    /// `savedSnapshot`, so it is cleared here once the duplicate is made, the
-    /// same way a save that lands elsewhere clears it in its own completion.
+    /// all. It runs as a save elsewhere, so that call neither takes the save
+    /// snapshot, which may belong to a save of the deck file still in
+    /// flight, nor names bytes to tap that the deck file never receives.
     override func duplicate() throws -> NSDocument {
-        defer { savedSnapshot = nil }
+        let wasSavingOwnFile = savingOwnFile
+        savingOwnFile = false
+        defer { savingOwnFile = wasSavingOwnFile }
         return try super.duplicate()
     }
 
