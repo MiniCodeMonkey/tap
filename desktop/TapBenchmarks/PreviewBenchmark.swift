@@ -111,12 +111,25 @@ final class PreviewBenchmark: BenchmarkCase {
             JSON.stringify({hidden: document.hidden, ready: window.__tapReady,
                             hasText: (document.body.textContent || '').includes(\(Self.javaScriptString(expected))),
                             probeInstalled: !!window.__benchmarkObserver, pageMs: Math.round(performance.now()),
-                            readyState: window.__tapReadyState})
+                            navigation: (performance.getEntriesByType('navigation')[0] || {}).type,
+                            readyState: window.__tapReadyState, socket: window.__tapSocketState})
             """)
         XCTFail("the preview never showed \(expected.debugDescription) within 5 s. page=\(String(describing: state)) "
                 + "lastReady=\(String(describing: controller.previewViewController.lastReady)) "
                 + "previewPageLoads=\(controller.previewViewController.pageLoadCount) "
-                + "renderer: \(controller.thumbnails.renderer.stateDescription)")
+                + "renderer: \(controller.thumbnails.renderer.stateDescription) "
+                + "log: \(Self.recentLogLines(controller.session.log))")
         throw CancellationError()
+    }
+
+    /// The Tap Log's app lines and event summaries from the last 15 s, each
+    /// with its age: a save ("saved the deck") or a file-changed report
+    /// next to a page that loaded again names what reloaded it.
+    private static func recentLogLines(_ log: TapLog) -> String {
+        let now = Date()
+        return log.lines
+            .filter { ($0.source == .app || $0.source == .event) && now.timeIntervalSince($0.date) < 15 }
+            .map { "[-\(String(format: "%.2f", now.timeIntervalSince($0.date)))s] \($0.text)" }
+            .joined(separator: " | ")
     }
 }
