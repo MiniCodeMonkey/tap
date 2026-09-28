@@ -227,7 +227,15 @@ final class PresentMenuTests: PresentingTestCase {
         XCTAssertEqual(presenter.page.lastLoadedURL?.port, AppEnvironment.shared.deckPorts.port(for: try XCTUnwrap(controller.document?.fileURL)),
                        "the deck's port: the presenter layout and notes size persist between launches (Task 4 proves the port is reused)")
         try await waitUntil(timeout: 20, "the audience page on slide 2") { audience.page.lastReady?.slide == 2 }
-        try await waitUntil(timeout: 20, "the presenter page on slide 2") { presenter.page.lastReady?.slide == 2 }
+        let slideTwoDeadline = Date().addingTimeInterval(20)
+        while presenter.page.lastReady?.slide != 2 {
+            if Date() > slideTwoDeadline {
+                let whereItStopped = await presenter.page.diagnostics()
+                XCTFail("timed out waiting for the presenter page on slide 2: \(whereItStopped)")
+                return
+            }
+            try await Task.sleep(nanoseconds: 20_000_000)
+        }
 
         // The arrow keys, and every other key, go to tap's page unchanged
         // (testEveryTapDevKeyGoesToThePageUnchanged): the page moves, the
