@@ -145,6 +145,25 @@ final class ExportWebsiteTests: HostedTestCase {
         _ = document
     }
 
+    /// A tap serve that cannot start (the built folder is gone, the bind
+    /// fails) prints a one-line failure; its message goes to the Tap Log.
+    func testAFailedPreviewPutsTapsMessageInTheLog() async throws {
+        let (_, window, deck) = try await openSevenSlides()
+        let record = try Fixtures.temporaryFolder().appendingPathComponent("record.txt")
+        AppEnvironment.shared.toolExecutableURL = try FakeToolScripts.write("""
+          "serve "*)
+            echo '{"ok":false,"error":{"code":"not_found","message":"no built site in that folder"}}'
+            exit 1 ;;
+        """, recordingTo: record)
+        var opened: [URL] = []
+        window.openURL = { opened.append($0) }
+        window.previewWebsite(at: deck.deletingLastPathComponent())
+        let log = window.sessionController.session.log
+        try await waitUntil(timeout: 10, "tap's message in the log") { log.text.contains("tap serve failed (not_found): no built site in that folder") }
+        XCTAssertEqual(opened, [], "no address, nothing opened")
+        XCTAssertNil(window.previewServer?.url)
+    }
+
     func testClosingTheDeckStopsThePreviewServer() async throws {
         let (document, window, _) = try await openSevenSlides("seven-slides-site.md")
         window.openURL = { _ in }

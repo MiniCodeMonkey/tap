@@ -28,6 +28,9 @@ final class PreviewServer {
             run.onStandardOutputLine = { [weak self] line in
                 guard !answered, let outcome = ToolOutcome.decode(Data(line.utf8)) else { return }
                 answered = true
+                if case .failed(let code, let message) = outcome {
+                    self?.log?.append("tap serve failed (\(code)): \(message)", source: .app)
+                }
                 let ready = try? outcome.result(ServeReady.self)
                 self?.url = ready.flatMap { URL(string: $0.url) }
                 completion(self?.url)
