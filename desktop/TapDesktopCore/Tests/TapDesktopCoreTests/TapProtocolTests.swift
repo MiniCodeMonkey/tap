@@ -135,6 +135,12 @@ final class TapProtocolTests: XCTestCase {
 
     func testEncodesCommandsAsJSONLines() {
         XCTAssertEqual(TapCommand.saved.line, #"{"type":"saved"}"#)
+        XCTAssertEqual(TapCommand.saving(text: "# Hello\n").line,
+                       #"{"type":"saving","digest":"90f8ec5669cd34183b9b0fdf8b94f5efb4c3672876330f4aa76088c2b4ad17be"}"#,
+                       "the digest is the SHA-256 of the text's UTF-8 bytes, as lowercase hexadecimal")
+        XCTAssertEqual(TapCommand.saving(text: "caf\u{E9}\r\n"),
+                       .saving(digest: "7f2adbdb77890209f13a322e75d8aa13b9169722e702a2e367250125d33e8832"),
+                       "a CRLF line ending and a non-ASCII character are hashed as the bytes a save writes")
         XCTAssertEqual(TapCommand.reload.line, #"{"type":"reload"}"#)
         XCTAssertEqual(TapCommand.quit.line, #"{"type":"quit"}"#)
         XCTAssertEqual(TapCommand.answer(id: "q1", value: true).line, #"{"type":"answer","id":"q1","value":true}"#)
