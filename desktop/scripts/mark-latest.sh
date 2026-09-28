@@ -25,14 +25,14 @@ fi
 
 # Fail closed: only "no release exists" (HTTP 404) means there is nothing
 # to protect; any other failure (auth, network, a rate limit) marks nothing.
-if latest=$("$gh" api 'repos/{owner}/{repo}/releases/latest' 2>"${TMPDIR:-/tmp}/mark-latest.$$"); then
-	rm -f "${TMPDIR:-/tmp}/mark-latest.$$"
-elif grep -q 'HTTP 404' "${TMPDIR:-/tmp}/mark-latest.$$"; then
-	rm -f "${TMPDIR:-/tmp}/mark-latest.$$"
+errors=$(mktemp)
+trap 'rm -f "$errors"' EXIT
+if latest=$("$gh" api 'repos/{owner}/{repo}/releases/latest' 2>"$errors"); then
+	:
+elif grep -q 'HTTP 404' "$errors"; then
 	latest=""
 else
-	cat "${TMPDIR:-/tmp}/mark-latest.$$" >&2
-	rm -f "${TMPDIR:-/tmp}/mark-latest.$$"
+	cat "$errors" >&2
 	echo "mark-latest.sh: could not read the latest release; $tag is left as it is" >&2
 	exit 1
 fi
