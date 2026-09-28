@@ -5,7 +5,8 @@
 # secret-bearing step is skipped by name; nothing was notarized, signed for
 # Sparkle or pushed; the state says so (the dry run, the same path CI takes
 # without secrets). Then, with a stand-in identity and shims: the
-# certificate alone, every secret, and a rejected notarization.
+# certificate alone, every secret, a rejected notarization, and the app
+# accepted with the DMG rejected.
 set -eu
 
 here="$(cd "$(dirname "$0")" && pwd)"
@@ -92,9 +93,12 @@ if "$script" 9.9.9 "$app" "$root/out2" >/dev/null 2>&1; then echo "a version the
 
 # With a stand-in identity: codesign turns the named identity into ad-hoc
 # and drops the timestamp, xcrun answers notarytool and stapler, spctl
-# accepts, and a stand-in sign_update signs. Three runs: the certificate
-# alone (the state right after enrolment), every secret, and every secret
-# with the notary service rejecting the submission.
+# accepts, and a stand-in sign_update signs. Four runs: the certificate
+# alone (the state right after enrolment), every secret, every secret with
+# the notary service rejecting every submission, and every secret with the
+# app's zip accepted and the DMG rejected. The notary stand-in answers each
+# submission from notary-status-zip or notary-status-dmg, by the
+# submitted file's extension.
 mkdir -p "$root/shims" "$root/tools-2.10.0/bin"
 cat > "$root/shims/codesign" <<'SHIM'
 #!/bin/sh
@@ -113,7 +117,13 @@ SHIM
 cat > "$root/shims/xcrun" <<SHIM
 #!/bin/sh
 case "\$1 \$2" in
-	"notarytool submit") printf '{"status":"%s","id":"sub-1"}\n' "\$(cat "$root/notary-status")" ;;
+	"notarytool submit")
+		case "\$3" in
+			*.zip) status=\$(cat "$root/notary-status-zip") ;;
+			*.dmg) status=\$(cat "$root/notary-status-dmg") ;;
+			*) echo "xcrun stand-in: unexpected submission \$3" >&2; exit 1 ;;
+		esac
+		printf '{"status":"%s","id":"sub-1"}\n' "\$status" ;;
 	"notarytool log") echo "log for sub-1" ;;
 	"stapler staple"|"stapler validate") echo "\$3: stapled (stand-in)" ;;
 	*) exec /usr/bin/xcrun "\$@" ;;
@@ -152,7 +162,7 @@ if grep -q '^- $' "$root/a/release-summary.md"; then echo "A: an empty summary l
 if grep -q 'identity=' "$root/a/release-state.env"; then echo "the identity stays out of the state file"; exit 1; fi
 
 # B: every secret, the notary service accepting.
-echo Accepted > "$root/notary-status"
+echo Accepted > "$root/notary-status-zip"; echo Accepted > "$root/notary-status-dmg"
 PATH="$root/shims:$PATH" APPLE_NOTARY_KEY=key APPLE_NOTARY_KEY_ID=id APPLE_NOTARY_ISSUER_ID=issuer SPARKLE_PRIVATE_KEY=bm90LWEta2V5 \
 	"$script" 0.0.0-test "$app" "$root/b" > "$root/log" 2>&1 || { echo "the all-secrets run should succeed"; cat "$root/log"; exit 1; }
 for file in Tap-0.0.0-test.dmg Tap-0.0.0-test.dmg.sha256 appcast.xml Casks/tap-desktop.rb; do
@@ -167,7 +177,7 @@ grep -q 'sparkle-signatures:' "$root/b/appcast.xml" || { echo "B: the feed is si
 
 # C: every secret, the notary service rejecting: the release stops, and
 # nothing says notarized.
-echo Invalid > "$root/notary-status"
+echo Invalid > "$root/notary-status-zip"; echo Invalid > "$root/notary-status-dmg"
 if PATH="$root/shims:$PATH" APPLE_NOTARY_KEY=key APPLE_NOTARY_KEY_ID=id APPLE_NOTARY_ISSUER_ID=issuer SPARKLE_PRIVATE_KEY=bm90LWEta2V5 \
 	"$script" 0.0.0-test "$app" "$root/c" > "$root/log" 2>&1; then echo "a rejected notarization should fail the release"; exit 1; fi
 grep -q "was not accepted (status: Invalid" "$root/log" || { echo "C: the rejection is reported: $(cat "$root/log")"; exit 1; }
@@ -175,6 +185,22 @@ grep -q "nothing is published" "$root/log" || { echo "C: release.sh says it stop
 [ ! -e "$root/c/release-state.env" ] || { echo "C: no state file after a failure"; exit 1; }
 [ ! -e "$root/c/appcast.xml" ] || { echo "C: no appcast after a failure"; exit 1; }
 if grep -q 'notarized' "$root/c/release-summary.md" 2>/dev/null; then echo "C: the summary must not claim notarization"; exit 1; fi
+
+# D: every secret, the app's zip accepted and the DMG rejected: the release
+# stops at the DMG, and nothing the release job would upload exists.
+echo Accepted > "$root/notary-status-zip"; echo Invalid > "$root/notary-status-dmg"
+PATH="$root/shims:$PATH" APPLE_NOTARY_KEY=key APPLE_NOTARY_KEY_ID=id APPLE_NOTARY_ISSUER_ID=issuer SPARKLE_PRIVATE_KEY=bm90LWEta2V5 \
+	"$script" 0.0.0-test "$app" "$root/d" > "$root/log" 2>&1 && status=0 || status=$?
+[ "$status" = 1 ] || { echo "D: a rejected DMG should exit 1, got $status"; cat "$root/log"; exit 1; }
+grep -Fq "Tap-0.0.0-test.dmg was not accepted (status: Invalid" "$root/log" || { echo "D: the DMG's rejection is reported: $(cat "$root/log")"; exit 1; }
+grep -Fq "the DMG's notarization failed; nothing is published" "$root/log" || { echo "D: release.sh says the DMG stopped it: $(cat "$root/log")"; exit 1; }
+[ ! -e "$root/d/release-state.env" ] || { echo "D: no state file after a failure"; exit 1; }
+[ ! -e "$root/d/appcast.xml" ] || { echo "D: no appcast after a failure"; exit 1; }
+for absent in Tap-0.0.0-test.dmg.sha256 Tap-0.0.0-test.md appcast-unsigned.xml Casks; do
+	[ ! -e "$root/d/$absent" ] || { echo "D: $absent is staged for upload after a failure"; exit 1; }
+done
+grep -Fq 'notarized Tap-0.0.0-test.zip (submission sub-1) and stapled Tap.app' "$root/d/release-summary.md" || { echo "D: the summary names the app as notarized"; cat "$root/d/release-summary.md"; exit 1; }
+if grep -Fq 'notarized Tap-0.0.0-test.dmg' "$root/d/release-summary.md"; then echo "D: the summary must not claim the DMG is notarized"; exit 1; fi
 unset TAP_RELEASE_IDENTITY SPARKLE_TOOLS
 
 echo "release.sh is right"
