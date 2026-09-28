@@ -67,10 +67,17 @@ final class UpdateController: NSObject, SPUUpdaterDelegate {
         return refusal
     }
 
+    /// Whether the updater is started and Sparkle allows a check. Never
+    /// under tests, so a test replaces it to reach the talk's part.
+    lazy var updaterCanCheck: () -> Bool = { [weak self] in
+        guard let self else { return false }
+        return self.isStarted && self.updater.canCheckForUpdates
+    }
+
     /// The menu item's state: a started updater that Sparkle allows to check
     /// and every talk down, as `mayPerform` asks.
     var canCheckForUpdates: Bool {
-        isStarted && updater.canCheckForUpdates && gate.mayCheck(mayInterrupt: talkWindowsAreDown)
+        updaterCanCheck() && gate.mayCheck(mayInterrupt: talkWindowsAreDown)
     }
 
     /// Whether every talk is over and its windows are gone: no deck's talk

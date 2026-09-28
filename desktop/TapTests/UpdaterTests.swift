@@ -40,16 +40,25 @@ final class UpdaterTests: PresentingTestCase {
     }
 
     func testNoCheckDuringATalk() async throws {
+        let previous = updates.updaterCanCheck
+        defer { updates.updaterCanCheck = previous }
+        updates.updaterCanCheck = { true }
+        let delegate = try XCTUnwrap(NSApp.delegate as? AppDelegate)
+        let item = try XCTUnwrap(NSApp.mainMenu?.items.first { $0.title == "Tap" }?.submenu?.items.first { $0.action == #selector(AppDelegate.checkForUpdates(_:)) })
         let (_, controller) = try await openDeckForPresenting()
+        XCTAssertTrue(updates.canCheckForUpdates, "a started updater, no talk: the menu item is on")
+        XCTAssertTrue(delegate.validateMenuItem(item))
         try await startPresenting(controller, PresentationOptions(mode: .rehearse, startSlide: 1))
         XCTAssertFalse(AppEnvironment.shared.updatesMayInterrupt)
         XCTAssertThrowsError(try updates.updater(updates.updater, mayPerform: .updatesInBackground)) { error in
             XCTAssertEqual(error.localizedDescription, UpdateGate.presentingMessage)
         }
         XCTAssertThrowsError(try updates.updater(updates.updater, mayPerform: .updates), "the person's own check waits too")
-        XCTAssertFalse(updates.canCheckForUpdates)
+        XCTAssertFalse(updates.canCheckForUpdates, "the menu item is off during the talk")
+        XCTAssertFalse(delegate.validateMenuItem(item))
         try await stopPresenting(controller)
         XCTAssertNoThrow(try updates.updater(updates.updater, mayPerform: .updatesInBackground))
+        XCTAssertTrue(updates.canCheckForUpdates, "and on again once the talk is down")
     }
 
     func testAnUpdateFoundDuringATalkIsDropped() async throws {
