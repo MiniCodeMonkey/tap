@@ -260,7 +260,7 @@ final class ExportController {
             // tap export images exits 1 with broken_slides after writing the
             // other files; that is warnings with a partial result, not a failure.
             if code == "broken_slides", case .images = request.kind {
-                state = .done(ExportSummary(output: URL(fileURLWithPath: request.output), summary: "Some slides could not be rendered. The others are in the folder.",
+                state = .done(ExportSummary(output: URL(fileURLWithPath: request.output, isDirectory: true), summary: "Some slides could not be rendered. The others are in the folder.",
                                             warnings: brokenLines.isEmpty ? [ExportWarning(slide: 0, message: message)] : brokenLines))
             } else {
                 state = .failed(message)
@@ -270,6 +270,8 @@ final class ExportController {
         }
     }
 
+    /// The website and images outputs are folders, built with isDirectory so
+    /// their URLs have one shape whether or not the folder exists yet.
     private func summary(from exit: ToolRun.Exit, request: ExportRequest) -> ExportSummary {
         let seconds = startedAt.map { String(format: "%.1f s", Date().timeIntervalSince($0)) } ?? ""
         let formatter = ByteCountFormatter()
@@ -284,10 +286,10 @@ final class ExportController {
             let result = try? exit.outcome?.result(BuildResult.self)
             let slides = sessionController?.editor.boxes.count ?? 0
             let summary = result.map { "\(slides) slides, \($0.files) files, \(formatter.string(fromByteCount: $0.bytes)) in \(seconds). Live code does not run in a static site." } ?? "Exported."
-            return ExportSummary(output: URL(fileURLWithPath: result?.output ?? request.output), summary: summary, warnings: [])
+            return ExportSummary(output: URL(fileURLWithPath: result?.output ?? request.output, isDirectory: true), summary: summary, warnings: [])
         case .images:
             let result = try? exit.outcome?.result(ImagesExportResult.self)
-            return ExportSummary(output: URL(fileURLWithPath: request.output), summary: "\(result?.files.count ?? 0) images in \(seconds).", warnings: [])
+            return ExportSummary(output: URL(fileURLWithPath: request.output, isDirectory: true), summary: "\(result?.files.count ?? 0) images in \(seconds).", warnings: [])
         }
     }
 }

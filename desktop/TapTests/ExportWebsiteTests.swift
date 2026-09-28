@@ -90,11 +90,12 @@ final class ExportWebsiteTests: HostedTestCase {
         sheet.exportButton.performClick(nil)
         let summary = try await waitForTheDoneState(sheet, timeout: 20)
         XCTAssertEqual(summary.summary.split(separator: " ").first, "7")
-        XCTAssertEqual(summary.output, folder)
+        XCTAssertEqual(summary.output.path, folder.path)
+        XCTAssertTrue(summary.output.hasDirectoryPath, "a folder output is a directory URL")
         XCTAssertTrue(sheet.previewButton.isHidden, "nothing to serve")
         XCTAssertTrue(try String(contentsOf: record, encoding: .utf8).contains("arguments: export images \(deckPath) --all --output \(folder.path) --progress json"))
         sheet.revealButton.performClick(nil)
-        XCTAssertEqual(revealed, [folder])
+        XCTAssertEqual(revealed.map(\.path), [folder.path])
         sheet.doneButton.performClick(nil)
     }
 
