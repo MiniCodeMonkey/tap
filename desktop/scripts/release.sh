@@ -8,8 +8,10 @@
 # the secret is absent, so this runs with none (a dry run) and with all
 # of them (the release job) along the same path. A DMG that was not
 # notarized is named -unnotarized; an appcast that is not signed is
-# appcast-unsigned.xml; neither is ever offered to a person. Nothing here
-# prints a secret; the scripts it calls own that rule.
+# appcast-unsigned.xml; neither is ever offered to a person. The DMG is
+# stapled before its checksum, its Sparkle signature and the cask's sha256
+# are taken, since stapling changes the file every one of them describes.
+# Nothing here prints a secret; the scripts it calls own that rule.
 set -eu
 
 version="${1:-}"; app="${2:-}"; out="${3:-}"
