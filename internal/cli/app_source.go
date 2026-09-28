@@ -30,9 +30,8 @@ type appDeckSource struct {
 	hasBuffer bool
 	seq       uint64
 	// sent holds the digests of the last recentBufferCount buffers the app
-	// sent, oldest first. The app saves only text it has already sent, so
-	// a deck file holding one of them is the app's own save, even of a
-	// buffer the person has typed past since.
+	// sent, oldest first. The app usually saves text it has already sent;
+	// a save of text it never sent is treated as the file.
 	sent [][sha256.Size]byte
 }
 
