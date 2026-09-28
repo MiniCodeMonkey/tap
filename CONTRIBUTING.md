@@ -261,6 +261,18 @@ That's it! The workflow automatically:
 - Builds binaries for all platforms (macOS, Linux, Windows)
 - Creates the GitHub release with binaries attached
 
+The workflow's second job, `desktop`, builds Tap Desktop for Apple silicon
+on a macOS runner from the tag, signs and notarizes it, and adds
+`Tap-<version>.dmg`, its checksum, the release notes and Sparkle's
+`appcast.xml` to the same release; for a notarized final it also updates
+the `tap-desktop` cask in the Homebrew tap and marks the release "latest"
+(the CLI job publishes with `make_latest: false`, since the app's feed URL
+points at "latest"). Each signing step is skipped, by name, when its secret
+is absent, a DMG that was not notarized never reaches the release (it is
+kept as a workflow artifact for seven days), and the job's summary says
+which steps ran. `desktop/README.md` lists the secrets, how to set them, and how
+to run the same pipeline locally with none of them.
+
 ### Version Format
 
 Use [Semantic Versioning](https://semver.org/):

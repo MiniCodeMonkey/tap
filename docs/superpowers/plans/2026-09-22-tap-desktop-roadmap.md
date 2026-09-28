@@ -25,7 +25,7 @@
 | D4 | `2026-09-24-desktop-presenting.md` | Desktop milestone 4 | D3, tap pull request 35 (the 60 s keep-recording wait, merged as a569901) | written, revised after review |
 | D5 | `2026-09-25-desktop-live-code-deck-tab-fixits.md` | Desktop milestone 5 | D4, P2, tap's re-ask of the approval on a reload (branch `feat/approval-asks-again`, its own pull request), and the one-field slide list change in its Task 1 | written, revised after review |
 | D6 | `desktop-create-export-settings.md` | Desktop milestone 6 | D5, P4 | outline below |
-| D7 | `desktop-release.md` | Desktop milestone 7 | D6 | outline below; needs credentials the machine does not have |
+| D7 | `2026-09-27-desktop-release.md` | Desktop milestone 7 | D6 | written, revised after review; runs with no secrets, publishes only what is notarized and signed once they exist |
 
 Desktop milestone 1 is P1 to P6. It has no plan of its own.
 

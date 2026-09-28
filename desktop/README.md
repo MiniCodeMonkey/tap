@@ -127,7 +127,75 @@ and benchmarks run on CI (the Desktop UI Tests and Desktop Benchmarks
 jobs), never on the person's own machine, since they take over the
 screen.
 
-## Release secrets
+## Release
+
+```sh
+make -C desktop release-tests                # every release script's own test, no build, no network
+make -C desktop release VERSION=0.0.0-dev    # the dry run: builds, signs ad-hoc, writes the DMG
+```
+
+Release builds are Apple silicon only. `make -C desktop release` builds the
+Release configuration for `arm64` with the version and a build number
+(`scripts/build-number.sh`: `alpha` below `beta` below `rc` below the
+final, so `2.0.0-beta.7 < 2.0.0-rc.1 < 2.0.0`), checks that no test hook is
+in the binary, then runs `scripts/release.sh`, which signs the app inside
+out with the hardened runtime and `Tap/Tap.entitlements` (the microphone,
+for recorded talks), notarizes the app and the DMG, writes the DMG, its
+`.sha256`, the release notes (`Tap-<version>.md`, from the changelog's
+section for the version), the Sparkle `appcast.xml` and the
+`Casks/tap-desktop.rb` cask into `build/release`, verifies them
+(architectures, the bundled `tap --version`, the plist keys, the
+entitlements, no test code, the signatures) and records every step in
+`build/release/release-summary.md` and the outcome in
+`build/release/release-state.env`. Each step that needs a secret is
+skipped, by name, when the secret is absent, so the dry run needs none
+and launches nothing. What is not notarized is named so
+(`Tap-<version>-unnotarized.dmg`) and never becomes a release asset (the
+job keeps it as a workflow artifact for seven days); an appcast that is
+not signed is `appcast-unsigned.xml`; neither is ever offered to a person.
+A rejected notarization stops the release.
+
+The release job (`.github/workflows/release.yml`, job `desktop`) runs the
+same target on a macOS runner after the CLI release, then publishes by the
+state file: for a notarized DMG, the DMG and its checksum, then the notes
+and the signed feed when the feed is signed; the cask to the Homebrew tap
+only for a notarized final; and the release becomes GitHub's "latest"
+(where the app's feed URL points) only once its feed is up, or when no
+earlier release ever carried one (otherwise the summary names the
+`gh release edit v<version> --latest` to run once the feed is fixed). A DMG
+that was not notarized reaches the release page never; it is the workflow
+artifact `desktop-release-unnotarized`. CI's Desktop
+Release Dry Run job runs the dry run on every pull request and keeps the
+DMG as an artifact.
+
+Updates come through Sparkle's standard UI. The feed is the latest
+release's `appcast.xml`
+(`https://github.com/MiniCodeMonkey/tap/releases/latest/download/appcast.xml`);
+`SUPublicEDKey` in `project.yml` checks the signature of every update, of
+the notes and of the feed itself, which the app requires
+(`SURequireSignedFeed`). A talk is never interrupted: `UpdateController`
+refuses a check, drops a found update and postpones a relaunch while a talk
+runs (`AppEnvironment.updatesMayInterrupt`), the postponed relaunch runs
+once the last talk's windows are down, and Play is refused, with the
+talk-not-started bar, while an update Sparkle already started is in
+progress. The updater never starts under tests or in a `0.0.0` build.
+
+The secrets the release job reads, all optional, each skipping its step
+when absent, set with `gh secret set` so no secret lands on disk or in the
+clipboard:
+
+```sh
+base64 -i certificate.p12 | gh secret set APPLE_DEVELOPER_ID_APPLICATION_P12   # the Developer ID Application certificate with its key
+gh secret set APPLE_DEVELOPER_ID_APPLICATION_PASSWORD                          # prompts; the .p12's password
+gh secret set APPLE_NOTARY_KEY < AuthKey_XXXXXXXXXX.p8                         # an App Store Connect API key, Developer role or higher
+gh secret set APPLE_NOTARY_KEY_ID                                              # prompts; the XXXXXXXXXX of the file name
+gh secret set APPLE_NOTARY_ISSUER_ID                                           # prompts; the issuer UUID
+op read "op://<vault>/<item>/<field>" | gh secret set SPARKLE_PRIVATE_KEY      # the EdDSA key, from its 1Password item (the only route: nothing on disk)
+```
+
+`HOMEBREW_TAP_TOKEN` exists already, and the optional variable
+`HOMEBREW_TAP_REPO` names the tap when it is not `MiniCodeMonkey/homebrew-tap`.
+A pre-release never reaches the feed or the cask.
 
 The release scripts in `scripts/` read their secrets from the environment,
 write a secret that must be a file (the `.p12`, the `.p8`) with `umask 077`
@@ -150,3 +218,12 @@ Authorization header through git's environment configuration
 (`GIT_CONFIG_COUNT`, `GIT_CONFIG_KEY_0`, `GIT_CONFIG_VALUE_0`) for one
 clone and push, never in the URL, an argument or `.git/config`. The
 Sparkle key reaches `sign_update` on its standard input alone.
+
+What only a person can check, from the first notarized DMG: drag the app
+to Applications and launch it (Gatekeeper accepts it with no dialog);
+play a deck with recording on and speak, then confirm the recording has
+sound (the hardened runtime's microphone entitlement; CI's recorder is a
+fake); Tap > Check for Updates… against the feed; `brew install --cask
+MiniCodeMonkey/tap/tap-desktop` on another Mac; `brew audit --cask
+--online tap-desktop` with the tap installed, as a manual check (CI runs
+`brew style` alone).
