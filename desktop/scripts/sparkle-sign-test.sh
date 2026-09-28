@@ -26,8 +26,15 @@ if "$script" sign "$root/Tap.dmg" >/dev/null 2>&1; then echo "an unknown mode sh
 # does for each kind of file, and never verifies anything but "ok". A key
 # that does not come on stdin fails it at once: a terminal on stdin, or
 # nothing within 5 seconds, is an error, never a wait.
-# The tools folder carries the version, as fetch-sparkle-tools.sh requires.
-mkdir -p "$root/tools-2.10.0/bin"
+# The tools folder carries the version, as fetch-sparkle-tools.sh requires,
+# and seal records each stand-in's sha256 beside it, as the fetch does for
+# the real tool. A curl on PATH fails the test if anything tries to fetch.
+mkdir -p "$root/tools-2.10.0/bin" "$root/offline"
+seal() { shasum -a 256 "$root/tools-2.10.0/bin/sign_update" | cut -d ' ' -f 1 > "$root/tools-2.10.0/bin/sign_update.sha256"; }
+printf '#!/bin/sh\necho "sparkle-sign-test.sh: nothing may be downloaded" >&2\nexit 1\n' > "$root/offline/curl"
+chmod +x "$root/offline/curl"
+PATH="$root/offline:$PATH"
+export PATH
 cat > "$root/tools-2.10.0/bin/sign_update" <<'FAKE'
 #!/bin/sh
 here="$(dirname "$0")"
@@ -53,6 +60,7 @@ case "$*" in
 esac
 FAKE
 chmod +x "$root/tools-2.10.0/bin/sign_update"
+seal
 export SPARKLE_TOOLS="$root/tools-2.10.0"
 export SPARKLE_PRIVATE_KEY="bm90LWEta2V5"
 
@@ -77,6 +85,7 @@ cat > "$root/tools-2.10.0/bin/sign_update" <<'FAKE'
 cat > /dev/null
 exit 0
 FAKE
+seal
 printf '<?xml version="1.0"?><rss/>\n' > "$root/silent.xml"
 if "$script" feed "$root/silent.xml" >/dev/null 2>"$root/err"; then echo "a feed left without its block should fail"; exit 1; fi
 grep -q 'carries no signature block' "$root/err" || { echo "the feed failure should say why: $(cat "$root/err")"; exit 1; }
@@ -88,6 +97,7 @@ cat > /dev/null
 echo "sign_update: bad key" >&2
 exit 1
 FAKE
+seal
 # It says so on stderr in every mode, even when sign_update itself is silent.
 for mode in archive notes feed; do
 	if out=$("$script" "$mode" "$root/Tap.dmg" 2>"$root/err"); then echo "$mode: a failing sign_update should fail the script"; exit 1; fi
@@ -99,6 +109,7 @@ cat > "$root/tools-2.10.0/bin/sign_update" <<'FAKE'
 cat > /dev/null
 exit 1
 FAKE
+seal
 for mode in archive notes feed; do
 	if "$script" "$mode" "$root/Tap.dmg" >/dev/null 2>"$root/err"; then echo "$mode: a silent failing sign_update should fail the script"; exit 1; fi
 	grep -Fxq 'sparkle-sign.sh: sign_update failed for Tap.dmg' "$root/err" || { echo "$mode: a silent failure should still be named: $(cat "$root/err")"; exit 1; }
@@ -110,8 +121,23 @@ cat > /dev/null
 case "$*" in *--verify*) exit 1 ;; esac
 echo "QVJDSElWRQ=="
 FAKE
+seal
 if "$script" archive "$root/Tap.dmg" >"$root/out" 2>"$root/err"; then echo "a signature that does not verify should fail the archive"; exit 1; fi
 [ ! -s "$root/out" ] || { echo "an unverified signature should not be printed"; exit 1; }
 grep -Fxq 'sparkle-sign.sh: sign_update failed for Tap.dmg' "$root/err" || { echo "a failed verification should be named: $(cat "$root/err")"; exit 1; }
+
+# A cached tool that no longer matches its recorded sha256 is refused, and
+# nothing is fetched over it.
+printf '\n# changed\n' >> "$root/tools-2.10.0/bin/sign_update"
+if "$script" archive "$root/Tap.dmg" >"$root/out" 2>"$root/err"; then echo "a changed tool should be refused"; exit 1; fi
+grep -Fq 'no longer matches the sha256 recorded when it was extracted' "$root/err" || { echo "a changed tool should be named: $(cat "$root/err")"; exit 1; }
+if grep -Fq 'nothing may be downloaded' "$root/err"; then echo "a changed tool should not be fetched over"; exit 1; fi
+
+# A tool with no record is fetched again, never trusted (here the fetch
+# reaches the failing curl).
+seal
+rm -f "$root/tools-2.10.0/bin/sign_update.sha256"
+if "$script" archive "$root/Tap.dmg" >"$root/out" 2>"$root/err"; then echo "a tool with no record should not be used"; exit 1; fi
+grep -Fq 'nothing may be downloaded' "$root/err" || { echo "a tool with no record should be fetched again: $(cat "$root/err")"; exit 1; }
 
 echo "sparkle-sign.sh is right"

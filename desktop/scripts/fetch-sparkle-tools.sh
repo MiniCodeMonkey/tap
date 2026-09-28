@@ -16,9 +16,18 @@ case "$folder" in
 	*"$version"*) ;;
 	*) echo "fetch-sparkle-tools.sh: the folder must carry the version ($version): $folder" >&2; exit 1 ;;
 esac
-if [ -x "$folder/bin/sign_update" ]; then
-	echo "Sparkle $version tools are in $folder"
-	exit 0
+# The extracted tool's sha256 is recorded beside it; a cached tool is used
+# only while it still matches, and one that does not is refused (nothing
+# is fetched over it). A tool with no record is fetched again.
+tool="$folder/bin/sign_update"
+record="$tool.sha256"
+if [ -x "$tool" ] && [ -f "$record" ]; then
+	if [ "$(shasum -a 256 "$tool" | cut -d ' ' -f 1)" = "$(cat "$record")" ]; then
+		echo "Sparkle $version tools are in $folder"
+		exit 0
+	fi
+	echo "fetch-sparkle-tools.sh: $tool no longer matches the sha256 recorded when it was extracted; remove $folder to fetch it again" >&2
+	exit 1
 fi
 mkdir -p "$folder"
 curl -sSL --fail -o "$archive" "https://github.com/sparkle-project/Sparkle/releases/download/$version/Sparkle-$version.tar.xz"
@@ -30,4 +39,5 @@ if [ "$actual" != "$sha256" ]; then
 fi
 tar -xJf "$archive" -C "$folder" bin/sign_update bin/generate_keys
 rm -f "$archive"
+shasum -a 256 "$tool" | cut -d ' ' -f 1 > "$record"
 echo "Sparkle $version tools are in $folder"
