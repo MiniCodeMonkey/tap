@@ -1278,7 +1278,7 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
         if identifier == Self.slidesItemIdentifier {
             let item = NSToolbarItem(itemIdentifier: identifier)
             item.label = "Slides"
-            item.toolTip = "Slides"
+            item.toolTip = nil // the label says it
             slidesButton.image = NSImage(systemSymbolName: "sidebar.left", accessibilityDescription: "Slides")
             slidesButton.bezelStyle = .toolbar
             slidesButton.setButtonType(.pushOnPushOff)

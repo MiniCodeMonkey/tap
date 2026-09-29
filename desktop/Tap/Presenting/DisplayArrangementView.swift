@@ -180,17 +180,22 @@ final class DisplayArrangementView: NSView {
 
     required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
 
-    /// Draws every screen of the arrangement. The tiles are rebuilt only
-    /// when the set of screens changed, so a menu that is open stays open.
+    /// Draws every screen of the arrangement, left to right as they sit on
+    /// the desk (by frame, not by the order the system lists them). The tiles
+    /// are rebuilt only when the set of screens changed, so a menu that is
+    /// open stays open.
     func update(arrangement: DisplayArrangement) {
-        if tiles.map(\.screen) != arrangement.screens {
+        let screens = arrangement.screens.enumerated().sorted { first, second in
+            first.element.frame.minX != second.element.frame.minX ? first.element.frame.minX < second.element.frame.minX : first.offset < second.offset
+        }.map(\.element)
+        if tiles.map(\.screen) != screens {
             for tile in tiles {
                 row.removeArrangedSubview(tile)
                 tile.removeFromSuperview()
             }
-            let sizes = Self.boxSizes(for: arrangement.screens)
-            let minimumColumn = Self.minimumColumnWidth(count: arrangement.screens.count)
-            tiles = zip(arrangement.screens, sizes).map { screen, size in
+            let sizes = Self.boxSizes(for: screens)
+            let minimumColumn = Self.minimumColumnWidth(count: screens.count)
+            tiles = zip(screens, sizes).map { screen, size in
                 Tile(screen: screen, boxSize: size, width: max(size.width, minimumColumn)) { [weak self] role, screen in
                     self?.onAssign?(role, screen)
                 }

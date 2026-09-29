@@ -71,6 +71,19 @@ final class WelcomeTests: HostedTestCase {
         }
     }
 
+    func testThemeRendersWaitForTheWindowToStayVisible() async throws {
+        NSDocumentController.shared.clearRecentDocuments(nil)
+        appDelegate.showWelcomeIfNoDecks()
+        welcome.reload()
+        XCTAssertFalse(welcome.themeRendersRequested, "nothing renders the moment the window shows")
+        WelcomeWindowController.closeIfOpen()
+        try await Task.sleep(nanoseconds: UInt64((WelcomeWindowController.themeRenderDelay + 0.4) * 1_000_000_000))
+        XCTAssertFalse(welcome.themeRendersRequested, "a window that closed within the beat never renders")
+        appDelegate.showWelcomeIfNoDecks()
+        welcome.reload()
+        try await waitUntil(timeout: 5, "the renders once the window stays") { self.welcome.themeRendersRequested }
+    }
+
     func testWelcomeWindowSwitchesLayoutWithItsRecentDecks() async throws {
         NSDocumentController.shared.clearRecentDocuments(nil)
         appDelegate.showWelcomeIfNoDecks()

@@ -1,13 +1,15 @@
 import AppKit
 
-/// The welcome window's dashed "drop a Markdown file here" box. It takes a
-/// dropped .md file and hands its URL to `onDrop`; anything else is refused.
+/// The welcome window's dashed "drop a Markdown file here" box. It shows
+/// the drop target and hands a dropped .md file's URL to `onDrop`; the
+/// window's `WelcomeContentView` receives the drag itself, so the whole
+/// window accepts a file and anything but Markdown is refused.
 final class WelcomeDropZone: NSView {
     static let markdownExtensions: Set<String> = ["md", "markdown"]
 
     var onDrop: ((URL) -> Void)?
     private let dashedBorder = CAShapeLayer()
-    private var isTargeted = false {
+    var isTargeted = false {
         didSet { updateAppearance() }
     }
 
@@ -27,7 +29,6 @@ final class WelcomeDropZone: NSView {
             label.centerXAnchor.constraint(equalTo: centerXAnchor), label.centerYAnchor.constraint(equalTo: centerYAnchor),
             widthAnchor.constraint(equalTo: label.widthAnchor, constant: 36), heightAnchor.constraint(equalTo: label.heightAnchor, constant: 20),
         ])
-        registerForDraggedTypes([.fileURL])
         setAccessibilityIdentifier("welcome-drop-zone")
         setAccessibilityLabel(text)
     }
@@ -58,21 +59,39 @@ final class WelcomeDropZone: NSView {
             dashedBorder.fillColor = isTargeted ? NSColor.controlAccentColor.withAlphaComponent(0.1).cgColor : nil
         }
     }
+}
+
+/// The welcome window's content view: a Markdown file dropped anywhere on
+/// it opens, and the drop zone lights up while one is over the window.
+final class WelcomeContentView: NSView {
+    let dropZone: WelcomeDropZone
+
+    init(dropZone: WelcomeDropZone) {
+        self.dropZone = dropZone
+        super.init(frame: .zero)
+        registerForDraggedTypes([.fileURL])
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
 
     override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
-        guard Self.markdownURL(in: sender.draggingPasteboard) != nil else { return [] }
-        isTargeted = true
+        guard WelcomeDropZone.markdownURL(in: sender.draggingPasteboard) != nil else { return [] }
+        dropZone.isTargeted = true
         return .copy
     }
 
-    override func draggingExited(_ sender: NSDraggingInfo?) { isTargeted = false }
+    override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation {
+        draggingEntered(sender)
+    }
 
-    override func draggingEnded(_ sender: NSDraggingInfo) { isTargeted = false }
+    override func draggingExited(_ sender: NSDraggingInfo?) { dropZone.isTargeted = false }
+
+    override func draggingEnded(_ sender: NSDraggingInfo) { dropZone.isTargeted = false }
 
     override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
-        isTargeted = false
-        guard let url = Self.markdownURL(in: sender.draggingPasteboard) else { return false }
-        onDrop?(url)
+        dropZone.isTargeted = false
+        guard let url = WelcomeDropZone.markdownURL(in: sender.draggingPasteboard) else { return false }
+        dropZone.onDrop?(url)
         return true
     }
 }

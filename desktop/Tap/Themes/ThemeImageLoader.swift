@@ -73,6 +73,12 @@ final class ThemeImageLoader {
         start()
     }
 
+    /// Drops the themes `loadImages` asked for; the render in flight finishes,
+    /// and nothing ahead of `loadAll`'s own list starts after it.
+    func cancelPriorityImages() {
+        prioritySlugs = []
+    }
+
     /// Cancels the work: the tap run in flight gets its SIGINT, and nothing
     /// more starts until the next load.
     func stop() {

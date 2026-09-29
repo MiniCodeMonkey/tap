@@ -295,6 +295,16 @@ final class PresentPopoverTests: PresentingTestCase {
         try await waitUntil(timeout: 40, "the other talk") { other.presentation.state == .presenting }
     }
 
+    func testTheDisplaysAreDrawnLeftToRight() async throws {
+        let (_, controller) = try await openDeckForPresenting()
+        let deckWindow = try windowController(controller)
+        let screens = halfScreens()
+        controller.presentation.screens = { screens.reversed() }
+        deckWindow.showPresentSettings(nil)
+        XCTAssertEqual(deckWindow.presentPopover.arrangementView.tiles.map(\.screen.name), ["Built-in Display", "Projector"], "by position, not the order the system lists them")
+        deckWindow.presentPopover.close()
+    }
+
     func testThePopoverWithOneDisplayHidesTheDisplayControls() async throws {
         let (_, controller) = try await openDeckForPresenting()
         let deckWindow = try windowController(controller)

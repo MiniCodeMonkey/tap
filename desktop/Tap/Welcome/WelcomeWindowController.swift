@@ -25,6 +25,10 @@ final class WelcomeWindowController: NSWindowController, NSTableViewDataSource, 
     private(set) var recentURLs: [URL] = []
     private(set) var showsEmptyState = false
     private var refreshTimer: Timer?
+    /// The beat the window stays visible before the theme renders start, so a window that gives way to a deck at once costs no renders.
+    static let themeRenderDelay: TimeInterval = 0.3
+    private var themeRenderTimer: Timer?
+    private(set) var themeRendersRequested = false
     private var observers: [NSObjectProtocol] = []
 
     /// The New Deck button that is on screen: the empty state's or the column's.
@@ -33,6 +37,10 @@ final class WelcomeWindowController: NSWindowController, NSTableViewDataSource, 
     var openButton: NSButton { showsEmptyState ? emptyStateOpenButton : columnOpenButton }
 
     static func closeIfOpen() {
+        shared.themeRenderTimer?.invalidate()
+        shared.themeRenderTimer = nil
+        shared.themeRendersRequested = false
+        AppEnvironment.shared.themeImages.cancelPriorityImages()
         shared.window?.orderOut(nil)
     }
 
@@ -96,15 +104,35 @@ final class WelcomeWindowController: NSWindowController, NSTableViewDataSource, 
             scrollView.bottomAnchor.constraint(equalTo: root.bottomAnchor),
         ])
         buildEmptyState(in: root)
-        window.contentView = root
-        dropZone.onDrop = { url in
-            NSDocumentController.shared.openDocument(withContentsOf: url, display: true) { _, _, _ in }
+        let content = WelcomeContentView(dropZone: dropZone)
+        root.translatesAutoresizingMaskIntoConstraints = false
+        content.addSubview(root)
+        NSLayoutConstraint.activate([
+            root.leadingAnchor.constraint(equalTo: content.leadingAnchor), root.trailingAnchor.constraint(equalTo: content.trailingAnchor),
+            root.topAnchor.constraint(equalTo: content.topAnchor), root.bottomAnchor.constraint(equalTo: content.bottomAnchor),
+        ])
+        window.contentView = content
+        dropZone.onDrop = { [weak self] url in
+            NSDocumentController.shared.openDocument(withContentsOf: url, display: true) { _, _, error in
+                guard let error, let window = self?.window else { return }
+                // A sheet on the welcome window: nothing app-modal.
+                window.presentError(error, modalFor: window, delegate: nil, didPresent: nil, contextInfo: nil)
+            }
         }
         let center = NotificationCenter.default
         let loader = AppEnvironment.shared.themeImages
         observers = [
             center.addObserver(forName: NSWindow.didBecomeKeyNotification, object: window, queue: .main) { [weak self] _ in
-                MainActor.assumeIsolated { self?.reload() }
+                MainActor.assumeIsolated {
+                    self?.reload()
+                    self?.startWatchingRecents()
+                }
+            },
+            center.addObserver(forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated {
+                    guard self?.window?.isVisible == true else { return }
+                    self?.startWatchingRecents()
+                }
             },
             center.addObserver(forName: ThemeImageLoader.didLoadCatalogNotification, object: loader, queue: .main) { [weak self] _ in
                 MainActor.assumeIsolated { self?.rebuildThemeRow() }
@@ -130,6 +158,7 @@ final class WelcomeWindowController: NSWindowController, NSTableViewDataSource, 
         themeRow.orientation = .horizontal
         themeRow.spacing = 12
         themeRow.setAccessibilityIdentifier("welcome-themes")
+        themeRow.isHidden = true // takes no room until a thumbnail loads
         let buttons = NSStackView(views: [emptyStateNewDeckButton, emptyStateOpenButton])
         buttons.spacing = 10
         let stack = NSStackView(views: [icon, headline, subline, themeRow, buttons, dropZone])
@@ -159,6 +188,7 @@ final class WelcomeWindowController: NSWindowController, NSTableViewDataSource, 
     private func rebuildThemeRow() {
         for view in themeRow.arrangedSubviews { view.removeFromSuperview() }
         emptyStateThemeCells = []
+        defer { themeRow.isHidden = emptyStateThemeCells.isEmpty }
         guard let catalog = AppEnvironment.shared.themeImages.catalog else { return }
         for slug in Self.emptyStateThemeSlugs {
             guard let theme = catalog.theme(slug: slug) else { continue }
@@ -223,9 +253,28 @@ final class WelcomeWindowController: NSWindowController, NSTableViewDataSource, 
         recentsScrollView.isHidden = shows
         emptyStateNewDeckButton.keyEquivalent = shows ? "\r" : ""
         if shows {
-            let loader = AppEnvironment.shared.themeImages
             if emptyStateThemeCells.isEmpty { rebuildThemeRow() }
-            loader.loadImages(for: Self.emptyStateThemeSlugs)
+            AppEnvironment.shared.themeImages.loadCatalog()
+            requestThemeRendersOnceVisible()
+        } else {
+            themeRenderTimer?.invalidate()
+            themeRenderTimer = nil
+            themeRendersRequested = false
+        }
+    }
+
+    /// The four theme renders start once the window has stayed visible for a
+    /// beat; a window shown only until a deck opens never starts them.
+    private func requestThemeRendersOnceVisible() {
+        guard !themeRendersRequested, themeRenderTimer == nil, window?.isVisible == true else { return }
+        themeRenderTimer = Timer.scheduledTimer(withTimeInterval: Self.themeRenderDelay, repeats: false) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                self.themeRenderTimer = nil
+                guard self.showsEmptyState, self.window?.isVisible == true else { return }
+                self.themeRendersRequested = true
+                AppEnvironment.shared.themeImages.loadImages(for: Self.emptyStateThemeSlugs)
+            }
         }
     }
 
