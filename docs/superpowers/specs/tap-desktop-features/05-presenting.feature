@@ -6,14 +6,29 @@ Feature: Presenting
 
   Scenario: Start presenting with two displays
     Given a projector is connected
+    And this deck has never been played
     When I click Play
-    Then the app shows the Present popover with the display arrangement
-    When I click "Start Presenting"
+    Then the app shows Present Settings with the display arrangement
+    When I click "Play" in Present Settings
     Then the app starts "tap present --app talk.md" as a second process
     And the preview keeps running from the tap dev process
     And the app opens the audience page full screen on the projector
     And the app opens the presenter page on the built-in display
     And both pages start at the slide under the cursor
+
+  Scenario: Play starts at once
+    Given this deck was played before, on the displays that are connected now
+    And the cursor is in slide 4
+    When I click the Play button
+    Then the talk starts at slide 4 with the settings I last used, and no popover opens
+    And holding the Play button or clicking its chevron opens a menu
+    And the menu offers "Play from Slide 4", "Play from Beginning" (with a "Shift click" hint), "Rehearse" and "Present Settings…"
+    And with the cursor in slide 1 the menu says "Play from Slide 1" and has no "Play from Beginning"
+
+  Scenario: Present Settings open on the first run
+    Given this deck has never been played, or the connected displays are not the ones it was last played on
+    When I click Play
+    Then Present Settings open instead of the talk starting, so nobody starts on the wrong screen
 
   Scenario: Save before presenting
     Given "talk.md" has unsaved edits
@@ -34,12 +49,21 @@ Feature: Presenting
     When I start presenting
     Then the audience page fills the screen
     And Option-Tab switches to the presenter window
-    And the Present popover shows no display arrangement, no explanation and no Swap Displays button
+    And Present Settings show no displays section, no explanation and no menus for displays
 
-  Scenario: Start from here or the beginning
+  Scenario: Start from the cursor or the beginning
     Given the cursor is in slide 3
-    Then the popover's "Start from" control offers "Here" and "Beginning"
-    And "Here" starts at slide 3, and "Beginning" starts at slide 1
+    Then the "Start from" menu next to Rehearse and Play offers "Slide 3" and "Beginning"
+    And "Slide 3" starts at slide 3, and "Beginning" starts at slide 1
+    And with the cursor in slide 1 the menu is not shown
+
+  Scenario: Three displays
+    Given three displays are connected
+    Then Present Settings draw every display to scale, labelled Presenter, Audience or Not used
+    And each display has a menu, named for it, that chooses Audience, Presenter or Not used
+    And clicking a display makes it the audience screen
+    And there is exactly one audience and at most one presenter, and a role another display holds is swapped with it
+    And the diagram follows a display being plugged in or unplugged while Present Settings are open
 
   Scenario: Rehearse
     When I choose Present > Rehearse
@@ -47,7 +71,7 @@ Feature: Presenting
     And shows only the presenter view, full screen, with the timer
 
   Scenario: Swap displays
-    When I click "Swap Displays" in the popover
+    When I choose Present > Swap Displays, or make the presenter display the audience in Present Settings
     Then the presenter and audience displays swap before I start
 
   Scenario: Every tap dev presenter feature works
@@ -72,14 +96,28 @@ Feature: Presenting
     Then the app holds a display sleep assertion and the cursor hides when idle
 
   Scenario: Phone remote
-    When I turn on "Phone remote"
+    When I turn on "Phone remote" in Present Settings
     Then tap starts the tunnel with a generated presenter password           # NEW endpoint: tunnel start and stop
     And the app shows the QR code that tap generates
+    And a (?) button explains the remote, and that it works away from this Wi-Fi through cloudflared
 
-  Scenario: Advanced remote options
-    When I open "Advanced" in the Present popover
-    Then I can set a presenter password and turn the tunnel on or off
-    And the app passes them as --presenter-password and --tunnel to tap present
+  Scenario: Phone remote password
+    Given "Phone remote" is on
+    When I turn on "Require a password"
+    Then a "Password" field appears, and its text is never saved
+    And the app passes it as --presenter-password to tap present
+
+  Scenario: Phone remote needs cloudflared
+    Given cloudflared is not installed
+    When I turn on "Phone remote"
+    Then Present Settings say "Needs cloudflared, which is not installed." in red
+    And "Copy install command" copies "brew install cloudflared"
+    And Play stays enabled and starts the talk without the remote
+
+  Scenario: Displays share one Space
+    Given two displays share one Space
+    Then Present Settings show a notice with an "Open Settings" button
+    And the button opens Desktop & Dock in System Settings
 
   Scenario: First talk asks about recording
     Given I have never answered the recording question

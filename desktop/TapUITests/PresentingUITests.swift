@@ -23,14 +23,15 @@ final class PresentingUITests: UITestCase {
         return application
     }
 
-    func testPlayThroughThePopoverAndEscapeStops() throws {
+    func testPlayThroughPresentSettingsAndEscapeStops() throws {
         let application = try launchForPresenting()
-        let play = application.buttons["play-button"]
+        let play = application.descendants(matching: .any).matching(identifier: "play-button").firstMatch
         XCTAssertTrue(play.waitForExistence(timeout: 30))
         Thread.sleep(forTimeInterval: 2)
-        play.click()
+        // The left part of the control is Play, the right part its chevron. A deck never played opens Present Settings first.
+        play.coordinate(withNormalizedOffset: CGVector(dx: 0.3, dy: 0.5)).click()
         let start = application.buttons["start-presenting"]
-        XCTAssertTrue(start.waitForExistence(timeout: 5), "the Present popover")
+        XCTAssertTrue(start.waitForExistence(timeout: 5), "Present Settings")
         start.click()
         let audience = application.windows["audience-window"]
         XCTAssertTrue(audience.waitForExistence(timeout: 30), "the audience window covers the screen")

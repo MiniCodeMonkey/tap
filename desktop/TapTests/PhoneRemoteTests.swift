@@ -178,7 +178,7 @@ final class PhoneRemoteTests: PresentingTestCase {
         presentation.onTunnelChange = deckWindowHears
     }
 
-    func testAdvancedRemoteOptions() async throws {
+    func testPhoneRemotePassword() async throws {
         let record = try Fixtures.temporaryFolder().appendingPathComponent("record")
         AppEnvironment.shared.presentExecutableURL = try FakeTapScripts.presenting(events: [], recordingTo: record)
         let (_, controller) = try await openDeckForPresenting()
@@ -187,7 +187,7 @@ final class PhoneRemoteTests: PresentingTestCase {
         let deck = try XCTUnwrap(controller.document?.fileURL)
         // A first talk asks for the deck's own port.
         let port = presentation.deckPorts.port(for: deck) ?? DeckPortStore.suggestedPort(for: deck)
-        try await startPresenting(controller, PresentationOptions(mode: .play, startSlide: 1, tunnel: true, presenterPassword: "secret"))
+        try await startPresenting(controller, PresentationOptions(mode: .play, startSlide: 1, phoneRemote: true, presenterPassword: "secret"))
         XCTAssertEqual(presentation.session?.command, .present(record: true, presenterPassword: "secret", port: port))
         try await waitUntil(timeout: 5, "the arguments") { self.recorded(record).contains("--presenter-password secret") }
         XCTAssertFalse(recorded(record).contains("--tunnel"), "tap present has no --tunnel flag; the tunnel is a command")

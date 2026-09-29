@@ -87,6 +87,27 @@ class PresentingTestCase: HostedTestCase {
                 ScreenInfo(name: "Projector", frame: right, isBuiltIn: false)]
     }
 
+    /// Three displays: a third of the real screen each. The built-in one
+    /// is the presenter and the projector the audience by default; the
+    /// Studio Display is not used.
+    func thirdScreens() -> [ScreenInfo] {
+        let frame = NSScreen.screens[0].frame
+        let width = (frame.width / 3).rounded(.down)
+        func third(_ index: Int) -> CGRect {
+            CGRect(x: frame.minX + width * CGFloat(index), y: frame.minY, width: index == 2 ? frame.width - 2 * width : width, height: frame.height)
+        }
+        return [ScreenInfo(name: "Built-in Display", frame: third(0), isBuiltIn: true),
+                ScreenInfo(name: "Projector", frame: third(1), isBuiltIn: false),
+                ScreenInfo(name: "Studio Display", frame: third(2), isBuiltIn: false)]
+    }
+
+    /// Records that the deck was played on the displays it reports now, so
+    /// a click on Play starts at once instead of opening Present Settings.
+    func markPlayed(_ controller: DeckSessionController) throws {
+        let deck = try XCTUnwrap(controller.document?.fileURL)
+        AppEnvironment.shared.presentedDisplays.recordPlay(of: deck, on: controller.presentation.screens())
+    }
+
     /// Opens a copy of the deck, waits for its preview and boxes, points
     /// its talk at the one real screen, and lets the talk use full screen
     /// only where the probe found it works. Two displays on one screen

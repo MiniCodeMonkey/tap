@@ -110,7 +110,7 @@ final class PresentingDisplayTests: PresentingTestCase {
         XCTAssertEqual(presentation.currentArrangement?.audience.name, "Epson")
         presentation.swapDisplays()
         XCTAssertEqual(presentation.currentArrangement?.audience.name, "Built-in Display")
-        XCTAssertEqual(AppEnvironment.shared.displayAssignments.audienceName(for: other), "Built-in Display")
+        XCTAssertEqual(AppEnvironment.shared.displayAssignments.roles(for: other)?.audience, "Built-in Display")
         try await startPresenting(controller, PresentationOptions(mode: .play, startSlide: 1))
         XCTAssertEqual(presentation.audienceWindow?.targetFrame, other[0].frame, "the next talk uses the swapped displays")
     }
@@ -123,7 +123,7 @@ final class PresentingDisplayTests: PresentingTestCase {
         try await startPresenting(first, PresentationOptions(mode: .play, startSlide: 1))
         XCTAssertEqual(first.presentation.audienceWindow?.targetFrame, screens[0].frame)
         try await stopPresenting(first)
-        XCTAssertEqual(AppEnvironment.shared.displayAssignments.audienceName(for: screens), "Built-in Display")
+        XCTAssertEqual(AppEnvironment.shared.displayAssignments.roles(for: screens)?.audience, "Built-in Display")
 
         // Another deck, the same pair of displays, in either order.
         let (_, second) = try await openDeckForPresenting()
@@ -169,7 +169,7 @@ final class PresentingDisplayTests: PresentingTestCase {
         // over the audience view as its child, shown, since the speaker is at the laptop.
         presentation.screens = { one }
         presentation.screensChanged()
-        XCTAssertEqual(presentation.arrangement?.isSingleDisplay, true)
+        XCTAssertEqual(presentation.arrangement?.sharesDisplay, true)
         // The windows are placed one at a time, so each frame is read once both are settled.
         try await waitUntil(timeout: 30, "the windows settled and the presenter over the audience") {
             presentation.windowsAreSettled && presentation.presenterIsShownOverAudience

@@ -22,14 +22,25 @@ final class PresentMenuTests: PresentingTestCase {
         let deckWindow = try XCTUnwrap(controller.editor.window?.windowController as? DeckWindowController)
         let menu = try presentMenu()
         let play = try item(menu, action: #selector(DeckWindowController.play(_:)))
-        XCTAssertEqual(play.title, "Play")
+        XCTAssertTrue(deckWindow.validateMenuItem(play))
+        XCTAssertEqual(play.title, "Play from Slide 1", "the title names the cursor's slide")
         XCTAssertEqual(play.keyEquivalent, "p")
         XCTAssertEqual(play.keyEquivalentModifierMask, [.command, .option])
-        let withOptions = try item(menu, action: #selector(DeckWindowController.playWithOptions(_:)))
-        XCTAssertEqual(withOptions.title, "Play with Options…")
-        XCTAssertEqual(withOptions.keyEquivalent, "", "the popover has no shortcut; the Play button opens it")
+        let beginning = try item(menu, action: #selector(DeckWindowController.playFromBeginning(_:)))
+        XCTAssertTrue(deckWindow.validateMenuItem(beginning))
+        XCTAssertTrue(beginning.isHidden, "on slide 1 both plays would do the same thing")
+        controller.jumpToSlide(number: 3)
+        XCTAssertTrue(deckWindow.validateMenuItem(play))
+        XCTAssertEqual(play.title, "Play from Slide 3")
+        XCTAssertTrue(deckWindow.validateMenuItem(beginning))
+        XCTAssertFalse(beginning.isHidden)
+        XCTAssertEqual(beginning.title, "Play from Beginning")
+        controller.jumpToSlide(number: 1)
+        let withOptions = try item(menu, action: #selector(DeckWindowController.showPresentSettings(_:)))
+        XCTAssertEqual(withOptions.title, "Present Settings\u{2026}")
+        XCTAssertEqual(withOptions.keyEquivalent, "", "Present Settings has no shortcut; the Play button opens it")
         // AppKit may read a key equivalent another item already has as "", so the mask is checked too: the item's default, no Option.
-        XCTAssertEqual(withOptions.keyEquivalentModifierMask, [.command], "Play with Options has no shortcut of its own")
+        XCTAssertEqual(withOptions.keyEquivalentModifierMask, [.command], "Present Settings has no shortcut of its own")
         let shortcuts = menu.items.filter { !$0.isSeparatorItem && !$0.keyEquivalent.isEmpty }
             .map { "\($0.keyEquivalent) \($0.keyEquivalentModifierMask.rawValue)" }
         XCTAssertEqual(Set(shortcuts).count, shortcuts.count, "no two Present items share a shortcut: \(shortcuts)")
@@ -41,7 +52,6 @@ final class PresentMenuTests: PresentingTestCase {
         XCTAssertEqual(stop.keyEquivalentModifierMask, [.command])
         let swap = try item(menu, action: #selector(DeckWindowController.swapDisplays(_:)))
 
-        XCTAssertTrue(deckWindow.validateMenuItem(play))
         XCTAssertTrue(deckWindow.validateMenuItem(withOptions))
         XCTAssertTrue(deckWindow.validateMenuItem(rehearse))
         XCTAssertFalse(deckWindow.validateMenuItem(stop))
@@ -61,7 +71,7 @@ final class PresentMenuTests: PresentingTestCase {
         try await waitUntil(timeout: 20, "Play to be allowed again") { deckWindow.validateMenuItem(play) }
         XCTAssertTrue(controller.presentation.windowsGoingDown.isEmpty)
 
-        // Cmd+Option+P starts presenting at once, with the last settings and no popover.
+        // Cmd+Option+P starts presenting at once, from the cursor's slide, with the last settings and no popover.
         controller.jumpToSlide(number: 2)
         deckWindow.play(nil)
         XCTAssertFalse(deckWindow.presentPopover.isShown)
