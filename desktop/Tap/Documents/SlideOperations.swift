@@ -115,9 +115,9 @@ extension DeckSessionController {
     }
 
     /// Declares `layout` for the slide `selection` names, as one undo step
-    /// named "Change Layout"; "default" removes the declaration. A slide
-    /// that already has the layout is left alone.
-    func changeLayout(of selection: SlideSelection, to layout: String) {
+    /// named "Change Layout"; nil removes the declaration, leaving the layout
+    /// to tap. A slide that already has the declaration is left alone.
+    func changeLayout(of selection: SlideSelection, to layout: String?) {
         perform(on: selection) { numbers in
             guard numbers.count == 1 else { return nil }
             return .setLayout(number: numbers[0], layout: layout)

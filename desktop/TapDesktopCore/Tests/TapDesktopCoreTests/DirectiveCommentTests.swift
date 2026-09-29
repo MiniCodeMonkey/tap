@@ -11,6 +11,14 @@ final class DirectiveCommentTests: XCTestCase {
         XCTAssertEqual(multi.body, "\nlayout: cover\nbackground: images/hero.jpg\n")
     }
 
+    func testReadsATopLevelValueButNotOneInTheNotes() {
+        XCTAssertEqual(DirectiveComment.value(for: "layout", in: "<!--\nlayout: quote\nskip: true\n-->\n# A"), "quote")
+        XCTAssertEqual(DirectiveComment.value(for: "layout", in: "<!-- layout: default -->\n# A"), "default")
+        XCTAssertNil(DirectiveComment.value(for: "layout", in: "<!--\nskip: true\n-->\n# A"))
+        XCTAssertNil(DirectiveComment.value(for: "layout", in: "<!--\nnotes: |\n  layout: quote\n-->\n# A"))
+        XCTAssertNil(DirectiveComment.value(for: "layout", in: "# A"))
+    }
+
     func testOnlyACommentAtTheStartIsTheDirectiveComment() {
         XCTAssertNil(DirectiveComment.leading(in: "# Hello\n\n<!-- layout: title -->"))
         XCTAssertNil(DirectiveComment.leading(in: "# Hello\n\n<!-- pause -->"))

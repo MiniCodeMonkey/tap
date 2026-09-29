@@ -29,12 +29,14 @@ final class LayoutMenuTests: HostedTestCase {
         let editor = controller.editor
         let menu = try XCTUnwrap(controller.editor(editor, layoutMenuForBoxAt: 1))
         let layouts = AppEnvironment.shared.layoutCatalog.templates.map { LayoutCatalog.displayName($0.name) }
-        XCTAssertEqual(menu.items.prefix(layouts.count).map(\.title), layouts)
+        XCTAssertEqual(menu.items.first?.title, "Automatic (Title)", "tap renders slide 2 with the title layout")
+        XCTAssertTrue(menu.items[1].isSeparatorItem)
+        XCTAssertEqual(menu.items[2...].prefix(layouts.count).map(\.title), layouts)
         XCTAssertEqual(menu.items.filter { $0.state == .on }.map(\.title), ["Title"], "slide 2 declares the title layout")
         XCTAssertTrue(menu.items[menu.items.count - 2].isSeparatorItem)
         XCTAssertEqual(menu.items.last?.title, "Show All Layouts\u{2026}")
         let undeclared = try XCTUnwrap(controller.editor(editor, layoutMenuForBoxAt: 0))
-        XCTAssertEqual(undeclared.items.filter { $0.state == .on }.map(\.title), ["Default"], "a slide that declares none is Default")
+        XCTAssertEqual(undeclared.items.filter { $0.state == .on }.map(\.title), ["Automatic (Title)"], "a slide that declares none is Automatic, whatever tap detects")
     }
 
     func testChangeASlideSLayoutFromItsHeader() async throws {
@@ -87,13 +89,34 @@ final class LayoutMenuTests: HostedTestCase {
         windowController.layoutGallery.close()
     }
 
-    func testDefaultRemovesTheLayoutDeclaration() async throws {
+    func testAutomaticRemovesTheLayoutDeclaration() async throws {
         let (_, controller) = try await openOps()
         let editor = controller.editor
         let menu = try XCTUnwrap(controller.editor(editor, layoutMenuForBoxAt: 2))
-        controller.chooseLayout(try item(menu, "Default"))
+        controller.chooseLayout(try item(menu, "Automatic (Section)"))
         XCTAssertFalse(slideText(editor, 3).contains("layout:"))
         XCTAssertTrue(slideText(editor, 3).contains("# Three"))
+    }
+
+    func testAutomaticOnASlideThatDeclaresNothingChangesNothing() async throws {
+        let (document, controller) = try await openOps()
+        let editor = controller.editor
+        let original = editor.string
+        let menu = try XCTUnwrap(controller.editor(editor, layoutMenuForBoxAt: 3))
+        XCTAssertEqual(menu.items.filter { $0.state == .on }.map(\.title), ["Automatic (Code Focus)"])
+        controller.chooseLayout(try item(menu, "Automatic (Code Focus)"))
+        XCTAssertEqual(editor.string, original)
+        XCTAssertNotEqual(document.undoManager?.undoActionName, "Change Layout")
+    }
+
+    func testDefaultIsDeclaredLikeAnyOtherLayout() async throws {
+        let (_, controller) = try await openOps()
+        let editor = controller.editor
+        let menu = try XCTUnwrap(controller.editor(editor, layoutMenuForBoxAt: 3))
+        controller.chooseLayout(try item(menu, "Default"))
+        XCTAssertTrue(slideText(editor, 4).contains("layout: default"))
+        let reopened = try XCTUnwrap(controller.editor(editor, layoutMenuForBoxAt: 3))
+        XCTAssertEqual(reopened.items.filter { $0.state == .on }.map(\.title), ["Default"])
     }
 
     /// The menu names its slide when it opens; a choice made after typing that tap has not answered
@@ -131,7 +154,7 @@ final class LayoutMenuTests: HostedTestCase {
 
         editor.mouseDown(with: try event(.leftMouseDown))
         XCTAssertEqual(shown.count, 1, "a click on the layout name opens the menu")
-        XCTAssertEqual(shown.first?.items.filter { $0.state == .on }.map(\.title), ["Default"])
+        XCTAssertEqual(shown.first?.items.filter { $0.state == .on }.map(\.title), ["Automatic (Title)"])
     }
 
     func testTheLayoutPopUpIsAccessible() async throws {

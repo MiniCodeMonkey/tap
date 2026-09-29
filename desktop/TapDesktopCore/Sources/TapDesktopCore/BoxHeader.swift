@@ -19,9 +19,12 @@ public struct BoxHeader: Equatable, Sendable {
     }
 
     public let number: String
-    /// The slide's layout as tap names it; "default" when the slide declares none.
+    /// The layout tap renders the slide with, declared or detected; "default" when tap reports none.
     public let layout: String
-    /// The layout's name as a menu shows it.
+    /// True when the slide renders as a component: tap then reports the
+    /// component's source path in place of a layout name.
+    public let layoutIsComponent: Bool
+    /// The layout's name as a menu shows it; a component's file name.
     public let layoutName: String
     /// The live code blocks, such as "sql, live"; empty when there are none.
     public let meta: String
@@ -32,7 +35,8 @@ public struct BoxHeader: Equatable, Sendable {
     public init(slide: Slide, declaredDrivers: [String]? = nil, frontmatterIsBroken: Bool = false) {
         number = "\(slide.number)"
         layout = slide.layout.isEmpty ? "default" : slide.layout
-        layoutName = LayoutCatalog.displayName(layout)
+        layoutIsComponent = layout.contains("/") || layout.contains(".")
+        layoutName = layoutIsComponent ? String(layout.split(separator: "/").last ?? Substring(layout)) : LayoutCatalog.displayName(layout)
         let liveBlocks = slide.codeBlocks.filter(\.live)
         meta = liveBlocks.map { "\($0.language.isEmpty ? "code" : $0.language), live" }.joined(separator: "; ")
 

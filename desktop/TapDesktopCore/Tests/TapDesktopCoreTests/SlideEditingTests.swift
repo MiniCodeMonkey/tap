@@ -193,11 +193,18 @@ final class SlideEditingTests: XCTestCase {
         XCTAssertNil(SlideEditing.apply(.setLayout(number: 9, layout: "section"), to: Self.text, boxes: Self.boxes))
     }
 
-    func testDefaultRemovesTheLayoutDeclaration() throws {
-        let removed = try XCTUnwrap(SlideEditing.apply(.setLayout(number: 3, layout: "default"), to: Self.text, boxes: Self.boxes))
+    func testAutomaticRemovesTheLayoutDeclaration() throws {
+        let removed = try XCTUnwrap(SlideEditing.apply(.setLayout(number: 3, layout: nil), to: Self.text, boxes: Self.boxes))
         XCTAssertEqual((removed.text as NSString).substring(with: removed.boxes[2].range), "# Three")
         XCTAssertFalse(removed.text.contains("layout:"))
-        XCTAssertNil(SlideEditing.apply(.setLayout(number: 4, layout: "default"), to: Self.text, boxes: Self.boxes), "a slide that declares nothing is already default")
+        XCTAssertNil(SlideEditing.apply(.setLayout(number: 4, layout: nil), to: Self.text, boxes: Self.boxes), "a slide that declares nothing is already automatic")
+    }
+
+    func testDefaultIsDeclaredLikeAnyOtherLayout() throws {
+        let declared = try XCTUnwrap(SlideEditing.apply(.setLayout(number: 4, layout: "default"), to: Self.text, boxes: Self.boxes))
+        XCTAssertTrue((declared.text as NSString).substring(with: declared.boxes[3].range).hasPrefix("<!--\nlayout: default\n-->"))
+        let replaced = try XCTUnwrap(SlideEditing.apply(.setLayout(number: 3, layout: "default"), to: Self.text, boxes: Self.boxes))
+        XCTAssertEqual((replaced.text as NSString).substring(with: replaced.boxes[2].range), "<!--\nlayout: default\n-->\n# Three")
     }
 
     func testActionNames() {

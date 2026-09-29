@@ -547,24 +547,32 @@ final class EditorTextView: NSTextView {
     private static let layoutChipHoverAttributes: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 11, weight: .semibold), .foregroundColor: NSColor.labelColor]
     private static let layoutQuietAttributes: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 11), .foregroundColor: NSColor.secondaryLabelColor]
 
-    static func layoutChipTitle(_ name: String) -> String { name + " \u{25BE}" }
+    /// A layout name with its chevron; a component's file name is plain text with none.
+    static func layoutChipTitle(_ name: String, isComponent: Bool = false) -> String { isComponent ? name : name + " \u{25BE}" }
 
     /// The layout pop-up in a header: right of the number, 18 points tall,
     /// as wide as the name and its chevron. It is sized for the chip's
     /// semibold text whether it is drawn as the chip or quietly, so the
     /// live segments after it never shift when the chip look comes and goes.
     /// Drawing and the click's hit test both come here.
-    static func layoutChipRect(name: String, leftEdge: CGFloat, headerTop: CGFloat) -> NSRect {
-        let width = NSAttributedString(string: layoutChipTitle(name), attributes: layoutChipAttributes).size().width + 14
+    static func layoutChipRect(name: String, isComponent: Bool = false, leftEdge: CGFloat, headerTop: CGFloat) -> NSRect {
+        let width = NSAttributedString(string: layoutChipTitle(name, isComponent: isComponent), attributes: layoutChipAttributes).size().width + 14
         return NSRect(x: leftEdge, y: headerTop + 5, width: width, height: 18)
     }
 
-    /// The layout pop-up of a box's header, in view coordinates; nil for a box off screen.
+    /// The layout pop-up of a box's header, in view coordinates; nil for a box off
+    /// screen and for a component slide, whose source path is text, not a pop-up.
     func layoutChipRect(forBoxAt index: Int) -> NSRect? {
+        guard boxes.indices.contains(index), !header(forBoxAt: index).layoutIsComponent else { return nil }
+        return layoutNameRect(forBoxAt: index)
+    }
+
+    /// Where the header's layout name sits, chip or plain text.
+    private func layoutNameRect(forBoxAt index: Int) -> NSRect? {
         guard boxes.indices.contains(index), let headerRect = headerRect(forBoxAt: index) else { return nil }
         let header = self.header(forBoxAt: index)
         let number = NSAttributedString(string: header.number, attributes: [.font: NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .bold)])
-        let chip = Self.layoutChipRect(name: header.layoutName, leftEdge: headerRect.minX + 12 + number.size().width + 7, headerTop: headerRect.minY)
+        let chip = Self.layoutChipRect(name: header.layoutName, isComponent: header.layoutIsComponent, leftEdge: headerRect.minX + 12 + number.size().width + 7, headerTop: headerRect.minY)
         let badgesLeftEdge = Self.badgeLayout(for: header.badges, headerMaxX: headerRect.maxX, headerTop: headerRect.minY).leftEdge
         let limit = (fixItRect(forBoxAt: index)?.minX ?? badgesLeftEdge) - 8
         return NSRect(x: chip.minX, y: chip.minY, width: min(chip.width, max(0, limit - chip.minX)), height: chip.height)
@@ -634,8 +642,8 @@ final class EditorTextView: NSTextView {
             NSAttributedString(string: fixIt.title, attributes: Self.fixItAttributes).draw(at: NSPoint(x: pill.minX + 8, y: pill.minY + 2))
             metaLimit = pill.minX
         }
-        let chip = Self.layoutChipRect(name: header.layoutName, leftEdge: x, headerTop: rect.minY)
-        let showsChip = isCurrent || hoveredLayoutBoxIndex == boxIndex
+        let chip = Self.layoutChipRect(name: header.layoutName, isComponent: header.layoutIsComponent, leftEdge: x, headerTop: rect.minY)
+        let showsChip = !header.layoutIsComponent && (isCurrent || hoveredLayoutBoxIndex == boxIndex)
         let chipVisibleWidth = min(chip.width, max(0, metaLimit - chip.minX - 8))
         if chipVisibleWidth > 0 {
             let drawnChip = NSRect(x: chip.minX, y: chip.minY, width: chipVisibleWidth, height: chip.height)
@@ -643,7 +651,7 @@ final class EditorTextView: NSTextView {
                 NSColor.controlAccentColor.withAlphaComponent(isCurrent ? 0.16 : 0.10).setFill()
                 NSBezierPath(roundedRect: drawnChip, xRadius: 9, yRadius: 9).fill()
             }
-            NSAttributedString(string: Self.layoutChipTitle(header.layoutName), attributes: showsChip && isCurrent ? Self.layoutChipAttributes : (showsChip ? Self.layoutChipHoverAttributes : Self.layoutQuietAttributes))
+            NSAttributedString(string: Self.layoutChipTitle(header.layoutName, isComponent: header.layoutIsComponent), attributes: showsChip && isCurrent ? Self.layoutChipAttributes : (showsChip ? Self.layoutChipHoverAttributes : Self.layoutQuietAttributes))
                 .draw(with: NSRect(x: drawnChip.minX + 7, y: drawnChip.minY + 2, width: max(0, drawnChip.width - 10), height: 14), options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
         }
         let metaX = chip.maxX + 6

@@ -28,6 +28,8 @@ final class BoxHeaderTests: XCTestCase {
         let undeclared = BoxHeader(slide: Slide(number: 2, startLine: 1, endLine: 1, layout: "", title: ""))
         XCTAssertEqual(undeclared.layout, "default")
         XCTAssertEqual(undeclared.layoutName, "Default")
+        XCTAssertFalse(undeclared.layoutIsComponent)
+        XCTAssertTrue(BoxHeader(slide: Slide(number: 2, startLine: 1, endLine: 1, layout: "./tiny/Tiny.jsx", title: "")).layoutIsComponent)
     }
 
     func testASkippedSlideAndErrorsShowInTheHeader() {
