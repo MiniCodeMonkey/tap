@@ -291,7 +291,7 @@ final class PresentPopoverTests: PresentingTestCase {
         deckWindow.presentPopover.pasteboard = pasteboard
         deckWindow.showPresentSettings(nil)
         let popover = deckWindow.presentPopover
-        try await waitUntil(timeout: 5, "the missing cloudflared shown") { !popover.cloudflaredInstalled }
+        XCTAssertFalse(popover.cloudflaredInstalled)
         XCTAssertFalse(popover.cloudflaredBlock.isHidden)
         XCTAssertEqual(popover.cloudflaredMessage.stringValue, "Needs cloudflared, which is not installed.")
         XCTAssertEqual(popover.cloudflaredMessage.textColor, .systemRed)
@@ -304,9 +304,31 @@ final class PresentPopoverTests: PresentingTestCase {
         popover.phoneRemoteSwitch.performClick(nil)
         AppEnvironment.shared.cloudflaredProbe = { true }
         deckWindow.showPresentSettings(nil)
-        try await waitUntil(timeout: 5, "cloudflared found") { popover.cloudflaredInstalled }
+        XCTAssertTrue(popover.cloudflaredInstalled)
         XCTAssertTrue(popover.cloudflaredBlock.isHidden, "installing it clears the message")
         popover.close()
+    }
+
+    func testPlayWithTheRemoteOnAndNoCloudflaredOpensSettingsInstead() async throws {
+        AppEnvironment.shared.cloudflaredProbe = { false }
+        AppEnvironment.shared.presentationSettings.settings = PresentationSettings(record: false, phoneRemote: true)
+        let (_, controller) = try await openDeckForPresenting()
+        let deckWindow = try windowController(controller)
+        try markPlayed(controller)
+        let popover = deckWindow.presentPopover
+        for start in [{ deckWindow.playButtonClicked(modifiers: []) }, { deckWindow.playButtonClicked(modifiers: [.shift]) },
+                      { deckWindow.play(nil) }, { deckWindow.playFromBeginning(nil) }] {
+            start()
+            XCTAssertTrue(popover.isShown, "Present Settings open instead of the talk")
+            XCTAssertFalse(popover.cloudflaredBlock.isHidden, "showing the cloudflared fix")
+            XCTAssertNil(controller.presentation.options, "nothing started")
+            XCTAssertEqual(controller.presentation.state, .idle)
+            popover.close()
+        }
+        AppEnvironment.shared.cloudflaredProbe = { true }
+        deckWindow.play(nil)
+        XCTAssertEqual(controller.presentation.options?.phoneRemote, true, "with cloudflared the remote starts")
+        try await waitUntil(timeout: 40, "the talk") { controller.presentation.state == .presenting }
     }
 
     func testThePlayButtonFollowsTheTalk() async throws {

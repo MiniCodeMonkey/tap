@@ -574,14 +574,14 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
     /// with the last settings (Present Settings' controls), from the
     /// cursor's slide.
     @objc func play(_ sender: Any?) {
-        guard canStartATalk else { return }
+        guard canStartATalk, !showsSettingsForMissingCloudflared() else { return }
         startPresenting(freshPopover().options(mode: .play))
     }
 
     /// Present > Play from Beginning, and a Shift-click on Play: the last
     /// settings, from slide 1.
     @objc func playFromBeginning(_ sender: Any?) {
-        guard canStartATalk else { return }
+        guard canStartATalk, !showsSettingsForMissingCloudflared() else { return }
         var options = freshPopover().options(mode: .play)
         options.startSlide = 1
         startPresenting(options)
@@ -593,6 +593,15 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
         guard canStartATalk else { return }
         let anchor: NSView = playButton.window == nil ? (window?.contentView ?? playButton) : playButton
         freshPopover().show(context: popoverContext(), relativeTo: anchor.bounds, of: anchor)
+    }
+
+    /// A direct start with the phone remote on needs cloudflared, which tap
+    /// would otherwise report as an error after the talk began. When it is
+    /// missing, Present Settings open with the fix instead. True when they did.
+    private func showsSettingsForMissingCloudflared() -> Bool {
+        guard AppEnvironment.shared.presentationSettings.settings.phoneRemote, !AppEnvironment.shared.isCloudflaredInstalled() else { return false }
+        showPresentSettings(nil)
+        return true
     }
 
     /// The accessibility press and the keyboard's activation of the toolbar's
@@ -657,15 +666,11 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
     /// and displays as they are now: the settings are app-wide and another
     /// deck may have saved newer ones, and the cursor moved since the
     /// popover was last shown. The password field is left alone. Whether
-    /// cloudflared is installed is looked up alongside, since the answer
-    /// comes from tap's own PATH, which loads asynchronously.
+    /// cloudflared is installed is looked up alongside.
     private func freshPopover() -> PresentPopoverController {
         presentPopover.loadSettings(AppEnvironment.shared.presentationSettings.settings)
         presentPopover.update(context: popoverContext())
-        Task { [weak self] in
-            let installed = await AppEnvironment.shared.isCloudflaredInstalled()
-            self?.presentPopover.cloudflaredInstalled = installed
-        }
+        presentPopover.cloudflaredInstalled = AppEnvironment.shared.isCloudflaredInstalled()
         return presentPopover
     }
 
