@@ -31,9 +31,14 @@ final class TapSessionTests: XCTestCase {
         XCTAssertTrue(tap.log.text.contains("ready on 127.0.0.1:4242"))
         XCTAssertTrue(tap.log.text.contains("listening on 127.0.0.1:4242"))
 
+        var sent: [TapCommand] = []
+        tap.onCommandSent = { sent.append($0) }
         tap.send(.saved)
+        XCTAssertEqual(sent, [.saved], "a command written to tap is reported")
         tap.stop()
         try await waitUntil { tap.state == .stopped }
+        tap.send(.reload)
+        XCTAssertEqual(sent, [.saved], "nothing is reported once tap has stopped")
         XCTAssertTrue(try String(contentsOf: record, encoding: .utf8).contains(#"stdin: {"type":"saved"}"#))
     }
 

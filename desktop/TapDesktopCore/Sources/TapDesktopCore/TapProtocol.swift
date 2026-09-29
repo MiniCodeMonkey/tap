@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 
 /// The first line `tap dev --app` prints on standard output.
@@ -360,6 +361,11 @@ public enum RecordingAction: String, Sendable {
 public enum TapCommand: Equatable, Sendable {
     /// The app saved its buffer to the deck file (tap dev only).
     case saved
+    /// The app is about to write the text whose SHA-256 is `digest`, as
+    /// lowercase hexadecimal, to the deck file (tap dev only). tap then
+    /// knows the write as the app's own even when the text never went out
+    /// in a PUT, and does not reload the pages for it.
+    case saving(digest: String)
     /// Render the deck again and reload every page.
     case reload
     /// Shut down. tap present asks keep-recording first when the run recorded.
@@ -375,6 +381,7 @@ public enum TapCommand: Equatable, Sendable {
     public var line: String {
         switch self {
         case .saved: return #"{"type":"saved"}"#
+        case .saving(let digest): return #"{"type":"saving","digest":"# + Self.jsonString(digest) + "}"
         case .reload: return #"{"type":"reload"}"#
         case .quit: return #"{"type":"quit"}"#
         case .answer(let id, let value):
@@ -382,6 +389,12 @@ public enum TapCommand: Equatable, Sendable {
         case .tunnel(let start): return #"{"type":"tunnel","start":"# + (start ? "true" : "false") + "}"
         case .recording(let action): return #"{"type":"recording","action":""# + action.rawValue + #""}"#
         }
+    }
+
+    /// The saving command for a write of `text`: the SHA-256 of its UTF-8
+    /// bytes, which are the bytes the save writes.
+    public static func saving(text: String) -> TapCommand {
+        .saving(digest: SHA256.hash(data: Data(text.utf8)).map { String(format: "%02x", $0) }.joined())
     }
 
     /// `text` as a JSON string literal, quotes included.

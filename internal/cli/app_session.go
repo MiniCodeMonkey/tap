@@ -2,6 +2,8 @@ package cli
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"os"
@@ -108,6 +110,11 @@ type appSessionOptions struct {
 	// has no buffer. Like Reload, it takes the session's context and
 	// should honour it.
 	Saved func(ctx context.Context) error
+	// Saving is the saving command: the app is about to write the text
+	// with this SHA-256 to the deck file. It is nil in tap present --app.
+	// It runs on the control loop, not the worker, and must return at
+	// once (see handle).
+	Saving func(digest [sha256.Size]byte)
 	// Run, with EndRun, is the context of the whole run, and the call
 	// that ends it. The session takes it as its own and cancels it as
 	// the first step of quit, so work the caller started with the same
@@ -290,6 +297,20 @@ func (session *appSession) handle(command appCommand) {
 			return
 		}
 		session.enqueue(func() { session.runAction(appCommandSaved, session.options.Saved) })
+	case appCommandSaving:
+		// Recorded here rather than queued: the file watcher reads the
+		// write about a tenth of a second after it lands, and a render
+		// the worker is busy with can take longer than that.
+		if session.options.Saving == nil {
+			session.fail(appErrorNotEditing, "saving works only in tap dev --app; tap present --app reads the deck file on reload")
+			return
+		}
+		digest, err := hex.DecodeString(command.Digest)
+		if err != nil || len(digest) != sha256.Size {
+			session.fail(appErrorInvalidCommand, `saving needs "digest": the SHA-256 of the text, as 64 hexadecimal digits`)
+			return
+		}
+		session.options.Saving([sha256.Size]byte(digest))
 	case appCommandTunnel:
 		if command.Start == nil {
 			session.fail(appErrorInvalidCommand, `tunnel needs "start": true or false`)

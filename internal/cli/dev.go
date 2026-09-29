@@ -3,6 +3,7 @@ package cli
 
 import (
 	"context"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"io"
@@ -739,6 +740,7 @@ func runDevServer(options serverOptions) (err error) {
 		// tap present --app has no buffer and no watcher: the audience sees
 		// only what the deck file held at the last reload.
 		var saved func(ctx context.Context) error
+		var saving func(digest [sha256.Size]byte)
 		if !options.present {
 			srv.RegisterHandlerFunc("PUT "+server.AppSourcePath, handleAppSource(deckSource, func(buffer []byte) (func(), error) {
 				return renderApp(appCtx, buffer, false)
@@ -747,6 +749,7 @@ func runDevServer(options serverOptions) (err error) {
 				deckSource.dropSavedBuffer()
 				return renderCurrentForApp(ctx, false)
 			}
+			saving = deckSource.noteSaving
 
 			// emitFileChanged tells the app, and when reloadPages is true
 			// also every open page, which reloads on it.
@@ -886,6 +889,7 @@ func runDevServer(options serverOptions) (err error) {
 				return renderCurrentForApp(ctx, true)
 			},
 			Saved:             saved,
+			Saving:            saving,
 			Run:               appCtx,
 			EndRun:            endAppRun,
 			Tunnels:           tunnels,

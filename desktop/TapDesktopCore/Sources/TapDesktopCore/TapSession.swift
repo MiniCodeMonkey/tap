@@ -92,6 +92,10 @@ public final class TapSession {
     public var restartsWhenExited = true
     public var onStateChange: ((State) -> Void)?
     public var onEvent: ((TapEvent) -> Void)?
+    /// Called with each command handed to tap's process, after it is
+    /// written to its standard input. Nothing is called while the session
+    /// has no process, since nothing is written then.
+    public var onCommandSent: ((TapCommand) -> Void)?
     public var processIdentifier: Int32? { process?.isRunning == true ? process?.processIdentifier : nil }
     /// The restart policy this session runs, so a caller can report the same
     /// exit count and window the session itself logs on giving up.
@@ -236,7 +240,9 @@ public final class TapSession {
     }
 
     public func send(_ command: TapCommand) {
-        process?.send(command)
+        guard let process else { return }
+        process.send(command)
+        onCommandSent?(command)
     }
 
     private func launch(environment: [String: String]) {

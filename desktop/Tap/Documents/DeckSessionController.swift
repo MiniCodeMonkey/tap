@@ -981,6 +981,14 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
         lastThemeSlug = currentThemeSlug
     }
 
+    /// A save of the deck file is about to write `text`. tap is told first,
+    /// by the text's SHA-256, so its watcher takes the write as the app's
+    /// own and does not reload the pages, even when the text has not gone
+    /// out in a PUT yet. Any other write still reloads them.
+    func documentWillWrite(_ text: String) {
+        session.send(.saving(text: text))
+    }
+
     /// The buffer is on disk. tap drops the buffer it renders and reads the
     /// file. `document.text` already holds the exact text the save wrote, so
     /// the edited flag is recomputed against it right away rather than

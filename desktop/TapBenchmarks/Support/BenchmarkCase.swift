@@ -129,9 +129,10 @@ class BenchmarkCase: XCTestCase {
     /// Writes `results` to desktop/build/benchmarks/`name`.json, and prints
     /// them on one line, so a CI log keeps every run's numbers, a passing
     /// run's too, and the bounds can be checked against the runner's
-    /// history. Every Double is written with exactly 2 decimals, so the log
+    /// history. A Double is written with exactly 2 decimals, so the log
     /// shows 296.78 rather than a Double's binary tail like
-    /// 296.77999999999997.
+    /// 296.77999999999997, and a whole number, such as a sample count, as
+    /// an integer: 20, not 20.00.
     func write(_ results: [String: Any], to name: String) {
         let folder = repositoryRoot.appendingPathComponent("desktop/build/benchmarks")
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
@@ -143,10 +144,10 @@ class BenchmarkCase: XCTestCase {
     /// `value` as JSON text with sorted keys. JSONSerialization writes a
     /// Double's full binary value, so rounding the Double first changes
     /// nothing it prints; this writes each Double as fixed 2-decimal text
-    /// instead. The results are flat maps and maps of maps of numbers, so
-    /// numbers, strings and dictionaries are all it needs; any other type
-    /// stops a debug build. A number JSON cannot hold (NaN, infinity) is
-    /// written as null.
+    /// instead, and a whole-numbered one as an integer. The results are
+    /// flat maps and maps of maps of numbers, so numbers, strings and
+    /// dictionaries are all it needs; any other type stops a debug build. A
+    /// number JSON cannot hold (NaN, infinity) is written as null.
     static func json(_ value: Any) -> String {
         switch value {
         case let dictionary as [String: Any]:
@@ -155,7 +156,9 @@ class BenchmarkCase: XCTestCase {
         case let integer as Int:
             return String(integer)
         case let number as Double:
-            return number.isFinite ? String(format: "%.2f", number) : "null"
+            guard number.isFinite else { return "null" }
+            if number == number.rounded(), abs(number) < 1e15 { return String(Int(number)) }
+            return String(format: "%.2f", number)
         case let text as String:
             let data = (try? JSONSerialization.data(withJSONObject: [text])) ?? Data("[\"\"]".utf8)
             return String(String(decoding: data, as: UTF8.self).dropFirst().dropLast())

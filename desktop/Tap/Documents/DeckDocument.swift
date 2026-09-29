@@ -103,6 +103,12 @@ final class DeckDocument: NSDocument {
             if self.savingOwnFile {
                 self.savedSnapshot = snapshot
                 self.savedSnapshotRevision = self.textRevision
+                // The snapshot can hold a keystroke tap has not been sent
+                // yet: a key that lands after the autosave checked for
+                // unsent text, or a Save right after typing. tap is told
+                // what is about to be written before the write, so it
+                // knows the write as the app's own.
+                self.sessionController?.documentWillWrite(snapshot)
             }
             return Data(snapshot.utf8)
         }
@@ -354,12 +360,7 @@ final class DeckDocument: NSDocument {
            sessionController?.hasDiskConflict == true {
             return completionHandler(CocoaError(.userCancelled))
         }
-        // Save To, and any other save explicitly told to land somewhere
-        // other than this document's own file, is the one kind of save
-        // `data(ofType:)` below must not treat as taking this document's
-        // save snapshot: nothing it writes changes what tap should be
-        // showing for this deck's own file.
-        savingOwnFile = saveOperation != .saveToOperation
+        savingOwnFile = Self.writesOwnFile(saveOperation)
         super.save(to: url, ofType: typeName, for: saveOperation) { [weak self] error in
             guard let self else { return completionHandler(error) }
             if self.savingOwnFile {
@@ -386,14 +387,27 @@ final class DeckDocument: NSDocument {
         }
     }
 
+    /// Whether a save of `operation` writes this document's own file. Save
+    /// To and an autosave elsewhere (a deck with no file, such as an
+    /// untitled or deleted one, into NSDocument's autosave folder) land
+    /// somewhere else, so `data(ofType:)` neither
+    /// takes this document's save snapshot for them nor names their text
+    /// to tap: nothing they write changes what tap should be showing for
+    /// this deck's own file.
+    static func writesOwnFile(_ operation: NSDocument.SaveOperationType) -> Bool {
+        operation != .saveToOperation && operation != .autosaveElsewhereOperation
+    }
+
     /// Duplicate (Cmd-Shift-S) never reaches `save(to:ofType:for:
     /// completionHandler:)` above; it seeds the new document's data through
     /// `data(ofType:)` directly, without writing this document's own file at
-    /// all. That call still captures whatever the editor holds into
-    /// `savedSnapshot`, so it is cleared here once the duplicate is made, the
-    /// same way a save that lands elsewhere clears it in its own completion.
+    /// all. It runs as a save elsewhere, so that call neither takes the save
+    /// snapshot, which may belong to a save of the deck file still in
+    /// flight, nor names bytes to tap that the deck file never receives.
     override func duplicate() throws -> NSDocument {
-        defer { savedSnapshot = nil }
+        let wasSavingOwnFile = savingOwnFile
+        savingOwnFile = false
+        defer { savingOwnFile = wasSavingOwnFile }
         return try super.duplicate()
     }
 

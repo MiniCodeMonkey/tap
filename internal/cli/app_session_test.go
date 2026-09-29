@@ -3,7 +3,9 @@ package cli
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"io"
@@ -227,6 +229,55 @@ func TestAppSessionSavedWithoutABufferIsAnError(t *testing.T) {
 	harness := startAppSessionForTest(t, nil)
 	harness.send(appCommand{Type: appCommandSaved})
 	if event := harness.log.next(t, appEventError); event["code"] != appErrorNotEditing {
+		t.Errorf("event = %v, want not_editing", event)
+	}
+}
+
+// saving is recorded on the control loop, not queued behind the worker:
+// the watcher reads the write the app is about to make within about a
+// tenth of a second, and a command the worker is running can take longer.
+func TestAppSessionSavingIsRecordedWhileTheWorkerIsBusy(t *testing.T) {
+	release := make(chan struct{})
+	defer close(release)
+	var reloadStarted atomic.Bool
+	digests := make(chan [sha256.Size]byte, 1)
+	harness := startAppSessionForTest(t, func(options *appSessionOptions) {
+		options.Reload = func(context.Context) error {
+			reloadStarted.Store(true)
+			<-release
+			return nil
+		}
+		options.Saving = func(digest [sha256.Size]byte) { digests <- digest }
+	})
+	harness.send(appCommand{Type: appCommandReload})
+	waitUntil(t, "the reload is running", reloadStarted.Load)
+
+	want := sha256.Sum256([]byte("# Typed as the save began\n"))
+	harness.send(appCommand{Type: appCommandSaving, Digest: hex.EncodeToString(want[:])})
+	select {
+	case digest := <-digests:
+		if digest != want {
+			t.Errorf("digest = %x, want %x", digest, want)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("saving waited for the running reload")
+	}
+}
+
+func TestAppSessionSavingNeedsADigestAndABuffer(t *testing.T) {
+	harness := startAppSessionForTest(t, func(options *appSessionOptions) {
+		options.Saving = func([sha256.Size]byte) { t.Error("saving ran for a bad digest") }
+	})
+	for _, digest := range []string{"", "not hex", strings.Repeat("ab", sha256.Size-1)} {
+		harness.send(appCommand{Type: appCommandSaving, Digest: digest})
+		if event := harness.log.next(t, appEventError); event["code"] != appErrorInvalidCommand {
+			t.Errorf("saving with digest %q: event = %v, want invalid_command", digest, event)
+		}
+	}
+
+	present := startAppSessionForTest(t, nil)
+	present.send(appCommand{Type: appCommandSaving, Digest: strings.Repeat("ab", sha256.Size)})
+	if event := present.log.next(t, appEventError); event["code"] != appErrorNotEditing {
 		t.Errorf("event = %v, want not_editing", event)
 	}
 }
