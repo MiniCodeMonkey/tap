@@ -28,8 +28,9 @@ final class PresentingUITests: UITestCase {
         let play = application.descendants(matching: .any).matching(identifier: "play-button").firstMatch
         XCTAssertTrue(play.waitForExistence(timeout: 30))
         Thread.sleep(forTimeInterval: 2)
-        // The left part of the control is Play, the right part its chevron. A deck never played opens Present Settings first.
-        play.coordinate(withNormalizedOffset: CGVector(dx: 0.3, dy: 0.5)).click()
+        // One display never needs choosing, so Play alone would start at once: Present Settings comes from the Present menu.
+        application.menuBarItems["Present"].click()
+        application.menuBarItems["Present"].menuItems["Present Settings…"].click()
         let start = application.buttons["start-presenting"]
         XCTAssertTrue(start.waitForExistence(timeout: 5), "Present Settings")
         start.click()

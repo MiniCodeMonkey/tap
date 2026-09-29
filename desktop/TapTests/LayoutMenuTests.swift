@@ -149,7 +149,9 @@ final class LayoutMenuTests: HostedTestCase {
         }
         editor.mouseMoved(with: try event(.mouseMoved))
         XCTAssertEqual(editor.hoveredLayoutBoxIndex, 4, "the pointer over a quiet layout name shows the chip look")
-        editor.mouseExited(with: try event(.mouseExited))
+        let exit = try XCTUnwrap(NSEvent.enterExitEvent(with: .mouseExited, location: location, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                                                        windowNumber: window.windowNumber, context: nil, eventNumber: 0, trackingNumber: 0, userData: nil))
+        editor.mouseExited(with: exit)
         XCTAssertNil(editor.hoveredLayoutBoxIndex)
 
         editor.mouseDown(with: try event(.leftMouseDown))

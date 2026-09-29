@@ -308,7 +308,7 @@ final class PresentPopoverTests: PresentingTestCase {
     func testThePopoverWithOneDisplayHidesTheDisplayControls() async throws {
         let (_, controller) = try await openDeckForPresenting()
         let deckWindow = try windowController(controller)
-        deckWindow.playButtonClicked(modifiers: [])
+        deckWindow.showPresentSettings(nil)
         let popover = deckWindow.presentPopover
         XCTAssertTrue(popover.isShown)
         XCTAssertTrue(popover.displaysSection.isHidden, "no displays section, no caption, no menus")
