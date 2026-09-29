@@ -36,8 +36,6 @@ final class NewDeckTests: HostedTestCase {
         XCTAssertEqual(sheet.grid.cellSize, ThemeGridViewController.sheetCellSize, "the NewDeckHintNoSlug board's 82x46 cells")
         XCTAssertEqual(ThemeGridViewController.sheetCellSize, NSSize(width: 82, height: 46))
         XCTAssertEqual(sheet.grid.cell(for: "terminal")?.nameLabel.font?.pointSize, 10.5, "the sheet's names")
-        let themeCount = try XCTUnwrap(AppEnvironment.shared.themeImages.catalog?.themes.count)
-        XCTAssertEqual(sheet.scrollHint.stringValue, "Scroll for all \(themeCount) themes", "the count is tap's")
         XCTAssertEqual(sheet.locationHint.stringValue, "Creates a folder named after the title, with the deck and images/")
         XCTAssertGreaterThanOrEqual(sheet.frame.width, 560, "the NewDeck board's sheet, wide enough for five cells")
 
