@@ -177,7 +177,31 @@ final class SlideEditingTests: XCTestCase {
         XCTAssertNil(SlideEditing.apply(.setSkip(numbers: [1], skipped: false), to: Self.text, boxes: Self.boxes), "unskipping a slide that is not skipped changes nothing")
     }
 
+    func testSetLayoutRewritesOnlyThatSlidesDirectiveComment() throws {
+        let changed = try XCTUnwrap(SlideEditing.apply(.setLayout(number: 3, layout: "big-stat"), to: Self.text, boxes: Self.boxes))
+        let text = changed.text as NSString
+        XCTAssertEqual(text.substring(with: changed.boxes[2].range), "<!--\nlayout: big-stat\n-->\n# Three")
+        XCTAssertEqual(changed.selectedNumbers, [3])
+        XCTAssertEqual(changed.boxes.count, Self.boxes.count)
+        for number in [1, 2, 4, 5, 6, 7] {
+            XCTAssertEqual(text.substring(with: changed.boxes[number - 1].range), (Self.text as NSString).substring(with: Self.boxes[number - 1].range))
+        }
+
+        let added = try XCTUnwrap(SlideEditing.apply(.setLayout(number: 4, layout: "section"), to: Self.text, boxes: Self.boxes))
+        XCTAssertEqual((added.text as NSString).substring(with: added.boxes[3].range), "<!--\nlayout: section\n-->\n\n# Four\n\n```text\n---\n```")
+
+        XCTAssertNil(SlideEditing.apply(.setLayout(number: 9, layout: "section"), to: Self.text, boxes: Self.boxes))
+    }
+
+    func testDefaultRemovesTheLayoutDeclaration() throws {
+        let removed = try XCTUnwrap(SlideEditing.apply(.setLayout(number: 3, layout: "default"), to: Self.text, boxes: Self.boxes))
+        XCTAssertEqual((removed.text as NSString).substring(with: removed.boxes[2].range), "# Three")
+        XCTAssertFalse(removed.text.contains("layout:"))
+        XCTAssertNil(SlideEditing.apply(.setLayout(number: 4, layout: "default"), to: Self.text, boxes: Self.boxes), "a slide that declares nothing is already default")
+    }
+
     func testActionNames() {
+        XCTAssertEqual(SlideEditing.actionName(for: .setLayout(number: 2, layout: "title")), "Change Layout")
         XCTAssertEqual(SlideEditing.actionName(for: .move(numbers: [1], beforeNumber: nil)), "Move Slide")
         XCTAssertEqual(SlideEditing.actionName(for: .move(numbers: [1, 2], beforeNumber: nil)), "Move 2 Slides")
         XCTAssertEqual(SlideEditing.actionName(for: .duplicate(numbers: [1])), "Duplicate Slide")

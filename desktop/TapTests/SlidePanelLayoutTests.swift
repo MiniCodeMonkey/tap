@@ -294,3 +294,35 @@ final class SlidePanelLayoutTests: HostedTestCase {
         XCTAssertTrue(split.dividerPolicy.userMovedDivider, "a drag of the editor's own divider is recorded")
     }
 }
+
+extension SlidePanelLayoutTests {
+    func testThePinInThePanelHeader() async throws {
+        let document = try await openDeck(try Fixtures.copyDeck("seven-slides.md"))
+        try await waitForBoxes(document, count: 7)
+        let controller = try windowController(for: document)
+        let panel = try XCTUnwrap(document.sessionController).slidePanel
+        panel.view.layoutSubtreeIfNeeded()
+        XCTAssertEqual(panel.titleLabel.stringValue, "Slides")
+        XCTAssertTrue(controller.isPanelPinned)
+        XCTAssertTrue(panel.isPinned, "the pin is filled while the panel is docked")
+        XCTAssertEqual(panel.pinButton.accessibilityLabel(), "Stop Keeping Slides Open")
+        XCTAssertGreaterThan(panel.pinButton.frame.minX, panel.titleLabel.frame.maxX, "the pin sits at the right end of the header, beside the title")
+
+        panel.pinButton.performClick(nil)
+        XCTAssertFalse(controller.isPanelPinned, "clicking the filled pin unpins")
+        XCTAssertTrue(controller.splitViewController.sidebarItem.isCollapsed)
+        XCTAssertTrue(panel.view.isDescendant(of: controller.panelOverlay), "the panel returns to peek behaviour")
+        XCTAssertFalse(panel.isPinned)
+        XCTAssertEqual(panel.pinButton.accessibilityLabel(), "Keep Slides Open")
+
+        // Peeked, the pin is unfilled and clicking it docks the panel.
+        controller.panelPeek.showDelay = 0.05
+        controller.panelPeek.pointerEnteredButton()
+        try await waitUntil(timeout: 2, "the overlay to show") { !controller.panelOverlay.isHidden }
+        panel.pinButton.performClick(nil)
+        XCTAssertTrue(controller.isPanelPinned, "clicking the unfilled pin docks")
+        XCTAssertFalse(controller.splitViewController.sidebarItem.isCollapsed)
+        XCTAssertTrue(controller.panelOverlay.isHidden)
+        XCTAssertTrue(panel.isPinned)
+    }
+}

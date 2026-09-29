@@ -7,7 +7,7 @@ Feature: Slide structure in the editor
     When the app sends the buffer to "PUT /api/app/source"
     Then tap returns, for each slide: its line range, layout, title, step count,
       and its code blocks with driver and live flag                          # NEW fields: code blocks
-    And the app draws one box per slide with its number, layout, and title
+    And the app draws one box per slide with its number and layout menu
 
   Scenario: Typing never makes boxes jump
     Given tap has not answered yet for my last keystroke
@@ -45,6 +45,20 @@ Feature: Slide structure in the editor
   Scenario: Code blocks with a live driver
     Given slide 4 has a sql block with "driver: sqlite"
     Then the header of box 4 shows "sql, live"
+
+  Scenario: Change a slide's layout from its header
+    Given the cursor is in slide 3, which has layout "Big Stat"
+    Then the header of box 3 shows "Big Stat" as a tinted chip with a chevron
+    And other boxes show their layout name quietly, as a chip while the pointer is over it
+    When I click the layout name
+    Then a menu lists tap's layouts with a checkmark on "Big Stat", then "Show All Layouts…"
+    When I choose "Two Columns"
+    Then only slide 3's directive comment changes to "layout: two-column"
+    And it is one undo step named "Change Layout"
+    When I choose "Default"
+    Then the layout line is removed from slide 3's directive comment
+    When I choose "Show All Layouts…"
+    Then the layout gallery opens for slide 3, and picking a layout changes that slide
 
   Scenario: Box badges
     Then a box header shows the step count, for example "2 steps"
