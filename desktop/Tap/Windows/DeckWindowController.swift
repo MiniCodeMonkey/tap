@@ -183,6 +183,7 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
             }
             self.panelOverlay.isHidden = true
         }
+        sessionController.slidePanel.onTogglePin = { [weak self] in self?.toggleSlidePanel(nil) }
         let deckURL = sessionController.document?.fileURL
         setPanelPinned(deckURL.map { AppEnvironment.shared.panelState.isPinned(deck: $0) } ?? true)
         // Two things change whether the sidebar is collapsed besides
@@ -349,6 +350,7 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
             panelOverlay.isHidden = true
         }
         slidesButton.state = pinned ? .on : .off
+        sessionController.slidePanel.setPinned(pinned)
         if let deck = sessionController.document?.fileURL {
             AppEnvironment.shared.panelState.setPinned(pinned, deck: deck)
         }
@@ -1173,7 +1175,7 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
         if identifier == Self.slidesItemIdentifier {
             let item = NSToolbarItem(itemIdentifier: identifier)
             item.label = "Slides"
-            item.toolTip = "Hover to peek at the slides, click to pin them"
+            item.toolTip = "Slides"
             slidesButton.image = NSImage(systemSymbolName: "sidebar.left", accessibilityDescription: "Slides")
             slidesButton.bezelStyle = .toolbar
             slidesButton.setButtonType(.pushOnPushOff)
