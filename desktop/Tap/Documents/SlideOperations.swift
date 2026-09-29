@@ -107,6 +107,23 @@ extension DeckSessionController {
         return SlideSelection(target: .slides(numbers, markdowns: markdown(forSlides: numbers)))
     }
 
+    /// Names one slide by its number and what it holds now, so the command
+    /// that acts on it refuses rather than change whichever slide has that
+    /// number once tap's answer arrives.
+    func selection(forSlide number: Int) -> SlideSelection {
+        SlideSelection(target: .slides([number], markdowns: markdown(forSlides: [number])))
+    }
+
+    /// Declares `layout` for the slide `selection` names, as one undo step
+    /// named "Change Layout"; "default" removes the declaration. A slide
+    /// that already has the layout is left alone.
+    func changeLayout(of selection: SlideSelection, to layout: String) {
+        perform(on: selection) { numbers in
+            guard numbers.count == 1 else { return nil }
+            return .setLayout(number: numbers[0], layout: layout)
+        }
+    }
+
     /// The numbers `selection` names now, on tap's ranges, or nil when its
     /// slides no longer hold the text they held when it was named.
     func resolve(_ selection: SlideSelection) -> [Int]? {
@@ -212,6 +229,7 @@ extension DeckSessionController {
         case .move(let moved, _): numbers = moved
         case .duplicate(let selected), .delete(let selected): numbers = selected
         case .setSkip(let selected, _): numbers = selected
+        case .setLayout(let number, _): numbers = [number]
         case .insert: return 0
         }
         guard let first = numbers.min(), let index = editor.currentBoxIndex, editor.boxes[index].slide.number == first else { return 0 }

@@ -105,9 +105,22 @@ final class LayoutGalleryController: NSObject, NSCollectionViewDataSource, NSCol
         popover.delegate = self
     }
 
+    /// Set while the gallery changes a slide's layout: the pick goes here
+    /// instead of `onPick`. Cleared by the next `show` for a new slide.
+    private var changePick: ((String) -> Void)?
+
+    func show(templates: [LayoutTemplate], relativeTo rect: NSRect, of view: NSView, changingSlide number: Int, onPick: @escaping (String) -> Void) {
+        show(templates: templates, relativeTo: rect, of: view, footer: "Changes the layout of slide \(number)", changePick: onPick)
+    }
+
     func show(templates: [LayoutTemplate], relativeTo rect: NSRect, of view: NSView, afterSlide number: Int?) {
+        show(templates: templates, relativeTo: rect, of: view, footer: number.map { "Inserts after slide \($0)" } ?? "Inserts at the end", changePick: nil)
+    }
+
+    private func show(templates: [LayoutTemplate], relativeTo rect: NSRect, of view: NSView, footer: String, changePick: ((String) -> Void)?) {
+        self.changePick = changePick
         self.templates = templates
-        footerLabel.stringValue = number.map { "Inserts after slide \($0)" } ?? "Inserts at the end"
+        footerLabel.stringValue = footer
         collectionView.reloadData()
         popover.show(relativeTo: rect, of: view, preferredEdge: .maxY)
         isShown = true
@@ -129,7 +142,7 @@ final class LayoutGalleryController: NSObject, NSCollectionViewDataSource, NSCol
     func pick(_ name: String) {
         guard templates.contains(where: { $0.name == name }) else { return }
         close()
-        onPick?(name)
+        (changePick ?? onPick)?(name)
     }
 
     func collectionView(_ collectionView: NSCollectionView, numberOfItemsInSection section: Int) -> Int { templates.count }

@@ -7,6 +7,7 @@ protocol EditorTextViewDelegate: AnyObject {
     func editor(_ editor: EditorTextView, dropSlides payload: SlideDragPayload, beforeNumber: Int?, isMove: Bool) -> Bool
     func editor(_ editor: EditorTextView, contextMenuForBoxAt index: Int) -> NSMenu?
     func editor(_ editor: EditorTextView, applyFixItForBoxAt index: Int)
+    func editor(_ editor: EditorTextView, layoutMenuForBoxAt index: Int) -> NSMenu?
     func editor(_ editor: EditorTextView, insertImages files: [URL])
     func editor(_ editor: EditorTextView, openComponentLinkAt characterIndex: Int) -> Bool
 }
@@ -16,6 +17,7 @@ extension EditorTextViewDelegate {
     func editor(_ editor: EditorTextView, dropSlides payload: SlideDragPayload, beforeNumber: Int?, isMove: Bool) -> Bool { false }
     func editor(_ editor: EditorTextView, contextMenuForBoxAt index: Int) -> NSMenu? { nil }
     func editor(_ editor: EditorTextView, applyFixItForBoxAt index: Int) {}
+    func editor(_ editor: EditorTextView, layoutMenuForBoxAt index: Int) -> NSMenu? { nil }
     func editor(_ editor: EditorTextView, insertImages files: [URL]) {}
     func editor(_ editor: EditorTextView, openComponentLinkAt characterIndex: Int) -> Bool { false }
 }
@@ -492,7 +494,7 @@ final class EditorTextView: NSTextView {
         for index in visibleBoxIndices() {
             guard let boxRect = boxRect(forBoxAt: index) else { continue }
             if boxRect.intersects(rect) {
-                draw(header: header(forBoxAt: index), skipped: boxes[index].slide.skip, in: boxRect, isCurrent: index == currentBoxIndex)
+                draw(header: header(forBoxAt: index), boxIndex: index, skipped: boxes[index].slide.skip, in: boxRect, isCurrent: index == currentBoxIndex)
             }
         }
         if let before = dropIndicatorBeforeNumber, let y = dropIndicatorY(beforeNumber: before) {
@@ -541,6 +543,33 @@ final class EditorTextView: NSTextView {
         return (pills, badgeX)
     }
 
+    private static let layoutChipAttributes: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 11, weight: .semibold), .foregroundColor: NSColor.controlAccentColor]
+    private static let layoutChipHoverAttributes: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 11, weight: .semibold), .foregroundColor: NSColor.labelColor]
+    private static let layoutQuietAttributes: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 11), .foregroundColor: NSColor.secondaryLabelColor]
+
+    static func layoutChipTitle(_ name: String) -> String { name + " \u{25BE}" }
+
+    /// The layout pop-up in a header: right of the number, 18 points tall,
+    /// as wide as the name and its chevron. It is sized for the chip's
+    /// semibold text whether it is drawn as the chip or quietly, so the
+    /// live segments after it never shift when the chip look comes and goes.
+    /// Drawing and the click's hit test both come here.
+    static func layoutChipRect(name: String, leftEdge: CGFloat, headerTop: CGFloat) -> NSRect {
+        let width = NSAttributedString(string: layoutChipTitle(name), attributes: layoutChipAttributes).size().width + 14
+        return NSRect(x: leftEdge, y: headerTop + 5, width: width, height: 18)
+    }
+
+    /// The layout pop-up of a box's header, in view coordinates; nil for a box off screen.
+    func layoutChipRect(forBoxAt index: Int) -> NSRect? {
+        guard boxes.indices.contains(index), let headerRect = headerRect(forBoxAt: index) else { return nil }
+        let header = self.header(forBoxAt: index)
+        let number = NSAttributedString(string: header.number, attributes: [.font: NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .bold)])
+        let chip = Self.layoutChipRect(name: header.layoutName, leftEdge: headerRect.minX + 12 + number.size().width + 7, headerTop: headerRect.minY)
+        let badgesLeftEdge = Self.badgeLayout(for: header.badges, headerMaxX: headerRect.maxX, headerTop: headerRect.minY).leftEdge
+        let limit = (fixItRect(forBoxAt: index)?.minX ?? badgesLeftEdge) - 8
+        return NSRect(x: chip.minX, y: chip.minY, width: min(chip.width, max(0, limit - chip.minX)), height: chip.height)
+    }
+
     /// The fix-it pill: left of the badges, 18 points tall, as wide as its
     /// title. Drawing and the hit test both come here, so a click lands
     /// where the pill was drawn.
@@ -558,7 +587,7 @@ final class EditorTextView: NSTextView {
         return Self.fixItRect(title: fixIt.title, badgesLeftEdge: badgesLeftEdge, headerTop: headerRect.minY)
     }
 
-    private func draw(header: BoxHeader, skipped: Bool, in rect: NSRect, isCurrent: Bool) {
+    private func draw(header: BoxHeader, boxIndex: Int, skipped: Bool, in rect: NSRect, isCurrent: Bool) {
         let hasErrors = !header.errors.isEmpty
         let path = NSBezierPath(roundedRect: rect, xRadius: 10, yRadius: 10)
         if isCurrent {
@@ -605,8 +634,21 @@ final class EditorTextView: NSTextView {
             NSAttributedString(string: fixIt.title, attributes: Self.fixItAttributes).draw(at: NSPoint(x: pill.minX + 8, y: pill.minY + 2))
             metaLimit = pill.minX
         }
+        let chip = Self.layoutChipRect(name: header.layoutName, leftEdge: x, headerTop: rect.minY)
+        let showsChip = isCurrent || hoveredLayoutBoxIndex == boxIndex
+        let chipVisibleWidth = min(chip.width, max(0, metaLimit - chip.minX - 8))
+        if chipVisibleWidth > 0 {
+            let drawnChip = NSRect(x: chip.minX, y: chip.minY, width: chipVisibleWidth, height: chip.height)
+            if showsChip {
+                NSColor.controlAccentColor.withAlphaComponent(isCurrent ? 0.16 : 0.10).setFill()
+                NSBezierPath(roundedRect: drawnChip, xRadius: 9, yRadius: 9).fill()
+            }
+            NSAttributedString(string: Self.layoutChipTitle(header.layoutName), attributes: showsChip && isCurrent ? Self.layoutChipAttributes : (showsChip ? Self.layoutChipHoverAttributes : Self.layoutQuietAttributes))
+                .draw(with: NSRect(x: drawnChip.minX + 7, y: drawnChip.minY + 2, width: max(0, drawnChip.width - 10), height: 14), options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
+        }
+        let metaX = chip.maxX + 6
         NSAttributedString(string: header.meta, attributes: Self.metaAttributes)
-            .draw(with: NSRect(x: x, y: baseline, width: max(0, metaLimit - x - 8), height: 16), options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
+            .draw(with: NSRect(x: metaX, y: baseline, width: max(0, metaLimit - metaX - 8), height: 16), options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
 
         for (line, message) in header.errors.enumerated() {
             let y = headerBottom + 4 + CGFloat(line) * Self.errorLineHeight
@@ -684,6 +726,53 @@ final class EditorTextView: NSTextView {
         return file
     }
 
+    // MARK: Layout pop-up
+
+    /// The box whose layout pop-up the pointer is over, drawn as the chip.
+    private(set) var hoveredLayoutBoxIndex: Int?
+    private var layoutHoverTrackingArea: NSTrackingArea?
+
+    /// Pops the layout menu up under the pop-up. A seam: a test replaces it
+    /// to read the menu without a menu tracking loop.
+    lazy var layoutMenuPresenter: (NSMenu, NSRect) -> Void = { [weak self] menu, rect in
+        guard let self else { return }
+        menu.popUp(positioning: nil, at: NSPoint(x: rect.minX, y: rect.maxY + 2), in: self)
+    }
+
+    func showLayoutMenu(forBoxAt index: Int) {
+        guard let rect = layoutChipRect(forBoxAt: index), let menu = editorDelegate?.editor(self, layoutMenuForBoxAt: index) else { return }
+        layoutMenuPresenter(menu, rect)
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let layoutHoverTrackingArea { removeTrackingArea(layoutHoverTrackingArea) }
+        let area = NSTrackingArea(rect: .zero, options: [.mouseMoved, .mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect], owner: self, userInfo: nil)
+        addTrackingArea(area)
+        layoutHoverTrackingArea = area
+    }
+
+    /// Moves the hover to `index` (nil for none) and redraws the two headers it touches.
+    func setHoveredLayoutBox(_ index: Int?) {
+        guard index != hoveredLayoutBoxIndex else { return }
+        for touched in [hoveredLayoutBoxIndex, index].compactMap({ $0 }) {
+            if let rect = headerRect(forBoxAt: touched) { setNeedsDisplay(rect) }
+        }
+        hoveredLayoutBoxIndex = index
+    }
+
+    override func mouseMoved(with event: NSEvent) {
+        super.mouseMoved(with: event)
+        let point = convert(event.locationInWindow, from: nil)
+        let index = boxIndex(forHeaderAt: point)
+        setHoveredLayoutBox(index.flatMap { layoutChipRect(forBoxAt: $0)?.contains(point) == true ? $0 : nil })
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        super.mouseExited(with: event)
+        setHoveredLayoutBox(nil)
+    }
+
     // MARK: Dragging a header
 
     private(set) var dropIndicatorBeforeNumber: Int?
@@ -716,6 +805,11 @@ final class EditorTextView: NSTextView {
         if event.modifierFlags.contains(.command), !event.modifierFlags.contains(.control) {
             let index = characterIndexForInsertion(at: point)
             if index < (string as NSString).length, editorDelegate?.editor(self, openComponentLinkAt: index) == true { return }
+        }
+        // A click on the layout pop-up opens its menu; a Control-click is a context menu click.
+        if !event.modifierFlags.contains(.control), isEditable, let index = boxIndex(forHeaderAt: point), layoutChipRect(forBoxAt: index)?.contains(point) == true {
+            showLayoutMenu(forBoxAt: index)
+            return
         }
         // A Control-click on the pill is a context menu click, as anywhere on the header.
         if !event.modifierFlags.contains(.control), let index = boxIndex(forHeaderAt: point), let pill = fixItRect(forBoxAt: index), pill.contains(point) {
@@ -754,7 +848,7 @@ final class EditorTextView: NSTextView {
     /// The dragged picture: the header's number and title, with a count.
     private func headerImage(forBoxAt index: Int, count: Int) -> NSImage {
         let slide = boxes[index].slide
-        let label = slide.title.isEmpty ? BoxHeader(slide: slide).meta : slide.title
+        let label = slide.title.isEmpty ? BoxHeader(slide: slide).layoutName : slide.title
         let text = count > 1 ? "\(slide.number) \(label)  +\(count - 1)" : "\(slide.number) \(label)"
         let attributes: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 12, weight: .semibold), .foregroundColor: NSColor.labelColor]
         let size = (text as NSString).size(withAttributes: attributes)
@@ -887,12 +981,23 @@ final class EditorTextView: NSTextView {
     /// slide on the next call, until the box leaves the visible range.
     private var boxAccessibilityElements: [Int: NSAccessibilityElement] = [:]
     private var dropIndicatorAccessibilityElement: NSAccessibilityElement?
+    private var layoutAccessibilityElements: [Int: LayoutPopUpAccessibilityElement] = [:]
+
+    /// A layout pop-up's element: a pop-up button that opens its menu when pressed.
+    private final class LayoutPopUpAccessibilityElement: NSAccessibilityElement {
+        var onPress: () -> Void = {}
+        override func accessibilityPerformPress() -> Bool {
+            onPress()
+            return true
+        }
+    }
 
     /// The text view's own children, plus one element per visible box and
     /// one for the drop indicator while a drag is over the editor.
     override func accessibilityChildren() -> [Any]? {
         var children = super.accessibilityChildren() ?? []
         var visibleElements: [Int: NSAccessibilityElement] = [:]
+        var visiblePopUps: [Int: LayoutPopUpAccessibilityElement] = [:]
         for index in visibleBoxIndices() {
             guard let rect = boxRect(forBoxAt: index) else { continue }
             let number = boxes[index].slide.number
@@ -907,8 +1012,27 @@ final class EditorTextView: NSTextView {
             element.setAccessibilityLabel(SlideAccessibility.label(for: boxes[index].slide))
             visibleElements[number] = element
             children.append(element)
+            if let chip = layoutChipRect(forBoxAt: index) {
+                let popUp = layoutAccessibilityElements[number] ?? {
+                    let popUp = LayoutPopUpAccessibilityElement()
+                    popUp.setAccessibilityRole(.popUpButton)
+                    popUp.setAccessibilityParent(self)
+                    popUp.setAccessibilityIdentifier("layout-\(number)")
+                    popUp.setAccessibilityLabel("Layout")
+                    return popUp
+                }()
+                popUp.setAccessibilityFrame(convertToScreen(chip))
+                popUp.setAccessibilityValue(header(forBoxAt: index).layoutName)
+                popUp.onPress = { [weak self] in
+                    guard let self, let box = self.boxes.firstIndex(where: { $0.slide.number == number }) else { return }
+                    self.showLayoutMenu(forBoxAt: box)
+                }
+                visiblePopUps[number] = popUp
+                children.append(popUp)
+            }
         }
         boxAccessibilityElements = visibleElements
+        layoutAccessibilityElements = visiblePopUps
         // A drag is over the editor exactly while the count is set: both
         // update paths set it and clearDropIndicator zeroes it.
         if dropIndicatorCount > 0 {
