@@ -753,8 +753,9 @@ final class EditorTextView: NSTextView {
 
     /// The dragged picture: the header's number and title, with a count.
     private func headerImage(forBoxAt index: Int, count: Int) -> NSImage {
-        let header = BoxHeader(slide: boxes[index].slide)
-        let text = count > 1 ? "\(header.number) \(header.meta)  +\(count - 1)" : "\(header.number) \(header.meta)"
+        let slide = boxes[index].slide
+        let label = slide.title.isEmpty ? BoxHeader(slide: slide).meta : slide.title
+        let text = count > 1 ? "\(slide.number) \(label)  +\(count - 1)" : "\(slide.number) \(label)"
         let attributes: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 12, weight: .semibold), .foregroundColor: NSColor.labelColor]
         let size = (text as NSString).size(withAttributes: attributes)
         return NSImage(size: NSSize(width: size.width + 24, height: Self.headerHeight), flipped: false) { rect in

@@ -1,7 +1,7 @@
 import Foundation
 
 /// What a slide box's header shows: the number, a meta line with the
-/// layout, title and live code blocks, badges for the reveal count, a
+/// layout's display name and live code blocks, badges for the reveal count, a
 /// skipped slide and each live-code driver, the error lines under the
 /// header (the slide's own, then each live block's problem with its line),
 /// and the one fix-it the app offers.
@@ -27,8 +27,7 @@ public struct BoxHeader: Equatable, Sendable {
     public init(slide: Slide, declaredDrivers: [String]? = nil, frontmatterIsBroken: Bool = false) {
         number = "\(slide.number)"
         var parts: [String] = []
-        if !slide.layout.isEmpty { parts.append(slide.layout) }
-        if !slide.title.isEmpty { parts.append(slide.title) }
+        if !slide.layout.isEmpty { parts.append(LayoutCatalog.displayName(slide.layout)) }
         let liveBlocks = slide.codeBlocks.filter(\.live)
         if !liveBlocks.isEmpty {
             parts.append(liveBlocks.map { "\($0.language.isEmpty ? "code" : $0.language), live" }.joined(separator: "; "))

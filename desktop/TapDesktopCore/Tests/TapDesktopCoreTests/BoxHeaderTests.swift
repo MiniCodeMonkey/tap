@@ -19,8 +19,8 @@ final class BoxHeaderTests: XCTestCase {
         let header = BoxHeader(slide: Slide(number: 4, startLine: 1, endLine: 5, layout: "code-focus", title: "Query",
                                             codeBlocks: [CodeBlock(block: 1, language: "sql", driver: "sqlite", live: true, line: 3)]))
         XCTAssertEqual(header.number, "4")
-        XCTAssertEqual(header.meta, "code-focus · Query · sql, live")
-        XCTAssertEqual(BoxHeader(slide: Slide(number: 2, startLine: 1, endLine: 1, layout: "section", title: "")).meta, "section")
+        XCTAssertEqual(header.meta, "Code Focus · sql, live")
+        XCTAssertEqual(BoxHeader(slide: Slide(number: 2, startLine: 1, endLine: 1, layout: "section", title: "")).meta, "Section")
     }
 
     func testASkippedSlideAndErrorsShowInTheHeader() {
