@@ -41,6 +41,8 @@ final class AppEnvironment {
     /// Which display is the audience for each pair of displays, across
     /// decks. A test replaces this with a store on a fresh UserDefaults suite.
     var displayAssignments = DisplayAssignmentStore()
+    /// The displays each deck was last played on, so Play asks first when a deck is new or the displays changed.
+    var presentedDisplays = PresentedDisplaysStore()
     /// The port each deck's talks run on, so the talk pages keep one origin.
     var deckPorts = DeckPortStore()
     /// The Present popover's last settings, which Cmd+Option+P starts with.
@@ -157,6 +159,7 @@ final class AppEnvironment {
             panelState = SlidePanelState(defaults: defaults)
             lastLayout = LastLayout(defaults: defaults)
             displayAssignments = DisplayAssignmentStore(defaults: defaults)
+            presentedDisplays = PresentedDisplaysStore(defaults: defaults)
             deckPorts = DeckPortStore(defaults: defaults)
             presentationSettings = PresentationSettingsStore(defaults: defaults)
             focusHint = FocusHintState(defaults: defaults)
@@ -199,6 +202,15 @@ final class AppEnvironment {
         var variables = await loginShellLoader.environment().variables
         variables.merge(extraEnvironment) { _, extra in extra }
         return variables
+    }
+
+    /// A test's answer to whether cloudflared is installed; nil looks on the PATH tap runs with.
+    var cloudflaredProbe: (() async -> Bool)?
+
+    /// Whether tap can start its tunnel, the way tap decides: cloudflared on the PATH it runs with.
+    func isCloudflaredInstalled() async -> Bool {
+        if let cloudflaredProbe { return await cloudflaredProbe() }
+        return CloudflaredLocator.isInstalled(searchPath: await tapEnvironment()["PATH"])
     }
 
     /// The environment closure falls back to the app's own process

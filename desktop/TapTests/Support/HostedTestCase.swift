@@ -47,6 +47,8 @@ class HostedTestCase: XCTestCase {
         Self.dataStoresToRemove.append(dataStoreIdentifier)
         AppEnvironment.shared.presentationDataStore = WKWebsiteDataStore(forIdentifier: dataStoreIdentifier)
         AppEnvironment.shared.displayAssignments = DisplayAssignmentStore(defaults: try XCTUnwrap(UserDefaults(suiteName: "TapTests.displays.\(UUID().uuidString)")))
+        AppEnvironment.shared.presentedDisplays = PresentedDisplaysStore(defaults: try XCTUnwrap(UserDefaults(suiteName: "TapTests.presented.\(UUID().uuidString)")))
+        AppEnvironment.shared.cloudflaredProbe = { true }
         AppEnvironment.shared.deckPorts = DeckPortStore(defaults: try XCTUnwrap(UserDefaults(suiteName: "TapTests.ports.\(UUID().uuidString)")))
         AppEnvironment.shared.presentationSettings = PresentationSettingsStore(defaults: try XCTUnwrap(UserDefaults(suiteName: "TapTests.present.\(UUID().uuidString)")))
         AppEnvironment.shared.presentExecutableURL = nil
