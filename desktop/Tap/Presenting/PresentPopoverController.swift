@@ -15,6 +15,8 @@ final class PresentOptionRow: NSStackView {
         titleLabel.font = .systemFont(ofSize: 13)
         sublineLabel.font = .systemFont(ofSize: 11.5)
         sublineLabel.textColor = .secondaryLabelColor
+        // The switch and the spacing before it take 48 points of the popover's width.
+        sublineLabel.preferredMaxLayoutWidth = PresentPopoverController.contentWidth - 48
         var titleViews: [NSView] = [titleLabel]
         if hasHelp {
             let button = NSButton()
@@ -244,6 +246,7 @@ final class PresentPopoverController: NSObject, NSPopoverDelegate {
         ])
         passwordRow.widthAnchor.constraint(equalTo: groupStack.widthAnchor).isActive = true
         passwordField.widthAnchor.constraint(equalTo: groupStack.widthAnchor).isActive = true
+        passwordRow.sublineLabel.preferredMaxLayoutWidth = Self.contentWidth - 24 - 48 // the group's insets
         remoteGroup.setAccessibilityIdentifier("remote-options")
         remoteGroup.isHidden = true
 
@@ -299,7 +302,7 @@ final class PresentPopoverController: NSObject, NSPopoverDelegate {
     }
 
     func show(context: Context, relativeTo rect: NSRect, of view: NSView) {
-        startFromPopUp.selectItem(at: 0)
+        resetStartFrom()
         update(context: context)
         popover.show(relativeTo: rect, of: view, preferredEdge: .maxY)
         isShown = true
@@ -312,8 +315,14 @@ final class PresentPopoverController: NSObject, NSPopoverDelegate {
         refresh()
     }
 
+    /// Start from goes back to the cursor's slide: a choice of Beginning belongs to one start.
+    private func resetStartFrom() {
+        startFromPopUp.selectItem(at: 0)
+    }
+
     func close() {
         closeHelp()
+        resetStartFrom()
         isShown = false
         stopObservingDisplays()
         popover.performClose(nil)
@@ -325,6 +334,7 @@ final class PresentPopoverController: NSObject, NSPopoverDelegate {
             return
         }
         isShown = false
+        resetStartFrom()
         stopObservingDisplays()
         closeHelp()
     }
@@ -393,6 +403,7 @@ final class PresentPopoverController: NSObject, NSPopoverDelegate {
     func loadSettings(_ settings: PresentationSettings) {
         recordSwitch.state = settings.record ? .on : .off
         phoneRemoteSwitch.state = settings.phoneRemote ? .on : .off
+        resetStartFrom()
         refresh()
     }
 

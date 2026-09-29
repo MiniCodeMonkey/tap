@@ -583,7 +583,10 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
     /// cursor's slide.
     @objc func play(_ sender: Any?) {
         guard canStartATalk, !showsSettingsForMissingCloudflared() else { return }
-        startPresenting(freshPopover().options(mode: .play))
+        var options = freshPopover().options(mode: .play)
+        // The cursor's slide, whatever a Start from choice left in the popover.
+        options.startSlide = sessionController.currentSlideNumber ?? 1
+        startPresenting(options)
     }
 
     /// Present > Play from Beginning, and a Shift-click on Play: the last
@@ -624,13 +627,13 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
     }
 
     /// A click on the toolbar's Play: the talk starts at once, from the
-    /// cursor's slide, or with Shift from slide 1. Present Settings opens
-    /// instead when this deck was never played, or the connected displays
-    /// are not the ones it was last played on, so nobody starts on the
-    /// wrong screen.
+    /// cursor's slide, or with Shift from slide 1. With two or more displays,
+    /// Present Settings opens instead when this deck was never played, or the
+    /// connected displays are not the ones it was last played on, so nobody
+    /// starts on the wrong screen. One display leaves nothing to choose.
     func playButtonClicked(modifiers: NSEvent.ModifierFlags) {
         guard canStartATalk else { return }
-        guard hasPlayedOnTheConnectedDisplays else {
+        guard !needsSettingsBeforePlaying else {
             showPresentSettings(nil)
             return
         }
@@ -639,6 +642,12 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
         } else {
             play(nil)
         }
+    }
+
+    /// True when a click on Play should open Present Settings first: several
+    /// displays are connected and the deck was not last played on them.
+    var needsSettingsBeforePlaying: Bool {
+        sessionController.presentation.screens().count > 1 && !hasPlayedOnTheConnectedDisplays
     }
 
     /// True when this deck's last Play was on the displays connected now, by name.
@@ -701,9 +710,14 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
     func startPresenting(_ options: PresentationOptions, savingSettings: Bool = false) {
         guard canStartATalk else { return }
         if refusedForAnUpdateWindow() { return }
-        if savingSettings { AppEnvironment.shared.presentationSettings.settings = presentPopover.settings }
+        if savingSettings {
+            // The remote is saved off when this start left it out (cloudflared missing), so later Plays do not reopen Present Settings.
+            let controls = presentPopover.settings
+            AppEnvironment.shared.presentationSettings.settings = PresentationSettings(record: controls.record, phoneRemote: controls.phoneRemote && options.phoneRemote)
+        }
         let presentation = sessionController.presentation
-        if options.mode == .play, let deck = presentation.deckURL() {
+        // Rehearse from Present Settings counts too: the person saw and accepted these displays there.
+        if options.mode == .play || savingSettings, let deck = presentation.deckURL() {
             AppEnvironment.shared.presentedDisplays.recordPlay(of: deck, on: presentation.screens())
         }
         // Play with the popover open starts at once; the popover goes, so a later click on its Start cannot save settings for a talk it did not start.

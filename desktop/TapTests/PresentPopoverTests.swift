@@ -54,9 +54,11 @@ final class PresentPopoverTests: PresentingTestCase {
         let (_, controller) = try await openDeckForPresenting()
         let deckWindow = try windowController(controller)
         let popover = deckWindow.presentPopover
+        let screens = halfScreens()
+        controller.presentation.screens = { screens }
         XCTAssertFalse(deckWindow.hasPlayedOnTheConnectedDisplays)
         deckWindow.playButtonClicked(modifiers: [])
-        XCTAssertTrue(popover.isShown, "a deck never played opens Present Settings first")
+        XCTAssertTrue(popover.isShown, "a deck never played on two displays opens Present Settings first")
         XCTAssertNil(controller.presentation.options, "nothing started")
         popover.startButton.performClick(nil)
         XCTAssertFalse(popover.isShown)
@@ -67,6 +69,70 @@ final class PresentPopoverTests: PresentingTestCase {
         try await waitUntil(timeout: 20, "Play to be allowed again") { deckWindow.canStartATalk }
         deckWindow.playButtonClicked(modifiers: [])
         XCTAssertFalse(popover.isShown, "the next click starts at once")
+        XCTAssertEqual(controller.presentation.state, .starting)
+    }
+
+    func testTheFirstClickOnOneDisplayJustPlays() async throws {
+        let (_, controller) = try await openDeckForPresenting()
+        let deckWindow = try windowController(controller)
+        XCTAssertFalse(deckWindow.hasPlayedOnTheConnectedDisplays)
+        XCTAssertFalse(deckWindow.needsSettingsBeforePlaying, "one display leaves nothing to choose")
+        deckWindow.playButtonClicked(modifiers: [])
+        XCTAssertFalse(deckWindow.presentPopover.isShown)
+        XCTAssertEqual(controller.presentation.options?.mode, .play)
+        try await waitUntil(timeout: 40, "the talk") { controller.presentation.state == .presenting }
+    }
+
+    func testRehearseFromPresentSettingsRecordsTheDisplays() async throws {
+        let (_, controller) = try await openDeckForPresenting()
+        let deckWindow = try windowController(controller)
+        let screens = halfScreens()
+        controller.presentation.screens = { screens }
+        XCTAssertTrue(deckWindow.needsSettingsBeforePlaying)
+        deckWindow.showPresentSettings(nil)
+        deckWindow.presentPopover.rehearseButton.performClick(nil)
+        XCTAssertEqual(controller.presentation.options?.mode, .rehearse)
+        XCTAssertTrue(deckWindow.hasPlayedOnTheConnectedDisplays, "the person accepted these displays in Present Settings")
+        XCTAssertFalse(deckWindow.needsSettingsBeforePlaying)
+        try await waitUntil(timeout: 40, "the rehearsal") { controller.presentation.state == .presenting }
+    }
+
+    /// A Beginning chosen for one start does not carry into the next Play.
+    func testStartFromBeginningDoesNotLeakIntoLaterPlays() async throws {
+        let (_, controller) = try await openDeckForPresenting()
+        let deckWindow = try windowController(controller)
+        let popover = deckWindow.presentPopover
+        controller.jumpToSlide(number: 2)
+        deckWindow.showPresentSettings(nil)
+        popover.startFromPopUp.selectItem(at: 1)
+        popover.startButton.performClick(nil)
+        XCTAssertEqual(controller.presentation.options?.startSlide, 1, "Beginning starts on slide 1")
+        try await waitUntil(timeout: 40, "the talk") { controller.presentation.state == .presenting }
+        try await stopPresenting(controller)
+        try await waitUntil(timeout: 20, "Play to be allowed again") { deckWindow.canStartATalk }
+        controller.jumpToSlide(number: 3)
+        deckWindow.play(nil)
+        XCTAssertEqual(controller.presentation.options?.startSlide, 3, "the cursor's slide, not the earlier Beginning")
+        try await waitUntil(timeout: 40, "the second talk") { controller.presentation.state == .presenting }
+    }
+
+    /// With the remote on and cloudflared missing, Play in Present Settings starts without the remote and saves that.
+    func testPlayingWithoutCloudflaredSavesTheRemoteOff() async throws {
+        AppEnvironment.shared.cloudflaredProbe = { false }
+        AppEnvironment.shared.presentationSettings.settings = PresentationSettings(record: false, phoneRemote: true)
+        let (_, controller) = try await openDeckForPresenting()
+        let deckWindow = try windowController(controller)
+        try markPlayed(controller)
+        deckWindow.play(nil)
+        XCTAssertTrue(deckWindow.presentPopover.isShown)
+        deckWindow.presentPopover.startButton.performClick(nil)
+        XCTAssertEqual(controller.presentation.options?.phoneRemote, false)
+        XCTAssertEqual(AppEnvironment.shared.presentationSettings.settings.phoneRemote, false)
+        try await waitUntil(timeout: 40, "the talk") { controller.presentation.state == .presenting }
+        try await stopPresenting(controller)
+        try await waitUntil(timeout: 20, "Play to be allowed again") { deckWindow.canStartATalk }
+        deckWindow.play(nil)
+        XCTAssertFalse(deckWindow.presentPopover.isShown, "later Plays start at once")
         XCTAssertEqual(controller.presentation.state, .starting)
     }
 
