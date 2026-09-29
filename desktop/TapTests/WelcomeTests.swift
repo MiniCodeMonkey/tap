@@ -5,6 +5,12 @@ final class WelcomeTests: HostedTestCase {
     var appDelegate: AppDelegate { NSApp.delegate as! AppDelegate }
     var welcome: WelcomeWindowController { WelcomeWindowController.shared }
 
+    func newDeckSheet() async throws -> NewDeckSheet {
+        let window = welcome.window
+        try await waitUntil(timeout: 10, "the New Deck sheet") { window?.attachedSheet is NewDeckSheet }
+        return try XCTUnwrap(window?.attachedSheet as? NewDeckSheet)
+    }
+
     func testWelcomeWindow() async throws {
         appDelegate.showWelcomeIfNoDecks()
         XCTAssertTrue(welcome.window?.isVisible ?? false, "no deck is open")
@@ -21,6 +27,71 @@ final class WelcomeTests: HostedTestCase {
         try await waitUntil(timeout: 5, "the welcome window") { self.welcome.window?.isVisible ?? false }
         let row = try XCTUnwrap(welcome.recentURLs.firstIndex { FilePaths.same($0, deck) }, "the deck is a recent deck")
         XCTAssertNotNil(welcome.thumbnail(forRow: row))
+    }
+
+    func testWelcomeWindowWithoutRecentDecks() async throws {
+        NSDocumentController.shared.clearRecentDocuments(nil)
+        appDelegate.showWelcomeIfNoDecks()
+        welcome.reload()
+        XCTAssertTrue(welcome.showsEmptyState)
+        XCTAssertFalse(welcome.emptyStateView.isHidden, "one centered view")
+        XCTAssertTrue(welcome.recentURLs.isEmpty)
+        XCTAssertEqual(welcome.newDeckButton.title, "New Deck…")
+        XCTAssertTrue(welcome.newDeckButton === welcome.emptyStateNewDeckButton)
+        XCTAssertEqual(welcome.newDeckButton.keyEquivalent, "\r", "New Deck is the default button")
+        XCTAssertEqual(welcome.newDeckButton.accessibilityIdentifier(), "new-deck")
+        XCTAssertEqual(welcome.openButton.accessibilityIdentifier(), "open")
+        XCTAssertEqual(welcome.emptyStateView.accessibilityIdentifier(), "welcome-empty-state")
+        XCTAssertEqual(welcome.dropZone.accessibilityIdentifier(), "welcome-drop-zone")
+
+        // A theme thumbnail opens the New Deck sheet with that theme chosen.
+        try await waitUntil(timeout: 20, "the theme thumbnails") { self.welcome.emptyStateThemeCells.count == WelcomeWindowController.emptyStateThemeSlugs.count }
+        XCTAssertEqual(welcome.emptyStateThemeCells.map(\.slug), WelcomeWindowController.emptyStateThemeSlugs)
+        try XCTUnwrap(welcome.emptyStateThemeCells.first { $0.slug == "riso" }).performClick(nil)
+        let sheet = try await newDeckSheet()
+        try await waitUntil(timeout: 20, "the grid") { !sheet.grid.cells.isEmpty }
+        XCTAssertEqual(sheet.grid.selectedSlug, "riso")
+        sheet.cancelButton.performClick(nil)
+
+        // A dropped Markdown file is the one the drop zone opens; other files are refused.
+        let deck = try Fixtures.copyDeck("plain.md")
+        let notes = deck.deletingLastPathComponent().appendingPathComponent("notes.txt")
+        try "notes".write(to: notes, atomically: true, encoding: .utf8)
+        let pasteboard = NSPasteboard(name: NSPasteboard.Name("tap.welcome.drop.\(UUID().uuidString)"))
+        defer { pasteboard.releaseGlobally() }
+        pasteboard.clearContents()
+        pasteboard.writeObjects([notes as NSURL])
+        XCTAssertNil(WelcomeDropZone.markdownURL(in: pasteboard))
+        pasteboard.clearContents()
+        pasteboard.writeObjects([notes as NSURL, deck as NSURL])
+        XCTAssertEqual(WelcomeDropZone.markdownURL(in: pasteboard)?.lastPathComponent, deck.lastPathComponent)
+        welcome.dropZone.onDrop?(deck)
+        try await waitUntil(timeout: 30, "the dropped deck to open") {
+            NSDocumentController.shared.documents.contains { $0.fileURL.map { FilePaths.same($0, deck) } ?? false }
+        }
+    }
+
+    func testWelcomeWindowSwitchesLayoutWithItsRecentDecks() async throws {
+        NSDocumentController.shared.clearRecentDocuments(nil)
+        appDelegate.showWelcomeIfNoDecks()
+        welcome.reload()
+        XCTAssertTrue(welcome.showsEmptyState)
+
+        // A recent deck brings the two columns back, with their own buttons.
+        let deck = try Fixtures.copyDeck("plain.md")
+        NSDocumentController.shared.noteNewRecentDocumentURL(deck)
+        welcome.reload()
+        XCTAssertFalse(welcome.showsEmptyState)
+        XCTAssertTrue(welcome.emptyStateView.isHidden)
+        XCTAssertTrue(welcome.newDeckButton === welcome.columnNewDeckButton)
+        XCTAssertEqual(welcome.emptyStateNewDeckButton.keyEquivalent, "")
+        XCTAssertTrue(welcome.recentURLs.contains { FilePaths.same($0, deck) })
+        XCTAssertEqual(welcome.tableView.numberOfRows, welcome.recentURLs.count)
+
+        // Removing the last recent deck shows the empty state again; the running window notices without help.
+        NSDocumentController.shared.clearRecentDocuments(nil)
+        try await waitUntil(timeout: 5, "the empty state") { self.welcome.showsEmptyState }
+        XCTAssertFalse(welcome.emptyStateView.isHidden)
     }
 
     func testLastWindowClosed() async throws {

@@ -2,6 +2,7 @@
 # Format: milestone | feature file | scenario name, exactly as the .feature file writes it.
 # The test is named "test" plus the scenario name in UpperCamelCase.
 D2 | 01-documents.feature | Welcome window
+D2 | 01-documents.feature | Welcome window without recent decks
 D2 | 01-documents.feature | Open a deck
 D2 | 01-documents.feature | Open a file that is not a deck
 D2 | 01-documents.feature | Open the same deck twice
