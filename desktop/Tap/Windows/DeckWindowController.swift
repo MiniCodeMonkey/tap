@@ -252,10 +252,6 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
         splitViewController.setPreviewHidden(!splitViewController.isPreviewHidden)
     }
 
-    @objc func togglePreviewPin(_ sender: Any?) {
-        sessionController.togglePin()
-    }
-
     /// Moves the preview into its own window. It keeps following the cursor.
     @objc func showPreviewInWindow(_ sender: Any?) {
         if let existing = previewWindowController {
@@ -1100,9 +1096,6 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
             menuItem.title = splitViewController.isPreviewHidden ? "Show Preview" : "Hide Preview"
         }
         if menuItem.action == #selector(showDeckTab(_:)) { return AppEnvironment.shared.deckSchema.isLoaded }
-        if menuItem.action == #selector(togglePreviewPin(_:)) {
-            menuItem.title = sessionController.navigator.isPinned ? "Unpin Preview" : "Pin Preview"
-        }
         if menuItem.action == #selector(toggleSlidePanel(_:)) {
             menuItem.title = isPanelPinned ? "Unpin Slide Panel" : "Pin Slide Panel"
         }

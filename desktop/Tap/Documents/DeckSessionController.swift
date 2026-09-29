@@ -593,7 +593,6 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
         Task { await AppEnvironment.shared.deckSchema.load() }
         previewViewController.onStepBackward = { [weak self] in self?.sendPreviewMessage(self?.navigator.stepBackward()) }
         previewViewController.onStepForward = { [weak self] in self?.sendPreviewMessage(self?.navigator.stepForward()) }
-        previewViewController.onPinToggled = { [weak self] in self?.togglePin() }
         previewViewController.onTryAgain = { [weak self] in self?.session.tryAgain() }
         previewViewController.onRestartSession = { [weak self] in
             guard let self, !self.stopped, case .running = self.session.state else { return }
@@ -879,17 +878,6 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
         guard let index = editor.boxes.firstIndex(where: { $0.slide.number == number }) else { return }
         editor.moveCursor(toSlide: index)
         editor.window?.makeFirstResponder(editor)
-    }
-
-    /// Pins the slide the preview shows, or unpins it and follows the cursor again.
-    func togglePin() {
-        if navigator.isPinned {
-            let cursorSlide = editor.currentBoxIndex.map { editor.boxes[$0].slide }
-            sendPreviewMessage(navigator.unpin(cursorSlide: cursorSlide))
-        } else {
-            navigator.pin()
-            sendPreviewMessage(nil)
-        }
     }
 
     /// The number of the slide under the cursor.
