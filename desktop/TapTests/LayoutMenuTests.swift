@@ -55,6 +55,38 @@ final class LayoutMenuTests: HostedTestCase {
         XCTAssertEqual(editor.string, original, "one undo restores the text")
     }
 
+    /// The person's selection stays where it was, shifted only by the edit's length change.
+    func testChangingAnotherSlidesLayoutKeepsTheSelection() async throws {
+        let (_, controller) = try await openOps()
+        let editor = controller.editor
+        // A range in slide 5 (after the edited slide), and the caret in slide 1 (before it).
+        let inFive = NSRange(location: editor.boxes[4].range.location + 2, length: 1)
+        editor.setSelectedRange(inFive)
+        let textBefore = editor.string as NSString
+        let selectedText = textBefore.substring(with: inFive)
+        let menu = try XCTUnwrap(controller.editor(editor, layoutMenuForBoxAt: 1))
+        controller.chooseLayout(try item(menu, "Big Stat"))
+        XCTAssertEqual((editor.string as NSString).substring(with: editor.selectedRange()), selectedText, "the same characters stay selected")
+        XCTAssertEqual(editor.currentBoxIndex, 4)
+
+        let caretInOne = editor.boxes[0].range.location + 2
+        editor.setSelectedRange(NSRange(location: caretInOne, length: 0))
+        let three = try XCTUnwrap(controller.editor(editor, layoutMenuForBoxAt: 2))
+        controller.chooseLayout(try item(three, "Quote"))
+        XCTAssertEqual(editor.selectedRange(), NSRange(location: caretInOne, length: 0), "an edit after the caret leaves it alone")
+    }
+
+    func testShowAllLayoutsPreselectsTheSlidesLayout() async throws {
+        let (document, controller) = try await openOps()
+        let editor = controller.editor
+        let windowController = try XCTUnwrap(document.windowControllers.first as? DeckWindowController)
+        let menu = try XCTUnwrap(controller.editor(editor, layoutMenuForBoxAt: 1))
+        controller.showAllLayouts(try XCTUnwrap(menu.items.last))
+        XCTAssertTrue(windowController.layoutGallery.isShown)
+        XCTAssertEqual(windowController.layoutGallery.selectedLayoutName, "title")
+        windowController.layoutGallery.close()
+    }
+
     func testDefaultRemovesTheLayoutDeclaration() async throws {
         let (_, controller) = try await openOps()
         let editor = controller.editor

@@ -26,7 +26,6 @@ D2 | 02-slide-structure.feature | The editor never folds
 D2 | 04-preview.feature | The preview follows the cursor
 D2 | 04-preview.feature | The preview updates while I type
 D2 | 04-preview.feature | Step through fragments
-D2 | 04-preview.feature | Pin a slide
 D2 | 04-preview.feature | The preview shows the audience-safe error form
 D2 | 04-preview.feature | Preview in its own window
 D2 | 04-preview.feature | Hide the preview

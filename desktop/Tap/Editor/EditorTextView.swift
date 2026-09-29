@@ -759,13 +759,24 @@ final class EditorTextView: NSTextView {
             if let rect = headerRect(forBoxAt: touched) { setNeedsDisplay(rect) }
         }
         hoveredLayoutBoxIndex = index
+        window?.invalidateCursorRects(for: self)
+    }
+
+    /// The layout pop-ups show the arrow, as any pop-up button does, over the text's I-beam.
+    override func resetCursorRects() {
+        super.resetCursorRects()
+        for index in visibleBoxIndices() {
+            if let chip = layoutChipRect(forBoxAt: index) { addCursorRect(chip.intersection(visibleRect), cursor: .arrow) }
+        }
     }
 
     override func mouseMoved(with event: NSEvent) {
         super.mouseMoved(with: event)
         let point = convert(event.locationInWindow, from: nil)
         let index = boxIndex(forHeaderAt: point)
-        setHoveredLayoutBox(index.flatMap { layoutChipRect(forBoxAt: $0)?.contains(point) == true ? $0 : nil })
+        let overChip = index.flatMap { layoutChipRect(forBoxAt: $0)?.contains(point) == true ? $0 : nil }
+        setHoveredLayoutBox(overChip)
+        if overChip != nil { NSCursor.arrow.set() }
     }
 
     override func mouseExited(with event: NSEvent) {

@@ -530,8 +530,8 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
 
     /// The gallery from a slide header's layout menu: a pick changes that
     /// slide's layout through `onPick` instead of inserting a slide.
-    func showLayoutGallery(changingSlide number: Int, anchor: NSRect, in view: NSView, onPick: @escaping (String) -> Void) {
-        layoutGallery.show(templates: AppEnvironment.shared.layoutCatalog.templates, relativeTo: anchor, of: view, changingSlide: number, onPick: onPick)
+    func showLayoutGallery(changingSlide number: Int, currentLayout: String, anchor: NSRect, in view: NSView, onPick: @escaping (String) -> Void) {
+        layoutGallery.show(templates: AppEnvironment.shared.layoutCatalog.templates, relativeTo: anchor, of: view, changingSlide: number, currentLayout: currentLayout, onPick: onPick)
     }
 
     /// Every New Slide comes here: the toolbar button, the Slide menu, the

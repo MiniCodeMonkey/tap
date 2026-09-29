@@ -186,6 +186,20 @@ extension DeckSessionController {
             return nil
         }
         guard let replacement = TextDiff.replacement(from: text, to: result.text), let undoManager = document?.undoManager else { return nil }
+        // A layout change edits one slide's directive comment and leaves the person's
+        // selection where it was, moved only by the edit's change in length.
+        var preservedSelection: NSRange?
+        if case .setLayout = operation {
+            let selection = editor.selectedRange()
+            func mapped(_ position: Int) -> Int {
+                let edited = replacement.range
+                if position >= NSMaxRange(edited) { return position + (replacement.replacement as NSString).length - edited.length }
+                if position <= edited.location { return position }
+                return edited.location + (replacement.replacement as NSString).length
+            }
+            let start = mapped(selection.location)
+            preservedSelection = NSRange(location: start, length: max(0, mapped(NSMaxRange(selection)) - start))
+        }
         // The operation is one undo step of its own: a top-level group
         // opened and closed here. With no group open, the automatic
         // grouping is paused while the group is open, so the undo manager
@@ -209,10 +223,14 @@ extension DeckSessionController {
         // slides itself, last.
         withPanelDrivingTheCursor {
             editor.adoptBoxes(result.boxes)
-            editor.setSelectedRange(NSRange(location: result.caret, length: 0))
+            editor.setSelectedRange(preservedSelection ?? NSRange(location: result.caret, length: 0))
         }
         slidePanel.remapImages(sourceNumbers: result.sourceNumbers)
         slidePanel.setSlides(editor.boxes.map(\.slide))
+        if preservedSelection != nil {
+            Task { await sourceSync.sendNow() }
+            return result
+        }
         slidePanel.select(numbers: result.selectedNumbers, scroll: true)
         if let first = result.selectedNumbers.first, editor.boxes.indices.contains(first - 1) {
             editor.scrollRangeToVisible(editor.boxes[first - 1].range)

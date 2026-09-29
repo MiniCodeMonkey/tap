@@ -1458,7 +1458,7 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
     @objc func showAllLayouts(_ sender: NSMenuItem) {
         guard let choice = sender.representedObject as? LayoutChoice,
               let windowController = editor.window?.windowController as? DeckWindowController else { return }
-        windowController.showLayoutGallery(changingSlide: choice.slideNumber, anchor: choice.anchor, in: editor) { [weak self] name in
+        windowController.showLayoutGallery(changingSlide: choice.slideNumber, currentLayout: choice.layout, anchor: choice.anchor, in: editor) { [weak self] name in
             self?.changeLayout(of: choice.selection, to: name)
         }
     }
