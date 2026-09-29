@@ -20,6 +20,14 @@ Feature: Preview
     When I click it again
     Then the panel unpins, and hovering the button peeks at it again
 
+  Scenario: The pin in the panel header
+    Given the slide panel is docked
+    Then a filled pin sits at the right end of the panel header, beside "Slides"
+    When I click the pin
+    Then the panel unpins, and hovering the toolbar button peeks at it again
+    When I peek at the panel and click its unfilled pin
+    Then the panel docks
+
   Scenario: The preview follows the cursor
     Given the cursor is in slide 3
     Then the preview shows slide 3 with all steps revealed

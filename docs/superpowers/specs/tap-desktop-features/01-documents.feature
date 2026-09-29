@@ -11,6 +11,18 @@ Feature: Documents
     When a deck opens
     Then the welcome window closes
 
+  Scenario: Welcome window without recent decks
+    Given no deck is open and the recent decks list is empty
+    Then the welcome window shows one centered view instead of its two columns
+    And the view has the app icon, "Make your first deck", four theme thumbnails, New Deck and Open buttons, and a drop zone
+    And New Deck is the default button
+    When I click a theme thumbnail
+    Then the New Deck sheet opens with that theme chosen
+    When I drop a .md file on the drop zone
+    Then the app opens it as a deck
+    When a deck is added to the recent decks list while the window is open
+    Then the window switches to its recent decks layout
+
   Scenario: Open a deck
     When I open "talk.md" from Finder, File > Open, or Open Recent
     Then the app shows it in a new window, or in a new tab when a window is open

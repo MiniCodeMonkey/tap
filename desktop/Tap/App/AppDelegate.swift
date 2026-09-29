@@ -200,10 +200,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         return WelcomeWindowController.shared.window
     }
 
-    /// The sheet on `host`. Create runs tap new; the deck opens.
+    /// The sheet on `host`, with `theme` chosen when given. Create runs tap new; the deck opens.
     /// A host with a sheet up already refuses it, with a beep and a line in
     /// the deck's log when the host is a deck window.
-    func newDeck(on host: NSWindow?) {
+    func newDeck(on host: NSWindow?, theme: String? = nil) {
         guard let host else { return }
         guard host.attachedSheet == nil else {
             Self.deck(owning: host)?.sessionController.session.log.append("New Deck was not shown: a sheet is up on this window", source: .app)
@@ -211,7 +211,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             return
         }
         let settings = AppEnvironment.shared.generalSettings
-        let sheet = NewDeckSheet(lastFolder: settings.lastNewDeckFolder, defaultTheme: settings.defaultTheme)
+        let sheet = NewDeckSheet(lastFolder: settings.lastNewDeckFolder, defaultTheme: theme ?? settings.defaultTheme)
         sheet.onCreate = { [weak self, weak sheet, weak host] request in
             guard let self, let sheet else { return }
             sheet.beginCreating()

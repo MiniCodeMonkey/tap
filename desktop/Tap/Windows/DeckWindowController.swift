@@ -189,6 +189,7 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
             }
             self.panelOverlay.isHidden = true
         }
+        sessionController.slidePanel.onTogglePin = { [weak self] in self?.toggleSlidePanel(nil) }
         let deckURL = sessionController.document?.fileURL
         setPanelPinned(deckURL.map { AppEnvironment.shared.panelState.isPinned(deck: $0) } ?? true)
         // Two things change whether the sidebar is collapsed besides
@@ -355,6 +356,7 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
             panelOverlay.isHidden = true
         }
         slidesButton.state = pinned ? .on : .off
+        sessionController.slidePanel.setPinned(pinned)
         if let deck = sessionController.document?.fileURL {
             AppEnvironment.shared.panelState.setPinned(pinned, deck: deck)
         }
@@ -530,6 +532,12 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
         let anchor: NSView = newSlideButton.window == nil ? (window?.contentView ?? newSlideButton) : newSlideButton
         layoutGallery.show(templates: AppEnvironment.shared.layoutCatalog.templates, relativeTo: anchor.bounds, of: anchor,
                            afterSlide: sessionController.currentSlideNumber)
+    }
+
+    /// The gallery from a slide header's layout menu: a pick changes that
+    /// slide's layout through `onPick` instead of inserting a slide.
+    func showLayoutGallery(changingSlide number: Int, currentLayout: String, anchor: NSRect, in view: NSView, onPick: @escaping (String) -> Void) {
+        layoutGallery.show(templates: AppEnvironment.shared.layoutCatalog.templates, relativeTo: anchor, of: view, changingSlide: number, currentLayout: currentLayout, onPick: onPick)
     }
 
     /// Every New Slide comes here: the toolbar button, the Slide menu, the
@@ -1256,7 +1264,7 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
         if identifier == Self.slidesItemIdentifier {
             let item = NSToolbarItem(itemIdentifier: identifier)
             item.label = "Slides"
-            item.toolTip = "Hover to peek at the slides, click to pin them"
+            item.toolTip = "Slides"
             slidesButton.image = NSImage(systemSymbolName: "sidebar.left", accessibilityDescription: "Slides")
             slidesButton.bezelStyle = .toolbar
             slidesButton.setButtonType(.pushOnPushOff)

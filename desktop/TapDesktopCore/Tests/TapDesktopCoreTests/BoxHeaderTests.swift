@@ -15,12 +15,19 @@ final class BoxHeaderTests: XCTestCase {
         XCTAssertEqual(live.badges, ["sqlite"], "one live-code badge per driver")
     }
 
-    func testTheMetaLineHasTheLayoutDisplayNameAndLiveBlocks() {
+    func testTheHeaderHasTheLayoutNameAndTheMetaLineTheLiveBlocks() {
         let header = BoxHeader(slide: Slide(number: 4, startLine: 1, endLine: 5, layout: "code-focus", title: "Query",
                                             codeBlocks: [CodeBlock(block: 1, language: "sql", driver: "sqlite", live: true, line: 3)]))
         XCTAssertEqual(header.number, "4")
-        XCTAssertEqual(header.meta, "Code Focus · sql, live")
-        XCTAssertEqual(BoxHeader(slide: Slide(number: 2, startLine: 1, endLine: 1, layout: "section", title: "")).meta, "Section")
+        XCTAssertEqual(header.layout, "code-focus")
+        XCTAssertEqual(header.layoutName, "Code Focus")
+        XCTAssertEqual(header.meta, "sql, live")
+        let section = BoxHeader(slide: Slide(number: 2, startLine: 1, endLine: 1, layout: "section", title: ""))
+        XCTAssertEqual(section.layoutName, "Section")
+        XCTAssertEqual(section.meta, "")
+        let undeclared = BoxHeader(slide: Slide(number: 2, startLine: 1, endLine: 1, layout: "", title: ""))
+        XCTAssertEqual(undeclared.layout, "default")
+        XCTAssertEqual(undeclared.layoutName, "Default")
     }
 
     func testASkippedSlideAndErrorsShowInTheHeader() {

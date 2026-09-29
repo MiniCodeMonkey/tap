@@ -1,7 +1,7 @@
 import Foundation
 
-/// What a slide box's header shows: the number, a meta line with the
-/// layout's display name and live code blocks, badges for the reveal count, a
+/// What a slide box's header shows: the number, the layout's name (a menu
+/// in the editor), a meta line with the live code blocks, badges for the reveal count, a
 /// skipped slide and each live-code driver, the error lines under the
 /// header (the slide's own, then each live block's problem with its line),
 /// and the one fix-it the app offers.
@@ -19,6 +19,11 @@ public struct BoxHeader: Equatable, Sendable {
     }
 
     public let number: String
+    /// The slide's layout as tap names it; "default" when the slide declares none.
+    public let layout: String
+    /// The layout's name as a menu shows it.
+    public let layoutName: String
+    /// The live code blocks, such as "sql, live"; empty when there are none.
     public let meta: String
     public let badges: [String]
     public let errors: [String]
@@ -26,13 +31,10 @@ public struct BoxHeader: Equatable, Sendable {
 
     public init(slide: Slide, declaredDrivers: [String]? = nil, frontmatterIsBroken: Bool = false) {
         number = "\(slide.number)"
-        var parts: [String] = []
-        if !slide.layout.isEmpty { parts.append(LayoutCatalog.displayName(slide.layout)) }
+        layout = slide.layout.isEmpty ? "default" : slide.layout
+        layoutName = LayoutCatalog.displayName(layout)
         let liveBlocks = slide.codeBlocks.filter(\.live)
-        if !liveBlocks.isEmpty {
-            parts.append(liveBlocks.map { "\($0.language.isEmpty ? "code" : $0.language), live" }.joined(separator: "; "))
-        }
-        meta = parts.joined(separator: " · ")
+        meta = liveBlocks.map { "\($0.language.isEmpty ? "code" : $0.language), live" }.joined(separator: "; ")
 
         var badges: [String] = []
         let reveals = Self.revealCount(for: slide)

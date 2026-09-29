@@ -11,11 +11,38 @@ final class ThemeCell: NSButton {
 
     var isSelected = false {
         didSet {
-            imageView.layer?.borderColor = isSelected ? NSColor.controlAccentColor.cgColor : NSColor.separatorColor.cgColor
-            imageView.layer?.borderWidth = isSelected ? 3 : 0.5
+            updateBorder()
             setAccessibilityValue(isSelected ? "selected" : "")
         }
     }
+
+    /// Draws the selected border while the pointer is over the cell, for a
+    /// row of themes that has no selection of its own.
+    var highlightsOnHover = false
+    private var isHovered = false {
+        didSet { updateBorder() }
+    }
+    private var hoverArea: NSTrackingArea?
+
+    private func updateBorder() {
+        let isHighlighted = isSelected || isHovered
+        imageView.layer?.borderColor = isHighlighted ? NSColor.controlAccentColor.cgColor : NSColor.separatorColor.cgColor
+        imageView.layer?.borderWidth = isHighlighted ? 3 : 0.5
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let hoverArea { removeTrackingArea(hoverArea) }
+        hoverArea = nil
+        guard highlightsOnHover else { return }
+        let area = NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect], owner: self, userInfo: nil)
+        addTrackingArea(area)
+        hoverArea = area
+    }
+
+    override func mouseEntered(with event: NSEvent) { isHovered = highlightsOnHover }
+
+    override func mouseExited(with event: NSEvent) { isHovered = false }
 
     init(theme: ThemeSummary, size: NSSize, nameFontSize: CGFloat, cornerRadius: CGFloat) {
         slug = theme.slug
