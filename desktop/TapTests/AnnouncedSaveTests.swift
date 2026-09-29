@@ -63,74 +63,66 @@ final class AnnouncedSaveTests: HostedTestCase {
         XCTAssertEqual(controller.previewViewController.pageLoadCount, loads, "the page did not reload")
     }
 
-    /// Opens the app fixture on slide 3 with every PUT held back 5 s, and
-    /// types into its heading, so the editor holds text tap has not been
-    /// sent. Returns the typed text.
-    private func openWithUnsentText() async throws -> (deck: URL, document: DeckDocument, controller: DeckSessionController, typed: String) {
+    /// Opens the app fixture with tap running, types into it, and records
+    /// every command the app sends tap from then on.
+    private func openAndRecordCommands() async throws -> (deck: URL, document: DeckDocument, controller: DeckSessionController, sent: () -> [TapCommand]) {
         let savedDelay = NSDocumentController.shared.autosavingDelay
         NSDocumentController.shared.autosavingDelay = 300
         addTeardownBlock { @MainActor in NSDocumentController.shared.autosavingDelay = savedDelay }
         let deck = try Fixtures.copyAppFixture()
-        let document = try await openDeckAndWaitForPreview(deck)
+        let document = try await openDeck(deck)
+        _ = try await waitForRunningTap(document)
         let controller = try XCTUnwrap(document.sessionController)
         try await waitForBoxes(document, count: 4)
-        controller.editor.moveCursor(toSlide: 2)
-        try await waitForPreview(document, slide: 3)
-        let sourceSync = try XCTUnwrap(controller.sourceSync)
-        let send = try XCTUnwrap(sourceSync.sender)
-        sourceSync.sender = { source in
-            try await Task.sleep(nanoseconds: 5_000_000_000)
-            return try await send(source)
-        }
         let headingEnd = (controller.editor.string as NSString).range(of: "# Fragments").upperBound
         controller.editor.setSelectedRange(NSRange(location: headingEnd, length: 0))
         controller.editor.insertText(" not in the deck file", replacementRange: NSRange(location: NSNotFound, length: 0))
-        XCTAssertTrue(sourceSync.hasUnsentText)
-        return (deck, document, controller, controller.editor.string)
+        var sent: [TapCommand] = []
+        controller.session.onCommandSent = { sent.append($0) }
+        return (deck, document, controller, { sent })
     }
 
-    /// Another program writing `text` to the deck reaches the pages as a
-    /// change made elsewhere: the bytes were never named to tap.
-    private func assertAnOutsideWriteReloadsThePages(_ text: String, deck: URL, controller: DeckSessionController,
-                                                     file: StaticString = #filePath, line: UInt = #line) async throws {
-        var messages: [HubMessage] = []
-        controller.onHubMessage = { messages.append($0) }
-        func isTheDeck(_ message: HubMessage) -> Bool {
-            if case .fileChanged(let path) = message { return (path as NSString).lastPathComponent == deck.lastPathComponent }
-            return false
-        }
-        try text.write(to: deck, atomically: true, encoding: .utf8)
-        let deadline = Date().addingTimeInterval(5)
-        while !messages.contains(where: { isTheDeck($0) }), Date() < deadline {
-            try await Task.sleep(nanoseconds: 20_000_000)
-        }
-        XCTAssertTrue(messages.contains { isTheDeck($0) },
-                      "the pages were not told about a write of bytes no save of the deck file wrote: \(messages)",
-                      file: file, line: line)
+    /// Whether `commands` hold a saving command.
+    private func containsSaving(_ commands: [TapCommand]) -> Bool {
+        commands.contains { if case .saving = $0 { return true } else { return false } }
+    }
+
+    /// A save of the deck file's own text names it, which is what shows
+    /// the recording sees a saving command when one is sent.
+    private func assertAnOwnFileSaveNamesItsText(_ document: DeckDocument, _ controller: DeckSessionController,
+                                                 sent: () -> [TapCommand], file: StaticString = #filePath, line: UInt = #line) throws {
+        _ = try document.data(ofType: document.fileType ?? "net.daringfireball.markdown")
+        XCTAssertEqual(sent().last, .saving(text: controller.editor.string), "a save of the deck file names its text", file: file, line: line)
     }
 
     /// Duplicate takes the text through data(ofType:) but writes no part of
     /// the deck file, so it names nothing to tap.
     func testDuplicateNamesNothingToTap() async throws {
-        let (deck, document, controller, typed) = try await openWithUnsentText()
+        let (_, document, controller, sent) = try await openAndRecordCommands()
         // tearDown closes the duplicate with every other document.
         _ = try document.duplicate()
-        try await assertAnOutsideWriteReloadsThePages(typed, deck: deck, controller: controller)
+        XCTAssertFalse(containsSaving(sent()), "Duplicate named its text to tap: \(sent())")
+        try assertAnOwnFileSaveNamesItsText(document, controller, sent: sent)
     }
 
     /// An autosave elsewhere writes a file other than the deck, so it names
     /// nothing to tap.
     func testAnAutosaveElsewhereNamesNothingToTap() async throws {
-        let (deck, document, controller, typed) = try await openWithUnsentText()
-        // Outside the deck's folder, which tap watches.
-        let elsewhere = FileManager.default.temporaryDirectory.appendingPathComponent("tap-autosaved-elsewhere-\(UUID().uuidString).md")
-        addTeardownBlock { try? FileManager.default.removeItem(at: elsewhere) }
-        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+        let (deck, document, controller, sent) = try await openAndRecordCommands()
+        // A folder of the test's own beside the deck's folder, which tap
+        // watches.
+        let folder = deck.deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("elsewhere")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let elsewhere = folder.appendingPathComponent("talk.md")
+        let typed = controller.editor.string
+        let error: Error? = await withCheckedContinuation { (continuation: CheckedContinuation<Error?, Never>) in
             document.save(to: elsewhere, ofType: document.fileType ?? "net.daringfireball.markdown", for: .autosaveElsewhereOperation) { error in
-                if let error { continuation.resume(throwing: error) } else { continuation.resume() }
+                continuation.resume(returning: error)
             }
         }
-        XCTAssertEqual(try String(contentsOf: elsewhere, encoding: .utf8), typed, "the autosave wrote the text elsewhere")
-        try await assertAnOutsideWriteReloadsThePages(typed, deck: deck, controller: controller)
+        XCTAssertNil(error, "the autosave elsewhere failed, so it may never have taken its text")
+        XCTAssertEqual(try? String(contentsOf: elsewhere, encoding: .utf8), typed, "the autosave wrote the text elsewhere")
+        XCTAssertFalse(containsSaving(sent()), "the autosave elsewhere named its text to tap: \(sent())")
+        try assertAnOwnFileSaveNamesItsText(document, controller, sent: sent)
     }
 }
