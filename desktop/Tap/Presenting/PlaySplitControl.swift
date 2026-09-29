@@ -30,9 +30,25 @@ final class PlaySplitControl: NSSegmentedControl {
 
     required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
 
+    /// Where the menu goes: a test replaces it, so no menu tracking loop blocks it.
+    lazy var menuPresenter: (NSMenu, PlaySplitControl) -> Void = { menu, control in
+        menu.popUp(positioning: nil, at: NSPoint(x: control.bounds.minX, y: control.isFlipped ? control.bounds.maxY + 4 : control.bounds.minY - 4), in: control)
+    }
+
+    /// The x where the play segment ends, in this view's coordinates. The
+    /// segments share the bounds in proportion to their widths: the bezel's
+    /// padding and dividers are spread over both, so the raw widths alone
+    /// would put the boundary in the wrong place.
+    var segmentBoundary: CGFloat {
+        let play = width(forSegment: 0)
+        let chevron = width(forSegment: 1)
+        guard play + chevron > 0 else { return bounds.midX }
+        return bounds.minX + bounds.width * play / (play + chevron)
+    }
+
     /// The segment under a point of this view's own coordinates.
     func segment(at point: NSPoint) -> Int {
-        point.x < Self.playSegmentWidth ? 0 : 1
+        point.x < segmentBoundary ? 0 : 1
     }
 
     override func mouseDown(with event: NSEvent) {
@@ -61,6 +77,7 @@ final class PlaySplitControl: NSSegmentedControl {
         holdWork?.cancel()
         holdWork = nil
         setSelected(false, forSegment: 0)
+        guard isEnabled else { return }
         let point = convert(event.locationInWindow, from: nil)
         if !held, segment(at: point) == 0, bounds.contains(point) { onPlay?(event.modifierFlags) }
     }
@@ -68,6 +85,6 @@ final class PlaySplitControl: NSSegmentedControl {
     /// Opens the menu under the control.
     func showMenu() {
         guard let menu = makeMenu?() else { return }
-        menu.popUp(positioning: nil, at: NSPoint(x: bounds.minX, y: isFlipped ? bounds.maxY + 4 : bounds.minY - 4), in: self)
+        menuPresenter(menu, self)
     }
 }
