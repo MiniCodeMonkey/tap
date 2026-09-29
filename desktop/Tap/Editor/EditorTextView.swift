@@ -766,7 +766,9 @@ final class EditorTextView: NSTextView {
     override func resetCursorRects() {
         super.resetCursorRects()
         for index in visibleBoxIndices() {
-            if let chip = layoutChipRect(forBoxAt: index) { addCursorRect(chip.intersection(visibleRect), cursor: .arrow) }
+            // AppKit asserts on an empty cursor rect, which a chip scrolled out of view produces.
+            guard let chip = layoutChipRect(forBoxAt: index)?.intersection(visibleRect), !chip.isEmpty else { continue }
+            addCursorRect(chip, cursor: .arrow)
         }
     }
 
