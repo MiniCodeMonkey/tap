@@ -105,24 +105,18 @@ final class AnnouncedSaveTests: HostedTestCase {
         try assertAnOwnFileSaveNamesItsText(document, controller, sent: sent)
     }
 
-    /// An autosave elsewhere writes a file other than the deck, so it names
-    /// nothing to tap.
-    func testAnAutosaveElsewhereNamesNothingToTap() async throws {
-        let (deck, document, controller, sent) = try await openAndRecordCommands()
-        // A folder of the test's own beside the deck's folder, which tap
-        // watches.
-        let folder = deck.deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("elsewhere")
-        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-        let elsewhere = folder.appendingPathComponent("talk.md")
-        let typed = controller.editor.string
-        let error: Error? = await withCheckedContinuation { (continuation: CheckedContinuation<Error?, Never>) in
-            document.save(to: elsewhere, ofType: document.fileType ?? "net.daringfireball.markdown", for: .autosaveElsewhereOperation) { error in
-                continuation.resume(returning: error)
-            }
-        }
-        XCTAssertNil(error, "the autosave elsewhere failed, so it may never have taken its text")
-        XCTAssertEqual(try? String(contentsOf: elsewhere, encoding: .utf8), typed, "the autosave wrote the text elsewhere")
-        XCTAssertFalse(containsSaving(sent()), "the autosave elsewhere named its text to tap: \(sent())")
-        try assertAnOwnFileSaveNamesItsText(document, controller, sent: sent)
+    /// Save To and an autosave elsewhere write a file other than the deck,
+    /// so they take no save snapshot and name nothing to tap. NSDocument
+    /// refuses an autosave elsewhere to a URL of the caller's choosing for
+    /// a deck that autosaves in place, before it takes any text, and runs
+    /// one itself only for a deck with no file, into its own autosave
+    /// folder; so this checks the rule save(to:ofType:for:completionHandler:)
+    /// applies rather than driving that write.
+    func testOnlySavesOfTheDeckFileNameTheirText() {
+        XCTAssertFalse(DeckDocument.writesOwnFile(.autosaveElsewhereOperation))
+        XCTAssertFalse(DeckDocument.writesOwnFile(.saveToOperation))
+        XCTAssertTrue(DeckDocument.writesOwnFile(.saveOperation))
+        XCTAssertTrue(DeckDocument.writesOwnFile(.saveAsOperation))
+        XCTAssertTrue(DeckDocument.writesOwnFile(.autosaveInPlaceOperation))
     }
 }

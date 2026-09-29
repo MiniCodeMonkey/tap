@@ -360,14 +360,7 @@ final class DeckDocument: NSDocument {
            sessionController?.hasDiskConflict == true {
             return completionHandler(CocoaError(.userCancelled))
         }
-        // Save To and an autosave elsewhere (an untitled deck's, or one
-        // NSDocument keeps beside a file it cannot write in place) land
-        // somewhere other than this document's own file, so
-        // `data(ofType:)` below neither takes this document's save
-        // snapshot for them nor names their text to tap: nothing they
-        // write changes what tap should be showing for this deck's own
-        // file.
-        savingOwnFile = saveOperation != .saveToOperation && saveOperation != .autosaveElsewhereOperation
+        savingOwnFile = Self.writesOwnFile(saveOperation)
         super.save(to: url, ofType: typeName, for: saveOperation) { [weak self] error in
             guard let self else { return completionHandler(error) }
             if self.savingOwnFile {
@@ -392,6 +385,17 @@ final class DeckDocument: NSDocument {
             self.savingOwnFile = true
             completionHandler(error)
         }
+    }
+
+    /// Whether a save of `operation` writes this document's own file. Save
+    /// To and an autosave elsewhere (a deck with no file, such as an
+    /// untitled or deleted one, into NSDocument's autosave folder) land
+    /// somewhere else, so `data(ofType:)` neither
+    /// takes this document's save snapshot for them nor names their text
+    /// to tap: nothing they write changes what tap should be showing for
+    /// this deck's own file.
+    static func writesOwnFile(_ operation: NSDocument.SaveOperationType) -> Bool {
+        operation != .saveToOperation && operation != .autosaveElsewhereOperation
     }
 
     /// Duplicate (Cmd-Shift-S) never reaches `save(to:ofType:for:
