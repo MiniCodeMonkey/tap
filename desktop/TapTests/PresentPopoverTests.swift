@@ -33,14 +33,13 @@ final class PresentPopoverTests: PresentingTestCase {
         let popover = deckWindow.presentPopover
         XCTAssertTrue(popover.isShown, "a click on Play opens the popover")
         XCTAssertTrue(popover.separateSpacesLabel.isHidden)
-        XCTAssertEqual(popover.startFromControl.label(forSegment: 0), "Slide 3")
-        XCTAssertEqual(popover.startFromControl.label(forSegment: 1), "Slide 1")
+        XCTAssertEqual(popover.startFromControl.label(forSegment: 0), "Here")
+        XCTAssertEqual(popover.startFromControl.label(forSegment: 1), "Beginning")
         XCTAssertEqual(popover.startFromControl.selectedSegment, 0)
         XCTAssertEqual(popover.arrangementView.audienceBox.nameLabel.stringValue, "Projector")
         XCTAssertEqual(popover.arrangementView.presenterBox.nameLabel.stringValue, "Built-in Display")
         XCTAssertFalse(popover.arrangementView.isHidden)
-        XCTAssertTrue(popover.singleDisplayLabel.isHidden)
-        XCTAssertTrue(popover.swapButton.isEnabled)
+        XCTAssertFalse(popover.swapButton.isHidden)
         XCTAssertEqual(popover.recordCheckbox.state, .on)
         XCTAssertEqual(popover.phoneRemoteCheckbox.state, .off)
         XCTAssertTrue(popover.advancedStack.isHidden)
@@ -127,16 +126,17 @@ final class PresentPopoverTests: PresentingTestCase {
         try await waitUntil(timeout: 40, "the other talk") { other.presentation.state == .presenting }
     }
 
-    func testThePopoverWithOneDisplaySaysSo() async throws {
+    func testThePopoverWithOneDisplayHidesTheDisplayControls() async throws {
         let (_, controller) = try await openDeckForPresenting()
         let deckWindow = try windowController(controller)
         deckWindow.playButtonClicked(modifiers: [])
         let popover = deckWindow.presentPopover
         XCTAssertTrue(popover.isShown)
         XCTAssertTrue(popover.arrangementView.isHidden)
-        XCTAssertFalse(popover.singleDisplayLabel.isHidden)
         XCTAssertTrue(popover.separateSpacesLabel.isHidden, "one display never needs the setting")
-        XCTAssertFalse(popover.swapButton.isEnabled)
+        XCTAssertTrue(popover.swapButton.isHidden, "no display talk with one display")
+        XCTAssertEqual(popover.startFromControl.label(forSegment: 0), "Here")
+        XCTAssertEqual(popover.startFromControl.label(forSegment: 1), "Beginning")
         popover.rehearseButton.performClick(nil)
         XCTAssertFalse(popover.isShown)
         XCTAssertEqual(controller.presentation.options?.mode, .rehearse)

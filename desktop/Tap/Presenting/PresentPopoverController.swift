@@ -17,10 +17,9 @@ final class PresentPopoverController: NSObject, NSPopoverDelegate {
     /// depend on whether the app is active (D3's gallery found the same).
     private(set) var isShown = false
     let arrangementView = DisplayArrangementView(frame: .zero)
-    let singleDisplayLabel = NSTextField(wrappingLabelWithString: "One display: the audience fills the screen, and Option-Tab shows the presenter view.")
     let separateSpacesLabel = NSTextField(wrappingLabelWithString: "Turn on \"Displays have separate Spaces\" in System Settings > Desktop & Dock so each display gets its own full screen window. Until then the talk windows are plain windows over their displays.")
     let swapButton = NSButton(title: "Swap Displays", target: nil, action: nil)
-    let startFromControl = NSSegmentedControl(labels: ["Slide 1", "Slide 1"], trackingMode: .selectOne, target: nil, action: nil)
+    let startFromControl = NSSegmentedControl(labels: ["Here", "Beginning"], trackingMode: .selectOne, target: nil, action: nil)
     let recordCheckbox = NSButton(checkboxWithTitle: "Record the talk", target: nil, action: nil)
     let recordHint = NSTextField(wrappingLabelWithString: "Records from the start until you stop, when recording is on for you.")
     let phoneRemoteCheckbox = NSButton(checkboxWithTitle: "Phone remote", target: nil, action: nil)
@@ -39,8 +38,6 @@ final class PresentPopoverController: NSObject, NSPopoverDelegate {
 
     override init() {
         super.init()
-        singleDisplayLabel.font = .systemFont(ofSize: 12)
-        singleDisplayLabel.textColor = .secondaryLabelColor
         separateSpacesLabel.font = .systemFont(ofSize: 12)
         separateSpacesLabel.textColor = .systemOrange
         separateSpacesLabel.isHidden = true
@@ -92,7 +89,7 @@ final class PresentPopoverController: NSObject, NSPopoverDelegate {
         startRow.orientation = .horizontal
         let buttons = NSStackView(views: [NSView(), rehearseButton, startButton])
         buttons.orientation = .horizontal
-        let stack = NSStackView(views: [arrangementView, singleDisplayLabel, separateSpacesLabel, swapButton, startRow, recordCheckbox, recordHint,
+        let stack = NSStackView(views: [arrangementView, separateSpacesLabel, swapButton, startRow, recordCheckbox, recordHint,
                                         phoneRemoteCheckbox, advancedRow, advancedStack, buttons])
         stack.orientation = .vertical
         stack.alignment = .leading
@@ -100,7 +97,6 @@ final class PresentPopoverController: NSObject, NSPopoverDelegate {
         stack.edgeInsets = NSEdgeInsets(top: 16, left: 16, bottom: 16, right: 16)
         stack.widthAnchor.constraint(equalToConstant: 360).isActive = true
         buttons.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -32).isActive = true
-        singleDisplayLabel.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -32).isActive = true
         separateSpacesLabel.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -32).isActive = true
         recordHint.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -32).isActive = true
         let content = NSViewController()
@@ -120,19 +116,15 @@ final class PresentPopoverController: NSObject, NSPopoverDelegate {
     /// The displays or the cursor changed, or a swap happened.
     func update(context: Context) {
         self.context = context
-        startFromControl.setLabel("Slide \(context.cursorSlide)", forSegment: 0)
-        startFromControl.setLabel("Slide 1", forSegment: 1)
         if let arrangement = context.arrangement, !arrangement.isSingleDisplay {
             arrangementView.update(arrangement: arrangement)
             arrangementView.isHidden = false
-            singleDisplayLabel.isHidden = true
             separateSpacesLabel.isHidden = context.usesFullScreen
-            swapButton.isEnabled = true
+            swapButton.isHidden = false
         } else {
             arrangementView.isHidden = true
-            singleDisplayLabel.isHidden = false
             separateSpacesLabel.isHidden = true
-            swapButton.isEnabled = false
+            swapButton.isHidden = true
         }
     }
 

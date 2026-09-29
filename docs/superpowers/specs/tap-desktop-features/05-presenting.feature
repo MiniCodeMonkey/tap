@@ -34,6 +34,12 @@ Feature: Presenting
     When I start presenting
     Then the audience page fills the screen
     And Option-Tab switches to the presenter window
+    And the Present popover shows no display arrangement, no explanation and no Swap Displays button
+
+  Scenario: Start from here or the beginning
+    Given the cursor is in slide 3
+    Then the popover's "Start from" control offers "Here" and "Beginning"
+    And "Here" starts at slide 3, and "Beginning" starts at slide 1
 
   Scenario: Rehearse
     When I choose Present > Rehearse

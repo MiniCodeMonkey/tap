@@ -1203,7 +1203,7 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
         if identifier == Self.playItemIdentifier {
             let item = NSToolbarItem(itemIdentifier: identifier)
             item.label = "Play"
-            item.toolTip = "Present: choose displays and options. Shift-click to start from slide 1. Cmd+Option+P starts at once."
+            item.toolTip = "Present: choose displays and options. Shift-click to start from the beginning. Cmd+Option+P starts at once."
             playButton.image = NSImage(systemSymbolName: "play.fill", accessibilityDescription: "Play")
             playButton.bezelStyle = .toolbar
             playButton.setAccessibilityIdentifier("play-button")

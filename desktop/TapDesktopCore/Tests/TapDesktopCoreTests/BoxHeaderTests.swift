@@ -15,7 +15,7 @@ final class BoxHeaderTests: XCTestCase {
         XCTAssertEqual(live.badges, ["sqlite"], "one live-code badge per driver")
     }
 
-    func testTheMetaLineHasTheLayoutTitleAndLiveBlocks() {
+    func testTheMetaLineHasTheLayoutDisplayNameAndLiveBlocks() {
         let header = BoxHeader(slide: Slide(number: 4, startLine: 1, endLine: 5, layout: "code-focus", title: "Query",
                                             codeBlocks: [CodeBlock(block: 1, language: "sql", driver: "sqlite", live: true, line: 3)]))
         XCTAssertEqual(header.number, "4")
