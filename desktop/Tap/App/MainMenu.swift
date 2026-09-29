@@ -149,8 +149,8 @@ enum MainMenu {
 
     static func presentMenu() -> NSMenu {
         let menu = NSMenu(title: "Present")
-        // The titles of the first two follow the cursor's slide, and the second hides on slide 1 (DeckWindowController.validateMenuItem).
-        menu.addItem(item("Play from Slide 1", action: #selector(DeckWindowController.play(_:)), key: "p", modifiers: [.command, .option]))
+        // With a deck window active the first two follow the cursor's slide, and the second hides on slide 1 (DeckWindowController.validateMenuItem).
+        menu.addItem(item("Play", action: #selector(DeckWindowController.play(_:)), key: "p", modifiers: [.command, .option]))
         menu.addItem(item("Play from Beginning", action: #selector(DeckWindowController.playFromBeginning(_:))))
         menu.addItem(item("Rehearse", action: #selector(DeckWindowController.rehearse(_:)), key: "p", modifiers: [.command, .option, .shift]))
         menu.addItem(.separator())
