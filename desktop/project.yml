@@ -111,6 +111,11 @@ targets:
         basedOnDependencyAnalysis: false
         outputFiles:
           - $(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/ThemeThumbnails/catalog.json
+      - name: Bundle tour thumbnails
+        path: scripts/build-tour-thumbnails.sh
+        basedOnDependencyAnalysis: false
+        outputFiles:
+          - $(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/TourThumbnails/theme-tour.md
   TapTests:
     type: bundle.unit-test
     platform: macOS
