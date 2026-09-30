@@ -179,8 +179,8 @@ final class DeckCardTests: HostedTestCase {
         editor.layoutSubtreeIfNeeded()
         let cardFrame = card.cardView.frame
         if card.display == .form {
-            let fitting = EditorTextView.deckCardHeaderHeight + min(max(card.form.contentHeight, 64), DeckCardController.maximumBodyHeight)
-            XCTAssertEqual(cardFrame.height, fitting, accuracy: 1, "\(context): the card is as tall as its form fits, up to the height at which the form scrolls", file: file, line: line)
+            let fitting = EditorTextView.deckCardHeaderHeight + max(card.form.contentHeight, 64)
+            XCTAssertEqual(cardFrame.height, fitting, accuracy: 1, "\(context): the card is as tall as its form fits", file: file, line: line)
         }
         XCTAssertEqual(cardFrame.height, editor.deckCardHeight, accuracy: 0.5, "\(context): the editor reserves the card's height", file: file, line: line)
         let rendered = renderedTextFrames(editor)
@@ -192,19 +192,55 @@ final class DeckCardTests: HostedTestCase {
         let layoutManager = try XCTUnwrap(editor.textLayoutManager, file: file, line: line)
         let contentManager = try XCTUnwrap(layoutManager.textContentManager, file: file, line: line)
         var checked = 0
+        var previousMaxY = cardFrame.maxY
+        let visible = editor.visibleRect
         for index in editor.boxes.indices {
-            guard let rect = editor.boxRect(forBoxAt: index), rect.size.height > 0,
-                  let location = contentManager.location(contentManager.documentRange.location, offsetBy: editor.boxes[index].range.location),
-                  let fragment = layoutManager.textLayoutFragment(for: location), let firstLine = fragment.textLineFragments.first else { continue }
+            // Every box has its rectangle, whether or not it is on screen: none is empty, none starts above the box before it.
+            let rect = try XCTUnwrap(editor.boxRect(forBoxAt: index), "\(context): box \(index + 1) has a rectangle", file: file, line: line)
+            XCTAssertGreaterThan(rect.size.height, 0, "\(context): box \(index + 1) \(rect) is not empty", file: file, line: line)
+            if card.display != .text { XCTAssertGreaterThanOrEqual(rect.minY, previousMaxY - 0.5, "\(context): box \(index + 1) \(rect) starts below the one before it (\(previousMaxY))", file: file, line: line) }
+            previousMaxY = rect.maxY
+            guard let location = contentManager.location(contentManager.documentRange.location, offsetBy: editor.boxes[index].range.location) else { continue }
+            layoutManager.ensureLayout(for: NSTextRange(location: contentManager.documentRange.location, end: contentManager.location(location, offsetBy: 1) ?? contentManager.documentRange.endLocation)!)
+            guard let fragment = layoutManager.textLayoutFragment(for: location), let firstLine = fragment.textLineFragments.first else { continue }
             let origin = editor.textContainerOrigin
             let glyphTop = fragment.layoutFragmentFrame.minY + origin.y
             let glyphRect = NSRect(x: rect.minX, y: glyphTop + firstLine.typographicBounds.minY, width: rect.width, height: firstLine.typographicBounds.height)
             XCTAssertTrue(rect.insetBy(dx: -0.5, dy: -0.5).contains(glyphRect), "\(context): box \(index + 1) \(rect) wraps its first line \(glyphRect)", file: file, line: line)
-            XCTAssertTrue(rendered.contains { abs($0.minY - glyphTop) < 1.5 }, "\(context): the first line of slide \(index + 1) is drawn at \(glyphTop), not elsewhere", file: file, line: line)
+            if glyphRect.intersects(visible) {
+                XCTAssertTrue(rendered.contains { abs($0.minY - glyphTop) < 1.5 }, "\(context): the first line of slide \(index + 1) is drawn at \(glyphTop), not elsewhere", file: file, line: line)
+            }
             checked += 1
         }
         XCTAssertGreaterThan(checked, 0, "\(context): a box was checked", file: file, line: line)
-        XCTAssertNotNil(editor.boxRect(forBoxAt: 0), "\(context): slide 1's box is laid out", file: file, line: line)
+    }
+
+    /// A box's rectangle is the same wherever the editor is scrolled: a box
+    /// with its top above the visible area, one with its bottom below it,
+    /// and one wholly below it, are all measured from their own text.
+    func assertBoxesKeepTheirRectanglesWhileScrolling(_ controller: DeckSessionController, file: StaticString = #filePath, line: UInt = #line) throws {
+        let editor = controller.editor
+        let clip = controller.editorViewController.scrollView.contentView
+        clip.scroll(to: .zero)
+        controller.editorViewController.scrollView.reflectScrolledClipView(clip)
+        let reference = try editor.boxes.indices.map { try XCTUnwrap(editor.boxRect(forBoxAt: $0), file: file, line: line) }
+        let visibleAtTop = editor.visibleRect
+        XCTAssertTrue(reference.contains { $0.minY > visibleAtTop.maxY }, "a box lies wholly below the fold: \(reference) under \(visibleAtTop)", file: file, line: line)
+        // Scrolled so that the second box's top is above the visible area and its bottom inside it.
+        let second = reference[1]
+        clip.scroll(to: NSPoint(x: 0, y: second.minY + 60))
+        controller.editorViewController.scrollView.reflectScrolledClipView(clip)
+        editor.layoutSubtreeIfNeeded()
+        let scrolled = editor.visibleRect
+        XCTAssertLessThan(second.minY, scrolled.minY, "the box's top is above the visible area", file: file, line: line)
+        XCTAssertGreaterThan(second.maxY, scrolled.minY, "and its bottom is in or below it", file: file, line: line)
+        for (index, expected) in reference.enumerated() {
+            let rect = try XCTUnwrap(editor.boxRect(forBoxAt: index), file: file, line: line)
+            XCTAssertEqual(rect.minY, expected.minY, accuracy: 1, "box \(index + 1) keeps its top when scrolled", file: file, line: line)
+            XCTAssertEqual(rect.maxY, expected.maxY, accuracy: 1, "box \(index + 1) keeps its bottom when scrolled", file: file, line: line)
+        }
+        clip.scroll(to: .zero)
+        controller.editorViewController.scrollView.reflectScrolledClipView(clip)
     }
 
     /// The theme tour, opened untitled as the Welcome window does, with the card open in Form mode.
@@ -219,9 +255,16 @@ final class DeckCardTests: HostedTestCase {
         let card = controller.deckCard
         let form = controller.deckForm
 
+        // A short editor: the card, and the boxes under it, reach below the fold.
+        let shortWindow = try XCTUnwrap(controller.editorViewController.scrollView.window)
+        let tallFrame = shortWindow.frame
+        shortWindow.setFrame(NSRect(x: tallFrame.minX, y: tallFrame.minY, width: tallFrame.width, height: 500), display: false)
+        controller.editor.layoutSubtreeIfNeeded()
+
         card.setOpen(true)
         XCTAssertEqual(card.display, .form)
         try await assertTheTextFollowsTheCard(controller, "open")
+        try assertBoxesKeepTheirRectanglesWhileScrolling(controller)
 
         // The schema arrives after the card opens: the form grows from its empty state.
         form.setSchema([])
@@ -232,7 +275,7 @@ final class DeckCardTests: HostedTestCase {
         card.refresh()
         try await assertTheTextFollowsTheCard(controller, "schema loaded")
         XCTAssertGreaterThan(card.cardView.frame.height, emptyHeight, "the card grew with the form")
-        XCTAssertEqual(card.cardView.frame.height, EditorTextView.deckCardHeaderHeight + DeckCardController.maximumBodyHeight, accuracy: 0.5, "a form taller than the cap scrolls inside the card")
+        XCTAssertEqual(card.cardView.frame.height, EditorTextView.deckCardHeaderHeight + form.contentHeight, accuracy: 1, "the card shows the whole form, taller than a short editor")
 
         card.setTextMode(true)
         try await assertTheTextFollowsTheCard(controller, "text mode")
