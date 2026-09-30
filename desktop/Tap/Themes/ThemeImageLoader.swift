@@ -1,9 +1,15 @@
 import AppKit
 
-/// The theme catalog (`tap theme list --json`, once) and every theme's
-/// render (`tap theme show <slug> --image --json --progress json`), one
-/// at a time in the grid's order, kept for the app's life. tap caches the
-/// PNGs by its version, so the next launch renders nothing. The first
+/// The theme catalog and every theme's image. The app bundle ships both,
+/// rendered at build time by the bundled tap (`BundledThemeThumbnails`), so
+/// the catalog is there from the start and an image is read from disk the
+/// first time it is asked for, with no tap run.
+///
+/// Only a theme with no bundled image, or a bundle with no catalog, falls
+/// back to running tap: the catalog (`tap theme list --json`, once) and each
+/// missing render (`tap theme show <slug> --image --json --progress json`),
+/// one at a time in the grid's order, kept for the app's life. tap caches
+/// those PNGs by its version, so the next launch renders nothing. The first
 /// render on a Mac downloads the export engine; its progress lines are
 /// published for the grid to show.
 ///
@@ -22,6 +28,7 @@ final class ThemeImageLoader {
     static let engineFailureCode = "browser"
 
     private(set) var catalog: ThemeCatalog?
+    private let bundledThumbnails: BundledThemeThumbnails?
     private var images: [String: NSImage] = [:]
     /// Bytes of totalBytes while the export engine downloads, nil otherwise.
     private(set) var downloadProgress: (bytes: Int64, totalBytes: Int64)?
@@ -47,8 +54,25 @@ final class ThemeImageLoader {
     private var failedSlugs: Set<String> = []
     private var currentRun: ToolRun?
 
-    /// The render for a slug; the Default cell's is the default theme's.
-    func image(for slug: String) -> NSImage? { images[slug == ThemeGridViewController.defaultSlug ? defaultSlug : slug] }
+    /// `bundledThumbnails` is the app's own by default; a test passes nil to
+    /// have every theme rendered by the tap it scripts.
+    init(bundledThumbnails: BundledThemeThumbnails? = Bundle.main.resourceURL.map(BundledThemeThumbnails.init(resourcesFolder:))) {
+        self.bundledThumbnails = bundledThumbnails
+        catalog = bundledThumbnails?.catalog()
+    }
+
+    /// The image for a slug, from the bundle or a render; the Default cell's
+    /// is the default theme's.
+    func image(for slug: String) -> NSImage? {
+        cachedImage(for: slug == ThemeGridViewController.defaultSlug ? defaultSlug : slug)
+    }
+
+    private func cachedImage(for slug: String) -> NSImage? {
+        if let image = images[slug] { return image }
+        guard let url = bundledThumbnails?.imageURL(forSlug: slug), let image = NSImage(contentsOf: url) else { return nil }
+        images[slug] = image
+        return image
+    }
 
     /// Loads the catalog if it is not loaded: a deck window's Theme item
     /// and the Deck tab's row show the theme's name from it.
@@ -122,7 +146,7 @@ final class ThemeImageLoader {
         guard let catalog else { return nil }
         let known = Set(catalog.themes.map(\.slug))
         let candidates = prioritySlugs.filter(known.contains) + (wantsRenders ? (catalog.light + catalog.dark).map(\.slug) : [])
-        return candidates.first { images[$0] == nil && !failedSlugs.contains($0) }
+        return candidates.first { cachedImage(for: $0) == nil && !failedSlugs.contains($0) }
     }
 
     private func runWork() async {

@@ -97,6 +97,11 @@ targets:
         basedOnDependencyAnalysis: false
         outputFiles:
           - $(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/tap
+      - name: Bundle theme thumbnails
+        path: scripts/build-theme-thumbnails.sh
+        basedOnDependencyAnalysis: false
+        outputFiles:
+          - $(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/ThemeThumbnails/catalog.json
   TapTests:
     type: bundle.unit-test
     platform: macOS
