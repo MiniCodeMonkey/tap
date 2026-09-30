@@ -24,6 +24,8 @@ final class WelcomeDropZone: NSView {
         didSet {
             guard isTargeted != oldValue else { return }
             updateAppearance()
+            // Nothing to announce until a file is over the window.
+            setAccessibilityElement(isTargeted)
             NSAnimationContext.runAnimationGroup { context in
                 context.duration = WelcomeMotion.reduceMotion() ? 0 : 0.2
                 animator().alphaValue = isTargeted ? 1 : 0
@@ -47,7 +49,8 @@ final class WelcomeDropZone: NSView {
         pill.layer?.borderWidth = 1
         pill.layer?.shadowOpacity = 0.3
         pill.layer?.shadowRadius = 14
-        pill.layer?.shadowOffset = CGSize(width: 0, height: -8)
+        // The pill is flipped, so a positive offset falls downward.
+        pill.layer?.shadowOffset = CGSize(width: 0, height: 12)
         pillLabel.translatesAutoresizingMaskIntoConstraints = false
         pillLabel.lineBreakMode = .byTruncatingMiddle
         pillLabel.maximumNumberOfLines = 1
@@ -70,6 +73,7 @@ final class WelcomeDropZone: NSView {
         ])
         setAccessibilityIdentifier("welcome-drop-zone")
         setAccessibilityLabel("Drop a Markdown file to open it")
+        setAccessibilityElement(false)
         updateAppearance()
     }
 
