@@ -5,6 +5,7 @@ D2 | 01-documents.feature | Welcome window
 D2 | 01-documents.feature | Welcome window without recent decks
 D2 | 01-documents.feature | Welcome window drag state
 D2 | 01-documents.feature | Welcome window theme tour
+D2 | 01-documents.feature | The theme tour opens with its thumbnails
 D2 | 01-documents.feature | Welcome window search
 D2 | 01-documents.feature | Welcome window with Reduce Motion
 D2 | 01-documents.feature | Welcome window aurora pauses while unseen
@@ -32,6 +33,11 @@ D3 | 02-slide-structure.feature | Change a slide's layout from its header
 D2 | 02-slide-structure.feature | The editor never folds
 D2 | 04-preview.feature | The preview follows the cursor
 D2 | 04-preview.feature | The preview updates while I type
+D2 | 04-preview.feature | Slide cards fill the panel at once
+D2 | 04-preview.feature | Real thumbnails fade in over the cards
+D2 | 04-preview.feature | The preview shows a text card until its first paint
+D2 | 04-preview.feature | The preview names the step after one second
+D2 | 04-preview.feature | The preview stops loading when it fails
 D2 | 04-preview.feature | Step through fragments
 D2 | 04-preview.feature | The preview shows the audience-safe error form
 D2 | 04-preview.feature | Preview in its own window
@@ -76,6 +82,7 @@ D3 | 13-performance.feature | Thumbnails
 D3 | 13-performance.feature | Reopen
 D4 | 05-presenting.feature | Start presenting with two displays
 D4 | 05-presenting.feature | Play starts at once
+D4 | 05-presenting.feature | Play is dimmed while tap gets ready
 D4 | 05-presenting.feature | Present Settings open on the first run
 D4 | 05-presenting.feature | Save before presenting
 D4 | 05-presenting.feature | Nothing interrupts the talk

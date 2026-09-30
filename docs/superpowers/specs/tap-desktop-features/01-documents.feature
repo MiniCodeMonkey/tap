@@ -39,6 +39,13 @@ Feature: Documents
     Then the app opens the bundled theme tour as a new untitled deck
     And its first save asks where to put it
 
+  Scenario: The theme tour opens with its thumbnails
+    Given the app bundle holds the tour's slide thumbnails, rendered at build time
+    When I open the theme tour and change nothing
+    Then every slide's thumbnail shows at once and no render starts
+    When I edit a slide of the tour
+    Then the edited slide renders as usual
+
   Scenario: Welcome window search
     Given the welcome window shows recent decks
     When I type while the window is key

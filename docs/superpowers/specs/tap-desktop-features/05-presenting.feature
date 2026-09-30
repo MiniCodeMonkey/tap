@@ -25,6 +25,13 @@ Feature: Presenting
     And the menu offers "Play from Slide 4", "Play from Beginning" (with a "Shift click" hint), "Rehearse" and "Present Settings…"
     And with the cursor in slide 1 the menu says "Play from Slide 1" and has no "Play from Beginning"
 
+  Scenario: Play is dimmed while tap gets ready
+    When a deck opens and tap has not started yet
+    Then the Play glyph and its chevron are dimmed and breathe slowly, and the tooltip says "Getting the slides ready…"
+    When tap is ready
+    Then the glyph is solid and the tooltip is the usual one
+    And with Reduce Motion on the glyph is dimmed and still
+
   Scenario: Present Settings open on the first run
     Given this deck has never been played, or the connected displays are not the ones it was last played on
     When I click Play
