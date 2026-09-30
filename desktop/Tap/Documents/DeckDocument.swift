@@ -54,9 +54,16 @@ final class DeckDocument: NSDocument {
     /// The file tap serves while the deck has none, alone in a folder of its
     /// own so that nothing else written to the temporary directory reloads
     /// the preview. Removed when the document closes.
+    ///
+    /// When the folder cannot be made, the URL still names a folder of its
+    /// own, which does not exist: writing the deck there fails with that
+    /// error, and tap says it cannot find the deck. It never names a file
+    /// in the shared temporary directory, whose every change would reload
+    /// the preview.
     var untitledDeckURL: URL {
         if let madeUntitledDeckURL { return madeUntitledDeckURL }
-        let url = (try? UntitledDeckLocation.make()) ?? FileManager.default.temporaryDirectory.appendingPathComponent("Untitled.md")
+        let url = (try? UntitledDeckLocation.make())
+            ?? FileManager.default.temporaryDirectory.appendingPathComponent("tap-untitled-\(UUID().uuidString)", isDirectory: true).appendingPathComponent("Untitled.md")
         madeUntitledDeckURL = url
         return url
     }
@@ -73,6 +80,8 @@ final class DeckDocument: NSDocument {
         }
         try text.write(to: document.untitledDeckURL, atomically: true, encoding: .utf8)
         document.text = text
+        // It has never been saved: closing it while unsaved offers Delete and Save.
+        document.isDraft = true
         controller.addDocument(document)
         document.makeWindowControllers()
         document.showWindows()
