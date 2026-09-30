@@ -217,20 +217,24 @@ final class LoadingStatesTests: HostedTestCase {
         control.isGettingReady = true
         XCTAssertEqual(control.toolTip, "Getting the slides ready…")
         XCTAssertTrue(control.isBreathing, "the glyph breathes")
-        let breathe = try XCTUnwrap(control.layer?.animation(forKey: PlaySplitControl.breatheAnimationKey) as? CABasicAnimation)
+        XCTAssertEqual(control.layer?.opacity, 1, "only the glyph breathes: the bezel and the chevron stay solid")
+        XCTAssertNil(control.layer?.animation(forKey: PlaySplitControl.breatheAnimationKey))
+        let glyphLayer = try XCTUnwrap(control.subviews.compactMap { $0 as? NSImageView }.first?.layer)
+        let breathe = try XCTUnwrap(glyphLayer.animation(forKey: PlaySplitControl.breatheAnimationKey) as? CABasicAnimation)
         XCTAssertEqual(breathe.duration * 2, 1.6, accuracy: 0.001, "a slow 1.6 s cycle")
         XCTAssertLessThan(try XCTUnwrap(breathe.fromValue as? Float), 0.3)
         XCTAssertGreaterThan(try XCTUnwrap(breathe.toValue as? Float), 0.5)
 
         control.isGettingReady = false
         XCTAssertFalse(control.isBreathing)
-        XCTAssertEqual(control.layer?.opacity, 1, "solid when ready")
+        XCTAssertEqual(control.glyphOpacity, 1, "solid when ready")
         XCTAssertEqual(control.toolTip, "Play from the current slide")
 
         WelcomeMotion.reduceMotion = { true }
         control.isGettingReady = true
         XCTAssertFalse(control.isBreathing, "Reduce Motion: dimmed and still")
-        XCTAssertLessThan(control.layer?.opacity ?? 1, 0.6)
+        XCTAssertLessThan(control.glyphOpacity, 0.6)
+        XCTAssertEqual(control.layer?.opacity, 1, "the bezel and the chevron stay solid")
     }
 
     func testPlayFollowsTapsReadiness() async throws {
