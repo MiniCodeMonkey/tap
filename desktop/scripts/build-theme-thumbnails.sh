@@ -73,6 +73,8 @@ done
 if [ -n "$missing" ]; then
 	problem "no thumbnail rendered for:$missing"
 	# Keep what rendered: the next build with this tap renders only the rest.
+	# A fresh folder: pictures an older tap left in it must not pass for this tap's.
+	rm -rf "$output"
 	mkdir -p "$output"
 	cp -f "$scratch"/out/* "$output"/
 	echo "$checksum" > "$partial"

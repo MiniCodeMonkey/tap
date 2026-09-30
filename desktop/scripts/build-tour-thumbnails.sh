@@ -76,6 +76,8 @@ if [ -n "$missing" ]; then
 	# Keep what scaled, and the full-size renders, for the next build with this tap and tour.
 	rm -rf "$partial_full"
 	cp -R "$scratch/full" "$partial_full"
+	# A fresh folder: pictures an older tap left in it must not pass for this tap's.
+	rm -rf "$output"
 	mkdir -p "$output"
 	cp -f "$scratch"/out/slide-*.png "$output"/ 2>/dev/null || true
 	echo "$checksum" > "$partial"
