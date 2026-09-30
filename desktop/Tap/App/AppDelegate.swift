@@ -188,6 +188,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         newDeck(on: hostWindowForNewDeck(keyWindow: NSApp.keyWindow, mainWindow: NSApp.mainWindow))
     }
 
+    /// The welcome window's "take the theme tour": the bundled tour deck
+    /// as a new untitled deck, so the first Save picks where it lives.
+    @objc func openThemeTour(_ sender: Any?) {
+        guard let url = Bundle.main.url(forResource: "theme-tour", withExtension: "md"),
+              let text = try? String(contentsOf: url, encoding: .utf8),
+              (try? DeckDocument.makeUntitled(text: text)) != nil else {
+            NSSound.beep()
+            return
+        }
+    }
+
     /// Where the sheet goes: the deck window that is key, else main, else
     /// the frontmost visible deck window, else the welcome window, shown
     /// first. Never a hidden window (a sheet there is invisible), and
