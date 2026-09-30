@@ -20,9 +20,19 @@ Feature: Preview
     When I click it again
     Then the panel unpins, and hovering the button peeks at it again
 
+  Scenario: The pin in the panel header
+    Given the slide panel is docked
+    Then a filled pin sits at the right end of the panel header, beside "Slides"
+    When I click the pin
+    Then the panel unpins, and hovering the toolbar button peeks at it again
+    When I peek at the panel and click its unfilled pin
+    Then the panel docks
+
   Scenario: The preview follows the cursor
     Given the cursor is in slide 3
     Then the preview shows slide 3 with all steps revealed
+    When I move the cursor to another slide
+    Then the preview follows it
 
   Scenario: The preview updates while I type
     When I change a bullet in slide 3 and pause
@@ -34,6 +44,10 @@ Feature: Preview
     Then the preview shows step 1, then step 2
     And the app drives the page through the existing WebSocket "slide" message
 
+  Scenario: A slide without steps shows no step controls
+    Given slide 1 has no steps
+    Then the step row shows no label and no previous or next step buttons
+
   Scenario: Step through a custom component
     Given slide 8 uses the whole-slide component "./slides/RollingDeploy.jsx" with "export const steps = 5"
     Then tap reports 5 steps for slide 8, and the box shows "5 steps"
@@ -42,11 +56,6 @@ Feature: Preview
     And the thumbnail shows the final step, because tap renders previews at the last step
     When I change the export to 6 and save the .jsx file
     Then tap rebuilds the component and reports 6 steps
-
-  Scenario: Pin a slide
-    Given the preview shows slide 3
-    When I pin it and move the cursor to slide 6
-    Then the preview keeps showing slide 3
 
   Scenario: The preview shows the audience-safe error form
     Given slide 2 has a component that throws

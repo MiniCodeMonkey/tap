@@ -105,15 +105,37 @@ final class LayoutGalleryController: NSObject, NSCollectionViewDataSource, NSCol
         popover.delegate = self
     }
 
+    /// Set while the gallery changes a slide's layout: the pick goes here
+    /// instead of `onPick`. Cleared by the next `show` for a new slide.
+    private var changePick: ((String) -> Void)?
+
+    func show(templates: [LayoutTemplate], relativeTo rect: NSRect, of view: NSView, changingSlide number: Int, currentLayout: String, onPick: @escaping (String) -> Void) {
+        show(templates: templates, relativeTo: rect, of: view, footer: "Changes the layout of slide \(number)", preselecting: currentLayout, changePick: onPick)
+    }
+
     func show(templates: [LayoutTemplate], relativeTo rect: NSRect, of view: NSView, afterSlide number: Int?) {
+        show(templates: templates, relativeTo: rect, of: view, footer: number.map { "Inserts after slide \($0)" } ?? "Inserts at the end", preselecting: nil, changePick: nil)
+    }
+
+    private func show(templates: [LayoutTemplate], relativeTo rect: NSRect, of view: NSView, footer: String, preselecting layout: String?, changePick: ((String) -> Void)?) {
+        self.changePick = changePick
         self.templates = templates
-        footerLabel.stringValue = number.map { "Inserts after slide \($0)" } ?? "Inserts at the end"
+        footerLabel.stringValue = footer
         collectionView.reloadData()
         popover.show(relativeTo: rect, of: view, preferredEdge: .maxY)
         isShown = true
-        if !templates.isEmpty { collectionView.selectionIndexPaths = [IndexPath(item: 0, section: 0)] }
+        if !templates.isEmpty {
+            let item = layout.flatMap { name in templates.firstIndex { $0.name == name } } ?? 0
+            collectionView.selectionIndexPaths = [IndexPath(item: item, section: 0)]
+            collectionView.scrollToItems(at: [IndexPath(item: item, section: 0)], scrollPosition: .centeredVertically)
+        }
         // The popover has its own window; Return and the arrow keys go to the grid only there.
         collectionView.window?.makeFirstResponder(collectionView)
+    }
+
+    /// The layout the grid has selected: what Return would pick.
+    var selectedLayoutName: String? {
+        collectionView.selectionIndexPaths.first.flatMap { templates.indices.contains($0.item) ? templates[$0.item].name : nil }
     }
 
     func close() {
@@ -129,7 +151,7 @@ final class LayoutGalleryController: NSObject, NSCollectionViewDataSource, NSCol
     func pick(_ name: String) {
         guard templates.contains(where: { $0.name == name }) else { return }
         close()
-        onPick?(name)
+        (changePick ?? onPick)?(name)
     }
 
     func collectionView(_ collectionView: NSCollectionView, numberOfItemsInSection section: Int) -> Int { templates.count }

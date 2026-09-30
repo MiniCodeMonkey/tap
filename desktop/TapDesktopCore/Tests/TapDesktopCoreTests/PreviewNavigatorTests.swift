@@ -17,7 +17,6 @@ final class PreviewNavigatorTests: XCTestCase {
         var navigator = PreviewNavigator()
         XCTAssertEqual(navigator.cursorMoved(to: fragments), SlideMessage(slideIndex: 2, fragment: 1, step: 0))
         XCTAssertEqual(navigator.stepLabel, "All steps shown, 2 of 2")
-        XCTAssertEqual(navigator.statusLabel, "Slide 3, follows the cursor")
         XCTAssertNil(navigator.cursorMoved(to: fragments), "moving inside the same slide sends nothing")
         XCTAssertEqual(navigator.cursorMoved(to: stepsAndFragments), SlideMessage(slideIndex: 3, fragment: 0, step: 2))
     }
@@ -33,19 +32,7 @@ final class PreviewNavigatorTests: XCTestCase {
         XCTAssertEqual(navigator.stepForward(), SlideMessage(slideIndex: 2, fragment: 0, step: 0))
         XCTAssertEqual(navigator.stepForward(), SlideMessage(slideIndex: 2, fragment: 1, step: 0))
         _ = navigator.cursorMoved(to: plain)
-        XCTAssertEqual(navigator.stepLabel, "No steps")
-    }
-
-    func testAPinnedSlideIgnoresTheCursorUntilUnpinned() {
-        var navigator = PreviewNavigator()
-        _ = navigator.cursorMoved(to: fragments)
-        navigator.pin()
-        XCTAssertTrue(navigator.isPinned)
-        XCTAssertEqual(navigator.statusLabel, "Slide 3, pinned")
-        XCTAssertNil(navigator.cursorMoved(to: plain))
-        XCTAssertEqual(navigator.slideNumber, 3)
-        XCTAssertEqual(navigator.unpin(cursorSlide: plain), SlideMessage(slideIndex: 0, fragment: -1, step: 0))
-        XCTAssertEqual(navigator.slideNumber, 1)
+        XCTAssertEqual(navigator.stepLabel, "", "a slide without steps shows no label")
     }
 
     func testNewCountsKeepTheLastPositionWhenEverythingWasShown() {

@@ -15,7 +15,29 @@ public struct ScreenInfo: Equatable, Sendable {
     }
 }
 
-/// Which display was the audience the last time this set of displays was
+/// What a display does in a talk.
+public enum DisplayRole: Equatable, Sendable {
+    /// The audience page, full screen. Exactly one display has it.
+    case audience
+    /// The presenter page. At most one display has it.
+    case presenter
+    /// Left alone.
+    case notUsed
+}
+
+/// The roles remembered for one set of displays: the audience display's
+/// name, and the presenter display's (nil when none was chosen).
+public struct RememberedDisplayRoles: Equatable, Sendable {
+    public var audience: String
+    public var presenter: String?
+
+    public init(audience: String, presenter: String?) {
+        self.audience = audience
+        self.presenter = presenter
+    }
+}
+
+/// Which display had which role the last time this set of displays was
 /// connected, across decks. Keyed by the displays' names, sorted, so the
 /// order the system lists them in does not matter.
 // UserDefaults is thread-safe, so a struct that only holds a reference to it is safe to share.
@@ -26,51 +48,187 @@ public struct DisplayAssignmentStore: @unchecked Sendable {
         self.defaults = defaults
     }
 
+    /// The set of displays as one string: their names, sorted.
+    public static func setName(for screens: [ScreenInfo]) -> String {
+        screens.map(\.name).sorted().joined(separator: "|")
+    }
+
     public static func key(for screens: [ScreenInfo]) -> String {
-        "DisplayAssignment:" + screens.map(\.name).sorted().joined(separator: "|")
+        "DisplayRoles:" + setName(for: screens)
     }
 
-    public func audienceName(for screens: [ScreenInfo]) -> String? {
-        defaults.string(forKey: Self.key(for: screens))
+    /// Where the audience display alone was remembered, before presenters were.
+    private static func audienceOnlyKey(for screens: [ScreenInfo]) -> String {
+        "DisplayAssignment:" + setName(for: screens)
     }
 
-    public func setAudienceName(_ name: String, for screens: [ScreenInfo]) {
-        defaults.set(name, forKey: Self.key(for: screens))
+    /// The roles remembered for `screens`. A set remembered only by its
+    /// audience display has the default presenter, unless that is the
+    /// audience display itself.
+    public func roles(for screens: [ScreenInfo]) -> RememberedDisplayRoles? {
+        if let stored = defaults.dictionary(forKey: Self.key(for: screens)), let audience = stored["audience"] as? String {
+            let presenter = stored["presenter"] as? String
+            return RememberedDisplayRoles(audience: audience, presenter: presenter?.isEmpty == false ? presenter : nil)
+        }
+        guard let audience = defaults.string(forKey: Self.audienceOnlyKey(for: screens)) else { return nil }
+        let fallback = DisplayArrangement.defaults(for: screens)
+        let presenter = fallback?.presenter.name == audience ? fallback?.audience.name : fallback?.presenter.name
+        return RememberedDisplayRoles(audience: audience, presenter: presenter)
+    }
+
+    public func setRoles(_ roles: RememberedDisplayRoles, for screens: [ScreenInfo]) {
+        defaults.set(["audience": roles.audience, "presenter": roles.presenter ?? ""], forKey: Self.key(for: screens))
+    }
+
+    public func remember(_ arrangement: DisplayArrangement) {
+        setRoles(RememberedDisplayRoles(audience: arrangement.audience.name,
+                                        presenter: arrangement.presenterScreen?.name),
+                 for: arrangement.screens)
     }
 }
 
-/// Which screen shows the audience page and which the presenter page. With
-/// one display both are the same screen.
+/// Which screen shows the audience page and which the presenter page, and
+/// which connected screens are left alone. With one display, or with no
+/// presenter display, the presenter page shares the audience's screen.
 public struct DisplayArrangement: Equatable, Sendable {
+    /// Every connected display, in the order the system lists them.
+    public let screens: [ScreenInfo]
     public let audience: ScreenInfo
-    public let presenter: ScreenInfo
+    /// The display with the presenter role; nil when none has it.
+    public let presenterScreen: ScreenInfo?
 
-    public init(audience: ScreenInfo, presenter: ScreenInfo) {
+    public init(screens: [ScreenInfo], audience: ScreenInfo, presenterScreen: ScreenInfo?) {
+        self.screens = screens
         self.audience = audience
-        self.presenter = presenter
+        self.presenterScreen = presenterScreen == audience ? nil : presenterScreen
     }
 
-    public var isSingleDisplay: Bool { audience == presenter }
+    /// Two displays with a role each.
+    public init(audience: ScreenInfo, presenter: ScreenInfo) {
+        self.init(screens: audience == presenter ? [audience] : [audience, presenter], audience: audience, presenterScreen: presenter)
+    }
 
-    /// The arrangement for `screens`: the first external display is the
-    /// audience and the built-in one the presenter, unless the store
-    /// remembers the audience on another connected display. With no
-    /// built-in display, the first listed is the audience. nil with no
-    /// screens at all.
-    public static func resolve(screens: [ScreenInfo], store: DisplayAssignmentStore) -> DisplayArrangement? {
+    /// Where the presenter page goes: its own display, or the audience's.
+    public var presenter: ScreenInfo { presenterScreen ?? audience }
+
+    /// True when the presenter page has no display of its own: one
+    /// display, or a presenter role nobody holds.
+    public var sharesDisplay: Bool { presenterScreen == nil }
+
+    public func role(of screen: ScreenInfo) -> DisplayRole {
+        if screen == audience { return .audience }
+        if screen == presenterScreen { return .presenter }
+        return .notUsed
+    }
+
+    /// The roles `screens` start with: the first external display is the
+    /// audience and the built-in one the presenter; with no built-in
+    /// display, the first listed is the audience and the second the
+    /// presenter. Any other display is not used. nil with no screens.
+    static func defaults(for screens: [ScreenInfo]) -> DisplayArrangement? {
         guard let first = screens.first else { return nil }
-        guard screens.count > 1 else { return DisplayArrangement(audience: first, presenter: first) }
+        guard screens.count > 1 else { return DisplayArrangement(screens: screens, audience: first, presenterScreen: nil) }
         let presenter = screens.first(where: \.isBuiltIn) ?? screens[1]
         let audience = screens.first { $0 != presenter } ?? first
-        var arrangement = DisplayArrangement(audience: audience, presenter: presenter)
-        if let remembered = store.audienceName(for: screens), remembered == presenter.name {
-            arrangement = arrangement.swapped()
-        }
-        return arrangement
+        return DisplayArrangement(screens: screens, audience: audience, presenterScreen: presenter)
     }
 
+    /// The arrangement for `screens`: the store's roles when it remembers
+    /// them for this set of displays and they are still connected, else
+    /// the defaults. nil with no screens.
+    public static func resolve(screens: [ScreenInfo], store: DisplayAssignmentStore) -> DisplayArrangement? {
+        guard let defaults = defaults(for: screens) else { return nil }
+        guard screens.count > 1, let remembered = store.roles(for: screens),
+              let audience = screens.first(where: { $0.name == remembered.audience }) else { return defaults }
+        let presenter = remembered.presenter.flatMap { name in screens.first { $0.name == name } }
+        return DisplayArrangement(screens: screens, audience: audience, presenterScreen: presenter)
+    }
+
+    /// The arrangement with `screen` given `role`. A role another display
+    /// holds is exchanged: that display takes the role `screen` had.
+    /// There is always an audience display, and the audience role never
+    /// goes to nobody: taking it off the audience display hands it to the
+    /// presenter display, or else the first other display. One display has
+    /// nothing to assign.
+    public func assigning(_ role: DisplayRole, to screen: ScreenInfo) -> DisplayArrangement {
+        guard screens.count > 1, screens.contains(screen), self.role(of: screen) != role else { return self }
+        let previous = self.role(of: screen)
+        var audience = self.audience
+        var presenter = presenterScreen
+        switch (role, previous) {
+        case (.audience, .presenter):
+            presenter = audience
+            audience = screen
+        case (.audience, _):
+            audience = screen
+        case (.presenter, .audience):
+            if let holder = presenter {
+                audience = holder
+            } else if let other = screens.first(where: { $0 != screen }) {
+                audience = other
+            }
+            presenter = screen
+        case (.presenter, _):
+            presenter = screen
+        case (.notUsed, .audience):
+            if let holder = presenter {
+                audience = holder
+                presenter = nil
+            } else if let other = screens.first(where: { $0 != screen }) {
+                audience = other
+            }
+        case (.notUsed, _):
+            presenter = nil
+        }
+        return DisplayArrangement(screens: screens, audience: audience, presenterScreen: presenter)
+    }
+
+    /// The audience and presenter displays exchanged; the same with no presenter display.
     public func swapped() -> DisplayArrangement {
-        DisplayArrangement(audience: presenter, presenter: audience)
+        guard let presenterScreen else { return self }
+        return DisplayArrangement(screens: screens, audience: presenterScreen, presenterScreen: audience)
+    }
+}
+
+/// The set of displays each deck was last presented on, so Play can ask
+/// before the first talk of a deck and after the displays changed.
+// UserDefaults is thread-safe, so a struct that only holds a reference to it is safe to share.
+public struct PresentedDisplaysStore: @unchecked Sendable {
+    private let defaults: UserDefaults
+
+    public init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+    }
+
+    static func key(for deck: URL) -> String {
+        "PresentedDisplays:" + deck.standardizedFileURL.path
+    }
+
+    /// Records that `deck` was played on `screens`.
+    public func recordPlay(of deck: URL, on screens: [ScreenInfo]) {
+        defaults.set(DisplayAssignmentStore.setName(for: screens), forKey: Self.key(for: deck))
+    }
+
+    /// True when `deck` was last played on exactly the displays `screens` names.
+    public func hasPlayed(_ deck: URL, on screens: [ScreenInfo]) -> Bool {
+        defaults.string(forKey: Self.key(for: deck)) == DisplayAssignmentStore.setName(for: screens)
+    }
+}
+
+/// Whether tap can start its public tunnel: tap looks for a `cloudflared`
+/// executable on the PATH it runs with (`tunnel.Available`), so this looks
+/// on the same PATH.
+public enum CloudflaredLocator {
+    public static let installCommand = "brew install cloudflared"
+
+    public static func isInstalled(searchPath: String?, fileManager: FileManager = .default) -> Bool {
+        guard let searchPath else { return false }
+        return searchPath.split(separator: ":").contains { directory in
+            var isDirectory: ObjCBool = false
+            let candidate = String(directory) + "/cloudflared"
+            return fileManager.fileExists(atPath: candidate, isDirectory: &isDirectory) && !isDirectory.boolValue
+                && fileManager.isExecutableFile(atPath: candidate)
+        }
     }
 }
 
@@ -89,20 +247,18 @@ public struct PresentationOptions: Equatable, Sendable {
     /// False passes --no-record for this run. True leaves recording to tap's
     /// own consent, stored in settings.yaml.
     public var record: Bool
-    /// Phone remote: the tunnel, with the QR code panel.
+    /// Phone remote: tap's public tunnel, with the QR code panel. tap has
+    /// no remote without the tunnel.
     public var phoneRemote: Bool
-    /// Advanced: the tunnel on its own.
-    public var tunnel: Bool
-    /// Advanced: the person's own presenter password, passed to tap.
+    /// The person's own presenter password for the remote, passed to tap.
     public var presenterPassword: String?
 
     public init(mode: PresentationMode, startSlide: Int, record: Bool = true, phoneRemote: Bool = false,
-                tunnel: Bool = false, presenterPassword: String? = nil) {
+                presenterPassword: String? = nil) {
         self.mode = mode
         self.startSlide = startSlide
         self.record = record
         self.phoneRemote = phoneRemote
-        self.tunnel = tunnel
         self.presenterPassword = presenterPassword
     }
 
@@ -112,30 +268,26 @@ public struct PresentationOptions: Equatable, Sendable {
         .present(record: mode == .play && record, presenterPassword: presenterPassword, port: port)
     }
 
-    public var wantsTunnel: Bool { phoneRemote || tunnel }
+    public var wantsTunnel: Bool { phoneRemote }
 }
 
-/// The Present popover's settings, the ones Cmd+Option+P starts with: kept
+/// The Present Settings the Play button and Cmd+Option+P start with: kept
 /// across launches. The presenter password is not among them; it lives in
-/// the popover's field for one launch of the app.
+/// the popover's field for one launch of the app. Where the talk starts is
+/// not among them either: a click on Play starts at the cursor's slide.
 public struct PresentationSettings: Equatable, Sendable {
-    public var startFromSlideOne = false
     public var record = true
     public var phoneRemote = false
-    public var tunnel = false
 
-    public init(startFromSlideOne: Bool = false, record: Bool = true, phoneRemote: Bool = false, tunnel: Bool = false) {
-        self.startFromSlideOne = startFromSlideOne
+    public init(record: Bool = true, phoneRemote: Bool = false) {
         self.record = record
         self.phoneRemote = phoneRemote
-        self.tunnel = tunnel
     }
 
-    /// The options for a start with these settings, from `cursorSlide`
-    /// unless the settings say slide 1.
-    public func options(mode: PresentationMode, cursorSlide: Int, presenterPassword: String?) -> PresentationOptions {
-        PresentationOptions(mode: mode, startSlide: startFromSlideOne ? 1 : cursorSlide, record: record,
-                            phoneRemote: phoneRemote, tunnel: tunnel, presenterPassword: presenterPassword)
+    /// The options for a start with these settings, opening on `startSlide`.
+    public func options(mode: PresentationMode, startSlide: Int, presenterPassword: String?) -> PresentationOptions {
+        PresentationOptions(mode: mode, startSlide: startSlide, record: record, phoneRemote: phoneRemote,
+                            presenterPassword: presenterPassword)
     }
 }
 
@@ -151,14 +303,12 @@ public struct PresentationSettingsStore: @unchecked Sendable {
     public var settings: PresentationSettings {
         get {
             guard let stored = defaults.dictionary(forKey: Self.key) else { return PresentationSettings() }
-            return PresentationSettings(startFromSlideOne: stored["startFromSlideOne"] as? Bool ?? false,
-                                        record: stored["record"] as? Bool ?? true,
-                                        phoneRemote: stored["phoneRemote"] as? Bool ?? false,
-                                        tunnel: stored["tunnel"] as? Bool ?? false)
+            // A tunnel saved on its own is a phone remote: the tunnel is only ever used for the remote.
+            return PresentationSettings(record: stored["record"] as? Bool ?? true,
+                                        phoneRemote: (stored["phoneRemote"] as? Bool ?? false) || (stored["tunnel"] as? Bool ?? false))
         }
         nonmutating set {
-            defaults.set(["startFromSlideOne": newValue.startFromSlideOne, "record": newValue.record,
-                          "phoneRemote": newValue.phoneRemote, "tunnel": newValue.tunnel], forKey: Self.key)
+            defaults.set(["record": newValue.record, "phoneRemote": newValue.phoneRemote], forKey: Self.key)
         }
     }
 }

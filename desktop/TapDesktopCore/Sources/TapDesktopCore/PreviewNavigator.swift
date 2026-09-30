@@ -22,19 +22,16 @@ public enum RevealPositions {
 }
 
 /// Which slide and reveal position the preview shows. It follows the
-/// cursor with every step revealed, stays on a pinned slide, and moves
-/// through positions with the step controls. Each change returns the hub
+/// cursor with every step revealed and moves through positions with the step controls. Each change returns the hub
 /// `slide` message that shows it.
 public struct PreviewNavigator: Equatable, Sendable {
     public private(set) var slideNumber: Int?
     public private(set) var positionIndex = 0
-    public private(set) var pinnedSlideNumber: Int?
     private var steps = 0
     private var fragments = 0
 
     public init() {}
 
-    public var isPinned: Bool { pinnedSlideNumber != nil }
     public var revealCount: Int { steps + fragments }
 
     public var message: SlideMessage? {
@@ -44,18 +41,12 @@ public struct PreviewNavigator: Equatable, Sendable {
     }
 
     public var stepLabel: String {
-        if revealCount == 0 { return "No steps" }
+        if revealCount == 0 { return "" }
         if positionIndex == revealCount { return "All steps shown, \(revealCount) of \(revealCount)" }
         return "Step \(positionIndex) of \(revealCount)"
     }
 
-    public var statusLabel: String {
-        guard let slideNumber else { return "" }
-        return isPinned ? "Slide \(slideNumber), pinned" : "Slide \(slideNumber), follows the cursor"
-    }
-
     public mutating func cursorMoved(to slide: Slide) -> SlideMessage? {
-        guard !isPinned else { return nil }
         if slide.number == slideNumber, slide.steps == steps, slide.fragments == fragments { return nil }
         show(slide)
         return message
@@ -77,18 +68,15 @@ public struct PreviewNavigator: Equatable, Sendable {
             return message
         }
 
-        let wasPinnedHere = pinnedSlideNumber == slideNumber
         guard !slides.isEmpty else {
             self.slideNumber = nil
             steps = 0
             fragments = 0
             positionIndex = 0
-            pinnedSlideNumber = nil
             return nil
         }
         let fallbackIndex = min(max(slideNumber - 1, 0), slides.count - 1)
         show(slides[fallbackIndex])
-        if wasPinnedHere { pinnedSlideNumber = self.slideNumber }
         return message
     }
 
@@ -101,17 +89,6 @@ public struct PreviewNavigator: Equatable, Sendable {
     public mutating func stepBackward() -> SlideMessage? {
         guard slideNumber != nil, positionIndex > 0 else { return nil }
         positionIndex -= 1
-        return message
-    }
-
-    public mutating func pin() {
-        pinnedSlideNumber = slideNumber
-    }
-
-    public mutating func unpin(cursorSlide: Slide?) -> SlideMessage? {
-        pinnedSlideNumber = nil
-        guard let cursorSlide else { return nil }
-        show(cursorSlide)
         return message
     }
 

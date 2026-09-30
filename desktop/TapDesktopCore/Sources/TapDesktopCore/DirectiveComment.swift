@@ -31,6 +31,17 @@ public struct DirectiveComment: Equatable, Sendable {
         return DirectiveComment(range: NSRange(location: start, length: NSMaxRange(close) - start), body: body)
     }
 
+    /// The value of the top-level `key:` line of the slide's leading
+    /// directive comment, or nil when the slide declares none. Lines after
+    /// `notes:` belong to the notes and never count.
+    public static func value(for key: String, in slideText: String) -> String? {
+        guard let comment = leading(in: slideText) else { return nil }
+        var lines = comment.body.components(separatedBy: "\n").map { $0.trimmingCharacters(in: .whitespaces) }
+        if let notesIndex = lines.firstIndex(where: { $0.hasPrefix("notes:") }) { lines = Array(lines[..<notesIndex]) }
+        guard let line = lines.first(where: { $0.hasPrefix(key + ":") }) else { return nil }
+        return line.dropFirst(key.count + 1).trimmingCharacters(in: .whitespaces)
+    }
+
     /// The slide text with `key` set to `value` in its directive comment,
     /// or removed when `value` is nil. Only the one top-level `key:` line
     /// is added, replaced or removed; every other line of the comment stays

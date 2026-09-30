@@ -39,6 +39,9 @@ final class ThemeImageLoader {
     private var workGeneration = 0
     private var startIsScheduled = false
     private var wantsRenders = false
+    /// Slugs rendered ahead of everything else, and without `loadAll`: the
+    /// welcome window's thumbnails.
+    private var prioritySlugs: [String] = []
     private var catalogAttempts = 0
     /// Themes whose render failed; a grid that opens tries them again.
     private var failedSlugs: Set<String> = []
@@ -63,10 +66,24 @@ final class ThemeImageLoader {
         start()
     }
 
+    /// Loads the catalog and renders just these themes, ahead of any
+    /// render `loadAll` asks for.
+    func loadImages(for slugs: [String]) {
+        prioritySlugs = slugs
+        start()
+    }
+
+    /// Drops the themes `loadImages` asked for; the render in flight finishes,
+    /// and nothing ahead of `loadAll`'s own list starts after it.
+    func cancelPriorityImages() {
+        prioritySlugs = []
+    }
+
     /// Cancels the work: the tap run in flight gets its SIGINT, and nothing
     /// more starts until the next load.
     func stop() {
         wantsRenders = false
+        prioritySlugs = []
         startIsScheduled = false
         work?.cancel()
         work = nil
@@ -102,8 +119,10 @@ final class ThemeImageLoader {
     private var catalogIsWanted: Bool { catalog == nil && catalogAttempts < Self.maximumAttempts }
 
     private var nextSlugToRender: String? {
-        guard wantsRenders, let catalog else { return nil }
-        return (catalog.light + catalog.dark).map(\.slug).first { images[$0] == nil && !failedSlugs.contains($0) }
+        guard let catalog else { return nil }
+        let known = Set(catalog.themes.map(\.slug))
+        let candidates = prioritySlugs.filter(known.contains) + (wantsRenders ? (catalog.light + catalog.dark).map(\.slug) : [])
+        return candidates.first { images[$0] == nil && !failedSlugs.contains($0) }
     }
 
     private func runWork() async {
@@ -139,7 +158,10 @@ final class ThemeImageLoader {
         guard let result = try? ThemeImageResult.decode(exit.standardOutput), let image = NSImage(contentsOfFile: result.image) else {
             failedSlugs.insert(slug)
             // Without the export engine no theme renders: the rest wait for the next grid.
-            if case .failed(let code, _)? = exit.outcome, code == Self.engineFailureCode { wantsRenders = false }
+            if case .failed(let code, _)? = exit.outcome, code == Self.engineFailureCode {
+                wantsRenders = false
+                prioritySlugs = []
+            }
             return
         }
         images[slug] = image

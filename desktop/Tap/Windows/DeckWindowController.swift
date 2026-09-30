@@ -21,8 +21,8 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
     let newSlideButton = NewSlideButton()
     /// The toolbar's Theme button: shows the deck's theme name, click opens the theme popover.
     let themeButton = NSButton()
-    /// The toolbar's Play button: a click opens the Present popover, a Shift-click starts from slide 1.
-    let playButton = NSButton()
+    /// The toolbar's Play control: a click plays at once, and holding it or its chevron opens the play menu.
+    let playButton = PlaySplitControl()
     /// The theme grid in a popover, for the toolbar's Theme item.
     private(set) lazy var themePopover: ThemePopoverController = {
         let popover = ThemePopoverController()
@@ -30,17 +30,22 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
         return popover
     }()
     private var themeCatalogObserver: NSObjectProtocol?
-    /// The popover, whose controls are the last settings: reloaded from the
-    /// environment every time the popover is freshened, and saved only by
-    /// its own Start and Rehearse.
+    /// Present Settings, whose controls are the last settings: reloaded from
+    /// the environment every time the popover is freshened, and saved only
+    /// by its own Play and Rehearse.
     private(set) lazy var presentPopover: PresentPopoverController = {
         let popover = PresentPopoverController()
         popover.loadSettings(AppEnvironment.shared.presentationSettings.settings)
-        popover.onSwap = { [weak self] in
+        popover.onAssign = { [weak self] role, screen in
             guard let self else { return }
-            self.sessionController.presentation.swapDisplays()
+            self.sessionController.presentation.assign(role, to: screen)
             self.presentPopover.update(context: self.popoverContext())
         }
+        popover.onScreensChanged = { [weak self] in
+            guard let self else { return }
+            self.presentPopover.update(context: self.popoverContext())
+        }
+        popover.onOpenSpacesSettings = { [weak self] in self?.openSystemSettings(Self.desktopSettingsURL) }
         popover.onStart = { [weak self] options in self?.startPresenting(options, savingSettings: true) }
         popover.onRehearse = { [weak self] options in self?.startPresenting(options, savingSettings: true) }
         return popover
@@ -73,6 +78,7 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
     private(set) var focusHintSheet: QuestionSheet?
     /// The Focus pane of System Settings: the bundle identifier of
     /// FocusSettingsExtension.appex, which System Settings opens by.
+    static let desktopSettingsURL = URL(string: "x-apple.systempreferences:com.apple.Desktop-Settings.extension")!
     static let focusSettingsURL = URL(string: "x-apple.systempreferences:com.apple.Focus-Settings.extension")!
     /// Opens a System Settings pane. A test replaces it and reads the URL.
     var openSystemSettings: (URL) -> Void = { NSWorkspace.shared.open($0) }
@@ -183,6 +189,7 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
             }
             self.panelOverlay.isHidden = true
         }
+        sessionController.slidePanel.onTogglePin = { [weak self] in self?.toggleSlidePanel(nil) }
         let deckURL = sessionController.document?.fileURL
         setPanelPinned(deckURL.map { AppEnvironment.shared.panelState.isPinned(deck: $0) } ?? true)
         // Two things change whether the sidebar is collapsed besides
@@ -250,10 +257,6 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
             return
         }
         splitViewController.setPreviewHidden(!splitViewController.isPreviewHidden)
-    }
-
-    @objc func togglePreviewPin(_ sender: Any?) {
-        sessionController.togglePin()
     }
 
     /// Moves the preview into its own window. It keeps following the cursor.
@@ -353,6 +356,7 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
             panelOverlay.isHidden = true
         }
         slidesButton.state = pinned ? .on : .off
+        sessionController.slidePanel.setPinned(pinned)
         if let deck = sessionController.document?.fileURL {
             AppEnvironment.shared.panelState.setPinned(pinned, deck: deck)
         }
@@ -530,6 +534,12 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
                            afterSlide: sessionController.currentSlideNumber)
     }
 
+    /// The gallery from a slide header's layout menu: a pick changes that
+    /// slide's layout through `onPick` instead of inserting a slide.
+    func showLayoutGallery(changingSlide number: Int, currentLayout: String, anchor: NSRect, in view: NSView, onPick: @escaping (String) -> Void) {
+        layoutGallery.show(templates: AppEnvironment.shared.layoutCatalog.templates, relativeTo: anchor, of: view, changingSlide: number, currentLayout: currentLayout, onPick: onPick)
+    }
+
     /// Every New Slide comes here: the toolbar button, the Slide menu, the
     /// context menu and the gallery. It inserts a slide of the layout after
     /// `selection` (or at the end), and remembers the layout for the next
@@ -568,44 +578,116 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
 
     // MARK: Presenting
 
-    /// Present > Play, Cmd+Option+P: the talk starts at once with the last
-    /// settings (the popover's controls), from the cursor's slide unless
-    /// those settings say slide 1.
+    /// Present > Play from Slide N, Cmd+Option+P: the talk starts at once
+    /// with the last settings (Present Settings' controls), from the
+    /// cursor's slide.
     @objc func play(_ sender: Any?) {
-        guard canStartATalk else { return }
-        startPresenting(freshPopover().options(mode: .play))
+        guard canStartATalk, !showsSettingsForMissingCloudflared() else { return }
+        var options = freshPopover().options(mode: .play)
+        // The cursor's slide, whatever a Start from choice left in the popover.
+        options.startSlide = sessionController.currentSlideNumber ?? 1
+        startPresenting(options)
     }
 
-    /// Present > Play with Options: the popover, anchored on the Play button.
-    @objc func playWithOptions(_ sender: Any?) {
+    /// Present > Play from Beginning, and a Shift-click on Play: the last
+    /// settings, from slide 1.
+    @objc func playFromBeginning(_ sender: Any?) {
+        guard canStartATalk, !showsSettingsForMissingCloudflared() else { return }
+        var options = freshPopover().options(mode: .play)
+        options.startSlide = 1
+        startPresenting(options)
+    }
+
+    /// Present > Present Settings…, the menu's last item, and a click on
+    /// Play the first time: Present Settings anchored on the Play button.
+    @objc func showPresentSettings(_ sender: Any?) {
         guard canStartATalk else { return }
         let anchor: NSView = playButton.window == nil ? (window?.contentView ?? playButton) : playButton
         freshPopover().show(context: popoverContext(), relativeTo: anchor.bounds, of: anchor)
     }
 
-    /// The toolbar's Play button: the popover, or with Shift a start from slide 1 at once.
-    @objc func playButtonPressed(_ sender: Any?) {
+    /// A direct start with the phone remote on needs cloudflared, which tap
+    /// would otherwise report as an error after the talk began. When it is
+    /// missing, Present Settings open with the fix instead. True when they did.
+    private func showsSettingsForMissingCloudflared() -> Bool {
+        guard AppEnvironment.shared.presentationSettings.settings.phoneRemote, !AppEnvironment.shared.isCloudflaredInstalled() else { return false }
+        showPresentSettings(nil)
+        return true
+    }
+
+    /// The accessibility press and the keyboard's activation of the toolbar's
+    /// Play control; a mouse click comes through `onPlay`, since the
+    /// control tracks holds itself.
+    @objc func playControlPressed(_ sender: Any?) {
+        if playButton.selectedSegment == 1 {
+            playButton.showMenu()
+            return
+        }
         playButtonClicked(modifiers: NSApp.currentEvent?.modifierFlags ?? [])
     }
 
+    /// A click on the toolbar's Play: the talk starts at once, from the
+    /// cursor's slide, or with Shift from slide 1. With two or more displays,
+    /// Present Settings opens instead when this deck was never played, or the
+    /// connected displays are not the ones it was last played on, so nobody
+    /// starts on the wrong screen. One display leaves nothing to choose.
     func playButtonClicked(modifiers: NSEvent.ModifierFlags) {
         guard canStartATalk else { return }
-        if modifiers.contains(.shift) {
-            var options = freshPopover().options(mode: .play)
-            options.startSlide = 1
-            startPresenting(options)
+        guard !needsSettingsBeforePlaying else {
+            showPresentSettings(nil)
             return
         }
-        playWithOptions(nil)
+        if modifiers.contains(.shift) {
+            playFromBeginning(nil)
+        } else {
+            play(nil)
+        }
     }
 
-    /// The popover with the settings as they are now and the cursor and
-    /// displays as they are now: the settings are app-wide and another
+    /// True when a click on Play should open Present Settings first: several
+    /// displays are connected and the deck was not last played on them.
+    var needsSettingsBeforePlaying: Bool {
+        sessionController.presentation.screens().count > 1 && !hasPlayedOnTheConnectedDisplays
+    }
+
+    /// True when this deck's last Play was on the displays connected now, by name.
+    var hasPlayedOnTheConnectedDisplays: Bool {
+        let presentation = sessionController.presentation
+        guard let deck = presentation.deckURL() else { return false }
+        return AppEnvironment.shared.presentedDisplays.hasPlayed(deck, on: presentation.screens())
+    }
+
+    /// The menu the Play control opens: the ways to play from here.
+    func makePlayMenu() -> NSMenu {
+        let menu = NSMenu(title: "Play")
+        menu.autoenablesItems = true
+        let cursor = sessionController.currentSlideNumber ?? 1
+        let playItem = NSMenuItem(title: "Play from Slide \(cursor)", action: #selector(play(_:)), keyEquivalent: "p")
+        playItem.keyEquivalentModifierMask = [.command, .option]
+        menu.addItem(playItem)
+        if cursor > 1 {
+            let beginning = NSMenuItem(title: "Play from Beginning", action: #selector(playFromBeginning(_:)), keyEquivalent: "")
+            beginning.badge = NSMenuItemBadge(string: "\u{21E7} click")
+            menu.addItem(beginning)
+        }
+        let rehearseItem = NSMenuItem(title: "Rehearse", action: #selector(rehearse(_:)), keyEquivalent: "p")
+        rehearseItem.keyEquivalentModifierMask = [.command, .option, .shift]
+        menu.addItem(rehearseItem)
+        menu.addItem(.separator())
+        menu.addItem(NSMenuItem(title: "Present Settings\u{2026}", action: #selector(showPresentSettings(_:)), keyEquivalent: ""))
+        for item in menu.items { item.target = self }
+        return menu
+    }
+
+    /// Present Settings with the settings as they are now and the cursor
+    /// and displays as they are now: the settings are app-wide and another
     /// deck may have saved newer ones, and the cursor moved since the
-    /// popover was last shown. The password field is left alone.
+    /// popover was last shown. The password field is left alone. Whether
+    /// cloudflared is installed is looked up alongside.
     private func freshPopover() -> PresentPopoverController {
         presentPopover.loadSettings(AppEnvironment.shared.presentationSettings.settings)
         presentPopover.update(context: popoverContext())
+        presentPopover.cloudflaredInstalled = AppEnvironment.shared.isCloudflaredInstalled()
         return presentPopover
     }
 
@@ -628,7 +710,16 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
     func startPresenting(_ options: PresentationOptions, savingSettings: Bool = false) {
         guard canStartATalk else { return }
         if refusedForAnUpdateWindow() { return }
-        if savingSettings { AppEnvironment.shared.presentationSettings.settings = presentPopover.settings }
+        if savingSettings {
+            // The remote is saved off when this start left it out (cloudflared missing), so later Plays do not reopen Present Settings.
+            let controls = presentPopover.settings
+            AppEnvironment.shared.presentationSettings.settings = PresentationSettings(record: controls.record, phoneRemote: controls.phoneRemote && options.phoneRemote)
+        }
+        let presentation = sessionController.presentation
+        // Rehearse from Present Settings counts too: the person saw and accepted these displays there.
+        if options.mode == .play || savingSettings, let deck = presentation.deckURL() {
+            AppEnvironment.shared.presentedDisplays.recordPlay(of: deck, on: presentation.screens())
+        }
         // Play with the popover open starts at once; the popover goes, so a later click on its Start cannot save settings for a talk it did not start.
         if presentPopover.isShown { presentPopover.close() }
         let hint = AppEnvironment.shared.focusHint
@@ -1100,14 +1191,20 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
             menuItem.title = splitViewController.isPreviewHidden ? "Show Preview" : "Hide Preview"
         }
         if menuItem.action == #selector(showDeckTab(_:)) { return AppEnvironment.shared.deckSchema.isLoaded }
-        if menuItem.action == #selector(togglePreviewPin(_:)) {
-            menuItem.title = sessionController.navigator.isPinned ? "Unpin Preview" : "Pin Preview"
-        }
         if menuItem.action == #selector(toggleSlidePanel(_:)) {
             menuItem.title = isPanelPinned ? "Unpin Slide Panel" : "Pin Slide Panel"
         }
         let presentation = sessionController.presentation
-        if [#selector(play(_:)), #selector(playWithOptions(_:)), #selector(rehearse(_:))].contains(menuItem.action) { return canStartATalk }
+        if menuItem.action == #selector(play(_:)) {
+            menuItem.title = "Play from Slide \(sessionController.currentSlideNumber ?? 1)"
+            return canStartATalk
+        }
+        if menuItem.action == #selector(playFromBeginning(_:)) {
+            // From slide 1 both plays would do the same thing.
+            menuItem.isHidden = (sessionController.currentSlideNumber ?? 1) <= 1
+            return canStartATalk
+        }
+        if [#selector(showPresentSettings(_:)), #selector(rehearse(_:))].contains(menuItem.action) { return canStartATalk }
         if menuItem.action == #selector(stopPresenting(_:)) { return presentation.isActive }
         if menuItem.action == #selector(togglePhoneRemote(_:)) {
             menuItem.state = presentation.remoteIsOn ? .on : .off
@@ -1116,7 +1213,7 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
         if menuItem.action == #selector(reloadSlides(_:)) { return presentation.state == .presenting }
         if menuItem.action == #selector(swapDisplays(_:)) {
             // While another deck presents, a swap here would change the remembered pair under its running talk.
-            return presentation.currentArrangement?.isSingleDisplay == false && (presentation.isActive || !AppEnvironment.shared.isPresenting)
+            return presentation.currentArrangement?.sharesDisplay == false && (presentation.isActive || !AppEnvironment.shared.isPresenting)
         }
         if menuItem.action == #selector(allowDriverInThisDeck(_:)) {
             if let driver = menuItem.representedObject as? String {
@@ -1168,7 +1265,8 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
     }
 
     func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
-        [Self.slidesItemIdentifier, .flexibleSpace, Self.newSlideItemIdentifier, Self.themeItemIdentifier, Self.playItemIdentifier, Self.previewItemIdentifier]
+        [Self.slidesItemIdentifier, .flexibleSpace, Self.newSlideItemIdentifier, Self.themeItemIdentifier, .space,
+         Self.playItemIdentifier, .space, Self.previewItemIdentifier]
     }
 
     func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
@@ -1180,7 +1278,7 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
         if identifier == Self.slidesItemIdentifier {
             let item = NSToolbarItem(itemIdentifier: identifier)
             item.label = "Slides"
-            item.toolTip = "Hover to peek at the slides, click to pin them"
+            item.toolTip = nil // the label says it
             slidesButton.image = NSImage(systemSymbolName: "sidebar.left", accessibilityDescription: "Slides")
             slidesButton.bezelStyle = .toolbar
             slidesButton.setButtonType(.pushOnPushOff)
@@ -1210,12 +1308,12 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
         if identifier == Self.playItemIdentifier {
             let item = NSToolbarItem(itemIdentifier: identifier)
             item.label = "Play"
-            item.toolTip = "Present: choose displays and options. Shift-click to start from slide 1. Cmd+Option+P starts at once."
-            playButton.image = NSImage(systemSymbolName: "play.fill", accessibilityDescription: "Play")
-            playButton.bezelStyle = .toolbar
+            item.toolTip = "Play from the current slide. Shift-click to play from the beginning. Hold for more."
             playButton.setAccessibilityIdentifier("play-button")
             playButton.target = self
-            playButton.action = #selector(playButtonPressed(_:))
+            playButton.action = #selector(playControlPressed(_:))
+            playButton.onPlay = { [weak self] modifiers in self?.playButtonClicked(modifiers: modifiers) }
+            playButton.makeMenu = { [weak self] in self?.makePlayMenu() ?? NSMenu() }
             playButton.isEnabled = canStartATalk
             item.view = playButton
             return item

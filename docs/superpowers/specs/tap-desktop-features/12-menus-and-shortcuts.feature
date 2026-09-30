@@ -24,9 +24,10 @@ Feature: Menus and shortcuts
     Then those keys type text
 
   Scenario: Presenting shortcuts
-    Then Cmd+Option+P starts presenting at once with the last settings from the Present popover
+    Then Cmd+Option+P starts presenting at once from the cursor's slide, with the last settings from Present Settings
     And Cmd+Option+Shift+P starts rehearsing
-    And clicking the Play button opens the Present popover, which Present > Play with Options also opens
+    And Present > Play from Beginning starts at slide 1, and is hidden while the cursor is in slide 1
+    And Present > Present Settings… opens Present Settings from the Play button
 
 
   Scenario: VoiceOver

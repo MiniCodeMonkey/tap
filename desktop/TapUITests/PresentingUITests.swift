@@ -23,14 +23,16 @@ final class PresentingUITests: UITestCase {
         return application
     }
 
-    func testPlayThroughThePopoverAndEscapeStops() throws {
+    func testPlayThroughPresentSettingsAndEscapeStops() throws {
         let application = try launchForPresenting()
-        let play = application.buttons["play-button"]
+        let play = application.descendants(matching: .any).matching(identifier: "play-button").firstMatch
         XCTAssertTrue(play.waitForExistence(timeout: 30))
         Thread.sleep(forTimeInterval: 2)
-        play.click()
+        // One display never needs choosing, so Play alone would start at once: Present Settings comes from the Present menu.
+        application.menuBarItems["Present"].click()
+        application.menuBarItems["Present"].menuItems["Present Settings…"].click()
         let start = application.buttons["start-presenting"]
-        XCTAssertTrue(start.waitForExistence(timeout: 5), "the Present popover")
+        XCTAssertTrue(start.waitForExistence(timeout: 5), "Present Settings")
         start.click()
         let audience = application.windows["audience-window"]
         XCTAssertTrue(audience.waitForExistence(timeout: 30), "the audience window covers the screen")

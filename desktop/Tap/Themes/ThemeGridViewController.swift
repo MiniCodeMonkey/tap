@@ -11,11 +11,38 @@ final class ThemeCell: NSButton {
 
     var isSelected = false {
         didSet {
-            imageView.layer?.borderColor = isSelected ? NSColor.controlAccentColor.cgColor : NSColor.separatorColor.cgColor
-            imageView.layer?.borderWidth = isSelected ? 3 : 0.5
+            updateBorder()
             setAccessibilityValue(isSelected ? "selected" : "")
         }
     }
+
+    /// Draws the selected border while the pointer is over the cell, for a
+    /// row of themes that has no selection of its own.
+    var highlightsOnHover = false
+    private var isHovered = false {
+        didSet { updateBorder() }
+    }
+    private var hoverArea: NSTrackingArea?
+
+    private func updateBorder() {
+        let isHighlighted = isSelected || isHovered
+        imageView.layer?.borderColor = isHighlighted ? NSColor.controlAccentColor.cgColor : NSColor.separatorColor.cgColor
+        imageView.layer?.borderWidth = isHighlighted ? 3 : 0.5
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let hoverArea { removeTrackingArea(hoverArea) }
+        hoverArea = nil
+        guard highlightsOnHover else { return }
+        let area = NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect], owner: self, userInfo: nil)
+        addTrackingArea(area)
+        hoverArea = area
+    }
+
+    override func mouseEntered(with event: NSEvent) { isHovered = highlightsOnHover }
+
+    override func mouseExited(with event: NSEvent) { isHovered = false }
 
     init(theme: ThemeSummary, size: NSSize, nameFontSize: CGFloat, cornerRadius: CGFloat) {
         slug = theme.slug
@@ -116,8 +143,14 @@ final class ThemeGridViewController: NSViewController {
     var showsSections = true
 
     /// The rows the scroll view shows at once, nil for the popover's 320
-    /// points. The New Deck sheet shows two. Set before the view loads.
-    var visibleRows: Int?
+    /// points. The New Deck sheet shows two and a half, so the third row is
+    /// cut off and the grid visibly scrolls. Set before the view loads.
+    var visibleRows: Double?
+
+    /// True when the grid takes the width its container gives it and spreads
+    /// its columns across it, edge to edge. False keeps the width five cells
+    /// need. The New Deck sheet fills its form. Set before the view loads.
+    var fillsWidth = false
 
     /// The width five cells need, for a sheet that sizes itself to the grid.
     var contentWidth: CGFloat { CGFloat(Self.columns) * cellSize.width + CGFloat(Self.columns - 1) * 12 + 8 }
@@ -128,7 +161,8 @@ final class ThemeGridViewController: NSViewController {
         content.orientation = .vertical
         content.alignment = .leading
         content.spacing = 8
-        content.edgeInsets = NSEdgeInsets(top: 4, left: 4, bottom: 4, right: 4)
+        let horizontalInset: CGFloat = fillsWidth ? 0 : 4
+        content.edgeInsets = NSEdgeInsets(top: 4, left: horizontalInset, bottom: 4, right: horizontalInset)
         scrollView.documentView = content
         scrollView.hasVerticalScroller = true
         scrollView.drawsBackground = false
@@ -146,7 +180,7 @@ final class ThemeGridViewController: NSViewController {
         root.spacing = 8
         scrollView.heightAnchor.constraint(equalToConstant: scrollHeight).isActive = true
         scrollView.widthAnchor.constraint(equalTo: root.widthAnchor).isActive = true
-        root.widthAnchor.constraint(equalToConstant: contentWidth).isActive = true
+        if !fillsWidth { root.widthAnchor.constraint(equalToConstant: contentWidth).isActive = true }
         view = root
         let loader = AppEnvironment.shared.themeImages
         observers = [
@@ -177,7 +211,25 @@ final class ThemeGridViewController: NSViewController {
         guard let visibleRows else { return 320 }
         let font = NSFont.systemFont(ofSize: nameFontSize)
         let rowHeight = cellSize.height + 4 + ceil(font.ascender - font.descender + font.leading)
-        return CGFloat(visibleRows) * rowHeight + CGFloat(visibleRows - 1) * 12 + 8
+        return CGFloat(visibleRows) * rowHeight + CGFloat(visibleRows.rounded(.up) - 1) * 12 + 8
+    }
+
+    override func viewDidLayout() {
+        super.viewDidLayout()
+        spreadColumns()
+    }
+
+    /// Sets the space between columns so the cells span the scroll view's
+    /// full width, the first cell at the left edge and the last at the right.
+    private func spreadColumns() {
+        guard fillsWidth else { return }
+        let available = scrollView.contentView.bounds.width - content.edgeInsets.left - content.edgeInsets.right
+        let gaps = CGFloat(Self.columns - 1)
+        let spacing = max(12, (available - CGFloat(Self.columns) * cellSize.width) / gaps)
+        for view in content.arrangedSubviews {
+            guard let grid = view as? NSGridView, grid.columnSpacing != spacing else { continue }
+            grid.columnSpacing = spacing
+        }
     }
 
     private func rebuild() {
@@ -220,6 +272,7 @@ final class ThemeGridViewController: NSViewController {
             }
             content.addArrangedSubview(grid)
         }
+        spreadColumns()
     }
 
     private func refreshDownload() {

@@ -8,7 +8,7 @@ final class MenuTests: HostedTestCase {
         XCTAssertTrue(NSApp.windowsMenu === menus[6])
         XCTAssertTrue(NSApp.helpMenu === menus[7])
         XCTAssertNotNil(menus[1].items.first { $0.title == "Open…" && $0.keyEquivalent == "o" })
-        XCTAssertNotNil(menus[5].items.first { $0.title == "Play" && $0.keyEquivalentModifierMask == [.command, .option] })
+        XCTAssertNotNil(menus[5].items.first { $0.action == #selector(DeckWindowController.play(_:)) && $0.keyEquivalentModifierMask == [.command, .option] })
     }
 
     /// AppKit adds Revert To only to a menu bar that is in place when launch

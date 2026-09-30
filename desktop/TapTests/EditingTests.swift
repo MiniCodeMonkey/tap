@@ -11,7 +11,7 @@ final class EditingTests: HostedTestCase {
         let text = editor.string as NSString
         XCTAssertEqual(text.substring(with: editor.boxes[0].range), "<!-- layout: title -->\n\n# Debugging Production at 3am\n\nWhat the pager doesn't tell you")
         XCTAssertEqual(editor.header(forBoxAt: 0).number, "1")
-        XCTAssertEqual(editor.header(forBoxAt: 0).meta, "title · Debugging Production at 3am")
+        XCTAssertEqual(editor.header(forBoxAt: 0).layoutName, "Title")
         XCTAssertEqual(editor.header(forBoxAt: 2).badges, ["1 step"])
         XCTAssertEqual(editor.hiddenLength, text.range(of: "<!-- layout: title -->").location, "slide 1 is the first box")
     }
@@ -81,7 +81,7 @@ final class EditingTests: HostedTestCase {
         let document = try await openDeck(try Fixtures.copyDeck("seven-slides.md"))
         try await waitForBoxes(document, count: 7)
         let header = try XCTUnwrap(document.sessionController?.editor.header(forBoxAt: 3))
-        XCTAssertTrue(header.meta.hasSuffix("sql, live"), header.meta)
+        XCTAssertEqual(header.meta, "sql, live")
         XCTAssertTrue(header.badges.contains("sqlite"))
     }
 

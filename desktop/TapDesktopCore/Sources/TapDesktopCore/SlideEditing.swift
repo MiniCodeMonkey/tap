@@ -9,6 +9,9 @@ public enum SlideOperation: Equatable, Sendable {
     case delete(numbers: [Int])
     case insert(markdowns: [String], beforeNumber: Int?)
     case setSkip(numbers: [Int], skipped: Bool)
+    /// Declares `layout` in the slide's directive comment, "default"
+    /// included; nil removes the declaration, so tap picks the layout itself.
+    case setLayout(number: Int, layout: String?)
 }
 
 /// What an operation produces: the new text, the boxes of that text, the
@@ -99,6 +102,12 @@ public enum SlideEditing {
                 document.entries[number - 1].text = DirectiveComment.rewrite(slideText: entry.text, setting: "skip", to: skipped ? "true" : nil)
             }
             selected = numbers
+
+        case .setLayout(let number, let layout):
+            guard let numbers = validated([number]) else { return nil }
+            let entry = document.entries[number - 1]
+            document.entries[number - 1].text = DirectiveComment.rewrite(slideText: entry.text, setting: "layout", to: layout)
+            selected = numbers
         }
 
         let sourceNumbers = document.entries.map { $0.slide.number > 0 ? Optional($0.slide.number) : nil }
@@ -120,6 +129,7 @@ public enum SlideEditing {
         case .delete(let numbers): return plural("Delete", Set(numbers).count)
         case .insert(let markdowns, _): return markdowns.count == 1 ? "New Slide" : "Insert \(markdowns.count) Slides"
         case .setSkip(let numbers, let skipped): return plural(skipped ? "Skip" : "Unskip", Set(numbers).count)
+        case .setLayout: return "Change Layout"
         }
     }
 

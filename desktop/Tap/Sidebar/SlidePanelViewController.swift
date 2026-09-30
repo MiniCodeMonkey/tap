@@ -56,6 +56,11 @@ final class SlidePanelViewController: NSViewController, NSCollectionViewDataSour
     let collectionView = SlidePanelCollectionView()
     let scrollView = NSScrollView()
     let titleLabel = NSTextField(labelWithString: "Slides")
+    /// The pin at the right end of the header: filled while the panel is docked.
+    let pinButton = NSButton()
+    /// Runs when the pin is clicked. The window docks a peeked panel and undocks a docked one.
+    var onTogglePin: (() -> Void)?
+    private(set) var isPinned = false
     /// Runs when the visible thumbnails change, so the renderer can reorder its queue.
     var onVisibleRangeChanged: (() -> Void)?
     private(set) var slides: [Slide] = []
@@ -104,19 +109,50 @@ final class SlidePanelViewController: NSViewController, NSCollectionViewDataSour
         scrollView.contentView.postsBoundsChangedNotifications = true
         NotificationCenter.default.addObserver(self, selector: #selector(boundsChanged(_:)), name: NSView.boundsDidChangeNotification, object: scrollView.contentView)
 
-        for view in [titleLabel, scrollView] as [NSView] {
+        pinButton.isBordered = false
+        pinButton.imagePosition = .imageOnly
+        pinButton.target = self
+        pinButton.action = #selector(pinClicked(_:))
+        pinButton.setAccessibilityIdentifier("slide-panel-pin")
+        applyPinState()
+
+        for view in [titleLabel, pinButton, scrollView] as [NSView] {
             view.translatesAutoresizingMaskIntoConstraints = false
             root.addSubview(view)
         }
         NSLayoutConstraint.activate([
             titleLabel.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 14),
             titleLabel.centerYAnchor.constraint(equalTo: root.topAnchor, constant: 20),
+            pinButton.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -10),
+            pinButton.centerYAnchor.constraint(equalTo: titleLabel.centerYAnchor),
+            pinButton.widthAnchor.constraint(equalToConstant: 22),
+            pinButton.heightAnchor.constraint(equalToConstant: 22),
+            titleLabel.trailingAnchor.constraint(lessThanOrEqualTo: pinButton.leadingAnchor, constant: -6),
             scrollView.topAnchor.constraint(equalTo: root.topAnchor, constant: 40),
             scrollView.leadingAnchor.constraint(equalTo: root.leadingAnchor),
             scrollView.trailingAnchor.constraint(equalTo: root.trailingAnchor),
             scrollView.bottomAnchor.constraint(equalTo: root.bottomAnchor),
         ])
         view = root
+    }
+
+    /// Shows the pin filled while the panel is docked and outlined while it peeks.
+    func setPinned(_ pinned: Bool) {
+        isPinned = pinned
+        applyPinState()
+    }
+
+    private func applyPinState() {
+        let label = isPinned ? "Stop Keeping Slides Open" : "Keep Slides Open"
+        let configuration = NSImage.SymbolConfiguration(pointSize: 12, weight: .regular)
+        pinButton.image = NSImage(systemSymbolName: isPinned ? "pin.fill" : "pin", accessibilityDescription: label)?.withSymbolConfiguration(configuration)
+        pinButton.contentTintColor = isPinned ? .controlAccentColor : .secondaryLabelColor
+        pinButton.toolTip = label
+        pinButton.setAccessibilityLabel(label)
+    }
+
+    @objc private func pinClicked(_ sender: Any?) {
+        onTogglePin?()
     }
 
     deinit {

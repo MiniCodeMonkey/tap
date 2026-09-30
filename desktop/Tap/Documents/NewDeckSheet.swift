@@ -24,8 +24,6 @@ final class NewDeckSheet: QuestionSheet, NSTextFieldDelegate {
     let locationHint = NSTextField(labelWithString: "Creates a folder named after the title, with the deck and images/")
     let grid = ThemeGridViewController(cellSize: ThemeGridViewController.sheetCellSize)
     let errorLabel = NSTextField(wrappingLabelWithString: "")
-    /// "Scroll for all 21 themes", the count from tap's catalog.
-    let scrollHint = NSTextField(labelWithString: "")
     var onCreate: ((NewDeckRequest) -> Void)?
     /// Opens a folder chooser (an NSOpenPanel in production; a test answers at once).
     var chooseFolder: (@escaping (URL?) -> Void) -> Void = { completion in
@@ -38,7 +36,6 @@ final class NewDeckSheet: QuestionSheet, NSTextFieldDelegate {
     }
     private var locations: [URL] = []
     private var chosenLocation: URL
-    private var catalogObserver: NSObjectProtocol?
 
     var createButton: NSButton { acceptButton }
     var cancelButton: NSButton { declineButton }
@@ -77,7 +74,8 @@ final class NewDeckSheet: QuestionSheet, NSTextFieldDelegate {
         locationHint.textColor = .secondaryLabelColor
         grid.showsFooter = false
         grid.showsSections = false
-        grid.visibleRows = 2
+        grid.visibleRows = 2.5
+        grid.fillsWidth = true
         grid.selectedSlug = defaultTheme
         errorLabel.textColor = .systemRed
         errorLabel.font = .systemFont(ofSize: 12)
@@ -107,10 +105,7 @@ final class NewDeckSheet: QuestionSheet, NSTextFieldDelegate {
         let themeHeading = NSTextField(labelWithString: "Theme")
         themeHeading.font = .systemFont(ofSize: 11, weight: .semibold)
         themeHeading.textColor = .secondaryLabelColor
-        scrollHint.font = .systemFont(ofSize: 11.5)
-        scrollHint.textColor = .secondaryLabelColor
-        refreshScrollHint()
-        let stack = NSStackView(views: [card, themeHeading, grid.view, scrollHint, errorLabel])
+        let stack = NSStackView(views: [card, themeHeading, grid.view, errorLabel])
         stack.orientation = .vertical
         stack.alignment = .leading
         stack.spacing = 10
@@ -119,7 +114,7 @@ final class NewDeckSheet: QuestionSheet, NSTextFieldDelegate {
         NSLayoutConstraint.activate([
             stack.topAnchor.constraint(equalTo: form.topAnchor), stack.bottomAnchor.constraint(equalTo: form.bottomAnchor),
             stack.leadingAnchor.constraint(equalTo: form.leadingAnchor), stack.trailingAnchor.constraint(equalTo: form.trailingAnchor),
-            card.widthAnchor.constraint(equalTo: stack.widthAnchor), titleField.widthAnchor.constraint(equalToConstant: 300),
+            card.widthAnchor.constraint(equalTo: stack.widthAnchor), grid.view.widthAnchor.constraint(equalTo: stack.widthAnchor), titleField.widthAnchor.constraint(equalToConstant: 300),
             rows.topAnchor.constraint(equalTo: card.topAnchor), rows.bottomAnchor.constraint(equalTo: card.bottomAnchor),
             rows.leadingAnchor.constraint(equalTo: card.leadingAnchor), rows.trailingAnchor.constraint(equalTo: card.trailingAnchor),
             titleRow.widthAnchor.constraint(equalTo: rows.widthAnchor, constant: -24), locationRow.widthAnchor.constraint(equalTo: titleRow.widthAnchor),
@@ -128,21 +123,9 @@ final class NewDeckSheet: QuestionSheet, NSTextFieldDelegate {
         ])
         setContentSize(contentView?.fittingSize ?? frame.size)
         titleChanged(titleField)
-        catalogObserver = NotificationCenter.default.addObserver(forName: ThemeImageLoader.didLoadCatalogNotification, object: AppEnvironment.shared.themeImages, queue: .main) { [weak self] _ in
-            MainActor.assumeIsolated { self?.refreshScrollHint() }
-        }
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
-
-    deinit {
-        if let catalogObserver { NotificationCenter.default.removeObserver(catalogObserver) }
-    }
-
-    private func refreshScrollHint() {
-        let count = AppEnvironment.shared.themeImages.catalog?.themes.count
-        scrollHint.stringValue = count.map { "Scroll for all \($0) themes" } ?? "Scroll for all themes"
-    }
 
     /// A folder in the Save in popup, with the folder icon the board draws.
     private func addLocationItem(_ location: URL, at index: Int) {

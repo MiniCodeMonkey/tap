@@ -250,7 +250,7 @@ final class PresentationController {
     var usesFullScreen: Bool {
         guard fullScreenAllowed() else { return false }
         let connected = DisplayArrangement.resolve(screens: screens(), store: displayAssignments)
-        return (connected?.isSingleDisplay ?? true) || screensHaveSeparateSpaces()
+        return (connected?.sharesDisplay ?? true) || screensHaveSeparateSpaces()
     }
 
     /// True once every window is where it was asked to be.
@@ -532,7 +532,7 @@ final class PresentationController {
         let fullScreen = usesFullScreen
         var order: [(window: PresentationWindow, frame: CGRect, fullScreen: Bool)] = []
         let front: PresentationWindow
-        if let audienceWindow, arrangement.isSingleDisplay {
+        if let audienceWindow, arrangement.sharesDisplay {
             order = [(audienceWindow, arrangement.audience.frame, fullScreen)]
             front = audienceWindow
         } else {
@@ -610,7 +610,7 @@ final class PresentationController {
     /// audience view as its child, in the same Space, or goes away again.
     /// No Space switch, no animation.
     func toggleFrontWindow() {
-        guard let audienceWindow, let presenterWindow, windowsShown, arrangement?.isSingleDisplay == true else { return }
+        guard let audienceWindow, let presenterWindow, windowsShown, arrangement?.sharesDisplay == true else { return }
         if presenterIsShownOverAudience {
             presenterWindow.detach()
             frontWindow = audienceWindow
@@ -625,7 +625,7 @@ final class PresentationController {
     /// becomes the active one, which is what making it key does.
     func bringPresenterWindowForward() {
         guard let presenterWindow, windowsShown else { return }
-        if arrangement?.isSingleDisplay == true, audienceWindow != nil {
+        if arrangement?.sharesDisplay == true, audienceWindow != nil {
             showPresenterOverAudience()
         } else {
             presenterWindow.makeKeyAndOrderFront(nil)
@@ -649,7 +649,7 @@ final class PresentationController {
             stop()
             return nil
         }
-        if event.keyCode == 48, event.modifierFlags.contains(.option), arrangement?.isSingleDisplay == true, audienceWindow != nil {
+        if event.keyCode == 48, event.modifierFlags.contains(.option), arrangement?.sharesDisplay == true, audienceWindow != nil {
             toggleFrontWindow()
             return nil
         }
@@ -757,19 +757,30 @@ final class PresentationController {
 
     /// Exchanges the audience and presenter displays, before the talk (the
     /// popover's Swap Displays) or during it (the toolbar's), and remembers
-    /// the choice for this pair of displays, across decks. During a talk
+    /// the choice for this set of displays, across decks. During a talk
     /// each window leaves its Space, moves and enters the other display's.
-    /// Nothing to swap on one display.
+    /// Nothing to swap on one display, or with no presenter display.
     func swapDisplays() {
-        let screens = self.screens()
-        guard let current = arrangement ?? DisplayArrangement.resolve(screens: screens, store: displayAssignments),
-              !current.isSingleDisplay else { return }
-        let swapped = current.swapped()
-        displayAssignments.setAudienceName(swapped.audience.name, for: screens)
+        guard let current = arrangement ?? DisplayArrangement.resolve(screens: screens(), store: displayAssignments),
+              !current.sharesDisplay else { return }
+        apply(current.swapped(), replacing: current)
+    }
+
+    /// Gives `screen` the role, as the popover's display menus do, and
+    /// remembers the result for this set of displays. The same as a swap
+    /// for the windows of a running talk.
+    func assign(_ role: DisplayRole, to screen: ScreenInfo) {
+        guard let current = arrangement ?? DisplayArrangement.resolve(screens: screens(), store: displayAssignments) else { return }
+        apply(current.assigning(role, to: screen), replacing: current)
+    }
+
+    private func apply(_ updated: DisplayArrangement, replacing current: DisplayArrangement) {
+        guard updated != current else { return }
+        displayAssignments.remember(updated)
         guard isActive, arrangement != nil else { return }
-        arrangement = swapped
+        arrangement = updated
         guard windowsShown else { return }
-        moveWindows(to: swapped, from: current)
+        moveWindows(to: updated, from: current)
     }
 
     /// The displays changed while a talk runs: a projector unplugged or
@@ -813,8 +824,8 @@ final class PresentationController {
             }
             return
         }
-        if arrangement.isSingleDisplay {
-            let showPresenter = !previous.isSingleDisplay || presenterIsShownOverAudience
+        if arrangement.sharesDisplay {
+            let showPresenter = !previous.sharesDisplay || presenterIsShownOverAudience
             presenterWindow.detach()
             // A presenter window with a Space of its own leaves it first (a
             // child may not have one), then rides over the audience. One

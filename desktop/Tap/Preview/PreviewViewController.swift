@@ -18,17 +18,14 @@ struct ReadyPayload: Equatable {
     }
 }
 
-/// tap's audience page for the slide under the cursor, a status line, the
-/// step controls and the pin.
+/// tap's audience page for the slide under the cursor and the step controls.
 final class PreviewViewController: NSViewController, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler {
     /// The page's web view. A web view whose content process stops
     /// answering is replaced by a new one (see `recoverPage`), so this is
     /// read afresh rather than kept.
     private(set) var webView: WKWebView
-    let statusLabel = NSTextField(labelWithString: "")
     let stepLabel = NSTextField(labelWithString: "")
     let stepControl: NSSegmentedControl
-    let pinButton: NSButton
     /// Holds the web view and anything laid over it.
     let pageContainer = NSView()
 
@@ -36,7 +33,6 @@ final class PreviewViewController: NSViewController, WKNavigationDelegate, WKUID
     var onReady: ((ReadyPayload) -> Void)?
     var onStepBackward: (() -> Void)?
     var onStepForward: (() -> Void)?
-    var onPinToggled: (() -> Void)?
     var onTryAgain: (() -> Void)?
     private(set) var lastReady: ReadyPayload?
     /// How many times the preview has been pointed at a page. Every reload
@@ -125,17 +121,11 @@ final class PreviewViewController: NSViewController, WKNavigationDelegate, WKUID
             NSImage(systemSymbolName: "chevron.left", accessibilityDescription: "Previous step")!,
             NSImage(systemSymbolName: "chevron.right", accessibilityDescription: "Next step")!,
         ], trackingMode: .momentary, target: nil, action: nil)
-        pinButton = NSButton(image: NSImage(systemSymbolName: "pin", accessibilityDescription: "Pin this slide")!, target: nil, action: nil)
         super.init(nibName: nil, bundle: nil)
         adopt(webView)
         stepControl.target = self
         stepControl.action = #selector(stepControlPressed(_:))
         stepControl.setAccessibilityIdentifier("step-control")
-        pinButton.setButtonType(.pushOnPushOff)
-        pinButton.bezelStyle = .toolbar
-        pinButton.target = self
-        pinButton.action = #selector(pinPressed(_:))
-        pinButton.setAccessibilityIdentifier("pin")
         overlay.tryAgainButton.target = self
         overlay.tryAgainButton.action = #selector(tryAgainPressed(_:))
         overlay.showLogButton.action = #selector(AppDelegate.showTapLog(_:))
@@ -166,24 +156,20 @@ final class PreviewViewController: NSViewController, WKNavigationDelegate, WKUID
 
     override func loadView() {
         let root = NSView()
-        statusLabel.font = .systemFont(ofSize: 12)
-        statusLabel.textColor = .secondaryLabelColor
         stepLabel.font = .systemFont(ofSize: 12)
         stepLabel.textColor = .secondaryLabelColor
-        let stepRow = NSStackView(views: [stepControl, stepLabel, NSView(), pinButton])
+        let stepRow = NSStackView(views: [stepControl, stepLabel, NSView()])
         stepRow.spacing = 10
         webView.translatesAutoresizingMaskIntoConstraints = false
         pageContainer.addSubview(webView)
         overlay.translatesAutoresizingMaskIntoConstraints = false
         pageContainer.addSubview(overlay)
-        for view in [statusLabel, pageContainer, stepRow] as [NSView] {
+        for view in [pageContainer, stepRow] as [NSView] {
             view.translatesAutoresizingMaskIntoConstraints = false
             root.addSubview(view)
         }
         NSLayoutConstraint.activate([
-            statusLabel.topAnchor.constraint(equalTo: root.topAnchor),
-            statusLabel.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 20),
-            pageContainer.topAnchor.constraint(equalTo: statusLabel.bottomAnchor, constant: 10),
+            pageContainer.topAnchor.constraint(equalTo: root.topAnchor, constant: 10),
             pageContainer.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 20),
             pageContainer.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -20),
             pageContainer.heightAnchor.constraint(equalTo: pageContainer.widthAnchor, multiplier: 9.0 / 16.0),
@@ -391,9 +377,8 @@ final class PreviewViewController: NSViewController, WKNavigationDelegate, WKUID
     }
 
     func show(_ navigator: PreviewNavigator) {
-        statusLabel.stringValue = navigator.statusLabel
         stepLabel.stringValue = navigator.stepLabel
-        pinButton.state = navigator.isPinned ? .on : .off
+        stepControl.isHidden = navigator.revealCount == 0
         stepControl.setEnabled(navigator.positionIndex > 0, forSegment: 0)
         stepControl.setEnabled(navigator.positionIndex < navigator.revealCount, forSegment: 1)
     }
@@ -463,10 +448,6 @@ final class PreviewViewController: NSViewController, WKNavigationDelegate, WKUID
 
     @objc private func stepControlPressed(_ sender: NSSegmentedControl) {
         if sender.selectedSegment == 0 { onStepBackward?() } else { onStepForward?() }
-    }
-
-    @objc private func pinPressed(_ sender: NSButton) {
-        onPinToggled?()
     }
 
     // MARK: WebKit

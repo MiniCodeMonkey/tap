@@ -593,7 +593,6 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
         Task { await AppEnvironment.shared.deckSchema.load() }
         previewViewController.onStepBackward = { [weak self] in self?.sendPreviewMessage(self?.navigator.stepBackward()) }
         previewViewController.onStepForward = { [weak self] in self?.sendPreviewMessage(self?.navigator.stepForward()) }
-        previewViewController.onPinToggled = { [weak self] in self?.togglePin() }
         previewViewController.onTryAgain = { [weak self] in self?.session.tryAgain() }
         previewViewController.onRestartSession = { [weak self] in
             guard let self, !self.stopped, case .running = self.session.state else { return }
@@ -879,17 +878,6 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
         guard let index = editor.boxes.firstIndex(where: { $0.slide.number == number }) else { return }
         editor.moveCursor(toSlide: index)
         editor.window?.makeFirstResponder(editor)
-    }
-
-    /// Pins the slide the preview shows, or unpins it and follows the cursor again.
-    func togglePin() {
-        if navigator.isPinned {
-            let cursorSlide = editor.currentBoxIndex.map { editor.boxes[$0].slide }
-            sendPreviewMessage(navigator.unpin(cursorSlide: cursorSlide))
-        } else {
-            navigator.pin()
-            sendPreviewMessage(nil)
-        }
     }
 
     /// The number of the slide under the cursor.
@@ -1413,6 +1401,76 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
             menu.addItem(item)
         }
         return menu
+    }
+
+    /// What a layout menu item carries: the slide as it was when the menu
+    /// opened, the layout the item declares (nil for Automatic, which removes
+    /// the declaration), the layout tap renders the slide with, and where
+    /// the pop-up sits.
+    final class LayoutChoice: NSObject {
+        let selection: SlideSelection
+        let slideNumber: Int
+        let layout: String?
+        let renderedLayout: String
+        let anchor: NSRect
+
+        init(selection: SlideSelection, slideNumber: Int, layout: String?, renderedLayout: String, anchor: NSRect) {
+            self.selection = selection
+            self.slideNumber = slideNumber
+            self.layout = layout
+            self.renderedLayout = renderedLayout
+            self.anchor = anchor
+        }
+    }
+
+    /// The menu of a box header's layout pop-up: Automatic with the layout
+    /// tap picked, tap's layouts by display name with a checkmark on the one
+    /// the slide declares, then Show All Layouts. A component slide has no menu.
+    func editor(_ editor: EditorTextView, layoutMenuForBoxAt index: Int) -> NSMenu? {
+        guard editor.boxes.indices.contains(index), let anchor = editor.layoutChipRect(forBoxAt: index) else { return nil }
+        let number = editor.boxes[index].slide.number
+        let rendered = editor.header(forBoxAt: index).layout
+        let slideText = (editor.string as NSString).substring(with: editor.boxes[index].range)
+        let declared = DirectiveComment.value(for: "layout", in: slideText)
+        let selection = self.selection(forSlide: number)
+        let catalog = AppEnvironment.shared.layoutCatalog
+        var names = catalog.templates.map(\.name)
+        if names.isEmpty { Task { await catalog.load() } }
+        // A declared layout tap no longer lists, or one still loading, keeps its own checked row.
+        if let declared, !names.contains(declared) { names.insert(declared, at: 0) }
+        let menu = NSMenu(title: "Layout")
+        menu.autoenablesItems = false
+        func addItem(title: String, layout: String?) {
+            let item = NSMenuItem(title: title, action: #selector(chooseLayout(_:)), keyEquivalent: "")
+            item.target = self
+            item.state = layout == declared ? .on : .off
+            item.representedObject = LayoutChoice(selection: selection, slideNumber: number, layout: layout, renderedLayout: rendered, anchor: anchor)
+            menu.addItem(item)
+        }
+        addItem(title: "Automatic (\(LayoutCatalog.displayName(rendered)))", layout: nil)
+        menu.addItem(.separator())
+        for name in names { addItem(title: LayoutCatalog.displayName(name), layout: name) }
+        menu.addItem(.separator())
+        let all = NSMenuItem(title: "Show All Layouts\u{2026}", action: #selector(showAllLayouts(_:)), keyEquivalent: "")
+        all.target = self
+        all.representedObject = LayoutChoice(selection: selection, slideNumber: number, layout: declared, renderedLayout: rendered, anchor: anchor)
+        menu.addItem(all)
+        return menu
+    }
+
+    @objc func chooseLayout(_ sender: NSMenuItem) {
+        guard let choice = sender.representedObject as? LayoutChoice else { return }
+        // The checked row is the slide's own declaration: picking it changes nothing.
+        guard sender.state != .on else { return }
+        changeLayout(of: choice.selection, to: choice.layout)
+    }
+
+    @objc func showAllLayouts(_ sender: NSMenuItem) {
+        guard let choice = sender.representedObject as? LayoutChoice,
+              let windowController = editor.window?.windowController as? DeckWindowController else { return }
+        windowController.showLayoutGallery(changingSlide: choice.slideNumber, currentLayout: choice.renderedLayout, anchor: choice.anchor, in: editor) { [weak self] name in
+            self?.changeLayout(of: choice.selection, to: name)
+        }
     }
 
     func editor(_ editor: EditorTextView, applyFixItForBoxAt index: Int) {

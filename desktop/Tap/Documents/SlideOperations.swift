@@ -107,6 +107,23 @@ extension DeckSessionController {
         return SlideSelection(target: .slides(numbers, markdowns: markdown(forSlides: numbers)))
     }
 
+    /// Names one slide by its number and what it holds now, so the command
+    /// that acts on it refuses rather than change whichever slide has that
+    /// number once tap's answer arrives.
+    func selection(forSlide number: Int) -> SlideSelection {
+        SlideSelection(target: .slides([number], markdowns: markdown(forSlides: [number])))
+    }
+
+    /// Declares `layout` for the slide `selection` names, as one undo step
+    /// named "Change Layout"; nil removes the declaration, leaving the layout
+    /// to tap. A slide that already has the declaration is left alone.
+    func changeLayout(of selection: SlideSelection, to layout: String?) {
+        perform(on: selection) { numbers in
+            guard numbers.count == 1 else { return nil }
+            return .setLayout(number: numbers[0], layout: layout)
+        }
+    }
+
     /// The numbers `selection` names now, on tap's ranges, or nil when its
     /// slides no longer hold the text they held when it was named.
     func resolve(_ selection: SlideSelection) -> [Int]? {
@@ -169,6 +186,20 @@ extension DeckSessionController {
             return nil
         }
         guard let replacement = TextDiff.replacement(from: text, to: result.text), let undoManager = document?.undoManager else { return nil }
+        // A layout change edits one slide's directive comment and leaves the person's
+        // selection where it was, moved only by the edit's change in length.
+        var preservedSelection: NSRange?
+        if case .setLayout = operation {
+            let selection = editor.selectedRange()
+            func mapped(_ position: Int) -> Int {
+                let edited = replacement.range
+                if position >= NSMaxRange(edited) { return position + (replacement.replacement as NSString).length - edited.length }
+                if position <= edited.location { return position }
+                return edited.location + (replacement.replacement as NSString).length
+            }
+            let start = mapped(selection.location)
+            preservedSelection = NSRange(location: start, length: max(0, mapped(NSMaxRange(selection)) - start))
+        }
         // The operation is one undo step of its own: a top-level group
         // opened and closed here. With no group open, the automatic
         // grouping is paused while the group is open, so the undo manager
@@ -192,10 +223,14 @@ extension DeckSessionController {
         // slides itself, last.
         withPanelDrivingTheCursor {
             editor.adoptBoxes(result.boxes)
-            editor.setSelectedRange(NSRange(location: result.caret, length: 0))
+            editor.setSelectedRange(preservedSelection ?? NSRange(location: result.caret, length: 0))
         }
         slidePanel.remapImages(sourceNumbers: result.sourceNumbers)
         slidePanel.setSlides(editor.boxes.map(\.slide))
+        if preservedSelection != nil {
+            Task { await sourceSync.sendNow() }
+            return result
+        }
         slidePanel.select(numbers: result.selectedNumbers, scroll: true)
         if let first = result.selectedNumbers.first, editor.boxes.indices.contains(first - 1) {
             editor.scrollRangeToVisible(editor.boxes[first - 1].range)
@@ -212,6 +247,7 @@ extension DeckSessionController {
         case .move(let moved, _): numbers = moved
         case .duplicate(let selected), .delete(let selected): numbers = selected
         case .setSkip(let selected, _): numbers = selected
+        case .setLayout(let number, _): numbers = [number]
         case .insert: return 0
         }
         guard let first = numbers.min(), let index = editor.currentBoxIndex, editor.boxes[index].slide.number == first else { return 0 }
