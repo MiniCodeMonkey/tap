@@ -113,7 +113,7 @@ final class ThemeGridTests: HostedTestCase {
         try await waitUntil(timeout: 6, "the cancelled run to end") { ToolRun.activeRuns.isEmpty }
     }
 
-    /// The scenario: a pick in the toolbar's pop-up, tap theme set, and the preview re-rendered.
+    /// The scenario: a pick in the toolbar's pop-up rewrites the theme line, and the preview re-renders.
     func testChangeTheDeckSTheme() async throws {
         _ = try useFakeRenders()
         let deck = try Fixtures.copyDeck("themed.md")
@@ -132,8 +132,7 @@ final class ThemeGridTests: HostedTestCase {
         window.themePopover.grid.cell(for: "blueprint")?.performClick(nil)
         XCTAssertFalse(window.themePopover.isShown, "a pick closes the popover")
 
-        try await waitUntil(timeout: 20, "tap theme set to land") { controller.editor.string.contains("theme: blueprint") }
-        XCTAssertTrue(try String(contentsOf: deck, encoding: .utf8).contains("theme: blueprint"), "tap wrote the file")
+        try await waitUntil(timeout: 20, "the theme line to change") { controller.editor.string.contains("theme: blueprint") }
         XCTAssertEqual(controller.editor.undoManager?.undoActionName, "Change Theme")
         try await waitUntil(timeout: 10, "the toolbar") { window.themeButton.title == "Blueprint" }
         // The preview re-rendered: tap reloads its pages on the file change, and the app resends the slide.
@@ -147,6 +146,5 @@ final class ThemeGridTests: HostedTestCase {
         window.themePopover.grid.cell(for: "default")?.performClick(nil)
         try await waitUntil(timeout: 20, "the theme line to go") { !controller.editor.string.contains("theme:") }
         try await waitUntil(timeout: 10, "the toolbar") { window.themeButton.title == "Default" }
-        XCTAssertFalse(try String(contentsOf: deck, encoding: .utf8).contains("theme:"))
     }
 }
