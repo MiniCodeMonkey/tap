@@ -446,6 +446,7 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
         let slug = currentThemeSlug
         guard slug != lastThemeSlug else { return }
         lastThemeSlug = slug
+        refreshCards()
         onThemeChanged?(slug)
     }
 
@@ -567,6 +568,10 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
         editor.deckURL = document.fileURL
         editorViewController.hostHiddenView(thumbnails.renderer.webView)
         thumbnails.currentSlideNumber = { [weak self] in self?.currentSlideNumber }
+        thumbnails.bundledImages = { [weak self] summary in
+            guard let self, let tour = AppEnvironment.shared.tourThumbnails else { return [:] }
+            return tour.imageURLs(forText: self.editor.string, slideCount: summary.slides.count)
+        }
         thumbnails.renderer.isPaused = { [weak self] in
             guard let last = self?.sourceSync.lastEditDate else { return false }
             return Date().timeIntervalSince(last) < 0.5
@@ -598,6 +603,7 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
             guard let self, !self.stopped, case .running = self.session.state else { return }
             self.session.restart()
         }
+        previewViewController.placeholder = { [weak self] in self?.previewPlaceholder() }
         previewViewController.onLog = { [weak self] line in self?.session.log.append(line, source: .app) }
         previewViewController.onReady = { [weak self] payload in
             self?.previewDidRender(payload)
@@ -911,7 +917,44 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
 
     func start() {
         editor.load(text: document?.text ?? "")
+        refreshCards()
         session.start()
+    }
+
+    /// True once tap runs and the slides can be shown.
+    var isTapReady: Bool { client != nil }
+    /// Runs when `isTapReady` may have changed.
+    var onReadinessChange: (() -> Void)?
+
+    /// The paper colour of the deck's theme: the dominant background of its bundled thumbnail, neutral when unknown.
+    var paperColour: PaperColour {
+        let slug = currentThemeSlug ?? ThemeGridViewController.defaultSlug
+        return AppEnvironment.shared.themeImages.image(for: slug).flatMap(PaperColour.sampled(from:)) ?? .neutral
+    }
+
+    /// The text card of each slide, read from the deck's Markdown: one per
+    /// tap box, or, before tap has answered, one per slide the text itself
+    /// shows. The panel and the preview draw them until real pictures exist.
+    func refreshCards() {
+        let text = editor.string
+        let cards: [SlideCard]
+        if editor.boxes.isEmpty {
+            cards = SlideCard.cards(inDeckMarkdown: text)
+        } else {
+            let nsText = text as NSString
+            let whole = NSRange(location: 0, length: nsText.length)
+            cards = editor.boxes.map { SlideCard(slideMarkdown: nsText.substring(with: NSIntersectionRange($0.range, whole))) }
+        }
+        slidePanel.setCards(cards, paper: paperColour)
+        previewViewController.refreshPlaceholder()
+    }
+
+    /// The card the preview shows before its first paint: the cursor's slide, or the first.
+    func previewPlaceholder() -> (card: SlideCard, paper: PaperColour)? {
+        let cards = slidePanel.cards
+        guard !cards.isEmpty else { return nil }
+        let index = min(max((currentSlideNumber ?? 1) - 1, 0), cards.count - 1)
+        return (cards[index], slidePanel.paper)
     }
 
     func stop() {
@@ -1233,6 +1276,7 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
         guard editor.apply(list, sentText: sentText, sentGeneration: generation) else { return }
         lastAppliedText = sentText
         presentation.deckTextChanged(sentText)
+        refreshCards()
         slidePanel.setSlides(editor.boxes.map(\.slide))
         thumbnails.deckChanged()
         deckForm.setDeckErrors(list.errors)
@@ -1315,10 +1359,12 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
             client = nil
             sourceSync.sender = nil
             thumbnails.client = nil
+            onReadinessChange?()
             return
         }
         let newClient = TapClient(ready: ready)
         client = newClient
+        onReadinessChange?()
         sourceSync.sender = { source in try await newClient.putSource(source) }
         previewViewController.load(client: newClient)
         thumbnails.client = newClient
@@ -1373,6 +1419,7 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
         refreshEditedState()
         sourceSync.textDidChange()
         deckForm.refresh()
+        if slidePanel.slides.isEmpty { refreshCards() }
         refreshThemeIfChanged()
     }
 

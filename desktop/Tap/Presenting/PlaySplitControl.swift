@@ -7,6 +7,59 @@ final class PlaySplitControl: NSSegmentedControl {
     static let playSegmentWidth: CGFloat = 34
     static let chevronSegmentWidth: CGFloat = 20
 
+    static let gettingReadyToolTip = "Getting the slides ready…"
+    static let breatheAnimationKey = "breathe"
+    /// The glyph's opacity while tap is not ready: it breathes between these, once every 1.6 s.
+    static let dimmedOpacity: Float = 0.28
+    static let brightOpacity: Float = 0.6
+    static let breatheHalfPeriod: CFTimeInterval = 0.8
+
+    /// True while tap is not ready to show the slides: the glyph and the
+    /// chevron are dimmed and breathe slowly, and the tooltip says why.
+    /// With Reduce Motion on they stay dimmed and still. Play works as
+    /// `isEnabled` says either way.
+    var isGettingReady = false {
+        didSet {
+            guard isGettingReady != oldValue else { return }
+            applyReadiness()
+        }
+    }
+    /// True while the glyph breathes.
+    var isBreathing: Bool { layer?.animation(forKey: Self.breatheAnimationKey) != nil }
+    /// The tooltip when tap is ready; set by the toolbar item that hosts the control.
+    var readyToolTip: String? {
+        didSet { applyReadiness() }
+    }
+    /// The tooltip now: the reason for the dimming, or the normal one.
+    var currentToolTip: String? { isGettingReady ? Self.gettingReadyToolTip : readyToolTip }
+
+    private func applyReadiness() {
+        toolTip = currentToolTip
+        layer?.removeAnimation(forKey: Self.breatheAnimationKey)
+        guard isGettingReady else {
+            layer?.opacity = 1
+            return
+        }
+        guard !WelcomeMotion.reduceMotion() else {
+            layer?.opacity = Self.dimmedOpacity + 0.12
+            return
+        }
+        layer?.opacity = Self.brightOpacity
+        let breathe = CABasicAnimation(keyPath: "opacity")
+        breathe.fromValue = Self.dimmedOpacity
+        breathe.toValue = Self.brightOpacity
+        breathe.duration = Self.breatheHalfPeriod
+        breathe.autoreverses = true
+        breathe.repeatCount = .infinity
+        breathe.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+        layer?.add(breathe, forKey: Self.breatheAnimationKey)
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if isGettingReady { applyReadiness() }
+    }
+
     /// A click on the play segment, with the modifiers held at the release.
     var onPlay: ((NSEvent.ModifierFlags) -> Void)?
     /// Builds the menu each time it opens, so its titles name the cursor's slide as it is then.
@@ -17,6 +70,7 @@ final class PlaySplitControl: NSSegmentedControl {
 
     override init(frame: NSRect) {
         super.init(frame: frame)
+        wantsLayer = true
         segmentCount = 2
         trackingMode = .momentary
         segmentStyle = .automatic

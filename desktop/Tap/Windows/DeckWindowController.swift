@@ -116,6 +116,7 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
         window.delegate = self
         shouldCascadeWindows = true
         sessionController.presentation.deckWindowController = self
+        sessionController.onReadinessChange = { [weak self] in self?.refreshPlayReadiness() }
         sessionController.presentation.onStateChange = { [weak self] state in
             self?.refreshPresentingControls()
             switch state {
@@ -802,6 +803,14 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
                                                 usesFullScreen: presentation.usesFullScreen)
     }
 
+    private weak var playToolbarItem: NSToolbarItem?
+
+    /// The Play glyph dims and breathes while tap is not ready, and its tooltip says why.
+    func refreshPlayReadiness() {
+        playButton.isGettingReady = !sessionController.isTapReady
+        playToolbarItem?.toolTip = playButton.currentToolTip
+    }
+
     /// The toolbar's Play button follows the talk: off while one runs.
     func refreshPresentingControls() {
         playButton.isEnabled = canStartATalk
@@ -1309,12 +1318,15 @@ final class DeckWindowController: NSWindowController, NSWindowDelegate, NSToolba
             let item = NSToolbarItem(itemIdentifier: identifier)
             item.label = "Play"
             item.toolTip = "Play from the current slide. Shift-click to play from the beginning. Hold for more."
+            playButton.readyToolTip = item.toolTip
+            playToolbarItem = item
             playButton.setAccessibilityIdentifier("play-button")
             playButton.target = self
             playButton.action = #selector(playControlPressed(_:))
             playButton.onPlay = { [weak self] modifiers in self?.playButtonClicked(modifiers: modifiers) }
             playButton.makeMenu = { [weak self] in self?.makePlayMenu() ?? NSMenu() }
             playButton.isEnabled = canStartATalk
+            refreshPlayReadiness()
             item.view = playButton
             return item
         }

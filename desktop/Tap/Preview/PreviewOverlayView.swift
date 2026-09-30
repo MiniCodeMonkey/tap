@@ -42,6 +42,9 @@ final class PreviewOverlayView: NSView {
 
     required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
 
+    /// Runs whenever the overlay shows: the preview then has something to say, so its loading state ends.
+    var onShow: (() -> Void)?
+
     func show(title: String, detail: String, output: [String], opaque: Bool, buttons: Bool) {
         titleLabel.stringValue = title
         detailLabel.stringValue = detail
@@ -51,6 +54,7 @@ final class PreviewOverlayView: NSView {
         showLogButton.isHidden = !buttons
         layer?.backgroundColor = NSColor.windowBackgroundColor.withAlphaComponent(opaque ? 0.97 : 0.55).cgColor
         isHidden = false
+        onShow?()
     }
 
     func hide() {
