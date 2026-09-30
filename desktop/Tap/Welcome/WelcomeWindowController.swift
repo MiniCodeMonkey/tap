@@ -1,37 +1,44 @@
 import AppKit
+import TapDesktopCore
 
-/// Shown when no deck is open: New Deck, Open, and recent decks with thumbnails.
-/// With no recent decks the two columns give way to one centered invitation:
-/// a headline, four theme thumbnails, New Deck, Open and a drop zone.
-final class WelcomeWindowController: NSWindowController, NSTableViewDataSource, NSTableViewDelegate {
+/// Shown when no deck is open. With no recent decks it is a hero: the app
+/// icon, wordmark and tagline over the tap.sh northern lights, New Deck and
+/// Open, a link to the theme tour, and a filmstrip of every theme that opens
+/// New Deck with the one you click. With recent decks the brand moves to a
+/// left pane and an opaque list of decks, with a search field, fills the
+/// right. A Markdown file dropped anywhere on the window opens.
+final class WelcomeWindowController: NSWindowController, NSTableViewDataSource, NSTableViewDelegate, NSSearchFieldDelegate {
     static let shared = WelcomeWindowController()
 
-    /// The themes the empty state offers, in order: a varied set from tap's catalog.
-    static let emptyStateThemeSlugs = ["poster", "paperback", "riso", "blueprint"]
-    static let emptyStateThemeSize = NSSize(width: 112, height: 62)
+    /// The beat the window stays visible before missing theme renders start, so a window that gives way to a deck at once costs no renders.
+    static let themeRenderDelay: TimeInterval = 0.3
 
-    let columnNewDeckButton = NSButton(title: "New Deck…", target: nil, action: nil)
-    let columnOpenButton = NSButton(title: "Open…", target: nil, action: #selector(NSDocumentController.openDocument(_:)))
-    let emptyStateNewDeckButton = NSButton(title: "New Deck…", target: nil, action: nil)
-    let emptyStateOpenButton = NSButton(title: "Open…", target: nil, action: #selector(NSDocumentController.openDocument(_:)))
-    let emptyStateView = NSView()
-    let dropZone = WelcomeDropZone(text: "or drop a Markdown file here")
-    let tableView = NSTableView()
-    private let versionLabel = NSTextField(labelWithString: "")
-    private let columnsView = NSStackView()
-    private let recentsScrollView = NSScrollView()
-    private let themeRow = NSStackView()
-    private(set) var emptyStateThemeCells: [ThemeCell] = []
+    let root = WelcomeRootView()
+    var columnNewDeckButton: NSButton { root.columnBrand.newDeckButton }
+    var columnOpenButton: NSButton { root.columnBrand.openButton }
+    var emptyStateNewDeckButton: NSButton { root.emptyStateBrand.newDeckButton }
+    var emptyStateOpenButton: NSButton { root.emptyStateBrand.openButton }
+    var emptyStateView: NSView { root.hero }
+    var dropZone: WelcomeDropZone { root.dropZone }
+    var tableView: NSTableView { root.tableView }
+    var aurora: AuroraView { root.aurora }
+    var filmstrip: WelcomeFilmstrip { root.filmstrip }
+    var searchField: NSSearchField { root.searchField }
+    /// The theme cards of the filmstrip, one per catalog theme.
+    var themeCards: [WelcomeThemeCard] { root.filmstrip.cards }
+    /// Every recent deck that still exists, newest first.
     private(set) var recentURLs: [URL] = []
+    /// The recent decks the search shows.
+    private(set) var visibleRecentURLs: [URL] = []
+    private(set) var searchQuery = ""
     private(set) var showsEmptyState = false
     private var refreshTimer: Timer?
-    /// The beat the window stays visible before the theme renders start, so a window that gives way to a deck at once costs no renders.
-    static let themeRenderDelay: TimeInterval = 0.3
     private var themeRenderTimer: Timer?
     private(set) var themeRendersRequested = false
     private var observers: [NSObjectProtocol] = []
+    private var workspaceObserver: NSObjectProtocol?
 
-    /// The New Deck button that is on screen: the empty state's or the column's.
+    /// The New Deck button that is on screen: the hero's or the column's.
     var newDeckButton: NSButton { showsEmptyState ? emptyStateNewDeckButton : columnNewDeckButton }
     /// The Open button that is on screen.
     var openButton: NSButton { showsEmptyState ? emptyStateOpenButton : columnOpenButton }
@@ -45,73 +52,29 @@ final class WelcomeWindowController: NSWindowController, NSTableViewDataSource, 
     }
 
     private init() {
-        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 800, height: 460),
+        let window = NSWindow(contentRect: NSRect(origin: .zero, size: WelcomeRootView.windowSize),
                               styleMask: [.titled, .closable, .fullSizeContentView], backing: .buffered, defer: false)
         window.titlebarAppearsTransparent = true
         window.titleVisibility = .hidden
         window.isReleasedWhenClosed = false
+        window.isMovableByWindowBackground = true
         window.center()
         super.init(window: window)
+        window.contentView = root
 
-        let icon = NSImageView(image: NSApp.applicationIconImage ?? NSImage())
-        icon.imageScaling = .scaleProportionallyUpOrDown
-        let name = NSTextField(labelWithString: "Tap")
-        name.font = .systemFont(ofSize: 28, weight: .semibold)
-        versionLabel.textColor = .secondaryLabelColor
-        // nil-targeted, so the responder chain reaches the app delegate.
-        for button in [columnNewDeckButton, emptyStateNewDeckButton] {
-            button.target = nil
-            button.action = #selector(AppDelegate.newDeck(_:))
-            button.isEnabled = true
-            button.setAccessibilityIdentifier("new-deck")
-        }
-        for button in [columnOpenButton, emptyStateOpenButton] { button.setAccessibilityIdentifier("open") }
-        for button in [columnNewDeckButton, columnOpenButton, emptyStateNewDeckButton, emptyStateOpenButton] {
-            button.bezelStyle = .rounded
-            button.controlSize = .large
-        }
-        let left = columnsView
-        for view in [icon, name, versionLabel, columnNewDeckButton, columnOpenButton] { left.addArrangedSubview(view) }
-        left.orientation = .vertical
-        left.spacing = 10
-        NSLayoutConstraint.activate([icon.widthAnchor.constraint(equalToConstant: 96), icon.heightAnchor.constraint(equalToConstant: 96)])
-
-        let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("recent"))
-        tableView.addTableColumn(column)
-        tableView.headerView = nil
-        tableView.rowHeight = 64
-        tableView.style = .inset
         tableView.dataSource = self
         tableView.delegate = self
         tableView.target = self
-        tableView.action = #selector(openSelectedRow(_:))
-        tableView.setAccessibilityIdentifier("recent-decks")
-        let scrollView = recentsScrollView
-        scrollView.documentView = tableView
-        scrollView.hasVerticalScroller = true
-
-        let root = NSView()
-        for view in [left, scrollView] as [NSView] {
-            view.translatesAutoresizingMaskIntoConstraints = false
-            root.addSubview(view)
+        tableView.doubleAction = #selector(openClickedRow(_:))
+        root.tableView.onOpenSelection = { [weak self] in self?.openSelectedRow() }
+        root.tableView.onTypeToSearch = { [weak self] characters in self?.typeToSearch(characters) }
+        root.onTypeToSearch = { [weak self] characters in self?.typeToSearch(characters) }
+        searchField.delegate = self
+        searchField.target = self
+        searchField.action = #selector(searchChanged(_:))
+        root.filmstrip.onSelect = { [weak self] slug in
+            (NSApp.delegate as? AppDelegate)?.newDeck(on: self?.window, theme: slug)
         }
-        NSLayoutConstraint.activate([
-            left.centerYAnchor.constraint(equalTo: root.centerYAnchor),
-            left.centerXAnchor.constraint(equalTo: root.leadingAnchor, constant: 170),
-            scrollView.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 340),
-            scrollView.trailingAnchor.constraint(equalTo: root.trailingAnchor),
-            scrollView.topAnchor.constraint(equalTo: root.topAnchor, constant: 28),
-            scrollView.bottomAnchor.constraint(equalTo: root.bottomAnchor),
-        ])
-        buildEmptyState(in: root)
-        let content = WelcomeContentView(dropZone: dropZone)
-        root.translatesAutoresizingMaskIntoConstraints = false
-        content.addSubview(root)
-        NSLayoutConstraint.activate([
-            root.leadingAnchor.constraint(equalTo: content.leadingAnchor), root.trailingAnchor.constraint(equalTo: content.trailingAnchor),
-            root.topAnchor.constraint(equalTo: content.topAnchor), root.bottomAnchor.constraint(equalTo: content.bottomAnchor),
-        ])
-        window.contentView = content
         dropZone.onDrop = { [weak self] url in
             NSDocumentController.shared.openDocument(withContentsOf: url, display: true) { _, _, error in
                 guard let error, let window = self?.window else { return }
@@ -119,6 +82,8 @@ final class WelcomeWindowController: NSWindowController, NSTableViewDataSource, 
                 window.presentError(error, modalFor: window, delegate: nil, didPresent: nil, contextInfo: nil)
             }
         }
+        dropZone.onTargetChange = { [weak self] targeted in self?.root.setDragActive(targeted) }
+
         let center = NotificationCenter.default
         let loader = AppEnvironment.shared.themeImages
         observers = [
@@ -128,6 +93,9 @@ final class WelcomeWindowController: NSWindowController, NSTableViewDataSource, 
                     self?.startWatchingRecents()
                 }
             },
+            center.addObserver(forName: NSWindow.didChangeOcclusionStateNotification, object: window, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.updateVisibility() }
+            },
             center.addObserver(forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
                 MainActor.assumeIsolated {
                     guard self?.window?.isVisible == true else { return }
@@ -135,75 +103,25 @@ final class WelcomeWindowController: NSWindowController, NSTableViewDataSource, 
                 }
             },
             center.addObserver(forName: ThemeImageLoader.didLoadCatalogNotification, object: loader, queue: .main) { [weak self] _ in
-                MainActor.assumeIsolated { self?.rebuildThemeRow() }
+                MainActor.assumeIsolated {
+                    self?.rebuildThemeStrip()
+                    if self?.themeRendersRequested == true { self?.requestMissingThemeImages() }
+                }
             },
             center.addObserver(forName: ThemeImageLoader.didLoadImageNotification, object: loader, queue: .main) { [weak self] notification in
                 MainActor.assumeIsolated {
                     guard let slug = notification.userInfo?["slug"] as? String else { return }
-                    self?.emptyStateThemeCells.first { $0.slug == slug }?.show(loader.image(for: slug))
+                    self?.root.filmstrip.show(loader.image(for: slug), forSlug: slug)
                 }
             },
         ]
-    }
-
-    /// One centered column: icon, headline, subline, theme thumbnails, the
-    /// buttons and the drop zone, drawn in system colors.
-    private func buildEmptyState(in root: NSView) {
-        let icon = NSImageView(image: NSApp.applicationIconImage ?? NSImage())
-        icon.imageScaling = .scaleProportionallyUpOrDown
-        let headline = NSTextField(labelWithString: "Make your first deck")
-        headline.font = .systemFont(ofSize: 22, weight: .semibold)
-        let subline = NSTextField(labelWithString: "Write slides in Markdown, run code live, present from here.")
-        subline.textColor = .secondaryLabelColor
-        themeRow.orientation = .horizontal
-        themeRow.spacing = 12
-        themeRow.setAccessibilityIdentifier("welcome-themes")
-        themeRow.isHidden = true // takes no room until a thumbnail loads
-        let buttons = NSStackView(views: [emptyStateNewDeckButton, emptyStateOpenButton])
-        buttons.spacing = 10
-        let stack = NSStackView(views: [icon, headline, subline, themeRow, buttons, dropZone])
-        stack.orientation = .vertical
-        stack.alignment = .centerX
-        stack.spacing = 8
-        stack.setCustomSpacing(12, after: icon)
-        stack.setCustomSpacing(18, after: subline)
-        stack.setCustomSpacing(18, after: themeRow)
-        stack.setCustomSpacing(18, after: buttons)
-        stack.translatesAutoresizingMaskIntoConstraints = false
-        emptyStateView.translatesAutoresizingMaskIntoConstraints = false
-        emptyStateView.addSubview(stack)
-        emptyStateView.isHidden = true
-        emptyStateView.setAccessibilityIdentifier("welcome-empty-state")
-        root.addSubview(emptyStateView)
-        NSLayoutConstraint.activate([
-            icon.widthAnchor.constraint(equalToConstant: 80), icon.heightAnchor.constraint(equalToConstant: 80),
-            themeRow.heightAnchor.constraint(equalToConstant: Self.emptyStateThemeSize.height + 22),
-            emptyStateView.leadingAnchor.constraint(equalTo: root.leadingAnchor), emptyStateView.trailingAnchor.constraint(equalTo: root.trailingAnchor),
-            emptyStateView.topAnchor.constraint(equalTo: root.topAnchor), emptyStateView.bottomAnchor.constraint(equalTo: root.bottomAnchor),
-            stack.centerXAnchor.constraint(equalTo: emptyStateView.centerXAnchor), stack.centerYAnchor.constraint(equalTo: emptyStateView.centerYAnchor, constant: 8),
-        ])
-    }
-
-    /// The thumbnails for the empty state's themes that tap's catalog has.
-    private func rebuildThemeRow() {
-        for view in themeRow.arrangedSubviews { view.removeFromSuperview() }
-        emptyStateThemeCells = []
-        defer { themeRow.isHidden = emptyStateThemeCells.isEmpty }
-        guard let catalog = AppEnvironment.shared.themeImages.catalog else { return }
-        for slug in Self.emptyStateThemeSlugs {
-            guard let theme = catalog.theme(slug: slug) else { continue }
-            let cell = ThemeCell(theme: theme, size: Self.emptyStateThemeSize, nameFontSize: 11.5, cornerRadius: 8)
-            cell.highlightsOnHover = true
-            cell.show(AppEnvironment.shared.themeImages.image(for: slug))
-            cell.target = self
-            cell.action = #selector(themePressed(_:))
-            themeRow.addArrangedSubview(cell)
-            emptyStateThemeCells.append(cell)
+        workspaceObserver = NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.root.filmstrip.refreshMotionSetting()
+                for brand in [self?.root.emptyStateBrand, self?.root.columnBrand] { brand?.icon.updateBlink() }
+            }
         }
-    }
-
-    @objc private func themePressed(_ sender: ThemeCell) {
-        (NSApp.delegate as? AppDelegate)?.newDeck(on: window, theme: sender.slug)
+        rebuildThemeStrip()
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
@@ -213,9 +131,22 @@ final class WelcomeWindowController: NSWindowController, NSTableViewDataSource, 
     // makeKeyAndOrderFront or NSApp.activate itself, so opening the welcome
     // window never steals focus beyond what that default implementation does.
     override func showWindow(_ sender: Any?) {
+        let wasVisible = window?.isVisible == true
         reload()
         super.showWindow(sender)
         startWatchingRecents()
+        updateVisibility()
+        guard !wasVisible else { return }
+        root.layoutSubtreeIfNeeded()
+        root.aurora.restartOpening()
+        root.playEntrance()
+    }
+
+    /// Starts and stops what only a visible window needs: the aurora reads the window itself, the strip and the caret are told here.
+    func updateVisibility() {
+        let visible = window.map { $0.isVisible && !$0.isMiniaturized && $0.occlusionState.contains(.visible) } ?? false
+        root.filmstrip.setActive(showsEmptyState && visible)
+        for brand in [root.emptyStateBrand, root.columnBrand] { brand.icon.setBlinking(visible) }
     }
 
     /// The recents list has no change notification, so a visible window
@@ -236,24 +167,23 @@ final class WelcomeWindowController: NSWindowController, NSTableViewDataSource, 
     }
 
     func reload() {
-        versionLabel.stringValue = "Version \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "")"
         let urls = NSDocumentController.shared.recentDocumentURLs.filter { FileManager.default.fileExists(atPath: $0.path) }
         if urls != recentURLs {
             recentURLs = urls
-            tableView.reloadData()
+            applyFilter()
         }
         showEmptyState(urls.isEmpty)
     }
 
-    /// Swaps the two layouts; New Deck is the empty state's default button (Return).
+    /// Swaps the two layouts.
     private func showEmptyState(_ shows: Bool) {
+        let changed = shows != showsEmptyState
         showsEmptyState = shows
-        emptyStateView.isHidden = !shows
-        columnsView.isHidden = shows
-        recentsScrollView.isHidden = shows
-        emptyStateNewDeckButton.keyEquivalent = shows ? "\r" : ""
+        root.setShowsEmptyState(shows)
+        window?.initialFirstResponder = shows ? nil : tableView
+        if changed { updateVisibility() }
         if shows {
-            if emptyStateThemeCells.isEmpty { rebuildThemeRow() }
+            if themeCards.isEmpty { rebuildThemeStrip() }
             AppEnvironment.shared.themeImages.loadCatalog()
             requestThemeRendersOnceVisible()
         } else {
@@ -263,8 +193,19 @@ final class WelcomeWindowController: NSWindowController, NSTableViewDataSource, 
         }
     }
 
-    /// The four theme renders start once the window has stayed visible for a
-    /// beat; a window shown only until a deck opens never starts them.
+    // MARK: Themes
+
+    /// Every catalog theme in the filmstrip; the catalog is in the app bundle, so this needs no tap run.
+    private func rebuildThemeStrip() {
+        guard let catalog = AppEnvironment.shared.themeImages.catalog else { return }
+        let loader = AppEnvironment.shared.themeImages
+        guard catalog.themes.map(\.slug) != themeCards.map(\.slug) else { return }
+        root.filmstrip.setThemes(catalog.themes) { loader.image(for: $0) }
+    }
+
+    /// The renders of themes with no bundled image start once the window has
+    /// stayed visible for a beat; a window shown only until a deck opens
+    /// never starts them.
     private func requestThemeRendersOnceVisible() {
         guard !themeRendersRequested, themeRenderTimer == nil, window?.isVisible == true else { return }
         themeRenderTimer = Timer.scheduledTimer(withTimeInterval: Self.themeRenderDelay, repeats: false) { [weak self] _ in
@@ -273,46 +214,97 @@ final class WelcomeWindowController: NSWindowController, NSTableViewDataSource, 
                 self.themeRenderTimer = nil
                 guard self.showsEmptyState, self.window?.isVisible == true else { return }
                 self.themeRendersRequested = true
-                AppEnvironment.shared.themeImages.loadImages(for: Self.emptyStateThemeSlugs)
+                self.requestMissingThemeImages()
             }
         }
     }
 
-    func thumbnail(forRow row: Int) -> NSImage? {
-        guard recentURLs.indices.contains(row) else { return nil }
-        return AppEnvironment.shared.recentThumbnailStore.imageData(for: recentURLs[row]).flatMap(NSImage.init(data:))
+    private func requestMissingThemeImages() {
+        guard let catalog = AppEnvironment.shared.themeImages.catalog else { return }
+        AppEnvironment.shared.themeImages.loadImages(for: catalog.themes.map(\.slug))
     }
 
-    @objc private func openSelectedRow(_ sender: Any?) {
-        guard recentURLs.indices.contains(tableView.clickedRow) else { return }
-        NSDocumentController.shared.openDocument(withContentsOf: recentURLs[tableView.clickedRow], display: true) { _, _, _ in }
+    // MARK: Recents
+
+    func thumbnail(forRow row: Int) -> NSImage? {
+        guard visibleRecentURLs.indices.contains(row) else { return nil }
+        return AppEnvironment.shared.recentThumbnailStore.imageData(for: visibleRecentURLs[row]).flatMap(NSImage.init(data:))
+    }
+
+    private static func tildePath(of url: URL) -> String {
+        (url.deletingLastPathComponent().path as NSString).abbreviatingWithTildeInPath
+    }
+
+    /// Shows the decks the search matches, keeping the selected deck selected when it still shows.
+    private func applyFilter() {
+        let selected = tableView.selectedRow >= 0 && visibleRecentURLs.indices.contains(tableView.selectedRow) ? visibleRecentURLs[tableView.selectedRow] : nil
+        visibleRecentURLs = recentURLs.filter { RecentDeckMatcher.matches(name: $0.lastPathComponent, path: Self.tildePath(of: $0), query: searchQuery) }
+        tableView.reloadData()
+        root.noMatchesLabel.isHidden = !visibleRecentURLs.isEmpty || recentURLs.isEmpty
+        let row = selected.flatMap { url in visibleRecentURLs.firstIndex(of: url) } ?? (visibleRecentURLs.isEmpty ? nil : 0)
+        if let row { tableView.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false) }
+    }
+
+    /// Filters the recent decks by `query`, as typing in the search field does.
+    func search(_ query: String) {
+        if searchField.stringValue != query { searchField.stringValue = query }
+        searchQuery = query
+        applyFilter()
+    }
+
+    @objc private func searchChanged(_ sender: NSSearchField) {
+        search(sender.stringValue)
+    }
+
+    func controlTextDidChange(_ notification: Notification) {
+        guard (notification.object as? NSSearchField) === searchField else { return }
+        search(searchField.stringValue)
+    }
+
+    func control(_ control: NSControl, textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
+        switch commandSelector {
+        case #selector(NSResponder.moveDown(_:)):
+            window?.makeFirstResponder(tableView)
+            return true
+        case #selector(NSResponder.insertNewline(_:)):
+            openSelectedRow()
+            return true
+        default:
+            return false
+        }
+    }
+
+    /// Typing while the window is key and nothing else takes the text goes to the search field.
+    private func typeToSearch(_ characters: String) {
+        guard !showsEmptyState, window?.isKeyWindow == true else { return }
+        window?.makeFirstResponder(searchField)
+        (searchField.currentEditor() as? NSTextView)?.insertText(characters, replacementRange: NSRange(location: NSNotFound, length: 0))
+        search(searchField.stringValue)
+    }
+
+    @objc private func openClickedRow(_ sender: Any?) {
+        open(row: tableView.clickedRow)
+    }
+
+    private func openSelectedRow() {
+        open(row: tableView.selectedRow >= 0 ? tableView.selectedRow : (visibleRecentURLs.isEmpty ? -1 : 0))
+    }
+
+    private func open(row: Int) {
+        guard visibleRecentURLs.indices.contains(row) else { return }
+        NSDocumentController.shared.openDocument(withContentsOf: visibleRecentURLs[row], display: true) { _, _, _ in }
     }
 
     // MARK: Table
 
-    func numberOfRows(in tableView: NSTableView) -> Int { recentURLs.count }
+    func numberOfRows(in tableView: NSTableView) -> Int { visibleRecentURLs.count }
 
     func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
-        let url = recentURLs[row]
-        let image = NSImageView(image: thumbnail(forRow: row) ?? NSImage(systemSymbolName: "rectangle", accessibilityDescription: nil) ?? NSImage())
-        image.imageScaling = .scaleProportionallyUpOrDown
-        image.wantsLayer = true
-        image.layer?.cornerRadius = 4
-        image.layer?.masksToBounds = true
-        let name = NSTextField(labelWithString: url.lastPathComponent)
-        name.font = .systemFont(ofSize: 13, weight: .medium)
-        let folder = NSTextField(labelWithString: (url.deletingLastPathComponent().path as NSString).abbreviatingWithTildeInPath)
-        folder.textColor = .secondaryLabelColor
+        let url = visibleRecentURLs[row]
+        let cell = (tableView.makeView(withIdentifier: WelcomeRecentCell.identifier, owner: nil) as? WelcomeRecentCell) ?? WelcomeRecentCell()
         let modified = (try? FileManager.default.attributesOfItem(atPath: url.path))?[.modificationDate] as? Date
-        let date = NSTextField(labelWithString: modified.map { RelativeDateTimeFormatter().localizedString(for: $0, relativeTo: Date()) } ?? "")
-        date.textColor = .tertiaryLabelColor
-        let text = NSStackView(views: [name, folder, date])
-        text.orientation = .vertical
-        text.alignment = .leading
-        text.spacing = 1
-        let row = NSStackView(views: [image, text])
-        row.spacing = 12
-        NSLayoutConstraint.activate([image.widthAnchor.constraint(equalToConstant: 96), image.heightAnchor.constraint(equalToConstant: 54)])
-        return row
+        cell.configure(name: url.lastPathComponent, tildePath: Self.tildePath(of: url), date: modified.map { RecentDeckDate.label(for: $0) } ?? "",
+                       thumbnail: thumbnail(forRow: row) ?? NSImage(systemSymbolName: "rectangle", accessibilityDescription: nil))
+        return cell
     }
 }

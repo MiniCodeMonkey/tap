@@ -1,39 +1,81 @@
 import AppKit
 
-/// The welcome window's dashed "drop a Markdown file here" box. It shows
-/// the drop target and hands a dropped .md file's URL to `onDrop`; the
-/// window's `WelcomeContentView` receives the drag itself, so the whole
-/// window accepts a file and anything but Markdown is refused.
+/// The drag state of the welcome window: while a Markdown file is dragged
+/// over it, a green ring and halo sit inside the window's edge and a glass
+/// pill names the file ("Drop to open slides.md"). It draws nothing
+/// otherwise, takes no clicks, and hands a dropped .md file's URL to
+/// `onDrop`; the window's `WelcomeContentView` receives the drag itself, so
+/// the whole window accepts a file and anything but Markdown is refused.
 final class WelcomeDropZone: NSView {
     static let markdownExtensions: Set<String> = ["md", "markdown"]
+    private static let ringInset: CGFloat = 8
 
     var onDrop: ((URL) -> Void)?
-    private let dashedBorder = CAShapeLayer()
+    /// Called when a Markdown file enters or leaves the window, so the rest of the window can step back.
+    var onTargetChange: ((Bool) -> Void)?
+    private(set) var fileName = ""
+    private let haloLayer = CALayer()
+    private let ringLayer = CALayer()
+    private let pill = FlippedView()
+    private let pillLabel = NSTextField(labelWithString: "")
+    private let dotLayer = CALayer()
+
     var isTargeted = false {
-        didSet { updateAppearance() }
+        didSet {
+            guard isTargeted != oldValue else { return }
+            updateAppearance()
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = WelcomeMotion.reduceMotion() ? 0 : 0.2
+                animator().alphaValue = isTargeted ? 1 : 0
+            }
+            onTargetChange?(isTargeted)
+        }
     }
 
-    init(text: String) {
+    init() {
         super.init(frame: .zero)
         wantsLayer = true
-        dashedBorder.fillColor = nil
-        dashedBorder.lineWidth = 1.5
-        dashedBorder.lineDashPattern = [5, 4]
-        layer?.addSublayer(dashedBorder)
-        let label = NSTextField(labelWithString: text)
-        label.font = .systemFont(ofSize: 12)
-        label.textColor = .secondaryLabelColor
-        label.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(label)
+        alphaValue = 0
+        for layer in [haloLayer, ringLayer] { layer.cornerRadius = 9 }
+        haloLayer.borderWidth = 6
+        ringLayer.borderWidth = 2
+        layer?.addSublayer(haloLayer)
+        layer?.addSublayer(ringLayer)
+
+        pill.wantsLayer = true
+        pill.layer?.cornerRadius = 19
+        pill.layer?.borderWidth = 1
+        pill.layer?.shadowOpacity = 0.3
+        pill.layer?.shadowRadius = 14
+        pill.layer?.shadowOffset = CGSize(width: 0, height: -8)
+        pillLabel.translatesAutoresizingMaskIntoConstraints = false
+        pillLabel.lineBreakMode = .byTruncatingMiddle
+        pillLabel.maximumNumberOfLines = 1
+        pill.addSubview(pillLabel)
+        dotLayer.cornerRadius = 3.5
+        dotLayer.shadowOpacity = 1
+        dotLayer.shadowRadius = 4
+        dotLayer.shadowOffset = .zero
+        pill.layer?.addSublayer(dotLayer)
+        pill.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(pill)
         NSLayoutConstraint.activate([
-            label.centerXAnchor.constraint(equalTo: centerXAnchor), label.centerYAnchor.constraint(equalTo: centerYAnchor),
-            widthAnchor.constraint(equalTo: label.widthAnchor, constant: 36), heightAnchor.constraint(equalTo: label.heightAnchor, constant: 20),
+            pill.centerXAnchor.constraint(equalTo: centerXAnchor),
+            pill.centerYAnchor.constraint(equalTo: centerYAnchor),
+            pill.heightAnchor.constraint(equalToConstant: 38),
+            pill.widthAnchor.constraint(lessThanOrEqualTo: widthAnchor, constant: -80),
+            pillLabel.leadingAnchor.constraint(equalTo: pill.leadingAnchor, constant: 34),
+            pillLabel.trailingAnchor.constraint(equalTo: pill.trailingAnchor, constant: -18),
+            pillLabel.centerYAnchor.constraint(equalTo: pill.centerYAnchor),
         ])
         setAccessibilityIdentifier("welcome-drop-zone")
-        setAccessibilityLabel(text)
+        setAccessibilityLabel("Drop a Markdown file to open it")
+        updateAppearance()
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
+
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
 
     /// The first dropped file that is a Markdown file.
     static func markdownURL(in pasteboard: NSPasteboard) -> URL? {
@@ -41,11 +83,22 @@ final class WelcomeDropZone: NSView {
         return urls?.first { markdownExtensions.contains($0.pathExtension.lowercased()) }
     }
 
+    /// Names the file the pill offers to open.
+    func setFileName(_ name: String) {
+        guard name != fileName else { return }
+        fileName = name
+        updateAppearance()
+    }
+
     override func layout() {
         super.layout()
-        dashedBorder.frame = bounds
-        dashedBorder.path = CGPath(roundedRect: bounds.insetBy(dx: 1, dy: 1), cornerWidth: 10, cornerHeight: 10, transform: nil)
-        updateAppearance()
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        ringLayer.frame = bounds.insetBy(dx: Self.ringInset, dy: Self.ringInset)
+        haloLayer.frame = ringLayer.frame.insetBy(dx: -6, dy: -6)
+        haloLayer.cornerRadius = 15
+        dotLayer.frame = CGRect(x: 18, y: 15.5, width: 7, height: 7)
+        CATransaction.commit()
     }
 
     override func viewDidChangeEffectiveAppearance() {
@@ -54,16 +107,22 @@ final class WelcomeDropZone: NSView {
     }
 
     private func updateAppearance() {
+        pillLabel.attributedStringValue = WelcomeFont.attributed(fileName.isEmpty ? "Drop to open" : "Drop to open \(fileName)", size: 15, weight: .semibold, color: WelcomeColor.ink, alignment: .left)
         effectiveAppearance.performAsCurrentDrawingAppearance {
-            dashedBorder.strokeColor = (isTargeted ? NSColor.controlAccentColor : NSColor.separatorColor).cgColor
-            dashedBorder.fillColor = isTargeted ? NSColor.controlAccentColor.withAlphaComponent(0.1).cgColor : nil
+            ringLayer.borderColor = WelcomeColor.dropRing.cgColor
+            ringLayer.backgroundColor = WelcomeColor.dropHalo.withAlphaComponent(0.05).cgColor
+            haloLayer.borderColor = WelcomeColor.dropHalo.cgColor
+            pill.layer?.backgroundColor = WelcomeColor.glass.cgColor
+            pill.layer?.borderColor = WelcomeColor.glassLine.cgColor
+            dotLayer.backgroundColor = WelcomeColor.dropRing.cgColor
+            dotLayer.shadowColor = WelcomeColor.dropRing.cgColor
         }
     }
 }
 
 /// The welcome window's content view: a Markdown file dropped anywhere on
-/// it opens, and the drop zone lights up while one is over the window.
-final class WelcomeContentView: NSView {
+/// it opens, and the drop overlay lights up while one is over the window.
+class WelcomeContentView: NSView {
     let dropZone: WelcomeDropZone
 
     init(dropZone: WelcomeDropZone) {
@@ -75,7 +134,11 @@ final class WelcomeContentView: NSView {
     required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
 
     override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
-        guard WelcomeDropZone.markdownURL(in: sender.draggingPasteboard) != nil else { return [] }
+        guard let url = WelcomeDropZone.markdownURL(in: sender.draggingPasteboard) else {
+            dropZone.isTargeted = false
+            return []
+        }
+        dropZone.setFileName(url.lastPathComponent)
         dropZone.isTargeted = true
         return .copy
     }

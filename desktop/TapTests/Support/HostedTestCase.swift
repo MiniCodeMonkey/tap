@@ -57,7 +57,7 @@ class HostedTestCase: XCTestCase {
         AppEnvironment.shared.geminiKeyStore = MemoryGeminiKeyStore()
         AppEnvironment.shared.generalSettings = GeneralSettings(defaults: try XCTUnwrap(UserDefaults(suiteName: "TapTests.general.\(UUID().uuidString)")))
         EditorTypography.refresh(from: AppEnvironment.shared.generalSettings)
-        AppEnvironment.shared.themeImages = ThemeImageLoader()
+        AppEnvironment.shared.themeImages = ThemeImageLoader(bundledThumbnails: nil)
         // The runner's own shell may set a key; the tests' shell value is empty (resolve reads empty as none).
         AppEnvironment.shared.extraEnvironment["GEMINI_API_KEY"] = ""
         // The Focus hint shows before the first talk on a Mac; every test but the hint's own has seen it.

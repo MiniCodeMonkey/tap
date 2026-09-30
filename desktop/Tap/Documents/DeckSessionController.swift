@@ -546,10 +546,13 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
 
     var editor: EditorTextView { editorViewController.textView }
 
+    /// The file tap serves for a deck that has none yet.
+    static var untitledDeckURL: URL { FileManager.default.temporaryDirectory.appendingPathComponent("Untitled.md") }
+
     init(document: DeckDocument) {
         self.document = document
         previousDeckURL = document.fileURL
-        let deckURL = document.fileURL ?? FileManager.default.temporaryDirectory.appendingPathComponent("Untitled.md")
+        let deckURL = document.fileURL ?? Self.untitledDeckURL
         session = TapSession(deckURL: deckURL, configuration: AppEnvironment.shared.sessionConfiguration())
         super.init()
         sourceSync = SourceSync(text: { [weak self] in self?.editor.string ?? "" },

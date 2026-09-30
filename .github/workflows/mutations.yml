@@ -26,6 +26,9 @@ jobs:
         with:
           xcode-version: '26'
 
+      - name: Install the Metal toolchain
+        run: xcodebuild -downloadComponent MetalToolchain || true
+
       - name: Set up Go
         uses: actions/setup-go@v7
         with:

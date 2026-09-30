@@ -51,6 +51,23 @@ final class DeckDocument: NSDocument {
 
     override class var autosavesInPlace: Bool { true }
 
+    /// A deck with no file yet, holding `text`: its first Save asks where to
+    /// put it. tap serves the untitled deck's file (`untitledDeckURL`), so
+    /// the text is written there first.
+    @MainActor
+    static func makeUntitled(text: String) throws -> DeckDocument {
+        let controller = NSDocumentController.shared
+        guard let document = try controller.makeUntitledDocument(ofType: controller.defaultType ?? "Markdown Deck") as? DeckDocument else {
+            throw CocoaError(.fileReadUnknown)
+        }
+        try text.write(to: DeckSessionController.untitledDeckURL, atomically: true, encoding: .utf8)
+        document.text = text
+        controller.addDocument(document)
+        document.makeWindowControllers()
+        document.showWindows()
+        return document
+    }
+
     override nonisolated var fileURL: URL? {
         didSet {
             MainActor.assumeIsolated {

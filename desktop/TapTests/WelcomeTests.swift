@@ -1,3 +1,4 @@
+import Metal
 import XCTest
 @testable import Tap
 
@@ -14,7 +15,8 @@ final class WelcomeTests: HostedTestCase {
     func testWelcomeWindow() async throws {
         appDelegate.showWelcomeIfNoDecks()
         XCTAssertTrue(welcome.window?.isVisible ?? false, "no deck is open")
-        XCTAssertEqual(welcome.newDeckButton.title, "New Deck…")
+        XCTAssertEqual(welcome.window?.contentView?.frame.size, NSSize(width: 880, height: 560))
+        XCTAssertEqual(welcome.newDeckButton.title, "New Deck")
         XCTAssertEqual(welcome.openButton.title, "Open…")
 
         // Opening a deck closes the welcome window and records a thumbnail of slide 1.
@@ -27,6 +29,15 @@ final class WelcomeTests: HostedTestCase {
         try await waitUntil(timeout: 5, "the welcome window") { self.welcome.window?.isVisible ?? false }
         let row = try XCTUnwrap(welcome.recentURLs.firstIndex { FilePaths.same($0, deck) }, "the deck is a recent deck")
         XCTAssertNotNil(welcome.thumbnail(forRow: row))
+        XCTAssertFalse(welcome.showsEmptyState)
+        XCTAssertFalse(welcome.searchField.isHidden, "the search field is always shown with recent decks")
+        XCTAssertEqual(welcome.searchField.placeholderString, "Search decks")
+        XCTAssertFalse(allSubviews(of: welcome.root).contains { ($0 as? NSTextField)?.stringValue.contains("Remove from list") ?? false }, "no keyboard hint footer")
+        XCTAssertEqual(welcome.tableView.selectedRow, 0, "the newest deck is selected")
+    }
+
+    func allSubviews(of view: NSView) -> [NSView] {
+        view.subviews + view.subviews.flatMap { allSubviews(of: $0) }
     }
 
     func testWelcomeWindowWithoutRecentDecks() async throws {
@@ -36,18 +47,37 @@ final class WelcomeTests: HostedTestCase {
         XCTAssertTrue(welcome.showsEmptyState)
         XCTAssertFalse(welcome.emptyStateView.isHidden, "one centered view")
         XCTAssertTrue(welcome.recentURLs.isEmpty)
-        XCTAssertEqual(welcome.newDeckButton.title, "New Deck…")
+        XCTAssertEqual(welcome.newDeckButton.title, "New Deck")
+        XCTAssertEqual(welcome.openButton.title, "Open…")
         XCTAssertTrue(welcome.newDeckButton === welcome.emptyStateNewDeckButton)
         XCTAssertEqual(welcome.newDeckButton.keyEquivalent, "\r", "New Deck is the default button")
         XCTAssertEqual(welcome.newDeckButton.accessibilityIdentifier(), "new-deck")
         XCTAssertEqual(welcome.openButton.accessibilityIdentifier(), "open")
         XCTAssertEqual(welcome.emptyStateView.accessibilityIdentifier(), "welcome-empty-state")
         XCTAssertEqual(welcome.dropZone.accessibilityIdentifier(), "welcome-drop-zone")
+        XCTAssertEqual(welcome.filmstrip.accessibilityIdentifier(), "welcome-themes")
 
-        // A theme thumbnail opens the New Deck sheet with that theme chosen.
-        try await waitUntil(timeout: 20, "the theme thumbnails") { self.welcome.emptyStateThemeCells.count == WelcomeWindowController.emptyStateThemeSlugs.count }
-        XCTAssertEqual(welcome.emptyStateThemeCells.map(\.slug), WelcomeWindowController.emptyStateThemeSlugs)
-        try XCTUnwrap(welcome.emptyStateThemeCells.first { $0.slug == "riso" }).performClick(nil)
+        // The hero: wordmark and tagline in place of the old headline, the tour link, and neither a version nor a drop hint.
+        let brand = welcome.root.emptyStateBrand
+        XCTAssertEqual(brand.wordmark.stringValue, "tap")
+        XCTAssertEqual(brand.tagline.stringValue, "Markdown slides, without the markdown limits.")
+        XCTAssertEqual(welcome.root.tourLink.title, "take the theme tour")
+        XCTAssertNotNil(brand.icon.superview)
+        let texts = allSubviews(of: welcome.root).compactMap { ($0 as? NSTextField)?.stringValue }
+        XCTAssertFalse(texts.contains { $0.hasPrefix("Version") }, "no version number")
+        XCTAssertFalse(texts.contains { $0.localizedCaseInsensitiveContains("drop a markdown") }, "no drop hint")
+        XCTAssertFalse(texts.contains("Make your first deck"))
+
+        // Every catalog theme has a card, named for its theme, in the catalog's order.
+        let catalog = try XCTUnwrap(AppEnvironment.shared.themeImages.catalog, "the bundle ships the theme catalog")
+        try await waitUntil(timeout: 20, "the theme cards") { self.welcome.themeCards.count == catalog.themes.count }
+        XCTAssertEqual(welcome.themeCards.map(\.slug), catalog.themes.map(\.slug))
+        let riso = try XCTUnwrap(welcome.themeCards.first { $0.slug == "riso" })
+        XCTAssertEqual(riso.accessibilityLabel(), "\(catalog.name(forSlug: "riso")) theme")
+        XCTAssertEqual(riso.accessibilityRole(), .button)
+
+        // A theme card opens the New Deck sheet with that theme chosen.
+        riso.performClick(nil)
         let sheet = try await newDeckSheet()
         try await waitUntil(timeout: 20, "the grid") { !sheet.grid.cells.isEmpty }
         XCTAssertEqual(sheet.grid.selectedSlug, "riso")
@@ -71,6 +101,179 @@ final class WelcomeTests: HostedTestCase {
         }
     }
 
+    func testWelcomeWindowDragState() throws {
+        NSDocumentController.shared.clearRecentDocuments(nil)
+        appDelegate.showWelcomeIfNoDecks()
+        welcome.reload()
+        let content = try XCTUnwrap(welcome.window?.contentView as? WelcomeContentView)
+        let deck = try Fixtures.copyDeck("plain.md")
+        let notes = deck.deletingLastPathComponent().appendingPathComponent("notes.txt")
+        try "notes".write(to: notes, atomically: true, encoding: .utf8)
+        func dragInfo(_ url: URL) -> (FakeDraggingInfo, NSPasteboard) {
+            let pasteboard = NSPasteboard(name: NSPasteboard.Name("tap.welcome.drag.\(UUID().uuidString)"))
+            pasteboard.clearContents()
+            pasteboard.writeObjects([url as NSURL])
+            return (FakeDraggingInfo(pasteboard: pasteboard, location: NSPoint(x: 100, y: 100), source: nil, window: welcome.window), pasteboard)
+        }
+
+        // A file that is not Markdown shows nothing.
+        let (refused, refusedBoard) = dragInfo(notes)
+        defer { refusedBoard.releaseGlobally() }
+        XCTAssertEqual(content.draggingEntered(refused), [])
+        XCTAssertFalse(welcome.dropZone.isTargeted)
+
+        // A Markdown file lights the drop state and names the file; leaving clears it.
+        let (accepted, acceptedBoard) = dragInfo(deck)
+        defer { acceptedBoard.releaseGlobally() }
+        XCTAssertEqual(content.draggingEntered(accepted), .copy)
+        XCTAssertTrue(welcome.dropZone.isTargeted)
+        XCTAssertEqual(welcome.dropZone.fileName, deck.lastPathComponent)
+        content.draggingExited(accepted)
+        XCTAssertFalse(welcome.dropZone.isTargeted)
+    }
+
+    func testWelcomeWindowThemeTour() async throws {
+        NSDocumentController.shared.clearRecentDocuments(nil)
+        appDelegate.showWelcomeIfNoDecks()
+        welcome.reload()
+        XCTAssertTrue(welcome.showsEmptyState)
+        let tourURL = try XCTUnwrap(Bundle.main.url(forResource: "theme-tour", withExtension: "md"), "the tour is bundled")
+        let tour = try String(contentsOf: tourURL, encoding: .utf8)
+
+        welcome.root.tourLink.performClick(nil)
+        try await waitUntil(timeout: 20, "the untitled tour deck") {
+            NSDocumentController.shared.documents.contains { ($0 as? DeckDocument)?.fileURL == nil }
+        }
+        let document = try XCTUnwrap(NSDocumentController.shared.documents.compactMap { $0 as? DeckDocument }.first { $0.fileURL == nil })
+        XCTAssertEqual(document.text, tour, "the tour's own content")
+        XCTAssertNil(document.fileURL, "untitled, so the first save picks a location")
+        XCTAssertTrue(document.isDraft)
+        XCTAssertFalse(welcome.window?.isVisible ?? false, "the welcome window gives way to the deck")
+        _ = try await waitForRunningTap(document)
+    }
+
+    func testWelcomeWindowSearch() throws {
+        NSDocumentController.shared.clearRecentDocuments(nil)
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("tap-welcome-search-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer {
+            try? FileManager.default.removeItem(at: folder)
+            welcome.search("")
+            NSDocumentController.shared.clearRecentDocuments(nil)
+        }
+        let alpha = folder.appendingPathComponent("alpha-talk.md")
+        let beta = folder.appendingPathComponent("beta-deck.md")
+        for url in [alpha, beta] {
+            try "# \(url.lastPathComponent)".write(to: url, atomically: true, encoding: .utf8)
+            NSDocumentController.shared.noteNewRecentDocumentURL(url)
+        }
+        appDelegate.showWelcomeIfNoDecks()
+        welcome.reload()
+        XCTAssertFalse(welcome.showsEmptyState)
+        XCTAssertEqual(welcome.visibleRecentURLs.count, 2)
+        XCTAssertEqual(welcome.tableView.numberOfRows, 2)
+
+        // Typing in the search field filters the list.
+        welcome.searchField.stringValue = "beta"
+        welcome.controlTextDidChange(Notification(name: NSControl.textDidChangeNotification, object: welcome.searchField))
+        XCTAssertEqual(welcome.visibleRecentURLs.map(\.lastPathComponent), ["beta-deck.md"])
+        XCTAssertEqual(welcome.tableView.numberOfRows, 1)
+        XCTAssertEqual(welcome.tableView.selectedRow, 0, "the one match is selected")
+        XCTAssertTrue(welcome.root.noMatchesLabel.isHidden)
+
+        welcome.search("zzz")
+        XCTAssertEqual(welcome.tableView.numberOfRows, 0)
+        XCTAssertFalse(welcome.root.noMatchesLabel.isHidden, "a search with no match says so")
+
+        welcome.search("")
+        XCTAssertEqual(welcome.tableView.numberOfRows, 2)
+        XCTAssertEqual(welcome.recentURLs.count, 2, "the search never drops a recent deck")
+    }
+
+    func testWelcomeWindowWithReduceMotion() async throws {
+        let saved = WelcomeMotion.reduceMotion
+        WelcomeMotion.reduceMotion = { true }
+        defer {
+            WelcomeMotion.reduceMotion = saved
+            welcome.aurora.refreshRunState()
+            welcome.filmstrip.refreshMotionSetting()
+        }
+        NSDocumentController.shared.clearRecentDocuments(nil)
+        appDelegate.showWelcomeIfNoDecks()
+        welcome.reload()
+        XCTAssertTrue(welcome.showsEmptyState)
+
+        // The aurora draws a still frame and no loop, even while the window is visible.
+        welcome.aurora.windowVisibilityChanged(true)
+        XCTAssertTrue(welcome.aurora.reduceMotion)
+        XCTAssertFalse(welcome.aurora.isAnimating, "Reduce Motion leaves the aurora paused")
+
+        // The caret does not blink; the strip holds still and each theme has one card, for scrolling by hand.
+        welcome.root.emptyStateBrand.icon.updateBlink()
+        XCTAssertFalse(welcome.root.emptyStateBrand.icon.blinkIsRunning)
+        welcome.filmstrip.refreshMotionSetting()
+        welcome.filmstrip.setActive(true)
+        XCTAssertFalse(welcome.filmstrip.isDrifting)
+        let catalog = try XCTUnwrap(AppEnvironment.shared.themeImages.catalog)
+        XCTAssertEqual(welcome.themeCards.count, catalog.themes.count)
+    }
+
+    func testWelcomeWindowAuroraPausesWhileUnseen() async throws {
+        let saved = WelcomeMotion.reduceMotion
+        WelcomeMotion.reduceMotion = { false }
+        defer { WelcomeMotion.reduceMotion = saved }
+        let aurora = AuroraView(frame: NSRect(x: 0, y: 0, width: 440, height: 280))
+        XCTAssertFalse(aurora.isAnimating, "a view outside any window draws nothing")
+
+        aurora.windowVisibilityChanged(true)
+        XCTAssertTrue(aurora.isAnimating)
+        aurora.windowVisibilityChanged(false)
+        XCTAssertFalse(aurora.isAnimating, "a covered, minimized or hidden window draws nothing")
+        aurora.windowVisibilityChanged(true)
+        XCTAssertTrue(aurora.isAnimating)
+
+        // A hidden app pauses it too, and showing the app resumes it.
+        NotificationCenter.default.post(name: NSApplication.didHideNotification, object: NSApp)
+        try await waitUntil(timeout: 5, "the aurora to pause with the app hidden") { !aurora.isAnimating }
+        NotificationCenter.default.post(name: NSApplication.didUnhideNotification, object: NSApp)
+        try await waitUntil(timeout: 5, "the aurora to resume") { aurora.isAnimating }
+    }
+
+    func testAuroraShaderRendersLightsRisingFromTheBottom() throws {
+        let device = try XCTUnwrap(MTLCreateSystemDefaultDevice(), "this Mac has a Metal device")
+        let renderer = try XCTUnwrap(AuroraRenderer(device: device), "the app bundle carries the compiled aurora shader")
+        let width = 88, height = 56
+        let descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .bgra8Unorm, width: width, height: height, mipmapped: false)
+        descriptor.usage = [.renderTarget, .shaderRead]
+        descriptor.storageMode = .shared
+        let texture = try XCTUnwrap(device.makeTexture(descriptor: descriptor))
+        let commandBuffer = try XCTUnwrap(device.makeCommandQueue()?.makeCommandBuffer())
+        renderer.encode(AuroraFrame(time: 45, intensity: 1.25, height: 0.3), into: texture, pointsPerTexel: 10, commandBuffer: commandBuffer)
+        commandBuffer.commit()
+        commandBuffer.waitUntilCompleted()
+        var pixels = [UInt8](repeating: 0, count: width * height * 4)
+        texture.getBytes(&pixels, bytesPerRow: width * 4, from: MTLRegionMake2D(0, 0, width, height), mipmapLevel: 0)
+        func alpha(row: Int) -> Double {
+            (0..<width).map { Double(pixels[(row * width + $0) * 4 + 3]) }.reduce(0, +) / Double(width) / 255
+        }
+        XCTAssertGreaterThan(alpha(row: Int(Double(height) * 0.7)), 0.15, "the lights are lit low in the window")
+        XCTAssertLessThan(alpha(row: 0), 0.02, "the top edge of the window stays a dark sky")
+    }
+
+    func testAppIcon() throws {
+        let bundle = Bundle.main
+        XCTAssertNotNil(bundle.url(forResource: "AppIcon", withExtension: "icns"), "the compiled app icon")
+        XCTAssertEqual(bundle.object(forInfoDictionaryKey: "CFBundleIconName") as? String, "AppIcon")
+        XCTAssertNotNil(NSImage(named: "WelcomeIconBase"), "the welcome window's caret-less icon")
+        XCTAssertNotNil(NSApp.applicationIconImage)
+
+        // The typeface and its license ride along, and the plist names their folder.
+        XCTAssertEqual(bundle.object(forInfoDictionaryKey: "ATSApplicationFontsPath") as? String, "Fonts")
+        XCTAssertNotNil(bundle.url(forResource: "InstrumentSans-Variable", withExtension: "ttf", subdirectory: "Fonts"))
+        XCTAssertNotNil(bundle.url(forResource: "OFL", withExtension: "txt", subdirectory: "Fonts"))
+        XCTAssertTrue(WelcomeFont.isDisplayFontAvailable, "Instrument Sans registers")
+    }
+
     func testThemeRendersWaitForTheWindowToStayVisible() async throws {
         NSDocumentController.shared.clearRecentDocuments(nil)
         appDelegate.showWelcomeIfNoDecks()
@@ -90,12 +293,13 @@ final class WelcomeTests: HostedTestCase {
         welcome.reload()
         XCTAssertTrue(welcome.showsEmptyState)
 
-        // A recent deck brings the two columns back, with their own buttons.
+        // A recent deck brings the two panes back, with their own buttons.
         let deck = try Fixtures.copyDeck("plain.md")
         NSDocumentController.shared.noteNewRecentDocumentURL(deck)
         welcome.reload()
         XCTAssertFalse(welcome.showsEmptyState)
         XCTAssertTrue(welcome.emptyStateView.isHidden)
+        XCTAssertTrue(welcome.filmstrip.isHidden, "the filmstrip belongs to the first launch")
         XCTAssertTrue(welcome.newDeckButton === welcome.columnNewDeckButton)
         XCTAssertEqual(welcome.emptyStateNewDeckButton.keyEquivalent, "")
         XCTAssertTrue(welcome.recentURLs.contains { FilePaths.same($0, deck) })
