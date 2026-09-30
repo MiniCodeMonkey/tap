@@ -11,6 +11,9 @@ public final class TapSession {
         case running(TapReady)
         case restarting(after: TimeInterval)
         case failed(lastOutput: [String])
+        /// tap stopped on a problem with the deck's settings that a restart
+        /// cannot change. It is not started again until the deck changes.
+        case invalidDeck([DeckProblem])
     }
 
     /// Which tap process this session runs. `dev` is the deck's writing
@@ -114,6 +117,10 @@ public final class TapSession {
     private var restartWork: DispatchWorkItem?
     private var readyWork: DispatchWorkItem?
     private var startsAfterStop = false
+    /// What tap last said was wrong with the deck's settings, cleared when
+    /// a process starts. An exit with an error among them is the deck's
+    /// doing, and the same deck would make the same exit again.
+    public private(set) var deckProblems: [DeckProblem] = []
 
     public init(deckURL: URL, configuration: Configuration, command: Command = .dev) {
         self.deckURL = deckURL
@@ -246,6 +253,7 @@ public final class TapSession {
     }
 
     private func launch(environment: [String: String]) {
+        deckProblems = []
         let tapProcess = TapProcess(configuration: TapProcess.Configuration(
             executableURL: configuration.executableURL,
             arguments: command.arguments(deck: deckURL),
@@ -299,6 +307,9 @@ public final class TapSession {
             log.append("audience on slide \(slide), step \(step)", source: .event)
         case .error(let payload):
             log.append("error \(payload.code): \(payload.message)", source: .event)
+        case .deckProblems(let problems):
+            deckProblems = problems
+            for problem in problems { log.append("\(problem.severity.rawValue): \(problem.message)", source: .event) }
         case .other(let type):
             log.append("event \(type)", source: .event)
         }
@@ -326,6 +337,13 @@ public final class TapSession {
     private func unexpectedExit() {
         guard restartsWhenExited else {
             state = .stopped
+            return
+        }
+        // A deterministic problem in the deck's settings is not a crash:
+        // starting tap again would print the same words, three times.
+        if DeckProblems.hasErrors(deckProblems) {
+            log.append("tap stopped on a problem with the deck's settings; it is not restarted until the deck changes", source: .app)
+            state = .invalidDeck(deckProblems)
             return
         }
         switch policy.recordExit(at: configuration.clock()) {

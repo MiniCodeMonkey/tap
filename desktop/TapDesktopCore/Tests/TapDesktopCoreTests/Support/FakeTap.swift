@@ -33,6 +33,19 @@ enum FakeTap {
         """)
     }
 
+    /// Prints a deck-problems event with one error and exits with status 1,
+    /// as tap does for a deck whose settings it cannot render. Every start
+    /// is counted in `record`.
+    static func rejectingTheDeck(recordingTo record: URL) throws -> URL {
+        try TestScripts.make("""
+        echo "started" >> "\(record.path)"
+        echo '{"type":"deck-problems","problems":[{"key":"aspectRatio","value":"16/9","message":"The aspect ratio bad.","severity":"error","suggestions":["16:9"],"allowed":["16:9","4:3","16:10"]}]}'
+        echo '{"type":"error","code":"invalid_deck","message":"invalid config: invalid aspectRatio"}'
+        echo "Error: invalid config" >&2
+        exit 1
+        """)
+    }
+
     /// Never prints a ready line.
     static func silent() throws -> URL {
         try TestScripts.make("while true; do sleep 0.1; done")

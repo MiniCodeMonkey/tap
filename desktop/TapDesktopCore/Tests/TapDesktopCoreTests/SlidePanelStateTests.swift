@@ -18,4 +18,21 @@ final class SlidePanelStateTests: XCTestCase {
         XCTAssertTrue(state.isPinned(deck: deckA), "and the old key is gone")
         defaults.removePersistentDomain(forName: suiteName)
     }
+
+    func testTheDeckCardIsClosedOnFirstOpenAndRememberedPerDeck() throws {
+        let suiteName = "SlidePanelStateTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let state = SlidePanelState(defaults: defaults)
+        let deckA = URL(fileURLWithPath: "/tmp/a.md")
+        let deckB = URL(fileURLWithPath: "/tmp/b.md")
+        XCTAssertFalse(state.isDeckCardOpen(deck: deckA))
+        state.setDeckCardOpen(true, deck: deckA)
+        XCTAssertTrue(state.isDeckCardOpen(deck: deckA))
+        XCTAssertFalse(state.isDeckCardOpen(deck: deckB))
+        XCTAssertTrue(state.isPinned(deck: deckA), "the panel's state is its own")
+        state.moveState(from: deckA, to: deckB)
+        XCTAssertTrue(state.isDeckCardOpen(deck: deckB), "a saved-as deck keeps its card open")
+        XCTAssertFalse(state.isDeckCardOpen(deck: deckA))
+    }
 }

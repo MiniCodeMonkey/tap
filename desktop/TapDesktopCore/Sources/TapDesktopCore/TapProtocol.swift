@@ -289,6 +289,8 @@ public enum TapEvent: Equatable, Sendable {
     /// The audience position: a 1-based slide and its step.
     case slide(slide: Int, step: Int)
     case error(TapErrorPayload)
+    /// What is wrong with the deck's settings right now; empty when nothing is.
+    case deckProblems([DeckProblem])
     case other(type: String)
 
     private struct Envelope: Decodable {
@@ -313,6 +315,7 @@ public enum TapEvent: Equatable, Sendable {
         let step: Int?
         let code: String?
         let message: String?
+        let problems: [DeckProblem]?
     }
 
     /// Returns nil for a line that is not a JSON object with a known shape.
@@ -345,6 +348,8 @@ public enum TapEvent: Equatable, Sendable {
             return .slide(slide: slide, step: envelope.step ?? 0)
         case "error":
             return .error(TapErrorPayload(code: envelope.code ?? "unknown", message: envelope.message ?? ""))
+        case "deck-problems":
+            return .deckProblems(envelope.problems ?? [])
         default:
             return .other(type: envelope.type)
         }
