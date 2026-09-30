@@ -178,4 +178,19 @@ final class TapProtocolTests: XCTestCase {
             XCTAssertFalse(TapErrorPayload(code: code, message: "").meansTheCommandFailed, code)
         }
     }
+
+    func testDecodesDeckProblems() {
+        let line = #"{"type":"deck-problems","problems":[{"key":"aspectRatio","value":"16/9","message":"m","severity":"error","suggestions":["16:9"],"allowed":["16:9","4:3"]},{"key":"theme","value":"x","message":"t","severity":"warning","suggestions":[],"allowed":[]}]}"#
+        XCTAssertEqual(TapEvent.decode(line: line), .deckProblems([
+            DeckProblem(key: "aspectRatio", value: "16/9", message: "m", severity: .error, suggestions: ["16:9"], allowed: ["16:9", "4:3"]),
+            DeckProblem(key: "theme", value: "x", message: "t", severity: .warning),
+        ]))
+        XCTAssertEqual(TapEvent.decode(line: #"{"type":"deck-problems","problems":[]}"#), .deckProblems([]))
+    }
+
+    func testADeckProblemFromALaterTapStillDecodes() {
+        let line = #"{"type":"deck-problems","problems":[{"key":"k","severity":"catastrophe"}]}"#
+        XCTAssertEqual(TapEvent.decode(line: line), .deckProblems([DeckProblem(key: "k", value: "", message: "", severity: .error)]),
+                       "no suggestions, and an unknown severity counts as an error")
+    }
 }

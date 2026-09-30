@@ -9,7 +9,7 @@ Feature: Creating decks and themes
     And tap records an approval for the new deck, because I made it          # NEW tap new approves its own deck
 
   Scenario: Theme picker lists tap's themes
-    When I open the theme picker in the New Deck sheet, the toolbar, or the Deck tab
+    When I open the theme picker in the New Deck sheet, the toolbar, or the Deck card
     Then I see all themes from "tap theme list --json" as one scrolling grid, grouped light and dark
     And each cell is a real render of a title slide in that theme            # NEW tap theme show <slug> --image
     And the renders are cached, so the grid opens instantly after the first time

@@ -90,9 +90,12 @@ final class WelcomeIconView: NSView {
 
     /// Blinks the caret (a 1.1 s step, as the mockup does) unless Reduce Motion is on.
     func updateBlink() {
+        let shouldBlink = hasBaseImage && window != nil && !WelcomeMotion.reduceMotion()
+        // A layout pass is not a change: restarting would reset the caret's phase.
+        if shouldBlink, blinkIsRunning, caretLayer.animation(forKey: "blink") != nil { return }
         caretLayer.removeAnimation(forKey: "blink")
         blinkIsRunning = false
-        guard hasBaseImage, window != nil, !WelcomeMotion.reduceMotion() else { return }
+        guard shouldBlink else { return }
         let blink = CAKeyframeAnimation(keyPath: "opacity")
         blink.values = [1, 0]
         blink.keyTimes = [0, 0.5]

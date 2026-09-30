@@ -5,6 +5,7 @@ D2 | 01-documents.feature | Welcome window
 D2 | 01-documents.feature | Welcome window without recent decks
 D2 | 01-documents.feature | Welcome window drag state
 D2 | 01-documents.feature | Welcome window theme tour
+D2 | 01-documents.feature | The theme tour opens with its thumbnails
 D2 | 01-documents.feature | Welcome window search
 D2 | 01-documents.feature | Welcome window with Reduce Motion
 D2 | 01-documents.feature | Welcome window aurora pauses while unseen
@@ -29,9 +30,13 @@ D2 | 02-slide-structure.feature | Speaker notes
 D2 | 02-slide-structure.feature | Code blocks with a live driver
 D2 | 02-slide-structure.feature | Box badges
 D3 | 02-slide-structure.feature | Change a slide's layout from its header
-D2 | 02-slide-structure.feature | The editor never folds
 D2 | 04-preview.feature | The preview follows the cursor
 D2 | 04-preview.feature | The preview updates while I type
+D2 | 04-preview.feature | Slide cards fill the panel at once
+D2 | 04-preview.feature | Real thumbnails fade in over the cards
+D2 | 04-preview.feature | The preview shows a text card until its first paint
+D2 | 04-preview.feature | The preview names the step after one second
+D2 | 04-preview.feature | The preview stops loading when it fails
 D2 | 04-preview.feature | Step through fragments
 D2 | 04-preview.feature | The preview shows the audience-safe error form
 D2 | 04-preview.feature | Preview in its own window
@@ -42,6 +47,8 @@ D2 | 07-tap-process.feature | Start
 D2 | 07-tap-process.feature | Login shell environment
 D2 | 07-tap-process.feature | Crash and restart
 D2 | 07-tap-process.feature | tap keeps failing
+D2 | 07-tap-process.feature | A deck problem is not a crash
+D2 | 07-tap-process.feature | tap reports deck problems
 D2 | 07-tap-process.feature | Requests are protected
 D2 | 07-tap-process.feature | Version match
 D2 | 07-tap-process.feature | Logs and version
@@ -68,7 +75,12 @@ D3 | 04-preview.feature | Peek at the slide panel
 D3 | 04-preview.feature | Pin the slide panel
 D3 | 04-preview.feature | The pin in the panel header
 D3 | 04-preview.feature | Step through a custom component
+D3 | 04-preview.feature | A bad setting stops the preview with one fix
+D3 | 04-preview.feature | An unknown theme still renders
+D3 | 04-preview.feature | An unexpected stop is calm
+D3 | 04-preview.feature | Thumbnails dim while the preview cannot render
 D3 | 12-menus-and-shortcuts.feature | Slide menu
+D3 | 12-menus-and-shortcuts.feature | Deck settings from the View menu
 D3 | 12-menus-and-shortcuts.feature | Context menu on a slide
 D3 | 12-menus-and-shortcuts.feature | VoiceOver
 D3 | 13-performance.feature | The current thumbnail follows the preview
@@ -76,6 +88,8 @@ D3 | 13-performance.feature | Thumbnails
 D3 | 13-performance.feature | Reopen
 D4 | 05-presenting.feature | Start presenting with two displays
 D4 | 05-presenting.feature | Play starts at once
+D4 | 05-presenting.feature | Play is dimmed while tap gets ready
+D4 | 05-presenting.feature | Play on an untitled deck
 D4 | 05-presenting.feature | Present Settings open on the first run
 D4 | 05-presenting.feature | Save before presenting
 D4 | 05-presenting.feature | Nothing interrupts the talk
@@ -114,7 +128,11 @@ D5 | 06-live-code-and-trust.feature | A deck with live code must list its driver
 D5 | 06-live-code-and-trust.feature | A new driver asks again
 D5 | 06-live-code-and-trust.feature | Secrets in driver settings
 D5 | 06-live-code-and-trust.feature | The safe button is the default
-D5 | 02-slide-structure.feature | Deck settings live in the inspector
+D5 | 02-slide-structure.feature | The Deck card is the one thing that folds
+D5 | 02-slide-structure.feature | Deck settings live in the Deck card
+D5 | 02-slide-structure.feature | The Deck card shows the frontmatter as text
+D5 | 02-slide-structure.feature | A deck with no frontmatter has a Deck card
+D5 | 02-slide-structure.feature | Frontmatter that does not parse opens the Deck card as text
 D6 | 08-creating-decks.feature | New deck
 D6 | 08-creating-decks.feature | Theme picker lists tap's themes
 D6 | 08-creating-decks.feature | Change the deck's theme

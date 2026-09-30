@@ -10,6 +10,11 @@ final class ThumbnailController {
     let cache: ThumbnailCache
     weak var panel: SlidePanelViewController?
     var currentSlideNumber: () -> Int? = { nil }
+    /// Pictures shipped in the app for slides whose text is known, by slide
+    /// number, for this summary: the unedited theme tour's. A slide that
+    /// has one takes it, and it goes into the cache under the slide's own
+    /// key, so no render starts for it.
+    var bundledImages: (PresentationSummary) -> [Int: URL] = { _ in [:] }
     var client: TapClient? {
         didSet {
             renderer.configure(client: client)
@@ -110,6 +115,7 @@ final class ThumbnailController {
         keys = summary.slides.map { ThumbnailKey(slideHash: $0.hash, themeSignature: signature) }
         var pending: [ThumbnailRenderer.Job] = []
         var updating: Set<Int> = []
+        let bundled = bundledImages(summary)
         for (index, key) in keys.enumerated() {
             let number = index + 1
             if let image = images[key] {
@@ -118,6 +124,12 @@ final class ThumbnailController {
             }
             if let data = cache.data(for: key), let image = NSImage(data: data) {
                 images[key] = image
+                panel?.setImage(image, forSlide: number)
+                continue
+            }
+            if let url = bundled[number], let data = try? Data(contentsOf: url), let image = NSImage(data: data) {
+                images[key] = image
+                try? cache.save(data, for: key)
                 panel?.setImage(image, forSlide: number)
                 continue
             }

@@ -4,7 +4,7 @@ import XCTest
 final class DeckTabThemeRowTests: HostedTestCase {
     /// The DeckTabThemeRow board: the Theme row is one button, the theme's
     /// render and name, that opens the same popover as the toolbar's item.
-    func testTheDeckTabThemeRowOpensTheGrid() async throws {
+    func testTheDeckCardThemeRowOpensTheGrid() async throws {
         let png = Fixtures.repositoryRoot.appendingPathComponent("desktop/TapTests/Fixtures/diagram.png")
         let record = try Fixtures.temporaryFolder().appendingPathComponent("record.txt")
         AppEnvironment.shared.toolExecutableURL = try FakeToolScripts.themeShow(png: png, recordingTo: record)
@@ -12,7 +12,7 @@ final class DeckTabThemeRowTests: HostedTestCase {
         let controller = try XCTUnwrap(document.sessionController)
         let window = try XCTUnwrap(document.windowControllers.first as? DeckWindowController)
         await AppEnvironment.shared.deckSchema.load()
-        window.showDeckTab(nil)
+        window.showDeckSettings(nil)
         let form = controller.deckForm
         try await waitUntil(timeout: 20, "the catalog") { AppEnvironment.shared.themeImages.catalog != nil }
         let row = try XCTUnwrap(form.themeRowButton, "the Theme row is a button, not a popup")

@@ -248,6 +248,8 @@ final class WelcomeWindowController: NSWindowController, NSTableViewDataSource, 
     /// Filters the recent decks by `query`, as typing in the search field does.
     func search(_ query: String) {
         if searchField.stringValue != query { searchField.stringValue = query }
+        // The field's action and its text-change notice both come here for one keystroke: the second finds nothing new.
+        guard query != searchQuery else { return }
         searchQuery = query
         applyFilter()
     }
@@ -278,7 +280,10 @@ final class WelcomeWindowController: NSWindowController, NSTableViewDataSource, 
     private func typeToSearch(_ characters: String) {
         guard !showsEmptyState, window?.isKeyWindow == true else { return }
         window?.makeFirstResponder(searchField)
-        (searchField.currentEditor() as? NSTextView)?.insertText(characters, replacementRange: NSRange(location: NSNotFound, length: 0))
+        // Focusing the field selects its text: the typed characters go after it, not over it.
+        let editor = searchField.currentEditor() as? NSTextView
+        editor?.setSelectedRange(NSRange(location: (searchField.stringValue as NSString).length, length: 0))
+        editor?.insertText(characters, replacementRange: NSRange(location: NSNotFound, length: 0))
         search(searchField.stringValue)
     }
 

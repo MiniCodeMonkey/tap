@@ -1,24 +1,24 @@
 import XCTest
 @testable import Tap
 
-/// The Deck tab's drivers cards: one per declared driver with its settings
+/// The Deck card's drivers cards: one per declared driver with its settings
 /// and Remove, the hint about secrets, the name field with Add, raw text
 /// for the settings the form has no field for, and Other keys for what
 /// tap does not know.
 final class DeckTabDriversTests: HostedTestCase {
-    func openOnTheDeckTab(_ deck: URL) async throws -> (DeckDocument, DeckSessionController, DeckFormViewController) {
+    func openWithTheDeckCardOpen(_ deck: URL) async throws -> (DeckDocument, DeckSessionController, DeckFormViewController) {
         Task { await AppEnvironment.shared.deckSchema.load() }
         try await waitUntil(timeout: 30, "the schema") { AppEnvironment.shared.deckSchema.isLoaded }
         let document = try await openDeckAndWaitForPreview(deck)
         let controller = try XCTUnwrap(document.sessionController)
         try await waitUntil(timeout: 10, "tap's first answer") { controller.lastAppliedText != nil }
         let deckWindow = try XCTUnwrap(document.windowControllers.first as? DeckWindowController)
-        deckWindow.showDeckTab(nil)
+        deckWindow.showDeckSettings(nil)
         return (document, controller, controller.deckForm)
     }
 
     func testTheDriversCardsListEachDriverWithItsSettings() async throws {
-        let (_, controller, form) = try await openOnTheDeckTab(try Fixtures.copyDeck("custom-driver.md"))
+        let (_, controller, form) = try await openWithTheDeckCardOpen(try Fixtures.copyDeck("custom-driver.md"))
         let editor = controller.editor
         XCTAssertEqual(form.builtForEntries["drivers"], ["sqlite", "fortune"])
         let command = try XCTUnwrap(form.field("drivers.fortune.command") as? NSTextField)
@@ -86,7 +86,7 @@ final class DeckTabDriversTests: HostedTestCase {
     }
 
     func testRawSettingsAreEditedAsText() async throws {
-        let (_, controller, form) = try await openOnTheDeckTab(try connectionsDeck())
+        let (_, controller, form) = try await openWithTheDeckCardOpen(try connectionsDeck())
         let editor = controller.editor
         let original = "    connections:\n      incident:\n        path: ./incident.db\n"
         // The editor is fetched again after every edit, so the checks hold whether or not the rows were rebuilt.
@@ -138,7 +138,7 @@ final class DeckTabDriversTests: HostedTestCase {
     /// the entry's own indent, inside a connections block: it is refused
     /// like any other line that would close the frontmatter early.
     func testRawSettingsRefuseADashesLineDeeperThanTheEntry() async throws {
-        let (_, controller, form) = try await openOnTheDeckTab(try connectionsDeck())
+        let (_, controller, form) = try await openWithTheDeckCardOpen(try connectionsDeck())
         let editor = controller.editor
         let original = "    connections:\n      incident:\n        path: ./incident.db\n"
         let unedited = editor.string
@@ -156,7 +156,7 @@ final class DeckTabDriversTests: HostedTestCase {
     func testABlockStyleListIsEditedAsTextAndFollowsTheText() async throws {
         let deck = try Fixtures.temporaryFolder().appendingPathComponent("args.md")
         try "---\ntitle: Args\ndrivers:\n  incidents:\n    command: /bin/echo\n    args:\n    - one\n    - two\n---\n\n# One\n".write(to: deck, atomically: true, encoding: .utf8)
-        let (_, controller, form) = try await openOnTheDeckTab(deck)
+        let (_, controller, form) = try await openWithTheDeckCardOpen(deck)
         let editor = controller.editor
         XCTAssertEqual((form.field("drivers.incidents.command") as? NSTextField)?.stringValue, "/bin/echo")
         XCTAssertNil(form.field("drivers.incidents.args"), "no one-line field for a list on several lines")
@@ -196,7 +196,7 @@ final class DeckTabDriversTests: HostedTestCase {
     /// An autosave writes what is typed in a raw row so far and leaves the
     /// person typing in it, as it does for a field.
     func testAnAutosaveWritesARawRowWithoutTakingItsFocus() async throws {
-        let (document, controller, form) = try await openOnTheDeckTab(try connectionsDeck())
+        let (document, controller, form) = try await openWithTheDeckCardOpen(try connectionsDeck())
         let deck = try XCTUnwrap(document.fileURL)
         let raw = try XCTUnwrap(form.rawEditor("drivers.sqlite.connections"))
         let window = try XCTUnwrap(raw.window)
@@ -218,7 +218,7 @@ final class DeckTabDriversTests: HostedTestCase {
     /// A rebuild (here, a driver added under the form) writes what is typed
     /// in a raw row before the row goes, as it does for a field.
     func testARebuildCommitsTheRawRowBeingEdited() async throws {
-        let (_, controller, form) = try await openOnTheDeckTab(try connectionsDeck())
+        let (_, controller, form) = try await openWithTheDeckCardOpen(try connectionsDeck())
         let editor = controller.editor
         let raw = try XCTUnwrap(form.rawEditor("drivers.sqlite.connections"))
         let window = try XCTUnwrap(raw.window)
@@ -236,7 +236,7 @@ final class DeckTabDriversTests: HostedTestCase {
     func testADriverWhoseNameHasADotIsRemoved() async throws {
         let deck = try Fixtures.temporaryFolder().appendingPathComponent("dotted.md")
         try "---\ntitle: Dotted\ndrivers:\n  sqlite: {}\n  my.db:\n    command: /bin/cat\n---\n\n# One\n".write(to: deck, atomically: true, encoding: .utf8)
-        let (_, controller, form) = try await openOnTheDeckTab(deck)
+        let (_, controller, form) = try await openWithTheDeckCardOpen(deck)
         XCTAssertEqual(form.builtForEntries["drivers"], ["sqlite", "my.db"])
         try XCTUnwrap(form.removeButton(for: "drivers.my.db")).performClick(nil)
         XCTAssertEqual(Frontmatter(text: controller.editor.string).declaredDrivers, ["sqlite"])
@@ -245,7 +245,7 @@ final class DeckTabDriversTests: HostedTestCase {
 
     /// Return in the name field adds the driver, as Add does.
     func testReturnInTheNameFieldAddsTheDriver() async throws {
-        let (_, controller, form) = try await openOnTheDeckTab(try Fixtures.copyDeck("custom-driver.md"))
+        let (_, controller, form) = try await openWithTheDeckCardOpen(try Fixtures.copyDeck("custom-driver.md"))
         let addField = try XCTUnwrap(form.addEntryField(for: "drivers"))
         addField.stringValue = "shell"
         addField.sendAction(addField.action, to: addField.target)
@@ -257,7 +257,7 @@ final class DeckTabDriversTests: HostedTestCase {
         let folder = try Fixtures.temporaryFolder()
         let deck = folder.appendingPathComponent("other.md")
         try "---\ntitle: Other\nspeakerNotesFont: 18\nlegacy:\n  a: 1\n---\n\n# One\n".write(to: deck, atomically: true, encoding: .utf8)
-        let (_, _, form) = try await openOnTheDeckTab(deck)
+        let (_, _, form) = try await openWithTheDeckCardOpen(deck)
         XCTAssertEqual(form.otherKeyLabels.map(\.stringValue), ["speakerNotesFont: 18", "legacy:\n  a: 1"], "as written, read-only")
         XCTAssertNil(form.field("speakerNotesFont"))
     }

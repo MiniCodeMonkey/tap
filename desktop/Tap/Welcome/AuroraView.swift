@@ -48,6 +48,8 @@ final class AuroraView: NSView, MTKViewDelegate {
             let view = MTKView(frame: .zero, device: device)
             view.colorPixelFormat = .bgra8Unorm
             view.framebufferOnly = true
+            // The shader's colours are sRGB values; without this the display's own space reads them.
+            (view.layer as? CAMetalLayer)?.colorspace = CGColorSpace(name: CGColorSpace.sRGB)
             view.autoResizeDrawable = false
             view.clearColor = MTLClearColor(red: 0, green: 0, blue: 0, alpha: 0)
             view.preferredFramesPerSecond = Self.framesPerSecond

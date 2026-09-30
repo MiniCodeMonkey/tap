@@ -20,6 +20,10 @@ final class FormCard: NSBox {
         borderWidth = 0.5
         cornerRadius = 10
         contentViewMargins = .zero
+        // A row with a problem is tinted to the card's edge: the corners are the card's.
+        contentView?.wantsLayer = true
+        contentView?.layer?.cornerRadius = 10
+        contentView?.layer?.masksToBounds = true
         translatesAutoresizingMaskIntoConstraints = false
         column.orientation = .vertical
         column.alignment = .leading
@@ -69,17 +73,21 @@ final class FormCard: NSBox {
 
     /// A group of the form: its heading, then its cards (and any note
     /// under them), each as wide as the group.
-    static func section(title: String, content: [NSView]) -> NSStackView {
-        let heading = NSTextField(labelWithString: title)
-        heading.font = .systemFont(ofSize: 11, weight: .semibold)
-        heading.textColor = .secondaryLabelColor
-        let headingRow = NSStackView(views: [heading])
-        headingRow.edgeInsets = NSEdgeInsets(top: 0, left: 4, bottom: 0, right: 4)
-        let section = NSStackView(views: [headingRow] + content)
+    static func section(title: String?, content: [NSView]) -> NSStackView {
+        var leading: [NSView] = []
+        if let title {
+            let heading = NSTextField(labelWithString: title)
+            heading.font = .systemFont(ofSize: 11, weight: .semibold)
+            heading.textColor = .secondaryLabelColor
+            let headingRow = NSStackView(views: [heading])
+            headingRow.edgeInsets = NSEdgeInsets(top: 0, left: 4, bottom: 0, right: 4)
+            leading = [headingRow]
+        }
+        let section = NSStackView(views: leading + content)
         section.orientation = .vertical
         section.alignment = .leading
         section.spacing = 8
-        section.setCustomSpacing(6, after: headingRow)
+        if let headingRow = leading.first { section.setCustomSpacing(6, after: headingRow) }
         for view in content { view.widthAnchor.constraint(equalTo: section.widthAnchor).isActive = true }
         return section
     }

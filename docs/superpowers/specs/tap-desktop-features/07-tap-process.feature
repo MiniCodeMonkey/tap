@@ -22,7 +22,19 @@ Feature: The tap process
 
   Scenario: tap keeps failing
     When tap exits 3 times within 30 seconds
-    Then the app stops retrying and shows the last lines of tap's stderr with a "Try Again" button
+    Then the app stops retrying and says "The preview stopped" with a "Restart Preview" button
+    And the last lines of tap's stderr are behind "Details", never on the notice
+
+  Scenario: A deck problem is not a crash
+    When tap exits because a setting of the deck is wrong, and said so in a deck-problems event
+    Then the app does not start tap again, since the same deck would fail the same way
+    And when the deck changes and no longer has an error, the app starts tap once
+
+  Scenario: tap reports deck problems
+    When tap dev --app starts, reloads, or renders the app's buffer
+    Then it sends a deck-problems event with each problem's key, value, message, severity, allowed values and nearest values   # NEW
+    And an unknown theme is a warning with the nearest theme, an unsupported aspect ratio an error whose first suggestion is "16:9" for "16/9"
+    And the event follows the ready line, and a problem that stops tap is sent before it exits
 
   Scenario: Requests are protected
     Then every request from the app carries the token

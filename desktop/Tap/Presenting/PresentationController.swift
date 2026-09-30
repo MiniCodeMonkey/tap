@@ -328,6 +328,9 @@ final class PresentationController {
             tapIsReady(ready)
         case .failed(let lastOutput):
             endBecauseTapFailed(lastOutput: lastOutput)
+        case .invalidDeck(let problems):
+            // tap present read settings it cannot render: the talk does not start, and the words say which.
+            fail("The deck\u{2019}s settings need a fix before it can play. " + problems.filter { $0.severity == .error }.map(\.message).joined(separator: " "))
         case .stopped:
             // tap present is gone or going: its questions die with it, and
             // a sheet still up for one must not answer the next process, whose ids start at q1 again.
@@ -1093,7 +1096,15 @@ final class PresentationController {
     private func releaseIfDone() {
         guard !isEnding else { return }
         AppEnvironment.shared.releaseEndingTalk(self)
+        if let onDone {
+            self.onDone = nil
+            onDone()
+        }
     }
+
+    /// Runs once when a talk that outlived its deck has nothing left: its
+    /// process has exited, so whatever tap wrote for the talk is on disk.
+    var onDone: (() -> Void)?
 
     private func countIn() {
         guard !countedAsPresenting else { return }

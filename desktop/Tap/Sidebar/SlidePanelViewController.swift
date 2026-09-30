@@ -1,4 +1,5 @@
 import AppKit
+import TapDesktopCore
 
 protocol SlidePanelDelegate: AnyObject {
     /// A click on a thumbnail. `selection` is the panel's selection after the click.
@@ -64,6 +65,10 @@ final class SlidePanelViewController: NSViewController, NSCollectionViewDataSour
     /// Runs when the visible thumbnails change, so the renderer can reorder its queue.
     var onVisibleRangeChanged: (() -> Void)?
     private(set) var slides: [Slide] = []
+    /// The text card of each slide, by index, and the paper colour they are drawn on. Until tap has
+    /// answered with the slides, the cards alone fill the panel.
+    private(set) var cards: [SlideCard] = []
+    private(set) var paper = PaperColour.neutral
     private var images: [Int: NSImage] = [:]
     private var updating: Set<Int> = []
     private var isSyncingSelection = false
@@ -137,6 +142,16 @@ final class SlidePanelViewController: NSViewController, NSCollectionViewDataSour
     }
 
     /// Shows the pin filled while the panel is docked and outlined while it peeks.
+    /// True while the preview cannot render: the thumbnails stay, dimmed.
+    private(set) var isDimmed = false
+
+    func setDimmed(_ dimmed: Bool) {
+        guard dimmed != isDimmed else { return }
+        isDimmed = dimmed
+        scrollView.alphaValue = dimmed ? 0.45 : 1
+        for slide in displayedSlides { refreshItem(forSlide: slide.number) }
+    }
+
     func setPinned(_ pinned: Bool) {
         isPinned = pinned
         applyPinState()
@@ -165,21 +180,47 @@ final class SlidePanelViewController: NSViewController, NSCollectionViewDataSour
 
     // MARK: Content
 
+    /// The slides the panel lists: tap's, or before tap has answered, one per card.
+    private var displayedSlides: [Slide] {
+        if !slides.isEmpty { return slides }
+        return cards.enumerated().map { Slide(number: $0.offset + 1, startLine: 0, endLine: 0, title: $0.element.heading) }
+    }
+
+    private func configure(_ item: ThumbnailItem, slide: Slide) {
+        let index = slide.number - 1
+        item.configure(slide: slide, image: images[slide.number], isUpdating: updating.contains(slide.number),
+                       card: cards.indices.contains(index) ? cards[index] : SlideCard(heading: slide.title), paper: paper, isDimmed: isDimmed)
+    }
+
+    /// Sets the text cards and the paper colour they are drawn on. A panel
+    /// with no slides from tap yet lists one placeholder per card.
+    func setCards(_ newCards: [SlideCard], paper newPaper: PaperColour) {
+        let countChanged = newCards.count != cards.count
+        cards = newCards
+        paper = newPaper
+        if slides.isEmpty {
+            images = images.filter { $0.key <= newCards.count }
+            if countChanged {
+                collectionView.reloadData()
+                return
+            }
+        }
+        for slide in displayedSlides { refreshItem(forSlide: slide.number) }
+    }
+
     /// Replaces the slides. The selection is kept by number where the
     /// numbers still exist.
     func setSlides(_ newSlides: [Slide]) {
         let previousSelection = selectedNumbers
+        let hadPlaceholders = slides.isEmpty && !cards.isEmpty
         let countChanged = newSlides.count != slides.count
         slides = newSlides
         images = images.filter { $0.key <= newSlides.count }
         updating = updating.filter { $0 <= newSlides.count }
-        if countChanged {
+        if countChanged || hadPlaceholders {
             collectionView.reloadData()
         } else {
-            for (index, slide) in newSlides.enumerated() {
-                (collectionView.item(at: IndexPath(item: index, section: 0)) as? ThumbnailItem)?
-                    .configure(slide: slide, image: images[slide.number], isUpdating: updating.contains(slide.number))
-            }
+            for slide in newSlides { refreshItem(forSlide: slide.number) }
         }
         let kept = previousSelection.filter { $0 <= newSlides.count }
         if kept != selectedNumbers { select(numbers: kept, scroll: false) }
@@ -204,7 +245,7 @@ final class SlidePanelViewController: NSViewController, NSCollectionViewDataSour
         for (index, source) in sourceNumbers.enumerated() {
             if let source, let image = old[source] { images[index + 1] = image }
         }
-        for number in 1...max(1, slides.count) { refreshItem(forSlide: number) }
+        for number in 1...max(1, displayedSlides.count) { refreshItem(forSlide: number) }
     }
 
     /// Marks the slides whose thumbnails are being rendered again. Their
@@ -216,13 +257,14 @@ final class SlidePanelViewController: NSViewController, NSCollectionViewDataSour
     }
 
     private func refreshItem(forSlide number: Int) {
-        guard number >= 1, number <= slides.count,
+        let shown = displayedSlides
+        guard number >= 1, number <= shown.count,
               let item = collectionView.item(at: IndexPath(item: number - 1, section: 0)) as? ThumbnailItem else { return }
-        item.configure(slide: slides[number - 1], image: images[number], isUpdating: updating.contains(number))
+        configure(item, slide: shown[number - 1])
     }
 
     func item(forSlide number: Int) -> ThumbnailItem? {
-        guard number >= 1, number <= slides.count else { return nil }
+        guard number >= 1, number <= displayedSlides.count else { return nil }
         return collectionView.item(at: IndexPath(item: number - 1, section: 0)) as? ThumbnailItem
     }
 
@@ -278,13 +320,12 @@ final class SlidePanelViewController: NSViewController, NSCollectionViewDataSour
     // MARK: NSCollectionViewDataSource and delegate
 
     func collectionView(_ collectionView: NSCollectionView, numberOfItemsInSection section: Int) -> Int {
-        slides.count
+        displayedSlides.count
     }
 
     func collectionView(_ collectionView: NSCollectionView, itemForRepresentedObjectAt indexPath: IndexPath) -> NSCollectionViewItem {
         let item = collectionView.makeItem(withIdentifier: ThumbnailItem.identifier, for: indexPath) as! ThumbnailItem
-        let slide = slides[indexPath.item]
-        item.configure(slide: slide, image: images[slide.number], isUpdating: updating.contains(slide.number))
+        configure(item, slide: displayedSlides[indexPath.item])
         return item
     }
 

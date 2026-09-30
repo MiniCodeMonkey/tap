@@ -87,6 +87,25 @@ final class TapSessionTests: XCTestCase {
         XCTAssertTrue(tap.log.text.contains("tap exited 3 times in 30 seconds"))
     }
 
+    func testADeckProblemIsNotACrash() async throws {
+        let record = try TestScripts.temporaryFolder().appendingPathComponent("record")
+        let tap = session(try FakeTap.rejectingTheDeck(recordingTo: record))
+        var states: [TapSession.State] = []
+        tap.onStateChange = { states.append($0) }
+        tap.start()
+        try await waitUntil { if case .invalidDeck = tap.state { return true } else { return false } }
+        guard case .invalidDeck(let problems) = tap.state else { return XCTFail() }
+        XCTAssertEqual(problems.map(\.key), ["aspectRatio"])
+        XCTAssertEqual(problems.first?.suggestions, ["16:9"])
+        try await Task.sleep(nanoseconds: 400_000_000)
+        XCTAssertEqual(try String(contentsOf: record, encoding: .utf8), "started\n", "tap is started once, not three times")
+        XCTAssertFalse(states.contains { if case .restarting = $0 { return true } else { return false } })
+        XCTAssertTrue(tap.log.text.contains("not restarted until the deck changes"))
+        tap.start()
+        try await waitUntil { try! String(contentsOf: record, encoding: .utf8) == "started\nstarted\n" }
+        try await waitUntil { if case .invalidDeck = tap.state { return true } else { return false } }
+    }
+
     func testTryAgainStartsOver() async throws {
         let tap = session(try FakeTap.crashing())
         tap.start()

@@ -38,6 +38,37 @@ Feature: Preview
     When I change a bullet in slide 3 and pause
     Then the preview shows the change within 200 ms
 
+  Scenario: Slide cards fill the panel at once
+    When a deck opens, before tap is ready
+    Then every slide in the panel shows a card with the slide's first heading on the theme's paper colour
+    And a slow sheen sweeps across each card, unless Reduce Motion is on
+    And the panel's numbers, order and count come from the Markdown until tap answers
+
+  Scenario: Real thumbnails fade in over the cards
+    Given the panel shows cards
+    When a slide's thumbnail is rendered
+    Then it fades in over the card in 0.35 s, and with Reduce Motion on it replaces it at once
+    And the visible slides render first, from the top down, then the rest
+
+  Scenario: The preview shows a text card until its first paint
+    When a deck opens
+    Then the preview shows the slide's card at full size, with a 2 pt progress line along its top edge
+    When the page paints its first slide
+    Then the card and the line go
+
+  Scenario: The preview names the step after one second
+    Given the preview has not painted
+    Then no status line shows for the first second
+    When the wait passes one second
+    Then a line under the preview says what it waits on, such as "Starting the preview…"
+    When the slide paints
+    Then the line fades out
+
+  Scenario: The preview stops loading when it fails
+    Given the preview has not painted
+    When the preview shows an error state
+    Then the card, the progress line and the status line are gone
+
   Scenario: Step through fragments
     Given slide 3 has 2 steps
     When I use the step controls
@@ -78,4 +109,33 @@ Feature: Preview
   Scenario: Try a theme in the preview
     When I press T with the preview focused
     Then the preview cycles themes and the file does not change
+
+  Scenario: A bad setting stops the preview with one fix
+    Given the deck sets an aspect ratio "16/9" that tap does not support
+    Then tap tells the app which setting is wrong, with the values it accepts, and the app does not start tap again for it
+    And the preview shows "This deck's settings need one fix", says in plain words what is wrong, and offers "Use 16:9"
+    And "Show in Editor" opens the Deck card on the field
+    And "Details" holds the raw line
+    When I press "Use 16:9"
+    Then the line is rewritten as one undo step, tap starts, and the preview comes back by itself
+    And in the Deck card the card is tinted, the field carries the problem with the same fix, and the closed card shows a red "1 problem" chip
+    And a new problem opens a closed card once, and not again while the same problem stands
+    When there are two problems
+    Then the heading says "need 2 fixes" and each problem has its own fix
+
+  Scenario: An unknown theme still renders
+    Given the deck names a theme "apple-basic" that tap does not have
+    Then the preview still renders, in Base
+    And a quiet amber band above the preview says the theme is not a tap theme, with "Use <the nearest theme>" and "Choose Theme…"
+    And the toolbar's Theme button reads "Base" with an amber dot and a tooltip that says why
+    And the closed Deck card shows the name as an amber chip
+
+  Scenario: An unexpected stop is calm
+    When tap quits while showing the deck, for a reason that is not the deck's settings
+    Then the preview says "The preview stopped" and "tap quit while showing this deck. Your text is safe."
+    And it offers "Restart Preview" and "Show Tap Log", and tap's raw output is only behind "Details"
+
+  Scenario: Thumbnails dim while the preview cannot render
+    When the preview shows a problem card or the stopped notice
+    Then the slide thumbnails stay, dimmed, and come back to full strength with the preview
 

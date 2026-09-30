@@ -23,6 +23,8 @@ final class AppEnvironment {
     /// Where slide thumbnails are cached on disk. A test replaces this with
     /// a cache rooted in its own temporary folder.
     var thumbnailCache = ThumbnailCache()
+    /// The theme tour's slide thumbnails rendered at build time, nil when the app has none. A test replaces this.
+    var tourThumbnails: BundledTourThumbnails? = Bundle.main.resourceURL.map(BundledTourThumbnails.init(resourcesFolder:))
     /// Every layout tap offers, loaded once from the bundled tap.
     lazy var layoutCatalog = LayoutCatalogLoader(executable: { [weak self] in self?.tapExecutableURL ?? URL(fileURLWithPath: "/usr/bin/false") })
     /// Every frontmatter key tap understands, loaded once from the bundled tap.

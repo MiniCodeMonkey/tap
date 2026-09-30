@@ -30,6 +30,35 @@ final class PreviewViewController: NSViewController, WKNavigationDelegate, WKUID
     let pageContainer = NSView()
 
     let overlay = PreviewOverlayView()
+    /// The deck's settings hold a mistake that keeps the preview from rendering.
+    let problemCard = DeckProblemCardView()
+    /// The deck renders with a fallback because of one of its settings: an unknown theme.
+    let themeBanner = PreviewBannerView()
+    private var pageTopBelowBanner: NSLayoutConstraint?
+    private var pageTopAtEdge: NSLayoutConstraint?
+    /// Choose Theme… on the banner.
+    var onChooseTheme: (() -> Void)?
+    /// Show in Editor on the problem card: the Deck card opens on the setting.
+    var onShowSettingProblemInEditor: ((DeckProblem) -> Void)?
+    /// The slide as a text card, at full size over the page until its first paint.
+    let placeholderCard = SlideCardView()
+    /// The 2 pt line along the card's top edge while the page loads.
+    let progressLine = IndeterminateProgressLine()
+    /// Names the step the page is waiting on, once the wait passes `PreviewLoadStatus.threshold`.
+    let statusLabel = NSTextField(labelWithString: "")
+    /// The card to draw before the first paint: the cursor's slide and the deck's paper colour.
+    var placeholder: () -> (card: SlideCard, paper: PaperColour)? = { nil }
+    /// The time, a seam a test replaces to move past the status line's threshold without waiting.
+    var now: () -> Date = Date.init
+    /// True from the start until the page reports its first slide ready, and again after a failure
+    /// that ended it, once a new tap loads the page: the card, the progress line and the status show.
+    private(set) var isLoadingFirstPaint = false
+    /// Whether any ready has arrived: after it, a reload does not bring the card back.
+    private(set) var hasPainted = false
+    private var loadingSince: Date?
+    private var statusTimer: Timer?
+    private var tapIsRunning = false
+    static let statusFadeDuration: TimeInterval = 0.3
     var onReady: ((ReadyPayload) -> Void)?
     var onStepBackward: (() -> Void)?
     var onStepForward: (() -> Void)?
@@ -129,6 +158,8 @@ final class PreviewViewController: NSViewController, WKNavigationDelegate, WKUID
         overlay.tryAgainButton.target = self
         overlay.tryAgainButton.action = #selector(tryAgainPressed(_:))
         overlay.showLogButton.action = #selector(AppDelegate.showTapLog(_:))
+        problemCard.onShowInEditor = { [weak self] problem in self?.onShowSettingProblemInEditor?(problem) }
+        themeBanner.onChoose = { [weak self] in self?.onChooseTheme?() }
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
@@ -162,14 +193,35 @@ final class PreviewViewController: NSViewController, WKNavigationDelegate, WKUID
         stepRow.spacing = 10
         webView.translatesAutoresizingMaskIntoConstraints = false
         pageContainer.addSubview(webView)
-        overlay.translatesAutoresizingMaskIntoConstraints = false
-        pageContainer.addSubview(overlay)
-        for view in [pageContainer, stepRow] as [NSView] {
+        for view in [placeholderCard, progressLine, overlay, problemCard] as [NSView] {
+            view.translatesAutoresizingMaskIntoConstraints = false
+            pageContainer.addSubview(view)
+        }
+        placeholderCard.layer?.cornerRadius = 8
+        progressLine.isHidden = true
+        placeholderCard.isHidden = true
+        statusLabel.font = .systemFont(ofSize: 11.5)
+        statusLabel.textColor = .secondaryLabelColor
+        statusLabel.alphaValue = 0
+        statusLabel.wantsLayer = true
+        statusLabel.setAccessibilityIdentifier("preview-status")
+        for view in [pageContainer, stepRow, statusLabel, themeBanner] as [NSView] {
             view.translatesAutoresizingMaskIntoConstraints = false
             root.addSubview(view)
         }
+        let atEdge = pageContainer.topAnchor.constraint(equalTo: root.topAnchor, constant: 10)
+        let belowBanner = pageContainer.topAnchor.constraint(equalTo: themeBanner.bottomAnchor, constant: 10)
+        pageTopAtEdge = atEdge
+        pageTopBelowBanner = belowBanner
         NSLayoutConstraint.activate([
-            pageContainer.topAnchor.constraint(equalTo: root.topAnchor, constant: 10),
+            atEdge,
+            themeBanner.topAnchor.constraint(equalTo: root.topAnchor, constant: 10),
+            themeBanner.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 20),
+            themeBanner.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -20),
+            problemCard.topAnchor.constraint(equalTo: pageContainer.topAnchor),
+            problemCard.leadingAnchor.constraint(equalTo: pageContainer.leadingAnchor),
+            problemCard.trailingAnchor.constraint(equalTo: pageContainer.trailingAnchor),
+            problemCard.bottomAnchor.constraint(equalTo: pageContainer.bottomAnchor),
             pageContainer.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 20),
             pageContainer.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -20),
             pageContainer.heightAnchor.constraint(equalTo: pageContainer.widthAnchor, multiplier: 9.0 / 16.0),
@@ -184,8 +236,108 @@ final class PreviewViewController: NSViewController, WKNavigationDelegate, WKUID
             stepRow.topAnchor.constraint(equalTo: pageContainer.bottomAnchor, constant: 12),
             stepRow.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 20),
             stepRow.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -20),
+            placeholderCard.topAnchor.constraint(equalTo: pageContainer.topAnchor),
+            placeholderCard.leadingAnchor.constraint(equalTo: pageContainer.leadingAnchor),
+            placeholderCard.trailingAnchor.constraint(equalTo: pageContainer.trailingAnchor),
+            placeholderCard.bottomAnchor.constraint(equalTo: pageContainer.bottomAnchor),
+            progressLine.topAnchor.constraint(equalTo: pageContainer.topAnchor),
+            progressLine.leadingAnchor.constraint(equalTo: pageContainer.leadingAnchor),
+            progressLine.trailingAnchor.constraint(equalTo: pageContainer.trailingAnchor),
+            progressLine.heightAnchor.constraint(equalToConstant: IndeterminateProgressLine.height),
+            statusLabel.topAnchor.constraint(equalTo: stepRow.bottomAnchor, constant: 6),
+            statusLabel.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 20),
+            statusLabel.trailingAnchor.constraint(lessThanOrEqualTo: root.trailingAnchor, constant: -20),
         ])
         view = root
+        // A band asked for before the view existed already shows: the page sits below it.
+        if !themeBanner.isHidden {
+            atEdge.isActive = false
+            belowBanner.isActive = true
+        }
+        overlay.onShow = { [weak self] in self?.endLoadingPlaceholder(animated: false) }
+        if !hasPainted { beginLoadingPlaceholder() }
+    }
+
+    // MARK: First-paint placeholder
+
+    /// Shows the text card at full size with the progress line, and starts
+    /// watching the wait: after `PreviewLoadStatus.threshold` a status line
+    /// names the step. Ended by the first ready, or by any overlay that
+    /// says the preview failed.
+    func beginLoadingPlaceholder() {
+        guard isViewLoaded else { return }
+        isLoadingFirstPaint = true
+        loadingSince = now()
+        placeholderCard.layer?.removeAllAnimations()
+        placeholderCard.alphaValue = 1
+        placeholderCard.isHidden = false
+        refreshPlaceholder()
+        placeholderCard.startSheen()
+        progressLine.isHidden = false
+        progressLine.start()
+        statusLabel.alphaValue = 0
+        statusLabel.stringValue = ""
+        statusTimer?.invalidate()
+        statusTimer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] timer in
+            MainActor.assumeIsolated {
+                guard let self else { return timer.invalidate() }
+                self.refreshStatus()
+            }
+        }
+        refreshStatus()
+    }
+
+    /// Redraws the card from the current slide and paper colour.
+    func refreshPlaceholder() {
+        guard isLoadingFirstPaint else { return }
+        let content = placeholder()
+        placeholderCard.configure(card: content?.card ?? SlideCard(heading: ""), paper: content?.paper ?? .neutral)
+    }
+
+    /// The step the wait is on, as far as the app can tell.
+    var loadStep: PreviewLoadStep {
+        if !tapIsRunning { return .startingTap }
+        return loadFinished ? .preparingSlide : .loadingPage
+    }
+
+    /// Shows or hides the status line for the wait so far. A timer calls
+    /// it while the card shows; a test calls it after moving `now`.
+    func refreshStatus() {
+        guard isLoadingFirstPaint, let loadingSince else { return }
+        let message = PreviewLoadStatus.message(for: loadStep, waited: now().timeIntervalSince(loadingSince))
+        if let message {
+            statusLabel.stringValue = message
+            statusLabel.alphaValue = 1
+        }
+    }
+
+    /// The card, the progress line and the status line go: the page has
+    /// painted, or an error state now says what happened. The status
+    /// fades out after a paint; an error hides it at once, so nothing
+    /// keeps looking busy.
+    func endLoadingPlaceholder(animated: Bool) {
+        statusTimer?.invalidate()
+        statusTimer = nil
+        guard isLoadingFirstPaint else { return }
+        isLoadingFirstPaint = false
+        progressLine.stop()
+        progressLine.isHidden = true
+        placeholderCard.stopSheen()
+        let fades = animated && !WelcomeMotion.reduceMotion()
+        if fades {
+            placeholderCard.fadeOut(duration: Self.statusFadeDuration) { [weak self] in
+                guard let self, !self.isLoadingFirstPaint else { return }
+                self.placeholderCard.isHidden = true
+            }
+            statusLabel.fadeOut(duration: Self.statusFadeDuration) { [weak self] in
+                guard let self, !self.isLoadingFirstPaint else { return }
+                self.statusLabel.stringValue = ""
+            }
+        } else {
+            placeholderCard.isHidden = true
+            statusLabel.alphaValue = 0
+            statusLabel.stringValue = ""
+        }
     }
 
     /// Loads the audience page of a newly started tap. The launch code works
@@ -199,6 +351,7 @@ final class PreviewViewController: NSViewController, WKNavigationDelegate, WKUID
             replaceWebView()
         }
         beginLoad()
+        if !hasPainted, !isLoadingFirstPaint { beginLoadingPlaceholder() }
         currentNavigation = webView.load(URLRequest(url: client.previewLaunchURL))
     }
 
@@ -410,7 +563,8 @@ final class PreviewViewController: NSViewController, WKNavigationDelegate, WKUID
     /// rather than a fixed guess. `pausedMessage` explains a session the app
     /// stopped on purpose, such as while the deck file is deleted.
     func showSessionState(_ state: TapSession.State, restartPolicy: RestartPolicy, pausedMessage: String? = nil) {
-        if case .running = state {} else {
+        if case .running = state { tapIsRunning = true } else {
+            tapIsRunning = false
             // The client is gone with tap, so nothing checks or reloads a
             // page until the next running state loads one.
             client = nil
@@ -427,13 +581,45 @@ final class PreviewViewController: NSViewController, WKNavigationDelegate, WKUID
         case .starting, .restarting:
             overlay.show(title: "Restarting preview.", detail: "Showing the last good render.", output: [], opaque: false, buttons: false)
         case .failed(let lastOutput):
-            overlay.show(title: "The preview stopped", detail: "\(restartPolicy.exitSummary). Last output:",
+            // tap quit; the text is safe in the editor. What tap printed is behind Details.
+            overlay.show(title: "The preview stopped", detail: "tap quit while showing this deck. Your text is safe.",
                          output: lastOutput, opaque: true, buttons: true)
+        case .invalidDeck:
+            // The problem card says which setting; nothing else to add.
+            overlay.hide()
         case .stopped:
             if let pausedMessage {
                 overlay.show(title: "The preview is paused", detail: pausedMessage, output: [], opaque: false, buttons: false)
             }
         }
+    }
+
+    // MARK: Problems with the deck's settings
+
+    /// Puts the problem card over the preview: the settings hold mistakes
+    /// tap cannot render past. The loading card ends, since something
+    /// other than loading says what happened.
+    func showSettingsProblems(_ problems: [DeckProblem], fixTitle: (DeckProblem) -> String?, rawLine: (DeckProblem) -> String?, fix: @escaping (DeckProblem) -> Void) {
+        problemCard.show(problems: problems, fixTitle: fixTitle, rawLine: rawLine, fix: fix)
+        endLoadingPlaceholder(animated: false)
+    }
+
+    func hideSettingsProblems() {
+        problemCard.hide()
+    }
+
+    /// The quiet band above the preview for an unknown theme, or none.
+    func showThemeBanner(unknownTheme name: String?, fixTitle: String? = nil, fix: (() -> Void)? = nil) {
+        guard let name else {
+            themeBanner.isHidden = true
+            pageTopBelowBanner?.isActive = false
+            pageTopAtEdge?.isActive = true
+            return
+        }
+        themeBanner.show(unknownTheme: name, fixTitle: fixTitle)
+        themeBanner.onFix = fix
+        pageTopAtEdge?.isActive = false
+        pageTopBelowBanner?.isActive = true
     }
 
     @objc private func tryAgainPressed(_ sender: NSButton) {
@@ -545,6 +731,8 @@ final class PreviewViewController: NSViewController, WKNavigationDelegate, WKUID
     func pageReportedReady(_ payload: ReadyPayload) {
         pageWorks()
         lastReady = payload
+        hasPainted = true
+        endLoadingPlaceholder(animated: true)
         onReady?(payload)
     }
 }

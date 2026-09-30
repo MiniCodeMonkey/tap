@@ -21,6 +21,50 @@ final class PresentingTests: PresentingTestCase {
         try await waitUntil(timeout: 40, "the talk") { controller.presentation.state == .presenting }
     }
 
+    func testPlayOnAnUntitledDeck() async throws {
+        let text = "# Tour\n\nFirst slide.\n\n---\n\n# Two\n\nSecond slide.\n"
+        let document = try DeckDocument.makeUntitled(text: text)
+        let controller = try XCTUnwrap(document.sessionController)
+        _ = try await waitForRunningTap(document)
+        try await waitForBoxes(document, count: 2)
+        let screens = oneScreen()
+        let presentation = controller.presentation
+        presentation.screens = { screens }
+        let available = fullScreenAvailable
+        presentation.fullScreenAllowed = { available }
+        let deckWindow = try XCTUnwrap(document.windowControllers.first as? DeckWindowController)
+        XCTAssertNil(document.fileURL, "the deck has no file")
+        XCTAssertEqual(presentation.deckURL(), document.untitledDeckURL, "the talk reads the deck's private untitled file")
+        XCTAssertTrue(presentation.canStart, "an untitled deck can play")
+        XCTAssertTrue(deckWindow.canStartATalk)
+
+        // Text typed and not saved anywhere is what the talk shows.
+        let end = (controller.editor.string as NSString).range(of: "# Tour").upperBound
+        controller.editor.setSelectedRange(NSRange(location: end, length: 0))
+        controller.editor.insertText(" edited", replacementRange: NSRange(location: NSNotFound, length: 0))
+        XCTAssertFalse(try String(contentsOf: document.untitledDeckURL, encoding: .utf8).contains("# Tour edited"), "not on disk yet")
+
+        deckWindow.play(nil)
+        XCTAssertEqual(presentation.state, .starting)
+        XCTAssertNil(deckWindow.window?.attachedSheet, "no save prompt")
+        XCTAssertNil(NSApp.modalWindow)
+        try await waitUntil(timeout: 10, "tap present to be started") { presentation.session != nil }
+        XCTAssertTrue(try String(contentsOf: document.untitledDeckURL, encoding: .utf8).contains("# Tour edited"), "the buffer reached the untitled file before tap present started")
+        XCTAssertEqual(presentation.presentedText, controller.editor.string)
+        XCTAssertNil(document.fileURL, "and the deck is still unsaved")
+        XCTAssertTrue(document.isDocumentEdited)
+        try await waitUntil(timeout: 40, "the talk") { presentation.state == .presenting }
+
+        // Later edits follow as they do for a saved deck: counted as not shown, and Reload Slides writes the file again.
+        controller.editor.insertText(" again", replacementRange: NSRange(location: NSNotFound, length: 0))
+        try await waitUntil(timeout: 15, "the edit to be counted") { presentation.editsNotShown == 1 }
+        presentation.reloadSlides()
+        try await waitUntil(timeout: 10, "Reload Slides to write the file") {
+            (try? String(contentsOf: document.untitledDeckURL, encoding: .utf8))?.contains("# Tour edited again") == true
+        }
+        XCTAssertEqual(presentation.editsNotShown, 0)
+    }
+
     func testStopThenPlayDuringTheSaveStartsOneTalk() async throws {
         let (_, controller) = try await openDeckForPresenting()
         let presentation = controller.presentation

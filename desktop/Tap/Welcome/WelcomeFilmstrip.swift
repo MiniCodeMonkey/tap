@@ -338,7 +338,8 @@ final class WelcomeFilmstrip: FlippedView {
 
     private func refreshDrift() {
         if shouldDrift, displayLink == nil {
-            let link = displayLink(target: self, selector: #selector(tick(_:)))
+            // The link keeps its target alive; the proxy holds the strip weakly, so the strip can go.
+            let link = displayLink(target: DisplayLinkProxy(self), selector: #selector(DisplayLinkProxy.tick(_:)))
             link.preferredFrameRateRange = CAFrameRateRange(minimum: 30, maximum: 60, preferred: 60)
             lastTick = CACurrentMediaTime()
             link.add(to: .main, forMode: .common)
@@ -349,7 +350,7 @@ final class WelcomeFilmstrip: FlippedView {
         }
     }
 
-    @objc private func tick(_ link: CADisplayLink) {
+    fileprivate func advance() {
         let now = CACurrentMediaTime()
         let delta = min(now - lastTick, 0.1)
         lastTick = now
@@ -369,4 +370,18 @@ final class WelcomeFilmstrip: FlippedView {
     }
 
     deinit { displayLink?.invalidate() }
+}
+
+/// Receives the display link's ticks for the filmstrip without keeping it alive.
+private final class DisplayLinkProxy: NSObject {
+    private weak var filmstrip: WelcomeFilmstrip?
+
+    init(_ filmstrip: WelcomeFilmstrip) {
+        self.filmstrip = filmstrip
+    }
+
+    @objc func tick(_ link: CADisplayLink) {
+        guard let filmstrip else { return link.invalidate() }
+        filmstrip.advance()
+    }
 }

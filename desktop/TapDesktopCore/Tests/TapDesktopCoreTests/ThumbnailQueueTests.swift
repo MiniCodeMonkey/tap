@@ -36,4 +36,17 @@ final class ThumbnailQueueTests: XCTestCase {
         queue.replace(with: [2], visible: [], current: nil)
         XCTAssertEqual(queue.pending, [2])
     }
+
+    func testVisibleSlidesRenderTopDownBeforeTheRest() {
+        var queue = ThumbnailQueue()
+        queue.replace(with: Array(1...12), visible: [1, 2, 3, 4], current: nil)
+        XCTAssertEqual(Array(queue.pending.prefix(4)), [1, 2, 3, 4])
+        XCTAssertEqual(Array(queue.pending.suffix(8)), [5, 6, 7, 8, 9, 10, 11, 12])
+    }
+
+    func testAFreshlyOpenedDeckRendersFromTheTopWhenNothingIsVisibleYet() {
+        var queue = ThumbnailQueue()
+        queue.replace(with: [5, 3, 1, 2, 4], visible: [], current: 1)
+        XCTAssertEqual(queue.pending, [1, 2, 3, 4, 5])
+    }
 }

@@ -84,7 +84,7 @@ final class EditorTextViewTests: HostedTestCase {
         XCTAssertGreaterThan(attributes[.obliqueness] as? Double ?? 0, 0, "notes are in italics")
     }
 
-    func testTheEditorNeverFolds() throws {
+    func testEveryLineOfEverySlideIsAlwaysVisible() throws {
         let editor = makeEditor()
         let layoutManager = try XCTUnwrap(editor.textLayoutManager)
         let contentManager = try XCTUnwrap(layoutManager.textContentManager)

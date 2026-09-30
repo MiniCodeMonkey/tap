@@ -220,8 +220,10 @@ final class ThumbnailRenderer: NSObject, WKScriptMessageHandler, WKNavigationDel
         pump()
     }
 
+    /// Starts the loop that renders the queue. With nothing queued there is
+    /// nothing to render, so no loop runs and `pendingCount` stays zero.
     private func pump() {
-        guard !running, baseURL != nil else { return }
+        guard !running, baseURL != nil, !queue.isEmpty else { return }
         running = true
         Task { @MainActor [weak self] in
             while true {

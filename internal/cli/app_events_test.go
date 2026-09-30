@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/MiniCodeMonkey/tap/internal/config"
 	"github.com/MiniCodeMonkey/tap/internal/slidelist"
 )
 
@@ -283,4 +284,62 @@ func TestAppEventWriterReportsHowManyEventsItDropped(t *testing.T) {
 	if count := strings.Count(log.String(), "\n"); count != 2 {
 		t.Errorf("standard error has %d lines, want two: the drops starting and the count once they stop:\n%s", count, log)
 	}
+}
+
+func TestDeckProblemsReporter_SendsOnlyChanges(t *testing.T) {
+	events, log := newTestEvents(t)
+	reporter := newDeckProblemsReporter(events)
+
+	good := config.DefaultConfig()
+	bad := config.DefaultConfig()
+	bad.AspectRatio = "16/9"
+	bad.Theme = "keynot"
+
+	reporter.report(good)
+	reporter.report(good)
+	reporter.report(bad)
+	reporter.report(bad)
+	reporter.report(good)
+
+	first := log.next(t, "deck-problems")
+	if problems, _ := first["problems"].([]any); len(problems) != 0 {
+		t.Fatalf("first event problems = %v, want an empty list", first["problems"])
+	}
+	second := log.next(t, "deck-problems")
+	problems, _ := second["problems"].([]any)
+	if len(problems) != 2 {
+		t.Fatalf("second event problems = %v, want 2", second["problems"])
+	}
+	byKey := map[string]map[string]any{}
+	for _, entry := range problems {
+		problem := entry.(map[string]any)
+		byKey[problem["key"].(string)] = problem
+	}
+	ratio := byKey["aspectRatio"]
+	if ratio["severity"] != "error" || ratio["value"] != "16/9" {
+		t.Errorf("aspectRatio problem = %v", ratio)
+	}
+	if suggestions, _ := ratio["suggestions"].([]any); len(suggestions) == 0 || suggestions[0] != "16:9" {
+		t.Errorf("aspectRatio suggestions = %v", ratio["suggestions"])
+	}
+	if allowed, _ := ratio["allowed"].([]any); len(allowed) != 3 {
+		t.Errorf("aspectRatio allowed = %v", ratio["allowed"])
+	}
+	theme := byKey["theme"]
+	if theme["severity"] != "warning" {
+		t.Errorf("theme problem = %v", theme)
+	}
+	if suggestions, _ := theme["suggestions"].([]any); len(suggestions) == 0 || suggestions[0] != "keynote" {
+		t.Errorf("theme suggestions = %v", theme["suggestions"])
+	}
+	third := log.next(t, "deck-problems")
+	if problems, _ := third["problems"].([]any); len(problems) != 0 {
+		t.Fatalf("third event problems = %v, want an empty list", third["problems"])
+	}
+}
+
+func TestDeckProblemsReporter_NilEventsReportNothing(t *testing.T) {
+	newDeckProblemsReporter(nil).report(config.DefaultConfig())
+	var reporter *deckProblemsReporter
+	reporter.report(config.DefaultConfig())
 }

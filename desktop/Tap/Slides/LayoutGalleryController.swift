@@ -7,7 +7,6 @@ final class LayoutGalleryController: NSObject, NSCollectionViewDataSource, NSCol
     private static let cellIdentifier = NSUserInterfaceItemIdentifier("LayoutCell")
     private(set) var templates: [LayoutTemplate] = []
     let footerLabel = NSTextField(labelWithString: "")
-    let sourceLabel = NSTextField(labelWithString: "Templates from tap slide add --print")
     var onPick: ((String) -> Void)?
     /// Kept by this controller rather than read from the popover, whose
     /// `isShown` can depend on whether the app is active, which differs
@@ -84,10 +83,8 @@ final class LayoutGalleryController: NSObject, NSCollectionViewDataSource, NSCol
         }
         footerLabel.font = .systemFont(ofSize: 11)
         footerLabel.textColor = .secondaryLabelColor
-        sourceLabel.font = .systemFont(ofSize: 11)
-        sourceLabel.textColor = .tertiaryLabelColor
 
-        let footer = NSStackView(views: [footerLabel, NSView(), sourceLabel])
+        let footer = NSStackView(views: [footerLabel, NSView()])
         footer.orientation = .horizontal
         footer.edgeInsets = NSEdgeInsets(top: 4, left: 16, bottom: 12, right: 16)
         let scroll = NSScrollView()

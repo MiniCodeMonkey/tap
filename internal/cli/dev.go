@@ -255,7 +255,12 @@ func runDevServer(options serverOptions) (err error) {
 		return userError(codeInvalidDeck, fmt.Errorf("failed to load config: %w", err))
 	}
 
+	// The app learns what is wrong with the settings before tap stops on
+	// one, so it can name the setting instead of showing tap's last words.
+	deckProblems := newDeckProblemsReporter(appEvents)
+	startupProblems := cfg.Problems()
 	if err := cfg.Validate(); err != nil {
+		deckProblems.reportProblems(startupProblems)
 		return userError(codeInvalidDeck, fmt.Errorf("invalid config: %w", err))
 	}
 
@@ -468,6 +473,7 @@ func runDevServer(options serverOptions) (err error) {
 			fmt.Fprintf(appLog, "Error reloading config: %v\n", err)
 			return
 		}
+		deckProblems.report(newCfg)
 
 		newPres, warnings, newResolvedComponents, newComponentBuildErrs, newRawSlides, err := loadPresentation(absFile, newCfg, baseDir)
 		if err != nil {
@@ -690,6 +696,10 @@ func runDevServer(options serverOptions) (err error) {
 			if loadErr != nil {
 				return nil, fmt.Errorf("failed to load config: %w", loadErr)
 			}
+			// The buffer's problems are what the app shows, whether or not
+			// this render goes on: an error keeps the last good render on
+			// screen, and the app says why.
+			deckProblems.report(newCfg)
 			if loadErr := newCfg.Validate(); loadErr != nil {
 				return nil, fmt.Errorf("invalid config: %w", loadErr)
 			}
@@ -878,6 +888,9 @@ func runDevServer(options serverOptions) (err error) {
 		// otherwise see. It is also what the route allow-list test reads.
 		fmt.Fprintf(appLog, "Routes: %s\n", strings.Join(srv.Routes(), ", "))
 		appEvents.emit(appReadyEvent{Type: appEventReady, Port: port, Token: appAuth.Token(), Launch: appAuth.LaunchCode(), Presenter: presenterPassword})
+		// The ready line stays the first line of a run that starts; a
+		// warning, such as an unknown theme, follows it.
+		deckProblems.reportProblems(startupProblems)
 		go readAppCommands(os.Stdin, appLog, questions, appEvents, commands)
 		appQuit = runAppSession(appSessionOptions{
 			Events:    appEvents,

@@ -12,6 +12,20 @@ final class WelcomeTests: HostedTestCase {
         return try XCTUnwrap(window?.attachedSheet as? NewDeckSheet)
     }
 
+    /// The welcome window's theme cards come from the catalog, which the
+    /// app bundle ships. The tests' own loader has no bundle, so its catalog
+    /// arrives only after an asynchronous `tap theme list`: a test that reads
+    /// the catalog at once installs the bundled loader, or, on a build with
+    /// no bundled catalog, waits for tap's list.
+    func installTheThemeCatalog() async throws {
+        AppEnvironment.shared.themeImages = ThemeImageLoader()
+        if AppEnvironment.shared.themeImages.catalog == nil {
+            AppEnvironment.shared.themeImages = ThemeImageLoader(bundledThumbnails: nil)
+            AppEnvironment.shared.themeImages.loadCatalog()
+            try await waitUntil(timeout: 30, "tap theme list") { AppEnvironment.shared.themeImages.catalog != nil }
+        }
+    }
+
     func testWelcomeWindow() async throws {
         appDelegate.showWelcomeIfNoDecks()
         XCTAssertTrue(welcome.window?.isVisible ?? false, "no deck is open")
@@ -41,6 +55,7 @@ final class WelcomeTests: HostedTestCase {
     }
 
     func testWelcomeWindowWithoutRecentDecks() async throws {
+        try await installTheThemeCatalog()
         NSDocumentController.shared.clearRecentDocuments(nil)
         appDelegate.showWelcomeIfNoDecks()
         welcome.reload()
@@ -69,7 +84,7 @@ final class WelcomeTests: HostedTestCase {
         XCTAssertFalse(texts.contains("Make your first deck"))
 
         // Every catalog theme has a card, named for its theme, in the catalog's order.
-        let catalog = try XCTUnwrap(AppEnvironment.shared.themeImages.catalog, "the bundle ships the theme catalog")
+        let catalog = try XCTUnwrap(AppEnvironment.shared.themeImages.catalog, "the theme catalog is installed")
         try await waitUntil(timeout: 20, "the theme cards") { self.welcome.themeCards.count == catalog.themes.count }
         XCTAssertEqual(welcome.themeCards.map(\.slug), catalog.themes.map(\.slug))
         let riso = try XCTUnwrap(welcome.themeCards.first { $0.slug == "riso" })
@@ -150,6 +165,14 @@ final class WelcomeTests: HostedTestCase {
         XCTAssertTrue(document.isDraft)
         XCTAssertFalse(welcome.window?.isVisible ?? false, "the welcome window gives way to the deck")
         _ = try await waitForRunningTap(document)
+        // tap reloads the preview for any file written under the deck's
+        // folder, so the untitled deck sits alone in a folder of its own.
+        XCTAssertNotEqual(document.untitledDeckURL.deletingLastPathComponent().standardizedFileURL,
+                          FileManager.default.temporaryDirectory.standardizedFileURL)
+        XCTAssertEqual(try String(contentsOf: document.untitledDeckURL, encoding: .utf8), tour)
+        let folder = document.untitledDeckURL.deletingLastPathComponent()
+        document.close()
+        XCTAssertFalse(FileManager.default.fileExists(atPath: folder.path), "closing the deck removes its folder")
     }
 
     func testWelcomeWindowSearch() throws {
@@ -191,6 +214,7 @@ final class WelcomeTests: HostedTestCase {
     }
 
     func testWelcomeWindowWithReduceMotion() async throws {
+        try await installTheThemeCatalog()
         let saved = WelcomeMotion.reduceMotion
         WelcomeMotion.reduceMotion = { true }
         defer {

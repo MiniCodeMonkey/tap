@@ -10,10 +10,15 @@ final class BundledThemeThumbnailsTests: XCTestCase {
     }
 
     func testFindsAnImageBySlugAndNothingElse() throws {
-        let folder = try makeFolder()
+        let parent = try makeFolder()
+        let folder = parent.appendingPathComponent("ThemeThumbnails", isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         try Data([1]).write(to: folder.appendingPathComponent("base.png"))
+        // A file beside the folder, which a slug of "../secret" would reach.
+        try Data([1]).write(to: parent.appendingPathComponent("secret.png"))
         let thumbnails = BundledThemeThumbnails(folder: folder)
         XCTAssertEqual(thumbnails.imageURL(forSlug: "base")?.lastPathComponent, "base.png")
+        XCTAssertNil(thumbnails.imageURL(forSlug: "../secret"), "the file exists, so only the guard keeps it out")
         XCTAssertNil(thumbnails.imageURL(forSlug: "custom"))
         XCTAssertNil(thumbnails.imageURL(forSlug: ""))
         XCTAssertNil(thumbnails.imageURL(forSlug: "../base"))
