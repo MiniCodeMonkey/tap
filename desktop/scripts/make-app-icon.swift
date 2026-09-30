@@ -93,8 +93,8 @@ func drawIcon(in context: CGContext, withCaret: Bool) {
     context.restoreGState()
     context.restoreGState()
 
-    // The slide: 58 x 39 of the 96 point design, centered.
-    let slide = CGRect(x: shape.midX - 29 * unit, y: shape.midY - 19.5 * unit, width: 58 * unit, height: 39 * unit)
+    // The slide: 58 points of width plus its 11 points of left padding, by 39, of the 96 point design, centered.
+    let slide = CGRect(x: shape.midX - 34.5 * unit, y: shape.midY - 19.5 * unit, width: 69 * unit, height: 39 * unit)
     let slidePath = CGPath(roundedRect: slide, cornerWidth: 7 * unit, cornerHeight: 7 * unit, transform: nil)
     context.saveGState()
     context.setShadow(offset: CGSize(width: 0, height: -34), blur: 60, color: color(0x000000, 0.5))
