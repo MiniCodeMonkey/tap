@@ -3,6 +3,12 @@
 # The test is named "test" plus the scenario name in UpperCamelCase.
 D2 | 01-documents.feature | Welcome window
 D2 | 01-documents.feature | Welcome window without recent decks
+D2 | 01-documents.feature | Welcome window drag state
+D2 | 01-documents.feature | Welcome window theme tour
+D2 | 01-documents.feature | Welcome window search
+D2 | 01-documents.feature | Welcome window with Reduce Motion
+D2 | 01-documents.feature | Welcome window aurora pauses while unseen
+D2 | 01-documents.feature | App icon
 D2 | 01-documents.feature | Open a deck
 D2 | 01-documents.feature | Open a file that is not a deck
 D2 | 01-documents.feature | Open the same deck twice
