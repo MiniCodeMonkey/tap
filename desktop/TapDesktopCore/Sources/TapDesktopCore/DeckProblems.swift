@@ -76,13 +76,19 @@ public enum DeckProblems {
                     continue
                 }
                 guard key.type == "string", !key.values.isEmpty,
-                      let written = frontmatter.entry(at: path)?.unquotedValue, !written.isEmpty,
-                      !key.values.contains(written) else { continue }
+                      let entry = frontmatter.entry(at: path), let written = entry.unquotedValue, !written.isEmpty,
+                      !isNull(entry), !key.values.contains(written) else { continue }
                 problems.append(problem(for: key, path: path, written: written))
             }
         }
         visit(schema, prefix: [])
         return problems
+    }
+
+    /// A value written as YAML null (`~` or `null`, unquoted) is a setting left unset, as tap reads it.
+    private static func isNull(_ entry: Frontmatter.Entry) -> Bool {
+        guard let raw = entry.value?.trimmingCharacters(in: .whitespaces) else { return false }
+        return raw == "~" || raw.lowercased() == "null"
     }
 
     private static func problem(for key: SchemaKey, path: [String], written: String) -> DeckProblem {

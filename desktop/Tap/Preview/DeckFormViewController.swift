@@ -183,12 +183,19 @@ final class DeckFormViewController: NSViewController, NSTextFieldDelegate, NSTex
         return editing
     }
 
+    /// Whether the field editor holds text the field has not taken yet. A
+    /// focused field whose text was written follows the deck, so an undo
+    /// changes what it shows instead of leaving it to be written back on blur.
+    private func hasUncommittedTyping(_ editing: NSText, in control: NSControl) -> Bool {
+        editing.string != control.stringValue
+    }
+
     private func refreshValues(from frontmatter: Frontmatter) {
         isRefreshing = true
         defer { isRefreshing = false }
         let editing = editingText
         for binding in bindings {
-            if let editing, editing.delegate === binding.control { continue }
+            if let editing, editing.delegate === binding.control, hasUncommittedTyping(editing, in: binding.control) { continue }
             guard let key = DeckSchema.key(at: binding.path, in: keys) else { continue }
             show(frontmatter.value(at: binding.path), in: binding.control, for: key)
         }

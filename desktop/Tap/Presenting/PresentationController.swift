@@ -1096,7 +1096,15 @@ final class PresentationController {
     private func releaseIfDone() {
         guard !isEnding else { return }
         AppEnvironment.shared.releaseEndingTalk(self)
+        if let onDone {
+            self.onDone = nil
+            onDone()
+        }
     }
+
+    /// Runs once when a talk that outlived its deck has nothing left: its
+    /// process has exited, so whatever tap wrote for the talk is on disk.
+    var onDone: (() -> Void)?
 
     private func countIn() {
         guard !countedAsPresenting else { return }

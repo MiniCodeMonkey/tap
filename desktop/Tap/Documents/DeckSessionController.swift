@@ -224,11 +224,29 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
         session.log.append("reloading after the talk's approval, so the preview's blocks can run", source: .app)
     }
 
-    /// The file tap present reads: the deck's own, or for a deck that has
-    /// none yet, its private untitled file, which is what Play writes.
+    /// The file tap present reads: the deck's own, or for an untitled deck,
+    /// its private untitled file, which is what Play writes. A deck whose
+    /// file was deleted has neither, so no talk starts for it.
     var presentableDeckURL: URL? {
         guard let document else { return nil }
-        return document.fileURL ?? document.untitledDeckURL
+        if let url = document.fileURL { return url }
+        return document.deletedName == nil ? document.untitledDeckURL : nil
+    }
+
+    /// Deletes an untitled deck's private folder once no talk of the deck
+    /// is still running. A talk records into that folder, so the recording
+    /// moves to the Movies folder first, and the folder stays if it cannot.
+    func discardUntitledDeck(_ deckURL: URL) {
+        let finish = {
+            let movies = FileManager.default.urls(for: .moviesDirectory, in: .userDomainMask).first?.appendingPathComponent("Tap", isDirectory: true)
+            if let movies, !UntitledDeckLocation.keepRecordings(of: deckURL, in: movies) { return }
+            UntitledDeckLocation.remove(deckURL)
+        }
+        if let presentation = createdPresentation, presentation.isEnding {
+            presentation.onDone = finish
+        } else {
+            finish()
+        }
     }
 
     /// Writes the buffer to the deck file before a talk, because tap
@@ -772,7 +790,7 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
     private func restartAfterAFix() {
         guard case .invalidDeck = session.state, let blocked = blockedText, editor.string != blocked, deckCard.errors.isEmpty else { return }
         blockedText = editor.string
-        saveNow { [weak self] error in
+        let started: (Error?) -> Void = { [weak self] error in
             guard let self, !self.stopped, case .invalidDeck = self.session.state else { return }
             if let error {
                 self.session.log.append("tap was not started after the fix: the save was refused: \(error.localizedDescription)", source: .app)
@@ -781,6 +799,31 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
             self.session.log.append("the deck's settings changed; starting tap again", source: .app)
             self.session.start()
         }
+        if let document, document.fileURL == nil {
+            // An untitled deck has no file to save: tap reads its private one.
+            do {
+                try writeUntitledDeck(editor.string, to: document.untitledDeckURL)
+                started(nil)
+            } catch {
+                started(error)
+            }
+            return
+        }
+        saveNow(completion: started)
+    }
+
+    private var restartCheck: DispatchWorkItem?
+
+    /// While tap refuses the deck, every change of the text may be the fix,
+    /// including for a setting only tap can judge, so each change asks
+    /// again after a typing pause.
+    private func scheduleRestartAfterAFix() {
+        restartCheck?.cancel()
+        restartCheck = nil
+        guard case .invalidDeck = session.state else { return }
+        let work = DispatchWorkItem { [weak self] in self?.restartAfterAFix() }
+        restartCheck = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6, execute: work)
     }
 
     /// The problems of the deck's settings, read from the text now.
@@ -1050,6 +1093,13 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
 
     func start() {
         editor.load(text: document?.text ?? "")
+        // A duplicate or a restored draft has no file yet and no one has written its private one: tap needs it to serve.
+        if let document, document.fileURL == nil, document.deletedName == nil {
+            try? FileManager.default.createDirectory(at: document.untitledDeckURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+            if !FileManager.default.fileExists(atPath: document.untitledDeckURL.path) {
+                try? editor.string.write(to: document.untitledDeckURL, atomically: true, encoding: .utf8)
+            }
+        }
         deckCard.refresh()
         refreshCards()
         session.start()
@@ -1147,6 +1197,7 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
         refreshEditedState()
         // Set, not reported: the toolbar item reads currentThemeSlug itself when it is built.
         lastThemeSlug = currentThemeSlug
+        scheduleRestartAfterAFix()
     }
 
     /// A save of the deck file is about to write `text`. tap is told first,
@@ -1550,6 +1601,7 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
         Task { await sourceSync.sendNow() }
         deckCard.refresh()
         refreshThemeIfChanged()
+        scheduleRestartAfterAFix()
     }
 
     // MARK: EditorTextViewDelegate
@@ -1560,6 +1612,7 @@ final class DeckSessionController: NSObject, EditorTextViewDelegate {
         deckCard.refresh()
         if slidePanel.slides.isEmpty { refreshCards() }
         refreshThemeIfChanged()
+        scheduleRestartAfterAFix()
     }
 
     func editor(_ editor: EditorTextView, payloadForHeaderDragOfBoxAt index: Int) -> SlideDragPayload? {

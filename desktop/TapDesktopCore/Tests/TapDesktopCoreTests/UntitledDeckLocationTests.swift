@@ -39,4 +39,28 @@ final class UntitledDeckLocationTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: deck.deletingLastPathComponent().path))
         XCTAssertTrue(FileManager.default.fileExists(atPath: base.path))
     }
+
+    func testKeepRecordingsMovesThemOutOfTheDecksFolder() throws {
+        let deck = try UntitledDeckLocation.make(under: base)
+        let recordings = UntitledDeckLocation.recordings(of: deck)
+        try FileManager.default.createDirectory(at: recordings, withIntermediateDirectories: true)
+        try Data("a".utf8).write(to: recordings.appendingPathComponent("talk.mov"))
+        let destination = base.appendingPathComponent("Movies/Tap")
+        try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: true)
+        try Data("old".utf8).write(to: destination.appendingPathComponent("talk.mov"))
+
+        XCTAssertTrue(UntitledDeckLocation.keepRecordings(of: deck, in: destination))
+        UntitledDeckLocation.remove(deck)
+
+        XCTAssertEqual(try String(contentsOf: destination.appendingPathComponent("talk.mov")), "old", "an earlier recording is left alone")
+        XCTAssertEqual(try String(contentsOf: destination.appendingPathComponent("talk 2.mov")), "a", "the new one takes the next number")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: deck.deletingLastPathComponent().path))
+    }
+
+    func testKeepRecordingsWithNoneIsANoOp() throws {
+        let deck = try UntitledDeckLocation.make(under: base)
+        let destination = base.appendingPathComponent("Movies/Tap")
+        XCTAssertTrue(UntitledDeckLocation.keepRecordings(of: deck, in: destination))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: destination.path), "nothing to keep, so no folder is made")
+    }
 }

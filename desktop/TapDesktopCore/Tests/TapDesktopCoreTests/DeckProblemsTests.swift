@@ -21,6 +21,11 @@ final class DeckProblemsTests: XCTestCase {
         XCTAssertEqual(DeckProblems.evaluate(Frontmatter(text: "# One\n"), schema: schema), [], "no frontmatter is no problem")
     }
 
+    func testANullValueIsASettingLeftUnset() {
+        XCTAssertEqual(problems("theme: ~\ntransition: null\n"), [])
+        XCTAssertEqual(problems("transition: \"null\"\n").count, 1, "a quoted null is the text null")
+    }
+
     func testAnUnknownThemeIsAWarningNamingTheNearestTheme() {
         let found = problems("theme: Keynot\n")
         XCTAssertEqual(found.count, 1)

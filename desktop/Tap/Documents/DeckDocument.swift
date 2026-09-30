@@ -154,7 +154,13 @@ final class DeckDocument: NSDocument {
     override nonisolated func close() {
         MainActor.assumeIsolated {
             self.sessionController?.stop()
-            if let deckURL = self.madeUntitledDeckURL { UntitledDeckLocation.remove(deckURL) }
+            if let deckURL = self.madeUntitledDeckURL {
+                if let sessionController = self.sessionController {
+                    sessionController.discardUntitledDeck(deckURL)
+                } else {
+                    UntitledDeckLocation.remove(deckURL)
+                }
+            }
         }
         super.close()
     }
