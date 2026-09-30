@@ -150,6 +150,14 @@ final class WelcomeTests: HostedTestCase {
         XCTAssertTrue(document.isDraft)
         XCTAssertFalse(welcome.window?.isVisible ?? false, "the welcome window gives way to the deck")
         _ = try await waitForRunningTap(document)
+        // tap reloads the preview for any file written under the deck's
+        // folder, so the untitled deck sits alone in a folder of its own.
+        XCTAssertNotEqual(document.untitledDeckURL.deletingLastPathComponent().standardizedFileURL,
+                          FileManager.default.temporaryDirectory.standardizedFileURL)
+        XCTAssertEqual(try String(contentsOf: document.untitledDeckURL, encoding: .utf8), tour)
+        let folder = document.untitledDeckURL.deletingLastPathComponent()
+        document.close()
+        XCTAssertFalse(FileManager.default.fileExists(atPath: folder.path), "closing the deck removes its folder")
     }
 
     func testWelcomeWindowSearch() throws {

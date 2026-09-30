@@ -51,16 +51,27 @@ final class DeckDocument: NSDocument {
 
     override class var autosavesInPlace: Bool { true }
 
+    /// The file tap serves while the deck has none, alone in a folder of its
+    /// own so that nothing else written to the temporary directory reloads
+    /// the preview. Removed when the document closes.
+    var untitledDeckURL: URL {
+        if let madeUntitledDeckURL { return madeUntitledDeckURL }
+        let url = (try? UntitledDeckLocation.make()) ?? FileManager.default.temporaryDirectory.appendingPathComponent("Untitled.md")
+        madeUntitledDeckURL = url
+        return url
+    }
+    private var madeUntitledDeckURL: URL?
+
     /// A deck with no file yet, holding `text`: its first Save asks where to
-    /// put it. tap serves the untitled deck's file (`untitledDeckURL`), so
-    /// the text is written there first.
+    /// put it. tap serves the untitled deck's file (`untitledDeckURL`, in a
+    /// folder of this document's own), so the text is written there first.
     @MainActor
     static func makeUntitled(text: String) throws -> DeckDocument {
         let controller = NSDocumentController.shared
         guard let document = try controller.makeUntitledDocument(ofType: controller.defaultType ?? "Markdown Deck") as? DeckDocument else {
             throw CocoaError(.fileReadUnknown)
         }
-        try text.write(to: DeckSessionController.untitledDeckURL, atomically: true, encoding: .utf8)
+        try text.write(to: document.untitledDeckURL, atomically: true, encoding: .utf8)
         document.text = text
         controller.addDocument(document)
         document.makeWindowControllers()
@@ -132,7 +143,10 @@ final class DeckDocument: NSDocument {
     }
 
     override nonisolated func close() {
-        MainActor.assumeIsolated { self.sessionController?.stop() }
+        MainActor.assumeIsolated {
+            self.sessionController?.stop()
+            if let deckURL = self.madeUntitledDeckURL { UntitledDeckLocation.remove(deckURL) }
+        }
         super.close()
     }
 
