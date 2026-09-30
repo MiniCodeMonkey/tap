@@ -289,6 +289,10 @@ jobs:
         with:
           xcode-version: '26'
 
+      - name: Install the Metal toolchain
+        if: steps.check-desktop.outputs.exists == 'true'
+        run: xcodebuild -downloadComponent MetalToolchain || true
+
       - name: Set up Go
         if: steps.check-desktop.outputs.exists == 'true'
         uses: actions/setup-go@v7
@@ -450,6 +454,9 @@ jobs:
         with:
           xcode-version: '26'
 
+      - name: Install the Metal toolchain
+        run: xcodebuild -downloadComponent MetalToolchain || true
+
       - name: Set up Go
         uses: actions/setup-go@v7
         with:
@@ -496,6 +503,9 @@ jobs:
         uses: maxim-lobanov/setup-xcode@v1
         with:
           xcode-version: '26'
+
+      - name: Install the Metal toolchain
+        run: xcodebuild -downloadComponent MetalToolchain || true
 
       - name: Set up Go
         uses: actions/setup-go@v7
@@ -548,6 +558,9 @@ jobs:
         uses: maxim-lobanov/setup-xcode@v1
         with:
           xcode-version: '26'
+
+      - name: Install the Metal toolchain
+        run: xcodebuild -downloadComponent MetalToolchain || true
 
       - name: Set up Go
         uses: actions/setup-go@v7
