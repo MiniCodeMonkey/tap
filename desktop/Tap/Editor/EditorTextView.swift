@@ -257,6 +257,13 @@ final class EditorTextView: NSTextView {
         deckCardDisplay == .text ? 0 : tracker.hiddenPrefixLength
     }
 
+    /// Lays every visible fragment out again at the container's current origin.
+    private func relayoutText() {
+        guard let layoutManager = textLayoutManager else { return }
+        layoutManager.invalidateLayout(for: layoutManager.documentRange)
+        layoutManager.textViewportLayoutController.layoutViewport()
+    }
+
     private func updateHiddenLayout() {
         let hidden = effectiveHiddenLength
         guard hidden != layoutHiddenLength, let layoutManager = textLayoutManager else { return }
@@ -322,7 +329,11 @@ final class EditorTextView: NSTextView {
         deckCardTint = tint
         deckCardMarkedLines = markedLines
         let top = Self.deckCardTop + (display == .text ? Self.deckCardHeaderHeight + 6 : deckCardHeight + Self.deckCardGap - Self.firstBoxTopOffset)
-        if textContainerInset.height != top { textContainerInset = NSSize(width: Self.horizontalInset, height: top) }
+        if textContainerInset.height != top {
+            textContainerInset = NSSize(width: Self.horizontalInset, height: top)
+            // The fragments already laid out keep the origin they were placed at: lay them out again from the new one.
+            relayoutText()
+        }
         updateHiddenLayout()
         refreshFrontmatterStyling()
         layoutDeckCard()

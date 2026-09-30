@@ -163,6 +163,99 @@ final class DeckCardTests: HostedTestCase {
 
     }
 
+    /// Every text fragment the editor has drawn: the views TextKit places at the fragments' layout positions.
+    func renderedTextFrames(_ editor: EditorTextView) -> [NSRect] {
+        func collect(_ view: NSView) -> [NSRect] {
+            view.subviews.flatMap { (String(describing: type(of: $0)) == "_NSTextViewportElementView" ? [$0.frame] : []) + collect($0) }
+        }
+        return collect(editor)
+    }
+
+    /// The card reserves exactly its own height, the text is drawn where
+    /// the layout puts it, and each box wraps the first line of its own slide.
+    func assertTheTextFollowsTheCard(_ controller: DeckSessionController, _ context: String, file: StaticString = #filePath, line: UInt = #line) throws {
+        let editor = controller.editor
+        let card = controller.deckCard
+        editor.layoutSubtreeIfNeeded()
+        let cardFrame = card.cardView.frame
+        if card.display == .form {
+            let fitting = EditorTextView.deckCardHeaderHeight + max(card.form.contentHeight, 64)
+            XCTAssertEqual(cardFrame.height, fitting, accuracy: 1, "\(context): the card is as tall as its form fits", file: file, line: line)
+        }
+        XCTAssertEqual(cardFrame.height, editor.deckCardHeight, accuracy: 0.5, "\(context): the editor reserves the card's height", file: file, line: line)
+        let rendered = renderedTextFrames(editor)
+        if card.display != .text {
+            for frame in rendered {
+                XCTAssertGreaterThanOrEqual(frame.minY, cardFrame.maxY - 0.5, "\(context): drawn text \(frame) is under the card \(cardFrame)", file: file, line: line)
+            }
+        }
+        let layoutManager = try XCTUnwrap(editor.textLayoutManager, file: file, line: line)
+        let contentManager = try XCTUnwrap(layoutManager.textContentManager, file: file, line: line)
+        var checked = 0
+        for index in editor.boxes.indices {
+            guard let rect = editor.boxRect(forBoxAt: index), rect.height > 0,
+                  let location = contentManager.location(contentManager.documentRange.location, offsetBy: editor.boxes[index].range.location),
+                  let fragment = layoutManager.textLayoutFragment(for: location), let firstLine = fragment.textLineFragments.first else { continue }
+            let origin = editor.textContainerOrigin
+            let glyphTop = fragment.layoutFragmentFrame.minY + origin.y
+            let glyphRect = NSRect(x: rect.minX, y: glyphTop + firstLine.typographicBounds.minY, width: rect.width, height: firstLine.typographicBounds.height)
+            XCTAssertTrue(rect.insetBy(dx: -0.5, dy: -0.5).contains(glyphRect), "\(context): box \(index + 1) \(rect) wraps its first line \(glyphRect)", file: file, line: line)
+            XCTAssertTrue(rendered.contains { abs($0.minY - glyphTop) < 1.5 }, "\(context): the first line of slide \(index + 1) is drawn at \(glyphTop), not elsewhere", file: file, line: line)
+            checked += 1
+        }
+        XCTAssertGreaterThan(checked, 0, "\(context): a box was checked", file: file, line: line)
+        XCTAssertNotNil(editor.boxRect(forBoxAt: 0), "\(context): slide 1's box is laid out", file: file, line: line)
+    }
+
+    /// The theme tour, opened untitled as the Welcome window does, with the card open in Form mode.
+    func testTheReservedSpaceTracksTheCardsForm() async throws {
+        let keys = try await loadedSchema()
+        let text = try String(contentsOf: Fixtures.repositoryRoot.appendingPathComponent("examples/theme-tour.md"), encoding: .utf8)
+        let document = try DeckDocument.makeUntitled(text: text)
+        let controller = try XCTUnwrap(document.sessionController)
+        _ = try await waitForRunningTap(document)
+        let slideCount = SlideCard.cards(inDeckMarkdown: text).count
+        try await waitForBoxes(document, count: slideCount)
+        let card = controller.deckCard
+        let form = controller.deckForm
+
+        card.setOpen(true)
+        XCTAssertEqual(card.display, .form)
+        try await assertTheTextFollowsTheCard(controller, "open")
+
+        // The schema arrives after the card opens: the form grows from its empty state.
+        form.setSchema([])
+        card.refresh()
+        try await assertTheTextFollowsTheCard(controller, "no schema")
+        let emptyHeight = card.cardView.frame.height
+        form.setSchema(keys)
+        card.refresh()
+        try await assertTheTextFollowsTheCard(controller, "schema loaded")
+        XCTAssertGreaterThan(card.cardView.frame.height, emptyHeight, "the card grew with the form")
+
+        card.setTextMode(true)
+        try await assertTheTextFollowsTheCard(controller, "text mode")
+        card.setTextMode(false)
+        try await assertTheTextFollowsTheCard(controller, "form again")
+        card.setOpen(false)
+        try await assertTheTextFollowsTheCard(controller, "collapsed")
+        card.setOpen(true)
+        try await assertTheTextFollowsTheCard(controller, "reopened")
+
+        // A width that puts the fields in two columns makes the form shorter.
+        let scroll = controller.editorViewController.scrollView
+        let window = try XCTUnwrap(scroll.window)
+        let original = window.frame
+        window.setFrame(NSRect(x: original.minX, y: original.minY, width: original.width + 500, height: original.height), display: false)
+        controller.editor.layoutSubtreeIfNeeded()
+        card.layout()
+        try await assertTheTextFollowsTheCard(controller, "wider")
+        window.setFrame(original, display: false)
+        controller.editor.layoutSubtreeIfNeeded()
+        card.layout()
+        try await assertTheTextFollowsTheCard(controller, "narrower")
+    }
+
     func testTheObjectGroupsHaveTheirFields() async throws {
         let keys = try await loadedSchema()
         let (_, controller, _) = try await openOnTheDeckCard()
