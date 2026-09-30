@@ -13,6 +13,13 @@ make -C desktop build     # generates Tap.xcodeproj and builds Tap.app
 open "desktop/$(make -s -C desktop app-path)"
 ```
 
+The first build needs network: the app bundles thumbnails of every theme,
+and rendering them downloads tap's export engine. It also needs the Metal
+toolchain for the welcome window's shader:
+`xcodebuild -downloadComponent MetalToolchain`. A Debug build that cannot
+render some thumbnails warns and goes on, and the next build renders only
+the ones that are missing.
+
 `desktop/project.yml` is the project. `Tap.xcodeproj` is generated and not
 committed; run `make -C desktop project` after changing `project.yml` or
 adding files.
