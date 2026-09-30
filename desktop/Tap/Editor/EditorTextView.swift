@@ -308,6 +308,8 @@ final class EditorTextView: NSTextView {
     func installDeckCard(_ card: NSView) {
         deckCardView?.removeFromSuperview()
         deckCardView = card
+        // A width to start from: the card's own constraints have none to satisfy at zero.
+        card.frame = NSRect(x: Self.horizontalInset - Self.boxOutset, y: Self.deckCardTop, width: 600, height: deckCardHeight)
         addSubview(card)
         layoutDeckCard()
     }
@@ -338,7 +340,7 @@ final class EditorTextView: NSTextView {
 
     /// Where the card's view sits: over the header, and over the body in form mode.
     func layoutDeckCard() {
-        guard let deckCardView else { return }
+        guard let deckCardView, bounds.width > 200 else { return }
         let horizontal = deckCardHorizontalRange
         let frame = NSRect(x: horizontal.left, y: Self.deckCardTop, width: horizontal.width, height: deckCardHeight)
         if deckCardView.frame != frame { deckCardView.frame = frame }
@@ -350,6 +352,11 @@ final class EditorTextView: NSTextView {
 
     override func setFrameSize(_ newSize: NSSize) {
         super.setFrameSize(newSize)
+        layoutDeckCard()
+    }
+
+    override func layout() {
+        super.layout()
         layoutDeckCard()
     }
 

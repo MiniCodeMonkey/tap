@@ -133,9 +133,9 @@ final class DeckCardController: NSObject {
         var bodyHeight: CGFloat = 0
         if shown == .form {
             // The form reads the text again once it can be seen: it does nothing while hidden.
+            cardView.layoutBodyForMeasuring()
             form.refresh()
             form.columnCount = cardView.frame.width >= Self.twoColumnWidth ? 2 : 1
-            cardView.layoutBodyForMeasuring()
             form.view.layoutSubtreeIfNeeded()
             bodyHeight = min(max(form.contentHeight, 64), Self.maximumBodyHeight)
         }

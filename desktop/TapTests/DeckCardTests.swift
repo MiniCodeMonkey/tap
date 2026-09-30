@@ -70,7 +70,7 @@ final class DeckCardTests: HostedTestCase {
 
     func testDeckSettingsLiveInTheDeckCard() async throws {
         let keys = try await loadedSchema()
-        let (_, controller, deckWindow) = try await openOnTheDeckCard()
+        let (_, controller, _) = try await openOnTheDeckCard()
         let editor = controller.editor
         XCTAssertGreaterThan(editor.hiddenLength, 0, "the frontmatter text is hidden from the editor")
         XCTAssertEqual(editor.boxes[0].range.location, editor.hiddenLength, "slide 1 is the first box")
