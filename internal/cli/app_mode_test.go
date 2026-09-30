@@ -1017,8 +1017,70 @@ func TestAppDevReportsAStartupFailureAsAnErrorEvent(t *testing.T) {
 	}
 	lines := strings.Split(strings.TrimSpace(stdout.String()), "\n")
 	var event map[string]any
-	if len(lines) != 1 || json.Unmarshal([]byte(lines[0]), &event) != nil || event["type"] != appEventError || event["code"] == "" {
-		t.Errorf("stdout = %q, want one error event\nstderr: %s", stdout.String(), stderr.String())
+	if len(lines) != 2 || json.Unmarshal([]byte(lines[1]), &event) != nil || event["type"] != appEventError || event["code"] == "" {
+		t.Fatalf("stdout = %q, want a deck-problems event and an error event\nstderr: %s", stdout.String(), stderr.String())
+	}
+	var problems struct {
+		Type     string `json:"type"`
+		Problems []struct {
+			Key         string   `json:"key"`
+			Severity    string   `json:"severity"`
+			Suggestions []string `json:"suggestions"`
+		} `json:"problems"`
+	}
+	if err := json.Unmarshal([]byte(lines[0]), &problems); err != nil || problems.Type != appEventDeckProblems || len(problems.Problems) != 1 {
+		t.Fatalf("first line = %q, want a deck-problems event with one problem", lines[0])
+	}
+	if got := problems.Problems[0]; got.Key != "aspectRatio" || got.Severity != "error" {
+		t.Errorf("problem = %+v, want an aspectRatio error", got)
+	}
+}
+
+func TestAppDevReportsAnUnknownThemeAfterTheReadyLine(t *testing.T) {
+	deck := filepath.Join(t.TempDir(), "themed.md")
+	if err := os.WriteFile(deck, []byte("---\ntheme: keynot\n---\n\n# Themed\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	process := startAppProcess(t, t.TempDir(), "dev", "--app", deck)
+	event := process.next(appEventDeckProblems)
+	problems, _ := event["problems"].([]any)
+	if len(problems) != 1 {
+		t.Fatalf("problems = %v, want one warning", event["problems"])
+	}
+	problem := problems[0].(map[string]any)
+	if problem["key"] != "theme" || problem["severity"] != "warning" {
+		t.Errorf("problem = %v", problem)
+	}
+	if suggestions, _ := problem["suggestions"].([]any); len(suggestions) == 0 || suggestions[0] != "keynote" {
+		t.Errorf("suggestions = %v, want keynote first", problem["suggestions"])
+	}
+}
+
+func TestAppDevReportsBufferProblemsAndTheirFix(t *testing.T) {
+	deck := filepath.Join(t.TempDir(), "buffer.md")
+	if err := os.WriteFile(deck, []byte("---\ntheme: base\n---\n\n# Buffer\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	process := startAppProcess(t, t.TempDir(), "dev", "--app", deck)
+	if status, body := process.putSource("---\naspectRatio: 16/9\n---\n\n# Buffer\n"); status != http.StatusOK {
+		t.Fatalf("PUT: status %d, body %s", status, body)
+	}
+	broken := process.nextWhere(appEventDeckProblems, func(event map[string]any) bool {
+		problems, _ := event["problems"].([]any)
+		return len(problems) == 1
+	})
+	if problem := broken["problems"].([]any)[0].(map[string]any); problem["key"] != "aspectRatio" {
+		t.Errorf("problem = %v", problem)
+	}
+	if status, body := process.putSource("---\naspectRatio: \"16:9\"\n---\n\n# Buffer\n"); status != http.StatusOK {
+		t.Fatalf("PUT: status %d, body %s", status, body)
+	}
+	fixed := process.nextWhere(appEventDeckProblems, func(event map[string]any) bool {
+		problems, _ := event["problems"].([]any)
+		return len(problems) == 0
+	})
+	if fixed["type"] != appEventDeckProblems {
+		t.Errorf("event = %v", fixed)
 	}
 }
 

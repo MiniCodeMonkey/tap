@@ -1,12 +1,14 @@
 package cli
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
 	"sync"
 	"time"
 
+	"github.com/MiniCodeMonkey/tap/internal/config"
 	"github.com/MiniCodeMonkey/tap/internal/slidelist"
 )
 
@@ -20,6 +22,7 @@ const (
 	appEventTunnel         = "tunnel"
 	appEventSlide          = "slide"
 	appEventError          = "error"
+	appEventDeckProblems   = "deck-problems"
 )
 
 // Codes of the error events tap sends while it runs in --app mode. A fatal
@@ -132,6 +135,64 @@ type appErrorEvent struct {
 	Type    string `json:"type"`
 	Code    string `json:"code"`
 	Message string `json:"message"`
+}
+
+// appDeckProblemsEvent is what is wrong with the deck's settings right now,
+// sent when tap starts and again after every reload. An empty list means
+// the settings are fine, so the app takes down whatever the last event
+// put up. An error problem is one tap cannot render past: at startup tap
+// exits right after sending it.
+//
+//nolint:govet // fieldalignment: field order is the JSON output order
+type appDeckProblemsEvent struct {
+	Type     string           `json:"type"`
+	Problems []config.Problem `json:"problems"`
+}
+
+// deckProblemsReporter sends the deck problems event, and only when the
+// problems differ from the last event it sent, so a keystroke that leaves
+// them as they were says nothing.
+type deckProblemsReporter struct {
+	events *appEventWriter
+	mu     sync.Mutex
+	last   []byte
+}
+
+// newDeckProblemsReporter reports to events, which is nil outside --app
+// mode, where nothing is reported.
+func newDeckProblemsReporter(events *appEventWriter) *deckProblemsReporter {
+	return &deckProblemsReporter{events: events}
+}
+
+// report tells the app what is wrong with cfg, read as the deck writes it
+// (before Validate normalizes a theme).
+func (reporter *deckProblemsReporter) report(cfg *config.Config) {
+	if cfg == nil {
+		return
+	}
+	reporter.reportProblems(cfg.Problems())
+}
+
+// reportProblems sends problems, an empty list when they are nil.
+func (reporter *deckProblemsReporter) reportProblems(problems []config.Problem) {
+	if reporter == nil || reporter.events == nil {
+		return
+	}
+	if problems == nil {
+		problems = []config.Problem{}
+	}
+	key, err := json.Marshal(problems)
+	if err != nil {
+		return
+	}
+	reporter.mu.Lock()
+	unchanged := reporter.last != nil && bytes.Equal(reporter.last, key)
+	reporter.last = key
+	reporter.mu.Unlock()
+	if unchanged {
+		return
+	}
+	reporter.events.emit(appDeckProblemsEvent{Type: appEventDeckProblems, Problems: problems})
 }
 
 // appEventWriter is the only writer of standard output in --app mode. Any
